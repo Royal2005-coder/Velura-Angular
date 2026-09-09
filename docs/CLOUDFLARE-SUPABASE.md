@@ -9,10 +9,10 @@ Registered domain: **velura.royalai.dev**.
 |---|---|---|---|---|
 | A | `velura.royalai.dev` | `135.235.219.13` | Proxied (orange) | Customer SPA + `/api` |
 | A | `admin.royalai.dev` | `135.235.219.13` | Proxied | Admin SPA |
+| A | `staging.velura.royalai.dev` | `135.235.219.13` | Proxied | Staging storefront |
+| A | `staging-admin.royalai.dev` | `135.235.219.13` | Proxied | Staging admin |
 
-The admin host is **`admin.royalai.dev`** (sibling of `velura.royalai.dev`), not `admin.velura.royalai.dev`. nginx accepts both.
-
-Optional later: `develop` / `admin-develop` for a staging host. Not required for the first production cut.
+The admin host is **`admin.royalai.dev`** (sibling of `velura.royalai.dev`), not `admin.velura.royalai.dev`. nginx accepts both plus staging hosts.
 
 ## Cloudflare SSL/TLS
 
@@ -47,8 +47,9 @@ http://localhost:4002/**
 https://velura.royalai.dev/**
 https://admin.royalai.dev/**
 https://admin.royalai.dev/auth/callback
-https://admin.velura.royalai.dev/**
-https://admin.velura.royalai.dev/auth/callback
+https://staging.velura.royalai.dev/**
+https://staging-admin.royalai.dev/**
+https://staging-admin.royalai.dev/auth/callback
 ```
 
 ## Google Cloud OAuth (if Google SSO is enabled)
@@ -74,7 +75,7 @@ https://gtyuajboeffmfskofoyh.supabase.co/auth/v1/callback
 `/opt/velura/.env` must contain:
 
 ```
-CORS_ORIGIN=https://velura.royalai.dev,https://admin.royalai.dev,https://admin.velura.royalai.dev
+CORS_ORIGIN=https://velura.royalai.dev,https://admin.royalai.dev,https://admin.velura.royalai.dev,https://staging.velura.royalai.dev,https://staging-admin.royalai.dev
 ```
 
 Browsers call `/api` on the same host through nginx, so CORS is a fallback for the admin subdomain.

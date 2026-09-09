@@ -66,7 +66,7 @@ validate:workspace:
         exit 1
       fi
     - |
-      if grep -R --include='*.pem' --include='*.key' -n "BEGIN .*PRIVATE KEY" . ; then
+      if grep -R --exclude-dir=.git --exclude-dir=node_modules --include='*.pem' --include='*.key' -n "BEGIN .*PRIVATE KEY" . ; then
         echo "Private keys must not be in the repository"
         exit 1
       fi
@@ -131,6 +131,8 @@ note:mr:
   stage: note
   image: alpine:3.20
   allow_failure: false
+  variables:
+    GIT_DEPTH: "0"
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
   needs:
@@ -146,6 +148,7 @@ note:mr:
 deploy:staging:
   stage: deploy
   extends: .ssh_deploy
+  resource_group: velura-staging
   environment:
     name: staging
     url: https://staging.velura.royalai.dev/
@@ -158,6 +161,7 @@ deploy:staging:
     - job: build:angular
   script:
     - SSH="ssh -i ~/.ssh/deploy.key -o IdentitiesOnly=yes"
+    - $SSH "${DEPLOY_USER}@${DEPLOY_HOST}" "mkdir -p /var/www/velura-staging/user /var/www/velura-staging/admin /opt/velura-staging/api /opt/velura/deploy"
     - rsync -az --delete -e "$SSH" apps/user-ng/dist/user-ng/browser/ "${DEPLOY_USER}@${DEPLOY_HOST}:/var/www/velura-staging/user/"
     - rsync -az --delete -e "$SSH" apps/admin-ng/dist/admin-ng/browser/ "${DEPLOY_USER}@${DEPLOY_HOST}:/var/www/velura-staging/admin/"
     - rsync -az --delete --exclude node_modules -e "$SSH" apps/api/ "${DEPLOY_USER}@${DEPLOY_HOST}:/opt/velura-staging/api/"
@@ -190,6 +194,7 @@ verify:staging:
 deploy:production:
   stage: deploy
   extends: .ssh_deploy
+  resource_group: velura-production
   environment:
     name: production
     url: https://velura.royalai.dev/

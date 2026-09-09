@@ -1,0 +1,3 @@
+KAN-15
+Why: Context as Code — business contract in types/JSDoc; why on MR ## Why, git log, git notes. Do not add docs/KAN-n.md.
+Do not: rewrite apps/api as Angular; do not treat long ADR.md as version history.

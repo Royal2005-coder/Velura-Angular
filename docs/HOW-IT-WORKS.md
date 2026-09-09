@@ -32,6 +32,8 @@ GitLab: MR (`## Why`) + Changes + job `note:mr` (log, notes, artifact `mr-trace.
 
 ## Jobs
 
+`validate:mr-contract` **chỉ** chạy trên MR pipeline (không chạy khi push branch). Job fail ngay stage `validate` nếu title không bắt đầu `KAN-n` hoặc description thiếu heading `## Why`. Sửa trên GitLab (template Default.md), không tạo `docs/KAN-n.md`.
+
 | Khi | Jobs | Deploy |
 |---|---|---|
 | MR → `develop` | validate, tests, build, **note:mr** | Không |

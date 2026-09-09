@@ -1,0 +1,4 @@
+KAN-15
+validate:mr-contract failed on MR pipelines when the description lacked ## Why. Why belongs on the MR, not docs/KAN-n.md.
+
+Do not add docs/KAN-n.md. Types/JSDoc = what. This note + MR = why.

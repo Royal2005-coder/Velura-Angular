@@ -79,14 +79,17 @@ validate:mr-contract:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
   script:
     - |
-      echo "$CI_MERGE_REQUEST_TITLE" | grep -Eq '^KAN-[0-9]+' || {
-        echo "MR title must start with KAN-n (version key for git log / Jira)"
+      TITLE=$(printf '%s' "${CI_MERGE_REQUEST_TITLE:-}" | tr -d '\r')
+      DESC=$(printf '%s' "${CI_MERGE_REQUEST_DESCRIPTION:-}" | tr -d '\r')
+      echo "MR title=[$TITLE]"
+      echo "MR source=[$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME] target=[$CI_MERGE_REQUEST_TARGET_BRANCH_NAME]"
+      echo "$TITLE" | grep -Eqi '^(Draft:[[:space:]]*)?KAN-[0-9]+' || {
+        echo "MR title must start with KAN-n (optional Draft: prefix). Version key for git log / Jira."
         exit 1
       }
-    - |
-      echo "${CI_MERGE_REQUEST_DESCRIPTION:-}" | grep -qiE '^## Why|^## Tại sao' || {
-        echo "MR description must include ## Why (Context as Code). Use .gitlab/merge_request_templates/Default.md"
-        echo "Do not add docs/KAN-n.md."
+      printf '%s\n' "$DESC" | grep -qiE '^##[[:space:]]*(Why|Tại sao)' || {
+        echo "MR description must include a heading line ## Why (Context as Code)."
+        echo "Paste .gitlab/merge_request_templates/Default.md into the MR. Do not add docs/KAN-n.md."
         exit 1
       }
     - |

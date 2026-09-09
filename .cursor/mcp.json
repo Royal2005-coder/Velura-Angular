@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "GitLab": {
+      "type": "http",
+      "url": "https://gitlab.com/api/v4/mcp",
+      "headers": {
+        "X-Gitlab-Mcp-Server-Tool-Name-Prefix": "gitlab_"
+      }
+    },
+    "Atlassian": {
+      "url": "https://mcp.atlassian.com/v1/sse"
+    }
+  }
+}

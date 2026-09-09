@@ -1,8 +1,17 @@
-import { afterNextRender, Component, inject, signal } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
+import { Component, inject, signal } from '@angular/core';
+import { ActivatedRoute, Router } from '@angular/router';
 import { useBodyClass } from '../../core/utils/body-class';
 
-type PolicyTab = 'returns' | 'privacy' | 'shipping' | 'terms' | 'faq' | 'member';
+export const POLICY_TABS = ['returns', 'privacy', 'shipping', 'terms', 'faq', 'member'] as const;
+
+export type PolicyTab = (typeof POLICY_TABS)[number];
+
+/**
+ * Type guard for `?tab=` query values from the storefront URL.
+ */
+export function isPolicyTab(value: string | null): value is PolicyTab {
+  return value !== null && (POLICY_TABS as readonly string[]).includes(value);
+}
 
 @Component({
   selector: 'app-policies-page',
@@ -11,38 +20,27 @@ type PolicyTab = 'returns' | 'privacy' | 'shipping' | 'terms' | 'faq' | 'member'
 })
 export class PoliciesPage {
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
   readonly tab = signal<PolicyTab>('returns');
 
   constructor() {
     useBodyClass('page-policies');
-    const requested = this.route.snapshot.queryParamMap.get('tab') as PolicyTab | null;
-    if (requested) {
+    const requested = this.route.snapshot.queryParamMap.get('tab');
+    if (isPolicyTab(requested)) {
       this.tab.set(requested);
     }
-    afterNextRender(() => this.sync());
   }
 
   /**
-   * Reads the original data-policy-tab attribute from a sidebar button.
+   * Selects a policy panel and keeps `?tab=` in sync for shareable URLs.
    */
-  onTabClick(event: Event): void {
-    const button = (event.target as HTMLElement).closest<HTMLElement>('[data-policy-tab]');
-    const value = button?.getAttribute('data-policy-tab') as PolicyTab | null;
-    if (!value) {
-      return;
-    }
+  selectTab(value: PolicyTab): void {
     this.tab.set(value);
-    this.sync();
-  }
-
-  private sync(): void {
-    const current = this.tab();
-    document.querySelectorAll<HTMLElement>('[data-policy-tab]').forEach((node) => {
-      node.classList.toggle('is-active', node.getAttribute('data-policy-tab') === current);
-      node.setAttribute('aria-selected', node.getAttribute('data-policy-tab') === current ? 'true' : 'false');
-    });
-    document.querySelectorAll<HTMLElement>('.js-policy-panel').forEach((panel) => {
-      panel.classList.toggle('is-active', panel.id === `policy-panel-${current}`);
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { tab: value },
+      queryParamsHandling: 'merge',
+      replaceUrl: true,
     });
   }
 }

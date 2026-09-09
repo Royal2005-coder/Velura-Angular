@@ -1,0 +1,14 @@
+@mixin velura-title {
+  font-family: 'Playfair Display', serif;
+  font-weight: 600;
+}
+
+@mixin velura-body {
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 400;
+}
+
+@mixin velura-admin-ui {
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 500;
+}

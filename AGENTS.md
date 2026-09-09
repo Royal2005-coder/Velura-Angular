@@ -5,9 +5,8 @@
     Maintainability, typed contracts, and reviewable merge requests come before speed.
   </Philosophy>
   <Scope>
-    Two Angular 21 standalone SPAs and one Node HTTP API.
-    Customer storefront (`apps/user-ng`) and admin operations (`apps/admin-ng`)
-    talk to `apps/api`. Persistence stays in Supabase PostgreSQL.
+    Two Angular 21 standalone SPAs and one Node HTTP API, split across two teams:
+    Storefront (`apps/user-ng`) and Admin (`apps/admin-ng` + `apps/api`).
   </Scope>
 </Context>
 
@@ -29,7 +28,8 @@
     - JSDoc on every public TypeScript method; Python-style docstrings in JS services
     - Smart containers vs presentational components
     - Design tokens / shared CSS only — no hardcoded hex in new component SCSS
-    - Feature branch → Merge Request with notes → CI tests → merge `main` → production
+    - Feature branch `feature/KAN-n-*` → Merge Request with Jira key → CI tests → merge `main` → production
+    - See `docs/TEAM-PROCESS.md` and `docs/ANGULAR-STANDARDS.md`
   </DO>
   <DO_NOT>
     - NgModules

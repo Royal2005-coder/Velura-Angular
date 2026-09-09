@@ -38,3 +38,5 @@ View (template)
 ## Local vs production
 
 Local admin Google SSO uses `http://localhost:4001/auth/callback`. Production admin uses the same path on `https://admin.royalai.dev` so the SPA does not need a `/admin` base href.
+
+Two delivery teams (Jira **KAN**): Storefront owns `apps/user-ng`; Admin owns `apps/admin-ng` and `apps/api`. See `docs/TEAM-PROCESS.md`.

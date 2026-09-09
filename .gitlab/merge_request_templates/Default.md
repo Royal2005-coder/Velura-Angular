@@ -1,6 +1,7 @@
 ## Jira
-- Key: VEL-___
-- Link:
+- Key: KAN-___
+- Team: Storefront (`user-ng`) / Admin (`admin-ng` + `api`)
+- Link: https://webadvance.atlassian.net/browse/KAN-___
 
 ## Summary
 - What changed and why
@@ -17,4 +18,4 @@
 
 ## Production
 This MR **must not** deploy. Production runs only after merge to `main`.
-Mention the Jira key (`VEL-123`) in the title so GitLab comments and the Jira development panel stay in sync.
+Mention the Jira key (`KAN-12`) in the title so GitLab comments and the Jira development panel stay in sync.

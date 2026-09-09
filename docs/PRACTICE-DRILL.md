@@ -1,16 +1,14 @@
 # Bài practice — train tay Jira + GitLab + CI
 
-Mục tiêu: mỗi người **một lần** đi hết vòng *kế hoạch → code → MR → CI xanh*, **không** đưa code lên production.
-
-Merge `main` trong repo này **bật** `deploy:production`. Practice **dừng trước merge**, hoặc đóng MR.
+Mục tiêu: mỗi người **một lần** đi hết *Jira → branch từ develop → MR vào develop → CI xanh + note:mr*, **không** merge.
 
 Mẫu lead demo: [KAN-13](https://webadvance.atlassian.net/browse/KAN-13).  
-Năm thành viên **không** dùng chung KAN-13 cho năm MR. Mỗi người tạo Task riêng.
+Năm thành viên **không** dùng chung KAN-13. Mỗi người tạo Task riêng.
 
 ## A. Chuẩn bị (5 phút)
 
 1. Xong [ONBOARDING.md](./ONBOARDING.md) mục 2–3 (account + clone).
-2. `git checkout main && git pull origin main`
+2. `git checkout develop && git pull origin develop`
 3. Mở board: https://webadvance.atlassian.net/jira/software/projects/KAN/board
 
 ## B. Tạo việc trên Jira (bạn tự tạo)
@@ -31,8 +29,8 @@ Từ đây thay mọi `KAN-14` bằng **key của bạn**.
 Chỉ sửa file practice, không đụng app production.
 
 ```bash
-git checkout main
-git pull origin main
+git checkout develop
+git pull origin develop
 git checkout -b feature/KAN-14-onboarding-practice
 ```
 
@@ -65,7 +63,7 @@ GitLab sẽ hiện nút Create merge request. Bắt buộc:
 | Field | Giá trị đúng |
 |---|---|
 | Source | `feature/KAN-14-onboarding-practice` |
-| Target | `main` |
+| Target | `develop` |
 | **Title** | `KAN-14 Practice log for <tên>` (key đứng đầu) |
 | Description | Template Default: điền Key, Team, Link Jira |
 | Draft | bật **Mark as draft** (chặn merge nhầm) |

@@ -22,8 +22,9 @@ Source files outside Git (do not copy the book into Git):
 
 - Angular is the **frontend SPA** only. `apps/api` in JavaScript is correct (ADR 0002). Tests for the API stay `tests/api/*.test.js`.
 - Lecture `NgModule` maps to **standalone + Signals** (ADR 0001). Do not add `NgModule`.
-- Work starts in Jira **KAN**, never as a GitLab Issue. Branch and MR title contain `KAN-n`.
-- Feature/MR pipelines must not deploy. Only `main` runs `deploy:production`.
+- Work starts in Jira **KAN**. Feature MR targets **develop** (staging). Only `develop` → `main` deploys production.
+- Version context lives on the **GitLab MR** (git log, CI note, diff). Do not add a markdown file per ticket.
+- CI must run `test:api` and `test:angular`. `[skip ci]` is forbidden.
 
 <Context>
   <Philosophy>
@@ -52,14 +53,14 @@ Source files outside Git (do not copy the book into Git):
     - Standalone components and Signals for derived state
     - JSDoc on public TypeScript methods; docstrings on public API functions
     - Design tokens in `src/app/theme` — no new hardcoded hex
-    - `feature/KAN-n-kebab` → MR template (ADR section if architecture) → CI → merge `main`
-    - After code change, comment the Jira key with the MR URL
+    - `feature/KAN-n-kebab` → MR into `develop` (required CI note) → staging → MR `develop` → `main`
+    - After merge, comment the Jira key with the MR URL
   </DO>
   <DO_NOT>
     - NgModules or `app.module.ts`
     - Logic in templates (`{{ data.filter(...) }}`)
     - Rewrite `apps/api` to Angular or Python inside a UI MR
     - Commit `.env`, `*.pem`, service-role keys
-    - Deploy from a feature branch or skip the Jira key
+    - Deploy from a feature branch, skip the Jira key, `[skip ci]`, or MR feature → `main`
   </DO_NOT>
 </Constraints>

@@ -17,7 +17,7 @@ Lead ghi tên 5 người vào bảng này khi chia slot. Đừng để hai ngư�
 ## 2. Account cần có trước khi code
 
 1. Jira: https://webadvance.atlassian.net — project **KAN**
-2. GitLab: https://gitlab.com/boygia757-netizen/velura-project — quyền **Developer** trở lên (tạo branch + MR). Không cần quyền push `main`.
+2. GitLab: Developer trở lên. Không push `main` hay `develop`.
 3. Node.js **22** + npm. Git SSH hoặc HTTPS.
 
 Lead mời người vào Jira project và GitLab project. Không share `.env`, không share `*.pem`.
@@ -29,7 +29,7 @@ Repo production Angular:
 ```bash
 git clone git@gitlab.com:boygia757-netizen/velura-project.git
 cd velura-project
-git checkout main
+git checkout develop
 git pull
 npm install
 copy .env.example .env
@@ -63,9 +63,9 @@ npm run build:admin
 2. Branch: `feature/KAN-<số>-<ten-ngan>`
 3. Mỗi commit và **title MR** chứa `KAN-<số>`
 4. Điền template MR (`.gitlab/merge_request_templates/Default.md`)
-5. Đợi CI **xanh** trên MR: `validate:workspace` → `test:api` → `build:angular` (và `note:mr`)
-6. **Không** merge nếu CI đỏ. **Không** push `main`. **Không** deploy tay lên VM.
-7. Merge `main` = production. Chỉ lead/maintainer merge khi review xong.
+5. Đợi CI **xanh**: validate + `test:api` + `test:angular` + build + **note:mr** (bắt buộc)
+6. **Không** merge nếu CI đỏ. **Không** push `main`/`develop`. Feature MR **chỉ** vào `develop`.
+7. Staging = merge `develop`. Production = MR `develop` → `main` sau khi staging OK.
 
 Chi tiết cơ chế: [HOW-IT-WORKS.md](./HOW-IT-WORKS.md).  
 Code Angular: [ANGULAR-STANDARDS.md](./ANGULAR-STANDARDS.md).
@@ -73,9 +73,8 @@ Code Angular: [ANGULAR-STANDARDS.md](./ANGULAR-STANDARDS.md).
 ## 5. Checklist ngày 1 (in / tick)
 
 - [ ] Vào được board KAN
-- [ ] Clone được GitLab, checkout `main`
-- [ ] `.env` local, không nằm trong `git status` như file sẽ commit
+- [ ] Clone được GitLab, checkout `develop`
+- [ ] `.env` local, không commit
 - [ ] Mở được 4001 / 4002 / 8787
-- [ ] Biết epic của mình (KAN-4 hoặc KAN-5)
-- [ ] Làm xong [PRACTICE-DRILL.md](./PRACTICE-DRILL.md) với **issue Jira của riêng mình**
-- [ ] MR practice **không** merge vào `main`
+- [ ] Biết epic (KAN-4 hoặc KAN-5)
+- [ ] Practice MR vào `develop`, CI xanh, **không** merge

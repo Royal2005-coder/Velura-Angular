@@ -1,5 +1,6 @@
-# Feature / develop / MR: validate + test + build. Never deploy.
-# main: same gates, then SSH deploy to the Azure origin.
+# Feature → MR into develop: tests + required MR trace note. No production.
+# develop: deploy + verify staging (same VM, Host staging.*).
+# develop → MR into main: tests + note. main: deploy + verify production.
 
 workflow:
   rules:
@@ -29,38 +30,91 @@ default:
 variables:
   npm_config_fund: false
   npm_config_cache: "$CI_PROJECT_DIR/.npm"
-  GIT_DEPTH: 1
+  GIT_DEPTH: 50
+  STAGING_USER_HOST: staging.velura.royalai.dev
+  STAGING_ADMIN_HOST: staging-admin.royalai.dev
 
-.validate_test_build:
+.rules_test_build:
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH
 
+.ssh_deploy:
+  image: alpine:3.20
+  interruptible: false
+  before_script:
+    - apk add --no-cache openssh-client rsync
+    - mkdir -p ~/.ssh
+    - printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/deploy.key
+    - chmod 600 ~/.ssh/deploy.key
+    - printf '%s\n' "$SSH_KNOWN_HOSTS" >> ~/.ssh/known_hosts
+    - test -n "$DEPLOY_HOST"
+    - test -n "$DEPLOY_USER"
+    - export SSH="ssh -i ~/.ssh/deploy.key -o IdentitiesOnly=yes"
+
 validate:workspace:
   stage: validate
-  extends: .validate_test_build
+  extends: .rules_test_build
   script:
     - test -f apps/admin-ng/package.json
     - test -f apps/user-ng/package.json
     - test -f apps/api/src/server.js
     - test -f .env.example
-    - test ! -f web_key.pem
+    - |
+      if echo "$CI_COMMIT_MESSAGE" | grep -qiE '\[skip ci\]|\[ci skip\]'; then
+        echo "[skip ci] is forbidden. Pipeline must always run."
+        exit 1
+      fi
     - |
       if grep -R --include='*.pem' --include='*.key' -n "BEGIN .*PRIVATE KEY" . ; then
         echo "Private keys must not be in the repository"
         exit 1
       fi
 
+validate:mr-contract:
+  stage: validate
+  image: alpine:3.20
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  script:
+    - |
+      echo "$CI_MERGE_REQUEST_TITLE" | grep -Eq '^KAN-[0-9]+' || {
+        echo "MR title must start with KAN-n (version key for git log / Jira)"
+        exit 1
+      }
+    - |
+      if [ "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" = "main" ] \
+        && [ "$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME" != "develop" ]; then
+        echo "Production is only promoted from develop. Retarget this MR to develop (staging), then open develop → main."
+        exit 1
+      fi
+    - |
+      case "$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME" in
+        feature/*|hotfix/*|develop) ;;
+        *)
+          echo "Source branch must be feature/KAN-*, hotfix/KAN-*, or develop"
+          exit 1
+          ;;
+      esac
+
 test:api:
   stage: test
-  extends: .validate_test_build
+  extends: .rules_test_build
   script:
     - npm ci
     - npm run test:api
 
+test:angular:
+  stage: test
+  extends: .rules_test_build
+  timeout: 20m
+  script:
+    - npm ci
+    - npm run test:ng
+
 build:angular:
   stage: build
-  extends: .validate_test_build
+  extends: .rules_test_build
   script:
     - npm ci
     - npm run build:user
@@ -76,26 +130,66 @@ build:angular:
 note:mr:
   stage: note
   image: alpine:3.20
-  allow_failure: true
+  allow_failure: false
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
   needs:
     - job: validate:workspace
+    - job: validate:mr-contract
     - job: test:api
+    - job: test:angular
     - job: build:angular
   script:
-    - apk add --no-cache curl
+    - sed -i 's/\r$//' deploy/scripts/post-mr-trace.sh
+    - sh deploy/scripts/post-mr-trace.sh
+
+deploy:staging:
+  stage: deploy
+  extends: .ssh_deploy
+  environment:
+    name: staging
+    url: https://staging.velura.royalai.dev/
+  rules:
+    - if: $CI_COMMIT_BRANCH == "develop"
+      when: on_success
+  needs:
+    - job: test:api
+    - job: test:angular
+    - job: build:angular
+  script:
+    - SSH="ssh -i ~/.ssh/deploy.key -o IdentitiesOnly=yes"
+    - rsync -az --delete -e "$SSH" apps/user-ng/dist/user-ng/browser/ "${DEPLOY_USER}@${DEPLOY_HOST}:/var/www/velura-staging/user/"
+    - rsync -az --delete -e "$SSH" apps/admin-ng/dist/admin-ng/browser/ "${DEPLOY_USER}@${DEPLOY_HOST}:/var/www/velura-staging/admin/"
+    - rsync -az --delete --exclude node_modules -e "$SSH" apps/api/ "${DEPLOY_USER}@${DEPLOY_HOST}:/opt/velura-staging/api/"
+    - rsync -az -e "$SSH" deploy/ "${DEPLOY_USER}@${DEPLOY_HOST}:/opt/velura/deploy/"
+    - $SSH "${DEPLOY_USER}@${DEPLOY_HOST}" "sed -i 's/\\r$//' /opt/velura/deploy/scripts/remote-staging.sh && bash /opt/velura/deploy/scripts/remote-staging.sh ${DEPLOY_USER}"
+
+verify:staging:
+  stage: verify
+  extends: .ssh_deploy
+  environment:
+    name: staging
+    url: https://staging.velura.royalai.dev/
+  rules:
+    - if: $CI_COMMIT_BRANCH == "develop"
+      when: on_success
+  needs:
+    - job: deploy:staging
+  script:
+    - SSH="ssh -i ~/.ssh/deploy.key -o IdentitiesOnly=yes"
     - |
-      NOTE_TOKEN="${GITLAB_TOKEN:-$CI_JOB_TOKEN}"
-      curl --fail --silent --show-error \
-        --header "PRIVATE-TOKEN: ${NOTE_TOKEN}" \
-        --header "Content-Type: application/json" \
-        --data "{\"body\":\"## Pipeline note\\n- Branch: \\`${CI_COMMIT_REF_NAME}\\`\\n- SHA: \\`${CI_COMMIT_SHORT_SHA}\\`\\n- Pipeline: ${CI_PIPELINE_URL}\\n- Validate, API tests, and Angular production builds passed.\\n- Production deploy is blocked until merge to \\`${CI_DEFAULT_BRANCH}\\`.\\n\"}" \
-        "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests/${CI_MERGE_REQUEST_IID}/notes"
+      $SSH "${DEPLOY_USER}@${DEPLOY_HOST}" "set -e
+        code=\$(curl -sS -o /dev/null -w '%{http_code}' -H 'Host: ${STAGING_USER_HOST}' http://127.0.0.1/)
+        test \"\$code\" = 200
+        curl -fsS -H 'Host: ${STAGING_USER_HOST}' http://127.0.0.1/api/health | grep '\"ok\":true'
+        code=\$(curl -sS -o /dev/null -w '%{http_code}' -H 'Host: ${STAGING_ADMIN_HOST}' http://127.0.0.1/login)
+        test \"\$code\" = 200
+        curl -fsS -H 'Host: ${STAGING_ADMIN_HOST}' http://127.0.0.1/ | grep -q 'Velura Admin'
+      "
 
 deploy:production:
   stage: deploy
-  image: alpine:3.20
+  extends: .ssh_deploy
   environment:
     name: production
     url: https://velura.royalai.dev/
@@ -104,16 +198,9 @@ deploy:production:
       when: on_success
   needs:
     - job: test:api
+    - job: test:angular
     - job: build:angular
-  before_script:
-    - apk add --no-cache openssh-client rsync
-    - mkdir -p ~/.ssh
-    - printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/deploy.key
-    - chmod 600 ~/.ssh/deploy.key
-    - printf '%s\n' "$SSH_KNOWN_HOSTS" >> ~/.ssh/known_hosts
   script:
-    - test -n "$DEPLOY_HOST"
-    - test -n "$DEPLOY_USER"
     - SSH="ssh -i ~/.ssh/deploy.key -o IdentitiesOnly=yes"
     - rsync -az --delete -e "$SSH" apps/user-ng/dist/user-ng/browser/ "${DEPLOY_USER}@${DEPLOY_HOST}:/var/www/velura/user/"
     - rsync -az --delete -e "$SSH" apps/admin-ng/dist/admin-ng/browser/ "${DEPLOY_USER}@${DEPLOY_HOST}:/var/www/velura/admin/"
@@ -139,4 +226,3 @@ verify:production:
     - test "$(curl -fsS -o /dev/null -w '%{http_code}' --max-redirs 2 https://velura.royalai.dev/api/health)" = "200"
     - test "$(curl -fsS -o /dev/null -w '%{http_code}' --max-redirs 2 https://admin.royalai.dev/login)" = "200"
     - curl -fsS https://admin.royalai.dev/ | grep -q "Velura Admin"
-

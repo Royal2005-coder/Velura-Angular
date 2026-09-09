@@ -17,7 +17,10 @@
     "build:user": "npm run build -w @velura/user-ng",
     "build": "npm run build:user && npm run build:admin",
     "test:api": "node --test tests/api/*.test.js",
-    "test": "npm run test:api"
+    "test:user": "npm run test -w @velura/user-ng -- --watch=false",
+    "test:admin": "npm run test -w @velura/admin-ng -- --watch=false",
+    "test:ng": "npm run test:user && npm run test:admin",
+    "test": "npm run test:api && npm run test:ng"
   },
   "engines": {
     "node": ">=22 <25"

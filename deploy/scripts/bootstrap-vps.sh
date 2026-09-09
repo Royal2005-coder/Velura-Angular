@@ -3,7 +3,7 @@ set -euo pipefail
 
 DEPLOY_USER="${SUDO_USER:-${USER}}"
 
-sudo mkdir -p /var/www/velura/user /var/www/velura/admin /opt/velura/api /opt/velura/deploy /etc/nginx/ssl /var/www/html
+sudo mkdir -p /var/www/velura/user /var/www/velura/admin /var/www/velura-staging/user /var/www/velura-staging/admin /opt/velura/api /opt/velura-staging/api /opt/velura/deploy /etc/nginx/ssl /var/www/html
 sudo apt-get update
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y nginx rsync curl ca-certificates openssl
 
@@ -31,8 +31,8 @@ if [ -f /opt/velura/deploy/systemd/velura-api.service ]; then
     /opt/velura/deploy/systemd/velura-api.service | sudo tee /etc/systemd/system/velura-api.service >/dev/null
 fi
 
-sudo chown -R "${DEPLOY_USER}:${DEPLOY_USER}" /var/www/velura /opt/velura
-echo "${DEPLOY_USER} ALL=(root) NOPASSWD: /bin/systemctl restart velura-api, /bin/systemctl reload nginx, /usr/sbin/nginx" | sudo tee /etc/sudoers.d/velura-deploy >/dev/null
+sudo chown -R "${DEPLOY_USER}:${DEPLOY_USER}" /var/www/velura /var/www/velura-staging /opt/velura /opt/velura-staging
+echo "${DEPLOY_USER} ALL=(root) NOPASSWD: /bin/systemctl restart velura-api, /bin/systemctl restart velura-api-staging, /bin/systemctl enable velura-api-staging, /bin/systemctl daemon-reload, /bin/systemctl reload nginx, /usr/sbin/nginx" | sudo tee /etc/sudoers.d/velura-deploy >/dev/null
 sudo chmod 440 /etc/sudoers.d/velura-deploy
 
 sudo systemctl daemon-reload

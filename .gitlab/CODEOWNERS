@@ -1,0 +1,11 @@
+# CODEOWNERS — GitLab merge request approvals
+# Settings → Merge requests → "Require approval from Code Owners" = on
+# Replace extra usernames when the 5 GitLab accounts exist.
+
+* @boygia757-netizen
+
+/apps/user-ng/ @boygia757-netizen
+/apps/admin-ng/ @boygia757-netizen
+/apps/api/ @boygia757-netizen
+/.gitlab-ci.yml @boygia757-netizen
+/deploy/ @boygia757-netizen

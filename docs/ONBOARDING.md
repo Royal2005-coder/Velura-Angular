@@ -55,7 +55,7 @@ npm run build
 3. Commit + **title MR** bắt đầu `KAN-<n>`.
 4. MR **vào develop**. CI: validate + `test:api` + `test:angular` + build + `note:mr`.
 5. Không merge CI đỏ. Không feature → `main`. Không `[skip ci]`.
-6. Production chỉ sau staging: MR `develop` → `main`.
+6. Production chỉ sau MR `develop` → `main`. `develop` không deploy.
 
 Luồng: [HOW-IT-WORKS.md](./HOW-IT-WORKS.md). UI: [ANGULAR-STANDARDS.md](./ANGULAR-STANDARDS.md).
 

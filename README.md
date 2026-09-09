@@ -43,8 +43,8 @@ Jira: https://webadvance.atlassian.net (**KAN**). GitLab: https://gitlab.com/boy
 ## Pipeline
 
 ```
-feature/KAN-n → MR develop → CI (tests + note:mr)
-             → staging → MR develop → main → production
+feature/KAN-n → MR develop → CI (tests + note:mr, không deploy)
+             → MR develop → main → production
 ```
 
 ```bash
@@ -78,7 +78,5 @@ Không commit `.env`.
 | Storefront | https://velura.royalai.dev/ |
 | Admin | https://admin.royalai.dev/login |
 | API | https://velura.royalai.dev/api/health |
-| Staging storefront | https://staging.velura.royalai.dev/ |
-| Staging admin | https://staging-admin.royalai.dev/login |
 
 DNS/CORS: [docs/CLOUDFLARE-SUPABASE.md](docs/CLOUDFLARE-SUPABASE.md).

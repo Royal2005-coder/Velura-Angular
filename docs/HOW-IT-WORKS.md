@@ -11,7 +11,7 @@ Jira KAN-n
   → MR vào develop (title bắt đầu KAN-n)
   → CI: validate + test:api + test:angular + build + note:mr
   → CODEOWNERS reviewer merge develop
-  → deploy:staging + verify:staging (cùng Azure VM)
+  → Push develop: cùng cổng test/build — không deploy
   → MR develop → main (title KAN-n promote)
   → deploy:production + verify:production
   → Jira Close + comment URL MR
@@ -37,21 +37,13 @@ GitLab: MR (`## Why`) + Changes + job `note:mr` (log, notes, artifact `mr-trace.
 | Khi | Jobs | Deploy |
 |---|---|---|
 | MR → `develop` | validate, tests, build, **note:mr** | Không |
-| Push `develop` | tests + build + staging | `staging.velura.royalai.dev` |
+| Push `develop` | validate, tests, build | Không |
 | MR `develop` → `main` | cùng cổng MR | Không |
-| Push `main` | tests + build + production | `velura.royalai.dev` |
+| Push `main` | tests + build + **production** | `velura.royalai.dev` |
 
 `note:mr` không `allow_failure`. Trace bắt buộc nằm trên job log + artifact `mr-trace.md`. Post lên tab Notes khi có `GITLAB_TOKEN` (scope `api`); Job-Token thường 403 và **không** chặn merge.
 
-## Staging (cùng VM, API :8788)
-
-| Host | Path |
-|---|---|
-| staging.velura.royalai.dev | `/var/www/velura-staging/user` |
-| staging-admin.royalai.dev | `/var/www/velura-staging/admin` |
-| API | `/opt/velura-staging/api`, `.env` `PORT=8788` |
-
-Verify CI gọi `Host:` tới `127.0.0.1` — không phụ thuộc DNS. Browser cần Cloudflare A (proxied) cùng IP `135.235.219.13`.
+Không có môi trường staging trên CI. Kiểm tra trên local (`:4001` / `:4002` / API `:8787`) rồi promote `develop` → `main`.
 
 ## Production
 
@@ -64,18 +56,18 @@ Verify CI gọi `Host:` tới `127.0.0.1` — không phụ thuộc DNS. Browser 
 
 | Variable | Ghi chú |
 |---|---|
-| `SSH_PRIVATE_KEY` | PEM, **Protected**, Environment scope = **All** (không chỉ `production`). Protect branch `develop` + `main`. |
+| `SSH_PRIVATE_KEY` | PEM, **Protected**. Scope `production` được vì chỉ `main` deploy. |
 | `SSH_KNOWN_HOSTS` | `ssh-keyscan -H 135.235.219.13` |
 | `DEPLOY_HOST` | `135.235.219.13` |
 | `DEPLOY_USER` | `azureuser` |
 | `GITLAB_TOKEN` | Chỉ khi `CI_JOB_TOKEN` không post được MR note |
 
-Sudoers VM phải có `systemctl restart velura-api-staging` (`deploy/scripts/bootstrap-vps.sh`).
+Sudoers VM: `systemctl restart velura-api` (`deploy/scripts/bootstrap-vps.sh`).
 
 ## GitLab Settings (lead, một lần)
 
 1. Protected branches: `main` + `develop` — no direct push, Maintainers merge via MR.
-2. `SSH_PRIVATE_KEY`: Protected **và** Environment scope **All**. Scope `production` → job `environment: staging` không nhận key (`main` xanh, `develop` fail, VM không có SSH runner).
+2. `SSH_PRIVATE_KEY`: Protected. Environment scope `production` hoặc All — chỉ job `main` dùng.
 3. Merge requests: Pipelines must succeed; Require approval from code owners; ≥ 1 approval.
 4. Push rules: reject `\[skip ci\]`.
 5. Integrations → Jira: Web URL `https://webadvance.atlassian.net`, project key `KAN`, comment + transition on merge.

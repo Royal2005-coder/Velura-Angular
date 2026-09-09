@@ -18,7 +18,7 @@
 | Tests Angular trên CI | `test:angular` → `ng test --watch=false` |
 | Page ViewModel specs | `*.page.spec.ts` cạnh page; mock Model, không gọi mạng |
 | Pipeline Jira key | branch/MR `KAN-n`; feature → develop → staging → main |
-| Trace version | CI `note:mr`: job log + artifact `mr-trace.md` |
+| Trace version | `git log --show-notes --grep=KAN-n` + MR `## Why` + CI `mr-trace.md` |
 | CODEOWNERS | `.gitlab/CODEOWNERS` |
 
 ## Cố ý không làm (không phải thiếu)

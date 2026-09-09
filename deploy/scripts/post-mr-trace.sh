@@ -16,8 +16,11 @@ else
   STAT_RANGE="origin/${TARGET_NAME}...HEAD"
 fi
 
+git fetch origin refs/notes/commits:refs/notes/commits 2>/dev/null || true
+
 LOG=$(git log --oneline ${RANGE} | head -n 30)
 STAT=$(git diff --stat ${STAT_RANGE} | tail -n 40)
+NOTES=$(git log --show-notes --format='%h %s%n%N' ${RANGE} | head -n 80)
 
 echo "${CI_MERGE_REQUEST_TITLE}" | grep -Eq '^KAN-[0-9]+' || {
   echo "MR title must start with KAN-n"
@@ -42,9 +45,14 @@ NOTE=$(printf '%s\n' \
   "${STAT}" \
   '```' \
   '' \
-  "CLI: \`git log --oneline --grep=KAN-\` then \`git show --stat ${CI_COMMIT_SHORT_SHA}\`" \
+  '### git notes' \
+  '```' \
+  "${NOTES}" \
+  '```' \
   '' \
-  'Do not add a docs/*.md file for this ticket. Stable maps stay in docs/; this MR is the version log.')
+  "CLI: \`git log --oneline --show-notes --grep=KAN-\` then \`git show --stat ${CI_COMMIT_SHORT_SHA}\`" \
+  '' \
+  'Context as Code: types/JSDoc = what. This MR + git notes + git log = why. No docs/KAN-n.md.')
 
 printf '%s\n' "${NOTE}" | tee mr-trace.md
 

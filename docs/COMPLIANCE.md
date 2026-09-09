@@ -1,0 +1,37 @@
+# Compliance vs source of truth
+
+Đánh giá trung thực. Agent không được tuyên bố “đã 100% Angular thuần” nếu mục còn Gap.
+
+## Đúng chuẩn (giữ)
+
+| Mục | Bằng chứng |
+|---|---|
+| Angular = frontend TypeScript SPA | `apps/user-ng`, `apps/admin-ng` |
+| User / Admin tách | hai app, hai origin production |
+| Component + template + TS class | `*.page.ts` / `.html` |
+| HTTP trong service, không trong template | `ApiService`, `AdminApiService` |
+| DI | `inject()` |
+| Interceptor auth | `core/interceptors`, `admin-auth.interceptor.ts` |
+| Standalone + Signals (TinyBigCorp) | không `NgModule` |
+| API OOP layers | `*-router.js` → `*-service.js` → `*-repository.js` |
+| Tests API theo ngôn ngữ API | `tests/api/*.test.js` (CI `test:api`) |
+| Pipeline Jira key | branch/MR `KAN-n` |
+
+## Cố ý không làm (không phải thiếu)
+
+| Ý tưởng sai | Lý do |
+|---|---|
+| Viết API bằng Angular | Angular không chạy server HTTP production của Velura |
+| Đổi `apps/api` sang Python FastAPI ngay | TinyBigCorp academic stack; Velura đang live Node + Supabase. Xem [ADR 0002](./adr/0002-node-api-javascript.md) |
+| Đưa NgModule trở lại “cho giống slide” | Trái Angular 21 + TinyBigCorp |
+
+## Gap (ticket / MR tiếp)
+
+| Gap | Việc | Jira |
+|---|---|---|
+| Lazy routes | `loadComponent` feature | [KAN-7](https://webadvance.atlassian.net/browse/KAN-7) |
+| Empty/error UI | cart, wishlist, checkout | [KAN-8](https://webadvance.atlassian.net/browse/KAN-8) |
+| Change password admin | gọi API, bỏ stub | [KAN-9](https://webadvance.atlassian.net/browse/KAN-9) |
+| Angular unit tests mỏng | `*.spec.ts` khi sửa page/service | tạo Task dưới KAN-4/KAN-5 |
+| API TypeScript | migrate dần từng bounded context | ADR mới, không nhét vào MR UI |
+| GitLab MCP 404 | bật Duo/MCP trên group | [KAN-11](https://webadvance.atlassian.net/browse/KAN-11) |

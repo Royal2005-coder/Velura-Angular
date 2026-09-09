@@ -1,54 +1,71 @@
 # Velura Angular
 
-Production workspace for the Velura fashion shop: Angular 21 customer SPA, Angular 21 admin SPA, and the Node API that already ran locally on `localhost:4002`, `localhost:4001`, and `localhost:8787`.
+Workspace production: hai SPA **Angular 21** (storefront + admin) và HTTP API **Node** (không phải Angular).
 
-This folder is the clean extract of the Angular work. Vanilla Vite apps stay in the original monorepo.
+Người mới và agent: đọc **[AGENTS.md](AGENTS.md)** trước, rồi file này, rồi **[docs/SOURCE-OF-TRUTH.md](docs/SOURCE-OF-TRUTH.md)**.
 
-## Team onboard (5 người)
+## Source of truth
 
-Đọc **[docs/README.md](docs/README.md)** rồi làm lần lượt:
+| Câu hỏi | Đọc |
+|---|---|
+| Angular là gì / component / service / HTTP | [docs/SOURCE-OF-TRUTH.md](docs/SOURCE-OF-TRUTH.md) + [LECTURE-MAP](docs/source-of-truth/LECTURE-MAP.md) + [BOOK-MAP](docs/source-of-truth/BOOK-MAP.md) |
+| Vì sao API vẫn `.js` | [ADR 0002](docs/adr/0002-node-api-javascript.md) |
+| Vì sao không `NgModule` | [ADR 0001](docs/adr/0001-angular-21-standalone-signals.md) |
+| Đã chuẩn chưa / còn gap | [docs/COMPLIANCE.md](docs/COMPLIANCE.md) |
+| Cài MCP Cursor (Jira + GitLab) | [docs/MCP-SETUP.md](docs/MCP-SETUP.md) |
+| Làm việc Jira → MR → CI → production | [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) |
+| Ngày 1 / practice | [docs/ONBOARDING.md](docs/ONBOARDING.md), [docs/PRACTICE-DRILL.md](docs/PRACTICE-DRILL.md) |
+| Mục lục docs | [docs/README.md](docs/README.md) |
 
-1. [docs/ONBOARDING.md](docs/ONBOARDING.md) — ngày 1
-2. [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) — Jira = kế hoạch, GitLab = code/CI/deploy
-3. [docs/PRACTICE-DRILL.md](docs/PRACTICE-DRILL.md) — bài tập tay, **không merge `main`**
+Slide gốc và sách GoalKicker nằm ngoài Git (TinyBigCorp `docs/`). Repo chỉ giữ **bản map** để agent không dán sách có bản quyền.
 
-Issue mẫu: [KAN-13](https://webadvance.atlassian.net/browse/KAN-13). Mỗi người tạo Task Jira riêng.
+## Team (5 người)
 
-## Local (same ports as the original localhost)
+| Team | Folder | Epic |
+|---|---|---|
+| Storefront (2) | `apps/user-ng` | [KAN-4](https://webadvance.atlassian.net/browse/KAN-4) |
+| Admin (2) | `apps/admin-ng`, `apps/api` | [KAN-5](https://webadvance.atlassian.net/browse/KAN-5) |
+| Lead (1) | CI, `docs/`, `packages/` | cả hai khi đụng contract |
+
+Jira: https://webadvance.atlassian.net (project **KAN**).  
+GitLab: https://gitlab.com/boygia757-netizen/velura-project  
+Không dùng GitLab Issues làm backlog.
+
+## Pipeline bắt buộc
+
+```
+Jira KAN-n → feature/KAN-n-name → MR title KAN-n (template + ADR nếu đổi kiến trúc)
+         → CI: validate:workspace, test:api, build:angular  (không deploy)
+         → merge main → deploy:production + verify:production → Jira Close
+```
+
+MR mẫu đang chạy: https://gitlab.com/boygia757-netizen/velura-project/-/merge_requests/1 (`KAN-13`).
+
+## Local
 
 | App | Command | URL |
 |---|---|---|
 | API | `npm run start:api` | http://localhost:8787/health |
-| Admin Angular | `npm run start:admin` | http://localhost:4001/login |
-| Customer Angular | `npm run start:user` | http://localhost:4002/ |
-
-Copy `.env.example` to `.env` and use the same Supabase values as the original project. Do not commit `.env`.
+| Admin | `npm run start:admin` | http://localhost:4001/login (`localhost`, không `127.0.0.1`) |
+| Storefront | `npm run start:user` | http://localhost:4002/ |
 
 ```bash
+git clone git@gitlab.com:boygia757-netizen/velura-project.git
+cd velura-project
 npm install
+copy .env.example .env
 npm run test:api
 npm run build
 ```
 
-## Architecture
+Không commit `.env`.
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/ANGULAR-STANDARDS.md](docs/ANGULAR-STANDARDS.md), and [docs/TEAM-PROCESS.md](docs/TEAM-PROCESS.md). Frontend is MVVM + Signals (Angular 21 standalone). Two teams: Storefront (`user-ng`) and Admin (`admin-ng` + `api`). Planning lives in Jira **KAN** at https://webadvance.atlassian.net.
-
-## GitLab GitOps
-
-See [docs/GITOPS.md](docs/GITOPS.md) and [docs/JIRA-GITLAB.md](docs/JIRA-GITLAB.md).
-
-- Feature branch: `feature/KAN-*` → validate + API tests + production Angular build
-- Merge Request: same gates + Jira key `KAN-n` in the title
-- `main`: deploy to the Azure origin after tests pass
-
-## Production URLs
+## Production
 
 | Surface | URL |
 |---|---|
-| Customer SPA | https://velura.royalai.dev/ |
-| Admin SPA | https://admin.royalai.dev/login |
-| API health | https://velura.royalai.dev/api/health |
-| Origin IP | `135.235.219.13` |
+| Storefront | https://velura.royalai.dev/ |
+| Admin | https://admin.royalai.dev/login |
+| API | https://velura.royalai.dev/api/health |
 
-Cloudflare and Supabase allowlists: [docs/CLOUDFLARE-SUPABASE.md](docs/CLOUDFLARE-SUPABASE.md).
+Cloudflare/Supabase: [docs/CLOUDFLARE-SUPABASE.md](docs/CLOUDFLARE-SUPABASE.md). Deploy: [docs/GITOPS.md](docs/GITOPS.md).

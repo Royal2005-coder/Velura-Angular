@@ -12,11 +12,11 @@ Viết lại API bằng Angular là sai (Angular không phải HTTP server của
 
 ## Decision
 
-Giữ `apps/api` **Node JavaScript** với OOP: router → service → repository. Test API bằng `tests/api/*.test.js`. Angular apps chỉ consume JSON.
+Giữ `apps/api` **Node** với OOP: router → service → repository. Ngôn ngữ nguồn là TypeScript ([ADR 0003](./0003-node-api-typescript.md)). Test API bằng `tests/api/*.test.ts`. Angular apps chỉ consume JSON.
 
 Migrate Python chỉ khi có ADR mới và epic riêng — không lẫn trong MR UI.
 
-TypeScript **trên cùng Node runtime** (không phải Angular): kế hoạch [ADR 0003](./0003-node-api-typescript.md) (Proposed). Không rewrite API trong MR UI.
+TypeScript **trên cùng Node runtime** (không phải Angular): [ADR 0003](./0003-node-api-typescript.md) (Accepted). Không rewrite API trong MR UI.
 
 ## Consequences
 

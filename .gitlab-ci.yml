@@ -58,7 +58,8 @@ validate:workspace:
   script:
     - test -f apps/admin-ng/package.json
     - test -f apps/user-ng/package.json
-    - test -f apps/api/src/server.js
+    - test -f apps/api/src/server.ts
+    - test -f apps/api/tsconfig.json
     - test -f .env.example
     - |
       if echo "$CI_COMMIT_MESSAGE" | grep -qiE '\[skip ci\]|\[ci skip\]'; then
@@ -102,6 +103,7 @@ test:api:
   extends: .rules_test_build
   script:
     - npm ci
+    - npm run typecheck:api
     - npm run test:api
 
 test:angular:
@@ -117,6 +119,7 @@ build:angular:
   extends: .rules_test_build
   script:
     - npm ci
+    - npm run build:api
     - npm run build:user
     - npm run build:admin
   artifacts:

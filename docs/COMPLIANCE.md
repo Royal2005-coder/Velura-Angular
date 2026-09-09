@@ -13,8 +13,8 @@
 | DI | `inject()` |
 | Interceptor auth | `core/interceptors`, `admin-auth.interceptor.ts` |
 | Standalone + Signals (TinyBigCorp) | không `NgModule` |
-| API OOP layers | `*-router.js` → `*-service.js` → `*-repository.js` |
-| Tests API theo ngôn ngữ API | `tests/api/*.test.js` (CI `test:api`) |
+| API OOP layers | `*-router.ts` → `*-service.ts` → `*-repository.ts` |
+| Tests API theo ngôn ngữ API | `tests/api/*.test.ts` (CI `test:api` + `typecheck:api`) |
 | Tests Angular trên CI | `test:angular` → `ng test --watch=false` |
 | Page ViewModel specs | `*.page.spec.ts` cạnh page; mock Model, không gọi mạng |
 | Pipeline Jira key | branch/MR `KAN-n`; feature → develop → staging → main |
@@ -28,7 +28,7 @@
 | Viết API bằng Angular | Angular không chạy server HTTP production của Velura |
 | Đổi `apps/api` sang Python FastAPI ngay | TinyBigCorp academic stack; Velura đang live Node + Supabase. Xem [ADR 0002](./adr/0002-node-api-javascript.md) |
 | Đưa NgModule trở lại “cho giống slide” | Trái Angular 21 + TinyBigCorp |
-| Đợi API TypeScript rồi mới test page | Page test mock `ApiService`. TS API = [ADR 0003](./adr/0003-node-api-typescript.md), epic riêng |
+| Đợi API TypeScript rồi mới test page | Page test mock `ApiService`. API đã TypeScript trên Node ([ADR 0003](./adr/0003-node-api-typescript.md)) |
 
 ## Gap (ticket / MR tiếp)
 
@@ -38,5 +38,5 @@
 | Empty/error UI | cart, wishlist, checkout | [KAN-8](https://webadvance.atlassian.net/browse/KAN-8) |
 | Change password admin | gọi API, bỏ stub local | [KAN-9](https://webadvance.atlassian.net/browse/KAN-9) |
 | Page specs sâu hơn khi đụng feature | empty/error/filter còn thiếu trên một số page | KAN-4 / KAN-5 |
-| API TypeScript trên Node | migrate từng bounded context; runtime vẫn Node | [ADR 0003](./adr/0003-node-api-typescript.md) · [KAN-14](https://webadvance.atlassian.net/browse/KAN-14) |
+| Domain API bỏ `// @ts-nocheck` | từng bounded context, runtime vẫn Node | [ADR 0003](./adr/0003-node-api-typescript.md) · [KAN-15](https://webadvance.atlassian.net/browse/KAN-15) |
 | GitLab MCP 404 | bật Duo/MCP trên group | [KAN-11](https://webadvance.atlassian.net/browse/KAN-11) |

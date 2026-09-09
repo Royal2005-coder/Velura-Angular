@@ -58,10 +58,18 @@ variables:
         exit 1
       fi
     - mkdir -p ~/.ssh
-    - printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/deploy.key
-    - chmod 600 ~/.ssh/deploy.key
-    - grep -q "BEGIN .*PRIVATE KEY" ~/.ssh/deploy.key || {
-        echo "SSH_PRIVATE_KEY is set but is not a PEM private key (Protected/masked empty payload?)."
+    - |
+      echo "CI_COMMIT_REF_PROTECTED=${CI_COMMIT_REF_PROTECTED:-unset} branch=${CI_COMMIT_BRANCH:-} env=${CI_ENVIRONMENT_NAME:-none}"
+      if [ -f "$SSH_PRIVATE_KEY" ]; then
+        echo "SSH_PRIVATE_KEY is a File variable; copying that file"
+        tr -d '\r' < "$SSH_PRIVATE_KEY" > ~/.ssh/deploy.key
+      else
+        printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/deploy.key
+      fi
+      chmod 600 ~/.ssh/deploy.key
+      echo "deploy.key bytes=$(wc -c < ~/.ssh/deploy.key)"
+      grep -q "BEGIN .*PRIVATE KEY" ~/.ssh/deploy.key || {
+        echo "SSH_PRIVATE_KEY is not a PEM. Check type=Variable (not a random string) and Environment scope=All (not only production)."
         exit 1
       }
     - printf '%s\n' "$SSH_KNOWN_HOSTS" >> ~/.ssh/known_hosts
@@ -146,12 +154,16 @@ build:angular:
     - npm run build:api
     - npm run build:user
     - npm run build:admin
+    - test -f apps/api/dist/server.js
+    - test -d apps/user-ng/dist/user-ng/browser
+    - test -d apps/admin-ng/dist/admin-ng/browser
   artifacts:
     expire_in: 14 days
     paths:
       - apps/user-ng/dist
       - apps/admin-ng/dist
-      - apps/api
+      - apps/api/dist
+      - apps/api/package.json
       - deploy
 
 note:mr:

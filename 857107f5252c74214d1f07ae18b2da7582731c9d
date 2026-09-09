@@ -1,0 +1,3 @@
+KAN-15
+develop pipeline e5cb1e1 failed at deploy:staging because GitLab never SSHed (no auth.log after last main deploy). SSH_PRIVATE_KEY is Protected and develop is not receiving it.
+Do not add docs/KAN-n.md. Types/JSDoc = what. This note + MR = why.

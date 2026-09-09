@@ -37,4 +37,4 @@ View (template)
 
 ## Local vs production
 
-Local admin Google SSO uses `http://localhost:4001/auth/callback`. Production admin uses the same path on `https://admin.velura.royalai.dev` so the SPA does not need a `/admin` base href.
+Local admin Google SSO uses `http://localhost:4001/auth/callback`. Production admin uses the same path on `https://admin.royalai.dev` so the SPA does not need a `/admin` base href.

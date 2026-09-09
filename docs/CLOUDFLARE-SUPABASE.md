@@ -8,7 +8,9 @@ Registered domain: **velura.royalai.dev**.
 | Type | Name | Content | Proxy | Purpose |
 |---|---|---|---|---|
 | A | `velura.royalai.dev` | `135.235.219.13` | Proxied (orange) | Customer SPA + `/api` |
-| A | `admin` | `135.235.219.13` | Proxied | Admin SPA |
+| A | `admin.royalai.dev` | `135.235.219.13` | Proxied | Admin SPA |
+
+The admin host is **`admin.royalai.dev`** (sibling of `velura.royalai.dev`), not `admin.velura.royalai.dev`. nginx accepts both.
 
 Optional later: `develop` / `admin-develop` for a staging host. Not required for the first production cut.
 
@@ -23,7 +25,7 @@ After DNS is orange-clouded, public URLs:
 
 - https://velura.royalai.dev/
 - https://velura.royalai.dev/api/health
-- https://admin.velura.royalai.dev/login
+- https://admin.royalai.dev/login
 
 ## Supabase Auth allowlist
 
@@ -43,6 +45,8 @@ https://velura.royalai.dev
 http://localhost:4001/auth/callback
 http://localhost:4002/**
 https://velura.royalai.dev/**
+https://admin.royalai.dev/**
+https://admin.royalai.dev/auth/callback
 https://admin.velura.royalai.dev/**
 https://admin.velura.royalai.dev/auth/callback
 ```
@@ -55,6 +59,7 @@ Authorized JavaScript origins:
 http://localhost:4001
 http://localhost:4002
 https://velura.royalai.dev
+https://admin.royalai.dev
 https://admin.velura.royalai.dev
 ```
 
@@ -69,7 +74,7 @@ https://gtyuajboeffmfskofoyh.supabase.co/auth/v1/callback
 `/opt/velura/.env` must contain:
 
 ```
-CORS_ORIGIN=https://velura.royalai.dev,https://admin.velura.royalai.dev
+CORS_ORIGIN=https://velura.royalai.dev,https://admin.royalai.dev,https://admin.velura.royalai.dev
 ```
 
 Browsers call `/api` on the same host through nginx, so CORS is a fallback for the admin subdomain.

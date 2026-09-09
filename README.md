@@ -37,7 +37,7 @@ See [docs/GITOPS.md](docs/GITOPS.md).
 | Surface | URL |
 |---|---|
 | Customer SPA | https://velura.royalai.dev/ |
-| Admin SPA | https://admin.velura.royalai.dev/ |
+| Admin SPA | https://admin.royalai.dev/login |
 | API health | https://velura.royalai.dev/api/health |
 | Origin IP | `135.235.219.13` |
 

@@ -10,7 +10,7 @@ feature/*  →  Merge Request (notes required)  →  CI: validate / test / build
                                          CI deploy: rsync + systemd + nginx
                                                       ↓
                               https://velura.royalai.dev
-                              https://admin.velura.royalai.dev
+                              https://admin.royalai.dev
 ```
 
 ## Branch policy

@@ -137,4 +137,6 @@ verify:production:
     - test "$(curl -fsS -o /dev/null -w '%{http_code}' --max-redirs 2 https://velura.royalai.dev/)" = "200"
     - curl -fsS https://velura.royalai.dev/api/health | grep '"ok":true'
     - test "$(curl -fsS -o /dev/null -w '%{http_code}' --max-redirs 2 https://velura.royalai.dev/api/health)" = "200"
+    - test "$(curl -fsS -o /dev/null -w '%{http_code}' --max-redirs 2 https://admin.royalai.dev/login)" = "200"
+    - curl -fsS https://admin.royalai.dev/ | grep -q "Velura Admin"
 

@@ -53,3 +53,13 @@ theme/                tokens
 | `apps/admin-ng` | `src/app/theme` | `core/admin-api.service.ts` |
 
 Local ports stay **4002** (user), **4001** (admin, host `localhost` for Google SSO), **8787** (API).
+
+## Unit tests (ViewModel)
+
+Book ch. 2 / 23.3: test the **component class**, not the HTTP server.
+
+- Colocate `*.page.spec.ts` next to `*.page.ts`.
+- Provide a **stub Model** (`ApiService`, `AdminApiService`, `CatalogService`). Never hit the network.
+- Assert **signals / computed** (empty cart, invalid login form, dashboard tabs). `should create` alone is not enough for a page with ViewModel logic.
+- Do not import `HttpClient` in the spec to “make the page work” — if the page needs HTTP, the architecture is wrong.
+- API TypeScript is [ADR 0003](./adr/0003-node-api-typescript.md). Page tests do not block on it.

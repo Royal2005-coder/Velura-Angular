@@ -84,4 +84,5 @@ Do not push product work to `main` or `develop`. Feature MR targets **develop**.
 | [KAN-10](https://webadvance.atlassian.net/browse/KAN-10) | Task | Admin theme folder |
 | [KAN-11](https://webadvance.atlassian.net/browse/KAN-11) | Task | GitLab MCP + Jira app |
 | [KAN-12](https://webadvance.atlassian.net/browse/KAN-12) | Task | Process docs |
-| [KAN-13](https://webadvance.atlassian.net/browse/KAN-13) | Task | Onboarding + SDLC (MR → develop, không feature → main) |
+| [KAN-13](https://webadvance.atlassian.net/browse/KAN-13) | Task | Onboarding + SDLC (MR → develop) |
+| [KAN-14](https://webadvance.atlassian.net/browse/KAN-14) | Task | Page `*.spec.ts` + ADR 0003 Node API TypeScript |

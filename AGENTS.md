@@ -48,6 +48,7 @@ Slide/sách **không** copy vào Git (bản quyền). Map:
 - Lecture `NgModule` → **standalone + Signals** (ADR 0001). Không thêm `NgModule`.
 - Feature MR target **`develop`**. Chỉ `develop` → `main` mới production.
 - CI bắt buộc: `validate` + `test:api` + `test:angular` + `build` + `note:mr`. `[skip ci]` cấm.
+- Page `*.spec.ts` mock Model (`ApiService` / `AdminApiService`). Không viết API bằng Angular. TypeScript API = [ADR 0003](docs/adr/0003-node-api-typescript.md) (Node runtime).
 - Build xanh ≠ UI đúng: phải có `test:ng` và reviewer nhìn Changes.
 
 <Context>

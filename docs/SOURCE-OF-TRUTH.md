@@ -71,7 +71,7 @@ Ví dụ: `apps/api/src/products/product-router.js` → `product-service.js` →
 
 Angular không import repository. Chỉ DTO JSON qua `ApiService` / `AdminApiService`.
 
-TypeScript cho API = cải tiến sau (ADR mới), không phải điều kiện “đúng Angular”.
+TypeScript cho API là **cải tiến sau** trên **cùng Node runtime** ([adr/0003-node-api-typescript.md](./adr/0003-node-api-typescript.md)). Không phải điều kiện “đúng Angular”. Không viết API bằng Angular.
 
 ## SDLC (bắt buộc)
 

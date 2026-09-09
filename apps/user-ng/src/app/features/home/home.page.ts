@@ -51,7 +51,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
     if (video) {
       video.muted = true;
       video.playsInline = true;
-      void video.play().catch(() => undefined);
+      void Promise.resolve(video.play()).catch(() => undefined);
     }
     if (!this.loading()) {
       this.bindCarousels();
@@ -120,7 +120,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
     video.muted = !next;
     this.soundOn.set(next);
     if (next) {
-      void video.play().catch(() => undefined);
+      void Promise.resolve(video.play()).catch(() => undefined);
     }
   }
 

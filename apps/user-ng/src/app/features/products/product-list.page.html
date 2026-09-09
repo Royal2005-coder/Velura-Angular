@@ -1,0 +1,325 @@
+<main class="product-list-page container">
+  <header class="product-list-header">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <a routerLink="/">Trang chủ</a>
+      <span class="breadcrumb__separator">/</span>
+      <span class="breadcrumb__current">Tất cả sản phẩm</span>
+    </nav>
+    <h1 class="product-list-header__title">Tất cả sản phẩm</h1>
+    <p class="product-list-header__subtitle">
+      Khám phá hơn 1.200 thiết kế thời trang nữ sang trọng và thời thượng
+    </p>
+  </header>
+
+  <div class="product-list-layout">
+    <aside class="filter-sidebar" [class.filter-sidebar--open]="sidebarOpen()">
+      <div class="filter-sidebar__header">
+        <h2 class="filter-sidebar__title">Bộ lọc</h2>
+        <button class="btn-clear-filters" type="button" (click)="clearFilters()">Xóa bộ lọc</button>
+        <button class="filter-sidebar__close" type="button" aria-label="Đóng bộ lọc" (click)="toggleSidebar()">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+
+      @if (hasStyleProfile()) {
+        <div class="style-profile-toggle">
+          <div class="style-profile-toggle__row">
+            <label class="style-profile-toggle__label">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+              </svg>
+              <span>Gợi ý dựa trên Style Profile</span>
+            </label>
+            <label class="style-profile-toggle__switch">
+              <input type="checkbox" [checked]="suggestionsEnabled()" (change)="toggleSuggestions($event)" />
+              <span class="style-profile-toggle__slider"></span>
+            </label>
+          </div>
+          @if (suggestionsEnabled() && profileTags().length) {
+            <div class="style-profile-toggle__summary">
+              @for (tag of profileTags(); track tag) {
+                <span class="style-profile-toggle__tag">{{ tag }}</span>
+              }
+            </div>
+          }
+        </div>
+      }
+
+      <div class="filter-group">
+        <h3 class="filter-group__title">Danh mục</h3>
+        <div class="filter-group__list">
+          @for (category of categories; track category.slug) {
+            <label class="filter-checkbox">
+              <input
+                type="checkbox"
+                name="category"
+                [value]="category.slug"
+                [checked]="selectedSlugs().includes(category.slug)"
+                (change)="onCategoryChange(category.slug, $event)"
+              />
+              <span>{{ category.name }}</span>
+            </label>
+          }
+        </div>
+      </div>
+
+      <div class="filter-group">
+        <h3 class="filter-group__title">Khoảng giá</h3>
+        <div class="price-range">
+          <div class="price-range__inputs">
+            <input type="number" class="price-range__input" placeholder="Từ" [value]="minPrice()" min="0" (input)="onPriceChange('min', $event)" />
+            <span class="price-range__separator">—</span>
+            <input type="number" class="price-range__input" placeholder="Đến" [value]="maxPrice()" min="0" (input)="onPriceChange('max', $event)" />
+          </div>
+          <span class="price-range__text">{{ priceRangeLabel() }}</span>
+        </div>
+      </div>
+
+      <div class="filter-group">
+        <h3 class="filter-group__title">Màu sắc</h3>
+        <div class="color-palette">
+          @for (swatch of colorSwatches; track swatch.title) {
+            <button
+              type="button"
+              class="color-option"
+              [class.is-selected]="selectedColor() === swatch.title"
+              [style.background]="swatch.hex"
+              [title]="swatch.title"
+              (click)="selectColor(swatch.title)"
+            ></button>
+          }
+        </div>
+      </div>
+
+      <div class="filter-group">
+        <h3 class="filter-group__title">Kích cỡ</h3>
+        <div class="size-selector">
+          @for (size of sizeOptions(); track size) {
+            <button type="button" class="size-option" [class.is-active]="selectedSize() === size" (click)="selectSize(size)">{{ size }}</button>
+          }
+        </div>
+      </div>
+
+      <div class="filter-group">
+        <h3 class="filter-group__title">Đặc biệt</h3>
+        <div class="filter-group__list">
+          <label class="filter-checkbox"><input type="checkbox" name="special" value="featured" [checked]="specials().includes('featured')" (change)="onSpecialChange('featured', $event)" /><span>Nổi bật (Hot)</span></label>
+          <label class="filter-checkbox"><input type="checkbox" name="special" value="combo" [checked]="specials().includes('combo')" (change)="onSpecialChange('combo', $event)" /><span>Set Combo</span></label>
+          <label class="filter-checkbox"><input type="checkbox" name="special" value="on_sale" [checked]="specials().includes('on_sale')" (change)="onSpecialChange('on_sale', $event)" /><span>Đang giảm giá</span></label>
+        </div>
+      </div>
+
+      <div class="filter-group body-shape-filter-group" id="body-shape-filter-group" style="position: relative; margin-top: 8px;">
+        <h3 class="filter-group__title">Dáng người (Body Type)</h3>
+        <div
+          class="filter-group__list js-body-shape-list"
+          [style.filter]="bodyShapeUnlocked() ? 'none' : 'blur(3px)'"
+          [style.pointer-events]="bodyShapeUnlocked() ? 'auto' : 'none'"
+          [style.opacity]="bodyShapeUnlocked() ? '1' : '0.5'"
+        >
+          @for (shape of bodyShapes; track shape.value) {
+            <label class="filter-checkbox">
+              <input
+                type="checkbox"
+                name="body_shape"
+                [value]="shape.value"
+                [checked]="selectedShapes().includes(shape.value)"
+                (change)="onShapeChange(shape.value, $event)"
+              />
+              <span>{{ shape.label }}</span>
+            </label>
+          }
+        </div>
+        @if (!bodyShapeUnlocked()) {
+          <a
+            class="body-shape-lock-overlay js-body-shape-lock"
+            [routerLink]="isLoggedIn() ? '/ai/style-quiz' : '/auth/signup'"
+            style="position: absolute; top: 24px; left: 0; right: 0; bottom: 0; background: rgba(255, 255, 255, 0.7); backdrop-filter: blur(2px); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 12px; z-index: 5; text-decoration: none; cursor: pointer;"
+          >
+            @if (isLoggedIn()) {
+              <div class="member-lock-badge">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="12" y1="16" x2="12" y2="12"></line>
+                  <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                </svg>
+                Hoàn thành Style Profile để mở khóa bộ lọc dáng người.
+              </div>
+            } @else {
+              <div class="member-lock-badge">
+                <span aria-hidden="true">🔒</span>
+                Chỉ thành viên. Lọc theo dáng người - đăng ký để mở khóa.
+              </div>
+            }
+          </a>
+        }
+      </div>
+
+      <div class="fit-helper">
+        @if (fitHelperState() === 'active') {
+          <div class="fit-helper__header" style="color: #C97B63; display: flex; align-items: center; justify-content: space-between; width: 100%;">
+            <div style="display: flex; align-items: center; gap: 4px;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                <polyline points="22 4 12 14.01 9 11.01"></polyline>
+              </svg>
+              <span>Gợi ý đã kích hoạt</span>
+            </div>
+            <button class="js-toggle-fit-suggestions" type="button" style="font-size: 0.7rem; background: #C97B63; color: white; border: none; padding: 2px 6px; border-radius: 4px; cursor: pointer; font-weight: 600;" (click)="setSuggestions(false)">Tắt</button>
+          </div>
+          <p class="fit-helper__desc">Hệ thống đã tự động lọc các trang phục phù hợp nhất với dáng người <strong>{{ bodyShapeLabel() }}</strong> của bạn.</p>
+        } @else if (fitHelperState() === 'paused') {
+          <div class="fit-helper__header" style="color: #666; display: flex; align-items: center; justify-content: space-between; width: 100%;">
+            <div style="display: flex; align-items: center; gap: 4px;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="16" x2="12" y2="12"></line>
+                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+              </svg>
+              <span>Gợi ý đã tạm tắt</span>
+            </div>
+            <button class="js-toggle-fit-suggestions" type="button" style="font-size: 0.7rem; background: #888; color: white; border: none; padding: 2px 6px; border-radius: 4px; cursor: pointer; font-weight: 600;" (click)="setSuggestions(true)">Bật</button>
+          </div>
+          <p class="fit-helper__desc">Nhấp vào nút Bật để tự động điền lại các bộ lọc dựa trên hồ sơ Style Profile của bạn.</p>
+        } @else if (fitHelperState() === 'empty') {
+          <div class="fit-helper__header">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="16" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+            <span>Style Profile trống</span>
+          </div>
+          <p class="fit-helper__desc">Hãy hoàn thành <a routerLink="/ai/style-quiz" style="color: #C97B63; font-weight: 600; text-decoration: underline;">Style Quiz</a> để mở khóa bộ lọc tự động gợi ý kích cỡ theo dáng người của bạn.</p>
+        } @else {
+          <div class="fit-helper__header">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="16" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+            <span>Chỉ thành viên</span>
+          </div>
+          <p class="fit-helper__desc">Đăng nhập hoặc đăng ký thành viên để mở khóa bộ lọc tự động gợi ý kích cỡ theo số đo dáng người riêng của bạn.</p>
+        }
+      </div>
+    </aside>
+
+    <div class="product-list-content">
+      <div class="grid-controls">
+        <span class="grid-controls__count">
+          @if (loading()) {
+            Đang tải sản phẩm từ cửa hàng...
+          } @else {
+            Hiển thị <strong>{{ productCount() }}</strong> sản phẩm
+            <span class="js-active-category" style="margin-left:4px; font-weight:600;">{{ activeCategoryLabel() }}</span>
+          }
+        </span>
+        <div class="grid-controls__actions">
+          <div class="view-toggle">
+            <button class="view-toggle__btn" type="button" aria-label="Xem dạng lưới" [class.active]="viewMode() === 'grid'" (click)="setView('grid')">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="7" height="7"></rect>
+                <rect x="14" y="3" width="7" height="7"></rect>
+                <rect x="14" y="14" width="7" height="7"></rect>
+                <rect x="3" y="14" width="7" height="7"></rect>
+              </svg>
+            </button>
+            <button class="view-toggle__btn" type="button" aria-label="Xem dạng bản to" [class.active]="viewMode() === 'large'" (click)="setView('large')">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="7" height="18"></rect>
+                <rect x="14" y="3" width="7" height="18"></rect>
+              </svg>
+            </button>
+            <button class="view-toggle__btn" type="button" aria-label="Xem dạng danh sách" [class.active]="viewMode() === 'list'" (click)="setView('list')">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="8" y1="6" x2="21" y2="6"></line>
+                <line x1="8" y1="12" x2="21" y2="12"></line>
+                <line x1="8" y1="18" x2="21" y2="18"></line>
+                <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                <line x1="3" y1="18" x2="3.01" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+          <button class="filter-toggle-btn" type="button" (click)="toggleSidebar()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+            </svg>
+            <span>Bộ lọc</span>
+          </button>
+          <div class="grid-controls__sort">
+            <label for="sort-select" class="visually-hidden">Sắp xếp</label>
+            <select id="sort-select" (change)="onSortChange($event)">
+              <option value="newest" selected>Mới nhất</option>
+              <option value="price-asc">Giá: Thấp đến Cao</option>
+              <option value="price-desc">Giá: Cao đến Thấp</option>
+              <option value="popular">Bán chạy nhất</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div [class]="gridClass()">
+        @if (loading()) {
+          <div style="grid-column: 1 / -1; text-align: center; padding: 64px 0; color: var(--soft);">
+            Đang tải sản phẩm từ cửa hàng...
+          </div>
+        } @else if (loadError()) {
+          <div style="grid-column: 1 / -1; text-align: center; padding: 64px 0; color: var(--soft);">
+            {{ loadError() }}
+          </div>
+        } @else if (filteredProducts().length === 0) {
+          <div style="grid-column: 1 / -1; text-align: center; padding: 48px 0; color: var(--soft);">
+            <p style="margin: 0; font-size: 1.1rem; font-weight: 500; color: var(--text-dark);">Rất tiếc, Velura không tìm thấy sản phẩm nào phù hợp với lựa chọn của bạn.</p>
+            <button class="btn btn--sm btn--primary" type="button" style="margin-top: 16px;" (click)="clearFilters()">Đặt lại bộ lọc</button>
+            @if (featuredFallback().length) {
+              <div style="margin-top: 48px; text-align: left;">
+                <h3 style="font-family: 'Playfair Display', serif; font-size: 1.5rem; margin-bottom: 24px; text-align: center; color: var(--text-dark);">Gợi ý sản phẩm nổi bật dành cho bạn</h3>
+                <div class="product-grid">
+                  @for (product of featuredFallback(); track product.product_id) {
+                    <app-product-card [product]="product" appearance="catalog" />
+                  }
+                </div>
+              </div>
+            }
+          </div>
+        } @else {
+          @for (product of pagedProducts(); track product.product_id) {
+            <app-product-card [product]="product" appearance="catalog" />
+          }
+        }
+      </div>
+
+      @if (showPagination()) {
+        <div class="pagination" style="display: flex;">
+          <button class="pagination__btn" type="button" aria-label="Trang trước" [class.pagination__btn--disabled]="currentPage() === 1" [disabled]="currentPage() === 1" (click)="prevPage()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="15 18 9 12 15 6"></polyline>
+            </svg>
+          </button>
+          @for (item of pageItems(); track item.kind + '-' + item.value) {
+            @if (item.kind === 'dots') {
+              <span class="pagination__dots">...</span>
+            } @else {
+              <button
+                class="pagination__btn"
+                type="button"
+                [class.pagination__btn--active]="currentPage() === item.value"
+                (click)="goToPage(item.value)"
+              >{{ item.value }}</button>
+            }
+          }
+          <button class="pagination__btn" type="button" aria-label="Trang sau" [class.pagination__btn--disabled]="currentPage() === totalPages()" [disabled]="currentPage() === totalPages()" (click)="nextPage()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+          </button>
+        </div>
+      }
+    </div>
+  </div>
+</main>

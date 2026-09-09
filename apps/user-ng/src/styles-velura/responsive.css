@@ -1,0 +1,143 @@
+/* ============================================================
+   Responsive — đặt cuối cùng (override modules trên)
+   Breakpoints: 1280 / 1024 / 768 / 480
+   ============================================================ */
+
+/* Desktop large: max-width container đã set 1200px, content nằm gọn */
+
+@media (max-width: 1280px) {
+  .container { padding: 0 32px; }
+}
+
+@media (max-width: 1024px) {
+  .checkout-grid {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+  .order-summary { position: static; }
+  .site-footer__grid { grid-template-columns: repeat(2, 1fr); gap: 32px; }
+  .container { padding: 0 24px; }
+}
+
+@media (max-width: 768px) {
+  .container { padding: 0 16px; }
+
+  .site-header__top {
+    gap: 8px;
+    padding: 12px 0;
+  }
+
+  .site-header__search { display: none; }
+  .menu-toggle { display: flex; }
+
+  .site-header__logo img { width: 64px; }
+
+  .site-header__nav {
+    display: none;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    padding: 8px 0 16px;
+    width: 100%;
+  }
+  .site-header__nav.is-open { display: flex; }
+  .site-header__nav a {
+    width: 100%;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .site-header__nav a:last-child { border-bottom: none; }
+
+  .icon-btn { width: 36px; height: 36px; }
+
+  .checkout-steps {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  .checkout-step__line {
+    width: 2px;
+    height: 24px;
+    margin-left: 19px;
+    flex: 0 0 24px;
+    max-width: 2px;
+  }
+
+  .form-row { grid-template-columns: 1fr; }
+
+  .site-footer__inner { padding: 32px 16px; }
+  .site-footer__grid { grid-template-columns: 1fr; gap: 28px; }
+
+  .login-card {
+    position: relative;
+    left: auto;
+    top: auto;
+    transform: none;
+    margin: 24px auto;
+  }
+
+  body.page-signin {
+    overflow: auto;
+    padding: 24px 16px;
+  }
+
+  .signin-stage {
+    width: 100%;
+    height: auto;
+    min-height: auto;
+    padding-bottom: 24px;
+  }
+
+  .signin-stage .product { opacity: 0.4; }
+  .signin-stage .product--8,
+  .signin-stage .product--6,
+  .signin-stage .product--5,
+  .signin-stage .product--4 { display: none; }
+
+  .details-grid { padding: 24px; margin: 0 16px 48px; }
+
+  .action-buttons { flex-direction: column; align-items: stretch; padding: 0 16px 64px; }
+  .action-buttons .btn { width: 100%; }
+
+  .otp-inputs { gap: 8px; }
+  .otp-input {
+    width: 52px;
+    height: 52px;
+    font-size: 1.25rem;
+  }
+
+  .payment-failed { padding: 0 16px 48px; }
+  .payment-failed__actions { flex-direction: column; }
+
+  .card { padding: 16px; }
+}
+
+@media (max-width: 480px) {
+  .container { padding: 0 14px; }
+
+  .site-footer__inner { padding: 28px 14px; }
+
+  .oauth { flex-direction: column; }
+  .btn--facebook,
+  .btn--guest { width: 100%; }
+
+  .coupon-row { flex-direction: column; }
+
+  .checkout-actions { flex-direction: column; }
+  .checkout-actions .btn { width: 100%; }
+
+  .page-title { font-size: 1.5rem; }
+
+  .login-card { padding: 24px 20px; }
+  .login-card__title { font-size: 1.5rem; }
+
+  .icon-btn { width: 34px; height: 34px; }
+  .site-header__actions { gap: 2px; }
+}
+
+@media (max-width: 1212px) and (min-width: 769px), (max-height: 755px) and (min-width: 769px) {
+  body.page-signin:not(.page-signin--mobile-stack) .signin-stage {
+    transform-origin: top center;
+    transform: scale(min(calc((100vw - 24px) / 1172), calc((100vh - 24px) / 715)));
+  }
+}

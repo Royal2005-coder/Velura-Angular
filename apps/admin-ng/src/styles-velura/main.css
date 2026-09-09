@@ -1,0 +1,37 @@
+/* ============================================================
+   Velura — Main CSS Entry
+   Order: base -> layouts -> components -> pages -> responsive
+   ============================================================ */
+
+/* Base */
+@import "./base/_variables.css";
+@import "./base/_reset.css";
+@import "./base/_typography.css";
+@import "./base/_utilities.css";
+
+/* Layouts */
+@import "./layouts/_page-shell.css";
+@import "./layouts/_header.css";
+@import "./layouts/_footer.css";
+
+/* Components */
+@import "./components/_buttons.css";
+@import "./components/_forms.css";
+@import "./components/_cards.css";
+@import "./components/_breadcrumb.css";
+@import "./components/_steps.css";
+@import "./components/_summary.css";
+@import "./components/_review.css";
+@import "./components/_otp-modal.css";
+
+/* Pages */
+@import "./pages/_signin.css";
+@import "./pages/_checkout.css";
+@import "./pages/_success.css";
+@import "./pages/_payment-failed.css";
+
+/* Responsive overrides (must be last) */
+@import "./responsive.css";
+
+/* Final responsive sync overrides */
+@import "./overrides/_responsive-sync.css";

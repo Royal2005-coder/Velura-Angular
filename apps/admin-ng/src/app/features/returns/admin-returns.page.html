@@ -1,0 +1,277 @@
+<main class="admin-content">
+  <p class="admin-page-crumb">Dashboard / Đổi trả &amp; CSKH</p>
+  <section class="admin-kpi-grid" aria-label="Thống kê đổi trả và hỗ trợ">
+    <article class="admin-kpi-card">
+      <div class="admin-kpi-card__head"><p class="admin-kpi-card__label">Đổi/trả chờ xử lý</p><span class="admin-kpi-card__icon"><app-admin-icon name="refresh" /></span></div>
+      <strong class="admin-kpi-card__value">{{ pendingReturns() }}</strong>
+    </article>
+    <article class="admin-kpi-card">
+      <div class="admin-kpi-card__head"><p class="admin-kpi-card__label">Hỗ trợ chờ phản hồi</p><span class="admin-kpi-card__icon"><app-admin-icon name="support" /></span></div>
+      <strong class="admin-kpi-card__value">{{ pendingTickets() }}</strong>
+    </article>
+    <article class="admin-kpi-card">
+      <div class="admin-kpi-card__head"><p class="admin-kpi-card__label">Ưu tiên cao</p><span class="admin-kpi-card__icon"><app-admin-icon name="alert" /></span></div>
+      <strong class="admin-kpi-card__value">{{ highPriority() }}</strong>
+    </article>
+    <article class="admin-kpi-card">
+      <div class="admin-kpi-card__head"><p class="admin-kpi-card__label">Hoàn tất hôm nay</p><span class="admin-kpi-card__icon"><app-admin-icon name="check" /></span></div>
+      <strong class="admin-kpi-card__value">{{ completedToday() }}</strong>
+    </article>
+  </section>
+  <section class="admin-card" aria-label="Danh sách đổi trả và hỗ trợ">
+    <div class="admin-tabs" role="tablist">
+      <button class="admin-tab" [class.admin-tab--active]="zone() === 'chat'" type="button" (click)="setZone('chat')">
+        <app-admin-icon name="support" cssClass="admin-line-icon admin-line-icon--tab-inset" />
+        Chat trực tuyến <span>{{ pendingChatCount() }}</span>
+      </button>
+      <button class="admin-tab" [class.admin-tab--active]="zone() === 'returns'" type="button" (click)="setZone('returns')">Đổi/trả hàng <span>{{ returns().length }}</span></button>
+      <button class="admin-tab" [class.admin-tab--active]="zone() === 'support'" type="button" (click)="setZone('support')">Phiếu hỗ trợ <span>{{ tickets().length }}</span></button>
+      <button class="admin-tab" [class.admin-tab--active]="zone() === 'logs'" type="button" (click)="setZone('logs')">Nhật ký xử lý</button>
+    </div>
+    <div class="admin-tab-content">
+      @if (loadError()) {
+        <p class="admin-note">{{ loadError() }}</p>
+      }
+      @if (zone() === 'chat') {
+        <div class="admin-chat-layout">
+          <div class="admin-chat-sidebar">
+            <div class="admin-chat-sidebar__header">
+              <h4>Phiên chat</h4>
+              <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" title="Làm mới" (click)="reload()">
+                <app-admin-icon name="refresh" />
+              </button>
+            </div>
+            <div class="admin-chat-filter">
+              <select class="admin-form-control" [value]="chatFilter()" (change)="onChatFilter($event)" aria-label="Lọc phiên chat">
+                <option value="all">Tất cả</option>
+                <option value="ai">AI đang trả lời</option>
+                <option value="requested">Chờ tiếp nhận</option>
+                <option value="assigned">Đang xử lý</option>
+                <option value="closed">Đã đóng</option>
+              </select>
+            </div>
+            <div class="admin-chat-session-list">
+              @if (!visibleChats().length) {
+                <p class="admin-note admin-note--centered-padded">Không có phiên chat nào</p>
+              } @else {
+                @for (session of visibleChats(); track session.session_id) {
+                  <button
+                    type="button"
+                    class="admin-chat-session-item"
+                    [class.is-active]="selectedChat()?.session_id === session.session_id"
+                    (click)="selectChat(session)"
+                  >
+                    <div class="admin-chat-session-item__header">
+                      <span class="admin-chat-session-item__name">{{ chatName(session) }}</span>
+                      <span
+                        class="admin-chat-session-item__status"
+                        [class.admin-chat-session-item__status--pending]="chatStatusTone(session) === 'pending'"
+                        [class.admin-chat-session-item__status--assigned]="chatStatusTone(session) === 'assigned'"
+                        [class.admin-chat-session-item__status--closed]="chatStatusTone(session) === 'closed'"
+                        [class.admin-chat-session-item__status--ai]="chatStatusTone(session) === 'ai'"
+                      >{{ chatStatus(session) }}</span>
+                    </div>
+                    <p class="admin-chat-session-item__preview">{{ chatPreview(session) }}</p>
+                    <small class="admin-chat-session-item__time">{{ date(session.last_message_at || session.created_at) }}</small>
+                  </button>
+                }
+              }
+            </div>
+          </div>
+          <div class="admin-chat-main">
+            @if (!selectedChat()) {
+              <div class="admin-chat-empty">
+                <p>Chọn một phiên chat để bắt đầu hỗ trợ khách hàng</p>
+              </div>
+            } @else {
+              <div class="admin-chat-active">
+                <header class="admin-chat-header">
+                  <div class="admin-chat-header__info">
+                    <div class="admin-chat-header__avatar">KH</div>
+                    <div>
+                      <strong>{{ chatName(selectedChat()!) }}</strong>
+                      <small class="admin-note">{{ selectedChat()!.session_id }}</small>
+                    </div>
+                  </div>
+                  <div class="admin-chat-header__actions">
+                    <span
+                      class="admin-badge"
+                      [class.admin-badge--pending]="chatStatusTone(selectedChat()!) === 'pending'"
+                      [class.admin-badge--success]="chatStatusTone(selectedChat()!) === 'assigned'"
+                      [class.admin-badge--neutral]="chatStatusTone(selectedChat()!) === 'closed' || chatStatusTone(selectedChat()!) === 'ai'"
+                    >
+                      {{ chatStatus(selectedChat()!) }}
+                    </span>
+                    @if (canJoinChat()) {
+                      <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="assignChat()">Tiếp nhận</button>
+                    }
+                    @if (!isClosedChat()) {
+                      <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="closeChat()">Đóng</button>
+                    }
+                  </div>
+                </header>
+                @if (chatError()) {
+                  <p class="admin-note">{{ chatError() }}</p>
+                }
+                <div class="admin-chat-messages">
+                  @if (!messages().length) {
+                    <p class="admin-note admin-note--centered-padded">Chưa có tin nhắn</p>
+                  } @else {
+                    @for (message of messages(); track message.message_id || message.created_at) {
+                      <div
+                        class="admin-chat-msg"
+                        [class.admin-chat-msg--user]="message.sender === 'user'"
+                        [class.admin-chat-msg--agent]="message.sender === 'agent'"
+                        [class.admin-chat-msg--bot]="message.sender !== 'user' && message.sender !== 'agent'"
+                      >
+                        <span class="admin-chat-msg__sender">{{ messageLabel(message) }}</span>
+                        <div class="admin-chat-msg__text">{{ message.text || '—' }}</div>
+                        @if (productsOf(message).length) {
+                          <div class="admin-chat-msg__products">
+                            @for (product of productsOf(message); track product.product_id) {
+                              <div class="admin-chat-product-card">
+                                @if (product.image_url) {
+                                  <img [src]="product.image_url" [alt]="product.name || 'Sản phẩm'" />
+                                }
+                                <div>
+                                  <strong>{{ product.name || 'Sản phẩm' }}</strong>
+                                  <span>{{ productPrice(product) }}</span>
+                                </div>
+                              </div>
+                            }
+                          </div>
+                        }
+                        <span class="admin-chat-msg__time">{{ date(message.created_at) }}</span>
+                      </div>
+                    }
+                  }
+                </div>
+                <form class="admin-chat-input-area" (submit)="sendReply($event)">
+                  <input
+                    class="admin-form-control"
+                    type="text"
+                    [value]="replyDraft()"
+                    (input)="onReplyInput($event)"
+                    [disabled]="!canReply()"
+                    [placeholder]="isClosedChat() ? 'Phiên chat đã đóng' : canReply() ? 'Nhập tin nhắn phản hồi...' : 'Tiếp nhận phiên trước khi phản hồi...'"
+                  />
+                  <button class="admin-btn admin-btn--secondary" type="submit" [disabled]="!canReply()">Gửi</button>
+                </form>
+              </div>
+            }
+          </div>
+        </div>
+      } @else if (zone() === 'returns') {
+        @if (!returns().length) {
+          <div class="admin-order-empty"><strong>Không có phiếu đổi/trả phù hợp</strong></div>
+        } @else {
+          <div class="admin-table-wrap">
+            <table class="admin-table admin-data-table">
+              <thead><tr><th>Mã phiếu</th><th>Đơn</th><th>Loại</th><th>Trạng thái</th><th>Ngày tạo</th><th>Thao tác</th></tr></thead>
+              <tbody>
+                @for (row of pagedReturns(); track row.return_id) {
+                  <tr>
+                    <td>{{ row.return_id }}</td>
+                    <td>{{ row.order_id }}</td>
+                    <td>{{ row.request_type || '—' }}</td>
+                    <td><span class="admin-badge">{{ statusLabel(row.status) }}</span></td>
+                    <td>{{ date(row.created_at) }}</td>
+                    <td>
+                      @if (row.status === 'pending') {
+                        <div class="admin-table-actions">
+                          <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openReturnAction('refund', row.return_id)">Hoàn tiền</button>
+                          <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openReturnAction('exchange', row.return_id)">Đổi hàng</button>
+                          <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="openReturnAction('reject', row.return_id)">Từ chối</button>
+                        </div>
+                      }
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          <app-admin-pagination [page]="page()" [pageCount]="returnPageCount()" [label]="returnRange()" (changed)="goPage($event)" />
+        }
+      } @else if (zone() === 'support') {
+        @if (!tickets().length) {
+          <div class="admin-order-empty"><strong>Không có phiếu hỗ trợ phù hợp</strong></div>
+        } @else {
+          <div class="admin-table-wrap">
+            <table class="admin-table admin-data-table">
+              <thead><tr><th>Mã</th><th>Chủ đề</th><th>Ưu tiên</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
+              <tbody>
+                @for (row of pagedTickets(); track row.ticket_id) {
+                  <tr>
+                    <td>{{ row.ticket_id }}</td>
+                    <td>{{ row.subject || '—' }}</td>
+                    <td>{{ row.priority || '—' }}</td>
+                    <td><span class="admin-badge">{{ statusLabel(row.status) }}</span></td>
+                    <td>
+                      @if (row.status !== 'closed') {
+                        <div class="admin-table-actions">
+                          <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openTicketAction('reply', row.ticket_id)">Phản hồi</button>
+                          <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="openTicketAction('close', row.ticket_id)">Đóng</button>
+                        </div>
+                      }
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          <app-admin-pagination [page]="page()" [pageCount]="ticketPageCount()" [label]="ticketRange()" (changed)="goPage($event)" />
+        }
+      } @else if (!logs().length) {
+        <div class="admin-order-empty"><strong>Chưa có nhật ký xử lý</strong></div>
+      } @else {
+        <div class="admin-table-wrap">
+          <table class="admin-table admin-data-table">
+            <thead><tr><th>Thời gian</th><th>Hành động</th><th>Đối tượng</th></tr></thead>
+            <tbody>
+              @for (row of pagedLogs(); track row.audit_id || row.timestamp) {
+                <tr>
+                  <td>{{ date(row.timestamp) }}</td>
+                  <td>{{ row.action }}</td>
+                  <td>{{ row.target_id }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <app-admin-pagination [page]="page()" [pageCount]="logPageCount()" [label]="logRange()" (changed)="goPage($event)" />
+      }
+    </div>
+  </section>
+</main>
+
+@if (actionType()) {
+  <div class="admin-modal-overlay">
+    <section class="admin-modal">
+      <form (submit)="submitAction($event)">
+        <header class="admin-modal__header">
+          <h2>{{ actionTitle() }}</h2>
+          <button class="admin-icon-button" type="button" (click)="closeOverlays()">×</button>
+        </header>
+        <div class="admin-modal__body">
+          @if (actionType() === 'refund') {
+            <label class="admin-form-group">
+              <span class="admin-form-label">Số tiền hoàn</span>
+              <input class="admin-form-control" name="amount" type="number" min="0" required />
+            </label>
+          }
+          <label class="admin-form-group">
+            <span class="admin-form-label">Ghi chú / lý do</span>
+            <textarea class="admin-form-control admin-form-textarea" name="note" minlength="10" required></textarea>
+          </label>
+          @if (actionError()) {
+            <p class="field__error">{{ actionError() }}</p>
+          }
+        </div>
+        <footer class="admin-modal__footer">
+          <button class="admin-btn admin-btn--ghost" type="button" (click)="closeOverlays()">Đóng</button>
+          <button class="admin-btn admin-btn--secondary" type="submit">Xác nhận</button>
+        </footer>
+      </form>
+    </section>
+  </div>
+}

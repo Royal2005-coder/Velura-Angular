@@ -1,0 +1,286 @@
+/* ============================================================
+   Velura — Account Management Module
+   Custom styles for details drawer and skeleton loaders.
+   Reuses shared design tokens from admin.css.
+   ============================================================ */
+
+.admin-member-command {
+  display: grid;
+  gap: 16px;
+  margin: 0 0 20px;
+  padding: 20px 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: #fbfaf8;
+}
+
+.admin-member-command__eyebrow {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--terracotta);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.admin-member-command__copy h2 {
+  margin: 0 0 6px;
+  color: var(--text-dark);
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 1.35rem;
+  font-weight: 600;
+}
+
+.admin-member-command__copy p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.admin-member-command__metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.admin-member-command__metrics article {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: #fff;
+}
+
+.admin-member-command__metrics span {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.admin-member-command__metrics strong {
+  display: block;
+  color: var(--text-dark);
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.admin-member-command__metrics small {
+  display: block;
+  color: var(--soft);
+  font-size: 0.75rem;
+}
+
+.admin-member-command__chips {
+  display: none;
+}
+
+.admin-member-command__chips span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--tab-bg);
+  color: var(--brown);
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  .admin-member-command__metrics {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Role text under account type badge in table */
+.admin-member-table .admin-member-role {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+/* Details Drawer Styling */
+.admin-member-drawer {
+  width: min(640px, 100vw);
+}
+
+.admin-member-drawer .admin-drawer__header {
+  padding: 24px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(250, 247, 243, 0.96)), #fff;
+}
+
+.admin-member-drawer .admin-drawer__body {
+  padding: 22px 24px 28px;
+}
+
+.admin-member-profile {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.admin-member-profile .admin-avatar--lg {
+  width: 56px;
+  height: 56px;
+  flex-basis: 56px;
+  border-radius: var(--radius-md);
+  font-size: 0.92rem;
+}
+
+.admin-member-profile h2 {
+  max-width: 440px;
+  margin: 4px 0 10px;
+  color: var(--text-dark);
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 1.35rem;
+  font-weight: 600;
+  line-height: 1.18;
+}
+
+.admin-member-profile .admin-status-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.admin-member-drawer .admin-product-code {
+  max-width: 420px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Member metrics panel inside drawer */
+.admin-member-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.admin-member-stats article {
+  display: grid;
+  gap: 5px;
+  min-height: 94px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: #fbfaf8;
+}
+
+.admin-member-stats span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.admin-member-stats strong {
+  color: var(--brown);
+  font-size: 0.92rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+/* User Profile Info List inside drawer */
+.admin-member-drawer .admin-data-list {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.admin-member-drawer .admin-data-list div {
+  padding: 13px 15px;
+  background: #fff;
+}
+
+.admin-member-drawer .admin-data-list div:nth-child(even) {
+  background: #fbfaf8;
+}
+
+/* Table skeleton loading state styles */
+.admin-table-row-skeleton td {
+  padding: 16px 18px;
+}
+
+.admin-person-skeleton {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.admin-avatar-skeleton {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--field-bg);
+}
+
+.admin-person-copy-skeleton {
+  display: grid;
+  gap: 6px;
+  flex: 1;
+}
+
+.skeleton-pulse {
+  animation: skeleton-loading 1.4s ease-in-out infinite;
+}
+
+@keyframes skeleton-loading {
+  0% { background-color: var(--field-bg); opacity: 0.6; }
+  50% { background-color: var(--line); opacity: 1; }
+  100% { background-color: var(--field-bg); opacity: 0.6; }
+}
+
+.skeleton-line {
+  height: 12px;
+  border-radius: 4px;
+  background: var(--field-bg);
+}
+
+.skeleton-line--name { width: 120px; }
+.skeleton-line--email { width: 160px; }
+.skeleton-line--role { width: 80px; }
+.skeleton-line--badge { width: 70px; }
+.skeleton-line--date { width: 90px; }
+
+.admin-actions-skeleton {
+  display: flex;
+  gap: 4px;
+}
+
+.admin-btn-skeleton {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  background: var(--field-bg);
+}
+
+/* Responsive Overrides */
+@media (max-width: 768px) {
+  .admin-member-stats {
+    grid-template-columns: 1fr;
+  }
+  .admin-member-drawer .admin-data-list div {
+    display: grid;
+    gap: 4px;
+  }
+  .admin-member-drawer .admin-data-list dd {
+    text-align: left;
+  }
+}
+
+/* KPI Grid Override for 5 Cards */
+@media (min-width: 1101px) {
+  .admin-kpi-grid--accounts {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}

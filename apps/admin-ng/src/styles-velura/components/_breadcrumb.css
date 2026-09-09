@@ -1,0 +1,13 @@
+﻿.breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin-bottom: 32px;
+}
+
+.breadcrumb a:hover { color: var(--terracotta); }
+
+.breadcrumb__current { color: var(--text-body); }

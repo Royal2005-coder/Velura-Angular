@@ -1,0 +1,82 @@
+<main class="velura-auth-page" aria-label="Đăng ký tài khoản Velura">
+  <div class="login-page">
+    <a class="logo-container" routerLink="/" aria-label="Về trang chủ Velura">
+      <img src="/assets/images/auth/logo_velura.png" alt="Velura" class="logo" />
+    </a>
+    <img src="/assets/images/auth/model_main.png" alt="" class="main-model" aria-hidden="true" />
+
+    <form class="login-container login-container--register" [formGroup]="form" (ngSubmit)="submit()" novalidate>
+      <header class="header">
+        <h1>Tạo tài khoản<br />mới với Velura</h1>
+        <p>Đăng ký để trải nghiệm đầy đủ</p>
+      </header>
+
+      <div class="form-group">
+        <label for="fullname">Họ và tên <span class="field__required">*</span></label>
+        <div class="input-wrapper">
+          <input id="fullname" type="text" formControlName="fullname" placeholder="Nguyễn Văn A" autocomplete="name" />
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="phone-signup">Số điện thoại <span class="field__required">*</span></label>
+        <div class="input-wrapper">
+          <input id="phone-signup" type="tel" formControlName="phone" placeholder="0912 345 678" autocomplete="tel" inputmode="numeric" />
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="email-signup">Email <span class="field__optional">(không bắt buộc)</span></label>
+        <div class="input-wrapper">
+          <input id="email-signup" type="email" formControlName="email" placeholder="example@velura.com" autocomplete="email" />
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="password-signup">Mật khẩu <span class="field__required">*</span></label>
+        <div class="input-wrapper">
+          <input
+            id="password-signup"
+            [type]="showPassword() ? 'text' : 'password'"
+            formControlName="password"
+            placeholder="Nhập mật khẩu"
+            autocomplete="new-password"
+          />
+          <button class="toggle-password" type="button" aria-label="Hiển thị mật khẩu" (click)="showPassword.set(!showPassword())">
+            <span aria-hidden="true">◉</span>
+          </button>
+        </div>
+        <p class="input-hint">Ít nhất 8 ký tự, gồm chữ hoa, chữ thường và số hoặc ký tự đặc biệt</p>
+      </div>
+
+      <div class="form-group">
+        <label for="password-confirm">Xác nhận mật khẩu <span class="field__required">*</span></label>
+        <div class="input-wrapper">
+          <input
+            id="password-confirm"
+            [type]="showConfirm() ? 'text' : 'password'"
+            formControlName="password_confirm"
+            placeholder="Nhập lại mật khẩu"
+            autocomplete="new-password"
+          />
+          <button class="toggle-password" type="button" aria-label="Hiển thị mật khẩu" (click)="showConfirm.set(!showConfirm())">
+            <span aria-hidden="true">◉</span>
+          </button>
+        </div>
+      </div>
+
+      @if (errorMessage()) {
+        <div class="field__error" aria-live="polite">{{ errorMessage() }}</div>
+      }
+
+      <button type="submit" class="btn-login" [disabled]="submitting()">Đăng ký</button>
+      <p class="footer">Đã có tài khoản? <a routerLink="/auth/signin">Đăng nhập</a></p>
+    </form>
+  </div>
+</main>
+<app-auth-otp-modal
+  [open]="otpOpen()"
+  [identity]="otpIdentity()"
+  (verified)="onOtpVerified($event)"
+  (cancelled)="onOtpCancelled()"
+/>

@@ -1,0 +1,189 @@
+<main>
+  <section class="hero">
+    <div class="hero__video-container">
+      <video #heroVideo autoplay loop playsinline muted poster="/assets/images/hero-banner.png">
+        <source src="/assets/videos/hero-bg.mp4" type="video/mp4" />
+      </video>
+    </div>
+    <div class="hero__overlay"></div>
+    <div class="hero__content">
+          <div class="hero__badge">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+            </svg>
+            <span>Bộ sưu tập mới 2026</span>
+          </div>
+      <h1 class="hero__title">Vẻ đẹp vượt thời gian</h1>
+      <p class="hero__description">
+        Velura mang đến những sản phẩm thời trang nữ thiết kế cao cấp, giúp bạn tự tin tỏa sáng với phong cách riêng biệt.
+      </p>
+      <div class="hero__buttons">
+        <a routerLink="/products" class="btn btn--accent">Khám phá ngay</a>
+        <a routerLink="/ai/style-quiz" class="btn btn--outline-white hero__btn--quiz">Style Quiz</a>
+      </div>
+    </div>
+    <button class="hero__audio-toggle" type="button" [attr.aria-label]="soundOn() ? 'Tắt âm thanh video' : 'Bật âm thanh video'" (click)="toggleSound()">
+      @if (soundOn()) {
+        <svg class="hero__audio-icon hero__audio-icon--on" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+          <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+        </svg>
+      } @else {
+        <svg class="hero__audio-icon hero__audio-icon--off" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+          <line x1="23" y1="9" x2="17" y2="15"></line>
+          <line x1="17" y1="9" x2="23" y2="15"></line>
+        </svg>
+      }
+      <span class="hero__audio-text">{{ soundOn() ? 'Tắt âm thanh' : 'Bật âm thanh' }}</span>
+    </button>
+  </section>
+
+  <section class="hot-offer-ticker" aria-label="Tin ưu đãi Velura">
+    <div class="container hot-offer-ticker__inner">
+      <span class="hot-offer-ticker__label">Ưu đãi hot</span>
+      <div class="hot-offer-ticker__viewport">
+        <div class="hot-offer-ticker__track">
+          @for (banner of banners; track banner.id) {
+            <a class="hot-offer-ticker__item" [routerLink]="'/offers'" [queryParams]="{ offer: banner.id }">{{ banner.title }}</a>
+          }
+        </div>
+      </div>
+      <a class="hot-offer-ticker__link" routerLink="/offers">Xem chi tiết</a>
+    </div>
+  </section>
+
+  <section class="categories-section container">
+    <div class="categories-section__header">
+      <h2 class="categories-section__title">Danh mục nổi bật</h2>
+      <p class="categories-section__subtitle">Tìm kiếm phong cách riêng biệt của bạn</p>
+    </div>
+    <div class="categories-section__grid" #categoriesTrack>
+      @if (loading()) {
+        <div class="category-card"><span class="category-card__name">Đang tải danh mục...</span></div>
+      } @else if (categories().length === 0) {
+        <div class="category-card">
+          <span class="category-card__name">{{ loadError() || 'Chưa có danh mục. Hãy chạy db:migrate và db:seed:catalog.' }}</span>
+        </div>
+      } @else {
+        @for (category of categories(); track category.category_id) {
+          <a class="category-card" routerLink="/products" [queryParams]="{ category: category.slug }">
+            <div class="category-card__icon">
+              <img [src]="categoryIcon(category.slug)" [alt]="category.name" class="category-card__icon-img" />
+            </div>
+            <span class="category-card__name">{{ category.name }}</span>
+            <span class="category-card__count">{{ category.product_count || 0 }} sản phẩm</span>
+          </a>
+        }
+      }
+    </div>
+  </section>
+
+  <section class="products-section container">
+    <div class="products-section__header">
+      <div class="products-section__title-group">
+        <h2 class="products-section__title">Sản phẩm nổi bật</h2>
+        <p class="products-section__subtitle">Được yêu thích nhất tháng này</p>
+      </div>
+      <a routerLink="/products" [queryParams]="{ special: 'featured', sort: 'popular' }" class="products-section__link">
+        <span>Xem tất cả</span>
+        <svg width="14" height="14" viewBox="0 0 24 24">
+          <path d="M9 5l7 7-7 7" />
+        </svg>
+      </a>
+    </div>
+    <div class="products-section__grid" #productsTrack>
+      @if (!loading() && products().length === 0) {
+        <p>Chưa tải được sản phẩm nổi bật. Kiểm tra API và catalog Supabase.</p>
+      }
+      @for (product of products(); track product.product_id) {
+        <app-product-card [product]="product" />
+      }
+    </div>
+  </section>
+
+  @if (personalized().length > 0) {
+    <section class="personalized-recommendations container" style="margin-top: 48px; margin-bottom: 48px;">
+      <div class="products-section__header">
+        <div class="products-section__title-group">
+          <h2 class="products-section__title">Gợi ý riêng cho bạn</h2>
+          <p class="products-section__subtitle">{{ personalizedSubtitle() }}</p>
+        </div>
+        <a routerLink="/products" class="products-section__link">
+          <span>Khám phá thêm</span>
+          <svg width="14" height="14" viewBox="0 0 24 24">
+            <path d="M9 5l7 7-7 7" />
+          </svg>
+        </a>
+      </div>
+      <div class="products-section__grid">
+        @for (product of personalized(); track product.product_id) {
+          <app-product-card [product]="product" />
+        }
+      </div>
+    </section>
+  }
+
+  <section class="collections-section container">
+    <div class="collections-section__header">
+      <h2 class="collections-section__title">Bộ sưu tập đặc biệt</h2>
+      <p class="collections-section__subtitle">Khám phá những bộ sưu tập được tuyển chọn</p>
+    </div>
+    <div class="collections-section__grid" #collectionsTrack>
+      @if (!loading() && collections().length === 0) {
+        <div style="grid-column: 1 / -1; text-align: center; padding: 24px; color: var(--soft);">Hiện chưa có bộ sưu tập nào hoạt động.</div>
+      }
+      @for (collection of collections(); track collection.id) {
+        <a [routerLink]="'/collections'" [queryParams]="{ id: collection.id }" class="collection-card">
+          <img [src]="collection.banner" [alt]="collection.name" class="collection-card__image" />
+          <div class="collection-card__overlay"></div>
+          <div class="collection-card__content">
+            <span class="collection-card__badge">{{ collection.badge }}</span>
+            <h3 class="collection-card__title">{{ collection.name }}</h3>
+            <p class="collection-card__desc">{{ collection.homeStory }}</p>
+            <span class="collection-card__btn">Xem chi tiết →</span>
+          </div>
+        </a>
+      }
+    </div>
+  </section>
+
+  <section class="policies-section">
+    <div class="container policies-section__grid">
+      <div class="policy-card">
+        <div class="policy-card__icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="7" y1="17" x2="17" y2="7"></line>
+            <polyline points="7 7 17 7 17 17"></polyline>
+          </svg>
+        </div>
+        <div class="policy-card__info">
+          <h3 class="policy-card__title">Miễn phí vận chuyển</h3>
+          <p class="policy-card__desc">Cho đơn hàng từ 500.000đ</p>
+        </div>
+      </div>
+      <div class="policy-card">
+        <div class="policy-card__icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+          </svg>
+        </div>
+        <div class="policy-card__info">
+          <h3 class="policy-card__title">Đổi trả minh bạch</h3>
+          <p class="policy-card__desc">Gửi yêu cầu trong 48 giờ</p>
+        </div>
+      </div>
+      <div class="policy-card">
+        <div class="policy-card__icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+          </svg>
+        </div>
+        <div class="policy-card__info">
+          <h3 class="policy-card__title">Bảo mật Style Quiz</h3>
+          <p class="policy-card__desc">Dữ liệu dùng khép kín cho AI Stylist</p>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>

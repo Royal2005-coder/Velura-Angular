@@ -1,0 +1,35 @@
+<main class="offers-page">
+  <section class="offers-hero container">
+    <p class="offers-hero__eyebrow">Ưu đãi Velura</p>
+    <h1 class="offers-hero__title">Ưu đãi tháng này</h1>
+    <p class="offers-hero__desc">
+      Những món quà nhỏ, mã freeship và combo phối đồ được Velura tuyển chọn để bạn mua sắm nhẹ nhàng hơn.
+    </p>
+  </section>
+
+  <section class="offer-list-section container" aria-labelledby="offer-list-title">
+    <div class="offer-list-section__header">
+      <span class="hot-banner-section__eyebrow">Đặc quyền tháng này</span>
+      <h2 class="hot-banner-section__title" id="offer-list-title">Bộ sưu tập ưu đãi</h2>
+    </div>
+
+    <div class="offer-banner-list" aria-label="Danh sách ưu đãi Velura">
+      @for (banner of banners; track banner.id; let i = $index) {
+        <article class="offer-banner-row" [class.offer-banner-row--reverse]="i % 2 === 1">
+          <div class="offer-banner-row__copy">
+            <span class="offer-banner-row__index">{{ banner.id }}</span>
+            <span class="offer-banner-row__eyebrow">{{ banner.eyebrow }}</span>
+            <h3 class="offer-banner-row__title">{{ banner.title }}</h3>
+            <p class="offer-banner-row__desc">{{ banner.description }}</p>
+            <p class="offer-banner-row__benefit"><strong>Quyền lợi:</strong> {{ banner.benefit }}</p>
+            <p class="offer-banner-row__condition">{{ banner.condition }}</p>
+            <a class="offer-banner-row__cta" [href]="banner.href">{{ banner.ctaText }} →</a>
+          </div>
+          <a class="offer-banner-row__image-link" [href]="banner.href" [attr.aria-label]="banner.title">
+            <img class="offer-banner-row__image" [src]="banner.imageSrc" [alt]="banner.imageAlt" />
+          </a>
+        </article>
+      }
+    </div>
+  </section>
+</main>

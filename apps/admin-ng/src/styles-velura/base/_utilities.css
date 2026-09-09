@@ -1,0 +1,11 @@
+.container {
+  width: 100%;
+  max-width: var(--max-w);
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.hidden { display: none !important; }
+
+.tab-panel { display: none; }
+.tab-panel.is-active { display: block; }

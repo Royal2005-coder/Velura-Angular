@@ -1,0 +1,29 @@
+{
+  "name": "velura-angular",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Velura production Angular workspace: admin SPA, customer SPA, Node API",
+  "type": "module",
+  "workspaces": [
+    "apps/admin-ng",
+    "apps/user-ng",
+    "apps/api"
+  ],
+  "scripts": {
+    "start:admin": "npm run start -w @velura/admin-ng",
+    "start:user": "npm run start -w @velura/user-ng",
+    "start:api": "node --env-file-if-exists=.env --watch apps/api/src/server.js",
+    "build:admin": "npm run build -w @velura/admin-ng",
+    "build:user": "npm run build -w @velura/user-ng",
+    "build": "npm run build:user && npm run build:admin",
+    "test:api": "node --test tests/api/*.test.js",
+    "test": "npm run test:api"
+  },
+  "engines": {
+    "node": ">=22 <25"
+  },
+  "dependencies": {
+    "@supabase/server": "^1.2.0",
+    "nodemailer": "^6.10.1"
+  }
+}

@@ -1,0 +1,118 @@
+<main class="product-review-page">
+      <div class="container">
+
+        <!-- Header -->
+        <div class="review-main__header">
+          <h1 class="review-main__title">Đánh Giá Sản Phẩm</h1>
+          <p class="review-main__subtitle">CHIA SẺ TRẢI NGHIỆM CỦA BẠN CÙNG VELURA</p>
+        </div>
+
+        <div class="review-card">
+          <!-- Product Summary Block -->
+          <div class="product-summary" id="js-product-summary">
+            <img class="product-summary__image" id="js-product-img" src="/assets/images/product-silk-blazer.png"
+              alt="Áo Blazer Lụa Satin" />
+            <div class="product-summary__details">
+              <h2 class="product-summary__name" id="js-product-name">Áo Blazer Lụa Satin</h2>
+              <div class="product-summary__meta">
+                <span class="product-summary__dot-bullet" style="background-color: #EFE7DD;"
+                  id="js-product-color-dot"></span>
+                <span class="product-summary__variant" id="js-product-variant">Champagne &nbsp;&middot;&nbsp; Size:
+                  M</span>
+                <span class="product-summary__price" id="js-product-price">1.200.000 VND</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Form block -->
+          <form class="review-form" id="js-review-form" novalidate onsubmit="return false;">
+            <!-- 1. Stars section -->
+            <div class="review-form__section">
+              <h3 class="review-form__label">MỨC ĐỘ HÀI LÒNG CỦA BẠN</h3>
+              <div class="review-rating" id="js-star-rating-main" (click)="onStarClick($event)">
+                <button type="button" class="review-rating__star" data-value="1" aria-label="1 sao">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <polygon
+                      points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2">
+                    </polygon>
+                  </svg>
+                </button>
+                <button type="button" class="review-rating__star" data-value="2" aria-label="2 sao">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <polygon
+                      points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2">
+                    </polygon>
+                  </svg>
+                </button>
+                <button type="button" class="review-rating__star" data-value="3" aria-label="3 sao">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <polygon
+                      points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2">
+                    </polygon>
+                  </svg>
+                </button>
+                <button type="button" class="review-rating__star" data-value="4" aria-label="4 sao">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <polygon
+                      points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2">
+                    </polygon>
+                  </svg>
+                </button>
+                <button type="button" class="review-rating__star" data-value="5" aria-label="5 sao">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <polygon
+                      points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2">
+                    </polygon>
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <!-- 2. Quick Tags section -->
+            <div class="review-form__section">
+              <h3 class="review-form__label">GỢI Ý NHẬN XÉT</h3>
+              <div class="review-tags" id="js-review-tags">
+                <button type="button" class="review-tag-btn" data-text="Size quá to">Size quá to</button>
+                <button type="button" class="review-tag-btn" data-text="Size quá nhỏ">Size quá nhỏ</button>
+                <button type="button" class="review-tag-btn" data-text="Vừa vặn">Vừa vặn</button>
+                <button type="button" class="review-tag-btn" data-text="Vải đẹp">Vải đẹp</button>
+                <button type="button" class="review-tag-btn" data-text="Đúng mô tả">Đúng mô tả</button>
+                <button type="button" class="review-tag-btn" data-text="Giao hàng nhanh">Giao hàng nhanh</button>
+                <button type="button" class="review-tag-btn" data-text="Đóng gói cẩn thận">Đóng gói cẩn thận</button>
+              </div>
+            </div>
+
+            <!-- 3. Details description -->
+            <div class="review-form__section">
+              <h3 class="review-form__label">CHI TIẾT NHẬN XÉT</h3>
+              <textarea class="review-form__textarea" id="js-review-textarea"
+                placeholder="Hãy chia sẻ về chất liệu, form dáng và cảm nhận của bạn khi khoác lên mình sản phẩm này..."></textarea>
+            </div>
+
+            <!-- 4. Media upload -->
+            <div class="review-form__section">
+              <h3 class="review-form__label" style="display: none;">HÌNH ẢNH & VIDEO THỰC TẾ</h3>
+              <div class="media-upload" id="js-media-upload">
+                <input type="file" id="js-media-input" style="display: none;" multiple accept="image/*,video/*" />
+                <div class="media-upload__dropzone" id="js-dropzone">
+                  <svg class="media-upload__icon" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                    <circle cx="12" cy="13" r="4" />
+                  </svg>
+                  <span class="media-upload__title">THÊM TỆP</span>
+                </div>
+                <p class="media-upload__desc">* Tối đa 5 hình ảnh và 1 video (dưới 10MB)</p>
+                <div class="media-upload__preview" id="js-media-preview"></div>
+              </div>
+            </div>
+
+            <!-- Action submit -->
+            <div class="review-form__actions">
+              <button class="btn review-action" type="button" id="js-btn-submit-review-main">GỬI ĐÁNH GIÁ</button>
+            </div>
+          </form>
+        </div>
+
+      </div>
+    </main>

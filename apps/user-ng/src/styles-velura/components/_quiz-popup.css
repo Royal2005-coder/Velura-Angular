@@ -1,0 +1,468 @@
+/* ============================================================
+   Velura — Style Quiz Auto Pop-up Stylesheet (Premium Mockup)
+   ============================================================ */
+
+.quiz-popup {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.quiz-popup.is-visible {
+  display: flex;
+  pointer-events: auto;
+}
+
+.quiz-popup__overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
+  z-index: 1;
+}
+
+.quiz-popup__content {
+  background-color: #FAF8F5; /* Minimalist off-white/light warm cream */
+  border-radius: 24px; /* Large rounded corners */
+  width: 90%;
+  max-width: 920px;
+  position: relative;
+  z-index: 2;
+  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.12);
+  display: flex;
+  padding: 48px;
+  gap: 40px;
+  align-items: center;
+  border: 1px solid rgba(115, 71, 36, 0.1);
+  overflow: hidden;
+  box-sizing: border-box;
+  
+  /* Zoom/fade-in animation */
+  transform: scale(0.95);
+  opacity: 0;
+  transition: transform 0.4s cubic-bezier(0.165, 0.84, 0.44, 1), opacity 0.4s ease;
+}
+
+.quiz-popup.is-visible .quiz-popup__content {
+  transform: scale(1);
+  opacity: 1;
+}
+
+.quiz-popup__close {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  background: none;
+  border: none;
+  color: #8C857E;
+  cursor: pointer;
+  padding: 4px;
+  transition: color 0.2s ease, transform 0.2s ease;
+  z-index: 10;
+}
+
+.quiz-popup__close:hover {
+  color: #734724;
+  transform: scale(1.1);
+}
+
+/* Decorative stars (✦) */
+.quiz-popup__decor-star {
+  position: absolute;
+  color: #D6C3B0;
+  opacity: 0.85;
+  pointer-events: none;
+  z-index: 1;
+  user-select: none;
+  animation: quizStarPulse 3s ease-in-out infinite alternate;
+}
+
+.quiz-popup__decor-star--1 {
+  top: 75px;
+  left: 23%;
+  font-size: 1.1rem;
+  color: #E2D6C5;
+  animation-delay: 0.5s;
+}
+
+.quiz-popup__decor-star--2 {
+  top: 135px;
+  left: 31%;
+  font-size: 0.8rem;
+  color: #EFE7DD;
+  animation-delay: 1.5s;
+}
+
+.quiz-popup__decor-star--3 {
+  top: 105px;
+  left: 48%;
+  font-size: 1.25rem;
+  color: #E2D6C5;
+  animation-delay: 2.5s;
+}
+
+.quiz-popup__decor-star--4 {
+  bottom: 90px;
+  left: 54%;
+  font-size: 1.1rem;
+  color: #D6C3B0;
+  animation-delay: 1s;
+}
+
+@keyframes quizStarPulse {
+  0% {
+    transform: scale(0.9) rotate(0deg);
+    opacity: 0.5;
+  }
+  100% {
+    transform: scale(1.15) rotate(10deg);
+    opacity: 1;
+  }
+}
+
+/* Left column (Arts block) */
+.quiz-popup__left {
+  flex: 1.1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-start;
+  position: relative;
+  height: 400px;
+  overflow: visible;
+}
+
+.quiz-popup__logo {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+}
+
+.quiz-popup__logo img {
+  display: block;
+  height: auto;
+}
+
+/* Dual Botanical leaves decoration (removed from HTML) */
+.quiz-popup__leaves-shadow {
+  display: none;
+}
+
+.quiz-popup__leaves-line {
+  display: none;
+}
+
+/* CSS absolute circle behind models */
+.quiz-popup__bg-circle {
+  position: absolute;
+  width: 420px;
+  height: 420px;
+  background-color: #EFE7DD; /* Beige circle */
+  border-radius: 50%;
+  bottom: -40px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1;
+  pointer-events: none;
+}
+
+.quiz-popup__illustration {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  height: auto;
+  max-height: 360px;
+  object-fit: contain;
+  margin-top: auto;
+  pointer-events: none;
+}
+
+/* Right column (Information block) */
+.quiz-popup__right {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  z-index: 2;
+}
+
+/* Top Badge */
+.quiz-popup__badge {
+  background-color: #F6ECE3; /* Orange-beige sữa */
+  border-radius: 20px;
+  padding: 6px 14px;
+  margin-bottom: 16px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.quiz-popup__badge span {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #734724; /* Nâu đất */
+  letter-spacing: 0.5px;
+}
+
+/* Title & Georgia serif italic formatting */
+.quiz-popup__title {
+  font-family: "Playfair Display", serif;
+  font-size: 2.375rem;
+  font-weight: 500;
+  color: #1A1A1A;
+  margin: 0 0 16px 0;
+  line-height: 1.25;
+  letter-spacing: -0.5px;
+}
+
+.quiz-popup__title span.italic {
+  font-style: italic;
+  color: #734724;
+  font-family: Georgia, serif;
+}
+
+/* Sparkles next to "phong cách" */
+.quiz-popup__title-sparkles {
+  position: relative;
+  display: inline-block;
+  width: 28px;
+  height: 18px;
+  vertical-align: middle;
+  margin-left: 8px;
+}
+
+.quiz-popup__title-sparkle {
+  position: absolute;
+  color: #D6C3B0;
+  line-height: 1;
+  pointer-events: none;
+  animation: quizStarPulse 3s ease-in-out infinite alternate;
+}
+
+.quiz-popup__title-sparkle--1 {
+  font-size: 1.15rem;
+  top: -8px;
+  left: 2px;
+}
+
+.quiz-popup__title-sparkle--2 {
+  font-size: 0.7rem;
+  top: 6px;
+  left: 16px;
+  animation-delay: 1.2s;
+}
+
+/* Horizontal Divider with center diamond */
+.quiz-popup__divider {
+  position: relative;
+  width: 100%;
+  height: 1px;
+  background-color: #E2D6C5;
+  margin: 12px 0 20px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.quiz-popup__divider-diamond {
+  position: absolute;
+  background-color: #FAF8F5; /* Matches popup content background */
+  padding: 0 10px;
+  color: #734724;
+  font-size: 0.75rem;
+  line-height: 1;
+}
+
+.quiz-popup__desc-lead {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #5A5450;
+  margin: 0 0 16px 0;
+}
+
+/* Benefits list */
+.quiz-popup__list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 32px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+}
+
+.quiz-popup__list-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.quiz-popup__list-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background-color: #FAF2EB;
+  color: #734724;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.quiz-popup__list-text {
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: #4A4035;
+}
+
+/* Footer Actions Group */
+.quiz-popup__actions-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+}
+
+.quiz-popup__btn-start {
+  background-color: #734724; /* Rich dark brown */
+  color: #fff !important;
+  border: none;
+  width: 100%;
+  height: 48px;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.165, 0.84, 0.44, 1);
+  text-decoration: none;
+  box-shadow: 0 4px 10px rgba(115, 71, 36, 0.1);
+}
+
+.quiz-popup__btn-start:hover {
+  background-color: #5D371B;
+  transform: translateY(-1px);
+  box-shadow: 0 8px 24px rgba(115, 71, 36, 0.2);
+}
+
+/* Link-style secondary close button */
+.quiz-popup__btn-later {
+  background: none;
+  border: none;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #8C857E;
+  cursor: pointer;
+  padding: 4px 8px;
+  text-decoration: underline;
+  text-decoration-style: dashed;
+  text-underline-offset: 4px;
+  transition: color 0.2s ease;
+}
+
+.quiz-popup__btn-later:hover {
+  color: #734724;
+}
+
+/* ---------- Responsive Design ---------- */
+@media (max-width: 992px) {
+  .quiz-popup__content {
+    flex-direction: column;
+    max-width: 480px;
+    padding: 36px 24px;
+    gap: 24px;
+  }
+  
+  .quiz-popup__left {
+    width: 100%;
+    height: 240px;
+    justify-content: flex-end;
+    align-items: center;
+  }
+  
+  .quiz-popup__leaves-shadow,
+  .quiz-popup__leaves-line {
+    display: none; /* Hide complex drawings on mobile/tablets */
+  }
+
+  .quiz-popup__title-sparkles {
+    display: none; /* Hide title sparkles on smaller screens */
+  }
+
+  .quiz-popup__bg-circle {
+    width: 220px; /* Reduced by 60% ratio */
+    height: 220px;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: -10px;
+  }
+  
+  .quiz-popup__illustration {
+    max-height: 220px;
+    width: auto;
+    margin: 0 auto;
+  }
+  
+  .quiz-popup__right {
+    width: 100%;
+    align-items: center;
+    text-align: center;
+  }
+  
+  .quiz-popup__title {
+    font-size: 1.85rem;
+    text-align: center;
+  }
+  
+  .quiz-popup__list {
+    align-items: center;
+  }
+
+  .quiz-popup__list-item {
+    justify-content: center;
+    width: 100%;
+  }
+
+  .quiz-popup__decor-star {
+    display: none; /* Hide background stars on mobile/tablet to reduce clutter */
+  }
+}
+
+@media (max-width: 576px) {
+  .quiz-popup__content {
+    padding: 28px 20px;
+  }
+  
+  .quiz-popup__title {
+    font-size: 1.5rem;
+  }
+
+  .quiz-popup__left {
+    height: 200px;
+  }
+
+  .quiz-popup__bg-circle {
+    width: 180px;
+    height: 180px;
+  }
+
+  .quiz-popup__illustration {
+    max-height: 180px;
+  }
+}

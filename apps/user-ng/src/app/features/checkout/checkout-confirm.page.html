@@ -1,0 +1,50 @@
+<main class="checkout-page">
+  <section class="success-hero">
+    <div class="success-hero__icon" aria-hidden="true">
+      <svg width="32" height="23" viewBox="0 0 32 23" fill="none">
+        <path d="M10.67 22.61L0 11.94l2.14-2.14L10.67 18.33 29 0l2.14 2.14L10.67 22.61z" fill="#7D562D" />
+      </svg>
+    </div>
+    <h1 class="success-hero__title">Đặt hàng thành công!</h1>
+    <p class="success-hero__desc">Cảm ơn bạn đã tin tưởng lựa chọn Velura. Đơn hàng của bạn đang được chuẩn bị để gửi tới bạn sớm nhất có thể.</p>
+  </section>
+
+  <div class="container">
+    <div class="details-grid">
+      <div class="details-grid__row">
+        <p class="label-upper">Mã đơn hàng</p>
+        <p class="details-grid__value details-grid__value--accent">#{{ trackingCode() }}</p>
+      </div>
+      <div class="details-grid__row">
+        <p class="label-upper">Phương thức thanh toán</p>
+        <p class="details-grid__value">{{ paymentLabel() }}</p>
+      </div>
+      <div class="details-grid__row">
+        <p class="label-upper">Dự kiến giao hàng</p>
+        <p class="details-grid__value">{{ deliveryLabel() }}</p>
+      </div>
+      <div class="details-grid__row">
+        <p class="label-upper">Địa chỉ nhận hàng</p>
+        <p class="details-grid__value">{{ address() }}</p>
+      </div>
+    </div>
+
+    @if (tempPassword) {
+      <div class="password-notice-container" style="margin: 24px 0; width: 100%;">
+        <div style="background: rgba(201, 123, 99, 0.08); border: 1px solid var(--terracotta); border-radius: 8px; padding: 20px;">
+          <h4 style="color: var(--terracotta); margin-top: 0; margin-bottom: 8px;">Chào mừng bạn đến với Velura!</h4>
+          <p style="margin: 0 0 12px 0;">Hệ thống đã tự động tạo tài khoản Thành viên cho số điện thoại của bạn.</p>
+          <div style="display: flex; align-items: center; justify-content: space-between; background: #fff; padding: 10px 14px; border-radius: 6px;">
+            <span>Mật khẩu tạm thời:</span>
+            <strong>{{ tempPassword }}</strong>
+          </div>
+        </div>
+      </div>
+    }
+
+    <div class="action-buttons">
+      <a class="btn btn--brown" routerLink="/account/track">Xem đơn hàng</a>
+      <a class="btn btn--brown-outline" routerLink="/">Tiếp tục mua sắm</a>
+    </div>
+  </div>
+</main>

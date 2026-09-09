@@ -1,0 +1,635 @@
+/* ============================================================
+   Order Tracking Page Styles
+   ============================================================ */
+
+.track-order-page {
+  padding: 60px 0 120px;
+  background-color: #fbf7f2;
+}
+
+/* Breadcrumb styling override */
+.track-order-page .breadcrumb {
+  margin-bottom: 24px;
+}
+
+/* Title Block */
+.track-order-title-block {
+  margin-bottom: 32px;
+}
+
+.track-order-title {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 3rem;
+  font-weight: 500;
+  color: #2a2522;
+  margin: 12px 0 8px;
+}
+
+.track-order-subtitle {
+  font-size: 1.375rem;
+  color: #8c857e;
+  margin: 0;
+}
+
+/* Search Bar widget */
+.track-search-bar {
+  background-color: #ffffff;
+  padding: 16px;
+  border-radius: 12px;
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  margin-bottom: 40px;
+  box-shadow: 0 4px 20px rgba(42, 37, 34, 0.01);
+}
+
+.track-search-input-wrapper {
+  flex-grow: 1;
+  background-color: #fbf7f2;
+  border-radius: 8px;
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.track-search-icon {
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
+.track-search-input-wrapper input {
+  border: none;
+  background: transparent;
+  width: 100%;
+  font-size: 1.125rem;
+  color: #2a2522;
+  font-family: "DM Sans", sans-serif;
+  outline: none;
+}
+/* Main Grid Layout */
+.track-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 32px;
+  align-items: start;
+}
+
+/* Cards styling */
+.track-card {
+  background-color: #ffffff;
+  border-radius: 12px;
+  padding: 32px;
+  margin-bottom: 32px;
+  box-shadow: 0 4px 20px rgba(42, 37, 34, 0.02);
+}
+
+.track-card:last-child {
+  margin-bottom: 0;
+}
+
+.track-section-title {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 1.75rem;
+  color: #2a2522;
+  margin: 0 0 28px 0;
+  font-weight: 500;
+}
+
+/* Timeline Header */
+.track-timeline-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1.5px solid #f4e4dc;
+  padding-bottom: 24px;
+  margin-bottom: 32px;
+}
+
+.track-code-label {
+  font-size: 1.0625rem;
+  color: #8c857e;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.track-code-value {
+  font-size: 1.625rem;
+  font-weight: 700;
+  color: #c97b63;
+  margin-top: 4px;
+}
+
+.track-status-badge {
+  background-color: #e8c9be;
+  color: #c97b63;
+  font-weight: 600;
+  padding: 8px 20px;
+  border-radius: 20px;
+  font-size: 1.0625rem;
+  letter-spacing: 0.5px;
+}
+
+/* Vertical Timeline */
+.track-timeline {
+  display: flex;
+  flex-direction: column;
+}
+
+.track-step {
+  display: flex;
+  gap: 24px;
+}
+
+.track-step__marker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.track-step__dot {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background-color: #eee2d6;
+  color: #8c857e;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s;
+}
+
+.track-step__line {
+  width: 2px;
+  flex-grow: 1;
+  background-color: #eee2d6;
+  margin: 8px 0;
+  min-height: 56px;
+}
+
+.track-step__content {
+  padding-top: 8px;
+  padding-bottom: 32px;
+}
+
+.track-step__title {
+  font-size: 1.375rem;
+  color: #8c857e;
+  font-weight: 500;
+  margin: 0 0 6px 0;
+}
+
+.track-step__time {
+  font-size: 1.0625rem;
+  font-weight: 600;
+  color: #c97b63;
+  display: block;
+  margin-bottom: 6px;
+}
+
+.track-step__desc {
+  font-size: 1.125rem;
+  color: #6b635d;
+  margin: 0;
+}
+
+/* Timeline State Modifiers */
+.track-step--completed .track-step__dot {
+  background-color: #c97b63;
+  color: #ffffff;
+}
+
+.track-step--completed .track-step__line {
+  background-color: #c97b63;
+}
+
+.track-step--completed .track-step__title {
+  color: #2a2522;
+}
+
+.track-step--active .track-step__dot {
+  background-color: #c97b63;
+  color: #ffffff;
+  box-shadow: 0 0 0 6px rgba(201, 123, 99, 0.15);
+}
+
+.track-step--active .track-step__title {
+  color: #2a2522;
+  font-weight: 700;
+}
+
+.track-step--pending .track-step__dot {
+  background-color: #f4e4dc;
+  width: 24px;
+  height: 24px;
+  margin: 12px; /* Centered relative to 48px footprint */
+}
+
+.track-step:last-child .track-step__line {
+  display: none;
+}
+
+.track-step:last-child .track-step__content {
+  padding-bottom: 0;
+}
+
+/* Map Visualization Widget */
+.track-map-visualization {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.track-map-route {
+  background: linear-gradient(135deg, #fbf7f2 0%, #f4e4dc 100%);
+  border-radius: 8px;
+  height: 240px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 60px;
+  position: relative;
+  border: 1px solid rgba(201, 123, 99, 0.1);
+  overflow: hidden;
+}
+
+/* Background road texture visual */
+.track-map-route::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 100%;
+  height: 12px;
+  background: repeating-linear-gradient(90deg, transparent, transparent 10px, #ffffff 10px, #ffffff 20px);
+  opacity: 0.15;
+  transform: translateY(-50%);
+}
+
+.track-map-marker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  z-index: 2;
+}
+
+.track-marker-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background-color: #c97b63;
+  border: 3px solid #ffffff;
+  box-shadow: 0 2px 8px rgba(201, 123, 99, 0.3);
+}
+
+.track-marker-label {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #2a2522;
+  background-color: rgba(255, 255, 255, 0.9);
+  padding: 4px 10px;
+  border-radius: 20px;
+  box-shadow: 0 2px 6px rgba(42, 37, 34, 0.05);
+}
+
+.track-map-line {
+  flex-grow: 1;
+  height: 4px;
+  background-color: #eee2d6;
+  position: relative;
+  margin: 0 -10px;
+  z-index: 1;
+}
+
+.track-map-progress {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: 70%;
+  background-color: #c97b63;
+}
+
+.track-map-truck-icon {
+  position: absolute;
+  left: 70%;
+  top: -18px;
+  transform: translateX(-50%);
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: #ffffff;
+  border: 2px solid #c97b63;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #c97b63;
+  box-shadow: 0 4px 10px rgba(201, 123, 99, 0.2);
+}
+
+.track-map-details {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 1.125rem;
+  color: #6b635d;
+  justify-content: center;
+  padding: 8px 0;
+}
+
+.track-map-details svg {
+  color: #c97b63;
+}
+
+/* Right Side Column */
+.track-side-title {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 1.5rem;
+  color: #2a2522;
+  margin: 0 0 24px 0;
+  font-weight: 500;
+}
+
+/* ETA Highlight Card */
+.track-eta-card {
+  background-color: #f4e4dc;
+  color: #2a2522;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 24px;
+}
+
+.track-eta-icon {
+  margin-bottom: 16px;
+  background-color: transparent;
+  color: #c97b63;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid #c97b63;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.track-eta-title {
+  font-size: 1.125rem;
+  color: #8c857e;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.track-eta-date {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 2.5rem;
+  font-weight: 500;
+  color: #2a2522;
+  margin: 12px 0 8px;
+}
+
+.track-eta-time {
+  font-size: 1.1875rem;
+  font-weight: 500;
+  color: #c97b63;
+  background-color: transparent;
+  padding: 0;
+  border-radius: 0;
+}
+
+/* Shipper Card */
+.track-shipper-profile {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.track-shipper-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background-color: #f4e4dc;
+  color: #c97b63;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.track-shipper-name {
+  font-size: 1.375rem;
+  font-weight: 600;
+  color: #2a2522;
+}
+
+.track-shipper-rating {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 1.0625rem;
+  color: #8c857e;
+  margin-top: 4px;
+}
+
+.track-shipper-rating svg {
+  color: #f5a623;
+}
+
+.track-shipper-details {
+  border-top: 1.5px solid #f4e4dc;
+  padding-top: 20px;
+  margin-bottom: 24px;
+}
+
+.track-detail-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 1.125rem;
+  margin-bottom: 12px;
+}
+
+.track-detail-row:last-child {
+  margin-bottom: 0;
+}
+
+.track-detail-label {
+  color: #8c857e;
+}
+
+.track-detail-value {
+  color: #2a2522;
+  font-weight: 600;
+}
+/* Shipping Address Card */
+.track-address-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+  border-bottom: 1.5px solid #f4e4dc;
+  padding-bottom: 16px;
+}
+
+.track-address-header svg {
+  color: #c97b63;
+  flex-shrink: 0;
+}
+
+.track-address-header .track-side-title {
+  margin-bottom: 0;
+}
+
+.track-address-recipient {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #2a2522;
+  margin-bottom: 8px;
+}
+
+.track-address-text {
+  font-size: 1.125rem;
+  color: #6b635d;
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+
+.track-address-phone {
+  font-size: 1.125rem;
+  color: #8c857e;
+}
+
+/* ============================================================
+   Responsive Layout
+   ============================================================ */
+
+@media (max-width: 1024px) {
+  .track-grid {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+
+  .track-order-title {
+    font-size: 2.5rem;
+  }
+}
+
+@media (max-width: 600px) {
+  .track-order-page {
+    padding: 40px 0 80px;
+  }
+
+  .track-order-title {
+    font-size: 2rem;
+  }
+
+  .track-order-subtitle {
+    font-size: 1.125rem;
+  }
+
+  .track-search-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .track-search-btn {
+    width: 100%;
+  }
+
+  .track-card {
+    padding: 20px;
+  }
+
+  .track-timeline-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .track-status-badge {
+    align-self: flex-start;
+  }
+
+  .track-step {
+    gap: 16px;
+  }
+
+  .track-step__dot {
+    width: 40px;
+    height: 40px;
+  }
+
+  .track-step__marker svg {
+    width: 12px;
+    height: 12px;
+  }
+
+  .track-step--pending .track-step__dot {
+    margin: 8px;
+  }
+
+  .track-step__title {
+    font-size: 1.1875rem;
+  }
+
+  .track-step__desc {
+    font-size: 1rem;
+  }
+
+  .track-map-route {
+    padding: 0 20px;
+    height: 200px;
+  }
+
+  .track-marker-label {
+    font-size: 0.9375rem;
+  }
+
+  .track-eta-date {
+    font-size: 2.25rem;
+  }
+}
+
+/* Empty State Styling */
+.track-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 80px 32px;
+  background-color: #ffffff;
+  border: 1.5px dashed #eee2d6;
+  border-radius: 12px;
+  margin-top: 40px;
+  box-shadow: 0 4px 20px rgba(42, 37, 34, 0.01);
+}
+
+.track-empty-icon-wrapper {
+  margin-bottom: 24px;
+  color: #c97b63;
+  opacity: 0.85;
+}
+
+.track-empty-title {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 2rem;
+  color: #2a2522;
+  margin: 0 0 12px 0;
+  font-weight: 500;
+}
+
+.track-empty-text {
+  font-family: "DM Sans", sans-serif;
+  font-size: 1.125rem;
+  color: #8c857e;
+  max-width: 520px;
+  line-height: 1.6;
+  margin: 0;
+}
+

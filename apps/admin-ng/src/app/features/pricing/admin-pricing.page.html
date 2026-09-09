@@ -1,0 +1,205 @@
+<main class="admin-content">
+  <p class="admin-page-crumb">Dashboard / Giá &amp; khuyến mãi / Quản lý giá</p>
+  <section class="admin-kpi-grid admin-pricing-kpis" aria-label="Thống kê giá">
+    <article class="admin-kpi-card"><div class="admin-kpi-card__head"><p class="admin-kpi-card__label">Sản phẩm</p><span class="admin-kpi-card__icon"><app-admin-icon name="tag" /></span></div><strong class="admin-kpi-card__value">{{ products().length }}</strong></article>
+    <article class="admin-kpi-card"><div class="admin-kpi-card__head"><p class="admin-kpi-card__label">Thiếu giá bán</p><span class="admin-kpi-card__icon"><app-admin-icon name="clock" /></span></div><strong class="admin-kpi-card__value">{{ missingSale() }}</strong></article>
+    <article class="admin-kpi-card"><div class="admin-kpi-card__head"><p class="admin-kpi-card__label">Đang giảm giá</p><span class="admin-kpi-card__icon"><app-admin-icon name="tag" /></span></div><strong class="admin-kpi-card__value">{{ discounted() }}</strong></article>
+    <article class="admin-kpi-card"><div class="admin-kpi-card__head"><p class="admin-kpi-card__label">Cần kiểm tra</p><span class="admin-kpi-card__icon"><app-admin-icon name="alert" /></span></div><strong class="admin-kpi-card__value">{{ invalid() }}</strong></article>
+  </section>
+  <section class="admin-card admin-card--flush">
+    <div class="admin-tab-content">
+      <div class="admin-filter-bar__actions" style="margin-bottom:12px;">
+        <button class="admin-btn admin-btn--outline admin-btn--sm" type="button" (click)="showHistory.set(!showHistory())">
+          {{ showHistory() ? 'Quay lại bảng giá' : 'Lịch sử giá' }}
+        </button>
+        <span class="admin-table-note">Lịch sử hôm nay: {{ historyToday() }}</span>
+      </div>
+      @if (showHistory()) {
+        <div class="admin-table-wrap">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>Thời gian</th>
+                <th>Sản phẩm</th>
+                <th>Giá gốc cũ</th>
+                <th>Giá gốc mới</th>
+                <th>Giá bán cũ</th>
+                <th>Giá bán mới</th>
+                <th>Lý do</th>
+                <th>Người sửa</th>
+              </tr>
+            </thead>
+            <tbody>
+              @if (!history().length) {
+                <tr><td colspan="8">Chưa có lịch sử thay đổi giá</td></tr>
+              } @else {
+                @for (row of history(); track row.changed_at || row.product_id) {
+                  <tr>
+                    <td>{{ date(row.changed_at) }}</td>
+                    <td>{{ row.product_id }}</td>
+                    <td>{{ money(row.old_base_price) }}</td>
+                    <td>{{ money(row.new_base_price) }}</td>
+                    <td>{{ money(row.old_sale_price) }}</td>
+                    <td>{{ money(row.new_sale_price) }}</td>
+                    <td>{{ row.reason }}</td>
+                    <td>{{ row.changed_by }}</td>
+                  </tr>
+                }
+              }
+            </tbody>
+          </table>
+        </div>
+      } @else {
+        <form class="admin-filter-bar admin-order-filter-bar" (submit)="applyFilters($event)" (reset)="resetFilters($event)">
+          <label class="admin-search-field">
+            <app-admin-icon name="search" />
+            <input class="admin-form-control" name="q" type="search" [value]="query()" placeholder="Tìm SKU hoặc tên sản phẩm" />
+          </label>
+          <select class="admin-form-control" name="category" [value]="category()">
+            <option value="">Tất cả danh mục</option>
+            @for (name of categories(); track name) {
+              <option [value]="name">{{ name }}</option>
+            }
+          </select>
+          <select class="admin-form-control" name="status" [value]="status()">
+            <option value="">Tất cả trạng thái giá</option>
+            <option value="discount">Đang giảm giá</option>
+            <option value="invalid">Cần kiểm tra</option>
+            <option value="missing">Thiếu giá bán</option>
+          </select>
+          <div class="admin-filter-bar__actions">
+            <button class="admin-btn admin-btn--filter admin-btn--sm" type="submit">Lọc</button>
+            <button class="admin-btn admin-btn--ghost admin-btn--sm" type="reset">Đặt lại</button>
+          </div>
+        </form>
+        @if (loadError()) {
+          <div class="admin-empty-state"><strong>Không tải được bảng giá</strong><p>{{ loadError() }}</p></div>
+        } @else if (!paged().length) {
+          <div class="admin-empty-state"><strong>Không có sản phẩm phù hợp</strong><p>Dữ liệu được tải trực tiếp từ Supabase.</p></div>
+        } @else {
+          <div class="admin-table-wrap">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>Sản phẩm</th>
+                  <th>Danh mục</th>
+                  <th>Giá gốc</th>
+                  <th>Giá bán</th>
+                  <th>Giảm</th>
+                  <th>Trạng thái</th>
+                  <th>Cập nhật</th>
+                  <th>Thao tác</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of paged(); track row.product_id) {
+                  <tr>
+                    <td>
+                      <strong>{{ row.name }}</strong>
+                      <small class="admin-order-subtext">{{ row.sku }}</small>
+                    </td>
+                    <td>{{ categoryName(row) }}</td>
+                    <td>{{ money(row.base_price) }}</td>
+                    <td [class.admin-price-discount]="isInvalid(row)">{{ money(row.sale_price ?? row.base_price) }}</td>
+                    <td>{{ discount(row) }}</td>
+                    <td><span class="admin-badge">{{ statusLabel(row.status) }}</span></td>
+                    <td>{{ date(row.updated_at) }}</td>
+                    <td>
+                      <div class="admin-table-actions">
+                        <button class="admin-icon-button admin-icon-button--sm" type="button" title="Chi tiết" (click)="openDetail(row.product_id)">
+                          <app-admin-icon name="eye" />
+                        </button>
+                        <button class="admin-icon-button admin-icon-button--sm" type="button" title="Cập nhật giá" (click)="openChange(row.product_id)">
+                          <app-admin-icon name="edit" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          <app-admin-pagination [page]="page()" [pageCount]="pageCount()" [label]="rangeLabel()" (changed)="goPage($event)" />
+        }
+      }
+    </div>
+  </section>
+</main>
+
+@if (detailOpen() && selected()) {
+  <div class="admin-drawer-backdrop" (click)="closeOverlays()"></div>
+  <aside class="admin-drawer admin-drawer--wide">
+    <header class="admin-drawer__header">
+      <div>
+        <p class="admin-product-code">{{ selected()!.sku }}</p>
+        <h2>{{ selected()!.name }}</h2>
+      </div>
+      <button class="admin-icon-button" type="button" (click)="closeOverlays()">×</button>
+    </header>
+    <div class="admin-drawer__body">
+      <dl class="admin-data-list">
+        <div><dt>Giá gốc</dt><dd>{{ money(selected()!.base_price) }}</dd></div>
+        <div><dt>Giá bán</dt><dd>{{ money(selected()!.sale_price ?? selected()!.base_price) }}</dd></div>
+        <div><dt>Phần trăm giảm</dt><dd>{{ discount(selected()!) }}</dd></div>
+        <div><dt>Phiên bản</dt><dd>{{ selected()!.version || '—' }}</dd></div>
+        <div><dt>Trạng thái</dt><dd>{{ statusLabel(selected()!.status) }}</dd></div>
+      </dl>
+      @if (isInvalid(selected()!)) {
+        <div class="admin-note admin-note--warning">Giá bán đang cao hơn giá gốc. Vui lòng kiểm tra lại.</div>
+      }
+    </div>
+  </aside>
+}
+
+@if (actionOpen() && selected()) {
+  <div class="admin-modal-overlay">
+    <section class="admin-modal admin-price-modal">
+      <form (submit)="submitPrice($event)">
+        <header class="admin-modal__header">
+          <h2>Cập nhật giá - {{ selected()!.sku }}</h2>
+          <button class="admin-icon-button" type="button" (click)="closeOverlays()">×</button>
+        </header>
+        <div class="admin-modal__body">
+          <div class="admin-price-form-grid">
+            <label class="admin-form-group">
+              <span class="admin-form-label">Giá gốc hiện tại</span>
+              <input class="admin-form-control" [value]="money(selected()!.base_price)" disabled />
+            </label>
+            <label class="admin-form-group">
+              <span class="admin-form-label">Giá bán hiện tại</span>
+              <input class="admin-form-control" [value]="money(selected()!.sale_price ?? selected()!.base_price)" disabled />
+            </label>
+            <label class="admin-form-group">
+              <span class="admin-form-label">Giá gốc mới</span>
+              <input class="admin-form-control" name="basePrice" type="number" min="0" [value]="previewBase()" required (input)="onPreviewInput($event, 'base')" />
+            </label>
+            <label class="admin-form-group">
+              <span class="admin-form-label">Giá bán mới</span>
+              <input class="admin-form-control" name="salePrice" type="number" min="0" [value]="previewSale()" required (input)="onPreviewInput($event, 'sale')" />
+            </label>
+            <div class="admin-price-preview admin-price-field--full">
+              <strong>Xem trước</strong>
+              <span>Giá gốc: {{ money(previewBase()) }}</span>
+              <span>Giá bán: {{ money(previewSale()) }}</span>
+              <span>Giảm: {{ previewPct() > 0 ? '-' + previewPct() + '%' : '0%' }}</span>
+              @if (previewInvalid()) {
+                <span class="admin-price-warning">Giá bán không được cao hơn giá gốc.</span>
+              }
+            </div>
+            <label class="admin-form-group admin-price-field--full">
+              <span class="admin-form-label">Lý do</span>
+              <textarea class="admin-form-control admin-form-textarea" name="reason" minlength="10" required placeholder="Nhập lý do thay đổi giá (tối thiểu 10 ký tự)"></textarea>
+            </label>
+          </div>
+          @if (actionError()) {
+            <p class="field__error">{{ actionError() }}</p>
+          }
+        </div>
+        <footer class="admin-modal__footer">
+          <button class="admin-btn admin-btn--ghost" type="button" (click)="closeOverlays()">Hủy</button>
+          <button class="admin-btn admin-btn--secondary" type="submit">Xác nhận</button>
+        </footer>
+      </form>
+    </section>
+  </div>
+}

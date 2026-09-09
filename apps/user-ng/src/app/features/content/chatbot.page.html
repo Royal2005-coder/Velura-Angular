@@ -1,0 +1,218 @@
+<div class="container" style="padding-top: 16px;"></div>
+<main>
+  <div class="chatbot-page">
+    <aside class="chatbot-page__sidebar" [class.is-open]="sidebarOpen()">
+      <div class="chatbot-sidebar-header">
+        <h3 class="chatbot-sidebar-title">Lịch sử trò chuyện</h3>
+        <button class="chatbot-sidebar-close" type="button" aria-label="Thu gọn sidebar" (click)="toggleSidebar()">✕</button>
+      </div>
+      <button class="chatbot-new-chat-btn" type="button" (click)="newChat()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="12" y1="5" x2="12" y2="19" />
+          <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+        Cuộc trò chuyện mới
+      </button>
+      <div class="chatbot-sessions js-chatbot-sessions">
+        @if (sessions().length === 0) {
+          <p class="history-list__empty">Chưa có lịch sử trò chuyện</p>
+        } @else {
+          @for (session of sessions(); track session.session_id) {
+            <div class="chatbot-session-item" [class.is-active]="session.session_id === sessionId()" (click)="openSession(session)">
+              <div class="chatbot-session-item__left">
+                <span class="chatbot-session-item__icon">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                  </svg>
+                </span>
+                <span class="chatbot-session-item__title" [title]="session.title || ''">
+                  {{ session.title || 'Cuộc trò chuyện' }}
+                  @if (session.handoff_status === 'requested' || session.handoff_status === 'assigned') {
+                    <span class="chatbot-session-item__badge">CSKH</span>
+                  }
+                  <small>{{ formatSessionDate(session.updated_at) }}</small>
+                </span>
+              </div>
+              <button class="chatbot-session-item__delete" type="button" aria-label="Xóa phiên" (click)="deleteSession(session, $event)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="3 6 5 6 21 6"></polyline>
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                </svg>
+              </button>
+            </div>
+          }
+        }
+      </div>
+    </aside>
+    <div class="chatbot-page__main">
+      <div class="chatbot-box chatbot-box--page">
+        <div class="chatbot-header">
+          <div class="chatbot-header__info">
+            <div class="chatbot-header__avatar">
+              <svg class="bot-sparkle-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#734724" stroke-width="2">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+              </svg>
+              <span class="chatbot-header__status"></span>
+            </div>
+            <div>
+              <h4 class="chatbot-header__title">AI Stylist</h4>
+              <span class="chatbot-header__desc">Trực tuyến</span>
+            </div>
+          </div>
+          <div class="chatbot-state-switcher" style="display:flex;align-items:center;gap:12px;">
+            <button type="button" aria-label="Lịch sử trò chuyện" (click)="toggleSidebar()" style="background:transparent;border:none;cursor:pointer;color:#1a1a1a;padding:0;display:flex;">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="3" y1="12" x2="21" y2="12"></line>
+                <line x1="3" y1="6" x2="21" y2="6"></line>
+                <line x1="3" y1="18" x2="21" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="chatbot-messages" #messagesPane>
+          @for (message of messages(); track message.message_id) {
+            @if (message.metadata?.local_greeting) {
+              <div class="chatbot-message chatbot-message--bot chatbot-welcome-card chatbot-welcome-new">
+                <div class="chatbot-welcome-header">
+                  <div class="chatbot-header__avatar">🌸</div>
+                  <div>
+                    <h3 class="chatbot-header__title">AI Stylist Velura</h3>
+                    <span class="chatbot-header__desc">Trợ lý thời trang &amp; phong cách cá nhân</span>
+                  </div>
+                </div>
+                <div class="chatbot-welcome-text">
+                  Chào bạn thân mến, mình là <strong>AI Stylist Velura</strong>. Mình rất vui khi được hỗ trợ bạn ngày hôm nay!<br /><br />
+                  Mình có thể gợi ý outfit, tư vấn size phù hợp dáng người, tìm sản phẩm thời trang, giải đáp chính sách hoặc kết nối với nhân viên hỗ trợ.<br /><br />
+                  <strong>Bạn muốn bắt đầu bằng gợi ý nào dưới đây?</strong>
+                </div>
+                <div class="chatbot-welcome-shortcuts">
+                  <button type="button" class="chatbot-chip" (click)="send('Gợi ý outfit đi tiệc sang trọng')">👠 Gợi ý outfit đi tiệc sang trọng</button>
+                  <button type="button" class="chatbot-chip" (click)="send('Phối đồ công sở thanh lịch')">💼 Phối đồ công sở thanh lịch</button>
+                  <button type="button" class="chatbot-chip" (click)="send('Tư vấn size: Cao 1m62, Nặng 52kg')">📏 Tư vấn size: Cao 1m62, Nặng 52kg</button>
+                  <button type="button" class="chatbot-chip" (click)="send('Chính sách đổi trả hàng như thế nào?')">📦 Chính sách đổi trả hàng như thế nào?</button>
+                  <button type="button" class="chatbot-chip" (click)="send('Gặp nhân viên chăm sóc khách hàng')">💬 Gặp nhân viên chăm sóc khách hàng</button>
+                </div>
+              </div>
+            } @else {
+              <div
+                class="chatbot-message"
+                [class.chatbot-message--user]="message.sender === 'user'"
+                [class.chatbot-message--bot]="message.sender === 'bot'"
+                [class.chatbot-message--agent]="message.sender === 'agent'"
+                [class.chatbot-message--typing]="message.metadata?.typing"
+                [class.chatbot-message--has-rich-content]="productsFor(message).length > 0"
+              >
+                @if (message.sender === 'agent') {
+                  <span class="chatbot-message__sender">CSKH</span>
+                }
+                @if (message.metadata?.typing) {
+                  <div class="chatbot-message__text"><span class="typing-dots"><span>.</span><span>.</span><span>.</span></span></div>
+                } @else {
+                  <div class="chatbot-message__text" [innerHTML]="formatBotText(message.text)"></div>
+                }
+                @if (message.metadata?.attachment?.data) {
+                  <div class="chatbot-message__attachment" style="margin-top: 8px;">
+                    <img [src]="message.metadata?.attachment?.data" style="max-width: 150px; max-height: 150px; border-radius: 8px; border: 1px solid rgba(115,71,36,0.15); object-fit: cover;" alt="" />
+                  </div>
+                }
+                @if (productsFor(message).length) {
+                  <div class="chat-product-list">
+                    @for (product of productsFor(message); track product.product_id) {
+                      <article class="chat-product-card">
+                        <a [routerLink]="['/products', product.product_id]" class="chat-product-card__image-link">
+                          <img [src]="productImage(product)" [alt]="product.name" loading="lazy" />
+                        </a>
+                        <div class="chat-product-card__info">
+                          <h4 class="chat-product-card__title">{{ product.name }}</h4>
+                          <p class="chat-product-card__price">{{ productPrice(product) }}</p>
+                          @if (isOutOfStock(product)) {
+                            <span class="chat-product-card__stock-note">Tạm hết hàng</span>
+                          }
+                        </div>
+                        <div class="chat-product-card__actions">
+                          <a [routerLink]="['/products', product.product_id]" class="btn-detail">Xem chi tiết</a>
+                          @if (!isOutOfStock(product)) {
+                            <button type="button" class="btn-buy" (click)="addProduct(product)">Thêm vào giỏ hàng</button>
+                          }
+                        </div>
+                      </article>
+                    }
+                  </div>
+                }
+                @if (blogsFor(message).length) {
+                  <div class="chat-blog-list-container" style="margin-top: 12px; border-top: 1px dashed rgba(115,71,36,0.15); padding-top: 10px;">
+                    <div style="font-size: 11px; font-weight: 600; color: #b56727; margin-bottom: 6px;">📖 Bài viết gợi ý phong cách</div>
+                    <div class="chat-blog-list" style="display: flex; gap: 10px; overflow-x: auto; padding-bottom: 6px;">
+                      @for (blog of blogsFor(message); track blog.blog_id) {
+                        <article class="chat-blog-card" style="flex: 0 0 200px; background: #ffffff; border: 1px solid #ebdacf; border-radius: var(--radius-md); overflow: hidden;">
+                          <a [routerLink]="['/blog', blog.slug]" style="display: block; height: 100px; overflow: hidden;">
+                            <img [src]="blogImage(blog)" [alt]="blog.title" style="width: 100%; height: 100%; object-fit: cover;" />
+                          </a>
+                          <div style="padding: 10px;">
+                            <h4 style="margin: 0 0 4px 0; font-size: 12px; color: #734724;">{{ blog.title }}</h4>
+                            <p style="margin: 0; color: #8e7d73; font-size: 11px;">{{ blog.excerpt }}</p>
+                          </div>
+                        </article>
+                      }
+                    </div>
+                  </div>
+                }
+                <span class="chatbot-message__time">{{ formatTime(message.created_at) }}</span>
+              </div>
+            }
+          }
+        </div>
+
+        <div class="chatbot-footer-sticky-wrap">
+          @if (previewUrl()) {
+            <div class="chatbot-image-preview" style="display: flex; align-items: center; gap: 8px; padding: 8px 16px;">
+              <img class="chatbot-image-preview-img" [src]="previewUrl()" alt="" style="width: 48px; height: 48px; object-fit: cover; border-radius: 8px;" />
+              <span class="chatbot-image-preview-filename">{{ previewName() }}</span>
+              <button type="button" class="chatbot-image-preview-remove" (click)="clearPreview()">✕</button>
+            </div>
+          }
+          <div class="chatbot-quick-chips">
+            <span class="chatbot-quick-chips__label">Gợi ý nhanh:</span>
+            <div class="chatbot-quick-chips__list">
+              <button type="button" class="chatbot-chip" (click)="send('Gợi ý outfit công sở')">Gợi ý outfit công sở</button>
+              <button type="button" class="chatbot-chip" (click)="send('Tìm váy dự tiệc')">Tìm váy dự tiệc</button>
+              <button type="button" class="chatbot-chip" (click)="send('Phối đồ với áo blazer')">Phối đồ với áo blazer</button>
+              <button type="button" class="chatbot-chip" (click)="send('Chọn size phù hợp')">Chọn size phù hợp</button>
+            </div>
+          </div>
+          <form class="chatbot-input-area" (submit)="onSubmit($event)">
+            <input #fileInput type="file" accept="image/*" hidden (change)="onFileChange($event)" />
+            <button class="chatbot-attach-btn" type="button" aria-label="Đính kèm ảnh" (click)="pickImage()">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                <polyline points="21 15 16 10 5 21"></polyline>
+              </svg>
+            </button>
+            <div class="chatbot-input-wrapper">
+              <input
+                class="chatbot-input"
+                type="text"
+                placeholder="Nhập tin nhắn..."
+                aria-label="Nội dung chat"
+                [value]="draft()"
+                (input)="onDraftInput($event)"
+              />
+              <button class="chatbot-send-btn" type="submit" aria-label="Gửi tin nhắn" [disabled]="loading()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="22" y1="2" x2="11" y2="13"></line>
+                  <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                </svg>
+                Gửi
+              </button>
+            </div>
+          </form>
+          <div style="text-align: center; padding: 8px 16px 16px; font-size: 0.6875rem; color: var(--text-secondary); background: #fff;">
+            AI chỉ mang tính chất tham khảo nên nếu thắc mắc hãy liên hệ trực tiếp cho chúng mình nhé
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>

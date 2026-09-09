@@ -1,0 +1,110 @@
+<main class="admin-content">
+  <p class="admin-page-crumb">Dashboard / Nhật ký hệ thống</p>
+  <section class="admin-kpi-grid admin-log-kpis" aria-label="Thống kê nhật ký">
+    <article class="admin-kpi-card">
+      <div class="admin-kpi-card__head">
+        <p class="admin-kpi-card__label">Sự kiện hôm nay</p>
+        <span class="admin-kpi-card__icon"><app-admin-icon name="log" /></span>
+      </div>
+      <strong class="admin-kpi-card__value">{{ todayCount() }}</strong>
+    </article>
+    <article class="admin-kpi-card">
+      <div class="admin-kpi-card__head">
+        <p class="admin-kpi-card__label">Thành công</p>
+        <span class="admin-kpi-card__icon"><app-admin-icon name="check" /></span>
+      </div>
+      <strong class="admin-kpi-card__value">{{ successCount() }}</strong>
+    </article>
+    <article class="admin-kpi-card">
+      <div class="admin-kpi-card__head">
+        <p class="admin-kpi-card__label">Thất bại</p>
+        <span class="admin-kpi-card__icon"><app-admin-icon name="alert" /></span>
+      </div>
+      <strong class="admin-kpi-card__value">{{ failureCount() }}</strong>
+    </article>
+    <article class="admin-kpi-card">
+      <div class="admin-kpi-card__head">
+        <p class="admin-kpi-card__label">Bị chặn</p>
+        <span class="admin-kpi-card__icon"><app-admin-icon name="lock" /></span>
+      </div>
+      <strong class="admin-kpi-card__value">{{ blockedCount() }}</strong>
+    </article>
+    <article class="admin-kpi-card">
+      <div class="admin-kpi-card__head">
+        <p class="admin-kpi-card__label">Bảo mật</p>
+        <span class="admin-kpi-card__icon"><app-admin-icon name="users" /></span>
+      </div>
+      <strong class="admin-kpi-card__value">{{ securityCount() }}</strong>
+    </article>
+  </section>
+  <section class="admin-card admin-card--flush admin-log-workspace">
+    <div class="admin-tabs" role="tablist" aria-label="Nhóm nhật ký">
+      <button class="admin-tab" [class.admin-tab--active]="tab() === 'all'" type="button" (click)="setTab('all')">Tất cả nhật ký <span>{{ rows().length }}</span></button>
+      <button class="admin-tab" [class.admin-tab--active]="tab() === 'admin'" type="button" (click)="setTab('admin')">Thao tác Admin <span>{{ adminCount() }}</span></button>
+      <button class="admin-tab" [class.admin-tab--active]="tab() === 'system'" type="button" (click)="setTab('system')">Sự kiện hệ thống <span>{{ systemCount() }}</span></button>
+      <button class="admin-tab" [class.admin-tab--active]="tab() === 'ai'" type="button" (click)="setTab('ai')">Nhật ký AI <span>{{ aiCount() }}</span></button>
+    </div>
+    <div class="admin-tab-content">
+      <form class="admin-filter-bar">
+        <label class="admin-search-field">
+          <app-admin-icon name="search" />
+          <input class="admin-form-control" type="search" placeholder="Tìm hành động, đối tượng hoặc người thao tác..." (input)="onSearch($event)" />
+        </label>
+        <select class="admin-form-control" (change)="onModule($event)">
+          <option value="">Tất cả phân hệ</option>
+          <option value="accounts">accounts</option>
+          <option value="products">products</option>
+          <option value="orders">orders</option>
+          <option value="reviews">reviews</option>
+          <option value="returns">returns</option>
+          <option value="support">support</option>
+          <option value="pricing">pricing</option>
+          <option value="promotions">promotions</option>
+          <option value="system">system</option>
+        </select>
+        <div class="admin-filter-bar__actions">
+          <button class="admin-btn admin-btn--filter admin-btn--sm" type="button">Lọc</button>
+          <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="resetFilters()">Đặt lại</button>
+        </div>
+      </form>
+      @if (loadError()) {
+        <div class="admin-empty-state"><strong>Không tải được nhật ký</strong><p>{{ loadError() }}</p></div>
+      } @else if (!filtered().length) {
+        <div class="admin-empty-state">
+          <strong>Chưa có nhật ký hệ thống</strong>
+          <p>Nhật ký được tải từ Supabase khi phiên quản trị được xác thực.</p>
+        </div>
+      } @else {
+        <div class="admin-table-wrap">
+          <table class="admin-table admin-log-table">
+            <thead>
+              <tr>
+                <th>Thời gian</th>
+                <th>Người thực hiện</th>
+                <th>Vai trò</th>
+                <th>Phân hệ</th>
+                <th>Hành động</th>
+                <th>Đối tượng</th>
+                <th>IP</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of paged(); track row.audit_id || row.timestamp) {
+                <tr>
+                  <td>{{ date(row.timestamp) }}</td>
+                  <td>{{ actor(row) }}</td>
+                  <td>{{ row.actor_role || '—' }}</td>
+                  <td>{{ row.module || '—' }}</td>
+                  <td>{{ row.action }}</td>
+                  <td>{{ row.target_id || '—' }}</td>
+                  <td>{{ row.ip_address || '—' }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <app-admin-pagination [page]="page()" [pageCount]="pageCount()" [label]="rangeLabel()" (changed)="goPage($event)" />
+      }
+    </div>
+  </section>
+</main>

@@ -1,0 +1,47 @@
+﻿/* Order management module styles. */
+.admin-order-kpis { grid-template-columns:repeat(4, minmax(0, 1fr)); }
+.admin-badge--order-pending { background:#f6eee0; color:#9a6b28; }
+.admin-badge--order-confirmed { background:var(--tab-bg); color:var(--brown); }
+.admin-badge--order-preparing { background:#f8ebd9; color:#a35f1e; }
+.admin-badge--order-shipping { background:#e6eef6; color:#476e91; }
+.admin-badge--order-completed { background:#e7f1e5; color:#4c7048; }
+.admin-badge--order-held { background:#f9e4e8; color:var(--error); }
+.admin-badge--payment-unpaid { background:var(--field-bg); color:var(--muted); }
+.admin-badge--payment-paid { background:#e7f1e5; color:#4c7048; }
+.admin-badge--payment-error { background:#f9e4e8; color:var(--error); }
+.admin-badge--refund { background:var(--tab-bg); color:var(--brown); }
+.admin-order-attention { display:inline-flex; align-items:center; gap:5px; color:var(--muted); font-size:.8125rem; white-space:nowrap; }
+.admin-order-attention .admin-line-icon { width:15px; height:15px; }
+.admin-order-attention--alert { color:var(--error); }
+.admin-order-attention--warning { color:#a35f1e; }
+.admin-order-attention--info { color:#3d6f91; }
+.admin-order-actions { position:relative; display:flex; align-items:center; gap:4px; min-height:32px; }
+.admin-order-action-menu { min-width:250px; padding:8px; }
+.admin-order-action-menu button { display:grid; grid-template-columns:16px minmax(0,1fr); align-items:center; gap:11px; min-height:40px; padding:9px 10px; font-size:.875rem; font-weight:400; }
+.admin-order-action-menu .admin-line-icon { width:16px; height:16px; }
+.admin-order-action-menu__danger { color:var(--error)!important; }
+.admin-order-action-menu__success { color:#4c7048!important; }
+.admin-order-filter-bar { align-items:center; }
+.admin-order-filter-bar .admin-search-field { flex:1 1 420px; max-width:560px; }
+.admin-order-filter-bar .admin-form-group { flex:0 0 auto; margin:0; }
+.admin-order-filter-bar .admin-form-group .admin-form-control { min-width:160px; }
+.admin-order-filter-bar .admin-filter-bar__actions { margin-left:auto; }
+.admin-order-filter-bar .admin-search-field + .admin-form-group { margin-left:0; }
+.admin-order-filter-bar .admin-form-label { display:none; }
+.admin-order-summary { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.admin-order-summary__item { display:grid; gap:4px; padding:13px; border-radius:var(--radius-md); background:var(--field-bg); }
+.admin-order-summary__item span { color:var(--soft); font-size:.75rem; }
+.admin-order-summary__item strong { color:var(--brown); font-size:1rem; font-weight:500; }
+.admin-order-product-list { display:grid; gap:12px; }
+.admin-order-product { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; padding:13px 0; border-bottom:1px solid var(--line); }
+.admin-order-product strong { display:block; margin-bottom:3px; color:var(--ink); font-size:.875rem; font-weight:500; }
+.admin-order-product small { color:var(--soft); font-size:.75rem; }
+.admin-order-product__price { color:var(--brown); font-size:.875rem; text-align:right; white-space:nowrap; }
+.admin-order-totals { display:grid; gap:9px; margin-top:14px; }
+.admin-order-totals div { display:flex; justify-content:space-between; gap:12px; color:var(--muted); font-size:.8125rem; }
+.admin-order-totals strong { color:var(--brown); font-size:1rem; }
+.admin-order-warning { margin:16px 0; padding:12px; border-left:3px solid #a35f1e; border-radius:var(--radius-sm); background:#f8ebd9; color:#765018; font-size:.8125rem; line-height:1.5; }
+.admin-order-danger-note { margin:16px 0; padding:12px; border-left:3px solid var(--error); border-radius:var(--radius-sm); background:#f9e4e8; color:var(--error); font-size:.8125rem; line-height:1.5; }
+@media (max-width:1100px) { .admin-order-kpis { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
+@media (max-width:768px) { .admin-page-intro { align-items:flex-start; flex-direction:column; }.admin-order-filter-bar .admin-filter-bar__actions { margin-left:0; }.admin-order-summary { grid-template-columns:1fr; }.admin-drawer__tabs { padding-inline:18px; } }
+

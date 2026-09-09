@@ -1,0 +1,162 @@
+.site-header {
+  border-bottom: 1px solid var(--line);
+  background: #fff;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.site-header__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.site-header__logo {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.site-header__logo img {
+  width: 84px;
+  height: auto;
+  display: block;
+}
+
+.site-header__search {
+  flex: 1;
+  max-width: 448px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: var(--tab-bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.site-header__search input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  outline: none;
+  min-width: 0;
+}
+
+.site-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow: visible;
+  flex-shrink: 0;
+}
+
+.icon-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: background 0.2s;
+  overflow: visible;
+  flex-shrink: 0;
+  color: var(--ink);
+}
+
+.icon-btn svg {
+  display: block;
+  flex-shrink: 0;
+}
+
+.icon-btn:hover { background: var(--tab-bg); }
+
+.cart-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  background: var(--terracotta);
+  color: #fff;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #fff;
+  box-sizing: content-box;
+}
+
+.site-header__nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 32px;
+  padding: 16px 0;
+}
+
+.site-header__nav a {
+  font-size: 0.875rem;
+  color: var(--soft);
+  font-weight: 400;
+  transition: color 0.2s;
+}
+
+.site-header__nav a:hover,
+.site-header__nav a.is-active {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+/* Hamburger — ẩn desktop, hiện mobile */
+.menu-toggle {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 8px;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+
+.menu-toggle:hover { background: var(--tab-bg); }
+
+.menu-toggle span {
+  display: block;
+  width: 22px;
+  height: 2px;
+  background: var(--ink);
+  border-radius: 1px;
+  transition: transform 0.2s, opacity 0.2s;
+}
+
+.menu-toggle[aria-expanded="true"] span:nth-child(1) {
+  transform: translateY(7px) rotate(45deg);
+}
+.menu-toggle[aria-expanded="true"] span:nth-child(2) {
+  opacity: 0;
+}
+.menu-toggle[aria-expanded="true"] span:nth-child(3) {
+  transform: translateY(-7px) rotate(-45deg);
+}

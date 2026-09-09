@@ -1,0 +1,466 @@
+/* ============================================================
+   Velura — FINAL Responsive Sync Override
+   Import cuối cùng để đồng bộ toàn bộ checkout pages.
+   ============================================================ */
+
+/* ---------- Global safety ---------- */
+html,
+body {
+  width: 100%;
+  min-height: 100%;
+  overflow-x: hidden;
+}
+
+body:not(.page-signin) {
+  background: var(--checkout-bg);
+}
+
+.page-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: var(--checkout-bg);
+}
+
+.page-shell > main {
+  flex: 1;
+}
+
+.page-shell > .site-header,
+.page-shell > .site-footer {
+  background: #fff;
+}
+
+/* ---------- Canonical container giống order-confirm ---------- */
+.container {
+  width: 100%;
+  max-width: var(--max-w);
+  margin-inline: auto;
+  padding-inline: 36px;
+}
+
+/* ---------- Header canonical ---------- */
+.site-header__top {
+  display: grid;
+  grid-template-columns: auto minmax(320px, 560px) auto;
+  align-items: center;
+  gap: 28px;
+  padding: 16px 0;
+}
+
+.site-header__logo {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.site-header__logo img {
+  width: 84px;
+  height: auto;
+  display: block;
+}
+
+.site-header__search {
+  width: 100%;
+  max-width: 560px;
+  justify-self: center;
+}
+
+.site-header__actions {
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  overflow: visible;
+  flex-shrink: 0;
+}
+
+.icon-btn {
+  width: 40px;
+  height: 40px;
+  overflow: visible;
+  flex-shrink: 0;
+}
+
+.icon-btn svg {
+  display: block;
+  flex-shrink: 0;
+}
+
+.cart-badge {
+  top: -2px;
+  right: -2px;
+  border: 2px solid #fff;
+}
+
+/* ---------- Checkout canonical ---------- */
+.checkout-page {
+  background: transparent;
+  padding: 28px 0 56px;
+}
+
+.checkout-page .page-title {
+  margin-bottom: 28px;
+}
+
+.checkout-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 420px;
+  gap: 32px;
+  align-items: start;
+}
+
+.checkout-main {
+  min-width: 0;
+}
+
+.order-summary {
+  width: 100%;
+  max-width: 420px;
+}
+
+/* ---------- Checkout steps desktop ---------- */
+.checkout-steps {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  max-width: 900px;
+  margin: 0 auto 48px;
+}
+
+.checkout-step {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.checkout-step__line {
+  display: block;
+  flex: 1 1 72px;
+  width: auto;
+  min-width: 64px;
+  max-width: 112px;
+  height: 2px;
+  margin: 0;
+  background: rgba(130, 116, 115, 0.2);
+}
+
+.checkout-step__line--done {
+  background: #7C5454;
+}
+
+/* ---------- Cards / sections ---------- */
+.card,
+.review-section,
+.order-summary,
+.error-box,
+.details-grid {
+  background: #fff;
+}
+
+/* ---------- Payment failed / success ---------- */
+.payment-failed {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 56px 36px 72px;
+  background: transparent;
+}
+
+.page-shell main:has(.success-hero) {
+  background: transparent;
+  padding: 32px 0 56px;
+}
+
+.success-hero {
+  padding-top: 40px;
+}
+
+.details-grid {
+  max-width: 760px;
+}
+
+/* ---------- Large desktop balance ---------- */
+@media (min-width: 1536px) {
+  .container {
+    max-width: 1488px;
+    padding-inline: 36px;
+  }
+
+  .checkout-grid {
+    grid-template-columns: minmax(0, 1fr) 440px;
+    gap: 36px;
+  }
+
+  .order-summary {
+    max-width: 440px;
+  }
+}
+
+/* ---------- Tablet ---------- */
+@media (max-width: 1200px) {
+  .container {
+    padding-inline: 28px;
+  }
+
+  .checkout-grid {
+    grid-template-columns: minmax(0, 1fr) 360px;
+    gap: 24px;
+  }
+
+  .order-summary {
+    max-width: 360px;
+  }
+
+  .checkout-steps {
+    max-width: 820px;
+  }
+}
+
+@media (max-width: 1024px) {
+  .container {
+    padding-inline: 24px;
+  }
+
+  .site-header__top {
+    grid-template-columns: auto minmax(240px, 1fr) auto;
+  }
+
+  .checkout-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .order-summary {
+    max-width: none;
+    position: static;
+  }
+
+  .site-footer__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 32px;
+  }
+}
+
+/* ---------- Mobile ---------- */
+@media (max-width: 768px) {
+  .container {
+    padding-inline: 16px;
+  }
+
+  .site-header__top {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 0;
+  }
+
+  .site-header__logo img {
+    width: 64px;
+  }
+
+  .site-header__search {
+    display: none;
+  }
+
+  .menu-toggle {
+    display: inline-flex;
+  }
+
+  .site-header__actions {
+    margin-left: auto;
+    gap: 2px;
+  }
+
+  .icon-btn {
+    width: 36px;
+    height: 36px;
+  }
+
+  .site-header__nav {
+    display: none;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    width: 100%;
+    padding: 8px 0 16px;
+  }
+
+  .site-header__nav.is-open {
+    display: flex;
+  }
+
+  .site-header__nav a {
+    width: 100%;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .site-header__nav a:last-child {
+    border-bottom: 0;
+  }
+
+  .checkout-page {
+    padding: 20px 0 40px;
+  }
+
+  .breadcrumb {
+    margin-bottom: 20px;
+  }
+
+  .page-title {
+    font-size: 1.75rem;
+    margin-bottom: 20px;
+  }
+
+  .checkout-steps {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    justify-content: flex-start !important;
+    gap: 0 !important;
+    max-width: none !important;
+    margin: 0 0 32px !important;
+  }
+
+  .checkout-step {
+    display: flex !important;
+    align-items: center !important;
+    gap: 14px !important;
+    min-height: 48px !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* Fix lỗi line thành cục vuông ở mobile */
+  .checkout-step__line {
+    display: block !important;
+    flex: 0 0 24px !important;
+    inline-size: 2px !important;
+    block-size: 24px !important;
+    width: 2px !important;
+    height: 24px !important;
+    min-width: 2px !important;
+    max-width: 2px !important;
+    min-height: 24px !important;
+    max-height: 24px !important;
+    margin: 0 0 0 19px !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: rgba(130, 116, 115, 0.2) !important;
+  }
+
+  .checkout-step__line--done {
+    background: #7C5454 !important;
+  }
+
+  .checkout-grid {
+    grid-template-columns: 1fr !important;
+    gap: 20px !important;
+  }
+
+  .card,
+  .review-section,
+  .order-summary,
+  .error-box,
+  .details-grid {
+    padding: 18px !important;
+  }
+
+  .review-title {
+    font-size: clamp(1.75rem, 8vw, 2.25rem);
+    margin-bottom: 24px;
+  }
+
+  .product-item {
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .product-item__img {
+    width: 100%;
+    height: auto;
+    max-height: 260px;
+  }
+
+  .product-item__img img {
+    width: 100%;
+    height: auto;
+    object-fit: contain;
+  }
+
+  .payment-failed {
+    padding: 40px 16px 48px !important;
+  }
+
+  .payment-failed__actions {
+    flex-direction: column;
+  }
+
+  .action-buttons {
+    flex-direction: column;
+    align-items: stretch;
+    padding-inline: 16px;
+  }
+
+  .action-buttons .btn {
+    width: 100%;
+  }
+
+  .site-footer__inner {
+    padding: 32px 16px;
+  }
+
+  .site-footer__grid {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+
+  .site-footer__bottom {
+    margin-top: 28px;
+  }
+}
+
+/* ---------- Small mobile ---------- */
+@media (max-width: 480px) {
+  .container {
+    padding-inline: 14px;
+  }
+
+  .site-header__logo img {
+    width: 58px;
+  }
+
+  .icon-btn {
+    width: 34px;
+    height: 34px;
+  }
+
+  .site-header__actions {
+    gap: 1px;
+  }
+
+  .page-title {
+    font-size: 1.5rem;
+  }
+
+  .checkout-step__label {
+    white-space: normal;
+  }
+
+  .coupon-row {
+    flex-direction: column;
+  }
+
+  .checkout-actions {
+    flex-direction: column;
+  }
+
+  .checkout-actions .btn {
+    width: 100%;
+  }
+
+  .site-footer__inner {
+    padding: 28px 14px;
+  }
+}

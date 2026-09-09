@@ -1,0 +1,250 @@
+/* ============================================================
+   Velura — Standardized Button Components
+   Aligns all buttons/links to the central Design System.
+   ============================================================ */
+
+/* Base Button Reset & Global Behaviors */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid transparent;
+  background: none;
+  padding: 0;
+  margin: 0;
+  color: inherit;
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+  outline: none;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.1s ease, box-shadow 0.2s ease;
+}
+
+/* Hover, active, focus, and disabled states */
+.btn:hover {
+  text-decoration: none;
+}
+
+.btn:active {
+  transform: scale(0.97);
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--terracotta);
+  outline-offset: 2px;
+}
+
+.btn:disabled,
+.btn.is-disabled {
+  opacity: 0.6 !important;
+  cursor: not-allowed !important;
+  pointer-events: none !important;
+  transform: none !important;
+}
+
+/* --- Button Variants --- */
+
+/* Primary Filled Button (Terracotta theme) */
+.btn--primary,
+.btn--accent {
+  height: 48px;
+  padding: 0 28px;
+  background-color: var(--terracotta);
+  color: #fff;
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border: none;
+}
+
+.btn--primary:hover,
+.btn--accent:hover {
+  background-color: var(--terracotta-h);
+  color: #fff;
+}
+
+/* Primary Outline Button (Terracotta theme) */
+.btn--outline {
+  height: 48px;
+  padding: 0 28px;
+  background-color: transparent;
+  color: var(--terracotta);
+  border: 1px solid var(--terracotta);
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.btn--outline:hover {
+  background-color: rgba(201, 123, 99, 0.05);
+  border-color: var(--terracotta-h);
+  color: var(--terracotta-h);
+}
+
+.btn--brown {
+  height: 48px;
+  padding: 0 28px;
+  background-color: var(--brown);
+  color: #fff;
+  border: 1px solid var(--brown);
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.btn--brown:hover {
+  background-color: #654320;
+  border-color: #654320;
+  color: #fff;
+}
+
+.btn--brown-outline {
+  height: 48px;
+  padding: 0 28px;
+  background-color: transparent;
+  color: var(--brown);
+  border: 1px solid var(--brown);
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.btn--brown-outline:hover {
+  background-color: rgba(125, 86, 45, 0.08);
+  border-color: #654320;
+  color: #654320;
+}
+
+/* Secondary/Neutral Outline Button (Gray border, dark/soft text) */
+.btn--secondary {
+  height: 48px;
+  padding: 0 28px;
+  background-color: #fff;
+  color: var(--soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.btn--secondary:hover {
+  background-color: var(--field-bg);
+  color: var(--text-dark);
+  border-color: var(--soft);
+}
+
+.btn--success {
+  height: 48px;
+  padding: 0 28px;
+  background-color: #E6F4EA;
+  color: #137333;
+  border: 1px solid #B7DFBF;
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.btn--success:hover {
+  background-color: #D7EEDF;
+  border-color: #8BC69B;
+  color: #0F5E29;
+}
+
+.btn--danger {
+  height: 48px;
+  padding: 0 28px;
+  background-color: #DC3545;
+  color: #fff;
+  border: 1px solid #DC3545;
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.btn--danger:hover {
+  background-color: #B02A37;
+  border-color: #B02A37;
+  color: #fff;
+}
+
+/* Plain Text / Link Style Button */
+.btn--text {
+  background: none;
+  border: none;
+  color: var(--terracotta);
+  padding: 0;
+  font-weight: 600;
+  letter-spacing: 0.025em;
+}
+
+.btn--text:hover {
+  color: var(--terracotta-h);
+  text-decoration: underline;
+}
+
+/* Utilities / Layout Helpers */
+.btn--full {
+  width: 100%;
+}
+
+.btn--sm {
+  height: 38px;
+  padding: 0 16px;
+  font-size: 0.8125rem;
+}
+
+/* Backward compatibility / Legacy aliases mapped to standardized design tokens */
+.btn-outline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 24px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background-color: #fff;
+  color: var(--text-dark);
+  font-weight: 500;
+  font-size: 0.875rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.2s, border-color 0.2s, color 0.2s;
+}
+
+.btn-outline:hover {
+  background-color: var(--field-bg);
+  border-color: var(--soft);
+}
+
+.btn-add-address {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: none;
+  color: var(--brown);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  margin-top: 8px;
+  transition: color 0.2s ease, opacity 0.2s ease;
+}
+
+.btn-add-address:hover {
+  color: var(--terracotta);
+}
+
+.checkout-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+}

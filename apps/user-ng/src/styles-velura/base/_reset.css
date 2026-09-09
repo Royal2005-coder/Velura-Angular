@@ -1,0 +1,23 @@
+﻿/* Reset + base elements */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: var(--ink);
+  background: #fff;
+  line-height: 1.5;
+  min-height: 100vh;
+}
+
+img { max-width: 100%; height: auto; display: block; }
+
+a { color: inherit; text-decoration: none; }
+
+button, input, textarea, select {
+  font: inherit;
+  color: inherit;
+}
+
+ul { list-style: none; }

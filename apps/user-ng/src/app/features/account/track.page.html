@@ -1,0 +1,251 @@
+<main class="track-order-page">
+      <div class="container">
+        <!-- Breadcrumb & Title -->
+        
+
+        <div class="track-order-title-block">
+          <h1 class="track-order-title">Theo dõi đơn hàng</h1>
+          <p class="track-order-subtitle">Cập nhật trạng thái vận chuyển theo thời gian thực</p>
+        </div>
+
+        <!-- Search Bar -->
+        <div class="track-search-bar">
+          <div class="track-search-input-wrapper">
+            <svg class="track-search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8C857E"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input type="text" id="js-track-search-input" value="" aria-label="Mã đơn hàng cần tra cứu"
+              placeholder="Nhập mã đơn hàng của bạn..." (input)="onInput($event)" />
+          </div>
+          <button class="btn btn--primary" id="js-track-search-btn" type="button" (click)="search()">Tra cứu</button>
+        </div>
+
+        <!-- Empty State (shown when no order is searched/loaded yet) -->
+        <div class="track-empty-state" id="js-track-empty-state">
+          <div class="track-empty-icon-wrapper">
+            <svg class="track-empty-icon" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="1" y="3" width="15" height="13" />
+              <polygon points="16 8 20 8 23 11 23 16 16 16 16 8" />
+              <circle cx="5.5" cy="18.5" r="2.5" />
+              <circle cx="18.5" cy="18.5" r="2.5" />
+            </svg>
+          </div>
+          <h2 class="track-empty-title">Theo dõi hành trình đơn hàng</h2>
+          <p class="track-empty-text">Vui lòng nhập mã đơn hàng của bạn ở thanh tìm kiếm trên để kiểm tra trạng thái và hành trình vận chuyển theo thời gian thực.</p>
+        </div>
+
+        <!-- Order Detail & Tracker Grid -->
+        <div class="track-grid" id="js-track-grid" style="display: none;">
+          <!-- Left Column -->
+          <div class="track-main-column">
+            <!-- Timeline Card -->
+            <div class="track-card track-timeline-card">
+              <div class="track-timeline-header">
+                <div>
+                  <span class="track-code-label">Mã đơn hàng</span>
+                  <div class="track-code-value" id="js-track-code">#VL-20260524-1234</div>
+                </div>
+                <span class="track-status-badge" id="js-track-status">Đang giao</span>
+              </div>
+
+              <h2 class="track-section-title">Hành trình đơn hàng</h2>
+
+              <div class="track-timeline" id="js-track-timeline">
+                <!-- Step 1: Completed -->
+                <div class="track-step track-step--completed">
+                  <div class="track-step__marker">
+                    <span class="track-step__dot">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    </span>
+                    <span class="track-step__line"></span>
+                  </div>
+                  <div class="track-step__content">
+                    <h3 class="track-step__title">Đã đặt hàng</h3>
+                    <time class="track-step__time">24/05/2026 • 10:32</time>
+                    <p class="track-step__desc">Velura Online Store</p>
+                  </div>
+                </div>
+
+                <!-- Step 2: Completed -->
+                <div class="track-step track-step--completed">
+                  <div class="track-step__marker">
+                    <span class="track-step__dot">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    </span>
+                    <span class="track-step__line"></span>
+                  </div>
+                  <div class="track-step__content">
+                    <h3 class="track-step__title">Đã xác nhận</h3>
+                    <time class="track-step__time">24/05/2026 • 11:05</time>
+                    <p class="track-step__desc">Trung tâm xử lý đơn hàng - TP.HCM</p>
+                  </div>
+                </div>
+
+                <!-- Step 3: Completed -->
+                <div class="track-step track-step--completed">
+                  <div class="track-step__marker">
+                    <span class="track-step__dot">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    </span>
+                    <span class="track-step__line"></span>
+                  </div>
+                  <div class="track-step__content">
+                    <h3 class="track-step__title">Đang đóng gói</h3>
+                    <time class="track-step__time">24/05/2026 • 15:48</time>
+                    <p class="track-step__desc">Kho Velura - Quận 7, TP.HCM</p>
+                  </div>
+                </div>
+
+                <!-- Step 4: Active (In transit) -->
+                <div class="track-step track-step--active">
+                  <div class="track-step__marker">
+                    <span class="track-step__dot">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="1" y="3" width="15" height="13" />
+                        <polygon points="16 8 20 8 23 11 23 16 16 16 16 8" />
+                        <circle cx="5.5" cy="18.5" r="2.5" />
+                        <circle cx="18.5" cy="18.5" r="2.5" />
+                      </svg>
+                    </span>
+                    <span class="track-step__line"></span>
+                  </div>
+                  <div class="track-step__content">
+                    <h3 class="track-step__title">Đang giao hàng</h3>
+                    <time class="track-step__time">25/05/2026 • 08:20</time>
+                    <p class="track-step__desc">Bưu cục Quận 1 - Đang trên đường giao</p>
+                  </div>
+                </div>
+
+                <!-- Step 5: Pending -->
+                <div class="track-step track-step--pending">
+                  <div class="track-step__marker">
+                    <span class="track-step__dot"></span>
+                  </div>
+                  <div class="track-step__content">
+                    <h3 class="track-step__title">Đã giao thành công</h3>
+                    <time class="track-step__time">Dự kiến 26/05/2026</time>
+                    <p class="track-step__desc">123 Nguyễn Huệ, Quận 1, TP.HCM</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Delivery Map Card -->
+            <div class="track-card track-map-card">
+              <h2 class="track-section-title">Bản đồ vận chuyển</h2>
+              <div class="track-map-visualization">
+                <div class="track-map-route">
+                  <div class="track-map-marker track-map-marker--start">
+                    <span class="track-marker-dot"></span>
+                    <span class="track-marker-label" id="js-track-map-start-label">Kho Q.7</span>
+                  </div>
+                  <div class="track-map-line">
+                    <span class="track-map-progress" id="js-track-map-progress"></span>
+                    <span class="track-map-truck-icon" id="js-track-map-truck-icon">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <rect x="1" y="3" width="15" height="13" />
+                        <polygon points="16 8 20 8 23 11 23 16 16 16 16 8" />
+                        <circle cx="5.5" cy="18.5" r="2.5" />
+                        <circle cx="18.5" cy="18.5" r="2.5" />
+                      </svg>
+                    </span>
+                  </div>
+                  <div class="track-map-marker track-map-marker--end">
+                    <span class="track-marker-dot"></span>
+                    <span class="track-marker-label" id="js-track-map-end-label">Nhà Q.1</span>
+                  </div>
+                </div>
+                <div class="track-map-details">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z" />
+                    <circle cx="12" cy="10" r="3" />
+                  </svg>
+                  <span id="js-track-map-details-text">Quận 7 → Quận 1, TP.HCM • 8.2km</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right Column -->
+          <div class="track-side-column">
+            <!-- ETA Card -->
+            <div class="track-card track-eta-card" id="js-track-eta-card">
+              <div class="track-eta-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10" />
+                  <polyline points="12 6 12 12 16 14" />
+                </svg>
+              </div>
+              <span class="track-eta-title">Thời gian giao dự kiến</span>
+              <div class="track-eta-date" id="js-track-eta-date">26/05/2026</div>
+              <div class="track-eta-time" id="js-track-eta-time">Trong khoảng 09:00 - 12:00</div>
+            </div>
+
+            <!-- Shipper Card -->
+            <div class="track-card track-shipper-card" id="js-track-shipper-card">
+              <h3 class="track-side-title">Thông tin shipper</h3>
+              <div class="track-shipper-profile">
+                <div class="track-shipper-avatar" id="js-track-shipper-avatar">TVH</div>
+                <div>
+                  <div class="track-shipper-name" id="js-track-shipper-name">Trần Văn Hùng</div>
+                  <div class="track-shipper-rating" id="js-track-shipper-rating">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                      <polygon
+                        points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                    </svg>
+                    <span>Đánh giá 4.9 / 5.0</span>
+                  </div>
+                </div>
+              </div>
+              <div class="track-shipper-details">
+                <div class="track-detail-row">
+                  <span class="track-detail-label">Số điện thoại</span>
+                  <span class="track-detail-value" id="js-track-shipper-phone">0905 678 234</span>
+                </div>
+                <div class="track-detail-row">
+                  <span class="track-detail-label">Biển số xe</span>
+                  <span class="track-detail-value" id="js-track-shipper-plate">59-K1 234.56</span>
+                </div>
+              </div>
+              <button class="btn btn--primary btn--full" type="button" id="js-track-shipper-call">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <path
+                    d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+                </svg>
+                Gọi cho shipper
+              </button>
+            </div>
+
+            <!-- Destination Address Card -->
+            <div class="track-card track-address-card">
+              <div class="track-address-header">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z" />
+                  <circle cx="12" cy="10" r="3" />
+                </svg>
+                <h3 class="track-side-title">Giao đến</h3>
+              </div>
+              <div class="track-address-recipient" id="js-track-recipient">Nguyễn Minh Anh</div>
+              <div class="track-address-text" id="js-track-address">123 Nguyễn Huệ, P. Bến Nghé, Q.1, TP. Hồ Chí Minh</div>
+              <div class="track-address-phone" id="js-track-phone">0912 345 678</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>

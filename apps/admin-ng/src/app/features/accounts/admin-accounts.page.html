@@ -1,0 +1,342 @@
+<main class="admin-content">
+  <p class="admin-page-crumb">Dashboard / Quản lý tài khoản</p>
+  <section class="admin-kpi-grid admin-kpi-grid--accounts" aria-label="Thống kê tài khoản">
+    <article class="admin-kpi-card">
+      <div class="admin-kpi-card__head">
+        <p class="admin-kpi-card__label">Tổng tài khoản</p>
+        <span class="admin-kpi-card__icon"><app-admin-icon name="users" /></span>
+      </div>
+      <strong class="admin-kpi-card__value">{{ total() }}</strong>
+    </article>
+    <article class="admin-kpi-card">
+      <div class="admin-kpi-card__head">
+        <p class="admin-kpi-card__label">Tài khoản member</p>
+        <span class="admin-kpi-card__icon"><app-admin-icon name="users" /></span>
+      </div>
+      <strong class="admin-kpi-card__value">{{ memberCount() }}</strong>
+    </article>
+    <article class="admin-kpi-card">
+      <div class="admin-kpi-card__head">
+        <p class="admin-kpi-card__label">Đang hoạt động</p>
+        <span class="admin-kpi-card__icon"><app-admin-icon name="check" /></span>
+      </div>
+      <strong class="admin-kpi-card__value">{{ activeCount() }}</strong>
+    </article>
+    <article class="admin-kpi-card">
+      <div class="admin-kpi-card__head">
+        <p class="admin-kpi-card__label">Bị khóa</p>
+        <span class="admin-kpi-card__icon"><app-admin-icon name="lock" /></span>
+      </div>
+      <strong class="admin-kpi-card__value">{{ lockedCount() }}</strong>
+    </article>
+    <article class="admin-kpi-card">
+      <div class="admin-kpi-card__head">
+        <p class="admin-kpi-card__label">Chờ phê duyệt</p>
+        <span class="admin-kpi-card__icon"><app-admin-icon name="clock" /></span>
+      </div>
+      <strong class="admin-kpi-card__value">{{ pendingCount() }}</strong>
+    </article>
+  </section>
+  <section class="admin-card admin-card--flush">
+    <div class="admin-tabs" role="tablist">
+      <button class="admin-tab" [class.admin-tab--active]="tab() === 'all'" type="button" (click)="setTab('all')">Tất cả tài khoản <span>{{ total() }}</span></button>
+      <button class="admin-tab" [class.admin-tab--active]="tab() === 'members'" type="button" (click)="setTab('members')">Thành viên <span>{{ memberCount() }}</span></button>
+      <button class="admin-tab" [class.admin-tab--active]="tab() === 'admins'" type="button" (click)="setTab('admins')">Quản trị viên <span>{{ adminCount() }}</span></button>
+      <button class="admin-tab" [class.admin-tab--active]="tab() === 'locked'" type="button" (click)="setTab('locked')">Bị khóa <span>{{ lockedCount() }}</span></button>
+      <button class="admin-tab" [class.admin-tab--active]="tab() === 'promotions'" type="button" (click)="setTab('promotions')">Nâng quyền <span>{{ pendingCount() }}</span></button>
+      <button class="admin-tab" [class.admin-tab--active]="tab() === 'logs'" type="button" (click)="setTab('logs')">Nhật ký</button>
+    </div>
+    <div class="admin-tab-content">
+      @if (tab() !== 'logs' && tab() !== 'promotions') {
+        <form class="admin-filter-bar admin-order-filter-bar" (submit)="applyFilters($event)" (reset)="resetFilters($event)">
+          <label class="admin-search-field">
+            <app-admin-icon name="search" />
+            <input class="admin-form-control" name="q" [value]="query()" placeholder="Tìm tên, email hoặc số điện thoại" />
+          </label>
+          <select class="admin-form-control" name="role" aria-label="Lọc loại tài khoản" [value]="roleFilter()">
+            <option value="">Tất cả loại tài khoản</option>
+            <option value="member">Thành viên</option>
+            <option value="admin">Quản trị viên</option>
+          </select>
+          <select class="admin-form-control" name="status" aria-label="Lọc trạng thái" [value]="statusFilter()">
+            <option value="">Tất cả trạng thái</option>
+            <option value="active">Đang hoạt động</option>
+            <option value="locked">Bị khóa</option>
+          </select>
+          <div class="admin-filter-bar__actions">
+            <button class="admin-btn admin-btn--filter admin-btn--sm" type="submit">Lọc</button>
+            <button class="admin-btn admin-btn--ghost admin-btn--sm" type="reset">Đặt lại</button>
+          </div>
+        </form>
+        @if (loadError()) {
+          <p class="admin-note">{{ loadError() }}</p>
+        }
+        <div class="admin-table-wrap">
+          <table class="admin-table admin-data-table admin-member-table">
+            <thead>
+              <tr>
+                <th>Tài khoản</th>
+                <th>Nhóm</th>
+                <th>Trạng thái</th>
+                <th>Đăng nhập gần nhất</th>
+                <th>Thao tác</th>
+              </tr>
+            </thead>
+            <tbody>
+              @if (!paged().length) {
+                <tr class="admin-table-empty-row">
+                  <td colspan="5">Không có tài khoản phù hợp. Dữ liệu được tải trực tiếp từ Supabase.</td>
+                </tr>
+              } @else {
+                @for (row of paged(); track rowKey(row, $index)) {
+                  <tr>
+                    <td>
+                      <div class="admin-person">
+                        <span class="admin-avatar">{{ initials(row) }}</span>
+                        <span>
+                          <strong>{{ row.full_name || 'Chưa cập nhật' }}</strong>
+                          <small>{{ row.email || row.phone || '—' }}</small>
+                        </span>
+                      </div>
+                    </td>
+                    <td>
+                      <span class="admin-badge" [class.admin-badge--success]="groupOf(row) === 'members'" [class.admin-badge--neutral]="groupOf(row) === 'admins'">
+                        {{ groupOf(row) === 'admins' ? 'Quản trị' : 'Thành viên' }}
+                      </span>
+                      <small class="admin-member-role">{{ roleText(row) }}</small>
+                    </td>
+                    <td>
+                      <span class="admin-badge" [class.admin-badge--success]="statusKey(row) === 'active'" [class.admin-badge--danger]="statusKey(row) !== 'active'">
+                        {{ statusLabel(row) }}
+                      </span>
+                    </td>
+                    <td>{{ date(row.last_login_at) }}</td>
+                    <td>
+                      <div class="admin-table-actions">
+                        <button class="admin-icon-button admin-icon-button--sm" type="button" title="Xem chi tiết" (click)="openDetail(row.user_id)">
+                          <app-admin-icon name="eye" />
+                        </button>
+                        @if (row.is_active) {
+                          <button class="admin-icon-button admin-icon-button--sm" type="button" title="Khóa tài khoản" (click)="openAction('lock', row.user_id)">
+                            <app-admin-icon name="lock" />
+                          </button>
+                        } @else {
+                          <button class="admin-icon-button admin-icon-button--sm" type="button" title="Mở khóa tài khoản" (click)="openAction('unlock', row.user_id)">
+                            <app-admin-icon name="unlock" />
+                          </button>
+                        }
+                        <button class="admin-icon-button admin-icon-button--sm" type="button" title="Thay đổi vai trò" (click)="openAction('role', row.user_id)">
+                          <app-admin-icon name="edit" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                }
+              }
+            </tbody>
+          </table>
+        </div>
+        <app-admin-pagination [page]="page()" [pageCount]="pageCount()" [label]="rangeLabel()" (changed)="goPage($event)" />
+      }
+      @if (tab() === 'promotions') {
+        @if (!requests().length) {
+          <div class="admin-empty-state"><strong>Không có yêu cầu nâng quyền</strong></div>
+        } @else {
+          <div class="admin-table-wrap">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>Yêu cầu</th>
+                  <th>Tài khoản</th>
+                  <th>Vai trò</th>
+                  <th>Hết hạn</th>
+                  <th>Trạng thái</th>
+                  <th>Thao tác</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of requests(); track row.request_id) {
+                  <tr>
+                    <td>{{ row.request_id }}</td>
+                    <td>{{ row.target_user_id }}</td>
+                    <td>{{ row.requested_role }}</td>
+                    <td>{{ date(row.expires_at) }}</td>
+                    <td>{{ row.status }}</td>
+                    <td>
+                      @if (row.status === 'pending') {
+                        <div class="admin-table-actions">
+                          <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openRequest('approve', row.request_id)">Duyệt</button>
+                          <button class="admin-btn admin-btn--danger admin-btn--sm" type="button" (click)="openRequest('reject', row.request_id)">Từ chối</button>
+                        </div>
+                      } @else {
+                        —
+                      }
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      }
+      @if (tab() === 'logs') {
+        @if (!logs().length) {
+          <div class="admin-empty-state"><strong>Chưa có nhật ký tài khoản</strong></div>
+        } @else {
+          <div class="admin-table-wrap">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>Thời gian</th>
+                  <th>Người thực hiện</th>
+                  <th>Hành động</th>
+                  <th>Đối tượng</th>
+                  <th>Dữ liệu cũ</th>
+                  <th>Dữ liệu mới</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of pagedLogs(); track row.audit_id || row.timestamp) {
+                  <tr>
+                    <td>{{ date(row.timestamp) }}</td>
+                    <td>{{ row.actor_id || 'system' }}</td>
+                    <td>{{ row.action }}</td>
+                    <td>{{ row.target_id }}</td>
+                    <td><div class="admin-log-json">{{ jsonValue(row.old_value) }}</div></td>
+                    <td><div class="admin-log-json">{{ jsonValue(row.new_value) }}</div></td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          <app-admin-pagination [page]="logsPage()" [pageCount]="logPageCount()" [label]="logRangeLabel()" (changed)="goLogsPage($event)" />
+        }
+      }
+    </div>
+  </section>
+</main>
+
+@if (selected() && !actionType()) {
+  <div class="admin-drawer-backdrop" (click)="closeOverlays()"></div>
+  <aside class="admin-drawer admin-drawer--wide admin-member-drawer">
+    <header class="admin-drawer__header">
+      <div class="admin-member-profile">
+        <span class="admin-avatar admin-avatar--lg">{{ initials(selected()!) }}</span>
+        <div>
+          <p class="admin-product-code">{{ selected()!.user_id }}</p>
+          <h2>{{ selected()!.full_name || selected()!.email || 'Tài khoản member' }}</h2>
+          <div class="admin-status-group">
+            <span class="admin-badge">{{ roleText(selected()!) }}</span>
+            <span class="admin-badge">{{ selected()!.is_verified ? 'Đã xác thực' : 'Chưa xác thực' }}</span>
+            <span class="admin-badge">{{ statusLabel(selected()!) }}</span>
+          </div>
+        </div>
+      </div>
+      <button class="admin-icon-button" type="button" aria-label="Đóng" (click)="closeOverlays()">×</button>
+    </header>
+    <div class="admin-drawer__body">
+      <dl class="admin-data-list">
+        <div><dt>Họ tên</dt><dd>{{ selected()!.full_name || '—' }}</dd></div>
+        <div><dt>Email</dt><dd>{{ selected()!.email || '—' }}</dd></div>
+        <div><dt>Số điện thoại</dt><dd>{{ selected()!.phone || '—' }}</dd></div>
+        <div><dt>Vai trò tài khoản</dt><dd>{{ selected()!.role || 'member' }}</dd></div>
+        <div><dt>Vai trò quản trị</dt><dd>{{ selected()!.admin_role || 'member' }}</dd></div>
+        <div><dt>Trạng thái</dt><dd>{{ statusLabel(selected()!) }}</dd></div>
+        <div><dt>Đăng nhập cuối</dt><dd>{{ date(selected()!.last_login_at) }}</dd></div>
+        <div><dt>Phiên bản</dt><dd>{{ selected()!.version || '—' }}</dd></div>
+      </dl>
+    </div>
+  </aside>
+}
+
+@if (actionType() && selected()) {
+  <div class="admin-modal-overlay">
+    <section class="admin-modal">
+      <form (submit)="submitAction($event)">
+        <header class="admin-modal__header">
+          <h2>{{ actionType() === 'role' ? 'Thay đổi vai trò' : actionType() === 'lock' ? 'Khóa tài khoản' : 'Mở khóa tài khoản' }}</h2>
+          <button class="admin-icon-button" type="button" (click)="closeOverlays()">×</button>
+        </header>
+        <div class="admin-modal__body">
+          @if (actionType() === 'role') {
+            <label class="admin-form-group">
+              <span class="admin-form-label">Loại tài khoản</span>
+              <select class="admin-form-control" name="role" [value]="targetRole()" (change)="onTargetRole($event)">
+                <option value="member">Thành viên</option>
+                <option value="admin">Quản trị viên</option>
+              </select>
+            </label>
+            @if (targetRole() === 'admin') {
+              <label class="admin-form-group">
+                <span class="admin-form-label">Vai trò quản trị</span>
+                <select class="admin-form-control" name="adminRole">
+                  @for (role of adminRoles; track role) {
+                    <option [value]="role" [selected]="selected()!.admin_role === role">{{ adminRoleLabel(role) }}</option>
+                  }
+                </select>
+              </label>
+            }
+          }
+          @if (actionType() === 'lock') {
+            <label class="admin-form-group">
+              <span class="admin-form-label">Loại khóa</span>
+              <select class="admin-form-control" name="lockType" (change)="onLockType($event)">
+                <option value="temporary">Tạm thời</option>
+                <option value="permanent">Vĩnh viễn</option>
+              </select>
+            </label>
+            @if (lockType() === 'temporary') {
+              <label class="admin-form-group">
+                <span class="admin-form-label">Thời hạn khóa</span>
+                <input class="admin-form-control" name="lockedUntil" type="datetime-local" required />
+              </label>
+            }
+          }
+          @if (actionType() !== 'role') {
+            <label class="admin-form-group">
+              <span class="admin-form-label">Lý do, tối thiểu 11 từ</span>
+              <textarea class="admin-form-control admin-form-textarea" name="reason" required (input)="onReasonInput($event)"></textarea>
+              <span class="admin-form-helper">{{ wordHint() }}</span>
+            </label>
+          }
+          @if (actionError()) {
+            <p class="field__error">{{ actionError() }}</p>
+          }
+        </div>
+        <footer class="admin-modal__footer">
+          <button class="admin-btn admin-btn--ghost" type="button" (click)="closeOverlays()">Hủy</button>
+          <button class="admin-btn admin-btn--secondary" type="submit">Xác nhận</button>
+        </footer>
+      </form>
+    </section>
+  </div>
+}
+
+@if (requestAction() && selectedRequest()) {
+  <div class="admin-modal-overlay">
+    <section class="admin-modal">
+      <form (submit)="submitRequest($event)">
+        <header class="admin-modal__header">
+          <h2>{{ requestAction() === 'approve' ? 'Duyệt yêu cầu nâng quyền' : 'Từ chối yêu cầu nâng quyền' }}</h2>
+          <button class="admin-icon-button" type="button" (click)="closeOverlays()">×</button>
+        </header>
+        <div class="admin-modal__body">
+          <label class="admin-form-group">
+            <span class="admin-form-label">{{ requestAction() === 'reject' ? 'Lý do từ chối, tối thiểu 11 từ' : 'Ghi chú phê duyệt' }}</span>
+            <textarea class="admin-form-control admin-form-textarea" name="note" [required]="requestAction() === 'reject'" (input)="onReasonInput($event)"></textarea>
+            @if (requestAction() === 'reject') {
+              <span class="admin-form-helper">{{ wordHint() }}</span>
+            }
+          </label>
+          @if (actionError()) {
+            <p class="field__error">{{ actionError() }}</p>
+          }
+        </div>
+        <footer class="admin-modal__footer">
+          <button class="admin-btn admin-btn--ghost" type="button" (click)="closeOverlays()">Hủy</button>
+          <button class="admin-btn admin-btn--secondary" type="submit">Xác nhận</button>
+        </footer>
+      </form>
+    </section>
+  </div>
+}

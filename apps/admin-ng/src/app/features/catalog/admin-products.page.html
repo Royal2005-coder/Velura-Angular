@@ -1,0 +1,241 @@
+<main class="admin-content">
+  <p class="admin-page-crumb">Dashboard / Quản lý sản phẩm</p>
+  <section class="admin-kpi-grid admin-product-kpis" aria-label="Thống kê sản phẩm">
+    <article class="admin-kpi-card">
+      <div class="admin-kpi-card__head">
+        <p class="admin-kpi-card__label">Tổng sản phẩm</p>
+        <span class="admin-kpi-card__icon"><app-admin-icon name="box" /></span>
+      </div>
+      <strong class="admin-kpi-card__value">{{ total() }}</strong>
+    </article>
+    <article class="admin-kpi-card">
+      <div class="admin-kpi-card__head">
+        <p class="admin-kpi-card__label">Đang bán</p>
+        <span class="admin-kpi-card__icon"><app-admin-icon name="check" /></span>
+      </div>
+      <strong class="admin-kpi-card__value">{{ onSale() }}</strong>
+    </article>
+    <article class="admin-kpi-card">
+      <div class="admin-kpi-card__head">
+        <p class="admin-kpi-card__label">Tạm ẩn</p>
+        <span class="admin-kpi-card__icon"><app-admin-icon name="eye" /></span>
+      </div>
+      <strong class="admin-kpi-card__value">{{ hidden() }}</strong>
+    </article>
+    <article class="admin-kpi-card">
+      <div class="admin-kpi-card__head">
+        <p class="admin-kpi-card__label">Hết hàng</p>
+        <span class="admin-kpi-card__icon"><app-admin-icon name="lock" /></span>
+      </div>
+      <strong class="admin-kpi-card__value">{{ outOfStock() }}</strong>
+    </article>
+    <article class="admin-kpi-card">
+      <div class="admin-kpi-card__head">
+        <p class="admin-kpi-card__label">Tồn kho thấp</p>
+        <span class="admin-kpi-card__icon"><app-admin-icon name="clock" /></span>
+      </div>
+      <strong class="admin-kpi-card__value">{{ lowStockCount() }}</strong>
+    </article>
+  </section>
+  <section class="admin-card admin-card--flush">
+    <div class="admin-tabs" role="tablist">
+      <button class="admin-tab" [class.admin-tab--active]="tab() === 'catalog'" type="button" (click)="setTab('catalog')">
+        Danh sách sản phẩm <span>{{ filtered().length }}</span>
+      </button>
+      <button class="admin-tab" [class.admin-tab--active]="tab() === 'csv'" type="button" (click)="setTab('csv')">Nhập CSV</button>
+      <button class="admin-tab" [class.admin-tab--active]="tab() === 'logs'" type="button" (click)="setTab('logs')">Nhật ký sản phẩm</button>
+    </div>
+    @if (tab() === 'catalog') {
+      <div class="admin-tab-content">
+        <form class="admin-filter-bar">
+          <label class="admin-search-field">
+            <app-admin-icon name="search" />
+            <input class="admin-form-control" type="search" placeholder="Tìm theo tên hoặc mã sản phẩm..." (input)="onSearch($event)" />
+          </label>
+          <select class="admin-form-control" (change)="onCategory($event)">
+            <option value="">Tất cả danh mục</option>
+            @for (name of categories(); track name) {
+              <option [value]="name">{{ name }}</option>
+            }
+          </select>
+          <select class="admin-form-control" (change)="onStatus($event)">
+            <option value="">Tất cả trạng thái</option>
+            <option value="on_sale">Đang bán</option>
+            <option value="hidden">Tạm ẩn</option>
+            <option value="out_of_stock">Hết hàng</option>
+            <option value="discontinued">Ngừng bán</option>
+          </select>
+          <select class="admin-form-control">
+            <option value="">Tất cả tồn kho</option>
+            <option value="low">Tồn kho thấp</option>
+            <option value="out">Hết hàng</option>
+          </select>
+          <div class="admin-filter-bar__actions">
+            <button class="admin-btn admin-btn--filter admin-btn--sm" type="button">Lọc</button>
+            <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="resetFilters()">Đặt lại</button>
+          </div>
+        </form>
+        <div class="admin-table-wrap">
+          <table class="admin-table admin-data-table">
+            <thead>
+              <tr>
+                <th>Sản phẩm</th>
+                <th>SKU</th>
+                <th>Danh mục</th>
+                <th>Giá bán</th>
+                <th>Tồn kho</th>
+                <th>Trạng thái</th>
+                <th>Cập nhật</th>
+                <th>Thao tác</th>
+              </tr>
+            </thead>
+            <tbody>
+              @if (!paged().length) {
+                <tr>
+                  <td colspan="8">
+                    <div class="admin-empty-state">
+                      <app-admin-icon name="search" />
+                      <strong>Không có sản phẩm phù hợp</strong>
+                    </div>
+                  </td>
+                </tr>
+              } @else {
+                @for (product of paged(); track product.product_id) {
+                  <tr>
+                    <td>
+                      <div class="admin-table__entity">
+                        <img [src]="imageUrl(product)" [alt]="product.name" />
+                        <span>
+                          <strong>{{ product.name }}</strong>
+                          <small>{{ product.collection || '' }}</small>
+                        </span>
+                      </div>
+                    </td>
+                    <td>{{ product.sku }}</td>
+                    <td><span class="admin-role-badge">{{ product.category_name || '—' }}</span></td>
+                    <td>{{ price(product) }}</td>
+                    <td><span class="admin-stock">—</span></td>
+                    <td>
+                      <span [class]="'admin-badge admin-badge--' + statusTone(product.status)">
+                        {{ statusLabel(product.status) }}
+                      </span>
+                    </td>
+                    <td>{{ updatedAt(product.updated_at) }}</td>
+                    <td>
+                      <div class="admin-table-actions">
+                        <button class="admin-icon-button admin-icon-button--sm" type="button" title="Đổi trạng thái" (click)="openStatus(product)">
+                          <app-admin-icon name="edit" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                }
+              }
+            </tbody>
+          </table>
+        </div>
+        <app-admin-pagination [page]="page()" [pageCount]="pageCount()" [label]="rangeLabel()" (changed)="goPage($event)" />
+      </div>
+    }
+    @if (tab() === 'csv') {
+      <div class="admin-tab-content">
+        <section class="admin-csv-import">
+          <header>
+            <div>
+              <h2 class="admin-section__title">Kiểm tra sản phẩm bằng CSV</h2>
+              <p class="admin-table-note">CSV ghi sản phẩm qua API production; tồn kho được điều chỉnh trong chi tiết biến thể.</p>
+            </div>
+            <button class="admin-btn admin-btn--outline admin-btn--sm" type="button">Tải file mẫu</button>
+          </header>
+          <div class="admin-csv-dropzone">
+            <app-admin-icon name="box" />
+            <strong>Chọn file CSV để kiểm tra</strong>
+            <span>Dung lượng tối đa 60 KB, tối đa 500 dòng.</span>
+            <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="csvInput.click()">Chọn file CSV</button>
+            <input #csvInput type="file" accept=".csv,text/csv" hidden (change)="onCsvFile($event)" />
+          </div>
+          <div class="admin-csv-checklist">
+            <h3>Kiểm tra dữ liệu</h3>
+            <p>✓ Đủ cột bắt buộc</p>
+            <p>✓ UUID danh mục hợp lệ</p>
+            <p>✓ Giá là số hợp lệ</p>
+            <p>✓ SKU đúng định dạng</p>
+          </div>
+          <div class="admin-alert">{{ csvMessage() }}</div>
+          <button class="admin-btn admin-btn--primary admin-btn--sm" type="button" (click)="commitCsv()">Ghi CSV vào catalog</button>
+        </section>
+      </div>
+    }
+    @if (tab() === 'logs') {
+      <div class="admin-tab-content">
+        <div class="admin-table-wrap">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>Thời gian</th>
+                <th>Người thao tác</th>
+                <th>Đối tượng</th>
+                <th>Hành động</th>
+                <th>Dữ liệu trước → sau</th>
+                <th>Kết quả</th>
+              </tr>
+            </thead>
+            <tbody>
+              @if (!logs().length) {
+                <tr>
+                  <td colspan="6">Chưa có nhật ký sản phẩm.</td>
+                </tr>
+              } @else {
+                @for (row of logs(); track row.audit_id || row.timestamp) {
+                  <tr>
+                    <td>{{ updatedAt(row.timestamp) }}</td>
+                    <td>{{ row.actor_id || '—' }}</td>
+                    <td>{{ row.target_id || '—' }}</td>
+                    <td>{{ row.action }}</td>
+                    <td>{{ row.old_value ? 'có' : '—' }} → {{ row.new_value ? 'có' : '—' }}</td>
+                    <td>{{ row.result || '—' }}</td>
+                  </tr>
+                }
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    }
+  </section>
+</main>
+
+@if (selected()) {
+  <div class="admin-modal-overlay">
+    <section class="admin-modal">
+      <form (submit)="submitStatus($event)">
+        <header class="admin-modal__header">
+          <h2>Đổi trạng thái - {{ selected()!.sku }}</h2>
+          <button class="admin-icon-button" type="button" (click)="closeOverlays()">×</button>
+        </header>
+        <div class="admin-modal__body">
+          <label class="admin-form-group">
+            <span class="admin-form-label">Trạng thái mới</span>
+            <select class="admin-form-control" name="status" [value]="nextStatus()" required>
+              <option value="on_sale">Đang bán</option>
+              <option value="hidden">Tạm ẩn</option>
+              <option value="out_of_stock">Hết hàng</option>
+              <option value="discontinued">Ngừng kinh doanh</option>
+            </select>
+          </label>
+          <label class="admin-form-group">
+            <span class="admin-form-label">Lý do</span>
+            <textarea class="admin-form-control admin-form-textarea" name="reason" minlength="10" required></textarea>
+          </label>
+          @if (actionError()) {
+            <p class="field__error">{{ actionError() }}</p>
+          }
+        </div>
+        <footer class="admin-modal__footer">
+          <button class="admin-btn admin-btn--ghost" type="button" (click)="closeOverlays()">Hủy</button>
+          <button class="admin-btn admin-btn--secondary" type="submit">Xác nhận</button>
+        </footer>
+      </form>
+    </section>
+  </div>
+}

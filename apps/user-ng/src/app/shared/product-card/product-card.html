@@ -1,0 +1,70 @@
+<article class="product-card" [class.is-out-of-stock]="isOutOfStock()">
+  <div class="product-card__img-wrapper">
+    @if (isOutOfStock()) {
+      <span class="product-card__badge product-card__badge--out-of-stock">HẾT HÀNG</span>
+    } @else if (discountPercent() > 0) {
+      <span class="product-card__badge product-card__badge--sale">-{{ discountPercent() }}%</span>
+    } @else if (product().is_combo) {
+      <span class="product-card__badge product-card__badge--new" [style.background]="isCatalog() ? '#4A90E2' : null">COMBO</span>
+    } @else if ((product().sold_count || 0) > 0) {
+      <span class="product-card__badge" [class.product-card__badge--best]="!isCatalog()" [class.product-card__badge--hot]="isCatalog()">BÁN CHẠY</span>
+    } @else if (product().is_featured) {
+      <span class="product-card__badge" [class.product-card__badge--hot]="!isCatalog()" [class.product-card__badge--new]="isCatalog()">NỔI BẬT</span>
+    }
+    <a [routerLink]="['/products', product().product_id]" class="product-card__img-link">
+      <img [src]="imageUrl()" [alt]="product().name" class="product-card__img" />
+    </a>
+    <div class="product-card__img-hover">
+      <a [routerLink]="['/products', product().product_id]" class="btn-detail">Xem chi tiết</a>
+    </div>
+    <button
+      class="btn-icon product-card__btn-wishlist card__wishlist-btn"
+      type="button"
+      title="Thêm vào Wishlist"
+      [class.active]="saved()"
+      (click)="toggleWishlist($event)"
+    >
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+      </svg>
+    </button>
+  </div>
+  <div class="product-card__info">
+    <div class="product-card__rating">
+      <span class="product-card__rating-star">★</span>
+      <span>{{ rating() }}</span>
+      <span>({{ product().rating_count || 0 }})</span>
+    </div>
+    <a [routerLink]="['/products', product().product_id]" class="product-card__title-link">
+      <h3 class="product-card__title">{{ product().name }}</h3>
+    </a>
+    @if (excerpt()) {
+      <p class="product-card__excerpt">{{ excerpt() }}</p>
+    }
+    @if (colorDots().length) {
+      <div class="product-card__colors">
+        @for (swatch of colorDots(); track swatch.name) {
+          <span class="product-card__color-dot" [style.background-color]="swatch.hex" [title]="swatch.name"></span>
+        }
+      </div>
+    }
+    <div class="product-card__price-row">
+      <span class="product-card__price">{{ priceLabel() }}</span>
+      @if (oldPriceLabel()) {
+        <span class="product-card__price-old">{{ oldPriceLabel() }}</span>
+      }
+    </div>
+  </div>
+  <div class="product-card__actions">
+    <a [routerLink]="['/products', product().product_id]" class="btn-buy" (click)="buyNow($event)">
+      <span>Mua ngay</span>
+    </a>
+    <button class="product-card__btn-cart" type="button" title="Thêm vào giỏ hàng" (click)="addToCart($event)">
+      <svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="9" cy="21" r="1"></circle>
+        <circle cx="20" cy="21" r="1"></circle>
+        <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+      </svg>
+    </button>
+  </div>
+</article>

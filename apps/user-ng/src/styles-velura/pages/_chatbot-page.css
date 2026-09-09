@@ -1,0 +1,210 @@
+/* ============================================================
+   Velura — Dedicated Chatbot Page Stylesheet
+   ============================================================ */
+
+.chatbot-page {
+  display: flex;
+  flex-direction: row-reverse; /* Lịch sử bên phải */
+  height: calc(100vh - 120px); /* Đảm bảo bằng chiều cao viewport trừ header và breadcrumb */
+  overflow: hidden;
+  background: #FAF8F6;
+  font-family: "DM Sans", sans-serif;
+  border-top: 1px solid var(--line);
+}
+
+.chatbot-page__sidebar {
+  width: 320px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--line); /* Đổi từ border-right thành border-left */
+  background: #fff;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  height: 100%;
+  overflow-y: auto;
+}
+
+.chatbot-page__sidebar.is-collapsed {
+  width: 0;
+  padding: 24px 0;
+  border-left: none; /* Đổi từ border-right thành border-left */
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.chatbot-page__main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: stretch;
+  align-items: stretch;
+  padding: 0;
+  background: #FAF8F6;
+  box-sizing: border-box;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Cho phép nội dung tin nhắn tự cuộn tròn bên trong, không cuộn toàn trang */
+.page-chatbot .chatbot-messages {
+  height: 100% !important;
+  overflow-y: auto !important;
+  flex: 1 1 auto !important;
+}
+
+.page-chatbot .chatbot-footer-sticky-wrap {
+  flex-shrink: 0;
+  background: #ffffff;
+  border-top: 1px solid var(--line);
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.05);
+}
+
+/* Chat box layout override inside full-page chatbot */
+.chatbot-box--page {
+  position: static !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  height: 100% !important; /* Thay đổi thành 100% để lấp đầy main */
+  opacity: 1 !important;
+  visibility: visible !important;
+  transform: none !important;
+  pointer-events: all !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  border: none !important;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden !important; /* Ngăn scroll toàn cục */
+}
+
+/* Sidebar History Title & Header */
+.chatbot-sidebar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  border-bottom: 2px solid var(--tab-bg);
+  padding-bottom: 8px;
+}
+
+.chatbot-sidebar-title {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--text-dark);
+  margin: 0;
+  font-family: "Playfair Display", serif;
+}
+
+.chatbot-sidebar-close {
+  background: none;
+  border: none;
+  font-size: 1.125rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px;
+  transition: color 0.2s, transform 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.chatbot-sidebar-close:hover {
+  color: var(--terracotta);
+  transform: scale(1.1);
+}
+
+/* Sessions list */
+.chatbot-sessions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.chatbot-session-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  background: #FAF8F6;
+  border: 1px solid var(--line);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-decoration: none;
+  color: var(--text-dark);
+}
+
+.chatbot-session-item:hover {
+  background: #F4E4DC;
+  border-color: var(--terracotta);
+}
+
+.chatbot-session-item__left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  overflow: hidden;
+  flex: 1;
+}
+
+.chatbot-session-item__icon {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.chatbot-session-item__title {
+  font-size: 0.875rem;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chatbot-session-item__delete {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  opacity: 0;
+  transition: all 0.2s ease;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chatbot-session-item:hover .chatbot-session-item__delete {
+  opacity: 1;
+}
+
+.chatbot-session-item__delete:hover {
+  color: var(--terracotta);
+}
+
+/* ---------- Responsive layout adjustment ---------- */
+@media (max-width: 768px) {
+  .chatbot-page {
+    flex-direction: column;
+    height: auto;
+  }
+  
+  .chatbot-page__sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+    padding: 20px;
+    max-height: 300px;
+  }
+  
+  .chatbot-page__main {
+    width: 100%;
+    padding: 20px;
+    height: 520px;
+  }
+}

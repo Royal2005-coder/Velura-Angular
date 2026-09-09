@@ -1,0 +1,58 @@
+.checkout-steps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 40px;
+  max-width: 760px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.checkout-step {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.checkout-step__num {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.875rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.checkout-step__num--done    { background: #E8C9BE; color: #fff; }
+.checkout-step__num--active  { background: #D4A3A3; color: #fff; }
+.checkout-step__num--pending {
+  background: var(--checkout-bg);
+  color: var(--text-secondary);
+  border: 1px solid var(--card-border);
+}
+.checkout-step__num--confirm { background: #CCCCCC; color: #fff; }
+
+.checkout-step__label {
+  font-size: 0.875rem;
+  white-space: nowrap;
+}
+
+.checkout-step__label--active  { color: var(--terracotta); font-weight: 600; }
+.checkout-step__label--done    { color: var(--terracotta); font-weight: 600; }
+.checkout-step__label--pending { color: var(--text-secondary); }
+
+.checkout-step__line {
+  flex: 1 1 40px;
+  min-width: 32px;
+  max-width: 80px;
+  height: 2px;
+  background: rgba(130, 116, 115, 0.2);
+}
+
+.checkout-step__line--done { background: #7C5454; }

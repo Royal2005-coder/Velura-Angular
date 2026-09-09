@@ -1,0 +1,736 @@
+/* ============================================================
+   Velura — Dedicated Two-Row Header Stylesheet
+   ============================================================ */
+
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  background: #ffffff;
+  border-bottom: 1px solid var(--line, #E8DFD6);
+  transition: box-shadow 0.3s ease, border-color 0.3s ease;
+  font-family: "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif !important;
+  /* Đảm bảo font chữ DM Sans và các font hệ thống */
+}
+
+/* Scroll shadow effect */
+.site-header.header-scrolled {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+}
+
+/* Grid Layout: Left Column (Logo) | Center Column (2 Rows) | Right Column (Actions) */
+.site-header__container-grid {
+  display: grid;
+  grid-template-columns: 160px 1fr 220px;
+  /* Thu hẹp cột trái và cột phải để nhường chỗ cho cột giữa */
+  align-items: stretch;
+  padding: 0;
+}
+
+/* 1. LEFT COLUMN: Logo box (Flower top, text bottom) */
+.header-col--left {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 12px;
+  border: none;
+}
+
+.site-header__logo-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  text-decoration: none;
+}
+
+/* Khung crop để loại bỏ hoàn toàn chữ viết thường "Velura" dưới bông hoa */
+.logo-flower-crop {
+  width: 50px;
+  height: 44px;
+  /* Giới hạn chiều cao chỉ hiển thị bông hoa */
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+.logo-flower-img {
+  width: 76px;
+  /* Kích thước ảnh gốc */
+  height: auto;
+  position: absolute;
+  top: -2px;
+  /* Dịch chuyển ảnh lên trên để giấu phần chữ cursive */
+  display: block;
+}
+
+.logo-brand-name {
+  font-family: "Playfair Display", serif !important;
+  /* Luôn dùng Playfair Display cho logo chữ/Headlines */
+  font-size: 1.375rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #731F21;
+  text-align: center;
+  line-height: 1;
+}
+
+/* 2. CENTER COLUMN: Two rows */
+.header-col--center {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  border: none;
+}
+
+.center-row--top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px 6px;
+  /* Giảm padding dọc để header mỏng hơn */
+  gap: 24px;
+}
+
+.center-row--bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  /* Giảm padding dọc để header mỏng hơn */
+  border-top: 1px solid var(--line, #E8DFD6);
+  border-bottom: none;
+}
+
+/* Center Top Row Items */
+.header-info-item {
+  display: flex;
+  align-items: center;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  /* Để bình thường, không in đậm */
+  color: #000000;
+  text-decoration: none;
+  font-family: "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif !important;
+  /* Body & UI dùng DM Sans */
+  white-space: nowrap !important;
+  /* Không cho phép rớt dòng */
+  flex-shrink: 0 !important;
+  /* Không cho phép co bóp */
+}
+
+.header-info-item svg {
+  color: inherit;
+  /* Kế thừa màu chữ */
+  fill: none;
+  stroke: currentColor;
+  flex-shrink: 0;
+}
+
+.highlight-text {
+  color: #731F21;
+  font-weight: 500;
+  /* Để bình thường, không in đậm */
+}
+
+/* Search bar styling - Giới hạn kích thước tối đa để tránh ép Hotline */
+.site-header__search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: #FAF2EF;
+  border-radius: 20px;
+  border: none;
+  width: 100%;
+  max-width: 260px;
+  /* Giới hạn chiều dài tối đa của thanh tìm kiếm */
+  flex-shrink: 1;
+}
+
+.site-header__search input {
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 0.8125rem;
+  width: 100%;
+  color: #000000;
+  font-family: "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif !important;
+}
+
+/* Center Bottom Row Menu items */
+.nav-link {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  /* Để bình thường, không in đậm */
+  color: #000000;
+  text-decoration: none;
+  padding: 8px 0;
+  position: relative;
+  transition: color 0.2s ease;
+  letter-spacing: 0.02em;
+  font-family: "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif !important;
+  /* Body & UI dùng DM Sans */
+  text-transform: uppercase;
+  /* Chuyển tự động thành in hoa */
+}
+
+.nav-link:hover,
+.nav-link.is-active {
+  color: #731F21;
+}
+
+/* Active indicator red line under tabs */
+.nav-link.is-active::after {
+  content: "";
+  position: absolute;
+  bottom: -9px;
+  /* Cân chỉnh sát viền dưới */
+  left: 0;
+  width: 100%;
+  height: 3px;
+  background: #731F21;
+}
+
+/* Marketing highlight style for Gợi ý AI */
+.nav-link--highlight {
+  color: #731F21 !important;
+  font-weight: 700 !important;
+}
+
+/* 3. RIGHT COLUMN: 3 action buttons */
+.header-col--right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 8px 16px 16px;
+  border: none;
+  margin-top: -6px;
+  /* No vertical borders! */
+}
+
+.header-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  color: #000000;
+  transition: color 0.2s ease, transform 0.15s ease;
+  padding: 8px;
+}
+
+.header-action-btn:hover {
+  color: #731F21;
+  transform: translateY(-1px);
+}
+
+.btn-icon-wrapper {
+  position: relative;
+  display: inline-flex;
+}
+
+/* Micro-copy (Labels): DM Sans 600 + UPPERCASE + letter-spacing 0.1em */
+.btn-label {
+  font-family: "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif !important;
+  font-size: 0.625rem;
+  /* Cỡ chữ 10px chuẩn Micro-copy */
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  /* letter-spacing 0.1em */
+  color: inherit;
+  white-space: nowrap;
+  /* Tuyệt đối không cho rớt dòng */
+  display: block;
+}
+
+/* Action Badges */
+.cart-badge,
+.wishlist-badge {
+  position: absolute;
+  top: -4px;
+  right: -6px;
+  background: #731F21;
+  color: #ffffff;
+  font-size: 0.625rem;
+  font-weight: 700;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid #ffffff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Mobile Toggle Hamburger */
+.menu-toggle {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 8px;
+  width: 36px;
+  height: 36px;
+  margin-left: 8px;
+}
+
+.menu-toggle span {
+  display: block;
+  width: 20px;
+  height: 2px;
+  background: #000000;
+  border-radius: 1px;
+  transition: transform 0.2s, opacity 0.2s;
+}
+
+.menu-toggle[aria-expanded="true"] span:nth-child(1) {
+  transform: translateY(6px) rotate(45deg);
+}
+
+.menu-toggle[aria-expanded="true"] span:nth-child(2) {
+  opacity: 0;
+}
+
+.menu-toggle[aria-expanded="true"] span:nth-child(3) {
+  transform: translateY(-6px) rotate(-45deg);
+}
+
+/* ============================================================
+   RESPONSIVE LAYOUT OVERRIDES (Mobile & Tablet)
+   ============================================================ */
+
+@media (max-width: 1024px) {
+  .site-header__container-grid {
+    grid-template-columns: auto auto;
+    /* 2 columns on mobile: logo left, actions/menu-toggle right */
+    align-items: center;
+    height: 72px;
+    padding: 0 16px;
+  }
+
+  .header-col--left {
+    padding: 0;
+    justify-content: flex-start;
+  }
+
+  .site-header__logo-group {
+    flex-direction: row;
+    gap: 8px;
+  }
+
+  .logo-flower-img {
+    height: 36px;
+  }
+
+  .logo-brand-name {
+    font-size: 1.25rem;
+  }
+
+  /* Center column dropdown drawer on mobile */
+  .header-col--center {
+    display: block;
+    position: absolute;
+    top: 72px;
+    left: 0;
+    width: 100%;
+    background: #ffffff;
+    border-bottom: 1px solid var(--line, #E8DFD6);
+    z-index: 999;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    pointer-events: none;
+  }
+
+  .center-row--top {
+    display: none;
+    /* Hide top row (hotline/shops/search) on mobile */
+  }
+
+  .site-header__nav {
+    display: none;
+    /* Toggled via JS .is-open class */
+    flex-direction: column;
+    align-items: stretch;
+    padding: 8px 24px;
+    gap: 0;
+    border-top: none;
+    pointer-events: auto;
+  }
+
+  .site-header__nav.is-open {
+    display: flex;
+  }
+
+  .nav-link {
+    width: 100%;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--line, #E8DFD6);
+  }
+
+  .nav-link:last-child {
+    border-bottom: none;
+  }
+
+  .nav-link.is-active::after {
+    display: none;
+    /* Hide horizontal active line on mobile drawer */
+  }
+
+  /* Actions column on mobile */
+  .header-col--right {
+    padding: 0;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 0;
+  }
+
+  .btn-label {
+    display: none;
+    /* Hide labels under icons on mobile */
+  }
+
+  .menu-toggle {
+    display: flex;
+    /* Show hamburger toggle */
+  }
+}
+
+/* ==================================================================
+   ACCOUNT DROPDOWN STYLING
+   ================================================================== */
+.header-account-dropdown {
+  position: relative;
+}
+
+.account-dropdown-menu {
+  position: absolute;
+  top: 100%;
+  right: 50%;
+  transform: translateX(50%) translateY(10px);
+  background-color: #ffffff;
+  min-width: 160px;
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+  border: 1px solid var(--line, #E8DFD6);
+  padding: 8px 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.25s ease, transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.25s;
+}
+
+/* Hover to show dropdown */
+.header-account-dropdown:hover .account-dropdown-menu {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateX(50%) translateY(4px);
+}
+
+/* Dropdown upward arrow */
+.account-dropdown-arrow {
+  position: absolute;
+  top: -6px;
+  right: 50%;
+  transform: translateX(50%) rotate(45deg);
+  width: 10px;
+  height: 10px;
+  background-color: #ffffff;
+  border-left: 1px solid var(--line, #E8DFD6);
+  border-top: 1px solid var(--line, #E8DFD6);
+  z-index: -1;
+}
+
+.account-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 18px;
+  font-family: "DM Sans", sans-serif;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #1a1a1a;
+  text-decoration: none;
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.account-dropdown-item svg {
+  color: #8c8c8c;
+  transition: color 0.2s ease;
+}
+
+.account-dropdown-item:hover {
+  background-color: var(--theme-hover, #F8F5F2);
+  color: #731F21;
+}
+
+.account-dropdown-item:hover svg {
+  color: #731F21;
+}
+
+/* Mobile adjusts for dropdown menu */
+@media (max-width: 768px) {
+  .account-dropdown-menu {
+    right: 0;
+    transform: translateY(10px);
+  }
+
+  .header-account-dropdown:hover .account-dropdown-menu {
+    transform: translateY(4px);
+  }
+
+  .account-dropdown-arrow {
+    right: 14px;
+    transform: rotate(45deg);
+  }
+}
+
+/* ==================================================================
+   NOTIFICATIONS DROPDOWN STYLING
+   ================================================================== */
+.header-notifications {
+  position: relative;
+}
+
+#js-notifications-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.notifications-dropdown-menu {
+  position: absolute;
+  top: 100%;
+  right: -80px;
+  transform: translateY(10px);
+  background-color: #ffffff;
+  width: 320px;
+  max-width: 90vw;
+  border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
+  border: 1px solid var(--line, #E8DFD6);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.25s ease, transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.25s;
+}
+
+.header-notifications.is-active .notifications-dropdown-menu {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateY(4px);
+}
+
+.notifications-dropdown-arrow {
+  position: absolute;
+  top: -6px;
+  right: 90px;
+  transform: rotate(45deg);
+  width: 10px;
+  height: 10px;
+  background-color: #ffffff;
+  border-left: 1px solid var(--line, #E8DFD6);
+  border-top: 1px solid var(--line, #E8DFD6);
+  z-index: -1;
+}
+
+.notifications-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line, #E8DFD6);
+}
+
+.notifications-header h3 {
+  font-family: "DM Sans", sans-serif;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin: 0;
+}
+
+.notifications-header button {
+  background: none;
+  border: none;
+  font-family: "DM Sans", sans-serif;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #731F21;
+  cursor: pointer;
+  padding: 0;
+  transition: opacity 0.2s ease;
+}
+
+.notifications-header button:hover {
+  text-decoration: underline;
+  opacity: 0.8;
+}
+
+.notifications-list {
+  max-height: 280px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.notifications-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.notifications-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.notifications-list::-webkit-scrollbar-thumb {
+  background: #E8DFD6;
+  border-radius: 3px;
+}
+
+.notifications-list::-webkit-scrollbar-thumb:hover {
+  background: #c5b4a5;
+}
+
+.notification-item {
+  display: flex;
+  flex-direction: column;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(232, 223, 214, 0.5);
+  text-decoration: none;
+  color: #333333;
+  transition: background-color 0.2s ease;
+  position: relative;
+  cursor: pointer;
+}
+
+.notification-item:hover {
+  background-color: var(--theme-hover, #F8F5F2);
+}
+
+.notification-item.is-unread {
+  background-color: #FAF4F2;
+}
+
+.notification-item.is-unread::before {
+  content: "";
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 6px;
+  height: 6px;
+  background-color: #731F21;
+  border-radius: 50%;
+}
+
+.notification-title {
+  font-family: "DM Sans", sans-serif;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin-bottom: 4px;
+  line-height: 1.3;
+}
+
+.notification-content {
+  font-family: "DM Sans", sans-serif;
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: #666666;
+  line-height: 1.4;
+  margin-bottom: 6px;
+}
+
+.notification-time {
+  font-family: "DM Sans", sans-serif;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: #999999;
+}
+
+.notifications-empty {
+  padding: 30px 16px;
+  text-align: center;
+  font-family: "DM Sans", sans-serif;
+  font-size: 0.8125rem;
+  color: #8c8c8c;
+}
+
+.notifications-footer {
+  padding: 12px;
+  text-align: center;
+  border-top: 1px solid var(--line, #E8DFD6);
+  background-color: #FAF6F4;
+  border-bottom-left-radius: 12px;
+  border-bottom-right-radius: 12px;
+}
+
+.notifications-footer a {
+  font-family: "DM Sans", sans-serif;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #731F21;
+  text-decoration: none;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.notifications-footer a:hover {
+  text-decoration: underline;
+}
+
+.notifications-badge {
+  position: absolute;
+  top: -4px;
+  right: -6px;
+  background: #731F21;
+  color: #ffffff;
+  font-size: 0.625rem;
+  font-weight: 700;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid #ffffff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+@media (max-width: 1024px) {
+  .notifications-dropdown-menu {
+    position: fixed;
+    top: 72px;
+    right: 16px;
+    width: calc(100vw - 32px);
+    max-width: 320px;
+    transform: translateY(10px);
+  }
+
+  .notifications-dropdown-arrow {
+    right: 64px;
+  }
+}

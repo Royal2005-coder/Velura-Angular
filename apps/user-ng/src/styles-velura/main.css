@@ -1,0 +1,77 @@
+/* ============================================================
+   Velura — Main CSS Entry
+   Order: base -> layouts -> components -> pages -> responsive
+   ============================================================ */
+
+/* Base */
+@import "./base/_variables.css";
+@import "./base/_reset.css";
+@import "./base/_typography.css";
+@import "./base/_utilities.css";
+
+/* Layouts */
+@import "./layouts/_page-shell.css";
+@import "./layouts/_header.css";
+@import "./layouts/_footer.css";
+
+/* Components */
+@import "./components/_buttons.css";
+@import "./components/_forms.css";
+@import "./components/_cards.css";
+@import "./components/_breadcrumb.css";
+@import "./components/_steps.css";
+@import "./components/_summary.css";
+@import "./components/_review.css";
+@import "./components/_otp-modal.css";
+@import "./components/_quiz-modal.css";
+@import "./components/_chatbot.css";
+@import "./components/_search-overlay.css";
+@import "./components/_hot-banner-slider.css";
+@import "./components/_policy-tabs.css";
+@import "./components/_contact-page.css";
+@import "./components/_product-grid.css";
+@import "./components/_account.css";
+@import "./components/_quiz.css";
+@import "./components/_quiz-popup.css";
+@import "./components/_my-orders.css";
+@import "./components/_product-review.css";
+@import "./components/_search-dropdown.css";
+
+/* Pages */
+@import "./pages/_signin.css";
+@import "./pages/_checkout.css";
+@import "./pages/_success.css";
+@import "./pages/_payment-failed.css";
+@import "./pages/_ai-suggestions.css";
+@import "./pages/_return-request.css";
+@import "./pages/_blog.css";
+@import "./pages/_about.css";
+@import "./pages/_cart.css";
+@import "./pages/_wishlist.css";
+@import "./pages/_track-order.css";
+@import "./pages/_order-detail.css";
+@import "./pages/_collections.css";
+@import "./pages/_offers-center.css";
+
+/* Các trang từ nhánh feature/optimize-product-pages */
+@import "./pages/_home.css";
+@import "./pages/_product.css";
+@import "./pages/_product-detail.css";
+@import "./pages/_chatbot-page.css";
+
+/* Các trang mới gộp từ nhánh main */
+@import "./pages/_ai-suggestions.css";
+@import "./pages/_return-request.css";
+@import "./pages/_blog.css";
+@import "./pages/_about.css";
+@import "./pages/_cart.css";
+@import "./pages/_wishlist.css";
+@import "./pages/_track-order.css";
+@import "./pages/_order-detail.css";
+
+
+/* Responsive overrides (must be last) */
+@import "./responsive.css";
+
+/* Final responsive sync overrides */
+@import "./overrides/_responsive-sync.css";

@@ -1,0 +1,147 @@
+<main class="admin-content">
+  <p class="admin-page-crumb">Dashboard / Giá &amp; khuyến mãi / Quản lý khuyến mãi</p>
+  <section class="admin-kpi-grid admin-promo-kpis" aria-label="Thống kê khuyến mãi">
+    <article class="admin-kpi-card">
+      <div class="admin-kpi-card__head">
+        <p class="admin-kpi-card__label">Chiến dịch đang chạy</p>
+        <span class="admin-kpi-card__icon"><app-admin-icon name="tag" /></span>
+      </div>
+      <strong class="admin-kpi-card__value">{{ activeCampaigns() }}</strong>
+    </article>
+    <article class="admin-kpi-card">
+      <div class="admin-kpi-card__head">
+        <p class="admin-kpi-card__label">Voucher hoạt động</p>
+        <span class="admin-kpi-card__icon"><app-admin-icon name="tag" /></span>
+      </div>
+      <strong class="admin-kpi-card__value">{{ activeVouchers() }}</strong>
+    </article>
+    <article class="admin-kpi-card">
+      <div class="admin-kpi-card__head">
+        <p class="admin-kpi-card__label">Giảm giá đã phát hành</p>
+        <span class="admin-kpi-card__icon"><app-admin-icon name="tag" /></span>
+      </div>
+      <strong class="admin-kpi-card__value">{{ money(issuedDiscount()) }}</strong>
+    </article>
+    <article class="admin-kpi-card">
+      <div class="admin-kpi-card__head">
+        <p class="admin-kpi-card__label">Tổng ngân sách</p>
+        <span class="admin-kpi-card__icon"><app-admin-icon name="tag" /></span>
+      </div>
+      <strong class="admin-kpi-card__value">{{ money(totalBudget()) }}</strong>
+    </article>
+    <article class="admin-kpi-card">
+      <div class="admin-kpi-card__head">
+        <p class="admin-kpi-card__label">Cần xử lý</p>
+        <span class="admin-kpi-card__icon"><app-admin-icon name="tag" /></span>
+      </div>
+      <strong class="admin-kpi-card__value">{{ pendingCampaigns() }}</strong>
+    </article>
+  </section>
+  <section class="admin-card admin-card--flush">
+    <div class="admin-tabs" role="tablist" aria-label="Không gian khuyến mãi">
+      <button class="admin-tab" [class.admin-tab--active]="view() === 'campaigns'" type="button" (click)="setView('campaigns')">Chiến dịch <span>{{ promotions().length }}</span></button>
+      <button class="admin-tab" [class.admin-tab--active]="view() === 'vouchers'" type="button" (click)="setView('vouchers')">Mã giảm giá <span>{{ vouchers().length }}</span></button>
+      <button class="admin-tab" [class.admin-tab--active]="view() === 'bundles'" type="button" (click)="setView('bundles')">Combo/Bundle <span>{{ bundles().length }}</span></button>
+      <button class="admin-tab" [class.admin-tab--active]="view() === 'logs'" type="button" (click)="setView('logs')">Nhật ký</button>
+      <button class="admin-tab" [class.admin-tab--active]="view() === 'stats'" type="button" (click)="setView('stats')">Thống kê</button>
+    </div>
+    <div class="admin-tab-content">
+      @if (loadError() && view() === 'campaigns' && !promotions().length) {
+        <div class="admin-empty-state"><strong>Không tải được khuyến mãi</strong><p>{{ loadError() }}</p></div>
+      } @else if (view() === 'campaigns') {
+        @if (!promotions().length) {
+          <div class="admin-empty-state"><strong>Chưa có chiến dịch</strong></div>
+        } @else {
+          <div class="admin-table-wrap">
+            <table class="admin-table admin-data-table">
+              <thead><tr><th>Chiến dịch</th><th>Loại</th><th>Thời gian</th><th>Ngân sách</th><th>Trạng thái</th><th></th></tr></thead>
+              <tbody>
+                @for (row of pagedCampaigns(); track row.promo_id || row.promotion_id || campaignName(row)) {
+                  <tr>
+                    <td>{{ campaignName(row) }}</td>
+                    <td>{{ campaignType(row) }}</td>
+                    <td>{{ campaignPeriod(row) }}</td>
+                    <td>{{ campaignBudget(row) }}</td>
+                    <td>
+                      <span class="admin-badge" [class.admin-badge--success]="isCampaignActive(row)" [class.admin-badge--warning]="!isCampaignActive(row)">
+                        {{ campaignStatus(row) }}
+                      </span>
+                    </td>
+                    <td>
+                      <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="toggleCampaign(row)">
+                        {{ isCampaignActive(row) ? 'Tạm dừng' : 'Kích hoạt' }}
+                      </button>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          <app-admin-pagination [page]="page()" [pageCount]="campaignPageCount()" [label]="campaignRange()" (changed)="goPage($event)" />
+        }
+      } @else if (view() === 'vouchers') {
+        @if (!vouchers().length) {
+          <div class="admin-empty-state"><strong>Chưa có voucher</strong></div>
+        } @else {
+          <div class="admin-table-wrap">
+            <table class="admin-table admin-data-table">
+              <thead><tr><th>Mã</th><th>Loại</th><th>Giá trị</th><th>Đơn tối thiểu</th><th>Lượt dùng</th><th>Hết hạn</th><th>Trạng thái</th><th></th></tr></thead>
+              <tbody>
+                @for (row of pagedVouchers(); track row.voucher_id) {
+                  <tr>
+                    <td>{{ row.code || row.name }}</td>
+                    <td>{{ voucherType(row) }}</td>
+                    <td>{{ voucherValue(row) }}</td>
+                    <td>{{ money(row.min_order_value ?? row.min_order) }}</td>
+                    <td>{{ voucherUsage(row) }}</td>
+                    <td>{{ date(row.end_date || row.expires_at) }}</td>
+                    <td>
+                      <span class="admin-badge" [class.admin-badge--success]="row.is_active !== false" [class.admin-badge--warning]="row.is_active === false">
+                        {{ voucherStatus(row) }}
+                      </span>
+                    </td>
+                    <td>
+                      <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="toggleVoucher(row)">
+                        {{ row.is_active === false ? 'Bật' : 'Tắt' }}
+                      </button>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          <app-admin-pagination [page]="page()" [pageCount]="voucherPageCount()" [label]="voucherRange()" (changed)="goPage($event)" />
+        }
+      } @else if (view() === 'bundles') {
+        @if (!bundles().length) {
+          <div class="admin-empty-state"><strong>Chưa có combo trong danh sách sản phẩm</strong></div>
+        } @else {
+          <div class="admin-table-wrap">
+            <table class="admin-table admin-data-table">
+              <thead><tr><th>Combo</th><th>Giá gốc</th><th>Giá bán</th><th>Trạng thái</th></tr></thead>
+              <tbody>
+                @for (row of pagedBundles(); track row.product_id) {
+                  <tr>
+                    <td>{{ row.name }}</td>
+                    <td>{{ money(row.base_price) }}</td>
+                    <td>{{ sellingPrice(row.base_price, row.sale_price) }}</td>
+                    <td>
+                      <span class="admin-badge" [class.admin-badge--success]="row.status === 'on_sale'" [class.admin-badge--warning]="row.status !== 'on_sale'">
+                        {{ bundleStatus(row) }}
+                      </span>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          <app-admin-pagination [page]="page()" [pageCount]="bundlePageCount()" [label]="bundleRange()" (changed)="goPage($event)" />
+        }
+      } @else if (view() === 'logs') {
+        <div class="admin-empty-state"><strong>Chưa có nhật ký</strong><p>Nhật ký khuyến mãi nằm trong phân hệ Nhật ký hệ thống.</p></div>
+      } @else {
+        <div class="admin-empty-state"><strong>Chưa có thống kê</strong><p>KPI phía trên được tính từ chiến dịch và voucher đang tải từ API.</p></div>
+      }
+    </div>
+  </section>
+</main>

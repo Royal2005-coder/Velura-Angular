@@ -1,0 +1,192 @@
+<main class="member-gate" aria-label="Trang chờ cấp quyền admin Velura">
+  <header class="member-gate__topbar">
+    <a class="member-brand" routerLink="/welcome" aria-label="Velura Admin">
+      <img src="/assets/images/logo.png" alt="Velura" />
+      <span class="member-brand__copy">
+        <strong>Velura Admin</strong>
+        <span>Cổng quản trị vận hành thời trang</span>
+      </span>
+    </a>
+    <div class="member-userbar">
+      <div class="member-userbar__actions">
+        <a class="member-btn member-btn--outline" routerLink="/change-password">
+          <app-admin-icon name="lock" />
+          Đổi mật khẩu
+        </a>
+        <button class="member-btn member-btn--ghost" type="button" (click)="logout()">Đăng xuất</button>
+      </div>
+      <div class="member-profile">
+        <div class="member-profile__avatar">{{ session.initials() }}</div>
+        <div class="member-profile__copy">
+          <strong>{{ session.displayName() }}</strong>
+          <span>{{ session.roleLabel() }}</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="member-gate__shell">
+    <section class="member-access">
+      <div class="member-access__content">
+        <span class="member-pill">
+          <app-admin-icon name="clock" />
+          Tài khoản đang chờ duyệt
+        </span>
+        <h1>Chờ cấp quyền truy cập admin</h1>
+        <p class="member-access__lead">
+          Tài khoản của bạn đã đăng nhập thành công nhưng chưa được phân quyền quản trị. Super admin sẽ duyệt vai trò phù hợp trước khi mở các phân hệ vận hành.
+        </p>
+        <div class="member-access__actions">
+          <a class="member-btn member-btn--primary" href="mailto:admin@velura.vn?subject=Yeu%20cau%20cap%20quyen%20admin%20Velura">Gửi yêu cầu quyền</a>
+          <button class="member-btn member-btn--outline" type="button" (click)="switchAccount()">Đăng nhập tài khoản khác</button>
+        </div>
+        <div class="member-status-card">
+          <span class="member-status-card__icon">
+            <app-admin-icon name="alert" />
+          </span>
+          <span>
+            <strong>Trạng thái: chưa có quyền quản trị</strong>
+            <span>Trang này chỉ hiển thị hướng dẫn và trạng thái tài khoản. Khi được cấp quyền, hệ thống sẽ tự chuyển bạn tới dashboard tương ứng sau lần đăng nhập tiếp theo.</span>
+          </span>
+        </div>
+      </div>
+    </section>
+
+    <aside class="member-side" aria-label="Thông tin tài khoản và quy trình">
+      <section class="member-panel">
+        <header class="member-panel__header">
+          <span class="member-panel__title">
+            <h2>Hồ sơ truy cập</h2>
+            <p>Dữ liệu lấy từ phiên đăng nhập hiện tại.</p>
+          </span>
+          <span class="member-badge">Pending</span>
+        </header>
+        <div class="member-panel__body">
+          <dl class="member-ticket">
+            <div class="member-ticket__row">
+              <dt>Tài khoản</dt>
+              <dd><strong>{{ session.displayName() }}</strong></dd>
+            </div>
+            <div class="member-ticket__row">
+              <dt>Email</dt>
+              <dd><strong>{{ session.session()?.email || 'Chưa có email' }}</strong></dd>
+            </div>
+            <div class="member-ticket__row">
+              <dt>Vai trò hiện tại</dt>
+              <dd><strong>{{ session.roleLabel() }}</strong></dd>
+            </div>
+            <div class="member-ticket__row">
+              <dt>Mã hồ sơ</dt>
+              <dd><strong>{{ profileId() }}</strong></dd>
+            </div>
+          </dl>
+        </div>
+      </section>
+
+      <section class="member-panel">
+        <header class="member-panel__header">
+          <span class="member-panel__title">
+            <h2>Quy trình cấp quyền</h2>
+            <p>Ba bước để vào đúng khu vực quản trị.</p>
+          </span>
+        </header>
+        <div class="member-panel__body">
+          <div class="member-workflow">
+            <article class="member-workflow__item">
+              <span class="member-workflow__number">1</span>
+              <span>
+                <strong>Super admin xác minh</strong>
+                <span>Kiểm tra email, bộ phận và phạm vi công việc.</span>
+              </span>
+            </article>
+            <article class="member-workflow__item">
+              <span class="member-workflow__number">2</span>
+              <span>
+                <strong>Cấp đúng vai trò</strong>
+                <span>Sản phẩm, đơn hàng, CSKH, giá khuyến mãi hoặc super admin.</span>
+              </span>
+            </article>
+            <article class="member-workflow__item">
+              <span class="member-workflow__number">3</span>
+              <span>
+                <strong>Đăng nhập lại</strong>
+                <span>Sau khi duyệt, hệ thống mở dashboard tương ứng với quyền mới.</span>
+              </span>
+            </article>
+          </div>
+        </div>
+      </section>
+    </aside>
+  </div>
+
+  <section class="member-panel member-panel--spaced" aria-label="Các phân hệ sau khi được cấp quyền">
+    <header class="member-panel__header">
+      <span class="member-panel__title">
+        <h2>Phân hệ quản trị sẽ mở theo vai trò</h2>
+        <p>Mỗi tài khoản chỉ nhìn thấy các khu vực đúng với nhiệm vụ được giao.</p>
+      </span>
+      <span class="member-badge member-badge--muted">Role based access</span>
+    </header>
+    <div class="member-panel__body">
+      <div class="member-module-grid">
+        <article class="member-module" style="--module-index:1">
+          <span class="member-module__icon"><app-admin-icon name="box" /></span>
+          <strong>Sản phẩm</strong>
+          <span>Catalog, tồn kho, biến thể, nhập CSV.</span>
+        </article>
+        <article class="member-module" style="--module-index:2">
+          <span class="member-module__icon"><app-admin-icon name="cart" /></span>
+          <strong>Đơn hàng</strong>
+          <span>Xử lý trạng thái, thanh toán, giao hàng.</span>
+        </article>
+        <article class="member-module" style="--module-index:3">
+          <span class="member-module__icon"><app-admin-icon name="support" /></span>
+          <strong>CSKH</strong>
+          <span>Phiếu đổi trả, hỗ trợ và hội thoại khách hàng.</span>
+        </article>
+        <article class="member-module" style="--module-index:4">
+          <span class="member-module__icon"><app-admin-icon name="tag" /></span>
+          <strong>Giá và khuyến mãi</strong>
+          <span>Cập nhật giá, voucher, combo, chiến dịch.</span>
+        </article>
+        <article class="member-module" style="--module-index:5">
+          <span class="member-module__icon"><app-admin-icon name="star" /></span>
+          <strong>Đánh giá</strong>
+          <span>Duyệt review, phản hồi và kiểm duyệt nội dung.</span>
+        </article>
+        <article class="member-module" style="--module-index:6">
+          <span class="member-module__icon"><app-admin-icon name="users" /></span>
+          <strong>Tài khoản</strong>
+          <span>Chỉ dành cho super admin quản lý quyền.</span>
+        </article>
+      </div>
+
+      <div class="member-access-map" aria-label="Bảng quyền rút gọn">
+        <div class="member-access-map__row">
+          <strong>Member mới</strong>
+          <span>Chỉ xem trang chờ duyệt</span>
+          <span class="member-state">Đang chờ</span>
+        </div>
+        <div class="member-access-map__row">
+          <strong>Admin vận hành</strong>
+          <span>Truy cập phân hệ theo bộ phận</span>
+          <span class="member-state member-state--open">Sau duyệt</span>
+        </div>
+        <div class="member-access-map__row">
+          <strong>Super admin</strong>
+          <span>Quản lý toàn bộ tài khoản và nhật ký</span>
+          <span class="member-state member-state--open">Toàn quyền</span>
+        </div>
+      </div>
+
+      <div class="member-contact">
+        <strong>Cần duyệt nhanh?</strong>
+        <p>Gửi email cho quản trị viên kèm email đăng nhập và bộ phận cần truy cập. Không chia sẻ mật khẩu trong yêu cầu hỗ trợ.</p>
+        <div class="member-contact__links">
+          <a href="mailto:admin@velura.vn?subject=Yeu%20cau%20cap%20quyen%20admin%20Velura">admin@velura.vn</a>
+          <a href="tel:1900-xxxx">1900 xxxx</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>

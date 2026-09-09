@@ -1,0 +1,78 @@
+/* Success page wrapper */
+.page-shell:has(.success-hero) main,
+main:has(.success-hero) {
+  background: var(--checkout-bg);
+  padding: 24px 0 48px;
+}
+
+.success-hero {
+  text-align: center;
+  padding: 48px 24px 32px;
+  max-width: var(--max-w);
+  margin: 0 auto;
+}
+
+.success-hero__icon {
+  width: 96px;
+  height: 96px;
+  margin: 0 auto;
+  background: rgba(125, 86, 45, 0.1);
+  box-shadow: 0 0 15px rgba(125, 86, 45, 0.2);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.success-hero__title {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: clamp(1.75rem, 5vw, 2.25rem);
+  font-weight: 600;
+  margin-top: 20px;
+  color: #1C1B1B;
+}
+
+.success-hero__desc {
+  max-width: 448px;
+  margin: 12px auto 0;
+  color: #50453B;
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+.details-grid {
+  max-width: 704px;
+  margin: 0 auto 48px;
+  padding: 40px;
+  background: #fff;
+  border: 1px solid rgba(212, 196, 183, 0.3);
+  border-radius: 12px;
+}
+
+.details-grid__row {
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(130, 117, 106, 0.2);
+}
+
+.details-grid__row + .details-grid__row { margin-top: 16px; }
+
+.details-grid__value {
+  font-size: 1.125rem;
+  color: #1C1B1B;
+  margin-top: 4px;
+}
+
+.details-grid__value--accent {
+  color: var(--brown);
+  font-weight: 700;
+}
+
+.action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 24px;
+  padding: 0 24px 64px;
+  max-width: var(--max-w);
+  margin: 0 auto;
+}

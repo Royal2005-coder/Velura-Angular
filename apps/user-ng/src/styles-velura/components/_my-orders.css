@@ -1,0 +1,532 @@
+/* ============================================================
+   Velura — My Orders Detailed List Stylesheet
+   ============================================================ */
+
+body.page-my-orders {
+  background-color: #FAF6F2 !important; /* Soft warm cream page background */
+}
+
+.my-orders-title-block {
+  margin-top: 32px;
+  margin-bottom: 24px;
+}
+
+.my-orders-title {
+  font-family: "Playfair Display", serif;
+  font-size: 2.25rem;
+  font-weight: 500;
+  color: var(--text-dark, #1a1a1a);
+  margin: 0 0 6px 0;
+}
+
+.my-orders-subtitle {
+  font-size: 0.875rem;
+  color: var(--soft, #8c857e);
+  margin: 0;
+}
+
+/* Search bar control */
+.search-orders-container {
+  margin-bottom: 24px;
+}
+
+.search-orders-wrapper {
+  position: relative;
+  max-width: 100%;
+  background: #fff;
+  border: 1px solid #E8DFD6;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  height: 48px;
+  box-shadow: 0 2px 8px rgba(115, 71, 36, 0.02);
+}
+
+.search-orders-icon {
+  color: #8c857e;
+  margin-right: 12px;
+  flex-shrink: 0;
+}
+
+.search-orders-input {
+  border: none;
+  outline: none;
+  background: none;
+  width: 100%;
+  font-size: 0.9375rem;
+  color: #1a1a1a;
+}
+
+.search-orders-input::placeholder {
+  color: #b0a8a0;
+}
+
+/* Horizontal Filters */
+.order-tabs {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 32px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
+.order-tab {
+  background: #fff;
+  border: 1px solid #E8DFD6;
+  border-radius: 24px;
+  padding: 10px 24px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #5A5450;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.order-tab:hover {
+  border-color: #734724;
+  color: #734724;
+  background: #FAF6F2;
+}
+
+.order-tab.is-active {
+  background: #734724;
+  border-color: #734724;
+  color: #fff;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(115, 71, 36, 0.15);
+}
+
+/* List cards */
+.order-list {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  margin-bottom: 64px;
+}
+
+.page-my-orders .order-card {
+  background: #fff;
+  border: 1px solid #E8DFD6;
+  border-radius: 16px;
+  padding: 30px;
+  box-shadow: 0 4px 20px rgba(115, 71, 36, 0.03);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  align-items: stretch;
+}
+
+.page-my-orders .order-card:hover {
+  box-shadow: 0 8px 30px rgba(115, 71, 36, 0.06);
+}
+
+.page-my-orders .order-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  border-bottom: 1px dashed #E8DFD6;
+  padding-bottom: 16px;
+  margin-bottom: 0;
+}
+
+.page-my-orders .order-card__header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.page-my-orders .order-card__id {
+  font-family: "Playfair Display", serif;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--terracotta);
+}
+
+.page-my-orders .order-card__date {
+  font-size: 0.8125rem;
+  color: var(--soft);
+}
+
+.page-my-orders .order-card__status-badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 12px;
+  letter-spacing: 0.3px;
+  display: inline-block;
+}
+
+.page-my-orders .order-card__status-badge--shipping {
+  background-color: #FFF2EC;
+  color: #A05A32;
+}
+
+.page-my-orders .order-card__status-badge--delivered {
+  background-color: #E6F7F0;
+  color: #00875A;
+}
+
+.page-my-orders .order-card__status-badge--pending {
+  background-color: #F5EFEB;
+  color: #8c857e;
+}
+
+.page-my-orders .order-card__status-badge--cancelled {
+  background-color: #FFF2F4;
+  color: #D32F2F;
+}
+
+/* Horizontal product chip system (simple inline row, no boxes) */
+.page-my-orders .order-card__products {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 32px;
+  align-items: center;
+  margin-bottom: 0;
+}
+
+.page-my-orders .order-product-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: none;
+  border: none;
+  padding: 0;
+  width: auto;
+  max-width: none;
+  box-sizing: content-box;
+}
+
+.page-my-orders .order-product-item__image {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid #EAE3D8;
+  flex-shrink: 0;
+}
+
+.page-my-orders .order-product-item__name {
+  font-family: 'Playfair Display', serif !important;
+  font-size: 1rem !important;
+  font-weight: 700 !important;
+  color: var(--text-dark);
+  line-height: 1.3;
+  white-space: normal;
+  max-width: 140px;
+  word-wrap: break-word;
+}
+
+.page-my-orders .order-product-item--more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #F4E4DC;
+  border: none;
+  color: var(--terracotta);
+  font-weight: 600;
+  font-size: 0.8125rem;
+  padding: 6px 12px;
+  border-radius: 6px;
+  width: auto;
+  box-sizing: border-box;
+  cursor: default;
+}
+
+/* Footer Section */
+.page-my-orders .order-card__footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  border-top: none;
+  padding-top: 0;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.page-my-orders .order-card__footer-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.page-my-orders .order-card__count {
+  font-size: 0.8125rem;
+  color: var(--soft);
+  display: block;
+}
+
+.page-my-orders .order-card__total {
+  font-family: 'DM Sans', sans-serif !important;
+  font-size: 1.5rem;
+  font-weight: 700 !important;
+  color: var(--terracotta);
+}
+
+.page-my-orders .order-card__actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.page-my-orders .order-card__actions .btn {
+  height: 40px;
+  padding: 0 20px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+  white-space: nowrap;
+}
+
+.page-my-orders .order-card__actions .btn--success {
+  background-color: #E6F4EA;
+  color: #137333;
+}
+
+.page-my-orders .order-card__actions .btn--success:hover {
+  background-color: #D2E3FC;
+  color: #137333;
+}
+
+.page-my-orders .order-card__actions .js-btn-return {
+  background-color: #C89E9C;
+  color: #fff;
+}
+
+.page-my-orders .order-card__actions .js-btn-return:hover {
+  background-color: #B88E8C;
+  color: #fff;
+}
+
+.page-my-orders .order-card__actions .btn:disabled {
+  background-color: #F5F5F5 !important;
+  border-color: #E0E0E0 !important;
+  color: #A0A0A0 !important;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.page-my-orders .order-card__actions .btn-detail-action {
+  text-decoration: none;
+  box-sizing: border-box;
+}
+
+/* Evaluation Popup Modal */
+.review-popup {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 3000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+
+.review-popup.is-visible {
+  display: flex;
+}
+
+.review-popup__overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
+  z-index: 1;
+}
+
+.review-popup__content {
+  position: relative;
+  background-color: #FAF8F5;
+  border: 1px solid rgba(115, 71, 36, 0.1);
+  border-radius: 20px;
+  width: 90%;
+  max-width: 500px;
+  padding: 36px;
+  z-index: 2;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.15);
+  box-sizing: border-box;
+  transform: scale(0.95);
+  opacity: 0;
+  transition: transform 0.3s cubic-bezier(0.165, 0.84, 0.44, 1), opacity 0.3s ease;
+}
+
+.review-popup.is-visible .review-popup__content {
+  transform: scale(1);
+  opacity: 1;
+}
+
+.review-popup__close {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background: none;
+  border: none;
+  color: #8c857e;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 4px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.review-popup__close:hover {
+  color: #734724;
+  transform: scale(1.1);
+}
+
+.review-popup__close svg {
+  display: block;
+}
+
+.review-popup__title {
+  font-family: "Playfair Display", serif;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin: 0 0 8px 0;
+  text-align: center;
+}
+
+.review-popup__subtitle {
+  font-size: 0.875rem;
+  color: #8c857e;
+  margin: 0 0 24px 0;
+  text-align: center;
+}
+
+.review-popup__rating {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.review-popup__star {
+  font-size: 2.25rem;
+  color: #E2D6C5;
+  cursor: pointer;
+  transition: color 0.15s ease, transform 0.15s ease;
+  user-select: none;
+}
+
+.review-popup__star:hover {
+  transform: scale(1.15);
+}
+
+.review-popup__star.is-hovered,
+.review-popup__star.is-selected {
+  color: #D4AF37; /* Gold color */
+}
+
+.review-popup__textarea {
+  width: 100%;
+  height: 120px;
+  padding: 12px 16px;
+  border: 1px solid #E8DFD6;
+  border-radius: 8px;
+  background-color: #fff;
+  font-family: inherit;
+  font-size: 0.9375rem;
+  color: #1a1a1a;
+  resize: none;
+  box-sizing: border-box;
+  margin-bottom: 24px;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.review-popup__textarea:focus {
+  border-color: #734724;
+}
+
+.review-popup__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.review-popup__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.d-none {
+  display: none !important;
+}
+
+/* Spinner for loading effect */
+.btn-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: #fff;
+  animation: spin 0.6s linear infinite;
+  margin-left: 8px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ---------- Responsive Design ---------- */
+@media (max-width: 768px) {
+  .page-my-orders .order-card {
+    padding: 20px;
+    gap: 20px;
+  }
+  
+  .page-my-orders .order-card__header {
+    align-items: flex-start;
+  }
+  
+  .page-my-orders .order-card__products {
+    gap: 16px;
+  }
+  
+  .page-my-orders .order-product-item {
+    width: 100%;
+  }
+
+  .page-my-orders .order-product-item__name {
+    white-space: normal;
+  }
+  
+  .page-my-orders .order-card__footer {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  
+  .page-my-orders .order-card__actions {
+    width: 100%;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  
+  .page-my-orders .order-card__actions .btn,
+  .page-my-orders .order-card__actions .btn-detail-action {
+    flex: 1 1 calc(50% - 8px);
+    text-align: center;
+    justify-content: center;
+  }
+}

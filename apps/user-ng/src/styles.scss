@@ -1,0 +1,170 @@
+/* Auth pages are custom elements; vanilla CSS expects a block-level canvas. */
+@import './styles-velura/pages/_auth-external.css';
+
+app-sign-in-page,
+app-sign-up-page,
+app-forgot-password-page,
+app-reset-password-page {
+  display: block;
+  min-height: 100dvh;
+}
+
+app-site-shell,
+app-site-header,
+app-site-footer,
+app-home-page,
+app-product-list-page,
+app-product-detail-page,
+app-cart-page,
+app-collections-page,
+app-account-profile-page,
+app-account-orders-page,
+app-wishlist-page,
+app-chatbot-page,
+app-contact-page,
+app-policies-page,
+app-offers-page,
+app-ai-suggestions-page,
+app-style-quiz-page,
+app-checkout-shipping-page,
+app-checkout-otp-page,
+app-checkout-confirm-page {
+  display: block;
+  width: 100%;
+}
+
+app-product-card {
+  display: block;
+  height: 100%;
+}
+
+.products-section__grid.home-carousel__track > app-product-card {
+  flex: 0 0 calc((100% - 84px) / 4);
+  min-width: 260px;
+}
+
+.product-grid > app-product-card {
+  min-width: 0;
+}
+
+app-auth-otp-modal {
+  display: contents;
+}
+
+.otp-modal-container {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 20000 !important;
+}
+
+.combo-component-item {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.combo-component-item__options,
+.combo-component-item__options.is-open {
+  display: flex;
+}
+
+.combo-actions {
+  flex-direction: column;
+  gap: 10px;
+}
+
+.combo-actions__row {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+}
+
+.combo-wishlist {
+  width: 100%;
+}
+
+.product-spec-grid {
+  margin-top: 16px;
+  padding-left: 20px;
+  list-style: disc;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 24px;
+}
+
+.product-badge--sale {
+  background: #e05a47;
+  color: #fff;
+  text-transform: uppercase;
+}
+
+.product-badge--new {
+  background: #89a894;
+  color: #fff;
+}
+
+.product-badge--combo {
+  background: #4a90e2;
+  color: #fff;
+  text-transform: uppercase;
+}
+
+.profile-slider > app-product-card {
+  flex: 0 0 calc(25% - 18px);
+  min-width: 240px;
+  scroll-snap-align: start;
+}
+
+.ai-profile-card .avatar-placeholder {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--terracotta, #c97b63);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.875rem;
+  flex-shrink: 0;
+}
+
+.pagination__dots {
+  padding: 8px 12px;
+  color: var(--soft);
+}
+
+.velura-auth-page .field__error,
+.otp-card .field__error {
+  display: block;
+}
+
+body.page-chatbot .chatbot-widget {
+  display: none;
+}
+
+/* Hero keeps a photographic fallback when autoplay is blocked. */
+.hero {
+  background-color: #111;
+  background-image: url('/assets/images/hero-banner.png');
+  background-position: center;
+  background-size: cover;
+}
+
+/* Vanilla CSS still points at /src/assets; Angular serves the same files from /assets. */
+.velura-auth-page {
+  background-image: url('/assets/images/auth/bg-texture.png') !important;
+}
+
+.newsletter-box {
+  background-image:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.78)),
+    url('/assets/images/velura-journal-banner.png');
+}
+
+.about-origin,
+.page-about .newsletter-box,
+.blog-hero,
+.page-blog .newsletter-box {
+  background-image: url('/assets/images/velura-journal-banner.png');
+}

@@ -1,4 +1,3 @@
 KAN-15
-MR
-
+MR pipeline failed at validate:mr-contract when the description lacked a Why heading. Why stays on the MR.
 Do not add docs/KAN-n.md. Types/JSDoc = what. This note + MR = why.

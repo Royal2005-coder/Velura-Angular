@@ -1,0 +1,218 @@
+<main class="admin-content">
+  <p class="admin-page-crumb">Dashboard / Quản lý đánh giá</p>
+  <section class="admin-kpi-grid admin-review-kpis" aria-label="Thống kê đánh giá">
+    <article class="admin-kpi-card">
+      <div class="admin-kpi-card__head"><p class="admin-kpi-card__label">Tổng đánh giá</p><span class="admin-kpi-card__icon"><app-admin-icon name="star" /></span></div>
+      <strong class="admin-kpi-card__value">{{ rows().length }}</strong>
+    </article>
+    <article class="admin-kpi-card">
+      <div class="admin-kpi-card__head"><p class="admin-kpi-card__label">Chờ duyệt</p><span class="admin-kpi-card__icon"><app-admin-icon name="clock" /></span></div>
+      <strong class="admin-kpi-card__value">{{ pendingCount() }}</strong>
+    </article>
+    <article class="admin-kpi-card">
+      <div class="admin-kpi-card__head"><p class="admin-kpi-card__label">Cần xử lý gấp</p><span class="admin-kpi-card__icon"><app-admin-icon name="alert" /></span></div>
+      <strong class="admin-kpi-card__value">{{ urgentCount() }}</strong>
+    </article>
+    <article class="admin-kpi-card">
+      <div class="admin-kpi-card__head"><p class="admin-kpi-card__label">Đã ẩn</p><span class="admin-kpi-card__icon"><app-admin-icon name="eye" /></span></div>
+      <strong class="admin-kpi-card__value">{{ hiddenCount() }}</strong>
+    </article>
+    <article class="admin-kpi-card">
+      <div class="admin-kpi-card__head"><p class="admin-kpi-card__label">Ticket CSKH</p><span class="admin-kpi-card__icon"><app-admin-icon name="support" /></span></div>
+      <strong class="admin-kpi-card__value">{{ urgentCount() }}</strong>
+    </article>
+  </section>
+  <section class="admin-card admin-card--flush">
+    <div class="admin-tabs" role="tablist">
+      <button class="admin-tab" [class.admin-tab--active]="tab() === 'all'" type="button" (click)="setTab('all')">Tất cả đánh giá <span>{{ rows().length }}</span></button>
+      <button class="admin-tab" [class.admin-tab--active]="tab() === 'pending'" type="button" (click)="setTab('pending')">Chờ duyệt <span>{{ pendingCount() }}</span></button>
+      <button class="admin-tab" [class.admin-tab--active]="tab() === 'urgent'" type="button" (click)="setTab('urgent')">Cần xử lý gấp <span>{{ urgentCount() }}</span></button>
+      <button class="admin-tab" [class.admin-tab--active]="tab() === 'processed'" type="button" (click)="setTab('processed')">Đã xử lý <span>{{ processedCount() }}</span></button>
+      <button class="admin-tab" [class.admin-tab--active]="tab() === 'logs'" type="button" (click)="setTab('logs')">Nhật ký đánh giá</button>
+    </div>
+    <div class="admin-tab-content">
+      @if (tab() !== 'logs') {
+        <form class="admin-filter-bar admin-order-filter-bar" (submit)="applyFilters($event)" (reset)="resetFilters($event)">
+          <label class="admin-search-field">
+            <app-admin-icon name="search" />
+            <input class="admin-form-control" name="q" type="search" [value]="query()" placeholder="Nội dung hoặc sản phẩm..." />
+          </label>
+          <select class="admin-form-control" name="rating" aria-label="Số sao" [value]="ratingFilter()">
+            <option value="">Tất cả số sao</option>
+            @for (star of [5, 4, 3, 2, 1]; track star) {
+              <option [value]="star">{{ star }} sao</option>
+            }
+          </select>
+          <select class="admin-form-control" name="status" aria-label="Trạng thái" [value]="statusFilter()">
+            <option value="">Tất cả trạng thái</option>
+            <option value="pending">Chờ duyệt</option>
+            <option value="approved">Đã duyệt</option>
+            <option value="rejected">Đã ẩn</option>
+          </select>
+          <div class="admin-filter-bar__actions">
+            <button class="admin-btn admin-btn--filter admin-btn--sm" type="submit">Lọc</button>
+            <button class="admin-btn admin-btn--ghost admin-btn--sm" type="reset">Đặt lại</button>
+          </div>
+        </form>
+        @if (loadError()) {
+          <p class="admin-note">{{ loadError() }}</p>
+        }
+        @if (!paged().length) {
+          <div class="admin-order-empty">
+            <app-admin-icon name="star" />
+            <strong>Không có đánh giá phù hợp</strong>
+            <span>Dữ liệu được tải trực tiếp từ Supabase.</span>
+          </div>
+        } @else {
+          <div class="admin-table-wrap">
+            <table class="admin-table admin-data-table">
+              <thead>
+                <tr>
+                  <th>Đánh giá</th>
+                  <th>Sản phẩm</th>
+                  <th>Khách hàng</th>
+                  <th>Trạng thái</th>
+                  <th>Ngày tạo</th>
+                  <th>Thao tác</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of paged(); track row.review_id) {
+                  <tr>
+                    <td>
+                      <div class="admin-review-snippet">
+                        <span class="admin-review-snippet__stars">{{ stars(row) }}</span>
+                        <p>{{ commentOf(row) }}</p>
+                      </div>
+                    </td>
+                    <td>
+                      <div class="admin-review-product">
+                        <strong>{{ productName(row) }}</strong>
+                        <small>{{ productSku(row) }}</small>
+                      </div>
+                    </td>
+                    <td><span class="admin-order-code">{{ row.user_id || '—' }}</span></td>
+                    <td><span class="admin-badge">{{ statusLabel(row.status) }}</span></td>
+                    <td>{{ date(row.submitted_at) }}</td>
+                    <td>
+                      <div class="admin-review-actions">
+                        <button class="admin-icon-button admin-icon-button--sm" type="button" title="Xem chi tiết" (click)="openDetail(row.review_id)">
+                          <app-admin-icon name="eye" />
+                        </button>
+                        <button class="admin-icon-button admin-icon-button--sm" type="button" title="Thao tác" (click)="toggleMenu(row.review_id)">
+                          <app-admin-icon name="edit" />
+                        </button>
+                        @if (menuId() === row.review_id) {
+                          <div class="admin-dropdown admin-table-action-menu admin-review-action-menu">
+                            <button type="button" (click)="openDetail(row.review_id)"><app-admin-icon name="eye" /><span>Xem chi tiết</span></button>
+                            @if (row.status !== 'approved') {
+                              <button type="button" (click)="openAction('approve', row.review_id)"><app-admin-icon name="check" /><span>Phê duyệt</span></button>
+                            }
+                            <button type="button" (click)="openAction('reply', row.review_id)"><app-admin-icon name="edit" /><span>Phản hồi</span></button>
+                            @if (row.status !== 'rejected') {
+                              <button class="admin-review-action-menu__danger" type="button" (click)="openAction('hide', row.review_id)"><app-admin-icon name="lock" /><span>Ẩn đánh giá</span></button>
+                            }
+                            <button type="button" (click)="openAction('escalate', row.review_id)"><app-admin-icon name="support" /><span>Tạo ticket CSKH</span></button>
+                          </div>
+                        }
+                      </div>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          <app-admin-pagination [page]="page()" [pageCount]="pageCount()" [label]="rangeLabel()" (changed)="goPage($event)" />
+        }
+      } @else if (!logs().length) {
+        <div class="admin-order-empty"><strong>Chưa có nhật ký đánh giá</strong></div>
+      } @else {
+        <div class="admin-table-wrap">
+          <table class="admin-table admin-data-table">
+            <thead>
+              <tr>
+                <th>Thời gian</th>
+                <th>Đối tượng</th>
+                <th>Vai trò</th>
+                <th>Hành động</th>
+                <th>Thay đổi</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of pagedLogs(); track row.audit_id || row.timestamp) {
+                <tr>
+                  <td>{{ date(row.timestamp) }}</td>
+                  <td><span class="admin-order-code">{{ row.target_id }}</span></td>
+                  <td>{{ row.actor_role }}</td>
+                  <td>{{ row.action }}</td>
+                  <td>{{ jsonValue(row.new_value) }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <app-admin-pagination [page]="logsPage()" [pageCount]="logPageCount()" [label]="logRangeLabel()" (changed)="goLogsPage($event)" />
+      }
+    </div>
+  </section>
+</main>
+
+@if (detailOpen() && selected()) {
+  <div class="admin-drawer-backdrop" (click)="closeOverlays()"></div>
+  <aside class="admin-drawer admin-drawer--wide">
+    <header class="admin-drawer__header">
+      <div>
+        <p class="admin-product-code">{{ selected()!.review_id }}</p>
+        <h2 class="admin-section__title">{{ productName(selected()!) }}</h2>
+        <div class="admin-status-group">
+          <span>{{ stars(selected()!) }}</span>
+          <span class="admin-badge">{{ statusLabel(selected()!.status) }}</span>
+        </div>
+      </div>
+      <button class="admin-icon-button" type="button" (click)="closeOverlays()">×</button>
+    </header>
+    <div class="admin-drawer__body">
+      <h3 class="admin-drawer__section">Nội dung</h3>
+      <p class="admin-review-original">{{ commentOf(selected()!) }}</p>
+      @if (selected()!.admin_reply) {
+        <div class="admin-review-response"><strong>Phản hồi Velura</strong><br>{{ selected()!.admin_reply }}</div>
+      }
+      <dl class="admin-data-list">
+        <div><dt>Đơn hàng</dt><dd>{{ selected()!.order_id || '—' }}</dd></div>
+        <div><dt>Khách hàng</dt><dd>{{ selected()!.user_id || '—' }}</dd></div>
+        <div><dt>Ngày gửi</dt><dd>{{ date(selected()!.submitted_at) }}</dd></div>
+      </dl>
+    </div>
+  </aside>
+}
+
+@if (actionType() && selected()) {
+  <div class="admin-modal-overlay">
+    <section class="admin-modal">
+      <form (submit)="submitAction($event)">
+        <header class="admin-modal__header">
+          <h2>{{ actionTitle() }}</h2>
+          <button class="admin-icon-button" type="button" (click)="closeOverlays()">×</button>
+        </header>
+        <div class="admin-modal__body">
+          <p>{{ commentOf(selected()!) }}</p>
+          <label class="admin-form-group">
+            <span class="admin-form-label">{{ actionType() === 'reply' ? 'Nội dung phản hồi' : 'Lý do / ghi chú' }}</span>
+            @if (actionType() === 'approve') {
+              <textarea class="admin-form-control admin-form-textarea" name="actionNote" maxlength="500" placeholder="Ghi chú nội bộ"></textarea>
+            } @else {
+              <textarea class="admin-form-control admin-form-textarea" name="value" [attr.minlength]="actionType() === 'reply' ? 1 : 10" maxlength="2000" required></textarea>
+            }
+          </label>
+          @if (actionError()) {
+            <p class="field__error">{{ actionError() }}</p>
+          }
+        </div>
+        <footer class="admin-modal__footer">
+          <button class="admin-btn admin-btn--ghost" type="button" (click)="closeOverlays()">Đóng</button>
+          <button class="admin-btn admin-btn--secondary" type="submit">Xác nhận</button>
+        </footer>
+      </form>
+    </section>
+  </div>
+}

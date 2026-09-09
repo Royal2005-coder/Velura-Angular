@@ -1,0 +1,98 @@
+<div class="admin-layout" [class.admin-layout--sidebar-collapsed]="sidebarCollapsed()">
+  <aside class="admin-sidebar" id="admin-sidebar" aria-label="Điều hướng quản trị">
+    <div class="admin-sidebar__brand">
+      <a class="admin-sidebar__logo" routerLink="/dashboard">
+        <img src="/assets/images/logo.png" alt="Velura" />
+      </a>
+      <span class="admin-sidebar__caption">Quản trị</span>
+    </div>
+    <nav class="admin-sidebar__nav">
+      @if (canSee('dashboard')) {
+        <a class="admin-menu-item" routerLink="/dashboard" routerLinkActive="admin-menu-item--active" [routerLinkActiveOptions]="{ exact: true }">
+          <app-admin-icon name="dashboard" cssClass="admin-menu-icon" />Dashboard
+        </a>
+      }
+      @if (canSee('accounts')) {
+        <a class="admin-menu-item" routerLink="/accounts" routerLinkActive="admin-menu-item--active" [routerLinkActiveOptions]="{ exact: true }">
+          <app-admin-icon name="users" cssClass="admin-menu-icon" />Quản lý tài khoản
+        </a>
+      }
+      @if (canSee('products')) {
+        <a class="admin-menu-item" routerLink="/products" routerLinkActive="admin-menu-item--active" [routerLinkActiveOptions]="{ exact: true }">
+          <app-admin-icon name="box" cssClass="admin-menu-icon" />Quản lý sản phẩm
+        </a>
+      }
+      @if (canSee('orders')) {
+        <a class="admin-menu-item" routerLink="/orders" routerLinkActive="admin-menu-item--active" [routerLinkActiveOptions]="{ exact: true }">
+          <app-admin-icon name="cart" cssClass="admin-menu-icon" />Quản lý đơn hàng
+        </a>
+      }
+      @if (canSee('reviews')) {
+        <a class="admin-menu-item" routerLink="/reviews" routerLinkActive="admin-menu-item--active" [routerLinkActiveOptions]="{ exact: true }">
+          <app-admin-icon name="star" cssClass="admin-menu-icon" />Quản lý đánh giá
+        </a>
+      }
+      @if (canSee('returns-cskh')) {
+        <a class="admin-menu-item" routerLink="/returns" routerLinkActive="admin-menu-item--active" [routerLinkActiveOptions]="{ exact: true }">
+          <app-admin-icon name="support" cssClass="admin-menu-icon" />Đổi trả &amp; CSKH
+        </a>
+      }
+      @if (canSee('pricing') || canSee('promotions')) {
+        <details class="admin-menu-group" [class.is-active]="pricingOpen()" [open]="pricingOpen()">
+          <summary>
+            <app-admin-icon name="tag" cssClass="admin-menu-icon" />Giá &amp; khuyến mãi
+          </summary>
+          <div class="admin-menu-subnav">
+            @if (canSee('pricing')) {
+              <a routerLink="/pricing" routerLinkActive="is-active">Quản lý giá</a>
+            }
+            @if (canSee('promotions')) {
+              <a routerLink="/promotions" routerLinkActive="is-active">Quản lý khuyến mãi</a>
+            }
+          </div>
+        </details>
+      }
+      @if (canSee('logs')) {
+        <a class="admin-menu-item" routerLink="/logs" routerLinkActive="admin-menu-item--active" [routerLinkActiveOptions]="{ exact: true }">
+          <app-admin-icon name="log" cssClass="admin-menu-icon" />Nhật ký hệ thống
+        </a>
+      }
+    </nav>
+  </aside>
+  <div class="admin-main">
+    <header class="admin-topbar">
+      <div class="admin-topbar__leading">
+        <button
+          class="admin-icon-button admin-topbar__menu"
+          type="button"
+          [attr.aria-label]="sidebarCollapsed() ? 'Mở sidebar' : 'Đóng sidebar'"
+          [title]="sidebarCollapsed() ? 'Mở sidebar' : 'Đóng sidebar'"
+          (click)="toggleSidebar()"
+        >
+          ☰
+        </button>
+        <h1 class="admin-topbar__title">{{ pageTitle() }}</h1>
+      </div>
+      <div class="admin-topbar__actions">
+        <button class="admin-btn admin-btn--outline admin-btn--sm" type="button" (click)="refresh()">
+          <app-admin-icon name="refresh" cssClass="admin-line-icon" />Làm mới
+        </button>
+        <span class="admin-profile">
+          <span class="admin-profile__avatar">
+            @if (session.avatarUrl()) {
+              <img [src]="session.avatarUrl()" [alt]="session.displayName()" />
+            } @else {
+              {{ session.initials() }}
+            }
+          </span>
+          <span class="admin-profile__copy">
+            <strong>{{ session.displayName() }}</strong>
+            <small>{{ session.roleLabel() }}</small>
+          </span>
+        </span>
+        <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="logout()">Đăng xuất</button>
+      </div>
+    </header>
+    <router-outlet />
+  </div>
+</div>

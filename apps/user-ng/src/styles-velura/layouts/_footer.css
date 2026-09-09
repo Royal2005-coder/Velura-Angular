@@ -1,0 +1,177 @@
+/* ============================================================
+   Velura — Dedicated Footer Stylesheet
+   ============================================================ */
+
+.site-footer {
+  border-top: 1px solid #f4e4dc;
+  background: #FAF5F2; /* Màu nền beige sáng ấm áp theo thiết kế */
+  margin-top: auto;
+  padding: 36px 0 0; /* padding bên trái/phải bằng 0 và bottom bằng 0 để bottom-bar tràn viền tuyệt đối */
+  font-family: "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.site-footer__grid {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr 1fr 1.2fr;
+  gap: 32px;
+  max-width: var(--max-w, 1200px);
+  margin: 0 auto;
+  padding: 0 24px; /* Giữ lề hai bên cho lưới nội dung */
+}
+
+.site-footer h3 {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 32px; /* Tăng kích thước chữ logo footer */
+  font-weight: 500;
+  color: #2a2522;
+  margin: 0 0 12px 0;
+}
+
+.site-footer p {
+  font-family: "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  margin: 0 0 12px 0;
+  color: #6b635d;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.site-footer__social {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.site-footer__social a {
+  width: 36px;
+  height: 36px;
+  background-color: #F2E3DC; /* Vòng tròn màu cam/beige nhạt */
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #731F21; /* Burgundy icon color */
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.site-footer__social a:hover {
+  background-color: #731F21;
+  color: #ffffff;
+}
+
+.site-footer h4 {
+  font-family: "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  margin: 0 0 16px 0;
+  color: #2a2522;
+  position: relative;
+  padding-bottom: 8px;
+}
+
+/* Thêm thanh gạch dưới nhỏ cho tiêu đề cột theo ảnh */
+.site-footer h4::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 24px;
+  height: 2px;
+  background-color: #c97b63;
+}
+
+.site-footer ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.site-footer ul li {
+  margin-bottom: 8px; /* Giảm khoảng cách li từ 12px xuống 8px để gọn hơn */
+}
+
+.site-footer ul li:last-child {
+  margin-bottom: 0;
+}
+
+.site-footer ul a {
+  font-family: "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 13.5px;
+  color: #6b635d;
+  font-weight: 500;
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.site-footer ul a:hover {
+  color: #731F21;
+}
+
+.site-footer__contact {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.site-footer__contact li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 13.5px;
+  color: #6b635d;
+  margin-bottom: 8px; /* Giảm khoảng cách để thon gọn */
+}
+
+.site-footer__contact li:last-child {
+  margin-bottom: 0;
+}
+
+.site-footer__contact li svg {
+  color: #c97b63;
+  flex-shrink: 0;
+  width: 15px;
+  height: 15px;
+}
+
+/* Hàng Bản Quyền Bottom với nền màu hồng nhạt */
+.site-footer__bottom-bar {
+  background: #FAF2EF; /* Màu hồng nhạt ấm áp cực đẹp */
+  padding: 20px 24px;
+  border-top: 1px solid #f4e4dc;
+  position: relative;
+  width: 100%;
+  margin-top: 48px; /* Tăng khoảng cách dãn trên để đẩy chữ "Liên hệ", "Câu hỏi thường gặp" cách xa line */
+}
+
+/* Render ngôi sao lấp lánh đè giữa đường line phân cách của Bottom Bar */
+.site-footer__bottom-bar::before {
+  content: "✦";
+  position: absolute;
+  top: -9px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #FAF2EF; /* Trùng màu nền hồng nhạt để che đường line */
+  padding: 0 12px;
+  color: #c97b63;
+  font-size: 13px;
+  z-index: 2;
+}
+
+.site-footer__bottom {
+  text-align: center;
+  color: #6b635d;
+  font-size: 13px;
+  max-width: var(--max-w, 1200px);
+  margin: 0 auto;
+}
+
+@media (max-width: 768px) {
+  .site-footer__grid {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+  
+  .site-footer__bottom-bar::before {
+    background: #FAF2EF;
+  }
+}

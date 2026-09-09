@@ -1,0 +1,14 @@
+node_modules/
+.angular/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.DS_Store
+Thumbs.db
+*.log
+.idea/
+.vscode/

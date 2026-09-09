@@ -1,0 +1,26 @@
+<main class="blog-page">
+  <div class="container">
+    <a routerLink="/blog" class="btn-read-more">← Tạp chí phong cách</a>
+    @if (post(); as article) {
+      <article class="featured-post" style="margin-top: 24px;">
+        <div class="featured-post__image">
+          <img [src]="article.image" [alt]="article.title" />
+        </div>
+        <div class="featured-post__content">
+          <span class="blog-badge">{{ article.badge }}</span>
+          <h1 class="featured-post__title">{{ article.title }}</h1>
+          <p class="featured-post__excerpt">{{ article.excerpt }}</p>
+          <div class="post-meta">
+            <span class="post-meta__author">{{ article.author }}</span>
+            <span class="post-meta__dot">&middot;</span>
+            <span class="post-meta__date">{{ article.date }}</span>
+            <span class="post-meta__dot">&middot;</span>
+            <span class="post-meta__read-time">{{ article.readMinutes }} phút đọc</span>
+          </div>
+        </div>
+      </article>
+    } @else {
+      <h1 class="blog-intro__title">Không tìm thấy bài viết</h1>
+    }
+  </div>
+</main>

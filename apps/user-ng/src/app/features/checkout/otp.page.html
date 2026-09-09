@@ -1,0 +1,72 @@
+<main class="checkout-page">
+  <div class="container">
+    <h1 class="page-title">Thanh toán</h1>
+    <div class="checkout-steps">
+      <div class="checkout-step">
+        <span class="checkout-step__num checkout-step__num--done">✓</span>
+        <span class="checkout-step__label checkout-step__label--done">Thông tin giao hàng</span>
+      </div>
+      <span class="checkout-step__line checkout-step__line--done"></span>
+      <div class="checkout-step">
+        <span class="checkout-step__num checkout-step__num--done">✓</span>
+        <span class="checkout-step__label checkout-step__label--done">Vận chuyển &amp; Thanh toán</span>
+      </div>
+      <span class="checkout-step__line checkout-step__line--done"></span>
+      <div class="checkout-step">
+        <span class="checkout-step__num checkout-step__num--active">3</span>
+        <span class="checkout-step__label checkout-step__label--active">Xác nhận</span>
+      </div>
+    </div>
+
+    <div class="checkout-grid">
+      <div class="checkout-main">
+        <h2 class="review-title">Kiểm tra đơn hàng</h2>
+        @for (item of items(); track item.variant_id) {
+          <article class="product-item">
+            <div class="product-item__img">
+              <img [src]="item.product_image" [alt]="item.product_name" width="96" height="128" />
+            </div>
+            <div style="display:flex;flex-direction:column;flex:1">
+              <h4 class="product-item__name">{{ item.product_name }}</h4>
+              <p class="product-item__variant">{{ item.color }} / Size {{ item.size }}</p>
+              <p class="product-item__qty">Số lượng: {{ item.quantity }}</p>
+            </div>
+          </article>
+        }
+      </div>
+      <aside class="order-summary">
+        <h2 class="order-summary__title">Tóm tắt đơn hàng</h2>
+        <div class="summary-total">
+          <span class="summary-total__label">Tổng cộng</span>
+          <span class="summary-total__value">{{ totalLabel() }}</span>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <div class="otp-overlay" role="dialog" aria-modal="true" aria-labelledby="otp-title">
+    <div class="otp-modal">
+      <div class="otp-modal__bg" aria-hidden="true"></div>
+      <div class="otp-modal__content" style="position: relative;">
+        <a class="otp-modal__close" routerLink="/checkout/shipping" aria-label="Đóng" style="position: absolute; top: 16px; right: 16px; background: none; border: none; font-size: 24px; cursor: pointer; color: #999;">&times;</a>
+        <h2 id="otp-title" class="otp-modal__title">Nhập OTP để hoàn tất đơn hàng</h2>
+        <p class="otp-modal__desc">Nhập mã OTP đã được gửi về số điện thoại mà bạn đăng kí</p>
+        <form (submit)="$event.preventDefault()">
+          <div class="otp-inputs" role="group" aria-label="Mã OTP 4 chữ số">
+            @for (digit of digits(); track $index) {
+              <input class="otp-input" type="text" inputmode="numeric" maxlength="1" [value]="digit" (input)="onDigit($index, $event)" />
+            }
+          </div>
+          <p class="otp-timer">(Hiệu lực: {{ seconds() }}s)</p>
+          <p class="otp-resend">Không nhận được mã? <button type="button" class="btn btn--text" (click)="resend()">Gửi lại</button></p>
+          @if (errorMessage()) {
+            <p class="field__error">{{ errorMessage() }}</p>
+          }
+          <div style="margin-top:24px">
+            <button class="btn btn--primary btn--full js-otp-btn-confirm" type="button" (click)="confirm()">Xác nhận</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</main>

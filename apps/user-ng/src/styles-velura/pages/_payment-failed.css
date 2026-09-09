@@ -1,0 +1,92 @@
+/* Payment failed page — apply cream bg via wrapper */
+main.payment-failed {
+  background: var(--checkout-bg);
+}
+
+.payment-failed {
+  max-width: 672px;
+  margin: 0 auto;
+  padding: 48px 24px 64px;
+  text-align: center;
+}
+
+.payment-failed__icon {
+  width: 80px;
+  height: 80px;
+  margin: 0 auto;
+  background: rgba(212, 24, 61, 0.1);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.payment-failed__title {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 1.5rem;
+  margin-top: 16px;
+}
+
+.payment-failed__desc {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  margin-top: 8px;
+}
+
+.error-box {
+  text-align: left;
+  margin-top: 32px;
+  padding: 24px;
+  background: #fff;
+  border: 1px solid #CCCCCC;
+  border-radius: var(--radius-md);
+}
+
+.error-box__head {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.error-box__reasons {
+  padding: 12px;
+  background: var(--tab-bg);
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  color: var(--text-body);
+}
+
+.error-box__reasons li + li { margin-top: 4px; }
+
+.payment-failed__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.payment-failed__actions .btn {
+  flex: 1;
+  min-width: 200px;
+  height: 40px;
+  padding: 10px 24px;
+  background: var(--brown-light);
+  color: #fff;
+  border-radius: 999px;
+  font-size: 1rem;
+}
+
+.help-box {
+  margin-top: 24px;
+  padding: 16px;
+  background: #E8C9BE;
+  border: 1px solid var(--tab-bg);
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+}
+
+.help-box p:last-child {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-top: 8px;
+}

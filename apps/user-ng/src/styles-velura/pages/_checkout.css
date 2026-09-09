@@ -1,0 +1,89 @@
+/* Checkout page — bg lấy từ .page-shell (cream) */
+.checkout-page {
+  min-height: calc(100vh - 200px);
+  padding: 24px 0 48px;
+}
+
+.guest-order-confirm-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  background: rgba(45, 39, 34, 0.24);
+}
+
+.guest-order-confirm-modal__card {
+  width: min(560px, calc(100vw - 32px));
+  border: 1px solid rgba(201, 123, 99, 0.18);
+  border-radius: 18px;
+  background: #fffaf7;
+  box-shadow: 0 28px 80px rgba(45, 39, 34, 0.18);
+  padding: 28px;
+}
+
+.guest-order-confirm-modal__card h2 {
+  margin: 0 0 20px;
+  color: var(--dark);
+  font-family: "Playfair Display", serif;
+  font-size: 1.65rem;
+}
+
+.guest-order-confirm-modal__card dl {
+  display: grid;
+  gap: 12px;
+  margin: 0 0 24px;
+}
+
+.guest-order-confirm-modal__card dl div {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 12px;
+}
+
+.guest-order-confirm-modal__card dt {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.guest-order-confirm-modal__card dd {
+  margin: 0;
+  color: var(--dark);
+}
+
+.guest-order-confirm-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.guest-order-confirm-modal__btn {
+  border: 0;
+  border-radius: 10px;
+  padding: 13px 22px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.guest-order-confirm-modal__btn--primary {
+  background: #cf7d63;
+  color: #fff;
+}
+
+.guest-order-confirm-modal__btn--secondary {
+  background: #f0e4de;
+  color: var(--dark);
+}
+
+.checkout-page .page-title {
+  margin-bottom: 24px;
+}
+
+.checkout-grid {
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  gap: 24px;
+  align-items: start;
+}
+
+.checkout-main { min-width: 0; }

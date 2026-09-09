@@ -1,0 +1,43 @@
+/* ============================================================
+   Velura — Product Grid & Large Format Modifier (ITCSS Component)
+   ============================================================ */
+
+/* Modifier cho lưới hiển thị sản phẩm dạng bản to */
+.product-grid.product-grid--large-view {
+  grid-template-columns: repeat(2, 1fr) !important;
+  gap: 40px !important;
+}
+
+/* Modifier cho card sản phẩm dạng bản to */
+.card--product.product-card--large {
+  padding: 24px;
+}
+
+/* Wrapper ảnh cho sản phẩm bản to */
+.card--product.product-card--large .product-card__image-wrapper {
+  position: relative;
+  width: 100%;
+  padding-top: 133.33% !important; /* Tỉ lệ 3:4 chuẩn lookbook lớn */
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  margin-bottom: 20px;
+  background: var(--field-bg);
+}
+
+.card--product.product-card--large .product-card__image-wrapper img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.4s ease;
+}
+
+@media (max-width: 768px) {
+  .product-grid.product-grid--large-view {
+    grid-template-columns: 1fr !important; /* Trên mobile hiển thị 1 cột lớn */
+    gap: 28px !important;
+  }
+}

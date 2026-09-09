@@ -1,0 +1,106 @@
+<div class="page-shell">
+  <app-site-header />
+  <router-outlet />
+  <app-site-footer />
+</div>
+
+<div class="quiz-modal" [class.quiz-modal--active]="quizOpen()" id="quiz-modal">
+  <div class="quiz-modal__overlay" (click)="closeQuiz()"></div>
+  <div class="quiz-modal__content">
+    <button class="quiz-modal__close" type="button" aria-label="Đóng" (click)="closeQuiz()">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="18" y1="6" x2="6" y2="18"></line>
+        <line x1="6" y1="6" x2="18" y2="18"></line>
+      </svg>
+    </button>
+    <div class="quiz-modal__image-side">
+      <img src="/assets/images/quiz-illustration.png" alt="Style Quiz Illustration" />
+    </div>
+    <div class="quiz-modal__content-side">
+      <div class="quiz-modal__header">
+        <div class="quiz-modal__icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+          </svg>
+        </div>
+        <h2 class="quiz-modal__title-text">Kiến tạo phong cách riêng cùng AI Stylist</h2>
+        <p class="quiz-modal__description">
+          Trải nghiệm dịch vụ tư vấn trang phục cá nhân hóa. Chúng mình sẽ phân tích sở thích và phong cách sống của
+          bạn để tuyển chọn những thiết kế hoàn hảo nhất từ Velura.
+        </p>
+      </div>
+      <div class="quiz-modal__buttons">
+        <a class="btn btn--accent" routerLink="/ai/style-quiz" (click)="closeQuiz()">Bắt đầu Style Quiz</a>
+        <button class="btn btn-outline" type="button" (click)="closeQuiz()">Để sau</button>
+      </div>
+      <p class="quiz-modal__note">Chỉ mất khoảng 2 phút. Phân tích miễn phí 100%.</p>
+    </div>
+  </div>
+</div>
+
+<aside class="hot-offer-widget" aria-label="Ưu đãi Velura">
+  <button class="hot-offer-widget__button" type="button" aria-label="Mở ưu đãi Velura">
+    <span class="hot-offer-widget__spark" aria-hidden="true">%</span>
+    <span class="hot-offer-widget__label">Ưu đãi</span>
+  </button>
+  <div class="hot-offer-widget__panel">
+    <div class="hot-offer-widget__header">
+      <span>Ưu đãi tháng này</span>
+      <small>{{ banners.length }} tin</small>
+    </div>
+    <div class="hot-offer-widget__list">
+      @for (banner of banners; track banner.id) {
+        <a class="hot-offer-widget__item" [routerLink]="'/offers'" [queryParams]="{ offer: banner.id }">
+          <img [src]="banner.imageSrc" [alt]="banner.imageAlt" />
+          <span>
+            <strong>{{ banner.title }}</strong>
+            <small>{{ banner.description }}</small>
+          </span>
+        </a>
+      }
+    </div>
+    <a class="hot-offer-widget__cta" routerLink="/offers">Xem chi tiết ưu đãi →</a>
+  </div>
+</aside>
+
+<div class="chatbot-widget" [class.chatbot-widget--open]="chatOpen()">
+  <button class="chatbot-toggler" type="button" aria-label="Mở khung chat" (click)="toggleChat()">
+    <svg class="chatbot-toggler__icon-chat" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+    </svg>
+    <svg class="chatbot-toggler__icon-close" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="18" y1="6" x2="6" y2="18"></line>
+      <line x1="6" y1="6" x2="18" y2="18"></line>
+    </svg>
+  </button>
+  <div class="chatbot-box">
+    <div class="chatbot-header">
+      <div class="chatbot-header__info">
+        <div class="chatbot-header__avatar">
+          <img src="/assets/images/chatbot/bot-avatar.png" alt="Velura Assistant" />
+          <span class="chatbot-header__status"></span>
+        </div>
+        <div>
+          <h4 class="chatbot-header__title">AI Stylist — Velura</h4>
+          <span class="chatbot-header__desc">Trực tuyến</span>
+        </div>
+      </div>
+      <a class="chatbot-header__expand" routerLink="/chatbot" aria-label="Phóng to" (click)="chatOpen.set(false)">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 3 21 3 21 9"></polyline>
+          <polyline points="9 21 3 21 3 15"></polyline>
+          <line x1="21" y1="3" x2="14" y2="10"></line>
+          <line x1="3" y1="21" x2="10" y2="14"></line>
+        </svg>
+      </a>
+    </div>
+    <div class="chatbot-messages">
+      <div class="chatbot-message chatbot-message--bot">
+        Chào bạn, mình là AI Stylist Velura. Mở trang chatbot để được gợi ý outfit, size và chính sách đầy đủ nhé.
+      </div>
+    </div>
+    <div class="chatbot-input-area">
+      <a class="chatbot-send-btn" routerLink="/chatbot" (click)="chatOpen.set(false)">Mở AI Stylist</a>
+    </div>
+  </div>
+</div>

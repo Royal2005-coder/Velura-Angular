@@ -1,0 +1,88 @@
+<main class="collections-page">
+  <div class="container">
+    <div class="collections-header">
+      <span class="collections-badge">SEASON LOOKBOOKS</span>
+      <h1 class="collections-title">BỘ SƯU TẬP VELURA</h1>
+      <p class="collections-subtitle">
+        Nơi lưu trữ những thiết kế may mặc cao cấp mang tinh thần tối giản, phóng khoáng và sang trọng của quý cô hiện đại.
+      </p>
+    </div>
+
+    <div class="collections-tabs">
+      <button class="collections-tab" [class.active]="filter() === 'all'" type="button" (click)="setFilter('all')">Tất cả</button>
+      @for (lookbook of lookbooks; track lookbook.id) {
+        <button class="collections-tab" [class.active]="filter() === lookbook.id" type="button" (click)="setFilter(lookbook.id)">
+          {{ lookbook.name }}
+        </button>
+      }
+    </div>
+
+    <div class="collections-list">
+      @if (loading()) {
+        <div class="collections-state">Đang tải danh sách bộ sưu tập từ cửa hàng...</div>
+      } @else {
+        @for (group of groups(); track group.lookbook.id) {
+          <section class="collection-detail" [attr.data-category]="group.lookbook.id" [attr.aria-labelledby]="'collection-' + group.lookbook.id">
+            <div class="collection-detail__cover">
+              <img [src]="group.lookbook.banner" [alt]="'Ảnh đại diện bộ sưu tập ' + group.lookbook.name" class="collection-detail__cover-img" />
+              <div class="collection-detail__cover-overlay">
+                <strong>{{ group.lookbook.name }}</strong>
+              </div>
+            </div>
+            <div class="collection-detail__body" [class.collection-detail__body--reverse]="group.reverse">
+              <aside class="collection-detail__info">
+                <div class="collection-detail__copy">
+                  <span class="collection-detail__story-tag">{{ group.lookbook.label }}</span>
+                  <h2 class="collection-detail__story-title" [id]="'collection-' + group.lookbook.id">{{ group.lookbook.name }}</h2>
+                  <div class="collection-detail__divider" aria-hidden="true"><span></span></div>
+                  <div class="collection-detail__story-desc">
+                    @for (paragraph of group.lookbook.story; track paragraph) {
+                      <p>{{ paragraph }}</p>
+                    }
+                  </div>
+                </div>
+                <figure class="collection-detail__decor" aria-hidden="true">
+                  <img [src]="group.lookbook.decor" alt="" class="collection-detail__decor-img" />
+                </figure>
+              </aside>
+              <div class="collection-detail__products">
+                <div class="collection-detail__products-header">
+                  <h3 class="collection-detail__products-title">Thiết kế tiêu biểu</h3>
+                  <span class="collection-detail__header-line"></span>
+                  <span class="collection-detail__mark">V</span>
+                </div>
+                <div class="collection-detail__products-grid">
+                  @if (!group.products.length) {
+                    <div class="collections-state">Bộ sưu tập này chưa có set đồ đang bán.</div>
+                  } @else {
+                    @for (product of group.products; track product.product_id; let i = $index) {
+                      <article class="collection-product-card">
+                        <div class="collection-product-card__media">
+                          <span class="collection-product-card__badge">{{ cardIndex(i) }}</span>
+                          <a [routerLink]="['/products', product.product_id]" class="collection-product-card__img-link">
+                            <img [src]="imageUrl(product)" [alt]="product.name" class="collection-product-card__img" />
+                          </a>
+                        </div>
+                        <div class="collection-product-card__info">
+                          <a [routerLink]="['/products', product.product_id]" class="collection-product-card__name-link">
+                            <h4 class="collection-product-card__name">{{ product.name }}</h4>
+                          </a>
+                          <span class="collection-product-card__price">{{ priceLabel(product) }}</span>
+                        </div>
+                        <div class="collection-product-card__actions">
+                          <a [routerLink]="['/products', product.product_id]" class="btn-buy"><span>Mua ngay</span></a>
+                          <button class="collection-product-card__btn-cart" type="button" title="Thêm vào giỏ hàng" (click)="addToCart(product)">+</button>
+                        </div>
+                      </article>
+                    }
+                  }
+                </div>
+                <p class="collection-detail__quote">“{{ group.lookbook.quote }}”</p>
+              </div>
+            </div>
+          </section>
+        }
+      }
+    </div>
+  </div>
+</main>

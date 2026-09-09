@@ -1,0 +1,370 @@
+<main class="product-detail-page container">
+  @if (loading()) {
+    <h1 class="product-info__title">Đang tải sản phẩm...</h1>
+  } @else if (loadError() || !product()) {
+    <h1 class="product-info__title">{{ loadError() || 'Không tìm thấy sản phẩm' }}</h1>
+  } @else {
+    <nav class="product-detail-breadcrumb" aria-label="Breadcrumb">
+      <a routerLink="/">Trang chủ</a>
+      <span>/</span>
+      <a routerLink="/products">Sản phẩm</a>
+      <span>/</span>
+      <span>{{ product()?.name }}</span>
+    </nav>
+    <div class="product-detail-layout">
+      <div class="product-detail__gallery">
+        <div class="gallery-main">
+          <img [src]="imageUrl()" [alt]="product()?.name || ''" class="gallery-main__img product-detail__main-img" />
+          @if (gallery().length > 1) {
+            <button type="button" class="gallery-nav-btn gallery-nav-btn--prev" aria-label="Hình trước" (click)="prevImage()">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
+            </button>
+            <button type="button" class="gallery-nav-btn gallery-nav-btn--next" aria-label="Hình sau" (click)="nextImage()">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </button>
+          }
+        </div>
+        <div class="gallery-thumbs">
+          @for (image of gallery(); track image; let i = $index) {
+            <button type="button" class="gallery-thumbs__btn" [class.active]="activeImage() === i" (click)="selectImage(i)">
+              <img [src]="gallerySrc(image)" [alt]="product()?.name || ''" />
+            </button>
+          }
+        </div>
+      </div>
+
+      <div class="product-detail__info">
+        <div class="product-info__head">
+          <div class="product-info__badge-group">
+            @for (badge of badges(); track badge.kind + badge.label) {
+              @if (badge.kind === 'sale') {
+                <span class="product-badge product-badge--sale">{{ badge.label }}</span>
+              } @else if (badge.kind === 'hot') {
+                <span class="product-badge product-badge--hot">{{ badge.label }}</span>
+              } @else if (badge.kind === 'new') {
+                <span class="product-badge product-badge--new">{{ badge.label }}</span>
+              } @else if (badge.kind === 'combo') {
+                <span class="product-badge product-badge--combo">{{ badge.label }}</span>
+              } @else {
+                <span class="product-badge product-badge--stock">{{ badge.label }}</span>
+              }
+            }
+          </div>
+          <h1 class="product-info__title">{{ product()?.name }}</h1>
+          <div class="product-info__rating">
+            <div class="rating-stars" aria-label="Xếp hạng">
+              @for (slot of starSlots; track slot) {
+                @if (isStarFilled(slot)) {
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="#C97B63"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" /></svg>
+                } @else {
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#C97B63" stroke-width="2"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" /></svg>
+                }
+              }
+            </div>
+            <span class="rating-count">{{ ratingLabel() }} &nbsp;·&nbsp; {{ product()?.rating_count || 0 }} đánh giá từ khách hàng</span>
+          </div>
+        </div>
+
+        <div class="product-info__price">
+          <span class="price-current">{{ priceLabel() }}</span>
+          @if (oldPriceLabel()) {
+            <span class="price-old">{{ oldPriceLabel() }}</span>
+          }
+        </div>
+
+        @if (isCombo()) {
+          <div class="combo-components">
+            <h3 class="combo-components__title">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="7" height="7"></rect>
+                <rect x="14" y="3" width="7" height="7"></rect>
+                <rect x="14" y="14" width="7" height="7"></rect>
+                <rect x="3" y="14" width="7" height="7"></rect>
+              </svg>
+              Bộ sản phẩm trong set
+            </h3>
+            <div class="combo-components__list">
+              @for (component of comboComponents(); track component.product_id; let i = $index) {
+                <div class="combo-component-item">
+                  <div class="combo-component-item__header">
+                    <img [src]="comboImage(component)" [alt]="component.name" class="combo-component-item__img" />
+                    <div class="combo-component-item__info">
+                      <span class="combo-component-item__category">{{ component.category_name }}</span>
+                      <span class="combo-component-item__name">{{ component.name }}</span>
+                      <span class="combo-component-item__price">{{ comboRetailLabel(component) }}</span>
+                    </div>
+                    <button
+                      type="button"
+                      class="combo-component-item__toggle"
+                      [class.is-expanded]="comboExpanded() === i"
+                      [attr.aria-expanded]="comboExpanded() === i"
+                      [attr.aria-label]="'Chọn tùy chọn cho ' + component.name"
+                      (click)="toggleCombo(i)"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="6 9 12 15 18 9"></polyline>
+                      </svg>
+                    </button>
+                  </div>
+                  @if (comboExpanded() === i) {
+                    <div class="combo-component-item__options is-open">
+                      <div class="combo-options__colors">
+                        <span class="combo-options__label">Màu:</span>
+                        <div class="combo-options__list">
+                          @for (color of componentColors(component); track color.name) {
+                            <button
+                              type="button"
+                              class="combo-color-btn"
+                              [class.is-selected]="comboPicks()[i]?.color === color.name"
+                              [style.background]="color.hex"
+                              [title]="color.name"
+                              (click)="selectComboColor(i, color.name)"
+                            ></button>
+                          }
+                        </div>
+                      </div>
+                      @if (componentSizes(component, comboPicks()[i]?.color || '').length) {
+                        <div class="combo-options__sizes">
+                          <span class="combo-options__label">Size:</span>
+                          <div class="combo-options__list">
+                            @for (size of componentSizes(component, comboPicks()[i]?.color || ''); track size) {
+                              <button
+                                type="button"
+                                class="combo-size-btn"
+                                [class.is-selected]="comboPicks()[i]?.size === size"
+                                (click)="selectComboSize(i, size)"
+                              >{{ size }}</button>
+                            }
+                          </div>
+                        </div>
+                      }
+                      <div class="combo-options__stock">
+                        @if (comboStock(i) > 0) {
+                          <span class="combo-stock--available">Còn {{ comboStock(i) }} sản phẩm</span>
+                        } @else {
+                          <span class="combo-stock--unavailable">Hết hàng</span>
+                        }
+                      </div>
+                    </div>
+                  }
+                </div>
+              }
+            </div>
+            <div class="combo-components__summary">
+              <div class="combo-summary-row">
+                <span class="combo-summary__label">Tổng nếu mua lẻ:</span>
+                <span class="combo-summary__old-price">{{ comboSummary().retailLabel }}</span>
+              </div>
+              <div class="combo-summary-row combo-summary-row--savings">
+                <span class="combo-summary__label">Tiết kiệm khi mua set:</span>
+                <span class="combo-summary__savings">{{ comboSummary().savingsLabel }}</span>
+              </div>
+              <div class="combo-summary-row combo-summary-row--total">
+                <span class="combo-summary__label">Giá set:</span>
+                <span class="combo-summary__total">{{ comboSummary().setPriceLabel }}</span>
+              </div>
+            </div>
+            <div class="combo-actions">
+              <div class="combo-actions__row">
+                <button type="button" class="btn btn--outline combo-add-cart" (click)="addComboToCart()">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="9" cy="21" r="1"></circle>
+                    <circle cx="20" cy="21" r="1"></circle>
+                    <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+                  </svg>
+                  Thêm set vào giỏ
+                </button>
+                <button type="button" class="btn btn--primary combo-buy-now" (click)="buyComboNow()">Mua ngay set này</button>
+              </div>
+              <button type="button" class="btn btn--secondary combo-wishlist" [class.is-wishlist-active]="wishlisted()" (click)="toggleWishlist()">
+                <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.67">
+                  <path d="M10 17.5l-5.83-5.83a4.17 4.17 0 115.83-5.83 4.17 4.17 0 115.83 5.83L10 17.5z" />
+                </svg>
+                Thêm vào yêu thích
+              </button>
+            </div>
+          </div>
+        }
+
+        @if (!isCombo() && colors().length) {
+          <div class="product-option option-color">
+            <h3 class="product-option__title">Màu sắc: <span class="option-selected-label">{{ selectedColor() }}</span></h3>
+            <div class="product-option__list">
+              @for (color of colors(); track color.name) {
+                <button
+                  type="button"
+                  class="color-btn"
+                  [class.is-selected]="selectedColor() === color.name"
+                  [style.background]="color.hex"
+                  [title]="color.name"
+                  (click)="selectColor(color.name)"
+                ></button>
+              }
+            </div>
+          </div>
+        }
+
+        @if (!isCombo() && sizes().length) {
+          <div class="product-option option-size">
+            <div class="product-option__header">
+              <h3 class="product-option__title">Kích cỡ: <span class="option-selected-label">{{ selectedSize() }}</span></h3>
+              <a href="#" class="size-guide-link" (click)="$event.preventDefault(); setInfoTab('size')">Hướng dẫn chọn size</a>
+            </div>
+            <div class="product-option__list">
+              @for (size of sizes(); track size) {
+                <button type="button" class="size-btn" [class.is-selected]="selectedSize() === size" (click)="selectSize(size)">{{ size }}</button>
+              }
+            </div>
+          </div>
+        }
+
+        @if (!isCombo()) {
+        <div class="product-fit-helper">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polyline points="12 6 12 12 16 14"></polyline>
+          </svg>
+          <span>{{ fitHelperText() }}</span>
+        </div>
+
+        }
+
+        @if (!isCombo()) {
+        <div class="product-quantity">
+          <span class="product-option__title">Số lượng</span>
+          <div class="quantity-selector">
+            <button type="button" class="quantity-btn" (click)="decrement()" aria-label="Giảm số lượng">-</button>
+            <input type="number" class="quantity-input" [value]="quantity()" readonly aria-label="Số lượng" />
+            <button type="button" class="quantity-btn" (click)="increment()" aria-label="Tăng số lượng">+</button>
+          </div>
+        </div>
+
+        }
+
+        @if (!isCombo()) {
+        <div class="product-actions-grid">
+          <div class="product-actions-main">
+            <button type="button" class="btn btn--outline add-to-cart-btn" [disabled]="isOutOfStock()" (click)="addToCart()">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px;">
+                <circle cx="9" cy="21" r="1"></circle>
+                <circle cx="20" cy="21" r="1"></circle>
+                <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+              </svg>
+              {{ isOutOfStock() ? 'Sản phẩm hết hàng' : 'Thêm vào giỏ' }}
+            </button>
+            @if (!isOutOfStock()) {
+              <button type="button" class="btn btn--primary buy-now-btn" (click)="buyNow()">Mua ngay</button>
+            }
+          </div>
+          <button type="button" class="btn btn--secondary wishlist-btn" [class.active]="wishlisted()" aria-label="Thêm vào danh sách yêu thích" (click)="toggleWishlist()">
+            <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.67" style="margin-right: 8px;">
+              <path d="M10 17.5l-5.83-5.83a4.17 4.17 0 115.83-5.83 4.17 4.17 0 115.83 5.83L10 17.5z" />
+            </svg>
+            Thêm vào yêu thích
+          </button>
+        </div>
+        }
+
+        <div class="product-benefits">
+          <div class="benefit-item">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="1" y="3" width="15" height="13"></rect>
+              <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon>
+              <circle cx="5.5" cy="18.5" r="2.5"></circle>
+              <circle cx="18.5" cy="18.5" r="2.5"></circle>
+            </svg>
+            <span>Miễn phí giao hàng cho đơn từ 500.000đ</span>
+          </div>
+          <div class="benefit-item">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
+            </svg>
+            <span>Gửi yêu cầu đổi trả trong 48 giờ sau khi giao thành công</span>
+          </div>
+          <div class="benefit-item">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <path d="M12 8v4l3 3"></path>
+            </svg>
+            <span>Cam kết chất lượng cao cấp chính hãng</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="product-detail__description">
+      <div class="tabs-header" role="tablist" aria-label="Thông tin sản phẩm">
+        <button type="button" class="tab-title" [class.active]="infoTab() === 'desc'" (click)="setInfoTab('desc')">Mô tả</button>
+        <button type="button" class="tab-title" [class.active]="infoTab() === 'size'" (click)="setInfoTab('size')">Bảng size</button>
+        <button type="button" class="tab-title" [class.active]="infoTab() === 'reviews'" (click)="setInfoTab('reviews')">Đánh giá</button>
+        <button type="button" class="tab-title" [class.active]="infoTab() === 'shipping'" (click)="setInfoTab('shipping')">Vận chuyển</button>
+      </div>
+      <div class="tabs-content">
+        @if (infoTab() === 'desc') {
+          <div class="tab-panel active">
+            <p>{{ product()?.description || 'Đang cập nhật thông tin mô tả chi tiết...' }}</p>
+            <ul class="product-spec-grid">
+              @for (row of specRows(); track row.label) {
+                <li><strong>{{ row.label }}:</strong> {{ row.value }}</li>
+              }
+            </ul>
+          </div>
+        }
+        @if (infoTab() === 'size') {
+          <div class="tab-panel active">
+            <table class="specs-table">
+              <thead>
+                <tr><th>Size</th><th>Ngực (cm)</th><th>Eo (cm)</th><th>Mông (cm)</th><th>Cân nặng đề xuất</th></tr>
+              </thead>
+              <tbody>
+                <tr><th>XS</th><td>78</td><td>62</td><td>84</td><td>40-45kg</td></tr>
+                <tr><th>S</th><td>82</td><td>66</td><td>88</td><td>45-50kg</td></tr>
+                <tr><th>M</th><td>86</td><td>70</td><td>92</td><td>50-55kg</td></tr>
+                <tr><th>L</th><td>90</td><td>74</td><td>96</td><td>55-60kg</td></tr>
+                <tr><th>XL</th><td>94</td><td>78</td><td>100</td><td>60-65kg</td></tr>
+              </tbody>
+            </table>
+          </div>
+        }
+        @if (infoTab() === 'reviews') {
+          <div class="tab-panel active">
+            <div class="reviews-header">
+              <h2 class="reviews-header__title">Đánh giá khách hàng</h2>
+            </div>
+            <div class="reviews-list">
+              @if (reviews().length === 0) {
+                <p>Chưa có đánh giá cho sản phẩm này.</p>
+              } @else {
+                @for (review of reviews(); track $index) {
+                  <article class="review-card">
+                    <strong>{{ review.user_full_name || 'Khách hàng' }}</strong>
+                    <p>{{ review.comment || '' }}</p>
+                  </article>
+                }
+              }
+            </div>
+          </div>
+        }
+        @if (infoTab() === 'shipping') {
+          <div class="tab-panel active">
+            <p>Velura cam kết giao hàng nhanh chóng toàn quốc với các chính sách ưu đãi:</p>
+            <ul>
+              <li><strong>Miễn phí vận chuyển:</strong> Áp dụng cho mọi đơn hàng có giá trị thanh toán từ 500.000₫ trở lên.</li>
+              <li><strong>Thời gian giao hàng:</strong> Từ 1-3 ngày làm việc đối với khu vực nội thành TP.HCM/Hà Nội, và từ 3-5 ngày đối với khu vực tỉnh thành khác.</li>
+              <li><strong>Đơn vị vận chuyển:</strong> Các đối tác uy tín như Giao Hàng Tiết Kiệm, GrabExpress, Viettel Post.</li>
+            </ul>
+          </div>
+        }
+      </div>
+    </div>
+
+    <section class="related-products">
+      <h2 class="related-products__title">Sản phẩm liên quan</h2>
+      <div class="product-grid">
+        @for (item of related(); track item.product_id) {
+          <app-product-card [product]="item" />
+        }
+      </div>
+    </section>
+  }
+</main>

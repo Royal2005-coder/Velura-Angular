@@ -1,0 +1,103 @@
+<main class="blog-page">
+  <div class="container">
+    <div class="blog-intro">
+      <div class="blog-intro__copy">
+        <span class="blog-intro__journal">VELURA JOURNAL</span>
+        <h1 class="blog-intro__title">Tạp chí phong cách</h1>
+        <p class="blog-intro__desc">
+          Câu chuyện thời trang, phỏng vấn nghệ nhân và những bài viết truyền cảm hứng phong cách.
+        </p>
+      </div>
+      <figure class="blog-intro__media" aria-label="Không gian thời trang Velura Journal">
+        <img src="/assets/images/velura-journal-banner.png" alt="Người mẫu trong chiến dịch Velura" />
+      </figure>
+    </div>
+
+    @if (featured(); as post) {
+      <section class="featured-post">
+        <div class="featured-post__image">
+          <img [src]="post.image" [alt]="post.title" />
+        </div>
+        <div class="featured-post__content">
+          <span class="blog-badge">{{ post.badge }}</span>
+          <h2 class="featured-post__title">{{ post.title }}</h2>
+          <p class="featured-post__excerpt">{{ post.excerpt }}</p>
+          <div class="post-meta">
+            <span class="post-meta__author">{{ post.author }}</span>
+            <span class="post-meta__dot">&middot;</span>
+            <span class="post-meta__date">{{ post.date }}</span>
+            <span class="post-meta__dot">&middot;</span>
+            <span class="post-meta__read-time">
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                <circle cx="8" cy="8" r="6" />
+                <path d="M8 4v4l2.5 1.5" />
+              </svg>
+              {{ post.readMinutes }} phút đọc
+            </span>
+          </div>
+          <a [routerLink]="['/blog', post.slug]" class="btn-read-more">
+            Đọc tiếp
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+              <polyline points="12 5 19 12 12 19"></polyline>
+            </svg>
+          </a>
+        </div>
+      </section>
+    }
+
+    <div class="category-tabs">
+      <button type="button" class="category-tab" [class.is-active]="category() === 'all'" (click)="setCategory('all')">Tất cả</button>
+      <button type="button" class="category-tab" [class.is-active]="category() === 'trend'" (click)="setCategory('trend')">Xu hướng</button>
+      <button type="button" class="category-tab" [class.is-active]="category() === 'style'" (click)="setCategory('style')">Phối đồ</button>
+      <button type="button" class="category-tab" [class.is-active]="category() === 'interview'" (click)="setCategory('interview')">Phỏng vấn</button>
+      <button type="button" class="category-tab" [class.is-active]="category() === 'sustainable'" (click)="setCategory('sustainable')">Bền vững</button>
+      <button type="button" class="category-tab" [class.is-active]="category() === 'event'" (click)="setCategory('event')">Sự kiện</button>
+    </div>
+
+    <div class="articles-grid">
+      @for (post of posts(); track post.slug) {
+        <article class="article-card">
+          <div class="article-card__image">
+            <img [src]="post.image" [alt]="post.title" />
+          </div>
+          <div class="article-card__content">
+            <span class="blog-badge">{{ post.badge }}</span>
+            <h3 class="article-card__title">
+              <a [routerLink]="['/blog', post.slug]">{{ post.title }}</a>
+            </h3>
+            <p class="article-card__excerpt">{{ post.excerpt }}</p>
+            <div class="post-meta">
+              <span class="post-meta__author">{{ post.author }}</span>
+              <span class="post-meta__dot">&middot;</span>
+              <span class="post-meta__date">{{ post.date }}</span>
+              <span class="post-meta__dot">&middot;</span>
+              <span class="post-meta__read-time">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <circle cx="8" cy="8" r="6" />
+                  <path d="M8 4v4l2.5 1.5" />
+                </svg>
+                {{ post.readMinutes }} phút
+              </span>
+            </div>
+          </div>
+        </article>
+      }
+    </div>
+
+    <section class="newsletter-box">
+      <div class="newsletter-box__icon">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+          <polyline points="22,6 12,13 2,6" />
+        </svg>
+      </div>
+      <h2 class="newsletter-box__title">Nhận tạp chí mỗi tuần</h2>
+      <p class="newsletter-box__desc">Đăng ký để nhận những bài viết mới nhất, gợi ý phối đồ và ưu đãi dành riêng cho thành viên.</p>
+      <form class="newsletter-box__form">
+        <input type="email" required placeholder="Email của bạn" aria-label="Địa chỉ Email" />
+        <button type="submit" class="btn btn--primary">Đăng ký</button>
+      </form>
+    </section>
+  </div>
+</main>

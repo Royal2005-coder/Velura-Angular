@@ -1,0 +1,73 @@
+﻿.order-summary {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  position: sticky;
+  top: 120px;
+}
+
+.order-summary__title {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 1.5rem;
+  font-weight: 500;
+  margin-bottom: 20px;
+}
+
+.coupon-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.coupon-row .form-input {
+  flex: 1;
+  background: var(--field-bg);
+  border-color: var(--line);
+  border-radius: 10px;
+}
+
+.summary-lines {
+  padding: 16px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.summary-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+
+.summary-line + .summary-line { margin-top: 12px; }
+
+.summary-line__value { color: var(--ink); }
+
+.summary-line--shipping .summary-line__value { color: #A8B5A0; }
+
+.summary-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 0;
+}
+
+.summary-total__label {
+  font-size: 1rem;
+  color: var(--ink);
+}
+
+.summary-total__value {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 1.75rem;
+  color: var(--terracotta);
+}
+
+.summary-note {
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--muted);
+  padding-top: 16px;
+}

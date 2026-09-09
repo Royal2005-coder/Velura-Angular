@@ -1,0 +1,18 @@
+/* Checkout page — bg lấy từ .page-shell (cream) */
+.checkout-page {
+  min-height: calc(100vh - 200px);
+  padding: 24px 0 48px;
+}
+
+.checkout-page .page-title {
+  margin-bottom: 24px;
+}
+
+.checkout-grid {
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  gap: 24px;
+  align-items: start;
+}
+
+.checkout-main { min-width: 0; }

@@ -1,0 +1,46 @@
+@if (open()) {
+  <div class="otp-modal-container">
+    <div class="otp-backdrop" (click)="cancel()"></div>
+    <div class="otp-card" role="dialog" aria-modal="true" aria-labelledby="otp-title">
+      <h3 id="otp-title" class="otp-card__title">Xác minh tài khoản</h3>
+      <p class="otp-card__desc">Nhập mã OTP 6 chữ số được gửi tới<br /><strong>{{ identity() }}</strong></p>
+      <p class="otp-card__notice" style="color:#d9534f;font-size:0.8rem;margin-bottom:8px;">
+        ⚠️ Dev mode: xem mã OTP trong console terminal của API server
+      </p>
+      <div class="otp-timer-row">
+        <span>Mã hết hạn sau: </span>
+        <strong [style.color]="expired() ? '#d9534f' : null">{{ timerText() }}</strong>
+      </div>
+      <div class="otp-inputs" (paste)="onPaste($event)">
+        @for (digit of digits(); track $index) {
+          <input
+            type="text"
+            class="otp-digit"
+            maxlength="1"
+            inputmode="numeric"
+            [attr.aria-label]="'Chữ số OTP thứ ' + ($index + 1)"
+            [value]="digit"
+            (input)="onDigit($index, $event)"
+            (keydown)="onKeydown($index, $event)"
+          />
+        }
+      </div>
+      @if (errorMessage()) {
+        <div class="field__error" aria-live="polite">{{ errorMessage() }}</div>
+      }
+      <button class="btn btn--login" type="button" style="margin-top:16px;" [disabled]="verifying() || expired()" (click)="verify()">
+        {{ verifying() ? 'Đang xác minh...' : 'Xác nhận' }}
+      </button>
+      <div style="margin-top:12px;text-align:center;">
+        <button class="otp-resend-btn" type="button" [disabled]="resendCooldown() > 0" (click)="resend()">
+          @if (resendCooldown() > 0) {
+            Gửi lại OTP ({{ resendCooldown() }}s)
+          } @else {
+            Gửi lại OTP
+          }
+        </button>
+      </div>
+      <button class="otp-cancel-btn" type="button" (click)="cancel()">Hủy</button>
+    </div>
+  </div>
+}

@@ -1,0 +1,206 @@
+<main class="admin-content dashboard-content">
+  <p class="admin-page-crumb">Dashboard / Tổng quan</p>
+  <div class="dashboard-controls">
+    <div class="dashboard-view-tabs" role="tablist" aria-label="Góc nhìn Dashboard">
+      <button class="dashboard-view-tab" [class.is-active]="tab() === 'operations'" type="button" (click)="setTab('operations')">
+        <app-admin-icon name="settings" />Quản trị
+      </button>
+      <button class="dashboard-view-tab" [class.is-active]="tab() === 'business'" type="button" (click)="setTab('business')">
+        <app-admin-icon name="dashboard" />Kinh doanh
+      </button>
+    </div>
+    <div class="dashboard-time-filter" role="group" aria-label="Khoảng thời gian xem dữ liệu">
+      <button type="button" [class.is-active]="range() === 'day'" (click)="setRange('day')">Ngày</button>
+      <button type="button" [class.is-active]="range() === 'week'" (click)="setRange('week')">Tuần</button>
+      <button type="button" [class.is-active]="range() === 'month'" (click)="setRange('month')">Tháng</button>
+      <button type="button" [class.is-active]="range() === 'custom'" (click)="setRange('custom')">
+        <app-admin-icon name="clock" />Tùy chọn
+      </button>
+    </div>
+  </div>
+  <div class="dashboard-data-status" aria-live="polite">
+    <span class="dashboard-data-status__dot" [class.dashboard-data-status__dot--error]="loadError()"></span>
+    @if (loadError()) {
+      <strong>Không thể xác minh dữ liệu</strong>
+      <span>{{ loadError() }}</span>
+    } @else if (loading()) {
+      <strong>Đang kết nối Supabase</strong>
+      <span>Đang xác minh dữ liệu…</span>
+    } @else {
+      <strong>Dữ liệu trực tiếp từ Supabase</strong>
+      <span>Cập nhật {{ generatedAt() }}</span>
+    }
+  </div>
+  @if (customOpen()) {
+    <form class="dashboard-custom-period" (submit)="applyCustom($event)">
+      <label><span>Từ ngày</span><input class="admin-form-control" type="date" name="from" [value]="fromDate()" /></label>
+      <label><span>Đến ngày</span><input class="admin-form-control" type="date" name="to" [value]="toDate()" /></label>
+      <button class="admin-btn admin-btn--filter admin-btn--sm" type="submit">Áp dụng</button>
+    </form>
+  }
+
+  @if (tab() === 'operations') {
+    <section class="dashboard-panel" id="dashboard-operations">
+      <div class="dashboard-kpi-grid" aria-label="Chỉ số vận hành">
+        <article class="dashboard-kpi" [class.dashboard-kpi--loading]="loading()">
+          <div class="dashboard-kpi__head"><span>Đơn hàng cần xử lý</span><i><app-admin-icon name="cart" /></i></div>
+          <strong>{{ num(ops().pendingOrders) }}</strong>
+          <div><small>{{ num(ops().paymentErrors) }} thanh toán lỗi</small><span class="admin-badge admin-badge--danger">Khẩn cấp</span></div>
+        </article>
+        <article class="dashboard-kpi" [class.dashboard-kpi--loading]="loading()">
+          <div class="dashboard-kpi__head"><span>Đổi/trả còn trong hạn</span><i><app-admin-icon name="refresh" /></i></div>
+          <strong>{{ num(ops().openReturns) }}</strong>
+        </article>
+        <article class="dashboard-kpi" [class.dashboard-kpi--loading]="loading()">
+          <div class="dashboard-kpi__head"><span>Ticket chờ phản hồi</span><i><app-admin-icon name="support" /></i></div>
+          <strong>{{ num(ops().openSupportTickets) }}</strong>
+        </article>
+        <article class="dashboard-kpi" [class.dashboard-kpi--loading]="loading()">
+          <div class="dashboard-kpi__head"><span>Sản phẩm sắp hết hàng</span><i><app-admin-icon name="box" /></i></div>
+          <strong>{{ num(ops().lowStockProducts) }}</strong>
+        </article>
+        <article class="dashboard-kpi" [class.dashboard-kpi--loading]="loading()">
+          <div class="dashboard-kpi__head"><span>Đánh giá cần duyệt</span><i><app-admin-icon name="star" /></i></div>
+          <strong>{{ num(business().pendingReviews) }}</strong>
+          <div><small>{{ num(ops().urgentReviews) }} đánh giá tiêu cực</small></div>
+        </article>
+      </div>
+
+      <div class="dashboard-command-grid">
+        <section class="dashboard-section dashboard-alert-center">
+          <header class="dashboard-section__header">
+            <div><span class="dashboard-eyebrow">Ưu tiên vận hành</span><h3>Cần xử lý trước</h3></div>
+            <span class="dashboard-text-action">Xem tất cả {{ alertTotal() }}</span>
+          </header>
+          <div class="dashboard-alert-list">
+            <article class="dashboard-alert dashboard-alert--critical">
+              <span class="admin-badge admin-badge--danger dashboard-alert__level">Khẩn cấp</span>
+              <div><h4>{{ num(ops().openReturns) }} phiếu đổi/trả cần xử lý</h4><p>Đổi trả &amp; CSKH · Tải trực tiếp từ Supabase</p></div>
+              <a routerLink="/returns">Xem phiếu</a>
+            </article>
+            <article class="dashboard-alert dashboard-alert--critical">
+              <span class="admin-badge admin-badge--danger dashboard-alert__level">Khẩn cấp</span>
+              <div><h4>{{ num(ops().paymentErrors) }} đơn hàng thanh toán lỗi cần kiểm tra</h4><p>Quản lý đơn hàng · Cảnh báo hệ thống</p></div>
+              <a routerLink="/orders">Kiểm tra</a>
+            </article>
+            <article class="dashboard-alert dashboard-alert--high">
+              <span class="admin-badge admin-badge--warning dashboard-alert__level">Cao</span>
+              <div><h4>{{ num(ops().lowStockProducts) }} sản phẩm dưới mức tồn kho tối thiểu</h4><p>Sản phẩm &amp; tồn kho · Tồn kho thấp</p></div>
+              <a routerLink="/products">Xem tồn kho</a>
+            </article>
+            <article class="dashboard-alert dashboard-alert--medium">
+              <span class="admin-badge admin-badge--pending dashboard-alert__level">Trung bình</span>
+              <div><h4>{{ num(ops().openSupportTickets) }} phiếu hỗ trợ khách hàng chờ phản hồi</h4><p>Đổi trả &amp; CSKH · Phiếu mới nhận</p></div>
+              <a routerLink="/returns">Xem hỗ trợ</a>
+            </article>
+          </div>
+        </section>
+
+        <section class="dashboard-section dashboard-module-health">
+          <header class="dashboard-section__header"><div><span class="dashboard-eyebrow">Toàn hệ thống</span><h3>Tình trạng phân hệ</h3></div></header>
+          <div class="dashboard-health-list">
+            <a class="dashboard-health-card" routerLink="/orders">
+              <div class="dashboard-health-card__head"><i><app-admin-icon name="cart" /></i><span class="admin-badge" [class]="'admin-badge--' + healthOrders().tone">{{ healthOrders().label }}</span></div>
+              <div class="dashboard-health-card__title"><span class="dashboard-health-dot" [class]="'dashboard-health-dot--' + healthOrders().tone"></span><strong>Đơn hàng</strong></div>
+              <small>{{ num(ops().pendingOrders) }} cần xử lý · {{ num(ops().paymentErrors) }} thanh toán lỗi</small>
+            </a>
+            <a class="dashboard-health-card" routerLink="/products">
+              <div class="dashboard-health-card__head"><i><app-admin-icon name="box" /></i><span class="admin-badge" [class]="'admin-badge--' + healthProducts().tone">{{ healthProducts().label }}</span></div>
+              <div class="dashboard-health-card__title"><span class="dashboard-health-dot" [class]="'dashboard-health-dot--' + healthProducts().tone"></span><strong>Sản phẩm &amp; tồn kho</strong></div>
+              <small>{{ num(ops().lowStockProducts) }} dưới tồn tối thiểu</small>
+            </a>
+            <a class="dashboard-health-card" routerLink="/reviews">
+              <div class="dashboard-health-card__head"><i><app-admin-icon name="star" /></i><span class="admin-badge" [class]="'admin-badge--' + healthReviews().tone">{{ healthReviews().label }}</span></div>
+              <div class="dashboard-health-card__title"><span class="dashboard-health-dot" [class]="'dashboard-health-dot--' + healthReviews().tone"></span><strong>Đánh giá</strong></div>
+              <small>{{ num(business().pendingReviews) }} chờ duyệt</small>
+            </a>
+            <a class="dashboard-health-card" routerLink="/returns">
+              <div class="dashboard-health-card__head"><i><app-admin-icon name="support" /></i><span class="admin-badge" [class]="'admin-badge--' + healthReturns().tone">{{ healthReturns().label }}</span></div>
+              <div class="dashboard-health-card__title"><span class="dashboard-health-dot" [class]="'dashboard-health-dot--' + healthReturns().tone"></span><strong>Đổi trả &amp; CSKH</strong></div>
+              <small>{{ num(ops().openReturns) }} phiếu còn hạn · {{ num(ops().openSupportTickets) }} ticket chờ</small>
+            </a>
+            <a class="dashboard-health-card" routerLink="/promotions">
+              <div class="dashboard-health-card__head"><i><app-admin-icon name="tag" /></i><span class="admin-badge admin-badge--success">Tốt</span></div>
+              <div class="dashboard-health-card__title"><span class="dashboard-health-dot dashboard-health-dot--success"></span><strong>Giá &amp; khuyến mãi</strong></div>
+              <small>Hoạt động bình thường</small>
+            </a>
+            <a class="dashboard-health-card" routerLink="/accounts">
+              <div class="dashboard-health-card__head"><i><app-admin-icon name="users" /></i><span class="admin-badge admin-badge--success">Tốt</span></div>
+              <div class="dashboard-health-card__title"><span class="dashboard-health-dot dashboard-health-dot--success"></span><strong>Tài khoản &amp; hệ thống</strong></div>
+              <small>Không có cảnh báo bảo mật mới</small>
+            </a>
+          </div>
+        </section>
+      </div>
+
+      <div class="dashboard-lower-grid">
+        <section class="dashboard-section dashboard-action-queue">
+          <header class="dashboard-section__header"><div><span class="dashboard-eyebrow">Gợi ý hành động</span><h3>Việc nên xử lý hôm nay</h3></div><span class="dashboard-section__count">4 việc</span></header>
+          <div class="dashboard-task-list">
+            <a routerLink="/returns"><span class="dashboard-task__index">01</span><div><strong>Duyệt {{ num(ops().openReturns) }} phiếu đổi/trả cần xử lý</strong><small>Đổi trả &amp; CSKH · Hạn trong tuần này</small></div><span class="admin-badge admin-badge--danger">Cao</span></a>
+            <a routerLink="/orders"><span class="dashboard-task__index">02</span><div><strong>Kiểm tra {{ num(ops().paymentErrors) }} đơn thanh toán lỗi</strong><small>Quản lý đơn hàng · Cảnh báo hệ thống</small></div><span class="admin-badge admin-badge--danger">Cao</span></a>
+            <a routerLink="/reviews"><span class="dashboard-task__index">03</span><div><strong>Phản hồi {{ num(ops().urgentReviews) }} đánh giá tiêu cực</strong><small>Quản lý đánh giá · Trong hôm nay</small></div><span class="admin-badge admin-badge--warning">Vừa</span></a>
+            <a routerLink="/products"><span class="dashboard-task__index">04</span><div><strong>Bổ sung tồn kho cho {{ num(ops().lowStockProducts) }} sản phẩm</strong><small>Quản lý sản phẩm · Tồn kho thấp</small></div><span class="admin-badge admin-badge--warning">Vừa</span></a>
+          </div>
+        </section>
+        <section class="dashboard-section dashboard-activity">
+          <header class="dashboard-section__header"><div><span class="dashboard-eyebrow">Nhật ký rút gọn</span><h3>Hoạt động gần đây</h3></div><a class="dashboard-text-action" routerLink="/logs">Mở nhật ký</a></header>
+          <div class="dashboard-timeline">
+            @if (!recentActivity().length) {
+              <div style="padding: 24px; text-align: center; color: var(--muted); font-size: 0.85rem;">Chưa có hoạt động gần đây</div>
+            } @else {
+              @for (item of recentActivity(); track item.log.audit_id || item.log.timestamp) {
+                <article>
+                  <time>{{ item.copy.time }}</time>
+                  <span></span>
+                  <div>
+                    <strong>{{ item.copy.actor }}</strong>
+                    <p>{{ item.copy.desc }}</p>
+                    <small>{{ item.copy.module }} · Thành công</small>
+                  </div>
+                </article>
+              }
+            }
+          </div>
+        </section>
+      </div>
+    </section>
+  } @else {
+    <section class="dashboard-panel" id="dashboard-business">
+      <div class="dashboard-kpi-grid dashboard-kpi-grid--business" aria-label="Chỉ số kinh doanh">
+        <article class="dashboard-kpi"><div class="dashboard-kpi__head"><span>Doanh thu</span><i><app-admin-icon name="credit-card" /></i></div><strong>{{ money(business().revenue) }}</strong><div><small class="dashboard-trend" [class]="trendClass(business().comparisons?.revenuePct)">{{ trend(business().comparisons?.revenuePct) }}</small></div></article>
+        <article class="dashboard-kpi"><div class="dashboard-kpi__head"><span>Số đơn hàng</span><i><app-admin-icon name="cart" /></i></div><strong>{{ num(business().orderCount) }}</strong><div><small class="dashboard-trend" [class]="trendClass(business().comparisons?.orderCountPct)">{{ trend(business().comparisons?.orderCountPct) }}</small></div></article>
+        <article class="dashboard-kpi"><div class="dashboard-kpi__head"><span>Giá trị đơn trung bình</span><i><app-admin-icon name="dashboard" /></i></div><strong>{{ money(business().averageOrderValue) }}</strong><div><small class="dashboard-trend" [class]="trendClass(business().comparisons?.aovPct)">{{ trend(business().comparisons?.aovPct) }}</small></div></article>
+        <article class="dashboard-kpi"><div class="dashboard-kpi__head"><span>Tỷ lệ hoàn tất</span><i><app-admin-icon name="check" /></i></div><strong>{{ num(business().completionRate) }}%</strong><div><small class="dashboard-trend" [class]="trendClass(business().comparisons?.completionRatePoints)">{{ trend(business().comparisons?.completionRatePoints, ' điểm phần trăm') }}</small></div></article>
+        <article class="dashboard-kpi"><div class="dashboard-kpi__head"><span>Doanh thu khuyến mãi</span><i><app-admin-icon name="tag" /></i></div><strong>{{ money(business().promotionRevenue) }}</strong><div><small>{{ num(business().promotionRevenueShare) }}% tổng doanh thu</small></div></article>
+      </div>
+      <div class="dashboard-business-grid">
+        <section class="dashboard-section">
+          <header class="dashboard-section__header"><div><span class="dashboard-eyebrow">Theo đóng góp</span><h3>Danh mục bán tốt</h3></div></header>
+          <div class="dashboard-ranking">
+            @for (cat of categories(); track cat.name) {
+              <div><span>{{ cat.name }}</span><i><b [style.width.%]="cat.pct"></b></i><strong>{{ money(cat.revenue) }} <small>{{ num(cat.pct) }}%</small></strong></div>
+            } @empty {
+              <p class="admin-note">Chưa có doanh thu theo danh mục trong kỳ đã chọn.</p>
+            }
+          </div>
+        </section>
+        <section class="dashboard-section">
+          <header class="dashboard-section__header"><div><span class="dashboard-eyebrow">Theo doanh thu</span><h3>Sản phẩm bán chạy</h3></div><a class="dashboard-text-action" routerLink="/products">Xem sản phẩm</a></header>
+          <div class="dashboard-products">
+            @for (item of bestSellers(); track item.name) {
+              <article>
+                <span>{{ item.rank }}</span>
+                <div><strong>{{ item.name }}</strong><small>{{ item.sku || '—' }} · {{ num(item.sold) }} đã bán</small></div>
+                <b>{{ money(item.revenue) }}</b>
+                <em class="admin-badge" [class.admin-badge--warning]="item.lowStock" [class.admin-badge--success]="!item.lowStock">{{ item.lowStock ? 'Sắp hết' : 'Còn hàng' }}</em>
+              </article>
+            } @empty {
+              <p class="admin-note">Chưa có sản phẩm bán chạy trong kỳ đã chọn.</p>
+            }
+          </div>
+        </section>
+      </div>
+    </section>
+  }
+</main>

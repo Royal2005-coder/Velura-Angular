@@ -1,0 +1,263 @@
+<main>
+      <div class="policy-container container">
+        <section class="policy-hero">
+          <div class="policy-hero__copy">
+            <span class="policy-header__subtitle">Trung tâm hỗ trợ</span>
+            <h1 class="policy-hero__title">Chính sách rõ ràng cho từng đơn hàng Velura</h1>
+            <p>Tra cứu nhanh quy tắc đổi trả 48 giờ, vận chuyển đồng giá, bảo mật Style Quiz và quyền lợi Member trước khi mua sắm.</p>
+          </div>
+          <div class="policy-hero__visual" aria-hidden="true">
+            <img src="https://images.unsplash.com/photo-1558769132-cb1aea458c5e?q=80&w=900&auto=format&fit=crop" alt="" />
+          </div>
+        </section>
+
+        <div class="policy-assurance" aria-label="Cam kết dịch vụ Velura">
+          <article>
+            <strong>48 giờ</strong>
+            <span>Gửi yêu cầu đổi trả sau khi đơn giao thành công.</span>
+          </article>
+          <article>
+            <strong>500K</strong>
+            <span>Miễn phí vận chuyển toàn quốc từ 500.000đ.</span>
+          </article>
+          <article>
+            <strong>AI</strong>
+            <span>Dữ liệu Style Quiz dùng khép kín cho tư vấn cá nhân hóa.</span>
+          </article>
+        </div>
+
+        <!-- Breadcrumb / Header -->
+        <div class="policy-header">
+          <h1 class="policy-header__title">Chính sách và Điều khoản</h1>
+          <div class="policy-header__meta">
+            <svg class="policy-header__meta-icon" width="16" height="16" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="16" y1="2" x2="16" y2="6"></line>
+              <line x1="8" y1="2" x2="8" y2="6"></line>
+              <line x1="3" y1="10" x2="21" y2="10"></line>
+            </svg>
+            <span>Cập nhật lần cuối: 01 tháng 06, 2026</span>
+          </div>
+        </div>
+
+        <!-- 2 Columns Layout -->
+        <div class="policy-layout">
+          <!-- Left Column: Navigation Tabs -->
+          <aside class="policy-tabs" role="tablist" aria-label="Danh mục chính sách" (click)="onTabClick($event)">
+            <button class="policy-tabs__item js-policy-tab is-active" data-policy-tab="returns" id="policy-tab-returns"
+              role="tab" aria-selected="true" aria-controls="policy-panel-returns">
+              <svg class="policy-tabs__item-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
+                aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 8H18.5" />
+              </svg>
+              <span>Chính sách đổi trả</span>
+            </button>
+
+            <button class="policy-tabs__item js-policy-tab" data-policy-tab="privacy" id="policy-tab-privacy" role="tab"
+              aria-selected="false" aria-controls="policy-panel-privacy">
+              <svg class="policy-tabs__item-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
+                aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+              </svg>
+              <span>Chính sách bảo mật</span>
+            </button>
+
+            <button class="policy-tabs__item js-policy-tab" data-policy-tab="shipping" id="policy-tab-shipping"
+              role="tab" aria-selected="false" aria-controls="policy-panel-shipping">
+              <svg class="policy-tabs__item-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
+                aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z" />
+                <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0" />
+              </svg>
+              <span>Chính sách vận chuyển</span>
+            </button>
+
+            <button class="policy-tabs__item js-policy-tab" data-policy-tab="terms" id="policy-tab-terms" role="tab"
+              aria-selected="false" aria-controls="policy-panel-terms">
+              <svg class="policy-tabs__item-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
+                aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <span>Điều khoản sử dụng</span>
+            </button>
+
+            <button class="policy-tabs__item js-policy-tab" data-policy-tab="faq" id="policy-tab-faq" role="tab"
+              aria-selected="false" aria-controls="policy-panel-faq">
+              <svg class="policy-tabs__item-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
+                aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span>Câu hỏi thường gặp</span>
+            </button>
+
+            <button class="policy-tabs__item js-policy-tab" data-policy-tab="member" id="policy-tab-member" role="tab"
+              aria-selected="false" aria-controls="policy-panel-member">
+              <svg class="policy-tabs__item-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
+                aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+              </svg>
+              <span>Chính sách thành viên</span>
+            </button>
+          </aside>
+
+          <!-- Right Column: Content Detail -->
+          <div class="policy-content">
+            <!-- PANEL 1: Chính sách đổi trả -->
+            <section class="policy-panel js-policy-panel is-active" id="policy-panel-returns" role="tabpanel"
+              aria-labelledby="policy-tab-returns">
+              <h2 class="policy-panel__title">Chính sách đổi trả</h2>
+              <p class="policy-panel__intro">Velura áp dụng chính sách đổi trả dựa trên mốc thời gian giao hàng thực tế từ hệ thống vận chuyển. Tính năng gửi yêu cầu chỉ mở khi đơn hàng đủ điều kiện theo quy tắc đã kiểm chứng.</p>
+
+              <h3 class="policy-panel__section-title">Thời hạn nghiêm ngặt</h3>
+              <ul class="policy-panel__list">
+                <li class="policy-panel__list-item">Khách hàng phải gửi yêu cầu trong vòng tối đa 2 ngày (48 giờ) kể từ lúc trạng thái đơn hàng cập nhật thành "Đã giao thành công".</li>
+                <li class="policy-panel__list-item">Mốc thời gian được tính theo trường <code>delivered_at</code> từ API vận chuyển.</li>
+                <li class="policy-panel__list-item">Sau 48 giờ, hệ thống tự động khóa tính năng gửi yêu cầu đổi trả cho đơn hàng đó.</li>
+              </ul>
+
+              <h3 class="policy-panel__section-title">Điều kiện sản phẩm</h3>
+              <ul class="policy-panel__list">
+                <li class="policy-panel__list-item">Sản phẩm chưa qua sử dụng.</li>
+                <li class="policy-panel__list-item">Còn nguyên tem mác và nhãn barcode.</li>
+                <li class="policy-panel__list-item">Sản phẩm được đặt trong bao bì đóng gói gốc của Velura.</li>
+              </ul>
+
+              <h3 class="policy-panel__section-title">Quy trình hoàn tiền</h3>
+              <ul class="policy-panel__list">
+                <li class="policy-panel__list-item">Hoàn tiền được xử lý trong vòng 4 - 5 ngày làm việc sau khi hàng về kho và đạt tiêu chuẩn kiểm tra.</li>
+                <li class="policy-panel__list-item">Khoản hoàn được chuyển về ví điện tử hoặc chuyển khoản ngân hàng trực tiếp đối với đơn COD.</li>
+              </ul>
+
+              <h3 class="policy-panel__section-title">Bù trừ chênh lệch khi đổi hàng</h3>
+              <p class="policy-panel__text">Khi đổi sang sản phẩm khác, hệ thống tự động tính chênh lệch giá trị. Nếu sản phẩm mới đắt hơn, khách hàng thanh toán phần chênh lệch. Nếu sản phẩm mới rẻ hơn, hệ thống hoàn lại phần tiền thừa.</p>
+            </section>
+
+            <!-- PANEL 2: Chính sách bảo mật -->
+            <section class="policy-panel js-policy-panel" id="policy-panel-privacy" role="tabpanel"
+              aria-labelledby="policy-tab-privacy">
+              <h2 class="policy-panel__title">Chính sách bảo mật</h2>
+              <p class="policy-panel__intro">Velura bảo vệ dữ liệu cá nhân, dữ liệu phong cách và dữ liệu tương tác AI của khách hàng theo nguyên tắc chỉ sử dụng đúng mục đích phục vụ trải nghiệm mua sắm.</p>
+
+              <h3 class="policy-panel__section-title">Bảo mật thông tin sinh trắc học &amp; Style Quiz</h3>
+              <ul class="policy-panel__list">
+                <li class="policy-panel__list-item">Dữ liệu Style Quiz gồm số đo ba vòng, chiều cao, cân nặng, dáng người và tông da.</li>
+                <li class="policy-panel__list-item">Dữ liệu này được sử dụng khép kín để đề xuất size động.</li>
+                <li class="policy-panel__list-item">Thông tin Style Quiz được dùng làm ngữ cảnh nền cho AI Stylist Chatbot nhằm cá nhân hóa tư vấn.</li>
+              </ul>
+
+              <h3 class="policy-panel__section-title">Quy tắc ngày sinh</h3>
+              <p class="policy-panel__text">Ngày sinh được dùng để gửi ưu đãi sinh nhật độc quyền. Để ngăn chặn gian lận voucher, hệ thống chỉ cho phép chỉnh sửa ngày sinh tối đa 2 lần.</p>
+
+              <h3 class="policy-panel__section-title">Bảo mật hình ảnh</h3>
+              <ul class="policy-panel__list">
+                <li class="policy-panel__list-item">Ảnh chân dung hoặc ảnh trang phục khách hàng tải lên Chatbot được xử lý theo thời gian thực.</li>
+                <li class="policy-panel__list-item">Đối với khách vãng lai (Guest), hình ảnh không được lưu trữ dài hạn.</li>
+                <li class="policy-panel__list-item">Velura không chia sẻ hình ảnh khách hàng cho bên thứ ba.</li>
+              </ul>
+
+              <h3 class="policy-panel__section-title">Lưu trữ Guest Session</h3>
+              <p class="policy-panel__text">Dữ liệu ẩn danh của Guest như giỏ hàng tạm thời và Style Profile tạm được lưu trữ trên server tối đa 3 tháng. Khi Guest đăng ký tài khoản thành công, dữ liệu này được tự động đồng bộ và hợp nhất sang tài khoản thành viên mới.</p>
+            </section>
+
+            <!-- PANEL 3: Chính sách vận chuyển -->
+            <section class="policy-panel js-policy-panel" id="policy-panel-shipping" role="tabpanel"
+              aria-labelledby="policy-tab-shipping">
+              <h2 class="policy-panel__title">Chính sách vận chuyển</h2>
+              <p class="policy-panel__intro">Velura áp dụng chính sách vận chuyển thống nhất toàn quốc, tự động tính phí và cập nhật trạng thái giao hàng theo dữ liệu từ đơn vị vận chuyển.</p>
+
+              <h3 class="policy-panel__section-title">Phí vận chuyển</h3>
+              <ul class="policy-panel__list">
+                <li class="policy-panel__list-item">Đồng giá tiêu chuẩn toàn quốc: 30.000 VNĐ.</li>
+                <li class="policy-panel__list-item">Tự động áp dụng miễn phí vận chuyển cho mọi đơn hàng từ 500.000 VNĐ trở lên.</li>
+              </ul>
+
+              <h3 class="policy-panel__section-title">Thời gian dự kiến</h3>
+              <ul class="policy-panel__list">
+                <li class="policy-panel__list-item">Nội thành TP.HCM và Hà Nội: 1 - 3 ngày làm việc.</li>
+                <li class="policy-panel__list-item">Các tỉnh thành khác: 3 - 5 ngày làm việc.</li>
+              </ul>
+
+              <h3 class="policy-panel__section-title">Quy tắc 3 lần giao</h3>
+              <ul class="policy-panel__list">
+                <li class="policy-panel__list-item">Shipper giao tối đa 3 lần cho mỗi đơn hàng.</li>
+                <li class="policy-panel__list-item">Nếu giao thất bại sau 3 lần, đơn hàng chuyển sang trạng thái "Hủy".</li>
+                <li class="policy-panel__list-item">Đối với đơn thanh toán trước qua VNPay, hệ thống hoàn tiền sau khi khấu trừ chi phí vận chuyển 2 chiều phát sinh.</li>
+              </ul>
+            </section>
+
+            <!-- PANEL 4: Điều khoản sử dụng -->
+            <section class="policy-panel js-policy-panel" id="policy-panel-terms" role="tabpanel"
+              aria-labelledby="policy-tab-terms">
+              <h2 class="policy-panel__title">Điều khoản sử dụng</h2>
+              <p class="policy-panel__intro">Khi sử dụng website Velura, khách hàng đồng ý tuân thủ các quy tắc vận hành nhằm đảm bảo hệ thống ổn định, minh bạch và an toàn cho cộng đồng người dùng.</p>
+
+              <h3 class="policy-panel__section-title">Giới hạn AI Stylist Chatbot</h3>
+              <ul class="policy-panel__list">
+                <li class="policy-panel__list-item">Để chống spam, Chatbot giới hạn tối đa 20 tin nhắn/phút.</li>
+                <li class="policy-panel__list-item">Nếu vượt quá giới hạn, hệ thống tự động khóa tính năng chat trong vòng 5 phút.</li>
+                <li class="policy-panel__list-item">Chatbot hỗ trợ tải ảnh dưới 5MB.</li>
+                <li class="policy-panel__list-item">Định dạng ảnh được hỗ trợ: JPG, JPEG, PNG.</li>
+              </ul>
+
+              <h3 class="policy-panel__section-title">Quy chuẩn đánh giá sản phẩm</h3>
+              <ul class="policy-panel__list">
+                <li class="policy-panel__list-item">Chỉ khách hàng đã mua sản phẩm với đơn hàng ở trạng thái "Hoàn thành" mới được gửi đánh giá.</li>
+                <li class="policy-panel__list-item">Mỗi khách hàng chỉ được đánh giá 1 lần duy nhất cho mỗi sản phẩm.</li>
+                <li class="policy-panel__list-item">Đánh giá tiêu cực từ 1 - 3 sao hoặc chứa từ cấm sẽ nhận nhãn "Cần xử lý gấp" để Admin duyệt thủ công.</li>
+              </ul>
+            </section>
+
+            <!-- PANEL 5: Câu hỏi thường gặp -->
+            <section class="policy-panel js-policy-panel" id="policy-panel-faq" role="tabpanel"
+              aria-labelledby="policy-tab-faq">
+              <h2 class="policy-panel__title">Câu hỏi thường gặp</h2>
+              <p class="policy-panel__intro">Các câu hỏi phổ biến được tổng hợp từ những quy tắc chính sách đang áp dụng trên hệ thống Velura.</p>
+
+              <h3 class="policy-panel__section-title">Sau khi nhận hàng bao lâu tôi còn được gửi yêu cầu đổi trả?</h3>
+              <p class="policy-panel__text">Bạn cần gửi yêu cầu trong vòng tối đa 48 giờ kể từ khi đơn hàng cập nhật trạng thái "Đã giao thành công". Sau thời hạn này, hệ thống tự động khóa tính năng gửi yêu cầu.</p>
+
+              <h3 class="policy-panel__section-title">Đơn hàng từ bao nhiêu tiền thì được miễn phí vận chuyển?</h3>
+              <p class="policy-panel__text">Velura miễn phí vận chuyển cho mọi đơn hàng từ 500.000 VNĐ trở lên. Đơn dưới mức này áp dụng phí đồng giá 30.000 VNĐ toàn quốc.</p>
+
+              <h3 class="policy-panel__section-title">Guest đăng ký tài khoản thì dữ liệu cũ có bị mất không?</h3>
+              <p class="policy-panel__text">Không. Giỏ hàng tạm thời và Style Profile tạm của Guest được lưu tối đa 3 tháng và sẽ tự động hợp nhất sang tài khoản thành viên mới khi đăng ký thành công.</p>
+
+              <h3 class="policy-panel__section-title">Chatbot có giới hạn gửi tin nhắn hoặc tải ảnh không?</h3>
+              <p class="policy-panel__text">Có. Chatbot giới hạn tối đa 20 tin nhắn/phút. Nếu vượt quá, tính năng chat bị khóa 5 phút. Ảnh tải lên cần dưới 5MB và thuộc định dạng JPG, JPEG hoặc PNG.</p>
+            </section>
+
+            <!-- PANEL 6: Chính sách thành viên -->
+            <section class="policy-panel js-policy-panel" id="policy-panel-member" role="tabpanel"
+              aria-labelledby="policy-tab-member">
+              <h2 class="policy-panel__title">Chính sách thành viên</h2>
+              <p class="policy-panel__intro">Tài khoản Member giúp khách hàng lưu trữ dữ liệu phong cách, đồng bộ trải nghiệm mua sắm và mở khóa các quyền lợi cá nhân hóa của Velura.</p>
+
+              <h3 class="policy-panel__section-title">Đặc quyền Member</h3>
+              <ul class="policy-panel__list">
+                <li class="policy-panel__list-item">Đồng bộ đám mây Style Profile vĩnh viễn.</li>
+                <li class="policy-panel__list-item">Kích hoạt feed gợi ý siêu cá nhân hóa "For You Feed".</li>
+                <li class="policy-panel__list-item">Lưu outfits yêu thích từ AI Stylist.</li>
+                <li class="policy-panel__list-item">Tích điểm thăng hạng.</li>
+                <li class="policy-panel__list-item">Nhận quà tặng trong tháng sinh nhật.</li>
+              </ul>
+
+              <h3 class="policy-panel__section-title">Tạo tài khoản tự động</h3>
+              <p class="policy-panel__text">Guest đặt hàng bằng số điện thoại và xác thực OTP SMS thành công sẽ được hệ thống tự động khởi tạo tài khoản Member. Mật khẩu tạm thời được gửi qua SMS để khách hàng đăng nhập và quản lý đơn hàng.</p>
+            </section>
+          </div>
+        </div>
+
+        <div class="policy-footer">
+          <span>Mọi thắc mắc về chính sách, vui lòng liên hệ </span>
+          <a href="mailto:velura@gmail.vn">velura@gmail.vn</a>
+        </div>
+      </div>
+    </main>

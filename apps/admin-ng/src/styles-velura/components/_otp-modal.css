@@ -1,0 +1,95 @@
+﻿.otp-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  padding: 24px;
+}
+
+.otp-modal {
+  width: min(613px, 100%);
+  background: #fff;
+  border-radius: 10px;
+  border: 1px solid #FBF7F2;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  position: relative;
+}
+
+.otp-modal__bg {
+  position: absolute;
+  inset: 0;
+  background: rgba(232, 201, 190, 0.72);
+  pointer-events: none;
+}
+
+.otp-modal__content {
+  position: relative;
+  padding: 32px 24px 40px;
+  text-align: center;
+}
+
+.otp-modal__title {
+  font-size: 1rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+}
+
+.otp-modal__desc {
+  font-size: 1rem;
+  line-height: 1.6;
+  margin-bottom: 24px;
+  max-width: 420px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.otp-inputs {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.otp-input {
+  width: 65px;
+  height: 65px;
+  text-align: center;
+  font-size: 1.5rem;
+  font-weight: 600;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: rgba(232, 201, 190, 0.43);
+  box-shadow: 0 4px 4px rgba(0, 0, 0, 0.25);
+}
+
+.otp-input:focus {
+  outline: 2px solid var(--brown);
+  background: #fff;
+}
+
+.otp-timer {
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  color: var(--brown-light);
+  margin-bottom: 16px;
+}
+
+.otp-resend {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.otp-resend button {
+  border: none;
+  background: none;
+  color: var(--terracotta);
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: underline;
+}

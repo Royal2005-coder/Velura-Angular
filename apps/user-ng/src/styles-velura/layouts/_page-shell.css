@@ -1,0 +1,27 @@
+/* ============================================================
+   Page shell — wrapper chung cho mọi page có header/footer
+   Cream background đồng nhất cho TẤT CẢ checkout pages
+   ============================================================ */
+
+.page-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: var(--checkout-bg);
+}
+
+.page-shell > main {
+  flex: 1;
+  background: transparent;
+}
+
+/* Override main classes — TẤT CẢ phải transparent để page-shell cream lộ ra */
+.page-shell > main.checkout-page,
+.page-shell > main.payment-failed,
+.page-shell > main:has(.success-hero) {
+  background: transparent;
+}
+
+/* Header + footer luôn trắng đè lên cream */
+.page-shell > .site-header { background: #fff; }
+.page-shell > .site-footer { background: #fff; }

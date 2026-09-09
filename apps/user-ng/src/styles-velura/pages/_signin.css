@@ -1,0 +1,308 @@
+body.page-signin {
+  background: var(--cream);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+.signin-stage {
+  position: relative;
+  width: min(var(--stage-w, 480px), 100vw);
+  min-height: 100vh;
+  background: var(--cream);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* ─── CSS gradient background (replaces deleted image assets) ─── */
+.auth-bg-gradient {
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 60% 50% at 10% 20%, rgba(161, 130, 101, 0.12) 0%, transparent 70%),
+    radial-gradient(ellipse 50% 60% at 90% 80%, rgba(193, 154, 107, 0.10) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 40% at 50% 50%, rgba(238, 224, 210, 0.18) 0%, transparent 80%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ─── Brand logo (text-based, no image) ─── */
+.brand-logo-link {
+  position: fixed;
+  top: 24px;
+  left: 32px;
+  z-index: 10;
+  text-decoration: none;
+}
+.brand-logo-text {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 1.5rem;
+  font-weight: 500;
+  color: #2D2722;
+  letter-spacing: 0.04em;
+}
+
+.login-card {
+  position: relative;
+  margin: 80px auto 40px;
+  width: min(448px, calc(100% - 32px));
+  padding: 40px 36px;
+  background: #fff;
+  border-radius: var(--radius-lg, 16px);
+  border: 1px solid var(--line, #EAE6E2);
+  box-shadow: 0 8px 40px rgba(45, 39, 34, 0.10);
+  z-index: 5;
+}
+
+.login-card__head { text-align: center; margin-bottom: 28px; }
+
+.login-card__title {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 2rem;
+  font-weight: 500;
+  line-height: 1.3;
+  color: #2D2722;
+}
+
+.login-card__subtitle {
+  margin-top: 8px;
+  font-size: 0.875rem;
+  color: var(--muted, #6B635D);
+}
+
+.btn--login {
+  width: 100%;
+  height: 52px;
+  margin-top: 24px;
+  background: var(--terracotta, #A18265);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-md, 10px);
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.1s;
+}
+.btn--login:hover:not(:disabled) { background: var(--terracotta-h, #8a6d52); }
+.btn--login:active:not(:disabled) { transform: scale(0.98); }
+.btn--login:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* ─── Field extras ─── */
+.field__required { color: #d9534f; margin-left: 2px; }
+.field__optional { font-size: 0.75rem; color: var(--muted, #6B635D); font-weight: 400; margin-left: 4px; }
+.field__hint { font-size: 0.75rem; color: var(--muted, #6B635D); font-weight: 400; margin-left: 4px; }
+
+.field__error {
+  display: none;
+  margin-top: 5px;
+  font-size: 0.8125rem;
+  color: #d9534f;
+  line-height: 1.4;
+}
+
+.field__check-icon {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 1rem;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+/* ─── Password strength ─── */
+.password-strength {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.password-strength__bar {
+  flex: 1;
+  height: 4px;
+  background: #EAE6E2;
+  border-radius: 99px;
+  overflow: hidden;
+}
+.password-strength__fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 99px;
+  transition: width 0.3s, background 0.3s;
+}
+.password-strength__label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  min-width: 60px;
+  text-align: right;
+}
+
+/* ─── Lock countdown notice ─── */
+.lock-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 12px 16px;
+  background: #fff3f3;
+  border: 1px solid #f5c2c2;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  color: #d9534f;
+}
+.lock-notice[hidden] {
+  display: none !important;
+}
+.lock-notice svg { flex-shrink: 0; }
+
+/* ─── OTP Modal ─── */
+.otp-modal-container {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.otp-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  backdrop-filter: blur(4px);
+}
+.otp-card {
+  position: relative;
+  background: #fff;
+  padding: 40px 32px 32px;
+  border-radius: 20px;
+  max-width: 420px;
+  width: 90%;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.18);
+  text-align: center;
+  animation: otp-slide-up 0.25s ease;
+}
+@keyframes otp-slide-up {
+  from { transform: translateY(24px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+.otp-card__title {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 1.5rem;
+  color: #2D2722;
+  margin: 0 0 10px;
+}
+.otp-card__desc {
+  font-size: 0.875rem;
+  color: #6B635D;
+  line-height: 1.5;
+  margin-bottom: 8px;
+}
+.otp-card__notice {
+  font-size: 0.78rem;
+  padding: 6px 10px;
+  background: #fff9e6;
+  border-radius: 6px;
+  border: 1px solid #f0d060;
+  margin-bottom: 16px;
+}
+.otp-timer-row {
+  font-size: 0.875rem;
+  color: #6B635D;
+  margin-bottom: 20px;
+}
+.otp-timer-row strong { color: #A18265; font-size: 1rem; }
+
+.otp-inputs {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+.otp-digit {
+  width: 44px;
+  height: 52px;
+  border: 1.5px solid #D5CFC9;
+  border-radius: 10px;
+  font-size: 1.5rem;
+  text-align: center;
+  font-weight: 700;
+  color: #2D2722;
+  background: #FAF9F8;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.otp-digit:focus {
+  border-color: #A18265;
+  box-shadow: 0 0 0 3px rgba(161,130,101,0.15);
+}
+
+.otp-resend-btn {
+  background: none;
+  border: none;
+  color: #A18265;
+  font-size: 0.875rem;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 4px 8px;
+}
+.otp-resend-btn:disabled { color: #bbb; text-decoration: none; cursor: not-allowed; }
+
+.otp-cancel-btn {
+  display: block;
+  margin: 12px auto 0;
+  background: none;
+  border: none;
+  color: #6B635D;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+/* ─── Auth options row ─── */
+.options {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 14px;
+  font-size: 0.875rem;
+}
+.remember { display: flex; align-items: center; gap: 6px; cursor: pointer; color: #6B635D; }
+.forgot { color: var(--terracotta, #A18265); font-weight: 500; text-decoration: none; }
+.forgot:hover { text-decoration: underline; }
+
+.oauth {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 14px;
+}
+.btn--guest {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 24px;
+  height: 44px;
+  background: transparent;
+  border: 1.5px solid var(--terracotta, #A18265);
+  color: var(--terracotta, #A18265);
+  border-radius: var(--radius-sm, 8px);
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: background 0.2s, color 0.2s;
+}
+.btn--guest:hover { background: var(--terracotta, #A18265); color: #fff; }
+
+.signup {
+  margin-top: 20px;
+  text-align: center;
+  font-size: 0.875rem;
+  color: var(--muted, #6B635D);
+}
+.signup a { color: var(--terracotta, #A18265); font-weight: 600; text-decoration: none; }
+.signup a:hover { text-decoration: underline; }
+
+/* ─── Legacy image product positions (kept for reference, unused) ─── */
+/* .signin-stage .product--8 { left: -1.9%; top: 1%; ... } */

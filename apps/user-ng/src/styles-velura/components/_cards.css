@@ -1,0 +1,748 @@
+/* Generic card */
+.card {
+  background: #fff;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-sm);
+  padding: 24px;
+}
+
+.card + .card { margin-top: 24px; }
+
+.card__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.card__header svg { flex-shrink: 0; color: #7C5454; }
+
+/* Address card */
+.address-list { display: flex; flex-direction: column; gap: 16px; }
+
+.address-card {
+  position: relative;
+  padding: 16px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s, transform 0.2s, box-shadow 0.2s;
+}
+
+.address-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.address-card input { position: absolute; opacity: 0; pointer-events: none; }
+
+.address-card--default {
+  background: #FDF8F8;
+  border: 2px solid var(--brown);
+}
+
+.address-card--secondary {
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(212, 196, 183, 0.5);
+}
+
+.address-card.is-selected {
+  border-color: var(--brown);
+  background: #FDF8F8;
+}
+
+.address-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.address-card__name {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #1C1B1B;
+}
+
+.address-card__badge {
+  padding: 2px 8px;
+  background: var(--brown);
+  color: #fff;
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  border-radius: 999px;
+}
+
+.address-card__phone,
+.address-card__addr {
+  font-size: 0.875rem;
+  color: #50453B;
+  line-height: 1.4;
+}
+
+.address-card__check {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  color: var(--brown);
+  opacity: 0;
+  transform: scale(0.8);
+  transition: opacity 0.2s, transform 0.2s;
+}
+
+.address-card.is-selected .address-card__check {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* Option card (radio) */
+.option-list { display: flex; flex-direction: column; gap: 12px; }
+
+.option-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.option-card input { display: none; }
+
+.option-card.is-selected,
+.option-card:has(input:checked) {
+  background: #E8C9BE;
+  border-color: #7C5454;
+}
+
+.option-card__left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.option-card__radio {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--card-border);
+  border-radius: 50%;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.option-card.is-selected .option-card__radio,
+.option-card:has(input:checked) .option-card__radio {
+  border-color: var(--brown);
+}
+
+.option-card.is-selected .option-card__radio::after,
+.option-card:has(input:checked) .option-card__radio::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  background: var(--brown);
+  border-radius: 50%;
+}
+
+.option-card__title {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-dark);
+}
+
+.option-card__desc {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+.option-card__price {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #7C5454;
+  text-align: center;
+  white-space: normal;
+}
+
+/* ---------- Reusable Product Card Component ---------- */
+.card--product {
+  padding: 16px;
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  cursor: pointer;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.card--product:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-card);
+}
+
+.card__image-container {
+  position: relative;
+  aspect-ratio: 4 / 5;
+  padding-top: 0;
+  background: var(--success-bg);
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  margin-bottom: 14px;
+  flex-shrink: 0;
+}
+
+.card__img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 8px;
+  background: #ffffff;
+  display: block;
+  transition: transform 0.4s ease;
+}
+
+.card--product:hover .card__img {
+  transform: scale(1.04);
+}
+
+.card__badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #fff;
+  z-index: 2;
+  letter-spacing: 0.05em;
+}
+
+.card__badge--sale { background: var(--terracotta); }
+.card__badge--new { background: #89A894; }
+.card__badge--hot { background: #D4183D; }
+.card__badge--best { background: var(--brown); }
+
+.card__info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-height: 0;
+}
+
+.card__rating {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  min-height: 18px;
+}
+
+.card__rating-star {
+  color: #F5A623;
+  display: inline-flex;
+}
+
+.card__rating-star svg {
+  display: block;
+  fill: currentColor;
+}
+
+/* ============================================================
+   HỆ THỐNG ĐỒNG BỘ FONT CHỮ & KIỂU DÁNG CARD SẢN PHẨM VELURA
+   ============================================================ */
+
+/* 1. KHỐI TÊN SẢN PHẨM - TO, ĐẬM, SANG TRỌNG */
+.card__title, 
+.product-card__title, 
+.order-item__title,
+.product-section__grid .product-card__title,
+.chatbot-messages .chatbot-message__text .product .title {
+  font-family: 'Playfair Display', serif !important;
+  font-size: 1.125rem !important; /* Tăng size chữ rõ rệt */
+  font-weight: 700 !important;    /* Làm đậm nét */
+  line-height: 1.35;
+  color: #2A2522;                 /* Màu var(--text-dark) */
+  text-decoration: none;
+}
+
+/* Overrides cho thẻ thu nhỏ (mini-card) */
+.order-item__title,
+.chatbot-messages .chatbot-message__text .product .title {
+  font-size: 1rem !important;
+}
+
+/* Các thuộc tính cấu trúc cho card__title */
+.card__title {
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  height: 2.8em; /* Align cards title block heights */
+  transition: color 0.2s;
+}
+
+.card__title:hover {
+  color: var(--terracotta) !important;
+}
+
+.card__price-group {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: auto;
+  min-height: 24px;
+}
+
+/* 2. KHỐI GIÁ TIỀN - HIỆN ĐẠI, DỄ NHÌN */
+.card__price, 
+.product-card__price, 
+.order-item__price,
+.card__price-group .card__price,
+.chatbot-messages .chatbot-message__text .product .price {
+  font-family: 'DM Sans', sans-serif !important;
+  font-weight: 700 !important;
+  color: #C97B63;                 /* Màu var(--terracotta) */
+}
+
+/* 3. KHỐI GIÁ CŨ (NẾU CÓ) */
+.card__price-old, 
+.product-card__price-old {
+  font-family: 'DM Sans', sans-serif !important;
+  font-weight: 400 !important;
+  color: #8C857E;                 /* Màu var(--text-secondary) */
+  text-decoration: line-through;
+}
+
+.card__add-btn {
+  width: 100%;
+  margin-top: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 10px 16px;
+}
+
+/* Card Excerpt (Short description) - hidden in grid view, shown in list view */
+.card__excerpt {
+  display: none;
+}
+
+/* Card List View Modifier */
+.card--product.card--list-view {
+  flex-direction: row;
+  align-items: center;
+  gap: 24px;
+  padding: 24px;
+  height: auto;
+}
+
+.card--list-view .card__image-container {
+  width: 180px;
+  height: 225px;
+  padding-top: 0;
+  flex-shrink: 0;
+  margin-bottom: 0;
+}
+
+.card--list-view .card__info {
+  flex: 1;
+  gap: 8px;
+}
+
+.card--list-view .card__title {
+  height: auto;
+  -webkit-line-clamp: unset;
+  font-size: 1.125rem;
+}
+
+.card--list-view .card__excerpt {
+  display: block;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 4px 0 8px;
+}
+
+.card--list-view .card__add-btn {
+  width: auto;
+  margin-top: 0;
+  padding: 12px 24px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 600px) {
+  .card--product.card--list-view {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+    padding: 16px;
+  }
+
+  .card--list-view .card__image-container {
+    width: 100%;
+    padding-top: 125%;
+    height: auto;
+  }
+
+  .card--list-view .card__add-btn {
+    width: 100%;
+    margin-top: 12px;
+  }
+}
+
+/* Ghi đè margin-top để không bị lệch card sản phẩm đầu tiên trong lưới */
+.product-grid .card,
+.card--product + .card--product {
+  margin-top: 0;
+}
+
+/* Nút Trái tim Yêu thích (Wishlist button) trên Card sản phẩm */
+.card__wishlist-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 10;
+  color: #6B635D;
+  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  padding: 0;
+}
+
+.card__wishlist-btn:hover {
+  transform: scale(1.1);
+  color: var(--terracotta);
+  background: #ffffff;
+}
+
+.card__wishlist-btn.is-active,
+.card__wishlist-btn.active {
+  background: var(--terracotta);
+  color: #ffffff;
+}
+
+.card__wishlist-btn.is-active svg,
+.card__wishlist-btn.active svg {
+  fill: currentColor;
+}
+
+/* Khối màu sắc trên Card sản phẩm */
+.card__colors {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+  margin-bottom: 4px;
+  min-height: 16px;
+}
+
+.card__color-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  display: inline-block;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  position: relative;
+}
+
+.card__color-dot:hover,
+.card__color-dot.is-active {
+  transform: scale(1.15);
+  box-shadow: 0 0 0 1px #ffffff, 0 0 0 2px var(--terracotta);
+}
+
+/* ============================================================
+   Product Card Overlay - card--product (list.html)
+   Tim luôn hiện, card click mở chi tiết, nút mua và giỏ hàng luôn thẳng hàng.
+   ============================================================ */
+
+/* Đảm bảo wrapper là stacking context */
+.card--product .product-card__image-wrapper {
+  position: relative;
+  overflow: hidden;
+}
+
+/* === ❤️  Wishlist: LUÔN HIỂN THỊ, góc trên-phải === */
+.card--product .card__wishlist-btn {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition: background 0.25s ease, color 0.25s ease,
+    transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+.card--product .card__wishlist-btn:hover {
+  transform: scale(1.12);
+}
+
+/* === 🔲  "Xem chi tiết": dưới ảnh, ẩn; hiện khi hover VÙNG ẢNH === */
+.card--product .product-card__img-hover {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.26);
+  z-index: 8;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
+  padding-bottom: 20px;
+}
+
+.card--product .product-card__image-wrapper:hover .product-card__img-hover {
+  opacity: 1;
+  visibility: visible;
+}
+
+.card--product .product-card__img-hover .btn-detail {
+  background: rgba(255, 255, 255, 0.96);
+  color: var(--text-dark, #2a2522);
+  padding: 10px 34px;
+  border-radius: var(--radius-sm);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-decoration: none;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+  transform: translateY(6px);
+  transition: background 0.2s ease, color 0.2s ease, transform 0.25s ease;
+  display: inline-block;
+  white-space: nowrap;
+}
+.card--product .product-card__image-wrapper:hover .product-card__img-hover .btn-detail {
+  transform: translateY(0);
+}
+.card--product .product-card__img-hover .btn-detail:hover {
+  background: #ffffff;
+  color: var(--terracotta);
+}
+
+/* === ⚪  Color dots: tĩnh — khoá không cho chọn === */
+.card--product .card__colors {
+  pointer-events: none;
+}
+.card--product .card__color-dot {
+  cursor: default;
+  pointer-events: none;
+}
+
+/* === Actions Row: Mua ngay + Cart icon (luôn hiển thị) === */
+.card--product .card__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 0 0;
+  margin-top: 12px;
+}
+
+.card--product .card__actions .btn-buy {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: #F4E4DC;
+  color: var(--terracotta, #C97B63);
+  padding: 11px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+  border: none;
+  cursor: pointer;
+  line-height: 1.2;
+  text-align: center;
+  transition: background 0.2s ease, color 0.2s ease;
+  min-height: 40px;
+}
+
+.card--product .card__actions .btn-buy:hover {
+  background: #e8c9be;
+  color: var(--terracotta-h, #b36a53);
+}
+
+.card--product .card__actions .btn-buy svg {
+  display: block;
+  flex-shrink: 0;
+}
+
+.card--product .card__btn-cart {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #F4E4DC;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--terracotta, #C97B63);
+  text-decoration: none;
+  border: none;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.2s ease, color 0.2s ease;
+  padding: 0;
+}
+
+.card--product .card__btn-cart svg {
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+}
+
+.card--product .card__btn-cart:hover {
+  background: var(--terracotta);
+  color: #ffffff;
+}
+
+.card--product.card--list-view .card__actions {
+  display: flex;
+  flex-direction: column;
+  width: 180px;
+  padding: 0;
+  margin-top: 0;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.card--product.card--list-view .card__actions .btn-buy {
+  width: 100%;
+}
+
+.card--product.card--list-view .card__btn-cart {
+  width: 100%;
+  border-radius: var(--radius-sm);
+}
+
+/* Final product card alignment for catalog cards */
+
+.card--product {
+  border-radius: 8px;
+  box-shadow: 0 10px 28px rgba(42, 37, 34, 0.04);
+}
+
+.card--product .card__image-container {
+  border-radius: 8px;
+  background: #f7f4f0;
+}
+
+.card--product .card__img {
+  object-fit: contain;
+  padding: 10px;
+}
+
+.card--product .card__title {
+  min-height: 2.8em;
+  height: auto;
+  color: #1f1d1b;
+  font-size: 1.02rem !important;
+}
+
+.card--product .card__price-group {
+  align-items: baseline;
+  min-height: 28px;
+}
+
+
+@media (max-width: 420px) {
+  .card--product .card__actions .btn-buy {
+    white-space: normal;
+  }
+}
+
+/* ============================================================
+   Voucher Card Component (for Promo Code Modal)
+   ============================================================ */
+.voucher-card {
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+  position: relative;
+}
+
+.voucher-card:hover:not(.voucher-card--disabled) {
+  border-color: var(--brown);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
+
+.voucher-card--disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background: #fcfcfc;
+}
+
+.voucher-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.voucher-card__code {
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 700;
+  font-size: 1.125rem;
+  color: var(--terracotta);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.voucher-card__badge {
+  padding: 4px 8px;
+  background: #E8DFD6;
+  color: var(--brown);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  border-radius: 4px;
+}
+
+.voucher-card__desc {
+  font-size: 0.875rem;
+  color: var(--text-dark);
+  line-height: 1.4;
+  margin-bottom: 8px;
+}
+
+.voucher-card__meta {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.voucher-card__error {
+  margin-top: 8px;
+  font-size: 0.75rem;
+  color: #D4183D;
+  font-weight: 500;
+}

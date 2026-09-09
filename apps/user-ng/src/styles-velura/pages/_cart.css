@@ -1,0 +1,554 @@
+/* ============================================================
+   Shopping Cart Page Styles
+   ============================================================ */
+
+.cart-page {
+  padding: 40px 0 80px;
+  background-color: #FAF5F2; /* Đồng bộ nền beige sáng của hệ thống */
+}
+
+/* Breadcrumb Navigation */
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 24px;
+  font-size: 0.8125rem; /* Đồng bộ cỡ chữ 13px */
+  color: #8c857e;
+  font-family: "DM Sans", sans-serif;
+}
+
+.breadcrumb a {
+  color: #8c857e;
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.breadcrumb a:hover {
+  color: #731F21;
+}
+
+.breadcrumb__current {
+  color: #2a2522;
+  font-weight: 500;
+}
+
+/* Page Header */
+.cart-header {
+  margin-bottom: 32px;
+}
+
+.cart-title {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: clamp(1.5rem, 4vw, 1.875rem); /* Đồng bộ với .page-title hệ thống */
+  font-weight: 500;
+  color: #2a2522;
+  margin: 8px 0 4px;
+}
+
+.cart-count {
+  font-family: "DM Sans", sans-serif;
+  font-size: 0.875rem; /* Cỡ chữ 14px chuẩn mô tả */
+  color: #8c857e;
+  margin: 0;
+}
+
+/* Layout Grid */
+.cart-grid {
+  display: grid;
+  grid-template-columns: 7.5fr 4.5fr;
+  gap: 32px;
+  align-items: start;
+}
+
+/* Left Column: Items List */
+.cart-main {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.cart-items {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Cart Item Card */
+.cart-item {
+  display: flex;
+  gap: 20px;
+  background: #ffffff;
+  border-radius: 8px;
+  padding: 16px; /* Giảm padding để gọn gàng */
+  box-shadow: 0 2px 12px rgba(42, 37, 34, 0.02);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.cart-item:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(42, 37, 34, 0.04);
+}
+
+.cart-item__image {
+  width: 90px; /* Thu nhỏ ảnh để vừa vặn hơn */
+  height: 116px;
+  border-radius: 6px;
+  overflow: hidden;
+  background-color: #f4e4dc;
+  flex-shrink: 0;
+}
+
+.cart-item__image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.cart-item__details {
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+}
+
+.cart-item__header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 4px;
+}
+
+.cart-item__name {
+  font-family: "DM Sans", sans-serif; /* Đổi sang font DM Sans */
+  font-size: 0.9375rem; /* Cỡ chữ 15px vừa vặn */
+  font-weight: 600;
+  color: #2a2522;
+  margin: 0;
+}
+
+.cart-item__delete {
+  background: transparent;
+  border: none;
+  color: #8c857e;
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s ease;
+}
+
+.cart-item__delete:hover {
+  color: #731F21;
+}
+
+.cart-item__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.cart-item__tag {
+  font-family: "DM Sans", sans-serif;
+  font-size: 0.75rem; /* Thu nhỏ xuống 12px */
+  color: #c97b63;
+  background-color: #FAF2EF;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-weight: 500;
+}
+
+.cart-item__footer-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: auto;
+}
+
+/* Quantity Selector */
+.qty-selector {
+  display: flex;
+  align-items: center;
+  border: 1px solid #eee2d6;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #ffffff;
+}
+
+.qty-selector__btn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: #2a2522;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s ease;
+}
+
+.qty-selector__btn:hover {
+  background-color: #FAF5F2;
+}
+
+.qty-selector__value {
+  font-family: "DM Sans", sans-serif;
+  width: 28px;
+  text-align: center;
+  font-size: 0.875rem; /* Cỡ chữ 14px */
+  font-weight: 500;
+  color: #2a2522;
+}
+
+/* Prices */
+.cart-item__price-block {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.cart-item__old-price {
+  font-family: "DM Sans", sans-serif;
+  font-size: 0.75rem;
+  color: #8c857e;
+  text-decoration: line-through;
+}
+
+.cart-item__price {
+  font-family: "DM Sans", sans-serif;
+  font-size: 0.9375rem; /* 15px */
+  color: #c97b63;
+  font-weight: 700;
+}
+
+/* Refund Guarantee Section */
+.cart-guarantee {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background-color: #FAF2EF;
+  padding: 14px 18px;
+  border-radius: 8px;
+  border: 1px dashed #c97b63;
+}
+
+.cart-guarantee__icon {
+  color: #c97b63;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+}
+
+.cart-guarantee__text {
+  font-family: "DM Sans", sans-serif;
+  font-size: 0.8125rem; /* 13px gọn gàng */
+  color: #2a2522;
+  font-weight: 500;
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* Right Column: Sidebar Order Summary */
+.cart-sidebar {
+  position: sticky;
+  top: 100px;
+}
+
+.summary-card {
+  background: #ffffff;
+  border-radius: 8px;
+  padding: 24px; /* Giảm padding để thon gọn */
+  box-shadow: 0 2px 12px rgba(42, 37, 34, 0.02);
+}
+
+.summary-card__title {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 1.25rem; /* Đồng nhất tiêu đề cột */
+  font-weight: 500;
+  color: #2a2522;
+  margin: 0 0 16px;
+}
+
+.summary-card__divider {
+  border: none;
+  border-top: 1px solid #eee2d6;
+  margin: 16px 0;
+}
+
+/* Promo Code Section */
+.coupon-section {
+  margin-bottom: 8px;
+}
+
+.coupon-label {
+  display: block;
+  font-family: "DM Sans", sans-serif;
+  font-size: 0.875rem; /* 14px */
+  font-weight: 600;
+  color: #2a2522;
+  margin-bottom: 8px;
+}
+
+.coupon-form {
+  display: flex;
+  gap: 8px;
+}
+
+.coupon-input-wrapper {
+  display: flex;
+  align-items: center;
+  background-color: #f3f3f5;
+  border-radius: 6px;
+  padding: 8px 12px;
+  flex-grow: 1;
+  gap: 6px;
+  border: 1px solid transparent;
+  transition: border-color 0.2s ease;
+}
+
+.coupon-input-wrapper:focus-within {
+  border-color: #eee2d6;
+}
+
+.coupon-icon {
+  color: #8c857e;
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+}
+
+.coupon-input-wrapper input {
+  font-family: "DM Sans", sans-serif;
+  border: none;
+  background: transparent;
+  font-size: 0.875rem; /* 14px */
+  color: #2a2522;
+  width: 100%;
+  outline: none;
+}
+
+.coupon-input-wrapper input::placeholder {
+  color: #8c857e;
+}
+
+.coupon-btn {
+  background: transparent;
+  border: none;
+  color: #c97b63;
+  font-size: 0.875rem; /* 14px */
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0 4px;
+  transition: color 0.2s ease;
+  display: flex;
+  align-items: center;
+}
+
+.coupon-btn:hover {
+  color: #731F21;
+}
+
+/* Pricing Rows */
+.summary-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.summary-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.summary-line__label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: "DM Sans", sans-serif;
+  font-size: 0.875rem; /* 14px */
+  color: #8c857e;
+}
+
+.shipping-icon {
+  color: #8c857e;
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+}
+
+.summary-line__value {
+  font-family: "DM Sans", sans-serif;
+  font-size: 0.875rem; /* 14px */
+  color: #2a2522;
+  font-weight: 500;
+}
+
+.summary-line__value--free {
+  color: #a8b5a0;
+  font-weight: 600;
+}
+
+/* Total Row */
+.summary-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 20px;
+}
+
+.summary-total__label {
+  font-family: "DM Sans", sans-serif;
+  font-size: 0.9375rem; /* 15px */
+  color: #2a2522;
+  font-weight: 600;
+}
+
+.summary-total__value {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 1.625rem; /* Thu nhỏ cỡ chữ tổng tiền */
+  color: #c97b63;
+  font-weight: 500;
+}
+
+/* Checkout Button */
+.summary-card__btn-checkout {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  background-color: #c97b63;
+  color: #ffffff;
+  width: 100%;
+  padding: 12px 20px; /* thu nhỏ nút thanh toán */
+  border-radius: 6px;
+  font-size: 0.9375rem; /* 15px */
+  font-weight: 600;
+  text-decoration: none;
+  text-align: center;
+  transition: background-color 0.2s ease, transform 0.2s ease;
+}
+
+.summary-card__btn-checkout:hover {
+  background-color: #b36a53;
+  transform: translateY(-1px);
+}
+
+.summary-card__btn-checkout svg {
+  transition: transform 0.2s ease;
+}
+
+.summary-card__btn-checkout:hover svg {
+  transform: translateX(3px);
+}
+
+/* Security Text */
+.summary-card__security {
+  text-align: center;
+  font-family: "DM Sans", sans-serif;
+  font-size: 0.75rem; /* 12px */
+  color: #8c857e;
+  margin-top: 14px;
+  margin-bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.summary-card__security svg {
+  color: #8c857e;
+  width: 12px;
+  height: 12px;
+}
+
+/* ============================================================
+   Responsive Breakpoints
+   ============================================================ */
+
+@media (max-width: 1024px) {
+  .cart-grid {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+
+  .cart-sidebar {
+    position: static;
+  }
+}
+
+@media (max-width: 768px) {
+  .cart-page {
+    padding: 32px 0 60px;
+  }
+
+  .cart-title {
+    font-size: 1.5rem;
+  }
+
+  .cart-count {
+    font-size: 0.8125rem;
+  }
+
+  .cart-item {
+    gap: 12px;
+    padding: 12px;
+  }
+
+  .cart-item__image {
+    width: 80px;
+    height: 104px;
+  }
+
+  .cart-item__name {
+    font-size: 0.875rem;
+  }
+
+  .cart-item__tag {
+    font-size: 0.75rem;
+    padding: 2px 8px;
+  }
+
+  .cart-item__price {
+    font-size: 0.875rem;
+  }
+
+  .cart-item__old-price {
+    font-size: 0.75rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .cart-item {
+    flex-direction: row; /* Giữ dạng ngang trên mobile cho gọn gàng */
+    align-items: flex-start;
+  }
+
+  .cart-item__image {
+    width: 75px;
+    height: 98px;
+  }
+
+  .cart-item__details {
+    width: auto;
+  }
+
+  .coupon-form {
+    flex-direction: row;
+  }
+
+  .coupon-btn {
+    border: none;
+    background-color: transparent;
+    padding: 0 4px;
+  }
+
+  .coupon-btn:hover {
+    background-color: transparent;
+  }
+}

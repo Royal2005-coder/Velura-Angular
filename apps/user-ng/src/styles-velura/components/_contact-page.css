@@ -1,0 +1,478 @@
+/* ============================================================
+   Contact Page — Giao diện trang Liên hệ Velura
+   Bám sát Figma Node 282-8352, cấu trúc ITCSS & đặt tên BEM
+   ============================================================ */
+
+.contact-container {
+  padding-bottom: 80px;
+}
+
+/* Header trang liên hệ */
+.contact-header {
+  margin-top: 40px;
+  margin-bottom: 40px;
+  text-align: center;
+}
+
+.contact-header__subtitle {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--terracotta);
+  display: block;
+  margin-bottom: 12px;
+}
+
+.contact-header__title {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: clamp(2rem, 5vw, 2.75rem);
+  font-weight: 500;
+  color: var(--text-dark);
+  margin-bottom: 16px;
+  line-height: 1.15;
+}
+
+.contact-header__desc {
+  font-size: 1rem;
+  color: var(--text-secondary);
+  max-width: 600px;
+  margin: 0 auto;
+  line-height: 1.6;
+}
+
+/* Layout 2 cột */
+.contact-layout {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr;
+  gap: 40px;
+  align-items: start;
+}
+
+/* Cột trái: Thông tin liên hệ */
+.contact-info {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.contact-card {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 24px;
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  transition: transform 0.25s ease, border-color 0.25s ease;
+}
+
+.contact-card:hover {
+  border-color: var(--tab-bg);
+}
+
+.contact-card__icon-wrapper {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background-color: var(--tab-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--brown);
+  flex-shrink: 0;
+}
+
+.contact-card__icon {
+  width: 20px;
+  height: 20px;
+  stroke: var(--brown);
+  fill: none;
+}
+
+.contact-card__content {
+  flex: 1;
+}
+
+.contact-card__title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-dark);
+  margin-bottom: 6px;
+}
+
+.contact-card__text {
+  font-size: 0.9375rem;
+  color: var(--text-body);
+  line-height: 1.5;
+}
+
+.contact-card__text a:hover {
+  color: var(--terracotta);
+  text-decoration: underline;
+}
+
+/* Social Media link list */
+.contact-social-list {
+  display: flex;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.contact-social-link {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.contact-social-link:hover {
+  background-color: var(--tab-bg);
+  color: var(--brown);
+  border-color: var(--tab-bg);
+  transform: translateY(-2px);
+}
+
+/* Map Iframe Container */
+.contact-map {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.contact-map__iframe-wrapper {
+  width: 100%;
+  height: 240px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  position: relative;
+}
+
+.contact-map__iframe-wrapper iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  vertical-align: middle;
+}
+
+/* Cột phải: Form liên hệ */
+.contact-form-container {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 40px;
+}
+
+.contact-form__title {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 1.75rem;
+  font-weight: 500;
+  color: var(--text-dark);
+  margin-bottom: 8px;
+}
+
+.contact-form__desc {
+  font-size: 0.9375rem;
+  color: var(--text-secondary);
+  margin-bottom: 28px;
+}
+
+.contact-form__group {
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.contact-form__label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-dark);
+}
+
+.contact-form__control {
+  width: 100%;
+  padding: 12px 16px;
+  background-color: var(--field-bg);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font-size: 0.9375rem;
+  color: var(--text-dark);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  outline: none;
+}
+
+.contact-form__control::placeholder {
+  color: var(--soft);
+  opacity: 0.6;
+}
+
+.contact-form__control:hover {
+  border-color: var(--line);
+}
+
+.contact-form__control:focus {
+  border-color: var(--terracotta);
+  background-color: #ffffff;
+  box-shadow: 0 0 0 3px rgba(201, 123, 99, 0.12);
+}
+
+/* Dropdown styling */
+select.contact-form__control {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236B635D' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 16px center;
+  background-size: 16px;
+  padding-right: 40px;
+}
+
+textarea.contact-form__control {
+  height: 120px;
+  resize: vertical;
+}
+
+/* Form Validation states */
+.contact-form__error {
+  font-size: 0.75rem;
+  color: var(--error);
+  display: none;
+  margin-top: 2px;
+}
+
+.contact-form__control.is-invalid {
+  border-color: var(--error);
+  background-color: #FFF5F5;
+}
+
+.contact-form__control.is-invalid:focus {
+  box-shadow: 0 0 0 3px rgba(212, 24, 61, 0.12);
+}
+
+.contact-form__control.is-invalid ~ .contact-form__error {
+  display: block;
+}
+
+/* Submit Button */
+.contact-form__submit {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 24px;
+  background-color: var(--terracotta);
+  border: none;
+  border-radius: var(--radius-md);
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 0.9375rem;
+  cursor: pointer;
+  transition: background-color 0.25s ease, transform 0.15s ease;
+}
+
+.contact-form__submit:hover {
+  background-color: var(--terracotta-h);
+}
+
+.contact-form__submit:active {
+  transform: scale(0.98);
+}
+
+.contact-form__submit svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+.contact-form__note {
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-top: 16px;
+  line-height: 1.4;
+}
+
+/* ============================================================
+   FAQ Section (Câu hỏi thường gặp Accordion)
+   ============================================================ */
+
+.contact-faq {
+  margin-top: 80px;
+  margin-bottom: 40px;
+}
+
+.contact-faq__subtitle {
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--terracotta);
+  display: block;
+  margin-bottom: 12px;
+}
+
+.contact-faq__title {
+  text-align: center;
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: clamp(1.75rem, 4vw, 2.25rem);
+  font-weight: 500;
+  color: var(--text-dark);
+  margin-bottom: 32px;
+}
+
+.contact-faq__list {
+  max-width: 800px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Accordion Item */
+.accordion-item {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.accordion-item:hover {
+  border-color: var(--tab-bg);
+}
+
+.accordion-item.is-open {
+  border-color: var(--line);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
+}
+
+.accordion-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-dark);
+  transition: color 0.2s ease;
+}
+
+.accordion-header:hover {
+  color: var(--terracotta);
+}
+
+.accordion-icon {
+  width: 16px;
+  height: 16px;
+  stroke: var(--text-secondary);
+  stroke-width: 2.2;
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), stroke 0.25s ease;
+  flex-shrink: 0;
+}
+
+.accordion-item.is-open .accordion-icon {
+  transform: rotate(180deg);
+  stroke: var(--terracotta);
+}
+
+.accordion-content {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  padding: 0 24px;
+  color: var(--text-body);
+  font-size: 0.9375rem;
+  line-height: 1.65;
+}
+
+.accordion-item.is-open .accordion-content {
+  padding-bottom: 20px;
+}
+
+/* ============================================================
+   Toast Notification System
+   ============================================================ */
+
+.toast-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 1100;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.toast {
+  background: #ffffff;
+  border-left: 4px solid var(--terracotta);
+  border-radius: var(--radius-md);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+  padding: 16px 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transform: translateX(120%);
+  opacity: 0;
+  transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.4s ease;
+}
+
+.toast.is-visible {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+.toast__icon {
+  width: 20px;
+  height: 20px;
+  color: var(--terracotta);
+  flex-shrink: 0;
+}
+
+.toast__message {
+  font-size: 0.9375rem;
+  color: var(--text-dark);
+  font-weight: 500;
+}
+
+/* Responsive Overrides */
+@media (max-width: 991px) {
+  .contact-layout {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+
+  .contact-form-container {
+    padding: 28px 20px;
+  }
+
+  .accordion-header {
+    padding: 16px 20px;
+    font-size: 0.9375rem;
+  }
+
+  .accordion-content {
+    padding: 0 20px;
+    font-size: 0.875rem;
+  }
+
+  .accordion-item.is-open .accordion-content {
+    padding-bottom: 16px;
+  }
+}

@@ -1,0 +1,121 @@
+# Feature / develop / MR: validate + test + build. Never deploy.
+# main: same gates, then SSH deploy to the Azure origin.
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+      when: never
+    - if: $CI_COMMIT_BRANCH
+
+stages:
+  - validate
+  - test
+  - build
+  - note
+  - deploy
+
+default:
+  image: node:22-bookworm
+  interruptible: true
+  cache:
+    key:
+      files:
+        - package-lock.json
+    paths:
+      - .npm/
+
+variables:
+  npm_config_fund: false
+  npm_config_cache: "$CI_PROJECT_DIR/.npm"
+  GIT_DEPTH: 1
+
+.validate_test_build:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH
+
+validate:workspace:
+  stage: validate
+  extends: .validate_test_build
+  script:
+    - test -f apps/admin-ng/package.json
+    - test -f apps/user-ng/package.json
+    - test -f apps/api/src/server.js
+    - test -f .env.example
+    - test ! -f web_key.pem
+    - |
+      if grep -R --include='*.pem' --include='*.key' -n "BEGIN .*PRIVATE KEY" . ; then
+        echo "Private keys must not be in the repository"
+        exit 1
+      fi
+
+test:api:
+  stage: test
+  extends: .validate_test_build
+  script:
+    - npm ci
+    - npm run test:api
+
+build:angular:
+  stage: build
+  extends: .validate_test_build
+  script:
+    - npm ci
+    - npm run build:user
+    - npm run build:admin
+  artifacts:
+    expire_in: 14 days
+    paths:
+      - apps/user-ng/dist
+      - apps/admin-ng/dist
+      - apps/api
+      - deploy
+
+note:mr:
+  stage: note
+  image: alpine:3.20
+  allow_failure: true
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  needs:
+    - job: validate:workspace
+    - job: test:api
+    - job: build:angular
+  script:
+    - apk add --no-cache curl
+    - |
+      NOTE_TOKEN="${GITLAB_TOKEN:-$CI_JOB_TOKEN}"
+      curl --fail --silent --show-error \
+        --header "PRIVATE-TOKEN: ${NOTE_TOKEN}" \
+        --header "Content-Type: application/json" \
+        --data "{\"body\":\"## Pipeline note\\n- Branch: \\`${CI_COMMIT_REF_NAME}\\`\\n- SHA: \\`${CI_COMMIT_SHORT_SHA}\\`\\n- Pipeline: ${CI_PIPELINE_URL}\\n- Validate, API tests, and Angular production builds passed.\\n- Production deploy is blocked until merge to \\`${CI_DEFAULT_BRANCH}\\`.\\n\"}" \
+        "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests/${CI_MERGE_REQUEST_IID}/notes"
+
+deploy:production:
+  stage: deploy
+  image: alpine:3.20
+  environment:
+    name: production
+    url: https://velura.royalai.dev/
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: on_success
+  needs:
+    - job: test:api
+    - job: build:angular
+  before_script:
+    - apk add --no-cache openssh-client rsync
+    - mkdir -p ~/.ssh
+    - printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/deploy.key
+    - chmod 600 ~/.ssh/deploy.key
+    - printf '%s\n' "$SSH_KNOWN_HOSTS" >> ~/.ssh/known_hosts
+  script:
+    - test -n "$DEPLOY_HOST"
+    - test -n "$DEPLOY_USER"
+    - SSH="ssh -i ~/.ssh/deploy.key -o IdentitiesOnly=yes"
+    - rsync -az --delete -e "$SSH" apps/user-ng/dist/user-ng/browser/ "${DEPLOY_USER}@${DEPLOY_HOST}:/var/www/velura/user/"
+    - rsync -az --delete -e "$SSH" apps/admin-ng/dist/admin-ng/browser/ "${DEPLOY_USER}@${DEPLOY_HOST}:/var/www/velura/admin/"
+    - rsync -az --delete --exclude node_modules -e "$SSH" apps/api/ "${DEPLOY_USER}@${DEPLOY_HOST}:/opt/velura/api/"
+    - rsync -az -e "$SSH" deploy/ "${DEPLOY_USER}@${DEPLOY_HOST}:/opt/velura/deploy/"
+    - $SSH "${DEPLOY_USER}@${DEPLOY_HOST}" "cd /opt/velura/api && npm install --omit=dev && sudo cp /opt/velura/deploy/nginx/velura.conf /etc/nginx/sites-available/velura && sudo nginx -t && sudo systemctl restart velura-api && sudo systemctl reload nginx"

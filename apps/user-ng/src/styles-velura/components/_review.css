@@ -1,0 +1,298 @@
+﻿.review-title {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: clamp(1.75rem, 4vw, 2.25rem);
+  font-weight: 600;
+  color: #1C1B1B;
+  margin-bottom: 32px;
+}
+
+.review-section {
+  background: var(--success-bg);
+  border: 1px solid rgba(212, 196, 183, 0.3);
+  border-radius: var(--radius-md);
+  padding: 24px;
+  margin-bottom: 16px;
+}
+
+.review-section__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.review-section__label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--brown);
+}
+
+.review-section__change {
+  font-size: 0.75rem;
+  color: #82756A;
+  text-decoration: underline;
+  cursor: pointer;
+  background: none;
+  border: none;
+  font: inherit;
+  padding: 0;
+}
+
+.review-section__name {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.review-section__text {
+  font-size: 0.875rem;
+  color: #50453B;
+  line-height: 1.5;
+}
+
+.product-item {
+  display: flex;
+  gap: 24px;
+  padding: 24px 0;
+  border-top: 1px solid rgba(212, 196, 183, 0.2);
+  border-bottom: 1px solid rgba(212, 196, 183, 0.2);
+}
+
+.product-item__img {
+  width: 96px;
+  height: 128px;
+  background: #F1EDEC;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.product-item__img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.product-item__name { font-size: 1.125rem; font-weight: 700; }
+
+.product-item__variant {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #50453B;
+  margin-top: 4px;
+}
+
+.product-item__qty { font-size: 1rem; color: #50453B; margin-top: 4px; }
+
+.product-item__price {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--brown);
+  margin-top: auto;
+}
+
+/* ---------- Review Edit Modals ---------- */
+.review-edit-modal .modal__container {
+  max-width: 520px;
+}
+
+.review-edit-modal__body {
+  max-height: 50vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.review-edit-modal__actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(212, 196, 183, 0.3);
+}
+
+.review-edit-modal__actions .btn {
+  flex: 1;
+}
+
+/* Address list inside edit modal */
+.review-edit-modal .address-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.review-edit-modal .address-card {
+  border: 1.5px solid var(--card-border);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.review-edit-modal .address-card:hover {
+  border-color: var(--brown);
+}
+
+.review-edit-modal .address-card.is-selected {
+  border-color: var(--terracotta);
+  background: rgba(212, 171, 148, 0.06);
+}
+
+.review-edit-modal .address-card input[type="radio"] {
+  display: none;
+}
+
+.review-edit-modal .address-card__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.review-edit-modal .address-card__name {
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+.review-edit-modal .address-card__badge {
+  font-size: 0.65rem;
+  background: var(--terracotta);
+  color: #fff;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.review-edit-modal .address-card__phone {
+  font-size: 0.8125rem;
+  color: #50453B;
+  margin: 2px 0;
+}
+
+.review-edit-modal .address-card__addr {
+  font-size: 0.8125rem;
+  color: #50453B;
+}
+
+/* Address form inside edit modal (guest) */
+.review-edit-modal .edit-form__row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.review-edit-modal .edit-form__row--three {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+.review-edit-modal .edit-form__group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.review-edit-modal .edit-form__group label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #50453B;
+}
+
+.review-edit-modal .edit-form__input {
+  padding: 10px 12px;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+  font-family: inherit;
+  color: var(--text-dark);
+  background: #fff;
+}
+
+.review-edit-modal .edit-form__input:focus {
+  outline: none;
+  border-color: var(--brown);
+}
+
+/* Option cards inside edit modal */
+.review-edit-modal .option-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.review-edit-modal .option-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 1.5px solid var(--card-border);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.review-edit-modal .option-card:hover {
+  border-color: var(--brown);
+}
+
+.review-edit-modal .option-card.is-selected {
+  border-color: var(--terracotta);
+  background: rgba(212, 171, 148, 0.06);
+}
+
+.review-edit-modal .option-card input[type="radio"] {
+  display: none;
+}
+
+.review-edit-modal .option-card__left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.review-edit-modal .option-card__radio {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--card-border);
+  flex-shrink: 0;
+  position: relative;
+  transition: border-color 0.2s;
+}
+
+.review-edit-modal .option-card.is-selected .option-card__radio {
+  border-color: var(--terracotta);
+}
+
+.review-edit-modal .option-card.is-selected .option-card__radio::after {
+  content: "";
+  position: absolute;
+  top: 3px; left: 3px;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--terracotta);
+}
+
+.review-edit-modal .option-card__title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-dark);
+}
+
+.review-edit-modal .option-card__desc {
+  font-size: 0.75rem;
+  color: #6B635D;
+  margin-top: 2px;
+}
+
+.review-edit-modal .option-card__price {
+  font-size: 0.75rem;
+  color: var(--terracotta);
+  font-weight: 500;
+  white-space: nowrap;
+}

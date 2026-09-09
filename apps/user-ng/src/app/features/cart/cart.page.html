@@ -1,0 +1,195 @@
+<main class="cart-page">
+  <div class="container">
+    <div class="cart-header">
+      <h1 class="cart-title">Giỏ hàng của bạn</h1>
+      <p class="cart-count">Bạn đang có {{ groupedCount() }} sản phẩm trong giỏ</p>
+    </div>
+    <div class="cart-grid">
+      <div class="cart-main">
+        @if (groupedItems().length) {
+          <div class="cart-select-all-wrapper" style="display: flex; align-items: center; gap: 10px; padding: 14px 18px; background: #FFF; border-radius: 8px; margin-bottom: 16px; border: 1px solid rgba(0,0,0,0.06);">
+            <input
+              type="checkbox"
+              id="selectAllItems"
+              class="cart-select-all-checkbox"
+              style="width: 18px; height: 18px; cursor: pointer; accent-color: var(--terracotta);"
+              [checked]="allSelected()"
+              (change)="toggleAll($event)"
+            />
+            <label for="selectAllItems" style="font-family: 'DM Sans', sans-serif; font-size: 0.9rem; font-weight: 600; color: var(--dark); cursor: pointer; user-select: none;">Chọn tất cả</label>
+          </div>
+        }
+        <div class="cart-items">
+          @if (groupedItems().length === 0) {
+            <div style="text-align: center; padding: 48px 24px; font-family: 'DM Sans', sans-serif;">
+              <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#A18265" stroke-width="1.5" style="margin-bottom: 16px;">
+                <circle cx="9" cy="21" r="1"></circle>
+                <circle cx="20" cy="21" r="1"></circle>
+                <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+              </svg>
+              <p style="color: #6B635D; font-size: 1.125rem; margin-bottom: 24px;">Giỏ hàng của bạn đang trống.</p>
+              <a routerLink="/" class="btn btn--primary" style="display: inline-block; padding: 12px 24px; text-decoration: none;">Tiếp tục mua sắm</a>
+            </div>
+          } @else {
+            @for (item of pagedItems(); track item.variant_id) {
+              <div class="cart-item" [attr.data-id]="item.variant_id" style="display: flex; align-items: center;">
+                <div class="cart-item__select" style="display: flex; align-items: center; justify-content: center; padding: 0 8px 0 16px;">
+                  <input
+                    type="checkbox"
+                    class="js-cart-item-checkbox"
+                    style="width: 18px; height: 18px; cursor: pointer; accent-color: var(--terracotta);"
+                    [checked]="isSelected(item)"
+                    (change)="toggleItem(item, $event)"
+                  />
+                </div>
+                <div class="cart-item__image">
+                  <img [src]="imageUrl(item)" [alt]="item.product_name" />
+                </div>
+                <div class="cart-item__details" style="flex: 1;">
+                  <div class="cart-item__header-row">
+                    <h3 class="cart-item__name">{{ item.product_name }}</h3>
+                    <button class="cart-item__delete" type="button" aria-label="Xóa sản phẩm" (click)="remove(item)">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <polyline points="3 6 5 6 21 6" />
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                        <line x1="10" y1="11" x2="10" y2="17" />
+                        <line x1="14" y1="11" x2="14" y2="17" />
+                      </svg>
+                    </button>
+                  </div>
+                  <div class="cart-item__tags">
+                    @if (item.is_combo) {
+                      <span class="cart-item__tag" style="background: #f4e4dc; color: var(--terracotta); font-weight: 500;">Set phối đồ gợi ý</span>
+                      <span class="cart-item__tag" style="white-space: normal; line-height: 1.4;">Gồm: {{ comboIncludes(item) }}</span>
+                    } @else {
+                      <span class="cart-item__tag">Size: {{ item.size || 'M' }}</span>
+                      <span class="cart-item__tag">Màu: {{ item.color || 'Mặc định' }}</span>
+                    }
+                  </div>
+                  <div class="cart-item__footer-row">
+                    <div class="qty-selector">
+                      <button class="qty-selector__btn" type="button" (click)="changeQty(item, -1)" aria-label="Giảm số lượng">-</button>
+                      <span class="qty-selector__value">{{ item.quantity }}</span>
+                      <button class="qty-selector__btn" type="button" (click)="changeQty(item, 1)" aria-label="Tăng số lượng">+</button>
+                    </div>
+                    <div class="cart-item__price-block">
+                      <span class="cart-item__price">{{ lineTotal(item) }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            }
+            @if (showPagination()) {
+              <div class="cart-pagination" style="display: flex; justify-content: center; gap: 8px; margin-top: 24px; padding-bottom: 8px;">
+                <button
+                  class="cart-page-btn cart-page-prev"
+                  type="button"
+                  style="width: 32px; height: 32px; border-radius: 4px; border: 1px solid var(--line, #E8DFD6); background: white; color: var(--dark); cursor: pointer; display: flex; align-items: center; justify-content: center;"
+                  [disabled]="currentPage() === 1"
+                  [style.opacity]="currentPage() === 1 ? '0.5' : '1'"
+                  (click)="goToPage(currentPage() - 1)"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                </button>
+                @for (page of pageItems(); track page.kind + '-' + page.value) {
+                  @if (page.kind === 'dots') {
+                    <span style="display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; color: #6B635D;">...</span>
+                  } @else {
+                    <button
+                      class="cart-page-btn"
+                      type="button"
+                      style="width: 32px; height: 32px; border-radius: 4px; border: 1px solid var(--line, #E8DFD6); cursor: pointer; display: flex; align-items: center; justify-content: center; font-family: 'DM Sans', sans-serif; font-weight: 500;"
+                      [style.background]="currentPage() === page.value ? 'var(--terracotta, #C97B63)' : 'white'"
+                      [style.color]="currentPage() === page.value ? 'white' : '#6B635D'"
+                      (click)="goToPage(page.value)"
+                    >{{ page.value }}</button>
+                  }
+                }
+                <button
+                  class="cart-page-btn cart-page-next"
+                  type="button"
+                  style="width: 32px; height: 32px; border-radius: 4px; border: 1px solid var(--line, #E8DFD6); background: white; color: var(--dark); cursor: pointer; display: flex; align-items: center; justify-content: center;"
+                  [disabled]="currentPage() === totalPages()"
+                  [style.opacity]="currentPage() === totalPages() ? '0.5' : '1'"
+                  (click)="goToPage(currentPage() + 1)"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                </button>
+              </div>
+            }
+          }
+        </div>
+        <div class="cart-guarantee">
+          <svg class="cart-guarantee__icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+            <path d="M9 11l2 2 4-4" />
+          </svg>
+          <p class="cart-guarantee__text">Yêu cầu đổi trả trong 48 giờ sau khi đơn được giao thành công; hoàn tiền trong 4 - 5 ngày làm việc sau khi hàng đạt kiểm tra.</p>
+        </div>
+      </div>
+      <div class="cart-sidebar">
+        <div class="summary-card">
+          <h2 class="summary-card__title">Tóm tắt đơn hàng</h2>
+          <div class="cart-summary-products" style="margin-top: 16px; margin-bottom: 16px; max-height: 300px; overflow-y: auto; padding-right: 4px; display: flex; flex-direction: column; gap: 12px;">
+            @if (selectedItems().length === 0) {
+              <p style="color: #6B635D; font-size: 0.875rem; text-align: center;">Chưa chọn sản phẩm nào</p>
+            } @else {
+              @for (item of selectedItems(); track item.variant_id) {
+                <div style="display: flex; gap: 12px; align-items: flex-start;">
+                  <div style="position: relative; width: 48px; height: 60px; flex-shrink: 0; border-radius: 4px; border: 1px solid var(--card-border);">
+                    <img [src]="imageUrl(item)" [alt]="item.product_name" style="width: 100%; height: 100%; object-fit: cover; border-radius: 4px;" />
+                  </div>
+                  <div style="flex: 1; display: flex; flex-direction: column; gap: 2px;">
+                    <span style="font-weight: 600; color: var(--text-dark); font-size: 0.8125rem; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">{{ item.product_name }}</span>
+                    @if (item.is_combo) {
+                      <span style="color: #6B635D; font-size: 0.75rem;">Set phối đồ</span>
+                    } @else if (item.size || item.color) {
+                      <span style="color: #6B635D; font-size: 0.75rem;">{{ item.color }}{{ item.color && item.size ? ' / ' : '' }}{{ item.size }}</span>
+                    }
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 2px;">
+                      <span style="color: var(--terracotta); font-weight: 600; font-size: 0.8125rem;">{{ lineTotal(item) }}</span>
+                      <span style="color: #6B635D; font-size: 0.8125rem; font-weight: 500;">x{{ item.quantity }}</span>
+                    </div>
+                  </div>
+                </div>
+              }
+            }
+          </div>
+          <hr class="summary-card__divider" />
+          <div class="summary-lines">
+            <div class="summary-line">
+              <span class="summary-line__label">Tạm tính</span>
+              <span class="summary-line__value">{{ subtotalLabel() }}</span>
+            </div>
+          </div>
+          <hr class="summary-card__divider" />
+          <div class="summary-total">
+            <span class="summary-total__label">Tổng cộng</span>
+            <span class="summary-total__value">{{ subtotalLabel() }}</span>
+          </div>
+          <button
+            class="summary-card__btn-checkout js-btn-checkout"
+            type="button"
+            style="display: flex; align-items: center; justify-content: center; width: 100%; border: none; margin-top: 16px; padding: 14px; cursor: pointer;"
+            [disabled]="selectedItems().length === 0"
+            [style.opacity]="selectedItems().length === 0 ? '0.5' : '1'"
+            (click)="checkout()"
+          >
+            Tiến hành thanh toán
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-left: 8px;">
+              <line x1="5" y1="12" x2="19" y2="12" />
+              <polyline points="12 5 19 12 12 19" />
+            </svg>
+          </button>
+          <p class="summary-card__security">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 4px;">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            </svg>
+            Thanh toán an toàn với SSL 256-bit
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>

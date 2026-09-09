@@ -1,0 +1,55 @@
+<main class="my-orders-page">
+  <div class="container">
+    <div class="my-orders-title-block">
+      <h1 class="my-orders-title">Đơn hàng của tôi</h1>
+      <p class="my-orders-subtitle">Theo dõi và quản lý tất cả đơn hàng của bạn tại Velura</p>
+    </div>
+
+    <div class="search-orders-container">
+      <div class="search-orders-wrapper">
+        <svg class="search-orders-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input type="text" class="search-orders-input" placeholder="Tìm theo mã đơn hàng..." (input)="onSearch($event)" />
+      </div>
+    </div>
+
+    <div class="order-tabs">
+      <button class="order-tab" [class.is-active]="tab() === 'all'" type="button" (click)="setTab('all')">Tất cả</button>
+      <button class="order-tab" [class.is-active]="tab() === 'pending'" type="button" (click)="setTab('pending')">Chờ xác nhận</button>
+      <button class="order-tab" [class.is-active]="tab() === 'shipping'" type="button" (click)="setTab('shipping')">Đang giao</button>
+      <button class="order-tab" [class.is-active]="tab() === 'delivered'" type="button" (click)="setTab('delivered')">Hoàn thành</button>
+      <button class="order-tab" [class.is-active]="tab() === 'cancelled'" type="button" (click)="setTab('cancelled')">Đã hủy</button>
+    </div>
+
+    <div class="order-list">
+      @if (loading()) {
+        <p>Đang tải đơn hàng...</p>
+      } @else if (filtered().length === 0) {
+        <p>Chưa có đơn hàng phù hợp.</p>
+      } @else {
+        @for (order of filtered(); track order.order_id) {
+          <div class="order-card" [attr.data-order-id]="order.order_id">
+            <div class="order-card__header">
+              <div class="order-card__header-left">
+                <span class="order-card__id">#{{ order.order_code || order.order_id }}</span>
+                <span class="order-card__date">{{ order.created_at }}</span>
+              </div>
+              <span class="order-card__status-badge">{{ order.status }}</span>
+            </div>
+            <div class="order-card__footer">
+              <div class="order-card__footer-left">
+                <span class="order-card__count">Tổng cộng ({{ order.item_count || 0 }} sản phẩm)</span>
+                <span class="order-card__total">{{ totalLabel(order) }}</span>
+              </div>
+              <div class="order-card__actions">
+                <a [routerLink]="['/account/orders', order.order_id]" class="btn btn--primary btn-detail-action">Chi tiết &gt;</a>
+              </div>
+            </div>
+          </div>
+        }
+      }
+    </div>
+  </div>
+</main>

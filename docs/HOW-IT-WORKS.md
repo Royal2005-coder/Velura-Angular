@@ -64,7 +64,7 @@ Verify CI gọi `Host:` tới `127.0.0.1` — không phụ thuộc DNS. Browser 
 
 | Variable | Ghi chú |
 |---|---|
-| `SSH_PRIVATE_KEY` | PEM; **unprotect hoặc protect cả `develop` và `main`** |
+| `SSH_PRIVATE_KEY` | PEM. **Protected + chỉ `main` = `deploy:staging` trên `develop` fail trước khi SSH.** Unprotect, hoặc protect **cả** `develop` và `main`. |
 | `SSH_KNOWN_HOSTS` | `ssh-keyscan -H 135.235.219.13` |
 | `DEPLOY_HOST` | `135.235.219.13` |
 | `DEPLOY_USER` | `azureuser` |
@@ -74,7 +74,7 @@ Sudoers VM phải có `systemctl restart velura-api-staging` (`deploy/scripts/bo
 
 ## GitLab Settings (lead, một lần)
 
-1. Protected branches: `main` + `develop` — no direct push, Maintainers merge via MR.
+1. Protected branches: `main` + `develop` — no direct push, Maintainers merge via MR. Nếu quên protect `develop`, biến Protected (`SSH_PRIVATE_KEY`) không vào job `deploy:staging`.
 2. Merge requests: Pipelines must succeed; Require approval from code owners; ≥ 1 approval.
 3. Push rules: reject `\[skip ci\]`.
 4. Integrations → Jira: Web URL `https://webadvance.atlassian.net`, project key `KAN`, comment + transition on merge.

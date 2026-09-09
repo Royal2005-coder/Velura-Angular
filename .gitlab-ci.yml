@@ -44,12 +44,27 @@ variables:
   interruptible: false
   before_script:
     - apk add --no-cache openssh-client rsync
+    - |
+      missing=""
+      [ -n "${SSH_PRIVATE_KEY:-}" ] || missing="$missing SSH_PRIVATE_KEY"
+      [ -n "${SSH_KNOWN_HOSTS:-}" ] || missing="$missing SSH_KNOWN_HOSTS"
+      [ -n "${DEPLOY_HOST:-}" ] || missing="$missing DEPLOY_HOST"
+      [ -n "${DEPLOY_USER:-}" ] || missing="$missing DEPLOY_USER"
+      if [ -n "$missing" ]; then
+        echo "Deploy CI variables empty:$missing"
+        echo "Protected variables are injected only on protected branches."
+        echo "Either unprotect SSH_PRIVATE_KEY (and the other deploy vars) or protect both develop and main."
+        echo "GitLab → Settings → CI/CD → Variables. See docs/HOW-IT-WORKS.md"
+        exit 1
+      fi
     - mkdir -p ~/.ssh
     - printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/deploy.key
     - chmod 600 ~/.ssh/deploy.key
+    - grep -q "BEGIN .*PRIVATE KEY" ~/.ssh/deploy.key || {
+        echo "SSH_PRIVATE_KEY is set but is not a PEM private key (Protected/masked empty payload?)."
+        exit 1
+      }
     - printf '%s\n' "$SSH_KNOWN_HOSTS" >> ~/.ssh/known_hosts
-    - test -n "$DEPLOY_HOST"
-    - test -n "$DEPLOY_USER"
     - export SSH="ssh -i ~/.ssh/deploy.key -o IdentitiesOnly=yes"
 
 validate:workspace:
@@ -178,6 +193,9 @@ deploy:staging:
     - job: build:angular
   script:
     - SSH="ssh -i ~/.ssh/deploy.key -o IdentitiesOnly=yes"
+    - test -f apps/api/dist/server.js || { echo "build:api did not emit apps/api/dist/server.js"; exit 1; }
+    - test -d apps/user-ng/dist/user-ng/browser || { echo "missing Angular user dist"; exit 1; }
+    - test -d apps/admin-ng/dist/admin-ng/browser || { echo "missing Angular admin dist"; exit 1; }
     - $SSH "${DEPLOY_USER}@${DEPLOY_HOST}" "mkdir -p /var/www/velura-staging/user /var/www/velura-staging/admin /opt/velura-staging/api /opt/velura/deploy"
     - rsync -az --delete -e "$SSH" apps/user-ng/dist/user-ng/browser/ "${DEPLOY_USER}@${DEPLOY_HOST}:/var/www/velura-staging/user/"
     - rsync -az --delete -e "$SSH" apps/admin-ng/dist/admin-ng/browser/ "${DEPLOY_USER}@${DEPLOY_HOST}:/var/www/velura-staging/admin/"
@@ -224,6 +242,7 @@ deploy:production:
     - job: build:angular
   script:
     - SSH="ssh -i ~/.ssh/deploy.key -o IdentitiesOnly=yes"
+    - test -f apps/api/dist/server.js || { echo "build:api did not emit apps/api/dist/server.js"; exit 1; }
     - rsync -az --delete -e "$SSH" apps/user-ng/dist/user-ng/browser/ "${DEPLOY_USER}@${DEPLOY_HOST}:/var/www/velura/user/"
     - rsync -az --delete -e "$SSH" apps/admin-ng/dist/admin-ng/browser/ "${DEPLOY_USER}@${DEPLOY_HOST}:/var/www/velura/admin/"
     - rsync -az --delete --exclude node_modules -e "$SSH" apps/api/ "${DEPLOY_USER}@${DEPLOY_HOST}:/opt/velura/api/"

@@ -21,5 +21,5 @@ TypeScript **trên cùng Node runtime** (không phải Angular): [ADR 0003](./00
 ## Consequences
 
 - `test:api` trong GitLab CI là cổng chất lượng backend.
-- Agent không “chuẩn hóa” bằng cách xóa JS.
-- JSDoc/docstring trên public functions API vẫn bắt buộc.
+- Agent không “chuẩn hóa” bằng cách viết API bằng Angular hoặc Python.
+- JSDoc trên public functions API vẫn bắt buộc.

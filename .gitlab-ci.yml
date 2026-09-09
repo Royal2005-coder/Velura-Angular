@@ -147,6 +147,11 @@ note:mr:
   script:
     - sed -i 's/\r$//' deploy/scripts/post-mr-trace.sh
     - sh deploy/scripts/post-mr-trace.sh
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths:
+      - mr-trace.md
 
 deploy:staging:
   stage: deploy

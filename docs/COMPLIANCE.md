@@ -15,7 +15,10 @@
 | Standalone + Signals (TinyBigCorp) | không `NgModule` |
 | API OOP layers | `*-router.js` → `*-service.js` → `*-repository.js` |
 | Tests API theo ngôn ngữ API | `tests/api/*.test.js` (CI `test:api`) |
-| Pipeline Jira key | branch/MR `KAN-n` |
+| Tests Angular trên CI | `test:angular` → `ng test --watch=false` (jsdom/vitest) |
+| Pipeline Jira key | branch/MR `KAN-n`; feature → develop → staging → main |
+| Trace version | CI `note:mr` bắt buộc (git log + diff --stat) |
+| CODEOWNERS | `.gitlab/CODEOWNERS` |
 
 ## Cố ý không làm (không phải thiếu)
 
@@ -32,6 +35,6 @@
 | Lazy routes | `loadComponent` feature | [KAN-7](https://webadvance.atlassian.net/browse/KAN-7) |
 | Empty/error UI | cart, wishlist, checkout | [KAN-8](https://webadvance.atlassian.net/browse/KAN-8) |
 | Change password admin | gọi API, bỏ stub | [KAN-9](https://webadvance.atlassian.net/browse/KAN-9) |
-| Angular unit tests mỏng | `*.spec.ts` khi sửa page/service | tạo Task dưới KAN-4/KAN-5 |
+| Angular unit tests mỏng trên từng page | thêm `*.spec.ts` khi sửa feature | Task dưới KAN-4/KAN-5 |
 | API TypeScript | migrate dần từng bounded context | ADR mới, không nhét vào MR UI |
 | GitLab MCP 404 | bật Duo/MCP trên group | [KAN-11](https://webadvance.atlassian.net/browse/KAN-11) |

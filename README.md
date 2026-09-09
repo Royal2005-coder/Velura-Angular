@@ -34,12 +34,12 @@ Không dùng GitLab Issues làm backlog.
 ## Pipeline bắt buộc
 
 ```
-Jira KAN-n → feature/KAN-n-name → MR title KAN-n (template + ADR nếu đổi kiến trúc)
-         → CI: validate:workspace, test:api, build:angular  (không deploy)
-         → merge main → deploy:production + verify:production → Jira Close
+Jira KAN-n → feature/KAN-n → MR vào develop (CI + note:mr bắt buộc)
+         → merge develop → staging
+         → MR develop → main → production
 ```
 
-MR mẫu đang chạy: https://gitlab.com/boygia757-netizen/velura-project/-/merge_requests/1 (`KAN-13`).
+MR đang chạy: https://gitlab.com/boygia757-netizen/velura-project/-/merge_requests/1 — **đổi target sang `develop`**. Không merge thẳng `main`.
 
 ## Local
 
@@ -60,12 +60,14 @@ npm run build
 
 Không commit `.env`.
 
-## Production
+## Production and staging
 
 | Surface | URL |
 |---|---|
 | Storefront | https://velura.royalai.dev/ |
 | Admin | https://admin.royalai.dev/login |
 | API | https://velura.royalai.dev/api/health |
+| Staging storefront | https://staging.velura.royalai.dev/ |
+| Staging admin | https://staging-admin.royalai.dev/login |
 
 Cloudflare/Supabase: [docs/CLOUDFLARE-SUPABASE.md](docs/CLOUDFLARE-SUPABASE.md). Deploy: [docs/GITOPS.md](docs/GITOPS.md).

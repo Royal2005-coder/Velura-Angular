@@ -1,118 +1,68 @@
-# Jira ↔ GitLab hoạt động cụ thể thế nào
+# Jira ↔ GitLab — luồng vận hành
 
-Cặp này **không** phải “Jira gửi ticket sang GitLab để GitLab có issue riêng”.  
-Hai hệ thống chia việc:
+Jira = việc. GitLab MR = **log phiên bản** (diff, git log, CI note).  
+`docs/` chỉ giữ map ổn định (Angular, pipeline). **Không** tạo file md cho từng ticket.
 
-| Hệ thống | Trả lời câu hỏi | Người dùng hàng ngày |
+## Vòng đời
+
+```
+Jira KAN-n
+  → git checkout develop && git pull
+  → feature/KAN-n-short
+  → commit "KAN-n why"
+  → MR vào develop (title bắt đầu KAN-n, điền template)
+  → CI bắt buộc: validate + test:api + test:angular + build + note:mr (ghi git log + diff --stat lên MR)
+  → 1 reviewer (CODEOWNERS) merge develop
+  → CI develop: deploy:staging + verify:staging
+  → Lead kiểm tra staging
+  → MR develop → main (title KAN-n promote / cùng key)
+  → CI main: deploy:production + verify:production
+  → Jira Close
+```
+
+Cấm: feature → `main`. Cấm `[skip ci]`. Cấm ADR.md cho bug/feature thường.
+
+## Trace (CLI + giao diện MR)
+
+```bash
+git log --oneline --grep=KAN-13
+git show --stat <sha>
+git diff develop...HEAD --stat
+```
+
+Trên GitLab: MR → Changes (file) + Notes (CI trace bắt buộc). Agent/người sau sửa tiếp từ MR, không từ docs rời.
+
+## Jobs
+
+| Khi | Jobs | Deploy |
 |---|---|---|
-| **Jira KAN** | Làm gì? Ai làm? Tới đâu? | Board, Epic, Task, trạng thái |
-| **GitLab** | Code nào? Test chưa? Lên production chưa? | Branch, Merge Request, Pipeline |
+| MR → `develop` | validate, `test:api`, `test:angular`, build, **note:mr** | Không |
+| Push `develop` | tests + build + `deploy:staging` + `verify:staging` | Staging cùng VM |
+| MR `develop` → `main` | cùng cổng MR | Không |
+| Push `main` | tests + build + `deploy:production` + `verify:production` | Production |
 
-Sợi dây nối là **mã issue**, ví dụ `KAN-13`. GitLab đọc chuỗi đó trong **tên branch, message commit, title MR**. Jira hiện chúng trên panel **Development**.
+`note:mr` **không** `allow_failure`. Thiếu `GITLAB_TOKEN` (api) thì dùng `JOB-TOKEN`; nếu 403, thêm biến `GITLAB_TOKEN`.
 
-## 1. Một vòng đời đầy đủ (đúng pipeline repo này)
+## Staging (cùng Azure VM)
 
-```
-1. Jira: tạo Task, parent = KAN-4 hoặc KAN-5, status To Do
-2. Dev: kéo In Progress, checkout main, tạo branch feature/KAN-13-short-name
-3. Dev: commit có "KAN-13 …", push origin
-4. Dev: mở Merge Request, title bắt đầu bằng KAN-13, điền template
-5. GitLab CI (nguồn = merge_request): 
-     validate:workspace → test:api → build:angular → note:mr
-   Không chạy deploy.
-6. Reviewer đọc diff + checklist Angular. CI phải xanh.
-7. Maintainer merge vào main.
-8. GitLab CI (nhánh main):
-     validate + test:api + build:angular
-     → deploy:production (rsync lên Azure)
-     → verify:production (curl storefront, /api/health, admin login)
-9. Jira: panel Development có branch/MR; integration có thể comment / Close.
-```
+| Host | Root |
+|---|---|
+| staging.velura.royalai.dev | `/var/www/velura-staging/user` |
+| staging-admin.royalai.dev | `/var/www/velura-staging/admin` |
+| API :8788 | `/opt/velura-staging/api`, `.env` `PORT=8788` |
 
-Production chỉ đổi ở bước 8. Feature branch và MR **không** đụng VM.
+Cloudflare A (proxied) cùng IP `135.235.219.13`. Verify CI dùng `Host:` tới `127.0.0.1` nên không phụ thuộc DNS để pass; DNS cần cho người mở browser.
 
-## 2. Job CI — nhớ đúng tên
+CORS staging: thêm origin staging vào `/opt/velura-staging/.env`.
 
-File: `.gitlab-ci.yml`
+## GitLab Settings (bật một lần, không nằm trong YAML)
 
-| Khi nào | Jobs | Deploy? |
-|---|---|---|
-| Push `feature/*` (không có MR mở) | `validate:workspace`, `test:api`, `build:angular` | Không |
-| **Merge Request** | cùng 3 job trên + `note:mr` (ghi note SHA lên MR; được phép fail) | Không |
-| Push / merge **`main`** | 3 job trên + `deploy:production` + `verify:production` | **Có** |
+1. Settings → Repository → Protected branches: `main` và `develop` — no direct push, maintainers merge.
+2. Settings → Merge requests: **Pipelines must succeed**; **Require approval from code owners**; approvals ≥ 1.
+3. Settings → Repository → Push rules: reject commit message `\[skip ci\]`.
+4. CI/CD Variables: `SSH_PRIVATE_KEY` available on **develop and main** (unprotect or protect both).
+5. CODEOWNERS: `.gitlab/CODEOWNERS` — thêm 5 username GitLab.
 
-`note:mr` chỉ chạy khi `CI_PIPELINE_SOURCE == merge_request_event`.
+## Jira Development
 
-Deploy thật:
-
-- rsync `apps/user-ng/dist` → `/var/www/velura/user/`
-- rsync `apps/admin-ng/dist` → `/var/www/velura/admin/`
-- rsync `apps/api` → `/opt/velura/api/`
-- reload nginx + restart `velura-api`
-
-Verify thật:
-
-- `https://velura.royalai.dev/` HTTP 200
-- `https://velura.royalai.dev/api/health` chứa `"ok":true`
-- `https://admin.royalai.dev/login` HTTP 200 và trang có chữ Velura Admin
-
-## 3. Chỗ nhìn “đã nối chưa” sau khi Connect GitLab–Jira
-
-Trên **một issue Jira** (ví dụ KAN-13):
-
-1. Mở issue.
-2. Cột phải, mục **Development** (GitLab for Jira Cloud).
-3. Sau khi push branch có `KAN-13` trong tên: hiện branch.
-4. Sau khi mở MR title có `KAN-13`: hiện merge request.
-5. Sau khi merge: hiện commit trên `main`.
-
-Trên **GitLab MR**:
-
-1. Title có `KAN-13` → widget Jira hiện link về https://webadvance.atlassian.net/browse/KAN-13
-2. Tab **Pipelines**: 4 job MR (3 bắt buộc xanh + note).
-3. Comment bot (nếu `GITLAB_TOKEN` / job token đủ quyền): pipeline note với SHA.
-
-Nếu Development trống: branch/MR **thiếu key** `KAN-n`, hoặc app GitLab for Jira chưa link đúng group `boygia757-netizen`.
-
-## 4. Ai làm gì trên board
-
-Trạng thái Jira team-managed hiện tại:
-
-`To Do` → `In Progress` → `Waiting for Review` → `Close`
-
-| Thời điểm | Jira | GitLab |
-|---|---|---|
-| Nhận việc | To Do → In Progress | tạo branch |
-| Push + mở MR | giữ In Progress hoặc → Waiting for Review khi MR sẵn sàng | MR + CI |
-| CI đỏ | không Close | sửa trên **cùng branch**, push thêm |
-| Review ok, merge | chờ pipeline `main` xanh | merge (maintainer) |
-| Production verify xong | Close | xong |
-
-Nếu GitLab integration bật **transition on merge**, bước Close có thể tự chạy. Vẫn kiểm tra tay: issue đúng thì Close, issue làm dở thì không.
-
-## 5. Hai team, một repo
-
-```
-KAN-4 Storefront          KAN-5 Admin
-   apps/user-ng              apps/admin-ng
-                             apps/api
-          \                  /
-           packages/*, database/   ← MR cần reviewer cả hai team
-```
-
-Storefront không sửa admin HTML “cho tiện”. Admin không nhét HTTP vào template storefront. Contract API đổi thì ghi rõ trong MR và tag team kia.
-
-## 6. Việc không làm
-
-- Tạo GitLab Issue song song với Jira
-- Push thẳng `main` (“hotfix 5 phút”)
-- MR title `fix login` không có `KAN-12`
-- Merge khi `test:api` hoặc `build:angular` đỏ
-- Commit `.env`, `web_key.pem`, service-role key
-- Deploy SSH tay lên `135.235.219.13` trừ khi CI gãy và lead quyết định hotfix có ghi nhận
-
-## 7. Liên kết kỹ thuật
-
-- Hợp đồng branch/MR: [JIRA-GITLAB.md](./JIRA-GITLAB.md)
-- Biến CI và layout VM: [GITOPS.md](./GITOPS.md)
-- Practice: [PRACTICE-DRILL.md](./PRACTICE-DRILL.md)
+Branch/MR phải chứa `KAN-n`. App **GitLab for Jira Cloud** link group `boygia757-netizen`.

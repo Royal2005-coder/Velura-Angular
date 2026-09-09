@@ -25,16 +25,15 @@ Placeholder tickets KAN-1 … KAN-3 are sample data. Do not use them for Velura 
 ## Flow
 
 ```
-Jira KAN-n (To Do)
-  → feature/KAN-n-short-kebab
-  → MR title starts with KAN-n  (template in .gitlab/merge_request_templates)
-  → CI: validate + test:api + build:angular  (no deploy)
-  → merge main
-  → CI: deploy:production + verify:production
-  → Jira → Close
+Jira KAN-n
+  → feature/KAN-n-short-kebab from develop
+  → MR into develop (title KAN-n; CI note = git log + diff)
+  → merge develop → staging
+  → MR develop → main → production
+  → Jira Close
 ```
 
-Do not push product work to `main`. Do not deploy from a feature branch.
+Do not push `main` or `develop` for product work. Feature never targets `main`.
 
 ## Branch and commit
 

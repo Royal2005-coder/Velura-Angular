@@ -1,0 +1,17 @@
+[Unit]
+Description=Velura Node API (staging)
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/velura-staging/api
+EnvironmentFile=/opt/velura-staging/.env
+ExecStart=/usr/bin/node src/server.js
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

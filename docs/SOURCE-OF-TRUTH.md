@@ -56,19 +56,18 @@ Không import repository vào Angular. Angular chỉ nói chuyện với DTO JSO
 
 TypeScript cho API là **cải tiến sau** (ADR riêng), không phải điều kiện “đúng Angular”.
 
-## Thứ tự làm việc (SDLC) — không nhảy bước
+## Thứ tự làm việc (SDLC)
 
-1. Jira: Task dưới [KAN-4](https://webadvance.atlassian.net/browse/KAN-4) hoặc [KAN-5](https://webadvance.atlassian.net/browse/KAN-5)
-2. Plan / ADR nếu đổi kiến trúc (template MR)
-3. Branch `feature/KAN-n-short-name`
-4. Code đúng [ANGULAR-STANDARDS.md](./ANGULAR-STANDARDS.md)
-5. MR title `KAN-n …`, description = template + ADR nếu có
-6. CI MR: `validate:workspace` → `test:api` → `build:angular` (**không deploy**)
-7. Review theo checklist Angular + OOP
-8. Merge `main` → `deploy:production` + `verify:production`
-9. Jira Close
+1. Jira Task dưới KAN-4 hoặc KAN-5
+2. Branch từ `develop`: `feature/KAN-n-short-name`
+3. Code theo [ANGULAR-STANDARDS.md](./ANGULAR-STANDARDS.md)
+4. MR **vào develop**, title `KAN-n …` — **MR là log** (CI note = git log + diff). Không thêm md theo ticket
+5. CI: validate + `test:api` + `test:angular` + build + note:mr
+6. Merge develop → staging verify
+7. MR develop → main → production
+8. Jira Close
 
-Chi tiết: [HOW-IT-WORKS.md](./HOW-IT-WORKS.md), [TEAM-PROCESS.md](./TEAM-PROCESS.md).
+Chi tiết: [HOW-IT-WORKS.md](./HOW-IT-WORKS.md).
 
 ## Gap (làm tiếp, không giả vờ xong)
 

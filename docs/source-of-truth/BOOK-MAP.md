@@ -17,7 +17,8 @@ Nguồn: GoalKicker *Angular 2+ Notes for Professionals* (file học thuật ngo
 | 43 | Http interceptor | Đã có auth + logging |
 | 21 | Lifecycle | `constructor` / `afterNextRender` khi cần; ưu tiên `signal` |
 | 26 / 53 | Change detection | Signals = không đụng `ChangeDetectorRef` trừ khi có ADR |
-| 49 / 66 | Protractor / unit tests | Ưu tiên unit `*.spec.ts` + API `tests/api`; E2E sau |
+| 49 / 66 | Protractor / unit tests | Page: `*.page.spec.ts` mock Model (`ApiService`). API: `tests/api`. E2E sau |
+| 1.1 vs TS API | Node backend | JS hôm nay; TS trên Node = [ADR 0003](../adr/0003-node-api-typescript.md) |
 | 24 | Service worker / PWA | Chưa bật; cần ADR nếu làm |
 
 Khi sách nói `NgModule` / `@NgModule.imports`: dịch sang `app.config.ts` providers và `imports: []` trên `@Component`.

@@ -18,7 +18,7 @@ Review: Storefront MR do Storefront khác; Admin MR do Admin khác. Đụng DTO/
 
 1. Jira https://webadvance.atlassian.net — project **KAN** (không VEL).
 2. GitLab Developer+. Không push `main` / `develop`.
-3. Node.js 22. MCP: [MCP-SETUP.md](./MCP-SETUP.md).
+3. Node.js 22. MCP: [MCP-SETUP.md](./MCP-SETUP.md). API = TypeScript trên Node (`npm run start:api`, `npm run test:api`). Angular = hai SPA.
 
 Không share `.env` / `*.pem`.
 

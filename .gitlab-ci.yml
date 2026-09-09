@@ -1,5 +1,5 @@
-# Feature → MR into develop: tests + required MR trace note. No production.
-# develop: deploy + verify staging (same VM, Host staging.*).
+# Feature → MR into develop: tests + required MR trace note. No deploy.
+# Push develop: tests + build only (integration branch).
 # develop → MR into main: tests + note. main: deploy + verify production.
 
 workflow:
@@ -31,8 +31,6 @@ variables:
   npm_config_fund: false
   npm_config_cache: "$CI_PROJECT_DIR/.npm"
   GIT_DEPTH: 50
-  STAGING_USER_HOST: staging.velura.royalai.dev
-  STAGING_ADMIN_HOST: staging-admin.royalai.dev
 
 .rules_test_build:
   rules:
@@ -118,7 +116,7 @@ validate:mr-contract:
     - |
       if [ "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" = "main" ] \
         && [ "$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME" != "develop" ]; then
-        echo "Production is only promoted from develop. Retarget this MR to develop (staging), then open develop → main."
+        echo "Production is only promoted from develop. Retarget this MR to develop, then open develop → main."
         exit 1
       fi
     - |
@@ -188,55 +186,6 @@ note:mr:
     expire_in: 30 days
     paths:
       - mr-trace.md
-
-deploy:staging:
-  stage: deploy
-  extends: .ssh_deploy
-  resource_group: velura-staging
-  environment:
-    name: staging
-    url: https://staging.velura.royalai.dev/
-  rules:
-    - if: $CI_COMMIT_BRANCH == "develop"
-      when: on_success
-  needs:
-    - job: test:api
-    - job: test:angular
-    - job: build:angular
-  script:
-    - SSH="ssh -i ~/.ssh/deploy.key -o IdentitiesOnly=yes"
-    - test -f apps/api/dist/server.js || { echo "build:api did not emit apps/api/dist/server.js"; exit 1; }
-    - test -d apps/user-ng/dist/user-ng/browser || { echo "missing Angular user dist"; exit 1; }
-    - test -d apps/admin-ng/dist/admin-ng/browser || { echo "missing Angular admin dist"; exit 1; }
-    - $SSH "${DEPLOY_USER}@${DEPLOY_HOST}" "mkdir -p /var/www/velura-staging/user /var/www/velura-staging/admin /opt/velura-staging/api /opt/velura/deploy"
-    - rsync -az --delete -e "$SSH" apps/user-ng/dist/user-ng/browser/ "${DEPLOY_USER}@${DEPLOY_HOST}:/var/www/velura-staging/user/"
-    - rsync -az --delete -e "$SSH" apps/admin-ng/dist/admin-ng/browser/ "${DEPLOY_USER}@${DEPLOY_HOST}:/var/www/velura-staging/admin/"
-    - rsync -az --delete --exclude node_modules -e "$SSH" apps/api/ "${DEPLOY_USER}@${DEPLOY_HOST}:/opt/velura-staging/api/"
-    - rsync -az -e "$SSH" deploy/ "${DEPLOY_USER}@${DEPLOY_HOST}:/opt/velura/deploy/"
-    - $SSH "${DEPLOY_USER}@${DEPLOY_HOST}" "sed -i 's/\\r$//' /opt/velura/deploy/scripts/remote-staging.sh && bash /opt/velura/deploy/scripts/remote-staging.sh ${DEPLOY_USER}"
-
-verify:staging:
-  stage: verify
-  extends: .ssh_deploy
-  environment:
-    name: staging
-    url: https://staging.velura.royalai.dev/
-  rules:
-    - if: $CI_COMMIT_BRANCH == "develop"
-      when: on_success
-  needs:
-    - job: deploy:staging
-  script:
-    - SSH="ssh -i ~/.ssh/deploy.key -o IdentitiesOnly=yes"
-    - |
-      $SSH "${DEPLOY_USER}@${DEPLOY_HOST}" "set -e
-        code=\$(curl -sS -o /dev/null -w '%{http_code}' -H 'Host: ${STAGING_USER_HOST}' http://127.0.0.1/)
-        test \"\$code\" = 200
-        curl -fsS -H 'Host: ${STAGING_USER_HOST}' http://127.0.0.1/api/health | grep '\"ok\":true'
-        code=\$(curl -sS -o /dev/null -w '%{http_code}' -H 'Host: ${STAGING_ADMIN_HOST}' http://127.0.0.1/login)
-        test \"\$code\" = 200
-        curl -fsS -H 'Host: ${STAGING_ADMIN_HOST}' http://127.0.0.1/ | grep -q 'Velura Admin'
-      "
 
 deploy:production:
   stage: deploy

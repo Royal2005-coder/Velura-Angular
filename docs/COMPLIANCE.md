@@ -17,7 +17,7 @@
 | Tests API theo ngôn ngữ API | `tests/api/*.test.ts` (CI `test:api` + `typecheck:api`) |
 | Tests Angular trên CI | `test:angular` → `ng test --watch=false` |
 | Page ViewModel specs | `*.page.spec.ts` cạnh page; mock Model, không gọi mạng |
-| Pipeline Jira key | branch/MR `KAN-n`; feature → develop → staging → main |
+| Pipeline Jira key | branch/MR `KAN-n`; feature → develop → main |
 | Trace version | `git log --show-notes --grep=KAN-n` + MR `## Why` + CI `mr-trace.md` |
 | CODEOWNERS | `.gitlab/CODEOWNERS` |
 

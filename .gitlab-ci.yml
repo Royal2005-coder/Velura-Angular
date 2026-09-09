@@ -84,6 +84,12 @@ validate:mr-contract:
         exit 1
       }
     - |
+      echo "${CI_MERGE_REQUEST_DESCRIPTION:-}" | grep -qiE '^## Why|^## Tại sao' || {
+        echo "MR description must include ## Why (Context as Code). Use .gitlab/merge_request_templates/Default.md"
+        echo "Do not add docs/KAN-n.md."
+        exit 1
+      }
+    - |
       if [ "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" = "main" ] \
         && [ "$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME" != "develop" ]; then
         echo "Production is only promoted from develop. Retarget this MR to develop (staging), then open develop → main."

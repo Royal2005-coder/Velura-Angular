@@ -28,7 +28,7 @@ Làm việc trên `develop`. Production = `main` sau MR promote. Chi tiết [doc
 | MCP | [MCP-SETUP](docs/MCP-SETUP.md) |
 | Ngày 1 | [ONBOARDING](docs/ONBOARDING.md) |
 
-Context từng version = GitLab MR, không phải `docs/KAN-n.md`.
+Context từng version = type/JSDoc + GitLab MR `## Why` + git notes, không phải `docs/KAN-n.md`.
 
 ## Team
 
@@ -48,7 +48,8 @@ feature/KAN-n → MR develop → CI (tests + note:mr)
 ```
 
 ```bash
-git log --oneline --grep=KAN-n
+git fetch origin refs/notes/commits:refs/notes/commits
+git log --oneline --show-notes --grep=KAN-n
 git show --stat <sha>
 ```
 

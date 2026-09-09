@@ -1,6 +1,10 @@
 # Angular 21 coding standard (Velura)
 
-Lecture slides (`Angularframewor.md`) teach Module → Component → Service. This workspace keeps that teaching model and implements it with **standalone components + Signals**, as required by the academic Clean Architecture guides.
+Lecture slides map: [docs/source-of-truth/LECTURE-MAP.md](./source-of-truth/LECTURE-MAP.md).  
+Book map: [docs/source-of-truth/BOOK-MAP.md](./source-of-truth/BOOK-MAP.md).  
+Index: [SOURCE-OF-TRUTH.md](./SOURCE-OF-TRUTH.md).
+
+This workspace keeps the teaching model and implements it with **Angular 21 standalone components + Signals** ([ADR 0001](./adr/0001-angular-21-standalone-signals.md)).
 
 ```
 View (HTML template)

@@ -1,41 +1,65 @@
+# Agent contract (Velura)
+
+Read this file first. Then follow the links. Do not invent a second process.
+
+## Read order (mọi agent, mọi thành viên mới)
+
+1. This file (`AGENTS.md`)
+2. [README.md](README.md)
+3. [docs/SOURCE-OF-TRUTH.md](docs/SOURCE-OF-TRUTH.md) — Angular lecture + book mapped to this repo
+4. [docs/MCP-SETUP.md](docs/MCP-SETUP.md) — Cursor GitLab + Jira MCP
+5. [docs/ANGULAR-STANDARDS.md](docs/ANGULAR-STANDARDS.md) — how to write UI
+6. [docs/COMPLIANCE.md](docs/COMPLIANCE.md) — what is done vs gap
+7. [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) — Jira → GitLab CI → production
+8. Feature code under `apps/user-ng` or `apps/admin-ng` or `apps/api`
+
+Source files outside Git (do not copy the book into Git):
+
+- Lecture: TinyBigCorp `docs/Angularframewor.md` → map [docs/source-of-truth/LECTURE-MAP.md](docs/source-of-truth/LECTURE-MAP.md)
+- Book: TinyBigCorp `docs/Angularbooksourceoftruth.md` → map [docs/source-of-truth/BOOK-MAP.md](docs/source-of-truth/BOOK-MAP.md)
+
+## Non-negotiable facts
+
+- Angular is the **frontend SPA** only. `apps/api` in JavaScript is correct (ADR 0002). Tests for the API stay `tests/api/*.test.js`.
+- Lecture `NgModule` maps to **standalone + Signals** (ADR 0001). Do not add `NgModule`.
+- Work starts in Jira **KAN**, never as a GitLab Issue. Branch and MR title contain `KAN-n`.
+- Feature/MR pipelines must not deploy. Only `main` runs `deploy:production`.
+
 <Context>
   <Philosophy>
-    This project is a production Angular workspace extracted from Velura.
-    It rejects shortcuts in favor of explicit MVVM, OOP, and Clean Architecture.
-    Maintainability, typed contracts, and reviewable merge requests come before speed.
+    Maintainability, typed UI contracts, and reviewable merge requests over speed.
+    Explicit layers over framework magic. Map the UEL Angular lecture onto Angular 21.
   </Philosophy>
   <Scope>
-    Two Angular 21 standalone SPAs and one Node HTTP API, split across two teams:
-    Storefront (`apps/user-ng`) and Admin (`apps/admin-ng` + `apps/api`).
+    Storefront `apps/user-ng` (KAN-4) and Admin `apps/admin-ng` + Node `apps/api` (KAN-5).
   </Scope>
 </Context>
 
 <Architecture>
   <Frontend_Pattern>
-    MVVM + Signals. Templates are Views. Components are ViewModels.
-    Services/repositories are the Model. Components never call HTTP directly
-    from templates and never use `any`.
+    Lecture: Component (template + class) + Service (HTTP).
+    Production: View = HTML, ViewModel = standalone component + signals,
+    Model = injectable service. No HttpClient in pages. No `any`.
   </Frontend_Pattern>
   <Backend_Pattern>
-    Router parses HTTP into commands. Services own business rules.
-    Repositories own Supabase/SQL. Domain errors are mapped before the router.
+    Router parses HTTP. Service owns rules and optimistic locking.
+    Repository owns Supabase. Domain errors mapped before the router.
   </Backend_Pattern>
 </Architecture>
 
 <Constraints>
   <DO>
-    - Standalone Angular components and Signals for derived state
-    - JSDoc on every public TypeScript method; Python-style docstrings in JS services
-    - Smart containers vs presentational components
-    - Design tokens / shared CSS only — no hardcoded hex in new component SCSS
-    - Feature branch `feature/KAN-n-*` → Merge Request with Jira key → CI tests → merge `main` → production
-    - See `docs/TEAM-PROCESS.md` and `docs/ANGULAR-STANDARDS.md`
+    - Standalone components and Signals for derived state
+    - JSDoc on public TypeScript methods; docstrings on public API functions
+    - Design tokens in `src/app/theme` — no new hardcoded hex
+    - `feature/KAN-n-kebab` → MR template (ADR section if architecture) → CI → merge `main`
+    - After code change, comment the Jira key with the MR URL
   </DO>
   <DO_NOT>
-    - NgModules
+    - NgModules or `app.module.ts`
     - Logic in templates (`{{ data.filter(...) }}`)
-    - ORM entities or service-role keys in the browser
-    - Commit `.env`, `*.pem`, or deploy keys
-    - Deploy from a feature branch
+    - Rewrite `apps/api` to Angular or Python inside a UI MR
+    - Commit `.env`, `*.pem`, service-role keys
+    - Deploy from a feature branch or skip the Jira key
   </DO_NOT>
 </Constraints>

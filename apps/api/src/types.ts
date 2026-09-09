@@ -57,7 +57,10 @@ export interface UserProfile {
 }
 
 /**
- * Auth + RBAC context passed from the server into routers and services.
+ * Auth + RBAC attached to one HTTP request.
+ * Guest: `authUser` null, `roleCode` `guest`. Member JWT: `isAdmin` false.
+ * Admin mutations require `isAdmin` and `profile.is_active`.
+ * Why a rule changed: `git log --show-notes --grep=KAN-` on `rbac.ts`.
  */
 export interface AuthContext {
   authUser: AuthUser | null;

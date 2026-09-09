@@ -1,6 +1,6 @@
 # Onboarding — ngày 1
 
-Đọc [AGENTS.md](../AGENTS.md) → [README.md](../README.md) → [SOURCE-OF-TRUTH.md](./SOURCE-OF-TRUTH.md) → file này.
+Đọc [AGENTS.md](../AGENTS.md) trước. Context = type/JSDoc + `git log --show-notes` + MR `## Why`.
 
 ## Team
 
@@ -29,6 +29,7 @@ git clone git@gitlab.com:boygia757-netizen/velura-project.git
 cd velura-project
 git checkout develop
 git pull
+git fetch origin refs/notes/commits:refs/notes/commits
 npm install
 copy .env.example .env
 ```

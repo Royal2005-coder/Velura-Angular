@@ -29,8 +29,11 @@ Repo production Angular:
 ```bash
 git clone git@gitlab.com:boygia757-netizen/velura-project.git
 cd velura-project
-git checkout develop
-git pull
+git fetch origin
+# Hôm nay SDLC đầy đủ chưa trên develop/main:
+git checkout feature/KAN-13-team-onboarding
+# Sau khi lead merge MR vào develop:
+# git checkout develop && git pull
 npm install
 copy .env.example .env
 ```
@@ -53,6 +56,7 @@ Kiểm tra nhanh:
 
 ```bash
 npm run test:api
+npm run test:ng
 npm run build:user
 npm run build:admin
 ```
@@ -73,7 +77,7 @@ Code Angular: [ANGULAR-STANDARDS.md](./ANGULAR-STANDARDS.md).
 ## 5. Checklist ngày 1 (in / tick)
 
 - [ ] Vào được board KAN
-- [ ] Clone được GitLab, checkout `develop`
+- [ ] Clone được GitLab; checkout `feature/KAN-13-team-onboarding` (hoặc `develop` sau khi merge)
 - [ ] `.env` local, không commit
 - [ ] Mở được 4001 / 4002 / 8787
 - [ ] Biết epic (KAN-4 hoặc KAN-5)

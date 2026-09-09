@@ -1,6 +1,8 @@
 # Two-team process (Jira + GitLab)
 
-Onboard 5 người: bắt đầu ở [README.md](./README.md) (mục lục docs) → [ONBOARDING.md](./ONBOARDING.md) → [HOW-IT-WORKS.md](./HOW-IT-WORKS.md) → [PRACTICE-DRILL.md](./PRACTICE-DRILL.md).
+Onboard 5 người: [AGENTS.md](../AGENTS.md) → [README.md](../README.md) → [SOURCE-OF-TRUTH.md](./SOURCE-OF-TRUTH.md) → [ONBOARDING.md](./ONBOARDING.md) → [HOW-IT-WORKS.md](./HOW-IT-WORKS.md) → [PRACTICE-DRILL.md](./PRACTICE-DRILL.md).
+
+Hôm nay clone `feature/KAN-13-team-onboarding` — `main` chưa có bộ SDLC/source-of-truth.
 
 Jira plans work. GitLab holds code, merge requests, CI, and production deploy.
 

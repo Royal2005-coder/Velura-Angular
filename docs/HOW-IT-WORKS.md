@@ -3,6 +3,8 @@
 Jira = việc. GitLab MR = **log phiên bản** (diff, git log, CI note).  
 `docs/` chỉ giữ map ổn định (Angular, pipeline). **Không** tạo file md cho từng ticket.
 
+Bộ SDLC này **chưa** trên `main`. Team clone `feature/KAN-13-team-onboarding` cho đến khi MR vào `develop` được merge. Xem [AGENTS.md](../AGENTS.md).
+
 ## Vòng đời
 
 ```

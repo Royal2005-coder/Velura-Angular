@@ -44,9 +44,10 @@
         <!-- 2 Columns Layout -->
         <div class="policy-layout">
           <!-- Left Column: Navigation Tabs -->
-          <aside class="policy-tabs" role="tablist" aria-label="Danh mục chính sách" (click)="onTabClick($event)">
-            <button class="policy-tabs__item js-policy-tab is-active" data-policy-tab="returns" id="policy-tab-returns"
-              role="tab" aria-selected="true" aria-controls="policy-panel-returns">
+          <aside class="policy-tabs" role="tablist" aria-label="Danh mục chính sách">
+            <button type="button" class="policy-tabs__item" [class.is-active]="tab() === 'returns'"
+              (click)="selectTab('returns')" id="policy-tab-returns"
+              role="tab" [attr.aria-selected]="tab() === 'returns'" aria-controls="policy-panel-returns">
               <svg class="policy-tabs__item-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
                 aria-hidden="true">
                 <path stroke-linecap="round" stroke-linejoin="round"
@@ -55,8 +56,9 @@
               <span>Chính sách đổi trả</span>
             </button>
 
-            <button class="policy-tabs__item js-policy-tab" data-policy-tab="privacy" id="policy-tab-privacy" role="tab"
-              aria-selected="false" aria-controls="policy-panel-privacy">
+            <button type="button" class="policy-tabs__item" [class.is-active]="tab() === 'privacy'"
+              (click)="selectTab('privacy')" id="policy-tab-privacy" role="tab"
+              [attr.aria-selected]="tab() === 'privacy'" aria-controls="policy-panel-privacy">
               <svg class="policy-tabs__item-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
                 aria-hidden="true">
                 <path stroke-linecap="round" stroke-linejoin="round"
@@ -65,8 +67,9 @@
               <span>Chính sách bảo mật</span>
             </button>
 
-            <button class="policy-tabs__item js-policy-tab" data-policy-tab="shipping" id="policy-tab-shipping"
-              role="tab" aria-selected="false" aria-controls="policy-panel-shipping">
+            <button type="button" class="policy-tabs__item" [class.is-active]="tab() === 'shipping'"
+              (click)="selectTab('shipping')" id="policy-tab-shipping"
+              role="tab" [attr.aria-selected]="tab() === 'shipping'" aria-controls="policy-panel-shipping">
               <svg class="policy-tabs__item-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
                 aria-hidden="true">
                 <path stroke-linecap="round" stroke-linejoin="round"
@@ -77,8 +80,9 @@
               <span>Chính sách vận chuyển</span>
             </button>
 
-            <button class="policy-tabs__item js-policy-tab" data-policy-tab="terms" id="policy-tab-terms" role="tab"
-              aria-selected="false" aria-controls="policy-panel-terms">
+            <button type="button" class="policy-tabs__item" [class.is-active]="tab() === 'terms'"
+              (click)="selectTab('terms')" id="policy-tab-terms" role="tab"
+              [attr.aria-selected]="tab() === 'terms'" aria-controls="policy-panel-terms">
               <svg class="policy-tabs__item-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
                 aria-hidden="true">
                 <path stroke-linecap="round" stroke-linejoin="round"
@@ -87,8 +91,9 @@
               <span>Điều khoản sử dụng</span>
             </button>
 
-            <button class="policy-tabs__item js-policy-tab" data-policy-tab="faq" id="policy-tab-faq" role="tab"
-              aria-selected="false" aria-controls="policy-panel-faq">
+            <button type="button" class="policy-tabs__item" [class.is-active]="tab() === 'faq'"
+              (click)="selectTab('faq')" id="policy-tab-faq" role="tab"
+              [attr.aria-selected]="tab() === 'faq'" aria-controls="policy-panel-faq">
               <svg class="policy-tabs__item-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
                 aria-hidden="true">
                 <path stroke-linecap="round" stroke-linejoin="round"
@@ -97,8 +102,9 @@
               <span>Câu hỏi thường gặp</span>
             </button>
 
-            <button class="policy-tabs__item js-policy-tab" data-policy-tab="member" id="policy-tab-member" role="tab"
-              aria-selected="false" aria-controls="policy-panel-member">
+            <button type="button" class="policy-tabs__item" [class.is-active]="tab() === 'member'"
+              (click)="selectTab('member')" id="policy-tab-member" role="tab"
+              [attr.aria-selected]="tab() === 'member'" aria-controls="policy-panel-member">
               <svg class="policy-tabs__item-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
                 aria-hidden="true">
                 <path stroke-linecap="round" stroke-linejoin="round"
@@ -111,7 +117,7 @@
           <!-- Right Column: Content Detail -->
           <div class="policy-content">
             <!-- PANEL 1: Chính sách đổi trả -->
-            <section class="policy-panel js-policy-panel is-active" id="policy-panel-returns" role="tabpanel"
+            <section class="policy-panel" [class.is-active]="tab() === 'returns'" id="policy-panel-returns" role="tabpanel"
               aria-labelledby="policy-tab-returns">
               <h2 class="policy-panel__title">Chính sách đổi trả</h2>
               <p class="policy-panel__intro">Velura áp dụng chính sách đổi trả dựa trên mốc thời gian giao hàng thực tế từ hệ thống vận chuyển. Tính năng gửi yêu cầu chỉ mở khi đơn hàng đủ điều kiện theo quy tắc đã kiểm chứng.</p>
@@ -141,7 +147,7 @@
             </section>
 
             <!-- PANEL 2: Chính sách bảo mật -->
-            <section class="policy-panel js-policy-panel" id="policy-panel-privacy" role="tabpanel"
+            <section class="policy-panel" [class.is-active]="tab() === 'privacy'" id="policy-panel-privacy" role="tabpanel"
               aria-labelledby="policy-tab-privacy">
               <h2 class="policy-panel__title">Chính sách bảo mật</h2>
               <p class="policy-panel__intro">Velura bảo vệ dữ liệu cá nhân, dữ liệu phong cách và dữ liệu tương tác AI của khách hàng theo nguyên tắc chỉ sử dụng đúng mục đích phục vụ trải nghiệm mua sắm.</p>
@@ -168,7 +174,7 @@
             </section>
 
             <!-- PANEL 3: Chính sách vận chuyển -->
-            <section class="policy-panel js-policy-panel" id="policy-panel-shipping" role="tabpanel"
+            <section class="policy-panel" [class.is-active]="tab() === 'shipping'" id="policy-panel-shipping" role="tabpanel"
               aria-labelledby="policy-tab-shipping">
               <h2 class="policy-panel__title">Chính sách vận chuyển</h2>
               <p class="policy-panel__intro">Velura áp dụng chính sách vận chuyển thống nhất toàn quốc, tự động tính phí và cập nhật trạng thái giao hàng theo dữ liệu từ đơn vị vận chuyển.</p>
@@ -194,7 +200,7 @@
             </section>
 
             <!-- PANEL 4: Điều khoản sử dụng -->
-            <section class="policy-panel js-policy-panel" id="policy-panel-terms" role="tabpanel"
+            <section class="policy-panel" [class.is-active]="tab() === 'terms'" id="policy-panel-terms" role="tabpanel"
               aria-labelledby="policy-tab-terms">
               <h2 class="policy-panel__title">Điều khoản sử dụng</h2>
               <p class="policy-panel__intro">Khi sử dụng website Velura, khách hàng đồng ý tuân thủ các quy tắc vận hành nhằm đảm bảo hệ thống ổn định, minh bạch và an toàn cho cộng đồng người dùng.</p>
@@ -216,7 +222,7 @@
             </section>
 
             <!-- PANEL 5: Câu hỏi thường gặp -->
-            <section class="policy-panel js-policy-panel" id="policy-panel-faq" role="tabpanel"
+            <section class="policy-panel" [class.is-active]="tab() === 'faq'" id="policy-panel-faq" role="tabpanel"
               aria-labelledby="policy-tab-faq">
               <h2 class="policy-panel__title">Câu hỏi thường gặp</h2>
               <p class="policy-panel__intro">Các câu hỏi phổ biến được tổng hợp từ những quy tắc chính sách đang áp dụng trên hệ thống Velura.</p>
@@ -235,7 +241,7 @@
             </section>
 
             <!-- PANEL 6: Chính sách thành viên -->
-            <section class="policy-panel js-policy-panel" id="policy-panel-member" role="tabpanel"
+            <section class="policy-panel" [class.is-active]="tab() === 'member'" id="policy-panel-member" role="tabpanel"
               aria-labelledby="policy-tab-member">
               <h2 class="policy-panel__title">Chính sách thành viên</h2>
               <p class="policy-panel__intro">Tài khoản Member giúp khách hàng lưu trữ dữ liệu phong cách, đồng bộ trải nghiệm mua sắm và mở khóa các quyền lợi cá nhân hóa của Velura.</p>

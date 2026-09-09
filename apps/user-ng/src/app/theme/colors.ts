@@ -1,6 +1,6 @@
 /**
  * Design token names only. Actual color values live in
- * `apps/user-web/src/styles/base/_variables.css` so the visual system
+ * `apps/user-ng/src/styles-velura` CSS variables so the visual system
  * can be reskinned without touching components.
  */
 export const COLOR_TOKENS = {

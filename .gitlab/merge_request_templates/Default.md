@@ -1,3 +1,7 @@
+## Jira
+- Key: VEL-___
+- Link:
+
 ## Summary
 - What changed and why
 
@@ -13,3 +17,4 @@
 
 ## Production
 This MR **must not** deploy. Production runs only after merge to `main`.
+Mention the Jira key (`VEL-123`) in the title so GitLab comments and the Jira development panel stay in sync.

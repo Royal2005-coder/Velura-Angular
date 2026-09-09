@@ -26,7 +26,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Frontend is MVVM + Signals (An
 
 ## GitLab GitOps
 
-See [docs/GITOPS.md](docs/GITOPS.md).
+See [docs/GITOPS.md](docs/GITOPS.md) and [docs/JIRA-GITLAB.md](docs/JIRA-GITLAB.md).
 
 - Feature branch: validate + API tests + production Angular build
 - Merge Request: same gates + required notes

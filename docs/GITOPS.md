@@ -3,12 +3,13 @@
 ReadyX training uses GitLab + Argo CD + Harbor on Kubernetes. This project is a **single Azure Ubuntu VM**, so Git remains the source of truth and GitLab CI deploys over SSH. There is no cluster and no Argo Application.
 
 ```
-feature/*  →  Merge Request (notes required)  →  CI: validate / test / build
+Jira VEL-n  →  feature/VEL-n-name  →  Merge Request (Jira key + notes)
+                                                      ↓
+                                         CI: validate / test / build
                                                       ↓
                                                    merge main
                                                       ↓
-                                         CI deploy: rsync + systemd + nginx
-                                                      ↓
+                              CI deploy + verify
                               https://velura.royalai.dev
                               https://admin.royalai.dev
 ```
@@ -17,7 +18,7 @@ feature/*  →  Merge Request (notes required)  →  CI: validate / test / build
 
 | Branch | Pipeline | Deploy |
 |---|---|---|
-| `feature/*` | validate, API tests, Angular production build | No |
+| `feature/VEL-*` | validate, API tests, Angular production build | No |
 | Merge Request | same + GitLab MR note with SHA | No |
 | `develop` | same as feature (integration gate) | No |
 | `main` | same gates, then `deploy:production` | Yes |

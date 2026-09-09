@@ -32,7 +32,7 @@ if [ -f /opt/velura/deploy/systemd/velura-api.service ]; then
 fi
 
 sudo chown -R "${DEPLOY_USER}:${DEPLOY_USER}" /var/www/velura /var/www/velura-staging /opt/velura /opt/velura-staging
-echo "${DEPLOY_USER} ALL=(root) NOPASSWD: /bin/systemctl restart velura-api, /bin/systemctl restart velura-api-staging, /bin/systemctl enable velura-api-staging, /bin/systemctl daemon-reload, /bin/systemctl reload nginx, /usr/sbin/nginx" | sudo tee /etc/sudoers.d/velura-deploy >/dev/null
+echo "${DEPLOY_USER} ALL=(root) NOPASSWD: /bin/systemctl restart velura-api, /bin/systemctl restart velura-api-staging, /bin/systemctl enable velura-api-staging, /bin/systemctl daemon-reload, /bin/systemctl reload nginx, /usr/sbin/nginx, /bin/mkdir, /bin/chown, /bin/cp, /bin/sed, /usr/bin/tee" | sudo tee /etc/sudoers.d/velura-deploy >/dev/null
 sudo chmod 440 /etc/sudoers.d/velura-deploy
 
 sudo systemctl daemon-reload

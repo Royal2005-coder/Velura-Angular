@@ -37,6 +37,6 @@
 | Lazy routes | `loadComponent` feature | [KAN-7](https://webadvance.atlassian.net/browse/KAN-7) |
 | Empty/error UI | cart, wishlist, checkout | [KAN-8](https://webadvance.atlassian.net/browse/KAN-8) |
 | Change password admin | gọi API, bỏ stub local | [KAN-9](https://webadvance.atlassian.net/browse/KAN-9) |
-| Page specs sâu hơn (filter/error/empty) | bổ sung khi đụng feature, không chỉ `should create` | [KAN-14](https://webadvance.atlassian.net/browse/KAN-14) + KAN-4/KAN-5 |
+| Page specs sâu hơn khi đụng feature | empty/error/filter còn thiếu trên một số page | KAN-4 / KAN-5 |
 | API TypeScript trên Node | migrate từng bounded context; runtime vẫn Node | [ADR 0003](./adr/0003-node-api-typescript.md) · [KAN-14](https://webadvance.atlassian.net/browse/KAN-14) |
 | GitLab MCP 404 | bật Duo/MCP trên group | [KAN-11](https://webadvance.atlassian.net/browse/KAN-11) |

@@ -4,11 +4,20 @@ set -eu
 
 apk add --no-cache git curl jq >/dev/null
 
-git fetch origin "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}" --depth=80
+TARGET_NAME="${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}"
+BASE="${CI_MERGE_REQUEST_DIFF_BASE_SHA:-}"
 
-TARGET="origin/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}"
-LOG=$(git log --oneline "${TARGET}..HEAD" | head -n 30)
-STAT=$(git diff --stat "${TARGET}...HEAD" | tail -n 40)
+if [ -n "${BASE}" ] && git cat-file -e "${BASE}^{commit}" 2>/dev/null; then
+  RANGE="${BASE}..HEAD"
+  STAT_RANGE="${BASE}...HEAD"
+else
+  git fetch origin "${TARGET_NAME}" --depth=200 || git fetch origin "${TARGET_NAME}" || true
+  RANGE="origin/${TARGET_NAME}..HEAD"
+  STAT_RANGE="origin/${TARGET_NAME}...HEAD"
+fi
+
+LOG=$(git log --oneline ${RANGE} | head -n 30)
+STAT=$(git diff --stat ${STAT_RANGE} | tail -n 40)
 
 echo "${CI_MERGE_REQUEST_TITLE}" | grep -Eq '^KAN-[0-9]+' || {
   echo "MR title must start with KAN-n"
@@ -23,7 +32,7 @@ NOTE=$(printf '%s\n' \
   "- SHA: \`${CI_COMMIT_SHORT_SHA}\` (\`${CI_COMMIT_SHA}\`)" \
   "- Pipeline: ${CI_PIPELINE_URL}" \
   '' \
-  "### git log (${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}..HEAD)" \
+  "### git log" \
   '```' \
   "${LOG}" \
   '```' \
@@ -39,6 +48,8 @@ NOTE=$(printf '%s\n' \
 
 BODY=$(jq -n --arg body "${NOTE}" '{body: $body}')
 
+echo "${NOTE}"
+
 if [ -n "${GITLAB_TOKEN:-}" ]; then
   AUTH_HEADER="PRIVATE-TOKEN: ${GITLAB_TOKEN}"
 else
@@ -49,4 +60,8 @@ curl --fail --silent --show-error \
   --header "${AUTH_HEADER}" \
   --header "Content-Type: application/json" \
   --data "${BODY}" \
-  "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests/${CI_MERGE_REQUEST_IID}/notes"
+  "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests/${CI_MERGE_REQUEST_IID}/notes" \
+  || {
+    echo "Failed to post MR note. Add CI/CD variable GITLAB_TOKEN (api) if Job-Token is denied."
+    exit 1
+  }

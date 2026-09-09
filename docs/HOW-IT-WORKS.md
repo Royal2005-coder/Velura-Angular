@@ -1,70 +1,80 @@
 # Jira ↔ GitLab — luồng vận hành
 
-Jira = việc. GitLab MR = **log phiên bản** (diff, git log, CI note).  
-`docs/` chỉ giữ map ổn định (Angular, pipeline). **Không** tạo file md cho từng ticket.
-
-Bộ SDLC này **chưa** trên `main`. Team clone `feature/KAN-13-team-onboarding` cho đến khi MR vào `develop` được merge. Xem [AGENTS.md](../AGENTS.md).
-
-## Vòng đời
+Jira = việc. GitLab MR = **log phiên bản** (Changes, git log, CI `note:mr`).  
+`docs/` chỉ map ổn định. **Không** tạo markdown theo ticket.
 
 ```
 Jira KAN-n
   → git checkout develop && git pull
   → feature/KAN-n-short
   → commit "KAN-n why"
-  → MR vào develop (title bắt đầu KAN-n, điền template)
-  → CI bắt buộc: validate + test:api + test:angular + build + note:mr (ghi git log + diff --stat lên MR)
-  → 1 reviewer (CODEOWNERS) merge develop
-  → CI develop: deploy:staging + verify:staging
-  → Lead kiểm tra staging
-  → MR develop → main (title KAN-n promote / cùng key)
-  → CI main: deploy:production + verify:production
-  → Jira Close
+  → MR vào develop (title bắt đầu KAN-n)
+  → CI: validate + test:api + test:angular + build + note:mr
+  → CODEOWNERS reviewer merge develop
+  → deploy:staging + verify:staging (cùng Azure VM)
+  → MR develop → main (title KAN-n promote)
+  → deploy:production + verify:production
+  → Jira Close + comment URL MR
 ```
 
-Cấm: feature → `main`. Cấm `[skip ci]`. Cấm ADR.md cho bug/feature thường.
+Cấm: feature → `main`. Cấm `[skip ci]`. Cấm ADR.md cho bug thường. Cấm GitLab Issues làm backlog.
 
-## Trace (CLI + giao diện MR)
+## Trace
 
 ```bash
-git log --oneline --grep=KAN-13
+git log --oneline --grep=KAN-n
 git show --stat <sha>
 git diff develop...HEAD --stat
 ```
 
-Trên GitLab: MR → Changes (file) + Notes (CI trace bắt buộc). Agent/người sau sửa tiếp từ MR, không từ docs rời.
+GitLab: MR → Changes + Notes (job `note:mr`).
 
 ## Jobs
 
 | Khi | Jobs | Deploy |
 |---|---|---|
-| MR → `develop` | validate, `test:api`, `test:angular`, build, **note:mr** | Không |
-| Push `develop` | tests + build + `deploy:staging` + `verify:staging` | Staging cùng VM |
+| MR → `develop` | validate, tests, build, **note:mr** | Không |
+| Push `develop` | tests + build + staging | `staging.velura.royalai.dev` |
 | MR `develop` → `main` | cùng cổng MR | Không |
-| Push `main` | tests + build + `deploy:production` + `verify:production` | Production |
+| Push `main` | tests + build + production | `velura.royalai.dev` |
 
-`note:mr` **không** `allow_failure`. Thiếu `GITLAB_TOKEN` (api) thì dùng `JOB-TOKEN`; nếu 403, thêm biến `GITLAB_TOKEN`.
+`note:mr` không `allow_failure`. Nếu post note 403: biến `GITLAB_TOKEN` (scope `api`).
 
-## Staging (cùng Azure VM)
+## Staging (cùng VM, API :8788)
 
-| Host | Root |
+| Host | Path |
 |---|---|
 | staging.velura.royalai.dev | `/var/www/velura-staging/user` |
 | staging-admin.royalai.dev | `/var/www/velura-staging/admin` |
-| API :8788 | `/opt/velura-staging/api`, `.env` `PORT=8788` |
+| API | `/opt/velura-staging/api`, `.env` `PORT=8788` |
 
-Cloudflare A (proxied) cùng IP `135.235.219.13`. Verify CI dùng `Host:` tới `127.0.0.1` nên không phụ thuộc DNS để pass; DNS cần cho người mở browser.
+Verify CI gọi `Host:` tới `127.0.0.1` — không phụ thuộc DNS. Browser cần Cloudflare A (proxied) cùng IP `135.235.219.13`.
 
-CORS staging: thêm origin staging vào `/opt/velura-staging/.env`.
+## Production
 
-## GitLab Settings (bật một lần, không nằm trong YAML)
+| Path | Env |
+|---|---|
+| `/var/www/velura/{user,admin}` | SPA |
+| `/opt/velura/api` + `/opt/velura/.env` | API :8787 |
 
-1. Settings → Repository → Protected branches: `main` và `develop` — no direct push, maintainers merge.
-2. Settings → Merge requests: **Pipelines must succeed**; **Require approval from code owners**; approvals ≥ 1.
-3. Settings → Repository → Push rules: reject commit message `\[skip ci\]`.
-4. CI/CD Variables: `SSH_PRIVATE_KEY` available on **develop and main** (unprotect or protect both).
-5. CODEOWNERS: `.gitlab/CODEOWNERS` — thêm 5 username GitLab.
+## CI variables (GitLab → CI/CD)
 
-## Jira Development
+| Variable | Ghi chú |
+|---|---|
+| `SSH_PRIVATE_KEY` | PEM; **unprotect hoặc protect cả `develop` và `main`** |
+| `SSH_KNOWN_HOSTS` | `ssh-keyscan -H 135.235.219.13` |
+| `DEPLOY_HOST` | `135.235.219.13` |
+| `DEPLOY_USER` | `azureuser` |
+| `GITLAB_TOKEN` | Chỉ khi `CI_JOB_TOKEN` không post được MR note |
 
-Branch/MR phải chứa `KAN-n`. App **GitLab for Jira Cloud** link group `boygia757-netizen`.
+Sudoers VM phải có `systemctl restart velura-api-staging` (`deploy/scripts/bootstrap-vps.sh`).
+
+## GitLab Settings (lead, một lần)
+
+1. Protected branches: `main` + `develop` — no direct push, Maintainers merge via MR.
+2. Merge requests: Pipelines must succeed; Require approval from code owners; ≥ 1 approval.
+3. Push rules: reject `\[skip ci\]`.
+4. Integrations → Jira: Web URL `https://webadvance.atlassian.net`, project key `KAN`, comment + transition on merge.
+5. Jira app **GitLab for Jira Cloud** link group `boygia757-netizen`.
+
+CODEOWNERS: `.gitlab/CODEOWNERS` — thêm đủ 5 username GitLab khi có account.

@@ -15,13 +15,13 @@ Agent và thành viên mới: cài MCP **trước** khi tạo issue/MR hộ team
       }
     },
     "Atlassian": {
-      "url": "https://mcp.atlassian.com/v1/sse"
+      "url": "https://mcp.atlassian.com/v1/mcp"
     }
   }
 }
 ```
 
-Atlassian: SSE `https://mcp.atlassian.com/v1/sse` đang chạy. Sau **30/06/2026** chuyển Streamable HTTP `https://mcp.atlassian.com/v1/mcp`.
+Atlassian: dùng Streamable HTTP `https://mcp.atlassian.com/v1/mcp`. SSE `/v1/sse` hết hỗ trợ sau **30/06/2026**.
 
 ## 2. Connect trong Cursor
 

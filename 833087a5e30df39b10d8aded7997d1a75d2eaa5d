@@ -1,0 +1,3 @@
+KAN-15
+Why: Same Node runtime, source is TypeScript. systemd runs dist/server.js. Angular stays SPA.
+Do not: convert API to Angular or FastAPI in this epic.

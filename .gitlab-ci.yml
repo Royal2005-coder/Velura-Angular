@@ -14,6 +14,7 @@ stages:
   - build
   - note
   - deploy
+  - verify
 
 default:
   image: node:22-bookworm
@@ -118,4 +119,22 @@ deploy:production:
     - rsync -az --delete -e "$SSH" apps/admin-ng/dist/admin-ng/browser/ "${DEPLOY_USER}@${DEPLOY_HOST}:/var/www/velura/admin/"
     - rsync -az --delete --exclude node_modules -e "$SSH" apps/api/ "${DEPLOY_USER}@${DEPLOY_HOST}:/opt/velura/api/"
     - rsync -az -e "$SSH" deploy/ "${DEPLOY_USER}@${DEPLOY_HOST}:/opt/velura/deploy/"
-    - $SSH "${DEPLOY_USER}@${DEPLOY_HOST}" "cd /opt/velura/api && npm install --omit=dev && sudo cp /opt/velura/deploy/nginx/velura.conf /etc/nginx/sites-available/velura && sudo nginx -t && sudo systemctl restart velura-api && sudo systemctl reload nginx"
+    - $SSH "${DEPLOY_USER}@${DEPLOY_HOST}" "cd /opt/velura/api && npm install --omit=dev && sudo sed -i 's/\r$//' /opt/velura/deploy/nginx/velura.conf /opt/velura/deploy/systemd/velura-api.service && sudo cp /opt/velura/deploy/nginx/velura.conf /etc/nginx/sites-available/velura && sudo nginx -t && sudo systemctl restart velura-api && sudo systemctl reload nginx"
+
+verify:production:
+  stage: verify
+  image: alpine:3.20
+  environment:
+    name: production
+    url: https://velura.royalai.dev/
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: on_success
+  needs:
+    - job: deploy:production
+  script:
+    - apk add --no-cache curl
+    - test "$(curl -fsS -o /dev/null -w '%{http_code}' --max-redirs 2 https://velura.royalai.dev/)" = "200"
+    - curl -fsS https://velura.royalai.dev/api/health | grep '"ok":true'
+    - test "$(curl -fsS -o /dev/null -w '%{http_code}' --max-redirs 2 https://velura.royalai.dev/api/health)" = "200"
+

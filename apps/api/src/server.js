@@ -77,7 +77,7 @@ const server = createServer(async (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
     const parts = parsePathname(url);
 
-    if (req.method === "GET" && parts[0] === "health") {
+    if (req.method === "GET" && (parts[0] === "health" || (parts[0] === "api" && parts[1] === "health"))) {
       return sendJson(res, 200, {
         ok: true,
         service: "velura-api",

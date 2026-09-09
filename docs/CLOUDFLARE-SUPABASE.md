@@ -14,9 +14,10 @@ Optional later: `develop` / `admin-develop` for a staging host. Not required for
 
 ## Cloudflare SSL/TLS
 
-1. SSL/TLS mode: **Full** (origin has a certificate; self-signed is enough for Full, Let's Encrypt for Full Strict).
-2. Always Use HTTPS: On.
-3. Minimum TLS: 1.2.
+1. SSL/TLS mode: **Full** (origin has a certificate; self-signed is enough for Full). Do **not** use Flexible: origin used to 301 HTTP→HTTPS and that looped as `ERR_TOO_MANY_REDIRECTS`.
+2. Origin nginx now serves the SPA on **both** port 80 and 443 so Flexible still works if someone leaves it on.
+3. Always Use HTTPS: On.
+4. Minimum TLS: 1.2.
 
 After DNS is orange-clouded, public URLs:
 

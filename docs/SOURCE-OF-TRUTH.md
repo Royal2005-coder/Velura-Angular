@@ -28,8 +28,8 @@ git show --stat <sha>
 | Tầng | Velura | Angular? |
 |---|---|---|
 | Storefront / Admin | Angular 21 standalone + Signals | Có |
-| HTTP API | Node, `apps/api`, router → service → repository | Không — **đúng** |
-| Test API | `tests/api/*.test.js` | Không |
+| HTTP API | Node TypeScript, `apps/api`, router → service → repository | Không — **đúng** |
+| Test API | `tests/api/*.test.ts` | Không |
 | Test UI | `*.page.spec.ts` (CI `test:angular`) | Có |
 | DB | PostgreSQL / Supabase | Không |
 
@@ -55,7 +55,7 @@ Page không biết SQL/HTTP verb. `HttpClient` chỉ trong service.
 | `HttpClientModule` | `provideHttpClient(withInterceptors([...]))` |
 | `*ngIf` / `*ngFor` | `@if` / `@for` |
 
-[ADR 0001](./adr/0001-angular-21-standalone-signals.md). TypeScript trên API Node: [ADR 0003](./adr/0003-node-api-typescript.md) (Proposed).
+[ADR 0001](./adr/0001-angular-21-standalone-signals.md). TypeScript trên API Node: [ADR 0003](./adr/0003-node-api-typescript.md) (Accepted).
 
 ## SDLC
 

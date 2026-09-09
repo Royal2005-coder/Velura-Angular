@@ -27,7 +27,7 @@ git show --stat <sha>
 git diff develop...HEAD --stat
 ```
 
-GitLab: MR → Changes + Notes (job `note:mr`).
+GitLab: MR → Changes + job `note:mr` (log + artifact `mr-trace.md`). Notes tab nếu có `GITLAB_TOKEN`.
 
 ## Jobs
 
@@ -38,7 +38,7 @@ GitLab: MR → Changes + Notes (job `note:mr`).
 | MR `develop` → `main` | cùng cổng MR | Không |
 | Push `main` | tests + build + production | `velura.royalai.dev` |
 
-`note:mr` không `allow_failure`. Nếu post note 403: biến `GITLAB_TOKEN` (scope `api`).
+`note:mr` không `allow_failure`. Trace bắt buộc nằm trên job log + artifact `mr-trace.md`. Post lên tab Notes khi có `GITLAB_TOKEN` (scope `api`); Job-Token thường 403 và **không** chặn merge.
 
 ## Staging (cùng VM, API :8788)
 

@@ -32,7 +32,7 @@ git show --stat <sha>
 
 ## Non-negotiable
 
-- Angular = SPA. `apps/api` Node (ADR 0002). Không viết API bằng Angular.
+- Angular = SPA. `apps/api` Node TypeScript (ADR 0002 + ADR 0003). Không viết API bằng Angular.
 - `NgModule` → standalone + Signals (ADR 0001).
 - Feature MR → **`develop`**. Production = `develop` → `main`.
 - CI: validate + `test:api` + `test:angular` + build + `note:mr`. Cấm `[skip ci]`.

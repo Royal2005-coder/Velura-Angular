@@ -1,74 +1,91 @@
 # Source of truth (Velura)
 
-Đây là **nguồn sự thật** của workspace. Agent và người mới đọc `AGENTS.md` → `README.md` → file này, rồi mới mở code.
+Đây là **nguồn sự thật ổn định** của workspace. Agent và người mới: `AGENTS.md` → `README.md` → file này → rồi mới mở code.
 
-Hai tài liệu gốc (học thuật, không copy nguyên cuốn sách có bản quyền vào Git):
+`docs/` **không** thay GitLab. Ticket / diff / git log nằm trên **MR**. File này chỉ map kiến trúc + SDLC để cả team cùng một hợp đồng.
 
-| Gốc | Vai trò | File map trong repo |
+## Hai lớp nguồn sự thật
+
+| Lớp | Nội dung | Nơi lưu |
 |---|---|---|
-| Slide UEL *Angular Framework* (Phúc NQ) | Kiến trúc SPA: App → Module → Component → Service → HTTP | [source-of-truth/LECTURE-MAP.md](./source-of-truth/LECTURE-MAP.md) |
-| *Angular 2+ Notes for Professionals* (GoalKicker) | Chi tiết professional: DI, interceptor, forms, routing, testing | [source-of-truth/BOOK-MAP.md](./source-of-truth/BOOK-MAP.md) |
-| TinyBigCorp `AGENTS.md` | SOLID, MVVM + Signals, Clean Architecture | Áp dụng **frontend** nguyên văn. Backend production Velura = Node (xem ADR 0002) |
+| Ổn định (ít đổi) | Angular là SPA; API là Node; standalone+Signals; luồng develop→staging→main | `docs/` (file này, ADR 0001/0002, HOW-IT-WORKS) |
+| Từng version | Vì sao sửa, file nào đổi, SHA nào | GitLab MR: title `KAN-n`, tab Changes, CI `note:mr` (git log + `diff --stat`) |
+| Việc | Ai làm gì, Done/Close | Jira **KAN** |
+
+Không tạo `docs/KAN-14.md` / ADR cho bug thường. Người sau / agent:
+
+```bash
+git log --oneline --grep=KAN-n
+git show --stat <sha>
+```
+
+Rồi mở MR cùng key trên GitLab.
+
+## Tài liệu học thuật (ngoài Git)
+
+| Gốc | Vai trò | Map trong repo |
+|---|---|---|
+| Slide UEL *Angular Framework* (Phúc NQ) | App → Module → Component → Service → HTTP | [source-of-truth/LECTURE-MAP.md](./source-of-truth/LECTURE-MAP.md) |
+| *Angular 2+ Notes for Professionals* (GoalKicker) | DI, interceptor, forms, routing, testing | [source-of-truth/BOOK-MAP.md](./source-of-truth/BOOK-MAP.md) |
+| TinyBigCorp `AGENTS.md` | SOLID, MVVM + Signals | Áp dụng **frontend**. Backend Velura = Node — [ADR 0002](./adr/0002-node-api-javascript.md) |
 
 ## Angular không phải toàn bộ hệ thống
 
 Angular = **SPA TypeScript trên browser** (`apps/user-ng`, `apps/admin-ng`).
 
-Slide và sách đều nói: Angular là front-end SPA. Sách GoalKicker **Chapter 1.1** còn hướng dẫn Angular + **Node/Express backend**. API không viết bằng Angular.
+Slide và sách: Angular là front-end. GoalKicker **ch. 1.1** = Angular + **Node/Express**. API không viết bằng Angular.
 
-| Tầng | Công nghệ Velura | Có phải Angular? |
+| Tầng | Công nghệ Velura | Angular? |
 |---|---|---|
 | Storefront / Admin UI | Angular 21 standalone + Signals + TypeScript | Có |
-| HTTP API | Node, `apps/api/**/*.js`, router → service → repository | Không — và **đúng** |
-| Test API | `tests/api/*.test.js` (Node test runner) | Không — test đúng ngôn ngữ API |
-| Test UI | `*.spec.ts` (Jasmine/Karma/Vitest Angular) | Có — đang mỏng, phải bổ sung theo book ch. 2.3 / 23.3 |
+| HTTP API | Node, `apps/api/**/*.js`, router → service → repository | Không — **đúng** |
+| Test API | `tests/api/*.test.js` | Không |
+| Test UI | `*.spec.ts` trên CI (`test:angular`) | Có — còn mỏng từng page |
 | DB | PostgreSQL / Supabase | Không |
 
-Viết API bằng Angular hoặc nhét SQL vào component là **sai** source of truth.
+Viết API bằng Angular hoặc nhét SQL vào component = sai source of truth.
 
 ## Ánh xạ slide (NgModule) → production (standalone)
 
-Slide dạy Module vì đó là mô hình Angular 2–13. TinyBigCorp và Angular 21 bắt buộc **standalone**. Cùng OOP, khác cú pháp:
+Slide dạy Module vì Angular 2–13. Angular 21 + TinyBigCorp bắt buộc **standalone**. Cùng OOP, khác cú pháp:
 
-| Slide / sách (cũ) | Velura (đúng production) |
+| Slide / sách (cũ) | Velura |
 |---|---|
 | `AppModule` / feature `NgModule` | `app.config.ts` + `app.routes.ts` |
-| `declarations: [ListComponent]` | `standalone: true` (mặc định CLI 21) |
-| `providers: [ProductService]` trong module | `providedIn: 'root'` hoặc `inject()` |
+| `declarations: [ListComponent]` | `standalone: true` |
+| `providers` trong module | `providedIn: 'root'` hoặc `inject()` |
 | `HttpClientModule` | `provideHttpClient(withInterceptors([...]))` |
-| `*ngIf` / `*ngFor` | `@if` / `@for` (cùng ý structural directive) |
+| `*ngIf` / `*ngFor` | `@if` / `@for` |
 | `[(ngModel)]` | Reactive forms + Signals trên page |
-| Service gọi HTTP, component subscribe | Service = Model; Component = ViewModel (`signal` / `computed`) |
+| Service HTTP, component subscribe | Service = Model; Component = ViewModel (`signal` / `computed`) |
 
-Quyết định ghi ở [adr/0001-angular-21-standalone-signals.md](./adr/0001-angular-21-standalone-signals.md).
+Quyết định: [adr/0001-angular-21-standalone-signals.md](./adr/0001-angular-21-standalone-signals.md).
 
-## OOP trên API (JavaScript) vẫn professional
-
-`apps/api` không “thuần Angular” vì **không được**. Nó tuân Clean Architecture bằng JS:
+## API JavaScript vẫn đúng kiến trúc
 
 ```
-router (parse HTTP) → service (luật, RBAC, expectedVersion) → repository (Supabase)
+router (HTTP) → service (luật, RBAC, expectedVersion) → repository (Supabase)
 ```
 
 Ví dụ: `apps/api/src/products/product-router.js` → `product-service.js` → `product-repository.js`.
 
-Không import repository vào Angular. Angular chỉ nói chuyện với DTO JSON qua `ApiService` / `AdminApiService`.
+Angular không import repository. Chỉ DTO JSON qua `ApiService` / `AdminApiService`.
 
-TypeScript cho API là **cải tiến sau** (ADR riêng), không phải điều kiện “đúng Angular”.
+TypeScript cho API = cải tiến sau (ADR mới), không phải điều kiện “đúng Angular”.
 
-## Thứ tự làm việc (SDLC)
+## SDLC (bắt buộc)
 
 1. Jira Task dưới KAN-4 hoặc KAN-5
-2. Branch từ `develop`: `feature/KAN-n-short-name`
+2. Branch từ **`develop`**: `feature/KAN-n-short-name`
 3. Code theo [ANGULAR-STANDARDS.md](./ANGULAR-STANDARDS.md)
-4. MR **vào develop**, title `KAN-n …` — **MR là log** (CI note = git log + diff). Không thêm md theo ticket
-5. CI: validate + `test:api` + `test:angular` + build + note:mr
-6. Merge develop → staging verify
-7. MR develop → main → production
-8. Jira Close
+4. MR **vào develop**, title `KAN-n …` — MR là log phiên bản
+5. CI: validate + `test:api` + `test:angular` + build + **note:mr** (không `allow_failure`)
+6. Merge `develop` → staging verify (cùng VM, Host `staging.*`)
+7. MR `develop` → `main` → production
+8. Jira Close + comment URL MR
 
-Chi tiết: [HOW-IT-WORKS.md](./HOW-IT-WORKS.md).
+Chi tiết: [HOW-IT-WORKS.md](./HOW-IT-WORKS.md). Gap: [COMPLIANCE.md](./COMPLIANCE.md).
 
-## Gap (làm tiếp, không giả vờ xong)
+## Team clone hôm nay
 
-Xem [COMPLIANCE.md](./COMPLIANCE.md).
+`main` chưa có file này. Xem bảng trạng thái trong [AGENTS.md](../AGENTS.md) và [README.md](../README.md). Checkout `feature/KAN-13-team-onboarding` cho đến khi lead merge vào `develop`.

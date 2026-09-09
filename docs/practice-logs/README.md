@@ -1,5 +1,5 @@
-# Practice logs (onboarding)
+# Practice logs
 
-Mỗi thành viên thêm đúng **một** file `KAN-<số>.md` trong thư mục này khi làm [PRACTICE-DRILL.md](../PRACTICE-DRILL.md).
+Practice = **một dòng** trong [ROSTER.md](./ROSTER.md) + Merge Request GitLab.
 
-Không merge các file này vào `main` trừ khi lead chủ động gom log sau khi practice xong trên một MR riêng.
+Không tạo `KAN-<n>.md`. Context version nằm trên MR (git log, CI `note:mr`, Changes).

@@ -9,17 +9,17 @@ Project key: **KAN** (not VEL). Two-team playbook: [TEAM-PROCESS.md](./TEAM-PROC
 ```
 Jira issue KAN-12
         ↓
-feature/KAN-12-short-name
+feature/KAN-12-short-name  (from develop)
         ↓
-Merge Request: "KAN-12 Policies page uses Signals"
+MR into develop: "KAN-12 …"
         ↓
-GitLab CI: validate → test → build  (no deploy)
+CI: validate → test:api → test:angular → build → note:mr
         ↓
-merge main
+merge develop → staging deploy + verify
         ↓
-GitLab CI: deploy + verify production
+MR develop → main → production deploy + verify
         ↓
-Jira development panel shows branch, MR, commits, deploy
+Jira Development panel: branch, MR, commits
 ```
 
 ## 1. GitLab MCP (Cursor)
@@ -69,7 +69,7 @@ Save → **Test settings**.
 | MR template | Jira key required |
 | Close issue | put `KAN-123` in the MR title; GitLab transitions Jira if configured |
 
-Do not push product work to `main`. Production deploy is the `main` pipeline only.
+Do not push product work to `main` or `develop`. Feature MR targets **develop**. Production is only `develop` → `main`.
 
 ## 5. Board (already created)
 
@@ -84,4 +84,4 @@ Do not push product work to `main`. Production deploy is the `main` pipeline onl
 | [KAN-10](https://webadvance.atlassian.net/browse/KAN-10) | Task | Admin theme folder |
 | [KAN-11](https://webadvance.atlassian.net/browse/KAN-11) | Task | GitLab MCP + Jira app |
 | [KAN-12](https://webadvance.atlassian.net/browse/KAN-12) | Task | Process docs |
-| [KAN-13](https://webadvance.atlassian.net/browse/KAN-13) | Task | Onboarding practice (do not merge main) |
+| [KAN-13](https://webadvance.atlassian.net/browse/KAN-13) | Task | Onboarding + SDLC (MR → develop, không feature → main) |

@@ -1,16 +1,16 @@
-// @ts-nocheck
 import { config } from "../config.js";
 import { getRequestIp, readJson, sendJson } from "../http.js";
-import type { RouteArgs } from "../types.js";
+import type { RequestMeta, RouteArgs } from "../types.js";
+import type { ReturnService } from "./return-service.js";
 
 /**
  * Admin return HTTP routes under `/api/v1/admin/returns`.
  */
-export async function handleReturnRoute({ req, res, url, parts, context, headers, service }: RouteArgs): Promise<boolean> {
+export async function handleReturnRoute({ req, res, url, parts, context, headers, service }: RouteArgs<ReturnService>): Promise<boolean> {
   if (parts[0] !== "api" || parts[1] !== "v1" || parts[2] !== "admin") return false;
 
   if (parts[3] === "returns") {
-    const requestMeta = { ipAddress: getRequestIp(req) };
+    const requestMeta: RequestMeta = { ipAddress: getRequestIp(req) };
 
     if (req.method === "GET" && parts.length === 4) {
       sendJson(res, 200, await service.listReturns(context, url.searchParams), headers);

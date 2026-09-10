@@ -1,9 +1,26 @@
-// @ts-nocheck
 import { HttpError, readJson, sendJson } from "../http.js";
 import { updateRows } from "../supabase.js";
 import { requireUserAuth, validatePhone } from "./auth.js";
+import {
+  asJsonObject,
+  asString,
+  type AuthContext,
+  type HeaderMap,
+  type HttpRequest,
+  type HttpResponse,
+  type JsonObject
+} from "../types.js";
 
-export async function handleProfileRoute(req, res, subRoute, corsHeaders, context) {
+/**
+ * Authenticated profile read/update and saved-address replace.
+ */
+export async function handleProfileRoute(
+  req: HttpRequest,
+  res: HttpResponse,
+  subRoute: string | undefined,
+  corsHeaders: HeaderMap,
+  context: AuthContext
+): Promise<void> {
   const profile = requireUserAuth(context);
 
   if (subRoute === "profile") {
@@ -18,7 +35,7 @@ export async function handleProfileRoute(req, res, subRoute, corsHeaders, contex
       const body = await readJson(req);
       const { full_name, date_of_birth, gender, avatar } = body;
 
-      const updates = {};
+      const updates: JsonObject = {};
       if (full_name !== undefined) {
         const normalizedName = String(full_name || "").trim();
         if (normalizedName.length < 2 || normalizedName.length > 120) {
@@ -31,7 +48,7 @@ export async function handleProfileRoute(req, res, subRoute, corsHeaders, contex
       }
       if (gender !== undefined && gender !== null && gender !== "") {
         const allowedGenders = new Set(["Nam", "Nữ", "Khác"]);
-        if (!allowedGenders.has(gender)) {
+        if (!allowedGenders.has(asString(gender))) {
           throw new HttpError(422, "INVALID_GENDER", "Giới tính không hợp lệ");
         }
         updates.gender = gender;
@@ -40,8 +57,8 @@ export async function handleProfileRoute(req, res, subRoute, corsHeaders, contex
       updates.updated_at = new Date().toISOString();
 
       const updatedRows = await updateRows("users", { user_id: `eq.${profile.user_id}` }, updates);
-      const updated = updatedRows[0];
-      if (!updated) {
+      const updated = asJsonObject(updatedRows[0]);
+      if (!updatedRows[0]) {
         throw new HttpError(404, "USER_NOT_FOUND", "Không tìm thấy người dùng");
       }
       const { password_hash, otp_code, otp_expires_at, ...cleanProfile } = updated;
@@ -59,7 +76,8 @@ export async function handleProfileRoute(req, res, subRoute, corsHeaders, contex
         throw new HttpError(400, "BAD_REQUEST", "Addresses phải là một mảng JSON");
       }
 
-      for (const addr of addresses) {
+      for (const rawAddr of addresses) {
+        const addr = asJsonObject(rawAddr);
         const phone = addr.phone || addr.recipient_phone;
         if (!phone || !validatePhone(phone)) {
           throw new HttpError(400, "BAD_REQUEST", "Số điện thoại trong địa chỉ giao hàng không hợp lệ (10 số, bắt đầu bằng 0)");
@@ -78,7 +96,7 @@ export async function handleProfileRoute(req, res, subRoute, corsHeaders, contex
   throw new HttpError(404, "NOT_FOUND", "Route profile not found");
 }
 
-function validateDateOfBirth(value) {
+function validateDateOfBirth(value: unknown): string {
   const normalized = String(value || "").trim();
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(normalized);
   if (!match) {

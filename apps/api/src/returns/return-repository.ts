@@ -1,13 +1,108 @@
-// @ts-nocheck
 import crypto from "crypto";
 import { callRpc, selectOne, selectRows, updateRows, insertRow } from "../supabase.js";
-import { RETURN_SELECT, TICKET_SELECT } from "./return-constants.js";
 import { HttpError } from "../http.js";
+import { asJsonObject, asNumber, type JsonObject } from "../types.js";
+import { RETURN_SELECT, TICKET_SELECT } from "./return-constants.js";
 
+/**
+ * Filters for listing return / exchange records.
+ */
+export interface ReturnListFilters {
+  status?: string;
+  search?: string;
+  limit: number;
+  offset: number;
+}
+
+/**
+ * Filters for listing support tickets.
+ */
+export interface TicketListFilters {
+  status?: string;
+  limit: number;
+  offset: number;
+}
+
+/**
+ * Filters for return / support audit logs.
+ */
+export interface ReturnAuditFilters {
+  targetId?: string;
+  limit: number;
+  offset: number;
+}
+
+/**
+ * Input for approving a refund.
+ */
+export interface ApproveRefundInput {
+  refundAmount: number;
+  adminNote?: unknown;
+  expectedVersion: number;
+}
+
+/**
+ * Input for approving an exchange.
+ */
+export interface ApproveExchangeInput {
+  adminNote?: unknown;
+  expectedVersion: number;
+}
+
+/**
+ * Input for rejecting a return.
+ */
+export interface RejectReturnInput {
+  reason: string;
+  imageProof?: unknown;
+  expectedVersion: number;
+}
+
+/**
+ * Input for a generic return status update.
+ */
+export interface UpdateReturnStatusInput {
+  status: string;
+  adminNote?: unknown;
+  reason?: unknown;
+  refundAmount?: number;
+  trackingReturnCode?: unknown;
+  conditionCheckResult?: unknown;
+  imageProof?: unknown;
+  expectedVersion: number;
+}
+
+/**
+ * Input for assigning a support ticket.
+ */
+export interface AssignTicketInput {
+  assignedTo: string;
+  expectedVersion: number;
+}
+
+/**
+ * Input for responding to a support ticket.
+ */
+export interface RespondTicketInput {
+  response: string;
+  expectedVersion: number;
+}
+
+/**
+ * Input for closing a support ticket.
+ */
+export interface CloseTicketInput {
+  reason?: unknown;
+  expectedVersion: number;
+}
+
+/**
+ * PostgREST accessors for admin returns, exchanges, and support tickets.
+ */
 export function createReturnRepository() {
   return {
-    async listReturns(filters, accessToken) {
-      const query = {
+    async listReturns(filters: ReturnListFilters, accessToken: string) {
+      const query: Record<string, unknown> = {
         select: RETURN_SELECT,
         order: "created_at.desc",
         limit: filters.limit,
@@ -18,14 +113,14 @@ export function createReturnRepository() {
       return selectRows("return_exchange", query, authOptions(accessToken));
     },
 
-    async getReturn(returnId, accessToken) {
+    async getReturn(returnId: string, accessToken: string) {
       return selectOne("return_exchange", {
         select: RETURN_SELECT,
         return_id: `eq.${returnId}`
       }, authOptions(accessToken));
     },
 
-    async approveRefund(returnId, input, actorId, actorRole, ipAddress) {
+    async approveRefund(returnId: string, input: ApproveRefundInput, actorId: string, actorRole: string, ipAddress: string | undefined) {
       const current = await selectOne("return_exchange", {
         select: RETURN_SELECT,
         return_id: `eq.${returnId}`
@@ -43,12 +138,12 @@ export function createReturnRepository() {
         throw new HttpError(422, "REFUND_AMOUNT_REQUIRED", "Refund amount must be positive");
       }
 
-      const payload = {
+      const payload: JsonObject = {
         status: "approved",
         refund_amount: input.refundAmount,
-        admin_note: input.adminNote ? input.adminNote.trim() : "",
+        admin_note: typeof input.adminNote === "string" ? input.adminNote.trim() : "",
         resolved_at: new Date().toISOString(),
-        version: current.version + 1,
+        version: asNumber(current.version) + 1,
         updated_at: new Date().toISOString()
       };
 
@@ -61,6 +156,7 @@ export function createReturnRepository() {
         throw new HttpError(409, "VERSION_CONFLICT", "Return record has been modified by another user or does not exist");
       }
 
+      const updated = asJsonObject(rows[0]);
       await insertRow("audit_log", {
         actor_id: actorId,
         actor_role: actorRole,
@@ -68,15 +164,15 @@ export function createReturnRepository() {
         module: "returns",
         target_id: returnId,
         old_value: { status: current.status, version: current.version },
-        new_value: { status: rows[0].status, version: rows[0].version, refund_amount: rows[0].refund_amount },
+        new_value: { status: updated.status, version: updated.version, refund_amount: updated.refund_amount },
         ip_address: ipAddress || "127.0.0.1",
         timestamp: new Date().toISOString()
       });
 
-      return rows[0];
+      return updated;
     },
 
-    async approveExchange(returnId, input, actorId, actorRole, ipAddress) {
+    async approveExchange(returnId: string, input: ApproveExchangeInput, actorId: string, actorRole: string, ipAddress: string | undefined) {
       const current = await selectOne("return_exchange", {
         select: RETURN_SELECT,
         return_id: `eq.${returnId}`
@@ -132,17 +228,17 @@ export function createReturnRepository() {
             product_image: origItem.product_image || null,
             quantity: item.quantity,
             unit_price: origItem.unit_price,
-            subtotal_item: origItem.unit_price * item.quantity
+            subtotal_item: asNumber(origItem.unit_price) * asNumber(item.quantity)
           });
         }
       }
 
-      const payload = {
+      const payload: JsonObject = {
         status: "approved",
         exchange_order_id: newOrderId,
-        admin_note: input.adminNote ? input.adminNote.trim() : "",
+        admin_note: typeof input.adminNote === "string" ? input.adminNote.trim() : "",
         resolved_at: new Date().toISOString(),
-        version: current.version + 1,
+        version: asNumber(current.version) + 1,
         updated_at: new Date().toISOString()
       };
 
@@ -155,6 +251,7 @@ export function createReturnRepository() {
         throw new HttpError(409, "VERSION_CONFLICT", "Return record has been modified by another user or does not exist");
       }
 
+      const updated = asJsonObject(rows[0]);
       await insertRow("audit_log", {
         actor_id: actorId,
         actor_role: actorRole,
@@ -162,15 +259,15 @@ export function createReturnRepository() {
         module: "returns",
         target_id: returnId,
         old_value: { status: current.status, version: current.version },
-        new_value: { status: rows[0].status, version: rows[0].version, exchange_order_id: newOrderId },
+        new_value: { status: updated.status, version: updated.version, exchange_order_id: newOrderId },
         ip_address: ipAddress || "127.0.0.1",
         timestamp: new Date().toISOString()
       });
 
-      return rows[0];
+      return updated;
     },
 
-    async reject(returnId, input, actorId, actorRole, ipAddress) {
+    async reject(returnId: string, input: RejectReturnInput, actorId: string, actorRole: string, ipAddress: string | undefined) {
       const current = await selectOne("return_exchange", {
         select: RETURN_SELECT,
         return_id: `eq.${returnId}`
@@ -188,11 +285,11 @@ export function createReturnRepository() {
         throw new HttpError(422, "VALIDATION_ERROR", "Reason must be at least 10 characters");
       }
 
-      const payload = {
+      const payload: JsonObject = {
         status: "rejected",
         rejection_reason: input.reason.trim(),
         resolved_at: new Date().toISOString(),
-        version: current.version + 1,
+        version: asNumber(current.version) + 1,
         updated_at: new Date().toISOString()
       };
       if (input.imageProof) {
@@ -208,6 +305,7 @@ export function createReturnRepository() {
         throw new HttpError(409, "VERSION_CONFLICT", "Return record has been modified by another user or does not exist");
       }
 
+      const updated = asJsonObject(rows[0]);
       await insertRow("audit_log", {
         actor_id: actorId,
         actor_role: actorRole,
@@ -215,15 +313,15 @@ export function createReturnRepository() {
         module: "returns",
         target_id: returnId,
         old_value: { status: current.status, version: current.version },
-        new_value: { status: rows[0].status, version: rows[0].version },
+        new_value: { status: updated.status, version: updated.version },
         ip_address: ipAddress || "127.0.0.1",
         timestamp: new Date().toISOString()
       });
 
-      return rows[0];
+      return updated;
     },
 
-    async updateReturnStatus(returnId, input, actorId, actorRole, ipAddress) {
+    async updateReturnStatus(returnId: string, input: UpdateReturnStatusInput, actorId: string, actorRole: string, ipAddress: string | undefined) {
       const current = await selectOne("return_exchange", {
         select: RETURN_SELECT,
         return_id: `eq.${returnId}`
@@ -235,9 +333,9 @@ export function createReturnRepository() {
         throw new HttpError(409, "VERSION_CONFLICT", "Return record has been modified by another user");
       }
 
-      const payload = {
+      const payload: JsonObject = {
         status: input.status,
-        version: current.version + 1,
+        version: asNumber(current.version) + 1,
         updated_at: new Date().toISOString()
       };
       if (input.adminNote !== undefined) payload.admin_note = input.adminNote;
@@ -248,7 +346,7 @@ export function createReturnRepository() {
       if (input.imageProof !== undefined && input.imageProof !== null) {
         payload.evidence_images = [input.imageProof];
       }
-      
+
       if (["completed", "rejected"].includes(input.status)) {
         payload.resolved_at = new Date().toISOString();
       }
@@ -268,6 +366,7 @@ export function createReturnRepository() {
         : input.status === "approved" ? "approve"
         : "update";
 
+      const updated = asJsonObject(rows[0]);
       await insertRow("audit_log", {
         actor_id: actorId,
         actor_role: actorRole,
@@ -275,16 +374,16 @@ export function createReturnRepository() {
         module: "returns",
         target_id: returnId,
         old_value: { status: current.status, version: current.version },
-        new_value: { status: rows[0].status, version: rows[0].version, transition: `${current.status} → ${input.status}` },
+        new_value: { status: updated.status, version: updated.version, transition: `${current.status} → ${input.status}` },
         ip_address: ipAddress || "127.0.0.1",
         timestamp: new Date().toISOString()
       });
 
-      return rows[0];
+      return updated;
     },
 
-    async listTickets(filters, accessToken) {
-      const query = {
+    async listTickets(filters: TicketListFilters, accessToken: string) {
+      const query: Record<string, unknown> = {
         select: TICKET_SELECT,
         order: "created_at.desc",
         limit: filters.limit,
@@ -294,14 +393,14 @@ export function createReturnRepository() {
       return selectRows("support_ticket", query, authOptions(accessToken));
     },
 
-    async getTicket(ticketId, accessToken) {
+    async getTicket(ticketId: string, accessToken: string) {
       return selectOne("support_ticket", {
         select: TICKET_SELECT,
         ticket_id: `eq.${ticketId}`
       }, authOptions(accessToken));
     },
 
-    async assignTicket(ticketId, input, accessToken) {
+    async assignTicket(ticketId: string, input: AssignTicketInput, accessToken: string) {
       return callRpc("admin_assign_ticket", {
         p_ticket_id: ticketId,
         p_assigned_to: input.assignedTo,
@@ -309,7 +408,7 @@ export function createReturnRepository() {
       }, { accessToken });
     },
 
-    async respondTicket(ticketId, input, accessToken) {
+    async respondTicket(ticketId: string, input: RespondTicketInput, accessToken: string) {
       return callRpc("admin_respond_ticket", {
         p_ticket_id: ticketId,
         p_response: input.response,
@@ -317,7 +416,7 @@ export function createReturnRepository() {
       }, { accessToken });
     },
 
-    async closeTicket(ticketId, input, accessToken) {
+    async closeTicket(ticketId: string, input: CloseTicketInput, accessToken: string) {
       return callRpc("admin_close_ticket", {
         p_ticket_id: ticketId,
         p_expected_version: input.expectedVersion,
@@ -325,8 +424,8 @@ export function createReturnRepository() {
       }, { accessToken });
     },
 
-    async listAuditLogs(filters, accessToken) {
-      const query = {
+    async listAuditLogs(filters: ReturnAuditFilters, accessToken: string) {
+      const query: Record<string, unknown> = {
         select: "audit_id,actor_id,actor_role,action,module,target_id,old_value,new_value,ip_address,timestamp",
         order: "timestamp.desc",
         limit: filters.limit,
@@ -339,6 +438,11 @@ export function createReturnRepository() {
   };
 }
 
-function authOptions(accessToken) {
+/**
+ * Repository returned by `createReturnRepository`.
+ */
+export type ReturnRepository = ReturnType<typeof createReturnRepository>;
+
+function authOptions(accessToken: string): { useAnonKey: true; accessToken: string } {
   return { useAnonKey: true, accessToken };
 }

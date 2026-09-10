@@ -15,6 +15,7 @@
 | Standalone + Signals (TinyBigCorp) | không `NgModule` |
 | API OOP layers | `*-router.ts` → `*-service.ts` → `*-repository.ts` |
 | Tests API theo ngôn ngữ API | `tests/api/*.test.ts` (CI `test:api` + `typecheck:api`) |
+| API TypeScript an toàn | `apps/api` `strict` + `noImplicitAny`; không `@ts-nocheck`; không `any` |
 | Tests Angular trên CI | `test:angular` → `ng test --watch=false` |
 | Page ViewModel specs | `*.page.spec.ts` cạnh page; mock Model, không gọi mạng |
 | Pipeline Jira key | branch/MR `KAN-n`; feature → develop → main |
@@ -38,5 +39,4 @@
 | Empty/error UI | cart, wishlist, checkout | [KAN-8](https://webadvance.atlassian.net/browse/KAN-8) |
 | Change password admin | gọi API, bỏ stub local | [KAN-9](https://webadvance.atlassian.net/browse/KAN-9) |
 | Page specs sâu hơn khi đụng feature | empty/error/filter còn thiếu trên một số page | KAN-4 / KAN-5 |
-| Domain API bỏ `// @ts-nocheck` | từng bounded context, runtime vẫn Node | [ADR 0003](./adr/0003-node-api-typescript.md) · [KAN-15](https://webadvance.atlassian.net/browse/KAN-15) |
 | GitLab MCP 404 | bật Duo/MCP trên group | [KAN-11](https://webadvance.atlassian.net/browse/KAN-11) |

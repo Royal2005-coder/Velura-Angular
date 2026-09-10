@@ -1,4 +1,6 @@
-// @ts-nocheck
+/**
+ * PostgREST column projection for account rows. Omits secrets and addresses.
+ */
 export const ACCOUNT_SELECT = [
   "user_id",
   "email",
@@ -24,6 +26,9 @@ export const ACCOUNT_SELECT = [
   "updated_at"
 ].join(",");
 
+/**
+ * Canonical admin_role values accepted by account mutations and filters.
+ */
 export const ADMIN_ROLES = [
   "admin_viewer",
   "admin_operator_sanpham",
@@ -34,9 +39,24 @@ export const ADMIN_ROLES = [
   "super_admin"
 ];
 
+/**
+ * Canonical `users.role` values: member or admin.
+ */
 export const ACCOUNT_ROLES = ["member", "admin"];
 
-export const ROLE_OPTIONS = [
+/**
+ * One selectable role row shown to super admins.
+ */
+export interface AccountRoleOption {
+  role: string;
+  adminRole: string | null;
+  label: string;
+}
+
+/**
+ * Role picker options for the admin accounts UI.
+ */
+export const ROLE_OPTIONS: AccountRoleOption[] = [
   { role: "member", adminRole: null, label: "Member" },
   { role: "admin", adminRole: "admin_viewer", label: "Admin chi xem" },
   { role: "admin", adminRole: "admin_operator_sanpham", label: "Admin quan ly san pham" },

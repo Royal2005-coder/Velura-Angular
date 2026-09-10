@@ -1,20 +1,59 @@
-// @ts-nocheck
 import { config } from "./config.js";
 import { HttpError } from "./http.js";
+import { asJsonObject, asString, errorMessage, isJsonObject, type JsonObject } from "./types.js";
 
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
 const MAX_RETRIES = 2;
 const RETRY_DELAY_MS = 1500;
 
-export function isGeminiConfigured() {
+/**
+ * Optional overrides for `generateGeminiEmbedding`.
+ */
+export interface GeminiEmbeddingOptions {
+  model?: string;
+  dimensions?: number;
+}
+
+/**
+ * Optional overrides for `generateGeminiJson`.
+ */
+export interface GeminiJsonOptions {
+  model?: string;
+}
+
+/**
+ * Optional overrides for `generateGeminiText`.
+ */
+export interface GeminiTextOptions {
+  model?: string;
+  temperature?: number;
+  topP?: number;
+  maxOutputTokens?: number;
+  timeoutMs?: number;
+}
+
+interface GeminiRequestOptions {
+  timeoutMs?: number;
+}
+
+/**
+ * True when a Gemini API key is present in config.
+ */
+export function isGeminiConfigured(): boolean {
   return Boolean(config.geminiApiKey);
 }
 
-export async function generateGeminiEmbedding(text, options = {}) {
+/**
+ * Request a Gemini embedding vector for `text`.
+ */
+export async function generateGeminiEmbedding(
+  text: unknown,
+  options: GeminiEmbeddingOptions = {}
+): Promise<number[]> {
   requireGeminiKey();
   const model = options.model || config.geminiEmbeddingModel;
   const dimensions = Number(options.dimensions || config.geminiEmbeddingDimensions || 1536);
-  const payload = {
+  const payload: JsonObject = {
     content: {
       parts: [{ text: String(text || "").slice(0, 12000) }]
     },
@@ -22,7 +61,7 @@ export async function generateGeminiEmbedding(text, options = {}) {
   };
 
   const data = await geminiRequestWithRetry(`/models/${encodeURIComponent(model)}:embedContent`, payload);
-  const values = data?.embedding?.values || data?.embeddings?.[0]?.values;
+  const values = readEmbeddingValues(data);
   if (!Array.isArray(values)) {
     throw new HttpError(502, "GEMINI_EMBEDDING_INVALID", "Gemini embedding response is invalid");
   }
@@ -36,10 +75,17 @@ export async function generateGeminiEmbedding(text, options = {}) {
   return slicedValues.map(Number);
 }
 
-export async function generateGeminiJson(prompt, schema, options = {}) {
+/**
+ * Request Gemini JSON that matches `schema` and parse the first candidate.
+ */
+export async function generateGeminiJson(
+  prompt: unknown,
+  schema: unknown,
+  options: GeminiJsonOptions = {}
+): Promise<unknown> {
   requireGeminiKey();
   const model = options.model || config.geminiStylistModel;
-  const payload = {
+  const payload: JsonObject = {
     contents: [{
       parts: [{ text: String(prompt || "").slice(0, 30000) }]
     }],
@@ -52,27 +98,33 @@ export async function generateGeminiJson(prompt, schema, options = {}) {
   const data = await geminiRequestWithRetry(`/models/${encodeURIComponent(model)}:generateContent`, payload);
 
   // Gemini response: candidates[0].content.parts[0].text
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  const text = readFirstCandidateText(data);
   if (!text) {
     console.error("[GEMINI_JSON_EMPTY] Raw response:", JSON.stringify(data).slice(0, 500));
     throw new HttpError(502, "GEMINI_JSON_EMPTY", "Gemini returned an empty stylist response");
   }
 
   try {
-    return JSON.parse(text);
-  } catch (error) {
+    return JSON.parse(text) as unknown;
+  } catch (error: unknown) {
     console.error("[GEMINI_JSON_INVALID] Response text:", text.slice(0, 300));
     throw new HttpError(502, "GEMINI_JSON_INVALID", "Gemini stylist response is not valid JSON", {
-      parserMessage: error.message,
+      parserMessage: errorMessage(error),
       responsePreview: text.slice(0, 200)
     });
   }
 }
 
-export async function generateGeminiText(prompt, options = {}) {
+/**
+ * Request Gemini plain text from a single user prompt.
+ */
+export async function generateGeminiText(
+  prompt: unknown,
+  options: GeminiTextOptions = {}
+): Promise<string> {
   requireGeminiKey();
   const model = options.model || config.geminiModel || config.geminiStylistModel;
-  const payload = {
+  const payload: JsonObject = {
     contents: [
       {
         role: "user",
@@ -91,40 +143,52 @@ export async function generateGeminiText(prompt, options = {}) {
     payload,
     { timeoutMs: options.timeoutMs }
   );
-  const parts = data?.candidates?.[0]?.content?.parts || [];
-  const text = parts.map((part) => part.text || "").join("").trim();
+  const parts = readCandidateParts(data);
+  const text = parts.map((part) => asString(part.text)).join("").trim();
   if (!text) {
     throw new HttpError(502, "GEMINI_TEXT_EMPTY", "Gemini returned an empty response");
   }
   return text;
 }
 
-export function vectorLiteral(values) {
+/**
+ * Format an embedding array as a PostgREST vector literal.
+ */
+export function vectorLiteral(values: unknown): string {
   if (!Array.isArray(values) || !values.length) {
     throw new HttpError(500, "INVALID_VECTOR", "Embedding vector is empty");
   }
   return `[${values.map((value) => Number(value).toFixed(8)).join(",")}]`;
 }
 
-async function geminiRequestWithRetry(path, payload, options = {}) {
-  let lastError;
+async function geminiRequestWithRetry(
+  path: string,
+  payload: JsonObject,
+  options: GeminiRequestOptions = {}
+): Promise<unknown> {
+  let lastError: unknown;
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
       return await geminiRequest(path, payload, options);
-    } catch (error) {
+    } catch (error: unknown) {
       lastError = error;
       const isRetryable = error instanceof HttpError && [429, 500, 502, 503].includes(error.status);
       if (!isRetryable || attempt === MAX_RETRIES) {
         throw error;
       }
-      console.warn(`[GEMINI RETRY] Attempt ${attempt + 1}/${MAX_RETRIES} failed (${error.status}), retrying in ${RETRY_DELAY_MS}ms...`);
-      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS * (attempt + 1)));
+      const status = error instanceof HttpError ? error.status : "";
+      console.warn(`[GEMINI RETRY] Attempt ${attempt + 1}/${MAX_RETRIES} failed (${status}), retrying in ${RETRY_DELAY_MS}ms...`);
+      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS * (attempt + 1)));
     }
   }
   throw lastError;
 }
 
-async function geminiRequest(path, payload, options = {}) {
+async function geminiRequest(
+  path: string,
+  payload: JsonObject,
+  options: GeminiRequestOptions = {}
+): Promise<unknown> {
   const timeoutMs = Number(options.timeoutMs || config.requestTimeoutMs || 15000);
   const response = await fetch(`${GEMINI_API_BASE}${path}`, {
     method: "POST",
@@ -140,7 +204,7 @@ async function geminiRequest(path, payload, options = {}) {
   const data = text ? parseJson(text) : {};
 
   if (!response.ok) {
-    const geminiMessage = data?.error?.message || response.statusText;
+    const geminiMessage = readGeminiErrorMessage(data) || response.statusText;
     console.error(`[GEMINI API ERROR] ${response.status} on ${path}:`, geminiMessage);
     throw new HttpError(response.status, "GEMINI_API_ERROR", `Gemini API error: ${geminiMessage}`, {
       status: response.status,
@@ -150,26 +214,33 @@ async function geminiRequest(path, payload, options = {}) {
   }
 
   // Check for safety blocks in promptFeedback
-  const blockReason = data?.promptFeedback?.blockReason;
+  const blockReason = readBlockReason(data);
   if (blockReason) {
     console.error(`[GEMINI SAFETY BLOCK] Reason: ${blockReason}`);
     throw new HttpError(400, "GEMINI_SAFETY_BLOCK", `Gemini blocked the request: ${blockReason}`);
   }
 
   // Check for empty candidates
-  if (!data?.candidates?.length) {
+  if (!hasCandidates(data)) {
     console.error("[GEMINI NO CANDIDATES] Raw response:", JSON.stringify(data).slice(0, 500));
   }
 
   return data;
 }
 
-export async function analyzeImageWithGemini(base64Data, mimeType, userPrompt) {
+/**
+ * Describe an image with Gemini Vision for chatbot attachments.
+ */
+export async function analyzeImageWithGemini(
+  base64Data: string,
+  mimeType: string,
+  userPrompt: string
+): Promise<string> {
   requireGeminiKey();
-  const model = "gemini-3.5-flash"; 
+  const model = "gemini-3.5-flash";
   const cleanBase64 = base64Data.replace(/^data:image\/[a-zA-Z+.-]+;base64,/, "");
 
-  const payload = {
+  const payload: JsonObject = {
     contents: [
       {
         parts: [
@@ -188,20 +259,61 @@ export async function analyzeImageWithGemini(base64Data, mimeType, userPrompt) {
   };
 
   const data = await geminiRequestWithRetry(`/models/${encodeURIComponent(model)}:generateContent`, payload);
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-  return text;
+  return readFirstCandidateText(data);
 }
 
-function requireGeminiKey() {
+function requireGeminiKey(): void {
   if (!config.geminiApiKey) {
     throw new HttpError(503, "GEMINI_API_KEY_REQUIRED", "Gemini API key is not configured. Set GEMINI_API_KEY in .env");
   }
 }
 
-function parseJson(text) {
+function parseJson(text: string): unknown {
   try {
-    return JSON.parse(text);
+    return JSON.parse(text) as unknown;
   } catch {
     return {};
   }
+}
+
+function readEmbeddingValues(data: unknown): unknown[] | null {
+  if (!isJsonObject(data)) return null;
+  if (isJsonObject(data.embedding) && Array.isArray(data.embedding.values)) {
+    return data.embedding.values;
+  }
+  if (Array.isArray(data.embeddings)) {
+    const first = data.embeddings[0];
+    if (isJsonObject(first) && Array.isArray(first.values)) {
+      return first.values;
+    }
+  }
+  return null;
+}
+
+function readCandidateParts(data: unknown): JsonObject[] {
+  if (!isJsonObject(data) || !Array.isArray(data.candidates)) return [];
+  const first = data.candidates[0];
+  if (!isJsonObject(first) || !isJsonObject(first.content) || !Array.isArray(first.content.parts)) {
+    return [];
+  }
+  return first.content.parts.map((part) => asJsonObject(part));
+}
+
+function readFirstCandidateText(data: unknown): string {
+  const parts = readCandidateParts(data);
+  return asString(parts[0]?.text);
+}
+
+function readGeminiErrorMessage(data: unknown): string {
+  if (!isJsonObject(data) || !isJsonObject(data.error)) return "";
+  return asString(data.error.message);
+}
+
+function readBlockReason(data: unknown): string {
+  if (!isJsonObject(data) || !isJsonObject(data.promptFeedback)) return "";
+  return asString(data.promptFeedback.blockReason);
+}
+
+function hasCandidates(data: unknown): boolean {
+  return isJsonObject(data) && Array.isArray(data.candidates) && data.candidates.length > 0;
 }

@@ -1,8 +1,65 @@
-// @ts-nocheck
 import { HttpError } from "../http.js";
-import { ACCOUNT_ROLES, ADMIN_ROLES, ROLE_OPTIONS } from "./account-constants.js";
+import type { AuthContext, AuthUser, JsonObject, RequestMeta, UserProfile } from "../types.js";
+import { ACCOUNT_ROLES, ADMIN_ROLES, ROLE_OPTIONS, type AccountRoleOption } from "./account-constants.js";
+import type {
+  AccountListFilters,
+  AccountLockInput,
+  AccountRepository,
+  AccountRequestFilters,
+  AccountReviewInput,
+  AccountRoleChangeInput,
+  AccountUnlockInput
+} from "./account-repository.js";
 
-export function createAccountService({ repository }) {
+/**
+ * Account methods the admin account router calls.
+ */
+export interface AccountService {
+  roles(context: AuthContext | undefined): AccountRoleOption[];
+  list(
+    context: AuthContext | undefined,
+    searchParams: URLSearchParams
+  ): Promise<{ rows: JsonObject[]; count: number | undefined }>;
+  get(context: AuthContext | undefined, userId: string): Promise<JsonObject>;
+  listRoleRequests(
+    context: AuthContext | undefined,
+    searchParams: URLSearchParams
+  ): Promise<{ rows: JsonObject[]; count: number | undefined }>;
+  listAuditLogs(
+    context: AuthContext | undefined,
+    searchParams: URLSearchParams
+  ): Promise<{ rows: JsonObject[]; count: number | undefined }>;
+  lock(
+    context: AuthContext | undefined,
+    userId: string,
+    body: JsonObject,
+    requestMeta: RequestMeta
+  ): Promise<unknown>;
+  unlock(
+    context: AuthContext | undefined,
+    userId: string,
+    body: JsonObject,
+    requestMeta: RequestMeta
+  ): Promise<unknown>;
+  changeRole(
+    context: AuthContext | undefined,
+    userId: string,
+    body: JsonObject,
+    requestMeta: RequestMeta
+  ): Promise<unknown>;
+  reviewRoleRequest(
+    context: AuthContext | undefined,
+    requestId: string,
+    decision: string,
+    body: JsonObject,
+    requestMeta: RequestMeta
+  ): Promise<unknown>;
+}
+
+/**
+ * Super-admin account use cases over an account repository.
+ */
+export function createAccountService({ repository }: { repository: AccountRepository }): AccountService {
   if (!repository) throw new TypeError("repository is required");
 
   return {
@@ -67,7 +124,7 @@ export function createAccountService({ repository }) {
       if (!["approve", "reject"].includes(decision)) {
         throw validationError("decision", "Decision must be approve or reject");
       }
-      const input = {
+      const input: AccountReviewInput = {
         decision,
         expectedVersion: requireVersion(body?.expectedVersion),
         note: optionalText(body?.note, 1000),
@@ -79,16 +136,20 @@ export function createAccountService({ repository }) {
   };
 }
 
-export function validateLock(body = {}, requestMeta = {}) {
-  if (!["temporary", "permanent"].includes(body.lockType)) {
+/**
+ * Validate a lock mutation body.
+ */
+export function validateLock(body: JsonObject = {}, requestMeta: Partial<RequestMeta> = {}): AccountLockInput {
+  const lockType = typeof body.lockType === "string" ? body.lockType : "";
+  if (!["temporary", "permanent"].includes(lockType)) {
     throw validationError("lockType", "lockType must be temporary or permanent");
   }
   const lockedUntil = body.lockedUntil ? parseFutureDate(body.lockedUntil, "lockedUntil") : null;
-  if (body.lockType === "permanent" && lockedUntil) {
+  if (lockType === "permanent" && lockedUntil) {
     throw validationError("lockedUntil", "Permanent locks cannot have an expiry");
   }
   return {
-    lockType: body.lockType,
+    lockType,
     reason: requireReason(body.reason),
     expectedVersion: requireVersion(body.expectedVersion),
     lockedUntil,
@@ -96,7 +157,10 @@ export function validateLock(body = {}, requestMeta = {}) {
   };
 }
 
-export function validateUnlock(body = {}, requestMeta = {}) {
+/**
+ * Validate an unlock mutation body.
+ */
+export function validateUnlock(body: JsonObject = {}, requestMeta: Partial<RequestMeta> = {}): AccountUnlockInput {
   return {
     reason: requireReason(body.reason),
     expectedVersion: requireVersion(body.expectedVersion),
@@ -104,38 +168,47 @@ export function validateUnlock(body = {}, requestMeta = {}) {
   };
 }
 
-export function validateRoleChange(body = {}, requestMeta = {}) {
-  if (!ACCOUNT_ROLES.includes(body.role)) {
+/**
+ * Validate a role-change mutation body against the BA role matrix.
+ */
+export function validateRoleChange(body: JsonObject = {}, requestMeta: Partial<RequestMeta> = {}): AccountRoleChangeInput {
+  const role = typeof body.role === "string" ? body.role : "";
+  if (!ACCOUNT_ROLES.includes(role)) {
     throw validationError("role", "role must be member or admin");
   }
   const adminRole = body.adminRole ?? null;
-  if (body.role === "admin" && !ADMIN_ROLES.includes(adminRole)) {
+  if (role === "admin" && (typeof adminRole !== "string" || !ADMIN_ROLES.includes(adminRole))) {
     throw validationError("adminRole", "A valid adminRole is required for admin accounts");
   }
-  if (body.role === "member" && adminRole !== null) {
+  if (role === "member" && adminRole !== null) {
     throw validationError("adminRole", "adminRole must be null for members");
   }
   return {
-    role: body.role,
-    adminRole,
+    role,
+    adminRole: typeof adminRole === "string" ? adminRole : null,
     expectedVersion: requireVersion(body.expectedVersion),
     ipAddress: requestMeta.ipAddress || "0.0.0.0"
   };
 }
 
-export function countWords(value) {
-  const text = String(value || "").trim();
+/**
+ * Count whitespace-separated words in a free-text reason.
+ */
+export function countWords(value: unknown): number {
+  const text = String(value ? value : "").trim();
   return text ? text.split(/\s+/u).filter(Boolean).length : 0;
 }
 
-function requireAccountAdmin(context) {
+function requireAccountAdmin(
+  context: AuthContext | undefined
+): asserts context is AuthContext & { profile: UserProfile; authUser: AuthUser } {
   if (!context?.authUser?.id) throw new HttpError(401, "AUTH_REQUIRED", "Authentication is required");
   if (!context.isAdmin || !context.profile?.is_active || context.roleCode !== "super_admin") {
     throw new HttpError(403, "RBAC_DENIED", "Only an active super admin can manage accounts");
   }
 }
 
-function parseListFilters(searchParams) {
+function parseListFilters(searchParams: URLSearchParams): AccountListFilters {
   const role = searchParams.get("role") || "";
   const adminRole = searchParams.get("adminRole") || "";
   const active = searchParams.get("isActive");
@@ -155,7 +228,7 @@ function parseListFilters(searchParams) {
   };
 }
 
-function parseRequestFilters(searchParams) {
+function parseRequestFilters(searchParams: URLSearchParams): AccountRequestFilters {
   const status = searchParams.get("status") || "";
   if (status && !["pending", "approved", "rejected", "expired"].includes(status)) {
     throw validationError("status", "Invalid approval status");
@@ -167,8 +240,8 @@ function parseRequestFilters(searchParams) {
   };
 }
 
-function requireReason(value, field = "reason") {
-  const reason = String(value || "").trim().replace(/\s+/g, " ");
+function requireReason(value: unknown, field = "reason"): string {
+  const reason = String(value ? value : "").trim().replace(/\s+/g, " ");
   if (countWords(reason) <= 10) {
     throw validationError(field, `${field} must contain more than 10 words`);
   }
@@ -176,7 +249,7 @@ function requireReason(value, field = "reason") {
   return reason;
 }
 
-function requireVersion(value) {
+function requireVersion(value: unknown): number {
   const version = Number(value);
   if (!Number.isInteger(version) || version < 1) {
     throw validationError("expectedVersion", "expectedVersion must be a positive integer");
@@ -184,33 +257,38 @@ function requireVersion(value) {
   return version;
 }
 
-function optionalText(value, maxLength) {
-  const text = String(value || "").trim().replace(/\s+/g, " ");
+function optionalText(value: unknown, maxLength: number): string {
+  const text = String(value ? value : "").trim().replace(/\s+/g, " ");
   if (text.length > maxLength) throw validationError("note", `note must be at most ${maxLength} characters`);
   return text;
 }
 
-function parseFutureDate(value, field) {
-  const date = new Date(value);
+function parseFutureDate(value: unknown, field: string): string {
+  const date =
+    value instanceof Date
+      ? new Date(value.getTime())
+      : typeof value === "string" || typeof value === "number"
+        ? new Date(value)
+        : new Date(Number.NaN);
   if (Number.isNaN(date.getTime()) || date <= new Date()) {
     throw validationError(field, `${field} must be a future ISO date`);
   }
   return date.toISOString();
 }
 
-function requireUuid(value, field) {
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ""))) {
+function requireUuid(value: unknown, field: string): void {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value ? value : ""))) {
     throw validationError(field, `${field} must be a UUID`);
   }
 }
 
-function clampInteger(raw, fallback, min, max) {
+function clampInteger(raw: string | null, fallback: number, min: number, max: number): number {
   if (raw === null || raw === "") return fallback;
   const number = Number(raw);
   if (!Number.isInteger(number)) return fallback;
   return Math.max(min, Math.min(max, number));
 }
 
-function validationError(field, message) {
+function validationError(field: string, message: string): HttpError {
   return new HttpError(422, "VALIDATION_ERROR", "Request validation failed", { [field]: [message] });
 }

@@ -1,11 +1,20 @@
-// @ts-nocheck
 import { HttpError, readJson, sendJson } from "../http.js";
 import { selectOne, selectRows, insertRow, updateRows } from "../supabase.js";
 import { requireUserAuth } from "./auth.js";
-import { parseUtcDate } from "./orders.js";
+import {
+  asJsonObject,
+  asString,
+  type AuthContext,
+  type HeaderMap,
+  type HttpRequest,
+  type HttpResponse,
+  type JsonObject
+} from "../types.js";
 
-// Calculate total amount to refund for a return request
-export async function calculateReturnAmount(returnId) {
+/**
+ * Sum refundable amount for a return request from its line items.
+ */
+export async function calculateReturnAmount(returnId: unknown): Promise<number> {
   const { rows: items } = await selectRows("return_item", { return_id: `eq.${returnId}` });
   let total = 0;
   for (const item of items) {
@@ -17,8 +26,10 @@ export async function calculateReturnAmount(returnId) {
   return total;
 }
 
-// Process refund status in payment
-export async function processRefundPayment(orderId, refundAmount) {
+/**
+ * Mark the order payment as refunded with the given amount.
+ */
+export async function processRefundPayment(orderId: unknown, refundAmount: unknown): Promise<void> {
   const payment = await selectOne("payment", { order_id: `eq.${orderId}` });
   if (payment) {
     await updateRows("payment", { payment_id: `eq.${payment.payment_id}` }, {
@@ -29,8 +40,10 @@ export async function processRefundPayment(orderId, refundAmount) {
   }
 }
 
-// Create new exchange order
-export async function createExchangeOrder(ret, exchangeVariantId) {
+/**
+ * Create a replacement order from an approved exchange request.
+ */
+export async function createExchangeOrder(ret: JsonObject, exchangeVariantId: unknown): Promise<unknown> {
   const originalOrder = await selectOne("orders", { order_id: `eq.${ret.order_id}` });
   if (!originalOrder) {
     throw new Error("Không tìm thấy đơn hàng gốc");
@@ -72,7 +85,7 @@ export async function createExchangeOrder(ret, exchangeVariantId) {
   const originalUnitPrice = originalOrderItem ? Number(originalOrderItem.unit_price) : 0;
   const newUnitPrice = Number(p.sale_price);
 
-  const qty = firstReturnItem.quantity;
+  const qty = Number(firstReturnItem.quantity);
   const originalTotal = originalUnitPrice * qty;
   const newTotal = newUnitPrice * qty;
 
@@ -88,7 +101,7 @@ export async function createExchangeOrder(ret, exchangeVariantId) {
 
   // Create new order
   const trackingCode = "EXC" + Date.now().toString().slice(-8).toUpperCase();
-  const exchangeOrder = await insertRow("orders", {
+  const exchangeOrder = asJsonObject(await insertRow("orders", {
     user_id: ret.user_id,
     status: orderStatus,
     shipping_name: originalOrder.shipping_name,
@@ -103,14 +116,16 @@ export async function createExchangeOrder(ret, exchangeVariantId) {
     internal_note: `Đơn hàng đổi mới từ yêu cầu ${ret.tracking_return_code}. Chênh lệch: ${priceDiff}₫`,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString()
-  });
+  }));
+
+  const images = Array.isArray(p.images) ? p.images : [];
 
   // Create order item for the exchange order
   await insertRow("order_item", {
     order_id: exchangeOrder.order_id,
     variant_id: targetVariantId,
     product_name: p.name,
-    product_image: (p.images && p.images[0]) || null,
+    product_image: images[0] || null,
     quantity: qty,
     unit_price: newUnitPrice,
     subtotal_item: newTotal
@@ -133,8 +148,16 @@ export async function createExchangeOrder(ret, exchangeVariantId) {
   return exchangeOrder;
 }
 
-
-export async function handleReturnsRoute(req, res, action, corsHeaders, context) {
+/**
+ * Authenticated return/exchange create, list, and customer cancel.
+ */
+export async function handleReturnsRoute(
+  req: HttpRequest,
+  res: HttpResponse,
+  action: string | undefined,
+  corsHeaders: HeaderMap,
+  context: AuthContext
+): Promise<void> {
   const profile = requireUserAuth(context);
 
   // POST /api/user/returns/cancel
@@ -154,7 +177,7 @@ export async function handleReturnsRoute(req, res, action, corsHeaders, context)
     }
 
     // Check current status
-    if (!["pending", "approved"].includes(ret.status)) {
+    if (!["pending", "approved"].includes(asString(ret.status))) {
       throw new HttpError(400, "BAD_REQUEST", "Chỉ có thể hủy yêu cầu khi đang ở trạng thái Chờ xác nhận hoặc Đã duyệt hồ sơ (chưa gửi hàng)");
     }
 
@@ -172,7 +195,7 @@ export async function handleReturnsRoute(req, res, action, corsHeaders, context)
     const body = await readJson(req);
     const { order_id, return_type, description, evidence_images, items } = body;
 
-    if (!order_id || !return_type || !items || !items.length) {
+    if (!order_id || !return_type || !Array.isArray(items) || !items.length) {
       throw new HttpError(400, "BAD_REQUEST", "Thiếu thông tin yêu cầu đổi trả");
     }
 
@@ -183,23 +206,24 @@ export async function handleReturnsRoute(req, res, action, corsHeaders, context)
     }
 
     // Enforce order status check
-    if (!["delivered", "completed"].includes(order.status)) {
+    if (!["delivered", "completed"].includes(asString(order.status))) {
       throw new HttpError(400, "BAD_REQUEST", "Đơn hàng phải hoàn thành mới được yêu cầu đổi trả");
     }
 
     // RET-01 Time Check (2 days / 48 hours)
-    const deliveryDate = order.delivered_at ? new Date(order.delivered_at) : new Date(order.updated_at || order.created_at);
+    const deliveryDate = order.delivered_at ? new Date(String(order.delivered_at)) : new Date(String(order.updated_at || order.created_at));
     const now = new Date();
-    const diffHours = (now - deliveryDate) / (1000 * 60 * 60);
+    const diffHours = (now.getTime() - deliveryDate.getTime()) / (1000 * 60 * 60);
     if (diffHours > 48) {
       throw new HttpError(400, "BAD_REQUEST", "Quá thời hạn đổi/trả (2 ngày)");
     }
 
     // Perform category and quantity validation
-    const validatedItems = [];
+    const validatedItems: JsonObject[] = [];
     const { rows: existingReturns } = await selectRows("return_exchange", { order_id: `eq.${order_id}` });
 
-    for (const item of items) {
+    for (const rawItem of items) {
+      const item = asJsonObject(rawItem);
       const orderItem = await selectOne("order_item", { item_id: `eq.${item.order_item_id}` });
       if (!orderItem || orderItem.order_id !== order_id) {
         throw new HttpError(400, "BAD_REQUEST", "Sản phẩm không thuộc đơn hàng này");
@@ -223,12 +247,12 @@ export async function handleReturnsRoute(req, res, action, corsHeaders, context)
         if (r.status !== "rejected") {
           const { rows: rItems } = await selectRows("return_item", { return_id: `eq.${r.return_id}`, order_item_id: `eq.${item.order_item_id}` });
           for (const ri of rItems) {
-            alreadyReturnedQty += ri.quantity;
+            alreadyReturnedQty += Number(ri.quantity);
           }
         }
       }
 
-      if (alreadyReturnedQty + item.quantity > orderItem.quantity) {
+      if (alreadyReturnedQty + Number(item.quantity) > Number(orderItem.quantity)) {
         throw new HttpError(400, "BAD_REQUEST", "Số lượng đổi trả vượt quá số lượng đã mua");
       }
 
@@ -240,7 +264,7 @@ export async function handleReturnsRoute(req, res, action, corsHeaders, context)
 
     const trackingReturnCode = "RET" + Date.now().toString().slice(-8).toUpperCase();
 
-    const newReturn = await insertRow("return_exchange", {
+    const newReturn = asJsonObject(await insertRow("return_exchange", {
       order_id,
       user_id: profile.user_id,
       return_type,
@@ -249,9 +273,9 @@ export async function handleReturnsRoute(req, res, action, corsHeaders, context)
       status: "pending",
       tracking_return_code: trackingReturnCode,
       created_at: new Date().toISOString()
-    });
+    }));
 
-    const returnItems = [];
+    const returnItems: unknown[] = [];
     for (const item of validatedItems) {
       const retItem = await insertRow("return_item", {
         return_id: newReturn.return_id,
@@ -269,10 +293,10 @@ export async function handleReturnsRoute(req, res, action, corsHeaders, context)
 
   // GET /api/user/returns
   if (req.method === "GET") {
-    const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
+    const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
     const order_id = url.searchParams.get("order_id");
 
-    let queryParams = { user_id: `eq.${profile.user_id}` };
+    const queryParams: Record<string, string> = { user_id: `eq.${profile.user_id}` };
     if (order_id) {
       queryParams.order_id = `eq.${order_id}`;
     }
@@ -280,11 +304,11 @@ export async function handleReturnsRoute(req, res, action, corsHeaders, context)
     const { rows: returns } = await selectRows("return_exchange", queryParams);
     
     // Populate items
-    const populatedReturns = [];
+    const populatedReturns: JsonObject[] = [];
     for (const ret of returns) {
       const { rows: rItems } = await selectRows("return_item", { return_id: `eq.${ret.return_id}` });
       
-      const itemsWithDetails = [];
+      const itemsWithDetails: JsonObject[] = [];
       for (const ri of rItems) {
         const orderItem = await selectOne("order_item", { item_id: `eq.${ri.order_item_id}` });
         itemsWithDetails.push({
@@ -301,7 +325,7 @@ export async function handleReturnsRoute(req, res, action, corsHeaders, context)
     }
 
     // Sort descending by created_at
-    populatedReturns.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    populatedReturns.sort((a, b) => new Date(String(b.created_at)).getTime() - new Date(String(a.created_at)).getTime());
 
     return sendJson(res, 200, {
       success: true,

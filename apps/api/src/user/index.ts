@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { HttpError } from "../http.js";
 import { handleAuthRoute } from "./auth.js";
 import { handleProfileRoute } from "./profile.js";

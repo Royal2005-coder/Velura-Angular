@@ -1,6 +1,6 @@
-// @ts-nocheck
 import { callRpc } from "./supabase.js";
 import { HttpError } from "./http.js";
+import { asJsonObject, isJsonObject } from "./types.js";
 
 const BUSINESS_TIMEZONE_OFFSET_MS = 7 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -15,11 +15,11 @@ function localDateParts(now = new Date()) {
   };
 }
 
-function vietnamMidnightUtc(year, month, day) {
+function vietnamMidnightUtc(year: number, month: number, day: number) {
   return new Date(Date.UTC(year, month, day) - BUSINESS_TIMEZONE_OFFSET_MS);
 }
 
-function parseBusinessDate(value, fieldName) {
+function parseBusinessDate(value: string, fieldName: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value || "")) {
     throw new HttpError(400, "INVALID_DASHBOARD_DATE", `${fieldName} phải có định dạng YYYY-MM-DD`);
   }
@@ -36,7 +36,10 @@ function parseBusinessDate(value, fieldName) {
   return parsed;
 }
 
-export function resolveDashboardPeriod(searchParams, now = new Date()) {
+/**
+ * Resolve the dashboard reporting window from query params (Vietnam business dates).
+ */
+export function resolveDashboardPeriod(searchParams: URLSearchParams | null, now = new Date()) {
   const fromValue = searchParams?.get("from");
   const toValue = searchParams?.get("to");
   const requestedRange = searchParams?.get("range") || "week";
@@ -47,8 +50,8 @@ export function resolveDashboardPeriod(searchParams, now = new Date()) {
     }
     const from = parseBusinessDate(fromValue, "Ngày bắt đầu");
     const to = new Date(parseBusinessDate(toValue, "Ngày kết thúc").getTime() + DAY_MS);
-    const days = Math.round((to - from) / DAY_MS);
-    if (to <= from || days > MAX_CUSTOM_RANGE_DAYS) {
+    const days = Math.round((to.getTime() - from.getTime()) / DAY_MS);
+    if (to.getTime() <= from.getTime() || days > MAX_CUSTOM_RANGE_DAYS) {
       throw new HttpError(400, "INVALID_DASHBOARD_RANGE", "Khoảng thời gian phải từ 1 đến 366 ngày");
     }
     return { range: "custom", from, to, days };
@@ -66,7 +69,10 @@ export function resolveDashboardPeriod(searchParams, now = new Date()) {
   return { range: requestedRange, from, to, days };
 }
 
-export async function buildDashboardSummary(searchParams, now = new Date()) {
+/**
+ * Build the admin dashboard summary for a query range, or the default week when params are null.
+ */
+export async function buildDashboardSummary(searchParams: URLSearchParams | null, now = new Date()) {
   const period = resolveDashboardPeriod(searchParams, now);
   const summary = await callRpc("get_admin_dashboard_summary", {
     p_from: period.from.toISOString(),
@@ -77,15 +83,21 @@ export async function buildDashboardSummary(searchParams, now = new Date()) {
     throw new HttpError(502, "INVALID_DASHBOARD_SUMMARY", "Supabase không trả về dữ liệu dashboard hợp lệ");
   }
 
+  const summaryObject = asJsonObject(summary);
+
   // A percentage/point comparison is undefined when the previous period has
   // no orders. The SQL returns null for count/revenue deltas; normalize every
   // related comparison here so the UI never presents a fabricated increase.
-  if (summary.business?.comparisons?.orderCountPct === null) {
-    summary.business.comparisons.completionRatePoints = null;
+  const business = summaryObject.business;
+  if (isJsonObject(business)) {
+    const comparisons = business.comparisons;
+    if (isJsonObject(comparisons) && comparisons.orderCountPct === null) {
+      comparisons.completionRatePoints = null;
+    }
   }
 
   return {
-    ...summary,
+    ...summaryObject,
     range: period.range,
     from: period.from.toISOString(),
     to: new Date(period.to.getTime() - 1).toISOString(),

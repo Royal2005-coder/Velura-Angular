@@ -1,10 +1,18 @@
-// @ts-nocheck
 import { HttpError, sendJson } from "../http.js";
 import { selectRows, insertRow, updateRows } from "../supabase.js";
 import { requireUserAuth } from "./auth.js";
+import { errorMessage, type AuthContext, type HeaderMap, type HttpRequest, type HttpResponse } from "../types.js";
 
-// Helper to create notifications with grace (no crash if table missing)
-export async function createNotification(userId, type, title, content, link = null) {
+/**
+ * Persist a user notification, or return null when the table is unavailable.
+ */
+export async function createNotification(
+  userId: string,
+  type: string,
+  title: string,
+  content: string,
+  link: string | null = null
+): Promise<unknown> {
   try {
     const newNotif = await insertRow("notifications", {
       user_id: userId,
@@ -18,12 +26,23 @@ export async function createNotification(userId, type, title, content, link = nu
     console.log(`[Notification Created] user_id: ${userId}, title: ${title}`);
     return newNotif;
   } catch (err) {
-    console.warn(`[Notification Failed] Could not create notification: ${err.message}. Table 'notifications' might not exist yet.`);
+    console.warn(`[Notification Failed] Could not create notification: ${errorMessage(err)}. Table 'notifications' might not exist yet.`);
     return null;
   }
 }
 
-export async function handleNotificationsRoute(req, res, action, parts, corsHeaders, context) {
+/**
+ * Storefront notification list and read-state mutations.
+ */
+export async function handleNotificationsRoute(
+  req: HttpRequest,
+  res: HttpResponse,
+  action: string | undefined,
+  parts: string[],
+  corsHeaders: HeaderMap,
+  context: AuthContext
+): Promise<void> {
+  void parts;
   const profile = requireUserAuth(context);
 
   // GET /api/user/notifications
@@ -59,7 +78,7 @@ export async function handleNotificationsRoute(req, res, action, parts, corsHead
       }
       return sendJson(res, 200, { success: true, notifications: rows }, corsHeaders);
     } catch (err) {
-      console.warn(`[Notification API] Failed to select notifications: ${err.message}. Returning fallback static notifications.`);
+      console.warn(`[Notification API] Failed to select notifications: ${errorMessage(err)}. Returning fallback static notifications.`);
       const welcomeNotif = {
         id: "welcome-default",
         user_id: profile.user_id,
@@ -94,7 +113,7 @@ export async function handleNotificationsRoute(req, res, action, parts, corsHead
       );
       return sendJson(res, 200, { success: true }, corsHeaders);
     } catch (err) {
-      console.warn(`[Notification API] Failed to update read-all: ${err.message}`);
+      console.warn(`[Notification API] Failed to update read-all: ${errorMessage(err)}`);
       return sendJson(res, 200, { success: true, fallback: true }, corsHeaders);
     }
   }
@@ -109,7 +128,7 @@ export async function handleNotificationsRoute(req, res, action, parts, corsHead
       );
       return sendJson(res, 200, { success: true }, corsHeaders);
     } catch (err) {
-      console.warn(`[Notification API] Failed to update notification read status: ${err.message}`);
+      console.warn(`[Notification API] Failed to update notification read status: ${errorMessage(err)}`);
       return sendJson(res, 200, { success: true, fallback: true }, corsHeaders);
     }
   }

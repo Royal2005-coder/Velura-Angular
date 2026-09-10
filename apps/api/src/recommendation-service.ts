@@ -1,9 +1,16 @@
-// @ts-nocheck
 import { config } from "./config.js";
 import { generateGeminiEmbedding, generateGeminiJson, isGeminiConfigured, vectorLiteral } from "./gemini-client.js";
 import { HttpError } from "./http.js";
 import { callRpc, selectOne, selectRows } from "./supabase.js";
 import { guestStyleProfiles } from "./user/quiz.js";
+import {
+  asJsonObject,
+  asString,
+  isJsonObject,
+  type AuthContext,
+  type HttpRequest,
+  type JsonObject
+} from "./types.js";
 
 const PRODUCT_SELECT = [
   "product_id",
@@ -52,14 +59,33 @@ const COMBO_SCHEMA = {
   required: ["combos"]
 };
 
-export async function buildStyleProfileRecommendations(context, req) {
-  let quiz = null;
-  let fallbackData = { success: true, quiz: null, combos: [], categories: [] };
+interface RecommendationPayload {
+  success: boolean;
+  quiz: JsonObject | null;
+  combos: JsonObject[];
+  categories: JsonObject[];
+  source?: string;
+  error?: unknown;
+}
+
+interface CategoryGroup extends JsonObject {
+  products: JsonObject[];
+}
+
+/**
+ * Hybrid RAG style-profile recommendations, with rule-based fallback.
+ */
+export async function buildStyleProfileRecommendations(
+  context: AuthContext,
+  req: HttpRequest
+): Promise<RecommendationPayload> {
+  let quiz: JsonObject | null = null;
+  let fallbackData: RecommendationPayload = { success: true, quiz: null, combos: [], categories: [] };
 
   try {
     quiz = await getStyleProfile(context, req);
     fallbackData = await buildRuleBasedRecommendations(quiz);
-  } catch (dbError) {
+  } catch (dbError: unknown) {
     console.error("[RECOMMENDATION DB ERROR]:", sanitizeAiError(dbError));
     return { success: true, quiz: null, combos: [], categories: [], source: "db_error" };
   }
@@ -95,16 +121,19 @@ export async function buildStyleProfileRecommendations(context, req) {
       categories: categories.length ? categories : fallbackData.categories,
       source: "gemini_rag"
     };
-  } catch (error) {
+  } catch (error: unknown) {
     const errorDetail = sanitizeAiError(error);
     console.error("[RECOMMENDATION] Gemini RAG failed, using rule-based fallback:", errorDetail);
     return { ...fallbackData, source: "rule_fallback_gemini_error", error: errorDetail };
   }
 }
 
-export async function buildProductEmbeddingText(product) {
-  const category = product.category || {};
-  const variants = Array.isArray(product.variants) ? product.variants : [];
+/**
+ * Flatten a product row into embedding text for Gemini.
+ */
+export async function buildProductEmbeddingText(product: JsonObject): Promise<string> {
+  const category = asJsonObject(product.category);
+  const variants = asObjectList(product.variants);
   const sizes = [...new Set(variants.map((variant) => variant.size).filter(Boolean))].slice(0, 16);
   const colors = [...new Set(variants.map((variant) => variant.color).filter(Boolean))].slice(0, 16);
 
@@ -123,7 +152,7 @@ export async function buildProductEmbeddingText(product) {
   ].join(" | ");
 }
 
-async function getStyleProfile(context, req) {
+async function getStyleProfile(context: AuthContext, req: HttpRequest): Promise<JsonObject | null> {
   if (context?.profile?.user_id) {
     return selectOne("style_profile", { user_id: `eq.${context.profile.user_id}` });
   }
@@ -133,17 +162,17 @@ async function getStyleProfile(context, req) {
 
   // Retrieve from in-memory guest store if available
   const inMemory = guestStyleProfiles.get(guestSessionId);
-  if (inMemory) return inMemory;
+  if (inMemory) return asJsonObject(inMemory);
 
   // Fallback to selectOne and handle cases where database column doesn't exist
   try {
     return await selectOne("style_profile", { guest_session_id: `eq.${guestSessionId}` }, { useAnonKey: true });
-  } catch (err) {
+  } catch {
     return null;
   }
 }
 
-async function matchProductsByVector(queryEmbedding, quiz) {
+async function matchProductsByVector(queryEmbedding: number[], quiz: JsonObject): Promise<JsonObject[]> {
   const rows = await callRpc("match_products", {
     query_embedding: vectorLiteral(queryEmbedding),
     match_threshold: config.recommendationMatchThreshold,
@@ -152,14 +181,14 @@ async function matchProductsByVector(queryEmbedding, quiz) {
   }, { useAnonKey: false });
 
   const products = (Array.isArray(rows) ? rows : [])
-    .map(normalizeProduct)
+    .map((row) => normalizeProduct(asJsonObject(row)))
     .filter((product) => product.product_id);
 
   return rankProductsForStyleProfile(products, quiz, { keepSemanticFallback: true })
     .slice(0, config.recommendationMatchCount);
 }
 
-async function buildRuleBasedRecommendations(quiz) {
+async function buildRuleBasedRecommendations(quiz: JsonObject | null): Promise<RecommendationPayload> {
   const [productsResult, categoriesResult, comboItemsResult, variantsResult] = await Promise.all([
     selectRows("product", { select: PRODUCT_SELECT, status: "eq.on_sale" }, { useAnonKey: true }),
     selectRows("category", {}, { useAnonKey: true }),
@@ -176,14 +205,18 @@ async function buildRuleBasedRecommendations(quiz) {
         .filter((item) => item.combo_product_id === product.product_id)
         .map((item) => item.component_product_id)
         .filter(Boolean);
-      
-      const uniqueIds = [...new Set(componentProductIds)];
-      product.products = uniqueIds
-        .map((id) => products.find((p) => p.product_id === id))
-        .filter(Boolean);
-      
-      if ((!product.images || product.images.length === 0) && product.products.length > 0) {
-        product.images = product.products.flatMap((p) => Array.isArray(p.images) ? p.images.slice(0, 1) : []).slice(0, 4);
+
+      const uniqueComponentIds = [...new Set(componentProductIds)];
+      const nestedProducts = uniqueComponentIds
+        .map((id) => products.find((candidate) => candidate.product_id === id))
+        .filter((candidate): candidate is JsonObject => Boolean(candidate));
+      product.products = nestedProducts;
+
+      if ((!product.images || collectionLength(product.images) === 0) && nestedProducts.length > 0) {
+        product.images = nestedProducts.flatMap((nested) => {
+          const images: unknown[] = Array.isArray(nested.images) ? nested.images : [];
+          return images.slice(0, 1);
+        }).slice(0, 4);
       }
     }
   }
@@ -191,7 +224,7 @@ async function buildRuleBasedRecommendations(quiz) {
   const combos = products
     .filter((product) => product.is_combo)
     .map((product) => attachRecommendationScore(product, quiz))
-    .filter((product) => product.recommendation_score >= 3.0)
+    .filter((product) => Number(product.recommendation_score) >= 3.0)
     .sort(compareRecommendedProducts)
     .slice(0, 5);
   const fallbackCombos = combos.length ? combos : products
@@ -203,7 +236,7 @@ async function buildRuleBasedRecommendations(quiz) {
   const singles = products
     .filter((product) => !product.is_combo)
     .map((product) => attachRecommendationScore(product, quiz))
-    .filter((product) => product.recommendation_score >= 3.0)
+    .filter((product) => Number(product.recommendation_score) >= 3.0)
     .sort(compareRecommendedProducts);
   const fallbackSingles = singles.length ? singles : products
     .filter((product) => !product.is_combo)
@@ -219,8 +252,8 @@ async function buildRuleBasedRecommendations(quiz) {
   };
 }
 
-async function fetchAllVariants() {
-  let allVariants = [];
+async function fetchAllVariants(): Promise<{ rows: JsonObject[] }> {
+  let allVariants: JsonObject[] = [];
   let offset = 0;
   const limit = 1000;
   while (true) {
@@ -232,7 +265,7 @@ async function fetchAllVariants() {
   return { rows: allVariants };
 }
 
-async function buildStylistCombos(quiz, products) {
+async function buildStylistCombos(quiz: JsonObject, products: JsonObject[]): Promise<JsonObject[]> {
   const prompt = [
     "Bạn là AI Stylist cao cấp của Velura.",
     "Chỉ được chọn product_id từ danh sách sản phẩm được cấp. Không bịa sản phẩm.",
@@ -246,58 +279,68 @@ async function buildStylistCombos(quiz, products) {
     JSON.stringify(products.slice(0, 24).map(formatProductForPrompt))
   ].join("\n");
 
-  const result = await generateGeminiJson(prompt, COMBO_SCHEMA);
+  const result = asJsonObject(await generateGeminiJson(prompt, COMBO_SCHEMA));
   const productById = new Map(products.map((product) => [product.product_id, product]));
-  const combos = Array.isArray(result?.combos) ? result.combos : [];
+  const rawCombos: unknown[] = Array.isArray(result.combos) ? result.combos : [];
 
-  return combos.map((combo) => {
-    const selected = uniqueIds(combo.product_ids)
+  return rawCombos.map((combo) => {
+    const comboObject = asJsonObject(combo);
+    const selected = uniqueIds(comboObject.product_ids)
       .map((id) => productById.get(id))
-      .filter(Boolean)
+      .filter((product): product is JsonObject => Boolean(product))
       .slice(0, 4);
     if (selected.length < 2) return null;
-    return formatGeneratedCombo(combo, selected);
-  }).filter(Boolean);
+    return formatGeneratedCombo(comboObject, selected);
+  }).filter((combo): combo is JsonObject => Boolean(combo));
 }
 
-function formatGeneratedCombo(combo, products) {
+function formatGeneratedCombo(combo: JsonObject, products: JsonObject[]): JsonObject {
   const total = products.reduce((sum, product) => sum + Number(product.sale_price || product.base_price || 0), 0);
   return {
-    product_id: `gemini-combo-${products.map((product) => product.product_id.slice(0, 8)).join("-")}`,
+    product_id: `gemini-combo-${products.map((product) => String(product.product_id).slice(0, 8)).join("-")}`,
     is_combo: true,
     name: combo.combo_name || "Set phối đồ Velura",
     description: combo.reason || "",
     base_price: total,
     sale_price: total,
-    images: products.flatMap((product) => Array.isArray(product.images) ? product.images.slice(0, 1) : []).slice(0, 4),
+    images: products.flatMap((product) => {
+      const images: unknown[] = Array.isArray(product.images) ? product.images : [];
+      return images.slice(0, 1);
+    }).slice(0, 4),
     products,
     product_ids: products.map((product) => product.product_id),
     reason: combo.reason || ""
   };
 }
 
-function groupProductsByCategory(products) {
-  const groups = new Map();
+function groupProductsByCategory(products: JsonObject[]): JsonObject[] {
+  const groups = new Map<string, CategoryGroup>();
   const sortedProducts = [...products].sort(compareRecommendedProducts);
   for (const product of sortedProducts) {
-    const categoryId = product.category_id || "uncategorized";
+    const categoryId = String(product.category_id || "uncategorized");
+    const category = asJsonObject(product.category);
     if (!groups.has(categoryId)) {
       groups.set(categoryId, {
-        category_id: categoryId,
-        category_name: product.category_name || product.category?.name || "Gợi ý Velura",
-        category_slug: product.category_slug || product.category?.slug || "",
+        category_id: product.category_id || "uncategorized",
+        category_name: product.category_name || category.name || "Gợi ý Velura",
+        category_slug: product.category_slug || category.slug || "",
         products: []
       });
     }
     const group = groups.get(categoryId);
-    group.products.push(product);
+    if (group) group.products.push(product);
   }
   return [...groups.values()].filter((group) => group.products.length);
 }
 
-function hydrateProducts(products, categories, comboItems, variants) {
+function hydrateProducts(
+  products: JsonObject[],
+  categories: JsonObject[],
+  comboItems: JsonObject[],
+  variants: JsonObject[]
+): JsonObject[] {
   return products.map((product) => {
-    let productVariants = [];
+    let productVariants: JsonObject[] = [];
     if (product.is_combo) {
       const componentProductIds = comboItems
         .filter((item) => item.combo_product_id === product.product_id)
@@ -314,8 +357,8 @@ function hydrateProducts(products, categories, comboItems, variants) {
   });
 }
 
-function normalizeProduct(product) {
-  const category = product.category || {};
+function normalizeProduct(product: JsonObject): JsonObject {
+  const category = asJsonObject(product.category);
   return {
     ...product,
     category_name: product.category_name || category.name || "",
@@ -324,13 +367,14 @@ function normalizeProduct(product) {
   };
 }
 
-function buildProfileEmbeddingText(quiz, profile) {
-  const budgetDisplay = {
+function buildProfileEmbeddingText(quiz: JsonObject, profile: JsonObject | null | undefined): string {
+  const budgetDisplay: Record<string, string> = {
     "under_300k": "Dưới 300k",
     "300k_700k": "300k – 700k",
     "700k_1.5m": "700k – 1.5 triệu",
     "above_1.5m": "Trên 1.5 triệu"
   };
+  const budgetKey = asString(quiz.budget_range);
   return [
     `Người dùng: ${profile?.full_name || "Khách hàng Velura"}`,
     `Dáng người: ${quiz.body_shape || ""}`,
@@ -338,20 +382,20 @@ function buildProfileEmbeddingText(quiz, profile) {
     `Phong cách yêu thích: ${arrayText(quiz.style_tags)}`,
     `Dịp mặc ưu tiên: ${arrayText(quiz.preferred_occasions)}`,
     `Thương hiệu yêu thích: ${arrayText(quiz.favorite_brands)}`,
-    `Ngân sách: ${budgetDisplay[quiz.budget_range] || quiz.budget_range || ""}`,
+    `Ngân sách: ${budgetDisplay[budgetKey] || quiz.budget_range || ""}`,
     `Chiều cao: ${quiz.height_cm || ""}cm`,
     `Cân nặng: ${quiz.weight_kg || ""}kg`
   ].join(" | ");
 }
 
-function buildSizeFilter(quiz) {
+function buildSizeFilter(quiz: JsonObject | null): JsonObject {
   return {
     clothing_size: quiz?.clothing_size || quiz?.size || "",
     shoe_size: quiz?.shoe_size || ""
   };
 }
 
-function formatQuiz(quiz) {
+function formatQuiz(quiz: JsonObject | null): JsonObject | null {
   if (!quiz) return null;
   return {
     profile_id: quiz.profile_id,
@@ -373,7 +417,8 @@ function formatQuiz(quiz) {
   };
 }
 
-function formatProductForPrompt(product) {
+function formatProductForPrompt(product: JsonObject): JsonObject {
+  const variants = asObjectList(product.variants);
   return {
     product_id: product.product_id,
     name: product.name,
@@ -382,30 +427,38 @@ function formatProductForPrompt(product) {
     price: Number(product.sale_price || product.base_price || 0),
     style_tags: product.style_tags || [],
     suitable_body_shapes: product.suitable_body_shapes || [],
-    sizes: [...new Set((product.variants || []).map((variant) => variant.size).filter(Boolean))]
+    sizes: [...new Set(variants.map((variant) => variant.size).filter(Boolean))]
   };
 }
 
-function hasStyleSignal(quiz) {
+function hasStyleSignal(quiz: JsonObject | null): boolean {
   return Boolean(quiz?.body_shape || (Array.isArray(quiz?.style_tags) && quiz.style_tags.length));
 }
 
-function rankProductsForStyleProfile(products, quiz, options = {}) {
+function rankProductsForStyleProfile(
+  products: JsonObject[],
+  quiz: JsonObject | null,
+  options: { keepSemanticFallback?: boolean } = {}
+): JsonObject[] {
   const ranked = products.map((product) => attachRecommendationScore(product, quiz));
-  const strictMatches = ranked.filter((product) => product.recommendation_score >= 3.0);
+  const strictMatches = ranked.filter((product) => Number(product.recommendation_score) >= 3.0);
   if (strictMatches.length || !options.keepSemanticFallback) {
     return strictMatches.sort(compareRecommendedProducts);
   }
   return ranked.sort(compareRecommendedProducts);
 }
 
-export function attachRecommendationScore(product, quiz) {
+/**
+ * Attach a style-match score and reason tags to one product row.
+ */
+export function attachRecommendationScore(product: JsonObject, quiz: JsonObject | null): JsonObject {
   const signals = buildStyleSignals(quiz);
   const productStyleTags = normalizedSet(product.style_tags);
   const productBodyShapes = normalizedSet(product.suitable_body_shapes);
   const productOccasions = normalizedSet(product.occasions);
   const productSkinTone = normalizeSignal(product.color_tone);
-  const productCategory = normalizeSignal(product.category_name || product.category?.name || product.category_slug || "");
+  const category = asJsonObject(product.category);
+  const productCategory = normalizeSignal(product.category_name || category.name || product.category_slug || "");
   const productText = normalizedSet([
     product.name,
     product.description,
@@ -416,7 +469,7 @@ export function attachRecommendationScore(product, quiz) {
   ]);
 
   let score = Number(product.similarity || 0) * 2;
-  const reasons = [];
+  const reasons: string[] = [];
 
   const styleMatches = overlapCount(signals.styleTags, productStyleTags);
   if (styleMatches) {
@@ -459,14 +512,20 @@ export function attachRecommendationScore(product, quiz) {
   };
 }
 
-function compareRecommendedProducts(a, b) {
+function compareRecommendedProducts(a: JsonObject, b: JsonObject): number {
   return Number(b.recommendation_score || 0) - Number(a.recommendation_score || 0)
     || Number(b.similarity || 0) - Number(a.similarity || 0)
     || Number(Boolean(b.is_featured)) - Number(Boolean(a.is_featured))
     || String(a.name || "").localeCompare(String(b.name || ""), "vi");
 }
 
-function buildStyleSignals(quiz) {
+function buildStyleSignals(quiz: JsonObject | null): {
+  bodyShape: string;
+  skinTone: string;
+  styleTags: Set<string>;
+  occasions: Set<string>;
+  budget: string;
+} {
   return {
     bodyShape: normalizeSignal(quiz?.body_shape),
     skinTone: normalizeSignal(quiz?.skin_tone),
@@ -476,9 +535,9 @@ function buildStyleSignals(quiz) {
   };
 }
 
-function normalizedSet(values) {
-  const input = Array.isArray(values) ? values : [values];
-  const output = new Set();
+function normalizedSet(values: unknown): Set<string> {
+  const input: unknown[] = Array.isArray(values) ? values : [values];
+  const output = new Set<string>();
   for (const value of input) {
     const normalized = normalizeSignal(value);
     if (normalized) output.add(normalized);
@@ -486,7 +545,7 @@ function normalizedSet(values) {
   return output;
 }
 
-function normalizeSignal(value) {
+function normalizeSignal(value: unknown): string {
   const raw = String(value || "").trim().toLowerCase();
   if (!raw) return "";
   const compact = raw
@@ -496,7 +555,7 @@ function normalizeSignal(value) {
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
 
-  const aliases = {
+  const aliases: Record<string, string> = {
     minimalism: "minimalist",
     toi_gian: "minimalist",
     thanh_lich: "elegant",
@@ -528,7 +587,7 @@ function normalizeSignal(value) {
   return aliases[compact] || compact;
 }
 
-function overlapCount(needles, haystack) {
+function overlapCount(needles: Iterable<string>, haystack: Set<string>): number {
   let count = 0;
   for (const value of needles) {
     if (haystack.has(value)) count += 1;
@@ -536,7 +595,7 @@ function overlapCount(needles, haystack) {
   return count;
 }
 
-function isPriceInsideBudget(product, budget) {
+function isPriceInsideBudget(product: JsonObject, budget: string): boolean {
   const price = Number(product.sale_price || product.base_price || 0);
   if (!price) return false;
   if (budget === "under_300k") return price <= 300000;
@@ -546,17 +605,34 @@ function isPriceInsideBudget(product, budget) {
   return false;
 }
 
-function arrayText(value) {
+function arrayText(value: unknown): string {
   return Array.isArray(value) ? value.filter(Boolean).join(", ") : String(value || "");
 }
 
-function uniqueIds(values) {
-  return [...new Set((Array.isArray(values) ? values : []).map((value) => String(value || "").trim()).filter(Boolean))];
+function uniqueIds(values: unknown): string[] {
+  const list: unknown[] = Array.isArray(values) ? values : [];
+  return [...new Set(list.map((value) => String(value || "").trim()).filter(Boolean))];
 }
 
-function sanitizeAiError(error) {
+function sanitizeAiError(error: unknown): JsonObject {
   if (error instanceof HttpError) {
     return { code: error.code, status: error.status, details: error.details };
   }
-  return { message: error?.message || "unknown" };
+  const message = error instanceof Error
+    ? error.message
+    : isJsonObject(error)
+      ? error.message
+      : undefined;
+  return { message: message || "unknown" };
+}
+
+function asObjectList(value: unknown): JsonObject[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => asJsonObject(item));
+}
+
+function collectionLength(value: unknown): number {
+  if (typeof value === "string" || Array.isArray(value)) return value.length;
+  if (isJsonObject(value)) return Number(value.length) || 0;
+  return 0;
 }

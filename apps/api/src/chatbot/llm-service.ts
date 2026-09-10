@@ -1,6 +1,7 @@
-// @ts-nocheck
 import { config } from "../config.js";
 import { generateGeminiText, isGeminiConfigured } from "../gemini-client.js";
+import { asJsonObject, asNumber, asString, errorMessage, isJsonObject, type JsonObject } from "../types.js";
+import type { ChatbotRepository } from "./chatbot-repository.js";
 
 const GEMINI_INTERACTIONS_URL = "https://generativelanguage.googleapis.com/v1beta/interactions";
 
@@ -39,7 +40,41 @@ THÔNG TIN CHÍNH SÁCH CỐ ĐỊNH:
 - Không đưa lời khuyên y tế/pháp lý/tài chính. Với vấn đề ngoài phạm vi thời trang/cửa hàng, hãy lịch sự chuyển hướng hoặc đề nghị CSKH hỗ trợ.
 - Tuyệt đối KHÔNG hiển thị bất kỳ dòng phân tích, tự đánh giá, hoặc danh sách kiểm tra quy tắc nào (như "Review against constraints", "Role: Velura Stylist? Yes",...) trong câu trả lời. Hãy bắt đầu trực tiếp bằng câu chào hoặc nội dung tư vấn thân thiện cho khách.`;
 
-const GEMINI_TOOLS = [
+interface ToolDefinition {
+  type: string;
+  name: string;
+  description: string;
+  parameters: JsonObject;
+}
+
+/**
+ * Gemini / Mistral chat result consumed by `createChatbotService`.
+ */
+export interface LlmChatResult {
+  text: string;
+  productIds: unknown[];
+  blogIds?: unknown[];
+  used: boolean;
+  intent: string;
+  interactionId?: unknown;
+  createdTicket?: JsonObject | null;
+  metadata?: JsonObject;
+}
+
+/**
+ * LLM facade used by the chatbot service.
+ */
+export interface LlmService {
+  chat(
+    messages: JsonObject[],
+    contextProducts?: JsonObject[],
+    previousInteractionId?: unknown,
+    styleProfile?: JsonObject | null,
+    userId?: string | null
+  ): Promise<LlmChatResult>;
+}
+
+const GEMINI_TOOLS: ToolDefinition[] = [
   {
     type: "function",
     name: "search_products",
@@ -165,7 +200,10 @@ const GEMINI_TOOLS = [
   }
 ];
 
-export function createLLMService({ repository }) {
+/**
+ * Build the Gemini / Mistral chat client around a chatbot repository.
+ */
+export function createLLMService({ repository }: { repository: ChatbotRepository }): LlmService {
   if (!repository) throw new TypeError("repository is required");
   return {
     async chat(messages, contextProducts = [], previousInteractionId = null, styleProfile = null, userId = null) {
@@ -174,14 +212,21 @@ export function createLLMService({ repository }) {
         if (geminiResult.used) {
           return geminiResult;
         }
-        console.warn("[LLM] Gemini did not return a usable response, falling back to Mistral:", geminiResult.metadata?.error || "unknown");
+        const geminiMeta = geminiResult.metadata || {};
+        console.warn("[LLM] Gemini did not return a usable response, falling back to Mistral:", geminiMeta.error || "unknown");
       }
       return callMistralChat(messages, repository, contextProducts, styleProfile, userId);
     }
   };
 }
 
-async function callGeminiChat(messages, repository, contextProducts = [], styleProfile = null, userId = null) {
+async function callGeminiChat(
+  messages: JsonObject[],
+  repository: ChatbotRepository,
+  contextProducts: JsonObject[] = [],
+  styleProfile: JsonObject | null = null,
+  userId: string | null = null
+): Promise<LlmChatResult> {
   const lastUserText = getLastUserText(messages);
   console.log("[LLM] callGeminiChat called, model:", config.geminiModel || config.geminiStylistModel);
 
@@ -236,42 +281,50 @@ async function callGeminiChat(messages, repository, contextProducts = [], styleP
         }
       }
     };
-  } catch (error) {
-    console.error("[LLM] Error in callGeminiChat:", error.message);
+  } catch (error: unknown) {
+    console.error("[LLM] Error in callGeminiChat:", errorMessage(error));
     return {
       text: "",
       productIds: [],
       blogIds: [],
       used: false,
       intent: "llm_error",
-      metadata: { provider: "gemini", error: error.message }
+      metadata: { provider: "gemini", error: errorMessage(error) }
     };
   }
 }
 
-function buildGeminiChatPrompt({ messages, contextProducts, policyContext, blogContext, styleProfile, userId, lastUserText }) {
+function buildGeminiChatPrompt(input: {
+  messages: JsonObject[];
+  contextProducts: JsonObject[];
+  policyContext: JsonObject[];
+  blogContext: JsonObject[];
+  styleProfile: JsonObject | null;
+  userId: string | null;
+  lastUserText: string;
+}): string {
   return `${SYSTEM_PROMPT}
 
 NGUỒN DỮ LIỆU ĐÃ NẠP CHO LƯỢT TRẢ LỜI NÀY
 
 1. Trạng thái người dùng
-- userId: ${userId || "guest hoặc chưa xác định"}
-${formatStyleProfileForPrompt(styleProfile)}
+- userId: ${input.userId || "guest hoặc chưa xác định"}
+${formatStyleProfileForPrompt(input.styleProfile)}
 
 2. Sản phẩm thật từ database
-${formatProductsForPrompt(contextProducts)}
+${formatProductsForPrompt(input.contextProducts)}
 
 3. Chính sách thật từ database
-${formatPoliciesForPrompt(policyContext)}
+${formatPoliciesForPrompt(input.policyContext)}
 
 4. Bài viết liên quan từ database
-${formatBlogsForPrompt(blogContext)}
+${formatBlogsForPrompt(input.blogContext)}
 
 5. Lịch sử trò chuyện gần nhất
-${formatMessagesForPrompt(messages)}
+${formatMessagesForPrompt(input.messages)}
 
 YÊU CẦU CUỐI CỦA KHÁCH
-${lastUserText || "Khách chưa nêu rõ nhu cầu."}
+${input.lastUserText || "Khách chưa nêu rõ nhu cầu."}
 
 QUY TẮC TRẢ LỜI BẮT BUỘC
 - Trả lời bằng tiếng Việt tự nhiên, đúng vai trò Velura Stylist.
@@ -282,7 +335,7 @@ QUY TẮC TRẢ LỜI BẮT BUỘC
 - Không bịa sản phẩm, giá, tồn kho, thời gian xử lý hoặc chính sách.`;
 }
 
-function formatStyleProfileForPrompt(styleProfile) {
+function formatStyleProfileForPrompt(styleProfile: JsonObject | null): string {
   if (!styleProfile) {
     return "- Style Profile: chưa có hoặc chưa tải được.";
   }
@@ -300,20 +353,21 @@ function formatStyleProfileForPrompt(styleProfile) {
   + Ngân sách: ${styleProfile.budget_range || "chưa rõ"}`;
 }
 
-function formatProductsForPrompt(products = []) {
+function formatProductsForPrompt(products: JsonObject[] = []): string {
   if (!products.length) {
     return "- Chưa có sản phẩm phù hợp được truy xuất ở lượt này.";
   }
   return products.slice(0, 10).map((product, index) => {
     const price = Number(product.sale_price || product.base_price || product.price || 0);
     const variants = Array.isArray(product.variants)
-      ? product.variants.slice(0, 4).map((variant) => `${variant.color || "màu chưa rõ"} / ${variant.size || "size chưa rõ"} / tồn ${variant.stock_quantity ?? "?"}`).join("; ")
+      ? product.variants.filter(isJsonObject).slice(0, 4).map((variant) => `${variant.color || "màu chưa rõ"} / ${variant.size || "size chưa rõ"} / tồn ${variant.stock_quantity ?? "?"}`).join("; ")
       : "";
-    return `${index + 1}. ${product.name || "Sản phẩm"} | ID: ${product.product_id || ""} | Giá: ${price ? price.toLocaleString("vi-VN") + "đ" : "chưa rõ"} | SKU: ${product.sku || "chưa rõ"} | Danh mục: ${product.category?.name || product.category_name || "chưa rõ"} | Tag: ${formatArray(product.tags)} | Feature: ${formatArray(product.features)} | Biến thể: ${variants || "chưa rõ"} | Mô tả: ${truncateText(product.description, 420)}`;
+    const category = isJsonObject(product.category) ? product.category : {};
+    return `${index + 1}. ${product.name || "Sản phẩm"} | ID: ${product.product_id || ""} | Giá: ${price ? price.toLocaleString("vi-VN") + "đ" : "chưa rõ"} | SKU: ${product.sku || "chưa rõ"} | Danh mục: ${category.name || product.category_name || "chưa rõ"} | Tag: ${formatArray(product.tags)} | Feature: ${formatArray(product.features)} | Biến thể: ${variants || "chưa rõ"} | Mô tả: ${truncateText(product.description, 420)}`;
   }).join("\n");
 }
 
-function formatPoliciesForPrompt(policies = []) {
+function formatPoliciesForPrompt(policies: JsonObject[] = []): string {
   if (!policies.length) {
     return "- Không có chính sách liên quan được truy xuất ở lượt này.";
   }
@@ -322,7 +376,7 @@ function formatPoliciesForPrompt(policies = []) {
   }).join("\n\n");
 }
 
-function formatBlogsForPrompt(blogs = []) {
+function formatBlogsForPrompt(blogs: JsonObject[] = []): string {
   if (!blogs.length) {
     return "- Không có bài viết liên quan được truy xuất ở lượt này.";
   }
@@ -331,18 +385,19 @@ function formatBlogsForPrompt(blogs = []) {
   }).join("\n");
 }
 
-function formatMessagesForPrompt(messages = []) {
+function formatMessagesForPrompt(messages: JsonObject[] = []): string {
   return messages.slice(-8).map((message) => {
     const role = message.sender === "user" ? "Khách" : "Velura Stylist";
     return `${role}: ${truncateText(message.text, 650)}`;
   }).join("\n") || "Chưa có lịch sử trò chuyện.";
 }
 
-function formatPolicyContent(content) {
+function formatPolicyContent(content: unknown): string {
   if (Array.isArray(content)) {
     return content.map((section) => {
-      const heading = section.heading ? `${section.heading}: ` : "";
-      const body = Array.isArray(section.items) ? section.items.join("; ") : (section.text || "");
+      const block = isJsonObject(section) ? section : {};
+      const heading = block.heading ? `${block.heading}: ` : "";
+      const body = Array.isArray(block.items) ? block.items.join("; ") : String(block.text || "");
       return heading + body;
     }).filter(Boolean).join(" | ");
   }
@@ -352,40 +407,41 @@ function formatPolicyContent(content) {
   return truncateText(JSON.stringify(content || {}), 1400);
 }
 
-function formatArray(value) {
+function formatArray(value: unknown): string {
   return Array.isArray(value) && value.length ? value.join(", ") : "chưa rõ";
 }
 
-function truncateText(value, maxLength = 500) {
+function truncateText(value: unknown, maxLength = 500): string {
   const text = String(value || "").trim();
   return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
 }
 
-async function safeSearchPolicies(repository, query) {
+async function safeSearchPolicies(repository: ChatbotRepository, query: string): Promise<JsonObject[]> {
   try {
     const result = await repository.searchPolicies?.(query);
     return result?.rows || [];
-  } catch (error) {
-    console.warn("[LLM] Could not load policy context:", error.message);
+  } catch (error: unknown) {
+    console.warn("[LLM] Could not load policy context:", errorMessage(error));
     return [];
   }
 }
 
-async function safeSearchBlogs(repository, query) {
+async function safeSearchBlogs(repository: ChatbotRepository, query: string): Promise<JsonObject[]> {
   try {
     const result = await repository.searchBlogs?.(query);
     return result?.rows || [];
-  } catch (error) {
-    console.warn("[LLM] Could not load blog context:", error.message);
+  } catch (error: unknown) {
+    console.warn("[LLM] Could not load blog context:", errorMessage(error));
     return [];
   }
 }
 
-function getLastUserText(messages = []) {
-  return [...messages].reverse().find((message) => message.sender === "user")?.text || "";
+function getLastUserText(messages: JsonObject[] = []): string {
+  const found = [...messages].reverse().find((message) => message.sender === "user");
+  return asString(found?.text);
 }
 
-function normalizeText(value) {
+function normalizeText(value: unknown): string {
   return String(value || "")
     .toLowerCase()
     .normalize("NFD")
@@ -393,17 +449,17 @@ function normalizeText(value) {
     .replace(/đ/g, "d");
 }
 
-function shouldLoadPolicyContext(text) {
+function shouldLoadPolicyContext(text: string): boolean {
   const normalized = normalizeText(text);
   return /(chinh sach|doi tra|hoan tien|van chuyen|giao hang|phi ship|bao mat|dieu khoan|thanh vien|faq|cau hoi|ho tro|khieu nai|return|refund|shipping|privacy|policy)/.test(normalized);
 }
 
-function shouldLoadBlogContext(text) {
+function shouldLoadBlogContext(text: string): boolean {
   const normalized = normalizeText(text);
   return /(blog|bai viet|xu huong|cam nang|meo phoi|quiet luxury|capsule|phong cach)/.test(normalized);
 }
 
-function detectGeminiIntent(text, policies = [], blogs = [], products = []) {
+function detectGeminiIntent(text: string, policies: JsonObject[] = [], blogs: JsonObject[] = [], products: JsonObject[] = []): string {
   const normalized = normalizeText(text);
   if (policies.length || shouldLoadPolicyContext(text)) return "policy_query";
   if (blogs.length || shouldLoadBlogContext(text)) return "blog_search";
@@ -413,7 +469,7 @@ function detectGeminiIntent(text, policies = [], blogs = [], products = []) {
   return "general";
 }
 
-function inferProductIdsFromAnswer(answer, products = []) {
+function inferProductIdsFromAnswer(answer: string, products: JsonObject[] = []): unknown[] {
   if (!products.length) return [];
   const normalizedAnswer = normalizeText(answer);
   const matched = products
@@ -425,7 +481,13 @@ function inferProductIdsFromAnswer(answer, products = []) {
   return products.map((product) => product.product_id).filter(Boolean).slice(0, 4);
 }
 
-async function callMistralChat(messages, repository, contextProducts = [], styleProfile = null, userId = null) {
+async function callMistralChat(
+  messages: JsonObject[],
+  repository: ChatbotRepository,
+  contextProducts: JsonObject[] = [],
+  styleProfile: JsonObject | null = null,
+  userId: string | null = null
+): Promise<LlmChatResult> {
   const apiKey = config.mistralApiKey;
   console.log("[LLM] callMistralChat called, apiKey:", apiKey ? apiKey.substring(0, 8) + "..." : "MISSING");
   if (!apiKey) {
@@ -435,19 +497,21 @@ async function callMistralChat(messages, repository, contextProducts = [], style
 
   let styleContext = "";
   if (styleProfile) {
+    const styleTags = Array.isArray(styleProfile.style_tags) ? styleProfile.style_tags : [];
+    const occasions = Array.isArray(styleProfile.preferred_occasions) ? styleProfile.preferred_occasions : [];
     styleContext = `\n\nStyle Profile của Khách hàng:
 - Chiều cao: ${styleProfile.height_cm || "chưa rõ"} cm
 - Cân nặng: ${styleProfile.weight_kg || "chưa rõ"} kg
 - Số đo 3 vòng: Ngực ${styleProfile.chest_cm || "chưa rõ"}cm, Eo ${styleProfile.waist_cm || "chưa rõ"}cm, Mông ${styleProfile.hip_cm || "chưa rõ"}cm
 - Dáng người: ${styleProfile.body_shape || "chưa rõ"}
 - Tông da: ${styleProfile.skin_tone || "chưa rõ"}
-- Phong cách: ${(styleProfile.style_tags || []).join(", ") || "chưa rõ"}
-- Dịp ưa thích: ${(styleProfile.preferred_occasions || []).join(", ") || "chưa rõ"}
+- Phong cách: ${styleTags.join(", ") || "chưa rõ"}
+- Dịp ưa thích: ${occasions.join(", ") || "chưa rõ"}
 - Ngân sách: ${styleProfile.budget_range || "chưa rõ"}`;
   }
 
   const productContext = contextProducts.length
-    ? `\n\nSản phẩm có sẵn trong database:\n${contextProducts.map(p => `- ID: ${p.product_id}, Tên: ${p.name}, Giá: ${(p.sale_price || p.base_price).toLocaleString('vi-VN')}đ, SKU: ${p.sku}`).join('\n')}`
+    ? `\n\nSản phẩm có sẵn trong database:\n${contextProducts.map((p) => `- ID: ${p.product_id}, Tên: ${p.name}, Giá: ${Number(p.sale_price || p.base_price).toLocaleString("vi-VN")}đ, SKU: ${p.sku}`).join("\n")}`
     : "";
 
   const policyInstruction = `\n\nNGUỒN CHÍNH SÁCH:
@@ -457,17 +521,20 @@ async function callMistralChat(messages, repository, contextProducts = [], style
 
   const systemContent = SYSTEM_PROMPT + policyInstruction + styleContext + productContext;
 
-  const apiMessages = [
+  const apiMessages: JsonObject[] = [
     { role: "system", content: systemContent }
   ];
 
-  const historyMessages = messages.filter(m => !m.metadata?.system);
+  const historyMessages = messages.filter((m) => {
+    const meta = isJsonObject(m.metadata) ? m.metadata : null;
+    return !meta?.system;
+  });
   for (const m of historyMessages) {
     const role = m.sender === "user" ? "user" : "assistant";
     apiMessages.push({ role, content: m.text });
   }
 
-  const MISTRAL_TOOLS = GEMINI_TOOLS.map(t => ({
+  const MISTRAL_TOOLS = GEMINI_TOOLS.map((t) => ({
     type: "function",
     function: {
       name: t.name,
@@ -502,46 +569,50 @@ async function callMistralChat(messages, repository, contextProducts = [], style
       return { text: "", productIds: [], used: false, intent: "llm_error", metadata: { error: err } };
     }
 
-    let data = await response.json();
-    console.log("[LLM] Response ID:", data.id);
+    let data: unknown = await response.json();
+    const dataObj = isJsonObject(data) ? data : {};
+    console.log("[LLM] Response ID:", dataObj.id);
 
-    let choice = data.choices?.[0];
-    let assistantMessage = choice?.message;
-    let finalText = assistantMessage?.content || "";
-    let allProductIds = [];
-    let allProductsObj = [];
-    let allBlogIds = [];
-    let usedTools = [];
-    let createdTicket = null;
+    let choice = Array.isArray(dataObj.choices) && isJsonObject(dataObj.choices[0]) ? dataObj.choices[0] : {};
+    let assistantMessage = isJsonObject(choice.message) ? choice.message : {};
+    let finalText = typeof assistantMessage.content === "string" ? assistantMessage.content : "";
+    const allProductIds: unknown[] = [];
+    const allProductsObj: JsonObject[] = [];
+    const allBlogIds: unknown[] = [];
+    const usedTools: string[] = [];
+    let createdTicket: JsonObject | null = null;
 
-    if (assistantMessage?.tool_calls && assistantMessage.tool_calls.length > 0) {
-      console.log("[LLM] Tool calls found:", assistantMessage.tool_calls.length);
-      
+    const toolCalls = Array.isArray(assistantMessage.tool_calls) ? assistantMessage.tool_calls : [];
+    if (toolCalls.length > 0) {
+      console.log("[LLM] Tool calls found:", toolCalls.length);
+
       apiMessages.push(assistantMessage);
 
-      for (const toolCall of assistantMessage.tool_calls) {
-        const name = toolCall.function.name;
-        let args = {};
+      for (const rawCall of toolCalls) {
+        const toolCall = isJsonObject(rawCall) ? rawCall : {};
+        const fn = isJsonObject(toolCall.function) ? toolCall.function : {};
+        const name = asString(fn.name);
+        let args: JsonObject = {};
         try {
-          args = typeof toolCall.function.arguments === "string"
-          ? JSON.parse(toolCall.function.arguments)
-          : (toolCall.function.arguments || {});
-        } catch (e) {
+          args = typeof fn.arguments === "string"
+            ? asJsonObject(JSON.parse(fn.arguments) as unknown)
+            : (isJsonObject(fn.arguments) ? fn.arguments : {});
+        } catch (e: unknown) {
           console.error("[LLM] Failed to parse arguments for tool", name, e);
         }
 
         usedTools.push(name);
         console.log("[LLM] Tool call:", name, JSON.stringify(args));
-        
+
         const toolResult = await executeToolCall(name, args, repository, userId);
-        if (toolResult.products) {
-          allProductIds.push(...toolResult.products.map(p => p.product_id));
+        if (Array.isArray(toolResult.products)) {
+          allProductIds.push(...toolResult.products.map((p) => p.product_id));
           allProductsObj.push(...toolResult.products);
         }
-        if (toolResult.blogs) {
-          allBlogIds.push(...toolResult.blogs.map(b => b.blog_id));
+        if (Array.isArray(toolResult.blogs)) {
+          allBlogIds.push(...toolResult.blogs.map((b) => b.blog_id));
         }
-        if (name === "create_support_ticket" && toolResult.ticket) {
+        if (name === "create_support_ticket" && isJsonObject(toolResult.ticket)) {
           createdTicket = toolResult.ticket;
         }
         apiMessages.push({
@@ -573,11 +644,15 @@ async function callMistralChat(messages, repository, contextProducts = [], style
       }
 
       data = await response.json();
-      choice = data.choices?.[0];
-      finalText = choice?.message?.content || "";
+      const followUp = isJsonObject(data) ? data : {};
+      choice = Array.isArray(followUp.choices) && isJsonObject(followUp.choices[0]) ? followUp.choices[0] : {};
+      const followMessage = isJsonObject(choice.message) ? choice.message : {};
+      finalText = typeof followMessage.content === "string" ? followMessage.content : "";
+      data = followUp;
     }
 
     const finalProductIds = inferProductIdsFromAnswer(finalText, contextProducts.concat(allProductsObj));
+    const resultData = isJsonObject(data) ? data : {};
     console.log("[LLM] Final reply length:", finalText.length, "Products:", finalProductIds.length, "Blogs:", allBlogIds.length);
     return {
       text: finalText.trim().slice(0, 4000),
@@ -585,41 +660,46 @@ async function callMistralChat(messages, repository, contextProducts = [], style
       blogIds: [...new Set(allBlogIds)].slice(0, 6),
       used: true,
       intent: detectIntent(usedTools, messages),
-      interactionId: data.id,
+      interactionId: resultData.id,
       createdTicket,
       metadata: { tools_used: usedTools, model: config.mistralModel || "mistral-large-latest" }
     };
-  } catch (error) {
-    console.error("[LLM] Error in callMistralChat:", error.message);
-    return { text: "", productIds: [], used: false, intent: "llm_error", metadata: { error: error.message } };
+  } catch (error: unknown) {
+    console.error("[LLM] Error in callMistralChat:", errorMessage(error));
+    return { text: "", productIds: [], used: false, intent: "llm_error", metadata: { error: errorMessage(error) } };
   }
 }
 
-async function executeToolCall(name, args, repository, userId = null) {
+async function executeToolCall(name: string, args: JsonObject, repository: ChatbotRepository, userId: string | null = null): Promise<JsonObject> {
   switch (name) {
     case "search_products": {
-      const result = await repository.searchProducts(args.query || "", args.limit || 6);
-      const products = (result.rows || []).slice(0, args.limit || 6);
+      const limit = asNumber(args.limit) || 6;
+      const result = await repository.searchProducts(args.query || "", limit);
+      const products = (result.rows || []).slice(0, limit);
       return {
         products,
         summary: products.length
-          ? products.map(p => `${p.name} - ${(p.sale_price || p.base_price).toLocaleString('vi-VN')}đ`).join('\n')
+          ? products.map((p) => `${p.name} - ${Number(p.sale_price || p.base_price).toLocaleString("vi-VN")}đ`).join("\n")
           : "Không tìm thấy sản phẩm phù hợp"
       };
     }
     case "get_categories": {
       const result = await repository.listCategories?.() || { rows: [] };
-      return { categories: result.rows || [], summary: (result.rows || []).map(c => c.name).join(', ') };
+      return { categories: result.rows || [], summary: (result.rows || []).map((c) => c.name).join(", ") };
     }
     case "get_product_detail": {
-      const result = await repository.getProductById?.(args.product_id) || null;
+      const result = await repository.getProductById?.(asString(args.product_id)) || null;
       let summaryText = "Không tìm thấy";
       if (result) {
-        summaryText = `${result.name} - ${(result.sale_price || result.base_price).toLocaleString('vi-VN')}đ`;
-        if (result.is_combo && result.combo_components && result.combo_components.length > 0) {
-          const componentsStr = result.combo_components
-            .map(c => `  + ${c.quantity}x ${c.product?.name || "Sản phẩm"} (SKU: ${c.product?.sku || "N/A"})`)
-            .join('\n');
+        summaryText = `${result.name} - ${Number(result.sale_price || result.base_price).toLocaleString("vi-VN")}đ`;
+        const comboComponents = Array.isArray(result.combo_components) ? result.combo_components.filter(isJsonObject) : [];
+        if (result.is_combo && comboComponents.length > 0) {
+          const componentsStr = comboComponents
+            .map((c) => {
+              const product = isJsonObject(c.product) ? c.product : {};
+              return `  + ${c.quantity}x ${product.name || "Sản phẩm"} (SKU: ${product.sku || "N/A"})`;
+            })
+            .join("\n");
           summaryText += `\nĐây là sản phẩm COMBO bao gồm:\n${componentsStr}`;
         }
       }
@@ -631,25 +711,25 @@ async function executeToolCall(name, args, repository, userId = null) {
     case "get_order_status": {
       const q = String(args.order_query || "").trim();
       if (!q) return { error: "Yêu cầu mã đơn hàng hoặc số điện thoại" };
-      
+
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(q);
-      const filter = {};
+      const filter: Record<string, unknown> = {};
       if (isUuid) {
         filter.order_id = `eq.${q}`;
       } else {
         filter.or = `(tracking_code.eq.${q},shipping_phone.eq.${q})`;
       }
-      
+
       const result = await repository.searchOrders?.(filter) || { rows: [] };
       const orders = result.rows || [];
       if (!orders.length) {
         return { summary: `Không tìm thấy đơn hàng nào khớp với thông tin "${q}".` };
       }
-      
-      const details = orders.map(o => {
-        const dateStr = new Date(o.order_date).toLocaleDateString("vi-VN");
+
+      const details = orders.map((o) => {
+        const dateStr = new Date(asString(o.order_date)).toLocaleDateString("vi-VN");
         const amountStr = Number(o.total_amount || 0).toLocaleString("vi-VN") + "đ";
-        const statusMap = {
+        const statusMap: Record<string, string> = {
           pending: "Đang chờ xử lý",
           confirmed: "Đã xác nhận",
           preparing: "Đang chuẩn bị hàng",
@@ -659,10 +739,11 @@ async function executeToolCall(name, args, repository, userId = null) {
           cancelled: "Đã hủy đơn",
           completed: "Đơn hàng hoàn tất"
         };
-        const statusText = statusMap[o.status] || o.status;
-        return `Đơn hàng ${o.order_id.substring(0, 8)}... (${dateStr}): Trạng thái: ${statusText}, Tổng tiền: ${amountStr}, Mã vận đơn: ${o.tracking_code || 'Chưa có'}`;
+        const statusKey = asString(o.status);
+        const statusText = statusMap[statusKey] || o.status;
+        return `Đơn hàng ${asString(o.order_id).substring(0, 8)}... (${dateStr}): Trạng thái: ${statusText}, Tổng tiền: ${amountStr}, Mã vận đơn: ${o.tracking_code || "Chưa có"}`;
       }).join("\n");
-      
+
       return { orders, summary: details };
     }
     case "update_style_profile": {
@@ -672,7 +753,7 @@ async function executeToolCall(name, args, repository, userId = null) {
       const updated = await repository.updateStyleProfile(userId, args);
       return {
         profile: updated,
-        summary: `Đã cập nhật hồ sơ phong cách thành công với các thông số: ${Object.entries(args).map(([k, v]) => `${k}: ${v}`).join(', ')}.`
+        summary: `Đã cập nhật hồ sơ phong cách thành công với các thông số: ${Object.entries(args).map(([k, v]) => `${k}: ${v}`).join(", ")}.`
       };
     }
     case "get_policies": {
@@ -688,21 +769,22 @@ async function executeToolCall(name, args, repository, userId = null) {
     case "search_policies": {
       const result = await repository.searchPolicies(args.query || "");
       const policies = result.rows || [];
-      const formatted = policies.map(p => {
+      const formatted = policies.map((p) => {
         let contentStr = "";
         if (Array.isArray(p.content)) {
-          contentStr = p.content.map(section => {
-            const heading = section.heading ? `**${section.heading}**\n` : "";
-            const items = Array.isArray(section.items)
-              ? section.items.map(item => `- ${item}`).join('\n')
-              : section.text || "";
+          contentStr = p.content.map((section: unknown) => {
+            const block = isJsonObject(section) ? section : {};
+            const heading = block.heading ? `**${block.heading}**\n` : "";
+            const items = Array.isArray(block.items)
+              ? block.items.map((item: unknown) => `- ${item}`).join("\n")
+              : String(block.text || "");
             return heading + items;
-          }).join('\n\n');
+          }).join("\n\n");
         } else {
           contentStr = typeof p.content === "string" ? p.content : JSON.stringify(p.content);
         }
         return `=== ${p.title} ===\nTóm tắt: ${p.summary}\nChi tiết:\n${contentStr}`;
-      }).join('\n\n');
+      }).join("\n\n");
       return {
         policies,
         summary: policies.length ? formatted : "Không tìm thấy chính sách tương ứng"
@@ -711,10 +793,11 @@ async function executeToolCall(name, args, repository, userId = null) {
     case "search_blogs": {
       const result = await repository.searchBlogs(args.query || "");
       const blogs = result.rows || [];
-      const formatted = blogs.map(b => {
-        const body = b.content ? b.content.slice(0, 1200) + (b.content.length > 1200 ? "..." : "") : "";
+      const formatted = blogs.map((b) => {
+        const content = asString(b.content);
+        const body = content ? content.slice(0, 1200) + (content.length > 1200 ? "..." : "") : "";
         return `=== ${b.title} ===\nTác giả: ${b.author} | Thời lượng đọc: ${b.read_minutes} phút\nTóm tắt: ${b.excerpt}\nNội dung:\n${body}`;
-      }).join('\n\n');
+      }).join("\n\n");
       return {
         blogs,
         summary: blogs.length ? formatted : "Không tìm thấy bài viết blog phù hợp"
@@ -723,10 +806,10 @@ async function executeToolCall(name, args, repository, userId = null) {
     case "create_support_ticket": {
       const ticket = await repository.createSupportTicket({
         profileUserId: userId || null,
-        guestEmail: args.email || null,
-        guestPhone: args.phone || null,
-        title: args.title,
-        description: args.description,
+        guestEmail: asString(args.email) || null,
+        guestPhone: asString(args.phone) || null,
+        title: asString(args.title),
+        description: asString(args.description),
         priority: "high"
       });
       return {
@@ -739,13 +822,14 @@ async function executeToolCall(name, args, repository, userId = null) {
   }
 }
 
-function formatPolicyForTool(policy) {
+function formatPolicyForTool(policy: JsonObject): string {
   const sections = Array.isArray(policy.content)
     ? policy.content.map((section) => {
-      const heading = section.heading ? `**${section.heading}**\n` : "";
-      const body = Array.isArray(section.items)
-        ? section.items.map((item) => `- ${item}`).join("\n")
-        : section.text || "";
+      const block = isJsonObject(section) ? section : {};
+      const heading = block.heading ? `**${block.heading}**\n` : "";
+      const body = Array.isArray(block.items)
+        ? block.items.map((item: unknown) => `- ${item}`).join("\n")
+        : String(block.text || "");
       return `${heading}${body}`.trim();
     }).filter(Boolean).join("\n")
     : typeof policy.content === "string"
@@ -754,8 +838,9 @@ function formatPolicyForTool(policy) {
   return `=== ${policy.title} ===\nTóm tắt: ${policy.summary || ""}\nChi tiết:\n${sections}`;
 }
 
-function detectIntent(tools, messages) {
-  const last = messages[messages.length - 1]?.text?.toLowerCase() || "";
+function detectIntent(tools: string[], messages: JsonObject[]): string {
+  const lastRaw = messages[messages.length - 1]?.text;
+  const last = typeof lastRaw === "string" ? lastRaw.toLowerCase() : "";
   if (tools.includes("get_order_status")) return "order_query";
   if (tools.includes("search_products")) return "product_search";
   if (tools.includes("get_categories")) return "category_browse";

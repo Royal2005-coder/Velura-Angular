@@ -1,12 +1,12 @@
-// @ts-nocheck
 import { config } from "../config.js";
 import { getRequestIp, readJson, sendJson } from "../http.js";
-import type { RouteArgs } from "../types.js";
+import { isJsonObject, type RouteArgs } from "../types.js";
+import type { AccountService } from "./account-service.js";
 
 /**
  * Admin account HTTP routes under `/api/v1/admin/accounts`.
  */
-export async function handleAccountRoute({ req, res, url, parts, context, headers, service }: RouteArgs): Promise<boolean> {
+export async function handleAccountRoute({ req, res, url, parts, context, headers, service }: RouteArgs<AccountService>): Promise<boolean> {
   if (parts[0] !== "api" || parts[1] !== "v1" || parts[2] !== "admin") return false;
 
   const requestMeta = { ipAddress: getRequestIp(req) };
@@ -38,7 +38,8 @@ export async function handleAccountRoute({ req, res, url, parts, context, header
       }
       if (action === "role") {
         const result = await service.changeRole(context, userId, body, requestMeta);
-        sendJson(res, result?.kind === "approval" ? 202 : 200, result, headers);
+        const kind = isJsonObject(result) ? result.kind : undefined;
+        sendJson(res, kind === "approval" ? 202 : 200, result, headers);
         return true;
       }
     }
@@ -52,7 +53,8 @@ export async function handleAccountRoute({ req, res, url, parts, context, header
     if (req.method === "POST" && parts.length === 6) {
       const body = await readJson(req, config.maxBodyBytes);
       const result = await service.reviewRoleRequest(context, parts[4], parts[5], body, requestMeta);
-      sendJson(res, result?.kind === "expired" ? 409 : 200, result, headers);
+      const kind = isJsonObject(result) ? result.kind : undefined;
+      sendJson(res, kind === "expired" ? 409 : 200, result, headers);
       return true;
     }
   }

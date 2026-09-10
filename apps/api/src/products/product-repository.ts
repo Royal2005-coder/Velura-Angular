@@ -1,13 +1,21 @@
-// @ts-nocheck
 import { HttpError } from "../http.js";
 import { randomUUID } from "node:crypto";
 import { callRpc, insertRow, selectOne, selectRows, updateRows, deleteRows } from "../supabase.js";
+import { asJsonObject, asString, type JsonObject } from "../types.js";
 import { PRODUCT_SELECT } from "./product-constants.js";
 
+/**
+ * PostgREST product repository used by `createProductService`.
+ */
+export type ProductRepository = ReturnType<typeof createProductRepository>;
+
+/**
+ * Create the product PostgREST repository.
+ */
 export function createProductRepository() {
   return {
-    async list(filters, accessToken) {
-      const query = {
+    async list(filters: JsonObject, accessToken: string | null) {
+      const query: Record<string, unknown> = {
         select: PRODUCT_SELECT,
         order: filters.order,
         limit: filters.limit,
@@ -33,21 +41,21 @@ export function createProductRepository() {
       return withProductError(() => selectRows("product", query, authOptions(accessToken)));
     },
 
-    async findById(productId, accessToken) {
+    async findById(productId: string, accessToken: string | null) {
       return withProductError(() => selectOne("product", {
         select: PRODUCT_SELECT,
         product_id: `eq.${productId}`
       }, authOptions(accessToken)));
     },
 
-    async findBySku(sku, accessToken) {
+    async findBySku(sku: string, accessToken: string | null) {
       return withProductError(() => selectOne("product", {
         select: PRODUCT_SELECT,
         sku: `eq.${sku}`
       }, authOptions(accessToken)));
     },
 
-    async listVariants(productId, accessToken) {
+    async listVariants(productId: string, accessToken: string | null) {
       return withProductError(() => selectRows("variant", {
         select: "variant_id,product_id,color,color_hex,size,size_measurements,stock_quantity,reserved_quantity,low_stock_threshold,version,updated_at",
         product_id: `eq.${productId}`,
@@ -55,14 +63,14 @@ export function createProductRepository() {
       }, authOptions(accessToken)));
     },
 
-    async listCategories(accessToken) {
+    async listCategories(accessToken: string | null) {
       return withProductError(() => selectRows("category", {
         select: "category_id,name,parent_id,slug,display_order",
         order: "display_order.asc,name.asc"
       }, authOptions(accessToken)));
     },
 
-    async createProduct(input, accessToken) {
+    async createProduct(input: JsonObject, accessToken: string | null) {
       return withProductError(async () => {
         const productId = randomUUID();
         const result = await insertRow("product", {
@@ -87,12 +95,12 @@ export function createProductRepository() {
           seo_title: input.seoTitle || null,
           seo_description: input.seoDescription || null,
           version: 1
-        }, accessToken);
+        }, accessToken as never);
         return result;
       });
     },
 
-    updateProduct(productId, input, accessToken) {
+    updateProduct(productId: string, input: JsonObject, accessToken: string | null) {
       return rpc("admin_update_product", {
         p_product_id: productId,
         p_name: input.name ?? null,
@@ -117,7 +125,7 @@ export function createProductRepository() {
       }, accessToken);
     },
 
-    async changeStatus(productId, input, accessToken) {
+    async changeStatus(productId: string, input: JsonObject, accessToken: string | null) {
       return withProductError(async () => {
         const product = await selectOne("product", {
           select: "product_id,status,version",
@@ -131,7 +139,7 @@ export function createProductRepository() {
           version: `eq.${product.version}`
         }, {
           status: input.status,
-          version: product.version + 1,
+          version: (product.version as number) + 1,
           updated_at: new Date().toISOString()
         }, authOptions(accessToken));
         if (!results || !results.length) throw new HttpError(409, "VERSION_CONFLICT", "Version conflict");
@@ -139,7 +147,7 @@ export function createProductRepository() {
       });
     },
 
-    updateStock(productId, variantId, input, accessToken) {
+    updateStock(productId: string, variantId: string, input: JsonObject, accessToken: string | null) {
       return rpc("admin_update_stock", {
         p_product_id: productId,
         p_variant_id: variantId,
@@ -150,7 +158,7 @@ export function createProductRepository() {
       }, accessToken);
     },
 
-    async createVariant(productId, input, accessToken) {
+    async createVariant(productId: string, input: JsonObject, accessToken?: string | null) {
       return withProductError(() => insertRow("variant", {
         variant_id: randomUUID(),
         product_id: productId,
@@ -166,8 +174,8 @@ export function createProductRepository() {
       }, authOptions(accessToken)));
     },
 
-    async listAuditLogs(filters, accessToken) {
-      const query = {
+    async listAuditLogs(filters: JsonObject, accessToken: string | null) {
+      const query: Record<string, unknown> = {
         select: "audit_id,actor_id,actor_role,action,module,target_id,old_value,new_value,ip_address,timestamp",
         module: "eq.products",
         order: "timestamp.desc",
@@ -178,18 +186,24 @@ export function createProductRepository() {
       return withProductError(() => selectRows("audit_log", query, authOptions(accessToken)));
     },
 
-    async lowStockCount(accessToken) {
+    async lowStockCount(accessToken: string | null) {
       return withProductError(() => callRpc("admin_list_low_stock", { p_limit: 100 }, authOptions(accessToken)));
     },
 
-    async getComboItems(productId, accessToken) {
+    async getComboItems(productId: string, accessToken: string | null) {
       return withProductError(() => selectRows("combo_item", {
         select: "combo_item_id,combo_product_id,component_product_id,component_variant_id,quantity",
         combo_product_id: `eq.${productId}`
       }, authOptions(accessToken)));
     },
 
-    async addComboItem(productId, componentProductId, componentVariantId, quantity, accessToken) {
+    async addComboItem(
+      productId: string,
+      componentProductId: string,
+      componentVariantId: string | null,
+      quantity: number,
+      accessToken: string | null
+    ) {
       return withProductError(() => insertRow("combo_item", {
         combo_item_id: randomUUID(),
         combo_product_id: productId,
@@ -199,14 +213,14 @@ export function createProductRepository() {
       }, authOptions(accessToken)));
     },
 
-    async updateComboItem(productId, itemId, quantity, accessToken) {
+    async updateComboItem(productId: string, itemId: string, quantity: number, accessToken: string | null) {
       return withProductError(() => updateRows("combo_item", {
         combo_item_id: `eq.${itemId}`,
         combo_product_id: `eq.${productId}`
       }, { quantity }, authOptions(accessToken)));
     },
 
-    async removeComboItem(productId, itemId, accessToken) {
+    async removeComboItem(productId: string, itemId: string, accessToken: string | null) {
       return withProductError(() => deleteRows("combo_item", {
         combo_item_id: `eq.${itemId}`,
         combo_product_id: `eq.${productId}`
@@ -215,24 +229,25 @@ export function createProductRepository() {
   };
 }
 
-async function rpc(name, payload, accessToken) {
+async function rpc(name: string, payload: unknown, accessToken: string | null): Promise<unknown> {
   return withProductError(() => callRpc(name, payload, authOptions(accessToken)));
 }
 
-function authOptions(accessToken) {
+function authOptions(accessToken: string | null | undefined) {
   return { useAnonKey: true, accessToken };
 }
 
-function sanitizeSearch(value) {
+function sanitizeSearch(value: unknown): string {
   return String(value || "").replace(/[,*()]/g, " ").replace(/\s+/g, " ").trim().slice(0, 100);
 }
 
-async function withProductError(operation) {
+async function withProductError<T>(operation: () => Promise<T>): Promise<T> {
   try {
     return await operation();
-  } catch (error) {
+  } catch (error: unknown) {
     if (error instanceof HttpError && error.code === "SUPABASE_ERROR") {
-      const databaseCode = error.details?.message || error.details?.code || "PRODUCT_DATABASE_ERROR";
+      const details = asJsonObject(error.details);
+      const databaseCode = asString(details.message) || asString(details.code) || "PRODUCT_DATABASE_ERROR";
       const status = error.status >= 400 && error.status < 500 ? error.status : 502;
       throw new HttpError(status, databaseCode, productErrorMessage(databaseCode), error.details);
     }
@@ -240,8 +255,8 @@ async function withProductError(operation) {
   }
 }
 
-function productErrorMessage(code) {
-  const messages = {
+function productErrorMessage(code: string): string {
+  const messages: Record<string, string> = {
     RBAC_DENIED: "You do not have permission to manage products",
     PRODUCT_NOT_FOUND: "Product was not found",
     VERSION_CONFLICT: "Product data changed; reload before trying again",

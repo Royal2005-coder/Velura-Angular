@@ -1,9 +1,25 @@
-// @ts-nocheck
 import { HttpError, readJson, sendJson } from "../http.js";
 import { selectOne, insertRow, updateRows } from "../supabase.js";
 import { requireUserAuth } from "./auth.js";
+import {
+  asJsonObject,
+  asNumber,
+  asString,
+  type AuthContext,
+  type HeaderMap,
+  type HttpRequest,
+  type HttpResponse
+} from "../types.js";
 
-export async function handleCartRoute(req, res, corsHeaders, context) {
+/**
+ * Authenticated cart read and replace.
+ */
+export async function handleCartRoute(
+  req: HttpRequest,
+  res: HttpResponse,
+  corsHeaders: HeaderMap,
+  context: AuthContext
+): Promise<void> {
   const profile = requireUserAuth(context);
 
   // GET /api/user/cart
@@ -22,12 +38,13 @@ export async function handleCartRoute(req, res, corsHeaders, context) {
     }
 
     // Stock verification for each item
-    const warnings = [];
-    const validatedItems = [];
-    for (const item of items) {
+    const warnings: string[] = [];
+    const validatedItems: ReturnType<typeof asJsonObject>[] = [];
+    for (const rawItem of items) {
+      const item = asJsonObject(rawItem);
       const normalizedVariantId = normalizeVariantId(item.variant_id);
       if (!normalizedVariantId) {
-        warnings.push(`Sản phẩm '${item.product_name || "Sản phẩm"}' có mã biến thể không hợp lệ và đã bị xóa khỏi giỏ hàng.`);
+        warnings.push(`Sản phẩm '${asString(item.product_name) || "Sản phẩm"}' có mã biến thể không hợp lệ và đã bị xóa khỏi giỏ hàng.`);
         continue;
       }
       item.variant_id = normalizedVariantId;
@@ -36,13 +53,13 @@ export async function handleCartRoute(req, res, corsHeaders, context) {
       if (!variant) {
         throw new HttpError(400, "NOT_FOUND", `Không tìm thấy biến thể sản phẩm`);
       }
-      const availableStock = Math.max(0, variant.stock_quantity - (variant.reserved_quantity || 0));
+      const availableStock = Math.max(0, asNumber(variant.stock_quantity) - asNumber(variant.reserved_quantity));
       if (availableStock <= 0) {
-        warnings.push(`Sản phẩm '${item.product_name || "Sản phẩm"} - ${item.color || ""} - ${item.size || ""}' đã hết hàng và bị xóa khỏi giỏ hàng.`);
+        warnings.push(`Sản phẩm '${asString(item.product_name) || "Sản phẩm"} - ${asString(item.color) || ""} - ${asString(item.size) || ""}' đã hết hàng và bị xóa khỏi giỏ hàng.`);
         continue;
       }
-      if (item.quantity > availableStock) {
-        warnings.push(`Sản phẩm '${item.product_name || "Sản phẩm"} - ${item.color || ""} - ${item.size || ""}' chỉ còn ${availableStock} sản phẩm khả dụng. Số lượng đã được điều chỉnh.`);
+      if (asNumber(item.quantity) > availableStock) {
+        warnings.push(`Sản phẩm '${asString(item.product_name) || "Sản phẩm"} - ${asString(item.color) || ""} - ${asString(item.size) || ""}' chỉ còn ${availableStock} sản phẩm khả dụng. Số lượng đã được điều chỉnh.`);
         item.quantity = availableStock;
       }
       validatedItems.push(item);
@@ -62,6 +79,7 @@ export async function handleCartRoute(req, res, corsHeaders, context) {
         updated_at: new Date().toISOString()
       });
     }
+    void result;
 
     return sendJson(res, 200, { success: true, items: validatedItems, warnings }, corsHeaders);
   }
@@ -69,7 +87,7 @@ export async function handleCartRoute(req, res, corsHeaders, context) {
   throw new HttpError(404, "NOT_FOUND", "Route cart not found");
 }
 
-function normalizeVariantId(value) {
+function normalizeVariantId(value: unknown): string {
   const rawValue = String(value || "").trim();
   const prefixedUuid = rawValue.match(/^var-([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i);
   if (prefixedUuid) {

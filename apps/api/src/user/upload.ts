@@ -1,6 +1,12 @@
-// @ts-nocheck
 import { config } from "../config.js";
 import { HttpError, sendJson } from "../http.js";
+import {
+  asJsonObject,
+  asString,
+  type HeaderMap,
+  type HttpRequest,
+  type HttpResponse
+} from "../types.js";
 
 const STORAGE_BUCKET = "return-evidence";
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
@@ -10,13 +16,17 @@ const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
  * Upload a single image file buffer to Supabase Storage.
  * Returns the public URL.
  */
-export async function uploadToSupabaseStorage(buffer, filename, mimeType) {
+export async function uploadToSupabaseStorage(
+  buffer: Buffer,
+  filename: string,
+  mimeType: string
+): Promise<string> {
   if (!config.supabaseUrl || !config.supabaseAnonKey) {
     throw new HttpError(503, "STORAGE_NOT_CONFIGURED", "Supabase Storage is not configured");
   }
 
   // Sanitize filename
-  const ext = filename.split(".").pop().toLowerCase() || "jpg";
+  const ext = filename.split(".").pop()?.toLowerCase() || "jpg";
   const uniqueName = `evidence/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
   const uploadUrl = `${config.supabaseUrl}/storage/v1/object/${STORAGE_BUCKET}/${uniqueName}`;
 
@@ -39,9 +49,11 @@ export async function uploadToSupabaseStorage(buffer, filename, mimeType) {
   if (!response.ok) {
     let errMsg = "Failed to upload to storage";
     try {
-      const errData = JSON.parse(responseText);
-      errMsg = errData?.error || errData?.message || errMsg;
-    } catch {}
+      const errData = asJsonObject(JSON.parse(responseText) as unknown);
+      errMsg = asString(errData.error) || asString(errData.message) || errMsg;
+    } catch {
+      // keep default message
+    }
     console.error(`[UPLOAD ERROR] Supabase Storage returned ${response.status}: ${errMsg}`);
     console.error(`[UPLOAD ERROR] Bucket '${STORAGE_BUCKET}' may not exist or missing upload policy.`);
     throw new HttpError(502, "STORAGE_UPLOAD_FAILED", `Supabase Storage: ${errMsg}`);
@@ -57,33 +69,47 @@ export async function uploadToSupabaseStorage(buffer, filename, mimeType) {
  * Accepts multipart/form-data with a single "file" field.
  * Returns { success: true, url: "https://..." }
  */
-export async function handleUploadRoute(req, res, corsHeaders) {
+export async function handleUploadRoute(
+  req: HttpRequest,
+  res: HttpResponse,
+  corsHeaders: HeaderMap
+): Promise<void> {
   if (req.method !== "POST") {
     throw new HttpError(405, "METHOD_NOT_ALLOWED", "Only POST is accepted");
   }
 
   const contentType = req.headers["content-type"] || "";
-  if (!contentType.includes("multipart/form-data")) {
+  const contentTypeText = Array.isArray(contentType) ? contentType.join(",") : contentType;
+  if (!contentTypeText.includes("multipart/form-data")) {
     throw new HttpError(400, "BAD_REQUEST", "Content-Type must be multipart/form-data");
   }
 
   // Extract boundary from Content-Type header
   // e.g. "multipart/form-data; boundary=----WebKitFormBoundaryXXXX"
-  const boundaryMatch = contentType.match(/boundary=([^\s;]+)/i);
+  const boundaryMatch = contentTypeText.match(/boundary=([^\s;]+)/i);
   if (!boundaryMatch) {
     throw new HttpError(400, "BAD_REQUEST", "Missing multipart boundary in Content-Type");
   }
   const boundary = boundaryMatch[1].replace(/^"|"$/g, ""); // strip surrounding quotes if any
 
   // Read entire body as a Buffer
-  const chunks = [];
+  const chunks: Buffer[] = [];
   let totalSize = 0;
-  for await (const chunk of req) {
-    totalSize += chunk.length;
+  const iterator = req[Symbol.asyncIterator];
+  if (typeof iterator !== "function") {
+    throw new TypeError("Request is not async iterable");
+  }
+  for await (const chunk of { [Symbol.asyncIterator]: () => iterator.call(req) } as AsyncIterable<unknown>) {
+    const buffer = Buffer.isBuffer(chunk)
+      ? chunk
+      : chunk instanceof Uint8Array
+        ? Buffer.from(chunk)
+        : Buffer.from(String(chunk));
+    totalSize += buffer.length;
     if (totalSize > MAX_FILE_SIZE + 8192) {
       throw new HttpError(413, "FILE_TOO_LARGE", "File exceeds 5 MB limit");
     }
-    chunks.push(chunk);
+    chunks.push(buffer);
   }
   const body = Buffer.concat(chunks);
 
@@ -110,12 +136,13 @@ export async function handleUploadRoute(req, res, corsHeaders) {
 /**
  * Parse a multipart/form-data body and return the first file part found.
  */
-function parseMultipartFile(body, boundary) {
-  const CRLF = Buffer.from("\r\n");
+function parseMultipartFile(
+  body: Buffer,
+  boundary: string
+): { fileBuffer: Buffer | null; fileName: string; mimeType: string } {
   const delimiterLine = Buffer.from(`--${boundary}`);
-  const finalLine = Buffer.from(`--${boundary}--`);
 
-  let fileBuffer = null;
+  let fileBuffer: Buffer | null = null;
   let fileName = "upload.jpg";
   let mimeType = "image/jpeg";
 
@@ -172,7 +199,7 @@ function parseMultipartFile(body, boundary) {
 /**
  * Find the index of needle in haystack starting at offset.
  */
-function indexOfBuf(haystack, needle, offset = 0) {
+function indexOfBuf(haystack: Buffer, needle: Buffer, offset = 0): number {
   for (let i = offset; i <= haystack.length - needle.length; i++) {
     let match = true;
     for (let j = 0; j < needle.length; j++) {

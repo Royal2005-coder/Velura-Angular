@@ -1,11 +1,58 @@
-// @ts-nocheck
 import { callRpc, selectOne, selectRows } from "../supabase.js";
 import { REVIEW_SELECT } from "./review-constants.js";
 
+/**
+ * Filters for listing admin reviews.
+ */
+export interface ReviewListFilters {
+  status?: string;
+  rating?: string;
+  search?: string;
+  order: string;
+  limit: number;
+  offset: number;
+}
+
+/**
+ * Filters for review-module audit logs.
+ */
+export interface ReviewAuditFilters {
+  targetId?: string;
+  limit: number;
+  offset: number;
+}
+
+/**
+ * Input for approving a review.
+ */
+export interface ReviewApproveInput {
+  expectedVersion: number;
+  actionNote?: unknown;
+}
+
+/**
+ * Input for hiding or escalating a review.
+ */
+export interface ReviewReasonInput {
+  reason: string;
+  expectedVersion: number;
+}
+
+/**
+ * Input for posting an admin reply on a review.
+ */
+export interface ReviewReplyInput {
+  reply: string;
+  expectedVersion: number;
+}
+
+/**
+ * PostgREST accessors for admin review moderation.
+ */
 export function createReviewRepository() {
   return {
-    async list(filters, accessToken) {
-      const query = {
+    async list(filters: ReviewListFilters, accessToken: string) {
+      const query: Record<string, unknown> = {
         select: REVIEW_SELECT,
         order: filters.order,
         limit: filters.limit,
@@ -19,14 +66,14 @@ export function createReviewRepository() {
       return selectRows("review", query, authOptions(accessToken));
     },
 
-    async get(reviewId, accessToken) {
+    async get(reviewId: string, accessToken: string) {
       return selectOne("review", {
         select: REVIEW_SELECT,
         review_id: `eq.${reviewId}`
       }, authOptions(accessToken));
     },
 
-    async approve(reviewId, input, accessToken) {
+    async approve(reviewId: string, input: ReviewApproveInput, accessToken: string) {
       return callRpc("admin_approve_review", {
         p_review_id: reviewId,
         p_expected_version: input.expectedVersion,
@@ -34,7 +81,7 @@ export function createReviewRepository() {
       }, { accessToken });
     },
 
-    async hide(reviewId, input, accessToken) {
+    async hide(reviewId: string, input: ReviewReasonInput, accessToken: string) {
       return callRpc("admin_hide_review", {
         p_review_id: reviewId,
         p_reason: input.reason,
@@ -42,7 +89,7 @@ export function createReviewRepository() {
       }, { accessToken });
     },
 
-    async reply(reviewId, input, accessToken) {
+    async reply(reviewId: string, input: ReviewReplyInput, accessToken: string) {
       return callRpc("admin_reply_review", {
         p_review_id: reviewId,
         p_reply: input.reply,
@@ -50,7 +97,7 @@ export function createReviewRepository() {
       }, { accessToken });
     },
 
-    async escalate(reviewId, input, accessToken) {
+    async escalate(reviewId: string, input: ReviewReasonInput, accessToken: string) {
       return callRpc("admin_escalate_review", {
         p_review_id: reviewId,
         p_reason: input.reason,
@@ -58,8 +105,8 @@ export function createReviewRepository() {
       }, { accessToken });
     },
 
-    async listAuditLogs(filters, accessToken) {
-      const query = {
+    async listAuditLogs(filters: ReviewAuditFilters, accessToken: string) {
+      const query: Record<string, unknown> = {
         select: "audit_id,actor_id,actor_role,action,module,target_id,old_value,new_value,ip_address,timestamp",
         module: "eq.reviews",
         order: "timestamp.desc",
@@ -72,6 +119,11 @@ export function createReviewRepository() {
   };
 }
 
-function authOptions(accessToken) {
+/**
+ * Repository returned by `createReviewRepository`.
+ */
+export type ReviewRepository = ReturnType<typeof createReviewRepository>;
+
+function authOptions(accessToken: string): { useAnonKey: true; accessToken: string } {
   return { useAnonKey: true, accessToken };
 }

@@ -67,7 +67,7 @@ test("policy content is database-backed for frontend and chatbot knowledge", asy
   assert.match(migration, /500\.000 VN/);
   assert.match(migration, /20 tin/);
   assert.match(repository, /async listPolicies\(\)/);
-  assert.match(repository, /async searchPolicies\(query\)/);
+  assert.match(repository, /async searchPolicies\(/);
   assert.match(repository, /selectRows\("policy"/);
   assert.match(llm, /name:\s*"get_policies"/);
   assert.match(llm, /name:\s*"search_policies"/);

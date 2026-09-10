@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * UC-A02 Product & Inventory constants.
  *
@@ -50,7 +49,7 @@ export const PRODUCT_DETAIL_SELECT = [
 export const PRODUCT_STATUSES = ["on_sale", "hidden", "out_of_stock", "discontinued"];
 
 /** Allowed status transitions to enforce business rules. */
-export const STATUS_TRANSITIONS = {
+export const STATUS_TRANSITIONS: Record<string, string[]> = {
   on_sale: ["hidden", "out_of_stock", "discontinued"],
   hidden: ["on_sale", "discontinued"],
   out_of_stock: ["on_sale", "hidden", "discontinued"],
@@ -66,6 +65,7 @@ export const PRODUCT_ADMIN_ROLES = [
   "admin_operator_sanpham"
 ];
 
+/** Admin roles allowed to read product data. */
 export const PRODUCT_VIEWER_ROLES = [
   ...PRODUCT_ADMIN_ROLES,
   "admin_viewer",
@@ -91,6 +91,7 @@ export const CSV_REQUIRED_COLUMNS = [
   "category_id"
 ];
 
+/** Optional CSV columns accepted during bulk import. */
 export const CSV_OPTIONAL_COLUMNS = [
   "description",
   "sale_price",

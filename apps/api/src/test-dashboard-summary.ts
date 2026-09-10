@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { buildDashboardSummary } from "./apps/api/src/dashboard.js";
+import { buildDashboardSummary } from "./dashboard.js";
 
 async function test() {
   try {

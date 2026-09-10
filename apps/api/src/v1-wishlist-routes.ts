@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { HttpError, readJson, sendJson } from "./http.js";
 import {
   addWishlistProductForUser,
@@ -6,7 +5,7 @@ import {
   removeWishlistProductForUser
 } from "./user/wishlist.js";
 
-import type { AuthContext, HeaderMap, HttpRequest, HttpResponse } from "./types.js";
+import type { AuthContext, HeaderMap, HttpRequest, HttpResponse, JsonObject } from "./types.js";
 
 function requireUserAuth(context: AuthContext) {
   if (!context || !context.profile || !context.profile.user_id) {
@@ -15,13 +14,16 @@ function requireUserAuth(context: AuthContext) {
   return context.profile;
 }
 
+/**
+ * Legacy `/api/v1/wishlists` routes used by the storefront wishlist UI.
+ */
 export async function handleWishlistRoute(
   req: HttpRequest,
   res: HttpResponse,
   parts: string[],
   corsHeaders: HeaderMap,
   context: AuthContext
-) {
+): Promise<void> {
   const profile = requireUserAuth(context);
 
   if (req.method === "GET") {
@@ -55,15 +57,16 @@ export async function handleWishlistRoute(
   throw new HttpError(405, "METHOD_NOT_ALLOWED", "Phương thức không được hỗ trợ");
 }
 
-function mapProductForLegacyWishlist(product) {
+function mapProductForLegacyWishlist(product: JsonObject) {
+  const images: unknown[] = Array.isArray(product.images) ? product.images : [];
   return {
     id: product.product_id,
     product: {
       id: product.product_id,
       name: product.name,
-      image_url: product.images?.[0] || "",
+      image_url: images[0] || "",
       price: product.sale_price || product.base_price,
-      old_price: product.sale_price && product.base_price > product.sale_price ? product.base_price : null,
+      old_price: product.sale_price && Number(product.base_price) > Number(product.sale_price) ? product.base_price : null,
       badge: product.is_featured ? "HOT" : "NEW"
     },
     added_at: null

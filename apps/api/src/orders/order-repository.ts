@@ -1,12 +1,20 @@
-// @ts-nocheck
 import { HttpError } from "../http.js";
 import { callRpc, selectOne, selectRows } from "../supabase.js";
+import { asJsonObject, asString, type JsonObject } from "../types.js";
 import { ORDER_DETAIL_SELECT, ORDER_LIST_SELECT } from "./order-constants.js";
 
+/**
+ * PostgREST order repository used by `createOrderService`.
+ */
+export type OrderRepository = ReturnType<typeof createOrderRepository>;
+
+/**
+ * Create the order PostgREST repository.
+ */
 export function createOrderRepository() {
   return {
-    list(filters, accessToken) {
-      const query = { select: ORDER_LIST_SELECT, order: filters.order, limit: filters.limit, offset: filters.offset };
+    list(filters: JsonObject, accessToken: string | null) {
+      const query: Record<string, unknown> = { select: ORDER_LIST_SELECT, order: filters.order, limit: filters.limit, offset: filters.offset };
       if (filters.q) query.or = `(shipping_name.ilike.*${filters.q}*,shipping_phone.ilike.*${filters.q}*,tracking_code.ilike.*${filters.q}*)`;
       if (filters.status) query.status = `eq.${filters.status}`;
       if (filters.paymentMethod) query.payment_method = `eq.${filters.paymentMethod}`;
@@ -16,14 +24,14 @@ export function createOrderRepository() {
       return withOrderError(() => selectRows("orders", query, authOptions(accessToken)));
     },
 
-    findById(orderId, accessToken) {
+    findById(orderId: string, accessToken: string | null) {
       return withOrderError(() => selectOne("orders", {
         select: ORDER_DETAIL_SELECT,
         order_id: `eq.${orderId}`
       }, authOptions(accessToken)));
     },
 
-    changeStatus(orderId, input, accessToken) {
+    changeStatus(orderId: string, input: JsonObject, accessToken: string | null) {
       return rpc("admin_change_order_status", {
         p_order_id: orderId,
         p_new_status: input.status,
@@ -34,7 +42,7 @@ export function createOrderRepository() {
       }, accessToken);
     },
 
-    cancel(orderId, input, accessToken) {
+    cancel(orderId: string, input: JsonObject, accessToken: string | null) {
       return rpc("admin_cancel_order", {
         p_order_id: orderId,
         p_reason: input.reason,
@@ -43,7 +51,7 @@ export function createOrderRepository() {
       }, accessToken);
     },
 
-    resolvePayment(orderId, paymentId, input, accessToken) {
+    resolvePayment(orderId: string, paymentId: string, input: JsonObject, accessToken: string | null) {
       return rpc("admin_resolve_payment", {
         p_order_id: orderId,
         p_payment_id: paymentId,
@@ -55,7 +63,7 @@ export function createOrderRepository() {
       }, accessToken);
     },
 
-    listAuditLogs(filters, accessToken) {
+    listAuditLogs(filters: JsonObject, accessToken: string | null) {
       return withOrderError(() => selectRows("audit_log", {
         select: "audit_id,actor_id,actor_role,action,module,target_id,old_value,new_value,ip_address,timestamp",
         module: "eq.orders",
@@ -68,20 +76,21 @@ export function createOrderRepository() {
   };
 }
 
-function authOptions(accessToken) {
+function authOptions(accessToken: string | null | undefined) {
   return { useAnonKey: true, accessToken };
 }
 
-function rpc(name, payload, accessToken) {
+function rpc(name: string, payload: unknown, accessToken: string | null): Promise<unknown> {
   return withOrderError(() => callRpc(name, payload, authOptions(accessToken)));
 }
 
-async function withOrderError(operation) {
+async function withOrderError<T>(operation: () => Promise<T>): Promise<T> {
   try {
     return await operation();
-  } catch (error) {
+  } catch (error: unknown) {
     if (error instanceof HttpError && error.code === "SUPABASE_ERROR") {
-      const code = error.details?.message || error.details?.code || "ORDER_DATABASE_ERROR";
+      const details = asJsonObject(error.details);
+      const code = asString(details.message) || asString(details.code) || "ORDER_DATABASE_ERROR";
       const status = error.status >= 400 && error.status < 500 ? error.status : 502;
       throw new HttpError(status, code, databaseMessage(code), error.details);
     }
@@ -89,8 +98,8 @@ async function withOrderError(operation) {
   }
 }
 
-function databaseMessage(code) {
-  const messages = {
+function databaseMessage(code: string): string {
+  const messages: Record<string, string> = {
     RBAC_DENIED: "You do not have permission to manage orders",
     ORDER_NOT_FOUND: "Order was not found",
     PAYMENT_NOT_FOUND: "Payment was not found",

@@ -1,18 +1,35 @@
-// @ts-nocheck
 import { HttpError, readJson, sendJson } from "../http.js";
 import { selectOne, selectRows, insertRow, updateRows, deleteRows } from "../supabase.js";
 import { requireUserAuth } from "./auth.js";
 import { createNotification } from "./notifications.js";
+import {
+  asJsonObject,
+  asString,
+  type AuthContext,
+  type HeaderMap,
+  type HttpRequest,
+  type HttpResponse
+} from "../types.js";
 
-export async function handleReviewsRoute(req, res, action, parts, corsHeaders, context) {
+/**
+ * Authenticated review list, create with auto-moderation, and customer reply.
+ */
+export async function handleReviewsRoute(
+  req: HttpRequest,
+  res: HttpResponse,
+  action: string | undefined,
+  parts: string[],
+  corsHeaders: HeaderMap,
+  context: AuthContext
+): Promise<void> {
   const profile = requireUserAuth(context);
 
   // POST /api/user/reviews/:id/reply
   if (action && parts[4] === "reply" && req.method === "POST") {
     const body = await readJson(req);
-    const { reply_text } = body;
+    const replyText = asString(body.reply_text);
 
-    if (!reply_text || !reply_text.trim()) {
+    if (!replyText || !replyText.trim()) {
       throw new HttpError(400, "BAD_REQUEST", "Nội dung phản hồi không được để trống");
     }
 
@@ -21,19 +38,21 @@ export async function handleReviewsRoute(req, res, action, parts, corsHeaders, c
       throw new HttpError(404, "NOT_FOUND", "Không tìm thấy đánh giá");
     }
 
-    let replies = [];
+    let replies: unknown[] = [];
     if (review.admin_reply) {
       try {
-        replies = JSON.parse(review.admin_reply);
-        if (!Array.isArray(replies)) {
+        const parsed: unknown = JSON.parse(typeof review.admin_reply === "string" ? review.admin_reply : String(review.admin_reply));
+        if (!Array.isArray(parsed)) {
           replies = [{
             user_name: "Admin",
             role: "admin",
             reply_text: review.admin_reply,
             created_at: review.moderated_at || review.updated_at || new Date().toISOString()
           }];
+        } else {
+          replies = parsed;
         }
-      } catch (e) {
+      } catch {
         replies = [{
           user_name: "Admin",
           role: "admin",
@@ -46,7 +65,7 @@ export async function handleReviewsRoute(req, res, action, parts, corsHeaders, c
     replies.push({
       user_name: profile.full_name || "Khách hàng",
       role: "customer",
-      reply_text: reply_text.trim(),
+      reply_text: replyText.trim(),
       created_at: new Date().toISOString()
     });
 
@@ -101,7 +120,7 @@ export async function handleReviewsRoute(req, res, action, parts, corsHeaders, c
     }
 
     // 1. Save initially as 'pending'
-    const review = await insertRow("review", {
+    const review = asJsonObject(await insertRow("review", {
       product_id,
       user_id: profile.user_id,
       order_id,
@@ -111,7 +130,7 @@ export async function handleReviewsRoute(req, res, action, parts, corsHeaders, c
       review_tags: review_tags || null,
       status: "pending",
       submitted_at: new Date().toISOString()
-    });
+    }));
 
     console.log(`[AUTO-MODERATION Queue] Đã đưa đánh giá ${review.review_id} vào hàng đợi kiểm duyệt tự động.`);
 
@@ -120,8 +139,8 @@ export async function handleReviewsRoute(req, res, action, parts, corsHeaders, c
     const adKeywords = ["http://", "https://", "t.me/", "zalo:", "shopee.vn", "lazada.vn", "click vào đây", "nhận quà miễn phí", "quà tặng miễn phí", "mua ngay", "giảm giá sốc"];
 
     let finalStatus = "approved";
-    let rejectionReason = null;
-    const lowerComment = (comment || "").toLowerCase();
+    let rejectionReason: string | null = null;
+    const lowerComment = String(comment || "").toLowerCase();
 
     // Check profanities
     for (const word of profanities) {
@@ -146,7 +165,7 @@ export async function handleReviewsRoute(req, res, action, parts, corsHeaders, c
     // Check image validity
     if (finalStatus === "approved" && Array.isArray(images)) {
       for (const img of images) {
-        const lowerImg = img.toLowerCase();
+        const lowerImg = String(img).toLowerCase();
         if (lowerImg.includes("fake") || lowerImg.includes("spam") || lowerImg.includes("cheat") || lowerImg.includes("error")) {
           finalStatus = "rejected";
           rejectionReason = "Hình ảnh tải lên không hợp lệ hoặc chứa nội dung vi phạm";

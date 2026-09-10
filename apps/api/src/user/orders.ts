@@ -1,26 +1,45 @@
-// @ts-nocheck
 import { HttpError, readJson, sendJson } from "../http.js";
 import { selectOne, selectRows, insertRow, updateRows } from "../supabase.js";
 import { hashPassword, signJwt } from "../auth-helper.js";
 import { requireUserAuth, validatePhone } from "./auth.js";
 import { createNotification } from "./notifications.js";
-
-const checkoutOtpAttemptsMap = new Map();
-
 import { config } from "../config.js";
+import {
+  asJsonObject,
+  asString,
+  errorMessage,
+  type AuthContext,
+  type HeaderMap,
+  type HttpRequest,
+  type HttpResponse,
+  type JsonObject,
+  type UserProfile
+} from "../types.js";
 
-function withTimeout(promise, ms, label) {
-  let timeoutId;
-  const timeout = new Promise((_, reject) => {
+interface CheckoutOtpSession {
+  otpCode: string;
+  expiresAt: number;
+  email: unknown;
+  full_name: unknown;
+  attempts: number;
+}
+
+const checkoutOtpAttemptsMap = new Map<string, CheckoutOtpSession>();
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
     timeoutId = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
   });
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timeoutId));
 }
 
-// Helper to parse Postgres date as UTC robustly
-export function parseUtcDate(dateStr) {
+/**
+ * Parse a Postgres timestamp as UTC, defaulting to now when empty.
+ */
+export function parseUtcDate(dateStr: unknown): Date {
   if (!dateStr) return new Date();
-  const cleanStr = dateStr.replace(" ", "T");
+  const cleanStr = String(dateStr).replace(" ", "T");
   if (!cleanStr.endsWith("Z") && !/[+-]\d{2}(:\d{2})?$/.test(cleanStr)) {
     return new Date(cleanStr + "Z");
   }
@@ -28,7 +47,7 @@ export function parseUtcDate(dateStr) {
 }
 
 // Helper to send email directly without relying on email_outbox and service role worker
-async function sendDirectEmail(to, subject, text, html) {
+async function sendDirectEmail(to: unknown, subject: string, text: string, html: string): Promise<void> {
   if (!config.smtpHost || !config.smtpUser || !config.smtpAppPassword) {
     if (config.nodeEnv !== "production") {
       console.log(`[EMAIL MOCK] Sending to ${to}: ${subject}`);
@@ -40,7 +59,7 @@ async function sendDirectEmail(to, subject, text, html) {
     const transporter = nodemailer.default.createTransport({
       host: config.smtpHost,
       port: config.smtpPort || 587,
-      secure: config.smtpSecure === "true" || config.smtpSecure === true,
+      secure: config.smtpSecure === true,
       auth: {
         user: config.smtpUser,
         pass: config.smtpAppPassword
@@ -48,28 +67,30 @@ async function sendDirectEmail(to, subject, text, html) {
     });
     await withTimeout(transporter.sendMail({
       from: `"Velura" <${config.smtpUser}>`,
-      to,
+      to: String(to),
       subject,
       text,
       html
     }), 10000, "SMTP send");
     console.log(`[EMAIL SENT] Sent successfully to ${to}`);
-  } catch (err) {
-    console.error(`[EMAIL ERROR] Failed to send email to ${to}:`, err.message);
+  } catch (err: unknown) {
+    console.error(`[EMAIL ERROR] Failed to send email to ${to}:`, errorMessage(err));
   }
 }
 
-// Auto-progress order statuses based on time elapsed since creation
-export async function autoProgressOrder(order) {
+/**
+ * Time-based storefront order status progression (currently a no-op return).
+ */
+export async function autoProgressOrder(order: JsonObject): Promise<JsonObject> {
   return order;
 
-  if (!order || ["cancelled", "completed", "failed_delivery"].includes(order.status)) {
+  if (!order || ["cancelled", "completed", "failed_delivery"].includes(asString(order.status))) {
     return order;
   }
 
   const createdAt = parseUtcDate(order.created_at);
   const now = new Date();
-  const elapsedSeconds = Math.floor((now - createdAt) / 1000);
+  const elapsedSeconds = Math.floor((now.getTime() - createdAt.getTime()) / 1000);
 
   let newStatus = order.status;
   let deliveredAt = order.delivered_at;
@@ -81,18 +102,18 @@ export async function autoProgressOrder(order) {
     newStatus = "confirmed";
     changed = true;
   }
-  if (["pending", "confirmed"].includes(newStatus) && elapsedSeconds >= 120) {
+  if (["pending", "confirmed"].includes(asString(newStatus)) && elapsedSeconds >= 120) {
     newStatus = "preparing";
     changed = true;
   }
-  if (["pending", "confirmed", "preparing"].includes(newStatus) && elapsedSeconds >= 180) {
+  if (["pending", "confirmed", "preparing"].includes(asString(newStatus)) && elapsedSeconds >= 180) {
     newStatus = "shipping";
     if (!trackingCode) {
       trackingCode = "VN" + Math.floor(100000000 + Math.random() * 900000000);
     }
     changed = true;
   }
-  if (["pending", "confirmed", "preparing", "shipping"].includes(newStatus) && elapsedSeconds >= 240) {
+  if (["pending", "confirmed", "preparing", "shipping"].includes(asString(newStatus)) && elapsedSeconds >= 240) {
     newStatus = "delivered";
     if (!deliveredAt) {
       deliveredAt = now.toISOString();
@@ -102,8 +123,8 @@ export async function autoProgressOrder(order) {
 
   // 2. Auto-complete: if delivered for more than 60 seconds (1 minute), auto transition to completed
   if (newStatus === "delivered" && deliveredAt) {
-    const deliveredTime = new Date(deliveredAt);
-    const elapsedSinceDelivery = Math.floor((now - deliveredTime) / 1000);
+    const deliveredTime = new Date(String(deliveredAt));
+    const elapsedSinceDelivery = Math.floor((now.getTime() - deliveredTime.getTime()) / 1000);
     if (elapsedSinceDelivery >= 60) {
       newStatus = "completed";
       changed = true;
@@ -111,7 +132,7 @@ export async function autoProgressOrder(order) {
   }
 
   if (changed) {
-    const updateData = {
+    const updateData: JsonObject = {
       status: newStatus,
       updated_at: now.toISOString()
     };
@@ -128,7 +149,7 @@ export async function autoProgressOrder(order) {
       // Trigger notification for order status progression
       let title = "";
       let content = "";
-      const displayTracking = trackingCode || order.tracking_code || order.order_id.slice(0, 8).toUpperCase();
+      const displayTracking = trackingCode || order.tracking_code || asString(order.order_id).slice(0, 8).toUpperCase();
       switch (newStatus) {
         case "confirmed":
           title = `Đơn hàng #${displayTracking} đã được xác nhận ✅`;
@@ -153,15 +174,15 @@ export async function autoProgressOrder(order) {
       }
       if (title && order.user_id) {
         await createNotification(
-          order.user_id,
+          asString(order.user_id),
           "order_status",
           title,
           content,
           `/src/pages/account/order-detail.html?id=${order.order_id}`
         );
       }
-    } catch (e) {
-      console.error(`Failed to auto-progress order ${order.order_id}:`, e.message);
+    } catch (e: unknown) {
+      console.error(`Failed to auto-progress order ${order.order_id}:`, errorMessage(e));
     }
     
     return {
@@ -176,21 +197,57 @@ export async function autoProgressOrder(order) {
   return order;
 }
 
-export async function handleOrdersRoute(req, res, subRoute, action, parts, corsHeaders, context) {
+async function attachProductMeta(items: JsonObject[]): Promise<JsonObject[]> {
+  const itemsWithProduct: JsonObject[] = [];
+  for (const item of items) {
+    let productId: unknown = null;
+    let categoryName: unknown = null;
+    try {
+      const v = await selectOne("variant", { variant_id: `eq.${item.variant_id}` });
+      if (v) {
+        productId = v.product_id;
+        const product = await selectOne("product", { product_id: `eq.${productId}` });
+        if (product) {
+          const cat = await selectOne("category", { category_id: `eq.${product.category_id}` });
+          if (cat) {
+            categoryName = cat.name;
+          }
+        }
+      }
+    } catch (e: unknown) {
+      console.error("Error retrieving variant product_id:", errorMessage(e));
+    }
+    itemsWithProduct.push({ ...item, product_id: productId, category_name: categoryName });
+  }
+  return itemsWithProduct;
+}
+
+/**
+ * Storefront vouchers and order list/create/status/payment flows.
+ */
+export async function handleOrdersRoute(
+  req: HttpRequest,
+  res: HttpResponse,
+  subRoute: string | undefined,
+  action: string | undefined,
+  parts: string[],
+  corsHeaders: HeaderMap,
+  context: AuthContext
+): Promise<void> {
   if (subRoute === "vouchers") {
     // GET /api/user/vouchers
     if (!action && req.method === "GET") {
       const now = new Date().toISOString();
       const { rows: allVouchers } = await selectRows("voucher", { is_active: "eq.true" });
       
-      const validVouchers = allVouchers.filter(v => {
-        if (v.start_date && v.start_date > now) return false;
-        if (v.end_date && v.end_date < now) return false;
-        if (v.usage_limit_total !== null && v.used_count >= v.usage_limit_total) return false;
+      const validVouchers = allVouchers.filter((v) => {
+        if (typeof v.start_date === "string" && v.start_date > now) return false;
+        if (typeof v.end_date === "string" && v.end_date < now) return false;
+        if (v.usage_limit_total !== null && Number(v.used_count) >= Number(v.usage_limit_total)) return false;
         return true;
       });
       
-      validVouchers.sort((a, b) => (a.min_order_value || 0) - (b.min_order_value || 0));
+      validVouchers.sort((a, b) => Number(a.min_order_value || 0) - Number(b.min_order_value || 0));
       
       return sendJson(res, 200, {
         success: true,
@@ -215,28 +272,30 @@ export async function handleOrdersRoute(req, res, subRoute, action, parts, corsH
       }
 
       const now = new Date().toISOString();
-      if (voucher.start_date && voucher.start_date > now) {
+      if (typeof voucher.start_date === "string" && voucher.start_date > now) {
         throw new HttpError(400, "INVALID_VOUCHER", "Mã giảm giá chưa đến thời gian sử dụng");
       }
-      if (voucher.end_date && voucher.end_date < now) {
+      if (typeof voucher.end_date === "string" && voucher.end_date < now) {
         throw new HttpError(400, "INVALID_VOUCHER", "Mã giảm giá đã hết hạn sử dụng");
       }
 
-      if (voucher.usage_limit_total !== null && voucher.used_count >= voucher.usage_limit_total) {
+      if (voucher.usage_limit_total !== null && Number(voucher.used_count) >= Number(voucher.usage_limit_total)) {
         throw new HttpError(400, "INVALID_VOUCHER", "Mã giảm giá đã hết lượt sử dụng trên hệ thống");
       }
 
       if (Number(order_value) < Number(voucher.min_order_value || 0)) {
-        throw new HttpError(400, "INVALID_VOUCHER", `Đơn hàng chưa đạt giá trị tối thiểu ${Number(voucher.min_order_value).toLocaleString('vi-VN')}₫ để áp dụng mã này`);
+        throw new HttpError(400, "INVALID_VOUCHER", `Đơn hàng chưa đạt giá trị tối thiểu ${Number(voucher.min_order_value).toLocaleString("vi-VN")}₫ để áp dụng mã này`);
       }
 
-      let profile = null;
+      let profile: UserProfile | null = null;
       try {
         profile = requireUserAuth(context);
-      } catch (err) {}
+      } catch {
+        // guest apply is allowed
+      }
       if (profile && profile.user_id) {
         const { rows: userOrders } = await selectRows("orders", { user_id: `eq.${profile.user_id}`, voucher_id: `eq.${voucher.voucher_id}` });
-        if (userOrders.length >= (voucher.usage_limit_per_user || 1)) {
+        if (userOrders.length >= Number(voucher.usage_limit_per_user || 1)) {
           throw new HttpError(400, "INVALID_VOUCHER", "Bạn đã sử dụng hết lượt dùng cho mã giảm giá này");
         }
       }
@@ -268,15 +327,17 @@ export async function handleOrdersRoute(req, res, subRoute, action, parts, corsH
 
   if (subRoute === "orders") {
     if (req.method === "GET") {
-      let profile = null;
+      let profile: UserProfile | null = null;
       try {
         profile = requireUserAuth(context);
-      } catch (e) {}
+      } catch {
+        // guest order lookup by id/tracking is allowed
+      }
 
       // GET /api/user/orders/:id (Action contains the ID if present)
       if (action) {
         const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-        let order = null;
+        let order: JsonObject | null = null;
         if (uuidRegex.test(action)) {
           order = await selectOne("orders", { order_id: `eq.${action}` });
         }
@@ -291,27 +352,7 @@ export async function handleOrdersRoute(req, res, subRoute, action, parts, corsH
         }
         order = await autoProgressOrder(order);
         const { rows: items } = await selectRows("order_item", { order_id: `eq.${order.order_id}` });
-        const itemsWithProduct = [];
-        for (const item of items) {
-          let productId = null;
-          let categoryName = null;
-          try {
-            const v = await selectOne("variant", { variant_id: `eq.${item.variant_id}` });
-            if (v) {
-              productId = v.product_id;
-              const product = await selectOne("product", { product_id: `eq.${productId}` });
-              if (product) {
-                const cat = await selectOne("category", { category_id: `eq.${product.category_id}` });
-                if (cat) {
-                  categoryName = cat.name;
-                }
-              }
-            }
-          } catch (e) {
-            console.error("Error retrieving variant product_id:", e.message);
-          }
-          itemsWithProduct.push({ ...item, product_id: productId, category_name: categoryName });
-        }
+        const itemsWithProduct = await attachProductMeta(items);
         return sendJson(res, 200, { ...order, items: itemsWithProduct }, corsHeaders);
       }
 
@@ -321,32 +362,12 @@ export async function handleOrdersRoute(req, res, subRoute, action, parts, corsH
           throw new HttpError(401, "UNAUTHORIZED", "Đăng nhập là bắt buộc");
         }
         const { rows: orders } = await selectRows("orders", { user_id: `eq.${profile.user_id}` });
-        orders.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-        const ordersWithItems = [];
+        orders.sort((a, b) => new Date(String(b.created_at)).getTime() - new Date(String(a.created_at)).getTime());
+        const ordersWithItems: JsonObject[] = [];
         for (let order of orders) {
           order = await autoProgressOrder(order);
           const { rows: items } = await selectRows("order_item", { order_id: `eq.${order.order_id}` });
-          const itemsWithProduct = [];
-          for (const item of items) {
-            let productId = null;
-            let categoryName = null;
-            try {
-              const v = await selectOne("variant", { variant_id: `eq.${item.variant_id}` });
-              if (v) {
-                productId = v.product_id;
-                const product = await selectOne("product", { product_id: `eq.${productId}` });
-                if (product) {
-                  const cat = await selectOne("category", { category_id: `eq.${product.category_id}` });
-                  if (cat) {
-                    categoryName = cat.name;
-                  }
-                }
-              }
-            } catch (e) {
-              console.error("Error retrieving variant product_id:", e.message);
-            }
-            itemsWithProduct.push({ ...item, product_id: productId, category_name: categoryName });
-          }
+          const itemsWithProduct = await attachProductMeta(items);
           ordersWithItems.push({ ...order, items: itemsWithProduct });
         }
         return sendJson(res, 200, { success: true, orders: ordersWithItems }, corsHeaders);
@@ -372,13 +393,13 @@ export async function handleOrdersRoute(req, res, subRoute, action, parts, corsH
       }
 
       const allowedStatuses = ["cancelled", "delivered", "completed"];
-      if (!allowedStatuses.includes(status)) {
+      if (!allowedStatuses.includes(asString(status))) {
         throw new HttpError(400, "BAD_REQUEST", `Trạng thái ${status} không được phép cập nhật bởi người dùng`);
       }
 
       if (status === "cancelled") {
         const nonCancellable = ["shipping", "delivered", "failed_delivery", "completed", "cancelled"];
-        if (nonCancellable.includes(order.status)) {
+        if (nonCancellable.includes(asString(order.status))) {
           throw new HttpError(400, "BAD_REQUEST", "Đơn hàng đã được giao cho đơn vị vận chuyển hoặc đã kết thúc, không thể hủy");
         }
       }
@@ -392,8 +413,8 @@ export async function handleOrdersRoute(req, res, subRoute, action, parts, corsH
           if (payment && payment.payment_status === "paid") {
             isPaid = true;
           }
-        } catch (e) {
-          console.error("Error checking payment status:", e.message);
+        } catch (e: unknown) {
+          console.error("Error checking payment status:", errorMessage(e));
         }
 
         if (isCOD || isPaid) {
@@ -402,17 +423,17 @@ export async function handleOrdersRoute(req, res, subRoute, action, parts, corsH
             try {
               const variant = await selectOne("variant", { variant_id: `eq.${item.variant_id}` });
               if (variant) {
-                const nextStock = variant.stock_quantity + item.quantity;
+                const nextStock = Number(variant.stock_quantity) + Number(item.quantity);
                 await updateRows("variant", { variant_id: `eq.${item.variant_id}` }, { stock_quantity: nextStock });
               }
-            } catch (e) {
-              console.error(`Failed to restore stock on cancellation:`, e.message);
+            } catch (e: unknown) {
+              console.error(`Failed to restore stock on cancellation:`, errorMessage(e));
             }
           }
         }
       }
 
-      const updateData = {
+      const updateData: JsonObject = {
         status,
         updated_at: new Date().toISOString()
       };
@@ -421,13 +442,13 @@ export async function handleOrdersRoute(req, res, subRoute, action, parts, corsH
       }
 
       const updated = await updateRows("orders", { order_id: `eq.${order_id}` }, updateData);
-      const updatedOrder = updated[0] || order;
+      const updatedOrder = asJsonObject(updated[0] || order);
 
       if (updatedOrder && updatedOrder.user_id) {
-        const displayTracking = updatedOrder.tracking_code || updatedOrder.order_id.slice(0, 8).toUpperCase();
+        const displayTracking = updatedOrder.tracking_code || asString(updatedOrder.order_id).slice(0, 8).toUpperCase();
         if (status === "cancelled") {
           await createNotification(
-            updatedOrder.user_id,
+            asString(updatedOrder.user_id),
             "order_status",
             `Đơn hàng #${displayTracking} đã bị hủy ❌`,
             `Đơn hàng đã bị hủy thành công. Lý do: ${updateData.cancelled_reason}.`,
@@ -444,7 +465,7 @@ export async function handleOrdersRoute(req, res, subRoute, action, parts, corsH
             content = "Cảm ơn bạn đã mua sắm tại Velura! Đơn hàng của bạn đã hoàn thành.";
           }
           await createNotification(
-            updatedOrder.user_id,
+            asString(updatedOrder.user_id),
             "order_status",
             title,
             content,
@@ -496,10 +517,10 @@ export async function handleOrdersRoute(req, res, subRoute, action, parts, corsH
         console.log(`[CHECKOUT GUEST OTP] OTP requested for ${phone}`);
       }
       
-      let userId = existingUser ? existingUser.user_id : null;
+      const userId = existingUser ? existingUser.user_id : null;
       
       // Store OTP and guest info in memory instead of DB
-      checkoutOtpAttemptsMap.set(phone, { 
+      checkoutOtpAttemptsMap.set(asString(phone), { 
         otpCode, 
         expiresAt: new Date(otpExpiresAt).getTime(),
         email: email || null,
@@ -543,7 +564,9 @@ export async function handleOrdersRoute(req, res, subRoute, action, parts, corsH
             status: "sent", // Already sent directly, don't let worker resend
             created_at: new Date().toISOString()
           });
-        } catch (e) { /* ignore */ }
+        } catch {
+          /* ignore */
+        }
       }
       
       return sendJson(res, 200, {
@@ -557,7 +580,7 @@ export async function handleOrdersRoute(req, res, subRoute, action, parts, corsH
     // POST /api/user/orders/otp-verify (Verify OTP and Place Order)
     if (action === "otp-verify" && req.method === "POST") {
       const body = await readJson(req);
-      const order = body.order || {};
+      const order = asJsonObject(body.order);
       const phone = body.phone || order.shipping_phone;
       const otp_code = body.otp_code || body.otp;
       const shipping_name = body.shipping_name || order.shipping_name;
@@ -568,16 +591,19 @@ export async function handleOrdersRoute(req, res, subRoute, action, parts, corsH
       const subtotal = body.subtotal !== undefined ? body.subtotal : order.subtotal;
       const total_amount = body.total_amount !== undefined ? body.total_amount : order.total_amount;
       const payment_method = body.payment_method || order.payment_method;
-      const items = body.items || order.items;
+      const rawItems = body.items || order.items;
       
-      if (!phone || !otp_code || !shipping_name || !shipping_address || !items || !items.length) {
+      if (!phone || !otp_code || !shipping_name || !shipping_address || !Array.isArray(rawItems) || !rawItems.length) {
         throw new HttpError(400, "BAD_REQUEST", "Thông tin xác thực hoặc đơn hàng không đầy đủ");
       }
       if (!validatePhone(phone)) {
         throw new HttpError(400, "BAD_REQUEST", "Số điện thoại không hợp lệ (10 số, bắt đầu bằng 0)");
       }
+
+      const items = rawItems.map((item) => asJsonObject(item));
+      const phoneKey = asString(phone);
       
-      const sessionState = checkoutOtpAttemptsMap.get(phone);
+      const sessionState = checkoutOtpAttemptsMap.get(phoneKey);
       if (!sessionState) {
         throw new HttpError(400, "INVALID_OTP", "Không tìm thấy phiên xác thực. Vui lòng nhận lại mã OTP.");
       }
@@ -593,10 +619,10 @@ export async function handleOrdersRoute(req, res, subRoute, action, parts, corsH
       if (sessionState.otpCode !== otp_code) {
         if (otp_code !== "1234") {
           sessionState.attempts += 1;
-          checkoutOtpAttemptsMap.set(phone, sessionState);
+          checkoutOtpAttemptsMap.set(phoneKey, sessionState);
           
           if (sessionState.attempts >= 5) {
-            checkoutOtpAttemptsMap.delete(phone);
+            checkoutOtpAttemptsMap.delete(phoneKey);
             throw new HttpError(403, "SESSION_LOCKED", "Phiên xác thực bị khóa do nhập sai quá 5 lần. Vui lòng đặt lại đơn hàng.");
           } else {
             throw new HttpError(400, "INVALID_OTP", `Mã OTP không hợp lệ. Bạn còn ${5 - sessionState.attempts} lần thử.`);
@@ -605,17 +631,17 @@ export async function handleOrdersRoute(req, res, subRoute, action, parts, corsH
       }
       
       // OTP is valid
-      checkoutOtpAttemptsMap.delete(phone);
+      checkoutOtpAttemptsMap.delete(phoneKey);
       
       // Stock check
-      const affectedItems = [];
+      const affectedItems: JsonObject[] = [];
       for (const item of items) {
         const variant = await selectOne("variant", { variant_id: `eq.${item.variant_id}` });
         if (!variant) {
           throw new HttpError(400, "NOT_FOUND", `Không tìm thấy biến thể sản phẩm`);
         }
-        const availableStock = variant.stock_quantity - (variant.reserved_quantity || 0);
-        if (item.quantity > availableStock) {
+        const availableStock = Number(variant.stock_quantity) - Number(variant.reserved_quantity || 0);
+        if (Number(item.quantity) > availableStock) {
           affectedItems.push({
             variant_id: item.variant_id,
             product_name: item.product_name,
@@ -644,9 +670,9 @@ export async function handleOrdersRoute(req, res, subRoute, action, parts, corsH
         is_default: true
       }];
       
-      let guestUser = await selectOne("users", { phone: `eq.${phone}` });
+      let guestUser: JsonObject | null = await selectOne("users", { phone: `eq.${phone}` });
       if (!guestUser) {
-        guestUser = await insertRow("users", {
+        guestUser = asJsonObject(await insertRow("users", {
           full_name: sessionState.full_name,
           phone: phone,
           email: sessionState.email,
@@ -656,7 +682,7 @@ export async function handleOrdersRoute(req, res, subRoute, action, parts, corsH
           saved_addresses: savedAddresses,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
-        });
+        }));
       } else {
         await updateRows("users", { user_id: `eq.${guestUser.user_id}` }, {
           is_active: true,
@@ -716,13 +742,15 @@ export async function handleOrdersRoute(req, res, subRoute, action, parts, corsH
             status: "sent", // Already sent directly, don't let worker resend
             created_at: new Date().toISOString()
           });
-        } catch (e) { /* ignore */ }
+        } catch {
+          /* ignore */
+        }
       }
       
       const trackingCode = "VLR" + Date.now().toString().slice(-8).toUpperCase();
       const dbPaymentMethod = (payment_method === "COD" || payment_method === "cod") ? "COD" : "ONLINE_PAYMENT";
       
-      const newOrder = await insertRow("orders", {
+      const newOrder = asJsonObject(await insertRow("orders", {
         user_id: guestUser.user_id,
         status: "pending",
         shipping_name,
@@ -737,9 +765,9 @@ export async function handleOrdersRoute(req, res, subRoute, action, parts, corsH
         tracking_code: trackingCode,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
-      });
+      }));
       
-      const createdItems = [];
+      const createdItems: unknown[] = [];
       for (const item of items) {
         const orderItem = await insertRow("order_item", {
           order_id: newOrder.order_id,
@@ -748,7 +776,7 @@ export async function handleOrdersRoute(req, res, subRoute, action, parts, corsH
           product_image: item.product_image || null,
           quantity: item.quantity,
           unit_price: item.unit_price,
-          subtotal_item: item.quantity * item.unit_price
+          subtotal_item: Number(item.quantity) * Number(item.unit_price)
         });
         createdItems.push(orderItem);
         
@@ -756,11 +784,11 @@ export async function handleOrdersRoute(req, res, subRoute, action, parts, corsH
           try {
             const variant = await selectOne("variant", { variant_id: `eq.${item.variant_id}` });
             if (variant) {
-              const nextStock = Math.max(0, variant.stock_quantity - item.quantity);
+              const nextStock = Math.max(0, Number(variant.stock_quantity) - Number(item.quantity));
               await updateRows("variant", { variant_id: `eq.${item.variant_id}` }, { stock_quantity: nextStock });
             }
-          } catch (e) {
-            console.error(`Failed to decrement stock:`, e.message);
+          } catch (e: unknown) {
+            console.error(`Failed to decrement stock:`, errorMessage(e));
           }
         }
       }
@@ -769,16 +797,16 @@ export async function handleOrdersRoute(req, res, subRoute, action, parts, corsH
         try {
           const voucher = await selectOne("voucher", { voucher_id: `eq.${voucher_id}` });
           if (voucher) {
-            await updateRows("voucher", { voucher_id: `eq.${voucher_id}` }, { used_count: (voucher.used_count || 0) + 1 });
+            await updateRows("voucher", { voucher_id: `eq.${voucher_id}` }, { used_count: (Number(voucher.used_count) || 0) + 1 });
           }
-        } catch (e) {
-          console.error(e.message);
+        } catch (e: unknown) {
+          console.error(errorMessage(e));
         }
       }
 
       // Send welcome notification
       await createNotification(
-        guestUser.user_id,
+        asString(guestUser.user_id),
         "system",
         "Chào mừng bạn đến với Velura! 🎉",
         "Chúc mừng bạn đã đăng ký tài khoản thành viên thành công. Nhận ngay ưu đãi thành viên và bắt đầu mua sắm ngay!",
@@ -787,7 +815,7 @@ export async function handleOrdersRoute(req, res, subRoute, action, parts, corsH
 
       // Send order placed notification
       await createNotification(
-        guestUser.user_id,
+        asString(guestUser.user_id),
         "order_status",
         `Đơn hàng #${trackingCode} đã được đặt thành công ✅`,
         "Cảm ơn bạn đã mua sắm tại Velura. Đơn hàng của bạn đang được xử lý.",
@@ -815,7 +843,7 @@ export async function handleOrdersRoute(req, res, subRoute, action, parts, corsH
     if (action === "payment-callback" && req.method === "POST") {
       const body = await readJson(req);
       const { order_id, payment_provider, gateway_transaction_ref, gateway_response_code } = body;
-      const rawStatus = (body.payment_status || body.status || "").toLowerCase();
+      const rawStatus = asString(body.payment_status || body.status).toLowerCase();
       
       if (!order_id || !rawStatus) {
         throw new HttpError(400, "BAD_REQUEST", "Thiếu order_id hoặc trạng thái thanh toán");
@@ -860,9 +888,9 @@ export async function handleOrdersRoute(req, res, subRoute, action, parts, corsH
         });
 
         if (order && order.user_id) {
-          const displayTracking = order.tracking_code || order.order_id.slice(0, 8).toUpperCase();
+          const displayTracking = order.tracking_code || asString(order.order_id).slice(0, 8).toUpperCase();
           await createNotification(
-            order.user_id,
+            asString(order.user_id),
             "order_status",
             `Thanh toán đơn hàng #${displayTracking} thành công 💳`,
             "Chúng tôi đã nhận được thanh toán cho đơn hàng của bạn. Đơn hàng đang chuẩn bị được đóng gói.",
@@ -876,11 +904,11 @@ export async function handleOrdersRoute(req, res, subRoute, action, parts, corsH
           try {
             const variant = await selectOne("variant", { variant_id: `eq.${item.variant_id}` });
             if (variant) {
-              const nextStock = Math.max(0, variant.stock_quantity - item.quantity);
+              const nextStock = Math.max(0, Number(variant.stock_quantity) - Number(item.quantity));
               await updateRows("variant", { variant_id: `eq.${item.variant_id}` }, { stock_quantity: nextStock });
             }
-          } catch (e) {
-            console.error(`Failed to decrement stock:`, e.message);
+          } catch (e: unknown) {
+            console.error(`Failed to decrement stock:`, errorMessage(e));
           }
         }
       }
@@ -891,10 +919,10 @@ export async function handleOrdersRoute(req, res, subRoute, action, parts, corsH
     // POST /api/user/orders/:id/change-payment-method or POST /api/user/orders/change-payment-method
     const isChangePaymentMethod = 
       (action === "change-payment-method" && req.method === "POST") ||
-      (action && parts[4] === "change-payment-method" && req.method === "POST");
+      (Boolean(action) && parts[4] === "change-payment-method" && req.method === "POST");
 
     if (isChangePaymentMethod) {
-      const body = await readJson(req).catch(() => ({}));
+      const body = await readJson(req).catch(() => ({} as JsonObject));
       const targetOrderId = action === "change-payment-method" ? body.order_id : action;
       
       if (!targetOrderId) {
@@ -918,11 +946,11 @@ export async function handleOrdersRoute(req, res, subRoute, action, parts, corsH
         try {
           const variant = await selectOne("variant", { variant_id: `eq.${item.variant_id}` });
           if (variant) {
-            const nextStock = Math.max(0, variant.stock_quantity - item.quantity);
+            const nextStock = Math.max(0, Number(variant.stock_quantity) - Number(item.quantity));
             await updateRows("variant", { variant_id: `eq.${item.variant_id}` }, { stock_quantity: nextStock });
           }
-        } catch (e) {
-          console.error(`Failed to decrement stock on COD conversion:`, e.message);
+        } catch (e: unknown) {
+          console.error(`Failed to decrement stock on COD conversion:`, errorMessage(e));
         }
       }
       
@@ -938,7 +966,7 @@ export async function handleOrdersRoute(req, res, subRoute, action, parts, corsH
         subtotal, total_amount, payment_method, items
       } = body;
 
-      if (!shipping_name || !shipping_phone || !shipping_address || !items || !items.length) {
+      if (!shipping_name || !shipping_phone || !shipping_address || !Array.isArray(items) || !items.length) {
         throw new HttpError(400, "BAD_REQUEST", "Thông tin đơn hàng không đầy đủ");
       }
       if (!validatePhone(shipping_phone)) {
@@ -946,16 +974,17 @@ export async function handleOrdersRoute(req, res, subRoute, action, parts, corsH
       }
 
       const profile = requireUserAuth(context);
+      const orderItems = items.map((item) => asJsonObject(item));
 
       // Stock check
-      const affectedItems = [];
-      for (const item of items) {
+      const affectedItems: JsonObject[] = [];
+      for (const item of orderItems) {
         const variant = await selectOne("variant", { variant_id: `eq.${item.variant_id}` });
         if (!variant) {
           throw new HttpError(400, "NOT_FOUND", `Không tìm thấy biến thể sản phẩm`);
         }
-        const availableStock = variant.stock_quantity - (variant.reserved_quantity || 0);
-        if (item.quantity > availableStock) {
+        const availableStock = Number(variant.stock_quantity) - Number(variant.reserved_quantity || 0);
+        if (Number(item.quantity) > availableStock) {
           affectedItems.push({
             variant_id: item.variant_id,
             product_name: item.product_name,
@@ -979,7 +1008,7 @@ export async function handleOrdersRoute(req, res, subRoute, action, parts, corsH
       const dbPaymentMethod = (payment_method === "COD" || payment_method === "cod") ? "COD" : "ONLINE_PAYMENT";
 
       // Create order row
-      const newOrder = await insertRow("orders", {
+      const newOrder = asJsonObject(await insertRow("orders", {
         user_id: profile.user_id,
         status: "pending",
         shipping_name,
@@ -994,11 +1023,11 @@ export async function handleOrdersRoute(req, res, subRoute, action, parts, corsH
         tracking_code: trackingCode,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
-      });
+      }));
 
       // Insert order items & update variant stock reservations
-      const createdItems = [];
-      for (const item of items) {
+      const createdItems: unknown[] = [];
+      for (const item of orderItems) {
         const orderItem = await insertRow("order_item", {
           order_id: newOrder.order_id,
           variant_id: item.variant_id,
@@ -1006,7 +1035,7 @@ export async function handleOrdersRoute(req, res, subRoute, action, parts, corsH
           product_image: item.product_image || null,
           quantity: item.quantity,
           unit_price: item.unit_price,
-          subtotal_item: item.quantity * item.unit_price
+          subtotal_item: Number(item.quantity) * Number(item.unit_price)
         });
         createdItems.push(orderItem);
 
@@ -1014,11 +1043,11 @@ export async function handleOrdersRoute(req, res, subRoute, action, parts, corsH
           try {
             const variant = await selectOne("variant", { variant_id: `eq.${item.variant_id}` });
             if (variant) {
-              const nextStock = Math.max(0, variant.stock_quantity - item.quantity);
+              const nextStock = Math.max(0, Number(variant.stock_quantity) - Number(item.quantity));
               await updateRows("variant", { variant_id: `eq.${item.variant_id}` }, { stock_quantity: nextStock });
             }
-          } catch (e) {
-            console.error(`Failed to decrement stock:`, e.message);
+          } catch (e: unknown) {
+            console.error(`Failed to decrement stock:`, errorMessage(e));
           }
         }
       }
@@ -1027,10 +1056,10 @@ export async function handleOrdersRoute(req, res, subRoute, action, parts, corsH
         try {
           const voucher = await selectOne("voucher", { voucher_id: `eq.${voucher_id}` });
           if (voucher) {
-            await updateRows("voucher", { voucher_id: `eq.${voucher_id}` }, { used_count: (voucher.used_count || 0) + 1 });
+            await updateRows("voucher", { voucher_id: `eq.${voucher_id}` }, { used_count: (Number(voucher.used_count) || 0) + 1 });
           }
-        } catch (e) {
-          console.error(e.message);
+        } catch (e: unknown) {
+          console.error(errorMessage(e));
         }
       }
 

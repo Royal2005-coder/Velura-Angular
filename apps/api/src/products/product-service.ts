@@ -1,6 +1,12 @@
-// @ts-nocheck
 import { HttpError } from "../http.js";
 import { selectRows, insertRow, selectOne, updateRows } from "../supabase.js";
+import {
+  asJsonObject,
+  errorMessage,
+  type AuthContext,
+  type JsonObject,
+  type RequestMeta
+} from "../types.js";
 import {
   PRODUCT_ADMIN_ROLES,
   PRODUCT_VIEWER_ROLES,
@@ -10,8 +16,42 @@ import {
   CSV_MAX_ROWS,
   CSV_REQUIRED_COLUMNS
 } from "./product-constants.js";
+import type { ProductRepository } from "./product-repository.js";
 
-export function createProductService({ repository }) {
+/**
+ * Admin product use-cases used by `handleProductRoute`.
+ */
+export interface ProductService {
+  list(context: AuthContext | undefined, searchParams: URLSearchParams): Promise<unknown>;
+  get(context: AuthContext | undefined, productId: string): Promise<unknown>;
+  getVariants(context: AuthContext | undefined, productId: string): Promise<unknown>;
+  categories(context: AuthContext | undefined): Promise<unknown>;
+  create(context: AuthContext | undefined, body: JsonObject, requestMeta: RequestMeta): Promise<unknown>;
+  update(context: AuthContext | undefined, productId: string, body: JsonObject, requestMeta: RequestMeta): Promise<unknown>;
+  changeStatus(context: AuthContext | undefined, productId: string, body: JsonObject, requestMeta: RequestMeta): Promise<unknown>;
+  updateStock(context: AuthContext | undefined, productId: string, body: JsonObject, requestMeta: RequestMeta): Promise<unknown>;
+  bulkUpdateStock(context: AuthContext | undefined, productId: string, body: JsonObject, requestMeta: RequestMeta): Promise<unknown>;
+  createVariant(context: AuthContext | undefined, productId: string, body: JsonObject, requestMeta: RequestMeta): Promise<unknown>;
+  parseCsv(context: AuthContext | undefined, csvContent: unknown): Promise<unknown>;
+  commitCsv(context: AuthContext | undefined, csvContent: unknown, requestMeta: RequestMeta): Promise<unknown>;
+  lowStock(context: AuthContext | undefined): Promise<unknown>;
+  listAuditLogs(context: AuthContext | undefined, searchParams: URLSearchParams): Promise<unknown>;
+  getComboItems(context: AuthContext | undefined, productId: string): Promise<unknown>;
+  addComboItem(context: AuthContext | undefined, productId: string, body: JsonObject, requestMeta: RequestMeta): Promise<unknown>;
+  updateComboItem(
+    context: AuthContext | undefined,
+    productId: string,
+    itemId: string,
+    body: JsonObject,
+    requestMeta: RequestMeta
+  ): Promise<unknown>;
+  removeComboItem(context: AuthContext | undefined, productId: string, itemId: string): Promise<unknown>;
+}
+
+/**
+ * Create the admin product application service.
+ */
+export function createProductService({ repository }: { repository: ProductRepository }): ProductService {
   if (!repository) throw new TypeError("repository is required");
 
   // Run an asynchronous alignment of stock status on startup with a brief delay
@@ -29,11 +69,11 @@ export function createProductService({ repository }) {
       const rows = products?.rows || (Array.isArray(products) ? products : []);
       for (const product of rows) {
         if (product.status === "on_sale" || product.status === "out_of_stock") {
-          const variants = await repository.listVariants(product.product_id, null);
+          const variants = await repository.listVariants(product.product_id as string, null);
           const list = variants?.rows || (Array.isArray(variants) ? variants : []);
-          const totalStock = list.reduce((sum, v) => sum + Number(v.stock_quantity || 0), 0);
+          const totalStock = list.reduce((sum: number, v: JsonObject) => sum + Number(v.stock_quantity || 0), 0);
           if (totalStock <= 0 && product.status === "on_sale") {
-            await repository.changeStatus(product.product_id, {
+            await repository.changeStatus(product.product_id as string, {
               status: "out_of_stock",
               reason: "Đồng bộ tồn kho hệ thống (hết hàng)",
               expectedVersion: product.version,
@@ -41,7 +81,7 @@ export function createProductService({ repository }) {
             }, null);
             console.log(`[Startup Sync] Product ${product.sku} status aligned to out_of_stock (stock: 0)`);
           } else if (totalStock > 0 && product.status === "out_of_stock") {
-            await repository.changeStatus(product.product_id, {
+            await repository.changeStatus(product.product_id as string, {
               status: "on_sale",
               reason: "Đồng bộ tồn kho hệ thống (còn hàng)",
               expectedVersion: product.version,
@@ -51,8 +91,8 @@ export function createProductService({ repository }) {
           }
         }
       }
-    } catch (err) {
-      console.error("[Startup Sync Error] Failed to align stock status:", err.message);
+    } catch (err: unknown) {
+      console.error("[Startup Sync Error] Failed to align stock status:", errorMessage(err));
     }
   }, 1000);
 
@@ -85,14 +125,14 @@ export function createProductService({ repository }) {
       requireProductAdmin(context, body?.isCombo === true);
       const input = validateCreateProduct(body);
       input.ipAddress = requestMeta.ipAddress || "0.0.0.0";
-      const product = await repository.createProduct(input, context.accessToken);
+      const product = asJsonObject(await repository.createProduct(input, context.accessToken));
 
       // Auto-create a default variant with the initial stock and threshold if repository method exists
       if (repository && typeof repository.createVariant === "function") {
         const initialStock = body.initialStock !== undefined ? Number(body.initialStock) : 0;
         const lowStockThreshold = body.lowStockThreshold !== undefined ? Number(body.lowStockThreshold) : 5;
 
-        await repository.createVariant(product.product_id, {
+        await repository.createVariant(product.product_id as string, {
           color: "Mặc định",
           colorHex: "#FFFFFF",
           size: "F",
@@ -100,7 +140,7 @@ export function createProductService({ repository }) {
           lowStockThreshold: lowStockThreshold
         });
 
-        await syncProductStockStatus(repository, context, product.product_id, "Khởi tạo tồn kho sản phẩm mới", input.ipAddress);
+        await syncProductStockStatus(repository, context, product.product_id as string, "Khởi tạo tồn kho sản phẩm mới", input.ipAddress);
       }
 
       return product;
@@ -108,7 +148,7 @@ export function createProductService({ repository }) {
 
     async update(context, productId, body, requestMeta) {
       requireUuid(productId, "productId");
-      const current = await repository.findById(productId, context.accessToken);
+      const current = await repository.findById(productId, context?.accessToken ?? null);
       if (!current) throw new HttpError(404, "PRODUCT_NOT_FOUND", "Product was not found");
       requireProductAdmin(context, current.is_combo === true);
       const input = validateUpdateProduct(body);
@@ -129,7 +169,7 @@ export function createProductService({ repository }) {
           if (stock !== undefined) {
             const delta = stock - Number(firstVariant.stock_quantity || 0);
             if (delta !== 0) {
-              await repository.updateStock(productId, firstVariant.variant_id, {
+              await repository.updateStock(productId, firstVariant.variant_id as string, {
                 delta,
                 reason: "Điều chỉnh tồn kho từ biểu mẫu sản phẩm",
                 expectedVersion: firstVariant.version || 1,
@@ -141,7 +181,7 @@ export function createProductService({ repository }) {
           if (minStock !== undefined) {
             await updateRows("variant", { variant_id: `eq.${firstVariant.variant_id}` }, {
               low_stock_threshold: minStock,
-              version: (firstVariant.version || 0) + 1,
+              version: (firstVariant.version as number || 0) + 1,
               updated_at: new Date().toISOString()
             });
             variantUpdated = true;
@@ -157,11 +197,11 @@ export function createProductService({ repository }) {
 
     async changeStatus(context, productId, body, requestMeta) {
       requireUuid(productId, "productId");
-      const current = await repository.findById(productId, context.accessToken);
+      const current = await repository.findById(productId, context?.accessToken ?? null);
       if (!current) throw new HttpError(404, "PRODUCT_NOT_FOUND", "Product was not found");
       requireProductAdmin(context, current.is_combo === true);
       const input = validateStatusChange(body);
-      if (current.status === input.status || !STATUS_TRANSITIONS[current.status]?.includes(input.status)) {
+      if (current.status === input.status || !STATUS_TRANSITIONS[current.status as string]?.includes(input.status)) {
         throw validationError("status", `Cannot change status from ${current.status} to ${input.status}`);
       }
       input.ipAddress = requestMeta.ipAddress || "0.0.0.0";
@@ -170,7 +210,7 @@ export function createProductService({ repository }) {
 
     async updateStock(context, productId, body, requestMeta) {
       requireUuid(productId, "productId");
-      const current = await repository.findById(productId, context.accessToken);
+      const current = await repository.findById(productId, context?.accessToken ?? null);
       if (!current) throw new HttpError(404, "PRODUCT_NOT_FOUND", "Product was not found");
       requireProductAdmin(context, current.is_combo === true);
       requireUuid(body?.variantId, "variantId");
@@ -187,11 +227,11 @@ export function createProductService({ repository }) {
         throw validationError("reason", "Reason must be at least 10 characters");
       }
 
-      let result = { success: true };
+      let result: unknown = { success: true };
       if (delta !== 0) {
         const input = validateStockUpdate(body);
         input.ipAddress = ipAddress;
-        result = await repository.updateStock(productId, body.variantId, input, context.accessToken);
+        result = await repository.updateStock(productId, body.variantId as string, input, context.accessToken);
       }
 
       if (lowStockThreshold !== undefined) {
@@ -202,20 +242,20 @@ export function createProductService({ repository }) {
         if (freshVariant) {
           await updateRows("variant", { variant_id: `eq.${body.variantId}` }, {
             low_stock_threshold: lowStockThreshold,
-            version: freshVariant.version + 1,
+            version: (freshVariant.version as number) + 1,
             updated_at: new Date().toISOString()
           });
         }
       }
 
       await syncProductStockStatus(repository, context, productId, reason, ipAddress);
-      await checkAndAlertLowStock(repository, context, productId, body.variantId);
+      await checkAndAlertLowStock(repository, context, productId, body.variantId as string);
       return result;
     },
 
     async bulkUpdateStock(context, productId, body, requestMeta) {
       requireUuid(productId, "productId");
-      const current = await repository.findById(productId, context.accessToken);
+      const current = await repository.findById(productId, context?.accessToken ?? null);
       if (!current) throw new HttpError(404, "PRODUCT_NOT_FOUND", "Product was not found");
       requireProductAdmin(context, current.is_combo === true);
 
@@ -228,9 +268,10 @@ export function createProductService({ repository }) {
       }
 
       const ipAddress = requestMeta.ipAddress || "0.0.0.0";
-      const results = [];
+      const results: JsonObject[] = [];
+      const updates = body.updates as JsonObject[];
 
-      for (const update of body.updates) {
+      for (const update of updates) {
         requireUuid(update.variantId, "variantId");
         const delta = Number(update.delta || 0);
         const lowStockThreshold = update.lowStockThreshold !== undefined ? Number(update.lowStockThreshold) : undefined;
@@ -244,7 +285,7 @@ export function createProductService({ repository }) {
 
         // Apply updates
         if (delta !== 0) {
-          await repository.updateStock(productId, update.variantId, {
+          await repository.updateStock(productId, update.variantId as string, {
             delta,
             reason,
             expectedVersion: update.expectedVersion || 1,
@@ -257,7 +298,7 @@ export function createProductService({ repository }) {
           if (freshVariant) {
             await updateRows("variant", { variant_id: `eq.${update.variantId}` }, {
               low_stock_threshold: lowStockThreshold,
-              version: freshVariant.version + 1,
+              version: (freshVariant.version as number) + 1,
               updated_at: new Date().toISOString()
             });
           }
@@ -267,8 +308,8 @@ export function createProductService({ repository }) {
 
       await syncProductStockStatus(repository, context, productId, reason, ipAddress);
 
-      for (const update of body.updates) {
-        await checkAndAlertLowStock(repository, context, productId, update.variantId);
+      for (const update of updates) {
+        await checkAndAlertLowStock(repository, context, productId, update.variantId as string);
       }
 
       return { success: true, results };
@@ -276,14 +317,14 @@ export function createProductService({ repository }) {
 
     async createVariant(context, productId, body, requestMeta) {
       requireUuid(productId, "productId");
-      const current = await repository.findById(productId, context.accessToken);
+      const current = await repository.findById(productId, context?.accessToken ?? null);
       if (!current) throw new HttpError(404, "PRODUCT_NOT_FOUND", "Product was not found");
       requireProductAdmin(context, current.is_combo === true);
       const input = validateCreateVariant(body);
       input.ipAddress = requestMeta.ipAddress || "0.0.0.0";
-      const result = await repository.createVariant(productId, input, context.accessToken);
+      const result = asJsonObject(await repository.createVariant(productId, input, context.accessToken));
       await syncProductStockStatus(repository, context, productId, "Cập nhật tồn kho biến thể sản phẩm", input.ipAddress);
-      await checkAndAlertLowStock(repository, context, productId, result.variant_id);
+      await checkAndAlertLowStock(repository, context, productId, result.variant_id as string);
       return result;
     },
 
@@ -301,8 +342,8 @@ export function createProductService({ repository }) {
         throw validationError("csv", `Missing required columns: ${missing.join(", ")}`);
       }
 
-      const errors = [];
-      const rows = [];
+      const errors: JsonObject[] = [];
+      const rows: JsonObject[] = [];
       for (let i = 1; i < lines.length; i++) {
         const row = parseCsvRow(headers, lines[i]);
         const rowNum = i + 1;
@@ -356,13 +397,14 @@ export function createProductService({ repository }) {
 
     async commitCsv(context, csvContent, requestMeta) {
       requireProductAdmin(context);
-      const parsed = await this.parseCsv(context, csvContent);
-      if (parsed.rows.length === 0) throw validationError("csv", "No valid rows to import");
+      const parsed = asJsonObject(await this.parseCsv(context, csvContent));
+      const parsedRows = Array.isArray(parsed.rows) ? parsed.rows as JsonObject[] : [];
+      if (parsedRows.length === 0) throw validationError("csv", "No valid rows to import");
 
-      const results = [];
-      for (const row of parsed.rows) {
+      const results: JsonObject[] = [];
+      for (const row of parsedRows) {
         try {
-          const existing = repository.findBySku ? await repository.findBySku(row.sku, context.accessToken) : null;
+          const existing = repository.findBySku ? await repository.findBySku(row.sku as string, context.accessToken) : null;
           if (existing) {
             // Update existing product
             const updateInput = {
@@ -376,14 +418,14 @@ export function createProductService({ repository }) {
               expectedVersion: existing.version,
               ipAddress: requestMeta.ipAddress || "0.0.0.0"
             };
-            await repository.updateProduct(existing.product_id, updateInput, context.accessToken);
+            await repository.updateProduct(existing.product_id as string, updateInput, context.accessToken);
 
             if (existing.status !== row.status) {
-              const fresh = await repository.findById(existing.product_id, context.accessToken);
-              await repository.changeStatus(existing.product_id, {
+              const fresh = await repository.findById(existing.product_id as string, context.accessToken);
+              await repository.changeStatus(existing.product_id as string, {
                 status: row.status,
                 reason: "Cập nhật trạng thái tự động qua import CSV",
-                expectedVersion: fresh.version,
+                expectedVersion: (fresh as JsonObject).version,
                 ipAddress: requestMeta.ipAddress || "0.0.0.0"
               }, context.accessToken);
             }
@@ -391,8 +433,8 @@ export function createProductService({ repository }) {
             results.push({ sku: row.sku, status: "updated", product_id: existing.product_id });
           } else {
             // Create new product
-            const slug = row.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") + "-" + row.sku.toLowerCase();
-            const product = await this.create(context, {
+            const slug = String(row.name).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") + "-" + String(row.sku).toLowerCase();
+            const product = asJsonObject(await this.create(context, {
               sku: row.sku,
               name: row.name,
               slug: slug,
@@ -404,18 +446,18 @@ export function createProductService({ repository }) {
               images: row.images || [],
               isFeatured: row.is_featured,
               expectedVersion: 0
-            }, requestMeta);
+            }, requestMeta));
             results.push({ sku: row.sku, status: "created", product_id: product.product_id });
           }
-        } catch (error) {
-          results.push({ sku: row.sku, status: "error", message: error.message || "Unknown error" });
+        } catch (error: unknown) {
+          results.push({ sku: row.sku, status: "error", message: errorMessage(error) || "Unknown error" });
         }
       }
 
       const created = results.filter((r) => r.status === "created").length;
       const updated = results.filter((r) => r.status === "updated").length;
       const failed = results.filter((r) => r.status === "error").length;
-      return { created, updated, failed, total: parsed.rows.length, results };
+      return { created, updated, failed, total: parsedRows.length, results };
     },
 
     async lowStock(context) {
@@ -470,7 +512,10 @@ export function createProductService({ repository }) {
   };
 }
 
-export function validateCreateVariant(body = {}) {
+/**
+ * Validate a create-variant request body.
+ */
+export function validateCreateVariant(body: JsonObject = {}) {
   const color = String(body.color || "").trim();
   const size = String(body.size || "").trim().toUpperCase();
   const stockQuantity = Number(body.stockQuantity);
@@ -486,11 +531,15 @@ export function validateCreateVariant(body = {}) {
     size,
     sizeMeasurements: body.sizeMeasurements || null,
     stockQuantity,
-    lowStockThreshold
+    lowStockThreshold,
+    ipAddress: "0.0.0.0"
   };
 }
 
-export function validateCreateProduct(body = {}) {
+/**
+ * Validate a create-product request body.
+ */
+export function validateCreateProduct(body: JsonObject = {}) {
   const sku = String(body.sku || "").trim().toUpperCase();
   const name = String(body.name || "").trim();
   const slug = String(body.slug || "").trim().toLowerCase();
@@ -513,7 +562,7 @@ export function validateCreateProduct(body = {}) {
     throw validationError("salePrice", "salePrice must be a non-negative number");
   }
   const status = body.status || "on_sale";
-  if (!["on_sale", "hidden"].includes(status)) {
+  if (!["on_sale", "hidden"].includes(status as string)) {
     throw validationError("status", "A new product must be on_sale or hidden");
   }
   return {
@@ -541,7 +590,10 @@ export function validateCreateProduct(body = {}) {
   };
 }
 
-export function validateUpdateProduct(body = {}) {
+/**
+ * Validate an update-product request body.
+ */
+export function validateUpdateProduct(body: JsonObject = {}) {
   if (body.name !== undefined && (typeof body.name !== "string" || body.name.trim().length < 2 || body.name.trim().length > 255)) {
     throw validationError("name", "Name must contain 2 to 255 characters");
   }
@@ -551,7 +603,7 @@ export function validateUpdateProduct(body = {}) {
     throw validationError("price", "Use the pricing endpoint to change product prices");
   }
   const input = {
-    name: body.name !== undefined ? body.name.trim() : undefined,
+    name: body.name !== undefined ? (body.name as string).trim() : undefined,
     description: body.description !== undefined ? optionalText(body.description, 5000) : undefined,
     categoryId: body.categoryId || undefined,
     brand: body.brand !== undefined ? optionalText(body.brand, 100) : undefined,
@@ -575,19 +627,25 @@ export function validateUpdateProduct(body = {}) {
   return input;
 }
 
-export function validateStatusChange(body = {}) {
-  if (!PRODUCT_STATUSES.includes(body.status)) {
+/**
+ * Validate a product status-change request body.
+ */
+export function validateStatusChange(body: JsonObject = {}) {
+  if (!PRODUCT_STATUSES.includes(body.status as string)) {
     throw validationError("status", `Invalid status. Must be one of: ${PRODUCT_STATUSES.join(", ")}`);
   }
   return {
-    status: body.status,
+    status: body.status as string,
     reason: requireReason(body.reason, "reason"),
     expectedVersion: requireVersion(body.expectedVersion),
     ipAddress: "0.0.0.0"
   };
 }
 
-export function validateStockUpdate(body = {}) {
+/**
+ * Validate a stock-delta request body.
+ */
+export function validateStockUpdate(body: JsonObject = {}) {
   const delta = Number(body.delta);
   if (!Number.isInteger(delta) || delta === 0) {
     throw validationError("delta", "delta must be a non-zero integer");
@@ -600,7 +658,7 @@ export function validateStockUpdate(body = {}) {
   };
 }
 
-function requireProductViewer(context) {
+function requireProductViewer(context: AuthContext | undefined): asserts context is AuthContext {
   if (!context?.authUser?.id) throw new HttpError(401, "AUTH_REQUIRED", "Authentication is required");
   if (!context.isAdmin || !context.profile?.is_active) {
     throw new HttpError(403, "ADMIN_REQUIRED", "Admin access is required");
@@ -610,7 +668,7 @@ function requireProductViewer(context) {
   }
 }
 
-function requireProductAdmin(context, isComboOperation = false) {
+function requireProductAdmin(context: AuthContext | undefined, isComboOperation = false): asserts context is AuthContext {
   requireProductViewer(context);
   const allowedRoles = isComboOperation ? [...PRODUCT_ADMIN_ROLES, "admin_operator_gia_km"] : PRODUCT_ADMIN_ROLES;
   if (!allowedRoles.includes(context.roleCode)) {
@@ -618,7 +676,7 @@ function requireProductAdmin(context, isComboOperation = false) {
   }
 }
 
-function parseListFilters(searchParams) {
+function parseListFilters(searchParams: URLSearchParams): JsonObject {
   const status = searchParams.get("status") || "";
   if (status && !PRODUCT_STATUSES.includes(status)) {
     throw validationError("status", "Invalid status filter");
@@ -649,9 +707,9 @@ function parseListFilters(searchParams) {
   };
 }
 
-function parseCsvLines(content) {
-  const rows = [];
-  let row = [];
+function parseCsvLines(content: unknown): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
   let value = "";
   let quoted = false;
   const input = String(content || "").replace(/^\uFEFF/, "");
@@ -683,19 +741,19 @@ function parseCsvLines(content) {
   return rows;
 }
 
-function parseCsvRow(headers, values) {
-  const row = {};
+function parseCsvRow(headers: string[], values: string[]): Record<string, string> {
+  const row: Record<string, string> = {};
   headers.forEach((header, i) => { row[header] = (values[i] || "").trim(); });
   return row;
 }
 
-function requireUuid(value, field) {
+function requireUuid(value: unknown, field: string): void {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ""))) {
     throw validationError(field, `${field} must be a UUID`);
   }
 }
 
-function requireVersion(value) {
+function requireVersion(value: unknown): number {
   const version = Number(value);
   if (!Number.isInteger(version) || version < 0) {
     throw validationError("expectedVersion", "expectedVersion must be a non-negative integer");
@@ -703,14 +761,14 @@ function requireVersion(value) {
   return version;
 }
 
-function optionalText(value, maxLength) {
+function optionalText(value: unknown, maxLength: number): string | null | undefined {
   if (value === undefined || value === null) return undefined;
   const text = String(value).trim();
   if (text.length > maxLength) throw validationError("field", `Text must be at most ${maxLength} characters`);
   return text || null;
 }
 
-function requireReason(value, field) {
+function requireReason(value: unknown, field: string): string {
   const text = String(value || "").trim().replace(/\s+/g, " ");
   if (text.length < 10 || text.length > 500) {
     throw validationError(field, `${field} must contain 10 to 500 characters`);
@@ -718,7 +776,7 @@ function requireReason(value, field) {
   return text;
 }
 
-function validateStringArray(value, field, maxItems, maxItemLength) {
+function validateStringArray(value: unknown, field: string, maxItems: number, maxItemLength: number): string[] {
   if (value === undefined || value === null) return [];
   if (!Array.isArray(value) || value.length > maxItems) {
     throw validationError(field, `${field} must be an array with at most ${maxItems} items`);
@@ -732,10 +790,10 @@ function validateStringArray(value, field, maxItems, maxItemLength) {
   });
 }
 
-function validateImageUrls(value) {
+function validateImageUrls(value: unknown): string[] {
   const images = validateStringArray(value, "images", 20, 2048);
   for (const image of images) {
-    let parsed;
+    let parsed: URL;
     try {
       parsed = new URL(image);
     } catch {
@@ -748,13 +806,19 @@ function validateImageUrls(value) {
   return images;
 }
 
-async function syncProductStockStatus(repository, context, productId, reason, ipAddress) {
+async function syncProductStockStatus(
+  repository: ProductRepository,
+  context: AuthContext,
+  productId: string,
+  reason: string,
+  ipAddress: string
+): Promise<void> {
   const [product, variants] = await Promise.all([
     repository.findById(productId, context.accessToken),
     repository.listVariants(productId, context.accessToken)
   ]);
   if (!product) return;
-  const totalStock = (variants.rows || variants || []).reduce((sum, variant) => sum + Number(variant.stock_quantity || 0), 0);
+  const totalStock = (variants.rows || variants || []).reduce((sum: number, variant: JsonObject) => sum + Number(variant.stock_quantity || 0), 0);
   if (totalStock <= 0 && product.status === "on_sale") {
     await repository.changeStatus(productId, { status: "out_of_stock", reason, expectedVersion: product.version, ipAddress }, context.accessToken);
   }
@@ -763,14 +827,19 @@ async function syncProductStockStatus(repository, context, productId, reason, ip
   }
 }
 
-async function checkAndAlertLowStock(repository, context, productId, variantId) {
+async function checkAndAlertLowStock(
+  repository: ProductRepository,
+  context: AuthContext,
+  productId: string,
+  variantId: string
+): Promise<void> {
   try {
     const [product, variants] = await Promise.all([
       repository.findById(productId, context.accessToken),
       repository.listVariants(productId, context.accessToken)
     ]);
     if (!product) return;
-    const targetVariant = (variants.rows || variants || []).find((v) => v.variant_id === variantId);
+    const targetVariant = (variants.rows || variants || []).find((v: JsonObject) => v.variant_id === variantId);
     if (!targetVariant) return;
 
     const stock = Number(targetVariant.stock_quantity || 0);
@@ -802,12 +871,12 @@ async function checkAndAlertLowStock(repository, context, productId, variantId) 
         }
       }
     }
-  } catch (err) {
-    console.error("[Low Stock Alert] Failed to queue warning emails:", err.message || err);
+  } catch (err: unknown) {
+    console.error("[Low Stock Alert] Failed to queue warning emails:", errorMessage(err) || err);
   }
 }
 
-function parseOptionalPrice(value, field) {
+function parseOptionalPrice(value: string | null, field: string): number | undefined {
   if (value === null || value === "") return undefined;
   const number = Number(value);
   if (!Number.isFinite(number) || number < 0) {
@@ -816,13 +885,13 @@ function parseOptionalPrice(value, field) {
   return number;
 }
 
-function clampInteger(raw, fallback, min, max) {
+function clampInteger(raw: string | null, fallback: number, min: number, max: number): number {
   if (raw === null || raw === "") return fallback;
   const number = Number(raw);
   if (!Number.isInteger(number)) return fallback;
   return Math.max(min, Math.min(max, number));
 }
 
-function validationError(field, message) {
+function validationError(field: string, message: string): HttpError {
   return new HttpError(422, "VALIDATION_ERROR", "Request validation failed", { [field]: [message] });
 }

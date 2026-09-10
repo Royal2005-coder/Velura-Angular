@@ -1,16 +1,41 @@
-// @ts-nocheck
 import { HttpError } from "../http.js";
+import type { AuthContext, JsonObject } from "../types.js";
 import { PROMOTION_OPERATOR_ROLES, PROMOTION_READER_ROLES, PROMOTION_TYPES, VOUCHER_TYPES } from "./pricing-constants.js";
+import type { PricingRepository } from "./pricing-repository.js";
 
-export function createPricingService({ repository }) {
-  function requirePricingAdmin(context) {
+/**
+ * Admin pricing use-cases used by `handlePricingRoute`.
+ */
+export interface PricingService {
+  listPriceHistory(context: AuthContext | undefined, searchParams: URLSearchParams): Promise<unknown>;
+  changePrice(context: AuthContext | undefined, productId: string, body: JsonObject): Promise<unknown>;
+  listPromotions(context: AuthContext | undefined, searchParams: URLSearchParams): Promise<unknown>;
+  getPromotion(context: AuthContext | undefined, promotionId: string): Promise<unknown>;
+  createPromotion(context: AuthContext | undefined, body: JsonObject): Promise<unknown>;
+  updatePromotion(context: AuthContext | undefined, promotionId: string, body: JsonObject): Promise<unknown>;
+  activatePromotion(context: AuthContext | undefined, promotionId: string, body: JsonObject): Promise<unknown>;
+  pausePromotion(context: AuthContext | undefined, promotionId: string, body: JsonObject): Promise<unknown>;
+  listVouchers(context: AuthContext | undefined, searchParams: URLSearchParams): Promise<unknown>;
+  getVoucher(context: AuthContext | undefined, voucherId: string): Promise<unknown>;
+  createVoucher(context: AuthContext | undefined, body: JsonObject): Promise<unknown>;
+  updateVoucher(context: AuthContext | undefined, voucherId: string, body: JsonObject): Promise<unknown>;
+  listAuditLogs(context: AuthContext | undefined, searchParams: URLSearchParams): Promise<unknown>;
+  toggleVoucher(context: AuthContext | undefined, voucherId: string): Promise<unknown>;
+  getStatistics(context: AuthContext | undefined): Promise<unknown>;
+}
+
+/**
+ * Create the admin pricing application service.
+ */
+export function createPricingService({ repository }: { repository: PricingRepository }): PricingService {
+  function requirePricingAdmin(context: AuthContext | undefined): asserts context is AuthContext {
     if (!context?.authUser?.id) throw new HttpError(401, "AUTH_REQUIRED", "Authentication is required");
     if (!PROMOTION_OPERATOR_ROLES.includes(context.roleCode)) {
       throw new HttpError(403, "RBAC_DENIED", "Only pricing operator or super admin can manage pricing");
     }
   }
 
-  function requirePricingReader(context) {
+  function requirePricingReader(context: AuthContext | undefined): asserts context is AuthContext {
     if (!context?.authUser?.id) throw new HttpError(401, "AUTH_REQUIRED", "Authentication is required");
     if (!PROMOTION_READER_ROLES.includes(context.roleCode)) {
       throw new HttpError(403, "RBAC_DENIED", "Insufficient permissions to view pricing");
@@ -53,27 +78,27 @@ export function createPricingService({ repository }) {
       requirePricingAdmin(context);
       if (!body?.name) throw new HttpError(422, "VALIDATION_ERROR", "Name required");
       if (!body?.startDate || !body?.endDate) throw new HttpError(422, "VALIDATION_ERROR", "Start and end dates required");
-      if (body.type && !PROMOTION_TYPES.includes(body.type)) throw new HttpError(422, "VALIDATION_ERROR", `Invalid promo type. Valid: ${PROMOTION_TYPES.join(", ")}`);
+      if (body.type && !PROMOTION_TYPES.includes(body.type as string)) throw new HttpError(422, "VALIDATION_ERROR", `Invalid promo type. Valid: ${PROMOTION_TYPES.join(", ")}`);
       return repository.createPromotion({ ...body, createdBy: context.profile?.user_id || context.authUser?.id }, context.accessToken);
     },
 
     async updatePromotion(context, promotionId, body) {
       requirePricingAdmin(context);
-      const expectedVersion = parseInt(body?.expectedVersion || "0");
+      const expectedVersion = parseInt((body?.expectedVersion || "0") as string);
       if (!expectedVersion) throw new HttpError(422, "VALIDATION_ERROR", "expectedVersion required");
       return repository.updatePromotion(promotionId, body, context.accessToken);
     },
 
     async activatePromotion(context, promotionId, body) {
       requirePricingAdmin(context);
-      const expectedVersion = parseInt(body?.expectedVersion || "0");
+      const expectedVersion = parseInt((body?.expectedVersion || "0") as string);
       if (!expectedVersion) throw new HttpError(422, "VALIDATION_ERROR", "expectedVersion required");
       return repository.activatePromotion(promotionId, { expectedVersion }, context.accessToken);
     },
 
     async pausePromotion(context, promotionId, body) {
       requirePricingAdmin(context);
-      const expectedVersion = parseInt(body?.expectedVersion || "0");
+      const expectedVersion = parseInt((body?.expectedVersion || "0") as string);
       if (!expectedVersion) throw new HttpError(422, "VALIDATION_ERROR", "expectedVersion required");
       return repository.pausePromotion(promotionId, { expectedVersion }, context.accessToken);
     },
@@ -98,13 +123,13 @@ export function createPricingService({ repository }) {
     async createVoucher(context, body) {
       requirePricingAdmin(context);
       if (!body?.code) throw new HttpError(422, "VALIDATION_ERROR", "Code required");
-      if (!VOUCHER_TYPES.includes(body?.type)) throw new HttpError(422, "VALIDATION_ERROR", "Invalid voucher type");
+      if (!VOUCHER_TYPES.includes(body?.type as string)) throw new HttpError(422, "VALIDATION_ERROR", "Invalid voucher type");
       return repository.createVoucher({ ...body, createdBy: context.profile?.user_id || context.authUser?.id }, context.accessToken);
     },
 
     async updateVoucher(context, voucherId, body) {
       requirePricingAdmin(context);
-      const expectedVersion = parseInt(body?.expectedVersion || "0");
+      const expectedVersion = parseInt((body?.expectedVersion || "0") as string);
       if (!expectedVersion) throw new HttpError(422, "VALIDATION_ERROR", "expectedVersion required");
       return repository.updateVoucher(voucherId, body, context.accessToken);
     },
@@ -122,7 +147,7 @@ export function createPricingService({ repository }) {
       const voucher = await repository.getVoucher(voucherId, context.accessToken);
       if (!voucher) throw new HttpError(404, "VOUCHER_NOT_FOUND", "Voucher not found");
       if (!voucher.is_active && voucher.promo_id) {
-        const promo = await repository.getPromotion(voucher.promo_id, context.accessToken);
+        const promo = await repository.getPromotion(voucher.promo_id as string, context.accessToken);
         if (promo && !promo.is_active) {
           throw new HttpError(422, "PROMOTION_PAUSED", "Không thể kích hoạt voucher của chiến dịch đang tạm dừng");
         }
@@ -141,7 +166,10 @@ export function createPricingService({ repository }) {
   };
 }
 
-export function validatePriceChange(body = {}) {
+/**
+ * Validate an admin product price-change body.
+ */
+export function validatePriceChange(body: JsonObject = {}) {
   const newBasePrice = parsePrice(body.newBasePrice ?? body.basePrice, "newBasePrice");
   const newSalePrice = parsePrice(body.newSalePrice ?? body.salePrice ?? body.newPrice, "newSalePrice");
   const reason = String(body.reason || "").trim().replace(/\s+/g, " ");
@@ -163,7 +191,7 @@ export function validatePriceChange(body = {}) {
   };
 }
 
-function parsePrice(value, field) {
+function parsePrice(value: unknown, field: string): number {
   if (value === undefined || value === null || value === "") {
     throw new HttpError(422, "VALIDATION_ERROR", `${field} required`, {
       [field]: [`${field} required`]
@@ -178,7 +206,7 @@ function parsePrice(value, field) {
   return price;
 }
 
-function parseVersion(value) {
+function parseVersion(value: unknown): number {
   const version = Number(value);
   if (!Number.isInteger(version) || version < 1) {
     throw new HttpError(422, "VALIDATION_ERROR", "expectedVersion required", {
@@ -188,7 +216,7 @@ function parseVersion(value) {
   return version;
 }
 
-function boundedInteger(value, fallback, min, max) {
+function boundedInteger(value: string | null, fallback: number, min: number, max: number): number {
   const parsed = Number.parseInt(value ?? "", 10);
   return Number.isFinite(parsed) ? Math.min(Math.max(parsed, min), max) : fallback;
 }

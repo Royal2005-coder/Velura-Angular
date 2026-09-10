@@ -1,4 +1,8 @@
-// @ts-nocheck
+import type { JsonObject } from "./types.js";
+
+/**
+ * Admin resource catalog: PostgREST table, module, select list, and list-query defaults.
+ */
 export const adminResources = {
   accounts: {
     table: "users",
@@ -100,14 +104,33 @@ export const adminResources = {
     defaultOrder: "created_at.desc",
     readOnly: true
   }
-};
+} as const;
 
-export function getResource(name) {
-  return adminResources[name] || null;
+/**
+ * Route name key in `adminResources`.
+ */
+export type AdminResourceName = keyof typeof adminResources;
+
+/**
+ * One admin resource definition from `adminResources`.
+ */
+export type AdminResource = (typeof adminResources)[AdminResourceName];
+
+/**
+ * Look up an admin resource definition by route name.
+ */
+export function getResource(name: string): AdminResource | null {
+  if (name in adminResources) {
+    return adminResources[name as AdminResourceName];
+  }
+  return null;
 }
 
-export function buildListQuery(resource, url) {
-  const query = {
+/**
+ * Build a PostgREST list query from an admin resource and request URL.
+ */
+export function buildListQuery(resource: AdminResource, url: URL): JsonObject {
+  const query: JsonObject = {
     select: resource.select,
     order: url.searchParams.get("order") || resource.defaultOrder,
     limit: clamp(Number(url.searchParams.get("limit") || 50), 1, 200),
@@ -140,7 +163,7 @@ export function buildListQuery(resource, url) {
   return query;
 }
 
-function clamp(value, min, max) {
+function clamp(value: number, min: number, max: number) {
   if (!Number.isFinite(value)) return min;
   return Math.max(min, Math.min(max, value));
 }

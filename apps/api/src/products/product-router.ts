@@ -1,7 +1,7 @@
-// @ts-nocheck
 import { config } from "../config.js";
 import { getRequestIp, readJson, sendJson } from "../http.js";
 import type { RouteArgs } from "../types.js";
+import type { ProductService } from "./product-service.js";
 
 /**
  * Admin product HTTP routes under `/api/v1/admin/products`.
@@ -14,7 +14,7 @@ export async function handleProductRoute({
   context,
   headers,
   service
-}: RouteArgs): Promise<boolean> {
+}: RouteArgs<ProductService>): Promise<boolean> {
   if (parts[0] !== "api" || parts[1] !== "v1" || parts[2] !== "admin") return false;
 
   const requestMeta = { ipAddress: getRequestIp(req) };

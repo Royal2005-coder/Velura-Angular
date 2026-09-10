@@ -1,14 +1,86 @@
-// @ts-nocheck
 import { config } from "../config.js";
 import { analyzeImageWithGemini } from "../gemini-client.js";
 import { HttpError } from "../http.js";
+import { asString, errorMessage, isJsonObject, type AuthContext, type JsonObject } from "../types.js";
 import { CHAT_SUPPORT_ROLES, DEFAULT_ASSISTANT_GREETING, HANDOFF_REPLY } from "./chatbot-constants.js";
+import type { ChatbotRepository } from "./chatbot-repository.js";
 import { createLLMService } from "./llm-service.js";
 
 console.log("[CHATBOT-INIT] config.geminiApiKey:", config.geminiApiKey ? "SET" : "EMPTY");
 console.log("[CHATBOT-INIT] config.geminiModel:", config.geminiModel);
 
-export function createChatbotService({ repository }) {
+interface ChatActor {
+  authUserId: string;
+  profileUserId: string;
+  guestId: string | null;
+}
+
+interface ChatInput {
+  sessionId: string;
+  guestId: string;
+  guestEmail: string;
+  guestPhone: string;
+  mode: string;
+  message: string;
+  attachment: JsonObject | null;
+}
+
+interface N8nWorkflowResult {
+  used: boolean;
+  text?: string;
+  productIds?: string[];
+  metadata?: JsonObject;
+  intent?: string;
+  responseHtml?: unknown;
+}
+
+interface LlmResultState {
+  used: boolean;
+  metadata: JsonObject;
+  intent: string;
+  blogs: JsonObject[];
+  interactionId?: unknown;
+}
+
+interface HandoffArgs {
+  repository: ChatbotRepository;
+  actor: ChatActor;
+  input: ChatInput;
+  session: JsonObject;
+  userMessage: JsonObject;
+  createdSession: boolean;
+}
+
+interface SupportAlertInput {
+  ticket: JsonObject;
+  session: JsonObject;
+  message: string;
+  actor: ChatActor;
+  guestEmail: string;
+  guestPhone: string;
+}
+
+/**
+ * Chatbot use-cases consumed by `handleChatbotRoute`.
+ */
+export interface ChatbotService {
+  listSessions(context: AuthContext | undefined, searchParams: URLSearchParams): Promise<unknown>;
+  createSession(context: AuthContext | undefined, body: JsonObject): Promise<unknown>;
+  getMessages(context: AuthContext | undefined, sessionId: string, searchParams: URLSearchParams): Promise<unknown>;
+  deleteSession(context: AuthContext | undefined, sessionId: string, body?: JsonObject): Promise<unknown>;
+  sendMessage(context: AuthContext | undefined, body: JsonObject): Promise<unknown>;
+  saveFavorite(context: AuthContext | undefined, body: JsonObject): Promise<unknown>;
+  syncFavorites(context: AuthContext | undefined, body: JsonObject): Promise<unknown>;
+  listAdminSessions(context: AuthContext | undefined, searchParams: URLSearchParams): Promise<unknown>;
+  getAdminMessages(context: AuthContext | undefined, sessionId: string, searchParams: URLSearchParams): Promise<unknown>;
+  agentReply(context: AuthContext | undefined, sessionId: string, body: JsonObject): Promise<unknown>;
+  assignSession(context: AuthContext | undefined, sessionId: string, body: JsonObject): Promise<unknown>;
+}
+
+/**
+ * Build the chatbot service around a PostgREST repository.
+ */
+export function createChatbotService({ repository }: { repository: ChatbotRepository }): ChatbotService {
   if (!repository) throw new TypeError("repository is required");
 
   const llm = createLLMService({ repository });
@@ -28,7 +100,7 @@ export function createChatbotService({ repository }) {
 
     async createSession(context, body) {
       const actor = resolveChatActor(context, body);
-      const title = buildSessionTitle(body?.title || body?.message || "Tư vấn Velura");
+      const title = buildSessionTitle(body.title || body.message || "Tư vấn Velura");
       const session = await repository.createSession({
         authUserId: actor.authUserId,
         profileUserId: actor.profileUserId,
@@ -37,12 +109,12 @@ export function createChatbotService({ repository }) {
         lastMessagePreview: DEFAULT_ASSISTANT_GREETING,
         metadata: {
           channel: "web",
-          guest_email: cleanEmail(body?.guestEmail),
-          guest_phone: cleanPhone(body?.guestPhone)
+          guest_email: cleanEmail(body.guestEmail),
+          guest_phone: cleanPhone(body.guestPhone)
         }
       });
       const greeting = await repository.insertMessage({
-        sessionId: session.session_id,
+        sessionId: asString(session.session_id),
         sender: "bot",
         text: DEFAULT_ASSISTANT_GREETING,
         metadata: { system: true },
@@ -57,7 +129,7 @@ export function createChatbotService({ repository }) {
         guestId: searchParams.get("guestId") || searchParams.get("guest_id")
       });
       const session = await requireOwnedSession(repository, sessionId, actor);
-      const messages = await repository.listMessages(session.session_id, boundedInteger(searchParams.get("limit"), 100, 1, 300));
+      const messages = await repository.listMessages(asString(session.session_id), boundedInteger(searchParams.get("limit"), 100, 1, 300));
       const products = await hydrateProductsForMessages(repository, messages.rows || []);
       const blogs = await hydrateBlogsForMessages(repository, messages.rows || []);
       return { session, messages: messages.rows || [], products, blogs };
@@ -73,8 +145,11 @@ export function createChatbotService({ repository }) {
 
     async sendMessage(context, body) {
       const input = validateChatInput(body);
-      const actor = resolveChatActor(context, input);
-      let session = null;
+      const actor = resolveChatActor(context, {
+        guestId: input.guestId,
+        guest_id: input.guestId
+      });
+      let session: JsonObject;
       let createdSession = false;
 
       if (input.sessionId) {
@@ -100,18 +175,18 @@ export function createChatbotService({ repository }) {
         try {
           console.log("[CHATBOT] Analyzing attached image with Gemini...");
           imageDescription = await analyzeImageWithGemini(
-            input.attachment.data,
-            input.attachment.mimeType || "image/jpeg",
+            asString(input.attachment.data),
+            asString(input.attachment.mimeType) || "image/jpeg",
             input.message
           );
           console.log("[CHATBOT] Gemini analyzed image result:", imageDescription);
-        } catch (err) {
+        } catch (err: unknown) {
           console.error("[CHATBOT] Image analysis error:", err);
         }
       }
 
       const userMessage = await repository.insertMessage({
-        sessionId: session.session_id,
+        sessionId: asString(session.session_id),
         sender: "user",
         text: input.message,
         metadata: {
@@ -124,10 +199,10 @@ export function createChatbotService({ repository }) {
 
       if (session && (session.handoff_status === "assigned" || session.handoff_status === "requested")) {
         // Admin is actively handling or has been requested — chatbot stays completely silent, return full history
-        const recent = await repository.listMessages(session.session_id, 50);
+        const recent = await repository.listMessages(asString(session.session_id), 50);
         const products = await hydrateProductsForMessages(repository, recent.rows || []);
         const blogs = await hydrateBlogsForMessages(repository, recent.rows || []);
-        const updatedSession = await repository.updateSession(session.session_id, {
+        const updatedSession = await repository.updateSession(asString(session.session_id), {
           last_message_preview: input.message.slice(0, 180),
           last_message_at: new Date().toISOString()
         });
@@ -141,7 +216,7 @@ export function createChatbotService({ repository }) {
         };
       }
 
-      const recent = await repository.listMessages(session.session_id, 16);
+      const recent = await repository.listMessages(asString(session.session_id), 16);
       const searchQuery = imageDescription ? `${input.message} ${imageDescription}` : input.message;
       const productSearch = await repository.searchProducts(searchQuery, 8);
       let candidateProducts = productSearch.rows || [];
@@ -154,7 +229,7 @@ export function createChatbotService({ repository }) {
 
       const conversationHistory = recent.rows || [];
 
-      let n8nResult = { used: false };
+      let n8nResult: N8nWorkflowResult = { used: false };
       // n8n chatbot disabled per user request, routing directly to Gemini LLM
       if (false) {
         n8nResult = await callN8nWorkflow({
@@ -178,12 +253,12 @@ export function createChatbotService({ repository }) {
         });
       }
 
-      let responseText;
-      let selectedProducts = [];
-      let selectedBlogs = [];
-      let productIds = [];
-      let blogIds = [];
-      let llmResult = { used: false, metadata: {}, intent: "", blogs: [] };
+      let responseText = "";
+      let selectedProducts: JsonObject[] = [];
+      let selectedBlogs: JsonObject[] = [];
+      let productIds: unknown[] = [];
+      let blogIds: unknown[] = [];
+      let llmResult: LlmResultState = { used: false, metadata: {}, intent: "", blogs: [] };
 
       if (n8nResult.used && n8nResult.text) {
         responseText = n8nResult.text;
@@ -201,11 +276,12 @@ export function createChatbotService({ repository }) {
           blogs: []
         };
       } else {
-        let styleProfile = null;
+        let styleProfile: JsonObject | null = null;
         if (actor.profileUserId) {
           styleProfile = await repository.getStyleProfile(actor.profileUserId);
         }
-        const previousInteractionId = session.metadata?.previous_interaction_id || null;
+        const sessionMeta = sessionMetadata(session);
+        const previousInteractionId = sessionMeta.previous_interaction_id || null;
 
         const chatResult = await llm.chat(
           [...conversationHistory, { sender: "user", text: searchQuery }],
@@ -237,13 +313,14 @@ export function createChatbotService({ repository }) {
           blogIds = selectedBlogs.map((b) => b.blog_id);
         }
 
+        const n8nMeta = n8nResult.metadata || {};
         llmResult = {
           used: chatResult.used,
           interactionId: chatResult.interactionId,
           metadata: {
             ...chatResult.metadata,
             blog_ids: blogIds,
-            n8n_error: n8nResult.metadata?.n8n_error || undefined
+            n8n_error: n8nMeta.n8n_error || undefined
           },
           intent: chatResult.intent || "general",
           blogs: selectedBlogs
@@ -251,7 +328,7 @@ export function createChatbotService({ repository }) {
       }
 
       const assistantMessage = await repository.insertMessage({
-        sessionId: session.session_id,
+        sessionId: asString(session.session_id),
         sender: "bot",
         text: responseText,
         metadata: {
@@ -266,19 +343,20 @@ export function createChatbotService({ repository }) {
 
       await repository.insertAiLog({
         profileUserId: actor.profileUserId,
-        messages: buildAiLogMessages(session.session_id, recent.rows || [], userMessage, assistantMessage),
+        messages: buildAiLogMessages(asString(session.session_id), recent.rows || [], userMessage, assistantMessage),
         recommendedProducts: productIds,
         escalatedToHuman: false
       });
 
-      const updatedSession = await repository.updateSession(session.session_id, {
+      const sessionMeta = sessionMetadata(session);
+      const updatedSession = await repository.updateSession(asString(session.session_id), {
         last_message_preview: responseText.slice(0, 180),
         last_message_at: new Date().toISOString(),
         metadata: {
-          ...(session.metadata || {}),
+          ...sessionMeta,
           last_product_ids: productIds,
           llm_used: llmResult.used,
-          previous_interaction_id: llmResult.interactionId || session.metadata?.previous_interaction_id
+          previous_interaction_id: llmResult.interactionId || sessionMeta.previous_interaction_id
         }
       });
 
@@ -293,20 +371,21 @@ export function createChatbotService({ repository }) {
     },
 
     async saveFavorite(context, body) {
-      if (!context.authUser?.id) {
+      if (!context?.authUser?.id) {
         throw new HttpError(401, "AUTH_REQUIRED", "Authentication is required to save favorites");
       }
-      const { messageId, sessionId } = body;
+      const messageId = body.messageId;
+      const sessionId = body.sessionId;
       if (!messageId) throw new HttpError(400, "BAD_REQUEST", "messageId is required");
 
-      const messages = await repository.listMessages(sessionId, 150);
-      const message = (messages.rows || []).find(m => m.message_id === messageId);
+      const messages = await repository.listMessages(asString(sessionId), 150);
+      const message = (messages.rows || []).find((m) => m.message_id === messageId);
       if (!message) throw new HttpError(404, "MESSAGE_NOT_FOUND", "Message not found");
 
       const productIds = normalizeUuidList(message.product_ids || []);
 
       const aiLog = await repository.insertAiLog({
-        profileUserId: context.profile.user_id,
+        profileUserId: context.profile!.user_id,
         messages: [{
           action: "save_favorite_outfit",
           message_id: messageId,
@@ -321,16 +400,17 @@ export function createChatbotService({ repository }) {
     },
 
     async syncFavorites(context, body) {
-      if (!context.authUser?.id) {
+      if (!context?.authUser?.id) {
         throw new HttpError(401, "AUTH_REQUIRED", "Authentication is required to sync favorites");
       }
-      const favorites = body.favorites || [];
-      const synced = [];
+      const favorites = Array.isArray(body.favorites) ? body.favorites : [];
+      const synced: unknown[] = [];
 
-      for (const fav of favorites) {
-        if (!fav.product_ids || fav.product_ids.length === 0) continue;
+      for (const raw of favorites) {
+        const fav = isJsonObject(raw) ? raw : {};
+        if (!fav.product_ids || (Array.isArray(fav.product_ids) && fav.product_ids.length === 0)) continue;
         const aiLog = await repository.insertAiLog({
-          profileUserId: context.profile.user_id,
+          profileUserId: context.profile!.user_id,
           messages: [{
             action: "save_favorite_outfit",
             message_id: fav.message_id || fav.id,
@@ -376,8 +456,8 @@ export function createChatbotService({ repository }) {
         throw new HttpError(409, "CHAT_SESSION_CLOSED", "This chat session is already closed");
       }
 
-      const text = normalizeText(body?.message || body?.text, 1, 2000, "message");
-      const agentName = context?.profile?.full_name || "CSKH Velura";
+      const text = normalizeText(body.message || body.text, 1, 2000, "message");
+      const agentName = context.profile?.full_name || "CSKH Velura";
       const now = new Date().toISOString();
       const isFirstAgentReply = session.handoff_status !== "assigned";
 
@@ -404,14 +484,15 @@ export function createChatbotService({ repository }) {
         productIds: []
       });
 
+      const sessionMeta = sessionMetadata(session);
       const updatedSession = await repository.updateSession(sessionId, {
         handoff_status: "assigned",
         assigned_to: context.authUser?.id,
         last_message_preview: text.slice(0, 180),
         last_message_at: now,
         metadata: {
-          ...(session.metadata || {}),
-          agent_assigned_at: session.metadata?.agent_assigned_at || now,
+          ...sessionMeta,
+          agent_assigned_at: sessionMeta.agent_assigned_at || now,
           agent_last_reply_at: now,
           agent_id: context.authUser?.id
         }
@@ -433,23 +514,24 @@ export function createChatbotService({ repository }) {
       const session = await repository.getSession(sessionId);
       if (!session) throw new HttpError(404, "CHAT_SESSION_NOT_FOUND", "Chat session not found");
 
-      const status = body?.status === "closed" ? "closed" : "assigned";
+      const status = body.status === "closed" ? "closed" : "assigned";
       const now = new Date().toISOString();
       if (session.handoff_status === "closed" && status !== "closed") {
         throw new HttpError(409, "CHAT_SESSION_CLOSED", "This chat session is already closed");
       }
+      const sessionMeta = sessionMetadata(session);
       const updated = await repository.updateSession(sessionId, {
         handoff_status: status,
         assigned_to: context.authUser?.id,
         metadata: {
-          ...(session.metadata || {}),
-          ...(status === "closed" ? { closed_at: now } : { assigned_at: session.metadata?.assigned_at || now }),
+          ...sessionMeta,
+          ...(status === "closed" ? { closed_at: now } : { assigned_at: sessionMeta.assigned_at || now }),
           agent_id: context.authUser?.id
         }
       });
 
       if (status !== "closed") {
-        const agentName = context?.profile?.full_name || "CSKH Velura";
+        const agentName = context.profile?.full_name || "CSKH Velura";
         await repository.insertMessage({
           sessionId,
           sender: "bot",
@@ -471,8 +553,8 @@ export function createChatbotService({ repository }) {
   };
 }
 
-async function handleHandoff({ repository, actor, input, session, userMessage, createdSession }) {
-  const existingMetadata = session.metadata || {};
+async function handleHandoff({ repository, actor, input, session, userMessage, createdSession }: HandoffArgs) {
+  const existingMetadata = sessionMetadata(session);
   const aiLog = await repository.insertAiLog({
     profileUserId: actor.profileUserId,
     messages: [{
@@ -494,10 +576,10 @@ async function handleHandoff({ repository, actor, input, session, userMessage, c
     priority: "high",
     aiLogId: aiLog?.log_id || null
   });
-  const replyText = buildTicketHandoffReply(ticket.ticket_id);
+  const replyText = buildTicketHandoffReply(asString(ticket.ticket_id));
 
   const assistantMessage = await repository.insertMessage({
-    sessionId: session.session_id,
+    sessionId: asString(session.session_id),
     sender: "bot",
     text: replyText,
     metadata: {
@@ -507,7 +589,7 @@ async function handleHandoff({ repository, actor, input, session, userMessage, c
     productIds: []
   });
 
-  await repository.updateSession(session.session_id, {
+  await repository.updateSession(asString(session.session_id), {
     handoff_status: "requested",
     support_ticket_id: ticket.ticket_id,
     last_message_preview: replyText.slice(0, 180),
@@ -542,7 +624,13 @@ async function handleHandoff({ repository, actor, input, session, userMessage, c
   };
 }
 
-async function callN8nWorkflow(payload) {
+async function callN8nWorkflow(payload: {
+  session: JsonObject;
+  actor: ChatActor;
+  message: string;
+  history: JsonObject[];
+  products: JsonObject[];
+}): Promise<N8nWorkflowResult> {
   if (!config.n8nChatWebhookUrl) {
     return { used: false, text: "", productIds: [], metadata: {}, intent: "" };
   }
@@ -571,33 +659,42 @@ async function callN8nWorkflow(payload) {
     if (!response.ok) {
       return { used: false, text: "", productIds: [], metadata: { n8n_error: `HTTP ${response.status}` }, intent: "" };
     }
-    const data = await response.json().catch(() => ({}));
+    const data: unknown = await response.json().catch(() => ({}));
     return { used: true, ...normalizeN8nResponse(data) };
-  } catch (error) {
+  } catch (error: unknown) {
+    const name = error instanceof Error ? error.name : "";
     return {
       used: false,
       text: "",
       productIds: [],
-      metadata: { n8n_error: error.name === "TimeoutError" ? "timeout" : "unavailable" },
+      metadata: { n8n_error: name === "TimeoutError" ? "timeout" : "unavailable" },
       intent: ""
     };
   }
 }
 
-export function normalizeN8nResponse(payload) {
-  let data = payload;
-  if (Array.isArray(data)) data = data[0]?.json || data[0] || {};
-  if (data?.json) data = data.json;
-  if (data?.response && typeof data.response === "object") data = data.response;
-  if (data?.data && typeof data.data === "object") data = data.data;
+/**
+ * Normalize an n8n webhook payload into a chatbot reply envelope.
+ */
+export function normalizeN8nResponse(payload: unknown) {
+  let data: unknown = payload;
+  if (Array.isArray(data)) {
+    const first = data[0];
+    const firstObj = isJsonObject(first) ? first : null;
+    data = (firstObj && firstObj.json) || first || {};
+  }
+  if (isJsonObject(data) && data.json) data = data.json;
+  if (isJsonObject(data) && data.response && typeof data.response === "object") data = data.response;
+  if (isJsonObject(data) && data.data && typeof data.data === "object") data = data.data;
 
   const textValue = typeof data === "string"
     ? data
-    : data?.response || data?.text || data?.reply || data?.answer || data?.output || data?.message || "";
-  const metadata = typeof data === "object" && data ? (data.metadata || {}) : {};
+    : isJsonObject(data)
+      ? (data.response || data.text || data.reply || data.answer || data.output || data.message || "")
+      : "";
+  const metadata = isJsonObject(data) && isJsonObject(data.metadata) ? data.metadata : {};
   const productIds = normalizeUuidList(
-    data?.product_ids ||
-    data?.productIds ||
+    (isJsonObject(data) ? (data.product_ids || data.productIds) : undefined) ||
     metadata.product_ids ||
     metadata.productIds ||
     []
@@ -605,20 +702,20 @@ export function normalizeN8nResponse(payload) {
 
   return {
     text: String(textValue || "").trim().slice(0, 4000),
-    responseHtml: data?.response_html || "",
+    responseHtml: isJsonObject(data) ? data.response_html || "" : "",
     productIds,
     metadata,
-    intent: data?.intent || metadata.intent || ""
+    intent: asString(isJsonObject(data) ? data.intent || metadata.intent : "")
   };
 }
 
-async function selectResponseProducts(repository, productIds, candidateProducts) {
+async function selectResponseProducts(repository: ChatbotRepository, productIds: unknown, candidateProducts: JsonObject[]) {
   const ids = normalizeUuidList(productIds);
-  let products = [];
+  let products: JsonObject[] = [];
   if (ids.length) {
     const result = await repository.listProductsByIds(ids);
     const byId = new Map((result.rows || []).map((product) => [product.product_id, product]));
-    products = ids.map((id) => byId.get(id)).filter(Boolean);
+    products = ids.map((id) => byId.get(id)).filter(isJsonObject);
   }
   if (!products.length) {
     products = candidateProducts.slice(0, 3);
@@ -626,35 +723,44 @@ async function selectResponseProducts(repository, productIds, candidateProducts)
   return products.slice(0, 6);
 }
 
-async function hydrateProductsForMessages(repository, messages) {
-  const ids = normalizeUuidList(messages.flatMap((message) => [
-    ...(message.product_ids || []),
-    ...((message.metadata || {}).product_ids || [])
-  ]));
+async function hydrateProductsForMessages(repository: ChatbotRepository, messages: JsonObject[]) {
+  const ids = normalizeUuidList(messages.flatMap((message) => {
+    const meta = sessionMetadata(message);
+    const fromMessage = Array.isArray(message.product_ids) ? message.product_ids : [];
+    const fromMeta = Array.isArray(meta.product_ids) ? meta.product_ids : [];
+    return [...fromMessage, ...fromMeta];
+  }));
   if (!ids.length) return [];
   const result = await repository.listProductsByIds(ids);
   const byId = new Map((result.rows || []).map((product) => [product.product_id, product]));
-  return ids.map((id) => byId.get(id)).filter(Boolean).map(formatProductCard);
+  return ids.map((id) => byId.get(id)).filter(isJsonObject).map(formatProductCard);
 }
 
-export function validateChatInput(body = {}) {
+/**
+ * Validate and normalize a public chat message body.
+ */
+export function validateChatInput(body: JsonObject = {}): ChatInput {
   const hasAttachment = !!(body.attachment || body.attachments);
   const minLength = hasAttachment ? 0 : 1;
   const message = normalizeText(body.message ?? body.text ?? "", minLength, 1000, "message");
-  const sessionId = body.sessionId || body.session_id || "";
+  const sessionId = asString(body.sessionId) || asString(body.session_id);
   if (sessionId) requireUuid(sessionId, "sessionId");
+  const mode = asString(body.mode);
   return {
     sessionId: sessionId || "",
-    guestId: body.guestId || body.guest_id || "",
+    guestId: asString(body.guestId) || asString(body.guest_id),
     guestEmail: cleanEmail(body.guestEmail || body.guest_email),
     guestPhone: cleanPhone(body.guestPhone || body.guest_phone),
-    mode: ["guest", "user"].includes(body.mode) ? body.mode : "guest",
+    mode: mode === "guest" || mode === "user" ? mode : "guest",
     message: message || (hasAttachment ? "Gửi hình ảnh đính kèm" : ""),
-    attachment: body.attachment || null
+    attachment: isJsonObject(body.attachment) ? body.attachment : null
   };
 }
 
-function resolveChatActor(context, input = {}) {
+function resolveChatActor(
+  context: AuthContext | undefined,
+  input: { guestId?: unknown; guest_id?: unknown } = {}
+): ChatActor {
   const profileUserId = context?.profile?.user_id || "";
   const authUserId = context?.authUser?.id && context?.profile ? context.authUser.id : "";
   const guestId = String(input.guestId || input.guest_id || "").trim();
@@ -672,7 +778,7 @@ function resolveChatActor(context, input = {}) {
   };
 }
 
-async function requireOwnedSession(repository, sessionId, actor) {
+async function requireOwnedSession(repository: ChatbotRepository, sessionId: string, actor: ChatActor) {
   const session = await repository.getSession(sessionId);
   if (!session || !session.is_active) {
     throw new HttpError(404, "CHAT_SESSION_NOT_FOUND", "Chat session not found");
@@ -689,7 +795,10 @@ async function requireOwnedSession(repository, sessionId, actor) {
   return session;
 }
 
-export function detectHandoffIntent(message) {
+/**
+ * True when the user message asks to speak with a human CSKH agent.
+ */
+export function detectHandoffIntent(message: unknown): boolean {
   const text = String(message || "").toLowerCase();
   return [
     "nhân viên",
@@ -720,7 +829,10 @@ export function detectHandoffIntent(message) {
   ].some((keyword) => text.includes(keyword));
 }
 
-export async function getFallbackReply(message, products = [], repository = null) {
+/**
+ * Database-backed fallback reply when the LLM does not return usable text.
+ */
+export async function getFallbackReply(message: unknown, products: JsonObject[] = [], repository: ChatbotRepository | null = null): Promise<string> {
   const text = String(message || "").toLowerCase();
 
   if (detectHandoffIntent(message)) {
@@ -740,24 +852,25 @@ export async function getFallbackReply(message, products = [], repository = null
         const result = await repository.searchPolicies(message);
         const policies = result.rows || [];
         if (policies.length > 0) {
-          return policies.map(p => {
+          return policies.map((p) => {
             let contentStr = "";
             if (Array.isArray(p.content)) {
-              contentStr = p.content.map(section => {
-                const heading = section.heading ? `**${section.heading}**\n` : "";
-                const items = Array.isArray(section.items)
-                  ? section.items.map(item => `- ${item}`).join('\n')
-                  : `  - ${section.text || ""}`;
+              contentStr = p.content.map((section: unknown) => {
+                const block = isJsonObject(section) ? section : {};
+                const heading = block.heading ? `**${block.heading}**\n` : "";
+                const items = Array.isArray(block.items)
+                  ? block.items.map((item: unknown) => `- ${item}`).join("\n")
+                  : `  - ${block.text || ""}`;
                 return heading + items;
-              }).join('\n');
+              }).join("\n");
             } else {
               contentStr = typeof p.content === "string" ? p.content : JSON.stringify(p.content);
             }
             return `=== ${p.title} ===\nTóm tắt: ${p.summary}\nChi tiết:\n${contentStr}`;
-          }).join('\n\n');
+          }).join("\n\n");
         }
-      } catch (err) {
-        console.warn("[FALLBACK-RAG] Failed to search policies:", err.message);
+      } catch (err: unknown) {
+        console.warn("[FALLBACK-RAG] Failed to search policies:", errorMessage(err));
       }
     }
     return "Mình chưa tải được dữ liệu chính sách mới nhất từ database ở thời điểm này nên sẽ không dùng thông tin cũ để trả lời. Bạn có thể mở trang Chính sách trên website hoặc liên hệ CSKH Velura qua hotline 1900 1212 để được xác nhận chính xác nhất nhé.";
@@ -786,7 +899,10 @@ export async function getFallbackReply(message, products = [], repository = null
   return "Mình đã nhận được câu hỏi của bạn. Bạn có thể nói thêm về dịp mặc, màu sắc yêu thích, dáng người hoặc khoảng giá để mình tư vấn sát hơn nhé.";
 }
 
-export function createFallbackReply(message, products = []) {
+/**
+ * Static fallback reply used by tests and offline paths.
+ */
+export function createFallbackReply(message: unknown, products: JsonObject[] = []): string {
   const text = String(message || "").toLowerCase();
 
   if (detectHandoffIntent(message)) {
@@ -826,7 +942,7 @@ export function createFallbackReply(message, products = []) {
   return "Mình đã nhận được câu hỏi của bạn. Bạn có thể nói thêm về dịp mặc, màu sắc yêu thích, dáng người hoặc khoảng giá để mình tư vấn sát hơn nhé.";
 }
 
-function buildTicketHandoffReply(ticketId) {
+function buildTicketHandoffReply(ticketId: string) {
   return [
     HANDOFF_REPLY,
     "",
@@ -835,12 +951,13 @@ function buildTicketHandoffReply(ticketId) {
   ].join("\n");
 }
 
-function formatProductForWorkflow(product) {
+function formatProductForWorkflow(product: JsonObject): JsonObject {
+  const category = isJsonObject(product.category) ? product.category : {};
   return {
     product_id: product.product_id,
     sku: product.sku,
     name: product.name,
-    category: product.category?.name || "",
+    category: category.name || "",
     price: Number(product.sale_price || product.base_price || 0),
     style_tags: product.style_tags || [],
     occasions: product.occasions || [],
@@ -848,8 +965,9 @@ function formatProductForWorkflow(product) {
   };
 }
 
-function formatProductCard(product) {
+function formatProductCard(product: JsonObject): JsonObject {
   const variant = firstAvailableVariant(product);
+  const category = isJsonObject(product.category) ? product.category : {};
   return {
     product_id: product.product_id,
     sku: product.sku,
@@ -860,8 +978,8 @@ function formatProductCard(product) {
     base_price: Number(product.base_price || 0),
     sale_price: Number(product.sale_price || product.base_price || 0),
     price: Number(product.sale_price || product.base_price || 0),
-    category_name: product.category?.name || "",
-    category_slug: product.category?.slug || "",
+    category_name: category.name || "",
+    category_slug: category.slug || "",
     detail_url: `/src/pages/products/detail.html?id=${product.product_id}`,
     variant: variant ? {
       variant_id: variant.variant_id,
@@ -873,7 +991,7 @@ function formatProductCard(product) {
   };
 }
 
-function formatBlogCard(blog) {
+function formatBlogCard(blog: JsonObject): JsonObject {
   return {
     blog_id: blog.blog_id,
     slug: blog.slug,
@@ -886,21 +1004,22 @@ function formatBlogCard(blog) {
   };
 }
 
-async function hydrateBlogsForMessages(repository, messages) {
-  const ids = normalizeUuidList(messages.flatMap((message) => [
-    ...((message.metadata || {}).blog_ids || [])
-  ]));
+async function hydrateBlogsForMessages(repository: ChatbotRepository, messages: JsonObject[]) {
+  const ids = normalizeUuidList(messages.flatMap((message) => {
+    const meta = sessionMetadata(message);
+    return Array.isArray(meta.blog_ids) ? meta.blog_ids : [];
+  }));
   if (!ids.length) return [];
   const result = await repository.listBlogsByIds(ids);
   return (result.rows || []).map(formatBlogCard);
 }
 
-function firstAvailableVariant(product) {
-  const variants = Array.isArray(product.variants) ? product.variants : [];
+function firstAvailableVariant(product: JsonObject): JsonObject | null {
+  const variants = Array.isArray(product.variants) ? product.variants.filter(isJsonObject) : [];
   return variants.find((variant) => Number(variant.stock_quantity || 0) > Number(variant.reserved_quantity || 0)) || variants[0] || null;
 }
 
-function buildAiLogMessages(sessionId, history, userMessage, assistantMessage) {
+function buildAiLogMessages(sessionId: string, history: JsonObject[], userMessage: JsonObject, assistantMessage: JsonObject) {
   return [
     ...history.slice(-12).map((item) => ({
       role: item.sender,
@@ -912,7 +1031,7 @@ function buildAiLogMessages(sessionId, history, userMessage, assistantMessage) {
   ].map((item) => ({ ...item, sessionId }));
 }
 
-function buildSupportDescription(session, message, actor) {
+function buildSupportDescription(session: JsonObject, message: string, actor: ChatActor) {
   return [
     `Khách yêu cầu gặp nhân viên từ chatbot Velura.`,
     `Chat session: ${session.session_id}`,
@@ -923,7 +1042,7 @@ function buildSupportDescription(session, message, actor) {
   ].join("\n");
 }
 
-async function queueSupportAlert(repository, input) {
+async function queueSupportAlert(repository: ChatbotRepository, input: SupportAlertInput) {
   if (!config.supportAlertTo) return null;
   const body = [
     "Velura có yêu cầu nối nhân viên CSKH từ chatbot.",
@@ -952,19 +1071,19 @@ async function queueSupportAlert(repository, input) {
   });
 }
 
-function requireSupportAdmin(context) {
+function requireSupportAdmin(context: AuthContext | undefined): asserts context is AuthContext {
   if (!context?.authUser?.id) throw new HttpError(401, "AUTH_REQUIRED", "Authentication is required");
   if (!CHAT_SUPPORT_ROLES.includes(context.roleCode)) {
     throw new HttpError(403, "RBAC_DENIED", "Only CSKH operator or super admin can view chatbot handoffs");
   }
 }
 
-function buildSessionTitle(text) {
+function buildSessionTitle(text: unknown): string {
   const clean = String(text || "").replace(/\s+/g, " ").trim();
   return (clean || "Tư vấn Velura").slice(0, 80);
 }
 
-function normalizeText(value, minLength, maxLength, field) {
+function normalizeText(value: unknown, minLength: number, maxLength: number, field: string): string {
   const text = String(value || "").replace(/\s+/g, " ").trim();
   if (text.length < minLength || text.length > maxLength) {
     throw new HttpError(422, "VALIDATION_ERROR", "Request validation failed", {
@@ -974,31 +1093,31 @@ function normalizeText(value, minLength, maxLength, field) {
   return text;
 }
 
-function cleanEmail(value) {
+function cleanEmail(value: unknown): string {
   const email = String(value || "").trim().toLowerCase();
   if (!email) return "";
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email.slice(0, 255) : "";
 }
 
-function cleanPhone(value) {
+function cleanPhone(value: unknown): string {
   const phone = String(value || "").replace(/[^\d+]/g, "").slice(0, 20);
   return phone.length >= 8 ? phone : "";
 }
 
-function shortSessionId(sessionId) {
+function shortSessionId(sessionId: unknown): string {
   return String(sessionId || "").slice(0, 8);
 }
 
-function normalizeUuidList(values) {
-  let list = [];
+function normalizeUuidList(values: unknown): string[] {
+  let list: unknown[] = [];
   if (Array.isArray(values)) {
     list = values;
   } else {
     const cleanStr = String(values || "").replace(/^\{|\}$/g, "");
     list = cleanStr.split(",");
   }
-  const seen = new Set();
-  const result = [];
+  const seen = new Set<string>();
+  const result: string[] = [];
   for (const value of list) {
     const id = String(value || "").trim();
     if (!isUuid(id) || seen.has(id)) continue;
@@ -1008,7 +1127,7 @@ function normalizeUuidList(values) {
   return result;
 }
 
-function requireUuid(value, field) {
+function requireUuid(value: unknown, field: string): void {
   if (!isUuid(String(value || ""))) {
     throw new HttpError(422, "VALIDATION_ERROR", "Request validation failed", {
       [field]: [`${field} must be a UUID`]
@@ -1016,11 +1135,15 @@ function requireUuid(value, field) {
   }
 }
 
-function isUuid(value) {
+function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
-function boundedInteger(value, fallback, min, max) {
-  const parsed = Number.parseInt(value ?? "", 10);
+function boundedInteger(value: string | number | null | undefined, fallback: number, min: number, max: number): number {
+  const parsed = Number.parseInt(String(value ?? ""), 10);
   return Number.isFinite(parsed) ? Math.min(Math.max(parsed, min), max) : fallback;
+}
+
+function sessionMetadata(record: JsonObject): JsonObject {
+  return isJsonObject(record.metadata) ? record.metadata : {};
 }

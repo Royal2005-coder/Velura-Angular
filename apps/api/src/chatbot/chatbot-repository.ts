@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { randomUUID } from "node:crypto";
 import { HttpError } from "../http.js";
 import {
@@ -8,47 +7,114 @@ import {
   selectRows as supabaseSelectRows,
   updateRows as supabaseUpdateRows
 } from "../supabase.js";
-import { config } from "../config.js";
 import { generateGeminiEmbedding, isGeminiConfigured, vectorLiteral } from "../gemini-client.js";
+import { asJsonObject, asNumber, asString, errorMessage, isJsonObject, type JsonObject } from "../types.js";
 import { CHAT_MESSAGE_SELECT, CHAT_PRODUCT_SELECT, CHAT_SESSION_SELECT } from "./chatbot-constants.js";
 
 const CHAT_DB_OPTIONS = Object.freeze({ useAnonKey: false });
 
-function selectRows(table, query) {
+interface SessionListFilters {
+  profileUserId?: string;
+  guestId?: string | null;
+  limit: number;
+  offset: number;
+}
+
+interface AdminSessionListFilters {
+  handoffOnly?: boolean;
+  ticketId?: string;
+  limit: number;
+  offset: number;
+}
+
+interface CreateSessionInput {
+  authUserId?: string;
+  profileUserId?: string;
+  guestId?: string | null;
+  title: string;
+  lastMessagePreview?: string | null;
+  metadata?: JsonObject;
+}
+
+interface InsertMessageInput {
+  sessionId: string;
+  sender: string;
+  text: string;
+  metadata?: JsonObject;
+  productIds?: unknown[];
+}
+
+interface InsertAiLogInput {
+  profileUserId?: string | null;
+  messages?: unknown;
+  recommendedProducts?: unknown;
+  quizResults?: unknown;
+  escalatedToHuman?: boolean;
+}
+
+interface CreateSupportTicketInput {
+  profileUserId?: string | null;
+  guestPhone?: string | null;
+  guestEmail?: string | null;
+  title: string;
+  description: string;
+  priority?: string;
+  aiLogId?: unknown;
+}
+
+interface QueueEmailInput {
+  recipient?: string | null;
+  templateCode: string;
+  subject: string;
+  body: string;
+  relatedUserId?: string | null;
+  metadata?: JsonObject;
+}
+
+function selectRows(table: string, query: Record<string, unknown>) {
   return supabaseSelectRows(table, query, CHAT_DB_OPTIONS);
 }
 
-function selectOne(table, query) {
+function selectOne(table: string, query: Record<string, unknown>) {
   return supabaseSelectOne(table, query, CHAT_DB_OPTIONS);
 }
 
-function insertRow(table, payload) {
-  return supabaseInsertRow(table, payload, CHAT_DB_OPTIONS);
+async function insertRow(table: string, payload: unknown): Promise<JsonObject> {
+  const row = await supabaseInsertRow(table, payload, CHAT_DB_OPTIONS);
+  return isJsonObject(row) ? row : asJsonObject(row);
 }
 
-function updateRows(table, query, payload) {
-  return supabaseUpdateRows(table, query, payload, CHAT_DB_OPTIONS);
+async function updateRows(table: string, query: Record<string, unknown>, payload: unknown): Promise<JsonObject[]> {
+  const rows = await supabaseUpdateRows(table, query, payload, CHAT_DB_OPTIONS);
+  return rows.filter(isJsonObject);
 }
 
-function callRpc(name, payload) {
+function callRpc(name: string, payload: unknown) {
   return supabaseCallRpc(name, payload, CHAT_DB_OPTIONS);
 }
 
-async function getEmbedding(text) {
+function rpcRows(value: unknown): JsonObject[] {
+  return Array.isArray(value) ? value.filter(isJsonObject) : [];
+}
+
+async function getEmbedding(text: string): Promise<string | null> {
   if (!isGeminiConfigured()) return null;
   try {
     const values = await generateGeminiEmbedding(text);
     return vectorLiteral(values);
-  } catch (err) {
-    console.warn("[EMBEDDING_ERROR] Chatbot embedding failed, falling back to text search:", err.message || err);
+  } catch (err: unknown) {
+    console.warn("[EMBEDDING_ERROR] Chatbot embedding failed, falling back to text search:", errorMessage(err) || err);
     return null;
   }
 }
 
+/**
+ * PostgREST accessors for chat sessions, messages, and RAG lookups.
+ */
 export function createChatbotRepository() {
   return {
-    async listSessions(filters) {
-      const query = {
+    async listSessions(filters: SessionListFilters) {
+      const query: Record<string, unknown> = {
         select: CHAT_SESSION_SELECT,
         is_active: "eq.true",
         order: "updated_at.desc",
@@ -60,8 +126,8 @@ export function createChatbotRepository() {
       return withChatError(() => selectRows("chat_session", query));
     },
 
-    async listAdminSessions(filters) {
-      const query = {
+    async listAdminSessions(filters: AdminSessionListFilters) {
+      const query: Record<string, unknown> = {
         select: CHAT_SESSION_SELECT,
         order: "updated_at.desc",
         limit: filters.limit,
@@ -72,14 +138,14 @@ export function createChatbotRepository() {
       return withChatError(() => selectRows("chat_session", query));
     },
 
-    async getSession(sessionId) {
+    async getSession(sessionId: string) {
       return withChatError(() => selectOne("chat_session", {
         select: CHAT_SESSION_SELECT,
         session_id: `eq.${sessionId}`
       }));
     },
 
-    async createSession(input) {
+    async createSession(input: CreateSessionInput) {
       return withChatError(() => insertRow("chat_session", {
         session_id: randomUUID(),
         user_id: input.authUserId || null,
@@ -95,7 +161,7 @@ export function createChatbotRepository() {
       }));
     },
 
-    async updateSession(sessionId, patch) {
+    async updateSession(sessionId: string, patch: JsonObject) {
       const rows = await withChatError(() => updateRows("chat_session", {
         session_id: `eq.${sessionId}`
       }, {
@@ -105,7 +171,7 @@ export function createChatbotRepository() {
       return rows[0] || null;
     },
 
-    async closeSession(sessionId) {
+    async closeSession(sessionId: string) {
       const rows = await withChatError(() => updateRows("chat_session", {
         session_id: `eq.${sessionId}`
       }, {
@@ -116,7 +182,7 @@ export function createChatbotRepository() {
       return rows[0] || null;
     },
 
-    async listMessages(sessionId, limit = 100) {
+    async listMessages(sessionId: string, limit = 100) {
       return withChatError(() => selectRows("chat_message", {
         select: CHAT_MESSAGE_SELECT,
         session_id: `eq.${sessionId}`,
@@ -125,7 +191,7 @@ export function createChatbotRepository() {
       }));
     },
 
-    async insertMessage(input) {
+    async insertMessage(input: InsertMessageInput) {
       return withChatError(() => insertRow("chat_message", {
         message_id: randomUUID(),
         session_id: input.sessionId,
@@ -137,7 +203,7 @@ export function createChatbotRepository() {
       }));
     },
 
-    async searchProducts(query, limit = 6) {
+    async searchProducts(query: unknown, limit = 6) {
       const rawValue = String(query || "").trim();
       if (!rawValue) {
         return withChatError(() => selectRows("product", {
@@ -152,28 +218,28 @@ export function createChatbotRepository() {
         const embedding = await getEmbedding(rawValue);
         if (embedding) {
           console.log("[RAG-VECTOR] Searching products by embedding similarity...");
-          const matchRows = await callRpc("match_products", {
+          const matchRows = rpcRows(await callRpc("match_products", {
             query_embedding: embedding,
             match_threshold: 0.15,
             match_count: limit,
             filter_size: null
-          });
-          if (matchRows && matchRows.length > 0) {
+          }));
+          if (matchRows.length > 0) {
             return { rows: matchRows };
           }
         }
-      } catch (err) {
-        console.warn("[RAG-VECTOR] Product embedding search failed, falling back to text search:", err.message);
+      } catch (err: unknown) {
+        console.warn("[RAG-VECTOR] Product embedding search failed, falling back to text search:", errorMessage(err));
       }
 
       const value = sanitizeSearch(rawValue);
-      const request = {
+      const request: Record<string, unknown> = {
         select: CHAT_PRODUCT_SELECT,
         status: "eq.on_sale",
         order: "is_featured.desc,updated_at.desc",
         limit
       };
-      
+
       request.or = `(name.ilike.*${value}*,sku.ilike.*${value}*,description.ilike.*${value}*)`;
       const res = await withChatError(() => selectRows("product", request));
       if (res.rows && res.rows.length > 0) {
@@ -181,15 +247,15 @@ export function createChatbotRepository() {
       }
 
       const words = value.split(" ")
-        .map(w => w.trim())
-        .filter(w => w.length > 1 && !["cho", "toi", "tôi", "mot", "một", "cai", "cái", "mau", "màu", "cua", "của", "nay", "này", "chiec", "chiếc", "voi", "với", "ban", "bạn"].includes(w.toLowerCase()));
+        .map((w) => w.trim())
+        .filter((w) => w.length > 1 && !["cho", "toi", "tôi", "mot", "một", "cai", "cái", "mau", "màu", "cua", "của", "nay", "này", "chiec", "chiếc", "voi", "với", "ban", "bạn"].includes(w.toLowerCase()));
 
       if (words.length > 0) {
-        const allProducts = [];
-        const seenIds = new Set();
-        
+        const allProducts: JsonObject[] = [];
+        const seenIds = new Set<unknown>();
+
         for (const word of words.slice(0, 4)) {
-          const wordReq = {
+          const wordReq: Record<string, unknown> = {
             select: CHAT_PRODUCT_SELECT,
             status: "eq.on_sale",
             or: `(name.ilike.*${word}*,sku.ilike.*${word}*,description.ilike.*${word}*)`,
@@ -202,22 +268,24 @@ export function createChatbotRepository() {
               p._matchScore = 1;
               allProducts.push(p);
             } else {
-              const existing = allProducts.find(x => x.product_id === p.product_id);
-              if (existing) existing._matchScore += 1;
+              const existing = allProducts.find((x) => x.product_id === p.product_id);
+              if (existing) existing._matchScore = asNumber(existing._matchScore) + 1;
             }
           }
         }
 
         allProducts.sort((a, b) => {
-          if (b._matchScore !== a._matchScore) {
-            return b._matchScore - a._matchScore;
+          const bScore = asNumber(b._matchScore);
+          const aScore = asNumber(a._matchScore);
+          if (bScore !== aScore) {
+            return bScore - aScore;
           }
           const aFeatured = a.is_featured ? 1 : 0;
           const bFeatured = b.is_featured ? 1 : 0;
           if (bFeatured !== aFeatured) {
             return bFeatured - aFeatured;
           }
-          return new Date(b.updated_at) - new Date(a.updated_at);
+          return new Date(asString(b.updated_at)).getTime() - new Date(asString(a.updated_at)).getTime();
         });
 
         return { rows: allProducts.slice(0, limit) };
@@ -226,7 +294,7 @@ export function createChatbotRepository() {
       return res;
     },
 
-    async listProductsByIds(productIds) {
+    async listProductsByIds(productIds: unknown) {
       const ids = uniqueUuidList(productIds);
       if (!ids.length) return { rows: [], count: 0 };
       return withChatError(() => selectRows("product", {
@@ -269,7 +337,7 @@ export function createChatbotRepository() {
       });
     },
 
-    async getProductById(productId) {
+    async getProductById(productId: string) {
       const result = await withChatError(() => selectRows("product", {
         select: CHAT_PRODUCT_SELECT,
         product_id: `eq.${productId}`,
@@ -283,14 +351,14 @@ export function createChatbotRepository() {
             combo_product_id: `eq.${productId}`
           });
           if (comboItems && comboItems.length > 0) {
-            const compIds = comboItems.map(ci => ci.component_product_id).filter(Boolean);
+            const compIds = comboItems.map((ci) => ci.component_product_id).filter(Boolean);
             if (compIds.length > 0) {
               const compProducts = await selectRows("product", {
                 select: "product_id,name,sku,base_price,sale_price",
                 product_id: `in.(${compIds.join(",")})`
               });
-              const compMap = new Map((compProducts.rows || []).map(p => [p.product_id, p]));
-              product.combo_components = comboItems.map(ci => ({
+              const compMap = new Map((compProducts.rows || []).map((p) => [p.product_id, p]));
+              product.combo_components = comboItems.map((ci) => ({
                 ...ci,
                 product: compMap.get(ci.component_product_id) || null
               }));
@@ -300,15 +368,15 @@ export function createChatbotRepository() {
           } else {
             product.combo_components = [];
           }
-        } catch (err) {
-          console.warn("[COMBO-DETAILS] Failed to fetch combo components:", err.message);
+        } catch (err: unknown) {
+          console.warn("[COMBO-DETAILS] Failed to fetch combo components:", errorMessage(err));
           product.combo_components = [];
         }
       }
       return product;
     },
 
-    async searchOrders(filter) {
+    async searchOrders(filter: Record<string, unknown>) {
       return withChatError(() => selectRows("orders", {
         select: "order_id,order_date,status,shipping_name,shipping_phone,total_amount,tracking_code",
         limit: 5,
@@ -316,14 +384,14 @@ export function createChatbotRepository() {
       }));
     },
 
-    async getStyleProfile(userId) {
+    async getStyleProfile(userId: string | null | undefined) {
       if (!userId) return null;
       return withChatError(() => selectOne("style_profile", {
         user_id: `eq.${userId}`
       }));
     },
 
-    async updateStyleProfile(userId, patch) {
+    async updateStyleProfile(userId: string | null | undefined, patch: JsonObject) {
       if (!userId) return null;
       const rows = await withChatError(() => updateRows("style_profile", {
         user_id: `eq.${userId}`
@@ -334,7 +402,7 @@ export function createChatbotRepository() {
       return rows[0] || null;
     },
 
-    async insertAiLog(input) {
+    async insertAiLog(input: InsertAiLogInput) {
       return withChatError(() => insertRow("ai_log", {
         log_type: "chatbot_session",
         user_id: input.profileUserId || null,
@@ -350,7 +418,7 @@ export function createChatbotRepository() {
       }));
     },
 
-    async createSupportTicket(input) {
+    async createSupportTicket(input: CreateSupportTicketInput) {
       return withChatError(() => insertRow("support_ticket", {
         ticket_id: randomUUID(),
         user_id: input.profileUserId || null,
@@ -366,7 +434,7 @@ export function createChatbotRepository() {
       }));
     },
 
-    async updateSupportTicket(ticketId, patch) {
+    async updateSupportTicket(ticketId: unknown, patch: JsonObject) {
       if (!ticketId) return null;
       const rows = await withChatError(() => updateRows("support_ticket", {
         ticket_id: `eq.${ticketId}`
@@ -377,7 +445,7 @@ export function createChatbotRepository() {
       return rows[0] || null;
     },
 
-    async queueEmail(input) {
+    async queueEmail(input: QueueEmailInput) {
       if (!input.recipient) return null;
       return withChatError(() => insertRow("email_outbox", {
         recipient: input.recipient,
@@ -389,7 +457,7 @@ export function createChatbotRepository() {
       }));
     },
 
-    async searchPolicies(query) {
+    async searchPolicies(query: unknown) {
       const rawValue = String(query || "").trim();
       if (!rawValue) {
         return withChatError(() => selectRows("policy", {
@@ -402,17 +470,17 @@ export function createChatbotRepository() {
         const embedding = await getEmbedding(rawValue);
         if (embedding) {
           console.log("[RAG-VECTOR] Searching policies by embedding similarity...");
-          const matchRows = await callRpc("match_policies", {
+          const matchRows = rpcRows(await callRpc("match_policies", {
             query_embedding: embedding,
             match_threshold: 0.15,
             match_count: 5
-          });
-          if (matchRows && matchRows.length > 0) {
+          }));
+          if (matchRows.length > 0) {
             return { rows: matchRows };
           }
         }
-      } catch (err) {
-        console.warn("[RAG-VECTOR] Policy embedding search failed, falling back to text search:", err.message);
+      } catch (err: unknown) {
+        console.warn("[RAG-VECTOR] Policy embedding search failed, falling back to text search:", errorMessage(err));
       }
 
       const value = sanitizeSearch(rawValue);
@@ -423,7 +491,7 @@ export function createChatbotRepository() {
       }));
     },
 
-    async searchBlogs(query) {
+    async searchBlogs(query: unknown) {
       const rawValue = String(query || "").trim();
       if (!rawValue) {
         return withChatError(() => selectRows("blog", {
@@ -437,17 +505,17 @@ export function createChatbotRepository() {
         const embedding = await getEmbedding(rawValue);
         if (embedding) {
           console.log("[RAG-VECTOR] Searching blogs by embedding similarity...");
-          const matchRows = await callRpc("match_blogs", {
+          const matchRows = rpcRows(await callRpc("match_blogs", {
             query_embedding: embedding,
             match_threshold: 0.15,
             match_count: 5
-          });
-          if (matchRows && matchRows.length > 0) {
+          }));
+          if (matchRows.length > 0) {
             return { rows: matchRows };
           }
         }
-      } catch (err) {
-        console.warn("[RAG-VECTOR] Blog embedding search failed, falling back to text search:", err.message);
+      } catch (err: unknown) {
+        console.warn("[RAG-VECTOR] Blog embedding search failed, falling back to text search:", errorMessage(err));
       }
 
       const value = sanitizeSearch(rawValue);
@@ -459,7 +527,7 @@ export function createChatbotRepository() {
       }));
     },
 
-    async listBlogsByIds(blogIds) {
+    async listBlogsByIds(blogIds: unknown) {
       const ids = uniqueUuidList(blogIds);
       if (!ids.length) return { rows: [], count: 0 };
       return withChatError(() => selectRows("blog", {
@@ -472,7 +540,12 @@ export function createChatbotRepository() {
   };
 }
 
-function sanitizeSearch(value) {
+/**
+ * Repository returned by `createChatbotRepository`.
+ */
+export type ChatbotRepository = ReturnType<typeof createChatbotRepository>;
+
+function sanitizeSearch(value: unknown): string {
   return String(value || "")
     .replace(/[%,*()]/g, " ")
     .replace(/\s+/g, " ")
@@ -480,9 +553,9 @@ function sanitizeSearch(value) {
     .slice(0, 100);
 }
 
-function uniqueUuidList(values) {
-  const seen = new Set();
-  const ids = [];
+function uniqueUuidList(values: unknown): string[] {
+  const seen = new Set<string>();
+  const ids: string[] = [];
   for (const value of Array.isArray(values) ? values : []) {
     const id = String(value || "").trim();
     if (!isUuid(id) || seen.has(id)) continue;
@@ -492,16 +565,16 @@ function uniqueUuidList(values) {
   return ids;
 }
 
-function isUuid(value) {
+function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
-function normalizePolicyContent(value) {
+function normalizePolicyContent(value: unknown): unknown[] {
   if (Array.isArray(value)) return value;
   if (!value) return [];
   if (typeof value === "string") {
     try {
-      const parsed = JSON.parse(value);
+      const parsed: unknown = JSON.parse(value);
       return Array.isArray(parsed) ? parsed : [];
     } catch {
       return [];
@@ -510,10 +583,10 @@ function normalizePolicyContent(value) {
   return [];
 }
 
-async function withChatError(operation) {
+async function withChatError<T>(operation: () => Promise<T>): Promise<T> {
   try {
     return await operation();
-  } catch (error) {
+  } catch (error: unknown) {
     if (error instanceof HttpError && error.code === "SERVICE_ROLE_REQUIRED") {
       throw new HttpError(
         503,
@@ -522,7 +595,8 @@ async function withChatError(operation) {
       );
     }
     if (error instanceof HttpError && error.code === "SUPABASE_ERROR") {
-      const databaseCode = error.details?.message || error.details?.code || "CHATBOT_DATABASE_ERROR";
+      const details = asJsonObject(error.details);
+      const databaseCode = asString(details.message) || asString(details.code) || "CHATBOT_DATABASE_ERROR";
       const status = error.status >= 400 && error.status < 500 ? error.status : 502;
       throw new HttpError(status, databaseCode, chatbotErrorMessage(databaseCode), error.details);
     }
@@ -530,8 +604,8 @@ async function withChatError(operation) {
   }
 }
 
-function chatbotErrorMessage(code) {
-  const messages = {
+function chatbotErrorMessage(code: string): string {
+  const messages: Record<string, string> = {
     INVALID_TEXT_REPRESENTATION: "Invalid chat identifier",
     CHATBOT_DATABASE_ERROR: "Chat database operation failed"
   };

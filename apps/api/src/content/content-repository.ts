@@ -1,10 +1,23 @@
-// @ts-nocheck
 import { selectOne, selectRows } from "../supabase.js";
+import { asNumber, asString, isJsonObject, type JsonObject } from "../types.js";
 
+/**
+ * Filters for listing published blog posts.
+ */
+export interface BlogListFilters {
+  categorySlug?: string;
+  featuredFirst: boolean;
+  limit: number;
+  offset: number;
+}
+
+/**
+ * PostgREST accessors for public content (blogs, policies, static pages).
+ */
 export function createContentRepository() {
   return {
-    async listCategories(type) {
-      const query = {
+    async listCategories(type: string | undefined) {
+      const query: Record<string, unknown> = {
         select: "content_category_id,content_type,slug,name,display_order",
         order: "display_order.asc,name.asc"
       };
@@ -14,7 +27,7 @@ export function createContentRepository() {
       }
 
       const result = await selectRows("content_category", query);
-      const rows = (result.rows || []).map(row => ({
+      const rows = (result.rows || []).map((row) => ({
         content_category_id: row.content_category_id,
         content_type: row.content_type,
         slug: row.slug,
@@ -24,8 +37,8 @@ export function createContentRepository() {
       return { rows };
     },
 
-    async listBlogs(filters) {
-      const query = {
+    async listBlogs(filters: BlogListFilters) {
+      const query: Record<string, unknown> = {
         select: "blog_id,category_slug,slug,title,excerpt,content,image_url,author,read_minutes,is_featured,status,published_at,updated_at",
         status: "eq.published",
         order: filters.featuredFirst
@@ -46,7 +59,7 @@ export function createContentRepository() {
       };
     },
 
-    async getBlog(slug) {
+    async getBlog(slug: string) {
       const row = await selectOne("blog", {
         select: "blog_id,category_slug,slug,title,excerpt,content,image_url,author,read_minutes,is_featured,status,published_at,updated_at",
         status: "eq.published",
@@ -68,7 +81,7 @@ export function createContentRepository() {
       };
     },
 
-    async getPolicy(slug) {
+    async getPolicy(slug: string) {
       const row = await selectOne("policy", {
         select: "policy_id,slug,title,summary,content,display_order,status,updated_at",
         status: "eq.published",
@@ -77,7 +90,7 @@ export function createContentRepository() {
       return row ? toPolicyDto(row) : null;
     },
 
-    async getStaticPage(slug) {
+    async getStaticPage(slug: string) {
       const row = await selectOne("static_page", {
         select: "static_page_id,slug,title,subtitle,content,status,updated_at",
         status: "eq.published",
@@ -97,17 +110,22 @@ export function createContentRepository() {
   };
 }
 
-function toBlogDto(row) {
+/**
+ * Repository returned by `createContentRepository`.
+ */
+export type ContentRepository = ReturnType<typeof createContentRepository>;
+
+function toBlogDto(row: JsonObject): JsonObject {
   return {
     blog_id: row.blog_id,
-    category_slug: row.category_slug || "trend",
+    category_slug: asString(row.category_slug) || "trend",
     slug: row.slug,
     title: row.title,
     excerpt: row.excerpt,
     content: row.content,
-    image_url: row.image_url || "/src/assets/images/image-8.png",
-    author: row.author || "Velura Editorial",
-    read_minutes: row.read_minutes || 5,
+    image_url: asString(row.image_url) || "/src/assets/images/image-8.png",
+    author: asString(row.author) || "Velura Editorial",
+    read_minutes: asNumber(row.read_minutes) || 5,
     is_featured: Boolean(row.is_featured),
     status: row.status,
     published_at: row.published_at,
@@ -115,25 +133,25 @@ function toBlogDto(row) {
   };
 }
 
-function toPolicyDto(row) {
+function toPolicyDto(row: JsonObject): JsonObject {
   return {
     policy_id: row.policy_id,
     slug: row.slug,
     title: row.title,
-    summary: row.summary || "",
+    summary: asString(row.summary) || "",
     content: normalizeArray(row.content),
     display_order: row.display_order,
     updated_at: row.updated_at
   };
 }
 
-function normalizeArray(value) {
-  if (Array.isArray(value)) return value;
+function normalizeArray(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value as unknown[];
   if (!value) return [];
   if (typeof value === "string") {
     try {
-      const parsed = JSON.parse(value);
-      return Array.isArray(parsed) ? parsed : [];
+      const parsed: unknown = JSON.parse(value);
+      return Array.isArray(parsed) ? (parsed as unknown[]) : [];
     } catch {
       return [];
     }
@@ -141,12 +159,12 @@ function normalizeArray(value) {
   return [];
 }
 
-function normalizeObject(value) {
-  if (value && typeof value === "object" && !Array.isArray(value)) return value;
+function normalizeObject(value: unknown): JsonObject {
+  if (isJsonObject(value)) return value;
   if (typeof value === "string") {
     try {
-      const parsed = JSON.parse(value);
-      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+      const parsed: unknown = JSON.parse(value);
+      return isJsonObject(parsed) ? parsed : {};
     } catch {
       return {};
     }

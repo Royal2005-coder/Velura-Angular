@@ -1,12 +1,12 @@
-// @ts-nocheck
 import { config } from "../config.js";
 import { getRequestIp, readJson, sendJson } from "../http.js";
 import type { RouteArgs } from "../types.js";
+import type { PricingService } from "./pricing-service.js";
 
 /**
  * Admin pricing HTTP routes under `/api/v1/admin`.
  */
-export async function handlePricingRoute({ req, res, url, parts, context, headers, service }: RouteArgs): Promise<boolean> {
+export async function handlePricingRoute({ req, res, url, parts, context, headers, service }: RouteArgs<PricingService>): Promise<boolean> {
   if (parts[0] !== "api" || parts[1] !== "v1" || parts[2] !== "admin") return false;
 
   if (parts[3] === "pricing") {

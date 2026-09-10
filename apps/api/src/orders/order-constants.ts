@@ -1,4 +1,4 @@
-// @ts-nocheck
+/** Canonical order status values. */
 export const ORDER_STATUSES = [
   "pending",
   "confirmed",
@@ -10,7 +10,8 @@ export const ORDER_STATUSES = [
   "completed"
 ];
 
-export const ORDER_TRANSITIONS = {
+/** Allowed order status transitions. */
+export const ORDER_TRANSITIONS: Record<string, string[]> = {
   pending: ["confirmed", "cancelled"],
   confirmed: ["preparing", "cancelled"],
   preparing: ["shipping", "cancelled"],
@@ -21,16 +22,20 @@ export const ORDER_TRANSITIONS = {
   completed: []
 };
 
+/** Admin roles allowed to read orders. */
 export const ORDER_READER_ROLES = [
   "super_admin",
   "admin_operator_donhang",
   "admin_operator_cskh_dt"
 ];
 
+/** Admin roles allowed to mutate orders. */
 export const ORDER_OPERATOR_ROLES = ["super_admin", "admin_operator_donhang"];
 
+/** Allowed manual payment resolution decisions. */
 export const PAYMENT_DECISIONS = ["mark_paid", "mark_failed"];
 
+/** Safe column projection for order rows. */
 export const ORDER_SELECT = [
   "order_id",
   "user_id",
@@ -55,6 +60,7 @@ export const ORDER_SELECT = [
   "version"
 ].join(",");
 
+/** Order detail projection including items, payments, and history. */
 export const ORDER_DETAIL_SELECT = [
   ORDER_SELECT,
   "items:order_item(item_id,order_id,variant_id,product_name,applied_promo_id,quantity,unit_price)",
@@ -62,11 +68,13 @@ export const ORDER_DETAIL_SELECT = [
   "history:order_status_history(history_id,order_id,old_status,new_status,trigger_type,changed_by,changed_at,note)"
 ].join(",");
 
+/** Order list projection including payment summary. */
 export const ORDER_LIST_SELECT = [
   ORDER_SELECT,
   "payments:payment(payment_id,payment_status,has_discrepancy,version,created_at)"
 ].join(",");
 
+/** Valid sort options for order listing. */
 export const ORDER_SORTS = [
   "order_date.desc",
   "order_date.asc",

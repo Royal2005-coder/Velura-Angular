@@ -1,7 +1,22 @@
-// @ts-nocheck
 import { HttpError } from "../http.js";
+import type { ContentRepository } from "./content-repository.js";
 
-export function createContentService({ repository }) {
+/**
+ * Public content use-cases consumed by `handleContentRoute`.
+ */
+export interface ContentService {
+  listCategories(searchParams: URLSearchParams): ReturnType<ContentRepository["listCategories"]>;
+  listBlogs(searchParams: URLSearchParams): ReturnType<ContentRepository["listBlogs"]>;
+  getBlog(slug: string): Promise<Awaited<ReturnType<ContentRepository["getBlog"]>>>;
+  listPolicies(): ReturnType<ContentRepository["listPolicies"]>;
+  getPolicy(slug: string): Promise<Awaited<ReturnType<ContentRepository["getPolicy"]>>>;
+  getStaticPage(slug: string): Promise<Awaited<ReturnType<ContentRepository["getStaticPage"]>>>;
+}
+
+/**
+ * Build the public content service around a PostgREST repository.
+ */
+export function createContentService({ repository }: { repository: ContentRepository }): ContentService {
   if (!repository) throw new TypeError("repository is required");
 
   return {
@@ -47,17 +62,17 @@ export function createContentService({ repository }) {
   };
 }
 
-function requireSlug(value) {
+function requireSlug(value: string): string {
   const slug = sanitizeSlug(value);
   if (!slug) throw new HttpError(422, "VALIDATION_ERROR", "Invalid slug");
   return slug;
 }
 
-function sanitizeSlug(value) {
+function sanitizeSlug(value: unknown): string {
   return String(value || "").toLowerCase().trim().replace(/[^a-z0-9-]/g, "").slice(0, 120);
 }
 
-function boundedInteger(value, fallback, min, max) {
+function boundedInteger(value: string | null, fallback: number, min: number, max: number): number {
   const parsed = Number.parseInt(value ?? "", 10);
   return Number.isFinite(parsed) ? Math.min(Math.max(parsed, min), max) : fallback;
 }

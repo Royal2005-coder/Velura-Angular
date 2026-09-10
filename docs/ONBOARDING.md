@@ -1,6 +1,6 @@
 # Onboarding — ngày 1
 
-Đọc [AGENTS.md](../AGENTS.md) → [README.md](../README.md) → [SOURCE-OF-TRUTH.md](./SOURCE-OF-TRUTH.md) → file này.
+Đọc [AGENTS.md](../AGENTS.md) trước. Context = type/JSDoc + `git log --show-notes` + MR `## Why`.
 
 ## Team
 
@@ -18,7 +18,7 @@ Review: Storefront MR do Storefront khác; Admin MR do Admin khác. Đụng DTO/
 
 1. Jira https://webadvance.atlassian.net — project **KAN** (không VEL).
 2. GitLab Developer+. Không push `main` / `develop`.
-3. Node.js 22. MCP: [MCP-SETUP.md](./MCP-SETUP.md).
+3. Node.js 22. MCP: [MCP-SETUP.md](./MCP-SETUP.md). API = TypeScript trên Node (`npm run start:api`, `npm run test:api`). Angular = hai SPA.
 
 Không share `.env` / `*.pem`.
 
@@ -29,6 +29,7 @@ git clone git@gitlab.com:boygia757-netizen/velura-project.git
 cd velura-project
 git checkout develop
 git pull
+git fetch origin refs/notes/commits:refs/notes/commits
 npm install
 copy .env.example .env
 ```
@@ -54,7 +55,7 @@ npm run build
 3. Commit + **title MR** bắt đầu `KAN-<n>`.
 4. MR **vào develop**. CI: validate + `test:api` + `test:angular` + build + `note:mr`.
 5. Không merge CI đỏ. Không feature → `main`. Không `[skip ci]`.
-6. Production chỉ sau staging: MR `develop` → `main`.
+6. Production chỉ sau MR `develop` → `main`. `develop` không deploy.
 
 Luồng: [HOW-IT-WORKS.md](./HOW-IT-WORKS.md). UI: [ANGULAR-STANDARDS.md](./ANGULAR-STANDARDS.md).
 

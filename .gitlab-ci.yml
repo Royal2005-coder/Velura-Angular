@@ -107,10 +107,27 @@ validate:mr-contract:
     - |
       TITLE=$(printf '%s' "${CI_MERGE_REQUEST_TITLE:-}" | tr -d '\r')
       DESC=$(printf '%s' "${CI_MERGE_REQUEST_DESCRIPTION:-}" | tr -d '\r')
+      SRC="${CI_MERGE_REQUEST_SOURCE_BRANCH_NAME:-}"
+      TGT="${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}"
       echo "MR title=[$TITLE]"
-      echo "MR source=[$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME] target=[$CI_MERGE_REQUEST_TARGET_BRANCH_NAME]"
+      echo "MR source=[$SRC] target=[$TGT]"
+      if [ "$TGT" = "main" ]; then
+        if [ "$SRC" != "develop" ]; then
+          echo "Production is only promoted from develop. Close this MR."
+          echo "Open a new MR: source develop → target main. Do not target main from a feature branch."
+          exit 1
+        fi
+        printf '%s\n' "$DESC" | grep -qiE '^##[[:space:]]*(Why|Tại sao)' || {
+          echo "Promote MR develop → main still needs a heading line ## Why in the description."
+          echo "Paste .gitlab/merge_request_templates/Default.md. GitLab default merge titles are OK on promote."
+          exit 1
+        }
+        echo "Promote contract OK: develop → main (GitLab merge titles allowed)."
+        exit 0
+      fi
       echo "$TITLE" | grep -Eqi '^(Draft:[[:space:]]*)?KAN-[0-9]+' || {
-        echo "MR title must start with KAN-n (optional Draft: prefix). Version key for git log / Jira."
+        echo "Feature MR title must start with KAN-n (optional Draft: prefix)."
+        echo "GitLab set title=[$TITLE]. Edit the MR title on GitLab — do not create SSH keys."
         exit 1
       }
       printf '%s\n' "$DESC" | grep -qiE '^##[[:space:]]*(Why|Tại sao)' || {
@@ -118,14 +135,7 @@ validate:mr-contract:
         echo "Paste .gitlab/merge_request_templates/Default.md into the MR. Do not add docs/KAN-n.md."
         exit 1
       }
-    - |
-      if [ "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" = "main" ] \
-        && [ "$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME" != "develop" ]; then
-        echo "Production is only promoted from develop. Retarget this MR to develop, then open develop → main."
-        exit 1
-      fi
-    - |
-      case "$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME" in
+      case "$SRC" in
         feature/*|hotfix/*|develop) ;;
         *)
           echo "Source branch must be feature/KAN-*, hotfix/KAN-*, or develop"

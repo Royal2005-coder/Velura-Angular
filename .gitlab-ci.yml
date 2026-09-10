@@ -92,6 +92,11 @@ validate:workspace:
         echo "Private keys must not be in the repository"
         exit 1
       fi
+    - |
+      if grep -R --include='*.ts' -n '@ts-nocheck' apps/api ; then
+        echo "apps/api must not use @ts-nocheck. Type the file or narrow unknown."
+        exit 1
+      fi
 
 validate:mr-contract:
   stage: validate

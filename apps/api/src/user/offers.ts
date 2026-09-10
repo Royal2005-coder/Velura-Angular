@@ -1,7 +1,14 @@
-// @ts-nocheck
 import { HttpError, sendJson } from "../http.js";
 import { selectRows } from "../supabase.js";
 import { requireUserAuth } from "./auth.js";
+import {
+  asString,
+  type AuthContext,
+  type HeaderMap,
+  type HttpRequest,
+  type HttpResponse,
+  type JsonObject
+} from "../types.js";
 
 const OFFER_STATUSES = Object.freeze({
   LOCKED: "LOCKED",
@@ -11,7 +18,15 @@ const OFFER_STATUSES = Object.freeze({
   SCHEDULED: "SCHEDULED"
 });
 
-export async function handleOffersRoute(req, res, corsHeaders, context) {
+/**
+ * Authenticated member offer list derived from vouchers and order history.
+ */
+export async function handleOffersRoute(
+  req: HttpRequest,
+  res: HttpResponse,
+  corsHeaders: HeaderMap,
+  context: AuthContext
+): Promise<void> {
   if (req.method !== "GET") {
     throw new HttpError(405, "METHOD_NOT_ALLOWED", "Phương thức không được hỗ trợ");
   }
@@ -24,7 +39,7 @@ export async function handleOffersRoute(req, res, corsHeaders, context) {
   ]);
 
   const usedVoucherIds = new Set(
-    orders.filter((order) => ["completed", "delivered"].includes(order.status) && order.voucher_id)
+    orders.filter((order) => ["completed", "delivered"].includes(asString(order.status)) && order.voucher_id)
       .map((order) => String(order.voucher_id))
   );
 
@@ -49,12 +64,12 @@ export async function handleOffersRoute(req, res, corsHeaders, context) {
   }, corsHeaders);
 }
 
-function normalizeVoucher(voucher, now, usedVoucherIds) {
-  const start = voucher.start_date ? new Date(voucher.start_date) : null;
-  const end = voucher.end_date ? new Date(voucher.end_date) : null;
+function normalizeVoucher(voucher: JsonObject, now: Date, usedVoucherIds: Set<string>): JsonObject {
+  const start = voucher.start_date ? new Date(String(voucher.start_date)) : null;
+  const end = voucher.end_date ? new Date(String(voucher.end_date)) : null;
   const exhausted = voucher.usage_limit_total !== null && voucher.usage_limit_total !== undefined
     && Number(voucher.used_count || 0) >= Number(voucher.usage_limit_total);
-  let status = OFFER_STATUSES.AVAILABLE;
+  let status: string = OFFER_STATUSES.AVAILABLE;
   if (usedVoucherIds.has(String(voucher.voucher_id))) status = OFFER_STATUSES.USED;
   else if (exhausted || (end && end < now) || voucher.is_active === false) status = OFFER_STATUSES.EXPIRED;
   else if (start && start > now) status = OFFER_STATUSES.SCHEDULED;
@@ -72,7 +87,7 @@ function normalizeVoucher(voucher, now, usedVoucherIds) {
     max_discount_amount: voucher.max_discount_amount ? Number(voucher.max_discount_amount) : null,
     terms: [
       Number(voucher.min_order_value || 0) > 0 ? `Đơn tối thiểu ${formatMoney(voucher.min_order_value)}.` : "Không yêu cầu giá trị tối thiểu.",
-      voucher.end_date ? `Hết hạn ${new Date(voucher.end_date).toLocaleDateString("vi-VN")}.` : "Áp dụng đến khi chương trình kết thúc."
+      voucher.end_date ? `Hết hạn ${new Date(String(voucher.end_date)).toLocaleDateString("vi-VN")}.` : "Áp dụng đến khi chương trình kết thúc."
     ],
     action: status === OFFER_STATUSES.AVAILABLE
       ? { label: "Dùng ngay", href: "/src/pages/cart.html" }
@@ -80,8 +95,8 @@ function normalizeVoucher(voucher, now, usedVoucherIds) {
   };
 }
 
-function formatVoucherTitle(voucher) {
-  const titlesByCode = {
+function formatVoucherTitle(voucher: JsonObject): string {
+  const titlesByCode: Record<string, string> = {
     SALE50K: "Giảm 50K cho đơn từ 500K",
     SUMMER25: "Giảm 25% mùa hè",
     VIP200K: "Ưu đãi VIP giảm 200K",
@@ -90,10 +105,10 @@ function formatVoucherTitle(voucher) {
     WELCOME100: "Giảm 10% cho khách mới"
   };
   const code = String(voucher.code || "").trim().toUpperCase();
-  return titlesByCode[code] || voucher.name || voucher.code || "Ưu đãi Velura";
+  return titlesByCode[code] || asString(voucher.name) || asString(voucher.code) || "Ưu đãi Velura";
 }
 
-function describeDiscount(voucher) {
+function describeDiscount(voucher: JsonObject): string {
   if (voucher.discount_type === "free_shipping") return "Miễn phí vận chuyển cho đơn đủ điều kiện.";
   if (voucher.discount_type === "percentage") {
     const cap = voucher.max_discount_amount ? `, tối đa ${formatMoney(voucher.max_discount_amount)}` : "";
@@ -102,11 +117,11 @@ function describeDiscount(voucher) {
   return `Giảm ${formatMoney(voucher.discount_value || 0)}.`;
 }
 
-function sortOffers(a, b) {
-  const rank = { AVAILABLE: 0, LOCKED: 1, SCHEDULED: 2, USED: 3, EXPIRED: 4 };
-  return (rank[a.status] ?? 9) - (rank[b.status] ?? 9);
+function sortOffers(a: JsonObject, b: JsonObject): number {
+  const rank: Record<string, number> = { AVAILABLE: 0, LOCKED: 1, SCHEDULED: 2, USED: 3, EXPIRED: 4 };
+  return (rank[asString(a.status)] ?? 9) - (rank[asString(b.status)] ?? 9);
 }
 
-function formatMoney(value) {
+function formatMoney(value: unknown): string {
   return `${Number(value || 0).toLocaleString("vi-VN")}đ`;
 }

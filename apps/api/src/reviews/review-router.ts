@@ -1,14 +1,14 @@
-// @ts-nocheck
 import { config } from "../config.js";
 import { getRequestIp, readJson, sendJson } from "../http.js";
-import type { RouteArgs } from "../types.js";
+import type { RequestMeta, RouteArgs } from "../types.js";
+import type { ReviewService } from "./review-service.js";
 
 /**
  * Admin review HTTP routes under `/api/v1/admin/reviews`.
  */
-export async function handleReviewRoute({ req, res, url, parts, context, headers, service }: RouteArgs): Promise<boolean> {
+export async function handleReviewRoute({ req, res, url, parts, context, headers, service }: RouteArgs<ReviewService>): Promise<boolean> {
   if (parts[0] !== "api" || parts[1] !== "v1" || parts[2] !== "admin" || parts[3] !== "reviews") return false;
-  const requestMeta = { ipAddress: getRequestIp(req) };
+  const requestMeta: RequestMeta = { ipAddress: getRequestIp(req) };
 
   if (req.method === "GET" && parts.length === 4) {
     sendJson(res, 200, await service.list(context, url.searchParams), headers);

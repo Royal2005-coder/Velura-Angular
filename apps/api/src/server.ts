@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
 import { config, assertRuntimeConfig } from "./config.js";
@@ -38,17 +37,22 @@ import { createFixedWindowLimiter } from "./rate-limit.js";
 import { handleUserRoute } from "./user/index.js";
 import { handleWishlistRoute } from "./v1-wishlist-routes.js";
 import { handleRecommendationRoute } from "./recommendation.controller.js";
+import { asJsonObject, asString } from "./types.js";
+import type { AccountService } from "./accounts/account-service.js";
+import type { ProductService } from "./products/product-service.js";
 
 assertRuntimeConfig();
 
-const accountService = createAccountService({ repository: createAccountRepository() });
-const productService = createProductService({ repository: createProductRepository() });
+type ChatbotService = ReturnType<typeof createChatbotService>;
+
+const accountService: AccountService = createAccountService({ repository: createAccountRepository() });
+const productService: ProductService = createProductService({ repository: createProductRepository() });
 const orderService = createOrderService({ repository: createOrderRepository() });
 const reviewService = createReviewService({ repository: createReviewRepository() });
 const returnService = createReturnService({ repository: createReturnRepository() });
 const pricingService = createPricingService({ repository: createPricingRepository() });
 const auditLogService = createAuditLogService({ repository: createAuditLogRepository() });
-const chatbotService = createChatbotService({ repository: createChatbotRepository() });
+const chatbotService: ChatbotService = createChatbotService({ repository: createChatbotRepository() });
 const contentService = createContentService({ repository: createContentRepository() });
 const mutationLimiter = createFixedWindowLimiter({
   limit: config.adminMutationLimitPerMinute,
@@ -75,7 +79,7 @@ const server = createServer(async (req, res) => {
     }
     if (req.method === "OPTIONS") return sendNoContent(res, corsHeaders);
 
-    const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
+    const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
     const parts = parsePathname(url);
 
     if (req.method === "GET" && (parts[0] === "health" || (parts[0] === "api" && parts[1] === "health"))) {
@@ -135,9 +139,9 @@ const server = createServer(async (req, res) => {
         },
         body: JSON.stringify({ email: body.email, password: body.password })
       });
-      const payload = await response.json().catch(() => ({}));
+      const payload = asJsonObject(await response.json().catch(() => ({})));
       if (!response.ok || !payload.access_token) {
-        throw new HttpError(401, "UNAUTHORIZED", payload.error_description || payload.msg || "Email hoặc mật khẩu không hợp lệ.");
+        throw new HttpError(401, "UNAUTHORIZED", asString(payload.error_description) || asString(payload.msg) || "Email hoặc mật khẩu không hợp lệ.");
       }
       return sendJson(res, 200, { token: payload.access_token }, corsHeaders);
     }
@@ -154,8 +158,8 @@ const server = createServer(async (req, res) => {
         body: JSON.stringify({ email: body.email })
       });
       if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        throw new HttpError(400, "BAD_REQUEST", payload.error_description || payload.msg || "Không gửi được email đặt lại mật khẩu.");
+        const payload = asJsonObject(await response.json().catch(() => ({})));
+        throw new HttpError(400, "BAD_REQUEST", asString(payload.error_description) || asString(payload.msg) || "Không gửi được email đặt lại mật khẩu.");
       }
       return sendJson(res, 200, { success: true }, corsHeaders);
     }
@@ -175,9 +179,9 @@ const server = createServer(async (req, res) => {
           redirect_uri: body.redirect_uri
         })
       });
-      const payload = await response.json().catch(() => ({}));
+      const payload = asJsonObject(await response.json().catch(() => ({})));
       if (!response.ok || !payload.access_token) {
-        throw new HttpError(401, "UNAUTHORIZED", payload.error_description || payload.msg || "Xác thực thất bại");
+        throw new HttpError(401, "UNAUTHORIZED", asString(payload.error_description) || asString(payload.msg) || "Xác thực thất bại");
       }
       return sendJson(res, 200, { token: payload.access_token }, corsHeaders);
     }
@@ -224,7 +228,7 @@ const server = createServer(async (req, res) => {
 
     if (parts[1] === "v1" && parts[2] === "admin") {
       requireAdmin(context);
-      if (["POST", "PATCH", "DELETE"].includes(req.method)) {
+      if (["POST", "PATCH", "DELETE"].includes(req.method || "")) {
         const rate = mutationLimiter.consume(context.authUser?.id || getRequestIp(req));
         res.setHeader("x-ratelimit-remaining", String(rate.remaining));
         res.setHeader("x-ratelimit-reset", String(Math.ceil(rate.resetAt / 1000)));

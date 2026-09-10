@@ -1,9 +1,18 @@
-// @ts-nocheck
 import { HttpError } from "./http.js";
 import { selectOne, selectRows, updateRows } from "./supabase.js";
 import { writeAuditLog } from "./audit.js";
+import { asJsonObject, asString, type AuthContext, type JsonObject } from "./types.js";
 
-export async function handleAction(context, resourceName, id, action, body) {
+/**
+ * Dispatch a legacy admin mutation for one resource row.
+ */
+export async function handleAction(
+  context: AuthContext,
+  resourceName: string,
+  id: string,
+  action: string,
+  body: JsonObject
+): Promise<unknown> {
   if (resourceName === "accounts") return handleAccountAction(context, id, action, body);
   if (resourceName === "orders") return handleOrderAction(context, id, action, body);
   if (resourceName === "reviews") return handleReviewAction(context, id, action, body);
@@ -16,19 +25,25 @@ export async function handleAction(context, resourceName, id, action, body) {
   throw new HttpError(404, "ACTION_NOT_FOUND", "Unsupported admin action");
 }
 
-async function handleAccountAction(context, id, action, body) {
+async function handleAccountAction(
+  context: AuthContext,
+  id: string,
+  action: string,
+  body: JsonObject
+): Promise<unknown> {
   const before = await selectOne("profiles", {
     select: "*,role:app_roles(code,name,is_admin)",
     id: `eq.${id}`
   });
   if (!before) throw new HttpError(404, "ROW_NOT_FOUND", "Target row was not found");
-  let patch;
+  const role = asJsonObject(before.role);
+  let patch: JsonObject;
 
   if (action === "lock") {
-    if (before.role?.code === "super_admin" && before.status === "active") {
+    if (role.code === "super_admin" && before.status === "active") {
       const activeSuperAdmins = await selectRows("profiles", {
         select: "id",
-        role_id: `eq.${before.role_id}`,
+        role_id: `eq.${String(before.role_id)}`,
         status: "eq.active"
       });
       if (activeSuperAdmins.rows.length <= 1) {
@@ -67,17 +82,22 @@ async function handleAccountAction(context, id, action, body) {
     targetCode: before.email,
     beforeData: before,
     afterData: after[0],
-    summary: `Account ${before.email} ${action}`
+    summary: `Account ${String(before.email)} ${action}`
   });
   return after[0];
 }
 
-async function handleProductAction(context, id, action, body) {
+async function handleProductAction(
+  context: AuthContext,
+  id: string,
+  action: string,
+  body: JsonObject
+): Promise<unknown> {
   const before = await requireRow("products", id);
-  let patch;
+  let patch: JsonObject;
 
   if (action === "change-status") {
-    if (!["active", "hidden", "discontinued"].includes(body.status)) {
+    if (!isOneOf(body.status, ["active", "hidden", "discontinued"])) {
       throw new HttpError(400, "INVALID_PRODUCT_STATUS", "Invalid product status");
     }
     patch = {
@@ -103,14 +123,19 @@ async function handleProductAction(context, id, action, body) {
     targetCode: before.sku,
     beforeData: before,
     afterData: after[0],
-    summary: `Product ${before.sku} ${action}`
+    summary: `Product ${String(before.sku)} ${action}`
   });
   return after[0];
 }
 
-async function handleOrderAction(context, id, action, body) {
+async function handleOrderAction(
+  context: AuthContext,
+  id: string,
+  action: string,
+  body: JsonObject
+): Promise<unknown> {
   const before = await requireRow("orders", id);
-  let patch;
+  let patch: JsonObject;
 
   if (action === "update-status") {
     const next = body.status;
@@ -129,7 +154,7 @@ async function handleOrderAction(context, id, action, body) {
       refund_status: before.payment_status === "paid" ? "pending_refund" : "no_refund"
     };
   } else if (action === "resolve-payment") {
-    if (!["paid", "failed", "refunded"].includes(body.paymentStatus)) {
+    if (!isOneOf(body.paymentStatus, ["paid", "failed", "refunded"])) {
       throw new HttpError(400, "INVALID_PAYMENT_STATUS", "Invalid paymentStatus");
     }
     patch = {
@@ -149,14 +174,19 @@ async function handleOrderAction(context, id, action, body) {
     targetCode: before.order_code,
     beforeData: before,
     afterData: after[0],
-    summary: `Order ${before.order_code} ${action}`
+    summary: `Order ${String(before.order_code)} ${action}`
   });
   return after[0];
 }
 
-async function handleReviewAction(context, id, action, body) {
+async function handleReviewAction(
+  context: AuthContext,
+  id: string,
+  action: string,
+  body: JsonObject
+): Promise<unknown> {
   const before = await requireRow("reviews", id);
-  const statusByAction = {
+  const statusByAction: Record<string, string> = {
     approve: "approved",
     hide: "hidden",
     reply: "replied"
@@ -164,7 +194,7 @@ async function handleReviewAction(context, id, action, body) {
   const status = statusByAction[action];
   if (!status) throw new HttpError(404, "ACTION_NOT_FOUND", "Unsupported review action");
 
-  const patch = {
+  const patch: JsonObject = {
     status,
     admin_response: action === "reply" ? requireText(body.response, "response", 5) : body.response || before.admin_response || null,
     moderated_by: context.profile?.id || null,
@@ -179,14 +209,19 @@ async function handleReviewAction(context, id, action, body) {
     targetCode: before.id,
     beforeData: before,
     afterData: after[0],
-    summary: `Review ${before.id} ${action}`
+    summary: `Review ${String(before.id)} ${action}`
   });
   return after[0];
 }
 
-async function handleReturnAction(context, id, action, body) {
+async function handleReturnAction(
+  context: AuthContext,
+  id: string,
+  action: string,
+  body: JsonObject
+): Promise<unknown> {
   const before = await requireRow("return_requests", id);
-  const statusByAction = {
+  const statusByAction: Record<string, string> = {
     approve: "approved",
     reject: "rejected",
     refund: "refunded",
@@ -195,7 +230,7 @@ async function handleReturnAction(context, id, action, body) {
   const status = statusByAction[action];
   if (!status) throw new HttpError(404, "ACTION_NOT_FOUND", "Unsupported return action");
 
-  const patch = {
+  const patch: JsonObject = {
     status,
     resolution_note: requireText(body.reason || body.note, "reason", 10),
     resolved_by: context.profile?.id || null,
@@ -210,14 +245,19 @@ async function handleReturnAction(context, id, action, body) {
     targetCode: before.request_code,
     beforeData: before,
     afterData: after[0],
-    summary: `Return request ${before.request_code} ${action}`
+    summary: `Return request ${String(before.request_code)} ${action}`
   });
   return after[0];
 }
 
-async function handleTicketAction(context, id, action, body) {
+async function handleTicketAction(
+  context: AuthContext,
+  id: string,
+  action: string,
+  body: JsonObject
+): Promise<unknown> {
   const before = await requireRow("support_tickets", id);
-  const statusByAction = {
+  const statusByAction: Record<string, string> = {
     reply: "replied",
     forward: "forwarded",
     resolve: "resolved",
@@ -226,7 +266,7 @@ async function handleTicketAction(context, id, action, body) {
   const status = statusByAction[action];
   if (!status) throw new HttpError(404, "ACTION_NOT_FOUND", "Unsupported support ticket action");
 
-  const patch = {
+  const patch: JsonObject = {
     status,
     response_note: requireText(body.message || body.reason, "message", 10),
     assigned_department: action === "forward" ? body.department || "operations" : before.assigned_department,
@@ -242,13 +282,19 @@ async function handleTicketAction(context, id, action, body) {
     targetCode: before.ticket_code,
     beforeData: before,
     afterData: after[0],
-    summary: `Support ticket ${before.ticket_code} ${action}`
+    summary: `Support ticket ${String(before.ticket_code)} ${action}`
   });
   return after[0];
 }
 
-async function handlePromotionAction(context, resourceName, id, action, body) {
-  const tableByResource = {
+async function handlePromotionAction(
+  context: AuthContext,
+  resourceName: string,
+  id: string,
+  action: string,
+  body: JsonObject
+): Promise<unknown> {
+  const tableByResource: Record<string, string> = {
     promotions: "promotions",
     vouchers: "vouchers",
     bundles: "bundles",
@@ -257,7 +303,7 @@ async function handlePromotionAction(context, resourceName, id, action, body) {
   const table = tableByResource[resourceName];
   const before = await requireRow(table, id);
 
-  const statusActions = {
+  const statusActions: Record<string, string> = {
     activate: "active",
     pause: "paused",
     stop: "stopped",
@@ -266,7 +312,7 @@ async function handlePromotionAction(context, resourceName, id, action, body) {
   const status = statusActions[action];
   if (!status) throw new HttpError(404, "ACTION_NOT_FOUND", "Unsupported promotion action");
 
-  const patch = {
+  const patch: JsonObject = {
     status,
     status_reason: body.reason || null
   };
@@ -279,12 +325,12 @@ async function handlePromotionAction(context, resourceName, id, action, body) {
     targetCode: before.code || before.name || before.id,
     beforeData: before,
     afterData: after[0],
-    summary: `${resourceName} ${before.code || before.id} ${action}`
+    summary: `${resourceName} ${String(before.code || before.id)} ${action}`
   });
   return after[0];
 }
 
-async function requireRow(table, id) {
+async function requireRow(table: string, id: string): Promise<JsonObject> {
   const row = await selectOne(table, {
     select: "*",
     id: `eq.${id}`
@@ -293,13 +339,18 @@ async function requireRow(table, id) {
   return row;
 }
 
-async function optimisticUpdate(table, id, expectedVersion, patch) {
+async function optimisticUpdate(
+  table: string,
+  id: string,
+  expectedVersion: unknown,
+  patch: JsonObject
+): Promise<unknown[]> {
   if (expectedVersion === undefined || expectedVersion === null) {
     throw new HttpError(400, "EXPECTED_VERSION_REQUIRED", "expectedVersion is required for updates");
   }
 
-  const query = { id: `eq.${id}` };
-  query.version = `eq.${expectedVersion}`;
+  const query: Record<string, unknown> = { id: `eq.${id}` };
+  query.version = `eq.${String(expectedVersion)}`;
 
   const payload = {
     ...patch,
@@ -313,7 +364,7 @@ async function optimisticUpdate(table, id, expectedVersion, patch) {
   return rows;
 }
 
-function requireText(value, field, minLength) {
+function requireText(value: unknown, field: string, minLength: number): string {
   const text = String(value || "").trim();
   if (text.length < minLength) {
     throw new HttpError(400, "VALIDATION_FAILED", `${field} must be at least ${minLength} characters`);
@@ -321,8 +372,8 @@ function requireText(value, field, minLength) {
   return text;
 }
 
-function assertOrderTransition(current, next) {
-  const transitions = {
+function assertOrderTransition(current: unknown, next: unknown): void {
+  const transitions: Record<string, string[]> = {
     pending: ["confirmed", "held", "cancelled"],
     confirmed: ["preparing", "held", "cancelled"],
     preparing: ["shipping", "held"],
@@ -331,7 +382,13 @@ function assertOrderTransition(current, next) {
     completed: [],
     cancelled: []
   };
-  if (!transitions[current]?.includes(next)) {
-    throw new HttpError(400, "INVALID_ORDER_TRANSITION", `Cannot move order from ${current} to ${next}`);
+  const currentStatus = asString(current);
+  const nextStatus = asString(next);
+  if (!transitions[currentStatus]?.includes(nextStatus)) {
+    throw new HttpError(400, "INVALID_ORDER_TRANSITION", `Cannot move order from ${String(current)} to ${String(next)}`);
   }
+}
+
+function isOneOf(value: unknown, options: readonly string[]): value is string {
+  return typeof value === "string" && options.includes(value);
 }

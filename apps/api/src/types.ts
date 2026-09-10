@@ -37,6 +37,7 @@ export interface HttpResponse {
 export interface AuthUser {
   id: string;
   email?: string | null;
+  phone?: string | null;
 }
 
 /**
@@ -137,4 +138,19 @@ export function isJsonObject(value: unknown): value is JsonObject {
 export function errorMessage(value: unknown): string {
   if (value instanceof Error) return value.message;
   return String(value);
+}
+
+/**
+ * String field from unknown JSON, or fallback.
+ */
+export function asString(value: unknown, fallback = ""): string {
+  return typeof value === "string" ? value : fallback;
+}
+
+/**
+ * Finite number from unknown JSON, or fallback.
+ */
+export function asNumber(value: unknown, fallback = 0): number {
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : fallback;
 }

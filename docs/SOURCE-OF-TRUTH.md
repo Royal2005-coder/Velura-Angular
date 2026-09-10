@@ -1,62 +1,35 @@
 # Source of truth (Velura)
 
-Agent và người mới: `AGENTS.md` → `README.md` → file này → rồi mới mở code.
-
-`docs/` không thay GitLab. Diff / git log / SHA nằm trên **MR**.
-
-| Lớp | Ở đâu |
-|---|---|
-| Kiến trúc ổn định | file này + ADR 0001–0003 |
-| Từng version | GitLab MR (`KAN-n`, Changes, CI `note:mr`) |
-| Việc | Jira **KAN** |
+**Cái gì** = type + JSDoc trong code. **Tại sao** = `git log` + MR + git notes. File này chỉ map ổn định.
 
 ```bash
-git log --oneline --grep=KAN-n
+git log --oneline --show-notes --grep=KAN-n
 git show --stat <sha>
 ```
 
-## Học thuật (không copy sách vào Git)
+Chi tiết retrieval: [AGENTS.md](../AGENTS.md). Pipeline: [HOW-IT-WORKS.md](./HOW-IT-WORKS.md).
 
-| Gốc | Map |
+| Lớp | Ở đâu |
 |---|---|
-| Slide UEL *Angular Framework* | [source-of-truth/LECTURE-MAP.md](./source-of-truth/LECTURE-MAP.md) |
-| GoalKicker *Angular 2+ Notes for Professionals* | [source-of-truth/BOOK-MAP.md](./source-of-truth/BOOK-MAP.md) |
-| TinyBigCorp `AGENTS.md` | Frontend MVVM+Signals. API Velura = Node — [ADR 0002](./adr/0002-node-api-javascript.md) |
+| Hợp đồng nghiệp vụ | `interface` / JSDoc (ví dụ `apps/api/src/types.ts`, `ApiService`) |
+| Version / why | GitLab MR (`## Why`) + CI `note:mr` + `git notes` |
+| Việc | Jira **KAN** |
+| Rule lâu dài (một câu) | [adr/README.md](./adr/README.md) |
 
-## Angular = SPA, không phải HTTP server
+## Angular = SPA
 
 | Tầng | Velura | Angular? |
 |---|---|---|
 | Storefront / Admin | Angular 21 standalone + Signals | Có |
-| HTTP API | Node, `apps/api`, router → service → repository | Không — **đúng** |
-| Test API | `tests/api/*.test.js` | Không |
-| Test UI | `*.page.spec.ts` (CI `test:angular`) | Có |
+| HTTP API | Node TypeScript, router → service → repository | Không |
+| Test UI / API | `*.page.spec.ts` / `tests/api/*.test.ts` | UI có / API không |
 | DB | PostgreSQL / Supabase | Không |
 
-GoalKicker ch. 1.1: Angular + **Node**. Không viết API bằng Angular.
+GoalKicker ch. 1.1: Angular + **Node**. Slide: TypeScript trên component, REST Node tách.
 
-## Layers
-
-```
-View (HTML)
-  → ViewModel (standalone page, signal / computed)
-    → Model (ApiService / AdminApiService)
-      → Node router → service → repository (Supabase)
-```
-
-Page không biết SQL/HTTP verb. `HttpClient` chỉ trong service.
-
-## NgModule (slide) → standalone (production)
-
-| Slide | Velura |
+| Slide | Repo |
 |---|---|
 | `AppModule` | `app.config.ts` + `app.routes.ts` |
-| `declarations` | `standalone: true` |
-| `HttpClientModule` | `provideHttpClient(withInterceptors([...]))` |
 | `*ngIf` / `*ngFor` | `@if` / `@for` |
 
-[ADR 0001](./adr/0001-angular-21-standalone-signals.md). TypeScript trên API Node: [ADR 0003](./adr/0003-node-api-typescript.md) (Proposed).
-
-## SDLC
-
-Feature → MR **develop** → staging → MR **develop → main** → production. Chi tiết [HOW-IT-WORKS.md](./HOW-IT-WORKS.md). Gap: [COMPLIANCE.md](./COMPLIANCE.md).
+Maps học thuật (không copy sách): [LECTURE-MAP](./source-of-truth/LECTURE-MAP.md), [BOOK-MAP](./source-of-truth/BOOK-MAP.md).

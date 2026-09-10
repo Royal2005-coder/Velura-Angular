@@ -22,13 +22,13 @@ Làm việc trên `develop`. Production = `main` sau MR promote. Chi tiết [doc
 | Câu hỏi | Đọc |
 |---|---|
 | Angular / HTTP | [SOURCE-OF-TRUTH](docs/SOURCE-OF-TRUTH.md) · [LECTURE-MAP](docs/source-of-truth/LECTURE-MAP.md) · [BOOK-MAP](docs/source-of-truth/BOOK-MAP.md) |
-| API `.js` / TS sau | [ADR 0002](docs/adr/0002-node-api-javascript.md) · [ADR 0003](docs/adr/0003-node-api-typescript.md) |
+| API `.ts` trên Node | [ADR 0002](docs/adr/0002-node-api-javascript.md) · [ADR 0003](docs/adr/0003-node-api-typescript.md) |
 | Không NgModule | [ADR 0001](docs/adr/0001-angular-21-standalone-signals.md) |
 | Gap | [COMPLIANCE](docs/COMPLIANCE.md) |
 | MCP | [MCP-SETUP](docs/MCP-SETUP.md) |
 | Ngày 1 | [ONBOARDING](docs/ONBOARDING.md) |
 
-Context từng version = GitLab MR, không phải `docs/KAN-n.md`.
+Context từng version = type/JSDoc + GitLab MR `## Why` + git notes, không phải `docs/KAN-n.md`.
 
 ## Team
 
@@ -43,12 +43,13 @@ Jira: https://webadvance.atlassian.net (**KAN**). GitLab: https://gitlab.com/boy
 ## Pipeline
 
 ```
-feature/KAN-n → MR develop → CI (tests + note:mr)
-             → staging → MR develop → main → production
+feature/KAN-n → MR develop → CI (tests + note:mr, không deploy)
+             → MR develop → main → production
 ```
 
 ```bash
-git log --oneline --grep=KAN-n
+git fetch origin refs/notes/commits:refs/notes/commits
+git log --oneline --show-notes --grep=KAN-n
 git show --stat <sha>
 ```
 
@@ -77,7 +78,5 @@ Không commit `.env`.
 | Storefront | https://velura.royalai.dev/ |
 | Admin | https://admin.royalai.dev/login |
 | API | https://velura.royalai.dev/api/health |
-| Staging storefront | https://staging.velura.royalai.dev/ |
-| Staging admin | https://staging-admin.royalai.dev/login |
 
 DNS/CORS: [docs/CLOUDFLARE-SUPABASE.md](docs/CLOUDFLARE-SUPABASE.md).

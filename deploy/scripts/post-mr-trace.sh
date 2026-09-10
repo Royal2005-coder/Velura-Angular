@@ -1,5 +1,5 @@
 #!/bin/sh
-# Required MR trace note: SHA, git log, diff stat. Version context lives on the MR.
+# Required MR trace: SHA, git log, diff stat. Posted to the MR when the token allows it.
 set -eu
 
 apk add --no-cache git curl jq >/dev/null
@@ -16,8 +16,11 @@ else
   STAT_RANGE="origin/${TARGET_NAME}...HEAD"
 fi
 
+git fetch origin refs/notes/commits:refs/notes/commits 2>/dev/null || true
+
 LOG=$(git log --oneline ${RANGE} | head -n 30)
 STAT=$(git diff --stat ${STAT_RANGE} | tail -n 40)
+NOTES=$(git log --show-notes --format='%h %s%n%N' ${RANGE} | head -n 80)
 
 echo "${CI_MERGE_REQUEST_TITLE}" | grep -Eq '^KAN-[0-9]+' || {
   echo "MR title must start with KAN-n"
@@ -42,26 +45,45 @@ NOTE=$(printf '%s\n' \
   "${STAT}" \
   '```' \
   '' \
-  "CLI: \`git log --oneline --grep=KAN-\` then \`git show --stat ${CI_COMMIT_SHORT_SHA}\`" \
+  '### git notes' \
+  '```' \
+  "${NOTES}" \
+  '```' \
   '' \
-  'Do not add a docs/*.md file for this ticket. Stable maps stay in docs/; this MR is the version log.')
+  "CLI: \`git log --oneline --show-notes --grep=KAN-\` then \`git show --stat ${CI_COMMIT_SHORT_SHA}\`" \
+  '' \
+  'Context as Code: types/JSDoc = what. This MR + git notes + git log = why. No docs/KAN-n.md.')
+
+printf '%s\n' "${NOTE}" | tee mr-trace.md
 
 BODY=$(jq -n --arg body "${NOTE}" '{body: $body}')
+API_URL="${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests/${CI_MERGE_REQUEST_IID}/notes"
+HTTP_CODE=""
+RESP=""
 
-echo "${NOTE}"
+post_note() {
+  header="$1"
+  RESP=$(curl -sS -o /tmp/note-resp.json -w '%{http_code}' \
+    --header "${header}" \
+    --header "Content-Type: application/json" \
+    --data "${BODY}" \
+    "${API_URL}") || RESP="000"
+  HTTP_CODE="${RESP}"
+  cat /tmp/note-resp.json 2>/dev/null || true
+}
 
 if [ -n "${GITLAB_TOKEN:-}" ]; then
-  AUTH_HEADER="PRIVATE-TOKEN: ${GITLAB_TOKEN}"
+  post_note "PRIVATE-TOKEN: ${GITLAB_TOKEN}"
 else
-  AUTH_HEADER="JOB-TOKEN: ${CI_JOB_TOKEN}"
+  post_note "JOB-TOKEN: ${CI_JOB_TOKEN}"
 fi
 
-curl --fail --silent --show-error \
-  --header "${AUTH_HEADER}" \
-  --header "Content-Type: application/json" \
-  --data "${BODY}" \
-  "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests/${CI_MERGE_REQUEST_IID}/notes" \
-  || {
-    echo "Failed to post MR note. Add CI/CD variable GITLAB_TOKEN (api) if Job-Token is denied."
-    exit 1
-  }
+if [ "${HTTP_CODE}" = "201" ]; then
+  echo "Posted MR note (${HTTP_CODE})."
+  exit 0
+fi
+
+echo "Could not post MR note (HTTP ${HTTP_CODE}). Trace is in this job log and artifact mr-trace.md."
+echo "Optional: set CI/CD variable GITLAB_TOKEN (scope api) so the same text is copied onto the MR Notes tab."
+# Job-Token is often denied for POST /notes. Blocking merge on that 403 is not an Angular or API defect.
+exit 0

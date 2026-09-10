@@ -12,11 +12,13 @@
   "scripts": {
     "start:admin": "npm run start -w @velura/admin-ng",
     "start:user": "npm run start -w @velura/user-ng",
-    "start:api": "node --env-file-if-exists=.env --watch apps/api/src/server.js",
+    "start:api": "node --env-file-if-exists=.env --import tsx --watch apps/api/src/server.ts",
     "build:admin": "npm run build -w @velura/admin-ng",
     "build:user": "npm run build -w @velura/user-ng",
-    "build": "npm run build:user && npm run build:admin",
-    "test:api": "node --test tests/api/*.test.js",
+    "build:api": "npm run build -w @velura/api",
+    "typecheck:api": "npm run typecheck -w @velura/api",
+    "build": "npm run build:api && npm run build:user && npm run build:admin",
+    "test:api": "node --import tsx --test tests/api/*.test.ts",
     "test:user": "npm run test -w @velura/user-ng -- --watch=false",
     "test:admin": "npm run test -w @velura/admin-ng -- --watch=false",
     "test:ng": "npm run test:user && npm run test:admin",
@@ -24,6 +26,10 @@
   },
   "engines": {
     "node": ">=22 <25"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2"
   },
   "dependencies": {
     "@supabase/server": "^1.2.0",

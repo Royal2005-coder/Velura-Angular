@@ -5,7 +5,9 @@ import { environment } from '../../../environments/environment';
 import { ApiErrorBody } from '../models/api-error.interface';
 
 /**
- * HTTP model layer. Components must not call HttpClient directly.
+ * HTTP model for the storefront SPA. Pages must not inject HttpClient.
+ * JSON contracts live on the Node API (`apps/api`); this class only maps HTTP.
+ * Trace a path change with `git log --show-notes --follow -- this file`.
  */
 @Injectable({ providedIn: 'root' })
 export class ApiService {

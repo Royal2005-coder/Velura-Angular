@@ -244,6 +244,7 @@ export interface AdminDashboardSummary {
 
 /**
  * Admin HTTP model. Pages bind signals; they do not construct URLs in templates.
+ * JSON contracts are owned by `apps/api`. Trace: `git log --show-notes --follow -- this file`.
  */
 @Injectable({ providedIn: 'root' })
 export class AdminApiService {

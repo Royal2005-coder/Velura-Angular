@@ -1,0 +1,19 @@
+---
+description: Context as Code — types, git log, MR, git notes. No ticket markdown.
+alwaysApply: true
+---
+
+# Context as Code (Velura)
+
+Do not invent a second process. Do not create `docs/KAN-n.md` or a parallel context repo.
+
+When starting a task:
+
+1. Run `git log --oneline --show-notes --grep=KAN-n` (or `git log origin/develop..HEAD`).
+2. Read `git show --stat <sha>` for the files you will touch.
+3. Read **interfaces / JSDoc** in those files — that is the business contract.
+4. Open the GitLab MR for that KAN key if the "why" is not in the commit body or git notes.
+
+`AGENTS.md` is the map. Lasting one-line rules: `docs/adr/README.md`. Version history is git + MR, not a new markdown file.
+
+After finishing work: JSDoc on public symbols, commit `KAN-n why`, MR template `## Why`, optional `sh deploy/scripts/git-notes.sh add`.

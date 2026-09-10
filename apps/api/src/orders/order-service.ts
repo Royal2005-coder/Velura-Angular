@@ -1,5 +1,5 @@
-// @ts-nocheck
 import { HttpError } from "../http.js";
+import type { AuthContext, JsonObject, RequestMeta } from "../types.js";
 import {
   ORDER_OPERATOR_ROLES,
   ORDER_READER_ROLES,
@@ -8,8 +8,30 @@ import {
   ORDER_TRANSITIONS,
   PAYMENT_DECISIONS
 } from "./order-constants.js";
+import type { OrderRepository } from "./order-repository.js";
 
-export function createOrderService({ repository }) {
+/**
+ * Admin order use-cases used by `handleOrderRoute`.
+ */
+export interface OrderService {
+  list(context: AuthContext | undefined, searchParams: URLSearchParams): Promise<unknown>;
+  get(context: AuthContext | undefined, orderId: string): Promise<unknown>;
+  listAuditLogs(context: AuthContext | undefined, orderId: string, searchParams: URLSearchParams): Promise<unknown>;
+  changeStatus(context: AuthContext | undefined, orderId: string, body: JsonObject, requestMeta: RequestMeta): Promise<unknown>;
+  cancel(context: AuthContext | undefined, orderId: string, body: JsonObject, requestMeta: RequestMeta): Promise<unknown>;
+  resolvePayment(
+    context: AuthContext | undefined,
+    orderId: string,
+    paymentId: string,
+    body: JsonObject,
+    requestMeta: RequestMeta
+  ): Promise<unknown>;
+}
+
+/**
+ * Create the admin order application service.
+ */
+export function createOrderService({ repository }: { repository: OrderRepository }): OrderService {
   if (!repository) throw new TypeError("repository is required");
 
   return {
@@ -42,7 +64,7 @@ export function createOrderService({ repository }) {
       const input = validateStatusChange(body);
       const order = await repository.findById(orderId, context.accessToken);
       if (!order) throw new HttpError(404, "ORDER_NOT_FOUND", "Order was not found");
-      if (!ORDER_TRANSITIONS[order.status]?.includes(input.status) || input.status === "cancelled") {
+      if (!ORDER_TRANSITIONS[order.status as string]?.includes(input.status) || input.status === "cancelled") {
         throw validationError("status", `Cannot change status from ${order.status} to ${input.status}`);
       }
       return repository.changeStatus(orderId, { ...input, ipAddress: requestMeta.ipAddress }, context.accessToken);
@@ -62,7 +84,7 @@ export function createOrderService({ repository }) {
       requireOrderOperator(context);
       requireUuid(orderId, "orderId");
       requireUuid(paymentId, "paymentId");
-      if (!PAYMENT_DECISIONS.includes(body?.decision)) {
+      if (!PAYMENT_DECISIONS.includes(body?.decision as string)) {
         throw validationError("decision", `Must be one of: ${PAYMENT_DECISIONS.join(", ")}`);
       }
       return repository.resolvePayment(orderId, paymentId, {
@@ -76,8 +98,11 @@ export function createOrderService({ repository }) {
   };
 }
 
-export function validateStatusChange(body = {}) {
-  if (!ORDER_STATUSES.includes(body.status)) {
+/**
+ * Validate an admin order status-change body.
+ */
+export function validateStatusChange(body: JsonObject = {}) {
+  if (!ORDER_STATUSES.includes(body.status as string)) {
     throw validationError("status", `Must be one of: ${ORDER_STATUSES.join(", ")}`);
   }
   const trackingCode = optionalText(body.trackingCode, 100);
@@ -85,14 +110,14 @@ export function validateStatusChange(body = {}) {
     throw validationError("trackingCode", "Tracking code is required for shipping");
   }
   return {
-    status: body.status,
+    status: body.status as string,
     reason: requireReason(body.reason),
     trackingCode,
     expectedVersion: requireVersion(body.expectedVersion)
   };
 }
 
-function parseListFilters(searchParams) {
+function parseListFilters(searchParams: URLSearchParams): JsonObject {
   const status = searchParams.get("status") || "";
   if (status && !ORDER_STATUSES.includes(status)) throw validationError("status", "Invalid status filter");
   const from = parseDate(searchParams.get("from"), "from");
@@ -111,61 +136,61 @@ function parseListFilters(searchParams) {
   };
 }
 
-function requireOrderReader(context) {
+function requireOrderReader(context: AuthContext | undefined): asserts context is AuthContext {
   if (!context?.authUser?.id) throw new HttpError(401, "AUTH_REQUIRED", "Authentication is required");
   if (!context.isAdmin || !context.profile?.is_active) throw new HttpError(403, "ADMIN_REQUIRED", "Admin access is required");
   if (!ORDER_READER_ROLES.includes(context.roleCode)) throw new HttpError(403, "RBAC_DENIED", "This admin role cannot access orders");
 }
 
-function requireOrderOperator(context) {
+function requireOrderOperator(context: AuthContext | undefined): asserts context is AuthContext {
   requireOrderReader(context);
   if (!ORDER_OPERATOR_ROLES.includes(context.roleCode)) throw new HttpError(403, "RBAC_DENIED", "This admin role cannot modify orders");
 }
 
-function requireUuid(value, field) {
+function requireUuid(value: unknown, field: string): void {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ""))) {
     throw validationError(field, `${field} must be a UUID`);
   }
 }
 
-function requireReason(value) {
+function requireReason(value: unknown): string {
   const reason = String(value || "").trim();
   if (reason.length < 10 || reason.length > 500) throw validationError("reason", "Reason must contain 10 to 500 characters");
   return reason;
 }
 
-function requireVersion(value, field = "expectedVersion") {
+function requireVersion(value: unknown, field = "expectedVersion"): number {
   const version = Number(value);
   if (!Number.isInteger(version) || version < 1) throw validationError(field, `${field} must be a positive integer`);
   return version;
 }
 
-function optionalText(value, maxLength) {
+function optionalText(value: unknown, maxLength: number): string | null {
   const text = String(value || "").trim();
   if (!text) return null;
   if (text.length > maxLength) throw validationError("trackingCode", `Must not exceed ${maxLength} characters`);
   return text;
 }
 
-function optionalEnum(value, allowed, field) {
+function optionalEnum(value: string | null, allowed: string[], field: string): string | undefined {
   if (!value) return undefined;
   if (!allowed.includes(value)) throw validationError(field, `Must be one of: ${allowed.join(", ")}`);
   return value;
 }
 
-function parseDate(value, field) {
+function parseDate(value: string | null, field: string): string | undefined {
   if (!value) return undefined;
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) throw validationError(field, `${field} must be a valid date`);
   return date.toISOString();
 }
 
-function clampInteger(raw, fallback, min, max) {
+function clampInteger(raw: string | null, fallback: number, min: number, max: number): number {
   if (raw === null || raw === "") return fallback;
   const number = Number(raw);
   return Number.isInteger(number) ? Math.max(min, Math.min(max, number)) : fallback;
 }
 
-function validationError(field, message) {
+function validationError(field: string, message: string): HttpError {
   return new HttpError(422, "VALIDATION_ERROR", "Request validation failed", { [field]: [message] });
 }

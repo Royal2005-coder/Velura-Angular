@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { HttpError, sendJson } from "./http.js";
 import { buildStyleProfileRecommendations } from "./recommendation-service.js";
 import type { AuthContext, HeaderMap, HttpRequest, HttpResponse } from "./types.js";

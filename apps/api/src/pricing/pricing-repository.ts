@@ -1,13 +1,21 @@
-// @ts-nocheck
 import { callRpc, selectOne, selectRows, insertRow } from "../supabase.js";
 import { randomUUID } from "node:crypto";
 import { HttpError } from "../http.js";
+import { asJsonObject, asString, type JsonObject } from "../types.js";
 import { PRICE_HISTORY_SELECT, PROMOTION_SELECT, VOUCHER_SELECT } from "./pricing-constants.js";
 
+/**
+ * PostgREST pricing repository used by `createPricingService`.
+ */
+export type PricingRepository = ReturnType<typeof createPricingRepository>;
+
+/**
+ * Create the pricing / promotion / voucher PostgREST repository.
+ */
 export function createPricingRepository() {
   return {
-    async listPriceHistory(filters, accessToken) {
-      const query = {
+    async listPriceHistory(filters: JsonObject, accessToken: string | null) {
+      const query: Record<string, unknown> = {
         select: PRICE_HISTORY_SELECT,
         order: "changed_at.desc",
         limit: filters.limit,
@@ -17,7 +25,7 @@ export function createPricingRepository() {
       return selectRows("price_history", query, authOptions(accessToken));
     },
 
-    async changePrice(productId, input, accessToken) {
+    async changePrice(productId: string, input: JsonObject, accessToken: string | null) {
       return withPricingError(() => callRpc("admin_change_product_price", {
         p_product_id: productId,
         p_new_base_price: input.newBasePrice,
@@ -27,8 +35,8 @@ export function createPricingRepository() {
       }, { accessToken }));
     },
 
-    async listPromotions(filters, accessToken) {
-      const query = {
+    async listPromotions(filters: JsonObject, accessToken: string | null) {
+      const query: Record<string, unknown> = {
         select: PROMOTION_SELECT,
         order: "start_date.desc",
         limit: filters.limit,
@@ -38,14 +46,14 @@ export function createPricingRepository() {
       return selectRows("promotion", query, authOptions(accessToken));
     },
 
-    async getPromotion(promotionId, accessToken) {
+    async getPromotion(promotionId: string, accessToken: string | null) {
       return selectOne("promotion", {
         select: PROMOTION_SELECT,
         promo_id: `eq.${promotionId}`
       }, authOptions(accessToken));
     },
 
-    async createPromotion(input, accessToken) {
+    async createPromotion(input: JsonObject, accessToken: string | null) {
       return withPricingError(async () => {
         const result = await insertRow("promotion", {
           promo_id: randomUUID(),
@@ -60,19 +68,12 @@ export function createPricingRepository() {
           total_discount_issued: 0,
           created_by: input.createdBy || null,
           version: 1
-        }, accessToken);
+        }, accessToken as never);
         return result;
       });
     },
 
-    async getPromotion(promotionId, accessToken) {
-      return selectOne("promotion", {
-        select: PROMOTION_SELECT,
-        promo_id: `eq.${promotionId}`
-      }, authOptions(accessToken));
-    },
-
-    async updatePromotion(promotionId, input, accessToken) {
+    async updatePromotion(promotionId: string, input: JsonObject, accessToken: string | null) {
       return callRpc("admin_update_promotion", {
         p_promo_id: promotionId,
         p_expected_version: input.expectedVersion,
@@ -83,22 +84,22 @@ export function createPricingRepository() {
       }, { accessToken });
     },
 
-    async activatePromotion(promotionId, input, accessToken) {
+    async activatePromotion(promotionId: string, input: JsonObject, accessToken: string | null) {
       return callRpc("admin_activate_promotion", {
         p_promo_id: promotionId,
         p_expected_version: input.expectedVersion
       }, { accessToken });
     },
 
-    async pausePromotion(promotionId, input, accessToken) {
+    async pausePromotion(promotionId: string, input: JsonObject, accessToken: string | null) {
       return callRpc("admin_pause_promotion", {
         p_promo_id: promotionId,
         p_expected_version: input.expectedVersion
       }, { accessToken });
     },
 
-    async listVouchers(filters, accessToken) {
-      const query = {
+    async listVouchers(filters: JsonObject, accessToken: string | null) {
+      const query: Record<string, unknown> = {
         select: VOUCHER_SELECT,
         order: "start_date.desc",
         limit: filters.limit,
@@ -108,14 +109,14 @@ export function createPricingRepository() {
       return selectRows("voucher", query, authOptions(accessToken));
     },
 
-    async getVoucher(voucherId, accessToken) {
+    async getVoucher(voucherId: string, accessToken: string | null) {
       return selectOne("voucher", {
         select: VOUCHER_SELECT,
         voucher_id: `eq.${voucherId}`
       }, authOptions(accessToken));
     },
 
-    async createVoucher(input, accessToken) {
+    async createVoucher(input: JsonObject, accessToken: string | null) {
       return withPricingError(async () => {
         const voucherId = randomUUID();
         const result = await insertRow("voucher", {
@@ -137,12 +138,12 @@ export function createPricingRepository() {
           is_active: true,
           created_by: input.createdBy || null,
           version: 1
-        }, accessToken);
+        }, accessToken as never);
         return result;
       });
     },
 
-    async updateVoucher(voucherId, input, accessToken) {
+    async updateVoucher(voucherId: string, input: JsonObject, accessToken: string | null) {
       return callRpc("admin_update_voucher", {
         p_voucher_id: voucherId,
         p_expected_version: input.expectedVersion,
@@ -151,7 +152,7 @@ export function createPricingRepository() {
       }, { accessToken });
     },
 
-    async listAuditLogs(filters, accessToken) {
+    async listAuditLogs(filters: JsonObject, accessToken: string | null) {
       return selectRows("audit_log", {
         select: "audit_id,actor_id,actor_role,action,module,target_id,old_value,new_value,ip_address,timestamp",
         or: "(module.eq.pricing,module.eq.promotions,module.eq.vouchers)",
@@ -161,7 +162,7 @@ export function createPricingRepository() {
       }, authOptions(accessToken));
     },
 
-    async getStatistics(accessToken) {
+    async getStatistics(accessToken: string | null) {
       const opts = authOptions(accessToken);
       const [promos, vouchers] = await Promise.all([
         selectRows("promotion", { select: PROMOTION_SELECT, limit: 500 }, opts),
@@ -169,12 +170,12 @@ export function createPricingRepository() {
       ]);
       const promoRows = promos?.rows || [];
       const voucherRows = vouchers?.rows || [];
-      const activePromos = promoRows.filter(p => p.is_active);
-      const pausedPromos = promoRows.filter(p => !p.is_active);
+      const activePromos = promoRows.filter((p) => p.is_active);
+      const pausedPromos = promoRows.filter((p) => !p.is_active);
       const totalBudget = promoRows.reduce((s, p) => s + Number(p.budget_limit || 0), 0);
       const totalIssued = promoRows.reduce((s, p) => s + Number(p.total_discount_issued || 0), 0);
-      const activeVouchers = voucherRows.filter(v => v.is_active);
-      const expiredVouchers = voucherRows.filter(v => !v.is_active || new Date(v.end_date) < new Date());
+      const activeVouchers = voucherRows.filter((v) => v.is_active);
+      const expiredVouchers = voucherRows.filter((v) => !v.is_active || new Date(v.end_date as string) < new Date());
       const totalUsed = voucherRows.reduce((s, v) => s + Number(v.used_count || 0), 0);
       const totalLimit = voucherRows.reduce((s, v) => s + Number(v.usage_limit_total || 0), 0);
       return {
@@ -200,16 +201,17 @@ export function createPricingRepository() {
   };
 }
 
-function authOptions(accessToken) {
+function authOptions(accessToken: string | null | undefined) {
   return { useAnonKey: true, accessToken };
 }
 
-async function withPricingError(operation) {
+async function withPricingError<T>(operation: () => Promise<T>): Promise<T> {
   try {
     return await operation();
-  } catch (error) {
+  } catch (error: unknown) {
     if (error instanceof HttpError && error.code === "SUPABASE_ERROR") {
-      const databaseCode = error.details?.message || error.details?.code || "PRICING_DATABASE_ERROR";
+      const details = asJsonObject(error.details);
+      const databaseCode = asString(details.message) || asString(details.code) || "PRICING_DATABASE_ERROR";
       const status = error.status >= 400 && error.status < 500 ? error.status : 502;
       throw new HttpError(status, databaseCode, pricingErrorMessage(databaseCode), error.details);
     }
@@ -217,8 +219,8 @@ async function withPricingError(operation) {
   }
 }
 
-function pricingErrorMessage(code) {
-  const messages = {
+function pricingErrorMessage(code: string): string {
+  const messages: Record<string, string> = {
     AUTH_REQUIRED: "Authentication is required",
     RBAC_DENIED: "Only pricing operator or super admin can manage pricing",
     PRODUCT_NOT_FOUND: "Product was not found",

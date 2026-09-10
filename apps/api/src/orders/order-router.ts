@@ -1,12 +1,12 @@
-// @ts-nocheck
 import { config } from "../config.js";
 import { getRequestIp, readJson, sendJson } from "../http.js";
 import type { RouteArgs } from "../types.js";
+import type { OrderService } from "./order-service.js";
 
 /**
  * Admin order HTTP routes under `/api/v1/admin/orders`.
  */
-export async function handleOrderRoute({ req, res, url, parts, context, headers, service }: RouteArgs): Promise<boolean> {
+export async function handleOrderRoute({ req, res, url, parts, context, headers, service }: RouteArgs<OrderService>): Promise<boolean> {
   if (parts[0] !== "api" || parts[1] !== "v1" || parts[2] !== "admin" || parts[3] !== "orders") return false;
   const requestMeta = { ipAddress: getRequestIp(req) };
 

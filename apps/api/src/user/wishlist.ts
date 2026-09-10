@@ -1,9 +1,25 @@
-// @ts-nocheck
 import { HttpError, readJson, sendJson } from "../http.js";
 import { selectOne, selectRows, updateRows } from "../supabase.js";
 import { requireUserAuth } from "./auth.js";
+import {
+  asJsonObject,
+  isJsonObject,
+  type AuthContext,
+  type HeaderMap,
+  type HttpRequest,
+  type HttpResponse,
+  type JsonObject
+} from "../types.js";
 
-export async function handleWishlistRoute(req, res, corsHeaders, context) {
+/**
+ * Authenticated wishlist read, add, and remove.
+ */
+export async function handleWishlistRoute(
+  req: HttpRequest,
+  res: HttpResponse,
+  corsHeaders: HeaderMap,
+  context: AuthContext
+): Promise<void> {
   const profile = requireUserAuth(context);
 
   if (req.method === "GET") {
@@ -43,13 +59,22 @@ export async function handleWishlistRoute(req, res, corsHeaders, context) {
   throw new HttpError(405, "METHOD_NOT_ALLOWED", "Phương thức wishlist không được hỗ trợ");
 }
 
-export async function readWishlistProductsForUser(userId) {
+/**
+ * Load a member's wishlist ids and on-sale product rows.
+ */
+export async function readWishlistProductsForUser(userId: string): Promise<{
+  wishlist: string[];
+  items: JsonObject[];
+}> {
   const wishlist = await getWishlistProductIds(userId);
   const items = await hydrateWishlistProducts(wishlist);
   return { wishlist, items };
 }
 
-export async function addWishlistProductForUser(userId, productId) {
+/**
+ * Add a product to a member's wishlist and return the next id list.
+ */
+export async function addWishlistProductForUser(userId: string, productId: unknown): Promise<string[]> {
   const normalizedProductId = normalizeProductId(productId);
   if (!normalizedProductId) {
     throw new HttpError(400, "BAD_REQUEST", "product_id là bắt buộc");
@@ -61,7 +86,10 @@ export async function addWishlistProductForUser(userId, productId) {
   return nextWishlist;
 }
 
-export async function removeWishlistProductForUser(userId, productId) {
+/**
+ * Remove a product from a member's wishlist and return the next id list.
+ */
+export async function removeWishlistProductForUser(userId: string, productId: unknown): Promise<string[]> {
   const normalizedProductId = normalizeProductId(productId);
   if (!normalizedProductId) {
     throw new HttpError(400, "BAD_REQUEST", "product_id là bắt buộc");
@@ -72,7 +100,7 @@ export async function removeWishlistProductForUser(userId, productId) {
   return nextWishlist;
 }
 
-async function getWishlistProductIds(userId) {
+async function getWishlistProductIds(userId: string): Promise<string[]> {
   const user = await selectOne("users", {
     select: "user_id,wishlist",
     user_id: `eq.${userId}`
@@ -81,14 +109,14 @@ async function getWishlistProductIds(userId) {
   return normalizeWishlist(user?.wishlist);
 }
 
-async function saveWishlistProductIds(userId, wishlist) {
+async function saveWishlistProductIds(userId: string, wishlist: unknown): Promise<void> {
   await updateRows("users", { user_id: `eq.${userId}` }, {
     wishlist: normalizeWishlist(wishlist),
     updated_at: new Date().toISOString()
   }, { useAnonKey: true });
 }
 
-async function hydrateWishlistProducts(wishlist) {
+async function hydrateWishlistProducts(wishlist: unknown): Promise<JsonObject[]> {
   const ids = normalizeWishlist(wishlist);
   if (!ids.length) return [];
 
@@ -98,10 +126,10 @@ async function hydrateWishlistProducts(wishlist) {
   }, { useAnonKey: true });
 
   const order = new Map(ids.map((id, index) => [id, index]));
-  return rows.sort((a, b) => (order.get(a.product_id) ?? 0) - (order.get(b.product_id) ?? 0));
+  return rows.sort((a, b) => (order.get(String(a.product_id)) ?? 0) - (order.get(String(b.product_id)) ?? 0));
 }
 
-async function ensureProductExists(productId) {
+async function ensureProductExists(productId: string): Promise<void> {
   const product = await selectOne("product", {
     select: "product_id",
     product_id: `eq.${productId}`,
@@ -113,22 +141,26 @@ async function ensureProductExists(productId) {
   }
 }
 
-async function getProductIdFromDeleteRequest(req) {
-  const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
+async function getProductIdFromDeleteRequest(req: HttpRequest): Promise<string> {
+  const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
   const queryProductId = normalizeProductId(url.searchParams.get("product_id"));
   if (queryProductId) return queryProductId;
 
-  const body = await readJson(req).catch(() => ({}));
+  const body = await readJson(req).catch((): JsonObject => ({}));
   return normalizeProductId(body.product_id);
 }
 
-function normalizeWishlist(value) {
+function normalizeWishlist(value: unknown): string[] {
   const rawItems = Array.isArray(value) ? value : [];
-  const seen = new Set();
-  const ids = [];
+  const seen = new Set<string>();
+  const ids: string[] = [];
 
   for (const item of rawItems) {
-    const id = normalizeProductId(typeof item === "object" && item !== null ? item.product_id : item);
+    const id = normalizeProductId(
+      typeof item === "object" && item !== null
+        ? (isJsonObject(item) ? item.product_id : asJsonObject(item).product_id)
+        : item
+    );
     if (!id || seen.has(id)) continue;
     seen.add(id);
     ids.push(id);
@@ -137,11 +169,11 @@ function normalizeWishlist(value) {
   return ids;
 }
 
-function normalizeProductId(value) {
+function normalizeProductId(value: unknown): string {
   const id = String(value || "").trim();
   return isUuid(id) ? id : "";
 }
 
-function isUuid(value) {
+function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }

@@ -270,7 +270,8 @@ function asAuthUser(value: unknown): AuthUser | null {
   if (!isJsonObject(value) || typeof value.id !== "string") return null;
   return {
     id: value.id,
-    email: typeof value.email === "string" ? value.email : null
+    email: typeof value.email === "string" ? value.email : null,
+    phone: typeof value.phone === "string" ? value.phone : null
   };
 }
 

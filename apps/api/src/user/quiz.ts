@@ -1,13 +1,31 @@
-// @ts-nocheck
 import { HttpError, readJson, sendJson } from "../http.js";
 import { selectOne, insertRow, updateRows } from "../supabase.js";
 import { requireUserAuth } from "./auth.js";
 import { createNotification } from "./notifications.js";
+import {
+  asJsonObject,
+  type AuthContext,
+  type HeaderMap,
+  type HttpRequest,
+  type HttpResponse,
+  type JsonObject,
+  type UserProfile
+} from "../types.js";
 
-// In-memory store for guest style profiles
-export const guestStyleProfiles = new Map();
+/**
+ * In-memory guest style-quiz answers keyed by `X-Guest-Session-ID`.
+ */
+export const guestStyleProfiles = new Map<string | string[], JsonObject>();
 
-export async function handleQuizRoute(req, res, corsHeaders, context) {
+/**
+ * Guest and member style-quiz read, write, and migrate-to-account.
+ */
+export async function handleQuizRoute(
+  req: HttpRequest,
+  res: HttpResponse,
+  corsHeaders: HeaderMap,
+  context: AuthContext
+): Promise<void> {
   const parts = req.url ? new URL(req.url, "http://localhost").pathname.split("/").filter(Boolean) : [];
   const action = parts[3]; // e.g. "migrate"
 
@@ -16,7 +34,7 @@ export async function handleQuizRoute(req, res, corsHeaders, context) {
     const profile = requireUserAuth(context);
     const guestSessionId = req.headers["x-guest-session-id"];
     
-    let quizData = null;
+    let quizData: JsonObject | undefined = undefined;
     if (guestSessionId) {
       quizData = guestStyleProfiles.get(guestSessionId);
       guestStyleProfiles.delete(guestSessionId);
@@ -26,9 +44,9 @@ export async function handleQuizRoute(req, res, corsHeaders, context) {
     try {
       const body = await readJson(req);
       if (body && typeof body === "object") {
-        quizData = { ...quizData, ...body };
+        quizData = { ...asJsonObject(quizData), ...body };
       }
-    } catch (e) {
+    } catch {
       // Ignored if body is empty or invalid
     }
     
@@ -44,11 +62,11 @@ export async function handleQuizRoute(req, res, corsHeaders, context) {
 
     const payload = {
       user_id: profile.user_id,
-      height_cm: height_cm ? parseInt(height_cm, 10) : null,
-      weight_kg: weight_kg ? parseInt(weight_kg, 10) : null,
-      chest_cm: chest_cm ? parseInt(chest_cm, 10) : null,
-      waist_cm: waist_cm ? parseInt(waist_cm, 10) : null,
-      hip_cm: hip_cm ? parseInt(hip_cm, 10) : null,
+      height_cm: height_cm ? parseInt(String(height_cm), 10) : null,
+      weight_kg: weight_kg ? parseInt(String(weight_kg), 10) : null,
+      chest_cm: chest_cm ? parseInt(String(chest_cm), 10) : null,
+      waist_cm: waist_cm ? parseInt(String(waist_cm), 10) : null,
+      hip_cm: hip_cm ? parseInt(String(hip_cm), 10) : null,
       body_shape: body_shape || null,
       skin_tone: skin_tone || null,
       style_tags: style_tags || null,
@@ -62,7 +80,7 @@ export async function handleQuizRoute(req, res, corsHeaders, context) {
     };
 
     const existing = await selectOne("style_profile", { user_id: `eq.${profile.user_id}` });
-    let result;
+    let result: unknown;
     if (existing) {
       result = await updateRows("style_profile", { user_id: `eq.${profile.user_id}` }, payload);
     } else {
@@ -81,10 +99,10 @@ export async function handleQuizRoute(req, res, corsHeaders, context) {
   }
 
   // Check authentication
-  let profile = null;
+  let profile: UserProfile | null = null;
   try {
     profile = requireUserAuth(context);
-  } catch (e) {
+  } catch {
     // Guest flow
   }
 
@@ -107,11 +125,11 @@ export async function handleQuizRoute(req, res, corsHeaders, context) {
 
       const payload = {
         user_id: profile.user_id,
-        height_cm: height_cm ? parseInt(height_cm, 10) : null,
-        weight_kg: weight_kg ? parseInt(weight_kg, 10) : null,
-        chest_cm: chest_cm ? parseInt(chest_cm, 10) : null,
-        waist_cm: waist_cm ? parseInt(waist_cm, 10) : null,
-        hip_cm: hip_cm ? parseInt(hip_cm, 10) : null,
+        height_cm: height_cm ? parseInt(String(height_cm), 10) : null,
+        weight_kg: weight_kg ? parseInt(String(weight_kg), 10) : null,
+        chest_cm: chest_cm ? parseInt(String(chest_cm), 10) : null,
+        waist_cm: waist_cm ? parseInt(String(waist_cm), 10) : null,
+        hip_cm: hip_cm ? parseInt(String(hip_cm), 10) : null,
         body_shape: body_shape || null,
         skin_tone: skin_tone || null,
         style_tags: style_tags || null,
@@ -125,7 +143,7 @@ export async function handleQuizRoute(req, res, corsHeaders, context) {
       };
 
       const existing = await selectOne("style_profile", { user_id: `eq.${profile.user_id}` });
-      let result;
+      let result: unknown;
       if (existing) {
         result = await updateRows("style_profile", { user_id: `eq.${profile.user_id}` }, payload);
       } else {
@@ -165,4 +183,3 @@ export async function handleQuizRoute(req, res, corsHeaders, context) {
 
   throw new HttpError(404, "NOT_FOUND", "Route style-quiz not found");
 }
-

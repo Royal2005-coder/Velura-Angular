@@ -1,11 +1,11 @@
-// @ts-nocheck
 import { sendJson } from "../http.js";
 import type { RouteArgs } from "../types.js";
+import type { ContentService } from "./content-service.js";
 
 /**
  * Public content HTTP routes under `/api/content`.
  */
-export async function handleContentRoute({ req, res, url, parts, headers, service }: RouteArgs): Promise<boolean> {
+export async function handleContentRoute({ req, res, url, parts, headers, service }: RouteArgs<ContentService>): Promise<boolean> {
   if (parts[0] !== "api" || parts[1] !== "content") return false;
 
   if (req.method === "GET" && parts[2] === "categories" && parts.length === 3) {

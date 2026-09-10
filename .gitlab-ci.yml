@@ -111,23 +111,20 @@ validate:mr-contract:
       TGT="${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}"
       echo "MR title=[$TITLE]"
       echo "MR source=[$SRC] target=[$TGT]"
-      if [ "$TGT" = "main" ]; then
-        if [ "$SRC" != "develop" ]; then
-          echo "Production is only promoted from develop. Close this MR."
-          echo "Open a new MR: source develop → target main. Do not target main from a feature branch."
-          exit 1
-        fi
-        printf '%s\n' "$DESC" | grep -qiE '^##[[:space:]]*(Why|Tại sao)' || {
-          echo "Promote MR develop → main still needs a heading line ## Why in the description."
-          echo "Paste .gitlab/merge_request_templates/Default.md. GitLab default merge titles are OK on promote."
-          exit 1
-        }
-        echo "Promote contract OK: develop → main (GitLab merge titles allowed)."
+      if [ "$SRC" = "develop" ] && [ "$TGT" = "main" ]; then
+        echo "Promote contract OK: develop → main. Why already lives in git log of merged feature MRs."
         exit 0
+      fi
+      if [ "$TGT" = "main" ]; then
+        echo "Production is only promoted from develop. Close this MR."
+        echo "New MR: source=develop target=main. Do not target main from a feature branch."
+        exit 1
       fi
       echo "$TITLE" | grep -Eqi '^(Draft:[[:space:]]*)?KAN-[0-9]+' || {
         echo "Feature MR title must start with KAN-n (optional Draft: prefix)."
-        echo "GitLab set title=[$TITLE]. Edit the MR title on GitLab — do not create SSH keys."
+        echo "GitLab set title=[$TITLE]."
+        echo "If this was meant to be production: source must be develop, target must be main — then retry."
+        echo "If this is a feature MR: edit the title on GitLab to start with KAN-n. Do not add SSH keys."
         exit 1
       }
       printf '%s\n' "$DESC" | grep -qiE '^##[[:space:]]*(Why|Tại sao)' || {

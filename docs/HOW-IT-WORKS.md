@@ -12,7 +12,7 @@ Jira KAN-n
   → CI: validate + test:api + test:angular + build + note:mr
   → CODEOWNERS reviewer merge develop
   → Push develop: cùng cổng test/build — không deploy
-  → MR develop → main (title KAN-n promote)
+  → MR develop → main (`## Why` bắt buộc; title GitLab mặc định được)
   → deploy:production + verify:production
   → Jira Close + comment URL MR
 ```
@@ -32,7 +32,7 @@ GitLab: MR (`## Why`) + Changes + job `note:mr` (log, notes, artifact `mr-trace.
 
 ## Jobs
 
-`validate:mr-contract` **chỉ** chạy trên MR pipeline (không chạy khi push branch). Job fail ngay stage `validate` nếu title không bắt đầu `KAN-n` hoặc description thiếu heading `## Why`. Sửa trên GitLab (template Default.md), không tạo `docs/KAN-n.md`.
+`validate:mr-contract` **chỉ** chạy trên MR pipeline. Feature → `develop`: title bắt đầu `KAN-n` + `## Why`. Promote `develop` → `main`: bắt buộc `## Why`; title GitLab kiểu `Merge branch '…'` **được** (commit merge trên develop không bắt đầu `KAN-n`). Feature → `main` vẫn cấm. Sửa trên GitLab, không tạo `docs/KAN-n.md`, không thêm SSH key cho lỗi validate.
 
 | Khi | Jobs | Deploy |
 |---|---|---|

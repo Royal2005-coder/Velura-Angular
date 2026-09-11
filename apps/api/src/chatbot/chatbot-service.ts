@@ -429,7 +429,8 @@ export function createChatbotService({ repository }: { repository: ChatbotReposi
     async listAdminSessions(context, searchParams) {
       requireSupportAdmin(context);
       return repository.listAdminSessions({
-        handoffOnly: searchParams.get("handoffOnly") !== "false",
+        handoffOnly: searchParams.get("handoffOnly") === "true",
+        handoffStatus: sanitizeHandoffStatus(searchParams.get("handoffStatus")),
         ticketId: searchParams.get("ticketId") || undefined,
         limit: boundedInteger(searchParams.get("limit"), 50, 1, 100),
         offset: boundedInteger(searchParams.get("offset"), 0, 0, 100000)
@@ -1125,6 +1126,17 @@ function normalizeUuidList(values: unknown): string[] {
     result.push(id);
   }
   return result;
+}
+
+function sanitizeHandoffStatus(value: string | null): string | undefined {
+  const status = String(value || "").trim();
+  if (!status) {
+    return undefined;
+  }
+  if (!["ai", "requested", "assigned", "closed"].includes(status)) {
+    throw new HttpError(422, "VALIDATION_ERROR", "Invalid chat handoff status");
+  }
+  return status;
 }
 
 function requireUuid(value: unknown, field: string): void {

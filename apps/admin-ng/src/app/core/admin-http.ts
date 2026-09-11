@@ -47,3 +47,22 @@ export function adminListCount<T>(payload: AdminListPayload<T> | T[] | null | un
   }
   return payload?.count ?? adminListRows(payload).length;
 }
+
+/**
+ * Converts a 1-based page index into the admin API `offset` query.
+ */
+export function adminOffset(page: number, pageSize: number): string {
+  return String((Math.max(1, page) - 1) * pageSize);
+}
+
+/**
+ * Builds the original admin footer range label from a server-paged list.
+ */
+export function adminRangeLabel(total: number, page: number, pageSize: number, noun: string): string {
+  if (!total) {
+    return `Hiển thị 0 - 0 / 0 ${noun}`;
+  }
+  const start = (page - 1) * pageSize + 1;
+  const end = Math.min(page * pageSize, total);
+  return `Hiển thị ${start} - ${end} / ${total} ${noun}`;
+}

@@ -1,12 +1,15 @@
 import { Component, computed, inject, signal } from '@angular/core';
-import { forkJoin, of } from 'rxjs';
+import { of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { AdminApiService, AdminAuditRow, AdminOrderPayment, AdminOrderRow } from '../../core/admin-api.service';
-import { adminErrorMessage, adminListCount, adminListRows } from '../../core/admin-http';
+import { adminErrorMessage, adminListCount, adminListRows, adminOffset, adminRangeLabel } from '../../core/admin-http';
+import { AdminSessionService } from '../../core/admin-session.service';
+import { AdminEmptyState } from '../../shared/admin-empty-state';
 import { AdminIcon } from '../../shared/admin-icon';
 import { AdminPagination } from '../../shared/admin-pagination';
 
 type OrderTab = 'all' | 'attention' | 'payment' | 'cancelled' | 'logs';
+type OrderAction = 'status' | 'cancel' | 'payment' | null;
 
 const ORDER_LABELS: Record<string, string> = {
   pending: 'Chờ xác nhận',
@@ -41,11 +44,12 @@ const CANCELLABLE = ['pending', 'confirmed', 'preparing', 'failed_delivery'];
 
 @Component({
   selector: 'app-admin-orders-page',
-  imports: [AdminIcon, AdminPagination],
+  imports: [AdminEmptyState, AdminIcon, AdminPagination],
   templateUrl: './admin-orders.page.html',
 })
 export class AdminOrdersPage {
   private readonly api = inject(AdminApiService);
+  private readonly session = inject(AdminSessionService);
 
   readonly tab = signal<OrderTab>('all');
   readonly query = signal('');
@@ -54,64 +58,30 @@ export class AdminOrdersPage {
   readonly from = signal('');
   readonly rows = signal<AdminOrderRow[]>([]);
   readonly count = signal(0);
+  readonly pendingCount = signal(0);
+  readonly cancelledCount = signal(0);
+  readonly paymentErrorCount = signal(0);
   readonly loadError = signal<string | null>(null);
   readonly loading = signal(true);
   readonly page = signal(1);
   readonly pageSize = 10;
   readonly selected = signal<AdminOrderRow | null>(null);
-  readonly actionType = signal<'status' | 'cancel' | null>(null);
+  readonly actionType = signal<OrderAction>(null);
   readonly actionError = signal<string | null>(null);
   readonly logs = signal<AdminAuditRow[]>([]);
   readonly logsPage = signal(1);
+  readonly logsCount = signal(0);
   readonly menuId = signal<string | null>(null);
-
-  readonly pendingCount = computed(() => this.rows().filter((row) => row.status === 'pending').length);
-  readonly paymentErrorCount = computed(() => this.rows().filter((row) => this.isPaymentError(row)).length);
-  readonly attentionCount = computed(() => this.rows().filter((row) => this.needsAttention(row)).length);
-  readonly cancelledCount = computed(() => this.rows().filter((row) => row.status === 'cancelled').length);
-  readonly filtered = computed(() => {
-    const tab = this.tab();
-    if (tab === 'attention') {
-      return this.rows().filter((row) => this.needsAttention(row));
-    }
-    if (tab === 'payment') {
-      return this.rows().filter((row) => this.isPaymentError(row));
-    }
-    if (tab === 'cancelled') {
-      return this.rows().filter((row) => row.status === 'cancelled');
-    }
-    return this.rows();
-  });
-  readonly totalPages = computed(() => Math.max(1, Math.ceil(this.filtered().length / this.pageSize)));
-  readonly paged = computed(() => {
-    const start = (this.page() - 1) * this.pageSize;
-    return this.filtered().slice(start, start + this.pageSize);
-  });
-  readonly rangeLabel = computed(() => {
-    const total = this.filtered().length;
-    if (!total) {
-      return 'Hiển thị 0 - 0 / 0 đơn hàng';
-    }
-    const start = (this.page() - 1) * this.pageSize + 1;
-    const end = Math.min(this.page() * this.pageSize, total);
-    return `Hiển thị ${start} - ${end} / ${total} đơn hàng`;
-  });
-  readonly pagedLogs = computed(() => {
-    const start = (this.logsPage() - 1) * this.pageSize;
-    return this.logs().slice(start, start + this.pageSize);
-  });
+  readonly canMutate = computed(() => this.session.canMutate('orders'));
+  readonly attentionCount = computed(() => this.pendingCount() + this.paymentErrorCount());
+  readonly totalPages = computed(() => Math.max(1, Math.ceil(this.count() / this.pageSize)));
+  readonly rangeLabel = computed(() => adminRangeLabel(this.count(), this.page(), this.pageSize, 'đơn hàng'));
+  readonly pagedLogs = computed(() => this.logs());
   readonly nextStatuses = computed(() => TRANSITIONS[this.selected()?.status || ''] || []);
   readonly selectedItems = computed(() => this.selected()?.items || []);
-  readonly logPageCount = computed(() => Math.max(1, Math.ceil(this.logs().length / this.pageSize)));
-  readonly logRangeLabel = computed(() => {
-    const total = this.logs().length;
-    if (!total) {
-      return 'Hiển thị 0 - 0 / 0 nhật ký';
-    }
-    const start = (this.logsPage() - 1) * this.pageSize + 1;
-    const end = Math.min(this.logsPage() * this.pageSize, total);
-    return `Hiển thị ${start} - ${end} / ${total} nhật ký`;
-  });
+  readonly logPageCount = computed(() => Math.max(1, Math.ceil(this.logsCount() / this.pageSize)));
+  readonly logRangeLabel = computed(() => adminRangeLabel(this.logsCount(), this.logsPage(), this.pageSize, 'nhật ký'));
+  readonly needsTracking = computed(() => this.nextStatuses().includes('shipping'));
 
   constructor() {
     this.reload();
@@ -124,37 +94,54 @@ export class AdminOrdersPage {
     this.tab.set(tab);
     this.page.set(1);
     this.menuId.set(null);
-    if (tab === 'logs' && !this.logs().length) {
+    if (tab === 'logs') {
       this.loadLogs();
+      return;
     }
+    this.reload();
   }
 
   /**
-   * Reloads orders from `/api/v1/admin/orders`.
+   * Reloads orders from `/api/v1/admin/orders` with server pagination.
    */
   reload(): void {
     this.loading.set(true);
     this.loadError.set(null);
+    const tab = this.tab();
+    let status = this.status();
+    if (tab === 'cancelled') {
+      status = 'cancelled';
+    } else if (tab === 'attention') {
+      status = status || 'pending';
+    }
     this.api
       .listOrders({
         q: this.query(),
-        status: this.status(),
+        status,
         paymentMethod: this.paymentMethod(),
         from: this.from(),
-        limit: '1000',
+        limit: String(this.pageSize),
+        offset: adminOffset(this.page(), this.pageSize),
       })
-      .subscribe({
-        next: (payload) => {
-          const rows = adminListRows(payload);
-          this.rows.set(rows);
-          this.count.set(adminListCount(payload));
-          this.loading.set(false);
-        },
-        error: (error: unknown) => {
+      .pipe(
+        catchError((error: unknown) => {
           this.loadError.set(adminErrorMessage(error, 'Không thể tải đơn hàng'));
-          this.loading.set(false);
-        },
+          return of({ rows: [] as AdminOrderRow[], count: 0 });
+        }),
+      )
+      .subscribe((payload) => {
+        const rows = adminListRows(payload);
+        this.rows.set(tab === 'payment' ? rows.filter((row) => this.isPaymentError(row)) : rows);
+        this.count.set(tab === 'payment' ? this.rows().length : adminListCount(payload));
+        this.paymentErrorCount.set(rows.filter((row) => this.isPaymentError(row)).length);
+        this.loading.set(false);
       });
+    this.api.listOrders({ status: 'pending', limit: '1' }).subscribe({
+      next: (payload) => this.pendingCount.set(adminListCount(payload)),
+    });
+    this.api.listOrders({ status: 'cancelled', limit: '1' }).subscribe({
+      next: (payload) => this.cancelledCount.set(adminListCount(payload)),
+    });
   }
 
   /**
@@ -189,6 +176,7 @@ export class AdminOrdersPage {
    */
   goPage(page: number): void {
     this.page.set(Math.min(this.totalPages(), Math.max(1, page)));
+    this.reload();
   }
 
   /**
@@ -196,6 +184,7 @@ export class AdminOrdersPage {
    */
   goLogsPage(page: number): void {
     this.logsPage.set(Math.min(this.logPageCount(), Math.max(1, page)));
+    this.loadLogs();
   }
 
   /**
@@ -228,7 +217,7 @@ export class AdminOrdersPage {
   /**
    * Opens the original status/cancel modal for the selected row.
    */
-  openAction(type: 'status' | 'cancel', orderId: string): void {
+  openAction(type: OrderAction, orderId: string): void {
     const order = this.rows().find((row) => row.order_id === orderId) || null;
     this.selected.set(order);
     this.actionType.set(type);
@@ -248,10 +237,39 @@ export class AdminOrdersPage {
     const form = event.target as HTMLFormElement;
     const reason = (form.elements.namedItem('reason') as HTMLTextAreaElement | null)?.value || '';
     const status = (form.elements.namedItem('status') as HTMLSelectElement | null)?.value || '';
+    const trackingCode = (form.elements.namedItem('trackingCode') as HTMLInputElement | null)?.value.trim() || '';
+    const decision = (form.elements.namedItem('decision') as HTMLSelectElement | null)?.value || '';
+    if (this.actionType() === 'payment') {
+      const payment = this.paymentOf(order);
+      if (!payment?.payment_id) {
+        this.actionError.set('Đơn hàng không có thanh toán để đối soát.');
+        return;
+      }
+      this.api
+        .resolvePayment(order.order_id, payment.payment_id, {
+          decision,
+          reason,
+          expectedOrderVersion: order.version,
+          expectedPaymentVersion: payment.version ?? 1,
+        })
+        .subscribe({
+          next: () => {
+            this.closeOverlays();
+            this.reload();
+          },
+          error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
+        });
+      return;
+    }
     const request$ =
       this.actionType() === 'cancel'
         ? this.api.cancelOrder(order.order_id, { reason, expectedVersion: order.version })
-        : this.api.changeOrderStatus(order.order_id, { status, reason, expectedVersion: order.version });
+        : this.api.changeOrderStatus(order.order_id, {
+            status,
+            reason,
+            trackingCode: status === 'shipping' ? trackingCode : undefined,
+            expectedVersion: order.version,
+          });
     request$.subscribe({
       next: () => {
         this.closeOverlays();
@@ -345,7 +363,7 @@ export class AdminOrdersPage {
   exportCsv(): void {
     const rows = [
       ['order_id', 'order_date', 'status', 'shipping_name', 'shipping_phone', 'total_amount'],
-      ...this.filtered().map((order) => [
+      ...this.rows().map((order) => [
         order.order_id,
         order.order_date || '',
         order.status || '',
@@ -363,18 +381,12 @@ export class AdminOrdersPage {
   }
 
   private loadLogs(): void {
-    const targets = this.rows().slice(0, 20);
-    if (!targets.length) {
-      this.logs.set([]);
-      return;
-    }
-    forkJoin(
-      targets.map((order) =>
-        this.api.orderAuditLogs(order.order_id, { limit: '20' }).pipe(catchError(() => of({ rows: [] as AdminAuditRow[] }))),
-      ),
-    ).subscribe((results) => {
-      const rows = results.flatMap((result) => adminListRows(result)).sort((a, b) => new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime());
-      this.logs.set(rows);
+    this.api.listAuditLogs({ module: 'orders', limit: String(this.pageSize), offset: adminOffset(this.logsPage(), this.pageSize) }).subscribe({
+      next: (payload) => {
+        this.logs.set(adminListRows(payload));
+        this.logsCount.set(adminListCount(payload));
+      },
+      error: (error: unknown) => this.loadError.set(adminErrorMessage(error)),
     });
   }
 }

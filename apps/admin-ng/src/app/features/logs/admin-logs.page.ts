@@ -3,28 +3,37 @@ import { forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { AdminAccountRow, AdminApiService, AdminAuditRow } from '../../core/admin-api.service';
 import { adminDateTime } from '../../core/admin-format';
-import { adminErrorMessage, adminListRows } from '../../core/admin-http';
+import { adminErrorMessage, adminListCount, adminListRows, adminOffset, adminRangeLabel } from '../../core/admin-http';
+import { AdminEmptyState } from '../../shared/admin-empty-state';
 import { AdminIcon } from '../../shared/admin-icon';
 import { AdminPagination } from '../../shared/admin-pagination';
 
-const ADMIN_MODULES = ['accounts', 'products', 'orders', 'pricing', 'promotions', 'vouchers', 'returns', 'reviews', 'support'];
+type LogTab = 'all' | 'admin' | 'system' | 'ai';
+
+const EMPTY_LOGS = { rows: [] as AdminAuditRow[], count: 0 };
 
 @Component({
   selector: 'app-admin-logs-page',
-  imports: [AdminIcon, AdminPagination],
+  imports: [AdminEmptyState, AdminIcon, AdminPagination],
   templateUrl: './admin-logs.page.html',
 })
 export class AdminLogsPage {
   private readonly api = inject(AdminApiService);
 
-  readonly tab = signal<'all' | 'admin' | 'system' | 'ai'>('all');
+  readonly tab = signal<LogTab>('all');
   readonly query = signal('');
   readonly module = signal('');
   readonly rows = signal<AdminAuditRow[]>([]);
   readonly accounts = signal<AdminAccountRow[]>([]);
   readonly loadError = signal<string | null>(null);
+  readonly loading = signal(true);
   readonly page = signal(1);
   readonly pageSize = 10;
+  readonly total = signal(0);
+  readonly allCount = signal(0);
+  readonly adminCount = signal(0);
+  readonly systemCount = signal(0);
+  readonly aiCount = signal(0);
 
   readonly todayCount = computed(() => {
     const today = new Date().toDateString();
@@ -34,82 +43,64 @@ export class AdminLogsPage {
   readonly failureCount = computed(() => this.rows().filter((row) => this.isFailure(row)).length);
   readonly blockedCount = computed(() => this.rows().filter((row) => this.isBlocked(row)).length);
   readonly securityCount = computed(() => this.rows().filter((row) => this.isSecurity(row)).length);
-  readonly adminCount = computed(() => this.rows().filter((row) => ADMIN_MODULES.includes(row.module || '')).length);
-  readonly systemCount = computed(() => this.rows().filter((row) => row.module === 'system' || !row.module).length);
-  readonly aiCount = computed(() => this.rows().filter((row) => row.module === 'ai').length);
-  readonly filtered = computed(() => {
-    const tab = this.tab();
-    const query = this.query().toLowerCase();
-    const module = this.module();
-    return this.rows().filter((row) => {
-      if (tab === 'admin' && !ADMIN_MODULES.includes(row.module || '')) {
-        return false;
-      }
-      if (tab === 'system' && row.module && row.module !== 'system') {
-        return false;
-      }
-      if (tab === 'ai' && row.module !== 'ai') {
-        return false;
-      }
-      if (module && row.module !== module) {
-        return false;
-      }
-      const haystack = `${row.action || ''} ${row.target_id || ''} ${row.actor_name || ''} ${row.actor_id || ''}`.toLowerCase();
-      return !query || haystack.includes(query);
-    });
-  });
-  readonly pageCount = computed(() => Math.max(1, Math.ceil(this.filtered().length / this.pageSize)));
-  readonly paged = computed(() => {
-    const start = (this.page() - 1) * this.pageSize;
-    return this.filtered().slice(start, start + this.pageSize);
-  });
-  readonly rangeLabel = computed(() => {
-    const total = this.filtered().length;
-    if (!total) {
-      return 'Hiển thị 0 - 0 / 0 nhật ký';
-    }
-    const start = (this.page() - 1) * this.pageSize + 1;
-    const end = Math.min(this.page() * this.pageSize, total);
-    return `Hiển thị ${start} - ${end} / ${total} nhật ký`;
-  });
+  readonly paged = computed(() => this.rows());
+  readonly pageCount = computed(() => Math.max(1, Math.ceil(this.total() / this.pageSize)));
+  readonly rangeLabel = computed(() => adminRangeLabel(this.total(), this.page(), this.pageSize, 'nhật ký'));
 
   constructor() {
+    this.reload();
+  }
+
+  /**
+   * Reloads the server-paged audit list for the active tab and filters.
+   */
+  reload(): void {
+    this.loading.set(true);
+    this.loadError.set(null);
+    const listParams = this.listParams();
     forkJoin({
-      logs: this.api.listAuditLogs({ limit: '1000' }).pipe(
+      logs: this.api.listAuditLogs(listParams).pipe(
         catchError((error: unknown) => {
           this.loadError.set(adminErrorMessage(error));
-          return of({ rows: [] as AdminAuditRow[] });
+          return of(EMPTY_LOGS);
         }),
       ),
+      all: this.api.listAuditLogs({ limit: '1' }).pipe(catchError(() => of(EMPTY_LOGS))),
+      admin: this.api.listAuditLogs({ scope: 'admin', limit: '1' }).pipe(catchError(() => of(EMPTY_LOGS))),
+      system: this.api.listAuditLogs({ scope: 'system', limit: '1' }).pipe(catchError(() => of(EMPTY_LOGS))),
+      ai: this.api.listAuditLogs({ scope: 'ai', limit: '1' }).pipe(catchError(() => of(EMPTY_LOGS))),
       accounts: this.api.listAccounts({ limit: '100' }).pipe(catchError(() => of({ rows: [] as AdminAccountRow[] }))),
     }).subscribe((payload) => {
       this.rows.set(adminListRows(payload.logs));
+      this.total.set(adminListCount(payload.logs));
+      this.allCount.set(adminListCount(payload.all));
+      this.adminCount.set(adminListCount(payload.admin));
+      this.systemCount.set(adminListCount(payload.system));
+      this.aiCount.set(adminListCount(payload.ai));
       this.accounts.set(adminListRows(payload.accounts));
+      this.loading.set(false);
     });
   }
 
   /**
-   * Switches the original system-log tablist.
+   * Switches the original system-log tablist and reloads.
    */
-  setTab(tab: 'all' | 'admin' | 'system' | 'ai'): void {
+  setTab(tab: LogTab): void {
     this.tab.set(tab);
     this.page.set(1);
+    this.reload();
   }
 
   /**
-   * Applies the original log search field.
+   * Applies search and module filters on the server list.
    */
-  onSearch(event: Event): void {
-    this.query.set((event.target as HTMLInputElement).value.trim());
+  applyFilters(event: Event): void {
+    event.preventDefault();
+    const form = event.target as HTMLFormElement;
+    this.query.set((form.elements.namedItem('q') as HTMLInputElement | null)?.value.trim() || '');
+    this.module.set((form.elements.namedItem('module') as HTMLSelectElement | null)?.value || '');
     this.page.set(1);
-  }
-
-  /**
-   * Applies the original module filter.
-   */
-  onModule(event: Event): void {
-    this.module.set((event.target as HTMLSelectElement).value);
-    this.page.set(1);
+    this.reload();
   }
 
   /**
@@ -119,13 +110,15 @@ export class AdminLogsPage {
     this.query.set('');
     this.module.set('');
     this.page.set(1);
+    this.reload();
   }
 
   /**
    * Moves log pagination.
    */
   goPage(page: number): void {
-    this.page.set(Math.min(this.pageCount(), Math.max(1, page)));
+    this.page.set(Math.max(1, page));
+    this.reload();
   }
 
   /**
@@ -144,6 +137,16 @@ export class AdminLogsPage {
       return `${account.full_name || 'Admin'} (${account.email || row.actor_id})`;
     }
     return row.actor_name || row.actor_id || 'system';
+  }
+
+  private listParams(): Record<string, string> {
+    return {
+      q: this.query(),
+      module: this.module(),
+      scope: this.module() || this.tab() === 'all' ? '' : this.tab(),
+      limit: String(this.pageSize),
+      offset: adminOffset(this.page(), this.pageSize),
+    };
   }
 
   private isFailure(row: AdminAuditRow): boolean {

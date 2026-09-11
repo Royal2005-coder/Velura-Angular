@@ -57,6 +57,13 @@ export function getSupabaseServiceKey() {
   return config.supabaseServiceRoleKey;
 }
 
+/**
+ * Hard-coded OTP shortcuts stay local-only. Production must use the stored code.
+ */
+export function allowDevOtpBypass(): boolean {
+  return config.nodeEnv !== "production";
+}
+
 function stripTrailingSlash(value: string): string {
   return value.replace(/\/+$/, "");
 }

@@ -55,6 +55,11 @@ export class CheckoutShippingPage {
   readonly ward = signal('');
   readonly detail = signal(this.checkout.shipping().address);
   readonly note = signal(this.checkout.shipping().note || '');
+  readonly voucherCode = signal('');
+  readonly voucherError = signal<string | null>(null);
+  readonly voucherName = signal<string | null>(null);
+  readonly applyingVoucher = signal(false);
+  readonly discount = signal(Number(localStorage.getItem('checkout_discount') || 0));
 
   readonly items = computed(() => this.checkout.readCheckoutItems());
   readonly subtotal = computed(() => this.items().reduce((sum, line) => sum + line.unit_price * line.quantity, 0));
@@ -65,9 +70,10 @@ export class CheckoutShippingPage {
     }
     return this.shipping() === 'express' ? 50000 : 30000;
   });
-  readonly total = computed(() => this.subtotal() + this.shippingFee());
+  readonly total = computed(() => Math.max(0, this.subtotal() + this.shippingFee() - this.discount()));
   readonly subtotalLabel = computed(() => formatVnd(this.subtotal()) || '0 đ');
   readonly shippingLabel = computed(() => (this.shippingFee() === 0 ? 'Miễn phí' : formatVnd(this.shippingFee())));
+  readonly discountLabel = computed(() => (this.discount() > 0 ? `-${formatVnd(this.discount())}` : ''));
   readonly totalLabel = computed(() => formatVnd(this.total()) || '0 đ');
   readonly standardFeeLabel = computed(() => (this.freeship() ? 'Miễn phí' : '30.000đ / Freeship từ 500.000đ'));
   readonly expressFeeLabel = computed(() => (this.freeship() ? 'Miễn phí' : '50.000đ / Freeship từ 500.000đ'));
@@ -115,6 +121,72 @@ export class CheckoutShippingPage {
    */
   setPayment(value: string): void {
     this.payment.set(value);
+  }
+
+  /**
+   * Updates the voucher code field before apply.
+   */
+  setVoucherCode(event: Event): void {
+    this.voucherCode.set((event.target as HTMLInputElement).value);
+  }
+
+  /**
+   * Applies a live voucher code through `/api/user/vouchers/apply`.
+   */
+  applyVoucher(): void {
+    const code = this.voucherCode().trim();
+    this.voucherError.set(null);
+    if (!code) {
+      this.voucherError.set('Nhập mã giảm giá.');
+      return;
+    }
+    this.applyingVoucher.set(true);
+    this.api
+      .post<{
+        success?: boolean;
+        voucher_id?: string;
+        code?: string;
+        name?: string;
+        discount_amount?: number;
+      }>('/api/user/vouchers/apply', {
+        code,
+        order_value: this.subtotal(),
+        shipping_fee: this.shippingFee(),
+      })
+      .subscribe({
+        next: (response) => {
+          this.applyingVoucher.set(false);
+          if (!response.success || !response.voucher_id) {
+            this.voucherError.set('Không áp dụng được mã này.');
+            return;
+          }
+          const amount = Number(response.discount_amount || 0);
+          this.discount.set(amount);
+          this.voucherName.set(response.name || response.code || code);
+          localStorage.setItem('checkout_voucher_id', response.voucher_id);
+          localStorage.setItem('checkout_discount', String(amount));
+        },
+        error: (error: Error) => {
+          this.applyingVoucher.set(false);
+          this.discount.set(0);
+          this.voucherName.set(null);
+          localStorage.removeItem('checkout_voucher_id');
+          localStorage.removeItem('checkout_discount');
+          this.voucherError.set(error.message || 'Mã giảm giá không hợp lệ.');
+        },
+      });
+  }
+
+  /**
+   * Clears an applied voucher before placing the order.
+   */
+  clearVoucher(): void {
+    this.voucherCode.set('');
+    this.voucherName.set(null);
+    this.voucherError.set(null);
+    this.discount.set(0);
+    localStorage.removeItem('checkout_voucher_id');
+    localStorage.removeItem('checkout_discount');
   }
 
   /**

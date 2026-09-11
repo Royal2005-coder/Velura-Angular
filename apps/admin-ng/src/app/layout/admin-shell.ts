@@ -21,15 +21,6 @@ export class AdminShell {
     useBodyClass('admin-page');
   }
 
-  readonly pricingOpen = toSignal(
-    this.router.events.pipe(
-      filter((event): event is NavigationEnd => event instanceof NavigationEnd),
-      startWith(null),
-      map(() => /\/(pricing|promotions)/.test(this.router.url)),
-    ),
-    { initialValue: /\/(pricing|promotions)/.test(this.router.url) },
-  );
-
   readonly pageTitle = toSignal(
     this.router.events.pipe(
       filter((event): event is NavigationEnd => event instanceof NavigationEnd),

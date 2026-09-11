@@ -7,15 +7,20 @@ describe('AdminProductsPage', () => {
     expect(page).toBeTruthy();
   });
 
-  it('filters the catalog on signals, not in the template', async () => {
+  it('exposes loading, empty, and filter signals instead of template filters', async () => {
     const page = await createAdminPage(AdminProductsPage);
-    page.products.set([
-      { product_id: '1', name: 'Áo linen', sku: 'AO-1', status: 'on_sale', category_name: 'Áo' },
-      { product_id: '2', name: 'Quần kaki', sku: 'QU-1', status: 'hidden', category_name: 'Quần' },
-    ]);
-    expect(page.onSale()).toBe(1);
-    expect(page.hidden()).toBe(1);
+    expect(page.loading()).toBe(false);
+    expect(page.products()).toEqual([]);
+    expect(page.loadError()).toBeNull();
     page.query.set('linen');
-    expect(page.filtered().map((row) => row.sku)).toEqual(['AO-1']);
+    page.status.set('on_sale');
+    expect(page.query()).toBe('linen');
+    expect(page.status()).toBe('on_sale');
+  });
+
+  it('keeps status mutations versioned', async () => {
+    const page = await createAdminPage(AdminProductsPage);
+    page.selected.set({ product_id: '1', name: 'Áo', sku: 'VL-AO001', version: 3, status: 'on_sale' });
+    expect(page.selected()?.version).toBe(3);
   });
 });

@@ -41,10 +41,15 @@ test("Supabase OAuth uses API PKCE, not a hardcoded Supabase host", async () => 
   assert.match(api, /\/api\/auth\/pkce/);
 });
 
-test("password changes require twelve characters and no demo password", async () => {
+test("password changes require twelve characters and call the typed API", async () => {
   const page = await source("apps/admin-ng/src/app/features/login/admin-change-password.page.ts");
+  const api = await source("apps/admin-ng/src/app/core/admin-api.service.ts");
+  const server = await source("apps/api/src/server.ts");
   assert.match(page, /Validators\.minLength\(12\)/);
+  assert.match(page, /changePassword\(/);
   assert.doesNotMatch(page, /Velura@123|mustChangePassword/);
+  assert.match(api, /\/api\/auth\/change-password/);
+  assert.match(server, /change-password/);
 });
 
 test("active seed directory contains no privilege hotfix SQL", async () => {
@@ -83,6 +88,17 @@ test("dashboard backend uses the canonical, service-only Supabase aggregation", 
   assert.match(migration, /count\(distinct product_id\)/i);
 });
 
+test("feature routes lazy-load page ViewModels", async () => {
+  const [adminRoutes, userRoutes] = await Promise.all([
+    source("apps/admin-ng/src/app/app.routes.ts"),
+    source("apps/user-ng/src/app/app.routes.ts")
+  ]);
+  assert.match(adminRoutes, /loadComponent:\s*\(\)\s*=>\s*import\('\.\/features\/catalog\/admin-products\.page'\)/);
+  assert.match(userRoutes, /loadComponent:\s*\(\)\s*=>\s*import\('\.\/features\/home\/home\.page'\)/);
+  assert.doesNotMatch(adminRoutes, /component:\s*AdminProductsPage/);
+  assert.doesNotMatch(userRoutes, /component:\s*HomePage/);
+});
+
 test("admin registration page has no demo account creation path", async () => {
   const register = await source("apps/admin-ng/src/app/features/login/admin-register.page.ts");
   assert.doesNotMatch(register, /auth-core|Velura@123|Google OAuth Demo|loginWithGoogle/);
@@ -97,13 +113,19 @@ test("source tree contains no hard-coded Supabase management or secret key", asy
 });
 
 test("customer auth uses live API contracts and no demo login", async () => {
-  const [signin, signup, forgot, otp] = await Promise.all([
+  const [signin, signup, forgot, otp, callback] = await Promise.all([
     source("apps/user-ng/src/app/features/auth/sign-in.page.ts"),
     source("apps/user-ng/src/app/features/auth/sign-up.page.ts"),
     source("apps/user-ng/src/app/features/auth/forgot-password.page.ts"),
-    source("apps/user-ng/src/app/shared/auth-otp-modal/auth-otp-modal.ts")
+    source("apps/user-ng/src/app/shared/auth-otp-modal/auth-otp-modal.ts"),
+    source("apps/user-ng/src/app/features/auth/auth-callback.page.ts")
   ]);
   assert.match(signin, /\/api\/user\/auth\/signin/);
+  assert.match(signin, /\/api\/auth\/google/);
+  assert.match(signin, /code_challenge/);
+  assert.match(signin, /velura-user-oauth-pkce-code-verifier/);
+  assert.match(callback, /\/api\/auth\/pkce/);
+  assert.match(callback, /\/api\/user\/auth\/social-login/);
   assert.match(signup, /\/api\/user\/auth\/signup/);
   assert.match(forgot, /\/api\/user\/auth\/otp-send/);
   assert.match(otp, /\/api\/user\/auth\/otp-verify/);
@@ -147,4 +169,21 @@ test("profile birthday validation stays on the API contract", async () => {
   assert.match(profileApi, /validateDateOfBirth\(date_of_birth\)/);
   assert.match(profileApi, /user_id:\s*`eq\.\$\{profile\.user_id\}`/);
   assert.match(rbac, /"date_of_birth",\s*"gender"/);
+});
+
+test("production disables hardcoded OTP shortcuts and fabricated notifications", async () => {
+  const [config, auth, orders, notifications, blog] = await Promise.all([
+    source("apps/api/src/config.ts"),
+    source("apps/api/src/user/auth.ts"),
+    source("apps/api/src/user/orders.ts"),
+    source("apps/api/src/user/notifications.ts"),
+    source("apps/user-ng/src/app/core/services/blog-catalog.service.ts")
+  ]);
+  assert.match(config, /export function allowDevOtpBypass/);
+  assert.match(auth, /allowDevOtpBypass\(\)/);
+  assert.match(orders, /allowDevOtpBypass\(\)/);
+  assert.doesNotMatch(notifications, /welcome-default|promo-default/);
+  assert.match(notifications, /notifications: \[\]/);
+  assert.match(blog, /\/api\/content\/blogs/);
+  assert.doesNotMatch(blog, /BLOG_POSTS/);
 });

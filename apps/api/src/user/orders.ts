@@ -3,7 +3,7 @@ import { selectOne, selectRows, insertRow, updateRows } from "../supabase.js";
 import { hashPassword, signJwt } from "../auth-helper.js";
 import { requireUserAuth, validatePhone } from "./auth.js";
 import { createNotification } from "./notifications.js";
-import { config } from "../config.js";
+import { allowDevOtpBypass, config } from "../config.js";
 import {
   asJsonObject,
   asString,
@@ -617,7 +617,7 @@ export async function handleOrdersRoute(
       }
 
       if (sessionState.otpCode !== otp_code) {
-        if (otp_code !== "1234") {
+        if (!allowDevOtpBypass() || otp_code !== "1234") {
           sessionState.attempts += 1;
           checkoutOtpAttemptsMap.set(phoneKey, sessionState);
           

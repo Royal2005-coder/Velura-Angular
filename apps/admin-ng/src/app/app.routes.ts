@@ -1,27 +1,36 @@
 import { Routes } from '@angular/router';
 import { adminAuthGuard, adminGuestGuard, adminSessionGuard, adminWelcomeGuard } from './core/admin-auth.guard';
-import { AdminAccountsPage } from './features/accounts/admin-accounts.page';
-import { AdminProductsPage } from './features/catalog/admin-products.page';
-import { AdminDashboardPage } from './features/dashboard/admin-dashboard.page';
-import { AdminAuthCallbackPage } from './features/login/admin-auth-callback.page';
-import { AdminLoginPage } from './features/login/admin-login.page';
-import { AdminRegisterPage } from './features/login/admin-register.page';
-import { AdminChangePasswordPage } from './features/login/admin-change-password.page';
-import { AdminWelcomePage } from './features/login/admin-welcome.page';
-import { AdminLogsPage } from './features/logs/admin-logs.page';
-import { AdminOrdersPage } from './features/orders/admin-orders.page';
-import { AdminPricingPage } from './features/pricing/admin-pricing.page';
-import { AdminPromotionsPage } from './features/promotions/admin-promotions.page';
-import { AdminReturnsPage } from './features/returns/admin-returns.page';
-import { AdminReviewsPage } from './features/reviews/admin-reviews.page';
 import { AdminShell } from './layout/admin-shell';
 
 export const routes: Routes = [
-  { path: 'login', component: AdminLoginPage, canActivate: [adminGuestGuard], title: 'Đăng nhập quản trị — Velura' },
-  { path: 'auth/callback', component: AdminAuthCallbackPage, title: 'Đang xác thực — Velura' },
-  { path: 'register', component: AdminRegisterPage, title: 'Đăng ký quản trị' },
-  { path: 'welcome', component: AdminWelcomePage, canActivate: [adminWelcomeGuard], title: 'Velura - Chờ cấp quyền admin' },
-  { path: 'change-password', component: AdminChangePasswordPage, canActivate: [adminSessionGuard], title: 'Đổi mật khẩu' },
+  {
+    path: 'login',
+    loadComponent: () => import('./features/login/admin-login.page').then((m) => m.AdminLoginPage),
+    canActivate: [adminGuestGuard],
+    title: 'Đăng nhập quản trị — Velura',
+  },
+  {
+    path: 'auth/callback',
+    loadComponent: () => import('./features/login/admin-auth-callback.page').then((m) => m.AdminAuthCallbackPage),
+    title: 'Đang xác thực — Velura',
+  },
+  {
+    path: 'register',
+    loadComponent: () => import('./features/login/admin-register.page').then((m) => m.AdminRegisterPage),
+    title: 'Đăng ký quản trị',
+  },
+  {
+    path: 'welcome',
+    loadComponent: () => import('./features/login/admin-welcome.page').then((m) => m.AdminWelcomePage),
+    canActivate: [adminWelcomeGuard],
+    title: 'Velura - Chờ cấp quyền admin',
+  },
+  {
+    path: 'change-password',
+    loadComponent: () => import('./features/login/admin-change-password.page').then((m) => m.AdminChangePasswordPage),
+    canActivate: [adminSessionGuard],
+    title: 'Đổi mật khẩu',
+  },
   {
     path: '',
     component: AdminShell,
@@ -29,15 +38,69 @@ export const routes: Routes = [
     data: { page: 'dashboard' },
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
-      { path: 'dashboard', component: AdminDashboardPage, canActivate: [adminAuthGuard], data: { title: 'Dashboard', page: 'dashboard' }, title: 'Dashboard quản trị — Velura' },
-      { path: 'accounts', component: AdminAccountsPage, canActivate: [adminAuthGuard], data: { title: 'Quản lý tài khoản', page: 'accounts' }, title: 'Quản lý tài khoản' },
-      { path: 'products', component: AdminProductsPage, canActivate: [adminAuthGuard], data: { title: 'Quản lý sản phẩm', page: 'products' }, title: 'Quản lý sản phẩm' },
-      { path: 'orders', component: AdminOrdersPage, canActivate: [adminAuthGuard], data: { title: 'Quản lý đơn hàng', page: 'orders' }, title: 'Quản lý đơn hàng' },
-      { path: 'reviews', component: AdminReviewsPage, canActivate: [adminAuthGuard], data: { title: 'Quản lý đánh giá', page: 'reviews' }, title: 'Quản lý đánh giá' },
-      { path: 'returns', component: AdminReturnsPage, canActivate: [adminAuthGuard], data: { title: 'Đổi trả & CSKH', page: 'returns-cskh' }, title: 'Đổi trả & CSKH' },
-      { path: 'pricing', component: AdminPricingPage, canActivate: [adminAuthGuard], data: { title: 'Quản lý giá', page: 'pricing' }, title: 'Quản lý giá' },
-      { path: 'promotions', component: AdminPromotionsPage, canActivate: [adminAuthGuard], data: { title: 'Quản lý khuyến mãi', page: 'promotions' }, title: 'Quản lý khuyến mãi' },
-      { path: 'logs', component: AdminLogsPage, canActivate: [adminAuthGuard], data: { title: 'Nhật ký hệ thống', page: 'logs' }, title: 'Nhật ký hệ thống' },
+      {
+        path: 'dashboard',
+        loadComponent: () => import('./features/dashboard/admin-dashboard.page').then((m) => m.AdminDashboardPage),
+        canActivate: [adminAuthGuard],
+        data: { title: 'Dashboard', page: 'dashboard' },
+        title: 'Dashboard quản trị — Velura',
+      },
+      {
+        path: 'accounts',
+        loadComponent: () => import('./features/accounts/admin-accounts.page').then((m) => m.AdminAccountsPage),
+        canActivate: [adminAuthGuard],
+        data: { title: 'Quản lý tài khoản', page: 'accounts' },
+        title: 'Quản lý tài khoản',
+      },
+      {
+        path: 'products',
+        loadComponent: () => import('./features/catalog/admin-products.page').then((m) => m.AdminProductsPage),
+        canActivate: [adminAuthGuard],
+        data: { title: 'Quản lý sản phẩm', page: 'products' },
+        title: 'Quản lý sản phẩm',
+      },
+      {
+        path: 'orders',
+        loadComponent: () => import('./features/orders/admin-orders.page').then((m) => m.AdminOrdersPage),
+        canActivate: [adminAuthGuard],
+        data: { title: 'Quản lý đơn hàng', page: 'orders' },
+        title: 'Quản lý đơn hàng',
+      },
+      {
+        path: 'reviews',
+        loadComponent: () => import('./features/reviews/admin-reviews.page').then((m) => m.AdminReviewsPage),
+        canActivate: [adminAuthGuard],
+        data: { title: 'Quản lý đánh giá', page: 'reviews' },
+        title: 'Quản lý đánh giá',
+      },
+      {
+        path: 'returns',
+        loadComponent: () => import('./features/returns/admin-returns.page').then((m) => m.AdminReturnsPage),
+        canActivate: [adminAuthGuard],
+        data: { title: 'Đổi trả & CSKH', page: 'returns-cskh' },
+        title: 'Đổi trả & CSKH',
+      },
+      {
+        path: 'pricing',
+        loadComponent: () => import('./features/pricing/admin-pricing.page').then((m) => m.AdminPricingPage),
+        canActivate: [adminAuthGuard],
+        data: { title: 'Quản lý giá', page: 'pricing' },
+        title: 'Quản lý giá',
+      },
+      {
+        path: 'promotions',
+        loadComponent: () => import('./features/promotions/admin-promotions.page').then((m) => m.AdminPromotionsPage),
+        canActivate: [adminAuthGuard],
+        data: { title: 'Quản lý khuyến mãi', page: 'promotions' },
+        title: 'Quản lý khuyến mãi',
+      },
+      {
+        path: 'logs',
+        loadComponent: () => import('./features/logs/admin-logs.page').then((m) => m.AdminLogsPage),
+        canActivate: [adminAuthGuard],
+        data: { title: 'Nhật ký hệ thống', page: 'logs' },
+        title: 'Nhật ký hệ thống',
+      },
     ],
   },
   { path: '**', redirectTo: 'login' },

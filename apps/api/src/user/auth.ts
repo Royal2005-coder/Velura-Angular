@@ -1,6 +1,7 @@
 import { HttpError, readJson, sendJson } from "../http.js";
 import { selectOne, insertRow, updateRows, getAuthUser } from "../supabase.js";
 import { hashPassword, verifyPassword, signJwt } from "../auth-helper.js";
+import { allowDevOtpBypass } from "../config.js";
 import { createNotification } from "./notifications.js";
 import {
   asJsonObject,
@@ -259,10 +260,9 @@ export async function handleAuthRoute(
     const query = identityText.includes("@") ? { email: `eq.${identityText}` } : { phone: `eq.${identityText}` };
     let user: JsonObject | null = await selectOne("users", query);
     
-    // Auto-register guest if verification is successful but account does not exist (AUTH-06)
+    // Auto-register guest only with the local OTP shortcut. Production requires a stored user + OTP.
     if (!user) {
-      // Validate OTP (for Guest flow, we accept a default verification code '123456' or simple simulation)
-      if (otp_code !== "123456" && otp_code !== "000000") {
+      if (!allowDevOtpBypass() || (otp_code !== "123456" && otp_code !== "000000")) {
         throw new HttpError(400, "INVALID_OTP", "Mã OTP không chính xác hoặc đã hết hạn");
       }
 
@@ -281,8 +281,7 @@ export async function handleAuthRoute(
       // Validate OTP for existing user
       const now = new Date().toISOString();
       if (!user.otp_code || user.otp_code !== otp_code || (typeof user.otp_expires_at === "string" && user.otp_expires_at < now)) {
-        // Allow mock verification for local development
-        if (otp_code !== "123456") {
+        if (!allowDevOtpBypass() || otp_code !== "123456") {
           throw new HttpError(400, "INVALID_OTP", "Mã OTP không chính xác hoặc đã hết hạn");
         }
       }
@@ -485,7 +484,7 @@ export async function handleAuthRoute(
 
     const now = new Date().toISOString();
     if (!user.otp_code || user.otp_code !== otp_code || (typeof user.otp_expires_at === "string" && user.otp_expires_at < now)) {
-      if (otp_code !== "123456") {
+      if (!allowDevOtpBypass() || otp_code !== "123456") {
         throw new HttpError(400, "INVALID_OTP", "Mã xác thực không chính xác hoặc đã hết hạn");
       }
     }

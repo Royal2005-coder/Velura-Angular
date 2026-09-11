@@ -72,10 +72,12 @@
             <button class="admin-btn admin-btn--ghost admin-btn--sm" type="reset">Đặt lại</button>
           </div>
         </form>
-        @if (loadError()) {
-          <div class="admin-empty-state"><strong>Không tải được bảng giá</strong><p>{{ loadError() }}</p></div>
+        @if (loading()) {
+          <app-admin-empty-state kind="loading" icon="clock" title="Đang tải bảng giá" />
+        } @else if (loadError()) {
+          <app-admin-empty-state kind="error" icon="alert" title="Không tải được bảng giá" [message]="loadError() || ''" />
         } @else if (!paged().length) {
-          <div class="admin-empty-state"><strong>Không có sản phẩm phù hợp</strong><p>Dữ liệu được tải trực tiếp từ Supabase.</p></div>
+          <app-admin-empty-state kind="empty" icon="tag" title="Không có sản phẩm phù hợp" message="Điều chỉnh bộ lọc hoặc tải lại." />
         } @else {
           <div class="admin-table-wrap">
             <table class="admin-table">
@@ -109,9 +111,11 @@
                         <button class="admin-icon-button admin-icon-button--sm" type="button" title="Chi tiết" (click)="openDetail(row.product_id)">
                           <app-admin-icon name="eye" />
                         </button>
-                        <button class="admin-icon-button admin-icon-button--sm" type="button" title="Cập nhật giá" (click)="openChange(row.product_id)">
-                          <app-admin-icon name="edit" />
-                        </button>
+                        @if (canMutate()) {
+                          <button class="admin-icon-button admin-icon-button--sm" type="button" title="Cập nhật giá" (click)="openChange(row.product_id)">
+                            <app-admin-icon name="edit" />
+                          </button>
+                        }
                       </div>
                     </td>
                   </tr>

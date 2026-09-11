@@ -54,15 +54,12 @@
             <button class="admin-btn admin-btn--ghost admin-btn--sm" type="reset">Đặt lại</button>
           </div>
         </form>
-        @if (loadError()) {
-          <p class="admin-note">{{ loadError() }}</p>
-        }
-        @if (!paged().length) {
-          <div class="admin-order-empty">
-            <app-admin-icon name="star" />
-            <strong>Không có đánh giá phù hợp</strong>
-            <span>Dữ liệu được tải trực tiếp từ Supabase.</span>
-          </div>
+        @if (loading()) {
+          <app-admin-empty-state kind="loading" icon="clock" title="Đang tải đánh giá" />
+        } @else if (loadError()) {
+          <app-admin-empty-state kind="error" icon="alert" title="Không tải được đánh giá" [message]="loadError() || ''" />
+        } @else if (!paged().length) {
+          <app-admin-empty-state kind="empty" icon="star" title="Không có đánh giá phù hợp" message="Điều chỉnh bộ lọc hoặc tải lại." />
         } @else {
           <div class="admin-table-wrap">
             <table class="admin-table admin-data-table">
@@ -105,14 +102,21 @@
                         @if (menuId() === row.review_id) {
                           <div class="admin-dropdown admin-table-action-menu admin-review-action-menu">
                             <button type="button" (click)="openDetail(row.review_id)"><app-admin-icon name="eye" /><span>Xem chi tiết</span></button>
-                            @if (row.status !== 'approved') {
+                            @if (canMutate() && row.status !== 'approved' && row.status !== 'rejected' && row.status !== 'hidden') {
                               <button type="button" (click)="openAction('approve', row.review_id)"><app-admin-icon name="check" /><span>Phê duyệt</span></button>
                             }
-                            <button type="button" (click)="openAction('reply', row.review_id)"><app-admin-icon name="edit" /><span>Phản hồi</span></button>
-                            @if (row.status !== 'rejected') {
+                            @if (canMutate()) {
+                              <button type="button" (click)="openAction('reply', row.review_id)"><app-admin-icon name="edit" /><span>Phản hồi</span></button>
+                            }
+                            @if (canMutate() && row.status !== 'rejected' && row.status !== 'hidden') {
                               <button class="admin-review-action-menu__danger" type="button" (click)="openAction('hide', row.review_id)"><app-admin-icon name="lock" /><span>Ẩn đánh giá</span></button>
                             }
-                            <button type="button" (click)="openAction('escalate', row.review_id)"><app-admin-icon name="support" /><span>Tạo ticket CSKH</span></button>
+                            @if (canMutate() && (row.status === 'rejected' || row.status === 'hidden')) {
+                              <button type="button" (click)="openAction('unhide', row.review_id)"><app-admin-icon name="check" /><span>Mở ẩn</span></button>
+                            }
+                            @if (canMutate()) {
+                              <button type="button" (click)="openAction('escalate', row.review_id)"><app-admin-icon name="support" /><span>Tạo ticket CSKH</span></button>
+                            }
                           </div>
                         }
                       </div>
@@ -125,7 +129,7 @@
           <app-admin-pagination [page]="page()" [pageCount]="pageCount()" [label]="rangeLabel()" (changed)="goPage($event)" />
         }
       } @else if (!logs().length) {
-        <div class="admin-order-empty"><strong>Chưa có nhật ký đánh giá</strong></div>
+        <app-admin-empty-state kind="empty" icon="clock" title="Chưa có nhật ký đánh giá" />
       } @else {
         <div class="admin-table-wrap">
           <table class="admin-table admin-data-table">
@@ -174,6 +178,13 @@
     <div class="admin-drawer__body">
       <h3 class="admin-drawer__section">Nội dung</h3>
       <p class="admin-review-original">{{ commentOf(selected()!) }}</p>
+      @if (selected()!.images?.length) {
+        <div class="admin-review-gallery">
+          @for (image of selected()!.images!; track image) {
+            <img [src]="image" alt="Ảnh đánh giá" width="96" height="96" />
+          }
+        </div>
+      }
       @if (selected()!.admin_reply) {
         <div class="admin-review-response"><strong>Phản hồi Velura</strong><br>{{ selected()!.admin_reply }}</div>
       }

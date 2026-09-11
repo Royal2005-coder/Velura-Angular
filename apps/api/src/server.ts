@@ -164,6 +164,51 @@ const server = createServer(async (req, res) => {
       return sendJson(res, 200, { success: true }, corsHeaders);
     }
 
+    if (req.method === "POST" && parts[1] === "auth" && parts[2] === "change-password") {
+      if (!context.accessToken || !context.authUser?.email) {
+        throw new HttpError(401, "AUTH_REQUIRED", "Cần đăng nhập để đổi mật khẩu.");
+      }
+      const body = await readJson(req);
+      const currentPassword = asString(body.currentPassword);
+      const newPassword = asString(body.newPassword);
+      if (!currentPassword || !newPassword) {
+        throw new HttpError(400, "BAD_REQUEST", "Mật khẩu hiện tại và mật khẩu mới là bắt buộc");
+      }
+      if (newPassword.length < 12) {
+        throw new HttpError(422, "VALIDATION_ERROR", "Mật khẩu mới phải có ít nhất 12 ký tự");
+      }
+      const verify = await fetch(`${config.supabaseUrl}/auth/v1/token?grant_type=password`, {
+        method: "POST",
+        headers: {
+          apikey: config.supabaseAnonKey,
+          Authorization: `Bearer ${config.supabaseAnonKey}`,
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({ email: context.authUser.email, password: currentPassword })
+      });
+      if (!verify.ok) {
+        throw new HttpError(401, "UNAUTHORIZED", "Mật khẩu hiện tại không đúng.");
+      }
+      const updated = await fetch(`${config.supabaseUrl}/auth/v1/user`, {
+        method: "PUT",
+        headers: {
+          apikey: config.supabaseAnonKey,
+          Authorization: `Bearer ${context.accessToken}`,
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({ password: newPassword })
+      });
+      if (!updated.ok) {
+        const payload = asJsonObject(await updated.json().catch(() => ({})));
+        throw new HttpError(
+          400,
+          "BAD_REQUEST",
+          asString(payload.error_description) || asString(payload.msg) || "Không đổi được mật khẩu."
+        );
+      }
+      return sendJson(res, 200, { success: true }, corsHeaders);
+    }
+
     if (req.method === "POST" && parts[1] === "auth" && parts[2] === "pkce") {
       const body = await readJson(req);
       const response = await fetch(`${config.supabaseUrl}/auth/v1/token?grant_type=pkce`, {

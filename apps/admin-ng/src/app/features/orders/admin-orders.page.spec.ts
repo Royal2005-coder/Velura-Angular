@@ -6,4 +6,11 @@ describe('AdminOrdersPage', () => {
     const page = await createAdminPage(AdminOrdersPage);
     expect(page).toBeTruthy();
   });
+
+  it('exposes loading, empty, and error list signals', async () => {
+    const page = await createAdminPage(AdminOrdersPage);
+    expect(page.loading()).toBe(false);
+    expect(page.rows()).toEqual([]);
+    expect(page.loadError()).toBeNull();
+  });
 });

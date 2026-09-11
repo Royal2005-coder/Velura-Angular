@@ -50,6 +50,9 @@ export function stubApiService(): ApiService {
       if (path.includes('/recommendations')) {
         return of({ quiz: null, combos: [], categories: [] });
       }
+      if (path.includes('/content/blogs')) {
+        return of({ rows: [] });
+      }
       if (path.includes('/profile')) {
         return of({ full_name: 'Guest', email: 'guest@velura.test' });
       }

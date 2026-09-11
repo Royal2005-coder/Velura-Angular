@@ -4,16 +4,16 @@ import { adminInitials, adminIsHttpUrl } from './admin-format';
 const TOKEN_KEY = 'velura_supabase_access_token';
 const SESSION_KEY = 'velura_current_session';
 
-export const ADMIN_ROLE_PAGES: Record<string, string[]> = {
-  super_admin: ['dashboard', 'accounts', 'products', 'orders', 'reviews', 'returns-cskh', 'pricing', 'promotions', 'logs'],
-  admin_viewer: ['dashboard'],
-  admin_operator_sanpham: ['products', 'dashboard'],
-  admin_operator_donhang: ['orders', 'dashboard'],
-  admin_operator_gia_km: ['pricing', 'dashboard', 'promotions'],
-  admin_operator_danhgia_review: ['reviews', 'dashboard'],
-  admin_operator_cskh_dt: ['returns-cskh', 'dashboard'],
-  member: ['welcome'],
-  guest: ['welcome'],
+/** UI hint for write buttons. API `roleModules` remains canonical. */
+const WRITE_ROLES: Record<string, string[]> = {
+  products: ['super_admin', 'admin_operator_sanpham'],
+  orders: ['super_admin', 'admin_operator_donhang'],
+  pricing: ['super_admin', 'admin_operator_gia_km'],
+  promotions: ['super_admin', 'admin_operator_gia_km'],
+  reviews: ['super_admin', 'admin_operator_danhgia_review'],
+  returns: ['super_admin', 'admin_operator_cskh_dt'],
+  accounts: ['super_admin'],
+  logs: ['super_admin'],
 };
 
 export interface AdminAuthMe {
@@ -136,9 +136,19 @@ export class AdminSessionService {
 
   /**
    * Whether the current role may open a vanilla page key.
+   * Uses `allowedPages` from `/api/auth/me` only — not a copied role matrix.
    */
   canOpen(page: string, session = this.sessionState()): boolean {
     return Boolean(session?.allowedPages?.includes(page));
+  }
+
+  /**
+   * Whether the current role may show write actions for a module.
+   * Mutations still fail closed in the API if this hint is wrong.
+   */
+  canMutate(module: string, session = this.sessionState()): boolean {
+    const role = session?.roleCode || '';
+    return (WRITE_ROLES[module] || []).includes(role);
   }
 
   private buildSession(context: AdminAuthMe): AdminSession {
@@ -164,9 +174,10 @@ export class AdminSessionService {
       avatar: profile?.avatar || initials || 'QA',
       isActive: profile?.is_active !== false,
       isVerified: profile?.is_verified !== false,
-      allowedPages: Array.isArray(context.allowedPages)
-        ? context.allowedPages
-        : ADMIN_ROLE_PAGES[roleCode] || ADMIN_ROLE_PAGES['member'],
+      allowedPages:
+        Array.isArray(context.allowedPages) && context.allowedPages.length > 0
+          ? context.allowedPages
+          : ['welcome'],
     };
   }
 

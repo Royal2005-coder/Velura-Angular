@@ -81,18 +81,7 @@ export class AdminReturnsPage {
   readonly returnRange = computed(() => adminRangeLabel(this.returnsTotal(), this.page(), this.pageSize, 'phiếu'));
   readonly ticketRange = computed(() => adminRangeLabel(this.ticketsTotal(), this.page(), this.pageSize, 'phiếu'));
   readonly logRange = computed(() => adminRangeLabel(this.logsTotal(), this.page(), this.pageSize, 'nhật ký'));
-  readonly visibleChats = computed(() => {
-    const filter = this.chatFilter();
-    return this.chats().filter((session) => {
-      if (session.is_active === false) {
-        return false;
-      }
-      if (filter === 'all') {
-        return true;
-      }
-      return (session.handoff_status || 'ai') === filter;
-    });
-  });
+  readonly visibleChats = computed(() => this.chats().filter((session) => session.is_active !== false));
   readonly pendingChatCount = computed(() => this.chats().filter((session) => session.handoff_status === 'requested').length);
   readonly canReply = computed(() => this.canMutate() && this.selectedChat()?.handoff_status === 'assigned');
   readonly canJoinChat = computed(() => {
@@ -135,10 +124,7 @@ export class AdminReturnsPage {
           ? this.api.listTickets(pageParams).pipe(catchError(() => of({ rows: [] as AdminTicketRow[], count: 0 })))
           : this.api.listTickets({ status: 'open', limit: '1' }).pipe(catchError(() => of({ rows: [] as AdminTicketRow[], count: 0 }))),
       chats: this.api
-        .listChatSessions({
-          limit: '50',
-          handoffOnly: this.chatFilter() === 'requested' || this.chatFilter() === 'assigned' ? 'true' : 'false',
-        })
+        .listChatSessions(this.chatListParams())
         .pipe(catchError(() => of({ rows: [] as AdminChatSessionRow[] }))),
       allReturns: this.api.listReturns({ limit: '1' }).pipe(catchError(() => of({ rows: [] as AdminReturnRow[], count: 0 }))),
       allTickets: this.api.listTickets({ limit: '1' }).pipe(catchError(() => of({ rows: [] as AdminTicketRow[], count: 0 }))),
@@ -199,6 +185,20 @@ export class AdminReturnsPage {
       },
       error: (error: unknown) => this.chatError.set(adminErrorMessage(error)),
     });
+  }
+
+  /**
+   * Server filters for the CSKH chat sidebar.
+   */
+  private chatListParams(): Record<string, string> {
+    const filter = this.chatFilter();
+    const params: Record<string, string> = { limit: '50' };
+    if (filter === 'ai' || filter === 'requested' || filter === 'assigned' || filter === 'closed') {
+      params['handoffStatus'] = filter;
+      return params;
+    }
+    params['handoffOnly'] = 'false';
+    return params;
   }
 
   /**

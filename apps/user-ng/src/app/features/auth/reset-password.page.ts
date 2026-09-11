@@ -32,7 +32,7 @@ export class ResetPasswordPage {
     this.errorMessage.set(null);
     const identity = sessionStorage.getItem('velura_reset_identity');
     const otpCode = sessionStorage.getItem('velura_reset_otp');
-    if (!identity) {
+    if (!identity || !otpCode) {
       this.errorMessage.set('Phiên xác minh đã hết hạn. Vui lòng thực hiện lại.');
       window.setTimeout(() => void this.router.navigateByUrl('/auth/forgot-password'), 1200);
       return;
@@ -45,7 +45,7 @@ export class ResetPasswordPage {
     this.api
       .post<unknown>('/api/user/auth/reset-password', {
         identity,
-        otp_code: otpCode || '123456',
+        otp_code: otpCode,
         password: this.form.controls.password.value,
       })
       .subscribe({

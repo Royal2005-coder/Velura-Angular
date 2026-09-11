@@ -123,6 +123,13 @@ export class SignInPage {
     }
   }
 
+  /**
+   * Facebook SSO is not wired. Keep the button honest instead of a dead click.
+   */
+  startFacebook(): void {
+    this.errorMessage.set('Đăng nhập Facebook chưa được kết nối. Dùng email, số điện thoại hoặc Google.');
+  }
+
   private finishAuth(response: { token?: string; user?: Record<string, unknown> }): void {
     this.auth.applySession(response.token, response.user);
     this.wishlist.refresh();

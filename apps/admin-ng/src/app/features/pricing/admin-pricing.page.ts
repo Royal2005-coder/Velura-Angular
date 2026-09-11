@@ -1,7 +1,10 @@
 import { Component, computed, inject, signal } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
 import { AdminApiService, AdminPriceHistoryRow, AdminProductRow } from '../../core/admin-api.service';
 import { adminDateTime, adminMoney } from '../../core/admin-format';
-import { adminErrorMessage, adminListRows } from '../../core/admin-http';
+import { adminErrorMessage, adminListCount, adminListRows, adminOffset, adminRangeLabel } from '../../core/admin-http';
+import { AdminSessionService } from '../../core/admin-session.service';
+import { AdminEmptyState } from '../../shared/admin-empty-state';
 import { AdminIcon } from '../../shared/admin-icon';
 import { AdminPagination } from '../../shared/admin-pagination';
 
@@ -9,11 +12,13 @@ type PriceStatus = '' | 'discount' | 'invalid' | 'missing';
 
 @Component({
   selector: 'app-admin-pricing-page',
-  imports: [AdminIcon, AdminPagination],
+  imports: [AdminEmptyState, AdminIcon, AdminPagination],
   templateUrl: './admin-pricing.page.html',
 })
 export class AdminPricingPage {
   private readonly api = inject(AdminApiService);
+  private readonly session = inject(AdminSessionService);
+  private readonly route = inject(ActivatedRoute);
 
   readonly products = signal<AdminProductRow[]>([]);
   readonly history = signal<AdminPriceHistoryRow[]>([]);
@@ -22,14 +27,17 @@ export class AdminPricingPage {
   readonly status = signal<PriceStatus>('');
   readonly showHistory = signal(false);
   readonly loadError = signal<string | null>(null);
+  readonly loading = signal(true);
   readonly page = signal(1);
   readonly pageSize = 10;
+  readonly total = signal(0);
   readonly selected = signal<AdminProductRow | null>(null);
   readonly actionOpen = signal(false);
   readonly detailOpen = signal(false);
   readonly actionError = signal<string | null>(null);
   readonly previewBase = signal(0);
   readonly previewSale = signal(0);
+  readonly canMutate = computed(() => this.session.canMutate('pricing'));
 
   readonly categories = computed(() => {
     const names = this.products()
@@ -67,24 +75,25 @@ export class AdminPricingPage {
       return true;
     });
   });
-  readonly pageCount = computed(() => Math.max(1, Math.ceil(this.filtered().length / this.pageSize)));
+  readonly pageCount = computed(() => Math.max(1, Math.ceil((this.status() ? this.filtered().length : this.total()) / this.pageSize)));
   readonly paged = computed(() => {
-    const start = (this.page() - 1) * this.pageSize;
-    return this.filtered().slice(start, start + this.pageSize);
-  });
-  readonly rangeLabel = computed(() => {
-    const total = this.filtered().length;
-    if (!total) {
-      return 'Hiển thị 0 - 0 / 0 sản phẩm';
+    if (this.status()) {
+      const start = (this.page() - 1) * this.pageSize;
+      return this.filtered().slice(start, start + this.pageSize);
     }
-    const start = (this.page() - 1) * this.pageSize + 1;
-    const end = Math.min(this.page() * this.pageSize, total);
-    return `Hiển thị ${start} - ${end} / ${total} sản phẩm`;
+    return this.filtered();
   });
+  readonly rangeLabel = computed(() =>
+    adminRangeLabel(this.status() ? this.filtered().length : this.total(), this.page(), this.pageSize, 'sản phẩm'),
+  );
   readonly previewPct = computed(() => this.discountFromPrices(this.previewBase(), this.previewSale()));
   readonly previewInvalid = computed(() => this.previewSale() > this.previewBase());
 
   constructor() {
+    const seeded = this.route.snapshot.queryParamMap.get('q') || this.route.snapshot.queryParamMap.get('productId') || '';
+    if (seeded) {
+      this.query.set(seeded);
+    }
     this.reload();
   }
 
@@ -92,10 +101,25 @@ export class AdminPricingPage {
    * Reloads catalog prices and price history.
    */
   reload(): void {
-    this.api.listProducts({ limit: '100' }).subscribe({
-      next: (payload) => this.products.set(adminListRows(payload)),
-      error: (error: unknown) => this.loadError.set(adminErrorMessage(error)),
-    });
+    this.loading.set(true);
+    this.loadError.set(null);
+    this.api
+      .listProducts({
+        q: this.query(),
+        limit: String(this.pageSize),
+        offset: adminOffset(this.page(), this.pageSize),
+      })
+      .subscribe({
+        next: (payload) => {
+          this.products.set(adminListRows(payload));
+          this.total.set(adminListCount(payload));
+          this.loading.set(false);
+        },
+        error: (error: unknown) => {
+          this.loadError.set(adminErrorMessage(error));
+          this.loading.set(false);
+        },
+      });
     this.api.listPriceHistory({ limit: '100' }).subscribe({
       next: (payload) => this.history.set(adminListRows(payload)),
     });
@@ -111,6 +135,7 @@ export class AdminPricingPage {
     this.category.set((form.elements.namedItem('category') as HTMLSelectElement | null)?.value || '');
     this.status.set(((form.elements.namedItem('status') as HTMLSelectElement | null)?.value || '') as PriceStatus);
     this.page.set(1);
+    this.reload();
   }
 
   /**
@@ -122,6 +147,7 @@ export class AdminPricingPage {
     this.category.set('');
     this.status.set('');
     this.page.set(1);
+    this.reload();
   }
 
   /**
@@ -129,6 +155,9 @@ export class AdminPricingPage {
    */
   goPage(page: number): void {
     this.page.set(Math.min(this.pageCount(), Math.max(1, page)));
+    if (!this.status()) {
+      this.reload();
+    }
   }
 
   /**

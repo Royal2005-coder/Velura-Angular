@@ -2,6 +2,8 @@ import { Component, inject, signal } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { useBodyClass } from '../../core/body-class';
+import { AdminApiService } from '../../core/admin-api.service';
+import { adminErrorMessage } from '../../core/admin-http';
 import { AdminSessionService } from '../../core/admin-session.service';
 
 @Component({
@@ -34,7 +36,7 @@ import { AdminSessionService } from '../../core/admin-session.service';
           <label for="cp-confirm">Xác nhận mật khẩu mới <span class="required">*</span></label>
           <input id="cp-confirm" type="password" formControlName="confirm" autocomplete="new-password" />
         </div>
-        <button class="auth-btn auth-btn--primary auth-btn--spaced" type="submit">Đổi mật khẩu</button>
+        <button class="auth-btn auth-btn--primary auth-btn--spaced" type="submit" [disabled]="saving()">Đổi mật khẩu</button>
       </form>
       <div class="auth-footer">
         <a class="auth-btn auth-btn--skip" [routerLink]="backRoute()">Quay lại</a>
@@ -44,7 +46,10 @@ import { AdminSessionService } from '../../core/admin-session.service';
 })
 export class AdminChangePasswordPage {
   private readonly session = inject(AdminSessionService);
+  private readonly api = inject(AdminApiService);
+  private readonly router = inject(Router);
   readonly errorMessage = signal<string | null>(null);
+  readonly saving = signal(false);
 
   readonly form = new FormGroup({
     current: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
@@ -64,13 +69,24 @@ export class AdminChangePasswordPage {
   }
 
   /**
-   * Validates the original change-password form locally.
+   * Validates then changes the signed-in password through `/api/auth/change-password`.
    */
   submit(): void {
     if (this.form.invalid || this.form.controls.next.value !== this.form.controls.confirm.value) {
       this.errorMessage.set('Mật khẩu mới chưa khớp hoặc chưa đủ 12 ký tự.');
       return;
     }
-    this.errorMessage.set('Đổi mật khẩu được xử lý qua email đặt lại trên trang đăng nhập.');
+    this.saving.set(true);
+    this.errorMessage.set(null);
+    this.api.changePassword(this.form.controls.current.value, this.form.controls.next.value).subscribe({
+      next: () => {
+        this.saving.set(false);
+        void this.router.navigateByUrl(this.backRoute());
+      },
+      error: (error: unknown) => {
+        this.saving.set(false);
+        this.errorMessage.set(adminErrorMessage(error, 'Không đổi được mật khẩu.'));
+      },
+    });
   }
 }

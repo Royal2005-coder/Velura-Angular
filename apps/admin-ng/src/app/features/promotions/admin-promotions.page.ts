@@ -2,25 +2,32 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { AdminApiService, AdminProductRow, AdminPromotionRow, AdminVoucherRow } from '../../core/admin-api.service';
-import { adminErrorMessage, adminListRows } from '../../core/admin-http';
+import { adminErrorMessage, adminListCount, adminListRows, adminOffset, adminRangeLabel } from '../../core/admin-http';
+import { AdminSessionService } from '../../core/admin-session.service';
+import { AdminEmptyState } from '../../shared/admin-empty-state';
 import { AdminIcon } from '../../shared/admin-icon';
 import { AdminPagination } from '../../shared/admin-pagination';
 
 @Component({
   selector: 'app-admin-promotions-page',
-  imports: [AdminIcon, AdminPagination],
+  imports: [AdminEmptyState, AdminIcon, AdminPagination],
   templateUrl: './admin-promotions.page.html',
 })
 export class AdminPromotionsPage {
   private readonly api = inject(AdminApiService);
+  private readonly session = inject(AdminSessionService);
 
   readonly view = signal<'campaigns' | 'vouchers' | 'bundles' | 'logs' | 'stats'>('campaigns');
   readonly promotions = signal<AdminPromotionRow[]>([]);
   readonly vouchers = signal<AdminVoucherRow[]>([]);
   readonly bundles = signal<AdminProductRow[]>([]);
   readonly loadError = signal<string | null>(null);
+  readonly loading = signal(true);
   readonly page = signal(1);
   readonly pageSize = 10;
+  readonly promoCount = signal(0);
+  readonly voucherCount = signal(0);
+  readonly canMutate = computed(() => this.session.canMutate('promotions'));
 
   readonly activeCampaigns = computed(() => this.promotions().filter((row) => this.isCampaignActive(row)).length);
   readonly pendingCampaigns = computed(() => this.promotions().length - this.activeCampaigns());
@@ -31,29 +38,18 @@ export class AdminPromotionsPage {
   readonly totalBudget = computed(() =>
     this.promotions().reduce((sum, row) => sum + Number(row.budget_limit ?? row.budget ?? 0), 0),
   );
-  readonly campaignPageCount = computed(() => Math.max(1, Math.ceil(this.promotions().length / this.pageSize)));
-  readonly voucherPageCount = computed(() => Math.max(1, Math.ceil(this.vouchers().length / this.pageSize)));
+  readonly campaignPageCount = computed(() => Math.max(1, Math.ceil(this.promoCount() / this.pageSize)));
+  readonly voucherPageCount = computed(() => Math.max(1, Math.ceil(this.voucherCount() / this.pageSize)));
   readonly bundlePageCount = computed(() => Math.max(1, Math.ceil(this.bundles().length / this.pageSize)));
-  readonly pagedCampaigns = computed(() => this.slicePage(this.promotions()));
-  readonly pagedVouchers = computed(() => this.slicePage(this.vouchers()));
+  readonly pagedCampaigns = computed(() => this.promotions());
+  readonly pagedVouchers = computed(() => this.vouchers());
   readonly pagedBundles = computed(() => this.slicePage(this.bundles()));
-  readonly campaignRange = computed(() => this.rangeText(this.promotions().length, 'chiến dịch'));
-  readonly voucherRange = computed(() => this.rangeText(this.vouchers().length, 'mã giảm giá'));
+  readonly campaignRange = computed(() => adminRangeLabel(this.promoCount(), this.page(), this.pageSize, 'chiến dịch'));
+  readonly voucherRange = computed(() => adminRangeLabel(this.voucherCount(), this.page(), this.pageSize, 'mã giảm giá'));
   readonly bundleRange = computed(() => this.rangeText(this.bundles().length, 'combo'));
 
   constructor() {
-    forkJoin({
-      promotions: this.api.listPromotions({ limit: '100' }).pipe(catchError((error: unknown) => {
-        this.loadError.set(adminErrorMessage(error));
-        return of({ rows: [] as AdminPromotionRow[] });
-      })),
-      vouchers: this.api.listVouchers({ limit: '100' }).pipe(catchError(() => of({ rows: [] as AdminVoucherRow[] }))),
-      products: this.api.listProducts({ limit: '100' }).pipe(catchError(() => of({ rows: [] as AdminProductRow[] }))),
-    }).subscribe((payload) => {
-      this.promotions.set(adminListRows(payload.promotions));
-      this.vouchers.set(adminListRows(payload.vouchers));
-      this.bundles.set(adminListRows(payload.products).filter((row) => row.is_combo));
-    });
+    this.reload();
   }
 
   /**
@@ -75,6 +71,9 @@ export class AdminPromotionsPage {
           ? this.bundlePageCount()
           : this.campaignPageCount();
     this.page.set(Math.min(count, Math.max(1, page)));
+    if (this.view() !== 'bundles' && this.view() !== 'logs' && this.view() !== 'stats') {
+      this.reload();
+    }
   }
 
   /**
@@ -231,17 +230,23 @@ export class AdminPromotionsPage {
    * Reloads campaigns and vouchers after a mutation.
    */
   reload(): void {
+    this.loading.set(true);
+    this.loadError.set(null);
+    const pageParams = { limit: String(this.pageSize), offset: adminOffset(this.page(), this.pageSize) };
     forkJoin({
-      promotions: this.api.listPromotions({ limit: '100' }).pipe(catchError((error: unknown) => {
+      promotions: this.api.listPromotions(pageParams).pipe(catchError((error: unknown) => {
         this.loadError.set(adminErrorMessage(error));
-        return of({ rows: [] as AdminPromotionRow[] });
+        return of({ rows: [] as AdminPromotionRow[], count: 0 });
       })),
-      vouchers: this.api.listVouchers({ limit: '100' }).pipe(catchError(() => of({ rows: [] as AdminVoucherRow[] }))),
-      products: this.api.listProducts({ limit: '100' }).pipe(catchError(() => of({ rows: [] as AdminProductRow[] }))),
+      vouchers: this.api.listVouchers(pageParams).pipe(catchError(() => of({ rows: [] as AdminVoucherRow[], count: 0 }))),
+      products: this.api.listProducts({ isCombo: 'true', limit: '100' }).pipe(catchError(() => of({ rows: [] as AdminProductRow[] }))),
     }).subscribe((payload) => {
       this.promotions.set(adminListRows(payload.promotions));
       this.vouchers.set(adminListRows(payload.vouchers));
+      this.promoCount.set(adminListCount(payload.promotions));
+      this.voucherCount.set(adminListCount(payload.vouchers));
       this.bundles.set(adminListRows(payload.products).filter((row) => row.is_combo));
+      this.loading.set(false);
     });
   }
 

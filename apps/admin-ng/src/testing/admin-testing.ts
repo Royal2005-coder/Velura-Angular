@@ -48,6 +48,7 @@ export function stubAdminApi(): AdminApiService {
       signIn: () => of({ token: '' }),
       exchangePkce: () => of({ token: '' }),
       requestPasswordReset: () => of({}),
+      changePassword: () => of({ success: true }),
       listLowStock: () => list(),
     } as unknown as AdminApiService,
     {

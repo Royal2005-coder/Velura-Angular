@@ -37,20 +37,15 @@
           <app-admin-icon name="support" cssClass="admin-menu-icon" />Đổi trả &amp; CSKH
         </a>
       }
-      @if (canSee('pricing') || canSee('promotions')) {
-        <details class="admin-menu-group" [class.is-active]="pricingOpen()" [open]="pricingOpen()">
-          <summary>
-            <app-admin-icon name="tag" cssClass="admin-menu-icon" />Giá &amp; khuyến mãi
-          </summary>
-          <div class="admin-menu-subnav">
-            @if (canSee('pricing')) {
-              <a routerLink="/pricing" routerLinkActive="is-active">Quản lý giá</a>
-            }
-            @if (canSee('promotions')) {
-              <a routerLink="/promotions" routerLinkActive="is-active">Quản lý khuyến mãi</a>
-            }
-          </div>
-        </details>
+      @if (canSee('pricing')) {
+        <a class="admin-menu-item" routerLink="/pricing" routerLinkActive="admin-menu-item--active" [routerLinkActiveOptions]="{ exact: true }">
+          <app-admin-icon name="tag" cssClass="admin-menu-icon" />Bảng giá
+        </a>
+      }
+      @if (canSee('promotions')) {
+        <a class="admin-menu-item" routerLink="/promotions" routerLinkActive="admin-menu-item--active" [routerLinkActiveOptions]="{ exact: true }">
+          <app-admin-icon name="tag" cssClass="admin-menu-icon" />Khuyến mãi
+        </a>
       }
       @if (canSee('logs')) {
         <a class="admin-menu-item" routerLink="/logs" routerLinkActive="admin-menu-item--active" [routerLinkActiveOptions]="{ exact: true }">

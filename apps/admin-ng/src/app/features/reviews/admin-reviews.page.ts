@@ -1,12 +1,14 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { AdminApiService, AdminAuditRow, AdminReviewRow } from '../../core/admin-api.service';
 import { adminDateTime, adminStars } from '../../core/admin-format';
-import { adminErrorMessage, adminListRows } from '../../core/admin-http';
+import { adminErrorMessage, adminListCount, adminListRows, adminOffset, adminRangeLabel } from '../../core/admin-http';
+import { AdminSessionService } from '../../core/admin-session.service';
+import { AdminEmptyState } from '../../shared/admin-empty-state';
 import { AdminIcon } from '../../shared/admin-icon';
 import { AdminPagination } from '../../shared/admin-pagination';
 
 type ReviewTab = 'all' | 'pending' | 'urgent' | 'processed' | 'logs';
-type ReviewAction = 'approve' | 'hide' | 'reply' | 'escalate' | null;
+type ReviewAction = 'approve' | 'hide' | 'unhide' | 'reply' | 'escalate' | null;
 
 const STATUS_LABELS: Record<string, string> = {
   pending: 'Chờ duyệt',
@@ -17,11 +19,12 @@ const STATUS_LABELS: Record<string, string> = {
 
 @Component({
   selector: 'app-admin-reviews-page',
-  imports: [AdminIcon, AdminPagination],
+  imports: [AdminEmptyState, AdminIcon, AdminPagination],
   templateUrl: './admin-reviews.page.html',
 })
 export class AdminReviewsPage {
   private readonly api = inject(AdminApiService);
+  private readonly session = inject(AdminSessionService);
 
   readonly tab = signal<ReviewTab>('all');
   readonly query = signal('');
@@ -30,56 +33,29 @@ export class AdminReviewsPage {
   readonly rows = signal<AdminReviewRow[]>([]);
   readonly logs = signal<AdminAuditRow[]>([]);
   readonly loadError = signal<string | null>(null);
+  readonly loading = signal(true);
   readonly page = signal(1);
   readonly logsPage = signal(1);
   readonly pageSize = 10;
+  readonly total = signal(0);
+  readonly logsCount = signal(0);
   readonly selected = signal<AdminReviewRow | null>(null);
   readonly actionType = signal<ReviewAction>(null);
   readonly actionError = signal<string | null>(null);
   readonly menuId = signal<string | null>(null);
   readonly detailOpen = signal(false);
+  readonly canMutate = computed(() => this.session.canMutate('reviews'));
 
   readonly pendingCount = computed(() => this.rows().filter((row) => row.status === 'pending').length);
   readonly urgentCount = computed(() => this.rows().filter((row) => row.is_flagged_urgent || Number(row.rating) <= 2).length);
   readonly hiddenCount = computed(() => this.rows().filter((row) => row.status === 'rejected' || row.status === 'hidden').length);
   readonly processedCount = computed(() => this.rows().filter((row) => row.status !== 'pending').length);
-  readonly filtered = computed(() => {
-    const tab = this.tab();
-    const query = this.query().toLowerCase();
-    const rating = this.ratingFilter();
-    const status = this.statusFilter();
-    return this.rows().filter((row) => {
-      if (tab === 'pending' && (row.status !== 'pending' || row.is_flagged_urgent)) {
-        return false;
-      }
-      if (tab === 'urgent' && !(row.is_flagged_urgent || Number(row.rating) <= 2)) {
-        return false;
-      }
-      if (tab === 'processed' && !(row.status !== 'pending' || row.admin_reply)) {
-        return false;
-      }
-      if (rating && String(row.rating) !== rating) {
-        return false;
-      }
-      if (status && row.status !== status) {
-        return false;
-      }
-      const haystack = `${this.commentOf(row)} ${this.productName(row)}`.toLowerCase();
-      return !query || haystack.includes(query);
-    });
-  });
-  readonly pageCount = computed(() => Math.max(1, Math.ceil(this.filtered().length / this.pageSize)));
-  readonly paged = computed(() => {
-    const start = (this.page() - 1) * this.pageSize;
-    return this.filtered().slice(start, start + this.pageSize);
-  });
-  readonly rangeLabel = computed(() => this.rangeText(this.filtered().length, this.page(), 'đánh giá'));
-  readonly pagedLogs = computed(() => {
-    const start = (this.logsPage() - 1) * this.pageSize;
-    return this.logs().slice(start, start + this.pageSize);
-  });
-  readonly logPageCount = computed(() => Math.max(1, Math.ceil(this.logs().length / this.pageSize)));
-  readonly logRangeLabel = computed(() => this.rangeText(this.logs().length, this.logsPage(), 'nhật ký'));
+  readonly pageCount = computed(() => Math.max(1, Math.ceil(this.total() / this.pageSize)));
+  readonly paged = computed(() => this.rows());
+  readonly rangeLabel = computed(() => adminRangeLabel(this.total(), this.page(), this.pageSize, 'đánh giá'));
+  readonly pagedLogs = computed(() => this.logs());
+  readonly logPageCount = computed(() => Math.max(1, Math.ceil(this.logsCount() / this.pageSize)));
+  readonly logRangeLabel = computed(() => adminRangeLabel(this.logsCount(), this.logsPage(), this.pageSize, 'nhật ký'));
 
   constructor() {
     this.reload();
@@ -89,10 +65,33 @@ export class AdminReviewsPage {
    * Reloads reviews from `/api/v1/admin/reviews`.
    */
   reload(): void {
-    this.api.listReviews({ limit: '100' }).subscribe({
-      next: (payload) => this.rows.set(adminListRows(payload)),
-      error: (error: unknown) => this.loadError.set(adminErrorMessage(error)),
-    });
+    this.loading.set(true);
+    this.loadError.set(null);
+    let status = this.statusFilter();
+    if (this.tab() === 'pending') {
+      status = 'pending';
+    } else if (this.tab() === 'processed') {
+      status = 'approved';
+    }
+    this.api
+      .listReviews({
+        q: this.query(),
+        rating: this.ratingFilter(),
+        status,
+        limit: String(this.pageSize),
+        offset: adminOffset(this.page(), this.pageSize),
+      })
+      .subscribe({
+        next: (payload) => {
+          this.rows.set(adminListRows(payload));
+          this.total.set(adminListCount(payload));
+          this.loading.set(false);
+        },
+        error: (error: unknown) => {
+          this.loadError.set(adminErrorMessage(error));
+          this.loading.set(false);
+        },
+      });
   }
 
   /**
@@ -102,12 +101,17 @@ export class AdminReviewsPage {
     this.tab.set(tab);
     this.page.set(1);
     this.menuId.set(null);
-    if (tab === 'logs' && !this.logs().length) {
-      this.api.listReviewAuditLogs({ limit: '100' }).subscribe({
-        next: (payload) => this.logs.set(adminListRows(payload)),
+    if (tab === 'logs') {
+      this.api.listReviewAuditLogs({ limit: String(this.pageSize), offset: adminOffset(this.logsPage(), this.pageSize) }).subscribe({
+        next: (payload) => {
+          this.logs.set(adminListRows(payload));
+          this.logsCount.set(adminListCount(payload));
+        },
         error: (error: unknown) => this.loadError.set(adminErrorMessage(error)),
       });
+      return;
     }
+    this.reload();
   }
 
   /**
@@ -120,6 +124,7 @@ export class AdminReviewsPage {
     this.ratingFilter.set((form.elements.namedItem('rating') as HTMLSelectElement | null)?.value || '');
     this.statusFilter.set((form.elements.namedItem('status') as HTMLSelectElement | null)?.value || '');
     this.page.set(1);
+    this.reload();
   }
 
   /**
@@ -131,6 +136,7 @@ export class AdminReviewsPage {
     this.ratingFilter.set('');
     this.statusFilter.set('');
     this.page.set(1);
+    this.reload();
   }
 
   /**
@@ -138,6 +144,7 @@ export class AdminReviewsPage {
    */
   goPage(page: number): void {
     this.page.set(Math.min(this.pageCount(), Math.max(1, page)));
+    this.reload();
   }
 
   /**
@@ -145,6 +152,13 @@ export class AdminReviewsPage {
    */
   goLogsPage(page: number): void {
     this.logsPage.set(Math.min(this.logPageCount(), Math.max(1, page)));
+    this.api.listReviewAuditLogs({ limit: String(this.pageSize), offset: adminOffset(this.logsPage(), this.pageSize) }).subscribe({
+      next: (payload) => {
+        this.logs.set(adminListRows(payload));
+        this.logsCount.set(adminListCount(payload));
+      },
+      error: (error: unknown) => this.loadError.set(adminErrorMessage(error)),
+    });
   }
 
   /**
@@ -207,7 +221,7 @@ export class AdminReviewsPage {
     const value = (form.elements.namedItem('value') as HTMLTextAreaElement | null)?.value || '';
     const payload = { expectedVersion: row.version };
     const request$ =
-      type === 'approve'
+      type === 'approve' || type === 'unhide'
         ? this.api.approveReview(row.review_id, { ...payload, actionNote: note })
         : type === 'hide'
           ? this.api.hideReview(row.review_id, { ...payload, reason: value })
@@ -273,6 +287,9 @@ export class AdminReviewsPage {
     if (type === 'approve') {
       return 'Phê duyệt đánh giá';
     }
+    if (type === 'unhide') {
+      return 'Mở ẩn đánh giá';
+    }
     if (type === 'hide') {
       return 'Ẩn đánh giá';
     }
@@ -287,14 +304,5 @@ export class AdminReviewsPage {
    */
   jsonValue(value: unknown): string {
     return JSON.stringify(value || {});
-  }
-
-  private rangeText(total: number, page: number, noun: string): string {
-    if (!total) {
-      return `Hiển thị 0 - 0 / 0 ${noun}`;
-    }
-    const start = (page - 1) * this.pageSize + 1;
-    const end = Math.min(page * this.pageSize, total);
-    return `Hiển thị ${start} - ${end} / ${total} ${noun}`;
   }
 }

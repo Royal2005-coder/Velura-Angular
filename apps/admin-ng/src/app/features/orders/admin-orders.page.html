@@ -74,20 +74,13 @@
           </div>
         </form>
         @if (loading()) {
-          <div class="admin-order-empty"><strong>Đang tải dữ liệu đơn hàng...</strong></div>
+          <app-admin-empty-state kind="loading" icon="clock" title="Đang tải dữ liệu đơn hàng" />
         } @else if (loadError()) {
-          <div class="admin-order-empty">
-            <app-admin-icon name="alert" />
-            <strong>Không thể tải đơn hàng</strong>
-            <span>{{ loadError() }}</span>
+          <app-admin-empty-state kind="error" icon="alert" title="Không thể tải đơn hàng" [message]="loadError() || ''">
             <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="reload()">Thử lại</button>
-          </div>
-        } @else if (!paged().length) {
-          <div class="admin-order-empty">
-            <app-admin-icon name="cart" />
-            <strong>Không có đơn hàng phù hợp</strong>
-            <span>Điều chỉnh bộ lọc hoặc tải lại dữ liệu.</span>
-          </div>
+          </app-admin-empty-state>
+        } @else if (!rows().length) {
+          <app-admin-empty-state kind="empty" icon="cart" title="Không có đơn hàng phù hợp" message="Điều chỉnh bộ lọc hoặc tải lại dữ liệu." />
         } @else {
           <div class="admin-table-wrap">
             <table class="admin-table admin-data-table">
@@ -103,7 +96,7 @@
                 </tr>
               </thead>
               <tbody>
-                @for (order of paged(); track order.order_id) {
+                @for (order of rows(); track order.order_id) {
                   <tr>
                     <td>
                       <span class="admin-order-code">{{ order.order_id }}</span>
@@ -132,10 +125,13 @@
                         @if (menuId() === order.order_id) {
                           <div class="admin-dropdown admin-table-action-menu admin-order-action-menu">
                             <button type="button" (click)="openDetail(order.order_id)"><app-admin-icon name="eye" /><span>Xem chi tiết</span></button>
-                            @if (canChangeStatus(order)) {
+                            @if (canMutate() && canChangeStatus(order)) {
                               <button type="button" (click)="openAction('status', order.order_id)"><app-admin-icon name="settings" /><span>Cập nhật trạng thái</span></button>
                             }
-                            @if (canCancel(order)) {
+                            @if (canMutate() && isPaymentError(order)) {
+                              <button type="button" (click)="openAction('payment', order.order_id)"><app-admin-icon name="credit-card" /><span>Đối soát thanh toán</span></button>
+                            }
+                            @if (canMutate() && canCancel(order)) {
                               <button class="admin-order-action-menu__danger" type="button" (click)="openAction('cancel', order.order_id)"><app-admin-icon name="lock" /><span>Hủy đơn</span></button>
                             }
                           </div>
@@ -150,7 +146,7 @@
           <app-admin-pagination [page]="page()" [pageCount]="totalPages()" [label]="rangeLabel()" (changed)="goPage($event)" />
         }
       } @else if (!logs().length) {
-        <div class="admin-order-empty"><strong>Chưa có nhật ký đơn hàng</strong></div>
+        <app-admin-empty-state kind="empty" icon="clock" title="Chưa có nhật ký đơn hàng" />
       } @else {
         <div class="admin-table-wrap">
           <table class="admin-table admin-data-table">
@@ -222,7 +218,7 @@
     <section class="admin-modal">
       <form (submit)="submitAction($event)">
         <header class="admin-modal__header">
-          <h2>{{ actionType() === 'cancel' ? 'Hủy đơn hàng' : 'Cập nhật trạng thái' }}</h2>
+          <h2>{{ actionType() === 'cancel' ? 'Hủy đơn hàng' : actionType() === 'payment' ? 'Đối soát thanh toán' : 'Cập nhật trạng thái' }}</h2>
           <button class="admin-icon-button" type="button" (click)="closeOverlays()">×</button>
         </header>
         <div class="admin-modal__body">
@@ -234,6 +230,21 @@
                 @for (status of nextStatuses(); track status) {
                   <option [value]="status">{{ orderLabel(status) }}</option>
                 }
+              </select>
+            </label>
+            @if (needsTracking()) {
+              <label class="admin-form-group">
+                <span class="admin-form-label">Mã vận đơn</span>
+                <input class="admin-form-control" name="trackingCode" [value]="selected()!.tracking_code || ''" />
+              </label>
+            }
+          }
+          @if (actionType() === 'payment') {
+            <label class="admin-form-group">
+              <span class="admin-form-label">Quyết định</span>
+              <select class="admin-form-control" name="decision" required>
+                <option value="mark_paid">Đánh dấu đã thanh toán</option>
+                <option value="mark_failed">Đánh dấu thất bại</option>
               </select>
             </label>
           }

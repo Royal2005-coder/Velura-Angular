@@ -6,4 +6,11 @@ describe('AdminPricingPage', () => {
     const page = await createAdminPage(AdminPricingPage);
     expect(page).toBeTruthy();
   });
+
+  it('exposes loading and empty price-list signals', async () => {
+    const page = await createAdminPage(AdminPricingPage);
+    expect(page.loading()).toBe(false);
+    expect(page.products()).toEqual([]);
+    expect(page.loadError()).toBeNull();
+  });
 });

@@ -32,7 +32,7 @@ if [ -f /opt/velura/deploy/systemd/velura-api.service ]; then
 fi
 
 sudo chown -R "${DEPLOY_USER}:${DEPLOY_USER}" /var/www/velura /var/www/velura-staging /opt/velura /opt/velura-staging
-echo "${DEPLOY_USER} ALL=(root) NOPASSWD: /bin/systemctl restart velura-api, /bin/systemctl restart velura-api-staging, /bin/systemctl enable velura-api-staging, /bin/systemctl daemon-reload, /bin/systemctl reload nginx, /usr/sbin/nginx, /bin/mkdir, /bin/chown, /bin/cp, /bin/sed, /usr/bin/tee" | sudo tee /etc/sudoers.d/velura-deploy >/dev/null
+echo "${DEPLOY_USER} ALL=(root) NOPASSWD: /bin/systemctl restart velura-api, /bin/systemctl restart velura-api-staging, /bin/systemctl enable velura-api-staging, /bin/systemctl enable nginx, /bin/systemctl start nginx, /bin/systemctl restart nginx, /bin/systemctl daemon-reload, /bin/systemctl reload nginx, /usr/sbin/nginx, /bin/mkdir, /bin/chown, /bin/cp, /bin/sed, /usr/bin/tee" | sudo tee /etc/sudoers.d/velura-deploy >/dev/null
 sudo chmod 440 /etc/sudoers.d/velura-deploy
 
 sudo systemctl daemon-reload
@@ -42,5 +42,6 @@ if [ -f /opt/velura/.env ]; then
 fi
 
 sudo nginx -t
-sudo systemctl reload nginx
+sudo systemctl enable --now nginx
+sudo systemctl reload nginx || sudo /usr/sbin/nginx
 echo "Bootstrap complete for ${DEPLOY_USER}. Place /opt/velura/.env then start velura-api."

@@ -3,6 +3,17 @@ import type { AuthContext, JsonObject } from "../types.js";
 import type { AuditLogListFilters, AuditLogRepository } from "./audit-log-repository.js";
 
 const MODULE_PATTERN = /^[a-z0-9_-]{1,50}$/;
+const ADMIN_MODULES = [
+  "accounts",
+  "products",
+  "orders",
+  "pricing",
+  "promotions",
+  "vouchers",
+  "returns",
+  "reviews",
+  "support"
+];
 
 /**
  * Audit-log methods the admin audit-log router calls.
@@ -23,16 +34,42 @@ export function createAuditLogService({ repository }: { repository: AuditLogRepo
       if (!context?.authUser?.id || !context.isAdmin || !context.profile?.is_active) {
         throw new HttpError(403, "RBAC_DENIED", "Only active administrators can view audit logs");
       }
-      const module = searchParams.get("module") || "";
-      if (module && !MODULE_PATTERN.test(module)) throw new HttpError(422, "VALIDATION_ERROR", "Invalid audit module");
-      const filters: AuditLogListFilters = {
-        module: module || undefined,
-        targetId: searchParams.get("targetId") || undefined,
-        limit: integer(searchParams.get("limit"), 50, 1, 1000),
-        offset: integer(searchParams.get("offset"), 0, 0, 1_000_000)
-      };
-      return repository.list(filters, context.accessToken);
+      return repository.list(parseListFilters(searchParams), context.accessToken);
     }
+  };
+}
+
+/**
+ * Parses list query params for module, admin scope, and free-text search.
+ */
+export function parseAuditLogFilters(searchParams: URLSearchParams): AuditLogListFilters {
+  return parseListFilters(searchParams);
+}
+
+function parseListFilters(searchParams: URLSearchParams): AuditLogListFilters {
+  const module = searchParams.get("module") || "";
+  const scope = searchParams.get("scope") || "";
+  const q = String(searchParams.get("q") || "").trim().slice(0, 100);
+  if (module && !MODULE_PATTERN.test(module)) throw new HttpError(422, "VALIDATION_ERROR", "Invalid audit module");
+  if (scope && !["admin", "system", "ai"].includes(scope)) {
+    throw new HttpError(422, "VALIDATION_ERROR", "Invalid audit scope");
+  }
+  let resolvedModule = module || undefined;
+  let modules: string[] | undefined;
+  if (!resolvedModule && scope === "admin") {
+    modules = ADMIN_MODULES;
+  } else if (!resolvedModule && scope === "system") {
+    resolvedModule = "system";
+  } else if (!resolvedModule && scope === "ai") {
+    resolvedModule = "ai";
+  }
+  return {
+    module: resolvedModule,
+    modules,
+    q: q || undefined,
+    targetId: searchParams.get("targetId") || undefined,
+    limit: integer(searchParams.get("limit"), 50, 1, 1000),
+    offset: integer(searchParams.get("offset"), 0, 0, 1_000_000)
   };
 }
 

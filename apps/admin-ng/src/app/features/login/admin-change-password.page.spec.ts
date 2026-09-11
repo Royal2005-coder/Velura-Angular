@@ -7,7 +7,7 @@ describe('AdminChangePasswordPage', () => {
     expect(page).toBeTruthy();
   });
 
-  it('validates mismatch locally (KAN-9 still stubs the API)', async () => {
+  it('validates mismatch locally before calling the API', async () => {
     const page = await createAdminPage(AdminChangePasswordPage);
     page.form.setValue({ current: 'old-password-1', next: 'new-password-12', confirm: 'other-password' });
     page.submit();

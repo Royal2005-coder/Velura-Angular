@@ -52,7 +52,7 @@ export class AdminDashboardPage {
   readonly logs = computed(() => this.data().recentLogs || []);
   readonly alertTotal = computed(() => {
     const ops = this.ops();
-    return ops.openReturns + ops.paymentErrors + ops.lowStockProducts + ops.openSupportTickets;
+    return this.safeNumber(ops.openReturns) + this.safeNumber(ops.paymentErrors) + this.safeNumber(ops.lowStockProducts) + this.safeNumber(ops.openSupportTickets);
   });
   readonly categories = computed(() => this.business().categoryContributions || []);
   readonly bestSellers = computed(() =>
@@ -139,7 +139,7 @@ export class AdminDashboardPage {
    * Formats compact money the same way vanilla `fmtMoney` does.
    */
   money(value: number | undefined): string {
-    const n = Number(value || 0);
+    const n = this.safeNumber(value);
     const abs = Math.abs(n);
     if (abs >= 1e9) {
       return `${(n / 1e9).toFixed(1).replace(/\.0$/, '')}B`;
@@ -157,7 +157,7 @@ export class AdminDashboardPage {
    * Formats a locale integer.
    */
   num(value: number | undefined): string {
-    return Number(value || 0).toLocaleString('vi-VN');
+    return this.safeNumber(value).toLocaleString('vi-VN');
   }
 
   /**
@@ -249,5 +249,13 @@ export class AdminDashboardPage {
     const now = new Date();
     const vietnam = new Date(now.getTime() + 7 * 60 * 60 * 1000 - days * 24 * 60 * 60 * 1000);
     return vietnam.toISOString().slice(0, 10);
+  }
+
+  /**
+   * Coerces RPC KPI values so "NaN" strings never reach the template.
+   */
+  private safeNumber(value: unknown): number {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : 0;
   }
 }

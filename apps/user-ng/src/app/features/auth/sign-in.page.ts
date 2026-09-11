@@ -1,11 +1,14 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
+import { environment } from '../../../environments/environment';
 import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { WishlistStore } from '../../core/services/wishlist.store';
 import { showToast } from '../../core/utils/toast';
 import { AuthOtpModal, AuthOtpResult } from '../../shared/auth-otp-modal/auth-otp-modal';
+
+const PKCE_STORAGE_KEY = 'velura-user-oauth-pkce-code-verifier';
 
 @Component({
   selector: 'app-sign-in-page',
@@ -100,10 +103,49 @@ export class SignInPage {
     this.otpOpen.set(false);
   }
 
+  /**
+   * Starts Google PKCE through `/api/auth/google`, same contract as admin login.
+   */
+  async startGoogle(): Promise<void> {
+    this.errorMessage.set(null);
+    try {
+      const redirectTo = `${window.location.origin}/auth/callback`;
+      const verifier = this.randomVerifier();
+      const challenge = await this.codeChallenge(verifier);
+      localStorage.setItem(PKCE_STORAGE_KEY, verifier);
+      const url =
+        `${environment.apiUrl}/api/auth/google` +
+        `?redirect_to=${encodeURIComponent(redirectTo)}` +
+        `&code_challenge=${encodeURIComponent(challenge)}`;
+      window.location.href = url;
+    } catch {
+      this.errorMessage.set('Không thể kết nối Google. Vui lòng thử lại hoặc đăng nhập bằng email.');
+    }
+  }
+
   private finishAuth(response: { token?: string; user?: Record<string, unknown> }): void {
     this.auth.applySession(response.token, response.user);
     this.wishlist.refresh();
     showToast('Đăng nhập thành công!');
     void this.router.navigateByUrl('/');
+  }
+
+  private randomVerifier(): string {
+    const bytes = crypto.getRandomValues(new Uint8Array(32));
+    return this.base64Url(bytes);
+  }
+
+  private async codeChallenge(verifier: string): Promise<string> {
+    const data = new TextEncoder().encode(verifier);
+    const digest = await crypto.subtle.digest('SHA-256', data);
+    return this.base64Url(new Uint8Array(digest));
+  }
+
+  private base64Url(bytes: Uint8Array): string {
+    let binary = '';
+    bytes.forEach((value) => {
+      binary += String.fromCharCode(value);
+    });
+    return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   }
 }

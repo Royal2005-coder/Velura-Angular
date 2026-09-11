@@ -56,7 +56,7 @@ Velura (bắt buộc):
 
 Slide: routes, `router-outlet`, child routes.
 
-Velura: `app.routes.ts`. Guard: `auth.guard.ts`, `admin-auth.guard.ts`. Lazy `loadComponent` là backlog [KAN-7](https://webadvance.atlassian.net/browse/KAN-7).
+Velura: `app.routes.ts` dùng `loadComponent`. Guard: `auth.guard.ts`, `admin-auth.guard.ts`.
 
 ## 8. CLI
 

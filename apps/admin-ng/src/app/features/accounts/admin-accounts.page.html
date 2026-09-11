@@ -6,7 +6,7 @@
         <p class="admin-kpi-card__label">Tổng tài khoản</p>
         <span class="admin-kpi-card__icon"><app-admin-icon name="users" /></span>
       </div>
-      <strong class="admin-kpi-card__value">{{ total() }}</strong>
+      <strong class="admin-kpi-card__value">{{ allCount() }}</strong>
     </article>
     <article class="admin-kpi-card">
       <div class="admin-kpi-card__head">
@@ -39,7 +39,7 @@
   </section>
   <section class="admin-card admin-card--flush">
     <div class="admin-tabs" role="tablist">
-      <button class="admin-tab" [class.admin-tab--active]="tab() === 'all'" type="button" (click)="setTab('all')">Tất cả tài khoản <span>{{ total() }}</span></button>
+      <button class="admin-tab" [class.admin-tab--active]="tab() === 'all'" type="button" (click)="setTab('all')">Tất cả tài khoản <span>{{ allCount() }}</span></button>
       <button class="admin-tab" [class.admin-tab--active]="tab() === 'members'" type="button" (click)="setTab('members')">Thành viên <span>{{ memberCount() }}</span></button>
       <button class="admin-tab" [class.admin-tab--active]="tab() === 'admins'" type="button" (click)="setTab('admins')">Quản trị viên <span>{{ adminCount() }}</span></button>
       <button class="admin-tab" [class.admin-tab--active]="tab() === 'locked'" type="button" (click)="setTab('locked')">Bị khóa <span>{{ lockedCount() }}</span></button>
@@ -68,9 +68,15 @@
             <button class="admin-btn admin-btn--ghost admin-btn--sm" type="reset">Đặt lại</button>
           </div>
         </form>
-        @if (loadError()) {
-          <p class="admin-note">{{ loadError() }}</p>
-        }
+        @if (loading()) {
+          <app-admin-empty-state kind="loading" icon="clock" title="Đang tải tài khoản" />
+        } @else if (loadError()) {
+          <app-admin-empty-state kind="error" icon="alert" title="Không tải được tài khoản" [message]="loadError() || ''">
+            <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="reload()">Thử lại</button>
+          </app-admin-empty-state>
+        } @else if (!paged().length) {
+          <app-admin-empty-state kind="empty" icon="users" title="Không có tài khoản phù hợp" message="Điều chỉnh bộ lọc hoặc tải lại." />
+        } @else {
         <div class="admin-table-wrap">
           <table class="admin-table admin-data-table admin-member-table">
             <thead>
@@ -83,11 +89,6 @@
               </tr>
             </thead>
             <tbody>
-              @if (!paged().length) {
-                <tr class="admin-table-empty-row">
-                  <td colspan="5">Không có tài khoản phù hợp. Dữ liệu được tải trực tiếp từ Supabase.</td>
-                </tr>
-              } @else {
                 @for (row of paged(); track rowKey(row, $index)) {
                   <tr>
                     <td>
@@ -116,31 +117,35 @@
                         <button class="admin-icon-button admin-icon-button--sm" type="button" title="Xem chi tiết" (click)="openDetail(row.user_id)">
                           <app-admin-icon name="eye" />
                         </button>
-                        @if (row.is_active) {
+                        @if (canMutate() && row.is_active) {
                           <button class="admin-icon-button admin-icon-button--sm" type="button" title="Khóa tài khoản" (click)="openAction('lock', row.user_id)">
                             <app-admin-icon name="lock" />
                           </button>
-                        } @else {
+                        } @else if (canMutate()) {
                           <button class="admin-icon-button admin-icon-button--sm" type="button" title="Mở khóa tài khoản" (click)="openAction('unlock', row.user_id)">
                             <app-admin-icon name="unlock" />
                           </button>
                         }
+                        @if (canMutate()) {
                         <button class="admin-icon-button admin-icon-button--sm" type="button" title="Thay đổi vai trò" (click)="openAction('role', row.user_id)">
                           <app-admin-icon name="edit" />
                         </button>
+                        }
                       </div>
                     </td>
                   </tr>
                 }
-              }
             </tbody>
           </table>
         </div>
         <app-admin-pagination [page]="page()" [pageCount]="pageCount()" [label]="rangeLabel()" (changed)="goPage($event)" />
+        }
       }
       @if (tab() === 'promotions') {
-        @if (!requests().length) {
-          <div class="admin-empty-state"><strong>Không có yêu cầu nâng quyền</strong></div>
+        @if (loading()) {
+          <app-admin-empty-state kind="loading" icon="clock" title="Đang tải yêu cầu nâng quyền" />
+        } @else if (!requests().length) {
+          <app-admin-empty-state kind="empty" icon="users" title="Không có yêu cầu nâng quyền" />
         } @else {
           <div class="admin-table-wrap">
             <table class="admin-table">
@@ -163,7 +168,7 @@
                     <td>{{ date(row.expires_at) }}</td>
                     <td>{{ row.status }}</td>
                     <td>
-                      @if (row.status === 'pending') {
+                      @if (canMutate() && row.status === 'pending') {
                         <div class="admin-table-actions">
                           <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openRequest('approve', row.request_id)">Duyệt</button>
                           <button class="admin-btn admin-btn--danger admin-btn--sm" type="button" (click)="openRequest('reject', row.request_id)">Từ chối</button>
@@ -177,11 +182,14 @@
               </tbody>
             </table>
           </div>
+          <app-admin-pagination [page]="page()" [pageCount]="requestPageCount()" [label]="requestRangeLabel()" (changed)="goPage($event)" />
         }
       }
       @if (tab() === 'logs') {
-        @if (!logs().length) {
-          <div class="admin-empty-state"><strong>Chưa có nhật ký tài khoản</strong></div>
+        @if (loading()) {
+          <app-admin-empty-state kind="loading" icon="clock" title="Đang tải nhật ký tài khoản" />
+        } @else if (!logs().length) {
+          <app-admin-empty-state kind="empty" icon="clock" title="Chưa có nhật ký tài khoản" />
         } @else {
           <div class="admin-table-wrap">
             <table class="admin-table">

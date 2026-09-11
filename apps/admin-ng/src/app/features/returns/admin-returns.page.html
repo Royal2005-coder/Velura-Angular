@@ -24,15 +24,16 @@
         <app-admin-icon name="support" cssClass="admin-line-icon admin-line-icon--tab-inset" />
         Chat trực tuyến <span>{{ pendingChatCount() }}</span>
       </button>
-      <button class="admin-tab" [class.admin-tab--active]="zone() === 'returns'" type="button" (click)="setZone('returns')">Đổi/trả hàng <span>{{ returns().length }}</span></button>
-      <button class="admin-tab" [class.admin-tab--active]="zone() === 'support'" type="button" (click)="setZone('support')">Phiếu hỗ trợ <span>{{ tickets().length }}</span></button>
+      <button class="admin-tab" [class.admin-tab--active]="zone() === 'returns'" type="button" (click)="setZone('returns')">Đổi/trả hàng <span>{{ returnsTotal() }}</span></button>
+      <button class="admin-tab" [class.admin-tab--active]="zone() === 'support'" type="button" (click)="setZone('support')">Phiếu hỗ trợ <span>{{ ticketsTotal() }}</span></button>
       <button class="admin-tab" [class.admin-tab--active]="zone() === 'logs'" type="button" (click)="setZone('logs')">Nhật ký xử lý</button>
     </div>
     <div class="admin-tab-content">
-      @if (loadError()) {
-        <p class="admin-note">{{ loadError() }}</p>
-      }
-      @if (zone() === 'chat') {
+      @if (loading()) {
+        <app-admin-empty-state kind="loading" icon="clock" title="Đang tải CSKH" />
+      } @else if (loadError()) {
+        <app-admin-empty-state kind="error" icon="alert" title="Không tải được đổi trả" [message]="loadError() || ''" />
+      } @else if (zone() === 'chat') {
         <div class="admin-chat-layout">
           <div class="admin-chat-sidebar">
             <div class="admin-chat-sidebar__header">
@@ -102,10 +103,10 @@
                     >
                       {{ chatStatus(selectedChat()!) }}
                     </span>
-                    @if (canJoinChat()) {
+                    @if (canMutate() && canJoinChat()) {
                       <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="assignChat()">Tiếp nhận</button>
                     }
-                    @if (!isClosedChat()) {
+                    @if (canMutate() && !isClosedChat()) {
                       <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="closeChat()">Đóng</button>
                     }
                   </div>
@@ -163,7 +164,7 @@
         </div>
       } @else if (zone() === 'returns') {
         @if (!returns().length) {
-          <div class="admin-order-empty"><strong>Không có phiếu đổi/trả phù hợp</strong></div>
+          <app-admin-empty-state kind="empty" icon="refresh" title="Không có phiếu đổi/trả phù hợp" />
         } @else {
           <div class="admin-table-wrap">
             <table class="admin-table admin-data-table">
@@ -179,9 +180,11 @@
                     <td>
                       @if (row.status === 'pending') {
                         <div class="admin-table-actions">
+                          @if (canMutate()) {
                           <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openReturnAction('refund', row.return_id)">Hoàn tiền</button>
                           <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openReturnAction('exchange', row.return_id)">Đổi hàng</button>
                           <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="openReturnAction('reject', row.return_id)">Từ chối</button>
+                          }
                         </div>
                       }
                     </td>
@@ -194,7 +197,7 @@
         }
       } @else if (zone() === 'support') {
         @if (!tickets().length) {
-          <div class="admin-order-empty"><strong>Không có phiếu hỗ trợ phù hợp</strong></div>
+          <app-admin-empty-state kind="empty" icon="support" title="Không có phiếu hỗ trợ phù hợp" />
         } @else {
           <div class="admin-table-wrap">
             <table class="admin-table admin-data-table">
@@ -207,7 +210,7 @@
                     <td>{{ row.priority || '—' }}</td>
                     <td><span class="admin-badge">{{ statusLabel(row.status) }}</span></td>
                     <td>
-                      @if (row.status !== 'closed') {
+                      @if (canMutate() && row.status !== 'closed') {
                         <div class="admin-table-actions">
                           <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openTicketAction('reply', row.ticket_id)">Phản hồi</button>
                           <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="openTicketAction('close', row.ticket_id)">Đóng</button>
@@ -222,7 +225,7 @@
           <app-admin-pagination [page]="page()" [pageCount]="ticketPageCount()" [label]="ticketRange()" (changed)="goPage($event)" />
         }
       } @else if (!logs().length) {
-        <div class="admin-order-empty"><strong>Chưa có nhật ký xử lý</strong></div>
+        <app-admin-empty-state kind="empty" icon="clock" title="Chưa có nhật ký xử lý" />
       } @else {
         <div class="admin-table-wrap">
           <table class="admin-table admin-data-table">

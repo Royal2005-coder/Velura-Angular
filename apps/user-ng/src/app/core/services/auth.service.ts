@@ -32,11 +32,15 @@ export class AuthService {
   }
 
   /**
-   * Clears the persisted user session.
+   * Clears the persisted user session and leftover OAuth/storage keys.
    */
   signOut(): void {
     localStorage.removeItem('velura_token');
     localStorage.removeItem('velura_user');
+    localStorage.removeItem('velura-user-oauth-pkce-code-verifier');
+    localStorage.removeItem('velura-oauth-pkce-code-verifier');
+    sessionStorage.removeItem('velura_token');
+    sessionStorage.removeItem('velura_user');
     this.sessionState.set(null);
   }
 
@@ -48,11 +52,15 @@ export class AuthService {
     }
     try {
       const parsed = JSON.parse(raw) as Record<string, unknown>;
+      const nested = parsed['profile'] && typeof parsed['profile'] === 'object' ? (parsed['profile'] as Record<string, unknown>) : {};
+      const fullNameCandidate = parsed['full_name'] || parsed['fullName'] || parsed['name'] || nested['full_name'];
+      const avatarCandidate = parsed['avatar'] || parsed['avatar_url'] || nested['avatar'];
       return {
         userId: String(parsed['user_id'] || parsed['id'] || ''),
         email: typeof parsed['email'] === 'string' ? parsed['email'] : null,
-        fullName: typeof parsed['full_name'] === 'string' ? parsed['full_name'] : null,
+        fullName: typeof fullNameCandidate === 'string' ? fullNameCandidate : null,
         phone: typeof parsed['phone'] === 'string' ? parsed['phone'] : null,
+        avatarUrl: typeof avatarCandidate === 'string' ? avatarCandidate : null,
       };
     } catch {
       return null;

@@ -40,67 +40,64 @@
   <section class="admin-card admin-card--flush">
     <div class="admin-tabs" role="tablist">
       <button class="admin-tab" [class.admin-tab--active]="tab() === 'catalog'" type="button" (click)="setTab('catalog')">
-        Danh sách sản phẩm <span>{{ filtered().length }}</span>
+        Danh sách sản phẩm <span>{{ total() }}</span>
       </button>
       <button class="admin-tab" [class.admin-tab--active]="tab() === 'csv'" type="button" (click)="setTab('csv')">Nhập CSV</button>
       <button class="admin-tab" [class.admin-tab--active]="tab() === 'logs'" type="button" (click)="setTab('logs')">Nhật ký sản phẩm</button>
     </div>
     @if (tab() === 'catalog') {
       <div class="admin-tab-content">
-        <form class="admin-filter-bar">
+        <form class="admin-filter-bar" (submit)="applyFilters($event)">
           <label class="admin-search-field">
             <app-admin-icon name="search" />
-            <input class="admin-form-control" type="search" placeholder="Tìm theo tên hoặc mã sản phẩm..." (input)="onSearch($event)" />
+            <input class="admin-form-control" name="q" type="search" [value]="query()" placeholder="Tìm theo tên hoặc mã sản phẩm..." />
           </label>
-          <select class="admin-form-control" (change)="onCategory($event)">
+          <select class="admin-form-control" name="categoryId" [value]="categoryId()">
             <option value="">Tất cả danh mục</option>
-            @for (name of categories(); track name) {
-              <option [value]="name">{{ name }}</option>
+            @for (row of categories(); track row.category_id) {
+              <option [value]="row.category_id">{{ row.name }}</option>
             }
           </select>
-          <select class="admin-form-control" (change)="onStatus($event)">
+          <select class="admin-form-control" name="status" [value]="status()">
             <option value="">Tất cả trạng thái</option>
             <option value="on_sale">Đang bán</option>
             <option value="hidden">Tạm ẩn</option>
             <option value="out_of_stock">Hết hàng</option>
             <option value="discontinued">Ngừng bán</option>
           </select>
-          <select class="admin-form-control">
-            <option value="">Tất cả tồn kho</option>
-            <option value="low">Tồn kho thấp</option>
-            <option value="out">Hết hàng</option>
-          </select>
           <div class="admin-filter-bar__actions">
-            <button class="admin-btn admin-btn--filter admin-btn--sm" type="button">Lọc</button>
-            <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="resetFilters()">Đặt lại</button>
+            <button class="admin-btn admin-btn--filter admin-btn--sm" type="submit">Lọc</button>
+            <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="resetFilters($event)">Đặt lại</button>
+            @if (canMutate()) {
+              <button class="admin-btn admin-btn--primary admin-btn--sm" type="button" (click)="openCreate()">Thêm sản phẩm</button>
+            }
           </div>
         </form>
-        <div class="admin-table-wrap">
-          <table class="admin-table admin-data-table">
-            <thead>
-              <tr>
-                <th>Sản phẩm</th>
-                <th>SKU</th>
-                <th>Danh mục</th>
-                <th>Giá bán</th>
-                <th>Tồn kho</th>
-                <th>Trạng thái</th>
-                <th>Cập nhật</th>
-                <th>Thao tác</th>
-              </tr>
-            </thead>
-            <tbody>
-              @if (!paged().length) {
+        @if (loading()) {
+          <app-admin-empty-state kind="loading" icon="clock" title="Đang tải danh mục sản phẩm" />
+        } @else if (loadError()) {
+          <app-admin-empty-state kind="error" icon="alert" title="Không tải được danh mục" [message]="loadError() || ''">
+            <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="reloadCatalog()">Thử lại</button>
+          </app-admin-empty-state>
+        } @else if (!products().length) {
+          <app-admin-empty-state kind="empty" icon="search" title="Không có sản phẩm phù hợp" message="Điều chỉnh bộ lọc hoặc thêm sản phẩm mới." />
+        } @else {
+          <div class="admin-table-wrap">
+            <table class="admin-table admin-data-table">
+              <thead>
                 <tr>
-                  <td colspan="8">
-                    <div class="admin-empty-state">
-                      <app-admin-icon name="search" />
-                      <strong>Không có sản phẩm phù hợp</strong>
-                    </div>
-                  </td>
+                  <th>Sản phẩm</th>
+                  <th>SKU</th>
+                  <th>Danh mục</th>
+                  <th>Giá bán</th>
+                  <th>Tồn kho</th>
+                  <th>Trạng thái</th>
+                  <th>Cập nhật</th>
+                  <th>Thao tác</th>
                 </tr>
-              } @else {
-                @for (product of paged(); track product.product_id) {
+              </thead>
+              <tbody>
+                @for (product of products(); track product.product_id) {
                   <tr>
                     <td>
                       <div class="admin-table__entity">
@@ -112,9 +109,9 @@
                       </div>
                     </td>
                     <td>{{ product.sku }}</td>
-                    <td><span class="admin-role-badge">{{ product.category_name || '—' }}</span></td>
+                    <td><span class="admin-role-badge">{{ categoryName(product) }}</span></td>
                     <td>{{ price(product) }}</td>
-                    <td><span class="admin-stock">—</span></td>
+                    <td><span class="admin-stock">{{ stockOf(product) }}</span></td>
                     <td>
                       <span [class]="'admin-badge admin-badge--' + statusTone(product.status)">
                         {{ statusLabel(product.status) }}
@@ -123,18 +120,26 @@
                     <td>{{ updatedAt(product.updated_at) }}</td>
                     <td>
                       <div class="admin-table-actions">
-                        <button class="admin-icon-button admin-icon-button--sm" type="button" title="Đổi trạng thái" (click)="openStatus(product)">
-                          <app-admin-icon name="edit" />
+                        <button class="admin-icon-button admin-icon-button--sm" type="button" title="Chi tiết" (click)="openEdit(product)">
+                          <app-admin-icon name="eye" />
                         </button>
+                        @if (canMutate()) {
+                          <button class="admin-icon-button admin-icon-button--sm" type="button" title="Tồn kho" (click)="openStock(product)">
+                            <app-admin-icon name="box" />
+                          </button>
+                          <button class="admin-icon-button admin-icon-button--sm" type="button" title="Đổi trạng thái" (click)="openStatus(product)">
+                            <app-admin-icon name="edit" />
+                          </button>
+                        }
                       </div>
                     </td>
                   </tr>
                 }
-              }
-            </tbody>
-          </table>
-        </div>
-        <app-admin-pagination [page]="page()" [pageCount]="pageCount()" [label]="rangeLabel()" (changed)="goPage($event)" />
+              </tbody>
+            </table>
+          </div>
+          <app-admin-pagination [page]="page()" [pageCount]="pageCount()" [label]="rangeLabel()" (changed)="goPage($event)" />
+        }
       </div>
     }
     @if (tab() === 'csv') {
@@ -145,7 +150,6 @@
               <h2 class="admin-section__title">Kiểm tra sản phẩm bằng CSV</h2>
               <p class="admin-table-note">CSV ghi sản phẩm qua API production; tồn kho được điều chỉnh trong chi tiết biến thể.</p>
             </div>
-            <button class="admin-btn admin-btn--outline admin-btn--sm" type="button">Tải file mẫu</button>
           </header>
           <div class="admin-csv-dropzone">
             <app-admin-icon name="box" />
@@ -154,38 +158,33 @@
             <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="csvInput.click()">Chọn file CSV</button>
             <input #csvInput type="file" accept=".csv,text/csv" hidden (change)="onCsvFile($event)" />
           </div>
-          <div class="admin-csv-checklist">
-            <h3>Kiểm tra dữ liệu</h3>
-            <p>✓ Đủ cột bắt buộc</p>
-            <p>✓ UUID danh mục hợp lệ</p>
-            <p>✓ Giá là số hợp lệ</p>
-            <p>✓ SKU đúng định dạng</p>
-          </div>
           <div class="admin-alert">{{ csvMessage() }}</div>
-          <button class="admin-btn admin-btn--primary admin-btn--sm" type="button" (click)="commitCsv()">Ghi CSV vào catalog</button>
+          @if (canMutate()) {
+            <button class="admin-btn admin-btn--primary admin-btn--sm" type="button" (click)="commitCsv()">Ghi CSV vào catalog</button>
+          }
         </section>
       </div>
     }
     @if (tab() === 'logs') {
       <div class="admin-tab-content">
-        <div class="admin-table-wrap">
-          <table class="admin-table">
-            <thead>
-              <tr>
-                <th>Thời gian</th>
-                <th>Người thao tác</th>
-                <th>Đối tượng</th>
-                <th>Hành động</th>
-                <th>Dữ liệu trước → sau</th>
-                <th>Kết quả</th>
-              </tr>
-            </thead>
-            <tbody>
-              @if (!logs().length) {
+        @if (logsLoading()) {
+          <app-admin-empty-state kind="loading" icon="clock" title="Đang tải nhật ký sản phẩm" />
+        } @else if (!logs().length) {
+          <app-admin-empty-state kind="empty" icon="clock" title="Chưa có nhật ký sản phẩm" />
+        } @else {
+          <div class="admin-table-wrap">
+            <table class="admin-table">
+              <thead>
                 <tr>
-                  <td colspan="6">Chưa có nhật ký sản phẩm.</td>
+                  <th>Thời gian</th>
+                  <th>Người thao tác</th>
+                  <th>Đối tượng</th>
+                  <th>Hành động</th>
+                  <th>Dữ liệu trước → sau</th>
+                  <th>Kết quả</th>
                 </tr>
-              } @else {
+              </thead>
+              <tbody>
                 @for (row of logs(); track row.audit_id || row.timestamp) {
                   <tr>
                     <td>{{ updatedAt(row.timestamp) }}</td>
@@ -196,16 +195,157 @@
                     <td>{{ row.result || '—' }}</td>
                   </tr>
                 }
-              }
-            </tbody>
-          </table>
-        </div>
+              </tbody>
+            </table>
+          </div>
+        }
       </div>
     }
   </section>
 </main>
 
-@if (selected()) {
+@if (overlay() === 'create' || overlay() === 'edit') {
+  <div class="admin-modal-overlay">
+    <section class="admin-modal admin-drawer--wide">
+      <form (submit)="submitEditor($event)">
+        <header class="admin-modal__header">
+          <h2>{{ overlay() === 'create' ? 'Thêm sản phẩm' : 'Chi tiết sản phẩm' }}</h2>
+          <button class="admin-icon-button" type="button" (click)="closeOverlays()">×</button>
+        </header>
+        <div class="admin-modal__body">
+          <label class="admin-form-group">
+            <span class="admin-form-label">Tên</span>
+            <input class="admin-form-control" name="name" required minlength="2" [value]="selected()?.name || ''" [readOnly]="!canMutate()" />
+          </label>
+          <label class="admin-form-group">
+            <span class="admin-form-label">SKU</span>
+            <input class="admin-form-control" name="sku" [value]="selected()?.sku || ''" [readOnly]="overlay() === 'edit'" placeholder="VL-AO001" />
+          </label>
+          <label class="admin-form-group">
+            <span class="admin-form-label">Slug</span>
+            <input class="admin-form-control" name="slug" [value]="selected()?.slug || ''" [readOnly]="overlay() === 'edit'" />
+          </label>
+          <label class="admin-form-group">
+            <span class="admin-form-label">Danh mục</span>
+            <select class="admin-form-control" name="categoryId" required [disabled]="!canMutate()">
+              <option value="">Chọn danh mục</option>
+              @for (row of categories(); track row.category_id) {
+                <option [value]="row.category_id" [selected]="row.category_id === selected()?.category_id || row.category_id === selected()?.category?.category_id">{{ row.name }}</option>
+              }
+            </select>
+          </label>
+          <label class="admin-form-group">
+            <span class="admin-form-label">Bộ sưu tập</span>
+            <input class="admin-form-control" name="collection" [value]="selected()?.collection || ''" [readOnly]="!canMutate()" />
+          </label>
+          @if (overlay() === 'create') {
+            <label class="admin-form-group">
+              <span class="admin-form-label">Giá gốc</span>
+              <input class="admin-form-control" name="basePrice" type="number" min="0" required />
+            </label>
+            <label class="admin-form-group">
+              <span class="admin-form-label">Giá bán</span>
+              <input class="admin-form-control" name="salePrice" type="number" min="0" />
+            </label>
+            <label class="admin-form-group">
+              <span class="admin-form-label">Trạng thái</span>
+              <select class="admin-form-control" name="createStatus">
+                <option value="on_sale">Đang bán</option>
+                <option value="hidden">Tạm ẩn</option>
+              </select>
+            </label>
+            <label class="admin-form-group">
+              <span class="admin-form-label">Tồn kho ban đầu</span>
+              <input class="admin-form-control" name="initialStock" type="number" min="0" value="0" />
+            </label>
+          }
+          @if (overlay() === 'edit') {
+            <div class="admin-form-group">
+              <span class="admin-form-label">Giá gốc</span>
+              <p class="admin-table-note">{{ money(selected()?.base_price) }}</p>
+            </div>
+            <div class="admin-form-group">
+              <span class="admin-form-label">Giá bán</span>
+              <p class="admin-table-note">{{ money(selected()?.sale_price) }}</p>
+            </div>
+            <p class="admin-table-note">
+              Giá không sửa tại catalog.
+              <a routerLink="/pricing" [queryParams]="{ q: selected()?.sku || selected()?.product_id }">Mở Bảng giá &amp; lịch sử</a>
+            </p>
+            @if (priceHistory().length) {
+              <h3 class="admin-drawer__section">Lịch sử giá gần đây</h3>
+              <div class="admin-table-wrap">
+                <table class="admin-table">
+                  <thead><tr><th>Thời gian</th><th>Giá gốc</th><th>Giá bán</th><th>Lý do</th></tr></thead>
+                  <tbody>
+                    @for (row of priceHistory(); track row.changed_at) {
+                      <tr>
+                        <td>{{ date(row.changed_at) }}</td>
+                        <td>{{ money(row.new_base_price) }}</td>
+                        <td>{{ money(row.new_sale_price) }}</td>
+                        <td>{{ row.reason || '—' }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+          }
+          <label class="admin-form-group">
+            <span class="admin-form-label">Mô tả</span>
+            <textarea class="admin-form-control admin-form-textarea" name="description" [readOnly]="!canMutate()">{{ selected()?.description || '' }}</textarea>
+          </label>
+          <label class="admin-form-group">
+            <span class="admin-form-label">Ảnh (mỗi URL một dòng)</span>
+            <textarea class="admin-form-control admin-form-textarea" name="images" [readOnly]="!canMutate()">{{ (selected()?.images || []).join('\n') }}</textarea>
+          </label>
+          @if (overlay() === 'edit') {
+            <h3 class="admin-drawer__section">Biến thể / tồn kho</h3>
+            @if (!variants().length) {
+              <p class="admin-table-note">Chưa có biến thể.</p>
+            } @else {
+              <div class="admin-table-wrap">
+                <table class="admin-table">
+                  <thead><tr><th>Màu</th><th>Size</th><th>Tồn</th><th>Ngưỡng</th></tr></thead>
+                  <tbody>
+                    @for (variant of variants(); track variant.variant_id) {
+                      <tr>
+                        <td>{{ variant.color }}</td>
+                        <td>{{ variant.size }}</td>
+                        <td>{{ variant.stock_quantity }}</td>
+                        <td>{{ variant.low_stock_threshold }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+          }
+          @if (actionError()) {
+            <p class="field__error">{{ actionError() }}</p>
+          }
+        </div>
+        <footer class="admin-modal__footer">
+          <button class="admin-btn admin-btn--ghost" type="button" (click)="closeOverlays()">Đóng</button>
+          @if (canMutate()) {
+            <button class="admin-btn admin-btn--secondary" type="submit">Lưu</button>
+          }
+        </footer>
+      </form>
+      @if (overlay() === 'edit' && canMutate() && selected()) {
+        <form class="admin-modal__body" (submit)="submitVariant($event)">
+          <label class="admin-form-group"><span class="admin-form-label">Màu</span><input class="admin-form-control" name="color" required /></label>
+          <label class="admin-form-group"><span class="admin-form-label">Size</span><input class="admin-form-control" name="size" required /></label>
+          <label class="admin-form-group"><span class="admin-form-label">Tồn kho</span><input class="admin-form-control" name="stockQuantity" type="number" min="0" value="0" /></label>
+          <label class="admin-form-group"><span class="admin-form-label">Ngưỡng thấp</span><input class="admin-form-control" name="lowStockThreshold" type="number" min="0" value="5" /></label>
+          <button class="admin-btn admin-btn--outline admin-btn--sm" type="submit">Thêm biến thể</button>
+        </form>
+      }
+    </section>
+  </div>
+}
+
+@if (overlay() === 'status' && selected()) {
   <div class="admin-modal-overlay">
     <section class="admin-modal">
       <form (submit)="submitStatus($event)">
@@ -234,6 +374,44 @@
         <footer class="admin-modal__footer">
           <button class="admin-btn admin-btn--ghost" type="button" (click)="closeOverlays()">Hủy</button>
           <button class="admin-btn admin-btn--secondary" type="submit">Xác nhận</button>
+        </footer>
+      </form>
+    </section>
+  </div>
+}
+
+@if (overlay() === 'stock' && selected()) {
+  <div class="admin-modal-overlay">
+    <section class="admin-modal">
+      <form (submit)="submitStock($event)">
+        <header class="admin-modal__header">
+          <h2>Điều chỉnh tồn kho - {{ selected()!.sku }}</h2>
+          <button class="admin-icon-button" type="button" (click)="closeOverlays()">×</button>
+        </header>
+        <div class="admin-modal__body">
+          <label class="admin-form-group">
+            <span class="admin-form-label">Biến thể</span>
+            <select class="admin-form-control" name="variantId" required>
+              @for (variant of variants(); track variant.variant_id) {
+                <option [value]="variant.variant_id">{{ variant.color }} / {{ variant.size }} ({{ variant.stock_quantity }})</option>
+              }
+            </select>
+          </label>
+          <label class="admin-form-group">
+            <span class="admin-form-label">Delta (+ nhập / − xuất)</span>
+            <input class="admin-form-control" name="delta" type="number" required />
+          </label>
+          <label class="admin-form-group">
+            <span class="admin-form-label">Lý do</span>
+            <textarea class="admin-form-control admin-form-textarea" name="reason" minlength="10" required></textarea>
+          </label>
+          @if (actionError()) {
+            <p class="field__error">{{ actionError() }}</p>
+          }
+        </div>
+        <footer class="admin-modal__footer">
+          <button class="admin-btn admin-btn--ghost" type="button" (click)="closeOverlays()">Hủy</button>
+          <button class="admin-btn admin-btn--secondary" type="submit">Cập nhật tồn</button>
         </footer>
       </form>
     </section>

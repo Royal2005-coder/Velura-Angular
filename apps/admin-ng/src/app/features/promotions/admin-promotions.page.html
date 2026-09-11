@@ -46,8 +46,10 @@
       <button class="admin-tab" [class.admin-tab--active]="view() === 'stats'" type="button" (click)="setView('stats')">Thống kê</button>
     </div>
     <div class="admin-tab-content">
-      @if (loadError() && view() === 'campaigns' && !promotions().length) {
-        <div class="admin-empty-state"><strong>Không tải được khuyến mãi</strong><p>{{ loadError() }}</p></div>
+      @if (loading()) {
+        <app-admin-empty-state kind="loading" icon="clock" title="Đang tải khuyến mãi" />
+      } @else if (loadError() && view() === 'campaigns' && !promotions().length) {
+        <app-admin-empty-state kind="error" icon="alert" title="Không tải được khuyến mãi" [message]="loadError() || ''" />
       } @else if (view() === 'campaigns') {
         @if (!promotions().length) {
           <div class="admin-empty-state"><strong>Chưa có chiến dịch</strong></div>
@@ -68,9 +70,11 @@
                       </span>
                     </td>
                     <td>
-                      <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="toggleCampaign(row)">
-                        {{ isCampaignActive(row) ? 'Tạm dừng' : 'Kích hoạt' }}
-                      </button>
+                      @if (canMutate()) {
+                        <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="toggleCampaign(row)">
+                          {{ isCampaignActive(row) ? 'Tạm dừng' : 'Kích hoạt' }}
+                        </button>
+                      }
                     </td>
                   </tr>
                 }
@@ -101,9 +105,11 @@
                       </span>
                     </td>
                     <td>
-                      <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="toggleVoucher(row)">
-                        {{ row.is_active === false ? 'Bật' : 'Tắt' }}
-                      </button>
+                      @if (canMutate()) {
+                        <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="toggleVoucher(row)">
+                          {{ row.is_active === false ? 'Bật' : 'Tắt' }}
+                        </button>
+                      }
                     </td>
                   </tr>
                 }

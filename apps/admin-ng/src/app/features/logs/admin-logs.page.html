@@ -39,18 +39,18 @@
   </section>
   <section class="admin-card admin-card--flush admin-log-workspace">
     <div class="admin-tabs" role="tablist" aria-label="Nhóm nhật ký">
-      <button class="admin-tab" [class.admin-tab--active]="tab() === 'all'" type="button" (click)="setTab('all')">Tất cả nhật ký <span>{{ rows().length }}</span></button>
+      <button class="admin-tab" [class.admin-tab--active]="tab() === 'all'" type="button" (click)="setTab('all')">Tất cả nhật ký <span>{{ allCount() }}</span></button>
       <button class="admin-tab" [class.admin-tab--active]="tab() === 'admin'" type="button" (click)="setTab('admin')">Thao tác Admin <span>{{ adminCount() }}</span></button>
       <button class="admin-tab" [class.admin-tab--active]="tab() === 'system'" type="button" (click)="setTab('system')">Sự kiện hệ thống <span>{{ systemCount() }}</span></button>
       <button class="admin-tab" [class.admin-tab--active]="tab() === 'ai'" type="button" (click)="setTab('ai')">Nhật ký AI <span>{{ aiCount() }}</span></button>
     </div>
     <div class="admin-tab-content">
-      <form class="admin-filter-bar">
+      <form class="admin-filter-bar" (submit)="applyFilters($event)">
         <label class="admin-search-field">
           <app-admin-icon name="search" />
-          <input class="admin-form-control" type="search" placeholder="Tìm hành động, đối tượng hoặc người thao tác..." (input)="onSearch($event)" />
+          <input class="admin-form-control" name="q" type="search" [value]="query()" placeholder="Tìm hành động, đối tượng hoặc người thao tác..." />
         </label>
-        <select class="admin-form-control" (change)="onModule($event)">
+        <select class="admin-form-control" name="module" [value]="module()" aria-label="Lọc phân hệ">
           <option value="">Tất cả phân hệ</option>
           <option value="accounts">accounts</option>
           <option value="products">products</option>
@@ -63,17 +63,18 @@
           <option value="system">system</option>
         </select>
         <div class="admin-filter-bar__actions">
-          <button class="admin-btn admin-btn--filter admin-btn--sm" type="button">Lọc</button>
+          <button class="admin-btn admin-btn--filter admin-btn--sm" type="submit">Lọc</button>
           <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="resetFilters()">Đặt lại</button>
         </div>
       </form>
-      @if (loadError()) {
-        <div class="admin-empty-state"><strong>Không tải được nhật ký</strong><p>{{ loadError() }}</p></div>
-      } @else if (!filtered().length) {
-        <div class="admin-empty-state">
-          <strong>Chưa có nhật ký hệ thống</strong>
-          <p>Nhật ký được tải từ Supabase khi phiên quản trị được xác thực.</p>
-        </div>
+      @if (loading()) {
+        <app-admin-empty-state kind="loading" icon="clock" title="Đang tải nhật ký hệ thống" />
+      } @else if (loadError()) {
+        <app-admin-empty-state kind="error" icon="alert" title="Không tải được nhật ký" [message]="loadError() || ''">
+          <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="reload()">Thử lại</button>
+        </app-admin-empty-state>
+      } @else if (!paged().length) {
+        <app-admin-empty-state kind="empty" icon="log" title="Chưa có nhật ký hệ thống" message="Nhật ký được tải từ API khi phiên quản trị được xác thực." />
       } @else {
         <div class="admin-table-wrap">
           <table class="admin-table admin-log-table">

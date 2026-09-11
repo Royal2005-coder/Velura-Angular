@@ -91,7 +91,11 @@
       </a>
       <div class="header-action-btn header-account-dropdown">
         <span class="btn-icon-wrapper" style="cursor: pointer;">
-          <svg class="icon icon-user" style="width: 24px; height: 24px;"><use href="#icon-user"></use></svg>
+          @if (isLoggedIn() && avatarUrl()) {
+            <img class="header-avatar" [src]="avatarUrl()!" [alt]="displayName()" width="24" height="24" />
+          } @else {
+            <svg class="icon icon-user" style="width: 24px; height: 24px;"><use href="#icon-user"></use></svg>
+          }
         </span>
         <div class="account-dropdown-menu">
           <div class="account-dropdown-arrow"></div>
@@ -99,6 +103,7 @@
             <a routerLink="/auth/signin" class="account-dropdown-item">Đăng nhập</a>
             <a routerLink="/auth/signup" class="account-dropdown-item">Đăng ký</a>
           } @else {
+            <span class="account-dropdown-item" aria-current="true">{{ displayName() }}</span>
             <a routerLink="/account/profile" class="account-dropdown-item">Tài khoản</a>
             <button type="button" class="account-dropdown-item" (click)="logout()">Đăng xuất</button>
           }

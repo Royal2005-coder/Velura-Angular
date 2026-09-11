@@ -22,6 +22,7 @@ interface SessionListFilters {
 
 interface AdminSessionListFilters {
   handoffOnly?: boolean;
+  handoffStatus?: string;
   ticketId?: string;
   limit: number;
   offset: number;
@@ -133,7 +134,11 @@ export function createChatbotRepository() {
         limit: filters.limit,
         offset: filters.offset
       };
-      if (filters.handoffOnly) query.handoff_status = "in.(requested,assigned)";
+      if (filters.handoffStatus) {
+        query.handoff_status = `eq.${filters.handoffStatus}`;
+      } else if (filters.handoffOnly) {
+        query.handoff_status = "in.(requested,assigned)";
+      }
       if (filters.ticketId) query.support_ticket_id = `eq.${filters.ticketId}`;
       return withChatError(() => selectRows("chat_session", query));
     },

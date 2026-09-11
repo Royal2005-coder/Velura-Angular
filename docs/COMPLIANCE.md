@@ -66,7 +66,7 @@ Không lắp Vendure/Medusa/Strapi. `apps/api` `rbac.ts` `rolePages` là canonic
 | Empty/error UI storefront | cart, wishlist, checkout | [KAN-8](https://webadvance.atlassian.net/browse/KAN-8) |
 | Pricing derived filters | `discount` / `invalid` / `missing` vẫn lọc trên trang hiện tại — API giá không có các status đó | KAN-4 |
 | Log KPI kết quả | success/fail/blocked/security đếm trên trang hiện tại — API audit không filter theo kết quả | KAN-4 |
-| Chat CSKH sidebar | danh sách phiên cap 50 (API max 100); filter `ai`/`closed` vẫn trên tập đã tải | KAN-5 |
+| Chat CSKH sidebar | list cap 50 (API max 100); filter `handoffStatus` server-side | Đã làm |
 | CSKH KPI ưu tiên cao | API ticket không filter `priority`; hiện = phiếu đổi/trả pending + ticket `open` | KAN-5 |
 | Tách Customers vs Staff | một trang `/accounts` | Hoãn có chủ đích |
 | GitLab MCP 404 | bật Duo/MCP trên group | [KAN-11](https://webadvance.atlassian.net/browse/KAN-11) |

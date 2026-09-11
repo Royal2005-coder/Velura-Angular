@@ -113,12 +113,13 @@ test("source tree contains no hard-coded Supabase management or secret key", asy
 });
 
 test("customer auth uses live API contracts and no demo login", async () => {
-  const [signin, signup, forgot, otp, callback] = await Promise.all([
+  const [signin, signup, forgot, otp, callback, reset] = await Promise.all([
     source("apps/user-ng/src/app/features/auth/sign-in.page.ts"),
     source("apps/user-ng/src/app/features/auth/sign-up.page.ts"),
     source("apps/user-ng/src/app/features/auth/forgot-password.page.ts"),
     source("apps/user-ng/src/app/shared/auth-otp-modal/auth-otp-modal.ts"),
-    source("apps/user-ng/src/app/features/auth/auth-callback.page.ts")
+    source("apps/user-ng/src/app/features/auth/auth-callback.page.ts"),
+    source("apps/user-ng/src/app/features/auth/reset-password.page.ts")
   ]);
   assert.match(signin, /\/api\/user\/auth\/signin/);
   assert.match(signin, /\/api\/auth\/google/);
@@ -129,7 +130,8 @@ test("customer auth uses live API contracts and no demo login", async () => {
   assert.match(signup, /\/api\/user\/auth\/signup/);
   assert.match(forgot, /\/api\/user\/auth\/otp-send/);
   assert.match(otp, /\/api\/user\/auth\/otp-verify/);
-  assert.doesNotMatch(`${signin}\n${signup}`, /js-dev-login|Test Phone|Test Email|createDevMemberSession/);
+  assert.doesNotMatch(`${signin}\n${signup}\n${reset}`, /js-dev-login|Test Phone|Test Email|createDevMemberSession/);
+  assert.doesNotMatch(reset, /123456/);
 });
 
 test("customer member flows require a real auth session", async () => {

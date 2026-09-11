@@ -52,54 +52,10 @@ export async function handleNotificationsRoute(
         user_id: `eq.${profile.user_id}`,
         order: "created_at.desc"
       });
-      // Fallback: if user has no notifications, return a welcome notification and an active promotion notification.
-      if (rows.length === 0) {
-        const welcomeNotif = {
-          id: "welcome-default",
-          user_id: profile.user_id,
-          type: "system",
-          title: "Chào mừng thành viên mới! 🎉",
-          content: "Chào mừng bạn đến với Velura. Hãy khám phá những bộ sưu tập mới nhất của chúng tôi và làm trắc nghiệm Style Quiz để nhận gợi ý phối đồ AI nhé!",
-          link: "/src/pages/ai/suggestions.html",
-          is_read: false,
-          created_at: new Date(Date.now() - 3600000).toISOString()
-        };
-        const promoNotif = {
-          id: "promo-default",
-          user_id: profile.user_id,
-          type: "promotion",
-          title: "Ưu đãi thành viên mới: Giảm 10% 🏷️",
-          content: "Mã giảm giá VELURANEW giảm ngay 10% cho đơn hàng đầu tiên của bạn. Áp dụng ngay khi thanh toán!",
-          link: "/src/pages/products/list.html",
-          is_read: false,
-          created_at: new Date().toISOString()
-        };
-        return sendJson(res, 200, { success: true, notifications: [promoNotif, welcomeNotif] }, corsHeaders);
-      }
       return sendJson(res, 200, { success: true, notifications: rows }, corsHeaders);
     } catch (err) {
-      console.warn(`[Notification API] Failed to select notifications: ${errorMessage(err)}. Returning fallback static notifications.`);
-      const welcomeNotif = {
-        id: "welcome-default",
-        user_id: profile.user_id,
-        type: "system",
-        title: "Chào mừng thành viên mới! 🎉",
-        content: "Chào mừng bạn đến với Velura. Hãy khám phá những bộ sưu tập mới nhất của chúng tôi và làm trắc nghiệm Style Quiz để nhận gợi ý phối đồ AI nhé!",
-        link: "/src/pages/ai/suggestions.html",
-        is_read: false,
-        created_at: new Date(Date.now() - 3600000).toISOString()
-      };
-      const promoNotif = {
-        id: "promo-default",
-        user_id: profile.user_id,
-        type: "promotion",
-        title: "Ưu đãi thành viên mới: Giảm 10% 🏷️",
-        content: "Mã giảm giá VELURANEW giảm ngay 10% cho đơn hàng đầu tiên của bạn. Áp dụng ngay khi thanh toán!",
-        link: "/src/pages/products/list.html",
-        is_read: false,
-        created_at: new Date().toISOString()
-      };
-      return sendJson(res, 200, { success: true, notifications: [promoNotif, welcomeNotif] }, corsHeaders);
+      console.warn(`[Notification API] Failed to select notifications: ${errorMessage(err)}`);
+      return sendJson(res, 200, { success: true, notifications: [] }, corsHeaders);
     }
   }
 

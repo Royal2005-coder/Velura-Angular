@@ -45,6 +45,12 @@ GitLab: MR (`## Why`) + Changes + job `note:mr` (log, notes, artifact `mr-trace.
 
 Không có môi trường staging trên CI. Kiểm tra trên local (`:4001` / `:4002` / API `:8787`) rồi promote `develop` → `main`.
 
+## Admin TMĐT — cơ sở đúng
+
+Chuẩn phân hệ lấy từ Vendure (catalog, orders, customers, marketing, settings) nhưng **runtime là Angular + Node**. Mỗi màn `admin-ng` phải thỏa 8 điểm trong [COMPLIANCE.md](./COMPLIANCE.md) (list server-paged, detail, mutation có version, audit, RBAC từ `/api/auth/me`, MVVM, lazy route, test empty/error).
+
+Luồng shop ↔ admin: sửa catalog/giá/KM trên admin → storefront đọc cùng API. Không page-builder. CMS nội dung (`/api/content`) hoãn đến khi catalog/orders đúng hợp đồng.
+
 ## Production
 
 | Path | Env |

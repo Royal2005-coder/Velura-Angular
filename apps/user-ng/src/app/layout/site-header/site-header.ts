@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
 import { CartStore } from '../../core/services/cart.store';
@@ -16,6 +16,8 @@ export class SiteHeader {
   private readonly router = inject(Router);
 
   readonly isLoggedIn = this.auth.isLoggedIn;
+  readonly displayName = computed(() => this.auth.session()?.fullName || this.auth.session()?.email || 'Tài khoản');
+  readonly avatarUrl = computed(() => this.auth.session()?.avatarUrl);
   readonly cartCount = this.cart.itemCount;
   readonly wishlistCount = this.wishlist.itemCount;
   readonly navOpen = signal(false);

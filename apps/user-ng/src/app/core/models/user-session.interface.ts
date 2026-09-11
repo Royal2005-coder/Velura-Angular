@@ -3,4 +3,5 @@ export interface UserSession {
   email: string | null;
   fullName: string | null;
   phone: string | null;
+  avatarUrl: string | null;
 }

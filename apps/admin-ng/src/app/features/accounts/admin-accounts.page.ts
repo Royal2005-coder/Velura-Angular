@@ -3,7 +3,9 @@ import { forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { AdminAccountRow, AdminApiService, AdminAuditRow, AdminRoleRequestRow } from '../../core/admin-api.service';
 import { adminDateTime, adminInitials, adminWordCount } from '../../core/admin-format';
-import { adminErrorMessage, adminListRows } from '../../core/admin-http';
+import { adminErrorMessage, adminListCount, adminListRows, adminOffset, adminRangeLabel } from '../../core/admin-http';
+import { AdminSessionService } from '../../core/admin-session.service';
+import { AdminEmptyState } from '../../shared/admin-empty-state';
 import { AdminIcon } from '../../shared/admin-icon';
 import { AdminPagination } from '../../shared/admin-pagination';
 
@@ -22,14 +24,18 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 const ADMIN_ROLES = Object.keys(ROLE_LABELS);
+const EMPTY_ACCOUNTS = { rows: [] as AdminAccountRow[], count: 0 };
+const EMPTY_REQUESTS = { rows: [] as AdminRoleRequestRow[], count: 0 };
+const EMPTY_LOGS = { rows: [] as AdminAuditRow[], count: 0 };
 
 @Component({
   selector: 'app-admin-accounts-page',
-  imports: [AdminIcon, AdminPagination],
+  imports: [AdminEmptyState, AdminIcon, AdminPagination],
   templateUrl: './admin-accounts.page.html',
 })
 export class AdminAccountsPage {
   private readonly api = inject(AdminApiService);
+  private readonly session = inject(AdminSessionService);
 
   readonly tab = signal<AccountTab>('all');
   readonly query = signal('');
@@ -39,9 +45,19 @@ export class AdminAccountsPage {
   readonly requests = signal<AdminRoleRequestRow[]>([]);
   readonly logs = signal<AdminAuditRow[]>([]);
   readonly loadError = signal<string | null>(null);
+  readonly loading = signal(true);
   readonly page = signal(1);
   readonly logsPage = signal(1);
   readonly pageSize = 10;
+  readonly total = signal(0);
+  readonly allCount = signal(0);
+  readonly memberCount = signal(0);
+  readonly adminCount = signal(0);
+  readonly activeCount = signal(0);
+  readonly lockedCount = signal(0);
+  readonly pendingCount = signal(0);
+  readonly requestTotal = signal(0);
+  readonly logsCount = signal(0);
   readonly selected = signal<AdminAccountRow | null>(null);
   readonly actionType = signal<AccountAction>(null);
   readonly requestAction = signal<RequestDecision>(null);
@@ -50,97 +66,88 @@ export class AdminAccountsPage {
   readonly lockType = signal<'temporary' | 'permanent'>('temporary');
   readonly targetRole = signal<'member' | 'admin'>('member');
   readonly wordHint = signal('Số từ: 0 / tối thiểu 11 từ');
-
-  readonly members = computed(() => this.rows().filter((row) => this.groupOf(row) === 'members'));
-  readonly admins = computed(() => this.rows().filter((row) => this.groupOf(row) === 'admins'));
-  readonly total = computed(() => this.rows().length);
-  readonly memberCount = computed(() => this.members().length);
-  readonly adminCount = computed(() => this.admins().length);
-  readonly activeCount = computed(() => this.rows().filter((row) => Boolean(row.is_active)).length);
-  readonly lockedCount = computed(() => this.rows().filter((row) => !row.is_active).length);
-  readonly pendingCount = computed(() => this.requests().filter((row) => row.status === 'pending').length);
+  readonly canMutate = computed(() => this.session.canMutate('accounts'));
   readonly adminRoles = ADMIN_ROLES;
-  readonly filtered = computed(() => {
-    const tab = this.tab();
-    const query = this.query().toLowerCase();
-    const role = this.roleFilter();
-    const status = this.statusFilter();
-    return this.rows().filter((row) => {
-      const group = this.groupOf(row);
-      if (tab === 'members' && group !== 'members') {
-        return false;
-      }
-      if (tab === 'admins' && group !== 'admins') {
-        return false;
-      }
-      if (tab === 'locked' && row.is_active) {
-        return false;
-      }
-      if (role && row.role !== role) {
-        return false;
-      }
-      if (status === 'active' && !row.is_active) {
-        return false;
-      }
-      if (status === 'locked' && row.is_active) {
-        return false;
-      }
-      const haystack = `${row.full_name || ''} ${row.email || ''} ${row.phone || ''}`.toLowerCase();
-      return !query || haystack.includes(query);
-    });
-  });
-  readonly pageCount = computed(() => Math.max(1, Math.ceil(this.filtered().length / this.pageSize)));
-  readonly paged = computed(() => {
-    const rows = this.filtered();
-    const page = Math.min(this.page(), this.pageCount());
-    const start = (page - 1) * this.pageSize;
-    return rows.slice(start, start + this.pageSize);
-  });
-  readonly rangeLabel = computed(() => this.rangeText(this.filtered().length, Math.min(this.page(), this.pageCount()), 'tài khoản'));
-  readonly pagedLogs = computed(() => {
-    const page = Math.min(this.logsPage(), this.logPageCount());
-    const start = (page - 1) * this.pageSize;
-    return this.logs().slice(start, start + this.pageSize);
-  });
-  readonly logPageCount = computed(() => Math.max(1, Math.ceil(this.logs().length / this.pageSize)));
-  readonly logRangeLabel = computed(() => this.rangeText(this.logs().length, Math.min(this.logsPage(), this.logPageCount()), 'nhật ký'));
+  readonly paged = computed(() => this.rows());
+  readonly pageCount = computed(() => Math.max(1, Math.ceil(this.total() / this.pageSize)));
+  readonly rangeLabel = computed(() => adminRangeLabel(this.total(), this.page(), this.pageSize, 'tài khoản'));
+  readonly pagedLogs = computed(() => this.logs());
+  readonly logPageCount = computed(() => Math.max(1, Math.ceil(this.logsCount() / this.pageSize)));
+  readonly logRangeLabel = computed(() => adminRangeLabel(this.logsCount(), this.logsPage(), this.pageSize, 'nhật ký'));
+  readonly requestPageCount = computed(() => Math.max(1, Math.ceil(this.requestTotal() / this.pageSize)));
+  readonly requestRangeLabel = computed(() => adminRangeLabel(this.requestTotal(), this.page(), this.pageSize, 'yêu cầu'));
 
   constructor() {
     this.reload();
   }
 
   /**
-   * Reloads accounts, role requests, and account logs from the original APIs.
+   * Reloads the active accounts tab from server-paged APIs.
    */
   reload(): void {
+    this.loading.set(true);
     this.loadError.set(null);
+    const pageParams = { limit: String(this.pageSize), offset: adminOffset(this.page(), this.pageSize) };
+    const tab = this.tab();
     forkJoin({
-      accounts: this.api.listAccounts({ limit: '100' }).pipe(
-        catchError((error: unknown) => {
-          this.loadError.set(adminErrorMessage(error));
-          return of({ rows: [] as AdminAccountRow[] });
-        }),
-      ),
-      requests: this.api.listRoleRequests({ limit: '100' }).pipe(catchError(() => of({ rows: [] as AdminRoleRequestRow[] }))),
-      logs: this.api.listAccountAuditLogs({ limit: '100' }).pipe(catchError(() => of({ rows: [] as AdminAuditRow[] }))),
+      accounts:
+        tab === 'promotions' || tab === 'logs'
+          ? of(EMPTY_ACCOUNTS)
+          : this.api.listAccounts(this.accountListParams(pageParams)).pipe(
+              catchError((error: unknown) => {
+                this.loadError.set(adminErrorMessage(error));
+                return of(EMPTY_ACCOUNTS);
+              }),
+            ),
+      requests:
+        tab === 'promotions'
+          ? this.api.listRoleRequests({ status: 'pending', ...pageParams }).pipe(catchError(() => of(EMPTY_REQUESTS)))
+          : this.api.listRoleRequests({ status: 'pending', limit: '1' }).pipe(catchError(() => of(EMPTY_REQUESTS))),
+      logs:
+        tab === 'logs'
+          ? this.api
+              .listAccountAuditLogs({ limit: String(this.pageSize), offset: adminOffset(this.logsPage(), this.pageSize) })
+              .pipe(catchError(() => of(EMPTY_LOGS)))
+          : of(EMPTY_LOGS),
+      all: this.api.listAccounts({ limit: '1' }).pipe(catchError(() => of(EMPTY_ACCOUNTS))),
+      members: this.api.listAccounts({ role: 'member', limit: '1' }).pipe(catchError(() => of(EMPTY_ACCOUNTS))),
+      admins: this.api.listAccounts({ role: 'admin', limit: '1' }).pipe(catchError(() => of(EMPTY_ACCOUNTS))),
+      active: this.api.listAccounts({ isActive: 'true', limit: '1' }).pipe(catchError(() => of(EMPTY_ACCOUNTS))),
+      locked: this.api.listAccounts({ isActive: 'false', limit: '1' }).pipe(catchError(() => of(EMPTY_ACCOUNTS))),
     }).subscribe((payload) => {
-      this.rows.set(adminListRows(payload.accounts));
+      if (tab !== 'promotions' && tab !== 'logs') {
+        this.rows.set(adminListRows(payload.accounts));
+        this.total.set(adminListCount(payload.accounts));
+      }
       this.requests.set(adminListRows(payload.requests));
-      this.logs.set(adminListRows(payload.logs));
+      this.requestTotal.set(adminListCount(payload.requests));
+      this.pendingCount.set(adminListCount(payload.requests));
+      if (tab === 'logs') {
+        this.logs.set(adminListRows(payload.logs));
+        this.logsCount.set(adminListCount(payload.logs));
+      }
+      this.allCount.set(adminListCount(payload.all));
+      this.memberCount.set(adminListCount(payload.members));
+      this.adminCount.set(adminListCount(payload.admins));
+      this.activeCount.set(adminListCount(payload.active));
+      this.lockedCount.set(adminListCount(payload.locked));
+      this.loading.set(false);
     });
   }
 
   /**
-   * Switches the original accounts tablist.
+   * Switches the original accounts tablist and reloads the matching list.
    */
   setTab(tab: AccountTab): void {
     this.tab.set(tab);
     this.page.set(1);
+    this.logsPage.set(1);
     this.closeOverlays();
+    this.reload();
   }
 
   /**
-   * Applies the original account filter bar.
+   * Applies the original account filter bar on the server list.
    */
   applyFilters(event: Event): void {
     event.preventDefault();
@@ -149,10 +156,11 @@ export class AdminAccountsPage {
     this.roleFilter.set((form.elements.namedItem('role') as HTMLSelectElement | null)?.value || '');
     this.statusFilter.set((form.elements.namedItem('status') as HTMLSelectElement | null)?.value || '');
     this.page.set(1);
+    this.reload();
   }
 
   /**
-   * Clears the original account filters.
+   * Clears the original account filters and reloads.
    */
   resetFilters(event: Event): void {
     event.preventDefault();
@@ -160,20 +168,23 @@ export class AdminAccountsPage {
     this.roleFilter.set('');
     this.statusFilter.set('');
     this.page.set(1);
+    this.reload();
   }
 
   /**
-   * Moves account pagination.
+   * Moves account or role-request pagination.
    */
   goPage(page: number): void {
-    this.page.set(Math.min(this.pageCount(), Math.max(1, page)));
+    this.page.set(Math.max(1, page));
+    this.reload();
   }
 
   /**
    * Moves account-log pagination.
    */
   goLogsPage(page: number): void {
-    this.logsPage.set(Math.min(this.logPageCount(), Math.max(1, page)));
+    this.logsPage.set(Math.max(1, page));
+    this.reload();
   }
 
   /**
@@ -188,6 +199,9 @@ export class AdminAccountsPage {
    * Opens lock, unlock, or role-change modal.
    */
   openAction(type: Exclude<AccountAction, null>, userId: string): void {
+    if (!this.canMutate()) {
+      return;
+    }
     const row = this.rows().find((item) => item.user_id === userId) || null;
     this.selected.set(row);
     this.actionType.set(type);
@@ -201,6 +215,9 @@ export class AdminAccountsPage {
    * Opens approve/reject for a role request.
    */
   openRequest(decision: Exclude<RequestDecision, null>, requestId: string): void {
+    if (!this.canMutate()) {
+      return;
+    }
     this.selectedRequest.set(this.requests().find((row) => row.request_id === requestId) || null);
     this.requestAction.set(decision);
     this.actionError.set(null);
@@ -245,6 +262,9 @@ export class AdminAccountsPage {
    */
   submitAction(event: Event): void {
     event.preventDefault();
+    if (!this.canMutate()) {
+      return;
+    }
     const row = this.selected();
     const type = this.actionType();
     if (!row || !type || !row.version) {
@@ -292,6 +312,9 @@ export class AdminAccountsPage {
    */
   submitRequest(event: Event): void {
     event.preventDefault();
+    if (!this.canMutate()) {
+      return;
+    }
     const row = this.selectedRequest();
     const decision = this.requestAction();
     if (!row || !decision || !row.version) {
@@ -386,12 +409,29 @@ export class AdminAccountsPage {
     return JSON.stringify(value || {});
   }
 
-  private rangeText(total: number, page: number, noun: string): string {
-    if (!total) {
-      return `Hiển thị 0 - 0 / 0 ${noun}`;
+  private accountListParams(pageParams: Record<string, string>): Record<string, string> {
+    const tab = this.tab();
+    let role = '';
+    if (tab === 'members') {
+      role = 'member';
+    } else if (tab === 'admins') {
+      role = 'admin';
+    } else if (this.roleFilter()) {
+      role = this.roleFilter();
     }
-    const start = (page - 1) * this.pageSize + 1;
-    const end = Math.min(page * this.pageSize, total);
-    return `Hiển thị ${start} - ${end} / ${total} ${noun}`;
+    let isActive = '';
+    if (tab === 'locked') {
+      isActive = 'false';
+    } else if (this.statusFilter() === 'active') {
+      isActive = 'true';
+    } else if (this.statusFilter() === 'locked') {
+      isActive = 'false';
+    }
+    return {
+      q: this.query(),
+      role,
+      isActive,
+      ...pageParams,
+    };
   }
 }

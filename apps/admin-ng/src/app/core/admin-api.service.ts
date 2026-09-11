@@ -129,12 +129,28 @@ export interface AdminChatMessagesPayload {
   message?: AdminChatMessageRow;
 }
 
+export interface AdminProductVariant {
+  variant_id: string;
+  color?: string;
+  color_hex?: string | null;
+  size?: string;
+  stock_quantity?: number;
+  reserved_quantity?: number;
+  low_stock_threshold?: number;
+  version?: number;
+  updated_at?: string | null;
+}
+
 export interface AdminProductRow {
   product_id: string;
   sku?: string;
   name: string;
+  slug?: string;
+  description?: string | null;
+  category_id?: string;
   category_name?: string | null;
-  category?: { name?: string };
+  category?: { category_id?: string; name?: string };
+  brand?: string | null;
   base_price?: number;
   sale_price?: number | null;
   status?: string;
@@ -142,7 +158,16 @@ export interface AdminProductRow {
   collection?: string | null;
   updated_at?: string | null;
   is_combo?: boolean;
+  is_featured?: boolean;
   version?: number;
+  variants?: AdminProductVariant[];
+}
+
+export interface AdminCategoryRow {
+  category_id: string;
+  name: string;
+  slug?: string;
+  parent_id?: string | null;
 }
 
 export interface AdminPromotionRow {
@@ -270,6 +295,16 @@ export class AdminApiService {
    */
   requestPasswordReset(email: string): Observable<unknown> {
     return this.http.post(`${this.baseUrl}/api/auth/recover`, { email });
+  }
+
+  /**
+   * Changes the signed-in admin password after verifying the current one.
+   */
+  changePassword(currentPassword: string, newPassword: string): Observable<{ success: boolean }> {
+    return this.http.post<{ success: boolean }>(`${this.baseUrl}/api/auth/change-password`, {
+      currentPassword,
+      newPassword,
+    });
   }
 
   /**
@@ -402,6 +437,70 @@ export class AdminApiService {
    */
   listProducts(params: Record<string, string> = {}): Observable<AdminListPayload<AdminProductRow>> {
     return this.http.get<AdminListPayload<AdminProductRow>>(`${this.baseUrl}/api/v1/admin/products`, { params: this.params(params) });
+  }
+
+  /**
+   * Lists catalog categories for product create/edit.
+   */
+  listCategories(): Observable<AdminListPayload<AdminCategoryRow>> {
+    return this.http.get<AdminListPayload<AdminCategoryRow>>(`${this.baseUrl}/api/v1/admin/products/categories`);
+  }
+
+  /**
+   * Loads one catalog product including nested variants.
+   */
+  getProduct(productId: string): Observable<AdminProductRow> {
+    return this.http.get<AdminProductRow>(`${this.baseUrl}/api/v1/admin/products/${encodeURIComponent(productId)}`);
+  }
+
+  /**
+   * Creates a catalog product through the original admin API.
+   */
+  createProduct(body: Record<string, unknown>): Observable<AdminProductRow> {
+    return this.http.post<AdminProductRow>(`${this.baseUrl}/api/v1/admin/products`, body);
+  }
+
+  /**
+   * Updates catalog fields (not price or status) through PATCH.
+   */
+  updateProduct(productId: string, body: Record<string, unknown>): Observable<AdminProductRow> {
+    return this.http.patch<AdminProductRow>(`${this.baseUrl}/api/v1/admin/products/${encodeURIComponent(productId)}`, body);
+  }
+
+  /**
+   * Lists variants for one product.
+   */
+  listVariants(productId: string): Observable<AdminListPayload<AdminProductVariant>> {
+    return this.http.get<AdminListPayload<AdminProductVariant>>(
+      `${this.baseUrl}/api/v1/admin/products/${encodeURIComponent(productId)}/variants`,
+    );
+  }
+
+  /**
+   * Creates a color/size variant with initial stock.
+   */
+  createVariant(productId: string, body: Record<string, unknown>): Observable<AdminProductVariant> {
+    return this.http.post<AdminProductVariant>(
+      `${this.baseUrl}/api/v1/admin/products/${encodeURIComponent(productId)}/variants`,
+      body,
+    );
+  }
+
+  /**
+   * Adjusts variant stock (delta) or low-stock threshold.
+   */
+  updateStock(productId: string, body: Record<string, unknown>): Observable<unknown> {
+    return this.http.post(`${this.baseUrl}/api/v1/admin/products/${encodeURIComponent(productId)}/update-stock`, body);
+  }
+
+  /**
+   * Resolves a failed or discrepancy payment on an order.
+   */
+  resolvePayment(orderId: string, paymentId: string, body: Record<string, unknown>): Observable<unknown> {
+    return this.http.post(
+      `${this.baseUrl}/api/v1/admin/orders/${encodeURIComponent(orderId)}/payments/${encodeURIComponent(paymentId)}/resolve`,
+      body,
+    );
   }
 
   /**

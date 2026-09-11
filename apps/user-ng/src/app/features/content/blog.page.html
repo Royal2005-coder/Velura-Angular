@@ -56,6 +56,9 @@
     </div>
 
     <div class="articles-grid">
+      @if (!posts().length) {
+        <p class="blog-intro__desc">Chưa có bài viết đã xuất bản.</p>
+      }
       @for (post of posts(); track post.slug) {
         <article class="article-card">
           <div class="article-card__image">

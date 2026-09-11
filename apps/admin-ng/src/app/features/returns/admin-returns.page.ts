@@ -10,7 +10,9 @@ import {
   AdminTicketRow,
 } from '../../core/admin-api.service';
 import { adminDateTime } from '../../core/admin-format';
-import { adminErrorMessage, adminListRows } from '../../core/admin-http';
+import { adminErrorMessage, adminListCount, adminListRows, adminOffset, adminRangeLabel } from '../../core/admin-http';
+import { AdminSessionService } from '../../core/admin-session.service';
+import { AdminEmptyState } from '../../shared/admin-empty-state';
 import { AdminIcon } from '../../shared/admin-icon';
 import { AdminPagination } from '../../shared/admin-pagination';
 
@@ -32,11 +34,12 @@ const RETURN_LABELS: Record<string, string> = {
 
 @Component({
   selector: 'app-admin-returns-page',
-  imports: [AdminIcon, AdminPagination],
+  imports: [AdminEmptyState, AdminIcon, AdminPagination],
   templateUrl: './admin-returns.page.html',
 })
 export class AdminReturnsPage {
   private readonly api = inject(AdminApiService);
+  private readonly session = inject(AdminSessionService);
 
   readonly zone = signal<ServiceZone>('chat');
   readonly returns = signal<AdminReturnRow[]>([]);
@@ -45,6 +48,7 @@ export class AdminReturnsPage {
   readonly logs = signal<AdminAuditRow[]>([]);
   readonly messages = signal<AdminChatMessageRow[]>([]);
   readonly loadError = signal<string | null>(null);
+  readonly loading = signal(true);
   readonly selectedChat = signal<AdminChatSessionRow | null>(null);
   readonly actionType = signal<ReturnAction>(null);
   readonly selectedReturn = signal<AdminReturnRow | null>(null);
@@ -56,31 +60,27 @@ export class AdminReturnsPage {
   readonly chatProducts = signal<Array<{ product_id: string; name?: string; image_url?: string; sale_price?: number; base_price?: number }>>([]);
   readonly page = signal(1);
   readonly pageSize = 10;
+  readonly returnsTotal = signal(0);
+  readonly ticketsTotal = signal(0);
+  readonly logsTotal = signal(0);
+  readonly pendingReturnCount = signal(0);
+  readonly pendingTicketCount = signal(0);
+  readonly completedReturnCount = signal(0);
+  readonly canMutate = computed(() => this.session.canMutate('returns'));
 
-  readonly pendingReturns = computed(() =>
-    this.returns().filter((row) => {
-      if (row.status !== 'pending') {
-        return false;
-      }
-      const age = (Date.now() - new Date(row.created_at || 0).getTime()) / 36e5;
-      return age <= 48;
-    }).length,
-  );
-  readonly pendingTickets = computed(() => this.tickets().filter((row) => !['resolved', 'closed'].includes(row.status || '')).length);
-  readonly highPriority = computed(() => {
-    const tickets = this.tickets().filter((row) => row.priority === 'high' && !['resolved', 'closed'].includes(row.status || '')).length;
-    return tickets + this.pendingReturns();
-  });
-  readonly completedToday = computed(() => this.returns().filter((row) => row.status === 'completed' || row.status === 'resolved').length);
-  readonly pagedReturns = computed(() => this.slicePage(this.returns()));
-  readonly pagedTickets = computed(() => this.slicePage(this.tickets()));
-  readonly pagedLogs = computed(() => this.slicePage(this.logs()));
-  readonly returnPageCount = computed(() => Math.max(1, Math.ceil(this.returns().length / this.pageSize)));
-  readonly ticketPageCount = computed(() => Math.max(1, Math.ceil(this.tickets().length / this.pageSize)));
-  readonly logPageCount = computed(() => Math.max(1, Math.ceil(this.logs().length / this.pageSize)));
-  readonly returnRange = computed(() => this.rangeText(this.returns().length, 'phiếu'));
-  readonly ticketRange = computed(() => this.rangeText(this.tickets().length, 'phiếu'));
-  readonly logRange = computed(() => this.rangeText(this.logs().length, 'nhật ký'));
+  readonly pendingReturns = computed(() => this.pendingReturnCount());
+  readonly pendingTickets = computed(() => this.pendingTicketCount());
+  readonly highPriority = computed(() => this.pendingReturnCount() + this.pendingTicketCount());
+  readonly completedToday = computed(() => this.completedReturnCount());
+  readonly pagedReturns = computed(() => this.returns());
+  readonly pagedTickets = computed(() => this.tickets());
+  readonly pagedLogs = computed(() => this.logs());
+  readonly returnPageCount = computed(() => Math.max(1, Math.ceil(this.returnsTotal() / this.pageSize)));
+  readonly ticketPageCount = computed(() => Math.max(1, Math.ceil(this.ticketsTotal() / this.pageSize)));
+  readonly logPageCount = computed(() => Math.max(1, Math.ceil(this.logsTotal() / this.pageSize)));
+  readonly returnRange = computed(() => adminRangeLabel(this.returnsTotal(), this.page(), this.pageSize, 'phiếu'));
+  readonly ticketRange = computed(() => adminRangeLabel(this.ticketsTotal(), this.page(), this.pageSize, 'phiếu'));
+  readonly logRange = computed(() => adminRangeLabel(this.logsTotal(), this.page(), this.pageSize, 'nhật ký'));
   readonly visibleChats = computed(() => {
     const filter = this.chatFilter();
     return this.chats().filter((session) => {
@@ -94,8 +94,11 @@ export class AdminReturnsPage {
     });
   });
   readonly pendingChatCount = computed(() => this.chats().filter((session) => session.handoff_status === 'requested').length);
-  readonly canReply = computed(() => this.selectedChat()?.handoff_status === 'assigned');
+  readonly canReply = computed(() => this.canMutate() && this.selectedChat()?.handoff_status === 'assigned');
   readonly canJoinChat = computed(() => {
+    if (!this.canMutate()) {
+      return false;
+    }
     const status = this.selectedChat()?.handoff_status || 'ai';
     return status === 'ai' || status === 'requested';
   });
@@ -106,30 +109,71 @@ export class AdminReturnsPage {
   }
 
   /**
-   * Reloads returns, tickets, chats, and service logs.
+   * Reloads the active CSKH zone from server-paged APIs.
    */
   reload(): void {
+    this.loading.set(true);
     this.loadError.set(null);
+    const pageParams = { limit: String(this.pageSize), offset: adminOffset(this.page(), this.pageSize) };
+    const zone = this.zone();
     forkJoin({
-      returns: this.api.listReturns({ limit: '200' }).pipe(
-        catchError((error: unknown) => {
-          this.loadError.set(adminErrorMessage(error));
-          return of({ rows: [] as AdminReturnRow[] });
-        }),
-      ),
-      tickets: this.api.listTickets({ limit: '200' }).pipe(catchError(() => of({ rows: [] as AdminTicketRow[] }))),
-      chats: this.api.listChatSessions({ limit: '1000', handoffOnly: 'false' }).pipe(catchError(() => of({ rows: [] as AdminChatSessionRow[] }))),
-      logs: this.api.listServiceLogs({ limit: '100' }).pipe(catchError(() => of({ rows: [] as AdminAuditRow[] }))),
+      returns:
+        zone === 'returns'
+          ? this.api.listReturns(pageParams).pipe(
+              catchError((error: unknown) => {
+                this.loadError.set(adminErrorMessage(error));
+                return of({ rows: [] as AdminReturnRow[], count: 0 });
+              }),
+            )
+          : this.api.listReturns({ status: 'pending', limit: '1' }).pipe(catchError(() => of({ rows: [] as AdminReturnRow[], count: 0 }))),
+      pendingReturns: this.api.listReturns({ status: 'pending', limit: '1' }).pipe(catchError(() => of({ rows: [] as AdminReturnRow[], count: 0 }))),
+      completedReturns: this.api
+        .listReturns({ status: 'completed', limit: '1' })
+        .pipe(catchError(() => of({ rows: [] as AdminReturnRow[], count: 0 }))),
+      tickets:
+        zone === 'support'
+          ? this.api.listTickets(pageParams).pipe(catchError(() => of({ rows: [] as AdminTicketRow[], count: 0 })))
+          : this.api.listTickets({ status: 'open', limit: '1' }).pipe(catchError(() => of({ rows: [] as AdminTicketRow[], count: 0 }))),
+      chats: this.api
+        .listChatSessions({
+          limit: '50',
+          handoffOnly: this.chatFilter() === 'requested' || this.chatFilter() === 'assigned' ? 'true' : 'false',
+        })
+        .pipe(catchError(() => of({ rows: [] as AdminChatSessionRow[] }))),
+      allReturns: this.api.listReturns({ limit: '1' }).pipe(catchError(() => of({ rows: [] as AdminReturnRow[], count: 0 }))),
+      allTickets: this.api.listTickets({ limit: '1' }).pipe(catchError(() => of({ rows: [] as AdminTicketRow[], count: 0 }))),
+      pendingTickets: this.api.listTickets({ status: 'open', limit: '1' }).pipe(catchError(() => of({ rows: [] as AdminTicketRow[], count: 0 }))),
+      logs:
+        zone === 'logs'
+          ? this.api.listServiceLogs(pageParams).pipe(catchError(() => of({ rows: [] as AdminAuditRow[], count: 0 })))
+          : of({ rows: [] as AdminAuditRow[], count: 0 }),
     }).subscribe((payload) => {
-      this.returns.set(adminListRows(payload.returns));
-      this.tickets.set(adminListRows(payload.tickets));
+      if (zone === 'returns') {
+        this.returns.set(adminListRows(payload.returns));
+        this.returnsTotal.set(adminListCount(payload.returns));
+      } else {
+        this.returnsTotal.set(adminListCount(payload.allReturns));
+      }
+      this.pendingReturnCount.set(adminListCount(payload.pendingReturns));
+      this.completedReturnCount.set(adminListCount(payload.completedReturns));
+      if (zone === 'support') {
+        this.tickets.set(adminListRows(payload.tickets));
+        this.ticketsTotal.set(adminListCount(payload.tickets));
+      } else {
+        this.ticketsTotal.set(adminListCount(payload.allTickets));
+      }
+      this.pendingTicketCount.set(adminListCount(payload.pendingTickets));
       this.chats.set(adminListRows(payload.chats).filter((session) => session.is_active !== false));
       const selectedId = this.selectedChat()?.session_id;
       if (selectedId) {
         const next = this.chats().find((session) => session.session_id === selectedId) || null;
         this.selectedChat.set(next);
       }
-      this.logs.set(adminListRows(payload.logs));
+      if (zone === 'logs') {
+        this.logs.set(adminListRows(payload.logs));
+        this.logsTotal.set(adminListCount(payload.logs));
+      }
+      this.loading.set(false);
     });
   }
 
@@ -139,6 +183,7 @@ export class AdminReturnsPage {
   setZone(zone: ServiceZone): void {
     this.zone.set(zone);
     this.page.set(1);
+    this.reload();
   }
 
   /**
@@ -161,6 +206,7 @@ export class AdminReturnsPage {
    */
   onChatFilter(event: Event): void {
     this.chatFilter.set((event.target as HTMLSelectElement).value || 'all');
+    this.reload();
   }
 
   /**
@@ -168,7 +214,7 @@ export class AdminReturnsPage {
    */
   assignChat(): void {
     const session = this.selectedChat();
-    if (!session) {
+    if (!session || !this.canMutate()) {
       return;
     }
     this.api.assignChatSession(session.session_id, 'assigned').subscribe({
@@ -187,7 +233,7 @@ export class AdminReturnsPage {
    */
   closeChat(): void {
     const session = this.selectedChat();
-    if (!session) {
+    if (!session || !this.canMutate()) {
       return;
     }
     this.api.assignChatSession(session.session_id, 'closed').subscribe({
@@ -208,7 +254,7 @@ export class AdminReturnsPage {
     event.preventDefault();
     const session = this.selectedChat();
     const message = this.replyDraft().trim();
-    if (!session || !message) {
+    if (!session || !message || !this.canMutate()) {
       return;
     }
     this.api.sendChatReply(session.session_id, message).subscribe({
@@ -310,6 +356,7 @@ export class AdminReturnsPage {
    */
   goPage(page: number): void {
     this.page.set(Math.max(1, page));
+    this.reload();
   }
 
   /**
@@ -430,19 +477,5 @@ export class AdminReturnsPage {
       return 'Phản hồi phiếu hỗ trợ';
     }
     return 'Đóng phiếu hỗ trợ';
-  }
-
-  private slicePage<T>(rows: T[]): T[] {
-    const start = (this.page() - 1) * this.pageSize;
-    return rows.slice(start, start + this.pageSize);
-  }
-
-  private rangeText(total: number, noun: string): string {
-    if (!total) {
-      return `Hiển thị 0 - 0 / 0 ${noun}`;
-    }
-    const start = (this.page() - 1) * this.pageSize + 1;
-    const end = Math.min(this.page() * this.pageSize, total);
-    return `Hiển thị ${start} - ${end} / ${total} ${noun}`;
   }
 }

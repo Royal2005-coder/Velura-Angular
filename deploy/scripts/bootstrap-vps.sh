@@ -43,5 +43,5 @@ fi
 
 sudo nginx -t
 sudo systemctl enable --now nginx
-sudo systemctl reload nginx || sudo /usr/sbin/nginx
+sudo systemctl reload nginx || sudo /usr/sbin/nginx -s reload || sudo /usr/sbin/nginx
 echo "Bootstrap complete for ${DEPLOY_USER}. Place /opt/velura/.env then start velura-api."

@@ -35,4 +35,4 @@ sudo nginx -t
 sudo systemctl daemon-reload
 sudo systemctl enable velura-api-staging
 sudo systemctl restart velura-api-staging
-sudo systemctl reload nginx || sudo /usr/sbin/nginx
+sudo systemctl reload nginx || sudo /usr/sbin/nginx -s reload || sudo /usr/sbin/nginx

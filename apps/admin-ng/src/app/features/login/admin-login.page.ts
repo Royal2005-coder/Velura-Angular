@@ -1,10 +1,10 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { catchError, of, switchMap } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { AdminApiService } from '../../core/admin-api.service';
-import { adminErrorMessage } from '../../core/admin-http';
+import { adminAuthLockout, adminErrorMessage } from '../../core/admin-http';
 import { AdminSessionService } from '../../core/admin-session.service';
 import { useBodyClass } from '../../core/body-class';
 
@@ -20,10 +20,20 @@ export class AdminLoginPage {
   private readonly api = inject(AdminApiService);
   private readonly session = inject(AdminSessionService);
   private readonly router = inject(Router);
+  private readonly destroyRef = inject(DestroyRef);
+  private countdownTimer: ReturnType<typeof setInterval> | null = null;
 
   readonly errorMessage = signal<string | null>(null);
   readonly successMessage = signal<string | null>(null);
   readonly submitting = signal(false);
+  readonly remainingAttempts = signal<number | null>(null);
+  readonly lockedUntil = signal<number | null>(null);
+  readonly remainingLockMs = signal(0);
+  readonly isLocked = computed(() => {
+    const until = this.lockedUntil();
+    return until !== null && until > Date.now();
+  });
+  readonly lockCountdown = computed(() => formatCountdown(this.remainingLockMs()));
 
   readonly form = new FormGroup({
     email: new FormControl('', { nonNullable: true, validators: [Validators.required, Validators.email] }),
@@ -32,12 +42,17 @@ export class AdminLoginPage {
 
   constructor() {
     useBodyClass('page-auth');
+    this.destroyRef.onDestroy(() => this.stopCountdown());
   }
 
   /**
-   * Submits admin credentials through the same Supabase password grant as vanilla login.
+   * Submits admin credentials through `/api/auth/signin` so AUTH-02 lockout runs.
    */
   submit(): void {
+    if (this.isLocked()) {
+      this.errorMessage.set(`Tài khoản của bạn đã bị tạm khóa. Thử lại sau ${this.lockCountdown()}.`);
+      return;
+    }
     if (this.form.invalid) {
       this.errorMessage.set('Vui lòng nhập đầy đủ email và mật khẩu.');
       return;
@@ -58,7 +73,8 @@ export class AdminLoginPage {
         catchError((error: unknown) => {
           this.session.clear();
           this.submitting.set(false);
-          this.errorMessage.set(adminErrorMessage(error, 'Email hoặc mật khẩu không hợp lệ.'));
+          this.applyLockout(error);
+          this.errorMessage.set(adminErrorMessage(error, 'Thông tin đăng nhập không chính xác.'));
           return of(null);
         }),
       )
@@ -66,9 +82,12 @@ export class AdminLoginPage {
         if (!context) {
           return;
         }
+        this.remainingAttempts.set(null);
+        this.lockedUntil.set(null);
+        this.stopCountdown();
         const session = this.session.applyAuthContext(context);
         this.submitting.set(false);
-        void this.router.navigateByUrl(this.session.firstRoute(session));
+        void this.router.navigateByUrl(this.session.firstRoute(session), { replaceUrl: true });
       });
   }
 
@@ -111,6 +130,48 @@ export class AdminLoginPage {
     });
   }
 
+  private applyLockout(error: unknown): void {
+    const lockout = adminAuthLockout(error);
+    if (!lockout) {
+      return;
+    }
+    this.remainingAttempts.set(lockout.remainingAttempts);
+    if (lockout.lockedUntil) {
+      const until = Date.parse(lockout.lockedUntil);
+      if (!Number.isNaN(until)) {
+        this.startCountdown(until);
+        return;
+      }
+    }
+    if (lockout.retryAfterSeconds > 0) {
+      this.startCountdown(Date.now() + lockout.retryAfterSeconds * 1000);
+    }
+  }
+
+  private startCountdown(until: number): void {
+    this.lockedUntil.set(until);
+    this.remainingLockMs.set(Math.max(0, until - Date.now()));
+    this.form.disable({ emitEvent: false });
+    this.stopCountdown();
+    this.countdownTimer = setInterval(() => {
+      const left = Math.max(0, until - Date.now());
+      this.remainingLockMs.set(left);
+      if (left <= 0) {
+        this.lockedUntil.set(null);
+        this.remainingAttempts.set(null);
+        this.form.enable({ emitEvent: false });
+        this.stopCountdown();
+      }
+    }, 1000);
+  }
+
+  private stopCountdown(): void {
+    if (this.countdownTimer) {
+      clearInterval(this.countdownTimer);
+      this.countdownTimer = null;
+    }
+  }
+
   private randomVerifier(): string {
     const bytes = crypto.getRandomValues(new Uint8Array(32));
     return this.base64Url(bytes);
@@ -129,4 +190,14 @@ export class AdminLoginPage {
     });
     return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   }
+}
+
+/**
+ * Formats remaining lock time as mm:ss for the login banner.
+ */
+export function formatCountdown(ms: number): string {
+  const total = Math.max(0, Math.ceil(ms / 1000));
+  const minutes = Math.floor(total / 60);
+  const seconds = total % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }

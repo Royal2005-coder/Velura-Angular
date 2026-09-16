@@ -291,6 +291,13 @@ export class AdminApiService {
   }
 
   /**
+   * Records AUTH-08 sign-out on the API, then the ViewModel clears the client session.
+   */
+  signOut(): Observable<{ success?: boolean }> {
+    return this.http.post<{ success?: boolean }>(`${this.baseUrl}/api/auth/signout`, {});
+  }
+
+  /**
    * Sends the original Supabase password-reset email through the API.
    */
   requestPasswordReset(email: string): Observable<unknown> {

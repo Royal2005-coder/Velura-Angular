@@ -2,7 +2,8 @@ import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
 import { config, assertRuntimeConfig } from "./config.js";
 import { applyCors, applySecurityHeaders, getRequestIp, HttpError, parsePathname, readJson, sendError, sendJson, sendNoContent } from "./http.js";
-import { buildAuthContext, requireAdmin, requirePermission } from "./rbac.js";
+import { completeAdminPasswordSignIn, recordAdminSignOut } from "./auth-signin.js";
+import { buildAuthContext, requireAdmin, requireAuthenticated, requirePermission } from "./rbac.js";
 import { buildDashboardSummary } from "./dashboard.js";
 import { createAccountRepository } from "./accounts/account-repository.js";
 import { createAccountService } from "./accounts/account-service.js";
@@ -127,23 +128,13 @@ const server = createServer(async (req, res) => {
 
     if (req.method === "POST" && parts[1] === "auth" && parts[2] === "signin") {
       const body = await readJson(req);
-      if (!body.email || !body.password) {
-        throw new HttpError(400, "BAD_REQUEST", "Email và mật khẩu là bắt buộc");
-      }
-      const response = await fetch(`${config.supabaseUrl}/auth/v1/token?grant_type=password`, {
-        method: "POST",
-        headers: {
-          apikey: config.supabaseAnonKey,
-          Authorization: `Bearer ${config.supabaseAnonKey}`,
-          "content-type": "application/json"
-        },
-        body: JSON.stringify({ email: body.email, password: body.password })
-      });
-      const payload = asJsonObject(await response.json().catch(() => ({})));
-      if (!response.ok || !payload.access_token) {
-        throw new HttpError(401, "UNAUTHORIZED", asString(payload.error_description) || asString(payload.msg) || "Email hoặc mật khẩu không hợp lệ.");
-      }
-      return sendJson(res, 200, { token: payload.access_token }, corsHeaders);
+      return sendJson(res, 200, await completeAdminPasswordSignIn(body), corsHeaders);
+    }
+
+    if (req.method === "POST" && parts[1] === "auth" && parts[2] === "signout") {
+      requireAuthenticated(context);
+      await recordAdminSignOut(req, context);
+      return sendJson(res, 200, { success: true }, corsHeaders);
     }
 
     if (req.method === "POST" && parts[1] === "auth" && parts[2] === "recover") {
@@ -242,7 +233,8 @@ const server = createServer(async (req, res) => {
         role: context.roleCode,
         roleName: context.roleName,
         isAdmin: context.isAdmin,
-        allowedPages: context.allowedPages
+        allowedPages: context.allowedPages,
+        allowedModules: context.allowedModules
       }, corsHeaders);
     }
 

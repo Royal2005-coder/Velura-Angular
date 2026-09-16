@@ -1,0 +1,12 @@
+<main class="admin-content">
+  <section class="admin-card admin-forbidden" aria-label="Không có quyền truy cập">
+    <h1>Bạn không có quyền truy cập</h1>
+    <p>
+      Vai trò hiện tại không được mở trang này.
+      @if (fromPage()) {
+        <span> ({{ fromPage() }})</span>
+      }
+    </p>
+    <a class="admin-btn admin-btn--secondary" [routerLink]="homeRoute">Về trang được phép</a>
+  </section>
+</main>

@@ -7,6 +7,34 @@ export interface AdminListPayload<T> {
 }
 
 /**
+ * Reads remaining attempts / lock expiry from the API error envelope.
+ */
+export function adminAuthLockout(error: unknown): {
+  code: string;
+  remainingAttempts: number | null;
+  lockedUntil: string | null;
+  retryAfterSeconds: number;
+} | null {
+  if (!(error instanceof HttpErrorResponse)) {
+    return null;
+  }
+  const payload = error.error as {
+    error?: { code?: string; details?: { remaining_attempts?: number; locked_until?: string | null; retry_after_seconds?: number } };
+  } | null;
+  const details = payload?.error?.details;
+  const code = payload?.error?.code || '';
+  if (!details && code !== 'LOCKED') {
+    return null;
+  }
+  return {
+    code: code || (error.status === 403 ? 'LOCKED' : 'UNAUTHORIZED'),
+    remainingAttempts: typeof details?.remaining_attempts === 'number' ? details.remaining_attempts : null,
+    lockedUntil: details?.locked_until || null,
+    retryAfterSeconds: Number(details?.retry_after_seconds) || 0,
+  };
+}
+
+/**
  * Reads the original admin API error envelope (`error.message`).
  */
 export function adminErrorMessage(error: unknown, fallback = 'Không thể gọi API quản trị.'): string {

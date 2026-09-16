@@ -1,8 +1,10 @@
 import { Injectable, computed, signal } from '@angular/core';
 import { adminInitials, adminIsHttpUrl } from './admin-format';
 
-const TOKEN_KEY = 'velura_supabase_access_token';
-const SESSION_KEY = 'velura_current_session';
+const TOKEN_KEY = 'velura_admin_access_token';
+const SESSION_KEY = 'velura_admin_session';
+const LEGACY_TOKEN_KEYS = ['velura_supabase_access_token', 'velura_token'];
+const LEGACY_SESSION_KEYS = ['velura_current_session'];
 
 /** UI hint for write buttons. API `roleModules` remains canonical. */
 const WRITE_ROLES: Record<string, string[]> = {
@@ -32,6 +34,7 @@ export interface AdminAuthMe {
   roleName?: string;
   isAdmin?: boolean;
   allowedPages?: string[];
+  allowedModules?: string[];
 }
 
 export interface AdminSession {
@@ -46,6 +49,7 @@ export interface AdminSession {
   isActive: boolean;
   isVerified: boolean;
   allowedPages: string[];
+  allowedModules: string[];
 }
 
 /**
@@ -72,22 +76,34 @@ export class AdminSessionService {
     return adminIsHttpUrl(avatar) ? avatar : '';
   });
   readonly displayName = computed(() => this.sessionState()?.name || 'Quản trị viên');
+  readonly displayEmail = computed(() => this.sessionState()?.email || '');
   readonly roleLabel = computed(() => this.sessionState()?.role || 'Velura Admin');
 
   /**
-   * Reads the original admin bearer token from session/local storage.
+   * Reads the admin bearer token. Storefront `velura_token` is never used.
    */
   token(): string {
-    return sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY) || localStorage.getItem('velura_token') || '';
+    const stored = sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY);
+    if (stored) {
+      return stored;
+    }
+    const legacy = sessionStorage.getItem('velura_supabase_access_token') || '';
+    if (legacy) {
+      this.setToken(legacy);
+    }
+    return legacy;
   }
 
   /**
-   * Stores the access token the same way vanilla `setAccessToken` does.
+   * Stores the admin access token in admin-only keys.
    */
   setToken(token: string): void {
     sessionStorage.setItem(TOKEN_KEY, token);
-    localStorage.setItem('velura_token', token);
-    localStorage.removeItem(TOKEN_KEY);
+    localStorage.setItem(TOKEN_KEY, token);
+    for (const key of LEGACY_TOKEN_KEYS) {
+      sessionStorage.removeItem(key);
+      localStorage.removeItem(key);
+    }
   }
 
   /**
@@ -99,29 +115,40 @@ export class AdminSessionService {
     }
     const session = this.buildSession(context);
     sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
-    localStorage.removeItem(SESSION_KEY);
+    localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    for (const key of LEGACY_SESSION_KEYS) {
+      sessionStorage.removeItem(key);
+      localStorage.removeItem(key);
+    }
     this.sessionState.set(session);
     return session;
   }
 
   /**
-   * Clears the original admin session keys.
+   * Clears admin session keys and leftover vanilla keys on this origin.
    */
   clear(): void {
     sessionStorage.removeItem(TOKEN_KEY);
     sessionStorage.removeItem(SESSION_KEY);
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(SESSION_KEY);
-    localStorage.removeItem('velura_token');
+    for (const key of [...LEGACY_TOKEN_KEYS, ...LEGACY_SESSION_KEYS]) {
+      sessionStorage.removeItem(key);
+      localStorage.removeItem(key);
+    }
     this.sessionState.set(null);
   }
 
   /**
-   * First allowed vanilla page, mapped to an Angular route.
+   * Lands operators on their module, not a shared dashboard that can look like a session swap.
    */
   firstRoute(session = this.sessionState()): string {
-    const page = session?.allowedPages?.[0] || 'welcome';
-    return this.toRoute(page);
+    const pages = session?.allowedPages || [];
+    if (session?.roleCode === 'super_admin' || session?.roleCode === 'admin_viewer') {
+      return this.toRoute(pages.includes('dashboard') ? 'dashboard' : pages[0] || 'welcome');
+    }
+    const home = pages.find((page) => page !== 'dashboard') || pages[0] || 'welcome';
+    return this.toRoute(home);
   }
 
   /**
@@ -140,6 +167,14 @@ export class AdminSessionService {
    */
   canOpen(page: string, session = this.sessionState()): boolean {
     return Boolean(session?.allowedPages?.includes(page));
+  }
+
+  /**
+   * Whether `/api/auth/me` granted a backend module (not a shell route).
+   */
+  canAccessModule(module: string, session = this.sessionState()): boolean {
+    const modules = session?.allowedModules || [];
+    return modules.includes('*') || modules.includes(module);
   }
 
   /**
@@ -178,6 +213,7 @@ export class AdminSessionService {
         Array.isArray(context.allowedPages) && context.allowedPages.length > 0
           ? context.allowedPages
           : ['welcome'],
+      allowedModules: Array.isArray(context.allowedModules) ? context.allowedModules : [],
     };
   }
 

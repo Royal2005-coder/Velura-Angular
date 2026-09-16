@@ -82,12 +82,30 @@
           </span>
           <span class="admin-profile__copy">
             <strong>{{ session.displayName() }}</strong>
-            <small>{{ session.roleLabel() }}</small>
+            <small>{{ session.displayEmail() || session.roleLabel() }}</small>
           </span>
         </span>
-        <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="logout()">Đăng xuất</button>
+        <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="askLogout()">Đăng xuất</button>
       </div>
     </header>
     <router-outlet />
   </div>
 </div>
+
+@if (logoutConfirmOpen()) {
+  <div class="admin-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="admin-logout-title">
+    <section class="admin-modal">
+      <header class="admin-modal__header">
+        <h2 id="admin-logout-title">Đăng xuất?</h2>
+        <button class="admin-icon-button" type="button" (click)="cancelLogout()">×</button>
+      </header>
+      <div class="admin-modal__body">
+        <p>Phiên quản trị sẽ bị đóng. Bạn cần đăng nhập lại để tiếp tục.</p>
+      </div>
+      <footer class="admin-modal__footer">
+        <button class="admin-btn admin-btn--ghost" type="button" (click)="cancelLogout()">Ở lại</button>
+        <button class="admin-btn admin-btn--secondary" type="button" [disabled]="signingOut()" (click)="confirmLogout()">Đăng xuất</button>
+      </footer>
+    </section>
+  </div>
+}

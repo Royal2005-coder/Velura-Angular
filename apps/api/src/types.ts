@@ -70,6 +70,7 @@ export interface AuthContext {
   roleName: string;
   isAdmin: boolean;
   allowedPages: string[];
+  allowedModules: string[];
   accessToken: string;
 }
 

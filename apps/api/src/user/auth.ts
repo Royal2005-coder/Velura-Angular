@@ -2,6 +2,13 @@ import { HttpError, readJson, sendJson } from "../http.js";
 import { selectOne, insertRow, updateRows, getAuthUser } from "../supabase.js";
 import { hashPassword, verifyPassword, signJwt } from "../auth-helper.js";
 import { allowDevOtpBypass } from "../config.js";
+import {
+  assertNotLocked,
+  clearLoginFailures,
+  recordFailedLogin,
+  resetStaleLoginFailures,
+  type LoginLockUser
+} from "../auth-lockout.js";
 import { createNotification } from "./notifications.js";
 import {
   asJsonObject,
@@ -338,59 +345,26 @@ export async function handleAuthRoute(
     // Query user
     const query = email ? { email: `eq.${email}` } : { phone: `eq.${phone}` };
     const user = await selectOne("users", query);
-    if (!user) {
+    if (!user || typeof user.user_id !== "string") {
       throw new HttpError(401, "UNAUTHORIZED", "Thông tin đăng nhập không chính xác");
     }
 
-    // Check lock status (AUTH-02)
-    const now = new Date();
-    if (user.locked_until) {
-      const lockedUntil = new Date(String(user.locked_until));
-      if (lockedUntil > now) {
-        const lockedTimeLeft = Math.ceil((lockedUntil.getTime() - now.getTime()) / 1000 / 60);
-        throw new HttpError(403, "LOCKED", `Tài khoản bị khóa tạm thời trong ${lockedTimeLeft} phút do nhập sai mật khẩu quá 5 lần`);
-      }
-    }
+    const lockUser: LoginLockUser = {
+      user_id: user.user_id,
+      login_fail_count: user.login_fail_count,
+      locked_until: user.locked_until,
+      updated_at: user.updated_at,
+      created_at: user.created_at
+    };
+    const currentLock = await resetStaleLoginFailures(lockUser);
+    assertNotLocked(currentLock);
 
-    // Reset login failures if last attempt was > 15 minutes ago, or if lock has expired
-    if (Number(user.login_fail_count) > 0) {
-      const lastUpdate = new Date(String(user.updated_at || user.created_at));
-      const elapsedMinutes = (now.getTime() - lastUpdate.getTime()) / 1000 / 60;
-      if (elapsedMinutes >= 15 || (user.locked_until && new Date(String(user.locked_until)) <= now)) {
-        user.login_fail_count = 0;
-        user.locked_until = null;
-        await updateRows("users", { user_id: `eq.${user.user_id}` }, {
-          login_fail_count: 0,
-          locked_until: null
-        });
-      }
-    }
-
-    // Verify password
     const isValidPassword = verifyPassword(asString(password), asString(user.password_hash));
     if (!isValidPassword) {
-      const nextFailCount = (Number(user.login_fail_count) || 0) + 1;
-      const updates: JsonObject = {
-        login_fail_count: nextFailCount
-      };
-      if (nextFailCount >= 5) {
-        updates.locked_until = new Date(Date.now() + 15 * 60 * 1000).toISOString();
-      }
-      await updateRows("users", { user_id: `eq.${user.user_id}` }, updates);
-
-      if (nextFailCount >= 5) {
-        throw new HttpError(403, "LOCKED", "Tài khoản bị khóa tạm thời trong 15 phút do nhập sai mật khẩu quá 5 lần");
-      } else {
-        throw new HttpError(401, "UNAUTHORIZED", `Thông tin đăng nhập không chính xác. Bạn còn ${5 - nextFailCount} lần thử.`);
-      }
+      await recordFailedLogin(currentLock);
     }
 
-    // Reset login failures and update last_login_at
-    await updateRows("users", { user_id: `eq.${user.user_id}` }, {
-      login_fail_count: 0,
-      locked_until: null,
-      last_login_at: new Date().toISOString()
-    });
+    await clearLoginFailures(user.user_id);
 
     // Check if user is active (AUTH-05 verification check)
     if (!user.is_active) {

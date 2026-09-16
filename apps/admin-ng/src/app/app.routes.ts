@@ -39,6 +39,13 @@ export const routes: Routes = [
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
       {
+        path: 'forbidden',
+        loadComponent: () => import('./features/login/admin-forbidden.page').then((m) => m.AdminForbiddenPage),
+        canActivate: [adminSessionGuard],
+        data: { title: 'Không có quyền truy cập' },
+        title: 'Không có quyền truy cập',
+      },
+      {
         path: 'dashboard',
         loadComponent: () => import('./features/dashboard/admin-dashboard.page').then((m) => m.AdminDashboardPage),
         canActivate: [adminAuthGuard],

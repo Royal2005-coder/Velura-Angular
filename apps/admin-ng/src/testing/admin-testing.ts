@@ -46,6 +46,7 @@ export function stubAdminApi(): AdminApiService {
       dashboard,
       me,
       signIn: () => of({ token: '' }),
+      signOut: () => of({ success: true }),
       exchangePkce: () => of({ token: '' }),
       requestPasswordReset: () => of({}),
       changePassword: () => of({ success: true }),

@@ -28,6 +28,16 @@ export const roleModules: Record<string, string[]> = {
 };
 
 /**
+ * Canonical page list + module list for one role code.
+ */
+export function accessForRole(roleCode: string): { allowedPages: string[]; allowedModules: string[] } {
+  return {
+    allowedPages: rolePages[roleCode] || rolePages.member,
+    allowedModules: roleModules[roleCode] || roleModules.member
+  };
+}
+
+/**
  * Build guest, member, or admin context from the Authorization header.
  */
 export async function buildAuthContext(req: HttpRequest): Promise<AuthContext> {
@@ -64,13 +74,15 @@ export async function buildAuthContext(req: HttpRequest): Promise<AuthContext> {
     if (!profile) return buildGuestContext();
 
     const roleCode = roleCodeOf(profile);
+    const access = accessForRole(roleCode);
     return {
       authUser: { id: profile.user_id, email: typeof profile.email === "string" ? profile.email : null },
       profile,
       roleCode,
       roleName: roleNames[roleCode] || "Member",
       isAdmin: profile.role === "admin",
-      allowedPages: rolePages[roleCode] || rolePages.member,
+      allowedPages: access.allowedPages,
+      allowedModules: access.allowedModules,
       accessToken: token
     };
   }
@@ -101,18 +113,21 @@ export async function buildAuthContext(req: HttpRequest): Promise<AuthContext> {
       roleName: "Member",
       isAdmin: false,
       allowedPages: rolePages.member,
+      allowedModules: roleModules.member,
       accessToken: token
     };
   }
 
   const roleCode = roleCodeOf(profile);
+  const access = accessForRole(roleCode);
   return {
     authUser,
     profile,
     roleCode,
     roleName: roleNames[roleCode] || "Member",
     isAdmin: profile.role === "admin",
-    allowedPages: rolePages[roleCode] || rolePages.member,
+    allowedPages: access.allowedPages,
+    allowedModules: access.allowedModules,
     accessToken: token
   };
 }
@@ -162,6 +177,7 @@ function buildGuestContext(): AuthContext {
     roleName: "Guest",
     isAdmin: false,
     allowedPages: rolePages.guest,
+    allowedModules: roleModules.guest,
     accessToken: ""
   };
 }

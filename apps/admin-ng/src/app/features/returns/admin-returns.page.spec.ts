@@ -14,5 +14,6 @@ describe('AdminReturnsPage', () => {
     expect(page.loadError()).toBeNull();
     page.zone.set('returns');
     expect(page.zone()).toBe('returns');
+    expect(page.canLookupOrders()).toBe(false);
   });
 });

@@ -32,9 +32,10 @@ body.page-auth {
 .auth-card__brand h1 {
   margin: 12px 0 4px;
   color: var(--text-dark, #2c2520);
-  font-family: "Playfair Display", Georgia, serif;
-  font-size: 1.5rem;
+  font-family: "DM Sans", sans-serif;
+  font-size: 1.375rem;
   font-weight: 600;
+  letter-spacing: -0.02em;
 }
 
 .auth-card__brand p {
@@ -67,8 +68,27 @@ body.page-auth {
 }
 
 .auth-error.is-visible,
-.auth-success.is-visible {
+.auth-success.is-visible,
+.auth-lockout.is-visible {
   display: block;
+}
+
+.auth-lockout {
+  display: none;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  border-left: 3px solid var(--error, #dc2626);
+  border-radius: var(--radius-sm, 4px);
+  background: #f9e4e8;
+  color: var(--error, #dc2626);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.auth-attempts {
+  margin: 0 0 16px;
+  color: var(--text-body, #3d322b);
+  font-size: 0.8125rem;
 }
 
 .auth-divider {

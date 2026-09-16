@@ -6,6 +6,7 @@ import {
   AdminAuditRow,
   AdminChatMessageRow,
   AdminChatSessionRow,
+  AdminOrderRow,
   AdminReturnRow,
   AdminTicketRow,
 } from '../../core/admin-api.service';
@@ -16,7 +17,7 @@ import { AdminEmptyState } from '../../shared/admin-empty-state';
 import { AdminIcon } from '../../shared/admin-icon';
 import { AdminPagination } from '../../shared/admin-pagination';
 
-type ServiceZone = 'chat' | 'returns' | 'support' | 'logs';
+type ServiceZone = 'chat' | 'returns' | 'support' | 'orders' | 'logs';
 type ReturnAction = 'refund' | 'exchange' | 'reject' | 'reply' | 'close' | null;
 
 const RETURN_LABELS: Record<string, string> = {
@@ -44,6 +45,7 @@ export class AdminReturnsPage {
   readonly zone = signal<ServiceZone>('chat');
   readonly returns = signal<AdminReturnRow[]>([]);
   readonly tickets = signal<AdminTicketRow[]>([]);
+  readonly orders = signal<AdminOrderRow[]>([]);
   readonly chats = signal<AdminChatSessionRow[]>([]);
   readonly logs = signal<AdminAuditRow[]>([]);
   readonly messages = signal<AdminChatMessageRow[]>([]);
@@ -62,11 +64,15 @@ export class AdminReturnsPage {
   readonly pageSize = 10;
   readonly returnsTotal = signal(0);
   readonly ticketsTotal = signal(0);
+  readonly ordersTotal = signal(0);
   readonly logsTotal = signal(0);
   readonly pendingReturnCount = signal(0);
   readonly pendingTicketCount = signal(0);
   readonly completedReturnCount = signal(0);
   readonly canMutate = computed(() => this.session.canMutate('returns'));
+  readonly canLookupOrders = computed(() => this.session.canAccessModule('orders'));
+  readonly orderQuery = signal('');
+  readonly selectedOrder = signal<AdminOrderRow | null>(null);
 
   readonly pendingReturns = computed(() => this.pendingReturnCount());
   readonly pendingTickets = computed(() => this.pendingTicketCount());
@@ -74,12 +80,15 @@ export class AdminReturnsPage {
   readonly completedToday = computed(() => this.completedReturnCount());
   readonly pagedReturns = computed(() => this.returns());
   readonly pagedTickets = computed(() => this.tickets());
+  readonly pagedOrders = computed(() => this.orders());
   readonly pagedLogs = computed(() => this.logs());
   readonly returnPageCount = computed(() => Math.max(1, Math.ceil(this.returnsTotal() / this.pageSize)));
   readonly ticketPageCount = computed(() => Math.max(1, Math.ceil(this.ticketsTotal() / this.pageSize)));
+  readonly orderPageCount = computed(() => Math.max(1, Math.ceil(this.ordersTotal() / this.pageSize)));
   readonly logPageCount = computed(() => Math.max(1, Math.ceil(this.logsTotal() / this.pageSize)));
   readonly returnRange = computed(() => adminRangeLabel(this.returnsTotal(), this.page(), this.pageSize, 'phiếu'));
   readonly ticketRange = computed(() => adminRangeLabel(this.ticketsTotal(), this.page(), this.pageSize, 'phiếu'));
+  readonly orderRange = computed(() => adminRangeLabel(this.ordersTotal(), this.page(), this.pageSize, 'đơn'));
   readonly logRange = computed(() => adminRangeLabel(this.logsTotal(), this.page(), this.pageSize, 'nhật ký'));
   readonly visibleChats = computed(() => this.chats().filter((session) => session.is_active !== false));
   readonly pendingChatCount = computed(() => this.chats().filter((session) => session.handoff_status === 'requested').length);
@@ -133,6 +142,21 @@ export class AdminReturnsPage {
         zone === 'logs'
           ? this.api.listServiceLogs(pageParams).pipe(catchError(() => of({ rows: [] as AdminAuditRow[], count: 0 })))
           : of({ rows: [] as AdminAuditRow[], count: 0 }),
+      orders:
+        zone === 'orders'
+          ? this.api
+              .listOrders({
+                q: this.orderQuery().trim(),
+                limit: String(this.pageSize),
+                offset: adminOffset(this.page(), this.pageSize),
+              })
+              .pipe(
+                catchError((error: unknown) => {
+                  this.loadError.set(adminErrorMessage(error, 'Bạn không có quyền tra cứu đơn hàng.'));
+                  return of({ rows: [] as AdminOrderRow[], count: 0 });
+                }),
+              )
+          : of({ rows: [] as AdminOrderRow[], count: 0 }),
     }).subscribe((payload) => {
       if (zone === 'returns') {
         this.returns.set(adminListRows(payload.returns));
@@ -159,6 +183,10 @@ export class AdminReturnsPage {
         this.logs.set(adminListRows(payload.logs));
         this.logsTotal.set(adminListCount(payload.logs));
       }
+      if (zone === 'orders') {
+        this.orders.set(adminListRows(payload.orders));
+        this.ordersTotal.set(adminListCount(payload.orders));
+      }
       this.loading.set(false);
     });
   }
@@ -169,7 +197,42 @@ export class AdminReturnsPage {
   setZone(zone: ServiceZone): void {
     this.zone.set(zone);
     this.page.set(1);
+    this.selectedOrder.set(null);
     this.reload();
+  }
+
+  /**
+   * Updates the CSKH order lookup query.
+   */
+  onOrderQuery(event: Event): void {
+    this.orderQuery.set((event.target as HTMLInputElement).value);
+  }
+
+  /**
+   * Runs the CSKH order lookup against the paged orders API.
+   */
+  searchOrders(): void {
+    if (!this.canLookupOrders()) {
+      this.loadError.set('Bạn không có quyền tra cứu đơn hàng.');
+      return;
+    }
+    this.page.set(1);
+    this.reload();
+  }
+
+  /**
+   * Loads one order for support without exposing mutation actions.
+   */
+  selectOrder(order: AdminOrderRow): void {
+    if (!this.canLookupOrders()) {
+      this.loadError.set('Bạn không có quyền tra cứu đơn hàng.');
+      return;
+    }
+    this.selectedOrder.set(order);
+    this.api.getOrder(order.order_id).subscribe({
+      next: (detail) => this.selectedOrder.set(detail),
+      error: (error: unknown) => this.loadError.set(adminErrorMessage(error)),
+    });
   }
 
   /**

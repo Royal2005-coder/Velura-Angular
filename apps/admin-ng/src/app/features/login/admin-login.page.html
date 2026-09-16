@@ -1,8 +1,8 @@
 <main class="auth-card" role="main" aria-label="Đăng nhập quản trị Velura">
   <div class="auth-card__brand">
     <img src="/assets/images/logo.png" alt="Velura" />
-    <h1>Chào mừng trở lại</h1>
-    <p>Đăng nhập để tiếp tục mua sắm</p>
+    <h1>Cổng quản trị Velura</h1>
+    <p>Đăng nhập bằng tài khoản được cấp quyền admin</p>
   </div>
 
   @if (errorMessage()) {
@@ -11,9 +11,16 @@
   @if (successMessage()) {
     <div class="auth-success is-visible">{{ successMessage() }}</div>
   }
+  @if (isLocked()) {
+    <div class="auth-lockout is-visible" role="status">
+      Tài khoản đã bị tạm khóa 15 phút. Thử lại sau <strong>{{ lockCountdown() }}</strong>.
+    </div>
+  } @else if (remainingAttempts() !== null) {
+    <p class="auth-attempts">Bạn còn {{ remainingAttempts() }} lần thử trước khi tài khoản bị khóa.</p>
+  }
 
   <div class="google-btn-wrap">
-    <button class="auth-btn auth-btn--google" type="button" (click)="startGoogle()">
+    <button class="auth-btn auth-btn--google" type="button" (click)="startGoogle()" [disabled]="isLocked()">
       <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
         <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/>
         <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
@@ -23,19 +30,19 @@
       Đăng nhập bằng Google
     </button>
   </div>
-  <p class="auth-google-note">Đăng nhập an toàn qua Supabase Auth</p>
+  <p class="auth-google-note">Đăng nhập an toàn qua API Velura</p>
   <div class="auth-divider">hoặc</div>
 
   <form [formGroup]="form" (ngSubmit)="submit()" novalidate>
     <div class="auth-field">
       <label for="login-email">Email</label>
-      <input id="login-email" type="email" formControlName="email" placeholder="email@example.com" autocomplete="email" />
+      <input id="login-email" type="email" formControlName="email" placeholder="email@velura.vn" autocomplete="email" />
     </div>
     <div class="auth-field">
       <label for="login-password">Mật khẩu</label>
       <input id="login-password" type="password" formControlName="password" placeholder="Nhập mật khẩu" autocomplete="current-password" />
     </div>
-    <button class="auth-btn auth-btn--primary auth-btn--spaced" type="submit" [disabled]="submitting()">Đăng nhập</button>
+    <button class="auth-btn auth-btn--primary auth-btn--spaced" type="submit" [disabled]="submitting() || isLocked()">Đăng nhập</button>
   </form>
   <div class="auth-links">
     <a href="#" (click)="forgot($event)">Quên mật khẩu?</a>

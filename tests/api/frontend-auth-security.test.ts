@@ -22,6 +22,7 @@ test("admin browser code delegates identity and RBAC to the backend", async () =
   assert.doesNotMatch(browserCode, /password_hash|otp_code/i);
   assert.doesNotMatch(browserCode, /Velura@123|reset123/i);
   assert.match(api, /\/api\/auth\/me/);
+  assert.match(api, /\/api\/auth\/signout/);
   assert.match(callback, /this\.api\.me\(\)/);
 });
 

@@ -25,7 +25,7 @@ export const adminAuthGuard: CanActivateFn = (route) => {
         return router.createUrlTree(['/login']);
       }
       if (!session.canOpen(page, next)) {
-        return router.createUrlTree([session.firstRoute(next)]);
+        return router.createUrlTree(['/forbidden'], { queryParams: { from: page } });
       }
       return true;
     }),

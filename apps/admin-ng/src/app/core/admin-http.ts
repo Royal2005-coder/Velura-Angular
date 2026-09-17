@@ -40,11 +40,16 @@ export function adminAuthLockout(error: unknown): {
 export function adminErrorMessage(error: unknown, fallback = 'Không thể gọi API quản trị.'): string {
   if (error instanceof HttpErrorResponse) {
     const payload = error.error as {
-      error?: { message?: string } | string;
+      error?: { message?: string; details?: unknown } | string;
       error_description?: string;
       msg?: string;
       message?: string;
     } | null;
+    const details = typeof payload?.error === 'object' ? payload.error?.details : undefined;
+    const detailText = formatErrorDetails(details);
+    if (detailText) {
+      return detailText;
+    }
     if (typeof payload?.error === 'object' && payload.error?.message) {
       return payload.error.message;
     }
@@ -57,13 +62,53 @@ export function adminErrorMessage(error: unknown, fallback = 'Không thể gọi
 }
 
 /**
+ * Flattens `{ field: [message] }` validation details from the admin API.
+ */
+export function formatErrorDetails(details: unknown): string {
+  if (!details || typeof details !== 'object') {
+    return '';
+  }
+  if (Array.isArray(details)) {
+    return details
+      .map((row) => {
+        if (!row || typeof row !== 'object') {
+          return String(row);
+        }
+        const item = row as { row?: number; field?: string; message?: string };
+        return [item.row ? `Dòng ${item.row}` : '', item.field, item.message].filter(Boolean).join(' · ');
+      })
+      .filter(Boolean)
+      .join(' | ');
+  }
+  return Object.entries(details as Record<string, unknown>)
+    .flatMap(([field, value]) => {
+      const messages = Array.isArray(value) ? value : [value];
+      return messages.map((message) => `${field}: ${String(message)}`);
+    })
+    .join(' · ');
+}
+
+/**
  * Unwraps `{ rows }` / `{ data }` list payloads used by vanilla admin modules.
  */
 export function adminListRows<T>(payload: AdminListPayload<T> | T[] | null | undefined): T[] {
   if (Array.isArray(payload)) {
     return payload;
   }
-  return payload?.rows || payload?.data || [];
+  if (!payload) {
+    return [];
+  }
+  if (Array.isArray(payload.rows)) {
+    return payload.rows;
+  }
+  const nested = payload.data as AdminListPayload<T> | T[] | undefined;
+  if (Array.isArray(nested)) {
+    return nested;
+  }
+  if (nested && Array.isArray(nested.rows)) {
+    return nested.rows;
+  }
+  return [];
 }
 
 /**
@@ -73,7 +118,14 @@ export function adminListCount<T>(payload: AdminListPayload<T> | T[] | null | un
   if (Array.isArray(payload)) {
     return payload.length;
   }
-  return payload?.count ?? adminListRows(payload).length;
+  if (typeof payload?.count === 'number') {
+    return payload.count;
+  }
+  const nested = payload?.data as AdminListPayload<T> | undefined;
+  if (nested && typeof nested.count === 'number') {
+    return nested.count;
+  }
+  return adminListRows(payload).length;
 }
 
 /**

@@ -134,6 +134,7 @@ export async function selectRows(
     query,
     useAnonKey: options.useAnonKey,
     accessToken: options.accessToken,
+    silentError: options.silentError,
     headers: {
       prefer: "count=exact"
     }

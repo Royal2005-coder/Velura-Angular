@@ -1,7 +1,12 @@
 <div class="admin-layout" [class.admin-layout--sidebar-collapsed]="sidebarCollapsed()">
-  <aside class="admin-sidebar" id="admin-sidebar" aria-label="Điều hướng quản trị">
+  <div
+    class="admin-sidebar-backdrop"
+    [hidden]="!mobileNavOpen()"
+    (click)="closeMobileNav()"
+  ></div>
+  <aside class="admin-sidebar" id="admin-sidebar" aria-label="Điều hướng quản trị" [class.is-open]="mobileNavOpen()">
     <div class="admin-sidebar__brand">
-      <a class="admin-sidebar__logo" routerLink="/dashboard">
+      <a class="admin-sidebar__logo" [routerLink]="session.firstRoute()">
         <img src="/assets/images/logo.png" alt="Velura" />
       </a>
       <span class="admin-sidebar__caption">Quản trị</span>
@@ -60,8 +65,9 @@
         <button
           class="admin-icon-button admin-topbar__menu"
           type="button"
-          [attr.aria-label]="sidebarCollapsed() ? 'Mở sidebar' : 'Đóng sidebar'"
-          [title]="sidebarCollapsed() ? 'Mở sidebar' : 'Đóng sidebar'"
+          [attr.aria-label]="menuLabel()"
+          [attr.aria-expanded]="!sidebarCollapsed() || mobileNavOpen()"
+          [title]="menuLabel()"
           (click)="toggleSidebar()"
         >
           ☰
@@ -81,8 +87,13 @@
             }
           </span>
           <span class="admin-profile__copy">
-            <strong>{{ session.displayName() }}</strong>
-            <small>{{ session.displayEmail() || session.roleLabel() }}</small>
+            @if (session.hydrating()) {
+              <strong>Đang xác minh phiên</strong>
+              <small>Không giữ thông tin tài khoản cũ</small>
+            } @else {
+              <strong>{{ session.displayName() }}</strong>
+              <small>{{ session.displayEmail() || session.roleLabel() }}</small>
+            }
           </span>
         </span>
         <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="askLogout()">Đăng xuất</button>

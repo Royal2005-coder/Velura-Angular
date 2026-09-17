@@ -1,35 +1,5 @@
 <main class="admin-content">
-  <p class="admin-page-crumb">Dashboard / Quản lý đơn hàng</p>
-  <section class="admin-kpi-grid admin-order-kpis" aria-label="Thống kê đơn hàng">
-    <article class="admin-kpi-card">
-      <div class="admin-kpi-card__head">
-        <p class="admin-kpi-card__label">Tổng đơn hàng</p>
-        <span class="admin-kpi-card__icon"><app-admin-icon name="cart" /></span>
-      </div>
-      <strong class="admin-kpi-card__value">{{ count() }}</strong>
-    </article>
-    <article class="admin-kpi-card">
-      <div class="admin-kpi-card__head">
-        <p class="admin-kpi-card__label">Chờ xác nhận</p>
-        <span class="admin-kpi-card__icon"><app-admin-icon name="clock" /></span>
-      </div>
-      <strong class="admin-kpi-card__value">{{ pendingCount() }}</strong>
-    </article>
-    <article class="admin-kpi-card">
-      <div class="admin-kpi-card__head">
-        <p class="admin-kpi-card__label">Lỗi thanh toán</p>
-        <span class="admin-kpi-card__icon"><app-admin-icon name="credit-card" /></span>
-      </div>
-      <strong class="admin-kpi-card__value">{{ paymentErrorCount() }}</strong>
-    </article>
-    <article class="admin-kpi-card">
-      <div class="admin-kpi-card__head">
-        <p class="admin-kpi-card__label">Đơn cần xử lý</p>
-        <span class="admin-kpi-card__icon"><app-admin-icon name="alert" /></span>
-      </div>
-      <strong class="admin-kpi-card__value">{{ attentionCount() }}</strong>
-    </article>
-  </section>
+  <p class="admin-page-crumb">Đơn hàng / Hàng đợi xử lý</p>
   <section class="admin-card admin-card--flush">
     <div class="admin-tabs" role="tablist" aria-label="Nhóm đơn hàng">
       <button class="admin-tab" [class.admin-tab--active]="tab() === 'all'" type="button" (click)="setTab('all')">Tất cả đơn hàng <span>{{ count() }}</span></button>

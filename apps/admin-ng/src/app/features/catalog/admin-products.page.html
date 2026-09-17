@@ -1,40 +1,30 @@
 <main class="admin-content">
-  <p class="admin-page-crumb">Dashboard / Quản lý sản phẩm</p>
-  <section class="admin-kpi-grid admin-product-kpis" aria-label="Thống kê sản phẩm">
+  <p class="admin-page-crumb">Sản phẩm / Danh mục</p>
+  <section class="admin-kpi-grid admin-product-kpis" aria-label="Số liệu danh mục">
     <article class="admin-kpi-card">
-      <div class="admin-kpi-card__head">
-        <p class="admin-kpi-card__label">Tổng sản phẩm</p>
-        <span class="admin-kpi-card__icon"><app-admin-icon name="box" /></span>
-      </div>
+      <span class="admin-kpi-card__label">Tổng sản phẩm</span>
       <strong class="admin-kpi-card__value">{{ total() }}</strong>
+      <span class="admin-kpi-card__trend admin-kpi-card__trend--neutral">Theo bộ lọc hiện tại</span>
     </article>
     <article class="admin-kpi-card">
-      <div class="admin-kpi-card__head">
-        <p class="admin-kpi-card__label">Đang bán</p>
-        <span class="admin-kpi-card__icon"><app-admin-icon name="check" /></span>
-      </div>
+      <span class="admin-kpi-card__label">Đang bán</span>
       <strong class="admin-kpi-card__value">{{ onSale() }}</strong>
+      <span class="admin-kpi-card__trend admin-kpi-card__trend--up">Trạng thái on_sale</span>
     </article>
     <article class="admin-kpi-card">
-      <div class="admin-kpi-card__head">
-        <p class="admin-kpi-card__label">Tạm ẩn</p>
-        <span class="admin-kpi-card__icon"><app-admin-icon name="eye" /></span>
-      </div>
+      <span class="admin-kpi-card__label">Tạm ẩn</span>
       <strong class="admin-kpi-card__value">{{ hidden() }}</strong>
+      <span class="admin-kpi-card__trend admin-kpi-card__trend--warning">Trạng thái hidden</span>
     </article>
     <article class="admin-kpi-card">
-      <div class="admin-kpi-card__head">
-        <p class="admin-kpi-card__label">Hết hàng</p>
-        <span class="admin-kpi-card__icon"><app-admin-icon name="lock" /></span>
-      </div>
+      <span class="admin-kpi-card__label">Hết hàng</span>
       <strong class="admin-kpi-card__value">{{ outOfStock() }}</strong>
+      <span class="admin-kpi-card__trend admin-kpi-card__trend--warning">out_of_stock</span>
     </article>
     <article class="admin-kpi-card">
-      <div class="admin-kpi-card__head">
-        <p class="admin-kpi-card__label">Tồn kho thấp</p>
-        <span class="admin-kpi-card__icon"><app-admin-icon name="clock" /></span>
-      </div>
+      <span class="admin-kpi-card__label">Sắp hết</span>
       <strong class="admin-kpi-card__value">{{ lowStockCount() }}</strong>
+      <span class="admin-kpi-card__trend admin-kpi-card__trend--neutral">Dưới ngưỡng tồn</span>
     </article>
   </section>
   <section class="admin-card admin-card--flush">
@@ -147,20 +137,59 @@
         <section class="admin-csv-import">
           <header>
             <div>
-              <h2 class="admin-section__title">Kiểm tra sản phẩm bằng CSV</h2>
-              <p class="admin-table-note">CSV ghi sản phẩm qua API production; tồn kho được điều chỉnh trong chi tiết biến thể.</p>
+              <h2 class="admin-section__title">Nhập sản phẩm bằng CSV</h2>
+              <p class="admin-table-note">Tải mẫu, kiểm tra từng dòng, rồi mới ghi catalog. SKU trùng sẽ được cập nhật, không xóa mềm dữ liệu cũ.</p>
             </div>
+            <button class="admin-btn admin-btn--outline admin-btn--sm" type="button" (click)="downloadCsvTemplate()">Tải file mẫu CSV</button>
           </header>
+          <div class="admin-csv-checklist">
+            <h3>Cột bắt buộc</h3>
+            <p>sku, name, base_price, category_id (UUID danh mục). SKU dạng VL-AO001. Ảnh để trống được.</p>
+          </div>
           <div class="admin-csv-dropzone">
             <app-admin-icon name="box" />
             <strong>Chọn file CSV để kiểm tra</strong>
-            <span>Dung lượng tối đa 60 KB, tối đa 500 dòng.</span>
+            <span>Dung lượng tối đa 60 KB, tối đa 500 dòng. Font bảng dùng chữ không chân, không dán JSON thô.</span>
             <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="csvInput.click()">Chọn file CSV</button>
             <input #csvInput type="file" accept=".csv,text/csv" hidden (change)="onCsvFile($event)" />
           </div>
-          <div class="admin-alert">{{ csvMessage() }}</div>
+          <p class="admin-alert">{{ csvMessage() }}</p>
+          @if (csvErrors().length) {
+            <div class="admin-csv-preview">
+              <table class="admin-table">
+                <thead><tr><th>Dòng</th><th>Cột</th><th>Lỗi</th></tr></thead>
+                <tbody>
+                  @for (row of csvErrors(); track $index) {
+                    <tr class="admin-csv-row-invalid">
+                      <td>{{ row.row || '—' }}</td>
+                      <td>{{ row.field || '—' }}</td>
+                      <td><span class="admin-csv-cell-error">{{ row.message }}</span></td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+          @if (csvRows().length) {
+            <div class="admin-csv-preview">
+              <table class="admin-table">
+                <thead><tr><th>SKU</th><th>Tên</th><th>Giá gốc</th><th>Danh mục</th><th>Trạng thái</th></tr></thead>
+                <tbody>
+                  @for (row of csvRows(); track $index) {
+                    <tr>
+                      <td>{{ row['sku'] }}</td>
+                      <td>{{ row['name'] }}</td>
+                      <td>{{ row['base_price'] }}</td>
+                      <td>{{ row['category_id'] }}</td>
+                      <td>{{ row['status'] }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
           @if (canMutate()) {
-            <button class="admin-btn admin-btn--primary admin-btn--sm" type="button" (click)="commitCsv()">Ghi CSV vào catalog</button>
+            <button class="admin-btn admin-btn--primary admin-btn--sm" type="button" [disabled]="csvHasErrors() || !csvPreview()" (click)="commitCsv()">Ghi CSV vào catalog</button>
           }
         </section>
       </div>
@@ -188,16 +217,27 @@
                 @for (row of logs(); track row.audit_id || row.timestamp) {
                   <tr>
                     <td>{{ updatedAt(row.timestamp) }}</td>
-                    <td>{{ row.actor_id || '—' }}</td>
-                    <td>{{ row.target_id || '—' }}</td>
-                    <td>{{ row.action }}</td>
-                    <td>{{ row.old_value ? 'có' : '—' }} → {{ row.new_value ? 'có' : '—' }}</td>
-                    <td>{{ row.result || '—' }}</td>
+                    <td>
+                      <strong>{{ logActor(row) }}</strong>
+                      @if (logActorRole(row)) {
+                        <div class="admin-table-note">{{ logActorRole(row) }}</div>
+                      }
+                    </td>
+                    <td>{{ logTarget(row) }}</td>
+                    <td>{{ logAction(row) }}</td>
+                    <td>{{ logChange(row) }}</td>
+                    <td>{{ logResult(row) }}</td>
                   </tr>
                 }
               </tbody>
             </table>
           </div>
+          <app-admin-pagination
+            [page]="logsPage()"
+            [pageCount]="logsPageCount()"
+            [label]="logsRangeLabel()"
+            (changed)="goLogsPage($event)"
+          />
         }
       </div>
     }
@@ -219,7 +259,8 @@
           </label>
           <label class="admin-form-group">
             <span class="admin-form-label">SKU</span>
-            <input class="admin-form-control" name="sku" [value]="selected()?.sku || ''" [readOnly]="overlay() === 'edit'" placeholder="VL-AO001" />
+            <input class="admin-form-control" name="sku" [value]="selected()?.sku || ''" [readOnly]="overlay() === 'edit'" placeholder="VLR-AO001" />
+            <small class="admin-form-helper">Dạng VLR-AO001 hoặc VL-AO001. Không dùng khoảng trắng.</small>
           </label>
           <label class="admin-form-group">
             <span class="admin-form-label">Slug</span>
@@ -269,26 +310,32 @@
               <p class="admin-table-note">{{ money(selected()?.sale_price) }}</p>
             </div>
             <p class="admin-table-note">
-              Giá không sửa tại catalog.
-              <a routerLink="/pricing" [queryParams]="{ q: selected()?.sku || selected()?.product_id }">Mở Bảng giá &amp; lịch sử</a>
+              Giá chỉ đọc tại catalog.
+              @if (canOpenPricing()) {
+                <a routerLink="/pricing" [queryParams]="{ q: selected()?.sku || selected()?.product_id }">Xem / đổi giá &amp; lịch sử</a>
+              } @else {
+                Đổi giá do admin giá thực hiện tại module Pricing.
+              }
             </p>
+            <h3 class="admin-drawer__section">Lịch sử giá gần đây</h3>
             @if (priceHistory().length) {
-              <h3 class="admin-drawer__section">Lịch sử giá gần đây</h3>
               <div class="admin-table-wrap">
                 <table class="admin-table">
-                  <thead><tr><th>Thời gian</th><th>Giá gốc</th><th>Giá bán</th><th>Lý do</th></tr></thead>
+                  <thead><tr><th>Thời gian</th><th>Giá gốc cũ → mới</th><th>Giá bán cũ → mới</th><th>Lý do</th></tr></thead>
                   <tbody>
                     @for (row of priceHistory(); track row.changed_at) {
                       <tr>
                         <td>{{ date(row.changed_at) }}</td>
-                        <td>{{ money(row.new_base_price) }}</td>
-                        <td>{{ money(row.new_sale_price) }}</td>
+                        <td>{{ money(row.old_base_price) }} → {{ money(row.new_base_price) }}</td>
+                        <td>{{ money(row.old_sale_price) }} → {{ money(row.new_sale_price) }}</td>
                         <td>{{ row.reason || '—' }}</td>
                       </tr>
                     }
                   </tbody>
                 </table>
               </div>
+            } @else {
+              <p class="admin-table-note">Chưa có bản ghi price_history. Đổi giá tại module Pricing.</p>
             }
           }
           <label class="admin-form-group">
@@ -297,7 +344,8 @@
           </label>
           <label class="admin-form-group">
             <span class="admin-form-label">Ảnh (mỗi URL một dòng)</span>
-            <textarea class="admin-form-control admin-form-textarea" name="images" [readOnly]="!canMutate()">{{ (selected()?.images || []).join('\n') }}</textarea>
+            <textarea class="admin-form-control admin-form-textarea" name="images" [readOnly]="!canMutate()" placeholder="https://... hoặc /assets/images/sp.jpg">{{ (selected()?.images || []).join('\n') }}</textarea>
+            <small class="admin-form-helper">Upload Supabase chưa bắt buộc cho UAT. Dùng URL https hoặc /assets/... — để trống vẫn tạo được.</small>
           </label>
           @if (overlay() === 'edit') {
             <h3 class="admin-drawer__section">Biến thể / tồn kho</h3>
@@ -350,19 +398,22 @@
     <section class="admin-modal">
       <form (submit)="submitStatus($event)">
         <header class="admin-modal__header">
-          <h2>Đổi trạng thái - {{ selected()!.sku }}</h2>
+          <h2>Ẩn / đổi trạng thái - {{ selected()!.sku }}</h2>
           <button class="admin-icon-button" type="button" (click)="closeOverlays()">×</button>
         </header>
         <div class="admin-modal__body">
-          <label class="admin-form-group">
-            <span class="admin-form-label">Trạng thái mới</span>
-            <select class="admin-form-control" name="status" [value]="nextStatus()" required>
-              <option value="on_sale">Đang bán</option>
-              <option value="hidden">Tạm ẩn</option>
-              <option value="out_of_stock">Hết hàng</option>
-              <option value="discontinued">Ngừng kinh doanh</option>
-            </select>
-          </label>
+          <fieldset class="admin-form-group">
+            <legend class="admin-form-label">Trạng thái mới</legend>
+            @for (option of allowedStatuses(); track option.value) {
+              <label class="admin-radio-card">
+                <input type="radio" name="status" [value]="option.value" [checked]="nextStatus() === option.value" (change)="chooseStatus(option.value)" />
+                <span>
+                  <strong>{{ option.label }}</strong>
+                  <small>{{ option.hint }}</small>
+                </span>
+              </label>
+            }
+          </fieldset>
           <label class="admin-form-group">
             <span class="admin-form-label">Lý do</span>
             <textarea class="admin-form-control admin-form-textarea" name="reason" minlength="10" required></textarea>

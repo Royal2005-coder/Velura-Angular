@@ -5,6 +5,8 @@ import { applyCors, applySecurityHeaders, getRequestIp, HttpError, parsePathname
 import { completeAdminPasswordSignIn, recordAdminSignOut } from "./auth-signin.js";
 import { buildAuthContext, requireAdmin, requireAuthenticated, requirePermission } from "./rbac.js";
 import { buildDashboardSummary } from "./dashboard.js";
+import { handleDashboardRoute } from "./dashboard-router.js";
+import { handleInsightsRoute } from "./insights-router.js";
 import { createAccountRepository } from "./accounts/account-repository.js";
 import { createAccountService } from "./accounts/account-service.js";
 import { handleAccountRoute } from "./accounts/account-router.js";
@@ -273,6 +275,28 @@ const server = createServer(async (req, res) => {
           throw new HttpError(429, "RATE_LIMITED", "Too many admin mutation requests");
         }
       }
+      const dashboardHandled = await handleDashboardRoute({
+        req,
+        res,
+        url,
+        parts,
+        context,
+        headers: corsHeaders,
+        service: {}
+      });
+      if (dashboardHandled) return;
+
+      const insightsHandled = await handleInsightsRoute({
+        req,
+        res,
+        url,
+        parts,
+        context,
+        headers: corsHeaders,
+        service: {}
+      });
+      if (insightsHandled) return;
+
       const handled = await handleAccountRoute({
         req,
         res,

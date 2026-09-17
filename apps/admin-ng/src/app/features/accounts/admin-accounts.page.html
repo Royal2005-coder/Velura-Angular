@@ -1,42 +1,5 @@
 <main class="admin-content">
-  <p class="admin-page-crumb">Dashboard / Quản lý tài khoản</p>
-  <section class="admin-kpi-grid admin-kpi-grid--accounts" aria-label="Thống kê tài khoản">
-    <article class="admin-kpi-card">
-      <div class="admin-kpi-card__head">
-        <p class="admin-kpi-card__label">Tổng tài khoản</p>
-        <span class="admin-kpi-card__icon"><app-admin-icon name="users" /></span>
-      </div>
-      <strong class="admin-kpi-card__value">{{ allCount() }}</strong>
-    </article>
-    <article class="admin-kpi-card">
-      <div class="admin-kpi-card__head">
-        <p class="admin-kpi-card__label">Tài khoản member</p>
-        <span class="admin-kpi-card__icon"><app-admin-icon name="users" /></span>
-      </div>
-      <strong class="admin-kpi-card__value">{{ memberCount() }}</strong>
-    </article>
-    <article class="admin-kpi-card">
-      <div class="admin-kpi-card__head">
-        <p class="admin-kpi-card__label">Đang hoạt động</p>
-        <span class="admin-kpi-card__icon"><app-admin-icon name="check" /></span>
-      </div>
-      <strong class="admin-kpi-card__value">{{ activeCount() }}</strong>
-    </article>
-    <article class="admin-kpi-card">
-      <div class="admin-kpi-card__head">
-        <p class="admin-kpi-card__label">Bị khóa</p>
-        <span class="admin-kpi-card__icon"><app-admin-icon name="lock" /></span>
-      </div>
-      <strong class="admin-kpi-card__value">{{ lockedCount() }}</strong>
-    </article>
-    <article class="admin-kpi-card">
-      <div class="admin-kpi-card__head">
-        <p class="admin-kpi-card__label">Chờ phê duyệt</p>
-        <span class="admin-kpi-card__icon"><app-admin-icon name="clock" /></span>
-      </div>
-      <strong class="admin-kpi-card__value">{{ pendingCount() }}</strong>
-    </article>
-  </section>
+  <p class="admin-page-crumb">Tài khoản / Danh sách</p>
   <section class="admin-card admin-card--flush">
     <div class="admin-tabs" role="tablist">
       <button class="admin-tab" [class.admin-tab--active]="tab() === 'all'" type="button" (click)="setTab('all')">Tất cả tài khoản <span>{{ allCount() }}</span></button>

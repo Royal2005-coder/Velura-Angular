@@ -212,13 +212,19 @@ export interface AdminAuditRow {
   audit_id?: string;
   timestamp?: string;
   actor_name?: string;
+  actor_email?: string | null;
+  actor_label?: string;
   actor_id?: string;
   actor_role?: string;
+  actor_role_label?: string;
   module?: string;
   action?: string;
+  action_label?: string;
   target_id?: string;
+  target_label?: string;
   old_value?: unknown;
   new_value?: unknown;
+  change_summary?: string;
   ip_address?: string;
   result?: string;
 }
@@ -257,14 +263,112 @@ export interface AdminDashboardSummary {
       aovPct?: number | null;
       completionRatePoints?: number | null;
     };
-    categoryContributions?: Array<{ name: string; revenue: number; pct: number }>;
-    bestSellers?: Array<{ name: string; sku?: string; sold?: number; revenue: number; lowStock?: boolean }>;
+    customers?: number;
+    customerCount?: number;
+    categoryContributions?: Array<{
+      category_id?: string;
+      name: string;
+      revenue: number;
+      pct: number;
+    }>;
+    bestSellers?: Array<{
+      product_id?: string;
+      name: string;
+      sku?: string;
+      sold?: number;
+      revenue: number;
+      lowStock?: boolean;
+    }>;
+    revenueTrend?: Array<{ date: string; dateStr: string; revenue: number; orderCount: number }>;
     insights?: Record<string, unknown>;
   };
   recentLogs?: AdminAuditRow[];
   periodDays?: number;
   range?: string;
-  meta?: { generatedAt?: string; definitions?: Record<string, string> };
+  from?: string;
+  to?: string;
+  filters?: { categoryId?: string | null; productId?: string | null };
+  meta?: {
+    generatedAt?: string;
+    definitions?: Record<string, string>;
+    source?: string;
+    samples?: { reviews?: number; csat?: number; deliveredOrders?: number };
+    reliable?: { reviews?: boolean; csat?: boolean };
+  };
+  voice?: AdminVoiceInsights;
+  board?: AdminInsightBoardModel;
+}
+
+export type AdminInsightRange = 'day' | 'week' | 'month';
+export type AdminInsightSeverity = 'critical' | 'high' | 'watch' | 'ok';
+
+export interface AdminInsightQuestion {
+  id: string;
+  question: string;
+  answer: string;
+  severity: AdminInsightSeverity;
+  evidence: Array<{ label: string; value: string }>;
+}
+
+export interface AdminInsightAction {
+  id: string;
+  title: string;
+  reason: string;
+  route: string;
+  routeLabel: string;
+  severity: AdminInsightSeverity;
+  clientSteer: string;
+}
+
+export interface AdminInsightBoardModel {
+  scope: string;
+  range: string;
+  periodLabel: string;
+  headline: string;
+  questions: AdminInsightQuestion[];
+  actions: AdminInsightAction[];
+}
+
+export interface AdminVoiceInsights {
+  range: string;
+  periodLabel: string;
+  coverage: {
+    deliveredOrders: number;
+    reviewedOrders: number;
+    silentOrders: number;
+    coveragePct: number;
+  };
+  productReaction: {
+    reviewCount: number;
+    avgRating: number | null;
+    loved: Array<{ product_id: string; name: string; sku: string; reviews: number; avgRating: number; lowStarCount: number }>;
+    complained: Array<{ product_id: string; name: string; sku: string; reviews: number; avgRating: number; lowStarCount: number }>;
+  };
+  serviceQuality: {
+    tickets: number;
+    closedTickets: number;
+    csatCount: number;
+    csatAvg: number | null;
+    ticketsWithoutCsat: number;
+    returns: number;
+    returnRatePct: number;
+  };
+  orderFriction: {
+    orderCount: number;
+    completedOrders: number;
+    cancelledOrders: number;
+    failedDelivery: number;
+    cancelReasons: Array<{ reason: string; count: number }>;
+  };
+}
+
+export interface AdminInsightsPayload {
+  scope: string;
+  range: string;
+  from?: string;
+  to?: string;
+  voice: AdminVoiceInsights;
+  board: AdminInsightBoardModel;
 }
 
 /**
@@ -326,10 +430,17 @@ export class AdminApiService {
   }
 
   /**
-   * Loads the original admin dashboard RPC summary.
+   * Loads the admin dashboard OLAP/legacy summary.
    */
   dashboard(params: Record<string, string> = {}): Observable<AdminDashboardSummary> {
-    return this.http.get<AdminDashboardSummary>(`${this.baseUrl}/api/admin/dashboard`, { params: this.params(params) });
+    return this.http.get<AdminDashboardSummary>(`${this.baseUrl}/api/v1/admin/dashboard`, { params: this.params(params) });
+  }
+
+  /**
+   * Loads the question-driven insight board for one admin module.
+   */
+  insights(params: Record<string, string> = {}): Observable<AdminInsightsPayload> {
+    return this.http.get<AdminInsightsPayload>(`${this.baseUrl}/api/v1/admin/insights`, { params: this.params(params) });
   }
 
   /**

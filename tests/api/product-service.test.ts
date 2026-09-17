@@ -14,6 +14,18 @@ const CATEGORY_ID = "40000000-0000-4000-8000-000000000001";
 
 // --- validateCreateProduct ---
 
+test("validateCreateProduct auto-builds slug and allows empty images", () => {
+  const result = validateCreateProduct({
+    sku: "VLR-AO099",
+    name: "Áo linen kem",
+    categoryId: CATEGORY_ID,
+    basePrice: 250000,
+    expectedVersion: 0
+  });
+  assert.equal(result.slug, "ao-linen-kem");
+  assert.deepEqual(result.images, []);
+});
+
 test("validateCreateProduct accepts valid input", () => {
   const result = validateCreateProduct({
     sku: "VL-AO001",
@@ -185,6 +197,33 @@ test("product list validates category and price filters", async () => {
   );
 });
 
+test("CSV preview returns per-row errors without throwing", async () => {
+  const service = createProductService({ repository: {} });
+  const result = await service.parseCsv(superAdminContext(), [
+    "sku,name,base_price,category_id",
+    `VL-AO001,Ao linen,100000,${CATEGORY_ID}`,
+    "bad-sku,Ten loi,not-a-price,not-a-uuid"
+  ].join("\n"));
+  assert.equal(result.validRows, 1);
+  assert.equal(result.totalRows, 2);
+  assert.equal(result.errors.length, 1);
+  assert.equal(result.errors[0].row, 3);
+  assert.equal(result.errors[0].field, "sku");
+});
+
+test("CSV commit refuses to write when preview still has row errors", async () => {
+  const service = createProductService({
+    repository: { createProduct: async () => assert.fail("should not create") }
+  });
+  await assert.rejects(
+    () => service.commitCsv(superAdminContext(), [
+      "sku,name,base_price,category_id",
+      "bad-sku,Ten loi,100000," + CATEGORY_ID
+    ].join("\n"), { ipAddress: "127.0.0.1" }),
+    (error) => error.status === 422 && error.code === "CSV_VALIDATION_FAILED"
+  );
+});
+
 test("CSV preview parses quoted commas", async () => {
   const service = createProductService({ repository: {} });
   const result = await service.parseCsv(superAdminContext(), [
@@ -247,6 +286,34 @@ test("product service allows super_admin to create products", async () => {
   assert.equal(result.product_id, PRODUCT_ID);
   assert.equal(received[0].sku, "VL-AO001");
   assert.equal(received[1], "valid-token");
+});
+
+test("product create seeds a default variant with the caller token", async () => {
+  let variantArgs;
+  const service = createProductService({
+    repository: {
+      createProduct: async () => ({ product_id: PRODUCT_ID, sku: "VL-AO001", status: "on_sale", version: 1 }),
+      createVariant: async (...args) => {
+        variantArgs = args;
+        return { variant_id: "v1" };
+      },
+      findById: async () => ({ product_id: PRODUCT_ID, status: "on_sale", version: 1 }),
+      listVariants: async () => [{ stock_quantity: 4 }],
+      changeStatus: async () => {
+        throw new Error("should not change status when stock is already on_sale");
+      }
+    }
+  });
+  await service.create(sanPhamContext(), {
+    sku: "VL-AO001",
+    name: "Ao Thun",
+    categoryId: CATEGORY_ID,
+    basePrice: 100000,
+    initialStock: 4,
+    expectedVersion: 0
+  }, { ipAddress: "127.0.0.1" });
+  assert.equal(variantArgs[2], "sanpham-token");
+  assert.equal(variantArgs[1].stockQuantity, 4);
 });
 
 test("product service allows product operator to create products", async () => {

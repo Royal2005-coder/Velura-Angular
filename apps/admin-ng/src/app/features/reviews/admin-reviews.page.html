@@ -1,25 +1,30 @@
 <main class="admin-content">
-  <p class="admin-page-crumb">Dashboard / Quản lý đánh giá</p>
-  <section class="admin-kpi-grid admin-review-kpis" aria-label="Thống kê đánh giá">
+  <p class="admin-page-crumb">Đánh giá / Hàng đợi duyệt</p>
+  <section class="admin-kpi-grid admin-review-kpis" aria-label="Số liệu đánh giá">
     <article class="admin-kpi-card">
-      <div class="admin-kpi-card__head"><p class="admin-kpi-card__label">Tổng đánh giá</p><span class="admin-kpi-card__icon"><app-admin-icon name="star" /></span></div>
-      <strong class="admin-kpi-card__value">{{ rows().length }}</strong>
+      <span class="admin-kpi-card__label">Tổng phiếu</span>
+      <strong class="admin-kpi-card__value">{{ total() }}</strong>
+      <span class="admin-kpi-card__trend admin-kpi-card__trend--neutral">Theo bộ lọc hiện tại</span>
     </article>
     <article class="admin-kpi-card">
-      <div class="admin-kpi-card__head"><p class="admin-kpi-card__label">Chờ duyệt</p><span class="admin-kpi-card__icon"><app-admin-icon name="clock" /></span></div>
+      <span class="admin-kpi-card__label">Chờ duyệt</span>
       <strong class="admin-kpi-card__value">{{ pendingCount() }}</strong>
+      <span class="admin-kpi-card__trend admin-kpi-card__trend--warning">Trên trang hiện tại</span>
     </article>
     <article class="admin-kpi-card">
-      <div class="admin-kpi-card__head"><p class="admin-kpi-card__label">Cần xử lý gấp</p><span class="admin-kpi-card__icon"><app-admin-icon name="alert" /></span></div>
+      <span class="admin-kpi-card__label">Cần xử lý gấp</span>
       <strong class="admin-kpi-card__value">{{ urgentCount() }}</strong>
+      <span class="admin-kpi-card__trend admin-kpi-card__trend--warning">≤2 sao hoặc gắn cờ</span>
     </article>
     <article class="admin-kpi-card">
-      <div class="admin-kpi-card__head"><p class="admin-kpi-card__label">Đã ẩn</p><span class="admin-kpi-card__icon"><app-admin-icon name="eye" /></span></div>
+      <span class="admin-kpi-card__label">Đã xử lý</span>
+      <strong class="admin-kpi-card__value">{{ processedCount() }}</strong>
+      <span class="admin-kpi-card__trend admin-kpi-card__trend--up">Không còn pending</span>
+    </article>
+    <article class="admin-kpi-card">
+      <span class="admin-kpi-card__label">Đã ẩn</span>
       <strong class="admin-kpi-card__value">{{ hiddenCount() }}</strong>
-    </article>
-    <article class="admin-kpi-card">
-      <div class="admin-kpi-card__head"><p class="admin-kpi-card__label">Ticket CSKH</p><span class="admin-kpi-card__icon"><app-admin-icon name="support" /></span></div>
-      <strong class="admin-kpi-card__value">{{ urgentCount() }}</strong>
+      <span class="admin-kpi-card__trend admin-kpi-card__trend--neutral">rejected / hidden</span>
     </article>
   </section>
   <section class="admin-card admin-card--flush">

@@ -44,7 +44,11 @@ export function createPricingService({ repository }: { repository: PricingReposi
 
   return {
     async listPriceHistory(context, searchParams) {
-      requirePricingReader(context);
+      if (!context?.authUser?.id) throw new HttpError(401, "AUTH_REQUIRED", "Authentication is required");
+      const historyReaders = [...PROMOTION_READER_ROLES, "admin_operator_sanpham", "admin_viewer"];
+      if (!historyReaders.includes(context.roleCode)) {
+        throw new HttpError(403, "RBAC_DENIED", "Insufficient permissions to view price history");
+      }
       return repository.listPriceHistory({
         productId: searchParams.get("productId") || undefined,
         limit: Math.min(parseInt(searchParams.get("limit") || "50"), 100),

@@ -1,42 +1,5 @@
 <main class="admin-content">
-  <p class="admin-page-crumb">Dashboard / Nhật ký hệ thống</p>
-  <section class="admin-kpi-grid admin-log-kpis" aria-label="Thống kê nhật ký">
-    <article class="admin-kpi-card">
-      <div class="admin-kpi-card__head">
-        <p class="admin-kpi-card__label">Sự kiện hôm nay</p>
-        <span class="admin-kpi-card__icon"><app-admin-icon name="log" /></span>
-      </div>
-      <strong class="admin-kpi-card__value">{{ todayCount() }}</strong>
-    </article>
-    <article class="admin-kpi-card">
-      <div class="admin-kpi-card__head">
-        <p class="admin-kpi-card__label">Thành công</p>
-        <span class="admin-kpi-card__icon"><app-admin-icon name="check" /></span>
-      </div>
-      <strong class="admin-kpi-card__value">{{ successCount() }}</strong>
-    </article>
-    <article class="admin-kpi-card">
-      <div class="admin-kpi-card__head">
-        <p class="admin-kpi-card__label">Thất bại</p>
-        <span class="admin-kpi-card__icon"><app-admin-icon name="alert" /></span>
-      </div>
-      <strong class="admin-kpi-card__value">{{ failureCount() }}</strong>
-    </article>
-    <article class="admin-kpi-card">
-      <div class="admin-kpi-card__head">
-        <p class="admin-kpi-card__label">Bị chặn</p>
-        <span class="admin-kpi-card__icon"><app-admin-icon name="lock" /></span>
-      </div>
-      <strong class="admin-kpi-card__value">{{ blockedCount() }}</strong>
-    </article>
-    <article class="admin-kpi-card">
-      <div class="admin-kpi-card__head">
-        <p class="admin-kpi-card__label">Bảo mật</p>
-        <span class="admin-kpi-card__icon"><app-admin-icon name="users" /></span>
-      </div>
-      <strong class="admin-kpi-card__value">{{ securityCount() }}</strong>
-    </article>
-  </section>
+  <p class="admin-page-crumb">Nhật ký / Audit</p>
   <section class="admin-card admin-card--flush admin-log-workspace">
     <div class="admin-tabs" role="tablist" aria-label="Nhóm nhật ký">
       <button class="admin-tab" [class.admin-tab--active]="tab() === 'all'" type="button" (click)="setTab('all')">Tất cả nhật ký <span>{{ allCount() }}</span></button>

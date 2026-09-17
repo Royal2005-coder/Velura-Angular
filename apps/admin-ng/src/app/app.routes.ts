@@ -1,5 +1,13 @@
 import { Routes } from '@angular/router';
-import { adminAuthGuard, adminGuestGuard, adminSessionGuard, adminWelcomeGuard } from './core/admin-auth.guard';
+import {
+  adminAuthGuard,
+  adminGuestGuard,
+  adminHomeRedirectGuard,
+  adminSessionGuard,
+  adminShellGuard,
+  adminWelcomeGuard,
+} from './core/admin-auth.guard';
+import { AdminHomeRedirectPage } from './core/admin-home-redirect';
 import { AdminShell } from './layout/admin-shell';
 
 export const routes: Routes = [
@@ -34,10 +42,9 @@ export const routes: Routes = [
   {
     path: '',
     component: AdminShell,
-    canActivate: [adminAuthGuard],
-    data: { page: 'dashboard' },
+    canActivate: [adminShellGuard],
     children: [
-      { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
+      { path: '', pathMatch: 'full', canActivate: [adminHomeRedirectGuard], component: AdminHomeRedirectPage },
       {
         path: 'forbidden',
         loadComponent: () => import('./features/login/admin-forbidden.page').then((m) => m.AdminForbiddenPage),

@@ -23,4 +23,12 @@ describe('AdminProductsPage', () => {
     page.selected.set({ product_id: '1', name: 'Áo', sku: 'VL-AO001', version: 3, status: 'on_sale' });
     expect(page.selected()?.version).toBe(3);
   });
+
+  it('defaults the hide modal to Tạm ẩn instead of dropping the option', async () => {
+    const page = await createAdminPage(AdminProductsPage);
+    page.openStatus({ product_id: '1', name: 'Áo', sku: 'VL-AO001', version: 3, status: 'on_sale' });
+    expect(page.nextStatus()).toBe('hidden');
+    expect(page.allowedStatuses().map((row) => row.value)).toContain('hidden');
+    expect(page.allowedStatuses().map((row) => row.value)).toContain('discontinued');
+  });
 });

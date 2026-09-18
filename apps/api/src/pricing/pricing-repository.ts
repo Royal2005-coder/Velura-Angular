@@ -67,7 +67,14 @@ export function createPricingRepository() {
           max_vouchers_allowed: input.maxVouchersAllowed || 0,
           total_discount_issued: 0,
           created_by: input.createdBy || null,
-          version: 1
+          version: 1,
+          // Nội dung marketing của chiến dịch. Trang Ưu đãi phía khách đọc thẳng từ
+          // đây, nên chiến dịch tạo ra là hiển thị được ngay, không cần sửa mã nguồn.
+          description: input.description || null,
+          banner_image_url: input.bannerImageUrl || null,
+          highlight_label: input.highlightLabel || null,
+          display_order: Number(input.displayOrder) || 0,
+          is_featured: input.isFeatured === true
         }, accessToken as never);
         return result;
       });

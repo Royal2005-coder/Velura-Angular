@@ -1,6 +1,6 @@
 # Tài liệu (gọn)
 
-Thứ tự onboard: [AGENTS.md](../AGENTS.md) → **[GIT-AND-CI.md](./GIT-AND-CI.md)** → [ONBOARDING.md](./ONBOARDING.md) → git log → code.
+Thứ tự onboard: [AGENTS.md](../AGENTS.md) → **[GIT-AND-CI.md](./GIT-AND-CI.md)** → **[ARCHITECTURE.md](./ARCHITECTURE.md)** → [ONBOARDING.md](./ONBOARDING.md) → git log → code.
 
 | File | Việc |
 |---|---|
@@ -8,6 +8,7 @@ Thứ tự onboard: [AGENTS.md](../AGENTS.md) → **[GIT-AND-CI.md](./GIT-AND-CI
 | [adr/README.md](./adr/README.md) | Quyết định lâu dài một câu (0001–0003) |
 | [HOW-IT-WORKS.md](./HOW-IT-WORKS.md) | Jira → PR develop → main → production (GitHub Actions) |
 | [GIT-AND-CI.md](./GIT-AND-CI.md) | **Bắt buộc trước khi code:** git versioning + Actions + checklist gate |
+| [ARCHITECTURE.md](./ARCHITECTURE.md) | **Bắt buộc:** cây dự án, layer OOP, role → folder, KAN → code |
 | [ONBOARDING.md](./ONBOARDING.md) | Ngày 1 + practice PR + gate |
 | [source-of-truth/LECTURE-MAP.md](./source-of-truth/LECTURE-MAP.md) | Slide UEL |
 | [source-of-truth/BOOK-MAP.md](./source-of-truth/BOOK-MAP.md) | GoalKicker |

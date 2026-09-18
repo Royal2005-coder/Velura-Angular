@@ -3,7 +3,7 @@
 Không invent process thứ hai. Không tạo `docs/KAN-n.md`. Context **không** nằm trong ADR dài.
 
 Clone **`develop`**. `main` = production.  
-**Trước khi code:** [docs/GIT-AND-CI.md](docs/GIT-AND-CI.md) + [docs/ONBOARDING.md](docs/ONBOARDING.md).  
+**Trước khi code:** [docs/GIT-AND-CI.md](docs/GIT-AND-CI.md) + [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) + [docs/ONBOARDING.md](docs/ONBOARDING.md).  
 Pipeline: [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md).
 
 ## Context as Code — đọc theo thứ tự này
@@ -15,7 +15,7 @@ Pipeline: [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md).
 | **3. PR** | Tại sao, trade-off, Jira (mẫu ADR cho **mọi** ticket) | GitHub PR — template [.github/pull_request_template.md](.github/pull_request_template.md) |
 | **4. Git notes** | Cảnh báo bên lề, không làm bẩn `git log` | `git log --show-notes --oneline`; `deploy/scripts/git-notes.sh` |
 | **5. Jira** | Việc / trạng thái | **KAN-n** |
-| **6. docs/** | Map ổn định (slide, DNS, CI, versioning) | [GIT-AND-CI.md](docs/GIT-AND-CI.md) khi onboard; còn lại khi lớp 1–4 không đủ |
+| **6. docs/** | Map ổn định (cây dự án, layer, CI, slide) | [ARCHITECTURE.md](docs/ARCHITECTURE.md) + [GIT-AND-CI.md](docs/GIT-AND-CI.md) khi onboard |
 
 Quyết định lâu dài (một câu): [docs/adr/README.md](docs/adr/README.md). **Why** của từng thay đổi = commit + PR + notes, không phải file markdown mới.
 

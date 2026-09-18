@@ -1,7 +1,8 @@
 # Onboarding — ngày 1 (gate trước khi code)
 
 > **Cấm bắt đầu feature thật** cho đến khi hoàn thành mục [Gate](#gate--bắt-buộc) bên dưới.  
-> Versioning + GitHub Actions chi tiết: **[GIT-AND-CI.md](./GIT-AND-CI.md)** (đọc hết).
+> Versioning + GitHub Actions: **[GIT-AND-CI.md](./GIT-AND-CI.md)** (đọc hết).  
+> Cây dự án + layer OOP + role (FE/BE/DB/test/CI): **[ARCHITECTURE.md](./ARCHITECTURE.md)** (đọc hết).
 
 Đọc [AGENTS.md](../AGENTS.md) trước. Context = type/JSDoc + `git log --show-notes` + PR `## Why`.
 
@@ -61,7 +62,8 @@ Chi tiết đầy đủ: [GIT-AND-CI.md §3–§4](./GIT-AND-CI.md#3-versioning-
 5. Không merge CI đỏ. Không feature → `main`. Không `[skip ci]`.
 6. Production chỉ sau PR `develop` → `main` (Lead). `develop` **không** deploy.
 
-Luồng: [HOW-IT-WORKS.md](./HOW-IT-WORKS.md). UI: [ANGULAR-STANDARDS.md](./ANGULAR-STANDARDS.md). Kiến trúc không phá: [COMPLIANCE.md](./COMPLIANCE.md).
+Luồng: [HOW-IT-WORKS.md](./HOW-IT-WORKS.md). UI: [ANGULAR-STANDARDS.md](./ANGULAR-STANDARDS.md).  
+Kiến trúc / folder / role: [ARCHITECTURE.md](./ARCHITECTURE.md). Kiến trúc không phá: [COMPLIANCE.md](./COMPLIANCE.md).
 
 ## Practice (một lần / người) — bắt buộc
 
@@ -88,4 +90,5 @@ Copy checklist [GIT-AND-CI.md §7](./GIT-AND-CI.md#7-checklist-gate--tick-hết-
 Lead **không giao** ticket feature cho đến khi:
 
 - Practice PR đã chạy CI xanh (và đã close), và  
-- Thành viên giải thích được: nhánh nào deploy, vì sao cấm `[skip ci]`, mở đâu để xem job Actions đỏ.
+- Thành viên giải thích được: nhánh nào deploy, vì sao cấm `[skip ci]`, mở đâu để xem job Actions đỏ, và  
+- Thành viên chỉ đúng **folder + layer** role mình trên [ARCHITECTURE.md](./ARCHITECTURE.md) (View / ViewModel / Model / Router / Service / Repository / SQL).

@@ -28,7 +28,40 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   overflow: hidden;
+  font-family: "DM Sans", "Segoe UI", sans-serif;
 }
+.admin-csv-preview .admin-table {
+  min-width: 0;
+  font-family: "DM Sans", "Segoe UI", sans-serif;
+}
+.admin-csv-import .admin-alert,
+.admin-csv-import .admin-table-note,
+.admin-csv-import .admin-section__title,
+.admin-csv-checklist h3,
+.admin-csv-checklist p,
+.admin-csv-dropzone,
+.admin-csv-dropzone strong,
+.admin-csv-dropzone span {
+  font-family: "DM Sans", "Segoe UI", sans-serif !important;
+}
+.admin-csv-import .admin-section__title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-dark);
+}
+.admin-radio-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.admin-radio-card strong { display: block; color: var(--ink); font-size: .875rem; }
+.admin-radio-card small { color: var(--soft); font-size: .75rem; }
 .admin-csv-row-invalid {
   background: #fdf2f4 !important;
 }

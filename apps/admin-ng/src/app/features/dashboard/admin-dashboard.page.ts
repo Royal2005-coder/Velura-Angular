@@ -1,11 +1,33 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { AdminApiService, AdminAuditRow, AdminDashboardSummary } from '../../core/admin-api.service';
+import {
+  AdminApiService,
+  AdminAuditRow,
+  AdminDashboardSummary,
+  AdminInsightRange,
+  AdminVoiceInsights,
+} from '../../core/admin-api.service';
 import { adminErrorMessage } from '../../core/admin-http';
 import { AdminIcon } from '../../shared/admin-icon';
 
 type DashboardTab = 'operations' | 'business';
-type DashboardRange = 'day' | 'week' | 'month' | 'custom';
+
+const emptyVoice = (): AdminVoiceInsights => ({
+  range: 'week',
+  periodLabel: '7 ngày gần nhất',
+  coverage: { deliveredOrders: 0, reviewedOrders: 0, silentOrders: 0, coveragePct: 0 },
+  productReaction: { reviewCount: 0, avgRating: null, loved: [], complained: [] },
+  serviceQuality: {
+    tickets: 0,
+    closedTickets: 0,
+    csatCount: 0,
+    csatAvg: null,
+    ticketsWithoutCsat: 0,
+    returns: 0,
+    returnRatePct: 0,
+  },
+  orderFriction: { orderCount: 0, completedOrders: 0, cancelledOrders: 0, failedDelivery: 0, cancelReasons: [] },
+});
 
 const emptyDashboard = (): AdminDashboardSummary => ({
   operations: {
@@ -24,9 +46,14 @@ const emptyDashboard = (): AdminDashboardSummary => ({
     promotionRevenue: 0,
     promotionRevenueShare: 0,
     pendingReviews: 0,
+    customers: 0,
+    revenueTrend: [],
+    categoryContributions: [],
+    bestSellers: [],
   },
   recentLogs: [],
   periodDays: 7,
+  voice: emptyVoice(),
 });
 
 @Component({
@@ -38,10 +65,9 @@ export class AdminDashboardPage {
   private readonly api = inject(AdminApiService);
 
   readonly tab = signal<DashboardTab>('operations');
-  readonly range = signal<DashboardRange>('week');
-  readonly customOpen = signal(false);
-  readonly fromDate = signal(this.isoDaysAgo(6));
-  readonly toDate = signal(this.isoDaysAgo(0));
+  readonly range = signal<AdminInsightRange>('week');
+  readonly productId = signal<string | null>(null);
+  readonly categoryId = signal<string | null>(null);
   readonly loading = signal(true);
   readonly loadError = signal<string | null>(null);
   readonly data = signal<AdminDashboardSummary>(emptyDashboard());
@@ -50,9 +76,40 @@ export class AdminDashboardPage {
   readonly ops = computed(() => this.data().operations);
   readonly business = computed(() => this.data().business);
   readonly logs = computed(() => this.data().recentLogs || []);
+  readonly voice = computed(() => this.data().voice || emptyVoice());
+  readonly comparisons = computed(() => this.business().comparisons || {});
+  readonly periodLabel = computed(() => {
+    if (this.range() === 'day') {
+      return 'hôm nay';
+    }
+    if (this.range() === 'month') {
+      return '30 ngày gần nhất';
+    }
+    return '7 ngày gần nhất';
+  });
+  readonly reviewSample = computed(
+    () => this.data().meta?.samples?.reviews ?? this.voice().productReaction.reviewCount,
+  );
+  readonly csatSample = computed(() => this.data().meta?.samples?.csat ?? this.voice().serviceQuality.csatCount);
+  readonly voiceReliable = computed(
+    () => this.data().meta?.reliable?.reviews === true && this.data().meta?.reliable?.csat === true,
+  );
+  readonly reviewTrustCopy = computed(() => {
+    const reviews = this.safeNumber(this.reviewSample());
+    const csat = this.safeNumber(this.csatSample());
+    const delivered = this.safeNumber(this.voice().coverage.deliveredOrders);
+    return `${reviews} đánh giá · ${csat} CSAT trên ${delivered} đơn giao. Cần ≥30 đánh giá và ≥20 CSAT trước khi dùng VoC để hoạch định.`;
+  });
   readonly alertTotal = computed(() => {
     const ops = this.ops();
-    return this.safeNumber(ops.openReturns) + this.safeNumber(ops.paymentErrors) + this.safeNumber(ops.lowStockProducts) + this.safeNumber(ops.openSupportTickets);
+    return (
+      this.safeNumber(ops.pendingOrders) +
+      this.safeNumber(ops.paymentErrors) +
+      this.safeNumber(ops.openReturns) +
+      this.safeNumber(ops.openSupportTickets) +
+      this.safeNumber(ops.lowStockProducts) +
+      this.safeNumber(ops.urgentReviews)
+    );
   });
   readonly categories = computed(() => this.business().categoryContributions || []);
   readonly bestSellers = computed(() =>
@@ -61,11 +118,63 @@ export class AdminDashboardPage {
       rank: String(index + 1).padStart(2, '0'),
     })),
   );
+  readonly chartBars = computed(() => {
+    const points = this.business().revenueTrend || [];
+    const maxRevenue = Math.max(...points.map((point) => this.safeNumber(point.revenue)), 1);
+    const maxOrders = Math.max(...points.map((point) => this.safeNumber(point.orderCount)), 1);
+    return points.map((point) => ({
+      ...point,
+      revenuePct: `${Math.round((this.safeNumber(point.revenue) / maxRevenue) * 100)}%`,
+      orderPct: `${Math.round((this.safeNumber(point.orderCount) / maxOrders) * 100)}%`,
+    }));
+  });
+  readonly chartColumns = computed(() => `repeat(${Math.max(this.chartBars().length, 1)}, minmax(0, 1fr))`);
+  readonly chartMaxLabel = computed(() => this.money(Math.max(...this.chartBars().map((point) => point.revenue), 0)));
+  readonly hasBusinessData = computed(() => this.safeNumber(this.business().orderCount) > 0 || this.chartBars().some((point) => point.revenue > 0));
+  readonly peakInsight = computed(() => {
+    const peak = this.business().insights?.['peakDay'];
+    if (!peak || typeof peak !== 'object') {
+      return 'Chưa đủ dữ liệu để nhận đỉnh doanh thu trong kỳ cố định.';
+    }
+    const row = peak as { date?: string; revenue?: number; changePct?: number | null };
+    if (!row.date) {
+      return 'Chưa đủ dữ liệu để nhận đỉnh doanh thu trong kỳ cố định.';
+    }
+    const change =
+      row.changePct === null || row.changePct === undefined
+        ? 'không so sánh được ngày liền trước'
+        : `${row.changePct > 0 ? 'tăng' : 'giảm'} ${Math.abs(row.changePct)}% so với ngày liền trước`;
+    return `Ngày ${row.date} đạt ${this.money(row.revenue)} — ${change}. Đây là tín hiệu nhịp mua, không phải mốc tùy chọn.`;
+  });
+  readonly filterChips = computed(() => {
+    const chips: Array<{ key: 'product' | 'category'; label: string }> = [];
+    if (this.productId()) {
+      chips.push({ key: 'product', label: 'Lọc theo sản phẩm' });
+    }
+    if (this.categoryId()) {
+      chips.push({ key: 'category', label: 'Lọc theo danh mục' });
+    }
+    return chips;
+  });
+  readonly sourceLabel = computed(() => {
+    const source = this.data().meta?.source;
+    if (source === 'analytics.star') {
+      return 'OLAP star (analytics)';
+    }
+    if (source === 'oltp.rpc') {
+      return 'OLTP RPC (đơn, thanh toán, tồn)';
+    }
+    return 'chưa xác định nguồn';
+  });
   readonly recentActivity = computed(() => this.logs().slice(0, 5).map((log) => ({ log, copy: this.logCopy(log) })));
   readonly healthOrders = computed(() => this.health(this.ops().pendingOrders > 0 || this.ops().paymentErrors > 0));
-  readonly healthProducts = computed(() => this.health(false, this.ops().lowStockProducts > 0));
-  readonly healthReviews = computed(() => this.health(this.business().pendingReviews > 0));
-  readonly healthReturns = computed(() => this.health(this.ops().openReturns > 0 || this.ops().openSupportTickets > 0));
+  readonly healthProducts = computed(() => this.health(this.ops().lowStockProducts > 0));
+  readonly healthReviews = computed(() =>
+    this.health(this.business().pendingReviews > 0 || this.ops().urgentReviews > 0),
+  );
+  readonly healthReturns = computed(() =>
+    this.health(this.ops().openReturns > 0 || this.ops().openSupportTickets > 0),
+  );
 
   constructor() {
     this.reload();
@@ -79,29 +188,36 @@ export class AdminDashboardPage {
   }
 
   /**
-   * Applies the original day/week/month range buttons.
+   * Applies the fixed day / week / month window.
    */
-  setRange(range: DashboardRange): void {
+  setRange(range: AdminInsightRange): void {
     this.range.set(range);
-    this.customOpen.set(range === 'custom');
-    if (range !== 'custom') {
-      this.reload();
-    }
+    this.reload();
   }
 
   /**
-   * Reloads `/api/admin/dashboard` with the active period.
+   * Reloads `/api/v1/admin/dashboard` for the active fixed period.
    */
   reload(): void {
     this.loading.set(true);
     this.loadError.set(null);
-    const params: Record<string, string> =
-      this.range() === 'custom'
-        ? { from: this.fromDate(), to: this.toDate() }
-        : { range: this.range() };
+    const params: Record<string, string> = { range: this.range() };
+    if (this.productId()) {
+      params['productId'] = this.productId() as string;
+    }
+    if (this.categoryId()) {
+      params['categoryId'] = this.categoryId() as string;
+    }
     this.api.dashboard(params).subscribe({
       next: (summary) => {
-        this.data.set({ ...emptyDashboard(), ...summary, operations: { ...emptyDashboard().operations, ...summary.operations }, business: { ...emptyDashboard().business, ...summary.business } });
+        this.data.set({
+          ...emptyDashboard(),
+          ...summary,
+          operations: { ...emptyDashboard().operations, ...summary.operations },
+          business: { ...emptyDashboard().business, ...summary.business },
+          voice: summary.voice || emptyVoice(),
+          meta: summary.meta,
+        });
         const generated = summary.meta?.generatedAt ? new Date(summary.meta.generatedAt) : new Date();
         this.generatedAt.set(
           generated.toLocaleString('vi-VN', {
@@ -116,6 +232,7 @@ export class AdminDashboardPage {
         this.loading.set(false);
       },
       error: (error: unknown) => {
+        this.data.set(emptyDashboard());
         this.loadError.set(adminErrorMessage(error, 'Không thể tải dữ liệu dashboard'));
         this.loading.set(false);
       },
@@ -123,15 +240,40 @@ export class AdminDashboardPage {
   }
 
   /**
-   * Applies the original custom date form.
+   * Product drill stays inside the current day/week/month window.
    */
-  applyCustom(event: Event): void {
-    event.preventDefault();
-    const form = event.target as HTMLFormElement;
-    const from = (form.elements.namedItem('from') as HTMLInputElement | null)?.value || this.fromDate();
-    const to = (form.elements.namedItem('to') as HTMLInputElement | null)?.value || this.toDate();
-    this.fromDate.set(from);
-    this.toDate.set(to);
+  drillProduct(productId: string | undefined): void {
+    if (!productId) {
+      return;
+    }
+    this.productId.set(productId);
+    this.categoryId.set(null);
+    this.setTab('business');
+    this.reload();
+  }
+
+  /**
+   * Category drill stays inside the current day/week/month window.
+   */
+  drillCategory(categoryId: string | undefined): void {
+    if (!categoryId) {
+      return;
+    }
+    this.categoryId.set(categoryId);
+    this.productId.set(null);
+    this.setTab('business');
+    this.reload();
+  }
+
+  /**
+   * Clears one OLAP dimension chip.
+   */
+  clearFilter(key: 'product' | 'category'): void {
+    if (key === 'product') {
+      this.productId.set(null);
+    } else {
+      this.categoryId.set(null);
+    }
     this.reload();
   }
 
@@ -193,12 +335,20 @@ export class AdminDashboardPage {
    */
   health(warning: boolean, danger = false): { tone: string; label: string } {
     if (danger) {
-      return { tone: 'danger', label: 'Rủi ro' };
+      return { tone: 'danger', label: 'Cần xử lý gấp' };
     }
     if (warning) {
-      return { tone: 'warning', label: 'Cần chú ý' };
+      return { tone: 'warning', label: 'Cần xử lý' };
     }
-    return { tone: 'success', label: 'Tốt' };
+    return { tone: 'success', label: 'Ổn' };
+  }
+
+  /**
+   * Bar width for a bestseller relative to the top SKU in the period.
+   */
+  bestSellerWidth(revenue: number | undefined): number {
+    const peak = Math.max(...this.bestSellers().map((item) => this.safeNumber(item.revenue)), 1);
+    return Math.round((this.safeNumber(revenue) / peak) * 100);
   }
 
   /**
@@ -243,12 +393,6 @@ export class AdminDashboardPage {
       desc,
       module: labels[log.module || ''] || 'Hệ thống',
     };
-  }
-
-  private isoDaysAgo(days: number): string {
-    const now = new Date();
-    const vietnam = new Date(now.getTime() + 7 * 60 * 60 * 1000 - days * 24 * 60 * 60 * 1000);
-    return vietnam.toISOString().slice(0, 10);
   }
 
   /**

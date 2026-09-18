@@ -36,7 +36,7 @@ export async function handleProductRoute({
 
   // GET /api/v1/admin/products/categories
   if (req.method === "GET" && parts[4] === "categories" && parts.length === 5) {
-    sendJson(res, 200, { data: await service.categories(context) }, headers);
+    sendJson(res, 200, await service.categories(context), headers);
     return true;
   }
 

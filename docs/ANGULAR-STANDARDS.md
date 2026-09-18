@@ -1,5 +1,7 @@
 # Angular 21 coding standard (Velura)
 
+**Cây dự án + layer OOP + role map:** [ARCHITECTURE.md](./ARCHITECTURE.md) (đọc trước khi sửa feature).
+
 Lecture slides map: [docs/source-of-truth/LECTURE-MAP.md](./source-of-truth/LECTURE-MAP.md).  
 Book map: [docs/source-of-truth/BOOK-MAP.md](./source-of-truth/BOOK-MAP.md).  
 Index: [SOURCE-OF-TRUTH.md](./SOURCE-OF-TRUTH.md).

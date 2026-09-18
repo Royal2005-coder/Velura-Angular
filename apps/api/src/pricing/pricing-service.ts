@@ -2,6 +2,7 @@ import { HttpError } from "../http.js";
 import type { AuthContext, JsonObject } from "../types.js";
 import { PROMOTION_OPERATOR_ROLES, PROMOTION_READER_ROLES, PROMOTION_TYPES, VOUCHER_TYPES } from "./pricing-constants.js";
 import type { PricingRepository } from "./pricing-repository.js";
+import { normalizePromotionPresentation } from "./promotion-presentation.js";
 
 /**
  * Admin pricing use-cases used by `handlePricingRoute`.
@@ -83,14 +84,21 @@ export function createPricingService({ repository }: { repository: PricingReposi
       if (!body?.name) throw new HttpError(422, "VALIDATION_ERROR", "Name required");
       if (!body?.startDate || !body?.endDate) throw new HttpError(422, "VALIDATION_ERROR", "Start and end dates required");
       if (body.type && !PROMOTION_TYPES.includes(body.type as string)) throw new HttpError(422, "VALIDATION_ERROR", `Invalid promo type. Valid: ${PROMOTION_TYPES.join(", ")}`);
-      return repository.createPromotion({ ...body, createdBy: context.profile?.user_id || context.authUser?.id }, context.accessToken);
+      return repository.createPromotion({
+        ...body,
+        ...normalizePromotionPresentation(body, "create"),
+        createdBy: context.profile?.user_id || context.authUser?.id
+      }, context.accessToken);
     },
 
     async updatePromotion(context, promotionId, body) {
       requirePricingAdmin(context);
       const expectedVersion = parseInt((body?.expectedVersion || "0") as string);
       if (!expectedVersion) throw new HttpError(422, "VALIDATION_ERROR", "expectedVersion required");
-      return repository.updatePromotion(promotionId, body, context.accessToken);
+      return repository.updatePromotion(promotionId, {
+        ...body,
+        ...normalizePromotionPresentation(body, "update")
+      }, context.accessToken);
     },
 
     async activatePromotion(context, promotionId, body) {

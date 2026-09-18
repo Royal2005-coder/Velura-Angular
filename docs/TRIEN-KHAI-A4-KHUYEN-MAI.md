@@ -1,62 +1,61 @@
 # Triển khai A4 — Khuyến mãi
 
-Ghi chú cho người có quyền chạm vào Supabase. Toàn bộ mã nguồn của module A4 đã lên
-nhánh và qua pipeline, nhưng **ba migration và một kho chứa tệp vẫn chưa được áp
-dụng** — người viết mã không có quyền truy cập cơ sở dữ liệu.
+**Trạng thái: đã triển khai lên Supabase ngày 19/09/2026.** Tài liệu này ghi lại những
+gì đã chạy, cách kiểm chứng, và cách chạy lại trên một môi trường khác.
 
-Cho tới khi làm xong các bước dưới đây:
+## Đã làm gì
 
-- Thanh ngân sách trong trang Khuyến mãi của admin luôn hiển thị `0đ / <hạn mức>`.
-- Trang Ưu đãi của khách sẽ lỗi vì thiếu cột.
-- Nút tải ảnh banner trả về lỗi kho chứa không tồn tại.
+| Việc | Trạng thái |
+|---|---|
+| Migration 025 — cộng dồn ngân sách, hoàn lại khi huỷ đơn, đồng bộ lịch | Đã chạy |
+| Migration 026 — 5 cột nội dung trình bày trên `public.promotion` | Đã chạy |
+| Migration 027 — dựng lại `admin_update_promotion`, chốt quyền 4 RPC | Đã chạy |
+| Kho chứa `promotion-banners` (public, 5 MB, JPG/PNG/WebP/GIF) | Đã tạo |
 
-## 1. Chạy migration theo đúng thứ tự
+Kiểm chứng ngay sau khi chạy:
+
+- 5/5 cột của 026 có mặt; `admin_update_promotion` từ 7 lên 13 tham số.
+- 3/3 RPC của 025 tồn tại và gọi được.
+- `velura_sync_promotion_schedule()` chạy lần đầu trả về `activated: 2, deactivated: 2`.
+  Đây là dữ liệu thật được sửa: hai chiến dịch đã quá hạn vẫn đang bật, và hai chiến
+  dịch nằm trong khung ngày lại đang tắt. Sau đồng bộ, 3 chiến dịch thật chạy (đều
+  trong khung), 5 chiến dịch test/hết hạn tắt.
+- PostgREST đọc được các cột mới bằng khoá anon (200).
+
+## Cách chạy migration
+
+Kho có sẵn trình chạy. Chuỗi kết nối đọc từ `SUPABASE_DB_URL` trong `.env` ở gốc kho
+chính (`.env` nằm trong `.gitignore`, không bao giờ commit). Khi làm việc trong một git
+worktree, script tự tìm ngược về `.env` của kho chính.
 
 ```bash
-psql "$SUPABASE_DB_URL" -f database/migrations/025_promotion_budget_and_schedule.sql
-psql "$SUPABASE_DB_URL" -f database/migrations/026_promotion_presentation_fields.sql
-psql "$SUPABASE_DB_URL" -f database/migrations/027_promotion_update_presentation.sql
+npm run db:check                      # chỉ đọc hiện trạng, không ghi gì
+npm run db:migrate -- 025 026 027     # chạy theo đúng thứ tự liệt kê
+node scripts/run-migrations.mjs --dry-run 027   # in SQL rồi dừng
 ```
 
-| Migration | Việc nó làm |
-|---|---|
-| 025 | Ba RPC cộng dồn tiền đã giảm, hoàn lại khi huỷ đơn, và đồng bộ lịch chạy. Trước đó `promotion.total_discount_issued` được khai báo và được đọc để hiển thị nhưng **không có nơi nào ghi vào**, nên chiến dịch có thể tiêu vượt ngân sách không giới hạn. |
-| 026 | Năm cột nội dung trình bày trên `public.promotion`: `description`, `banner_image_url`, `highlight_label`, `display_order`, `is_featured`. |
-| 027 | Dựng lại `admin_update_promotion` để nhận các cột của 026 cùng hai mốc lịch chạy, và đặt chốt quyền cho bốn RPC ghi khuyến mãi/voucher. |
+Mỗi tệp chạy trong một giao dịch riêng: hỏng giữa chừng thì tệp đó quay lui trọn vẹn,
+các tệp trước đó giữ nguyên.
 
-**027 có `drop function`.** Nó bỏ chữ ký cũ của `admin_update_promotion` trước khi tạo
-lại — bắt buộc, vì `create or replace` với danh sách tham số khác chỉ tạo thêm một bản
-nạp chồng và PostgREST gọi bằng tham số có tên sẽ báo `function is not unique`. Chạy
-026 trước 027; chạy ngược lại thì 027 tham chiếu cột chưa tồn tại.
+**Thứ tự bắt buộc: 026 trước 027.** 027 có `drop function` để bỏ chữ ký cũ của
+`admin_update_promotion` trước khi tạo lại — bắt buộc, vì `create or replace` với danh
+sách tham số khác chỉ tạo thêm một bản nạp chồng và PostgREST gọi bằng tham số có tên
+sẽ báo `function is not unique`. Chạy 027 trước 026 thì nó tham chiếu cột chưa tồn tại.
 
-Kiểm tra sau khi chạy:
+## Cách kiểm tra lại bằng tay
 
 ```sql
--- Phải trả về đúng một dòng, 13 tham số.
-select pronargs from pg_proc where proname = 'admin_update_promotion';
+-- Phải là 13.
+select pronargs from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+ where n.nspname = 'public' and p.proname = 'admin_update_promotion';
 
--- Phải có đủ năm cột.
+-- Phải đủ 5 cột.
 select column_name from information_schema.columns
  where table_name = 'promotion'
    and column_name in ('description','banner_image_url','highlight_label','display_order','is_featured');
 ```
 
-## 2. Tạo kho chứa ảnh banner
-
-Tuyến `POST /api/v1/admin/promotions/banner` ghi vào kho `promotion-banners`, thư mục
-`campaign/`. Kho này chưa tồn tại.
-
-Trên Supabase Dashboard → Storage → New bucket:
-
-- Tên: `promotion-banners`
-- Public: **có** (ảnh banner hiển thị công khai trên trang Ưu đãi)
-- Giới hạn kích thước: 5 MB, khớp với mức API đang chặn
-
-Kho này cố tình tách khỏi `return-evidence`: banner là nội dung công khai lâu dài, còn
-ảnh bằng chứng đổi trả là dữ liệu riêng của một khách cụ thể — hai vòng đời và hai mức
-quyền đọc khác hẳn nhau.
-
-## 3. Kiểm tra lại sau khi triển khai
+Luồng nghiệp vụ, chạy trên giao diện:
 
 1. Admin → Khuyến mãi → **Tạo chiến dịch**: điền tên, hai mốc thời gian, ngân sách, tải
    một ảnh banner. Lưu xong chiến dịch phải ở trạng thái **Tạm dừng**.
@@ -68,8 +67,13 @@ quyền đọc khác hẳn nhau.
 
 ## Việc còn để lại
 
-- **Tuyến `/api/user/upload/evidence` không có xác thực.** `handleUploadRoute` không
-  nhận `context`, nên bất kỳ ai trên Internet cũng tải được tệp 5 MB vào kho
+- **Tuyến `POST /api/user/upload/evidence` không có xác thực.** `handleUploadRoute`
+  không nhận `context`, nên bất kỳ ai trên Internet cũng tải được tệp 5 MB vào kho
   `return-evidence`. Không thuộc phạm vi A4 nhưng cần xử lý — ghi ở đây để không rơi.
+  Kho `promotion-banners` của A4 đi qua tuyến admin riêng có kiểm vai trò.
+- **Kho `return-evidence` không có giới hạn kích thước ở tầng kho chứa.** Chặn 5 MB
+  hiện chỉ nằm trong mã API. Kho `promotion-banners` đã đặt giới hạn ngay ở kho.
+- **Dữ liệu rác trên cơ sở dữ liệu thật:** 5 trong 8 chiến dịch là bản test
+  (`Test Campaign 1783249933508`, `grsgrg`, …). Nên dọn trước khi trình bày.
 - Các thông báo lỗi tiếng Anh còn lại trong `pricingErrorMessage` thuộc luồng đổi giá.
   Giao diện quản trị là tiếng Việt nên phần này nên được dịch nốt trong một lần riêng.

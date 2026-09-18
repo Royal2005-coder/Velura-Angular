@@ -7,7 +7,7 @@ git log --oneline --show-notes --grep=KAN-n
 git show --stat <sha>
 ```
 
-Chi tiết retrieval: [AGENTS.md](../AGENTS.md). Pipeline: [HOW-IT-WORKS.md](./HOW-IT-WORKS.md).
+Chi tiết retrieval: [AGENTS.md](../AGENTS.md). Versioning + Actions: [GIT-AND-CI.md](./GIT-AND-CI.md). Pipeline: [HOW-IT-WORKS.md](./HOW-IT-WORKS.md).
 
 | Lớp | Ở đâu |
 |---|---|

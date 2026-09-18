@@ -257,12 +257,13 @@ Production: **không** tự merge `main`. Lead mở PR `develop` → `main` sau 
 
 In hoặc copy vào comment Jira onboarding:
 
-- [ ] Đã đọc [AGENTS.md](../AGENTS.md) + file này + [HOW-IT-WORKS.md](./HOW-IT-WORKS.md)
+- [ ] Đã đọc [AGENTS.md](../AGENTS.md) + file này + [HOW-IT-WORKS.md](./HOW-IT-WORKS.md) + [ARCHITECTURE.md](./ARCHITECTURE.md)
 - [ ] `gh auth status` / GitHub Web login OK; remote `origin` = Velura-Angular
 - [ ] Làm việc trên `develop`; biết `main` = production
 - [ ] Hiểu: feature → PR develop → (promote) PR develop→main → deploy
 - [ ] Biết mở Actions tab và đọc job đỏ
 - [ ] Biết PR cần `KAN-n` + `## Why`; cấm `[skip ci]`
+- [ ] Biết folder + layer của role mình (Storefront / Admin / API / DB) trong ARCHITECTURE
 - [ ] `npm install` + `test:api` + `test:ng` + `build` local chạy được
 - [ ] Có `.env` từ lead; không commit secret
 - [ ] Đã làm **Practice PR** trong [ONBOARDING.md](./ONBOARDING.md) (draft, không merge)

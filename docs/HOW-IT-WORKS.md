@@ -3,6 +3,7 @@
 Jira = việc. GitHub **Pull Request** = **log phiên bản** (Files changed, git log, CI `note-pr`).  
 `docs/` chỉ map ổn định. **Không** tạo markdown theo ticket.
 
+**Onboard / versioning / Actions (đọc trước khi code):** [GIT-AND-CI.md](./GIT-AND-CI.md)  
 **Canonical CI/CD:** [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) trên  
 https://github.com/Royal2005-coder/Velura-Angular  
 

@@ -2,7 +2,7 @@
 
 Hai SPA **Angular 21** (storefront + admin) và HTTP API **Node**. Không viết API bằng Angular.
 
-Đọc [AGENTS.md](AGENTS.md) → file này → [docs/SOURCE-OF-TRUTH.md](docs/SOURCE-OF-TRUTH.md). Mục lục: [docs/README.md](docs/README.md).
+Đọc [AGENTS.md](AGENTS.md) → **[docs/GIT-AND-CI.md](docs/GIT-AND-CI.md)** (bắt buộc trước khi code) → [docs/ONBOARDING.md](docs/ONBOARDING.md) → file này → [docs/SOURCE-OF-TRUTH.md](docs/SOURCE-OF-TRUTH.md). Mục lục: [docs/README.md](docs/README.md).
 
 **Repo + CI/CD (canonical):** https://github.com/Royal2005-coder/Velura-Angular  
 GitLab chỉ còn archive / legacy — team làm việc trên GitHub Actions.
@@ -29,7 +29,7 @@ Làm việc trên `develop`. Production = `main` sau PR promote. Chi tiết [doc
 | Không NgModule | [ADR 0001](docs/adr/0001-angular-21-standalone-signals.md) |
 | Gap | [COMPLIANCE](docs/COMPLIANCE.md) |
 | MCP | [MCP-SETUP](docs/MCP-SETUP.md) |
-| Ngày 1 | [ONBOARDING](docs/ONBOARDING.md) |
+| Ngày 1 | [ONBOARDING](docs/ONBOARDING.md) · [GIT-AND-CI](docs/GIT-AND-CI.md) |
 
 Context từng version = type/JSDoc + GitHub PR `## Why` + git notes, không phải `docs/KAN-n.md`.
 

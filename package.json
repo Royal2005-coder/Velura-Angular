@@ -22,7 +22,9 @@
     "test:user": "npm run test -w @velura/user-ng -- --watch=false",
     "test:admin": "npm run test -w @velura/admin-ng -- --watch=false",
     "test:ng": "npm run test:user && npm run test:admin",
-    "test": "npm run test:api && npm run test:ng"
+    "test": "npm run test:api && npm run test:ng",
+    "db:check": "node scripts/run-migrations.mjs --check",
+    "db:migrate": "node scripts/run-migrations.mjs"
   },
   "engines": {
     "node": ">=22 <25"

@@ -1,4 +1,5 @@
 import { config } from "./config.js";
+import { isEmailUnconfirmed } from "./auth-profile.js";
 import { getRequestIp, HttpError } from "./http.js";
 import { insertRow } from "./supabase.js";
 import { asString, type AuthContext, type HttpRequest, type JsonObject } from "./types.js";
@@ -39,6 +40,13 @@ export async function completeAdminPasswordSignIn(body: JsonObject): Promise<{ t
   if (!response.ok || !payload.access_token) {
     if (user) {
       await recordFailedLogin(user);
+    }
+    if (isEmailUnconfirmed(payload)) {
+      throw new HttpError(
+        401,
+        "EMAIL_NOT_CONFIRMED",
+        "Email chưa được xác nhận. Mở thư xác minh hoặc đăng nhập bằng Google."
+      );
     }
     throw new HttpError(
       401,

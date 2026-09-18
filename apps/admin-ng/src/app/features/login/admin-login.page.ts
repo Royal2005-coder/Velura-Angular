@@ -42,6 +42,7 @@ export class AdminLoginPage {
 
   constructor() {
     useBodyClass('page-auth');
+    this.session.clear();
     this.destroyRef.onDestroy(() => this.stopCountdown());
   }
 
@@ -60,6 +61,7 @@ export class AdminLoginPage {
     this.errorMessage.set(null);
     this.successMessage.set(null);
     this.submitting.set(true);
+    this.session.clear();
     this.api
       .signIn(this.form.controls.email.value, this.form.controls.password.value)
       .pipe(

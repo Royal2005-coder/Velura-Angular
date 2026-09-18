@@ -2,6 +2,7 @@ import { HttpError } from "../http.js";
 import { selectRows, insertRow, selectOne, updateRows } from "../supabase.js";
 import {
   asJsonObject,
+  asString,
   errorMessage,
   type AuthContext,
   type JsonObject,
@@ -136,9 +137,9 @@ export function createProductService({ repository }: { repository: ProductReposi
           color: "Mặc định",
           colorHex: "#FFFFFF",
           size: "F",
-          stockQuantity: initialStock,
-          lowStockThreshold: lowStockThreshold
-        });
+          stockQuantity: Number.isInteger(initialStock) && initialStock >= 0 ? initialStock : 0,
+          lowStockThreshold: Number.isInteger(lowStockThreshold) && lowStockThreshold >= 0 ? lowStockThreshold : 5
+        }, context.accessToken);
 
         await syncProductStockStatus(repository, context, product.product_id as string, "Khởi tạo tồn kho sản phẩm mới", input.ipAddress);
       }
@@ -349,30 +350,30 @@ export function createProductService({ repository }: { repository: ProductReposi
         const rowNum = i + 1;
 
         if (!row.sku || !SKU_PATTERN.test(row.sku)) {
-          errors.push({ row: rowNum, field: "sku", message: "Invalid SKU format" });
+          errors.push({ row: rowNum, field: "sku", message: "SKU không đúng dạng VL-AO001" });
           continue;
         }
         if (!row.name || row.name.length < 2) {
-          errors.push({ row: rowNum, field: "name", message: "Name is required (min 2 chars)" });
+          errors.push({ row: rowNum, field: "name", message: "Tên bắt buộc, tối thiểu 2 ký tự" });
           continue;
         }
         const basePrice = Number(row.base_price);
         if (!Number.isFinite(basePrice) || basePrice < 0) {
-          errors.push({ row: rowNum, field: "base_price", message: "Must be a non-negative number" });
+          errors.push({ row: rowNum, field: "base_price", message: "Giá gốc phải là số không âm" });
           continue;
         }
         if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(row.category_id || "")) {
-          errors.push({ row: rowNum, field: "category_id", message: "Must be a UUID" });
+          errors.push({ row: rowNum, field: "category_id", message: "category_id phải là UUID danh mục" });
           continue;
         }
         const salePrice = row.sale_price === "" || row.sale_price === undefined ? basePrice : Number(row.sale_price);
         if (!Number.isFinite(salePrice) || salePrice < 0) {
-          errors.push({ row: rowNum, field: "sale_price", message: "Must be a non-negative number" });
+          errors.push({ row: rowNum, field: "sale_price", message: "Giá bán phải là số không âm" });
           continue;
         }
         const status = row.status || "on_sale";
         if (!PRODUCT_STATUSES.includes(status)) {
-          errors.push({ row: rowNum, field: "status", message: "Invalid product status" });
+          errors.push({ row: rowNum, field: "status", message: "Trạng thái phải là on_sale, hidden, out_of_stock hoặc discontinued" });
           continue;
         }
         rows.push({
@@ -388,18 +389,18 @@ export function createProductService({ repository }: { repository: ProductReposi
         });
       }
 
-      if (errors.length) {
-        throw new HttpError(422, "CSV_VALIDATION_FAILED", "CSV contains validation errors", { errors });
-      }
-
-      return { rows, totalRows: lines.length - 1, validRows: rows.length };
+      return { rows, errors, totalRows: lines.length - 1, validRows: rows.length };
     },
 
     async commitCsv(context, csvContent, requestMeta) {
       requireProductAdmin(context);
       const parsed = asJsonObject(await this.parseCsv(context, csvContent));
+      const csvErrors = Array.isArray(parsed.errors) ? parsed.errors : [];
+      if (csvErrors.length) {
+        throw new HttpError(422, "CSV_VALIDATION_FAILED", "CSV còn dòng lỗi, chưa ghi vào catalog", { errors: csvErrors });
+      }
       const parsedRows = Array.isArray(parsed.rows) ? parsed.rows as JsonObject[] : [];
-      if (parsedRows.length === 0) throw validationError("csv", "No valid rows to import");
+      if (parsedRows.length === 0) throw validationError("csv", "Không có dòng hợp lệ để nhập");
 
       const results: JsonObject[] = [];
       for (const row of parsedRows) {
@@ -411,8 +412,6 @@ export function createProductService({ repository }: { repository: ProductReposi
               name: row.name,
               description: row.description,
               categoryId: row.category_id,
-              basePrice: row.base_price,
-              salePrice: row.sale_price,
               images: row.images,
               isFeatured: row.is_featured,
               expectedVersion: existing.version,
@@ -470,11 +469,12 @@ export function createProductService({ repository }: { repository: ProductReposi
       requireProductViewer(context);
       const targetId = searchParams.get("targetId") || "";
       if (targetId) requireUuid(targetId, "targetId");
-      return repository.listAuditLogs({
+      const payload = await repository.listAuditLogs({
         targetId: targetId || undefined,
         limit: clampInteger(searchParams.get("limit"), 50, 1, 100),
         offset: clampInteger(searchParams.get("offset"), 0, 0, 1000000)
       }, context.accessToken);
+      return enrichProductAuditLogs(payload);
     },
 
     async getComboItems(context, productId) {
@@ -542,28 +542,31 @@ export function validateCreateVariant(body: JsonObject = {}) {
 export function validateCreateProduct(body: JsonObject = {}) {
   const sku = String(body.sku || "").trim().toUpperCase();
   const name = String(body.name || "").trim();
-  const slug = String(body.slug || "").trim().toLowerCase();
+  let slug = String(body.slug || "").trim().toLowerCase();
   if (!SKU_PATTERN.test(sku)) {
-    throw validationError("sku", "Invalid SKU format (e.g. VL-AO001)");
+    throw validationError("sku", "SKU phải dạng VL-AO001 hoặc VLR-DV006 (chữ in hoa, có gạch ngang)");
   }
   if (name.length < 2 || name.length > 255) {
-    throw validationError("name", "Name is required (min 2 characters)");
+    throw validationError("name", "Tên sản phẩm bắt buộc, từ 2 đến 255 ký tự");
+  }
+  if (!slug) {
+    slug = slugifyName(name) || slugifyName(sku);
   }
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug) || slug.length > 255) {
-    throw validationError("slug", "Slug must contain lowercase letters, numbers and single hyphens");
+    throw validationError("slug", "Slug chỉ gồm chữ thường, số và gạch ngang");
   }
   requireUuid(body.categoryId, "categoryId");
   const basePrice = Number(body.basePrice);
   if (!Number.isFinite(basePrice) || basePrice < 0) {
-    throw validationError("basePrice", "basePrice must be a non-negative number");
+    throw validationError("basePrice", "Giá gốc phải là số không âm");
   }
   const salePrice = Number(body.salePrice ?? basePrice);
   if (!Number.isFinite(salePrice) || salePrice < 0) {
-    throw validationError("salePrice", "salePrice must be a non-negative number");
+    throw validationError("salePrice", "Giá bán phải là số không âm");
   }
   const status = body.status || "on_sale";
   if (!["on_sale", "hidden"].includes(status as string)) {
-    throw validationError("status", "A new product must be on_sale or hidden");
+    throw validationError("status", "Sản phẩm mới chỉ được Đang bán hoặc Tạm ẩn");
   }
   return {
     sku,
@@ -749,7 +752,7 @@ function parseCsvRow(headers: string[], values: string[]): Record<string, string
 
 function requireUuid(value: unknown, field: string): void {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ""))) {
-    throw validationError(field, `${field} must be a UUID`);
+    throw validationError(field, field === "categoryId" ? "Chọn danh mục hợp lệ" : `${field} phải là UUID`);
   }
 }
 
@@ -790,17 +793,34 @@ function validateStringArray(value: unknown, field: string, maxItems: number, ma
   });
 }
 
+function slugifyName(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/gi, "d")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+}
+
 function validateImageUrls(value: unknown): string[] {
+  if (value === undefined || value === null || value === "") {
+    return [];
+  }
   const images = validateStringArray(value, "images", 20, 2048);
   for (const image of images) {
+    if (image.startsWith("/") && !image.startsWith("//")) {
+      continue;
+    }
     let parsed: URL;
     try {
       parsed = new URL(image);
     } catch {
-      throw validationError("images", "Each image must be an absolute HTTPS URL");
+      throw validationError("images", "Ảnh phải là URL https hoặc đường dẫn /assets/...");
     }
-    if (parsed.protocol !== "https:") {
-      throw validationError("images", "Each image must use HTTPS");
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+      throw validationError("images", "Ảnh phải dùng http hoặc https. Có thể để trống nếu chưa có storage.");
     }
   }
   return images;
@@ -883,6 +903,227 @@ function parseOptionalPrice(value: string | null, field: string): number | undef
     throw validationError(field, `${field} must be a non-negative number`);
   }
   return number;
+}
+
+/**
+ * Resolves actor/product UUIDs into readable labels for the catalog audit table.
+ */
+async function enrichProductAuditLogs(
+  payload: { rows: JsonObject[]; count: number | undefined } | JsonObject[] | unknown
+): Promise<{ rows: JsonObject[]; count: number | undefined }> {
+  const rows = Array.isArray(payload)
+    ? payload
+    : Array.isArray((payload as { rows?: JsonObject[] })?.rows)
+      ? (payload as { rows: JsonObject[] }).rows
+      : [];
+  const count = Array.isArray(payload)
+    ? payload.length
+    : (payload as { count?: number | undefined })?.count;
+
+  if (!rows.length) {
+    return { rows: [], count: count ?? 0 };
+  }
+
+  const actorIds = uniqueIds(rows.map((row) => asString(row.actor_id)));
+  const targetIds = uniqueIds(rows.map((row) => asString(row.target_id)));
+  const productIdsFromPayload = uniqueIds(
+    rows.flatMap((row) => [
+      asString(asJsonObject(row.new_value)?.product_id),
+      asString(asJsonObject(row.old_value)?.product_id)
+    ])
+  );
+
+  const [actors, products] = await Promise.all([
+    actorIds.length
+      ? selectRows(
+          "users",
+          {
+            select: "user_id,full_name,email,admin_role",
+            user_id: `in.(${actorIds.join(",")})`
+          },
+          { useAnonKey: false, silentError: true }
+        ).catch(() => ({ rows: [] as JsonObject[], count: 0 }))
+      : Promise.resolve({ rows: [] as JsonObject[], count: 0 }),
+    uniqueIds([...targetIds, ...productIdsFromPayload]).length
+      ? selectRows(
+          "product",
+          {
+            select: "product_id,sku,name",
+            product_id: `in.(${uniqueIds([...targetIds, ...productIdsFromPayload]).join(",")})`
+          },
+          { useAnonKey: false, silentError: true }
+        ).catch(() => ({ rows: [] as JsonObject[], count: 0 }))
+      : Promise.resolve({ rows: [] as JsonObject[], count: 0 })
+  ]);
+
+  const actorMap = new Map(
+    (actors.rows || []).map((row) => [asString(row.user_id), row] as const)
+  );
+  const productMap = new Map(
+    (products.rows || []).map((row) => [asString(row.product_id), row] as const)
+  );
+
+  const enriched = rows.map((row) => {
+    const actor = actorMap.get(asString(row.actor_id) || "");
+    const oldValue = asJsonObject(row.old_value) || {};
+    const newValue = asJsonObject(row.new_value) || {};
+    const productId =
+      asString(row.target_id) ||
+      asString(newValue.product_id) ||
+      asString(oldValue.product_id) ||
+      "";
+    const product = productMap.get(productId) || productMap.get(asString(newValue.product_id) || "");
+    const actionLabel = productAuditActionLabel(asString(row.action), oldValue, newValue);
+    const targetLabel = productAuditTargetLabel(product, oldValue, newValue, asString(row.target_id));
+    const changeSummary = productAuditChangeSummary(oldValue, newValue, asString(row.action));
+    const actorName = asString(actor?.full_name) || asString(row.actor_name) || "";
+    const actorEmail = asString(actor?.email) || "";
+    const actorRole = asString(row.actor_role) || asString(actor?.admin_role) || "";
+
+    return {
+      ...row,
+      actor_name: actorName || actorEmail || asString(row.actor_id) || "Hệ thống",
+      actor_email: actorEmail || null,
+      actor_label: actorName && actorEmail
+        ? `${actorName} (${actorEmail})`
+        : actorName || actorEmail || asString(row.actor_id) || "Hệ thống",
+      actor_role_label: productAuditRoleLabel(actorRole),
+      target_label: targetLabel,
+      action_label: actionLabel,
+      change_summary: changeSummary,
+      result: asString(row.result) || "Thành công"
+    };
+  });
+
+  return { rows: enriched, count };
+}
+
+function uniqueIds(values: Array<string | null | undefined>): string[] {
+  return [...new Set(values.map((value) => String(value || "").trim()).filter(Boolean))];
+}
+
+function productAuditRoleLabel(role: string): string {
+  const map: Record<string, string> = {
+    admin_super: "Super Admin",
+    super_admin: "Super Admin",
+    admin_operator_sanpham: "Quản lý sản phẩm",
+    admin_operator_donhang: "Quản lý đơn hàng",
+    admin_operator_gia_km: "Quản lý giá / KM",
+    admin_operator_danhgia_review: "Quản lý đánh giá",
+    admin_operator_cskh_dt: "CSKH / Đổi trả"
+  };
+  return map[role] || role || "—";
+}
+
+function productAuditActionLabel(
+  action: string | null,
+  oldValue: JsonObject,
+  newValue: JsonObject
+): string {
+  const raw = String(action || "").toLowerCase();
+  if (raw === "create") {
+    if (newValue.color || newValue.size) return "Thêm biến thể";
+    return "Thêm sản phẩm";
+  }
+  if (oldValue.status !== undefined && newValue.status !== undefined && oldValue.status !== newValue.status) {
+    return "Đổi trạng thái";
+  }
+  if (
+    oldValue.stock_quantity !== undefined &&
+    newValue.stock_quantity !== undefined &&
+    oldValue.stock_quantity !== newValue.stock_quantity
+  ) {
+    return "Điều chỉnh tồn kho";
+  }
+  if (raw === "update") return "Cập nhật sản phẩm";
+  if (raw === "import" || raw.includes("csv")) return "Nhập CSV";
+  return action || "—";
+}
+
+function productAuditTargetLabel(
+  product: JsonObject | undefined,
+  oldValue: JsonObject,
+  newValue: JsonObject,
+  targetId: string | null
+): string {
+  const sku = asString(product?.sku) || asString(newValue.sku) || asString(oldValue.sku) || "";
+  const name = asString(product?.name) || asString(newValue.name) || asString(oldValue.name) || "";
+  if (sku && name) return `${sku} — ${name}`;
+  if (sku) return sku;
+  if (name) return name;
+
+  const color = asString(newValue.color) || asString(oldValue.color) || "";
+  const size = asString(newValue.size) || asString(oldValue.size) || "";
+  if (color || size) {
+    const productRef = asString(newValue.product_id) || asString(oldValue.product_id) || "";
+    const variantLabel = [color, size].filter(Boolean).join(" / ");
+    return productRef ? `Biến thể ${variantLabel}` : variantLabel;
+  }
+
+  return targetId || "—";
+}
+
+function productAuditChangeSummary(
+  oldValue: JsonObject,
+  newValue: JsonObject,
+  action: string | null
+): string {
+  const hasOld = Object.keys(oldValue).length > 0;
+  const hasNew = Object.keys(newValue).length > 0;
+  if (!hasOld && !hasNew) return "—";
+
+  if (String(action || "").toLowerCase() === "create") {
+    const sku = asString(newValue.sku) || "";
+    const name = asString(newValue.name) || "";
+    if (sku || name) return `— → ${[sku, name].filter(Boolean).join(" · ")}`;
+    const color = asString(newValue.color) || "";
+    const size = asString(newValue.size) || "";
+    const stock = newValue.stock_quantity;
+    if (color || size || stock !== undefined) {
+      return `— → ${[color, size].filter(Boolean).join("/")} tồn ${stock ?? 0}`;
+    }
+    return "— → đã tạo";
+  }
+
+  if (oldValue.status !== undefined && newValue.status !== undefined && oldValue.status !== newValue.status) {
+    return `${statusVi(asString(oldValue.status))} → ${statusVi(asString(newValue.status))}`;
+  }
+
+  if (
+    oldValue.stock_quantity !== undefined &&
+    newValue.stock_quantity !== undefined &&
+    oldValue.stock_quantity !== newValue.stock_quantity
+  ) {
+    return `Tồn ${oldValue.stock_quantity} → ${newValue.stock_quantity}`;
+  }
+
+  const parts: string[] = [];
+  for (const key of ["name", "sku", "sale_price", "base_price", "collection", "status"] as const) {
+    if (oldValue[key] !== undefined && newValue[key] !== undefined && oldValue[key] !== newValue[key]) {
+      parts.push(`${key}: ${formatAuditScalar(oldValue[key])} → ${formatAuditScalar(newValue[key])}`);
+    }
+  }
+  if (parts.length) return parts.slice(0, 3).join("; ");
+  if (hasOld && hasNew) return "Đã cập nhật";
+  if (hasNew) return "— → có dữ liệu mới";
+  return "có → —";
+}
+
+function statusVi(status: string | null): string {
+  const map: Record<string, string> = {
+    on_sale: "Đang bán",
+    hidden: "Tạm ẩn",
+    out_of_stock: "Hết hàng",
+    discontinued: "Ngừng kinh doanh"
+  };
+  return map[String(status || "")] || status || "—";
+}
+
+function formatAuditScalar(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "—";
+  if (typeof value === "number") return String(value);
+  if (typeof value === "boolean") return value ? "có" : "không";
+  return String(value);
 }
 
 function clampInteger(raw: string | null, fallback: number, min: number, max: number): number {

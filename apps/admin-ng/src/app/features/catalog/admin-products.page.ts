@@ -34,6 +34,26 @@ const STATUS_TONE: Record<string, string> = {
   discontinued: 'neutral',
 };
 
+const STATUS_TRANSITIONS: Record<string, string[]> = {
+  on_sale: ['hidden', 'out_of_stock', 'discontinued'],
+  hidden: ['on_sale', 'discontinued'],
+  out_of_stock: ['on_sale', 'hidden', 'discontinued'],
+  discontinued: ['hidden'],
+};
+
+interface CsvPreviewError {
+  row?: number;
+  field?: string;
+  message?: string;
+}
+
+interface CsvPreviewResult {
+  rows?: Array<Record<string, unknown>>;
+  errors?: CsvPreviewError[];
+  totalRows?: number;
+  validRows?: number;
+}
+
 /**
  * Catalog ViewModel: server-paged list, product editor, variants/stock, CSV, audit.
  */
@@ -64,17 +84,46 @@ export class AdminProductsPage {
   readonly loadError = signal<string | null>(null);
   readonly csvMessage = signal('Chưa có file được kiểm tra.');
   readonly csvPreview = signal('');
+  readonly csvRows = signal<Array<Record<string, unknown>>>([]);
+  readonly csvErrors = signal<CsvPreviewError[]>([]);
+  readonly csvValidRows = signal(0);
+  readonly csvTotalRows = signal(0);
   readonly logs = signal<AdminAuditRow[]>([]);
   readonly logsLoading = signal(false);
+  readonly logsTotal = signal(0);
+  readonly logsPage = signal(1);
+  readonly logsPageSize = 10;
   readonly selected = signal<AdminProductRow | null>(null);
   readonly overlay = signal<ProductOverlay>(null);
   readonly actionError = signal<string | null>(null);
   readonly nextStatus = signal('');
   readonly priceHistory = signal<AdminPriceHistoryRow[]>([]);
   readonly canMutate = computed(() => this.session.canMutate('products'));
+  readonly canOpenPricing = computed(() => this.session.canOpen('pricing'));
+  readonly allowedStatuses = computed(() => {
+    const current = this.selected()?.status || 'on_sale';
+    const next = STATUS_TRANSITIONS[current] || ['hidden'];
+    return next.map((value) => ({
+      value,
+      label: STATUS_LABEL[value] || value,
+      hint:
+        value === 'hidden'
+          ? 'Ẩn khỏi storefront, giữ dữ liệu đơn cũ'
+          : value === 'discontinued'
+            ? 'Xóa mềm / ngừng kinh doanh'
+            : value === 'out_of_stock'
+              ? 'Hết hàng, khách không đặt được'
+              : 'Hiện lại trên storefront',
+    }));
+  });
+  readonly csvHasErrors = computed(() => this.csvErrors().length > 0);
 
   readonly pageCount = computed(() => Math.max(1, Math.ceil(this.total() / this.pageSize)));
   readonly rangeLabel = computed(() => adminRangeLabel(this.total(), this.page(), this.pageSize, 'sản phẩm'));
+  readonly logsPageCount = computed(() => Math.max(1, Math.ceil(this.logsTotal() / this.logsPageSize)));
+  readonly logsRangeLabel = computed(() =>
+    adminRangeLabel(this.logsTotal(), this.logsPage(), this.logsPageSize, 'nhật ký'),
+  );
 
   constructor() {
     this.reloadCatalog();
@@ -88,9 +137,17 @@ export class AdminProductsPage {
    */
   setTab(tab: ProductTab): void {
     this.tab.set(tab);
-    if (tab === 'logs' && !this.logs().length) {
+    if (tab === 'logs') {
       this.loadLogs();
     }
+  }
+
+  /**
+   * Moves product-audit pagination through the same list footer as catalog.
+   */
+  goLogsPage(page: number): void {
+    this.logsPage.set(Math.min(this.logsPageCount(), Math.max(1, page)));
+    this.loadLogs();
   }
 
   /**
@@ -146,6 +203,68 @@ export class AdminProductsPage {
    */
   statusTone(status: string | undefined): string {
     return STATUS_TONE[status || ''] || 'neutral';
+  }
+
+  /**
+   * Human-readable audit actor (name + email), never raw UUID when enriched.
+   */
+  logActor(row: AdminAuditRow): string {
+    return row.actor_label || row.actor_name || row.actor_email || row.actor_id || 'Hệ thống';
+  }
+
+  /**
+   * Role label under the actor name.
+   */
+  logActorRole(row: AdminAuditRow): string {
+    return row.actor_role_label || row.actor_role || '';
+  }
+
+  /**
+   * Product/variant label for the audit target column.
+   */
+  logTarget(row: AdminAuditRow): string {
+    if (row.target_label) return row.target_label;
+    const payload = this.auditPayload(row.new_value) || this.auditPayload(row.old_value);
+    const sku = String(payload?.['sku'] || '');
+    const name = String(payload?.['name'] || '');
+    if (sku && name) return `${sku} — ${name}`;
+    if (sku || name) return sku || name;
+    return row.target_id || '—';
+  }
+
+  /**
+   * Vietnamese action label for product audit rows.
+   */
+  logAction(row: AdminAuditRow): string {
+    return row.action_label || row.action || '—';
+  }
+
+  /**
+   * Before → after summary for the audit table.
+   */
+  logChange(row: AdminAuditRow): string {
+    if (row.change_summary) return row.change_summary;
+    const oldValue = this.auditPayload(row.old_value);
+    const newValue = this.auditPayload(row.new_value);
+    if (!oldValue && !newValue) return '—';
+    if (!oldValue && newValue) {
+      const sku = String(newValue['sku'] || '');
+      const name = String(newValue['name'] || '');
+      return `— → ${[sku, name].filter(Boolean).join(' · ') || 'đã tạo'}`;
+    }
+    return 'Đã cập nhật';
+  }
+
+  /**
+   * Outcome column; product mutation audits are written only after success.
+   */
+  logResult(row: AdminAuditRow): string {
+    return row.result || 'Thành công';
+  }
+
+  private auditPayload(value: unknown): Record<string, unknown> | null {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    return value as Record<string, unknown>;
   }
 
   /**
@@ -224,6 +343,7 @@ export class AdminProductsPage {
     });
     this.adminApi.listPriceHistory({ productId: product.product_id, limit: '10' }).subscribe({
       next: (payload) => this.priceHistory.set(adminListRows(payload)),
+      error: () => this.priceHistory.set([]),
     });
   }
 
@@ -232,7 +352,8 @@ export class AdminProductsPage {
    */
   openStatus(product: AdminProductRow): void {
     this.selected.set(product);
-    this.nextStatus.set(product.status === 'on_sale' ? 'hidden' : 'on_sale');
+    const allowed = STATUS_TRANSITIONS[product.status || ''] || ['hidden'];
+    this.nextStatus.set(allowed.includes('hidden') ? 'hidden' : allowed[0] || 'hidden');
     this.overlay.set('status');
     this.actionError.set(null);
   }
@@ -282,8 +403,20 @@ export class AdminProductsPage {
           .map((item) => item.trim())
           .filter(Boolean)
       : [];
+    if (!name || name.length < 2) {
+      this.actionError.set('Tên sản phẩm phải từ 2 ký tự.');
+      return;
+    }
+    if (!categoryId) {
+      this.actionError.set('Chọn danh mục trước khi lưu.');
+      return;
+    }
     const overlay = this.overlay();
     if (overlay === 'create') {
+      if (!/^[A-Z]{2,6}-[A-Z0-9]{2,20}(-[A-Z0-9]{1,10})*$/.test(sku)) {
+        this.actionError.set('SKU phải dạng VL-AO001 hoặc VLR-DV006.');
+        return;
+      }
       const basePrice = Number((form.elements.namedItem('basePrice') as HTMLInputElement).value);
       const salePrice = Number((form.elements.namedItem('salePrice') as HTMLInputElement).value || basePrice);
       const status = (form.elements.namedItem('createStatus') as HTMLSelectElement).value || 'on_sale';
@@ -398,8 +531,16 @@ export class AdminProductsPage {
       return;
     }
     const form = event.target as HTMLFormElement;
-    const status = (form.elements.namedItem('status') as HTMLSelectElement).value;
+    const status = (form.elements.namedItem('status') as HTMLSelectElement | HTMLInputElement).value;
     const reason = (form.elements.namedItem('reason') as HTMLTextAreaElement).value.trim();
+    if (!status) {
+      this.actionError.set('Chọn trạng thái mới, gồm Tạm ẩn hoặc Ngừng kinh doanh.');
+      return;
+    }
+    if (reason.length < 10) {
+      this.actionError.set('Lý do đổi trạng thái tối thiểu 10 ký tự.');
+      return;
+    }
     this.adminApi.changeProductStatus(product.product_id, { status, reason, expectedVersion: product.version }).subscribe({
       next: () => {
         this.closeOverlays();
@@ -407,6 +548,32 @@ export class AdminProductsPage {
       },
       error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
     });
+  }
+
+  /**
+   * Selects a status option in the hide / soft-delete modal.
+   */
+  chooseStatus(status: string): void {
+    this.nextStatus.set(status);
+  }
+
+  /**
+   * Downloads the Velura CSV template with a real category UUID when available.
+   */
+  downloadCsvTemplate(): void {
+    const categoryId = this.categories()[0]?.category_id || '00000000-0000-4000-8000-000000000001';
+    const csv = [
+      'sku,name,base_price,category_id,sale_price,status,description,image_url',
+      `VLR-UAT001,Ao linen mau kem,450000,${categoryId},420000,on_sale,Mau CSV hop le,`,
+      `bad-sku,Ten thieu gia,not-a-price,${categoryId},,on_sale,Dong loi de test preview,`,
+    ].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'velura-products-template.csv';
+    link.click();
+    URL.revokeObjectURL(url);
   }
 
   /**
@@ -422,11 +589,27 @@ export class AdminProductsPage {
     reader.onload = () => {
       const csv = String(reader.result || '');
       this.csvPreview.set(csv);
+      this.csvRows.set([]);
+      this.csvErrors.set([]);
       this.adminApi.previewCsv(csv).subscribe({
         next: (result) => {
-          this.csvMessage.set(JSON.stringify(result));
+          const preview = (result || {}) as CsvPreviewResult;
+          this.csvRows.set(preview.rows || []);
+          this.csvErrors.set(preview.errors || []);
+          this.csvValidRows.set(preview.validRows || 0);
+          this.csvTotalRows.set(preview.totalRows || 0);
+          const errorCount = (preview.errors || []).length;
+          this.csvMessage.set(
+            errorCount
+              ? `Kiểm tra xong: ${preview.validRows || 0}/${preview.totalRows || 0} dòng hợp lệ, ${errorCount} dòng lỗi.`
+              : `Kiểm tra xong: ${preview.validRows || 0} dòng hợp lệ, có thể ghi catalog.`,
+          );
         },
-        error: (error: unknown) => this.csvMessage.set(adminErrorMessage(error, 'Cần đăng nhập quản trị rồi mới nhập CSV.')),
+        error: (error: unknown) => {
+          this.csvRows.set([]);
+          this.csvErrors.set([]);
+          this.csvMessage.set(adminErrorMessage(error, 'Không kiểm tra được CSV.'));
+        },
       });
     };
     reader.readAsText(file);
@@ -441,8 +624,18 @@ export class AdminProductsPage {
       this.csvMessage.set('Chưa chọn file CSV.');
       return;
     }
+    if (this.csvHasErrors()) {
+      this.csvMessage.set('Sửa các dòng lỗi trước khi ghi catalog.');
+      return;
+    }
     this.adminApi.commitCsv(csv).subscribe({
-      next: (result) => this.csvMessage.set(JSON.stringify(result)),
+      next: (result) => {
+        this.csvMessage.set('Đã ghi CSV vào catalog.');
+        this.csvRows.set([]);
+        this.csvPreview.set('');
+        this.reloadCatalog();
+        void result;
+      },
       error: (error: unknown) => this.csvMessage.set(adminErrorMessage(error, 'Cần đăng nhập quản trị rồi mới ghi CSV.')),
     });
   }
@@ -498,15 +691,21 @@ export class AdminProductsPage {
 
   private loadLogs(): void {
     this.logsLoading.set(true);
-    this.adminApi.listProductAuditLogs({ limit: '100' }).subscribe({
-      next: (payload) => {
-        this.logs.set(adminListRows(payload));
-        this.logsLoading.set(false);
-      },
-      error: (error: unknown) => {
-        this.csvMessage.set(adminErrorMessage(error));
-        this.logsLoading.set(false);
-      },
-    });
+    this.adminApi
+      .listProductAuditLogs({
+        limit: String(this.logsPageSize),
+        offset: adminOffset(this.logsPage(), this.logsPageSize),
+      })
+      .subscribe({
+        next: (payload) => {
+          this.logs.set(adminListRows(payload));
+          this.logsTotal.set(adminListCount(payload));
+          this.logsLoading.set(false);
+        },
+        error: (error: unknown) => {
+          this.csvMessage.set(adminErrorMessage(error));
+          this.logsLoading.set(false);
+        },
+      });
   }
 }

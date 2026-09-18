@@ -1,23 +1,5 @@
 <main class="admin-content">
-  <p class="admin-page-crumb">Dashboard / Đổi trả &amp; CSKH</p>
-  <section class="admin-kpi-grid" aria-label="Thống kê đổi trả và hỗ trợ">
-    <article class="admin-kpi-card">
-      <div class="admin-kpi-card__head"><p class="admin-kpi-card__label">Đổi/trả chờ xử lý</p><span class="admin-kpi-card__icon"><app-admin-icon name="refresh" /></span></div>
-      <strong class="admin-kpi-card__value">{{ pendingReturns() }}</strong>
-    </article>
-    <article class="admin-kpi-card">
-      <div class="admin-kpi-card__head"><p class="admin-kpi-card__label">Hỗ trợ chờ phản hồi</p><span class="admin-kpi-card__icon"><app-admin-icon name="support" /></span></div>
-      <strong class="admin-kpi-card__value">{{ pendingTickets() }}</strong>
-    </article>
-    <article class="admin-kpi-card">
-      <div class="admin-kpi-card__head"><p class="admin-kpi-card__label">Ưu tiên cao</p><span class="admin-kpi-card__icon"><app-admin-icon name="alert" /></span></div>
-      <strong class="admin-kpi-card__value">{{ highPriority() }}</strong>
-    </article>
-    <article class="admin-kpi-card">
-      <div class="admin-kpi-card__head"><p class="admin-kpi-card__label">Hoàn tất hôm nay</p><span class="admin-kpi-card__icon"><app-admin-icon name="check" /></span></div>
-      <strong class="admin-kpi-card__value">{{ completedToday() }}</strong>
-    </article>
-  </section>
+  <p class="admin-page-crumb">Đổi trả &amp; CSKH / Hàng đợi</p>
   <section class="admin-card" aria-label="Danh sách đổi trả và hỗ trợ">
     <div class="admin-tabs" role="tablist">
       <button class="admin-tab" [class.admin-tab--active]="zone() === 'chat'" type="button" (click)="setZone('chat')">

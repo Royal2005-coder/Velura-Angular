@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { catchError, filter, finalize, map, of, startWith } from 'rxjs';
@@ -18,11 +18,23 @@ export class AdminShell {
   private readonly api = inject(AdminApiService);
   readonly session = inject(AdminSessionService);
   readonly sidebarCollapsed = signal(false);
+  readonly mobileNavOpen = signal(false);
   readonly logoutConfirmOpen = signal(false);
   readonly signingOut = signal(false);
+  readonly menuLabel = computed(() => {
+    this.mobileNavOpen();
+    this.sidebarCollapsed();
+    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches) {
+      return this.mobileNavOpen() ? 'Đóng menu' : 'Mở menu';
+    }
+    return this.sidebarCollapsed() ? 'Mở sidebar' : 'Đóng sidebar';
+  });
 
   constructor() {
     useBodyClass('admin-page');
+    this.router.events.pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd)).subscribe(() => {
+      this.mobileNavOpen.set(false);
+    });
   }
 
   readonly pageTitle = toSignal(
@@ -48,10 +60,21 @@ export class AdminShell {
   }
 
   /**
-   * Collapses the original admin sidebar.
+   * Opens the off-canvas nav on mobile and collapses the desktop sidebar.
    */
   toggleSidebar(): void {
+    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches) {
+      this.mobileNavOpen.update((open) => !open);
+      return;
+    }
     this.sidebarCollapsed.update((open) => !open);
+  }
+
+  /**
+   * Closes the mobile off-canvas sidebar.
+   */
+  closeMobileNav(): void {
+    this.mobileNavOpen.set(false);
   }
 
   /**

@@ -77,16 +77,30 @@ test("admin mutations send expectedVersion through typed API services", async ()
 });
 
 test("dashboard backend uses the canonical, service-only Supabase aggregation", async () => {
-  const [dashboard, migration] = await Promise.all([
+  const [dashboard, migration, olap, router, api] = await Promise.all([
     source("apps/api/src/dashboard.ts"),
-    source("database/migrations/018_admin_dashboard_summary.sql")
+    source("database/migrations/018_admin_dashboard_summary.sql"),
+    source("database/migrations/022_admin_dashboard_olap_star.sql"),
+    source("apps/api/src/dashboard-router.ts"),
+    source("apps/admin-ng/src/app/core/admin-api.service.ts")
   ]);
   assert.match(dashboard, /callRpc\("get_admin_dashboard_summary"/);
+  assert.match(dashboard, /callRpc\(\s*"get_admin_olap_summary"/);
+  assert.match(dashboard, /callRpc\(\s*"refresh_analytics_star"/);
   assert.match(migration, /security invoker/i);
   assert.match(migration, /revoke all on function .* from public, anon, authenticated/i);
   assert.match(migration, /grant execute on function .* to service_role/i);
   assert.match(migration, /join current_orders o on o\.order_id = oi\.order_id/i);
   assert.match(migration, /count\(distinct product_id\)/i);
+  assert.match(olap, /create schema if not exists analytics/i);
+  assert.match(olap, /analytics\.fact_order/);
+  assert.match(olap, /grant execute on function public\.get_admin_olap_summary/i);
+  assert.match(router, /api\/v1\/admin\/dashboard/);
+  assert.match(api, /\/api\/v1\/admin\/dashboard/);
+  assert.match(api, /\/api\/v1\/admin\/insights/);
+  assert.match(dashboard, /CUSTOM_DASHBOARD_RANGE_DISABLED/);
+  const insights = await source("apps/api/src/insights-router.ts");
+  assert.match(insights, /api\/v1\/admin\/insights/);
 });
 
 test("feature routes lazy-load page ViewModels", async () => {
@@ -98,6 +112,29 @@ test("feature routes lazy-load page ViewModels", async () => {
   assert.match(userRoutes, /loadComponent:\s*\(\)\s*=>\s*import\('\.\/features\/home\/home\.page'\)/);
   assert.doesNotMatch(adminRoutes, /component:\s*AdminProductsPage/);
   assert.doesNotMatch(userRoutes, /component:\s*HomePage/);
+});
+
+test("admin login stays open so another account can replace a leftover session", async () => {
+  const guard = await source("apps/admin-ng/src/app/core/admin-auth.guard.ts");
+  assert.match(guard, /export const adminGuestGuard: CanActivateFn = \(\) => true/);
+  const login = await source("apps/admin-ng/src/app/features/login/admin-login.page.ts");
+  assert.match(login, /this\.session\.clear\(\)/);
+});
+
+test("admin shell does not require HQ dashboard before operator modules", async () => {
+  const [routes, guard, home] = await Promise.all([
+    source("apps/admin-ng/src/app/app.routes.ts"),
+    source("apps/admin-ng/src/app/core/admin-auth.guard.ts"),
+    source("apps/admin-ng/src/app/core/admin-home-redirect.ts")
+  ]);
+  assert.match(routes, /canActivate: \[adminShellGuard\]/);
+  assert.match(routes, /AdminHomeRedirectPage/);
+  assert.doesNotMatch(routes, /component: AdminShell,\s*canActivate: \[adminAuthGuard\]/);
+  assert.match(guard, /export const adminShellGuard/);
+  assert.match(guard, /page === 'dashboard'/);
+  assert.doesNotMatch(guard, /route\.data\['page'\] \|\| 'dashboard'/);
+  assert.match(guard, /export const adminHomeRedirectGuard/);
+  assert.match(home, /adminHomeRedirectGuard/);
 });
 
 test("admin registration page has no demo account creation path", async () => {
@@ -165,13 +202,13 @@ test("customer wishlist uses users.wishlist JSON and not a dedicated wishlist ta
 });
 
 test("profile birthday validation stays on the API contract", async () => {
-  const [profileApi, rbac] = await Promise.all([
+  const [profileApi, authProfile] = await Promise.all([
     source("apps/api/src/user/profile.ts"),
-    source("apps/api/src/rbac.ts")
+    source("apps/api/src/auth-profile.ts")
   ]);
   assert.match(profileApi, /validateDateOfBirth\(date_of_birth\)/);
   assert.match(profileApi, /user_id:\s*`eq\.\$\{profile\.user_id\}`/);
-  assert.match(rbac, /"date_of_birth",\s*"gender"/);
+  assert.match(authProfile, /"date_of_birth",\s*"gender"/);
 });
 
 test("production disables hardcoded OTP shortcuts and fabricated notifications", async () => {

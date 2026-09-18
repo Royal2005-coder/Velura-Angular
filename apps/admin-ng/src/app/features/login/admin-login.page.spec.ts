@@ -16,6 +16,16 @@ describe('AdminLoginPage', () => {
     expect(page.submitting()).toBe(false);
   });
 
+  it('clears a leftover HQ session before verifying another account', async () => {
+    const page = await createAdminPage(AdminLoginPage);
+    const session = TestBed.inject(AdminSessionService);
+    session.setToken('leftover-super-admin');
+    page.form.setValue({ email: 'product@velura.vn', password: 'secret-pass' });
+    page.submit();
+    expect(session.token()).toBe('');
+    expect(page.errorMessage()).toBe('Không nhận được phiên đăng nhập.');
+  });
+
   it('formats the AUTH-02 lock countdown as mm:ss', () => {
     expect(formatCountdown(15 * 60 * 1000)).toBe('15:00');
     expect(formatCountdown(65_000)).toBe('01:05');
@@ -30,17 +40,18 @@ describe('AdminSessionService RBAC landing', () => {
       role: 'admin_operator_sanpham',
       roleName: 'Admin sản phẩm',
       isAdmin: true,
-      allowedPages: ['products', 'dashboard'],
+      allowedPages: ['products'],
       user: { id: 'p1', email: 'product@velura.vn' },
     });
     expect(session.firstRoute()).toBe('/products');
     expect(session.canOpen('orders')).toBe(false);
+    expect(session.canOpen('dashboard')).toBe(false);
 
     session.applyAuthContext({
       role: 'admin_operator_donhang',
       roleName: 'Admin đơn hàng',
       isAdmin: true,
-      allowedPages: ['orders', 'dashboard'],
+      allowedPages: ['orders'],
       user: { id: 'o1', email: 'order@velura.vn' },
     });
     expect(session.firstRoute()).toBe('/orders');
@@ -50,8 +61,8 @@ describe('AdminSessionService RBAC landing', () => {
       role: 'admin_operator_cskh_dt',
       roleName: 'Admin CSKH',
       isAdmin: true,
-      allowedPages: ['returns-cskh', 'dashboard'],
-      allowedModules: ['returns', 'orders', 'dashboard'],
+      allowedPages: ['returns-cskh'],
+      allowedModules: ['returns', 'orders'],
       user: { id: 'c1', email: 'cskh-test@velura.vn' },
     });
     expect(session.firstRoute()).toBe('/returns');

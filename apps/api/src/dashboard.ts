@@ -1,10 +1,13 @@
 import { callRpc } from "./supabase.js";
 import { HttpError } from "./http.js";
-import { asJsonObject, isJsonObject } from "./types.js";
+import { asJsonObject, isJsonObject, type JsonObject } from "./types.js";
+import { loadVoiceInsights, type VoiceInsights } from "./insights.js";
 
 const BUSINESS_TIMEZONE_OFFSET_MS = 7 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
-const MAX_CUSTOM_RANGE_DAYS = 366;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+export const DASHBOARD_MIN_REVIEW_SAMPLE = 30;
+export const DASHBOARD_MIN_CSAT_SAMPLE = 20;
 
 function localDateParts(now = new Date()) {
   const vietnam = new Date(now.getTime() + BUSINESS_TIMEZONE_OFFSET_MS);
@@ -19,46 +22,29 @@ function vietnamMidnightUtc(year: number, month: number, day: number) {
   return new Date(Date.UTC(year, month, day) - BUSINESS_TIMEZONE_OFFSET_MS);
 }
 
-function parseBusinessDate(value: string, fieldName: string) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value || "")) {
-    throw new HttpError(400, "INVALID_DASHBOARD_DATE", `${fieldName} phải có định dạng YYYY-MM-DD`);
+export function optionalUuid(searchParams: URLSearchParams | null, key: string): string | null {
+  const value = searchParams?.get(key)?.trim() || "";
+  if (!value) return null;
+  if (!UUID_RE.test(value)) {
+    throw new HttpError(400, "INVALID_DASHBOARD_FILTER", `${key} phải là UUID`);
   }
-  const [year, month, day] = value.split("-").map(Number);
-  const parsed = vietnamMidnightUtc(year, month - 1, day);
-  const check = new Date(parsed.getTime() + BUSINESS_TIMEZONE_OFFSET_MS);
-  if (
-    check.getUTCFullYear() !== year ||
-    check.getUTCMonth() !== month - 1 ||
-    check.getUTCDate() !== day
-  ) {
-    throw new HttpError(400, "INVALID_DASHBOARD_DATE", `${fieldName} không phải ngày hợp lệ`);
-  }
-  return parsed;
+  return value;
 }
 
 /**
- * Resolve the dashboard reporting window from query params (Vietnam business dates).
+ * Resolve the dashboard reporting window. Only day / week / month — no custom dates.
  */
 export function resolveDashboardPeriod(searchParams: URLSearchParams | null, now = new Date()) {
-  const fromValue = searchParams?.get("from");
-  const toValue = searchParams?.get("to");
-  const requestedRange = searchParams?.get("range") || "week";
-
-  if (fromValue || toValue) {
-    if (!fromValue || !toValue) {
-      throw new HttpError(400, "INCOMPLETE_DASHBOARD_RANGE", "Cần chọn đủ ngày bắt đầu và ngày kết thúc");
-    }
-    const from = parseBusinessDate(fromValue, "Ngày bắt đầu");
-    const to = new Date(parseBusinessDate(toValue, "Ngày kết thúc").getTime() + DAY_MS);
-    const days = Math.round((to.getTime() - from.getTime()) / DAY_MS);
-    if (to.getTime() <= from.getTime() || days > MAX_CUSTOM_RANGE_DAYS) {
-      throw new HttpError(400, "INVALID_DASHBOARD_RANGE", "Khoảng thời gian phải từ 1 đến 366 ngày");
-    }
-    return { range: "custom", from, to, days };
+  if (searchParams?.get("from") || searchParams?.get("to")) {
+    throw new HttpError(
+      400,
+      "CUSTOM_DASHBOARD_RANGE_DISABLED",
+      "Khoảng thời gian chỉ hỗ trợ ngày, tuần hoặc tháng"
+    );
   }
-
+  const requestedRange = searchParams?.get("range") || "week";
   if (!["day", "week", "month"].includes(requestedRange)) {
-    throw new HttpError(400, "INVALID_DASHBOARD_RANGE", "Khoảng xem chỉ hỗ trợ ngày, tuần, tháng hoặc tùy chọn");
+    throw new HttpError(400, "INVALID_DASHBOARD_RANGE", "Khoảng xem chỉ hỗ trợ ngày, tuần hoặc tháng");
   }
 
   const { year, month, day } = localDateParts(now);
@@ -69,38 +55,191 @@ export function resolveDashboardPeriod(searchParams: URLSearchParams | null, now
   return { range: requestedRange, from, to, days };
 }
 
+function asFiniteNumber(value: unknown): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function mapBestSellers(raw: unknown) {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((item) => {
+    const row = isJsonObject(item) ? item : {};
+    const stockStatus = String(row.stockStatus || "");
+    const statusClass = String(row.statusClass || "");
+    return {
+      product_id: typeof row.product_id === "string" ? row.product_id : undefined,
+      sku: typeof row.sku === "string" ? row.sku : undefined,
+      name: String(row.name || "Sản phẩm"),
+      sold: asFiniteNumber(row.sold ?? row.qty),
+      revenue: asFiniteNumber(row.revenue),
+      lowStock:
+        row.lowStock === true ||
+        stockStatus === "Sắp hết" ||
+        stockStatus === "Hết hàng" ||
+        statusClass === "warning" ||
+        statusClass === "danger"
+    };
+  });
+}
+
+function mapCategories(raw: unknown) {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((item) => {
+    const row = isJsonObject(item) ? item : {};
+    return {
+      category_id: typeof row.category_id === "string" ? row.category_id : undefined,
+      name: String(row.name || "Khác"),
+      revenue: asFiniteNumber(row.revenue),
+      pct: asFiniteNumber(row.pct)
+    };
+  });
+}
+
+function mapTrend(raw: unknown) {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((item) => {
+    const row = isJsonObject(item) ? item : {};
+    return {
+      date: String(row.date || ""),
+      dateStr: String(row.dateStr || row.date || ""),
+      revenue: asFiniteNumber(row.revenue),
+      orderCount: asFiniteNumber(row.orderCount)
+    };
+  });
+}
+
+/**
+ * Labels the KPI source and refuses to treat tiny VoC samples as planning facts.
+ */
+export function dashboardProvenance(olapUsed: boolean, voice: VoiceInsights | null | undefined) {
+  const reviews = asFiniteNumber(voice?.productReaction?.reviewCount);
+  const csat = asFiniteNumber(voice?.serviceQuality?.csatCount);
+  const deliveredOrders = asFiniteNumber(voice?.coverage?.deliveredOrders);
+  return {
+    generatedAt: new Date().toISOString(),
+    source: olapUsed ? "analytics.star" : "oltp.rpc",
+    definitions: {
+      revenue: "Tổng doanh thu đơn trong kỳ",
+      orderCount: "Số đơn trong kỳ",
+      averageOrderValue: "Doanh thu / số đơn",
+      completionRate: "Tỷ lệ đơn hoàn tất trong kỳ"
+    },
+    samples: { reviews, csat, deliveredOrders },
+    reliable: {
+      reviews: reviews >= DASHBOARD_MIN_REVIEW_SAMPLE,
+      csat: csat >= DASHBOARD_MIN_CSAT_SAMPLE
+    }
+  };
+}
+
+/**
+ * Maps RPC JSON (OLAP or legacy OLTP) onto the Angular dashboard contract.
+ */
+export function normalizeDashboardSummary(summary: JsonObject): JsonObject {
+  const business = isJsonObject(summary.business) ? { ...summary.business } : {};
+  const operations = isJsonObject(summary.operations) ? { ...summary.operations } : {};
+  const comparisons = isJsonObject(business.comparisons) ? { ...business.comparisons } : {};
+  if (comparisons.orderCountPct === null) {
+    comparisons.completionRatePoints = null;
+  }
+  const customers = asFiniteNumber(business.customers ?? business.customerCount);
+
+  return {
+    ...summary,
+    operations: {
+      pendingOrders: asFiniteNumber(operations.pendingOrders),
+      paymentErrors: asFiniteNumber(operations.paymentErrors),
+      openReturns: asFiniteNumber(operations.openReturns),
+      openSupportTickets: asFiniteNumber(operations.openSupportTickets),
+      lowStockProducts: asFiniteNumber(operations.lowStockProducts),
+      urgentReviews: asFiniteNumber(operations.urgentReviews),
+      returnsDueSoon: asFiniteNumber(operations.returnsDueSoon)
+    },
+    business: {
+      ...business,
+      revenue: asFiniteNumber(business.revenue),
+      orderCount: asFiniteNumber(business.orderCount),
+      customers,
+      customerCount: customers,
+      averageOrderValue: asFiniteNumber(business.averageOrderValue),
+      completionRate: asFiniteNumber(business.completionRate),
+      promotionRevenue: asFiniteNumber(business.promotionRevenue),
+      promotionRevenueShare: asFiniteNumber(business.promotionRevenueShare),
+      pendingReviews: asFiniteNumber(business.pendingReviews),
+      comparisons,
+      categoryContributions: mapCategories(business.categoryContributions),
+      bestSellers: mapBestSellers(business.bestSellers),
+      revenueTrend: mapTrend(business.revenueTrend)
+    }
+  };
+}
+
+async function loadOlapSummary(
+  period: { from: Date; to: Date },
+  categoryId: string | null,
+  productId: string | null
+): Promise<JsonObject | null> {
+  try {
+    await callRpc(
+      "refresh_analytics_star",
+      { p_max_age: "5 minutes" },
+      { silentError: true }
+    );
+    const summary = await callRpc(
+      "get_admin_olap_summary",
+      {
+        p_from: period.from.toISOString(),
+        p_to: period.to.toISOString(),
+        p_category_id: categoryId,
+        p_product_id: productId
+      },
+      { silentError: true }
+    );
+    if (!summary || typeof summary !== "object") return null;
+    return asJsonObject(summary);
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Build the admin dashboard summary for a query range, or the default week when params are null.
  */
 export async function buildDashboardSummary(searchParams: URLSearchParams | null, now = new Date()) {
   const period = resolveDashboardPeriod(searchParams, now);
-  const summary = await callRpc("get_admin_dashboard_summary", {
-    p_from: period.from.toISOString(),
-    p_to: period.to.toISOString()
-  });
+  const categoryId = optionalUuid(searchParams, "categoryId");
+  const productId = optionalUuid(searchParams, "productId");
+  const olap = await loadOlapSummary(period, categoryId, productId);
+  const summary =
+    olap ||
+    (await callRpc("get_admin_dashboard_summary", {
+      p_from: period.from.toISOString(),
+      p_to: period.to.toISOString()
+    }));
 
   if (!summary || typeof summary !== "object") {
     throw new HttpError(502, "INVALID_DASHBOARD_SUMMARY", "Supabase không trả về dữ liệu dashboard hợp lệ");
   }
 
-  const summaryObject = asJsonObject(summary);
-
-  // A percentage/point comparison is undefined when the previous period has
-  // no orders. The SQL returns null for count/revenue deltas; normalize every
-  // related comparison here so the UI never presents a fabricated increase.
-  const business = summaryObject.business;
-  if (isJsonObject(business)) {
-    const comparisons = business.comparisons;
-    if (isJsonObject(comparisons) && comparisons.orderCountPct === null) {
-      comparisons.completionRatePoints = null;
-    }
-  }
-
+  const mapped = normalizeDashboardSummary(asJsonObject(summary));
+  const voice = await loadVoiceInsights(period, productId);
+  const existingMeta = isJsonObject(mapped.meta) ? mapped.meta : {};
   return {
-    ...summaryObject,
+    ...mapped,
+    operations: mapped.operations,
+    business: mapped.business,
     range: period.range,
     from: period.from.toISOString(),
     to: new Date(period.to.getTime() - 1).toISOString(),
-    periodDays: period.days
+    periodDays: period.days,
+    filters: {
+      categoryId,
+      productId
+    },
+    voice,
+    meta: {
+      ...existingMeta,
+      ...dashboardProvenance(Boolean(olap), voice)
+    }
   };
 }

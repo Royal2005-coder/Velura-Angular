@@ -58,6 +58,7 @@ export interface AdminSession {
 @Injectable({ providedIn: 'root' })
 export class AdminSessionService {
   private readonly sessionState = signal<AdminSession | null>(this.readStoredSession());
+  readonly hydrating = signal(false);
   readonly session = this.sessionState.asReadonly();
   readonly isLoggedIn = computed(() => Boolean(this.sessionState()));
   readonly isAdmin = computed(() => this.sessionState()?.type === 'admin');
@@ -121,7 +122,16 @@ export class AdminSessionService {
       localStorage.removeItem(key);
     }
     this.sessionState.set(session);
+    this.hydrating.set(false);
     return session;
+  }
+
+  /**
+   * Hides the leftover profile while `/api/auth/me` confirms the current role.
+   */
+  beginHydration(): void {
+    this.hydrating.set(true);
+    this.sessionState.set(null);
   }
 
   /**
@@ -137,6 +147,7 @@ export class AdminSessionService {
       localStorage.removeItem(key);
     }
     this.sessionState.set(null);
+    this.hydrating.set(false);
   }
 
   /**

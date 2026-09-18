@@ -39,12 +39,18 @@ test("AUTH-02 locked accounts stay closed until locked_until", () => {
   );
 });
 
-test("operator landing pages stay on the role module, not a shared accounts screen", () => {
-  assert.deepEqual(rolePages.admin_operator_sanpham, ["products", "dashboard"]);
-  assert.deepEqual(rolePages.admin_operator_donhang, ["orders", "dashboard"]);
-  assert.deepEqual(rolePages.admin_operator_cskh_dt, ["returns-cskh", "dashboard"]);
+test("operator landing pages stay on the role module, not the HQ dashboard", () => {
+  assert.deepEqual(rolePages.admin_operator_sanpham, ["products"]);
+  assert.deepEqual(rolePages.admin_operator_donhang, ["orders"]);
+  assert.deepEqual(rolePages.admin_operator_cskh_dt, ["returns-cskh"]);
+  assert.deepEqual(rolePages.admin_operator_gia_km, ["pricing", "promotions"]);
+  assert.deepEqual(rolePages.admin_operator_danhgia_review, ["reviews"]);
+  assert.ok(rolePages.super_admin.includes("dashboard"));
+  assert.ok(rolePages.admin_viewer.includes("dashboard"));
+  assert.equal(rolePages.admin_operator_sanpham.includes("dashboard"), false);
   assert.ok(accessForRole("admin_operator_cskh_dt").allowedModules.includes("orders"));
   assert.equal(accessForRole("admin_operator_sanpham").allowedModules.includes("orders"), false);
+  assert.equal(accessForRole("admin_operator_sanpham").allowedModules.includes("dashboard"), false);
 });
 
 test("admin password grant and sign-out stay on the custom API", async () => {

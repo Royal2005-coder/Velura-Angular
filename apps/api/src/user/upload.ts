@@ -12,6 +12,14 @@ const STORAGE_BUCKET = "return-evidence";
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
+/** Nơi cất tệp: kho chứa và thư mục con bên trong kho. */
+export interface StorageTarget {
+  bucket: string;
+  prefix: string;
+}
+
+const EVIDENCE_TARGET: StorageTarget = { bucket: STORAGE_BUCKET, prefix: "evidence" };
+
 /**
  * Upload a single image file buffer to Supabase Storage.
  * Returns the public URL.
@@ -19,7 +27,8 @@ const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 export async function uploadToSupabaseStorage(
   buffer: Buffer,
   filename: string,
-  mimeType: string
+  mimeType: string,
+  target: StorageTarget = EVIDENCE_TARGET
 ): Promise<string> {
   if (!config.supabaseUrl || !config.supabaseAnonKey) {
     throw new HttpError(503, "STORAGE_NOT_CONFIGURED", "Supabase Storage is not configured");
@@ -27,8 +36,8 @@ export async function uploadToSupabaseStorage(
 
   // Sanitize filename
   const ext = filename.split(".").pop()?.toLowerCase() || "jpg";
-  const uniqueName = `evidence/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
-  const uploadUrl = `${config.supabaseUrl}/storage/v1/object/${STORAGE_BUCKET}/${uniqueName}`;
+  const uniqueName = `${target.prefix}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+  const uploadUrl = `${config.supabaseUrl}/storage/v1/object/${target.bucket}/${uniqueName}`;
 
   console.log(`[UPLOAD] Uploading to Supabase Storage: ${uploadUrl} (${buffer.length} bytes, ${mimeType})`);
 
@@ -55,44 +64,42 @@ export async function uploadToSupabaseStorage(
       // keep default message
     }
     console.error(`[UPLOAD ERROR] Supabase Storage returned ${response.status}: ${errMsg}`);
-    console.error(`[UPLOAD ERROR] Bucket '${STORAGE_BUCKET}' may not exist or missing upload policy.`);
+    console.error(`[UPLOAD ERROR] Bucket '${target.bucket}' may not exist or missing upload policy.`);
     throw new HttpError(502, "STORAGE_UPLOAD_FAILED", `Supabase Storage: ${errMsg}`);
   }
 
   // Public URL format for Supabase Storage
-  const publicUrl = `${config.supabaseUrl}/storage/v1/object/public/${STORAGE_BUCKET}/${uniqueName}`;
+  const publicUrl = `${config.supabaseUrl}/storage/v1/object/public/${target.bucket}/${uniqueName}`;
   return publicUrl;
 }
 
-/**
- * POST /api/user/upload/evidence
- * Accepts multipart/form-data with a single "file" field.
- * Returns { success: true, url: "https://..." }
- */
-export async function handleUploadRoute(
-  req: HttpRequest,
-  res: HttpResponse,
-  corsHeaders: HeaderMap
-): Promise<void> {
-  if (req.method !== "POST") {
-    throw new HttpError(405, "METHOD_NOT_ALLOWED", "Only POST is accepted");
-  }
+/** Tệp ảnh đã đọc xong từ thân yêu cầu multipart. */
+export interface UploadedImage {
+  fileBuffer: Buffer;
+  fileName: string;
+  mimeType: string;
+}
 
+/**
+ * Đọc một ảnh từ thân yêu cầu multipart/form-data và kiểm tra kích thước, kiểu tệp.
+ *
+ * Tách ra khỏi `handleUploadRoute` để các tuyến khác dùng lại được phần đọc tệp mà
+ * vẫn tự đặt chốt quyền của riêng mình — tuyến bằng chứng đổi trả không yêu cầu đăng
+ * nhập, còn tuyến tải ảnh banner thì chỉ dành cho người vận hành khuyến mãi.
+ */
+export async function readMultipartImage(req: HttpRequest): Promise<UploadedImage> {
   const contentType = req.headers["content-type"] || "";
   const contentTypeText = Array.isArray(contentType) ? contentType.join(",") : contentType;
   if (!contentTypeText.includes("multipart/form-data")) {
     throw new HttpError(400, "BAD_REQUEST", "Content-Type must be multipart/form-data");
   }
 
-  // Extract boundary from Content-Type header
-  // e.g. "multipart/form-data; boundary=----WebKitFormBoundaryXXXX"
   const boundaryMatch = contentTypeText.match(/boundary=([^\s;]+)/i);
   if (!boundaryMatch) {
     throw new HttpError(400, "BAD_REQUEST", "Missing multipart boundary in Content-Type");
   }
-  const boundary = boundaryMatch[1].replace(/^"|"$/g, ""); // strip surrounding quotes if any
+  const boundary = boundaryMatch[1].replace(/^"|"$/g, "");
 
-  // Read entire body as a Buffer
   const chunks: Buffer[] = [];
   let totalSize = 0;
   const iterator = req[Symbol.asyncIterator];
@@ -111,23 +118,34 @@ export async function handleUploadRoute(
     }
     chunks.push(buffer);
   }
-  const body = Buffer.concat(chunks);
 
-  console.log(`[UPLOAD] Body received: ${body.length} bytes, boundary: ${boundary}`);
-
-  // Parse multipart body
-  const { fileBuffer, fileName, mimeType } = parseMultipartFile(body, boundary);
-
+  const { fileBuffer, fileName, mimeType } = parseMultipartFile(Buffer.concat(chunks), boundary);
   if (!fileBuffer || fileBuffer.length === 0) {
     throw new HttpError(400, "BAD_REQUEST", "No file found in the request body");
   }
-
-  console.log(`[UPLOAD] Parsed file: ${fileName}, type: ${mimeType}, size: ${fileBuffer.length}`);
-
   if (!ALLOWED_TYPES.includes(mimeType)) {
     throw new HttpError(415, "UNSUPPORTED_MEDIA_TYPE",
       `File type '${mimeType}' is not allowed. Accepted: JPG, PNG, WebP, GIF`);
   }
+  return { fileBuffer, fileName, mimeType };
+}
+
+/**
+ * POST /api/user/upload/evidence
+ * Accepts multipart/form-data with a single "file" field.
+ * Returns { success: true, url: "https://..." }
+ */
+export async function handleUploadRoute(
+  req: HttpRequest,
+  res: HttpResponse,
+  corsHeaders: HeaderMap
+): Promise<void> {
+  if (req.method !== "POST") {
+    throw new HttpError(405, "METHOD_NOT_ALLOWED", "Only POST is accepted");
+  }
+
+  const { fileBuffer, fileName, mimeType } = await readMultipartImage(req);
+  console.log(`[UPLOAD] Parsed file: ${fileName}, type: ${mimeType}, size: ${fileBuffer.length}`);
 
   const publicUrl = await uploadToSupabaseStorage(fileBuffer, fileName, mimeType);
   return sendJson(res, 200, { success: true, url: publicUrl }, corsHeaders);

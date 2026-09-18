@@ -6,10 +6,11 @@ import { adminErrorMessage, adminListCount, adminListRows, adminOffset, adminRan
 import { AdminSessionService } from '../../core/admin-session.service';
 import { AdminEmptyState } from '../../shared/admin-empty-state';
 import { AdminPagination } from '../../shared/admin-pagination';
+import { CampaignForm } from './campaign-form';
 
 @Component({
   selector: 'app-admin-promotions-page',
-  imports: [AdminEmptyState, AdminPagination],
+  imports: [AdminEmptyState, AdminPagination, CampaignForm],
   templateUrl: './admin-promotions.page.html',
 })
 export class AdminPromotionsPage {
@@ -30,6 +31,10 @@ export class AdminPromotionsPage {
   readonly stats = signal<AdminPricingStatistics | null>(null);
   readonly statsLoading = signal(false);
   readonly statsError = signal<string | null>(null);
+
+  /** Form tạo/sửa chiến dịch. `editing` bằng null nghĩa là đang tạo mới. */
+  readonly formOpen = signal(false);
+  readonly editing = signal<AdminPromotionRow | null>(null);
 
   readonly activeCampaigns = computed(() => this.promotions().filter((row) => this.isCampaignActive(row)).length);
   readonly pendingCampaigns = computed(() => this.promotions().length - this.activeCampaigns());
@@ -282,6 +287,33 @@ export class AdminPromotionsPage {
    */
   sellingPrice(basePrice: number | undefined, salePrice: number | null | undefined): string {
     return this.money(salePrice || basePrice);
+  }
+
+  /** Mở form tạo chiến dịch mới. */
+  openCreate(): void {
+    this.editing.set(null);
+    this.formOpen.set(true);
+  }
+
+  /** Mở form sửa một chiến dịch có sẵn. */
+  openEdit(row: AdminPromotionRow): void {
+    this.editing.set(row);
+    this.formOpen.set(true);
+  }
+
+  /** Đóng form, không lưu gì. */
+  closeForm(): void {
+    this.formOpen.set(false);
+    this.editing.set(null);
+  }
+
+  /**
+   * Lưu xong thì đóng form và tải lại bảng — bản ghi vừa lưu đã tăng `version`, giữ
+   * lại bản cũ trên màn hình sẽ khiến thao tác kế tiếp vấp lỗi phiên bản.
+   */
+  onCampaignSaved(): void {
+    this.closeForm();
+    this.reload();
   }
 
   /**

@@ -1,0 +1,129 @@
+name: CI
+
+# Pipeline trên GitHub Actions cho Velura.
+#
+# Thay thế .gitlab-ci.yml cho nhánh phát triển trên GitHub. Ba việc, chạy theo đúng
+# thứ tự tốn kém tăng dần: kiểm kiểu → chạy test → build. Hỏng ở bước rẻ thì không
+# tốn thời gian cho bước đắt.
+
+on:
+  push:
+    branches: [main, develop, 'feature/**', 'claude/**']
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+concurrency:
+  # Push liên tiếp lên cùng một nhánh thì chỉ giữ lần chạy mới nhất.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  typecheck:
+    name: Kiểm kiểu API
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Cài đặt phụ thuộc
+        run: npm ci
+
+      - name: tsc --noEmit
+        run: npm run typecheck:api
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    needs: typecheck
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [api, user, admin]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Cài đặt phụ thuộc
+        run: npm ci
+
+      - name: Chạy test ${{ matrix.suite }}
+        run: npm run test:${{ matrix.suite }}
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Cài đặt phụ thuộc
+        run: npm ci
+
+      - name: Build API + hai SPA
+        run: npm run build
+
+      - name: Lưu bản build
+        uses: actions/upload-artifact@v4
+        with:
+          name: velura-dist
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            apps/api/dist
+            apps/user-ng/dist
+            apps/admin-ng/dist
+
+  migrations:
+    name: Kiểm tra migration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Migration được đánh số tuần tự và không sửa lại bản đã chạy. Hai nhánh cùng
+      # thêm một số thứ tự là lỗi hay gặp nhất khi merge, và nếu không chặn ở đây thì
+      # chỉ lộ ra lúc chạy thật trên production.
+      #
+      # Chỉ chặn từ 025 trở đi: kho hiện đã có sẵn trùng số ở 005 (005/005b/005c) và
+      # 015 (ba file). Đó là nợ cũ, dọn riêng — không để nó làm đỏ mọi lần chạy.
+      - name: Chặn trùng số thứ tự migration mới
+        run: |
+          set -euo pipefail
+          duplicates=$(ls database/migrations \
+            | grep -oE '^[0-9]+' \
+            | awk '$1 + 0 >= 25' \
+            | sort \
+            | uniq -d || true)
+          if [ -n "$duplicates" ]; then
+            echo "::error::Trùng số thứ tự migration: $duplicates"
+            for n in $duplicates; do ls database/migrations | grep -E "^${n}"; done
+            exit 1
+          fi
+          echo "Không có migration mới nào trùng số."
+
+      - name: Liệt kê nợ trùng số cũ (chỉ cảnh báo)
+        run: |
+          legacy=$(ls database/migrations \
+            | grep -oE '^[0-9]+' \
+            | awk '$1 + 0 < 25' \
+            | sort \
+            | uniq -d || true)
+          if [ -n "$legacy" ]; then
+            echo "::warning::Migration cũ đang trùng số: $legacy — cần đánh số lại khi có dịp."
+          fi

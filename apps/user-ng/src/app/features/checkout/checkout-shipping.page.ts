@@ -7,6 +7,8 @@ import { CheckoutStore } from '../../core/services/checkout.store';
 import { formatVnd } from '../../core/utils/money';
 import { showToast } from '../../core/utils/toast';
 import { useBodyClass } from '../../core/utils/body-class';
+import { VoucherWallet } from '../../shared/voucher-wallet/voucher-wallet';
+import type { AppliedVoucher } from '../../core/models/voucher.interface';
 
 interface MemberProfile {
   full_name?: string;
@@ -34,7 +36,7 @@ interface PlaceOrderResponse {
 
 @Component({
   selector: 'app-checkout-shipping-page',
-  imports: [RouterLink],
+  imports: [RouterLink, VoucherWallet],
   host: { style: 'display:block' },
   templateUrl: './checkout-shipping.page.html',
 })
@@ -175,6 +177,26 @@ export class CheckoutShippingPage {
           this.voucherError.set(error.message || 'Mã giảm giá không hợp lệ.');
         },
       });
+  }
+
+  /**
+   * Nhận kết quả từ Ví Voucher: mã được áp hoặc bị bỏ.
+   *
+   * Ví là nơi duy nhất quyết định mã nào đang áp và giảm bao nhiêu; trang thanh toán
+   * chỉ ghi lại kết quả để hiển thị tổng tiền và gửi kèm khi đặt hàng.
+   */
+  onVoucherApplied(voucher: AppliedVoucher | null): void {
+    this.voucherError.set(null);
+    if (!voucher) {
+      this.clearVoucher();
+      return;
+    }
+    const amount = Number(voucher.discount_amount || 0);
+    this.discount.set(amount);
+    this.voucherName.set(voucher.name || voucher.code);
+    this.voucherCode.set(voucher.code);
+    localStorage.setItem('checkout_voucher_id', voucher.voucher_id);
+    localStorage.setItem('checkout_discount', String(amount));
   }
 
   /**

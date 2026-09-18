@@ -12,6 +12,7 @@ import { createAccountService } from "./accounts/account-service.js";
 import { handleAccountRoute } from "./accounts/account-router.js";
 import { startAccountMaintenance } from "./accounts/account-maintenance.js";
 import { startEmailOutboxWorker } from "./email/outbox-worker.js";
+import { startPromotionScheduler } from "./pricing/promotion-scheduler.js";
 import { createProductRepository } from "./products/product-repository.js";
 import { createProductService } from "./products/product-service.js";
 import { handleProductRoute } from "./products/product-router.js";
@@ -67,6 +68,7 @@ const chatLimiter = createFixedWindowLimiter({
 });
 startAccountMaintenance();
 startEmailOutboxWorker();
+startPromotionScheduler();
 
 const server = createServer(async (req, res) => {
   const requestId = String(req.headers["x-request-id"] || randomUUID()).slice(0, 128);

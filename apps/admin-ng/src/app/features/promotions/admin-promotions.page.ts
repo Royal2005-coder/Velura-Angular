@@ -1,7 +1,7 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
-import { AdminApiService, AdminProductRow, AdminPromotionRow, AdminVoucherRow } from '../../core/admin-api.service';
+import { AdminApiService, AdminPricingStatistics, AdminProductRow, AdminPromotionRow, AdminVoucherRow } from '../../core/admin-api.service';
 import { adminErrorMessage, adminListCount, adminListRows, adminOffset, adminRangeLabel } from '../../core/admin-http';
 import { AdminSessionService } from '../../core/admin-session.service';
 import { AdminEmptyState } from '../../shared/admin-empty-state';
@@ -27,6 +27,9 @@ export class AdminPromotionsPage {
   readonly promoCount = signal(0);
   readonly voucherCount = signal(0);
   readonly canMutate = computed(() => this.session.canMutate('promotions'));
+  readonly stats = signal<AdminPricingStatistics | null>(null);
+  readonly statsLoading = signal(false);
+  readonly statsError = signal<string | null>(null);
 
   readonly activeCampaigns = computed(() => this.promotions().filter((row) => this.isCampaignActive(row)).length);
   readonly pendingCampaigns = computed(() => this.promotions().length - this.activeCampaigns());
@@ -57,6 +60,9 @@ export class AdminPromotionsPage {
   setView(view: 'campaigns' | 'vouchers' | 'bundles' | 'logs' | 'stats'): void {
     this.view.set(view);
     this.page.set(1);
+    if (view === 'stats' && !this.stats() && !this.statsLoading()) {
+      this.loadStats();
+    }
   }
 
   /**
@@ -128,6 +134,87 @@ export class AdminPromotionsPage {
    */
   campaignBudget(row: AdminPromotionRow): string {
     return `${this.money(row.total_discount_issued)} / ${this.money(row.budget_limit ?? row.budget)}`;
+  }
+
+  /**
+   * Phần trăm ngân sách chiến dịch đã tiêu, dùng cho thanh tiến độ.
+   *
+   * Trước migration 025 con số này luôn bằng 0 vì tổng tiền đã giảm không có nơi nào
+   * cộng dồn. Giờ nó phản ánh số tiền thật đã phát ra cho khách.
+   */
+  campaignBudgetPercent(row: AdminPromotionRow): number {
+    const limit = Number(row.budget_limit ?? row.budget ?? 0);
+    if (limit <= 0) return 0;
+    const issued = Number(row.total_discount_issued || 0);
+    return Math.min(100, Math.round((issued * 100) / limit));
+  }
+
+  /** Ngân sách sắp cạn — cảnh báo trước khi chiến dịch tự dừng. */
+  isBudgetNearLimit(row: AdminPromotionRow): boolean {
+    const percent = this.campaignBudgetPercent(row);
+    return percent >= 80 && percent < 100;
+  }
+
+  /** Ngân sách đã cạn: hệ thống tự dừng chiến dịch. */
+  isBudgetExhausted(row: AdminPromotionRow): boolean {
+    return this.campaignBudgetPercent(row) >= 100;
+  }
+
+  /**
+   * Trạng thái vòng đời thật của chiến dịch.
+   *
+   * Bản cũ chỉ đọc cờ bật/tắt nên một chiến dịch đã hết hạn vẫn hiện "Đang hoạt động"
+   * mãi mãi, dù mã của nó đã bị từ chối ở bước thanh toán — hai nơi nói hai chuyện
+   * khác nhau về cùng một chiến dịch.
+   */
+  campaignLifecycle(row: AdminPromotionRow): 'scheduled' | 'running' | 'ended' | 'paused' | 'budget_exhausted' {
+    const now = Date.now();
+    const start = this.toTime(row.start_date || row.starts_at);
+    const end = this.toTime(row.end_date || row.ends_at);
+
+    if (end !== null && now > end) return 'ended';
+    if (this.isBudgetExhausted(row)) return 'budget_exhausted';
+    if (!this.isCampaignActive(row)) {
+      return start !== null && now < start ? 'scheduled' : 'paused';
+    }
+    if (start !== null && now < start) return 'scheduled';
+    return 'running';
+  }
+
+  /** Nhãn tiếng Việt cho trạng thái vòng đời. */
+  campaignLifecycleLabel(row: AdminPromotionRow): string {
+    const labels: Record<string, string> = {
+      scheduled: 'Đã lên lịch',
+      running: 'Đang chạy',
+      ended: 'Đã kết thúc',
+      paused: 'Tạm dừng thủ công',
+      budget_exhausted: 'Hết ngân sách',
+    };
+    return labels[this.campaignLifecycle(row)] ?? 'Không rõ';
+  }
+
+  private toTime(value: unknown): number | null {
+    if (!value) return null;
+    const time = new Date(String(value)).getTime();
+    return Number.isNaN(time) ? null : time;
+  }
+
+  /**
+   * Tải số liệu thống kê cho tab Thống kê.
+   */
+  loadStats(): void {
+    this.statsLoading.set(true);
+    this.statsError.set(null);
+    this.api.pricingStatistics().subscribe({
+      next: (payload) => {
+        this.statsLoading.set(false);
+        this.stats.set(payload);
+      },
+      error: (error: unknown) => {
+        this.statsLoading.set(false);
+        this.statsError.set(adminErrorMessage(error));
+      },
+    });
   }
 
   /**

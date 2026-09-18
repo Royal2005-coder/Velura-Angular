@@ -189,6 +189,27 @@ export interface AdminPromotionRow {
   version?: number;
 }
 
+/** Số liệu tổng hợp trả về từ `/api/v1/admin/pricing/statistics`. */
+export interface AdminPricingStatistics {
+  promotions: {
+    total: number;
+    active: number;
+    paused: number;
+    totalBudget: number;
+    totalIssued: number;
+    budgetRemaining: number;
+    budgetUsagePercent: number;
+  };
+  vouchers: {
+    total: number;
+    active: number;
+    expired: number;
+    totalUsed: number;
+    totalLimit: number;
+    usagePercent: number;
+  };
+}
+
 export interface AdminVoucherRow {
   voucher_id: string;
   code?: string;
@@ -845,6 +866,16 @@ export class AdminApiService {
    */
   listVouchers(params: Record<string, string> = {}): Observable<AdminListPayload<AdminVoucherRow>> {
     return this.http.get<AdminListPayload<AdminVoucherRow>>(`${this.baseUrl}/api/v1/admin/vouchers`, { params: this.params(params) });
+  }
+
+  /**
+   * Số liệu tổng hợp chiến dịch và mã giảm giá.
+   *
+   * Endpoint này đã tồn tại từ trước nhưng chưa màn hình nào gọi tới, nên tab Thống kê
+   * hiển thị một khối rỗng viết cứng.
+   */
+  pricingStatistics(): Observable<AdminPricingStatistics> {
+    return this.http.get<AdminPricingStatistics>(`${this.baseUrl}/api/v1/admin/pricing/statistics`);
   }
 
   /**

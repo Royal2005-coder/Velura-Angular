@@ -24,7 +24,8 @@ export const PRICE_HISTORY_SELECT = [
 export const PROMOTION_SELECT = [
   "promo_id", "promo_name", "promo_type", "applicable_categories",
   "start_date", "end_date", "is_active", "budget_limit",
-  "max_vouchers_allowed", "total_discount_issued", "created_by", "version"
+  "max_vouchers_allowed", "total_discount_issued", "created_by", "version",
+  "description", "banner_image_url", "highlight_label", "display_order", "is_featured"
 ].join(",");
 
 /** Safe column projection for voucher rows. */

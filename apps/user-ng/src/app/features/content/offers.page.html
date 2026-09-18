@@ -7,29 +7,103 @@
     </p>
   </section>
 
+  @if (birthdayPrompt(); as prompt) {
+    <section class="container offers-prompt">
+      <div class="offers-prompt__card">
+        <div>
+          <h2 class="offers-prompt__title">{{ prompt.title }}</h2>
+          <p class="offers-prompt__desc">{{ prompt.description }}</p>
+        </div>
+        <a class="btn-primary" [routerLink]="prompt.action_route">{{ prompt.action_label }}</a>
+      </div>
+    </section>
+  }
+
   <section class="offer-list-section container" aria-labelledby="offer-list-title">
     <div class="offer-list-section__header">
       <span class="hot-banner-section__eyebrow">Đặc quyền tháng này</span>
       <h2 class="hot-banner-section__title" id="offer-list-title">Bộ sưu tập ưu đãi</h2>
     </div>
 
-    <div class="offer-banner-list" aria-label="Danh sách ưu đãi Velura">
-      @for (banner of banners; track banner.id; let i = $index) {
-        <article class="offer-banner-row" [class.offer-banner-row--reverse]="i % 2 === 1">
-          <div class="offer-banner-row__copy">
-            <span class="offer-banner-row__index">{{ banner.id }}</span>
-            <span class="offer-banner-row__eyebrow">{{ banner.eyebrow }}</span>
-            <h3 class="offer-banner-row__title">{{ banner.title }}</h3>
-            <p class="offer-banner-row__desc">{{ banner.description }}</p>
-            <p class="offer-banner-row__benefit"><strong>Quyền lợi:</strong> {{ banner.benefit }}</p>
-            <p class="offer-banner-row__condition">{{ banner.condition }}</p>
-            <a class="offer-banner-row__cta" [href]="banner.href">{{ banner.ctaText }} →</a>
-          </div>
-          <a class="offer-banner-row__image-link" [href]="banner.href" [attr.aria-label]="banner.title">
-            <img class="offer-banner-row__image" [src]="banner.imageSrc" [alt]="banner.imageAlt" />
-          </a>
-        </article>
-      }
-    </div>
+    @if (loading()) {
+      <p class="offers-state">Đang tải ưu đãi…</p>
+    } @else if (loadError()) {
+      <div class="offers-state offers-state--error">
+        <p>{{ loadError() }}</p>
+        <button type="button" class="btn-outline" (click)="load()">Thử lại</button>
+      </div>
+    } @else if (campaigns().length === 0) {
+      <div class="offers-state">
+        <p>Hiện chưa có chương trình ưu đãi nào đang chạy.</p>
+        <a class="btn-outline" routerLink="/products">Khám phá sản phẩm</a>
+      </div>
+    } @else {
+      <div class="offer-banner-list" aria-label="Danh sách ưu đãi Velura">
+        @for (campaign of campaigns(); track campaign.promo_id; let i = $index) {
+          <article class="offer-banner-row" [class.offer-banner-row--reverse]="i % 2 === 1">
+            <div class="offer-banner-row__copy">
+              <span class="offer-banner-row__index">{{ campaignIndex(i) }}</span>
+              @if (campaign.highlight_label) {
+                <span class="offer-banner-row__eyebrow">{{ campaign.highlight_label }}</span>
+              }
+              <h3 class="offer-banner-row__title">{{ campaign.title }}</h3>
+              @if (campaign.description) {
+                <p class="offer-banner-row__desc">{{ campaign.description }}</p>
+              }
+              @if (campaign.days_left !== null) {
+                <p class="offer-banner-row__condition">
+                  @if (campaign.days_left === 0) {
+                    Kết thúc hôm nay
+                  } @else {
+                    Còn {{ campaign.days_left }} ngày · đến {{ expiryLabel(campaign.end_date) }}
+                  }
+                </p>
+              }
+              <a class="offer-banner-row__cta" routerLink="/products">Mua sắm ngay →</a>
+            </div>
+            @if (campaign.banner_image_url) {
+              <a class="offer-banner-row__image-link" routerLink="/products" [attr.aria-label]="campaign.title">
+                <img class="offer-banner-row__image" [src]="campaign.banner_image_url" [alt]="campaign.title" />
+              </a>
+            }
+          </article>
+        }
+      </div>
+    }
   </section>
+
+  @if (vouchers().length > 0) {
+    <section class="offer-list-section container" aria-labelledby="offer-voucher-title">
+      <div class="offer-list-section__header">
+        <span class="hot-banner-section__eyebrow">Ví Voucher</span>
+        <h2 class="hot-banner-section__title" id="offer-voucher-title">Mã giảm giá của bạn</h2>
+        @if (!isMember()) {
+          <p class="offers-state">Đăng nhập để lưu mã vào ví và nhận ưu đãi riêng.</p>
+        }
+      </div>
+
+      <ul class="offer-voucher-grid">
+        @for (voucher of vouchers(); track voucher.voucher_id) {
+          <li>
+            <article class="voucher-card" [class.voucher-card--disabled]="!voucher.usable">
+              <div class="voucher-card__main">
+                <p class="voucher-card__code">
+                  {{ voucher.code }}
+                  @if (voucher.remaining_uses !== null) {
+                    <span class="voucher-card__remaining">(Còn {{ voucher.remaining_uses }})</span>
+                  }
+                </p>
+                <p class="voucher-card__name">{{ voucher.description }}</p>
+                <p class="voucher-card__meta">{{ voucher.condition_text }}</p>
+                <p class="voucher-card__meta">HSD: {{ expiryLabel(voucher.end_date) }}</p>
+                @if (voucher.blocked_reason) {
+                  <p class="voucher-card__reason">** {{ voucher.blocked_reason }}</p>
+                }
+              </div>
+            </article>
+          </li>
+        }
+      </ul>
+    </section>
+  }
 </main>

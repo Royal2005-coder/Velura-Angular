@@ -220,7 +220,7 @@ deploy:production:
     - rsync -az --delete -e "$SSH" apps/admin-ng/dist/admin-ng/browser/ "${DEPLOY_USER}@${DEPLOY_HOST}:/var/www/velura/admin/"
     - rsync -az --delete --exclude node_modules -e "$SSH" apps/api/ "${DEPLOY_USER}@${DEPLOY_HOST}:/opt/velura/api/"
     - rsync -az -e "$SSH" deploy/ "${DEPLOY_USER}@${DEPLOY_HOST}:/opt/velura/deploy/"
-    - $SSH "${DEPLOY_USER}@${DEPLOY_HOST}" "cd /opt/velura/api && npm install --omit=dev && sudo sed -i 's/\r$//' /opt/velura/deploy/nginx/velura.conf /opt/velura/deploy/systemd/velura-api.service && sudo cp /opt/velura/deploy/nginx/velura.conf /etc/nginx/sites-available/velura && sudo cp /opt/velura/deploy/systemd/velura-api.service /etc/systemd/system/velura-api.service && sudo nginx -t && sudo systemctl daemon-reload && sudo systemctl restart velura-api && (sudo systemctl reload nginx || sudo /usr/sbin/nginx -s reload || sudo /usr/sbin/nginx)"
+    - $SSH "${DEPLOY_USER}@${DEPLOY_HOST}" "cd /opt/velura/api && npm install --omit=dev && sudo sed -i 's/\r$//' /opt/velura/deploy/nginx/velura.conf /opt/velura/deploy/systemd/velura-api.service && sudo cp /opt/velura/deploy/nginx/velura.conf /etc/nginx/sites-available/velura && sudo cp /opt/velura/deploy/systemd/velura-api.service /etc/systemd/system/velura-api.service && sudo nginx -t && sudo systemctl daemon-reload && sudo systemctl restart velura-api && (sudo systemctl reload nginx || sudo /usr/sbin/nginx -s reload || sudo kill -HUP \$(pgrep -o nginx))"
 
 verify:production:
   stage: verify

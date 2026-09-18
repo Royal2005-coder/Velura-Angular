@@ -10,7 +10,7 @@ Clone **`develop`**. `main` = production. Pipeline: [docs/HOW-IT-WORKS.md](docs/
 |---|---|---|
 | **1. Code** | Hợp đồng nghiệp vụ (cái gì / được phép gì) | `interface` / `type` + JSDoc cạnh symbol. Angular: `*.page.ts`, `core/services`. API: `apps/api/src/types.ts`, router → service → repository |
 | **2. Git log** | Toàn bộ lịch sử version | `git log --oneline --grep=KAN-n` rồi `git show --stat <sha>` |
-| **3. MR** | Tại sao, trade-off, Jira (mẫu ADR cho **mọi** ticket) | GitLab MR — template [Default.md](.gitlab/merge_request_templates/Default.md) |
+| **3. PR** | Tại sao, trade-off, Jira (mẫu ADR cho **mọi** ticket) | GitHub PR — template [.github/pull_request_template.md](.github/pull_request_template.md) |
 | **4. Git notes** | Cảnh báo bên lề, không làm bẩn `git log` | `git log --show-notes --oneline`; `deploy/scripts/git-notes.sh` |
 | **5. Jira** | Việc / trạng thái | **KAN-n** |
 | **6. docs/** | Map ổn định (slide, DNS, CI vars) | Chỉ khi lớp 1–4 không đủ |
@@ -31,8 +31,8 @@ Agent khác / teammate: **đừng hỏi lại Tuesday.** Chạy các lệnh trê
 
 - Angular = SPA TypeScript. `apps/api` = Node TypeScript. Không viết API bằng Angular.
 - Standalone + Signals. Không `NgModule`. Không `any`. Không HttpClient trong page.
-- Feature → MR **`develop`**. Production = `develop` → `main`. Cấm `[skip ci]`.
-- Mỗi public method / interface: JSDoc (ý định nghiệp vụ). Mỗi commit: `KAN-n why`. Mỗi MR: `## Why`.
+- Feature → PR **`develop`**. Production = `develop` → `main`. Cấm `[skip ci]`.
+- Mỗi public method / interface: JSDoc (ý định nghiệp vụ). Mỗi commit: `KAN-n why`. Mỗi PR: `## Why`.
 - Page specs mock Model.
 
 <Architecture>
@@ -43,13 +43,14 @@ Agent khác / teammate: **đừng hỏi lại Tuesday.** Chạy các lệnh trê
 <Constraints>
   <DO>
     - Nhồi ý nghĩa vào type, tên, JSDoc trước khi viết docs
-    - MR dùng template Default (Why / Decision / Trace)
+    - PR dùng template Default (Why / Decision / Trace)
     - `git notes` cho “đừng optimize / cố ý không cache” — không nhét vào ADR.md
-    - Comment Jira với URL MR sau merge
+    - Comment Jira với URL PR sau merge
   </DO>
   <DO_NOT>
     - Game plan / context repo / markdown theo ticket
     - ADR.md cho bug thường (chỉ 0001–0003 trừ khi rule mới **lâu dài**)
     - Feature → `main`, `.env` / `*.pem`
+    - Đẩy CI lên GitLab (canonical = GitHub Actions)
   </DO_NOT>
 </Constraints>

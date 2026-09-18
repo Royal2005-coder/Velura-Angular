@@ -14,8 +14,16 @@
       } @else if (loadError() && view() === 'campaigns' && !promotions().length) {
         <app-admin-empty-state kind="error" icon="alert" title="Không tải được khuyến mãi" [message]="loadError() || ''" />
       } @else if (view() === 'campaigns') {
+        @if (canMutate()) {
+          <div class="admin-toolbar">
+            <button class="admin-btn admin-btn--primary admin-btn--sm" type="button" (click)="openCreate()">Tạo chiến dịch</button>
+          </div>
+        }
         @if (!promotions().length) {
-          <div class="admin-empty-state"><strong>Chưa có chiến dịch</strong></div>
+          <div class="admin-empty-state">
+            <strong>Chưa có chiến dịch</strong>
+            <p>Tạo chiến dịch đầu tiên để trang Ưu đãi của khách có nội dung hiển thị.</p>
+          </div>
         } @else {
           <div class="admin-table-wrap">
             <table class="admin-table admin-data-table">
@@ -51,6 +59,7 @@
                     </td>
                     <td>
                       @if (canMutate()) {
+                        <button class="admin-btn admin-btn--outline admin-btn--sm" type="button" (click)="openEdit(row)">Sửa</button>
                         <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="toggleCampaign(row)">
                           {{ isCampaignActive(row) ? 'Tạm dừng' : 'Kích hoạt' }}
                         </button>
@@ -175,4 +184,8 @@
       }
     </div>
   </section>
+
+  @if (formOpen()) {
+    <app-campaign-form [campaign]="editing()" [canMutate]="canMutate()" (saved)="onCampaignSaved()" (closed)="closeForm()" />
+  }
 </main>

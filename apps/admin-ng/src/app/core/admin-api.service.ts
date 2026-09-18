@@ -187,6 +187,12 @@ export interface AdminPromotionRow {
   budget_limit?: number;
   total_discount_issued?: number;
   version?: number;
+  /** Nội dung marketing hiển thị cho khách trên trang Ưu đãi — xem migration 026. */
+  description?: string | null;
+  banner_image_url?: string | null;
+  highlight_label?: string | null;
+  display_order?: number | null;
+  is_featured?: boolean | null;
 }
 
 /** Số liệu tổng hợp trả về từ `/api/v1/admin/pricing/statistics`. */
@@ -831,6 +837,33 @@ export class AdminApiService {
     return this.http.get<AdminListPayload<AdminAuditRow>>(`${this.baseUrl}/api/v1/admin/products/audit-logs`, {
       params: this.params(params),
     });
+  }
+
+  /**
+   * Tạo một chiến dịch khuyến mãi. Chiến dịch mới luôn ở trạng thái tạm dừng; phải bấm
+   * "Chạy" riêng, để không có chiến dịch nào lên sóng chỉ vì lỡ tay bấm Lưu.
+   */
+  createPromotion(body: Record<string, unknown>): Observable<AdminPromotionRow> {
+    return this.http.post<AdminPromotionRow>(`${this.baseUrl}/api/v1/admin/promotions`, body);
+  }
+
+  /**
+   * Sửa một chiến dịch. Trường bỏ trống nghĩa là giữ nguyên, chuỗi rỗng là xoá.
+   */
+  updatePromotion(promoId: string, body: Record<string, unknown>): Observable<AdminPromotionRow> {
+    return this.http.patch<AdminPromotionRow>(`${this.baseUrl}/api/v1/admin/promotions/${encodeURIComponent(promoId)}`, body);
+  }
+
+  /**
+   * Tải ảnh banner chiến dịch lên kho và nhận lại đường dẫn công khai.
+   *
+   * Không đặt content-type: trình duyệt phải tự sinh boundary của multipart, đặt tay
+   * vào sẽ làm máy chủ không tách được tệp.
+   */
+  uploadPromotionBanner(file: File): Observable<{ url: string }> {
+    const form = new FormData();
+    form.append('file', file);
+    return this.http.post<{ url: string }>(`${this.baseUrl}/api/v1/admin/promotions/banner`, form);
   }
 
   /**

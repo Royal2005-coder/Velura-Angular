@@ -62,10 +62,10 @@ export class AdminChangePasswordPage {
   }
 
   /**
-   * Returns to welcome for members or dashboard for admins.
+   * Returns members to welcome and operators/HQ to their first allowed module.
    */
   backRoute(): string {
-    return this.session.isAdmin() ? '/dashboard' : '/welcome';
+    return this.session.isAdmin() ? this.session.firstRoute() : '/welcome';
   }
 
   /**

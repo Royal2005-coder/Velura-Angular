@@ -2,7 +2,8 @@ import { Type } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { of } from 'rxjs';
-import { AdminApiService, AdminDashboardSummary } from '../app/core/admin-api.service';
+import { AdminApiService, AdminDashboardSummary, AdminInsightsPayload } from '../app/core/admin-api.service';
+import { emptyInsightBoard } from '../app/core/admin-insight-state';
 
 const emptyDashboard = (): AdminDashboardSummary => ({
   operations: {
@@ -21,9 +22,35 @@ const emptyDashboard = (): AdminDashboardSummary => ({
     promotionRevenue: 0,
     promotionRevenueShare: 0,
     pendingReviews: 0,
+    customers: 0,
+    revenueTrend: [],
+    categoryContributions: [],
+    bestSellers: [],
   },
   recentLogs: [],
   periodDays: 7,
+});
+
+const emptyInsights = (): AdminInsightsPayload => ({
+  scope: 'hq',
+  range: 'week',
+  voice: {
+    range: 'week',
+    periodLabel: '7 ngày gần nhất',
+    coverage: { deliveredOrders: 0, reviewedOrders: 0, silentOrders: 0, coveragePct: 0 },
+    productReaction: { reviewCount: 0, avgRating: null, loved: [], complained: [] },
+    serviceQuality: {
+      tickets: 0,
+      closedTickets: 0,
+      csatCount: 0,
+      csatAvg: null,
+      ticketsWithoutCsat: 0,
+      returns: 0,
+      returnRatePct: 0,
+    },
+    orderFriction: { orderCount: 0, completedOrders: 0, cancelledOrders: 0, failedDelivery: 0, cancelReasons: [] },
+  },
+  board: emptyInsightBoard('hq'),
 });
 
 const list = <T,>(rows: T[] = []) => of({ rows, count: rows.length });
@@ -33,6 +60,7 @@ const list = <T,>(rows: T[] = []) => of({ rows, count: rows.length });
  */
 export function stubAdminApi(): AdminApiService {
   const dashboard = () => of(emptyDashboard());
+  const insights = () => of(emptyInsights());
   const me = () =>
     of({
       role: 'member',
@@ -44,6 +72,7 @@ export function stubAdminApi(): AdminApiService {
   return new Proxy(
     {
       dashboard,
+      insights,
       me,
       signIn: () => of({ token: '' }),
       signOut: () => of({ success: true }),

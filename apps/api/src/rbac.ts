@@ -1,15 +1,16 @@
-import { HttpError } from "./http.js";
+import { asProfile, AUTH_PROFILE_SELECT, loadProfileForAuthUser } from "./auth-profile.js";
 import { verifyJwt } from "./auth-helper.js";
+import { HttpError } from "./http.js";
 import { getAuthUser, selectOne } from "./supabase.js";
-import type { AuthContext, AuthUser, HttpRequest, JsonObject, UserProfile } from "./types.js";
+import type { AuthContext, AuthUser, HttpRequest, UserProfile } from "./types.js";
 
 export const rolePages: Record<string, string[]> = {
   super_admin: ["dashboard", "accounts", "products", "orders", "reviews", "returns-cskh", "pricing", "promotions", "logs"],
-  admin_operator_sanpham: ["products", "dashboard"],
-  admin_operator_donhang: ["orders", "dashboard"],
-  admin_operator_gia_km: ["pricing", "dashboard", "promotions"],
-  admin_operator_danhgia_review: ["reviews", "dashboard"],
-  admin_operator_cskh_dt: ["returns-cskh", "dashboard"],
+  admin_operator_sanpham: ["products"],
+  admin_operator_donhang: ["orders"],
+  admin_operator_gia_km: ["pricing", "promotions"],
+  admin_operator_danhgia_review: ["reviews"],
+  admin_operator_cskh_dt: ["returns-cskh"],
   admin_viewer: ["dashboard"],
   member: ["welcome"],
   guest: ["welcome"]
@@ -17,11 +18,11 @@ export const rolePages: Record<string, string[]> = {
 
 export const roleModules: Record<string, string[]> = {
   super_admin: ["*"],
-  admin_operator_sanpham: ["dashboard", "products", "categories", "inventory", "audit_logs"],
-  admin_operator_donhang: ["dashboard", "orders", "payments", "shipments", "audit_logs"],
-  admin_operator_gia_km: ["dashboard", "pricing", "promotions", "vouchers", "bundles", "budgets", "audit_logs"],
-  admin_operator_danhgia_review: ["dashboard", "reviews", "support_tickets", "audit_logs"],
-  admin_operator_cskh_dt: ["dashboard", "returns", "support_tickets", "orders", "audit_logs"],
+  admin_operator_sanpham: ["products", "categories", "inventory", "audit_logs"],
+  admin_operator_donhang: ["orders", "payments", "shipments", "audit_logs"],
+  admin_operator_gia_km: ["pricing", "promotions", "vouchers", "bundles", "budgets", "audit_logs"],
+  admin_operator_danhgia_review: ["reviews", "support_tickets", "audit_logs"],
+  admin_operator_cskh_dt: ["returns", "support_tickets", "orders", "audit_logs"],
   admin_viewer: ["dashboard"],
   member: [],
   guest: []
@@ -44,13 +45,6 @@ export async function buildAuthContext(req: HttpRequest): Promise<AuthContext> {
   const token = getToken(req);
   if (!token) return buildGuestContext();
 
-  const accountSelect = [
-    "user_id", "auth_user_id", "email", "phone", "full_name", "date_of_birth", "gender", "avatar",
-    "role", "admin_role", "is_active", "is_verified", "created_at",
-    "last_login_at", "version", "updated_at", "saved_addresses"
-  ].join(",");
-  const dbOptions = {};
-
   let authUser: AuthUser | null = null;
   try {
     authUser = await getAuthUser(token);
@@ -64,9 +58,9 @@ export async function buildAuthContext(req: HttpRequest): Promise<AuthContext> {
     let profile: UserProfile | null = null;
     try {
       profile = asProfile(await selectOne("users", {
-        select: accountSelect,
+        select: AUTH_PROFILE_SELECT,
         user_id: `eq.${String(decoded.user_id ?? "")}`
-      }, dbOptions));
+      }));
     } catch {
       profile = null;
     }
@@ -91,16 +85,7 @@ export async function buildAuthContext(req: HttpRequest): Promise<AuthContext> {
 
   let profile: UserProfile | null = null;
   try {
-    profile = asProfile(await selectOne("users", {
-      select: accountSelect,
-      auth_user_id: `eq.${authUser.id}`
-    }, dbOptions));
-    if (!profile) {
-      profile = asProfile(await selectOne("users", {
-        select: accountSelect,
-        email: `eq.${authUser.email || ""}`
-      }, dbOptions));
-    }
+    profile = await loadProfileForAuthUser(authUser);
   } catch {
     profile = null;
   }
@@ -187,11 +172,6 @@ function getToken(req: HttpRequest): string {
   const header = Array.isArray(raw) ? raw[0] : raw || "";
   const match = header.match(/^Bearer\s+(.+)$/i);
   return match ? match[1].trim() : "";
-}
-
-function asProfile(row: JsonObject | null): UserProfile | null {
-  if (!row || typeof row.user_id !== "string") return null;
-  return row as UserProfile;
 }
 
 function roleCodeOf(profile: UserProfile): string {

@@ -1,19 +1,15 @@
-# MCP setup (Cursor) — GitLab + Jira
+# MCP setup (Cursor) — Jira (+ GitHub CLI)
 
-Agent và thành viên mới: cài MCP **trước** khi tạo issue/MR hộ team. File mẫu: `.cursor/mcp.json` (commit trong repo). Copy vào `%USERPROFILE%\.cursor\mcp.json` nếu Cursor chưa có.
+Agent và thành viên mới: cài MCP **trước** khi tạo issue/PR hộ team.
 
-## 1. File cấu hình
+**Canonical VCS:** https://github.com/Royal2005-coder/Velura-Angular (GitHub Actions).  
+GitLab MCP là legacy — không cần cho team đồ án.
+
+## 1. File cấu hình (Jira)
 
 ```json
 {
   "mcpServers": {
-    "GitLab": {
-      "type": "http",
-      "url": "https://gitlab.com/api/v4/mcp",
-      "headers": {
-        "X-Gitlab-Mcp-Server-Tool-Name-Prefix": "gitlab_"
-      }
-    },
     "Atlassian": {
       "url": "https://mcp.atlassian.com/v1/mcp"
     }
@@ -21,26 +17,22 @@ Agent và thành viên mới: cài MCP **trước** khi tạo issue/MR hộ team
 }
 ```
 
-Atlassian: dùng Streamable HTTP `https://mcp.atlassian.com/v1/mcp`. SSE `/v1/sse` hết hỗ trợ sau **30/06/2026**.
+Atlassian: Streamable HTTP `https://mcp.atlassian.com/v1/mcp`. SSE `/v1/sse` hết hỗ trợ sau **30/06/2026**.
+
+Copy vào `%USERPROFILE%\.cursor\mcp.json` nếu Cursor chưa có.
 
 ## 2. Connect trong Cursor
 
 1. Settings → Tools & MCP.
 2. **Atlassian** → Connect → OAuth (account Jira `webadvance.atlassian.net`).
-3. **GitLab** → Connect → OAuth bằng user **có quyền** `boygia757-netizen/velura-project`.
+3. GitHub: dùng `gh auth login` + Cursor GitHub connect (PR/review). Không bắt buộc GitLab MCP.
 
-## 3. GitLab MCP trả 404
-
-URL đúng. 404 = group GitLab.com chưa bật MCP (Duo + beta + Allow MCP). Owner group bật; xem [KAN-11](https://webadvance.atlassian.net/browse/KAN-11).  
-`glab` login nhầm user (`Royal2005-coder`) không thấy project — không dùng user đó cho MCP.
-
-Không có GitLab MCP: vẫn làm việc bằng `git` SSH + UI GitLab. Jira MCP vẫn đủ tạo/chuyển Task.
-
-## 4. Agent dùng MCP thế nào (không bỏ pipeline)
+## 3. Agent dùng thế nào (không bỏ pipeline)
 
 1. Jira: `searchJiraIssuesUsingJql` / `createJiraIssue` — key `KAN`.
 2. Code trên branch `feature/KAN-n-…`.
-3. Git (không MCP): commit message chứa `KAN-n`, push, MR title chứa `KAN-n`.
-4. Jira: comment link MR, chuyển Waiting for Review / Close theo [HOW-IT-WORKS.md](./HOW-IT-WORKS.md).
+3. Git: commit message có `KAN-n`, push lên GitHub, PR title có `KAN-n`, body có `## Why`.
+4. Đợi GitHub Actions xanh → review → merge vào `develop`.
+5. Jira: comment link PR, chuyển Waiting for Review / Close theo [HOW-IT-WORKS.md](./HOW-IT-WORKS.md).
 
-Cấm: sửa `main` trực tiếp; tạo GitLab Issue thay Jira; bỏ key `KAN-n`.
+Cấm: sửa `main` trực tiếp; tạo GitHub/GitLab Issue thay Jira; bỏ key `KAN-n`; push CI lên GitLab.

@@ -1,6 +1,6 @@
 # ADR NNNN: Title
 
-Chỉ khi rule **lâu dài** (đổi tầng, runtime, Angular vs Node). Ticket thường: **không** tạo file này — điền [MR template](../../.gitlab/merge_request_templates/Default.md) (`## Why` / `## Decision`).
+Chỉ khi rule **lâu dài** (đổi tầng, runtime, Angular vs Node). Ticket thường: **không** tạo file này — điền [PR template](../../.github/pull_request_template.md) (`## Why` / `## Decision`).
 
 Date: YYYY-MM-DD  
 Status: Proposed | Accepted | Superseded  
@@ -13,4 +13,4 @@ Một câu.
 
 ## Why (pointer)
 
-Không viết lại lịch sử ở đây. Why = commit + MR + git notes.
+Không viết lại lịch sử ở đây. Why = commit + PR + git notes.

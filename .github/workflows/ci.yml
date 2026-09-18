@@ -1,0 +1,309 @@
+# Feature → PR into develop: validate + test + build (+ PR trace). No deploy.
+# Push develop: validate + test + build (integration only).
+# develop → PR into main: same gate. Push main: deploy + verify production.
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  npm_config_fund: false
+  npm_config_cache: ${{ github.workspace }}/.npm
+
+jobs:
+  validate:
+    name: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Workspace contract
+        run: |
+          test -f apps/admin-ng/package.json
+          test -f apps/user-ng/package.json
+          test -f apps/api/src/server.ts
+          test -f apps/api/tsconfig.json
+          test -f .env.example
+      - name: Forbid skip ci
+        run: |
+          if echo "${{ github.event.head_commit.message }}${{ github.event.pull_request.title }}" | grep -qiE '\[skip ci\]|\[ci skip\]'; then
+            echo "[skip ci] is forbidden. Pipeline must always run."
+            exit 1
+          fi
+      - name: No private keys in repo
+        run: |
+          if grep -R --exclude-dir=.git --exclude-dir=node_modules --include='*.pem' --include='*.key' -n "BEGIN .*PRIVATE KEY" . ; then
+            echo "Private keys must not be in the repository"
+            exit 1
+          fi
+      - name: No @ts-nocheck in API
+        run: |
+          if grep -R --include='*.ts' -n '@ts-nocheck' apps/api ; then
+            echo "apps/api must not use @ts-nocheck. Type the file or narrow unknown."
+            exit 1
+          fi
+
+  validate-pr-contract:
+    name: validate-pr-contract
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: PR title / branch contract
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+          BODY: ${{ github.event.pull_request.body }}
+          SRC: ${{ github.head_ref }}
+          TGT: ${{ github.base_ref }}
+        run: |
+          set -e
+          echo "PR title=[$TITLE]"
+          echo "PR source=[$SRC] target=[$TGT]"
+          if [ "$SRC" = "develop" ] && [ "$TGT" = "main" ]; then
+            echo "Promote contract OK: develop → main."
+            exit 0
+          fi
+          if [ "$TGT" = "main" ]; then
+            echo "Production is only promoted from develop. Close this PR."
+            echo "New PR: source=develop target=main."
+            exit 1
+          fi
+          echo "$TITLE" | grep -Eqi '^(Draft:[[:space:]]*)?KAN-[0-9]+' || {
+            echo "Feature PR title must start with KAN-n (optional Draft: prefix)."
+            exit 1
+          }
+          printf '%s\n' "$BODY" | grep -qiE '^##[[:space:]]*(Why|Tại sao)' || {
+            echo "PR description must include a heading line ## Why"
+            exit 1
+          }
+          case "$SRC" in
+            feature/*|hotfix/*|develop) ;;
+            *)
+              echo "Source branch must be feature/KAN-*, hotfix/KAN-*, or develop"
+              exit 1
+              ;;
+          esac
+
+  test-api:
+    name: test-api
+    runs-on: ubuntu-latest
+    needs: [validate]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck:api
+      - run: npm run test:api
+
+  test-angular:
+    name: test-angular
+    runs-on: ubuntu-latest
+    needs: [validate]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run test:ng
+
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    needs: [validate]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run build:api
+      - run: npm run build:user
+      - run: npm run build:admin
+      - run: |
+          test -f apps/api/dist/server.js
+          test -d apps/user-ng/dist/user-ng/browser
+          test -d apps/admin-ng/dist/admin-ng/browser
+      - uses: actions/upload-artifact@v4
+        with:
+          name: velura-dist
+          retention-days: 14
+          path: |
+            apps/user-ng/dist
+            apps/admin-ng/dist
+            apps/api/dist
+            apps/api/package.json
+            deploy
+
+  note-pr:
+    name: note-pr
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    needs: [validate, validate-pr-contract, test-api, test-angular, build]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Write PR trace
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+          SRC: ${{ github.head_ref }}
+          TGT: ${{ github.base_ref }}
+          SHA: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -e
+          BASE="${{ github.event.pull_request.base.sha }}"
+          LOG=$(git log --oneline "${BASE}..HEAD" | head -n 30)
+          STAT=$(git diff --stat "${BASE}...HEAD" | tail -n 40)
+          {
+            echo "## Trace log (required CI note)"
+            echo
+            echo "- Title: \`$TITLE\`"
+            echo "- Source: \`$SRC\` → target: \`$TGT\`"
+            echo "- SHA: \`${SHA:0:8}\` (\`$SHA\`)"
+            echo "- Run: $RUN_URL"
+            echo
+            echo "### git log"
+            echo '```'
+            echo "$LOG"
+            echo '```'
+            echo
+            echo "### diff --stat"
+            echo '```'
+            echo "$STAT"
+            echo '```'
+          } > pr-trace.md
+          cat pr-trace.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pr-trace
+          path: pr-trace.md
+          retention-days: 30
+      - name: Comment PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('pr-trace.md', 'utf8');
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const marker = '## Trace log (required CI note)';
+            const existing = comments.find(c => c.user.type === 'Bot' && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+  deploy-production:
+    name: deploy-production
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    needs: [test-api, test-angular, build]
+    environment:
+      name: production
+      url: https://velura.royalai.dev/
+    concurrency:
+      group: velura-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: velura-dist
+      - name: Setup SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          set -e
+          missing=""
+          [ -n "${SSH_PRIVATE_KEY:-}" ] || missing="$missing SSH_PRIVATE_KEY"
+          [ -n "${SSH_KNOWN_HOSTS:-}" ] || missing="$missing SSH_KNOWN_HOSTS"
+          [ -n "${DEPLOY_HOST:-}" ] || missing="$missing DEPLOY_HOST"
+          [ -n "${DEPLOY_USER:-}" ] || missing="$missing DEPLOY_USER"
+          if [ -n "$missing" ]; then
+            echo "Deploy secrets empty:$missing"
+            echo "Add them under Settings → Secrets and variables → Actions (Environment: production)."
+            exit 1
+          fi
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/deploy.key
+          chmod 600 ~/.ssh/deploy.key
+          grep -q "BEGIN .*PRIVATE KEY" ~/.ssh/deploy.key || {
+            echo "SSH_PRIVATE_KEY is not a PEM"
+            exit 1
+          }
+          printf '%s\n' "$SSH_KNOWN_HOSTS" >> ~/.ssh/known_hosts
+      - name: Rsync + restart
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          set -e
+          SSH="ssh -i ~/.ssh/deploy.key -o IdentitiesOnly=yes"
+          test -f apps/api/dist/server.js || { echo "build:api did not emit apps/api/dist/server.js"; exit 1; }
+          sudo apt-get update -qq && sudo apt-get install -y -qq rsync
+          rsync -az --delete -e "$SSH" apps/user-ng/dist/user-ng/browser/ "${DEPLOY_USER}@${DEPLOY_HOST}:/var/www/velura/user/"
+          rsync -az --delete -e "$SSH" apps/admin-ng/dist/admin-ng/browser/ "${DEPLOY_USER}@${DEPLOY_HOST}:/var/www/velura/admin/"
+          rsync -az --delete --exclude node_modules -e "$SSH" apps/api/ "${DEPLOY_USER}@${DEPLOY_HOST}:/opt/velura/api/"
+          rsync -az -e "$SSH" deploy/ "${DEPLOY_USER}@${DEPLOY_HOST}:/opt/velura/deploy/"
+          $SSH "${DEPLOY_USER}@${DEPLOY_HOST}" "cd /opt/velura/api && npm install --omit=dev && sudo sed -i 's/\r$//' /opt/velura/deploy/nginx/velura.conf /opt/velura/deploy/systemd/velura-api.service && sudo cp /opt/velura/deploy/nginx/velura.conf /etc/nginx/sites-available/velura && sudo cp /opt/velura/deploy/systemd/velura-api.service /etc/systemd/system/velura-api.service && sudo nginx -t && sudo systemctl daemon-reload && sudo systemctl restart velura-api && (sudo systemctl reload nginx || sudo /usr/sbin/nginx -s reload || sudo kill -HUP \$(pgrep -o nginx))"
+
+  verify-production:
+    name: verify-production
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    needs: [deploy-production]
+    environment:
+      name: production
+      url: https://velura.royalai.dev/
+    steps:
+      - name: Health checks
+        run: |
+          set -e
+          code="$(curl -fsS -o /dev/null -w '%{http_code}' --max-redirs 2 https://velura.royalai.dev/)"
+          test "$code" = "200"
+          i=0
+          while [ "$i" -lt 12 ]; do
+            if curl -fsS https://velura.royalai.dev/api/health | grep '"ok":true'; then
+              break
+            fi
+            i=$((i + 1))
+            sleep 5
+          done
+          curl -fsS https://velura.royalai.dev/api/health | grep '"ok":true'
+          test "$(curl -fsS -o /dev/null -w '%{http_code}' --max-redirs 2 https://velura.royalai.dev/api/health)" = "200"
+          test "$(curl -fsS -o /dev/null -w '%{http_code}' --max-redirs 2 https://admin.royalai.dev/login)" = "200"
+          curl -fsS https://admin.royalai.dev/ | grep -q "Velura Admin"

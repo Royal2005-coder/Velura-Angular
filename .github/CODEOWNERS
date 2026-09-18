@@ -1,0 +1,11 @@
+# CODEOWNERS — GitHub pull request reviews
+# Settings → Branches → Require review from Code Owners = on
+# Add teammate GitHub usernames when the 6 accounts exist.
+
+* @Royal2005-coder
+
+/apps/user-ng/ @Royal2005-coder
+/apps/admin-ng/ @Royal2005-coder
+/apps/api/ @Royal2005-coder
+/.github/workflows/ @Royal2005-coder
+/deploy/ @Royal2005-coder

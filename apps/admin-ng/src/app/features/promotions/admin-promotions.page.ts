@@ -5,12 +5,11 @@ import { AdminApiService, AdminProductRow, AdminPromotionRow, AdminVoucherRow } 
 import { adminErrorMessage, adminListCount, adminListRows, adminOffset, adminRangeLabel } from '../../core/admin-http';
 import { AdminSessionService } from '../../core/admin-session.service';
 import { AdminEmptyState } from '../../shared/admin-empty-state';
-import { AdminIcon } from '../../shared/admin-icon';
 import { AdminPagination } from '../../shared/admin-pagination';
 
 @Component({
   selector: 'app-admin-promotions-page',
-  imports: [AdminEmptyState, AdminIcon, AdminPagination],
+  imports: [AdminEmptyState, AdminPagination],
   templateUrl: './admin-promotions.page.html',
 })
 export class AdminPromotionsPage {

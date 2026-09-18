@@ -71,33 +71,29 @@ export function createProductRepository() {
     },
 
     async createProduct(input: JsonObject, accessToken: string | null) {
-      return withProductError(async () => {
-        const productId = randomUUID();
-        const result = await insertRow("product", {
-          product_id: productId,
-          sku: input.sku,
-          name: input.name,
-          slug: input.slug,
-          description: input.description || null,
-          category_id: input.categoryId,
-          brand: input.brand || null,
-          base_price: input.basePrice,
-          sale_price: input.salePrice,
-          images: input.images || [],
-          style_tags: input.styleTags || [],
-          color_tone: input.colorTone || null,
-          occasions: input.occasions || [],
-          suitable_body_shapes: input.suitableBodyShapes || [],
-          status: input.status || "on_sale",
-          is_featured: input.isFeatured || false,
-          is_combo: input.isCombo || false,
-          collection: input.collection || null,
-          seo_title: input.seoTitle || null,
-          seo_description: input.seoDescription || null,
-          version: 1
-        }, accessToken as never);
-        return result;
-      });
+      return rpc("admin_create_product", {
+        p_sku: input.sku,
+        p_name: input.name,
+        p_slug: input.slug,
+        p_description: input.description || null,
+        p_category_id: input.categoryId,
+        p_brand: input.brand || null,
+        p_base_price: input.basePrice,
+        p_sale_price: input.salePrice,
+        p_images: input.images || [],
+        p_style_tags: input.styleTags || [],
+        p_color_tone: input.colorTone || null,
+        p_occasions: input.occasions || [],
+        p_suitable_body_shapes: input.suitableBodyShapes || [],
+        p_status: input.status || "on_sale",
+        p_is_featured: Boolean(input.isFeatured),
+        p_is_combo: Boolean(input.isCombo),
+        p_collection: input.collection || null,
+        p_seo_title: input.seoTitle || null,
+        p_seo_description: input.seoDescription || null,
+        p_expected_version: input.expectedVersion ?? 0,
+        p_ip_address: input.ipAddress || null
+      }, accessToken);
     },
 
     updateProduct(productId: string, input: JsonObject, accessToken: string | null) {
@@ -125,26 +121,14 @@ export function createProductRepository() {
       }, accessToken);
     },
 
-    async changeStatus(productId: string, input: JsonObject, accessToken: string | null) {
-      return withProductError(async () => {
-        const product = await selectOne("product", {
-          select: "product_id,status,version",
-          product_id: `eq.${productId}`
-        }, authOptions(accessToken));
-        if (!product) throw new HttpError(404, "PRODUCT_NOT_FOUND", "Product not found");
-        if (product.status === input.status) throw new HttpError(422, "STATUS_UNCHANGED", "Status unchanged");
-        if (product.version !== input.expectedVersion) throw new HttpError(409, "VERSION_CONFLICT", "Version conflict");
-        const results = await updateRows("product", {
-          product_id: `eq.${productId}`,
-          version: `eq.${product.version}`
-        }, {
-          status: input.status,
-          version: (product.version as number) + 1,
-          updated_at: new Date().toISOString()
-        }, authOptions(accessToken));
-        if (!results || !results.length) throw new HttpError(409, "VERSION_CONFLICT", "Version conflict");
-        return results[0];
-      });
+    changeStatus(productId: string, input: JsonObject, accessToken: string | null) {
+      return rpc("admin_change_product_status", {
+        p_product_id: productId,
+        p_new_status: input.status,
+        p_reason: input.reason,
+        p_expected_version: input.expectedVersion,
+        p_ip_address: input.ipAddress || null
+      }, accessToken);
     },
 
     updateStock(productId: string, variantId: string, input: JsonObject, accessToken: string | null) {
@@ -159,19 +143,45 @@ export function createProductRepository() {
     },
 
     async createVariant(productId: string, input: JsonObject, accessToken?: string | null) {
-      return withProductError(() => insertRow("variant", {
-        variant_id: randomUUID(),
-        product_id: productId,
-        color: input.color,
-        color_hex: input.colorHex || null,
-        size: input.size,
-        size_measurements: input.sizeMeasurements || null,
-        stock_quantity: input.stockQuantity,
-        reserved_quantity: 0,
-        low_stock_threshold: input.lowStockThreshold,
-        version: 1,
-        updated_at: new Date().toISOString()
-      }, authOptions(accessToken)));
+      try {
+        return await rpc("admin_create_variant", {
+          p_product_id: productId,
+          p_color: input.color,
+          p_color_hex: input.colorHex || null,
+          p_size: input.size,
+          p_size_measurements: input.sizeMeasurements || null,
+          p_stock_quantity: input.stockQuantity ?? 0,
+          p_low_stock_threshold: input.lowStockThreshold ?? 5,
+          p_ip_address: input.ipAddress || null
+        }, accessToken ?? null);
+      } catch (error: unknown) {
+        // Migration 024 may not be on remote yet; API RBAC already passed in the service.
+        const blob = error instanceof HttpError
+          ? `${error.code} ${error.message} ${JSON.stringify(error.details || {})}`
+          : String(error);
+        if (!/admin_create_variant|PGRST202|Could not find the function|42883|404/i.test(blob)) {
+          throw error;
+        }
+        return withProductError(() =>
+          insertRow(
+            "variant",
+            {
+              variant_id: randomUUID(),
+              product_id: productId,
+              color: input.color,
+              color_hex: input.colorHex || null,
+              size: input.size,
+              size_measurements: input.sizeMeasurements || null,
+              stock_quantity: input.stockQuantity ?? 0,
+              reserved_quantity: 0,
+              low_stock_threshold: input.lowStockThreshold ?? 5,
+              version: 1,
+              updated_at: new Date().toISOString()
+            },
+            { useAnonKey: false }
+          )
+        );
+      }
     },
 
     async listAuditLogs(filters: JsonObject, accessToken: string | null) {
@@ -257,16 +267,30 @@ async function withProductError<T>(operation: () => Promise<T>): Promise<T> {
 
 function productErrorMessage(code: string): string {
   const messages: Record<string, string> = {
-    RBAC_DENIED: "You do not have permission to manage products",
-    PRODUCT_NOT_FOUND: "Product was not found",
-    VERSION_CONFLICT: "Product data changed; reload before trying again",
-    SKU_DUPLICATE: "A product with this SKU already exists",
-    SLUG_DUPLICATE: "A product with this slug already exists",
-    INVALID_STATUS: "Invalid product status",
-    INVALID_CATEGORY: "Category not found",
-    PRICE_BELOW_COST: "Sale price cannot be lower than base price without approved promotion",
-    STOCK_UNDERFLOW: "Stock cannot go below zero",
-    CANNOT_DELETE: "Products cannot be physically deleted from the database"
+    RBAC_DENIED: "Bạn không có quyền ghi catalog sản phẩm",
+    PRODUCT_NOT_FOUND: "Không tìm thấy sản phẩm",
+    VERSION_CONFLICT: "Dữ liệu đã đổi; tải lại rồi thử lại",
+    SKU_DUPLICATE: "SKU đã tồn tại",
+    SLUG_DUPLICATE: "Slug đã tồn tại",
+    INVALID_STATUS: "Trạng thái sản phẩm không hợp lệ",
+    INVALID_STATUS_TRANSITION: "Không thể chuyển sang trạng thái này",
+    INVALID_CATEGORY: "Danh mục không tồn tại",
+    PRICE_BELOW_COST: "Giá bán không được thấp hơn giá gốc nếu chưa có KM",
+    STOCK_UNDERFLOW: "Tồn kho không được âm",
+    CANNOT_DELETE: "Không xóa vật lý sản phẩm; hãy Tạm ẩn hoặc Ngừng kinh doanh",
+    STATUS_REASON_REQUIRED: "Lý do đổi trạng thái tối thiểu 10 ký tự",
+    COLOR_REQUIRED: "Màu biến thể bắt buộc",
+    SIZE_REQUIRED: "Size biến thể bắt buộc",
+    STOCK_INVALID: "Tồn kho phải là số không âm"
   };
-  return messages[code] || "Product database operation failed";
+  if (messages[code]) {
+    return messages[code];
+  }
+  if (/permission denied for table product/i.test(code)) {
+    return "Ghi sản phẩm phải qua RPC admin (RLS). Kiểm tra migration 024.";
+  }
+  if (/permission denied for table variant/i.test(code)) {
+    return "Ghi biến thể phải qua RPC admin_create_variant (RLS).";
+  }
+  return "Thao tác catalog thất bại";
 }

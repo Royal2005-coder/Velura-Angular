@@ -1,42 +1,5 @@
 <main class="admin-content">
-  <p class="admin-page-crumb">Dashboard / Khuyến mãi</p>
-  <section class="admin-kpi-grid admin-promo-kpis" aria-label="Thống kê khuyến mãi">
-    <article class="admin-kpi-card">
-      <div class="admin-kpi-card__head">
-        <p class="admin-kpi-card__label">Chiến dịch đang chạy</p>
-        <span class="admin-kpi-card__icon"><app-admin-icon name="tag" /></span>
-      </div>
-      <strong class="admin-kpi-card__value">{{ activeCampaigns() }}</strong>
-    </article>
-    <article class="admin-kpi-card">
-      <div class="admin-kpi-card__head">
-        <p class="admin-kpi-card__label">Voucher hoạt động</p>
-        <span class="admin-kpi-card__icon"><app-admin-icon name="tag" /></span>
-      </div>
-      <strong class="admin-kpi-card__value">{{ activeVouchers() }}</strong>
-    </article>
-    <article class="admin-kpi-card">
-      <div class="admin-kpi-card__head">
-        <p class="admin-kpi-card__label">Giảm giá đã phát hành</p>
-        <span class="admin-kpi-card__icon"><app-admin-icon name="tag" /></span>
-      </div>
-      <strong class="admin-kpi-card__value">{{ money(issuedDiscount()) }}</strong>
-    </article>
-    <article class="admin-kpi-card">
-      <div class="admin-kpi-card__head">
-        <p class="admin-kpi-card__label">Tổng ngân sách</p>
-        <span class="admin-kpi-card__icon"><app-admin-icon name="tag" /></span>
-      </div>
-      <strong class="admin-kpi-card__value">{{ money(totalBudget()) }}</strong>
-    </article>
-    <article class="admin-kpi-card">
-      <div class="admin-kpi-card__head">
-        <p class="admin-kpi-card__label">Cần xử lý</p>
-        <span class="admin-kpi-card__icon"><app-admin-icon name="tag" /></span>
-      </div>
-      <strong class="admin-kpi-card__value">{{ pendingCampaigns() }}</strong>
-    </article>
-  </section>
+  <p class="admin-page-crumb">Khuyến mãi / Chiến dịch</p>
   <section class="admin-card admin-card--flush">
     <div class="admin-tabs" role="tablist" aria-label="Không gian khuyến mãi">
       <button class="admin-tab" [class.admin-tab--active]="view() === 'campaigns'" type="button" (click)="setView('campaigns')">Chiến dịch <span>{{ promotions().length }}</span></button>

@@ -44,6 +44,25 @@ test("A06 base and sale price migration records full price history", async () =>
   assert.match(migration, /revoke all on public\.price_history from anon, authenticated/);
 });
 
+test("product operator can read price history but not promotions", async () => {
+  let historyToken;
+  const service = createPricingService({
+    repository: {
+      listPriceHistory: async (_filters, token) => {
+        historyToken = token;
+        return { rows: [] };
+      },
+      listPromotions: async () => ({ rows: [] })
+    }
+  });
+  await service.listPriceHistory(context("admin_operator_sanpham"), new URLSearchParams("productId=" + PRODUCT_ID));
+  assert.equal(historyToken, "jwt-token");
+  await assert.rejects(
+    () => service.listPromotions(context("admin_operator_sanpham"), new URLSearchParams()),
+    (error) => error.status === 403
+  );
+});
+
 test("unrelated role cannot read pricing audit logs", async () => {
   const service = createPricingService({ repository: { listAuditLogs: async () => ({}) } });
   await assert.rejects(() => service.listAuditLogs(context("admin_operator_cskh_dt"), new URLSearchParams()), (error) => error.status === 403);

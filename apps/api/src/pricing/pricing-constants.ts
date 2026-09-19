@@ -24,8 +24,21 @@ export const PRICE_HISTORY_SELECT = [
 export const PROMOTION_SELECT = [
   "promo_id", "promo_name", "promo_type", "applicable_categories",
   "start_date", "end_date", "is_active", "budget_limit",
-  "max_vouchers_allowed", "total_discount_issued", "created_by", "version"
+  "max_vouchers_allowed", "total_discount_issued", "created_by", "version",
+  "description", "banner_image_url", "highlight_label", "display_order", "is_featured"
 ].join(",");
+
+/**
+ * Kho chứa ảnh banner chiến dịch.
+ *
+ * Tách riêng khỏi kho `return-evidence` của ảnh bằng chứng đổi trả: hai loại tệp có
+ * vòng đời và quyền đọc khác hẳn nhau — banner là nội dung công khai lâu dài, bằng
+ * chứng đổi trả là dữ liệu của một khách cụ thể.
+ *
+ * Kho này phải được tạo trên Supabase trước khi tính năng tải ảnh dùng được; xem ghi
+ * chú triển khai kèm migration 025-027.
+ */
+export const PROMOTION_BANNER_STORAGE = { bucket: "promotion-banners", prefix: "campaign" };
 
 /** Safe column projection for voucher rows. */
 export const VOUCHER_SELECT = [

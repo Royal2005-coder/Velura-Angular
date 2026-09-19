@@ -694,3 +694,30 @@ input:checked + .admin-sim-slider:before {
 }
 
 
+
+/* Form chiến dịch khuyến mãi (features/promotions/campaign-form). */
+.admin-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+.admin-form-row .admin-form-group { min-width: 0; }
+@media (max-width: 640px) { .admin-form-row { grid-template-columns: 1fr; } }
+
+.admin-form-divider { margin: 4px 0 18px; border: 0; border-top: 1px solid var(--line); }
+.admin-form-section { margin: 0 0 14px; color: var(--muted); font-size: .6875rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
+
+.admin-form-check { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; color: var(--text-body); font-size: .8125rem; cursor: pointer; }
+.admin-form-check input { width: 16px; height: 16px; accent-color: var(--terracotta); cursor: pointer; }
+.admin-form-check input:disabled { cursor: not-allowed; }
+
+/* Xem trước ảnh banner: khung cố định theo tỉ lệ để ảnh cao bất thường không đẩy
+   nút Lưu ra khỏi tầm nhìn. */
+.admin-banner-preview { display: block; width: 100%; max-height: 180px; margin-bottom: 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--field-bg); object-fit: cover; }
+.admin-upload-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 8px 0; }
+.admin-upload-row input[type="file"] { max-width: 100%; color: var(--muted); font-size: .75rem; }
+
+/* Đường dẫn ảnh dài không được phá vỡ chiều rộng hộp thoại. */
+.admin-form-helper--break { overflow-wrap: anywhere; }
+
+/* Ghi chú ở chân hộp thoại đứng bên trái, tách khỏi cụm nút bên phải. */
+.admin-modal__footer-note { margin: 0 auto 0 0; color: var(--soft); font-size: .75rem; }
+
+/* Dấu sao cạnh nhãn của trường bắt buộc. */
+.admin-form-label abbr { border: 0; color: var(--error); text-decoration: none; }

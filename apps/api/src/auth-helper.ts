@@ -2,14 +2,42 @@ import crypto from "node:crypto";
 
 const JWT_SECRET = process.env.VELURA_SUPABASE_SERVICE_ROLE_KEY || "velura-secret";
 
+const SCRYPT_PREFIX = "scrypt";
+const SCRYPT_KEYLEN = 64;
+
+/**
+ * Hashes a password with a per-password random salt using scrypt.
+ * Format: `scrypt$<saltHex>$<derivedKeyHex>`.
+ */
 export function hashPassword(password: string): string {
   if (!password) return "";
-  return crypto.createHash("sha256").update(password).digest("hex");
+  const salt = crypto.randomBytes(16).toString("hex");
+  const derivedKey = crypto.scryptSync(password, salt, SCRYPT_KEYLEN).toString("hex");
+  return `${SCRYPT_PREFIX}$${salt}$${derivedKey}`;
 }
 
+/**
+ * Verifies a password against either the current salted scrypt format or the
+ * legacy unsalted SHA-256 digest (kept only so existing accounts created
+ * before this migration can still sign in; new/changed passwords always use
+ * scrypt via `hashPassword`).
+ */
 export function verifyPassword(password: string, hash: string): boolean {
   if (!password || !hash) return false;
-  return hashPassword(password) === hash;
+  if (hash.startsWith(`${SCRYPT_PREFIX}$`)) {
+    const parts = hash.split("$");
+    if (parts.length !== 3) return false;
+    const [, salt, expectedHex] = parts;
+    if (!salt || !expectedHex) return false;
+    const expected = Buffer.from(expectedHex, "hex");
+    const candidate = crypto.scryptSync(password, salt, SCRYPT_KEYLEN);
+    return candidate.length === expected.length && crypto.timingSafeEqual(candidate, expected);
+  }
+  return legacySha256(password) === hash;
+}
+
+function legacySha256(password: string): string {
+  return crypto.createHash("sha256").update(password).digest("hex");
 }
 
 export function signJwt(payload: Record<string, unknown>): string {

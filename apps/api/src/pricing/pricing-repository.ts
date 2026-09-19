@@ -67,21 +67,36 @@ export function createPricingRepository() {
           max_vouchers_allowed: input.maxVouchersAllowed || 0,
           total_discount_issued: 0,
           created_by: input.createdBy || null,
-          version: 1
+          version: 1,
+          // Nội dung marketing của chiến dịch. Trang Ưu đãi phía khách đọc thẳng từ
+          // đây, nên chiến dịch tạo ra là hiển thị được ngay, không cần sửa mã nguồn.
+          description: input.description || null,
+          banner_image_url: input.bannerImageUrl || null,
+          highlight_label: input.highlightLabel || null,
+          display_order: Number(input.displayOrder) || 0,
+          is_featured: input.isFeatured === true
         }, accessToken as never);
         return result;
       });
     },
 
     async updatePromotion(promotionId: string, input: JsonObject, accessToken: string | null) {
-      return callRpc("admin_update_promotion", {
+      // Trường bỏ trống (null) nghĩa là giữ nguyên; chuỗi rỗng là lệnh xoá. Quy ước này
+      // nằm trong RPC `admin_update_promotion` — xem migration 027.
+      return withPricingError(() => callRpc("admin_update_promotion", {
         p_promo_id: promotionId,
         p_expected_version: input.expectedVersion,
         p_name: input.name,
         p_description: input.description,
         p_applicable_categories: input.applicableCategories,
-        p_budget_limit: input.budgetLimit
-      }, { accessToken });
+        p_budget_limit: input.budgetLimit,
+        p_banner_image_url: input.bannerImageUrl,
+        p_highlight_label: input.highlightLabel,
+        p_display_order: input.displayOrder,
+        p_is_featured: input.isFeatured,
+        p_start_date: input.startDate,
+        p_end_date: input.endDate
+      }, { accessToken }));
     },
 
     async activatePromotion(promotionId: string, input: JsonObject, accessToken: string | null) {
@@ -220,15 +235,33 @@ async function withPricingError<T>(operation: () => Promise<T>): Promise<T> {
 }
 
 function pricingErrorMessage(code: string): string {
+  // Ghi chú: các dòng tiếng Anh bên dưới là nội dung có sẵn của luồng đổi giá. Giao diện
+  // quản trị hiển thị thẳng chuỗi này cho người vận hành, nên phần bổ sung cho khuyến mãi
+  // viết bằng tiếng Việt. Dịch nốt phần cũ là một việc riêng, không gộp vào thay đổi này.
   const messages: Record<string, string> = {
     AUTH_REQUIRED: "Authentication is required",
     RBAC_DENIED: "Only pricing operator or super admin can manage pricing",
     PRODUCT_NOT_FOUND: "Product was not found",
-    VERSION_CONFLICT: "Product price changed; reload before trying again",
+    // Mã này giờ dùng chung cho cả đổi giá lẫn sửa chiến dịch, nên nội dung không được
+    // nhắc riêng giá sản phẩm nữa.
+    VERSION_CONFLICT: "Dữ liệu đã được người khác thay đổi. Hãy tải lại rồi lưu lại.",
     PRICE_REQUIRED: "Base price and sale price are required",
     PRICE_NON_NEGATIVE: "Prices must be non-negative",
     SALE_PRICE_ABOVE_BASE_PRICE: "Sale price cannot be higher than base price",
-    REASON_MIN_10_CHARS: "Reason must be at least 10 characters"
+    REASON_MIN_10_CHARS: "Reason must be at least 10 characters",
+
+    PROMOTION_NOT_FOUND: "Không tìm thấy chiến dịch khuyến mãi.",
+    HIGHLIGHT_LABEL_TOO_LONG: "Nhãn nổi bật tối đa 60 ký tự.",
+    DISPLAY_ORDER_NEGATIVE: "Thứ tự hiển thị không được là số âm.",
+    BUDGET_LIMIT_NEGATIVE: "Ngân sách chiến dịch không được là số âm.",
+    BANNER_URL_INVALID: "Ảnh banner phải là đường dẫn http(s) hoặc bắt đầu bằng /.",
+    BUDGET_BELOW_ISSUED: "Ngân sách mới thấp hơn số tiền đã giảm cho khách. Hãy đặt mức bằng hoặc cao hơn phần đã phát.",
+    END_DATE_BEFORE_START_DATE: "Ngày kết thúc phải sau ngày bắt đầu.",
+    BUDGET_EXHAUSTED: "Chiến dịch đã tiêu hết ngân sách. Hãy nâng ngân sách trước khi chạy lại.",
+    ALREADY_ACTIVE: "Chiến dịch đang chạy rồi.",
+    NOT_ACTIVE: "Chiến dịch đang không chạy.",
+    OUTSIDE_DATE_RANGE: "Thời điểm hiện tại nằm ngoài khoảng ngày của chiến dịch.",
+    VOUCHER_NOT_FOUND: "Không tìm thấy mã giảm giá."
   };
   return messages[code] || "Pricing database operation failed";
 }

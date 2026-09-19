@@ -26,5 +26,13 @@
 .admin-review-attachment { display:grid; width:74px; height:74px; place-items:center; border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--field-bg); color:var(--soft); font-size:.75rem; text-align:center; }
 .admin-review-empty-attachments { color:var(--soft); font-size:.8125rem; }
 .admin-review-response { margin-top:12px; padding:12px; border-left:3px solid var(--terracotta); border-radius:var(--radius-sm); background:var(--tab-bg); color:var(--text-body); font-size:.8125rem; line-height:1.5; }
+.admin-review-gallery { display:flex; flex-wrap:wrap; gap:12px; margin:0 0 14px; }
+.admin-review-gallery__item { display:block; padding:0; border:1px solid var(--line); border-radius:var(--radius-sm); overflow:hidden; background:none; cursor:zoom-in; transition:transform .15s ease, box-shadow .15s ease; }
+.admin-review-gallery__item:hover, .admin-review-gallery__item:focus-visible { transform:translateY(-2px); box-shadow:0 6px 16px rgba(0,0,0,.12); }
+.admin-review-gallery__item img { display:block; width:160px; height:160px; object-fit:cover; }
+.admin-lightbox-overlay { position:fixed; inset:0; z-index:1000; display:grid; place-items:center; padding:32px; background:rgba(20,16,12,.82); cursor:zoom-out; }
+.admin-lightbox-overlay__image { max-width:min(90vw, 1000px); max-height:88vh; border-radius:var(--radius-md); box-shadow:0 20px 60px rgba(0,0,0,.45); cursor:default; }
+.admin-lightbox-overlay__close { position:absolute; top:20px; right:28px; width:40px; height:40px; border:none; border-radius:50%; background:rgba(255,255,255,.15); color:#fff; font-size:1.5rem; line-height:1; cursor:pointer; }
+.admin-lightbox-overlay__close:hover { background:rgba(255,255,255,.28); }
 @media (max-width:1100px) { .admin-review-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 

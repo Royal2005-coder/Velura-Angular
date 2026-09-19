@@ -66,6 +66,10 @@ export class AdminAccountsPage {
   readonly lockType = signal<'temporary' | 'permanent'>('temporary');
   readonly targetRole = signal<'member' | 'admin'>('member');
   readonly wordHint = signal('Số từ: 0 / tối thiểu 11 từ');
+  readonly createOpen = signal(false);
+  readonly createRole = signal<'member' | 'admin'>('member');
+  readonly createError = signal<string | null>(null);
+  readonly createdAccount = signal<{ email?: string; phone?: string; temporary_password?: string } | null>(null);
   readonly canMutate = computed(() => this.session.canMutate('accounts'));
   readonly adminRoles = ADMIN_ROLES;
   readonly paged = computed(() => this.rows());
@@ -233,6 +237,80 @@ export class AdminAccountsPage {
     this.requestAction.set(null);
     this.selectedRequest.set(null);
     this.actionError.set(null);
+  }
+
+  /**
+   * Opens the create-account modal.
+   */
+  openCreate(): void {
+    if (!this.canMutate()) {
+      return;
+    }
+    this.createOpen.set(true);
+    this.createRole.set('member');
+    this.createError.set(null);
+    this.createdAccount.set(null);
+  }
+
+  /**
+   * Syncs the role select used by the create-account modal.
+   */
+  onCreateRole(event: Event): void {
+    this.createRole.set((event.target as HTMLSelectElement).value === 'admin' ? 'admin' : 'member');
+  }
+
+  /**
+   * Closes the create-account modal and refreshes the list when an account was created.
+   */
+  closeCreate(): void {
+    const created = this.createdAccount();
+    this.createOpen.set(false);
+    this.createError.set(null);
+    this.createdAccount.set(null);
+    if (created) {
+      this.reload();
+    }
+  }
+
+  /**
+   * Submits the new-account form through the admin API.
+   */
+  submitCreate(event: Event): void {
+    event.preventDefault();
+    if (!this.canMutate()) {
+      return;
+    }
+    const form = event.target as HTMLFormElement;
+    const fullName = (form.elements.namedItem('fullName') as HTMLInputElement | null)?.value.trim() || '';
+    const email = (form.elements.namedItem('email') as HTMLInputElement | null)?.value.trim() || '';
+    const phone = (form.elements.namedItem('phone') as HTMLInputElement | null)?.value.trim() || '';
+    const password = (form.elements.namedItem('password') as HTMLInputElement | null)?.value || '';
+    const role = this.createRole();
+    const adminRole = role === 'admin' ? (form.elements.namedItem('adminRole') as HTMLSelectElement | null)?.value || '' : null;
+    if (!fullName) {
+      this.createError.set('Vui lòng nhập họ tên.');
+      return;
+    }
+    if (!email && !phone) {
+      this.createError.set('Vui lòng nhập email hoặc số điện thoại.');
+      return;
+    }
+    this.api
+      .createAccount({
+        fullName,
+        email: email || undefined,
+        phone: phone || undefined,
+        password: password || undefined,
+        role,
+        adminRole: role === 'admin' ? adminRole : null,
+      })
+      .subscribe({
+        next: (created) => {
+          this.createError.set(null);
+          this.createdAccount.set({ email: created.email, phone: created.phone, temporary_password: created.temporary_password });
+        },
+        error: (error: unknown) => this.createError.set(adminErrorMessage(error)),
+      });
   }
 
   /**

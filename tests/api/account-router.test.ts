@@ -46,6 +46,31 @@ test("POST account lock passes parsed input and request IP", async () => {
   assert.equal(received[3].ipAddress, "127.0.0.1");
 });
 
+test("POST account create returns 201 with the created account", async () => {
+  const req = request("POST", JSON.stringify({ email: "new@velura.vn", fullName: "Nguoi moi", role: "member" }));
+  let received;
+  const res = response();
+
+  const handled = await handleAccountRoute({
+    req, res,
+    url: new URL("http://localhost/api/v1/admin/accounts"),
+    parts: ["api", "v1", "admin", "accounts"],
+    context: superAdminContext(), headers: {},
+    service: {
+      create: async (...args) => {
+        received = args;
+        return { user_id: USER_ID, email: "new@velura.vn", temporary_password: "Velurax9!" };
+      }
+    }
+  });
+
+  assert.equal(handled, true);
+  assert.equal(res.status, 201);
+  assert.equal(res.json().temporary_password, "Velurax9!");
+  assert.equal(received[1].email, "new@velura.vn");
+  assert.equal(received[2].ipAddress, "127.0.0.1");
+});
+
 test("role escalation returns 202 while approval is pending", async () => {
   const req = request("POST", JSON.stringify({ role: "admin", adminRole: "super_admin", expectedVersion: 3 }));
   const res = response();

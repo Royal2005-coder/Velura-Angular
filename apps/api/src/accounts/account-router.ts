@@ -15,6 +15,11 @@ export async function handleAccountRoute({ req, res, url, parts, context, header
       sendJson(res, 200, await service.list(context, url.searchParams), headers);
       return true;
     }
+    if (req.method === "POST" && parts.length === 4) {
+      const body = await readJson(req, config.maxBodyBytes);
+      sendJson(res, 201, await service.create(context, body, requestMeta), headers);
+      return true;
+    }
     if (req.method === "GET" && parts[4] === "roles" && parts.length === 5) {
       sendJson(res, 200, { data: service.roles(context) }, headers);
       return true;

@@ -88,6 +88,13 @@ export class AdminPricingPage {
   );
   readonly previewPct = computed(() => this.discountFromPrices(this.previewBase(), this.previewSale()));
   readonly previewInvalid = computed(() => this.previewSale() > this.previewBase());
+  readonly productMap = computed(() => {
+    const map = new Map<string, AdminProductRow>();
+    for (const product of this.products()) {
+      map.set(product.product_id, product);
+    }
+    return map;
+  });
 
   constructor() {
     const seeded = this.route.snapshot.queryParamMap.get('q') || this.route.snapshot.queryParamMap.get('productId') || '';
@@ -268,6 +275,26 @@ export class AdminPricingPage {
    */
   categoryName(product: AdminProductRow): string {
     return product.category?.name || product.category_name || '—';
+  }
+
+  /**
+   * Resolves a product name for a price-history row, falling back to the raw id.
+   */
+  historyProductName(productId: string | undefined | null): string {
+    if (!productId) {
+      return '—';
+    }
+    return this.productMap().get(productId)?.name || productId;
+  }
+
+  /**
+   * Resolves a product SKU for a price-history row.
+   */
+  historyProductSku(productId: string | undefined | null): string {
+    if (!productId) {
+      return '';
+    }
+    return this.productMap().get(productId)?.sku || '';
   }
 
   /**

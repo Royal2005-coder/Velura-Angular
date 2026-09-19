@@ -273,7 +273,10 @@
           @if (actionType() === 'refund') {
             <label class="admin-form-group">
               <span class="admin-form-label">Số tiền hoàn</span>
-              <input class="admin-form-control" name="amount" type="number" min="0" required />
+              <input class="admin-form-control" name="amount" type="number" min="0" placeholder="VD: 500000" [value]="refundSuggestion()" required />
+              @if (refundSuggestion() != null) {
+                <small class="admin-note">Gợi ý theo tổng giá trị đơn hàng: {{ money(refundSuggestion()) }}. Có thể chỉnh sửa nếu cần.</small>
+              }
             </label>
           }
           <label class="admin-form-group">

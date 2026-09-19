@@ -1,0 +1,64 @@
+<main class="account-page container">
+  <header class="account-page__head">
+    <h1 class="account-page__title">Ví Voucher</h1>
+    <p class="account-page__desc">Mã giảm giá đang có trong tài khoản của bạn. Mỗi đơn hàng áp dụng được một mã.</p>
+  </header>
+
+  @if (loading()) {
+    <p class="offers-state">Đang tải ví voucher…</p>
+  } @else if (loadError()) {
+    <div class="offers-state offers-state--error">
+      <p>{{ loadError() }}</p>
+      <button type="button" class="btn-outline" (click)="load()">Thử lại</button>
+    </div>
+  } @else if (items().length === 0) {
+    <div class="offers-state">
+      <p>Ví của bạn chưa có mã nào.</p>
+      <a class="btn-outline" routerLink="/offers">Xem ưu đãi đang chạy</a>
+    </div>
+  } @else {
+    @if (usable().length > 0) {
+      <h2 class="account-page__section">Đang có hiệu lực</h2>
+      <ul class="offer-voucher-grid">
+        @for (item of usable(); track item.voucher_id) {
+          <li>
+            <article class="voucher-card">
+              <div class="voucher-card__main">
+                <p class="voucher-card__code">
+                  {{ item.code }}
+                  @if (item.remaining_uses !== null) {
+                    <span class="voucher-card__remaining">(Còn {{ item.remaining_uses }})</span>
+                  }
+                </p>
+                <p class="voucher-card__name">{{ discountLabel(item) }}</p>
+                <p class="voucher-card__meta">{{ conditionLabel(item) }}</p>
+                <p class="voucher-card__meta">HSD: {{ expiryLabel(item.end_date) }}</p>
+              </div>
+              <div class="voucher-card__side">
+                <a class="btn-outline" routerLink="/cart">Dùng ngay</a>
+              </div>
+            </article>
+          </li>
+        }
+      </ul>
+    }
+
+    @if (blocked().length > 0) {
+      <h2 class="account-page__section">Không dùng được</h2>
+      <ul class="offer-voucher-grid">
+        @for (item of blocked(); track item.voucher_id) {
+          <li>
+            <article class="voucher-card voucher-card--disabled">
+              <div class="voucher-card__main">
+                <p class="voucher-card__code">{{ item.code }}</p>
+                <p class="voucher-card__name">{{ discountLabel(item) }}</p>
+                <p class="voucher-card__meta">HSD: {{ expiryLabel(item.end_date) }}</p>
+                <p class="voucher-card__reason">** {{ item.reason_text }}</p>
+              </div>
+            </article>
+          </li>
+        }
+      </ul>
+    }
+  }
+</main>

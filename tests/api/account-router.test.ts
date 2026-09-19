@@ -5,6 +5,8 @@ import { handleAccountRoute } from "../../apps/api/src/accounts/account-router.j
 
 const USER_ID = "10000000-0000-4000-8000-000000000001";
 const REASON = "Tai khoan co dau hieu vi pham nghiem trong dieu khoan bao mat cua he thong";
+// Not a real credential: a mock service return value, never validated for password complexity.
+const MOCK_TEMPORARY_PASSWORD = "not-a-real-secret-fixture-value";
 
 test("GET account list returns the service payload", async () => {
   const req = request("GET");
@@ -44,6 +46,31 @@ test("POST account lock passes parsed input and request IP", async () => {
   assert.equal(received[1], USER_ID);
   assert.equal(received[2].expectedVersion, 2);
   assert.equal(received[3].ipAddress, "127.0.0.1");
+});
+
+test("POST account create returns 201 with the created account", async () => {
+  const req = request("POST", JSON.stringify({ email: "new@velura.vn", fullName: "Nguoi moi", role: "member" }));
+  let received;
+  const res = response();
+
+  const handled = await handleAccountRoute({
+    req, res,
+    url: new URL("http://localhost/api/v1/admin/accounts"),
+    parts: ["api", "v1", "admin", "accounts"],
+    context: superAdminContext(), headers: {},
+    service: {
+      create: async (...args) => {
+        received = args;
+        return { user_id: USER_ID, email: "new@velura.vn", temporary_password: MOCK_TEMPORARY_PASSWORD };
+      }
+    }
+  });
+
+  assert.equal(handled, true);
+  assert.equal(res.status, 201);
+  assert.equal(res.json().temporary_password, MOCK_TEMPORARY_PASSWORD);
+  assert.equal(received[1].email, "new@velura.vn");
+  assert.equal(received[2].ipAddress, "127.0.0.1");
 });
 
 test("role escalation returns 202 while approval is pending", async () => {

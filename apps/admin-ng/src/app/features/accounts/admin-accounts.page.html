@@ -10,6 +10,14 @@
       <button class="admin-tab" [class.admin-tab--active]="tab() === 'logs'" type="button" (click)="setTab('logs')">Nhật ký</button>
     </div>
     <div class="admin-tab-content">
+      @if (canMutate() && tab() !== 'promotions' && tab() !== 'logs') {
+        <div class="admin-filter-bar__actions" style="margin-bottom:12px; justify-content:flex-end;">
+          <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openCreate()">
+            <app-admin-icon name="edit" />
+            Tạo tài khoản
+          </button>
+        </div>
+      }
       @if (tab() !== 'logs' && tab() !== 'promotions') {
         <form class="admin-filter-bar admin-order-filter-bar" (submit)="applyFilters($event)" (reset)="resetFilters($event)">
           <label class="admin-search-field">
@@ -279,6 +287,81 @@
           <button class="admin-btn admin-btn--secondary" type="submit">Xác nhận</button>
         </footer>
       </form>
+    </section>
+  </div>
+}
+
+@if (createOpen()) {
+  <div class="admin-modal-overlay">
+    <section class="admin-modal">
+      @if (createdAccount()) {
+        <header class="admin-modal__header">
+          <h2>Tạo tài khoản thành công</h2>
+          <button class="admin-icon-button" type="button" (click)="closeCreate()">×</button>
+        </header>
+        <div class="admin-modal__body">
+          <p>Tài khoản {{ createdAccount()!.email || createdAccount()!.phone }} đã được tạo và kích hoạt.</p>
+          @if (createdAccount()!.temporary_password) {
+            <div class="admin-price-preview">
+              <strong>Mật khẩu tạm thời</strong>
+              <span>{{ createdAccount()!.temporary_password }}</span>
+              <span class="admin-price-warning">Hãy gửi mật khẩu này cho người dùng và yêu cầu đổi mật khẩu sau lần đăng nhập đầu tiên. Mật khẩu sẽ không hiển thị lại.</span>
+            </div>
+          }
+        </div>
+        <footer class="admin-modal__footer">
+          <button class="admin-btn admin-btn--secondary" type="button" (click)="closeCreate()">Xong</button>
+        </footer>
+      } @else {
+        <form (submit)="submitCreate($event)">
+          <header class="admin-modal__header">
+            <h2>Tạo tài khoản mới</h2>
+            <button class="admin-icon-button" type="button" (click)="closeCreate()">×</button>
+          </header>
+          <div class="admin-modal__body">
+            <label class="admin-form-group">
+              <span class="admin-form-label">Họ tên</span>
+              <input class="admin-form-control" name="fullName" type="text" placeholder="VD: Nguyễn Văn A" required />
+            </label>
+            <label class="admin-form-group">
+              <span class="admin-form-label">Email</span>
+              <input class="admin-form-control" name="email" type="email" placeholder="VD: admin@velura.vn" />
+            </label>
+            <label class="admin-form-group">
+              <span class="admin-form-label">Số điện thoại</span>
+              <input class="admin-form-control" name="phone" type="tel" placeholder="VD: 0901234567" />
+            </label>
+            <label class="admin-form-group">
+              <span class="admin-form-label">Mật khẩu (bỏ trống để hệ thống tự tạo)</span>
+              <input class="admin-form-control" name="password" type="password" placeholder="Tối thiểu 8 ký tự, có hoa/thường/số" minlength="8" />
+            </label>
+            <label class="admin-form-group">
+              <span class="admin-form-label">Loại tài khoản</span>
+              <select class="admin-form-control" name="role" [value]="createRole()" (change)="onCreateRole($event)">
+                <option value="member">Thành viên</option>
+                <option value="admin">Quản trị viên</option>
+              </select>
+            </label>
+            @if (createRole() === 'admin') {
+              <label class="admin-form-group">
+                <span class="admin-form-label">Vai trò quản trị</span>
+                <select class="admin-form-control" name="adminRole">
+                  @for (role of adminRoles; track role) {
+                    <option [value]="role">{{ adminRoleLabel(role) }}</option>
+                  }
+                </select>
+              </label>
+            }
+            @if (createError()) {
+              <p class="field__error">{{ createError() }}</p>
+            }
+          </div>
+          <footer class="admin-modal__footer">
+            <button class="admin-btn admin-btn--ghost" type="button" (click)="closeCreate()">Hủy</button>
+            <button class="admin-btn admin-btn--secondary" type="submit">Tạo tài khoản</button>
+          </footer>
+        </form>
+      }
     </section>
   </div>
 }

@@ -10,7 +10,7 @@ import {
   AdminReturnRow,
   AdminTicketRow,
 } from '../../core/admin-api.service';
-import { adminDateTime } from '../../core/admin-format';
+import { adminDateTime, adminMoney } from '../../core/admin-format';
 import { adminErrorMessage, adminListCount, adminListRows, adminOffset, adminRangeLabel } from '../../core/admin-http';
 import { AdminSessionService } from '../../core/admin-session.service';
 import { AdminEmptyState } from '../../shared/admin-empty-state';
@@ -73,6 +73,7 @@ export class AdminReturnsPage {
   readonly canLookupOrders = computed(() => this.session.canAccessModule('orders'));
   readonly orderQuery = signal('');
   readonly selectedOrder = signal<AdminOrderRow | null>(null);
+  readonly refundSuggestion = signal<number | null>(null);
 
   readonly pendingReturns = computed(() => this.pendingReturnCount());
   readonly pendingTickets = computed(() => this.pendingTicketCount());
@@ -346,10 +347,27 @@ export class AdminReturnsPage {
    * Opens a return or ticket action modal.
    */
   openReturnAction(type: 'refund' | 'exchange' | 'reject', returnId: string): void {
-    this.selectedReturn.set(this.returns().find((row) => row.return_id === returnId) || null);
+    const row = this.returns().find((item) => item.return_id === returnId) || null;
+    this.selectedReturn.set(row);
     this.selectedTicket.set(null);
     this.actionType.set(type);
     this.actionError.set(null);
+    this.refundSuggestion.set(null);
+    if (type === 'refund' && row?.order_id) {
+      this.api.getOrder(row.order_id).subscribe({
+        next: (order) => {
+          // Ignore a stale response if the admin already switched to a different return.
+          if (this.selectedReturn()?.return_id === returnId) {
+            this.refundSuggestion.set(Number(order.total_amount) || null);
+          }
+        },
+        error: () => {
+          if (this.selectedReturn()?.return_id === returnId) {
+            this.refundSuggestion.set(null);
+          }
+        },
+      });
+    }
   }
 
   /**
@@ -370,6 +388,14 @@ export class AdminReturnsPage {
     this.selectedReturn.set(null);
     this.selectedTicket.set(null);
     this.actionError.set(null);
+    this.refundSuggestion.set(null);
+  }
+
+  /**
+   * Formats a currency amount for the refund suggestion hint.
+   */
+  money(value: number | undefined | null): string {
+    return adminMoney(value);
   }
 
   /**

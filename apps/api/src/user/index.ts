@@ -3,6 +3,7 @@ import { handleAuthRoute } from "./auth.js";
 import { handleProfileRoute } from "./profile.js";
 import { handleProductsRoute } from "./products.js";
 import { handleOrdersRoute } from "./orders.js";
+import { handleVouchersRoute } from "./vouchers.js";
 import { handleReturnsRoute } from "./returns.js";
 import { handleReviewsRoute } from "./reviews.js";
 import { handleQuizRoute } from "./quiz.js";
@@ -47,8 +48,10 @@ export async function handleUserRoute(
       return await handleProductsRoute(req, res, subRoute, action, corsHeaders);
       
     case "orders":
-    case "vouchers":
       return await handleOrdersRoute(req, res, subRoute, action, parts, corsHeaders, context);
+
+    case "vouchers":
+      return await handleVouchersRoute(req, res, action, corsHeaders, context);
       
     case "returns":
       return await handleReturnsRoute(req, res, action, corsHeaders, context);

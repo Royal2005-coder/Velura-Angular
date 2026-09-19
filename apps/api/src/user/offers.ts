@@ -1,25 +1,32 @@
 import { HttpError, sendJson } from "../http.js";
 import { selectRows } from "../supabase.js";
 import { requireUserAuth } from "./auth.js";
+import { buildWallet } from "./vouchers.js";
 import {
   asString,
   type AuthContext,
   type HeaderMap,
   type HttpRequest,
   type HttpResponse,
-  type JsonObject
+  type JsonObject,
+  type UserProfile
 } from "../types.js";
 
-const OFFER_STATUSES = Object.freeze({
-  LOCKED: "LOCKED",
-  AVAILABLE: "AVAILABLE",
-  USED: "USED",
-  EXPIRED: "EXPIRED",
-  SCHEDULED: "SCHEDULED"
-});
+/** Ảnh mặc định theo loại chiến dịch, dùng khi admin chưa tải ảnh riêng. */
+const DEFAULT_BANNER_BY_TYPE: Record<string, string> = {
+  flash_sale: "/assets/offers/flash-sale.jpg",
+  seasonal_sale: "/assets/offers/seasonal.jpg",
+  combo_discount: "/assets/offers/combo.jpg",
+  bulk_discount: "/assets/offers/bulk.jpg",
+  product_discount: "/assets/offers/product.jpg"
+};
 
 /**
- * Authenticated member offer list derived from vouchers and order history.
+ * Trang Ưu đãi phía khách hàng — chạy bằng dữ liệu thật từ bảng chiến dịch và mã.
+ *
+ * Mở cho cả khách vãng lai: ưu đãi là công cụ thu hút khách mới, bắt đăng nhập mới
+ * cho xem là tự chặn chính mình. Khách đã đăng nhập thì nhận thêm phần cá nhân hóa
+ * (mã đã dùng, nhắc bổ sung ngày sinh).
  */
 export async function handleOffersRoute(
   req: HttpRequest,
@@ -31,95 +38,127 @@ export async function handleOffersRoute(
     throw new HttpError(405, "METHOD_NOT_ALLOWED", "Phương thức không được hỗ trợ");
   }
 
-  const profile = requireUserAuth(context);
+  const profile = resolveProfile(context);
   const now = new Date();
-  const [{ rows: vouchers }, { rows: orders }] = await Promise.all([
-    selectRows("voucher", { limit: 500 }),
-    selectRows("orders", { user_id: `eq.${profile.user_id}`, limit: 500 })
+
+  // Đánh giá mã ở giá trị đơn bằng 0: ví voucher ở trang Ưu đãi cho khách xem mã nào
+  // đang có và điều kiện của từng mã, chưa gắn với một giỏ hàng cụ thể nào.
+  const [{ rows: promotions }, wallet] = await Promise.all([
+    selectRows("promotion", { is_active: "eq.true", order: "display_order.asc", limit: 100 }),
+    buildWallet(context, 0, 0)
   ]);
 
-  const usedVoucherIds = new Set(
-    orders.filter((order) => ["completed", "delivered"].includes(asString(order.status)) && order.voucher_id)
-      .map((order) => String(order.voucher_id))
-  );
-
-  const items = (vouchers || []).map((voucher) => normalizeVoucher(voucher, now, usedVoucherIds));
-  const birthday = profile.date_of_birth || profile.birthday || profile.birthdate || profile.dob;
-  if (!birthday) {
-    items.unshift({
-      id: "birthday-profile",
-      type: "birthday",
-      title: "Ưu đãi sinh nhật",
-      description: "Bổ sung ngày sinh để Velura chuẩn bị voucher và quà trong tháng sinh nhật.",
-      status: OFFER_STATUSES.LOCKED,
-      action: { label: "Bổ sung ngày sinh", href: "/src/pages/offers.html?offer=A1" },
-      terms: ["Giảm 15% cho đơn từ 500.000đ, tối đa 300.000đ.", "Mỗi tháng sinh nhật dùng một lần."]
-    });
-  }
+  const campaigns = (promotions || [])
+    .filter((promotion) => isRunning(promotion, now))
+    .map((promotion) => toCampaignCard(promotion, now));
 
   return sendJson(res, 200, {
     success: true,
     generated_at: now.toISOString(),
-    offers: items.sort(sortOffers)
+    is_member: Boolean(profile?.user_id),
+    featured: campaigns.filter((campaign) => campaign.is_featured),
+    campaigns,
+    vouchers: wallet.items.map(toVoucherCard),
+    birthday_prompt: buildBirthdayPrompt(profile)
   }, corsHeaders);
 }
 
-function normalizeVoucher(voucher: JsonObject, now: Date, usedVoucherIds: Set<string>): JsonObject {
-  const start = voucher.start_date ? new Date(String(voucher.start_date)) : null;
-  const end = voucher.end_date ? new Date(String(voucher.end_date)) : null;
-  const exhausted = voucher.usage_limit_total !== null && voucher.usage_limit_total !== undefined
-    && Number(voucher.used_count || 0) >= Number(voucher.usage_limit_total);
-  let status: string = OFFER_STATUSES.AVAILABLE;
-  if (usedVoucherIds.has(String(voucher.voucher_id))) status = OFFER_STATUSES.USED;
-  else if (exhausted || (end && end < now) || voucher.is_active === false) status = OFFER_STATUSES.EXPIRED;
-  else if (start && start > now) status = OFFER_STATUSES.SCHEDULED;
+function isRunning(promotion: JsonObject, now: Date): boolean {
+  const start = promotion.start_date ? new Date(String(promotion.start_date)) : null;
+  const end = promotion.end_date ? new Date(String(promotion.end_date)) : null;
+  if (start && start > now) return false;
+  if (end && end < now) return false;
+  return true;
+}
+
+function toCampaignCard(promotion: JsonObject, now: Date): JsonObject {
+  const type = asString(promotion.promo_type) || "product_discount";
+  const end = promotion.end_date ? new Date(String(promotion.end_date)) : null;
+  const daysLeft = end ? Math.max(0, Math.ceil((end.getTime() - now.getTime()) / 86400000)) : null;
 
   return {
-    id: voucher.voucher_id,
-    type: voucher.discount_type || "voucher",
-    title: formatVoucherTitle(voucher),
-    code: voucher.code || null,
-    description: describeDiscount(voucher),
-    status,
-    valid_from: voucher.start_date || null,
-    valid_until: voucher.end_date || null,
-    min_order_value: Number(voucher.min_order_value || 0),
-    max_discount_amount: voucher.max_discount_amount ? Number(voucher.max_discount_amount) : null,
-    terms: [
-      Number(voucher.min_order_value || 0) > 0 ? `Đơn tối thiểu ${formatMoney(voucher.min_order_value)}.` : "Không yêu cầu giá trị tối thiểu.",
-      voucher.end_date ? `Hết hạn ${new Date(String(voucher.end_date)).toLocaleDateString("vi-VN")}.` : "Áp dụng đến khi chương trình kết thúc."
-    ],
-    action: status === OFFER_STATUSES.AVAILABLE
-      ? { label: "Dùng ngay", href: "/src/pages/cart.html" }
-      : { label: "Xem chi tiết", href: "/src/pages/offers.html" }
+    promo_id: promotion.promo_id,
+    title: asString(promotion.promo_name),
+    description: asString(promotion.description) || null,
+    type,
+    banner_image_url: asString(promotion.banner_image_url) || DEFAULT_BANNER_BY_TYPE[type] || null,
+    // Nhãn do admin đặt được ưu tiên; nếu bỏ trống thì tự sinh nhãn đếm ngược khi
+    // chiến dịch sắp kết thúc, để khách thấy được tính cấp thiết mà admin không phải sửa tay.
+    highlight_label: asString(promotion.highlight_label)
+      || (daysLeft !== null && daysLeft <= 3 ? `Chỉ còn ${daysLeft} ngày` : null),
+    is_featured: promotion.is_featured === true,
+    start_date: promotion.start_date || null,
+    end_date: promotion.end_date || null,
+    days_left: daysLeft
   };
 }
 
-function formatVoucherTitle(voucher: JsonObject): string {
-  const titlesByCode: Record<string, string> = {
-    SALE50K: "Giảm 50K cho đơn từ 500K",
-    SUMMER25: "Giảm 25% mùa hè",
-    VIP200K: "Ưu đãi VIP giảm 200K",
-    FREESHIP: "Miễn phí vận chuyển",
-    WELCOME10: "Giảm 10% cho khách mới",
-    WELCOME100: "Giảm 10% cho khách mới"
+function toVoucherCard(item: {
+  voucherId: string;
+  promoId: string | null;
+  code: string;
+  name: string;
+  discountType: string;
+  discountValue: number;
+  maxDiscountAmount: number | null;
+  minOrderValue: number;
+  endDate: string | null;
+  remainingUses: number | null;
+  eligible: boolean;
+  reason: string | null;
+  reasonText: string | null;
+}): JsonObject {
+  return {
+    voucher_id: item.voucherId,
+    promo_id: item.promoId,
+    code: item.code,
+    name: item.name,
+    description: describeDiscount(item),
+    discount_type: item.discountType,
+    min_order_value: item.minOrderValue,
+    end_date: item.endDate,
+    remaining_uses: item.remainingUses,
+    // Ở trang Ưu đãi, "không dùng được vì đơn chưa đủ tiền" chưa phải là lỗi — khách
+    // chưa có giỏ hàng nào. Chỉ các lý do thật sự chặn mới hạ trạng thái xuống.
+    usable: item.eligible || item.reason === "MIN_ORDER_NOT_MET",
+    blocked_reason: item.reason === "MIN_ORDER_NOT_MET" ? null : item.reasonText,
+    condition_text: item.minOrderValue > 0
+      ? `Đơn tối thiểu ${formatMoney(item.minOrderValue)}`
+      : "Không yêu cầu giá trị tối thiểu"
   };
-  const code = String(voucher.code || "").trim().toUpperCase();
-  return titlesByCode[code] || asString(voucher.name) || asString(voucher.code) || "Ưu đãi Velura";
 }
 
-function describeDiscount(voucher: JsonObject): string {
-  if (voucher.discount_type === "free_shipping") return "Miễn phí vận chuyển cho đơn đủ điều kiện.";
-  if (voucher.discount_type === "percentage") {
-    const cap = voucher.max_discount_amount ? `, tối đa ${formatMoney(voucher.max_discount_amount)}` : "";
-    return `Giảm ${Number(voucher.discount_value || 0)}%${cap}.`;
+function describeDiscount(item: {
+  discountType: string;
+  discountValue: number;
+  maxDiscountAmount: number | null;
+}): string {
+  if (item.discountType === "free_shipping") return "Miễn phí vận chuyển";
+  if (item.discountType === "percentage") {
+    const cap = item.maxDiscountAmount ? `, tối đa ${formatMoney(item.maxDiscountAmount)}` : "";
+    return `Giảm ${item.discountValue}%${cap}`;
   }
-  return `Giảm ${formatMoney(voucher.discount_value || 0)}.`;
+  return `Giảm ${formatMoney(item.discountValue)}`;
 }
 
-function sortOffers(a: JsonObject, b: JsonObject): number {
-  const rank: Record<string, number> = { AVAILABLE: 0, LOCKED: 1, SCHEDULED: 2, USED: 3, EXPIRED: 4 };
-  return (rank[asString(a.status)] ?? 9) - (rank[asString(b.status)] ?? 9);
+function buildBirthdayPrompt(profile: UserProfile | null): JsonObject | null {
+  if (!profile?.user_id) return null;
+  const birthday = profile.date_of_birth || profile.birthday || profile.birthdate || profile.dob;
+  if (birthday) return null;
+  return {
+    title: "Ưu đãi sinh nhật",
+    description: "Bổ sung ngày sinh để Velura chuẩn bị voucher và quà trong tháng sinh nhật của bạn.",
+    action_label: "Bổ sung ngày sinh",
+    action_route: "/account/profile"
+  };
+}
+
+function resolveProfile(context: AuthContext): UserProfile | null {
+  try {
+    return requireUserAuth(context);
+  } catch {
+    return null;
+  }
 }
 
 function formatMoney(value: unknown): string {

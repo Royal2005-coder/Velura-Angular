@@ -186,7 +186,9 @@
       @if (selected()!.images?.length) {
         <div class="admin-review-gallery">
           @for (image of selected()!.images!; track image) {
-            <img [src]="image" alt="Ảnh đánh giá" width="96" height="96" />
+            <button type="button" class="admin-review-gallery__item" title="Xem ảnh cỡ lớn" (click)="openLightbox(image)">
+              <img [src]="image" alt="Ảnh đánh giá" width="160" height="160" />
+            </button>
           }
         </div>
       }
@@ -230,5 +232,12 @@
         </footer>
       </form>
     </section>
+  </div>
+}
+
+@if (lightboxImage()) {
+  <div class="admin-lightbox-overlay" (click)="closeLightbox()">
+    <button class="admin-lightbox-overlay__close" type="button" (click)="closeLightbox()">×</button>
+    <img class="admin-lightbox-overlay__image" [src]="lightboxImage()" alt="Ảnh đánh giá cỡ lớn" (click)="$event.stopPropagation()" />
   </div>
 }

@@ -44,6 +44,7 @@ export class AdminReviewsPage {
   readonly actionError = signal<string | null>(null);
   readonly menuId = signal<string | null>(null);
   readonly detailOpen = signal(false);
+  readonly lightboxImage = signal<string | null>(null);
   readonly canMutate = computed(() => this.session.canMutate('reviews'));
 
   readonly pendingCount = computed(() => this.rows().filter((row) => row.status === 'pending').length);
@@ -203,6 +204,21 @@ export class AdminReviewsPage {
     this.actionType.set(null);
     this.detailOpen.set(false);
     this.actionError.set(null);
+    this.lightboxImage.set(null);
+  }
+
+  /**
+   * Opens a review image full-size in a lightbox overlay.
+   */
+  openLightbox(image: string): void {
+    this.lightboxImage.set(image);
+  }
+
+  /**
+   * Closes the image lightbox without dismissing the detail drawer.
+   */
+  closeLightbox(): void {
+    this.lightboxImage.set(null);
   }
 
   /**

@@ -187,6 +187,33 @@ export interface AdminPromotionRow {
   budget_limit?: number;
   total_discount_issued?: number;
   version?: number;
+  /** Nội dung marketing hiển thị cho khách trên trang Ưu đãi — xem migration 026. */
+  description?: string | null;
+  banner_image_url?: string | null;
+  highlight_label?: string | null;
+  display_order?: number | null;
+  is_featured?: boolean | null;
+}
+
+/** Số liệu tổng hợp trả về từ `/api/v1/admin/pricing/statistics`. */
+export interface AdminPricingStatistics {
+  promotions: {
+    total: number;
+    active: number;
+    paused: number;
+    totalBudget: number;
+    totalIssued: number;
+    budgetRemaining: number;
+    budgetUsagePercent: number;
+  };
+  vouchers: {
+    total: number;
+    active: number;
+    expired: number;
+    totalUsed: number;
+    totalLimit: number;
+    usagePercent: number;
+  };
 }
 
 export interface AdminVoucherRow {
@@ -448,6 +475,13 @@ export class AdminApiService {
    */
   listAccounts(params: Record<string, string> = {}): Observable<AdminListPayload<AdminAccountRow>> {
     return this.http.get<AdminListPayload<AdminAccountRow>>(`${this.baseUrl}/api/v1/admin/accounts`, { params: this.params(params) });
+  }
+
+  /**
+   * Creates a new member or admin account through the admin API.
+   */
+  createAccount(body: Record<string, unknown>): Observable<AdminAccountRow & { temporary_password?: string }> {
+    return this.http.post<AdminAccountRow & { temporary_password?: string }>(`${this.baseUrl}/api/v1/admin/accounts`, body);
   }
 
   /**
@@ -813,6 +847,33 @@ export class AdminApiService {
   }
 
   /**
+   * Tạo một chiến dịch khuyến mãi. Chiến dịch mới luôn ở trạng thái tạm dừng; phải bấm
+   * "Chạy" riêng, để không có chiến dịch nào lên sóng chỉ vì lỡ tay bấm Lưu.
+   */
+  createPromotion(body: Record<string, unknown>): Observable<AdminPromotionRow> {
+    return this.http.post<AdminPromotionRow>(`${this.baseUrl}/api/v1/admin/promotions`, body);
+  }
+
+  /**
+   * Sửa một chiến dịch. Trường bỏ trống nghĩa là giữ nguyên, chuỗi rỗng là xoá.
+   */
+  updatePromotion(promoId: string, body: Record<string, unknown>): Observable<AdminPromotionRow> {
+    return this.http.patch<AdminPromotionRow>(`${this.baseUrl}/api/v1/admin/promotions/${encodeURIComponent(promoId)}`, body);
+  }
+
+  /**
+   * Tải ảnh banner chiến dịch lên kho và nhận lại đường dẫn công khai.
+   *
+   * Không đặt content-type: trình duyệt phải tự sinh boundary của multipart, đặt tay
+   * vào sẽ làm máy chủ không tách được tệp.
+   */
+  uploadPromotionBanner(file: File): Observable<{ url: string }> {
+    const form = new FormData();
+    form.append('file', file);
+    return this.http.post<{ url: string }>(`${this.baseUrl}/api/v1/admin/promotions/banner`, form);
+  }
+
+  /**
    * Activates a promotion campaign.
    */
   activatePromotion(promoId: string, body: Record<string, unknown>): Observable<unknown> {
@@ -845,6 +906,16 @@ export class AdminApiService {
    */
   listVouchers(params: Record<string, string> = {}): Observable<AdminListPayload<AdminVoucherRow>> {
     return this.http.get<AdminListPayload<AdminVoucherRow>>(`${this.baseUrl}/api/v1/admin/vouchers`, { params: this.params(params) });
+  }
+
+  /**
+   * Số liệu tổng hợp chiến dịch và mã giảm giá.
+   *
+   * Endpoint này đã tồn tại từ trước nhưng chưa màn hình nào gọi tới, nên tab Thống kê
+   * hiển thị một khối rỗng viết cứng.
+   */
+  pricingStatistics(): Observable<AdminPricingStatistics> {
+    return this.http.get<AdminPricingStatistics>(`${this.baseUrl}/api/v1/admin/pricing/statistics`);
   }
 
   /**

@@ -1,0 +1,144 @@
+<section class="voucher-wallet">
+  <header class="voucher-wallet__head">
+    <h3 class="voucher-wallet__title">Ưu đãi dành riêng cho bạn</h3>
+    <button type="button" class="voucher-wallet__link" (click)="openModal()">Ví Voucher</button>
+  </header>
+
+  @if (loading()) {
+    <p class="voucher-wallet__state">Đang tìm ưu đãi tốt nhất cho đơn của bạn…</p>
+  } @else if (loadError()) {
+    <p class="voucher-wallet__state voucher-wallet__state--error">{{ loadError() }}</p>
+  } @else if (selected(); as current) {
+    <article class="voucher-card voucher-card--applied">
+      <div class="voucher-card__main">
+        <p class="voucher-card__code">{{ current.code }}</p>
+        <p class="voucher-card__name">{{ current.name }}</p>
+        <p class="voucher-card__meta">HSD: {{ expiryLabel(current.end_date) }}</p>
+      </div>
+      <div class="voucher-card__side">
+        <span class="voucher-card__badge">✓ Đã áp dụng</span>
+        <p class="voucher-card__saving">Tiết kiệm {{ money(current.discount_amount) }}</p>
+        <div class="voucher-card__actions">
+          <button type="button" class="btn-link" (click)="openModal()">Đổi mã</button>
+          <button type="button" class="btn-link btn-link--muted" (click)="clear()">Bỏ mã</button>
+        </div>
+      </div>
+    </article>
+
+    @if (betterOption(); as better) {
+      <p class="voucher-wallet__hint">
+        Có mã lợi hơn: <strong>{{ better.code }}</strong> tiết kiệm {{ money(better.discount_amount) }}.
+        <button type="button" class="btn-link" (click)="choose(better)">Dùng mã này</button>
+      </p>
+    }
+  } @else if (hasAnyVoucher()) {
+    <p class="voucher-wallet__state">Chưa áp mã nào cho đơn này.</p>
+    <button type="button" class="btn-outline" (click)="openModal()">Chọn mã giảm giá</button>
+  } @else {
+    <p class="voucher-wallet__state">Hiện chưa có ưu đãi nào khả dụng.</p>
+  }
+
+  @if (nearestGoal(); as goal) {
+    <div class="voucher-wallet__goal">
+      <p class="voucher-wallet__goal-text">
+        Mua thêm <strong>{{ money(goal.shortfall) }}</strong> để dùng mã {{ goal.code }} — {{ goal.name }}
+      </p>
+    </div>
+  }
+</section>
+
+@if (modalOpen()) {
+  <div class="voucher-modal" role="dialog" aria-modal="true" aria-labelledby="voucher-modal-title">
+    <div class="voucher-modal__backdrop" (click)="closeModal()"></div>
+    <div class="voucher-modal__panel">
+      <header class="voucher-modal__head">
+        <h2 id="voucher-modal-title" class="voucher-modal__title">Ví Voucher của bạn</h2>
+        <button type="button" class="voucher-modal__close" aria-label="Đóng" (click)="closeModal()">×</button>
+      </header>
+
+      <p class="voucher-modal__note">Mỗi đơn hàng chỉ áp dụng được một mã giảm giá.</p>
+
+      <div class="voucher-modal__manual">
+        <label class="voucher-modal__manual-label" for="voucher-manual-code">Nhập mã giảm giá</label>
+        <div class="voucher-modal__manual-row">
+          <input
+            id="voucher-manual-code"
+            class="form-input"
+            type="text"
+            autocomplete="off"
+            placeholder="Ví dụ: VLR10"
+            [value]="manualCode()"
+            (input)="setManualCode($event)"
+            (keyup.enter)="submitManualCode()"
+          />
+          <button type="button" class="btn-primary" [disabled]="applying()" (click)="submitManualCode()">
+            {{ applying() ? 'Đang kiểm tra…' : 'Áp dụng' }}
+          </button>
+        </div>
+        @if (manualError()) {
+          <p class="field__error">{{ manualError() }}</p>
+        }
+      </div>
+
+      @if (eligible().length > 0) {
+        <h3 class="voucher-modal__group">Dùng được cho đơn này</h3>
+        <ul class="voucher-modal__list">
+          @for (item of eligible(); track item.voucher_id) {
+            <li>
+              <button
+                type="button"
+                class="voucher-card voucher-card--selectable"
+                [class.voucher-card--active]="item.voucher_id === selectedId()"
+                (click)="choose(item)"
+              >
+                <div class="voucher-card__main">
+                  <p class="voucher-card__code">
+                    {{ item.code }}
+                    @if (item.remaining_uses !== null) {
+                      <span class="voucher-card__remaining">(Còn {{ item.remaining_uses }})</span>
+                    }
+                  </p>
+                  <p class="voucher-card__name">{{ item.name }}</p>
+                  <p class="voucher-card__meta">HSD: {{ expiryLabel(item.end_date) }}</p>
+                </div>
+                <div class="voucher-card__side">
+                  <p class="voucher-card__saving">− {{ money(item.discount_amount) }}</p>
+                  @if (item.voucher_id === selectedId()) {
+                    <span class="voucher-card__badge">Đang dùng</span>
+                  }
+                </div>
+              </button>
+            </li>
+          }
+        </ul>
+      }
+
+      @if (ineligible().length > 0) {
+        <h3 class="voucher-modal__group">Chưa đủ điều kiện</h3>
+        <ul class="voucher-modal__list">
+          @for (item of ineligible(); track item.voucher_id) {
+            <li>
+              <article class="voucher-card voucher-card--disabled">
+                <div class="voucher-card__main">
+                  <p class="voucher-card__code">
+                    {{ item.code }}
+                    @if (item.remaining_uses !== null) {
+                      <span class="voucher-card__remaining">(Còn {{ item.remaining_uses }})</span>
+                    }
+                  </p>
+                  <p class="voucher-card__name">{{ item.name }}</p>
+                  <p class="voucher-card__meta">HSD: {{ expiryLabel(item.end_date) }}</p>
+                  <p class="voucher-card__reason">** {{ item.reason_text }}</p>
+                </div>
+              </article>
+            </li>
+          }
+        </ul>
+      }
+
+      @if (!hasAnyVoucher()) {
+        <p class="voucher-modal__empty">Bạn chưa có mã giảm giá nào. Theo dõi trang Ưu đãi để nhận mã mới.</p>
+      }
+    </div>
+  </div>
+}

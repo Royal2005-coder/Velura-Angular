@@ -1,0 +1,128 @@
+<div class="admin-modal-overlay">
+  <section class="admin-modal admin-drawer--wide">
+    <form (submit)="submit($event)">
+      <header class="admin-modal__header">
+        <h2>{{ title() }}</h2>
+        <button class="admin-icon-button" type="button" (click)="close()" aria-label="Đóng">×</button>
+      </header>
+
+      <div class="admin-modal__body">
+        @if (saveError()) {
+          <p class="admin-form-error" role="alert">{{ saveError() }}</p>
+        }
+
+        <label class="admin-form-group">
+          <span class="admin-form-label">Tên chiến dịch <abbr title="Bắt buộc">*</abbr></span>
+          <input class="admin-form-control" name="name" required minlength="2"
+                 [value]="campaign()?.promo_name || ''" [readOnly]="!canMutate()"
+                 placeholder="Sale cuối tuần tháng 9" />
+        </label>
+
+        @if (!isEdit()) {
+          <label class="admin-form-group">
+            <span class="admin-form-label">Loại chiến dịch</span>
+            <select class="admin-form-control" name="type" [disabled]="!canMutate()">
+              @for (option of promoTypes; track option.value) {
+                <option [value]="option.value">{{ option.label }}</option>
+              }
+            </select>
+            <small class="admin-form-helper">Chỉ đặt được lúc tạo. Đổi loại của chiến dịch đang chạy sẽ làm lệch cách tính của các mã đã phát.</small>
+          </label>
+        }
+
+        <div class="admin-form-row">
+          <label class="admin-form-group">
+            <span class="admin-form-label">Bắt đầu <abbr title="Bắt buộc">*</abbr></span>
+            <input class="admin-form-control" name="startDate" type="datetime-local" required
+                   [value]="toLocalInput(campaign()?.start_date)" [readOnly]="!canMutate()" />
+          </label>
+          <label class="admin-form-group">
+            <span class="admin-form-label">Kết thúc <abbr title="Bắt buộc">*</abbr></span>
+            <input class="admin-form-control" name="endDate" type="datetime-local" required
+                   [value]="toLocalInput(campaign()?.end_date)" [readOnly]="!canMutate()" />
+          </label>
+        </div>
+
+        <label class="admin-form-group">
+          <span class="admin-form-label">Ngân sách chiến dịch (₫)</span>
+          <input class="admin-form-control" name="budgetLimit" type="number" min="0" step="1000"
+                 [value]="campaign()?.budget_limit ?? 0" [readOnly]="!canMutate()" />
+          @if (isEdit() && issued() > 0) {
+            <small class="admin-form-helper">
+              Đã giảm cho khách {{ issued().toLocaleString('vi-VN') }}₫. Đặt ngân sách thấp hơn mức này thì
+              chiến dịch sẽ tự dừng ngay lần dùng mã kế tiếp.
+            </small>
+          } @else {
+            <small class="admin-form-helper">Để 0 nghĩa là không giới hạn. Khi tiêu hết, hệ thống tự tạm dừng chiến dịch và toàn bộ mã của nó.</small>
+          }
+        </label>
+
+        <hr class="admin-form-divider" />
+        <p class="admin-form-section">Nội dung hiển thị trên trang Ưu đãi của khách</p>
+
+        <label class="admin-form-group">
+          <span class="admin-form-label">Mô tả</span>
+          <textarea class="admin-form-control admin-form-textarea" name="description" rows="3" maxlength="2000"
+                    [readOnly]="!canMutate()"
+                    placeholder="Giảm đến 30% toàn bộ bộ sưu tập thu đông.">{{ campaign()?.description || '' }}</textarea>
+        </label>
+
+        <div class="admin-form-group">
+          <span class="admin-form-label">Ảnh banner</span>
+          @if (bannerUrl()) {
+            <img class="admin-banner-preview" [src]="bannerUrl()" alt="Xem trước ảnh banner chiến dịch" />
+            <p class="admin-form-helper admin-form-helper--break">{{ bannerUrl() }}</p>
+          } @else {
+            <p class="admin-form-helper">Chưa có ảnh. Trang Ưu đãi sẽ dùng ảnh mặc định theo loại chiến dịch.</p>
+          }
+          @if (canMutate()) {
+            <div class="admin-upload-row">
+              <input type="file" accept="image/jpeg,image/png,image/webp,image/gif"
+                     [disabled]="uploading()" (change)="uploadBanner($event)" aria-label="Chọn ảnh banner" />
+              @if (bannerUrl()) {
+                <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="clearBanner()">Gỡ ảnh</button>
+              }
+            </div>
+            @if (uploading()) {
+              <p class="admin-form-helper">Đang tải ảnh lên…</p>
+            }
+            <small class="admin-form-helper">JPG, PNG, WebP hoặc GIF, tối đa 5 MB.</small>
+          }
+        </div>
+
+        <div class="admin-form-row">
+          <label class="admin-form-group">
+            <span class="admin-form-label">Nhãn nổi bật</span>
+            <input class="admin-form-control" name="highlightLabel" maxlength="60"
+                   [value]="campaign()?.highlight_label || ''" [readOnly]="!canMutate()"
+                   (input)="onLabelInput($event)" placeholder="Chỉ còn 2 ngày" />
+            <small class="admin-form-helper">{{ labelLength() }}/60. Bỏ trống thì hệ thống tự đếm ngược khi chiến dịch còn dưới 3 ngày.</small>
+          </label>
+          <label class="admin-form-group">
+            <span class="admin-form-label">Thứ tự hiển thị</span>
+            <input class="admin-form-control" name="displayOrder" type="number" min="0"
+                   [value]="campaign()?.display_order ?? 0" [readOnly]="!canMutate()" />
+            <small class="admin-form-helper">Số nhỏ hơn lên trước.</small>
+          </label>
+        </div>
+
+        <label class="admin-form-check">
+          <input type="checkbox" name="isFeatured" [checked]="campaign()?.is_featured === true" [disabled]="!canMutate()" />
+          <span>Đẩy lên khối nổi bật đầu trang Ưu đãi</span>
+        </label>
+      </div>
+
+      <footer class="admin-modal__footer">
+        @if (!isEdit()) {
+          <p class="admin-modal__footer-note">Chiến dịch mới được lưu ở trạng thái tạm dừng. Bấm “Kích hoạt” trong bảng để lên sóng.</p>
+        }
+        <button class="admin-btn admin-btn--ghost" type="button" (click)="close()">Đóng</button>
+        @if (canMutate()) {
+          <button class="admin-btn admin-btn--secondary" type="submit" [disabled]="saving() || uploading()">
+            {{ saving() ? 'Đang lưu…' : 'Lưu' }}
+          </button>
+        }
+      </footer>
+    </form>
+  </section>
+</div>

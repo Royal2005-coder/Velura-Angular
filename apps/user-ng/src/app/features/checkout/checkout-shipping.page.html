@@ -155,30 +155,14 @@
             </article>
           }
         </div>
-        <div class="form-group">
-          <label for="coupon">Mã giảm giá</label>
-          @if (voucherName()) {
-            <p class="summary-note">{{ voucherName() }} {{ discountLabel() }}</p>
-            <button type="button" class="btn-outline" (click)="clearVoucher()">Bỏ mã</button>
-          } @else {
-            <div class="form-row">
-              <input
-                id="coupon"
-                class="form-input"
-                type="text"
-                placeholder="Nhập mã"
-                [value]="voucherCode()"
-                (input)="setVoucherCode($event)"
-              />
-              <button type="button" class="btn-outline" [disabled]="applyingVoucher()" (click)="applyVoucher()">
-                Áp dụng
-              </button>
-            </div>
-          }
-          @if (voucherError()) {
-            <p class="field__error">{{ voucherError() }}</p>
-          }
-        </div>
+        <app-voucher-wallet
+          [orderValue]="subtotal()"
+          [shippingFee]="shippingFee()"
+          (applied)="onVoucherApplied($event)"
+        />
+        @if (voucherError()) {
+          <p class="field__error">{{ voucherError() }}</p>
+        }
         <div class="summary-lines">
           <div class="summary-line"><span>Tạm tính</span><span class="summary-line__value">{{ subtotalLabel() }}</span></div>
           <div class="summary-line summary-line--shipping"><span>Vận chuyển</span><span class="summary-line__value">{{ shippingLabel() }}</span></div>

@@ -1,6 +1,8 @@
 import { config } from "../config.js";
-import { getRequestIp, readJson, sendJson } from "../http.js";
+import { getRequestIp, HttpError, readJson, sendJson } from "../http.js";
 import type { RouteArgs } from "../types.js";
+import { readMultipartImage, uploadToSupabaseStorage } from "../user/upload.js";
+import { PROMOTION_BANNER_STORAGE, PROMOTION_OPERATOR_ROLES } from "./pricing-constants.js";
 import type { PricingService } from "./pricing-service.js";
 
 /**
@@ -33,6 +35,21 @@ export async function handlePricingRoute({ req, res, url, parts, context, header
     if (req.method === "POST" && parts.length === 4) {
       const body = await readJson(req, config.maxBodyBytes);
       sendJson(res, 201, await service.createPromotion(context, body), headers);
+      return true;
+    }
+    // Tải ảnh banner chiến dịch. Đặt trước nhánh :promoId vì promo_id là uuid nên không
+    // thể trùng với "banner". Chốt quyền kiểm ngay tại đây: tuyến tải ảnh của khách
+    // (/api/user/upload/evidence) không yêu cầu đăng nhập, không lấy đó làm mẫu.
+    if (req.method === "POST" && parts[4] === "banner" && parts.length === 5) {
+      if (!context?.authUser?.id) {
+        throw new HttpError(401, "AUTH_REQUIRED", "Authentication is required");
+      }
+      if (!PROMOTION_OPERATOR_ROLES.includes(context.roleCode)) {
+        throw new HttpError(403, "RBAC_DENIED", "Chỉ người vận hành giá & khuyến mãi mới được tải ảnh chiến dịch.");
+      }
+      const image = await readMultipartImage(req);
+      const url = await uploadToSupabaseStorage(image.fileBuffer, image.fileName, image.mimeType, PROMOTION_BANNER_STORAGE);
+      sendJson(res, 200, { url }, headers);
       return true;
     }
     const promoId = parts[4];

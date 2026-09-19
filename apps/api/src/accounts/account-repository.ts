@@ -1,6 +1,7 @@
+import { hashPassword } from "../auth-helper.js";
 import { HttpError } from "../http.js";
-import { callRpc, selectOne, selectRows } from "../supabase.js";
-import { asString, isJsonObject, type JsonObject } from "../types.js";
+import { callRpc, insertRow, selectOne, selectRows } from "../supabase.js";
+import { asJsonObject, asString, isJsonObject, type JsonObject } from "../types.js";
 import { ACCOUNT_SELECT } from "./account-constants.js";
 
 /**
@@ -75,6 +76,19 @@ export interface AccountReviewInput {
 }
 
 /**
+ * New-account creation input after validation.
+ */
+export interface AccountCreateInput {
+  email: string | null;
+  phone: string | null;
+  fullName: string;
+  password: string;
+  role: string;
+  adminRole: string | null;
+  ipAddress: string;
+}
+
+/**
  * Persistence surface used by `createAccountService`.
  */
 export interface AccountRepository {
@@ -83,6 +97,11 @@ export interface AccountRepository {
     accessToken: string
   ): Promise<{ rows: JsonObject[]; count: number | undefined }>;
   findById(userId: string, accessToken: string): Promise<JsonObject | null>;
+  create(
+    input: AccountCreateInput,
+    actorId: string,
+    actorRole: string
+  ): Promise<JsonObject>;
   listRoleRequests(
     filters: AccountRequestFilters,
     accessToken: string
@@ -143,6 +162,46 @@ export function createAccountRepository(): AccountRepository {
         select: ACCOUNT_SELECT,
         user_id: `eq.${userId}`
       }, authOptions(accessToken)));
+    },
+
+    async create(input, actorId, actorRole) {
+      return withAccountError(async () => {
+        if (input.email) {
+          const existingEmail = await selectOne("users", { email: `eq.${input.email}` });
+          if (existingEmail) {
+            throw new HttpError(409, "DUPLICATE_ACCOUNT", "Email đã được sử dụng trên hệ thống");
+          }
+        }
+        if (input.phone) {
+          const existingPhone = await selectOne("users", { phone: `eq.${input.phone}` });
+          if (existingPhone) {
+            throw new HttpError(409, "DUPLICATE_ACCOUNT", "Số điện thoại đã được sử dụng trên hệ thống");
+          }
+        }
+        const created = asJsonObject(await insertRow("users", {
+          email: input.email,
+          phone: input.phone,
+          full_name: input.fullName,
+          password_hash: hashPassword(input.password),
+          role: input.role,
+          admin_role: input.adminRole,
+          is_active: true,
+          is_verified: true
+        }));
+        await insertRow("audit_log", {
+          actor_id: actorId,
+          actor_role: actorRole,
+          action: "create",
+          module: "accounts",
+          target_id: created.user_id,
+          old_value: null,
+          new_value: { email: created.email, phone: created.phone, role: created.role, admin_role: created.admin_role },
+          ip_address: input.ipAddress || "127.0.0.1",
+          timestamp: new Date().toISOString()
+        });
+        const { password_hash: _passwordHash, otp_code: _otpCode, otp_expires_at: _otpExpiresAt, ...safeAccount } = created;
+        return safeAccount;
+      });
     },
 
     async listRoleRequests(filters, accessToken) {

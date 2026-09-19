@@ -142,6 +142,12 @@ export const routes: Routes = [
         title: 'Đánh giá sản phẩm - Velura Store',
       },
       {
+        path: 'account/vouchers',
+        canActivate: [authGuard],
+        loadComponent: () => import('./features/account/vouchers.page').then((m) => m.AccountVouchersPage),
+        title: 'Ví Voucher - Velura Store',
+      },
+      {
         path: 'checkout/shipping',
         loadComponent: () => import('./features/checkout/checkout-shipping.page').then((m) => m.CheckoutShippingPage),
         title: 'Vận chuyển & Thanh toán',

@@ -145,3 +145,23 @@
 .admin-promo-console .admin-card__body { padding:16px 20px 20px; }
 @media(max-width:1100px){.admin-pricing-kpis,.admin-promo-kpis{grid-template-columns:repeat(2,minmax(0,1fr));}.admin-promo-campaign-layout,.admin-promo-split,.admin-promo-workspace-grid,.admin-promo-overview-grid,.admin-promo-command-grid,.admin-promo-operational-grid{grid-template-columns:1fr;}.admin-promo-campaign-cards{grid-template-columns:repeat(2,minmax(0,1fr));}.admin-promo-preview-section:last-child{grid-column:auto;}.admin-promo-preview{position:static;}.admin-promo-mini-kpis .admin-promo-detail-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.admin-promo-detail-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
 @media(max-width:768px){.admin-page-tools,.admin-promo-view-head{align-items:flex-start;flex-direction:column;}.admin-promo-workspace-toolbar{width:100%;align-items:stretch;flex-direction:column;}.admin-promo-campaign-cards{grid-template-columns:1fr;}.admin-promo-campaign-card header,.admin-promo-campaign-card footer{align-items:flex-start;flex-direction:column;}.admin-price-range{flex:1 1 100%;}.admin-price-range .admin-form-control{width:100%;min-width:0;}.admin-promo-actions{display:grid;}.admin-price-form-grid,.admin-promo-form,.admin-promo-form-grid,.admin-promo-conditional,.admin-promo-combo-row,.admin-promo-detail-grid,.admin-promo-input-action{grid-template-columns:1fr;}.admin-price-modal,.admin-promo-modal{width:min(100vw - 24px, 100%);}.admin-drawer__actions{flex-wrap:wrap;justify-content:flex-end;}}
+
+/* --- Ngân sách chiến dịch & tab Thống kê (A4) ------------------------------ */
+/* Thanh tiến độ ngân sách: trước migration 025 con số luôn là 0 nên không cần
+   thanh nào; giờ nó phản ánh tiền thật đã phát ra, và admin cần thấy ngưỡng. */
+.admin-budget__figure { display: block; font-variant-numeric: tabular-nums; }
+.admin-budget__note { display: inline-block; margin-top: 4px; font-size: .6875rem; font-weight: 600; }
+.admin-budget__note--warning { color: #a35f1e; }
+.admin-budget__note--danger { color: var(--error); }
+
+.admin-progress { width: 100%; height: 8px; margin-top: 6px; border-radius: 999px; background: var(--field-bg); overflow: hidden; }
+.admin-progress--sm { height: 6px; max-width: 180px; }
+.admin-progress__bar { height: 100%; border-radius: 999px; background: var(--accent, #c4553b); transition: width .25s ease; }
+.admin-progress__bar--warning { background: #d9902f; }
+.admin-progress__bar--danger { background: var(--error); }
+
+.admin-stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.admin-stat-card { padding: 20px; border: 1px solid var(--line, #e4dedb); border-radius: 14px; background: #fff; }
+.admin-stat-card__title { margin: 0 0 8px; font-size: .8125rem; font-weight: 600; color: var(--muted); }
+.admin-stat-card__value { margin: 0; font-size: 1.75rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.admin-stat-card__meta { margin: 6px 0 0; font-size: .8125rem; color: var(--muted); }

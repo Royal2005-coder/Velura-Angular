@@ -14,8 +14,16 @@
       } @else if (loadError() && view() === 'campaigns' && !promotions().length) {
         <app-admin-empty-state kind="error" icon="alert" title="Không tải được khuyến mãi" [message]="loadError() || ''" />
       } @else if (view() === 'campaigns') {
+        @if (canMutate()) {
+          <div class="admin-toolbar">
+            <button class="admin-btn admin-btn--primary admin-btn--sm" type="button" (click)="openCreate()">Tạo chiến dịch</button>
+          </div>
+        }
         @if (!promotions().length) {
-          <div class="admin-empty-state"><strong>Chưa có chiến dịch</strong></div>
+          <div class="admin-empty-state">
+            <strong>Chưa có chiến dịch</strong>
+            <p>Tạo chiến dịch đầu tiên để trang Ưu đãi của khách có nội dung hiển thị.</p>
+          </div>
         } @else {
           <div class="admin-table-wrap">
             <table class="admin-table admin-data-table">
@@ -26,14 +34,32 @@
                     <td>{{ campaignName(row) }}</td>
                     <td>{{ campaignType(row) }}</td>
                     <td>{{ campaignPeriod(row) }}</td>
-                    <td>{{ campaignBudget(row) }}</td>
                     <td>
-                      <span class="admin-badge" [class.admin-badge--success]="isCampaignActive(row)" [class.admin-badge--warning]="!isCampaignActive(row)">
-                        {{ campaignStatus(row) }}
+                      <span class="admin-budget__figure">{{ campaignBudget(row) }}</span>
+                      <div class="admin-progress admin-progress--sm" role="img"
+                           [attr.aria-label]="'Đã dùng ' + campaignBudgetPercent(row) + '% ngân sách'">
+                        <div class="admin-progress__bar"
+                             [class.admin-progress__bar--warning]="isBudgetNearLimit(row)"
+                             [class.admin-progress__bar--danger]="isBudgetExhausted(row)"
+                             [style.width.%]="campaignBudgetPercent(row)"></div>
+                      </div>
+                      @if (isBudgetNearLimit(row)) {
+                        <span class="admin-budget__note admin-budget__note--warning">Sắp chạm ngưỡng</span>
+                      } @else if (isBudgetExhausted(row)) {
+                        <span class="admin-budget__note admin-budget__note--danger">Đã cạn ngân sách</span>
+                      }
+                    </td>
+                    <td>
+                      <span class="admin-badge"
+                            [class.admin-badge--success]="campaignLifecycle(row) === 'running'"
+                            [class.admin-badge--warning]="campaignLifecycle(row) === 'scheduled' || campaignLifecycle(row) === 'paused'"
+                            [class.admin-badge--danger]="campaignLifecycle(row) === 'ended' || campaignLifecycle(row) === 'budget_exhausted'">
+                        {{ campaignLifecycleLabel(row) }}
                       </span>
                     </td>
                     <td>
                       @if (canMutate()) {
+                        <button class="admin-btn admin-btn--outline admin-btn--sm" type="button" (click)="openEdit(row)">Sửa</button>
                         <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="toggleCampaign(row)">
                           {{ isCampaignActive(row) ? 'Tạm dừng' : 'Kích hoạt' }}
                         </button>
@@ -109,8 +135,57 @@
       } @else if (view() === 'logs') {
         <div class="admin-empty-state"><strong>Chưa có nhật ký</strong><p>Nhật ký khuyến mãi nằm trong phân hệ Nhật ký hệ thống.</p></div>
       } @else {
-        <div class="admin-empty-state"><strong>Chưa có thống kê</strong><p>KPI phía trên được tính từ chiến dịch và voucher đang tải từ API.</p></div>
+        @if (statsLoading()) {
+          <div class="admin-empty-state"><strong>Đang tải thống kê…</strong></div>
+        } @else if (statsError()) {
+          <div class="admin-empty-state">
+            <strong>Không tải được thống kê</strong>
+            <p>{{ statsError() }}</p>
+            <button type="button" class="admin-btn" (click)="loadStats()">Thử lại</button>
+          </div>
+        } @else if (stats(); as data) {
+          <div class="admin-stats-grid">
+            <article class="admin-stat-card">
+              <h3 class="admin-stat-card__title">Ngân sách khuyến mãi đã dùng</h3>
+              <p class="admin-stat-card__value">{{ money(data.promotions.totalIssued) }}</p>
+              <p class="admin-stat-card__meta">trên tổng {{ money(data.promotions.totalBudget) }} đã cấp</p>
+              <div class="admin-progress" role="img"
+                   [attr.aria-label]="'Đã dùng ' + data.promotions.budgetUsagePercent + '% ngân sách'">
+                <div class="admin-progress__bar" [style.width.%]="data.promotions.budgetUsagePercent"></div>
+              </div>
+              <p class="admin-stat-card__meta">Còn lại {{ money(data.promotions.budgetRemaining) }}</p>
+            </article>
+
+            <article class="admin-stat-card">
+              <h3 class="admin-stat-card__title">Chiến dịch</h3>
+              <p class="admin-stat-card__value">{{ data.promotions.active }} / {{ data.promotions.total }}</p>
+              <p class="admin-stat-card__meta">đang chạy · {{ data.promotions.paused }} tạm dừng</p>
+            </article>
+
+            <article class="admin-stat-card">
+              <h3 class="admin-stat-card__title">Lượt dùng mã</h3>
+              <p class="admin-stat-card__value">{{ data.vouchers.totalUsed }}</p>
+              <p class="admin-stat-card__meta">trên {{ data.vouchers.totalLimit }} lượt được phát hành</p>
+              <div class="admin-progress" role="img"
+                   [attr.aria-label]="'Đã dùng ' + data.vouchers.usagePercent + '% số lượt'">
+                <div class="admin-progress__bar" [style.width.%]="data.vouchers.usagePercent"></div>
+              </div>
+            </article>
+
+            <article class="admin-stat-card">
+              <h3 class="admin-stat-card__title">Mã giảm giá</h3>
+              <p class="admin-stat-card__value">{{ data.vouchers.active }} / {{ data.vouchers.total }}</p>
+              <p class="admin-stat-card__meta">còn hiệu lực · {{ data.vouchers.expired }} đã hết hạn</p>
+            </article>
+          </div>
+        } @else {
+          <div class="admin-empty-state"><strong>Chưa có dữ liệu thống kê</strong></div>
+        }
       }
     </div>
   </section>
+
+  @if (formOpen()) {
+    <app-campaign-form [campaign]="editing()" [canMutate]="canMutate()" (saved)="onCampaignSaved()" (closed)="closeForm()" />
+  }
 </main>

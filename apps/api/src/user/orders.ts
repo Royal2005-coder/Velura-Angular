@@ -3,6 +3,7 @@ import { selectOne, selectRows, insertRow, updateRows } from "../supabase.js";
 import { hashPassword, signJwt } from "../auth-helper.js";
 import { requireUserAuth, validatePhone } from "./auth.js";
 import { createNotification } from "./notifications.js";
+import { recordVoucherRedemption, releaseVoucherRedemption } from "./vouchers.js";
 import { allowDevOtpBypass, config } from "../config.js";
 import {
   asJsonObject,
@@ -234,97 +235,6 @@ export async function handleOrdersRoute(
   corsHeaders: HeaderMap,
   context: AuthContext
 ): Promise<void> {
-  if (subRoute === "vouchers") {
-    // GET /api/user/vouchers
-    if (!action && req.method === "GET") {
-      const now = new Date().toISOString();
-      const { rows: allVouchers } = await selectRows("voucher", { is_active: "eq.true" });
-      
-      const validVouchers = allVouchers.filter((v) => {
-        if (typeof v.start_date === "string" && v.start_date > now) return false;
-        if (typeof v.end_date === "string" && v.end_date < now) return false;
-        if (v.usage_limit_total !== null && Number(v.used_count) >= Number(v.usage_limit_total)) return false;
-        return true;
-      });
-      
-      validVouchers.sort((a, b) => Number(a.min_order_value || 0) - Number(b.min_order_value || 0));
-      
-      return sendJson(res, 200, {
-        success: true,
-        vouchers: validVouchers
-      }, corsHeaders);
-    }
-
-    // POST /api/user/vouchers/apply
-    if (action === "apply" && req.method === "POST") {
-      const body = await readJson(req);
-      const { code, order_value } = body;
-      if (!code) {
-        throw new HttpError(400, "BAD_REQUEST", "Mã giảm giá là bắt buộc");
-      }
-
-      const voucher = await selectOne("voucher", { code: `eq.${code}` });
-      if (!voucher) {
-        throw new HttpError(404, "NOT_FOUND", "Mã giảm giá không tồn tại");
-      }
-      if (!voucher.is_active) {
-        throw new HttpError(400, "INVALID_VOUCHER", "Mã giảm giá này hiện không hoạt động");
-      }
-
-      const now = new Date().toISOString();
-      if (typeof voucher.start_date === "string" && voucher.start_date > now) {
-        throw new HttpError(400, "INVALID_VOUCHER", "Mã giảm giá chưa đến thời gian sử dụng");
-      }
-      if (typeof voucher.end_date === "string" && voucher.end_date < now) {
-        throw new HttpError(400, "INVALID_VOUCHER", "Mã giảm giá đã hết hạn sử dụng");
-      }
-
-      if (voucher.usage_limit_total !== null && Number(voucher.used_count) >= Number(voucher.usage_limit_total)) {
-        throw new HttpError(400, "INVALID_VOUCHER", "Mã giảm giá đã hết lượt sử dụng trên hệ thống");
-      }
-
-      if (Number(order_value) < Number(voucher.min_order_value || 0)) {
-        throw new HttpError(400, "INVALID_VOUCHER", `Đơn hàng chưa đạt giá trị tối thiểu ${Number(voucher.min_order_value).toLocaleString("vi-VN")}₫ để áp dụng mã này`);
-      }
-
-      let profile: UserProfile | null = null;
-      try {
-        profile = requireUserAuth(context);
-      } catch {
-        // guest apply is allowed
-      }
-      if (profile && profile.user_id) {
-        const { rows: userOrders } = await selectRows("orders", { user_id: `eq.${profile.user_id}`, voucher_id: `eq.${voucher.voucher_id}` });
-        if (userOrders.length >= Number(voucher.usage_limit_per_user || 1)) {
-          throw new HttpError(400, "INVALID_VOUCHER", "Bạn đã sử dụng hết lượt dùng cho mã giảm giá này");
-        }
-      }
-
-      let discountAmount = 0;
-      if (voucher.discount_type === "fixed_amount") {
-        discountAmount = Number(voucher.discount_value);
-      } else if (voucher.discount_type === "percentage") {
-        discountAmount = Number(order_value) * (Number(voucher.discount_value) / 100);
-        if (voucher.max_discount_amount) {
-          discountAmount = Math.min(discountAmount, Number(voucher.max_discount_amount));
-        }
-      } else if (voucher.discount_type === "free_shipping") {
-        discountAmount = Number(body.shipping_fee || 30000);
-      }
-
-      discountAmount = Math.min(discountAmount, Number(order_value));
-
-      return sendJson(res, 200, {
-        success: true,
-        voucher_id: voucher.voucher_id,
-        code: voucher.code,
-        name: voucher.name,
-        discount_amount: discountAmount,
-        discount_type: voucher.discount_type
-      }, corsHeaders);
-    }
-  }
-
   if (subRoute === "orders") {
     if (req.method === "GET") {
       let profile: UserProfile | null = null;
@@ -430,6 +340,12 @@ export async function handleOrdersRoute(
               console.error(`Failed to restore stock on cancellation:`, errorMessage(e));
             }
           }
+        }
+
+        // Trả lại lượt dùng mã và ngân sách chiến dịch, nếu không thì một đơn bị hủy
+        // vẫn chiếm chỗ của khách khác và vẫn ăn vào ngân sách khuyến mãi.
+        if (order.voucher_id) {
+          await releaseVoucherRedemption(String(order.voucher_id), Number(order.discount_amount) || 0);
         }
       }
 
@@ -794,14 +710,7 @@ export async function handleOrdersRoute(
       }
       
       if (voucher_id) {
-        try {
-          const voucher = await selectOne("voucher", { voucher_id: `eq.${voucher_id}` });
-          if (voucher) {
-            await updateRows("voucher", { voucher_id: `eq.${voucher_id}` }, { used_count: (Number(voucher.used_count) || 0) + 1 });
-          }
-        } catch (e: unknown) {
-          console.error(errorMessage(e));
-        }
+        await recordVoucherRedemption(String(voucher_id), Number(discount_amount) || 0);
       }
 
       // Send welcome notification
@@ -1053,14 +962,7 @@ export async function handleOrdersRoute(
       }
 
       if (voucher_id) {
-        try {
-          const voucher = await selectOne("voucher", { voucher_id: `eq.${voucher_id}` });
-          if (voucher) {
-            await updateRows("voucher", { voucher_id: `eq.${voucher_id}` }, { used_count: (Number(voucher.used_count) || 0) + 1 });
-          }
-        } catch (e: unknown) {
-          console.error(errorMessage(e));
-        }
+        await recordVoucherRedemption(String(voucher_id), Number(discount_amount) || 0);
       }
 
       await createNotification(

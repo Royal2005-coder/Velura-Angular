@@ -1,18 +1,18 @@
 # Source of truth (Velura)
 
-**Cái gì** = type + JSDoc trong code. **Tại sao** = `git log` + MR + git notes. File này chỉ map ổn định.
+**Cái gì** = type + JSDoc trong code. **Tại sao** = `git log` + PR + git notes. File này chỉ map ổn định.
 
 ```bash
 git log --oneline --show-notes --grep=KAN-n
 git show --stat <sha>
 ```
 
-Chi tiết retrieval: [AGENTS.md](../AGENTS.md). Pipeline: [HOW-IT-WORKS.md](./HOW-IT-WORKS.md).
+Chi tiết retrieval: [AGENTS.md](../AGENTS.md). Cây + layer: [ARCHITECTURE.md](./ARCHITECTURE.md). Versioning + Actions: [GIT-AND-CI.md](./GIT-AND-CI.md). Pipeline: [HOW-IT-WORKS.md](./HOW-IT-WORKS.md).
 
 | Lớp | Ở đâu |
 |---|---|
 | Hợp đồng nghiệp vụ | `interface` / JSDoc (ví dụ `apps/api/src/types.ts`, `ApiService`) |
-| Version / why | GitLab MR (`## Why`) + CI `note:mr` + `git notes` |
+| Version / why | GitHub PR (`## Why`) + CI `note-pr` + `git notes` |
 | Việc | Jira **KAN** |
 | Rule lâu dài (một câu) | [adr/README.md](./adr/README.md) |
 

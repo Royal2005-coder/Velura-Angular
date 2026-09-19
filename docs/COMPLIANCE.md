@@ -20,9 +20,9 @@
 | Page ViewModel specs | `*.page.spec.ts` cạnh page; mock Model, không gọi mạng |
 | Lazy routes | `loadComponent` trong `apps/admin-ng` và `apps/user-ng` `app.routes.ts` |
 | Admin đổi mật khẩu | `POST /api/auth/change-password`; không stub local |
-| Pipeline Jira key | branch/MR `KAN-n`; feature → develop → main |
-| Trace version | `git log --show-notes --grep=KAN-n` + MR `## Why` + CI `mr-trace.md` |
-| CODEOWNERS | `.gitlab/CODEOWNERS` |
+| Pipeline Jira key | branch/PR `KAN-n`; feature → develop → main |
+| Trace version | `git log --show-notes --grep=KAN-n` + PR `## Why` + CI `pr-trace.md` |
+| CODEOWNERS | `.github/CODEOWNERS` |
 
 ## Cố ý không làm (không phải thiếu)
 
@@ -69,7 +69,7 @@ Không lắp Vendure/Medusa/Strapi. `apps/api` `rbac.ts` `rolePages` là canonic
 | Chat CSKH sidebar | list cap 50 (API max 100); filter `handoffStatus` server-side | Đã làm |
 | CSKH KPI ưu tiên cao | API ticket không filter `priority`; hiện = phiếu đổi/trả pending + ticket `open` | KAN-5 |
 | Tách Customers vs Staff | một trang `/accounts` | Hoãn có chủ đích |
-| GitLab MCP 404 | bật Duo/MCP trên group | [KAN-11](https://webadvance.atlassian.net/browse/KAN-11) |
+| GitLab MCP 404 (legacy) | Team dùng GitHub; GitLab archive | [KAN-11](https://webadvance.atlassian.net/browse/KAN-11) |
 | Admin CMS write / media / store settings | editor blog/policy/page, media library, shipping/tax | Hoãn có chủ đích |
 | Cổng thanh toán MoMo/VNPay | checkout chỉ ghi nhãn; chưa create-intent + HMAC IPN | Hoãn (cần khóa merchant) |
 | SMS OTP provider | local OTP shortcut chỉ khi `NODE_ENV !== production` | Hoãn (cần nhà mạng) |

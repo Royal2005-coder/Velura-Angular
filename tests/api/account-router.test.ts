@@ -5,6 +5,8 @@ import { handleAccountRoute } from "../../apps/api/src/accounts/account-router.j
 
 const USER_ID = "10000000-0000-4000-8000-000000000001";
 const REASON = "Tai khoan co dau hieu vi pham nghiem trong dieu khoan bao mat cua he thong";
+// Not a real credential: a mock service return value, never validated for password complexity.
+const MOCK_TEMPORARY_PASSWORD = "not-a-real-secret-fixture-value";
 
 test("GET account list returns the service payload", async () => {
   const req = request("GET");
@@ -59,14 +61,14 @@ test("POST account create returns 201 with the created account", async () => {
     service: {
       create: async (...args) => {
         received = args;
-        return { user_id: USER_ID, email: "new@velura.vn", temporary_password: "Velurax9!" };
+        return { user_id: USER_ID, email: "new@velura.vn", temporary_password: MOCK_TEMPORARY_PASSWORD };
       }
     }
   });
 
   assert.equal(handled, true);
   assert.equal(res.status, 201);
-  assert.equal(res.json().temporary_password, "Velurax9!");
+  assert.equal(res.json().temporary_password, MOCK_TEMPORARY_PASSWORD);
   assert.equal(received[1].email, "new@velura.vn");
   assert.equal(received[2].ipAddress, "127.0.0.1");
 });

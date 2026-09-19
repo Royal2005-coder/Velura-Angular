@@ -1,3 +1,4 @@
+import { randomInt } from "node:crypto";
 import { HttpError } from "../http.js";
 import type { AuthContext, AuthUser, JsonObject, RequestMeta, UserProfile } from "../types.js";
 import { validateEmail, validatePassword, validatePhone } from "../user/auth.js";
@@ -263,12 +264,39 @@ export function validateCreate(
   };
 }
 
+const TEMP_PASSWORD_UPPER = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+const TEMP_PASSWORD_LOWER = "abcdefghijkmnpqrstuvwxyz";
+const TEMP_PASSWORD_DIGIT = "23456789";
+const TEMP_PASSWORD_SPECIAL = "!@#$%^&*";
+const TEMP_PASSWORD_ALL = TEMP_PASSWORD_UPPER + TEMP_PASSWORD_LOWER + TEMP_PASSWORD_DIGIT + TEMP_PASSWORD_SPECIAL;
+const TEMP_PASSWORD_LENGTH = 14;
+
 /**
- * Generates a random password that satisfies the platform's complexity rule.
+ * Generates a cryptographically random password that satisfies the platform's
+ * complexity rule (uppercase + lowercase + digit-or-special, 8+ chars).
  */
 function generateTemporaryPassword(): string {
-  const random = Math.random().toString(36).slice(2, 10);
-  return `Velura${random}9!`;
+  const required = [
+    randomChar(TEMP_PASSWORD_UPPER),
+    randomChar(TEMP_PASSWORD_LOWER),
+    randomChar(TEMP_PASSWORD_DIGIT),
+    randomChar(TEMP_PASSWORD_SPECIAL)
+  ];
+  const rest = Array.from({ length: TEMP_PASSWORD_LENGTH - required.length }, () => randomChar(TEMP_PASSWORD_ALL));
+  return shuffle([...required, ...rest]).join("");
+}
+
+function randomChar(alphabet: string): string {
+  return alphabet[randomInt(alphabet.length)];
+}
+
+function shuffle<T>(items: T[]): T[] {
+  const result = [...items];
+  for (let i = result.length - 1; i > 0; i -= 1) {
+    const j = randomInt(i + 1);
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
 }
 
 /**

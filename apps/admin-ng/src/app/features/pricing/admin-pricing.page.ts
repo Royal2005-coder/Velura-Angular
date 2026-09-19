@@ -21,6 +21,7 @@ export class AdminPricingPage {
   private readonly route = inject(ActivatedRoute);
 
   readonly products = signal<AdminProductRow[]>([]);
+  readonly allProducts = signal<AdminProductRow[]>([]);
   readonly history = signal<AdminPriceHistoryRow[]>([]);
   readonly query = signal('');
   readonly category = signal('');
@@ -90,6 +91,11 @@ export class AdminPricingPage {
   readonly previewInvalid = computed(() => this.previewSale() > this.previewBase());
   readonly productMap = computed(() => {
     const map = new Map<string, AdminProductRow>();
+    // Price history can reference any product ever sold, not just the current
+    // paginated page, so the map is built from the full catalog fetched once below.
+    for (const product of this.allProducts()) {
+      map.set(product.product_id, product);
+    }
     for (const product of this.products()) {
       map.set(product.product_id, product);
     }
@@ -129,6 +135,11 @@ export class AdminPricingPage {
       });
     this.api.listPriceHistory({ limit: '100' }).subscribe({
       next: (payload) => this.history.set(adminListRows(payload)),
+    });
+    // Fetched unpaginated so historyProductName() can resolve any product ever
+    // priced, not only the ones on the current catalog page.
+    this.api.listProducts({ limit: '1000' }).subscribe({
+      next: (payload) => this.allProducts.set(adminListRows(payload)),
     });
   }
 

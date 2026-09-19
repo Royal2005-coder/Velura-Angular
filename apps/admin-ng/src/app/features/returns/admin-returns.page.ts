@@ -355,8 +355,17 @@ export class AdminReturnsPage {
     this.refundSuggestion.set(null);
     if (type === 'refund' && row?.order_id) {
       this.api.getOrder(row.order_id).subscribe({
-        next: (order) => this.refundSuggestion.set(Number(order.total_amount) || null),
-        error: () => this.refundSuggestion.set(null),
+        next: (order) => {
+          // Ignore a stale response if the admin already switched to a different return.
+          if (this.selectedReturn()?.return_id === returnId) {
+            this.refundSuggestion.set(Number(order.total_amount) || null);
+          }
+        },
+        error: () => {
+          if (this.selectedReturn()?.return_id === returnId) {
+            this.refundSuggestion.set(null);
+          }
+        },
       });
     }
   }

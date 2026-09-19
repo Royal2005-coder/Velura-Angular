@@ -1,3 +1,7 @@
+# LEGACY — do not use for team CI. Canonical pipeline:
+#   .github/workflows/ci.yml on https://github.com/Royal2005-coder/Velura-Angular
+# Kept only for reference while GitLab minutes remain exhausted.
+#
 # Feature → MR into develop: tests + required MR trace note. No deploy.
 # Push develop: tests + build only (integration branch).
 # develop → MR into main: tests + note. main: deploy + verify production.

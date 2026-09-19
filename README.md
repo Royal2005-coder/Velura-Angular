@@ -2,20 +2,23 @@
 
 Hai SPA **Angular 21** (storefront + admin) và HTTP API **Node**. Không viết API bằng Angular.
 
-Đọc [AGENTS.md](AGENTS.md) → file này → [docs/SOURCE-OF-TRUTH.md](docs/SOURCE-OF-TRUTH.md). Mục lục: [docs/README.md](docs/README.md).
+Đọc [AGENTS.md](AGENTS.md) → **[docs/GIT-AND-CI.md](docs/GIT-AND-CI.md)** → **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** → [docs/ONBOARDING.md](docs/ONBOARDING.md) → file này → [docs/SOURCE-OF-TRUTH.md](docs/SOURCE-OF-TRUTH.md). Mục lục: [docs/README.md](docs/README.md).
+
+**Repo + CI/CD (canonical):** https://github.com/Royal2005-coder/Velura-Angular  
+GitLab chỉ còn archive / legacy — team làm việc trên GitHub Actions.
 
 ## Clone
 
 ```bash
-git clone git@gitlab.com:boygia757-netizen/velura-project.git
-cd velura-project
+git clone https://github.com/Royal2005-coder/Velura-Angular.git
+cd Velura-Angular
 git checkout develop
 git pull
 npm install
 copy .env.example .env
 ```
 
-Làm việc trên `develop`. Production = `main` sau MR promote. Chi tiết [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md).
+Làm việc trên `develop`. Production = `main` sau PR promote. Chi tiết [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md).
 
 ## Source of truth
 
@@ -26,9 +29,9 @@ Làm việc trên `develop`. Production = `main` sau MR promote. Chi tiết [doc
 | Không NgModule | [ADR 0001](docs/adr/0001-angular-21-standalone-signals.md) |
 | Gap | [COMPLIANCE](docs/COMPLIANCE.md) |
 | MCP | [MCP-SETUP](docs/MCP-SETUP.md) |
-| Ngày 1 | [ONBOARDING](docs/ONBOARDING.md) |
+| Ngày 1 | [ONBOARDING](docs/ONBOARDING.md) · [GIT-AND-CI](docs/GIT-AND-CI.md) · [ARCHITECTURE](docs/ARCHITECTURE.md) |
 
-Context từng version = type/JSDoc + GitLab MR `## Why` + git notes, không phải `docs/KAN-n.md`.
+Context từng version = type/JSDoc + GitHub PR `## Why` + git notes, không phải `docs/KAN-n.md`.
 
 ## Team
 
@@ -38,13 +41,13 @@ Context từng version = type/JSDoc + GitLab MR `## Why` + git notes, không ph�
 | Admin (2) | `apps/admin-ng`, `apps/api` | [KAN-5](https://webadvance.atlassian.net/browse/KAN-5) |
 | Lead (1) | CI, `docs/`, `packages/` | cả hai khi đụng contract |
 
-Jira: https://webadvance.atlassian.net (**KAN**). GitLab: https://gitlab.com/boygia757-netizen/velura-project
+Jira: https://webadvance.atlassian.net (**KAN**). GitHub: https://github.com/Royal2005-coder/Velura-Angular
 
 ## Pipeline
 
 ```
-feature/KAN-n → MR develop → CI (tests + note:mr, không deploy)
-             → MR develop → main → production
+feature/KAN-n → PR develop → CI (tests + note-pr, không deploy)
+             → PR develop → main → production
 ```
 
 ```bash

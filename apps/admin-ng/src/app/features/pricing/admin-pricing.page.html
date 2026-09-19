@@ -30,7 +30,14 @@
                 @for (row of history(); track row.changed_at || row.product_id) {
                   <tr>
                     <td>{{ date(row.changed_at) }}</td>
-                    <td>{{ row.product_id }}</td>
+                    <td>
+                      <div class="admin-review-product">
+                        <strong>{{ historyProductName(row.product_id) }}</strong>
+                        @if (historyProductSku(row.product_id)) {
+                          <small>{{ historyProductSku(row.product_id) }}</small>
+                        }
+                      </div>
+                    </td>
                     <td>{{ money(row.old_base_price) }}</td>
                     <td>{{ money(row.new_base_price) }}</td>
                     <td>{{ money(row.old_sale_price) }}</td>
@@ -169,11 +176,11 @@
             </label>
             <label class="admin-form-group">
               <span class="admin-form-label">Giá gốc mới</span>
-              <input class="admin-form-control" name="basePrice" type="number" min="0" [value]="previewBase()" required (input)="onPreviewInput($event, 'base')" />
+              <input class="admin-form-control" name="basePrice" type="number" min="0" placeholder="VD: 500000" [value]="previewBase()" required (input)="onPreviewInput($event, 'base')" />
             </label>
             <label class="admin-form-group">
               <span class="admin-form-label">Giá bán mới</span>
-              <input class="admin-form-control" name="salePrice" type="number" min="0" [value]="previewSale()" required (input)="onPreviewInput($event, 'sale')" />
+              <input class="admin-form-control" name="salePrice" type="number" min="0" placeholder="VD: 450000" [value]="previewSale()" required (input)="onPreviewInput($event, 'sale')" />
             </label>
             <div class="admin-price-preview admin-price-field--full">
               <strong>Xem trước</strong>

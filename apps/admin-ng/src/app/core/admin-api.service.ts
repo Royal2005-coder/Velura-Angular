@@ -478,6 +478,13 @@ export class AdminApiService {
   }
 
   /**
+   * Creates a new member or admin account through the admin API.
+   */
+  createAccount(body: Record<string, unknown>): Observable<AdminAccountRow & { temporary_password?: string }> {
+    return this.http.post<AdminAccountRow & { temporary_password?: string }>(`${this.baseUrl}/api/v1/admin/accounts`, body);
+  }
+
+  /**
    * Lists pending role-upgrade requests.
    */
   listRoleRequests(params: Record<string, string> = {}): Observable<AdminListPayload<AdminRoleRequestRow>> {

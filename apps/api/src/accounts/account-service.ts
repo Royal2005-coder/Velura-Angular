@@ -1,7 +1,9 @@
 import { HttpError } from "../http.js";
 import type { AuthContext, AuthUser, JsonObject, RequestMeta, UserProfile } from "../types.js";
+import { validateEmail, validatePassword, validatePhone } from "../user/auth.js";
 import { ACCOUNT_ROLES, ADMIN_ROLES, ROLE_OPTIONS, type AccountRoleOption } from "./account-constants.js";
 import type {
+  AccountCreateInput,
   AccountListFilters,
   AccountLockInput,
   AccountRepository,
@@ -21,6 +23,11 @@ export interface AccountService {
     searchParams: URLSearchParams
   ): Promise<{ rows: JsonObject[]; count: number | undefined }>;
   get(context: AuthContext | undefined, userId: string): Promise<JsonObject>;
+  create(
+    context: AuthContext | undefined,
+    body: JsonObject,
+    requestMeta: RequestMeta
+  ): Promise<JsonObject>;
   listRoleRequests(
     context: AuthContext | undefined,
     searchParams: URLSearchParams
@@ -79,6 +86,13 @@ export function createAccountService({ repository }: { repository: AccountReposi
       const account = await repository.findById(userId, context.accessToken);
       if (!account) throw new HttpError(404, "ACCOUNT_NOT_FOUND", "Account was not found");
       return account;
+    },
+
+    async create(context, body, requestMeta) {
+      requireAccountAdmin(context);
+      const { input, generatedPassword } = validateCreate(body, requestMeta);
+      const created = await repository.create(input, context.profile.user_id, context.roleCode || "super_admin");
+      return generatedPassword ? { ...created, temporary_password: generatedPassword } : created;
     },
 
     async listRoleRequests(context, searchParams) {
@@ -189,6 +203,72 @@ export function validateRoleChange(body: JsonObject = {}, requestMeta: Partial<R
     expectedVersion: requireVersion(body.expectedVersion),
     ipAddress: requestMeta.ipAddress || "0.0.0.0"
   };
+}
+
+/**
+ * Validate a new-account creation body. Generates a temporary password when
+ * the caller does not supply one, so the admin can hand it to the new user.
+ */
+export function validateCreate(
+  body: JsonObject = {},
+  requestMeta: Partial<RequestMeta> = {}
+): { input: AccountCreateInput; generatedPassword: string | null } {
+  const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+  const phone = typeof body.phone === "string" ? body.phone.trim() : "";
+  const fullName = typeof body.fullName === "string" ? body.fullName.trim() : "";
+
+  if (!email && !phone) {
+    throw validationError("email", "email hoặc phone là bắt buộc");
+  }
+  if (email && !validateEmail(email)) {
+    throw validationError("email", "email không đúng định dạng");
+  }
+  if (phone && !validatePhone(phone)) {
+    throw validationError("phone", "phone không đúng định dạng");
+  }
+  if (!fullName) {
+    throw validationError("fullName", "fullName là bắt buộc");
+  }
+
+  const role = typeof body.role === "string" ? body.role : "";
+  if (!ACCOUNT_ROLES.includes(role)) {
+    throw validationError("role", "role must be member or admin");
+  }
+  const adminRole = body.adminRole ?? null;
+  if (role === "admin" && (typeof adminRole !== "string" || !ADMIN_ROLES.includes(adminRole))) {
+    throw validationError("adminRole", "A valid adminRole is required for admin accounts");
+  }
+  if (role === "member" && adminRole !== null) {
+    throw validationError("adminRole", "adminRole must be null for members");
+  }
+
+  const suppliedPassword = typeof body.password === "string" && body.password ? body.password : null;
+  const generatedPassword = suppliedPassword ? null : generateTemporaryPassword();
+  const password = suppliedPassword || generatedPassword!;
+  if (!validatePassword(password)) {
+    throw validationError("password", "password phải tối thiểu 8 ký tự, gồm chữ hoa, chữ thường và số hoặc ký tự đặc biệt");
+  }
+
+  return {
+    input: {
+      email: email || null,
+      phone: phone || null,
+      fullName,
+      password,
+      role,
+      adminRole: typeof adminRole === "string" ? adminRole : null,
+      ipAddress: requestMeta.ipAddress || "0.0.0.0"
+    },
+    generatedPassword
+  };
+}
+
+/**
+ * Generates a random password that satisfies the platform's complexity rule.
+ */
+function generateTemporaryPassword(): string {
+  const random = Math.random().toString(36).slice(2, 10);
+  return `Velura${random}9!`;
 }
 
 /**

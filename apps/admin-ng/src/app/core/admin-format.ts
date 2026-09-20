@@ -9,7 +9,7 @@ export function adminDateTime(value: string | null | undefined): string {
   if (!value) {
     return '—';
   }
-  const parsed = new Date(value);
+  const parsed = new Date(asUtcIso(value));
   return Number.isNaN(parsed.getTime())
     ? '—'
     : new Intl.DateTimeFormat('vi-VN', {
@@ -17,6 +17,25 @@ export function adminDateTime(value: string | null | undefined): string {
         timeStyle: 'short',
         timeZone: 'Asia/Ho_Chi_Minh',
       }).format(parsed);
+}
+
+/**
+ * Gắn hậu tố UTC cho mốc thời gian không mang múi giờ.
+ *
+ * Các cột thời gian trong lược đồ là `TIMESTAMP` (không múi giờ) còn API luôn ghi
+ * chuỗi UTC, nên PostgREST trả về dạng "2026-09-20T16:32:15" — không có Z. Theo chuẩn
+ * ECMAScript, chuỗi ngày-giờ thiếu offset được hiểu là giờ địa phương, nên trình duyệt
+ * ở UTC+7 đọc 16:32 UTC thành 16:32 giờ Việt Nam. Tuỳ chọn `timeZone` phía dưới không
+ * cứu được, vì mốc thời gian đã sai ngay từ lúc parse: mọi nhật ký hiển thị chậm đúng
+ * 7 tiếng so với lúc thao tác thật (UAT ADM-LOG-01).
+ *
+ * Chuỗi đã có offset (Z hoặc +07:00) thì giữ nguyên.
+ */
+function asUtcIso(value: string): string {
+  const text = String(value).trim();
+  if (!text.includes('T') && !text.includes(' ')) return text;
+  if (/(Z|[+-]\d{2}:?\d{2})$/i.test(text)) return text;
+  return `${text.replace(' ', 'T')}Z`;
 }
 
 /**

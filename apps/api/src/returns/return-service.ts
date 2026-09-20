@@ -1,3 +1,4 @@
+import { enrichAuditLogs, RETURN_AUDIT } from "../audit-enrichment.js";
 import { HttpError } from "../http.js";
 import type { AuthContext, AuthUser, JsonObject, RequestMeta } from "../types.js";
 import { asNumber, asString } from "../types.js";
@@ -179,11 +180,12 @@ export function createReturnService({ repository }: { repository: ReturnReposito
 
     async listAuditLogs(context, searchParams) {
       requireReturnReader(context);
-      return repository.listAuditLogs({
+      const payload = await repository.listAuditLogs({
         limit: Math.min(parseInt(searchParams.get("limit") || "50"), 1000),
         offset: Math.max(parseInt(searchParams.get("offset") || "0"), 0),
         targetId: searchParams.get("targetId") || undefined
       }, context.accessToken);
+      return enrichAuditLogs(payload, RETURN_AUDIT);
     }
   };
 }

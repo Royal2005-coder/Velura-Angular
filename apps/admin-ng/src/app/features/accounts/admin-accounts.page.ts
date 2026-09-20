@@ -8,8 +8,9 @@ import { AdminSessionService } from '../../core/admin-session.service';
 import { AdminEmptyState } from '../../shared/admin-empty-state';
 import { AdminIcon } from '../../shared/admin-icon';
 import { AdminPagination } from '../../shared/admin-pagination';
+import { AdminTableSkeleton } from '../../shared/admin-table-skeleton';
 
-type AccountTab = 'all' | 'members' | 'admins' | 'locked' | 'promotions' | 'logs';
+type AccountTab = 'all' | 'members' | 'admins' | 'locked' | 'unverified' | 'promotions' | 'logs';
 type AccountAction = 'lock' | 'unlock' | 'role' | null;
 type RequestDecision = 'approve' | 'reject' | null;
 
@@ -30,7 +31,7 @@ const EMPTY_LOGS = { rows: [] as AdminAuditRow[], count: 0 };
 
 @Component({
   selector: 'app-admin-accounts-page',
-  imports: [AdminEmptyState, AdminIcon, AdminPagination],
+  imports: [AdminEmptyState, AdminIcon, AdminPagination, AdminTableSkeleton],
   templateUrl: './admin-accounts.page.html',
 })
 export class AdminAccountsPage {
@@ -46,6 +47,16 @@ export class AdminAccountsPage {
   readonly logs = signal<AdminAuditRow[]>([]);
   readonly loadError = signal<string | null>(null);
   readonly loading = signal(true);
+  /**
+   * Phân biệt lần tải đầu với lần tải lại.
+   *
+   * Lần đầu chưa có gì để hiện thì vẽ khung xương. Từ lần thứ hai — đổi bộ lọc, sang
+   * trang, đổi tab — giữ nguyên bảng cũ và chỉ làm mờ đi, vì xoá sạch bảng rồi vẽ lại
+   * khiến thao tác lọc có cảm giác chậm hơn thực tế.
+   */
+  readonly hasLoadedOnce = signal(false);
+  readonly showSkeleton = computed(() => this.loading() && !this.hasLoadedOnce());
+  readonly isRefreshing = computed(() => this.loading() && this.hasLoadedOnce());
   readonly page = signal(1);
   readonly logsPage = signal(1);
   readonly pageSize = 10;
@@ -53,8 +64,8 @@ export class AdminAccountsPage {
   readonly allCount = signal(0);
   readonly memberCount = signal(0);
   readonly adminCount = signal(0);
-  readonly activeCount = signal(0);
   readonly lockedCount = signal(0);
+  readonly unverifiedCount = signal(0);
   readonly pendingCount = signal(0);
   readonly requestTotal = signal(0);
   readonly logsCount = signal(0);
@@ -116,8 +127,10 @@ export class AdminAccountsPage {
       all: this.api.listAccounts({ limit: '1' }).pipe(catchError(() => of(EMPTY_ACCOUNTS))),
       members: this.api.listAccounts({ role: 'member', limit: '1' }).pipe(catchError(() => of(EMPTY_ACCOUNTS))),
       admins: this.api.listAccounts({ role: 'admin', limit: '1' }).pipe(catchError(() => of(EMPTY_ACCOUNTS))),
-      active: this.api.listAccounts({ isActive: 'true', limit: '1' }).pipe(catchError(() => of(EMPTY_ACCOUNTS))),
-      locked: this.api.listAccounts({ isActive: 'false', limit: '1' }).pipe(catchError(() => of(EMPTY_ACCOUNTS))),
+      // `lockState` thay cho `isActive=false`: tài khoản bỏ dở OTP cũng có
+      // `is_active=false` nhưng không phải bị khoá, và cần đếm riêng.
+      locked: this.api.listAccounts({ lockState: 'locked', limit: '1' }).pipe(catchError(() => of(EMPTY_ACCOUNTS))),
+      unverified: this.api.listAccounts({ lockState: 'unverified', limit: '1' }).pipe(catchError(() => of(EMPTY_ACCOUNTS))),
     }).subscribe((payload) => {
       if (tab !== 'promotions' && tab !== 'logs') {
         this.rows.set(adminListRows(payload.accounts));
@@ -133,9 +146,10 @@ export class AdminAccountsPage {
       this.allCount.set(adminListCount(payload.all));
       this.memberCount.set(adminListCount(payload.members));
       this.adminCount.set(adminListCount(payload.admins));
-      this.activeCount.set(adminListCount(payload.active));
       this.lockedCount.set(adminListCount(payload.locked));
+      this.unverifiedCount.set(adminListCount(payload.unverified));
       this.loading.set(false);
+      this.hasLoadedOnce.set(true);
     });
   }
 
@@ -415,6 +429,16 @@ export class AdminAccountsPage {
   }
 
   /**
+   * Số đếm trên chip tab, hoặc dấu gạch khi chưa có số thật.
+   *
+   * Các signal đếm khởi tạo bằng 0 và render ngay, nên người vận hành thấy "0 / 0 / 0"
+   * nháy lên rồi mới nhảy sang số đúng — trông như dữ liệu rỗng chứ không như đang tải.
+   */
+  kpi(value: number): string {
+    return this.hasLoadedOnce() ? String(value) : '—';
+  }
+
+  /**
    * Member vs admin group used by the original tabs.
    */
   groupOf(row: AdminAccountRow): 'members' | 'admins' {
@@ -438,6 +462,11 @@ export class AdminAccountsPage {
     if (row.is_active) {
       return 'active';
     }
+    // Không có `lock_type` thì tài khoản chưa bao giờ bị khoá — nó đang chờ xác minh
+    // OTP. Gọi đó là "Khóa tạm thời" khiến admin bấm mở khoá và vô tình bỏ qua xác thực.
+    if (!row.lock_type) {
+      return 'unverified';
+    }
     return row.lock_type === 'permanent' ? 'locked_perm' : 'locked_temp';
   }
 
@@ -448,6 +477,9 @@ export class AdminAccountsPage {
     const key = this.statusKey(row);
     if (key === 'active') {
       return 'Đang hoạt động';
+    }
+    if (key === 'unverified') {
+      return 'Chưa xác thực';
     }
     return key === 'locked_perm' ? 'Khóa vĩnh viễn' : 'Khóa tạm thời';
   }
@@ -497,18 +529,22 @@ export class AdminAccountsPage {
     } else if (this.roleFilter()) {
       role = this.roleFilter();
     }
+    // "Bị khoá" đọc `lock_type`, không đọc `is_active`: tài khoản đăng ký dở OTP cũng
+    // có `is_active=false` nhưng thuộc tab "Chưa xác thực".
     let isActive = '';
-    if (tab === 'locked') {
-      isActive = 'false';
+    let lockState = '';
+    if (tab === 'locked' || this.statusFilter() === 'locked') {
+      lockState = 'locked';
+    } else if (tab === 'unverified' || this.statusFilter() === 'unverified') {
+      lockState = 'unverified';
     } else if (this.statusFilter() === 'active') {
       isActive = 'true';
-    } else if (this.statusFilter() === 'locked') {
-      isActive = 'false';
     }
     return {
       q: this.query(),
       role,
       isActive,
+      lockState,
       ...pageParams,
     };
   }

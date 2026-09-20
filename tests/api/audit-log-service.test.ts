@@ -38,7 +38,7 @@ test("parseAuditLogFilters rejects an invalid module or scope", () => {
   );
 });
 
-test("audit log service denies a non-admin before repository access", () => {
+test("audit log service denies a non-admin before repository access", async () => {
   let called = false;
   const service = createAuditLogService({
     repository: {
@@ -48,7 +48,7 @@ test("audit log service denies a non-admin before repository access", () => {
       }
     }
   });
-  assert.throws(
+  await assert.rejects(
     () =>
       service.list(
         { authUser: { id: "u1" }, profile: { is_active: true }, isAdmin: false, accessToken: "t" },

@@ -123,8 +123,8 @@
             <thead>
               <tr>
                 <th>Thời gian</th>
-                <th>Mã đơn</th>
-                <th>Vai trò</th>
+                <th>Người thao tác</th>
+                <th>Đơn hàng</th>
                 <th>Hành động</th>
                 <th>Thay đổi</th>
               </tr>
@@ -133,10 +133,15 @@
               @for (log of pagedLogs(); track log.audit_id || log.timestamp) {
                 <tr>
                   <td>{{ dateTime(log.timestamp) }}</td>
-                  <td><span class="admin-order-code">{{ log.target_id }}</span></td>
-                  <td>{{ log.actor_role }}</td>
-                  <td>{{ log.action }}</td>
-                  <td>{{ log.new_value }}</td>
+                  <td>
+                    <div class="admin-review-product">
+                      <strong>{{ log.actor_label || log.actor_name || '—' }}</strong>
+                      <small>{{ log.actor_role_label || log.actor_role }}</small>
+                    </div>
+                  </td>
+                  <td><span class="admin-order-code">{{ log.target_label || log.target_id }}</span></td>
+                  <td>{{ log.action_label || log.action }}</td>
+                  <td>{{ log.change_summary || '—' }}</td>
                 </tr>
               }
             </tbody>

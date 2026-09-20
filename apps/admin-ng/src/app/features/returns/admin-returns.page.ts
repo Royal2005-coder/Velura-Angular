@@ -11,6 +11,12 @@ import {
   AdminTicketRow,
 } from '../../core/admin-api.service';
 import { adminDateTime, adminMoney } from '../../core/admin-format';
+import {
+  ORDER_STATUS_LABELS,
+  RETURN_STATUS_LABELS,
+  statusLabelFrom,
+  TICKET_STATUS_LABELS,
+} from '../../core/admin-status-labels';
 import { adminErrorMessage, adminListCount, adminListRows, adminOffset, adminRangeLabel } from '../../core/admin-http';
 import { AdminSessionService } from '../../core/admin-session.service';
 import { AdminEmptyState } from '../../shared/admin-empty-state';
@@ -19,19 +25,6 @@ import { AdminPagination } from '../../shared/admin-pagination';
 
 type ServiceZone = 'chat' | 'returns' | 'support' | 'orders' | 'logs';
 type ReturnAction = 'refund' | 'exchange' | 'reject' | 'reply' | 'close' | null;
-
-const RETURN_LABELS: Record<string, string> = {
-  pending: 'Chờ xử lý',
-  approved: 'Đã duyệt',
-  shipping_back: 'Đang gửi về',
-  received: 'Đã nhận',
-  completed: 'Hoàn tất',
-  rejected: 'Từ chối',
-  open: 'Mới',
-  processing: 'Đang xử lý',
-  resolved: 'Đã giải quyết',
-  closed: 'Đã đóng',
-};
 
 @Component({
   selector: 'app-admin-returns-page',
@@ -534,11 +527,25 @@ export class AdminReturnsPage {
     return 'AI';
   }
 
+  /** Nhãn trạng thái phiếu đổi/trả. */
+  returnStatusLabel(status: string | undefined): string {
+    return statusLabelFrom(RETURN_STATUS_LABELS, status);
+  }
+
+  /** Nhãn trạng thái phiếu hỗ trợ. */
+  ticketStatusLabel(status: string | undefined): string {
+    return statusLabelFrom(TICKET_STATUS_LABELS, status);
+  }
+
   /**
-   * Status badge text for returns and tickets.
+   * Nhãn trạng thái đơn hàng.
+   *
+   * Màn tra cứu đơn trước đây đọc bằng bảng nhãn đổi trả, nên `confirmed`, `shipping`,
+   * `delivered` rơi ra tiếng Anh, còn `pending` hiện "Chờ xử lý" trong khi trang Đơn
+   * hàng gọi đúng trạng thái đó là "Chờ xác nhận".
    */
-  statusLabel(status: string | undefined): string {
-    return RETURN_LABELS[status || ''] || status || '—';
+  orderStatusLabel(status: string | undefined): string {
+    return statusLabelFrom(ORDER_STATUS_LABELS, status);
   }
 
   /**

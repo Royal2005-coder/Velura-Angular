@@ -1,3 +1,4 @@
+import { ALL_AUDIT_TARGETS, enrichAuditLogs } from "../audit-enrichment.js";
 import { HttpError } from "../http.js";
 import type { AuthContext, JsonObject } from "../types.js";
 import type { AuditLogListFilters, AuditLogRepository } from "./audit-log-repository.js";
@@ -30,11 +31,13 @@ export interface AuditLogService {
  */
 export function createAuditLogService({ repository }: { repository: AuditLogRepository }): AuditLogService {
   return {
-    list(context, searchParams) {
+    async list(context, searchParams) {
       if (!context?.authUser?.id || !context.isAdmin || !context.profile?.is_active) {
         throw new HttpError(403, "RBAC_DENIED", "Only active administrators can view audit logs");
       }
-      return repository.list(parseListFilters(searchParams), context.accessToken);
+      const payload = await repository.list(parseListFilters(searchParams), context.accessToken);
+      // Trang nhật ký trộn nhiều phân hệ nên tra đối tượng theo `module` của từng dòng.
+      return enrichAuditLogs(payload, { targets: ALL_AUDIT_TARGETS });
     }
   };
 }

@@ -1,3 +1,4 @@
+import { enrichAuditLogs, REVIEW_AUDIT } from "../audit-enrichment.js";
 import { HttpError } from "../http.js";
 import type { AuthContext, AuthUser, JsonObject } from "../types.js";
 import { asNumber, asString } from "../types.js";
@@ -91,11 +92,12 @@ export function createReviewService({ repository }: { repository: ReviewReposito
 
     async listAuditLogs(context, searchParams) {
       requireReviewReader(context);
-      return repository.listAuditLogs({
+      const payload = await repository.listAuditLogs({
         targetId: searchParams.get("targetId") || undefined,
         limit: Math.min(parseInt(searchParams.get("limit") || "50"), 1000),
         offset: parseInt(searchParams.get("offset") || "0")
       }, context.accessToken);
+      return enrichAuditLogs(payload, REVIEW_AUDIT);
     }
   };
 }

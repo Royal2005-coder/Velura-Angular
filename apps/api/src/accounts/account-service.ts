@@ -1,4 +1,5 @@
 import { randomInt } from "node:crypto";
+import { ACCOUNT_AUDIT, enrichAuditLogs } from "../audit-enrichment.js";
 import { HttpError } from "../http.js";
 import type { AuthContext, AuthUser, JsonObject, RequestMeta, UserProfile } from "../types.js";
 import { validateEmail, validatePassword, validatePhone } from "../user/auth.js";
@@ -105,11 +106,12 @@ export function createAccountService({ repository }: { repository: AccountReposi
       requireAccountAdmin(context);
       const targetId = searchParams.get("targetId") || "";
       if (targetId) requireUuid(targetId, "targetId");
-      return repository.listAuditLogs({
+      const payload = await repository.listAuditLogs({
         targetId: targetId || undefined,
         limit: clampInteger(searchParams.get("limit"), 50, 1, 100),
         offset: clampInteger(searchParams.get("offset"), 0, 0, 1000000)
       }, context.accessToken);
+      return enrichAuditLogs(payload, ACCOUNT_AUDIT);
     },
 
     async lock(context, userId, body, requestMeta) {

@@ -170,18 +170,23 @@
                   <th>Người thực hiện</th>
                   <th>Hành động</th>
                   <th>Đối tượng</th>
-                  <th>Dữ liệu cũ</th>
-                  <th>Dữ liệu mới</th>
+                  <th>Thay đổi</th>
+                  <th>Dữ liệu gốc</th>
                 </tr>
               </thead>
               <tbody>
                 @for (row of pagedLogs(); track row.audit_id || row.timestamp) {
                   <tr>
                     <td>{{ date(row.timestamp) }}</td>
-                    <td>{{ row.actor_id || 'system' }}</td>
-                    <td>{{ row.action }}</td>
-                    <td>{{ row.target_id }}</td>
-                    <td><div class="admin-log-json">{{ jsonValue(row.old_value) }}</div></td>
+                    <td>
+                      <div class="admin-review-product">
+                        <strong>{{ row.actor_label || row.actor_name || 'Hệ thống' }}</strong>
+                        <small>{{ row.actor_role_label || row.actor_role }}</small>
+                      </div>
+                    </td>
+                    <td>{{ row.action_label || row.action }}</td>
+                    <td>{{ row.target_label || row.target_id }}</td>
+                    <td>{{ row.change_summary || '—' }}</td>
                     <td><div class="admin-log-json">{{ jsonValue(row.new_value) }}</div></td>
                   </tr>
                 }

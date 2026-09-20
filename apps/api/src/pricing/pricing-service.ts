@@ -1,3 +1,4 @@
+import { enrichAuditLogs, PRICING_AUDIT } from "../audit-enrichment.js";
 import { HttpError } from "../http.js";
 import type { AuthContext, JsonObject } from "../types.js";
 import { PROMOTION_OPERATOR_ROLES, PROMOTION_READER_ROLES, PROMOTION_TYPES, VOUCHER_TYPES } from "./pricing-constants.js";
@@ -148,10 +149,11 @@ export function createPricingService({ repository }: { repository: PricingReposi
 
     async listAuditLogs(context, searchParams) {
       requirePricingReader(context);
-      return repository.listAuditLogs({
+      const payload = await repository.listAuditLogs({
         limit: boundedInteger(searchParams.get("limit"), 50, 1, 100),
         offset: boundedInteger(searchParams.get("offset"), 0, 0, Number.MAX_SAFE_INTEGER)
       }, context.accessToken);
+      return enrichAuditLogs(payload, PRICING_AUDIT);
     },
 
     async toggleVoucher(context, voucherId) {

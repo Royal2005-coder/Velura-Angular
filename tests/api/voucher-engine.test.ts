@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  buildPromotionBudgetMap,
+  buildPromotionStateMap,
   buildUsageMap,
   computeVoucherDiscount,
   evaluateVoucher,
@@ -41,7 +41,19 @@ function context(overrides = {}) {
     isMember: true,
     isFirstOrder: false,
     usageByVoucherId: {},
-    promotionBudgetByPromoId: {},
+    promotionByPromoId: {},
+    ...overrides
+  };
+}
+
+/** Chiến dịch cha đang chạy bình thường; test ghi đè đúng thứ nó muốn kiểm. */
+function promoState(overrides = {}) {
+  return {
+    limit: 0,
+    issued: 0,
+    isActive: true,
+    startDate: "2026-09-01T00:00:00.000Z",
+    endDate: "2026-12-31T00:00:00.000Z",
     ...overrides
   };
 }
@@ -133,7 +145,7 @@ test("campaign budget exhaustion blocks its vouchers", () => {
   const result = evaluateVoucher(
     voucher({ promo_id: "p-1" }),
     context({
-      promotionBudgetByPromoId: { "p-1": { limit: 10000000, issued: 10000000 } }
+      promotionByPromoId: { "p-1": promoState({ limit: 10000000, issued: 10000000 }) }
     })
   );
 
@@ -145,9 +157,39 @@ test("campaign with budget still remaining does not block its vouchers", () => {
   const result = evaluateVoucher(
     voucher({ promo_id: "p-1" }),
     context({
-      promotionBudgetByPromoId: { "p-1": { limit: 10000000, issued: 9000000 } }
+      promotionByPromoId: { "p-1": promoState({ limit: 10000000, issued: 9000000 }) }
     })
   );
+
+  assert.equal(result.eligible, true);
+});
+
+test("a paused campaign stops its vouchers even while the voucher row is still active", () => {
+  const result = evaluateVoucher(
+    voucher({ promo_id: "p-1", is_active: true }),
+    context({ promotionByPromoId: { "p-1": promoState({ isActive: false }) } })
+  );
+
+  assert.equal(result.eligible, false);
+  assert.equal(result.reason, "PROMOTION_INACTIVE");
+});
+
+test("an ended or not-yet-started campaign stops its vouchers", () => {
+  const ended = evaluateVoucher(
+    voucher({ promo_id: "p-1" }),
+    context({ promotionByPromoId: { "p-1": promoState({ endDate: "2026-09-01T00:00:00.000Z" }) } })
+  );
+  assert.equal(ended.reason, "PROMOTION_INACTIVE");
+
+  const notStarted = evaluateVoucher(
+    voucher({ promo_id: "p-1" }),
+    context({ promotionByPromoId: { "p-1": promoState({ startDate: "2026-12-01T00:00:00.000Z" }) } })
+  );
+  assert.equal(notStarted.reason, "PROMOTION_INACTIVE");
+});
+
+test("a voucher with no parent campaign is judged on its own merits", () => {
+  const result = evaluateVoucher(voucher({ promo_id: null }), context());
 
   assert.equal(result.eligible, true);
 });
@@ -228,12 +270,27 @@ test("usage map ignores cancelled orders", () => {
   assert.deepEqual(usage, { "v-1": 1, "v-2": 1 });
 });
 
-test("promotion budget map reads limit and issued amount", () => {
-  const budgets = buildPromotionBudgetMap([
-    { promo_id: "p-1", budget_limit: 10000000, total_discount_issued: 2500000 }
+test("promotion state map carries budget and campaign lifecycle together", () => {
+  const states = buildPromotionStateMap([
+    {
+      promo_id: "p-1",
+      budget_limit: 10000000,
+      total_discount_issued: 2500000,
+      is_active: false,
+      start_date: "2026-09-01T00:00:00.000Z",
+      end_date: "2026-12-31T00:00:00.000Z"
+    }
   ]);
 
-  assert.deepEqual(budgets, { "p-1": { limit: 10000000, issued: 2500000 } });
+  assert.deepEqual(states, {
+    "p-1": {
+      limit: 10000000,
+      issued: 2500000,
+      isActive: false,
+      startDate: "2026-09-01T00:00:00.000Z",
+      endDate: "2026-12-31T00:00:00.000Z"
+    }
+  });
 });
 
 test("shipping fee falls back to the standard fee when the client sends nonsense", () => {

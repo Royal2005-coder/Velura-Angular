@@ -57,10 +57,10 @@
                 <tr>
                   <td>{{ date(row.timestamp) }}</td>
                   <td>{{ actor(row) }}</td>
-                  <td>{{ row.actor_role || '—' }}</td>
+                  <td>{{ row.actor_role_label || row.actor_role || '—' }}</td>
                   <td>{{ row.module || '—' }}</td>
-                  <td>{{ row.action }}</td>
-                  <td>{{ row.target_id || '—' }}</td>
+                  <td>{{ row.action_label || row.action }}</td>
+                  <td>{{ row.target_label || row.target_id || '—' }}</td>
                   <td>{{ row.ip_address || '—' }}</td>
                 </tr>
               }

@@ -11,6 +11,7 @@ export type VoucherIneligibleReason =
   | "MIN_ORDER_NOT_MET"
   | "USER_LIMIT_REACHED"
   | "GROUP_MISMATCH"
+  | "PROMOTION_INACTIVE"
   | "BUDGET_EXHAUSTED";
 
 /**
@@ -26,7 +27,22 @@ export interface VoucherEvaluationContext {
   isMember: boolean;
   isFirstOrder: boolean;
   usageByVoucherId: Record<string, number>;
-  promotionBudgetByPromoId: Record<string, { limit: number; issued: number }>;
+  promotionByPromoId: Record<string, PromotionState>;
+}
+
+/**
+ * Trạng thái chiến dịch cha của một mã, đủ để quyết định mã còn dùng được không.
+ *
+ * Voucher có cờ `is_active` và khung ngày riêng, nhưng chiến dịch cha cũng có. Khách
+ * không được hưởng mã của một chiến dịch đã tạm dừng hoặc đã hết hạn, kể cả khi bản
+ * thân voucher còn bật — nên engine phải xét cả hai.
+ */
+export interface PromotionState {
+  limit: number;
+  issued: number;
+  isActive: boolean;
+  startDate: string | null;
+  endDate: string | null;
 }
 
 /**
@@ -150,9 +166,23 @@ export function evaluateVoucher(
   }
 
   if (promoId) {
-    const budget = context.promotionBudgetByPromoId[promoId];
-    if (budget && budget.limit > 0 && budget.issued >= budget.limit) {
-      return reject("BUDGET_EXHAUSTED", "Chiến dịch của mã này đã dùng hết ngân sách.");
+    const promotion = context.promotionByPromoId[promoId];
+    if (promotion) {
+      // Chiến dịch cha bị tạm dừng hoặc ngoài khung ngày thì mã của nó phải ngừng theo.
+      // Cascade ở migration 028 đã tắt voucher con, nhưng chốt lại ở đây để một lần
+      // cascade lỡ nhịp không biến thành giảm giá ngoài ý muốn.
+      if (!promotion.isActive) {
+        return reject("PROMOTION_INACTIVE", "Chiến dịch của mã này đã tạm dừng.");
+      }
+      if (promotion.startDate && promotion.startDate > nowIso) {
+        return reject("PROMOTION_INACTIVE", `Chiến dịch của mã bắt đầu từ ${formatDate(promotion.startDate)}.`);
+      }
+      if (promotion.endDate && promotion.endDate < nowIso) {
+        return reject("PROMOTION_INACTIVE", "Chiến dịch của mã này đã kết thúc.");
+      }
+      if (promotion.limit > 0 && promotion.issued >= promotion.limit) {
+        return reject("BUDGET_EXHAUSTED", "Chiến dịch của mã này đã dùng hết ngân sách.");
+      }
     }
   }
 
@@ -238,21 +268,25 @@ export function buildUsageMap(orders: readonly JsonObject[]): Record<string, num
 }
 
 /**
- * Gom ngân sách đã phát của từng chiến dịch để chặn mã khi chiến dịch cạn ngân sách.
+ * Gom trạng thái và ngân sách của từng chiến dịch để chặn mã khi chiến dịch cha
+ * đã tạm dừng, hết hạn hoặc cạn ngân sách.
  */
-export function buildPromotionBudgetMap(
+export function buildPromotionStateMap(
   promotions: readonly JsonObject[]
-): Record<string, { limit: number; issued: number }> {
-  const budgets: Record<string, { limit: number; issued: number }> = {};
+): Record<string, PromotionState> {
+  const states: Record<string, PromotionState> = {};
   for (const promotion of promotions) {
     const promoId = promotion.promo_id ? String(promotion.promo_id) : "";
     if (!promoId) continue;
-    budgets[promoId] = {
+    states[promoId] = {
       limit: Number(promotion.budget_limit || 0),
-      issued: Number(promotion.total_discount_issued || 0)
+      issued: Number(promotion.total_discount_issued || 0),
+      isActive: promotion.is_active !== false,
+      startDate: promotion.start_date ? String(promotion.start_date) : null,
+      endDate: promotion.end_date ? String(promotion.end_date) : null
     };
   }
-  return budgets;
+  return states;
 }
 
 /**

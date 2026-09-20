@@ -24,11 +24,21 @@ test("order operator is read-only and invalid refunds are rejected", async () =>
 });
 
 test("service audit logs are protected by the A05 reader matrix", async () => {
-  const service = createReturnService({ repository: { listAuditLogs: async (filters, token) => ({ filters, token }) } });
-  const result = await service.listAuditLogs(context("admin_operator_donhang"), new URLSearchParams("limit=500&offset=-2"));
-  assert.equal(result.filters.limit, 500);
-  assert.equal(result.filters.offset, 0);
-  assert.equal(result.token, "jwt-token");
+  // Bắt tham số qua closure chứ không qua giá trị trả về: service còn enrich lại
+  // payload trước khi trả, nên dùng kết quả để dò tham số sẽ hỏng.
+  let received;
+  const service = createReturnService({
+    repository: {
+      listAuditLogs: async (filters, token) => {
+        received = { filters, token };
+        return { rows: [], count: 0 };
+      }
+    }
+  });
+  await service.listAuditLogs(context("admin_operator_donhang"), new URLSearchParams("limit=500&offset=-2"));
+  assert.equal(received.filters.limit, 500);
+  assert.equal(received.filters.offset, 0);
+  assert.equal(received.token, "jwt-token");
 });
 
 test("updateReturnStatus validates status and enforces permissions", async () => {

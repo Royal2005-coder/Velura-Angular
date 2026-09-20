@@ -1,7 +1,7 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
-import { AdminAccountRow, AdminApiService, AdminAuditRow } from '../../core/admin-api.service';
+import { AdminApiService, AdminAuditRow } from '../../core/admin-api.service';
 import { adminDateTime } from '../../core/admin-format';
 import { adminErrorMessage, adminListCount, adminListRows, adminOffset, adminRangeLabel } from '../../core/admin-http';
 import { AdminEmptyState } from '../../shared/admin-empty-state';
@@ -24,7 +24,6 @@ export class AdminLogsPage {
   readonly query = signal('');
   readonly module = signal('');
   readonly rows = signal<AdminAuditRow[]>([]);
-  readonly accounts = signal<AdminAccountRow[]>([]);
   readonly loadError = signal<string | null>(null);
   readonly loading = signal(true);
   readonly page = signal(1);
@@ -69,7 +68,6 @@ export class AdminLogsPage {
       admin: this.api.listAuditLogs({ scope: 'admin', limit: '1' }).pipe(catchError(() => of(EMPTY_LOGS))),
       system: this.api.listAuditLogs({ scope: 'system', limit: '1' }).pipe(catchError(() => of(EMPTY_LOGS))),
       ai: this.api.listAuditLogs({ scope: 'ai', limit: '1' }).pipe(catchError(() => of(EMPTY_LOGS))),
-      accounts: this.api.listAccounts({ limit: '100' }).pipe(catchError(() => of({ rows: [] as AdminAccountRow[] }))),
     }).subscribe((payload) => {
       this.rows.set(adminListRows(payload.logs));
       this.total.set(adminListCount(payload.logs));
@@ -77,7 +75,6 @@ export class AdminLogsPage {
       this.adminCount.set(adminListCount(payload.admin));
       this.systemCount.set(adminListCount(payload.system));
       this.aiCount.set(adminListCount(payload.ai));
-      this.accounts.set(adminListRows(payload.accounts));
       this.loading.set(false);
     });
   }
@@ -129,14 +126,13 @@ export class AdminLogsPage {
   }
 
   /**
-   * Actor label for the original log table, joined from accounts like vanilla logs.js.
+   * Actor label for the log table.
+   *
+   * Tên người thao tác do API tra sẵn. Trước đây trang này tự join với một trang 100
+   * tài khoản tải kèm, nên mọi thao tác của người ngoài 100 dòng đó hiện ra UUID.
    */
   actor(row: AdminAuditRow): string {
-    const account = this.accounts().find((item) => item.user_id === row.actor_id);
-    if (account) {
-      return `${account.full_name || 'Admin'} (${account.email || row.actor_id})`;
-    }
-    return row.actor_name || row.actor_id || 'system';
+    return row.actor_label || row.actor_name || row.actor_id || 'Hệ thống';
   }
 
   private listParams(): Record<string, string> {

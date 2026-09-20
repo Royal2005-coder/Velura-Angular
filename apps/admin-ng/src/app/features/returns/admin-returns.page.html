@@ -160,7 +160,7 @@
                     <td>{{ row.return_id }}</td>
                     <td>{{ row.order_id }}</td>
                     <td>{{ row.request_type || '—' }}</td>
-                    <td><span class="admin-badge">{{ statusLabel(row.status) }}</span></td>
+                    <td><span class="admin-badge">{{ returnStatusLabel(row.status) }}</span></td>
                     <td>{{ date(row.created_at) }}</td>
                     <td>
                       @if (row.status === 'pending') {
@@ -193,7 +193,7 @@
                     <td>{{ row.ticket_id }}</td>
                     <td>{{ row.subject || '—' }}</td>
                     <td>{{ row.priority || '—' }}</td>
-                    <td><span class="admin-badge">{{ statusLabel(row.status) }}</span></td>
+                    <td><span class="admin-badge">{{ ticketStatusLabel(row.status) }}</span></td>
                     <td>
                       @if (canMutate() && row.status !== 'closed') {
                         <div class="admin-table-actions">
@@ -215,7 +215,7 @@
           <button class="admin-btn admin-btn--secondary admin-btn--sm" type="submit">Tìm đơn</button>
         </form>
         @if (selectedOrder()) {
-          <p class="admin-note">Đơn {{ selectedOrder()!.order_id }} — {{ selectedOrder()!.shipping_name || 'Khách' }} / {{ selectedOrder()!.shipping_phone || '—' }} / {{ statusLabel(selectedOrder()!.status) }}. Không được sửa giá, danh mục hay tài khoản từ màn này.</p>
+          <p class="admin-note">Đơn {{ selectedOrder()!.order_id }} — {{ selectedOrder()!.shipping_name || 'Khách' }} / {{ selectedOrder()!.shipping_phone || '—' }} / {{ orderStatusLabel(selectedOrder()!.status) }}. Không được sửa giá, danh mục hay tài khoản từ màn này.</p>
         }
         @if (!orders().length) {
           <app-admin-empty-state kind="empty" icon="cart" title="Không có đơn hàng phù hợp" />
@@ -229,7 +229,7 @@
                     <td><button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="selectOrder(row)">{{ row.order_id }}</button></td>
                     <td>{{ row.shipping_name || '—' }}</td>
                     <td>{{ row.shipping_phone || '—' }}</td>
-                    <td><span class="admin-badge">{{ statusLabel(row.status) }}</span></td>
+                    <td><span class="admin-badge">{{ orderStatusLabel(row.status) }}</span></td>
                     <td>{{ date(row.order_date) }}</td>
                   </tr>
                 }
@@ -243,13 +243,20 @@
       } @else {
         <div class="admin-table-wrap">
           <table class="admin-table admin-data-table">
-            <thead><tr><th>Thời gian</th><th>Hành động</th><th>Đối tượng</th></tr></thead>
+            <thead><tr><th>Thời gian</th><th>Người thao tác</th><th>Hành động</th><th>Đối tượng</th><th>Thay đổi</th></tr></thead>
             <tbody>
               @for (row of pagedLogs(); track row.audit_id || row.timestamp) {
                 <tr>
                   <td>{{ date(row.timestamp) }}</td>
-                  <td>{{ row.action }}</td>
-                  <td>{{ row.target_id }}</td>
+                  <td>
+                    <div class="admin-review-product">
+                      <strong>{{ row.actor_label || row.actor_name || '—' }}</strong>
+                      <small>{{ row.actor_role_label || row.actor_role }}</small>
+                    </div>
+                  </td>
+                  <td>{{ row.action_label || row.action }}</td>
+                  <td>{{ row.target_label || row.target_id }}</td>
+                  <td>{{ row.change_summary || '—' }}</td>
                 </tr>
               }
             </tbody>

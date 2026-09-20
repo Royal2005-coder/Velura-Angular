@@ -187,6 +187,18 @@ export interface AdminPromotionRow {
   budget_limit?: number;
   total_discount_issued?: number;
   version?: number;
+  paused_at?: string | null;
+  /**
+   * Vòng đời do API tính (`promotion-lifecycle.ts`), không tính lại ở trình duyệt —
+   * badge, nút thao tác và trang ưu đãi bên khách phải cùng một câu trả lời.
+   */
+  lifecycle_status?: 'scheduled' | 'running' | 'paused' | 'ended' | 'budget_exhausted';
+  lifecycle_label?: string;
+  can_activate?: boolean;
+  can_pause?: boolean;
+  /** `budget_limit = 0` là "không đặt trần", không phải ngân sách bằng 0. */
+  budget_unlimited?: boolean;
+  warnings?: Array<{ code: string; level: 'info' | 'warning' | 'danger'; message: string }>;
   /** Nội dung marketing hiển thị cho khách trên trang Ưu đãi — xem migration 026. */
   description?: string | null;
   banner_image_url?: string | null;

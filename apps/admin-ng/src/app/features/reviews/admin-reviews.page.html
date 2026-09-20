@@ -141,8 +141,8 @@
             <thead>
               <tr>
                 <th>Thời gian</th>
+                <th>Người thao tác</th>
                 <th>Đối tượng</th>
-                <th>Vai trò</th>
                 <th>Hành động</th>
                 <th>Thay đổi</th>
               </tr>
@@ -151,10 +151,15 @@
               @for (row of pagedLogs(); track row.audit_id || row.timestamp) {
                 <tr>
                   <td>{{ date(row.timestamp) }}</td>
-                  <td><span class="admin-order-code">{{ row.target_id }}</span></td>
-                  <td>{{ row.actor_role }}</td>
-                  <td>{{ row.action }}</td>
-                  <td>{{ jsonValue(row.new_value) }}</td>
+                  <td>
+                    <div class="admin-review-product">
+                      <strong>{{ row.actor_label || row.actor_name || '—' }}</strong>
+                      <small>{{ row.actor_role_label || row.actor_role }}</small>
+                    </div>
+                  </td>
+                  <td><span class="admin-order-code">{{ row.target_label || row.target_id }}</span></td>
+                  <td>{{ row.action_label || row.action }}</td>
+                  <td>{{ row.change_summary || '—' }}</td>
                 </tr>
               }
             </tbody>

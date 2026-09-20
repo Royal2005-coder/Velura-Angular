@@ -2,7 +2,7 @@ import { HttpError, readJson, sendJson } from "../http.js";
 import { callRpc, selectRows } from "../supabase.js";
 import { requireUserAuth } from "./auth.js";
 import {
-  buildPromotionBudgetMap,
+  buildPromotionStateMap,
   buildUsageMap,
   evaluateVouchers,
   normalizeShippingFee,
@@ -128,7 +128,7 @@ export async function buildWallet(
     isMember: Boolean(profile?.user_id),
     isFirstOrder: countBillableOrders(orders) === 0,
     usageByVoucherId: buildUsageMap(orders),
-    promotionBudgetByPromoId: buildPromotionBudgetMap(promotionResult.rows || [])
+    promotionByPromoId: buildPromotionStateMap(promotionResult.rows || [])
   };
 
   const items = evaluateVouchers(voucherResult.rows || [], evaluationContext);

@@ -12,6 +12,12 @@ export interface AccountListFilters {
   role?: string;
   adminRole?: string;
   isActive?: boolean;
+  /**
+   * `is_active = false` gộp hai tình huống khác hẳn nhau: bị admin khoá, và đăng ký
+   * xong chưa nhập OTP. Bộ lọc này tách chúng ra để tab "Bị khoá" không đếm nhầm
+   * người dùng bỏ dở đăng ký.
+   */
+  lockState?: "locked" | "unverified";
   limit: number;
   offset: number;
   order: string;
@@ -154,6 +160,12 @@ export function createAccountRepository(): AccountRepository {
       if (filters.role) query.role = `eq.${filters.role}`;
       if (filters.adminRole) query.admin_role = `eq.${filters.adminRole}`;
       if (filters.isActive !== undefined) query.is_active = `eq.${filters.isActive}`;
+      if (filters.lockState === "locked") {
+        query.lock_type = "not.is.null";
+      } else if (filters.lockState === "unverified") {
+        query.is_active = "eq.false";
+        query.lock_type = "is.null";
+      }
       return withAccountError(() => selectRows("users", query, authOptions(accessToken)));
     },
 

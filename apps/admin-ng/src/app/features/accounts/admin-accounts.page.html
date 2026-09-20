@@ -2,11 +2,12 @@
   <p class="admin-page-crumb">Tài khoản / Danh sách</p>
   <section class="admin-card admin-card--flush">
     <div class="admin-tabs" role="tablist">
-      <button class="admin-tab" [class.admin-tab--active]="tab() === 'all'" type="button" (click)="setTab('all')">Tất cả tài khoản <span>{{ allCount() }}</span></button>
-      <button class="admin-tab" [class.admin-tab--active]="tab() === 'members'" type="button" (click)="setTab('members')">Thành viên <span>{{ memberCount() }}</span></button>
-      <button class="admin-tab" [class.admin-tab--active]="tab() === 'admins'" type="button" (click)="setTab('admins')">Quản trị viên <span>{{ adminCount() }}</span></button>
-      <button class="admin-tab" [class.admin-tab--active]="tab() === 'locked'" type="button" (click)="setTab('locked')">Bị khóa <span>{{ lockedCount() }}</span></button>
-      <button class="admin-tab" [class.admin-tab--active]="tab() === 'promotions'" type="button" (click)="setTab('promotions')">Nâng quyền <span>{{ pendingCount() }}</span></button>
+      <button class="admin-tab" [class.admin-tab--active]="tab() === 'all'" type="button" (click)="setTab('all')">Tất cả tài khoản <span>{{ kpi(allCount()) }}</span></button>
+      <button class="admin-tab" [class.admin-tab--active]="tab() === 'members'" type="button" (click)="setTab('members')">Thành viên <span>{{ kpi(memberCount()) }}</span></button>
+      <button class="admin-tab" [class.admin-tab--active]="tab() === 'admins'" type="button" (click)="setTab('admins')">Quản trị viên <span>{{ kpi(adminCount()) }}</span></button>
+      <button class="admin-tab" [class.admin-tab--active]="tab() === 'locked'" type="button" (click)="setTab('locked')">Bị khóa <span>{{ kpi(lockedCount()) }}</span></button>
+      <button class="admin-tab" [class.admin-tab--active]="tab() === 'unverified'" type="button" (click)="setTab('unverified')">Chưa xác thực <span>{{ kpi(unverifiedCount()) }}</span></button>
+      <button class="admin-tab" [class.admin-tab--active]="tab() === 'promotions'" type="button" (click)="setTab('promotions')">Nâng quyền <span>{{ kpi(pendingCount()) }}</span></button>
       <button class="admin-tab" [class.admin-tab--active]="tab() === 'logs'" type="button" (click)="setTab('logs')">Nhật ký</button>
     </div>
     <div class="admin-tab-content">
@@ -33,14 +34,17 @@
             <option value="">Tất cả trạng thái</option>
             <option value="active">Đang hoạt động</option>
             <option value="locked">Bị khóa</option>
+            <option value="unverified">Chưa xác thực</option>
           </select>
           <div class="admin-filter-bar__actions">
             <button class="admin-btn admin-btn--filter admin-btn--sm" type="submit">Lọc</button>
             <button class="admin-btn admin-btn--ghost admin-btn--sm" type="reset">Đặt lại</button>
           </div>
         </form>
-        @if (loading()) {
-          <app-admin-empty-state kind="loading" icon="clock" title="Đang tải tài khoản" />
+        @if (showSkeleton()) {
+          <app-admin-table-skeleton
+            [headers]="['Tài khoản', 'Nhóm', 'Trạng thái', 'Đăng nhập gần nhất', 'Thao tác']"
+            [rows]="pageSize" />
         } @else if (loadError()) {
           <app-admin-empty-state kind="error" icon="alert" title="Không tải được tài khoản" [message]="loadError() || ''">
             <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="reload()">Thử lại</button>
@@ -48,7 +52,7 @@
         } @else if (!paged().length) {
           <app-admin-empty-state kind="empty" icon="users" title="Không có tài khoản phù hợp" message="Điều chỉnh bộ lọc hoặc tải lại." />
         } @else {
-        <div class="admin-table-wrap">
+        <div class="admin-table-wrap" [class.admin-table-wrap--refreshing]="isRefreshing()">
           <table class="admin-table admin-data-table admin-member-table">
             <thead>
               <tr>
@@ -88,13 +92,13 @@
                         <button class="admin-icon-button admin-icon-button--sm" type="button" title="Xem chi tiết" (click)="openDetail(row.user_id)">
                           <app-admin-icon name="eye" />
                         </button>
-                        @if (canMutate() && row.is_active) {
-                          <button class="admin-icon-button admin-icon-button--sm" type="button" title="Khóa tài khoản" (click)="openAction('lock', row.user_id)">
-                            <app-admin-icon name="lock" />
-                          </button>
-                        } @else if (canMutate()) {
+                        @if (canMutate() && statusKey(row) !== 'active' && statusKey(row) !== 'unverified') {
                           <button class="admin-icon-button admin-icon-button--sm" type="button" title="Mở khóa tài khoản" (click)="openAction('unlock', row.user_id)">
                             <app-admin-icon name="unlock" />
+                          </button>
+                        } @else if (canMutate()) {
+                          <button class="admin-icon-button admin-icon-button--sm" type="button" title="Khóa tài khoản" (click)="openAction('lock', row.user_id)">
+                            <app-admin-icon name="lock" />
                           </button>
                         }
                         @if (canMutate()) {
@@ -170,18 +174,23 @@
                   <th>Người thực hiện</th>
                   <th>Hành động</th>
                   <th>Đối tượng</th>
-                  <th>Dữ liệu cũ</th>
-                  <th>Dữ liệu mới</th>
+                  <th>Thay đổi</th>
+                  <th>Dữ liệu gốc</th>
                 </tr>
               </thead>
               <tbody>
                 @for (row of pagedLogs(); track row.audit_id || row.timestamp) {
                   <tr>
                     <td>{{ date(row.timestamp) }}</td>
-                    <td>{{ row.actor_id || 'system' }}</td>
-                    <td>{{ row.action }}</td>
-                    <td>{{ row.target_id }}</td>
-                    <td><div class="admin-log-json">{{ jsonValue(row.old_value) }}</div></td>
+                    <td>
+                      <div class="admin-review-product">
+                        <strong>{{ row.actor_label || row.actor_name || 'Hệ thống' }}</strong>
+                        <small>{{ row.actor_role_label || row.actor_role }}</small>
+                      </div>
+                    </td>
+                    <td>{{ row.action_label || row.action }}</td>
+                    <td>{{ row.target_label || row.target_id }}</td>
+                    <td>{{ row.change_summary || '—' }}</td>
                     <td><div class="admin-log-json">{{ jsonValue(row.new_value) }}</div></td>
                   </tr>
                 }

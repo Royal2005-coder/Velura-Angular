@@ -129,6 +129,30 @@ test("approval rejection requires a reason longer than ten words", async () => {
   );
 });
 
+test("locked and unverified accounts are filtered apart, not lumped into is_active=false", async () => {
+  let received;
+  const service = createAccountService({
+    repository: {
+      list: async (filters) => {
+        received = filters;
+        return { rows: [], count: 0 };
+      }
+    }
+  });
+
+  await service.list(superAdminContext(), new URLSearchParams("lockState=locked"));
+  assert.equal(received.lockState, "locked");
+  assert.equal(received.isActive, undefined);
+
+  await service.list(superAdminContext(), new URLSearchParams("lockState=unverified"));
+  assert.equal(received.lockState, "unverified");
+
+  await assert.rejects(
+    () => service.list(superAdminContext(), new URLSearchParams("lockState=suspended")),
+    (error) => error.status === 422 && error.details.lockState.length === 1
+  );
+});
+
 test("validateCreate generates a compliant temporary password when none is supplied", () => {
   const { input, generatedPassword } = validateCreate({
     email: "New.Admin@Velura.vn",

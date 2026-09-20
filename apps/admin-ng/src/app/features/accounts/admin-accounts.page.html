@@ -6,6 +6,7 @@
       <button class="admin-tab" [class.admin-tab--active]="tab() === 'members'" type="button" (click)="setTab('members')">Thành viên <span>{{ memberCount() }}</span></button>
       <button class="admin-tab" [class.admin-tab--active]="tab() === 'admins'" type="button" (click)="setTab('admins')">Quản trị viên <span>{{ adminCount() }}</span></button>
       <button class="admin-tab" [class.admin-tab--active]="tab() === 'locked'" type="button" (click)="setTab('locked')">Bị khóa <span>{{ lockedCount() }}</span></button>
+      <button class="admin-tab" [class.admin-tab--active]="tab() === 'unverified'" type="button" (click)="setTab('unverified')">Chưa xác thực <span>{{ unverifiedCount() }}</span></button>
       <button class="admin-tab" [class.admin-tab--active]="tab() === 'promotions'" type="button" (click)="setTab('promotions')">Nâng quyền <span>{{ pendingCount() }}</span></button>
       <button class="admin-tab" [class.admin-tab--active]="tab() === 'logs'" type="button" (click)="setTab('logs')">Nhật ký</button>
     </div>
@@ -33,6 +34,7 @@
             <option value="">Tất cả trạng thái</option>
             <option value="active">Đang hoạt động</option>
             <option value="locked">Bị khóa</option>
+            <option value="unverified">Chưa xác thực</option>
           </select>
           <div class="admin-filter-bar__actions">
             <button class="admin-btn admin-btn--filter admin-btn--sm" type="submit">Lọc</button>
@@ -88,13 +90,13 @@
                         <button class="admin-icon-button admin-icon-button--sm" type="button" title="Xem chi tiết" (click)="openDetail(row.user_id)">
                           <app-admin-icon name="eye" />
                         </button>
-                        @if (canMutate() && row.is_active) {
-                          <button class="admin-icon-button admin-icon-button--sm" type="button" title="Khóa tài khoản" (click)="openAction('lock', row.user_id)">
-                            <app-admin-icon name="lock" />
-                          </button>
-                        } @else if (canMutate()) {
+                        @if (canMutate() && statusKey(row) !== 'active' && statusKey(row) !== 'unverified') {
                           <button class="admin-icon-button admin-icon-button--sm" type="button" title="Mở khóa tài khoản" (click)="openAction('unlock', row.user_id)">
                             <app-admin-icon name="unlock" />
+                          </button>
+                        } @else if (canMutate()) {
+                          <button class="admin-icon-button admin-icon-button--sm" type="button" title="Khóa tài khoản" (click)="openAction('lock', row.user_id)">
+                            <app-admin-icon name="lock" />
                           </button>
                         }
                         @if (canMutate()) {

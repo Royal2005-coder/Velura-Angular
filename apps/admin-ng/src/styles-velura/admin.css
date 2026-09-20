@@ -595,6 +595,15 @@ input:checked + .admin-sim-slider:before {
   border-color: transparent !important;
 }
 
+/* Đang tải lại: giữ nguyên bảng cũ, chỉ mờ đi và chặn thao tác.
+   Xoá bảng rồi vẽ lại khiến mỗi lần lọc hay sang trang có cảm giác chậm hơn thực tế. */
+.admin-table-wrap--refreshing {
+  position: relative;
+  opacity: 0.55;
+  pointer-events: none;
+  transition: opacity 120ms ease-out;
+}
+
 .admin-table-row-skeleton td {
   padding: 18px 16px !important;
   pointer-events: none;

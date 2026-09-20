@@ -109,8 +109,32 @@ async function main() {
     process.exit(1);
   }
 
+  // Script này cầm chuỗi kết nối cơ sở dữ liệu production và đẩy nguyên văn DDL qua đó.
+  // Bản trước đặt thẳng `rejectUnauthorized: false`, nghĩa là bất kỳ ai chen được vào
+  // giữa cũng đọc được thông tin kết nối và toàn bộ nội dung migration.
+  //
+  // Supabase ký chứng chỉ bằng CA riêng nên kho tin cậy mặc định của Node không xác thực
+  // được; cách đúng là trỏ tới CA của họ (tải ở Dashboard > Settings > Database > SSL).
+  // Không có CA thì script dừng và nói rõ hai lựa chọn, thay vì âm thầm hạ tiêu chuẩn.
+  const caPath = readEnv("SUPABASE_DB_CA_CERT");
+  const allowInsecureTls = readEnv("SUPABASE_DB_ALLOW_INSECURE_TLS") === "true";
+
+  let ssl;
+  if (caPath) {
+    ssl = { ca: readFileSync(caPath, "utf8"), rejectUnauthorized: true };
+  } else if (allowInsecureTls) {
+    console.warn("CẢNH BÁO: đang bỏ qua xác thực chứng chỉ TLS tới cơ sở dữ liệu.");
+    console.warn("Chỉ dùng tạm. Đặt SUPABASE_DB_CA_CERT trỏ tới CA của Supabase để chạy an toàn.");
+    ssl = { rejectUnauthorized: false };
+  } else {
+    console.error("Thiếu cấu hình TLS cho kết nối cơ sở dữ liệu. Chọn một trong hai:");
+    console.error("  1. SUPABASE_DB_CA_CERT=<đường dẫn tới CA của Supabase>   (khuyến nghị)");
+    console.error("  2. SUPABASE_DB_ALLOW_INSECURE_TLS=true                    (chỉ khi chạy tạm)");
+    process.exit(1);
+  }
+
   const { Client } = require("pg");
-  const client = new Client({ connectionString, ssl: { rejectUnauthorized: false } });
+  const client = new Client({ connectionString, ssl });
   await client.connect();
 
   try {

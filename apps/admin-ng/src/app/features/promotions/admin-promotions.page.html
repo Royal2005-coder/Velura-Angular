@@ -43,10 +43,10 @@
                              [class.admin-progress__bar--danger]="isBudgetExhausted(row)"
                              [style.width.%]="campaignBudgetPercent(row)"></div>
                       </div>
-                      @if (isBudgetNearLimit(row)) {
-                        <span class="admin-budget__note admin-budget__note--warning">Sắp chạm ngưỡng</span>
-                      } @else if (isBudgetExhausted(row)) {
-                        <span class="admin-budget__note admin-budget__note--danger">Đã cạn ngân sách</span>
+                      @for (warning of campaignWarnings(row); track warning.code) {
+                        <span class="admin-budget__note"
+                              [class.admin-budget__note--warning]="warning.level === 'warning'"
+                              [class.admin-budget__note--danger]="warning.level === 'danger'">{{ warning.message }}</span>
                       }
                     </td>
                     <td>
@@ -60,9 +60,11 @@
                     <td>
                       @if (canMutate()) {
                         <button class="admin-btn admin-btn--outline admin-btn--sm" type="button" (click)="openEdit(row)">Sửa</button>
-                        <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="toggleCampaign(row)">
-                          {{ isCampaignActive(row) ? 'Tạm dừng' : 'Kích hoạt' }}
-                        </button>
+                        @if (canToggleCampaign(row)) {
+                          <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="toggleCampaign(row)">
+                            {{ row.can_pause ? 'Tạm dừng' : 'Kích hoạt' }}
+                          </button>
+                        }
                       }
                     </td>
                   </tr>

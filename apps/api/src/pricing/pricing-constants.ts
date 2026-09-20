@@ -23,7 +23,7 @@ export const PRICE_HISTORY_SELECT = [
 /** Safe column projection for promotion rows. */
 export const PROMOTION_SELECT = [
   "promo_id", "promo_name", "promo_type", "applicable_categories",
-  "start_date", "end_date", "is_active", "budget_limit",
+  "start_date", "end_date", "is_active", "paused_at", "paused_by", "budget_limit",
   "max_vouchers_allowed", "total_discount_issued", "created_by", "version",
   "description", "banner_image_url", "highlight_label", "display_order", "is_featured"
 ].join(",");

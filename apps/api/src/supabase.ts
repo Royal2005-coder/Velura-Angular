@@ -13,6 +13,14 @@ export interface SupabaseRequestOptions {
   useAnonKey?: boolean;
   accessToken?: string | null;
   silentError?: boolean;
+  /**
+   * Chiến lược đếm tổng của PostgREST.
+   *
+   * `exact` bắt Postgres đếm toàn bảng sau khi lọc — đúng thứ trang danh sách cần để
+   * phân trang, nhưng lãng phí với những truy vấn chỉ lấy một dòng hoặc chỉ tra nhãn.
+   * Mặc định vẫn là `exact` để không đổi hành vi của các trang danh sách.
+   */
+  count?: "exact" | "planned" | "estimated" | "none";
 }
 
 /**
@@ -130,14 +138,14 @@ export async function selectRows(
   query: Record<string, unknown> = {},
   options: SupabaseRequestOptions = {}
 ): Promise<{ rows: JsonObject[]; count: number | undefined }> {
+  const countStrategy = options.count ?? "exact";
   const result = await supabaseRequest(`/rest/v1/${table}`, {
     query,
     useAnonKey: options.useAnonKey,
     accessToken: options.accessToken,
     silentError: options.silentError,
-    headers: {
-      prefer: "count=exact"
-    }
+    // Không gửi `prefer` thì PostgREST bỏ qua bước đếm hoàn toàn.
+    headers: countStrategy === "none" ? {} : { prefer: `count=${countStrategy}` }
   });
   const rawRows = Array.isArray(result.data) ? result.data : [];
   return {
@@ -154,7 +162,9 @@ export async function selectOne(
   query: Record<string, unknown> = {},
   options: SupabaseRequestOptions = {}
 ): Promise<JsonObject | null> {
-  const { rows } = await selectRows(table, { limit: 1, ...query }, options);
+  // Lấy đúng một dòng thì tổng số dòng của bảng không dùng vào việc gì; bỏ `count=exact`
+  // ở đây cắt được một lần đếm toàn bảng cho mỗi lần tra cứu.
+  const { rows } = await selectRows(table, { limit: 1, ...query }, { count: "none", ...options });
   return rows[0] || null;
 }
 

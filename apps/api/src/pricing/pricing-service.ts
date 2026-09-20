@@ -3,6 +3,14 @@ import { HttpError } from "../http.js";
 import type { AuthContext, JsonObject } from "../types.js";
 import { PROMOTION_OPERATOR_ROLES, PROMOTION_READER_ROLES, PROMOTION_TYPES, VOUCHER_TYPES } from "./pricing-constants.js";
 import type { PricingRepository } from "./pricing-repository.js";
+import {
+  canActivatePromotion,
+  canPausePromotion,
+  promotionLifecycle,
+  promotionLifecycleLabel,
+  promotionWarnings,
+  toLifecycleInput
+} from "./promotion-lifecycle.js";
 import { normalizePromotionPresentation } from "./promotion-presentation.js";
 
 /**
@@ -66,11 +74,12 @@ export function createPricingService({ repository }: { repository: PricingReposi
 
     async listPromotions(context, searchParams) {
       requirePricingReader(context);
-      return repository.listPromotions({
+      const payload = await repository.listPromotions({
         isActive: searchParams.get("isActive") || undefined,
         limit: Math.min(parseInt(searchParams.get("limit") || "50"), 100),
         offset: parseInt(searchParams.get("offset") || "0")
       }, context.accessToken);
+      return decoratePromotions(payload, new Date());
     },
 
     async getPromotion(context, promotionId) {
@@ -82,9 +91,8 @@ export function createPricingService({ repository }: { repository: PricingReposi
 
     async createPromotion(context, body) {
       requirePricingAdmin(context);
-      if (!body?.name) throw new HttpError(422, "VALIDATION_ERROR", "Name required");
-      if (!body?.startDate || !body?.endDate) throw new HttpError(422, "VALIDATION_ERROR", "Start and end dates required");
       if (body.type && !PROMOTION_TYPES.includes(body.type as string)) throw new HttpError(422, "VALIDATION_ERROR", `Invalid promo type. Valid: ${PROMOTION_TYPES.join(", ")}`);
+      validatePromotionSchedule(body);
       return repository.createPromotion({
         ...body,
         ...normalizePromotionPresentation(body, "create"),
@@ -233,4 +241,94 @@ function parseVersion(value: unknown): number {
 function boundedInteger(value: string | null, fallback: number, min: number, max: number): number {
   const parsed = Number.parseInt(value ?? "", 10);
   return Number.isFinite(parsed) ? Math.min(Math.max(parsed, min), max) : fallback;
+}
+
+/**
+ * Tên chiến dịch ngắn hơn mức này thì không ai đọc ra nó là chương trình gì.
+ * Đặt ở 8 để vẫn nhận tên thật ngắn gọn như "Tet 2026" nhưng loại được "grsgrg".
+ */
+const PROMOTION_NAME_MIN = 8;
+
+/**
+ * Chặn chiến dịch rác ngay tại biên.
+ *
+ * Bảng khuyến mãi trên production đang lẫn "grsgrg" và vài "Test Campaign <timestamp>"
+ * cùng chiến dịch thật, vì tầng API chỉ kiểm tên khác rỗng và hai mốc ngày có mặt —
+ * không kiểm thứ tự hai mốc đó, cũng không kiểm độ dài tên. Kiểm ở client thì bỏ qua
+ * được bằng một lệnh curl.
+ */
+export function validatePromotionSchedule(body: JsonObject): void {
+  const name = typeof body.name === "string" ? body.name.trim() : "";
+  if (name.length < PROMOTION_NAME_MIN) {
+    throw new HttpError(422, "VALIDATION_ERROR", `Tên chiến dịch cần tối thiểu ${PROMOTION_NAME_MIN} ký tự`, {
+      name: [`Tên chiến dịch cần tối thiểu ${PROMOTION_NAME_MIN} ký tự`]
+    });
+  }
+
+  if (!body.startDate || !body.endDate) {
+    throw new HttpError(422, "VALIDATION_ERROR", "Cần cả ngày bắt đầu và ngày kết thúc", {
+      startDate: ["Cần cả ngày bắt đầu và ngày kết thúc"]
+    });
+  }
+
+  const start = Date.parse(String(body.startDate));
+  const end = Date.parse(String(body.endDate));
+  if (!Number.isFinite(start) || !Number.isFinite(end)) {
+    throw new HttpError(422, "VALIDATION_ERROR", "Ngày bắt đầu hoặc kết thúc không hợp lệ", {
+      startDate: ["Ngày không hợp lệ"]
+    });
+  }
+  if (end <= start) {
+    throw new HttpError(422, "VALIDATION_ERROR", "Ngày kết thúc phải sau ngày bắt đầu", {
+      endDate: ["Ngày kết thúc phải sau ngày bắt đầu"]
+    });
+  }
+
+  if (body.budgetLimit !== undefined && body.budgetLimit !== null && body.budgetLimit !== "") {
+    const budget = Number(body.budgetLimit);
+    if (!Number.isFinite(budget) || budget < 0) {
+      throw new HttpError(422, "VALIDATION_ERROR", "Ngân sách phải là số không âm", {
+        budgetLimit: ["Ngân sách phải là số không âm"]
+      });
+    }
+  }
+}
+
+/**
+ * Gắn vòng đời và cảnh báo vào từng chiến dịch trước khi trả cho admin.
+ *
+ * Trạng thái tính ở đây chứ không ở trình duyệt, để badge, nút thao tác và trang ưu đãi
+ * bên khách không thể suy ra ba kết quả khác nhau từ cùng một dòng dữ liệu.
+ */
+export function decoratePromotions(
+  payload: { rows?: JsonObject[]; count?: number | undefined } | JsonObject[] | unknown,
+  now: Date
+): { rows: JsonObject[]; count: number | undefined } {
+  const rows = Array.isArray(payload)
+    ? payload
+    : Array.isArray((payload as { rows?: JsonObject[] })?.rows)
+      ? (payload as { rows: JsonObject[] }).rows
+      : [];
+  const count = Array.isArray(payload)
+    ? payload.length
+    : (payload as { count?: number | undefined })?.count;
+
+  return {
+    rows: rows.map((row) => {
+      const input = toLifecycleInput(row);
+      const lifecycle = promotionLifecycle(input, now);
+      return {
+        ...row,
+        lifecycle_status: lifecycle,
+        lifecycle_label: promotionLifecycleLabel(lifecycle),
+        can_activate: canActivatePromotion(lifecycle),
+        can_pause: canPausePromotion(lifecycle),
+        // `budget_limit = 0` trong cơ sở dữ liệu nghĩa là không đặt trần, không phải
+        // ngân sách bằng không — nói rõ ra để UI không vẽ "0đ / 0đ".
+        budget_unlimited: input.budgetLimit <= 0,
+        warnings: promotionWarnings(input, now)
+      };
+    }),
+    count
+  };
 }

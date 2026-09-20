@@ -205,6 +205,10 @@ export interface AdminPromotionRow {
   can_pause?: boolean;
   /** `budget_limit = 0` là "không đặt trần", không phải ngân sách bằng 0. */
   budget_unlimited?: boolean;
+  /** Ngân sách chỉ tăng khi có mã được dùng; chiến dịch chưa phát mã thì không theo dõi được. */
+  budget_tracked?: boolean;
+  voucher_count?: number;
+  active_voucher_count?: number;
   warnings?: Array<{ code: string; level: 'info' | 'warning' | 'danger'; message: string }>;
   /** Nội dung marketing hiển thị cho khách trên trang Ưu đãi — xem migration 026. */
   description?: string | null;

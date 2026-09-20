@@ -156,6 +156,15 @@ export class AdminPromotionsPage {
     return `${this.money(row.total_discount_issued)} / ${this.money(row.budget_limit ?? row.budget)}`;
   }
 
+  /**
+   * Số mã của chiến dịch, vì đó là thứ quyết định chiến dịch có tác dụng thật hay không.
+   */
+  voucherCoverage(row: AdminPromotionRow): string {
+    const total = row.voucher_count ?? 0;
+    if (!total) return 'Chưa có mã nào';
+    return `${row.active_voucher_count ?? 0}/${total} mã còn hiệu lực`;
+  }
+
   /** Cảnh báo do API tính sẵn cho từng chiến dịch. */
   campaignWarnings(row: AdminPromotionRow): Array<{ code: string; level: string; message: string }> {
     return row.warnings ?? [];

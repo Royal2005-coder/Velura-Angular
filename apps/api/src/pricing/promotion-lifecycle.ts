@@ -36,6 +36,9 @@ export interface PromotionLifecycleInput {
   /** 0 nghĩa là không đặt trần — không phải "ngân sách bằng 0". */
   budgetLimit: number;
   totalDiscountIssued: number;
+  /** Số mã thuộc chiến dịch, và số mã còn hiệu lực. */
+  voucherCount?: number;
+  activeVoucherCount?: number;
 }
 
 const LIFECYCLE_LABELS: Readonly<Record<PromotionLifecycle, string>> = {
@@ -128,6 +131,26 @@ export function promotionWarnings(input: PromotionLifecycleInput, now: Date): Pr
         ? "Đang tạm dừng thủ công — voucher của chiến dịch cũng đã ngừng."
         : "Đang tắt."
     });
+  }
+
+  // Ngân sách chỉ tăng khi có người dùng mã của chiến dịch. Đặt trần cho một chiến dịch
+  // chưa phát mã nào thì con số đó không bao giờ nhúc nhích — nói thẳng thay vì vẽ một
+  // thanh tiến độ đứng yên.
+  if (input.voucherCount !== undefined) {
+    if (input.budgetLimit > 0 && input.voucherCount === 0) {
+      warnings.push({
+        code: "BUDGET_NOT_TRACKED",
+        level: "warning",
+        message: "Chiến dịch chưa có mã nào nên ngân sách không được theo dõi."
+      });
+    }
+    if (lifecycle === "running" && input.voucherCount > 0 && input.activeVoucherCount === 0) {
+      warnings.push({
+        code: "NO_ACTIVE_VOUCHER",
+        level: "danger",
+        message: "Đang chạy nhưng không mã nào còn hiệu lực — khách không dùng được gì."
+      });
+    }
   }
 
   if (lifecycle === "running" && input.endDate) {

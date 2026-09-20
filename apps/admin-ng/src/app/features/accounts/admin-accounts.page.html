@@ -2,12 +2,12 @@
   <p class="admin-page-crumb">Tài khoản / Danh sách</p>
   <section class="admin-card admin-card--flush">
     <div class="admin-tabs" role="tablist">
-      <button class="admin-tab" [class.admin-tab--active]="tab() === 'all'" type="button" (click)="setTab('all')">Tất cả tài khoản <span>{{ allCount() }}</span></button>
-      <button class="admin-tab" [class.admin-tab--active]="tab() === 'members'" type="button" (click)="setTab('members')">Thành viên <span>{{ memberCount() }}</span></button>
-      <button class="admin-tab" [class.admin-tab--active]="tab() === 'admins'" type="button" (click)="setTab('admins')">Quản trị viên <span>{{ adminCount() }}</span></button>
-      <button class="admin-tab" [class.admin-tab--active]="tab() === 'locked'" type="button" (click)="setTab('locked')">Bị khóa <span>{{ lockedCount() }}</span></button>
-      <button class="admin-tab" [class.admin-tab--active]="tab() === 'unverified'" type="button" (click)="setTab('unverified')">Chưa xác thực <span>{{ unverifiedCount() }}</span></button>
-      <button class="admin-tab" [class.admin-tab--active]="tab() === 'promotions'" type="button" (click)="setTab('promotions')">Nâng quyền <span>{{ pendingCount() }}</span></button>
+      <button class="admin-tab" [class.admin-tab--active]="tab() === 'all'" type="button" (click)="setTab('all')">Tất cả tài khoản <span>{{ kpi(allCount()) }}</span></button>
+      <button class="admin-tab" [class.admin-tab--active]="tab() === 'members'" type="button" (click)="setTab('members')">Thành viên <span>{{ kpi(memberCount()) }}</span></button>
+      <button class="admin-tab" [class.admin-tab--active]="tab() === 'admins'" type="button" (click)="setTab('admins')">Quản trị viên <span>{{ kpi(adminCount()) }}</span></button>
+      <button class="admin-tab" [class.admin-tab--active]="tab() === 'locked'" type="button" (click)="setTab('locked')">Bị khóa <span>{{ kpi(lockedCount()) }}</span></button>
+      <button class="admin-tab" [class.admin-tab--active]="tab() === 'unverified'" type="button" (click)="setTab('unverified')">Chưa xác thực <span>{{ kpi(unverifiedCount()) }}</span></button>
+      <button class="admin-tab" [class.admin-tab--active]="tab() === 'promotions'" type="button" (click)="setTab('promotions')">Nâng quyền <span>{{ kpi(pendingCount()) }}</span></button>
       <button class="admin-tab" [class.admin-tab--active]="tab() === 'logs'" type="button" (click)="setTab('logs')">Nhật ký</button>
     </div>
     <div class="admin-tab-content">
@@ -41,8 +41,10 @@
             <button class="admin-btn admin-btn--ghost admin-btn--sm" type="reset">Đặt lại</button>
           </div>
         </form>
-        @if (loading()) {
-          <app-admin-empty-state kind="loading" icon="clock" title="Đang tải tài khoản" />
+        @if (showSkeleton()) {
+          <app-admin-table-skeleton
+            [headers]="['Tài khoản', 'Nhóm', 'Trạng thái', 'Đăng nhập gần nhất', 'Thao tác']"
+            [rows]="pageSize" />
         } @else if (loadError()) {
           <app-admin-empty-state kind="error" icon="alert" title="Không tải được tài khoản" [message]="loadError() || ''">
             <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="reload()">Thử lại</button>
@@ -50,7 +52,7 @@
         } @else if (!paged().length) {
           <app-admin-empty-state kind="empty" icon="users" title="Không có tài khoản phù hợp" message="Điều chỉnh bộ lọc hoặc tải lại." />
         } @else {
-        <div class="admin-table-wrap">
+        <div class="admin-table-wrap" [class.admin-table-wrap--refreshing]="isRefreshing()">
           <table class="admin-table admin-data-table admin-member-table">
             <thead>
               <tr>

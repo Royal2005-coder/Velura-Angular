@@ -410,7 +410,8 @@ async function lookup(
     const result = await selectRows(
       table,
       { select, [idColumn]: `in.(${ids.join(",")})`, limit: ids.length },
-      { useAnonKey: false, silentError: true }
+      // Chỉ tra nhãn, không phân trang — không cần Postgres đếm cả bảng.
+      { useAnonKey: false, silentError: true, count: "none" }
     );
     return new Map((result.rows || []).map((row) => [asString(row[idColumn]) || "", row] as const));
   } catch {

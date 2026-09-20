@@ -8,6 +8,7 @@ import { AdminSessionService } from '../../core/admin-session.service';
 import { AdminEmptyState } from '../../shared/admin-empty-state';
 import { AdminIcon } from '../../shared/admin-icon';
 import { AdminPagination } from '../../shared/admin-pagination';
+import { AdminTableSkeleton } from '../../shared/admin-table-skeleton';
 
 type AccountTab = 'all' | 'members' | 'admins' | 'locked' | 'unverified' | 'promotions' | 'logs';
 type AccountAction = 'lock' | 'unlock' | 'role' | null;
@@ -30,7 +31,7 @@ const EMPTY_LOGS = { rows: [] as AdminAuditRow[], count: 0 };
 
 @Component({
   selector: 'app-admin-accounts-page',
-  imports: [AdminEmptyState, AdminIcon, AdminPagination],
+  imports: [AdminEmptyState, AdminIcon, AdminPagination, AdminTableSkeleton],
   templateUrl: './admin-accounts.page.html',
 })
 export class AdminAccountsPage {
@@ -46,6 +47,16 @@ export class AdminAccountsPage {
   readonly logs = signal<AdminAuditRow[]>([]);
   readonly loadError = signal<string | null>(null);
   readonly loading = signal(true);
+  /**
+   * Phân biệt lần tải đầu với lần tải lại.
+   *
+   * Lần đầu chưa có gì để hiện thì vẽ khung xương. Từ lần thứ hai — đổi bộ lọc, sang
+   * trang, đổi tab — giữ nguyên bảng cũ và chỉ làm mờ đi, vì xoá sạch bảng rồi vẽ lại
+   * khiến thao tác lọc có cảm giác chậm hơn thực tế.
+   */
+  readonly hasLoadedOnce = signal(false);
+  readonly showSkeleton = computed(() => this.loading() && !this.hasLoadedOnce());
+  readonly isRefreshing = computed(() => this.loading() && this.hasLoadedOnce());
   readonly page = signal(1);
   readonly logsPage = signal(1);
   readonly pageSize = 10;
@@ -138,6 +149,7 @@ export class AdminAccountsPage {
       this.lockedCount.set(adminListCount(payload.locked));
       this.unverifiedCount.set(adminListCount(payload.unverified));
       this.loading.set(false);
+      this.hasLoadedOnce.set(true);
     });
   }
 
@@ -414,6 +426,16 @@ export class AdminAccountsPage {
       },
       error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
     });
+  }
+
+  /**
+   * Số đếm trên chip tab, hoặc dấu gạch khi chưa có số thật.
+   *
+   * Các signal đếm khởi tạo bằng 0 và render ngay, nên người vận hành thấy "0 / 0 / 0"
+   * nháy lên rồi mới nhảy sang số đúng — trông như dữ liệu rỗng chứ không như đang tải.
+   */
+  kpi(value: number): string {
+    return this.hasLoadedOnce() ? String(value) : '—';
   }
 
   /**

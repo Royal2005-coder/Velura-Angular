@@ -53,8 +53,16 @@ function findEnvFile() {
   return found;
 }
 
-/** Đọc một biến từ .env mà không nạp cả tệp vào process.env. */
+/**
+ * Đọc một biến cấu hình: ưu tiên biến môi trường, sau đó mới tới .env.
+ *
+ * Đường dẫn CA và cờ TLS thường được truyền ngay trên dòng lệnh cho một lần chạy chứ
+ * không ghi vào .env, nên chỉ đọc .env là bỏ sót đúng những tham số đó.
+ */
 function readEnv(name) {
+  const fromProcess = process.env[name];
+  if (fromProcess !== undefined && fromProcess !== "") return fromProcess.trim();
+
   const text = readFileSync(findEnvFile(), "utf8");
   const match = text.match(new RegExp(`^${name}=(.*)$`, "m"));
   if (!match) return "";

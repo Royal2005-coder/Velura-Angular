@@ -120,6 +120,31 @@ export function createReturnRepository() {
       }, authOptions(accessToken));
     },
 
+    /**
+     * Giá trị hoàn được của một phiếu: tổng tiền đúng những món khách gửi trả.
+     *
+     * UAT ADM-RET-01 chốt "tự động điền tiền hoàn đúng số tiền của hàng thay vì bắt tự
+     * nhập". Số đó không phải tổng đơn — một đơn bốn món mà khách chỉ trả một món thì
+     * hoàn cả đơn là thất thoát; và cũng không thể để CSKH gõ tay, vì gõ tay thì con số
+     * phụ thuộc trí nhớ của người trực.
+     *
+     * Đọc qua `return_item` (phiếu ↔ dòng đơn) nhân với đơn giá đã bán tại thời điểm
+     * đặt, chứ không lấy giá hiện hành của sản phẩm.
+     */
+    async getRefundableAmount(returnId: string, accessToken: string): Promise<number> {
+      const result = await selectRows("return_item", {
+        select: "quantity,order_item:order_item_id(unit_price)",
+        return_id: `eq.${returnId}`,
+        limit: 200
+      }, { ...authOptions(accessToken), count: "none" });
+
+      return (result.rows || []).reduce((total, row) => {
+        const quantity = asNumber(row.quantity);
+        const unitPrice = asNumber(asJsonObject(row.order_item)?.unit_price);
+        return total + quantity * unitPrice;
+      }, 0);
+    },
+
     async approveRefund(returnId: string, input: ApproveRefundInput, actorId: string, actorRole: string, ipAddress: string | undefined) {
       const current = await selectOne("return_exchange", {
         select: RETURN_SELECT,

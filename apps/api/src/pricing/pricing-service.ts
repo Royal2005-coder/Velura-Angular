@@ -1,6 +1,6 @@
 import { enrichAuditLogs, PRICING_AUDIT } from "../audit-enrichment.js";
 import { HttpError } from "../http.js";
-import type { AuthContext, JsonObject } from "../types.js";
+import { asString, type AuthContext, type JsonObject } from "../types.js";
 import { PROMOTION_OPERATOR_ROLES, PROMOTION_READER_ROLES, PROMOTION_TYPES, VOUCHER_TYPES } from "./pricing-constants.js";
 import type { PricingRepository } from "./pricing-repository.js";
 import {
@@ -79,7 +79,11 @@ export function createPricingService({ repository }: { repository: PricingReposi
         limit: Math.min(parseInt(searchParams.get("limit") || "50"), 100),
         offset: parseInt(searchParams.get("offset") || "0")
       }, context.accessToken);
-      return decoratePromotions(payload, new Date());
+      const promoIds = (payload?.rows || [])
+        .map((row) => asString(row.promo_id))
+        .filter((id): id is string => Boolean(id));
+      const voucherStats = await repository.countVouchersByPromotion(promoIds, context.accessToken);
+      return decoratePromotions(payload, new Date(), voucherStats);
     },
 
     async getPromotion(context, promotionId) {
@@ -302,7 +306,8 @@ export function validatePromotionSchedule(body: JsonObject): void {
  */
 export function decoratePromotions(
   payload: { rows?: JsonObject[]; count?: number | undefined } | JsonObject[] | unknown,
-  now: Date
+  now: Date,
+  voucherStats: Record<string, { total: number; active: number }> = {}
 ): { rows: JsonObject[]; count: number | undefined } {
   const rows = Array.isArray(payload)
     ? payload
@@ -315,10 +320,15 @@ export function decoratePromotions(
 
   return {
     rows: rows.map((row) => {
-      const input = toLifecycleInput(row);
+      const stats = voucherStats[asString(row.promo_id) || ""] || { total: 0, active: 0 };
+      const input = { ...toLifecycleInput(row), voucherCount: stats.total, activeVoucherCount: stats.active };
       const lifecycle = promotionLifecycle(input, now);
       return {
         ...row,
+        voucher_count: stats.total,
+        active_voucher_count: stats.active,
+        // Ngân sách chỉ nhúc nhích khi có mã được dùng; không mã thì không theo dõi được.
+        budget_tracked: stats.total > 0,
         lifecycle_status: lifecycle,
         lifecycle_label: promotionLifecycleLabel(lifecycle),
         can_activate: canActivatePromotion(lifecycle),

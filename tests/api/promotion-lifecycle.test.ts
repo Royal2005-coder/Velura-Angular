@@ -72,6 +72,25 @@ test("warnings flag a campaign about to end, and stay quiet on one already over"
   assert.deepEqual(promotionWarnings(campaign({ endDate: "2026-01-01T00:00:00.000Z" }), NOW), []);
 });
 
+test("a budget on a campaign with no vouchers is reported as untracked", () => {
+  // Ngân sách chỉ tăng khi có người dùng mã; chiến dịch chưa phát mã nào thì con số đó
+  // vĩnh viễn đứng yên, nên thanh tiến độ ở đó là nói dối.
+  const warnings = promotionWarnings(
+    campaign({ budgetLimit: 10000000, voucherCount: 0, activeVoucherCount: 0 }),
+    NOW
+  );
+
+  assert.equal(warnings.some((w) => w.code === "BUDGET_NOT_TRACKED"), true);
+});
+
+test("a running campaign whose vouchers are all inactive is flagged as useless to customers", () => {
+  const warnings = promotionWarnings(campaign({ voucherCount: 3, activeVoucherCount: 0 }), NOW);
+
+  const warning = warnings.find((w) => w.code === "NO_ACTIVE_VOUCHER");
+  assert.ok(warning);
+  assert.equal(warning.level, "danger");
+});
+
 test("an unset budget is reported as unlimited, not as zero", () => {
   const payload = decoratePromotions(
     [{ promo_id: "p-1", is_active: true, start_date: "2026-09-01", end_date: "2026-12-31", budget_limit: 0 }],

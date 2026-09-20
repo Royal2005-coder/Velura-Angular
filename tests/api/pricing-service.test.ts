@@ -7,7 +7,10 @@ const PRODUCT_ID = "60000000-0000-4000-8000-000000000001";
 
 test("pricing operator reads production data with the caller token", async () => {
   let received;
-  const service = createPricingService({ repository: { listPromotions: async (filters, token) => { received = { filters, token }; return { rows: [] }; } } });
+  const service = createPricingService({ repository: {
+    listPromotions: async (filters, token) => { received = { filters, token }; return { rows: [] }; },
+    countVouchersByPromotion: async () => ({})
+  } });
   await service.listPromotions(context("admin_operator_gia_km"), new URLSearchParams("isActive=true&limit=10"));
   assert.equal(received.filters.isActive, "true");
   assert.equal(received.token, "jwt-token");

@@ -36,13 +36,16 @@
                     <td>{{ campaignPeriod(row) }}</td>
                     <td>
                       <span class="admin-budget__figure">{{ campaignBudget(row) }}</span>
-                      <div class="admin-progress admin-progress--sm" role="img"
-                           [attr.aria-label]="'Đã dùng ' + campaignBudgetPercent(row) + '% ngân sách'">
-                        <div class="admin-progress__bar"
-                             [class.admin-progress__bar--warning]="isBudgetNearLimit(row)"
-                             [class.admin-progress__bar--danger]="isBudgetExhausted(row)"
-                             [style.width.%]="campaignBudgetPercent(row)"></div>
-                      </div>
+                      @if (row.budget_tracked && !row.budget_unlimited) {
+                        <div class="admin-progress admin-progress--sm" role="img"
+                             [attr.aria-label]="'Đã dùng ' + campaignBudgetPercent(row) + '% ngân sách'">
+                          <div class="admin-progress__bar"
+                               [class.admin-progress__bar--warning]="isBudgetNearLimit(row)"
+                               [class.admin-progress__bar--danger]="isBudgetExhausted(row)"
+                               [style.width.%]="campaignBudgetPercent(row)"></div>
+                        </div>
+                      }
+                      <small class="admin-note">{{ voucherCoverage(row) }}</small>
                       @for (warning of campaignWarnings(row); track warning.code) {
                         <span class="admin-budget__note"
                               [class.admin-budget__note--warning]="warning.level === 'warning'"

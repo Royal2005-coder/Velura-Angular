@@ -46,6 +46,37 @@ export function createPricingRepository() {
       return selectRows("promotion", query, authOptions(accessToken));
     },
 
+    /**
+     * Đếm số mã của từng chiến dịch, tách riêng số mã còn hiệu lực.
+     *
+     * Ngân sách chiến dịch chỉ tăng khi có người dùng mã của nó
+     * (`velura_record_voucher_redemption`). Chiến dịch chưa phát mã nào thì cột ngân
+     * sách vĩnh viễn đứng yên — hiện thanh tiến độ ở đó là nói dối người vận hành rằng
+     * hệ thống đang theo dõi. Đếm ở đây để nói đúng thực tế.
+     */
+    async countVouchersByPromotion(
+      promoIds: readonly string[],
+      accessToken: string | null
+    ): Promise<Record<string, { total: number; active: number }>> {
+      if (!promoIds.length) return {};
+      const result = await selectRows("voucher", {
+        select: "promo_id,is_active",
+        promo_id: `in.(${promoIds.join(",")})`,
+        limit: 1000
+      }, { ...authOptions(accessToken), count: "none" });
+
+      const stats: Record<string, { total: number; active: number }> = {};
+      for (const row of result.rows || []) {
+        const promoId = asString(row.promo_id);
+        if (!promoId) continue;
+        const entry = stats[promoId] || { total: 0, active: 0 };
+        entry.total += 1;
+        if (row.is_active !== false) entry.active += 1;
+        stats[promoId] = entry;
+      }
+      return stats;
+    },
+
     async getPromotion(promotionId: string, accessToken: string | null) {
       return selectOne("promotion", {
         select: PROMOTION_SELECT,

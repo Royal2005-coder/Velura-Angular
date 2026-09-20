@@ -1,4 +1,5 @@
 import { randomInt } from "node:crypto";
+import { ACCOUNT_AUDIT, enrichAuditLogs } from "../audit-enrichment.js";
 import { HttpError } from "../http.js";
 import type { AuthContext, AuthUser, JsonObject, RequestMeta, UserProfile } from "../types.js";
 import { validateEmail, validatePassword, validatePhone } from "../user/auth.js";
@@ -105,11 +106,12 @@ export function createAccountService({ repository }: { repository: AccountReposi
       requireAccountAdmin(context);
       const targetId = searchParams.get("targetId") || "";
       if (targetId) requireUuid(targetId, "targetId");
-      return repository.listAuditLogs({
+      const payload = await repository.listAuditLogs({
         targetId: targetId || undefined,
         limit: clampInteger(searchParams.get("limit"), 50, 1, 100),
         offset: clampInteger(searchParams.get("offset"), 0, 0, 1000000)
       }, context.accessToken);
+      return enrichAuditLogs(payload, ACCOUNT_AUDIT);
     },
 
     async lock(context, userId, body, requestMeta) {
@@ -320,9 +322,13 @@ function parseListFilters(searchParams: URLSearchParams): AccountListFilters {
   const role = searchParams.get("role") || "";
   const adminRole = searchParams.get("adminRole") || "";
   const active = searchParams.get("isActive");
+  const lockState = searchParams.get("lockState") || "";
   if (role && !ACCOUNT_ROLES.includes(role)) throw validationError("role", "Invalid role filter");
   if (adminRole && !ADMIN_ROLES.includes(adminRole)) throw validationError("adminRole", "Invalid adminRole filter");
   if (active !== null && !["true", "false"].includes(active)) throw validationError("isActive", "isActive must be true or false");
+  if (lockState && !["locked", "unverified"].includes(lockState)) {
+    throw validationError("lockState", "lockState must be locked or unverified");
+  }
   const orderInput = searchParams.get("order") || "created_at.desc";
   const allowedOrders = ["created_at.desc", "created_at.asc", "full_name.asc", "full_name.desc", "last_login_at.desc"];
   return {
@@ -330,6 +336,7 @@ function parseListFilters(searchParams: URLSearchParams): AccountListFilters {
     role: role || undefined,
     adminRole: adminRole || undefined,
     isActive: active === null ? undefined : active === "true",
+    lockState: (lockState || undefined) as AccountListFilters["lockState"],
     limit: clampInteger(searchParams.get("limit"), 20, 1, 100),
     offset: clampInteger(searchParams.get("offset"), 0, 0, 1000000),
     order: allowedOrders.includes(orderInput) ? orderInput : "created_at.desc"

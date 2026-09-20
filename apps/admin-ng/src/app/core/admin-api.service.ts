@@ -85,9 +85,16 @@ export interface AdminReturnRow {
   order_id?: string;
   status?: string;
   request_type?: string;
+  return_type?: string;
   created_at?: string;
   customer_name?: string;
   version?: number;
+  /**
+   * Tổng tiền đúng những món khách gửi trả, do API tính từ `return_item`.
+   * Không phải tổng đơn: một đơn nhiều món mà khách chỉ trả một món thì hoàn cả đơn
+   * là thất thoát.
+   */
+  refundable_amount?: number;
 }
 
 export interface AdminTicketRow {
@@ -782,6 +789,13 @@ export class AdminApiService {
       `${this.baseUrl}/api/v1/admin/chat-sessions/${encodeURIComponent(sessionId)}/reply`,
       { message },
     );
+  }
+
+  /**
+   * Reads one return, including the refundable amount computed from its items.
+   */
+  getReturn(returnId: string): Observable<AdminReturnRow> {
+    return this.http.get<AdminReturnRow>(`${this.baseUrl}/api/v1/admin/returns/${encodeURIComponent(returnId)}`);
   }
 
   /**

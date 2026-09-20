@@ -346,12 +346,15 @@ export class AdminReturnsPage {
     this.actionType.set(type);
     this.actionError.set(null);
     this.refundSuggestion.set(null);
-    if (type === 'refund' && row?.order_id) {
-      this.api.getOrder(row.order_id).subscribe({
-        next: (order) => {
-          // Ignore a stale response if the admin already switched to a different return.
+    if (type === 'refund') {
+      // Số tiền hoàn lấy theo đúng những món khách gửi trả (API tính từ return_item),
+      // không lấy tổng đơn: một đơn nhiều món mà khách chỉ trả một món thì hoàn cả đơn
+      // là thất thoát.
+      this.api.getReturn(returnId).subscribe({
+        next: (detail) => {
+          // Bỏ qua phản hồi cũ nếu CSKH đã chuyển sang phiếu khác.
           if (this.selectedReturn()?.return_id === returnId) {
-            this.refundSuggestion.set(Number(order.total_amount) || null);
+            this.refundSuggestion.set(Number(detail.refundable_amount) || null);
           }
         },
         error: () => {
@@ -525,6 +528,37 @@ export class AdminReturnsPage {
       return 'CSKH';
     }
     return 'AI';
+  }
+
+  /**
+   * Bước kế tiếp hợp lệ của một phiếu đã duyệt.
+   *
+   * Trước đây bảng chỉ có nút ở trạng thái `pending`, nên mọi phiếu duyệt xong nằm lại
+   * ở `approved` vĩnh viễn: `shipping_back`, `received`, `completed` có trong máy trạng
+   * thái nhưng không nơi nào ghi được, và KPI "Hoàn tất hôm nay" vì thế luôn bằng 0.
+   * Thứ tự ở đây khớp `RETURN_TRANSITIONS` phía API, nơi chốt tính hợp lệ thật sự.
+   */
+  nextReturnStep(row: AdminReturnRow): { status: string; label: string } | null {
+    const steps: Record<string, { status: string; label: string }> = {
+      approved: { status: 'shipping_back', label: 'Khách đã gửi hàng' },
+      shipping_back: { status: 'received', label: 'Đã nhận hàng' },
+      received: { status: 'completed', label: 'Hoàn tất' },
+    };
+    return steps[row.status || ''] || null;
+  }
+
+  /**
+   * Đẩy phiếu sang bước kế tiếp trong quy trình nhận hàng về.
+   */
+  advanceReturn(row: AdminReturnRow, status: string): void {
+    if (!this.canMutate() || row.version == null) {
+      this.actionError.set('Thiếu phiên bản phiếu để thao tác.');
+      return;
+    }
+    this.api.updateReturnStatus(row.return_id, { status, expectedVersion: row.version }).subscribe({
+      next: () => this.reload(),
+      error: (error: unknown) => this.loadError.set(adminErrorMessage(error)),
+    });
   }
 
   /** Nhãn trạng thái phiếu đổi/trả. */

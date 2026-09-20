@@ -8,6 +8,7 @@ test("CSKH reads returns and approves a positive refund", async () => {
   let received;
   const service = createReturnService({ repository: {
     listReturns: async (filters, token) => { received = { filters, token }; return { rows: [] }; },
+    getRefundableAmount: async () => 250000,
     approveRefund: async (_id, input) => input
   } });
   await service.listReturns(context("admin_operator_cskh_dt"), new URLSearchParams("limit=15"));
@@ -18,9 +19,65 @@ test("CSKH reads returns and approves a positive refund", async () => {
 });
 
 test("order operator is read-only and invalid refunds are rejected", async () => {
-  const service = createReturnService({ repository: { approveRefund: async () => ({}) } });
+  const service = createReturnService({ repository: { approveRefund: async () => ({}), getRefundableAmount: async () => 250000 } });
   await assert.rejects(() => service.approveRefund(context("admin_operator_donhang"), RETURN_ID, { refundAmount: 1, expectedVersion: 1 }), (error) => error.status === 403);
   await assert.rejects(() => service.approveRefund(context("admin_operator_cskh_dt"), RETURN_ID, { refundAmount: 0, expectedVersion: 1 }), (error) => error.status === 422);
+});
+
+test("refund defaults to the value of the returned items, not to a number typed by hand", async () => {
+  let received;
+  const service = createReturnService({
+    repository: {
+      getRefundableAmount: async () => 250000,
+      approveRefund: async (_id, input) => {
+        received = input;
+        return input;
+      }
+    }
+  });
+
+  // Không gửi refundAmount: API tự điền theo giá trị hàng trả (UAT ADM-RET-01).
+  await service.approveRefund(context("admin_operator_cskh_dt"), RETURN_ID, { expectedVersion: 1 });
+  assert.equal(received.refundAmount, 250000);
+});
+
+test("a refund larger than the returned goods is refused", async () => {
+  const service = createReturnService({
+    repository: { getRefundableAmount: async () => 250000, approveRefund: async () => ({}) }
+  });
+
+  await assert.rejects(
+    () => service.approveRefund(context("admin_operator_cskh_dt"), RETURN_ID, { refundAmount: 400000, expectedVersion: 1 }),
+    (error) => error.status === 422 && error.code === "REFUND_EXCEEDS_ITEM_VALUE"
+  );
+
+  // Hoàn một phần vẫn hợp lệ: hàng hỏng một phần thì CSKH giảm số tiền xuống.
+  await service.approveRefund(context("admin_operator_cskh_dt"), RETURN_ID, { refundAmount: 100000, expectedVersion: 1 });
+});
+
+test("a return cannot skip the physical steps between approval and completion", async () => {
+  let wrote = false;
+  const service = createReturnService({
+    repository: {
+      getReturn: async () => ({ return_id: RETURN_ID, status: "approved", version: 5 }),
+      updateReturnStatus: async (returnId, input) => {
+        wrote = true;
+        return { return_id: returnId, status: input.status };
+      }
+    }
+  });
+  const ctx = { authUser: { id: "admin-user-id" }, roleCode: "admin_operator_cskh_dt", ipAddress: "127.0.0.1", accessToken: "jwt-token" };
+
+  // `approved` chỉ được đi tiếp sang `shipping_back`; nhảy thẳng sang hoàn tất là bỏ
+  // qua cả bước nhận hàng lẫn bước kiểm tra tình trạng.
+  await assert.rejects(
+    () => service.updateReturnStatus(ctx, RETURN_ID, { status: "completed", expectedVersion: 5 }),
+    (error) => error.status === 422 && error.code === "INVALID_TRANSITION"
+  );
+  assert.equal(wrote, false);
+
+  await service.updateReturnStatus(ctx, RETURN_ID, { status: "shipping_back", expectedVersion: 5 });
+  assert.equal(wrote, true);
 });
 
 test("service audit logs are protected by the A05 reader matrix", async () => {
@@ -44,6 +101,7 @@ test("service audit logs are protected by the A05 reader matrix", async () => {
 test("updateReturnStatus validates status and enforces permissions", async () => {
   let receivedInput;
   const service = createReturnService({ repository: {
+    getReturn: async () => ({ return_id: RETURN_ID, status: "approved", version: 5 }),
     updateReturnStatus: async (returnId, input, actorId, roleCode, ipAddress) => {
       receivedInput = { returnId, input, actorId, roleCode, ipAddress };
       return { return_id: returnId, status: input.status };

@@ -97,7 +97,17 @@ export class AdminPromotionsPage {
    * Whether a campaign is live in the original promotions table.
    */
   isCampaignActive(row: AdminPromotionRow): boolean {
-    return row.is_active !== false && row.status !== 'inactive';
+    return this.campaignLifecycle(row) === 'running';
+  }
+
+  /**
+   * Chiến dịch có thao tác bật/tắt nào hợp lệ không.
+   *
+   * Chiến dịch đã hết hạn hoặc cạn ngân sách thì RPC từ chối cả hai chiều, nên ẩn nút
+   * đi thay vì mời bấm rồi trả lỗi `OUTSIDE_DATE_RANGE`.
+   */
+  canToggleCampaign(row: AdminPromotionRow): boolean {
+    return Boolean(row.can_pause || row.can_activate);
   }
 
   /**
@@ -138,7 +148,17 @@ export class AdminPromotionsPage {
    * Budget used / limit for the original table.
    */
   campaignBudget(row: AdminPromotionRow): string {
+    // Không đặt trần thì nói thẳng là không giới hạn; "0đ / 0đ" khiến admin tưởng
+    // chiến dịch hỏng dữ liệu.
+    if (row.budget_unlimited) {
+      return `${this.money(row.total_discount_issued)} / Không giới hạn`;
+    }
     return `${this.money(row.total_discount_issued)} / ${this.money(row.budget_limit ?? row.budget)}`;
+  }
+
+  /** Cảnh báo do API tính sẵn cho từng chiến dịch. */
+  campaignWarnings(row: AdminPromotionRow): Array<{ code: string; level: string; message: string }> {
+    return row.warnings ?? [];
   }
 
   /**
@@ -173,29 +193,12 @@ export class AdminPromotionsPage {
    * khác nhau về cùng một chiến dịch.
    */
   campaignLifecycle(row: AdminPromotionRow): 'scheduled' | 'running' | 'ended' | 'paused' | 'budget_exhausted' {
-    const now = Date.now();
-    const start = this.toTime(row.start_date || row.starts_at);
-    const end = this.toTime(row.end_date || row.ends_at);
-
-    if (end !== null && now > end) return 'ended';
-    if (this.isBudgetExhausted(row)) return 'budget_exhausted';
-    if (!this.isCampaignActive(row)) {
-      return start !== null && now < start ? 'scheduled' : 'paused';
-    }
-    if (start !== null && now < start) return 'scheduled';
-    return 'running';
+    return row.lifecycle_status ?? 'paused';
   }
 
   /** Nhãn tiếng Việt cho trạng thái vòng đời. */
   campaignLifecycleLabel(row: AdminPromotionRow): string {
-    const labels: Record<string, string> = {
-      scheduled: 'Đã lên lịch',
-      running: 'Đang chạy',
-      ended: 'Đã kết thúc',
-      paused: 'Tạm dừng thủ công',
-      budget_exhausted: 'Hết ngân sách',
-    };
-    return labels[this.campaignLifecycle(row)] ?? 'Không rõ';
+    return row.lifecycle_label || 'Không rõ';
   }
 
   private toTime(value: unknown): number | null {
@@ -325,7 +328,7 @@ export class AdminPromotionsPage {
       this.loadError.set('Thiếu phiên bản chiến dịch để thao tác.');
       return;
     }
-    const request$ = this.isCampaignActive(row)
+    const request$ = row.can_pause
       ? this.api.pausePromotion(promoId, { expectedVersion: row.version })
       : this.api.activatePromotion(promoId, { expectedVersion: row.version });
     request$.subscribe({

@@ -31,6 +31,15 @@ export class AdminPromotionsPage {
   readonly promotions = signal<AdminPromotionRow[]>([]);
   readonly vouchers = signal<AdminVoucherRow[]>([]);
   readonly bundles = signal<AdminProductRow[]>([]);
+  /**
+   * Chiến dịch loại `combo_discount` — phần thật sự thuộc phân hệ khuyến mãi.
+   *
+   * Tách khỏi `bundles` (sản phẩm có cờ `is_combo`) vì hai thứ này chưa liên kết được
+   * với nhau: bảng `promotion_product` tồn tại nhưng chưa đường ghi nào điền vào
+   * (GA-A4-02 / KAN-68). Hiển thị chung một bảng như trước là để người vận hành hiểu
+   * nhầm rằng sản phẩm combo đang chịu tác động của chiến dịch combo.
+   */
+  readonly comboCampaigns = signal<AdminPromotionRow[]>([]);
   readonly loadError = signal<string | null>(null);
   readonly loading = signal(true);
   readonly page = signal(1);
@@ -440,6 +449,12 @@ export class AdminPromotionsPage {
       })),
       vouchers: this.api.listVouchers(pageParams).pipe(catchError(() => of({ rows: [] as AdminVoucherRow[], count: 0 }))),
       products: this.api.listProducts({ isCombo: 'true', limit: '100' }).pipe(catchError(() => of({ rows: [] as AdminProductRow[] }))),
+      // Tab Combo trước đây chỉ liệt kê sản phẩm có cờ `is_combo` và gọi đó là combo
+      // khuyến mãi. Đó là hai thứ khác nhau: chiến dịch loại `combo_discount` mới là
+      // phần thuộc phân hệ này. Lấy cả hai để nói đúng từng thứ là gì.
+      comboCampaigns: this.api
+        .listPromotions({ type: 'combo_discount', limit: '100' })
+        .pipe(catchError(() => of({ rows: [] as AdminPromotionRow[], count: 0 } as AdminPromotionListPayload))),
     }).subscribe((payload) => {
       this.promotions.set(adminListRows(payload.promotions));
       this.summary.set(payload.promotions.summary ?? null);
@@ -447,6 +462,7 @@ export class AdminPromotionsPage {
       this.promoCount.set(adminListCount(payload.promotions));
       this.voucherCount.set(adminListCount(payload.vouchers));
       this.bundles.set(adminListRows(payload.products).filter((row) => row.is_combo));
+      this.comboCampaigns.set(adminListRows(payload.comboCampaigns));
       this.loading.set(false);
     });
   }

@@ -168,6 +168,84 @@ export function promotionWarnings(input: PromotionLifecycleInput, now: Date): Pr
 }
 
 /**
+ * Một chiến dịch rút gọn, đủ để xét chồng lấn với các chiến dịch khác.
+ */
+export interface PromotionOverlapCandidate {
+  promoId: string;
+  name: string;
+  startDate: string | null;
+  endDate: string | null;
+  /** Danh mục áp dụng. Rỗng nghĩa là áp cho toàn bộ danh mục. */
+  categories: readonly string[];
+}
+
+/**
+ * Tìm các chiến dịch đang chạy cùng lúc và cùng đụng tới một danh mục.
+ *
+ * Hệ thống chưa có quy tắc nào chọn giữa hai chiến dịch cùng phủ một sản phẩm
+ * (GA-A4-03). Chừng nào quy tắc đó chưa được chốt, ít nhất người vận hành phải nhìn
+ * thấy tình huống đó tồn tại thay vì phát hiện qua một hoá đơn giảm sai.
+ *
+ * Chiến dịch không khai danh mục nào được hiểu là áp cho tất cả, nên nó chồng lấn với
+ * mọi chiến dịch khác cùng khung thời gian.
+ */
+export function overlappingPromotions(
+  target: PromotionOverlapCandidate,
+  others: readonly PromotionOverlapCandidate[]
+): PromotionOverlapCandidate[] {
+  return others.filter((other) => {
+    if (other.promoId === target.promoId) return false;
+    if (!datesOverlap(target, other)) return false;
+    // Một trong hai áp cho toàn bộ danh mục thì chắc chắn có phần chung.
+    if (!target.categories.length || !other.categories.length) return true;
+    return target.categories.some((category) => other.categories.includes(category));
+  });
+}
+
+function datesOverlap(a: PromotionOverlapCandidate, b: PromotionOverlapCandidate): boolean {
+  // Thiếu mốc nào thì coi như mốc đó mở vô hạn về phía ấy.
+  const aStart = a.startDate ? Date.parse(a.startDate) : Number.NEGATIVE_INFINITY;
+  const aEnd = a.endDate ? Date.parse(a.endDate) : Number.POSITIVE_INFINITY;
+  const bStart = b.startDate ? Date.parse(b.startDate) : Number.NEGATIVE_INFINITY;
+  const bEnd = b.endDate ? Date.parse(b.endDate) : Number.POSITIVE_INFINITY;
+  return aStart <= bEnd && bStart <= aEnd;
+}
+
+/**
+ * Cảnh báo chồng lấn cho một chiến dịch, nếu có.
+ */
+export function overlapWarning(
+  target: PromotionOverlapCandidate,
+  others: readonly PromotionOverlapCandidate[]
+): PromotionWarning | null {
+  const clashes = overlappingPromotions(target, others);
+  if (!clashes.length) return null;
+  const names = clashes.map((row) => row.name).filter(Boolean);
+  return {
+    code: "OVERLAPPING_CAMPAIGN",
+    level: "warning",
+    message: names.length
+      ? `Trùng thời gian và danh mục với: ${names.join(", ")}.`
+      : `Trùng thời gian và danh mục với ${clashes.length} chiến dịch khác.`
+  };
+}
+
+/**
+ * Đọc một dòng `promotion` thô từ PostgREST thành ứng viên xét chồng lấn.
+ */
+export function toOverlapCandidate(row: Record<string, unknown>): PromotionOverlapCandidate {
+  const raw = row.applicable_categories;
+  const categories = Array.isArray(raw) ? raw.map((item) => String(item)).filter(Boolean) : [];
+  return {
+    promoId: String(row.promo_id || ""),
+    name: String(row.promo_name || ""),
+    startDate: row.start_date ? String(row.start_date) : null,
+    endDate: row.end_date ? String(row.end_date) : null,
+    categories
+  };
+}
+
+/**
  * Đọc một dòng `promotion` thô từ PostgREST thành đầu vào của vòng đời.
  */
 export function toLifecycleInput(row: Record<string, unknown>): PromotionLifecycleInput {

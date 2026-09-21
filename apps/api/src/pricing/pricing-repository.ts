@@ -43,6 +43,8 @@ export function createPricingRepository() {
         offset: filters.offset
       };
       if (filters.isActive !== undefined) query.is_active = `eq.${filters.isActive}`;
+      // Lọc theo loại chiến dịch, dùng cho tab Combo trên màn khuyến mãi.
+      if (filters.type) query.promo_type = `eq.${filters.type}`;
       return selectRows("promotion", query, authOptions(accessToken));
     },
 
@@ -56,7 +58,9 @@ export function createPricingRepository() {
      */
     async summarizePromotions(accessToken: string | null) {
       return selectRows("promotion", {
-        select: "promo_id,start_date,end_date,is_active,paused_at,budget_limit,total_discount_issued",
+        // `promo_name` và `applicable_categories` cũng có ở đây vì cùng truy vấn này
+        // dùng để phát hiện chiến dịch chồng lấn — xem `overlapWarning`.
+        select: "promo_id,promo_name,applicable_categories,start_date,end_date,is_active,paused_at,budget_limit,total_discount_issued",
         limit: 1000
       }, { ...authOptions(accessToken), count: "exact" });
     },

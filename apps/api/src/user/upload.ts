@@ -1,8 +1,10 @@
 import { config } from "../config.js";
 import { HttpError, sendJson } from "../http.js";
+import { requireUserAuth } from "./auth.js";
 import {
   asJsonObject,
   asString,
+  type AuthContext,
   type HeaderMap,
   type HttpRequest,
   type HttpResponse
@@ -134,20 +136,31 @@ export async function readMultipartImage(req: HttpRequest): Promise<UploadedImag
  * POST /api/user/upload/evidence
  * Accepts multipart/form-data with a single "file" field.
  * Returns { success: true, url: "https://..." }
+ *
+ * Tuyến này trước đây không nhận `context` và không kiểm tra gì cả: bất kỳ ai biết
+ * đường dẫn đều ghi được tệp 5 MB vào kho `return-evidence` với đường dẫn công khai,
+ * không giới hạn số lần và không truy được ai đã tải. Kho này chứa ảnh bằng chứng đổi
+ * trả của khách, nên nó phải đứng sau đăng nhập như mọi tuyến `/api/user/*` khác.
  */
 export async function handleUploadRoute(
   req: HttpRequest,
   res: HttpResponse,
-  corsHeaders: HeaderMap
+  corsHeaders: HeaderMap,
+  context: AuthContext
 ): Promise<void> {
   if (req.method !== "POST") {
     throw new HttpError(405, "METHOD_NOT_ALLOWED", "Only POST is accepted");
   }
 
-  const { fileBuffer, fileName, mimeType } = await readMultipartImage(req);
-  console.log(`[UPLOAD] Parsed file: ${fileName}, type: ${mimeType}, size: ${fileBuffer.length}`);
+  const profile = requireUserAuth(context);
 
-  const publicUrl = await uploadToSupabaseStorage(fileBuffer, fileName, mimeType);
+  const { fileBuffer, fileName, mimeType } = await readMultipartImage(req);
+
+  // Thư mục con theo người tải, để một tệp bất thường còn truy được về chủ của nó.
+  const publicUrl = await uploadToSupabaseStorage(fileBuffer, fileName, mimeType, {
+    bucket: EVIDENCE_TARGET.bucket,
+    prefix: `${EVIDENCE_TARGET.prefix}/${profile.user_id}`
+  });
   return sendJson(res, 200, { success: true, url: publicUrl }, corsHeaders);
 }
 

@@ -2,7 +2,13 @@ import { enrichAuditLogs, RETURN_AUDIT } from "../audit-enrichment.js";
 import { HttpError } from "../http.js";
 import type { AuthContext, AuthUser, JsonObject, RequestMeta } from "../types.js";
 import { asNumber, asString } from "../types.js";
-import { RETURN_OPERATOR_ROLES, RETURN_READER_ROLES, RETURN_STATUSES, RETURN_TRANSITIONS } from "./return-constants.js";
+import {
+  RETURN_OPERATOR_ROLES,
+  RETURN_READER_ROLES,
+  RETURN_STATUSES,
+  RETURN_TRANSITIONS,
+  SUPPORT_TICKET_TRANSITIONS
+} from "./return-constants.js";
 import type { ReturnRepository } from "./return-repository.js";
 
 /**
@@ -25,6 +31,7 @@ export interface ReturnService {
   assignTicket(context: ReturnContext | undefined, ticketId: string, body: JsonObject): Promise<unknown>;
   respondTicket(context: ReturnContext | undefined, ticketId: string, body: JsonObject): Promise<unknown>;
   closeTicket(context: ReturnContext | undefined, ticketId: string, body: JsonObject): Promise<unknown>;
+  resolveTicket(context: ReturnContext | undefined, ticketId: string, body: JsonObject): Promise<unknown>;
   listAuditLogs(context: ReturnContext | undefined, searchParams: URLSearchParams): Promise<{ rows: JsonObject[]; count: number | undefined }>;
 }
 
@@ -32,6 +39,30 @@ export interface ReturnService {
  * Build the admin return / support service around a PostgREST repository.
  */
 export function createReturnService({ repository }: { repository: ReturnRepository }): ReturnService {
+  /**
+   * Chặn bước chuyển trạng thái phiếu hỗ trợ không có trong `SUPPORT_TICKET_TRANSITIONS`.
+   *
+   * Bảng chuyển trạng thái này được khai báo từ đầu nhưng chưa nơi nào đọc, nên mọi
+   * endpoint đều ghi thẳng trạng thái mới bất kể phiếu đang ở đâu.
+   */
+  async function requireTicketTransition(
+    context: ReturnContext & { authUser: AuthUser },
+    ticketId: string,
+    target: string
+  ): Promise<void> {
+    const ticket = await repository.getTicket(ticketId, context.accessToken);
+    if (!ticket) throw new HttpError(404, "TICKET_NOT_FOUND", "Không tìm thấy phiếu hỗ trợ");
+    const from = asString(ticket.status);
+    // Ghi lại chính trạng thái đang có không phải là bước chuyển, luôn hợp lệ.
+    if (from === target) return;
+    const allowed = SUPPORT_TICKET_TRANSITIONS[from] || [];
+    if (!allowed.includes(target)) {
+      throw new HttpError(422, "INVALID_TRANSITION", `Không thể chuyển phiếu từ "${from}" sang "${target}"`, {
+        status: [`Từ "${from}" chỉ được chuyển sang: ${allowed.join(", ") || "không trạng thái nào"}`]
+      });
+    }
+  }
+
   function requireReturnAdmin(context: ReturnContext | undefined): asserts context is ReturnContext & { authUser: AuthUser } {
     if (!context?.authUser?.id) throw new HttpError(401, "AUTH_REQUIRED", "Authentication is required");
     if (!RETURN_OPERATOR_ROLES.includes(context.roleCode)) {
@@ -200,6 +231,9 @@ export function createReturnService({ repository }: { repository: ReturnReposito
       if (response.length < 1) throw new HttpError(422, "VALIDATION_ERROR", "Response content required");
       const expectedVersion = asNumber(body.expectedVersion);
       if (!expectedVersion) throw new HttpError(422, "VALIDATION_ERROR", "expectedVersion required");
+      // RPC phản hồi đặt phiếu về `processing`. Trên phiếu đã `resolved` thì đó là bước
+      // lùi không có trong máy trạng thái: phiếu đã giải quyết bỗng quay lại đang xử lý.
+      await requireTicketTransition(context, ticketId, "processing");
       return repository.respondTicket(ticketId, { response, expectedVersion }, context.accessToken);
     },
 
@@ -207,7 +241,23 @@ export function createReturnService({ repository }: { repository: ReturnReposito
       requireReturnAdmin(context);
       const expectedVersion = asNumber(body.expectedVersion);
       if (!expectedVersion) throw new HttpError(422, "VALIDATION_ERROR", "expectedVersion required");
+      await requireTicketTransition(context, ticketId, "closed");
       return repository.closeTicket(ticketId, { reason: body.reason, expectedVersion }, context.accessToken);
+    },
+
+    async resolveTicket(context, ticketId, body) {
+      requireReturnAdmin(context);
+      const expectedVersion = asNumber(body.expectedVersion);
+      if (!expectedVersion) throw new HttpError(422, "VALIDATION_ERROR", "expectedVersion required");
+      // `resolved` có trong máy trạng thái và có nhãn trên giao diện nhưng trước đây
+      // không đường nào ghi được, nên "Đã giải quyết" là nhãn chết và CSKH chỉ còn cách
+      // đóng thẳng phiếu. Đây là đường vào của trạng thái đó.
+      await requireTicketTransition(context, ticketId, "resolved");
+      return repository.updateTicketStatus(
+        ticketId,
+        { status: "resolved", adminNote: asString(body.adminNote), expectedVersion },
+        context.accessToken
+      );
     },
 
     async listAuditLogs(context, searchParams) {

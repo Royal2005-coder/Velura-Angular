@@ -9,7 +9,9 @@ import {
   promotionLifecycle,
   promotionLifecycleLabel,
   promotionWarnings,
-  toLifecycleInput
+  overlapWarning,
+  toLifecycleInput,
+  toOverlapCandidate
 } from "./promotion-lifecycle.js";
 import { normalizePromotionPresentation } from "./promotion-presentation.js";
 
@@ -74,8 +76,13 @@ export function createPricingService({ repository }: { repository: PricingReposi
 
     async listPromotions(context, searchParams) {
       requirePricingReader(context);
+      const type = searchParams.get("type") || undefined;
+      if (type && !PROMOTION_TYPES.includes(type)) {
+        throw new HttpError(422, "VALIDATION_ERROR", `Invalid promo type. Valid: ${PROMOTION_TYPES.join(", ")}`);
+      }
       const payload = await repository.listPromotions({
         isActive: searchParams.get("isActive") || undefined,
+        type,
         limit: Math.min(parseInt(searchParams.get("limit") || "50"), 100),
         offset: parseInt(searchParams.get("offset") || "0")
       }, context.accessToken);
@@ -88,8 +95,9 @@ export function createPricingService({ repository }: { repository: PricingReposi
         repository.summarizePromotions(context.accessToken),
         repository.countActiveVouchers(context.accessToken)
       ]);
+      const allCampaigns = Array.isArray(summarySource?.rows) ? summarySource.rows : [];
       return {
-        ...decoratePromotions(payload, now, voucherStats),
+        ...decoratePromotions(payload, now, voucherStats, allCampaigns),
         summary: summarizePromotionRows(summarySource, activeVouchers?.count, now)
       };
     },
@@ -157,6 +165,25 @@ export function createPricingService({ repository }: { repository: PricingReposi
       requirePricingAdmin(context);
       if (!body?.code) throw new HttpError(422, "VALIDATION_ERROR", "Code required");
       if (!VOUCHER_TYPES.includes(body?.type as string)) throw new HttpError(422, "VALIDATION_ERROR", "Invalid voucher type");
+
+      // `max_vouchers_allowed` được ghi lúc tạo chiến dịch rồi chưa bao giờ có ai đọc:
+      // admin đặt trần "chiến dịch này phát tối đa 50 mã" và hệ thống vẫn cho phát mã
+      // thứ 51. Đây là chỗ trần đó có hiệu lực.
+      const promoId = asString(body.promoId);
+      if (promoId) {
+        const promo = await repository.getPromotion(promoId, context.accessToken);
+        if (!promo) throw new HttpError(404, "PROMOTION_NOT_FOUND", "Không tìm thấy chiến dịch của mã này");
+        const allowed = Number(promo.max_vouchers_allowed || 0);
+        if (allowed > 0) {
+          const stats = await repository.countVouchersByPromotion([promoId], context.accessToken);
+          const issued = stats[promoId]?.total ?? 0;
+          if (issued >= allowed) {
+            throw new HttpError(422, "VOUCHER_LIMIT_REACHED",
+              `Chiến dịch này chỉ được phát tối đa ${allowed} mã, hiện đã có ${issued}.`);
+          }
+        }
+      }
+
       return repository.createVoucher({ ...body, createdBy: context.profile?.user_id || context.authUser?.id }, context.accessToken);
     },
 
@@ -380,7 +407,12 @@ export function summarizePromotionRows(
 export function decoratePromotions(
   payload: { rows?: JsonObject[]; count?: number | undefined } | JsonObject[] | unknown,
   now: Date,
-  voucherStats: Record<string, { total: number; active: number }> = {}
+  voucherStats: Record<string, { total: number; active: number }> = {},
+  /**
+   * Toàn bộ chiến dịch, dùng để phát hiện chồng lấn. Bỏ trống thì chỉ xét trong phạm
+   * vi trang hiện tại — vẫn đúng, chỉ là sót những chiến dịch ở trang khác.
+   */
+  allCampaigns: readonly JsonObject[] = []
 ): { rows: JsonObject[]; count: number | undefined } {
   const rows = Array.isArray(payload)
     ? payload
@@ -391,11 +423,25 @@ export function decoratePromotions(
     ? payload.length
     : (payload as { count?: number | undefined })?.count;
 
+  // Chỉ xét chồng lấn giữa những chiến dịch còn sống: một chiến dịch đã kết thúc trùng
+  // danh mục với chiến dịch đang chạy không phải là vấn đề của ai cả.
+  const liveCandidates = (allCampaigns.length ? allCampaigns : rows)
+    .filter((row) => {
+      const lifecycle = promotionLifecycle(toLifecycleInput(row), now);
+      return lifecycle === "running" || lifecycle === "scheduled";
+    })
+    .map(toOverlapCandidate);
+
   return {
     rows: rows.map((row) => {
       const stats = voucherStats[asString(row.promo_id) || ""] || { total: 0, active: 0 };
       const input = { ...toLifecycleInput(row), voucherCount: stats.total, activeVoucherCount: stats.active };
       const lifecycle = promotionLifecycle(input, now);
+      const warnings = promotionWarnings(input, now);
+      if (lifecycle === "running" || lifecycle === "scheduled") {
+        const overlap = overlapWarning(toOverlapCandidate(row), liveCandidates);
+        if (overlap) warnings.push(overlap);
+      }
       return {
         ...row,
         voucher_count: stats.total,
@@ -409,7 +455,7 @@ export function decoratePromotions(
         // `budget_limit = 0` trong cơ sở dữ liệu nghĩa là không đặt trần, không phải
         // ngân sách bằng không — nói rõ ra để UI không vẽ "0đ / 0đ".
         budget_unlimited: input.budgetLimit <= 0,
-        warnings: promotionWarnings(input, now)
+        warnings
       };
     }),
     count

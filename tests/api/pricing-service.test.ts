@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { createPricingService, validatePriceChange } from "../../apps/api/src/pricing/pricing-service.js";
 
 const PRODUCT_ID = "60000000-0000-4000-8000-000000000001";
+const PROMO_ID = "60000000-0000-4000-8000-000000000002";
 
 test("pricing operator reads production data with the caller token", async () => {
   let received;
@@ -110,3 +111,41 @@ test("unrelated role cannot read pricing audit logs", async () => {
 });
 
 function context(roleCode) { return { authUser: { id: "auth-1" }, roleCode, accessToken: "jwt-token" }; }
+
+test("a campaign cannot issue more vouchers than its declared ceiling", async () => {
+  // `max_vouchers_allowed` được ghi lúc tạo chiến dịch nhưng trước đây chưa ai đọc: trần
+  // "tối đa 2 mã" không ngăn được mã thứ 3.
+  let created = 0;
+  const service = createPricingService({ repository: {
+    getPromotion: async () => ({ promo_id: PROMO_ID, max_vouchers_allowed: 2 }),
+    countVouchersByPromotion: async () => ({ [PROMO_ID]: { total: 2, active: 2 } }),
+    createVoucher: async (input) => { created += 1; return input; }
+  } });
+
+  await assert.rejects(
+    () => service.createVoucher(context("admin_operator_gia_km"), { code: "TET3", type: "percentage", promoId: PROMO_ID }),
+    (error) => error.status === 422 && error.code === "VOUCHER_LIMIT_REACHED"
+  );
+  assert.equal(created, 0);
+});
+
+test("no ceiling and a campaign under its ceiling both let the voucher through", async () => {
+  const unlimited = createPricingService({ repository: {
+    getPromotion: async () => ({ promo_id: PROMO_ID, max_vouchers_allowed: 0 }),
+    countVouchersByPromotion: async () => ({ [PROMO_ID]: { total: 99, active: 99 } }),
+    createVoucher: async (input) => input
+  } });
+  // `max_vouchers_allowed = 0` nghĩa là không đặt trần, không phải cấm phát mã.
+  await unlimited.createVoucher(context("admin_operator_gia_km"), { code: "TET4", type: "percentage", promoId: PROMO_ID });
+
+  const underLimit = createPricingService({ repository: {
+    getPromotion: async () => ({ promo_id: PROMO_ID, max_vouchers_allowed: 5 }),
+    countVouchersByPromotion: async () => ({ [PROMO_ID]: { total: 4, active: 4 } }),
+    createVoucher: async (input) => input
+  } });
+  await underLimit.createVoucher(context("admin_operator_gia_km"), { code: "TET5", type: "percentage", promoId: PROMO_ID });
+
+  // Mã không thuộc chiến dịch nào thì không có trần để xét.
+  const standalone = createPricingService({ repository: { createVoucher: async (input) => input } });
+  await standalone.createVoucher(context("admin_operator_gia_km"), { code: "TET6", type: "percentage" });
+});

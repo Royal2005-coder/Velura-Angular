@@ -82,8 +82,16 @@ export function createPricingService({ repository }: { repository: PricingReposi
       const promoIds = (payload?.rows || [])
         .map((row) => asString(row.promo_id))
         .filter((id): id is string => Boolean(id));
-      const voucherStats = await repository.countVouchersByPromotion(promoIds, context.accessToken);
-      return decoratePromotions(payload, new Date(), voucherStats);
+      const now = new Date();
+      const [voucherStats, summarySource, activeVouchers] = await Promise.all([
+        repository.countVouchersByPromotion(promoIds, context.accessToken),
+        repository.summarizePromotions(context.accessToken),
+        repository.countActiveVouchers(context.accessToken)
+      ]);
+      return {
+        ...decoratePromotions(payload, now, voucherStats),
+        summary: summarizePromotionRows(summarySource, activeVouchers?.count, now)
+      };
     },
 
     async getPromotion(context, promotionId) {
@@ -304,6 +312,71 @@ export function validatePromotionSchedule(body: JsonObject): void {
  * Trạng thái tính ở đây chứ không ở trình duyệt, để badge, nút thao tác và trang ưu đãi
  * bên khách không thể suy ra ba kết quả khác nhau từ cùng một dòng dữ liệu.
  */
+/**
+ * Chỉ số tổng hợp của toàn bộ chiến dịch, không phụ thuộc vào trang đang xem.
+ */
+export interface PromotionSummary {
+  total: number;
+  running: number;
+  scheduled: number;
+  paused: number;
+  ended: number;
+  budgetExhausted: number;
+  totalBudget: number;
+  issuedDiscount: number;
+  /** Số chiến dịch có đặt trần ngân sách — phần còn lại không theo dõi được bằng tiền. */
+  budgetedCampaigns: number;
+  activeVouchers: number;
+}
+
+/**
+ * Tính các chỉ số đầu trang Khuyến mãi trên toàn bộ chiến dịch.
+ *
+ * `totalBudget` chỉ cộng những chiến dịch có đặt trần. Cộng cả chiến dịch không giới
+ * hạn vào (chúng lưu `budget_limit = 0`) sẽ cho ra một tổng nhỏ hơn thực tế và làm
+ * người vận hành tưởng ngân sách còn dư trong khi không có trần nào cả.
+ */
+export function summarizePromotionRows(
+  payload: { rows?: JsonObject[]; count?: number | undefined } | unknown,
+  activeVoucherCount: number | undefined,
+  now: Date
+): PromotionSummary {
+  const rows = Array.isArray((payload as { rows?: JsonObject[] })?.rows)
+    ? (payload as { rows: JsonObject[] }).rows
+    : [];
+
+  const summary: PromotionSummary = {
+    total: rows.length,
+    running: 0,
+    scheduled: 0,
+    paused: 0,
+    ended: 0,
+    budgetExhausted: 0,
+    totalBudget: 0,
+    issuedDiscount: 0,
+    budgetedCampaigns: 0,
+    activeVouchers: activeVoucherCount ?? 0
+  };
+
+  for (const row of rows) {
+    const input = toLifecycleInput(row);
+    switch (promotionLifecycle(input, now)) {
+      case "running": summary.running += 1; break;
+      case "scheduled": summary.scheduled += 1; break;
+      case "paused": summary.paused += 1; break;
+      case "ended": summary.ended += 1; break;
+      case "budget_exhausted": summary.budgetExhausted += 1; break;
+    }
+    if (input.budgetLimit > 0) {
+      summary.totalBudget += input.budgetLimit;
+      summary.budgetedCampaigns += 1;
+    }
+    summary.issuedDiscount += input.totalDiscountIssued;
+  }
+
+  return summary;
+}
+
 export function decoratePromotions(
   payload: { rows?: JsonObject[]; count?: number | undefined } | JsonObject[] | unknown,
   now: Date,

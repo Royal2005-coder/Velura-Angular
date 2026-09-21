@@ -138,7 +138,36 @@
           <app-admin-pagination [page]="page()" [pageCount]="bundlePageCount()" [label]="bundleRange()" (changed)="goPage($event)" />
         }
       } @else if (view() === 'logs') {
-        <div class="admin-empty-state"><strong>Chưa có nhật ký</strong><p>Nhật ký khuyến mãi nằm trong phân hệ Nhật ký hệ thống.</p></div>
+        @if (logsError()) {
+          <app-admin-empty-state kind="error" title="Không tải được nhật ký" [message]="logsError()!" />
+        } @else if (logsLoading()) {
+          <p class="admin-muted">Đang tải nhật ký…</p>
+        } @else if (!logs().length) {
+          <app-admin-empty-state kind="empty" title="Chưa có thao tác nào được ghi nhận" />
+        } @else {
+          <div class="admin-table-wrap">
+            <table class="admin-table admin-data-table">
+              <thead><tr><th>Thời điểm</th><th>Người thao tác</th><th>Hành động</th><th>Đối tượng</th><th>Thay đổi</th></tr></thead>
+              <tbody>
+                @for (row of logs(); track row.audit_id) {
+                  <tr>
+                    <td>{{ logTime(row.timestamp) }}</td>
+                    <td>
+                      <div class="admin-review-product">
+                        <strong>{{ row.actor_label || row.actor_name || '—' }}</strong>
+                        <small>{{ row.actor_role_label || row.actor_role }}</small>
+                      </div>
+                    </td>
+                    <td>{{ row.action_label || row.action }}</td>
+                    <td>{{ row.target_label || row.target_id }}</td>
+                    <td>{{ row.change_summary || '—' }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          <app-admin-pagination [page]="page()" [pageCount]="logPageCount()" [label]="logRange()" (changed)="goPage($event)" />
+        }
       } @else {
         @if (statsLoading()) {
           <div class="admin-empty-state"><strong>Đang tải thống kê…</strong></div>

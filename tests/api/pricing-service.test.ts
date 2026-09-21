@@ -9,11 +9,49 @@ test("pricing operator reads production data with the caller token", async () =>
   let received;
   const service = createPricingService({ repository: {
     listPromotions: async (filters, token) => { received = { filters, token }; return { rows: [] }; },
-    countVouchersByPromotion: async () => ({})
+    countVouchersByPromotion: async () => ({}),
+    summarizePromotions: async () => ({ rows: [], count: 0 }),
+    countActiveVouchers: async () => ({ rows: [], count: 0 })
   } });
   await service.listPromotions(context("admin_operator_gia_km"), new URLSearchParams("isActive=true&limit=10"));
   assert.equal(received.filters.isActive, "true");
   assert.equal(received.token, "jwt-token");
+});
+
+test("promotion KPIs count every campaign, not just the page being viewed", async () => {
+  // Trang hiện tại chỉ có 1 chiến dịch, nhưng hệ thống có 4. Các chỉ số đầu trang phải
+  // nói về cả 4.
+  // Vòng đời được tính tại thời điểm chạy thật, nên các mốc phải neo vào hôm nay chứ
+  // không phải một ngày cố định trong lịch.
+  const day = 24 * 60 * 60 * 1000;
+  const at = (offsetDays) => new Date(Date.now() + offsetDays * day).toISOString();
+  const allCampaigns = [
+    { promo_id: "p1", start_date: at(-10), end_date: at(10), is_active: true, paused_at: null, budget_limit: 1000000, total_discount_issued: 400000 },
+    { promo_id: "p2", start_date: at(10), end_date: at(40), is_active: true, paused_at: null, budget_limit: 500000, total_discount_issued: 0 },
+    { promo_id: "p3", start_date: at(-90), end_date: at(-60), is_active: true, paused_at: null, budget_limit: 0, total_discount_issued: 90000 },
+    { promo_id: "p4", start_date: at(-10), end_date: at(10), is_active: false, paused_at: at(-5), budget_limit: 0, total_discount_issued: 10000 }
+  ];
+
+  const service = createPricingService({ repository: {
+    listPromotions: async () => ({ rows: [allCampaigns[0]], count: 4 }),
+    countVouchersByPromotion: async () => ({}),
+    summarizePromotions: async () => ({ rows: allCampaigns, count: 4 }),
+    countActiveVouchers: async () => ({ rows: [], count: 7 })
+  } });
+
+  const result = await service.listPromotions(context("admin_operator_gia_km"), new URLSearchParams("limit=1"));
+  assert.equal(result.rows.length, 1, "danh sách vẫn phân trang");
+  assert.equal(result.summary.total, 4);
+  assert.equal(result.summary.running, 1);
+  assert.equal(result.summary.scheduled, 1);
+  assert.equal(result.summary.ended, 1);
+  assert.equal(result.summary.paused, 1);
+  assert.equal(result.summary.activeVouchers, 7);
+  // Chỉ hai chiến dịch có đặt trần; hai chiến dịch còn lại `budget_limit = 0` nghĩa là
+  // không giới hạn, cộng chúng vào tổng sẽ cho ra một con số bịa.
+  assert.equal(result.summary.totalBudget, 1500000);
+  assert.equal(result.summary.budgetedCampaigns, 2);
+  assert.equal(result.summary.issuedDiscount, 500000);
 });
 
 test("price mutation validates reason, price and optimistic version", async () => {

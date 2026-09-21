@@ -218,6 +218,30 @@ export interface AdminPromotionRow {
   is_featured?: boolean | null;
 }
 
+/**
+ * Chỉ số đầu trang Khuyến mãi, do API tính trên toàn bộ chiến dịch.
+ *
+ * Trước đây trang tự cộng trên `rows` của trang hiện tại, nên bốn con số đổi theo mỗi
+ * lần bấm sang trang. Đây là số thật.
+ */
+export interface AdminPromotionSummary {
+  total: number;
+  running: number;
+  scheduled: number;
+  paused: number;
+  ended: number;
+  budgetExhausted: number;
+  totalBudget: number;
+  issuedDiscount: number;
+  budgetedCampaigns: number;
+  activeVouchers: number;
+}
+
+/** Danh sách chiến dịch kèm chỉ số tổng hợp. */
+export interface AdminPromotionListPayload extends AdminListPayload<AdminPromotionRow> {
+  summary?: AdminPromotionSummary;
+}
+
 /** Số liệu tổng hợp trả về từ `/api/v1/admin/pricing/statistics`. */
 export interface AdminPricingStatistics {
   promotions: {
@@ -935,8 +959,8 @@ export class AdminApiService {
   /**
    * Lists promotions for the original campaign table.
    */
-  listPromotions(params: Record<string, string> = {}): Observable<AdminListPayload<AdminPromotionRow>> {
-    return this.http.get<AdminListPayload<AdminPromotionRow>>(`${this.baseUrl}/api/v1/admin/promotions`, { params: this.params(params) });
+  listPromotions(params: Record<string, string> = {}): Observable<AdminPromotionListPayload> {
+    return this.http.get<AdminPromotionListPayload>(`${this.baseUrl}/api/v1/admin/promotions`, { params: this.params(params) });
   }
 
   /**
@@ -954,6 +978,16 @@ export class AdminApiService {
    */
   pricingStatistics(): Observable<AdminPricingStatistics> {
     return this.http.get<AdminPricingStatistics>(`${this.baseUrl}/api/v1/admin/pricing/statistics`);
+  }
+
+  /**
+   * Nhật ký phân hệ giá & khuyến mãi, đã được API bổ sung tên người thao tác và nội
+   * dung thay đổi thay vì chỉ có UUID.
+   */
+  listPricingAuditLogs(params: Record<string, string> = {}): Observable<AdminListPayload<AdminAuditRow>> {
+    return this.http.get<AdminListPayload<AdminAuditRow>>(`${this.baseUrl}/api/v1/admin/pricing/audit-logs`, {
+      params: this.params(params),
+    });
   }
 
   /**

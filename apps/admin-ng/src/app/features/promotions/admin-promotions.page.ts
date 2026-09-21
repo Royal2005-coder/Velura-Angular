@@ -1,7 +1,17 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
-import { AdminApiService, AdminPricingStatistics, AdminProductRow, AdminPromotionRow, AdminVoucherRow } from '../../core/admin-api.service';
+import {
+  AdminApiService,
+  AdminAuditRow,
+  AdminPricingStatistics,
+  AdminProductRow,
+  AdminPromotionListPayload,
+  AdminPromotionRow,
+  AdminPromotionSummary,
+  AdminVoucherRow,
+} from '../../core/admin-api.service';
+import { adminDateTime } from '../../core/admin-format';
 import { adminErrorMessage, adminListCount, adminListRows, adminOffset, adminRangeLabel } from '../../core/admin-http';
 import { AdminSessionService } from '../../core/admin-session.service';
 import { AdminEmptyState } from '../../shared/admin-empty-state';
@@ -32,19 +42,42 @@ export class AdminPromotionsPage {
   readonly statsLoading = signal(false);
   readonly statsError = signal<string | null>(null);
 
+  // Tab "Nhật ký" trước đây là một khung rỗng cố định với dòng chữ "Nhật ký khuyến mãi
+  // nằm trong phân hệ Nhật ký hệ thống" — trong khi API đã có sẵn
+  // `/api/v1/admin/pricing/audit-logs` trả về đúng nhật ký của phân hệ này.
+  readonly logs = signal<AdminAuditRow[]>([]);
+  readonly logsCount = signal(0);
+  readonly logsLoading = signal(false);
+  readonly logsError = signal<string | null>(null);
+  readonly logPageCount = computed(() => Math.max(1, Math.ceil(this.logsCount() / this.pageSize)));
+  readonly logRange = computed(() => adminRangeLabel(this.logsCount(), this.page(), this.pageSize, 'nhật ký'));
+
   /** Form tạo/sửa chiến dịch. `editing` bằng null nghĩa là đang tạo mới. */
   readonly formOpen = signal(false);
   readonly editing = signal<AdminPromotionRow | null>(null);
 
-  readonly activeCampaigns = computed(() => this.promotions().filter((row) => this.isCampaignActive(row)).length);
-  readonly pendingCampaigns = computed(() => this.promotions().length - this.activeCampaigns());
-  readonly activeVouchers = computed(() => this.vouchers().filter((row) => row.is_active !== false).length);
-  readonly issuedDiscount = computed(() =>
-    this.promotions().reduce((sum, row) => sum + Number(row.total_discount_issued || 0), 0),
-  );
-  readonly totalBudget = computed(() =>
-    this.promotions().reduce((sum, row) => sum + Number(row.budget_limit ?? row.budget ?? 0), 0),
-  );
+  /**
+   * Chỉ số do API tính trên toàn bộ chiến dịch.
+   *
+   * Trước đây năm con số này là `computed` cộng trên `promotions()` — tức trên đúng 10
+   * bản ghi của trang đang xem. Với 8 chiến dịch thì tình cờ đúng; sang trang 2 hoặc
+   * khi có hơn 10 chiến dịch thì mọi con số ở đầu trang đều sai.
+   */
+  readonly summary = signal<AdminPromotionSummary | null>(null);
+  readonly activeCampaigns = computed(() => this.summary()?.running ?? 0);
+  readonly pendingCampaigns = computed(() => {
+    const s = this.summary();
+    if (!s) return 0;
+    return s.scheduled + s.paused + s.ended + s.budgetExhausted;
+  });
+  readonly activeVouchers = computed(() => this.summary()?.activeVouchers ?? 0);
+  readonly issuedDiscount = computed(() => this.summary()?.issuedDiscount ?? 0);
+  readonly totalBudget = computed(() => this.summary()?.totalBudget ?? 0);
+  /** Có chiến dịch nào không đặt trần ngân sách hay không — để chú thích tổng ngân sách. */
+  readonly hasUnbudgetedCampaigns = computed(() => {
+    const s = this.summary();
+    return Boolean(s && s.total > s.budgetedCampaigns);
+  });
   readonly campaignPageCount = computed(() => Math.max(1, Math.ceil(this.promoCount() / this.pageSize)));
   readonly voucherPageCount = computed(() => Math.max(1, Math.ceil(this.voucherCount() / this.pageSize)));
   readonly bundlePageCount = computed(() => Math.max(1, Math.ceil(this.bundles().length / this.pageSize)));
@@ -68,6 +101,37 @@ export class AdminPromotionsPage {
     if (view === 'stats' && !this.stats() && !this.statsLoading()) {
       this.loadStats();
     }
+    if (view === 'logs') {
+      this.loadLogs();
+    }
+  }
+
+  /**
+   * Tải nhật ký phân hệ giá & khuyến mãi.
+   */
+  loadLogs(): void {
+    this.logsLoading.set(true);
+    this.logsError.set(null);
+    this.api
+      .listPricingAuditLogs({ limit: String(this.pageSize), offset: adminOffset(this.page(), this.pageSize) })
+      .subscribe({
+        next: (payload) => {
+          this.logs.set(adminListRows(payload));
+          this.logsCount.set(adminListCount(payload));
+          this.logsLoading.set(false);
+        },
+        error: (error: unknown) => {
+          this.logsError.set(adminErrorMessage(error));
+          this.logsLoading.set(false);
+        },
+      });
+  }
+
+  /**
+   * Thời điểm của một dòng nhật ký, đọc theo giờ Việt Nam.
+   */
+  logTime(value: string | undefined): string {
+    return adminDateTime(value);
   }
 
   /**
@@ -79,9 +143,15 @@ export class AdminPromotionsPage {
         ? this.voucherPageCount()
         : this.view() === 'bundles'
           ? this.bundlePageCount()
-          : this.campaignPageCount();
+          : this.view() === 'logs'
+            ? this.logPageCount()
+            : this.campaignPageCount();
     this.page.set(Math.min(count, Math.max(1, page)));
-    if (this.view() !== 'bundles' && this.view() !== 'logs' && this.view() !== 'stats') {
+    if (this.view() === 'logs') {
+      this.loadLogs();
+      return;
+    }
+    if (this.view() !== 'bundles' && this.view() !== 'stats') {
       this.reload();
     }
   }
@@ -366,12 +436,13 @@ export class AdminPromotionsPage {
     forkJoin({
       promotions: this.api.listPromotions(pageParams).pipe(catchError((error: unknown) => {
         this.loadError.set(adminErrorMessage(error));
-        return of({ rows: [] as AdminPromotionRow[], count: 0 });
+        return of({ rows: [] as AdminPromotionRow[], count: 0, summary: undefined } as AdminPromotionListPayload);
       })),
       vouchers: this.api.listVouchers(pageParams).pipe(catchError(() => of({ rows: [] as AdminVoucherRow[], count: 0 }))),
       products: this.api.listProducts({ isCombo: 'true', limit: '100' }).pipe(catchError(() => of({ rows: [] as AdminProductRow[] }))),
     }).subscribe((payload) => {
       this.promotions.set(adminListRows(payload.promotions));
+      this.summary.set(payload.promotions.summary ?? null);
       this.vouchers.set(adminListRows(payload.vouchers));
       this.promoCount.set(adminListCount(payload.promotions));
       this.voucherCount.set(adminListCount(payload.vouchers));

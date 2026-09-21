@@ -8,10 +8,21 @@ export interface ReviewListFilters {
   status?: string;
   rating?: string;
   search?: string;
+  /** Chỉ lấy đánh giá cần xử lý gấp: bị gắn cờ, hoặc từ 2 sao trở xuống. */
+  urgent?: boolean;
   order: string;
   limit: number;
   offset: number;
 }
+
+/**
+ * Điều kiện "cần xử lý gấp", viết theo cú pháp PostgREST.
+ *
+ * Định nghĩa này trước đây chỉ nằm trong một `computed` của trang Angular và chạy trên
+ * đúng 10 dòng của trang hiện tại, nên con số KPI và tab "Cần xử lý gấp" đều nói về
+ * trang chứ không về toàn bộ dữ liệu.
+ */
+const URGENT_CONDITION = "is_flagged_urgent.eq.true,rating.lte.2";
 
 /**
  * Filters for review-module audit logs.
@@ -60,9 +71,21 @@ export function createReviewRepository() {
       };
       if (filters.status) query.status = `eq.${filters.status}`;
       if (filters.rating) query.rating = `eq.${filters.rating}`;
-      if (filters.search) {
+
+      // PostgREST chỉ nhận một tham số `or` cho mỗi truy vấn, nên khi vừa tìm kiếm vừa
+      // lọc gấp thì phải gộp hai nhóm vào một `and` lồng nhau thay vì ghi đè lẫn nhau.
+      const searchGroup = filters.search
+        ? `or(comment.ilike.*${filters.search}*,product.name.ilike.*${filters.search}*)`
+        : "";
+      const urgentGroup = filters.urgent ? `or(${URGENT_CONDITION})` : "";
+      if (searchGroup && urgentGroup) {
+        query.and = `(${searchGroup},${urgentGroup})`;
+      } else if (searchGroup) {
         query.or = `(comment.ilike.*${filters.search}*,product.name.ilike.*${filters.search}*)`;
+      } else if (urgentGroup) {
+        query.or = `(${URGENT_CONDITION})`;
       }
+
       return selectRows("review", query, authOptions(accessToken));
     },
 

@@ -4,32 +4,13 @@ import { catchError } from 'rxjs/operators';
 import { AdminApiService, AdminAuditRow, AdminOrderPayment, AdminOrderRow } from '../../core/admin-api.service';
 import { adminErrorMessage, adminListCount, adminListRows, adminOffset, adminRangeLabel } from '../../core/admin-http';
 import { AdminSessionService } from '../../core/admin-session.service';
+import { ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS, statusLabelFrom } from '../../core/admin-status-labels';
 import { AdminEmptyState } from '../../shared/admin-empty-state';
 import { AdminIcon } from '../../shared/admin-icon';
 import { AdminPagination } from '../../shared/admin-pagination';
 
 type OrderTab = 'all' | 'attention' | 'payment' | 'cancelled' | 'logs';
 type OrderAction = 'status' | 'cancel' | 'payment' | null;
-
-const ORDER_LABELS: Record<string, string> = {
-  pending: 'Chờ xác nhận',
-  confirmed: 'Đã xác nhận',
-  preparing: 'Đang chuẩn bị',
-  shipping: 'Đang giao',
-  delivered: 'Đã giao',
-  failed_delivery: 'Giao thất bại',
-  cancelled: 'Đã hủy',
-  completed: 'Hoàn thành',
-};
-
-const PAYMENT_LABELS: Record<string, string> = {
-  paid: 'Đã thanh toán',
-  failed: 'Thanh toán thất bại',
-  pending: 'Chờ xử lý',
-  refunded: 'Đã hoàn tiền',
-  refund_pending: 'Chờ hoàn tiền',
-  discrepancy: 'Cần đối soát',
-};
 
 const TRANSITIONS: Record<string, string[]> = {
   pending: ['confirmed'],
@@ -319,14 +300,18 @@ export class AdminOrdersPage {
    * Maps an order status to the original Vietnamese badge.
    */
   orderLabel(status: string | undefined): string {
-    return ORDER_LABELS[status || ''] || status || '—';
+    return statusLabelFrom(ORDER_STATUS_LABELS, status);
   }
 
   /**
    * Maps a payment status to the original Vietnamese badge.
+   *
+   * Trạng thái lạ trả về nguyên mã. Trước đây mặc định là "Chờ xử lý", nên một
+   * trạng thái thanh toán mà admin chưa biết sẽ hiện y hệt `pending` — người vận
+   * hành đọc là đơn chưa trả tiền trong khi thực tế không ai biết nó đang ở đâu.
    */
   paymentLabel(status: string | undefined): string {
-    return PAYMENT_LABELS[status || ''] || status || 'Chờ xử lý';
+    return statusLabelFrom(PAYMENT_STATUS_LABELS, status);
   }
 
   /**

@@ -47,6 +47,32 @@ export function createPricingRepository() {
     },
 
     /**
+     * Lấy các cột đủ để tính vòng đời và ngân sách của TOÀN BỘ chiến dịch.
+     *
+     * Các chỉ số ở đầu trang Khuyến mãi — đang chạy, tạm dừng, tổng ngân sách, đã phát
+     * ra — trước đây được cộng trên `rows` của trang hiện tại, tức trên đúng 10 bản
+     * ghi. Sang trang 2 là bốn con số đổi hết, và với hơn 10 chiến dịch thì không con
+     * số nào đúng. Truy vấn này chỉ lấy 6 cột nên nhẹ hơn hẳn việc tải cả danh sách.
+     */
+    async summarizePromotions(accessToken: string | null) {
+      return selectRows("promotion", {
+        select: "promo_id,start_date,end_date,is_active,paused_at,budget_limit,total_discount_issued",
+        limit: 1000
+      }, { ...authOptions(accessToken), count: "exact" });
+    },
+
+    /**
+     * Đếm số mã còn hiệu lực trên toàn hệ thống.
+     */
+    async countActiveVouchers(accessToken: string | null) {
+      return selectRows("voucher", {
+        select: "voucher_id",
+        is_active: "eq.true",
+        limit: 1
+      }, authOptions(accessToken));
+    },
+
+    /**
      * Đếm số mã của từng chiến dịch, tách riêng số mã còn hiệu lực.
      *
      * Ngân sách chiến dịch chỉ tăng khi có người dùng mã của nó

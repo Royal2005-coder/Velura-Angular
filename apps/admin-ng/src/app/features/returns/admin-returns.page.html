@@ -202,7 +202,12 @@
                     <td>
                       @if (canMutate() && row.status !== 'closed') {
                         <div class="admin-table-actions">
-                          <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openTicketAction('reply', row.ticket_id)">Phản hồi</button>
+                          @if (canTicketAction(row, 'reply')) {
+                            <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openTicketAction('reply', row.ticket_id)">Phản hồi</button>
+                          }
+                          @if (canTicketAction(row, 'resolve')) {
+                            <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openTicketAction('resolve', row.ticket_id)">Đã giải quyết</button>
+                          }
                           <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="openTicketAction('close', row.ticket_id)">Đóng</button>
                         </div>
                       }

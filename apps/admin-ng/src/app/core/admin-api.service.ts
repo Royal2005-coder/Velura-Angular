@@ -838,6 +838,14 @@ export class AdminApiService {
   }
 
   /**
+   * Marks a support ticket as resolved, which is the state between "đang xử lý" and
+   * "đã đóng" — the customer can still come back before it is closed for good.
+   */
+  resolveTicket(ticketId: string, body: Record<string, unknown>): Observable<unknown> {
+    return this.http.post(`${this.baseUrl}/api/v1/admin/support-tickets/${encodeURIComponent(ticketId)}/resolve`, body);
+  }
+
+  /**
    * Closes a support ticket.
    */
   closeTicket(ticketId: string, body: Record<string, unknown>): Observable<unknown> {

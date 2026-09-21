@@ -449,6 +449,21 @@ export function createReturnRepository() {
       }, { accessToken });
     },
 
+    async updateTicketStatus(
+      ticketId: string,
+      input: { status: string; adminNote?: string; expectedVersion: number },
+      accessToken: string
+    ) {
+      if (input.status !== "resolved") {
+        throw new HttpError(422, "VALIDATION_ERROR", "Chỉ hỗ trợ đánh dấu phiếu đã giải quyết");
+      }
+      return callRpc("admin_resolve_ticket", {
+        p_ticket_id: ticketId,
+        p_expected_version: input.expectedVersion,
+        p_admin_note: input.adminNote || ""
+      }, { accessToken });
+    },
+
     async listAuditLogs(filters: ReturnAuditFilters, accessToken: string) {
       const query: Record<string, unknown> = {
         select: "audit_id,actor_id,actor_role,action,module,target_id,old_value,new_value,ip_address,timestamp",

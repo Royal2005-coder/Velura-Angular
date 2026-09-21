@@ -62,6 +62,7 @@ export class AdminReviewsPage {
 
   constructor() {
     this.reload();
+    this.loadCounts();
   }
 
   /**
@@ -94,29 +95,44 @@ export class AdminReviewsPage {
 
     // Mỗi KPI là một truy vấn đếm `limit=1`: máy chủ trả về tổng số qua tiêu đề count
     // mà không phải tải dữ liệu về.
-    const countOnly = (params: Record<string, string>) =>
-      this.api.listReviews({ ...params, limit: '1' }).pipe(catchError(() => of(EMPTY_LIST)));
-
-    forkJoin({
-      list: this.api.listReviews(listParams).pipe(
+    this.api
+      .listReviews(listParams)
+      .pipe(
         catchError((error: unknown) => {
           this.loadError.set(adminErrorMessage(error));
           return of(EMPTY_LIST);
         }),
-      ),
+      )
+      .subscribe((payload) => {
+        this.rows.set(adminListRows(payload));
+        this.total.set(adminListCount(payload));
+        this.loading.set(false);
+      });
+  }
+
+  /**
+   * Tải các chỉ số đầu trang.
+   *
+   * Tách khỏi `reload()` vì bấm sang trang không làm mấy con số này đổi: gọi lại chúng
+   * ở mỗi lần phân trang là bốn truy vấn thừa cho một thông tin không thay đổi. Chúng
+   * chỉ cần chạy lại khi dữ liệu thật sự đổi — lần đầu vào trang, đổi bộ lọc, và sau
+   * mỗi thao tác duyệt/ẩn.
+   */
+  loadCounts(): void {
+    const countOnly = (params: Record<string, string>) =>
+      this.api.listReviews({ ...params, limit: '1' }).pipe(catchError(() => of(EMPTY_LIST)));
+
+    forkJoin({
       pending: countOnly({ status: 'pending' }),
       approved: countOnly({ status: 'approved' }),
       rejected: countOnly({ status: 'rejected' }),
       urgent: countOnly({ urgent: 'true' }),
     }).subscribe((payload) => {
-      this.rows.set(adminListRows(payload.list));
-      this.total.set(adminListCount(payload.list));
       this.pendingCount.set(adminListCount(payload.pending));
       this.hiddenCount.set(adminListCount(payload.rejected));
       this.urgentCount.set(adminListCount(payload.urgent));
       // "Đã xử lý" là mọi đánh giá đã rời khỏi hàng chờ, gồm cả đã duyệt lẫn đã ẩn.
       this.processedCount.set(adminListCount(payload.approved) + adminListCount(payload.rejected));
-      this.loading.set(false);
     });
   }
 
@@ -151,6 +167,7 @@ export class AdminReviewsPage {
     this.statusFilter.set((form.elements.namedItem('status') as HTMLSelectElement | null)?.value || '');
     this.page.set(1);
     this.reload();
+    this.loadCounts();
   }
 
   /**
@@ -163,6 +180,7 @@ export class AdminReviewsPage {
     this.statusFilter.set('');
     this.page.set(1);
     this.reload();
+    this.loadCounts();
   }
 
   /**
@@ -273,6 +291,9 @@ export class AdminReviewsPage {
       next: () => {
         this.closeOverlays();
         this.reload();
+        // Duyệt hoặc ẩn một đánh giá làm đổi số liệu, nên đây là một trong số ít chỗ
+        // cần tính lại.
+        this.loadCounts();
       },
       error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
     });

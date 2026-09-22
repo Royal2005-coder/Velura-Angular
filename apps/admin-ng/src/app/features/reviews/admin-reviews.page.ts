@@ -9,6 +9,7 @@ import { REVIEW_STATUS_LABELS, statusLabelFrom } from '../../core/admin-status-l
 import { AdminEmptyState } from '../../shared/admin-empty-state';
 import { AdminIcon } from '../../shared/admin-icon';
 import { AdminPagination } from '../../shared/admin-pagination';
+import { AdminTableSkeleton } from '../../shared/admin-table-skeleton';
 
 type ReviewTab = 'all' | 'pending' | 'urgent' | 'processed' | 'logs';
 type ReviewAction = 'approve' | 'hide' | 'unhide' | 'reply' | 'escalate' | null;
@@ -18,7 +19,7 @@ const EMPTY_LIST = { rows: [] as AdminReviewRow[], count: 0 };
 
 @Component({
   selector: 'app-admin-reviews-page',
-  imports: [AdminEmptyState, AdminIcon, AdminPagination],
+  imports: [AdminEmptyState, AdminIcon, AdminPagination, AdminTableSkeleton],
   templateUrl: './admin-reviews.page.html',
 })
 export class AdminReviewsPage {
@@ -33,6 +34,14 @@ export class AdminReviewsPage {
   readonly logs = signal<AdminAuditRow[]>([]);
   readonly loadError = signal<string | null>(null);
   readonly loading = signal(true);
+  /**
+   * Khung xương chỉ hiện ở lần tải đầu. Từ lần sau, bảng cũ vẫn ở nguyên chỗ và
+   * chỉ mờ đi — thay cả bảng bằng khung xương ở mỗi lần lọc hay sang trang là bắt
+   * người vận hành mất chỗ đang nhìn.
+   */
+  readonly hasLoadedOnce = signal(false);
+  readonly showSkeleton = computed(() => this.loading() && !this.hasLoadedOnce());
+  readonly isRefreshing = computed(() => this.loading() && this.hasLoadedOnce());
   readonly page = signal(1);
   readonly logsPage = signal(1);
   readonly pageSize = 10;
@@ -107,6 +116,7 @@ export class AdminReviewsPage {
         this.rows.set(adminListRows(payload));
         this.total.set(adminListCount(payload));
         this.loading.set(false);
+        this.hasLoadedOnce.set(true);
       });
   }
 

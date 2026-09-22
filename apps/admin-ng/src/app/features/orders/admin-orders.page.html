@@ -43,8 +43,8 @@
             <button class="admin-btn admin-btn--outline admin-btn--sm" type="button" (click)="exportCsv()">Xuất CSV</button>
           </div>
         </form>
-        @if (loading()) {
-          <app-admin-empty-state kind="loading" icon="clock" title="Đang tải dữ liệu đơn hàng" />
+        @if (showSkeleton()) {
+          <app-admin-table-skeleton [headers]="['Mã đơn', 'Khách hàng', 'Tổng tiền', 'Trạng thái', 'Thanh toán', 'Cần xử lý', 'Thao tác']" [rows]="pageSize" />
         } @else if (loadError()) {
           <app-admin-empty-state kind="error" icon="alert" title="Không thể tải đơn hàng" [message]="loadError() || ''">
             <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="reload()">Thử lại</button>
@@ -52,7 +52,7 @@
         } @else if (!rows().length) {
           <app-admin-empty-state kind="empty" icon="cart" title="Không có đơn hàng phù hợp" message="Điều chỉnh bộ lọc hoặc tải lại dữ liệu." />
         } @else {
-          <div class="admin-table-wrap">
+          <div class="admin-table-wrap" [class.admin-table-wrap--refreshing]="isRefreshing()">
             <table class="admin-table admin-data-table">
               <thead>
                 <tr>

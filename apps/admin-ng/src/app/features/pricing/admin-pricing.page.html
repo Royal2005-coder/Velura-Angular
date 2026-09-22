@@ -32,9 +32,9 @@
                     <td>{{ date(row.changed_at) }}</td>
                     <td>
                       <div class="admin-review-product">
-                        <strong>{{ historyProductName(row.product_id) }}</strong>
-                        @if (historyProductSku(row.product_id)) {
-                          <small>{{ historyProductSku(row.product_id) }}</small>
+                        <strong>{{ historyProductName(row) }}</strong>
+                        @if (historyProductSku(row)) {
+                          <small>{{ historyProductSku(row) }}</small>
                         }
                       </div>
                     </td>

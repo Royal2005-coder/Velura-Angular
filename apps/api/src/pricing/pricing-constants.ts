@@ -17,7 +17,12 @@ export const PROMOTION_OPERATOR_ROLES = ["super_admin", "admin_operator_gia_km"]
 export const PRICE_HISTORY_SELECT = [
   "price_history_id", "product_id", "variant_id",
   "old_base_price", "new_base_price", "old_sale_price", "new_sale_price",
-  "changed_by", "changed_at", "reason"
+  "changed_by", "changed_at", "reason",
+  // Tên và SKU đi kèm ngay trên dòng lịch sử. Không có chúng thì trình duyệt phải tự
+  // dựng bảng tra cứu, và cách duy nhất để tra được một sản phẩm đã từng đổi giá nhưng
+  // không nằm trên trang hiện tại là tải cả danh mục về — đúng một nghìn dòng, ở mỗi
+  // lần đổi bộ lọc và mỗi lần sang trang.
+  "product:product(product_id,name,sku)"
 ].join(",");
 
 /** Safe column projection for promotion rows. */

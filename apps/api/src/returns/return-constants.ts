@@ -8,7 +8,10 @@ export const RETURN_STATUSES: readonly string[] = ["pending", "approved", "shipp
  */
 export const RETURN_TRANSITIONS: Record<string, readonly string[]> = {
   pending: ["approved", "rejected"],
-  approved: ["shipping_back"],
+  // `approved` sang `rejected` là đường khách tự huỷ yêu cầu sau khi đã được duyệt
+  // nhưng chưa gửi hàng đi (`apps/api/src/user/returns.ts`). Đây là hành vi nghiệp vụ
+  // có thật và đang chạy, nên bảng này phải công nhận thay vì để code đi vòng.
+  approved: ["shipping_back", "rejected"],
   shipping_back: ["received"],
   received: ["completed", "rejected"],
   completed: [],

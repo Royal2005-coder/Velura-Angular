@@ -13,6 +13,14 @@
  * Chuỗi kết nối đọc từ SUPABASE_DB_URL trong .env ở gốc kho. Script không in chuỗi đó
  * ra màn hình hay nhật ký.
  *
+ * Máy chủ trực tiếp `db.<ref>.supabase.co` chỉ có bản ghi AAAA. Máy nào không có đường
+ * ra IPv6 sẽ gặp ENETUNREACH; khi đó dùng pooler ở chế độ phiên (cổng 5432 — chế độ
+ * giao dịch ở cổng 6543 không chạy được DDL):
+ *
+ *   postgresql://postgres.<ref>:<mật khẩu>@aws-0-<vùng>.pooler.supabase.com:5432/postgres
+ *
+ * Dự án này nằm ở vùng ap-southeast-2.
+ *
  * Mỗi tệp chạy trong một giao dịch riêng: hỏng giữa chừng thì tệp đó quay lui trọn vẹn,
  * các tệp đã xong trước đó vẫn giữ nguyên. Postgres cho phép DDL trong giao dịch nên
  * điều này áp dụng cho cả `create table` lẫn `drop function`.
@@ -23,6 +31,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
+import { lookup as dnsLookup, promises as dnsPromises } from "node:dns";
 
 const require = createRequire(import.meta.url);
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -53,12 +62,53 @@ function findEnvFile() {
   return found;
 }
 
-/** Đọc một biến từ .env mà không nạp cả tệp vào process.env. */
+/**
+ * Đọc một biến cấu hình: ưu tiên biến môi trường, sau đó mới tới .env.
+ *
+ * Đường dẫn CA và cờ TLS thường được truyền ngay trên dòng lệnh cho một lần chạy chứ
+ * không ghi vào .env, nên chỉ đọc .env là bỏ sót đúng những tham số đó.
+ */
 function readEnv(name) {
+  const fromProcess = process.env[name];
+  if (fromProcess !== undefined && fromProcess !== "") return fromProcess.trim();
+
   const text = readFileSync(findEnvFile(), "utf8");
   const match = text.match(new RegExp(`^${name}=(.*)$`, "m"));
   if (!match) return "";
   return match[1].trim().replace(/^["']|["']$/g, "");
+}
+
+/**
+ * Phân giải tên máy chủ cơ sở dữ liệu, có đường lui khi trình phân giải của hệ điều
+ * hành không trả lời.
+ *
+ * Máy chủ Supabase chỉ công bố bản ghi AAAA. Trên một số máy — Windows có VPN hoặc
+ * Tailscale chen vào DNS — `dns.lookup` (đi qua getaddrinfo của hệ điều hành) trả
+ * ENOENT trong khi truy vấn DNS trực tiếp vẫn ra địa chỉ. Khi rơi vào trường hợp đó,
+ * script tự hỏi DNS rồi nối thẳng tới địa chỉ IP.
+ *
+ * Nối bằng IP thì tên trong chứng chỉ không còn khớp với `host` nữa, nên phải truyền
+ * `servername` là tên máy chủ thật. Xác thực chứng chỉ vẫn giữ nguyên, chỉ đổi cách
+ * tìm ra địa chỉ.
+ */
+async function resolveHostAddress(hostname) {
+  try {
+    await new Promise((ok, fail) => dnsLookup(hostname, (error, address) => (error ? fail(error) : ok(address))));
+    return null; // Trình phân giải của hệ điều hành chạy được, không cần can thiệp.
+  } catch (lookupError) {
+    for (const query of [dnsPromises.resolve6, dnsPromises.resolve4]) {
+      try {
+        const [address] = await query.call(dnsPromises, hostname);
+        if (address) return address;
+      } catch {
+        // Thử loại bản ghi tiếp theo.
+      }
+    }
+    throw new Error(
+      `Không phân giải được ${hostname} (${lookupError.code || lookupError.message}). ` +
+        "Kiểm tra DNS hoặc VPN đang chen vào phân giải tên."
+    );
+  }
 }
 
 /** Tìm tệp migration theo số thứ tự, ví dụ "027". */
@@ -109,8 +159,48 @@ async function main() {
     process.exit(1);
   }
 
+  // Script này cầm chuỗi kết nối cơ sở dữ liệu production và đẩy nguyên văn DDL qua đó.
+  // Bản trước đặt thẳng `rejectUnauthorized: false`, nghĩa là bất kỳ ai chen được vào
+  // giữa cũng đọc được thông tin kết nối và toàn bộ nội dung migration.
+  //
+  // Supabase ký chứng chỉ bằng CA riêng nên kho tin cậy mặc định của Node không xác thực
+  // được; cách đúng là trỏ tới CA của họ (tải ở Dashboard > Settings > Database > SSL).
+  // Không có CA thì script dừng và nói rõ hai lựa chọn, thay vì âm thầm hạ tiêu chuẩn.
+  const caPath = readEnv("SUPABASE_DB_CA_CERT");
+  const allowInsecureTls = readEnv("SUPABASE_DB_ALLOW_INSECURE_TLS") === "true";
+
+  let ssl;
+  if (caPath) {
+    ssl = { ca: readFileSync(caPath, "utf8"), rejectUnauthorized: true };
+  } else if (allowInsecureTls) {
+    console.warn("CẢNH BÁO: đang bỏ qua xác thực chứng chỉ TLS tới cơ sở dữ liệu.");
+    console.warn("Chỉ dùng tạm. Đặt SUPABASE_DB_CA_CERT trỏ tới CA của Supabase để chạy an toàn.");
+    ssl = { rejectUnauthorized: false };
+  } else {
+    console.error("Thiếu cấu hình TLS cho kết nối cơ sở dữ liệu. Chọn một trong hai:");
+    console.error("  1. SUPABASE_DB_CA_CERT=<đường dẫn tới CA của Supabase>   (khuyến nghị)");
+    console.error("  2. SUPABASE_DB_ALLOW_INSECURE_TLS=true                    (chỉ khi chạy tạm)");
+    process.exit(1);
+  }
+
+  const dbUrl = new URL(connectionString);
+  const resolvedAddress = await resolveHostAddress(dbUrl.hostname);
+  const clientConfig = { connectionString, ssl };
+  if (resolvedAddress) {
+    console.log(`DNS của hệ điều hành không trả lời; dùng địa chỉ phân giải trực tiếp cho ${dbUrl.hostname}.`);
+    // `pg` ưu tiên connectionString hơn các trường rời, nên phải bỏ hẳn chuỗi đó đi
+    // thì `host` mới có tác dụng.
+    delete clientConfig.connectionString;
+    clientConfig.host = resolvedAddress;
+    clientConfig.port = Number(dbUrl.port) || 5432;
+    clientConfig.user = decodeURIComponent(dbUrl.username);
+    clientConfig.password = decodeURIComponent(dbUrl.password);
+    clientConfig.database = dbUrl.pathname.replace(/^\//, "") || "postgres";
+    clientConfig.ssl = { ...ssl, servername: dbUrl.hostname };
+  }
+
   const { Client } = require("pg");
-  const client = new Client({ connectionString, ssl: { rejectUnauthorized: false } });
+  const client = new Client(clientConfig);
   await client.connect();
 
   try {

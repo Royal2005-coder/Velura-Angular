@@ -38,8 +38,8 @@ export async function handlePricingRoute({ req, res, url, parts, context, header
       return true;
     }
     // Tải ảnh banner chiến dịch. Đặt trước nhánh :promoId vì promo_id là uuid nên không
-    // thể trùng với "banner". Chốt quyền kiểm ngay tại đây: tuyến tải ảnh của khách
-    // (/api/user/upload/evidence) không yêu cầu đăng nhập, không lấy đó làm mẫu.
+    // thể trùng với "banner". Quyền kiểm ngay tại đây chứ không để mặc cho tầng dưới:
+    // một tuyến ghi vào kho lưu trữ mà không chốt vai trò là một cửa mở.
     if (req.method === "POST" && parts[4] === "banner" && parts.length === 5) {
       if (!context?.authUser?.id) {
         throw new HttpError(401, "AUTH_REQUIRED", "Authentication is required");

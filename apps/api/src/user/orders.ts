@@ -5,6 +5,7 @@ import { requireUserAuth, validatePhone } from "./auth.js";
 import { createNotification } from "./notifications.js";
 import { recordVoucherRedemption, releaseVoucherRedemption } from "./vouchers.js";
 import { allowDevOtpBypass, config } from "../config.js";
+import { ORDER_TRANSITIONS } from "../orders/order-constants.js";
 import {
   asJsonObject,
   asString,
@@ -305,6 +306,20 @@ export async function handleOrdersRoute(
       const allowedStatuses = ["cancelled", "delivered", "completed"];
       if (!allowedStatuses.includes(asString(status))) {
         throw new HttpError(400, "BAD_REQUEST", `Trạng thái ${status} không được phép cập nhật bởi người dùng`);
+      }
+
+      // Ba trạng thái trên là những gì khách được phép ghi, nhưng "được phép ghi" khác
+      // với "ghi từ đâu cũng được". Không chốt bảng chuyển trạng thái ở đây thì khách
+      // đẩy được đơn từ `shipping` thẳng sang `completed`, bỏ qua `delivered` — đơn
+      // thành hoàn tất mà chưa từng ghi nhận đã giao. Nhánh huỷ có danh sách chặn riêng
+      // ngay dưới nên bỏ qua ở bước này.
+      if (status !== "cancelled") {
+        const from = asString(order.status);
+        const allowed = ORDER_TRANSITIONS[from] || [];
+        if (!allowed.includes(asString(status))) {
+          throw new HttpError(400, "INVALID_TRANSITION",
+            `Không thể chuyển đơn từ "${from}" sang "${status}"`);
+        }
       }
 
       if (status === "cancelled") {

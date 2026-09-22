@@ -1,6 +1,6 @@
 import { enrichAuditLogs, PRICING_AUDIT } from "../audit-enrichment.js";
 import { HttpError } from "../http.js";
-import type { AuthContext, JsonObject } from "../types.js";
+import { asString, type AuthContext, type JsonObject } from "../types.js";
 import { PROMOTION_OPERATOR_ROLES, PROMOTION_READER_ROLES, PROMOTION_TYPES, VOUCHER_TYPES } from "./pricing-constants.js";
 import type { PricingRepository } from "./pricing-repository.js";
 import {
@@ -9,7 +9,9 @@ import {
   promotionLifecycle,
   promotionLifecycleLabel,
   promotionWarnings,
-  toLifecycleInput
+  overlapWarning,
+  toLifecycleInput,
+  toOverlapCandidate
 } from "./promotion-lifecycle.js";
 import { normalizePromotionPresentation } from "./promotion-presentation.js";
 
@@ -74,12 +76,30 @@ export function createPricingService({ repository }: { repository: PricingReposi
 
     async listPromotions(context, searchParams) {
       requirePricingReader(context);
+      const type = searchParams.get("type") || undefined;
+      if (type && !PROMOTION_TYPES.includes(type)) {
+        throw new HttpError(422, "VALIDATION_ERROR", `Invalid promo type. Valid: ${PROMOTION_TYPES.join(", ")}`);
+      }
       const payload = await repository.listPromotions({
         isActive: searchParams.get("isActive") || undefined,
+        type,
         limit: Math.min(parseInt(searchParams.get("limit") || "50"), 100),
         offset: parseInt(searchParams.get("offset") || "0")
       }, context.accessToken);
-      return decoratePromotions(payload, new Date());
+      const promoIds = (payload?.rows || [])
+        .map((row) => asString(row.promo_id))
+        .filter((id): id is string => Boolean(id));
+      const now = new Date();
+      const [voucherStats, summarySource, activeVouchers] = await Promise.all([
+        repository.countVouchersByPromotion(promoIds, context.accessToken),
+        repository.summarizePromotions(context.accessToken),
+        repository.countActiveVouchers(context.accessToken)
+      ]);
+      const allCampaigns = Array.isArray(summarySource?.rows) ? summarySource.rows : [];
+      return {
+        ...decoratePromotions(payload, now, voucherStats, allCampaigns),
+        summary: summarizePromotionRows(summarySource, activeVouchers?.count, now)
+      };
     },
 
     async getPromotion(context, promotionId) {
@@ -145,6 +165,25 @@ export function createPricingService({ repository }: { repository: PricingReposi
       requirePricingAdmin(context);
       if (!body?.code) throw new HttpError(422, "VALIDATION_ERROR", "Code required");
       if (!VOUCHER_TYPES.includes(body?.type as string)) throw new HttpError(422, "VALIDATION_ERROR", "Invalid voucher type");
+
+      // `max_vouchers_allowed` được ghi lúc tạo chiến dịch rồi chưa bao giờ có ai đọc:
+      // admin đặt trần "chiến dịch này phát tối đa 50 mã" và hệ thống vẫn cho phát mã
+      // thứ 51. Đây là chỗ trần đó có hiệu lực.
+      const promoId = asString(body.promoId);
+      if (promoId) {
+        const promo = await repository.getPromotion(promoId, context.accessToken);
+        if (!promo) throw new HttpError(404, "PROMOTION_NOT_FOUND", "Không tìm thấy chiến dịch của mã này");
+        const allowed = Number(promo.max_vouchers_allowed || 0);
+        if (allowed > 0) {
+          const stats = await repository.countVouchersByPromotion([promoId], context.accessToken);
+          const issued = stats[promoId]?.total ?? 0;
+          if (issued >= allowed) {
+            throw new HttpError(422, "VOUCHER_LIMIT_REACHED",
+              `Chiến dịch này chỉ được phát tối đa ${allowed} mã, hiện đã có ${issued}.`);
+          }
+        }
+      }
+
       return repository.createVoucher({ ...body, createdBy: context.profile?.user_id || context.authUser?.id }, context.accessToken);
     },
 
@@ -300,9 +339,80 @@ export function validatePromotionSchedule(body: JsonObject): void {
  * Trạng thái tính ở đây chứ không ở trình duyệt, để badge, nút thao tác và trang ưu đãi
  * bên khách không thể suy ra ba kết quả khác nhau từ cùng một dòng dữ liệu.
  */
+/**
+ * Chỉ số tổng hợp của toàn bộ chiến dịch, không phụ thuộc vào trang đang xem.
+ */
+export interface PromotionSummary {
+  total: number;
+  running: number;
+  scheduled: number;
+  paused: number;
+  ended: number;
+  budgetExhausted: number;
+  totalBudget: number;
+  issuedDiscount: number;
+  /** Số chiến dịch có đặt trần ngân sách — phần còn lại không theo dõi được bằng tiền. */
+  budgetedCampaigns: number;
+  activeVouchers: number;
+}
+
+/**
+ * Tính các chỉ số đầu trang Khuyến mãi trên toàn bộ chiến dịch.
+ *
+ * `totalBudget` chỉ cộng những chiến dịch có đặt trần. Cộng cả chiến dịch không giới
+ * hạn vào (chúng lưu `budget_limit = 0`) sẽ cho ra một tổng nhỏ hơn thực tế và làm
+ * người vận hành tưởng ngân sách còn dư trong khi không có trần nào cả.
+ */
+export function summarizePromotionRows(
+  payload: { rows?: JsonObject[]; count?: number | undefined } | unknown,
+  activeVoucherCount: number | undefined,
+  now: Date
+): PromotionSummary {
+  const rows = Array.isArray((payload as { rows?: JsonObject[] })?.rows)
+    ? (payload as { rows: JsonObject[] }).rows
+    : [];
+
+  const summary: PromotionSummary = {
+    total: rows.length,
+    running: 0,
+    scheduled: 0,
+    paused: 0,
+    ended: 0,
+    budgetExhausted: 0,
+    totalBudget: 0,
+    issuedDiscount: 0,
+    budgetedCampaigns: 0,
+    activeVouchers: activeVoucherCount ?? 0
+  };
+
+  for (const row of rows) {
+    const input = toLifecycleInput(row);
+    switch (promotionLifecycle(input, now)) {
+      case "running": summary.running += 1; break;
+      case "scheduled": summary.scheduled += 1; break;
+      case "paused": summary.paused += 1; break;
+      case "ended": summary.ended += 1; break;
+      case "budget_exhausted": summary.budgetExhausted += 1; break;
+    }
+    if (input.budgetLimit > 0) {
+      summary.totalBudget += input.budgetLimit;
+      summary.budgetedCampaigns += 1;
+    }
+    summary.issuedDiscount += input.totalDiscountIssued;
+  }
+
+  return summary;
+}
+
 export function decoratePromotions(
   payload: { rows?: JsonObject[]; count?: number | undefined } | JsonObject[] | unknown,
-  now: Date
+  now: Date,
+  voucherStats: Record<string, { total: number; active: number }> = {},
+  /**
+   * Toàn bộ chiến dịch, dùng để phát hiện chồng lấn. Bỏ trống thì chỉ xét trong phạm
+   * vi trang hiện tại — vẫn đúng, chỉ là sót những chiến dịch ở trang khác.
+   */
+  allCampaigns: readonly JsonObject[] = []
 ): { rows: JsonObject[]; count: number | undefined } {
   const rows = Array.isArray(payload)
     ? payload
@@ -313,12 +423,31 @@ export function decoratePromotions(
     ? payload.length
     : (payload as { count?: number | undefined })?.count;
 
+  // Chỉ xét chồng lấn giữa những chiến dịch còn sống: một chiến dịch đã kết thúc trùng
+  // danh mục với chiến dịch đang chạy không phải là vấn đề của ai cả.
+  const liveCandidates = (allCampaigns.length ? allCampaigns : rows)
+    .filter((row) => {
+      const lifecycle = promotionLifecycle(toLifecycleInput(row), now);
+      return lifecycle === "running" || lifecycle === "scheduled";
+    })
+    .map(toOverlapCandidate);
+
   return {
     rows: rows.map((row) => {
-      const input = toLifecycleInput(row);
+      const stats = voucherStats[asString(row.promo_id) || ""] || { total: 0, active: 0 };
+      const input = { ...toLifecycleInput(row), voucherCount: stats.total, activeVoucherCount: stats.active };
       const lifecycle = promotionLifecycle(input, now);
+      const warnings = promotionWarnings(input, now);
+      if (lifecycle === "running" || lifecycle === "scheduled") {
+        const overlap = overlapWarning(toOverlapCandidate(row), liveCandidates);
+        if (overlap) warnings.push(overlap);
+      }
       return {
         ...row,
+        voucher_count: stats.total,
+        active_voucher_count: stats.active,
+        // Ngân sách chỉ nhúc nhích khi có mã được dùng; không mã thì không theo dõi được.
+        budget_tracked: stats.total > 0,
         lifecycle_status: lifecycle,
         lifecycle_label: promotionLifecycleLabel(lifecycle),
         can_activate: canActivatePromotion(lifecycle),
@@ -326,7 +455,7 @@ export function decoratePromotions(
         // `budget_limit = 0` trong cơ sở dữ liệu nghĩa là không đặt trần, không phải
         // ngân sách bằng không — nói rõ ra để UI không vẽ "0đ / 0đ".
         budget_unlimited: input.budgetLimit <= 0,
-        warnings: promotionWarnings(input, now)
+        warnings
       };
     }),
     count

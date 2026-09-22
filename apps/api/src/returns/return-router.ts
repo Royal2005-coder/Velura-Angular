@@ -81,6 +81,12 @@ export async function handleReturnRoute({ req, res, url, parts, context, headers
       return true;
     }
 
+    if (req.method === "POST" && parts[5] === "resolve" && parts.length === 6) {
+      const body = await readJson(req, config.maxBodyBytes);
+      sendJson(res, 200, await service.resolveTicket(context, ticketId, body), headers);
+      return true;
+    }
+
     if (req.method === "POST" && parts[5] === "close" && parts.length === 6) {
       const body = await readJson(req, config.maxBodyBytes);
       sendJson(res, 200, await service.closeTicket(context, ticketId, body), headers);

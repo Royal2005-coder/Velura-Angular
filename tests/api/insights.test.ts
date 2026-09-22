@@ -11,6 +11,7 @@ function facts(overrides: Partial<VoiceFacts> = {}): VoiceFacts {
     returns: [],
     tickets: [],
     products: {},
+    truncated: false,
     ...overrides
   };
 }
@@ -88,4 +89,14 @@ test("insight scopes map onto RBAC modules and keep HQ on dashboard", () => {
   assert.equal(moduleForInsightScope("products"), "products");
   assert.equal(moduleForInsightScope("returns"), "returns");
   assert.equal(moduleForInsightScope("logs"), "audit_logs");
+});
+
+test("a period that overflows the read cap is reported as incomplete, not as a finished number", () => {
+  // Bốn truy vấn nguồn đều có trần. Khoảng thời gian đông hơn trần thì mọi chỉ số dẫn
+  // xuất chỉ tính trên phần lấy được — người vận hành phải biết điều đó.
+  const complete = deriveVoiceInsights(facts(), "month");
+  assert.equal(complete.truncated, false);
+
+  const partial = deriveVoiceInsights(facts({ truncated: true }), "month");
+  assert.equal(partial.truncated, true);
 });

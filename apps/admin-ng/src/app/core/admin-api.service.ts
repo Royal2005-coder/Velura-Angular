@@ -312,6 +312,8 @@ export interface AdminPriceHistoryRow {
   new_sale_price?: number;
   reason?: string;
   changed_by?: string;
+  /** Sản phẩm của dòng lịch sử, do API nhúng kèm — xem `PRICE_HISTORY_SELECT`. */
+  product?: { product_id?: string; name?: string; sku?: string } | null;
 }
 
 export interface AdminDashboardSummary {
@@ -367,7 +369,11 @@ export interface AdminDashboardSummary {
     definitions?: Record<string, string>;
     source?: string;
     samples?: { reviews?: number; csat?: number; deliveredOrders?: number };
-    reliable?: { reviews?: boolean; csat?: boolean };
+    /**
+     * `complete` bằng false nghĩa là kỳ này có nhiều dữ liệu hơn trần đọc của API, nên
+     * các chỉ số tiếng nói khách hàng chỉ tính trên một phần.
+     */
+    reliable?: { reviews?: boolean; csat?: boolean; complete?: boolean };
   };
   voice?: AdminVoiceInsights;
   board?: AdminInsightBoardModel;

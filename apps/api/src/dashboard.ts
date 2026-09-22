@@ -127,7 +127,11 @@ export function dashboardProvenance(olapUsed: boolean, voice: VoiceInsights | nu
     samples: { reviews, csat, deliveredOrders },
     reliable: {
       reviews: reviews >= DASHBOARD_MIN_REVIEW_SAMPLE,
-      csat: csat >= DASHBOARD_MIN_CSAT_SAMPLE
+      csat: csat >= DASHBOARD_MIN_CSAT_SAMPLE,
+      // Kỳ có nhiều dữ liệu hơn trần đọc thì mọi chỉ số tiếng nói khách hàng ở trên
+      // chỉ tính trên một phần. Nói ra ở đây để giao diện không trình bày một con số
+      // thiếu như thể là đủ.
+      complete: !voice?.truncated
     }
   };
 }

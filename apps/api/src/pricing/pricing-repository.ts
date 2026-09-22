@@ -43,7 +43,68 @@ export function createPricingRepository() {
         offset: filters.offset
       };
       if (filters.isActive !== undefined) query.is_active = `eq.${filters.isActive}`;
+      // Lọc theo loại chiến dịch, dùng cho tab Combo trên màn khuyến mãi.
+      if (filters.type) query.promo_type = `eq.${filters.type}`;
       return selectRows("promotion", query, authOptions(accessToken));
+    },
+
+    /**
+     * Lấy các cột đủ để tính vòng đời và ngân sách của TOÀN BỘ chiến dịch.
+     *
+     * Các chỉ số ở đầu trang Khuyến mãi — đang chạy, tạm dừng, tổng ngân sách, đã phát
+     * ra — trước đây được cộng trên `rows` của trang hiện tại, tức trên đúng 10 bản
+     * ghi. Sang trang 2 là bốn con số đổi hết, và với hơn 10 chiến dịch thì không con
+     * số nào đúng. Truy vấn này chỉ lấy 6 cột nên nhẹ hơn hẳn việc tải cả danh sách.
+     */
+    async summarizePromotions(accessToken: string | null) {
+      return selectRows("promotion", {
+        // `promo_name` và `applicable_categories` cũng có ở đây vì cùng truy vấn này
+        // dùng để phát hiện chiến dịch chồng lấn — xem `overlapWarning`.
+        select: "promo_id,promo_name,applicable_categories,start_date,end_date,is_active,paused_at,budget_limit,total_discount_issued",
+        limit: 1000
+      }, { ...authOptions(accessToken), count: "exact" });
+    },
+
+    /**
+     * Đếm số mã còn hiệu lực trên toàn hệ thống.
+     */
+    async countActiveVouchers(accessToken: string | null) {
+      return selectRows("voucher", {
+        select: "voucher_id",
+        is_active: "eq.true",
+        limit: 1
+      }, authOptions(accessToken));
+    },
+
+    /**
+     * Đếm số mã của từng chiến dịch, tách riêng số mã còn hiệu lực.
+     *
+     * Ngân sách chiến dịch chỉ tăng khi có người dùng mã của nó
+     * (`velura_record_voucher_redemption`). Chiến dịch chưa phát mã nào thì cột ngân
+     * sách vĩnh viễn đứng yên — hiện thanh tiến độ ở đó là nói dối người vận hành rằng
+     * hệ thống đang theo dõi. Đếm ở đây để nói đúng thực tế.
+     */
+    async countVouchersByPromotion(
+      promoIds: readonly string[],
+      accessToken: string | null
+    ): Promise<Record<string, { total: number; active: number }>> {
+      if (!promoIds.length) return {};
+      const result = await selectRows("voucher", {
+        select: "promo_id,is_active",
+        promo_id: `in.(${promoIds.join(",")})`,
+        limit: 1000
+      }, { ...authOptions(accessToken), count: "none" });
+
+      const stats: Record<string, { total: number; active: number }> = {};
+      for (const row of result.rows || []) {
+        const promoId = asString(row.promo_id);
+        if (!promoId) continue;
+        const entry = stats[promoId] || { total: 0, active: 0 };
+        entry.total += 1;
+        if (row.is_active !== false) entry.active += 1;
+        stats[promoId] = entry;
+      }
+      return stats;
     },
 
     async getPromotion(promotionId: string, accessToken: string | null) {

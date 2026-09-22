@@ -29,7 +29,7 @@
   </section>
   <section class="admin-card admin-card--flush">
     <div class="admin-tabs" role="tablist">
-      <button class="admin-tab" [class.admin-tab--active]="tab() === 'all'" type="button" (click)="setTab('all')">Tất cả đánh giá <span>{{ rows().length }}</span></button>
+      <button class="admin-tab" [class.admin-tab--active]="tab() === 'all'" type="button" (click)="setTab('all')">Tất cả đánh giá <span>{{ total() }}</span></button>
       <button class="admin-tab" [class.admin-tab--active]="tab() === 'pending'" type="button" (click)="setTab('pending')">Chờ duyệt <span>{{ pendingCount() }}</span></button>
       <button class="admin-tab" [class.admin-tab--active]="tab() === 'urgent'" type="button" (click)="setTab('urgent')">Cần xử lý gấp <span>{{ urgentCount() }}</span></button>
       <button class="admin-tab" [class.admin-tab--active]="tab() === 'processed'" type="button" (click)="setTab('processed')">Đã xử lý <span>{{ processedCount() }}</span></button>

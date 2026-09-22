@@ -1,8 +1,11 @@
 import { Component, computed, inject, signal } from '@angular/core';
+import { forkJoin, of } from 'rxjs';
+import { catchError } from 'rxjs/operators';
 import { AdminApiService, AdminAuditRow, AdminReviewRow } from '../../core/admin-api.service';
 import { adminDateTime, adminStars } from '../../core/admin-format';
 import { adminErrorMessage, adminListCount, adminListRows, adminOffset, adminRangeLabel } from '../../core/admin-http';
 import { AdminSessionService } from '../../core/admin-session.service';
+import { REVIEW_STATUS_LABELS, statusLabelFrom } from '../../core/admin-status-labels';
 import { AdminEmptyState } from '../../shared/admin-empty-state';
 import { AdminIcon } from '../../shared/admin-icon';
 import { AdminPagination } from '../../shared/admin-pagination';
@@ -10,12 +13,8 @@ import { AdminPagination } from '../../shared/admin-pagination';
 type ReviewTab = 'all' | 'pending' | 'urgent' | 'processed' | 'logs';
 type ReviewAction = 'approve' | 'hide' | 'unhide' | 'reply' | 'escalate' | null;
 
-const STATUS_LABELS: Record<string, string> = {
-  pending: 'Chờ duyệt',
-  approved: 'Đã duyệt',
-  rejected: 'Đã ẩn',
-  hidden: 'Đã ẩn',
-};
+/** Không có payload khi tab hiện tại không cần tới danh sách đó. */
+const EMPTY_LIST = { rows: [] as AdminReviewRow[], count: 0 };
 
 @Component({
   selector: 'app-admin-reviews-page',
@@ -47,10 +46,13 @@ export class AdminReviewsPage {
   readonly lightboxImage = signal<string | null>(null);
   readonly canMutate = computed(() => this.session.canMutate('reviews'));
 
-  readonly pendingCount = computed(() => this.rows().filter((row) => row.status === 'pending').length);
-  readonly urgentCount = computed(() => this.rows().filter((row) => row.is_flagged_urgent || Number(row.rating) <= 2).length);
-  readonly hiddenCount = computed(() => this.rows().filter((row) => row.status === 'rejected' || row.status === 'hidden').length);
-  readonly processedCount = computed(() => this.rows().filter((row) => row.status !== 'pending').length);
+  // Các con số này đếm trên toàn bộ dữ liệu, không phải trên 10 dòng của trang hiện
+  // tại. Trước đây chúng là `computed` trên `rows()`, nên ở tab "Chờ duyệt" con số
+  // "Chờ duyệt" luôn bằng đúng cỡ trang còn "Đã xử lý" luôn bằng 0.
+  readonly pendingCount = signal(0);
+  readonly urgentCount = signal(0);
+  readonly hiddenCount = signal(0);
+  readonly processedCount = signal(0);
   readonly pageCount = computed(() => Math.max(1, Math.ceil(this.total() / this.pageSize)));
   readonly paged = computed(() => this.rows());
   readonly rangeLabel = computed(() => adminRangeLabel(this.total(), this.page(), this.pageSize, 'đánh giá'));
@@ -60,6 +62,7 @@ export class AdminReviewsPage {
 
   constructor() {
     this.reload();
+    this.loadCounts();
   }
 
   /**
@@ -68,31 +71,69 @@ export class AdminReviewsPage {
   reload(): void {
     this.loading.set(true);
     this.loadError.set(null);
+
+    // Tab "Cần xử lý gấp" trước đây không đổi tham số truy vấn nào cả, nên nó hiện ra
+    // y hệt tab "Tất cả". Nay lọc thật ở phía máy chủ.
+    const tab = this.tab();
     let status = this.statusFilter();
-    if (this.tab() === 'pending') {
+    if (tab === 'pending') {
       status = 'pending';
-    } else if (this.tab() === 'processed') {
+    } else if (tab === 'processed') {
       status = 'approved';
     }
+
+    const listParams: Record<string, string> = {
+      q: this.query(),
+      rating: this.ratingFilter(),
+      status,
+      limit: String(this.pageSize),
+      offset: adminOffset(this.page(), this.pageSize),
+    };
+    if (tab === 'urgent') {
+      listParams['urgent'] = 'true';
+    }
+
+    // Mỗi KPI là một truy vấn đếm `limit=1`: máy chủ trả về tổng số qua tiêu đề count
+    // mà không phải tải dữ liệu về.
     this.api
-      .listReviews({
-        q: this.query(),
-        rating: this.ratingFilter(),
-        status,
-        limit: String(this.pageSize),
-        offset: adminOffset(this.page(), this.pageSize),
-      })
-      .subscribe({
-        next: (payload) => {
-          this.rows.set(adminListRows(payload));
-          this.total.set(adminListCount(payload));
-          this.loading.set(false);
-        },
-        error: (error: unknown) => {
+      .listReviews(listParams)
+      .pipe(
+        catchError((error: unknown) => {
           this.loadError.set(adminErrorMessage(error));
-          this.loading.set(false);
-        },
+          return of(EMPTY_LIST);
+        }),
+      )
+      .subscribe((payload) => {
+        this.rows.set(adminListRows(payload));
+        this.total.set(adminListCount(payload));
+        this.loading.set(false);
       });
+  }
+
+  /**
+   * Tải các chỉ số đầu trang.
+   *
+   * Tách khỏi `reload()` vì bấm sang trang không làm mấy con số này đổi: gọi lại chúng
+   * ở mỗi lần phân trang là bốn truy vấn thừa cho một thông tin không thay đổi. Chúng
+   * chỉ cần chạy lại khi dữ liệu thật sự đổi — lần đầu vào trang, đổi bộ lọc, và sau
+   * mỗi thao tác duyệt/ẩn.
+   */
+  loadCounts(): void {
+    const countOnly = (params: Record<string, string>) =>
+      this.api.listReviews({ ...params, limit: '1' }).pipe(catchError(() => of(EMPTY_LIST)));
+
+    forkJoin({
+      pending: countOnly({ status: 'pending' }),
+      approved: countOnly({ status: 'approved' }),
+      rejected: countOnly({ status: 'rejected' }),
+      urgent: countOnly({ urgent: 'true' }),
+    }).subscribe((payload) => {
+      this.pendingCount.set(adminListCount(payload.pending));
+      this.hiddenCount.set(adminListCount(payload.rejected));
+      this.urgentCount.set(adminListCount(payload.urgent));
+      // "Đã xử lý" là mọi đánh giá đã rời khỏi hàng chờ, gồm cả đã duyệt lẫn đã ẩn.
+      this.processedCount.set(adminListCount(payload.approved) + adminListCount(payload.rejected));
+    });
   }
 
   /**
@@ -126,6 +167,7 @@ export class AdminReviewsPage {
     this.statusFilter.set((form.elements.namedItem('status') as HTMLSelectElement | null)?.value || '');
     this.page.set(1);
     this.reload();
+    this.loadCounts();
   }
 
   /**
@@ -138,6 +180,7 @@ export class AdminReviewsPage {
     this.statusFilter.set('');
     this.page.set(1);
     this.reload();
+    this.loadCounts();
   }
 
   /**
@@ -248,6 +291,9 @@ export class AdminReviewsPage {
       next: () => {
         this.closeOverlays();
         this.reload();
+        // Duyệt hoặc ẩn một đánh giá làm đổi số liệu, nên đây là một trong số ít chỗ
+        // cần tính lại.
+        this.loadCounts();
       },
       error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
     });
@@ -285,7 +331,7 @@ export class AdminReviewsPage {
    * Status badge text.
    */
   statusLabel(status: string | undefined): string {
-    return STATUS_LABELS[status || ''] || status || '—';
+    return statusLabelFrom(REVIEW_STATUS_LABELS, status);
   }
 
   /**

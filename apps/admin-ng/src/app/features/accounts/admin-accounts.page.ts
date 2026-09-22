@@ -67,6 +67,14 @@ export class AdminAccountsPage {
   readonly lockedCount = signal(0);
   readonly unverifiedCount = signal(0);
   readonly pendingCount = signal(0);
+  /**
+   * Các chỉ số đầu trang có cần tính lại không.
+   *
+   * Bật lên ở lần tải đầu và sau mỗi thao tác tạo/khoá/mở/đổi vai trò — tức đúng
+   * những lúc con số có thể đã khác. Phân trang, đổi tab và đổi bộ lọc thì không:
+   * năm truy vấn này đếm trên toàn bộ tài khoản, không theo bộ lọc của bảng.
+   */
+  private readonly countsStale = signal(true);
   readonly requestTotal = signal(0);
   readonly logsCount = signal(0);
   readonly selected = signal<AdminAccountRow | null>(null);
@@ -124,13 +132,16 @@ export class AdminAccountsPage {
               .listAccountAuditLogs({ limit: String(this.pageSize), offset: adminOffset(this.logsPage(), this.pageSize) })
               .pipe(catchError(() => of(EMPTY_LOGS)))
           : of(EMPTY_LOGS),
-      all: this.api.listAccounts({ limit: '1' }).pipe(catchError(() => of(EMPTY_ACCOUNTS))),
-      members: this.api.listAccounts({ role: 'member', limit: '1' }).pipe(catchError(() => of(EMPTY_ACCOUNTS))),
-      admins: this.api.listAccounts({ role: 'admin', limit: '1' }).pipe(catchError(() => of(EMPTY_ACCOUNTS))),
+      // Năm truy vấn đếm chỉ chạy khi số liệu có thể đã đổi. Bấm sang trang không làm
+      // tổng số tài khoản thay đổi, nên chạy lại chúng ở mỗi lần phân trang là năm
+      // vòng gọi mạng thừa trước khi bảng kịp hiện ra.
+      all: this.countsStale() ? this.api.listAccounts({ limit: '1' }).pipe(catchError(() => of(EMPTY_ACCOUNTS))) : of(EMPTY_ACCOUNTS),
+      members: this.countsStale() ? this.api.listAccounts({ role: 'member', limit: '1' }).pipe(catchError(() => of(EMPTY_ACCOUNTS))) : of(EMPTY_ACCOUNTS),
+      admins: this.countsStale() ? this.api.listAccounts({ role: 'admin', limit: '1' }).pipe(catchError(() => of(EMPTY_ACCOUNTS))) : of(EMPTY_ACCOUNTS),
       // `lockState` thay cho `isActive=false`: tài khoản bỏ dở OTP cũng có
       // `is_active=false` nhưng không phải bị khoá, và cần đếm riêng.
-      locked: this.api.listAccounts({ lockState: 'locked', limit: '1' }).pipe(catchError(() => of(EMPTY_ACCOUNTS))),
-      unverified: this.api.listAccounts({ lockState: 'unverified', limit: '1' }).pipe(catchError(() => of(EMPTY_ACCOUNTS))),
+      locked: this.countsStale() ? this.api.listAccounts({ lockState: 'locked', limit: '1' }).pipe(catchError(() => of(EMPTY_ACCOUNTS))) : of(EMPTY_ACCOUNTS),
+      unverified: this.countsStale() ? this.api.listAccounts({ lockState: 'unverified', limit: '1' }).pipe(catchError(() => of(EMPTY_ACCOUNTS))) : of(EMPTY_ACCOUNTS),
     }).subscribe((payload) => {
       if (tab !== 'promotions' && tab !== 'logs') {
         this.rows.set(adminListRows(payload.accounts));
@@ -143,11 +154,14 @@ export class AdminAccountsPage {
         this.logs.set(adminListRows(payload.logs));
         this.logsCount.set(adminListCount(payload.logs));
       }
-      this.allCount.set(adminListCount(payload.all));
-      this.memberCount.set(adminListCount(payload.members));
-      this.adminCount.set(adminListCount(payload.admins));
-      this.lockedCount.set(adminListCount(payload.locked));
-      this.unverifiedCount.set(adminListCount(payload.unverified));
+      if (this.countsStale()) {
+        this.allCount.set(adminListCount(payload.all));
+        this.memberCount.set(adminListCount(payload.members));
+        this.adminCount.set(adminListCount(payload.admins));
+        this.lockedCount.set(adminListCount(payload.locked));
+        this.unverifiedCount.set(adminListCount(payload.unverified));
+        this.countsStale.set(false);
+      }
       this.loading.set(false);
       this.hasLoadedOnce.set(true);
     });
@@ -282,8 +296,18 @@ export class AdminAccountsPage {
     this.createError.set(null);
     this.createdAccount.set(null);
     if (created) {
-      this.reload();
+      this.reloadWithCounts();
     }
+  }
+
+  /**
+   * Tải lại bảng và tính lại các chỉ số đầu trang.
+   *
+   * Dùng sau những thao tác làm đổi số liệu; phân trang thuần thì gọi `reload()`.
+   */
+  private reloadWithCounts(): void {
+    this.countsStale.set(true);
+    this.reload();
   }
 
   /**
@@ -393,7 +417,7 @@ export class AdminAccountsPage {
     request$.subscribe({
       next: () => {
         this.closeOverlays();
-        this.reload();
+        this.reloadWithCounts();
       },
       error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
     });
@@ -422,7 +446,7 @@ export class AdminAccountsPage {
     this.api.reviewRoleRequest(row.request_id, decision, { expectedVersion: row.version, note }).subscribe({
       next: () => {
         this.closeOverlays();
-        this.reload();
+        this.reloadWithCounts();
       },
       error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
     });

@@ -6,6 +6,10 @@ import { createPricingService, validatePriceChange } from "../../apps/api/src/pr
 const PRODUCT_ID = "60000000-0000-4000-8000-000000000001";
 const PROMO_ID = "60000000-0000-4000-8000-000000000002";
 
+// Vòng đời được tính tại thời điểm chạy thật, nên các mốc phải neo vào hôm nay.
+const DAY_MS = 24 * 60 * 60 * 1000;
+const at = (offsetDays) => new Date(Date.now() + offsetDays * DAY_MS).toISOString();
+
 test("pricing operator reads production data with the caller token", async () => {
   let received;
   const service = createPricingService({ repository: {
@@ -24,8 +28,6 @@ test("promotion KPIs count every campaign, not just the page being viewed", asyn
   // nói về cả 4.
   // Vòng đời được tính tại thời điểm chạy thật, nên các mốc phải neo vào hôm nay chứ
   // không phải một ngày cố định trong lịch.
-  const day = 24 * 60 * 60 * 1000;
-  const at = (offsetDays) => new Date(Date.now() + offsetDays * day).toISOString();
   const allCampaigns = [
     { promo_id: "p1", start_date: at(-10), end_date: at(10), is_active: true, paused_at: null, budget_limit: 1000000, total_discount_issued: 400000 },
     { promo_id: "p2", start_date: at(10), end_date: at(40), is_active: true, paused_at: null, budget_limit: 500000, total_discount_issued: 0 },
@@ -148,4 +150,43 @@ test("no ceiling and a campaign under its ceiling both let the voucher through",
   // Mã không thuộc chiến dịch nào thì không có trần để xét.
   const standalone = createPricingService({ repository: { createVoucher: async (input) => input } });
   await standalone.createVoucher(context("admin_operator_gia_km"), { code: "TET6", type: "percentage" });
+});
+
+test("the campaign total comes from the exact count, not from the capped row array", async () => {
+  // Truy vấn tổng hợp có trần 1000 dòng. Nếu đếm trên mảng đã bị cắt thì tổng số chiến
+  // dịch sẽ nhỏ hơn thực tế mà không có dấu hiệu gì.
+  const rows = [
+    { promo_id: "p1", start_date: at(-10), end_date: at(10), is_active: true, paused_at: null, budget_limit: 0, total_discount_issued: 0 }
+  ];
+  const service = createPricingService({ repository: {
+    listPromotions: async () => ({ rows, count: 1500 }),
+    countVouchersByPromotion: async () => ({}),
+    // PostgREST trả về 1 dòng nhưng báo count là 1500.
+    summarizePromotions: async () => ({ rows, count: 1500 }),
+    countActiveVouchers: async () => ({ rows: [], count: 0 })
+  } });
+
+  const result = await service.listPromotions(context("admin_operator_gia_km"), new URLSearchParams("limit=1"));
+  assert.equal(result.summary.total, 1500, "tổng đọc từ count");
+  assert.equal(result.summary.truncated, true, "nói rõ phần bóc tách theo trạng thái là chưa đủ");
+  // Phần đếm theo trạng thái vẫn chỉ tính trên số dòng lấy được — đó là giới hạn thật,
+  // không phải lỗi, nên cờ `truncated` ở trên mới cần thiết.
+  assert.equal(result.summary.running, 1);
+});
+
+test("a campaign count under the cap is not reported as truncated", async () => {
+  const rows = [
+    { promo_id: "p1", start_date: at(-10), end_date: at(10), is_active: true, paused_at: null, budget_limit: 0, total_discount_issued: 0 },
+    { promo_id: "p2", start_date: at(10), end_date: at(40), is_active: true, paused_at: null, budget_limit: 0, total_discount_issued: 0 }
+  ];
+  const service = createPricingService({ repository: {
+    listPromotions: async () => ({ rows, count: 2 }),
+    countVouchersByPromotion: async () => ({}),
+    summarizePromotions: async () => ({ rows, count: 2 }),
+    countActiveVouchers: async () => ({ rows: [], count: 0 })
+  } });
+
+  const result = await service.listPromotions(context("admin_operator_gia_km"), new URLSearchParams("limit=10"));
+  assert.equal(result.summary.total, 2);
+  assert.equal(result.summary.truncated, false);
 });

@@ -1,6 +1,6 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { forkJoin, of } from 'rxjs';
-import { catchError } from 'rxjs/operators';
+import { catchError, map } from 'rxjs/operators';
 import { AdminAccountRow, AdminApiService, AdminAuditRow, AdminRoleRequestRow } from '../../core/admin-api.service';
 import { adminDateTime, adminInitials, adminWordCount } from '../../core/admin-format';
 import { adminErrorMessage, adminListCount, adminListRows, adminOffset, adminRangeLabel } from '../../core/admin-http';
@@ -135,13 +135,13 @@ export class AdminAccountsPage {
       // Năm truy vấn đếm chỉ chạy khi số liệu có thể đã đổi. Bấm sang trang không làm
       // tổng số tài khoản thay đổi, nên chạy lại chúng ở mỗi lần phân trang là năm
       // vòng gọi mạng thừa trước khi bảng kịp hiện ra.
-      all: this.countsStale() ? this.api.listAccounts({ limit: '1' }).pipe(catchError(() => of(EMPTY_ACCOUNTS))) : of(EMPTY_ACCOUNTS),
-      members: this.countsStale() ? this.api.listAccounts({ role: 'member', limit: '1' }).pipe(catchError(() => of(EMPTY_ACCOUNTS))) : of(EMPTY_ACCOUNTS),
-      admins: this.countsStale() ? this.api.listAccounts({ role: 'admin', limit: '1' }).pipe(catchError(() => of(EMPTY_ACCOUNTS))) : of(EMPTY_ACCOUNTS),
+      all: this.countQuery({}),
+      members: this.countQuery({ role: 'member' }),
+      admins: this.countQuery({ role: 'admin' }),
       // `lockState` thay cho `isActive=false`: tài khoản bỏ dở OTP cũng có
       // `is_active=false` nhưng không phải bị khoá, và cần đếm riêng.
-      locked: this.countsStale() ? this.api.listAccounts({ lockState: 'locked', limit: '1' }).pipe(catchError(() => of(EMPTY_ACCOUNTS))) : of(EMPTY_ACCOUNTS),
-      unverified: this.countsStale() ? this.api.listAccounts({ lockState: 'unverified', limit: '1' }).pipe(catchError(() => of(EMPTY_ACCOUNTS))) : of(EMPTY_ACCOUNTS),
+      locked: this.countQuery({ lockState: 'locked' }),
+      unverified: this.countQuery({ lockState: 'unverified' }),
     }).subscribe((payload) => {
       if (tab !== 'promotions' && tab !== 'logs') {
         this.rows.set(adminListRows(payload.accounts));
@@ -155,16 +155,42 @@ export class AdminAccountsPage {
         this.logsCount.set(adminListCount(payload.logs));
       }
       if (this.countsStale()) {
-        this.allCount.set(adminListCount(payload.all));
-        this.memberCount.set(adminListCount(payload.members));
-        this.adminCount.set(adminListCount(payload.admins));
-        this.lockedCount.set(adminListCount(payload.locked));
-        this.unverifiedCount.set(adminListCount(payload.unverified));
-        this.countsStale.set(false);
+        const counts = [payload.all, payload.members, payload.admins, payload.locked, payload.unverified];
+        // Chỉ ghi nhận khi cả năm truy vấn đều thành công. Một truy vấn hỏng trả về
+        // payload rỗng, ghi vào là dựng số 0 lên màn hình; đánh dấu hết cũ luôn thì con
+        // số 0 đó nằm lại cho tới lần thao tác ghi tiếp theo — có thể là rất lâu sau,
+        // hoặc không bao giờ trong phiên làm việc đó. Thà giữ nguyên số cũ và thử lại
+        // ở lần tải sau.
+        if (counts.every((entry) => entry.ok)) {
+          this.allCount.set(adminListCount(payload.all.payload));
+          this.memberCount.set(adminListCount(payload.members.payload));
+          this.adminCount.set(adminListCount(payload.admins.payload));
+          this.lockedCount.set(adminListCount(payload.locked.payload));
+          this.unverifiedCount.set(adminListCount(payload.unverified.payload));
+          this.countsStale.set(false);
+        }
       }
       this.loading.set(false);
       this.hasLoadedOnce.set(true);
     });
+  }
+
+  /**
+   * Một truy vấn đếm, kèm thông tin nó có thành công hay không.
+   *
+   * `catchError` nuốt lỗi để `forkJoin` còn hoàn tất được phần danh sách, nên nếu không
+   * kèm cờ `ok` thì phía nhận không phân biệt được "đếm được 0" với "gọi hỏng".
+   * Trả về `ok: true` mà không gọi gì khi số liệu chưa cũ — lúc đó giá trị không được
+   * dùng tới.
+   */
+  private countQuery(params: Record<string, string>) {
+    if (!this.countsStale()) {
+      return of({ ok: true, payload: EMPTY_ACCOUNTS });
+    }
+    return this.api.listAccounts({ ...params, limit: '1' }).pipe(
+      map((payload) => ({ ok: true, payload })),
+      catchError(() => of({ ok: false, payload: EMPTY_ACCOUNTS })),
+    );
   }
 
   /**

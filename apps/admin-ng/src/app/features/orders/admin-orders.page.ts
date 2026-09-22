@@ -4,7 +4,13 @@ import { catchError } from 'rxjs/operators';
 import { AdminApiService, AdminAuditRow, AdminOrderPayment, AdminOrderRow } from '../../core/admin-api.service';
 import { adminErrorMessage, adminListCount, adminListRows, adminOffset, adminRangeLabel } from '../../core/admin-http';
 import { AdminSessionService } from '../../core/admin-session.service';
-import { ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS, statusLabelFrom } from '../../core/admin-status-labels';
+import {
+  ORDER_CANCELLABLE,
+  ORDER_STATUS_LABELS,
+  ORDER_TRANSITIONS,
+  PAYMENT_STATUS_LABELS,
+  statusLabelFrom,
+} from '../../core/admin-status-labels';
 import { AdminEmptyState } from '../../shared/admin-empty-state';
 import { AdminIcon } from '../../shared/admin-icon';
 import { AdminPagination } from '../../shared/admin-pagination';
@@ -12,16 +18,6 @@ import { AdminPagination } from '../../shared/admin-pagination';
 type OrderTab = 'all' | 'attention' | 'payment' | 'cancelled' | 'logs';
 type OrderAction = 'status' | 'cancel' | 'payment' | null;
 
-const TRANSITIONS: Record<string, string[]> = {
-  pending: ['confirmed'],
-  confirmed: ['preparing'],
-  preparing: ['shipping'],
-  shipping: ['delivered', 'failed_delivery'],
-  failed_delivery: ['shipping'],
-  delivered: ['completed'],
-};
-
-const CANCELLABLE = ['pending', 'confirmed', 'preparing', 'failed_delivery'];
 
 @Component({
   selector: 'app-admin-orders-page',
@@ -58,7 +54,7 @@ export class AdminOrdersPage {
   readonly totalPages = computed(() => Math.max(1, Math.ceil(this.count() / this.pageSize)));
   readonly rangeLabel = computed(() => adminRangeLabel(this.count(), this.page(), this.pageSize, 'đơn hàng'));
   readonly pagedLogs = computed(() => this.logs());
-  readonly nextStatuses = computed(() => TRANSITIONS[this.selected()?.status || ''] || []);
+  readonly nextStatuses = computed(() => ORDER_TRANSITIONS[this.selected()?.status || ''] || []);
   readonly selectedItems = computed(() => this.selected()?.items || []);
   readonly logPageCount = computed(() => Math.max(1, Math.ceil(this.logsCount() / this.pageSize)));
   readonly logRangeLabel = computed(() => adminRangeLabel(this.logsCount(), this.logsPage(), this.pageSize, 'nhật ký'));
@@ -279,14 +275,14 @@ export class AdminOrdersPage {
    * Whether the original cancel action is allowed.
    */
   canCancel(order: AdminOrderRow): boolean {
-    return CANCELLABLE.includes(order.status || '');
+    return ORDER_CANCELLABLE.includes(order.status || '');
   }
 
   /**
    * Whether the original status action has a next step.
    */
   canChangeStatus(order: AdminOrderRow): boolean {
-    return (TRANSITIONS[order.status || ''] || []).length > 0;
+    return (ORDER_TRANSITIONS[order.status || ''] || []).length > 0;
   }
 
   /**

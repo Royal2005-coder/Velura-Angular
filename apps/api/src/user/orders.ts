@@ -28,6 +28,29 @@ interface CheckoutOtpSession {
 
 const checkoutOtpAttemptsMap = new Map<string, CheckoutOtpSession>();
 
+/**
+ * Chặn đọc một đơn hàng không thuộc về người đang đăng nhập.
+ *
+ * Điều kiện cũ là `order.user_id && profile && order.user_id !== profile.user_id`, tức
+ * chỉ chặn khi cả ba vế cùng đúng. Người chưa đăng nhập không có `profile` nên không
+ * bao giờ chạm tới nhánh chặn: ai biết mã vận đơn là đọc được họ tên, số điện thoại và
+ * địa chỉ giao của khách. Mã vận đơn lại sinh bằng
+ * `"VLR" + Date.now().toString().slice(-8)` — tám chữ số cuối của một mốc mili giây,
+ * nên với một ngày đã biết thì dải cần dò rất hẹp.
+ *
+ * KAN-37 FR-01 chốt: chỉ trả về đơn thuộc về người đang đăng nhập. Tra cứu cho khách
+ * vãng lai là tính năng riêng, phải xác thực bằng số điện thoại và OTP (KAN-37 FR-03
+ * và bản chốt ngày 20/09) — không phải là để ngỏ tuyến này.
+ */
+export function assertOrderVisibleTo(order: JsonObject, profile: UserProfile | null): void {
+  if (!profile) {
+    throw new HttpError(401, "UNAUTHORIZED", "Đăng nhập là bắt buộc để xem đơn hàng");
+  }
+  if (order.user_id !== profile.user_id) {
+    throw new HttpError(403, "FORBIDDEN", "Bạn không có quyền xem đơn hàng này");
+  }
+}
+
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
@@ -242,7 +265,7 @@ export async function handleOrdersRoute(
       try {
         profile = requireUserAuth(context);
       } catch {
-        // guest order lookup by id/tracking is allowed
+        profile = null;
       }
 
       // GET /api/user/orders/:id (Action contains the ID if present)
@@ -258,9 +281,8 @@ export async function handleOrdersRoute(
         if (!order) {
           throw new HttpError(404, "NOT_FOUND", "Không tìm thấy đơn hàng");
         }
-        if (order.user_id && profile && order.user_id !== profile.user_id) {
-          throw new HttpError(403, "FORBIDDEN", "Bạn không có quyền xem đơn hàng này");
-        }
+
+        assertOrderVisibleTo(order, profile);
         order = await autoProgressOrder(order);
         const { rows: items } = await selectRows("order_item", { order_id: `eq.${order.order_id}` });
         const itemsWithProduct = await attachProductMeta(items);

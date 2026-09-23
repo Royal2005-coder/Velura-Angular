@@ -11,14 +11,30 @@
  * thì thêm nhãn ở đây, đừng thêm vào bảng nhãn của riêng một trang.
  */
 
-/** Trạng thái đơn hàng — `order_status`. */
+/**
+ * Trạng thái đơn hàng — `order_status`.
+ *
+ * Nhãn lấy đúng theo bảng đã chốt chung giữa U4 (KAN-37, FSD mục 3.5) và A1 (KAN-59):
+ * "Đang chuẩn bị hàng", "Giao thành công", "Giao không thành công". Khách và người vận
+ * hành phải đọc cùng một chữ cho cùng một trạng thái.
+ *
+ * Đặc tả dùng bộ tám mã `pending, waiting_payment, confirmed, processing, shipping,
+ * delivered, delivery_failed, cancelled`. Cơ sở dữ liệu hiện chạy `preparing`,
+ * `failed_delivery` và `completed`, chưa có `waiting_payment`. Đổi tên mã là thay đổi
+ * phá vỡ xuyên enum, API và cả hai frontend trên dữ liệu đang chạy, và KAN-63 còn ở
+ * trạng thái chờ phê duyệt sáu quyết định mở — nên chưa đổi. Bảng này khai cả hai bộ
+ * để nhãn đúng dù dữ liệu trả về mã nào.
+ */
 export const ORDER_STATUS_LABELS: Readonly<Record<string, string>> = {
   pending: 'Chờ xác nhận',
+  waiting_payment: 'Chờ thanh toán',
   confirmed: 'Đã xác nhận',
-  preparing: 'Đang chuẩn bị',
-  shipping: 'Đang giao',
-  delivered: 'Đã giao',
-  failed_delivery: 'Giao thất bại',
+  preparing: 'Đang chuẩn bị hàng',
+  processing: 'Đang chuẩn bị hàng',
+  shipping: 'Đang giao hàng',
+  delivered: 'Giao thành công',
+  failed_delivery: 'Giao không thành công',
+  delivery_failed: 'Giao không thành công',
   cancelled: 'Đã hủy',
   completed: 'Hoàn thành',
 };

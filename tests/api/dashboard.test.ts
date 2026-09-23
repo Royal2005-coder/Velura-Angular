@@ -86,3 +86,20 @@ test("dashboard provenance refuses to treat a single review or CSAT as reliable"
   assert.equal(enough.reliable.reviews, true);
   assert.equal(enough.reliable.csat, true);
 });
+
+test("provenance marks the period incomplete when the source rows were capped", () => {
+  const voice = { productReaction: { reviewCount: 40 }, serviceQuality: { csatCount: 25 }, coverage: { deliveredOrders: 100 }, truncated: true };
+  const capped = dashboardProvenance(false, voice);
+  assert.equal(capped.reliable.complete, false);
+  // Cỡ mẫu vẫn đủ lớn để tin được từng chỉ số riêng lẻ; hai chuyện khác nhau.
+  assert.equal(capped.reliable.reviews, true);
+  assert.equal(capped.reliable.csat, true);
+
+  const whole = dashboardProvenance(false, { ...voice, truncated: false });
+  assert.equal(whole.reliable.complete, true);
+});
+
+test("provenance treats a missing voice payload as complete rather than as truncated", () => {
+  // Không có dữ liệu tiếng nói khách hàng là một chuyện; có nhưng bị cắt là chuyện khác.
+  assert.equal(dashboardProvenance(false, null).reliable.complete, true);
+});

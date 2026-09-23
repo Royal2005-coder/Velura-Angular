@@ -14,6 +14,7 @@ import {
 import { AdminEmptyState } from '../../shared/admin-empty-state';
 import { AdminIcon } from '../../shared/admin-icon';
 import { AdminPagination } from '../../shared/admin-pagination';
+import { AdminTableSkeleton } from '../../shared/admin-table-skeleton';
 
 type OrderTab = 'all' | 'attention' | 'payment' | 'cancelled' | 'logs';
 type OrderAction = 'status' | 'cancel' | 'payment' | null;
@@ -21,7 +22,7 @@ type OrderAction = 'status' | 'cancel' | 'payment' | null;
 
 @Component({
   selector: 'app-admin-orders-page',
-  imports: [AdminEmptyState, AdminIcon, AdminPagination],
+  imports: [AdminEmptyState, AdminIcon, AdminPagination, AdminTableSkeleton],
   templateUrl: './admin-orders.page.html',
 })
 export class AdminOrdersPage {
@@ -40,6 +41,14 @@ export class AdminOrdersPage {
   readonly paymentErrorCount = signal(0);
   readonly loadError = signal<string | null>(null);
   readonly loading = signal(true);
+  /**
+   * Khung xương chỉ hiện ở lần tải đầu. Từ lần sau, bảng cũ vẫn ở nguyên chỗ và
+   * chỉ mờ đi — thay cả bảng bằng khung xương ở mỗi lần lọc hay sang trang là bắt
+   * người vận hành mất chỗ đang nhìn.
+   */
+  readonly hasLoadedOnce = signal(false);
+  readonly showSkeleton = computed(() => this.loading() && !this.hasLoadedOnce());
+  readonly isRefreshing = computed(() => this.loading() && this.hasLoadedOnce());
   readonly page = signal(1);
   readonly pageSize = 10;
   readonly selected = signal<AdminOrderRow | null>(null);
@@ -112,6 +121,7 @@ export class AdminOrdersPage {
         this.count.set(tab === 'payment' ? this.rows().length : adminListCount(payload));
         this.paymentErrorCount.set(rows.filter((row) => this.isPaymentError(row)).length);
         this.loading.set(false);
+        this.hasLoadedOnce.set(true);
       });
     this.api.listOrders({ status: 'pending', limit: '1' }).subscribe({
       next: (payload) => this.pendingCount.set(adminListCount(payload)),

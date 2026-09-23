@@ -5,6 +5,16 @@ import { asJsonObject, asString, type JsonObject } from "../types.js";
 import { PRICE_HISTORY_SELECT, PROMOTION_SELECT, VOUCHER_SELECT } from "./pricing-constants.js";
 
 /**
+ * Số chiến dịch tối đa kéo về để tính chỉ số tổng hợp và phát hiện chồng lấn.
+ *
+ * Một truy vấn không có trần là một truy vấn sẽ đổ sập vào một ngày nào đó. Tổng số
+ * chiến dịch vẫn luôn đúng vì đọc từ `count` của PostgREST; chỉ phần bóc tách theo
+ * trạng thái là giới hạn trong khoảng này, và tầng dịch vụ nói rõ điều đó qua cờ
+ * `truncated`.
+ */
+export const PROMOTION_SUMMARY_CAP = 1000;
+
+/**
  * PostgREST pricing repository used by `createPricingService`.
  */
 export type PricingRepository = ReturnType<typeof createPricingRepository>;
@@ -51,6 +61,11 @@ export function createPricingRepository() {
     /**
      * Lấy các cột đủ để tính vòng đời và ngân sách của TOÀN BỘ chiến dịch.
      *
+     * Trần `PROMOTION_SUMMARY_CAP` là giới hạn thật: quá số đó thì phần đếm theo trạng
+     * thái và phần phát hiện chồng lấn chỉ xét trong khoảng đã lấy. `count` trả về từ
+     * PostgREST vẫn là con số đúng nên tổng số chiến dịch không bao giờ sai; tầng dịch
+     * vụ dùng `count` cho tổng và báo `truncated` khi vượt trần.
+     *
      * Các chỉ số ở đầu trang Khuyến mãi — đang chạy, tạm dừng, tổng ngân sách, đã phát
      * ra — trước đây được cộng trên `rows` của trang hiện tại, tức trên đúng 10 bản
      * ghi. Sang trang 2 là bốn con số đổi hết, và với hơn 10 chiến dịch thì không con
@@ -61,7 +76,11 @@ export function createPricingRepository() {
         // `promo_name` và `applicable_categories` cũng có ở đây vì cùng truy vấn này
         // dùng để phát hiện chiến dịch chồng lấn — xem `overlapWarning`.
         select: "promo_id,promo_name,applicable_categories,start_date,end_date,is_active,paused_at,budget_limit,total_discount_issued",
-        limit: 1000
+        // Sắp xếp để việc cắt ở `limit` là xác định: không có `order` thì PostgREST
+        // trả về 1000 dòng nào là chuyện của bộ tối ưu, và mỗi lần tải lại có thể ra
+        // một tập khác.
+        order: "start_date.desc",
+        limit: PROMOTION_SUMMARY_CAP
       }, { ...authOptions(accessToken), count: "exact" });
     },
 

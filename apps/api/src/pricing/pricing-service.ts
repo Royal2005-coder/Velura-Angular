@@ -347,7 +347,14 @@ export function validatePromotionSchedule(body: JsonObject): void {
  * Chỉ số tổng hợp của toàn bộ chiến dịch, không phụ thuộc vào trang đang xem.
  */
 export interface PromotionSummary {
+  /** Tổng số chiến dịch — đọc từ `count` của PostgREST nên luôn đúng. */
   total: number;
+  /**
+   * Phần bóc tách theo trạng thái chỉ xét được trong số chiến dịch đã kéo về. Cờ này
+   * bật khi tổng vượt trần, để giao diện không trình bày một con số thiếu như thể là
+   * đủ.
+   */
+  truncated: boolean;
   running: number;
   scheduled: number;
   paused: number;
@@ -376,8 +383,14 @@ export function summarizePromotionRows(
     ? (payload as { rows: JsonObject[] }).rows
     : [];
 
+  // Tổng lấy từ `count` chứ không từ `rows.length`: truy vấn có trần nên `rows` có thể
+  // ngắn hơn thực tế, và đếm trên nó sẽ cho ra một con số nhỏ hơn mà không báo gì.
+  const exactTotal = (payload as { count?: number | undefined })?.count;
+  const total = typeof exactTotal === "number" ? exactTotal : rows.length;
+
   const summary: PromotionSummary = {
-    total: rows.length,
+    total,
+    truncated: total > rows.length,
     running: 0,
     scheduled: 0,
     paused: 0,

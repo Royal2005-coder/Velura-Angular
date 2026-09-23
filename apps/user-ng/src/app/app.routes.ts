@@ -154,8 +154,8 @@ export const routes: Routes = [
       },
       {
         path: 'checkout/payment',
-        loadComponent: () => import('./features/checkout/otp.page').then((m) => m.CheckoutOtpPage),
-        title: 'Xác nhận OTP',
+        pathMatch: 'full',
+        redirectTo: '/checkout/shipping',
       },
       {
         path: 'checkout/otp',

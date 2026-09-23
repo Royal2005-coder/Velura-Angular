@@ -3,7 +3,7 @@ import { RouterLink } from '@angular/router';
 import { catchError, of } from 'rxjs';
 import { ApiService } from '../../core/services/api.service';
 import { useBodyClass } from '../../core/utils/body-class';
-import { isReturnableOrder } from './return-window';
+import { isReturnableOrder, returnReasonText } from './return-window';
 import { orderStatusLabel } from './order-status';
 
 interface ReturnLine {
@@ -137,7 +137,7 @@ export class AccountReturnsPage {
     }
     this.submitting.set(true);
     this.formError.set(null);
-    const note = [this.reason(), this.description().trim()].filter(Boolean).join('. ');
+    const note = [returnReasonText(this.reason()), this.description().trim()].filter(Boolean).join('. ');
     this.api
       .post<{ success?: boolean }>('/api/user/returns', {
         order_id: order.order_id,

@@ -16,4 +16,12 @@ describe('AdminReturnsPage', () => {
     expect(page.zone()).toBe('returns');
     expect(page.canLookupOrders()).toBe(false);
   });
+
+  it('shows the customer return type instead of an empty request column', async () => {
+    const page = await createAdminPage(AdminReturnsPage);
+    expect(page.returnKind({ return_id: '1', return_type: 'refund' })).toBe('Hoàn tiền');
+    expect(page.returnKind({ return_id: '2', return_type: 'exchange' })).toBe('Đổi hàng');
+    expect(page.showReturnAction({ return_id: '1', return_type: 'refund' }, 'refund')).toBe(true);
+    expect(page.showReturnAction({ return_id: '1', return_type: 'refund' }, 'exchange')).toBe(false);
+  });
 });

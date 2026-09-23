@@ -47,6 +47,13 @@ export class AdminPromotionsPage {
   readonly promoCount = signal(0);
   readonly voucherCount = signal(0);
   readonly canMutate = computed(() => this.session.canMutate('promotions'));
+  readonly voucherCode = signal('');
+  readonly voucherName = signal('');
+  readonly voucherTypeDraft = signal('fixed_amount');
+  readonly voucherValueDraft = signal(0);
+  readonly voucherMinOrder = signal(0);
+  readonly voucherAudienceDraft = signal('all_users');
+  readonly savingVoucher = signal(false);
   readonly stats = signal<AdminPricingStatistics | null>(null);
   readonly statsLoading = signal(false);
   readonly statsError = signal<string | null>(null);
@@ -345,6 +352,70 @@ export class AdminPromotionsPage {
   /**
    * Voucher type label used by the original table.
    */
+  /**
+   * Text from a form control in the voucher issue form.
+   */
+  readInput(event: Event): string {
+    return (event.target as HTMLInputElement).value;
+  }
+
+  /**
+   * Number from a form control in the voucher issue form.
+   */
+  readNumber(event: Event): number {
+    return Number((event.target as HTMLInputElement).value) || 0;
+  }
+
+  /**
+   * Who may use the code at checkout: guests, members, or both.
+   */
+  voucherAudience(row: AdminVoucherRow): string {
+    const group = row.applicable_user_group || 'all_users';
+    if (group === 'guest') {
+      return 'Khách vãng lai';
+    }
+    if (group === 'all_users') {
+      return 'Mọi khách';
+    }
+    return 'Thành viên';
+  }
+
+  /**
+   * Publishes one voucher the shared quote can rank for that audience.
+   */
+  createVoucher(): void {
+    const code = this.voucherCode().trim();
+    if (!code || this.savingVoucher()) {
+      return;
+    }
+    const start = new Date();
+    const end = new Date(start.getTime() + 30 * 24 * 60 * 60 * 1000);
+    this.savingVoucher.set(true);
+    this.api
+      .createVoucher({
+        code,
+        name: this.voucherName().trim() || code,
+        type: this.voucherTypeDraft(),
+        value: Number(this.voucherValueDraft()),
+        minOrderValue: Number(this.voucherMinOrder()),
+        applicableUserGroup: this.voucherAudienceDraft(),
+        startDate: start.toISOString(),
+        endDate: end.toISOString(),
+      })
+      .subscribe({
+        next: () => {
+          this.savingVoucher.set(false);
+          this.voucherCode.set('');
+          this.voucherName.set('');
+          this.reload();
+        },
+        error: (error: unknown) => {
+          this.savingVoucher.set(false);
+          this.loadError.set(adminErrorMessage(error));
+        },
+      });
+  }
+
   voucherType(row: AdminVoucherRow): string {
     const type = row.discount_type || row.type || '';
     if (type === 'percentage') {

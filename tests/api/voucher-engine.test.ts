@@ -88,6 +88,20 @@ test("discount never exceeds the order value", () => {
   assert.equal(discount, 200000);
 });
 
+test("guest codes and member codes stay in separate sets", () => {
+  const guestCode = voucher({ voucher_id: "g", code: "GUEST", applicable_user_group: "guest", discount_type: "fixed_amount", discount_value: 20000 });
+  const memberCode = voucher({ voucher_id: "m", code: "MEMBER", applicable_user_group: "member", discount_type: "fixed_amount", discount_value: 50000 });
+  const shared = voucher({ voucher_id: "a", code: "ALL", applicable_user_group: "all_users", discount_type: "fixed_amount", discount_value: 10000 });
+
+  const asGuest = evaluateVouchers([guestCode, memberCode, shared], context({ isMember: false }));
+  assert.equal(pickBestVoucher(asGuest)?.code, "GUEST");
+  assert.equal(asGuest.find((item) => item.code === "MEMBER")?.reason, "GROUP_MISMATCH");
+
+  const asMember = evaluateVouchers([guestCode, memberCode, shared], context({ isMember: true, isFirstOrder: false }));
+  assert.equal(pickBestVoucher(asMember)?.code, "MEMBER");
+  assert.equal(asMember.find((item) => item.code === "GUEST")?.reason, "GROUP_MISMATCH");
+});
+
 test("best voucher is chosen by real money saved, not by headline percentage", () => {
   // Giam 30% nhung tran 10.000d phai THUA giam thang 15.000d.
   const percentCapped = voucher({

@@ -1,3 +1,4 @@
+import { returnWindowOpen } from "./return-window.js";
 import { HttpError, readJson, sendJson } from "../http.js";
 import { selectOne, selectRows, insertRow, updateRows } from "../supabase.js";
 import { requireUserAuth } from "./auth.js";
@@ -210,12 +211,9 @@ export async function handleReturnsRoute(
       throw new HttpError(400, "BAD_REQUEST", "Đơn hàng phải hoàn thành mới được yêu cầu đổi trả");
     }
 
-    // RET-01 Time Check (2 days / 48 hours)
     const deliveryDate = order.delivered_at ? new Date(String(order.delivered_at)) : new Date(String(order.updated_at || order.created_at));
-    const now = new Date();
-    const diffHours = (now.getTime() - deliveryDate.getTime()) / (1000 * 60 * 60);
-    if (diffHours > 48) {
-      throw new HttpError(400, "BAD_REQUEST", "Quá thời hạn đổi/trả (2 ngày)");
+    if (!returnWindowOpen(deliveryDate, new Date())) {
+      throw new HttpError(400, "RETURN_WINDOW_CLOSED", "Quá thời hạn đổi/trả (30 ngày kể từ khi giao hàng)");
     }
 
     // Perform category and quantity validation

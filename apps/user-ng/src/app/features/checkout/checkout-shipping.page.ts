@@ -222,8 +222,12 @@ export class CheckoutShippingPage {
     const phone = this.phone().trim();
     const email = this.email().trim();
     const address = this.composeAddress();
-    if (!name || !phone || !address) {
-      showToast('Vui lòng điền đầy đủ Họ tên, Số điện thoại và Địa chỉ giao hàng!');
+    if (!name || !phone || !address || (!this.auth.isLoggedIn() && !email)) {
+      showToast('Vui lòng điền đầy đủ Họ tên, Số điện thoại, Email và Địa chỉ giao hàng!');
+      return;
+    }
+    if (!this.auth.isLoggedIn() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      showToast('Email không hợp lệ. Mã OTP được gửi tới email, không gửi qua số điện thoại.');
       return;
     }
     if (!/^0\d{9}$/.test(phone.replace(/\s/g, ''))) {

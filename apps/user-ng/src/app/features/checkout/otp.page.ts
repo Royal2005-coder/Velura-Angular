@@ -38,6 +38,9 @@ export class CheckoutOtpPage {
   readonly seconds = signal(300);
   readonly errorMessage = signal<string | null>(null);
   readonly submitting = signal(false);
+  readonly resending = signal(false);
+  readonly maskedEmail = signal(this.readMaskedEmail());
+  readonly devBypass = signal(false);
   readonly items = computed(() => this.checkout.readCheckoutItems());
   readonly totalLabel = computed(() => {
     const total = this.items().reduce((sum, line) => sum + line.unit_price * line.quantity, 0);
@@ -71,28 +74,52 @@ export class CheckoutOtpPage {
    * Resends the original guest checkout OTP.
    */
   resend(): void {
+    if (this.resending()) {
+      return;
+    }
     const payload = this.checkout.readGuestPayload();
     if (!payload) {
       showToast('Thông tin đặt hàng không hợp lệ. Vui lòng thử lại từ đầu.');
       return;
     }
+    this.resending.set(true);
     this.api
-      .post<{ success?: boolean }>('/api/user/orders/otp-send', {
+      .post<{ success?: boolean; masked_email?: string; dev_bypass?: boolean }>('/api/user/orders/otp-send', {
         phone: payload['phone'],
         email: payload['email'] || '',
         full_name: payload['shipping_name'],
       })
       .subscribe({
         next: (res) => {
+          this.resending.set(false);
           if (res.success) {
             this.seconds.set(300);
-            showToast('Mã OTP mới đã được gửi thành công!');
+            if (res.masked_email) {
+              this.maskedEmail.set(res.masked_email);
+            }
+            this.devBypass.set(res.dev_bypass === true);
+            showToast('Mã OTP mới đã được gửi tới email.');
           } else {
             showToast('Không thể gửi lại mã OTP. Vui lòng thử lại!');
           }
         },
-        error: (error: Error) => showToast(error.message || 'Lỗi gửi lại mã OTP'),
+        error: (error: Error) => {
+          this.resending.set(false);
+          showToast(error.message || 'Lỗi gửi lại mã OTP');
+        },
       });
+  }
+
+  /**
+   * Mailbox shown on the OTP dialog. Empty until the guest payload has an email.
+   */
+  private readMaskedEmail(): string {
+    const email = String(this.checkout.readGuestPayload()?.['email'] || '').trim();
+    const at = email.indexOf('@');
+    if (at < 1) {
+      return '';
+    }
+    return `${email.slice(0, 1)}***${email.slice(at)}`;
   }
 
   /**

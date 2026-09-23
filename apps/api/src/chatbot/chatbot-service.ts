@@ -917,7 +917,7 @@ export function createFallbackReply(message: unknown, products: JsonObject[] = [
 
   const isPolicyQuery = /(đổi trả|return|bảo hành|chính sách|policy|quy định|điều khoản)/i.test(text);
   if (isPolicyQuery) {
-    return "Chính sách đổi trả Velura: khách hàng cần gửi yêu cầu trong vòng tối đa 2 ngày (48 giờ) kể từ lúc đơn hàng cập nhật trạng thái \"Đã giao thành công\". Sản phẩm phải chưa qua sử dụng, còn nguyên tem mác, nhãn barcode và bao bì đóng gói gốc của Velura. Hoàn tiền được xử lý trong 4 - 5 ngày làm việc sau khi hàng về kho đạt tiêu chuẩn kiểm tra.";
+    return "Chính sách đổi trả Velura: khách hàng cần gửi yêu cầu trong vòng 30 ngày kể từ lúc đơn hàng cập nhật trạng thái \"Đã giao thành công\". Sản phẩm phải chưa qua sử dụng, còn nguyên tem mác, nhãn barcode và bao bì đóng gói gốc của Velura. Hoàn tiền được xử lý trong 4 - 5 ngày làm việc sau khi hàng về kho đạt tiêu chuẩn kiểm tra.";
   }
 
   const isShippingQuery = /(phí ship|phí vận chuyển|miễn phí|free ship|giao mất bao lâu|thời gian giao)/i.test(text);

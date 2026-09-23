@@ -165,6 +165,10 @@ export function createPricingService({ repository }: { repository: PricingReposi
       requirePricingAdmin(context);
       if (!body?.code) throw new HttpError(422, "VALIDATION_ERROR", "Code required");
       if (!VOUCHER_TYPES.includes(body?.type as string)) throw new HttpError(422, "VALIDATION_ERROR", "Invalid voucher type");
+      const audience = String(body.applicableUserGroup || "all_users");
+      if (!["guest", "member", "all_users", "new_user", "loyal_user", "churn_risk_user"].includes(audience)) {
+        throw new HttpError(422, "VALIDATION_ERROR", "Đối tượng mã phải là khách vãng lai, thành viên hoặc mọi khách");
+      }
 
       // `max_vouchers_allowed` được ghi lúc tạo chiến dịch rồi chưa bao giờ có ai đọc:
       // admin đặt trần "chiến dịch này phát tối đa 50 mã" và hệ thống vẫn cho phát mã

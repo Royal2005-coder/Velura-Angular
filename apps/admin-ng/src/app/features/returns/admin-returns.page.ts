@@ -359,6 +359,28 @@ export class AdminReturnsPage {
   }
 
   /**
+   * What the customer asked for. The API stores `return_type`, not `request_type`.
+   */
+  returnKind(row: AdminReturnRow): string {
+    const type = row.return_type || row.request_type;
+    if (type === 'refund') {
+      return 'Hoàn tiền';
+    }
+    if (type === 'exchange') {
+      return 'Đổi hàng';
+    }
+    return type || '—';
+  }
+
+  /**
+   * Pending actions that match the customer's request. Reject stays available.
+   */
+  showReturnAction(row: AdminReturnRow, type: 'refund' | 'exchange'): boolean {
+    const asked = row.return_type || row.request_type;
+    return !asked || asked === type;
+  }
+
+  /**
    * Opens a return or ticket action modal.
    */
   openReturnAction(type: 'refund' | 'exchange' | 'reject', returnId: string): void {

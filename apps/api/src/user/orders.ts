@@ -203,7 +203,7 @@ export async function autoProgressOrder(order: JsonObject): Promise<JsonObject> 
           "order_status",
           title,
           content,
-          `/src/pages/account/order-detail.html?id=${order.order_id}`
+          `/account/orders/${order.order_id}`
         );
       }
     } catch (e: unknown) {
@@ -405,7 +405,7 @@ export async function handleOrdersRoute(
             "order_status",
             `Đơn hàng #${displayTracking} đã bị hủy ❌`,
             `Đơn hàng đã bị hủy thành công. Lý do: ${updateData.cancelled_reason}.`,
-            `/src/pages/account/order-detail.html?id=${updatedOrder.order_id}`
+            `/account/orders/${updatedOrder.order_id}`
           );
         } else {
           let title = `Cập nhật đơn hàng #${displayTracking}`;
@@ -422,7 +422,7 @@ export async function handleOrdersRoute(
             "order_status",
             title,
             content,
-            `/src/pages/account/order-detail.html?id=${updatedOrder.order_id}`
+            `/account/orders/${updatedOrder.order_id}`
           );
         }
       }
@@ -774,7 +774,7 @@ export async function handleOrdersRoute(
         "order_status",
         `Đơn hàng #${trackingCode} đã được đặt thành công ✅`,
         "Cảm ơn bạn đã mua sắm tại Velura. Đơn hàng của bạn đang được xử lý.",
-        `/src/pages/account/order-detail.html?id=${newOrder.order_id}`
+        `/account/orders/${newOrder.order_id}`
       );
       
       const token = signJwt({ user_id: guestUser.user_id, email: guestUser.email || `${phone}@velura.vn`, role: "member" });
@@ -849,7 +849,7 @@ export async function handleOrdersRoute(
             "order_status",
             `Thanh toán đơn hàng #${displayTracking} thành công 💳`,
             "Chúng tôi đã nhận được thanh toán cho đơn hàng của bạn. Đơn hàng đang chuẩn bị được đóng gói.",
-            `/src/pages/account/order-detail.html?id=${order_id}`
+            `/account/orders/${order_id}`
           );
         }
         
@@ -1025,7 +1025,7 @@ export async function handleOrdersRoute(
         "order_status",
         `Đơn hàng #${trackingCode} đã được đặt thành công ✅`,
         "Cảm ơn bạn đã mua sắm tại Velura. Đơn hàng của bạn đang được xử lý.",
-        `/src/pages/account/order-detail.html?id=${newOrder.order_id}`
+        `/account/orders/${newOrder.order_id}`
       );
 
       return sendJson(res, 200, {

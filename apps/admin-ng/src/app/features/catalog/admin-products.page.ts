@@ -16,6 +16,7 @@ import { AdminSessionService } from '../../core/admin-session.service';
 import { AdminEmptyState } from '../../shared/admin-empty-state';
 import { AdminIcon } from '../../shared/admin-icon';
 import { AdminPagination } from '../../shared/admin-pagination';
+import { AdminTableSkeleton } from '../../shared/admin-table-skeleton';
 
 type ProductTab = 'catalog' | 'csv' | 'logs';
 type ProductOverlay = 'create' | 'edit' | 'status' | 'stock' | null;
@@ -59,7 +60,7 @@ interface CsvPreviewResult {
  */
 @Component({
   selector: 'app-admin-products-page',
-  imports: [AdminEmptyState, AdminIcon, AdminPagination, RouterLink],
+  imports: [AdminEmptyState, AdminIcon, AdminPagination, RouterLink, AdminTableSkeleton],
   templateUrl: './admin-products.page.html',
 })
 export class AdminProductsPage {
@@ -81,6 +82,14 @@ export class AdminProductsPage {
   readonly page = signal(1);
   readonly pageSize = 10;
   readonly loading = signal(true);
+  /**
+   * Khung xương chỉ hiện ở lần tải đầu. Từ lần sau, bảng cũ vẫn ở nguyên chỗ và
+   * chỉ mờ đi — thay cả bảng bằng khung xương ở mỗi lần lọc hay sang trang là bắt
+   * người vận hành mất chỗ đang nhìn.
+   */
+  readonly hasLoadedOnce = signal(false);
+  readonly showSkeleton = computed(() => this.loading() && !this.hasLoadedOnce());
+  readonly isRefreshing = computed(() => this.loading() && this.hasLoadedOnce());
   readonly loadError = signal<string | null>(null);
   readonly csvMessage = signal('Chưa có file được kiểm tra.');
   readonly csvPreview = signal('');
@@ -686,6 +695,7 @@ export class AdminProductsPage {
       this.outOfStock.set(adminListCount(payload.out));
       this.lowStockCount.set(adminListRows(payload.low).length);
       this.loading.set(false);
+        this.hasLoadedOnce.set(true);
     });
   }
 

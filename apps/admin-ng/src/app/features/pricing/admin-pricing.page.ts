@@ -21,7 +21,6 @@ export class AdminPricingPage {
   private readonly route = inject(ActivatedRoute);
 
   readonly products = signal<AdminProductRow[]>([]);
-  readonly allProducts = signal<AdminProductRow[]>([]);
   readonly history = signal<AdminPriceHistoryRow[]>([]);
   readonly query = signal('');
   readonly category = signal('');
@@ -91,11 +90,6 @@ export class AdminPricingPage {
   readonly previewInvalid = computed(() => this.previewSale() > this.previewBase());
   readonly productMap = computed(() => {
     const map = new Map<string, AdminProductRow>();
-    // Price history can reference any product ever sold, not just the current
-    // paginated page, so the map is built from the full catalog fetched once below.
-    for (const product of this.allProducts()) {
-      map.set(product.product_id, product);
-    }
     for (const product of this.products()) {
       map.set(product.product_id, product);
     }
@@ -135,11 +129,6 @@ export class AdminPricingPage {
       });
     this.api.listPriceHistory({ limit: '100' }).subscribe({
       next: (payload) => this.history.set(adminListRows(payload)),
-    });
-    // Fetched unpaginated so historyProductName() can resolve any product ever
-    // priced, not only the ones on the current catalog page.
-    this.api.listProducts({ limit: '1000' }).subscribe({
-      next: (payload) => this.allProducts.set(adminListRows(payload)),
     });
   }
 
@@ -289,23 +278,24 @@ export class AdminPricingPage {
   }
 
   /**
-   * Resolves a product name for a price-history row, falling back to the raw id.
+   * Tên sản phẩm của một dòng lịch sử giá.
+   *
+   * Đọc từ phần API nhúng kèm. Trước đây trang tự dựng bảng tra cứu, và để tra được
+   * một sản phẩm đã đổi giá nhưng không nằm trên trang hiện tại thì phải tải cả nghìn
+   * dòng danh mục — ở mỗi lần đổi bộ lọc và mỗi lần sang trang. Vẫn còn bảng tra cứu
+   * cho dòng nào thiếu phần nhúng, và cuối cùng mới rơi về mã.
    */
-  historyProductName(productId: string | undefined | null): string {
-    if (!productId) {
-      return '—';
-    }
-    return this.productMap().get(productId)?.name || productId;
+  historyProductName(row: AdminPriceHistoryRow): string {
+    const productId = row.product_id;
+    return row.product?.name || (productId ? this.productMap().get(productId)?.name || productId : '—');
   }
 
   /**
-   * Resolves a product SKU for a price-history row.
+   * SKU sản phẩm của một dòng lịch sử giá.
    */
-  historyProductSku(productId: string | undefined | null): string {
-    if (!productId) {
-      return '';
-    }
-    return this.productMap().get(productId)?.sku || '';
+  historyProductSku(row: AdminPriceHistoryRow): string {
+    const productId = row.product_id;
+    return row.product?.sku || (productId ? this.productMap().get(productId)?.sku || '' : '');
   }
 
   /**

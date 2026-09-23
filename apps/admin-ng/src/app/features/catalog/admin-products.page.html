@@ -63,8 +63,8 @@
             }
           </div>
         </form>
-        @if (loading()) {
-          <app-admin-empty-state kind="loading" icon="clock" title="Đang tải danh mục sản phẩm" />
+        @if (showSkeleton()) {
+          <app-admin-table-skeleton [headers]="['Sản phẩm', 'SKU', 'Danh mục', 'Giá bán', 'Tồn kho', 'Trạng thái', 'Cập nhật', 'Thao tác']" [rows]="pageSize" />
         } @else if (loadError()) {
           <app-admin-empty-state kind="error" icon="alert" title="Không tải được danh mục" [message]="loadError() || ''">
             <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="reloadCatalog()">Thử lại</button>
@@ -72,7 +72,7 @@
         } @else if (!products().length) {
           <app-admin-empty-state kind="empty" icon="search" title="Không có sản phẩm phù hợp" message="Điều chỉnh bộ lọc hoặc thêm sản phẩm mới." />
         } @else {
-          <div class="admin-table-wrap">
+          <div class="admin-table-wrap" [class.admin-table-wrap--refreshing]="isRefreshing()">
             <table class="admin-table admin-data-table">
               <thead>
                 <tr>

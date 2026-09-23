@@ -25,6 +25,24 @@ export interface ReviewListFilters {
 const URGENT_CONDITION = "is_flagged_urgent.eq.true,rating.lte.2";
 
 /**
+ * Bọc một giá trị do người dùng gõ vào để PostgREST đọc nó như dữ liệu, không như cú
+ * pháp.
+ *
+ * Dấu phẩy, ngoặc đơn và nháy kép đều có nghĩa trong ngữ pháp lọc của PostgREST. Nối
+ * thẳng chuỗi tìm kiếm vào `or=(...)` thì một câu bình thường như `Áo dài, đẹp` sẽ bị
+ * tách ở dấu phẩy thành hai mệnh đề méo và máy chủ trả 400 PGRST100 — ô tìm kiếm hỏng
+ * với bất kỳ câu nào có dấu phẩy. Đã kiểm chứng trực tiếp trên PostgREST của dự án.
+ *
+ * Bọc trong nháy kép làm mọi ký tự bên trong thành dữ liệu; bên trong đó chỉ còn dấu
+ * chéo ngược và nháy kép cần thoát. Dấu `*` vẫn giữ vai trò ký tự đại diện của `ilike`
+ * kể cả khi nằm trong nháy kép.
+ */
+export function quotePostgrestValue(value: string): string {
+  const escaped = value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  return `"${escaped}"`;
+}
+
+/**
  * Filters for review-module audit logs.
  */
 export interface ReviewAuditFilters {
@@ -74,15 +92,15 @@ export function createReviewRepository() {
 
       // PostgREST chỉ nhận một tham số `or` cho mỗi truy vấn, nên khi vừa tìm kiếm vừa
       // lọc gấp thì phải gộp hai nhóm vào một `and` lồng nhau thay vì ghi đè lẫn nhau.
-      const searchGroup = filters.search
-        ? `or(comment.ilike.*${filters.search}*,product.name.ilike.*${filters.search}*)`
+      const searchCondition = filters.search
+        ? `comment.ilike.${quotePostgrestValue(`*${filters.search}*`)},` +
+          `product.name.ilike.${quotePostgrestValue(`*${filters.search}*`)}`
         : "";
-      const urgentGroup = filters.urgent ? `or(${URGENT_CONDITION})` : "";
-      if (searchGroup && urgentGroup) {
-        query.and = `(${searchGroup},${urgentGroup})`;
-      } else if (searchGroup) {
-        query.or = `(comment.ilike.*${filters.search}*,product.name.ilike.*${filters.search}*)`;
-      } else if (urgentGroup) {
+      if (searchCondition && filters.urgent) {
+        query.and = `(or(${searchCondition}),or(${URGENT_CONDITION}))`;
+      } else if (searchCondition) {
+        query.or = `(${searchCondition})`;
+      } else if (filters.urgent) {
         query.or = `(${URGENT_CONDITION})`;
       }
 

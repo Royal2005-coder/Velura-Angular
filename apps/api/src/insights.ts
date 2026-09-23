@@ -97,6 +97,11 @@ export interface VoiceInsights {
     failedDelivery: number;
     cancelReasons: Array<{ reason: string; count: number }>;
   };
+  /**
+   * true khi dữ liệu nguồn của kỳ này vượt trần đọc, tức các con số trên là tính trên
+   * một phần. Giao diện phải nói điều đó ra thay vì trình bày như số liệu đầy đủ.
+   */
+  truncated: boolean;
 }
 
 export interface VoiceFacts {
@@ -105,6 +110,13 @@ export interface VoiceFacts {
   returns: JsonObject[];
   tickets: JsonObject[];
   products: Record<string, { name: string; sku: string }>;
+  /**
+   * true khi ít nhất một trong bốn truy vấn chạm trần của nó.
+   *
+   * Các con số dẫn xuất khi đó chỉ tính trên phần dữ liệu lấy được. Không có cờ này
+   * thì một tháng đông đơn sẽ hiện ra những chỉ số nhỏ hơn thực tế mà không ai biết.
+   */
+  truncated: boolean;
 }
 
 const SCOPE_MODULE: Record<InsightScope, string> = {
@@ -147,12 +159,22 @@ function periodLabelOf(range: string): string {
   return PERIOD_LABEL[range] || PERIOD_LABEL.week;
 }
 
-async function safeSelect(table: string, query: Record<string, unknown>): Promise<JsonObject[]> {
+/**
+ * Kết quả một lần đọc, kèm thông tin có bị cắt ở trần hay không.
+ */
+interface CappedRows {
+  rows: JsonObject[];
+  /** true khi khoảng thời gian có nhiều dòng hơn trần, tức phép tính bên dưới là thiếu. */
+  truncated: boolean;
+}
+
+async function safeSelect(table: string, query: Record<string, unknown>): Promise<CappedRows> {
   try {
-    const { rows } = await selectRows(table, query, { silentError: true });
-    return rows;
+    const { rows, count } = await selectRows(table, query, { silentError: true });
+    const cap = Number(query.limit || 0);
+    return { rows, truncated: cap > 0 && typeof count === "number" && count > cap };
   } catch {
-    return [];
+    return { rows: [], truncated: false };
   }
 }
 
@@ -193,10 +215,10 @@ export async function loadVoiceFacts(
     })
   ]);
 
-  const productIds = [...new Set(reviews.map((row) => String(row.product_id || "")).filter(Boolean))];
+  const productIds = [...new Set(reviews.rows.map((row) => String(row.product_id || "")).filter(Boolean))];
   const products: VoiceFacts["products"] = {};
   if (productIds.length) {
-    const rows = await safeSelect("product", {
+    const { rows } = await safeSelect("product", {
       select: "product_id,name,sku",
       product_id: `in.(${productIds.join(",")})`,
       limit: 500
@@ -211,7 +233,20 @@ export async function loadVoiceFacts(
     }
   }
 
-  return { orders, reviews, returns, tickets, products };
+  // Bốn truy vấn trên đều có trần. Khoảng thời gian đông hơn trần thì mọi con số dẫn
+  // xuất bên dưới đều là tính trên một phần dữ liệu — phải nói ra thay vì trình bày
+  // như thể đã tính hết. Chuyển hẳn sang tổng hợp phía cơ sở dữ liệu là việc của KAN-52.
+  const truncated =
+    orders.truncated || reviews.truncated || returns.truncated || tickets.truncated;
+
+  return {
+    orders: orders.rows,
+    reviews: reviews.rows,
+    returns: returns.rows,
+    tickets: tickets.rows,
+    products,
+    truncated
+  };
 }
 
 function productBuckets(facts: VoiceFacts): ProductReactionRow[] {
@@ -269,6 +304,7 @@ export function deriveVoiceInsights(facts: VoiceFacts, range: string): VoiceInsi
   return {
     range,
     periodLabel: periodLabelOf(range),
+    truncated: facts.truncated,
     coverage: {
       deliveredOrders: delivered.length,
       reviewedOrders,

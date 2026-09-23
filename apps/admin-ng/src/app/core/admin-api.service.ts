@@ -85,9 +85,16 @@ export interface AdminReturnRow {
   order_id?: string;
   status?: string;
   request_type?: string;
+  return_type?: string;
   created_at?: string;
   customer_name?: string;
   version?: number;
+  /**
+   * Tổng tiền đúng những món khách gửi trả, do API tính từ `return_item`.
+   * Không phải tổng đơn: một đơn nhiều món mà khách chỉ trả một món thì hoàn cả đơn
+   * là thất thoát.
+   */
+  refundable_amount?: number;
 }
 
 export interface AdminTicketRow {
@@ -198,6 +205,10 @@ export interface AdminPromotionRow {
   can_pause?: boolean;
   /** `budget_limit = 0` là "không đặt trần", không phải ngân sách bằng 0. */
   budget_unlimited?: boolean;
+  /** Ngân sách chỉ tăng khi có mã được dùng; chiến dịch chưa phát mã thì không theo dõi được. */
+  budget_tracked?: boolean;
+  voucher_count?: number;
+  active_voucher_count?: number;
   warnings?: Array<{ code: string; level: 'info' | 'warning' | 'danger'; message: string }>;
   /** Nội dung marketing hiển thị cho khách trên trang Ưu đãi — xem migration 026. */
   description?: string | null;
@@ -205,6 +216,30 @@ export interface AdminPromotionRow {
   highlight_label?: string | null;
   display_order?: number | null;
   is_featured?: boolean | null;
+}
+
+/**
+ * Chỉ số đầu trang Khuyến mãi, do API tính trên toàn bộ chiến dịch.
+ *
+ * Trước đây trang tự cộng trên `rows` của trang hiện tại, nên bốn con số đổi theo mỗi
+ * lần bấm sang trang. Đây là số thật.
+ */
+export interface AdminPromotionSummary {
+  total: number;
+  running: number;
+  scheduled: number;
+  paused: number;
+  ended: number;
+  budgetExhausted: number;
+  totalBudget: number;
+  issuedDiscount: number;
+  budgetedCampaigns: number;
+  activeVouchers: number;
+}
+
+/** Danh sách chiến dịch kèm chỉ số tổng hợp. */
+export interface AdminPromotionListPayload extends AdminListPayload<AdminPromotionRow> {
+  summary?: AdminPromotionSummary;
 }
 
 /** Số liệu tổng hợp trả về từ `/api/v1/admin/pricing/statistics`. */
@@ -244,6 +279,7 @@ export interface AdminVoucherRow {
   expires_at?: string;
   is_active?: boolean;
   promo_id?: string;
+  applicable_user_group?: string;
   version?: number;
 }
 
@@ -277,6 +313,8 @@ export interface AdminPriceHistoryRow {
   new_sale_price?: number;
   reason?: string;
   changed_by?: string;
+  /** Sản phẩm của dòng lịch sử, do API nhúng kèm — xem `PRICE_HISTORY_SELECT`. */
+  product?: { product_id?: string; name?: string; sku?: string } | null;
 }
 
 export interface AdminDashboardSummary {
@@ -332,7 +370,11 @@ export interface AdminDashboardSummary {
     definitions?: Record<string, string>;
     source?: string;
     samples?: { reviews?: number; csat?: number; deliveredOrders?: number };
-    reliable?: { reviews?: boolean; csat?: boolean };
+    /**
+     * `complete` bằng false nghĩa là kỳ này có nhiều dữ liệu hơn trần đọc của API, nên
+     * các chỉ số tiếng nói khách hàng chỉ tính trên một phần.
+     */
+    reliable?: { reviews?: boolean; csat?: boolean; complete?: boolean };
   };
   voice?: AdminVoiceInsights;
   board?: AdminInsightBoardModel;
@@ -785,6 +827,13 @@ export class AdminApiService {
   }
 
   /**
+   * Reads one return, including the refundable amount computed from its items.
+   */
+  getReturn(returnId: string): Observable<AdminReturnRow> {
+    return this.http.get<AdminReturnRow>(`${this.baseUrl}/api/v1/admin/returns/${encodeURIComponent(returnId)}`);
+  }
+
+  /**
    * Approves a return as a refund.
    */
   approveRefund(returnId: string, body: Record<string, unknown>): Observable<unknown> {
@@ -817,6 +866,14 @@ export class AdminApiService {
    */
   respondTicket(ticketId: string, body: Record<string, unknown>): Observable<unknown> {
     return this.http.post(`${this.baseUrl}/api/v1/admin/support-tickets/${encodeURIComponent(ticketId)}/respond`, body);
+  }
+
+  /**
+   * Marks a support ticket as resolved, which is the state between "đang xử lý" and
+   * "đã đóng" — the customer can still come back before it is closed for good.
+   */
+  resolveTicket(ticketId: string, body: Record<string, unknown>): Observable<unknown> {
+    return this.http.post(`${this.baseUrl}/api/v1/admin/support-tickets/${encodeURIComponent(ticketId)}/resolve`, body);
   }
 
   /**
@@ -902,6 +959,14 @@ export class AdminApiService {
   /**
    * Toggles a voucher through the original promotions API.
    */
+  /**
+   * Issues one voucher for guests, members, or both.
+   * Checkout ranks that set and keeps a single code.
+   */
+  createVoucher(body: Record<string, unknown>): Observable<unknown> {
+    return this.http.post(`${this.baseUrl}/api/v1/admin/vouchers`, body);
+  }
+
   toggleVoucher(voucherId: string): Observable<unknown> {
     return this.http.post(`${this.baseUrl}/api/v1/admin/vouchers/${encodeURIComponent(voucherId)}/toggle`, {});
   }
@@ -909,8 +974,8 @@ export class AdminApiService {
   /**
    * Lists promotions for the original campaign table.
    */
-  listPromotions(params: Record<string, string> = {}): Observable<AdminListPayload<AdminPromotionRow>> {
-    return this.http.get<AdminListPayload<AdminPromotionRow>>(`${this.baseUrl}/api/v1/admin/promotions`, { params: this.params(params) });
+  listPromotions(params: Record<string, string> = {}): Observable<AdminPromotionListPayload> {
+    return this.http.get<AdminPromotionListPayload>(`${this.baseUrl}/api/v1/admin/promotions`, { params: this.params(params) });
   }
 
   /**
@@ -928,6 +993,16 @@ export class AdminApiService {
    */
   pricingStatistics(): Observable<AdminPricingStatistics> {
     return this.http.get<AdminPricingStatistics>(`${this.baseUrl}/api/v1/admin/pricing/statistics`);
+  }
+
+  /**
+   * Nhật ký phân hệ giá & khuyến mãi, đã được API bổ sung tên người thao tác và nội
+   * dung thay đổi thay vì chỉ có UUID.
+   */
+  listPricingAuditLogs(params: Record<string, string> = {}): Observable<AdminListPayload<AdminAuditRow>> {
+    return this.http.get<AdminListPayload<AdminAuditRow>>(`${this.baseUrl}/api/v1/admin/pricing/audit-logs`, {
+      params: this.params(params),
+    });
   }
 
   /**

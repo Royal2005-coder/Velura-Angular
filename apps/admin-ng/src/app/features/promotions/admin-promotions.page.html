@@ -36,13 +36,16 @@
                     <td>{{ campaignPeriod(row) }}</td>
                     <td>
                       <span class="admin-budget__figure">{{ campaignBudget(row) }}</span>
-                      <div class="admin-progress admin-progress--sm" role="img"
-                           [attr.aria-label]="'Đã dùng ' + campaignBudgetPercent(row) + '% ngân sách'">
-                        <div class="admin-progress__bar"
-                             [class.admin-progress__bar--warning]="isBudgetNearLimit(row)"
-                             [class.admin-progress__bar--danger]="isBudgetExhausted(row)"
-                             [style.width.%]="campaignBudgetPercent(row)"></div>
-                      </div>
+                      @if (row.budget_tracked && !row.budget_unlimited) {
+                        <div class="admin-progress admin-progress--sm" role="img"
+                             [attr.aria-label]="'Đã dùng ' + campaignBudgetPercent(row) + '% ngân sách'">
+                          <div class="admin-progress__bar"
+                               [class.admin-progress__bar--warning]="isBudgetNearLimit(row)"
+                               [class.admin-progress__bar--danger]="isBudgetExhausted(row)"
+                               [style.width.%]="campaignBudgetPercent(row)"></div>
+                        </div>
+                      }
+                      <small class="admin-note">{{ voucherCoverage(row) }}</small>
                       @for (warning of campaignWarnings(row); track warning.code) {
                         <span class="admin-budget__note"
                               [class.admin-budget__note--warning]="warning.level === 'warning'"
@@ -75,18 +78,42 @@
           <app-admin-pagination [page]="page()" [pageCount]="campaignPageCount()" [label]="campaignRange()" (changed)="goPage($event)" />
         }
       } @else if (view() === 'vouchers') {
+        @if (canMutate()) {
+          <form class="admin-form" (submit)="$event.preventDefault(); createVoucher()">
+            <label>Mã <input [value]="voucherCode()" (input)="voucherCode.set(readInput($event))" /></label>
+            <label>Tên <input [value]="voucherName()" (input)="voucherName.set(readInput($event))" /></label>
+            <label>Loại
+              <select [value]="voucherTypeDraft()" (change)="voucherTypeDraft.set(readInput($event))">
+                <option value="fixed_amount">Số tiền</option>
+                <option value="percentage">Phần trăm</option>
+                <option value="free_shipping">Miễn phí vận chuyển</option>
+              </select>
+            </label>
+            <label>Giá trị <input type="number" [value]="voucherValueDraft()" (input)="voucherValueDraft.set(readNumber($event))" /></label>
+            <label>Đơn tối thiểu <input type="number" [value]="voucherMinOrder()" (input)="voucherMinOrder.set(readNumber($event))" /></label>
+            <label>Đối tượng
+              <select [value]="voucherAudienceDraft()" (change)="voucherAudienceDraft.set(readInput($event))">
+                <option value="all_users">Mọi khách</option>
+                <option value="guest">Khách vãng lai</option>
+                <option value="member">Thành viên</option>
+              </select>
+            </label>
+            <button class="admin-btn" type="submit" [disabled]="savingVoucher()">Phát hành mã</button>
+          </form>
+        }
         @if (!vouchers().length) {
           <div class="admin-empty-state"><strong>Chưa có voucher</strong></div>
         } @else {
           <div class="admin-table-wrap">
             <table class="admin-table admin-data-table">
-              <thead><tr><th>Mã</th><th>Loại</th><th>Giá trị</th><th>Đơn tối thiểu</th><th>Lượt dùng</th><th>Hết hạn</th><th>Trạng thái</th><th></th></tr></thead>
+              <thead><tr><th>Mã</th><th>Loại</th><th>Giá trị</th><th>Đối tượng</th><th>Đơn tối thiểu</th><th>Lượt dùng</th><th>Hết hạn</th><th>Trạng thái</th><th></th></tr></thead>
               <tbody>
                 @for (row of pagedVouchers(); track row.voucher_id) {
                   <tr>
                     <td>{{ row.code || row.name }}</td>
                     <td>{{ voucherType(row) }}</td>
                     <td>{{ voucherValue(row) }}</td>
+                    <td>{{ voucherAudience(row) }}</td>
                     <td>{{ money(row.min_order_value ?? row.min_order) }}</td>
                     <td>{{ voucherUsage(row) }}</td>
                     <td>{{ date(row.end_date || row.expires_at) }}</td>
@@ -110,6 +137,33 @@
           <app-admin-pagination [page]="page()" [pageCount]="voucherPageCount()" [label]="voucherRange()" (changed)="goPage($event)" />
         }
       } @else if (view() === 'bundles') {
+        <h3 class="admin-drawer__section">Chiến dịch combo</h3>
+        @if (!comboCampaigns().length) {
+          <div class="admin-empty-state"><strong>Chưa có chiến dịch nào thuộc loại Giảm giá Combo</strong></div>
+        } @else {
+          <div class="admin-table-wrap">
+            <table class="admin-table admin-data-table">
+              <thead><tr><th>Chiến dịch</th><th>Thời gian</th><th>Ngân sách</th><th>Trạng thái</th></tr></thead>
+              <tbody>
+                @for (row of comboCampaigns(); track row.promo_id) {
+                  <tr>
+                    <td>{{ campaignName(row) }}</td>
+                    <td>{{ campaignPeriod(row) }}</td>
+                    <td>{{ campaignBudget(row) }}</td>
+                    <td><span class="admin-badge">{{ campaignLifecycleLabel(row) }}</span></td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+
+        <h3 class="admin-drawer__section">Sản phẩm combo trong danh mục</h3>
+        <p class="admin-note">
+          Danh sách dưới đây là sản phẩm được đánh dấu là combo trong danh mục hàng hoá.
+          Hệ thống chưa liên kết được sản phẩm combo với chiến dịch combo ở trên, nên
+          đừng đọc hai bảng này như thể bảng dưới đang chịu tác động của bảng trên.
+        </p>
         @if (!bundles().length) {
           <div class="admin-empty-state"><strong>Chưa có combo trong danh sách sản phẩm</strong></div>
         } @else {
@@ -135,7 +189,36 @@
           <app-admin-pagination [page]="page()" [pageCount]="bundlePageCount()" [label]="bundleRange()" (changed)="goPage($event)" />
         }
       } @else if (view() === 'logs') {
-        <div class="admin-empty-state"><strong>Chưa có nhật ký</strong><p>Nhật ký khuyến mãi nằm trong phân hệ Nhật ký hệ thống.</p></div>
+        @if (logsError()) {
+          <app-admin-empty-state kind="error" title="Không tải được nhật ký" [message]="logsError()!" />
+        } @else if (logsLoading()) {
+          <p class="admin-muted">Đang tải nhật ký…</p>
+        } @else if (!logs().length) {
+          <app-admin-empty-state kind="empty" title="Chưa có thao tác nào được ghi nhận" />
+        } @else {
+          <div class="admin-table-wrap">
+            <table class="admin-table admin-data-table">
+              <thead><tr><th>Thời điểm</th><th>Người thao tác</th><th>Hành động</th><th>Đối tượng</th><th>Thay đổi</th></tr></thead>
+              <tbody>
+                @for (row of logs(); track row.audit_id) {
+                  <tr>
+                    <td>{{ logTime(row.timestamp) }}</td>
+                    <td>
+                      <div class="admin-review-product">
+                        <strong>{{ row.actor_label || row.actor_name || '—' }}</strong>
+                        <small>{{ row.actor_role_label || row.actor_role }}</small>
+                      </div>
+                    </td>
+                    <td>{{ row.action_label || row.action }}</td>
+                    <td>{{ row.target_label || row.target_id }}</td>
+                    <td>{{ row.change_summary || '—' }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          <app-admin-pagination [page]="page()" [pageCount]="logPageCount()" [label]="logRange()" (changed)="goPage($event)" />
+        }
       } @else {
         @if (statsLoading()) {
           <div class="admin-empty-state"><strong>Đang tải thống kê…</strong></div>

@@ -24,7 +24,29 @@ import { AdminIcon } from '../../shared/admin-icon';
 import { AdminPagination } from '../../shared/admin-pagination';
 
 type ServiceZone = 'chat' | 'returns' | 'support' | 'orders' | 'logs';
-type ReturnAction = 'refund' | 'exchange' | 'reject' | 'reply' | 'close' | null;
+type ReturnAction = 'refund' | 'exchange' | 'reject' | 'reply' | 'resolve' | 'close' | null;
+type TicketAction = 'reply' | 'resolve' | 'close';
+
+/**
+ * Máy trạng thái phiếu hỗ trợ, khớp với `SUPPORT_TICKET_TRANSITIONS` phía API.
+ *
+ * Giao diện trước đây cho bấm "Phản hồi" trên mọi phiếu chưa đóng, kể cả phiếu đã
+ * giải quyết — bấm xong API trả 422 và CSKH không hiểu vì sao. Bảng này để nút chỉ
+ * hiện ra khi bước chuyển đó thật sự đi được.
+ */
+const TICKET_TRANSITIONS: Record<string, readonly string[]> = {
+  open: ['processing', 'closed'],
+  processing: ['resolved', 'closed'],
+  resolved: ['closed'],
+  closed: [],
+};
+
+/** Trạng thái đích mà mỗi thao tác sẽ ghi. */
+const TICKET_ACTION_TARGET: Record<TicketAction, string> = {
+  reply: 'processing',
+  resolve: 'resolved',
+  close: 'closed',
+};
 
 @Component({
   selector: 'app-admin-returns-page',
@@ -346,12 +368,15 @@ export class AdminReturnsPage {
     this.actionType.set(type);
     this.actionError.set(null);
     this.refundSuggestion.set(null);
-    if (type === 'refund' && row?.order_id) {
-      this.api.getOrder(row.order_id).subscribe({
-        next: (order) => {
-          // Ignore a stale response if the admin already switched to a different return.
+    if (type === 'refund') {
+      // Số tiền hoàn lấy theo đúng những món khách gửi trả (API tính từ return_item),
+      // không lấy tổng đơn: một đơn nhiều món mà khách chỉ trả một món thì hoàn cả đơn
+      // là thất thoát.
+      this.api.getReturn(returnId).subscribe({
+        next: (detail) => {
+          // Bỏ qua phản hồi cũ nếu CSKH đã chuyển sang phiếu khác.
           if (this.selectedReturn()?.return_id === returnId) {
-            this.refundSuggestion.set(Number(order.total_amount) || null);
+            this.refundSuggestion.set(Number(detail.refundable_amount) || null);
           }
         },
         error: () => {
@@ -364,9 +389,24 @@ export class AdminReturnsPage {
   }
 
   /**
-   * Opens a ticket reply/close modal.
+   * Cho biết một thao tác có hợp lệ với trạng thái hiện tại của phiếu hay không.
+   *
+   * Trả lời lại một phiếu đang xử lý không phải là bước chuyển trạng thái nên luôn
+   * được phép; các thao tác còn lại phải nằm trong bảng chuyển.
    */
-  openTicketAction(type: 'reply' | 'close', ticketId: string): void {
+  canTicketAction(row: AdminTicketRow, type: TicketAction): boolean {
+    const from = row.status || '';
+    const target = TICKET_ACTION_TARGET[type];
+    if (from === target) {
+      return true;
+    }
+    return (TICKET_TRANSITIONS[from] || []).includes(target);
+  }
+
+  /**
+   * Opens a ticket reply/resolve/close modal.
+   */
+  openTicketAction(type: TicketAction, ticketId: string): void {
     this.selectedTicket.set(this.tickets().find((row) => row.ticket_id === ticketId) || null);
     this.selectedReturn.set(null);
     this.actionType.set(type);
@@ -422,7 +462,9 @@ export class AdminReturnsPage {
       const request$ =
         type === 'reply'
           ? this.api.respondTicket(ticket.ticket_id, { response: note, expectedVersion: ticket.version })
-          : this.api.closeTicket(ticket.ticket_id, { reason: note, expectedVersion: ticket.version });
+          : type === 'resolve'
+            ? this.api.resolveTicket(ticket.ticket_id, { adminNote: note, expectedVersion: ticket.version })
+            : this.api.closeTicket(ticket.ticket_id, { reason: note, expectedVersion: ticket.version });
       request$.subscribe({
         next: () => {
           this.closeOverlays();
@@ -527,6 +569,37 @@ export class AdminReturnsPage {
     return 'AI';
   }
 
+  /**
+   * Bước kế tiếp hợp lệ của một phiếu đã duyệt.
+   *
+   * Trước đây bảng chỉ có nút ở trạng thái `pending`, nên mọi phiếu duyệt xong nằm lại
+   * ở `approved` vĩnh viễn: `shipping_back`, `received`, `completed` có trong máy trạng
+   * thái nhưng không nơi nào ghi được, và KPI "Hoàn tất hôm nay" vì thế luôn bằng 0.
+   * Thứ tự ở đây khớp `RETURN_TRANSITIONS` phía API, nơi chốt tính hợp lệ thật sự.
+   */
+  nextReturnStep(row: AdminReturnRow): { status: string; label: string } | null {
+    const steps: Record<string, { status: string; label: string }> = {
+      approved: { status: 'shipping_back', label: 'Khách đã gửi hàng' },
+      shipping_back: { status: 'received', label: 'Đã nhận hàng' },
+      received: { status: 'completed', label: 'Hoàn tất' },
+    };
+    return steps[row.status || ''] || null;
+  }
+
+  /**
+   * Đẩy phiếu sang bước kế tiếp trong quy trình nhận hàng về.
+   */
+  advanceReturn(row: AdminReturnRow, status: string): void {
+    if (!this.canMutate() || row.version == null) {
+      this.actionError.set('Thiếu phiên bản phiếu để thao tác.');
+      return;
+    }
+    this.api.updateReturnStatus(row.return_id, { status, expectedVersion: row.version }).subscribe({
+      next: () => this.reload(),
+      error: (error: unknown) => this.loadError.set(adminErrorMessage(error)),
+    });
+  }
+
   /** Nhãn trạng thái phiếu đổi/trả. */
   returnStatusLabel(status: string | undefined): string {
     return statusLabelFrom(RETURN_STATUS_LABELS, status);
@@ -571,6 +644,9 @@ export class AdminReturnsPage {
     }
     if (type === 'reply') {
       return 'Phản hồi phiếu hỗ trợ';
+    }
+    if (type === 'resolve') {
+      return 'Đánh dấu đã giải quyết';
     }
     return 'Đóng phiếu hỗ trợ';
   }

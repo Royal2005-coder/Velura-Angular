@@ -163,12 +163,17 @@
                     <td><span class="admin-badge">{{ returnStatusLabel(row.status) }}</span></td>
                     <td>{{ date(row.created_at) }}</td>
                     <td>
-                      @if (row.status === 'pending') {
+                      @if (canMutate()) {
                         <div class="admin-table-actions">
-                          @if (canMutate()) {
-                          <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openReturnAction('refund', row.return_id)">Hoàn tiền</button>
-                          <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openReturnAction('exchange', row.return_id)">Đổi hàng</button>
-                          <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="openReturnAction('reject', row.return_id)">Từ chối</button>
+                          @if (row.status === 'pending') {
+                            <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openReturnAction('refund', row.return_id)">Hoàn tiền</button>
+                            <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openReturnAction('exchange', row.return_id)">Đổi hàng</button>
+                            <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="openReturnAction('reject', row.return_id)">Từ chối</button>
+                          } @else if (nextReturnStep(row); as step) {
+                            <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="advanceReturn(row, step.status)">{{ step.label }}</button>
+                            @if (row.status === 'received') {
+                              <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="openReturnAction('reject', row.return_id)">Không đạt kiểm tra</button>
+                            }
                           }
                         </div>
                       }
@@ -197,7 +202,12 @@
                     <td>
                       @if (canMutate() && row.status !== 'closed') {
                         <div class="admin-table-actions">
-                          <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openTicketAction('reply', row.ticket_id)">Phản hồi</button>
+                          @if (canTicketAction(row, 'reply')) {
+                            <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openTicketAction('reply', row.ticket_id)">Phản hồi</button>
+                          }
+                          @if (canTicketAction(row, 'resolve')) {
+                            <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openTicketAction('resolve', row.ticket_id)">Đã giải quyết</button>
+                          }
                           <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="openTicketAction('close', row.ticket_id)">Đóng</button>
                         </div>
                       }
@@ -282,7 +292,7 @@
               <span class="admin-form-label">Số tiền hoàn</span>
               <input class="admin-form-control" name="amount" type="number" min="0" placeholder="VD: 500000" [value]="refundSuggestion()" required />
               @if (refundSuggestion() != null) {
-                <small class="admin-note">Gợi ý theo tổng giá trị đơn hàng: {{ money(refundSuggestion()) }}. Có thể chỉnh sửa nếu cần.</small>
+                <small class="admin-note">Tính theo giá trị hàng khách gửi trả: {{ money(refundSuggestion()) }}. Không được hoàn quá số này.</small>
               }
             </label>
           }

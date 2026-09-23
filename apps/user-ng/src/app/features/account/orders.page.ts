@@ -4,6 +4,7 @@ import { catchError, of } from 'rxjs';
 import { ApiService } from '../../core/services/api.service';
 import { formatVnd } from '../../core/utils/money';
 import { useBodyClass } from '../../core/utils/body-class';
+import { orderStatusLabel } from './order-status';
 
 interface MemberOrder {
   order_id: string;
@@ -73,5 +74,12 @@ export class AccountOrdersPage {
    */
   totalLabel(order: MemberOrder): string {
     return formatVnd(order.total_amount) || '0₫';
+  }
+
+  /**
+   * Same Vietnamese status the admin order screen shows.
+   */
+  statusLabel(order: MemberOrder): string {
+    return orderStatusLabel(order.status);
   }
 }

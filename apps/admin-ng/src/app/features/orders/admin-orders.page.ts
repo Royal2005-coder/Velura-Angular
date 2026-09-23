@@ -4,47 +4,25 @@ import { catchError } from 'rxjs/operators';
 import { AdminApiService, AdminAuditRow, AdminOrderPayment, AdminOrderRow } from '../../core/admin-api.service';
 import { adminErrorMessage, adminListCount, adminListRows, adminOffset, adminRangeLabel } from '../../core/admin-http';
 import { AdminSessionService } from '../../core/admin-session.service';
+import {
+  ORDER_CANCELLABLE,
+  ORDER_STATUS_LABELS,
+  ORDER_TRANSITIONS,
+  PAYMENT_STATUS_LABELS,
+  statusLabelFrom,
+} from '../../core/admin-status-labels';
 import { AdminEmptyState } from '../../shared/admin-empty-state';
 import { AdminIcon } from '../../shared/admin-icon';
 import { AdminPagination } from '../../shared/admin-pagination';
+import { AdminTableSkeleton } from '../../shared/admin-table-skeleton';
 
 type OrderTab = 'all' | 'attention' | 'payment' | 'cancelled' | 'logs';
 type OrderAction = 'status' | 'cancel' | 'payment' | null;
 
-const ORDER_LABELS: Record<string, string> = {
-  pending: 'Chờ xác nhận',
-  confirmed: 'Đã xác nhận',
-  preparing: 'Đang chuẩn bị',
-  shipping: 'Đang giao',
-  delivered: 'Đã giao',
-  failed_delivery: 'Giao thất bại',
-  cancelled: 'Đã hủy',
-  completed: 'Hoàn thành',
-};
-
-const PAYMENT_LABELS: Record<string, string> = {
-  paid: 'Đã thanh toán',
-  failed: 'Thanh toán thất bại',
-  pending: 'Chờ xử lý',
-  refunded: 'Đã hoàn tiền',
-  refund_pending: 'Chờ hoàn tiền',
-  discrepancy: 'Cần đối soát',
-};
-
-const TRANSITIONS: Record<string, string[]> = {
-  pending: ['confirmed'],
-  confirmed: ['preparing'],
-  preparing: ['shipping'],
-  shipping: ['delivered', 'failed_delivery'],
-  failed_delivery: ['shipping'],
-  delivered: ['completed'],
-};
-
-const CANCELLABLE = ['pending', 'confirmed', 'preparing', 'failed_delivery'];
 
 @Component({
   selector: 'app-admin-orders-page',
-  imports: [AdminEmptyState, AdminIcon, AdminPagination],
+  imports: [AdminEmptyState, AdminIcon, AdminPagination, AdminTableSkeleton],
   templateUrl: './admin-orders.page.html',
 })
 export class AdminOrdersPage {
@@ -63,6 +41,14 @@ export class AdminOrdersPage {
   readonly paymentErrorCount = signal(0);
   readonly loadError = signal<string | null>(null);
   readonly loading = signal(true);
+  /**
+   * Khung xương chỉ hiện ở lần tải đầu. Từ lần sau, bảng cũ vẫn ở nguyên chỗ và
+   * chỉ mờ đi — thay cả bảng bằng khung xương ở mỗi lần lọc hay sang trang là bắt
+   * người vận hành mất chỗ đang nhìn.
+   */
+  readonly hasLoadedOnce = signal(false);
+  readonly showSkeleton = computed(() => this.loading() && !this.hasLoadedOnce());
+  readonly isRefreshing = computed(() => this.loading() && this.hasLoadedOnce());
   readonly page = signal(1);
   readonly pageSize = 10;
   readonly selected = signal<AdminOrderRow | null>(null);
@@ -77,7 +63,7 @@ export class AdminOrdersPage {
   readonly totalPages = computed(() => Math.max(1, Math.ceil(this.count() / this.pageSize)));
   readonly rangeLabel = computed(() => adminRangeLabel(this.count(), this.page(), this.pageSize, 'đơn hàng'));
   readonly pagedLogs = computed(() => this.logs());
-  readonly nextStatuses = computed(() => TRANSITIONS[this.selected()?.status || ''] || []);
+  readonly nextStatuses = computed(() => ORDER_TRANSITIONS[this.selected()?.status || ''] || []);
   readonly selectedItems = computed(() => this.selected()?.items || []);
   readonly logPageCount = computed(() => Math.max(1, Math.ceil(this.logsCount() / this.pageSize)));
   readonly logRangeLabel = computed(() => adminRangeLabel(this.logsCount(), this.logsPage(), this.pageSize, 'nhật ký'));
@@ -135,6 +121,7 @@ export class AdminOrdersPage {
         this.count.set(tab === 'payment' ? this.rows().length : adminListCount(payload));
         this.paymentErrorCount.set(rows.filter((row) => this.isPaymentError(row)).length);
         this.loading.set(false);
+        this.hasLoadedOnce.set(true);
       });
     this.api.listOrders({ status: 'pending', limit: '1' }).subscribe({
       next: (payload) => this.pendingCount.set(adminListCount(payload)),
@@ -298,14 +285,14 @@ export class AdminOrdersPage {
    * Whether the original cancel action is allowed.
    */
   canCancel(order: AdminOrderRow): boolean {
-    return CANCELLABLE.includes(order.status || '');
+    return ORDER_CANCELLABLE.includes(order.status || '');
   }
 
   /**
    * Whether the original status action has a next step.
    */
   canChangeStatus(order: AdminOrderRow): boolean {
-    return (TRANSITIONS[order.status || ''] || []).length > 0;
+    return (ORDER_TRANSITIONS[order.status || ''] || []).length > 0;
   }
 
   /**
@@ -319,14 +306,18 @@ export class AdminOrdersPage {
    * Maps an order status to the original Vietnamese badge.
    */
   orderLabel(status: string | undefined): string {
-    return ORDER_LABELS[status || ''] || status || '—';
+    return statusLabelFrom(ORDER_STATUS_LABELS, status);
   }
 
   /**
    * Maps a payment status to the original Vietnamese badge.
+   *
+   * Trạng thái lạ trả về nguyên mã. Trước đây mặc định là "Chờ xử lý", nên một
+   * trạng thái thanh toán mà admin chưa biết sẽ hiện y hệt `pending` — người vận
+   * hành đọc là đơn chưa trả tiền trong khi thực tế không ai biết nó đang ở đâu.
    */
   paymentLabel(status: string | undefined): string {
-    return PAYMENT_LABELS[status || ''] || status || 'Chờ xử lý';
+    return statusLabelFrom(PAYMENT_STATUS_LABELS, status);
   }
 
   /**

@@ -36,7 +36,7 @@
                 <span class="order-card__id">#{{ order.order_code || order.order_id }}</span>
                 <span class="order-card__date">{{ order.created_at }}</span>
               </div>
-              <span class="order-card__status-badge">{{ order.status }}</span>
+              <span class="order-card__status-badge">{{ statusLabel(order) }}</span>
             </div>
             <div class="order-card__footer">
               <div class="order-card__footer-left">

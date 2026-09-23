@@ -3,7 +3,7 @@ import { selectOne, selectRows, insertRow, updateRows } from "../supabase.js";
 import { hashPassword, signJwt } from "../auth-helper.js";
 import { requireUserAuth, validatePhone } from "./auth.js";
 import { createNotification } from "./notifications.js";
-import { recordVoucherRedemption, releaseVoucherRedemption } from "./vouchers.js";
+import { recordVoucherRedemption, releaseVoucherRedemption, resolveOrderVoucher } from "./vouchers.js";
 import { allowDevOtpBypass, config } from "../config.js";
 import { ORDER_TRANSITIONS } from "../orders/order-constants.js";
 import {
@@ -680,6 +680,15 @@ export async function handleOrdersRoute(
       
       const trackingCode = "VLR" + Date.now().toString().slice(-8).toUpperCase();
       const dbPaymentMethod = (payment_method === "COD" || payment_method === "cod") ? "COD" : "ONLINE_PAYMENT";
+      const guestMerchandise = Number(subtotal) || 0;
+      const guestShipping = Number(shipping_fee) || 0;
+      const guestVoucher = await resolveOrderVoucher(
+        context,
+        guestMerchandise,
+        guestShipping,
+        voucher_id ? String(voucher_id) : null,
+        body.decline_voucher === true || order.decline_voucher === true
+      );
       
       const newOrder = asJsonObject(await insertRow("orders", {
         user_id: guestUser.user_id,
@@ -687,11 +696,11 @@ export async function handleOrdersRoute(
         shipping_name,
         shipping_phone: phone,
         shipping_address,
-        shipping_fee: shipping_fee || 0,
-        voucher_id: voucher_id || null,
-        discount_amount: discount_amount || 0,
-        subtotal,
-        total_amount,
+        shipping_fee: guestShipping,
+        voucher_id: guestVoucher.voucherId,
+        discount_amount: guestVoucher.discountAmount,
+        subtotal: guestMerchandise,
+        total_amount: Math.max(0, guestMerchandise + guestShipping - guestVoucher.discountAmount),
         payment_method: dbPaymentMethod,
         tracking_code: trackingCode,
         created_at: new Date().toISOString(),
@@ -724,8 +733,8 @@ export async function handleOrdersRoute(
         }
       }
       
-      if (voucher_id) {
-        await recordVoucherRedemption(String(voucher_id), Number(discount_amount) || 0);
+      if (guestVoucher.voucherId) {
+        await recordVoucherRedemption(guestVoucher.voucherId, guestVoucher.discountAmount);
       }
 
       // Send welcome notification
@@ -930,6 +939,15 @@ export async function handleOrdersRoute(
 
       const trackingCode = "VLR" + Date.now().toString().slice(-8).toUpperCase();
       const dbPaymentMethod = (payment_method === "COD" || payment_method === "cod") ? "COD" : "ONLINE_PAYMENT";
+      const memberMerchandise = Number(subtotal) || 0;
+      const memberShipping = Number(shipping_fee) || 0;
+      const memberVoucher = await resolveOrderVoucher(
+        context,
+        memberMerchandise,
+        memberShipping,
+        voucher_id ? String(voucher_id) : null,
+        body.decline_voucher === true
+      );
 
       // Create order row
       const newOrder = asJsonObject(await insertRow("orders", {
@@ -938,11 +956,11 @@ export async function handleOrdersRoute(
         shipping_name,
         shipping_phone,
         shipping_address,
-        shipping_fee: shipping_fee || 0,
-        voucher_id: voucher_id || null,
-        discount_amount: discount_amount || 0,
-        subtotal,
-        total_amount,
+        shipping_fee: memberShipping,
+        voucher_id: memberVoucher.voucherId,
+        discount_amount: memberVoucher.discountAmount,
+        subtotal: memberMerchandise,
+        total_amount: Math.max(0, memberMerchandise + memberShipping - memberVoucher.discountAmount),
         payment_method: dbPaymentMethod,
         tracking_code: trackingCode,
         created_at: new Date().toISOString(),
@@ -976,8 +994,8 @@ export async function handleOrdersRoute(
         }
       }
 
-      if (voucher_id) {
-        await recordVoucherRedemption(String(voucher_id), Number(discount_amount) || 0);
+      if (memberVoucher.voucherId) {
+        await recordVoucherRedemption(memberVoucher.voucherId, memberVoucher.discountAmount);
       }
 
       await createNotification(

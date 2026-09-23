@@ -279,6 +279,7 @@ export interface AdminVoucherRow {
   expires_at?: string;
   is_active?: boolean;
   promo_id?: string;
+  applicable_user_group?: string;
   version?: number;
 }
 
@@ -952,6 +953,14 @@ export class AdminApiService {
   /**
    * Toggles a voucher through the original promotions API.
    */
+  /**
+   * Issues one voucher for guests, members, or both.
+   * Checkout ranks that set and keeps a single code.
+   */
+  createVoucher(body: Record<string, unknown>): Observable<unknown> {
+    return this.http.post(`${this.baseUrl}/api/v1/admin/vouchers`, body);
+  }
+
   toggleVoucher(voucherId: string): Observable<unknown> {
     return this.http.post(`${this.baseUrl}/api/v1/admin/vouchers/${encodeURIComponent(voucherId)}/toggle`, {});
   }

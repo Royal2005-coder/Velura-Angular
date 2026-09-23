@@ -20,7 +20,7 @@
             <p>Vui lòng điền đầy đủ thông tin để chúng tôi xử lý yêu cầu của bạn</p>
           </div>
 
-          <form id="returnForm" class="return-form">
+          <form id="returnForm" class="return-form" (submit)="$event.preventDefault(); submit()">
             <!-- Hidden order ID -->
             <input type="hidden" id="js-hidden-order-id" name="order_id" value="" />
 
@@ -34,18 +34,40 @@
               </div>
 
               <!-- Area shown when no orderId in URL (dropdown selection) -->
-              <div id="js-order-dropdown-area" class="order-dropdown-area" style="display:none;">
-                <div class="order-selection-list" id="js-order-selection-list">
-                  <!-- Populated dynamically by JS -->
-                </div>
+              <div class="order-dropdown-area">
+                @if (loading()) {
+                  <p>Đang tải đơn đã giao…</p>
+                } @else if (loadError()) {
+                  <p>{{ loadError() }}</p>
+                } @else if (!eligible().length) {
+                  <p>Chưa có đơn giao thành công trong vòng 30 ngày.</p>
+                } @else {
+                  <div class="order-selection-list">
+                    @for (order of eligible(); track order.order_id) {
+                      <button type="button" class="selection-card" [class.is-selected]="selectedOrderId() === order.order_id" (click)="selectOrder(order.order_id)">
+                        <div class="selection-card__content">
+                          <strong>{{ order.tracking_code || order.order_id }}</strong>
+                          <span>{{ statusLabel(order.status) }}</span>
+                        </div>
+                      </button>
+                    }
+                  </div>
+                }
               </div>
             </section>
 
             <!-- Section 2: Chọn sản phẩm cần đổi trả -->
             <section class="return-section">
               <h2>2. Chọn sản phẩm cần đổi/trả</h2>
-              <div class="product-selection-list" id="js-product-selection-list">
-                <!-- Populated dynamically by JS -->
+              <div class="product-selection-list">
+                @for (item of selectedOrder()?.items || []; track item.item_id) {
+                  <button type="button" class="selection-card" [class.is-selected]="selectedItemIds().includes(item.item_id)" (click)="toggleItem(item.item_id)">
+                    <div class="selection-card__content">
+                      <strong>{{ item.product_name || 'Sản phẩm' }}</strong>
+                      <span>Số lượng {{ item.quantity || 1 }}</span>
+                    </div>
+                  </button>
+                }
               </div>
             </section>
 
@@ -54,7 +76,7 @@
               <h2>3. Chọn phương thức đổi trả</h2>
               <div class="method-selection-list">
                 <!-- Method 1 (Selected by default) -->
-                <div class="selection-card is-selected" data-type="method">
+                <div class="selection-card" [class.is-selected]="returnType() === 'refund'" data-type="method" (click)="setReturnType('refund')">
                   <div class="selection-card__content">
                     <strong>Trả hàng hoàn tiền</strong>
                   </div>
@@ -65,7 +87,7 @@
                 </div>
 
                 <!-- Method 2 -->
-                <div class="selection-card" data-type="method" id="method-exchange-card">
+                <div class="selection-card" [class.is-selected]="returnType() === 'exchange'" data-type="method" id="method-exchange-card" (click)="setReturnType('exchange')">
                   <div class="selection-card__content">
                     <strong>Trả hàng đổi hàng mới</strong>
                   </div>
@@ -128,7 +150,7 @@
               <div class="form-group">
                 <label for="returnReason" class="form-label">Chọn lý do *</label>
                 <div class="select-wrapper">
-                  <select id="returnReason" required class="form-select">
+                  <select id="returnReason" class="form-select" [value]="reason()" (change)="setReason($event)">
                     <option value="" disabled selected>Chọn lý do đổi trả...</option>
                     <option value="error">Sản phẩm bị lỗi sản xuất</option>
                     <option value="size">Không vừa kích cỡ (Size)</option>
@@ -144,13 +166,13 @@
               <!-- Textarea -->
               <div class="form-group">
                 <label for="returnDesc" class="form-label">Mô tả chi tiết (tùy chọn)</label>
-                <textarea id="returnDesc" class="form-textarea"
+                <textarea id="returnDesc" class="form-textarea" [value]="description()" (input)="setDescription($event)"
                   placeholder="Mô tả cụ thể về vấn đề của sản phẩm..."></textarea>
               </div>
 
               <!-- Upload proof images -->
               <div class="form-group">
-                <label class="form-label">Hình ảnh minh chứng (bắt buộc)</label>
+                <label class="form-label">Hình ảnh minh chứng</label>
                 <p class="form-help-text">Chụp rõ tình trạng sản phẩm, tem mác, và bao bì (nếu có)</p>
                 <div class="upload-container">
                   <div class="upload-actions">
@@ -192,9 +214,15 @@
 
             <!-- Form buttons -->
             <div class="form-actions">
-              <button type="button" class="btn-cancel" id="btn-cancel-return">Hủy</button>
-              <button type="submit" class="btn-submit" id="btn-submit-return">Gửi yêu cầu</button>
+              <a routerLink="/account/orders" class="btn-cancel" id="btn-cancel-return">Hủy</a>
+              <button type="submit" class="btn-submit" id="btn-submit-return" [disabled]="submitting() || submitted()">{{ submitted() ? 'Đã gửi' : 'Gửi yêu cầu' }}</button>
             </div>
+            @if (formError()) {
+              <p class="form-help-text">{{ formError() }}</p>
+            }
+            @if (submitted()) {
+              <p class="form-help-text">Yêu cầu đã gửi. Trạng thái sẽ hiện cùng lúc trên trang CSKH.</p>
+            }
 
           </form>
         </div>

@@ -99,6 +99,31 @@ export async function handleVouchersRoute(
 }
 
 /**
+ * Số tiền giảm lúc đặt hàng. Khách gửi mã thì dùng đúng một mã đó nếu còn hợp lệ;
+ * không gửi mã thì lấy mã lợi nhất của đúng đối tượng (vãng lai hoặc thành viên).
+ * Số tiền do engine tính, không lấy từ trình duyệt.
+ */
+export async function resolveOrderVoucher(
+  context: AuthContext,
+  orderValue: number,
+  shippingFee: number,
+  requestedVoucherId: string | null,
+  decline: boolean
+): Promise<{ voucherId: string | null; discountAmount: number }> {
+  if (decline) return { voucherId: null, discountAmount: 0 };
+  const wallet = await buildWallet(context, orderValue, shippingFee);
+  if (requestedVoucherId) {
+    const match = wallet.items.find((item) => item.voucherId === requestedVoucherId);
+    if (!match?.eligible) {
+      throw new HttpError(400, "INVALID_VOUCHER", match?.reasonText || "Mã giảm giá không dùng được cho đơn này");
+    }
+    return { voucherId: match.voucherId, discountAmount: match.discountAmount };
+  }
+  if (!wallet.best) return { voucherId: null, discountAmount: 0 };
+  return { voucherId: wallet.best.voucherId, discountAmount: wallet.best.discountAmount };
+}
+
+/**
  * Dựng ví voucher cho người gọi hiện tại.
  *
  * Khách vãng lai vẫn nhận đủ danh sách mã công khai — chỉ khác ở chỗ không tra được

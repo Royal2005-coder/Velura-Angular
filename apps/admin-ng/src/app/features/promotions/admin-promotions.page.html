@@ -78,18 +78,42 @@
           <app-admin-pagination [page]="page()" [pageCount]="campaignPageCount()" [label]="campaignRange()" (changed)="goPage($event)" />
         }
       } @else if (view() === 'vouchers') {
+        @if (canMutate()) {
+          <form class="admin-form" (submit)="$event.preventDefault(); createVoucher()">
+            <label>Mã <input [value]="voucherCode()" (input)="voucherCode.set(readInput($event))" /></label>
+            <label>Tên <input [value]="voucherName()" (input)="voucherName.set(readInput($event))" /></label>
+            <label>Loại
+              <select [value]="voucherTypeDraft()" (change)="voucherTypeDraft.set(readInput($event))">
+                <option value="fixed_amount">Số tiền</option>
+                <option value="percentage">Phần trăm</option>
+                <option value="free_shipping">Miễn phí vận chuyển</option>
+              </select>
+            </label>
+            <label>Giá trị <input type="number" [value]="voucherValueDraft()" (input)="voucherValueDraft.set(readNumber($event))" /></label>
+            <label>Đơn tối thiểu <input type="number" [value]="voucherMinOrder()" (input)="voucherMinOrder.set(readNumber($event))" /></label>
+            <label>Đối tượng
+              <select [value]="voucherAudienceDraft()" (change)="voucherAudienceDraft.set(readInput($event))">
+                <option value="all_users">Mọi khách</option>
+                <option value="guest">Khách vãng lai</option>
+                <option value="member">Thành viên</option>
+              </select>
+            </label>
+            <button class="admin-btn" type="submit" [disabled]="savingVoucher()">Phát hành mã</button>
+          </form>
+        }
         @if (!vouchers().length) {
           <div class="admin-empty-state"><strong>Chưa có voucher</strong></div>
         } @else {
           <div class="admin-table-wrap">
             <table class="admin-table admin-data-table">
-              <thead><tr><th>Mã</th><th>Loại</th><th>Giá trị</th><th>Đơn tối thiểu</th><th>Lượt dùng</th><th>Hết hạn</th><th>Trạng thái</th><th></th></tr></thead>
+              <thead><tr><th>Mã</th><th>Loại</th><th>Giá trị</th><th>Đối tượng</th><th>Đơn tối thiểu</th><th>Lượt dùng</th><th>Hết hạn</th><th>Trạng thái</th><th></th></tr></thead>
               <tbody>
                 @for (row of pagedVouchers(); track row.voucher_id) {
                   <tr>
                     <td>{{ row.code || row.name }}</td>
                     <td>{{ voucherType(row) }}</td>
                     <td>{{ voucherValue(row) }}</td>
+                    <td>{{ voucherAudience(row) }}</td>
                     <td>{{ money(row.min_order_value ?? row.min_order) }}</td>
                     <td>{{ voucherUsage(row) }}</td>
                     <td>{{ date(row.end_date || row.expires_at) }}</td>

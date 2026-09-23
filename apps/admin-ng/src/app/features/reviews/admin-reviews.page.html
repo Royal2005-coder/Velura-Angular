@@ -4,12 +4,12 @@
     <article class="admin-kpi-card">
       <span class="admin-kpi-card__label">Tổng phiếu</span>
       <strong class="admin-kpi-card__value">{{ total() }}</strong>
-      <span class="admin-kpi-card__trend admin-kpi-card__trend--neutral">Theo bộ lọc hiện tại</span>
+      <span class="admin-kpi-card__trend admin-kpi-card__trend--neutral">Theo bộ lọc đang áp</span>
     </article>
     <article class="admin-kpi-card">
       <span class="admin-kpi-card__label">Chờ duyệt</span>
       <strong class="admin-kpi-card__value">{{ pendingCount() }}</strong>
-      <span class="admin-kpi-card__trend admin-kpi-card__trend--warning">Trên trang hiện tại</span>
+      <span class="admin-kpi-card__trend admin-kpi-card__trend--warning">Toàn bộ hàng đợi</span>
     </article>
     <article class="admin-kpi-card">
       <span class="admin-kpi-card__label">Cần xử lý gấp</span>
@@ -19,17 +19,17 @@
     <article class="admin-kpi-card">
       <span class="admin-kpi-card__label">Đã xử lý</span>
       <strong class="admin-kpi-card__value">{{ processedCount() }}</strong>
-      <span class="admin-kpi-card__trend admin-kpi-card__trend--up">Không còn pending</span>
+      <span class="admin-kpi-card__trend admin-kpi-card__trend--up">Đã duyệt hoặc đã ẩn</span>
     </article>
     <article class="admin-kpi-card">
       <span class="admin-kpi-card__label">Đã ẩn</span>
       <strong class="admin-kpi-card__value">{{ hiddenCount() }}</strong>
-      <span class="admin-kpi-card__trend admin-kpi-card__trend--neutral">rejected / hidden</span>
+      <span class="admin-kpi-card__trend admin-kpi-card__trend--neutral">Đã từ chối hiển thị</span>
     </article>
   </section>
   <section class="admin-card admin-card--flush">
     <div class="admin-tabs" role="tablist">
-      <button class="admin-tab" [class.admin-tab--active]="tab() === 'all'" type="button" (click)="setTab('all')">Tất cả đánh giá <span>{{ rows().length }}</span></button>
+      <button class="admin-tab" [class.admin-tab--active]="tab() === 'all'" type="button" (click)="setTab('all')">Tất cả đánh giá <span>{{ total() }}</span></button>
       <button class="admin-tab" [class.admin-tab--active]="tab() === 'pending'" type="button" (click)="setTab('pending')">Chờ duyệt <span>{{ pendingCount() }}</span></button>
       <button class="admin-tab" [class.admin-tab--active]="tab() === 'urgent'" type="button" (click)="setTab('urgent')">Cần xử lý gấp <span>{{ urgentCount() }}</span></button>
       <button class="admin-tab" [class.admin-tab--active]="tab() === 'processed'" type="button" (click)="setTab('processed')">Đã xử lý <span>{{ processedCount() }}</span></button>
@@ -59,14 +59,14 @@
             <button class="admin-btn admin-btn--ghost admin-btn--sm" type="reset">Đặt lại</button>
           </div>
         </form>
-        @if (loading()) {
-          <app-admin-empty-state kind="loading" icon="clock" title="Đang tải đánh giá" />
+        @if (showSkeleton()) {
+          <app-admin-table-skeleton [headers]="['Đánh giá', 'Sản phẩm', 'Khách hàng', 'Trạng thái', 'Ngày tạo', 'Thao tác']" [rows]="pageSize" />
         } @else if (loadError()) {
           <app-admin-empty-state kind="error" icon="alert" title="Không tải được đánh giá" [message]="loadError() || ''" />
         } @else if (!paged().length) {
           <app-admin-empty-state kind="empty" icon="star" title="Không có đánh giá phù hợp" message="Điều chỉnh bộ lọc hoặc tải lại." />
         } @else {
-          <div class="admin-table-wrap">
+          <div class="admin-table-wrap" [class.admin-table-wrap--refreshing]="isRefreshing()">
             <table class="admin-table admin-data-table">
               <thead>
                 <tr>

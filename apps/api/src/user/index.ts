@@ -75,7 +75,7 @@ export async function handleUserRoute(
       return await handleOffersRoute(req, res, corsHeaders, context);
       
     case "upload":
-      return await handleUploadRoute(req, res, corsHeaders);
+      return await handleUploadRoute(req, res, corsHeaders, context);
       
     default:
       throw new HttpError(404, "NOT_FOUND", "API endpoint not found");

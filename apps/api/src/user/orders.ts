@@ -3,8 +3,9 @@ import { selectOne, selectRows, insertRow, updateRows } from "../supabase.js";
 import { hashPassword, signJwt } from "../auth-helper.js";
 import { requireUserAuth, validatePhone } from "./auth.js";
 import { createNotification } from "./notifications.js";
-import { recordVoucherRedemption, releaseVoucherRedemption } from "./vouchers.js";
+import { recordVoucherRedemption, releaseVoucherRedemption, resolveOrderVoucher } from "./vouchers.js";
 import { allowDevOtpBypass, config } from "../config.js";
+import { ORDER_TRANSITIONS } from "../orders/order-constants.js";
 import {
   asJsonObject,
   asString,
@@ -26,6 +27,29 @@ interface CheckoutOtpSession {
 }
 
 const checkoutOtpAttemptsMap = new Map<string, CheckoutOtpSession>();
+
+/**
+ * Chặn đọc một đơn hàng không thuộc về người đang đăng nhập.
+ *
+ * Điều kiện cũ là `order.user_id && profile && order.user_id !== profile.user_id`, tức
+ * chỉ chặn khi cả ba vế cùng đúng. Người chưa đăng nhập không có `profile` nên không
+ * bao giờ chạm tới nhánh chặn: ai biết mã vận đơn là đọc được họ tên, số điện thoại và
+ * địa chỉ giao của khách. Mã vận đơn lại sinh bằng
+ * `"VLR" + Date.now().toString().slice(-8)` — tám chữ số cuối của một mốc mili giây,
+ * nên với một ngày đã biết thì dải cần dò rất hẹp.
+ *
+ * KAN-37 FR-01 chốt: chỉ trả về đơn thuộc về người đang đăng nhập. Tra cứu cho khách
+ * vãng lai là tính năng riêng, phải xác thực bằng số điện thoại và OTP (KAN-37 FR-03
+ * và bản chốt ngày 20/09) — không phải là để ngỏ tuyến này.
+ */
+export function assertOrderVisibleTo(order: JsonObject, profile: UserProfile | null): void {
+  if (!profile) {
+    throw new HttpError(401, "UNAUTHORIZED", "Đăng nhập là bắt buộc để xem đơn hàng");
+  }
+  if (order.user_id !== profile.user_id) {
+    throw new HttpError(403, "FORBIDDEN", "Bạn không có quyền xem đơn hàng này");
+  }
+}
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -179,7 +203,7 @@ export async function autoProgressOrder(order: JsonObject): Promise<JsonObject> 
           "order_status",
           title,
           content,
-          `/src/pages/account/order-detail.html?id=${order.order_id}`
+          `/account/orders/${order.order_id}`
         );
       }
     } catch (e: unknown) {
@@ -241,7 +265,7 @@ export async function handleOrdersRoute(
       try {
         profile = requireUserAuth(context);
       } catch {
-        // guest order lookup by id/tracking is allowed
+        profile = null;
       }
 
       // GET /api/user/orders/:id (Action contains the ID if present)
@@ -257,9 +281,8 @@ export async function handleOrdersRoute(
         if (!order) {
           throw new HttpError(404, "NOT_FOUND", "Không tìm thấy đơn hàng");
         }
-        if (order.user_id && profile && order.user_id !== profile.user_id) {
-          throw new HttpError(403, "FORBIDDEN", "Bạn không có quyền xem đơn hàng này");
-        }
+
+        assertOrderVisibleTo(order, profile);
         order = await autoProgressOrder(order);
         const { rows: items } = await selectRows("order_item", { order_id: `eq.${order.order_id}` });
         const itemsWithProduct = await attachProductMeta(items);
@@ -305,6 +328,20 @@ export async function handleOrdersRoute(
       const allowedStatuses = ["cancelled", "delivered", "completed"];
       if (!allowedStatuses.includes(asString(status))) {
         throw new HttpError(400, "BAD_REQUEST", `Trạng thái ${status} không được phép cập nhật bởi người dùng`);
+      }
+
+      // Ba trạng thái trên là những gì khách được phép ghi, nhưng "được phép ghi" khác
+      // với "ghi từ đâu cũng được". Không chốt bảng chuyển trạng thái ở đây thì khách
+      // đẩy được đơn từ `shipping` thẳng sang `completed`, bỏ qua `delivered` — đơn
+      // thành hoàn tất mà chưa từng ghi nhận đã giao. Nhánh huỷ có danh sách chặn riêng
+      // ngay dưới nên bỏ qua ở bước này.
+      if (status !== "cancelled") {
+        const from = asString(order.status);
+        const allowed = ORDER_TRANSITIONS[from] || [];
+        if (!allowed.includes(asString(status))) {
+          throw new HttpError(400, "INVALID_TRANSITION",
+            `Không thể chuyển đơn từ "${from}" sang "${status}"`);
+        }
       }
 
       if (status === "cancelled") {
@@ -368,7 +405,7 @@ export async function handleOrdersRoute(
             "order_status",
             `Đơn hàng #${displayTracking} đã bị hủy ❌`,
             `Đơn hàng đã bị hủy thành công. Lý do: ${updateData.cancelled_reason}.`,
-            `/src/pages/account/order-detail.html?id=${updatedOrder.order_id}`
+            `/account/orders/${updatedOrder.order_id}`
           );
         } else {
           let title = `Cập nhật đơn hàng #${displayTracking}`;
@@ -385,7 +422,7 @@ export async function handleOrdersRoute(
             "order_status",
             title,
             content,
-            `/src/pages/account/order-detail.html?id=${updatedOrder.order_id}`
+            `/account/orders/${updatedOrder.order_id}`
           );
         }
       }
@@ -665,6 +702,15 @@ export async function handleOrdersRoute(
       
       const trackingCode = "VLR" + Date.now().toString().slice(-8).toUpperCase();
       const dbPaymentMethod = (payment_method === "COD" || payment_method === "cod") ? "COD" : "ONLINE_PAYMENT";
+      const guestMerchandise = Number(subtotal) || 0;
+      const guestShipping = Number(shipping_fee) || 0;
+      const guestVoucher = await resolveOrderVoucher(
+        context,
+        guestMerchandise,
+        guestShipping,
+        voucher_id ? String(voucher_id) : null,
+        body.decline_voucher === true || order.decline_voucher === true
+      );
       
       const newOrder = asJsonObject(await insertRow("orders", {
         user_id: guestUser.user_id,
@@ -672,11 +718,11 @@ export async function handleOrdersRoute(
         shipping_name,
         shipping_phone: phone,
         shipping_address,
-        shipping_fee: shipping_fee || 0,
-        voucher_id: voucher_id || null,
-        discount_amount: discount_amount || 0,
-        subtotal,
-        total_amount,
+        shipping_fee: guestShipping,
+        voucher_id: guestVoucher.voucherId,
+        discount_amount: guestVoucher.discountAmount,
+        subtotal: guestMerchandise,
+        total_amount: Math.max(0, guestMerchandise + guestShipping - guestVoucher.discountAmount),
         payment_method: dbPaymentMethod,
         tracking_code: trackingCode,
         created_at: new Date().toISOString(),
@@ -709,8 +755,8 @@ export async function handleOrdersRoute(
         }
       }
       
-      if (voucher_id) {
-        await recordVoucherRedemption(String(voucher_id), Number(discount_amount) || 0);
+      if (guestVoucher.voucherId) {
+        await recordVoucherRedemption(guestVoucher.voucherId, guestVoucher.discountAmount);
       }
 
       // Send welcome notification
@@ -728,7 +774,7 @@ export async function handleOrdersRoute(
         "order_status",
         `Đơn hàng #${trackingCode} đã được đặt thành công ✅`,
         "Cảm ơn bạn đã mua sắm tại Velura. Đơn hàng của bạn đang được xử lý.",
-        `/src/pages/account/order-detail.html?id=${newOrder.order_id}`
+        `/account/orders/${newOrder.order_id}`
       );
       
       const token = signJwt({ user_id: guestUser.user_id, email: guestUser.email || `${phone}@velura.vn`, role: "member" });
@@ -803,7 +849,7 @@ export async function handleOrdersRoute(
             "order_status",
             `Thanh toán đơn hàng #${displayTracking} thành công 💳`,
             "Chúng tôi đã nhận được thanh toán cho đơn hàng của bạn. Đơn hàng đang chuẩn bị được đóng gói.",
-            `/src/pages/account/order-detail.html?id=${order_id}`
+            `/account/orders/${order_id}`
           );
         }
         
@@ -915,6 +961,15 @@ export async function handleOrdersRoute(
 
       const trackingCode = "VLR" + Date.now().toString().slice(-8).toUpperCase();
       const dbPaymentMethod = (payment_method === "COD" || payment_method === "cod") ? "COD" : "ONLINE_PAYMENT";
+      const memberMerchandise = Number(subtotal) || 0;
+      const memberShipping = Number(shipping_fee) || 0;
+      const memberVoucher = await resolveOrderVoucher(
+        context,
+        memberMerchandise,
+        memberShipping,
+        voucher_id ? String(voucher_id) : null,
+        body.decline_voucher === true
+      );
 
       // Create order row
       const newOrder = asJsonObject(await insertRow("orders", {
@@ -923,11 +978,11 @@ export async function handleOrdersRoute(
         shipping_name,
         shipping_phone,
         shipping_address,
-        shipping_fee: shipping_fee || 0,
-        voucher_id: voucher_id || null,
-        discount_amount: discount_amount || 0,
-        subtotal,
-        total_amount,
+        shipping_fee: memberShipping,
+        voucher_id: memberVoucher.voucherId,
+        discount_amount: memberVoucher.discountAmount,
+        subtotal: memberMerchandise,
+        total_amount: Math.max(0, memberMerchandise + memberShipping - memberVoucher.discountAmount),
         payment_method: dbPaymentMethod,
         tracking_code: trackingCode,
         created_at: new Date().toISOString(),
@@ -961,8 +1016,8 @@ export async function handleOrdersRoute(
         }
       }
 
-      if (voucher_id) {
-        await recordVoucherRedemption(String(voucher_id), Number(discount_amount) || 0);
+      if (memberVoucher.voucherId) {
+        await recordVoucherRedemption(memberVoucher.voucherId, memberVoucher.discountAmount);
       }
 
       await createNotification(
@@ -970,7 +1025,7 @@ export async function handleOrdersRoute(
         "order_status",
         `Đơn hàng #${trackingCode} đã được đặt thành công ✅`,
         "Cảm ơn bạn đã mua sắm tại Velura. Đơn hàng của bạn đang được xử lý.",
-        `/src/pages/account/order-detail.html?id=${newOrder.order_id}`
+        `/account/orders/${newOrder.order_id}`
       );
 
       return sendJson(res, 200, {

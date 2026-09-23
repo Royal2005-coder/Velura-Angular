@@ -1,7 +1,17 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
-import { AdminApiService, AdminPricingStatistics, AdminProductRow, AdminPromotionRow, AdminVoucherRow } from '../../core/admin-api.service';
+import {
+  AdminApiService,
+  AdminAuditRow,
+  AdminPricingStatistics,
+  AdminProductRow,
+  AdminPromotionListPayload,
+  AdminPromotionRow,
+  AdminPromotionSummary,
+  AdminVoucherRow,
+} from '../../core/admin-api.service';
+import { adminDateTime } from '../../core/admin-format';
 import { adminErrorMessage, adminListCount, adminListRows, adminOffset, adminRangeLabel } from '../../core/admin-http';
 import { AdminSessionService } from '../../core/admin-session.service';
 import { AdminEmptyState } from '../../shared/admin-empty-state';
@@ -21,6 +31,15 @@ export class AdminPromotionsPage {
   readonly promotions = signal<AdminPromotionRow[]>([]);
   readonly vouchers = signal<AdminVoucherRow[]>([]);
   readonly bundles = signal<AdminProductRow[]>([]);
+  /**
+   * Chiến dịch loại `combo_discount` — phần thật sự thuộc phân hệ khuyến mãi.
+   *
+   * Tách khỏi `bundles` (sản phẩm có cờ `is_combo`) vì hai thứ này chưa liên kết được
+   * với nhau: bảng `promotion_product` tồn tại nhưng chưa đường ghi nào điền vào
+   * (GA-A4-02 / KAN-68). Hiển thị chung một bảng như trước là để người vận hành hiểu
+   * nhầm rằng sản phẩm combo đang chịu tác động của chiến dịch combo.
+   */
+  readonly comboCampaigns = signal<AdminPromotionRow[]>([]);
   readonly loadError = signal<string | null>(null);
   readonly loading = signal(true);
   readonly page = signal(1);
@@ -28,23 +47,53 @@ export class AdminPromotionsPage {
   readonly promoCount = signal(0);
   readonly voucherCount = signal(0);
   readonly canMutate = computed(() => this.session.canMutate('promotions'));
+  readonly voucherCode = signal('');
+  readonly voucherName = signal('');
+  readonly voucherTypeDraft = signal('fixed_amount');
+  readonly voucherValueDraft = signal(0);
+  readonly voucherMinOrder = signal(0);
+  readonly voucherAudienceDraft = signal('all_users');
+  readonly savingVoucher = signal(false);
   readonly stats = signal<AdminPricingStatistics | null>(null);
   readonly statsLoading = signal(false);
   readonly statsError = signal<string | null>(null);
+
+  // Tab "Nhật ký" trước đây là một khung rỗng cố định với dòng chữ "Nhật ký khuyến mãi
+  // nằm trong phân hệ Nhật ký hệ thống" — trong khi API đã có sẵn
+  // `/api/v1/admin/pricing/audit-logs` trả về đúng nhật ký của phân hệ này.
+  readonly logs = signal<AdminAuditRow[]>([]);
+  readonly logsCount = signal(0);
+  readonly logsLoading = signal(false);
+  readonly logsError = signal<string | null>(null);
+  readonly logPageCount = computed(() => Math.max(1, Math.ceil(this.logsCount() / this.pageSize)));
+  readonly logRange = computed(() => adminRangeLabel(this.logsCount(), this.page(), this.pageSize, 'nhật ký'));
 
   /** Form tạo/sửa chiến dịch. `editing` bằng null nghĩa là đang tạo mới. */
   readonly formOpen = signal(false);
   readonly editing = signal<AdminPromotionRow | null>(null);
 
-  readonly activeCampaigns = computed(() => this.promotions().filter((row) => this.isCampaignActive(row)).length);
-  readonly pendingCampaigns = computed(() => this.promotions().length - this.activeCampaigns());
-  readonly activeVouchers = computed(() => this.vouchers().filter((row) => row.is_active !== false).length);
-  readonly issuedDiscount = computed(() =>
-    this.promotions().reduce((sum, row) => sum + Number(row.total_discount_issued || 0), 0),
-  );
-  readonly totalBudget = computed(() =>
-    this.promotions().reduce((sum, row) => sum + Number(row.budget_limit ?? row.budget ?? 0), 0),
-  );
+  /**
+   * Chỉ số do API tính trên toàn bộ chiến dịch.
+   *
+   * Trước đây năm con số này là `computed` cộng trên `promotions()` — tức trên đúng 10
+   * bản ghi của trang đang xem. Với 8 chiến dịch thì tình cờ đúng; sang trang 2 hoặc
+   * khi có hơn 10 chiến dịch thì mọi con số ở đầu trang đều sai.
+   */
+  readonly summary = signal<AdminPromotionSummary | null>(null);
+  readonly activeCampaigns = computed(() => this.summary()?.running ?? 0);
+  readonly pendingCampaigns = computed(() => {
+    const s = this.summary();
+    if (!s) return 0;
+    return s.scheduled + s.paused + s.ended + s.budgetExhausted;
+  });
+  readonly activeVouchers = computed(() => this.summary()?.activeVouchers ?? 0);
+  readonly issuedDiscount = computed(() => this.summary()?.issuedDiscount ?? 0);
+  readonly totalBudget = computed(() => this.summary()?.totalBudget ?? 0);
+  /** Có chiến dịch nào không đặt trần ngân sách hay không — để chú thích tổng ngân sách. */
+  readonly hasUnbudgetedCampaigns = computed(() => {
+    const s = this.summary();
+    return Boolean(s && s.total > s.budgetedCampaigns);
+  });
   readonly campaignPageCount = computed(() => Math.max(1, Math.ceil(this.promoCount() / this.pageSize)));
   readonly voucherPageCount = computed(() => Math.max(1, Math.ceil(this.voucherCount() / this.pageSize)));
   readonly bundlePageCount = computed(() => Math.max(1, Math.ceil(this.bundles().length / this.pageSize)));
@@ -68,6 +117,37 @@ export class AdminPromotionsPage {
     if (view === 'stats' && !this.stats() && !this.statsLoading()) {
       this.loadStats();
     }
+    if (view === 'logs') {
+      this.loadLogs();
+    }
+  }
+
+  /**
+   * Tải nhật ký phân hệ giá & khuyến mãi.
+   */
+  loadLogs(): void {
+    this.logsLoading.set(true);
+    this.logsError.set(null);
+    this.api
+      .listPricingAuditLogs({ limit: String(this.pageSize), offset: adminOffset(this.page(), this.pageSize) })
+      .subscribe({
+        next: (payload) => {
+          this.logs.set(adminListRows(payload));
+          this.logsCount.set(adminListCount(payload));
+          this.logsLoading.set(false);
+        },
+        error: (error: unknown) => {
+          this.logsError.set(adminErrorMessage(error));
+          this.logsLoading.set(false);
+        },
+      });
+  }
+
+  /**
+   * Thời điểm của một dòng nhật ký, đọc theo giờ Việt Nam.
+   */
+  logTime(value: string | undefined): string {
+    return adminDateTime(value);
   }
 
   /**
@@ -79,9 +159,15 @@ export class AdminPromotionsPage {
         ? this.voucherPageCount()
         : this.view() === 'bundles'
           ? this.bundlePageCount()
-          : this.campaignPageCount();
+          : this.view() === 'logs'
+            ? this.logPageCount()
+            : this.campaignPageCount();
     this.page.set(Math.min(count, Math.max(1, page)));
-    if (this.view() !== 'bundles' && this.view() !== 'logs' && this.view() !== 'stats') {
+    if (this.view() === 'logs') {
+      this.loadLogs();
+      return;
+    }
+    if (this.view() !== 'bundles' && this.view() !== 'stats') {
       this.reload();
     }
   }
@@ -154,6 +240,15 @@ export class AdminPromotionsPage {
       return `${this.money(row.total_discount_issued)} / Không giới hạn`;
     }
     return `${this.money(row.total_discount_issued)} / ${this.money(row.budget_limit ?? row.budget)}`;
+  }
+
+  /**
+   * Số mã của chiến dịch, vì đó là thứ quyết định chiến dịch có tác dụng thật hay không.
+   */
+  voucherCoverage(row: AdminPromotionRow): string {
+    const total = row.voucher_count ?? 0;
+    if (!total) return 'Chưa có mã nào';
+    return `${row.active_voucher_count ?? 0}/${total} mã còn hiệu lực`;
   }
 
   /** Cảnh báo do API tính sẵn cho từng chiến dịch. */
@@ -257,6 +352,70 @@ export class AdminPromotionsPage {
   /**
    * Voucher type label used by the original table.
    */
+  /**
+   * Text from a form control in the voucher issue form.
+   */
+  readInput(event: Event): string {
+    return (event.target as HTMLInputElement).value;
+  }
+
+  /**
+   * Number from a form control in the voucher issue form.
+   */
+  readNumber(event: Event): number {
+    return Number((event.target as HTMLInputElement).value) || 0;
+  }
+
+  /**
+   * Who may use the code at checkout: guests, members, or both.
+   */
+  voucherAudience(row: AdminVoucherRow): string {
+    const group = row.applicable_user_group || 'all_users';
+    if (group === 'guest') {
+      return 'Khách vãng lai';
+    }
+    if (group === 'all_users') {
+      return 'Mọi khách';
+    }
+    return 'Thành viên';
+  }
+
+  /**
+   * Publishes one voucher the shared quote can rank for that audience.
+   */
+  createVoucher(): void {
+    const code = this.voucherCode().trim();
+    if (!code || this.savingVoucher()) {
+      return;
+    }
+    const start = new Date();
+    const end = new Date(start.getTime() + 30 * 24 * 60 * 60 * 1000);
+    this.savingVoucher.set(true);
+    this.api
+      .createVoucher({
+        code,
+        name: this.voucherName().trim() || code,
+        type: this.voucherTypeDraft(),
+        value: Number(this.voucherValueDraft()),
+        minOrderValue: Number(this.voucherMinOrder()),
+        applicableUserGroup: this.voucherAudienceDraft(),
+        startDate: start.toISOString(),
+        endDate: end.toISOString(),
+      })
+      .subscribe({
+        next: () => {
+          this.savingVoucher.set(false);
+          this.voucherCode.set('');
+          this.voucherName.set('');
+          this.reload();
+        },
+        error: (error: unknown) => {
+          this.savingVoucher.set(false);
+          this.loadError.set(adminErrorMessage(error));
+        },
+      });
+  }
+
   voucherType(row: AdminVoucherRow): string {
     const type = row.discount_type || row.type || '';
     if (type === 'percentage') {
@@ -357,16 +516,24 @@ export class AdminPromotionsPage {
     forkJoin({
       promotions: this.api.listPromotions(pageParams).pipe(catchError((error: unknown) => {
         this.loadError.set(adminErrorMessage(error));
-        return of({ rows: [] as AdminPromotionRow[], count: 0 });
+        return of({ rows: [] as AdminPromotionRow[], count: 0, summary: undefined } as AdminPromotionListPayload);
       })),
       vouchers: this.api.listVouchers(pageParams).pipe(catchError(() => of({ rows: [] as AdminVoucherRow[], count: 0 }))),
       products: this.api.listProducts({ isCombo: 'true', limit: '100' }).pipe(catchError(() => of({ rows: [] as AdminProductRow[] }))),
+      // Tab Combo trước đây chỉ liệt kê sản phẩm có cờ `is_combo` và gọi đó là combo
+      // khuyến mãi. Đó là hai thứ khác nhau: chiến dịch loại `combo_discount` mới là
+      // phần thuộc phân hệ này. Lấy cả hai để nói đúng từng thứ là gì.
+      comboCampaigns: this.api
+        .listPromotions({ type: 'combo_discount', limit: '100' })
+        .pipe(catchError(() => of({ rows: [] as AdminPromotionRow[], count: 0 } as AdminPromotionListPayload))),
     }).subscribe((payload) => {
       this.promotions.set(adminListRows(payload.promotions));
+      this.summary.set(payload.promotions.summary ?? null);
       this.vouchers.set(adminListRows(payload.vouchers));
       this.promoCount.set(adminListCount(payload.promotions));
       this.voucherCount.set(adminListCount(payload.vouchers));
       this.bundles.set(adminListRows(payload.products).filter((row) => row.is_combo));
+      this.comboCampaigns.set(adminListRows(payload.comboCampaigns));
       this.loading.set(false);
     });
   }

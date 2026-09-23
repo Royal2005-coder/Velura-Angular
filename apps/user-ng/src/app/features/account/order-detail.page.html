@@ -16,18 +16,21 @@
           <div class="detail-header-row">
             <div>
               <h1 class="detail-page-title">Chi tiết đơn hàng</h1>
-              <div class="detail-meta-text">Mã đơn: <span class="text-bold" id="js-order-code">VEL-2025-001234</span></div>
-              <div class="detail-meta-text" id="js-order-date">Ngày đặt: 25/05/2026</div>
+              <div class="detail-meta-text">Mã đơn: <span class="text-bold">{{ codeLabel() }}</span></div>
+              <div class="detail-meta-text">{{ dateLabel() }}</div>
             </div>
-            <span class="detail-status-badge" id="js-order-status">Đang giao hàng</span>
+            <span class="detail-status-badge">{{ statusLabel() }}</span>
           </div>
+          @if (loadError()) {
+            <p class="detail-meta-text">{{ loadError() }}</p>
+          }
 
           <div class="detail-tracking-row">
             <div class="detail-tracking-info">
               <span class="detail-tracking-label">Mã vận đơn</span>
-              <span class="detail-tracking-code" id="js-tracking-code">VN123456789</span>
+              <span class="detail-tracking-code">{{ order()?.tracking_code || '—' }}</span>
             </div>
-            <a href="./track-order.html" class="btn btn--primary" id="js-track-btn">Theo dõi</a>
+            <a routerLink="/account/track" class="btn btn--primary">Theo dõi</a>
           </div>
         </div>
 
@@ -183,39 +186,42 @@
               </svg>
               <h3 class="detail-grid-title">Thanh toán</h3>
             </div>
-            <div class="detail-payment-method" id="js-payment-method">Phương thức: <span class="text-bold">VNPay</span></div>
+            <div class="detail-payment-method">Phương thức: <span class="text-bold">{{ order()?.payment_method || '—' }}</span></div>
             <div class="detail-billing-summary">
               <div class="detail-billing-row">
                 <span>Tạm tính:</span>
-                <span id="js-subtotal">1,550,000đ</span>
+                <span>{{ money(order()?.subtotal) }}</span>
               </div>
               <div class="detail-billing-row">
                 <span>Phí vận chuyển:</span>
-                <span id="js-shipping-fee">30,000đ</span>
+                <span>{{ money(order()?.shipping_fee) }}</span>
               </div>
               <div class="detail-billing-row">
                 <span>Giảm giá:</span>
-                <span class="text-green" id="js-discount">-100,000đ</span>
+                <span class="text-green">-{{ money(order()?.discount_amount) }}</span>
               </div>
               <div class="detail-billing-row detail-billing-row--total">
                 <span>Tổng cộng:</span>
-                <span class="detail-total-price" id="js-total-amount">1,480,000đ</span>
+                <span class="detail-total-price">{{ money(order()?.total_amount) }}</span>
               </div>
             </div>
           </div>
         </div>
 
         <!-- Action Card -->
-        <div class="detail-card detail-action-card" id="js-action-card">
+        <div class="detail-card detail-action-card">
           <h3 class="detail-action-title">Hành động</h3>
-          <button class="btn btn--secondary" type="button">Liên hệ hỗ trợ</button>
+          @if (canCancel()) {
+            <button class="btn btn--secondary" type="button" (click)="openCancel()">Hủy đơn</button>
+          }
+          <a routerLink="/contact" class="btn btn--secondary">Liên hệ hỗ trợ</a>
         </div>
 
         <!-- Cancel Order Modal -->
-        <div class="review-popup" id="js-cancel-order-modal">
-          <div class="review-popup__overlay js-close-cancel"></div>
+        <div class="review-popup" [class.is-visible]="cancelOpen()">
+          <div class="review-popup__overlay" (click)="closeCancel()"></div>
           <div class="review-popup__content" style="max-width: 480px; width: 90%; text-align: left; background: var(--bg-card, #fff); border: 1px solid var(--border); padding: 24px; border-radius: 8px;">
-            <button class="review-popup__close js-close-cancel" type="button" aria-label="Đóng" style="position: absolute; top: 16px; right: 16px; background: transparent; border: none; cursor: pointer;">
+            <button class="review-popup__close" type="button" aria-label="Đóng" (click)="closeCancel()" style="position: absolute; top: 16px; right: 16px; background: transparent; border: none; cursor: pointer;">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                 stroke-linecap="round" stroke-linejoin="round">
                 <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -228,7 +234,7 @@
 
             <div style="margin-bottom: 16px;">
               <label for="js-cancel-reason-select" style="display: block; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; color: var(--soft); margin-bottom: 8px;">Lý do hủy *</label>
-              <select id="js-cancel-reason-select" style="width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 4px; font-size: 0.9375rem; background-color: var(--bg-input, transparent); color: var(--text-dark);">
+              <select id="js-cancel-reason-select" [value]="cancelReason()" (change)="setCancelReason($event)" style="width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 4px; font-size: 0.9375rem; background-color: var(--bg-input, transparent); color: var(--text-dark);">
                 <option value="Thay đổi ý định">Thay đổi ý định</option>
                 <option value="Nhập sai thông tin giao hàng">Nhập sai thông tin giao hàng</option>
                 <option value="Tìm thấy sản phẩm rẻ hơn">Tìm thấy sản phẩm rẻ hơn</option>
@@ -238,14 +244,19 @@
               </select>
             </div>
 
-            <div id="js-cancel-reason-other-container" style="margin-bottom: 16px; display: none;">
-              <label for="js-cancel-reason-other" style="display: block; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; color: var(--soft); margin-bottom: 8px;">Chi tiết lý do *</label>
-              <textarea id="js-cancel-reason-other" placeholder="Vui lòng nhập lý do khác..." style="width: 100%; height: 80px; padding: 10px; border: 1px solid var(--border); border-radius: 4px; font-size: 0.9375rem; resize: vertical; background-color: var(--bg-input, transparent); color: var(--text-dark);"></textarea>
-            </div>
+            @if (cancelReason() === 'Khác') {
+              <div style="margin-bottom: 16px;">
+                <label for="js-cancel-reason-other" style="display: block; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; color: var(--soft); margin-bottom: 8px;">Chi tiết lý do *</label>
+                <textarea id="js-cancel-reason-other" [value]="cancelOther()" (input)="setCancelOther($event)" placeholder="Vui lòng nhập lý do khác..." style="width: 100%; height: 80px; padding: 10px; border: 1px solid var(--border); border-radius: 4px; font-size: 0.9375rem; resize: vertical; background-color: var(--bg-input, transparent); color: var(--text-dark);"></textarea>
+              </div>
+            }
+            @if (cancelError()) {
+              <p style="color: #9b2c2c; font-size: 0.875rem;">{{ cancelError() }}</p>
+            }
 
             <div class="review-popup__actions" style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px;">
-              <button class="btn btn--secondary js-close-cancel" type="button" style="min-width: 100px;">Bỏ qua</button>
-              <button class="btn btn--primary" id="js-btn-submit-cancel" type="button" style="min-width: 120px;">Xác nhận hủy</button>
+              <button class="btn btn--secondary" type="button" (click)="closeCancel()" style="min-width: 100px;">Bỏ qua</button>
+              <button class="btn btn--primary" type="button" [disabled]="cancelling()" (click)="submitCancel()" style="min-width: 120px;">Xác nhận hủy</button>
             </div>
           </div>
         </div>

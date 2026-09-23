@@ -187,11 +187,14 @@ export function evaluateVoucher(
   }
 
   const group = String(voucher.applicable_user_group || "all_users");
+  if (group === "guest" && context.isMember) {
+    return reject("GROUP_MISMATCH", "Mã chỉ dành cho khách vãng lai.");
+  }
+  if (group !== "guest" && group !== "all_users" && !context.isMember) {
+    return reject("GROUP_MISMATCH", "Mã chỉ dành cho thành viên. Đăng nhập để sử dụng.");
+  }
   if (group === "new_user" && !context.isFirstOrder) {
     return reject("GROUP_MISMATCH", "Mã chỉ dành cho khách hàng mua lần đầu.");
-  }
-  if (group === "loyal_user" && !context.isMember) {
-    return reject("GROUP_MISMATCH", "Mã chỉ dành cho thành viên. Đăng nhập để sử dụng.");
   }
 
   if (context.isMember && usedByThisCustomer >= usageLimitPerUser) {

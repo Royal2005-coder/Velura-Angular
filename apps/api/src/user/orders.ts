@@ -71,6 +71,25 @@ export function parseUtcDate(dateStr: unknown): Date {
   return new Date(cleanStr);
 }
 
+/**
+ * Guest checkout has no SMS provider. The code is emailed, so an address is required.
+ */
+export function requireGuestOtpEmail(value: unknown): string {
+  const email = String(value || "").trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new HttpError(400, "EMAIL_REQUIRED", "Email là bắt buộc để nhận mã OTP. Velura chưa gửi OTP qua số điện thoại.");
+  }
+  return email;
+}
+
+/**
+ * Hides the mailbox name before showing the destination on the checkout screen.
+ */
+export function maskEmail(email: string): string {
+  const [name, domain] = email.split("@");
+  return `${name.slice(0, 1)}***@${domain}`;
+}
+
 // Helper to send email directly without relying on email_outbox and service role worker
 async function sendDirectEmail(to: unknown, subject: string, text: string, html: string): Promise<void> {
   if (!config.smtpHost || !config.smtpUser || !config.smtpAppPassword) {
@@ -441,6 +460,10 @@ export async function handleOrdersRoute(
       if (!validatePhone(phone)) {
         throw new HttpError(400, "BAD_REQUEST", "Số điện thoại không hợp lệ (10 số, bắt đầu bằng 0)");
       }
+      const otpEmail = requireGuestOtpEmail(email);
+      if (config.nodeEnv === "production" && (!config.smtpHost || !config.smtpUser || !config.smtpAppPassword)) {
+        throw new HttpError(503, "OTP_EMAIL_UNAVAILABLE", "Chưa cấu hình email để gửi mã OTP. Không gửi mã giả qua số điện thoại.");
+      }
       
       const existingUser = await selectOne("users", { phone: `eq.${phone}` });
       if (existingUser && existingUser.is_active) {
@@ -481,9 +504,7 @@ export async function handleOrdersRoute(
         attempts: 0 
       });
       
-      // Send OTP email directly
-      if (email) {
-        const emailBody = `Chào ${full_name || "bạn"},\n\nMã xác thực OTP của bạn là: ${otpCode}.\n\nMã có hiệu lực trong 5 phút. Vui lòng không chia sẻ mã này cho bất kỳ ai.`;
+      const emailBody = `Chào ${full_name || "bạn"},\n\nMã xác thực OTP của bạn là: ${otpCode}.\n\nMã có hiệu lực trong 5 phút. Vui lòng không chia sẻ mã này cho bất kỳ ai.`;
         const emailHtml = `
           <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eaeaea; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
             <div style="background-color: #d1b8a8; padding: 24px; text-align: center;">
@@ -505,12 +526,12 @@ export async function handleOrdersRoute(
             </div>
           </div>
         `;
-        await sendDirectEmail(email, "Mã xác thực đơn hàng Velura", emailBody, emailHtml);
+        await sendDirectEmail(otpEmail, "Mã xác thực đơn hàng Velura", emailBody, emailHtml);
         
         // Vẫn cố gắng lưu vết vào email_outbox nếu RLS cho phép
         try {
           await insertRow("email_outbox", {
-            recipient: email,
+            recipient: otpEmail,
             template_code: "otp_verification",
             subject: "Mã xác thực đơn hàng Velura",
             body: emailBody,
@@ -520,11 +541,13 @@ export async function handleOrdersRoute(
         } catch {
           /* ignore */
         }
-      }
       
       return sendJson(res, 200, {
         success: true,
-        message: "Mã OTP đã được gửi.",
+        message: "Mã OTP đã được gửi tới email.",
+        channel: "email",
+        masked_email: maskEmail(otpEmail),
+        dev_bypass: allowDevOtpBypass(),
         phone,
         user_id: userId
       }, corsHeaders);

@@ -50,7 +50,16 @@
       <div class="otp-modal__content" style="position: relative;">
         <a class="otp-modal__close" routerLink="/checkout/shipping" aria-label="Đóng" style="position: absolute; top: 16px; right: 16px; background: none; border: none; font-size: 24px; cursor: pointer; color: #999;">&times;</a>
         <h2 id="otp-title" class="otp-modal__title">Nhập OTP để hoàn tất đơn hàng</h2>
-        <p class="otp-modal__desc">Nhập mã OTP đã được gửi về số điện thoại mà bạn đăng kí</p>
+        <p class="otp-modal__desc">
+          @if (maskedEmail()) {
+            Mã OTP đã gửi tới email {{ maskedEmail() }}. Velura chưa gửi mã qua số điện thoại.
+          } @else {
+            Nhập email ở bước giao hàng để nhận mã OTP. Velura chưa gửi mã qua số điện thoại.
+          }
+        </p>
+        @if (devBypass()) {
+          <p class="otp-modal__desc">Máy local có thể nhập 1234.</p>
+        }
         <form (submit)="$event.preventDefault()">
           <div class="otp-inputs" role="group" aria-label="Mã OTP 4 chữ số">
             @for (digit of digits(); track $index) {
@@ -58,7 +67,7 @@
             }
           </div>
           <p class="otp-timer">(Hiệu lực: {{ seconds() }}s)</p>
-          <p class="otp-resend">Không nhận được mã? <button type="button" class="btn btn--text" (click)="resend()">Gửi lại</button></p>
+          <p class="otp-resend">Không nhận được mã? <button type="button" class="btn btn--text" [disabled]="resending()" (click)="resend()">{{ resending() ? 'Đang gửi...' : 'Gửi lại' }}</button></p>
           @if (errorMessage()) {
             <p class="field__error">{{ errorMessage() }}</p>
           }

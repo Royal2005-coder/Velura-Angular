@@ -1,7 +1,11 @@
 import { config } from "../config.js";
-import { getRequestIp, readJson, sendJson } from "../http.js";
+import { HttpError, getRequestIp, readJson, sendJson } from "../http.js";
+import { readMultipartImage, uploadToSupabaseStorage } from "../user/upload.js";
 import type { RouteArgs } from "../types.js";
+import { PRODUCT_ADMIN_ROLES } from "./product-constants.js";
 import type { ProductService } from "./product-service.js";
+
+const PRODUCT_IMAGE_STORAGE = { bucket: "product-images", prefix: "catalog" };
 
 /**
  * Admin product HTTP routes under `/api/v1/admin/products`.
@@ -48,6 +52,20 @@ export async function handleProductRoute({
 
   if (req.method === "GET" && parts[4] === "audit-logs" && parts.length === 5) {
     sendJson(res, 200, await service.listAuditLogs(context, url.searchParams), headers);
+    return true;
+  }
+
+  // POST /api/v1/admin/products/image — catalog photo for the product form.
+  if (req.method === "POST" && parts[4] === "image" && parts.length === 5) {
+    if (!context?.authUser?.id) {
+      throw new HttpError(401, "AUTH_REQUIRED", "Authentication is required");
+    }
+    if (!PRODUCT_ADMIN_ROLES.includes(context.roleCode || "")) {
+      throw new HttpError(403, "RBAC_DENIED", "Chỉ người vận hành sản phẩm mới được tải ảnh.");
+    }
+    const image = await readMultipartImage(req);
+    const url = await uploadToSupabaseStorage(image.fileBuffer, image.fileName, image.mimeType, PRODUCT_IMAGE_STORAGE);
+    sendJson(res, 200, { url }, headers);
     return true;
   }
 

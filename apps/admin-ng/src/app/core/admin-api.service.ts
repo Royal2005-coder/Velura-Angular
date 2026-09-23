@@ -720,6 +720,16 @@ export class AdminApiService {
   /**
    * Previews a product CSV import.
    */
+  /**
+   * Stores one catalog photo and returns its public URL.
+   * The product form keeps that URL on the image list.
+   */
+  uploadProductImage(file: File): Observable<{ url?: string }> {
+    const body = new FormData();
+    body.append("file", file);
+    return this.http.post<{ url?: string }>(`${this.baseUrl}/api/v1/admin/products/image`, body);
+  }
+
   previewCsv(csv: string): Observable<unknown> {
     return this.http.post(`${this.baseUrl}/api/v1/admin/products/import-csv`, { csv });
   }

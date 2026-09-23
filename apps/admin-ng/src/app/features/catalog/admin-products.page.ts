@@ -107,6 +107,7 @@ export class AdminProductsPage {
   readonly actionError = signal<string | null>(null);
   readonly nextStatus = signal('');
   readonly priceHistory = signal<AdminPriceHistoryRow[]>([]);
+  readonly imageUploading = signal(false);
   readonly canMutate = computed(() => this.session.canMutate('products'));
   readonly canOpenPricing = computed(() => this.session.canOpen('pricing'));
   readonly allowedStatuses = computed(() => {
@@ -588,6 +589,36 @@ export class AdminProductsPage {
   /**
    * Reads a local CSV file and previews it through the original import API.
    */
+  /**
+   * Uploads one catalog photo and appends its public URL to the image list.
+   */
+  uploadImage(event: Event, images: HTMLTextAreaElement): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file || this.imageUploading()) {
+      return;
+    }
+    this.imageUploading.set(true);
+    this.actionError.set(null);
+    this.adminApi.uploadProductImage(file).subscribe({
+      next: (result) => {
+        this.imageUploading.set(false);
+        const url = result.url || '';
+        if (!url) {
+          this.actionError.set('Kho ảnh không trả về đường dẫn.');
+          return;
+        }
+        const current = images.value.trim();
+        images.value = current ? `${current}\n${url}` : url;
+      },
+      error: (error: unknown) => {
+        this.imageUploading.set(false);
+        this.actionError.set(adminErrorMessage(error, 'Không tải được ảnh sản phẩm.'));
+      },
+    });
+  }
+
   onCsvFile(event: Event): void {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];

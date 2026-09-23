@@ -86,6 +86,7 @@ export interface AdminReturnRow {
   status?: string;
   request_type?: string;
   return_type?: string;
+  description?: string;
   created_at?: string;
   customer_name?: string;
   version?: number;

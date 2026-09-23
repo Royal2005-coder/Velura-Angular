@@ -159,15 +159,24 @@
                   <tr>
                     <td>{{ row.return_id }}</td>
                     <td>{{ row.order_id }}</td>
-                    <td>{{ row.request_type || '—' }}</td>
+                    <td>
+                      {{ returnKind(row) }}
+                      @if (row.description) {
+                        <small class="admin-note">{{ row.description }}</small>
+                      }
+                    </td>
                     <td><span class="admin-badge">{{ returnStatusLabel(row.status) }}</span></td>
                     <td>{{ date(row.created_at) }}</td>
                     <td>
                       @if (canMutate()) {
                         <div class="admin-table-actions">
                           @if (row.status === 'pending') {
-                            <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openReturnAction('refund', row.return_id)">Hoàn tiền</button>
-                            <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openReturnAction('exchange', row.return_id)">Đổi hàng</button>
+                            @if (showReturnAction(row, 'refund')) {
+                              <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openReturnAction('refund', row.return_id)">Hoàn tiền</button>
+                            }
+                            @if (showReturnAction(row, 'exchange')) {
+                              <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openReturnAction('exchange', row.return_id)">Đổi hàng</button>
+                            }
                             <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="openReturnAction('reject', row.return_id)">Từ chối</button>
                           } @else if (nextReturnStep(row); as step) {
                             <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="advanceReturn(row, step.status)">{{ step.label }}</button>

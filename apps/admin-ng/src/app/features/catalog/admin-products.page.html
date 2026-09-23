@@ -344,8 +344,12 @@
           </label>
           <label class="admin-form-group">
             <span class="admin-form-label">Ảnh (mỗi URL một dòng)</span>
-            <textarea class="admin-form-control admin-form-textarea" name="images" [readOnly]="!canMutate()" placeholder="https://... hoặc /assets/images/sp.jpg">{{ (selected()?.images || []).join('\n') }}</textarea>
-            <small class="admin-form-helper">Upload Supabase chưa bắt buộc cho UAT. Dùng URL https hoặc /assets/... — để trống vẫn tạo được.</small>
+            <textarea #imagesBox class="admin-form-control admin-form-textarea" name="images" [readOnly]="!canMutate()" placeholder="https://... hoặc /assets/images/sp.jpg">{{ (selected()?.images || []).join('\n') }}</textarea>
+            @if (canMutate()) {
+              <input #imageFile type="file" accept="image/jpeg,image/png,image/webp,image/gif" hidden (change)="uploadImage($event, imagesBox)" />
+              <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" [disabled]="imageUploading()" (click)="imageFile.click()">{{ imageUploading() ? 'Đang tải ảnh...' : 'Tải ảnh lên' }}</button>
+            }
+            <small class="admin-form-helper">Ảnh JPG, PNG, WebP hoặc GIF, tối đa 5 MB. URL hiện có vẫn dùng được.</small>
           </label>
           @if (overlay() === 'edit') {
             <h3 class="admin-drawer__section">Biến thể / tồn kho</h3>

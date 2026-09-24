@@ -226,6 +226,10 @@ export class CheckoutShippingPage {
       showToast('Vui lòng điền đầy đủ Họ tên, Số điện thoại, Email và Địa chỉ giao hàng!');
       return;
     }
+    if (this.payment() === 'vnpay' || this.payment() === 'momo') {
+      showToast('VNPay và MoMo chưa bật. Chọn COD hoặc thẻ Stripe.');
+      return;
+    }
     if (!this.auth.isLoggedIn() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       showToast('Email không hợp lệ. Mã OTP được gửi tới email, không gửi qua số điện thoại.');
       return;
@@ -359,7 +363,9 @@ export class CheckoutShippingPage {
       shipping_method: this.shipping(),
     });
     this.checkout.completeCheckout(items);
-    showToast('Đặt hàng thành công!');
+    showToast(paymentMethod === 'STRIPE'
+      ? 'Đơn đã tạo. Stripe đánh dấu đã thanh toán khi webhook payment_intent.succeeded tới API.'
+      : 'Đặt hàng thành công!');
     this.submitting.set(false);
     void this.router.navigateByUrl('/checkout/confirm');
     void paymentMethod;

@@ -608,6 +608,20 @@ export async function handleOrdersRoute(
         }
       }
       
+      // Chốt tiền trước khi tiêu mã OTP. Giá lệch bảng giá hoặc mã giảm giá vừa đổi
+      // (409 VOUCHER_CHANGED) thì khách phải xác nhận lại tổng mới; nếu OTP đã bị xoá
+      // thì khách phải xin mã lần nữa chỉ vì một mã giảm giá, và tài khoản khách bên
+      // dưới đã được tạo thừa.
+      const guestPriced = await priceClaimedOrder(items, shipping_fee, body.shipping_method || order.shipping_method);
+      const guestVoucher = await resolveOrderVoucher(
+        context,
+        guestPriced.subtotal,
+        guestPriced.shippingFee,
+        voucher_id ? String(voucher_id) : null,
+        body.decline_voucher === true || order.decline_voucher === true,
+        guestPriced.cart
+      );
+
       // OTP is valid
       checkoutOtpAttemptsMap.delete(phoneKey);
       
@@ -728,15 +742,6 @@ export async function handleOrdersRoute(
       const trackingCode = "VLR" + Date.now().toString().slice(-8).toUpperCase();
       assertStripeReady(payment_method);
       const dbPaymentMethod = (payment_method === "COD" || payment_method === "cod") ? "COD" : "ONLINE_PAYMENT";
-      const guestPriced = await priceClaimedOrder(items, shipping_fee, body.shipping_method || order.shipping_method);
-      const guestVoucher = await resolveOrderVoucher(
-        context,
-        guestPriced.subtotal,
-        guestPriced.shippingFee,
-        voucher_id ? String(voucher_id) : null,
-        body.decline_voucher === true || order.decline_voucher === true,
-        guestPriced.cart
-      );
       const guestTotal = Math.max(0, guestPriced.subtotal + guestPriced.shippingFee - guestVoucher.discountAmount);
       
       const newOrder = asJsonObject(await insertRow("orders", {

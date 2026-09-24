@@ -1,6 +1,6 @@
 import { Component, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
 import { VoucherService } from '../../core/services/voucher.service';
-import type { AppliedVoucher, WalletVoucher } from '../../core/models/voucher.interface';
+import type { AppliedVoucher, CartItemRef, WalletVoucher } from '../../core/models/voucher.interface';
 
 /**
  * Ví Voucher — bảng mã giảm giá chủ động dùng ở giỏ hàng và trang thanh toán.
@@ -21,10 +21,20 @@ export class VoucherWallet {
 
   readonly orderValue = input.required<number>();
   readonly shippingFee = input(0);
+  /**
+   * Dòng giỏ hàng. Có thì máy chủ tự tính giá trị đơn từ bảng giá và xét được mã theo
+   * danh mục; thiếu thì mã theo danh mục bị báo là chưa có sản phẩm phù hợp.
+   */
+  readonly cartItems = input<readonly CartItemRef[]>([]);
   /** Cho phép trang cha tắt tính năng tự áp mã (ví dụ khi khách đã chủ động bỏ mã). */
   readonly autoApply = input(true);
 
   readonly applied = output<AppliedVoucher | null>();
+  /**
+   * Khách chủ động bỏ mã (true) hay chọn lại mã (false). Trang cha cần biết để gửi
+   * `decline_voucher` khi báo giá và đặt đơn — phân biệt với trường hợp mã tự mất hiệu lực.
+   */
+  readonly declined = output<boolean>();
 
   readonly items = signal<WalletVoucher[]>([]);
   readonly loading = signal(false);
@@ -43,6 +53,9 @@ export class VoucherWallet {
     () => this.items().find((item) => item.voucher_id === this.selectedId()) ?? null
   );
   readonly hasAnyVoucher = computed(() => this.items().length > 0);
+  private readonly cartKey = computed(() =>
+    this.cartItems().map((item) => `${item.variant_id}:${item.quantity}`).join(',')
+  );
 
   /** Mã dùng được tốt nhất mà khách CHƯA chọn — dùng cho gợi ý "còn mã lợi hơn". */
   readonly betterOption = computed(() => {
@@ -64,7 +77,11 @@ export class VoucherWallet {
     effect(() => {
       const value = this.orderValue();
       const shipping = this.shippingFee();
+      // Chỉ theo dõi nội dung giỏ, không theo dõi tham chiếu mảng, để trang cha dựng lại
+      // mảng mới mỗi lần render không làm ví tải lại liên tục.
+      const cartKey = this.cartKey();
       untracked(() => this.refresh(value, shipping));
+      void cartKey;
     });
   }
 
@@ -74,7 +91,7 @@ export class VoucherWallet {
   refresh(orderValue: number, shippingFee: number): void {
     this.loading.set(true);
     this.loadError.set(null);
-    this.vouchers.loadWallet(orderValue, shippingFee).subscribe({
+    this.vouchers.loadWallet(orderValue, shippingFee, this.cartItems()).subscribe({
       next: (response) => {
         this.loading.set(false);
         this.items.set(response.vouchers ?? []);
@@ -131,6 +148,7 @@ export class VoucherWallet {
   choose(item: WalletVoucher): void {
     if (!item.eligible) return;
     this.dismissed.set(false);
+    this.declined.emit(false);
     this.selectedId.set(item.voucher_id);
     this.emit(item);
     this.closeModal();
@@ -141,6 +159,7 @@ export class VoucherWallet {
    */
   clear(): void {
     this.dismissed.set(true);
+    this.declined.emit(true);
     this.selectedId.set(null);
     this.applied.emit(null);
   }
@@ -162,7 +181,7 @@ export class VoucherWallet {
       return;
     }
     this.applying.set(true);
-    this.vouchers.applyCode(code, this.orderValue(), this.shippingFee()).subscribe({
+    this.vouchers.applyCode(code, this.orderValue(), this.shippingFee(), this.cartItems()).subscribe({
       next: (response) => {
         this.applying.set(false);
         if (!response.applied || !response.voucher_id) {
@@ -170,6 +189,7 @@ export class VoucherWallet {
           return;
         }
         this.dismissed.set(false);
+        this.declined.emit(false);
         this.selectedId.set(response.voucher_id);
         this.manualCode.set('');
         this.applied.emit({

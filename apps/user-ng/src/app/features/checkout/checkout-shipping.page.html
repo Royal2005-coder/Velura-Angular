@@ -168,10 +168,23 @@
         <app-voucher-wallet
           [orderValue]="subtotal()"
           [shippingFee]="shippingFee()"
+          [cartItems]="cartRefs()"
           (applied)="onVoucherApplied($event)"
+          (declined)="onVoucherDeclined($event)"
         />
+        @if (voucherNotice()) {
+          <p class="field__error" role="status">{{ voucherNotice() }}</p>
+        }
         @if (voucherError()) {
           <p class="field__error">{{ voucherError() }}</p>
+        }
+        @if (freeShippingHint()) {
+          <div class="freeship-progress" role="status">
+            <p class="freeship-progress__text">{{ freeShippingHint() }}</p>
+            <div class="freeship-progress__track" aria-hidden="true">
+              <div class="freeship-progress__bar" [style.width.%]="freeShippingProgress()"></div>
+            </div>
+          </div>
         }
         <div class="summary-lines">
           <div class="summary-line"><span>Tạm tính</span><span class="summary-line__value">{{ subtotalLabel() }}</span></div>

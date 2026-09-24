@@ -7,6 +7,8 @@ import { ApiService } from '../../core/services/api.service';
 import { formatVnd } from '../../core/utils/money';
 import { showToast } from '../../core/utils/toast';
 import { useBodyClass } from '../../core/utils/body-class';
+import { ApiRequestError } from '../../core/models/api-request-error';
+import type { VoucherChangedDetails } from '../../core/models/voucher.interface';
 
 interface OtpVerifyResponse {
   success?: boolean;
@@ -148,6 +150,7 @@ export class CheckoutOtpPage {
           shipping_address: guestPayload['shipping_address'],
           shipping_fee: guestPayload['shipping_fee'],
           voucher_id: guestPayload['voucher_id'],
+          decline_voucher: guestPayload['decline_voucher'] === true,
           discount_amount: guestPayload['discount_amount'],
           subtotal: guestPayload['subtotal'],
           total_amount: guestPayload['total_amount'],
@@ -184,8 +187,39 @@ export class CheckoutOtpPage {
         },
         error: (error: Error) => {
           this.submitting.set(false);
+          if (this.handleVoucherChanged(error, guestPayload)) return;
           this.errorMessage.set(error.message || 'Lỗi xác thực OTP');
         },
       });
+  }
+
+  /**
+   * Mã giảm giá vừa hết hiệu lực giữa lúc xem giỏ và lúc xác nhận OTP.
+   *
+   * Máy chủ chốt tiền trước khi tiêu mã OTP, nên mã OTP khách vừa nhập vẫn còn dùng
+   * được. Ghi mã thay thế vào đơn đang chờ, báo tổng mới ngay tại đây và để khách bấm
+   * xác nhận lần nữa — không bắt khách xin OTP lại chỉ vì một mã giảm giá (D1).
+   */
+  private handleVoucherChanged(error: Error, guestPayload: Record<string, unknown>): boolean {
+    if (!(error instanceof ApiRequestError) || error.code !== 'VOUCHER_CHANGED') return false;
+    const details = (error.details || {}) as Partial<VoucherChangedDetails>;
+    const replacement = details.replacement ?? null;
+    const discount = replacement?.discount_amount ?? 0;
+    const subtotal = Number(guestPayload['subtotal'] || 0);
+    const shippingFee = Number(guestPayload['shipping_fee'] || 0);
+    const total = Math.max(0, subtotal + shippingFee - discount);
+    this.checkout.saveGuestPayload({
+      ...guestPayload,
+      voucher_id: replacement?.voucher_id ?? null,
+      decline_voucher: false,
+      discount_amount: discount,
+      total_amount: total,
+    });
+    const requested = details.requested_code ? `Mã ${details.requested_code}` : 'Mã đã chọn';
+    const next = replacement ? `đã chuyển sang mã ${replacement.code}` : 'đơn sẽ không áp mã';
+    this.errorMessage.set(
+      `${requested} không còn dùng được, ${next}. Tổng mới: ${formatVnd(total)}. Bấm xác nhận lần nữa để đặt hàng.`
+    );
+    return true;
   }
 }

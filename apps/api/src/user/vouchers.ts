@@ -12,6 +12,7 @@ import {
   type VoucherEvaluationContext
 } from "./voucher-engine.js";
 import { loadVoucherCart, parseCartItems } from "./cart-catalog.js";
+import { chooseOrderVoucher } from "./voucher-choice.js";
 import {
   type AuthContext,
   type HeaderMap,
@@ -104,6 +105,10 @@ export async function handleVouchersRoute(
  * Số tiền giảm lúc đặt hàng. Khách gửi mã thì dùng đúng một mã đó nếu còn hợp lệ;
  * không gửi mã thì lấy mã lợi nhất của đúng đối tượng (vãng lai hoặc thành viên).
  * Số tiền do engine tính, không lấy từ trình duyệt.
+ *
+ * Mã khách chọn không còn hợp lệ — hết lượt, hết hạn giữa lúc xem giỏ và lúc đặt — thì
+ * không tạo đơn ở mức giá khách chưa thấy. Ném `409 VOUCHER_CHANGED` kèm lý do và mã
+ * thay thế, để màn Tóm tắt đơn báo lại tổng mới và khách bấm lại (U1-09, U1-13, D1).
  */
 export async function resolveOrderVoucher(
   context: AuthContext,
@@ -115,15 +120,20 @@ export async function resolveOrderVoucher(
 ): Promise<{ voucherId: string | null; discountAmount: number }> {
   if (decline) return { voucherId: null, discountAmount: 0 };
   const wallet = await buildWallet(context, orderValue, shippingFee, cart);
-  if (requestedVoucherId) {
-    const match = wallet.items.find((item) => item.voucherId === requestedVoucherId);
-    if (!match?.eligible) {
-      throw new HttpError(400, "INVALID_VOUCHER", match?.reasonText || "Mã giảm giá không dùng được cho đơn này");
-    }
-    return { voucherId: match.voucherId, discountAmount: match.discountAmount };
+  const { applied, change } = chooseOrderVoucher(wallet, { voucherId: requestedVoucherId, code: null, decline });
+  if (change) {
+    throw new HttpError(409, "VOUCHER_CHANGED", change.reasonText, {
+      requested_voucher_id: change.requestedVoucherId,
+      requested_code: change.requestedCode,
+      reason_text: change.reasonText,
+      replacement: applied
+        ? { voucher_id: applied.voucherId, code: applied.code, name: applied.name, discount_amount: applied.discountAmount }
+        : null
+    });
   }
-  if (!wallet.best) return { voucherId: null, discountAmount: 0 };
-  return { voucherId: wallet.best.voucherId, discountAmount: wallet.best.discountAmount };
+  return applied
+    ? { voucherId: applied.voucherId, discountAmount: applied.discountAmount }
+    : { voucherId: null, discountAmount: 0 };
 }
 
 /**

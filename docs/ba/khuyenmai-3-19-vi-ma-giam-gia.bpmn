@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions id="Definitions_3_19_vi_ma_giam_gia" xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" targetNamespace="http://velura.vn/bpmn/khuyenmai">
+  <bpmn:collaboration id="Collaboration_3_19_vi_ma_giam_gia">
+    <bpmn:participant id="Participant_khachhang" name="Khách hàng" processRef="Process_khachhang" />
+    <bpmn:participant id="Participant_velura" name="Velura" processRef="Process_velura" />
+    <bpmn:messageFlow id="m_w_xem_w_sstart" name="Phiên giỏ hàng và
+trạng thái đăng nhập" sourceRef="w_xem" targetRef="w_sstart" />
+    <bpmn:messageFlow id="m_w_chon_w_vi" name="Mã được áp
+và mức giảm" sourceRef="w_chon" targetRef="w_vi" />
+    <bpmn:messageFlow id="m_w_lydo_w_vi" name="Lý do chưa dùng được" sourceRef="w_lydo" targetRef="w_vi" />
+    <bpmn:messageFlow id="m_w_doi_w_cham" name="Mã khách tự chọn" sourceRef="w_doi" targetRef="w_cham" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_khachhang" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_khachhang">
+      <bpmn:lane id="lane_kh" name="Khách hàng">
+        <bpmn:flowNodeRef>w_cstart</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>w_xem</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>w_vi</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>w_gw</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>w_doi</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>w_cend</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="w_cstart" name="Khách mở giỏ hàng hoặc trang Ưu đãi"><bpmn:outgoing>f_w_cstart_w_xem</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:userTask id="w_xem" name="Xem trang Ưu đãi hoặc thêm sản phẩm vào giỏ"><bpmn:incoming>f_w_cstart_w_xem</bpmn:incoming><bpmn:outgoing>f_w_xem_w_vi</bpmn:outgoing></bpmn:userTask>
+    <bpmn:userTask id="w_vi" name="Xem ví mã giảm giá và mức giảm được gợi ý"><bpmn:incoming>f_w_xem_w_vi</bpmn:incoming><bpmn:incoming>f_w_doi_w_vi</bpmn:incoming><bpmn:outgoing>f_w_vi_w_gw</bpmn:outgoing></bpmn:userTask>
+    <bpmn:exclusiveGateway id="w_gw" name="Đổi sang mã khác?"><bpmn:incoming>f_w_vi_w_gw</bpmn:incoming><bpmn:outgoing>f_w_gw_w_doi</bpmn:outgoing><bpmn:outgoing>f_w_gw_w_cend</bpmn:outgoing></bpmn:exclusiveGateway>
+    <bpmn:userTask id="w_doi" name="Chọn mã khác trong ví"><bpmn:incoming>f_w_gw_w_doi</bpmn:incoming><bpmn:outgoing>f_w_doi_w_vi</bpmn:outgoing></bpmn:userTask>
+    <bpmn:endEvent id="w_cend" name="Giỏ hàng đã gắn một mã duy nhất"><bpmn:incoming>f_w_gw_w_cend</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="f_w_cstart_w_xem" name="" sourceRef="w_cstart" targetRef="w_xem" />
+    <bpmn:sequenceFlow id="f_w_xem_w_vi" name="" sourceRef="w_xem" targetRef="w_vi" />
+    <bpmn:sequenceFlow id="f_w_vi_w_gw" name="" sourceRef="w_vi" targetRef="w_gw" />
+    <bpmn:sequenceFlow id="f_w_gw_w_doi" name="Có" sourceRef="w_gw" targetRef="w_doi" />
+    <bpmn:sequenceFlow id="f_w_doi_w_vi" name="" sourceRef="w_doi" targetRef="w_vi" />
+    <bpmn:sequenceFlow id="f_w_gw_w_cend" name="Không" sourceRef="w_gw" targetRef="w_cend" />
+  </bpmn:process>
+  <bpmn:process id="Process_velura" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_velura">
+      <bpmn:lane id="lane_promo" name="Dịch vụ khuyến mãi">
+        <bpmn:flowNodeRef>w_sstart</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>w_loc</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>w_cham</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>w_sgw</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>w_lydo</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>w_chon</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>w_send</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="w_sstart" name="Nhận phiên giỏ hàng"><bpmn:outgoing>f_w_sstart_w_loc</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:serviceTask id="w_loc" name="Xác định khách vãng lai hay thành viên và lọc bộ mã theo đối tượng"><bpmn:incoming>f_w_sstart_w_loc</bpmn:incoming><bpmn:outgoing>f_w_loc_w_cham</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:serviceTask id="w_cham" name="Chấm từng mã trên giá trị giỏ hiện tại theo tám bước kiểm"><bpmn:incoming>f_w_loc_w_cham</bpmn:incoming><bpmn:outgoing>f_w_cham_w_sgw</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="w_sgw" name="Có mã đủ điều kiện?"><bpmn:incoming>f_w_cham_w_sgw</bpmn:incoming><bpmn:outgoing>f_w_sgw_w_lydo</bpmn:outgoing><bpmn:outgoing>f_w_sgw_w_chon</bpmn:outgoing></bpmn:exclusiveGateway>
+    <bpmn:sendTask id="w_lydo" name="Nêu lý do chưa dùng được và số tiền còn thiếu"><bpmn:incoming>f_w_sgw_w_lydo</bpmn:incoming><bpmn:outgoing>f_w_lydo_w_send</bpmn:outgoing></bpmn:sendTask>
+    <bpmn:serviceTask id="w_chon" name="Chọn mã cho số tiền giảm thực tế lớn nhất"><bpmn:incoming>f_w_sgw_w_chon</bpmn:incoming><bpmn:outgoing>f_w_chon_w_send</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:endEvent id="w_send" name="Ví mã đã sẵn sàng"><bpmn:incoming>f_w_lydo_w_send</bpmn:incoming><bpmn:incoming>f_w_chon_w_send</bpmn:incoming></bpmn:endEvent>
+    <bpmn:textAnnotation id="n_tambuoc"><bpmn:text>Tám bước kiểm theo thứ tự: mã ngừng hoạt động, chưa tới hạn, hết hạn, hết lượt toàn hệ thống, chiến dịch cha dừng hoặc cạn ngân sách, sai nhóm khách, hết lượt của chính khách, chưa đạt giá trị đơn tối thiểu.</bpmn:text></bpmn:textAnnotation>
+    <bpmn:textAnnotation id="n_totnhat"><bpmn:text>So sánh theo số tiền giảm thực tế sau khi áp trần, không theo phần trăm danh nghĩa. Bằng nhau thì ưu tiên mã hết hạn sớm hơn. Mỗi đơn một mã.</bpmn:text></bpmn:textAnnotation>
+    <bpmn:sequenceFlow id="f_w_sstart_w_loc" name="" sourceRef="w_sstart" targetRef="w_loc" />
+    <bpmn:sequenceFlow id="f_w_loc_w_cham" name="" sourceRef="w_loc" targetRef="w_cham" />
+    <bpmn:sequenceFlow id="f_w_cham_w_sgw" name="" sourceRef="w_cham" targetRef="w_sgw" />
+    <bpmn:sequenceFlow id="f_w_sgw_w_lydo" name="Không" sourceRef="w_sgw" targetRef="w_lydo" />
+    <bpmn:sequenceFlow id="f_w_sgw_w_chon" name="Có" sourceRef="w_sgw" targetRef="w_chon" />
+    <bpmn:sequenceFlow id="f_w_lydo_w_send" name="" sourceRef="w_lydo" targetRef="w_send" />
+    <bpmn:sequenceFlow id="f_w_chon_w_send" name="" sourceRef="w_chon" targetRef="w_send" />
+    <bpmn:association id="a_n_tambuoc_w_cham" sourceRef="n_tambuoc" targetRef="w_cham" />
+    <bpmn:association id="a_n_totnhat_w_chon" sourceRef="n_totnhat" targetRef="w_chon" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_3_19_vi_ma_giam_gia">
+    <bpmndi:BPMNPlane id="BPMNPlane_3_19_vi_ma_giam_gia" bpmnElement="Collaboration_3_19_vi_ma_giam_gia">
+      <bpmndi:BPMNShape id="Participant_khachhang_di" bpmnElement="Participant_khachhang" isHorizontal="true"><dc:Bounds x="40" y="40" width="1869" height="280" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="lane_kh_di" bpmnElement="lane_kh" isHorizontal="true"><dc:Bounds x="70" y="40" width="1839" height="280" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Participant_velura_di" bpmnElement="Participant_velura" isHorizontal="true"><dc:Bounds x="40" y="390" width="1869" height="742" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="lane_promo_di" bpmnElement="lane_promo" isHorizontal="true"><dc:Bounds x="70" y="390" width="1839" height="742" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="w_cstart_di" bpmnElement="w_cstart"><dc:Bounds x="172" y="120" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="w_xem_di" bpmnElement="w_xem"><dc:Bounds x="330" y="96" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="w_vi_di" bpmnElement="w_vi"><dc:Bounds x="1129" y="96" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="w_gw_di" bpmnElement="w_gw" isMarkerVisible="true"><dc:Bounds x="1436" y="115" width="46" height="46" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="w_doi_di" bpmnElement="w_doi"><dc:Bounds x="1364" y="238.8" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="w_cend_di" bpmnElement="w_cend"><dc:Bounds x="1676" y="120" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="w_sstart_di" bpmnElement="w_sstart"><dc:Bounds x="407" y="603" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="w_loc_di" bpmnElement="w_loc"><dc:Bounds x="565" y="579" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="w_cham_di" bpmnElement="w_cham"><dc:Bounds x="800" y="579" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="w_sgw_di" bpmnElement="w_sgw" isMarkerVisible="true"><dc:Bounds x="1083.5" y="598" width="46" height="46" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="w_lydo_di" bpmnElement="w_lydo"><dc:Bounds x="1011.5" y="805.8" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="w_chon_di" bpmnElement="w_chon"><dc:Bounds x="1223" y="579" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="w_send_di" bpmnElement="w_send"><dc:Bounds x="1535" y="603" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="n_tambuoc_di" bpmnElement="n_tambuoc"><dc:Bounds x="788" y="958.2" width="26" height="104" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="n_totnhat_di" bpmnElement="n_totnhat"><dc:Bounds x="1422.5" y="958.2" width="26" height="104" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f_w_cstart_w_xem_di" bpmnElement="f_w_cstart_w_xem"><di:waypoint x="208" y="138" /><di:waypoint x="330" y="138" /><di:waypoint x="330" y="138" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_w_xem_w_vi_di" bpmnElement="f_w_xem_w_vi"><di:waypoint x="520" y="138" /><di:waypoint x="1129" y="138" /><di:waypoint x="1129" y="138" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_w_vi_w_gw_di" bpmnElement="f_w_vi_w_gw"><di:waypoint x="1319" y="138" /><di:waypoint x="1436" y="138" /><di:waypoint x="1436" y="138" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_w_gw_w_doi_di" bpmnElement="f_w_gw_w_doi"><di:waypoint x="1436" y="138" /><di:waypoint x="1554" y="138" /><di:waypoint x="1554" y="280.8" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_w_doi_w_vi_di" bpmnElement="f_w_doi_w_vi"><di:waypoint x="1364" y="280.8" /><di:waypoint x="1319" y="280.8" /><di:waypoint x="1319" y="138" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_w_gw_w_cend_di" bpmnElement="f_w_gw_w_cend"><di:waypoint x="1482" y="138" /><di:waypoint x="1676" y="138" /><di:waypoint x="1676" y="138" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_w_sstart_w_loc_di" bpmnElement="f_w_sstart_w_loc"><di:waypoint x="443" y="621" /><di:waypoint x="565" y="621" /><di:waypoint x="565" y="621" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_w_loc_w_cham_di" bpmnElement="f_w_loc_w_cham"><di:waypoint x="755" y="621" /><di:waypoint x="800" y="621" /><di:waypoint x="800" y="621" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_w_cham_w_sgw_di" bpmnElement="f_w_cham_w_sgw"><di:waypoint x="990" y="621" /><di:waypoint x="1083.5" y="621" /><di:waypoint x="1083.5" y="621" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_w_sgw_w_lydo_di" bpmnElement="f_w_sgw_w_lydo"><di:waypoint x="1083.5" y="621" /><di:waypoint x="1201.5" y="621" /><di:waypoint x="1201.5" y="847.8" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_w_sgw_w_chon_di" bpmnElement="f_w_sgw_w_chon"><di:waypoint x="1129.5" y="621" /><di:waypoint x="1223" y="621" /><di:waypoint x="1223" y="621" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_w_lydo_w_send_di" bpmnElement="f_w_lydo_w_send"><di:waypoint x="1201.5" y="847.8" /><di:waypoint x="1535" y="847.8" /><di:waypoint x="1535" y="621" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_w_chon_w_send_di" bpmnElement="f_w_chon_w_send"><di:waypoint x="1413" y="621" /><di:waypoint x="1535" y="621" /><di:waypoint x="1535" y="621" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="m_w_xem_w_sstart_di" bpmnElement="m_w_xem_w_sstart"><di:waypoint x="520" y="138" /><di:waypoint x="407" y="138" /><di:waypoint x="407" y="621" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="m_w_chon_w_vi_di" bpmnElement="m_w_chon_w_vi"><di:waypoint x="1223" y="621" /><di:waypoint x="1319" y="621" /><di:waypoint x="1319" y="138" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="m_w_lydo_w_vi_di" bpmnElement="m_w_lydo_w_vi"><di:waypoint x="1201.5" y="847.8" /><di:waypoint x="1129" y="847.8" /><di:waypoint x="1129" y="138" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="m_w_doi_w_cham_di" bpmnElement="m_w_doi_w_cham"><di:waypoint x="1364" y="280.8" /><di:waypoint x="990" y="280.8" /><di:waypoint x="990" y="621" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="a_n_tambuoc_w_cham_di" bpmnElement="a_n_tambuoc_w_cham"><di:waypoint x="814" y="1010.2" /><di:waypoint x="800" y="1010.2" /><di:waypoint x="800" y="621" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="a_n_totnhat_w_chon_di" bpmnElement="a_n_totnhat_w_chon"><di:waypoint x="1422.5" y="1010.2" /><di:waypoint x="1413" y="1010.2" /><di:waypoint x="1413" y="621" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

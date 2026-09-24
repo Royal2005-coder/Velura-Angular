@@ -12,6 +12,7 @@ import { handleCartRoute } from "./cart.js";
 import { handleNotificationsRoute } from "./notifications.js";
 import { handleUploadRoute } from "./upload.js";
 import { handleOffersRoute } from "./offers.js";
+import { handleStripeWebhook } from "../payments/stripe-webhook.js";
 
 import type { AuthContext, HeaderMap, HttpRequest, HttpResponse } from "../types.js";
 
@@ -73,6 +74,12 @@ export async function handleUserRoute(
 
     case "offers":
       return await handleOffersRoute(req, res, corsHeaders, context);
+
+    case "payments":
+      if (action === "stripe" && parts[4] === "webhook") {
+        return await handleStripeWebhook(req, res, corsHeaders);
+      }
+      throw new HttpError(404, "NOT_FOUND", "Payment route not found");
       
     case "upload":
       return await handleUploadRoute(req, res, corsHeaders, context);

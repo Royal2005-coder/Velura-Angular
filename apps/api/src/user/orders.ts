@@ -6,6 +6,7 @@ import { createNotification } from "./notifications.js";
 import { recordVoucherRedemption, releaseVoucherRedemption, resolveOrderVoucher } from "./vouchers.js";
 import { allowDevOtpBypass, config } from "../config.js";
 import { createStripePaymentIntent, stripeConfigured } from "../payments/stripe.js";
+import { catalogUnitPrice, priceOrder, shippingMethodFromClaim } from "./order-pricing.js";
 import { ORDER_TRANSITIONS } from "../orders/order-constants.js";
 import {
   asJsonObject,
@@ -727,15 +728,15 @@ export async function handleOrdersRoute(
       const trackingCode = "VLR" + Date.now().toString().slice(-8).toUpperCase();
       assertStripeReady(payment_method);
       const dbPaymentMethod = (payment_method === "COD" || payment_method === "cod") ? "COD" : "ONLINE_PAYMENT";
-      const guestMerchandise = Number(subtotal) || 0;
-      const guestShipping = Number(shipping_fee) || 0;
+      const guestPriced = await priceClaimedOrder(items, shipping_fee, body.shipping_method || order.shipping_method);
       const guestVoucher = await resolveOrderVoucher(
         context,
-        guestMerchandise,
-        guestShipping,
+        guestPriced.subtotal,
+        guestPriced.shippingFee,
         voucher_id ? String(voucher_id) : null,
         body.decline_voucher === true || order.decline_voucher === true
       );
+      const guestTotal = Math.max(0, guestPriced.subtotal + guestPriced.shippingFee - guestVoucher.discountAmount);
       
       const newOrder = asJsonObject(await insertRow("orders", {
         user_id: guestUser.user_id,
@@ -743,11 +744,11 @@ export async function handleOrdersRoute(
         shipping_name,
         shipping_phone: phone,
         shipping_address,
-        shipping_fee: guestShipping,
+        shipping_fee: guestPriced.shippingFee,
         voucher_id: guestVoucher.voucherId,
         discount_amount: guestVoucher.discountAmount,
-        subtotal: guestMerchandise,
-        total_amount: Math.max(0, guestMerchandise + guestShipping - guestVoucher.discountAmount),
+        subtotal: guestPriced.subtotal,
+        total_amount: guestTotal,
         payment_method: dbPaymentMethod,
         tracking_code: trackingCode,
         created_at: new Date().toISOString(),
@@ -756,14 +757,15 @@ export async function handleOrdersRoute(
       
       const createdItems: unknown[] = [];
       for (const item of items) {
+        const pricedLine = guestPriced.items.find((line) => line.variantId === String(item.variant_id));
         const orderItem = await insertRow("order_item", {
           order_id: newOrder.order_id,
           variant_id: item.variant_id,
-          product_name: item.product_name,
+          product_name: pricedLine?.productName || item.product_name,
           product_image: item.product_image || null,
-          quantity: item.quantity,
-          unit_price: item.unit_price,
-          subtotal_item: Number(item.quantity) * Number(item.unit_price)
+          quantity: pricedLine?.quantity || item.quantity,
+          unit_price: pricedLine?.unitPrice,
+          subtotal_item: pricedLine?.subtotal
         });
         createdItems.push(orderItem);
         
@@ -988,15 +990,15 @@ export async function handleOrdersRoute(
       const trackingCode = "VLR" + Date.now().toString().slice(-8).toUpperCase();
       assertStripeReady(payment_method);
       const dbPaymentMethod = (payment_method === "COD" || payment_method === "cod") ? "COD" : "ONLINE_PAYMENT";
-      const memberMerchandise = Number(subtotal) || 0;
-      const memberShipping = Number(shipping_fee) || 0;
+      const memberPriced = await priceClaimedOrder(orderItems, shipping_fee, body.shipping_method);
       const memberVoucher = await resolveOrderVoucher(
         context,
-        memberMerchandise,
-        memberShipping,
+        memberPriced.subtotal,
+        memberPriced.shippingFee,
         voucher_id ? String(voucher_id) : null,
         body.decline_voucher === true
       );
+      const memberTotal = Math.max(0, memberPriced.subtotal + memberPriced.shippingFee - memberVoucher.discountAmount);
 
       // Create order row
       const newOrder = asJsonObject(await insertRow("orders", {
@@ -1005,11 +1007,11 @@ export async function handleOrdersRoute(
         shipping_name,
         shipping_phone,
         shipping_address,
-        shipping_fee: memberShipping,
+        shipping_fee: memberPriced.shippingFee,
         voucher_id: memberVoucher.voucherId,
         discount_amount: memberVoucher.discountAmount,
-        subtotal: memberMerchandise,
-        total_amount: Math.max(0, memberMerchandise + memberShipping - memberVoucher.discountAmount),
+        subtotal: memberPriced.subtotal,
+        total_amount: memberTotal,
         payment_method: dbPaymentMethod,
         tracking_code: trackingCode,
         created_at: new Date().toISOString(),
@@ -1019,14 +1021,15 @@ export async function handleOrdersRoute(
       // Insert order items & update variant stock reservations
       const createdItems: unknown[] = [];
       for (const item of orderItems) {
+        const pricedLine = memberPriced.items.find((line) => line.variantId === String(item.variant_id));
         const orderItem = await insertRow("order_item", {
           order_id: newOrder.order_id,
           variant_id: item.variant_id,
-          product_name: item.product_name,
+          product_name: pricedLine?.productName || item.product_name,
           product_image: item.product_image || null,
-          quantity: item.quantity,
-          unit_price: item.unit_price,
-          subtotal_item: Number(item.quantity) * Number(item.unit_price)
+          quantity: pricedLine?.quantity || item.quantity,
+          unit_price: pricedLine?.unitPrice,
+          subtotal_item: pricedLine?.subtotal
         });
         createdItems.push(orderItem);
 
@@ -1071,6 +1074,41 @@ function assertStripeReady(method: unknown): void {
   if (!stripeConfigured()) {
     throw new HttpError(503, "STRIPE_NOT_CONFIGURED", "Chưa cấu hình STRIPE_SECRET_KEY. Chọn thanh toán khi nhận hàng hoặc cấu hình Stripe.");
   }
+}
+
+async function priceClaimedOrder(
+  rawItems: Array<Record<string, unknown>>,
+  claimedFee: unknown,
+  claimedMethod: unknown
+) {
+  const lines = rawItems.map((item) => ({
+    variantId: String(item.variant_id || ""),
+    quantity: Number(item.quantity),
+    claimedUnitPrice: Number(item.unit_price)
+  }));
+  const catalog = new Map<string, { variantId: string; unitPrice: number; productName: string }>();
+  for (const line of lines) {
+    if (!line.variantId || catalog.has(line.variantId)) continue;
+    const variant = await selectOne("variant", { variant_id: `eq.${line.variantId}`, select: "variant_id,product_id" });
+    const product = variant?.product_id
+      ? await selectOne("product", { product_id: `eq.${variant.product_id}`, select: "name,sale_price,base_price" })
+      : null;
+    if (!variant || !product) continue;
+    catalog.set(line.variantId, {
+      variantId: line.variantId,
+      unitPrice: catalogUnitPrice(product.sale_price, product.base_price),
+      productName: String(product.name || "")
+    });
+  }
+  const priced = priceOrder(lines, catalog, shippingMethodFromClaim(claimedFee, claimedMethod));
+  if (!priced.ok) {
+    throw new HttpError(400, priced.code, priced.message, {
+      variant_id: priced.variantId,
+      claimed_unit_price: priced.claimedUnitPrice,
+      catalog_unit_price: priced.catalogUnitPrice
+    });
+  }
+  return priced;
 }
 
 async function openStripePayment(orderId: unknown, amount: unknown, method: unknown): Promise<{ payment_intent_id: string; url: string } | null> {

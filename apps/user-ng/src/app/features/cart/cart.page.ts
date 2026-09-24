@@ -1,6 +1,7 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { CartLine, CartStore, GroupedCartItem } from '../../core/services/cart.store';
+import { ApiService } from '../../core/services/api.service';
 import { formatVnd, toPublicAsset } from '../../core/utils/money';
 import { showToast } from '../../core/utils/toast';
 import { useBodyClass } from '../../core/utils/body-class';
@@ -19,6 +20,9 @@ type PageItem = { kind: 'page'; value: number } | { kind: 'dots'; value: number 
 })
 export class CartPage {
   private readonly cart = inject(CartStore);
+  private readonly api = inject(ApiService);
+  readonly editingVariantId = signal<string | null>(null);
+  readonly variantChoices = signal<Array<{ variant_id: string; size?: string; color?: string; stock_quantity?: number }>>([]);
   private readonly router = inject(Router);
 
   readonly currentPage = signal(1);
@@ -105,6 +109,51 @@ export class CartPage {
     this.selectedIds.update((ids) => ids.filter((id) => id !== item.variant_id));
     this.persistSelected();
     this.clampPage();
+  }
+
+  /**
+   * Loads the other sizes and colors of this product so the buyer can swap the line.
+   */
+  toggleVariants(item: GroupedCartItem): void {
+    if (item.is_combo) {
+      return;
+    }
+    if (this.editingVariantId() === item.variant_id) {
+      this.editingVariantId.set(null);
+      this.variantChoices.set([]);
+      return;
+    }
+    this.editingVariantId.set(item.variant_id);
+    this.variantChoices.set([]);
+    this.api.get<{ variants?: Array<{ variant_id: string; size?: string; color?: string; stock_quantity?: number }> }>(
+      `/api/user/products/${item.product_id}`,
+    ).subscribe({
+      next: (product) => this.variantChoices.set(product.variants || []),
+      error: () => this.variantChoices.set([]),
+    });
+  }
+
+  /**
+   * Replaces the cart line with the chosen variant and keeps the quantity.
+   */
+  pickVariant(item: GroupedCartItem, option: { variant_id: string; size?: string; color?: string }): void {
+    if (option.variant_id === item.variant_id) {
+      this.editingVariantId.set(null);
+      return;
+    }
+    this.cart.replaceVariant(item.variant_id, {
+      variant_id: option.variant_id,
+      product_id: item.product_id,
+      product_name: item.product_name,
+      product_image: item.product_image,
+      quantity: item.quantity,
+      unit_price: item.unit_price,
+      color: option.color,
+      size: option.size,
+    });
+    this.selectedIds.update((ids) => ids.map((id) => (id === item.variant_id ? option.variant_id : id)));
+    this.editingVariantId.set(null);
+    this.variantChoices.set([]);
   }
 
   /**

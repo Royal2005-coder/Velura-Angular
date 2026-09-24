@@ -730,3 +730,12 @@ input:checked + .admin-sim-slider:before {
 
 /* Dấu sao cạnh nhãn của trường bắt buộc. */
 .admin-form-label abbr { border: 0; color: var(--error); text-decoration: none; }
+
+/* Form mã giảm giá (features/promotions/voucher-form). */
+.admin-form-control--code { text-transform: uppercase; letter-spacing: .04em; font-variant-numeric: tabular-nums; }
+.admin-toolbar__filter { display: flex; align-items: center; gap: 10px; margin-right: auto; }
+.admin-toolbar__filter .admin-form-control { min-width: 220px; }
+/* Cây danh mục cuộn trong khung riêng để danh mục dài không đẩy nút Lưu ra khỏi tầm nhìn. */
+.admin-category-tree { max-height: 220px; margin-bottom: 8px; padding: 10px 12px; overflow-y: auto; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--field-bg); }
+.admin-category-tree__item { margin-bottom: 8px; }
+.admin-category-tree__item:last-child { margin-bottom: 0; }

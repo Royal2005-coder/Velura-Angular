@@ -193,6 +193,8 @@ export interface AdminPromotionRow {
   ends_at?: string;
   budget?: number;
   budget_limit?: number;
+  /** Trần số mã chiến dịch được phát. 0 là không đặt trần. */
+  max_vouchers_allowed?: number;
   total_discount_issued?: number;
   version?: number;
   paused_at?: string | null;
@@ -275,11 +277,16 @@ export interface AdminVoucherRow {
   min_order?: number;
   min_order_value?: number;
   used_count?: number;
-  usage_limit_total?: number;
+  usage_limit_total?: number | null;
+  usage_limit_per_user?: number;
+  max_discount_amount?: number | null;
+  /** Mảng mã danh mục; null là áp cho cả giỏ. */
+  applicable_categories?: string[] | string | null;
+  start_date?: string;
   end_date?: string;
   expires_at?: string;
   is_active?: boolean;
-  promo_id?: string;
+  promo_id?: string | null;
   applicable_user_group?: string;
   version?: number;
 }
@@ -976,6 +983,18 @@ export class AdminApiService {
    */
   createVoucher(body: Record<string, unknown>): Observable<unknown> {
     return this.http.post(`${this.baseUrl}/api/v1/admin/vouchers`, body);
+  }
+
+  /**
+   * Sửa một mã. Trường không gửi là giữ nguyên; bỏ trần giảm, bỏ tổng lượt, gỡ khỏi
+   * chiến dịch phải gửi cờ `clearMaxDiscount`, `clearMaxUses`, `clearPromo`.
+   */
+  updateVoucher(voucherId: string, body: Record<string, unknown>): Observable<AdminVoucherRow> {
+    return this.http.patch<AdminVoucherRow>(`${this.baseUrl}/api/v1/admin/vouchers/${encodeURIComponent(voucherId)}`, body);
+  }
+
+  getVoucher(voucherId: string): Observable<AdminVoucherRow> {
+    return this.http.get<AdminVoucherRow>(`${this.baseUrl}/api/v1/admin/vouchers/${encodeURIComponent(voucherId)}`);
   }
 
   toggleVoucher(voucherId: string): Observable<unknown> {

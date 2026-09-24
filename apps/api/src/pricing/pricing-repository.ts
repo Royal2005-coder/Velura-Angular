@@ -192,6 +192,9 @@ export function createPricingRepository() {
         offset: filters.offset
       };
       if (filters.isActive !== undefined) query.is_active = `eq.${filters.isActive}`;
+      // "none" là mã không thuộc chiến dịch nào; còn lại service đã kiểm là UUID.
+      if (filters.promoId === "none") query.promo_id = "is.null";
+      else if (filters.promoId) query.promo_id = `eq.${filters.promoId}`;
       return selectRows("voucher", query, authOptions(accessToken));
     },
 

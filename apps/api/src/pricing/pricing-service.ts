@@ -15,6 +15,9 @@ import {
 } from "./promotion-lifecycle.js";
 import { normalizePromotionPresentation } from "./promotion-presentation.js";
 
+/** Dạng UUID chung, đủ để chặn chuỗi lạ lọt vào bộ lọc PostgREST. */
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
  * Admin pricing use-cases used by `handlePricingRoute`.
  */
@@ -147,8 +150,13 @@ export function createPricingService({ repository }: { repository: PricingReposi
     async listVouchers(context, searchParams) {
       requirePricingReader(context);
       const isActive = searchParams.get("isActive");
+      const promoId = searchParams.get("promoId") || "";
+      if (promoId && promoId !== "none" && !UUID_PATTERN.test(promoId)) {
+        throw new HttpError(422, "VALIDATION_ERROR", "promoId không hợp lệ");
+      }
       return repository.listVouchers({
         isActive: isActive !== null ? isActive === "true" : undefined,
+        promoId: promoId || undefined,
         limit: Math.min(parseInt(searchParams.get("limit") || "50"), 100),
         offset: parseInt(searchParams.get("offset") || "0")
       }, context.accessToken);

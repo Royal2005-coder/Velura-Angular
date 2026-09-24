@@ -4,6 +4,7 @@ import { catchError } from 'rxjs/operators';
 import {
   AdminApiService,
   AdminAuditRow,
+  AdminCategoryRow,
   AdminPricingStatistics,
   AdminProductRow,
   AdminPromotionListPayload,
@@ -17,10 +18,11 @@ import { AdminSessionService } from '../../core/admin-session.service';
 import { AdminEmptyState } from '../../shared/admin-empty-state';
 import { AdminPagination } from '../../shared/admin-pagination';
 import { CampaignForm } from './campaign-form';
+import { VoucherForm, voucherCategoryIds } from './voucher-form';
 
 @Component({
   selector: 'app-admin-promotions-page',
-  imports: [AdminEmptyState, AdminPagination, CampaignForm],
+  imports: [AdminEmptyState, AdminPagination, CampaignForm, VoucherForm],
   templateUrl: './admin-promotions.page.html',
 })
 export class AdminPromotionsPage {
@@ -47,13 +49,16 @@ export class AdminPromotionsPage {
   readonly promoCount = signal(0);
   readonly voucherCount = signal(0);
   readonly canMutate = computed(() => this.session.canMutate('promotions'));
-  readonly voucherCode = signal('');
-  readonly voucherName = signal('');
-  readonly voucherTypeDraft = signal('fixed_amount');
-  readonly voucherValueDraft = signal(0);
-  readonly voucherMinOrder = signal(0);
-  readonly voucherAudienceDraft = signal('all_users');
-  readonly savingVoucher = signal(false);
+  /**
+   * Toàn bộ chiến dịch (tối đa 100) cho ô chọn chiến dịch cha và bộ lọc bảng mã.
+   * `promotions()` chỉ là trang đang xem nên không dùng được cho việc này.
+   */
+  readonly allCampaigns = signal<AdminPromotionRow[]>([]);
+  readonly categories = signal<AdminCategoryRow[]>([]);
+  /** Lọc bảng mã theo chiến dịch: rỗng là tất cả, `none` là mã đứng riêng. */
+  readonly voucherPromoFilter = signal('');
+  readonly voucherFormOpen = signal(false);
+  readonly editingVoucher = signal<AdminVoucherRow | null>(null);
   readonly stats = signal<AdminPricingStatistics | null>(null);
   readonly statsLoading = signal(false);
   readonly statsError = signal<string | null>(null);
@@ -350,23 +355,6 @@ export class AdminPromotionsPage {
   }
 
   /**
-   * Voucher type label used by the original table.
-   */
-  /**
-   * Text from a form control in the voucher issue form.
-   */
-  readInput(event: Event): string {
-    return (event.target as HTMLInputElement).value;
-  }
-
-  /**
-   * Number from a form control in the voucher issue form.
-   */
-  readNumber(event: Event): number {
-    return Number((event.target as HTMLInputElement).value) || 0;
-  }
-
-  /**
    * Who may use the code at checkout: guests, members, or both.
    */
   voucherAudience(row: AdminVoucherRow): string {
@@ -380,40 +368,57 @@ export class AdminPromotionsPage {
     return 'Thành viên';
   }
 
-  /**
-   * Publishes one voucher the shared quote can rank for that audience.
-   */
-  createVoucher(): void {
-    const code = this.voucherCode().trim();
-    if (!code || this.savingVoucher()) {
-      return;
-    }
-    const start = new Date();
-    const end = new Date(start.getTime() + 30 * 24 * 60 * 60 * 1000);
-    this.savingVoucher.set(true);
-    this.api
-      .createVoucher({
-        code,
-        name: this.voucherName().trim() || code,
-        type: this.voucherTypeDraft(),
-        value: Number(this.voucherValueDraft()),
-        minOrderValue: Number(this.voucherMinOrder()),
-        applicableUserGroup: this.voucherAudienceDraft(),
-        startDate: start.toISOString(),
-        endDate: end.toISOString(),
-      })
-      .subscribe({
-        next: () => {
-          this.savingVoucher.set(false);
-          this.voucherCode.set('');
-          this.voucherName.set('');
-          this.reload();
-        },
-        error: (error: unknown) => {
-          this.savingVoucher.set(false);
-          this.loadError.set(adminErrorMessage(error));
-        },
-      });
+  /** Tên chiến dịch cha của một mã, để bảng mã nói mã thuộc đợt nào. */
+  voucherCampaign(row: AdminVoucherRow): string {
+    if (!row.promo_id) return 'Mã đứng riêng';
+    const campaign = this.allCampaigns().find((item) => (item.promo_id || item.promotion_id) === row.promo_id);
+    return campaign ? this.campaignName(campaign) : 'Chiến dịch không còn';
+  }
+
+  /** Danh mục áp dụng, hoặc "Cả giỏ" khi mã không giới hạn danh mục. */
+  voucherScope(row: AdminVoucherRow): string {
+    const ids = voucherCategoryIds(row.applicable_categories);
+    if (!ids.length) return 'Cả giỏ';
+    const names = ids.map((id) => this.categories().find((item) => item.category_id === id)?.name || 'Danh mục đã xoá');
+    return names.join(', ');
+  }
+
+  /** Mức giảm kèm trần giảm, vì với mã phần trăm hai số này phải đọc cùng nhau. */
+  voucherCap(row: AdminVoucherRow): string {
+    if ((row.discount_type || row.type) !== 'percentage') return '—';
+    return row.max_discount_amount != null ? this.money(row.max_discount_amount) : 'Không giới hạn';
+  }
+
+  /** Khung thời gian hiệu lực của mã. */
+  voucherPeriod(row: AdminVoucherRow): string {
+    return `${this.date(row.start_date)} - ${this.date(row.end_date || row.expires_at)}`;
+  }
+
+  setVoucherPromoFilter(event: Event): void {
+    this.voucherPromoFilter.set((event.target as HTMLSelectElement).value);
+    this.page.set(1);
+    this.reload();
+  }
+
+  openVoucherCreate(): void {
+    this.editingVoucher.set(null);
+    this.voucherFormOpen.set(true);
+  }
+
+  openVoucherEdit(row: AdminVoucherRow): void {
+    this.editingVoucher.set(row);
+    this.voucherFormOpen.set(true);
+  }
+
+  closeVoucherForm(): void {
+    this.voucherFormOpen.set(false);
+    this.editingVoucher.set(null);
+  }
+
+  /** Lưu xong thì tải lại: mã vừa sửa đã tăng `version`, số mã của chiến dịch cũng đổi. */
+  onVoucherSaved(): void {
+    this.closeVoucherForm();
+    this.reload();
   }
 
   voucherType(row: AdminVoucherRow): string {
@@ -513,12 +518,20 @@ export class AdminPromotionsPage {
     this.loading.set(true);
     this.loadError.set(null);
     const pageParams = { limit: String(this.pageSize), offset: adminOffset(this.page(), this.pageSize) };
+    const voucherParams = this.voucherPromoFilter() ? { ...pageParams, promoId: this.voucherPromoFilter() } : pageParams;
     forkJoin({
       promotions: this.api.listPromotions(pageParams).pipe(catchError((error: unknown) => {
         this.loadError.set(adminErrorMessage(error));
         return of({ rows: [] as AdminPromotionRow[], count: 0, summary: undefined } as AdminPromotionListPayload);
       })),
-      vouchers: this.api.listVouchers(pageParams).pipe(catchError(() => of({ rows: [] as AdminVoucherRow[], count: 0 }))),
+      vouchers: this.api.listVouchers(voucherParams).pipe(catchError((error: unknown) => {
+        this.loadError.set(adminErrorMessage(error));
+        return of({ rows: [] as AdminVoucherRow[], count: 0 });
+      })),
+      allCampaigns: this.api
+        .listPromotions({ limit: '100' })
+        .pipe(catchError(() => of({ rows: [] as AdminPromotionRow[], count: 0 } as AdminPromotionListPayload))),
+      categories: this.api.listCategories().pipe(catchError(() => of({ rows: [] as AdminCategoryRow[] }))),
       products: this.api.listProducts({ isCombo: 'true', limit: '100' }).pipe(catchError(() => of({ rows: [] as AdminProductRow[] }))),
       // Tab Combo trước đây chỉ liệt kê sản phẩm có cờ `is_combo` và gọi đó là combo
       // khuyến mãi. Đó là hai thứ khác nhau: chiến dịch loại `combo_discount` mới là
@@ -534,6 +547,8 @@ export class AdminPromotionsPage {
       this.voucherCount.set(adminListCount(payload.vouchers));
       this.bundles.set(adminListRows(payload.products).filter((row) => row.is_combo));
       this.comboCampaigns.set(adminListRows(payload.comboCampaigns));
+      this.allCampaigns.set(adminListRows(payload.allCampaigns));
+      this.categories.set(adminListRows(payload.categories));
       this.loading.set(false);
     });
   }

@@ -308,6 +308,9 @@ jobs:
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          STOREFRONT_ORIGIN: ${{ secrets.STOREFRONT_ORIGIN }}
         run: |
           set -e
           SSH="ssh -i ~/.ssh/deploy.key -o IdentitiesOnly=yes"
@@ -317,7 +320,8 @@ jobs:
           rsync -az --delete -e "$SSH" apps/admin-ng/dist/admin-ng/browser/ "${DEPLOY_USER}@${DEPLOY_HOST}:/var/www/velura/admin/"
           rsync -az --delete --exclude node_modules -e "$SSH" apps/api/ "${DEPLOY_USER}@${DEPLOY_HOST}:/opt/velura/api/"
           rsync -az -e "$SSH" deploy/ "${DEPLOY_USER}@${DEPLOY_HOST}:/opt/velura/deploy/"
-          $SSH "${DEPLOY_USER}@${DEPLOY_HOST}" "cd /opt/velura/api && npm install --omit=dev && sudo sed -i 's/\r$//' /opt/velura/deploy/nginx/velura.conf /opt/velura/deploy/systemd/velura-api.service && sudo cp /opt/velura/deploy/nginx/velura.conf /etc/nginx/sites-available/velura && sudo cp /opt/velura/deploy/systemd/velura-api.service /etc/systemd/system/velura-api.service && sudo nginx -t && sudo systemctl daemon-reload && sudo systemctl restart velura-api && (sudo systemctl reload nginx || sudo /usr/sbin/nginx -s reload || sudo kill -HUP \$(pgrep -o nginx))"
+          $SSH "${DEPLOY_USER}@${DEPLOY_HOST}" "STRIPE_SECRET_KEY='$STRIPE_SECRET_KEY' STRIPE_WEBHOOK_SECRET='$STRIPE_WEBHOOK_SECRET' STOREFRONT_ORIGIN='${STOREFRONT_ORIGIN:-https://velura.royalai.dev}' bash /opt/velura/deploy/scripts/sync-stripe-env.sh"
+          $SSH "${DEPLOY_USER}@${DEPLOY_HOST}" "cd /opt/velura/api && npm install --omit=dev && sudo sed -i 's/\r$//' /opt/velura/deploy/nginx/velura.conf /opt/velura/deploy/systemd/velura-api.service /opt/velura/deploy/scripts/sync-stripe-env.sh && sudo cp /opt/velura/deploy/nginx/velura.conf /etc/nginx/sites-available/velura && sudo cp /opt/velura/deploy/systemd/velura-api.service /etc/systemd/system/velura-api.service && sudo nginx -t && sudo systemctl daemon-reload && sudo systemctl restart velura-api && (sudo systemctl reload nginx || sudo /usr/sbin/nginx -s reload || sudo kill -HUP \$(pgrep -o nginx))"
 
   verify-production:
     name: verify-production

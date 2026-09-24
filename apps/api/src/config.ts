@@ -30,6 +30,7 @@ export const config = {
   smtpFrom: process.env.SMTP_FROM || "",
   stripeSecretKey: process.env.STRIPE_SECRET_KEY || "",
   stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET || "",
+  storefrontOrigin: (process.env.STOREFRONT_ORIGIN || "https://velura.royalai.dev").replace(/\/+$/, ""),
   supportAlertTo: process.env.SUPPORT_ALERT_TO || process.env.SMTP_USER || "",
   n8nChatWebhookUrl: process.env.N8N_CHAT_WEBHOOK_URL || "",
   n8nChatWebhookToken: process.env.N8N_CHAT_WEBHOOK_TOKEN || "",

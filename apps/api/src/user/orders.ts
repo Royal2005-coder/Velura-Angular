@@ -3,7 +3,7 @@ import { selectOne, selectRows, insertRow, updateRows } from "../supabase.js";
 import { hashPassword, signJwt } from "../auth-helper.js";
 import { requireUserAuth, validatePhone } from "./auth.js";
 import { createNotification } from "./notifications.js";
-import { recordVoucherRedemption, releaseVoucherRedemption, resolveOrderVoucher } from "./vouchers.js";
+import { recordVoucherRedemption, resolveOrderVoucher } from "./vouchers.js";
 import { allowDevOtpBypass, config } from "../config.js";
 import { createStripePaymentIntent, stripeConfigured } from "../payments/stripe.js";
 import { catalogUnitPrice, priceOrder, shippingMethodFromClaim } from "./order-pricing.js";
@@ -400,11 +400,10 @@ export async function handleOrdersRoute(
           }
         }
 
-        // Trả lại lượt dùng mã và ngân sách chiến dịch, nếu không thì một đơn bị hủy
-        // vẫn chiếm chỗ của khách khác và vẫn ăn vào ngân sách khuyến mãi.
-        if (order.voucher_id) {
-          await releaseVoucherRedemption(String(order.voucher_id), Number(order.discount_amount) || 0);
-        }
+        // Lượt dùng mã và ngân sách chiến dịch không trả ở đây. Trigger
+        // `trg_orders_release_voucher_on_cancel` (migration 034) trả khi trạng thái đổi
+        // sang cancelled, đúng một lần cho mỗi đơn, cho cả đường khách huỷ lẫn admin huỷ.
+        // Gọi thêm ở đây sẽ thành trả hai lần.
       }
 
       const updateData: JsonObject = {

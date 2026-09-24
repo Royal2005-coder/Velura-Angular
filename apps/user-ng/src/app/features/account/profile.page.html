@@ -804,15 +804,43 @@
                 <p class="account-main__subtitle">Quyền lợi thành viên của bạn tại Velura</p>
               </div>
               <div class="offers-center" data-offers-center style="padding: 0; min-height: auto; background: transparent;">
-                <div class="offers-center__filters" role="tablist" aria-label="Lọc ưu đãi" style="margin-top: 0; margin-bottom: 24px;">
-                  <button type="button" class="is-active" data-offer-filter="ALL">Tất cả</button>
-                  <button type="button" data-offer-filter="AVAILABLE">Có thể dùng</button>
-                  <button type="button" data-offer-filter="LOCKED">Sắp mở khóa</button>
-                  <button type="button" data-offer-filter="USED">Đã sử dụng</button>
-                  <button type="button" data-offer-filter="EXPIRED">Hết hạn</button>
+                <div class="offers-center__filters" role="group" aria-label="Lọc ưu đãi" style="margin-top: 0; margin-bottom: 24px;">
+                  <button type="button" [class.is-active]="offerFilter() === 'ALL'" [attr.aria-pressed]="offerFilter() === 'ALL'" (click)="setOfferFilter('ALL')">Tất cả</button>
+                  <button type="button" [class.is-active]="offerFilter() === 'AVAILABLE'" [attr.aria-pressed]="offerFilter() === 'AVAILABLE'" (click)="setOfferFilter('AVAILABLE')">Có thể dùng</button>
+                  <button type="button" [class.is-active]="offerFilter() === 'LOCKED'" [attr.aria-pressed]="offerFilter() === 'LOCKED'" (click)="setOfferFilter('LOCKED')">Chưa dùng được</button>
                 </div>
-                <section class="offers-center__list js-offers-list" aria-live="polite">
-                  <div class="offers-center__loading">Đang tải quyền lợi của bạn…</div>
+                <section class="offers-center__list" aria-live="polite">
+                  @if (offersLoading()) {
+                    <div class="offers-center__loading">Đang tải quyền lợi của bạn…</div>
+                  } @else if (filteredVouchers().length === 0) {
+                    <p class="offers-state">
+                      {{ myVouchers().length ? 'Không có mã nào trong nhóm này.' : 'Hiện chưa có mã giảm giá nào dành cho bạn.' }}
+                      <a routerLink="/offers">Xem các chương trình ưu đãi</a>
+                    </p>
+                  } @else {
+                    <ul class="offer-voucher-grid">
+                      @for (voucher of filteredVouchers(); track voucher.voucher_id) {
+                        <li>
+                          <article class="voucher-card" [class.voucher-card--disabled]="!voucher.usable">
+                            <div class="voucher-card__main">
+                              <p class="voucher-card__code">{{ voucher.code }}</p>
+                              <p class="voucher-card__name">{{ voucher.description }}</p>
+                              <p class="voucher-card__meta">{{ voucher.condition_text }}</p>
+                              <p class="voucher-card__meta">HSD: {{ expiryLabel(voucher.end_date) }}</p>
+                              @if (voucher.blocked_reason) {
+                                <p class="voucher-card__reason">{{ voucher.blocked_reason }}</p>
+                              }
+                            </div>
+                            @if (voucher.usable) {
+                              <div class="voucher-card__side">
+                                <a class="btn-outline voucher-card__use" routerLink="/cart" [queryParams]="{ voucher: voucher.code }">Dùng mã</a>
+                              </div>
+                            }
+                          </article>
+                        </li>
+                      }
+                    </ul>
+                  }
                 </section>
               </div>
             </div>

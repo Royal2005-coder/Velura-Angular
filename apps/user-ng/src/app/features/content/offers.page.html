@@ -40,7 +40,8 @@
     } @else {
       <div class="offer-banner-list" aria-label="Danh sách ưu đãi Velura">
         @for (campaign of campaigns(); track campaign.promo_id; let i = $index) {
-          <article class="offer-banner-row" [class.offer-banner-row--reverse]="i % 2 === 1">
+          <article class="offer-banner-row" [class.offer-banner-row--reverse]="i % 2 === 1"
+                   [class.offer-banner-row--focused]="focusedOffer() === campaign.promo_id">
             <div class="offer-banner-row__copy">
               <span class="offer-banner-row__index">{{ campaignIndex(i) }}</span>
               @if (campaign.highlight_label) {
@@ -59,7 +60,13 @@
                   }
                 </p>
               }
-              <a class="offer-banner-row__cta" routerLink="/products">Mua sắm ngay →</a>
+              @if (voucherCount(campaign) > 0) {
+                <button type="button" class="offer-banner-row__cta" (click)="focus(campaign)">
+                  Xem {{ voucherCount(campaign) }} mã của chương trình →
+                </button>
+              } @else {
+                <a class="offer-banner-row__cta" routerLink="/products">Mua sắm ngay →</a>
+              }
             </div>
             @if (campaign.banner_image_url) {
               <a class="offer-banner-row__image-link" routerLink="/products" [attr.aria-label]="campaign.title">
@@ -77,14 +84,24 @@
       <div class="offer-list-section__header">
         <span class="hot-banner-section__eyebrow">Ví Voucher</span>
         <h2 class="hot-banner-section__title" id="offer-voucher-title">Mã giảm giá của bạn</h2>
+        <p class="offers-state">
+          Bấm "Dùng mã" để sang giỏ hàng với mã đã chọn sẵn. Mỗi đơn áp được một mã, và ở bước thanh
+          toán hệ thống vẫn kiểm lại điều kiện theo giỏ hàng thật.
+        </p>
         @if (!isMember()) {
-          <p class="offers-state">Đăng nhập để lưu mã vào ví và nhận ưu đãi riêng.</p>
+          <p class="offers-state">Đăng nhập để thấy thêm mã dành riêng cho thành viên.</p>
         }
       </div>
 
-      <ul class="offer-voucher-grid">
-        @for (voucher of vouchers(); track voucher.voucher_id) {
-          <li>
+      @if (focusedCampaign(); as campaign) {
+        <div class="offer-voucher-group" id="offer-focused">
+          <h3 class="offer-voucher-group__title">Mã của {{ campaign.title }}</h3>
+          @if (focusedVouchers().length === 0) {
+            <p class="offers-state">Chương trình này chưa có mã nào dùng được cho bạn.</p>
+          } @else {
+            <ul class="offer-voucher-grid">
+              @for (voucher of focusedVouchers(); track voucher.voucher_id) {
+                <li>
             <article class="voucher-card" [class.voucher-card--disabled]="!voucher.usable">
               <div class="voucher-card__main">
                 <p class="voucher-card__code">
@@ -97,13 +114,54 @@
                 <p class="voucher-card__meta">{{ voucher.condition_text }}</p>
                 <p class="voucher-card__meta">HSD: {{ expiryLabel(voucher.end_date) }}</p>
                 @if (voucher.blocked_reason) {
-                  <p class="voucher-card__reason">** {{ voucher.blocked_reason }}</p>
+                  <p class="voucher-card__reason">{{ voucher.blocked_reason }}</p>
                 }
               </div>
+              @if (voucher.usable) {
+                <div class="voucher-card__side">
+                  <a class="btn-outline voucher-card__use" routerLink="/cart" [queryParams]="{ voucher: voucher.code }">Dùng mã</a>
+                </div>
+              }
             </article>
-          </li>
-        }
-      </ul>
+                </li>
+              }
+            </ul>
+          }
+        </div>
+      }
+
+      @for (group of voucherGroups(); track group.key) {
+        <div class="offer-voucher-group">
+          <h3 class="offer-voucher-group__title">{{ group.title }}</h3>
+          <ul class="offer-voucher-grid">
+            @for (voucher of group.items; track voucher.voucher_id) {
+              <li>
+            <article class="voucher-card" [class.voucher-card--disabled]="!voucher.usable">
+              <div class="voucher-card__main">
+                <p class="voucher-card__code">
+                  {{ voucher.code }}
+                  @if (voucher.remaining_uses !== null) {
+                    <span class="voucher-card__remaining">(Còn {{ voucher.remaining_uses }})</span>
+                  }
+                </p>
+                <p class="voucher-card__name">{{ voucher.description }}</p>
+                <p class="voucher-card__meta">{{ voucher.condition_text }}</p>
+                <p class="voucher-card__meta">HSD: {{ expiryLabel(voucher.end_date) }}</p>
+                @if (voucher.blocked_reason) {
+                  <p class="voucher-card__reason">{{ voucher.blocked_reason }}</p>
+                }
+              </div>
+              @if (voucher.usable) {
+                <div class="voucher-card__side">
+                  <a class="btn-outline voucher-card__use" routerLink="/cart" [queryParams]="{ voucher: voucher.code }">Dùng mã</a>
+                </div>
+              }
+            </article>
+              </li>
+            }
+          </ul>
+        </div>
+      }
     </section>
   }
 </main>

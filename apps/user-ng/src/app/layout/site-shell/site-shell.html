@@ -38,6 +38,7 @@
   </div>
 </div>
 
+@if (banners().length) {
 <aside class="hot-offer-widget" aria-label="Ưu đãi Velura">
   <button class="hot-offer-widget__button" type="button" aria-label="Mở ưu đãi Velura">
     <span class="hot-offer-widget__spark" aria-hidden="true">%</span>
@@ -46,15 +47,17 @@
   <div class="hot-offer-widget__panel">
     <div class="hot-offer-widget__header">
       <span>Ưu đãi tháng này</span>
-      <small>{{ banners.length }} tin</small>
+      <small>{{ banners().length }} chương trình</small>
     </div>
     <div class="hot-offer-widget__list">
-      @for (banner of banners; track banner.id) {
-        <a class="hot-offer-widget__item" [routerLink]="'/offers'" [queryParams]="{ offer: banner.id }">
-          <img [src]="banner.imageSrc" [alt]="banner.imageAlt" />
+      @for (banner of banners(); track banner.promo_id) {
+        <a class="hot-offer-widget__item" [routerLink]="'/offers'" [queryParams]="{ offer: banner.promo_id }">
+          @if (banner.banner_image_url) {
+            <img [src]="banner.banner_image_url" [alt]="banner.title" />
+          }
           <span>
             <strong>{{ banner.title }}</strong>
-            <small>{{ banner.description }}</small>
+            <small>{{ banner.highlight_label || banner.description }}</small>
           </span>
         </a>
       }
@@ -62,6 +65,7 @@
     <a class="hot-offer-widget__cta" routerLink="/offers">Xem chi tiết ưu đãi →</a>
   </div>
 </aside>
+}
 
 <div class="chatbot-widget" [class.chatbot-widget--open]="chatOpen()">
   <button class="chatbot-toggler" type="button" aria-label="Mở khung chat" (click)="toggleChat()">

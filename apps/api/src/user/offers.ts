@@ -2,6 +2,9 @@ import { HttpError, sendJson } from "../http.js";
 import { selectRows } from "../supabase.js";
 import { requireUserAuth } from "./auth.js";
 import { buildWallet } from "./vouchers.js";
+import { loadCategoryTree } from "./cart-catalog.js";
+import { promotionLifecycle, toLifecycleInput } from "../pricing/promotion-lifecycle.js";
+import type { EvaluatedVoucher } from "./voucher-engine.js";
 import {
   asString,
   type AuthContext,
@@ -11,6 +14,14 @@ import {
   type JsonObject,
   type UserProfile
 } from "../types.js";
+
+/** Mã còn từ chừng này ngày trở xuống thì xếp vào nhóm "Sắp hết hạn". */
+const ENDING_SOON_DAYS = 3;
+
+/**
+ * Lý do chỉ có nghĩa khi đã có giỏ hàng. Trang Ưu đãi chưa có giỏ nên không coi là bị chặn.
+ */
+const CART_DEPENDENT_REASONS = new Set(["MIN_ORDER_NOT_MET", "CATEGORY_MISMATCH"]);
 
 /** Ảnh mặc định theo loại chiến dịch, dùng khi admin chưa tải ảnh riêng. */
 const DEFAULT_BANNER_BY_TYPE: Record<string, string> = {
@@ -42,33 +53,30 @@ export async function handleOffersRoute(
   const now = new Date();
 
   // Đánh giá mã ở giá trị đơn bằng 0: ví voucher ở trang Ưu đãi cho khách xem mã nào
-  // đang có và điều kiện của từng mã, chưa gắn với một giỏ hàng cụ thể nào.
-  const [{ rows: promotions }, wallet] = await Promise.all([
+  // đang có và điều kiện của từng mã, chưa gắn với một giỏ hàng cụ thể nào. Cây danh
+  // mục tải kèm để mã theo danh mục nói được tên danh mục thay vì "danh mục khác".
+  const [{ rows: promotions }, tree] = await Promise.all([
     selectRows("promotion", { is_active: "eq.true", order: "display_order.asc", limit: 100 }),
-    buildWallet(context, 0, 0)
+    loadCategoryTree()
   ]);
+  const wallet = await buildWallet(context, 0, 0, { lines: [], categoryNameById: tree.nameById });
 
+  // Cùng quy tắc vòng đời với bảng chiến dịch bên admin: chiến dịch cạn ngân sách vẫn
+  // còn cờ bật nhưng không còn giảm được, nên không được mời khách vào.
   const campaigns = (promotions || [])
-    .filter((promotion) => isRunning(promotion, now))
+    .filter((promotion) => promotionLifecycle(toLifecycleInput(promotion), now) === "running")
     .map((promotion) => toCampaignCard(promotion, now));
+  const isMember = Boolean(profile?.user_id);
 
   return sendJson(res, 200, {
     success: true,
     generated_at: now.toISOString(),
-    is_member: Boolean(profile?.user_id),
+    is_member: isMember,
     featured: campaigns.filter((campaign) => campaign.is_featured),
     campaigns,
-    vouchers: wallet.items.map(toVoucherCard),
+    vouchers: wallet.items.map((item) => toVoucherCard(item, now, isMember)),
     birthday_prompt: buildBirthdayPrompt(profile)
   }, corsHeaders);
-}
-
-function isRunning(promotion: JsonObject, now: Date): boolean {
-  const start = promotion.start_date ? new Date(String(promotion.start_date)) : null;
-  const end = promotion.end_date ? new Date(String(promotion.end_date)) : null;
-  if (start && start > now) return false;
-  if (end && end < now) return false;
-  return true;
 }
 
 function toCampaignCard(promotion: JsonObject, now: Date): JsonObject {
@@ -93,21 +101,26 @@ function toCampaignCard(promotion: JsonObject, now: Date): JsonObject {
   };
 }
 
-function toVoucherCard(item: {
-  voucherId: string;
-  promoId: string | null;
-  code: string;
-  name: string;
-  discountType: string;
-  discountValue: number;
-  maxDiscountAmount: number | null;
-  minOrderValue: number;
-  endDate: string | null;
-  remainingUses: number | null;
-  eligible: boolean;
-  reason: string | null;
-  reasonText: string | null;
-}): JsonObject {
+/**
+ * Nhóm hiển thị của một mã trên trang Ưu đãi.
+ *
+ * "Dành riêng cho bạn" là mã nhắm một nhóm khách cụ thể mà khách đang đăng nhập đạt,
+ * không phải mã mở cho mọi khách. Mã sắp hết hạn tách riêng để khách thấy trước.
+ */
+export function voucherGroup(item: Pick<EvaluatedVoucher, "audience" | "endDate">, usable: boolean, isMember: boolean, now: Date): "personal" | "ending" | "running" {
+  const daysLeft = item.endDate ? (new Date(item.endDate).getTime() - now.getTime()) / 86400000 : null;
+  if (daysLeft !== null && daysLeft <= ENDING_SOON_DAYS) return "ending";
+  if (isMember && usable && item.audience !== "all_users") return "personal";
+  return "running";
+}
+
+export function toVoucherCard(item: EvaluatedVoucher, now: Date, isMember: boolean): JsonObject {
+  const cartDependent = item.reason !== null && CART_DEPENDENT_REASONS.has(item.reason);
+  const usable = item.eligible || cartDependent;
+  const conditions = [
+    item.minOrderValue > 0 ? `Đơn tối thiểu ${formatMoney(item.minOrderValue)}` : "Không yêu cầu giá trị tối thiểu",
+    item.categoryNames.length ? `Áp cho ${item.categoryNames.join(", ")}` : null
+  ].filter(Boolean);
   return {
     voucher_id: item.voucherId,
     promo_id: item.promoId,
@@ -118,13 +131,13 @@ function toVoucherCard(item: {
     min_order_value: item.minOrderValue,
     end_date: item.endDate,
     remaining_uses: item.remainingUses,
-    // Ở trang Ưu đãi, "không dùng được vì đơn chưa đủ tiền" chưa phải là lỗi — khách
-    // chưa có giỏ hàng nào. Chỉ các lý do thật sự chặn mới hạ trạng thái xuống.
-    usable: item.eligible || item.reason === "MIN_ORDER_NOT_MET",
-    blocked_reason: item.reason === "MIN_ORDER_NOT_MET" ? null : item.reasonText,
-    condition_text: item.minOrderValue > 0
-      ? `Đơn tối thiểu ${formatMoney(item.minOrderValue)}`
-      : "Không yêu cầu giá trị tối thiểu"
+    // Ở trang Ưu đãi, "đơn chưa đủ tiền" hay "giỏ chưa có sản phẩm thuộc danh mục" chưa
+    // phải là lỗi — khách chưa có giỏ hàng nào. Chỉ các lý do thật sự chặn mới hạ trạng thái.
+    usable,
+    blocked_reason: usable ? null : item.reasonText,
+    category_names: item.categoryNames,
+    group: voucherGroup(item, usable, isMember, now),
+    condition_text: conditions.join(" · ")
   };
 }
 

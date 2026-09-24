@@ -191,3 +191,19 @@ test("a campaign count under the cap is not reported as truncated", async () => 
   assert.equal(result.summary.total, 2);
   assert.equal(result.summary.truncated, false);
 });
+
+test("voucher list filters by campaign, and rejects a promoId that is not a UUID", async () => {
+  const seen = [];
+  const service = createPricingService({ repository: {
+    listVouchers: async (filters) => { seen.push(filters.promoId); return { rows: [] }; }
+  } });
+  await service.listVouchers(context("admin_operator_gia_km"), new URLSearchParams("promoId=" + PROMO_ID));
+  await service.listVouchers(context("admin_operator_gia_km"), new URLSearchParams("promoId=none"));
+  await service.listVouchers(context("admin_operator_gia_km"), new URLSearchParams());
+  assert.deepEqual(seen, [PROMO_ID, "none", undefined]);
+  // Chuỗi lạ đi thẳng vào bộ lọc PostgREST sẽ thành một toán tử khác, nên chặn ở đây.
+  await assert.rejects(
+    () => service.listVouchers(context("admin_operator_gia_km"), new URLSearchParams("promoId=eq.x,or(1.eq.1)")),
+    (error) => error.status === 422
+  );
+});

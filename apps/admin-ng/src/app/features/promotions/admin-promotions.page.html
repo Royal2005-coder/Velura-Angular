@@ -2,8 +2,8 @@
   <p class="admin-page-crumb">Khuyến mãi / Chiến dịch</p>
   <section class="admin-card admin-card--flush">
     <div class="admin-tabs" role="tablist" aria-label="Không gian khuyến mãi">
-      <button class="admin-tab" [class.admin-tab--active]="view() === 'campaigns'" type="button" (click)="setView('campaigns')">Chiến dịch <span>{{ promotions().length }}</span></button>
-      <button class="admin-tab" [class.admin-tab--active]="view() === 'vouchers'" type="button" (click)="setView('vouchers')">Mã giảm giá <span>{{ vouchers().length }}</span></button>
+      <button class="admin-tab" [class.admin-tab--active]="view() === 'campaigns'" type="button" (click)="setView('campaigns')">Chiến dịch <span>{{ promoCount() }}</span></button>
+      <button class="admin-tab" [class.admin-tab--active]="view() === 'vouchers'" type="button" (click)="setView('vouchers')">Mã giảm giá <span>{{ voucherCount() }}</span></button>
       <button class="admin-tab" [class.admin-tab--active]="view() === 'bundles'" type="button" (click)="setView('bundles')">Combo/Bundle <span>{{ bundles().length }}</span></button>
       <button class="admin-tab" [class.admin-tab--active]="view() === 'logs'" type="button" (click)="setView('logs')">Nhật ký</button>
       <button class="admin-tab" [class.admin-tab--active]="view() === 'stats'" type="button" (click)="setView('stats')">Thống kê</button>
@@ -78,45 +78,53 @@
           <app-admin-pagination [page]="page()" [pageCount]="campaignPageCount()" [label]="campaignRange()" (changed)="goPage($event)" />
         }
       } @else if (view() === 'vouchers') {
-        @if (canMutate()) {
-          <form class="admin-form" (submit)="$event.preventDefault(); createVoucher()">
-            <label>Mã <input [value]="voucherCode()" (input)="voucherCode.set(readInput($event))" /></label>
-            <label>Tên <input [value]="voucherName()" (input)="voucherName.set(readInput($event))" /></label>
-            <label>Loại
-              <select [value]="voucherTypeDraft()" (change)="voucherTypeDraft.set(readInput($event))">
-                <option value="fixed_amount">Số tiền</option>
-                <option value="percentage">Phần trăm</option>
-                <option value="free_shipping">Miễn phí vận chuyển</option>
-              </select>
-            </label>
-            <label>Giá trị <input type="number" [value]="voucherValueDraft()" (input)="voucherValueDraft.set(readNumber($event))" /></label>
-            <label>Đơn tối thiểu <input type="number" [value]="voucherMinOrder()" (input)="voucherMinOrder.set(readNumber($event))" /></label>
-            <label>Đối tượng
-              <select [value]="voucherAudienceDraft()" (change)="voucherAudienceDraft.set(readInput($event))">
-                <option value="all_users">Mọi khách</option>
-                <option value="guest">Khách vãng lai</option>
-                <option value="member">Thành viên</option>
-              </select>
-            </label>
-            <button class="admin-btn" type="submit" [disabled]="savingVoucher()">Phát hành mã</button>
-          </form>
+        <div class="admin-toolbar">
+          <label class="admin-toolbar__filter">
+            <span class="admin-form-label">Chiến dịch</span>
+            <select class="admin-form-control" [value]="voucherPromoFilter()" (change)="setVoucherPromoFilter($event)">
+              <option value="">Tất cả mã</option>
+              <option value="none">Mã đứng riêng</option>
+              @for (campaign of allCampaigns(); track campaign.promo_id) {
+                <option [value]="campaign.promo_id">{{ campaignName(campaign) }}</option>
+              }
+            </select>
+          </label>
+          @if (canMutate()) {
+            <button class="admin-btn admin-btn--primary admin-btn--sm" type="button" (click)="openVoucherCreate()">Tạo mã giảm giá</button>
+          }
+        </div>
+        @if (loadError()) {
+          <p class="admin-form-error" role="alert">{{ loadError() }}</p>
         }
         @if (!vouchers().length) {
-          <div class="admin-empty-state"><strong>Chưa có voucher</strong></div>
+          <div class="admin-empty-state">
+            <strong>{{ voucherPromoFilter() ? 'Chiến dịch này chưa có mã nào' : 'Chưa có mã giảm giá' }}</strong>
+            <p>Mã là thứ khách thật sự dùng ở bước thanh toán. Chiến dịch không có mã thì không giảm được đồng nào.</p>
+          </div>
         } @else {
           <div class="admin-table-wrap">
             <table class="admin-table admin-data-table">
-              <thead><tr><th>Mã</th><th>Loại</th><th>Giá trị</th><th>Đối tượng</th><th>Đơn tối thiểu</th><th>Lượt dùng</th><th>Hết hạn</th><th>Trạng thái</th><th></th></tr></thead>
+              <thead><tr><th>Mã</th><th>Chiến dịch</th><th>Giá trị</th><th>Giảm tối đa</th><th>Đơn tối thiểu</th><th>Đối tượng</th><th>Danh mục</th><th>Lượt dùng</th><th>Hiệu lực</th><th>Trạng thái</th><th></th></tr></thead>
               <tbody>
                 @for (row of pagedVouchers(); track row.voucher_id) {
                   <tr>
-                    <td>{{ row.code || row.name }}</td>
-                    <td>{{ voucherType(row) }}</td>
+                    <td>
+                      <div class="admin-review-product">
+                        <strong>{{ row.code || row.name }}</strong>
+                        <small>{{ voucherType(row) }}</small>
+                      </div>
+                    </td>
+                    <td>{{ voucherCampaign(row) }}</td>
                     <td>{{ voucherValue(row) }}</td>
-                    <td>{{ voucherAudience(row) }}</td>
+                    <td>{{ voucherCap(row) }}</td>
                     <td>{{ money(row.min_order_value ?? row.min_order) }}</td>
-                    <td>{{ voucherUsage(row) }}</td>
-                    <td>{{ date(row.end_date || row.expires_at) }}</td>
+                    <td>{{ voucherAudience(row) }}</td>
+                    <td>{{ voucherScope(row) }}</td>
+                    <td>
+                      {{ voucherUsage(row) }}
+                      <small class="admin-note">tối đa {{ row.usage_limit_per_user || 1 }} lượt/khách</small>
+                    </td>
+                    <td>{{ voucherPeriod(row) }}</td>
                     <td>
                       <span class="admin-badge" [class.admin-badge--success]="row.is_active !== false" [class.admin-badge--warning]="row.is_active === false">
                         {{ voucherStatus(row) }}
@@ -124,6 +132,7 @@
                     </td>
                     <td>
                       @if (canMutate()) {
+                        <button class="admin-btn admin-btn--outline admin-btn--sm" type="button" (click)="openVoucherEdit(row)">Sửa</button>
                         <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="toggleVoucher(row)">
                           {{ row.is_active === false ? 'Bật' : 'Tắt' }}
                         </button>
@@ -272,5 +281,15 @@
 
   @if (formOpen()) {
     <app-campaign-form [campaign]="editing()" [canMutate]="canMutate()" (saved)="onCampaignSaved()" (closed)="closeForm()" />
+  }
+  @if (voucherFormOpen()) {
+    <app-voucher-form
+      [voucher]="editingVoucher()"
+      [campaigns]="allCampaigns()"
+      [categories]="categories()"
+      [canMutate]="canMutate()"
+      (saved)="onVoucherSaved()"
+      (closed)="closeVoucherForm()"
+    />
   }
 </main>

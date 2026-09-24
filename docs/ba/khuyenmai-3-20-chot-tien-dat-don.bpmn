@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions id="Definitions_3_20_chot_tien_dat_don" xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" targetNamespace="http://velura.vn/bpmn/khuyenmai">
+  <bpmn:collaboration id="Collaboration_3_20_chot_tien_dat_don">
+    <bpmn:participant id="Participant_khachhang" name="Khách hàng" processRef="Process_khachhang" />
+    <bpmn:participant id="Participant_velura" name="Velura" processRef="Process_velura" />
+    <bpmn:messageFlow id="m_k_dat_k_sstart" name="Giỏ hàng và mã
+khách đang áp" sourceRef="k_dat" targetRef="k_sstart" />
+    <bpmn:messageFlow id="m_k_taila_k_ketqua" name="Giá đã thay đổi,
+vui lòng tải lại giỏ" sourceRef="k_taila" targetRef="k_ketqua" />
+    <bpmn:messageFlow id="m_k_tuchoi_k_ketqua" name="Mã không còn hợp lệ" sourceRef="k_tuchoi" targetRef="k_ketqua" />
+    <bpmn:messageFlow id="m_k_ghidon_k_ketqua" name="Xác nhận đơn và
+số tiền đã giảm" sourceRef="k_ghidon" targetRef="k_ketqua" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_khachhang" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_khachhang">
+      <bpmn:lane id="lane_kh" name="Khách hàng">
+        <bpmn:flowNodeRef>k_cstart</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>k_dat</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>k_ketqua</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>k_cend</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="k_cstart" name="Khách bấm đặt hàng"><bpmn:outgoing>f_k_cstart_k_dat</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:userTask id="k_dat" name="Xác nhận đặt hàng"><bpmn:incoming>f_k_cstart_k_dat</bpmn:incoming><bpmn:outgoing>f_k_dat_k_ketqua</bpmn:outgoing></bpmn:userTask>
+    <bpmn:userTask id="k_ketqua" name="Nhận kết quả đặt hàng"><bpmn:incoming>f_k_dat_k_ketqua</bpmn:incoming><bpmn:outgoing>f_k_ketqua_k_cend</bpmn:outgoing></bpmn:userTask>
+    <bpmn:endEvent id="k_cend" name="Kết thúc lượt mua"><bpmn:incoming>f_k_ketqua_k_cend</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="f_k_cstart_k_dat" name="" sourceRef="k_cstart" targetRef="k_dat" />
+    <bpmn:sequenceFlow id="f_k_dat_k_ketqua" name="" sourceRef="k_dat" targetRef="k_ketqua" />
+    <bpmn:sequenceFlow id="f_k_ketqua_k_cend" name="" sourceRef="k_ketqua" targetRef="k_cend" />
+  </bpmn:process>
+  <bpmn:process id="Process_velura" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_velura">
+      <bpmn:lane id="lane_sell" name="Hệ thống bán hàng">
+        <bpmn:flowNodeRef>k_sstart</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>k_gia</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>k_gwgia</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>k_taila</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>k_ship</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>k_endloi</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>k_ghidon</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>k_send</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="lane_promo" name="Dịch vụ khuyến mãi">
+        <bpmn:flowNodeRef>k_chamlai</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>k_gwma</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>k_tuchoi</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>k_tong</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>k_ghiluot</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>k_endma</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>k_log</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="k_sstart" name="Nhận yêu cầu đặt hàng"><bpmn:outgoing>f_k_sstart_k_gia</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:serviceTask id="k_gia" name="Tra bảng giá và tự tính tạm tính từ giá catalog"><bpmn:incoming>f_k_sstart_k_gia</bpmn:incoming><bpmn:outgoing>f_k_gia_k_gwgia</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="k_gwgia" name="Giá khớp bảng giá?"><bpmn:incoming>f_k_gia_k_gwgia</bpmn:incoming><bpmn:outgoing>f_k_gwgia_k_taila</bpmn:outgoing><bpmn:outgoing>f_k_gwgia_k_ship</bpmn:outgoing></bpmn:exclusiveGateway>
+    <bpmn:sendTask id="k_taila" name="Yêu cầu tải lại giỏ hàng"><bpmn:incoming>f_k_gwgia_k_taila</bpmn:incoming><bpmn:outgoing>f_k_taila_k_endloi</bpmn:outgoing></bpmn:sendTask>
+    <bpmn:serviceTask id="k_ship" name="Xác định phí vận chuyển theo ngưỡng miễn phí"><bpmn:incoming>f_k_gwgia_k_ship</bpmn:incoming><bpmn:outgoing>f_k_ship_k_chamlai</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:endEvent id="k_endloi" name="Dừng, chờ khách thao tác lại"><bpmn:incoming>f_k_taila_k_endloi</bpmn:incoming></bpmn:endEvent>
+    <bpmn:serviceTask id="k_chamlai" name="Chấm lại mã tại thời điểm đặt đơn"><bpmn:incoming>f_k_ship_k_chamlai</bpmn:incoming><bpmn:outgoing>f_k_chamlai_k_gwma</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="k_gwma" name="Mã còn hợp lệ?"><bpmn:incoming>f_k_chamlai_k_gwma</bpmn:incoming><bpmn:outgoing>f_k_gwma_k_tuchoi</bpmn:outgoing><bpmn:outgoing>f_k_gwma_k_tong</bpmn:outgoing></bpmn:exclusiveGateway>
+    <bpmn:sendTask id="k_tuchoi" name="Từ chối đơn kèm lý do cụ thể"><bpmn:incoming>f_k_gwma_k_tuchoi</bpmn:incoming><bpmn:outgoing>f_k_tuchoi_k_endma</bpmn:outgoing></bpmn:sendTask>
+    <bpmn:serviceTask id="k_tong" name="Chốt tổng tiền bằng tạm tính cộng phí giao trừ giảm giá"><bpmn:incoming>f_k_gwma_k_tong</bpmn:incoming><bpmn:outgoing>f_k_tong_k_ghiluot</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:serviceTask id="k_ghiluot" name="Ghi lượt dùng mã và cộng dồn ngân sách trong cùng giao dịch"><bpmn:incoming>f_k_tong_k_ghiluot</bpmn:incoming><bpmn:outgoing>f_k_ghiluot_k_ghidon</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:endEvent id="k_endma" name="Dừng, chờ khách chọn lại mã"><bpmn:incoming>f_k_tuchoi_k_endma</bpmn:incoming></bpmn:endEvent>
+    <bpmn:serviceTask id="k_ghidon" name="Ghi đơn hàng kèm số tiền đã giảm"><bpmn:incoming>f_k_ghiluot_k_ghidon</bpmn:incoming><bpmn:outgoing>f_k_ghidon_k_send</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:endEvent id="k_send" name="Ưu đãi được ghi nhận"><bpmn:incoming>f_k_ghidon_k_send</bpmn:incoming></bpmn:endEvent>
+    <bpmn:dataStoreReference id="k_log" name="Nhật ký khuyến mãi" />
+    <bpmn:textAnnotation id="n_maychu"><bpmn:text>Máy chủ không nhận đơn giá, tạm tính, phí giao hay số tiền giảm do trình duyệt gửi lên. Lệch giá thì từ chối đơn.</bpmn:text></bpmn:textAnnotation>
+    <bpmn:textAnnotation id="n_ship"><bpmn:text>Miễn phí vận chuyển là ngưỡng theo giá trị đơn do máy chủ giữ, không phải một loại mã giảm giá.</bpmn:text></bpmn:textAnnotation>
+    <bpmn:textAnnotation id="n_huy"><bpmn:text>Huỷ đơn thì lượt dùng và phần ngân sách đã cộng được hoàn lại.</bpmn:text></bpmn:textAnnotation>
+    <bpmn:sequenceFlow id="f_k_sstart_k_gia" name="" sourceRef="k_sstart" targetRef="k_gia" />
+    <bpmn:sequenceFlow id="f_k_gia_k_gwgia" name="" sourceRef="k_gia" targetRef="k_gwgia" />
+    <bpmn:sequenceFlow id="f_k_gwgia_k_taila" name="Không" sourceRef="k_gwgia" targetRef="k_taila" />
+    <bpmn:sequenceFlow id="f_k_taila_k_endloi" name="" sourceRef="k_taila" targetRef="k_endloi" />
+    <bpmn:sequenceFlow id="f_k_gwgia_k_ship" name="Có" sourceRef="k_gwgia" targetRef="k_ship" />
+    <bpmn:sequenceFlow id="f_k_ship_k_chamlai" name="" sourceRef="k_ship" targetRef="k_chamlai" />
+    <bpmn:sequenceFlow id="f_k_chamlai_k_gwma" name="" sourceRef="k_chamlai" targetRef="k_gwma" />
+    <bpmn:sequenceFlow id="f_k_gwma_k_tuchoi" name="Không" sourceRef="k_gwma" targetRef="k_tuchoi" />
+    <bpmn:sequenceFlow id="f_k_tuchoi_k_endma" name="" sourceRef="k_tuchoi" targetRef="k_endma" />
+    <bpmn:sequenceFlow id="f_k_gwma_k_tong" name="Có" sourceRef="k_gwma" targetRef="k_tong" />
+    <bpmn:sequenceFlow id="f_k_tong_k_ghiluot" name="" sourceRef="k_tong" targetRef="k_ghiluot" />
+    <bpmn:sequenceFlow id="f_k_ghiluot_k_ghidon" name="" sourceRef="k_ghiluot" targetRef="k_ghidon" />
+    <bpmn:sequenceFlow id="f_k_ghidon_k_send" name="" sourceRef="k_ghidon" targetRef="k_send" />
+    <bpmn:association id="a_k_ghiluot_k_log" sourceRef="k_ghiluot" targetRef="k_log" />
+    <bpmn:association id="a_n_maychu_k_gia" sourceRef="n_maychu" targetRef="k_gia" />
+    <bpmn:association id="a_n_ship_k_ship" sourceRef="n_ship" targetRef="k_ship" />
+    <bpmn:association id="a_n_huy_k_ghiluot" sourceRef="n_huy" targetRef="k_ghiluot" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_3_20_chot_tien_dat_don">
+    <bpmndi:BPMNPlane id="BPMNPlane_3_20_chot_tien_dat_don" bpmnElement="Collaboration_3_20_chot_tien_dat_don">
+      <bpmndi:BPMNShape id="Participant_khachhang_di" bpmnElement="Participant_khachhang" isHorizontal="true"><dc:Bounds x="40" y="40" width="2597.5" height="280" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="lane_kh_di" bpmnElement="lane_kh" isHorizontal="true"><dc:Bounds x="70" y="40" width="2567.5" height="280" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Participant_velura_di" bpmnElement="Participant_velura" isHorizontal="true"><dc:Bounds x="40" y="390" width="2597.5" height="1092" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="lane_sell_di" bpmnElement="lane_sell" isHorizontal="true"><dc:Bounds x="70" y="390" width="2567.5" height="364" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="lane_promo_di" bpmnElement="lane_promo" isHorizontal="true"><dc:Bounds x="70" y="754" width="2567.5" height="728" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="k_cstart_di" bpmnElement="k_cstart"><dc:Bounds x="172" y="120" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="k_dat_di" bpmnElement="k_dat"><dc:Bounds x="330" y="96" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="k_ketqua_di" bpmnElement="k_ketqua"><dc:Bounds x="1881" y="96" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="k_cend_di" bpmnElement="k_cend"><dc:Bounds x="2193" y="120" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="k_sstart_di" bpmnElement="k_sstart"><dc:Bounds x="407" y="514.8" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="k_gia_di" bpmnElement="k_gia"><dc:Bounds x="565" y="490.8" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="k_gwgia_di" bpmnElement="k_gwgia" isMarkerVisible="true"><dc:Bounds x="848.5" y="509.8" width="46" height="46" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="k_taila_di" bpmnElement="k_taila"><dc:Bounds x="776.5" y="630.8" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="k_ship_di" bpmnElement="k_ship"><dc:Bounds x="988" y="490.8" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="k_endloi_di" bpmnElement="k_endloi"><dc:Bounds x="1065" y="654.8" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="k_chamlai_di" bpmnElement="k_chamlai"><dc:Bounds x="1223" y="936" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="k_gwma_di" bpmnElement="k_gwma" isMarkerVisible="true"><dc:Bounds x="1506.5" y="955" width="46" height="46" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="k_tuchoi_di" bpmnElement="k_tuchoi"><dc:Bounds x="1434.5" y="1162.8" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="k_tong_di" bpmnElement="k_tong"><dc:Bounds x="1646" y="936" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="k_ghiluot_di" bpmnElement="k_ghiluot"><dc:Bounds x="1881" y="936" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="k_endma_di" bpmnElement="k_endma"><dc:Bounds x="1723" y="1186.8" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="k_log_di" bpmnElement="k_log"><dc:Bounds x="2136" y="1325.2" width="150" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="k_ghidon_di" bpmnElement="k_ghidon"><dc:Bounds x="2116" y="490.8" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="k_send_di" bpmnElement="k_send"><dc:Bounds x="2404.5" y="514.8" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="n_maychu_di" bpmnElement="n_maychu"><dc:Bounds x="741" y="737" width="26" height="104" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="n_ship_di" bpmnElement="n_ship"><dc:Bounds x="1211" y="1315.2" width="26" height="104" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="n_huy_di" bpmnElement="n_huy"><dc:Bounds x="1822" y="1315.2" width="26" height="104" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f_k_cstart_k_dat_di" bpmnElement="f_k_cstart_k_dat"><di:waypoint x="208" y="138" /><di:waypoint x="330" y="138" /><di:waypoint x="330" y="138" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_k_dat_k_ketqua_di" bpmnElement="f_k_dat_k_ketqua"><di:waypoint x="520" y="138" /><di:waypoint x="1881" y="138" /><di:waypoint x="1881" y="138" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_k_ketqua_k_cend_di" bpmnElement="f_k_ketqua_k_cend"><di:waypoint x="2071" y="138" /><di:waypoint x="2193" y="138" /><di:waypoint x="2193" y="138" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_k_sstart_k_gia_di" bpmnElement="f_k_sstart_k_gia"><di:waypoint x="443" y="532.8" /><di:waypoint x="565" y="532.8" /><di:waypoint x="565" y="532.8" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_k_gia_k_gwgia_di" bpmnElement="f_k_gia_k_gwgia"><di:waypoint x="755" y="532.8" /><di:waypoint x="848.5" y="532.8" /><di:waypoint x="848.5" y="532.8" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_k_gwgia_k_taila_di" bpmnElement="f_k_gwgia_k_taila"><di:waypoint x="848.5" y="532.8" /><di:waypoint x="966.5" y="532.8" /><di:waypoint x="966.5" y="672.8" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_k_taila_k_endloi_di" bpmnElement="f_k_taila_k_endloi"><di:waypoint x="966.5" y="672.8" /><di:waypoint x="1065" y="672.8" /><di:waypoint x="1065" y="672.8" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_k_gwgia_k_ship_di" bpmnElement="f_k_gwgia_k_ship"><di:waypoint x="894.5" y="532.8" /><di:waypoint x="988" y="532.8" /><di:waypoint x="988" y="532.8" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_k_ship_k_chamlai_di" bpmnElement="f_k_ship_k_chamlai"><di:waypoint x="1178" y="532.8" /><di:waypoint x="1223" y="532.8" /><di:waypoint x="1223" y="978" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_k_chamlai_k_gwma_di" bpmnElement="f_k_chamlai_k_gwma"><di:waypoint x="1413" y="978" /><di:waypoint x="1506.5" y="978" /><di:waypoint x="1506.5" y="978" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_k_gwma_k_tuchoi_di" bpmnElement="f_k_gwma_k_tuchoi"><di:waypoint x="1506.5" y="978" /><di:waypoint x="1624.5" y="978" /><di:waypoint x="1624.5" y="1204.8" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_k_tuchoi_k_endma_di" bpmnElement="f_k_tuchoi_k_endma"><di:waypoint x="1624.5" y="1204.8" /><di:waypoint x="1723" y="1204.8" /><di:waypoint x="1723" y="1204.8" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_k_gwma_k_tong_di" bpmnElement="f_k_gwma_k_tong"><di:waypoint x="1552.5" y="978" /><di:waypoint x="1646" y="978" /><di:waypoint x="1646" y="978" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_k_tong_k_ghiluot_di" bpmnElement="f_k_tong_k_ghiluot"><di:waypoint x="1836" y="978" /><di:waypoint x="1881" y="978" /><di:waypoint x="1881" y="978" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_k_ghiluot_k_ghidon_di" bpmnElement="f_k_ghiluot_k_ghidon"><di:waypoint x="2071" y="978" /><di:waypoint x="2116" y="978" /><di:waypoint x="2116" y="532.8" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_k_ghidon_k_send_di" bpmnElement="f_k_ghidon_k_send"><di:waypoint x="2306" y="532.8" /><di:waypoint x="2404.5" y="532.8" /><di:waypoint x="2404.5" y="532.8" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="a_k_ghiluot_k_log_di" bpmnElement="a_k_ghiluot_k_log"><di:waypoint x="2071" y="978" /><di:waypoint x="2136" y="978" /><di:waypoint x="2136" y="1367.2" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="m_k_dat_k_sstart_di" bpmnElement="m_k_dat_k_sstart"><di:waypoint x="520" y="138" /><di:waypoint x="407" y="138" /><di:waypoint x="407" y="532.8" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="m_k_taila_k_ketqua_di" bpmnElement="m_k_taila_k_ketqua"><di:waypoint x="966.5" y="672.8" /><di:waypoint x="1881" y="672.8" /><di:waypoint x="1881" y="138" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="m_k_tuchoi_k_ketqua_di" bpmnElement="m_k_tuchoi_k_ketqua"><di:waypoint x="1624.5" y="1204.8" /><di:waypoint x="1881" y="1204.8" /><di:waypoint x="1881" y="138" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="m_k_ghidon_k_ketqua_di" bpmnElement="m_k_ghidon_k_ketqua"><di:waypoint x="2116" y="532.8" /><di:waypoint x="2071" y="532.8" /><di:waypoint x="2071" y="138" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="a_n_maychu_k_gia_di" bpmnElement="a_n_maychu_k_gia"><di:waypoint x="741" y="789" /><di:waypoint x="755" y="789" /><di:waypoint x="755" y="532.8" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="a_n_ship_k_ship_di" bpmnElement="a_n_ship_k_ship"><di:waypoint x="1211" y="1367.2" /><di:waypoint x="1178" y="1367.2" /><di:waypoint x="1178" y="532.8" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="a_n_huy_k_ghiluot_di" bpmnElement="a_n_huy_k_ghiluot"><di:waypoint x="1848" y="1367.2" /><di:waypoint x="1881" y="1367.2" /><di:waypoint x="1881" y="978" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

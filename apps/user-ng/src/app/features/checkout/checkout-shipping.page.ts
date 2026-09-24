@@ -24,6 +24,7 @@ interface MemberProfile {
 }
 
 interface PlaceOrderResponse {
+  stripe?: { url?: string };
   success?: boolean;
   message?: string;
   order?: {
@@ -272,6 +273,10 @@ export class CheckoutShippingPage {
           if (!res.success || !res.order) {
             this.submitting.set(false);
             showToast(res.message || 'Đặt hàng thất bại');
+            return;
+          }
+          if (res.stripe?.url) {
+            window.location.assign(res.stripe.url);
             return;
           }
           this.finishOrder(res.order, items, paymentMethod);

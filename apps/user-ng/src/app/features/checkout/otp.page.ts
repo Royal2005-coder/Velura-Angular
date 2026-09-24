@@ -14,6 +14,7 @@ interface OtpVerifyResponse {
   token?: string;
   user?: Record<string, unknown>;
   temp_password?: string;
+  stripe?: { url?: string };
   order?: {
     order_id?: string;
     tracking_code?: string;
@@ -174,6 +175,10 @@ export class CheckoutOtpPage {
             shipping_method: this.checkout.methods().shippingMethod,
           });
           this.checkout.completeCheckout((guestPayload['items'] as CartLine[]) || []);
+          if (res.stripe?.url) {
+            window.location.assign(res.stripe.url);
+            return;
+          }
           showToast('Thanh toán & Đăng ký thành công!');
           void this.router.navigateByUrl('/checkout/confirm');
         },

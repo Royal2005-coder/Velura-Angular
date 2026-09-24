@@ -1073,8 +1073,8 @@ function assertStripeReady(method: unknown): void {
   }
 }
 
-async function openStripePayment(orderId: unknown, amount: unknown, method: unknown): Promise<{ payment_intent_id: string } | null> {
+async function openStripePayment(orderId: unknown, amount: unknown, method: unknown): Promise<{ payment_intent_id: string; url: string } | null> {
   if (String(method || "").toUpperCase() !== "STRIPE") return null;
   const intent = await createStripePaymentIntent(String(orderId), Number(amount) || 0);
-  return { payment_intent_id: intent.id };
+  return { payment_intent_id: intent.id, url: intent.url };
 }

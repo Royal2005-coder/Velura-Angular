@@ -20,13 +20,14 @@ export async function handleStripeWebhook(req: HttpRequest, res: HttpResponse, c
     throw new HttpError(400, "STRIPE_SIGNATURE_INVALID", "Chữ ký Stripe không hợp lệ.");
   }
   const event = JSON.parse(rawBody) as JsonObject;
-  if (event.type !== "payment_intent.succeeded") {
+  if (event.type !== "payment_intent.succeeded" && event.type !== "checkout.session.completed") {
     sendJson(res, 200, { received: true, ignored: event.type || "unknown" }, corsHeaders);
     return;
   }
   const object = (event.data as JsonObject | undefined)?.object as JsonObject | undefined;
   const orderId = (object?.metadata as JsonObject | undefined)?.order_id;
-  const paymentIntentId = object?.id;
+  const rawIntent = event.type === "checkout.session.completed" ? object?.payment_intent : object?.id;
+  const paymentIntentId = typeof rawIntent === "string" ? rawIntent : (rawIntent as JsonObject | undefined)?.id;
   if (typeof orderId !== "string" || typeof paymentIntentId !== "string") {
     sendJson(res, 200, { received: true, ignored: "missing_order" }, corsHeaders);
     return;

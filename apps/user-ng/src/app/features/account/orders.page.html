@@ -1,8 +1,19 @@
 <main class="my-orders-page">
   <div class="container">
     <div class="my-orders-title-block">
-      <h1 class="my-orders-title">Đơn hàng của tôi</h1>
-      <p class="my-orders-subtitle">Theo dõi và quản lý tất cả đơn hàng của bạn tại Velura</p>
+      <div class="my-orders-heading-row">
+        <div>
+          <h1 class="my-orders-title">Đơn hàng của tôi</h1>
+          <p class="my-orders-subtitle">Theo dõi và quản lý các đơn hàng của bạn.</p>
+        </div>
+        <a routerLink="/account/track" class="my-orders-track-link">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="9"></circle>
+            <path d="M12 7v5l3 2"></path>
+          </svg>
+          Tra cứu đơn hàng
+        </a>
+      </div>
     </div>
 
     <div class="search-orders-container">
@@ -15,9 +26,9 @@
       </div>
     </div>
 
-    <div class="order-tabs">
+    <div class="order-tabs" role="tablist">
       <button class="order-tab" [class.is-active]="tab() === 'all'" type="button" (click)="setTab('all')">Tất cả</button>
-      <button class="order-tab" [class.is-active]="tab() === 'pending'" type="button" (click)="setTab('pending')">Chờ xác nhận</button>
+      <button class="order-tab" [class.is-active]="tab() === 'pending'" type="button" (click)="setTab('pending')">Đang xử lý</button>
       <button class="order-tab" [class.is-active]="tab() === 'shipping'" type="button" (click)="setTab('shipping')">Đang giao</button>
       <button class="order-tab" [class.is-active]="tab() === 'delivered'" type="button" (click)="setTab('delivered')">Hoàn thành</button>
       <button class="order-tab" [class.is-active]="tab() === 'cancelled'" type="button" (click)="setTab('cancelled')">Đã hủy</button>
@@ -25,26 +36,94 @@
 
     <div class="order-list">
       @if (loading()) {
-        <p>Đang tải đơn hàng...</p>
+        <!-- Skeleton Order Cards Loading State -->
+        <div class="order-card-skeleton-list" aria-label="Đang tải danh sách đơn hàng...">
+          @for (sk of [1, 2, 3]; track sk) {
+            <div class="order-card order-card--skeleton">
+              <div class="order-card__header">
+                <div class="skeleton-box skeleton-title"></div>
+                <div class="skeleton-box skeleton-badge"></div>
+              </div>
+              <div class="order-card__products">
+                <div class="skeleton-box skeleton-thumb"></div>
+                <div class="skeleton-box skeleton-text"></div>
+              </div>
+              <div class="order-card__footer">
+                <div class="skeleton-box skeleton-price"></div>
+                <div class="skeleton-box skeleton-btn"></div>
+              </div>
+            </div>
+          }
+        </div>
       } @else if (filtered().length === 0) {
-        <p>Chưa có đơn hàng phù hợp.</p>
+        <!-- Empty State -->
+        <div class="orders-empty-state">
+          <div class="orders-empty-icon-wrapper">
+            <svg class="orders-empty-icon" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
+              <line x1="3" y1="6" x2="21" y2="6"></line>
+              <path d="M16 10a4 4 0 0 1-8 0"></path>
+            </svg>
+          </div>
+          <h2 class="orders-empty-title">Bạn chưa có đơn hàng nào</h2>
+          <p class="orders-empty-text">Các đơn hàng sau khi đặt sẽ được hiển thị tại đây.</p>
+          <a routerLink="/products" class="btn btn--primary btn-continue-shopping">Tiếp tục mua sắm</a>
+        </div>
       } @else {
         @for (order of filtered(); track order.order_id) {
-          <div class="order-card" [attr.data-order-id]="order.order_id">
+          <div class="order-card" [attr.data-order-id]="order.order_id" [routerLink]="['/account/orders', order.order_id]" style="cursor: pointer;">
             <div class="order-card__header">
               <div class="order-card__header-left">
-                <span class="order-card__id">#{{ order.order_code || order.order_id }}</span>
-                <span class="order-card__date">{{ order.created_at }}</span>
+                <span class="order-card__id">#{{ order.order_code || order.tracking_code || order.order_id }}</span>
+                @if (orderDateLabel(order)) {
+                  <span class="order-card__date">Ngày đặt: {{ orderDateLabel(order) }}</span>
+                }
               </div>
-              <span class="order-card__status-badge">{{ statusLabel(order) }}</span>
+              <span class="order-card__status-badge {{ statusBadgeClass(order) }}">{{ statusLabel(order) }}</span>
             </div>
-            <div class="order-card__footer">
+
+            @if (order.items && order.items.length > 0) {
+              <div class="order-card__products">
+                @for (item of order.items.slice(0, 2); track item.product_name) {
+                  <div class="order-product-item">
+                    @if (item.product_image) {
+                      <img [src]="item.product_image" [alt]="item.product_name || 'Sản phẩm'" class="order-product-item__image" />
+                    } @else {
+                      <div class="order-product-item__image order-product-item__image--placeholder">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#8C857E" stroke-width="1.5">
+                          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                          <circle cx="8.5" cy="8.5" r="1.5"/>
+                          <polyline points="21 15 16 10 5 21"/>
+                        </svg>
+                      </div>
+                    }
+                    <div class="order-product-item__info">
+                      <span class="order-product-item__name">{{ item.product_name || 'Sản phẩm Velura' }}</span>
+                      @if (item.quantity) {
+                        <span class="order-product-item__qty">x{{ item.quantity }}</span>
+                      }
+                    </div>
+                  </div>
+                }
+                @if (order.items.length > 2) {
+                  <span class="order-product-item--more">+{{ order.items.length - 2 }} sản phẩm khác</span>
+                }
+              </div>
+            }
+
+            <div class="order-card__footer" (click)="$event.stopPropagation()">
               <div class="order-card__footer-left">
-                <span class="order-card__count">Tổng cộng ({{ order.item_count || 0 }} sản phẩm)</span>
+                <span class="order-card__count">{{ order.item_count || order.items?.length || 1 }} sản phẩm</span>
                 <span class="order-card__total">{{ totalLabel(order) }}</span>
               </div>
               <div class="order-card__actions">
-                <a [routerLink]="['/account/orders', order.order_id]" class="btn btn--primary btn-detail-action">Chi tiết &gt;</a>
+                @if (isCompleted(order)) {
+                  <a [routerLink]="['/account/reviews']" [queryParams]="{ orderId: order.order_id }" class="btn btn--review">Đánh giá <span aria-hidden="true">›</span></a>
+                  <a [routerLink]="['/account/returns']" [queryParams]="{ orderId: order.order_id }" class="btn btn--return">Đổi/trả</a>
+                } @else if (isShipping(order)) {
+                  <a routerLink="/account/track" [queryParams]="{ code: order.tracking_code || order.order_code }" class="btn btn--return">Theo dõi</a>
+                }
+                <a [routerLink]="['/account/orders', order.order_id]" class="btn btn--primary btn-detail-action">Xem chi tiết &gt;</a>
               </div>
             </div>
           </div>
@@ -53,3 +132,4 @@
     </div>
   </div>
 </main>
+

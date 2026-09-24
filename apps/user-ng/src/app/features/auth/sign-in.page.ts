@@ -1,6 +1,6 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { environment } from '../../../environments/environment';
 import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
@@ -22,6 +22,7 @@ export class SignInPage {
   private readonly auth = inject(AuthService);
   private readonly wishlist = inject(WishlistStore);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
 
   readonly method = signal<'phone' | 'email'>('phone');
   readonly errorMessage = signal<string | null>(null);
@@ -57,7 +58,8 @@ export class SignInPage {
   }
 
   /**
-   * Submits credentials to the existing user auth API.
+   * Submits credentials to user auth API.
+   * Enables seamless frontend testing fallback if backend is offline.
    */
   submit(): void {
     this.errorMessage.set(null);
@@ -69,6 +71,12 @@ export class SignInPage {
 
     const identity =
       this.method() === 'email' ? this.form.controls.email.value : this.form.controls.phone.value;
+
+    if (environment.mockAuth) {
+      this.signInWithMockAccount(identity);
+      return;
+    }
+
     this.api
       .post<{ token?: string; user?: Record<string, unknown>; otp_required?: boolean }>('/api/user/auth/signin', payload)
       .subscribe({
@@ -81,10 +89,30 @@ export class SignInPage {
           }
           this.finishAuth(response);
         },
-        error: (error: Error) => {
+        error: (err: Error) => {
           this.submitting.set(false);
-          this.errorMessage.set(error.message);
+          this.errorMessage.set(err?.message || 'Không thể kết nối máy chủ. Vui lòng thử lại sau.');
         },
+      });
+  }
+
+  private signInWithMockAccount(identity: string): void {
+    fetch('/mock/member-account.json')
+      .then((response) => {
+        if (!response.ok) throw new Error('Mock account unavailable');
+        return response.json() as Promise<{ email: string; phone: string; password: string; user: Record<string, unknown> }>;
+      })
+      .then((account) => {
+        const matchesIdentity = this.method() === 'email' ? identity === account.email : identity === account.phone;
+        if (!matchesIdentity || this.form.controls.password.value !== account.password) {
+          throw new Error('Invalid mock credentials');
+        }
+        this.submitting.set(false);
+        this.finishAuth({ token: 'mock-jwt-token-demo', user: account.user });
+      })
+      .catch(() => {
+        this.submitting.set(false);
+        this.errorMessage.set('Tài khoản mock không đúng. Dùng thông tin trong mock/member-account.json.');
       });
   }
 
@@ -134,7 +162,8 @@ export class SignInPage {
     this.auth.applySession(response.token, response.user);
     this.wishlist.refresh();
     showToast('Đăng nhập thành công!');
-    void this.router.navigateByUrl('/');
+    const returnUrl = this.route.snapshot.queryParams['returnUrl'] || '/account/orders';
+    void this.router.navigateByUrl(returnUrl);
   }
 
   private randomVerifier(): string {

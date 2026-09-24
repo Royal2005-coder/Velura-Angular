@@ -67,6 +67,193 @@
   font-family: "DM Sans", sans-serif;
   outline: none;
 }
+
+/* Guest search results: keep the summary scannable before OTP authorization. */
+.track-public-summary-section {
+  margin: 40px 0 64px;
+}
+
+.track-results-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 18px;
+}
+
+.track-results-eyebrow {
+  margin: 0 0 6px;
+  color: #c97b63;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.track-results-heading h2 {
+  margin: 0;
+  color: #2a2522;
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 1.8rem;
+  font-weight: 500;
+}
+
+.track-results-heading h2 span {
+  color: #8c857e;
+  font-family: "DM Sans", sans-serif;
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.track-results-note {
+  color: #8c857e;
+  font-size: 0.82rem;
+}
+
+.track-public-summary-list {
+  display: grid;
+  gap: 14px;
+}
+
+.track-public-order-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 28px;
+  min-height: 148px;
+  padding: 24px 28px;
+  border: 1px solid #e8dfd6;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(42, 37, 34, 0.035);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.track-public-order-card:hover {
+  border-color: #d8b7a8;
+  box-shadow: 0 12px 30px rgba(42, 37, 34, 0.07);
+  transform: translateY(-2px);
+}
+
+.track-public-order-main {
+  display: flex;
+  align-items: flex-start;
+  min-width: 0;
+  gap: 18px;
+}
+
+.track-public-order-icon {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  place-items: center;
+  border-radius: 12px;
+  background: #faf1eb;
+  color: #a9614d;
+}
+
+.track-public-order-copy {
+  min-width: 0;
+}
+
+.track-public-order-topline {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.track-public-order-topline h3 {
+  margin: 0;
+  color: #2a2522;
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 1.18rem;
+  font-weight: 500;
+}
+
+.track-public-order-topline h3 strong {
+  color: #a9614d;
+  font-weight: 600;
+}
+
+.track-public-status {
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.track-public-status--pending {
+  background: #f5efeb;
+  color: #8c857e;
+}
+
+.track-public-status--shipping {
+  background: #fff2ec;
+  color: #a05a32;
+}
+
+.track-public-status--delivered {
+  background: #e6f7f0;
+  color: #00875a;
+}
+
+.track-public-status--cancelled {
+  background: #fff2f4;
+  color: #d32f2f;
+}
+
+.track-public-date {
+  margin: 7px 0 16px;
+  color: #8c857e;
+  font-size: 0.82rem;
+}
+
+.track-public-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #8c857e;
+  font-size: 0.86rem;
+}
+
+.track-public-meta strong {
+  color: #734724;
+  font-size: 1.05rem;
+}
+
+.track-public-meta-separator {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #d8b7a8;
+}
+
+.track-public-detail-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-width: 150px;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 8px;
+  background: #c97b63;
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.track-public-detail-btn:hover {
+  background: #a9614d;
+  transform: translateX(2px);
+}
 /* Main Grid Layout */
 .track-grid {
   display: grid;
@@ -121,13 +308,31 @@
 }
 
 .track-status-badge {
-  background-color: #e8c9be;
-  color: #c97b63;
   font-weight: 600;
   padding: 8px 20px;
   border-radius: 20px;
   font-size: 1.0625rem;
   letter-spacing: 0.5px;
+}
+
+.track-status-badge--pending {
+  background-color: #f5efeb;
+  color: #8c857e;
+}
+
+.track-status-badge--shipping {
+  background-color: #fff2ec;
+  color: #a05a32;
+}
+
+.track-status-badge--delivered {
+  background-color: #e6f7f0;
+  color: #00875a;
+}
+
+.track-status-badge--cancelled {
+  background-color: #fff2f4;
+  color: #d32f2f;
 }
 
 /* Vertical Timeline */
@@ -541,6 +746,37 @@
     width: 100%;
   }
 
+  .track-results-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .track-public-summary-section {
+    margin-top: 32px;
+  }
+
+  .track-public-order-card {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 20px;
+    padding: 20px;
+  }
+
+  .track-public-order-main {
+    gap: 12px;
+  }
+
+  .track-public-order-topline {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .track-public-detail-btn {
+    width: 100%;
+  }
+
   .track-card {
     padding: 20px;
   }
@@ -632,4 +868,264 @@
   line-height: 1.6;
   margin: 0;
 }
+
+/* Toast Notification (Section 8.1) */
+.track-toast-notification {
+  position: fixed;
+  bottom: 32px;
+  right: 32px;
+  background-color: #2a2522;
+  color: #ffffff;
+  padding: 14px 24px;
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  z-index: 9999;
+  animation: slideUpFade 0.3s ease-out forwards;
+}
+
+@keyframes slideUpFade {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Failed step modifier (Section 7.5 & 7.6) */
+.track-step--failed .track-step__dot {
+  background-color: #D32F2F;
+  color: #ffffff;
+}
+
+.track-step--failed .track-step__title {
+  color: #D32F2F;
+  font-weight: 600;
+}
+
+.track-step--failed .track-step__line {
+  background-color: #D32F2F;
+}
+
+/* ============================================================
+   Phone Order Results List (Public Order Summary Cards)
+   ============================================================ */
+
+.track-public-summary-section {
+  margin-top: 32px;
+  margin-bottom: 48px;
+}
+
+.track-results-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: 24px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #E8DFD6;
+}
+
+.track-results-eyebrow {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #734724;
+  margin: 0 0 4px 0;
+}
+
+.track-results-heading h2 {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 1.75rem;
+  font-weight: 600;
+  color: #2a2522;
+  margin: 0;
+}
+
+.track-results-heading h2 span {
+  color: #8c857e;
+  font-weight: 400;
+}
+
+.track-results-note {
+  font-size: 0.8125rem;
+  color: #8c857e;
+}
+
+.track-public-summary-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.track-public-order-card {
+  background: #ffffff;
+  border: 1px solid #E8DFD6;
+  border-radius: 14px;
+  padding: 24px 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  box-shadow: 0 4px 16px rgba(42, 37, 34, 0.03);
+  transition: all 0.25s ease;
+}
+
+.track-public-order-card:hover {
+  border-color: #c97b63;
+  box-shadow: 0 6px 24px rgba(201, 123, 99, 0.12);
+  transform: translateY(-2px);
+}
+
+.track-public-order-main {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex: 1;
+}
+
+.track-public-order-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  background-color: #FAF6F2;
+  color: #734724;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.track-public-order-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.track-public-order-topline {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.track-public-order-topline h3 {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #2a2522;
+  margin: 0;
+}
+
+.track-public-order-topline h3 strong {
+  color: #734724;
+}
+
+.track-public-date {
+  font-size: 0.8125rem;
+  color: #8c857e;
+  margin: 0;
+}
+
+.track-public-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.9375rem;
+  color: #5A5450;
+  margin-top: 4px;
+}
+
+.track-public-meta strong {
+  color: #734724;
+  font-size: 1.0625rem;
+}
+
+.track-public-meta-separator {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: #D3C9C1;
+  display: inline-block;
+}
+
+.track-public-detail-btn {
+  background: #734724;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 12px 24px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.track-public-detail-btn:hover {
+  background: #59351a;
+  transform: translateX(2px);
+}
+
+/* Status Badges with Old Version Color Palette */
+.track-public-status,
+.track-badge {
+  padding: 5px 14px;
+  border-radius: 20px;
+  font-size: 0.78125rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  display: inline-flex;
+  align-items: center;
+}
+
+.track-badge--delivered,
+.track-public-status--delivered {
+  background-color: #E6F7F0 !important;
+  color: #00875A !important;
+}
+
+.track-badge--shipping,
+.track-public-status--shipping {
+  background-color: #FFF2EC !important;
+  color: #A05A32 !important;
+}
+
+.track-badge--pending,
+.track-public-status--pending {
+  background-color: #F5EFEB !important;
+  color: #8C857E !important;
+}
+
+.track-badge--cancelled,
+.track-public-status--cancelled {
+  background-color: #FFF2F4 !important;
+  color: #D32F2F !important;
+}
+
+@media (max-width: 768px) {
+  .track-public-order-card {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 20px;
+  }
+  
+  .track-public-detail-btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+
 

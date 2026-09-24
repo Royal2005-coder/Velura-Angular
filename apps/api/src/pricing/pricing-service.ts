@@ -170,32 +170,20 @@ export function createPricingService({ repository }: { repository: PricingReposi
         throw new HttpError(422, "VALIDATION_ERROR", "Đối tượng mã phải là khách vãng lai, thành viên hoặc mọi khách");
       }
 
-      // `max_vouchers_allowed` được ghi lúc tạo chiến dịch rồi chưa bao giờ có ai đọc:
-      // admin đặt trần "chiến dịch này phát tối đa 50 mã" và hệ thống vẫn cho phát mã
-      // thứ 51. Đây là chỗ trần đó có hiệu lực.
-      const promoId = asString(body.promoId);
-      if (promoId) {
-        const promo = await repository.getPromotion(promoId, context.accessToken);
-        if (!promo) throw new HttpError(404, "PROMOTION_NOT_FOUND", "Không tìm thấy chiến dịch của mã này");
-        const allowed = Number(promo.max_vouchers_allowed || 0);
-        if (allowed > 0) {
-          const stats = await repository.countVouchersByPromotion([promoId], context.accessToken);
-          const issued = stats[promoId]?.total ?? 0;
-          if (issued >= allowed) {
-            throw new HttpError(422, "VOUCHER_LIMIT_REACHED",
-              `Chiến dịch này chỉ được phát tối đa ${allowed} mã, hiện đã có ${issued}.`);
-          }
-        }
-      }
-
-      return repository.createVoucher({ ...body, createdBy: context.profile?.user_id || context.authUser?.id }, context.accessToken);
+      // Trần `max_vouchers_allowed` của chiến dịch do RPC chốt khi đang khoá dòng chiến
+      // dịch (migration 035). Đếm ở đây rồi mới ghi thì hai admin bấm cùng lúc vẫn lọt
+      // qua cả hai, nên không đếm lại ở tầng này.
+      return repository.createVoucher({ ...body, code: String(body.code).trim().toUpperCase() }, context.accessToken);
     },
 
     async updateVoucher(context, voucherId, body) {
       requirePricingAdmin(context);
       const expectedVersion = parseInt((body?.expectedVersion || "0") as string);
       if (!expectedVersion) throw new HttpError(422, "VALIDATION_ERROR", "expectedVersion required");
-      return repository.updateVoucher(voucherId, body, context.accessToken);
+      if (body?.type !== undefined && body.type !== null && !VOUCHER_TYPES.includes(body.type as string)) {
+        throw new HttpError(422, "VALIDATION_ERROR", "Invalid voucher type");
+      }
+      return repository.updateVoucher(voucherId, { ...body, expectedVersion }, context.accessToken);
     },
 
     async listAuditLogs(context, searchParams) {

@@ -114,42 +114,43 @@ test("unrelated role cannot read pricing audit logs", async () => {
 
 function context(roleCode) { return { authUser: { id: "auth-1" }, roleCode, accessToken: "jwt-token" }; }
 
-test("a campaign cannot issue more vouchers than its declared ceiling", async () => {
-  // `max_vouchers_allowed` được ghi lúc tạo chiến dịch nhưng trước đây chưa ai đọc: trần
-  // "tối đa 2 mã" không ngăn được mã thứ 3.
-  let created = 0;
+test("creating a voucher goes straight to the RPC, with no read-then-write cap check", async () => {
+  // Trần số mã của chiến dịch do RPC chốt khi đang khoá dòng chiến dịch. Tầng dịch vụ
+  // không được tự đếm rồi mới ghi, vì hai admin bấm cùng lúc sẽ cùng lọt qua bước đếm.
+  let received;
   const service = createPricingService({ repository: {
-    getPromotion: async () => ({ promo_id: PROMO_ID, max_vouchers_allowed: 2 }),
-    countVouchersByPromotion: async () => ({ [PROMO_ID]: { total: 2, active: 2 } }),
-    createVoucher: async (input) => { created += 1; return input; }
+    getPromotion: async () => { throw new Error("không được đọc chiến dịch trước khi ghi"); },
+    countVouchersByPromotion: async () => { throw new Error("không được đếm mã trước khi ghi"); },
+    createVoucher: async (input, token) => { received = { input, token }; return input; }
   } });
-
-  await assert.rejects(
-    () => service.createVoucher(context("admin_operator_gia_km"), { code: "TET3", type: "percentage", promoId: PROMO_ID }),
-    (error) => error.status === 422 && error.code === "VOUCHER_LIMIT_REACHED"
-  );
-  assert.equal(created, 0);
+  await service.createVoucher(context("admin_operator_gia_km"), { code: " tet3 ", type: "percentage", promoId: PROMO_ID });
+  assert.equal(received.input.code, "TET3");
+  assert.equal(received.input.promoId, PROMO_ID);
+  assert.equal(received.token, "jwt-token");
 });
 
-test("no ceiling and a campaign under its ceiling both let the voucher through", async () => {
-  const unlimited = createPricingService({ repository: {
-    getPromotion: async () => ({ promo_id: PROMO_ID, max_vouchers_allowed: 0 }),
-    countVouchersByPromotion: async () => ({ [PROMO_ID]: { total: 99, active: 99 } }),
-    createVoucher: async (input) => input
-  } });
-  // `max_vouchers_allowed = 0` nghĩa là không đặt trần, không phải cấm phát mã.
-  await unlimited.createVoucher(context("admin_operator_gia_km"), { code: "TET4", type: "percentage", promoId: PROMO_ID });
+test("updating a voucher rejects an unknown discount type before calling the RPC", async () => {
+  let called = false;
+  const service = createPricingService({ repository: { updateVoucher: async () => { called = true; } } });
+  await assert.rejects(
+    () => service.updateVoucher(context("admin_operator_gia_km"), PROMO_ID, { expectedVersion: 3, type: "buy_one_get_one" }),
+    (error) => error.status === 422
+  );
+  assert.equal(called, false);
+});
 
-  const underLimit = createPricingService({ repository: {
-    getPromotion: async () => ({ promo_id: PROMO_ID, max_vouchers_allowed: 5 }),
-    countVouchersByPromotion: async () => ({ [PROMO_ID]: { total: 4, active: 4 } }),
-    createVoucher: async (input) => input
-  } });
-  await underLimit.createVoucher(context("admin_operator_gia_km"), { code: "TET5", type: "percentage", promoId: PROMO_ID });
-
-  // Mã không thuộc chiến dịch nào thì không có trần để xét.
-  const standalone = createPricingService({ repository: { createVoucher: async (input) => input } });
-  await standalone.createVoucher(context("admin_operator_gia_km"), { code: "TET6", type: "percentage" });
+test("migration 035 checks the caller's role and the campaign ceiling inside the RPC", async () => {
+  const migration = await readFile(new URL("../../database/migrations/035_admin_promotion_voucher_rpc.sql", import.meta.url), "utf8");
+  // Hàm SECURITY DEFINER mở cho `authenticated` mà không kiểm vai trò thì bất kỳ tài
+  // khoản đăng nhập nào cũng tạo được mã giảm giá.
+  assert.match(migration, /create or replace function public\.velura_require_pricing_admin\(\)/);
+  assert.match(migration, /'super_admin', 'admin_operator_gia_km'/);
+  assert.match(migration, /RBAC_DENIED/);
+  assert.match(migration, /VOUCHER_LIMIT_REACHED/);
+  assert.match(migration, /for update/);
+  assert.match(migration, /CATEGORY_NOT_FOUND/);
+  assert.match(migration, /VOUCHER_CODE_EXISTS/);
+  assert.match(migration, /revoke all on function public\.admin_create_voucher/);
 });
 
 test("the campaign total comes from the exact count, not from the capped row array", async () => {

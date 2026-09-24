@@ -117,13 +117,23 @@
                 </div>
               </div>
             </label>
+            <label class="option-card" [class.is-selected]="payment() === 'stripe'">
+              <input type="radio" name="payment" value="stripe" [checked]="payment() === 'stripe'" (change)="setPayment('stripe')" />
+              <div class="option-card__left">
+                <span class="option-card__radio"></span>
+                <div>
+                  <p class="option-card__title">Thẻ qua Stripe</p>
+                  <p class="option-card__desc">Thanh toán thẻ ở chế độ test. Đơn chờ webhook payment_intent.succeeded.</p>
+                </div>
+              </div>
+            </label>
             <label class="option-card" [class.is-selected]="payment() === 'vnpay'">
               <input type="radio" name="payment" value="vnpay" [checked]="payment() === 'vnpay'" (change)="setPayment('vnpay')" />
               <div class="option-card__left">
                 <span class="option-card__radio"></span>
                 <div>
                   <p class="option-card__title">VNPay</p>
-                  <p class="option-card__desc">Thanh toán qua ví điện tử VNPay</p>
+                  <p class="option-card__desc">Chưa bật. Dùng COD hoặc Stripe.</p>
                 </div>
               </div>
             </label>
@@ -133,7 +143,7 @@
                 <span class="option-card__radio"></span>
                 <div>
                   <p class="option-card__title">MoMo</p>
-                  <p class="option-card__desc">Thanh toán qua ví MoMo</p>
+                  <p class="option-card__desc">Chưa bật. Dùng COD hoặc Stripe.</p>
                 </div>
               </div>
             </label>

@@ -73,12 +73,30 @@
 }
 
 .detail-status-badge {
-  background-color: #a8b5a2;
-  color: #ffffff;
   font-weight: 600;
   padding: 8px 18px;
   border-radius: 20px;
   font-size: 1.0625rem;
+}
+
+.detail-status-badge--pending {
+  background-color: #f5efeb;
+  color: #8c857e;
+}
+
+.detail-status-badge--shipping {
+  background-color: #fff2ec;
+  color: #a05a32;
+}
+
+.detail-status-badge--delivered {
+  background-color: #e6f7f0;
+  color: #00875a;
+}
+
+.detail-status-badge--cancelled {
+  background-color: #fff2f4;
+  color: #d32f2f;
 }
 
 .detail-tracking-row {
@@ -197,6 +215,23 @@
 .detail-timeline-item--active .detail-timeline-title {
   color: #2a2522;
   font-weight: 600;
+}
+
+.detail-timeline-item--failed .detail-timeline-dot {
+  background-color: #d32f2f;
+  color: #ffffff;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.detail-timeline-item--failed .detail-timeline-title,
+.detail-timeline-reason {
+  color: #b42318;
+}
+
+.detail-timeline-reason {
+  font-size: 0.875rem;
+  margin: 6px 0 0;
 }
 
 .detail-timeline-item--pending .detail-timeline-dot {

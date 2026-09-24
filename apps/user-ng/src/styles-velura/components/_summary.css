@@ -71,3 +71,39 @@
   color: var(--muted);
   padding-top: 16px;
 }
+
+/* Tiến độ miễn phí vận chuyển. Ngưỡng và số tiền còn thiếu đến từ báo giá của máy chủ,
+   không viết cứng ở trình duyệt. Chỉ dùng biến màu sẵn có của design system. */
+.freeship-progress {
+  margin: 12px 0 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  background: var(--success-bg);
+}
+
+.freeship-progress__text {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.freeship-progress__track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--card-border);
+  overflow: hidden;
+}
+
+.freeship-progress__bar {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--terracotta);
+  transition: width 0.3s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .freeship-progress__bar {
+    transition: none;
+  }
+}

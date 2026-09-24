@@ -3,6 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { Observable, catchError, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { ApiErrorBody } from '../models/api-error.interface';
+import { ApiRequestError } from '../models/api-request-error';
 
 /**
  * HTTP model for the storefront SPA. Pages must not inject HttpClient.
@@ -51,7 +52,7 @@ export class ApiService {
     if (error instanceof HttpErrorResponse) {
       const body = error.error as { error?: ApiErrorBody } | null;
       const message = body?.error?.message || error.message || 'Lỗi API';
-      return throwError(() => new Error(message));
+      return throwError(() => new ApiRequestError(message, error.status, body?.error?.code || null, body?.error?.details));
     }
     return throwError(() => error);
   }

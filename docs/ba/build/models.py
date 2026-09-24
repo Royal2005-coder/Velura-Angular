@@ -33,7 +33,7 @@ def _admin_pool(m, admin_rows=2, sys_rows=5.3):
 # Hinh 3.17 - Thiet lap chien dich khuyen mai
 # ---------------------------------------------------------------------------
 def dia_campaign():
-    m = Model("Hinh 3.17 Thiet lap chien dich khuyen mai")
+    m = Model("Hình 3.17 - Thiết lập chiến dịch khuyến mãi")
     _admin_pool(m)
 
     m.event("ev_start", ADMIN, 0, AROW, "Có nhu cầu chạy\nchương trình khuyến mãi", "start")
@@ -85,7 +85,7 @@ def dia_campaign():
 # Hinh 3.18 - Phat hanh ma giam gia va kich hoat chien dich
 # ---------------------------------------------------------------------------
 def dia_voucher():
-    m = Model("Hinh 3.18 Phat hanh ma giam gia va kich hoat chien dich")
+    m = Model("Hình 3.18 - Phát hành mã giảm giá và kích hoạt chiến dịch")
     _admin_pool(m)
 
     m.event("v_start", ADMIN, 0, AROW, "Chiến dịch đã có\ntrần số mã", "start")
@@ -130,7 +130,7 @@ def dia_voucher():
 # Hinh 3.19 - Vi ma giam gia va chon ma tot nhat cho khach
 # ---------------------------------------------------------------------------
 def dia_wallet():
-    m = Model("Hinh 3.19 Vi ma giam gia va chon ma tot nhat")
+    m = Model("Hình 3.19 - Ví mã giảm giá và chọn mã tốt nhất")
     m.pool("khachhang", "Khách hàng", [(KH, "Khách hàng", 2)])
     m.pool("velura", "Velura", [(PROMO, "Dịch vụ khuyến mãi", 5.3)])
 
@@ -189,7 +189,7 @@ def dia_wallet():
 # Hinh 3.20 - Chot tien va ghi nhan uu dai khi dat don
 # ---------------------------------------------------------------------------
 def dia_checkout():
-    m = Model("Hinh 3.20 Chot tien va ghi nhan uu dai khi dat don")
+    m = Model("Hình 3.20 - Chốt tiền và ghi nhận ưu đãi khi đặt đơn")
     m.pool("khachhang", "Khách hàng", [(KH, "Khách hàng", 2)])
     m.pool("velura", "Velura", [
         (SELL, "Hệ thống bán hàng", 2.6),
@@ -270,7 +270,7 @@ def dia_checkout():
 # Hinh 3.21 - Giam sat ngan sach, tu dong dung va thong ke
 # ---------------------------------------------------------------------------
 def dia_budget():
-    m = Model("Hinh 3.21 Giam sat ngan sach va thong ke")
+    m = Model("Hình 3.21 - Giám sát ngân sách và thống kê")
     _admin_pool(m)
 
     m.event("b_start", SYS, 0, TOP, "Chiến dịch\nđang chạy", "start")

@@ -64,6 +64,14 @@
                     } @else {
                       <span class="cart-item__tag">Size: {{ item.size || 'M' }}</span>
                       <span class="cart-item__tag">Màu: {{ item.color || 'Mặc định' }}</span>
+                      <button class="cart-item__tag" type="button" (click)="toggleVariants(item)">Đổi size / màu</button>
+                      @if (editingVariantId() === item.variant_id) {
+                        @for (option of variantChoices(); track option.variant_id) {
+                          <button class="cart-item__tag" type="button" (click)="pickVariant(item, option)">
+                            {{ option.size || 'Size' }} / {{ option.color || 'Màu' }}
+                          </button>
+                        }
+                      }
                     }
                   </div>
                   <div class="cart-item__footer-row">

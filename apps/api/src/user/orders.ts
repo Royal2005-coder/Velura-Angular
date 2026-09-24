@@ -5,6 +5,7 @@ import { requireUserAuth, validatePhone } from "./auth.js";
 import { createNotification } from "./notifications.js";
 import { recordVoucherRedemption, releaseVoucherRedemption, resolveOrderVoucher } from "./vouchers.js";
 import { allowDevOtpBypass, config } from "../config.js";
+import { createStripePaymentIntent, stripeConfigured } from "../payments/stripe.js";
 import { ORDER_TRANSITIONS } from "../orders/order-constants.js";
 import {
   asJsonObject,
@@ -724,6 +725,7 @@ export async function handleOrdersRoute(
       }
       
       const trackingCode = "VLR" + Date.now().toString().slice(-8).toUpperCase();
+      assertStripeReady(payment_method);
       const dbPaymentMethod = (payment_method === "COD" || payment_method === "cod") ? "COD" : "ONLINE_PAYMENT";
       const guestMerchandise = Number(subtotal) || 0;
       const guestShipping = Number(shipping_fee) || 0;
@@ -813,7 +815,8 @@ export async function handleOrdersRoute(
           role: "member"
         },
         order: { ...newOrder, items: createdItems },
-        temp_password: tempPassword
+        temp_password: tempPassword,
+        stripe: await openStripePayment(newOrder.order_id, newOrder.total_amount, payment_method)
       }, corsHeaders);
     }
 
@@ -983,6 +986,7 @@ export async function handleOrdersRoute(
       }
 
       const trackingCode = "VLR" + Date.now().toString().slice(-8).toUpperCase();
+      assertStripeReady(payment_method);
       const dbPaymentMethod = (payment_method === "COD" || payment_method === "cod") ? "COD" : "ONLINE_PAYMENT";
       const memberMerchandise = Number(subtotal) || 0;
       const memberShipping = Number(shipping_fee) || 0;
@@ -1053,10 +1057,24 @@ export async function handleOrdersRoute(
 
       return sendJson(res, 200, {
         success: true,
-        order: { ...newOrder, items: createdItems }
+        order: { ...newOrder, items: createdItems },
+        stripe: await openStripePayment(newOrder.order_id, newOrder.total_amount, payment_method)
       }, corsHeaders);
     }
   }
 
   throw new HttpError(404, "NOT_FOUND", "Route orders not found");
+}
+
+function assertStripeReady(method: unknown): void {
+  if (String(method || "").toUpperCase() !== "STRIPE") return;
+  if (!stripeConfigured()) {
+    throw new HttpError(503, "STRIPE_NOT_CONFIGURED", "Chưa cấu hình STRIPE_SECRET_KEY. Chọn thanh toán khi nhận hàng hoặc cấu hình Stripe.");
+  }
+}
+
+async function openStripePayment(orderId: unknown, amount: unknown, method: unknown): Promise<{ payment_intent_id: string } | null> {
+  if (String(method || "").toUpperCase() !== "STRIPE") return null;
+  const intent = await createStripePaymentIntent(String(orderId), Number(amount) || 0);
+  return { payment_intent_id: intent.id };
 }

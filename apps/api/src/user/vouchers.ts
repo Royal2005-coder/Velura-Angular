@@ -185,19 +185,20 @@ export async function recordVoucherRedemption(
 }
 
 /**
- * Hoàn lại lượt dùng và ngân sách khi đơn bị hủy.
+ * Trả lượt dùng mã và ngân sách chiến dịch của một đơn, đúng một lần.
+ *
+ * Làm việc theo đơn chứ không theo mã: hàm CSDL đóng dấu `voucher_released_at` nên gọi
+ * lại trên cùng đơn là no-op, dù lần trước đến từ đường huỷ đơn hay đường thanh toán hết
+ * hạn. Đường huỷ đơn không cần gọi hàm này — trigger của migration 034 đã làm.
  */
-export async function releaseVoucherRedemption(
-  voucherId: string,
-  discountAmount: number
-): Promise<void> {
+export async function releaseOrderVoucher(orderId: string, reason: string): Promise<void> {
   try {
-    await callRpc("velura_release_voucher_redemption", {
-      p_voucher_id: voucherId,
-      p_discount_amount: Math.max(0, Math.round(Number(discountAmount) || 0))
+    await callRpc("velura_release_order_voucher", {
+      p_order_id: orderId,
+      p_reason: reason
     });
   } catch (error: unknown) {
-    console.error("[voucher] redemption release failed", voucherId, error);
+    console.error("[voucher] order voucher release failed", orderId, reason, error);
   }
 }
 

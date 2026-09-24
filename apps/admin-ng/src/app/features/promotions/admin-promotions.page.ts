@@ -62,6 +62,14 @@ export class AdminPromotionsPage {
   readonly stats = signal<AdminPricingStatistics | null>(null);
   readonly statsLoading = signal(false);
   readonly statsError = signal<string | null>(null);
+  /** Khoảng thời gian của tab Thống kê, tính theo ngày tạo đơn. */
+  readonly statsRange = signal<'all' | '7' | '30' | '90'>('30');
+  readonly statsRanges = [
+    { value: '7', label: '7 ngày' },
+    { value: '30', label: '30 ngày' },
+    { value: '90', label: '90 ngày' },
+    { value: 'all', label: 'Toàn bộ' },
+  ] as const;
 
   // Tab "Nhật ký" trước đây là một khung rỗng cố định với dòng chữ "Nhật ký khuyến mãi
   // nằm trong phân hệ Nhật ký hệ thống" — trong khi API đã có sẵn
@@ -313,7 +321,10 @@ export class AdminPromotionsPage {
   loadStats(): void {
     this.statsLoading.set(true);
     this.statsError.set(null);
-    this.api.pricingStatistics().subscribe({
+    const range = this.statsRange();
+    const params: Record<string, string> =
+      range === 'all' ? {} : { from: new Date(Date.now() - Number(range) * 24 * 60 * 60 * 1000).toISOString() };
+    this.api.pricingStatistics(params).subscribe({
       next: (payload) => {
         this.statsLoading.set(false);
         this.stats.set(payload);
@@ -323,6 +334,17 @@ export class AdminPromotionsPage {
         this.statsError.set(adminErrorMessage(error));
       },
     });
+  }
+
+  setStatsRange(value: 'all' | '7' | '30' | '90'): void {
+    if (this.statsRange() === value) return;
+    this.statsRange.set(value);
+    this.loadStats();
+  }
+
+  /** Tỉ số doanh thu trên tiền giảm, đọc như "13,2 lần". */
+  revenueRatio(value: number | null): string {
+    return value === null ? '—' : `${value.toLocaleString('vi-VN')} lần`;
   }
 
   /**

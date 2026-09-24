@@ -739,3 +739,10 @@ input:checked + .admin-sim-slider:before {
 .admin-category-tree { max-height: 220px; margin-bottom: 8px; padding: 10px 12px; overflow-y: auto; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--field-bg); }
 .admin-category-tree__item { margin-bottom: 8px; }
 .admin-category-tree__item:last-child { margin-bottom: 0; }
+
+/* Chọn khoảng thời gian của tab Thống kê khuyến mãi. */
+.admin-segmented { display: inline-flex; padding: 3px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--field-bg); }
+.admin-segmented__item { padding: 6px 12px; border: 0; border-radius: calc(var(--radius-sm) - 2px); background: transparent; color: var(--muted); font-size: .75rem; font-weight: 500; cursor: pointer; transition: background .2s, color .2s; }
+.admin-segmented__item:hover { color: var(--ink); }
+.admin-segmented__item:focus-visible { outline: 2px solid var(--terracotta); outline-offset: 1px; }
+.admin-segmented__item--active { background: #fff; color: var(--ink); box-shadow: 0 1px 2px rgba(0, 0, 0, .06); }

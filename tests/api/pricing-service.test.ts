@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { createPricingService, validatePriceChange } from "../../apps/api/src/pricing/pricing-service.js";
+import { buildPromotionStatistics, createPricingService, validatePriceChange } from "../../apps/api/src/pricing/pricing-service.js";
 
 const PRODUCT_ID = "60000000-0000-4000-8000-000000000001";
 const PROMO_ID = "60000000-0000-4000-8000-000000000002";
@@ -204,6 +204,51 @@ test("voucher list filters by campaign, and rejects a promoId that is not a UUID
   // Chuỗi lạ đi thẳng vào bộ lọc PostgREST sẽ thành một toán tử khác, nên chặn ở đây.
   await assert.rejects(
     () => service.listVouchers(context("admin_operator_gia_km"), new URLSearchParams("promoId=eq.x,or(1.eq.1)")),
+    (error) => error.status === 422
+  );
+});
+
+test("statistics read real orders and label each campaign with its real lifecycle", async () => {
+  // Chiến dịch hết hạn vẫn còn `is_active = true`. Bản cũ đếm nó là đang chạy.
+  const raw = {
+    overall: { orders: 154, voucher_orders: 6, revenue_with_voucher: 5977000, revenue_without_voucher: 373607000,
+      discount_total: 978000, aov_with_voucher: 996167, aov_without_voucher: 2524372 },
+    vouchers: { total: 13, active: 0, expired: 13, total_used: 6, total_limit: 1280, unlimited: 3 },
+    campaigns: [
+      { promo_id: PROMO_ID, promo_name: "Sale 9.9", start_date: at(-40), end_date: at(-10), is_active: true,
+        budget_limit: 0, total_discount_issued: 449000, vouchers: 5, orders: 5, revenue: 5947000, discount: 449000 },
+      { promo_id: null, vouchers: 2, orders: 1, revenue: 30000, discount: 0 }
+    ],
+    top_vouchers: [{ voucher_id: "v1", code: "WELCOME10", orders: 2, discount: 189000, revenue: 900000 }]
+  };
+  const summary = { total: 1, truncated: false, running: 0, scheduled: 0, paused: 0, ended: 1, budgetExhausted: 0,
+    totalBudget: 0, issuedDiscount: 449000, budgetedCampaigns: 0, activeVouchers: 0 };
+  const stats = buildPromotionStatistics(raw, summary, new Date());
+
+  assert.equal(stats.orders.withVoucher, 6);
+  assert.equal(stats.orders.voucherRate, 3.9);
+  assert.equal(stats.orders.discountTotal, 978000);
+  assert.equal(stats.campaigns[0].lifecycle, "ended");
+  assert.equal(stats.campaigns[0].revenuePerDiscount, 13.2);
+  // Chưa giảm đồng nào thì không có tỉ số, không phải vô cực hay 0.
+  assert.equal(stats.campaigns[1].name, "Mã đứng riêng");
+  assert.equal(stats.campaigns[1].revenuePerDiscount, null);
+  assert.equal(stats.vouchers.usagePercent, 0);
+  assert.equal(stats.topVouchers[0].code, "WELCOME10");
+});
+
+test("statistics reject a date range that ends before it starts", async () => {
+  const service = createPricingService({ repository: {
+    getStatistics: async () => { throw new Error("không được gọi RPC"); },
+    summarizePromotions: async () => ({ rows: [] }),
+    countActiveVouchers: async () => ({ count: 0 })
+  } });
+  await assert.rejects(
+    () => service.getStatistics(context("admin_operator_gia_km"), new URLSearchParams("from=2026-10-10&to=2026-10-01")),
+    (error) => error.status === 422
+  );
+  await assert.rejects(
+    () => service.getStatistics(context("admin_operator_gia_km"), new URLSearchParams("from=hom-qua")),
     (error) => error.status === 422
   );
 });

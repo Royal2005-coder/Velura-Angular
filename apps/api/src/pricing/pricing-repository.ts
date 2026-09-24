@@ -260,41 +260,17 @@ export function createPricingRepository() {
       }, authOptions(accessToken));
     },
 
-    async getStatistics(accessToken: string | null) {
-      const opts = authOptions(accessToken);
-      const [promos, vouchers] = await Promise.all([
-        selectRows("promotion", { select: PROMOTION_SELECT, limit: 500 }, opts),
-        selectRows("voucher", { select: VOUCHER_SELECT, limit: 500 }, opts)
-      ]);
-      const promoRows = promos?.rows || [];
-      const voucherRows = vouchers?.rows || [];
-      const activePromos = promoRows.filter((p) => p.is_active);
-      const pausedPromos = promoRows.filter((p) => !p.is_active);
-      const totalBudget = promoRows.reduce((s, p) => s + Number(p.budget_limit || 0), 0);
-      const totalIssued = promoRows.reduce((s, p) => s + Number(p.total_discount_issued || 0), 0);
-      const activeVouchers = voucherRows.filter((v) => v.is_active);
-      const expiredVouchers = voucherRows.filter((v) => !v.is_active || new Date(v.end_date as string) < new Date());
-      const totalUsed = voucherRows.reduce((s, v) => s + Number(v.used_count || 0), 0);
-      const totalLimit = voucherRows.reduce((s, v) => s + Number(v.usage_limit_total || 0), 0);
-      return {
-        promotions: {
-          total: promoRows.length,
-          active: activePromos.length,
-          paused: pausedPromos.length,
-          totalBudget,
-          totalIssued,
-          budgetRemaining: totalBudget - totalIssued,
-          budgetUsagePercent: totalBudget > 0 ? Math.round(totalIssued * 100 / totalBudget) : 0
-        },
-        vouchers: {
-          total: voucherRows.length,
-          active: activeVouchers.length,
-          expired: expiredVouchers.length,
-          totalUsed,
-          totalLimit,
-          usagePercent: totalLimit > 0 ? Math.round(totalUsed * 100 / totalLimit) : 0
-        }
-      };
+    /**
+     * Số liệu tổng hợp đọc từ đơn hàng thật (migration 036).
+     *
+     * Vai trò giá và khuyến mãi không đọc được `orders` qua RLS, nên con số đi qua một
+     * RPC chỉ trả tổng hợp, không trả dòng đơn nào.
+     */
+    async getStatistics(filters: JsonObject, accessToken: string | null) {
+      return withPricingError(() => callRpc("admin_promotion_statistics", {
+        p_from: filters.from ?? null,
+        p_to: filters.to ?? null
+      }, { accessToken }));
     }
   };
 }

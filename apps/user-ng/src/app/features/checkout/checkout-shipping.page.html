@@ -169,6 +169,8 @@
           [orderValue]="subtotal()"
           [shippingFee]="shippingFee()"
           [cartItems]="cartRefs()"
+          [preferred]="initialVoucherId"
+          [autoApply]="autoApplyVoucher"
           (applied)="onVoucherApplied($event)"
           (declined)="onVoucherDeclined($event)"
         />

@@ -28,6 +28,12 @@ export class VoucherWallet {
   readonly cartItems = input<readonly CartItemRef[]>([]);
   /** Cho phép trang cha tắt tính năng tự áp mã (ví dụ khi khách đã chủ động bỏ mã). */
   readonly autoApply = input(true);
+  /**
+   * Mã khách đã chọn từ trước (mã hoặc `voucher_id`): từ nút "Dùng mã" ở trang Ưu đãi
+   * qua `/cart?voucher=CODE`, hoặc mã đã chọn ở giỏ khi sang trang thanh toán. Được ưu
+   * tiên hơn mã tốt nhất ở lần tải đầu, vì đó là lựa chọn của khách.
+   */
+  readonly preferred = input<string | null>(null);
 
   readonly applied = output<AppliedVoucher | null>();
   /**
@@ -46,6 +52,10 @@ export class VoucherWallet {
   readonly selectedId = signal<string | null>(null);
   /** Khách đã tự bỏ mã thì không tự áp lại, nếu không nút "Bỏ mã" sẽ vô nghĩa. */
   private readonly dismissed = signal(false);
+  /** Câu báo khi mã khách mang theo không áp được, kèm lý do. */
+  readonly preferredNotice = signal<string | null>(null);
+  /** Mã mang theo chỉ xét ở lần tải đầu; sau đó khách tự đổi trong ví. */
+  private preferredHandled = false;
 
   readonly eligible = computed(() => this.items().filter((item) => item.eligible));
   readonly ineligible = computed(() => this.items().filter((item) => !item.eligible));
@@ -112,6 +122,7 @@ export class VoucherWallet {
    * trang cha biết để bỏ số tiền giảm khỏi tổng tiền, chứ không im lặng giữ nguyên.
    */
   private reconcileSelection(bestId: string | null): void {
+    if (!this.selectedId() && this.applyPreferred()) return;
     const currentId = this.selectedId();
     if (currentId) {
       const still = this.items().find((item) => item.voucher_id === currentId);
@@ -131,6 +142,33 @@ export class VoucherWallet {
     }
   }
 
+  /**
+   * Áp mã khách mang theo nếu dùng được. Trả true khi đã áp.
+   *
+   * Không dùng được thì nói rõ vì sao rồi để luồng tự chọn mã tốt nhất chạy tiếp, chứ
+   * không im lặng thay bằng mã khác khiến khách tưởng mã mình chọn đã được áp.
+   */
+  private applyPreferred(): boolean {
+    const wanted = (this.preferred() || '').trim();
+    if (this.preferredHandled || !wanted) return false;
+    this.preferredHandled = true;
+    const upper = wanted.toUpperCase();
+    const match = this.items().find((item) => item.voucher_id === wanted || item.code.toUpperCase() === upper);
+    if (match?.eligible) {
+      this.dismissed.set(false);
+      this.declined.emit(false);
+      this.selectedId.set(match.voucher_id);
+      this.emit(match);
+      return true;
+    }
+    this.preferredNotice.set(
+      match
+        ? `Mã ${match.code} chưa dùng được cho đơn này: ${match.reason_text || 'chưa đủ điều kiện'}`
+        : `Không tìm thấy mã ${upper} trong ví của bạn. Mã có thể đã hết hạn hoặc không dành cho tài khoản này.`
+    );
+    return false;
+  }
+
   /** Mở bảng chọn mã. */
   openModal(): void {
     this.manualError.set(null);
@@ -147,6 +185,7 @@ export class VoucherWallet {
    */
   choose(item: WalletVoucher): void {
     if (!item.eligible) return;
+    this.preferredNotice.set(null);
     this.dismissed.set(false);
     this.declined.emit(false);
     this.selectedId.set(item.voucher_id);

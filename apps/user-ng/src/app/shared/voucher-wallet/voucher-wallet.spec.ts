@@ -43,7 +43,7 @@ function stubVoucherService(vouchers: WalletVoucher[], bestId: string | null): V
   } as unknown as VoucherService;
 }
 
-function createWallet(service: VoucherService) {
+function createWallet(service: VoucherService, preferred: string | null = null) {
   TestBed.configureTestingModule({
     imports: [VoucherWallet],
     providers: [{ provide: VoucherService, useValue: service }],
@@ -51,6 +51,7 @@ function createWallet(service: VoucherService) {
   const fixture = TestBed.createComponent(VoucherWallet);
   fixture.componentRef.setInput('orderValue', 1000000);
   fixture.componentRef.setInput('shippingFee', 30000);
+  fixture.componentRef.setInput('preferred', preferred);
   fixture.detectChanges();
   return fixture;
 }
@@ -123,5 +124,34 @@ describe('VoucherWallet', () => {
     const fixture = createWallet(failing);
     expect(fixture.componentInstance.loadError()).toBe('Mạng lỗi');
     expect(fixture.componentInstance.items().length).toBe(0);
+  });
+
+  it('mã khách mang theo từ trang Ưu đãi được áp thay cho mã tốt nhất', () => {
+    const best = walletVoucher({ voucher_id: 'v-big', code: 'BIG', discount_amount: 90000 });
+    const chosen = walletVoucher({ voucher_id: 'v-ao', code: 'AO20', discount_amount: 40000 });
+    const fixture = createWallet(stubVoucherService([best, chosen], 'v-big'), 'ao20');
+    expect(fixture.componentInstance.selected()?.code).toBe('AO20');
+    expect(fixture.componentInstance.preferredNotice()).toBeNull();
+  });
+
+  it('mã mang theo chưa dùng được thì nói lý do rồi mới áp mã tốt nhất', () => {
+    const best = walletVoucher({ voucher_id: 'v-big', code: 'BIG', discount_amount: 90000 });
+    const blocked = walletVoucher({
+      voucher_id: 'v-ao',
+      code: 'AO20',
+      eligible: false,
+      discount_amount: 0,
+      reason: 'CATEGORY_MISMATCH',
+      reason_text: 'Mã chỉ áp cho Áo, giỏ hàng chưa có sản phẩm phù hợp.',
+    });
+    const fixture = createWallet(stubVoucherService([best, blocked], 'v-big'), 'AO20');
+    expect(fixture.componentInstance.selected()?.code).toBe('BIG');
+    expect(fixture.componentInstance.preferredNotice()).toContain('chỉ áp cho Áo');
+  });
+
+  it('mã mang theo không có trong ví thì báo, không im lặng thay mã khác', () => {
+    const best = walletVoucher({ voucher_id: 'v-big', code: 'BIG', discount_amount: 90000 });
+    const fixture = createWallet(stubVoucherService([best], 'v-big'), 'KHONGCO');
+    expect(fixture.componentInstance.preferredNotice()).toContain('KHONGCO');
   });
 });

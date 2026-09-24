@@ -69,8 +69,12 @@ export class CheckoutShippingPage {
   readonly voucherError = signal<string | null>(null);
   /** Mã ví đang áp. Ví là nơi chọn; trang chỉ ghi lại để báo giá và đặt đơn. */
   readonly selectedVoucherId = signal<string | null>(localStorage.getItem('checkout_voucher_id'));
+  /** Mã đã chọn ở giỏ hàng, để ví ở trang này áp đúng mã đó thay vì tự chọn lại. */
+  readonly initialVoucherId = localStorage.getItem('checkout_voucher_id');
   /** Khách chủ động bỏ mã. Khác với mã tự mất hiệu lực: bỏ mã thì không tự áp lại. */
-  readonly declinedVoucher = signal(false);
+  readonly declinedVoucher = signal(localStorage.getItem('checkout_voucher_declined') === '1');
+  /** Đọc một lần: đã bỏ mã ở giỏ thì ví trang này không tự áp mã tốt nhất. */
+  readonly autoApplyVoucher = !this.declinedVoucher();
   /** Báo giá của máy chủ, nguồn duy nhất cho mọi con số trên màn Tóm tắt đơn (U1-13). */
   readonly quote = signal<CheckoutQuote | null>(null);
   readonly quoteLoading = signal(false);
@@ -189,6 +193,11 @@ export class CheckoutShippingPage {
   /** Ví báo khách chủ động bỏ mã hoặc chọn lại mã. */
   onVoucherDeclined(declined: boolean): void {
     this.declinedVoucher.set(declined);
+    if (declined) {
+      localStorage.setItem('checkout_voucher_declined', '1');
+    } else {
+      localStorage.removeItem('checkout_voucher_declined');
+    }
   }
 
   /**

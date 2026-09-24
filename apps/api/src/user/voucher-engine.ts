@@ -91,6 +91,8 @@ export interface EvaluatedVoucher {
   shortfall: number | null;
   /** Tên các danh mục mã áp dụng. Rỗng nghĩa là áp cho mọi sản phẩm. */
   categoryNames: string[];
+  /** Đối tượng mã (`applicable_user_group`), để trang Ưu đãi tách nhóm "dành riêng cho bạn". */
+  audience: string;
 }
 
 const DEFAULT_SHIPPING_FEE = 30000;
@@ -196,7 +198,8 @@ export function evaluateVoucher(
     startDate: voucher.start_date ? String(voucher.start_date) : null,
     endDate: voucher.end_date ? String(voucher.end_date) : null,
     remainingUses,
-    categoryNames
+    categoryNames,
+    audience: String(voucher.applicable_user_group || "all_users")
   };
 
   const reject = (

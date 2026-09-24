@@ -28,6 +28,8 @@ export const config = {
   smtpUser: process.env.SMTP_USER || "",
   smtpAppPassword: process.env.SMTP_APP_PASSWORD || "",
   smtpFrom: process.env.SMTP_FROM || "",
+  stripeSecretKey: process.env.STRIPE_SECRET_KEY || "",
+  stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET || "",
   supportAlertTo: process.env.SUPPORT_ALERT_TO || process.env.SMTP_USER || "",
   n8nChatWebhookUrl: process.env.N8N_CHAT_WEBHOOK_URL || "",
   n8nChatWebhookToken: process.env.N8N_CHAT_WEBHOOK_TOKEN || "",

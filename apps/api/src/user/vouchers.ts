@@ -8,8 +8,10 @@ import {
   normalizeShippingFee,
   pickBestVoucher,
   type EvaluatedVoucher,
+  type VoucherCartLine,
   type VoucherEvaluationContext
 } from "./voucher-engine.js";
+import { loadVoucherCart, parseCartItems } from "./cart-catalog.js";
 import {
   type AuthContext,
   type HeaderMap,
@@ -37,9 +39,9 @@ export async function handleVouchersRoute(
   context: AuthContext
 ): Promise<void> {
   if (!action && req.method === "GET") {
-    const orderValue = toAmount(readQueryParam(req, "orderValue"));
     const shippingFee = normalizeShippingFee(readQueryParam(req, "shippingFee"));
-    const wallet = await buildWallet(context, orderValue, shippingFee);
+    const { orderValue, cart } = await readCart(readQueryParam(req, "items"), readQueryParam(req, "orderValue"));
+    const wallet = await buildWallet(context, orderValue, shippingFee, cart);
     return sendJson(res, 200, {
       success: true,
       order_value: orderValue,
@@ -52,9 +54,9 @@ export async function handleVouchersRoute(
 
   if (action === "best" && req.method === "POST") {
     const body = await readJson(req) as JsonObject;
-    const orderValue = toAmount(body.order_value);
     const shippingFee = normalizeShippingFee(body.shipping_fee);
-    const wallet = await buildWallet(context, orderValue, shippingFee);
+    const { orderValue, cart } = await readCart(body.items, body.order_value);
+    const wallet = await buildWallet(context, orderValue, shippingFee, cart);
 
     if (!wallet.best) {
       return sendJson(res, 200, {
@@ -78,9 +80,9 @@ export async function handleVouchersRoute(
     const code = String(body.code || "").trim().toUpperCase();
     if (!code) throw new HttpError(400, "BAD_REQUEST", "Mã giảm giá là bắt buộc");
 
-    const orderValue = toAmount(body.order_value);
     const shippingFee = normalizeShippingFee(body.shipping_fee);
-    const wallet = await buildWallet(context, orderValue, shippingFee);
+    const { orderValue, cart } = await readCart(body.items, body.order_value);
+    const wallet = await buildWallet(context, orderValue, shippingFee, cart);
     const match = wallet.items.find((item) => item.code.toUpperCase() === code);
 
     if (!match) throw new HttpError(404, "NOT_FOUND", "Mã giảm giá không tồn tại");
@@ -108,10 +110,11 @@ export async function resolveOrderVoucher(
   orderValue: number,
   shippingFee: number,
   requestedVoucherId: string | null,
-  decline: boolean
+  decline: boolean,
+  cart: VoucherCart | null = null
 ): Promise<{ voucherId: string | null; discountAmount: number }> {
   if (decline) return { voucherId: null, discountAmount: 0 };
-  const wallet = await buildWallet(context, orderValue, shippingFee);
+  const wallet = await buildWallet(context, orderValue, shippingFee, cart);
   if (requestedVoucherId) {
     const match = wallet.items.find((item) => item.voucherId === requestedVoucherId);
     if (!match?.eligible) {
@@ -133,7 +136,8 @@ export async function resolveOrderVoucher(
 export async function buildWallet(
   context: AuthContext,
   orderValue: number,
-  shippingFee: number
+  shippingFee: number,
+  cart: VoucherCart | null = null
 ): Promise<{ items: EvaluatedVoucher[]; best: EvaluatedVoucher | null }> {
   const profile = resolveProfile(context);
 
@@ -153,7 +157,9 @@ export async function buildWallet(
     isMember: Boolean(profile?.user_id),
     isFirstOrder: countBillableOrders(orders) === 0,
     usageByVoucherId: buildUsageMap(orders),
-    promotionByPromoId: buildPromotionStateMap(promotionResult.rows || [])
+    promotionByPromoId: buildPromotionStateMap(promotionResult.rows || []),
+    lines: cart?.lines,
+    categoryNameById: cart?.categoryNameById
   };
 
   const items = evaluateVouchers(voucherResult.rows || [], evaluationContext);
@@ -235,7 +241,8 @@ function toWireFormat(item: EvaluatedVoucher): JsonObject {
     discount_amount: item.discountAmount,
     reason: item.reason,
     reason_text: item.reasonText,
-    shortfall: item.shortfall
+    shortfall: item.shortfall,
+    category_names: item.categoryNames
   };
 }
 
@@ -246,6 +253,31 @@ function toAppliedFormat(item: EvaluatedVoucher): JsonObject {
     name: item.name,
     discount_amount: item.discountAmount,
     discount_type: item.discountType
+  };
+}
+
+/**
+ * Giỏ hàng đã quy về giá catalog, đủ để xét phạm vi danh mục của mã.
+ */
+export interface VoucherCart {
+  lines: readonly VoucherCartLine[];
+  categoryNameById: Readonly<Record<string, string>>;
+}
+
+/**
+ * Giá trị đơn và dòng hàng để chấm mã.
+ *
+ * Có `items` thì máy chủ tự tính giá trị đơn từ bảng giá và bỏ qua con số trình duyệt
+ * gửi. Không có thì dùng `orderValue` như trước — khi đó mã khai danh mục bị đóng mặc
+ * định, vì engine không có dòng hàng để xét.
+ */
+async function readCart(rawItems: unknown, rawOrderValue: unknown): Promise<{ orderValue: number; cart: VoucherCart | null }> {
+  const items = parseCartItems(rawItems);
+  if (!items.length) return { orderValue: toAmount(rawOrderValue), cart: null };
+  const loaded = await loadVoucherCart(items);
+  return {
+    orderValue: loaded.orderValue,
+    cart: { lines: loaded.lines, categoryNameById: loaded.categoryNameById }
   };
 }
 

@@ -30,19 +30,30 @@ export function verifyStripeSignature(rawBody: string, header: string, secret: s
 }
 
 /**
- * Opens a PaymentIntent for one pending online order. Amount is VND, a zero-decimal currency.
+ * Opens Stripe's hosted test checkout for one pending order.
+ * The buyer pays with a sandbox card. The order stays unpaid until the webhook.
  */
-export async function createStripePaymentIntent(orderId: string, amount: number): Promise<{ id: string; clientSecret: string }> {
+export async function createStripePaymentIntent(orderId: string, amount: number): Promise<{ id: string; url: string }> {
   if (!config.stripeSecretKey) {
     throw new HttpError(503, "STRIPE_NOT_CONFIGURED", "Chưa cấu hình STRIPE_SECRET_KEY. COD vẫn đặt được.");
   }
+  const charge = Math.round(amount);
+  if (charge < 10000) {
+    throw new HttpError(400, "STRIPE_AMOUNT_TOO_SMALL", "Stripe sandbox yêu cầu đơn từ 10.000 đồng.");
+  }
+  const origin = config.storefrontOrigin;
   const body = new URLSearchParams({
-    amount: String(Math.max(0, Math.round(amount))),
-    currency: "vnd",
+    mode: "payment",
+    success_url: `${origin}/checkout/confirm?stripe=success`,
+    cancel_url: `${origin}/checkout/shipping?stripe=cancel`,
+    "line_items[0][quantity]": "1",
+    "line_items[0][price_data][currency]": "vnd",
+    "line_items[0][price_data][unit_amount]": String(charge),
+    "line_items[0][price_data][product_data][name]": "Don hang Velura",
     "metadata[order_id]": orderId,
-    "automatic_payment_methods[enabled]": "true"
+    "payment_intent_data[metadata][order_id]": orderId
   });
-  const response = await fetch("https://api.stripe.com/v1/payment_intents", {
+  const response = await fetch("https://api.stripe.com/v1/checkout/sessions", {
     method: "POST",
     headers: {
       authorization: `Bearer ${config.stripeSecretKey}`,
@@ -50,20 +61,20 @@ export async function createStripePaymentIntent(orderId: string, amount: number)
     },
     body
   });
-  const payload = await response.json() as { id?: string; client_secret?: string; error?: { message?: string } };
-  if (!response.ok || !payload.id || !payload.client_secret) {
-    throw new HttpError(502, "STRIPE_INTENT_FAILED", payload.error?.message || "Stripe không tạo được phiên thanh toán.");
+  const payload = await response.json() as { id?: string; url?: string; error?: { message?: string } };
+  if (!response.ok || !payload.id || !payload.url) {
+    throw new HttpError(502, "STRIPE_INTENT_FAILED", payload.error?.message || "Stripe không tạo được trang thanh toán.");
   }
   await insertRow("payment", {
     order_id: orderId,
     payment_method: "ONLINE_PAYMENT",
     payment_provider: "stripe",
-    amount: Math.max(0, Math.round(amount)),
+    amount: charge,
     payment_status: "pending",
     payment_channel: "stripe",
     gateway_transaction_ref: payload.id
   });
-  return { id: payload.id, clientSecret: payload.client_secret };
+  return { id: payload.id, url: payload.url };
 }
 
 /**
@@ -71,18 +82,27 @@ export async function createStripePaymentIntent(orderId: string, amount: number)
  * A repeat webhook for the same PaymentIntent does not decrement again.
  */
 export async function markStripePaymentPaid(orderId: string, paymentIntentId: string): Promise<"paid" | "ignored"> {
-  const { rows } = await selectRows("payment", {
+  const byRef = await selectRows("payment", {
     order_id: `eq.${orderId}`,
     gateway_transaction_ref: `eq.${paymentIntentId}`,
     limit: 1
   });
-  const payment = rows[0];
+  const pending = byRef.rows[0]
+    ? { rows: byRef.rows }
+    : await selectRows("payment", {
+      order_id: `eq.${orderId}`,
+      payment_provider: "eq.stripe",
+      payment_status: "eq.pending",
+      limit: 1
+    });
+  const payment = pending.rows[0];
   if (!payment) return "ignored";
   if (payment.payment_status === "paid") return "paid";
   await updateRows("payment", { payment_id: `eq.${payment.payment_id}` }, {
     payment_status: "paid",
     paid_at: new Date().toISOString(),
-    gateway_response_code: "succeeded"
+    gateway_response_code: "succeeded",
+    gateway_transaction_ref: paymentIntentId
   });
   const { rows: items } = await selectRows("order_item", { order_id: `eq.${orderId}`, limit: 100 });
   for (const item of items) {

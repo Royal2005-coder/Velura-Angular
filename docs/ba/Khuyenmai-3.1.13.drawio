@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <mxfile host="app.diagrams.net">
-  <diagram name="Hinh 3.17 Thiet lap chien dich khuyen mai" id="diagram1">
+  <diagram name="Hình 3.17 - Thiết lập chiến dịch khuyến mãi" id="diagram1">
     <mxGraphModel dx="2200" dy="1300" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2294" pageHeight="1142" math="0" shadow="0">
       <root>
         <mxCell id="0" />
@@ -122,7 +122,7 @@
       </root>
     </mxGraphModel>
   </diagram>
-  <diagram name="Hinh 3.18 Phat hanh ma giam gia va kich hoat chien dich" id="diagram2">
+  <diagram name="Hình 3.18 - Phát hành mã giảm giá và kích hoạt chiến dịch" id="diagram2">
     <mxGraphModel dx="2200" dy="1300" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2083" pageHeight="1142" math="0" shadow="0">
       <root>
         <mxCell id="0" />
@@ -220,7 +220,7 @@
       </root>
     </mxGraphModel>
   </diagram>
-  <diagram name="Hinh 3.19 Vi ma giam gia va chon ma tot nhat" id="diagram3">
+  <diagram name="Hình 3.19 - Ví mã giảm giá và chọn mã tốt nhất" id="diagram3">
     <mxGraphModel dx="2200" dy="1300" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1989" pageHeight="1212" math="0" shadow="0">
       <root>
         <mxCell id="0" />
@@ -372,7 +372,7 @@
       </root>
     </mxGraphModel>
   </diagram>
-  <diagram name="Hinh 3.20 Chot tien va ghi nhan uu dai khi dat don" id="diagram4">
+  <diagram name="Hình 3.20 - Chốt tiền và ghi nhận ưu đãi khi đặt đơn" id="diagram4">
     <mxGraphModel dx="2200" dy="1300" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2717" pageHeight="1562" math="0" shadow="0">
       <root>
         <mxCell id="0" />
@@ -563,7 +563,7 @@
       </root>
     </mxGraphModel>
   </diagram>
-  <diagram name="Hinh 3.21 Giam sat ngan sach va thong ke" id="diagram5">
+  <diagram name="Hình 3.21 - Giám sát ngân sách và thống kê" id="diagram5">
     <mxGraphModel dx="2200" dy="1300" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2717" pageHeight="1142" math="0" shadow="0">
       <root>
         <mxCell id="0" />

@@ -60,15 +60,24 @@ MO_TA = [
      "Mỗi mã giảm giá mang một bộ thuộc tính: mã code duy nhất, loại giảm gồm số tiền cố định, "
      "phần trăm kèm trần giảm hoặc miễn phí vận chuyển, giá trị đơn hàng tối thiểu, nhóm khách "
      "áp dụng, số lượt tối đa toàn hệ thống, số lượt tối đa trên mỗi khách và khung thời gian "
-     "hiệu lực. Quản trị viên tạo mã thủ công hoặc sinh hàng loạt theo tiền tố. Mọi thao tác ghi "
-     "lên chiến dịch và mã đều đi qua hàm trên cơ sở dữ liệu có kiểm vai trò và sinh một dòng "
-     "nhật ký kèm người thực hiện, thời điểm và phần dữ liệu thay đổi; không còn đường ghi nào "
-     "bỏ qua bước này."),
+     "hiệu lực. Quản trị viên tạo mã thủ công hoặc sinh hàng loạt theo tiền tố. Ngay khi nhập "
+     "ngân sách và trần giảm, màn hình hiển thị số mã tối đa còn được phép phát hành, để người "
+     "vận hành thấy hạn mức trước khi lưu thay vì bị chặn sau đó. Mọi thao tác ghi lên chiến dịch "
+     "và mã đều đi qua hàm trên cơ sở dữ liệu có kiểm vai trò và sinh một dòng nhật ký kèm người "
+     "thực hiện, thời điểm và phần dữ liệu thay đổi; không còn đường ghi nào bỏ qua bước này."),
 
     ("hinh", "khuyenmai-3-18-phat-hanh-ma.png",
      "Hình 3.18: BPMN quy trình phát hành mã giảm giá và kích hoạt chiến dịch",
      "Sơ đồ dưới đây mô tả bước phát hành mã vào một chiến dịch đã có trần số mã, và bước kích "
      "hoạt để mã bắt đầu phục vụ khách."),
+
+    ("para",
+     "Trang Ưu đãi phía khách lấy dữ liệu từ các chiến dịch đang chạy và nhóm thành ba mục: ưu "
+     "đãi dành riêng cho khách theo nhóm đối tượng, ưu đãi đang diễn ra và ưu đãi sắp hết hạn. "
+     "Toàn bộ nội dung trình bày gồm ảnh, nhãn nổi bật và thứ tự hiển thị lấy từ chính chiến dịch "
+     "mà quản trị viên đã khai, nên tạm dừng một chiến dịch là nó biến mất khỏi trang khách ngay "
+     "lần tải kế tiếp. Trước đây phần banner ưu đãi trên trang chủ và trang hồ sơ được viết cứng "
+     "trong mã nguồn nên không phản ánh chiến dịch thật; phần viết cứng đó được gỡ bỏ."),
 
     ("para",
      "Phía khách hàng, Velura không lưu một bản sao mã riêng cho từng người. Khi khách mở giỏ "
@@ -247,6 +256,12 @@ BANG = [
      "hoặc không xảy ra.",
      "Khoá dòng mã khi ghi, nên hai đơn đặt cùng lúc không ghi đè số lượt của nhau. Huỷ đơn thì "
      "hoàn lại cả lượt dùng lẫn phần ngân sách đã cộng."),
+
+    ("AD_OFFER_01", "Trang Ưu đãi phản ánh đúng chiến dịch đang chạy",
+     "Trang Ưu đãi hiển thị các chiến dịch đang trong khung thời gian và đang bật, nhóm theo ưu "
+     "đãi dành riêng cho khách, ưu đãi đang diễn ra và ưu đãi sắp hết hạn.",
+     "Đọc trực tiếp từ dữ liệu chiến dịch, không dùng nội dung viết cứng trong mã nguồn. Chiến "
+     "dịch bị tạm dừng hoặc đã kết thúc thì biến mất khỏi trang khách ở lần tải kế tiếp."),
 
     ("AD_COMBO_01", "Giá combo thấp hơn tổng giá lẻ",
      "Giá của một combo phải thấp hơn tổng giá bán hiện hành của các sản phẩm thành phần.",

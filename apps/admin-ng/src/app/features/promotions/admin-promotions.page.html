@@ -14,6 +14,30 @@
       } @else if (loadError() && view() === 'campaigns' && !promotions().length) {
         <app-admin-empty-state kind="error" icon="alert" title="Không tải được khuyến mãi" [message]="loadError() || ''" />
       } @else if (view() === 'campaigns') {
+        @if (summary()) {
+          <div class="admin-stats-grid">
+            <article class="admin-stat-card">
+              <h3 class="admin-stat-card__title">Đang chạy</h3>
+              <p class="admin-stat-card__value">{{ activeCampaigns() }}</p>
+              <p class="admin-stat-card__meta">{{ pendingCampaigns() }} chiến dịch chưa hoặc không còn chạy</p>
+            </article>
+            <article class="admin-stat-card">
+              <h3 class="admin-stat-card__title">Mã còn hiệu lực</h3>
+              <p class="admin-stat-card__value">{{ activeVouchers() }}</p>
+            </article>
+            <article class="admin-stat-card">
+              <h3 class="admin-stat-card__title">Đã giảm cho khách</h3>
+              <p class="admin-stat-card__value">{{ money(issuedDiscount()) }}</p>
+              <p class="admin-stat-card__meta">
+                @if (totalBudget()) {
+                  trên {{ money(totalBudget()) }} ngân sách{{ hasUnbudgetedCampaigns() ? ', có chiến dịch không đặt trần' : '' }}
+                } @else {
+                  chưa chiến dịch nào đặt trần ngân sách
+                }
+              </p>
+            </article>
+          </div>
+        }
         @if (canMutate()) {
           <div class="admin-toolbar">
             <button class="admin-btn admin-btn--primary admin-btn--sm" type="button" (click)="openCreate()">Tạo chiến dịch</button>
@@ -238,40 +262,118 @@
             <button type="button" class="admin-btn" (click)="loadStats()">Thử lại</button>
           </div>
         } @else if (stats(); as data) {
+          <div class="admin-toolbar">
+            <div class="admin-segmented" role="group" aria-label="Khoảng thời gian">
+              @for (option of statsRanges; track option.value) {
+                <button type="button" class="admin-segmented__item"
+                        [class.admin-segmented__item--active]="statsRange() === option.value"
+                        [attr.aria-pressed]="statsRange() === option.value"
+                        (click)="setStatsRange(option.value)">{{ option.label }}</button>
+              }
+            </div>
+            <small class="admin-note">Tính trên đơn chưa huỷ, theo ngày tạo đơn. Đơn có mã đã được trả lượt tính như đơn không mã.</small>
+          </div>
+
           <div class="admin-stats-grid">
             <article class="admin-stat-card">
-              <h3 class="admin-stat-card__title">Ngân sách khuyến mãi đã dùng</h3>
-              <p class="admin-stat-card__value">{{ money(data.promotions.totalIssued) }}</p>
-              <p class="admin-stat-card__meta">trên tổng {{ money(data.promotions.totalBudget) }} đã cấp</p>
-              <div class="admin-progress" role="img"
-                   [attr.aria-label]="'Đã dùng ' + data.promotions.budgetUsagePercent + '% ngân sách'">
-                <div class="admin-progress__bar" [style.width.%]="data.promotions.budgetUsagePercent"></div>
-              </div>
-              <p class="admin-stat-card__meta">Còn lại {{ money(data.promotions.budgetRemaining) }}</p>
+              <h3 class="admin-stat-card__title">Đơn dùng mã</h3>
+              <p class="admin-stat-card__value">{{ data.orders.voucherRate }}%</p>
+              <p class="admin-stat-card__meta">{{ data.orders.withVoucher }} trên {{ data.orders.total }} đơn</p>
+            </article>
+
+            <article class="admin-stat-card">
+              <h3 class="admin-stat-card__title">Doanh thu từ đơn có mã</h3>
+              <p class="admin-stat-card__value">{{ money(data.orders.revenueWithVoucher) }}</p>
+              <p class="admin-stat-card__meta">{{ data.orders.revenueShareWithVoucher }}% tổng doanh thu · đã giảm {{ money(data.orders.discountTotal) }}</p>
+            </article>
+
+            <article class="admin-stat-card">
+              <h3 class="admin-stat-card__title">Giá trị đơn trung bình</h3>
+              <p class="admin-stat-card__value">{{ money(data.orders.aovWithVoucher) }}</p>
+              <p class="admin-stat-card__meta">có mã · không mã {{ money(data.orders.aovWithoutVoucher) }}</p>
+            </article>
+
+            <article class="admin-stat-card">
+              <h3 class="admin-stat-card__title">Ngân sách chiến dịch</h3>
+              @if (data.promotions.budgetedCampaigns) {
+                <p class="admin-stat-card__value">{{ data.promotions.budgetUsagePercent }}%</p>
+                <p class="admin-stat-card__meta">{{ money(data.promotions.issuedDiscount) }} trên {{ money(data.promotions.totalBudget) }}</p>
+                <div class="admin-progress" role="img"
+                     [attr.aria-label]="'Đã dùng ' + data.promotions.budgetUsagePercent + '% ngân sách'">
+                  <div class="admin-progress__bar" [style.width.%]="data.promotions.budgetUsagePercent"></div>
+                </div>
+              } @else {
+                <p class="admin-stat-card__value">{{ money(data.promotions.issuedDiscount) }}</p>
+                <p class="admin-stat-card__meta">đã giảm, chưa chiến dịch nào đặt trần ngân sách</p>
+              }
             </article>
 
             <article class="admin-stat-card">
               <h3 class="admin-stat-card__title">Chiến dịch</h3>
-              <p class="admin-stat-card__value">{{ data.promotions.active }} / {{ data.promotions.total }}</p>
-              <p class="admin-stat-card__meta">đang chạy · {{ data.promotions.paused }} tạm dừng</p>
-            </article>
-
-            <article class="admin-stat-card">
-              <h3 class="admin-stat-card__title">Lượt dùng mã</h3>
-              <p class="admin-stat-card__value">{{ data.vouchers.totalUsed }}</p>
-              <p class="admin-stat-card__meta">trên {{ data.vouchers.totalLimit }} lượt được phát hành</p>
-              <div class="admin-progress" role="img"
-                   [attr.aria-label]="'Đã dùng ' + data.vouchers.usagePercent + '% số lượt'">
-                <div class="admin-progress__bar" [style.width.%]="data.vouchers.usagePercent"></div>
-              </div>
+              <p class="admin-stat-card__value">{{ data.promotions.running }} / {{ data.promotions.total }}</p>
+              <p class="admin-stat-card__meta">
+                đang chạy · {{ data.promotions.scheduled }} sắp chạy · {{ data.promotions.paused }} tạm dừng ·
+                {{ data.promotions.ended }} đã kết thúc · {{ data.promotions.budgetExhausted }} cạn ngân sách
+              </p>
             </article>
 
             <article class="admin-stat-card">
               <h3 class="admin-stat-card__title">Mã giảm giá</h3>
               <p class="admin-stat-card__value">{{ data.vouchers.active }} / {{ data.vouchers.total }}</p>
-              <p class="admin-stat-card__meta">còn hiệu lực · {{ data.vouchers.expired }} đã hết hạn</p>
+              <p class="admin-stat-card__meta">
+                còn hiệu lực · {{ data.vouchers.scheduled }} chưa tới ngày · {{ data.vouchers.expired }} hết hạn ·
+                đã dùng {{ data.vouchers.totalUsed }} lượt
+              </p>
             </article>
           </div>
+
+          <h3 class="admin-drawer__section">So sánh chiến dịch</h3>
+          <div class="admin-table-wrap">
+            <table class="admin-table admin-data-table">
+              <thead><tr><th>Chiến dịch</th><th>Trạng thái</th><th>Số mã</th><th>Đơn</th><th>Doanh thu</th><th>Đã giảm</th><th>Doanh thu / đồng giảm</th></tr></thead>
+              <tbody>
+                @for (row of data.campaigns; track row.promoId ?? 'standalone') {
+                  <tr>
+                    <td>{{ row.name }}</td>
+                    <td>
+                      @if (row.lifecycleLabel) {
+                        <span class="admin-badge"
+                              [class.admin-badge--success]="row.lifecycle === 'running'"
+                              [class.admin-badge--warning]="row.lifecycle === 'scheduled' || row.lifecycle === 'paused'"
+                              [class.admin-badge--danger]="row.lifecycle === 'ended' || row.lifecycle === 'budget_exhausted'">{{ row.lifecycleLabel }}</span>
+                      } @else {
+                        —
+                      }
+                    </td>
+                    <td>{{ row.vouchers }}</td>
+                    <td>{{ row.orders }}</td>
+                    <td>{{ money(row.revenue) }}</td>
+                    <td>{{ money(row.discount) }}</td>
+                    <td>{{ revenueRatio(row.revenuePerDiscount) }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+
+          @if (data.topVouchers.length) {
+            <h3 class="admin-drawer__section">Mã được dùng nhiều nhất</h3>
+            <div class="admin-table-wrap">
+              <table class="admin-table admin-data-table">
+                <thead><tr><th>Mã</th><th>Đơn</th><th>Doanh thu</th><th>Đã giảm</th></tr></thead>
+                <tbody>
+                  @for (row of data.topVouchers; track row.voucherId) {
+                    <tr>
+                      <td>{{ row.code }}</td>
+                      <td>{{ row.orders }}</td>
+                      <td>{{ money(row.revenue) }}</td>
+                      <td>{{ money(row.discount) }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
         } @else {
           <div class="admin-empty-state"><strong>Chưa có dữ liệu thống kê</strong></div>
         }

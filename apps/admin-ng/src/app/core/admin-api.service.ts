@@ -245,25 +245,58 @@ export interface AdminPromotionListPayload extends AdminListPayload<AdminPromoti
   summary?: AdminPromotionSummary;
 }
 
-/** Số liệu tổng hợp trả về từ `/api/v1/admin/pricing/statistics`. */
+/** Một dòng trong bảng so sánh chiến dịch của tab Thống kê. */
+export interface AdminCampaignStatistic {
+  /** null là nhóm "Mã đứng riêng". */
+  promoId: string | null;
+  name: string;
+  lifecycle: AdminPromotionRow['lifecycle_status'] | null;
+  lifecycleLabel: string | null;
+  vouchers: number;
+  orders: number;
+  revenue: number;
+  discount: number;
+  /** Doanh thu trên mỗi đồng giảm; null khi chưa giảm đồng nào. */
+  revenuePerDiscount: number | null;
+  budgetLimit: number;
+  budgetUsed: number;
+}
+
+/**
+ * Số liệu tổng hợp trả về từ `/api/v1/admin/pricing/statistics`.
+ *
+ * Phần `orders` đọc từ đơn hàng thật (migration 036): đơn chưa huỷ, mã chưa bị trả lượt.
+ */
 export interface AdminPricingStatistics {
-  promotions: {
+  range: { from: string | null; to: string | null };
+  orders: {
     total: number;
-    active: number;
-    paused: number;
-    totalBudget: number;
-    totalIssued: number;
+    withVoucher: number;
+    voucherRate: number;
+    revenueWithVoucher: number;
+    revenueWithoutVoucher: number;
+    revenueShareWithVoucher: number;
+    discountTotal: number;
+    aovWithVoucher: number;
+    aovWithoutVoucher: number;
+  };
+  promotions: AdminPromotionSummary & {
     budgetRemaining: number;
     budgetUsagePercent: number;
   };
   vouchers: {
     total: number;
     active: number;
+    scheduled: number;
     expired: number;
+    disabled: number;
+    unlimited: number;
     totalUsed: number;
     totalLimit: number;
     usagePercent: number;
   };
+  campaigns: AdminCampaignStatistic[];
+  topVouchers: Array<{ voucherId: string; code: string; orders: number; discount: number; revenue: number }>;
 }
 
 export interface AdminVoucherRow {
@@ -1021,8 +1054,8 @@ export class AdminApiService {
    * Endpoint này đã tồn tại từ trước nhưng chưa màn hình nào gọi tới, nên tab Thống kê
    * hiển thị một khối rỗng viết cứng.
    */
-  pricingStatistics(): Observable<AdminPricingStatistics> {
-    return this.http.get<AdminPricingStatistics>(`${this.baseUrl}/api/v1/admin/pricing/statistics`);
+  pricingStatistics(params: Record<string, string> = {}): Observable<AdminPricingStatistics> {
+    return this.http.get<AdminPricingStatistics>(`${this.baseUrl}/api/v1/admin/pricing/statistics`, { params: this.params(params) });
   }
 
   /**

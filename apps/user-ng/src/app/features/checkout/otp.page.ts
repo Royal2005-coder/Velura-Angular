@@ -19,7 +19,7 @@ interface OtpVerifyResponse {
   stripe?: { url?: string };
   order?: {
     order_id?: string;
-    tracking_code?: string;
+    order_code?: string;
     payment_method?: string;
     shipping_address?: string;
   };
@@ -172,7 +172,7 @@ export class CheckoutOtpPage {
           }
           this.checkout.saveCreatedOrder({
             order_id: res.order.order_id,
-            tracking_code: res.order.tracking_code,
+            order_code: res.order.order_code,
             payment_method: res.order.payment_method,
             shipping_address: res.order.shipping_address,
             shipping_method: this.checkout.methods().shippingMethod,

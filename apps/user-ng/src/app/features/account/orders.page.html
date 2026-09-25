@@ -17,9 +17,9 @@
 
     <div class="order-tabs">
       <button class="order-tab" [class.is-active]="tab() === 'all'" type="button" (click)="setTab('all')">Tất cả</button>
-      <button class="order-tab" [class.is-active]="tab() === 'pending'" type="button" (click)="setTab('pending')">Chờ xác nhận</button>
+      <button class="order-tab" [class.is-active]="tab() === 'pending'" type="button" (click)="setTab('pending')">Đang xử lý</button>
       <button class="order-tab" [class.is-active]="tab() === 'shipping'" type="button" (click)="setTab('shipping')">Đang giao</button>
-      <button class="order-tab" [class.is-active]="tab() === 'delivered'" type="button" (click)="setTab('delivered')">Hoàn thành</button>
+      <button class="order-tab" [class.is-active]="tab() === 'delivered'" type="button" (click)="setTab('delivered')">Đã giao</button>
       <button class="order-tab" [class.is-active]="tab() === 'cancelled'" type="button" (click)="setTab('cancelled')">Đã hủy</button>
     </div>
 
@@ -34,7 +34,7 @@
             <div class="order-card__header">
               <div class="order-card__header-left">
                 <span class="order-card__id">#{{ order.order_code || order.order_id }}</span>
-                <span class="order-card__date">{{ order.created_at }}</span>
+                <span class="order-card__date">{{ dateLabel(order) }}</span>
               </div>
               <span class="order-card__status-badge">{{ statusLabel(order) }}</span>
             </div>

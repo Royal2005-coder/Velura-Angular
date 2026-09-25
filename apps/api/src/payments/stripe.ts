@@ -114,7 +114,11 @@ export function verifyStripeSignature(rawBody: string, header: string, secret: s
  * Opens Stripe's hosted test checkout for one pending order.
  * The buyer pays with a sandbox card. The order stays unpaid until the webhook.
  */
-export async function createStripePaymentIntent(orderId: string, amount: number): Promise<{ id: string; url: string }> {
+export async function createStripePaymentIntent(
+  orderId: string,
+  amount: number,
+  returnPath: string | null = null
+): Promise<{ id: string; url: string }> {
   if (!config.stripeSecretKey) {
     throw new HttpError(503, "STRIPE_NOT_CONFIGURED", "Chưa cấu hình STRIPE_SECRET_KEY. COD vẫn đặt được.");
   }
@@ -125,8 +129,10 @@ export async function createStripePaymentIntent(orderId: string, amount: number)
   const origin = config.storefrontOrigin;
   const body = new URLSearchParams({
     mode: "payment",
-    success_url: `${origin}/checkout/confirm?stripe=success`,
-    cancel_url: `${origin}/checkout/shipping?stripe=cancel`,
+    // Thanh toán lại từ trang đơn thì quay về chính trang đơn, không về luồng checkout
+    // (trang xác nhận checkout không có dữ liệu của đơn cũ).
+    success_url: `${origin}${returnPath ?? "/checkout/confirm"}?stripe=success`,
+    cancel_url: `${origin}${returnPath ?? "/checkout/shipping"}?stripe=cancel`,
     "line_items[0][quantity]": "1",
     "line_items[0][price_data][currency]": "vnd",
     "line_items[0][price_data][unit_amount]": String(charge),

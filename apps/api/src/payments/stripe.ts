@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { config } from "../config.js";
 import { HttpError } from "../http.js";
 import { callRpc, insertRow, selectOne, selectRows, updateRows } from "../supabase.js";
-import { asString, errorMessage, type JsonObject } from "../types.js";
+import { asJsonObject, asString, errorMessage, type JsonObject } from "../types.js";
 
 /**
  * Hạn của một phiên Stripe Checkout.
@@ -29,7 +29,13 @@ export function stripeConfigured(): boolean {
  * sách chiến dịch của đơn phải được trả lại.
  */
 export type StripeEventAction =
-  | { kind: "paid"; orderId: string; paymentIntentId: string }
+  | {
+    kind: "paid";
+    orderId: string;
+    paymentIntentId: string;
+    /** Mã phiên Checkout khi sự kiện là `checkout.session.completed`. */
+    sessionId: string | null;
+  }
   | {
     kind: "closed";
     orderId: string;
@@ -73,7 +79,8 @@ export function classifyStripeEvent(event: JsonObject): StripeEventAction {
     if (typeof paymentIntentId !== "string" || !paymentIntentId) {
       return { kind: "ignore", reason: "missing_payment_intent" };
     }
-    return { kind: "paid", orderId, paymentIntentId };
+    const sessionId = type === "checkout.session.completed" && typeof object?.id === "string" ? object.id : null;
+    return { kind: "paid", orderId, paymentIntentId, sessionId };
   }
 
   if (type === "checkout.session.expired" || type === "payment_intent.canceled") {
@@ -153,15 +160,24 @@ export async function createStripePaymentIntent(
   if (!response.ok || !payload.id || !payload.url) {
     throw new HttpError(502, "STRIPE_INTENT_FAILED", payload.error?.message || "Stripe không tạo được trang thanh toán.");
   }
-  await insertRow("payment", {
-    order_id: orderId,
-    payment_method: "ONLINE_PAYMENT",
-    payment_provider: "stripe",
-    amount: charge,
-    payment_status: "pending",
-    payment_channel: "stripe",
-    gateway_transaction_ref: payload.id
-  });
+  try {
+    await insertRow("payment", {
+      order_id: orderId,
+      payment_method: "ONLINE_PAYMENT",
+      payment_provider: "stripe",
+      amount: charge,
+      payment_status: "pending",
+      payment_channel: "stripe",
+      gateway_transaction_ref: payload.id
+    });
+  } catch (error: unknown) {
+    // Chỉ mục `payment_one_open_stripe_session`: đơn đã có một phiên đang mở. Không trả
+    // đường dẫn của phiên vừa tạo, để khách không thể trả tiền hai lần.
+    if (error instanceof HttpError && asString(asJsonObject(error.details).code) === "23505") {
+      throw new HttpError(409, "PAYMENT_SESSION_OPEN", "Phiên thanh toán trước vẫn còn mở. Hoàn tất ở tab đó hoặc thử lại sau ít phút.");
+    }
+    throw error;
+  }
   return { id: payload.id, url: payload.url };
 }
 
@@ -184,6 +200,38 @@ async function transitionPendingStripePayment(
   };
   if (sessionId) filter.gateway_transaction_ref = `eq.${sessionId}`;
   const changed = await updateRows("payment", filter, patch);
+  return (changed[0] as JsonObject | undefined) ?? null;
+}
+
+/**
+ * Ghi tiền về cho đúng một payment.
+ *
+ * - Có mã phiên (`checkout.session.completed`): chỉ đổi payment của phiên đó. Nhận cả
+ *   payment đã bị đóng `failed`, vì tiền đã về thật thì phải ghi nhận.
+ * - Chỉ có PaymentIntent: chỉ đổi khi đơn có đúng một payment `pending`; nhiều hơn thì chờ
+ *   sự kiện có mã phiên, không đoán.
+ */
+async function markOneStripePaymentPaid(orderId: string, patch: JsonObject, sessionId: string | null): Promise<JsonObject | null> {
+  if (sessionId) {
+    const changed = await updateRows("payment", {
+      order_id: `eq.${orderId}`,
+      payment_provider: "eq.stripe",
+      gateway_transaction_ref: `eq.${sessionId}`,
+      payment_status: "in.(pending,failed)"
+    }, patch);
+    return (changed[0] as JsonObject | undefined) ?? null;
+  }
+  const { rows } = await selectRows("payment", {
+    order_id: `eq.${orderId}`,
+    payment_provider: "eq.stripe",
+    payment_status: "eq.pending",
+    select: "payment_id"
+  });
+  if (rows.length !== 1) return null;
+  const changed = await updateRows("payment", {
+    payment_id: `eq.${asString(rows[0].payment_id)}`,
+    payment_status: "eq.pending"
+  }, patch);
   return (changed[0] as JsonObject | undefined) ?? null;
 }
 
@@ -221,13 +269,17 @@ export async function closeStripePayment(
  * Webhook gửi lại không làm gì thêm: chỉ lần cập nhật đổi được payment khỏi `pending` mới
  * đi tiếp.
  */
-export async function markStripePaymentPaid(orderId: string, paymentIntentId: string): Promise<"paid" | "refunding" | "ignored"> {
-  const paid = await transitionPendingStripePayment(orderId, {
+export async function markStripePaymentPaid(
+  orderId: string,
+  paymentIntentId: string,
+  sessionId: string | null = null
+): Promise<"paid" | "refunding" | "ignored"> {
+  const paid = await markOneStripePaymentPaid(orderId, {
     payment_status: "paid",
     paid_at: new Date().toISOString(),
     gateway_response_code: "succeeded",
     gateway_transaction_ref: paymentIntentId
-  });
+  }, sessionId);
   if (!paid) {
     const existing = await selectRows("payment", {
       order_id: `eq.${orderId}`,
@@ -239,11 +291,20 @@ export async function markStripePaymentPaid(orderId: string, paymentIntentId: st
   }
 
   const order = await selectOne("orders", { order_id: `eq.${orderId}`, select: "order_id,status" });
-  if (asString(order?.status) === "cancelled") {
+  const { rows: otherPaid } = await selectRows("payment", {
+    order_id: `eq.${orderId}`,
+    payment_provider: "eq.stripe",
+    payment_status: "eq.paid",
+    payment_id: `neq.${asString(paid.payment_id)}`,
+    select: "payment_id",
+    limit: 1
+  });
+  // Đơn đã huỷ, hoặc đơn đã được trả tiền bằng một payment khác: khoản này là thừa, hoàn lại.
+  if (asString(order?.status) === "cancelled" || otherPaid.length > 0) {
     await updateRows("payment", { payment_id: `eq.${paid.payment_id}` }, {
       payment_status: "refund_pending",
       refund_amount: paid.amount,
-      refund_reason: "Tiền về sau khi đơn đã huỷ",
+      refund_reason: otherPaid.length > 0 ? "Khoản thanh toán trùng cho cùng một đơn" : "Tiền về sau khi đơn đã huỷ",
       gateway_response_code: "REFUND_REQUESTED"
     });
     await refundStripeOrder(orderId);

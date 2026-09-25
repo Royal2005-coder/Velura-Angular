@@ -161,3 +161,9 @@ test("customer steps: a delivered order ends done; orders without history get on
   const legacy = customerOrderSteps("shipping", "COD", []);
   assert.deepEqual(legacy.map((step) => [step.status, step.state]), [["shipping", "current"], ["delivered", "upcoming"]]);
 });
+
+test("an online order that already has money is never cancelled for running out of time", () => {
+  const facts = orderFacts({ status: "waiting_payment", payment_method: "ONLINE_PAYMENT", payments: [{ payment_status: "paid", created_at: "2026-09-25" }] });
+  assert.equal(actionGuard("payment_expired", facts), "PAYMENT_ALREADY_PAID");
+  assert.equal(actionGuard("payment_succeeded", facts), null);
+});

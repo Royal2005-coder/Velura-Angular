@@ -50,8 +50,9 @@ export function assertOrderVisibleTo(order: JsonObject, profile: UserProfile | n
   if (!profile) {
     throw new HttpError(401, "UNAUTHORIZED", "Đăng nhập là bắt buộc để xem đơn hàng");
   }
+  // Cùng câu trả lời với mã đơn không tồn tại: không để lộ mã nào là mã thật.
   if (order.user_id !== profile.user_id) {
-    throw new HttpError(403, "FORBIDDEN", "Bạn không có quyền xem đơn hàng này");
+    throw new HttpError(404, "NOT_FOUND", "Không tìm thấy đơn hàng");
   }
 }
 
@@ -358,6 +359,15 @@ export async function handleOrdersRoute(
       });
       if (hasOpenStripeSession(openSessions)) {
         throw new HttpError(409, "PAYMENT_SESSION_OPEN", "Phiên thanh toán trước vẫn còn mở. Hoàn tất ở tab đó hoặc thử lại sau ít phút.");
+      }
+      // Phiên quá hạn mà webhook hết hạn chưa về: Stripe đã đóng phiên đó, nên đóng theo để
+      // chỉ mục một-phiên-mở-mỗi-đơn nhận phiên mới. Tiền về muộn cho phiên này vẫn được
+      // ghi nhận, vì webhook có mã phiên nhận cả payment đã đóng.
+      for (const stale of openSessions) {
+        await updateRows("payment", { payment_id: `eq.${asString(stale.payment_id)}`, payment_status: "eq.pending" }, {
+          payment_status: "failed",
+          gateway_response_code: "stale_session"
+        });
       }
       const stripe = await openStripePayment(order.order_id, order.total_amount, "STRIPE", `/account/orders/${order.order_id}`);
       return sendJson(res, 200, { success: true, stripe }, corsHeaders);

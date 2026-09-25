@@ -58,7 +58,7 @@ test("PaymentIntent bị huỷ cũng là phiên đã đóng, nhưng không mang 
 test("thanh toán thành công lấy đúng mã PaymentIntent ở cả hai loại sự kiện", () => {
   assert.deepEqual(
     classifyStripeEvent(event("payment_intent.succeeded", { id: "pi_ok", metadata: { order_id: ORDER } })),
-    { kind: "paid", orderId: ORDER, paymentIntentId: "pi_ok" }
+    { kind: "paid", orderId: ORDER, paymentIntentId: "pi_ok", sessionId: null }
   );
   assert.deepEqual(
     classifyStripeEvent(event("checkout.session.completed", {
@@ -66,7 +66,7 @@ test("thanh toán thành công lấy đúng mã PaymentIntent ở cả hai loạ
       payment_intent: "pi_from_session",
       metadata: { order_id: ORDER }
     })),
-    { kind: "paid", orderId: ORDER, paymentIntentId: "pi_from_session" }
+    { kind: "paid", orderId: ORDER, paymentIntentId: "pi_from_session", sessionId: "cs_ok" }
   );
 });
 
@@ -232,6 +232,9 @@ test("webhook thành công gửi lại không chuyển đơn lần hai", async (
 test("thanh toán thành công lần đầu: System chuyển đơn qua action payment_succeeded, kho trừ ở CSDL", async () => {
   const pg = fakePostgrest((call) => {
     if (call.method === "PATCH" && call.path === "/rest/v1/payment") return [{ payment_id: "pay_1", amount: 500000 }];
+    if (call.method === "GET" && call.path === "/rest/v1/payment") {
+      return call.query.get("payment_status") === "eq.pending" ? [{ payment_id: "pay_1" }] : [];
+    }
     if (call.method === "GET" && call.path === "/rest/v1/orders") return [{ order_id: ORDER, status: "waiting_payment" }];
     return { order: { order_id: ORDER, status: "confirmed" } };
   });
@@ -395,6 +398,63 @@ test("webhook charge.refunded chốt Đã hoàn tiền một lần; gửi lại 
     assert.equal(patch?.query.get("gateway_transaction_ref"), "eq.pi_paid");
     assert.equal(patch?.query.get("payment_status"), "eq.refund_pending");
   } finally {
+    pg.restore();
+  }
+});
+
+test("sự kiện có mã phiên chỉ ghi tiền cho đúng phiên đó, kể cả phiên đã bị đóng", async () => {
+  const pg = fakePostgrest((call) => {
+    if (call.method === "PATCH" && call.path === "/rest/v1/payment") return [{ payment_id: "pay_2", amount: 500000 }];
+    if (call.method === "GET" && call.path === "/rest/v1/orders") return [{ order_id: ORDER, status: "waiting_payment" }];
+    if (call.method === "GET" && call.path === "/rest/v1/payment") return [];
+    return { order: { order_id: ORDER, status: "confirmed" } };
+  });
+  try {
+    assert.equal(await markStripePaymentPaid(ORDER, "pi_2", "cs_second"), "paid");
+    const patch = pg.calls.find((c) => c.method === "PATCH" && c.path === "/rest/v1/payment");
+    assert.equal(patch?.query.get("gateway_transaction_ref"), "eq.cs_second");
+    assert.equal(patch?.query.get("payment_status"), "in.(pending,failed)");
+  } finally {
+    pg.restore();
+  }
+});
+
+test("chỉ có PaymentIntent mà đơn có hai payment đang chờ thì không đoán, chờ sự kiện có mã phiên", async () => {
+  const pg = fakePostgrest((call) => {
+    if (call.method === "GET" && call.path === "/rest/v1/payment") {
+      return call.query.get("payment_status") === "eq.pending" ? [{ payment_id: "pay_1" }, { payment_id: "pay_2" }] : [];
+    }
+    return [];
+  });
+  try {
+    assert.equal(await markStripePaymentPaid(ORDER, "pi_x"), "ignored");
+    assert.equal(pg.calls.filter((c) => c.method === "PATCH").length, 0);
+    assert.equal(orderActionCalls(pg.calls).length, 0);
+  } finally {
+    pg.restore();
+  }
+});
+
+test("khoản thanh toán thứ hai cho đơn đã có tiền được hoàn lại, không để khách trả hai lần", async () => {
+  const pg = fakePostgrest((call) => {
+    if (call.method === "PATCH" && call.path === "/rest/v1/payment") return [{ payment_id: "pay_2", amount: 500000 }];
+    if (call.method === "GET" && call.path === "/rest/v1/orders") return [{ order_id: ORDER, status: "confirmed" }];
+    if (call.method === "GET" && call.path === "/rest/v1/payment") {
+      if (call.query.get("payment_status") === "eq.paid") return [{ payment_id: "pay_1" }];
+      return [{ payment_id: "pay_2", gateway_transaction_ref: "pi_2", version: 1 }];
+    }
+    return [];
+  });
+  const originalKey = config.stripeSecretKey;
+  config.stripeSecretKey = "";
+  try {
+    assert.equal(await markStripePaymentPaid(ORDER, "pi_2", "cs_second"), "refunding");
+    const refundPending = pg.calls.find((c) => c.method === "PATCH" && bodyOf(c).payment_status === "refund_pending");
+    assert.ok(refundPending, "khoản trùng phải sang Chờ hoàn tiền");
+    assert.equal(refundPending.query.get("payment_id"), "eq.pay_2");
+    assert.equal(orderActionCalls(pg.calls).length, 0);
+  } finally {
+    config.stripeSecretKey = originalKey;
     pg.restore();
   }
 });

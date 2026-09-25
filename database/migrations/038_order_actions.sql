@@ -64,14 +64,17 @@ select
     case when o.status::text = 'waiting_payment'
               and o.created_at <= (now() at time zone 'utc') - interval '24 hours' then 'PAYMENT_OVERDUE' end,
     case when p.payment_status::text in ('failed', 'discrepancy') and o.status::text not in ('waiting_payment', 'cancelled')
-              or coalesce(p.has_discrepancy, false) then 'PAYMENT_ATTENTION' end,
+              or coalesce(p.has_discrepancy, false)
+              -- Phiên Stripe sống 31 phút; còn `pending` quá 1 giờ là cổng không gọi lại được.
+              or (p.payment_status::text = 'pending' and p.payment_provider::text = 'stripe'
+                  and p.created_at <= (now() at time zone 'utc') - interval '1 hour') then 'PAYMENT_ATTENTION' end,
     case when p.payment_status::text = 'refund_pending' and coalesce(p.gateway_response_code, '') <> 'REFUND_FAILED' then 'REFUND_PENDING' end,
     case when p.payment_status::text = 'refund_pending' and p.gateway_response_code = 'REFUND_FAILED' then 'REFUND_FAILED' end,
     case when o.status::text = 'delivery_failed' and o.returned_to_stock_at is null then 'RETURN_TO_STOCK_PENDING' end
   ], null) as tags
 from public.orders o
 left join lateral (
-  select pp.payment_status, pp.gateway_response_code, pp.has_discrepancy
+  select pp.payment_status, pp.gateway_response_code, pp.has_discrepancy, pp.payment_provider, pp.created_at
   from public.payment pp where pp.order_id = o.order_id
   order by pp.created_at desc limit 1
 ) p on true;
@@ -148,6 +151,11 @@ begin
   end if;
   if p_action = 'payment_expired' and v_before.created_at > (now() at time zone 'utc') - interval '24 hours' then
     raise sqlstate 'PT422' using message = 'PAYMENT_NOT_EXPIRED';
+  end if;
+  if p_action = 'payment_expired' and exists (
+    select 1 from public.payment p where p.order_id = p_order_id and p.payment_status::text = 'paid'
+  ) then
+    raise sqlstate 'PT422' using message = 'PAYMENT_ALREADY_PAID';
   end if;
   if p_action = 'confirm_handover' then
     if nullif(btrim(coalesce(v_before.tracking_code, '')), '') is null then
@@ -395,9 +403,10 @@ begin
   select count(*) into v_confirm_due from public.orders
   where status::text = 'pending' and payment_method::text = 'COD' and total_amount < 1000000
     and created_at <= (now() at time zone 'utc') - interval '24 hours';
-  select count(*) into v_expire_due from public.orders
-  where status::text = 'waiting_payment'
-    and created_at <= (now() at time zone 'utc') - interval '24 hours';
+  select count(*) into v_expire_due from public.orders o
+  where o.status::text = 'waiting_payment'
+    and o.created_at <= (now() at time zone 'utc') - interval '24 hours'
+    and not exists (select 1 from public.payment p where p.order_id = o.order_id and p.payment_status::text = 'paid');
   if p_dry_run then
     return jsonb_build_object('dry_run', true, 'auto_confirm_due', v_confirm_due, 'payment_expired_due', v_expire_due);
   end if;
@@ -417,11 +426,29 @@ begin
     end;
   end loop;
 
+  -- Đơn đã có tiền (đối soát tay hoặc webhook chuyển trạng thái bị lỗi) thì đi tiếp, không
+  -- huỷ: huỷ lúc này là hoàn lại số tiền khách đã trả.
   for v_order in
-    select order_id from public.orders
-    where status::text = 'waiting_payment'
-      and created_at <= (now() at time zone 'utc') - interval '24 hours'
-    order by created_at limit 200
+    select o.order_id from public.orders o
+    where o.status::text = 'waiting_payment'
+      and exists (select 1 from public.payment p where p.order_id = o.order_id and p.payment_status::text = 'paid')
+    order by o.created_at limit 200
+  loop
+    begin
+      perform public.velura_order_apply_action(v_order.order_id, 'payment_succeeded', 'system', null, null,
+        'Đơn đã có thanh toán thành công', '{}'::jsonb, null, null);
+      v_confirmed := v_confirmed + 1;
+    exception when others then
+      v_failed := v_failed + 1;
+    end;
+  end loop;
+
+  for v_order in
+    select o.order_id from public.orders o
+    where o.status::text = 'waiting_payment'
+      and o.created_at <= (now() at time zone 'utc') - interval '24 hours'
+      and not exists (select 1 from public.payment p where p.order_id = o.order_id and p.payment_status::text = 'paid')
+    order by o.created_at limit 200
   loop
     begin
       perform public.velura_order_apply_action(v_order.order_id, 'payment_expired', 'system', null, null,
@@ -462,6 +489,26 @@ begin
     end if;
   end loop;
 end $$;
+
+-- ---------------------------------------------------------------------------
+-- 7b. Mỗi đơn chỉ một phiên Stripe đang mở
+-- ---------------------------------------------------------------------------
+-- Hai yêu cầu "Thanh toán lại" gần như cùng lúc đều qua được bước kiểm ở API. Khoá ở cơ
+-- sở dữ liệu để lần thứ hai không tạo được payment `pending` thứ hai; khách không thể trả
+-- tiền hai lần cho một đơn. Payment `pending` cũ trùng trên dữ liệu hiện có được đóng
+-- trước, giữ lại phiên mới nhất.
+update public.payment p
+set payment_status = 'failed', gateway_response_code = 'superseded_session', updated_at = now()
+where p.payment_provider::text = 'stripe' and p.payment_status::text = 'pending'
+  and exists (
+    select 1 from public.payment q
+    where q.order_id = p.order_id and q.payment_provider::text = 'stripe' and q.payment_status::text = 'pending'
+      and (q.created_at, q.payment_id) > (p.created_at, p.payment_id)
+  );
+
+create unique index if not exists payment_one_open_stripe_session
+  on public.payment (order_id)
+  where payment_provider = 'stripe' and payment_status = 'pending';
 
 -- ---------------------------------------------------------------------------
 -- 8. Đường cũ

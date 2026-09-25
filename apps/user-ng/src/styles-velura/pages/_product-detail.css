@@ -855,6 +855,82 @@
   color: var(--text-dark);
 }
 
+/* Combo Component Item Links & Price Row */
+.combo-component-item__img-link {
+  display: block;
+  flex-shrink: 0;
+  border-radius: 6px;
+  overflow: hidden;
+  line-height: 0;
+}
+
+.combo-component-item__img-link:hover .combo-component-item__img {
+  opacity: 0.9;
+  transform: scale(1.02);
+}
+
+.combo-component-item__img {
+  transition: transform 0.2s, opacity 0.2s;
+}
+
+.combo-component-item__link {
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.combo-component-item__link:hover {
+  color: var(--terracotta);
+  text-decoration: underline;
+}
+
+.combo-component-item__price-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.combo-component-item__view-single {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--terracotta);
+  text-decoration: none;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: rgba(161, 130, 101, 0.08);
+  border: 1px solid rgba(161, 130, 101, 0.2);
+  transition: background 0.2s, color 0.2s, transform 0.2s;
+}
+
+.combo-component-item__view-single:hover {
+  background: var(--terracotta);
+  color: #fff;
+  transform: translateX(2px);
+}
+
+/* Combo Quantity Stepper */
+.combo-quantity {
+  margin: 14px 0 12px 0;
+  padding: 12px 14px;
+  background: #fbf9f6;
+  border-radius: 8px;
+  border: 1px solid rgba(212, 196, 183, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.combo-quantity .product-option__title {
+  margin-bottom: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-dark);
+}
+
 /* ---------- Tabs Content area ---------- */
 .product-detail__description {
   margin-top: 80px;

@@ -593,6 +593,104 @@ export async function handleOrdersRoute(
       return sendJson(res, 200, { success: true, message: "Đã cập nhật trạng thái thanh toán" }, corsHeaders);
     }
 
+    // POST /api/user/orders/:id/confirm-payment hoặc POST /api/user/orders/confirm-payment
+    if (((action && parts[4] === "confirm-payment") || action === "confirm-payment") && req.method === "POST") {
+      const body = await readJson(req);
+      const targetOrderId = (action !== "confirm-payment" ? action : asString(body.order_id || body.orderId)) || "";
+      const order = await selectOne("orders", { order_id: `eq.${targetOrderId}` }) ||
+                    await selectOne("orders", { order_code: `eq.${quotePostgrestValue(targetOrderId.toUpperCase())}` });
+      if (!order) {
+        throw new HttpError(404, "NOT_FOUND", "Không tìm thấy đơn hàng");
+      }
+      if (order.status !== "pending" && order.status !== "waiting_payment") {
+        throw new HttpError(400, "INVALID_STATE", "Đơn hàng không ở trạng thái chờ thanh toán");
+      }
+      const nowIso = new Date().toISOString();
+      try {
+        await callRpc("velura_order_service_action", {
+          p_order_id: order.order_id,
+          p_action: "payment_succeeded",
+          p_actor_id: null,
+          p_note: "Khách hàng xác nhận đã chuyển khoản thành công qua VietQR (VNPay/MoMo Demo)",
+          p_payload: { method: order.payment_method || "VIETQR" },
+          p_expected_version: null
+        });
+      } catch {
+        // Fallback direct update
+        await updateRows("orders", { order_id: `eq.${order.order_id}` }, {
+          status: "confirmed",
+          stock_committed_at: order.stock_committed_at || nowIso,
+          updated_at: nowIso
+        });
+      }
+
+      // Update payment record to paid
+      try {
+        await updateRows("payment", { order_id: `eq.${order.order_id}`, payment_status: "eq.pending" }, {
+          payment_status: "paid",
+          paid_at: nowIso,
+          gateway_response_code: "DEMO_CONFIRMED",
+          updated_at: nowIso
+        });
+      } catch {
+        /* ignore */
+      }
+
+      // Commit stock if not already committed
+      if (!order.stock_committed_at) {
+        try {
+          const { rows: items } = await selectRows("order_item", { order_id: `eq.${order.order_id}` });
+          for (const item of items) {
+            const variant = await selectOne("variant", { variant_id: `eq.${item.variant_id}` });
+            if (variant) {
+              const nextStock = Math.max(0, Number(variant.stock_quantity) - Number(item.quantity));
+              await updateRows("variant", { variant_id: `eq.${item.variant_id}` }, { stock_quantity: nextStock });
+            }
+          }
+        } catch (e: unknown) {
+          console.error("Failed to commit variant stock on confirm-payment:", errorMessage(e));
+        }
+      }
+
+      // Insert order status history
+      try {
+        await insertRow("order_status_history", {
+          order_id: order.order_id,
+          old_status: order.status,
+          new_status: "confirmed",
+          trigger_type: "customer",
+          changed_by: "customer",
+          changed_at: nowIso,
+          note: "Khách hàng xác nhận đã chuyển khoản thành công qua VietQR (VNPay/MoMo Demo)"
+        });
+      } catch {
+        /* ignore */
+      }
+
+      if (order.user_id) {
+        try {
+          await createNotification(
+            asString(order.user_id),
+            "order_status",
+            `Đã xác nhận thanh toán đơn hàng #${asString(order.order_code)}`,
+            "Cảm ơn bạn! Kho Velura đang tiến hành đóng gói và chuẩn bị đơn hàng cho bạn.",
+            `/account/orders/${asString(order.order_id)}`
+          );
+        } catch {
+          /* ignore */
+        }
+      }
+
+      return sendJson(res, 200, {
+        success: true,
+        message: "Xác nhận thanh toán thành công",
+        order: {
+          ...order,
+          status: "confirmed"
+        }
+      }, corsHeaders);
+    }
+
     // POST /api/user/orders/otp-send (Send OTP)
     if (action === "otp-send" && req.method === "POST") {
       const body = await readJson(req);

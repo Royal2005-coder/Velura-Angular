@@ -99,6 +99,14 @@ export class CheckoutShippingPage {
   readonly addressMode = signal<'default' | 'saved' | 'new'>('default');
   readonly saveNewAddress = signal(false);
   readonly defaultAddress = signal<NonNullable<MemberProfile['saved_addresses']>[number] | null>(null);
+  readonly selectedAddressIsDefault = computed(() => {
+    if (this.addressMode() === 'default') return true;
+    const def = this.defaultAddress();
+    if (!def) return false;
+    const curDetail = this.detail().trim();
+    const defDetail = (def.detail || def.address || '').trim();
+    return (curDetail.length > 0 && curDetail === defDetail) || this.phone().trim() === (def.phone || '').trim();
+  });
 
   readonly voucherError = signal<string | null>(null);
   /** Mã ví đang áp. Ví là nơi chọn; trang chỉ ghi lại để báo giá và đặt đơn. */
@@ -140,6 +148,7 @@ export class CheckoutShippingPage {
   private qrTimerId: number | null = null;
   readonly qrTimedOut = computed(() => this.qrSeconds() === 0);
   readonly switchingToCod = signal(false);
+  readonly confirmingPayment = signal(false);
 
   readonly pendingOrderCode = computed(() => this.pendingOrder()?.order_code || 'VLR-2026-DEMO');
   readonly qrImageUrl = computed(() => {
@@ -222,15 +231,46 @@ export class CheckoutShippingPage {
   }
 
   /**
+   * Chuẩn hóa số điện thoại Việt Nam (+84, 84, 0084, dấu cách, dấu gạch nối) thành 0xxxxxxxxx.
+   */
+  normalizeVnPhone(raw: string): string {
+    let p = String(raw || '').trim().replace(/[\s\-\.]/g, '');
+    if (p.startsWith('+84')) p = '0' + p.slice(3);
+    else if (p.startsWith('84') && (p.length === 11 || p.length === 12)) p = '0' + p.slice(2);
+    else if (p.startsWith('0084')) p = '0' + p.slice(4);
+    return p;
+  }
+
+  onPhoneInput(field: 'phone' | 'otherPhone', event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const normalized = this.normalizeVnPhone(input.value);
+    input.value = normalized;
+    if (field === 'phone') {
+      this.phone.set(normalized);
+    } else {
+      this.otherPhone.set(normalized);
+    }
+  }
+
+  onPhoneBlur(field: 'phone' | 'otherPhone', event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const normalized = this.normalizeVnPhone(input.value);
+    input.value = normalized;
+    if (field === 'phone') {
+      this.phone.set(normalized);
+    } else {
+      this.otherPhone.set(normalized);
+    }
+  }
+
+  /**
    * Updates a shipping form field from the original checkout inputs.
    */
   setField(field: 'name' | 'phone' | 'email' | 'province' | 'district' | 'ward' | 'detail' | 'note', event: Event): void {
     let value = (event.target as HTMLInputElement | HTMLTextAreaElement).value;
     if (field === 'phone') {
-      let p = value.trim().replace(/[\s\-\.]/g, '');
-      if (p.startsWith('+84')) p = '0' + p.slice(3);
-      else if (p.startsWith('84') && p.length === 11) p = '0' + p.slice(2);
-      value = p;
+      value = this.normalizeVnPhone(value);
+      (event.target as HTMLInputElement).value = value;
     }
     const fields = {
       name: this.name,
@@ -284,10 +324,10 @@ export class CheckoutShippingPage {
   }
 
   setOtherPhone(event: Event): void {
-    let p = (event.target as HTMLInputElement).value.trim().replace(/[\s\-\.]/g, '');
-    if (p.startsWith('+84')) p = '0' + p.slice(3);
-    else if (p.startsWith('84') && p.length === 11) p = '0' + p.slice(2);
-    this.otherPhone.set(p);
+    const input = event.target as HTMLInputElement;
+    const normalized = this.normalizeVnPhone(input.value);
+    input.value = normalized;
+    this.otherPhone.set(normalized);
   }
 
   toggleVatInvoice(): void {
@@ -335,7 +375,7 @@ export class CheckoutShippingPage {
       const def = this.defaultAddress() || this.savedAddresses()[0];
       if (def) {
         if (def.name) this.name.set(def.name);
-        if (def.phone) this.phone.set(def.phone);
+        if (def.phone) this.phone.set(this.normalizeVnPhone(def.phone));
         this.detail.set(def.detail || def.address || '');
         this.province.set(def.province || '');
         this.district.set(def.district || '');
@@ -361,14 +401,14 @@ export class CheckoutShippingPage {
 
   selectSavedAddress(addr: NonNullable<MemberProfile['saved_addresses']>[number]): void {
     if (addr.name) this.name.set(addr.name);
-    if (addr.phone) this.phone.set(addr.phone);
+    if (addr.phone) this.phone.set(this.normalizeVnPhone(addr.phone));
     if (addr.detail || addr.address) {
       this.detail.set(addr.detail || addr.address || '');
     }
     if (addr.province) this.province.set(addr.province);
     if (addr.district) this.district.set(addr.district);
     if (addr.ward) this.ward.set(addr.ward);
-    this.addressMode.set('saved');
+    this.addressMode.set(addr.is_default ? 'default' : 'saved');
     this.saveNewAddress.set(false);
     this.addressModalOpen.set(false);
     showToast('Đã chọn địa chỉ từ sổ địa chỉ');
@@ -585,10 +625,24 @@ export class CheckoutShippingPage {
   confirmDemoPayment(): void {
     const order = this.pendingOrder();
     const items = this.pendingItems();
-    if (!order) return;
-    this.clearQrTimer();
-    this.qrModalOpen.set(false);
-    this.finishOrder(order, items, this.payment().toUpperCase());
+    if (!order || !order.order_id) {
+      showToast('Không tìm thấy thông tin đơn hàng để xác nhận.');
+      return;
+    }
+    this.confirmingPayment.set(true);
+    this.api.post<{ success: boolean; message?: string }>(`/api/user/orders/${order.order_id}/confirm-payment`, {}).subscribe({
+      next: () => {
+        this.confirmingPayment.set(false);
+        this.clearQrTimer();
+        this.qrModalOpen.set(false);
+        showToast('✓ Đã xác nhận thanh toán thành công! Đơn hàng đang được chuẩn bị.');
+        this.finishOrder({ ...order, payment_method: this.payment().toUpperCase() }, items, this.payment().toUpperCase());
+      },
+      error: (err: Error) => {
+        this.confirmingPayment.set(false);
+        showToast(err.message || 'Không thể xác nhận thanh toán. Bạn có thể thử lại hoặc đổi sang COD.');
+      },
+    });
   }
 
   retryQrPayment(): void {
@@ -925,11 +979,15 @@ export class CheckoutShippingPage {
     return threshold ? `${fee} / Freeship từ ${formatVnd(threshold)}` : fee;
   }
 
-  private composeAddress(): string {
+  composeAddress(): string {
     const d = this.detail().trim();
     const w = this.ward().trim();
     const dist = this.district().trim();
     const p = this.province().trim();
+    if (!w && !dist && !p) return d;
+    if (d && ((w && d.includes(w)) || (dist && d.includes(dist)) || (p && d.includes(p)))) {
+      return d;
+    }
     const parts = [d, w, dist, p].filter(Boolean);
     return parts.length > 0 ? parts.join(', ') : d;
   }
@@ -949,14 +1007,14 @@ export class CheckoutShippingPage {
       this.name.set(profile.full_name);
     }
     if (!this.phone() && profile.phone) {
-      this.phone.set(profile.phone);
+      this.phone.set(this.normalizeVnPhone(profile.phone));
     }
     if (!this.email() && profile.email) {
       this.email.set(profile.email);
     }
     if (!this.detail() && addr) {
       this.name.set(this.name() || addr.name || profile.full_name || '');
-      this.phone.set(this.phone() || addr.phone || profile.phone || '');
+      this.phone.set(this.phone() || this.normalizeVnPhone(addr.phone || profile.phone || ''));
       this.detail.set(addr.detail || addr.address || '');
       if (addr.province) this.province.set(addr.province);
       if (addr.district) this.district.set(addr.district);

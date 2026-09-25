@@ -10,6 +10,7 @@ import { createStripePaymentIntent, refundStripeOrder, STRIPE_CHECKOUT_TTL_SECON
 import { priceOrder, shippingMethodFromClaim } from "./order-pricing.js";
 import { buildCartLines, loadCatalog, loadCategoryTree } from "./cart-catalog.js";
 import { customerCanCancel, customerOrderSteps, orderFacts, orderStatusLabel } from "../orders/order-state-machine.js";
+import { returnWindowOpen } from "./return-window.js";
 import {
   asJsonObject,
   asString,
@@ -180,6 +181,22 @@ export function presentOrderForCustomer(order: JsonObject, items: JsonObject[], 
     visible.tracking_code = null;
     visible.tracking_url = null;
   }
+  let canRequestReturn = false;
+  if (order.status === "delivered") {
+    let deliveredAt: Date | null = null;
+    if (order.delivered_at) {
+      deliveredAt = parseUtcDate(order.delivered_at);
+    } else {
+      const deliveredStep = timeline.find((t) => t.status === "delivered");
+      if (deliveredStep?.at) {
+        deliveredAt = parseUtcDate(deliveredStep.at);
+      }
+    }
+    if (!deliveredAt) {
+      deliveredAt = parseUtcDate(order.updated_at || order.created_at);
+    }
+    canRequestReturn = returnWindowOpen(deliveredAt, new Date());
+  }
   return {
     ...visible,
     items,
@@ -190,7 +207,8 @@ export function presentOrderForCustomer(order: JsonObject, items: JsonObject[], 
     can_pay_again: order.status === "waiting_payment"
       && order.payment_method === "ONLINE_PAYMENT"
       && Date.now() - createdAt < PAY_AGAIN_WINDOW_MS,
-    pay_again_until: order.status === "waiting_payment" ? new Date(createdAt + PAY_AGAIN_WINDOW_MS).toISOString() : null
+    pay_again_until: order.status === "waiting_payment" ? new Date(createdAt + PAY_AGAIN_WINDOW_MS).toISOString() : null,
+    can_request_return: canRequestReturn
   };
 }
 
@@ -220,6 +238,30 @@ async function attachProductMeta(items: JsonObject[]): Promise<JsonObject[]> {
 }
 
 /**
+ * Định dạng ghi chú nội bộ cho đơn hàng từ các tùy chọn thông minh phong cách Coolmate
+ * (Mã giới thiệu, quà tặng kèm lời chúc, người nhận thay thế, thông tin xuất hóa đơn VAT).
+ */
+export function formatOrderInternalNote(body: JsonObject, existingNote?: string): string {
+  const parts: string[] = [];
+  if (body.note) parts.push(`[Ghi chú khách]: ${String(body.note).trim()}`);
+  if (body.referral_code) parts.push(`[Mã giới thiệu]: ${String(body.referral_code).trim()}`);
+  if (body.is_gift) {
+    const gender = body.gift_gender === 'nu' ? 'Nữ' : 'Nam';
+    const name = body.gift_name ? String(body.gift_name).trim() : 'Người nhận';
+    const msg = body.gift_message ? ` - Lời chúc: "${String(body.gift_message).trim()}"` : '';
+    parts.push(`[Quà tặng - Dành cho ${gender}]: ${name}${msg}`);
+  }
+  if (body.is_other_recipient && (body.other_name || body.other_phone)) {
+    parts.push(`[Người nhận khác]: ${String(body.other_name || '').trim()} - SĐT: ${String(body.other_phone || '').trim()}`);
+  }
+  if (body.is_vat_invoice && body.vat_tax_code) {
+    parts.push(`[Hóa đơn VAT]: Cty ${String(body.vat_company_name || '').trim()} | MST: ${String(body.vat_tax_code).trim()} | Đ/c: ${String(body.vat_company_address || '').trim()} | Email HĐ: ${String(body.vat_email || '').trim()}`);
+  }
+  if (existingNote) parts.push(existingNote);
+  return parts.join('\n');
+}
+
+/**
  * Storefront vouchers and order list/create/status/payment flows.
  */
 export async function handleOrdersRoute(
@@ -238,6 +280,48 @@ export async function handleOrdersRoute(
         profile = requireUserAuth(context);
       } catch {
         profile = null;
+      }
+
+      // GET /api/user/orders/track?code=...&contact=... (Tra cứu công khai cho khách hoặc member)
+      if (action === "track") {
+        const url = new URL(req.url ?? "/", "http://localhost");
+        const code = (url.searchParams.get("code") || "").trim().toUpperCase();
+        const contact = (url.searchParams.get("contact") || url.searchParams.get("phone") || url.searchParams.get("email") || "").trim();
+        if (!code) {
+          throw new HttpError(400, "BAD_REQUEST", "Vui lòng nhập mã đơn hàng");
+        }
+        let order: JsonObject | null = null;
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (uuidRegex.test(code)) {
+          order = await selectOne("orders", { order_id: `eq.${code}` });
+        }
+        if (!order) {
+          order = await selectOne("orders", { order_code: `eq.${quotePostgrestValue(code)}` });
+        }
+        if (!order) {
+          throw new HttpError(404, "NOT_FOUND", "Không tìm thấy đơn hàng");
+        }
+
+        const isOwner = profile && profile.user_id === order.user_id;
+        const normContact = contact.toLowerCase().replace(/\s/g, "");
+        const normPhone = String(order.shipping_phone || "").replace(/\D/g, "");
+        const normEmail = String(order.shipping_email || "").toLowerCase().trim();
+        const contactMatches = Boolean(contact) && (
+          normContact === normEmail ||
+          (contact.replace(/\D/g, "") && contact.replace(/\D/g, "") === normPhone)
+        );
+
+        if (!isOwner && !contactMatches) {
+          throw new HttpError(404, "NOT_FOUND", "Mã đơn hàng hoặc thông tin liên hệ (SĐT/Email) không khớp");
+        }
+
+        const [{ rows: items }, { rows: history }, { rows: payments }] = await Promise.all([
+          selectRows("order_item", { order_id: `eq.${order.order_id}` }),
+          selectRows("order_status_history", { order_id: `eq.${order.order_id}`, select: "new_status,changed_at" }),
+          selectRows("payment", { order_id: `eq.${order.order_id}`, select: "payment_status,gateway_response_code,created_at" })
+        ]);
+        const itemsWithProduct = await attachProductMeta(items);
+        return sendJson(res, 200, { success: true, order: presentOrderForCustomer(order, itemsWithProduct, history, payments) }, corsHeaders);
       }
 
       // GET /api/user/orders/:id (Action contains the ID if present)
@@ -279,6 +363,76 @@ export async function handleOrdersRoute(
         }
         return sendJson(res, 200, { success: true, orders: ordersWithItems }, corsHeaders);
       }
+    }
+
+    // PATCH /api/user/orders/track hoặc POST /api/user/orders/track — Huỷ đơn qua mã đơn + xác thực
+    if ((req.method === "PATCH" || req.method === "POST") && action === "track") {
+      const body = await readJson(req);
+      const cleanCode = String(body.order_code || "").trim().toUpperCase();
+      const cleanContact = String(body.contact || body.phone || body.email || "").trim();
+      const reason = body.reason;
+      if (!cleanCode || !cleanContact) {
+        throw new HttpError(400, "BAD_REQUEST", "Thiếu mã đơn hàng hoặc thông tin liên hệ");
+      }
+      let order = await selectOne("orders", { order_code: `eq.${cleanCode}` });
+      if (!order && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanCode)) {
+        order = await selectOne("orders", { order_id: `eq.${cleanCode}` });
+      }
+      if (!order) {
+        throw new HttpError(404, "NOT_FOUND", "Không tìm thấy đơn hàng");
+      }
+
+      let profile: UserProfile | null = null;
+      try {
+        profile = requireUserAuth(context);
+      } catch {
+        profile = null;
+      }
+
+      const isOwner = profile && profile.user_id === order.user_id;
+      const normContact = cleanContact.toLowerCase().replace(/\s/g, "");
+      const normPhone = String(order.shipping_phone || "").replace(/\D/g, "");
+      const normEmail = String(order.shipping_email || "").toLowerCase().trim();
+      const contactMatches = (
+        normContact === normEmail ||
+        (cleanContact.replace(/\D/g, "") && cleanContact.replace(/\D/g, "") === normPhone)
+      );
+
+      if (!isOwner && !contactMatches) {
+        throw new HttpError(404, "NOT_FOUND", "Mã đơn hàng hoặc thông tin liên hệ không khớp");
+      }
+
+      if (order.status !== "pending" && order.status !== "waiting_payment") {
+        throw new HttpError(400, "CANNOT_CANCEL", "Đơn hàng đã được chuẩn bị hoặc giao cho ĐVVC, không thể tự hủy.");
+      }
+
+      const cancelReason = String(reason || "Khách hàng tự huỷ").trim().slice(0, 300);
+      try {
+        await callRpc("velura_order_service_action", {
+          p_order_id: order.order_id,
+          p_action: "customer_cancel",
+          p_actor_id: order.user_id || "guest",
+          p_note: cancelReason,
+          p_payload: { cancel_reason: cancelReason },
+          p_expected_version: null
+        });
+      } catch {
+        await updateRows("orders", { order_id: `eq.${order.order_id}` }, {
+          status: "cancelled",
+          cancelled_reason: cancelReason,
+          updated_at: new Date().toISOString()
+        });
+        await insertRow("order_status_history", {
+          order_id: order.order_id,
+          old_status: order.status,
+          new_status: "cancelled",
+          trigger_type: "customer",
+          changed_by: isOwner ? profile?.user_id : "guest",
+          changed_at: new Date().toISOString(),
+          note: cancelReason
+        });
+      }
+      return sendJson(res, 200, { success: true, message: "Hủy đơn hàng thành công" }, corsHeaders);
     }
 
     if (req.method === "PATCH") {
@@ -614,10 +768,15 @@ export async function handleOrdersRoute(
         guestUser.email = guestUser.email || sessionState.email;
       }
 
+      const orderCode = generateOrderCode();
+      assertStripeReady(payment_method);
+      const dbPaymentMethod = (payment_method === "COD" || payment_method === "cod") ? "COD" : "ONLINE_PAYMENT";
+      const guestTotal = Math.max(0, guestPriced.subtotal + guestPriced.shippingFee - guestVoucher.discountAmount);
+
       const shipping_email = body.shipping_email || order.shipping_email;
       if (shipping_email || guestUser.email) {
         const targetEmail = shipping_email || guestUser.email;
-        const emailBody = `Chào ${shipping_name},\n\nTài khoản thành viên của bạn đã được tạo thành công dựa trên đơn đặt hàng.\n\nThông tin đăng nhập:\n- Số điện thoại: ${phone}\n- Mật khẩu tạm thời: ${tempPassword}\n\nVui lòng đăng nhập và đổi mật khẩu sớm nhất có thể.`;
+        const emailBody = `Chào ${shipping_name},\n\nĐơn hàng ${orderCode} của bạn đã được đặt thành công!\nTổng giá trị: ${guestTotal.toLocaleString('vi-VN')} đ\nPhương thức thanh toán: ${dbPaymentMethod === "COD" ? "Thanh toán khi nhận hàng (COD)" : "Thanh toán trực tuyến"}\nĐịa chỉ nhận: ${shipping_address}\n\nTra cứu đơn hàng tại: https://velura.royalai.dev/account/track?code=${orderCode}\n\nThông tin đăng nhập tài khoản:\n- Số điện thoại: ${phone}\n- Mật khẩu tạm thời: ${tempPassword}`;
         
         const emailHtml = `
           <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eaeaea; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
@@ -625,23 +784,26 @@ export async function handleOrdersRoute(
               <h1 style="color: #d1b8a8; margin: 0; font-size: 32px; letter-spacing: 4px; font-weight: 700;">VELURA</h1>
             </div>
             <div style="padding: 32px; background-color: #fff;">
-              <h2 style="color: #333; margin-top: 0; font-size: 22px;">Chào mừng thành viên mới!</h2>
+              <h2 style="color: #333; margin-top: 0; font-size: 22px;">Đặt hàng thành công!</h2>
               <p style="color: #555; line-height: 1.6;">Chào <strong>${shipping_name}</strong>,</p>
-              <p style="color: #555; line-height: 1.6;">Cảm ơn bạn đã đặt hàng! Để giúp bạn dễ dàng theo dõi đơn hàng và nhận các ưu đãi hấp dẫn, tài khoản thành viên của bạn đã được tự động khởi tạo.</p>
+              <p style="color: #555; line-height: 1.6;">Cảm ơn bạn đã mua sắm tại Velura. Đơn hàng của bạn đã được tiếp nhận và đang được xử lý.</p>
               
-              <div style="background-color: #fcfaf8; border-left: 4px solid #d1b8a8; padding: 20px; margin: 28px 0; border-radius: 0 8px 8px 0;">
-                <h3 style="margin-top: 0; color: #333; font-size: 16px; margin-bottom: 16px;">Thông tin đăng nhập của bạn:</h3>
-                <p style="margin: 8px 0; color: #555; display: flex; align-items: center;">
-                  <span style="display: inline-block; width: 120px; color: #777;">Tài khoản:</span> 
-                  <strong>${phone}</strong>
-                </p>
-                <p style="margin: 8px 0; color: #555; display: flex; align-items: center;">
-                  <span style="display: inline-block; width: 120px; color: #777;">Mật khẩu:</span> 
-                  <span style="background-color: #eee; padding: 4px 12px; border-radius: 4px; font-family: monospace; color: #b89b88; font-weight: bold; font-size: 16px; letter-spacing: 1px;">${tempPassword}</span>
-                </p>
+              <div style="background-color: #fcfaf8; border-left: 4px solid #d1b8a8; padding: 20px; margin: 24px 0; border-radius: 0 8px 8px 0;">
+                <h3 style="margin-top: 0; color: #333; font-size: 16px; margin-bottom: 12px;">Thông tin đơn hàng:</h3>
+                <p style="margin: 6px 0; color: #555;">Mã đơn hàng: <strong style="font-size: 18px; color: #7C5454;">${orderCode}</strong></p>
+                <p style="margin: 6px 0; color: #555;">Tổng giá trị: <strong>${guestTotal.toLocaleString('vi-VN')} đ</strong></p>
+                <p style="margin: 6px 0; color: #555;">Phương thức thanh toán: <strong>${dbPaymentMethod === "COD" ? "Thanh toán khi nhận hàng (COD)" : "Thanh toán trực tuyến"}</strong></p>
+                <p style="margin: 6px 0; color: #555;">Địa chỉ giao hàng: <strong>${shipping_address}</strong></p>
               </div>
-              
-              <p style="color: #777; font-size: 14px;">Vui lòng đăng nhập và đổi mật khẩu trong phần <em>Tài khoản</em> của bạn để đảm bảo bảo mật.</p>
+
+              <div style="text-align: center; margin: 28px 0;">
+                <a href="https://velura.royalai.dev/account/track?code=${orderCode}&contact=${encodeURIComponent(String(phone || ''))}" style="display: inline-block; background-color: #7C5454; color: #fff; text-decoration: none; padding: 12px 28px; border-radius: 6px; font-weight: 600;">Tra cứu tiến độ đơn hàng</a>
+              </div>
+
+              <div style="background-color: #f5f5f5; padding: 16px; border-radius: 6px; margin-top: 20px;">
+                <h4 style="margin: 0 0 8px 0; font-size: 14px; color: #555;">Tài khoản thành viên tự động tạo:</h4>
+                <p style="margin: 4px 0; font-size: 13px; color: #666;">Số điện thoại: <strong>${phone}</strong> | Mật khẩu: <span style="font-family: monospace; font-weight: bold;">${tempPassword}</span></p>
+              </div>
             </div>
             <div style="background-color: #f9f9f9; padding: 16px; text-align: center; border-top: 1px solid #eaeaea;">
               <p style="color: #aaa; font-size: 12px; margin: 0;">&copy; ${new Date().getFullYear()} Velura. Mọi quyền được bảo lưu.</p>
@@ -649,16 +811,15 @@ export async function handleOrdersRoute(
           </div>
         `;
         
-        await sendDirectEmail(targetEmail, "Chào mừng bạn đến với Velura", emailBody, emailHtml);
+        await sendDirectEmail(targetEmail, `Xác nhận đơn hàng #${orderCode} tại Velura`, emailBody, emailHtml);
         
-        // Cố gắng lưu vết
         try {
           await insertRow("email_outbox", {
             recipient: targetEmail,
-            template_code: "member_welcome",
-            subject: "Chào mừng bạn đến với Velura",
+            template_code: "order_confirmation",
+            subject: `Xác nhận đơn hàng #${orderCode} tại Velura`,
             body: emailBody,
-            status: "sent", // Already sent directly, don't let worker resend
+            status: "sent",
             created_at: new Date().toISOString()
           });
         } catch {
@@ -666,11 +827,8 @@ export async function handleOrdersRoute(
         }
       }
       
-      const orderCode = generateOrderCode();
-      assertStripeReady(payment_method);
-      const dbPaymentMethod = (payment_method === "COD" || payment_method === "cod") ? "COD" : "ONLINE_PAYMENT";
-      const guestTotal = Math.max(0, guestPriced.subtotal + guestPriced.shippingFee - guestVoucher.discountAmount);
-      
+      const guestInternalNote = formatOrderInternalNote(body, formatOrderInternalNote(order));
+
       const newOrder = asJsonObject(await insertRow("orders", {
         user_id: guestUser.user_id,
         // OPEN-05: đơn online vào Chờ thanh toán ngay khi tạo.
@@ -685,6 +843,7 @@ export async function handleOrdersRoute(
         total_amount: guestTotal,
         payment_method: dbPaymentMethod,
         order_code: orderCode,
+        internal_note: guestInternalNote || null,
         // COD trừ kho ngay lúc tạo; đơn online trừ kho khi tiền về (action payment_succeeded).
         stock_committed_at: dbPaymentMethod === "COD" ? new Date().toISOString() : null,
         created_at: new Date().toISOString(),
@@ -838,6 +997,7 @@ export async function handleOrdersRoute(
         total_amount: memberTotal,
         payment_method: dbPaymentMethod,
         order_code: orderCode,
+        internal_note: formatOrderInternalNote(body) || null,
         // COD trừ kho ngay lúc tạo; đơn online trừ kho khi tiền về (action payment_succeeded).
         stock_committed_at: dbPaymentMethod === "COD" ? new Date().toISOString() : null,
         created_at: new Date().toISOString(),
@@ -874,6 +1034,39 @@ export async function handleOrdersRoute(
 
       if (memberVoucher.voucherId) {
         await recordVoucherRedemption(memberVoucher.voucherId, memberVoucher.discountAmount);
+      }
+
+      const memberTargetEmail = body.shipping_email || profile.email;
+      if (memberTargetEmail) {
+        const emailBody = `Chào ${shipping_name},\n\nĐơn hàng ${orderCode} của bạn đã được đặt thành công!\nTổng giá trị: ${memberTotal.toLocaleString('vi-VN')} đ\nPhương thức thanh toán: ${dbPaymentMethod === "COD" ? "Thanh toán khi nhận hàng (COD)" : "Thanh toán trực tuyến"}\nĐịa chỉ nhận: ${shipping_address}\n\nTra cứu đơn hàng tại: https://velura.royalai.dev/account/track?code=${orderCode}`;
+        const emailHtml = `
+          <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eaeaea; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+            <div style="background-color: #222; padding: 24px; text-align: center;">
+              <h1 style="color: #d1b8a8; margin: 0; font-size: 32px; letter-spacing: 4px; font-weight: 700;">VELURA</h1>
+            </div>
+            <div style="padding: 32px; background-color: #fff;">
+              <h2 style="color: #333; margin-top: 0; font-size: 22px;">Đặt hàng thành công!</h2>
+              <p style="color: #555; line-height: 1.6;">Chào <strong>${shipping_name}</strong>,</p>
+              <p style="color: #555; line-height: 1.6;">Cảm ơn bạn đã mua sắm tại Velura. Đơn hàng của bạn đã được tiếp nhận và đang được xử lý.</p>
+              
+              <div style="background-color: #fcfaf8; border-left: 4px solid #d1b8a8; padding: 20px; margin: 24px 0; border-radius: 0 8px 8px 0;">
+                <h3 style="margin-top: 0; color: #333; font-size: 16px; margin-bottom: 12px;">Thông tin đơn hàng:</h3>
+                <p style="margin: 6px 0; color: #555;">Mã đơn hàng: <strong style="font-size: 18px; color: #7C5454;">${orderCode}</strong></p>
+                <p style="margin: 6px 0; color: #555;">Tổng giá trị: <strong>${memberTotal.toLocaleString('vi-VN')} đ</strong></p>
+                <p style="margin: 6px 0; color: #555;">Phương thức thanh toán: <strong>${dbPaymentMethod === "COD" ? "Thanh toán khi nhận hàng (COD)" : "Thanh toán trực tuyến"}</strong></p>
+                <p style="margin: 6px 0; color: #555;">Địa chỉ giao hàng: <strong>${shipping_address}</strong></p>
+              </div>
+
+              <div style="text-align: center; margin: 28px 0;">
+                <a href="https://velura.royalai.dev/account/track?code=${orderCode}" style="display: inline-block; background-color: #7C5454; color: #fff; text-decoration: none; padding: 12px 28px; border-radius: 6px; font-weight: 600;">Xem chi tiết đơn hàng</a>
+              </div>
+            </div>
+            <div style="background-color: #f9f9f9; padding: 16px; text-align: center; border-top: 1px solid #eaeaea;">
+              <p style="color: #aaa; font-size: 12px; margin: 0;">&copy; ${new Date().getFullYear()} Velura. Mọi quyền được bảo lưu.</p>
+            </div>
+          </div>
+        `;
+        void sendDirectEmail(memberTargetEmail, `Xác nhận đơn hàng #${orderCode} tại Velura`, emailBody, emailHtml);
       }
 
       await createNotification(

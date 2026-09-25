@@ -21,47 +21,302 @@
     <div class="checkout-grid">
       <div class="checkout-main">
         <section class="card">
-          <div class="card__header">
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-              <path d="M10.5 18.17c1.55-1.34 6.17-5.67 6.17-9.84a4.17 4.17 0 00-8.33 0c0 4.17 4.62 8.5 6.17 9.84z" stroke="#7C5454" stroke-width="1.67" />
-            </svg>
-            <h2 class="section-title">Thông tin giao hàng</h2>
+          <div class="card__header" style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <path d="M10.5 18.17c1.55-1.34 6.17-5.67 6.17-9.84a4.17 4.17 0 00-8.33 0c0 4.17 4.62 8.5 6.17 9.84z" stroke="#7C5454" stroke-width="1.67" />
+              </svg>
+              <h2 class="section-title" style="margin: 0;">Thông tin giao hàng</h2>
+            </div>
+            @if (savedAddresses().length > 0) {
+              <button
+                type="button"
+                class="coolmate-address-book-btn"
+                (click)="openAddressModal()"
+              >
+                📖 Sổ địa chỉ ({{ savedAddresses().length }})
+              </button>
+            }
           </div>
           <div class="form-group">
-            <label for="fullname">Họ và tên</label>
-            <input class="form-input" type="text" id="fullname" placeholder="Nhập họ và tên" [value]="name()" (input)="setField('name', $event)" />
+            <label for="fullname">Họ và tên *</label>
+            <input
+              class="form-input"
+              type="text"
+              id="fullname"
+              autocomplete="name"
+              placeholder="Nhập họ và tên"
+              [value]="name()"
+              (input)="setField('name', $event)"
+              (change)="setField('name', $event)"
+            />
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label for="guest-phone">Số điện thoại</label>
-              <input class="form-input" type="tel" id="guest-phone" placeholder="0901 234 567" [value]="phone()" (input)="setField('phone', $event)" />
+              <label for="guest-phone">Số điện thoại *</label>
+              <input
+                class="form-input"
+                type="tel"
+                id="guest-phone"
+                autocomplete="tel"
+                placeholder="0901 234 567"
+                [value]="phone()"
+                (input)="setField('phone', $event)"
+                (change)="setField('phone', $event)"
+              />
             </div>
             <div class="form-group">
-              <label for="guest-email">Email</label>
-              <input class="form-input" type="email" id="guest-email" placeholder="email@example.com" [value]="email()" (input)="setField('email', $event)" />
+              <label for="guest-email">Email *</label>
+              <input
+                class="form-input"
+                type="email"
+                id="guest-email"
+                autocomplete="email"
+                placeholder="email@example.com"
+                [value]="email()"
+                (input)="setField('email', $event)"
+                (change)="setField('email', $event)"
+              />
             </div>
           </div>
           <div class="form-row form-row--three">
             <div class="form-group">
               <label for="address-province">Tỉnh/Thành phố *</label>
-              <input class="form-input" type="text" id="address-province" placeholder="Chọn Tỉnh/Thành phố" [value]="province()" (input)="setField('province', $event)" />
+              <input
+                class="form-input"
+                type="text"
+                id="address-province"
+                autocomplete="address-level1"
+                placeholder="Chọn Tỉnh/Thành phố"
+                [value]="province()"
+                (input)="setField('province', $event)"
+                (change)="setField('province', $event)"
+              />
             </div>
             <div class="form-group">
               <label for="address-district">Quận/Huyện *</label>
-              <input class="form-input" type="text" id="address-district" placeholder="Chọn Quận/Huyện" [value]="district()" (input)="setField('district', $event)" />
+              <input
+                class="form-input"
+                type="text"
+                id="address-district"
+                autocomplete="address-level2"
+                placeholder="Chọn Quận/Huyện"
+                [value]="district()"
+                (input)="setField('district', $event)"
+                (change)="setField('district', $event)"
+              />
             </div>
             <div class="form-group">
               <label for="address-ward">Phường/Xã *</label>
-              <input class="form-input" type="text" id="address-ward" placeholder="Chọn Phường/Xã" [value]="ward()" (input)="setField('ward', $event)" />
+              <input
+                class="form-input"
+                type="text"
+                id="address-ward"
+                autocomplete="address-level3"
+                placeholder="Chọn Phường/Xã"
+                [value]="ward()"
+                (input)="setField('ward', $event)"
+                (change)="setField('ward', $event)"
+              />
             </div>
           </div>
           <div class="form-group">
             <label for="guest-address-detail">Địa chỉ cụ thể *</label>
-            <input class="form-input" type="text" id="guest-address-detail" placeholder="Số nhà, tên đường" [value]="detail()" (input)="setField('detail', $event)" />
+            <input
+              class="form-input"
+              type="text"
+              id="guest-address-detail"
+              autocomplete="street-address"
+              placeholder="Số nhà, tên đường"
+              [value]="detail()"
+              (input)="setField('detail', $event)"
+              (change)="setField('detail', $event)"
+            />
           </div>
+
+          <!-- Coolmate: Gọi người khác nhận hàng -->
+          <div class="coolmate-toggle-box">
+            <label class="coolmate-checkbox-label">
+              <input
+                type="checkbox"
+                [checked]="isOtherRecipient()"
+                (change)="toggleOtherRecipient()"
+              />
+              <span class="coolmate-checkbox-title">Gọi người khác nhận hàng (nếu có)</span>
+            </label>
+            @if (isOtherRecipient()) {
+              <div class="coolmate-expandable-fields">
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Họ và tên người nhận thay</label>
+                    <input
+                      type="text"
+                      class="form-input"
+                      placeholder="Tên người nhận thay"
+                      [value]="otherName()"
+                      (input)="setOtherName($event)"
+                    />
+                  </div>
+                  <div class="form-group">
+                    <label>Số điện thoại người nhận thay</label>
+                    <input
+                      type="tel"
+                      class="form-input"
+                      placeholder="09xx xxx xxx"
+                      [value]="otherPhone()"
+                      (input)="setOtherPhone($event)"
+                    />
+                  </div>
+                </div>
+              </div>
+            }
+          </div>
+
+          <!-- Coolmate: Giờ hành chính delivery banner -->
+          <div class="coolmate-delivery-notice">
+            <div class="coolmate-delivery-notice__content">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+              </svg>
+              <span>Đơn hàng được giao trong giờ hành chính (thứ 2 đến thứ 7).</span>
+              <button type="button" class="coolmate-link-btn" (click)="toggleDeliveryPolicy()">
+                {{ showDeliveryPolicy() ? 'Ẩn chi tiết' : 'Xem chi tiết' }}
+              </button>
+            </div>
+            @if (showDeliveryPolicy()) {
+              <div class="coolmate-delivery-policy-detail">
+                <p>• Thời gian giao hàng: từ 8h00 - 17h30 các ngày từ Thứ Hai đến Thứ Bảy (không tính Chủ Nhật & ngày lễ).</p>
+                <p>• Đối với đơn giao tại cơ quan/văn phòng, shipper sẽ liên hệ trước để đảm bảo bạn có mặt nhận hàng.</p>
+                <p>• Nếu bạn bận hoặc cần đổi thời gian giao, có thể hẹn lại với shipper hoặc nhân viên CSKH qua hotline 1900 1212.</p>
+              </div>
+            }
+          </div>
+
           <div class="form-group">
-            <label for="guest-note">Ghi chú (tùy chọn)</label>
-            <textarea class="form-textarea" id="guest-note" placeholder="Ghi chú về đơn hàng..." [value]="note()" (input)="setField('note', $event)"></textarea>
+            <label for="guest-note">Ghi chú khác</label>
+            <textarea
+              class="form-textarea"
+              id="guest-note"
+              placeholder="Ghi chú khác về giao hàng hoặc yêu cầu đặc biệt..."
+              [value]="note()"
+              (input)="setField('note', $event)"
+            ></textarea>
+          </div>
+
+          <!-- Coolmate: Quà tặng Người thân/Bạn bè -->
+          <div class="coolmate-toggle-box">
+            <label class="coolmate-checkbox-label">
+              <input
+                type="checkbox"
+                [checked]="isGift()"
+                (change)="toggleGift()"
+              />
+              <span class="coolmate-checkbox-title">🎁 Quà tặng Người thân / Bạn bè</span>
+            </label>
+            @if (isGift()) {
+              <div class="coolmate-expandable-fields">
+                <div class="form-group">
+                  <label>Người nhận là</label>
+                  <div class="coolmate-gender-pills">
+                    <button
+                      type="button"
+                      class="coolmate-gender-pill"
+                      [class.is-active]="giftGender() === 'nam'"
+                      (click)="setGiftGender('nam')"
+                    >
+                      Nam
+                    </button>
+                    <button
+                      type="button"
+                      class="coolmate-gender-pill"
+                      [class.is-active]="giftGender() === 'nu'"
+                      (click)="setGiftGender('nu')"
+                    >
+                      Nữ
+                    </button>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label>Họ và tên người nhận quà</label>
+                  <input
+                    type="text"
+                    class="form-input"
+                    placeholder="Nhập họ và tên người nhận quà"
+                    [value]="giftName()"
+                    (input)="setGiftName($event)"
+                  />
+                </div>
+                <div class="form-group">
+                  <label>Lời chúc</label>
+                  <textarea
+                    class="form-textarea"
+                    placeholder="Gửi gắm thông điệp hoặc lời chúc yêu thương..."
+                    [value]="giftMessage()"
+                    (input)="setGiftMessage($event)"
+                  ></textarea>
+                </div>
+              </div>
+            }
+          </div>
+
+          <!-- Coolmate: Xuất hoá đơn VAT và quản lý ở đơn -->
+          <div class="coolmate-toggle-box">
+            <label class="coolmate-checkbox-label">
+              <input
+                type="checkbox"
+                [checked]="isVatInvoice()"
+                (change)="toggleVatInvoice()"
+              />
+              <span class="coolmate-checkbox-title">🧾 Xuất hoá đơn VAT và quản lý ở đơn</span>
+            </label>
+            @if (isVatInvoice()) {
+              <div class="coolmate-expandable-fields">
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Tên công ty *</label>
+                    <input
+                      type="text"
+                      class="form-input"
+                      placeholder="Công ty TNHH / Cổ phần..."
+                      [value]="vatCompanyName()"
+                      (input)="setVatField('company', $event)"
+                    />
+                  </div>
+                  <div class="form-group">
+                    <label>Mã số thuế (MST) *</label>
+                    <input
+                      type="text"
+                      class="form-input"
+                      placeholder="Mã số thuế doanh nghiệp"
+                      [value]="vatTaxCode()"
+                      (input)="setVatField('tax', $event)"
+                    />
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label>Địa chỉ công ty</label>
+                  <input
+                    type="text"
+                    class="form-input"
+                    placeholder="Địa chỉ trụ sở theo đăng ký kinh doanh"
+                    [value]="vatCompanyAddress()"
+                    (input)="setVatField('address', $event)"
+                  />
+                </div>
+                <div class="form-group">
+                  <label>Email nhận hoá đơn điện tử</label>
+                  <input
+                    type="email"
+                    class="form-input"
+                    placeholder="ketoan@company.com"
+                    [value]="vatEmail()"
+                    (input)="setVatField('email', $event)"
+                  />
+                </div>
+              </div>
+            }
           </div>
         </section>
 
@@ -272,6 +527,33 @@
             </article>
           }
         </div>
+
+        <!-- Coolmate: Mã giới thiệu bạn bè -->
+        <div class="coolmate-referral-checkout" style="margin-bottom: 16px; padding: 12px; background: #fff; border-radius: 8px; border: 1px solid var(--line, #e8dfd6);">
+          <label style="display: block; font-size: 0.8125rem; font-weight: 600; color: var(--dark, #2a2522); margin-bottom: 6px;">Mã giới thiệu bạn bè</label>
+          <div style="display: flex; gap: 8px;">
+            <input
+              type="text"
+              class="form-input"
+              placeholder="Nhập mã giới thiệu..."
+              [value]="referralCode()"
+              (input)="setReferralCode($event)"
+              style="padding: 8px 12px; font-size: 0.8125rem;"
+            />
+            <button
+              type="button"
+              class="btn btn--outline btn--sm"
+              style="white-space: nowrap; padding: 8px 14px; font-size: 0.8125rem; font-weight: 600;"
+              (click)="applyReferralCode()"
+            >
+              {{ referralApplied() ? 'Đã lưu' : 'Áp dụng' }}
+            </button>
+          </div>
+          @if (referralApplied()) {
+            <span style="display: block; margin-top: 6px; font-size: 0.75rem; color: #2e7d32; font-weight: 500;">✓ Mã giới thiệu sẽ được áp dụng vào đơn</span>
+          }
+        </div>
+
         <app-voucher-wallet
           [orderValue]="subtotal()"
           [shippingFee]="shippingFee()"
@@ -385,6 +667,53 @@
           <button type="button" class="btn btn--primary" (click)="confirmDemoPayment()">
             ✓ Tôi đã chuyển khoản thành công (Xác nhận Demo)
           </button>
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (addressModalOpen()) {
+    <div class="address-book-modal-backdrop" (click)="closeAddressModal()">
+      <div class="address-book-modal" (click)="$event.stopPropagation()">
+        <div class="address-book-modal__header">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 1.25rem;">📖</span>
+            <h3 style="margin: 0; font-family: 'Playfair Display', serif; font-size: 1.25rem;">Sổ địa chỉ đã lưu</h3>
+          </div>
+          <button type="button" class="address-book-modal__close" (click)="closeAddressModal()" aria-label="Đóng">&times;</button>
+        </div>
+        <div class="address-book-modal__body">
+          @if (savedAddresses().length === 0) {
+            <p style="text-align: center; color: var(--muted, #8c857e); padding: 24px 0;">Bạn chưa có địa chỉ nào được lưu trong sổ địa chỉ.</p>
+          } @else {
+            <div class="address-book-list">
+              @for (addr of savedAddresses(); track addr.address || addr.detail) {
+                <div class="address-book-card" [class.is-default]="addr.is_default">
+                  <div class="address-book-card__main">
+                    <div class="address-book-card__top">
+                      <span class="address-book-card__name">{{ addr.name || name() }}</span>
+                      <span class="address-book-card__divider">|</span>
+                      <span class="address-book-card__phone">{{ addr.phone || phone() }}</span>
+                      @if (addr.is_default) {
+                        <span class="address-book-card__badge">Mặc định</span>
+                      }
+                    </div>
+                    <p class="address-book-card__addr">{{ addr.detail || addr.address }}</p>
+                  </div>
+                  <button
+                    type="button"
+                    class="btn btn--primary btn--sm"
+                    (click)="selectSavedAddress(addr)"
+                  >
+                    Chọn địa chỉ này
+                  </button>
+                </div>
+              }
+            </div>
+          }
+        </div>
+        <div class="address-book-modal__footer">
+          <button type="button" class="btn btn--outline" (click)="closeAddressModal()">Đóng</button>
         </div>
       </div>
     </div>

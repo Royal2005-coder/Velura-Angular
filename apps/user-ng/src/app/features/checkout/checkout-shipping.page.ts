@@ -66,11 +66,33 @@ export class CheckoutShippingPage {
   readonly name = signal(this.checkout.shipping().name);
   readonly phone = signal(this.checkout.shipping().phone);
   readonly email = signal(this.checkout.shipping().email);
-  readonly province = signal('');
-  readonly district = signal('');
-  readonly ward = signal('');
-  readonly detail = signal(this.checkout.shipping().address);
+  readonly province = signal(this.checkout.shipping().province || '');
+  readonly district = signal(this.checkout.shipping().district || '');
+  readonly ward = signal(this.checkout.shipping().ward || '');
+  readonly detail = signal(this.checkout.shipping().detail || this.checkout.shipping().address);
   readonly note = signal(this.checkout.shipping().note || '');
+
+  /** Coolmate options: mã giới thiệu, quà tặng, người nhận khác, hóa đơn VAT, giao hàng HC */
+  readonly referralCode = signal(this.checkout.shipping().referral_code || '');
+  readonly referralApplied = signal(Boolean(this.checkout.shipping().referral_code));
+  readonly isGift = signal(this.checkout.shipping().is_gift || false);
+  readonly giftGender = signal<'nam' | 'nu'>(this.checkout.shipping().gift_gender || 'nam');
+  readonly giftName = signal(this.checkout.shipping().gift_name || '');
+  readonly giftMessage = signal(this.checkout.shipping().gift_message || '');
+  readonly isOtherRecipient = signal(this.checkout.shipping().is_other_recipient || false);
+  readonly otherName = signal(this.checkout.shipping().other_name || '');
+  readonly otherPhone = signal(this.checkout.shipping().other_phone || '');
+  readonly isVatInvoice = signal(this.checkout.shipping().is_vat_invoice || false);
+  readonly vatCompanyName = signal(this.checkout.shipping().vat_company_name || '');
+  readonly vatTaxCode = signal(this.checkout.shipping().vat_tax_code || '');
+  readonly vatCompanyAddress = signal(this.checkout.shipping().vat_company_address || '');
+  readonly vatEmail = signal(this.checkout.shipping().vat_email || '');
+  readonly showDeliveryPolicy = signal(false);
+
+  /** Member address book */
+  readonly savedAddresses = signal<NonNullable<MemberProfile['saved_addresses']>>([]);
+  readonly addressModalOpen = signal(false);
+
   readonly voucherError = signal<string | null>(null);
   /** Mã ví đang áp. Ví là nơi chọn; trang chỉ ghi lại để báo giá và đặt đơn. */
   readonly selectedVoucherId = signal<string | null>(localStorage.getItem('checkout_voucher_id'));
@@ -219,6 +241,83 @@ export class CheckoutShippingPage {
    */
   setPayment(value: string): void {
     this.payment.set(value);
+  }
+
+  toggleGift(): void {
+    this.isGift.update((v) => !v);
+  }
+
+  setGiftGender(gender: 'nam' | 'nu'): void {
+    this.giftGender.set(gender);
+  }
+
+  setGiftName(event: Event): void {
+    this.giftName.set((event.target as HTMLInputElement).value);
+  }
+
+  setGiftMessage(event: Event): void {
+    this.giftMessage.set((event.target as HTMLTextAreaElement).value);
+  }
+
+  toggleOtherRecipient(): void {
+    this.isOtherRecipient.update((v) => !v);
+  }
+
+  setOtherName(event: Event): void {
+    this.otherName.set((event.target as HTMLInputElement).value);
+  }
+
+  setOtherPhone(event: Event): void {
+    this.otherPhone.set((event.target as HTMLInputElement).value);
+  }
+
+  toggleVatInvoice(): void {
+    this.isVatInvoice.update((v) => !v);
+  }
+
+  setVatField(field: 'company' | 'tax' | 'address' | 'email', event: Event): void {
+    const val = (event.target as HTMLInputElement).value;
+    if (field === 'company') this.vatCompanyName.set(val);
+    else if (field === 'tax') this.vatTaxCode.set(val);
+    else if (field === 'address') this.vatCompanyAddress.set(val);
+    else if (field === 'email') this.vatEmail.set(val);
+  }
+
+  setReferralCode(event: Event): void {
+    this.referralCode.set((event.target as HTMLInputElement).value);
+  }
+
+  applyReferralCode(): void {
+    const code = this.referralCode().trim();
+    if (!code) {
+      this.referralApplied.set(false);
+      showToast('Đã xóa mã giới thiệu');
+      return;
+    }
+    this.referralApplied.set(true);
+    showToast(`Đã ghi nhận mã giới thiệu: ${code}`);
+  }
+
+  toggleDeliveryPolicy(): void {
+    this.showDeliveryPolicy.update((v) => !v);
+  }
+
+  openAddressModal(): void {
+    this.addressModalOpen.set(true);
+  }
+
+  closeAddressModal(): void {
+    this.addressModalOpen.set(false);
+  }
+
+  selectSavedAddress(addr: NonNullable<MemberProfile['saved_addresses']>[number]): void {
+    if (addr.name) this.name.set(addr.name);
+    if (addr.phone) this.phone.set(addr.phone);
+    if (addr.detail || addr.address) {
+      this.detail.set(addr.detail || addr.address || '');
+    }
+    this.addressModalOpen.set(false);
+    showToast('Đã chọn địa chỉ giao hàng');
   }
 
   /**
@@ -501,8 +600,44 @@ export class CheckoutShippingPage {
       showToast('Đang tính lại tổng tiền, vui lòng đợi trong giây lát.');
       return;
     }
+    if (this.isOtherRecipient()) {
+      const oPhone = this.otherPhone().trim();
+      if (oPhone && !/^0\d{9}$/.test(oPhone.replace(/\s/g, ''))) {
+        showToast('Số điện thoại người nhận thay không hợp lệ (10 số, bắt đầu bằng 0)!');
+        return;
+      }
+    }
+    if (this.isVatInvoice()) {
+      if (!this.vatCompanyName().trim() || !this.vatTaxCode().trim()) {
+        showToast('Vui lòng điền Tên công ty và Mã số thuế để xuất hoá đơn VAT!');
+        return;
+      }
+    }
     const paymentMethod = this.payment().toUpperCase();
-    this.checkout.saveShipping({ name, phone, email, address, note: this.note().trim() });
+    this.checkout.saveShipping({
+      name,
+      phone,
+      email,
+      address,
+      note: this.note().trim(),
+      province: this.province().trim(),
+      district: this.district().trim(),
+      ward: this.ward().trim(),
+      detail: this.detail().trim(),
+      referral_code: this.referralCode().trim(),
+      is_gift: this.isGift(),
+      gift_gender: this.giftGender(),
+      gift_name: this.giftName().trim(),
+      gift_message: this.giftMessage().trim(),
+      is_other_recipient: this.isOtherRecipient(),
+      other_name: this.otherName().trim(),
+      other_phone: this.otherPhone().trim(),
+      is_vat_invoice: this.isVatInvoice(),
+      vat_company_name: this.vatCompanyName().trim(),
+      vat_tax_code: this.vatTaxCode().trim(),
+      vat_company_address: this.vatCompanyAddress().trim(),
+      vat_email: this.vatEmail().trim(),
+    });
     this.checkout.saveMethods({
       shippingMethod: this.shipping(),
       shippingFee: this.shippingFee(),
@@ -523,6 +658,20 @@ export class CheckoutShippingPage {
       payment_method: paymentMethod,
       shipping_email: email,
       items,
+      note: this.note().trim(),
+      referral_code: this.referralCode().trim(),
+      is_gift: this.isGift(),
+      gift_gender: this.giftGender(),
+      gift_name: this.giftName().trim(),
+      gift_message: this.giftMessage().trim(),
+      is_other_recipient: this.isOtherRecipient(),
+      other_name: this.otherName().trim(),
+      other_phone: this.otherPhone().trim(),
+      is_vat_invoice: this.isVatInvoice(),
+      vat_company_name: this.vatCompanyName().trim(),
+      vat_tax_code: this.vatTaxCode().trim(),
+      vat_company_address: this.vatCompanyAddress().trim(),
+      vat_email: this.vatEmail().trim(),
     };
 
     this.submitting.set(true);
@@ -598,6 +747,20 @@ export class CheckoutShippingPage {
             payment_method: paymentMethod,
             email,
             items,
+            note: payload.note,
+            referral_code: payload.referral_code,
+            is_gift: payload.is_gift,
+            gift_gender: payload.gift_gender,
+            gift_name: payload.gift_name,
+            gift_message: payload.gift_message,
+            is_other_recipient: payload.is_other_recipient,
+            other_name: payload.other_name,
+            other_phone: payload.other_phone,
+            is_vat_invoice: payload.is_vat_invoice,
+            vat_company_name: payload.vat_company_name,
+            vat_tax_code: payload.vat_tax_code,
+            vat_company_address: payload.vat_company_address,
+            vat_email: payload.vat_email,
           });
           showToast('Mã xác thực OTP đã được gửi!');
           void this.router.navigateByUrl('/checkout/otp');
@@ -661,17 +824,20 @@ export class CheckoutShippingPage {
   }
 
   private composeAddress(): string {
-    const existing = this.detail().trim();
-    const parts = [existing, this.ward().trim(), this.district().trim(), this.province().trim()].filter(Boolean);
-    if (parts.length > 1) {
-      return parts.join(', ');
-    }
-    return existing;
+    const d = this.detail().trim();
+    const w = this.ward().trim();
+    const dist = this.district().trim();
+    const p = this.province().trim();
+    const parts = [d, w, dist, p].filter(Boolean);
+    return parts.length > 0 ? parts.join(', ') : d;
   }
 
   private prefillProfile(profile: MemberProfile | null): void {
     if (!profile) {
       return;
+    }
+    if (profile.saved_addresses) {
+      this.savedAddresses.set(profile.saved_addresses);
     }
     const addr = (profile.saved_addresses || []).find((row) => row.is_default) || profile.saved_addresses?.[0];
     if (!this.name() && profile.full_name) {

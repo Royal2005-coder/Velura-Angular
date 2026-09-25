@@ -1,251 +1,395 @@
 <main class="track-order-page">
-      <div class="container">
-        <!-- Breadcrumb & Title -->
-        
+  <div class="container">
+    <div class="track-order-title-block">
+      <h1 class="track-order-title">Theo dõi &amp; Tra cứu đơn hàng</h1>
+      <p class="track-order-subtitle">Cập nhật trạng thái vận chuyển, xử lý hủy đơn và yêu cầu đổi trả theo thời gian thực</p>
+    </div>
 
-        <div class="track-order-title-block">
-          <h1 class="track-order-title">Theo dõi đơn hàng</h1>
-          <p class="track-order-subtitle">Cập nhật trạng thái vận chuyển theo thời gian thực</p>
+    <!-- Search Form -->
+    <div class="track-search-card" style="background: #fff; padding: 20px; border-radius: 12px; border: 1px solid var(--line, #e8dfd6); margin-bottom: 24px; box-shadow: 0 4px 16px rgba(0,0,0,0.03);">
+      <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 14px; align-items: flex-end;">
+        <div class="form-group" style="margin: 0;">
+          <label style="display: block; font-size: 0.8125rem; font-weight: 600; color: var(--dark, #2a2522); margin-bottom: 6px;">Mã đơn hàng *</label>
+          <input
+            type="text"
+            class="form-input"
+            placeholder="VD: VLR-2026-XXXX hoặc #..."
+            [value]="codeQuery()"
+            (input)="onCodeInput($event)"
+            (keydown.enter)="search()"
+            style="width: 100%; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--line, #e8dfd6);"
+          />
         </div>
 
-        <!-- Search Bar -->
-        <div class="track-search-bar">
-          <div class="track-search-input-wrapper">
-            <svg class="track-search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8C857E"
-              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="11" cy="11" r="8" />
-              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+        <div class="form-group" style="margin: 0;">
+          <label style="display: block; font-size: 0.8125rem; font-weight: 600; color: var(--dark, #2a2522); margin-bottom: 6px;">
+            Số điện thoại / Email đặt hàng {{ isLoggedIn() ? '(Tùy chọn)' : '*' }}
+          </label>
+          <input
+            type="text"
+            class="form-input"
+            placeholder="09xx xxx xxx hoặc email..."
+            [value]="contactQuery()"
+            (input)="onContactInput($event)"
+            (keydown.enter)="search()"
+            style="width: 100%; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--line, #e8dfd6);"
+          />
+        </div>
+
+        <button
+          type="button"
+          class="btn btn--primary"
+          style="padding: 11px 28px; border-radius: 8px; font-weight: 600; height: 44px; display: flex; align-items: center; justify-content: center; gap: 6px;"
+          [disabled]="searching()"
+          (click)="search()"
+        >
+          @if (searching()) {
+            <span>Đang tra cứu...</span>
+          } @else {
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
             </svg>
-            <input type="text" id="js-track-search-input" value="" aria-label="Mã đơn hàng cần tra cứu"
-              placeholder="Nhập mã đơn hàng của bạn..." (input)="onInput($event)" />
+            <span>Tra cứu</span>
+          }
+        </button>
+      </div>
+
+      @if (searchError()) {
+        <div style="margin-top: 14px; padding: 10px 14px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; color: #b91c1c; font-size: 0.875rem;">
+          {{ searchError() }}
+        </div>
+      }
+
+      @if (isLoggedIn()) {
+        <div style="margin-top: 14px; font-size: 0.8125rem; color: var(--muted, #8c857e);">
+          Đang đăng nhập? <a routerLink="/account/orders" style="color: var(--terracotta, #c97b63); text-decoration: underline; font-weight: 500;">Xem danh sách đơn hàng đã mua trong tài khoản &rarr;</a>
+        </div>
+      }
+    </div>
+
+    <!-- Empty State -->
+    @if (!order() && !searching() && !searchError()) {
+      <div class="track-empty-state" style="text-align: center; padding: 48px 24px; background: #fff; border-radius: 12px; border: 1px solid var(--line, #e8dfd6); margin-bottom: 32px;">
+        <div class="track-empty-icon-wrapper" style="margin-bottom: 16px;">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#A18265" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="1" y="3" width="15" height="13"></rect>
+            <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon>
+            <circle cx="5.5" cy="18.5" r="2.5"></circle>
+            <circle cx="18.5" cy="18.5" r="2.5"></circle>
+          </svg>
+        </div>
+        <h2 style="font-family: 'Playfair Display', serif; font-size: 1.35rem; color: var(--dark, #2a2522); margin-bottom: 8px;">Tra cứu hành trình đơn hàng</h2>
+        <p style="color: var(--muted, #8c857e); font-size: 0.9375rem; max-width: 500px; margin: 0 auto;">
+          Nhập mã đơn hàng và số điện thoại/email đã dùng lúc đặt hàng để kiểm tra tiến độ giao nhận, lịch sử vận chuyển và yêu cầu hỗ trợ.
+        </p>
+        <div style="margin-top: 20px;">
+          <a routerLink="/shop" class="btn btn--outline" style="display: inline-block; padding: 8px 20px; border-radius: 6px; font-size: 0.875rem; text-decoration: none;">
+            Khám phá bộ sưu tập &rarr;
+          </a>
+        </div>
+      </div>
+    }
+
+    <!-- Order Detail & Tracker Grid -->
+    @if (order(); as ord) {
+      <div class="track-grid" style="display: grid; grid-template-columns: 1fr 360px; gap: 24px; align-items: start; margin-bottom: 40px;">
+        <!-- Left Column: Timeline & Items -->
+        <div class="track-main-column" style="display: flex; flex-direction: column; gap: 20px;">
+          <!-- Header Card -->
+          <div class="track-card" style="background: #fff; padding: 20px; border-radius: 12px; border: 1px solid var(--line, #e8dfd6); display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <span style="font-size: 0.75rem; color: var(--muted, #8c857e); text-transform: uppercase; letter-spacing: 0.5px;">Mã đơn hàng</span>
+              <div style="font-size: 1.25rem; font-weight: 700; color: var(--dark, #2a2522); font-family: monospace;">#{{ ord.order_code || ord.order_id }}</div>
+              <div style="font-size: 0.8125rem; color: var(--muted, #8c857e); margin-top: 4px;">Đặt lúc: {{ timeLabel(ord.created_at) }}</div>
+            </div>
+            <div style="text-align: right;">
+              <span class="track-status-badge" style="display: inline-block; padding: 6px 14px; border-radius: 20px; font-size: 0.875rem; font-weight: 600; background: #f0e4de; color: var(--terracotta, #c97b63);">
+                {{ ord.status_label || ord.status }}
+              </span>
+            </div>
           </div>
-          <button class="btn btn--primary" id="js-track-search-btn" type="button" (click)="search()">Tra cứu</button>
+
+          <!-- Dynamic State Machine Timeline -->
+          <div class="track-card" style="background: #fff; padding: 24px; border-radius: 12px; border: 1px solid var(--line, #e8dfd6);">
+            <h2 style="font-size: 1.125rem; font-weight: 600; color: var(--dark, #2a2522); margin-top: 0; margin-bottom: 20px;">Hành trình đơn hàng</h2>
+            <div class="track-timeline" style="display: flex; flex-direction: column; gap: 16px; position: relative;">
+              @for (step of steps(); track step.status) {
+                <div class="track-step" style="display: flex; gap: 16px; position: relative;">
+                  <div class="track-step__marker" style="display: flex; flex-direction: column; align-items: center; width: 24px;">
+                    <span
+                      style="width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700;"
+                      [style.background]="step.state === 'done' ? 'var(--terracotta, #c97b63)' : step.state === 'current' ? '#2e7d32' : '#e8dfd6'"
+                      [style.color]="step.state === 'done' || step.state === 'current' ? '#fff' : '#8c857e'"
+                    >
+                      @if (step.state === 'done') {
+                        ✓
+                      } @else if (step.state === 'current') {
+                        ●
+                      } @else {
+                        ○
+                      }
+                    </span>
+                    <span style="width: 2px; flex: 1; background: #e8dfd6; min-height: 24px; margin-top: 4px;"></span>
+                  </div>
+                  <div class="track-step__content" style="flex: 1; padding-bottom: 12px;">
+                    <div style="display: flex; justify-content: space-between; align-items: baseline;">
+                      <h4 style="margin: 0; font-size: 0.9375rem; font-weight: 600; color: var(--dark, #2a2522);" [style.color]="step.state === 'current' ? '#2e7d32' : 'inherit'">
+                        {{ step.label }}
+                      </h4>
+                      @if (step.at) {
+                        <time style="font-size: 0.75rem; color: var(--muted, #8c857e);">{{ timeLabel(step.at) }}</time>
+                      }
+                    </div>
+                  </div>
+                </div>
+              }
+            </div>
+          </div>
+
+          <!-- Items list -->
+          <div class="track-card" style="background: #fff; padding: 24px; border-radius: 12px; border: 1px solid var(--line, #e8dfd6);">
+            <h2 style="font-size: 1.125rem; font-weight: 600; color: var(--dark, #2a2522); margin-top: 0; margin-bottom: 16px;">Sản phẩm trong đơn</h2>
+            <div style="display: flex; flex-direction: column; gap: 14px;">
+              @for (item of items(); track item.item_id || item.variant_id) {
+                <div style="display: flex; gap: 14px; align-items: center; padding-bottom: 14px; border-bottom: 1px solid var(--line, #e8dfd6);">
+                  <div style="width: 60px; height: 75px; border-radius: 6px; overflow: hidden; background: #f4e4dc; flex-shrink: 0;">
+                    <img [src]="itemImage(item)" [alt]="item.product_name" style="width: 100%; height: 100%; object-fit: cover;" />
+                  </div>
+                  <div style="flex: 1;">
+                    <div style="font-weight: 600; font-size: 0.875rem; color: var(--dark, #2a2522);">{{ item.product_name }}</div>
+                    @if (item.color || item.size) {
+                      <div style="font-size: 0.75rem; color: var(--muted, #8c857e); margin-top: 2px;">
+                        {{ item.color }}{{ item.color && item.size ? ' / ' : '' }}{{ item.size }}
+                      </div>
+                    }
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px;">
+                      <span style="font-size: 0.8125rem; color: var(--muted, #8c857e);">Số lượng: x{{ item.quantity }}</span>
+                      <span style="font-weight: 600; font-size: 0.875rem; color: var(--terracotta, #c97b63);">{{ money((item.unit_price || 0) * (item.quantity || 1)) }}</span>
+                    </div>
+                  </div>
+                </div>
+              }
+            </div>
+
+            <!-- Customer Actions for this order -->
+            <div style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line, #e8dfd6);">
+              @if (canCancel()) {
+                <button
+                  type="button"
+                  class="btn btn--outline"
+                  style="color: #b91c1c; border-color: #fca5a5;"
+                  (click)="openCancelModal()"
+                >
+                  ✕ Hủy đơn hàng
+                </button>
+              }
+
+              @if (canPayAgain()) {
+                <button
+                  type="button"
+                  class="btn btn--primary"
+                  (click)="payAgain()"
+                >
+                  💳 Thanh toán ngay (Stripe)
+                </button>
+              }
+
+              @if (canRequestReturn()) {
+                <button
+                  type="button"
+                  class="btn btn--primary"
+                  style="background: #2a2522;"
+                  (click)="openReturnModal()"
+                >
+                  🔄 Yêu cầu Đổi / Trả hàng (30 ngày)
+                </button>
+              }
+            </div>
+          </div>
         </div>
 
-        <!-- Empty State (shown when no order is searched/loaded yet) -->
-        <div class="track-empty-state" id="js-track-empty-state">
-          <div class="track-empty-icon-wrapper">
-            <svg class="track-empty-icon" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="1" y="3" width="15" height="13" />
-              <polygon points="16 8 20 8 23 11 23 16 16 16 16 8" />
-              <circle cx="5.5" cy="18.5" r="2.5" />
-              <circle cx="18.5" cy="18.5" r="2.5" />
-            </svg>
-          </div>
-          <h2 class="track-empty-title">Theo dõi hành trình đơn hàng</h2>
-          <p class="track-empty-text">Vui lòng nhập mã đơn hàng của bạn ở thanh tìm kiếm trên để kiểm tra trạng thái và hành trình vận chuyển theo thời gian thực.</p>
-        </div>
+        <!-- Right Column: Shipping & Payment Summary -->
+        <div class="track-side-column" style="display: flex; flex-direction: column; gap: 20px;">
+          <!-- Delivery Details Card -->
+          <div class="track-card" style="background: #fff; padding: 20px; border-radius: 12px; border: 1px solid var(--line, #e8dfd6);">
+            <h3 style="font-size: 0.9375rem; font-weight: 600; color: var(--dark, #2a2522); margin-top: 0; margin-bottom: 14px; display: flex; align-items: center; gap: 6px;">
+              <span>📍</span> Địa chỉ nhận hàng
+            </h3>
+            <div style="font-weight: 600; font-size: 0.875rem; color: var(--dark, #2a2522);">{{ ord.shipping_name }}</div>
+            <div style="font-size: 0.8125rem; color: var(--muted, #8c857e); margin-top: 2px;">{{ ord.shipping_phone }}</div>
+            <div style="font-size: 0.8125rem; color: #4a423e; margin-top: 6px; line-height: 1.4;">{{ ord.shipping_address }}</div>
 
-        <!-- Order Detail & Tracker Grid -->
-        <div class="track-grid" id="js-track-grid" style="display: none;">
-          <!-- Left Column -->
-          <div class="track-main-column">
-            <!-- Timeline Card -->
-            <div class="track-card track-timeline-card">
-              <div class="track-timeline-header">
-                <div>
-                  <span class="track-code-label">Mã đơn hàng</span>
-                  <div class="track-code-value" id="js-track-code">#VL-20260524-1234</div>
-                </div>
-                <span class="track-status-badge" id="js-track-status">Đang giao</span>
-              </div>
-
-              <h2 class="track-section-title">Hành trình đơn hàng</h2>
-
-              <div class="track-timeline" id="js-track-timeline">
-                <!-- Step 1: Completed -->
-                <div class="track-step track-step--completed">
-                  <div class="track-step__marker">
-                    <span class="track-step__dot">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="20 6 9 17 4 12" />
-                      </svg>
-                    </span>
-                    <span class="track-step__line"></span>
-                  </div>
-                  <div class="track-step__content">
-                    <h3 class="track-step__title">Đã đặt hàng</h3>
-                    <time class="track-step__time">24/05/2026 • 10:32</time>
-                    <p class="track-step__desc">Velura Online Store</p>
-                  </div>
-                </div>
-
-                <!-- Step 2: Completed -->
-                <div class="track-step track-step--completed">
-                  <div class="track-step__marker">
-                    <span class="track-step__dot">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="20 6 9 17 4 12" />
-                      </svg>
-                    </span>
-                    <span class="track-step__line"></span>
-                  </div>
-                  <div class="track-step__content">
-                    <h3 class="track-step__title">Đã xác nhận</h3>
-                    <time class="track-step__time">24/05/2026 • 11:05</time>
-                    <p class="track-step__desc">Trung tâm xử lý đơn hàng - TP.HCM</p>
-                  </div>
-                </div>
-
-                <!-- Step 3: Completed -->
-                <div class="track-step track-step--completed">
-                  <div class="track-step__marker">
-                    <span class="track-step__dot">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="20 6 9 17 4 12" />
-                      </svg>
-                    </span>
-                    <span class="track-step__line"></span>
-                  </div>
-                  <div class="track-step__content">
-                    <h3 class="track-step__title">Đang đóng gói</h3>
-                    <time class="track-step__time">24/05/2026 • 15:48</time>
-                    <p class="track-step__desc">Kho Velura - Quận 7, TP.HCM</p>
-                  </div>
-                </div>
-
-                <!-- Step 4: Active (In transit) -->
-                <div class="track-step track-step--active">
-                  <div class="track-step__marker">
-                    <span class="track-step__dot">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <rect x="1" y="3" width="15" height="13" />
-                        <polygon points="16 8 20 8 23 11 23 16 16 16 16 8" />
-                        <circle cx="5.5" cy="18.5" r="2.5" />
-                        <circle cx="18.5" cy="18.5" r="2.5" />
-                      </svg>
-                    </span>
-                    <span class="track-step__line"></span>
-                  </div>
-                  <div class="track-step__content">
-                    <h3 class="track-step__title">Đang giao hàng</h3>
-                    <time class="track-step__time">25/05/2026 • 08:20</time>
-                    <p class="track-step__desc">Bưu cục Quận 1 - Đang trên đường giao</p>
-                  </div>
-                </div>
-
-                <!-- Step 5: Pending -->
-                <div class="track-step track-step--pending">
-                  <div class="track-step__marker">
-                    <span class="track-step__dot"></span>
-                  </div>
-                  <div class="track-step__content">
-                    <h3 class="track-step__title">Đã giao thành công</h3>
-                    <time class="track-step__time">Dự kiến 26/05/2026</time>
-                    <p class="track-step__desc">123 Nguyễn Huệ, Quận 1, TP.HCM</p>
-                  </div>
+            @if (ord.carrier || ord.tracking_code) {
+              <div style="margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--line, #e8dfd6);">
+                <span style="font-size: 0.75rem; color: var(--muted, #8c857e);">Đơn vị vận chuyển:</span>
+                <div style="font-weight: 600; font-size: 0.8125rem; color: var(--dark, #2a2522);">
+                  {{ ord.carrier || 'Giao hàng nhanh' }} - Mã vận đơn: <strong style="color: var(--terracotta, #c97b63);">{{ ord.tracking_code || 'Chưa cập nhật' }}</strong>
                 </div>
               </div>
-            </div>
-
-            <!-- Delivery Map Card -->
-            <div class="track-card track-map-card">
-              <h2 class="track-section-title">Bản đồ vận chuyển</h2>
-              <div class="track-map-visualization">
-                <div class="track-map-route">
-                  <div class="track-map-marker track-map-marker--start">
-                    <span class="track-marker-dot"></span>
-                    <span class="track-marker-label" id="js-track-map-start-label">Kho Q.7</span>
-                  </div>
-                  <div class="track-map-line">
-                    <span class="track-map-progress" id="js-track-map-progress"></span>
-                    <span class="track-map-truck-icon" id="js-track-map-truck-icon">
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                        <rect x="1" y="3" width="15" height="13" />
-                        <polygon points="16 8 20 8 23 11 23 16 16 16 16 8" />
-                        <circle cx="5.5" cy="18.5" r="2.5" />
-                        <circle cx="18.5" cy="18.5" r="2.5" />
-                      </svg>
-                    </span>
-                  </div>
-                  <div class="track-map-marker track-map-marker--end">
-                    <span class="track-marker-dot"></span>
-                    <span class="track-marker-label" id="js-track-map-end-label">Nhà Q.1</span>
-                  </div>
-                </div>
-                <div class="track-map-details">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                    stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z" />
-                    <circle cx="12" cy="10" r="3" />
-                  </svg>
-                  <span id="js-track-map-details-text">Quận 7 → Quận 1, TP.HCM • 8.2km</span>
-                </div>
-              </div>
-            </div>
+            }
           </div>
 
-          <!-- Right Column -->
-          <div class="track-side-column">
-            <!-- ETA Card -->
-            <div class="track-card track-eta-card" id="js-track-eta-card">
-              <div class="track-eta-icon">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                  stroke-linecap="round" stroke-linejoin="round">
-                  <circle cx="12" cy="12" r="10" />
-                  <polyline points="12 6 12 12 16 14" />
-                </svg>
+          <!-- Order Summary Breakdown -->
+          <div class="track-card" style="background: #fff; padding: 20px; border-radius: 12px; border: 1px solid var(--line, #e8dfd6);">
+            <h3 style="font-size: 0.9375rem; font-weight: 600; color: var(--dark, #2a2522); margin-top: 0; margin-bottom: 14px;">Thanh toán</h3>
+            <div style="display: flex; flex-direction: column; gap: 8px; font-size: 0.8125rem;">
+              <div style="display: flex; justify-content: space-between;">
+                <span style="color: var(--muted, #8c857e);">Tạm tính:</span>
+                <span>{{ money(ord.subtotal) }}</span>
               </div>
-              <span class="track-eta-title">Thời gian giao dự kiến</span>
-              <div class="track-eta-date" id="js-track-eta-date">26/05/2026</div>
-              <div class="track-eta-time" id="js-track-eta-time">Trong khoảng 09:00 - 12:00</div>
+              <div style="display: flex; justify-content: space-between;">
+                <span style="color: var(--muted, #8c857e);">Phí vận chuyển:</span>
+                <span>{{ ord.shipping_fee ? money(ord.shipping_fee) : 'Miễn phí' }}</span>
+              </div>
+              @if ((ord.discount_amount || 0) > 0) {
+                <div style="display: flex; justify-content: space-between; color: #2e7d32;">
+                  <span>Giảm giá:</span>
+                  <span>-{{ money(ord.discount_amount) }}</span>
+                </div>
+              }
+              <hr style="border: none; border-top: 1px solid var(--line, #e8dfd6); margin: 6px 0;" />
+              <div style="display: flex; justify-content: space-between; font-size: 1rem; font-weight: 700; color: var(--dark, #2a2522);">
+                <span>Tổng tiền:</span>
+                <span style="color: var(--terracotta, #c97b63);">{{ money(ord.total_amount) }}</span>
+              </div>
             </div>
 
-            <!-- Shipper Card -->
-            <div class="track-card track-shipper-card" id="js-track-shipper-card">
-              <h3 class="track-side-title">Thông tin shipper</h3>
-              <div class="track-shipper-profile">
-                <div class="track-shipper-avatar" id="js-track-shipper-avatar">TVH</div>
-                <div>
-                  <div class="track-shipper-name" id="js-track-shipper-name">Trần Văn Hùng</div>
-                  <div class="track-shipper-rating" id="js-track-shipper-rating">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                      <polygon
-                        points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                    </svg>
-                    <span>Đánh giá 4.9 / 5.0</span>
-                  </div>
-                </div>
-              </div>
-              <div class="track-shipper-details">
-                <div class="track-detail-row">
-                  <span class="track-detail-label">Số điện thoại</span>
-                  <span class="track-detail-value" id="js-track-shipper-phone">0905 678 234</span>
-                </div>
-                <div class="track-detail-row">
-                  <span class="track-detail-label">Biển số xe</span>
-                  <span class="track-detail-value" id="js-track-shipper-plate">59-K1 234.56</span>
-                </div>
-              </div>
-              <button class="btn btn--primary btn--full" type="button" id="js-track-shipper-call">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                  stroke-linecap="round" stroke-linejoin="round">
-                  <path
-                    d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
-                </svg>
-                Gọi cho shipper
-              </button>
-            </div>
-
-            <!-- Destination Address Card -->
-            <div class="track-card track-address-card">
-              <div class="track-address-header">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                  stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z" />
-                  <circle cx="12" cy="10" r="3" />
-                </svg>
-                <h3 class="track-side-title">Giao đến</h3>
-              </div>
-              <div class="track-address-recipient" id="js-track-recipient">Nguyễn Minh Anh</div>
-              <div class="track-address-text" id="js-track-address">123 Nguyễn Huệ, P. Bến Nghé, Q.1, TP. Hồ Chí Minh</div>
-              <div class="track-address-phone" id="js-track-phone">0912 345 678</div>
+            <div style="margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--line, #e8dfd6); font-size: 0.8125rem;">
+              <span style="color: var(--muted, #8c857e);">Phương thức:</span>
+              <div style="font-weight: 500; color: var(--dark, #2a2522); margin-top: 2px;">{{ paymentMethodLabel(ord.payment_method) }}</div>
             </div>
           </div>
         </div>
       </div>
-    </main>
+    }
+
+    <!-- Cancel Order Modal (U2 KAN-29) -->
+    @if (cancelModalOpen()) {
+      <div class="address-book-modal-backdrop" (click)="closeCancelModal()">
+        <div class="address-book-modal" (click)="$event.stopPropagation()">
+          <div class="address-book-modal__header">
+            <h3 style="margin: 0; font-size: 1.125rem; font-weight: 600; color: var(--dark, #2a2522);">Hủy đơn hàng</h3>
+            <button type="button" class="address-book-modal__close" (click)="closeCancelModal()">&times;</button>
+          </div>
+          <div class="address-book-modal__body">
+            <p style="font-size: 0.875rem; color: #4a423e; margin-top: 0;">
+              Lưu ý: Chỉ có thể hủy đơn khi đơn hàng đang ở trạng thái <strong>Chờ xử lý</strong> hoặc <strong>Chờ thanh toán</strong>.
+            </p>
+            <div class="form-group">
+              <label style="display: block; font-size: 0.8125rem; font-weight: 600; margin-bottom: 6px;">Lý do hủy đơn *</label>
+              <select class="form-input" (change)="setCancelReason($event)">
+                <option value="Thay đổi ý định">Thay đổi ý định</option>
+                <option value="Muốn đổi kích cỡ / màu sắc">Muốn đổi kích cỡ / màu sắc</option>
+                <option value="Thời gian giao hàng quá lâu">Thời gian giao hàng quá lâu</option>
+                <option value="Tìm thấy giá tốt hơn ở nơi khác">Tìm thấy giá tốt hơn ở nơi khác</option>
+                <option value="Khác">Lý do khác...</option>
+              </select>
+            </div>
+
+            @if (cancelReason() === 'Khác') {
+              <div class="form-group">
+                <label style="display: block; font-size: 0.8125rem; font-weight: 600; margin-bottom: 6px;">Chi tiết lý do *</label>
+                <textarea class="form-textarea" placeholder="Nhập lý do cụ thể..." (input)="setCancelOther($event)"></textarea>
+              </div>
+            }
+
+            @if (cancelError()) {
+              <div style="margin-top: 10px; color: #b91c1c; font-size: 0.8125rem;">{{ cancelError() }}</div>
+            }
+          </div>
+          <div class="address-book-modal__footer" style="gap: 10px;">
+            <button type="button" class="btn btn--outline" (click)="closeCancelModal()">Không hủy</button>
+            <button type="button" class="btn btn--primary" style="background: #b91c1c;" [disabled]="cancelling()" (click)="submitCancel()">
+              {{ cancelling() ? 'Đang xử lý...' : 'Xác nhận hủy đơn' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    }
+
+    <!-- Return & Exchange Modal (U2 KAN-29) -->
+    @if (returnModalOpen()) {
+      <div class="address-book-modal-backdrop" (click)="closeReturnModal()">
+        <div class="address-book-modal" (click)="$event.stopPropagation()">
+          <div class="address-book-modal__header">
+            <h3 style="margin: 0; font-size: 1.125rem; font-weight: 600; color: var(--dark, #2a2522);">Yêu cầu Đổi / Trả hàng (30 ngày)</h3>
+            <button type="button" class="address-book-modal__close" (click)="closeReturnModal()">&times;</button>
+          </div>
+          <div class="address-book-modal__body">
+            @if (returnSuccess()) {
+              <div style="text-align: center; padding: 24px 0;">
+                <div style="font-size: 2.5rem; margin-bottom: 12px;">🎉</div>
+                <h4 style="font-size: 1.125rem; font-weight: 600; color: #2e7d32; margin-bottom: 8px;">Đã tiếp nhận yêu cầu thành công!</h4>
+                <p style="font-size: 0.875rem; color: var(--muted, #8c857e); line-height: 1.5;">
+                  Bộ phận CSKH Velura sẽ kiểm tra và liên hệ với bạn trong vòng 24 giờ qua điện thoại hoặc email.
+                </p>
+                <button type="button" class="btn btn--primary" style="margin-top: 16px;" (click)="closeReturnModal()">Đóng</button>
+              </div>
+            } @else {
+              <div class="form-group">
+                <label style="display: block; font-size: 0.8125rem; font-weight: 600; margin-bottom: 8px;">Bạn muốn *</label>
+                <div style="display: flex; gap: 12px;">
+                  <button
+                    type="button"
+                    class="coolmate-gender-pill"
+                    [class.is-active]="returnType() === 'refund'"
+                    (click)="setReturnType('refund')"
+                    style="flex: 1; padding: 10px; text-align: center;"
+                  >
+                    💰 Trả hàng &amp; Hoàn tiền
+                  </button>
+                  <button
+                    type="button"
+                    class="coolmate-gender-pill"
+                    [class.is-active]="returnType() === 'exchange'"
+                    (click)="setReturnType('exchange')"
+                    style="flex: 1; padding: 10px; text-align: center;"
+                  >
+                    🔄 Đổi size / Đổi mẫu
+                  </button>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label style="display: block; font-size: 0.8125rem; font-weight: 600; margin-bottom: 6px;">Lý do đổi trả *</label>
+                <select class="form-input" (change)="setReturnReason($event)">
+                  <option value="Sản phẩm bị lỗi / hỏng khi nhận">Sản phẩm bị lỗi / hỏng khi nhận</option>
+                  <option value="Không vừa kích cỡ / muốn đổi size">Không vừa kích cỡ / muốn đổi size</option>
+                  <option value="Giao sai mẫu mã / sai màu sắc">Giao sai mẫu mã / sai màu sắc</option>
+                  <option value="Sản phẩm khác với mô tả trên web">Sản phẩm khác với mô tả trên web</option>
+                  <option value="Khác">Lý do khác...</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label style="display: block; font-size: 0.8125rem; font-weight: 600; margin-bottom: 6px;">Mô tả chi tiết / Ghi chú</label>
+                <textarea
+                  class="form-textarea"
+                  placeholder="Mô tả cụ thể về tình trạng sản phẩm hoặc mong muốn đổi sang size/mẫu nào..."
+                  (input)="setReturnNote($event)"
+                ></textarea>
+              </div>
+
+              <div style="background: #fdf8f5; border: 1px solid #f2e3da; border-radius: 8px; padding: 10px 14px; font-size: 0.75rem; color: #6b5c54; line-height: 1.4;">
+                🛡️ <strong>Chính sách đổi trả Velura:</strong> Hỗ trợ đổi trả miễn phí trong 30 ngày kể từ ngày nhận hàng với sản phẩm còn nguyên tem mác. Hoàn tiền chuyển khoản trong 4 - 5 ngày làm việc sau khi nhận lại hàng.
+              </div>
+
+              @if (returnError()) {
+                <div style="margin-top: 10px; color: #b91c1c; font-size: 0.8125rem;">{{ returnError() }}</div>
+              }
+            }
+          </div>
+          @if (!returnSuccess()) {
+            <div class="address-book-modal__footer" style="gap: 10px;">
+              <button type="button" class="btn btn--outline" (click)="closeReturnModal()">Đóng</button>
+              <button type="button" class="btn btn--primary" [disabled]="submittingReturn()" (click)="submitReturn()">
+                {{ submittingReturn() ? 'Đang gửi...' : 'Gửi yêu cầu đổi trả' }}
+              </button>
+            </div>
+          }
+        </div>
+      </div>
+    }
+  </div>
+</main>

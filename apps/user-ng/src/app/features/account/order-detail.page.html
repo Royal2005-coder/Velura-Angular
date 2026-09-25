@@ -25,130 +25,88 @@
             <p class="detail-meta-text">{{ loadError() }}</p>
           }
 
-          <div class="detail-tracking-row">
-            <div class="detail-tracking-info">
-              <span class="detail-tracking-label">Mã vận đơn</span>
-              <span class="detail-tracking-code">{{ order()?.tracking_code || '—' }}</span>
+          @if (notice()) {
+            <p class="detail-notice" role="status">{{ notice() }}</p>
+          }
+
+          @if (order()?.tracking_code) {
+            <div class="detail-tracking-row">
+              <div class="detail-tracking-info">
+                <span class="detail-tracking-label">Mã vận đơn{{ order()?.carrier ? ' · ' + order()?.carrier : '' }}</span>
+                <span class="detail-tracking-code">{{ order()?.tracking_code }}</span>
+              </div>
+              @if (order()?.tracking_url) {
+                <a class="btn btn--primary" [href]="order()?.tracking_url" target="_blank" rel="noopener noreferrer">Theo dõi</a>
+              }
             </div>
-            <a routerLink="/account/track" class="btn btn--primary">Theo dõi</a>
-          </div>
+          }
         </div>
+
+        @if (canPayAgain()) {
+          <div class="detail-card detail-pay-again-card">
+            <div>
+              <h2 class="detail-section-title">Đơn đang chờ thanh toán</h2>
+              <p class="detail-meta-text">Thanh toán trước {{ payDeadline() }} để giữ đơn. Quá thời hạn, đơn tự hủy và mã giảm giá được trả lại.</p>
+              @if (payError()) {
+                <p class="detail-error" role="alert">{{ payError() }}</p>
+              }
+            </div>
+            <button class="btn btn--primary" type="button" [disabled]="paying()" (click)="payAgain()">{{ paying() ? 'Đang mở Stripe...' : 'Thanh toán lại' }}</button>
+          </div>
+        }
 
         <!-- Order Timeline Card -->
-        <div class="detail-card detail-timeline-card">
-          <h2 class="detail-section-title">Trạng thái đơn hàng</h2>
-
-          <div class="detail-timeline" id="js-detail-timeline">
-            <!-- Timeline Item 1 -->
-            <div class="detail-timeline-item detail-timeline-item--completed">
-              <div class="detail-timeline-marker">
-                <span class="detail-timeline-dot">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
-                    stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                </span>
-                <span class="detail-timeline-line"></span>
-              </div>
-              <div class="detail-timeline-content">
-                <h3 class="detail-timeline-title">Đặt hàng thành công</h3>
-                <time class="detail-timeline-time">25/05/2026 10:30</time>
-              </div>
-            </div>
-
-            <!-- Timeline Item 2 -->
-            <div class="detail-timeline-item detail-timeline-item--completed">
-              <div class="detail-timeline-marker">
-                <span class="detail-timeline-dot">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
-                    stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                </span>
-                <span class="detail-timeline-line"></span>
-              </div>
-              <div class="detail-timeline-content">
-                <h3 class="detail-timeline-title">Đã xác nhận</h3>
-                <time class="detail-timeline-time">25/05/2026 11:00</time>
-              </div>
-            </div>
-
-            <!-- Timeline Item 3 -->
-            <div class="detail-timeline-item detail-timeline-item--completed">
-              <div class="detail-timeline-marker">
-                <span class="detail-timeline-dot">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
-                    stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                </span>
-                <span class="detail-timeline-line"></span>
-              </div>
-              <div class="detail-timeline-content">
-                <h3 class="detail-timeline-title">Đang chuẩn bị hàng</h3>
-                <time class="detail-timeline-time">25/05/2026 14:20</time>
-              </div>
-            </div>
-
-            <!-- Timeline Item 4 -->
-            <div class="detail-timeline-item detail-timeline-item--active">
-              <div class="detail-timeline-marker">
-                <span class="detail-timeline-dot">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
-                    stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                </span>
-                <span class="detail-timeline-line"></span>
-              </div>
-              <div class="detail-timeline-content">
-                <h3 class="detail-timeline-title">Đang giao hàng</h3>
-                <time class="detail-timeline-time">26/05/2026 08:15</time>
-              </div>
-            </div>
-
-            <!-- Timeline Item 5 -->
-            <div class="detail-timeline-item detail-timeline-item--pending">
-              <div class="detail-timeline-marker">
-                <span class="detail-timeline-dot"></span>
-              </div>
-              <div class="detail-timeline-content">
-                <h3 class="detail-timeline-title">Đã giao hàng</h3>
-              </div>
-            </div>
+        @if (steps().length) {
+          <div class="detail-card detail-timeline-card">
+            <h2 class="detail-section-title">Trạng thái đơn hàng</h2>
+            <ol class="detail-timeline">
+              @for (step of steps(); track $index; let last = $last) {
+                <li
+                  class="detail-timeline-item"
+                  [class.detail-timeline-item--completed]="step.state === 'done'"
+                  [class.detail-timeline-item--active]="step.state === 'current'"
+                  [class.detail-timeline-item--pending]="step.state === 'upcoming'"
+                  [class.detail-timeline-item--alert]="step.state === 'current' && (step.status === 'cancelled' || step.status === 'delivery_failed')">
+                  <div class="detail-timeline-marker">
+                    <span class="detail-timeline-dot">
+                      @if (step.state !== 'upcoming') {
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                      }
+                    </span>
+                    @if (!last) {
+                      <span class="detail-timeline-line"></span>
+                    }
+                  </div>
+                  <div class="detail-timeline-content">
+                    <h3 class="detail-timeline-title">{{ step.label }}</h3>
+                    @if (stepTime(step)) {
+                      <time class="detail-timeline-time">{{ stepTime(step) }}</time>
+                    }
+                  </div>
+                </li>
+              }
+            </ol>
+            @if (order()?.status === 'cancelled' && order()?.cancelled_reason) {
+              <p class="detail-meta-text">Lý do hủy: {{ order()?.cancelled_reason }}</p>
+            }
           </div>
-        </div>
-
-        <!-- Return Status Card -->
-        <div id="js-return-status-container" style="display:none;"></div>
+        }
 
         <!-- Products Card -->
         <div class="detail-card detail-products-card">
-          <h2 class="detail-section-title" id="js-products-count">Sản phẩm (2)</h2>
-          <div class="detail-products-list" id="js-products-list">
-            <!-- Product Item 1 -->
-            <div class="detail-product-item">
-              <div class="detail-product-img">
-                <img src="/assets/images/about_01.jpg" alt="Áo sơ mi linen trắng" />
+          <h2 class="detail-section-title">Sản phẩm ({{ items().length }})</h2>
+          <div class="detail-products-list">
+            @for (item of items(); track item.item_id || $index) {
+              <div class="detail-product-item">
+                <div class="detail-product-info">
+                  <h3 class="detail-product-name">{{ item.product_name }}</h3>
+                  <div class="detail-product-meta">{{ item.category_name ? item.category_name + ' • ' : '' }}x{{ item.quantity }}</div>
+                  <div class="detail-product-price">{{ money((item.unit_price || 0) * (item.quantity || 0)) }}</div>
+                </div>
               </div>
-              <div class="detail-product-info">
-                <h3 class="detail-product-name">Áo sơ mi linen trắng</h3>
-                <div class="detail-product-meta">Trắng • Size M • x2</div>
-                <div class="detail-product-price">900,000đ</div>
-              </div>
-            </div>
-
-            <!-- Product Item 2 -->
-            <div class="detail-product-item">
-              <div class="detail-product-img">
-                <img src="/assets/images/about_02.jpg" alt="Quần suông ống rộng be" />
-              </div>
-              <div class="detail-product-info">
-                <h3 class="detail-product-name">Quần suông ống rộng be</h3>
-                <div class="detail-product-meta">Be • Size L • x1</div>
-                <div class="detail-product-price">650,000đ</div>
-              </div>
-            </div>
+            }
           </div>
         </div>
 
@@ -164,16 +122,16 @@
               </svg>
               <h3 class="detail-grid-title">Địa chỉ giao hàng</h3>
             </div>
-            <div class="detail-address-recipient" id="js-shipping-name">Nguyễn Minh</div>
-            <div class="detail-address-row" id="js-shipping-phone-container">
+            <div class="detail-address-recipient">{{ order()?.shipping_name || '—' }}</div>
+            <div class="detail-address-row">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                 stroke-linecap="round" stroke-linejoin="round">
                 <path
                   d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 2 1.72z" />
               </svg>
-              <span id="js-shipping-phone">0912 345 678</span>
+              <span>{{ order()?.shipping_phone || '—' }}</span>
             </div>
-            <div class="detail-address-text" id="js-shipping-address">123 Nguyễn Huệ, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh</div>
+            <div class="detail-address-text">{{ order()?.shipping_address || '—' }}</div>
           </div>
 
           <!-- Billing Info -->
@@ -186,7 +144,7 @@
               </svg>
               <h3 class="detail-grid-title">Thanh toán</h3>
             </div>
-            <div class="detail-payment-method">Phương thức: <span class="text-bold">{{ order()?.payment_method || '—' }}</span></div>
+            <div class="detail-payment-method">Phương thức: <span class="text-bold">{{ paymentLabel() }}</span></div>
             <div class="detail-billing-summary">
               <div class="detail-billing-row">
                 <span>Tạm tính:</span>
@@ -213,6 +171,8 @@
           <h3 class="detail-action-title">Hành động</h3>
           @if (canCancel()) {
             <button class="btn btn--secondary" type="button" (click)="openCancel()">Hủy đơn</button>
+          } @else if (order() && order()?.status !== 'cancelled' && order()?.status !== 'delivered') {
+            <p class="detail-meta-text">Đơn đã vào khâu chuẩn bị hoặc giao hàng nên không tự hủy được. Cần hỗ trợ, liên hệ CSKH.</p>
           }
           <a routerLink="/contact" class="btn btn--secondary">Liên hệ hỗ trợ</a>
         </div>

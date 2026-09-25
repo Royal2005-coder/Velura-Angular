@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { createPricingService, validatePriceChange } from "../../apps/api/src/pricing/pricing-service.js";
+import { buildPromotionStatistics, createPricingService, validatePriceChange } from "../../apps/api/src/pricing/pricing-service.js";
 
 const PRODUCT_ID = "60000000-0000-4000-8000-000000000001";
 const PROMO_ID = "60000000-0000-4000-8000-000000000002";
@@ -114,42 +114,43 @@ test("unrelated role cannot read pricing audit logs", async () => {
 
 function context(roleCode) { return { authUser: { id: "auth-1" }, roleCode, accessToken: "jwt-token" }; }
 
-test("a campaign cannot issue more vouchers than its declared ceiling", async () => {
-  // `max_vouchers_allowed` được ghi lúc tạo chiến dịch nhưng trước đây chưa ai đọc: trần
-  // "tối đa 2 mã" không ngăn được mã thứ 3.
-  let created = 0;
+test("creating a voucher goes straight to the RPC, with no read-then-write cap check", async () => {
+  // Trần số mã của chiến dịch do RPC chốt khi đang khoá dòng chiến dịch. Tầng dịch vụ
+  // không được tự đếm rồi mới ghi, vì hai admin bấm cùng lúc sẽ cùng lọt qua bước đếm.
+  let received;
   const service = createPricingService({ repository: {
-    getPromotion: async () => ({ promo_id: PROMO_ID, max_vouchers_allowed: 2 }),
-    countVouchersByPromotion: async () => ({ [PROMO_ID]: { total: 2, active: 2 } }),
-    createVoucher: async (input) => { created += 1; return input; }
+    getPromotion: async () => { throw new Error("không được đọc chiến dịch trước khi ghi"); },
+    countVouchersByPromotion: async () => { throw new Error("không được đếm mã trước khi ghi"); },
+    createVoucher: async (input, token) => { received = { input, token }; return input; }
   } });
-
-  await assert.rejects(
-    () => service.createVoucher(context("admin_operator_gia_km"), { code: "TET3", type: "percentage", promoId: PROMO_ID }),
-    (error) => error.status === 422 && error.code === "VOUCHER_LIMIT_REACHED"
-  );
-  assert.equal(created, 0);
+  await service.createVoucher(context("admin_operator_gia_km"), { code: " tet3 ", type: "percentage", promoId: PROMO_ID });
+  assert.equal(received.input.code, "TET3");
+  assert.equal(received.input.promoId, PROMO_ID);
+  assert.equal(received.token, "jwt-token");
 });
 
-test("no ceiling and a campaign under its ceiling both let the voucher through", async () => {
-  const unlimited = createPricingService({ repository: {
-    getPromotion: async () => ({ promo_id: PROMO_ID, max_vouchers_allowed: 0 }),
-    countVouchersByPromotion: async () => ({ [PROMO_ID]: { total: 99, active: 99 } }),
-    createVoucher: async (input) => input
-  } });
-  // `max_vouchers_allowed = 0` nghĩa là không đặt trần, không phải cấm phát mã.
-  await unlimited.createVoucher(context("admin_operator_gia_km"), { code: "TET4", type: "percentage", promoId: PROMO_ID });
+test("updating a voucher rejects an unknown discount type before calling the RPC", async () => {
+  let called = false;
+  const service = createPricingService({ repository: { updateVoucher: async () => { called = true; } } });
+  await assert.rejects(
+    () => service.updateVoucher(context("admin_operator_gia_km"), PROMO_ID, { expectedVersion: 3, type: "buy_one_get_one" }),
+    (error) => error.status === 422
+  );
+  assert.equal(called, false);
+});
 
-  const underLimit = createPricingService({ repository: {
-    getPromotion: async () => ({ promo_id: PROMO_ID, max_vouchers_allowed: 5 }),
-    countVouchersByPromotion: async () => ({ [PROMO_ID]: { total: 4, active: 4 } }),
-    createVoucher: async (input) => input
-  } });
-  await underLimit.createVoucher(context("admin_operator_gia_km"), { code: "TET5", type: "percentage", promoId: PROMO_ID });
-
-  // Mã không thuộc chiến dịch nào thì không có trần để xét.
-  const standalone = createPricingService({ repository: { createVoucher: async (input) => input } });
-  await standalone.createVoucher(context("admin_operator_gia_km"), { code: "TET6", type: "percentage" });
+test("migration 035 checks the caller's role and the campaign ceiling inside the RPC", async () => {
+  const migration = await readFile(new URL("../../database/migrations/035_admin_promotion_voucher_rpc.sql", import.meta.url), "utf8");
+  // Hàm SECURITY DEFINER mở cho `authenticated` mà không kiểm vai trò thì bất kỳ tài
+  // khoản đăng nhập nào cũng tạo được mã giảm giá.
+  assert.match(migration, /create or replace function public\.velura_require_pricing_admin\(\)/);
+  assert.match(migration, /'super_admin', 'admin_operator_gia_km'/);
+  assert.match(migration, /RBAC_DENIED/);
+  assert.match(migration, /VOUCHER_LIMIT_REACHED/);
+  assert.match(migration, /for update/);
+  assert.match(migration, /CATEGORY_NOT_FOUND/);
+  assert.match(migration, /VOUCHER_CODE_EXISTS/);
+  assert.match(migration, /revoke all on function public\.admin_create_voucher/);
 });
 
 test("the campaign total comes from the exact count, not from the capped row array", async () => {
@@ -189,4 +190,65 @@ test("a campaign count under the cap is not reported as truncated", async () => 
   const result = await service.listPromotions(context("admin_operator_gia_km"), new URLSearchParams("limit=10"));
   assert.equal(result.summary.total, 2);
   assert.equal(result.summary.truncated, false);
+});
+
+test("voucher list filters by campaign, and rejects a promoId that is not a UUID", async () => {
+  const seen = [];
+  const service = createPricingService({ repository: {
+    listVouchers: async (filters) => { seen.push(filters.promoId); return { rows: [] }; }
+  } });
+  await service.listVouchers(context("admin_operator_gia_km"), new URLSearchParams("promoId=" + PROMO_ID));
+  await service.listVouchers(context("admin_operator_gia_km"), new URLSearchParams("promoId=none"));
+  await service.listVouchers(context("admin_operator_gia_km"), new URLSearchParams());
+  assert.deepEqual(seen, [PROMO_ID, "none", undefined]);
+  // Chuỗi lạ đi thẳng vào bộ lọc PostgREST sẽ thành một toán tử khác, nên chặn ở đây.
+  await assert.rejects(
+    () => service.listVouchers(context("admin_operator_gia_km"), new URLSearchParams("promoId=eq.x,or(1.eq.1)")),
+    (error) => error.status === 422
+  );
+});
+
+test("statistics read real orders and label each campaign with its real lifecycle", async () => {
+  // Chiến dịch hết hạn vẫn còn `is_active = true`. Bản cũ đếm nó là đang chạy.
+  const raw = {
+    overall: { orders: 154, voucher_orders: 6, revenue_with_voucher: 5977000, revenue_without_voucher: 373607000,
+      discount_total: 978000, aov_with_voucher: 996167, aov_without_voucher: 2524372 },
+    vouchers: { total: 13, active: 0, expired: 13, total_used: 6, total_limit: 1280, unlimited: 3 },
+    campaigns: [
+      { promo_id: PROMO_ID, promo_name: "Sale 9.9", start_date: at(-40), end_date: at(-10), is_active: true,
+        budget_limit: 0, total_discount_issued: 449000, vouchers: 5, orders: 5, revenue: 5947000, discount: 449000 },
+      { promo_id: null, vouchers: 2, orders: 1, revenue: 30000, discount: 0 }
+    ],
+    top_vouchers: [{ voucher_id: "v1", code: "WELCOME10", orders: 2, discount: 189000, revenue: 900000 }]
+  };
+  const summary = { total: 1, truncated: false, running: 0, scheduled: 0, paused: 0, ended: 1, budgetExhausted: 0,
+    totalBudget: 0, issuedDiscount: 449000, budgetedCampaigns: 0, activeVouchers: 0 };
+  const stats = buildPromotionStatistics(raw, summary, new Date());
+
+  assert.equal(stats.orders.withVoucher, 6);
+  assert.equal(stats.orders.voucherRate, 3.9);
+  assert.equal(stats.orders.discountTotal, 978000);
+  assert.equal(stats.campaigns[0].lifecycle, "ended");
+  assert.equal(stats.campaigns[0].revenuePerDiscount, 13.2);
+  // Chưa giảm đồng nào thì không có tỉ số, không phải vô cực hay 0.
+  assert.equal(stats.campaigns[1].name, "Mã đứng riêng");
+  assert.equal(stats.campaigns[1].revenuePerDiscount, null);
+  assert.equal(stats.vouchers.usagePercent, 0);
+  assert.equal(stats.topVouchers[0].code, "WELCOME10");
+});
+
+test("statistics reject a date range that ends before it starts", async () => {
+  const service = createPricingService({ repository: {
+    getStatistics: async () => { throw new Error("không được gọi RPC"); },
+    summarizePromotions: async () => ({ rows: [] }),
+    countActiveVouchers: async () => ({ count: 0 })
+  } });
+  await assert.rejects(
+    () => service.getStatistics(context("admin_operator_gia_km"), new URLSearchParams("from=2026-10-10&to=2026-10-01")),
+    (error) => error.status === 422
+  );
+  await assert.rejects(
+    () => service.getStatistics(context("admin_operator_gia_km"), new URLSearchParams("from=hom-qua")),
+    (error) => error.status === 422
+  );
 });

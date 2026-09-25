@@ -1,0 +1,269 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="app.diagrams.net">
+  <diagram name="Quy trình 3.1.13 Khuyến mãi &amp; Voucher" id="promo_3113_master">
+    <mxGraphModel dx="1600" dy="1200" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1800" pageHeight="1400" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- ==================== POOL 1: ADMIN ==================== -->
+        <mxCell id="p_admin" value="" style="shape=mxgraph.bpmn.pool;horizontal=1;swimlaneHead=0;collapsible=0;" vertex="1" parent="1">
+          <mxGeometry x="40" y="40" width="1680" height="420" as="geometry" />
+        </mxCell>
+        <mxCell id="p_admin_hdr" value="Velura Admin Dashboard" style="text;html=1;fontSize=14;fontStyle=1;align=left;verticalAlign=middle;" vertex="1" parent="p_admin">
+          <mxGeometry x="45" y="5" width="300" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="l_admin_op" value="Quản trị viên" style="swimlane;horizontal=0;swimlaneFillColor=none;startSize=30;fontSize=12;fontStyle=1;collapsible=0;" vertex="1" parent="p_admin">
+          <mxGeometry y="30" width="1680" height="240" as="geometry" />
+        </mxCell>
+        <mxCell id="l_admin_sys" value="Hệ thống Quản trị" style="swimlane;horizontal=0;swimlaneFillColor=none;startSize=30;fontSize=12;fontStyle=1;collapsible=0;" vertex="1" parent="p_admin">
+          <mxGeometry y="270" width="1680" height="150" as="geometry" />
+        </mxCell>
+
+        <!-- Admin Op Elements -->
+        <mxCell id="a_start" value="" style="shape=mxgraph.bpmn.event;verticalLabelPosition=bottom;verticalAlign=top;perimeter=ellipsePerimeter;outline=standard;symbol=general;" vertex="1" parent="l_admin_op">
+          <mxGeometry x="50" y="105" width="30" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="a_t1" value="Xem danh sách&#xa;chiến dịch, voucher,&#xa;combo &amp; thống kê" style="shape=mxgraph.bpmn.task2;whiteSpace=wrap;rectStyle=rounded;size=8;html=1;taskMarker=user;fontSize=12;" vertex="1" parent="l_admin_op">
+          <mxGeometry x="120" y="90" width="140" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="a_g1" value="" style="shape=mxgraph.bpmn.gateway2;html=1;perimeter=rhombusPerimeter;outline=none;symbol=exclusiveGw;gwType=exclusive;" vertex="1" parent="l_admin_op">
+          <mxGeometry x="300" y="100" width="40" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="a_g1_lbl" value="Lựa chọn&#xa;nghiệp vụ?" style="text;html=1;fontSize=11;fontStyle=2;align=center;" vertex="1" parent="l_admin_op">
+          <mxGeometry x="280" y="65" width="80" height="30" as="geometry" />
+        </mxCell>
+
+        <mxCell id="a_t2" value="Tạo chiến dịch: tên,&#xa;loại, mô tả, khung giờ,&#xa;trần ngân sách" style="shape=mxgraph.bpmn.task2;whiteSpace=wrap;rectStyle=rounded;size=8;html=1;taskMarker=user;fontSize=11;" vertex="1" parent="l_admin_op">
+          <mxGeometry x="380" y="20" width="150" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="a_t3" value="Phát hành mã: code, loại,&#xa;đơn tối thiểu, trần giảm,&#xa;nhóm khách, hạn dùng" style="shape=mxgraph.bpmn.task2;whiteSpace=wrap;rectStyle=rounded;size=8;html=1;taskMarker=user;fontSize=11;" vertex="1" parent="l_admin_op">
+          <mxGeometry x="380" y="92" width="150" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="a_t4" value="Cập nhật mã: sửa giá trị,&#xa;trần, đơn tối thiểu, nhóm,&#xa;lượt dùng, chiến dịch" style="shape=mxgraph.bpmn.task2;whiteSpace=wrap;rectStyle=rounded;size=8;html=1;taskMarker=user;fontSize=11;" vertex="1" parent="l_admin_op">
+          <mxGeometry x="380" y="165" width="150" height="55" as="geometry" />
+        </mxCell>
+
+        <mxCell id="a_t6" value="Bật / Tạm dừng mã&#xa;hoặc chiến dịch&#xa;(kèm expectedVersion)" style="shape=mxgraph.bpmn.task2;whiteSpace=wrap;rectStyle=rounded;size=8;html=1;taskMarker=user;fontSize=11;" vertex="1" parent="l_admin_op">
+          <mxGeometry x="980" y="25" width="160" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="a_t8" value="Xem báo cáo thống kê:&#xa;tỷ lệ dùng mã, doanh thu&#xa;đơn có mã, đối soát thực tế" style="shape=mxgraph.bpmn.task2;whiteSpace=wrap;rectStyle=rounded;size=8;html=1;taskMarker=user;fontSize=11;" vertex="1" parent="l_admin_op">
+          <mxGeometry x="980" y="150" width="160" height="55" as="geometry" />
+        </mxCell>
+
+        <mxCell id="a_g3" value="" style="shape=mxgraph.bpmn.gateway2;html=1;perimeter=rhombusPerimeter;outline=none;symbol=exclusiveGw;gwType=exclusive;" vertex="1" parent="l_admin_op">
+          <mxGeometry x="1200" y="100" width="40" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="a_end" value="Hoàn tất" style="shape=mxgraph.bpmn.event;verticalLabelPosition=bottom;verticalAlign=top;perimeter=ellipsePerimeter;outline=end;symbol=general;fontSize=11;" vertex="1" parent="l_admin_op">
+          <mxGeometry x="1290" y="105" width="30" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- Admin Sys Elements -->
+        <mxCell id="a_g2" value="" style="shape=mxgraph.bpmn.gateway2;html=1;perimeter=rhombusPerimeter;outline=none;symbol=exclusiveGw;gwType=exclusive;" vertex="1" parent="l_admin_sys">
+          <mxGeometry x="580" y="45" width="40" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="a_g2_lbl" value="Dữ liệu&#xa;hợp lệ?" style="text;html=1;fontSize=11;fontStyle=2;align=center;" vertex="1" parent="l_admin_sys">
+          <mxGeometry x="565" y="15" width="70" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="a_t5" value="Thực thi RPC bảo mật&#xa;(security definer), kiểm vai trò&#xa;&amp; ghi audit_log kèm actor_id" style="shape=mxgraph.bpmn.task2;whiteSpace=wrap;rectStyle=rounded;size=8;html=1;taskMarker=service;fontSize=11;" vertex="1" parent="l_admin_sys">
+          <mxGeometry x="670" y="35" width="170" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="a_ds_audit" value="audit_log" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=8;fontSize=11;" vertex="1" parent="l_admin_sys">
+          <mxGeometry x="720" y="102" width="70" height="35" as="geometry" />
+        </mxCell>
+        <mxCell id="a_t7" value="Tính trần mã phát hành =&#xa;Ngân sách / Trần giảm tối đa;&#xa;Kích hoạt tự động dừng khi cạn" style="shape=mxgraph.bpmn.task2;whiteSpace=wrap;rectStyle=rounded;size=8;html=1;taskMarker=service;fontSize=11;" vertex="1" parent="l_admin_sys">
+          <mxGeometry x="880" y="35" width="180" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- ==================== POOL 2: STOREFRONT ==================== -->
+        <mxCell id="p_user" value="" style="shape=mxgraph.bpmn.pool;horizontal=1;swimlaneHead=0;collapsible=0;" vertex="1" parent="1">
+          <mxGeometry x="40" y="500" width="1680" height="380" as="geometry" />
+        </mxCell>
+        <mxCell id="p_user_hdr" value="Velura Storefront (Khách hàng)" style="text;html=1;fontSize=14;fontStyle=1;align=left;verticalAlign=middle;" vertex="1" parent="p_user">
+          <mxGeometry x="45" y="5" width="300" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="l_user_cust" value="Khách hàng" style="swimlane;horizontal=0;swimlaneFillColor=none;startSize=30;fontSize=12;fontStyle=1;collapsible=0;" vertex="1" parent="p_user">
+          <mxGeometry y="30" width="1680" height="190" as="geometry" />
+        </mxCell>
+        <mxCell id="l_user_sys" value="Hệ thống Storefront" style="swimlane;horizontal=0;swimlaneFillColor=none;startSize=30;fontSize=12;fontStyle=1;collapsible=0;" vertex="1" parent="p_user">
+          <mxGeometry y="220" width="1680" height="160" as="geometry" />
+        </mxCell>
+
+        <!-- User Cust Elements -->
+        <mxCell id="u_start" value="" style="shape=mxgraph.bpmn.event;verticalLabelPosition=bottom;verticalAlign=top;perimeter=ellipsePerimeter;outline=standard;symbol=general;" vertex="1" parent="l_user_cust">
+          <mxGeometry x="50" y="80" width="30" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="u_t1" value="Xem ví voucher:&#xa;Dành riêng cho bạn,&#xa;Đang diễn ra, Sắp hết hạn" style="shape=mxgraph.bpmn.task2;whiteSpace=wrap;rectStyle=rounded;size=8;html=1;taskMarker=user;fontSize=11;" vertex="1" parent="l_user_cust">
+          <mxGeometry x="120" y="65" width="150" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="u_t3" value="Xem mức giảm, chủ động&#xa;đổi mã khác hoặc bấm&#xa;bỏ mã (decline_voucher)" style="shape=mxgraph.bpmn.task2;whiteSpace=wrap;rectStyle=rounded;size=8;html=1;taskMarker=user;fontSize=11;" vertex="1" parent="l_user_cust">
+          <mxGeometry x="640" y="65" width="160" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="u_t7" value="Xác nhận đặt hàng&#xa;(Guest: OTP email xác thực;&#xa;Member: chọn địa chỉ có sẵn)" style="shape=mxgraph.bpmn.task2;whiteSpace=wrap;rectStyle=rounded;size=8;html=1;taskMarker=user;fontSize=11;" vertex="1" parent="l_user_cust">
+          <mxGeometry x="1170" y="65" width="170" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="u_end" value="Đơn pending" style="shape=mxgraph.bpmn.event;verticalLabelPosition=bottom;verticalAlign=top;perimeter=ellipsePerimeter;outline=end;symbol=general;fontSize=11;" vertex="1" parent="l_user_cust">
+          <mxGeometry x="1400" y="80" width="30" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- User Sys Elements -->
+        <mxCell id="u_t2" value="Chấm 8 bước điều kiện ví:&#xa;Lọc theo nhóm (guest/member),&#xa;hiển thị lý do &amp; tiền thiếu" style="shape=mxgraph.bpmn.task2;whiteSpace=wrap;rectStyle=rounded;size=8;html=1;taskMarker=service;fontSize=11;" vertex="1" parent="l_user_sys">
+          <mxGeometry x="270" y="45" width="160" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="u_t4" value="quoteBestVoucher:&#xa;Tự động chọn 01 mã giảm tối đa,&#xa;ưu tiên hạn gần, cấm cộng dồn" style="shape=mxgraph.bpmn.task2;whiteSpace=wrap;rectStyle=rounded;size=8;html=1;taskMarker=service;fontSize=11;" vertex="1" parent="l_user_sys">
+          <mxGeometry x="470" y="45" width="160" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="u_g1" value="" style="shape=mxgraph.bpmn.gateway2;html=1;perimeter=rhombusPerimeter;outline=none;symbol=exclusiveGw;gwType=exclusive;" vertex="1" parent="l_user_sys">
+          <mxGeometry x="840" y="55" width="40" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="u_g1_lbl" value="Khách dùng&#xa;mã?" style="text;html=1;fontSize=11;fontStyle=2;align=center;" vertex="1" parent="l_user_sys">
+          <mxGeometry x="820" y="25" width="80" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="u_t5" value="Cập nhật mức giảm giá&#xa;tạm tính của voucher" style="shape=mxgraph.bpmn.task2;whiteSpace=wrap;rectStyle=rounded;size=8;html=1;taskMarker=service;fontSize=11;" vertex="1" parent="l_user_sys">
+          <mxGeometry x="930" y="20" width="150" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="u_t6" value="Tính phí ship theo ngưỡng&#xa;từ server (>= 500k miễn phí;&#xa;thường 30k, nhanh 50k)" style="shape=mxgraph.bpmn.task2;whiteSpace=wrap;rectStyle=rounded;size=8;html=1;taskMarker=service;fontSize=11;" vertex="1" parent="l_user_sys">
+          <mxGeometry x="930" y="85" width="150" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- ==================== POOL 3: API SERVER ==================== -->
+        <mxCell id="p_api" value="" style="shape=mxgraph.bpmn.pool;horizontal=1;swimlaneHead=0;collapsible=0;" vertex="1" parent="1">
+          <mxGeometry x="40" y="920" width="1680" height="240" as="geometry" />
+        </mxCell>
+        <mxCell id="p_api_hdr" value="Velura API Server (Định giá &amp; Giao dịch)" style="text;html=1;fontSize=14;fontStyle=1;align=left;verticalAlign=middle;" vertex="1" parent="p_api">
+          <mxGeometry x="45" y="5" width="350" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="l_api" value="Định giá &amp; Ngân sách" style="swimlane;horizontal=0;swimlaneFillColor=none;startSize=30;fontSize=12;fontStyle=1;collapsible=0;" vertex="1" parent="p_api">
+          <mxGeometry y="30" width="1680" height="210" as="geometry" />
+        </mxCell>
+
+        <!-- API Elements -->
+        <mxCell id="api_start" value="" style="shape=mxgraph.bpmn.event;verticalLabelPosition=bottom;verticalAlign=top;perimeter=ellipsePerimeter;outline=standard;symbol=general;" vertex="1" parent="l_api">
+          <mxGeometry x="50" y="80" width="30" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="api_t1" value="Tra cứu catalog theo&#xa;variant_id &amp; đối chiếu&#xa;unit_price client gửi" style="shape=mxgraph.bpmn.task2;whiteSpace=wrap;rectStyle=rounded;size=8;html=1;taskMarker=service;fontSize=11;" vertex="1" parent="l_api">
+          <mxGeometry x="120" y="65" width="150" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="api_g1" value="" style="shape=mxgraph.bpmn.gateway2;html=1;perimeter=rhombusPerimeter;outline=none;symbol=exclusiveGw;gwType=exclusive;" vertex="1" parent="l_api">
+          <mxGeometry x="310" y="75" width="40" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="api_g1_lbl" value="Giá catalog&#xa;khớp?" style="text;html=1;fontSize=11;fontStyle=2;align=center;" vertex="1" parent="l_api">
+          <mxGeometry x="295" y="45" width="70" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="api_err" value="PRICE_MISMATCH" style="shape=mxgraph.bpmn.event;verticalLabelPosition=bottom;verticalAlign=top;perimeter=ellipsePerimeter;outline=end;symbol=terminate;fontSize=10;" vertex="1" parent="l_api">
+          <mxGeometry x="315" y="150" width="30" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="api_t2" value="Server tự tính subtotal =&#xa;tổng(catalog_price x qty);&#xa;Bỏ qua subtotal client" style="shape=mxgraph.bpmn.task2;whiteSpace=wrap;rectStyle=rounded;size=8;html=1;taskMarker=service;fontSize=11;" vertex="1" parent="l_api">
+          <mxGeometry x="410" y="65" width="160" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="api_t3" value="Thẩm định lại mã tại server&#xa;(evaluateVoucher) &amp; tính&#xa;discount_amount chuẩn" style="shape=mxgraph.bpmn.task2;whiteSpace=wrap;rectStyle=rounded;size=8;html=1;taskMarker=service;fontSize=11;" vertex="1" parent="l_api">
+          <mxGeometry x="610" y="65" width="170" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="api_t4" value="Tính phí ship theo cấu hình;&#xa;total = subtotal + ship - discount&#xa;(Không tin total client gửi)" style="shape=mxgraph.bpmn.task2;whiteSpace=wrap;rectStyle=rounded;size=8;html=1;taskMarker=service;fontSize=11;" vertex="1" parent="l_api">
+          <mxGeometry x="820" y="65" width="170" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="api_t5" value="Ghi đơn pending, tăng used_count&#xa;&amp; trừ ngân sách kịch trần qua RPC&#xa;(velura_record_voucher_redemption)" style="shape=mxgraph.bpmn.task2;whiteSpace=wrap;rectStyle=rounded;size=8;html=1;taskMarker=service;fontSize=11;" vertex="1" parent="l_api">
+          <mxGeometry x="1030" y="65" width="190" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="api_end" value="Đơn pending" style="shape=mxgraph.bpmn.event;verticalLabelPosition=bottom;verticalAlign=top;perimeter=ellipsePerimeter;outline=end;symbol=general;fontSize=11;" vertex="1" parent="l_api">
+          <mxGeometry x="1270" y="80" width="30" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- ==================== FLOWS: ADMIN ==================== -->
+        <mxCell id="f_a1" edge="1" source="a_start" target="a_t1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;endArrow=block;endFill=1;" />
+        <mxCell id="f_a2" edge="1" source="a_t1" target="a_g1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;endArrow=block;endFill=1;" />
+        <mxCell id="f_a3_t2" edge="1" source="a_g1" target="a_t2" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;endArrow=block;endFill=1;" />
+        <mxCell id="f_a3_t3" edge="1" source="a_g1" target="a_t3" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;endArrow=block;endFill=1;" />
+        <mxCell id="f_a3_t4" edge="1" source="a_g1" target="a_t4" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;endArrow=block;endFill=1;" />
+        <mxCell id="f_a3_t6" edge="1" source="a_g1" target="a_t6" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;endArrow=block;endFill=1;">
+          <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="360" y="55" /><mxPoint x="960" y="55" /></Array></mxGeometry>
+        </mxCell>
+        <mxCell id="f_a3_t8" edge="1" source="a_g1" target="a_t8" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;endArrow=block;endFill=1;">
+          <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="360" y="240" /><mxPoint x="960" y="240" /></Array></mxGeometry>
+        </mxCell>
+
+        <mxCell id="f_a4_t2" edge="1" source="a_t2" target="a_g2" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;endArrow=block;endFill=1;" />
+        <mxCell id="f_a4_t3" edge="1" source="a_t3" target="a_g2" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;endArrow=block;endFill=1;" />
+        <mxCell id="f_a4_t4" edge="1" source="a_t4" target="a_g2" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;endArrow=block;endFill=1;" />
+
+        <mxCell id="f_a5_val" value="Hợp lệ" edge="1" source="a_g2" target="a_t5" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;endArrow=block;endFill=1;fontSize=10;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f_a5_inval" value="Lỗi (Báo lỗi)" edge="1" source="a_g2" target="a_g3" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;endArrow=block;endFill=1;fontSize=10;">
+          <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="600" y="440" /><mxPoint x="1220" y="440" /></Array></mxGeometry>
+        </mxCell>
+
+        <mxCell id="f_t5_audit" edge="1" source="a_t5" target="a_ds_audit" parent="1" style="edgeStyle=orthogonalEdgeStyle;dashed=1;endArrow=classic;endFill=1;" />
+        <mxCell id="f_t5_t7" edge="1" source="a_t5" target="a_t7" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;endArrow=block;endFill=1;" />
+        <mxCell id="f_t7_g3" edge="1" source="a_t7" target="a_g3" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;endArrow=block;endFill=1;" />
+        <mxCell id="f_t6_g3" edge="1" source="a_t6" target="a_g3" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;endArrow=block;endFill=1;" />
+        <mxCell id="f_t8_g3" edge="1" source="a_t8" target="a_g3" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;endArrow=block;endFill=1;" />
+        <mxCell id="f_g3_end" edge="1" source="a_g3" target="a_end" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;endArrow=block;endFill=1;" />
+
+        <!-- ==================== FLOWS: USER ==================== -->
+        <mxCell id="f_u1" edge="1" source="u_start" target="u_t1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;endArrow=block;endFill=1;" />
+        <mxCell id="f_u2" edge="1" source="u_t1" target="u_t2" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;endArrow=block;endFill=1;" />
+        <mxCell id="f_u3" edge="1" source="u_t2" target="u_t4" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;endArrow=block;endFill=1;" />
+        <mxCell id="f_u4" edge="1" source="u_t4" target="u_t3" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;endArrow=block;endFill=1;" />
+        <mxCell id="f_u5" edge="1" source="u_t3" target="u_g1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;endArrow=block;endFill=1;" />
+
+        <mxCell id="f_u6_yes" value="Dùng mã" edge="1" source="u_g1" target="u_t5" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;endArrow=block;endFill=1;fontSize=10;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="f_u6_no" value="Bỏ mã" edge="1" source="u_g1" target="u_t6" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;endArrow=block;endFill=1;fontSize=10;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f_u_t5_t6" edge="1" source="u_t5" target="u_t6" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;endArrow=block;endFill=1;" />
+        <mxCell id="f_u_t6_t7" edge="1" source="u_t6" target="u_t7" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;endArrow=block;endFill=1;" />
+        <mxCell id="f_u_t7_end" edge="1" source="u_t7" target="u_end" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;endArrow=block;endFill=1;" />
+
+        <!-- ==================== FLOWS: API ==================== -->
+        <mxCell id="f_api1" edge="1" source="api_start" target="api_t1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;endArrow=block;endFill=1;" />
+        <mxCell id="f_api2" edge="1" source="api_t1" target="api_g1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;endArrow=block;endFill=1;" />
+
+        <mxCell id="f_api3_match" value="Khớp" edge="1" source="api_g1" target="api_t2" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;endArrow=block;endFill=1;fontSize=10;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="f_api3_mismatch" value="Lệch giá" edge="1" source="api_g1" target="api_err" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;endArrow=block;endFill=1;fontSize=10;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f_api4" edge="1" source="api_t2" target="api_t3" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;endArrow=block;endFill=1;" />
+        <mxCell id="f_api5" edge="1" source="api_t3" target="api_t4" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;endArrow=block;endFill=1;" />
+        <mxCell id="f_api6" edge="1" source="api_t4" target="api_t5" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;endArrow=block;endFill=1;" />
+        <mxCell id="f_api7" edge="1" source="api_t5" target="api_end" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;endArrow=block;endFill=1;" />
+
+        <!-- ==================== MESSAGE FLOWS (INTER-POOL) ==================== -->
+        <mxCell id="mf_voucher_sync" value="Mã hiển thị trong ví voucher khách" style="edgeStyle=orthogonalEdgeStyle;dashed=1;endArrow=open;endFill=0;fontSize=11;strokeColor=#4B5563;" edge="1" parent="1" source="a_t7" target="u_t1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1010" y="480" />
+              <mxPoint x="235" y="480" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="mf_order_submit" value="Gửi payload đặt đơn kèm voucher_id" style="edgeStyle=orthogonalEdgeStyle;dashed=1;endArrow=open;endFill=0;fontSize=11;strokeColor=#4B5563;" edge="1" parent="1" source="u_t7" target="api_start">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1295" y="900" />
+              <mxPoint x="105" y="900" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="mf_order_feedback" value="Phản hồi kết quả đơn &amp; tiền thực thu" style="edgeStyle=orthogonalEdgeStyle;dashed=1;endArrow=open;endFill=0;fontSize=11;strokeColor=#4B5563;" edge="1" parent="1" source="api_t5" target="u_end">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1165" y="905" />
+              <mxPoint x="1455" y="905" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

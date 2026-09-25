@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { catchError, of } from 'rxjs';
 import { ApiService } from '../../core/services/api.service';
@@ -8,7 +8,14 @@ import { formatVnd } from '../../core/utils/money';
 import { showToast } from '../../core/utils/toast';
 import { useBodyClass } from '../../core/utils/body-class';
 import { VoucherWallet } from '../../shared/voucher-wallet/voucher-wallet';
-import type { AppliedVoucher } from '../../core/models/voucher.interface';
+import { VoucherService } from '../../core/services/voucher.service';
+import { ApiRequestError } from '../../core/models/api-request-error';
+import type {
+  AppliedVoucher,
+  CartItemRef,
+  CheckoutQuote,
+  VoucherChangedDetails
+} from '../../core/models/voucher.interface';
 
 interface MemberProfile {
   full_name?: string;
@@ -29,7 +36,7 @@ interface PlaceOrderResponse {
   message?: string;
   order?: {
     order_id?: string;
-    tracking_code?: string;
+    order_code?: string;
     payment_method?: string;
     shipping_address?: string;
   };
@@ -46,6 +53,7 @@ export class CheckoutShippingPage {
   private readonly api = inject(ApiService);
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
+  private readonly vouchers = inject(VoucherService);
 
   readonly submitting = signal(false);
   readonly payment = signal(this.checkout.methods().paymentMethod === 'MOMO' ? 'momo' : this.checkout.methods().paymentMethod === 'VNPAY' ? 'vnpay' : 'cod');
@@ -58,34 +66,72 @@ export class CheckoutShippingPage {
   readonly ward = signal('');
   readonly detail = signal(this.checkout.shipping().address);
   readonly note = signal(this.checkout.shipping().note || '');
-  readonly voucherCode = signal('');
   readonly voucherError = signal<string | null>(null);
-  readonly voucherName = signal<string | null>(null);
-  readonly applyingVoucher = signal(false);
-  readonly discount = signal(Number(localStorage.getItem('checkout_discount') || 0));
+  /** Mã ví đang áp. Ví là nơi chọn; trang chỉ ghi lại để báo giá và đặt đơn. */
+  readonly selectedVoucherId = signal<string | null>(localStorage.getItem('checkout_voucher_id'));
+  /** Mã đã chọn ở giỏ hàng, để ví ở trang này áp đúng mã đó thay vì tự chọn lại. */
+  readonly initialVoucherId = localStorage.getItem('checkout_voucher_id');
+  /** Khách chủ động bỏ mã. Khác với mã tự mất hiệu lực: bỏ mã thì không tự áp lại. */
+  readonly declinedVoucher = signal(localStorage.getItem('checkout_voucher_declined') === '1');
+  /** Đọc một lần: đã bỏ mã ở giỏ thì ví trang này không tự áp mã tốt nhất. */
+  readonly autoApplyVoucher = !this.declinedVoucher();
+  /** Báo giá của máy chủ, nguồn duy nhất cho mọi con số trên màn Tóm tắt đơn (U1-13). */
+  readonly quote = signal<CheckoutQuote | null>(null);
+  readonly quoteLoading = signal(false);
+  /** Câu báo khi mã khách chọn vừa hết hiệu lực lúc đặt đơn (D1). */
+  readonly voucherNotice = signal<string | null>(null);
 
   readonly items = computed(() => this.checkout.readCheckoutItems());
-  readonly subtotal = computed(() => this.items().reduce((sum, line) => sum + line.unit_price * line.quantity, 0));
-  readonly freeship = computed(() => this.subtotal() >= 500000);
-  readonly shippingFee = computed(() => {
-    if (this.freeship() || !this.subtotal()) {
-      return 0;
-    }
-    return this.shipping() === 'express' ? 50000 : 30000;
-  });
-  readonly total = computed(() => Math.max(0, this.subtotal() + this.shippingFee() - this.discount()));
+  readonly cartRefs = computed<CartItemRef[]>(() =>
+    this.items().map((line) => ({ variant_id: line.variant_id, quantity: line.quantity }))
+  );
+  /** Ước tính tạm trước khi có báo giá, chỉ để ví mã có giá trị đơn mà chấm. */
+  private readonly localSubtotal = computed(() =>
+    this.items().reduce((sum, line) => sum + line.unit_price * line.quantity, 0)
+  );
+  readonly subtotal = computed(() => this.quote()?.subtotal ?? this.localSubtotal());
+  readonly freeship = computed(() => this.quote()?.free_shipping_shortfall === 0);
+  readonly freeShippingThreshold = computed(() => this.quote()?.free_shipping_threshold ?? null);
+  readonly freeShippingShortfall = computed(() => this.quote()?.free_shipping_shortfall ?? 0);
+  readonly shippingFee = computed(() => this.quote()?.shipping_fee ?? 0);
+  readonly discount = computed(() => this.quote()?.discount_amount ?? 0);
+  readonly total = computed(() => this.quote()?.total_amount ?? 0);
+  readonly quoteReady = computed(() => this.quote() !== null && !this.quoteLoading());
   readonly subtotalLabel = computed(() => formatVnd(this.subtotal()) || '0 đ');
-  readonly shippingLabel = computed(() => (this.shippingFee() === 0 ? 'Miễn phí' : formatVnd(this.shippingFee())));
+  readonly shippingLabel = computed(() => {
+    if (!this.quote()) return 'Đang tính…';
+    return this.shippingFee() === 0 ? 'Miễn phí' : formatVnd(this.shippingFee());
+  });
   readonly discountLabel = computed(() => (this.discount() > 0 ? `-${formatVnd(this.discount())}` : ''));
-  readonly totalLabel = computed(() => formatVnd(this.total()) || '0 đ');
-  readonly standardFeeLabel = computed(() => (this.freeship() ? 'Miễn phí' : '30.000đ / Freeship từ 500.000đ'));
-  readonly expressFeeLabel = computed(() => (this.freeship() ? 'Miễn phí' : '50.000đ / Freeship từ 500.000đ'));
+  readonly totalLabel = computed(() => (this.quote() ? formatVnd(this.total()) || '0 đ' : 'Đang tính…'));
+  readonly standardFeeLabel = computed(() => this.feeLabel('30.000đ'));
+  readonly expressFeeLabel = computed(() => this.feeLabel('50.000đ'));
+  /** "Mua thêm X để được miễn phí vận chuyển" — ngưỡng lấy từ máy chủ, không viết cứng. */
+  readonly freeShippingHint = computed(() => {
+    const shortfall = this.freeShippingShortfall();
+    if (!this.quote() || this.freeship() || shortfall <= 0) return null;
+    return `Mua thêm ${formatVnd(shortfall)} để được miễn phí vận chuyển`;
+  });
+  readonly freeShippingProgress = computed(() => {
+    const threshold = this.freeShippingThreshold();
+    if (!threshold) return 0;
+    return Math.min(100, Math.round((this.subtotal() / threshold) * 100));
+  });
   readonly submitLabel = computed(() =>
     this.auth.isLoggedIn() ? 'Xác nhận đặt hàng' : 'Nhận mã OTP & Đặt hàng',
   );
 
   constructor() {
     useBodyClass('page-checkout');
+    // Báo giá lại mỗi khi giỏ, cách giao hoặc lựa chọn mã đổi. Theo dõi nội dung giỏ chứ
+    // không theo dõi tham chiếu mảng để không gọi lặp.
+    effect(() => {
+      const cartKey = this.cartRefs().map((item) => `${item.variant_id}:${item.quantity}`).join(',');
+      const shipping = this.shipping();
+      const voucherId = this.selectedVoucherId();
+      const declined = this.declinedVoucher();
+      untracked(() => this.refreshQuote(cartKey, shipping, voucherId, declined));
+    });
     if (this.auth.isLoggedIn()) {
       this.api
         .get<MemberProfile>('/api/user/profile')
@@ -127,89 +173,31 @@ export class CheckoutShippingPage {
   }
 
   /**
-   * Updates the voucher code field before apply.
-   */
-  setVoucherCode(event: Event): void {
-    this.voucherCode.set((event.target as HTMLInputElement).value);
-  }
-
-  /**
-   * Applies a live voucher code through `/api/user/vouchers/apply`.
-   */
-  applyVoucher(): void {
-    const code = this.voucherCode().trim();
-    this.voucherError.set(null);
-    if (!code) {
-      this.voucherError.set('Nhập mã giảm giá.');
-      return;
-    }
-    this.applyingVoucher.set(true);
-    this.api
-      .post<{
-        success?: boolean;
-        voucher_id?: string;
-        code?: string;
-        name?: string;
-        discount_amount?: number;
-      }>('/api/user/vouchers/apply', {
-        code,
-        order_value: this.subtotal(),
-        shipping_fee: this.shippingFee(),
-      })
-      .subscribe({
-        next: (response) => {
-          this.applyingVoucher.set(false);
-          if (!response.success || !response.voucher_id) {
-            this.voucherError.set('Không áp dụng được mã này.');
-            return;
-          }
-          const amount = Number(response.discount_amount || 0);
-          this.discount.set(amount);
-          this.voucherName.set(response.name || response.code || code);
-          localStorage.setItem('checkout_voucher_id', response.voucher_id);
-          localStorage.setItem('checkout_discount', String(amount));
-        },
-        error: (error: Error) => {
-          this.applyingVoucher.set(false);
-          this.discount.set(0);
-          this.voucherName.set(null);
-          localStorage.removeItem('checkout_voucher_id');
-          localStorage.removeItem('checkout_discount');
-          this.voucherError.set(error.message || 'Mã giảm giá không hợp lệ.');
-        },
-      });
-  }
-
-  /**
    * Nhận kết quả từ Ví Voucher: mã được áp hoặc bị bỏ.
    *
-   * Ví là nơi duy nhất quyết định mã nào đang áp và giảm bao nhiêu; trang thanh toán
-   * chỉ ghi lại kết quả để hiển thị tổng tiền và gửi kèm khi đặt hàng.
+   * Ví quyết định mã nào đang áp; số tiền giảm thì lấy từ báo giá của máy chủ, không lấy
+   * con số ví đang hiển thị, để màn Tóm tắt đơn khớp đúng số ghi vào đơn.
    */
   onVoucherApplied(voucher: AppliedVoucher | null): void {
     this.voucherError.set(null);
-    if (!voucher) {
-      this.clearVoucher();
-      return;
+    this.voucherNotice.set(null);
+    this.selectedVoucherId.set(voucher?.voucher_id ?? null);
+    if (voucher) {
+      localStorage.setItem('checkout_voucher_id', voucher.voucher_id);
+    } else {
+      localStorage.removeItem('checkout_voucher_id');
     }
-    const amount = Number(voucher.discount_amount || 0);
-    this.discount.set(amount);
-    this.voucherName.set(voucher.name || voucher.code);
-    this.voucherCode.set(voucher.code);
-    localStorage.setItem('checkout_voucher_id', voucher.voucher_id);
-    localStorage.setItem('checkout_discount', String(amount));
+    localStorage.removeItem('checkout_discount');
   }
 
-  /**
-   * Clears an applied voucher before placing the order.
-   */
-  clearVoucher(): void {
-    this.voucherCode.set('');
-    this.voucherName.set(null);
-    this.voucherError.set(null);
-    this.discount.set(0);
-    localStorage.removeItem('checkout_voucher_id');
-    localStorage.removeItem('checkout_discount');
+  /** Ví báo khách chủ động bỏ mã hoặc chọn lại mã. */
+  onVoucherDeclined(declined: boolean): void {
+    this.declinedVoucher.set(declined);
+    if (declined) {
+      localStorage.setItem('checkout_voucher_declined', '1');
+    } else {
+      localStorage.removeItem('checkout_voucher_declined');
+    }
   }
 
   /**
@@ -244,6 +232,10 @@ export class CheckoutShippingPage {
       showToast('Giỏ hàng không có sản phẩm để thanh toán.');
       return;
     }
+    if (!this.quoteReady()) {
+      showToast('Đang tính lại tổng tiền, vui lòng đợi trong giây lát.');
+      return;
+    }
     const paymentMethod = this.payment().toUpperCase();
     this.checkout.saveShipping({ name, phone, email, address, note: this.note().trim() });
     this.checkout.saveMethods({
@@ -257,8 +249,10 @@ export class CheckoutShippingPage {
       shipping_phone: phone,
       shipping_address: address,
       shipping_fee: this.shippingFee(),
-      voucher_id: localStorage.getItem('checkout_voucher_id') || null,
-      discount_amount: Number(localStorage.getItem('checkout_discount') || 0),
+      voucher_id: this.declinedVoucher() ? null : this.selectedVoucherId(),
+      decline_voucher: this.declinedVoucher(),
+      // Máy chủ tự tính lại mọi con số; gửi kèm chỉ để đối chiếu trong nhật ký.
+      discount_amount: this.discount(),
       subtotal: this.subtotal(),
       total_amount: this.total(),
       payment_method: paymentMethod,
@@ -283,6 +277,7 @@ export class CheckoutShippingPage {
         },
         error: (error: Error) => {
           this.submitting.set(false);
+          if (this.handleVoucherChanged(error)) return;
           showToast(error.message || 'Đặt hàng thất bại');
         },
       });
@@ -308,6 +303,7 @@ export class CheckoutShippingPage {
             shipping_address: address,
             shipping_fee: this.shippingFee(),
             voucher_id: payload.voucher_id,
+            decline_voucher: payload.decline_voucher,
             discount_amount: payload.discount_amount,
             subtotal: payload.subtotal,
             total_amount: payload.total_amount,
@@ -323,6 +319,57 @@ export class CheckoutShippingPage {
           showToast(error.message || 'Không thể gửi mã xác thực');
         },
       });
+  }
+
+  /**
+   * Mã khách chọn vừa hết hiệu lực lúc đặt đơn: máy chủ không tạo đơn mà trả 409 kèm
+   * mã thay thế. Chuyển sang mã đó, báo giá lại và để khách bấm đặt hàng lần nữa với
+   * tổng mới đã thấy trên màn hình (D1). Trả true nếu đã xử lý.
+   */
+  private handleVoucherChanged(error: Error): boolean {
+    if (!(error instanceof ApiRequestError) || error.code !== 'VOUCHER_CHANGED') return false;
+    const details = (error.details || {}) as Partial<VoucherChangedDetails>;
+    const replacement = details.replacement ?? null;
+    const requested = details.requested_code ? `Mã ${details.requested_code}` : 'Mã đã chọn';
+    const next = replacement ? ` Đã chuyển sang mã ${replacement.code}.` : ' Đơn sẽ không áp mã.';
+    this.voucherNotice.set(
+      `${requested} không còn dùng được: ${details.reason_text || error.message}${next} Kiểm tra tổng mới rồi bấm đặt hàng lần nữa.`
+    );
+    this.selectedVoucherId.set(replacement?.voucher_id ?? null);
+    if (replacement) {
+      localStorage.setItem('checkout_voucher_id', replacement.voucher_id);
+    } else {
+      localStorage.removeItem('checkout_voucher_id');
+    }
+    return true;
+  }
+
+  private refreshQuote(cartKey: string, shipping: string, voucherId: string | null, declined: boolean): void {
+    if (!cartKey) {
+      this.quote.set(null);
+      return;
+    }
+    this.quoteLoading.set(true);
+    this.vouchers.quote(this.cartRefs(), shipping, { voucherId, decline: declined }).subscribe({
+      next: (quote) => {
+        this.quoteLoading.set(false);
+        this.quote.set(quote ?? null);
+        if (quote?.voucher_change) {
+          this.voucherNotice.set(`${quote.voucher_change.reason_text} Tổng tiền đã được tính lại.`);
+        }
+      },
+      error: (error: Error) => {
+        this.quoteLoading.set(false);
+        this.quote.set(null);
+        this.voucherError.set(error.message || 'Không tính được tổng tiền. Vui lòng thử lại.');
+      },
+    });
+  }
+
+  private feeLabel(fee: string): string {
+    if (this.freeship()) return 'Miễn phí';
+    const threshold = this.freeShippingThreshold();
+    return threshold ? `${fee} / Freeship từ ${formatVnd(threshold)}` : fee;
   }
 
   private composeAddress(): string {
@@ -362,7 +409,7 @@ export class CheckoutShippingPage {
   ): void {
     this.checkout.saveCreatedOrder({
       order_id: order.order_id,
-      tracking_code: order.tracking_code,
+      order_code: order.order_code,
       payment_method: order.payment_method,
       shipping_address: order.shipping_address,
       shipping_method: this.shipping(),

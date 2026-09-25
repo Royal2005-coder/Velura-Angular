@@ -1,0 +1,160 @@
+<div class="admin-modal-overlay">
+  <section class="admin-modal admin-drawer--wide">
+    <form (submit)="submit($event)">
+      <header class="admin-modal__header">
+        <h2>{{ title() }}</h2>
+        <button class="admin-icon-button" type="button" (click)="close()" aria-label="Đóng">×</button>
+      </header>
+
+      <div class="admin-modal__body">
+        @if (saveError()) {
+          <p class="admin-form-error" role="alert">{{ saveError() }}</p>
+        }
+
+        <div class="admin-form-row">
+          <label class="admin-form-group">
+            <span class="admin-form-label">Mã <abbr title="Bắt buộc">*</abbr></span>
+            <input class="admin-form-control admin-form-control--code" name="code" required maxlength="30"
+                   [value]="voucher()?.code || ''" [readOnly]="isEdit() || !canMutate()"
+                   placeholder="GIAM50K" autocomplete="off" />
+            <small class="admin-form-helper">
+              {{ isEdit() ? 'Mã đã phát không đổi được vì khách có thể đã lưu lại.' : 'Chữ không dấu, số, gạch ngang. Hệ thống tự viết hoa.' }}
+            </small>
+          </label>
+          <label class="admin-form-group">
+            <span class="admin-form-label">Tên hiển thị</span>
+            <input class="admin-form-control" name="name" maxlength="120"
+                   [value]="voucher()?.name || ''" [readOnly]="!canMutate()" placeholder="Giảm 50.000đ cho đơn từ 500.000đ" />
+            <small class="admin-form-helper">Khách thấy tên này trong ví mã. Bỏ trống thì dùng chính mã.</small>
+          </label>
+        </div>
+
+        <label class="admin-form-group">
+          <span class="admin-form-label">Chiến dịch</span>
+          <select class="admin-form-control" name="promoId" [disabled]="!canMutate()" (change)="onCampaignChange($event)">
+            <option value="" [selected]="!promoId()">Không thuộc chiến dịch nào</option>
+            @for (row of campaigns(); track campaignValue(row)) {
+              <option [value]="campaignValue(row)" [selected]="promoId() === campaignValue(row)">{{ campaignLabel(row) }}</option>
+            }
+          </select>
+          @if (campaignCapacity(); as capacity) {
+            <small class="admin-form-helper" [class.admin-form-error]="campaignFull()">{{ capacity }}</small>
+          } @else {
+            <small class="admin-form-helper">Mã thuộc chiến dịch chỉ dùng được khi chiến dịch đang chạy và còn ngân sách.</small>
+          }
+        </label>
+
+        <div class="admin-form-row">
+          <label class="admin-form-group">
+            <span class="admin-form-label">Loại giảm <abbr title="Bắt buộc">*</abbr></span>
+            <select class="admin-form-control" name="type" [disabled]="!canMutate()" (change)="onTypeChange($event)">
+              <option value="fixed_amount" [selected]="discountType() === 'fixed_amount'">Số tiền cố định</option>
+              <option value="percentage" [selected]="discountType() === 'percentage'">Theo phần trăm</option>
+              <option value="free_shipping" [selected]="discountType() === 'free_shipping'">Miễn phí vận chuyển</option>
+            </select>
+          </label>
+          @if (showValue()) {
+            <label class="admin-form-group">
+              <span class="admin-form-label">
+                {{ discountType() === 'percentage' ? 'Phần trăm giảm (%)' : 'Số tiền giảm (₫)' }} <abbr title="Bắt buộc">*</abbr>
+              </span>
+              <input class="admin-form-control" name="value" type="number" min="0"
+                     [attr.max]="discountType() === 'percentage' ? 100 : null"
+                     [attr.step]="discountType() === 'percentage' ? 1 : 1000"
+                     [value]="voucher()?.discount_value ?? ''" [readOnly]="!canMutate()" />
+            </label>
+          } @else {
+            <p class="admin-form-helper admin-form-group">Giảm đúng bằng phí vận chuyển của đơn, không vượt giá trị hàng.</p>
+          }
+        </div>
+
+        <div class="admin-form-row">
+          @if (showMaxDiscount()) {
+            <label class="admin-form-group">
+              <span class="admin-form-label">Giảm tối đa (₫)</span>
+              <input class="admin-form-control" name="maxDiscount" type="number" min="0" step="1000"
+                     [value]="voucher()?.max_discount_amount ?? ''" [readOnly]="!canMutate()" />
+              <small class="admin-form-helper">Bỏ trống là không giới hạn số tiền giảm.</small>
+            </label>
+          }
+          <label class="admin-form-group">
+            <span class="admin-form-label">Đơn tối thiểu (₫)</span>
+            <input class="admin-form-control" name="minOrderValue" type="number" min="0" step="1000"
+                   [value]="voucher()?.min_order_value ?? 0" [readOnly]="!canMutate()" />
+            @if (selectedCategories().length) {
+              <small class="admin-form-helper">Tính trên phần hàng thuộc danh mục đã chọn, không tính cả đơn.</small>
+            }
+          </label>
+        </div>
+
+        <div class="admin-form-row">
+          <label class="admin-form-group">
+            <span class="admin-form-label">Tổng lượt dùng</span>
+            <input class="admin-form-control" name="maxUses" type="number" min="1" step="1"
+                   [value]="voucher()?.usage_limit_total ?? ''" [readOnly]="!canMutate()" />
+            <small class="admin-form-helper">
+              Bỏ trống là không giới hạn.
+              @if (isEdit()) { Đã dùng {{ voucher()?.used_count || 0 }} lượt. }
+            </small>
+          </label>
+          <label class="admin-form-group">
+            <span class="admin-form-label">Lượt mỗi khách</span>
+            <input class="admin-form-control" name="maxPerUser" type="number" min="1" step="1"
+                   [value]="voucher()?.usage_limit_per_user ?? 1" [readOnly]="!canMutate()" />
+          </label>
+        </div>
+
+        <div class="admin-form-row">
+          <label class="admin-form-group">
+            <span class="admin-form-label">Bắt đầu <abbr title="Bắt buộc">*</abbr></span>
+            <input class="admin-form-control" name="startDate" type="datetime-local" required
+                   [value]="toLocalInput(voucher()?.start_date)" [readOnly]="!canMutate()" />
+          </label>
+          <label class="admin-form-group">
+            <span class="admin-form-label">Kết thúc <abbr title="Bắt buộc">*</abbr></span>
+            <input class="admin-form-control" name="endDate" type="datetime-local" required
+                   [value]="toLocalInput(voucher()?.end_date)" [readOnly]="!canMutate()" />
+          </label>
+        </div>
+
+        <label class="admin-form-group">
+          <span class="admin-form-label">Đối tượng</span>
+          <select class="admin-form-control" name="applicableUserGroup" [disabled]="!canMutate()">
+            <option value="all_users" [selected]="(voucher()?.applicable_user_group || 'all_users') === 'all_users'">Mọi khách</option>
+            <option value="guest" [selected]="voucher()?.applicable_user_group === 'guest'">Khách vãng lai</option>
+            <option value="member" [selected]="voucher()?.applicable_user_group === 'member'">Thành viên</option>
+          </select>
+        </label>
+
+        <hr class="admin-form-divider" />
+        <p class="admin-form-section">Danh mục áp dụng</p>
+        @if (!categoryOptions().length) {
+          <p class="admin-form-helper">Chưa tải được danh mục. Mã sẽ áp cho toàn bộ giỏ hàng.</p>
+        } @else {
+          <div class="admin-category-tree" role="group" aria-label="Danh mục áp dụng">
+            @for (option of categoryOptions(); track option.id) {
+              <label class="admin-form-check admin-category-tree__item" [style.padding-left.px]="option.depth * 20">
+                <input type="checkbox" [checked]="isCategorySelected(option.id)" [disabled]="!canMutate()"
+                       (change)="toggleCategory(option.id, $event)" />
+                <span>{{ option.name }}</span>
+              </label>
+            }
+          </div>
+          <small class="admin-form-helper">
+            Không chọn là áp cho cả giỏ. Chọn danh mục cha thì bao luôn các danh mục con. Mã chỉ giảm trên phần
+            hàng thuộc danh mục, giỏ không có hàng phù hợp thì khách thấy lý do trong ví mã.
+          </small>
+        }
+      </div>
+
+      <footer class="admin-modal__footer">
+        <button class="admin-btn admin-btn--ghost" type="button" (click)="close()">Đóng</button>
+        @if (canMutate()) {
+          <button class="admin-btn admin-btn--secondary" type="submit" [disabled]="saving()">
+            {{ saving() ? 'Đang lưu…' : 'Lưu' }}
+          </button>
+        }
+      </footer>
+    </form>
+  </section>
+</div>

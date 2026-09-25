@@ -26,7 +26,13 @@ export interface OfferVoucher {
   usable: boolean;
   blocked_reason: string | null;
   condition_text: string;
+  /** Tên danh mục mã áp dụng. Rỗng là áp cho cả giỏ. */
+  category_names?: string[];
+  /** Nhóm hiển thị do máy chủ xếp: dành riêng, đang diễn ra, sắp hết hạn. */
+  group?: OfferVoucherGroup;
 }
+
+export type OfferVoucherGroup = 'personal' | 'running' | 'ending';
 
 /** Lời mời bổ sung ngày sinh để nhận ưu đãi sinh nhật. */
 export interface BirthdayPrompt {

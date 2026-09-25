@@ -12,6 +12,7 @@ import { handleCartRoute } from "./cart.js";
 import { handleNotificationsRoute } from "./notifications.js";
 import { handleUploadRoute } from "./upload.js";
 import { handleOffersRoute } from "./offers.js";
+import { handleCheckoutRoute } from "./checkout-quote.js";
 import { handleStripeWebhook } from "../payments/stripe-webhook.js";
 
 import type { AuthContext, HeaderMap, HttpRequest, HttpResponse } from "../types.js";
@@ -53,6 +54,9 @@ export async function handleUserRoute(
 
     case "vouchers":
       return await handleVouchersRoute(req, res, action, corsHeaders, context);
+
+    case "checkout":
+      return await handleCheckoutRoute(req, res, action, corsHeaders, context);
       
     case "returns":
       return await handleReturnsRoute(req, res, action, corsHeaders, context);

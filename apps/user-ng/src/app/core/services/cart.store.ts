@@ -93,6 +93,17 @@ export class CartStore {
   }
 
   /**
+   * Swaps one line to another variant of the same product, keeping quantity.
+   */
+  replaceVariant(fromVariantId: string, next: CartLine): void {
+    const current = this.items();
+    const previous = current.find((line) => line.variant_id === fromVariantId);
+    const quantity = previous?.quantity || next.quantity || 1;
+    const without = current.filter((line) => line.variant_id !== fromVariantId);
+    this.persist(this.mergeLine(without, { ...next, quantity }));
+  }
+
+  /**
    * Removes a variant line or every component of a combo set.
    */
   removeItem(variantId: string): void {

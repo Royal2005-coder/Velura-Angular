@@ -38,6 +38,10 @@
     <p class="voucher-wallet__state">Hiện chưa có ưu đãi nào khả dụng.</p>
   }
 
+  @if (preferredNotice()) {
+    <p class="voucher-wallet__state voucher-wallet__state--error" role="status">{{ preferredNotice() }}</p>
+  }
+
   @if (nearestGoal(); as goal) {
     <div class="voucher-wallet__goal">
       <p class="voucher-wallet__goal-text">
@@ -128,7 +132,7 @@
                   </p>
                   <p class="voucher-card__name">{{ item.name }}</p>
                   <p class="voucher-card__meta">HSD: {{ expiryLabel(item.end_date) }}</p>
-                  <p class="voucher-card__reason">** {{ item.reason_text }}</p>
+                  <p class="voucher-card__reason">{{ item.reason_text }}</p>
                 </div>
               </article>
             </li>

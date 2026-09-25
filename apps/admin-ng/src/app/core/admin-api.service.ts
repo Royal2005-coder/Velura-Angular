@@ -61,23 +61,91 @@ export interface AdminOrderPayment {
   payment_id?: string;
   payment_status?: string;
   payment_method?: string;
+  payment_provider?: string;
+  gateway_response_code?: string | null;
+  amount?: number;
+  refund_amount?: number | null;
+  refund_reason?: string | null;
+  refund_at?: string | null;
+  paid_at?: string | null;
   has_discrepancy?: boolean;
+  created_at?: string;
   version?: number;
+}
+
+/** Trường nhập thêm của một action đơn, ngoài ghi chú. Khớp `OrderActionField` phía API. */
+export type AdminOrderActionField = 'call_result' | 'shortage' | 'shipment' | 'cancel_reason' | 'tracking';
+
+/** Action admin đang xem được bấm, do API tính theo vai trò, trạng thái và guard. */
+export interface AdminOrderAction {
+  code: string;
+  label: string;
+  to_status: string | null;
+  requires_note: boolean;
+  fields: AdminOrderActionField[];
+  destructive: boolean;
+}
+
+/** Một dòng lịch sử xử lý (`order_event`): mọi action, kể cả action không đổi trạng thái. */
+export interface AdminOrderEvent {
+  event_id?: string;
+  action?: string;
+  actor_type?: string;
+  actor_id?: string | null;
+  actor_role?: string | null;
+  from_status?: string | null;
+  to_status?: string | null;
+  result?: string | null;
+  note?: string | null;
+  payload?: Record<string, unknown> | null;
+  created_at?: string;
 }
 
 export interface AdminOrderRow {
   order_id: string;
+  order_code?: string;
   order_date?: string;
+  created_at?: string;
   status?: string;
+  status_label?: string;
+  payment_method?: string;
+  payment_status?: string | null;
+  payment_status_label?: string | null;
   shipping_name?: string;
   shipping_phone?: string;
   shipping_address?: string;
+  shipping_fee?: number;
+  subtotal?: number;
+  discount_amount?: number;
   tracking_code?: string | null;
+  carrier?: string | null;
+  tracking_url?: string | null;
+  handed_over_at?: string | null;
+  shipment_voided_at?: string | null;
+  returned_to_stock_at?: string | null;
+  cancelled_reason?: string | null;
+  internal_note?: string | null;
   total_amount?: number;
   version?: number;
+  tags?: Array<{ code: string; label: string }>;
+  allowed_actions?: AdminOrderAction[];
+  can_simulate_carrier?: boolean;
   payments?: AdminOrderPayment[];
   items?: Array<{ product_name?: string; quantity?: number; unit_price?: number }>;
-  history?: Array<{ new_status?: string; changed_at?: string; note?: string; trigger_type?: string }>;
+  history?: Array<{ old_status?: string | null; new_status?: string; changed_at?: string; note?: string; trigger_type?: string }>;
+  events?: AdminOrderEvent[];
+}
+
+/** Số đơn theo trạng thái và số đơn cần xử lý, đếm ở cơ sở dữ liệu. */
+export interface AdminOrderSummary {
+  by_status: Array<{ status: string; label: string; count: number }>;
+  attention: number;
+}
+
+/** Kết quả một action: đơn mới nhất và kết quả hoàn tiền nếu action kéo theo hoàn tiền. */
+export interface AdminOrderActionResult {
+  order: AdminOrderRow;
+  refund: { status: 'refunded' | 'requested' | 'failed' | 'skipped'; message?: string } | null;
 }
 
 export interface AdminReturnRow {
@@ -193,6 +261,8 @@ export interface AdminPromotionRow {
   ends_at?: string;
   budget?: number;
   budget_limit?: number;
+  /** Trần số mã chiến dịch được phát. 0 là không đặt trần. */
+  max_vouchers_allowed?: number;
   total_discount_issued?: number;
   version?: number;
   paused_at?: string | null;
@@ -243,25 +313,58 @@ export interface AdminPromotionListPayload extends AdminListPayload<AdminPromoti
   summary?: AdminPromotionSummary;
 }
 
-/** Số liệu tổng hợp trả về từ `/api/v1/admin/pricing/statistics`. */
+/** Một dòng trong bảng so sánh chiến dịch của tab Thống kê. */
+export interface AdminCampaignStatistic {
+  /** null là nhóm "Mã đứng riêng". */
+  promoId: string | null;
+  name: string;
+  lifecycle: AdminPromotionRow['lifecycle_status'] | null;
+  lifecycleLabel: string | null;
+  vouchers: number;
+  orders: number;
+  revenue: number;
+  discount: number;
+  /** Doanh thu trên mỗi đồng giảm; null khi chưa giảm đồng nào. */
+  revenuePerDiscount: number | null;
+  budgetLimit: number;
+  budgetUsed: number;
+}
+
+/**
+ * Số liệu tổng hợp trả về từ `/api/v1/admin/pricing/statistics`.
+ *
+ * Phần `orders` đọc từ đơn hàng thật (migration 036): đơn chưa huỷ, mã chưa bị trả lượt.
+ */
 export interface AdminPricingStatistics {
-  promotions: {
+  range: { from: string | null; to: string | null };
+  orders: {
     total: number;
-    active: number;
-    paused: number;
-    totalBudget: number;
-    totalIssued: number;
+    withVoucher: number;
+    voucherRate: number;
+    revenueWithVoucher: number;
+    revenueWithoutVoucher: number;
+    revenueShareWithVoucher: number;
+    discountTotal: number;
+    aovWithVoucher: number;
+    aovWithoutVoucher: number;
+  };
+  promotions: AdminPromotionSummary & {
     budgetRemaining: number;
     budgetUsagePercent: number;
   };
   vouchers: {
     total: number;
     active: number;
+    scheduled: number;
     expired: number;
+    disabled: number;
+    unlimited: number;
     totalUsed: number;
     totalLimit: number;
     usagePercent: number;
   };
+  campaigns: AdminCampaignStatistic[];
+  topVouchers: Array<{ voucherId: string; code: string; orders: number; discount: number; revenue: number }>;
 }
 
 export interface AdminVoucherRow {
@@ -275,11 +378,16 @@ export interface AdminVoucherRow {
   min_order?: number;
   min_order_value?: number;
   used_count?: number;
-  usage_limit_total?: number;
+  usage_limit_total?: number | null;
+  usage_limit_per_user?: number;
+  max_discount_amount?: number | null;
+  /** Mảng mã danh mục; null là áp cho cả giỏ. */
+  applicable_categories?: string[] | string | null;
+  start_date?: string;
   end_date?: string;
   expires_at?: string;
   is_active?: boolean;
-  promo_id?: string;
+  promo_id?: string | null;
   applicable_user_group?: string;
   version?: number;
 }
@@ -766,17 +874,31 @@ export class AdminApiService {
   }
 
   /**
-   * Changes order status using the original transition API.
+   * Số đơn theo trạng thái và số đơn cần xử lý, cho tab và bộ lọc.
    */
-  changeOrderStatus(orderId: string, body: Record<string, unknown>): Observable<unknown> {
-    return this.http.post(`${this.baseUrl}/api/v1/admin/orders/${encodeURIComponent(orderId)}/change-status`, body);
+  orderSummary(): Observable<AdminOrderSummary> {
+    return this.http.get<AdminOrderSummary>(`${this.baseUrl}/api/v1/admin/orders/summary`);
   }
 
   /**
-   * Cancels an order through the original admin API.
+   * Thực hiện một action nghiệp vụ trên đơn (KAN-60). API kiểm lại quyền, trạng thái và
+   * phiên bản; trả về đơn mới nhất.
    */
-  cancelOrder(orderId: string, body: Record<string, unknown>): Observable<unknown> {
-    return this.http.post(`${this.baseUrl}/api/v1/admin/orders/${encodeURIComponent(orderId)}/cancel`, body);
+  performOrderAction(orderId: string, action: string, body: Record<string, unknown>): Observable<AdminOrderActionResult> {
+    return this.http.post<AdminOrderActionResult>(
+      `${this.baseUrl}/api/v1/admin/orders/${encodeURIComponent(orderId)}/actions/${encodeURIComponent(action)}`,
+      body,
+    );
+  }
+
+  /**
+   * Mô phỏng kết quả giao hàng của ĐVVC. Chỉ super_admin; ghi nhận là action của System.
+   */
+  simulateCarrier(orderId: string, body: { outcome: string; note?: string }): Observable<AdminOrderRow> {
+    return this.http.post<AdminOrderRow>(
+      `${this.baseUrl}/api/v1/admin/orders/${encodeURIComponent(orderId)}/simulate-carrier`,
+      body,
+    );
   }
 
   /**
@@ -978,6 +1100,18 @@ export class AdminApiService {
     return this.http.post(`${this.baseUrl}/api/v1/admin/vouchers`, body);
   }
 
+  /**
+   * Sửa một mã. Trường không gửi là giữ nguyên; bỏ trần giảm, bỏ tổng lượt, gỡ khỏi
+   * chiến dịch phải gửi cờ `clearMaxDiscount`, `clearMaxUses`, `clearPromo`.
+   */
+  updateVoucher(voucherId: string, body: Record<string, unknown>): Observable<AdminVoucherRow> {
+    return this.http.patch<AdminVoucherRow>(`${this.baseUrl}/api/v1/admin/vouchers/${encodeURIComponent(voucherId)}`, body);
+  }
+
+  getVoucher(voucherId: string): Observable<AdminVoucherRow> {
+    return this.http.get<AdminVoucherRow>(`${this.baseUrl}/api/v1/admin/vouchers/${encodeURIComponent(voucherId)}`);
+  }
+
   toggleVoucher(voucherId: string): Observable<unknown> {
     return this.http.post(`${this.baseUrl}/api/v1/admin/vouchers/${encodeURIComponent(voucherId)}/toggle`, {});
   }
@@ -1002,8 +1136,8 @@ export class AdminApiService {
    * Endpoint này đã tồn tại từ trước nhưng chưa màn hình nào gọi tới, nên tab Thống kê
    * hiển thị một khối rỗng viết cứng.
    */
-  pricingStatistics(): Observable<AdminPricingStatistics> {
-    return this.http.get<AdminPricingStatistics>(`${this.baseUrl}/api/v1/admin/pricing/statistics`);
+  pricingStatistics(params: Record<string, string> = {}): Observable<AdminPricingStatistics> {
+    return this.http.get<AdminPricingStatistics>(`${this.baseUrl}/api/v1/admin/pricing/statistics`, { params: this.params(params) });
   }
 
   /**

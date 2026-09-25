@@ -247,18 +247,23 @@
 @if (overlay() === 'create' || overlay() === 'edit') {
   <div class="admin-modal-overlay">
     <section class="admin-modal admin-drawer--wide">
-      <form (submit)="submitEditor($event)">
-        <header class="admin-modal__header">
+      <header class="admin-modal__header">
+        <div>
           <h2>{{ overlay() === 'create' ? 'Thêm sản phẩm' : 'Chi tiết sản phẩm' }}</h2>
-          <button class="admin-icon-button" type="button" (click)="closeOverlays()">×</button>
-        </header>
-        <div class="admin-modal__body">
+          @if (overlay() === 'edit' && selected()) {
+            <small class="admin-product-code" style="margin: 0;">{{ selected()!.sku }} — ID: {{ selected()!.product_id }}</small>
+          }
+        </div>
+        <button class="admin-icon-button" type="button" (click)="closeOverlays()">×</button>
+      </header>
+      <div class="admin-modal__body">
+        <form id="productEditorForm" (submit)="submitEditor($event)">
           <label class="admin-form-group">
-            <span class="admin-form-label">Tên</span>
+            <span class="admin-form-label">Tên *</span>
             <input class="admin-form-control" name="name" required minlength="2" [value]="selected()?.name || ''" [readOnly]="!canMutate()" />
           </label>
           <label class="admin-form-group">
-            <span class="admin-form-label">SKU</span>
+            <span class="admin-form-label">SKU *</span>
             <input class="admin-form-control" name="sku" [value]="selected()?.sku || ''" [readOnly]="overlay() === 'edit'" placeholder="VLR-AO001" />
             <small class="admin-form-helper">Dạng VLR-AO001 hoặc VL-AO001. Không dùng khoảng trắng.</small>
           </label>
@@ -267,7 +272,7 @@
             <input class="admin-form-control" name="slug" [value]="selected()?.slug || ''" [readOnly]="overlay() === 'edit'" />
           </label>
           <label class="admin-form-group">
-            <span class="admin-form-label">Danh mục</span>
+            <span class="admin-form-label">Danh mục *</span>
             <select class="admin-form-control" name="categoryId" required [disabled]="!canMutate()">
               <option value="">Chọn danh mục</option>
               @for (row of categories(); track row.category_id) {
@@ -351,20 +356,39 @@
             }
             <small class="admin-form-helper">Ảnh JPG, PNG, WebP hoặc GIF, tối đa 5 MB. URL hiện có vẫn dùng được.</small>
           </label>
-          @if (overlay() === 'edit') {
-            <h3 class="admin-drawer__section">Biến thể / tồn kho</h3>
+        </form>
+
+        @if (overlay() === 'edit') {
+          <div style="margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--line);">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+              <h3 class="admin-drawer__section" style="margin: 0;">Danh sách biến thể ({{ variants().length }})</h3>
+              @if (canMutate() && selected()) {
+                <button
+                  class="admin-btn admin-btn--ghost admin-btn--sm"
+                  type="button"
+                  (click)="openStock(selected()!)"
+                >
+                  ⚡ Điều chỉnh tồn kho ERP
+                </button>
+              }
+            </div>
+
             @if (!variants().length) {
-              <p class="admin-table-note">Chưa có biến thể.</p>
+              <p class="admin-table-note">Chưa có biến thể nào cho sản phẩm này.</p>
             } @else {
               <div class="admin-table-wrap">
                 <table class="admin-table">
-                  <thead><tr><th>Màu</th><th>Size</th><th>Tồn</th><th>Ngưỡng</th></tr></thead>
+                  <thead><tr><th>Màu</th><th>Size</th><th>Tồn kho</th><th>Ngưỡng cảnh báo</th></tr></thead>
                   <tbody>
                     @for (variant of variants(); track variant.variant_id) {
                       <tr>
-                        <td>{{ variant.color }}</td>
+                        <td><strong>{{ variant.color }}</strong></td>
                         <td>{{ variant.size }}</td>
-                        <td>{{ variant.stock_quantity }}</td>
+                        <td>
+                          <span [style.color]="(variant.stock_quantity ?? 0) <= (variant.low_stock_threshold ?? 5) ? '#c62828' : '#2e7d32'" style="font-weight: 600;">
+                            {{ variant.stock_quantity }}
+                          </span>
+                        </td>
                         <td>{{ variant.low_stock_threshold }}</td>
                       </tr>
                     }
@@ -372,27 +396,44 @@
                 </table>
               </div>
             }
-          }
-          @if (actionError()) {
-            <p class="field__error">{{ actionError() }}</p>
-          }
-        </div>
-        <footer class="admin-modal__footer">
-          <button class="admin-btn admin-btn--ghost" type="button" (click)="closeOverlays()">Đóng</button>
-          @if (canMutate()) {
-            <button class="admin-btn admin-btn--secondary" type="submit">Lưu</button>
-          }
-        </footer>
-      </form>
-      @if (overlay() === 'edit' && canMutate() && selected()) {
-        <form class="admin-modal__body" (submit)="submitVariant($event)">
-          <label class="admin-form-group"><span class="admin-form-label">Màu</span><input class="admin-form-control" name="color" required /></label>
-          <label class="admin-form-group"><span class="admin-form-label">Size</span><input class="admin-form-control" name="size" required /></label>
-          <label class="admin-form-group"><span class="admin-form-label">Tồn kho</span><input class="admin-form-control" name="stockQuantity" type="number" min="0" value="0" /></label>
-          <label class="admin-form-group"><span class="admin-form-label">Ngưỡng thấp</span><input class="admin-form-control" name="lowStockThreshold" type="number" min="0" value="5" /></label>
-          <button class="admin-btn admin-btn--outline admin-btn--sm" type="submit">Thêm biến thể</button>
-        </form>
-      }
+
+            @if (canMutate() && selected()) {
+              <div style="margin-top: 16px; padding: 14px; background: #faf8f5; border: 1px solid var(--line); border-radius: 8px;">
+                <h4 style="margin: 0 0 10px 0; font-size: 0.875rem; font-weight: 600; color: #4a4039;">Thêm biến thể mới</h4>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)) auto; gap: 10px; align-items: end;">
+                  <label class="admin-form-group" style="margin: 0;">
+                    <span class="admin-form-label" style="font-size: 0.75rem;">Màu sắc *</span>
+                    <input class="admin-form-control" [value]="newVariantColor()" (input)="newVariantColor.set($any($event.target).value)" placeholder="VD: Trắng" />
+                  </label>
+                  <label class="admin-form-group" style="margin: 0;">
+                    <span class="admin-form-label" style="font-size: 0.75rem;">Size *</span>
+                    <input class="admin-form-control" [value]="newVariantSize()" (input)="newVariantSize.set($any($event.target).value)" placeholder="VD: L" />
+                  </label>
+                  <label class="admin-form-group" style="margin: 0;">
+                    <span class="admin-form-label" style="font-size: 0.75rem;">Tồn kho</span>
+                    <input class="admin-form-control" type="number" min="0" [value]="newVariantStock()" (input)="newVariantStock.set(+$any($event.target).value)" />
+                  </label>
+                  <label class="admin-form-group" style="margin: 0;">
+                    <span class="admin-form-label" style="font-size: 0.75rem;">Ngưỡng thấp</span>
+                    <input class="admin-form-control" type="number" min="0" [value]="newVariantThreshold()" (input)="newVariantThreshold.set(+$any($event.target).value)" />
+                  </label>
+                  <button class="admin-btn admin-btn--outline admin-btn--sm" type="button" (click)="submitNewVariant()">+ Thêm</button>
+                </div>
+              </div>
+            }
+          </div>
+        }
+
+        @if (actionError()) {
+          <p class="field__error" style="margin-top: 12px; color: var(--error);">{{ actionError() }}</p>
+        }
+      </div>
+      <footer class="admin-modal__footer">
+        <button class="admin-btn admin-btn--ghost" type="button" (click)="closeOverlays()">Đóng</button>
+        @if (canMutate()) {
+          <button class="admin-btn admin-btn--secondary" type="submit" form="productEditorForm">Lưu thay đổi</button>
+        }
+      </footer>
     </section>
   </div>
 }
@@ -437,36 +478,124 @@
 
 @if (overlay() === 'stock' && selected()) {
   <div class="admin-modal-overlay">
-    <section class="admin-modal">
+    <section class="admin-modal admin-modal--lg">
       <form (submit)="submitStock($event)">
         <header class="admin-modal__header">
-          <h2>Điều chỉnh tồn kho - {{ selected()!.sku }}</h2>
+          <div>
+            <h2 style="margin: 0; font-size: 1.25rem;">Điều chỉnh tồn kho ERP</h2>
+            <small style="color: var(--muted); font-size: 0.8125rem;">SKU: <strong>{{ selected()!.sku }}</strong> — {{ selected()!.name }}</small>
+          </div>
           <button class="admin-icon-button" type="button" (click)="closeOverlays()">×</button>
         </header>
-        <div class="admin-modal__body">
-          <label class="admin-form-group">
-            <span class="admin-form-label">Biến thể</span>
-            <select class="admin-form-control" name="variantId" required>
+        <div class="admin-modal__body" style="display: flex; flex-direction: column; gap: 16px;">
+          <!-- 1. Chọn biến thể -->
+          <div class="admin-form-group">
+            <span class="admin-form-label">Chọn biến thể (Màu / Size) *</span>
+            <select class="admin-form-control" [value]="selectedVariantId()" (change)="onVariantSelect($event)" required>
+              @if (!variants().length) {
+                <option value="">Đang tải danh sách biến thể...</option>
+              }
               @for (variant of variants(); track variant.variant_id) {
-                <option [value]="variant.variant_id">{{ variant.color }} / {{ variant.size }} ({{ variant.stock_quantity }})</option>
+                <option [value]="variant.variant_id">
+                  {{ variant.color }} / Size {{ variant.size }} (Hiện có: {{ variant.stock_quantity }} cái)
+                </option>
               }
             </select>
-          </label>
-          <label class="admin-form-group">
-            <span class="admin-form-label">Delta (+ nhập / − xuất)</span>
-            <input class="admin-form-control" name="delta" type="number" required />
-          </label>
-          <label class="admin-form-group">
-            <span class="admin-form-label">Lý do</span>
-            <textarea class="admin-form-control admin-form-textarea" name="reason" minlength="10" required></textarea>
-          </label>
+          </div>
+
+          <!-- 2. Loại thao tác kho (Segmented Buttons) -->
+          <div class="admin-form-group">
+            <span class="admin-form-label">Loại thao tác kho *</span>
+            <div style="display: flex; gap: 8px; background: var(--field-bg, #f6f3ee); padding: 4px; border-radius: 8px; border: 1px solid var(--line);">
+              <button
+                type="button"
+                [style.background]="stockAdjustmentType() === 'in' ? '#2e7d32' : 'transparent'"
+                [style.color]="stockAdjustmentType() === 'in' ? '#fff' : 'inherit'"
+                style="flex: 1; padding: 8px 12px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; transition: all 0.2s; font-size: 0.8125rem;"
+                (click)="setStockAdjustmentType('in')"
+              >
+                + Nhập kho
+              </button>
+              <button
+                type="button"
+                [style.background]="stockAdjustmentType() === 'out' ? '#c62828' : 'transparent'"
+                [style.color]="stockAdjustmentType() === 'out' ? '#fff' : 'inherit'"
+                style="flex: 1; padding: 8px 12px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; transition: all 0.2s; font-size: 0.8125rem;"
+                (click)="setStockAdjustmentType('out')"
+              >
+                - Xuất kho
+              </button>
+              <button
+                type="button"
+                [style.background]="stockAdjustmentType() === 'set' ? '#7C5454' : 'transparent'"
+                [style.color]="stockAdjustmentType() === 'set' ? '#fff' : 'inherit'"
+                style="flex: 1; padding: 8px 12px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; transition: all 0.2s; font-size: 0.8125rem;"
+                (click)="setStockAdjustmentType('set')"
+              >
+                Kiểm kê điều chỉnh
+              </button>
+            </div>
+          </div>
+
+          <!-- 3. Số lượng & Xem trước tồn kho Real-time -->
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: center;">
+            <div class="admin-form-group">
+              <span class="admin-form-label">
+                {{ stockAdjustmentType() === 'set' ? 'Số lượng thực tế sau kiểm kê' : 'Số lượng điều chỉnh' }} *
+              </span>
+              <input
+                class="admin-form-control"
+                type="number"
+                min="0"
+                [value]="stockAdjustmentQuantity()"
+                (input)="onStockQuantityChange($event)"
+                required
+              />
+            </div>
+            <div style="padding: 12px 16px; border-radius: 8px; background: #faf8f5; border: 1px dashed var(--line); text-align: center;">
+              <small style="color: var(--muted); font-size: 0.75rem; text-transform: uppercase; font-weight: 600; letter-spacing: 0.04em;">Dự báo tồn kho</small>
+              <div style="font-size: 1.125rem; font-weight: 700; margin-top: 4px; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                <span style="color: #666;">{{ currentStock() }}</span>
+                <span>→</span>
+                <span [style.color]="projectedStock() < 5 ? '#c62828' : '#2e7d32'">{{ projectedStock() }}</span>
+                <small style="font-size: 0.8125rem; font-weight: 500; color: #888;">cái</small>
+              </div>
+            </div>
+          </div>
+
+          <!-- 4. Gợi ý lý do chuẩn ERP & Ô nhập lý do -->
+          <div class="admin-form-group">
+            <span class="admin-form-label">Lý do điều chỉnh (Tối thiểu 5 ký tự) *</span>
+            <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px;">
+              @for (reason of commonStockReasons; track reason) {
+                <button
+                  type="button"
+                  class="admin-btn admin-btn--ghost admin-btn--sm"
+                  style="font-size: 0.75rem; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--line);"
+                  (click)="selectStockReason(reason)"
+                >
+                  {{ reason }}
+                </button>
+              }
+            </div>
+            <textarea
+              class="admin-form-control admin-form-textarea"
+              name="reason"
+              rows="2"
+              [value]="stockReason()"
+              (input)="onStockReasonChange($event)"
+              minlength="5"
+              required
+            ></textarea>
+          </div>
+
           @if (actionError()) {
-            <p class="field__error">{{ actionError() }}</p>
+            <p class="field__error" style="margin: 0; color: var(--error);">{{ actionError() }}</p>
           }
         </div>
         <footer class="admin-modal__footer">
           <button class="admin-btn admin-btn--ghost" type="button" (click)="closeOverlays()">Hủy</button>
-          <button class="admin-btn admin-btn--secondary" type="submit">Cập nhật tồn</button>
+          <button class="admin-btn admin-btn--secondary" type="submit">Xác nhận cập nhật tồn</button>
         </footer>
       </form>
     </section>

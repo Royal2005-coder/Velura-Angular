@@ -110,6 +110,44 @@ export class AdminProductsPage {
   readonly imageUploading = signal(false);
   readonly canMutate = computed(() => this.session.canMutate('products'));
   readonly canOpenPricing = computed(() => this.session.canOpen('pricing'));
+
+  // Signals cho thêm biến thể trong drawer Chi tiết sản phẩm
+  readonly newVariantColor = signal('');
+  readonly newVariantSize = signal('');
+  readonly newVariantStock = signal(0);
+  readonly newVariantThreshold = signal(5);
+
+  // Signals & computed cho modal Điều chỉnh tồn kho chuẩn ERP
+  readonly stockAdjustmentType = signal<'in' | 'out' | 'set'>('in');
+  readonly stockAdjustmentQuantity = signal<number>(10);
+  readonly selectedVariantId = signal<string>('');
+  readonly stockReason = signal<string>('Nhập lô hàng mới từ xưởng may');
+  readonly commonStockReasons: readonly string[] = [
+    'Nhập lô hàng mới từ xưởng may',
+    'Khách hoàn hàng, tái nhập kho',
+    'Xuất trả hàng lỗi / bảo hành',
+    'Hàng rách, hỏng, tiêu hủy mẫu trưng bày',
+    'Cân bằng kiểm kê định kỳ',
+  ];
+
+  readonly selectedVariant = computed(() => {
+    const id = this.selectedVariantId();
+    return this.variants().find((v) => v.variant_id === id) || this.variants()[0] || null;
+  });
+
+  readonly currentStock = computed(() => {
+    return Number(this.selectedVariant()?.stock_quantity ?? 0);
+  });
+
+  readonly projectedStock = computed(() => {
+    const current = this.currentStock();
+    const qty = Math.max(0, this.stockAdjustmentQuantity());
+    const type = this.stockAdjustmentType();
+    if (type === 'in') return current + qty;
+    if (type === 'out') return Math.max(0, current - qty);
+    return qty;
+  });
+
   readonly allowedStatuses = computed(() => {
     const current = this.selected()?.status || 'on_sale';
     const next = STATUS_TRANSITIONS[current] || ['hidden'];
@@ -369,14 +407,35 @@ export class AdminProductsPage {
   }
 
   /**
-   * Opens stock adjustment for the first or selected variant.
+   * Opens stock adjustment for the first or selected variant with ERP controls.
    */
   openStock(product: AdminProductRow): void {
     this.selected.set(product);
     this.overlay.set('stock');
     this.actionError.set(null);
+    this.stockAdjustmentType.set('in');
+    this.stockAdjustmentQuantity.set(10);
+    this.stockReason.set('Nhập lô hàng mới từ xưởng may');
+
+    // Nạp ngay biến thể sẵn có của sản phẩm để dropdown không bị rỗng
+    const initialVariants = product.variants || [];
+    this.variants.set(initialVariants);
+    if (initialVariants.length > 0) {
+      this.selectedVariantId.set(initialVariants[0].variant_id);
+    } else {
+      this.selectedVariantId.set('');
+    }
+
     this.adminApi.listVariants(product.product_id).subscribe({
-      next: (payload) => this.variants.set(adminListRows(payload)),
+      next: (payload) => {
+        const rows = adminListRows(payload);
+        if (rows.length > 0) {
+          this.variants.set(rows);
+          if (!this.selectedVariantId() || !rows.find((r) => r.variant_id === this.selectedVariantId())) {
+            this.selectedVariantId.set(rows[0].variant_id);
+          }
+        }
+      },
       error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
     });
   }
@@ -479,47 +538,109 @@ export class AdminProductsPage {
   }
 
   /**
-   * Adds a variant from the editor stock form.
+   * Adds a variant from the editor variant section.
    */
-  submitVariant(event: Event): void {
-    event.preventDefault();
+  submitNewVariant(): void {
     const product = this.selected();
     if (!product) {
       return;
     }
-    const form = event.target as HTMLFormElement;
-    const color = (form.elements.namedItem('color') as HTMLInputElement).value.trim();
-    const size = (form.elements.namedItem('size') as HTMLInputElement).value.trim();
-    const stockQuantity = Number((form.elements.namedItem('stockQuantity') as HTMLInputElement).value || 0);
-    const lowStockThreshold = Number((form.elements.namedItem('lowStockThreshold') as HTMLInputElement).value || 5);
+    const color = this.newVariantColor().trim();
+    const size = this.newVariantSize().trim();
+    if (!color || !size) {
+      this.actionError.set('Vui lòng nhập màu sắc và kích thước cho biến thể mới.');
+      return;
+    }
     this.adminApi
-      .createVariant(product.product_id, { color, size, stockQuantity, lowStockThreshold })
+      .createVariant(product.product_id, {
+        color,
+        size,
+        stockQuantity: this.newVariantStock(),
+        lowStockThreshold: this.newVariantThreshold(),
+      })
       .subscribe({
-        next: () => this.openEdit(product),
+        next: () => {
+          this.newVariantColor.set('');
+          this.newVariantSize.set('');
+          this.newVariantStock.set(0);
+          this.newVariantThreshold.set(5);
+          this.actionError.set(null);
+          this.openEdit(product);
+        },
         error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
       });
   }
 
   /**
-   * Applies a stock delta on one variant.
+   * Backwards compatible variant form submit.
+   */
+  submitVariant(event: Event): void {
+    event.preventDefault();
+    this.submitNewVariant();
+  }
+
+  setStockAdjustmentType(type: 'in' | 'out' | 'set'): void {
+    this.stockAdjustmentType.set(type);
+  }
+
+  selectStockReason(reason: string): void {
+    this.stockReason.set(reason);
+  }
+
+  onVariantSelect(event: Event): void {
+    this.selectedVariantId.set((event.target as HTMLSelectElement).value);
+  }
+
+  onStockQuantityChange(event: Event): void {
+    const val = Number((event.target as HTMLInputElement).value || 0);
+    this.stockAdjustmentQuantity.set(Math.max(0, val));
+  }
+
+  onStockReasonChange(event: Event): void {
+    this.stockReason.set((event.target as HTMLTextAreaElement).value);
+  }
+
+  /**
+   * Applies an ERP-grade stock adjustment on the selected variant.
    */
   submitStock(event: Event): void {
     event.preventDefault();
     const product = this.selected();
-    if (!product) {
+    const variant = this.selectedVariant();
+    if (!product || !variant) {
+      this.actionError.set('Vui lòng chọn biến thể cần điều chỉnh.');
       return;
     }
-    const form = event.target as HTMLFormElement;
-    const variantId = (form.elements.namedItem('variantId') as HTMLSelectElement).value;
-    const delta = Number((form.elements.namedItem('delta') as HTMLInputElement).value);
-    const reason = (form.elements.namedItem('reason') as HTMLTextAreaElement).value.trim();
-    const variant = this.variants().find((row) => row.variant_id === variantId);
+
+    const current = Number(variant.stock_quantity ?? 0);
+    const qty = this.stockAdjustmentQuantity();
+    const type = this.stockAdjustmentType();
+    let delta = 0;
+    if (type === 'in') {
+      delta = qty;
+    } else if (type === 'out') {
+      delta = -qty;
+    } else {
+      delta = qty - current;
+    }
+
+    if (delta === 0) {
+      this.actionError.set('Số lượng điều chỉnh không làm thay đổi tồn kho.');
+      return;
+    }
+
+    const reason = this.stockReason().trim();
+    if (!reason || reason.length < 5) {
+      this.actionError.set('Vui lòng nhập lý do điều chỉnh từ 5 ký tự.');
+      return;
+    }
+
     this.adminApi
       .updateStock(product.product_id, {
-        variantId,
+        variantId: variant.variant_id,
         delta,
         reason,
-        expectedVersion: variant?.version ?? 1,
+        expectedVersion: variant.version ?? 1,
       })
       .subscribe({
         next: () => {

@@ -1,6 +1,6 @@
 import { config } from "../config.js";
 import { HttpError, sendJson } from "../http.js";
-import { classifyStripeEvent, closeStripePayment, markStripePaymentPaid, verifyStripeSignature } from "./stripe.js";
+import { classifyStripeEvent, closeStripePayment, markStripePaymentPaid, markStripeRefunded, verifyStripeSignature } from "./stripe.js";
 import type { HeaderMap, HttpRequest, HttpResponse, JsonObject } from "../types.js";
 
 /**
@@ -27,7 +27,9 @@ export async function handleStripeWebhook(req: HttpRequest, res: HttpResponse, c
   }
   const result = action.kind === "paid"
     ? await markStripePaymentPaid(action.orderId, action.paymentIntentId)
-    : await closeStripePayment(action.orderId, action.reason, action.sessionId);
+    : action.kind === "refunded"
+      ? await markStripeRefunded(action.paymentIntentId)
+      : await closeStripePayment(action.orderId, action.reason, action.sessionId);
   sendJson(res, 200, { received: true, result }, corsHeaders);
 }
 

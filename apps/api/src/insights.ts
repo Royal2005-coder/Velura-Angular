@@ -2,7 +2,7 @@ import { selectRows } from "./supabase.js";
 import { HttpError } from "./http.js";
 import { isJsonObject, type JsonObject } from "./types.js";
 
-const DELIVERED_STATUSES = new Set(["delivered", "completed"]);
+const DELIVERED_STATUSES = new Set(["delivered"]);
 const CLOSED_TICKET_STATUSES = new Set(["resolved", "closed"]);
 const PERIOD_LABEL: Record<string, string> = {
   day: "hôm nay",
@@ -294,7 +294,7 @@ export function deriveVoiceInsights(facts: VoiceFacts, range: string): VoiceInsi
   ).length;
   const completedOrders = delivered.length;
   const cancelled = facts.orders.filter((row) => String(row.status || "") === "cancelled");
-  const failedDelivery = facts.orders.filter((row) => String(row.status || "") === "failed_delivery").length;
+  const failedDelivery = facts.orders.filter((row) => String(row.status || "") === "delivery_failed").length;
   const reasonMap = new Map<string, number>();
   for (const row of cancelled) {
     const reason = String(row.cancelled_reason || "Không ghi lý do").trim() || "Không ghi lý do";

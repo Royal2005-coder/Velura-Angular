@@ -1,14 +1,15 @@
+import { randomUUID } from "node:crypto";
 import { HttpError, readJson, sendJson } from "../http.js";
-import { selectOne, selectRows, insertRow, updateRows } from "../supabase.js";
+import { callRpc, quotePostgrestValue, selectOne, selectRows, insertRow, updateRows } from "../supabase.js";
 import { hashPassword, signJwt } from "../auth-helper.js";
 import { requireUserAuth, validatePhone } from "./auth.js";
 import { createNotification } from "./notifications.js";
 import { recordVoucherRedemption, resolveOrderVoucher } from "./vouchers.js";
 import { allowDevOtpBypass, config } from "../config.js";
-import { createStripePaymentIntent, stripeConfigured } from "../payments/stripe.js";
+import { createStripePaymentIntent, refundStripeOrder, stripeConfigured } from "../payments/stripe.js";
 import { priceOrder, shippingMethodFromClaim } from "./order-pricing.js";
 import { buildCartLines, loadCatalog, loadCategoryTree } from "./cart-catalog.js";
-import { ORDER_TRANSITIONS } from "../orders/order-constants.js";
+import { customerCanCancel, orderFacts, orderStatusLabel } from "../orders/order-state-machine.js";
 import {
   asJsonObject,
   asString,
@@ -125,123 +126,42 @@ async function sendDirectEmail(to: unknown, subject: string, text: string, html:
   }
 }
 
+/** Khách được thanh toán lại đơn online trong chừng này kể từ lúc tạo (KAN-59). */
+const PAY_AGAIN_WINDOW_MS = 24 * 60 * 60 * 1000;
+
 /**
- * Time-based storefront order status progression (currently a no-op return).
+ * Mã đơn cho khách. Ngẫu nhiên, không suy ra được từ thời điểm tạo: mã cũ
+ * `"VLR" + 8 chữ số cuối của mốc mili giây` dò được trong một ngày đã biết (KAN-40).
  */
-export async function autoProgressOrder(order: JsonObject): Promise<JsonObject> {
-  return order;
+export function generateOrderCode(): string {
+  return "VLR" + randomUUID().replace(/-/g, "").slice(0, 9).toUpperCase();
+}
 
-  if (!order || ["cancelled", "completed", "failed_delivery"].includes(asString(order.status))) {
-    return order;
-  }
-
-  const createdAt = parseUtcDate(order.created_at);
-  const now = new Date();
-  const elapsedSeconds = Math.floor((now.getTime() - createdAt.getTime()) / 1000);
-
-  let newStatus = order.status;
-  let deliveredAt = order.delivered_at;
-  let trackingCode = order.tracking_code;
-  let changed = false;
-
-  // 1. Time-based progression for intermediate states (1 minute = 60s per step)
-  if (order.status === "pending" && elapsedSeconds >= 60) {
-    newStatus = "confirmed";
-    changed = true;
-  }
-  if (["pending", "confirmed"].includes(asString(newStatus)) && elapsedSeconds >= 120) {
-    newStatus = "preparing";
-    changed = true;
-  }
-  if (["pending", "confirmed", "preparing"].includes(asString(newStatus)) && elapsedSeconds >= 180) {
-    newStatus = "shipping";
-    if (!trackingCode) {
-      trackingCode = "VN" + Math.floor(100000000 + Math.random() * 900000000);
-    }
-    changed = true;
-  }
-  if (["pending", "confirmed", "preparing", "shipping"].includes(asString(newStatus)) && elapsedSeconds >= 240) {
-    newStatus = "delivered";
-    if (!deliveredAt) {
-      deliveredAt = now.toISOString();
-    }
-    changed = true;
-  }
-
-  // 2. Auto-complete: if delivered for more than 60 seconds (1 minute), auto transition to completed
-  if (newStatus === "delivered" && deliveredAt) {
-    const deliveredTime = new Date(String(deliveredAt));
-    const elapsedSinceDelivery = Math.floor((now.getTime() - deliveredTime.getTime()) / 1000);
-    if (elapsedSinceDelivery >= 60) {
-      newStatus = "completed";
-      changed = true;
-    }
-  }
-
-  if (changed) {
-    const updateData: JsonObject = {
-      status: newStatus,
-      updated_at: now.toISOString()
-    };
-    if (deliveredAt) {
-      updateData.delivered_at = deliveredAt;
-    }
-    if (trackingCode) {
-      updateData.tracking_code = trackingCode;
-    }
-    
-    try {
-      await updateRows("orders", { order_id: `eq.${order.order_id}` }, updateData);
-
-      // Trigger notification for order status progression
-      let title = "";
-      let content = "";
-      const displayTracking = trackingCode || order.tracking_code || asString(order.order_id).slice(0, 8).toUpperCase();
-      switch (newStatus) {
-        case "confirmed":
-          title = `Đơn hàng #${displayTracking} đã được xác nhận ✅`;
-          content = "Người bán đã xác nhận đơn hàng của bạn.";
-          break;
-        case "preparing":
-          title = `Đơn hàng #${displayTracking} đang được chuẩn bị 📦`;
-          content = "Velura đang chuẩn bị hàng để gửi cho đơn vị vận chuyển.";
-          break;
-        case "shipping":
-          title = `Đơn hàng #${displayTracking} đang được giao 🚚`;
-          content = "Đơn hàng đã được bàn giao cho đơn vị vận chuyển.";
-          break;
-        case "delivered":
-          title = `Đơn hàng #${displayTracking} đã giao thành công 🎉`;
-          content = "Đơn hàng đã được giao đến bạn. Hãy kiểm tra sản phẩm và để lại đánh giá nhé!";
-          break;
-        case "completed":
-          title = `Đơn hàng #${displayTracking} hoàn thành ✨`;
-          content = "Cảm ơn bạn đã mua sắm tại Velura! Đơn hàng của bạn đã hoàn thành.";
-          break;
-      }
-      if (title && order.user_id) {
-        await createNotification(
-          asString(order.user_id),
-          "order_status",
-          title,
-          content,
-          `/account/orders/${order.order_id}`
-        );
-      }
-    } catch (e: unknown) {
-      console.error(`Failed to auto-progress order ${order.order_id}:`, errorMessage(e));
-    }
-    
-    return {
-      ...order,
-      status: newStatus,
-      delivered_at: deliveredAt,
-      tracking_code: trackingCode,
-      updated_at: updateData.updated_at
-    };
-  }
-
-  return order;
+/**
+ * Hình dạng đơn trả cho storefront: nhãn, timeline và cờ huỷ đều lấy từ State Machine,
+ * không để frontend tự định nghĩa lại (KAN-37, KAN-39).
+ */
+export function presentOrderForCustomer(order: JsonObject, items: JsonObject[], history: JsonObject[], payments: JsonObject[] = []): JsonObject {
+  const facts = orderFacts({ ...order, payments });
+  const createdAt = parseUtcDate(order.created_at).getTime();
+  const timeline = [...history]
+    .sort((a, b) => String(a.changed_at || "").localeCompare(String(b.changed_at || "")))
+    .map((row) => ({
+      status: row.new_status,
+      label: orderStatusLabel(row.new_status),
+      at: row.changed_at
+    }));
+  return {
+    ...order,
+    items,
+    status_label: orderStatusLabel(order.status),
+    timeline,
+    can_cancel: customerCanCancel(facts),
+    can_pay_again: order.status === "waiting_payment"
+      && order.payment_method === "ONLINE_PAYMENT"
+      && Date.now() - createdAt < PAY_AGAIN_WINDOW_MS,
+    pay_again_until: order.status === "waiting_payment" ? new Date(createdAt + PAY_AGAIN_WINDOW_MS).toISOString() : null
+  };
 }
 
 async function attachProductMeta(items: JsonObject[]): Promise<JsonObject[]> {
@@ -298,17 +218,20 @@ export async function handleOrdersRoute(
           order = await selectOne("orders", { order_id: `eq.${action}` });
         }
         if (!order) {
-          order = await selectOne("orders", { tracking_code: `eq.${action}` });
+          order = await selectOne("orders", { order_code: `eq.${quotePostgrestValue(action.toUpperCase())}` });
         }
         if (!order) {
           throw new HttpError(404, "NOT_FOUND", "Không tìm thấy đơn hàng");
         }
 
         assertOrderVisibleTo(order, profile);
-        order = await autoProgressOrder(order);
-        const { rows: items } = await selectRows("order_item", { order_id: `eq.${order.order_id}` });
+        const [{ rows: items }, { rows: history }, { rows: payments }] = await Promise.all([
+          selectRows("order_item", { order_id: `eq.${order.order_id}` }),
+          selectRows("order_status_history", { order_id: `eq.${order.order_id}`, select: "new_status,changed_at" }),
+          selectRows("payment", { order_id: `eq.${order.order_id}`, select: "payment_status,gateway_response_code,created_at" })
+        ]);
         const itemsWithProduct = await attachProductMeta(items);
-        return sendJson(res, 200, { ...order, items: itemsWithProduct }, corsHeaders);
+        return sendJson(res, 200, presentOrderForCustomer(order, itemsWithProduct, history, payments), corsHeaders);
       }
 
       // GET /api/user/orders (Fetch all orders for user)
@@ -319,11 +242,10 @@ export async function handleOrdersRoute(
         const { rows: orders } = await selectRows("orders", { user_id: `eq.${profile.user_id}` });
         orders.sort((a, b) => new Date(String(b.created_at)).getTime() - new Date(String(a.created_at)).getTime());
         const ordersWithItems: JsonObject[] = [];
-        for (let order of orders) {
-          order = await autoProgressOrder(order);
+        for (const order of orders) {
           const { rows: items } = await selectRows("order_item", { order_id: `eq.${order.order_id}` });
           const itemsWithProduct = await attachProductMeta(items);
-          ordersWithItems.push({ ...order, items: itemsWithProduct });
+          ordersWithItems.push(presentOrderForCustomer(order, itemsWithProduct, []));
         }
         return sendJson(res, 200, { success: true, orders: ordersWithItems }, corsHeaders);
       }
@@ -337,118 +259,68 @@ export async function handleOrdersRoute(
       if (!order_id || !status) {
         throw new HttpError(400, "BAD_REQUEST", "Thiếu order_id hoặc status");
       }
+      // Khách chỉ được huỷ đơn. Giao thành công là kết quả của đơn vị vận chuyển, không phải
+      // thứ khách tự đánh dấu (KAN-59 FR-07).
+      if (status !== "cancelled") {
+        throw new HttpError(400, "BAD_REQUEST", "Khách hàng chỉ có thể huỷ đơn");
+      }
 
       const order = await selectOne("orders", { order_id: `eq.${order_id}` });
       if (!order) {
         throw new HttpError(404, "NOT_FOUND", "Không tìm thấy đơn hàng");
       }
-
       if (order.user_id !== profile.user_id) {
         throw new HttpError(403, "FORBIDDEN", "Bạn không có quyền cập nhật đơn hàng này");
       }
 
-      const allowedStatuses = ["cancelled", "delivered", "completed"];
-      if (!allowedStatuses.includes(asString(status))) {
-        throw new HttpError(400, "BAD_REQUEST", `Trạng thái ${status} không được phép cập nhật bởi người dùng`);
-      }
-
-      // Ba trạng thái trên là những gì khách được phép ghi, nhưng "được phép ghi" khác
-      // với "ghi từ đâu cũng được". Không chốt bảng chuyển trạng thái ở đây thì khách
-      // đẩy được đơn từ `shipping` thẳng sang `completed`, bỏ qua `delivered` — đơn
-      // thành hoàn tất mà chưa từng ghi nhận đã giao. Nhánh huỷ có danh sách chặn riêng
-      // ngay dưới nên bỏ qua ở bước này.
-      if (status !== "cancelled") {
-        const from = asString(order.status);
-        const allowed = ORDER_TRANSITIONS[from] || [];
-        if (!allowed.includes(asString(status))) {
-          throw new HttpError(400, "INVALID_TRANSITION",
-            `Không thể chuyển đơn từ "${from}" sang "${status}"`);
+      // Cùng đường xử lý với admin: kiểm trạng thái (BR-03), trả kho đúng một lần, ghi lịch
+      // sử và nhật ký, chuyển thanh toán sang Chờ hoàn tiền nếu đã trả tiền.
+      const reason = String(cancelled_reason || "").trim().slice(0, 300) || "Khách hàng tự huỷ";
+      let result: JsonObject;
+      try {
+        result = asJsonObject(await callRpc("velura_order_service_action", {
+          p_order_id: order_id,
+          p_action: "customer_cancel",
+          p_actor_id: profile.user_id,
+          p_note: reason,
+          p_payload: { cancel_reason: reason },
+          p_expected_version: null
+        }));
+      } catch (error: unknown) {
+        const code = error instanceof HttpError ? asString(asJsonObject(error.details).message) : "";
+        if (code === "INVALID_ORDER_ACTION" || code === "ORDER_ALREADY_HANDED_OVER") {
+          throw new HttpError(400, code, "Đơn hàng đã được chuẩn bị hoặc giao cho đơn vị vận chuyển, không thể tự huỷ. Vui lòng liên hệ CSKH.");
         }
+        throw error;
       }
+      const refund = result.refund_required ? await refundStripeOrder(String(order_id)) : null;
+      const updatedOrder = asJsonObject(result.order);
 
-      if (status === "cancelled") {
-        const nonCancellable = ["shipping", "delivered", "failed_delivery", "completed", "cancelled"];
-        if (nonCancellable.includes(asString(order.status))) {
-          throw new HttpError(400, "BAD_REQUEST", "Đơn hàng đã được giao cho đơn vị vận chuyển hoặc đã kết thúc, không thể hủy");
-        }
+      await createNotification(
+        profile.user_id,
+        "order_status",
+        `Đơn hàng #${asString(updatedOrder.order_code)} đã được huỷ`,
+        refund
+          ? `Lý do: ${reason}. Tiền sẽ được hoàn về phương thức thanh toán ban đầu.`
+          : `Lý do: ${reason}.`,
+        `/account/orders/${updatedOrder.order_id}`
+      );
+      return sendJson(res, 200, { success: true, order: updatedOrder, refund }, corsHeaders);
+    }
+
+    // POST /api/user/orders/:id/pay-again — thanh toán lại đơn online trong 24 giờ.
+    if (action && parts[4] === "pay-again" && req.method === "POST") {
+      const profile = requireUserAuth(context);
+      const order = await selectOne("orders", { order_id: `eq.${action}` });
+      if (!order || order.user_id !== profile.user_id) {
+        throw new HttpError(404, "NOT_FOUND", "Không tìm thấy đơn hàng");
       }
-
-      // Handle stock recovery on cancellation
-      if (status === "cancelled" && order.status !== "cancelled") {
-        const isCOD = order.payment_method === "COD";
-        let isPaid = false;
-        try {
-          const payment = await selectOne("payment", { order_id: `eq.${order_id}` });
-          if (payment && payment.payment_status === "paid") {
-            isPaid = true;
-          }
-        } catch (e: unknown) {
-          console.error("Error checking payment status:", errorMessage(e));
-        }
-
-        if (isCOD || isPaid) {
-          const { rows: items } = await selectRows("order_item", { order_id: `eq.${order_id}` });
-          for (const item of items) {
-            try {
-              const variant = await selectOne("variant", { variant_id: `eq.${item.variant_id}` });
-              if (variant) {
-                const nextStock = Number(variant.stock_quantity) + Number(item.quantity);
-                await updateRows("variant", { variant_id: `eq.${item.variant_id}` }, { stock_quantity: nextStock });
-              }
-            } catch (e: unknown) {
-              console.error(`Failed to restore stock on cancellation:`, errorMessage(e));
-            }
-          }
-        }
-
-        // Lượt dùng mã và ngân sách chiến dịch không trả ở đây. Trigger
-        // `trg_orders_release_voucher_on_cancel` (migration 034) trả khi trạng thái đổi
-        // sang cancelled, đúng một lần cho mỗi đơn, cho cả đường khách huỷ lẫn admin huỷ.
-        // Gọi thêm ở đây sẽ thành trả hai lần.
+      const view = presentOrderForCustomer(order, [], []);
+      if (!view.can_pay_again) {
+        throw new HttpError(409, "PAY_AGAIN_NOT_ALLOWED", "Đơn không còn ở trạng thái chờ thanh toán hoặc đã quá 24 giờ.");
       }
-
-      const updateData: JsonObject = {
-        status,
-        updated_at: new Date().toISOString()
-      };
-      if (status === "cancelled") {
-        updateData.cancelled_reason = cancelled_reason || "Hủy bởi khách hàng";
-      }
-
-      const updated = await updateRows("orders", { order_id: `eq.${order_id}` }, updateData);
-      const updatedOrder = asJsonObject(updated[0] || order);
-
-      if (updatedOrder && updatedOrder.user_id) {
-        const displayTracking = updatedOrder.tracking_code || asString(updatedOrder.order_id).slice(0, 8).toUpperCase();
-        if (status === "cancelled") {
-          await createNotification(
-            asString(updatedOrder.user_id),
-            "order_status",
-            `Đơn hàng #${displayTracking} đã bị hủy ❌`,
-            `Đơn hàng đã bị hủy thành công. Lý do: ${updateData.cancelled_reason}.`,
-            `/account/orders/${updatedOrder.order_id}`
-          );
-        } else {
-          let title = `Cập nhật đơn hàng #${displayTracking}`;
-          let content = `Trạng thái đơn hàng của bạn đã thay đổi thành: ${status}.`;
-          if (status === "delivered") {
-            title = `Đơn hàng #${displayTracking} đã giao thành công 🎉`;
-            content = "Đơn hàng đã được giao đến bạn. Hãy kiểm tra sản phẩm và để lại đánh giá nhé!";
-          } else if (status === "completed") {
-            title = `Đơn hàng #${displayTracking} hoàn thành ✨`;
-            content = "Cảm ơn bạn đã mua sắm tại Velura! Đơn hàng của bạn đã hoàn thành.";
-          }
-          await createNotification(
-            asString(updatedOrder.user_id),
-            "order_status",
-            title,
-            content,
-            `/account/orders/${updatedOrder.order_id}`
-          );
-        }
-      }
-
-      return sendJson(res, 200, { success: true, order: updatedOrder }, corsHeaders);
+      const stripe = await openStripePayment(order.order_id, order.total_amount, "STRIPE");
+      return sendJson(res, 200, { success: true, stripe }, corsHeaders);
     }
 
     // POST /api/user/orders/otp-send (Send OTP)
@@ -739,14 +611,15 @@ export async function handleOrdersRoute(
         }
       }
       
-      const trackingCode = "VLR" + Date.now().toString().slice(-8).toUpperCase();
+      const orderCode = generateOrderCode();
       assertStripeReady(payment_method);
       const dbPaymentMethod = (payment_method === "COD" || payment_method === "cod") ? "COD" : "ONLINE_PAYMENT";
       const guestTotal = Math.max(0, guestPriced.subtotal + guestPriced.shippingFee - guestVoucher.discountAmount);
       
       const newOrder = asJsonObject(await insertRow("orders", {
         user_id: guestUser.user_id,
-        status: "pending",
+        // OPEN-05: đơn online vào Chờ thanh toán ngay khi tạo.
+        status: dbPaymentMethod === "COD" ? "pending" : "waiting_payment",
         shipping_name,
         shipping_phone: phone,
         shipping_address,
@@ -756,7 +629,9 @@ export async function handleOrdersRoute(
         subtotal: guestPriced.subtotal,
         total_amount: guestTotal,
         payment_method: dbPaymentMethod,
-        tracking_code: trackingCode,
+        order_code: orderCode,
+        // COD trừ kho ngay lúc tạo; đơn online trừ kho khi tiền về (action payment_succeeded).
+        stock_committed_at: dbPaymentMethod === "COD" ? new Date().toISOString() : null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       }));
@@ -805,7 +680,7 @@ export async function handleOrdersRoute(
       await createNotification(
         asString(guestUser.user_id),
         "order_status",
-        `Đơn hàng #${trackingCode} đã được đặt thành công ✅`,
+        `Đơn hàng #${orderCode} đã được đặt thành công`,
         "Cảm ơn bạn đã mua sắm tại Velura. Đơn hàng của bạn đang được xử lý.",
         `/account/orders/${newOrder.order_id}`
       );
@@ -826,124 +701,6 @@ export async function handleOrdersRoute(
         temp_password: tempPassword,
         stripe: await openStripePayment(newOrder.order_id, newOrder.total_amount, payment_method)
       }, corsHeaders);
-    }
-
-    // POST /api/user/orders/payment-callback (Payment Callback)
-    if (action === "payment-callback" && req.method === "POST") {
-      const body = await readJson(req);
-      const { order_id, payment_provider, gateway_transaction_ref, gateway_response_code } = body;
-      const rawStatus = asString(body.payment_status || body.status).toLowerCase();
-      
-      if (!order_id || !rawStatus) {
-        throw new HttpError(400, "BAD_REQUEST", "Thiếu order_id hoặc trạng thái thanh toán");
-      }
-      
-      const payment_status = ["paid", "success", "successful"].includes(rawStatus) ? "paid" : "failed";
-      
-      const order = await selectOne("orders", { order_id: `eq.${order_id}` });
-      if (!order) {
-        throw new HttpError(404, "NOT_FOUND", "Không tìm thấy đơn hàng");
-      }
-      
-      const existingPayment = await selectOne("payment", { order_id: `eq.${order_id}` });
-      const payStatusMapped = payment_status === "paid" ? "paid" : "failed";
-      
-      if (existingPayment) {
-        await updateRows("payment", { payment_id: `eq.${existingPayment.payment_id}` }, {
-          payment_status: payStatusMapped,
-          payment_provider: payment_provider || existingPayment.payment_provider,
-          gateway_transaction_ref: gateway_transaction_ref || existingPayment.gateway_transaction_ref,
-          gateway_response_code: gateway_response_code || existingPayment.gateway_response_code,
-          paid_at: payment_status === "paid" ? new Date().toISOString() : null
-        });
-      } else {
-        await insertRow("payment", {
-          order_id,
-          payment_method: "ONLINE_PAYMENT",
-          payment_provider: payment_provider || "ONLINE_GATEWAY",
-          amount: order.total_amount,
-          payment_status: payStatusMapped,
-          gateway_transaction_ref: gateway_transaction_ref || null,
-          gateway_response_code: gateway_response_code || null,
-          paid_at: payment_status === "paid" ? new Date().toISOString() : null,
-          created_at: new Date().toISOString()
-        });
-      }
-      
-      if (payment_status === "paid") {
-        await updateRows("orders", { order_id: `eq.${order_id}` }, {
-          status: "confirmed",
-          updated_at: new Date().toISOString()
-        });
-
-        if (order && order.user_id) {
-          const displayTracking = order.tracking_code || asString(order.order_id).slice(0, 8).toUpperCase();
-          await createNotification(
-            asString(order.user_id),
-            "order_status",
-            `Thanh toán đơn hàng #${displayTracking} thành công 💳`,
-            "Chúng tôi đã nhận được thanh toán cho đơn hàng của bạn. Đơn hàng đang chuẩn bị được đóng gói.",
-            `/account/orders/${order_id}`
-          );
-        }
-        
-        // Decrement stock
-        const { rows: items } = await selectRows("order_item", { order_id: `eq.${order_id}` });
-        for (const item of items) {
-          try {
-            const variant = await selectOne("variant", { variant_id: `eq.${item.variant_id}` });
-            if (variant) {
-              const nextStock = Math.max(0, Number(variant.stock_quantity) - Number(item.quantity));
-              await updateRows("variant", { variant_id: `eq.${item.variant_id}` }, { stock_quantity: nextStock });
-            }
-          } catch (e: unknown) {
-            console.error(`Failed to decrement stock:`, errorMessage(e));
-          }
-        }
-      }
-      
-      return sendJson(res, 200, { success: true }, corsHeaders);
-    }
-
-    // POST /api/user/orders/:id/change-payment-method or POST /api/user/orders/change-payment-method
-    const isChangePaymentMethod = 
-      (action === "change-payment-method" && req.method === "POST") ||
-      (Boolean(action) && parts[4] === "change-payment-method" && req.method === "POST");
-
-    if (isChangePaymentMethod) {
-      const body = await readJson(req).catch(() => ({} as JsonObject));
-      const targetOrderId = action === "change-payment-method" ? body.order_id : action;
-      
-      if (!targetOrderId) {
-        throw new HttpError(400, "BAD_REQUEST", "Thiếu order_id");
-      }
-      
-      const order = await selectOne("orders", { order_id: `eq.${targetOrderId}` });
-      if (!order) {
-        throw new HttpError(404, "NOT_FOUND", "Không tìm thấy đơn hàng");
-      }
-      
-      const updatedOrders = await updateRows("orders", { order_id: `eq.${targetOrderId}` }, {
-        payment_method: "COD",
-        status: "pending",
-        updated_at: new Date().toISOString()
-      });
-      const updatedOrder = updatedOrders[0] || order;
-      
-      const { rows: items } = await selectRows("order_item", { order_id: `eq.${targetOrderId}` });
-      for (const item of items) {
-        try {
-          const variant = await selectOne("variant", { variant_id: `eq.${item.variant_id}` });
-          if (variant) {
-            const nextStock = Math.max(0, Number(variant.stock_quantity) - Number(item.quantity));
-            await updateRows("variant", { variant_id: `eq.${item.variant_id}` }, { stock_quantity: nextStock });
-          }
-        } catch (e: unknown) {
-          console.error(`Failed to decrement stock on COD conversion:`, errorMessage(e));
-        }
-      }
-      
-      return sendJson(res, 200, { success: true, order: updatedOrder }, corsHeaders);
     }
 
     // POST /api/user/orders (Place Order for Authenticated/Members)
@@ -993,7 +750,7 @@ export async function handleOrdersRoute(
         }, corsHeaders);
       }
 
-      const trackingCode = "VLR" + Date.now().toString().slice(-8).toUpperCase();
+      const orderCode = generateOrderCode();
       assertStripeReady(payment_method);
       const dbPaymentMethod = (payment_method === "COD" || payment_method === "cod") ? "COD" : "ONLINE_PAYMENT";
       const memberPriced = await priceClaimedOrder(orderItems, shipping_fee, body.shipping_method);
@@ -1010,7 +767,7 @@ export async function handleOrdersRoute(
       // Create order row
       const newOrder = asJsonObject(await insertRow("orders", {
         user_id: profile.user_id,
-        status: "pending",
+        status: dbPaymentMethod === "COD" ? "pending" : "waiting_payment",
         shipping_name,
         shipping_phone,
         shipping_address,
@@ -1020,7 +777,9 @@ export async function handleOrdersRoute(
         subtotal: memberPriced.subtotal,
         total_amount: memberTotal,
         payment_method: dbPaymentMethod,
-        tracking_code: trackingCode,
+        order_code: orderCode,
+        // COD trừ kho ngay lúc tạo; đơn online trừ kho khi tiền về (action payment_succeeded).
+        stock_committed_at: dbPaymentMethod === "COD" ? new Date().toISOString() : null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       }));
@@ -1060,7 +819,7 @@ export async function handleOrdersRoute(
       await createNotification(
         profile.user_id,
         "order_status",
-        `Đơn hàng #${trackingCode} đã được đặt thành công ✅`,
+        `Đơn hàng #${orderCode} đã được đặt thành công`,
         "Cảm ơn bạn đã mua sắm tại Velura. Đơn hàng của bạn đang được xử lý.",
         `/account/orders/${newOrder.order_id}`
       );

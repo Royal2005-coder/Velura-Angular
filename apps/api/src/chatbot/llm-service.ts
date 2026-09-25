@@ -1,4 +1,5 @@
 import { config } from "../config.js";
+import { orderStatusLabel } from "../orders/order-state-machine.js";
 import { generateGeminiText, isGeminiConfigured } from "../gemini-client.js";
 import { asJsonObject, asNumber, asString, errorMessage, isJsonObject, type JsonObject } from "../types.js";
 import type { ChatbotRepository } from "./chatbot-repository.js";
@@ -729,19 +730,9 @@ async function executeToolCall(name: string, args: JsonObject, repository: Chatb
       const details = orders.map((o) => {
         const dateStr = new Date(asString(o.order_date)).toLocaleDateString("vi-VN");
         const amountStr = Number(o.total_amount || 0).toLocaleString("vi-VN") + "đ";
-        const statusMap: Record<string, string> = {
-          pending: "Đang chờ xử lý",
-          confirmed: "Đã xác nhận",
-          preparing: "Đang chuẩn bị hàng",
-          shipping: "Đang giao hàng",
-          delivered: "Đã giao hàng thành công",
-          failed_delivery: "Giao hàng thất bại",
-          cancelled: "Đã hủy đơn",
-          completed: "Đơn hàng hoàn tất"
-        };
-        const statusKey = asString(o.status);
-        const statusText = statusMap[statusKey] || o.status;
-        return `Đơn hàng ${asString(o.order_id).substring(0, 8)}... (${dateStr}): Trạng thái: ${statusText}, Tổng tiền: ${amountStr}, Mã vận đơn: ${o.tracking_code || "Chưa có"}`;
+        // Nhãn lấy từ State Machine A1, để chatbot nói đúng chữ khách thấy trên trang đơn hàng.
+        const statusText = orderStatusLabel(o.status);
+        return `Đơn hàng ${asString(o.order_code) || asString(o.order_id).substring(0, 8)} (${dateStr}): Trạng thái: ${statusText}, Tổng tiền: ${amountStr}, Mã vận đơn: ${o.tracking_code || "Chưa có"}`;
       }).join("\n");
 
       return { orders, summary: details };

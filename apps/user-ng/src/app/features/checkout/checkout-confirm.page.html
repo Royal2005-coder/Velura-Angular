@@ -6,6 +6,9 @@
       </svg>
     </div>
     <h1 class="success-hero__title">Đặt hàng thành công!</h1>
+    @if (isStripeSuccess()) {
+      <p class="success-hero__desc" style="color: #4a7c59; font-weight: 600; margin-bottom: 8px;">✓ Giao dịch thanh toán trực tuyến qua thẻ (Stripe) đã thành công!</p>
+    }
     <p class="success-hero__desc">Cảm ơn bạn đã tin tưởng lựa chọn Velura. Đơn hàng của bạn đang được chuẩn bị để gửi tới bạn sớm nhất có thể.</p>
   </section>
 

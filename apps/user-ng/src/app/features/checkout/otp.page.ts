@@ -4,7 +4,7 @@ import { AuthService } from '../../core/services/auth.service';
 import { CartLine } from '../../core/services/cart.store';
 import { CheckoutStore } from '../../core/services/checkout.store';
 import { ApiService } from '../../core/services/api.service';
-import { formatVnd } from '../../core/utils/money';
+import { formatVnd, toPublicAsset } from '../../core/utils/money';
 import { showToast } from '../../core/utils/toast';
 import { useBodyClass } from '../../core/utils/body-class';
 import { ApiRequestError } from '../../core/models/api-request-error';
@@ -49,6 +49,13 @@ export class CheckoutOtpPage {
     const total = this.items().reduce((sum, line) => sum + line.unit_price * line.quantity, 0);
     return formatVnd(total) || '0 đ';
   });
+
+  /**
+   * Resolves a checkout thumbnail for Angular public assets.
+   */
+  imageUrl(item: CartLine): string {
+    return toPublicAsset(item.product_image, '/assets/images/placeholder.jpg');
+  }
 
   constructor() {
     useBodyClass('page-checkout');

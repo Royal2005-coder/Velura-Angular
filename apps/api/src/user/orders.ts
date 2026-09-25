@@ -571,7 +571,12 @@ export async function handleOrdersRoute(
           success: false,
           code: "INSUFFICIENT_STOCK",
           message: "Một số sản phẩm trong giỏ hàng đã hết hàng hoặc không đủ tồn kho.",
-          items: affectedItems
+          items: affectedItems,
+          error: {
+            code: "INSUFFICIENT_STOCK",
+            message: "Một số sản phẩm trong giỏ hàng đã hết hàng hoặc không đủ tồn kho.",
+            details: { items: affectedItems }
+          }
         }, corsHeaders);
       }
       
@@ -796,7 +801,12 @@ export async function handleOrdersRoute(
           success: false,
           code: "INSUFFICIENT_STOCK",
           message: "Một số sản phẩm trong giỏ hàng đã hết hàng hoặc không đủ tồn kho.",
-          items: affectedItems
+          items: affectedItems,
+          error: {
+            code: "INSUFFICIENT_STOCK",
+            message: "Một số sản phẩm trong giỏ hàng đã hết hàng hoặc không đủ tồn kho.",
+            details: { items: affectedItems }
+          }
         }, corsHeaders);
       }
 

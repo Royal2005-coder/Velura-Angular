@@ -1,5 +1,4 @@
-import { callRpc, selectOne, selectRows, insertRow } from "../supabase.js";
-import { randomUUID } from "node:crypto";
+import { callRpc, selectOne, selectRows } from "../supabase.js";
 import { HttpError } from "../http.js";
 import { asJsonObject, asString, type JsonObject } from "../types.js";
 import { PRICE_HISTORY_SELECT, PROMOTION_SELECT, VOUCHER_SELECT } from "./pricing-constants.js";
@@ -134,30 +133,22 @@ export function createPricingRepository() {
     },
 
     async createPromotion(input: JsonObject, accessToken: string | null) {
-      return withPricingError(async () => {
-        const result = await insertRow("promotion", {
-          promo_id: randomUUID(),
-          promo_name: input.name,
-          promo_type: input.type || "product_discount",
-          applicable_categories: input.applicableCategories || null,
-          start_date: input.startDate,
-          end_date: input.endDate,
-          is_active: false,
-          budget_limit: input.budgetLimit || 0,
-          max_vouchers_allowed: input.maxVouchersAllowed || 0,
-          total_discount_issued: 0,
-          created_by: input.createdBy || null,
-          version: 1,
-          // Nội dung marketing của chiến dịch. Trang Ưu đãi phía khách đọc thẳng từ
-          // đây, nên chiến dịch tạo ra là hiển thị được ngay, không cần sửa mã nguồn.
-          description: input.description || null,
-          banner_image_url: input.bannerImageUrl || null,
-          highlight_label: input.highlightLabel || null,
-          display_order: Number(input.displayOrder) || 0,
-          is_featured: input.isFeatured === true
-        }, accessToken as never);
-        return result;
-      });
+      // Đi qua RPC để hàm tự kiểm vai trò người gọi và ghi nhật ký (BR-A4-08). Trước đây
+      // ghi thẳng bằng khoá service-role nên bỏ qua RLS và không có dòng nhật ký nào.
+      return withPricingError(() => callRpc("admin_create_promotion", {
+        p_name: input.name,
+        p_start_date: input.startDate,
+        p_end_date: input.endDate,
+        p_promo_type: input.type || "product_discount",
+        p_description: input.description ?? null,
+        p_applicable_categories: input.applicableCategories || null,
+        p_budget_limit: Number(input.budgetLimit) || 0,
+        p_max_vouchers_allowed: Number(input.maxVouchersAllowed) || 0,
+        p_banner_image_url: input.bannerImageUrl ?? null,
+        p_highlight_label: input.highlightLabel ?? null,
+        p_display_order: Number(input.displayOrder) || 0,
+        p_is_featured: input.isFeatured === true
+      }, { accessToken }));
     },
 
     async updatePromotion(promotionId: string, input: JsonObject, accessToken: string | null) {
@@ -180,17 +171,17 @@ export function createPricingRepository() {
     },
 
     async activatePromotion(promotionId: string, input: JsonObject, accessToken: string | null) {
-      return callRpc("admin_activate_promotion", {
+      return withPricingError(() => callRpc("admin_activate_promotion", {
         p_promo_id: promotionId,
         p_expected_version: input.expectedVersion
-      }, { accessToken });
+      }, { accessToken }));
     },
 
     async pausePromotion(promotionId: string, input: JsonObject, accessToken: string | null) {
-      return callRpc("admin_pause_promotion", {
+      return withPricingError(() => callRpc("admin_pause_promotion", {
         p_promo_id: promotionId,
         p_expected_version: input.expectedVersion
-      }, { accessToken });
+      }, { accessToken }));
     },
 
     async listVouchers(filters: JsonObject, accessToken: string | null) {
@@ -201,6 +192,9 @@ export function createPricingRepository() {
         offset: filters.offset
       };
       if (filters.isActive !== undefined) query.is_active = `eq.${filters.isActive}`;
+      // "none" là mã không thuộc chiến dịch nào; còn lại service đã kiểm là UUID.
+      if (filters.promoId === "none") query.promo_id = "is.null";
+      else if (filters.promoId) query.promo_id = `eq.${filters.promoId}`;
       return selectRows("voucher", query, authOptions(accessToken));
     },
 
@@ -212,39 +206,48 @@ export function createPricingRepository() {
     },
 
     async createVoucher(input: JsonObject, accessToken: string | null) {
-      return withPricingError(async () => {
-        const voucherId = randomUUID();
-        const result = await insertRow("voucher", {
-          voucher_id: voucherId,
-          code: input.code,
-          name: input.name,
-          promo_id: input.promoId || null,
-          discount_type: input.type,
-          discount_value: input.value,
-          max_discount_amount: input.maxDiscount || null,
-          min_order_value: input.minOrderValue || 0,
-          usage_limit_total: input.maxUses || null,
-          usage_limit_per_user: input.maxPerUser || 1,
-          used_count: 0,
-          applicable_categories: input.applicableCategories || null,
-          applicable_user_group: input.applicableUserGroup || "all_users",
-          start_date: input.startDate,
-          end_date: input.endDate,
-          is_active: true,
-          created_by: input.createdBy || null,
-          version: 1
-        }, accessToken as never);
-        return result;
-      });
+      // RPC tự kiểm vai trò, kiểm trùng mã không phân biệt hoa thường, kiểm danh mục tồn
+      // tại, và chốt trần `max_vouchers_allowed` trong lúc khoá dòng chiến dịch.
+      return withPricingError(() => callRpc("admin_create_voucher", {
+        p_code: input.code,
+        p_name: input.name || input.code,
+        p_discount_type: input.type,
+        p_discount_value: Number(input.value) || 0,
+        p_start_date: input.startDate,
+        p_end_date: input.endDate,
+        p_promo_id: input.promoId || null,
+        p_max_discount_amount: optionalNumber(input.maxDiscount),
+        p_min_order_value: Number(input.minOrderValue) || 0,
+        p_usage_limit_total: optionalNumber(input.maxUses),
+        p_usage_limit_per_user: Number(input.maxPerUser) || 1,
+        p_applicable_categories: input.applicableCategories || null,
+        p_applicable_user_group: input.applicableUserGroup || "all_users"
+      }, { accessToken }));
     },
 
     async updateVoucher(voucherId: string, input: JsonObject, accessToken: string | null) {
-      return callRpc("admin_update_voucher", {
+      // Tham số không gửi (null) là giữ nguyên. Ba trường "không giới hạn" có cờ xoá riêng
+      // vì null đã mang nghĩa giữ nguyên — xem migration 035.
+      return withPricingError(() => callRpc("admin_update_voucher", {
         p_voucher_id: voucherId,
         p_expected_version: input.expectedVersion,
-        p_is_active: input.isActive,
-        p_name: input.name
-      }, { accessToken });
+        p_is_active: optionalBoolean(input.isActive),
+        p_name: input.name ?? null,
+        p_discount_type: input.type ?? null,
+        p_discount_value: optionalNumber(input.value),
+        p_max_discount_amount: optionalNumber(input.maxDiscount),
+        p_clear_max_discount: input.clearMaxDiscount === true,
+        p_min_order_value: optionalNumber(input.minOrderValue),
+        p_usage_limit_total: optionalNumber(input.maxUses),
+        p_clear_usage_limit_total: input.clearMaxUses === true,
+        p_usage_limit_per_user: optionalNumber(input.maxPerUser),
+        p_applicable_user_group: input.applicableUserGroup ?? null,
+        p_applicable_categories: input.applicableCategories ?? null,
+        p_start_date: input.startDate ?? null,
+        p_end_date: input.endDate ?? null,
+        p_promo_id: input.promoId || null,
+        p_clear_promo: input.clearPromo === true
+      }, { accessToken }));
     },
 
     async listAuditLogs(filters: JsonObject, accessToken: string | null) {
@@ -257,43 +260,30 @@ export function createPricingRepository() {
       }, authOptions(accessToken));
     },
 
-    async getStatistics(accessToken: string | null) {
-      const opts = authOptions(accessToken);
-      const [promos, vouchers] = await Promise.all([
-        selectRows("promotion", { select: PROMOTION_SELECT, limit: 500 }, opts),
-        selectRows("voucher", { select: VOUCHER_SELECT, limit: 500 }, opts)
-      ]);
-      const promoRows = promos?.rows || [];
-      const voucherRows = vouchers?.rows || [];
-      const activePromos = promoRows.filter((p) => p.is_active);
-      const pausedPromos = promoRows.filter((p) => !p.is_active);
-      const totalBudget = promoRows.reduce((s, p) => s + Number(p.budget_limit || 0), 0);
-      const totalIssued = promoRows.reduce((s, p) => s + Number(p.total_discount_issued || 0), 0);
-      const activeVouchers = voucherRows.filter((v) => v.is_active);
-      const expiredVouchers = voucherRows.filter((v) => !v.is_active || new Date(v.end_date as string) < new Date());
-      const totalUsed = voucherRows.reduce((s, v) => s + Number(v.used_count || 0), 0);
-      const totalLimit = voucherRows.reduce((s, v) => s + Number(v.usage_limit_total || 0), 0);
-      return {
-        promotions: {
-          total: promoRows.length,
-          active: activePromos.length,
-          paused: pausedPromos.length,
-          totalBudget,
-          totalIssued,
-          budgetRemaining: totalBudget - totalIssued,
-          budgetUsagePercent: totalBudget > 0 ? Math.round(totalIssued * 100 / totalBudget) : 0
-        },
-        vouchers: {
-          total: voucherRows.length,
-          active: activeVouchers.length,
-          expired: expiredVouchers.length,
-          totalUsed,
-          totalLimit,
-          usagePercent: totalLimit > 0 ? Math.round(totalUsed * 100 / totalLimit) : 0
-        }
-      };
+    /**
+     * Số liệu tổng hợp đọc từ đơn hàng thật (migration 036).
+     *
+     * Vai trò giá và khuyến mãi không đọc được `orders` qua RLS, nên con số đi qua một
+     * RPC chỉ trả tổng hợp, không trả dòng đơn nào.
+     */
+    async getStatistics(filters: JsonObject, accessToken: string | null) {
+      return withPricingError(() => callRpc("admin_promotion_statistics", {
+        p_from: filters.from ?? null,
+        p_to: filters.to ?? null
+      }, { accessToken }));
     }
   };
+}
+
+/** Số từ body, hoặc null khi không gửi. Khác `Number(x) || 0` ở chỗ 0 vẫn là 0. */
+function optionalNumber(value: unknown): number | null {
+  if (value === undefined || value === null || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function optionalBoolean(value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : null;
 }
 
 function authOptions(accessToken: string | null | undefined) {
@@ -320,7 +310,7 @@ function pricingErrorMessage(code: string): string {
   // viết bằng tiếng Việt. Dịch nốt phần cũ là một việc riêng, không gộp vào thay đổi này.
   const messages: Record<string, string> = {
     AUTH_REQUIRED: "Authentication is required",
-    RBAC_DENIED: "Only pricing operator or super admin can manage pricing",
+    RBAC_DENIED: "Chỉ quản trị viên giá và khuyến mãi hoặc super admin được thao tác phần này.",
     PRODUCT_NOT_FOUND: "Product was not found",
     // Mã này giờ dùng chung cho cả đổi giá lẫn sửa chiến dịch, nên nội dung không được
     // nhắc riêng giá sản phẩm nữa.
@@ -341,7 +331,20 @@ function pricingErrorMessage(code: string): string {
     ALREADY_ACTIVE: "Chiến dịch đang chạy rồi.",
     NOT_ACTIVE: "Chiến dịch đang không chạy.",
     OUTSIDE_DATE_RANGE: "Thời điểm hiện tại nằm ngoài khoảng ngày của chiến dịch.",
-    VOUCHER_NOT_FOUND: "Không tìm thấy mã giảm giá."
+    VOUCHER_NOT_FOUND: "Không tìm thấy mã giảm giá.",
+    NAME_MIN_8_CHARS: "Tên chiến dịch tối thiểu 8 ký tự.",
+    DATES_REQUIRED: "Cần nhập ngày bắt đầu và ngày kết thúc.",
+    MAX_VOUCHERS_NEGATIVE: "Số mã tối đa không được là số âm.",
+    CATEGORIES_MUST_BE_ARRAY: "Danh mục áp dụng phải là một danh sách.",
+    CATEGORY_NOT_FOUND: "Có danh mục áp dụng không tồn tại.",
+    CODE_REQUIRED: "Mã giảm giá là bắt buộc.",
+    VOUCHER_CODE_EXISTS: "Mã này đã tồn tại. Chọn một mã khác.",
+    DISCOUNT_VALUE_REQUIRED: "Giá trị giảm phải lớn hơn 0.",
+    PERCENTAGE_OVER_100: "Giảm theo phần trăm không được vượt 100%.",
+    AMOUNT_NEGATIVE: "Số tiền không được là số âm.",
+    USAGE_LIMIT_INVALID: "Số lượt dùng phải từ 1 trở lên.",
+    USAGE_LIMIT_BELOW_USED: "Tổng lượt mới thấp hơn số lượt khách đã dùng.",
+    VOUCHER_LIMIT_REACHED: "Chiến dịch đã phát đủ số mã tối đa. Nâng trần số mã của chiến dịch trước."
   };
   return messages[code] || "Pricing database operation failed";
 }

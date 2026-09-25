@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions id="Definitions_3_21_ngan_sach_thong_ke" xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" targetNamespace="http://velura.vn/bpmn/khuyenmai">
+  <bpmn:collaboration id="Collaboration_3_21_ngan_sach_thong_ke">
+    <bpmn:participant id="Participant_velura" name="Velura" processRef="Process_velura" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_velura" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_velura">
+      <bpmn:lane id="lane_admin" name="Quản trị viên giá và khuyến mãi">
+        <bpmn:flowNodeRef>b_theodoi</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>b_thongke</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>b_xuat</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>b_end</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="lane_sys" name="Hệ thống">
+        <bpmn:flowNodeRef>b_start</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>b_timer</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>b_lich</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>b_congdon</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>b_gw</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>b_dung</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>b_canhbao</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>b_nhan</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>b_tonghop</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>b_log</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="b_start" name="Chiến dịch đang chạy"><bpmn:outgoing>f_b_start_b_timer</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:intermediateCatchEvent id="b_timer" name="Đến mốc đồng bộ theo lịch"><bpmn:incoming>f_b_start_b_timer</bpmn:incoming><bpmn:outgoing>f_b_timer_b_lich</bpmn:outgoing><bpmn:timerEventDefinition id="b_timer_td" /></bpmn:intermediateCatchEvent>
+    <bpmn:serviceTask id="b_lich" name="Bộ lịch bật hoặc tắt chiến dịch theo khung ngày"><bpmn:incoming>f_b_timer_b_lich</bpmn:incoming><bpmn:outgoing>f_b_lich_b_congdon</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:serviceTask id="b_congdon" name="Cộng dồn ngân sách theo số tiền giảm thực tế của từng lượt dùng"><bpmn:incoming>f_b_lich_b_congdon</bpmn:incoming><bpmn:outgoing>f_b_congdon_b_gw</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="b_gw" name="Chạm trần ngân sách hoặc quá hạn?"><bpmn:incoming>f_b_congdon_b_gw</bpmn:incoming><bpmn:outgoing>f_b_gw_b_dung</bpmn:outgoing><bpmn:outgoing>f_b_gw_b_nhan</bpmn:outgoing></bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="b_dung" name="Dừng chiến dịch và tắt toàn bộ mã thuộc chiến dịch"><bpmn:incoming>f_b_gw_b_dung</bpmn:incoming><bpmn:outgoing>f_b_dung_b_canhbao</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:sendTask id="b_canhbao" name="Cảnh báo ngân sách cho quản trị viên"><bpmn:incoming>f_b_dung_b_canhbao</bpmn:incoming><bpmn:outgoing>f_b_canhbao_b_theodoi</bpmn:outgoing></bpmn:sendTask>
+    <bpmn:serviceTask id="b_nhan" name="Cập nhật nhãn cảnh báo vận hành trên bảng danh sách"><bpmn:incoming>f_b_gw_b_nhan</bpmn:incoming><bpmn:outgoing>f_b_nhan_b_theodoi</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:userTask id="b_theodoi" name="Theo dõi cảnh báo và trạng thái chiến dịch"><bpmn:incoming>f_b_canhbao_b_theodoi</bpmn:incoming><bpmn:incoming>f_b_nhan_b_theodoi</bpmn:incoming><bpmn:outgoing>f_b_theodoi_b_thongke</bpmn:outgoing></bpmn:userTask>
+    <bpmn:userTask id="b_thongke" name="Xem thống kê hiệu quả khuyến mãi"><bpmn:incoming>f_b_theodoi_b_thongke</bpmn:incoming><bpmn:outgoing>f_b_thongke_b_tonghop</bpmn:outgoing></bpmn:userTask>
+    <bpmn:serviceTask id="b_tonghop" name="Tổng hợp chỉ số từ đơn hàng thật có áp mã giảm giá"><bpmn:incoming>f_b_thongke_b_tonghop</bpmn:incoming><bpmn:outgoing>f_b_tonghop_b_xuat</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:userTask id="b_xuat" name="Xuất báo cáo"><bpmn:incoming>f_b_tonghop_b_xuat</bpmn:incoming><bpmn:outgoing>f_b_xuat_b_end</bpmn:outgoing></bpmn:userTask>
+    <bpmn:endEvent id="b_end" name="Kết thúc kỳ theo dõi"><bpmn:incoming>f_b_xuat_b_end</bpmn:incoming></bpmn:endEvent>
+    <bpmn:dataStoreReference id="b_log" name="Nhật ký khuyến mãi" />
+    <bpmn:textAnnotation id="n_congdon"><bpmn:text>Ngân sách đã dùng cộng dồn theo số tiền giảm thực tế của từng đơn, không theo mức trần cấu hình.</bpmn:text></bpmn:textAnnotation>
+    <bpmn:textAnnotation id="n_tonghop"><bpmn:text>Chỉ số đọc từ bảng đơn hàng thật, không đếm số dòng trong bảng chiến dịch. Trạng thái lấy từ năm trạng thái vòng đời.</bpmn:text></bpmn:textAnnotation>
+    <bpmn:sequenceFlow id="f_b_start_b_timer" name="" sourceRef="b_start" targetRef="b_timer" />
+    <bpmn:sequenceFlow id="f_b_timer_b_lich" name="" sourceRef="b_timer" targetRef="b_lich" />
+    <bpmn:sequenceFlow id="f_b_lich_b_congdon" name="" sourceRef="b_lich" targetRef="b_congdon" />
+    <bpmn:sequenceFlow id="f_b_congdon_b_gw" name="" sourceRef="b_congdon" targetRef="b_gw" />
+    <bpmn:sequenceFlow id="f_b_gw_b_dung" name="Có" sourceRef="b_gw" targetRef="b_dung" />
+    <bpmn:sequenceFlow id="f_b_dung_b_canhbao" name="" sourceRef="b_dung" targetRef="b_canhbao" />
+    <bpmn:sequenceFlow id="f_b_canhbao_b_theodoi" name="" sourceRef="b_canhbao" targetRef="b_theodoi" />
+    <bpmn:sequenceFlow id="f_b_gw_b_nhan" name="Không" sourceRef="b_gw" targetRef="b_nhan" />
+    <bpmn:sequenceFlow id="f_b_nhan_b_theodoi" name="" sourceRef="b_nhan" targetRef="b_theodoi" />
+    <bpmn:sequenceFlow id="f_b_theodoi_b_thongke" name="" sourceRef="b_theodoi" targetRef="b_thongke" />
+    <bpmn:sequenceFlow id="f_b_thongke_b_tonghop" name="" sourceRef="b_thongke" targetRef="b_tonghop" />
+    <bpmn:sequenceFlow id="f_b_tonghop_b_xuat" name="" sourceRef="b_tonghop" targetRef="b_xuat" />
+    <bpmn:sequenceFlow id="f_b_xuat_b_end" name="" sourceRef="b_xuat" targetRef="b_end" />
+    <bpmn:association id="a_b_dung_b_log" sourceRef="b_dung" targetRef="b_log" />
+    <bpmn:association id="a_n_congdon_b_congdon" sourceRef="n_congdon" targetRef="b_congdon" />
+    <bpmn:association id="a_n_tonghop_b_tonghop" sourceRef="n_tonghop" targetRef="b_tonghop" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_3_21_ngan_sach_thong_ke">
+    <bpmndi:BPMNPlane id="BPMNPlane_3_21_ngan_sach_thong_ke" bpmnElement="Collaboration_3_21_ngan_sach_thong_ke">
+      <bpmndi:BPMNShape id="Participant_velura_di" bpmnElement="Participant_velura" isHorizontal="true"><dc:Bounds x="40" y="40" width="2597.5" height="1022" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="lane_admin_di" bpmnElement="lane_admin" isHorizontal="true"><dc:Bounds x="70" y="40" width="2567.5" height="280" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="lane_sys_di" bpmnElement="lane_sys" isHorizontal="true"><dc:Bounds x="70" y="320" width="2567.5" height="742" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_start_di" bpmnElement="b_start"><dc:Bounds x="172" y="533" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_timer_di" bpmnElement="b_timer"><dc:Bounds x="383.5" y="533" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_lich_di" bpmnElement="b_lich"><dc:Bounds x="518" y="509" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_congdon_di" bpmnElement="b_congdon"><dc:Bounds x="753" y="509" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_gw_di" bpmnElement="b_gw" isMarkerVisible="true"><dc:Bounds x="1036.5" y="528" width="46" height="46" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_dung_di" bpmnElement="b_dung"><dc:Bounds x="964.5" y="735.8" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_canhbao_di" bpmnElement="b_canhbao"><dc:Bounds x="1176" y="735.8" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_nhan_di" bpmnElement="b_nhan"><dc:Bounds x="1176" y="509" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_theodoi_di" bpmnElement="b_theodoi"><dc:Bounds x="1411" y="96" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_thongke_di" bpmnElement="b_thongke"><dc:Bounds x="1646" y="96" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_tonghop_di" bpmnElement="b_tonghop"><dc:Bounds x="1881" y="509" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_xuat_di" bpmnElement="b_xuat"><dc:Bounds x="2116" y="96" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_end_di" bpmnElement="b_end"><dc:Bounds x="2404.5" y="120" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_log_di" bpmnElement="b_log"><dc:Bounds x="984.5" y="898.2" width="150" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="n_congdon_di" bpmnElement="n_congdon"><dc:Bounds x="600" y="888.2" width="26" height="104" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="n_tonghop_di" bpmnElement="n_tonghop"><dc:Bounds x="1822" y="888.2" width="26" height="104" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f_b_start_b_timer_di" bpmnElement="f_b_start_b_timer"><di:waypoint x="208" y="551" /><di:waypoint x="383.5" y="551" /><di:waypoint x="383.5" y="551" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_b_timer_b_lich_di" bpmnElement="f_b_timer_b_lich"><di:waypoint x="419.5" y="551" /><di:waypoint x="518" y="551" /><di:waypoint x="518" y="551" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_b_lich_b_congdon_di" bpmnElement="f_b_lich_b_congdon"><di:waypoint x="708" y="551" /><di:waypoint x="753" y="551" /><di:waypoint x="753" y="551" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_b_congdon_b_gw_di" bpmnElement="f_b_congdon_b_gw"><di:waypoint x="943" y="551" /><di:waypoint x="1036.5" y="551" /><di:waypoint x="1036.5" y="551" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_b_gw_b_dung_di" bpmnElement="f_b_gw_b_dung"><di:waypoint x="1036.5" y="551" /><di:waypoint x="1154.5" y="551" /><di:waypoint x="1154.5" y="777.8" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_b_dung_b_canhbao_di" bpmnElement="f_b_dung_b_canhbao"><di:waypoint x="1154.5" y="777.8" /><di:waypoint x="1176" y="777.8" /><di:waypoint x="1176" y="777.8" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_b_canhbao_b_theodoi_di" bpmnElement="f_b_canhbao_b_theodoi"><di:waypoint x="1366" y="777.8" /><di:waypoint x="1411" y="777.8" /><di:waypoint x="1411" y="138" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_b_gw_b_nhan_di" bpmnElement="f_b_gw_b_nhan"><di:waypoint x="1082.5" y="551" /><di:waypoint x="1176" y="551" /><di:waypoint x="1176" y="551" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_b_nhan_b_theodoi_di" bpmnElement="f_b_nhan_b_theodoi"><di:waypoint x="1366" y="551" /><di:waypoint x="1411" y="551" /><di:waypoint x="1411" y="138" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_b_theodoi_b_thongke_di" bpmnElement="f_b_theodoi_b_thongke"><di:waypoint x="1601" y="138" /><di:waypoint x="1646" y="138" /><di:waypoint x="1646" y="138" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_b_thongke_b_tonghop_di" bpmnElement="f_b_thongke_b_tonghop"><di:waypoint x="1836" y="138" /><di:waypoint x="1881" y="138" /><di:waypoint x="1881" y="551" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_b_tonghop_b_xuat_di" bpmnElement="f_b_tonghop_b_xuat"><di:waypoint x="2071" y="551" /><di:waypoint x="2116" y="551" /><di:waypoint x="2116" y="138" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_b_xuat_b_end_di" bpmnElement="f_b_xuat_b_end"><di:waypoint x="2306" y="138" /><di:waypoint x="2404.5" y="138" /><di:waypoint x="2404.5" y="138" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="a_b_dung_b_log_di" bpmnElement="a_b_dung_b_log"><di:waypoint x="1154.5" y="777.8" /><di:waypoint x="984.5" y="777.8" /><di:waypoint x="984.5" y="940.2" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="a_n_congdon_b_congdon_di" bpmnElement="a_n_congdon_b_congdon"><di:waypoint x="626" y="940.2" /><di:waypoint x="753" y="940.2" /><di:waypoint x="753" y="551" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="a_n_tonghop_b_tonghop_di" bpmnElement="a_n_tonghop_b_tonghop"><di:waypoint x="1848" y="940.2" /><di:waypoint x="1881" y="940.2" /><di:waypoint x="1881" y="551" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

@@ -119,9 +119,10 @@ describe('CampaignForm', () => {
 
   it('chặn tên quá ngắn và ngày để trống', async () => {
     const form = await create(null);
-    submit(form, buildForm({ ...VALID, name: 'A' }));
+    // Mốc 8 ký tự khớp API và RPC; trước đây form cho qua tên 2 ký tự rồi máy chủ từ chối.
+    submit(form, buildForm({ ...VALID, name: 'Sale 9' }));
     expect(calls.create.length).toBe(0);
-    expect(form.saveError()).toContain('2 ký tự');
+    expect(form.saveError()).toContain('8 ký tự');
 
     submit(form, buildForm({ ...VALID, startDate: '' }));
     expect(calls.create.length).toBe(0);

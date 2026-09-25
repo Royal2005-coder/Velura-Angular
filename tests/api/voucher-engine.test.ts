@@ -314,3 +314,133 @@ test("shipping fee falls back to the standard fee when the client sends nonsense
   assert.equal(normalizeShippingFee(undefined), 30000);
   assert.equal(normalizeShippingFee(-5), 30000);
 });
+
+// ---------------------------------------------------------------------------
+// Mã theo danh mục (U1-09, quyết định D4)
+// ---------------------------------------------------------------------------
+// Giá trị đơn tối thiểu và số tiền giảm tính trên phần hàng thuộc danh mục của mã.
+// Danh mục cha phủ danh mục con: `categoryPath` của một dòng gồm danh mục của sản phẩm
+// và mọi danh mục tổ tiên của nó.
+
+const AO = "cat-ao";
+const AO_SOMI = "cat-ao-somi";
+const QUAN = "cat-quan";
+const LINE_AO = { categoryPath: [AO], lineTotal: 300000 };
+const LINE_QUAN = { categoryPath: [QUAN], lineTotal: 500000 };
+const CAT_NAMES = { [AO]: "Áo", [AO_SOMI]: "Áo sơ mi", [QUAN]: "Quần" };
+
+function cartContext(lines: { categoryPath: string[]; lineTotal: number }[], overrides = {}) {
+  return context({
+    orderValue: lines.reduce((sum, line) => sum + line.lineTotal, 0),
+    lines,
+    categoryNameById: CAT_NAMES,
+    ...overrides
+  });
+}
+
+test("đơn tối thiểu của mã danh mục chỉ tính phần hàng thuộc danh mục", () => {
+  // Đơn 800k nhưng phần Áo mới 300k, nên mã Áo tối thiểu 400k chưa dùng được.
+  const result = evaluateVoucher(
+    voucher({ applicable_categories: [AO], discount_value: 20, min_order_value: 400000 }),
+    cartContext([LINE_AO, LINE_QUAN])
+  );
+  assert.equal(result.eligible, false);
+  assert.equal(result.reason, "MIN_ORDER_NOT_MET");
+  assert.equal(result.shortfall, 100000);
+});
+
+test("mã danh mục giảm phần trăm trên phần hàng thuộc danh mục, không trên cả đơn", () => {
+  const result = evaluateVoucher(
+    voucher({ applicable_categories: [AO], discount_value: 20 }),
+    cartContext([LINE_AO, LINE_QUAN])
+  );
+  assert.equal(result.eligible, true);
+  assert.equal(result.discountAmount, 60000, "20% của 300k Áo, không phải 20% của 800k");
+});
+
+test("mã cho danh mục cha phủ sản phẩm thuộc danh mục con", () => {
+  const result = evaluateVoucher(
+    voucher({ applicable_categories: [AO], discount_value: 10 }),
+    cartContext([{ categoryPath: [AO_SOMI, AO], lineTotal: 400000 }, LINE_QUAN])
+  );
+  assert.equal(result.eligible, true);
+  assert.equal(result.discountAmount, 40000);
+});
+
+test("giỏ không có sản phẩm nào thuộc danh mục thì từ chối kèm tên danh mục", () => {
+  const result = evaluateVoucher(
+    voucher({ applicable_categories: [AO] }),
+    cartContext([LINE_QUAN])
+  );
+  assert.equal(result.eligible, false);
+  assert.equal(result.reason, "CATEGORY_MISMATCH");
+  assert.match(result.reasonText || "", /Áo/);
+  assert.deepEqual(result.categoryNames, ["Áo"]);
+});
+
+test("mã danh mục đóng mặc định khi đường gọi không truyền dòng hàng", () => {
+  // Nếu thiếu dòng hàng mà lại tính trên cả đơn thì mọi đường gọi quên truyền dòng hàng
+  // sẽ mở lại đúng lỗ rò giảm cho cả đơn.
+  const result = evaluateVoucher(
+    voucher({ applicable_categories: [AO] }),
+    context({ orderValue: 800000 })
+  );
+  assert.equal(result.eligible, false);
+  assert.equal(result.reason, "CATEGORY_MISMATCH");
+});
+
+test("mã cố định theo danh mục không giảm quá phần hàng thuộc danh mục", () => {
+  const result = evaluateVoucher(
+    voucher({ applicable_categories: [AO], discount_type: "fixed_amount", discount_value: 100000 }),
+    cartContext([{ categoryPath: [AO], lineTotal: 60000 }, LINE_QUAN])
+  );
+  assert.equal(result.discountAmount, 60000);
+});
+
+test("mã miễn phí vận chuyển theo danh mục vẫn giảm đúng bằng phí vận chuyển", () => {
+  // BR-A4-07: freeship giảm đúng phí ship. Danh mục chỉ quyết định mã có dùng được không.
+  const result = evaluateVoucher(
+    voucher({ applicable_categories: [AO], discount_type: "free_shipping", discount_value: 0 }),
+    cartContext([LINE_AO, LINE_QUAN], { shippingFee: 30000 })
+  );
+  assert.equal(result.eligible, true);
+  assert.equal(result.discountAmount, 30000);
+});
+
+test("danh mục lưu dạng chuỗi JSON cũng đọc được, còn mảng rỗng nghĩa là không giới hạn", () => {
+  const asJsonString = evaluateVoucher(
+    voucher({ applicable_categories: JSON.stringify([AO]), discount_value: 20 }),
+    cartContext([LINE_AO, LINE_QUAN])
+  );
+  assert.equal(asJsonString.discountAmount, 60000);
+
+  const empty = evaluateVoucher(
+    voucher({ applicable_categories: [], discount_value: 20 }),
+    cartContext([LINE_AO, LINE_QUAN])
+  );
+  assert.equal(empty.discountAmount, 160000, "mảng rỗng tính trên cả đơn 800k");
+  assert.deepEqual(empty.categoryNames, []);
+});
+
+test("sai danh mục xét sau sai nhóm khách và trước hết lượt của khách", () => {
+  // Nhóm khách là lý do "mã không dành cho bạn", xét trước. Hết lượt của khách xét sau,
+  // vì với giỏ không có món nào thuộc danh mục thì lượt còn hay hết đều không quan trọng.
+  const groupFirst = evaluateVoucher(
+    voucher({ applicable_categories: [AO], applicable_user_group: "guest" }),
+    cartContext([LINE_QUAN], { isMember: true })
+  );
+  assert.equal(groupFirst.reason, "GROUP_MISMATCH");
+
+  const categoryBeforeLimit = evaluateVoucher(
+    voucher({ applicable_categories: [AO], usage_limit_per_user: 1 }),
+    cartContext([LINE_QUAN], { usageByVoucherId: { "v-1": 1 } })
+  );
+  assert.equal(categoryBeforeLimit.reason, "CATEGORY_MISMATCH");
+});
+
+test("mã không khai danh mục giữ nguyên kết quả khi có dòng hàng", () => {
+  const withLines = evaluateVoucher(voucher({ discount_value: 10 }), cartContext([LINE_AO, LINE_QUAN]));
+  const withoutLines = evaluateVoucher(voucher({ discount_value: 10 }), context({ orderValue: 800000 }));
+  assert.equal(withLines.discountAmount, withoutLines.discountAmount);
+  assert.equal(withLines.discountAmount, 80000);
+});

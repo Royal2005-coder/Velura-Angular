@@ -28,15 +28,6 @@
               </svg>
               <h2 class="section-title" style="margin: 0;">Thông tin giao hàng</h2>
             </div>
-            @if (savedAddresses().length > 0) {
-              <button
-                type="button"
-                class="coolmate-address-book-btn"
-                (click)="openAddressModal()"
-              >
-                📖 Sổ địa chỉ ({{ savedAddresses().length }})
-              </button>
-            }
           </div>
 
           @if (savedAddresses().length > 0) {
@@ -169,7 +160,7 @@
             />
           </div>
 
-          @if (savedAddresses().length > 0 && addressMode() === 'new') {
+          @if (auth.isLoggedIn()) {
             <div style="margin: 4px 0 16px 0; padding: 10px 14px; background: #faf8f5; border-radius: 8px; border: 1px dashed #d5c4b5;">
               <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 0.875rem; color: #4a4039; font-weight: 500;">
                 <input
@@ -178,7 +169,7 @@
                   (change)="toggleSaveNewAddress($event)"
                   style="width: 17px; height: 17px; accent-color: #7C5454; cursor: pointer;"
                 />
-                <span>Lưu địa chỉ này vào sổ địa chỉ (không ghi đè địa chỉ cũ)</span>
+                <span>Lưu địa chỉ này vào sổ địa chỉ (không ghi đè dữ liệu cũ)</span>
               </label>
             </div>
           }
@@ -667,6 +658,25 @@
             </div>
           </div>
 
+          @if (qrTimedOut()) {
+            <div class="qr-modal__timeout-alert" style="background: #fff3cd; color: #856404; padding: 14px 16px; border-radius: 8px; margin: 12px 0 16px 0; border: 1px solid #ffeeba; display: flex; flex-direction: column; gap: 8px;">
+              <div style="display: flex; align-items: center; gap: 8px; font-weight: 600;">
+                <span>⚠️ Hết thời gian chờ thanh toán (15 phút)</span>
+              </div>
+              <p style="margin: 0; font-size: 0.875rem; line-height: 1.5;">
+                Phiên quét mã QR đã hết thời gian. Bạn có thể <strong>Quét mã thanh toán lại</strong> hoặc <strong>Đổi sang hình thức COD (Thanh toán khi nhận hàng)</strong> để đơn hàng được giao nhanh chóng.
+              </p>
+              <div style="display: flex; gap: 8px; margin-top: 4px;">
+                <button type="button" class="btn btn--secondary btn--sm" (click)="retryQrPayment()">
+                  🔄 Quét mã thanh toán lại
+                </button>
+                <button type="button" class="btn btn--primary btn--sm" (click)="switchToCod()" [disabled]="switchingToCod()">
+                  {{ switchingToCod() ? 'Đang chuyển đổi…' : '💳 Đổi sang COD & Xác nhận ngay' }}
+                </button>
+              </div>
+            </div>
+          }
+
           <div class="qr-modal__details">
             <div class="qr-modal__detail-row">
               <span class="qr-modal__label">Ngân hàng thụ hưởng:</span>
@@ -711,8 +721,13 @@
           </div>
         </div>
 
-        <div class="qr-modal__footer">
-          <button type="button" class="btn btn--outline" (click)="closeQrModal()">Thanh toán sau</button>
+        <div class="qr-modal__footer" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+          <div style="display: flex; gap: 8px;">
+            <button type="button" class="btn btn--outline" (click)="closeQrModal()">Thanh toán sau</button>
+            <button type="button" class="btn btn--secondary" (click)="switchToCod()" [disabled]="switchingToCod()" title="Chuyển ngay sang thanh toán khi nhận hàng">
+              {{ switchingToCod() ? 'Đang chuyển đổi…' : '💳 Đổi sang COD' }}
+            </button>
+          </div>
           <button type="button" class="btn btn--primary" (click)="confirmDemoPayment()">
             ✓ Tôi đã chuyển khoản thành công (Xác nhận Demo)
           </button>
@@ -761,7 +776,10 @@
             </div>
           }
         </div>
-        <div class="address-book-modal__footer">
+        <div class="address-book-modal__footer" style="display: flex; justify-content: space-between; align-items: center;">
+          <button type="button" class="btn btn--secondary" (click)="setAddressMode('new'); closeAddressModal()">
+            ➕ Nhập địa chỉ mới
+          </button>
           <button type="button" class="btn btn--outline" (click)="closeAddressModal()">Đóng</button>
         </div>
       </div>

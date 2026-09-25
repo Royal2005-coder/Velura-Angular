@@ -245,6 +245,9 @@ export function formatOrderInternalNote(body: JsonObject, existingNote?: string)
   const parts: string[] = [];
   if (body.note) parts.push(`[Ghi chú khách]: ${String(body.note).trim()}`);
   if (body.referral_code) parts.push(`[Mã giới thiệu]: ${String(body.referral_code).trim()}`);
+  if (body.payment_method && String(body.payment_method).toUpperCase() !== 'COD') {
+    parts.push(`[Cổng thanh toán]: ${String(body.payment_method).toUpperCase()}`);
+  }
   if (body.is_gift) {
     const gender = body.gift_gender === 'nu' ? 'Nữ' : 'Nam';
     const name = body.gift_name ? String(body.gift_name).trim() : 'Người nhận';
@@ -527,14 +530,87 @@ export async function handleOrdersRoute(
       return sendJson(res, 200, { success: true, stripe }, corsHeaders);
     }
 
+    // POST /api/user/orders/:id/switch-cod hoặc POST /api/user/orders/switch-cod
+    if (((action && parts[4] === "switch-cod") || action === "switch-cod") && req.method === "POST") {
+      const body = await readJson(req);
+      const targetOrderId = (action !== "switch-cod" ? action : asString(body.order_id || body.orderId)) || "";
+      const order = await selectOne("orders", { order_id: `eq.${targetOrderId}` }) ||
+                    await selectOne("orders", { order_code: `eq.${quotePostgrestValue(targetOrderId.toUpperCase())}` });
+      if (!order) {
+        throw new HttpError(404, "NOT_FOUND", "Không tìm thấy đơn hàng");
+      }
+      if (order.status !== "pending" && order.status !== "waiting_payment") {
+        throw new HttpError(400, "INVALID_STATE", "Đơn hàng không ở trạng thái chờ thanh toán");
+      }
+      await updateRows("orders", { order_id: `eq.${order.order_id}` }, {
+        payment_method: "COD",
+        status: "pending",
+        stock_committed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
+      try {
+        await updateRows("payment", { order_id: `eq.${order.order_id}`, payment_status: "eq.pending" }, {
+          payment_status: "failed",
+          gateway_response_code: "SWITCHED_TO_COD",
+          updated_at: new Date().toISOString()
+        });
+      } catch {
+        /* ignore */
+      }
+      try {
+        await insertRow("order_status_history", {
+          order_id: order.order_id,
+          old_status: order.status,
+          new_status: "pending",
+          trigger_type: "customer",
+          changed_by: "customer",
+          changed_at: new Date().toISOString(),
+          note: "Khách hàng đổi phương thức thanh toán sang COD (Thanh toán khi nhận hàng)"
+        });
+      } catch {
+        /* ignore */
+      }
+      return sendJson(res, 200, { success: true, message: "Đã chuyển sang phương thức thanh toán COD thành công" }, corsHeaders);
+    }
+
+    // POST /api/user/orders/:id/payment-failed hoặc POST /api/user/orders/payment-failed
+    if (((action && parts[4] === "payment-failed") || action === "payment-failed") && req.method === "POST") {
+      const body = await readJson(req);
+      const targetOrderId = (action !== "payment-failed" ? action : asString(body.order_id || body.orderId)) || "";
+      const order = await selectOne("orders", { order_id: `eq.${targetOrderId}` }) ||
+                    await selectOne("orders", { order_code: `eq.${quotePostgrestValue(targetOrderId.toUpperCase())}` });
+      if (order) {
+        try {
+          await updateRows("payment", { order_id: `eq.${order.order_id}`, payment_status: "eq.pending" }, {
+            payment_status: "failed",
+            gateway_response_code: "TIMEOUT_OR_CANCELLED",
+            updated_at: new Date().toISOString()
+          });
+        } catch {
+          /* ignore */
+        }
+      }
+      return sendJson(res, 200, { success: true, message: "Đã cập nhật trạng thái thanh toán" }, corsHeaders);
+    }
+
     // POST /api/user/orders/otp-send (Send OTP)
     if (action === "otp-send" && req.method === "POST") {
       const body = await readJson(req);
-      const { phone, email, full_name } = body;
+      let { phone, email, full_name } = body;
       
       if (!phone) {
         throw new HttpError(400, "BAD_REQUEST", "Số điện thoại là bắt buộc");
       }
+
+      // Chuẩn hóa số điện thoại Việt Nam (+84 hoặc 84 -> 0)
+      let cleanPhone = String(phone).trim().replace(/[\s.-]/g, "");
+      if (cleanPhone.startsWith("+84")) {
+        cleanPhone = "0" + cleanPhone.slice(3);
+      } else if (cleanPhone.startsWith("84") && cleanPhone.length === 11) {
+        cleanPhone = "0" + cleanPhone.slice(2);
+      }
+      phone = cleanPhone;
+
       if (!validatePhone(phone)) {
         throw new HttpError(400, "BAD_REQUEST", "Số điện thoại không hợp lệ (10 số, bắt đầu bằng 0)");
       }
@@ -544,21 +620,9 @@ export async function handleOrdersRoute(
       }
       
       const existingUser = await selectOne("users", { phone: `eq.${phone}` });
-      if (existingUser && existingUser.is_active) {
-        throw new HttpError(400, "DUPLICATE_ACCOUNT", "Số điện thoại này đã có tài khoản thành viên. Vui lòng đăng nhập để thanh toán.");
-      }
-
-      if (email) {
-        const existingUserByEmail = await selectOne("users", { email: `eq.${email}` });
-        if (existingUserByEmail) {
-          if (existingUserByEmail.is_active) {
-            throw new HttpError(400, "DUPLICATE_EMAIL", "Email này đã được sử dụng bởi một tài khoản thành viên. Vui lòng đăng nhập hoặc sử dụng email khác.");
-          }
-          if (!existingUser || existingUser.user_id !== existingUserByEmail.user_id) {
-            throw new HttpError(400, "DUPLICATE_EMAIL", "Email này đã được đăng ký với một số điện thoại khác. Vui lòng sử dụng email khác.");
-          }
-        }
-      }
+      const existingUserByEmail = email ? await selectOne("users", { email: `eq.${email}` }) : null;
+      // Nếu số điện thoại hoặc email đã thuộc thành viên, KHÔNG CHẶN mà vẫn gửi OTP về email bình thường
+      const userId = existingUser ? existingUser.user_id : (existingUserByEmail ? existingUserByEmail.user_id : null);
       
       const otpCode = Math.floor(1000 + Math.random() * 9000).toString(); // 4 digits
       const otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
@@ -571,14 +635,12 @@ export async function handleOrdersRoute(
         console.log(`[CHECKOUT GUEST OTP] OTP requested for ${phone}`);
       }
       
-      const userId = existingUser ? existingUser.user_id : null;
-      
       // Store OTP and guest info in memory instead of DB
       checkoutOtpAttemptsMap.set(asString(phone), { 
         otpCode, 
         expiresAt: new Date(otpExpiresAt).getTime(),
         email: email || null,
-        full_name: full_name || (existingUser ? existingUser.full_name : "Khách hàng Guest"),
+        full_name: full_name || (existingUser ? existingUser.full_name : "Khách hàng"),
         attempts: 0 
       });
       
@@ -635,7 +697,16 @@ export async function handleOrdersRoute(
     if (action === "otp-verify" && req.method === "POST") {
       const body = await readJson(req);
       const order = asJsonObject(body.order);
-      const phone = body.phone || order.shipping_phone;
+      let phone = body.phone || order.shipping_phone;
+      if (phone) {
+        let cleanPhone = String(phone).trim().replace(/[\s.-]/g, "");
+        if (cleanPhone.startsWith("+84")) {
+          cleanPhone = "0" + cleanPhone.slice(3);
+        } else if (cleanPhone.startsWith("84") && cleanPhone.length === 11) {
+          cleanPhone = "0" + cleanPhone.slice(2);
+        }
+        phone = cleanPhone;
+      }
       const otp_code = body.otp_code || body.otp;
       const shipping_name = body.shipping_name || order.shipping_name;
       const shipping_address = body.shipping_address || order.shipping_address;
@@ -744,6 +815,10 @@ export async function handleOrdersRoute(
       }];
       
       let guestUser: JsonObject | null = await selectOne("users", { phone: `eq.${phone}` });
+      if (!guestUser && sessionState.email) {
+        guestUser = await selectOne("users", { email: `eq.${sessionState.email}` });
+      }
+      const isExistingMember = Boolean(guestUser && guestUser.is_active);
       if (!guestUser) {
         guestUser = asJsonObject(await insertRow("users", {
           full_name: sessionState.full_name,
@@ -756,7 +831,7 @@ export async function handleOrdersRoute(
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         }));
-      } else {
+      } else if (!guestUser.is_active) {
         await updateRows("users", { user_id: `eq.${guestUser.user_id}` }, {
           is_active: true,
           otp_code: null,
@@ -800,10 +875,14 @@ export async function handleOrdersRoute(
                 <a href="https://velura.royalai.dev/account/track?code=${orderCode}&contact=${encodeURIComponent(String(phone || ''))}" style="display: inline-block; background-color: #7C5454; color: #fff; text-decoration: none; padding: 12px 28px; border-radius: 6px; font-weight: 600;">Tra cứu tiến độ đơn hàng</a>
               </div>
 
+              ${!isExistingMember ? `
               <div style="background-color: #f5f5f5; padding: 16px; border-radius: 6px; margin-top: 20px;">
                 <h4 style="margin: 0 0 8px 0; font-size: 14px; color: #555;">Tài khoản thành viên tự động tạo:</h4>
                 <p style="margin: 4px 0; font-size: 13px; color: #666;">Số điện thoại: <strong>${phone}</strong> | Mật khẩu: <span style="font-family: monospace; font-weight: bold;">${tempPassword}</span></p>
-              </div>
+              </div>` : `
+              <div style="background-color: #f5f5f5; padding: 16px; border-radius: 6px; margin-top: 20px;">
+                <p style="margin: 4px 0; font-size: 13px; color: #666;">Đơn hàng đã được liên kết với tài khoản thành viên của bạn (<strong>${phone}</strong>).</p>
+              </div>`}
             </div>
             <div style="background-color: #f9f9f9; padding: 16px; text-align: center; border-top: 1px solid #eaeaea;">
               <p style="color: #aaa; font-size: 12px; margin: 0;">&copy; ${new Date().getFullYear()} Velura. Mọi quyền được bảo lưu.</p>
@@ -849,6 +928,23 @@ export async function handleOrdersRoute(
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       }));
+
+      if (dbPaymentMethod !== "COD") {
+        try {
+          const provider = String(payment_method || "online_payment").toLowerCase();
+          await insertRow("payment", {
+            order_id: newOrder.order_id,
+            amount: guestTotal,
+            payment_method: provider.toUpperCase(),
+            payment_provider: provider,
+            payment_status: "pending",
+            transaction_id: `pay_${provider}_${orderCode}`,
+            created_at: new Date().toISOString()
+          });
+        } catch {
+          /* ignore */
+        }
+      }
       
       const createdItems: unknown[] = [];
       for (const item of items) {
@@ -929,7 +1025,15 @@ export async function handleOrdersRoute(
       if (!shipping_name || !shipping_phone || !shipping_address || !Array.isArray(items) || !items.length) {
         throw new HttpError(400, "BAD_REQUEST", "Thông tin đơn hàng không đầy đủ");
       }
-      if (!validatePhone(shipping_phone)) {
+      let cleanPhone = String(shipping_phone || "").trim().replace(/[\s.-]/g, "");
+      if (cleanPhone.startsWith("+84")) {
+        cleanPhone = "0" + cleanPhone.slice(3);
+      } else if (cleanPhone.startsWith("84") && cleanPhone.length === 11) {
+        cleanPhone = "0" + cleanPhone.slice(2);
+      }
+      const validPhone = cleanPhone;
+
+      if (!validatePhone(validPhone)) {
         throw new HttpError(400, "BAD_REQUEST", "Số điện thoại giao hàng không hợp lệ (10 số, bắt đầu bằng 0)");
       }
 
@@ -988,7 +1092,7 @@ export async function handleOrdersRoute(
         user_id: profile.user_id,
         status: dbPaymentMethod === "COD" ? "pending" : "waiting_payment",
         shipping_name,
-        shipping_phone,
+        shipping_phone: validPhone,
         shipping_address,
         shipping_fee: memberPriced.shippingFee,
         voucher_id: memberVoucher.voucherId,
@@ -1003,6 +1107,23 @@ export async function handleOrdersRoute(
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       }));
+
+      if (dbPaymentMethod !== "COD") {
+        try {
+          const provider = String(payment_method || "online_payment").toLowerCase();
+          await insertRow("payment", {
+            order_id: newOrder.order_id,
+            amount: memberTotal,
+            payment_method: provider.toUpperCase(),
+            payment_provider: provider,
+            payment_status: "pending",
+            transaction_id: `pay_${provider}_${orderCode}`,
+            created_at: new Date().toISOString()
+          });
+        } catch {
+          /* ignore */
+        }
+      }
 
       // Insert order items & update variant stock reservations
       const createdItems: unknown[] = [];

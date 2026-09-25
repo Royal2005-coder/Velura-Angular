@@ -159,6 +159,112 @@ export async function handleReturnsRoute(
   corsHeaders: HeaderMap,
   context: AuthContext
 ): Promise<void> {
+  // POST /api/user/returns/guest — Cho phép khách vãng lai gửi yêu cầu đổi/trả
+  if (req.method === "POST" && action === "guest") {
+    const body = await readJson(req);
+    const cleanCode = String(body.order_code || "").trim().toUpperCase();
+    const cleanContact = String(body.contact || body.phone || body.email || "").trim();
+    const return_type = body.return_type;
+    const description = body.description;
+    const evidence_images = body.evidence_images;
+    const items = body.items;
+    if (!cleanCode || !cleanContact || !return_type || !Array.isArray(items) || !items.length) {
+      throw new HttpError(400, "BAD_REQUEST", "Thiếu thông tin yêu cầu đổi trả (mã đơn, liên hệ, loại đổi trả hoặc sản phẩm)");
+    }
+    let order = await selectOne("orders", { order_code: `eq.${cleanCode}` });
+    if (!order && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanCode)) {
+      order = await selectOne("orders", { order_id: `eq.${cleanCode}` });
+    }
+    if (!order) {
+      throw new HttpError(404, "NOT_FOUND", "Không tìm thấy đơn hàng");
+    }
+
+    const normContact = cleanContact.toLowerCase().replace(/\s/g, "");
+    const normPhone = String(order.shipping_phone || "").replace(/\D/g, "");
+    const normEmail = String(order.shipping_email || "").toLowerCase().trim();
+    const contactMatches = (
+      normContact === normEmail ||
+      (cleanContact.replace(/\D/g, "") && cleanContact.replace(/\D/g, "") === normPhone)
+    );
+    if (!contactMatches) {
+      throw new HttpError(404, "NOT_FOUND", "Mã đơn hàng hoặc thông tin liên hệ không khớp");
+    }
+
+    if (asString(order.status) !== "delivered") {
+      throw new HttpError(400, "BAD_REQUEST", "Đơn hàng phải hoàn thành (giao thành công) mới được yêu cầu đổi trả");
+    }
+
+    const deliveryDate = order.delivered_at ? new Date(String(order.delivered_at)) : new Date(String(order.updated_at || order.created_at));
+    if (!returnWindowOpen(deliveryDate, new Date())) {
+      throw new HttpError(400, "RETURN_WINDOW_CLOSED", "Quá thời hạn đổi/trả (30 ngày kể từ khi giao hàng)");
+    }
+
+    const validatedItems: JsonObject[] = [];
+    const { rows: existingReturns } = await selectRows("return_exchange", { order_id: `eq.${order.order_id}` });
+
+    for (const rawItem of items) {
+      const item = asJsonObject(rawItem);
+      const orderItem = await selectOne("order_item", { item_id: `eq.${item.order_item_id}` });
+      if (!orderItem || orderItem.order_id !== order.order_id) {
+        throw new HttpError(400, "BAD_REQUEST", "Sản phẩm không thuộc đơn hàng này");
+      }
+
+      const variant = await selectOne("variant", { variant_id: `eq.${orderItem.variant_id}` });
+      if (variant) {
+        const product = await selectOne("product", { product_id: `eq.${variant.product_id}` });
+        if (product) {
+          const category = await selectOne("category", { category_id: `eq.${product.category_id}` });
+          if (category && (category.name === "Phụ kiện" || category.slug === "phu-kien")) {
+            throw new HttpError(400, "BAD_REQUEST", `Sản phẩm ${product.name} thuộc danh mục hạn chế đổi trả của Velura`);
+          }
+        }
+      }
+
+      let alreadyReturnedQty = 0;
+      for (const r of existingReturns) {
+        if (r.status !== "rejected") {
+          const { rows: rItems } = await selectRows("return_item", { return_id: `eq.${r.return_id}`, order_item_id: `eq.${item.order_item_id}` });
+          for (const ri of rItems) {
+            alreadyReturnedQty += Number(ri.quantity);
+          }
+        }
+      }
+
+      if (alreadyReturnedQty + Number(item.quantity) > Number(orderItem.quantity)) {
+        throw new HttpError(400, "BAD_REQUEST", "Số lượng đổi trả vượt quá số lượng đã mua");
+      }
+
+      validatedItems.push({
+        order_item_id: item.order_item_id,
+        quantity: item.quantity
+      });
+    }
+
+    const trackingReturnCode = "RT" + Date.now().toString().slice(-8).toUpperCase();
+    const newReturn = asJsonObject(await insertRow("return_exchange", {
+      order_id: order.order_id,
+      user_id: order.user_id || null,
+      return_type,
+      status: "pending",
+      tracking_return_code: trackingReturnCode,
+      reason: description || "Khách hàng yêu cầu đổi trả",
+      description: description || null,
+      evidence_images: Array.isArray(evidence_images) ? evidence_images : [],
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }));
+
+    for (const vItem of validatedItems) {
+      await insertRow("return_item", {
+        return_id: newReturn.return_id,
+        order_item_id: vItem.order_item_id,
+        quantity: vItem.quantity
+      });
+    }
+
+    return sendJson(res, 201, { success: true, return: newReturn }, corsHeaders);
+  }
+
   const profile = requireUserAuth(context);
 
   // POST /api/user/returns/cancel

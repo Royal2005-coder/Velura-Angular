@@ -1,6 +1,7 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { CartLine, CartStore, GroupedCartItem } from '../../core/services/cart.store';
+import { CheckoutStore } from '../../core/services/checkout.store';
 import { ApiService } from '../../core/services/api.service';
 import { formatVnd, toPublicAsset } from '../../core/utils/money';
 import { showToast } from '../../core/utils/toast';
@@ -29,6 +30,7 @@ type PageItem = { kind: 'page'; value: number } | { kind: 'dots'; value: number 
 })
 export class CartPage {
   private readonly cart = inject(CartStore);
+  private readonly checkoutStore = inject(CheckoutStore);
   private readonly api = inject(ApiService);
   readonly editingVariantId = signal<string | null>(null);
   readonly variantChoices = signal<Array<{ variant_id: string; size?: string; color?: string; stock_quantity?: number }>>([]);
@@ -43,6 +45,9 @@ export class CartPage {
   readonly preferredVoucher = this.route.snapshot.queryParamMap.get('voucher');
   readonly appliedVoucher = signal<AppliedVoucher | null>(null);
   readonly voucherDeclined = signal(false);
+
+  readonly referralCode = signal(this.checkoutStore.shipping().referral_code || '');
+  readonly referralApplied = signal(Boolean(this.checkoutStore.shipping().referral_code));
 
   readonly currentPage = signal(1);
   readonly selectedIds = signal<string[]>(this.readSelectedIds());
@@ -352,6 +357,23 @@ export class CartPage {
     document.querySelector('.cart-header')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
+  onReferralInput(event: Event): void {
+    this.referralCode.set((event.target as HTMLInputElement).value);
+  }
+
+  applyReferralCode(): void {
+    const code = this.referralCode().trim();
+    if (!code) {
+      this.referralApplied.set(false);
+      this.checkoutStore.saveShipping({ ...this.checkoutStore.shipping(), referral_code: '' });
+      showToast('Đã xóa mã giới thiệu');
+      return;
+    }
+    this.referralApplied.set(true);
+    this.checkoutStore.saveShipping({ ...this.checkoutStore.shipping(), referral_code: code });
+    showToast(`Đã ghi nhận mã giới thiệu: ${code}`);
+  }
+
   /**
    * Starts checkout with the originally selected cart rows.
    */
@@ -361,7 +383,12 @@ export class CartPage {
       showToast('Vui lòng chọn ít nhất một sản phẩm để thanh toán.');
       return;
     }
-    sessionStorage.setItem(CHECKOUT_ITEMS_KEY, JSON.stringify(this.cart.expandGroupedItems(selected)));
+    const expanded = this.cart.expandGroupedItems(selected);
+    this.checkoutStore.setCheckoutItems(expanded);
+    if (this.referralCode().trim()) {
+      this.checkoutStore.saveShipping({ ...this.checkoutStore.shipping(), referral_code: this.referralCode().trim() });
+    }
+    sessionStorage.setItem(CHECKOUT_ITEMS_KEY, JSON.stringify(expanded));
     localStorage.removeItem('checkout_discount');
     localStorage.removeItem('checkout_voucher_code');
     // Mang lựa chọn mã sang trang thanh toán. Trước đây bước này xoá mã đi, nên mã khách

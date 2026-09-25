@@ -1,12 +1,32 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { CartLine, CartStore } from './cart.store';
 
+/**
+ * Thông tin giao hàng và các tùy chọn bổ sung chuẩn Coolmate (quà tặng, người nhận thay thế, xuất hóa đơn VAT, mã giới thiệu).
+ */
 export interface CheckoutShipping {
   name: string;
   phone: string;
   email: string;
   address: string;
   note?: string;
+  province?: string;
+  district?: string;
+  ward?: string;
+  detail?: string;
+  referral_code?: string;
+  is_gift?: boolean;
+  gift_gender?: 'nam' | 'nu';
+  gift_name?: string;
+  gift_message?: string;
+  is_other_recipient?: boolean;
+  other_name?: string;
+  other_phone?: string;
+  is_vat_invoice?: boolean;
+  vat_company_name?: string;
+  vat_tax_code?: string;
+  vat_company_address?: string;
+  vat_email?: string;
 }
 
 export interface CheckoutMethods {
@@ -45,6 +65,23 @@ export class CheckoutStore {
   readonly subtotal = computed(() =>
     this.items().reduce((sum, line) => sum + line.unit_price * line.quantity, 0),
   );
+
+  /**
+   * Sets the checkout items directly, updating both reactive signal and sessionStorage.
+   * Prevents stale cart lines when navigating between cart and checkout.
+   */
+  setCheckoutItems(items: CartLine[]): void {
+    this.items.set(items);
+    sessionStorage.setItem(ITEMS_KEY, JSON.stringify(items));
+  }
+
+  /**
+   * Re-syncs checkout lines with the latest persistent cart lines.
+   */
+  syncFromCart(): void {
+    const next = this.readCheckoutItems();
+    this.items.set(next);
+  }
 
   /**
    * Updates quantity of an item in checkout and syncs with the persistent cart.
@@ -187,6 +224,23 @@ export class CheckoutStore {
         email: raw.email || '',
         address: raw.address || '',
         note: raw.note || '',
+        province: raw.province || '',
+        district: raw.district || '',
+        ward: raw.ward || '',
+        detail: raw.detail || '',
+        referral_code: raw.referral_code || '',
+        is_gift: Boolean(raw.is_gift),
+        gift_gender: raw.gift_gender || 'nam',
+        gift_name: raw.gift_name || '',
+        gift_message: raw.gift_message || '',
+        is_other_recipient: Boolean(raw.is_other_recipient),
+        other_name: raw.other_name || '',
+        other_phone: raw.other_phone || '',
+        is_vat_invoice: Boolean(raw.is_vat_invoice),
+        vat_company_name: raw.vat_company_name || '',
+        vat_tax_code: raw.vat_tax_code || '',
+        vat_company_address: raw.vat_company_address || '',
+        vat_email: raw.vat_email || '',
       };
     } catch {
       return { name: '', phone: '', email: '', address: '' };

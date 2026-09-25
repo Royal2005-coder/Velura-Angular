@@ -108,8 +108,9 @@ let lastFixture: ComponentFixture<unknown> | undefined;
 
 /**
  * Boots a storefront page ViewModel with Model stubs (lecture: HTTP lives in services).
+ * `apiOverrides` thay từng hàm của ApiService giả cho ca test cần dữ liệu riêng.
  */
-export async function createStorefrontPage<T>(page: Type<T>): Promise<T> {
+export async function createStorefrontPage<T>(page: Type<T>, apiOverrides: Partial<Record<'get' | 'post' | 'patch' | 'delete', unknown>> = {}): Promise<T> {
   lastFixture?.destroy();
   lastFixture = undefined;
   sessionStorage.clear();
@@ -119,7 +120,7 @@ export async function createStorefrontPage<T>(page: Type<T>): Promise<T> {
     imports: [page],
     providers: [
       provideRouter([]),
-      { provide: ApiService, useValue: stubApiService() },
+      { provide: ApiService, useValue: { ...stubApiService(), ...apiOverrides } },
       { provide: CatalogService, useValue: stubCatalogService() },
       { provide: ChatbotService, useValue: stubChatbotService() },
       { provide: ActivatedRoute, useValue: stubActivatedRoute() },
@@ -129,6 +130,12 @@ export async function createStorefrontPage<T>(page: Type<T>): Promise<T> {
   lastFixture = fixture as ComponentFixture<unknown>;
   fixture.detectChanges();
   return fixture.componentInstance;
+}
+
+/** Fixture của trang vừa dựng bằng `createStorefrontPage`, để đọc DOM đã render. */
+export function lastStorefrontFixture(): ComponentFixture<unknown> {
+  if (!lastFixture) throw new Error('createStorefrontPage chưa được gọi');
+  return lastFixture;
 }
 
 export { sampleProduct };

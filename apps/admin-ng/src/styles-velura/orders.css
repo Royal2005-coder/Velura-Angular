@@ -1,11 +1,13 @@
-﻿/* Order management module styles. */
+/* Order management module styles. */
 .admin-order-kpis { grid-template-columns:repeat(4, minmax(0, 1fr)); }
 .admin-badge--order-pending { background:#f6eee0; color:#9a6b28; }
 .admin-badge--order-confirmed { background:var(--tab-bg); color:var(--brown); }
-.admin-badge--order-preparing { background:#f8ebd9; color:#a35f1e; }
+.admin-badge--order-waiting_payment { background:#fbf1dc; color:#8a6420; }
+.admin-badge--order-processing { background:#f8ebd9; color:#a35f1e; }
 .admin-badge--order-shipping { background:#e6eef6; color:#476e91; }
-.admin-badge--order-completed { background:#e7f1e5; color:#4c7048; }
-.admin-badge--order-held { background:#f9e4e8; color:var(--error); }
+.admin-badge--order-delivered { background:#e7f1e5; color:#4c7048; }
+.admin-badge--order-delivery_failed { background:#f9e4e8; color:var(--error); }
+.admin-badge--order-cancelled { background:var(--field-bg); color:var(--muted); }
 .admin-badge--payment-unpaid { background:var(--field-bg); color:var(--muted); }
 .admin-badge--payment-paid { background:#e7f1e5; color:#4c7048; }
 .admin-badge--payment-error { background:#f9e4e8; color:var(--error); }
@@ -44,4 +46,33 @@
 .admin-order-danger-note { margin:16px 0; padding:12px; border-left:3px solid var(--error); border-radius:var(--radius-sm); background:#f9e4e8; color:var(--error); font-size:.8125rem; line-height:1.5; }
 @media (max-width:1100px) { .admin-order-kpis { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
 @media (max-width:768px) { .admin-page-intro { align-items:flex-start; flex-direction:column; }.admin-order-filter-bar .admin-filter-bar__actions { margin-left:0; }.admin-order-summary { grid-template-columns:1fr; }.admin-drawer__tabs { padding-inline:18px; } }
-
+/* A1: hàng đợi xử lý theo action (KAN-60). */
+.admin-order-row { cursor:pointer; }
+.admin-order-row:hover td { background:var(--field-bg); }
+.admin-order-payment { display:grid; gap:2px; font-size:.8125rem; }
+.admin-order-payment__status { color:var(--soft); font-size:.75rem; }
+.admin-order-payment__status--paid { color:#4c7048; }
+.admin-order-payment__status--failed,
+.admin-order-payment__status--discrepancy { color:var(--error); }
+.admin-order-payment__status--refund_pending { color:#a35f1e; }
+.admin-order-tags { display:flex; flex-wrap:wrap; gap:4px; max-width:220px; }
+.admin-order-tag { display:inline-flex; align-items:center; padding:2px 8px; border-radius:999px; background:var(--tab-bg); color:var(--brown); font-size:.6875rem; font-weight:500; white-space:nowrap; }
+.admin-order-tag--PRIORITY_REVIEW,
+.admin-order-tag--RETURN_TO_STOCK_PENDING,
+.admin-order-tag--REFUND_PENDING { background:#f8ebd9; color:#a35f1e; }
+.admin-order-tag--REVIEW_OVERDUE,
+.admin-order-tag--PAYMENT_OVERDUE,
+.admin-order-tag--PAYMENT_ATTENTION,
+.admin-order-tag--REFUND_FAILED { background:#f9e4e8; color:var(--error); }
+.admin-order-action-bar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; margin:0 0 20px; padding:14px; border:1px solid var(--line); border-radius:var(--radius-md); background:#fff; }
+.admin-order-action-bar__primary { display:flex; flex-wrap:wrap; gap:8px; }
+.admin-order-action-bar__danger { color:var(--error)!important; }
+.admin-order-simulator { display:grid; gap:10px; margin:0 0 20px; padding:14px; border:1px dashed #476e91; border-radius:var(--radius-md); background:#f3f7fb; }
+.admin-order-simulator strong { display:block; color:#476e91; font-size:.875rem; font-weight:500; }
+.admin-order-simulator small { color:var(--soft); font-size:.75rem; }
+.admin-order-simulator__buttons { display:flex; flex-wrap:wrap; gap:8px; }
+.admin-order-choice { display:grid; gap:8px; margin:0 0 14px; padding:0; border:0; }
+.admin-order-choice label { display:flex; align-items:center; gap:8px; font-size:.875rem; }
+.admin-drawer--busy { opacity:.7; pointer-events:none; }
+.admin-timeline__item--system::before { background:#476e91; }
+.admin-timeline__note { color:var(--muted)!important; font-size:.8125rem!important; line-height:1.45; }

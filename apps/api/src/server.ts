@@ -18,6 +18,8 @@ import { createProductService } from "./products/product-service.js";
 import { handleProductRoute } from "./products/product-router.js";
 import { createOrderRepository } from "./orders/order-repository.js";
 import { createOrderService } from "./orders/order-service.js";
+import { startOrderAutomation } from "./orders/order-automation.js";
+import { refundStripeOrder } from "./payments/stripe.js";
 import { handleOrderRoute } from "./orders/order-router.js";
 import { createReviewRepository } from "./reviews/review-repository.js";
 import { createReviewService } from "./reviews/review-service.js";
@@ -51,7 +53,7 @@ type ChatbotService = ReturnType<typeof createChatbotService>;
 
 const accountService: AccountService = createAccountService({ repository: createAccountRepository() });
 const productService: ProductService = createProductService({ repository: createProductRepository() });
-const orderService = createOrderService({ repository: createOrderRepository() });
+const orderService = createOrderService({ repository: createOrderRepository(), refunds: { refund: refundStripeOrder } });
 const reviewService = createReviewService({ repository: createReviewRepository() });
 const returnService = createReturnService({ repository: createReturnRepository() });
 const pricingService = createPricingService({ repository: createPricingRepository() });
@@ -69,6 +71,7 @@ const chatLimiter = createFixedWindowLimiter({
 startAccountMaintenance();
 startEmailOutboxWorker();
 startPromotionScheduler();
+startOrderAutomation();
 
 const server = createServer(async (req, res) => {
   const requestId = String(req.headers["x-request-id"] || randomUUID()).slice(0, 128);

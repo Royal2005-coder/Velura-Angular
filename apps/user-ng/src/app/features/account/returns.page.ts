@@ -4,7 +4,6 @@ import { catchError, of } from 'rxjs';
 import { ApiService } from '../../core/services/api.service';
 import { useBodyClass } from '../../core/utils/body-class';
 import { isReturnableOrder, returnReasonText } from './return-window';
-import { orderStatusLabel } from './order-status';
 
 interface ReturnLine {
   item_id: string;
@@ -14,8 +13,9 @@ interface ReturnLine {
 
 interface MemberOrder {
   order_id: string;
-  tracking_code?: string;
+  order_code?: string;
   status?: string;
+  status_label?: string;
   delivered_at?: string;
   updated_at?: string;
   created_at?: string;
@@ -70,8 +70,8 @@ export class AccountReturnsPage {
   /**
    * Same Vietnamese status shown on the order list and in admin.
    */
-  statusLabel(status: string | undefined): string {
-    return orderStatusLabel(status);
+  statusLabel(order: MemberOrder): string {
+    return order.status_label || order.status || '—';
   }
 
   /**

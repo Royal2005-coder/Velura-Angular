@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import {
+  customerOrderSteps,
   ORDER_ACTIONS,
   ORDER_STATUSES,
   actionGuard,
@@ -123,4 +124,40 @@ test("orderFacts reads the latest payment and the REFUND_FAILED marker", () => {
   });
   assert.equal(read.paymentStatus, "refund_pending");
   assert.equal(read.refundFailed, true);
+});
+
+test("customer steps: passed milestones from history, then the rest of the normal path", () => {
+  const steps = customerOrderSteps("confirmed", "COD", [
+    { status: "pending", at: "2026-09-24 03:00:00" },
+    { status: "confirmed", at: "2026-09-24 09:00:00" }
+  ]);
+  assert.deepEqual(steps.map((step) => [step.status, step.state]), [
+    ["pending", "done"],
+    ["confirmed", "current"],
+    ["processing", "upcoming"],
+    ["shipping", "upcoming"],
+    ["delivered", "upcoming"]
+  ]);
+});
+
+test("customer steps: online orders start at waiting for payment", () => {
+  const steps = customerOrderSteps("waiting_payment", "ONLINE_PAYMENT", []);
+  assert.equal(steps[0].status, "waiting_payment");
+  assert.equal(steps[0].state, "current");
+  assert.equal(steps[1].status, "confirmed");
+});
+
+test("customer steps: a cancelled order shows what happened and nothing after it", () => {
+  const steps = customerOrderSteps("cancelled", "COD", [
+    { status: "pending", at: "2026-09-24 03:00:00" },
+    { status: "cancelled", at: "2026-09-24 05:00:00" }
+  ]);
+  assert.deepEqual(steps.map((step) => [step.status, step.state]), [["pending", "done"], ["cancelled", "current"]]);
+});
+
+test("customer steps: a delivered order ends done; orders without history get only the current milestone", () => {
+  const delivered = customerOrderSteps("delivered", "COD", [{ status: "delivered", at: "2026-09-25 03:00:00" }]);
+  assert.deepEqual(delivered.map((step) => step.state), ["done"]);
+  const legacy = customerOrderSteps("shipping", "COD", []);
+  assert.deepEqual(legacy.map((step) => [step.status, step.state]), [["shipping", "current"], ["delivered", "upcoming"]]);
 });

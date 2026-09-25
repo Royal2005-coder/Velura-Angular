@@ -232,3 +232,53 @@ export function orderFacts(order: Record<string, unknown>): OrderFacts {
     refundFailed: String(latest?.gateway_response_code || "") === "REFUND_FAILED"
   };
 }
+
+/** Một bước trên timeline khách xem (KAN-39 FR-08). */
+export interface CustomerOrderStep {
+  status: string;
+  label: string;
+  at: string | null;
+  state: "done" | "current" | "upcoming";
+}
+
+/** Đường đi bình thường của một đơn, theo phương thức thanh toán. */
+const HAPPY_PATH: Readonly<Record<string, readonly OrderStatus[]>> = {
+  COD: ["pending", "confirmed", "processing", "shipping", "delivered"],
+  ONLINE_PAYMENT: ["waiting_payment", "confirmed", "processing", "shipping", "delivered"]
+};
+
+/**
+ * Timeline cho khách: các mốc đã qua lấy từ lịch sử thật, cộng các bước còn lại của
+ * đường đi bình thường khi đơn chưa kết thúc.
+ *
+ * Đơn tạo trước khi có lịch sử chi tiết chỉ có mốc hiện tại; không dựng mốc giả.
+ */
+export function customerOrderSteps(
+  status: string,
+  paymentMethod: string,
+  timeline: ReadonlyArray<{ status: unknown; at: unknown }>
+): CustomerOrderStep[] {
+  const passed: CustomerOrderStep[] = [];
+  for (const row of timeline) {
+    const code = String(row.status || "");
+    if (!code || passed[passed.length - 1]?.status === code) continue;
+    passed.push({ status: code, label: orderStatusLabel(code), at: row.at ? String(row.at) : null, state: "done" });
+  }
+  if (passed[passed.length - 1]?.status !== status) {
+    passed.push({ status, label: orderStatusLabel(status), at: null, state: "done" });
+  }
+  const last = passed[passed.length - 1];
+  if (isOrderStatus(status) && TERMINAL_STATUSES.includes(status)) {
+    // Giao thành công là đích; huỷ và giao thất bại là mốc cần khách chú ý.
+    if (status !== "delivered") last.state = "current";
+    return passed;
+  }
+  last.state = "current";
+  const path = HAPPY_PATH[paymentMethod] ?? HAPPY_PATH.COD;
+  const position = path.indexOf(status as OrderStatus);
+  const upcoming = position >= 0 ? path.slice(position + 1) : [];
+  return [
+    ...passed,
+    ...upcoming.map((code): CustomerOrderStep => ({ status: code, label: ORDER_STATUS_LABELS[code], at: null, state: "upcoming" }))
+  ];
+}

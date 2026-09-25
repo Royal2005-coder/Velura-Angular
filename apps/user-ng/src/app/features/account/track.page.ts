@@ -28,11 +28,12 @@ export class AccountTrackPage {
       return;
     }
     this.api
-      .get<{ orders?: Array<{ order_code?: string; order_id?: string; status?: string }> }>('/api/user/orders')
+      .get<{ orders?: Array<{ order_code?: string; order_id?: string; status?: string; status_label?: string }> }>('/api/user/orders')
       .pipe(catchError(() => of({ orders: [] })))
       .subscribe((data) => {
+        const wanted = code.replace(/^#/, '').toUpperCase();
         const match = (data.orders || []).find(
-          (order) => order.order_code === code || order.order_id === code || `#${order.order_code}` === code,
+          (order) => (order.order_code || '').toUpperCase() === wanted || order.order_id === code,
         );
         this.found.set(Boolean(match));
         this.errorMessage.set(match ? null : 'Không tìm thấy đơn hàng với mã này.');
@@ -50,7 +51,7 @@ export class AccountTrackPage {
           codeNode.textContent = `#${match.order_code || match.order_id}`;
         }
         if (match && statusNode) {
-          statusNode.textContent = match.status || '';
+          statusNode.textContent = match.status_label || match.status || '';
         }
       });
   }

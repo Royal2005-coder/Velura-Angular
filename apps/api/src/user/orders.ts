@@ -6,10 +6,10 @@ import { requireUserAuth, validatePhone } from "./auth.js";
 import { createNotification } from "./notifications.js";
 import { recordVoucherRedemption, resolveOrderVoucher } from "./vouchers.js";
 import { allowDevOtpBypass, config } from "../config.js";
-import { createStripePaymentIntent, refundStripeOrder, stripeConfigured } from "../payments/stripe.js";
+import { createStripePaymentIntent, refundStripeOrder, STRIPE_CHECKOUT_TTL_SECONDS, stripeConfigured } from "../payments/stripe.js";
 import { priceOrder, shippingMethodFromClaim } from "./order-pricing.js";
 import { buildCartLines, loadCatalog, loadCategoryTree } from "./cart-catalog.js";
-import { customerCanCancel, orderFacts, orderStatusLabel } from "../orders/order-state-machine.js";
+import { customerCanCancel, customerOrderSteps, orderFacts, orderStatusLabel } from "../orders/order-state-machine.js";
 import {
   asJsonObject,
   asString,
@@ -130,6 +130,15 @@ async function sendDirectEmail(to: unknown, subject: string, text: string, html:
 const PAY_AGAIN_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 /**
+ * Còn phiên Stripe nào chưa hết hạn không. Phiên sống `STRIPE_CHECKOUT_TTL_SECONDS`; payment
+ * `pending` cũ hơn thế là phiên đã chết mà webhook hết hạn chưa về, không chặn.
+ */
+export function hasOpenStripeSession(pendingPayments: JsonObject[], now = Date.now()): boolean {
+  return pendingPayments.some((payment) =>
+    now - parseUtcDate(payment.created_at).getTime() < STRIPE_CHECKOUT_TTL_SECONDS * 1000);
+}
+
+/**
  * Mã đơn cho khách. Ngẫu nhiên, không suy ra được từ thời điểm tạo: mã cũ
  * `"VLR" + 8 chữ số cuối của mốc mili giây` dò được trong một ngày đã biết (KAN-40).
  */
@@ -141,6 +150,16 @@ export function generateOrderCode(): string {
  * Hình dạng đơn trả cho storefront: nhãn, timeline và cờ huỷ đều lấy từ State Machine,
  * không để frontend tự định nghĩa lại (KAN-37, KAN-39).
  */
+/**
+ * Cột của đơn mà khách được thấy. Không trả nguyên dòng: `internal_note`, `ai_source`,
+ * mốc kho và `version` là dữ liệu vận hành của admin.
+ */
+const CUSTOMER_ORDER_FIELDS = [
+  "order_id", "order_code", "order_date", "created_at", "updated_at", "delivered_at", "status",
+  "shipping_name", "shipping_phone", "shipping_address", "shipping_fee", "subtotal", "discount_amount",
+  "total_amount", "payment_method", "voucher_id", "cancelled_reason", "tracking_code", "carrier", "tracking_url"
+] as const;
+
 export function presentOrderForCustomer(order: JsonObject, items: JsonObject[], history: JsonObject[], payments: JsonObject[] = []): JsonObject {
   const facts = orderFacts({ ...order, payments });
   const createdAt = parseUtcDate(order.created_at).getTime();
@@ -151,11 +170,21 @@ export function presentOrderForCustomer(order: JsonObject, items: JsonObject[], 
       label: orderStatusLabel(row.new_status),
       at: row.changed_at
     }));
+  const visible: JsonObject = {};
+  for (const field of CUSTOMER_ORDER_FIELDS) {
+    if (field in order) visible[field] = order[field];
+  }
+  // Mã vận đơn chỉ có nghĩa khi vận đơn còn hiệu lực (FR-09: hiện khi có mã).
+  if (order.shipment_voided_at) {
+    visible.tracking_code = null;
+    visible.tracking_url = null;
+  }
   return {
-    ...order,
+    ...visible,
     items,
     status_label: orderStatusLabel(order.status),
     timeline,
+    steps: customerOrderSteps(String(order.status || ""), String(order.payment_method || ""), timeline),
     can_cancel: customerCanCancel(facts),
     can_pay_again: order.status === "waiting_payment"
       && order.payment_method === "ONLINE_PAYMENT"
@@ -305,7 +334,7 @@ export async function handleOrdersRoute(
           : `Lý do: ${reason}.`,
         `/account/orders/${updatedOrder.order_id}`
       );
-      return sendJson(res, 200, { success: true, order: updatedOrder, refund }, corsHeaders);
+      return sendJson(res, 200, { success: true, order: presentOrderForCustomer(updatedOrder, [], []), refund }, corsHeaders);
     }
 
     // POST /api/user/orders/:id/pay-again — thanh toán lại đơn online trong 24 giờ.
@@ -319,7 +348,18 @@ export async function handleOrdersRoute(
       if (!view.can_pay_again) {
         throw new HttpError(409, "PAY_AGAIN_NOT_ALLOWED", "Đơn không còn ở trạng thái chờ thanh toán hoặc đã quá 24 giờ.");
       }
-      const stripe = await openStripePayment(order.order_id, order.total_amount, "STRIPE");
+      // Một phiên còn mở thì không mở phiên thứ hai: khách trả cả hai thì lần sau rơi vào
+      // đơn đã xác nhận và không có đường hoàn tiền tự động.
+      const { rows: openSessions } = await selectRows("payment", {
+        order_id: `eq.${order.order_id}`,
+        payment_provider: "eq.stripe",
+        payment_status: "eq.pending",
+        select: "payment_id,created_at"
+      });
+      if (hasOpenStripeSession(openSessions)) {
+        throw new HttpError(409, "PAYMENT_SESSION_OPEN", "Phiên thanh toán trước vẫn còn mở. Hoàn tất ở tab đó hoặc thử lại sau ít phút.");
+      }
+      const stripe = await openStripePayment(order.order_id, order.total_amount, "STRIPE", `/account/orders/${order.order_id}`);
       return sendJson(res, 200, { success: true, stripe }, corsHeaders);
     }
 
@@ -697,7 +737,7 @@ export async function handleOrdersRoute(
           full_name: guestUser.full_name,
           role: "member"
         },
-        order: { ...newOrder, items: createdItems },
+        order: presentOrderForCustomer(newOrder, createdItems as JsonObject[], []),
         temp_password: tempPassword,
         stripe: await openStripePayment(newOrder.order_id, newOrder.total_amount, payment_method)
       }, corsHeaders);
@@ -826,7 +866,7 @@ export async function handleOrdersRoute(
 
       return sendJson(res, 200, {
         success: true,
-        order: { ...newOrder, items: createdItems },
+        order: presentOrderForCustomer(newOrder, createdItems as JsonObject[], []),
         stripe: await openStripePayment(newOrder.order_id, newOrder.total_amount, payment_method)
       }, corsHeaders);
     }
@@ -874,8 +914,13 @@ async function priceClaimedOrder(
   return { ...priced, cart: { lines: cartLines, categoryNameById: tree.nameById } };
 }
 
-async function openStripePayment(orderId: unknown, amount: unknown, method: unknown): Promise<{ payment_intent_id: string; url: string } | null> {
+async function openStripePayment(
+  orderId: unknown,
+  amount: unknown,
+  method: unknown,
+  returnPath: string | null = null
+): Promise<{ payment_intent_id: string; url: string } | null> {
   if (String(method || "").toUpperCase() !== "STRIPE") return null;
-  const intent = await createStripePaymentIntent(String(orderId), Number(amount) || 0);
+  const intent = await createStripePaymentIntent(String(orderId), Number(amount) || 0, returnPath);
   return { payment_intent_id: intent.id, url: intent.url };
 }

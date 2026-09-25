@@ -1,7 +1,7 @@
 import { enrichAuditLogs, RETURN_AUDIT } from "../audit-enrichment.js";
 import { HttpError } from "../http.js";
 import type { AuthContext, AuthUser, JsonObject, RequestMeta } from "../types.js";
-import { asNumber, asString } from "../types.js";
+import { asNumber, asString, errorMessage } from "../types.js";
 import {
   RETURN_OPERATOR_ROLES,
   RETURN_READER_ROLES,
@@ -17,12 +17,20 @@ import type { ReturnRepository } from "./return-repository.js";
 type ReturnContext = AuthContext & Partial<RequestMeta>;
 
 /**
+ * Hoàn tiền qua cổng thanh toán cho đơn hàng gắn với phiếu đổi trả.
+ */
+export interface ReturnRefundGateway {
+  refund(orderId: string, amount?: number): Promise<{ status: "refunded" | "requested" | "failed" | "skipped"; message?: string }>;
+}
+
+/**
  * Admin return / support use-cases consumed by `handleReturnRoute`.
  */
 export interface ReturnService {
   listReturns(context: ReturnContext | undefined, searchParams: URLSearchParams): Promise<{ rows: JsonObject[]; count: number | undefined }>;
   getReturn(context: ReturnContext | undefined, returnId: string): Promise<JsonObject>;
   approveRefund(context: ReturnContext | undefined, returnId: string, body: JsonObject): Promise<JsonObject>;
+  triggerStripeRefund(context: ReturnContext | undefined, returnId: string, body?: JsonObject): Promise<JsonObject>;
   approveExchange(context: ReturnContext | undefined, returnId: string, body: JsonObject): Promise<JsonObject>;
   reject(context: ReturnContext | undefined, returnId: string, body: JsonObject): Promise<JsonObject>;
   updateReturnStatus(context: ReturnContext | undefined, returnId: string, body: JsonObject): Promise<JsonObject>;
@@ -36,9 +44,15 @@ export interface ReturnService {
 }
 
 /**
- * Build the admin return / support service around a PostgREST repository.
+ * Build the admin return / support service around a PostgREST repository and optional payment refund gateway.
  */
-export function createReturnService({ repository }: { repository: ReturnRepository }): ReturnService {
+export function createReturnService({
+  repository,
+  refunds
+}: {
+  repository: ReturnRepository;
+  refunds?: ReturnRefundGateway;
+}): ReturnService {
   /**
    * Chặn bước chuyển trạng thái phiếu hỗ trợ không có trong `SUPPORT_TICKET_TRANSITIONS`.
    *
@@ -94,7 +108,10 @@ export function createReturnService({ repository }: { repository: ReturnReposito
       if (!ret) throw new HttpError(404, "RETURN_NOT_FOUND", "Return not found");
       // Kèm giá trị hoàn được để form duyệt hoàn tiền điền sẵn đúng số, không bắt gõ tay.
       const refundableAmount = await repository.getRefundableAmount(returnId, context.accessToken);
-      return { ...ret, refundable_amount: refundableAmount };
+      const payment = ret.order_id && repository.getPaymentByOrderId
+        ? await repository.getPaymentByOrderId(asString(ret.order_id), context.accessToken)
+        : null;
+      return { ...ret, refundable_amount: refundableAmount, payment };
     },
 
     async approveRefund(context, returnId, body) {
@@ -118,13 +135,39 @@ export function createReturnService({ repository }: { repository: ReturnReposito
         });
       }
 
-      return repository.approveRefund(
+      const updated = await repository.approveRefund(
         returnId,
         { refundAmount: requested, adminNote: body.adminNote, expectedVersion },
         context.profile?.user_id || context.authUser.id,
         context.roleCode,
         context.ipAddress
       );
+
+      // Kích hoạt hoàn tiền Stripe nếu đơn hàng thanh toán qua Stripe
+      const current = repository.getReturn ? await repository.getReturn(returnId, context.accessToken) : null;
+      const orderId = asString(current?.order_id || updated.order_id);
+      let refundResult: unknown = null;
+      if (orderId && refunds) {
+        try {
+          refundResult = await refunds.refund(orderId, requested);
+        } catch (err: unknown) {
+          console.error("[RETURN REFUND GATEWAY ERROR]", errorMessage(err));
+        }
+      }
+
+      return { ...updated, refund: refundResult };
+    },
+
+    async triggerStripeRefund(context, returnId, body = {}) {
+      requireReturnAdmin(context);
+      const current = await repository.getReturn(returnId, context.accessToken);
+      if (!current) throw new HttpError(404, "RETURN_NOT_FOUND", "Phiếu đổi trả không tồn tại");
+      const orderId = asString(current.order_id);
+      if (!orderId) throw new HttpError(422, "MISSING_ORDER_ID", "Phiếu không có mã đơn hàng hợp lệ");
+      if (!refunds) throw new HttpError(503, "GATEWAY_UNAVAILABLE", "Cổng hoàn tiền Stripe chưa sẵn sàng");
+      const amount = body.refundAmount ? asNumber(body.refundAmount) : asNumber(current.refund_amount);
+      const result = await refunds.refund(orderId, amount);
+      return { success: true, refund: result };
     },
 
     async approveExchange(context, returnId, body) {
@@ -188,7 +231,7 @@ export function createReturnService({ repository }: { repository: ReturnReposito
       const conditionCheckResult = body.conditionCheckResult;
       const imageProof = body.imageProof;
 
-      return repository.updateReturnStatus(returnId, {
+      const updated = await repository.updateReturnStatus(returnId, {
         status,
         adminNote,
         reason,
@@ -198,6 +241,20 @@ export function createReturnService({ repository }: { repository: ReturnReposito
         imageProof,
         expectedVersion
       }, context.profile?.user_id || context.authUser.id, context.roleCode, context.ipAddress);
+
+      if (status === "completed" && refunds) {
+        const orderId = asString(currentReturn.order_id);
+        const amount = refundAmount ?? asNumber(currentReturn.refund_amount);
+        if (orderId) {
+          try {
+            await refunds.refund(orderId, amount);
+          } catch (err: unknown) {
+            console.error("[RETURN COMPLETE REFUND ERROR]", errorMessage(err));
+          }
+        }
+      }
+
+      return updated;
     },
 
     async listTickets(context, searchParams) {

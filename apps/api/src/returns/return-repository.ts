@@ -121,6 +121,20 @@ export function createReturnRepository() {
     },
 
     /**
+     * Thông tin thanh toán mới nhất của đơn hàng gắn với phiếu đổi trả.
+     */
+    async getPaymentByOrderId(orderId: string, accessToken?: string): Promise<JsonObject | null> {
+      const options = accessToken ? authOptions(accessToken) : undefined;
+      const result = await selectRows("payment", {
+        select: "payment_id,payment_method,payment_provider,amount,payment_status,gateway_transaction_ref,refund_at,refund_amount,gateway_response_code,created_at",
+        order_id: `eq.${orderId}`,
+        order: "created_at.desc",
+        limit: 1
+      }, options);
+      return result.rows[0] ? asJsonObject(result.rows[0]) : null;
+    },
+
+    /**
      * Giá trị hoàn được của một phiếu: tổng tiền đúng những món khách gửi trả.
      *
      * UAT ADM-RET-01 chốt "tự động điền tiền hoàn đúng số tiền của hàng thay vì bắt tự

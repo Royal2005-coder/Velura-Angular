@@ -148,6 +148,18 @@ export interface AdminOrderActionResult {
   refund: { status: 'refunded' | 'requested' | 'failed' | 'skipped'; message?: string } | null;
 }
 
+export interface AdminReturnPayment {
+  payment_id?: string;
+  payment_method?: string;
+  payment_provider?: string;
+  payment_status?: string;
+  amount?: number;
+  gateway_transaction_ref?: string;
+  refund_at?: string;
+  refund_amount?: number;
+  gateway_response_code?: string;
+}
+
 export interface AdminReturnRow {
   return_id: string;
   order_id?: string;
@@ -167,6 +179,7 @@ export interface AdminReturnRow {
   evidence_images?: string[];
   tracking_return_code?: string;
   condition_check_result?: string;
+  payment?: AdminReturnPayment | null;
 }
 
 export interface AdminTicketRow {
@@ -989,6 +1002,13 @@ export class AdminApiService {
    */
   approveRefund(returnId: string, body: Record<string, unknown>): Observable<unknown> {
     return this.http.post(`${this.baseUrl}/api/v1/admin/returns/${encodeURIComponent(returnId)}/approve-refund`, body);
+  }
+
+  /**
+   * Kích hoạt hoàn tiền Stripe cho phiếu đổi trả (dùng khi phiếu duyệt trước đó hoặc cần thử lại).
+   */
+  triggerStripeRefund(returnId: string, body: Record<string, unknown> = {}): Observable<unknown> {
+    return this.http.post(`${this.baseUrl}/api/v1/admin/returns/${encodeURIComponent(returnId)}/trigger-stripe-refund`, body);
   }
 
   /**

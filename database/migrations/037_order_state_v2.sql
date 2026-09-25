@@ -87,12 +87,42 @@ where status::text = 'cancelled'
   and stock_committed_at is not null
   and stock_returned_at is null;
 
--- Đơn đã giao hoặc đang giao có mã vận đơn: coi như đã bàn giao tại lần cập nhật cuối.
+-- ---------------------------------------------------------------------------
+-- 3b. Mã đơn tách khỏi mã vận đơn (FR-09 của KAN-40: order_code khác tracking_code)
+-- ---------------------------------------------------------------------------
+-- Storefront đang sinh `tracking_code = 'VLR' + 8 chữ số cuối của mốc mili giây` lúc tạo
+-- đơn và dùng nó làm mã đơn cho khách, trong khi luồng admin cũ lại ghi mã vận đơn của
+-- ĐVVC vào cùng cột đó. Hệ quả: không phân biệt được đơn đã có vận đơn hay chưa, và mã
+-- đơn đoán được (KAN-40). Đo ngày 25/09: 99 đơn có tracking_code, phần lớn dạng VLR…,
+-- vài đơn mang mã vận đơn thật (TRK-…), vài đơn mang chính order_id.
+alter table public.orders add column if not exists order_code varchar(20);
+
+-- Mã đơn cũ dạng VLR/EXC giữ nguyên để khách tra cứu bằng mã đã nhận trong email.
 update public.orders
-set shipment_created_at = coalesce(shipment_created_at, updated_at),
-    handed_over_at = coalesce(handed_over_at, updated_at)
+set order_code = upper(ltrim(tracking_code, '#'))
+where order_code is null
+  and tracking_code ~* '^#?(VLR|EXC)[0-9A-Z]{6,12}$';
+
+-- Đơn không có mã hợp lệ: sinh mã ngẫu nhiên, không suy ra được từ thời điểm tạo.
+update public.orders
+set order_code = 'VLR' || upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 9))
+where order_code is null;
+
+create unique index if not exists orders_order_code_key on public.orders (order_code);
+alter table public.orders alter column order_code set not null;
+
+-- tracking_code từ nay chỉ là mã vận đơn. Giá trị đang là mã đơn hoặc order_id thì xoá.
+update public.orders
+set tracking_code = null
 where tracking_code is not null
-  and status::text in ('shipping', 'delivered', 'delivery_failed');
+  and (upper(ltrim(tracking_code, '#')) = order_code or tracking_code = order_id::text);
+
+-- Đơn đã rời kho trước ngày này: coi như đã bàn giao tại lần cập nhật cuối. Chỉ đơn còn
+-- mã vận đơn thật mới có mốc tạo vận đơn.
+update public.orders
+set handed_over_at = coalesce(handed_over_at, updated_at),
+    shipment_created_at = case when tracking_code is not null then coalesce(shipment_created_at, updated_at) else shipment_created_at end
+where status::text in ('shipping', 'delivered', 'delivery_failed');
 
 -- ---------------------------------------------------------------------------
 -- 4. Nhật ký xử lý đơn (OPEN-04)

@@ -24,7 +24,7 @@
         @for (item of items(); track item.variant_id) {
           <article class="product-item">
             <div class="product-item__img">
-              <img [src]="item.product_image" [alt]="item.product_name" width="96" height="128" />
+              <img [src]="imageUrl(item)" [alt]="item.product_name" width="96" height="128" />
             </div>
             <div style="display:flex;flex-direction:column;flex:1">
               <h4 class="product-item__name">{{ item.product_name }}</h4>

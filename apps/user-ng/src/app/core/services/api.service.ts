@@ -50,9 +50,36 @@ export class ApiService {
 
   private mapError(error: unknown): Observable<never> {
     if (error instanceof HttpErrorResponse) {
-      const body = error.error as { error?: ApiErrorBody } | null;
-      const message = body?.error?.message || error.message || 'Lỗi API';
-      return throwError(() => new ApiRequestError(message, error.status, body?.error?.code || null, body?.error?.details));
+      const body = error.error as {
+        error?: ApiErrorBody;
+        message?: string;
+        code?: string;
+        items?: Array<{
+          variant_id?: string;
+          product_name?: string;
+          color?: string;
+          size?: string;
+          available?: number;
+          requested?: number;
+        }>;
+        details?: unknown;
+      } | null;
+
+      const code = body?.error?.code || body?.code || null;
+      const details = body?.error?.details || (body?.items ? { items: body.items } : body?.details);
+      let message = body?.error?.message || body?.message;
+
+      if (code === 'INSUFFICIENT_STOCK' && Array.isArray(body?.items) && body.items.length > 0) {
+        const itemDescriptions = body.items.map((it) => {
+          const variantInfo = [it.color, it.size].filter(Boolean).join(' / ');
+          return `${it.product_name || 'Sản phẩm'}${variantInfo ? ` (${variantInfo})` : ''}: còn ${it.available ?? 0} sản phẩm (bạn đặt ${it.requested ?? 0})`;
+        }).join('; ');
+        message = `Một số sản phẩm không đủ tồn kho: ${itemDescriptions}. Vui lòng giảm số lượng hoặc chọn màu/size khác.`;
+      } else if (!message) {
+        message = error.message || 'Lỗi API';
+      }
+
+      return throwError(() => new ApiRequestError(message, error.status, code, details));
     }
     return throwError(() => error);
   }

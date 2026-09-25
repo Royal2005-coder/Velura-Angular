@@ -12,31 +12,21 @@
  */
 
 /**
- * Trạng thái đơn hàng — `order_status`.
+ * Trạng thái đơn hàng — `order_status`, bộ tám mã của KAN-59.
  *
- * Nhãn lấy đúng theo bảng đã chốt chung giữa U4 (KAN-37, FSD mục 3.5) và A1 (KAN-59):
- * "Đang chuẩn bị hàng", "Giao thành công", "Giao không thành công". Khách và người vận
- * hành phải đọc cùng một chữ cho cùng một trạng thái.
- *
- * Đặc tả dùng bộ tám mã `pending, waiting_payment, confirmed, processing, shipping,
- * delivered, delivery_failed, cancelled`. Cơ sở dữ liệu hiện chạy `preparing`,
- * `failed_delivery` và `completed`, chưa có `waiting_payment`. Đổi tên mã là thay đổi
- * phá vỡ xuyên enum, API và cả hai frontend trên dữ liệu đang chạy, và KAN-63 còn ở
- * trạng thái chờ phê duyệt sáu quyết định mở — nên chưa đổi. Bảng này khai cả hai bộ
- * để nhãn đúng dù dữ liệu trả về mã nào.
+ * Màn Đơn hàng dùng `status_label` do API trả về. Bảng này cho các màn khác chỉ nhận mã
+ * trạng thái (CSKH, tổng quan). Nhãn trùng với `ORDER_STATUS_LABELS` ở
+ * `apps/api/src/orders/order-state-machine.ts`.
  */
 export const ORDER_STATUS_LABELS: Readonly<Record<string, string>> = {
   pending: 'Chờ xác nhận',
   waiting_payment: 'Chờ thanh toán',
   confirmed: 'Đã xác nhận',
-  preparing: 'Đang chuẩn bị hàng',
   processing: 'Đang chuẩn bị hàng',
   shipping: 'Đang giao hàng',
   delivered: 'Giao thành công',
-  failed_delivery: 'Giao không thành công',
   delivery_failed: 'Giao không thành công',
   cancelled: 'Đã hủy',
-  completed: 'Hoàn thành',
 };
 
 /** Trạng thái thanh toán — `payment_status`. */
@@ -75,30 +65,31 @@ export const REVIEW_STATUS_LABELS: Readonly<Record<string, string>> = {
 };
 
 /**
- * Bước chuyển trạng thái đơn hàng mà admin được phép ghi.
+ * Lựa chọn trên form action đơn. API kiểm lại mã; nhãn trùng với `CALL_RESULTS` và
+ * `CANCEL_REASONS` phía API.
  *
- * Bản sao của `ORDER_TRANSITIONS` trong `apps/api/src/orders/order-constants.ts`. Hai
- * ứng dụng không chung tsconfig nên không import thẳng qua nhau được; bảng này chỉ để
- * quyết định hiện nút nào, còn quyền quyết định cuối cùng vẫn nằm ở API. Sửa bên kia
- * thì sửa cả bên này.
- *
- * Khác một điểm có chủ đích: nhánh `cancelled` không nằm ở đây. Huỷ đơn là thao tác
- * riêng, có form lý do riêng và bảng điều kiện riêng (`ORDER_CANCELLABLE`), không phải
- * một mục trong danh sách "chuyển sang trạng thái kế tiếp".
+ * Các nút action không khai ở đây: API trả `allowed_actions` cho từng đơn.
  */
-export const ORDER_TRANSITIONS: Readonly<Record<string, readonly string[]>> = {
-  pending: ['confirmed'],
-  confirmed: ['preparing'],
-  preparing: ['shipping'],
-  shipping: ['delivered', 'failed_delivery'],
-  failed_delivery: ['shipping'],
-  delivered: ['completed'],
-  cancelled: [],
-  completed: [],
-};
+export const ORDER_CALL_RESULTS: ReadonlyArray<{ code: string; label: string }> = [
+  { code: 'reached', label: 'Liên hệ được' },
+  { code: 'no_answer', label: 'Không nghe máy' },
+  { code: 'customer_requests_cancel', label: 'Khách yêu cầu hủy' },
+];
 
-/** Trạng thái mà từ đó admin còn huỷ được đơn. */
-export const ORDER_CANCELLABLE: readonly string[] = ['pending', 'confirmed', 'preparing', 'failed_delivery'];
+export const ORDER_CANCEL_REASONS: ReadonlyArray<{ code: string; label: string }> = [
+  { code: 'customer_request', label: 'Khách yêu cầu huỷ' },
+  { code: 'out_of_stock', label: 'Hết hàng, không thể giao' },
+  { code: 'unreachable', label: 'Không liên hệ được khách' },
+  { code: 'suspected_fraud', label: 'Nghi ngờ đơn ảo' },
+  { code: 'other', label: 'Lý do khác' },
+];
+
+/** Kết quả mô phỏng ĐVVC, chỉ dùng ở panel của super_admin. */
+export const CARRIER_SIMULATION_OUTCOMES: ReadonlyArray<{ code: string; label: string }> = [
+  { code: 'delivered', label: 'Giao thành công' },
+  { code: 'failed_retrying', label: 'Giao thất bại, ĐVVC giao lại' },
+  { code: 'failed_returned', label: 'Giao thất bại, hàng hoàn về kho' },
+];
 
 /**
  * Đọc nhãn từ một bảng cụ thể.

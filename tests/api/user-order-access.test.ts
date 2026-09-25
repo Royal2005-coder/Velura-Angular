@@ -27,14 +27,14 @@ test("a guest cannot read a guest order either", () => {
 test("a signed-in member cannot read another member's order", () => {
   assert.throws(
     () => assertOrderVisibleTo({ order_id: "o3", user_id: OWNER.user_id }, STRANGER),
-    (error) => error.status === 403
+    (error) => error.status === 404
   );
 });
 
 test("a signed-in member cannot read an unowned guest order", () => {
   assert.throws(
     () => assertOrderVisibleTo({ order_id: "o4", user_id: null }, STRANGER),
-    (error) => error.status === 403
+    (error) => error.status === 404
   );
 });
 

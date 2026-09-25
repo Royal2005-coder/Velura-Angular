@@ -172,8 +172,11 @@ export function actionGuard(code: string, facts: OrderFacts): string | null {
       return facts.paymentMethod === "COD" ? null : "COD_ONLY";
     case "to_waiting_payment":
     case "payment_succeeded":
-    case "payment_expired":
       return facts.paymentMethod === "ONLINE_PAYMENT" ? null : "ONLINE_ONLY";
+    case "payment_expired":
+      // Đã có tiền thì không huỷ vì hết hạn: huỷ lúc này là hoàn lại tiền khách đã trả.
+      if (facts.paymentMethod !== "ONLINE_PAYMENT") return "ONLINE_ONLY";
+      return facts.paymentStatus === "paid" ? "PAYMENT_ALREADY_PAID" : null;
     case "confirm_handover":
       // BR-05: có mã vận đơn và vận đơn chưa bị vô hiệu.
       if (!facts.trackingCode) return "TRACKING_CODE_REQUIRED";

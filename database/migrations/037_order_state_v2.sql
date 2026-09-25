@@ -88,6 +88,14 @@ where status::text = 'cancelled'
   and stock_returned_at is null;
 
 -- ---------------------------------------------------------------------------
+-- 3a. Mã phản hồi cổng thanh toán
+-- ---------------------------------------------------------------------------
+-- Cột chỉ dài 10 ký tự, trong khi các mã đang ghi dài hơn (`checkout.session.expired`,
+-- `REFUND_REQUESTED`, `REFUND_FAILED`). Mọi lần ghi như vậy đều lỗi và bị bỏ qua, nên
+-- webhook hết hạn phiên Stripe chưa từng đóng được payment nào.
+alter table public.payment alter column gateway_response_code type varchar(50);
+
+-- ---------------------------------------------------------------------------
 -- 3b. Mã đơn tách khỏi mã vận đơn (FR-09 của KAN-40: order_code khác tracking_code)
 -- ---------------------------------------------------------------------------
 -- Storefront đang sinh `tracking_code = 'VLR' + 8 chữ số cuối của mốc mili giây` lúc tạo
@@ -110,6 +118,10 @@ where order_code is null;
 
 create unique index if not exists orders_order_code_key on public.orders (order_code);
 alter table public.orders alter column order_code set not null;
+-- Mặc định ở cơ sở dữ liệu: bản API cũ chưa gửi order_code vẫn tạo được đơn trong
+-- khoảng giữa lúc áp migration và lúc bản mới lên. API mới tự sinh mã.
+alter table public.orders
+  alter column order_code set default ('VLR' || upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 9)));
 
 -- tracking_code từ nay chỉ là mã vận đơn. Giá trị đang là mã đơn hoặc order_id thì xoá.
 update public.orders
@@ -397,6 +409,17 @@ begin
   update public.orders set version = version + 1, updated_at = now()
   where order_id = p_order_id and version = p_expected_order_version;
   if not found then raise sqlstate 'PT409' using message = 'VERSION_CONFLICT'; end if;
+
+  -- Đơn online còn Chờ thanh toán mà admin xác nhận đã nhận tiền: đi tiếp sang Đã xác
+  -- nhận ngay trong giao dịch này (trừ kho, ghi lịch sử). Không làm vậy thì đơn kẹt ở
+  -- Chờ thanh toán, 24 giờ sau bị tự huỷ và hoàn lại số tiền vừa được xác nhận.
+  if p_decision = 'mark_paid' and v_order.status::text = 'waiting_payment'
+     and v_order.payment_method::text = 'ONLINE_PAYMENT' then
+    perform public.velura_order_apply_action(
+      p_order_id, 'payment_succeeded', 'system', v_actor.user_id, v_actor.admin_role::text,
+      'Đối soát thủ công: ' || btrim(p_reason), jsonb_build_object('payment_id', p_payment_id), null, p_ip_address
+    );
+  end if;
 
   perform public.velura_append_module_audit(
     'orders', v_actor.user_id, v_actor.admin_role::text, 'update', p_order_id,

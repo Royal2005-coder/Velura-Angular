@@ -189,6 +189,7 @@ export function orderErrorMessage(code: string): string {
     SHIPMENT_VOIDED: "Vận đơn đã bị vô hiệu. Tạo lại vận đơn trước khi bàn giao.",
     ORDER_ALREADY_HANDED_OVER: "Đơn đã bàn giao cho đơn vị vận chuyển, không huỷ được nữa.",
     ALREADY_RETURNED_TO_STOCK: "Hàng của đơn này đã được xác nhận hoàn kho.",
+    PAYMENT_ALREADY_PAID: "Đơn đã có thanh toán thành công, không huỷ vì hết hạn.",
     REFUND_NOT_RETRYABLE: "Đơn không có lần hoàn tiền lỗi nào cần thử lại.",
     CALL_RESULT_REQUIRED: "Chọn kết quả cuộc gọi.",
     SHORTAGE_REQUIRED: "Nhập tình trạng thiếu hàng.",

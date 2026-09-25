@@ -12,6 +12,13 @@ import { buildCartLines, loadCatalog, loadCategoryTree } from "./cart-catalog.js
 import { customerCanCancel, customerOrderSteps, orderFacts, orderStatusLabel } from "../orders/order-state-machine.js";
 import { returnWindowOpen } from "./return-window.js";
 import {
+  sendCheckoutOtpSms,
+  sendOrderConfirmationSms,
+  sendTwilioSms,
+  maskPhone,
+  isTwilioConfigured
+} from "../sms/twilio.js";
+import {
   asJsonObject,
   asString,
   errorMessage,
@@ -681,6 +688,13 @@ export async function handleOrdersRoute(
         }
       }
 
+      if (order.shipping_phone) {
+        void sendTwilioSms(
+          asString(order.shipping_phone),
+          `[Velura] Don hang #${asString(order.order_code)} da duoc xac nhan thanh toan thanh cong. Kho Velura dang tien hanh dong goi va giao cho ban.`
+        );
+      }
+
       return sendJson(res, 200, {
         success: true,
         message: "Xác nhận thanh toán thành công",
@@ -694,32 +708,38 @@ export async function handleOrdersRoute(
     // POST /api/user/orders/otp-send (Send OTP)
     if (action === "otp-send" && req.method === "POST") {
       const body = await readJson(req);
-      let { phone, email, full_name } = body;
+      const rawPhone = asString(body.phone);
+      const email = body.email;
+      const full_name = body.full_name;
       
-      if (!phone) {
+      if (!rawPhone) {
         throw new HttpError(400, "BAD_REQUEST", "Số điện thoại là bắt buộc");
       }
 
       // Chuẩn hóa số điện thoại Việt Nam (+84 hoặc 84 -> 0)
-      let cleanPhone = String(phone).trim().replace(/[\s.-]/g, "");
+      let cleanPhone = rawPhone.trim().replace(/[\s.-]/g, "");
       if (cleanPhone.startsWith("+84")) {
         cleanPhone = "0" + cleanPhone.slice(3);
       } else if (cleanPhone.startsWith("84") && cleanPhone.length === 11) {
         cleanPhone = "0" + cleanPhone.slice(2);
       }
-      phone = cleanPhone;
+      const phone: string = cleanPhone;
 
       if (!validatePhone(phone)) {
         throw new HttpError(400, "BAD_REQUEST", "Số điện thoại không hợp lệ (10 số, bắt đầu bằng 0)");
       }
-      const otpEmail = requireGuestOtpEmail(email);
-      if (config.nodeEnv === "production" && (!config.smtpHost || !config.smtpUser || !config.smtpAppPassword)) {
-        throw new HttpError(503, "OTP_EMAIL_UNAVAILABLE", "Chưa cấu hình email để gửi mã OTP. Không gửi mã giả qua số điện thoại.");
+      const twilioReady = isTwilioConfigured();
+      let otpEmail: string | null = null;
+      if (email || !twilioReady) {
+        otpEmail = requireGuestOtpEmail(email);
+      }
+      if (config.nodeEnv === "production" && !twilioReady && (!config.smtpHost || !config.smtpUser || !config.smtpAppPassword)) {
+        throw new HttpError(503, "OTP_SERVICE_UNAVAILABLE", "Chưa cấu hình dịch vụ SMS hoặc email để gửi mã OTP.");
       }
       
       const existingUser = await selectOne("users", { phone: `eq.${phone}` });
       const existingUserByEmail = email ? await selectOne("users", { email: `eq.${email}` }) : null;
-      // Nếu số điện thoại hoặc email đã thuộc thành viên, KHÔNG CHẶN mà vẫn gửi OTP về email bình thường
+      // Nếu số điện thoại hoặc email đã thuộc thành viên, KHÔNG CHẶN mà vẫn gửi OTP bình thường
       const userId = existingUser ? existingUser.user_id : (existingUserByEmail ? existingUserByEmail.user_id : null);
       
       const otpCode = Math.floor(1000 + Math.random() * 9000).toString(); // 4 digits
@@ -734,15 +754,20 @@ export async function handleOrdersRoute(
       }
       
       // Store OTP and guest info in memory instead of DB
-      checkoutOtpAttemptsMap.set(asString(phone), { 
+      checkoutOtpAttemptsMap.set(phone, { 
         otpCode, 
         expiresAt: new Date(otpExpiresAt).getTime(),
         email: email || null,
         full_name: full_name || (existingUser ? existingUser.full_name : "Khách hàng"),
         attempts: 0 
       });
-      
-      const emailBody = `Chào ${full_name || "bạn"},\n\nMã xác thực OTP của bạn là: ${otpCode}.\n\nMã có hiệu lực trong 5 phút. Vui lòng không chia sẻ mã này cho bất kỳ ai.`;
+
+      // Gửi OTP qua Twilio SMS
+      const smsResult = await sendCheckoutOtpSms(phone, otpCode);
+
+      // Gửi OTP qua Email nếu có
+      if (otpEmail) {
+        const emailBody = `Chào ${full_name || "bạn"},\n\nMã xác thực OTP của bạn là: ${otpCode}.\n\nMã có hiệu lực trong 5 phút. Vui lòng không chia sẻ mã này cho bất kỳ ai.`;
         const emailHtml = `
           <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eaeaea; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
             <div style="background-color: #d1b8a8; padding: 24px; text-align: center;">
@@ -779,12 +804,26 @@ export async function handleOrdersRoute(
         } catch {
           /* ignore */
         }
+      }
+
+      const smsSent = smsResult.success;
+      const emailSent = Boolean(otpEmail);
+      let channel: "sms" | "email" | "both" = "sms";
+      let message = `Mã OTP đã được gửi tới số điện thoại ${maskPhone(phone)}.`;
+      if (smsSent && emailSent) {
+        channel = "both";
+        message = `Mã OTP đã được gửi tới số điện thoại ${maskPhone(phone)} và email ${maskEmail(otpEmail!)}.`;
+      } else if (emailSent && !smsSent) {
+        channel = "email";
+        message = `Mã OTP đã được gửi tới email ${maskEmail(otpEmail!)}.`;
+      }
       
       return sendJson(res, 200, {
         success: true,
-        message: "Mã OTP đã được gửi tới email.",
-        channel: "email",
-        masked_email: maskEmail(otpEmail),
+        message,
+        channel,
+        masked_phone: maskPhone(phone),
+        masked_email: otpEmail ? maskEmail(otpEmail) : null,
         dev_bypass: allowDevOtpBypass(),
         phone,
         user_id: userId
@@ -1002,6 +1041,11 @@ export async function handleOrdersRoute(
         } catch {
           /* ignore */
         }
+      }
+
+      // Gửi SMS xác nhận đơn hàng qua Twilio cho khách
+      if (phone) {
+        void sendOrderConfirmationSms(asString(phone), orderCode, guestTotal);
       }
       
       const guestInternalNote = formatOrderInternalNote(body, formatOrderInternalNote(order));
@@ -1286,6 +1330,10 @@ export async function handleOrdersRoute(
           </div>
         `;
         void sendDirectEmail(memberTargetEmail, `Xác nhận đơn hàng #${orderCode} tại Velura`, emailBody, emailHtml);
+      }
+
+      if (validPhone) {
+        void sendOrderConfirmationSms(validPhone, orderCode, memberTotal);
       }
 
       await createNotification(

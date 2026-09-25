@@ -129,6 +129,7 @@ export class CheckoutStore {
     localStorage.removeItem('checkout_discount');
     localStorage.removeItem('checkout_voucher_id');
     localStorage.removeItem('checkout_voucher_code');
+    localStorage.removeItem('checkout_voucher_declined');
   }
 
   private readShipping(): CheckoutShipping {

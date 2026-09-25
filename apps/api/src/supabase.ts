@@ -131,6 +131,29 @@ export async function getAuthUser(accessToken: string): Promise<AuthUser | null>
 }
 
 /**
+ * Bọc một giá trị do người dùng gõ để PostgREST đọc nó như dữ liệu, không như cú pháp.
+ *
+ * Dấu phẩy, ngoặc đơn và nháy kép đều có nghĩa trong ngữ pháp lọc của PostgREST. Nối
+ * thẳng chuỗi tìm kiếm vào `or=(...)` thì một câu bình thường như `Áo dài, đẹp` sẽ bị
+ * tách ở dấu phẩy thành mệnh đề cụt và máy chủ trả 400 PGRST100. Đã kiểm chứng trực
+ * tiếp trên PostgREST của dự án:
+ *
+ *   400 PGRST100  or=(name.ilike.*ao dai, dep*,sku.ilike.*ao dai, dep*)
+ *   200 OK        or=(name.ilike."*ao dai, dep*",sku.ilike."*ao dai, dep*")
+ *
+ * Bọc trong nháy kép làm mọi ký tự bên trong thành dữ liệu; bên trong đó chỉ còn dấu
+ * chéo ngược và nháy kép cần thoát, và phải thoát dấu chéo ngược TRƯỚC — làm ngược thứ
+ * tự thì `\"` sinh ra ở bước sau lại bị bước trước nhân đôi và nháy kép thoát ra ngoài.
+ * Dấu `*` vẫn giữ vai trò ký tự đại diện của `ilike` kể cả khi nằm trong nháy kép.
+ *
+ * Cách cũ là thay các ký tự đó bằng dấu cách, tức lặng lẽ tìm sai chuỗi khách gõ.
+ */
+export function quotePostgrestValue(value: string): string {
+  const escaped = value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  return `"${escaped}"`;
+}
+
+/**
  * Select many rows from a PostgREST table.
  */
 export async function selectRows(

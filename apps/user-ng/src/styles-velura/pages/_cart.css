@@ -467,6 +467,15 @@
   height: 12px;
 }
 
+/* Tổng ở giỏ là ước tính; nói rõ con số chốt nằm ở bước thanh toán. */
+.summary-card__note {
+  margin: 8px 0 0;
+  font-family: "DM Sans", sans-serif;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: #8c857e;
+}
+
 /* ============================================================
    Responsive Breakpoints
    ============================================================ */

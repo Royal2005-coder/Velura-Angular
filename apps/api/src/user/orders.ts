@@ -3,10 +3,11 @@ import { selectOne, selectRows, insertRow, updateRows } from "../supabase.js";
 import { hashPassword, signJwt } from "../auth-helper.js";
 import { requireUserAuth, validatePhone } from "./auth.js";
 import { createNotification } from "./notifications.js";
-import { recordVoucherRedemption, releaseVoucherRedemption, resolveOrderVoucher } from "./vouchers.js";
+import { recordVoucherRedemption, resolveOrderVoucher } from "./vouchers.js";
 import { allowDevOtpBypass, config } from "../config.js";
 import { createStripePaymentIntent, stripeConfigured } from "../payments/stripe.js";
-import { catalogUnitPrice, priceOrder, shippingMethodFromClaim } from "./order-pricing.js";
+import { priceOrder, shippingMethodFromClaim } from "./order-pricing.js";
+import { buildCartLines, loadCatalog, loadCategoryTree } from "./cart-catalog.js";
 import { ORDER_TRANSITIONS } from "../orders/order-constants.js";
 import {
   asJsonObject,
@@ -400,11 +401,10 @@ export async function handleOrdersRoute(
           }
         }
 
-        // Trả lại lượt dùng mã và ngân sách chiến dịch, nếu không thì một đơn bị hủy
-        // vẫn chiếm chỗ của khách khác và vẫn ăn vào ngân sách khuyến mãi.
-        if (order.voucher_id) {
-          await releaseVoucherRedemption(String(order.voucher_id), Number(order.discount_amount) || 0);
-        }
+        // Lượt dùng mã và ngân sách chiến dịch không trả ở đây. Trigger
+        // `trg_orders_release_voucher_on_cancel` (migration 034) trả khi trạng thái đổi
+        // sang cancelled, đúng một lần cho mỗi đơn, cho cả đường khách huỷ lẫn admin huỷ.
+        // Gọi thêm ở đây sẽ thành trả hai lần.
       }
 
       const updateData: JsonObject = {
@@ -608,6 +608,20 @@ export async function handleOrdersRoute(
         }
       }
       
+      // Chốt tiền trước khi tiêu mã OTP. Giá lệch bảng giá hoặc mã giảm giá vừa đổi
+      // (409 VOUCHER_CHANGED) thì khách phải xác nhận lại tổng mới; nếu OTP đã bị xoá
+      // thì khách phải xin mã lần nữa chỉ vì một mã giảm giá, và tài khoản khách bên
+      // dưới đã được tạo thừa.
+      const guestPriced = await priceClaimedOrder(items, shipping_fee, body.shipping_method || order.shipping_method);
+      const guestVoucher = await resolveOrderVoucher(
+        context,
+        guestPriced.subtotal,
+        guestPriced.shippingFee,
+        voucher_id ? String(voucher_id) : null,
+        body.decline_voucher === true || order.decline_voucher === true,
+        guestPriced.cart
+      );
+
       // OTP is valid
       checkoutOtpAttemptsMap.delete(phoneKey);
       
@@ -728,14 +742,6 @@ export async function handleOrdersRoute(
       const trackingCode = "VLR" + Date.now().toString().slice(-8).toUpperCase();
       assertStripeReady(payment_method);
       const dbPaymentMethod = (payment_method === "COD" || payment_method === "cod") ? "COD" : "ONLINE_PAYMENT";
-      const guestPriced = await priceClaimedOrder(items, shipping_fee, body.shipping_method || order.shipping_method);
-      const guestVoucher = await resolveOrderVoucher(
-        context,
-        guestPriced.subtotal,
-        guestPriced.shippingFee,
-        voucher_id ? String(voucher_id) : null,
-        body.decline_voucher === true || order.decline_voucher === true
-      );
       const guestTotal = Math.max(0, guestPriced.subtotal + guestPriced.shippingFee - guestVoucher.discountAmount);
       
       const newOrder = asJsonObject(await insertRow("orders", {
@@ -996,7 +1002,8 @@ export async function handleOrdersRoute(
         memberPriced.subtotal,
         memberPriced.shippingFee,
         voucher_id ? String(voucher_id) : null,
-        body.decline_voucher === true
+        body.decline_voucher === true,
+        memberPriced.cart
       );
       const memberTotal = Math.max(0, memberPriced.subtotal + memberPriced.shippingFee - memberVoucher.discountAmount);
 
@@ -1086,20 +1093,12 @@ async function priceClaimedOrder(
     quantity: Number(item.quantity),
     claimedUnitPrice: Number(item.unit_price)
   }));
-  const catalog = new Map<string, { variantId: string; unitPrice: number; productName: string }>();
-  for (const line of lines) {
-    if (!line.variantId || catalog.has(line.variantId)) continue;
-    const variant = await selectOne("variant", { variant_id: `eq.${line.variantId}`, select: "variant_id,product_id" });
-    const product = variant?.product_id
-      ? await selectOne("product", { product_id: `eq.${variant.product_id}`, select: "name,sale_price,base_price" })
-      : null;
-    if (!variant || !product) continue;
-    catalog.set(line.variantId, {
-      variantId: line.variantId,
-      unitPrice: catalogUnitPrice(product.sale_price, product.base_price),
-      productName: String(product.name || "")
-    });
-  }
+  // Một truy vấn cho cả giỏ thay vì hai truy vấn cho mỗi dòng. Cùng nguồn với ví mã, nên
+  // số tiền giảm trong ví và số tiền trừ khi đặt đơn không lệch nhau.
+  const [catalog, tree] = await Promise.all([
+    loadCatalog(lines.map((line) => line.variantId)),
+    loadCategoryTree()
+  ]);
   const priced = priceOrder(lines, catalog, shippingMethodFromClaim(claimedFee, claimedMethod));
   if (!priced.ok) {
     throw new HttpError(400, priced.code, priced.message, {
@@ -1108,7 +1107,12 @@ async function priceClaimedOrder(
       catalog_unit_price: priced.catalogUnitPrice
     });
   }
-  return priced;
+  const { lines: cartLines } = buildCartLines(
+    priced.items.map((item) => ({ variantId: item.variantId, quantity: item.quantity })),
+    catalog,
+    tree
+  );
+  return { ...priced, cart: { lines: cartLines, categoryNameById: tree.nameById } };
 }
 
 async function openStripePayment(orderId: unknown, amount: unknown, method: unknown): Promise<{ payment_intent_id: string; url: string } | null> {

@@ -2,9 +2,10 @@ import { AfterViewInit, Component, ElementRef, Injector, OnDestroy, ViewChild, a
 import { RouterLink } from '@angular/router';
 import { catchError, forkJoin, of } from 'rxjs';
 import { COLLECTION_LOOKBOOKS } from '../../core/models/collection-lookbook';
-import { HOT_BANNERS } from '../../core/models/hot-banner';
 import { CategorySummary, ProductSummary } from '../../core/models/product.interface';
 import { CatalogService } from '../../core/services/catalog.service';
+import { OffersService } from '../../core/services/offers.service';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { bindHomeCarousel } from '../../core/utils/home-carousel';
 import { ProductCard } from '../../shared/product-card/product-card';
 
@@ -32,7 +33,8 @@ export class HomePage implements AfterViewInit, OnDestroy {
   readonly personalized = signal<ProductSummary[]>([]);
   readonly personalizedSubtitle = signal('Được tuyển chọn dựa trên Style Profile cá nhân');
   readonly soundOn = signal(false);
-  readonly banners = HOT_BANNERS;
+  /** Chiến dịch đang chạy cho thanh tin ưu đãi, đọc từ API thay vì mảng viết cứng. */
+  readonly banners = toSignal(inject(OffersService).highlights(), { initialValue: [] });
   readonly collections = computed(() => {
     const names = new Set(this.catalogProducts().map((item) => item.collection).filter(Boolean));
     const matched = COLLECTION_LOOKBOOKS.filter((item) => names.has(item.name));

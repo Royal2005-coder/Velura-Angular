@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions id="Definitions_3_17_thiet_lap_chien_dich" xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" targetNamespace="http://velura.vn/bpmn/khuyenmai">
+  <bpmn:collaboration id="Collaboration_3_17_thiet_lap_chien_dich">
+    <bpmn:participant id="Participant_velura" name="Velura" processRef="Process_velura" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_velura" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_velura">
+      <bpmn:lane id="lane_admin" name="Quản trị viên giá và khuyến mãi">
+        <bpmn:flowNodeRef>ev_start</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_khaibao</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>ev_end</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="lane_sys" name="Hệ thống">
+        <bpmn:flowNodeRef>t_kiem</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>gw_hople</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_loi</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_quydoi</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_ghicd</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_chonglan</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>gw_chonglan</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_canhbaotrung</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>ds_log</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="ev_start" name="Có nhu cầu chạy chương trình khuyến mãi"><bpmn:outgoing>f_ev_start_t_khaibao</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:userTask id="t_khaibao" name="Khai báo chiến dịch: tên, mô tả, khung thời gian, ngân sách và nội dung trình bày"><bpmn:incoming>f_ev_start_t_khaibao</bpmn:incoming><bpmn:incoming>f_t_loi_t_khaibao</bpmn:incoming><bpmn:outgoing>f_t_khaibao_t_kiem</bpmn:outgoing></bpmn:userTask>
+    <bpmn:serviceTask id="t_kiem" name="Kiểm vai trò và tính hợp lệ của khung thời gian"><bpmn:incoming>f_t_khaibao_t_kiem</bpmn:incoming><bpmn:outgoing>f_t_kiem_gw_hople</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="gw_hople" name="Dữ liệu hợp lệ?"><bpmn:incoming>f_t_kiem_gw_hople</bpmn:incoming><bpmn:outgoing>f_gw_hople_t_loi</bpmn:outgoing><bpmn:outgoing>f_gw_hople_t_quydoi</bpmn:outgoing></bpmn:exclusiveGateway>
+    <bpmn:sendTask id="t_loi" name="Trả về trường sai và giữ nguyên dữ liệu đã nhập"><bpmn:incoming>f_gw_hople_t_loi</bpmn:incoming><bpmn:outgoing>f_t_loi_t_khaibao</bpmn:outgoing></bpmn:sendTask>
+    <bpmn:serviceTask id="t_quydoi" name="Quy đổi ngân sách thành số mã tối đa được phát hành"><bpmn:incoming>f_gw_hople_t_quydoi</bpmn:incoming><bpmn:outgoing>f_t_quydoi_t_ghicd</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:serviceTask id="t_ghicd" name="Ghi chiến dịch ở trạng thái Tạm dừng và ghi nhật ký"><bpmn:incoming>f_t_quydoi_t_ghicd</bpmn:incoming><bpmn:outgoing>f_t_ghicd_t_chonglan</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:serviceTask id="t_chonglan" name="Đối chiếu chồng lấn thời gian và danh mục với chiến dịch khác"><bpmn:incoming>f_t_ghicd_t_chonglan</bpmn:incoming><bpmn:outgoing>f_t_chonglan_gw_chonglan</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="gw_chonglan" name="Có chồng lấn?"><bpmn:incoming>f_t_chonglan_gw_chonglan</bpmn:incoming><bpmn:outgoing>f_gw_chonglan_t_canhbaotrung</bpmn:outgoing><bpmn:outgoing>f_gw_chonglan_ev_end</bpmn:outgoing></bpmn:exclusiveGateway>
+    <bpmn:sendTask id="t_canhbaotrung" name="Cảnh báo trùng chiến dịch, không tự gộp mức giảm"><bpmn:incoming>f_gw_chonglan_t_canhbaotrung</bpmn:incoming><bpmn:outgoing>f_t_canhbaotrung_ev_end</bpmn:outgoing></bpmn:sendTask>
+    <bpmn:endEvent id="ev_end" name="Chiến dịch chờ phát hành mã"><bpmn:incoming>f_t_canhbaotrung_ev_end</bpmn:incoming><bpmn:incoming>f_gw_chonglan_ev_end</bpmn:incoming></bpmn:endEvent>
+    <bpmn:dataStoreReference id="ds_log" name="Nhật ký khuyến mãi" />
+    <bpmn:textAnnotation id="n_quydoi"><bpmn:text>Số mã tối đa bằng ngân sách chiến dịch chia cho trần giảm mỗi lượt. Trần này chặn tại thời điểm phát hành mã.</bpmn:text></bpmn:textAnnotation>
+    <bpmn:textAnnotation id="n_chonglan"><bpmn:text>Hệ thống chỉ cảnh báo. Không tự chọn giữa hai chiến dịch chồng lấn và không cộng dồn mức giảm của chúng.</bpmn:text></bpmn:textAnnotation>
+    <bpmn:sequenceFlow id="f_ev_start_t_khaibao" name="" sourceRef="ev_start" targetRef="t_khaibao" />
+    <bpmn:sequenceFlow id="f_t_khaibao_t_kiem" name="" sourceRef="t_khaibao" targetRef="t_kiem" />
+    <bpmn:sequenceFlow id="f_t_kiem_gw_hople" name="" sourceRef="t_kiem" targetRef="gw_hople" />
+    <bpmn:sequenceFlow id="f_gw_hople_t_loi" name="Không" sourceRef="gw_hople" targetRef="t_loi" />
+    <bpmn:sequenceFlow id="f_t_loi_t_khaibao" name="" sourceRef="t_loi" targetRef="t_khaibao" />
+    <bpmn:sequenceFlow id="f_gw_hople_t_quydoi" name="Có" sourceRef="gw_hople" targetRef="t_quydoi" />
+    <bpmn:sequenceFlow id="f_t_quydoi_t_ghicd" name="" sourceRef="t_quydoi" targetRef="t_ghicd" />
+    <bpmn:sequenceFlow id="f_t_ghicd_t_chonglan" name="" sourceRef="t_ghicd" targetRef="t_chonglan" />
+    <bpmn:sequenceFlow id="f_t_chonglan_gw_chonglan" name="" sourceRef="t_chonglan" targetRef="gw_chonglan" />
+    <bpmn:sequenceFlow id="f_gw_chonglan_t_canhbaotrung" name="Có" sourceRef="gw_chonglan" targetRef="t_canhbaotrung" />
+    <bpmn:sequenceFlow id="f_t_canhbaotrung_ev_end" name="" sourceRef="t_canhbaotrung" targetRef="ev_end" />
+    <bpmn:sequenceFlow id="f_gw_chonglan_ev_end" name="Không" sourceRef="gw_chonglan" targetRef="ev_end" />
+    <bpmn:association id="a_t_ghicd_ds_log" sourceRef="t_ghicd" targetRef="ds_log" />
+    <bpmn:association id="a_n_quydoi_t_quydoi" sourceRef="n_quydoi" targetRef="t_quydoi" />
+    <bpmn:association id="a_n_chonglan_t_chonglan" sourceRef="n_chonglan" targetRef="t_chonglan" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_3_17_thiet_lap_chien_dich">
+    <bpmndi:BPMNPlane id="BPMNPlane_3_17_thiet_lap_chien_dich" bpmnElement="Collaboration_3_17_thiet_lap_chien_dich">
+      <bpmndi:BPMNShape id="Participant_velura_di" bpmnElement="Participant_velura" isHorizontal="true"><dc:Bounds x="40" y="40" width="2174.5" height="1022" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="lane_admin_di" bpmnElement="lane_admin" isHorizontal="true"><dc:Bounds x="70" y="40" width="2144.5" height="280" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="lane_sys_di" bpmnElement="lane_sys" isHorizontal="true"><dc:Bounds x="70" y="320" width="2144.5" height="742" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ev_start_di" bpmnElement="ev_start"><dc:Bounds x="172" y="120" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_khaibao_di" bpmnElement="t_khaibao"><dc:Bounds x="330" y="96" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_kiem_di" bpmnElement="t_kiem"><dc:Bounds x="565" y="509" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_hople_di" bpmnElement="gw_hople" isMarkerVisible="true"><dc:Bounds x="848.5" y="528" width="46" height="46" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_loi_di" bpmnElement="t_loi"><dc:Bounds x="776.5" y="735.8" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_quydoi_di" bpmnElement="t_quydoi"><dc:Bounds x="988" y="509" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_ghicd_di" bpmnElement="t_ghicd"><dc:Bounds x="1223" y="509" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_chonglan_di" bpmnElement="t_chonglan"><dc:Bounds x="1458" y="509" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_chonglan_di" bpmnElement="gw_chonglan" isMarkerVisible="true"><dc:Bounds x="1741.5" y="528" width="46" height="46" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_canhbaotrung_di" bpmnElement="t_canhbaotrung"><dc:Bounds x="1669.5" y="735.8" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ev_end_di" bpmnElement="ev_end"><dc:Bounds x="1981.5" y="120" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ds_log_di" bpmnElement="ds_log"><dc:Bounds x="1243" y="898.2" width="150" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="n_quydoi_di" bpmnElement="n_quydoi"><dc:Bounds x="858.5" y="888.2" width="26" height="104" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="n_chonglan_di" bpmnElement="n_chonglan"><dc:Bounds x="1751.5" y="888.2" width="26" height="104" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f_ev_start_t_khaibao_di" bpmnElement="f_ev_start_t_khaibao"><di:waypoint x="208" y="138" /><di:waypoint x="330" y="138" /><di:waypoint x="330" y="138" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_t_khaibao_t_kiem_di" bpmnElement="f_t_khaibao_t_kiem"><di:waypoint x="520" y="138" /><di:waypoint x="565" y="138" /><di:waypoint x="565" y="551" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_t_kiem_gw_hople_di" bpmnElement="f_t_kiem_gw_hople"><di:waypoint x="755" y="551" /><di:waypoint x="848.5" y="551" /><di:waypoint x="848.5" y="551" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_hople_t_loi_di" bpmnElement="f_gw_hople_t_loi"><di:waypoint x="848.5" y="551" /><di:waypoint x="966.5" y="551" /><di:waypoint x="966.5" y="777.8" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_t_loi_t_khaibao_di" bpmnElement="f_t_loi_t_khaibao"><di:waypoint x="776.5" y="777.8" /><di:waypoint x="520" y="777.8" /><di:waypoint x="520" y="138" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_hople_t_quydoi_di" bpmnElement="f_gw_hople_t_quydoi"><di:waypoint x="894.5" y="551" /><di:waypoint x="988" y="551" /><di:waypoint x="988" y="551" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_t_quydoi_t_ghicd_di" bpmnElement="f_t_quydoi_t_ghicd"><di:waypoint x="1178" y="551" /><di:waypoint x="1223" y="551" /><di:waypoint x="1223" y="551" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_t_ghicd_t_chonglan_di" bpmnElement="f_t_ghicd_t_chonglan"><di:waypoint x="1413" y="551" /><di:waypoint x="1458" y="551" /><di:waypoint x="1458" y="551" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_t_chonglan_gw_chonglan_di" bpmnElement="f_t_chonglan_gw_chonglan"><di:waypoint x="1648" y="551" /><di:waypoint x="1741.5" y="551" /><di:waypoint x="1741.5" y="551" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_chonglan_t_canhbaotrung_di" bpmnElement="f_gw_chonglan_t_canhbaotrung"><di:waypoint x="1741.5" y="551" /><di:waypoint x="1859.5" y="551" /><di:waypoint x="1859.5" y="777.8" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_t_canhbaotrung_ev_end_di" bpmnElement="f_t_canhbaotrung_ev_end"><di:waypoint x="1859.5" y="777.8" /><di:waypoint x="1981.5" y="777.8" /><di:waypoint x="1981.5" y="138" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_chonglan_ev_end_di" bpmnElement="f_gw_chonglan_ev_end"><di:waypoint x="1787.5" y="551" /><di:waypoint x="1981.5" y="551" /><di:waypoint x="1981.5" y="138" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="a_t_ghicd_ds_log_di" bpmnElement="a_t_ghicd_ds_log"><di:waypoint x="1413" y="551" /><di:waypoint x="1243" y="551" /><di:waypoint x="1243" y="940.2" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="a_n_quydoi_t_quydoi_di" bpmnElement="a_n_quydoi_t_quydoi"><di:waypoint x="884.5" y="940.2" /><di:waypoint x="988" y="940.2" /><di:waypoint x="988" y="551" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="a_n_chonglan_t_chonglan_di" bpmnElement="a_n_chonglan_t_chonglan"><di:waypoint x="1751.5" y="940.2" /><di:waypoint x="1648" y="940.2" /><di:waypoint x="1648" y="551" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

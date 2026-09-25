@@ -163,18 +163,34 @@
               }
             }
           </div>
+          @if (selectedItems().length) {
+            <app-voucher-wallet
+              [orderValue]="selectedSubtotal()"
+              [cartItems]="selectedRefs()"
+              [preferred]="preferredVoucher"
+              (applied)="onVoucherApplied($event)"
+              (declined)="onVoucherDeclined($event)"
+            />
+          }
           <hr class="summary-card__divider" />
           <div class="summary-lines">
             <div class="summary-line">
               <span class="summary-line__label">Tạm tính</span>
               <span class="summary-line__value">{{ subtotalLabel() }}</span>
             </div>
+            @if (estimatedDiscount() > 0) {
+              <div class="summary-line">
+                <span class="summary-line__label">Giảm giá</span>
+                <span class="summary-line__value">{{ discountLabel() }}</span>
+              </div>
+            }
           </div>
           <hr class="summary-card__divider" />
           <div class="summary-total">
-            <span class="summary-total__label">Tổng cộng</span>
-            <span class="summary-total__value">{{ subtotalLabel() }}</span>
+            <span class="summary-total__label">Tạm tính sau giảm</span>
+            <span class="summary-total__value">{{ estimatedTotalLabel() }}</span>
           </div>
+          <p class="summary-card__note">Phí vận chuyển và tổng cuối cùng được tính ở bước thanh toán.</p>
           <button
             class="summary-card__btn-checkout js-btn-checkout"
             type="button"

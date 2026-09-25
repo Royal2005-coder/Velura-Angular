@@ -13,7 +13,7 @@
 
         <label class="admin-form-group">
           <span class="admin-form-label">Tên chiến dịch <abbr title="Bắt buộc">*</abbr></span>
-          <input class="admin-form-control" name="name" required minlength="2"
+          <input class="admin-form-control" name="name" required [attr.minlength]="isEdit() ? 2 : 8"
                  [value]="campaign()?.promo_name || ''" [readOnly]="!canMutate()"
                  placeholder="Sale cuối tuần tháng 9" />
         </label>
@@ -26,7 +26,10 @@
                 <option [value]="option.value">{{ option.label }}</option>
               }
             </select>
-            <small class="admin-form-helper">Chỉ đặt được lúc tạo. Đổi loại của chiến dịch đang chạy sẽ làm lệch cách tính của các mã đã phát.</small>
+            <small class="admin-form-helper">
+              Loại dùng để phân nhóm và báo cáo, không tự đổi giá sản phẩm. Ưu đãi tới khách qua mã giảm giá
+              của chiến dịch, nên tạo chiến dịch xong cần phát ít nhất một mã. Loại chỉ đặt được lúc tạo.
+            </small>
           </label>
         }
 

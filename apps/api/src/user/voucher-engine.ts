@@ -12,7 +12,20 @@ export type VoucherIneligibleReason =
   | "USER_LIMIT_REACHED"
   | "GROUP_MISMATCH"
   | "PROMOTION_INACTIVE"
-  | "BUDGET_EXHAUSTED";
+  | "BUDGET_EXHAUSTED"
+  | "CATEGORY_MISMATCH";
+
+/**
+ * Một dòng trong giỏ, đủ để xét phạm vi danh mục của mã.
+ *
+ * `categoryPath` gồm danh mục của sản phẩm và mọi danh mục tổ tiên, nên mã khai cho
+ * danh mục cha tự phủ các danh mục con. Do máy chủ dựng từ bảng giá, không nhận từ
+ * trình duyệt.
+ */
+export interface VoucherCartLine {
+  categoryPath: readonly string[];
+  lineTotal: number;
+}
 
 /**
  * Ngữ cảnh đánh giá mã cho một giỏ hàng cụ thể.
@@ -28,6 +41,14 @@ export interface VoucherEvaluationContext {
   isFirstOrder: boolean;
   usageByVoucherId: Record<string, number>;
   promotionByPromoId: Record<string, PromotionState>;
+  /**
+   * Các dòng trong giỏ. Chỉ cần cho mã có khai danh mục. Thiếu thì mã có danh mục bị
+   * coi như giỏ không có món nào thuộc danh mục — đóng mặc định, để một đường gọi quên
+   * truyền dòng hàng không mở lại việc giảm cho cả đơn.
+   */
+  lines?: readonly VoucherCartLine[];
+  /** Tên danh mục theo mã, để câu giải thích gọi đúng tên thay vì mã UUID. */
+  categoryNameById?: Readonly<Record<string, string>>;
 }
 
 /**
@@ -68,6 +89,10 @@ export interface EvaluatedVoucher {
   reasonText: string | null;
   /** Còn thiếu bao nhiêu tiền nữa mới đạt giá trị đơn tối thiểu. */
   shortfall: number | null;
+  /** Tên các danh mục mã áp dụng. Rỗng nghĩa là áp cho mọi sản phẩm. */
+  categoryNames: string[];
+  /** Đối tượng mã (`applicable_user_group`), để trang Ưu đãi tách nhóm "dành riêng cho bạn". */
+  audience: string;
 }
 
 const DEFAULT_SHIPPING_FEE = 30000;
@@ -82,25 +107,59 @@ const DEFAULT_SHIPPING_FEE = 30000;
 export function computeVoucherDiscount(
   voucher: JsonObject,
   orderValue: number,
-  shippingFee: number
+  shippingFee: number,
+  scopedValue: number = orderValue
 ): number {
   const value = Number(voucher.discount_value || 0);
-  let discount = 0;
 
+  // Mã miễn phí vận chuyển giảm đúng bằng phí vận chuyển (BR-A4-07). Danh mục chỉ quyết
+  // định mã có dùng được hay không, nên trần ở đây là cả đơn.
+  if (voucher.discount_type === "free_shipping") {
+    return Math.max(0, Math.round(Math.min(shippingFee, orderValue)));
+  }
+
+  // Mã phần trăm và mã cố định chỉ giảm trên phần hàng thuộc phạm vi của mã (D4). Mã
+  // không khai danh mục thì phần đó chính là cả đơn.
+  let discount = 0;
   if (voucher.discount_type === "fixed_amount") {
     discount = value;
   } else if (voucher.discount_type === "percentage") {
-    discount = (orderValue * value) / 100;
+    discount = (scopedValue * value) / 100;
     const cap = voucher.max_discount_amount;
     if (cap !== null && cap !== undefined && cap !== "") {
       discount = Math.min(discount, Number(cap));
     }
-  } else if (voucher.discount_type === "free_shipping") {
-    discount = shippingFee;
   }
 
-  discount = Math.min(discount, orderValue);
+  discount = Math.min(discount, scopedValue, orderValue);
   return Math.max(0, Math.round(discount));
+}
+
+/**
+ * Danh mục mã áp dụng. Cột là JSONB nên có thể về dạng mảng, chuỗi JSON, hoặc null.
+ */
+export function voucherCategoryIds(voucher: JsonObject): string[] {
+  let raw: unknown = voucher.applicable_categories;
+  if (typeof raw === "string") {
+    try {
+      raw = JSON.parse(raw);
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(raw)) return [];
+  return raw.map((id) => String(id || "").trim()).filter(Boolean);
+}
+
+/**
+ * Tổng tiền của các dòng thuộc phạm vi danh mục. Không có dòng hàng thì bằng 0.
+ */
+function scopedLineTotal(categoryIds: readonly string[], lines: readonly VoucherCartLine[] | undefined): number {
+  if (!lines) return 0;
+  const wanted = new Set(categoryIds);
+  return lines
+    .filter((line) => line.categoryPath.some((id) => wanted.has(id)))
+    .reduce((sum, line) => sum + Math.max(0, Number(line.lineTotal) || 0), 0);
 }
 
 /**
@@ -122,6 +181,10 @@ export function evaluateVoucher(
   const usageLimitPerUser = Number(voucher.usage_limit_per_user || 1);
   const usedByThisCustomer = context.usageByVoucherId[voucherId] || 0;
   const remainingUses = usageLimitTotal === null ? null : Math.max(0, usageLimitTotal - usedCount);
+  const categoryIds = voucherCategoryIds(voucher);
+  const categoryNames = categoryIds.map((id) => context.categoryNameById?.[id] || "danh mục khác");
+  // Phần giá trị đơn mà mã được phép tính trên đó. Mã không khai danh mục thì là cả đơn.
+  const scopedValue = categoryIds.length ? scopedLineTotal(categoryIds, context.lines) : context.orderValue;
 
   const base = {
     voucherId,
@@ -134,7 +197,9 @@ export function evaluateVoucher(
     minOrderValue,
     startDate: voucher.start_date ? String(voucher.start_date) : null,
     endDate: voucher.end_date ? String(voucher.end_date) : null,
-    remainingUses
+    remainingUses,
+    categoryNames,
+    audience: String(voucher.applicable_user_group || "all_users")
   };
 
   const reject = (
@@ -197,20 +262,30 @@ export function evaluateVoucher(
     return reject("GROUP_MISMATCH", "Mã chỉ dành cho khách hàng mua lần đầu.");
   }
 
+  // Sai danh mục xét sau nhóm khách và trước lượt của khách: giỏ không có món nào thuộc
+  // danh mục thì lượt còn hay hết không đổi được kết quả.
+  if (categoryIds.length && scopedValue <= 0) {
+    return reject(
+      "CATEGORY_MISMATCH",
+      `Mã chỉ áp cho ${joinNames(categoryNames)}, giỏ hàng chưa có sản phẩm phù hợp.`
+    );
+  }
+
   if (context.isMember && usedByThisCustomer >= usageLimitPerUser) {
     return reject("USER_LIMIT_REACHED", "Bạn đã dùng hết lượt cho mã này.");
   }
 
-  if (context.orderValue < minOrderValue) {
-    const shortfall = Math.max(0, Math.round(minOrderValue - context.orderValue));
+  if (scopedValue < minOrderValue) {
+    const shortfall = Math.max(0, Math.round(minOrderValue - scopedValue));
+    const where = categoryIds.length ? ` sản phẩm thuộc ${joinNames(categoryNames)}` : "";
     return reject(
       "MIN_ORDER_NOT_MET",
-      `Đơn hàng chưa thỏa mãn điều kiện — mua thêm ${formatMoney(shortfall)} để dùng mã này.`,
+      `Đơn hàng chưa thỏa mãn điều kiện — mua thêm ${formatMoney(shortfall)}${where} để dùng mã này.`,
       shortfall
     );
   }
 
-  const discountAmount = computeVoucherDiscount(voucher, context.orderValue, context.shippingFee);
+  const discountAmount = computeVoucherDiscount(voucher, context.orderValue, context.shippingFee, scopedValue);
   if (discountAmount <= 0) {
     return reject("MIN_ORDER_NOT_MET", "Mã không mang lại giá trị giảm cho đơn này.");
   }
@@ -321,6 +396,12 @@ function toNullableNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === "") return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function joinNames(names: readonly string[]): string {
+  const unique = [...new Set(names)];
+  if (unique.length <= 1) return unique[0] || "một số danh mục";
+  return `${unique.slice(0, -1).join(", ")} và ${unique[unique.length - 1]}`;
 }
 
 function formatMoney(value: number): string {

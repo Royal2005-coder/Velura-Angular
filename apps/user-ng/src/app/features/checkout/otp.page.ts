@@ -43,6 +43,8 @@ export class CheckoutOtpPage {
   readonly submitting = signal(false);
   readonly resending = signal(false);
   readonly maskedEmail = signal(this.readMaskedEmail());
+  readonly maskedPhone = signal(this.readMaskedPhone());
+  readonly channel = signal<'sms' | 'email' | 'both'>('sms');
   readonly devBypass = signal(false);
   readonly items = computed(() => this.checkout.readCheckoutItems());
   readonly totalLabel = computed(() => {
@@ -94,7 +96,14 @@ export class CheckoutOtpPage {
     }
     this.resending.set(true);
     this.api
-      .post<{ success?: boolean; masked_email?: string; dev_bypass?: boolean }>('/api/user/orders/otp-send', {
+      .post<{
+        success?: boolean;
+        message?: string;
+        channel?: 'sms' | 'email' | 'both';
+        masked_phone?: string;
+        masked_email?: string;
+        dev_bypass?: boolean;
+      }>('/api/user/orders/otp-send', {
         phone: payload['phone'],
         email: payload['email'] || '',
         full_name: payload['shipping_name'],
@@ -107,8 +116,14 @@ export class CheckoutOtpPage {
             if (res.masked_email) {
               this.maskedEmail.set(res.masked_email);
             }
+            if (res.masked_phone) {
+              this.maskedPhone.set(res.masked_phone);
+            }
+            if (res.channel) {
+              this.channel.set(res.channel);
+            }
             this.devBypass.set(res.dev_bypass === true);
-            showToast('Mã OTP mới đã được gửi tới email.');
+            showToast(res.message || 'Mã OTP mới đã được gửi thành công.');
           } else {
             showToast('Không thể gửi lại mã OTP. Vui lòng thử lại!');
           }
@@ -118,6 +133,17 @@ export class CheckoutOtpPage {
           showToast(error.message || 'Lỗi gửi lại mã OTP');
         },
       });
+  }
+
+  /**
+   * Phone number shown on the OTP dialog.
+   */
+  private readMaskedPhone(): string {
+    const phone = String(this.checkout.readGuestPayload()?.['phone'] || '').trim();
+    if (phone.length < 7) {
+      return phone;
+    }
+    return `${phone.slice(0, 3)}****${phone.slice(-3)}`;
   }
 
   /**

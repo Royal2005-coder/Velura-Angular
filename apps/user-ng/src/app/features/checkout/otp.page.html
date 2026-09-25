@@ -51,10 +51,14 @@
         <a class="otp-modal__close" routerLink="/checkout/shipping" aria-label="Đóng" style="position: absolute; top: 16px; right: 16px; background: none; border: none; font-size: 24px; cursor: pointer; color: #999;">&times;</a>
         <h2 id="otp-title" class="otp-modal__title">Nhập OTP để hoàn tất đơn hàng</h2>
         <p class="otp-modal__desc">
-          @if (maskedEmail()) {
-            Mã OTP đã gửi tới email {{ maskedEmail() }}. Velura chưa gửi mã qua số điện thoại.
+          @if (maskedPhone() && maskedEmail()) {
+            Mã OTP đã được gửi tới số điện thoại {{ maskedPhone() }} và email {{ maskedEmail() }}.
+          } @else if (maskedPhone()) {
+            Mã OTP đã được gửi tới số điện thoại {{ maskedPhone() }}.
+          } @else if (maskedEmail()) {
+            Mã OTP đã được gửi tới email {{ maskedEmail() }}.
           } @else {
-            Nhập email ở bước giao hàng để nhận mã OTP. Velura chưa gửi mã qua số điện thoại.
+            Vui lòng nhập mã OTP để hoàn tất đơn hàng.
           }
         </p>
         @if (devBypass()) {

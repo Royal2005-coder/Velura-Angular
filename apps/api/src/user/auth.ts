@@ -10,6 +10,7 @@ import {
   type LoginLockUser
 } from "../auth-lockout.js";
 import { createNotification } from "./notifications.js";
+import { sendAuthOtpSms } from "../sms/twilio.js";
 import {
   asJsonObject,
   asString,
@@ -230,6 +231,10 @@ export async function handleAuthRoute(
     console.log(`[OTP VERIFICATION] Mã kích hoạt tài khoản của ${email || phone} là: ${otpCode}`);
     console.log(`==================================================\n`);
 
+    if (phone) {
+      void sendAuthOtpSms(asString(phone), otpCode, "signup");
+    }
+
     // Create inactive user first (AUTH-05)
     const hashedPassword = hashPassword(asString(password));
     const newUser = asJsonObject(await insertRow("users", {
@@ -379,6 +384,10 @@ export async function handleAuthRoute(
       console.log(`[OTP VERIFICATION] Mã kích hoạt tài khoản của ${identity} là: ${otpCode}`);
       console.log(`==================================================\n`);
 
+      if (user.phone) {
+        void sendAuthOtpSms(asString(user.phone), otpCode, "verify");
+      }
+
       return sendJson(res, 200, {
         success: false,
         otp_required: true,
@@ -430,6 +439,10 @@ export async function handleAuthRoute(
     console.log(`\n==================================================`);
     console.log(`[OTP RESET] Mã khôi phục mật khẩu của ${identity} là: ${otpCode}`);
     console.log(`==================================================\n`);
+
+    if (user.phone) {
+      void sendAuthOtpSms(asString(user.phone), otpCode, "forgot_password");
+    }
 
     return sendJson(res, 200, {
       success: true,

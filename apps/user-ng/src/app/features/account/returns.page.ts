@@ -42,6 +42,7 @@ export class AccountReturnsPage {
   readonly submitting = signal(false);
   readonly formError = signal<string | null>(null);
   readonly submitted = signal(false);
+  readonly evidenceImages = signal<string[]>([]);
 
   readonly eligible = computed(() => this.orders().filter((order) => isReturnableOrder(order)));
   readonly selectedOrder = computed(() => this.eligible().find((order) => order.order_id === this.selectedOrderId()) || null);
@@ -117,6 +118,44 @@ export class AccountReturnsPage {
   }
 
   /**
+   * Handles customer selecting proof photos for return.
+   */
+  onFilesSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    if (!input.files || input.files.length === 0) {
+      return;
+    }
+    const current = this.evidenceImages();
+    const remaining = 5 - current.length;
+    if (remaining <= 0) {
+      this.formError.set('Chỉ được tải lên tối đa 5 hình ảnh minh chứng.');
+      return;
+    }
+    const files = Array.from(input.files).slice(0, remaining);
+    for (const file of files) {
+      if (!file.type.startsWith('image/')) {
+        continue;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        if (result) {
+          this.evidenceImages.update((imgs) => (imgs.length < 5 ? [...imgs, result] : imgs));
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+    input.value = '';
+  }
+
+  /**
+   * Removes an attached evidence image.
+   */
+  removeImage(index: number): void {
+    this.evidenceImages.update((imgs) => imgs.filter((_, i) => i !== index));
+  }
+
+  /**
    * Sends the request. The API enforces the 30-day window and the delivered state.
    */
   submit(): void {
@@ -143,6 +182,7 @@ export class AccountReturnsPage {
         order_id: order.order_id,
         return_type: this.returnType(),
         description: note,
+        evidence_images: this.evidenceImages(),
         items,
       })
       .subscribe({

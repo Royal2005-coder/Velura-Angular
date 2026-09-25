@@ -84,7 +84,7 @@
                     <td><span class="admin-badge" [class]="'admin-badge admin-badge--order-' + (order.status || 'pending')">{{ orderLabel(order) }}</span></td>
                     <td>
                       <div class="admin-order-payment">
-                        <span>{{ paymentMethodLabel(order.payment_method) }}</span>
+                        <span>{{ paymentMethodLabel(order.payment_method, order) }}</span>
                         @if (order.payment_status_label) {
                           <small [class]="'admin-order-payment__status admin-order-payment__status--' + order.payment_status">{{ order.payment_status_label }}</small>
                         }
@@ -205,10 +205,63 @@
       <dl class="admin-data-list">
         <div><dt>Điện thoại</dt><dd>{{ order.shipping_phone }}</dd></div>
         <div><dt>Địa chỉ</dt><dd>{{ order.shipping_address }}</dd></div>
-        @if (order.internal_note) {
+        @if (order.internal_note && !selectedCoolmateMeta()) {
           <div><dt>Ghi chú</dt><dd>{{ order.internal_note }}</dd></div>
         }
       </dl>
+
+      @if (selectedCoolmateMeta(); as meta) {
+        <h3 class="admin-drawer__section">Tùy chọn dịch vụ Coolmate</h3>
+        <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px;">
+          @if (meta.gift) {
+            <div style="background: #fdf8f5; border: 1px solid #ebd9c8; border-radius: 8px; padding: 12px 14px;">
+              <div style="display: flex; align-items: center; gap: 6px; font-weight: 600; color: #7c5454; margin-bottom: 4px;">
+                <span>🎁 Đơn hàng quà tặng (Dành cho {{ meta.gift.gender }})</span>
+              </div>
+              <div style="font-size: 0.875rem; color: #4a4039;">
+                <div><strong>Người nhận quà:</strong> {{ meta.gift.recipientName }}</div>
+                @if (meta.gift.message) {
+                  <div style="margin-top: 4px; font-style: italic; color: #6b5c52;"><strong>Lời chúc:</strong> "{{ meta.gift.message }}"</div>
+                }
+              </div>
+            </div>
+          }
+          @if (meta.otherRecipient) {
+            <div style="background: #f4f8fb; border: 1px solid #cbe0ef; border-radius: 8px; padding: 12px 14px;">
+              <div style="display: flex; align-items: center; gap: 6px; font-weight: 600; color: #235d88; margin-bottom: 4px;">
+                <span>📞 Gọi người khác nhận hàng</span>
+              </div>
+              <div style="font-size: 0.875rem; color: #4a4039;">
+                <div><strong>Tên người nhận thay:</strong> {{ meta.otherRecipient.name }}</div>
+                <div><strong>Số điện thoại:</strong> {{ meta.otherRecipient.phone }}</div>
+              </div>
+            </div>
+          }
+          @if (meta.vatInvoice) {
+            <div style="background: #f7f9f6; border: 1px solid #d5e5d3; border-radius: 8px; padding: 12px 14px;">
+              <div style="display: flex; align-items: center; gap: 6px; font-weight: 600; color: #2e6930; margin-bottom: 4px;">
+                <span>🧾 Yêu cầu xuất hóa đơn VAT</span>
+              </div>
+              <div style="font-size: 0.875rem; color: #4a4039; display: grid; gap: 2px;">
+                <div><strong>Công ty:</strong> {{ meta.vatInvoice.company }}</div>
+                <div><strong>Mã số thuế:</strong> {{ meta.vatInvoice.taxCode }}</div>
+                <div><strong>Địa chỉ:</strong> {{ meta.vatInvoice.address }}</div>
+                <div><strong>Email nhận HĐ:</strong> {{ meta.vatInvoice.email }}</div>
+              </div>
+            </div>
+          }
+          @if (meta.referralCode) {
+            <div style="background: #fafafa; border: 1px solid #e0e0e0; border-radius: 8px; padding: 10px 14px; font-size: 0.875rem;">
+              <strong>Mã giới thiệu bạn bè:</strong> <span style="font-family: monospace; background: #eee; padding: 2px 6px; border-radius: 4px;">{{ meta.referralCode }}</span>
+            </div>
+          }
+          @if (meta.customerNote) {
+            <div style="background: #fff; border: 1px solid #eee; border-radius: 8px; padding: 10px 14px; font-size: 0.875rem;">
+              <strong>Ghi chú giao hàng:</strong> {{ meta.customerNote }}
+            </div>
+          }
+        </div>
+      }
 
       <h3 class="admin-drawer__section">Sản phẩm</h3>
       <div class="admin-order-product-list">
@@ -230,7 +283,7 @@
 
       <h3 class="admin-drawer__section">Thanh toán và hoàn tiền</h3>
       <dl class="admin-data-list">
-        <div><dt>Phương thức</dt><dd>{{ paymentMethodLabel(order.payment_method) }}</dd></div>
+        <div><dt>Phương thức</dt><dd>{{ paymentMethodLabel(order.payment_method, order) }}</dd></div>
         <div><dt>Trạng thái</dt><dd>{{ order.payment_status_label || (order.payment_method === 'COD' ? 'Thu khi giao hàng' : '—') }}</dd></div>
         @if (selectedPayment()?.paid_at) {
           <div><dt>Thanh toán lúc</dt><dd>{{ dateTime(selectedPayment()?.paid_at) }}</dd></div>

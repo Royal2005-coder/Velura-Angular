@@ -55,6 +55,12 @@ export class AdminReviewsPage {
   readonly lightboxImage = signal<string | null>(null);
   readonly canMutate = computed(() => this.session.canMutate('reviews'));
 
+  // Signals trợ lý AI CSKH, nhận diện từ cấm và gợi ý phản hồi
+  readonly replyDraft = signal<string>('');
+  readonly aiSuggestions = signal<string[]>([]);
+  readonly detectedRestrictedWords = signal<string[]>([]);
+  readonly sentiment = signal<{ label: string; tone: string; score: number } | null>(null);
+
   // Các con số này đếm trên toàn bộ dữ liệu, không phải trên 10 dòng của trang hiện
   // tại. Trước đây chúng là `computed` trên `rows()`, nên ở tab "Chờ duyệt" con số
   // "Chờ duyệt" luôn bằng đúng cỡ trang còn "Đã xử lý" luôn bằng 0.
@@ -238,7 +244,68 @@ export class AdminReviewsPage {
   }
 
   /**
-   * Opens approve / hide / reply / escalate modal.
+   * Danh sách từ khóa nhạy cảm / từ cấm / spam cần cảnh báo cho CSKH.
+   */
+  readonly restrictedPatterns: readonly string[] = [
+    'mấy má', 'may ma', 'mấy mẹ', 'nhận xu', 'nhan xu', 'kiếm xu', 'kiem xu',
+    'đm', 'dm', 'đmm', 'vcl', 'vl', 'cl', 'vcc', 'dcm', 'đcm', 'lừa đảo', 'lua dao',
+    'fake', 'fake lòi', 'như cc', 'nhu cc', 'hàng đểu', 'treo đầu dê', 'bố láo', 'mất dạy', 'chó chết'
+  ];
+
+  detectRestrictedWords(text: string): string[] {
+    if (!text) return [];
+    const lower = text.toLowerCase();
+    return this.restrictedPatterns.filter((word) => lower.includes(word));
+  }
+
+  analyzeSentiment(row: AdminReviewRow): { label: string; tone: string; score: number } {
+    const rating = row.rating || 0;
+    const comment = (this.commentOf(row) || '').toLowerCase();
+    const negativeKeywords = ['xấu', 'tệ', 'rách', 'lỗi', 'chật', 'rộng', 'thất vọng', 'kém', 'lừa', 'không giống', 'hỏng'];
+    const hasNegativeKeyword = negativeKeywords.some((w) => comment.includes(w));
+
+    if (rating >= 4 && !hasNegativeKeyword) {
+      return { label: 'Tích cực', tone: 'positive', score: rating };
+    }
+    if (rating <= 2 || hasNegativeKeyword) {
+      return { label: 'Tiêu cực', tone: 'negative', score: rating || 1 };
+    }
+    return { label: 'Trung tính', tone: 'neutral', score: rating || 3 };
+  }
+
+  generateAiSuggestions(row: AdminReviewRow, sentiment: { label: string; tone: string }): string[] {
+    const prodName = this.productName(row) || 'sản phẩm';
+    if (sentiment.tone === 'positive') {
+      return [
+        `Chào bạn, Velura chân thành cảm ơn bạn đã tin tưởng và đánh giá 5 sao cho ${prodName}! Sự hài lòng của bạn là niềm vui và động lực lớn nhất của chúng mình. Chúc bạn luôn rạng rỡ và tự tin mỗi ngày cùng Velura nhé!`,
+        `Dạ Velura xin gửi lời cảm ơn sâu sắc đến quý khách ạ! Velura xin gửi tặng bạn voucher ưu đãi 10% cho đơn hàng kế tiếp. Hy vọng bạn sẽ luôn đồng hành và ủng hộ Velura trong thời gian tới!`,
+        `Cảm ơn bạn đã lựa chọn ${prodName} từ Velura! Để trang phục luôn bền đẹp như mới, bạn lưu ý giặt ở chế độ nhẹ và phơi nơi thoáng mát nhé. Chúc bạn một ngày thật nhiều niềm vui!`,
+      ];
+    }
+    if (sentiment.tone === 'negative') {
+      return [
+        `Chào bạn, Velura thành thật xin lỗi vì trải nghiệm chưa trọn vẹn với ${prodName}. Bộ phận CSKH Velura xin phép liên hệ hỗ trợ đổi trả mới hoặc hoàn tiền ngay trong hôm nay theo chính sách 30 ngày. Rất mong bạn cho Velura cơ hội khắc phục ạ!`,
+        `Dạ Velura chân thành xin lỗi bạn về sự bất tiện này. Chúng mình sẽ liên hệ hỗ trợ bạn đổi size/màu hoặc kiểm tra đổi sản phẩm mới hoàn toàn miễn phí ship 2 chiều ngay hôm nay ạ. Mong bạn thông cảm cho sơ suất của shop nhé!`,
+        `Velura đã ghi nhận phản hồi đóng góp quý báu từ bạn và chuyển ngay cho bộ phận sản xuất kiểm tra chất lượng. CSKH Velura sẽ gọi điện hỗ trợ giải quyết thỏa đáng nhất cho bạn ngay trong ít phút tới ạ. Cảm ơn bạn!`,
+      ];
+    }
+    return [
+      `Chào bạn, cảm ơn bạn đã gửi đánh giá cho sản phẩm ${prodName}. Không biết sản phẩm còn điểm nào chưa hoàn toàn làm bạn ưng ý không ạ? Bạn có thể nhắn tin cho CSKH Velura để được hỗ trợ và tư vấn chu đáo hơn nhé!`,
+      `Dạ Velura cảm ơn quý khách đã tin tưởng mua sắm. Mọi góp ý của bạn là động lực để Velura ngày càng hoàn thiện chất lượng và dịch vụ hơn nữa. Chúc bạn một ngày tốt lành!`,
+      `Chào bạn, nếu bạn cần hỗ trợ thêm về hướng dẫn bảo quản trang phục, đổi size hoặc tư vấn phối đồ, đừng ngần ngại liên hệ CSKH Velura bất cứ lúc nào nhé ạ!`,
+    ];
+  }
+
+  applyAiSuggestion(text: string): void {
+    this.replyDraft.set(text);
+  }
+
+  onReplyInput(event: Event): void {
+    this.replyDraft.set((event.target as HTMLTextAreaElement).value);
+  }
+
+  /**
+   * Opens approve / hide / reply / escalate modal with AI context.
    */
   openAction(type: Exclude<ReviewAction, null>, reviewId: string): void {
     const row = this.rows().find((item) => item.review_id === reviewId) || null;
@@ -247,6 +314,33 @@ export class AdminReviewsPage {
     this.detailOpen.set(false);
     this.actionError.set(null);
     this.menuId.set(null);
+
+    if (row) {
+      this.replyDraft.set(row.admin_reply || '');
+      const comment = this.commentOf(row);
+      this.detectedRestrictedWords.set(this.detectRestrictedWords(comment));
+      const s = this.analyzeSentiment(row);
+      this.sentiment.set(s);
+      this.aiSuggestions.set(this.generateAiSuggestions(row, s));
+    }
+
+    // Tải chi tiết bổ sung (ảnh, thông tin người dùng) nếu có
+    this.api.getReview(reviewId).subscribe({
+      next: (fullRow) => {
+        if (this.selected()?.review_id === reviewId) {
+          this.selected.set(fullRow);
+          if (type === 'reply' && !this.replyDraft()) {
+            this.replyDraft.set(fullRow.admin_reply || '');
+          }
+          const comment = this.commentOf(fullRow);
+          this.detectedRestrictedWords.set(this.detectRestrictedWords(comment));
+          const s = this.analyzeSentiment(fullRow);
+          this.sentiment.set(s);
+          this.aiSuggestions.set(this.generateAiSuggestions(fullRow, s));
+        }
+      },
+      error: () => {},
+    });
   }
 
   /**
@@ -258,6 +352,10 @@ export class AdminReviewsPage {
     this.detailOpen.set(false);
     this.actionError.set(null);
     this.lightboxImage.set(null);
+    this.replyDraft.set('');
+    this.aiSuggestions.set([]);
+    this.detectedRestrictedWords.set([]);
+    this.sentiment.set(null);
   }
 
   /**
@@ -287,7 +385,14 @@ export class AdminReviewsPage {
     }
     const form = event.target as HTMLFormElement;
     const note = (form.elements.namedItem('actionNote') as HTMLTextAreaElement | null)?.value || '';
-    const value = (form.elements.namedItem('value') as HTMLTextAreaElement | null)?.value || '';
+    const formValue = (form.elements.namedItem('value') as HTMLTextAreaElement | null)?.value || '';
+    const value = type === 'reply' ? this.replyDraft() : formValue;
+
+    if (type === 'reply' && (!value || !value.trim())) {
+      this.actionError.set('Vui lòng nhập nội dung phản hồi đánh giá.');
+      return;
+    }
+
     const payload = { expectedVersion: row.version };
     const request$ =
       type === 'approve' || type === 'unhide'
@@ -295,7 +400,7 @@ export class AdminReviewsPage {
         : type === 'hide'
           ? this.api.hideReview(row.review_id, { ...payload, reason: value })
           : type === 'reply'
-            ? this.api.replyReview(row.review_id, { ...payload, reply: value })
+            ? this.api.replyReview(row.review_id, { ...payload, reply: value.trim() })
             : this.api.escalateReview(row.review_id, { ...payload, reason: value });
     request$.subscribe({
       next: () => {

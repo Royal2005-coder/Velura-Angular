@@ -67,6 +67,35 @@ export async function handleProfileRoute(
   }
 
   if (subRoute === "addresses") {
+    // POST /api/user/addresses — Thêm địa chỉ mới vào sổ địa chỉ (không ghi đè dữ liệu cũ)
+    if (req.method === "POST") {
+      const body = await readJson(req);
+      const newAddr = asJsonObject(body);
+      const phone = newAddr.phone || newAddr.recipient_phone;
+      if (!phone || !validatePhone(phone)) {
+        throw new HttpError(400, "BAD_REQUEST", "Số điện thoại trong địa chỉ giao hàng không hợp lệ (10 số, bắt đầu bằng 0)");
+      }
+      const existingAddresses = Array.isArray(profile.saved_addresses) ? (profile.saved_addresses as JsonObject[]) : [];
+      const addressId = String(newAddr.id || `addr_${Date.now()}`);
+      const entry: JsonObject = {
+        ...newAddr,
+        id: addressId,
+        is_default: existingAddresses.length === 0 ? true : Boolean(newAddr.is_default)
+      };
+      let updatedAddresses: JsonObject[];
+      if (entry.is_default) {
+        updatedAddresses = existingAddresses.map((a) => ({ ...a, is_default: false }));
+        updatedAddresses.push(entry);
+      } else {
+        updatedAddresses = [...existingAddresses, entry];
+      }
+      await updateRows("users", { user_id: `eq.${profile.user_id}` }, {
+        saved_addresses: updatedAddresses,
+        updated_at: new Date().toISOString()
+      });
+      return sendJson(res, 201, { success: true, address: entry, addresses: updatedAddresses }, corsHeaders);
+    }
+
     // PATCH /api/user/addresses
     if (req.method === "PATCH") {
       const body = await readJson(req);

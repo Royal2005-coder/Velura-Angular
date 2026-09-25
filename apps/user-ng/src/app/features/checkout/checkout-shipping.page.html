@@ -21,7 +21,7 @@
     <div class="checkout-grid">
       <div class="checkout-main">
         <section class="card">
-          <div class="card__header" style="display: flex; justify-content: space-between; align-items: center;">
+          <div class="card__header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
             <div style="display: flex; align-items: center; gap: 8px;">
               <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
                 <path d="M10.5 18.17c1.55-1.34 6.17-5.67 6.17-9.84a4.17 4.17 0 00-8.33 0c0 4.17 4.62 8.5 6.17 9.84z" stroke="#7C5454" stroke-width="1.67" />
@@ -38,6 +38,41 @@
               </button>
             }
           </div>
+
+          @if (savedAddresses().length > 0) {
+            <div class="checkout-address-mode-selector" style="display: flex; gap: 8px; margin-bottom: 18px; background: #fdfbf7; padding: 6px; border-radius: 8px; border: 1px solid #ebd9c8;">
+              <button
+                type="button"
+                class="btn-address-mode"
+                [style.background]="addressMode() === 'default' ? '#7C5454' : 'transparent'"
+                [style.color]="addressMode() === 'default' ? '#fff' : '#4a4039'"
+                style="flex: 1; padding: 8px 10px; border-radius: 6px; border: none; font-size: 0.8125rem; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 4px;"
+                (click)="setAddressMode('default')"
+              >
+                <span>🏠 Mặc định</span>
+              </button>
+              <button
+                type="button"
+                class="btn-address-mode"
+                [style.background]="addressMode() === 'saved' ? '#7C5454' : 'transparent'"
+                [style.color]="addressMode() === 'saved' ? '#fff' : '#4a4039'"
+                style="flex: 1; padding: 8px 10px; border-radius: 6px; border: none; font-size: 0.8125rem; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 4px;"
+                (click)="openAddressModal()"
+              >
+                <span>📖 Đã lưu ({{ savedAddresses().length }})</span>
+              </button>
+              <button
+                type="button"
+                class="btn-address-mode"
+                [style.background]="addressMode() === 'new' ? '#7C5454' : 'transparent'"
+                [style.color]="addressMode() === 'new' ? '#fff' : '#4a4039'"
+                style="flex: 1; padding: 8px 10px; border-radius: 6px; border: none; font-size: 0.8125rem; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 4px;"
+                (click)="setAddressMode('new')"
+              >
+                <span>➕ Địa chỉ mới</span>
+              </button>
+            </div>
+          }
           <div class="form-group">
             <label for="fullname">Họ và tên *</label>
             <input
@@ -133,6 +168,20 @@
               (change)="setField('detail', $event)"
             />
           </div>
+
+          @if (savedAddresses().length > 0 && addressMode() === 'new') {
+            <div style="margin: 4px 0 16px 0; padding: 10px 14px; background: #faf8f5; border-radius: 8px; border: 1px dashed #d5c4b5;">
+              <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 0.875rem; color: #4a4039; font-weight: 500;">
+                <input
+                  type="checkbox"
+                  [checked]="saveNewAddress()"
+                  (change)="toggleSaveNewAddress($event)"
+                  style="width: 17px; height: 17px; accent-color: #7C5454; cursor: pointer;"
+                />
+                <span>Lưu địa chỉ này vào sổ địa chỉ (không ghi đè địa chỉ cũ)</span>
+              </label>
+            </div>
+          }
 
           <!-- Coolmate: Gọi người khác nhận hàng -->
           <div class="coolmate-toggle-box">

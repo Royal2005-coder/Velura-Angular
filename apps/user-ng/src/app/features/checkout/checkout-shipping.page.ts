@@ -23,9 +23,13 @@ interface MemberProfile {
   email?: string;
   phone?: string;
   saved_addresses?: Array<{
+    id?: string;
     name?: string;
     phone?: string;
     detail?: string;
+    province?: string;
+    district?: string;
+    ward?: string;
     address?: string;
     is_default?: boolean;
   }>;
@@ -92,6 +96,9 @@ export class CheckoutShippingPage {
   /** Member address book */
   readonly savedAddresses = signal<NonNullable<MemberProfile['saved_addresses']>>([]);
   readonly addressModalOpen = signal(false);
+  readonly addressMode = signal<'default' | 'saved' | 'new'>('default');
+  readonly saveNewAddress = signal(false);
+  readonly defaultAddress = signal<NonNullable<MemberProfile['saved_addresses']>[number] | null>(null);
 
   readonly voucherError = signal<string | null>(null);
   /** Mã ví đang áp. Ví là nơi chọn; trang chỉ ghi lại để báo giá và đặt đơn. */
@@ -310,14 +317,49 @@ export class CheckoutShippingPage {
     this.addressModalOpen.set(false);
   }
 
+  setAddressMode(mode: 'default' | 'saved' | 'new'): void {
+    this.addressMode.set(mode);
+    if (mode === 'default') {
+      const def = this.defaultAddress() || this.savedAddresses()[0];
+      if (def) {
+        if (def.name) this.name.set(def.name);
+        if (def.phone) this.phone.set(def.phone);
+        this.detail.set(def.detail || def.address || '');
+        this.province.set(def.province || '');
+        this.district.set(def.district || '');
+        this.ward.set(def.ward || '');
+        this.saveNewAddress.set(false);
+        showToast('Đã chọn địa chỉ mặc định');
+      } else {
+        showToast('Chưa có địa chỉ mặc định, bạn có thể nhập địa chỉ mới');
+      }
+    } else if (mode === 'new') {
+      this.detail.set('');
+      this.province.set('');
+      this.district.set('');
+      this.ward.set('');
+      this.saveNewAddress.set(true);
+      showToast('Vui lòng nhập địa chỉ mới');
+    }
+  }
+
+  toggleSaveNewAddress(event: Event): void {
+    this.saveNewAddress.set((event.target as HTMLInputElement).checked);
+  }
+
   selectSavedAddress(addr: NonNullable<MemberProfile['saved_addresses']>[number]): void {
     if (addr.name) this.name.set(addr.name);
     if (addr.phone) this.phone.set(addr.phone);
     if (addr.detail || addr.address) {
       this.detail.set(addr.detail || addr.address || '');
     }
+    if (addr.province) this.province.set(addr.province);
+    if (addr.district) this.district.set(addr.district);
+    if (addr.ward) this.ward.set(addr.ward);
+    this.addressMode.set('saved');
+    this.saveNewAddress.set(false);
     this.addressModalOpen.set(false);
-    showToast('Đã chọn địa chỉ giao hàng');
+    showToast('Đã chọn địa chỉ từ sổ địa chỉ');
   }
 
   /**
@@ -683,6 +725,21 @@ export class CheckoutShippingPage {
             showToast(res.message || 'Đặt hàng thất bại');
             return;
           }
+          if (this.auth.isLoggedIn() && this.addressMode() === 'new' && this.saveNewAddress()) {
+            this.api.post('/api/user/addresses', {
+              name,
+              phone,
+              detail: this.detail().trim(),
+              province: this.province().trim(),
+              district: this.district().trim(),
+              ward: this.ward().trim(),
+              address,
+              is_default: false,
+            }).subscribe({
+              next: () => {},
+              error: () => {},
+            });
+          }
           if (res.stripe?.url) {
             this.checkout.saveCreatedOrder({
               order_id: res.order.order_id,
@@ -839,7 +896,10 @@ export class CheckoutShippingPage {
     if (profile.saved_addresses) {
       this.savedAddresses.set(profile.saved_addresses);
     }
-    const addr = (profile.saved_addresses || []).find((row) => row.is_default) || profile.saved_addresses?.[0];
+    const addr = (profile.saved_addresses || []).find((row) => row.is_default) || profile.saved_addresses?.[0] || null;
+    if (addr) {
+      this.defaultAddress.set(addr);
+    }
     if (!this.name() && profile.full_name) {
       this.name.set(profile.full_name);
     }
@@ -853,6 +913,9 @@ export class CheckoutShippingPage {
       this.name.set(this.name() || addr.name || profile.full_name || '');
       this.phone.set(this.phone() || addr.phone || profile.phone || '');
       this.detail.set(addr.detail || addr.address || '');
+      if (addr.province) this.province.set(addr.province);
+      if (addr.district) this.district.set(addr.district);
+      if (addr.ward) this.ward.set(addr.ward);
     }
   }
 

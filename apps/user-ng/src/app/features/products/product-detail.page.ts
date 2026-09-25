@@ -223,8 +223,13 @@ export class ProductDetailPage {
   });
   readonly comboSummary = computed(() => {
     const item = this.product();
-    const retail = this.comboComponents().reduce((sum, component) => sum + (component.base_price || 0), 0);
-    const setPrice = item?.sale_price || item?.base_price || 0;
+    const setQty = Math.max(1, this.quantity() || 1);
+    const retailSingle = this.comboComponents().reduce((sum, component) => {
+      const compQty = component.quantity && component.quantity < 10 ? component.quantity : 1;
+      return sum + ((component.base_price || 0) * compQty);
+    }, 0);
+    const retail = retailSingle * setQty;
+    const setPrice = (item?.sale_price || item?.base_price || 0) * setQty;
     const savings = Math.max(0, retail - setPrice);
     const savingsPct = retail > 0 ? Math.round((savings / retail) * 100) : 0;
     return {
@@ -563,15 +568,17 @@ export class ProductDetailPage {
     }
     const comboId = `combo-${item.product_id}-${Date.now()}`;
     const comboPrice = item.sale_price || item.base_price || 0;
+    const setQty = Math.max(1, this.quantity() || 1);
     return this.comboComponents().map((component, index) => {
       const pick = this.comboPicks()[index];
       const variant = this.findVariant(component.variants || [], pick.color, pick.size);
+      const componentItemQty = (component.quantity && component.quantity < 10 ? component.quantity : 1) * setQty;
       return {
         variant_id: variant?.variant_id || component.product_id,
         product_id: component.product_id,
         product_name: component.name,
         product_image: this.comboImage(component),
-        quantity: component.quantity || 1,
+        quantity: componentItemQty,
         unit_price: component.sale_price || component.base_price || 0,
         color: pick.color || variant?.color,
         size: pick.size || variant?.size,

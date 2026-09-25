@@ -94,11 +94,11 @@
                 class="form-input"
                 type="text"
                 id="fullname"
+                name="name"
                 autocomplete="name"
                 placeholder="Nhập họ và tên"
                 [value]="name()"
                 (input)="setField('name', $event)"
-                (change)="setField('name', $event)"
               />
             </div>
             <div class="form-row">
@@ -108,11 +108,11 @@
                   class="form-input"
                   type="tel"
                   id="guest-phone"
+                  name="tel"
                   autocomplete="tel"
                   placeholder="0901 234 567"
                   [value]="phone()"
                   (input)="onPhoneInput('phone', $event)"
-                  (change)="onPhoneInput('phone', $event)"
                   (blur)="onPhoneBlur('phone', $event)"
                 />
               </div>
@@ -122,11 +122,11 @@
                   class="form-input"
                   type="email"
                   id="guest-email"
+                  name="email"
                   autocomplete="email"
                   placeholder="email@example.com"
                   [value]="email()"
                   (input)="setField('email', $event)"
-                  (change)="setField('email', $event)"
                 />
               </div>
             </div>
@@ -137,11 +137,11 @@
                   class="form-input"
                   type="text"
                   id="address-province"
+                  name="address-level1"
                   autocomplete="address-level1"
                   placeholder="Chọn Tỉnh/Thành phố"
                   [value]="province()"
                   (input)="setField('province', $event)"
-                  (change)="setField('province', $event)"
                 />
               </div>
               <div class="form-group">
@@ -150,11 +150,11 @@
                   class="form-input"
                   type="text"
                   id="address-district"
+                  name="address-level2"
                   autocomplete="address-level2"
                   placeholder="Chọn Quận/Huyện"
                   [value]="district()"
                   (input)="setField('district', $event)"
-                  (change)="setField('district', $event)"
                 />
               </div>
               <div class="form-group">
@@ -163,11 +163,11 @@
                   class="form-input"
                   type="text"
                   id="address-ward"
+                  name="address-level3"
                   autocomplete="address-level3"
                   placeholder="Chọn Phường/Xã"
                   [value]="ward()"
                   (input)="setField('ward', $event)"
-                  (change)="setField('ward', $event)"
                 />
               </div>
             </div>
@@ -177,11 +177,11 @@
                 class="form-input"
                 type="text"
                 id="guest-address-detail"
+                name="street-address"
                 autocomplete="street-address"
                 placeholder="Số nhà, tên đường"
                 [value]="detail()"
                 (input)="setField('detail', $event)"
-                (change)="setField('detail', $event)"
               />
             </div>
 
@@ -231,7 +231,6 @@
                       placeholder="09xx xxx xxx"
                       [value]="otherPhone()"
                       (input)="onPhoneInput('otherPhone', $event)"
-                      (change)="onPhoneInput('otherPhone', $event)"
                       (blur)="onPhoneBlur('otherPhone', $event)"
                     />
                   </div>

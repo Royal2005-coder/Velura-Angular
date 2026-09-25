@@ -259,7 +259,7 @@ def dia_checkout():
            "Miễn phí vận chuyển là ngưỡng theo giá trị đơn do máy chủ giữ, "
            "không phải một loại mã giảm giá.")
     m.note("n_huy", PROMO, 7.0, DEEP,
-           "Đơn không thành (khách huỷ, admin huỷ, thanh toán hết hạn hoặc bị huỷ) "
+           "Đơn bị huỷ (khách huỷ, admin huỷ, hoặc quá 24 giờ chưa thanh toán) "
            "được trả lượt và ngân sách đúng một lần.", wrap=34)
     m.note("n_xacnhan", PROMO, 2.4, LOW,
            "Khách không bị trừ tiền theo con số khác với con số đã thấy. Khách xác "

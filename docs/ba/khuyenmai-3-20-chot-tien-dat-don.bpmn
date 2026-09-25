@@ -68,7 +68,7 @@ số tiền đã giảm" sourceRef="k_ghidon" targetRef="k_ketqua" />
     <bpmn:dataStoreReference id="k_log" name="Nhật ký khuyến mãi" />
     <bpmn:textAnnotation id="n_maychu"><bpmn:text>Máy chủ không nhận đơn giá, tạm tính, phí giao hay số tiền giảm do trình duyệt gửi lên. Lệch giá thì từ chối đơn.</bpmn:text></bpmn:textAnnotation>
     <bpmn:textAnnotation id="n_ship"><bpmn:text>Miễn phí vận chuyển là ngưỡng theo giá trị đơn do máy chủ giữ, không phải một loại mã giảm giá.</bpmn:text></bpmn:textAnnotation>
-    <bpmn:textAnnotation id="n_huy"><bpmn:text>Đơn không thành (khách huỷ, admin huỷ, thanh toán hết hạn hoặc bị huỷ) được trả lượt và ngân sách đúng một lần.</bpmn:text></bpmn:textAnnotation>
+    <bpmn:textAnnotation id="n_huy"><bpmn:text>Đơn bị huỷ (khách huỷ, admin huỷ, hoặc quá 24 giờ chưa thanh toán) được trả lượt và ngân sách đúng một lần.</bpmn:text></bpmn:textAnnotation>
     <bpmn:textAnnotation id="n_xacnhan"><bpmn:text>Khách không bị trừ tiền theo con số khác với con số đã thấy. Khách xác nhận tổng mới thì đơn đi lại từ đầu với mã thay thế.</bpmn:text></bpmn:textAnnotation>
     <bpmn:sequenceFlow id="f_k_sstart_k_gia" name="" sourceRef="k_sstart" targetRef="k_gia" />
     <bpmn:sequenceFlow id="f_k_gia_k_gwgia" name="" sourceRef="k_gia" targetRef="k_gwgia" />

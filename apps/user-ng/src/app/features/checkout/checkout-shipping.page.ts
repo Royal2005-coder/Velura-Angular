@@ -1,10 +1,11 @@
 import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { catchError, of } from 'rxjs';
 import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
+import { CartLine } from '../../core/services/cart.store';
 import { CheckoutStore } from '../../core/services/checkout.store';
-import { formatVnd } from '../../core/utils/money';
+import { formatVnd, toPublicAsset } from '../../core/utils/money';
 import { showToast } from '../../core/utils/toast';
 import { useBodyClass } from '../../core/utils/body-class';
 import { VoucherWallet } from '../../shared/voucher-wallet/voucher-wallet';
@@ -53,6 +54,7 @@ export class CheckoutShippingPage {
   private readonly api = inject(ApiService);
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
   private readonly vouchers = inject(VoucherService);
 
   readonly submitting = signal(false);
@@ -81,7 +83,13 @@ export class CheckoutShippingPage {
   /** Câu báo khi mã khách chọn vừa hết hiệu lực lúc đặt đơn (D1). */
   readonly voucherNotice = signal<string | null>(null);
 
-  readonly items = computed(() => this.checkout.readCheckoutItems());
+  /** Quản lý chỉnh sửa biến thể và cảnh báo tồn kho ngay trong tóm tắt đơn. */
+  readonly editingVariantId = signal<string | null>(null);
+  readonly variantChoices = signal<Array<{ variant_id: string; size?: string; color?: string; stock_quantity?: number }>>([]);
+  readonly loadingVariants = signal(false);
+  readonly outOfStockVariantIds = signal<Set<string>>(new Set());
+
+  readonly items = this.checkout.checkoutItems;
   readonly cartRefs = computed<CartItemRef[]>(() =>
     this.items().map((line) => ({ variant_id: line.variant_id, quantity: line.quantity }))
   );
@@ -123,6 +131,9 @@ export class CheckoutShippingPage {
 
   constructor() {
     useBodyClass('page-checkout');
+    if (this.route.snapshot.queryParamMap.get('stripe') === 'cancel') {
+      showToast('Giao dịch Stripe đã bị hủy. Bạn có thể chọn lại phương thức thanh toán.');
+    }
     // Báo giá lại mỗi khi giỏ, cách giao hoặc lựa chọn mã đổi. Theo dõi nội dung giỏ chứ
     // không theo dõi tham chiếu mảng để không gọi lặp.
     effect(() => {
@@ -201,6 +212,106 @@ export class CheckoutShippingPage {
   }
 
   /**
+   * Resolves a checkout thumbnail for Angular public assets.
+   */
+  imageUrl(line: CartLine): string {
+    return toPublicAsset(line.product_image, '/assets/images/placeholder.jpg');
+  }
+
+  /**
+   * Formats the total price for a line.
+   */
+  lineTotal(line: CartLine): string {
+    return formatVnd(line.unit_price * line.quantity) || '0 đ';
+  }
+
+  /**
+   * Changes the quantity of a line item directly in checkout.
+   */
+  changeItemQty(line: CartLine, delta: number): void {
+    const next = line.quantity + delta;
+    if (next <= 0) {
+      this.removeItem(line);
+      return;
+    }
+    this.checkout.updateItemQty(line.variant_id, next);
+    if (this.outOfStockVariantIds().has(line.variant_id)) {
+      this.outOfStockVariantIds.update((set) => {
+        const copy = new Set(set);
+        copy.delete(line.variant_id);
+        return copy;
+      });
+    }
+  }
+
+  /**
+   * Removes a line item from checkout and syncs with persistent cart.
+   */
+  removeItem(line: CartLine): void {
+    this.checkout.removeItem(line.variant_id);
+    this.outOfStockVariantIds.update((set) => {
+      const copy = new Set(set);
+      copy.delete(line.variant_id);
+      return copy;
+    });
+    if (this.editingVariantId() === line.variant_id) {
+      this.editingVariantId.set(null);
+      this.variantChoices.set([]);
+    }
+  }
+
+  /**
+   * Toggles the variant selector dropdown for a line item.
+   */
+  toggleVariants(line: CartLine): void {
+    if (this.editingVariantId() === line.variant_id) {
+      this.editingVariantId.set(null);
+      this.variantChoices.set([]);
+      return;
+    }
+    this.editingVariantId.set(line.variant_id);
+    this.variantChoices.set([]);
+    this.loadingVariants.set(true);
+    this.api
+      .get<{ variants?: Array<{ variant_id: string; size?: string; color?: string; stock_quantity?: number }> }>(
+        `/api/user/products/${line.product_id}`
+      )
+      .subscribe({
+        next: (product) => {
+          this.loadingVariants.set(false);
+          this.variantChoices.set(product.variants || []);
+        },
+        error: () => {
+          this.loadingVariants.set(false);
+          this.variantChoices.set([]);
+        },
+      });
+  }
+
+  /**
+   * Replaces a line item with another variant.
+   */
+  pickVariant(line: CartLine, option: { variant_id: string; size?: string; color?: string }): void {
+    if (option.variant_id === line.variant_id) {
+      this.editingVariantId.set(null);
+      return;
+    }
+    this.checkout.replaceItemVariant(line.variant_id, {
+      ...line,
+      variant_id: option.variant_id,
+      color: option.color,
+      size: option.size,
+    });
+    this.editingVariantId.set(null);
+    this.variantChoices.set([]);
+    this.outOfStockVariantIds.update((set) => {
+      const copy = new Set(set);
+      copy.delete(line.variant_id);
+      return copy;
+    });
+  }
+
+  /**
    * Saves shipping fields and places the order or sends guest OTP.
    */
   submit(): void {
@@ -270,6 +381,14 @@ export class CheckoutShippingPage {
             return;
           }
           if (res.stripe?.url) {
+            this.checkout.saveCreatedOrder({
+              order_id: res.order.order_id,
+              order_code: res.order.order_code,
+              payment_method: res.order.payment_method,
+              shipping_address: res.order.shipping_address,
+              shipping_method: this.shipping(),
+            });
+            this.checkout.completeCheckout(items);
             window.location.assign(res.stripe.url);
             return;
           }
@@ -278,6 +397,13 @@ export class CheckoutShippingPage {
         error: (error: Error) => {
           this.submitting.set(false);
           if (this.handleVoucherChanged(error)) return;
+          if (error instanceof ApiRequestError && error.code === 'INSUFFICIENT_STOCK') {
+            const details = error.details as { items?: Array<{ variant_id: string }> } | undefined;
+            if (details?.items?.length) {
+              const ids = new Set(details.items.map((i) => i.variant_id));
+              this.outOfStockVariantIds.set(ids);
+            }
+          }
           showToast(error.message || 'Đặt hàng thất bại');
         },
       });

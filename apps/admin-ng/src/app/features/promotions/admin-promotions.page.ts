@@ -405,6 +405,15 @@ export class AdminPromotionsPage {
     return names.join(', ');
   }
 
+  /** Danh mục hiển thị rút gọn trong bảng để giữ layout bảng chuẩn không vỡ. */
+  voucherScopeDisplay(row: AdminVoucherRow): string {
+    const ids = voucherCategoryIds(row.applicable_categories);
+    if (!ids.length) return 'Cả giỏ';
+    const names = ids.map((id) => this.categories().find((item) => item.category_id === id)?.name || 'Danh mục');
+    if (names.length <= 2) return names.join(', ');
+    return `${names.slice(0, 2).join(', ')} (+${names.length - 2})`;
+  }
+
   /** Mức giảm kèm trần giảm, vì với mã phần trăm hai số này phải đọc cùng nhau. */
   voucherCap(row: AdminVoucherRow): string {
     if ((row.discount_type || row.type) !== 'percentage') return '—';

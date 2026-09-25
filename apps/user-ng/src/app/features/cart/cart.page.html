@@ -242,6 +242,30 @@
               }
             }
           </div>
+          <!-- Coolmate Referral Code Input -->
+          <div class="cart-referral-block" style="margin-top: 14px; margin-bottom: 12px;">
+            <label style="display: block; font-size: 0.8125rem; font-weight: 600; color: var(--text-dark, #2a2522); margin-bottom: 6px;">Mã giới thiệu bạn bè</label>
+            <div style="display: flex; gap: 8px;">
+              <input
+                type="text"
+                placeholder="Nhập mã giới thiệu..."
+                [value]="referralCode()"
+                (input)="onReferralInput($event)"
+                style="flex: 1; padding: 8px 12px; border: 1px solid var(--card-border, #E8DFD6); border-radius: 6px; font-size: 0.8125rem; background: #fff;"
+              />
+              <button
+                type="button"
+                (click)="applyReferralCode()"
+                style="padding: 8px 14px; background: var(--terracotta, #C97B63); color: #fff; border: none; border-radius: 6px; font-size: 0.8125rem; font-weight: 600; cursor: pointer;"
+              >
+                {{ referralApplied() ? 'Đã lưu' : 'Áp dụng' }}
+              </button>
+            </div>
+            @if (referralApplied()) {
+              <span style="font-size: 0.75rem; color: #2e7d32; display: inline-block; margin-top: 4px;">✓ Mã giới thiệu sẽ được lưu vào đơn hàng</span>
+            }
+          </div>
+
           @if (selectedItems().length) {
             <app-voucher-wallet
               [orderValue]="selectedSubtotal()"

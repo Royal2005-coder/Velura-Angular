@@ -5,6 +5,7 @@ import { ApiService } from '../../core/services/api.service';
 import { formatVnd } from '../../core/utils/money';
 import { useBodyClass } from '../../core/utils/body-class';
 import { formatOrderTime } from '../../core/utils/order-time';
+import { showToast } from '../../core/utils/toast';
 
 /** Một mốc trên timeline, do API dựng từ lịch sử trạng thái (KAN-39 FR-08). */
 export interface OrderStep {
@@ -48,6 +49,7 @@ export interface MemberOrderDetail {
   steps?: OrderStep[];
   can_cancel?: boolean;
   can_pay_again?: boolean;
+  can_request_return?: boolean;
   pay_again_until?: string | null;
 }
 
@@ -74,9 +76,22 @@ export class AccountOrderDetailPage {
   readonly paying = signal(false);
   readonly payError = signal<string | null>(null);
 
+  /** Return & Exchange state (U2 KAN-29) */
+  readonly returnModalOpen = signal(false);
+  readonly returnType = signal<'refund' | 'exchange'>('refund');
+  readonly returnReason = signal('Sản phẩm bị lỗi / hỏng khi nhận');
+  readonly returnNote = signal('');
+  readonly submittingReturn = signal(false);
+  readonly returnError = signal<string | null>(null);
+  readonly returnSuccess = signal(false);
+
   readonly statusLabel = computed(() => this.order()?.status_label || '—');
   readonly canCancel = computed(() => this.order()?.can_cancel === true);
   readonly canPayAgain = computed(() => this.order()?.can_pay_again === true);
+  readonly canRequestReturn = computed(() => {
+    const o = this.order();
+    return o?.can_request_return === true || o?.status === 'delivered';
+  });
   readonly steps = computed(() => this.order()?.steps || []);
   readonly items = computed(() => this.order()?.items || []);
   readonly codeLabel = computed(() => {
@@ -200,6 +215,62 @@ export class AccountOrderDetailPage {
         this.payError.set(error.message || 'Không mở được trang thanh toán.');
       },
     });
+  }
+
+  openReturnModal(): void {
+    this.returnError.set(null);
+    this.returnSuccess.set(false);
+    this.returnModalOpen.set(true);
+  }
+
+  closeReturnModal(): void {
+    if (this.submittingReturn()) return;
+    this.returnModalOpen.set(false);
+  }
+
+  setReturnType(type: 'refund' | 'exchange'): void {
+    this.returnType.set(type);
+  }
+
+  setReturnReason(event: Event): void {
+    this.returnReason.set((event.target as HTMLSelectElement).value);
+  }
+
+  setReturnNote(event: Event): void {
+    this.returnNote.set((event.target as HTMLTextAreaElement).value);
+  }
+
+  submitReturn(): void {
+    const o = this.order();
+    if (!o?.order_id || this.submittingReturn()) return;
+
+    const returnItems = (o.items || []).map((item) => ({
+      order_item_id: item.item_id,
+      quantity: item.quantity || 1,
+    }));
+
+    this.submittingReturn.set(true);
+    this.returnError.set(null);
+
+    this.api
+      .post<{ success?: boolean; message?: string }>('/api/user/returns', {
+        order_id: o.order_id,
+        return_type: this.returnType(),
+        reason: this.returnReason(),
+        note: this.returnNote().trim(),
+        items: returnItems,
+      })
+      .subscribe({
+        next: () => {
+          this.submittingReturn.set(false);
+          this.returnSuccess.set(true);
+          showToast('Yêu cầu đổi/trả hàng đã được tiếp nhận.');
+        },
+        error: (err: Error) => {
+          this.submittingReturn.set(false);
+          this.returnError.set(err.message || 'Không thể gửi yêu cầu đổi/trả hàng.');
+        },
+      });
   }
 
   money(value: number | undefined): string {

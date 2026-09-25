@@ -162,7 +162,9 @@ async function withOrderError<T>(operation: () => Promise<T>): Promise<T> {
       const details = asJsonObject(error.details);
       const code = asString(details.message) || asString(details.code) || "ORDER_DATABASE_ERROR";
       const status = error.status >= 400 && error.status < 500 ? error.status : 502;
-      throw new HttpError(status, code, orderErrorMessage(code), error.details);
+      // Không chuyển nguyên lỗi PostgREST ra ngoài: frontend hiện `details` trước
+      // `message`, và lỗi thô lộ cấu trúc CSDL. Mã lỗi đã đủ để nhận biết.
+      throw new HttpError(status, code, orderErrorMessage(code));
     }
     throw error;
   }

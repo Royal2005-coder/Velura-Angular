@@ -157,11 +157,73 @@
 
       <aside class="order-summary">
         <h2 class="order-summary__title">Tóm tắt đơn hàng</h2>
-        <div class="checkout-product-list" style="max-height: 400px; overflow-y: auto; padding-right: 8px; margin-bottom: 24px;">
+        <div class="checkout-product-list" style="max-height: 440px; overflow-y: auto; padding-right: 4px; margin-bottom: 24px;">
           @for (line of items(); track line.variant_id) {
-            <article class="product-item">
-              <h4 class="product-item__name">{{ line.product_name }}</h4>
-              <p class="product-item__variant">{{ line.color }} / Size {{ line.size }} × {{ line.quantity }}</p>
+            <article class="checkout-item" [class.checkout-item--warning]="outOfStockVariantIds().has(line.variant_id)">
+              <div class="checkout-item__thumb-wrap">
+                <img [src]="imageUrl(line)" [alt]="line.product_name" class="checkout-item__thumb" loading="lazy" />
+              </div>
+              <div class="checkout-item__body">
+                <div class="checkout-item__header">
+                  <h4 class="checkout-item__name">{{ line.product_name }}</h4>
+                  <button class="checkout-item__remove" type="button" aria-label="Xóa sản phẩm" (click)="removeItem(line)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <line x1="18" y1="6" x2="6" y2="18"></line>
+                      <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                  </button>
+                </div>
+
+                @if (outOfStockVariantIds().has(line.variant_id)) {
+                  <div class="checkout-item__stock-alert">
+                    <span>⚠️ Số lượng đặt vượt quá tồn kho khả dụng</span>
+                  </div>
+                }
+
+                <div class="checkout-item__tags">
+                  <span class="checkout-item__tag">Màu: {{ line.color || 'Mặc định' }}</span>
+                  <span class="checkout-item__tag">Size: {{ line.size || 'M' }}</span>
+                  <button class="checkout-item__tag checkout-item__tag--switch" type="button" (click)="toggleVariants(line)">
+                    {{ editingVariantId() === line.variant_id ? 'Đóng' : 'Đổi màu / size' }}
+                  </button>
+                </div>
+
+                @if (editingVariantId() === line.variant_id) {
+                  <div class="checkout-item__variants-popup">
+                    <p class="checkout-item__variants-title">Chọn màu &amp; kích cỡ:</p>
+                    @if (loadingVariants()) {
+                      <p class="checkout-item__variants-loading">Đang tải biến thể…</p>
+                    } @else if (variantChoices().length === 0) {
+                      <p class="checkout-item__variants-empty">Không có biến thể khác.</p>
+                    } @else {
+                      <div class="checkout-item__variants-grid">
+                        @for (opt of variantChoices(); track opt.variant_id) {
+                          <button
+                            class="checkout-item__variant-btn"
+                            [class.is-active]="opt.variant_id === line.variant_id"
+                            type="button"
+                            (click)="pickVariant(line, opt)"
+                          >
+                            <span>{{ opt.color || 'Màu' }} / {{ opt.size || 'Size' }}</span>
+                            @if (opt.stock_quantity !== undefined) {
+                              <span class="checkout-item__variant-stock">({{ opt.stock_quantity > 0 ? 'còn ' + opt.stock_quantity : 'hết hàng' }})</span>
+                            }
+                          </button>
+                        }
+                      </div>
+                    }
+                  </div>
+                }
+
+                <div class="checkout-item__footer">
+                  <div class="qty-selector qty-selector--compact">
+                    <button class="qty-selector__btn" type="button" (click)="changeItemQty(line, -1)" aria-label="Giảm số lượng">-</button>
+                    <span class="qty-selector__value">{{ line.quantity }}</span>
+                    <button class="qty-selector__btn" type="button" (click)="changeItemQty(line, 1)" aria-label="Tăng số lượng">+</button>
+                  </div>
+                  <span class="checkout-item__price">{{ lineTotal(line) }}</span>
+                </div>
+              </div>
             </article>
           }
         </div>

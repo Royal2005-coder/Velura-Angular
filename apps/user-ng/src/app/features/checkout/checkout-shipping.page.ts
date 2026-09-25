@@ -46,7 +46,10 @@ interface PlaceOrderResponse {
 @Component({
   selector: 'app-checkout-shipping-page',
   imports: [RouterLink, VoucherWallet],
-  host: { style: 'display:block' },
+  host: {
+    style: 'display:block',
+    '(document:click)': 'closeAllDropdowns()',
+  },
   templateUrl: './checkout-shipping.page.html',
 })
 export class CheckoutShippingPage {
@@ -83,11 +86,46 @@ export class CheckoutShippingPage {
   /** Câu báo khi mã khách chọn vừa hết hiệu lực lúc đặt đơn (D1). */
   readonly voucherNotice = signal<string | null>(null);
 
-  /** Quản lý chỉnh sửa biến thể và cảnh báo tồn kho ngay trong tóm tắt đơn. */
-  readonly editingVariantId = signal<string | null>(null);
-  readonly variantChoices = signal<Array<{ variant_id: string; size?: string; color?: string; stock_quantity?: number }>>([]);
+  /** Quản lý Coolmate variant selector pills và dropdowns. */
+  readonly activeDropdown = signal<{ variantId: string; type: 'color' | 'size' } | null>(null);
+  private readonly variantsCache = new Map<string, Array<{ variant_id: string; size?: string; color?: string; stock_quantity?: number }>>();
+  readonly variantsVersion = signal(0);
   readonly loadingVariants = signal(false);
   readonly outOfStockVariantIds = signal<Set<string>>(new Set());
+
+  readonly editingVariantId = computed(() => this.activeDropdown()?.variantId ?? null);
+  readonly variantChoices = computed(() => {
+    this.variantsVersion();
+    const id = this.editingVariantId();
+    if (!id) return [];
+    const item = this.items().find((i) => i.variant_id === id);
+    if (!item) return [];
+    return this.variantsCache.get(item.product_id) || [];
+  });
+
+  /** Quản lý QR Payment Demo (VNPay / MoMo / Napas 247). */
+  readonly qrModalOpen = signal(false);
+  readonly pendingOrder = signal<NonNullable<PlaceOrderResponse['order']> | null>(null);
+  readonly pendingItems = signal<CartLine[]>([]);
+  readonly qrSeconds = signal(900);
+  private qrTimerId: number | null = null;
+
+  readonly pendingOrderCode = computed(() => this.pendingOrder()?.order_code || 'VLR-2026-DEMO');
+  readonly qrImageUrl = computed(() => {
+    const amount = this.total();
+    const code = encodeURIComponent(this.pendingOrderCode());
+    return `https://img.vietqr.io/image/BIDV-6150764893-compact2.png?amount=${amount}&addInfo=${code}&accountName=NGUYEN%20TO%20HOANG%20GIA`;
+  });
+  readonly qrCountdownLabel = computed(() => {
+    const s = this.qrSeconds();
+    const mins = Math.floor(s / 60);
+    const secs = s % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  });
+  readonly qrBankName = 'BIDV (Ngân hàng TMCP Đầu tư và Phát triển Việt Nam)';
+  readonly qrAccountNumber = '6150764893';
+  readonly qrAccountHolder = 'NGUYEN TO HOANG GIA';
+  readonly qrAmountFormatted = computed(() => formatVnd(this.pendingOrder() ? this.total() : 0) || this.totalLabel());
 
   readonly items = this.checkout.checkoutItems;
   readonly cartRefs = computed<CartItemRef[]>(() =>
@@ -254,61 +292,181 @@ export class CheckoutShippingPage {
       copy.delete(line.variant_id);
       return copy;
     });
-    if (this.editingVariantId() === line.variant_id) {
-      this.editingVariantId.set(null);
-      this.variantChoices.set([]);
+    this.activeDropdown.set(null);
+  }
+
+  isDropdownOpen(line: CartLine, type: 'color' | 'size'): boolean {
+    const cur = this.activeDropdown();
+    return cur !== null && cur.variantId === line.variant_id && cur.type === type;
+  }
+
+  toggleDropdown(line: CartLine, type: 'color' | 'size', event?: Event): void {
+    if (event) {
+      event.stopPropagation();
+    }
+    const cur = this.activeDropdown();
+    if (cur && cur.variantId === line.variant_id && cur.type === type) {
+      this.activeDropdown.set(null);
+      return;
+    }
+    this.activeDropdown.set({ variantId: line.variant_id, type });
+    if (!this.variantsCache.has(line.product_id)) {
+      this.loadingVariants.set(true);
+      this.api
+        .get<{ variants?: Array<{ variant_id: string; size?: string; color?: string; stock_quantity?: number }> }>(
+          `/api/user/products/${line.product_id}`
+        )
+        .subscribe({
+          next: (product) => {
+            this.variantsCache.set(line.product_id, product.variants || []);
+            this.variantsVersion.update((v) => v + 1);
+            this.loadingVariants.set(false);
+          },
+          error: () => {
+            this.variantsCache.set(line.product_id, []);
+            this.variantsVersion.update((v) => v + 1);
+            this.loadingVariants.set(false);
+          },
+        });
     }
   }
 
-  /**
-   * Toggles the variant selector dropdown for a line item.
-   */
   toggleVariants(line: CartLine): void {
-    if (this.editingVariantId() === line.variant_id) {
-      this.editingVariantId.set(null);
-      this.variantChoices.set([]);
-      return;
+    if (this.isDropdownOpen(line, 'color') || this.isDropdownOpen(line, 'size')) {
+      this.activeDropdown.set(null);
+    } else {
+      this.toggleDropdown(line, 'color');
     }
-    this.editingVariantId.set(line.variant_id);
-    this.variantChoices.set([]);
-    this.loadingVariants.set(true);
-    this.api
-      .get<{ variants?: Array<{ variant_id: string; size?: string; color?: string; stock_quantity?: number }> }>(
-        `/api/user/products/${line.product_id}`
-      )
-      .subscribe({
-        next: (product) => {
-          this.loadingVariants.set(false);
-          this.variantChoices.set(product.variants || []);
-        },
-        error: () => {
-          this.loadingVariants.set(false);
-          this.variantChoices.set([]);
-        },
-      });
   }
 
-  /**
-   * Replaces a line item with another variant.
-   */
-  pickVariant(line: CartLine, option: { variant_id: string; size?: string; color?: string }): void {
-    if (option.variant_id === line.variant_id) {
-      this.editingVariantId.set(null);
-      return;
-    }
+  pickVariant(line: CartLine, variant: { variant_id: string; color?: string; size?: string }): void {
+    this.activeDropdown.set(null);
     this.checkout.replaceItemVariant(line.variant_id, {
       ...line,
-      variant_id: option.variant_id,
-      color: option.color,
-      size: option.size,
+      variant_id: variant.variant_id,
+      color: variant.color || line.color,
+      size: variant.size || line.size,
     });
-    this.editingVariantId.set(null);
-    this.variantChoices.set([]);
     this.outOfStockVariantIds.update((set) => {
       const copy = new Set(set);
       copy.delete(line.variant_id);
       return copy;
     });
+  }
+
+  getColorsForLine(line: CartLine): string[] {
+    this.variantsVersion();
+    const list = this.variantsCache.get(line.product_id) || [];
+    const set = new Set<string>();
+    if (line.color) set.add(line.color);
+    for (const v of list) {
+      if (v.color) set.add(v.color);
+    }
+    return Array.from(set);
+  }
+
+  getSizesForLine(line: CartLine): string[] {
+    this.variantsVersion();
+    const list = this.variantsCache.get(line.product_id) || [];
+    const set = new Set<string>();
+    if (line.size) set.add(line.size);
+    for (const v of list) {
+      if (v.size) set.add(v.size);
+    }
+    return Array.from(set);
+  }
+
+  pickColor(line: CartLine, color: string): void {
+    this.activeDropdown.set(null);
+    if (line.color === color) return;
+    const list = this.variantsCache.get(line.product_id) || [];
+    const match = list.find((v) => v.color === color && v.size === line.size) || list.find((v) => v.color === color);
+    if (match) {
+      this.checkout.replaceItemVariant(line.variant_id, {
+        ...line,
+        variant_id: match.variant_id,
+        color: match.color || color,
+        size: match.size || line.size,
+      });
+      this.outOfStockVariantIds.update((set) => {
+        const copy = new Set(set);
+        copy.delete(line.variant_id);
+        return copy;
+      });
+    }
+  }
+
+  pickSize(line: CartLine, size: string): void {
+    this.activeDropdown.set(null);
+    if (line.size === size) return;
+    const list = this.variantsCache.get(line.product_id) || [];
+    const match = list.find((v) => v.size === size && v.color === line.color) || list.find((v) => v.size === size);
+    if (match) {
+      this.checkout.replaceItemVariant(line.variant_id, {
+        ...line,
+        variant_id: match.variant_id,
+        color: match.color || line.color,
+        size: match.size || size,
+      });
+      this.outOfStockVariantIds.update((set) => {
+        const copy = new Set(set);
+        copy.delete(line.variant_id);
+        return copy;
+      });
+    }
+  }
+
+  closeAllDropdowns(): void {
+    this.activeDropdown.set(null);
+  }
+
+  copyText(text: string, message: string): void {
+    if (navigator?.clipboard?.writeText) {
+      void navigator.clipboard.writeText(text);
+      showToast(message);
+    } else {
+      showToast(`Đã sao chép: ${text}`);
+    }
+  }
+
+  confirmDemoPayment(): void {
+    const order = this.pendingOrder();
+    const items = this.pendingItems();
+    if (!order) return;
+    this.clearQrTimer();
+    this.qrModalOpen.set(false);
+    this.finishOrder(order, items, this.payment().toUpperCase());
+  }
+
+  closeQrModal(): void {
+    const order = this.pendingOrder();
+    const items = this.pendingItems();
+    this.clearQrTimer();
+    this.qrModalOpen.set(false);
+    if (order) {
+      this.finishOrder(order, items, this.payment().toUpperCase());
+    }
+  }
+
+  private startQrTimer(): void {
+    this.clearQrTimer();
+    this.qrSeconds.set(900);
+    this.qrTimerId = window.setInterval(() => {
+      this.qrSeconds.update((v) => {
+        if (v <= 1) {
+          this.clearQrTimer();
+          return 0;
+        }
+        return v - 1;
+      });
+    }, 1000);
+  }
+
+  private clearQrTimer(): void {
+    if (this.qrTimerId !== null) {
+      window.clearInterval(this.qrTimerId);
+      this.qrTimerId = null;
+    }
   }
 
   /**
@@ -324,10 +482,6 @@ export class CheckoutShippingPage {
     const address = this.composeAddress();
     if (!name || !phone || !address || (!this.auth.isLoggedIn() && !email)) {
       showToast('Vui lòng điền đầy đủ Họ tên, Số điện thoại, Email và Địa chỉ giao hàng!');
-      return;
-    }
-    if (this.payment() === 'vnpay' || this.payment() === 'momo') {
-      showToast('VNPay và MoMo chưa bật. Chọn COD hoặc thẻ Stripe.');
       return;
     }
     if (!this.auth.isLoggedIn() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -390,6 +544,14 @@ export class CheckoutShippingPage {
             });
             this.checkout.completeCheckout(items);
             window.location.assign(res.stripe.url);
+            return;
+          }
+          if (paymentMethod === 'VNPAY' || paymentMethod === 'MOMO') {
+            this.submitting.set(false);
+            this.pendingOrder.set(res.order);
+            this.pendingItems.set(items);
+            this.qrModalOpen.set(true);
+            this.startQrTimer();
             return;
           }
           this.finishOrder(res.order, items, paymentMethod);

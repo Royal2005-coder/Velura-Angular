@@ -244,7 +244,9 @@ export class CheckoutShippingPage {
   onPhoneInput(field: 'phone' | 'otherPhone', event: Event): void {
     const input = event.target as HTMLInputElement;
     const normalized = this.normalizeVnPhone(input.value);
-    input.value = normalized;
+    if (input.value !== normalized) {
+      input.value = normalized;
+    }
     if (field === 'phone') {
       this.phone.set(normalized);
     } else {
@@ -267,11 +269,7 @@ export class CheckoutShippingPage {
    * Updates a shipping form field from the original checkout inputs.
    */
   setField(field: 'name' | 'phone' | 'email' | 'province' | 'district' | 'ward' | 'detail' | 'note', event: Event): void {
-    let value = (event.target as HTMLInputElement | HTMLTextAreaElement).value;
-    if (field === 'phone') {
-      value = this.normalizeVnPhone(value);
-      (event.target as HTMLInputElement).value = value;
-    }
+    const value = (event.target as HTMLInputElement | HTMLTextAreaElement).value;
     const fields = {
       name: this.name,
       phone: this.phone,
@@ -326,7 +324,9 @@ export class CheckoutShippingPage {
   setOtherPhone(event: Event): void {
     const input = event.target as HTMLInputElement;
     const normalized = this.normalizeVnPhone(input.value);
-    input.value = normalized;
+    if (input.value !== normalized) {
+      input.value = normalized;
+    }
     this.otherPhone.set(normalized);
   }
 
@@ -713,9 +713,7 @@ export class CheckoutShippingPage {
       return;
     }
     const name = this.name().trim();
-    let phone = this.phone().trim().replace(/[\s\-\.]/g, '');
-    if (phone.startsWith('+84')) phone = '0' + phone.slice(3);
-    else if (phone.startsWith('84') && phone.length === 11) phone = '0' + phone.slice(2);
+    const phone = this.normalizeVnPhone(this.phone());
     const email = this.email().trim();
     const address = this.composeAddress();
     if (!name || !phone || !address || (!this.auth.isLoggedIn() && !email)) {
@@ -739,9 +737,7 @@ export class CheckoutShippingPage {
       showToast('Đang tính lại tổng tiền, vui lòng đợi trong giây lát.');
       return;
     }
-    let oPhone = this.otherPhone().trim().replace(/[\s\-\.]/g, '');
-    if (oPhone.startsWith('+84')) oPhone = '0' + oPhone.slice(3);
-    else if (oPhone.startsWith('84') && oPhone.length === 11) oPhone = '0' + oPhone.slice(2);
+    const oPhone = this.normalizeVnPhone(this.otherPhone());
     if (this.isOtherRecipient()) {
       if (oPhone && !/^0\d{9}$/.test(oPhone)) {
         showToast('Số điện thoại người nhận thay không hợp lệ (10 số, bắt đầu bằng 0)!');

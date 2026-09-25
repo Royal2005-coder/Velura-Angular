@@ -87,11 +87,21 @@
               @for (component of comboComponents(); track component.product_id; let i = $index) {
                 <div class="combo-component-item">
                   <div class="combo-component-item__header">
-                    <img [src]="comboImage(component)" [alt]="component.name" class="combo-component-item__img" />
+                    <a [routerLink]="['/products', component.slug || component.product_id]" target="_blank" class="combo-component-item__img-link" title="Xem sản phẩm riêng lẻ">
+                      <img [src]="comboImage(component)" [alt]="component.name" class="combo-component-item__img" />
+                    </a>
                     <div class="combo-component-item__info">
                       <span class="combo-component-item__category">{{ component.category_name }}</span>
-                      <span class="combo-component-item__name">{{ component.name }}</span>
-                      <span class="combo-component-item__price">{{ comboRetailLabel(component) }}</span>
+                      <a [routerLink]="['/products', component.slug || component.product_id]" target="_blank" class="combo-component-item__name combo-component-item__link" title="Xem sản phẩm riêng lẻ">
+                        {{ component.name }}
+                      </a>
+                      <div class="combo-component-item__price-row">
+                        <span class="combo-component-item__price">{{ comboRetailLabel(component) }}</span>
+                        <a [routerLink]="['/products', component.slug || component.product_id]" target="_blank" class="combo-component-item__view-single" title="Xem và mua riêng lẻ sản phẩm này">
+                          <span>Xem lẻ</span>
+                          <span aria-hidden="true">&rarr;</span>
+                        </a>
+                      </div>
                     </div>
                     <button
                       type="button"
@@ -164,6 +174,16 @@
                 <span class="combo-summary__total">{{ comboSummary().setPriceLabel }}</span>
               </div>
             </div>
+
+            <div class="product-quantity combo-quantity">
+              <span class="product-option__title">Số lượng set combo</span>
+              <div class="quantity-selector">
+                <button type="button" class="quantity-btn" (click)="decrement()" aria-label="Giảm số lượng set combo">-</button>
+                <input type="number" class="quantity-input" [value]="quantity()" readonly aria-label="Số lượng set combo" />
+                <button type="button" class="quantity-btn" (click)="increment()" aria-label="Tăng số lượng set combo">+</button>
+              </div>
+            </div>
+
             <div class="combo-actions">
               <div class="combo-actions__row">
                 <button type="button" class="btn btn--outline combo-add-cart" (click)="addComboToCart()">

@@ -63,7 +63,8 @@ export async function handleProductsRoute(
               })
               .map((cp) => {
                 const item = comboItems.find((ci) => ci.component_product_id === cp.product_id);
-                const qty = item ? item.quantity : 1;
+                const rawQty = item ? Number(item.quantity) : 1;
+                const qty = Number.isFinite(rawQty) && rawQty > 0 && rawQty < 10 ? rawQty : 1;
                 const compVariants = compVariantsMap.get(cp.product_id) || [];
                 return {
                   product_id: cp.product_id,

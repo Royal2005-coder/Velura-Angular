@@ -119,6 +119,7 @@ export class AdminOrdersPage {
   readonly logRangeLabel = computed(() => adminRangeLabel(this.logsCount(), this.logsPage(), this.pageSize, 'nhật ký'));
 
   readonly selectedItems = computed(() => this.selected()?.items || []);
+  readonly selectedCoolmateMeta = computed(() => parseCoolmateMeta(this.selected()?.internal_note));
   /** Action thường, theo thứ tự API trả. Hủy đơn tách riêng thành nút nguy hiểm (FR-06). */
   readonly primaryActions = computed(() => (this.selected()?.allowed_actions || []).filter((action) => !action.destructive));
   readonly destructiveActions = computed(() => (this.selected()?.allowed_actions || []).filter((action) => action.destructive));
@@ -364,8 +365,24 @@ export class AdminOrdersPage {
     return statusLabelFrom(ORDER_STATUS_LABELS, status);
   }
 
-  paymentMethodLabel(method: string | undefined): string {
-    return method === 'COD' ? 'COD' : method === 'ONLINE_PAYMENT' ? 'Online (Stripe)' : method || '—';
+  paymentMethodLabel(method: string | undefined, order?: AdminOrderRow | null): string {
+    const target = order ?? this.selected();
+    const payments = Array.isArray(target?.payments) ? target!.payments : [];
+    const provider = String(payments[0]?.payment_provider || payments[0]?.payment_method || '').toLowerCase();
+    const note = String(target?.internal_note || '');
+
+    if (provider === 'vnpay' || note.includes('VNPay') || note.includes('VNPAY')) {
+      return 'VNPay (VietQR)';
+    }
+    if (provider === 'momo' || note.includes('MoMo') || note.includes('MOMO')) {
+      return 'MoMo (VietQR)';
+    }
+    if (provider === 'stripe' || note.includes('Stripe')) {
+      return 'Online (Stripe)';
+    }
+    if (method === 'COD') return 'COD';
+    if (method === 'ONLINE_PAYMENT') return 'Online Payment';
+    return method || '—';
   }
 
   eventLabel(event: AdminOrderEvent): string {
@@ -491,4 +508,76 @@ function refundNotice(refund: AdminOrderActionResult['refund']): string | null {
     default:
       return null;
   }
+}
+
+export interface CoolmateOrderMeta {
+  customerNote?: string;
+  referralCode?: string;
+  paymentGateway?: string;
+  gift?: {
+    gender: string;
+    recipientName: string;
+    message?: string;
+  };
+  otherRecipient?: {
+    name: string;
+    phone: string;
+  };
+  vatInvoice?: {
+    company: string;
+    taxCode: string;
+    address: string;
+    email: string;
+  };
+}
+
+export function parseCoolmateMeta(note?: string | null): CoolmateOrderMeta | null {
+  if (!note) return null;
+  const meta: CoolmateOrderMeta = {};
+  let found = false;
+
+  const lines = note.split('\n');
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (line.startsWith('[Ghi chú khách]:')) {
+      meta.customerNote = line.replace('[Ghi chú khách]:', '').trim();
+      found = true;
+    } else if (line.startsWith('[Mã giới thiệu]:')) {
+      meta.referralCode = line.replace('[Mã giới thiệu]:', '').trim();
+      found = true;
+    } else if (line.startsWith('[Cổng thanh toán]:')) {
+      meta.paymentGateway = line.replace('[Cổng thanh toán]:', '').trim();
+      found = true;
+    } else if (line.startsWith('[Quà tặng - Dành cho')) {
+      const match = line.match(/\[Quà tặng - Dành cho (Nam|Nữ)\]:\s*([^-\n]+)(?:\s*-\s*Lời chúc:\s*"(.*)")?/);
+      if (match) {
+        meta.gift = {
+          gender: match[1] || 'Khác',
+          recipientName: match[2]?.trim() || '',
+          message: match[3]?.trim(),
+        };
+        found = true;
+      }
+    } else if (line.startsWith('[Người nhận khác]:')) {
+      const match = line.match(/\[Người nhận khác\]:\s*(.*?)\s*-\s*SĐT:\s*(.*)/);
+      if (match) {
+        meta.otherRecipient = {
+          name: match[1]?.trim() || '',
+          phone: match[2]?.trim() || '',
+        };
+        found = true;
+      }
+    } else if (line.startsWith('[Hóa đơn VAT]:')) {
+      const content = line.replace('[Hóa đơn VAT]:', '').trim();
+      const parts = content.split('|').map((s) => s.trim());
+      meta.vatInvoice = {
+        company: parts[0]?.replace(/^Cty\s*/, '') || '',
+        taxCode: parts[1]?.replace(/^MST:\s*/, '') || '',
+        address: parts[2]?.replace(/^Đ\/c:\s*/, '') || '',
+        email: parts[3]?.replace(/^Email HĐ:\s*/, '') || '',
+      };
+      found = true;
+    }
+  }
+  return found ? meta : null;
 }

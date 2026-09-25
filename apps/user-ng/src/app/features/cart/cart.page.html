@@ -65,6 +65,29 @@
                       <span class="cart-item__tag" style="background: #f4e4dc; color: var(--terracotta); font-weight: 500;">Set phối đồ gợi ý</span>
                       <span class="cart-item__tag" style="white-space: normal; line-height: 1.4;">Gồm: {{ comboIncludes(item) }}</span>
                     </div>
+                    @if (item.items?.length) {
+                      <div class="cart-combo-components" style="margin: 8px 0; display: flex; flex-direction: column; gap: 6px;">
+                        @for (sub of item.items; track sub.variant_id) {
+                          <div style="display: flex; align-items: center; justify-content: space-between; font-size: 0.8125rem; background: #fdfaf8; padding: 6px 10px; border-radius: 6px; border: 1px dashed #ebd9c8;">
+                            <div style="display: flex; align-items: center; gap: 8px; min-width: 0;">
+                              <a [routerLink]="['/products', sub.product_id]" target="_blank" style="display: block; line-height: 0; flex-shrink: 0;" title="Xem sản phẩm riêng lẻ">
+                                <img [src]="sub.product_image" [alt]="sub.product_name" style="width: 28px; height: 36px; object-fit: cover; border-radius: 4px;" />
+                              </a>
+                              <div style="min-width: 0;">
+                                <a [routerLink]="['/products', sub.product_id]" target="_blank" style="color: var(--text-dark); text-decoration: none; font-weight: 500; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="Xem sản phẩm riêng lẻ">
+                                  {{ sub.product_name }}
+                                </a>
+                                <span style="font-size: 0.75rem; color: #8c857e;">{{ sub.color }} / {{ sub.size }}</span>
+                              </div>
+                            </div>
+                            <a [routerLink]="['/products', sub.product_id]" target="_blank" style="font-size: 0.75rem; color: var(--terracotta); text-decoration: none; font-weight: 600; flex-shrink: 0; margin-left: 8px; padding: 2px 6px; border-radius: 4px; background: rgba(161, 130, 101, 0.08);" title="Xem sản phẩm riêng lẻ">
+                              <span>Xem lẻ</span>
+                              <span aria-hidden="true">&rarr;</span>
+                            </a>
+                          </div>
+                        }
+                      </div>
+                    }
                   } @else {
                     <span class="cart-item__subtitle">{{ item.color || 'Màu' }} / {{ item.size || 'Size' }}</span>
 

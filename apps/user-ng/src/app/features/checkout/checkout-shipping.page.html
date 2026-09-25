@@ -133,7 +133,7 @@
                 <span class="option-card__radio"></span>
                 <div>
                   <p class="option-card__title">VNPay</p>
-                  <p class="option-card__desc">Chưa bật. Dùng COD hoặc Stripe.</p>
+                  <p class="option-card__desc">Quét mã VNPAY-QR hoặc ứng dụng ngân hàng (Demo VietQR BIDV)</p>
                 </div>
               </div>
             </label>
@@ -143,7 +143,7 @@
                 <span class="option-card__radio"></span>
                 <div>
                   <p class="option-card__title">MoMo</p>
-                  <p class="option-card__desc">Chưa bật. Dùng COD hoặc Stripe.</p>
+                  <p class="option-card__desc">Quét mã MoMo / Napas 24/7 (Demo VietQR BIDV)</p>
                 </div>
               </div>
             </label>
@@ -166,13 +166,9 @@
               <div class="checkout-item__body">
                 <div class="checkout-item__header">
                   <h4 class="checkout-item__name">{{ line.product_name }}</h4>
-                  <button class="checkout-item__remove" type="button" aria-label="Xóa sản phẩm" (click)="removeItem(line)">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <line x1="18" y1="6" x2="6" y2="18"></line>
-                      <line x1="6" y1="6" x2="18" y2="18"></line>
-                    </svg>
-                  </button>
                 </div>
+
+                <span class="checkout-item__subtitle">{{ line.color || 'Màu' }} / {{ line.size || 'Size' }}</span>
 
                 @if (outOfStockVariantIds().has(line.variant_id)) {
                   <div class="checkout-item__stock-alert">
@@ -180,46 +176,95 @@
                   </div>
                 }
 
-                <div class="checkout-item__tags">
-                  <span class="checkout-item__tag">Màu: {{ line.color || 'Mặc định' }}</span>
-                  <span class="checkout-item__tag">Size: {{ line.size || 'M' }}</span>
-                  <button class="checkout-item__tag checkout-item__tag--switch" type="button" (click)="toggleVariants(line)">
-                    {{ editingVariantId() === line.variant_id ? 'Đóng' : 'Đổi màu / size' }}
-                  </button>
-                </div>
-
-                @if (editingVariantId() === line.variant_id) {
-                  <div class="checkout-item__variants-popup">
-                    <p class="checkout-item__variants-title">Chọn màu &amp; kích cỡ:</p>
-                    @if (loadingVariants()) {
-                      <p class="checkout-item__variants-loading">Đang tải biến thể…</p>
-                    } @else if (variantChoices().length === 0) {
-                      <p class="checkout-item__variants-empty">Không có biến thể khác.</p>
-                    } @else {
-                      <div class="checkout-item__variants-grid">
-                        @for (opt of variantChoices(); track opt.variant_id) {
-                          <button
-                            class="checkout-item__variant-btn"
-                            [class.is-active]="opt.variant_id === line.variant_id"
-                            type="button"
-                            (click)="pickVariant(line, opt)"
-                          >
-                            <span>{{ opt.color || 'Màu' }} / {{ opt.size || 'Size' }}</span>
-                            @if (opt.stock_quantity !== undefined) {
-                              <span class="checkout-item__variant-stock">({{ opt.stock_quantity > 0 ? 'còn ' + opt.stock_quantity : 'hết hàng' }})</span>
-                            }
-                          </button>
+                <div class="coolmate-variant-row">
+                  <!-- Color Pill & Dropdown -->
+                  <div class="coolmate-pill-wrap">
+                    <button
+                      type="button"
+                      class="coolmate-pill-btn"
+                      [class.is-active]="isDropdownOpen(line, 'color')"
+                      (click)="toggleDropdown(line, 'color', $event)"
+                    >
+                      <span>{{ line.color || 'Màu' }}</span>
+                      <span class="coolmate-pill-arrow">⌵</span>
+                    </button>
+                    @if (isDropdownOpen(line, 'color')) {
+                      <div class="coolmate-dropdown-card" (click)="$event.stopPropagation()">
+                        @if (loadingVariants()) {
+                          <div class="coolmate-dropdown-empty">Đang tải...</div>
+                        } @else {
+                          @for (color of getColorsForLine(line); track color) {
+                            <button
+                              type="button"
+                              class="coolmate-dropdown-item"
+                              [class.is-selected]="line.color === color"
+                              (click)="pickColor(line, color)"
+                            >
+                              <span>{{ color }}</span>
+                              @if (line.color === color) {
+                                <span>✓</span>
+                              }
+                            </button>
+                          }
+                          @if (getColorsForLine(line).length === 0) {
+                            <div class="coolmate-dropdown-empty">Không có màu khác</div>
+                          }
                         }
                       </div>
                     }
                   </div>
-                }
+
+                  <!-- Size Pill & Dropdown -->
+                  <div class="coolmate-pill-wrap">
+                    <button
+                      type="button"
+                      class="coolmate-pill-btn"
+                      [class.is-active]="isDropdownOpen(line, 'size')"
+                      (click)="toggleDropdown(line, 'size', $event)"
+                    >
+                      <span>{{ line.size || 'Size' }}</span>
+                      <span class="coolmate-pill-arrow">⌵</span>
+                    </button>
+                    @if (isDropdownOpen(line, 'size')) {
+                      <div class="coolmate-dropdown-card" (click)="$event.stopPropagation()">
+                        @if (loadingVariants()) {
+                          <div class="coolmate-dropdown-empty">Đang tải...</div>
+                        } @else {
+                          @for (size of getSizesForLine(line); track size) {
+                            <button
+                              type="button"
+                              class="coolmate-dropdown-item"
+                              [class.is-selected]="line.size === size"
+                              (click)="pickSize(line, size)"
+                            >
+                              <span>{{ size }}</span>
+                              @if (line.size === size) {
+                                <span>✓</span>
+                              }
+                            </button>
+                          }
+                          @if (getSizesForLine(line).length === 0) {
+                            <div class="coolmate-dropdown-empty">Không có size khác</div>
+                          }
+                        }
+                      </div>
+                    }
+                  </div>
+
+                  <!-- Delete button Coolmate style -->
+                  <button type="button" class="coolmate-delete-btn" (click)="removeItem(line)" title="Xóa khỏi đơn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    </svg>
+                    <span>Xóa</span>
+                  </button>
+                </div>
 
                 <div class="checkout-item__footer">
-                  <div class="qty-selector qty-selector--compact">
-                    <button class="qty-selector__btn" type="button" (click)="changeItemQty(line, -1)" aria-label="Giảm số lượng">-</button>
-                    <span class="qty-selector__value">{{ line.quantity }}</span>
-                    <button class="qty-selector__btn" type="button" (click)="changeItemQty(line, 1)" aria-label="Tăng số lượng">+</button>
+                  <div class="coolmate-qty-stepper">
+                    <button class="coolmate-qty-btn" type="button" (click)="changeItemQty(line, -1)" aria-label="Giảm số lượng">-</button>
+                    <span class="coolmate-qty-val">{{ line.quantity }}</span>
+                    <button class="coolmate-qty-btn" type="button" (click)="changeItemQty(line, 1)" aria-label="Tăng số lượng">+</button>
                   </div>
                   <span class="checkout-item__price">{{ lineTotal(line) }}</span>
                 </div>
@@ -265,4 +310,83 @@
       </aside>
     </div>
   </div>
+
+  @if (qrModalOpen()) {
+    <div class="qr-modal-backdrop" (click)="closeQrModal()">
+      <div class="qr-modal" (click)="$event.stopPropagation()">
+        <div class="qr-modal__header">
+          <div class="qr-modal__brand">
+            <h3>Thanh toán qua quét mã QR</h3>
+            <span class="qr-modal__badge" [class.qr-modal__badge--vnpay]="payment() === 'vnpay'" [class.qr-modal__badge--momo]="payment() === 'momo'">
+              {{ payment() === 'vnpay' ? 'VNPay-QR' : 'MoMo QR' }}
+            </span>
+          </div>
+          <button type="button" class="qr-modal__close" (click)="closeQrModal()" aria-label="Đóng">&times;</button>
+        </div>
+
+        <div class="qr-modal__body">
+          <div class="qr-modal__instruction">
+            <p>Mở ứng dụng <strong>Ngân hàng</strong> hoặc ví <strong>{{ payment() === 'vnpay' ? 'VNPay' : 'MoMo' }}</strong> để quét mã VietQR chuẩn Napas 24/7</p>
+          </div>
+
+          <div class="qr-modal__qrcode-wrap">
+            <img [src]="qrImageUrl()" alt="Mã thanh toán QR" class="qr-modal__image" />
+            <div class="qr-modal__timer">
+              <span>⏳ Hết hạn sau: <strong>{{ qrCountdownLabel() }}</strong></span>
+            </div>
+          </div>
+
+          <div class="qr-modal__details">
+            <div class="qr-modal__detail-row">
+              <span class="qr-modal__label">Ngân hàng thụ hưởng:</span>
+              <span class="qr-modal__val qr-modal__val-strong">{{ qrBankName }}</span>
+            </div>
+            <div class="qr-modal__detail-row">
+              <span class="qr-modal__label">Số tài khoản:</span>
+              <div class="qr-modal__val-wrap">
+                <span class="qr-modal__val qr-modal__val-strong">{{ qrAccountNumber }}</span>
+                <button type="button" class="qr-modal__copy-btn" (click)="copyText(qrAccountNumber, 'Đã sao chép số tài khoản!')">Sao chép</button>
+              </div>
+            </div>
+            <div class="qr-modal__detail-row">
+              <span class="qr-modal__label">Chủ tài khoản:</span>
+              <span class="qr-modal__val qr-modal__val-strong">{{ qrAccountHolder }}</span>
+            </div>
+            <div class="qr-modal__detail-row">
+              <span class="qr-modal__label">Số tiền:</span>
+              <div class="qr-modal__val-wrap">
+                <span class="qr-modal__val qr-modal__val-amount">{{ qrAmountFormatted() }}</span>
+                <button type="button" class="qr-modal__copy-btn" (click)="copyText('' + total(), 'Đã sao chép số tiền!')">Sao chép</button>
+              </div>
+            </div>
+            <div class="qr-modal__detail-row">
+              <span class="qr-modal__label">Nội dung chuyển khoản:</span>
+              <div class="qr-modal__val-wrap">
+                <span class="qr-modal__val qr-modal__val-code">{{ pendingOrderCode() }}</span>
+                <button type="button" class="qr-modal__copy-btn" (click)="copyText(pendingOrderCode(), 'Đã sao chép mã đơn hàng!')">Sao chép</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="qr-modal__demo-alert">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="16" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+            <div>
+              <strong>Chế độ thử nghiệm:</strong> Bạn có thể quét mã chuyển tiền thật hoặc bấm nút <em>"Tôi đã chuyển khoản thành công"</em> để hoàn tất đơn hàng demo ngay lập tức.
+            </div>
+          </div>
+        </div>
+
+        <div class="qr-modal__footer">
+          <button type="button" class="btn btn--outline" (click)="closeQrModal()">Thanh toán sau</button>
+          <button type="button" class="btn btn--primary" (click)="confirmDemoPayment()">
+            ✓ Tôi đã chuyển khoản thành công (Xác nhận Demo)
+          </button>
+        </div>
+      </div>
+    </div>
+  }
 </main>

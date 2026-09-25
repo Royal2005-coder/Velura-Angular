@@ -15,20 +15,20 @@
         <app-admin-empty-state kind="error" icon="alert" title="Không tải được khuyến mãi" [message]="loadError() || ''" />
       } @else if (view() === 'campaigns') {
         @if (summary()) {
-          <div class="admin-stats-grid">
-            <article class="admin-stat-card">
-              <h3 class="admin-stat-card__title">Đang chạy</h3>
-              <p class="admin-stat-card__value">{{ activeCampaigns() }}</p>
-              <p class="admin-stat-card__meta">{{ pendingCampaigns() }} chiến dịch chưa hoặc không còn chạy</p>
+          <div class="admin-kpi-grid">
+            <article class="admin-kpi-card">
+              <span class="admin-kpi-card__label">Đang chạy</span>
+              <strong class="admin-kpi-card__value">{{ activeCampaigns() }}</strong>
+              <p class="admin-kpi-card__trend admin-kpi-card__trend--neutral">{{ pendingCampaigns() }} chiến dịch chưa hoặc không còn chạy</p>
             </article>
-            <article class="admin-stat-card">
-              <h3 class="admin-stat-card__title">Mã còn hiệu lực</h3>
-              <p class="admin-stat-card__value">{{ activeVouchers() }}</p>
+            <article class="admin-kpi-card">
+              <span class="admin-kpi-card__label">Mã còn hiệu lực</span>
+              <strong class="admin-kpi-card__value">{{ activeVouchers() }}</strong>
             </article>
-            <article class="admin-stat-card">
-              <h3 class="admin-stat-card__title">Đã giảm cho khách</h3>
-              <p class="admin-stat-card__value">{{ money(issuedDiscount()) }}</p>
-              <p class="admin-stat-card__meta">
+            <article class="admin-kpi-card">
+              <span class="admin-kpi-card__label">Đã giảm cho khách</span>
+              <strong class="admin-kpi-card__value">{{ money(issuedDiscount()) }}</strong>
+              <p class="admin-kpi-card__trend admin-kpi-card__trend--neutral">
                 @if (totalBudget()) {
                   trên {{ money(totalBudget()) }} ngân sách{{ hasUnbudgetedCampaigns() ? ', có chiến dịch không đặt trần' : '' }}
                 } @else {
@@ -39,8 +39,10 @@
           </div>
         }
         @if (canMutate()) {
-          <div class="admin-toolbar">
-            <button class="admin-btn admin-btn--primary admin-btn--sm" type="button" (click)="openCreate()">Tạo chiến dịch</button>
+          <div class="admin-filter-bar">
+            <div class="admin-filter-bar__actions" style="margin-left: auto;">
+              <button class="admin-btn admin-btn--primary admin-btn--sm" type="button" (click)="openCreate()">Tạo chiến dịch</button>
+            </div>
           </div>
         }
         @if (!promotions().length) {
@@ -69,7 +71,7 @@
                                [style.width.%]="campaignBudgetPercent(row)"></div>
                         </div>
                       }
-                      <small class="admin-note">{{ voucherCoverage(row) }}</small>
+                      <small class="admin-table-subtext">{{ voucherCoverage(row) }}</small>
                       @for (warning of campaignWarnings(row); track warning.code) {
                         <span class="admin-budget__note"
                               [class.admin-budget__note--warning]="warning.level === 'warning'"
@@ -85,14 +87,16 @@
                       </span>
                     </td>
                     <td>
-                      @if (canMutate()) {
-                        <button class="admin-btn admin-btn--outline admin-btn--sm" type="button" (click)="openEdit(row)">Sửa</button>
-                        @if (canToggleCampaign(row)) {
-                          <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="toggleCampaign(row)">
-                            {{ row.can_pause ? 'Tạm dừng' : 'Kích hoạt' }}
-                          </button>
+                      <div class="admin-table-actions">
+                        @if (canMutate()) {
+                          <button class="admin-btn admin-btn--outline admin-btn--sm" type="button" (click)="openEdit(row)">Sửa</button>
+                          @if (canToggleCampaign(row)) {
+                            <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="toggleCampaign(row)">
+                              {{ row.can_pause ? 'Tạm dừng' : 'Kích hoạt' }}
+                            </button>
+                          }
                         }
-                      }
+                      </div>
                     </td>
                   </tr>
                 }
@@ -102,9 +106,8 @@
           <app-admin-pagination [page]="page()" [pageCount]="campaignPageCount()" [label]="campaignRange()" (changed)="goPage($event)" />
         }
       } @else if (view() === 'vouchers') {
-        <div class="admin-toolbar">
-          <label class="admin-toolbar__filter">
-            <span class="admin-form-label">Chiến dịch</span>
+        <div class="admin-filter-bar">
+          <label class="admin-form-group">
             <select class="admin-form-control" [value]="voucherPromoFilter()" (change)="setVoucherPromoFilter($event)">
               <option value="">Tất cả mã</option>
               <option value="none">Mã đứng riêng</option>
@@ -113,9 +116,11 @@
               }
             </select>
           </label>
-          @if (canMutate()) {
-            <button class="admin-btn admin-btn--primary admin-btn--sm" type="button" (click)="openVoucherCreate()">Tạo mã giảm giá</button>
-          }
+          <div class="admin-filter-bar__actions" style="margin-left: auto;">
+            @if (canMutate()) {
+              <button class="admin-btn admin-btn--primary admin-btn--sm" type="button" (click)="openVoucherCreate()">Tạo mã giảm giá</button>
+            }
+          </div>
         </div>
         @if (loadError()) {
           <p class="admin-form-error" role="alert">{{ loadError() }}</p>
@@ -143,10 +148,10 @@
                     <td>{{ voucherCap(row) }}</td>
                     <td>{{ money(row.min_order_value ?? row.min_order) }}</td>
                     <td>{{ voucherAudience(row) }}</td>
-                    <td>{{ voucherScope(row) }}</td>
+                    <td [title]="voucherScope(row)"><span class="admin-table-scope">{{ voucherScopeDisplay(row) }}</span></td>
                     <td>
-                      {{ voucherUsage(row) }}
-                      <small class="admin-note">tối đa {{ row.usage_limit_per_user || 1 }} lượt/khách</small>
+                      <span class="admin-table-figure">{{ voucherUsage(row) }}</span>
+                      <small class="admin-table-subtext">tối đa {{ row.usage_limit_per_user || 1 }} lượt/khách</small>
                     </td>
                     <td>{{ voucherPeriod(row) }}</td>
                     <td>
@@ -155,12 +160,14 @@
                       </span>
                     </td>
                     <td>
-                      @if (canMutate()) {
-                        <button class="admin-btn admin-btn--outline admin-btn--sm" type="button" (click)="openVoucherEdit(row)">Sửa</button>
-                        <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="toggleVoucher(row)">
-                          {{ row.is_active === false ? 'Bật' : 'Tắt' }}
-                        </button>
-                      }
+                      <div class="admin-table-actions">
+                        @if (canMutate()) {
+                          <button class="admin-btn admin-btn--outline admin-btn--sm" type="button" (click)="openVoucherEdit(row)">Sửa</button>
+                          <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="toggleVoucher(row)">
+                            {{ row.is_active === false ? 'Bật' : 'Tắt' }}
+                          </button>
+                        }
+                      </div>
                     </td>
                   </tr>
                 }
@@ -262,7 +269,7 @@
             <button type="button" class="admin-btn" (click)="loadStats()">Thử lại</button>
           </div>
         } @else if (stats(); as data) {
-          <div class="admin-toolbar">
+          <div class="admin-filter-bar">
             <div class="admin-segmented" role="group" aria-label="Khoảng thời gian">
               @for (option of statsRanges; track option.value) {
                 <button type="button" class="admin-segmented__item"
@@ -271,58 +278,56 @@
                         (click)="setStatsRange(option.value)">{{ option.label }}</button>
               }
             </div>
-            <small class="admin-note">Tính trên đơn chưa huỷ, theo ngày tạo đơn. Đơn có mã đã được trả lượt tính như đơn không mã.</small>
+            <span class="admin-table-subtext" style="margin-left: 12px;">Tính trên đơn chưa huỷ, theo ngày tạo đơn.</span>
           </div>
 
-          <div class="admin-stats-grid">
-            <article class="admin-stat-card">
-              <h3 class="admin-stat-card__title">Đơn dùng mã</h3>
-              <p class="admin-stat-card__value">{{ data.orders.voucherRate }}%</p>
-              <p class="admin-stat-card__meta">{{ data.orders.withVoucher }} trên {{ data.orders.total }} đơn</p>
+          <div class="admin-kpi-grid">
+            <article class="admin-kpi-card">
+              <span class="admin-kpi-card__label">Đơn dùng mã</span>
+              <strong class="admin-kpi-card__value">{{ data.orders.voucherRate }}%</strong>
+              <p class="admin-kpi-card__trend admin-kpi-card__trend--neutral">{{ data.orders.withVoucher }} trên {{ data.orders.total }} đơn</p>
             </article>
 
-            <article class="admin-stat-card">
-              <h3 class="admin-stat-card__title">Doanh thu từ đơn có mã</h3>
-              <p class="admin-stat-card__value">{{ money(data.orders.revenueWithVoucher) }}</p>
-              <p class="admin-stat-card__meta">{{ data.orders.revenueShareWithVoucher }}% tổng doanh thu · đã giảm {{ money(data.orders.discountTotal) }}</p>
+            <article class="admin-kpi-card">
+              <span class="admin-kpi-card__label">Doanh thu từ đơn có mã</span>
+              <strong class="admin-kpi-card__value">{{ money(data.orders.revenueWithVoucher) }}</strong>
+              <p class="admin-kpi-card__trend admin-kpi-card__trend--neutral">{{ data.orders.revenueShareWithVoucher }}% tổng doanh thu · đã giảm {{ money(data.orders.discountTotal) }}</p>
             </article>
 
-            <article class="admin-stat-card">
-              <h3 class="admin-stat-card__title">Giá trị đơn trung bình</h3>
-              <p class="admin-stat-card__value">{{ money(data.orders.aovWithVoucher) }}</p>
-              <p class="admin-stat-card__meta">có mã · không mã {{ money(data.orders.aovWithoutVoucher) }}</p>
+            <article class="admin-kpi-card">
+              <span class="admin-kpi-card__label">Giá trị đơn trung bình</span>
+              <strong class="admin-kpi-card__value">{{ money(data.orders.aovWithVoucher) }}</strong>
+              <p class="admin-kpi-card__trend admin-kpi-card__trend--neutral">có mã · không mã {{ money(data.orders.aovWithoutVoucher) }}</p>
             </article>
 
-            <article class="admin-stat-card">
-              <h3 class="admin-stat-card__title">Ngân sách chiến dịch</h3>
+            <article class="admin-kpi-card">
+              <span class="admin-kpi-card__label">Ngân sách chiến dịch</span>
               @if (data.promotions.budgetedCampaigns) {
-                <p class="admin-stat-card__value">{{ data.promotions.budgetUsagePercent }}%</p>
-                <p class="admin-stat-card__meta">{{ money(data.promotions.issuedDiscount) }} trên {{ money(data.promotions.totalBudget) }}</p>
+                <strong class="admin-kpi-card__value">{{ data.promotions.budgetUsagePercent }}%</strong>
+                <p class="admin-kpi-card__trend admin-kpi-card__trend--neutral">{{ money(data.promotions.issuedDiscount) }} trên {{ money(data.promotions.totalBudget) }}</p>
                 <div class="admin-progress" role="img"
                      [attr.aria-label]="'Đã dùng ' + data.promotions.budgetUsagePercent + '% ngân sách'">
                   <div class="admin-progress__bar" [style.width.%]="data.promotions.budgetUsagePercent"></div>
                 </div>
               } @else {
-                <p class="admin-stat-card__value">{{ money(data.promotions.issuedDiscount) }}</p>
-                <p class="admin-stat-card__meta">đã giảm, chưa chiến dịch nào đặt trần ngân sách</p>
+                <strong class="admin-kpi-card__value">{{ money(data.promotions.issuedDiscount) }}</strong>
+                <p class="admin-kpi-card__trend admin-kpi-card__trend--neutral">đã giảm, chưa chiến dịch nào đặt trần ngân sách</p>
               }
             </article>
 
-            <article class="admin-stat-card">
-              <h3 class="admin-stat-card__title">Chiến dịch</h3>
-              <p class="admin-stat-card__value">{{ data.promotions.running }} / {{ data.promotions.total }}</p>
-              <p class="admin-stat-card__meta">
-                đang chạy · {{ data.promotions.scheduled }} sắp chạy · {{ data.promotions.paused }} tạm dừng ·
-                {{ data.promotions.ended }} đã kết thúc · {{ data.promotions.budgetExhausted }} cạn ngân sách
+            <article class="admin-kpi-card">
+              <span class="admin-kpi-card__label">Chiến dịch</span>
+              <strong class="admin-kpi-card__value">{{ data.promotions.running }} / {{ data.promotions.total }}</strong>
+              <p class="admin-kpi-card__trend admin-kpi-card__trend--neutral">
+                đang chạy · {{ data.promotions.scheduled }} sắp chạy · {{ data.promotions.paused }} tạm dừng
               </p>
             </article>
 
-            <article class="admin-stat-card">
-              <h3 class="admin-stat-card__title">Mã giảm giá</h3>
-              <p class="admin-stat-card__value">{{ data.vouchers.active }} / {{ data.vouchers.total }}</p>
-              <p class="admin-stat-card__meta">
-                còn hiệu lực · {{ data.vouchers.scheduled }} chưa tới ngày · {{ data.vouchers.expired }} hết hạn ·
-                đã dùng {{ data.vouchers.totalUsed }} lượt
+            <article class="admin-kpi-card">
+              <span class="admin-kpi-card__label">Mã giảm giá</span>
+              <strong class="admin-kpi-card__value">{{ data.vouchers.active }} / {{ data.vouchers.total }}</strong>
+              <p class="admin-kpi-card__trend admin-kpi-card__trend--neutral">
+                còn hiệu lực · đã dùng {{ data.vouchers.totalUsed }} lượt
               </p>
             </article>
           </div>

@@ -561,3 +561,194 @@
     background-color: transparent;
   }
 }
+
+/* ============================================================
+   Coolmate Variant Selector & Pill Dropdowns
+   ============================================================ */
+.cart-item__subtitle {
+  font-size: 0.8125rem;
+  color: #6b7280;
+  margin: 2px 0 4px;
+  display: block;
+}
+
+.coolmate-variant-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0;
+  position: relative;
+  flex-wrap: wrap;
+}
+
+.coolmate-pill-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+.coolmate-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #f3f4f6;
+  color: #1f2937;
+  border: 1px solid transparent;
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.coolmate-pill-btn:hover {
+  background: #e5e7eb;
+}
+
+.coolmate-pill-btn.is-active {
+  background: #e5e7eb;
+  border-color: #d1d5db;
+}
+
+.coolmate-pill-arrow {
+  display: inline-block;
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.coolmate-pill-btn.is-active .coolmate-pill-arrow {
+  transform: rotate(180deg);
+}
+
+.coolmate-dropdown-card {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 120;
+  min-width: 130px;
+  max-height: 200px;
+  overflow-y: auto;
+  background: #ffffff;
+  border-radius: 10px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e5e7eb;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  animation: dropdownFadeIn 0.15s ease-out;
+}
+
+.coolmate-dropdown-card::before {
+  content: "";
+  position: absolute;
+  top: -5px;
+  left: 16px;
+  width: 8px;
+  height: 8px;
+  background: #ffffff;
+  border-left: 1px solid #e5e7eb;
+  border-top: 1px solid #e5e7eb;
+  transform: rotate(45deg);
+}
+
+.coolmate-dropdown-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 0;
+  background: transparent;
+  color: #374151;
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  width: 100%;
+}
+
+.coolmate-dropdown-item:hover {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.coolmate-dropdown-item.is-selected {
+  background: #f3f4f6;
+  font-weight: 600;
+  color: #111827;
+}
+
+.coolmate-dropdown-empty {
+  padding: 8px 10px;
+  font-size: 0.6875rem;
+  color: #9ca3af;
+  text-align: center;
+}
+
+.coolmate-delete-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  background: transparent;
+  color: #6b7280;
+  font-family: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 3px 0;
+  transition: color 0.15s ease;
+  width: max-content;
+}
+
+.coolmate-delete-btn:hover {
+  color: #ef4444;
+}
+
+.coolmate-delete-btn svg {
+  width: 13px;
+  height: 13px;
+}
+
+.coolmate-qty-stepper {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+  padding: 2px 6px;
+  background: #ffffff;
+  gap: 4px;
+}
+
+.coolmate-qty-btn {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 0;
+  background: transparent;
+  color: #374151;
+  font-size: 0.9375rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.coolmate-qty-btn:hover {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.coolmate-qty-val {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  min-width: 18px;
+  text-align: center;
+  color: #111827;
+}
+

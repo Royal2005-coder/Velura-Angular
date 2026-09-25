@@ -322,3 +322,435 @@
   color: var(--dark, #2b2623);
 }
 
+/* ============================================================
+   Coolmate Variant Selector & Pill Dropdowns
+   ============================================================ */
+.checkout-item__subtitle,
+.cart-item__subtitle {
+  font-size: 0.8125rem;
+  color: #6b7280;
+  margin: 2px 0 4px;
+  display: block;
+}
+
+.coolmate-variant-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0;
+  position: relative;
+  flex-wrap: wrap;
+}
+
+.coolmate-pill-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+.coolmate-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #f3f4f6;
+  color: #1f2937;
+  border: 1px solid transparent;
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.coolmate-pill-btn:hover {
+  background: #e5e7eb;
+}
+
+.coolmate-pill-btn.is-active {
+  background: #e5e7eb;
+  border-color: #d1d5db;
+}
+
+.coolmate-pill-arrow {
+  display: inline-block;
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.coolmate-pill-btn.is-active .coolmate-pill-arrow {
+  transform: rotate(180deg);
+}
+
+.coolmate-dropdown-card {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 120;
+  min-width: 130px;
+  max-height: 200px;
+  overflow-y: auto;
+  background: #ffffff;
+  border-radius: 10px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e5e7eb;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  animation: dropdownFadeIn 0.15s ease-out;
+}
+
+@keyframes dropdownFadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.coolmate-dropdown-card::before {
+  content: "";
+  position: absolute;
+  top: -5px;
+  left: 16px;
+  width: 8px;
+  height: 8px;
+  background: #ffffff;
+  border-left: 1px solid #e5e7eb;
+  border-top: 1px solid #e5e7eb;
+  transform: rotate(45deg);
+}
+
+.coolmate-dropdown-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 0;
+  background: transparent;
+  color: #374151;
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  width: 100%;
+}
+
+.coolmate-dropdown-item:hover {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.coolmate-dropdown-item.is-selected {
+  background: #f3f4f6;
+  font-weight: 600;
+  color: #111827;
+}
+
+.coolmate-dropdown-empty {
+  padding: 8px 10px;
+  font-size: 0.6875rem;
+  color: #9ca3af;
+  text-align: center;
+}
+
+.coolmate-delete-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  background: transparent;
+  color: #6b7280;
+  font-family: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 3px 0;
+  transition: color 0.15s ease;
+  width: max-content;
+}
+
+.coolmate-delete-btn:hover {
+  color: #ef4444;
+}
+
+.coolmate-delete-btn svg {
+  width: 13px;
+  height: 13px;
+}
+
+.coolmate-qty-stepper {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+  padding: 2px 6px;
+  background: #ffffff;
+  gap: 4px;
+}
+
+.coolmate-qty-btn {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 0;
+  background: transparent;
+  color: #374151;
+  font-size: 0.9375rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.coolmate-qty-btn:hover {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.coolmate-qty-val {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  min-width: 18px;
+  text-align: center;
+  color: #111827;
+}
+
+/* ============================================================
+   QR Payment Modal (VNPay / MoMo / VietQR)
+   ============================================================ */
+.qr-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(17, 24, 39, 0.65);
+  backdrop-filter: blur(4px);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  overflow-y: auto;
+  animation: qrModalFadeIn 0.2s ease-out;
+}
+
+@keyframes qrModalFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.qr-modal {
+  background: #ffffff;
+  border-radius: 16px;
+  width: min(520px, 100%);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: qrModalScaleUp 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes qrModalScaleUp {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.qr-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.qr-modal__brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.qr-modal__brand h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #111827;
+}
+
+.qr-modal__badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.qr-modal__badge--vnpay {
+  background: #005baa;
+  color: #ffffff;
+}
+
+.qr-modal__badge--momo {
+  background: #a50064;
+  color: #ffffff;
+}
+
+.qr-modal__close {
+  background: transparent;
+  border: 0;
+  color: #9ca3af;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  transition: all 0.15s;
+}
+
+.qr-modal__close:hover {
+  color: #374151;
+  background: #f3f4f6;
+}
+
+.qr-modal__body {
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.qr-modal__instruction p {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: #4b5563;
+  text-align: center;
+}
+
+.qr-modal__qrcode-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 14px;
+  background: #fafaf9;
+  border: 1px dashed #e5e7eb;
+  border-radius: 12px;
+}
+
+.qr-modal__image {
+  width: 200px;
+  height: 200px;
+  object-fit: contain;
+  background: #ffffff;
+  padding: 6px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.qr-modal__timer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  color: #d97706;
+}
+
+.qr-modal__details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: #f9fafb;
+  border-radius: 10px;
+  padding: 12px 14px;
+  border: 1px solid #f3f4f6;
+}
+
+.qr-modal__detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.75rem;
+}
+
+.qr-modal__label {
+  color: #6b7280;
+  flex-shrink: 0;
+}
+
+.qr-modal__val {
+  color: #1f2937;
+  text-align: right;
+}
+
+.qr-modal__val-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.qr-modal__val-strong {
+  color: #111827;
+  font-size: 0.875rem;
+}
+
+.qr-modal__val-amount {
+  color: var(--terracotta, #c97b63);
+  font-size: 0.9375rem;
+  font-weight: 700;
+}
+
+.qr-modal__val-code {
+  color: #2563eb;
+  font-family: monospace;
+  font-size: 0.875rem;
+}
+
+.qr-modal__copy-btn {
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.qr-modal__copy-btn:hover {
+  background: #f3f4f6;
+  border-color: #9ca3af;
+}
+
+.qr-modal__demo-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: #1e40af;
+  font-size: 0.6875rem;
+  line-height: 1.4;
+}
+
+.qr-modal__demo-alert svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.qr-modal__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 20px;
+  background: #fafaf9;
+  border-top: 1px solid #f3f4f6;
+}
+
+

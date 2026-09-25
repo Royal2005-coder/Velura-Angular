@@ -23,18 +23,37 @@ test("GET order list and detail delegate to service", async () => {
   assert.equal(JSON.parse(detail.response.body).order_id, ORDER_ID);
 });
 
-test("POST status, cancel and payment resolve parse JSON bodies", async () => {
-  let statusBody;
-  const status = await route("POST", ["api", "v1", "admin", "orders", ORDER_ID, "change-status"], {
-    status: "confirmed", reason: "Da xac minh thong tin dat hang", expectedVersion: 1
-  }, { changeStatus: async (_context, _id, body) => { statusBody = body; return { status: body.status }; } });
-  assert.equal(status.result, true);
-  assert.equal(statusBody.status, "confirmed");
+test("the old change-status and cancel routes are gone", async () => {
+  for (const segment of ["change-status", "cancel"]) {
+    const handled = await route("POST", ["api", "v1", "admin", "orders", ORDER_ID, segment], {}, {});
+    assert.equal(handled.result, false);
+  }
+});
 
-  const cancel = await route("POST", ["api", "v1", "admin", "orders", ORDER_ID, "cancel"], {
-    reason: "Khach hang yeu cau huy don hang", expectedVersion: 2
-  }, { cancel: async () => ({ refund_pending: false }) });
-  assert.equal(cancel.response.status, 200);
+test("GET summary is not mistaken for an order id", async () => {
+  const summary = await route("GET", ["api", "v1", "admin", "orders", "summary"], {}, {
+    summary: async () => ({ by_status: [], attention: 0 }),
+    get: async () => { throw new Error("summary must not hit get"); }
+  });
+  assert.equal(JSON.parse(summary.response.body).attention, 0);
+});
+
+test("POST action, carrier simulation and payment resolve parse JSON bodies", async () => {
+  let action;
+  let actionBody;
+  const performed = await route("POST", ["api", "v1", "admin", "orders", ORDER_ID, "actions", "confirm_cod"], {
+    note: "Da goi xac nhan voi khach", expectedVersion: 1
+  }, { performAction: async (_context, _id, code, body) => { action = code; actionBody = body; return { order: {} }; } });
+  assert.equal(performed.result, true);
+  assert.equal(action, "confirm_cod");
+  assert.equal(actionBody.expectedVersion, 1);
+
+  let outcome;
+  const simulated = await route("POST", ["api", "v1", "admin", "orders", ORDER_ID, "simulate-carrier"], {
+    outcome: "delivered"
+  }, { simulateCarrier: async (_context, _id, body) => { outcome = body.outcome; return { order: {} }; } });
+  assert.equal(simulated.response.status, 200);
+  assert.equal(outcome, "delivered");
 
   let paymentId;
   const payment = await route("POST", ["api", "v1", "admin", "orders", ORDER_ID, "payments", PAYMENT_ID, "resolve"], {

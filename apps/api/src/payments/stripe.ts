@@ -1,9 +1,8 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { config } from "../config.js";
 import { HttpError } from "../http.js";
-import { insertRow, selectOne, selectRows, updateRows } from "../supabase.js";
-import { releaseOrderVoucher } from "../user/vouchers.js";
-import type { JsonObject } from "../types.js";
+import { callRpc, insertRow, selectOne, selectRows, updateRows } from "../supabase.js";
+import { asString, errorMessage, type JsonObject } from "../types.js";
 
 /**
  * Hạn của một phiên Stripe Checkout.
@@ -17,7 +16,7 @@ export const STRIPE_CHECKOUT_TTL_SECONDS = 31 * 60;
 
 /**
  * Card checkout through Stripe test mode. COD stays a separate path.
- * The order stays pending until `payment_intent.succeeded` marks the payment paid.
+ * Đơn online nằm ở Chờ thanh toán cho tới khi webhook báo tiền về (OPEN-05).
  */
 export function stripeConfigured(): boolean {
   return Boolean(config.stripeSecretKey);
@@ -38,6 +37,7 @@ export type StripeEventAction =
     /** Mã phiên Checkout khi sự kiện mang theo, để chỉ đóng đúng phiên đó. */
     sessionId: string | null;
   }
+  | { kind: "refunded"; paymentIntentId: string }
   | { kind: "ignore"; reason: string };
 
 /**
@@ -51,6 +51,17 @@ export type StripeEventAction =
 export function classifyStripeEvent(event: JsonObject): StripeEventAction {
   const type = typeof event.type === "string" ? event.type : "unknown";
   const object = (event.data as JsonObject | undefined)?.object as JsonObject | undefined;
+
+  // Hoàn tiền nhận ra bằng PaymentIntent của charge, không bằng metadata: payment lưu
+  // mã PaymentIntent ở `gateway_transaction_ref` từ lúc tiền về.
+  if (type === "charge.refunded") {
+    const intent = object?.payment_intent;
+    const paymentIntentId = typeof intent === "string" ? intent : (intent as JsonObject | undefined)?.id;
+    return typeof paymentIntentId === "string" && paymentIntentId
+      ? { kind: "refunded", paymentIntentId }
+      : { kind: "ignore", reason: "missing_payment_intent" };
+  }
+
   const orderId = (object?.metadata as JsonObject | undefined)?.order_id;
   if (typeof orderId !== "string" || !orderId) {
     return { kind: "ignore", reason: "missing_order" };
@@ -171,16 +182,16 @@ async function transitionPendingStripePayment(
 }
 
 /**
- * Đóng payment Stripe của một đơn khi phiên thanh toán kết thúc mà không thu được tiền,
- * rồi trả lượt mã và ngân sách chiến dịch của đơn đó.
+ * Đóng payment Stripe của một phiên thanh toán đã kết thúc mà không thu được tiền.
  *
  * Enum `payment_status` không có `expired` hay `cancelled`, nên ghi `failed` và để lý
- * do thật ở `gateway_response_code`. Chỉ trả lượt khi chính lần gọi này đổi được payment
- * khỏi `pending`, nên webhook gửi lại hai lần cũng chỉ trả một lần (U1-20). Hàm trả lượt
- * phía CSDL cũng tự chặn lần thứ hai, nên đây là hai lớp chứ không phải một.
+ * do thật ở `gateway_response_code`. Chỉ đổi khi chính lần gọi này đổi được payment khỏi
+ * `pending`, nên webhook gửi lại hai lần cũng chỉ ghi một lần (U1-20).
  *
- * Không đổi trạng thái đơn: bộ trạng thái mới của KAN-59 chưa chốt và màn "Hết hạn thanh
- * toán" thuộc U1.
+ * Không đổi trạng thái đơn và không trả lượt mã: theo OPEN-05 đơn vẫn Chờ thanh toán,
+ * khách còn thanh toán lại được trong 24 giờ với đúng mức giảm đã thấy. Lượt mã được trả
+ * khi đơn thật sự bị huỷ (trigger của migration 034), kể cả khi hệ thống tự huỷ lúc hết
+ * 24 giờ.
  */
 export async function closeStripePayment(
   orderId: string,
@@ -191,16 +202,20 @@ export async function closeStripePayment(
     payment_status: "failed",
     gateway_response_code: reason
   }, sessionId);
-  if (!closed) return "ignored";
-  await releaseOrderVoucher(orderId, reason);
-  return "closed";
+  return closed ? "closed" : "ignored";
 }
 
 /**
- * Marks the Stripe payment paid and decrements stock once.
- * A repeat webhook for the same PaymentIntent does not decrement again.
+ * Ghi nhận tiền về cho một đơn, đúng một lần.
+ *
+ * - Đơn còn Chờ thanh toán: System chuyển sang Đã xác nhận và trừ kho trong cùng một
+ *   giao dịch ở cơ sở dữ liệu (action `payment_succeeded`, AC-07).
+ * - Đơn đã bị huỷ trước khi tiền về (OPEN-05): không trừ kho, hoàn lại tiền ngay.
+ *
+ * Webhook gửi lại không làm gì thêm: chỉ lần cập nhật đổi được payment khỏi `pending` mới
+ * đi tiếp.
  */
-export async function markStripePaymentPaid(orderId: string, paymentIntentId: string): Promise<"paid" | "ignored"> {
+export async function markStripePaymentPaid(orderId: string, paymentIntentId: string): Promise<"paid" | "refunding" | "ignored"> {
   const paid = await transitionPendingStripePayment(orderId, {
     payment_status: "paid",
     paid_at: new Date().toISOString(),
@@ -208,9 +223,6 @@ export async function markStripePaymentPaid(orderId: string, paymentIntentId: st
     gateway_transaction_ref: paymentIntentId
   });
   if (!paid) {
-    // Không còn payment đang chờ: hoặc webhook này là bản gửi lại, hoặc phiên đã hết hạn.
-    // Bản cũ đọc rồi mới kiểm `=== "paid"`, nên hai webhook đến cùng lúc đều thấy
-    // pending và đều trừ kho. Nay chỉ lần cập nhật trúng dòng mới đi tiếp.
     const existing = await selectRows("payment", {
       order_id: `eq.${orderId}`,
       payment_provider: "eq.stripe",
@@ -219,12 +231,117 @@ export async function markStripePaymentPaid(orderId: string, paymentIntentId: st
     });
     return existing.rows[0] ? "paid" : "ignored";
   }
-  const { rows: items } = await selectRows("order_item", { order_id: `eq.${orderId}`, limit: 100 });
-  for (const item of items) {
-    const variant = await selectOne("variant", { variant_id: `eq.${item.variant_id}` });
-    if (!variant) continue;
-    const nextStock = Math.max(0, Number(variant.stock_quantity) - Number(item.quantity));
-    await updateRows("variant", { variant_id: `eq.${item.variant_id}` }, { stock_quantity: nextStock });
+
+  const order = await selectOne("orders", { order_id: `eq.${orderId}`, select: "order_id,status" });
+  if (asString(order?.status) === "cancelled") {
+    await updateRows("payment", { payment_id: `eq.${paid.payment_id}` }, {
+      payment_status: "refund_pending",
+      refund_amount: paid.amount,
+      refund_reason: "Tiền về sau khi đơn đã huỷ",
+      gateway_response_code: "REFUND_REQUESTED"
+    });
+    await refundStripeOrder(orderId);
+    return "refunding";
+  }
+  if (asString(order?.status) === "waiting_payment") {
+    await callRpc("velura_order_service_action", {
+      p_order_id: orderId,
+      p_action: "payment_succeeded",
+      p_actor_id: null,
+      p_note: "Stripe xác nhận thanh toán thành công",
+      p_payload: { payment_intent: paymentIntentId },
+      p_expected_version: null
+    });
   }
   return "paid";
+}
+
+/** Kết quả một lần yêu cầu hoàn tiền. */
+export interface RefundResult {
+  status: "refunded" | "requested" | "failed" | "skipped";
+  message?: string;
+}
+
+/**
+ * Hoàn toàn bộ tiền của payment Stripe đang Chờ hoàn tiền của một đơn.
+ *
+ * Idempotency key gắn với payment và phiên bản của nó: gọi lại vì mạng chập chờn thì
+ * Stripe trả lại đúng kết quả cũ, còn "Thử hoàn tiền lại" sau khi lỗi (payment đã tăng
+ * phiên bản) là một yêu cầu mới. Stripe từ chối thì payment giữ `refund_pending` và mang
+ * dấu `REFUND_FAILED` để admin thấy và thử lại (OPEN-02).
+ */
+export async function refundStripeOrder(orderId: string, fetchImpl: typeof fetch = fetch): Promise<RefundResult> {
+  const payment = await selectOne("payment", {
+    order_id: `eq.${orderId}`,
+    payment_provider: "eq.stripe",
+    payment_status: "eq.refund_pending",
+    order: "created_at.desc"
+  });
+  if (!payment) return { status: "skipped", message: "Không có payment Stripe nào chờ hoàn tiền" };
+  const intent = asString(payment.gateway_transaction_ref);
+  if (!config.stripeSecretKey || !intent.startsWith("pi_")) {
+    await markRefundFailed(orderId, payment, !config.stripeSecretKey ? "Chưa cấu hình STRIPE_SECRET_KEY" : "Thiếu mã PaymentIntent của giao dịch");
+    return { status: "failed", message: "Không gửi được yêu cầu hoàn tiền tới Stripe" };
+  }
+  try {
+    const response = await fetchImpl("https://api.stripe.com/v1/refunds", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${config.stripeSecretKey}`,
+        "content-type": "application/x-www-form-urlencoded",
+        "idempotency-key": `refund-${asString(payment.payment_id)}-${String(payment.version ?? 1)}`
+      },
+      body: new URLSearchParams({ payment_intent: intent, "metadata[order_id]": orderId })
+    });
+    const body = await response.json() as { id?: string; status?: string; error?: { message?: string } };
+    if (!response.ok || !body.id || body.status === "failed" || body.status === "canceled") {
+      await markRefundFailed(orderId, payment, body.error?.message || `Stripe trả trạng thái ${body.status || response.status}`);
+      return { status: "failed", message: body.error?.message || "Stripe từ chối hoàn tiền" };
+    }
+    if (body.status === "succeeded") {
+      await completeRefund(asString(payment.payment_id));
+      return { status: "refunded" };
+    }
+    // `pending`: Stripe xử lý bất đồng bộ, webhook `charge.refunded` sẽ chốt.
+    return { status: "requested" };
+  } catch (error: unknown) {
+    await markRefundFailed(orderId, payment, errorMessage(error));
+    return { status: "failed", message: "Không kết nối được Stripe" };
+  }
+}
+
+/** Webhook `charge.refunded`: chốt payment đang chờ hoàn thành Đã hoàn tiền, một lần. */
+export async function markStripeRefunded(paymentIntentId: string): Promise<"refunded" | "ignored"> {
+  const changed = await updateRows("payment", {
+    gateway_transaction_ref: `eq.${paymentIntentId}`,
+    payment_provider: "eq.stripe",
+    payment_status: "eq.refund_pending"
+  }, {
+    payment_status: "refunded",
+    refund_at: new Date().toISOString(),
+    gateway_response_code: "REFUNDED"
+  });
+  return changed.length ? "refunded" : "ignored";
+}
+
+async function completeRefund(paymentId: string): Promise<void> {
+  await updateRows("payment", { payment_id: `eq.${paymentId}`, payment_status: "eq.refund_pending" }, {
+    payment_status: "refunded",
+    refund_at: new Date().toISOString(),
+    gateway_response_code: "REFUNDED"
+  });
+}
+
+async function markRefundFailed(orderId: string, payment: JsonObject, message: string): Promise<void> {
+  await updateRows("payment", { payment_id: `eq.${asString(payment.payment_id)}` }, {
+    gateway_response_code: "REFUND_FAILED"
+  });
+  await insertRow("order_event", {
+    order_id: orderId,
+    action: "refund_failed",
+    actor_type: "system",
+    result: "failed",
+    note: message.slice(0, 500),
+    payload: { payment_id: payment.payment_id }
+  });
 }

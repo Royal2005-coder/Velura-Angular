@@ -207,7 +207,7 @@ export async function handleReturnsRoute(
     }
 
     // Enforce order status check
-    if (!["delivered", "completed"].includes(asString(order.status))) {
+    if (asString(order.status) !== "delivered") {
       throw new HttpError(400, "BAD_REQUEST", "Đơn hàng phải hoàn thành mới được yêu cầu đổi trả");
     }
 

@@ -119,6 +119,8 @@ function lifecycleActions(row) {
   if (status !== "ended") {
     btns.push(`<button class="admin-icon-button admin-icon-button--sm" data-promo-edit="promotion:${id}" title="Chỉnh sửa">${icon("edit")}</button>`);
   }
+  // Nút Nhân đôi (Duplicate) chiến dịch
+  btns.push(`<button class="admin-icon-button admin-icon-button--sm" data-promo-duplicate="${id}" title="Nhân đôi chiến dịch">${icon("copy")}</button>`);
   // Toggle: running → pause, paused → activate. Không hiện cho ended/scheduled/budget_exhausted
   if (status === "running") {
     btns.push(`<button class="admin-icon-button admin-icon-button--sm admin-icon-button--warn" data-promo-pause="${id}" title="Tạm dừng chiến dịch">${icon("pause")}</button>`);
@@ -957,11 +959,27 @@ async function loadComboItems(productId) {
   }
 }
 
-// ─── CAMPAIGN FORM (Tạo / Sửa) ───────────────────────────────────────────────
-function openCampaignForm(id = null) {
+// ─── CAMPAIGN FORM (Tạo / Sửa / Nhân đôi) ───────────────────────────────────
+function openCampaignForm(id = null, duplicateRow = null) {
   const existing = id ? state.promotions.find(r => r.promo_id === id) : null;
   const isEdit = !!existing;
-  const row = existing || {};
+  const isDuplicate = !!duplicateRow;
+  
+  let row = existing || {};
+  if (isDuplicate) {
+    const defaultStart = new Date();
+    const defaultEnd = new Date(Date.now() + 30 * 86400000);
+    row = {
+      promo_name: (duplicateRow.promo_name || "") + " (Bản sao)",
+      promo_type: duplicateRow.promo_type || "product_discount",
+      description: duplicateRow.description || "",
+      highlight_label: duplicateRow.highlight_label || "",
+      budget_limit: duplicateRow.budget_limit || 0,
+      banner_url: duplicateRow.banner_url || "",
+      start_date: defaultStart.toISOString(),
+      end_date: defaultEnd.toISOString(),
+    };
+  }
 
   // Loại chiến dịch: CHỈ chọn khi tạo mới, disable khi sửa (spec mục 7)
   const typeOptions = [
@@ -980,7 +998,7 @@ function openCampaignForm(id = null) {
     <section class="admin-modal admin-modal--lg">
       <form data-promo-campaign-form data-id="${esc(id||"")}">
         <header class="admin-modal__header">
-          <h2>${isEdit ? "Chỉnh sửa chiến dịch" : "Tạo chiến dịch mới"}</h2>
+          <h2>${isEdit ? "Chỉnh sửa chiến dịch" : isDuplicate ? "Nhân đôi chiến dịch (Bản sao)" : "Tạo chiến dịch mới"}</h2>
           <button class="admin-icon-button" type="button" data-promo-close>×</button>
         </header>
         <div class="admin-modal__body" style="display:grid;gap:14px">
@@ -1544,6 +1562,15 @@ document.addEventListener("click", async event => {
     return;
   }
 
+  // Campaign duplicate form
+  const dupBtn = event.target.closest("[data-promo-duplicate]");
+  if (dupBtn) {
+    const id = dupBtn.dataset.promoDuplicate;
+    const target = state.promotions.find(r => r.promo_id === id);
+    if (target) { overlay.innerHTML = ""; openCampaignForm(null, target); }
+    return;
+  }
+
   // Create buttons (topbar)
   const modalBtn = event.target.closest("[data-promo-modal]");
   if (modalBtn) {
@@ -1697,10 +1724,19 @@ document.addEventListener("submit", async event => {
       return;
     }
 
+    let highlightLabel = form.elements.highlight_label?.value.trim() || null;
+    // Gap 5: Nhãn nổi bật tự động sinh "Còn N ngày" khi để trống và kết thúc trong ≤3 ngày
+    if (!highlightLabel && endDate > startDate) {
+      const daysLeft = Math.ceil((endDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+      if (daysLeft > 0 && daysLeft <= 3) {
+        highlightLabel = `Còn ${daysLeft} ngày`;
+      }
+    }
+
     const body = {
       name:           form.elements.promo_name.value.trim(),
       description:    form.elements.description?.value.trim() || null,
-      highlightLabel: form.elements.highlight_label?.value.trim() || null,
+      highlightLabel: highlightLabel,
       startDate:      startDate.toISOString(),
       endDate:        endDate.toISOString(),
       budgetLimit:    Number(form.elements.budget_limit?.value || 0),
@@ -1797,13 +1833,22 @@ document.addEventListener("submit", async event => {
     const form = event.target;
     const submitBtn = form.querySelector("[type=submit]");
     if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = "Đang tạo…"; }
+
+    const rawSku = form.elements.sku.value.trim().toUpperCase();
+    const skuPattern = /^VLR-[A-Z0-9]{2}-\d{3}$/;
+    if (!skuPattern.test(rawSku)) {
+      showToast("⚠️ Mã SKU Combo phải đúng định dạng VLR-XX-000 (Ví dụ: VLR-CB-001)", "error");
+      if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = "Tạo combo"; }
+      return;
+    }
+
     try {
       const name = form.elements.name.value.trim();
       const slug = name.toLowerCase()
         .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
         .replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
       await productApi.create({
-        sku:          form.elements.sku.value.trim().toUpperCase(),
+        sku:          rawSku,
         name, slug,
         description:  form.elements.description?.value.trim() || null,
         categoryId:   form.elements.categoryId.value,

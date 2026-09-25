@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './core/guards/auth.guard';
+import { purchaseFlowGuard } from './core/guards/purchase-flow.guard';
 import { SiteShell } from './layout/site-shell/site-shell';
 
 export const routes: Routes = [
@@ -148,9 +149,23 @@ export const routes: Routes = [
         title: 'Ví Voucher - Velura Store',
       },
       {
+        path: 'checkout/guest',
+        canActivate: [purchaseFlowGuard],
+        data: { audience: 'guest', area: 'checkout' },
+        loadComponent: () => import('./features/checkout/purchase-flow.page').then((m) => m.PurchaseFlowPage),
+        title: 'Thanh toán khách — Velura',
+      },
+      {
+        path: 'checkout/user',
+        canActivate: [purchaseFlowGuard],
+        data: { audience: 'user', area: 'checkout' },
+        loadComponent: () => import('./features/checkout/purchase-flow.page').then((m) => m.PurchaseFlowPage),
+        title: 'Thanh toán thành viên — Velura',
+      },
+      {
         path: 'checkout/shipping',
-        loadComponent: () => import('./features/checkout/checkout-shipping.page').then((m) => m.CheckoutShippingPage),
-        title: 'Vận chuyển & Thanh toán',
+        pathMatch: 'full',
+        redirectTo: '/checkout/guest',
       },
       {
         path: 'checkout/payment',

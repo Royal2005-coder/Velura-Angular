@@ -21,157 +21,183 @@
     <div class="checkout-grid">
       <div class="checkout-main">
         <section class="card">
-          <div class="card__header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <div class="card__header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid #ebd9c8; padding-bottom: 12px;">
             <div style="display: flex; align-items: center; gap: 8px;">
-              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                <path d="M10.5 18.17c1.55-1.34 6.17-5.67 6.17-9.84a4.17 4.17 0 00-8.33 0c0 4.17 4.62 8.5 6.17 9.84z" stroke="#7C5454" stroke-width="1.67" />
-              </svg>
-              <h2 class="section-title" style="margin: 0;">Thông tin giao hàng</h2>
+              <span style="font-size: 1.25rem;">📍</span>
+              <h2 class="section-title" style="margin: 0; font-size: 1.125rem;">Địa chỉ nhận hàng</h2>
             </div>
-          </div>
-
-          @if (savedAddresses().length > 0) {
-            <div class="checkout-address-mode-selector" style="display: flex; gap: 8px; margin-bottom: 18px; background: #fdfbf7; padding: 6px; border-radius: 8px; border: 1px solid #ebd9c8;">
+            @if (savedAddresses().length > 0) {
               <button
                 type="button"
-                class="btn-address-mode"
-                [style.background]="addressMode() === 'default' ? '#7C5454' : 'transparent'"
-                [style.color]="addressMode() === 'default' ? '#fff' : '#4a4039'"
-                style="flex: 1; padding: 8px 10px; border-radius: 6px; border: none; font-size: 0.8125rem; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 4px;"
-                (click)="setAddressMode('default')"
-              >
-                <span>🏠 Mặc định</span>
-              </button>
-              <button
-                type="button"
-                class="btn-address-mode"
-                [style.background]="addressMode() === 'saved' ? '#7C5454' : 'transparent'"
-                [style.color]="addressMode() === 'saved' ? '#fff' : '#4a4039'"
-                style="flex: 1; padding: 8px 10px; border-radius: 6px; border: none; font-size: 0.8125rem; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 4px;"
+                style="background: transparent; border: none; color: #7C5454; font-size: 0.875rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 4px;"
                 (click)="openAddressModal()"
+                title="Chọn địa chỉ từ sổ địa chỉ"
               >
-                <span>📖 Đã lưu ({{ savedAddresses().length }})</span>
+                <span>Thay đổi</span>
+                <span style="font-size: 0.85rem;">›</span>
               </button>
-              <button
-                type="button"
-                class="btn-address-mode"
-                [style.background]="addressMode() === 'new' ? '#7C5454' : 'transparent'"
-                [style.color]="addressMode() === 'new' ? '#fff' : '#4a4039'"
-                style="flex: 1; padding: 8px 10px; border-radius: 6px; border: none; font-size: 0.8125rem; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 4px;"
-                (click)="setAddressMode('new')"
-              >
-                <span>➕ Địa chỉ mới</span>
-              </button>
-            </div>
-          }
-          <div class="form-group">
-            <label for="fullname">Họ và tên *</label>
-            <input
-              class="form-input"
-              type="text"
-              id="fullname"
-              autocomplete="name"
-              placeholder="Nhập họ và tên"
-              [value]="name()"
-              (input)="setField('name', $event)"
-              (change)="setField('name', $event)"
-            />
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label for="guest-phone">Số điện thoại *</label>
-              <input
-                class="form-input"
-                type="tel"
-                id="guest-phone"
-                autocomplete="tel"
-                placeholder="0901 234 567"
-                [value]="phone()"
-                (input)="setField('phone', $event)"
-                (change)="setField('phone', $event)"
-              />
-            </div>
-            <div class="form-group">
-              <label for="guest-email">Email *</label>
-              <input
-                class="form-input"
-                type="email"
-                id="guest-email"
-                autocomplete="email"
-                placeholder="email@example.com"
-                [value]="email()"
-                (input)="setField('email', $event)"
-                (change)="setField('email', $event)"
-              />
-            </div>
-          </div>
-          <div class="form-row form-row--three">
-            <div class="form-group">
-              <label for="address-province">Tỉnh/Thành phố *</label>
-              <input
-                class="form-input"
-                type="text"
-                id="address-province"
-                autocomplete="address-level1"
-                placeholder="Chọn Tỉnh/Thành phố"
-                [value]="province()"
-                (input)="setField('province', $event)"
-                (change)="setField('province', $event)"
-              />
-            </div>
-            <div class="form-group">
-              <label for="address-district">Quận/Huyện *</label>
-              <input
-                class="form-input"
-                type="text"
-                id="address-district"
-                autocomplete="address-level2"
-                placeholder="Chọn Quận/Huyện"
-                [value]="district()"
-                (input)="setField('district', $event)"
-                (change)="setField('district', $event)"
-              />
-            </div>
-            <div class="form-group">
-              <label for="address-ward">Phường/Xã *</label>
-              <input
-                class="form-input"
-                type="text"
-                id="address-ward"
-                autocomplete="address-level3"
-                placeholder="Chọn Phường/Xã"
-                [value]="ward()"
-                (input)="setField('ward', $event)"
-                (change)="setField('ward', $event)"
-              />
-            </div>
-          </div>
-          <div class="form-group">
-            <label for="guest-address-detail">Địa chỉ cụ thể *</label>
-            <input
-              class="form-input"
-              type="text"
-              id="guest-address-detail"
-              autocomplete="street-address"
-              placeholder="Số nhà, tên đường"
-              [value]="detail()"
-              (input)="setField('detail', $event)"
-              (change)="setField('detail', $event)"
-            />
+            }
           </div>
 
-          @if (auth.isLoggedIn()) {
-            <div style="margin: 4px 0 16px 0; padding: 10px 14px; background: #faf8f5; border-radius: 8px; border: 1px dashed #d5c4b5;">
-              <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 0.875rem; color: #4a4039; font-weight: 500;">
-                <input
-                  type="checkbox"
-                  [checked]="saveNewAddress()"
-                  (change)="toggleSaveNewAddress($event)"
-                  style="width: 17px; height: 17px; accent-color: #7C5454; cursor: pointer;"
-                />
-                <span>Lưu địa chỉ này vào sổ địa chỉ (không ghi đè dữ liệu cũ)</span>
-              </label>
+          @if (savedAddresses().length > 0 && addressMode() !== 'new') {
+            <div class="shopee-address-card" style="background: #faf7f2; border: 1px solid #e2d2c1; border-radius: 10px; padding: 14px 18px; margin-bottom: 18px; position: relative;">
+              <div style="display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 6px;">
+                <span style="font-weight: 700; color: #222; font-size: 1rem;">{{ name() }}</span>
+                <span style="color: #666; font-size: 0.9375rem;">{{ phone() }}</span>
+                @if (selectedAddressIsDefault()) {
+                  <span style="background: #7C5454; color: #fff; font-size: 0.6875rem; font-weight: 600; padding: 2px 8px; border-radius: 4px; text-transform: uppercase;">Mặc định</span>
+                }
+              </div>
+              <p style="margin: 0 0 10px 0; color: #4a4039; font-size: 0.9375rem; line-height: 1.5;">
+                {{ composeAddress() }}
+              </p>
+              @if (email()) {
+                <div style="font-size: 0.8125rem; color: #7a7068; margin-bottom: 8px;">
+                  <span>Email xác nhận: <strong>{{ email() }}</strong></span>
+                </div>
+              }
+              <div style="display: flex; gap: 14px; align-items: center; margin-top: 10px; border-top: 1px dashed #d5c4b5; padding-top: 10px;">
+                <button
+                  type="button"
+                  style="background: transparent; border: none; color: #7C5454; font-size: 0.8125rem; font-weight: 600; cursor: pointer; padding: 0; display: flex; align-items: center; gap: 4px;"
+                  (click)="openAddressModal()"
+                >
+                  <span>📖 Chọn địa chỉ khác ({{ savedAddresses().length }})</span>
+                </button>
+                <span style="color: #c0b0a0;">|</span>
+                <button
+                  type="button"
+                  style="background: transparent; border: none; color: #7C5454; font-size: 0.8125rem; font-weight: 600; cursor: pointer; padding: 0; display: flex; align-items: center; gap: 4px;"
+                  (click)="setAddressMode('new')"
+                >
+                  <span>➕ Thêm địa chỉ mới</span>
+                </button>
+              </div>
             </div>
+          } @else {
+            @if (savedAddresses().length > 0 && addressMode() === 'new') {
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; background: #faf7f2; padding: 10px 14px; border-radius: 8px; border: 1px solid #ebd9c8;">
+                <span style="font-size: 0.875rem; font-weight: 600; color: #4a4039;">➕ Nhập địa chỉ giao hàng mới</span>
+                <button
+                  type="button"
+                  style="background: transparent; border: none; color: #7C5454; font-size: 0.8125rem; font-weight: 600; cursor: pointer;"
+                  (click)="setAddressMode('default')"
+                >
+                  ← Quay lại địa chỉ đã lưu
+                </button>
+              </div>
+            }
+
+            <div class="form-group">
+              <label for="fullname">Họ và tên *</label>
+              <input
+                class="form-input"
+                type="text"
+                id="fullname"
+                autocomplete="name"
+                placeholder="Nhập họ và tên"
+                [value]="name()"
+                (input)="setField('name', $event)"
+                (change)="setField('name', $event)"
+              />
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="guest-phone">Số điện thoại *</label>
+                <input
+                  class="form-input"
+                  type="tel"
+                  id="guest-phone"
+                  autocomplete="tel"
+                  placeholder="0901 234 567"
+                  [value]="phone()"
+                  (input)="onPhoneInput('phone', $event)"
+                  (change)="onPhoneInput('phone', $event)"
+                  (blur)="onPhoneBlur('phone', $event)"
+                />
+              </div>
+              <div class="form-group">
+                <label for="guest-email">Email *</label>
+                <input
+                  class="form-input"
+                  type="email"
+                  id="guest-email"
+                  autocomplete="email"
+                  placeholder="email@example.com"
+                  [value]="email()"
+                  (input)="setField('email', $event)"
+                  (change)="setField('email', $event)"
+                />
+              </div>
+            </div>
+            <div class="form-row form-row--three">
+              <div class="form-group">
+                <label for="address-province">Tỉnh/Thành phố *</label>
+                <input
+                  class="form-input"
+                  type="text"
+                  id="address-province"
+                  autocomplete="address-level1"
+                  placeholder="Chọn Tỉnh/Thành phố"
+                  [value]="province()"
+                  (input)="setField('province', $event)"
+                  (change)="setField('province', $event)"
+                />
+              </div>
+              <div class="form-group">
+                <label for="address-district">Quận/Huyện *</label>
+                <input
+                  class="form-input"
+                  type="text"
+                  id="address-district"
+                  autocomplete="address-level2"
+                  placeholder="Chọn Quận/Huyện"
+                  [value]="district()"
+                  (input)="setField('district', $event)"
+                  (change)="setField('district', $event)"
+                />
+              </div>
+              <div class="form-group">
+                <label for="address-ward">Phường/Xã *</label>
+                <input
+                  class="form-input"
+                  type="text"
+                  id="address-ward"
+                  autocomplete="address-level3"
+                  placeholder="Chọn Phường/Xã"
+                  [value]="ward()"
+                  (input)="setField('ward', $event)"
+                  (change)="setField('ward', $event)"
+                />
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="guest-address-detail">Địa chỉ cụ thể *</label>
+              <input
+                class="form-input"
+                type="text"
+                id="guest-address-detail"
+                autocomplete="street-address"
+                placeholder="Số nhà, tên đường"
+                [value]="detail()"
+                (input)="setField('detail', $event)"
+                (change)="setField('detail', $event)"
+              />
+            </div>
+
+            @if (auth.isLoggedIn()) {
+              <div style="margin: 4px 0 16px 0; padding: 10px 14px; background: #faf8f5; border-radius: 8px; border: 1px dashed #d5c4b5;">
+                <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 0.875rem; color: #4a4039; font-weight: 500;">
+                  <input
+                    type="checkbox"
+                    [checked]="saveNewAddress()"
+                    (change)="toggleSaveNewAddress($event)"
+                    style="width: 17px; height: 17px; accent-color: #7C5454; cursor: pointer;"
+                  />
+                  <span>Lưu địa chỉ này vào sổ địa chỉ (không ghi đè dữ liệu cũ)</span>
+                </label>
+              </div>
+            }
           }
 
           <!-- Coolmate: Gọi người khác nhận hàng -->
@@ -204,7 +230,9 @@
                       class="form-input"
                       placeholder="09xx xxx xxx"
                       [value]="otherPhone()"
-                      (input)="setOtherPhone($event)"
+                      (input)="onPhoneInput('otherPhone', $event)"
+                      (change)="onPhoneInput('otherPhone', $event)"
+                      (blur)="onPhoneBlur('otherPhone', $event)"
                     />
                   </div>
                 </div>
@@ -709,6 +737,12 @@
             </div>
           </div>
 
+          @if (qrTimedOut()) {
+            <div style="background: #fdf2f2; border: 1px solid #f5c2c7; border-radius: 8px; padding: 12px; margin-top: 14px; color: #842029; font-size: 0.875rem;">
+              ⚠️ Đã hết thời gian thanh toán (15 phút). Vui lòng bấm <strong>🔄 Gia hạn 15 phút</strong> hoặc <strong>💳 Đổi sang COD</strong> để tiếp tục.
+            </div>
+          }
+
           <div class="qr-modal__demo-alert">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="12" r="10"></circle>
@@ -727,9 +761,14 @@
             <button type="button" class="btn btn--secondary" (click)="switchToCod()" [disabled]="switchingToCod()" title="Chuyển ngay sang thanh toán khi nhận hàng">
               {{ switchingToCod() ? 'Đang chuyển đổi…' : '💳 Đổi sang COD' }}
             </button>
+            @if (qrTimedOut()) {
+              <button type="button" class="btn btn--outline" (click)="retryQrPayment()" title="Gia hạn thời gian thanh toán thêm 15 phút">
+                🔄 Gia hạn 15 phút
+              </button>
+            }
           </div>
-          <button type="button" class="btn btn--primary" (click)="confirmDemoPayment()">
-            ✓ Tôi đã chuyển khoản thành công (Xác nhận Demo)
+          <button type="button" class="btn btn--primary" (click)="confirmDemoPayment()" [disabled]="confirmingPayment()">
+            {{ confirmingPayment() ? 'Đang xác nhận…' : '✓ Tôi đã chuyển khoản thành công (Xác nhận Demo)' }}
           </button>
         </div>
       </div>

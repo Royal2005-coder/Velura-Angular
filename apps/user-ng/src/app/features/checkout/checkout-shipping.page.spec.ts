@@ -66,7 +66,7 @@ async function createPage(options: {
   await TestBed.configureTestingModule({
     imports: [CheckoutShippingPage],
     providers: [
-      provideRouter([]),
+      provideRouter([{ path: '**', component: class {} }]),
       { provide: ApiService, useValue: api },
       { provide: AuthService, useValue: { isLoggedIn: () => true } },
     ],
@@ -206,6 +206,50 @@ describe('CheckoutShippingPage', () => {
 
     expect(page.submitting()).toBe(false);
     expect(page.outOfStockVariantIds().has('v1')).toBe(true);
+  });
+
+  it('xác nhận thanh toán demo gọi endpoint confirm-payment và cập nhật trạng thái đơn', async () => {
+    const { page, calls } = await createPage({});
+    page.pendingOrder.set({ order_id: 'ord-123', order_code: 'VLR123456789', payment_method: 'VNPAY' });
+    page.pendingItems.set(CART);
+    page.qrModalOpen.set(true);
+
+    page.confirmDemoPayment();
+
+    const confirmCall = calls.find((c) => c.path === '/api/user/orders/ord-123/confirm-payment');
+    expect(confirmCall).toBeTruthy();
+    expect(page.qrModalOpen()).toBe(false);
+  });
+
+  it('chuẩn hóa số điện thoại Việt Nam khi autofill hoặc nhập +84', async () => {
+    const { page } = await createPage({});
+    expect(page.normalizeVnPhone('+84913956506')).toBe('0913956506');
+    expect(page.normalizeVnPhone('84913956506')).toBe('0913956506');
+    expect(page.normalizeVnPhone('0913 956 506')).toBe('0913956506');
+    expect(page.normalizeVnPhone('0084913956506')).toBe('0913956506');
+
+    const fakeInput = document.createElement('input');
+    fakeInput.value = '+84913956506';
+    page.onPhoneInput('phone', { target: fakeInput } as unknown as Event);
+    expect(fakeInput.value).toBe('0913956506');
+    expect(page.phone()).toBe('0913956506');
+  });
+
+  it('chọn địa chỉ mặc định và chuyển đổi chế độ địa chỉ kiểu Shopee', async () => {
+    const { page } = await createPage({});
+    const addr = {
+      name: 'Nguyễn Văn B',
+      phone: '+84987654321',
+      detail: '456 Hai Bà Trưng, Phường Bến Nghé, Quận 1',
+      is_default: true,
+    };
+    page.savedAddresses.set([addr]);
+    page.selectSavedAddress(addr);
+
+    expect(page.phone()).toBe('0987654321');
+    expect(page.addressMode()).toBe('default');
+    expect(page.selectedAddressIsDefault()).toBe(true);
+    expect(page.composeAddress()).toBe('456 Hai Bà Trưng, Phường Bến Nghé, Quận 1');
   });
 });
 

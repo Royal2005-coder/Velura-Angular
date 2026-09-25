@@ -44,8 +44,12 @@
       <span class="hot-offer-ticker__label">Ưu đãi hot</span>
       <div class="hot-offer-ticker__viewport">
         <div class="hot-offer-ticker__track">
-          @for (banner of banners; track banner.id) {
-            <a class="hot-offer-ticker__item" [routerLink]="'/offers'" [queryParams]="{ offer: banner.id }">{{ banner.title }}</a>
+          @for (banner of banners(); track banner.promo_id) {
+            <a class="hot-offer-ticker__item" [routerLink]="'/offers'" [queryParams]="{ offer: banner.promo_id }">
+              {{ banner.highlight_label ? banner.highlight_label + ' · ' : '' }}{{ banner.title }}
+            </a>
+          } @empty {
+            <a class="hot-offer-ticker__item" routerLink="/offers">Xem các ưu đãi đang có tại Velura</a>
           }
         </div>
       </div>

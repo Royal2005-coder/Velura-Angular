@@ -14,7 +14,7 @@ export class CheckoutConfirmPage {
   private readonly created = this.checkout.readCreatedOrder();
   readonly tempPassword = localStorage.getItem('guest_temp_password');
 
-  readonly trackingCode = computed(() => this.created?.tracking_code || this.created?.order_id || '—');
+  readonly orderCode = computed(() => this.created?.order_code || this.created?.order_id || '—');
   readonly paymentLabel = computed(() => {
     const method = this.created?.payment_method || 'COD';
     if (method === 'COD' || method === 'cod') {

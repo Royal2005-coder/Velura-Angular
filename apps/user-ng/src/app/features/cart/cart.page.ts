@@ -1,25 +1,40 @@
 import { Component, computed, inject, signal } from '@angular/core';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { CartLine, CartStore, GroupedCartItem } from '../../core/services/cart.store';
+import { ApiService } from '../../core/services/api.service';
 import { formatVnd, toPublicAsset } from '../../core/utils/money';
 import { showToast } from '../../core/utils/toast';
 import { useBodyClass } from '../../core/utils/body-class';
+import { VoucherWallet } from '../../shared/voucher-wallet/voucher-wallet';
+import type { AppliedVoucher, CartItemRef } from '../../core/models/voucher.interface';
 
 const ITEMS_PER_PAGE = 5;
 const SELECTED_KEY = 'selected_cart_items';
 const CHECKOUT_ITEMS_KEY = 'checkout_items';
+const VOUCHER_ID_KEY = 'checkout_voucher_id';
+/** Khách đã chủ động bỏ mã ở giỏ; trang thanh toán không tự áp lại. */
+const VOUCHER_DECLINED_KEY = 'checkout_voucher_declined';
 
 type PageItem = { kind: 'page'; value: number } | { kind: 'dots'; value: number };
 
 @Component({
   selector: 'app-cart-page',
-  imports: [RouterLink],
+  imports: [RouterLink, VoucherWallet],
   host: { class: 'page-cart', style: 'display:block' },
   templateUrl: './cart.page.html',
 })
 export class CartPage {
   private readonly cart = inject(CartStore);
+  private readonly api = inject(ApiService);
+  readonly editingVariantId = signal<string | null>(null);
+  readonly variantChoices = signal<Array<{ variant_id: string; size?: string; color?: string; stock_quantity?: number }>>([]);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
+
+  /** Mã mang theo từ nút "Dùng mã" ở trang Ưu đãi (`/cart?voucher=CODE`). */
+  readonly preferredVoucher = this.route.snapshot.queryParamMap.get('voucher');
+  readonly appliedVoucher = signal<AppliedVoucher | null>(null);
+  readonly voucherDeclined = signal(false);
 
   readonly currentPage = signal(1);
   readonly selectedIds = signal<string[]>(this.readSelectedIds());
@@ -55,6 +70,23 @@ export class CartPage {
   readonly selectedSubtotal = computed(() =>
     this.selectedItems().reduce((sum, item) => sum + item.unit_price * item.quantity, 0),
   );
+  /**
+   * Dòng hàng gửi cho ví mã, đã tách combo thành từng biến thể như lúc đặt đơn, để mã
+   * theo danh mục được chấm trên đúng những gì sẽ vào đơn.
+   */
+  readonly selectedRefs = computed<CartItemRef[]>(() =>
+    this.cart.expandGroupedItems(this.selectedItems()).map((line) => ({ variant_id: line.variant_id, quantity: line.quantity })),
+  );
+  /**
+   * Tiền giảm ước tính ở giỏ. Phí vận chuyển chưa biết nên mã miễn phí vận chuyển chưa
+   * trừ ở đây; con số chốt là báo giá ở trang thanh toán.
+   */
+  readonly estimatedDiscount = computed(() => {
+    const voucher = this.appliedVoucher();
+    if (!voucher || voucher.discount_type === 'free_shipping') return 0;
+    return Math.min(voucher.discount_amount, this.selectedSubtotal());
+  });
+  readonly estimatedTotal = computed(() => Math.max(0, this.selectedSubtotal() - this.estimatedDiscount()));
   readonly allSelected = computed(() => {
     const items = this.groupedItems();
     if (!items.length) {
@@ -74,6 +106,23 @@ export class CartPage {
    */
   lineTotal(item: GroupedCartItem): string {
     return formatVnd(item.unit_price * item.quantity) || '0 đ';
+  }
+
+  /** Nhận mã ví đang áp ở giỏ. */
+  onVoucherApplied(voucher: AppliedVoucher | null): void {
+    this.appliedVoucher.set(voucher);
+  }
+
+  onVoucherDeclined(declined: boolean): void {
+    this.voucherDeclined.set(declined);
+  }
+
+  discountLabel(): string {
+    return `-${formatVnd(this.estimatedDiscount()) || '0 đ'}`;
+  }
+
+  estimatedTotalLabel(): string {
+    return formatVnd(this.estimatedTotal()) || '0 đ';
   }
 
   /**
@@ -105,6 +154,51 @@ export class CartPage {
     this.selectedIds.update((ids) => ids.filter((id) => id !== item.variant_id));
     this.persistSelected();
     this.clampPage();
+  }
+
+  /**
+   * Loads the other sizes and colors of this product so the buyer can swap the line.
+   */
+  toggleVariants(item: GroupedCartItem): void {
+    if (item.is_combo) {
+      return;
+    }
+    if (this.editingVariantId() === item.variant_id) {
+      this.editingVariantId.set(null);
+      this.variantChoices.set([]);
+      return;
+    }
+    this.editingVariantId.set(item.variant_id);
+    this.variantChoices.set([]);
+    this.api.get<{ variants?: Array<{ variant_id: string; size?: string; color?: string; stock_quantity?: number }> }>(
+      `/api/user/products/${item.product_id}`,
+    ).subscribe({
+      next: (product) => this.variantChoices.set(product.variants || []),
+      error: () => this.variantChoices.set([]),
+    });
+  }
+
+  /**
+   * Replaces the cart line with the chosen variant and keeps the quantity.
+   */
+  pickVariant(item: GroupedCartItem, option: { variant_id: string; size?: string; color?: string }): void {
+    if (option.variant_id === item.variant_id) {
+      this.editingVariantId.set(null);
+      return;
+    }
+    this.cart.replaceVariant(item.variant_id, {
+      variant_id: option.variant_id,
+      product_id: item.product_id,
+      product_name: item.product_name,
+      product_image: item.product_image,
+      quantity: item.quantity,
+      unit_price: item.unit_price,
+      color: option.color,
+      size: option.size,
+    });
+    this.selectedIds.update((ids) => ids.map((id) => (id === item.variant_id ? option.variant_id : id)));
+    this.editingVariantId.set(null);
+    this.variantChoices.set([]);
   }
 
   /**
@@ -156,8 +250,20 @@ export class CartPage {
     }
     sessionStorage.setItem(CHECKOUT_ITEMS_KEY, JSON.stringify(this.cart.expandGroupedItems(selected)));
     localStorage.removeItem('checkout_discount');
-    localStorage.removeItem('checkout_voucher_id');
     localStorage.removeItem('checkout_voucher_code');
+    // Mang lựa chọn mã sang trang thanh toán. Trước đây bước này xoá mã đi, nên mã khách
+    // chọn ở giỏ bị ví ở trang thanh toán thay bằng mã tốt nhất mà không nói gì.
+    const voucher = this.appliedVoucher();
+    if (voucher) {
+      localStorage.setItem(VOUCHER_ID_KEY, voucher.voucher_id);
+    } else {
+      localStorage.removeItem(VOUCHER_ID_KEY);
+    }
+    if (this.voucherDeclined()) {
+      localStorage.setItem(VOUCHER_DECLINED_KEY, '1');
+    } else {
+      localStorage.removeItem(VOUCHER_DECLINED_KEY);
+    }
     void this.router.navigateByUrl('/checkout/shipping');
   }
 

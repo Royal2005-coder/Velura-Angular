@@ -21,7 +21,7 @@ export async function handlePricingRoute({ req, res, url, parts, context, header
       return true;
     }
     if (req.method === "GET" && parts[4] === "statistics" && parts.length === 5) {
-      sendJson(res, 200, await service.getStatistics(context), headers);
+      sendJson(res, 200, await service.getStatistics(context, url.searchParams), headers);
       return true;
     }
     return false;

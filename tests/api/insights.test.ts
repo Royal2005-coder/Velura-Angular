@@ -32,7 +32,9 @@ test("silent delivered orders block product planning", () => {
     facts({
       orders: [
         { order_id: "o1", status: "delivered" },
-        { order_id: "o2", status: "completed" }
+        { order_id: "o2", status: "delivered" },
+        // Mã cũ đã bị chặn ở CSDL; nếu còn sót thì không được tính là đã giao.
+        { order_id: "o3", status: "completed" }
       ]
     }),
     "week"

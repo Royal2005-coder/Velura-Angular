@@ -99,7 +99,7 @@ export async function handleReviewsRoute(
       throw new HttpError(403, "FORBIDDEN", "Đơn hàng không hợp lệ");
     }
 
-    if (order.status !== "delivered" && order.status !== "completed") {
+    if (order.status !== "delivered") {
       throw new HttpError(400, "BAD_REQUEST", "Chỉ có thể đánh giá sản phẩm sau khi đơn hàng đã giao thành công hoặc hoàn thành");
     }
 

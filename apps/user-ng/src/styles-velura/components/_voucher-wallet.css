@@ -1,0 +1,320 @@
+/* ============================================================
+   Ví Voucher (shared/voucher-wallet) và ví mã trên trang Ưu đãi
+
+   Ví được dùng ở giỏ hàng, trang thanh toán và trang Ưu đãi nhưng trước đây không có
+   quy tắc CSS nào, nên hiện ra như văn bản thô. Khối dưới đây đặt thẻ mã thành một hàng
+   hai cột: bên trái là mã và điều kiện, bên phải là số tiền tiết kiệm hoặc nút hành động,
+   để khách so hai mã bằng một cái liếc theo cột phải.
+   ============================================================ */
+
+.voucher-wallet {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0 0 20px;
+  padding: 16px;
+  border: 1px dashed var(--brown-light);
+  border-radius: var(--radius-md);
+  background: var(--checkout-bg);
+}
+
+.voucher-wallet__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.voucher-wallet__title {
+  margin: 0;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.voucher-wallet__link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--terracotta);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.voucher-wallet__link:hover { color: var(--terracotta-h); }
+
+.voucher-wallet__state {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.voucher-wallet__state--error { color: var(--error); }
+
+.voucher-wallet__hint {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--tab-bg);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--text-body);
+}
+
+.voucher-wallet__goal {
+  padding: 10px 12px;
+  border-left: 3px solid var(--terracotta);
+  background: #fff;
+}
+
+.voucher-wallet__goal-text {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--text-body);
+}
+
+/* Thẻ mã: hai cột, cột phải căn theo nhau giữa các thẻ. */
+.voucher-wallet .voucher-card,
+.voucher-modal .voucher-card,
+.offer-voucher-grid .voucher-card {
+  flex-direction: row;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+}
+
+.voucher-card__main {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.voucher-card__main p { margin: 0; }
+
+.voucher-card__side {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 6px;
+  padding-left: 16px;
+  border-left: 1px dashed var(--line);
+}
+
+.voucher-card__name {
+  font-size: 0.875rem;
+  line-height: 1.4;
+  color: var(--text-dark);
+}
+
+.voucher-card__remaining {
+  margin-left: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--soft);
+}
+
+.voucher-card__reason {
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--error);
+}
+
+.voucher-card__saving {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--terracotta);
+  white-space: nowrap;
+}
+
+.voucher-card__actions {
+  display: flex;
+  gap: 12px;
+}
+
+.voucher-card--applied {
+  border-color: var(--terracotta);
+  background: #fff;
+  cursor: default;
+}
+
+.voucher-card--selectable:focus-visible {
+  outline: 2px solid var(--terracotta);
+  outline-offset: 2px;
+}
+
+.voucher-card--active {
+  border-color: var(--terracotta);
+  box-shadow: 0 0 0 1px var(--terracotta) inset;
+}
+
+.voucher-card__use {
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+/* ------------------------------------------------------------
+   Bảng chọn mã
+   ------------------------------------------------------------ */
+.voucher-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.voucher-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(42, 37, 34, 0.45);
+}
+
+.voucher-modal__panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(560px, 100%);
+  max-height: calc(100vh - 32px);
+  padding: 20px;
+  overflow-y: auto;
+  border-radius: var(--radius-lg);
+  background: #fff;
+  box-shadow: var(--shadow-card);
+}
+
+.voucher-modal__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.voucher-modal__title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.voucher-modal__close {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--field-bg);
+  color: var(--muted);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.voucher-modal__close:hover { color: var(--ink); }
+
+.voucher-modal__note {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+
+.voucher-modal__manual {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.voucher-modal__manual-label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-body);
+}
+
+.voucher-modal__manual-row {
+  display: flex;
+  gap: 8px;
+}
+
+.voucher-modal__manual-row .form-input { flex: 1 1 auto; min-width: 0; }
+
+.voucher-modal__group {
+  margin: 6px 0 0;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--soft);
+}
+
+.voucher-modal__list,
+.offer-voucher-grid {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* ------------------------------------------------------------
+   Trang Ưu đãi
+   ------------------------------------------------------------ */
+.offer-voucher-grid {
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.offer-voucher-group {
+  margin-top: 28px;
+  scroll-margin-top: 96px;
+}
+
+.offer-voucher-group__title {
+  margin: 0 0 12px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.offers-state {
+  margin: 8px 0 0;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.offers-state--error { color: var(--error); }
+
+/* Chiến dịch khách vừa bấm vào từ trang chủ hoặc thanh tin. */
+.offer-banner-row--focused {
+  outline: 2px solid var(--terracotta);
+  outline-offset: 8px;
+  border-radius: var(--radius-md);
+}
+
+button.offer-banner-row__cta {
+  border: 0;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+@media (max-width: 480px) {
+  .offer-voucher-grid { grid-template-columns: 1fr; }
+  .voucher-card__side { padding-left: 12px; }
+}

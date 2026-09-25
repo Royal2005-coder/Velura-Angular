@@ -1,6 +1,7 @@
-import { Component, signal } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { RouterLink, RouterOutlet } from '@angular/router';
-import { HOT_BANNERS } from '../../core/models/hot-banner';
+import { OffersService } from '../../core/services/offers.service';
 import { SiteFooter } from '../site-footer/site-footer';
 import { SiteHeader } from '../site-header/site-header';
 
@@ -10,7 +11,7 @@ import { SiteHeader } from '../site-header/site-header';
   templateUrl: './site-shell.html',
 })
 export class SiteShell {
-  readonly banners = HOT_BANNERS;
+  readonly banners = toSignal(inject(OffersService).highlights(), { initialValue: [] });
   readonly quizOpen = signal(false);
   readonly chatOpen = signal(false);
 

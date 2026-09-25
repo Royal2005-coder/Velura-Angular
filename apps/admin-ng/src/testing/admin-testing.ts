@@ -58,7 +58,7 @@ const list = <T,>(rows: T[] = []) => of({ rows, count: rows.length });
 /**
  * Admin Model stub. Every list method returns `{ rows, count }` like production JSON.
  */
-export function stubAdminApi(): AdminApiService {
+export function stubAdminApi(overrides: Record<string, unknown> = {}): AdminApiService {
   const dashboard = () => of(emptyDashboard());
   const insights = () => of(emptyInsights());
   const me = () =>
@@ -80,6 +80,7 @@ export function stubAdminApi(): AdminApiService {
       requestPasswordReset: () => of({}),
       changePassword: () => of({ success: true }),
       listLowStock: () => list(),
+      ...overrides,
     } as unknown as AdminApiService,
     {
       get(target, prop) {
@@ -99,8 +100,9 @@ let lastFixture: ComponentFixture<unknown> | undefined;
 
 /**
  * Boots an admin page ViewModel with a stub AdminApiService (no HttpClient).
+ * `apiOverrides` thay từng hàm của API giả cho ca test cần dữ liệu riêng.
  */
-export async function createAdminPage<T>(page: Type<T>): Promise<T> {
+export async function createAdminPage<T>(page: Type<T>, apiOverrides: Record<string, unknown> = {}): Promise<T> {
   lastFixture?.destroy();
   lastFixture = undefined;
   sessionStorage.clear();
@@ -110,7 +112,7 @@ export async function createAdminPage<T>(page: Type<T>): Promise<T> {
     imports: [page],
     providers: [
       provideRouter([]),
-      { provide: AdminApiService, useValue: stubAdminApi() },
+      { provide: AdminApiService, useValue: stubAdminApi(apiOverrides) },
       {
         provide: ActivatedRoute,
         useValue: {
@@ -126,6 +128,12 @@ export async function createAdminPage<T>(page: Type<T>): Promise<T> {
   lastFixture = fixture as ComponentFixture<unknown>;
   fixture.detectChanges();
   return fixture.componentInstance;
+}
+
+/** Fixture của trang vừa dựng bằng `createAdminPage`, để đọc DOM đã render. */
+export function lastAdminFixture(): ComponentFixture<unknown> {
+  if (!lastFixture) throw new Error('createAdminPage chưa được gọi');
+  return lastFixture;
 }
 
 export { emptyDashboard };

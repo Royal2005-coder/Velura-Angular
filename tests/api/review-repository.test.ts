@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { quotePostgrestValue } from "../../apps/api/src/reviews/review-repository.js";
+import { quotePostgrestValue } from "../../apps/api/src/supabase.js";
 
 const BACKSLASH = String.fromCharCode(92);
 

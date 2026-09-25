@@ -46,8 +46,8 @@
                     @for (order of eligible(); track order.order_id) {
                       <button type="button" class="selection-card" [class.is-selected]="selectedOrderId() === order.order_id" (click)="selectOrder(order.order_id)">
                         <div class="selection-card__content">
-                          <strong>{{ order.tracking_code || order.order_id }}</strong>
-                          <span>{{ statusLabel(order.status) }}</span>
+                          <strong>{{ order.order_code || order.order_id }}</strong>
+                          <span>{{ statusLabel(order) }}</span>
                         </div>
                       </button>
                     }

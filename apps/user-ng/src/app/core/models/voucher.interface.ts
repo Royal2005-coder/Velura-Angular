@@ -7,7 +7,9 @@ export type VoucherIneligibleReason =
   | 'MIN_ORDER_NOT_MET'
   | 'USER_LIMIT_REACHED'
   | 'GROUP_MISMATCH'
-  | 'BUDGET_EXHAUSTED';
+  | 'PROMOTION_INACTIVE'
+  | 'BUDGET_EXHAUSTED'
+  | 'CATEGORY_MISMATCH';
 
 /** Một mã trong ví voucher, đã được API đánh giá theo giỏ hàng hiện tại. */
 export interface WalletVoucher {
@@ -28,6 +30,41 @@ export interface WalletVoucher {
   reason: VoucherIneligibleReason | null;
   reason_text: string | null;
   shortfall: number | null;
+  /** Tên danh mục mã áp dụng. Rỗng nghĩa là áp cho mọi sản phẩm. */
+  category_names?: string[];
+}
+
+/** Một dòng giỏ hàng gửi lên để máy chủ tự tính giá trị đơn từ bảng giá. */
+export interface CartItemRef {
+  variant_id: string;
+  quantity: number;
+}
+
+/** Mã khách chọn không còn dùng được và đã được thay. */
+export interface VoucherChange {
+  requested_voucher_id: string | null;
+  requested_code: string | null;
+  reason_text: string;
+}
+
+/** Báo giá của `POST /api/user/checkout/quote` — đúng các con số sẽ ghi vào đơn. */
+export interface CheckoutQuote {
+  subtotal: number;
+  shipping_fee: number;
+  free_shipping_threshold: number;
+  free_shipping_shortfall: number;
+  discount_amount: number;
+  total_amount: number;
+  voucher: { voucher_id: string; code: string; name: string; discount_amount: number } | null;
+  voucher_change: VoucherChange | null;
+}
+
+/** Chi tiết của lỗi 409 `VOUCHER_CHANGED` khi đặt đơn. */
+export interface VoucherChangedDetails {
+  requested_voucher_id: string | null;
+  requested_code: string | null;
+  reason_text: string;
+  replacement: { voucher_id: string; code: string; name: string; discount_amount: number } | null;
 }
 
 /** Phản hồi của `GET /api/user/vouchers`. */

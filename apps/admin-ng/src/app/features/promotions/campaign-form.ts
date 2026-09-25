@@ -2,6 +2,9 @@ import { Component, computed, inject, input, output, signal } from '@angular/cor
 import { AdminApiService, AdminPromotionRow } from '../../core/admin-api.service';
 import { adminErrorMessage } from '../../core/admin-http';
 
+/** Tên chiến dịch tối thiểu, khớp `PROMOTION_NAME_MIN` phía API và `NAME_MIN_8_CHARS` của RPC. */
+const CAMPAIGN_NAME_MIN = 8;
+
 /**
  * Form tạo và sửa một chiến dịch khuyến mãi.
  *
@@ -120,6 +123,12 @@ export class CampaignForm {
     const name = read('name');
     const startLocal = read('startDate');
     const endLocal = read('endDate');
+    // Cùng mốc với API và RPC. Chỉ xét lúc tạo: chiến dịch cũ có tên ngắn vẫn phải sửa
+    // được các trường khác mà không bị bắt đổi tên.
+    if (!this.isEdit() && name.length < CAMPAIGN_NAME_MIN) {
+      this.saveError.set(`Tên chiến dịch cần tối thiểu ${CAMPAIGN_NAME_MIN} ký tự.`);
+      return;
+    }
     if (name.length < 2) {
       this.saveError.set('Tên chiến dịch phải từ 2 ký tự.');
       return;

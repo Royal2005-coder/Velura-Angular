@@ -1,4 +1,4 @@
-import { callRpc, selectOne, selectRows } from "../supabase.js";
+import { callRpc, quotePostgrestValue, selectOne, selectRows } from "../supabase.js";
 import { REVIEW_SELECT } from "./review-constants.js";
 
 /**
@@ -24,23 +24,6 @@ export interface ReviewListFilters {
  */
 const URGENT_CONDITION = "is_flagged_urgent.eq.true,rating.lte.2";
 
-/**
- * Bọc một giá trị do người dùng gõ vào để PostgREST đọc nó như dữ liệu, không như cú
- * pháp.
- *
- * Dấu phẩy, ngoặc đơn và nháy kép đều có nghĩa trong ngữ pháp lọc của PostgREST. Nối
- * thẳng chuỗi tìm kiếm vào `or=(...)` thì một câu bình thường như `Áo dài, đẹp` sẽ bị
- * tách ở dấu phẩy thành hai mệnh đề méo và máy chủ trả 400 PGRST100 — ô tìm kiếm hỏng
- * với bất kỳ câu nào có dấu phẩy. Đã kiểm chứng trực tiếp trên PostgREST của dự án.
- *
- * Bọc trong nháy kép làm mọi ký tự bên trong thành dữ liệu; bên trong đó chỉ còn dấu
- * chéo ngược và nháy kép cần thoát. Dấu `*` vẫn giữ vai trò ký tự đại diện của `ilike`
- * kể cả khi nằm trong nháy kép.
- */
-export function quotePostgrestValue(value: string): string {
-  const escaped = value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-  return `"${escaped}"`;
-}
 
 /**
  * Filters for review-module audit logs.

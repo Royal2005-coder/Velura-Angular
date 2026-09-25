@@ -1,7 +1,8 @@
-import { afterNextRender, Component, inject, signal } from '@angular/core';
+import { afterNextRender, Component, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { catchError, of } from 'rxjs';
-import { HOT_BANNERS } from '../../core/models/hot-banner';
+import { OffersService } from '../../core/services/offers.service';
+import type { OfferVoucher } from '../../core/models/offer.interface';
 import { AuthService } from '../../core/services/auth.service';
 import { ApiService } from '../../core/services/api.service';
 import { useBodyClass } from '../../core/utils/body-class';
@@ -51,6 +52,21 @@ export class AccountProfilePage {
   readonly displayName = signal(this.auth.session()?.fullName || 'Tên khách hàng');
   readonly addressModalOpen = signal(false);
   private savedAddresses: NonNullable<MemberProfile['saved_addresses']> = [];
+  private readonly offers = inject(OffersService);
+
+  /**
+   * Ưu đãi của tôi. Trước đây là sáu banner viết cứng ghi bằng `innerHTML`, không liên
+   * quan gì tới mã khách thật sự dùng được. Giờ là ví mã của chính tài khoản này.
+   */
+  readonly myVouchers = signal<OfferVoucher[]>([]);
+  readonly offersLoading = signal(true);
+  readonly offerFilter = signal<'ALL' | 'AVAILABLE' | 'LOCKED'>('ALL');
+  readonly filteredVouchers = computed(() => {
+    const filter = this.offerFilter();
+    return this.myVouchers().filter((voucher) =>
+      filter === 'ALL' ? true : filter === 'AVAILABLE' ? voucher.usable : !voucher.usable,
+    );
+  });
 
   constructor() {
     useBodyClass('page-profile');
@@ -154,7 +170,7 @@ export class AccountProfilePage {
       }
     }
     this.renderAddresses(profile?.saved_addresses || []);
-    this.renderOffers();
+    this.loadOffers();
     this.syncTab();
   }
 
@@ -245,23 +261,25 @@ export class AccountProfilePage {
       .join('');
   }
 
-  private renderOffers(): void {
-    const list = document.querySelector('.js-offers-list');
-    if (!list) {
-      return;
-    }
-    list.innerHTML = HOT_BANNERS.map(
-      (banner) => `
-      <article class="offer-card">
-        <img src="${banner.imageSrc}" alt="${banner.imageAlt}" />
-        <div>
-          <small>${banner.eyebrow}</small>
-          <h3>${banner.title}</h3>
-          <p>${banner.benefit}</p>
-          <p>${banner.condition}</p>
-        </div>
-      </article>`,
-    ).join('');
+  setOfferFilter(filter: 'ALL' | 'AVAILABLE' | 'LOCKED'): void {
+    this.offerFilter.set(filter);
+  }
+
+  expiryLabel(value: string | null): string {
+    if (!value) return 'Không giới hạn';
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleDateString('vi-VN');
+  }
+
+  private loadOffers(): void {
+    // Bộ nhớ đệm có thể còn từ lúc chưa đăng nhập; mã dành riêng cho thành viên chỉ hiện
+    // sau khi đọc lại bằng phiên hiện tại.
+    this.offers.invalidate();
+    this.offersLoading.set(true);
+    this.offers.load().subscribe((response) => {
+      this.myVouchers.set(response.vouchers ?? []);
+      this.offersLoading.set(false);
+    });
   }
 
   private bindStyleProfile(quiz: StyleQuiz | undefined): void {

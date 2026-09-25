@@ -1,6 +1,6 @@
 import { enrichAuditLogs, PRICING_AUDIT } from "../audit-enrichment.js";
 import { HttpError } from "../http.js";
-import { asString, type AuthContext, type JsonObject } from "../types.js";
+import { asJsonObject, asString, type AuthContext, type JsonObject } from "../types.js";
 import { PROMOTION_OPERATOR_ROLES, PROMOTION_READER_ROLES, PROMOTION_TYPES, VOUCHER_TYPES } from "./pricing-constants.js";
 import type { PricingRepository } from "./pricing-repository.js";
 import {
@@ -14,6 +14,9 @@ import {
   toOverlapCandidate
 } from "./promotion-lifecycle.js";
 import { normalizePromotionPresentation } from "./promotion-presentation.js";
+
+/** Dạng UUID chung, đủ để chặn chuỗi lạ lọt vào bộ lọc PostgREST. */
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Admin pricing use-cases used by `handlePricingRoute`.
@@ -33,7 +36,7 @@ export interface PricingService {
   updateVoucher(context: AuthContext | undefined, voucherId: string, body: JsonObject): Promise<unknown>;
   listAuditLogs(context: AuthContext | undefined, searchParams: URLSearchParams): Promise<unknown>;
   toggleVoucher(context: AuthContext | undefined, voucherId: string): Promise<unknown>;
-  getStatistics(context: AuthContext | undefined): Promise<unknown>;
+  getStatistics(context: AuthContext | undefined, searchParams?: URLSearchParams): Promise<unknown>;
 }
 
 /**
@@ -147,8 +150,13 @@ export function createPricingService({ repository }: { repository: PricingReposi
     async listVouchers(context, searchParams) {
       requirePricingReader(context);
       const isActive = searchParams.get("isActive");
+      const promoId = searchParams.get("promoId") || "";
+      if (promoId && promoId !== "none" && !UUID_PATTERN.test(promoId)) {
+        throw new HttpError(422, "VALIDATION_ERROR", "promoId không hợp lệ");
+      }
       return repository.listVouchers({
         isActive: isActive !== null ? isActive === "true" : undefined,
+        promoId: promoId || undefined,
         limit: Math.min(parseInt(searchParams.get("limit") || "50"), 100),
         offset: parseInt(searchParams.get("offset") || "0")
       }, context.accessToken);
@@ -170,32 +178,20 @@ export function createPricingService({ repository }: { repository: PricingReposi
         throw new HttpError(422, "VALIDATION_ERROR", "Đối tượng mã phải là khách vãng lai, thành viên hoặc mọi khách");
       }
 
-      // `max_vouchers_allowed` được ghi lúc tạo chiến dịch rồi chưa bao giờ có ai đọc:
-      // admin đặt trần "chiến dịch này phát tối đa 50 mã" và hệ thống vẫn cho phát mã
-      // thứ 51. Đây là chỗ trần đó có hiệu lực.
-      const promoId = asString(body.promoId);
-      if (promoId) {
-        const promo = await repository.getPromotion(promoId, context.accessToken);
-        if (!promo) throw new HttpError(404, "PROMOTION_NOT_FOUND", "Không tìm thấy chiến dịch của mã này");
-        const allowed = Number(promo.max_vouchers_allowed || 0);
-        if (allowed > 0) {
-          const stats = await repository.countVouchersByPromotion([promoId], context.accessToken);
-          const issued = stats[promoId]?.total ?? 0;
-          if (issued >= allowed) {
-            throw new HttpError(422, "VOUCHER_LIMIT_REACHED",
-              `Chiến dịch này chỉ được phát tối đa ${allowed} mã, hiện đã có ${issued}.`);
-          }
-        }
-      }
-
-      return repository.createVoucher({ ...body, createdBy: context.profile?.user_id || context.authUser?.id }, context.accessToken);
+      // Trần `max_vouchers_allowed` của chiến dịch do RPC chốt khi đang khoá dòng chiến
+      // dịch (migration 035). Đếm ở đây rồi mới ghi thì hai admin bấm cùng lúc vẫn lọt
+      // qua cả hai, nên không đếm lại ở tầng này.
+      return repository.createVoucher({ ...body, code: String(body.code).trim().toUpperCase() }, context.accessToken);
     },
 
     async updateVoucher(context, voucherId, body) {
       requirePricingAdmin(context);
       const expectedVersion = parseInt((body?.expectedVersion || "0") as string);
       if (!expectedVersion) throw new HttpError(422, "VALIDATION_ERROR", "expectedVersion required");
-      return repository.updateVoucher(voucherId, body, context.accessToken);
+      if (body?.type !== undefined && body.type !== null && !VOUCHER_TYPES.includes(body.type as string)) {
+        throw new HttpError(422, "VALIDATION_ERROR", "Invalid voucher type");
+      }
+      return repository.updateVoucher(voucherId, { ...body, expectedVersion }, context.accessToken);
     },
 
     async listAuditLogs(context, searchParams) {
@@ -224,9 +220,19 @@ export function createPricingService({ repository }: { repository: PricingReposi
       }, context.accessToken);
     },
 
-    async getStatistics(context) {
+    async getStatistics(context, searchParams = new URLSearchParams()) {
       requirePricingReader(context);
-      return repository.getStatistics(context.accessToken);
+      const from = optionalIsoDate(searchParams.get("from"), "from");
+      const to = optionalIsoDate(searchParams.get("to"), "to");
+      if (from && to && Date.parse(from) >= Date.parse(to)) {
+        throw new HttpError(422, "VALIDATION_ERROR", "Ngày kết thúc phải sau ngày bắt đầu");
+      }
+      const [raw, summarySource, activeVouchers] = await Promise.all([
+        repository.getStatistics({ from, to }, context.accessToken),
+        repository.summarizePromotions(context.accessToken),
+        repository.countActiveVouchers(context.accessToken)
+      ]);
+      return buildPromotionStatistics(asJsonObject(raw), summarizePromotionRows(summarySource, activeVouchers?.count, new Date()), new Date(), { from, to });
     }
   };
 }
@@ -476,5 +482,101 @@ export function decoratePromotions(
       };
     }),
     count
+  };
+}
+
+/** Ngày ISO từ query, hoặc undefined khi không gửi. */
+function optionalIsoDate(value: string | null, field: string): string | undefined {
+  if (!value) return undefined;
+  const time = Date.parse(value);
+  if (Number.isNaN(time)) throw new HttpError(422, "VALIDATION_ERROR", `${field} không phải ngày hợp lệ`);
+  return new Date(time).toISOString();
+}
+
+const toNumber = (value: unknown): number => Number(value) || 0;
+const percent = (part: number, whole: number): number => (whole > 0 ? Math.round((part * 1000) / whole) / 10 : 0);
+
+/**
+ * Ghép số liệu đơn hàng từ RPC với vòng đời chiến dịch tính ở API.
+ *
+ * Trạng thái chiến dịch lấy từ `promotionLifecycle`, cùng nguồn với badge trên bảng
+ * chiến dịch, chứ không suy từ `is_active`: chiến dịch hết hạn vẫn còn cờ bật.
+ */
+export function buildPromotionStatistics(
+  raw: JsonObject,
+  summary: PromotionSummary,
+  now: Date,
+  range: { from?: string; to?: string } = {}
+) {
+  const overall = asJsonObject(raw.overall);
+  const vouchers = asJsonObject(raw.vouchers);
+  const orders = toNumber(overall.orders);
+  const voucherOrders = toNumber(overall.voucher_orders);
+  const revenueWith = toNumber(overall.revenue_with_voucher);
+  const revenueWithout = toNumber(overall.revenue_without_voucher);
+  const totalUsed = toNumber(vouchers.total_used);
+  const totalLimit = toNumber(vouchers.total_limit);
+  const campaigns = (Array.isArray(raw.campaigns) ? raw.campaigns : []).map((item) => {
+    const row = asJsonObject(item);
+    const revenue = toNumber(row.revenue);
+    const discount = toNumber(row.discount);
+    const standalone = !row.promo_id;
+    const lifecycle = standalone ? null : promotionLifecycle(toLifecycleInput(row), now);
+    return {
+      promoId: asString(row.promo_id) || null,
+      name: standalone ? "Mã đứng riêng" : asString(row.promo_name) || "—",
+      lifecycle,
+      lifecycleLabel: lifecycle ? promotionLifecycleLabel(lifecycle) : null,
+      vouchers: toNumber(row.vouchers),
+      orders: toNumber(row.orders),
+      revenue,
+      discount,
+      // Mỗi đồng giảm mang về bao nhiêu đồng doanh thu. Chưa có đơn thì không có tỉ số.
+      revenuePerDiscount: discount > 0 ? Math.round((revenue / discount) * 10) / 10 : null,
+      budgetLimit: toNumber(row.budget_limit),
+      budgetUsed: toNumber(row.total_discount_issued)
+    };
+  });
+
+  return {
+    range: { from: range.from ?? null, to: range.to ?? null },
+    orders: {
+      total: orders,
+      withVoucher: voucherOrders,
+      voucherRate: percent(voucherOrders, orders),
+      revenueWithVoucher: revenueWith,
+      revenueWithoutVoucher: revenueWithout,
+      revenueShareWithVoucher: percent(revenueWith, revenueWith + revenueWithout),
+      discountTotal: toNumber(overall.discount_total),
+      aovWithVoucher: toNumber(overall.aov_with_voucher),
+      aovWithoutVoucher: toNumber(overall.aov_without_voucher)
+    },
+    promotions: {
+      ...summary,
+      budgetRemaining: Math.max(0, summary.totalBudget - summary.issuedDiscount),
+      budgetUsagePercent: summary.totalBudget > 0 ? Math.min(100, Math.round((summary.issuedDiscount * 100) / summary.totalBudget)) : 0
+    },
+    vouchers: {
+      total: toNumber(vouchers.total),
+      active: toNumber(vouchers.active),
+      scheduled: toNumber(vouchers.scheduled),
+      expired: toNumber(vouchers.expired),
+      disabled: toNumber(vouchers.disabled),
+      unlimited: toNumber(vouchers.unlimited),
+      totalUsed,
+      totalLimit,
+      usagePercent: totalLimit > 0 ? Math.min(100, Math.round((totalUsed * 100) / totalLimit)) : 0
+    },
+    campaigns,
+    topVouchers: (Array.isArray(raw.top_vouchers) ? raw.top_vouchers : []).map((item) => {
+      const row = asJsonObject(item);
+      return {
+        voucherId: asString(row.voucher_id),
+        code: asString(row.code) || "—",
+        orders: toNumber(row.orders),
+        discount: toNumber(row.discount),
+        revenue: toNumber(row.revenue)
+      };
+    })
   };
 }

@@ -2,31 +2,29 @@
   <p class="admin-page-crumb">Đơn hàng / Hàng đợi xử lý</p>
   <section class="admin-card admin-card--flush">
     <div class="admin-tabs" role="tablist" aria-label="Nhóm đơn hàng">
-      <button class="admin-tab" [class.admin-tab--active]="tab() === 'all'" type="button" (click)="setTab('all')">Tất cả đơn hàng <span>{{ count() }}</span></button>
-      <button class="admin-tab" [class.admin-tab--active]="tab() === 'attention'" type="button" (click)="setTab('attention')">Đơn cần xử lý <span>{{ attentionCount() }}</span></button>
-      <button class="admin-tab" [class.admin-tab--active]="tab() === 'payment'" type="button" (click)="setTab('payment')">Lỗi thanh toán <span>{{ paymentErrorCount() }}</span></button>
-      <button class="admin-tab" [class.admin-tab--active]="tab() === 'cancelled'" type="button" (click)="setTab('cancelled')">Đơn hủy <span>{{ cancelledCount() }}</span></button>
-      <button class="admin-tab" [class.admin-tab--active]="tab() === 'logs'" type="button" (click)="setTab('logs')">Nhật ký đơn hàng</button>
+      <button class="admin-tab" [class.admin-tab--active]="tab() === 'all'" type="button" role="tab" [attr.aria-selected]="tab() === 'all'" (click)="setTab('all')">Tất cả đơn hàng @if (tab() === 'all') {<span>{{ count() }}</span>}</button>
+      <button class="admin-tab" [class.admin-tab--active]="tab() === 'attention'" type="button" role="tab" [attr.aria-selected]="tab() === 'attention'" (click)="setTab('attention')">Cần xử lý <span>{{ attentionCount() }}</span></button>
+      <button class="admin-tab" [class.admin-tab--active]="tab() === 'payment'" type="button" role="tab" [attr.aria-selected]="tab() === 'payment'" (click)="setTab('payment')">Cần kiểm thanh toán @if (tab() === 'payment') {<span>{{ count() }}</span>}</button>
+      <button class="admin-tab" [class.admin-tab--active]="tab() === 'cancelled'" type="button" role="tab" [attr.aria-selected]="tab() === 'cancelled'" (click)="setTab('cancelled')">Đơn hủy <span>{{ cancelledCount() }}</span></button>
+      <button class="admin-tab" [class.admin-tab--active]="tab() === 'logs'" type="button" role="tab" [attr.aria-selected]="tab() === 'logs'" (click)="setTab('logs')">Nhật ký đơn hàng</button>
     </div>
     <div class="admin-tab-content">
       @if (tab() !== 'logs') {
         <form class="admin-filter-bar admin-order-filter-bar" (submit)="applyFilters($event)">
           <label class="admin-search-field">
             <app-admin-icon name="search" />
-            <input class="admin-form-control" name="q" type="search" [value]="query()" placeholder="Tên khách, số điện thoại, mã vận đơn..." />
+            <input class="admin-form-control" name="q" type="search" [value]="query()" placeholder="Mã đơn, tên khách, số điện thoại, mã vận đơn..." />
           </label>
-          <label class="admin-form-group">
-            <select class="admin-form-control" name="status" aria-label="Trạng thái" [value]="status()">
-              <option value="">Tất cả trạng thái</option>
-              <option value="pending">Chờ xác nhận</option>
-              <option value="confirmed">Đã xác nhận</option>
-              <option value="preparing">Đang chuẩn bị</option>
-              <option value="shipping">Đang giao</option>
-              <option value="delivered">Đã giao</option>
-              <option value="completed">Hoàn tất</option>
-              <option value="cancelled">Đã hủy</option>
-            </select>
-          </label>
+          @if (tab() !== 'cancelled') {
+            <label class="admin-form-group">
+              <select class="admin-form-control" name="status" aria-label="Trạng thái" [value]="status()">
+                <option value="">Tất cả trạng thái</option>
+                @for (option of statusOptions(); track option.status) {
+                  <option [value]="option.status">{{ option.label }} ({{ option.count }})</option>
+                }
+              </select>
+            </label>
+          }
           <label class="admin-form-group">
             <select class="admin-form-control" name="paymentMethod" aria-label="Thanh toán" [value]="paymentMethod()">
               <option value="">Tất cả thanh toán</option>
@@ -44,13 +42,17 @@
           </div>
         </form>
         @if (showSkeleton()) {
-          <app-admin-table-skeleton [headers]="['Mã đơn', 'Khách hàng', 'Tổng tiền', 'Trạng thái', 'Thanh toán', 'Cần xử lý', 'Thao tác']" [rows]="pageSize" />
+          <app-admin-table-skeleton [headers]="['Mã đơn', 'Khách hàng', 'Tổng tiền', 'Trạng thái', 'Thanh toán', 'Cần xử lý', '']" [rows]="pageSize" />
         } @else if (loadError()) {
           <app-admin-empty-state kind="error" icon="alert" title="Không thể tải đơn hàng" [message]="loadError() || ''">
             <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="reload()">Thử lại</button>
           </app-admin-empty-state>
         } @else if (!rows().length) {
-          <app-admin-empty-state kind="empty" icon="cart" title="Không có đơn hàng phù hợp" message="Điều chỉnh bộ lọc hoặc tải lại dữ liệu." />
+          <app-admin-empty-state
+            kind="empty"
+            icon="cart"
+            [title]="tab() === 'attention' ? 'Không còn đơn nào cần xử lý' : 'Không có đơn hàng phù hợp'"
+            message="Điều chỉnh bộ lọc hoặc tải lại dữ liệu." />
         } @else {
           <div class="admin-table-wrap" [class.admin-table-wrap--refreshing]="isRefreshing()">
             <table class="admin-table admin-data-table">
@@ -62,14 +64,14 @@
                   <th>Trạng thái</th>
                   <th>Thanh toán</th>
                   <th>Cần xử lý</th>
-                  <th>Thao tác</th>
+                  <th aria-label="Thao tác"></th>
                 </tr>
               </thead>
               <tbody>
                 @for (order of rows(); track order.order_id) {
-                  <tr>
+                  <tr class="admin-order-row" (click)="openDetail(order.order_id)">
                     <td>
-                      <span class="admin-order-code">{{ order.order_id }}</span>
+                      <span class="admin-order-code">{{ order.order_code || order.order_id }}</span>
                       <small class="admin-order-subtext">{{ dateTime(order.order_date) }}</small>
                     </td>
                     <td>
@@ -79,34 +81,28 @@
                       </div>
                     </td>
                     <td class="admin-order-amount">{{ money(order.total_amount) }}</td>
-                    <td><span class="admin-badge" [class]="'admin-badge--order-' + (order.status || 'pending')">{{ orderLabel(order.status) }}</span></td>
-                    <td><span class="admin-badge" [class]="'admin-badge--payment-' + (paymentOf(order)?.payment_status || 'pending')">{{ paymentLabel(paymentOf(order)?.payment_status) }}</span></td>
+                    <td><span class="admin-badge" [class]="'admin-badge admin-badge--order-' + (order.status || 'pending')">{{ orderLabel(order) }}</span></td>
                     <td>
-                      @if (needsAttention(order)) {
-                        <span class="admin-order-attention admin-order-attention--alert"><app-admin-icon name="alert" />Cần xử lý</span>
+                      <div class="admin-order-payment">
+                        <span>{{ paymentMethodLabel(order.payment_method) }}</span>
+                        @if (order.payment_status_label) {
+                          <small [class]="'admin-order-payment__status admin-order-payment__status--' + order.payment_status">{{ order.payment_status_label }}</small>
+                        }
+                      </div>
+                    </td>
+                    <td>
+                      @if (order.tags?.length) {
+                        <div class="admin-order-tags">
+                          @for (tag of order.tags; track tag.code) {
+                            <span [class]="'admin-order-tag admin-order-tag--' + tag.code">{{ tag.label }}</span>
+                          }
+                        </div>
                       } @else {
                         —
                       }
                     </td>
                     <td>
-                      <div class="admin-order-actions">
-                        <button class="admin-icon-button admin-icon-button--sm" type="button" title="Xem chi tiết" (click)="openDetail(order.order_id)"><app-admin-icon name="eye" /></button>
-                        <button class="admin-icon-button admin-icon-button--sm" type="button" title="Thao tác" (click)="toggleMenu(order.order_id)"><app-admin-icon name="edit" /></button>
-                        @if (menuId() === order.order_id) {
-                          <div class="admin-dropdown admin-table-action-menu admin-order-action-menu">
-                            <button type="button" (click)="openDetail(order.order_id)"><app-admin-icon name="eye" /><span>Xem chi tiết</span></button>
-                            @if (canMutate() && canChangeStatus(order)) {
-                              <button type="button" (click)="openAction('status', order.order_id)"><app-admin-icon name="settings" /><span>Cập nhật trạng thái</span></button>
-                            }
-                            @if (canMutate() && isPaymentError(order)) {
-                              <button type="button" (click)="openAction('payment', order.order_id)"><app-admin-icon name="credit-card" /><span>Đối soát thanh toán</span></button>
-                            }
-                            @if (canMutate() && canCancel(order)) {
-                              <button class="admin-order-action-menu__danger" type="button" (click)="openAction('cancel', order.order_id)"><app-admin-icon name="lock" /><span>Hủy đơn</span></button>
-                            }
-                          </div>
-                        }
-                      </div>
+                      <button class="admin-icon-button admin-icon-button--sm" type="button" title="Xem và xử lý" aria-label="Xem và xử lý đơn" (click)="$event.stopPropagation(); openDetail(order.order_id)"><app-admin-icon name="eye" /></button>
                     </td>
                   </tr>
                 }
@@ -130,7 +126,7 @@
               </tr>
             </thead>
             <tbody>
-              @for (log of pagedLogs(); track log.audit_id || log.timestamp) {
+              @for (log of logs(); track log.audit_id || log.timestamp) {
                 <tr>
                   <td>{{ dateTime(log.timestamp) }}</td>
                   <td>
@@ -153,87 +149,256 @@
   </section>
 </main>
 
-@if (selected() && !actionType()) {
-  <div class="admin-drawer-backdrop" (click)="closeOverlays()"></div>
-  <aside class="admin-drawer admin-drawer--wide">
+@if (selected(); as order) {
+  <div class="admin-drawer-backdrop" (click)="closeDetail()"></div>
+  <aside class="admin-drawer admin-drawer--wide" aria-label="Chi tiết đơn hàng" [class.admin-drawer--busy]="detailLoading()">
     <header class="admin-drawer__header">
       <div>
-        <p class="admin-product-code">{{ selected()!.order_id }}</p>
-        <h2 class="admin-section__title">{{ selected()!.shipping_name }}</h2>
+        <p class="admin-product-code">{{ order.order_code || order.order_id }} · {{ dateTime(order.order_date) }}</p>
+        <h2 class="admin-section__title">{{ order.shipping_name }}</h2>
         <div class="admin-status-group">
-          <span class="admin-badge">{{ orderLabel(selected()!.status) }}</span>
-          <span class="admin-badge">{{ paymentLabel(paymentOf(selected()!)?.payment_status) }}</span>
+          <span [class]="'admin-badge admin-badge--order-' + (order.status || 'pending')">{{ orderLabel(order) }}</span>
+          @for (tag of order.tags || []; track tag.code) {
+            <span [class]="'admin-order-tag admin-order-tag--' + tag.code">{{ tag.label }}</span>
+          }
         </div>
       </div>
-      <button class="admin-icon-button" type="button" aria-label="Đóng" (click)="closeOverlays()">×</button>
+      <button class="admin-icon-button" type="button" aria-label="Đóng" (click)="closeDetail()">×</button>
     </header>
+
     <div class="admin-drawer__body">
-      <h3 class="admin-drawer__section">Thông tin giao hàng</h3>
+      @if (notice()) {
+        <p class="admin-order-warning" role="status">{{ notice() }}</p>
+      }
+
+      @if (primaryActions().length || destructiveActions().length || canResolvePayment()) {
+        <section class="admin-order-action-bar" aria-label="Thao tác với đơn">
+          <div class="admin-order-action-bar__primary">
+            @for (action of primaryActions(); track action.code; let first = $first) {
+              <button class="admin-btn admin-btn--sm" [class.admin-btn--secondary]="first" [class.admin-btn--outline]="!first" type="button" (click)="openAction(action)">{{ action.label }}</button>
+            }
+            @if (canResolvePayment()) {
+              <button class="admin-btn admin-btn--outline admin-btn--sm" type="button" (click)="openPaymentResolve()">Đối soát thanh toán</button>
+            }
+          </div>
+          @for (action of destructiveActions(); track action.code) {
+            <button class="admin-btn admin-btn--ghost admin-btn--sm admin-order-action-bar__danger" type="button" (click)="openAction(action)">{{ action.label }}</button>
+          }
+        </section>
+      }
+
+      @if (order.can_simulate_carrier) {
+        <section class="admin-order-simulator" aria-label="Mô phỏng đơn vị vận chuyển">
+          <div>
+            <strong>Mô phỏng ĐVVC</strong>
+            <small>Chỉ super_admin thấy. Kết quả ghi là thao tác của Hệ thống, như khi ĐVVC báo về.</small>
+          </div>
+          <div class="admin-order-simulator__buttons">
+            @for (outcome of carrierOutcomes; track outcome.code) {
+              <button class="admin-btn admin-btn--outline admin-btn--sm" type="button" [disabled]="submitting()" (click)="simulateCarrier(outcome.code)">{{ outcome.label }}</button>
+            }
+          </div>
+        </section>
+      }
+
+      <h3 class="admin-drawer__section">Khách hàng và giao hàng</h3>
       <dl class="admin-data-list">
-        <div><dt>Điện thoại</dt><dd>{{ selected()!.shipping_phone }}</dd></div>
-        <div><dt>Địa chỉ</dt><dd>{{ selected()!.shipping_address }}</dd></div>
-        <div><dt>Mã vận đơn</dt><dd>{{ selected()!.tracking_code || '—' }}</dd></div>
-        <div><dt>Tổng thanh toán</dt><dd>{{ money(selected()!.total_amount) }}</dd></div>
+        <div><dt>Điện thoại</dt><dd>{{ order.shipping_phone }}</dd></div>
+        <div><dt>Địa chỉ</dt><dd>{{ order.shipping_address }}</dd></div>
+        @if (order.internal_note) {
+          <div><dt>Ghi chú</dt><dd>{{ order.internal_note }}</dd></div>
+        }
       </dl>
+
       <h3 class="admin-drawer__section">Sản phẩm</h3>
       <div class="admin-order-product-list">
-        @for (item of selectedItems(); track item.product_name) {
+        @for (item of selectedItems(); track $index) {
           <article class="admin-order-product">
-            <div><strong>{{ item.product_name }}</strong><small>SL: {{ item.quantity }}</small></div>
+            <div><strong>{{ item.product_name }}</strong><small>SL: {{ item.quantity }} × {{ money(item.unit_price) }}</small></div>
             <div class="admin-order-product__price">{{ lineTotal(item.unit_price, item.quantity) }}</div>
           </article>
         }
       </div>
+      <div class="admin-order-totals">
+        <div><span>Tạm tính</span><span>{{ money(order.subtotal) }}</span></div>
+        @if (order.discount_amount) {
+          <div><span>Giảm giá</span><span>−{{ money(order.discount_amount) }}</span></div>
+        }
+        <div><span>Phí vận chuyển</span><span>{{ money(order.shipping_fee) }}</span></div>
+        <div><span>Tổng thanh toán</span><strong>{{ money(order.total_amount) }}</strong></div>
+      </div>
+
+      <h3 class="admin-drawer__section">Thanh toán và hoàn tiền</h3>
+      <dl class="admin-data-list">
+        <div><dt>Phương thức</dt><dd>{{ paymentMethodLabel(order.payment_method) }}</dd></div>
+        <div><dt>Trạng thái</dt><dd>{{ order.payment_status_label || (order.payment_method === 'COD' ? 'Thu khi giao hàng' : '—') }}</dd></div>
+        @if (selectedPayment()?.paid_at) {
+          <div><dt>Thanh toán lúc</dt><dd>{{ dateTime(selectedPayment()?.paid_at) }}</dd></div>
+        }
+        @if (selectedPayment()?.refund_amount) {
+          <div><dt>Số tiền hoàn</dt><dd>{{ money(selectedPayment()?.refund_amount) }}</dd></div>
+        }
+        @if (selectedPayment()?.refund_at) {
+          <div><dt>Hoàn tiền lúc</dt><dd>{{ dateTime(selectedPayment()?.refund_at) }}</dd></div>
+        }
+      </dl>
+
+      <h3 class="admin-drawer__section">Vận chuyển</h3>
+      <dl class="admin-data-list">
+        <div><dt>Đơn vị vận chuyển</dt><dd>{{ order.carrier || '—' }}</dd></div>
+        <div>
+          <dt>Mã vận đơn</dt>
+          <dd>
+            {{ order.tracking_code || '—' }}
+            @if (order.shipment_voided_at) {
+              <small class="admin-order-subtext">Đã vô hiệu {{ dateTime(order.shipment_voided_at) }}</small>
+            }
+          </dd>
+        </div>
+        @if (order.tracking_url) {
+          <div><dt>Tracking</dt><dd><a [href]="order.tracking_url" target="_blank" rel="noopener noreferrer">Mở trang tra cứu</a></dd></div>
+        }
+        <div><dt>Bàn giao ĐVVC</dt><dd>{{ dateTime(order.handed_over_at) }}</dd></div>
+        @if (order.returned_to_stock_at) {
+          <div><dt>Hàng hoàn kho</dt><dd>{{ dateTime(order.returned_to_stock_at) }}</dd></div>
+        }
+        @if (order.cancelled_reason) {
+          <div><dt>Lý do hủy</dt><dd>{{ order.cancelled_reason }}</dd></div>
+        }
+      </dl>
+
+      <h3 class="admin-drawer__section">Lịch sử xử lý</h3>
+      @if (events().length) {
+        <ol class="admin-timeline">
+          @for (event of events(); track event.event_id || $index) {
+            <li class="admin-timeline__item" [class.admin-timeline__item--system]="event.actor_type === 'system'">
+              <strong>
+                {{ eventLabel(event) }}
+                @if (event.to_status && event.to_status !== event.from_status) {
+                  · {{ statusName(event.from_status) }} → {{ statusName(event.to_status) }}
+                }
+              </strong>
+              <span>{{ dateTime(event.created_at) }} · {{ eventActor(event) }}@if (event.result && event.result !== 'success') { · {{ event.result }}}</span>
+              @if (event.note) {
+                <span class="admin-timeline__note">{{ event.note }}</span>
+              }
+            </li>
+          }
+        </ol>
+      } @else {
+        <p class="admin-order-subtext">Đơn tạo trước ngày có lịch sử xử lý chi tiết.</p>
+      }
     </div>
   </aside>
 }
 
-@if (actionType() && selected()) {
+@if (activeAction(); as action) {
   <div class="admin-modal-overlay">
-    <section class="admin-modal">
+    <section class="admin-modal" role="dialog" aria-modal="true" [attr.aria-label]="action.label">
       <form (submit)="submitAction($event)">
         <header class="admin-modal__header">
-          <h2>{{ actionType() === 'cancel' ? 'Hủy đơn hàng' : actionType() === 'payment' ? 'Đối soát thanh toán' : 'Cập nhật trạng thái' }}</h2>
-          <button class="admin-icon-button" type="button" (click)="closeOverlays()">×</button>
+          <h2>{{ action.label }}</h2>
+          <button class="admin-icon-button" type="button" aria-label="Đóng" (click)="closeModal()">×</button>
         </header>
         <div class="admin-modal__body">
-          @if (actionType() === 'status') {
+          <p class="admin-order-subtext">
+            Đơn {{ selected()?.order_code }} · {{ orderLabel(selected()) }}
+            @if (action.to_status) { → {{ statusName(action.to_status) }} }
+          </p>
+
+          @if (hasField(action, 'call_result')) {
+            <fieldset class="admin-form-group admin-order-choice">
+              <legend class="admin-form-label">Kết quả cuộc gọi <b>*</b></legend>
+              @for (result of callResults; track result.code) {
+                <label><input type="radio" name="callResult" [value]="result.code" required /> {{ result.label }}</label>
+              }
+            </fieldset>
+          }
+
+          @if (hasField(action, 'shortage')) {
             <label class="admin-form-group">
-              <span class="admin-form-label">Trạng thái mới</span>
-              <select class="admin-form-control" name="status" required>
-                <option value="" disabled selected>-- Chọn trạng thái mới --</option>
-                @for (status of nextStatuses(); track status) {
-                  <option [value]="status">{{ orderLabel(status) }}</option>
+              <span class="admin-form-label">Tình trạng thiếu hàng <b>*</b></span>
+              <textarea class="admin-form-control admin-form-textarea" name="shortage" maxlength="500" required placeholder="Sản phẩm, size, số lượng thiếu, hướng xử lý"></textarea>
+            </label>
+          }
+
+          @if (hasField(action, 'shipment') || hasField(action, 'tracking')) {
+            <label class="admin-form-group">
+              <span class="admin-form-label">Đơn vị vận chuyển @if (hasField(action, 'shipment')) {<b>*</b>}</span>
+              <input class="admin-form-control" name="carrier" maxlength="80" [value]="selected()?.carrier || ''" [required]="hasField(action, 'shipment')" placeholder="GHN, GHTK, Viettel Post..." />
+            </label>
+            <label class="admin-form-group">
+              <span class="admin-form-label">Mã vận đơn <b>*</b></span>
+              <input class="admin-form-control" name="trackingCode" maxlength="60" [value]="selected()?.tracking_code || ''" required />
+            </label>
+            <label class="admin-form-group">
+              <span class="admin-form-label">Link tra cứu</span>
+              <input class="admin-form-control" name="trackingUrl" type="url" pattern="https://.*" maxlength="500" [value]="selected()?.tracking_url || ''" placeholder="https://" />
+            </label>
+          }
+
+          @if (hasField(action, 'cancel_reason')) {
+            <label class="admin-form-group">
+              <span class="admin-form-label">Lý do hủy <b>*</b></span>
+              <select class="admin-form-control" name="cancelReason" required [value]="cancelReason()" (change)="cancelReason.set($any($event.target).value)">
+                <option value="" disabled>-- Chọn lý do --</option>
+                @for (reason of cancelReasons; track reason.code) {
+                  <option [value]="reason.code">{{ reason.label }}</option>
                 }
               </select>
             </label>
-            @if (needsTracking()) {
-              <label class="admin-form-group">
-                <span class="admin-form-label">Mã vận đơn</span>
-                <input class="admin-form-control" name="trackingCode" [value]="selected()!.tracking_code || ''" />
-              </label>
+            @if (selected()?.payment_status === 'paid') {
+              <p class="admin-order-danger-note">Đơn đã thanh toán online. Hủy đơn sẽ hoàn toàn bộ tiền cho khách qua Stripe.</p>
+            }
+            @if (selected()?.tracking_code) {
+              <p class="admin-order-warning">Vận đơn {{ selected()?.tracking_code }} sẽ bị vô hiệu cùng lúc hủy đơn.</p>
             }
           }
-          @if (actionType() === 'payment') {
-            <label class="admin-form-group">
-              <span class="admin-form-label">Quyết định</span>
-              <select class="admin-form-control" name="decision" required>
-                <option value="mark_paid">Đánh dấu đã thanh toán</option>
-                <option value="mark_failed">Đánh dấu thất bại</option>
-              </select>
-            </label>
+
+          <label class="admin-form-group">
+            <span class="admin-form-label">{{ cancelReason() === 'other' ? 'Lý do hủy cụ thể' : 'Ghi chú' }} @if (action.requires_note) {<b>*</b>}</span>
+            <textarea class="admin-form-control admin-form-textarea" name="note" maxlength="1000" [attr.minlength]="action.requires_note ? 5 : null" [required]="action.requires_note"></textarea>
+          </label>
+          @if (actionError()) {
+            <p class="field__error" role="alert">{{ actionError() }}</p>
           }
+        </div>
+        <footer class="admin-modal__footer">
+          <button class="admin-btn admin-btn--ghost" type="button" (click)="closeModal()">Đóng</button>
+          <button class="admin-btn" [class.admin-btn--danger]="action.destructive" [class.admin-btn--secondary]="!action.destructive" type="submit" [disabled]="submitting()">{{ action.label }}</button>
+        </footer>
+      </form>
+    </section>
+  </div>
+}
+
+@if (modal()?.kind === 'payment') {
+  <div class="admin-modal-overlay">
+    <section class="admin-modal" role="dialog" aria-modal="true" aria-label="Đối soát thanh toán">
+      <form (submit)="submitPaymentResolve($event)">
+        <header class="admin-modal__header">
+          <h2>Đối soát thanh toán</h2>
+          <button class="admin-icon-button" type="button" aria-label="Đóng" (click)="closeModal()">×</button>
+        </header>
+        <div class="admin-modal__body">
+          <label class="admin-form-group">
+            <span class="admin-form-label">Quyết định</span>
+            <select class="admin-form-control" name="decision" required>
+              <option value="mark_paid">Đánh dấu đã thanh toán</option>
+              <option value="mark_failed">Đánh dấu thất bại</option>
+            </select>
+          </label>
           <label class="admin-form-group">
             <span class="admin-form-label">Lý do <b>*</b></span>
             <textarea class="admin-form-control admin-form-textarea" name="reason" minlength="10" maxlength="500" required></textarea>
           </label>
           @if (actionError()) {
-            <p class="field__error">{{ actionError() }}</p>
+            <p class="field__error" role="alert">{{ actionError() }}</p>
           }
         </div>
         <footer class="admin-modal__footer">
-          <button class="admin-btn admin-btn--ghost" type="button" (click)="closeOverlays()">Đóng</button>
-          <button class="admin-btn" [class.admin-btn--danger]="actionType() === 'cancel'" [class.admin-btn--secondary]="actionType() !== 'cancel'" type="submit">Xác nhận</button>
+          <button class="admin-btn admin-btn--ghost" type="button" (click)="closeModal()">Đóng</button>
+          <button class="admin-btn admin-btn--secondary" type="submit" [disabled]="submitting()">Xác nhận</button>
         </footer>
       </form>
     </section>

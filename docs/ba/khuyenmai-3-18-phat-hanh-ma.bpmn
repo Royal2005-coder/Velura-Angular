@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions id="Definitions_3_18_phat_hanh_ma" xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" targetNamespace="http://velura.vn/bpmn/khuyenmai">
+  <bpmn:collaboration id="Collaboration_3_18_phat_hanh_ma">
+    <bpmn:participant id="Participant_velura" name="Velura" processRef="Process_velura" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_velura" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_velura">
+      <bpmn:lane id="lane_admin" name="Quản trị viên giá và khuyến mãi">
+        <bpmn:flowNodeRef>v_start</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>v_nhap</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>v_kichhoat</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>v_end</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="lane_sys" name="Hệ thống">
+        <bpmn:flowNodeRef>v_kiem</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>v_gw</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>v_tuchoi</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>v_ghi</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>v_mo</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>v_log</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="v_start" name="Chiến dịch đã có trần số mã"><bpmn:outgoing>f_v_start_v_nhap</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:userTask id="v_nhap" name="Nhập mã: loại giảm, trần giảm, giá trị đơn tối thiểu, nhóm khách, kho lượt và hạn dùng"><bpmn:incoming>f_v_start_v_nhap</bpmn:incoming><bpmn:incoming>f_v_tuchoi_v_nhap</bpmn:incoming><bpmn:outgoing>f_v_nhap_v_kiem</bpmn:outgoing></bpmn:userTask>
+    <bpmn:serviceTask id="v_kiem" name="Kiểm mã không trùng và số mã chưa vượt trần ngân sách"><bpmn:incoming>f_v_nhap_v_kiem</bpmn:incoming><bpmn:outgoing>f_v_kiem_v_gw</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="v_gw" name="Đủ điều kiện phát hành?"><bpmn:incoming>f_v_kiem_v_gw</bpmn:incoming><bpmn:outgoing>f_v_gw_v_tuchoi</bpmn:outgoing><bpmn:outgoing>f_v_gw_v_ghi</bpmn:outgoing></bpmn:exclusiveGateway>
+    <bpmn:sendTask id="v_tuchoi" name="Từ chối kèm lý do cụ thể: trùng mã hoặc vượt trần"><bpmn:incoming>f_v_gw_v_tuchoi</bpmn:incoming><bpmn:outgoing>f_v_tuchoi_v_nhap</bpmn:outgoing></bpmn:sendTask>
+    <bpmn:serviceTask id="v_ghi" name="Ghi mã giảm giá và ghi nhật ký kèm người thực hiện"><bpmn:incoming>f_v_gw_v_ghi</bpmn:incoming><bpmn:outgoing>f_v_ghi_v_kichhoat</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:userTask id="v_kichhoat" name="Kích hoạt chiến dịch"><bpmn:incoming>f_v_ghi_v_kichhoat</bpmn:incoming><bpmn:outgoing>f_v_kichhoat_v_mo</bpmn:outgoing></bpmn:userTask>
+    <bpmn:serviceTask id="v_mo" name="Mở mã cho khách theo đúng nhóm đối tượng đã khai"><bpmn:incoming>f_v_kichhoat_v_mo</bpmn:incoming><bpmn:outgoing>f_v_mo_v_end</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:endEvent id="v_end" name="Mã sẵn sàng phục vụ khách"><bpmn:incoming>f_v_mo_v_end</bpmn:incoming></bpmn:endEvent>
+    <bpmn:dataStoreReference id="v_log" name="Nhật ký khuyến mãi" />
+    <bpmn:textAnnotation id="n_rpc"><bpmn:text>Mọi thao tác ghi đi qua hàm RPC có kiểm vai trò trên cơ sở dữ liệu và sinh một dòng nhật ký kèm người thực hiện.</bpmn:text></bpmn:textAnnotation>
+    <bpmn:textAnnotation id="n_nhom"><bpmn:text>Chiến dịch là vỏ chứa mã, ngân sách và khung thời gian. Chiến dịch không tự đổi giá bán của sản phẩm.</bpmn:text></bpmn:textAnnotation>
+    <bpmn:sequenceFlow id="f_v_start_v_nhap" name="" sourceRef="v_start" targetRef="v_nhap" />
+    <bpmn:sequenceFlow id="f_v_nhap_v_kiem" name="" sourceRef="v_nhap" targetRef="v_kiem" />
+    <bpmn:sequenceFlow id="f_v_kiem_v_gw" name="" sourceRef="v_kiem" targetRef="v_gw" />
+    <bpmn:sequenceFlow id="f_v_gw_v_tuchoi" name="Không" sourceRef="v_gw" targetRef="v_tuchoi" />
+    <bpmn:sequenceFlow id="f_v_tuchoi_v_nhap" name="" sourceRef="v_tuchoi" targetRef="v_nhap" />
+    <bpmn:sequenceFlow id="f_v_gw_v_ghi" name="Có" sourceRef="v_gw" targetRef="v_ghi" />
+    <bpmn:sequenceFlow id="f_v_ghi_v_kichhoat" name="" sourceRef="v_ghi" targetRef="v_kichhoat" />
+    <bpmn:sequenceFlow id="f_v_kichhoat_v_mo" name="" sourceRef="v_kichhoat" targetRef="v_mo" />
+    <bpmn:sequenceFlow id="f_v_mo_v_end" name="" sourceRef="v_mo" targetRef="v_end" />
+    <bpmn:association id="a_v_ghi_v_log" sourceRef="v_ghi" targetRef="v_log" />
+    <bpmn:association id="a_n_rpc_v_ghi" sourceRef="n_rpc" targetRef="v_ghi" />
+    <bpmn:association id="a_n_nhom_v_mo" sourceRef="n_nhom" targetRef="v_mo" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_3_18_phat_hanh_ma">
+    <bpmndi:BPMNPlane id="BPMNPlane_3_18_phat_hanh_ma" bpmnElement="Collaboration_3_18_phat_hanh_ma">
+      <bpmndi:BPMNShape id="Participant_velura_di" bpmnElement="Participant_velura" isHorizontal="true"><dc:Bounds x="40" y="40" width="1963" height="1022" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="lane_admin_di" bpmnElement="lane_admin" isHorizontal="true"><dc:Bounds x="70" y="40" width="1933" height="280" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="lane_sys_di" bpmnElement="lane_sys" isHorizontal="true"><dc:Bounds x="70" y="320" width="1933" height="742" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="v_start_di" bpmnElement="v_start"><dc:Bounds x="172" y="120" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="v_nhap_di" bpmnElement="v_nhap"><dc:Bounds x="330" y="96" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="v_kiem_di" bpmnElement="v_kiem"><dc:Bounds x="565" y="509" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="v_gw_di" bpmnElement="v_gw" isMarkerVisible="true"><dc:Bounds x="848.5" y="528" width="46" height="46" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="v_tuchoi_di" bpmnElement="v_tuchoi"><dc:Bounds x="776.5" y="735.8" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="v_ghi_di" bpmnElement="v_ghi"><dc:Bounds x="988" y="509" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="v_kichhoat_di" bpmnElement="v_kichhoat"><dc:Bounds x="1223" y="96" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="v_mo_di" bpmnElement="v_mo"><dc:Bounds x="1458" y="509" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="v_end_di" bpmnElement="v_end"><dc:Bounds x="1770" y="120" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="v_log_di" bpmnElement="v_log"><dc:Bounds x="1008" y="898.2" width="150" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="n_rpc_di" bpmnElement="n_rpc"><dc:Bounds x="623.5" y="888.2" width="26" height="104" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="n_nhom_di" bpmnElement="n_nhom"><dc:Bounds x="1540" y="888.2" width="26" height="104" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f_v_start_v_nhap_di" bpmnElement="f_v_start_v_nhap"><di:waypoint x="208" y="138" /><di:waypoint x="330" y="138" /><di:waypoint x="330" y="138" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_v_nhap_v_kiem_di" bpmnElement="f_v_nhap_v_kiem"><di:waypoint x="520" y="138" /><di:waypoint x="565" y="138" /><di:waypoint x="565" y="551" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_v_kiem_v_gw_di" bpmnElement="f_v_kiem_v_gw"><di:waypoint x="755" y="551" /><di:waypoint x="848.5" y="551" /><di:waypoint x="848.5" y="551" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_v_gw_v_tuchoi_di" bpmnElement="f_v_gw_v_tuchoi"><di:waypoint x="848.5" y="551" /><di:waypoint x="966.5" y="551" /><di:waypoint x="966.5" y="777.8" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_v_tuchoi_v_nhap_di" bpmnElement="f_v_tuchoi_v_nhap"><di:waypoint x="776.5" y="777.8" /><di:waypoint x="520" y="777.8" /><di:waypoint x="520" y="138" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_v_gw_v_ghi_di" bpmnElement="f_v_gw_v_ghi"><di:waypoint x="894.5" y="551" /><di:waypoint x="988" y="551" /><di:waypoint x="988" y="551" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_v_ghi_v_kichhoat_di" bpmnElement="f_v_ghi_v_kichhoat"><di:waypoint x="1178" y="551" /><di:waypoint x="1223" y="551" /><di:waypoint x="1223" y="138" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_v_kichhoat_v_mo_di" bpmnElement="f_v_kichhoat_v_mo"><di:waypoint x="1413" y="138" /><di:waypoint x="1458" y="138" /><di:waypoint x="1458" y="551" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_v_mo_v_end_di" bpmnElement="f_v_mo_v_end"><di:waypoint x="1648" y="551" /><di:waypoint x="1770" y="551" /><di:waypoint x="1770" y="138" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="a_v_ghi_v_log_di" bpmnElement="a_v_ghi_v_log"><di:waypoint x="1178" y="551" /><di:waypoint x="1008" y="551" /><di:waypoint x="1008" y="940.2" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="a_n_rpc_v_ghi_di" bpmnElement="a_n_rpc_v_ghi"><di:waypoint x="649.5" y="940.2" /><di:waypoint x="988" y="940.2" /><di:waypoint x="988" y="551" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="a_n_nhom_v_mo_di" bpmnElement="a_n_nhom_v_mo"><di:waypoint x="1540" y="940.2" /><di:waypoint x="1648" y="940.2" /><di:waypoint x="1648" y="551" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

@@ -4,17 +4,26 @@ import { catchError, of } from 'rxjs';
 import { ApiService } from '../../core/services/api.service';
 import { formatVnd } from '../../core/utils/money';
 import { useBodyClass } from '../../core/utils/body-class';
-import { orderStatusLabel } from './order-status';
+import { formatOrderTime } from '../../core/utils/order-time';
 
 interface MemberOrder {
   order_id: string;
   order_code?: string;
   status?: string;
+  status_label?: string;
   created_at?: string;
   total_amount?: number;
   item_count?: number;
   items?: Array<{ product_name?: string; product_image?: string }>;
 }
+
+/** Nhóm trạng thái của từng tab, theo bộ tám trạng thái KAN-59. */
+const ORDER_TABS: Readonly<Record<string, readonly string[]>> = {
+  pending: ['pending', 'waiting_payment', 'confirmed', 'processing'],
+  shipping: ['shipping', 'delivery_failed'],
+  delivered: ['delivered'],
+  cancelled: ['cancelled'],
+};
 
 @Component({
   selector: 'app-account-orders-page',
@@ -32,13 +41,7 @@ export class AccountOrdersPage {
     const tab = this.tab();
     const query = this.query().toLowerCase();
     return this.orders().filter((order) => {
-      const status = (order.status || '').toLowerCase();
-      const matchTab =
-        tab === 'all' ||
-        (tab === 'pending' && (status.includes('pending') || status.includes('confirm'))) ||
-        (tab === 'shipping' && status.includes('ship')) ||
-        (tab === 'delivered' && (status.includes('deliver') || status.includes('complete'))) ||
-        (tab === 'cancelled' && status.includes('cancel'));
+      const matchTab = tab === 'all' || (ORDER_TABS[tab] || []).includes(order.status || '');
       const code = (order.order_code || order.order_id || '').toLowerCase();
       return matchTab && (!query || code.includes(query));
     });
@@ -77,9 +80,13 @@ export class AccountOrdersPage {
   }
 
   /**
-   * Same Vietnamese status the admin order screen shows.
+   * Nhãn trạng thái do API trả, cùng chữ với màn admin.
    */
   statusLabel(order: MemberOrder): string {
-    return orderStatusLabel(order.status);
+    return order.status_label || order.status || '—';
+  }
+
+  dateLabel(order: MemberOrder): string {
+    return formatOrderTime(order.created_at);
   }
 }

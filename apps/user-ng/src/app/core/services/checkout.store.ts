@@ -17,7 +17,8 @@ export interface CheckoutMethods {
 
 export interface CreatedOrder {
   order_id?: string;
-  tracking_code?: string;
+  /** Mã đơn cho khách (`VLR…`). Không phải mã vận đơn. */
+  order_code?: string;
   payment_method?: string;
   shipping_address?: string;
   shipping_method?: string;
@@ -129,6 +130,7 @@ export class CheckoutStore {
     localStorage.removeItem('checkout_discount');
     localStorage.removeItem('checkout_voucher_id');
     localStorage.removeItem('checkout_voucher_code');
+    localStorage.removeItem('checkout_voucher_declined');
   }
 
   private readShipping(): CheckoutShipping {

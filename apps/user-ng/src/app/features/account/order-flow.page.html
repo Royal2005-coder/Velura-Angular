@@ -1,0 +1,638 @@
+<main class="flow flow--orders">
+  <header class="flow-header flow-header--orders">
+    <div class="flow-heading">
+      <p class="eyebrow">Velura / Chăm sóc đơn hàng</p>
+      <h1>
+        {{
+          view() === 'tracking'
+            ? 'Theo dõi yêu cầu đổi / trả'
+            : view() === 'return' || view() === 'return-summary'
+              ? 'Đổi / trả theo cách của bạn'
+              : view() === 'requests'
+                ? 'Yêu cầu đổi / trả của bạn'
+                : model.member()
+                  ? 'Đơn hàng của tôi'
+                  : 'Tra cứu đơn hàng'
+        }}
+      </h1>
+    </div>
+    <nav class="actions flow-toolbar" aria-label="Điều hướng chăm sóc đơn hàng">
+      <a class="action secondary" routerLink="/">Tiếp tục mua hàng</a>
+      @if (model.member() || verified()) {
+        <a
+          class="action secondary"
+          [routerLink]="model.member() ? '/account/orders' : '/guest/orders'"
+          >Danh sách đơn</a
+        >
+        <a
+          class="action secondary"
+          [routerLink]="model.member() ? '/account/returns' : '/guest/returns'"
+          >Yêu cầu đổi / trả</a
+        >
+      }
+      @if (!model.member()) {
+        <a class="action secondary" routerLink="/auth/signin">Đăng nhập tài khoản</a>
+      }
+    </nav>
+  </header>
+  @if (error()) {
+    <p role="alert" class="error">{{ error() }}</p>
+  }
+  <div
+    class="flow-grid"
+    [class.flow-grid--single]="view() !== 'detail' && view() !== 'return' && view() !== 'tracking'"
+  >
+    <div>
+      @switch (view()) {
+        @case ('requests') {
+          <section class="panel request-list">
+            <h2>Yêu cầu đổi / trả</h2>
+            @for (item of visibleRequests(); track item.id) {
+              <article class="address-card">
+                <h3>
+                  {{ item.id }} · {{ item.kind === 'refund' ? 'Trả hàng & hoàn tiền' : 'Đổi hàng' }}
+                </h3>
+                <p>Đơn {{ item.orderId }} · {{ date(item.createdAt) }}</p>
+                <p class="badge">{{ model.timeline(item.kind)[item.stage] }}</p>
+                <button type="button" (click)="openRequest(item)">Theo dõi yêu cầu</button>
+              </article>
+            } @empty {
+              <p>Chưa có yêu cầu đổi / trả. Chọn đơn đã giao trong danh sách đơn để bắt đầu.</p>
+            }
+            <a
+              class="action secondary"
+              [routerLink]="model.member() ? '/account/orders' : '/guest/orders'"
+              >Xem danh sách đơn</a
+            >
+          </section>
+        }
+        @case ('lookup') {
+          <section class="panel lookup-card">
+            <h2>Tìm đơn hàng</h2>
+            <p class="muted">
+              Xác thực chủ đơn để xem thông tin, hủy hoặc đổi / trả. Không cần tạo tài khoản.
+            </p>
+            <div class="split">
+              <label class="choice"
+                ><input
+                  type="radio"
+                  name="lookup"
+                  value="phone"
+                  [(ngModel)]="mode"
+                  (change)="query = ''"
+                />Bằng SĐT</label
+              ><label class="choice"
+                ><input
+                  type="radio"
+                  name="lookup"
+                  value="code"
+                  [(ngModel)]="mode"
+                  (change)="query = ''"
+                />Bằng mã đơn</label
+              >
+            </div>
+            <form (ngSubmit)="lookup()">
+              <label class="field"
+                >{{ mode === 'phone' ? 'Số điện thoại đặt hàng' : 'Mã đơn hàng'
+                }}<input
+                  name="query"
+                  [type]="mode === 'phone' ? 'tel' : 'text'"
+                  [(ngModel)]="query"
+                  [placeholder]="mode === 'phone' ? '0901234567' : 'DEMO-…'"
+                  required /></label
+              ><button type="submit">Tiếp tục · Gửi mã OTP</button>
+            </form>
+          </section>
+        }
+        @case ('otp') {
+          <section class="panel lookup-card">
+            <h2>Xác thực chủ đơn</h2>
+            <p>
+              Mã xác thực đã được gửi đến <strong>{{ maskedPhone() }}</strong
+              >.
+            </p>
+            <p class="muted">Hiệu lực {{ seconds() }} giây.</p>
+            <form (ngSubmit)="verify()">
+              <label class="field"
+                >Mã OTP 6 chữ số<input
+                  name="otp"
+                  inputmode="numeric"
+                  autocomplete="one-time-code"
+                  maxlength="6"
+                  pattern="[0-9]{6}"
+                  [(ngModel)]="otp"
+                  required
+              /></label>
+              @if (seconds() === 0) {
+                <p class="error">Mã đã hết hạn.</p>
+              }
+              <div class="actions">
+                <button type="submit" [disabled]="otp.length !== 6 || seconds() === 0">
+                  Xác thực</button
+                ><button
+                  type="button"
+                  class="secondary"
+                  [disabled]="cooldown() > 0"
+                  (click)="resend()"
+                >
+                  Gửi lại {{ cooldown() > 0 ? '(' + cooldown() + 's)' : '' }}</button
+                ><button type="button" class="secondary" (click)="view.set('lookup')">
+                  Quay lại
+                </button>
+              </div>
+            </form>
+          </section>
+        }
+        @case ('list') {
+          <section class="panel order-list">
+            <h2>{{ model.member() ? 'Đơn hàng của tôi' : 'Đơn hàng thuộc SĐT đã xác thực' }}</h2>
+            <label class="field"
+              >Tìm mã đơn<input
+                [ngModel]="filter()"
+                (ngModelChange)="filter.set($event)"
+                placeholder="DEMO-…"
+            /></label>
+            @for (item of visibleOrders(); track item.id) {
+              <article class="panel order-card">
+                <div class="row">
+                  <strong>{{ item.id }}</strong
+                  ><span class="badge">{{ labels[item.status] }}</span>
+                </div>
+                <p class="muted">{{ date(item.createdAt) }} · {{ item.items.length }} sản phẩm</p>
+                <div class="row">
+                  <strong>{{ money(item.total) }}</strong
+                  ><button (click)="open(item.id)">Xem chi tiết</button>
+                </div>
+              </article>
+            } @empty {
+              <div class="empty">
+                <h3>Chưa có đơn hàng phù hợp</h3>
+                <p class="muted">Bạn chưa có đơn hàng phù hợp với thông tin tìm kiếm.</p>
+                <a class="action" routerLink="/products">Bắt đầu mua sắm</a>
+              </div>
+            }
+          </section>
+        }
+        @case ('detail') {
+          @if (order(); as item) {
+            <section class="panel order-detail">
+              <a
+                class="action secondary"
+                [routerLink]="model.member() ? '/account/orders' : '/guest/orders'"
+                >← Danh sách đơn</a
+              >
+              <div class="row">
+                <h2>{{ item.id }}</h2>
+                <span class="badge">{{ labels[item.status] }}</span>
+              </div>
+              <p class="muted">Ngày đặt: {{ date(item.createdAt) }}</p>
+              @if (item.status !== 'cancelled') {
+                <details>
+                  <summary>Tiến trình đơn hàng</summary>
+                  <ol class="timeline">
+                    @for (status of orderSteps(); track status) {
+                      <li
+                        [class.done]="$index <= orderStepIndex()"
+                        [attr.aria-current]="status === item.status ? 'step' : null"
+                      >
+                        {{ labels[status] }}
+                      </li>
+                    }
+                  </ol>
+                </details>
+              }
+              @for (line of item.items; track line.variant_id) {
+                <article class="line">
+                  <img [src]="image(line.product_image)" [alt]="line.product_name" />
+                  <div>
+                    <h3>{{ line.product_name }}</h3>
+                    <p class="muted">{{ line.size }} / {{ line.color }} · SL {{ line.quantity }}</p>
+                    <strong>{{ money(line.quantity * line.unit_price) }}</strong>
+                    @if (item.status === 'delivered') {
+                      <p class="muted">
+                        {{
+                          line.returnCount >= 2
+                            ? 'Đã sử dụng đủ 2 lượt đổi/trả'
+                            : 'Còn ' + (2 - line.returnCount) + ' lượt đổi/trả'
+                        }}
+                        · {{ line.availableQuantity }} sản phẩm khả dụng
+                      </p>
+                    }
+                  </div>
+                </article>
+              }
+              <h3>Thông tin giao hàng</h3>
+              <p>
+                {{ item.address.name }} · {{ item.address.phone }}<br />{{ item.address.detail }},
+                {{ item.address.ward }}, {{ item.address.district }}, {{ item.address.province }}
+              </p>
+              <p>
+                Thanh toán: <strong>{{ item.payment }}</strong>
+              </p>
+              @if (item.status === 'cancelled') {
+                <p class="muted">
+                  Đơn đã hủy.
+                  {{
+                    item.payment === 'COD'
+                      ? 'Không phát sinh hoàn tiền vì chưa thanh toán.'
+                      : item.refund === 'pending'
+                        ? 'Chờ hoàn tiền về kênh thanh toán ban đầu.'
+                        : item.refund === 'completed'
+                          ? 'Đã hoàn tiền.'
+                          : 'Giao dịch chưa thanh toán, không phát sinh hoàn tiền.'
+                  }}
+                </p>
+                @if (item.refund) {
+                  <p>Số tiền hoàn: {{ money(item.total) }} · Phương thức: VNPay</p>
+                  @if (item.refundCompletedAt) {
+                    <p>Thời gian hoàn tất: {{ date(item.refundCompletedAt) }}</p>
+                  }
+                }
+              }
+              @if (
+                item.status === 'preparing' ||
+                item.status === 'shipping' ||
+                item.status === 'delivered'
+              ) {
+                <p class="muted">Đơn hàng đã được chuẩn bị và không thể hủy tại thời điểm này.</p>
+              }
+              @if (item.status === 'delivered') {
+                <p class="muted">Ngày nhận: {{ date(item.deliveredAt) }}</p>
+                @if (!withinWindow(item)) {
+                  <p class="error">Đã hết thời hạn đổi/trả.</p>
+                }
+              }
+              <div class="actions">
+                @if (canCancel(item)) {
+                  <button class="secondary" (click)="startCancel()">Hủy đơn</button>
+                }
+                @if (withinWindow(item)) {
+                  <button (click)="startReturn()">Đổi / Trả hàng</button>
+                }
+              </div>
+              @if (item.status === 'pending_payment') {
+                <a
+                  class="action"
+                  [routerLink]="model.member() ? '/checkout/user' : '/checkout/guest'"
+                  [queryParams]="{ order: item.id }"
+                  >Tiếp tục thanh toán</a
+                >
+              }
+              <h3>Yêu cầu đổi / trả</h3>
+              @for (request of model.requests(); track request.id) {
+                @if (request.orderId === item.id) {
+                  <div class="row">
+                    <span>{{ request.id }} · {{ model.timeline(request.kind)[request.stage] }}</span
+                    ><button class="secondary" (click)="track(request)">Theo dõi</button>
+                  </div>
+                }
+              }
+            </section>
+          }
+        }
+        @case ('cancel') {
+          <section class="panel lookup-card">
+            <h2>Lý do hủy đơn</h2>
+            <p>{{ order()?.id }}</p>
+            <p class="muted">
+              Lý do giúp Velura cải thiện trải nghiệm, không dùng để xét duyệt khi đơn còn đủ điều
+              kiện.
+            </p>
+            <label class="field"
+              >Lý do<select [(ngModel)]="reason">
+                <option>Tôi muốn thay đổi sản phẩm</option>
+                <option>Tôi muốn thay đổi địa chỉ</option>
+                <option>Tôi không còn nhu cầu</option>
+                <option>Khác</option>
+              </select></label
+            >
+            @if (reason === 'Khác') {
+              <label class="field"
+                >Lý do khác<textarea [(ngModel)]="otherReason" maxlength="500"></textarea>
+              </label>
+            }
+            <div class="actions">
+              <button class="secondary" (click)="view.set('detail')">Giữ đơn hàng</button
+              ><button (click)="reviewCancel()">Tiếp tục</button>
+            </div>
+          </section>
+        }
+        @case ('cancel-confirm') {
+          <section class="panel lookup-card">
+            <h2>Xác nhận hủy đơn?</h2>
+            <p>
+              Bạn đang hủy <strong>{{ order()?.id }}</strong
+              >. Hành động này không thể hoàn tác.
+            </p>
+            <p class="muted">
+              {{
+                order()?.payment === 'COD'
+                  ? 'Đơn COD chưa thu tiền nên không phát sinh hoàn tiền.'
+                  : order()?.paymentState === 'paid'
+                    ? 'Sau khi hủy, đơn chuyển sang chờ hoàn tiền về kênh thanh toán ban đầu.'
+                    : 'Đơn chưa thanh toán nên không phát sinh hoàn tiền.'
+              }}
+            </p>
+            <div class="actions">
+              <button class="secondary" [disabled]="busy()" (click)="view.set('detail')">
+                Giữ đơn hàng</button
+              ><button [disabled]="busy()" (click)="confirmCancel()">
+                {{ busy() ? 'Đang kiểm tra…' : 'Xác nhận hủy đơn' }}
+              </button>
+            </div>
+          </section>
+        }
+        @case ('return') {
+          @if (order(); as item) {
+            <section class="panel return-builder">
+              <h2>1. Chọn sản phẩm</h2>
+              <p class="muted">Trong 30 ngày từ khi nhận hàng · Tối đa 2 lượt mỗi sản phẩm.</p>
+              @for (line of item.items; track line.variant_id) {
+                <article class="line">
+                  <img [src]="image(line.product_image)" [alt]="line.product_name" />
+                  <div>
+                    <label class="check"
+                      ><input
+                        type="checkbox"
+                        [checked]="!!selections()[line.variant_id]"
+                        [disabled]="
+                          line.returnCount >= 2 || line.availableQuantity < 1 || !withinWindow(item)
+                        "
+                        [ngModel]="!!selections()[line.variant_id]"
+                        (ngModelChange)="select(line, $event)"
+                      /><strong>{{ line.product_name }}</strong></label
+                    >
+                    <p class="muted">
+                      {{ line.size }} / {{ line.color }} · Đã mua {{ line.quantity }} · Có thể xử lý
+                      {{ line.availableQuantity }}
+                    </p>
+                    <p class="muted">
+                      Đã dùng {{ line.returnCount }}/2 lượt · Còn {{ 2 - line.returnCount }} lượt
+                    </p>
+                    @if (line.returnCount >= 2) {
+                      <p class="error">Đã sử dụng đủ 2 lượt đổi/trả.</p>
+                    } @else if (line.availableQuantity === 0) {
+                      <p class="muted">Sản phẩm đang được xử lý hoặc đã hoàn trả.</p>
+                    }
+                    @if (selections()[line.variant_id]) {
+                      <label class="field"
+                        >Số lượng<input
+                          type="number"
+                          min="1"
+                          [max]="line.availableQuantity"
+                          [ngModel]="selections()[line.variant_id].quantity"
+                          (ngModelChange)="quantity(line, $event)"
+                      /></label>
+                    }
+                  </div>
+                </article>
+              }
+              <h2>2. Bạn muốn xử lý thế nào?</h2>
+              <label class="choice" [class.selected]="returnKind === 'refund'"
+                ><input type="radio" name="kind" value="refund" [(ngModel)]="returnKind" /><span
+                  ><strong>Trả hàng & Hoàn tiền</strong
+                  ><small>Trả sản phẩm và nhận lại số tiền tương ứng.</small></span
+                ></label
+              ><label class="choice" [class.selected]="returnKind === 'exchange'"
+                ><input type="radio" name="kind" value="exchange" [(ngModel)]="returnKind" /><span
+                  ><strong>Đổi hàng</strong
+                  ><small>Đổi size hoặc màu của cùng sản phẩm.</small></span
+                ></label
+              >
+              @if (returnKind === 'exchange') {
+                @for (selected of selectedLines(); track selected.variantId) {
+                  @if (lineFor(selected.variantId); as line) {
+                    <label class="field"
+                      >{{ line.product_name }} · {{ line.size }} / {{ line.color }} →<select
+                        [ngModel]="selected.replacement || ''"
+                        (ngModelChange)="replacement(line, $event)"
+                      >
+                        <option value="">Chọn size / màu mới</option>
+                        @for (variant of model.replacements(line); track variant) {
+                          <option [value]="variant">{{ variant }} · Còn hàng</option>
+                        }
+                      </select></label
+                    >
+                  }
+                }
+              }
+              <h2>3. Thông tin bổ sung</h2>
+              <label class="field"
+                >Lý do (tùy chọn)<textarea
+                  [(ngModel)]="returnReason"
+                  maxlength="1000"
+                  placeholder="Chia sẻ thêm để Velura hỗ trợ tốt hơn"
+                ></textarea></label
+              ><label class="field"
+                >Hình ảnh (tùy chọn)<input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  multiple
+                  (change)="files($event)"
+                /><small
+                  >Tối đa 5 ảnh, mỗi ảnh 5 MB. Chỉ xem trước, không tải lên máy chủ.</small
+                ></label
+              >
+              <div class="preview-images">
+                @for (file of evidence(); track file.url) {
+                  <div>
+                    <img [src]="file.url" [alt]="file.name" /><button
+                      class="secondary"
+                      (click)="removeImage($index)"
+                      [attr.aria-label]="'Xóa ảnh ' + file.name"
+                    >
+                      Xóa
+                    </button>
+                  </div>
+                }
+              </div>
+              @if (returnKind === 'refund') {
+                <p class="muted">
+                  {{
+                    item.payment === 'COD'
+                      ? 'CSKH sẽ liên hệ xác nhận phương án hoàn tiền. Chưa cần cung cấp tài khoản ngân hàng ở bước này.'
+                      : 'Dự kiến hoàn về kênh thanh toán ban đầu. Không cần nhập tài khoản ngân hàng.'
+                  }}
+                </p>
+              }
+              <div class="actions">
+                <button class="secondary" (click)="view.set('detail')">Quay lại</button
+                ><button (click)="reviewReturn()">Xem tóm tắt yêu cầu</button>
+              </div>
+            </section>
+          }
+        }
+        @case ('return-summary') {
+          <section class="panel return-summary">
+            <h2>Tóm tắt yêu cầu {{ returnKind === 'refund' ? 'trả hàng' : 'đổi hàng' }}</h2>
+            <p>Mã đơn: {{ order()?.id }}</p>
+            @for (selected of selectedLines(); track selected.variantId) {
+              <article class="line">
+                <div>
+                  <h3>{{ lineFor(selected.variantId)?.product_name }}</h3>
+                  <p>
+                    {{ lineFor(selected.variantId)?.size }} /
+                    {{ lineFor(selected.variantId)?.color }} · SL {{ selected.quantity }}
+                  </p>
+                  @if (returnKind === 'exchange') {
+                    <p>
+                      Đổi sang: <strong>{{ selected.replacement }}</strong>
+                    </p>
+                  }
+                </div>
+              </article>
+            }
+            <p>Lý do: {{ returnReason || 'Không cung cấp' }}</p>
+            <p>Hình ảnh: {{ evidence().length }} ảnh</p>
+            @if (returnKind === 'refund') {
+              <p class="muted">
+                Số tiền dự kiến: {{ money(refundEstimate(selectedLines())) }}. CSKH xác nhận số tiền
+                và phương thức hoàn.
+              </p>
+            }
+            <div class="actions">
+              <button class="secondary" [disabled]="busy()" (click)="view.set('return')">
+                Chỉnh sửa</button
+              ><button [disabled]="busy()" (click)="submitReturn()">
+                {{ busy() ? 'Đang gửi…' : 'Gửi yêu cầu đổi/trả' }}
+              </button>
+            </div>
+          </section>
+        }
+        @case ('tracking') {
+          @if (request(); as request) {
+            <section class="panel request-tracking">
+              <span class="badge">{{ request.id }}</span>
+              <h2>{{ model.timeline(request.kind)[request.stage] }}</h2>
+              <p class="muted">
+                Velura đã ghi nhận yêu cầu của bạn. Nhân viên CSKH sẽ liên hệ để xác nhận phương án
+                đổi/trả.
+              </p>
+              <p>Mã đơn: {{ request.orderId }} · {{ date(request.createdAt) }}</p>
+              @if (request.completedAt) {
+                <p>Thời gian hoàn tất: {{ date(request.completedAt) }}</p>
+              }
+              <ol class="timeline">
+                @for (stage of model.timeline(request.kind); track $index) {
+                  <li
+                    [class.done]="$index <= request.stage"
+                    [attr.aria-current]="$index === request.stage ? 'step' : null"
+                  >
+                    {{ stage }}
+                  </li>
+                }
+              </ol>
+              @for (item of request.items; track item.variantId) {
+                <p>
+                  <strong>{{ lineFor(item.variantId)?.product_name }}</strong> · SL
+                  {{ item.quantity }}
+                  @if (request.kind === 'exchange') {
+                    <br />{{ lineFor(item.variantId)?.size }} /
+                    {{ lineFor(item.variantId)?.color }} → {{ item.replacement }}
+                  }
+                </p>
+              }
+              @if (request.replacementUnavailable) {
+                <div class="error">
+                  <h3>Variant thay thế vừa hết hàng</h3>
+                  <p>CSKH sẽ liên hệ để chọn variant khác hoặc chuyển sang hoàn tiền.</p>
+                  @for (item of request.items; track item.variantId) {
+                    @if (lineFor(item.variantId); as line) {
+                      <label class="field"
+                        >Chọn variant khác cho {{ line.product_name
+                        }}<select
+                          #alternative
+                          (change)="changeUnavailable(item.variantId, alternative.value)"
+                        >
+                          <option value="">Chọn variant</option>
+                          @for (value of model.replacements(line); track value) {
+                            @if (value !== item.replacement) {
+                              <option [value]="value">{{ value }}</option>
+                            }
+                          }
+                        </select></label
+                      >
+                    }
+                  }
+                  <button class="secondary" (click)="model.replacementConflict(request.id, true)">
+                    Chuyển sang hoàn tiền
+                  </button>
+                </div>
+              }
+              @if (request.kind === 'refund') {
+                <p>
+                  Số tiền {{ request.stage === 6 ? 'đã hoàn' : 'dự kiến hoàn' }}:
+                  <strong>{{ money(refundEstimate(request.items)) }}</strong>
+                </p>
+                <p>
+                  Phương thức:
+                  {{
+                    order()?.payment === 'COD'
+                      ? 'Chuyển khoản sau xác nhận CSKH'
+                      : 'Kênh VNPay ban đầu'
+                  }}
+                </p>
+                @if (order()?.payment === 'COD' && request.stage >= 1 && !request.bank) {
+                  <div class="muted">Vui lòng bổ sung thông tin nhận hoàn tiền.</div>
+                  <form (ngSubmit)="saveBank()">
+                    <label class="field"
+                      >Ngân hàng<input name="bank" [(ngModel)]="bankName" required /></label
+                    ><label class="field"
+                      >Số tài khoản<input
+                        name="account"
+                        inputmode="numeric"
+                        [(ngModel)]="bankAccount"
+                        required /></label
+                    ><label class="field"
+                      >Tên chủ tài khoản<input
+                        name="holder"
+                        [(ngModel)]="bankHolder"
+                        required /></label
+                    ><button type="submit">Lưu thông tin nhận tiền</button>
+                  </form>
+                }
+                @if (request.bank) {
+                  <p>
+                    {{ request.stage === 6 ? 'Tiền đã được chuyển tới' : 'Tài khoản nhận tiền' }}:
+                    {{ request.bank.name }} · ••••{{ request.bank.last4 }}
+                  </p>
+                }
+              }
+              @if (request.kind === 'exchange' && request.stage >= 5) {
+                <p class="muted">
+                  Đơn đổi hàng đã được tạo. Mã giao hàng đổi: EX-{{ request.id }}.
+                </p>
+              }
+              <div class="actions">
+                <button class="secondary" (click)="view.set('detail')">Xem chi tiết đơn</button>
+              </div>
+            </section>
+          }
+        }
+      }
+    </div>
+    <aside class="panel summary flow-order-summary">
+      <h2>An tâm cùng Velura</h2>
+      @if (order(); as item) {
+        <div class="row">
+          <span>Tiền hàng</span><span>{{ money(item.subtotal) }}</span>
+        </div>
+        <div class="row">
+          <span>Vận chuyển</span><span>{{ money(item.shipping) }}</span>
+        </div>
+        <div class="row">
+          <span>Giảm giá</span><span>−{{ money(item.discount) }}</span>
+        </div>
+        <div class="row total">
+          <span>Tổng thanh toán</span><span>{{ money(item.total) }}</span>
+        </div>
+      }
+      <p class="muted">Hủy đơn trước khi bắt đầu chuẩn bị hàng.</p>
+      <p class="muted">
+        Đổi / trả trong 30 ngày từ khi giao thành công, tối đa 2 lượt mỗi sản phẩm.
+      </p>
+      <p class="muted">Guest xác thực OTP để bảo vệ thông tin đơn hàng.</p>
+      <a class="link" routerLink="/contact">Liên hệ Velura</a>
+    </aside>
+  </div>
+</main>

@@ -40,10 +40,54 @@ export class CheckoutStore {
   readonly shipping = signal<CheckoutShipping>(this.readShipping());
   readonly methods = signal<CheckoutMethods>(this.readMethods());
 
-  readonly checkoutItems = computed(() => this.readCheckoutItems());
+  readonly items = signal<CartLine[]>(this.readCheckoutItems());
+  readonly checkoutItems = computed(() => this.items());
   readonly subtotal = computed(() =>
-    this.checkoutItems().reduce((sum, line) => sum + line.unit_price * line.quantity, 0),
+    this.items().reduce((sum, line) => sum + line.unit_price * line.quantity, 0),
   );
+
+  /**
+   * Updates quantity of an item in checkout and syncs with the persistent cart.
+   */
+  updateItemQty(variantId: string, quantity: number): void {
+    if (quantity <= 0) {
+      this.removeItem(variantId);
+      return;
+    }
+    const next = this.items().map((line) => {
+      if (line.variant_id === variantId) {
+        return { ...line, quantity };
+      }
+      return line;
+    });
+    this.items.set(next);
+    sessionStorage.setItem(ITEMS_KEY, JSON.stringify(next));
+    this.cart.updateQty(variantId, quantity);
+  }
+
+  /**
+   * Replaces a variant in checkout with another variant of the same product, keeping quantity.
+   */
+  replaceItemVariant(fromVariantId: string, next: CartLine): void {
+    const current = this.items();
+    const previous = current.find((line) => line.variant_id === fromVariantId);
+    const quantity = previous?.quantity || next.quantity || 1;
+    const filtered = current.filter((line) => line.variant_id !== fromVariantId);
+    const merged = [...filtered, { ...next, quantity }];
+    this.items.set(merged);
+    sessionStorage.setItem(ITEMS_KEY, JSON.stringify(merged));
+    this.cart.replaceVariant(fromVariantId, next);
+  }
+
+  /**
+   * Removes an item from checkout and syncs with the persistent cart.
+   */
+  removeItem(variantId: string): void {
+    const next = this.items().filter((line) => line.variant_id !== variantId);
+    this.items.set(next);
+    sessionStorage.setItem(ITEMS_KEY, JSON.stringify(next));
+    this.cart.removeItem(variantId);
+  }
 
   /**
    * Persists shipping fields used by vanilla `checkout_shipping`.
@@ -123,6 +167,7 @@ export class CheckoutStore {
   completeCheckout(orderedItems: CartLine[]): void {
     const ordered = new Set(orderedItems.map((line) => line.variant_id));
     this.cart.replaceItems(this.cart.items().filter((line) => !ordered.has(line.variant_id)));
+    this.items.set([]);
     sessionStorage.removeItem(ITEMS_KEY);
     sessionStorage.removeItem(GUEST_PAYLOAD_KEY);
     localStorage.removeItem(SHIPPING_KEY);

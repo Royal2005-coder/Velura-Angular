@@ -9,7 +9,7 @@ import type { CheckoutQuote } from '../../core/models/voucher.interface';
 import { CheckoutShippingPage } from './checkout-shipping.page';
 
 const CART = [
-  { variant_id: 'v1', product_name: 'Áo linen', color: 'trắng', size: 'M', quantity: 2, unit_price: 160000 },
+  { variant_id: 'v1', product_id: 'prod-1', product_name: 'Áo linen', color: 'trắng', size: 'M', quantity: 2, unit_price: 160000, product_image: '/assets/images/placeholder.jpg' },
 ];
 
 function quote(overrides: Partial<CheckoutQuote> = {}): CheckoutQuote {
@@ -37,13 +37,17 @@ interface PostCall {
 async function createPage(options: {
   quoteFor?: (body: Record<string, unknown>) => CheckoutQuote;
   orderResult?: () => ReturnType<ApiService['post']>;
+  productResult?: (path: string) => ReturnType<ApiService['get']>;
 }) {
   sessionStorage.clear();
   localStorage.clear();
   sessionStorage.setItem('checkout_items', JSON.stringify(CART));
   const calls: PostCall[] = [];
   const api = {
-    get: () => of({}),
+    get: (path: string) => {
+      if (options.productResult) return options.productResult(path);
+      return of({});
+    },
     patch: () => of({}),
     delete: () => of({}),
     post: (path: string, body: Record<string, unknown>) => {
@@ -134,4 +138,74 @@ describe('CheckoutShippingPage', () => {
     expect(page.selectedVoucherId()).toBe('vc-20');
     expect(localStorage.getItem('checkout_voucher_id')).toBe('vc-20');
   });
+
+  it('cho phép tăng giảm số lượng sản phẩm trực tiếp và gọi tính lại báo giá', async () => {
+    const { page, calls, fixture } = await createPage({});
+    const initialItem = page.items()[0];
+    expect(initialItem.quantity).toBe(2);
+
+    page.changeItemQty(initialItem, 1);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(page.items()[0].quantity).toBe(3);
+    const lastQuote = [...calls].reverse().find((call) => call.path === '/api/user/checkout/quote');
+    expect(lastQuote?.body['items']).toEqual([{ variant_id: 'v1', quantity: 3 }]);
+  });
+
+  it('cho phép xóa sản phẩm khỏi đơn hàng và cập nhật tóm tắt', async () => {
+    const { page, fixture } = await createPage({});
+    expect(page.items().length).toBe(1);
+
+    page.removeItem(page.items()[0]);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(page.items().length).toBe(0);
+  });
+
+  it('cho phép xem và đổi biến thể sản phẩm', async () => {
+    const mockVariants = [
+      { variant_id: 'v1', color: 'trắng', size: 'M', stock_quantity: 10 },
+      { variant_id: 'v2', color: 'đen', size: 'L', stock_quantity: 15 },
+    ];
+    const { page, fixture } = await createPage({
+      productResult: (path) => {
+        if (path === '/api/user/products/prod-1') {
+          return of({ variants: mockVariants });
+        }
+        return of({});
+      },
+    });
+
+    const item = page.items()[0];
+    page.toggleVariants(item);
+    expect(page.editingVariantId()).toBe('v1');
+    expect(page.variantChoices()).toEqual(mockVariants);
+
+    page.pickVariant(item, { variant_id: 'v2', color: 'đen', size: 'L' });
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(page.items()[0].variant_id).toBe('v2');
+    expect(page.items()[0].color).toBe('đen');
+    expect(page.items()[0].size).toBe('L');
+    expect(page.editingVariantId()).toBeNull();
+  });
+
+  it('đánh dấu biến thể bị thiếu hàng khi đặt đơn gặp lỗi INSUFFICIENT_STOCK', async () => {
+    const stockError = new ApiRequestError('Sản phẩm đã hết hàng', 400, 'INSUFFICIENT_STOCK', {
+      items: [{ variant_id: 'v1', requested_quantity: 2, stock_quantity: 0 }],
+    });
+    const { page } = await createPage({
+      orderResult: () => throwError(() => stockError),
+    });
+
+    fillShipping(page);
+    page.submit();
+
+    expect(page.submitting()).toBe(false);
+    expect(page.outOfStockVariantIds().has('v1')).toBe(true);
+  });
 });
+

@@ -264,7 +264,7 @@
         <mxCell id="c3_13" parent="c3_4" style="shape=mxgraph.bpmn.task2;whiteSpace=wrap;rectStyle=rounded;size=10;html=1;container=1;expand=0;collapsible=0;taskMarker=service;fontSize=14;" value="Xác định khách vãng lai hay thành viên&#xa;và lọc bộ mã theo đối tượng" vertex="1">
           <mxGeometry x="495" y="189" width="190" height="84" as="geometry" />
         </mxCell>
-        <mxCell id="c3_14" parent="c3_4" style="shape=mxgraph.bpmn.task2;whiteSpace=wrap;rectStyle=rounded;size=10;html=1;container=1;expand=0;collapsible=0;taskMarker=service;fontSize=14;" value="Chấm từng mã trên giá trị giỏ&#xa;hiện tại theo tám bước kiểm" vertex="1">
+        <mxCell id="c3_14" parent="c3_4" style="shape=mxgraph.bpmn.task2;whiteSpace=wrap;rectStyle=rounded;size=10;html=1;container=1;expand=0;collapsible=0;taskMarker=service;fontSize=14;" value="Chấm từng mã trên giá trị giỏ&#xa;hiện tại theo chín bước kiểm" vertex="1">
           <mxGeometry x="730" y="189" width="190" height="84" as="geometry" />
         </mxCell>
         <mxCell id="c3_15" parent="c3_4" style="shape=mxgraph.bpmn.gateway2;html=1;verticalLabelPosition=bottom;labelBackgroundColor=#ffffff;verticalAlign=top;align=center;perimeter=rhombusPerimeter;outlineConnect=0;outline=none;symbol=exclusiveGw;gwType=exclusive;fontSize=15;" value="" vertex="1">
@@ -282,7 +282,7 @@
         <mxCell id="c3_19" parent="c3_4" style="points=[[0.145,0.145,0],[0.5,0,0],[0.855,0.145,0],[1,0.5,0],[0.855,0.855,0],[0.5,1,0],[0.145,0.855,0],[0,0.5,0]];shape=mxgraph.bpmn.event;html=1;verticalLabelPosition=bottom;labelBackgroundColor=#ffffff;verticalAlign=top;align=center;perimeter=ellipsePerimeter;outlineConnect=0;aspect=fixed;outline=end;symbol=general;fontSize=14;" value="Ví mã đã&#xa;sẵn sàng" vertex="1">
           <mxGeometry x="1465" y="213" width="36" height="36" as="geometry" />
         </mxCell>
-        <mxCell id="c3_20" parent="c3_4" style="html=1;shape=mxgraph.flowchart.annotation_2;align=left;labelPosition=right;verticalAlign=top;fontSize=13;spacingLeft=10;" value="Tám bước kiểm theo thứ tự: mã ngừng hoạt động, chưa tới&#xa;hạn, hết hạn, hết lượt toàn hệ thống, chiến dịch cha dừng&#xa;hoặc cạn ngân sách, sai nhóm khách, hết lượt của chính&#xa;khách, chưa đạt giá trị đơn tối thiểu." vertex="1">
+        <mxCell id="c3_20" parent="c3_4" style="html=1;shape=mxgraph.flowchart.annotation_2;align=left;labelPosition=right;verticalAlign=top;fontSize=13;spacingLeft=10;" value="Chín bước kiểm theo thứ tự: mã ngừng hoạt động, chưa tới&#xa;hạn, hết hạn, hết lượt toàn hệ thống, chiến dịch cha dừng&#xa;hoặc cạn ngân sách, sai nhóm khách, sai danh mục, hết lượt&#xa;của chính khách, chưa đạt giá trị đơn tối thiểu." vertex="1">
           <mxGeometry x="718" y="568.2" width="26" height="104" as="geometry" />
         </mxCell>
         <mxCell id="c3_21" parent="c3_4" style="html=1;shape=mxgraph.flowchart.annotation_2;align=left;labelPosition=right;verticalAlign=top;fontSize=13;spacingLeft=10;" value="So sánh theo số tiền giảm thực tế sau khi áp trần, không&#xa;theo phần trăm danh nghĩa. Bằng nhau thì ưu tiên mã hết&#xa;hạn sớm hơn. Mỗi đơn một mã." vertex="1">
@@ -434,7 +434,7 @@
         <mxCell id="c4_19" parent="c4_5" style="text;html=1;fontSize=14;fontStyle=2;align=center;verticalAlign=middle;whiteSpace=wrap;" value="Mã còn hợp lệ?" vertex="1">
           <mxGeometry x="1384.5" y="151" width="150" height="40" as="geometry" />
         </mxCell>
-        <mxCell id="c4_20" parent="c4_5" style="shape=mxgraph.bpmn.task2;whiteSpace=wrap;rectStyle=rounded;size=10;html=1;container=1;expand=0;collapsible=0;taskMarker=send;fontSize=14;" value="Từ chối đơn kèm lý do cụ thể" vertex="1">
+        <mxCell id="c4_20" parent="c4_5" style="shape=mxgraph.bpmn.task2;whiteSpace=wrap;rectStyle=rounded;size=10;html=1;container=1;expand=0;collapsible=0;taskMarker=send;fontSize=14;" value="Chọn mã thay thế tốt nhất&#xa;và tính tổng mới" vertex="1">
           <mxGeometry x="1364.5" y="408.8" width="190" height="84" as="geometry" />
         </mxCell>
         <mxCell id="c4_21" parent="c4_5" style="shape=mxgraph.bpmn.task2;whiteSpace=wrap;rectStyle=rounded;size=10;html=1;container=1;expand=0;collapsible=0;taskMarker=service;fontSize=14;" value="Chốt tổng tiền bằng tạm tính&#xa;cộng phí giao trừ giảm giá" vertex="1">
@@ -443,7 +443,7 @@
         <mxCell id="c4_22" parent="c4_5" style="shape=mxgraph.bpmn.task2;whiteSpace=wrap;rectStyle=rounded;size=10;html=1;container=1;expand=0;collapsible=0;taskMarker=service;fontSize=14;" value="Ghi lượt dùng mã và cộng dồn ngân sách&#xa;trong cùng giao dịch" vertex="1">
           <mxGeometry x="1811" y="182" width="190" height="84" as="geometry" />
         </mxCell>
-        <mxCell id="c4_23" parent="c4_5" style="points=[[0.145,0.145,0],[0.5,0,0],[0.855,0.145,0],[1,0.5,0],[0.855,0.855,0],[0.5,1,0],[0.145,0.855,0],[0,0.5,0]];shape=mxgraph.bpmn.event;html=1;verticalLabelPosition=bottom;labelBackgroundColor=#ffffff;verticalAlign=top;align=center;perimeter=ellipsePerimeter;outlineConnect=0;aspect=fixed;outline=end;symbol=general;fontSize=14;" value="Dừng, chờ khách&#xa;chọn lại mã" vertex="1">
+        <mxCell id="c4_23" parent="c4_5" style="points=[[0.145,0.145,0],[0.5,0,0],[0.855,0.145,0],[1,0.5,0],[0.855,0.855,0],[0.5,1,0],[0.145,0.855,0],[0,0.5,0]];shape=mxgraph.bpmn.event;html=1;verticalLabelPosition=bottom;labelBackgroundColor=#ffffff;verticalAlign=top;align=center;perimeter=ellipsePerimeter;outlineConnect=0;aspect=fixed;outline=end;symbol=general;fontSize=14;" value="Không tạo đơn, chờ khách&#xa;xác nhận tổng mới" vertex="1">
           <mxGeometry x="1653" y="432.8" width="36" height="36" as="geometry" />
         </mxCell>
         <mxCell id="c4_24" parent="c4_5" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=10;fontSize=14;" value="Nhật ký&#xa;khuyến mãi" vertex="1">
@@ -461,103 +461,109 @@
         <mxCell id="c4_28" parent="c4_5" style="html=1;shape=mxgraph.flowchart.annotation_2;align=left;labelPosition=right;verticalAlign=top;fontSize=13;spacingLeft=10;" value="Miễn phí vận chuyển là ngưỡng theo giá trị đơn do máy chủ&#xa;giữ, không phải một loại mã giảm giá." vertex="1">
           <mxGeometry x="1141" y="561.2" width="26" height="104" as="geometry" />
         </mxCell>
-        <mxCell id="c4_29" parent="c4_5" style="html=1;shape=mxgraph.flowchart.annotation_2;align=left;labelPosition=right;verticalAlign=top;fontSize=13;spacingLeft=10;" value="Huỷ đơn thì lượt dùng và phần ngân sách đã cộng được hoàn&#xa;lại." vertex="1">
+        <mxCell id="c4_29" parent="c4_5" style="html=1;shape=mxgraph.flowchart.annotation_2;align=left;labelPosition=right;verticalAlign=top;fontSize=13;spacingLeft=10;" value="Đơn bị huỷ (khách huỷ, admin huỷ,&#xa;hoặc quá 24 giờ chưa thanh toán)&#xa;được trả lượt và ngân sách đúng&#xa;một lần." vertex="1">
           <mxGeometry x="1752" y="561.2" width="26" height="104" as="geometry" />
         </mxCell>
-        <mxCell id="c4_30" parent="1" source="c4_6" target="c4_7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;fontSize=14;" edge="1">
+        <mxCell id="c4_30" parent="c4_5" style="html=1;shape=mxgraph.flowchart.annotation_2;align=left;labelPosition=right;verticalAlign=top;fontSize=13;spacingLeft=10;" value="Khách không bị trừ tiền theo con số khác với con số đã&#xa;thấy. Khách xác nhận tổng mới thì đơn đi lại từ đầu với mã&#xa;thay thế." vertex="1">
+          <mxGeometry x="671" y="398.8" width="26" height="104" as="geometry" />
+        </mxCell>
+        <mxCell id="c4_31" parent="1" source="c4_6" target="c4_7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;fontSize=14;" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="c4_31" parent="1" source="c4_7" target="c4_8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;fontSize=14;" edge="1">
+        <mxCell id="c4_32" parent="1" source="c4_7" target="c4_8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;fontSize=14;" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="c4_32" parent="1" source="c4_8" target="c4_9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;fontSize=14;" edge="1">
+        <mxCell id="c4_33" parent="1" source="c4_8" target="c4_9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;fontSize=14;" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="c4_33" parent="1" source="c4_10" target="c4_11" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;fontSize=14;" edge="1">
+        <mxCell id="c4_34" parent="1" source="c4_10" target="c4_11" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;fontSize=14;" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="c4_34" parent="1" source="c4_11" target="c4_12" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;fontSize=14;" edge="1">
+        <mxCell id="c4_35" parent="1" source="c4_11" target="c4_12" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;fontSize=14;" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="c4_35" parent="1" source="c4_12" target="c4_14" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;fontSize=14;" edge="1">
+        <mxCell id="c4_36" parent="1" source="c4_12" target="c4_14" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;fontSize=14;" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="c4_36" connectable="0" parent="c4_35" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=14;" value="Không" vertex="1">
+        <mxCell id="c4_37" connectable="0" parent="c4_36" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=14;" value="Không" vertex="1">
           <mxGeometry relative="1" as="geometry"><mxPoint as="offset" /></mxGeometry>
         </mxCell>
-        <mxCell id="c4_37" parent="1" source="c4_14" target="c4_16" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;fontSize=14;" edge="1">
+        <mxCell id="c4_38" parent="1" source="c4_14" target="c4_16" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;fontSize=14;" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="c4_38" parent="1" source="c4_12" target="c4_15" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;fontSize=14;" edge="1">
+        <mxCell id="c4_39" parent="1" source="c4_12" target="c4_15" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;fontSize=14;" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="c4_39" connectable="0" parent="c4_38" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=14;" value="Có" vertex="1">
+        <mxCell id="c4_40" connectable="0" parent="c4_39" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=14;" value="Có" vertex="1">
           <mxGeometry relative="1" as="geometry"><mxPoint as="offset" /></mxGeometry>
         </mxCell>
-        <mxCell id="c4_40" parent="1" source="c4_15" target="c4_17" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;fontSize=14;" edge="1">
+        <mxCell id="c4_41" parent="1" source="c4_15" target="c4_17" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;fontSize=14;" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="c4_41" parent="1" source="c4_17" target="c4_18" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;fontSize=14;" edge="1">
+        <mxCell id="c4_42" parent="1" source="c4_17" target="c4_18" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;fontSize=14;" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="c4_42" parent="1" source="c4_18" target="c4_20" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;fontSize=14;" edge="1">
+        <mxCell id="c4_43" parent="1" source="c4_18" target="c4_20" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;fontSize=14;" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="c4_43" connectable="0" parent="c4_42" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=14;" value="Không" vertex="1">
+        <mxCell id="c4_44" connectable="0" parent="c4_43" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=14;" value="Không" vertex="1">
           <mxGeometry relative="1" as="geometry"><mxPoint as="offset" /></mxGeometry>
         </mxCell>
-        <mxCell id="c4_44" parent="1" source="c4_20" target="c4_23" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;fontSize=14;" edge="1">
+        <mxCell id="c4_45" parent="1" source="c4_20" target="c4_23" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;fontSize=14;" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="c4_45" parent="1" source="c4_18" target="c4_21" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;fontSize=14;" edge="1">
+        <mxCell id="c4_46" parent="1" source="c4_18" target="c4_21" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;fontSize=14;" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="c4_46" connectable="0" parent="c4_45" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=14;" value="Có" vertex="1">
+        <mxCell id="c4_47" connectable="0" parent="c4_46" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=14;" value="Có" vertex="1">
           <mxGeometry relative="1" as="geometry"><mxPoint as="offset" /></mxGeometry>
         </mxCell>
-        <mxCell id="c4_47" parent="1" source="c4_21" target="c4_22" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;fontSize=14;" edge="1">
+        <mxCell id="c4_48" parent="1" source="c4_21" target="c4_22" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;fontSize=14;" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="c4_48" parent="1" source="c4_22" target="c4_25" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;fontSize=14;" edge="1">
+        <mxCell id="c4_49" parent="1" source="c4_22" target="c4_25" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;fontSize=14;" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="c4_49" parent="1" source="c4_25" target="c4_26" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;fontSize=14;" edge="1">
+        <mxCell id="c4_50" parent="1" source="c4_25" target="c4_26" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;fontSize=14;" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="c4_50" parent="1" source="c4_22" target="c4_24" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;endArrow=none;endFill=0;fontSize=13;" edge="1">
+        <mxCell id="c4_51" parent="1" source="c4_22" target="c4_24" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;endArrow=none;endFill=0;fontSize=13;" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="c4_51" parent="1" source="c4_7" target="c4_10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;endArrow=open;endFill=0;startArrow=oval;startFill=0;fontSize=13;" edge="1">
+        <mxCell id="c4_52" parent="1" source="c4_7" target="c4_10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;endArrow=open;endFill=0;startArrow=oval;startFill=0;fontSize=13;" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="c4_52" connectable="0" parent="c4_51" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=14;" value="Giỏ hàng và mã&#xa;khách đang áp" vertex="1">
+        <mxCell id="c4_53" connectable="0" parent="c4_52" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=14;" value="Giỏ hàng và mã&#xa;khách đang áp" vertex="1">
           <mxGeometry relative="1" as="geometry"><mxPoint as="offset" /></mxGeometry>
         </mxCell>
-        <mxCell id="c4_53" parent="1" source="c4_14" target="c4_8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;endArrow=open;endFill=0;startArrow=oval;startFill=0;fontSize=13;" edge="1">
+        <mxCell id="c4_54" parent="1" source="c4_14" target="c4_8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;endArrow=open;endFill=0;startArrow=oval;startFill=0;fontSize=13;" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="c4_54" connectable="0" parent="c4_53" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=14;" value="Giá đã thay đổi,&#xa;vui lòng tải lại giỏ" vertex="1">
+        <mxCell id="c4_55" connectable="0" parent="c4_54" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=14;" value="Giá đã thay đổi,&#xa;vui lòng tải lại giỏ" vertex="1">
           <mxGeometry relative="1" as="geometry"><mxPoint as="offset" /></mxGeometry>
         </mxCell>
-        <mxCell id="c4_55" parent="1" source="c4_20" target="c4_8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;endArrow=open;endFill=0;startArrow=oval;startFill=0;fontSize=13;" edge="1">
+        <mxCell id="c4_56" parent="1" source="c4_20" target="c4_8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;endArrow=open;endFill=0;startArrow=oval;startFill=0;fontSize=13;" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="c4_56" connectable="0" parent="c4_55" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=14;" value="Mã không còn hợp lệ" vertex="1">
+        <mxCell id="c4_57" connectable="0" parent="c4_56" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=14;" value="Mã vừa mất hiệu lực,&#xa;mã thay thế và tổng mới" vertex="1">
           <mxGeometry relative="1" as="geometry"><mxPoint as="offset" /></mxGeometry>
         </mxCell>
-        <mxCell id="c4_57" parent="1" source="c4_25" target="c4_8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;endArrow=open;endFill=0;startArrow=oval;startFill=0;fontSize=13;" edge="1">
+        <mxCell id="c4_58" parent="1" source="c4_25" target="c4_8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;endArrow=open;endFill=0;startArrow=oval;startFill=0;fontSize=13;" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="c4_58" connectable="0" parent="c4_57" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=14;" value="Xác nhận đơn và&#xa;số tiền đã giảm" vertex="1">
+        <mxCell id="c4_59" connectable="0" parent="c4_58" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=14;" value="Xác nhận đơn và&#xa;số tiền đã giảm" vertex="1">
           <mxGeometry relative="1" as="geometry"><mxPoint as="offset" /></mxGeometry>
         </mxCell>
-        <mxCell id="c4_59" parent="1" source="c4_27" target="c4_11" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;endArrow=none;endFill=0;fontSize=13;" edge="1">
+        <mxCell id="c4_60" parent="1" source="c4_30" target="c4_20" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;endArrow=none;endFill=0;fontSize=13;" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="c4_60" parent="1" source="c4_28" target="c4_15" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;endArrow=none;endFill=0;fontSize=13;" edge="1">
+        <mxCell id="c4_61" parent="1" source="c4_27" target="c4_11" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;endArrow=none;endFill=0;fontSize=13;" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="c4_61" parent="1" source="c4_29" target="c4_22" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;endArrow=none;endFill=0;fontSize=13;" edge="1">
+        <mxCell id="c4_62" parent="1" source="c4_28" target="c4_15" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;endArrow=none;endFill=0;fontSize=13;" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c4_63" parent="1" source="c4_29" target="c4_22" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;endArrow=none;endFill=0;fontSize=13;" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
       </root>

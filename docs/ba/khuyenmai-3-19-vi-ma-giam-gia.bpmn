@@ -48,12 +48,12 @@ và mức giảm" sourceRef="w_chon" targetRef="w_vi" />
     </bpmn:laneSet>
     <bpmn:startEvent id="w_sstart" name="Nhận phiên giỏ hàng"><bpmn:outgoing>f_w_sstart_w_loc</bpmn:outgoing></bpmn:startEvent>
     <bpmn:serviceTask id="w_loc" name="Xác định khách vãng lai hay thành viên và lọc bộ mã theo đối tượng"><bpmn:incoming>f_w_sstart_w_loc</bpmn:incoming><bpmn:outgoing>f_w_loc_w_cham</bpmn:outgoing></bpmn:serviceTask>
-    <bpmn:serviceTask id="w_cham" name="Chấm từng mã trên giá trị giỏ hiện tại theo tám bước kiểm"><bpmn:incoming>f_w_loc_w_cham</bpmn:incoming><bpmn:outgoing>f_w_cham_w_sgw</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:serviceTask id="w_cham" name="Chấm từng mã trên giá trị giỏ hiện tại theo chín bước kiểm"><bpmn:incoming>f_w_loc_w_cham</bpmn:incoming><bpmn:outgoing>f_w_cham_w_sgw</bpmn:outgoing></bpmn:serviceTask>
     <bpmn:exclusiveGateway id="w_sgw" name="Có mã đủ điều kiện?"><bpmn:incoming>f_w_cham_w_sgw</bpmn:incoming><bpmn:outgoing>f_w_sgw_w_lydo</bpmn:outgoing><bpmn:outgoing>f_w_sgw_w_chon</bpmn:outgoing></bpmn:exclusiveGateway>
     <bpmn:sendTask id="w_lydo" name="Nêu lý do chưa dùng được và số tiền còn thiếu"><bpmn:incoming>f_w_sgw_w_lydo</bpmn:incoming><bpmn:outgoing>f_w_lydo_w_send</bpmn:outgoing></bpmn:sendTask>
     <bpmn:serviceTask id="w_chon" name="Chọn mã cho số tiền giảm thực tế lớn nhất"><bpmn:incoming>f_w_sgw_w_chon</bpmn:incoming><bpmn:outgoing>f_w_chon_w_send</bpmn:outgoing></bpmn:serviceTask>
     <bpmn:endEvent id="w_send" name="Ví mã đã sẵn sàng"><bpmn:incoming>f_w_lydo_w_send</bpmn:incoming><bpmn:incoming>f_w_chon_w_send</bpmn:incoming></bpmn:endEvent>
-    <bpmn:textAnnotation id="n_tambuoc"><bpmn:text>Tám bước kiểm theo thứ tự: mã ngừng hoạt động, chưa tới hạn, hết hạn, hết lượt toàn hệ thống, chiến dịch cha dừng hoặc cạn ngân sách, sai nhóm khách, hết lượt của chính khách, chưa đạt giá trị đơn tối thiểu.</bpmn:text></bpmn:textAnnotation>
+    <bpmn:textAnnotation id="n_tambuoc"><bpmn:text>Chín bước kiểm theo thứ tự: mã ngừng hoạt động, chưa tới hạn, hết hạn, hết lượt toàn hệ thống, chiến dịch cha dừng hoặc cạn ngân sách, sai nhóm khách, sai danh mục, hết lượt của chính khách, chưa đạt giá trị đơn tối thiểu.</bpmn:text></bpmn:textAnnotation>
     <bpmn:textAnnotation id="n_totnhat"><bpmn:text>So sánh theo số tiền giảm thực tế sau khi áp trần, không theo phần trăm danh nghĩa. Bằng nhau thì ưu tiên mã hết hạn sớm hơn. Mỗi đơn một mã.</bpmn:text></bpmn:textAnnotation>
     <bpmn:sequenceFlow id="f_w_sstart_w_loc" name="" sourceRef="w_sstart" targetRef="w_loc" />
     <bpmn:sequenceFlow id="f_w_loc_w_cham" name="" sourceRef="w_loc" targetRef="w_cham" />

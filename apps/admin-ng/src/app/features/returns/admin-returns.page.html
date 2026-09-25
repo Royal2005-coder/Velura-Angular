@@ -157,7 +157,11 @@
               <tbody>
                 @for (row of pagedReturns(); track row.return_id) {
                   <tr>
-                    <td>{{ row.return_id }}</td>
+                    <td>
+                      <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="openReturnDetail(row.return_id)" style="font-weight: 600; text-decoration: underline;" title="Xem chi tiết phiếu đổi/trả">
+                        {{ row.return_id }}
+                      </button>
+                    </td>
                     <td>{{ row.order_id }}</td>
                     <td>
                       {{ returnKind(row) }}
@@ -168,8 +172,9 @@
                     <td><span class="admin-badge">{{ returnStatusLabel(row.status) }}</span></td>
                     <td>{{ date(row.created_at) }}</td>
                     <td>
-                      @if (canMutate()) {
-                        <div class="admin-table-actions">
+                      <div class="admin-table-actions">
+                        <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="openReturnDetail(row.return_id)">Chi tiết</button>
+                        @if (canMutate()) {
                           @if (row.status === 'pending') {
                             @if (showReturnAction(row, 'refund')) {
                               <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openReturnAction('refund', row.return_id)">Hoàn tiền</button>
@@ -184,8 +189,8 @@
                               <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="openReturnAction('reject', row.return_id)">Không đạt kiểm tra</button>
                             }
                           }
-                        </div>
-                      }
+                        }
+                      </div>
                     </td>
                   </tr>
                 }
@@ -204,13 +209,18 @@
               <tbody>
                 @for (row of pagedTickets(); track row.ticket_id) {
                   <tr>
-                    <td>{{ row.ticket_id }}</td>
-                    <td>{{ row.subject || '—' }}</td>
+                    <td>
+                      <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="openTicketDetail(row.ticket_id)" style="font-weight: 600; text-decoration: underline;" title="Xem chi tiết phiếu hỗ trợ">
+                        {{ row.ticket_id }}
+                      </button>
+                    </td>
+                    <td>{{ row.title || row.subject || '—' }}</td>
                     <td>{{ row.priority || '—' }}</td>
                     <td><span class="admin-badge">{{ ticketStatusLabel(row.status) }}</span></td>
                     <td>
-                      @if (canMutate() && row.status !== 'closed') {
-                        <div class="admin-table-actions">
+                      <div class="admin-table-actions">
+                        <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="openTicketDetail(row.ticket_id)">Chi tiết</button>
+                        @if (canMutate() && row.status !== 'closed') {
                           @if (canTicketAction(row, 'reply')) {
                             <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openTicketAction('reply', row.ticket_id)">Phản hồi</button>
                           }
@@ -218,8 +228,8 @@
                             <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openTicketAction('resolve', row.ticket_id)">Đã giải quyết</button>
                           }
                           <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="openTicketAction('close', row.ticket_id)">Đóng</button>
-                        </div>
-                      }
+                        }
+                      </div>
                     </td>
                   </tr>
                 }
@@ -319,5 +329,188 @@
         </footer>
       </form>
     </section>
+  </div>
+}
+
+<!-- Detail Drawer: Phiếu Đổi / Trả hàng (A2) -->
+@if (returnDetailOpen() && selectedReturn()) {
+  <div class="admin-drawer-backdrop" (click)="closeOverlays()"></div>
+  <aside class="admin-drawer admin-drawer--wide">
+    <header class="admin-drawer__header">
+      <div>
+        <p class="admin-product-code" style="margin: 0;">Phiếu đổi / trả: {{ selectedReturn()!.return_id }}</p>
+        <h2 class="admin-section__title" style="margin: 4px 0;">Yêu cầu {{ returnKind(selectedReturn()!) }}</h2>
+        <div class="admin-status-group" style="display: flex; gap: 8px; align-items: center; margin-top: 4px;">
+          <span class="admin-badge">{{ returnStatusLabel(selectedReturn()!.status) }}</span>
+          @if (selectedReturn()!.order_id) {
+            <span class="admin-table-note">Đơn hàng: <strong>{{ selectedReturn()!.order_id }}</strong></span>
+          }
+        </div>
+      </div>
+      <button class="admin-icon-button" type="button" (click)="closeOverlays()">×</button>
+    </header>
+
+    <div class="admin-drawer__body" style="display: flex; flex-direction: column; gap: 20px;">
+      <!-- Tiến trình State Machine (Stepper) -->
+      <div style="background: #faf8f5; border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px;">
+        <span style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: var(--muted); letter-spacing: 0.04em;">Tiến trình xử lý đổi trả:</span>
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 12px; gap: 4px; overflow-x: auto; padding-bottom: 4px;">
+          @for (step of [
+            { label: 'Chờ duyệt', idx: 0 },
+            { label: 'Đã duyệt', idx: 1 },
+            { label: 'Khách gửi hàng', idx: 2 },
+            { label: 'Kho đã nhận', idx: 3 },
+            { label: 'Hoàn tất', idx: 4 }
+          ]; track step.idx) {
+            <div style="display: flex; flex-direction: column; align-items: center; flex: 1; text-align: center; min-width: 70px;">
+              <div
+                [style.background]="returnStepIndex(selectedReturn()!.status) >= step.idx ? '#7C5454' : '#e0d8ce'"
+                [style.color]="returnStepIndex(selectedReturn()!.status) >= step.idx ? '#fff' : '#666'"
+                style="width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700;"
+              >
+                {{ returnStepIndex(selectedReturn()!.status) > step.idx ? '✓' : (step.idx + 1) }}
+              </div>
+              <span style="font-size: 0.6875rem; margin-top: 4px; font-weight: 500;" [style.color]="returnStepIndex(selectedReturn()!.status) >= step.idx ? '#4a4039' : '#999'">
+                {{ step.label }}
+              </span>
+            </div>
+            @if (step.idx < 4) {
+              <div [style.background]="returnStepIndex(selectedReturn()!.status) > step.idx ? '#7C5454' : '#e0d8ce'" style="height: 2px; flex: 1; margin: 0 2px;"></div>
+            }
+          }
+        </div>
+        @if (selectedReturn()!.status === 'rejected') {
+          <div style="margin-top: 10px; padding: 8px 12px; background: #ffebee; border-radius: 6px; color: #c62828; font-size: 0.8125rem;">
+            ⛔ <strong>Phiếu đã bị từ chối.</strong> Lý do: {{ selectedReturn()!.rejection_reason || 'Không đạt điều kiện đổi trả' }}
+          </div>
+        }
+      </div>
+
+      <!-- Nội dung & Lý do từ khách hàng -->
+      <div style="background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px;">
+        <h4 style="margin: 0 0 10px 0; font-size: 0.875rem; font-weight: 600; color: #4a4039;">Nội dung & Lý do từ khách hàng</h4>
+        <p style="margin: 0; font-size: 0.875rem; line-height: 1.5; color: var(--ink);">
+          {{ selectedReturn()!.description || 'Không có mô tả chi tiết từ khách hàng.' }}
+        </p>
+
+        @if (selectedReturn()!.evidence_images?.length) {
+          <div style="margin-top: 14px;">
+            <span style="font-size: 0.75rem; font-weight: 600; color: var(--muted); text-transform: uppercase;">Ảnh bằng chứng sản phẩm ({{ selectedReturn()!.evidence_images!.length }}):</span>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px;">
+              @for (img of selectedReturn()!.evidence_images!; track img) {
+                <button
+                  type="button"
+                  style="border: 1px solid var(--line); border-radius: 6px; overflow: hidden; padding: 0; background: none; cursor: pointer;"
+                  title="Click để phóng to ảnh"
+                  (click)="openLightbox(img)"
+                >
+                  <img [src]="img" alt="Bằng chứng đổi trả" style="width: 72px; height: 72px; object-fit: cover; display: block;" />
+                </button>
+              }
+            </div>
+          </div>
+        }
+      </div>
+
+      <!-- Thông tin giải quyết & Tài chính -->
+      <dl class="admin-data-list">
+        <div><dt>Mã đơn hàng</dt><dd><strong>{{ selectedReturn()!.order_id }}</strong></dd></div>
+        <div><dt>Khách hàng (User ID)</dt><dd>{{ selectedReturn()!.user_id || 'Khách vãng lai' }}</dd></div>
+        <div><dt>Loại yêu cầu</dt><dd><strong>{{ returnKind(selectedReturn()!) }}</strong></dd></div>
+        <div><dt>Tiền hoàn dự kiến</dt><dd><strong style="color: #2e7d32;">{{ money(selectedReturn()!.refundable_amount || selectedReturn()!.refund_amount) }}</strong></dd></div>
+        <div><dt>Mã vận đơn trả về</dt><dd>{{ selectedReturn()!.tracking_return_code || '—' }}</dd></div>
+        <div><dt>Kết quả kiểm tra kho</dt><dd>{{ selectedReturn()!.condition_check_result || 'Chưa kiểm định' }}</dd></div>
+        <div><dt>Ghi chú CSKH</dt><dd>{{ selectedReturn()!.admin_note || '—' }}</dd></div>
+        <div><dt>Thời gian tạo phiếu</dt><dd>{{ date(selectedReturn()!.created_at) }}</dd></div>
+      </dl>
+
+      <!-- Thao tác trực tiếp từ Drawer nếu có quyền -->
+      @if (canMutate()) {
+        <div style="display: flex; gap: 10px; justify-content: flex-end; padding-top: 14px; border-top: 1px solid var(--line);">
+          @if (selectedReturn()!.status === 'pending') {
+            @if (showReturnAction(selectedReturn()!, 'refund')) {
+              <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openReturnAction('refund', selectedReturn()!.return_id)">Duyệt hoàn tiền</button>
+            }
+            @if (showReturnAction(selectedReturn()!, 'exchange')) {
+              <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openReturnAction('exchange', selectedReturn()!.return_id)">Duyệt đổi hàng</button>
+            }
+            <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="openReturnAction('reject', selectedReturn()!.return_id)">Từ chối yêu cầu</button>
+          } @else if (nextReturnStep(selectedReturn()!); as step) {
+            <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="advanceReturn(selectedReturn()!, step.status)">{{ step.label }}</button>
+            @if (selectedReturn()!.status === 'received') {
+              <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="openReturnAction('reject', selectedReturn()!.return_id)">Không đạt kiểm tra</button>
+            }
+          }
+        </div>
+      }
+    </div>
+  </aside>
+}
+
+<!-- Detail Drawer: Phiếu hỗ trợ khách hàng (Support Ticket) -->
+@if (ticketDetailOpen() && selectedTicket()) {
+  <div class="admin-drawer-backdrop" (click)="closeOverlays()"></div>
+  <aside class="admin-drawer admin-drawer--wide">
+    <header class="admin-drawer__header">
+      <div>
+        <p class="admin-product-code" style="margin: 0;">Phiếu hỗ trợ: {{ selectedTicket()!.ticket_id }}</p>
+        <h2 class="admin-section__title" style="margin: 4px 0;">{{ selectedTicket()!.title || selectedTicket()!.subject || 'Phiếu hỗ trợ khách hàng' }}</h2>
+        <div class="admin-status-group" style="display: flex; gap: 8px; align-items: center; margin-top: 4px;">
+          <span class="admin-badge">{{ ticketStatusLabel(selectedTicket()!.status) }}</span>
+          <span class="admin-table-note">Ưu tiên: <strong>{{ selectedTicket()!.priority || 'Bình thường' }}</strong></span>
+        </div>
+      </div>
+      <button class="admin-icon-button" type="button" (click)="closeOverlays()">×</button>
+    </header>
+
+    <div class="admin-drawer__body" style="display: flex; flex-direction: column; gap: 20px;">
+      <!-- Nội dung yêu cầu từ khách -->
+      <div style="background: #faf8f5; border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px;">
+        <span style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: var(--muted); letter-spacing: 0.04em;">Nội dung yêu cầu từ khách hàng:</span>
+        <p style="margin: 6px 0 0 0; font-size: 0.875rem; line-height: 1.6; color: var(--ink);">
+          {{ selectedTicket()!.description || 'Không có mô tả chi tiết.' }}
+        </p>
+      </div>
+
+      <!-- Phản hồi từ CSKH nếu đã có -->
+      @if (selectedTicket()!.admin_reply) {
+        <div style="background: #f0f7fc; border: 1px solid #b8d5ea; border-radius: 8px; padding: 14px 16px;">
+          <span style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: #2980b9; letter-spacing: 0.04em;">Phản hồi từ CSKH Velura:</span>
+          <p style="margin: 6px 0 0 0; font-size: 0.875rem; line-height: 1.6; color: #2c3e50;">
+            {{ selectedTicket()!.admin_reply }}
+          </p>
+        </div>
+      }
+
+      <dl class="admin-data-list">
+        <div><dt>Email khách hàng</dt><dd><strong>{{ selectedTicket()!.guest_email || '—' }}</strong></dd></div>
+        <div><dt>Số điện thoại</dt><dd><strong>{{ selectedTicket()!.guest_phone || '—' }}</strong></dd></div>
+        <div><dt>User ID</dt><dd>{{ selectedTicket()!.user_id || 'Khách vãng lai' }}</dd></div>
+        <div><dt>Thời gian tạo</dt><dd>{{ date(selectedTicket()!.created_at) }}</dd></div>
+        @if (selectedTicket()!.resolved_at) {
+          <div><dt>Thời gian giải quyết</dt><dd>{{ date(selectedTicket()!.resolved_at) }}</dd></div>
+        }
+      </dl>
+
+      <!-- Nút thao tác -->
+      @if (canMutate() && selectedTicket()!.status !== 'closed') {
+        <div style="display: flex; gap: 10px; justify-content: flex-end; padding-top: 14px; border-top: 1px solid var(--line);">
+          @if (canTicketAction(selectedTicket()!, 'reply')) {
+            <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openTicketAction('reply', selectedTicket()!.ticket_id)">Phản hồi</button>
+          }
+          @if (canTicketAction(selectedTicket()!, 'resolve')) {
+            <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openTicketAction('resolve', selectedTicket()!.ticket_id)">Đã giải quyết</button>
+          }
+          <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="openTicketAction('close', selectedTicket()!.ticket_id)">Đóng phiếu</button>
+        </div>
+      }
+    </div>
+  </aside>
+}
+
+@if (lightboxImage()) {
+  <div class="admin-lightbox-overlay" (click)="closeLightbox()">
+    <button class="admin-lightbox-overlay__close" type="button" (click)="closeLightbox()">×</button>
+    <img class="admin-lightbox-overlay__image" [src]="lightboxImage()" alt="Ảnh đính kèm cỡ lớn" (click)="$event.stopPropagation()" />
   </div>
 }

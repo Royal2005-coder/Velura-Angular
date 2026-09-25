@@ -211,29 +211,143 @@
 
 @if (actionType() && selected()) {
   <div class="admin-modal-overlay">
-    <section class="admin-modal">
+    <section class="admin-modal" [class.admin-modal--lg]="actionType() === 'reply'">
       <form (submit)="submitAction($event)">
         <header class="admin-modal__header">
-          <h2>{{ actionTitle() }}</h2>
+          <div>
+            <h2>{{ actionTitle() }}</h2>
+            @if (actionType() === 'reply') {
+              <small style="color: var(--muted); font-size: 0.8125rem;">Trợ lý AI hỗ trợ CSKH phản hồi khách hàng thông minh</small>
+            }
+          </div>
           <button class="admin-icon-button" type="button" (click)="closeOverlays()">×</button>
         </header>
-        <div class="admin-modal__body">
-          <p>{{ commentOf(selected()!) }}</p>
-          <label class="admin-form-group">
-            <span class="admin-form-label">{{ actionType() === 'reply' ? 'Nội dung phản hồi' : 'Lý do / ghi chú' }}</span>
+
+        <div class="admin-modal__body" style="display: flex; flex-direction: column; gap: 16px;">
+          <!-- 1. Thông tin ngữ cảnh đánh giá của khách hàng -->
+          <div style="background: #faf8f5; border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 8px;">
+              <div>
+                <strong style="color: var(--ink); font-size: 0.9375rem;">{{ productName(selected()!) }}</strong>
+                @if (productSku(selected()!)) {
+                  <span class="admin-table-note" style="margin-left: 6px;">({{ productSku(selected()!) }})</span>
+                }
+                <div style="font-size: 0.8125rem; color: var(--muted); margin-top: 2px;">
+                  <span>Đơn: <strong>{{ selected()!.order_id || '—' }}</strong></span>
+                  <span style="margin: 0 6px;">•</span>
+                  <span>Khách: <strong>{{ selected()!.user_id || 'Ẩn danh' }}</strong></span>
+                  <span style="margin: 0 6px;">•</span>
+                  <span>{{ date(selected()!.submitted_at) }}</span>
+                </div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <span style="color: #e67e22; font-size: 1rem; font-weight: 600;">{{ stars(selected()!) }}</span>
+                <span class="admin-badge">{{ statusLabel(selected()!.status) }}</span>
+              </div>
+            </div>
+
+            <div style="padding: 10px 12px; background: #fff; border-radius: 6px; border: 1px solid #ebd9c8; margin-top: 8px;">
+              <strong style="font-size: 0.75rem; text-transform: uppercase; color: var(--muted); letter-spacing: 0.04em;">Nhận xét từ khách:</strong>
+              <p style="margin: 4px 0 0 0; font-size: 0.875rem; color: var(--ink); line-height: 1.5;">{{ commentOf(selected()!) }}</p>
+            </div>
+
+            <!-- Thư viện ảnh đính kèm của khách nếu có -->
+            @if (selected()!.images?.length) {
+              <div style="margin-top: 10px;">
+                <span style="font-size: 0.75rem; font-weight: 600; color: var(--muted); text-transform: uppercase;">Ảnh đính kèm từ khách ({{ selected()!.images!.length }}):</span>
+                <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px;">
+                  @for (image of selected()!.images!; track image) {
+                    <button
+                      type="button"
+                      style="border: 1px solid var(--line); border-radius: 6px; overflow: hidden; padding: 0; background: none; cursor: pointer; transition: transform 0.2s;"
+                      title="Click để phóng to ảnh"
+                      (click)="openLightbox(image)"
+                    >
+                      <img [src]="image" alt="Ảnh khách chụp" style="width: 60px; height: 60px; object-fit: cover; display: block;" />
+                    </button>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+
+          <!-- 2. Panel Trợ lý AI CSKH (Chỉ hiện khi thao tác phản hồi) -->
+          @if (actionType() === 'reply') {
+            <div style="background: #f0f7fc; border: 1px solid #b8d5ea; border-radius: 8px; padding: 12px 16px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 8px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span style="background: #2980b9; color: #fff; font-size: 0.6875rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; text-transform: uppercase;">AI CSKH</span>
+                  @if (sentiment(); as s) {
+                    <span
+                      [style.background]="s.tone === 'positive' ? '#e8f5e9' : s.tone === 'negative' ? '#ffebee' : '#fff9c4'"
+                      [style.color]="s.tone === 'positive' ? '#2e7d32' : s.tone === 'negative' ? '#c62828' : '#f57f17'"
+                      style="font-size: 0.75rem; font-weight: 600; padding: 2px 8px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px;"
+                    >
+                      {{ s.tone === 'positive' ? '🌟' : s.tone === 'negative' ? '⚠️' : '💬' }} Sắc thái: {{ s.label }}
+                    </span>
+                  }
+                </div>
+
+                @if (detectedRestrictedWords().length > 0) {
+                  <span style="background: #ffebee; color: #c62828; font-size: 0.75rem; font-weight: 600; padding: 2px 8px; border-radius: 4px; border: 1px solid #ffcdd2;">
+                    ⚠️ Phát hiện từ nhạy cảm / spam: <strong>{{ detectedRestrictedWords().join(', ') }}</strong>
+                  </span>
+                }
+              </div>
+
+              <!-- Gợi ý phản hồi 1-click -->
+              @if (aiSuggestions().length > 0) {
+                <div>
+                  <span style="font-size: 0.75rem; font-weight: 600; color: #2c3e50; text-transform: uppercase;">Gợi ý phản hồi chuẩn mực (Click để tự động điền):</span>
+                  <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 6px;">
+                    @for (suggestion of aiSuggestions(); track suggestion; let idx = $index) {
+                      <button
+                        type="button"
+                        style="text-align: left; background: #fff; border: 1px solid #c9e0f1; border-radius: 6px; padding: 8px 10px; font-size: 0.8125rem; color: #34495e; cursor: pointer; transition: all 0.15s; line-height: 1.4;"
+                        (click)="applyAiSuggestion(suggestion)"
+                        title="Bấm để chọn mẫu này"
+                      >
+                        <span style="font-weight: 600; color: #2980b9;">Mẫu {{ idx + 1 }}:</span> {{ suggestion }}
+                      </button>
+                    }
+                  </div>
+                </div>
+              }
+            </div>
+          }
+
+          <!-- 3. Vùng nhập liệu phản hồi / lý do -->
+          <label class="admin-form-group" style="margin: 0;">
+            <span class="admin-form-label">
+              {{ actionType() === 'reply' ? 'Nội dung phản hồi chính thức tới khách hàng *' : 'Lý do / ghi chú thao tác *' }}
+            </span>
             @if (actionType() === 'approve') {
-              <textarea class="admin-form-control admin-form-textarea" name="actionNote" maxlength="500" placeholder="Ghi chú nội bộ"></textarea>
+              <textarea class="admin-form-control admin-form-textarea" name="actionNote" maxlength="500" placeholder="Ghi chú nội bộ khi duyệt đánh giá..."></textarea>
+            } @else if (actionType() === 'reply') {
+              <textarea
+                class="admin-form-control admin-form-textarea"
+                rows="4"
+                name="replyContent"
+                [value]="replyDraft()"
+                (input)="onReplyInput($event)"
+                placeholder="Nhập nội dung phản hồi hoặc click vào mẫu gợi ý AI phía trên..."
+                required
+              ></textarea>
             } @else {
-              <textarea class="admin-form-control admin-form-textarea" name="value" [attr.minlength]="actionType() === 'reply' ? 1 : 10" maxlength="2000" required></textarea>
+              <textarea class="admin-form-control admin-form-textarea" name="value" minlength="10" maxlength="2000" placeholder="Nhập lý do thao tác (tối thiểu 10 ký tự)..." required></textarea>
             }
           </label>
+
           @if (actionError()) {
-            <p class="field__error">{{ actionError() }}</p>
+            <p class="field__error" style="margin: 0; color: var(--error);">{{ actionError() }}</p>
           }
         </div>
+
         <footer class="admin-modal__footer">
           <button class="admin-btn admin-btn--ghost" type="button" (click)="closeOverlays()">Đóng</button>
-          <button class="admin-btn admin-btn--secondary" type="submit">Xác nhận</button>
+          <button class="admin-btn admin-btn--secondary" type="submit">
+            {{ actionType() === 'reply' ? 'Gửi phản hồi khách hàng' : 'Xác nhận' }}
+          </button>
         </footer>
       </form>
     </section>

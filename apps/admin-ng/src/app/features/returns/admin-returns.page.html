@@ -418,6 +418,20 @@
         <div><dt>Khách hàng (User ID)</dt><dd>{{ selectedReturn()!.user_id || 'Khách vãng lai' }}</dd></div>
         <div><dt>Loại yêu cầu</dt><dd><strong>{{ returnKind(selectedReturn()!) }}</strong></dd></div>
         <div><dt>Tiền hoàn dự kiến</dt><dd><strong style="color: #2e7d32;">{{ money(selectedReturn()!.refundable_amount || selectedReturn()!.refund_amount) }}</strong></dd></div>
+        <div><dt>Phương thức TT</dt><dd><strong>{{ returnPaymentMethod(selectedReturn()!) }}</strong></dd></div>
+        <div>
+          <dt>Trạng thái thanh toán</dt>
+          <dd style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <span class="admin-badge" [class.admin-badge--success]="isReturnRefunded(selectedReturn()!)" [class.admin-badge--warning]="selectedReturn()!.payment?.payment_status === 'refund_pending'">
+              {{ returnPaymentStatus(selectedReturn()!) }}
+            </span>
+            @if (canTriggerStripeRefund(selectedReturn()!)) {
+              <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="triggerStripeRefund(selectedReturn()!)">
+                Hoàn tiền qua Stripe
+              </button>
+            }
+          </dd>
+        </div>
         <div><dt>Mã vận đơn trả về</dt><dd>{{ selectedReturn()!.tracking_return_code || '—' }}</dd></div>
         <div><dt>Kết quả kiểm tra kho</dt><dd>{{ selectedReturn()!.condition_check_result || 'Chưa kiểm định' }}</dd></div>
         <div><dt>Ghi chú CSKH</dt><dd>{{ selectedReturn()!.admin_note || '—' }}</dd></div>
@@ -435,10 +449,15 @@
               <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openReturnAction('exchange', selectedReturn()!.return_id)">Duyệt đổi hàng</button>
             }
             <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="openReturnAction('reject', selectedReturn()!.return_id)">Từ chối yêu cầu</button>
-          } @else if (nextReturnStep(selectedReturn()!); as step) {
-            <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="advanceReturn(selectedReturn()!, step.status)">{{ step.label }}</button>
-            @if (selectedReturn()!.status === 'received') {
-              <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="openReturnAction('reject', selectedReturn()!.return_id)">Không đạt kiểm tra</button>
+          } @else {
+            @if (canTriggerStripeRefund(selectedReturn()!)) {
+              <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="triggerStripeRefund(selectedReturn()!)">Hoàn tiền qua Stripe</button>
+            }
+            @if (nextReturnStep(selectedReturn()!); as step) {
+              <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="advanceReturn(selectedReturn()!, step.status)">{{ step.label }}</button>
+              @if (selectedReturn()!.status === 'received') {
+                <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="openReturnAction('reject', selectedReturn()!.return_id)">Không đạt kiểm tra</button>
+              }
             }
           }
         </div>

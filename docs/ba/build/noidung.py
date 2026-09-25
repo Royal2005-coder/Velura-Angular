@@ -118,10 +118,12 @@ MO_TA = [
      "khoảng giữa lúc xem giỏ và lúc bấm đặt hàng, hệ thống không tạo đơn. Thay vào đó hệ thống "
      "chọn mã thay thế tốt nhất, tính lại tổng tiền và báo khách mã nào vừa mất hiệu lực; khách "
      "xác nhận tổng mới thì đơn mới được tạo. Cách làm này bảo đảm khách không bao giờ bị trừ "
-     "tiền theo một con số khác với con số mình đã nhìn thấy. Đơn không thành, dù do khách huỷ, "
-     "quản trị viên huỷ, hay phiên thanh toán trực tuyến hết hạn hoặc bị huỷ, đều được trả lại "
-     "lượt dùng và phần ngân sách đã cộng. Mỗi đơn chỉ được trả đúng một lần, kể cả khi cùng một "
-     "đơn đi qua nhiều đường kết thúc."),
+     "tiền theo một con số khác với con số mình đã nhìn thấy. Với thanh toán trực tuyến, phiên "
+     "thanh toán hết hạn chưa làm đơn thất bại: đơn giữ trạng thái Chờ thanh toán trong 24 giờ "
+     "kể từ lúc đặt để khách thanh toán lại với đúng mức giảm đã thấy. Lượt dùng và phần ngân "
+     "sách đã cộng chỉ được trả lại khi đơn thật sự bị huỷ, dù do khách huỷ, quản trị viên huỷ "
+     "hay hệ thống tự huỷ vì quá 24 giờ chưa thanh toán. Mỗi đơn chỉ được trả đúng một lần, kể "
+     "cả khi cùng một đơn đi qua nhiều đường kết thúc."),
 
     ("hinh", "khuyenmai-3-20-chot-tien-dat-don.png",
      "Hình 3.20: BPMN quy trình chốt tiền và ghi nhận ưu đãi khi đặt đơn",
@@ -280,11 +282,11 @@ BANG = [
      "nào dùng được, tính lại tổng và báo khách. Đơn chỉ được tạo khi khách xác nhận tổng mới."),
 
     ("AD_ORDER_06", "Trả lượt mã đúng một lần",
-     "Đơn không thành thì lượt dùng mã và phần ngân sách chiến dịch được trả lại. Đơn không thành "
-     "gồm khách huỷ, quản trị viên huỷ, phiên thanh toán trực tuyến hết hạn hoặc bị huỷ.",
-     "Đánh dấu thời điểm trả lượt trên đơn. Đơn đã được trả thì mọi lần gọi sau đều bỏ qua, kể "
-     "cả khi cổng thanh toán gửi lại cùng một thông báo. Thẻ bị từ chối chưa tính là đơn không "
-     "thành vì khách vẫn thử lại được trên cùng phiên thanh toán."),
+     "Đơn bị huỷ thì lượt dùng mã và phần ngân sách chiến dịch được trả lại. Đơn bị huỷ gồm khách "
+     "huỷ, quản trị viên huỷ và hệ thống tự huỷ đơn trực tuyến quá 24 giờ chưa thanh toán.",
+     "Việc trả lượt gắn với lúc đơn chuyển sang Đã huỷ và đánh dấu thời điểm trả trên đơn. Đơn "
+     "đã được trả thì mọi lần sau đều bỏ qua. Phiên thanh toán hết hạn hay thẻ bị từ chối chưa "
+     "làm đơn bị huỷ: đơn vẫn Chờ thanh toán và khách thanh toán lại được trong 24 giờ."),
 
     ("AD_OFFER_01", "Trang Ưu đãi phản ánh đúng chiến dịch đang chạy",
      "Trang Ưu đãi hiển thị các chiến dịch đang trong khung thời gian và đang bật, nhóm theo ưu "
@@ -368,9 +370,10 @@ NGOAI_LE = [
 
     ("Tình huống 8: Đơn đã áp mã không thành",
      "Một đơn đã ghi nhận lượt dùng mã và đã cộng ngân sách chiến dịch, sau đó bị khách hoặc quản "
-     "trị viên huỷ, hoặc khách bỏ ngang trang thanh toán trực tuyến cho tới khi phiên hết hạn. "
-     "Cùng một đơn có thể đi qua hai đường, chẳng hạn phiên thanh toán hết hạn rồi quản trị viên "
-     "huỷ đơn.",
+     "trị viên huỷ, hoặc khách bỏ ngang trang thanh toán trực tuyến và không thanh toán lại trong "
+     "24 giờ nên hệ thống tự huỷ. Phiên thanh toán hết hạn thì đơn chưa bị huỷ và chưa trả lượt. "
+     "Cùng một đơn có thể gặp hai yêu cầu huỷ gần như cùng lúc, chẳng hạn khách bấm huỷ đúng "
+     "lúc hệ thống tự huỷ.",
      "Hệ thống trả lại một lượt dùng cho mã và trừ đúng phần ngân sách đã cộng của đơn đó, đúng "
      "một lần dù đơn đi qua bao nhiêu đường kết thúc. Nếu "
      "chiến dịch trước đó đã dừng vì chạm trần, việc hoàn lại không tự bật lại chiến dịch; quản "

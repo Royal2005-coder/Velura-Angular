@@ -461,7 +461,7 @@
         <mxCell id="c4_28" parent="c4_5" style="html=1;shape=mxgraph.flowchart.annotation_2;align=left;labelPosition=right;verticalAlign=top;fontSize=13;spacingLeft=10;" value="Miễn phí vận chuyển là ngưỡng theo giá trị đơn do máy chủ&#xa;giữ, không phải một loại mã giảm giá." vertex="1">
           <mxGeometry x="1141" y="561.2" width="26" height="104" as="geometry" />
         </mxCell>
-        <mxCell id="c4_29" parent="c4_5" style="html=1;shape=mxgraph.flowchart.annotation_2;align=left;labelPosition=right;verticalAlign=top;fontSize=13;spacingLeft=10;" value="Đơn không thành (khách huỷ, admin&#xa;huỷ, thanh toán hết hạn hoặc bị&#xa;huỷ) được trả lượt và ngân sách&#xa;đúng một lần." vertex="1">
+        <mxCell id="c4_29" parent="c4_5" style="html=1;shape=mxgraph.flowchart.annotation_2;align=left;labelPosition=right;verticalAlign=top;fontSize=13;spacingLeft=10;" value="Đơn bị huỷ (khách huỷ, admin huỷ,&#xa;hoặc quá 24 giờ chưa thanh toán)&#xa;được trả lượt và ngân sách đúng&#xa;một lần." vertex="1">
           <mxGeometry x="1752" y="561.2" width="26" height="104" as="geometry" />
         </mxCell>
         <mxCell id="c4_30" parent="c4_5" style="html=1;shape=mxgraph.flowchart.annotation_2;align=left;labelPosition=right;verticalAlign=top;fontSize=13;spacingLeft=10;" value="Khách không bị trừ tiền theo con số khác với con số đã&#xa;thấy. Khách xác nhận tổng mới thì đơn đi lại từ đầu với mã&#xa;thay thế." vertex="1">

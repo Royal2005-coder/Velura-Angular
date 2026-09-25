@@ -19,6 +19,9 @@ interface MemberProfile {
     name?: string;
     phone?: string;
     detail?: string;
+    province?: string;
+    district?: string;
+    ward?: string;
     address?: string;
     is_default?: boolean;
   }>;

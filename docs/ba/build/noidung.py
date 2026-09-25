@@ -85,10 +85,13 @@ MO_TA = [
      "từng mã trên giá trị giỏ hiện tại. Thứ tự chấm có chủ đích: các lý do thuộc về bản thân mã "
      "được xét trước, gồm mã ngừng hoạt động, chưa tới hạn, đã hết hạn và hết lượt toàn hệ thống; "
      "tiếp đó tới trạng thái chiến dịch cha, gồm tạm dừng, ngoài khung ngày và cạn ngân sách; rồi "
-     "tới nhóm khách áp dụng; rồi tới số lượt chính khách đã dùng; cuối cùng mới tới giá trị đơn "
-     "tối thiểu. Xếp như vậy để câu giải thích hiển thị cho khách nêu đúng nguyên nhân gốc, thay "
+     "tới nhóm khách áp dụng; rồi tới danh mục áp dụng; rồi tới số lượt chính khách đã dùng; "
+     "cuối cùng mới tới giá trị đơn tối thiểu. Xếp như vậy để câu giải thích hiển thị cho khách nêu đúng nguyên nhân gốc, thay "
      "vì mời khách mua thêm hàng cho một mã vốn đã hết hạn. Mã chưa đủ điều kiện vẫn được hiển "
-     "thị kèm lý do cụ thể và số tiền còn thiếu để đạt điều kiện."),
+     "thị kèm lý do cụ thể và số tiền còn thiếu để đạt điều kiện. Mã khai danh mục áp dụng chỉ "
+     "tính trên phần hàng thuộc danh mục đó, cả khi xét giá trị đơn tối thiểu lẫn khi tính số "
+     "tiền giảm, và danh mục cha bao luôn các danh mục con. Giỏ hàng không có sản phẩm nào thuộc "
+     "danh mục thì mã được báo là sai danh mục, không bị báo là đơn chưa đủ tiền."),
 
     ("para",
      "Mỗi đơn chỉ áp một mã. Khi khách chưa tự chọn, hệ thống áp sẵn mã cho số tiền giảm thực tế "
@@ -111,13 +114,20 @@ MO_TA = [
      "với bảng giá, đơn bị từ chối và khách được yêu cầu tải lại giỏ, vì khoảng lệch đó thường là "
      "dấu hiệu giá vừa thay đổi trong lúc khách còn đang ở giỏ hàng. Lượt dùng mã và phần ngân "
      "sách tương ứng được ghi trong cùng một giao dịch có khoá dòng, nên hai đơn đặt gần như cùng "
-     "lúc không ghi đè số lượt của nhau. Đơn bị huỷ thì cả lượt dùng lẫn phần ngân sách đã cộng "
-     "được hoàn lại."),
+     "lúc không ghi đè số lượt của nhau. Nếu mã khách chọn vừa hết lượt hoặc hết hạn trong "
+     "khoảng giữa lúc xem giỏ và lúc bấm đặt hàng, hệ thống không tạo đơn. Thay vào đó hệ thống "
+     "chọn mã thay thế tốt nhất, tính lại tổng tiền và báo khách mã nào vừa mất hiệu lực; khách "
+     "xác nhận tổng mới thì đơn mới được tạo. Cách làm này bảo đảm khách không bao giờ bị trừ "
+     "tiền theo một con số khác với con số mình đã nhìn thấy. Đơn không thành, dù do khách huỷ, "
+     "quản trị viên huỷ, hay phiên thanh toán trực tuyến hết hạn hoặc bị huỷ, đều được trả lại "
+     "lượt dùng và phần ngân sách đã cộng. Mỗi đơn chỉ được trả đúng một lần, kể cả khi cùng một "
+     "đơn đi qua nhiều đường kết thúc."),
 
     ("hinh", "khuyenmai-3-20-chot-tien-dat-don.png",
      "Hình 3.20: BPMN quy trình chốt tiền và ghi nhận ưu đãi khi đặt đơn",
      "Sơ đồ dưới đây mô tả đường đi của một đơn hàng có áp mã, từ lúc khách xác nhận đặt hàng "
-     "tới lúc ưu đãi được ghi nhận, kèm hai nhánh từ chối."),
+     "tới lúc ưu đãi được ghi nhận, kèm nhánh giá lệch bảng giá và nhánh mã vừa mất hiệu lực, "
+     "trong đó khách nhận tổng mới để xác nhận lại."),
 
     ("para",
      "Combo cho phép gom nhiều sản phẩm thành một set theo mô hình gợi ý trang phục của Velura. "
@@ -205,9 +215,9 @@ BANG = [
      "Kiểm tra code trước khi tạo và báo lỗi mã đã tồn tại nếu trùng."),
 
     ("AD_VOUCHER_02", "Thứ tự kiểm tra khi chấm một mã",
-     "Mã được chấm theo tám bước có thứ tự: mã ngừng hoạt động, chưa tới hạn, đã hết hạn, hết "
+     "Mã được chấm theo chín bước có thứ tự: mã ngừng hoạt động, chưa tới hạn, đã hết hạn, hết "
      "lượt toàn hệ thống, chiến dịch cha dừng hoặc ngoài khung ngày hoặc cạn ngân sách, sai nhóm "
-     "khách, hết lượt của chính khách, chưa đạt giá trị đơn tối thiểu.",
+     "khách, sai danh mục, hết lượt của chính khách, chưa đạt giá trị đơn tối thiểu.",
      "Dừng ở bước đầu tiên không đạt và hiển thị đúng lý do của bước đó. Riêng bước giá trị đơn "
      "tối thiểu kèm theo số tiền khách cần mua thêm."),
 
@@ -235,6 +245,13 @@ BANG = [
      "Tắt toàn bộ mã con khi chiến dịch dừng, và chặn thêm một lần nữa ở bước chấm mã để một lần "
      "tắt lỡ nhịp không biến thành giảm giá ngoài ý muốn."),
 
+    ("AD_VOUCHER_07", "Mã theo danh mục chỉ tính trên phần hàng thuộc danh mục",
+     "Mã có khai danh mục áp dụng thì giá trị đơn tối thiểu và số tiền giảm đều tính trên tổng "
+     "các dòng hàng thuộc danh mục đó. Danh mục cha bao luôn danh mục con.",
+     "Giỏ không có dòng hàng nào thuộc danh mục thì từ chối với lý do sai danh mục: mã chỉ áp "
+     "cho danh mục nêu tên, giỏ hàng chưa có sản phẩm phù hợp. Khi quản trị viên lưu mã, mọi "
+     "danh mục khai báo phải tồn tại."),
+
     ("AD_ORDER_01", "Máy chủ là nơi duy nhất chốt số tiền",
      "Đơn giá, tạm tính, phí vận chuyển, số tiền giảm và tổng thanh toán đều do máy chủ tính từ "
      "bảng giá và từ kết quả chấm mã.",
@@ -254,8 +271,20 @@ BANG = [
     ("AD_ORDER_04", "Ghi lượt dùng và ngân sách trong cùng giao dịch",
      "Việc tăng số lượt đã dùng của mã và cộng dồn ngân sách chiến dịch phải xảy ra trọn vẹn "
      "hoặc không xảy ra.",
-     "Khoá dòng mã khi ghi, nên hai đơn đặt cùng lúc không ghi đè số lượt của nhau. Huỷ đơn thì "
-     "hoàn lại cả lượt dùng lẫn phần ngân sách đã cộng."),
+     "Khoá dòng mã khi ghi, nên hai đơn đặt cùng lúc không ghi đè số lượt của nhau."),
+
+    ("AD_ORDER_05", "Mã mất hiệu lực lúc đặt đơn thì báo tổng mới",
+     "Mã khách đã chọn có thể hết lượt hoặc hết hạn trong khoảng giữa lúc xem giỏ và lúc bấm đặt "
+     "hàng.",
+     "Không tạo đơn. Chọn mã thay thế cho số tiền giảm lớn nhất, hoặc không mã nếu không còn mã "
+     "nào dùng được, tính lại tổng và báo khách. Đơn chỉ được tạo khi khách xác nhận tổng mới."),
+
+    ("AD_ORDER_06", "Trả lượt mã đúng một lần",
+     "Đơn không thành thì lượt dùng mã và phần ngân sách chiến dịch được trả lại. Đơn không thành "
+     "gồm khách huỷ, quản trị viên huỷ, phiên thanh toán trực tuyến hết hạn hoặc bị huỷ.",
+     "Đánh dấu thời điểm trả lượt trên đơn. Đơn đã được trả thì mọi lần gọi sau đều bỏ qua, kể "
+     "cả khi cổng thanh toán gửi lại cùng một thông báo. Thẻ bị từ chối chưa tính là đơn không "
+     "thành vì khách vẫn thử lại được trên cùng phiên thanh toán."),
 
     ("AD_OFFER_01", "Trang Ưu đãi phản ánh đúng chiến dịch đang chạy",
      "Trang Ưu đãi hiển thị các chiến dịch đang trong khung thời gian và đang bật, nhóm theo ưu "
@@ -333,12 +362,17 @@ NGOAI_LE = [
     ("Tình huống 7: Hai khách dùng lượt cuối cùng của một mã tại cùng thời điểm",
      "Mã chỉ còn một lượt trên toàn hệ thống. Hai khách bấm đặt hàng gần như cùng lúc.",
      "Việc ghi lượt dùng khoá dòng mã nên hai yêu cầu xếp hàng. Yêu cầu đầu tiên nhận lượt cuối. "
-     "Yêu cầu thứ hai bị từ chối ở bước chấm lại mã với lý do mã đã hết lượt, và khách được mời "
-     "chọn mã khác trong ví."),
+     "Yêu cầu thứ hai không tạo đơn: hệ thống báo mã vừa hết lượt, đưa ra mã thay thế tốt nhất "
+     "cùng tổng tiền mới, và đơn chỉ được tạo khi khách xác nhận lại. Với khách vãng lai đặt hàng "
+     "bằng mã xác thực gửi qua email, mã xác thực đó vẫn dùng lại được cho lần xác nhận này."),
 
-    ("Tình huống 8: Khách huỷ đơn đã áp mã",
-     "Một đơn đã ghi nhận lượt dùng mã và đã cộng ngân sách chiến dịch, sau đó bị huỷ.",
-     "Hệ thống trả lại một lượt dùng cho mã và trừ đúng phần ngân sách đã cộng của đơn đó. Nếu "
+    ("Tình huống 8: Đơn đã áp mã không thành",
+     "Một đơn đã ghi nhận lượt dùng mã và đã cộng ngân sách chiến dịch, sau đó bị khách hoặc quản "
+     "trị viên huỷ, hoặc khách bỏ ngang trang thanh toán trực tuyến cho tới khi phiên hết hạn. "
+     "Cùng một đơn có thể đi qua hai đường, chẳng hạn phiên thanh toán hết hạn rồi quản trị viên "
+     "huỷ đơn.",
+     "Hệ thống trả lại một lượt dùng cho mã và trừ đúng phần ngân sách đã cộng của đơn đó, đúng "
+     "một lần dù đơn đi qua bao nhiêu đường kết thúc. Nếu "
      "chiến dịch trước đó đã dừng vì chạm trần, việc hoàn lại không tự bật lại chiến dịch; quản "
      "trị viên quyết định có kích hoạt lại hay không."),
 
@@ -357,4 +391,12 @@ NGOAI_LE = [
      "danh sách thành phần. Trường hợp hết tồn, hệ thống chuyển combo sang tạm hết hàng và ẩn nút "
      "thêm vào giỏ, đồng thời cảnh báo thiếu hụt tồn kho trên trang quản trị. Combo trở lại bán "
      "được ngay khi thành phần đó có tồn trở lại."),
+
+    ("Tình huống 11: Mã theo danh mục trên giỏ hàng lẫn nhiều danh mục",
+     "Mã giảm 20% chỉ cho danh mục Áo, đơn tối thiểu 400.000đ. Giỏ hàng có một áo 300.000đ và "
+     "một quần 500.000đ, tổng giỏ 800.000đ.",
+     "Hệ thống chỉ tính phần hàng thuộc danh mục Áo là 300.000đ, chưa đạt mức tối thiểu, nên mã "
+     "được báo là chưa đủ điều kiện kèm số tiền cần mua thêm trong danh mục Áo. Nếu mã không đặt "
+     "mức tối thiểu thì số tiền giảm là 20% của 300.000đ, tức 60.000đ, không phải 20% của cả "
+     "giỏ. Giỏ chỉ có quần thì mã được báo là sai danh mục."),
 ]

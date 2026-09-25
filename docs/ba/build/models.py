@@ -145,7 +145,7 @@ def dia_wallet():
     m.task("w_loc", PROMO, 2, TOP,
            "Xác định khách vãng lai hay thành viên\nvà lọc bộ mã theo đối tượng", "service")
     m.task("w_cham", PROMO, 3, TOP,
-           "Chấm từng mã trên giá trị giỏ\nhiện tại theo tám bước kiểm", "service")
+           "Chấm từng mã trên giá trị giỏ\nhiện tại theo chín bước kiểm", "service")
     m.gateway("w_sgw", PROMO, 3.9, TOP, "Có mã đủ điều kiện?")
     m.task("w_lydo", PROMO, 3.9, LOW,
            "Nêu lý do chưa dùng được\nvà số tiền còn thiếu", "send")
@@ -174,9 +174,9 @@ def dia_wallet():
     m.msg("w_doi", "w_cham", "Mã khách tự chọn")
 
     m.note("n_tambuoc", PROMO, 2.6, DEEP,
-           "Tám bước kiểm theo thứ tự: mã ngừng hoạt động, chưa tới hạn, hết hạn, "
+           "Chín bước kiểm theo thứ tự: mã ngừng hoạt động, chưa tới hạn, hết hạn, "
            "hết lượt toàn hệ thống, chiến dịch cha dừng hoặc cạn ngân sách, sai nhóm "
-           "khách, hết lượt của chính khách, chưa đạt giá trị đơn tối thiểu.")
+           "khách, sai danh mục, hết lượt của chính khách, chưa đạt giá trị đơn tối thiểu.")
     m.note("n_totnhat", PROMO, 5.3, DEEP,
            "So sánh theo số tiền giảm thực tế sau khi áp trần, không theo phần trăm "
            "danh nghĩa. Bằng nhau thì ưu tiên mã hết hạn sớm hơn. Mỗi đơn một mã.")
@@ -216,12 +216,12 @@ def dia_checkout():
            "Chấm lại mã tại thời điểm đặt đơn", "service")
     m.gateway("k_gwma", PROMO, 5.7, TOP, "Mã còn hợp lệ?")
     m.task("k_tuchoi", PROMO, 5.7, LOW,
-           "Từ chối đơn kèm lý do cụ thể", "send")
+           "Chọn mã thay thế tốt nhất\nvà tính tổng mới", "send")
     m.task("k_tong", PROMO, 6.6, TOP,
            "Chốt tổng tiền bằng tạm tính\ncộng phí giao trừ giảm giá", "service")
     m.task("k_ghiluot", PROMO, 7.6, TOP,
            "Ghi lượt dùng mã và cộng dồn ngân sách\ntrong cùng giao dịch", "service")
-    m.event("k_endma", PROMO, 6.6, LOW, "Dừng, chờ khách\nchọn lại mã", "end")
+    m.event("k_endma", PROMO, 6.6, LOW, "Không tạo đơn, chờ khách\nxác nhận tổng mới", "end")
     m.store("k_log", PROMO, 8.6, DEEP, "Nhật ký\nkhuyến mãi")
 
     m.task("k_ghidon", SELL, 8.6, srow,
@@ -249,7 +249,7 @@ def dia_checkout():
 
     m.msg("k_dat", "k_sstart", "Giỏ hàng và mã\nkhách đang áp")
     m.msg("k_taila", "k_ketqua", "Giá đã thay đổi,\nvui lòng tải lại giỏ")
-    m.msg("k_tuchoi", "k_ketqua", "Mã không còn hợp lệ")
+    m.msg("k_tuchoi", "k_ketqua", "Mã vừa mất hiệu lực,\nmã thay thế và tổng mới")
     m.msg("k_ghidon", "k_ketqua", "Xác nhận đơn và\nsố tiền đã giảm")
 
     m.note("n_maychu", SELL, 2.4, 1.55,
@@ -259,7 +259,12 @@ def dia_checkout():
            "Miễn phí vận chuyển là ngưỡng theo giá trị đơn do máy chủ giữ, "
            "không phải một loại mã giảm giá.")
     m.note("n_huy", PROMO, 7.0, DEEP,
-           "Huỷ đơn thì lượt dùng và phần ngân sách đã cộng được hoàn lại.")
+           "Đơn không thành (khách huỷ, admin huỷ, thanh toán hết hạn hoặc bị huỷ) "
+           "được trả lượt và ngân sách đúng một lần.", wrap=34)
+    m.note("n_xacnhan", PROMO, 2.4, LOW,
+           "Khách không bị trừ tiền theo con số khác với con số đã thấy. Khách xác "
+           "nhận tổng mới thì đơn đi lại từ đầu với mã thay thế.")
+    m.assoc("n_xacnhan", "k_tuchoi")
     m.assoc("n_maychu", "k_gia")
     m.assoc("n_ship", "k_ship")
     m.assoc("n_huy", "k_ghiluot")

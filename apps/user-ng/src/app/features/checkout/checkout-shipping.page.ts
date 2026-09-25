@@ -36,7 +36,7 @@ interface PlaceOrderResponse {
   message?: string;
   order?: {
     order_id?: string;
-    tracking_code?: string;
+    order_code?: string;
     payment_method?: string;
     shipping_address?: string;
   };
@@ -409,7 +409,7 @@ export class CheckoutShippingPage {
   ): void {
     this.checkout.saveCreatedOrder({
       order_id: order.order_id,
-      tracking_code: order.tracking_code,
+      order_code: order.order_code,
       payment_method: order.payment_method,
       shipping_address: order.shipping_address,
       shipping_method: this.shipping(),

@@ -27,10 +27,10 @@ export interface ReturnableOrder {
 }
 
 /**
- * Delivered or completed orders still inside the 30-day window.
+ * Đơn Giao thành công còn trong 30 ngày. Bộ trạng thái KAN-59 không còn `completed`.
  */
 export function isReturnableOrder(order: ReturnableOrder, now = new Date()): boolean {
-  if (order.status !== 'delivered' && order.status !== 'completed') {
+  if (order.status !== 'delivered') {
     return false;
   }
   const raw = order.delivered_at || order.updated_at || order.created_at;

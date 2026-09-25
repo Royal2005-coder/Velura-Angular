@@ -61,23 +61,91 @@ export interface AdminOrderPayment {
   payment_id?: string;
   payment_status?: string;
   payment_method?: string;
+  payment_provider?: string;
+  gateway_response_code?: string | null;
+  amount?: number;
+  refund_amount?: number | null;
+  refund_reason?: string | null;
+  refund_at?: string | null;
+  paid_at?: string | null;
   has_discrepancy?: boolean;
+  created_at?: string;
   version?: number;
+}
+
+/** Trường nhập thêm của một action đơn, ngoài ghi chú. Khớp `OrderActionField` phía API. */
+export type AdminOrderActionField = 'call_result' | 'shortage' | 'shipment' | 'cancel_reason' | 'tracking';
+
+/** Action admin đang xem được bấm, do API tính theo vai trò, trạng thái và guard. */
+export interface AdminOrderAction {
+  code: string;
+  label: string;
+  to_status: string | null;
+  requires_note: boolean;
+  fields: AdminOrderActionField[];
+  destructive: boolean;
+}
+
+/** Một dòng lịch sử xử lý (`order_event`): mọi action, kể cả action không đổi trạng thái. */
+export interface AdminOrderEvent {
+  event_id?: string;
+  action?: string;
+  actor_type?: string;
+  actor_id?: string | null;
+  actor_role?: string | null;
+  from_status?: string | null;
+  to_status?: string | null;
+  result?: string | null;
+  note?: string | null;
+  payload?: Record<string, unknown> | null;
+  created_at?: string;
 }
 
 export interface AdminOrderRow {
   order_id: string;
+  order_code?: string;
   order_date?: string;
+  created_at?: string;
   status?: string;
+  status_label?: string;
+  payment_method?: string;
+  payment_status?: string | null;
+  payment_status_label?: string | null;
   shipping_name?: string;
   shipping_phone?: string;
   shipping_address?: string;
+  shipping_fee?: number;
+  subtotal?: number;
+  discount_amount?: number;
   tracking_code?: string | null;
+  carrier?: string | null;
+  tracking_url?: string | null;
+  handed_over_at?: string | null;
+  shipment_voided_at?: string | null;
+  returned_to_stock_at?: string | null;
+  cancelled_reason?: string | null;
+  internal_note?: string | null;
   total_amount?: number;
   version?: number;
+  tags?: Array<{ code: string; label: string }>;
+  allowed_actions?: AdminOrderAction[];
+  can_simulate_carrier?: boolean;
   payments?: AdminOrderPayment[];
   items?: Array<{ product_name?: string; quantity?: number; unit_price?: number }>;
-  history?: Array<{ new_status?: string; changed_at?: string; note?: string; trigger_type?: string }>;
+  history?: Array<{ old_status?: string | null; new_status?: string; changed_at?: string; note?: string; trigger_type?: string }>;
+  events?: AdminOrderEvent[];
+}
+
+/** Số đơn theo trạng thái và số đơn cần xử lý, đếm ở cơ sở dữ liệu. */
+export interface AdminOrderSummary {
+  by_status: Array<{ status: string; label: string; count: number }>;
+  attention: number;
+}
+
+/** Kết quả một action: đơn mới nhất và kết quả hoàn tiền nếu action kéo theo hoàn tiền. */
+export interface AdminOrderActionResult {
+  order: AdminOrderRow;
+  refund: { status: 'refunded' | 'requested' | 'failed' | 'skipped'; message?: string } | null;
 }
 
 export interface AdminReturnRow {
@@ -806,17 +874,31 @@ export class AdminApiService {
   }
 
   /**
-   * Changes order status using the original transition API.
+   * Số đơn theo trạng thái và số đơn cần xử lý, cho tab và bộ lọc.
    */
-  changeOrderStatus(orderId: string, body: Record<string, unknown>): Observable<unknown> {
-    return this.http.post(`${this.baseUrl}/api/v1/admin/orders/${encodeURIComponent(orderId)}/change-status`, body);
+  orderSummary(): Observable<AdminOrderSummary> {
+    return this.http.get<AdminOrderSummary>(`${this.baseUrl}/api/v1/admin/orders/summary`);
   }
 
   /**
-   * Cancels an order through the original admin API.
+   * Thực hiện một action nghiệp vụ trên đơn (KAN-60). API kiểm lại quyền, trạng thái và
+   * phiên bản; trả về đơn mới nhất.
    */
-  cancelOrder(orderId: string, body: Record<string, unknown>): Observable<unknown> {
-    return this.http.post(`${this.baseUrl}/api/v1/admin/orders/${encodeURIComponent(orderId)}/cancel`, body);
+  performOrderAction(orderId: string, action: string, body: Record<string, unknown>): Observable<AdminOrderActionResult> {
+    return this.http.post<AdminOrderActionResult>(
+      `${this.baseUrl}/api/v1/admin/orders/${encodeURIComponent(orderId)}/actions/${encodeURIComponent(action)}`,
+      body,
+    );
+  }
+
+  /**
+   * Mô phỏng kết quả giao hàng của ĐVVC. Chỉ super_admin; ghi nhận là action của System.
+   */
+  simulateCarrier(orderId: string, body: { outcome: string; note?: string }): Observable<AdminOrderRow> {
+    return this.http.post<AdminOrderRow>(
+      `${this.baseUrl}/api/v1/admin/orders/${encodeURIComponent(orderId)}/simulate-carrier`,
+      body,
+    );
   }
 
   /**

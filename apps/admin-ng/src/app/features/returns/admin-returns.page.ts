@@ -695,6 +695,54 @@ export class AdminReturnsPage {
     return statusLabelFrom(RETURN_STATUS_LABELS, status);
   }
 
+  /**
+   * Phương thức thanh toán của đơn gắn với phiếu đổi trả.
+   */
+  returnPaymentMethod(row: AdminReturnRow): string {
+    const provider = row.payment?.payment_provider;
+    const method = row.payment?.payment_method;
+    if (provider === 'stripe') return 'Stripe (Thẻ quốc tế)';
+    if (method === 'COD') return 'COD (Tiền mặt)';
+    if (method === 'ONLINE_PAYMENT') return 'Thanh toán Online';
+    return method || '—';
+  }
+
+  /**
+   * Nhãn trạng thái thanh toán và hoàn tiền của đơn.
+   */
+  returnPaymentStatus(row: AdminReturnRow): string {
+    const status = row.payment?.payment_status;
+    if (status === 'refunded') return 'Đã hoàn tiền (Stripe)';
+    if (status === 'refund_pending') return 'Chờ Stripe xử lý';
+    if (status === 'paid') return 'Đã thanh toán (Chưa hoàn)';
+    if (status === 'pending') return 'Chờ thanh toán';
+    if (status === 'failed') return 'Thanh toán thất bại';
+    return status || '—';
+  }
+
+  isReturnRefunded(row: AdminReturnRow): boolean {
+    return row.payment?.payment_status === 'refunded';
+  }
+
+  canTriggerStripeRefund(row: AdminReturnRow): boolean {
+    return this.canMutate()
+      && row.payment?.payment_provider === 'stripe'
+      && row.payment?.payment_status !== 'refunded'
+      && (row.return_type === 'refund' || row.request_type === 'refund');
+  }
+
+  triggerStripeRefund(row: AdminReturnRow): void {
+    if (!this.canTriggerStripeRefund(row)) return;
+    this.actionError.set(null);
+    this.api.triggerStripeRefund(row.return_id).subscribe({
+      next: () => {
+        this.openReturnDetail(row.return_id);
+        this.reload();
+      },
+      error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
+    });
+  }
+
   /** Nhãn trạng thái phiếu hỗ trợ. */
   ticketStatusLabel(status: string | undefined): string {
     return statusLabelFrom(TICKET_STATUS_LABELS, status);

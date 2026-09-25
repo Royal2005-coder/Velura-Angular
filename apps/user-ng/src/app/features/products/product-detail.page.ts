@@ -10,6 +10,7 @@ import {
 import { CartLine } from '../../core/services/cart.store';
 import { AuthService } from '../../core/services/auth.service';
 import { CartStore } from '../../core/services/cart.store';
+import { CheckoutStore } from '../../core/services/checkout.store';
 import { CatalogService } from '../../core/services/catalog.service';
 import { WishlistStore } from '../../core/services/wishlist.store';
 import { useBodyClass } from '../../core/utils/body-class';
@@ -67,6 +68,7 @@ export class ProductDetailPage {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly cart = inject(CartStore);
+  private readonly checkout = inject(CheckoutStore);
   private readonly wishlist = inject(WishlistStore);
   private readonly auth = inject(AuthService);
 
@@ -306,15 +308,14 @@ export class ProductDetailPage {
   }
 
   /**
-   * Adds to cart then opens the original checkout shipping step.
+   * Starts instant checkout for the selected variant without polluting the persistent cart.
    */
   buyNow(): void {
     const item = this.buildCartItem();
     if (!item) {
       return;
     }
-    this.cart.addItem(item);
-    sessionStorage.setItem('checkout_items', JSON.stringify([item]));
+    this.checkout.setCheckoutItems([item]);
     localStorage.removeItem('checkout_discount');
     localStorage.removeItem('checkout_voucher_id');
     localStorage.removeItem('checkout_voucher_code');
@@ -333,14 +334,14 @@ export class ProductDetailPage {
   }
 
   /**
-   * Starts checkout with the selected combo set, matching original buy-now.
+   * Starts checkout with the selected combo set directly, matching instant checkout.
    */
   buyComboNow(): void {
     const lines = this.buildComboLines();
     if (!lines) {
       return;
     }
-    sessionStorage.setItem('checkout_items', JSON.stringify(lines));
+    this.checkout.setCheckoutItems(lines);
     localStorage.removeItem('checkout_discount');
     localStorage.removeItem('checkout_voucher_id');
     localStorage.removeItem('checkout_voucher_code');

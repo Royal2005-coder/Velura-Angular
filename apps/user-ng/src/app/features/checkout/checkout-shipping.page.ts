@@ -59,7 +59,7 @@ interface PlaceOrderResponse {
 export class CheckoutShippingPage {
   private readonly checkout = inject(CheckoutStore);
   private readonly api = inject(ApiService);
-  private readonly auth = inject(AuthService);
+  readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly vouchers = inject(VoucherService);
@@ -138,6 +138,8 @@ export class CheckoutShippingPage {
   readonly pendingItems = signal<CartLine[]>([]);
   readonly qrSeconds = signal(900);
   private qrTimerId: number | null = null;
+  readonly qrTimedOut = computed(() => this.qrSeconds() === 0);
+  readonly switchingToCod = signal(false);
 
   readonly pendingOrderCode = computed(() => this.pendingOrder()?.order_code || 'VLR-2026-DEMO');
   readonly qrImageUrl = computed(() => {
@@ -198,6 +200,7 @@ export class CheckoutShippingPage {
 
   constructor() {
     useBodyClass('page-checkout');
+    this.checkout.syncFromCart();
     if (this.route.snapshot.queryParamMap.get('stripe') === 'cancel') {
       showToast('Giao dịch Stripe đã bị hủy. Bạn có thể chọn lại phương thức thanh toán.');
     }
@@ -222,7 +225,13 @@ export class CheckoutShippingPage {
    * Updates a shipping form field from the original checkout inputs.
    */
   setField(field: 'name' | 'phone' | 'email' | 'province' | 'district' | 'ward' | 'detail' | 'note', event: Event): void {
-    const value = (event.target as HTMLInputElement | HTMLTextAreaElement).value;
+    let value = (event.target as HTMLInputElement | HTMLTextAreaElement).value;
+    if (field === 'phone') {
+      let p = value.trim().replace(/[\s\-\.]/g, '');
+      if (p.startsWith('+84')) p = '0' + p.slice(3);
+      else if (p.startsWith('84') && p.length === 11) p = '0' + p.slice(2);
+      value = p;
+    }
     const fields = {
       name: this.name,
       phone: this.phone,
@@ -275,7 +284,10 @@ export class CheckoutShippingPage {
   }
 
   setOtherPhone(event: Event): void {
-    this.otherPhone.set((event.target as HTMLInputElement).value);
+    let p = (event.target as HTMLInputElement).value.trim().replace(/[\s\-\.]/g, '');
+    if (p.startsWith('+84')) p = '0' + p.slice(3);
+    else if (p.startsWith('84') && p.length === 11) p = '0' + p.slice(2);
+    this.otherPhone.set(p);
   }
 
   toggleVatInvoice(): void {
@@ -579,12 +591,41 @@ export class CheckoutShippingPage {
     this.finishOrder(order, items, this.payment().toUpperCase());
   }
 
+  retryQrPayment(): void {
+    this.startQrTimer();
+    showToast('Đã làm mới mã thanh toán và thời gian đếm ngược (15 phút)');
+  }
+
+  switchToCod(): void {
+    const order = this.pendingOrder();
+    const items = this.pendingItems();
+    if (!order || !order.order_id) {
+      showToast('Không tìm thấy thông tin đơn hàng để chuyển đổi.');
+      return;
+    }
+    this.switchingToCod.set(true);
+    this.api.post<{ success: boolean; message?: string }>(`/api/user/orders/${order.order_id}/switch-cod`, {}).subscribe({
+      next: () => {
+        this.switchingToCod.set(false);
+        this.clearQrTimer();
+        this.qrModalOpen.set(false);
+        showToast('Đã chuyển sang phương thức thanh toán khi nhận hàng (COD)!');
+        this.finishOrder({ ...order, payment_method: 'COD' }, items, 'COD');
+      },
+      error: (err: Error) => {
+        this.switchingToCod.set(false);
+        showToast(err.message || 'Không thể chuyển đổi sang COD, vui lòng thử lại');
+      },
+    });
+  }
+
   closeQrModal(): void {
     const order = this.pendingOrder();
     const items = this.pendingItems();
     this.clearQrTimer();
     this.qrModalOpen.set(false);
-    if (order) {
+    if (order && order.order_id) {
+      this.api.post(`/api/user/orders/${order.order_id}/payment-failed`, {}).pipe(catchError(() => of(null))).subscribe();
       this.finishOrder(order, items, this.payment().toUpperCase());
     }
   }
@@ -618,7 +659,9 @@ export class CheckoutShippingPage {
       return;
     }
     const name = this.name().trim();
-    const phone = this.phone().trim();
+    let phone = this.phone().trim().replace(/[\s\-\.]/g, '');
+    if (phone.startsWith('+84')) phone = '0' + phone.slice(3);
+    else if (phone.startsWith('84') && phone.length === 11) phone = '0' + phone.slice(2);
     const email = this.email().trim();
     const address = this.composeAddress();
     if (!name || !phone || !address || (!this.auth.isLoggedIn() && !email)) {
@@ -629,7 +672,7 @@ export class CheckoutShippingPage {
       showToast('Email không hợp lệ. Mã OTP được gửi tới email, không gửi qua số điện thoại.');
       return;
     }
-    if (!/^0\d{9}$/.test(phone.replace(/\s/g, ''))) {
+    if (!/^0\d{9}$/.test(phone)) {
       showToast('Số điện thoại không hợp lệ (10 số, bắt đầu bằng 0)!');
       return;
     }
@@ -642,9 +685,11 @@ export class CheckoutShippingPage {
       showToast('Đang tính lại tổng tiền, vui lòng đợi trong giây lát.');
       return;
     }
+    let oPhone = this.otherPhone().trim().replace(/[\s\-\.]/g, '');
+    if (oPhone.startsWith('+84')) oPhone = '0' + oPhone.slice(3);
+    else if (oPhone.startsWith('84') && oPhone.length === 11) oPhone = '0' + oPhone.slice(2);
     if (this.isOtherRecipient()) {
-      const oPhone = this.otherPhone().trim();
-      if (oPhone && !/^0\d{9}$/.test(oPhone.replace(/\s/g, ''))) {
+      if (oPhone && !/^0\d{9}$/.test(oPhone)) {
         showToast('Số điện thoại người nhận thay không hợp lệ (10 số, bắt đầu bằng 0)!');
         return;
       }
@@ -725,7 +770,7 @@ export class CheckoutShippingPage {
             showToast(res.message || 'Đặt hàng thất bại');
             return;
           }
-          if (this.auth.isLoggedIn() && this.addressMode() === 'new' && this.saveNewAddress()) {
+          if (this.auth.isLoggedIn() && this.saveNewAddress()) {
             this.api.post('/api/user/addresses', {
               name,
               phone,

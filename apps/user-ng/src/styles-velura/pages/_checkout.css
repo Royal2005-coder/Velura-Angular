@@ -753,4 +753,268 @@
   border-top: 1px solid #f3f4f6;
 }
 
+/* ============================================================
+   Coolmate Smart Checkout Extra Options & Address Book
+   ============================================================ */
+.coolmate-address-book-btn {
+  background: #fffaf7;
+  border: 1px solid var(--terracotta, #c97b63);
+  color: var(--terracotta, #c97b63);
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.coolmate-address-book-btn:hover {
+  background: var(--terracotta, #c97b63);
+  color: #fff;
+}
+
+.coolmate-toggle-box {
+  background: #fff;
+  border: 1px solid var(--line, #e8dfd6);
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-top: 14px;
+  transition: border-color 0.2s ease;
+}
+
+.coolmate-toggle-box:focus-within {
+  border-color: var(--terracotta, #c97b63);
+}
+
+.coolmate-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.coolmate-checkbox-label input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--terracotta, #c97b63);
+}
+
+.coolmate-checkbox-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--dark, #2a2522);
+}
+
+.coolmate-expandable-fields {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--line, #e8dfd6);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.coolmate-gender-pills {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.coolmate-gender-pill {
+  padding: 7px 18px;
+  border-radius: 20px;
+  border: 1px solid var(--line, #e8dfd6);
+  background: #fff;
+  color: var(--dark, #2a2522);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.coolmate-gender-pill:hover {
+  border-color: var(--terracotta, #c97b63);
+}
+
+.coolmate-gender-pill.is-active {
+  background: var(--terracotta, #c97b63);
+  color: #fff;
+  border-color: var(--terracotta, #c97b63);
+  font-weight: 600;
+}
+
+.coolmate-delivery-notice {
+  background: #fdf8f5;
+  border: 1px solid #f2e3da;
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-top: 14px;
+}
+
+.coolmate-delivery-notice__content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8125rem;
+  color: #5c4d44;
+}
+
+.coolmate-delivery-notice__content svg {
+  flex-shrink: 0;
+  color: var(--terracotta, #c97b63);
+}
+
+.coolmate-link-btn {
+  background: none;
+  border: none;
+  color: var(--terracotta, #c97b63);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+  margin-left: 4px;
+}
+
+.coolmate-delivery-policy-detail {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #faece3;
+  font-size: 0.75rem;
+  color: #6b5c54;
+  line-height: 1.5;
+}
+
+.coolmate-delivery-policy-detail p {
+  margin: 4px 0;
+}
+
+/* Address Book Modal */
+.address-book-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(2px);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.address-book-modal {
+  background: #fff;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 520px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+}
+
+.address-book-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--line, #e8dfd6);
+  background: #faf7f5;
+}
+
+.address-book-modal__close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  line-height: 1;
+  color: var(--muted, #8c857e);
+  cursor: pointer;
+}
+
+.address-book-modal__body {
+  padding: 16px 20px;
+  overflow-y: auto;
+}
+
+.address-book-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.address-book-card {
+  border: 1px solid var(--line, #e8dfd6);
+  border-radius: 8px;
+  padding: 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  transition: all 0.15s ease;
+}
+
+.address-book-card:hover {
+  border-color: var(--terracotta, #c97b63);
+  background: #fffaf7;
+}
+
+.address-book-card.is-default {
+  border-color: var(--terracotta, #c97b63);
+  background: #fdfaf8;
+}
+
+.address-book-card__main {
+  flex: 1;
+}
+
+.address-book-card__top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.address-book-card__name {
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: var(--dark, #2a2522);
+}
+
+.address-book-card__divider {
+  color: var(--muted, #8c857e);
+}
+
+.address-book-card__phone {
+  font-size: 0.8125rem;
+  color: var(--muted, #8c857e);
+}
+
+.address-book-card__badge {
+  font-size: 0.6875rem;
+  padding: 2px 6px;
+  background: #f0e4de;
+  color: var(--terracotta, #c97b63);
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.address-book-card__addr {
+  font-size: 0.8125rem;
+  color: #4a423e;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.address-book-modal__footer {
+  padding: 12px 20px;
+  border-top: 1px solid var(--line, #e8dfd6);
+  display: flex;
+  justify-content: flex-end;
+  background: #faf7f5;
+}
+
+
 

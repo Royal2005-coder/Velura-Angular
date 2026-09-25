@@ -101,3 +101,28 @@ test("a Stripe session younger than its lifetime blocks a second one", () => {
   assert.equal(hasOpenStripeSession([{ created_at: "2026-09-25 09:00:00" }], now), false);
   assert.equal(hasOpenStripeSession([], now), false);
 });
+
+test("formatOrderInternalNote formats Coolmate options (gift, VAT, other recipient, referral)", async () => {
+  const { formatOrderInternalNote } = await import("../../apps/api/src/user/orders.js");
+  const note = formatOrderInternalNote({
+    note: "Giao sau 18h",
+    referral_code: "BANBE2026",
+    is_gift: true,
+    gift_gender: "nu",
+    gift_name: "Lan Anh",
+    gift_message: "Chúc mừng sinh nhật em!",
+    is_other_recipient: true,
+    other_name: "Trần Minh",
+    other_phone: "0912345678",
+    is_vat_invoice: true,
+    vat_company_name: "Công ty TNHH Sáng Tạo",
+    vat_tax_code: "0312345678",
+    vat_company_address: "123 Lê Duẩn, Q1, HCM",
+    vat_email: "ketoan@sangtao.vn"
+  });
+  assert.match(note, /\[Ghi chú khách\]: Giao sau 18h/);
+  assert.match(note, /\[Mã giới thiệu\]: BANBE2026/);
+  assert.match(note, /\[Quà tặng - Dành cho Nữ\]: Lan Anh - Lời chúc: "Chúc mừng sinh nhật em!"/);
+  assert.match(note, /\[Người nhận khác\]: Trần Minh - SĐT: 0912345678/);
+  assert.match(note, /\[Hóa đơn VAT\]: Cty Công ty TNHH Sáng Tạo \| MST: 0312345678/);
+});

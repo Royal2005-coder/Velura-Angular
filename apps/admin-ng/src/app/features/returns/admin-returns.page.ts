@@ -70,6 +70,9 @@ export class AdminReturnsPage {
   readonly actionType = signal<ReturnAction>(null);
   readonly selectedReturn = signal<AdminReturnRow | null>(null);
   readonly selectedTicket = signal<AdminTicketRow | null>(null);
+  readonly returnDetailOpen = signal(false);
+  readonly ticketDetailOpen = signal(false);
+  readonly lightboxImage = signal<string | null>(null);
   readonly actionError = signal<string | null>(null);
   readonly chatError = signal<string | null>(null);
   readonly replyDraft = signal('');
@@ -436,7 +439,69 @@ export class AdminReturnsPage {
   }
 
   /**
-   * Closes CSKH action modals.
+   * Opens the return request detail drawer.
+   */
+  openReturnDetail(returnId: string): void {
+    const cached = this.returns().find((r) => r.return_id === returnId) || null;
+    this.selectedReturn.set(cached);
+    this.selectedTicket.set(null);
+    this.returnDetailOpen.set(true);
+    this.ticketDetailOpen.set(false);
+    this.actionType.set(null);
+    this.actionError.set(null);
+    this.api.getReturn(returnId).subscribe({
+      next: (full) => {
+        if (this.selectedReturn()?.return_id === returnId) {
+          this.selectedReturn.set(full);
+        }
+      },
+      error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
+    });
+  }
+
+  /**
+   * Opens the support ticket detail drawer.
+   */
+  openTicketDetail(ticketId: string): void {
+    const cached = this.tickets().find((t) => t.ticket_id === ticketId) || null;
+    this.selectedTicket.set(cached);
+    this.selectedReturn.set(null);
+    this.ticketDetailOpen.set(true);
+    this.returnDetailOpen.set(false);
+    this.actionType.set(null);
+    this.actionError.set(null);
+    this.api.getTicket(ticketId).subscribe({
+      next: (full) => {
+        if (this.selectedTicket()?.ticket_id === ticketId) {
+          this.selectedTicket.set(full);
+        }
+      },
+      error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
+    });
+  }
+
+  openLightbox(image: string): void {
+    this.lightboxImage.set(image);
+  }
+
+  closeLightbox(): void {
+    this.lightboxImage.set(null);
+  }
+
+  returnStepIndex(status: string | undefined): number {
+    switch (status) {
+      case 'pending': return 0;
+      case 'approved': return 1;
+      case 'shipping_back': return 2;
+      case 'received': return 3;
+      case 'completed': return 4;
+      case 'rejected': return -1;
+      default: return 0;
+    }
+  }
+
+  /**
+   * Closes CSKH action modals and detail drawers.
    */
   closeOverlays(): void {
     this.actionType.set(null);
@@ -444,6 +509,9 @@ export class AdminReturnsPage {
     this.selectedTicket.set(null);
     this.actionError.set(null);
     this.refundSuggestion.set(null);
+    this.returnDetailOpen.set(false);
+    this.ticketDetailOpen.set(false);
+    this.lightboxImage.set(null);
   }
 
   /**

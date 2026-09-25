@@ -151,27 +151,38 @@ export interface AdminOrderActionResult {
 export interface AdminReturnRow {
   return_id: string;
   order_id?: string;
+  user_id?: string;
   status?: string;
   request_type?: string;
   return_type?: string;
   description?: string;
   created_at?: string;
+  resolved_at?: string;
   customer_name?: string;
   version?: number;
-  /**
-   * Tổng tiền đúng những món khách gửi trả, do API tính từ `return_item`.
-   * Không phải tổng đơn: một đơn nhiều món mà khách chỉ trả một món thì hoàn cả đơn
-   * là thất thoát.
-   */
   refundable_amount?: number;
+  refund_amount?: number;
+  admin_note?: string;
+  rejection_reason?: string;
+  evidence_images?: string[];
+  tracking_return_code?: string;
+  condition_check_result?: string;
 }
 
 export interface AdminTicketRow {
   ticket_id: string;
+  user_id?: string;
   status?: string;
   subject?: string;
+  title?: string;
+  description?: string;
   priority?: string;
+  guest_phone?: string;
+  guest_email?: string;
+  admin_reply?: string;
+  csat_score?: number;
   created_at?: string;
+  resolved_at?: string;
   version?: number;
 }
 
@@ -913,6 +924,13 @@ export class AdminApiService {
    */
   listTickets(params: Record<string, string> = {}): Observable<AdminListPayload<AdminTicketRow>> {
     return this.http.get<AdminListPayload<AdminTicketRow>>(`${this.baseUrl}/api/v1/admin/support-tickets`, { params: this.params(params) });
+  }
+
+  /**
+   * Reads one CSKH support ticket detail.
+   */
+  getTicket(ticketId: string): Observable<AdminTicketRow> {
+    return this.http.get<AdminTicketRow>(`${this.baseUrl}/api/v1/admin/support-tickets/${encodeURIComponent(ticketId)}`);
   }
 
   /**

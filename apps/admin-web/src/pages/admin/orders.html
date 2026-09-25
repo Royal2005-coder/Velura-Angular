@@ -46,18 +46,20 @@
       <main class="admin-content">
         <p class="admin-page-crumb">Dashboard / Quản lý đơn hàng</p>
         <section class="admin-kpi-grid admin-order-kpis" aria-label="Thống kê đơn hàng">
-          <article class="admin-kpi-card"><div class="admin-kpi-card__head"><p class="admin-kpi-card__label">Tổng đơn hàng</p><span class="admin-kpi-card__icon"><svg class="admin-line-icon"><use href="../../assets/icons/admin-icons.svg#cart" /></svg></span></div><strong class="admin-kpi-card__value">86</strong></article>
-          <article class="admin-kpi-card"><div class="admin-kpi-card__head"><p class="admin-kpi-card__label">Chờ xác nhận</p><span class="admin-kpi-card__icon"><svg class="admin-line-icon"><use href="../../assets/icons/admin-icons.svg#clock" /></svg></span></div><strong class="admin-kpi-card__value">12</strong></article>
-          <article class="admin-kpi-card"><div class="admin-kpi-card__head"><p class="admin-kpi-card__label">Lỗi thanh toán</p><span class="admin-kpi-card__icon"><svg class="admin-line-icon"><use href="../../assets/icons/admin-icons.svg#credit-card" /></svg></span></div><strong class="admin-kpi-card__value">2</strong></article>
-          <article class="admin-kpi-card"><div class="admin-kpi-card__head"><p class="admin-kpi-card__label">Đơn cần xử lý</p><span class="admin-kpi-card__icon"><svg class="admin-line-icon"><use href="../../assets/icons/admin-icons.svg#alert" /></svg></span></div><strong class="admin-kpi-card__value">5</strong></article>
+          <article class="admin-kpi-card"><div class="admin-kpi-card__head"><p class="admin-kpi-card__label">Tổng đơn hàng</p><span class="admin-kpi-card__icon"><svg class="admin-line-icon"><use href="../../assets/icons/admin-icons.svg#cart" /></svg></span></div><strong class="admin-kpi-card__value">0</strong></article>
+          <article class="admin-kpi-card"><div class="admin-kpi-card__head"><p class="admin-kpi-card__label">Chờ xác nhận</p><span class="admin-kpi-card__icon"><svg class="admin-line-icon"><use href="../../assets/icons/admin-icons.svg#clock" /></svg></span></div><strong class="admin-kpi-card__value">0</strong></article>
+          <article class="admin-kpi-card"><div class="admin-kpi-card__head"><p class="admin-kpi-card__label">Lỗi thanh toán</p><span class="admin-kpi-card__icon"><svg class="admin-line-icon"><use href="../../assets/icons/admin-icons.svg#credit-card" /></svg></span></div><strong class="admin-kpi-card__value">0</strong></article>
+          <article class="admin-kpi-card"><div class="admin-kpi-card__head"><p class="admin-kpi-card__label">Đơn cần xử lý</p><span class="admin-kpi-card__icon"><svg class="admin-line-icon"><use href="../../assets/icons/admin-icons.svg#alert" /></svg></span></div><strong class="admin-kpi-card__value">0</strong></article>
         </section>
 
         <section class="admin-card admin-card--flush">
           <div class="admin-tabs" role="tablist" aria-label="Nhóm đơn hàng">
-            <button class="admin-tab admin-tab--active" type="button" data-order-tab="all">Tất cả đơn hàng <span>86</span></button>
-            <button class="admin-tab" type="button" data-order-tab="attention">Đơn cần xử lý <span>5</span></button>
-            <button class="admin-tab" type="button" data-order-tab="payment">Lỗi thanh toán <span>2</span></button>
-            <button class="admin-tab" type="button" data-order-tab="cancelled">Đơn hủy <span>2</span></button>
+            <button class="admin-tab admin-tab--active" type="button" data-order-tab="all">Tất cả đơn hàng <span>0</span></button>
+            <button class="admin-tab" type="button" data-order-tab="pending">Chờ xác nhận <span>0</span></button>
+            <button class="admin-tab" type="button" data-order-tab="active_processing">Đang chuẩn bị &amp; giao <span>0</span></button>
+            <button class="admin-tab" type="button" data-order-tab="attention">Cần xử lý <span>0</span></button>
+            <button class="admin-tab" type="button" data-order-tab="payment">Lỗi thanh toán <span>0</span></button>
+            <button class="admin-tab" type="button" data-order-tab="cancelled">Đơn hủy <span>0</span></button>
             <button class="admin-tab" type="button" data-order-tab="logs">Nhật ký đơn hàng</button>
           </div>
           <div class="admin-tab-content" id="order-panel"></div>

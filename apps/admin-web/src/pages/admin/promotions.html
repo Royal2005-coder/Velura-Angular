@@ -3,7 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Velura - Quản lý khuyến mãi</title>
+  <title>Velura Admin — Quản lý khuyến mãi (A4)</title>
+  <meta name="description" content="Quản lý chiến dịch khuyến mãi, mã giảm giá voucher, combo sản phẩm và thống kê A4 — Velura Admin">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Playfair+Display:wght@500;600&display=swap" rel="stylesheet">
@@ -13,48 +14,160 @@
 </head>
 <body class="admin-page">
   <div class="admin-layout" data-admin-module="promotions">
+
+    <!-- ── Sidebar ── -->
     <aside class="admin-sidebar" id="admin-sidebar" aria-label="Điều hướng quản trị">
-      <div class="admin-sidebar__brand"><a class="admin-sidebar__logo" href="./promotions.html"><img src="../../assets/images/logo.png" alt="Velura"></a><span class="admin-sidebar__caption">Quản trị</span></div>
-      <nav class="admin-sidebar__nav">
-        <a class="admin-menu-item" href="./dashboard.html"><svg class="admin-menu-icon"><use href="../../assets/icons/admin-icons.svg#dashboard"></use></svg>Dashboard</a>
-        <a class="admin-menu-item" href="./accounts.html"><svg class="admin-menu-icon"><use href="../../assets/icons/admin-icons.svg#users"></use></svg>Quản lý tài khoản</a>
-        <a class="admin-menu-item" href="./products.html"><svg class="admin-menu-icon"><use href="../../assets/icons/admin-icons.svg#box"></use></svg>Quản lý sản phẩm</a>
-        <a class="admin-menu-item" href="./orders.html"><svg class="admin-menu-icon"><use href="../../assets/icons/admin-icons.svg#cart"></use></svg>Quản lý đơn hàng</a>
-        <a class="admin-menu-item" href="./reviews.html"><svg class="admin-menu-icon"><use href="../../assets/icons/admin-icons.svg#star"></use></svg>Quản lý đánh giá</a>
-        <a class="admin-menu-item" href="./returns-cskh.html"><svg class="admin-menu-icon"><use href="../../assets/icons/admin-icons.svg#support"></use></svg>Đổi trả &amp; CSKH</a>
-        <details class="admin-menu-group" open><summary><svg class="admin-menu-icon"><use href="../../assets/icons/admin-icons.svg#tag"></use></svg>Giá &amp; khuyến mãi</summary><div class="admin-menu-subnav"><a href="./pricing.html">Quản lý giá</a><a class="is-active" href="./promotions.html">Quản lý khuyến mãi</a></div></details>
-        <a class="admin-menu-item" href="./logs.html"><svg class="admin-menu-icon"><use href="../../assets/icons/admin-icons.svg#log"></use></svg>Nhật ký hệ thống</a>
+      <div class="admin-sidebar__brand">
+        <a class="admin-sidebar__logo" href="./promotions.html" aria-label="Velura – về trang khuyến mãi">
+          <img src="../../assets/images/logo.png" alt="Velura">
+        </a>
+        <span class="admin-sidebar__caption">Quản trị</span>
+      </div>
+      <nav class="admin-sidebar__nav" aria-label="Menu chính">
+        <a class="admin-menu-item" href="./dashboard.html">
+          <svg class="admin-menu-icon" aria-hidden="true"><use href="../../assets/icons/admin-icons.svg#dashboard"></use></svg>Dashboard
+        </a>
+        <a class="admin-menu-item" href="./accounts.html">
+          <svg class="admin-menu-icon" aria-hidden="true"><use href="../../assets/icons/admin-icons.svg#users"></use></svg>Quản lý tài khoản
+        </a>
+        <a class="admin-menu-item" href="./products.html">
+          <svg class="admin-menu-icon" aria-hidden="true"><use href="../../assets/icons/admin-icons.svg#box"></use></svg>Quản lý sản phẩm
+        </a>
+        <a class="admin-menu-item" href="./orders.html">
+          <svg class="admin-menu-icon" aria-hidden="true"><use href="../../assets/icons/admin-icons.svg#cart"></use></svg>Quản lý đơn hàng
+        </a>
+        <a class="admin-menu-item" href="./reviews.html">
+          <svg class="admin-menu-icon" aria-hidden="true"><use href="../../assets/icons/admin-icons.svg#star"></use></svg>Quản lý đánh giá
+        </a>
+        <a class="admin-menu-item" href="./returns-cskh.html">
+          <svg class="admin-menu-icon" aria-hidden="true"><use href="../../assets/icons/admin-icons.svg#support"></use></svg>Đổi trả &amp; CSKH
+        </a>
+        <details class="admin-menu-group" open>
+          <summary>
+            <svg class="admin-menu-icon" aria-hidden="true"><use href="../../assets/icons/admin-icons.svg#tag"></use></svg>Giá &amp; khuyến mãi
+          </summary>
+          <div class="admin-menu-subnav">
+            <a href="./pricing.html">Quản lý giá</a>
+            <a class="is-active" href="./promotions.html">Quản lý khuyến mãi</a>
+          </div>
+        </details>
+        <a class="admin-menu-item" href="./logs.html">
+          <svg class="admin-menu-icon" aria-hidden="true"><use href="../../assets/icons/admin-icons.svg#log"></use></svg>Nhật ký hệ thống
+        </a>
       </nav>
     </aside>
+
+    <!-- ── Main content ── -->
     <div class="admin-main">
-      <header class="admin-topbar">
-        <div class="admin-topbar__leading"><button class="admin-icon-button admin-topbar__menu" type="button" data-promo-sidebar aria-label="Đóng sidebar">☰</button><h1 class="admin-topbar__title">Quản lý khuyến mãi</h1></div>
-        <div class="admin-topbar__actions"><button class="admin-btn admin-btn--export admin-btn--sm" type="button" data-promo-export>Xuất báo cáo</button><button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" data-promo-modal="campaigns">Tạo chiến dịch</button><button class="admin-btn admin-btn--outline admin-btn--sm" type="button" data-promo-modal="vouchers">Tạo voucher</button><button class="admin-profile" type="button"><span class="admin-profile__avatar">PH</span><span class="admin-profile__copy"><strong>Phạm Thu Hương</strong><small>Quản trị viên</small></span></button></div>
+
+      <!-- Topbar -->
+      <header class="admin-topbar" role="banner">
+        <div class="admin-topbar__leading">
+          <button class="admin-icon-button admin-topbar__menu" type="button"
+            data-promo-sidebar aria-label="Mở/đóng sidebar" aria-controls="admin-sidebar">☰</button>
+          <h1 class="admin-topbar__title">Quản lý khuyến mãi</h1>
+        </div>
+        <div class="admin-topbar__actions">
+          <button class="admin-btn admin-btn--export admin-btn--sm" type="button"
+            data-promo-export title="Xuất toàn bộ dữ liệu JSON">
+            Xuất báo cáo
+          </button>
+          <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button"
+            data-promo-modal="campaigns" id="btn-create-campaign">
+            + Tạo chiến dịch
+          </button>
+          <button class="admin-btn admin-btn--outline admin-btn--sm" type="button"
+            data-promo-modal="vouchers" id="btn-create-voucher">
+            + Tạo voucher
+          </button>
+          <button class="admin-profile" type="button" aria-label="Tài khoản quản trị">
+            <span class="admin-profile__avatar">PH</span>
+            <span class="admin-profile__copy">
+              <strong>Phạm Thu Hương</strong>
+              <small>Quản trị viên</small>
+            </span>
+          </button>
+        </div>
       </header>
-      <main class="admin-content">
-        <p class="admin-page-crumb">Dashboard / Giá &amp; khuyến mãi / Quản lý khuyến mãi</p>
-        <section class="admin-kpi-grid admin-promo-kpis" id="promo-kpis" aria-label="Thống kê khuyến mãi"></section>
-        <section class="admin-card admin-card--flush">
-          <div class="admin-tabs" role="tablist" aria-label="Không gian khuyến mãi">
-            <button class="admin-tab admin-tab--active" type="button" data-promo-view="campaigns">Chiến dịch <span>0</span></button>
-            <button class="admin-tab" type="button" data-promo-view="vouchers">Mã giảm giá <span>0</span></button>
-            <button class="admin-tab" type="button" data-promo-view="bundles">Combo/Bundle <span>0</span></button>
-            <button class="admin-tab" type="button" data-promo-view="logs">Nhật ký</button>
-            <button class="admin-tab" type="button" data-promo-view="stats">Thống kê</button>
+
+      <!-- Content area -->
+      <main class="admin-content" id="main-content">
+        <nav class="admin-page-crumb" aria-label="Breadcrumb">
+          Dashboard / Giá &amp; khuyến mãi /
+          <span aria-current="page">Quản lý khuyến mãi</span>
+        </nav>
+
+        <!-- KPI cards — cập nhật bởi JS -->
+        <section class="admin-kpi-grid admin-promo-kpis" id="promo-kpis"
+          aria-label="Tổng quan khuyến mãi" aria-live="polite">
+          <!-- JS renders: Đang chạy / Voucher hoạt động / Đã phát hành / Tổng ngân sách / Cần chú ý -->
+        </section>
+
+        <!-- Main tab panel -->
+        <section class="admin-card admin-card--flush" aria-label="Bảng quản lý khuyến mãi">
+
+          <!-- Tabs -->
+          <div class="admin-tabs" role="tablist" aria-label="Chế độ xem khuyến mãi">
+            <button class="admin-tab admin-tab--active" type="button"
+              role="tab" aria-selected="true" aria-controls="promo-panel"
+              data-promo-view="campaigns" id="tab-campaigns">
+              Chiến dịch <span aria-label="số chiến dịch">0</span>
+            </button>
+            <button class="admin-tab" type="button"
+              role="tab" aria-selected="false" aria-controls="promo-panel"
+              data-promo-view="vouchers" id="tab-vouchers">
+              Mã giảm giá <span aria-label="số voucher">0</span>
+            </button>
+            <button class="admin-tab" type="button"
+              role="tab" aria-selected="false" aria-controls="promo-panel"
+              data-promo-view="bundles" id="tab-bundles">
+              Combo/Bundle <span aria-label="số combo">0</span>
+            </button>
+            <button class="admin-tab" type="button"
+              role="tab" aria-selected="false" aria-controls="promo-panel"
+              data-promo-view="logs" id="tab-logs">
+              Nhật ký
+            </button>
+            <button class="admin-tab" type="button"
+              role="tab" aria-selected="false" aria-controls="promo-panel"
+              data-promo-view="stats" id="tab-stats">
+              Thống kê
+            </button>
           </div>
-          <div class="admin-tab-content" id="promo-panel"></div>
+
+          <!-- Tab content — fully managed by JS -->
+          <div class="admin-tab-content" id="promo-panel"
+            role="tabpanel" aria-live="polite" aria-label="Nội dung tab khuyến mãi">
+            <!-- JS renders content here based on active tab -->
+          </div>
+
         </section>
       </main>
-    </div>
-  </div>
-  <div id="promo-overlay"></div>
-  <p class="admin-toast" id="promo-toast" hidden></p>
+    </div><!-- /.admin-main -->
+
+  </div><!-- /.admin-layout -->
+
+  <!-- Overlay: modal + drawer container -->
+  <div id="promo-overlay" role="dialog" aria-modal="true" aria-label="Hộp thoại"></div>
+
+  <!-- Toast notification -->
+  <p class="admin-toast" id="promo-toast" role="status" aria-live="polite" hidden></p>
+
+  <!-- Auth script -->
   <script type="module">
     import { checkAuth, updateSidebarForRole, logout } from '../../scripts/auth.js';
     checkAuth().then((session) => {
-      if (session) { updateSidebarForRole(session); document.addEventListener('click', e => { if (e.target.closest('[data-admin-logout]')) logout(); }); }
+      if (session) {
+        updateSidebarForRole(session);
+        document.addEventListener('click', e => {
+          if (e.target.closest('[data-admin-logout]')) logout();
+        });
+      }
     });
   </script>
+
+  <!-- Module A4 main script -->
   <script type="module" src="../../scripts/promotions.js"></script>
+
 </body>
 </html>

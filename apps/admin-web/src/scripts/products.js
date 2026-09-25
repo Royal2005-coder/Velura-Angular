@@ -77,13 +77,21 @@ import { productApi } from "./product-api.js";
     return "admin-stock--ok";
   }
 
+  function formatApiError(error) {
+    if (error?.details && typeof error.details === "object") {
+      const messages = Object.values(error.details).flat().filter(Boolean);
+      if (messages.length > 0) return messages.join("; ");
+    }
+    return error?.message || "Đã xảy ra lỗi không xác định.";
+  }
+
   function showToast(message, isError = false) {
     const toast = document.querySelector("#product-toast");
-    toast.textContent = message;
+    toast.textContent = typeof message === "string" ? message : formatApiError(message);
     toast.classList.toggle("is-error", isError);
     toast.hidden = false;
     clearTimeout(showToast.timer);
-    showToast.timer = setTimeout(() => { toast.hidden = true; }, 3500);
+    showToast.timer = setTimeout(() => { toast.hidden = true; }, 4500);
   }
 
   function currentRows() {
@@ -412,7 +420,7 @@ import { productApi } from "./product-api.js";
       productModal.hidden = true;
       await loadState();
     } catch (error) {
-      showToast(error.message, true);
+      showToast(formatApiError(error), true);
     } finally {
       submit.disabled = false;
     }
@@ -432,7 +440,7 @@ import { productApi } from "./product-api.js";
       showToast("Đã cập nhật trạng thái sản phẩm.");
       await loadState();
     } catch (error) {
-      showToast(error.message, true);
+      showToast(formatApiError(error), true);
     }
   }
 

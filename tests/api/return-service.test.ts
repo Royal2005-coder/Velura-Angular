@@ -210,4 +210,66 @@ test("replying twice to the same processing ticket is not a transition and stays
   assert.equal(calls, 2);
 });
 
+test("approving a refund triggers payment refund gateway with orderId and requested amount", async () => {
+  let refundCall: { orderId: string; amount?: number } | null = null;
+  const service = createReturnService({
+    repository: {
+      getRefundableAmount: async () => 350000,
+      approveRefund: async (_id, input) => ({ order_id: "order-123", refund_amount: input.refundAmount }),
+      getReturn: async () => ({ return_id: RETURN_ID, order_id: "order-123", status: "pending", version: 1 })
+    },
+    refunds: {
+      refund: async (orderId, amount) => {
+        refundCall = { orderId, amount };
+        return { status: "refunded" };
+      }
+    }
+  });
+
+  const res = await service.approveRefund(context("admin_operator_cskh_dt"), RETURN_ID, { refundAmount: 300000, expectedVersion: 1 });
+  assert.equal(refundCall?.orderId, "order-123");
+  assert.equal(refundCall?.amount, 300000);
+  assert.deepEqual(res.refund, { status: "refunded" });
+});
+
+test("completing a return triggers payment refund gateway if applicable", async () => {
+  let refundCall: { orderId: string; amount?: number } | null = null;
+  const service = createReturnService({
+    repository: {
+      getReturn: async () => ({ return_id: RETURN_ID, order_id: "order-456", status: "received", refund_amount: 500000, version: 3 }),
+      updateReturnStatus: async (_id, input) => ({ status: input.status, order_id: "order-456" })
+    },
+    refunds: {
+      refund: async (orderId, amount) => {
+        refundCall = { orderId, amount };
+        return { status: "refunded" };
+      }
+    }
+  });
+
+  await service.updateReturnStatus(context("admin_operator_cskh_dt"), RETURN_ID, { status: "completed", expectedVersion: 3 });
+  assert.equal(refundCall?.orderId, "order-456");
+  assert.equal(refundCall?.amount, 500000);
+});
+
+test("triggerStripeRefund manually executes payment refund gateway", async () => {
+  let refundCall: { orderId: string; amount?: number } | null = null;
+  const service = createReturnService({
+    repository: {
+      getReturn: async () => ({ return_id: RETURN_ID, order_id: "order-789", status: "completed", refund_amount: 200000, version: 4 })
+    },
+    refunds: {
+      refund: async (orderId, amount) => {
+        refundCall = { orderId, amount };
+        return { status: "refunded" };
+      }
+    }
+  });
+
+  const res = await service.triggerStripeRefund(context("admin_operator_cskh_dt"), RETURN_ID, { refundAmount: 200000 });
+  assert.equal(refundCall?.orderId, "order-789");
+  assert.equal(refundCall?.amount, 200000);
+  assert.equal(res.success, true);
+});
+
 function context(roleCode) { return { authUser: { id: "auth-1" }, roleCode, accessToken: "jwt-token" }; }

@@ -58,6 +58,9 @@ const EVENT_LABELS: Readonly<Record<string, string>> = {
   payment_expired: 'Hết hạn thanh toán',
   retry_refund: 'Thử hoàn tiền lại',
   refund_failed: 'Hoàn tiền lỗi',
+  refund_succeeded: 'Hoàn tiền thành công',
+  stripe_refund_succeeded: 'Hoàn tiền Stripe thành công',
+  stripe_refund_requested: 'Yêu cầu hoàn tiền Stripe',
 };
 
 @Component({

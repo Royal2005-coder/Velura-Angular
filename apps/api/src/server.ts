@@ -55,7 +55,10 @@ const accountService: AccountService = createAccountService({ repository: create
 const productService: ProductService = createProductService({ repository: createProductRepository() });
 const orderService = createOrderService({ repository: createOrderRepository(), refunds: { refund: refundStripeOrder } });
 const reviewService = createReviewService({ repository: createReviewRepository() });
-const returnService = createReturnService({ repository: createReturnRepository() });
+const returnService = createReturnService({
+  repository: createReturnRepository(),
+  refunds: { refund: (orderId, amount) => refundStripeOrder(orderId, { amount }) }
+});
 const pricingService = createPricingService({ repository: createPricingRepository() });
 const auditLogService = createAuditLogService({ repository: createAuditLogRepository() });
 const chatbotService: ChatbotService = createChatbotService({ repository: createChatbotRepository() });

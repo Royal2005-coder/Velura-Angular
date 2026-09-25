@@ -20,7 +20,11 @@ type PageItem = { kind: 'page'; value: number } | { kind: 'dots'; value: number 
 @Component({
   selector: 'app-cart-page',
   imports: [RouterLink, VoucherWallet],
-  host: { class: 'page-cart', style: 'display:block' },
+  host: {
+    class: 'page-cart',
+    style: 'display:block',
+    '(document:click)': 'closeAllDropdowns()',
+  },
   templateUrl: './cart.page.html',
 })
 export class CartPage {
@@ -28,6 +32,10 @@ export class CartPage {
   private readonly api = inject(ApiService);
   readonly editingVariantId = signal<string | null>(null);
   readonly variantChoices = signal<Array<{ variant_id: string; size?: string; color?: string; stock_quantity?: number }>>([]);
+  readonly activeDropdown = signal<{ variantId: string; type: 'color' | 'size' } | null>(null);
+  private readonly variantsCache = new Map<string, Array<{ variant_id: string; size?: string; color?: string; stock_quantity?: number }>>();
+  readonly variantsVersion = signal(0);
+  readonly loadingVariants = signal(false);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
 
@@ -163,19 +171,124 @@ export class CartPage {
     if (item.is_combo) {
       return;
     }
-    if (this.editingVariantId() === item.variant_id) {
+    if (this.isDropdownOpen(item, 'color') || this.isDropdownOpen(item, 'size')) {
+      this.activeDropdown.set(null);
       this.editingVariantId.set(null);
       this.variantChoices.set([]);
       return;
     }
     this.editingVariantId.set(item.variant_id);
-    this.variantChoices.set([]);
-    this.api.get<{ variants?: Array<{ variant_id: string; size?: string; color?: string; stock_quantity?: number }> }>(
-      `/api/user/products/${item.product_id}`,
-    ).subscribe({
-      next: (product) => this.variantChoices.set(product.variants || []),
-      error: () => this.variantChoices.set([]),
-    });
+    this.toggleDropdown(item, 'color');
+  }
+
+  isDropdownOpen(item: GroupedCartItem, type: 'color' | 'size'): boolean {
+    const cur = this.activeDropdown();
+    return cur !== null && cur.variantId === item.variant_id && cur.type === type;
+  }
+
+  toggleDropdown(item: GroupedCartItem, type: 'color' | 'size', event?: Event): void {
+    if (event) {
+      event.stopPropagation();
+    }
+    if (item.is_combo) return;
+    const cur = this.activeDropdown();
+    if (cur && cur.variantId === item.variant_id && cur.type === type) {
+      this.activeDropdown.set(null);
+      return;
+    }
+    this.activeDropdown.set({ variantId: item.variant_id, type });
+    if (!this.variantsCache.has(item.product_id)) {
+      this.loadingVariants.set(true);
+      this.api
+        .get<{ variants?: Array<{ variant_id: string; size?: string; color?: string; stock_quantity?: number }> }>(
+          `/api/user/products/${item.product_id}`,
+        )
+        .subscribe({
+          next: (product) => {
+            const list = product.variants || [];
+            this.variantsCache.set(item.product_id, list);
+            this.variantChoices.set(list);
+            this.variantsVersion.update((v) => v + 1);
+            this.loadingVariants.set(false);
+          },
+          error: () => {
+            this.variantsCache.set(item.product_id, []);
+            this.variantChoices.set([]);
+            this.variantsVersion.update((v) => v + 1);
+            this.loadingVariants.set(false);
+          },
+        });
+    } else {
+      this.variantChoices.set(this.variantsCache.get(item.product_id) || []);
+    }
+  }
+
+  getColorsForItem(item: GroupedCartItem): string[] {
+    this.variantsVersion();
+    const list = this.variantsCache.get(item.product_id) || [];
+    const set = new Set<string>();
+    if (item.color) set.add(item.color);
+    for (const v of list) {
+      if (v.color) set.add(v.color);
+    }
+    return Array.from(set);
+  }
+
+  getSizesForItem(item: GroupedCartItem): string[] {
+    this.variantsVersion();
+    const list = this.variantsCache.get(item.product_id) || [];
+    const set = new Set<string>();
+    if (item.size) set.add(item.size);
+    for (const v of list) {
+      if (v.size) set.add(v.size);
+    }
+    return Array.from(set);
+  }
+
+  pickColor(item: GroupedCartItem, color: string): void {
+    this.activeDropdown.set(null);
+    if (item.color === color) return;
+    const list = this.variantsCache.get(item.product_id) || [];
+    const match = list.find((v) => v.color === color && v.size === item.size) || list.find((v) => v.color === color);
+    if (match) {
+      this.cart.replaceVariant(item.variant_id, {
+        variant_id: match.variant_id,
+        product_id: item.product_id,
+        product_name: item.product_name,
+        product_image: item.product_image,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        color: match.color || color,
+        size: match.size || item.size,
+      });
+      this.selectedIds.update((ids) => ids.map((id) => (id === item.variant_id ? match.variant_id : id)));
+      this.persistSelected();
+    }
+  }
+
+  pickSize(item: GroupedCartItem, size: string): void {
+    this.activeDropdown.set(null);
+    if (item.size === size) return;
+    const list = this.variantsCache.get(item.product_id) || [];
+    const match = list.find((v) => v.size === size && v.color === item.color) || list.find((v) => v.size === size);
+    if (match) {
+      this.cart.replaceVariant(item.variant_id, {
+        variant_id: match.variant_id,
+        product_id: item.product_id,
+        product_name: item.product_name,
+        product_image: item.product_image,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        color: match.color || item.color,
+        size: match.size || size,
+      });
+      this.selectedIds.update((ids) => ids.map((id) => (id === item.variant_id ? match.variant_id : id)));
+      this.persistSelected();
+    }
+  }
+
+  closeAllDropdowns(): void {
+    this.activeDropdown.set(null);
   }
 
   /**

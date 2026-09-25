@@ -323,6 +323,13 @@ export async function markStripePaymentPaid(
   return "paid";
 }
 
+/** Tuỳ chọn bổ sung cho yêu cầu hoàn tiền Stripe (số tiền hoàn một phần, lý do, fetch mock). */
+export interface RefundStripeOptions {
+  fetchImpl?: typeof fetch;
+  amount?: number;
+  reason?: string;
+}
+
 /** Kết quả một lần yêu cầu hoàn tiền. */
 export interface RefundResult {
   status: "refunded" | "requested" | "failed" | "skipped";
@@ -330,27 +337,53 @@ export interface RefundResult {
 }
 
 /**
- * Hoàn toàn bộ tiền của payment Stripe đang Chờ hoàn tiền của một đơn.
+ * Hoàn tiền của payment Stripe cho một đơn hàng (hỗ trợ hoàn toàn bộ hoặc một phần).
  *
  * Idempotency key gắn với payment và phiên bản của nó: gọi lại vì mạng chập chờn thì
  * Stripe trả lại đúng kết quả cũ, còn "Thử hoàn tiền lại" sau khi lỗi (payment đã tăng
  * phiên bản) là một yêu cầu mới. Stripe từ chối thì payment giữ `refund_pending` và mang
  * dấu `REFUND_FAILED` để admin thấy và thử lại (OPEN-02).
  */
-export async function refundStripeOrder(orderId: string, fetchImpl: typeof fetch = fetch): Promise<RefundResult> {
+export async function refundStripeOrder(
+  orderId: string,
+  fetchImplOrOptions: typeof fetch | RefundStripeOptions = fetch
+): Promise<RefundResult> {
+  const fetchImpl = typeof fetchImplOrOptions === "function" ? fetchImplOrOptions : (fetchImplOrOptions?.fetchImpl ?? fetch);
+  const refundAmount = typeof fetchImplOrOptions === "object" && typeof fetchImplOrOptions?.amount === "number"
+    ? fetchImplOrOptions.amount
+    : undefined;
+  const reason = typeof fetchImplOrOptions === "object" && typeof fetchImplOrOptions?.reason === "string"
+    ? fetchImplOrOptions.reason
+    : undefined;
+
   const payment = await selectOne("payment", {
     order_id: `eq.${orderId}`,
     payment_provider: "eq.stripe",
-    payment_status: "eq.refund_pending",
+    payment_status: "in.(paid,refund_pending)",
     order: "created_at.desc"
   });
   if (!payment) return { status: "skipped", message: "Không có payment Stripe nào chờ hoàn tiền" };
+
+  // Nếu payment đang ở trạng thái 'paid', chuyển sang 'refund_pending' để ghi nhận tiến trình
+  if (payment.payment_status === "paid") {
+    await updateRows("payment", { payment_id: `eq.${payment.payment_id}` }, {
+      payment_status: "refund_pending",
+      refund_amount: refundAmount ?? payment.amount,
+      refund_reason: reason || "Yêu cầu hoàn tiền từ quản trị viên / trả hàng",
+      gateway_response_code: "REFUND_REQUESTED"
+    });
+  }
+
   const intent = asString(payment.gateway_transaction_ref);
   if (!config.stripeSecretKey || !intent.startsWith("pi_")) {
     await markRefundFailed(orderId, payment, !config.stripeSecretKey ? "Chưa cấu hình STRIPE_SECRET_KEY" : "Thiếu mã PaymentIntent của giao dịch");
     return { status: "failed", message: "Không gửi được yêu cầu hoàn tiền tới Stripe" };
   }
   try {
+    const params = new URLSearchParams({ payment_intent: intent, "metadata[order_id]": orderId });
+    if (refundAmount && refundAmount > 0 && refundAmount < Number(payment.amount)) {
+      params.append("amount", String(Math.round(refundAmount)));
+    }
     const response = await fetchImpl("https://api.stripe.com/v1/refunds", {
       method: "POST",
       headers: {
@@ -358,7 +391,7 @@ export async function refundStripeOrder(orderId: string, fetchImpl: typeof fetch
         "content-type": "application/x-www-form-urlencoded",
         "idempotency-key": `refund-${asString(payment.payment_id)}-${String(payment.version ?? 1)}`
       },
-      body: new URLSearchParams({ payment_intent: intent, "metadata[order_id]": orderId })
+      body: params
     });
     const body = await response.json() as { id?: string; status?: string; error?: { message?: string } };
     if (!response.ok || !body.id || body.status === "failed" || body.status === "canceled") {
@@ -366,10 +399,18 @@ export async function refundStripeOrder(orderId: string, fetchImpl: typeof fetch
       return { status: "failed", message: body.error?.message || "Stripe từ chối hoàn tiền" };
     }
     if (body.status === "succeeded") {
-      await completeRefund(asString(payment.payment_id));
+      await completeRefund(asString(payment.payment_id), orderId, refundAmount ?? Number(payment.amount), body.id);
       return { status: "refunded" };
     }
     // `pending`: Stripe xử lý bất đồng bộ, webhook `charge.refunded` sẽ chốt.
+    await insertRow("order_event", {
+      order_id: orderId,
+      action: "stripe_refund_requested",
+      actor_type: "system",
+      result: "success",
+      note: "Yêu cầu hoàn tiền Stripe đã được gửi, đang chờ xử lý từ cổng thanh toán",
+      payload: { payment_id: payment.payment_id, payment_intent: intent, stripe_refund_id: body.id, amount: refundAmount ?? payment.amount }
+    });
     return { status: "requested" };
   } catch (error: unknown) {
     await markRefundFailed(orderId, payment, errorMessage(error));
@@ -382,21 +423,76 @@ export async function markStripeRefunded(paymentIntentId: string): Promise<"refu
   const changed = await updateRows("payment", {
     gateway_transaction_ref: `eq.${paymentIntentId}`,
     payment_provider: "eq.stripe",
-    payment_status: "eq.refund_pending"
+    payment_status: "in.(paid,refund_pending)"
   }, {
     payment_status: "refunded",
     refund_at: new Date().toISOString(),
     gateway_response_code: "REFUNDED"
   });
-  return changed.length ? "refunded" : "ignored";
+  if (changed.length) {
+    const payment = asJsonObject(changed[0]);
+    const orderId = asString(payment.order_id);
+    if (orderId) {
+      await insertRow("order_event", {
+        order_id: orderId,
+        action: "stripe_refund_succeeded",
+        actor_type: "system",
+        result: "success",
+        note: "Stripe xác nhận hoàn tiền thành công (webhook)",
+        payload: { payment_id: payment.payment_id, payment_intent: paymentIntentId, amount: payment.amount }
+      });
+      try {
+        const order = await selectOne("orders", { order_id: `eq.${orderId}`, select: "order_id,user_id,order_code" });
+        if (order?.user_id) {
+          await insertRow("notification", {
+            user_id: order.user_id,
+            type: "order_status",
+            title: `Đơn hàng #${order.order_code || orderId} đã được hoàn tiền`,
+            content: "Cổng Stripe đã xác nhận hoàn tiền thành công về tài khoản thẻ của bạn.",
+            link: `/account/orders/${orderId}`,
+            is_read: false
+          });
+        }
+      } catch (err: unknown) {
+        console.warn("[STRIPE WEBHOOK NOTIFICATION] Failed to create notification:", errorMessage(err));
+      }
+    }
+    return "refunded";
+  }
+  return "ignored";
 }
 
-async function completeRefund(paymentId: string): Promise<void> {
-  await updateRows("payment", { payment_id: `eq.${paymentId}`, payment_status: "eq.refund_pending" }, {
+async function completeRefund(paymentId: string, orderId?: string, amount?: number, stripeRefundId?: string): Promise<void> {
+  await updateRows("payment", { payment_id: `eq.${paymentId}`, payment_status: "in.(paid,refund_pending)" }, {
     payment_status: "refunded",
     refund_at: new Date().toISOString(),
     gateway_response_code: "REFUNDED"
   });
+  if (orderId) {
+    await insertRow("order_event", {
+      order_id: orderId,
+      action: "stripe_refund_succeeded",
+      actor_type: "system",
+      result: "success",
+      note: `Stripe xác nhận hoàn tiền thành công (${Number(amount || 0).toLocaleString("vi-VN")} đ)`,
+      payload: { payment_id: paymentId, stripe_refund_id: stripeRefundId, amount }
+    });
+    try {
+      const order = await selectOne("orders", { order_id: `eq.${orderId}`, select: "order_id,user_id,order_code" });
+      if (order?.user_id) {
+        await insertRow("notification", {
+          user_id: order.user_id,
+          type: "order_status",
+          title: `Đơn hàng #${order.order_code || orderId} đã được hoàn tiền`,
+          content: `Số tiền ${Number(amount || 0).toLocaleString("vi-VN")} đ đã được hoàn thành công về phương thức thanh toán ban đầu qua Stripe.`,
+          link: `/account/orders/${orderId}`,
+          is_read: false
+        });
+      }
+    } catch (err: unknown) {
+      console.warn("[STRIPE NOTIFICATION] Could not create refund notification:", errorMessage(err));
+    }
+  }
 }
 
 async function markRefundFailed(orderId: string, payment: JsonObject, message: string): Promise<void> {

@@ -332,7 +332,7 @@ test("Stripe hoàn xong ngay thì payment sang Đã hoàn tiền; idempotency ke
     assert.equal(stripe.calls[0].headers["idempotency-key"], "refund-pay_1-3");
     const done = pg.calls.find((c) => c.method === "PATCH" && c.path === "/rest/v1/payment");
     assert.equal(bodyOf(done).payment_status, "refunded");
-    assert.equal(done?.query.get("payment_status"), "eq.refund_pending");
+    assert.equal(done?.query.get("payment_status"), "in.(paid,refund_pending)");
   } finally {
     pg.restore();
   }
@@ -396,7 +396,7 @@ test("webhook charge.refunded chốt Đã hoàn tiền một lần; gửi lại 
     assert.equal(await markStripeRefunded("pi_paid"), "ignored");
     const patch = pg.calls.find((c) => c.method === "PATCH");
     assert.equal(patch?.query.get("gateway_transaction_ref"), "eq.pi_paid");
-    assert.equal(patch?.query.get("payment_status"), "eq.refund_pending");
+    assert.equal(patch?.query.get("payment_status"), "in.(paid,refund_pending)");
   } finally {
     pg.restore();
   }

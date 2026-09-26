@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { HttpError } from "../http.js";
-import { selectOne, updateRows } from "../supabase.js";
+import { insertRow, selectOne, updateRows } from "../supabase.js";
 import { asJsonObject, type JsonObject } from "../types.js";
 import type { CheckoutContact } from "./checkout-service.js";
 
@@ -18,6 +18,71 @@ export interface CheckoutAddressInput {
 export interface SavedAddressBookUpdate {
   entry: JsonObject;
   addresses: JsonObject[];
+}
+
+/** Cổng dữ liệu checkout; service không biết chi tiết PostgREST/Supabase. */
+export interface CheckoutRepository {
+  /** Tìm biến thể để kiểm tồn kho tại thời điểm đặt hàng. */
+  findVariant(variantId: string): Promise<JsonObject | null>;
+  /** Tìm tài khoản theo số điện thoại đã chuẩn hóa. */
+  findUserByPhone(phone: string): Promise<JsonObject | null>;
+  /** Tìm tài khoản theo email đã chuẩn hóa. */
+  findUserByEmail(email: string): Promise<JsonObject | null>;
+  /** Tìm Guest theo hash token kích hoạt dùng một lần. */
+  findUserByActivationHash(tokenHash: string): Promise<JsonObject | null>;
+  /** Tạo tài khoản Guest chưa kích hoạt. */
+  createGuestUser(input: JsonObject): Promise<JsonObject>;
+  /** Cập nhật token kích hoạt của Guest đã tồn tại. */
+  updateGuestUser(userId: string, input: JsonObject): Promise<void>;
+  /** Kích hoạt tài khoản và xóa token để không thể dùng lại. */
+  activateGuestUser(userId: string, passwordHash: string): Promise<void>;
+  /** Ghi một đơn hàng đã được service chốt giá và trạng thái. */
+  createOrder(input: JsonObject): Promise<JsonObject>;
+  /** Ghi phiên thanh toán online của đơn. */
+  createPayment(input: JsonObject): Promise<void>;
+  /** Ghi một dòng hàng thuộc đơn. */
+  createOrderItem(input: JsonObject): Promise<JsonObject>;
+  /** Cập nhật số lượng tồn của một biến thể sau khi service tính số mới. */
+  updateVariantStock(variantId: string, quantity: number): Promise<void>;
+  /** Ghi vết email đã gửi để worker không gửi lặp. */
+  createEmailOutbox(input: JsonObject): Promise<void>;
+  /** Thêm địa chỉ checkout vào sổ địa chỉ của Member. */
+  appendAddress(userId: string, contact: CheckoutContact, input: CheckoutAddressInput): Promise<JsonObject>;
+}
+
+/** Tạo repository checkout dùng Supabase; đây là lớp duy nhất của checkout gọi helper DB. */
+export function createCheckoutRepository(): CheckoutRepository {
+  return {
+    findVariant: (variantId) => selectOne("variant", { variant_id: `eq.${variantId}` }),
+    findUserByPhone: (phone) => selectOne("users", { phone: `eq.${phone}` }),
+    findUserByEmail: (email) => selectOne("users", { email: `eq.${email}` }),
+    findUserByActivationHash: (tokenHash) => selectOne("users", { activation_token_hash: `eq.${tokenHash}` }),
+    createGuestUser: async (input) => asJsonObject(await insertRow("users", input)),
+    updateGuestUser: async (userId, input) => {
+      await updateRows("users", { user_id: `eq.${userId}` }, input);
+    },
+    activateGuestUser: async (userId, passwordHash) => {
+      await updateRows("users", { user_id: `eq.${userId}` }, {
+        password_hash: passwordHash,
+        is_active: true,
+        activation_token_hash: null,
+        activation_expires_at: null,
+        updated_at: new Date().toISOString()
+      });
+    },
+    createOrder: async (input) => asJsonObject(await insertRow("orders", input)),
+    createPayment: async (input) => {
+      await insertRow("payment", input);
+    },
+    createOrderItem: async (input) => asJsonObject(await insertRow("order_item", input)),
+    updateVariantStock: async (variantId, quantity) => {
+      await updateRows("variant", { variant_id: `eq.${variantId}` }, { stock_quantity: quantity });
+    },
+    createEmailOutbox: async (input) => {
+      await insertRow("email_outbox", input);
+    },
+    appendAddress: appendCheckoutAddress
+  };
 }
 
 /** Tạo bản cập nhật sổ địa chỉ nhưng luôn bảo toàn các địa chỉ đã có. */

@@ -1,4 +1,4 @@
-import { createServer } from "node:http";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
 import { config, assertRuntimeConfig } from "./config.js";
 import { applyCors, applySecurityHeaders, getRequestIp, HttpError, parsePathname, readJson, sendError, sendJson, sendNoContent } from "./http.js";
@@ -71,12 +71,7 @@ const chatLimiter = createFixedWindowLimiter({
   limit: 30,
   windowMs: 60_000
 });
-startAccountMaintenance();
-startEmailOutboxWorker();
-startPromotionScheduler();
-startOrderAutomation();
-
-const server = createServer(async (req, res) => {
+export async function handleApiRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const requestId = String(req.headers["x-request-id"] || randomUUID()).slice(0, 128);
   applySecurityHeaders(res, config.nodeEnv);
   res.setHeader("x-request-id", requestId);
@@ -91,7 +86,7 @@ const server = createServer(async (req, res) => {
     if (req.method === "OPTIONS") return sendNoContent(res, corsHeaders);
 
     const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
-    const parts = parsePathname(url);
+    const parts = parsePathname(url, req);
 
     if (req.method === "GET" && (parts[0] === "health" || (parts[0] === "api" && parts[1] === "health"))) {
       return sendJson(res, 200, {
@@ -250,13 +245,16 @@ const server = createServer(async (req, res) => {
 
     if (parts[1] === "user") {
       if (parts[2] === "recommendations" && parts[3] === "style-profile") {
-        return await handleRecommendationRoute(req, res, parts, corsHeaders, context);
+        await handleRecommendationRoute(req, res, parts, corsHeaders, context);
+        return;
       }
-      return await handleUserRoute(req, res, parts, corsHeaders, context);
+      await handleUserRoute(req, res, parts, corsHeaders, context);
+      return;
     }
 
     if (parts[1] === "v1" && parts[2] === "wishlists") {
-      return await handleWishlistRoute(req, res, parts, corsHeaders, context);
+      await handleWishlistRoute(req, res, parts, corsHeaders, context);
+      return;
     }
 
     if (parts[1] === "v1" && parts[2] === "chat") {
@@ -410,9 +408,19 @@ const server = createServer(async (req, res) => {
   } catch (error) {
     sendError(res, error, corsHeaders, requestId);
   }
-});
+}
 
-server.listen(config.port, () => {
-  console.log(`Velura API listening on http://localhost:${config.port}`);
-});
-// Trigger watch restart.
+export const server = createServer(handleApiRequest);
+
+if (process.env.VERCEL !== "1") {
+  startAccountMaintenance();
+  startEmailOutboxWorker();
+  startPromotionScheduler();
+  startOrderAutomation();
+
+  server.listen(config.port, () => {
+    console.log(`Velura API listening on http://localhost:${config.port}`);
+  });
+}
+
+export default handleApiRequest;

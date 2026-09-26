@@ -153,40 +153,65 @@
         } @else {
           <div class="admin-table-wrap">
             <table class="admin-table admin-data-table">
-              <thead><tr><th>Mã phiếu</th><th>Đơn</th><th>Loại</th><th>Trạng thái</th><th>Ngày tạo</th><th>Thao tác</th></tr></thead>
+              <thead>
+                <tr>
+                  <th>Mã phiếu</th>
+                  <th>Đơn hàng</th>
+                  <th>Loại yêu cầu</th>
+                  <th>Tiền hoàn</th>
+                  <th>Thanh toán</th>
+                  <th>Trạng thái</th>
+                  <th>Ngày tạo</th>
+                  <th>Thao tác</th>
+                </tr>
+              </thead>
               <tbody>
                 @for (row of pagedReturns(); track row.return_id) {
                   <tr>
                     <td>
                       <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="openReturnDetail(row.return_id)" style="font-weight: 600; text-decoration: underline;" title="Xem chi tiết phiếu đổi/trả">
-                        {{ row.return_id }}
+                        📋 {{ row.return_id.slice(0, 8) }}...
                       </button>
                     </td>
-                    <td>{{ row.order_id }}</td>
                     <td>
-                      {{ returnKind(row) }}
-                      @if (row.description) {
-                        <small class="admin-note">{{ row.description }}</small>
-                      }
+                      <span class="admin-order-code">#{{ (row.order_id || '').slice(0, 8) }}</span>
                     </td>
-                    <td><span class="admin-badge">{{ returnStatusLabel(row.status) }}</span></td>
+                    <td>
+                      <span class="admin-badge" [class.admin-badge--warning]="returnKind(row) === 'Hoàn tiền'" [class.admin-badge--secondary]="returnKind(row) === 'Đổi hàng'">
+                        {{ returnKind(row) }}
+                      </span>
+                    </td>
+                    <td>
+                      <strong style="color: #2e7d32; font-weight: 600;">{{ money(row.refundable_amount || row.refund_amount) }}</strong>
+                    </td>
+                    <td>
+                      <div style="display: flex; flex-direction: column; gap: 2px;">
+                        <span style="font-size: 0.75rem; font-weight: 500;">{{ returnPaymentMethod(row) }}</span>
+                        <span class="admin-badge" [class.admin-badge--success]="isReturnRefunded(row)" [class.admin-badge--warning]="row.payment?.payment_status === 'refund_pending'">
+                          {{ returnPaymentStatus(row) }}
+                        </span>
+                      </div>
+                    </td>
+                    <td><span class="admin-badge admin-badge--order-{{ row.status }}">{{ returnStatusLabel(row.status) }}</span></td>
                     <td>{{ date(row.created_at) }}</td>
                     <td>
-                      <div class="admin-table-actions">
-                        <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="openReturnDetail(row.return_id)">Chi tiết</button>
+                      <div class="admin-table-actions" style="display: flex; align-items: center; gap: 6px;">
+                        <button class="admin-icon-button admin-icon-button--sm" type="button" title="Xem chi tiết phiếu" (click)="openReturnDetail(row.return_id)">
+                          <app-admin-icon name="eye" />
+                        </button>
                         @if (canMutate()) {
                           @if (row.status === 'pending') {
                             @if (showReturnAction(row, 'refund')) {
-                              <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openReturnAction('refund', row.return_id)">Hoàn tiền</button>
+                              <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openReturnAction('refund', row.return_id)">Duyệt hoàn tiền</button>
                             }
                             @if (showReturnAction(row, 'exchange')) {
-                              <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openReturnAction('exchange', row.return_id)">Đổi hàng</button>
+                              <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openReturnAction('exchange', row.return_id)">Duyệt đổi hàng</button>
                             }
                             <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="openReturnAction('reject', row.return_id)">Từ chối</button>
                           } @else if (nextReturnStep(row); as step) {
                             <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="advanceReturn(row, step.status)">{{ step.label }}</button>
                             @if (row.status === 'received') {
-                              <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="openReturnAction('reject', row.return_id)">Không đạt kiểm tra</button>
+                              <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="openReturnAction('reject', row.return_id)">Không đạt</button>
                             }
                           }
                         }

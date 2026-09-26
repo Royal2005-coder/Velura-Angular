@@ -1,11 +1,21 @@
 import { randomUUID } from "node:crypto";
 import { HttpError, readJson, sendJson } from "../http.js";
 import { callRpc, quotePostgrestValue, selectOne, selectRows, insertRow, updateRows } from "../supabase.js";
-import { hashPassword, signJwt } from "../auth-helper.js";
+import { hashPassword } from "../auth-helper.js";
 import { requireUserAuth, validatePhone } from "./auth.js";
 import { createNotification } from "./notifications.js";
 import { recordVoucherRedemption, resolveOrderVoucher } from "./vouchers.js";
-import { allowDevOtpBypass, config } from "../config.js";
+import { config } from "../config.js";
+import {
+  CheckoutOtpRateLimiter,
+  checkoutClientIp,
+  checkoutPaymentState,
+  createCheckoutActivation,
+  generateCheckoutOtp,
+  normalizeVietnamesePhone,
+  validateCheckoutContact
+} from "./checkout-service.js";
+import { appendCheckoutAddress } from "./checkout-repository.js";
 import { createStripePaymentIntent, refundStripeOrder, STRIPE_CHECKOUT_TTL_SECONDS, stripeConfigured } from "../payments/stripe.js";
 import { priceOrder, shippingMethodFromClaim } from "./order-pricing.js";
 import { buildCartLines, loadCatalog, loadCategoryTree } from "./cart-catalog.js";
@@ -39,6 +49,7 @@ interface CheckoutOtpSession {
 }
 
 const checkoutOtpAttemptsMap = new Map<string, CheckoutOtpSession>();
+const checkoutOtpRateLimiter = new CheckoutOtpRateLimiter();
 
 /**
  * Chặn đọc một đơn hàng không thuộc về người đang đăng nhập.
@@ -711,23 +722,9 @@ export async function handleOrdersRoute(
       const rawPhone = asString(body.phone);
       const email = body.email;
       const full_name = body.full_name;
-      
-      if (!rawPhone) {
-        throw new HttpError(400, "BAD_REQUEST", "Số điện thoại là bắt buộc");
-      }
-
-      // Chuẩn hóa số điện thoại Việt Nam (+84 hoặc 84 -> 0)
-      let cleanPhone = rawPhone.trim().replace(/[\s.-]/g, "");
-      if (cleanPhone.startsWith("+84")) {
-        cleanPhone = "0" + cleanPhone.slice(3);
-      } else if (cleanPhone.startsWith("84") && cleanPhone.length === 11) {
-        cleanPhone = "0" + cleanPhone.slice(2);
-      }
-      const phone: string = cleanPhone;
-
-      if (!validatePhone(phone)) {
-        throw new HttpError(400, "BAD_REQUEST", "Số điện thoại không hợp lệ (10 số, bắt đầu bằng 0)");
-      }
+      const contact = validateCheckoutContact({ fullName: full_name, phone: rawPhone, email });
+      const phone = contact.phone;
+      checkoutOtpRateLimiter.consume(phone, checkoutClientIp(req.headers, req.socket?.remoteAddress));
       const twilioReady = isTwilioConfigured();
       let otpEmail: string | null = null;
       if (email || !twilioReady) {
@@ -742,7 +739,7 @@ export async function handleOrdersRoute(
       // Nếu số điện thoại hoặc email đã thuộc thành viên, KHÔNG CHẶN mà vẫn gửi OTP bình thường
       const userId = existingUser ? existingUser.user_id : (existingUserByEmail ? existingUserByEmail.user_id : null);
       
-      const otpCode = Math.floor(1000 + Math.random() * 9000).toString(); // 4 digits
+      const otpCode = generateCheckoutOtp();
       const otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
       
       if (config.nodeEnv !== "production") {
@@ -757,8 +754,8 @@ export async function handleOrdersRoute(
       checkoutOtpAttemptsMap.set(phone, { 
         otpCode, 
         expiresAt: new Date(otpExpiresAt).getTime(),
-        email: email || null,
-        full_name: full_name || (existingUser ? existingUser.full_name : "Khách hàng"),
+        email: contact.email,
+        full_name: contact.fullName,
         attempts: 0 
       });
 
@@ -824,8 +821,6 @@ export async function handleOrdersRoute(
         channel,
         masked_phone: maskPhone(phone),
         masked_email: otpEmail ? maskEmail(otpEmail) : null,
-        dev_bypass: allowDevOtpBypass(),
-        phone,
         user_id: userId
       }, corsHeaders);
     }
@@ -834,16 +829,7 @@ export async function handleOrdersRoute(
     if (action === "otp-verify" && req.method === "POST") {
       const body = await readJson(req);
       const order = asJsonObject(body.order);
-      let phone = body.phone || order.shipping_phone;
-      if (phone) {
-        let cleanPhone = String(phone).trim().replace(/[\s.-]/g, "");
-        if (cleanPhone.startsWith("+84")) {
-          cleanPhone = "0" + cleanPhone.slice(3);
-        } else if (cleanPhone.startsWith("84") && cleanPhone.length === 11) {
-          cleanPhone = "0" + cleanPhone.slice(2);
-        }
-        phone = cleanPhone;
-      }
+      let phone = normalizeVietnamesePhone(body.phone || order.shipping_phone);
       const otp_code = body.otp_code || body.otp;
       const shipping_name = body.shipping_name || order.shipping_name;
       const shipping_address = body.shipping_address || order.shipping_address;
@@ -858,9 +844,12 @@ export async function handleOrdersRoute(
       if (!phone || !otp_code || !shipping_name || !shipping_address || !Array.isArray(rawItems) || !rawItems.length) {
         throw new HttpError(400, "BAD_REQUEST", "Thông tin xác thực hoặc đơn hàng không đầy đủ");
       }
-      if (!validatePhone(phone)) {
-        throw new HttpError(400, "BAD_REQUEST", "Số điện thoại không hợp lệ (10 số, bắt đầu bằng 0)");
-      }
+      const contact = validateCheckoutContact({
+        fullName: shipping_name,
+        phone,
+        email: body.shipping_email || order.shipping_email || null
+      });
+      phone = contact.phone;
 
       const items = rawItems.map((item) => asJsonObject(item));
       const phoneKey = asString(phone);
@@ -879,16 +868,14 @@ export async function handleOrdersRoute(
       }
 
       if (sessionState.otpCode !== otp_code) {
-        if (!allowDevOtpBypass() || otp_code !== "1234") {
-          sessionState.attempts += 1;
-          checkoutOtpAttemptsMap.set(phoneKey, sessionState);
-          
-          if (sessionState.attempts >= 5) {
-            checkoutOtpAttemptsMap.delete(phoneKey);
-            throw new HttpError(403, "SESSION_LOCKED", "Phiên xác thực bị khóa do nhập sai quá 5 lần. Vui lòng đặt lại đơn hàng.");
-          } else {
-            throw new HttpError(400, "INVALID_OTP", `Mã OTP không hợp lệ. Bạn còn ${5 - sessionState.attempts} lần thử.`);
-          }
+        sessionState.attempts += 1;
+        checkoutOtpAttemptsMap.set(phoneKey, sessionState);
+
+        if (sessionState.attempts >= 5) {
+          checkoutOtpAttemptsMap.delete(phoneKey);
+          throw new HttpError(403, "SESSION_LOCKED", "Phiên xác thực bị khóa do nhập sai quá 5 lần. Vui lòng đặt lại đơn hàng.");
+        } else {
+          throw new HttpError(400, "INVALID_OTP", `Mã OTP không hợp lệ. Bạn còn ${5 - sessionState.attempts} lần thử.`);
         }
       }
       
@@ -942,8 +929,6 @@ export async function handleOrdersRoute(
         }, corsHeaders);
       }
       
-      const tempPassword = "VLR" + Math.floor(100000 + Math.random() * 900000).toString();
-      const hashedPassword = hashPassword(tempPassword);
       const savedAddresses = [{
         name: shipping_name,
         phone: phone,
@@ -956,24 +941,25 @@ export async function handleOrdersRoute(
         guestUser = await selectOne("users", { email: `eq.${sessionState.email}` });
       }
       const isExistingMember = Boolean(guestUser && guestUser.is_active);
+      const activation = isExistingMember ? null : createCheckoutActivation();
       if (!guestUser) {
         guestUser = asJsonObject(await insertRow("users", {
           full_name: sessionState.full_name,
           phone: phone,
           email: sessionState.email,
-          password_hash: hashedPassword,
+          password_hash: hashPassword(randomUUID() + randomUUID()),
           role: "member",
-          is_active: true,
+          is_active: false,
+          activation_token_hash: activation?.tokenHash,
+          activation_expires_at: activation?.expiresAt,
           saved_addresses: savedAddresses,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         }));
       } else if (!guestUser.is_active) {
         await updateRows("users", { user_id: `eq.${guestUser.user_id}` }, {
-          is_active: true,
-          otp_code: null,
-          otp_expires_at: null,
-          password_hash: hashedPassword,
+          activation_token_hash: activation?.tokenHash,
+          activation_expires_at: activation?.expiresAt,
           saved_addresses: savedAddresses,
           updated_at: new Date().toISOString()
         });
@@ -982,13 +968,17 @@ export async function handleOrdersRoute(
 
       const orderCode = generateOrderCode();
       assertStripeReady(payment_method);
-      const dbPaymentMethod = (payment_method === "COD" || payment_method === "cod") ? "COD" : "ONLINE_PAYMENT";
+      const paymentState = checkoutPaymentState(payment_method);
+      const dbPaymentMethod = paymentState.method;
       const guestTotal = Math.max(0, guestPriced.subtotal + guestPriced.shippingFee - guestVoucher.discountAmount);
 
       const shipping_email = body.shipping_email || order.shipping_email;
+      const activationUrl = activation
+        ? `https://velura.royalai.dev/auth/activate?token=${encodeURIComponent(activation.token)}`
+        : null;
       if (shipping_email || guestUser.email) {
         const targetEmail = shipping_email || guestUser.email;
-        const emailBody = `Chào ${shipping_name},\n\nĐơn hàng ${orderCode} của bạn đã được đặt thành công!\nTổng giá trị: ${guestTotal.toLocaleString('vi-VN')} đ\nPhương thức thanh toán: ${dbPaymentMethod === "COD" ? "Thanh toán khi nhận hàng (COD)" : "Thanh toán trực tuyến"}\nĐịa chỉ nhận: ${shipping_address}\n\nTra cứu đơn hàng tại: https://velura.royalai.dev/account/track?code=${orderCode}\n\nThông tin đăng nhập tài khoản:\n- Số điện thoại: ${phone}\n- Mật khẩu tạm thời: ${tempPassword}`;
+        const emailBody = `Chào ${shipping_name},\n\nĐơn hàng ${orderCode} của bạn đã được đặt thành công!\nTổng giá trị: ${guestTotal.toLocaleString('vi-VN')} đ\nPhương thức thanh toán: ${dbPaymentMethod === "COD" ? "Thanh toán khi nhận hàng (COD)" : "Thanh toán trực tuyến"}\nĐịa chỉ nhận: ${shipping_address}\n\nTra cứu đơn hàng tại: https://velura.royalai.dev/account/track?code=${orderCode}${activationUrl ? `\n\nKích hoạt tài khoản và tự đặt mật khẩu trong 24 giờ: ${activationUrl}` : ""}`;
         
         const emailHtml = `
           <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eaeaea; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
@@ -1014,8 +1004,9 @@ export async function handleOrdersRoute(
 
               ${!isExistingMember ? `
               <div style="background-color: #f5f5f5; padding: 16px; border-radius: 6px; margin-top: 20px;">
-                <h4 style="margin: 0 0 8px 0; font-size: 14px; color: #555;">Tài khoản thành viên tự động tạo:</h4>
-                <p style="margin: 4px 0; font-size: 13px; color: #666;">Số điện thoại: <strong>${phone}</strong> | Mật khẩu: <span style="font-family: monospace; font-weight: bold;">${tempPassword}</span></p>
+                <h4 style="margin: 0 0 8px 0; font-size: 14px; color: #555;">Kích hoạt tài khoản thành viên:</h4>
+                <p style="margin: 4px 0; font-size: 13px; color: #666;">Liên kết kích hoạt dùng một lần và có hiệu lực trong 24 giờ.</p>
+                <p style="margin: 12px 0 0;"><a href="${activationUrl}" style="color: #7C5454; font-weight: 600;">Kích hoạt và đặt mật khẩu</a></p>
               </div>` : `
               <div style="background-color: #f5f5f5; padding: 16px; border-radius: 6px; margin-top: 20px;">
                 <p style="margin: 4px 0; font-size: 13px; color: #666;">Đơn hàng đã được liên kết với tài khoản thành viên của bạn (<strong>${phone}</strong>).</p>
@@ -1046,6 +1037,9 @@ export async function handleOrdersRoute(
       // Gửi SMS xác nhận đơn hàng qua Twilio cho khách
       if (phone) {
         void sendOrderConfirmationSms(asString(phone), orderCode, guestTotal);
+        if (activationUrl) {
+          void sendTwilioSms(asString(phone), `Velura: Kích hoạt tài khoản và tự đặt mật khẩu trong 24 giờ: ${activationUrl}`);
+        }
       }
       
       const guestInternalNote = formatOrderInternalNote(body, formatOrderInternalNote(order));
@@ -1053,7 +1047,7 @@ export async function handleOrdersRoute(
       const newOrder = asJsonObject(await insertRow("orders", {
         user_id: guestUser.user_id,
         // OPEN-05: đơn online vào Chờ thanh toán ngay khi tạo.
-        status: dbPaymentMethod === "COD" ? "pending" : "waiting_payment",
+        status: paymentState.orderStatus,
         shipping_name,
         shipping_phone: phone,
         shipping_address,
@@ -1137,20 +1131,10 @@ export async function handleOrdersRoute(
         `/account/orders/${newOrder.order_id}`
       );
       
-      const token = signJwt({ user_id: guestUser.user_id, email: guestUser.email || `${phone}@velura.vn`, role: "member" });
-      
       return sendJson(res, 200, {
         success: true,
-        token,
-        user: {
-          user_id: guestUser.user_id,
-          email: guestUser.email,
-          phone: guestUser.phone,
-          full_name: guestUser.full_name,
-          role: "member"
-        },
+        activation_required: Boolean(activation),
         order: presentOrderForCustomer(newOrder, createdItems as JsonObject[], []),
-        temp_password: tempPassword,
         stripe: await openStripePayment(newOrder.order_id, newOrder.total_amount, payment_method)
       }, corsHeaders);
     }
@@ -1167,17 +1151,12 @@ export async function handleOrdersRoute(
       if (!shipping_name || !shipping_phone || !shipping_address || !Array.isArray(items) || !items.length) {
         throw new HttpError(400, "BAD_REQUEST", "Thông tin đơn hàng không đầy đủ");
       }
-      let cleanPhone = String(shipping_phone || "").trim().replace(/[\s.-]/g, "");
-      if (cleanPhone.startsWith("+84")) {
-        cleanPhone = "0" + cleanPhone.slice(3);
-      } else if (cleanPhone.startsWith("84") && cleanPhone.length === 11) {
-        cleanPhone = "0" + cleanPhone.slice(2);
-      }
-      const validPhone = cleanPhone;
-
-      if (!validatePhone(validPhone)) {
-        throw new HttpError(400, "BAD_REQUEST", "Số điện thoại giao hàng không hợp lệ (10 số, bắt đầu bằng 0)");
-      }
+      const memberContact = validateCheckoutContact({
+        fullName: shipping_name,
+        phone: shipping_phone,
+        email: body.shipping_email || null
+      });
+      const validPhone = memberContact.phone;
 
       const profile = requireUserAuth(context);
       const orderItems = items.map((item) => asJsonObject(item));
@@ -1217,7 +1196,8 @@ export async function handleOrdersRoute(
 
       const orderCode = generateOrderCode();
       assertStripeReady(payment_method);
-      const dbPaymentMethod = (payment_method === "COD" || payment_method === "cod") ? "COD" : "ONLINE_PAYMENT";
+      const paymentState = checkoutPaymentState(payment_method);
+      const dbPaymentMethod = paymentState.method;
       const memberPriced = await priceClaimedOrder(orderItems, shipping_fee, body.shipping_method);
       const memberVoucher = await resolveOrderVoucher(
         context,
@@ -1232,7 +1212,7 @@ export async function handleOrdersRoute(
       // Create order row
       const newOrder = asJsonObject(await insertRow("orders", {
         user_id: profile.user_id,
-        status: dbPaymentMethod === "COD" ? "pending" : "waiting_payment",
+        status: paymentState.orderStatus,
         shipping_name,
         shipping_phone: validPhone,
         shipping_address,
@@ -1297,6 +1277,13 @@ export async function handleOrdersRoute(
 
       if (memberVoucher.voucherId) {
         await recordVoucherRedemption(memberVoucher.voucherId, memberVoucher.discountAmount);
+      }
+
+      if (body.save_address === true) {
+        await appendCheckoutAddress(asString(profile.user_id), memberContact, {
+          detail: asString(shipping_address),
+          isDefault: body.address_is_default === true
+        });
       }
 
       const memberTargetEmail = body.shipping_email || profile.email;

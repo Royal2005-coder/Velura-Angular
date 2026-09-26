@@ -3,6 +3,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { CartLine, CartStore, GroupedCartItem } from '../../core/services/cart.store';
 import { CheckoutStore } from '../../core/services/checkout.store';
 import { ApiService } from '../../core/services/api.service';
+import { AuthService } from '../../core/services/auth.service';
 import { formatVnd, toPublicAsset } from '../../core/utils/money';
 import { showToast } from '../../core/utils/toast';
 import { useBodyClass } from '../../core/utils/body-class';
@@ -32,6 +33,7 @@ export class CartPage {
   private readonly cart = inject(CartStore);
   private readonly checkoutStore = inject(CheckoutStore);
   private readonly api = inject(ApiService);
+  private readonly auth = inject(AuthService);
   readonly editingVariantId = signal<string | null>(null);
   readonly variantChoices = signal<Array<{ variant_id: string; size?: string; color?: string; stock_quantity?: number }>>([]);
   readonly activeDropdown = signal<{ variantId: string; type: 'color' | 'size' } | null>(null);
@@ -404,7 +406,7 @@ export class CartPage {
     } else {
       localStorage.removeItem(VOUCHER_DECLINED_KEY);
     }
-    void this.router.navigateByUrl('/checkout/shipping');
+    void this.router.navigateByUrl(this.auth.isLoggedIn() ? '/checkout/user' : '/checkout/guest');
   }
 
   /**

@@ -2,7 +2,9 @@ import { HttpError } from "../http.js";
 import { handleAuthRoute } from "./auth.js";
 import { handleProfileRoute } from "./profile.js";
 import { handleProductsRoute } from "./products.js";
-import { handleOrdersRoute } from "./orders.js";
+import { handleOrdersRoute } from "./order-router.js";
+import { CheckoutOtpRateLimiter, CheckoutOtpService, CheckoutService } from "./checkout-service.js";
+import { createCheckoutRepository } from "./checkout-repository.js";
 import { handleVouchersRoute } from "./vouchers.js";
 import { handleReturnsRoute } from "./returns.js";
 import { handleReviewsRoute } from "./reviews.js";
@@ -16,6 +18,9 @@ import { handleCheckoutRoute } from "./checkout-quote.js";
 import { handleStripeWebhook } from "../payments/stripe-webhook.js";
 
 import type { AuthContext, HeaderMap, HttpRequest, HttpResponse } from "../types.js";
+
+const checkoutService = new CheckoutService(createCheckoutRepository());
+const checkoutOtpService = new CheckoutOtpService(new CheckoutOtpRateLimiter());
 
 /**
  * Storefront `/api/user/*` dispatcher.
@@ -39,7 +44,7 @@ export async function handleUserRoute(
 
   switch (subRoute) {
     case "auth":
-      return await handleAuthRoute(req, res, action, corsHeaders, context);
+      return await handleAuthRoute(req, res, action, corsHeaders, context, checkoutService);
       
     case "profile":
     case "addresses":
@@ -50,7 +55,17 @@ export async function handleUserRoute(
       return await handleProductsRoute(req, res, subRoute, action, corsHeaders);
       
     case "orders":
-      return await handleOrdersRoute(req, res, subRoute, action, parts, corsHeaders, context);
+      return await handleOrdersRoute(
+        req,
+        res,
+        subRoute,
+        action,
+        parts,
+        corsHeaders,
+        context,
+        checkoutService,
+        checkoutOtpService
+      );
 
     case "vouchers":
       return await handleVouchersRoute(req, res, action, corsHeaders, context);

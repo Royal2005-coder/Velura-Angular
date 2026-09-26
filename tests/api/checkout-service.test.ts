@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   CheckoutOtpRateLimiter,
+  CheckoutOtpService,
+  CheckoutService,
   checkoutClientIp,
   checkoutPaymentState,
   createCheckoutActivation,
@@ -10,7 +12,28 @@ import {
   normalizeVietnamesePhone,
   validateCheckoutContact
 } from "../../apps/api/src/user/checkout-service.js";
-import { buildSavedAddressBook } from "../../apps/api/src/user/checkout-repository.js";
+import { buildSavedAddressBook, type CheckoutRepository } from "../../apps/api/src/user/checkout-repository.js";
+import type { JsonObject } from "../../apps/api/src/types.js";
+
+function checkoutRepositoryStub(overrides: Partial<CheckoutRepository> = {}): CheckoutRepository {
+  const noop = async (): Promise<void> => {};
+  return {
+    findVariant: async () => ({ stock_quantity: 10, reserved_quantity: 0 }),
+    findUserByPhone: async () => null,
+    findUserByEmail: async () => null,
+    findUserByActivationHash: async () => null,
+    createGuestUser: async (input) => ({ user_id: "guest-1", ...input }),
+    updateGuestUser: noop,
+    activateGuestUser: noop,
+    createOrder: async (input) => ({ order_id: "order-1", ...input }),
+    createPayment: noop,
+    createOrderItem: async (input) => ({ order_item_id: "item-1", ...input }),
+    updateVariantStock: noop,
+    createEmailOutbox: noop,
+    appendAddress: async (_userId, _contact, input) => ({ detail: input.detail }),
+    ...overrides
+  };
+}
 
 test("guest checkout rejects a missing phone", () => {
   assert.throws(
@@ -79,6 +102,23 @@ test("checkout OTP limits one IP to five distinct phones per hour", () => {
   );
 });
 
+test("checkout OTP service owns issue, attempt limits and one-time consumption", () => {
+  const service = new CheckoutOtpService();
+  const now = Date.UTC(2026, 8, 26);
+  const session = service.issue({
+    fullName: "Nguyễn Văn An",
+    phone: "0912345678",
+    email: "an@example.com",
+    ip: "203.0.113.10"
+  }, now);
+  assert.equal(service.verify("0912345678", session.otpCode, now + 1), session);
+  service.consume("0912345678");
+  assert.throws(
+    () => service.verify("0912345678", session.otpCode, now + 2),
+    (error: { code?: string }) => error.code === "INVALID_OTP"
+  );
+});
+
 test("checkout client IP prefers the first proxy address", () => {
   assert.equal(checkoutClientIp({ "x-forwarded-for": "203.0.113.3, 10.0.0.1" }, "127.0.0.1"), "203.0.113.3");
 });
@@ -111,4 +151,66 @@ test("guest activation token is hashed and expires after 24 hours", () => {
   assert.notEqual(activation.token, activation.tokenHash);
   assert.equal(activation.tokenHash, hashCheckoutActivationToken(activation.token));
   assert.equal(new Date(activation.expiresAt).getTime(), now + 24 * 60 * 60 * 1000);
+});
+
+test("checkout service persists COD through the repository and decrements stock", async () => {
+  const calls: JsonObject[] = [];
+  const repository = checkoutRepositoryStub({
+    createOrder: async (input) => {
+      calls.push({ operation: "order", input });
+      return { order_id: "order-1", ...input };
+    },
+    createOrderItem: async (input) => {
+      calls.push({ operation: "item", input });
+      return { order_item_id: "item-1", ...input };
+    },
+    updateVariantStock: async (variantId, quantity) => {
+      calls.push({ operation: "stock", variantId, quantity });
+    }
+  });
+  const service = new CheckoutService(repository);
+  const result = await service.persistOrder({
+    userId: "member-1",
+    contact: { fullName: "Nguyễn Văn An", phone: "0912345678", email: null },
+    shippingAddress: "123 Nguyễn Huệ",
+    shippingFee: 30_000,
+    voucherId: null,
+    discountAmount: 0,
+    subtotal: 100_000,
+    totalAmount: 130_000,
+    paymentMethod: "COD",
+    paymentProvider: "COD",
+    orderStatus: "pending",
+    orderCode: "VLRTEST",
+    internalNote: null,
+    items: [{
+      variantId: "variant-1",
+      productName: "Áo",
+      productImage: null,
+      quantity: 2,
+      unitPrice: 50_000,
+      subtotal: 100_000
+    }]
+  });
+  assert.equal(result.order.order_id, "order-1");
+  assert.deepEqual(calls.map((call) => call.operation), ["order", "item", "stock"]);
+  assert.equal(calls[2]?.quantity, 8);
+});
+
+test("checkout service activates a guest only through the repository", async () => {
+  const token = "one-time-token";
+  let activatedUserId = "";
+  const service = new CheckoutService(checkoutRepositoryStub({
+    findUserByActivationHash: async (hash) => {
+      assert.equal(hash, hashCheckoutActivationToken(token));
+      return { user_id: "guest-1", activation_expires_at: new Date(Date.now() + 60_000).toISOString() };
+    },
+    activateGuestUser: async (userId, passwordHash) => {
+      activatedUserId = userId;
+      assert.match(passwordHash, /^scrypt\$/);
+    }
+  }));
+  const user = await service.activateGuest(token, "StrongPass1!");
+  assert.equal(user.user_id, "guest-1");
+  assert.equal(activatedUserId, "guest-1");
 });

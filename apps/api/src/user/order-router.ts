@@ -1,24 +1,18 @@
 import { randomUUID } from "node:crypto";
 import { HttpError, readJson, sendJson } from "../http.js";
 import { callRpc, quotePostgrestValue, selectOne, selectRows, insertRow, updateRows } from "../supabase.js";
-import { hashPassword } from "../auth-helper.js";
 import { requireUserAuth, validatePhone } from "./auth.js";
 import { createNotification } from "./notifications.js";
-import { recordVoucherRedemption, resolveOrderVoucher } from "./vouchers.js";
 import { config } from "../config.js";
 import {
-  CheckoutOtpRateLimiter,
+  type CheckoutOtpService,
+  type CheckoutService,
   checkoutClientIp,
   checkoutPaymentState,
-  createCheckoutActivation,
-  generateCheckoutOtp,
   normalizeVietnamesePhone,
   validateCheckoutContact
 } from "./checkout-service.js";
-import { appendCheckoutAddress } from "./checkout-repository.js";
 import { createStripePaymentIntent, refundStripeOrder, STRIPE_CHECKOUT_TTL_SECONDS, stripeConfigured } from "../payments/stripe.js";
-import { priceOrder, shippingMethodFromClaim } from "./order-pricing.js";
-import { buildCartLines, loadCatalog, loadCategoryTree } from "./cart-catalog.js";
 import { customerCanCancel, customerOrderSteps, orderFacts, orderStatusLabel } from "../orders/order-state-machine.js";
 import { returnWindowOpen } from "./return-window.js";
 import {
@@ -39,17 +33,6 @@ import {
   type JsonObject,
   type UserProfile
 } from "../types.js";
-
-interface CheckoutOtpSession {
-  otpCode: string;
-  expiresAt: number;
-  email: unknown;
-  full_name: unknown;
-  attempts: number;
-}
-
-const checkoutOtpAttemptsMap = new Map<string, CheckoutOtpSession>();
-const checkoutOtpRateLimiter = new CheckoutOtpRateLimiter();
 
 /**
  * Chặn đọc một đơn hàng không thuộc về người đang đăng nhập.
@@ -283,7 +266,7 @@ export function formatOrderInternalNote(body: JsonObject, existingNote?: string)
 }
 
 /**
- * Storefront vouchers and order list/create/status/payment flows.
+ * Storefront order HTTP router; checkout rules delegate to CheckoutService.
  */
 export async function handleOrdersRoute(
   req: HttpRequest,
@@ -292,7 +275,9 @@ export async function handleOrdersRoute(
   action: string | undefined,
   parts: string[],
   corsHeaders: HeaderMap,
-  context: AuthContext
+  context: AuthContext,
+  checkoutService: CheckoutService,
+  checkoutOtpService: CheckoutOtpService
 ): Promise<void> {
   if (subRoute === "orders") {
     if (req.method === "GET") {
@@ -732,9 +717,14 @@ export async function handleOrdersRoute(
       const rawPhone = asString(body.phone);
       const email = body.email;
       const full_name = body.full_name;
-      const contact = validateCheckoutContact({ fullName: full_name, phone: rawPhone, email });
+      const session = checkoutOtpService.issue({
+        fullName: full_name,
+        phone: rawPhone,
+        email,
+        ip: checkoutClientIp(req.headers, req.socket?.remoteAddress)
+      });
+      const contact = session.contact;
       const phone = contact.phone;
-      checkoutOtpRateLimiter.consume(phone, checkoutClientIp(req.headers, req.socket?.remoteAddress));
       const twilioReady = isTwilioConfigured();
       let otpEmail: string | null = null;
       if (email || !twilioReady) {
@@ -744,8 +734,7 @@ export async function handleOrdersRoute(
         throw new HttpError(503, "OTP_SERVICE_UNAVAILABLE", "Chưa cấu hình dịch vụ SMS hoặc email để gửi mã OTP.");
       }
       
-      const otpCode = generateCheckoutOtp();
-      const otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+      const otpCode = session.otpCode;
       
       if (config.nodeEnv !== "production") {
         console.log(`\n==================================================`);
@@ -755,15 +744,6 @@ export async function handleOrdersRoute(
         console.log(`[CHECKOUT GUEST OTP] OTP requested for ${phone}`);
       }
       
-      // Store OTP and guest info in memory instead of DB
-      checkoutOtpAttemptsMap.set(phone, { 
-        otpCode, 
-        expiresAt: new Date(otpExpiresAt).getTime(),
-        email: contact.email,
-        full_name: contact.fullName,
-        attempts: 0 
-      });
-
       // Gửi OTP qua Twilio SMS
       const smsResult = await sendCheckoutOtpSms(phone, otpCode);
 
@@ -795,7 +775,7 @@ export async function handleOrdersRoute(
         
         // Vẫn cố gắng lưu vết vào email_outbox nếu RLS cho phép
         try {
-          await insertRow("email_outbox", {
+          await checkoutService.recordSentEmail({
             recipient: otpEmail,
             template_code: "otp_verification",
             subject: "Mã xác thực đơn hàng Velura",
@@ -856,69 +836,26 @@ export async function handleOrdersRoute(
       phone = contact.phone;
 
       const items = rawItems.map((item) => asJsonObject(item));
-      const phoneKey = asString(phone);
-      
-      const sessionState = checkoutOtpAttemptsMap.get(phoneKey);
-      if (!sessionState) {
-        throw new HttpError(400, "INVALID_OTP", "Không tìm thấy phiên xác thực. Vui lòng nhận lại mã OTP.");
-      }
-      
-      if (sessionState.attempts >= 5) {
-        throw new HttpError(403, "SESSION_LOCKED", "Phiên xác thực bị khóa do nhập sai quá 5 lần. Vui lòng đặt lại đơn hàng.");
-      }
-
-      if (sessionState.expiresAt < Date.now()) {
-        throw new HttpError(400, "EXPIRED_OTP", "Mã xác thực đã hết hạn.");
-      }
-
-      if (sessionState.otpCode !== otp_code) {
-        sessionState.attempts += 1;
-        checkoutOtpAttemptsMap.set(phoneKey, sessionState);
-
-        if (sessionState.attempts >= 5) {
-          checkoutOtpAttemptsMap.delete(phoneKey);
-          throw new HttpError(403, "SESSION_LOCKED", "Phiên xác thực bị khóa do nhập sai quá 5 lần. Vui lòng đặt lại đơn hàng.");
-        } else {
-          throw new HttpError(400, "INVALID_OTP", `Mã OTP không hợp lệ. Bạn còn ${5 - sessionState.attempts} lần thử.`);
-        }
-      }
+      const sessionState = checkoutOtpService.verify(phone, otp_code);
       
       // Chốt tiền trước khi tiêu mã OTP. Giá lệch bảng giá hoặc mã giảm giá vừa đổi
       // (409 VOUCHER_CHANGED) thì khách phải xác nhận lại tổng mới; nếu OTP đã bị xoá
       // thì khách phải xin mã lần nữa chỉ vì một mã giảm giá, và tài khoản khách bên
       // dưới đã được tạo thừa.
-      const guestPriced = await priceClaimedOrder(items, shipping_fee, body.shipping_method || order.shipping_method);
-      const guestVoucher = await resolveOrderVoucher(
+      const guestQuote = await checkoutService.quote(
         context,
-        guestPriced.subtotal,
-        guestPriced.shippingFee,
+        items,
+        shipping_fee,
+        body.shipping_method || order.shipping_method,
         voucher_id ? String(voucher_id) : null,
-        body.decline_voucher === true || order.decline_voucher === true,
-        guestPriced.cart
+        body.decline_voucher === true || order.decline_voucher === true
       );
 
       // OTP is valid
-      checkoutOtpAttemptsMap.delete(phoneKey);
+      checkoutOtpService.consume(phone);
       
       // Stock check
-      const affectedItems: JsonObject[] = [];
-      for (const item of items) {
-        const variant = await selectOne("variant", { variant_id: `eq.${item.variant_id}` });
-        if (!variant) {
-          throw new HttpError(400, "NOT_FOUND", `Không tìm thấy biến thể sản phẩm`);
-        }
-        const availableStock = Number(variant.stock_quantity) - Number(variant.reserved_quantity || 0);
-        if (Number(item.quantity) > availableStock) {
-          affectedItems.push({
-            variant_id: item.variant_id,
-            product_name: item.product_name,
-            color: item.color,
-            size: item.size,
-            requested: item.quantity,
-            available: Math.max(0, availableStock)
-          });
-        }
-      }
+      const affectedItems = await checkoutService.unavailableItems(items);
       if (affectedItems.length > 0) {
         return sendJson(res, 400, {
           success: false,
@@ -933,48 +870,16 @@ export async function handleOrdersRoute(
         }, corsHeaders);
       }
       
-      const savedAddresses = [{
-        name: shipping_name,
-        phone: phone,
-        detail: shipping_address,
-        is_default: true
-      }];
-      
-      let guestUser: JsonObject | null = await selectOne("users", { phone: `eq.${phone}` });
-      if (!guestUser && sessionState.email) {
-        guestUser = await selectOne("users", { email: `eq.${sessionState.email}` });
-      }
-      const isExistingMember = Boolean(guestUser && guestUser.is_active);
-      const activation = isExistingMember ? null : createCheckoutActivation();
-      if (!guestUser) {
-        guestUser = asJsonObject(await insertRow("users", {
-          full_name: sessionState.full_name,
-          phone: phone,
-          email: sessionState.email,
-          password_hash: hashPassword(randomUUID() + randomUUID()),
-          role: "member",
-          is_active: false,
-          activation_token_hash: activation?.tokenHash,
-          activation_expires_at: activation?.expiresAt,
-          saved_addresses: savedAddresses,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        }));
-      } else if (!guestUser.is_active) {
-        await updateRows("users", { user_id: `eq.${guestUser.user_id}` }, {
-          activation_token_hash: activation?.tokenHash,
-          activation_expires_at: activation?.expiresAt,
-          saved_addresses: savedAddresses,
-          updated_at: new Date().toISOString()
-        });
-        guestUser.email = guestUser.email || sessionState.email;
-      }
+      const guestAccount = await checkoutService.resolveGuest(sessionState.contact, asString(shipping_address));
+      const guestUser = guestAccount.user;
+      const isExistingMember = guestAccount.existingMember;
+      const activation = guestAccount.activation;
 
       const orderCode = generateOrderCode();
       assertStripeReady(payment_method);
       const paymentState = checkoutPaymentState(payment_method);
       const dbPaymentMethod = paymentState.method;
-      const guestTotal = Math.max(0, guestPriced.subtotal + guestPriced.shippingFee - guestVoucher.discountAmount);
+      const guestTotal = guestQuote.totalAmount;
 
       const shipping_email = body.shipping_email || order.shipping_email;
       const activationUrl = activation
@@ -1025,7 +930,7 @@ export async function handleOrdersRoute(
         await sendDirectEmail(targetEmail, `Xác nhận đơn hàng #${orderCode} tại Velura`, emailBody, emailHtml);
         
         try {
-          await insertRow("email_outbox", {
+          await checkoutService.recordSentEmail({
             recipient: targetEmail,
             template_code: "order_confirmation",
             subject: `Xác nhận đơn hàng #${orderCode} tại Velura`,
@@ -1048,74 +953,36 @@ export async function handleOrdersRoute(
       
       const guestInternalNote = formatOrderInternalNote(body, formatOrderInternalNote(order));
 
-      const newOrder = asJsonObject(await insertRow("orders", {
-        user_id: guestUser.user_id,
-        // OPEN-05: đơn online vào Chờ thanh toán ngay khi tạo.
-        status: paymentState.orderStatus,
-        shipping_name,
-        shipping_phone: phone,
-        shipping_address,
-        shipping_fee: guestPriced.shippingFee,
-        voucher_id: guestVoucher.voucherId,
-        discount_amount: guestVoucher.discountAmount,
-        subtotal: guestPriced.subtotal,
-        total_amount: guestTotal,
-        payment_method: dbPaymentMethod,
-        order_code: orderCode,
-        internal_note: guestInternalNote || null,
-        // COD trừ kho ngay lúc tạo; đơn online trừ kho khi tiền về (action payment_succeeded).
-        stock_committed_at: dbPaymentMethod === "COD" ? new Date().toISOString() : null,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }));
-
-      if (dbPaymentMethod !== "COD") {
-        try {
-          const provider = String(payment_method || "online_payment").toLowerCase();
-          await insertRow("payment", {
-            order_id: newOrder.order_id,
-            amount: guestTotal,
-            payment_method: provider.toUpperCase(),
-            payment_provider: provider,
-            payment_status: "pending",
-            transaction_id: `pay_${provider}_${orderCode}`,
-            created_at: new Date().toISOString()
-          });
-        } catch {
-          /* ignore */
-        }
-      }
+      const persistedGuestOrder = await checkoutService.persistOrder({
+        userId: asString(guestUser.user_id),
+        contact,
+        shippingAddress: asString(shipping_address),
+        shippingFee: guestQuote.shippingFee,
+        voucherId: guestQuote.voucherId,
+        discountAmount: guestQuote.discountAmount,
+        subtotal: guestQuote.subtotal,
+        totalAmount: guestTotal,
+        paymentMethod: dbPaymentMethod,
+        paymentProvider: asString(payment_method || "online_payment"),
+        orderStatus: paymentState.orderStatus,
+        orderCode,
+        internalNote: guestInternalNote || null,
+        items: guestQuote.items.map((line) => {
+          const claimed = items.find((item) => asString(item.variant_id) === line.variantId);
+          return {
+            variantId: line.variantId,
+            productName: line.productName || asString(claimed?.product_name),
+            productImage: claimed?.product_image || null,
+            quantity: line.quantity,
+            unitPrice: line.unitPrice,
+            subtotal: line.subtotal
+          };
+        })
+      });
+      const newOrder = persistedGuestOrder.order;
+      const createdItems = persistedGuestOrder.items;
       
-      const createdItems: unknown[] = [];
-      for (const item of items) {
-        const pricedLine = guestPriced.items.find((line) => line.variantId === String(item.variant_id));
-        const orderItem = await insertRow("order_item", {
-          order_id: newOrder.order_id,
-          variant_id: item.variant_id,
-          product_name: pricedLine?.productName || item.product_name,
-          product_image: item.product_image || null,
-          quantity: pricedLine?.quantity || item.quantity,
-          unit_price: pricedLine?.unitPrice,
-          subtotal_item: pricedLine?.subtotal
-        });
-        createdItems.push(orderItem);
-        
-        if (dbPaymentMethod === "COD") {
-          try {
-            const variant = await selectOne("variant", { variant_id: `eq.${item.variant_id}` });
-            if (variant) {
-              const nextStock = Math.max(0, Number(variant.stock_quantity) - Number(item.quantity));
-              await updateRows("variant", { variant_id: `eq.${item.variant_id}` }, { stock_quantity: nextStock });
-            }
-          } catch (e: unknown) {
-            console.error(`Failed to decrement stock:`, errorMessage(e));
-          }
-        }
-      }
-      
-      if (guestVoucher.voucherId) {
-        await recordVoucherRedemption(guestVoucher.voucherId, guestVoucher.discountAmount);
-      }
+      await checkoutService.recordVoucher(guestQuote.voucherId, guestQuote.discountAmount);
 
       // Send welcome notification
       await createNotification(
@@ -1166,24 +1033,7 @@ export async function handleOrdersRoute(
       const orderItems = items.map((item) => asJsonObject(item));
 
       // Stock check
-      const affectedItems: JsonObject[] = [];
-      for (const item of orderItems) {
-        const variant = await selectOne("variant", { variant_id: `eq.${item.variant_id}` });
-        if (!variant) {
-          throw new HttpError(400, "NOT_FOUND", `Không tìm thấy biến thể sản phẩm`);
-        }
-        const availableStock = Number(variant.stock_quantity) - Number(variant.reserved_quantity || 0);
-        if (Number(item.quantity) > availableStock) {
-          affectedItems.push({
-            variant_id: item.variant_id,
-            product_name: item.product_name,
-            color: item.color,
-            size: item.size,
-            requested: item.quantity,
-            available: Math.max(0, availableStock)
-          });
-        }
-      }
+      const affectedItems = await checkoutService.unavailableItems(orderItems);
       if (affectedItems.length > 0) {
         return sendJson(res, 400, {
           success: false,
@@ -1202,89 +1052,49 @@ export async function handleOrdersRoute(
       assertStripeReady(payment_method);
       const paymentState = checkoutPaymentState(payment_method);
       const dbPaymentMethod = paymentState.method;
-      const memberPriced = await priceClaimedOrder(orderItems, shipping_fee, body.shipping_method);
-      const memberVoucher = await resolveOrderVoucher(
+      const memberQuote = await checkoutService.quote(
         context,
-        memberPriced.subtotal,
-        memberPriced.shippingFee,
+        orderItems,
+        shipping_fee,
+        body.shipping_method,
         voucher_id ? String(voucher_id) : null,
-        body.decline_voucher === true,
-        memberPriced.cart
+        body.decline_voucher === true
       );
-      const memberTotal = Math.max(0, memberPriced.subtotal + memberPriced.shippingFee - memberVoucher.discountAmount);
+      const memberTotal = memberQuote.totalAmount;
 
-      // Create order row
-      const newOrder = asJsonObject(await insertRow("orders", {
-        user_id: profile.user_id,
-        status: paymentState.orderStatus,
-        shipping_name,
-        shipping_phone: validPhone,
-        shipping_address,
-        shipping_fee: memberPriced.shippingFee,
-        voucher_id: memberVoucher.voucherId,
-        discount_amount: memberVoucher.discountAmount,
-        subtotal: memberPriced.subtotal,
-        total_amount: memberTotal,
-        payment_method: dbPaymentMethod,
-        order_code: orderCode,
-        internal_note: formatOrderInternalNote(body) || null,
-        // COD trừ kho ngay lúc tạo; đơn online trừ kho khi tiền về (action payment_succeeded).
-        stock_committed_at: dbPaymentMethod === "COD" ? new Date().toISOString() : null,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }));
+      const persistedMemberOrder = await checkoutService.persistOrder({
+        userId: asString(profile.user_id),
+        contact: memberContact,
+        shippingAddress: asString(shipping_address),
+        shippingFee: memberQuote.shippingFee,
+        voucherId: memberQuote.voucherId,
+        discountAmount: memberQuote.discountAmount,
+        subtotal: memberQuote.subtotal,
+        totalAmount: memberTotal,
+        paymentMethod: dbPaymentMethod,
+        paymentProvider: asString(payment_method || "online_payment"),
+        orderStatus: paymentState.orderStatus,
+        orderCode,
+        internalNote: formatOrderInternalNote(body) || null,
+        items: memberQuote.items.map((line) => {
+          const claimed = orderItems.find((item) => asString(item.variant_id) === line.variantId);
+          return {
+            variantId: line.variantId,
+            productName: line.productName || asString(claimed?.product_name),
+            productImage: claimed?.product_image || null,
+            quantity: line.quantity,
+            unitPrice: line.unitPrice,
+            subtotal: line.subtotal
+          };
+        })
+      });
+      const newOrder = persistedMemberOrder.order;
+      const createdItems = persistedMemberOrder.items;
 
-      if (dbPaymentMethod !== "COD") {
-        try {
-          const provider = String(payment_method || "online_payment").toLowerCase();
-          await insertRow("payment", {
-            order_id: newOrder.order_id,
-            amount: memberTotal,
-            payment_method: provider.toUpperCase(),
-            payment_provider: provider,
-            payment_status: "pending",
-            transaction_id: `pay_${provider}_${orderCode}`,
-            created_at: new Date().toISOString()
-          });
-        } catch {
-          /* ignore */
-        }
-      }
-
-      // Insert order items & update variant stock reservations
-      const createdItems: unknown[] = [];
-      for (const item of orderItems) {
-        const pricedLine = memberPriced.items.find((line) => line.variantId === String(item.variant_id));
-        const orderItem = await insertRow("order_item", {
-          order_id: newOrder.order_id,
-          variant_id: item.variant_id,
-          product_name: pricedLine?.productName || item.product_name,
-          product_image: item.product_image || null,
-          quantity: pricedLine?.quantity || item.quantity,
-          unit_price: pricedLine?.unitPrice,
-          subtotal_item: pricedLine?.subtotal
-        });
-        createdItems.push(orderItem);
-
-        if (dbPaymentMethod === "COD") {
-          try {
-            const variant = await selectOne("variant", { variant_id: `eq.${item.variant_id}` });
-            if (variant) {
-              const nextStock = Math.max(0, Number(variant.stock_quantity) - Number(item.quantity));
-              await updateRows("variant", { variant_id: `eq.${item.variant_id}` }, { stock_quantity: nextStock });
-            }
-          } catch (e: unknown) {
-            console.error(`Failed to decrement stock:`, errorMessage(e));
-          }
-        }
-      }
-
-      if (memberVoucher.voucherId) {
-        await recordVoucherRedemption(memberVoucher.voucherId, memberVoucher.discountAmount);
-      }
+      await checkoutService.recordVoucher(memberQuote.voucherId, memberQuote.discountAmount);
 
       if (body.save_address === true) {
-        await appendCheckoutAddress(asString(profile.user_id), memberContact, {
+        await checkoutService.saveMemberAddress(asString(profile.user_id), memberContact, {
           detail: asString(shipping_address),
           address: asString(shipping_address),
           province: asString(body.shipping_province),
@@ -1355,38 +1165,6 @@ function assertStripeReady(method: unknown): void {
   if (!stripeConfigured()) {
     throw new HttpError(503, "STRIPE_NOT_CONFIGURED", "Chưa cấu hình STRIPE_SECRET_KEY. Chọn thanh toán khi nhận hàng hoặc cấu hình Stripe.");
   }
-}
-
-async function priceClaimedOrder(
-  rawItems: Array<Record<string, unknown>>,
-  claimedFee: unknown,
-  claimedMethod: unknown
-) {
-  const lines = rawItems.map((item) => ({
-    variantId: String(item.variant_id || ""),
-    quantity: Number(item.quantity),
-    claimedUnitPrice: Number(item.unit_price)
-  }));
-  // Một truy vấn cho cả giỏ thay vì hai truy vấn cho mỗi dòng. Cùng nguồn với ví mã, nên
-  // số tiền giảm trong ví và số tiền trừ khi đặt đơn không lệch nhau.
-  const [catalog, tree] = await Promise.all([
-    loadCatalog(lines.map((line) => line.variantId)),
-    loadCategoryTree()
-  ]);
-  const priced = priceOrder(lines, catalog, shippingMethodFromClaim(claimedFee, claimedMethod));
-  if (!priced.ok) {
-    throw new HttpError(400, priced.code, priced.message, {
-      variant_id: priced.variantId,
-      claimed_unit_price: priced.claimedUnitPrice,
-      catalog_unit_price: priced.catalogUnitPrice
-    });
-  }
-  const { lines: cartLines } = buildCartLines(
-    priced.items.map((item) => ({ variantId: item.variantId, quantity: item.quantity })),
-    catalog,
-    tree
-  );
-  return { ...priced, cart: { lines: cartLines, categoryNameById: tree.nameById } };
 }
 
 async function openStripePayment(

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { assertOrderVisibleTo, hasOpenStripeSession, presentOrderForCustomer } from "../../apps/api/src/user/orders.js";
+import { assertOrderVisibleTo, hasOpenStripeSession, presentOrderForCustomer } from "../../apps/api/src/user/order-router.js";
 
 const OWNER = { user_id: "11111111-1111-4111-8111-111111111111" };
 const STRANGER = { user_id: "22222222-2222-4222-8222-222222222222" };
@@ -103,7 +103,7 @@ test("a Stripe session younger than its lifetime blocks a second one", () => {
 });
 
 test("formatOrderInternalNote formats Coolmate options (gift, VAT, other recipient, referral)", async () => {
-  const { formatOrderInternalNote } = await import("../../apps/api/src/user/orders.js");
+  const { formatOrderInternalNote } = await import("../../apps/api/src/user/order-router.js");
   const note = formatOrderInternalNote({
     note: "Giao sau 18h",
     referral_code: "BANBE2026",

@@ -62,4 +62,52 @@ describe('AdminProductsPage', () => {
     page.stockAdjustmentQuantity.set(45);
     expect(page.projectedStock()).toBe(45);
   });
+
+  it('calculates live discount percentage and validates price correctly', async () => {
+    const page = await createAdminPage(AdminProductsPage);
+    page.editBasePrice.set(500_000);
+    page.editSalePrice.set(400_000);
+    expect(page.editDiscountPct()).toBe(20);
+    expect(page.editPriceInvalid()).toBe(false);
+
+    // Sale price higher than base price is invalid
+    page.editSalePrice.set(600_000);
+    expect(page.editPriceInvalid()).toBe(true);
+    expect(page.editDiscountPct()).toBe(0);
+
+    // No sale price: 0% discount, valid
+    page.editSalePrice.set(null);
+    expect(page.editDiscountPct()).toBe(0);
+    expect(page.editPriceInvalid()).toBe(false);
+  });
+
+  it('manages combo composition and savings with default quantity 1', async () => {
+    const page = await createAdminPage(AdminProductsPage);
+    expect(page.addComboQuantity()).toBe(1);
+
+    page.editBasePrice.set(500_000);
+    page.editSalePrice.set(399_000);
+    page.comboItems.set([
+      {
+        combo_item_id: 'ci_1',
+        combo_product_id: 'combo_1',
+        component_product_id: 'comp_1',
+        quantity: 1,
+        product: { product_id: 'comp_1', name: 'Áo Thun', sku: 'VL-AO001', base_price: 250_000, sale_price: 250_000 },
+      },
+      {
+        combo_item_id: 'ci_2',
+        combo_product_id: 'combo_1',
+        component_product_id: 'comp_2',
+        quantity: 1,
+        product: { product_id: 'comp_2', name: 'Quần Short', sku: 'VL-QU001', base_price: 300_000, sale_price: 300_000 },
+      },
+    ]);
+
+    // Total original: 250k + 300k = 550k
+    expect(page.comboTotalOriginal()).toBe(550_000);
+    // Combo sale price: 399k -> Savings: 550k - 399k = 151k
+    expect(page.comboSavings()).toBe(151_000);
+    expect(page.comboSavingsPct()).toBe(27);
+  });
 });

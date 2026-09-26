@@ -111,7 +111,7 @@ export class AdminReturnsPage {
   readonly logRange = computed(() => adminRangeLabel(this.logsTotal(), this.page(), this.pageSize, 'nhật ký'));
   readonly visibleChats = computed(() => this.chats().filter((session) => session.is_active !== false));
   readonly pendingChatCount = computed(() => this.chats().filter((session) => session.handoff_status === 'requested').length);
-  readonly canReply = computed(() => this.canMutate() && this.selectedChat()?.handoff_status === 'assigned');
+  readonly canReply = computed(() => this.canMutate() && !this.isClosedChat());
   readonly canJoinChat = computed(() => {
     if (!this.canMutate()) {
       return false;
@@ -330,7 +330,7 @@ export class AdminReturnsPage {
   }
 
   /**
-   * Sends an agent reply on the selected chat session.
+   * Sends an agent reply on the selected chat session, tự động tiếp nhận phiên nếu chưa assign.
    */
   sendReply(event: Event): void {
     event.preventDefault();
@@ -339,19 +339,36 @@ export class AdminReturnsPage {
     if (!session || !message || !this.canMutate()) {
       return;
     }
-    this.api.sendChatReply(session.session_id, message).subscribe({
-      next: (payload) => {
-        if (payload.message) {
-          this.messages.update((rows) => [...rows, payload.message!]);
-        }
-        if (payload.session) {
-          this.selectedChat.set(payload.session);
-        }
-        this.replyDraft.set('');
-        this.reload();
-      },
-      error: (error: unknown) => this.chatError.set(adminErrorMessage(error)),
-    });
+
+    const doSend = () => {
+      this.api.sendChatReply(session.session_id, message).subscribe({
+        next: (payload) => {
+          if (payload.message) {
+            this.messages.update((rows) => [...rows, payload.message!]);
+          }
+          if (payload.session) {
+            this.selectedChat.set(payload.session);
+          }
+          this.replyDraft.set('');
+          this.reload();
+        },
+        error: (error: unknown) => this.chatError.set(adminErrorMessage(error)),
+      });
+    };
+
+    if (session.handoff_status !== 'assigned') {
+      this.api.assignChatSession(session.session_id, 'assigned').subscribe({
+        next: (payload) => {
+          if (payload.session) {
+            this.selectedChat.set(payload.session);
+          }
+          doSend();
+        },
+        error: (error: unknown) => this.chatError.set(adminErrorMessage(error)),
+      });
+    } else {
+      doSend();
+    }
   }
 
   /**

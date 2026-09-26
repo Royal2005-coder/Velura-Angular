@@ -4,7 +4,6 @@
     <div class="admin-tabs" role="tablist" aria-label="Không gian khuyến mãi">
       <button class="admin-tab" [class.admin-tab--active]="view() === 'campaigns'" type="button" (click)="setView('campaigns')">Chiến dịch <span>{{ promoCount() }}</span></button>
       <button class="admin-tab" [class.admin-tab--active]="view() === 'vouchers'" type="button" (click)="setView('vouchers')">Mã giảm giá <span>{{ voucherCount() }}</span></button>
-      <button class="admin-tab" [class.admin-tab--active]="view() === 'bundles'" type="button" (click)="setView('bundles')">Combo/Bundle <span>{{ bundles().length }}</span></button>
       <button class="admin-tab" [class.admin-tab--active]="view() === 'logs'" type="button" (click)="setView('logs')">Nhật ký</button>
       <button class="admin-tab" [class.admin-tab--active]="view() === 'stats'" type="button" (click)="setView('stats')">Thống kê</button>
     </div>
@@ -175,58 +174,6 @@
             </table>
           </div>
           <app-admin-pagination [page]="page()" [pageCount]="voucherPageCount()" [label]="voucherRange()" (changed)="goPage($event)" />
-        }
-      } @else if (view() === 'bundles') {
-        <h3 class="admin-drawer__section">Chiến dịch combo</h3>
-        @if (!comboCampaigns().length) {
-          <div class="admin-empty-state"><strong>Chưa có chiến dịch nào thuộc loại Giảm giá Combo</strong></div>
-        } @else {
-          <div class="admin-table-wrap">
-            <table class="admin-table admin-data-table">
-              <thead><tr><th>Chiến dịch</th><th>Thời gian</th><th>Ngân sách</th><th>Trạng thái</th></tr></thead>
-              <tbody>
-                @for (row of comboCampaigns(); track row.promo_id) {
-                  <tr>
-                    <td>{{ campaignName(row) }}</td>
-                    <td>{{ campaignPeriod(row) }}</td>
-                    <td>{{ campaignBudget(row) }}</td>
-                    <td><span class="admin-badge">{{ campaignLifecycleLabel(row) }}</span></td>
-                  </tr>
-                }
-              </tbody>
-            </table>
-          </div>
-        }
-
-        <h3 class="admin-drawer__section">Sản phẩm combo trong danh mục</h3>
-        <p class="admin-note">
-          Danh sách dưới đây là sản phẩm được đánh dấu là combo trong danh mục hàng hoá.
-          Hệ thống chưa liên kết được sản phẩm combo với chiến dịch combo ở trên, nên
-          đừng đọc hai bảng này như thể bảng dưới đang chịu tác động của bảng trên.
-        </p>
-        @if (!bundles().length) {
-          <div class="admin-empty-state"><strong>Chưa có combo trong danh sách sản phẩm</strong></div>
-        } @else {
-          <div class="admin-table-wrap">
-            <table class="admin-table admin-data-table">
-              <thead><tr><th>Combo</th><th>Giá gốc</th><th>Giá bán</th><th>Trạng thái</th></tr></thead>
-              <tbody>
-                @for (row of pagedBundles(); track row.product_id) {
-                  <tr>
-                    <td>{{ row.name }}</td>
-                    <td>{{ money(row.base_price) }}</td>
-                    <td>{{ sellingPrice(row.base_price, row.sale_price) }}</td>
-                    <td>
-                      <span class="admin-badge" [class.admin-badge--success]="row.status === 'on_sale'" [class.admin-badge--warning]="row.status !== 'on_sale'">
-                        {{ bundleStatus(row) }}
-                      </span>
-                    </td>
-                  </tr>
-                }
-              </tbody>
-            </table>
-          </div>
-          <app-admin-pagination [page]="page()" [pageCount]="bundlePageCount()" [label]="bundleRange()" (changed)="goPage($event)" />
         }
       } @else if (view() === 'logs') {
         @if (logsError()) {

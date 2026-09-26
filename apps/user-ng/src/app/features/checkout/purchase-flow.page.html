@@ -1,0 +1,614 @@
+<main class="flow flow--checkout">
+  <nav class="checkout-nav" aria-label="Tiến trình mua hàng">
+    <a routerLink="/" class="brand">✿ Velura</a
+    ><span><a routerLink="/cart">Giỏ hàng</a> › <b>Thanh toán</b> › Hoàn tất</span
+    ><small>♧ Thanh toán bảo mật</small>
+  </nav>
+  <header class="flow-header flow-header--checkout">
+    <h1>Thanh toán</h1>
+    <p class="muted intro">Hoàn tất thông tin để đơn hàng được giao nhanh và chính xác.</p>
+  </header>
+  @if (!lines().length) {
+    <section class="panel empty">
+      <h2>Giỏ hàng đang trống</h2>
+      <p>Thêm sản phẩm vào giỏ hàng để tiếp tục thanh toán.</p>
+      <div class="actions">
+        <a class="action" routerLink="/products">Khám phá sản phẩm</a>
+      </div>
+    </section>
+  } @else {
+    <div class="flow-grid" [class.flow-grid--single]="step() !== 'form'">
+      <div>
+        @if (error()) {
+          <p class="error" role="alert">{{ error() }}</p>
+        }
+        @switch (step()) {
+          @case ('form') {
+            <form
+              id="checkout-form"
+              class="panel checkout-form-card"
+              (ngSubmit)="place()"
+              novalidate
+            >
+              <h2>Thông tin giao hàng</h2>
+              <p class="muted">Điền một lần, kiểm tra và hoàn tất ngay tại đây.</p>
+              <fieldset [disabled]="busy()">
+                <section class="form-section">
+                  <div class="section-heading">
+                    <span class="number">1</span>
+                    <div>
+                      <h3>Thông tin liên hệ</h3>
+                      <small>Để xác nhận và cập nhật đơn hàng.</small>
+                    </div>
+                    <span class="badge">Bắt buộc</span>
+                  </div>
+                  <div class="fields">
+                    <label class="field"
+                      >Họ tên người nhận *<input
+                        name="name"
+                        autocomplete="name"
+                        [ngModel]="address.name"
+                        (ngModelChange)="editField('name', $event)"
+                        (blur)="validateField('name')"
+                        [attr.aria-invalid]="!!fieldErrors()['name']"
+                        required
+                      /><small class="error">{{ fieldErrors()['name'] }}</small></label
+                    >
+                    <label class="field"
+                      >Email (tùy chọn)<input
+                        name="email"
+                        type="email"
+                        autocomplete="email"
+                        [ngModel]="address.email"
+                        (ngModelChange)="editField('email', $event)"
+                        (blur)="validateField('email')"
+                      /><small class="error">{{ fieldErrors()['email'] }}</small></label
+                    >
+                  </div>
+                  <label class="field"
+                    >Số điện thoại *
+                    <div class="phone-row">
+                      <input
+                        name="phone"
+                        type="tel"
+                        autocomplete="tel"
+                        placeholder="Nhập số điện thoại"
+                        [ngModel]="address.phone"
+                        (ngModelChange)="editField('phone', $event)"
+                        (blur)="validateField('phone')"
+                        [attr.aria-invalid]="!!fieldErrors()['phone']"
+                        required
+                      />
+                      @if (!member()) {
+                        <button
+                          type="button"
+                          (click)="sendOtp()"
+                          [disabled]="
+                            sendingOtp() || otpVerified() || (!!otpPhone() && resendSeconds() > 0)
+                          "
+                        >
+                          {{
+                            sendingOtp()
+                              ? 'Đang gửi…'
+                              : otpVerified()
+                                ? 'Đã xác thực ✓'
+                                : 'Gửi mã OTP'
+                          }}
+                        </button>
+                      }
+                    </div>
+                    <small class="error">{{ fieldErrors()['phone'] }}</small></label
+                  >
+                  @if (!member()) {
+                    @if (otpPhone() && !sendingOtp()) {
+                      @if (!otpVerified()) {
+                        <div class="otp" (paste)="paste($event)">
+                          @for (value of digits(); track $index) {
+                            <input
+                              type="text"
+                              inputmode="numeric"
+                              maxlength="1"
+                              [attr.aria-label]="'Chữ số OTP ' + ($index + 1)"
+                              [value]="value"
+                              (input)="digit($index, $event)"
+                              (keydown.backspace)="backspace($index, $event)"
+                              autocomplete="one-time-code"
+                            />
+                          }
+                        </div>
+                        <div class="otp-footer">
+                          <small
+                            >{{ clockLabel() }} ·
+                            {{ seconds() ? 'Mã còn hiệu lực' : 'Mã đã hết hạn' }}</small
+                          ><button
+                            class="text-button"
+                            type="button"
+                            (click)="sendOtp()"
+                            [disabled]="resendSeconds() > 0"
+                          >
+                            Gửi lại mã {{ resendSeconds() > 0 ? '(' + resendSeconds() + 's)' : '' }}
+                          </button>
+                        </div>
+                      }
+                    }
+                    @if (otpError()) {
+                      <p class="error" role="alert">{{ otpError() }}</p>
+                    }
+                    <small class="muted"
+                      >Xác thực không tự tạo tài khoản.
+                      <a routerLink="/auth/signin">Đăng nhập</a> nếu bạn đã là thành viên.</small
+                    >
+                  }
+                </section>
+                <section class="form-section">
+                  <div class="section-heading">
+                    <span class="number">2</span>
+                    <div>
+                      <h3>Địa chỉ giao hàng</h3>
+                      <small>{{
+                        member()
+                          ? 'Sửa trực tiếp hoặc chọn từ sổ địa chỉ.'
+                          : 'Nhập địa chỉ nhận hàng chính xác.'
+                      }}</small>
+                    </div>
+                    @if (member()) {
+                      <button
+                        class="add-address"
+                        type="button"
+                        aria-label="Mở sổ địa chỉ"
+                        (click)="openAddressBook()"
+                      >
+                        <span aria-hidden="true">+</span> Sổ địa chỉ
+                      </button>
+                    } @else {
+                      <span class="badge">Bắt buộc</span>
+                    }
+                  </div>
+                  @if (member() && address.detail) {
+                    <div class="selected-address" aria-live="polite">
+                      <span class="selected-address__icon" aria-hidden="true">⌖</span>
+                      <div>
+                        <strong>Đang giao đến {{ address.name }}</strong
+                        ><small
+                          >{{ address.detail }}, {{ address.ward }}, {{ address.district }},
+                          {{ address.province }}</small
+                        >
+                      </div>
+                      <button type="button" class="text-button" (click)="openAddressBook()">
+                        Thay đổi
+                      </button>
+                    </div>
+                  }
+                  <div class="fields">
+                    <label class="field"
+                      >Tỉnh / Thành phố *<input
+                        name="province"
+                        autocomplete="address-level1"
+                        [ngModel]="address.province"
+                        (ngModelChange)="editField('province', $event)"
+                        (blur)="validateField('province')"
+                        required
+                      /><small class="error">{{ fieldErrors()['province'] }}</small></label
+                    ><label class="field"
+                      >Quận / Huyện *<input
+                        name="district"
+                        autocomplete="address-level2"
+                        [ngModel]="address.district"
+                        (ngModelChange)="editField('district', $event)"
+                        (blur)="validateField('district')"
+                        required
+                      /><small class="error">{{ fieldErrors()['district'] }}</small></label
+                    ><label class="field"
+                      >Phường / Xã *<input
+                        name="ward"
+                        autocomplete="address-level3"
+                        [ngModel]="address.ward"
+                        (ngModelChange)="editField('ward', $event)"
+                        (blur)="validateField('ward')"
+                        required
+                      /><small class="error">{{ fieldErrors()['ward'] }}</small></label
+                    ><label class="field"
+                      >Số nhà, tên đường *<input
+                        name="detail"
+                        autocomplete="street-address"
+                        [ngModel]="address.detail"
+                        (ngModelChange)="editField('detail', $event)"
+                        (blur)="validateField('detail')"
+                        required
+                      /><small class="error">{{ fieldErrors()['detail'] }}</small></label
+                    >
+                  </div>
+                  @if (member()) {
+                    <label class="check"
+                      ><input type="checkbox" name="save" [(ngModel)]="saveAddress" />Lưu thông tin
+                      này vào sổ địa chỉ khi đặt hàng</label
+                    >
+                  }
+                </section>
+                <section class="form-section">
+                  <div class="section-heading">
+                    <span class="number">3</span>
+                    <div>
+                      <h3>Ghi chú giao hàng</h3>
+                      <small>Thêm yêu cầu để người giao hàng hỗ trợ tốt hơn.</small>
+                    </div>
+                  </div>
+                  <label class="field"
+                    >Ghi chú (tùy chọn)<input
+                      name="note"
+                      maxlength="300"
+                      placeholder="Ví dụ: Giao giờ hành chính"
+                      [(ngModel)]="address.note"
+                  /></label>
+                </section>
+                <section class="form-section">
+                  <div class="section-heading">
+                    <span class="number">4</span>
+                    <h3>Phương thức thanh toán</h3>
+                  </div>
+                  <label class="choice" [class.selected]="payment === 'COD'"
+                    ><input type="radio" name="payment" value="COD" [(ngModel)]="payment" /><span
+                      ><strong>Thanh toán khi nhận hàng (COD)</strong
+                      ><small>Thanh toán cho người giao hàng.</small></span
+                    ></label
+                  >
+                  <label class="choice" [class.selected]="payment === 'VNPAY'"
+                    ><input type="radio" name="payment" value="VNPAY" [(ngModel)]="payment" /><span
+                      ><strong>VNPay</strong
+                      ><small>Chuyển đến cổng thanh toán sau khi đặt hàng.</small></span
+                    ></label
+                  >
+                </section>
+              </fieldset>
+            </form>
+          }
+          @case ('gateway') {
+            <section class="panel payment-page">
+              <span class="badge">Thanh toán trực tuyến</span>
+              <h2>Thanh toán qua VNPay</h2>
+              <p class="payment-page__order">
+                Mã đơn <strong>{{ order()?.id }}</strong>
+              </p>
+              <div class="qr-payment">
+                <div class="qr-code" role="img" aria-label="Mã QR thanh toán VNPay"></div>
+                <div class="qr-payment__details">
+                  <strong>{{ money(order()?.total) }}</strong>
+                  <span>Quét mã QR để thanh toán</span>
+                  <small>Thời gian còn lại: {{ seconds() }} giây</small>
+                </div>
+              </div>
+              <p class="muted">
+                Mở ứng dụng ngân hàng hoặc ví điện tử, quét mã và hoàn tất giao dịch.
+              </p>
+              <div class="payment-simulation">
+                <span class="payment-simulation__label">Mô phỏng kết quả thanh toán</span>
+                <div class="actions">
+                  <button (click)="result('paid')" [disabled]="seconds() === 0">
+                    Thanh toán thành công</button
+                  ><button class="secondary" (click)="result('failed')">Thất bại</button
+                  ><button class="secondary" (click)="result('cancelled')">Hủy giao dịch</button
+                  ><button class="secondary" (click)="result('expired')">Hết hạn</button>
+                </div>
+              </div>
+            </section>
+          }
+          @case ('result') {
+            <section class="panel" aria-live="polite">
+              <h2>
+                {{
+                  paymentResult() === 'confirming'
+                    ? 'Đang xác nhận giao dịch…'
+                    : paymentResult() === 'expired'
+                      ? 'Thanh toán đã hết hạn'
+                      : paymentResult() === 'cancelled'
+                        ? 'Bạn đã hủy thanh toán'
+                        : 'Thanh toán chưa thành công'
+                }}
+              </h2>
+              <p>Mã đơn {{ order()?.id }} được giữ nguyên.</p>
+              @if (!busy()) {
+                <div class="actions">
+                  <button (click)="retry()">Thanh toán lại</button
+                  ><button class="secondary" (click)="useCod()">Đổi sang COD</button
+                  ><a
+                    class="action secondary"
+                    [routerLink]="member() ? '/account/orders' : '/guest/orders'"
+                    >Quay lại tra cứu</a
+                  >
+                </div>
+              }
+            </section>
+          }
+          @case ('success') {
+            <section class="panel success">
+              <div class="success-icon">✓</div>
+              <p class="eyebrow">Cảm ơn bạn</p>
+              <h2>Đơn hàng đã được ghi nhận</h2>
+              <p>
+                <strong>{{ order()?.id }}</strong>
+              </p>
+              <span class="badge">{{
+                order()?.payment === 'COD' ? 'Chờ xác nhận' : 'Đã thanh toán'
+              }}</span>
+              <p>
+                Tổng thanh toán: <strong>{{ money(order()?.total) }}</strong>
+              </p>
+              <p class="muted">Bạn có thể tra cứu đơn hàng bằng số điện thoại đã đặt hàng.</p>
+              <div class="actions">
+                <a
+                  class="action"
+                  [routerLink]="member() ? ['/account/orders', order()?.id] : ['/guest/orders']"
+                  [queryParams]="member() ? {} : { order: order()?.id }"
+                  >{{ member() ? 'Xem đơn hàng' : 'Tra cứu đơn' }}</a
+                ><a class="action secondary" routerLink="/products">Tiếp tục mua sắm</a>
+              </div>
+            </section>
+            @if (!member()) {
+              <section class="panel">
+                <h2>Lưu hành trình cùng Velura</h2>
+                <p>Tạo tài khoản để quản lý các đơn hàng thuận tiện hơn. Bạn có thể để sau.</p>
+                <div class="actions">
+                  <button (click)="step.set('invite')">Tạo tài khoản Velura</button
+                  ><a class="action secondary" routerLink="/products">Để sau</a>
+                </div>
+              </section>
+            }
+          }
+          @case ('invite') {
+            <section class="panel">
+              <h2>Thiết lập tài khoản</h2>
+              <p class="muted">Tạo mật khẩu để quản lý đơn hàng thuận tiện hơn.</p>
+              <form (ngSubmit)="activate()">
+                <label class="field"
+                  >Mật khẩu mới<input
+                    type="password"
+                    name="password"
+                    autocomplete="new-password"
+                    [(ngModel)]="password"
+                    minlength="8"
+                    required /></label
+                ><label class="field"
+                  >Xác nhận mật khẩu<input
+                    type="password"
+                    name="confirm"
+                    autocomplete="new-password"
+                    [(ngModel)]="confirmation"
+                    required /></label
+                ><button type="submit">Tạo tài khoản</button>
+              </form>
+            </section>
+          }
+          @case ('activated') {
+            <section class="panel success">
+              <div class="success-icon">✓</div>
+              <h2>Hoàn tất thiết lập</h2>
+              <p>Tài khoản của bạn đã sẵn sàng. Đăng nhập để quản lý đơn hàng thuận tiện hơn.</p>
+
+              <div class="actions">
+                <a class="action" routerLink="/auth/signin">Đăng nhập</a
+                ><a class="action secondary" routerLink="/products">Tiếp tục mua sắm</a>
+              </div>
+            </section>
+          }
+        }
+      </div>
+      @if (step() === 'form') {
+        <aside class="panel summary checkout-summary">
+          <h2>Đơn hàng của bạn</h2>
+          @for (line of lines(); track $index) {
+            <article
+              class="line"
+              [style.background]="$index === 0 && stockProblem() ? '#fff0ec' : ''"
+            >
+              <img [src]="image(line.product_image)" [alt]="line.product_name" />
+              <div>
+                <h3>{{ line.product_name }}</h3>
+                <p class="muted">{{ line.size }} / {{ line.color }} · SL {{ line.quantity }}</p>
+                <strong>{{ money(line.unit_price * line.quantity) }}</strong>
+                @if ($index === 0 && stockProblem()) {
+                  <p class="error" role="alert">{{ stockProblem() }}</p>
+                }
+              </div>
+            </article>
+          }
+          <div class="row">
+            <span>Tiền hàng</span><span>{{ money(quote().subtotal) }}</span>
+          </div>
+          <div class="row">
+            <span>Phí vận chuyển</span
+            ><span>{{ quote().shipping ? money(quote().shipping) : 'Miễn phí' }}</span>
+          </div>
+          <div class="row">
+            <span>Voucher tự động</span><span>−{{ money(quote().discount) }}</span>
+          </div>
+          <p class="muted">{{ quote().voucher }}</p>
+          <div class="row total">
+            <span>Tổng thanh toán</span><span>{{ money(quote().total) }}</span>
+          </div>
+          <p class="muted">
+            Đổi / trả trong 30 ngày từ khi giao thành công. Tối đa 2 lượt mỗi sản phẩm.
+          </p>
+          @if (voucherNotice()) {
+            <p class="muted" role="status">{{ voucherNotice() }}</p>
+          }
+          <button class="checkout-submit" type="submit" form="checkout-form" [disabled]="busy()">
+            {{
+              busy()
+                ? 'Đang xử lý…'
+                : payment === 'COD'
+                  ? 'Hoàn tất đơn hàng →'
+                  : 'Thanh toán qua VNPay →'
+            }}
+          </button>
+          <a class="edit-cart" routerLink="/cart">Chỉnh sửa giỏ hàng</a>
+        </aside>
+      }
+    </div>
+  }
+</main>
+<dialog
+  #addressDialog
+  class="address-dialog"
+  aria-labelledby="address-dialog-title"
+  (cancel)="$event.preventDefault(); closeAddressBook()"
+>
+  <div class="modal-heading">
+    <h2 id="address-dialog-title">
+      {{
+        dialogMode() === 'list'
+          ? 'Sổ địa chỉ'
+          : editingAddress >= 0
+            ? 'Sửa địa chỉ'
+            : 'Thêm địa chỉ mới'
+      }}
+    </h2>
+    <button
+      class="close secondary"
+      type="button"
+      aria-label="Đóng sổ địa chỉ"
+      (click)="closeAddressBook()"
+    >
+      ×
+    </button>
+  </div>
+  @if (dialogMode() === 'list') {
+    <p class="muted">Chọn địa chỉ đã lưu hoặc từng sử dụng cho đơn hàng.</p>
+    @for (entry of bookEntries(); track $index; let i = $index) {
+      <article class="address-card" [class.selected]="pendingAddress() === i">
+        <label class="choice"
+          ><input
+            type="radio"
+            name="book"
+            [checked]="pendingAddress() === i"
+            (change)="pendingAddress.set(i)"
+          /><span
+            ><strong>{{ entry.address.name }} · {{ entry.address.phone }}</strong>
+            @if (entry.address.isDefault && entry.savedIndex !== null) {
+              <span class="badge">Mặc định</span>
+            }
+            @if (entry.savedIndex === null) {
+              <span class="badge">Đã dùng trước đây</span>
+            }
+            <small
+              >{{ entry.address.detail }}, {{ entry.address.ward }}<br />{{
+                entry.address.district
+              }}, {{ entry.address.province }}</small
+            ></span
+          ></label
+        >
+        <div class="actions">
+          <button class="text-button" type="button" (click)="editAddress(i)">
+            {{ entry.savedIndex === null ? 'Sửa và lưu' : 'Sửa' }}
+          </button>
+          @if (entry.savedIndex !== null) {
+            <button
+              class="text-button"
+              type="button"
+              (click)="deletingAddress.set(entry.savedIndex)"
+            >
+              Xóa
+            </button>
+          }
+        </div>
+        @if (entry.savedIndex !== null && deletingAddress() === entry.savedIndex) {
+          <p>Xóa địa chỉ này khỏi sổ?</p>
+          <div class="actions">
+            <button type="button" (click)="deleteSavedAddress(entry.savedIndex)">Xóa địa chỉ</button
+            ><button class="secondary" type="button" (click)="deletingAddress.set(-1)">
+              Giữ lại
+            </button>
+          </div>
+        }
+      </article>
+    } @empty {
+      <p class="empty muted">
+        Bạn chưa có địa chỉ đã lưu. Thêm địa chỉ đầu tiên để dùng nhanh cho lần sau.
+      </p>
+    }
+    <button class="wide secondary" type="button" (click)="editAddress()">+ Thêm địa chỉ mới</button>
+    <button
+      class="wide"
+      type="button"
+      [disabled]="pendingAddress() < 0"
+      (click)="applySelectedAddress()"
+    >
+      Giao đến địa chỉ này
+    </button>
+  } @else {
+    <form (ngSubmit)="useDraftAddress()" novalidate>
+      <label class="field"
+        >Email (tùy chọn)<input
+          name="draft-email"
+          type="email"
+          [(ngModel)]="addressDraft.email"
+        /><small class="error">{{ dialogErrors()['email'] }}</small></label
+      ><label class="field"
+        >Người nhận *<input
+          name="draft-name"
+          autocomplete="name"
+          [(ngModel)]="addressDraft.name"
+          required
+        /><small class="error">{{ dialogErrors()['name'] }}</small></label
+      ><label class="field"
+        >Số điện thoại *<input
+          name="draft-phone"
+          autocomplete="tel"
+          [(ngModel)]="addressDraft.phone"
+          required
+        /><small class="error">{{ dialogErrors()['phone'] }}</small></label
+      ><label class="field"
+        >Tỉnh / Thành phố *<input
+          name="draft-province"
+          autocomplete="address-level1"
+          [(ngModel)]="addressDraft.province"
+          required
+        /><small class="error">{{ dialogErrors()['province'] }}</small></label
+      ><label class="field"
+        >Quận / Huyện *<input
+          name="draft-district"
+          autocomplete="address-level2"
+          [(ngModel)]="addressDraft.district"
+          required
+        /><small class="error">{{ dialogErrors()['district'] }}</small></label
+      ><label class="field"
+        >Phường / Xã *<input
+          name="draft-ward"
+          autocomplete="address-level3"
+          [(ngModel)]="addressDraft.ward"
+          required
+        /><small class="error">{{ dialogErrors()['ward'] }}</small></label
+      ><label class="field"
+        >Số nhà, tên đường *<input
+          name="draft-detail"
+          autocomplete="street-address"
+          [(ngModel)]="addressDraft.detail"
+          required
+        /><small class="error">{{ dialogErrors()['detail'] }}</small></label
+      >
+      <div class="actions">
+        <label class="check"
+          ><input name="saveDraft" type="checkbox" [(ngModel)]="saveDraft" />Lưu địa chỉ</label
+        ><label class="check"
+          ><input
+            name="defaultDraft"
+            type="checkbox"
+            [(ngModel)]="draftDefault"
+            [disabled]="!saveDraft"
+          />Đặt làm mặc định</label
+        >
+      </div>
+      @if (!saveDraft) {
+        <p class="muted">Chỉ dùng cho đơn hàng này.</p>
+      }
+      <button type="submit" class="wide">Sử dụng địa chỉ này</button>
+      @if (saveDraft) {
+        <button type="button" class="wide secondary" (click)="saveAddressChanges()">
+          Lưu thay đổi vào sổ địa chỉ
+        </button>
+      }
+      <button type="button" class="text-button" (click)="backToAddresses()">
+        ← Quay lại sổ địa chỉ
+      </button>
+    </form>
+  }
+</dialog>

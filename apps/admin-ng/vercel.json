@@ -1,0 +1,20 @@
+{
+  "version": 2,
+  "buildCommand": "ng build",
+  "outputDirectory": "dist/admin-ng/browser",
+  "cleanUrls": true,
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://velura-api.vercel.app/api/:path*"
+    },
+    {
+      "source": "/supabase/:path*",
+      "destination": "https://gtyuajboeffmfskofoyh.supabase.co/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

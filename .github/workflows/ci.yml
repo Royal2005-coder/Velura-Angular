@@ -278,50 +278,25 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: velura-dist
-      - name: Setup SSH
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest
+      - name: Prepare Vercel outputs
         env:
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-        run: |
-          set -e
-          missing=""
-          [ -n "${SSH_PRIVATE_KEY:-}" ] || missing="$missing SSH_PRIVATE_KEY"
-          [ -n "${SSH_KNOWN_HOSTS:-}" ] || missing="$missing SSH_KNOWN_HOSTS"
-          [ -n "${DEPLOY_HOST:-}" ] || missing="$missing DEPLOY_HOST"
-          [ -n "${DEPLOY_USER:-}" ] || missing="$missing DEPLOY_USER"
-          if [ -n "$missing" ]; then
-            echo "Deploy secrets empty:$missing"
-            echo "Add them under Settings → Secrets and variables → Actions (Environment: production)."
-            exit 1
-          fi
-          mkdir -p ~/.ssh
-          printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/deploy.key
-          chmod 600 ~/.ssh/deploy.key
-          grep -q "BEGIN .*PRIVATE KEY" ~/.ssh/deploy.key || {
-            echo "SSH_PRIVATE_KEY is not a PEM"
-            exit 1
-          }
-          printf '%s\n' "$SSH_KNOWN_HOSTS" >> ~/.ssh/known_hosts
-      - name: Rsync + restart
-        env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
-          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
-          STOREFRONT_ORIGIN: ${{ secrets.STOREFRONT_ORIGIN }}
-        run: |
-          set -e
-          SSH="ssh -i ~/.ssh/deploy.key -o IdentitiesOnly=yes"
-          test -f apps/api/dist/server.js || { echo "build:api did not emit apps/api/dist/server.js"; exit 1; }
-          sudo apt-get update -qq && sudo apt-get install -y -qq rsync
-          rsync -az --delete -e "$SSH" apps/user-ng/dist/user-ng/browser/ "${DEPLOY_USER}@${DEPLOY_HOST}:/var/www/velura/user/"
-          rsync -az --delete -e "$SSH" apps/admin-ng/dist/admin-ng/browser/ "${DEPLOY_USER}@${DEPLOY_HOST}:/var/www/velura/admin/"
-          rsync -az --delete --exclude node_modules -e "$SSH" apps/api/ "${DEPLOY_USER}@${DEPLOY_HOST}:/opt/velura/api/"
-          rsync -az -e "$SSH" deploy/ "${DEPLOY_USER}@${DEPLOY_HOST}:/opt/velura/deploy/"
-          $SSH "${DEPLOY_USER}@${DEPLOY_HOST}" "STRIPE_SECRET_KEY='$STRIPE_SECRET_KEY' STRIPE_WEBHOOK_SECRET='$STRIPE_WEBHOOK_SECRET' STOREFRONT_ORIGIN='${STOREFRONT_ORIGIN:-https://velura.royalai.dev}' bash /opt/velura/deploy/scripts/sync-stripe-env.sh"
-          $SSH "${DEPLOY_USER}@${DEPLOY_HOST}" "cd /opt/velura/api && npm install --omit=dev && sudo sed -i 's/\r$//' /opt/velura/deploy/nginx/velura.conf /opt/velura/deploy/systemd/velura-api.service /opt/velura/deploy/scripts/sync-stripe-env.sh && sudo cp /opt/velura/deploy/nginx/velura.conf /etc/nginx/sites-available/velura && sudo cp /opt/velura/deploy/systemd/velura-api.service /etc/systemd/system/velura-api.service && sudo nginx -t && sudo systemctl daemon-reload && sudo systemctl restart velura-api && (sudo systemctl reload nginx || sudo /usr/sbin/nginx -s reload || sudo kill -HUP \$(pgrep -o nginx))"
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID_API: ${{ secrets.VERCEL_PROJECT_ID_API }}
+          VERCEL_PROJECT_ID_USER: ${{ secrets.VERCEL_PROJECT_ID_USER }}
+          VERCEL_PROJECT_ID_ADMIN: ${{ secrets.VERCEL_PROJECT_ID_ADMIN }}
+        run: node deploy/scripts/prepare-vercel-spa.mjs
+      - name: Deploy API to Vercel
+        run: vercel deploy --prod --cwd apps/api --token ${{ secrets.VERCEL_TOKEN }} --yes
+      - name: Deploy Storefront to Vercel
+        run: vercel deploy --prebuilt --prod --cwd apps/user-ng --token ${{ secrets.VERCEL_TOKEN }} --yes
+      - name: Deploy Admin to Vercel
+        run: vercel deploy --prebuilt --prod --cwd apps/admin-ng --token ${{ secrets.VERCEL_TOKEN }} --yes
 
   verify-production:
     name: verify-production
@@ -335,17 +310,14 @@ jobs:
       - name: Health checks
         run: |
           set -e
-          code="$(curl -fsS -o /dev/null -w '%{http_code}' --max-redirs 2 https://velura.royalai.dev/)"
-          test "$code" = "200"
-          i=0
-          while [ "$i" -lt 12 ]; do
-            if curl -fsS https://velura.royalai.dev/api/health | grep '"ok":true'; then
-              break
-            fi
-            i=$((i + 1))
-            sleep 5
-          done
-          curl -fsS https://velura.royalai.dev/api/health | grep '"ok":true'
-          test "$(curl -fsS -o /dev/null -w '%{http_code}' --max-redirs 2 https://velura.royalai.dev/api/health)" = "200"
-          test "$(curl -fsS -o /dev/null -w '%{http_code}' --max-redirs 2 https://admin.royalai.dev/login)" = "200"
-          curl -fsS https://admin.royalai.dev/ | grep -q "Velura Admin"
+          echo "Verifying Vercel direct deployments..."
+          curl -fsS https://velura-api.vercel.app/health | grep '"ok":true'
+          test "$(curl -fsS -o /dev/null -w '%{http_code}' --max-redirs 2 https://velura-storefront.vercel.app/)" = "200"
+          test "$(curl -fsS -o /dev/null -w '%{http_code}' --max-redirs 2 https://velura-admin-mocha.vercel.app/)" = "200"
+
+          echo "Checking custom domain routing..."
+          if curl -fsS -m 5 https://velura.royalai.dev/api/health 2>/dev/null | grep -q '"ok":true'; then
+            echo "Custom domain velura.royalai.dev is live and healthy."
+          else
+            echo "::warning::Custom domain velura.royalai.dev is waiting for Cloudflare CNAME update to cname.vercel-dns.com."
+          fi

@@ -28,8 +28,12 @@ import { AdminTableSkeleton } from '../../shared/admin-table-skeleton';
 
 type OrderTab = 'all' | 'attention' | 'payment' | 'cancelled' | 'logs';
 
-/** Modal đang mở: một action của đơn, hoặc đối soát thanh toán. */
-type OrderModal = { kind: 'action'; action: AdminOrderAction } | { kind: 'payment' } | null;
+/** Modal đang mở: một action của đơn, đối soát thanh toán, hoặc gọi xác nhận đơn COD. */
+type OrderModal =
+  | { kind: 'action'; action: AdminOrderAction }
+  | { kind: 'payment' }
+  | { kind: 'cod_call'; order: AdminOrderRow }
+  | null;
 
 /** Lỗi mà trạng thái trên màn đã cũ so với dữ liệu thật: tải lại đơn rồi báo. */
 const STALE_ORDER_CODES = new Set(['VERSION_CONFLICT', 'INVALID_ORDER_ACTION', 'ORDER_ALREADY_HANDED_OVER', 'PAYMENT_VERSION_CONFLICT']);
@@ -105,6 +109,11 @@ export class AdminOrdersPage {
   /** Báo sau một action: đơn đã đổi dưới tay, hoặc kết quả hoàn tiền. */
   readonly notice = signal<string | null>(null);
   readonly submitting = signal(false);
+
+  readonly copiedPhone = signal(false);
+  readonly codDecision = signal<'confirm' | 'cancel' | 'no_answer' | 'invalid'>('confirm');
+  readonly codCancelReason = signal<string>('customer_request');
+  readonly codNote = signal<string>('Đã gọi xác nhận, khách đồng ý nhận hàng');
 
   readonly logs = signal<AdminAuditRow[]>([]);
   readonly logsPage = signal(1);
@@ -274,6 +283,110 @@ export class AdminOrdersPage {
     this.modal.set(null);
     this.actionError.set(null);
     this.submitting.set(false);
+  }
+
+  /**
+   * Kiểm tra đơn có đang cần người vận hành xử lý hay đã hoàn tất.
+   * Đơn đã giao (delivered), đã hủy (cancelled) hoặc đã hoàn (returned) mà không có lỗi thanh toán
+   * thì chỉ hiển thị biểu tượng xem (eye). Các trạng thái khác hiển thị bút chì (edit).
+   */
+  canProcessOrder(order: AdminOrderRow): boolean {
+    if (order.status === 'delivered' || order.status === 'cancelled' || order.status === 'returned') {
+      return this.isPaymentError(order);
+    }
+    return true;
+  }
+
+  isPendingCod(order: AdminOrderRow | null | undefined): boolean {
+    return !!order && order.payment_method === 'COD' && order.status === 'pending';
+  }
+
+  hasCancelRequest(order: AdminOrderRow | null | undefined): boolean {
+    return (
+      !!order?.tags?.some((t) => t.code === 'CANCEL_REQUESTED') ||
+      String(order?.internal_note || '').toLowerCase().includes('yêu cầu hủy')
+    );
+  }
+
+  handleOrderClick(order: AdminOrderRow): void {
+    if (this.isPendingCod(order)) {
+      this.openCodCallConfirm(order);
+    } else {
+      this.openDetail(order.order_id);
+    }
+  }
+
+  openCodCallConfirm(order: AdminOrderRow): void {
+    this.actionError.set(null);
+    this.copiedPhone.set(false);
+    this.codDecision.set('confirm');
+    this.codCancelReason.set('customer_request');
+    this.codNote.set('Đã gọi xác nhận, khách đồng ý nhận hàng');
+    this.submitting.set(false);
+    this.modal.set({ kind: 'cod_call', order });
+
+    // Tải thông tin đơn hàng mới nhất và đầy đủ items nếu chưa có
+    this.api.getOrder(order.order_id).subscribe({
+      next: (fullOrder) => {
+        this.selected.set(fullOrder);
+        this.modal.set({ kind: 'cod_call', order: fullOrder });
+      },
+      error: () => {
+        this.selected.set(order);
+      },
+    });
+  }
+
+  copyPhone(phone: string | undefined): void {
+    if (!phone) return;
+    navigator.clipboard?.writeText(phone);
+    this.copiedPhone.set(true);
+    setTimeout(() => this.copiedPhone.set(false), 2000);
+  }
+
+  setCodQuickNote(note: string): void {
+    this.codNote.set(note);
+  }
+
+  submitCodCall(event: Event): void {
+    event.preventDefault();
+    const order = this.selected();
+    if (!order || this.submitting()) return;
+    const note = this.codNote().trim();
+    if (note.length < 5) {
+      this.actionError.set('Vui lòng nhập ghi chú cuộc gọi (tối thiểu 5 ký tự).');
+      return;
+    }
+
+    this.submitting.set(true);
+    this.actionError.set(null);
+
+    const decision = this.codDecision();
+    let actionCode = 'confirm_cod';
+    let body: Record<string, string> = { note };
+
+    if (decision === 'confirm') {
+      actionCode = 'confirm_cod';
+    } else if (decision === 'cancel') {
+      actionCode = 'cancel';
+      body['cancelReason'] = this.codCancelReason() || 'customer_request';
+    } else if (decision === 'no_answer') {
+      actionCode = 'call_confirm';
+      body['callResult'] = 'no_answer';
+    } else if (decision === 'invalid') {
+      actionCode = 'cancel';
+      body['cancelReason'] = 'fraud';
+    }
+
+    this.api.performOrderAction(order.order_id, actionCode, { ...body, expectedVersion: order.version }).subscribe({
+      next: (result) => {
+        this.closeModal();
+        this.afterAction(result);
+      },
+      error: (error: unknown) => {
+        this.handleActionError(order.order_id, error);
+      },
+    });
   }
 
   /**

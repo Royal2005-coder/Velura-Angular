@@ -69,7 +69,7 @@
               </thead>
               <tbody>
                 @for (order of rows(); track order.order_id) {
-                  <tr class="admin-order-row" (click)="openDetail(order.order_id)">
+                  <tr class="admin-order-row" (click)="handleOrderClick(order)">
                     <td>
                       <span class="admin-order-code">{{ order.order_code || order.order_id }}</span>
                       <small class="admin-order-subtext">{{ dateTime(order.order_date) }}</small>
@@ -102,7 +102,11 @@
                       }
                     </td>
                     <td>
-                      <button class="admin-icon-button admin-icon-button--sm" type="button" title="Xem và xử lý" aria-label="Xem và xử lý đơn" (click)="$event.stopPropagation(); openDetail(order.order_id)"><app-admin-icon name="eye" /></button>
+                      @if (canProcessOrder(order)) {
+                        <button class="admin-icon-button admin-icon-button--sm admin-icon-button--primary" type="button" title="Xử lý đơn hàng" aria-label="Xử lý đơn hàng" (click)="$event.stopPropagation(); handleOrderClick(order)"><app-admin-icon name="edit" /></button>
+                      } @else {
+                        <button class="admin-icon-button admin-icon-button--sm" type="button" title="Xem chi tiết" aria-label="Xem chi tiết đơn" (click)="$event.stopPropagation(); openDetail(order.order_id)"><app-admin-icon name="eye" /></button>
+                      }
                     </td>
                   </tr>
                 }
@@ -169,6 +173,27 @@
     <div class="admin-drawer__body">
       @if (notice()) {
         <p class="admin-order-warning" role="status">{{ notice() }}</p>
+      }
+
+      @if (hasCancelRequest(order)) {
+        <div class="admin-order-alert-banner admin-order-alert-banner--danger" role="alert">
+          <strong>⚠️ Yêu cầu hủy đơn từ khách hàng:</strong> Khách đã gửi yêu cầu hủy đơn hàng này. Vui lòng kiểm tra tiến độ đóng gói và vận chuyển trước khi duyệt hủy hoặc liên hệ hỗ trợ.
+          @if (order.payment_status === 'paid') {
+            <span> (Đơn đã thanh toán online, duyệt hủy sẽ tự động hoàn trả tiền cho khách)</span>
+          }
+        </div>
+      }
+
+      @if (isPendingCod(order)) {
+        <div class="admin-order-alert-banner admin-order-alert-banner--warning">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+            <div>
+              <strong>📞 Đơn hàng COD chờ gọi xác nhận:</strong>
+              <p style="margin: 2px 0 0; font-size: 0.8125rem;">Cần gọi điện thoại xác nhận với khách trước khi duyệt đơn hoặc chuyển sang đóng gói.</p>
+            </div>
+            <button class="admin-btn admin-btn--sm admin-btn--secondary" type="button" (click)="openCodCallConfirm(order)">📞 Gọi xác nhận COD ngay</button>
+          </div>
+        </div>
       }
 
       @if (primaryActions().length || destructiveActions().length || canResolvePayment()) {
@@ -408,6 +433,17 @@
             }
           }
 
+          @if (action.code === 'confirm_handover' || hasField(action, 'shipment')) {
+            <label class="admin-form-group">
+              <span class="admin-form-label">Ảnh biên nhận / Phiếu gửi hàng (Tùy chọn)</span>
+              <input class="admin-form-control" name="proofUrl" placeholder="https://... hoặc ghi chú niêm phong kiện" />
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 0.8125rem; margin-top: 6px; cursor: pointer; color: var(--text-body);">
+              <input type="checkbox" name="notifyCustomer" checked />
+              <span>Gửi SMS &amp; Email thông báo cập nhật hành trình cho khách hàng</span>
+            </label>
+          }
+
           <label class="admin-form-group">
             <span class="admin-form-label">{{ cancelReason() === 'other' ? 'Lý do hủy cụ thể' : 'Ghi chú' }} @if (action.requires_note) {<b>*</b>}</span>
             <textarea class="admin-form-control admin-form-textarea" name="note" maxlength="1000" [attr.minlength]="action.requires_note ? 5 : null" [required]="action.requires_note"></textarea>
@@ -452,6 +488,167 @@
         <footer class="admin-modal__footer">
           <button class="admin-btn admin-btn--ghost" type="button" (click)="closeModal()">Đóng</button>
           <button class="admin-btn admin-btn--secondary" type="submit" [disabled]="submitting()">Xác nhận</button>
+        </footer>
+      </form>
+    </section>
+  </div>
+}
+
+@if (modal()?.kind === 'cod_call') {
+  <div class="admin-modal-overlay">
+    <section class="admin-modal admin-modal--lg" role="dialog" aria-modal="true" aria-label="Gọi xác nhận đơn hàng COD">
+      <form (submit)="submitCodCall($event)">
+        <header class="admin-modal__header">
+          <div>
+            <h2>Gọi xác nhận đơn hàng COD</h2>
+            <p class="admin-order-subtext" style="margin: 4px 0 0;">
+              Mã đơn: <strong>{{ selected()?.order_code || selected()?.order_id }}</strong> · Ngày tạo: {{ dateTime(selected()?.order_date) }}
+            </p>
+          </div>
+          <button class="admin-icon-button" type="button" aria-label="Đóng" (click)="closeModal()">×</button>
+        </header>
+
+        <div class="admin-modal__body">
+          <!-- Khung thông tin khách hàng trực quan -->
+          <div class="admin-cod-card">
+            <div class="admin-cod-card__header">
+              <span class="admin-cod-card__badge">Đơn hàng thanh toán khi nhận hàng (COD)</span>
+              <strong class="admin-cod-card__amount">Cần thu: {{ money(selected()?.total_amount) }}</strong>
+            </div>
+
+            <div class="admin-cod-card__grid">
+              <div>
+                <small>Khách hàng / Người nhận:</small>
+                <div style="font-weight: 600; font-size: 1rem;">{{ selected()?.shipping_name || 'Khách vãng lai' }}</div>
+              </div>
+              <div>
+                <small>Số điện thoại liên hệ:</small>
+                <div style="display: flex; align-items: center; gap: 8px; margin-top: 2px;">
+                  <a [href]="'tel:' + selected()?.shipping_phone" class="admin-phone-call-btn">
+                    📞 {{ selected()?.shipping_phone }}
+                  </a>
+                  <button type="button" class="admin-copy-btn" (click)="copyPhone(selected()?.shipping_phone)">
+                    {{ copiedPhone() ? '✓ Đã chép' : 'Sao chép' }}
+                  </button>
+                </div>
+              </div>
+              <div style="grid-column: 1 / -1;">
+                <small>Địa chỉ nhận hàng:</small>
+                <div>{{ selected()?.shipping_address || '—' }}</div>
+              </div>
+              @if (selected()?.items?.length) {
+                <div style="grid-column: 1 / -1;">
+                  <small>Sản phẩm đặt mua ({{ selected()?.items?.length }} món):</small>
+                  <ul class="admin-cod-items-list">
+                    @for (item of selected()?.items || []; track $index) {
+                      <li>
+                        <span>{{ item.product_name }}</span>
+                        <strong>SL: {{ item.quantity }} · {{ money(item.unit_price) }}</strong>
+                      </li>
+                    }
+                  </ul>
+                </div>
+              }
+              @if (selected()?.internal_note) {
+                <div style="grid-column: 1 / -1; background: #fff; padding: 8px 10px; border-radius: 6px; font-size: 0.8125rem; border: 1px dashed #d0c2b4;">
+                  <strong>Ghi chú đơn hàng:</strong> {{ selected()?.internal_note }}
+                </div>
+              }
+            </div>
+          </div>
+
+          <!-- Lựa chọn kết quả cuộc gọi -->
+          <fieldset class="admin-form-group" style="margin-top: 16px; border: 0; padding: 0;">
+            <legend class="admin-form-label" style="font-weight: 600; margin-bottom: 8px;">
+              Kết quả liên hệ &amp; Quyết định đơn hàng <b>*</b>
+            </legend>
+            <div class="admin-cod-decisions">
+              <label class="admin-decision-label" [class.admin-decision-label--active]="codDecision() === 'confirm'">
+                <input type="radio" name="codDecisionRadio" value="confirm" [checked]="codDecision() === 'confirm'" (change)="codDecision.set('confirm')" />
+                <div>
+                  <strong>🟢 Khách đồng ý nhận hàng</strong>
+                  <p>Khách nghe máy, xác nhận đúng thông tin đơn hàng và đồng ý nhận. Đơn sẽ chuyển sang 'Đã xác nhận' để chuẩn bị đóng gói.</p>
+                </div>
+              </label>
+
+              <label class="admin-decision-label" [class.admin-decision-label--active]="codDecision() === 'cancel'">
+                <input type="radio" name="codDecisionRadio" value="cancel" [checked]="codDecision() === 'cancel'" (change)="codDecision.set('cancel')" />
+                <div>
+                  <strong>🔴 Khách yêu cầu hủy đơn hàng</strong>
+                  <p>Khách đổi ý, đặt nhầm hoặc không còn nhu cầu. Đơn hàng sẽ được chuyển sang 'Đã hủy'.</p>
+                </div>
+              </label>
+
+              <label class="admin-decision-label" [class.admin-decision-label--active]="codDecision() === 'no_answer'">
+                <input type="radio" name="codDecisionRadio" value="no_answer" [checked]="codDecision() === 'no_answer'" (change)="codDecision.set('no_answer')" />
+                <div>
+                  <strong>🟡 Không nghe máy / Thuê bao (Lưu lịch sử &amp; Gọi lại sau)</strong>
+                  <p>Khách không bắt máy. Ghi nhận cuộc gọi vào nhật ký và giữ nguyên trạng thái Chờ xác nhận để nhân viên liên hệ lại.</p>
+                </div>
+              </label>
+
+              <label class="admin-decision-label" [class.admin-decision-label--active]="codDecision() === 'invalid'">
+                <input type="radio" name="codDecisionRadio" value="invalid" [checked]="codDecision() === 'invalid'" (change)="codDecision.set('invalid')" />
+                <div>
+                  <strong>⛔ Sai số điện thoại / Đơn ảo / Bom hàng</strong>
+                  <p>Số điện thoại không tồn tại, thuê bao nhiều lần hoặc có dấu hiệu đơn giả. Đơn hàng sẽ được hủy với lý do gian lận.</p>
+                </div>
+              </label>
+            </div>
+          </fieldset>
+
+          @if (codDecision() === 'cancel') {
+            <label class="admin-form-group">
+              <span class="admin-form-label">Lý do hủy đơn <b>*</b></span>
+              <select class="admin-form-control" [value]="codCancelReason()" (change)="codCancelReason.set($any($event.target).value)">
+                <option value="customer_request">Khách hàng yêu cầu hủy / Đổi ý</option>
+                <option value="duplicate">Khách đặt trùng đơn</option>
+                <option value="change_product">Khách muốn đổi sang sản phẩm khác</option>
+                <option value="other">Lý do khác</option>
+              </select>
+            </label>
+          }
+
+          <!-- Ghi chú cuộc gọi -->
+          <label class="admin-form-group" style="margin-top: 12px;">
+            <span class="admin-form-label">Ghi chú cuộc gọi xác nhận <b>*</b> (tối thiểu 5 ký tự)</span>
+            <div class="admin-call-chips">
+              <button type="button" class="admin-chip-btn" (click)="setCodQuickNote('Đã gọi xác nhận, khách hẹn giao giờ hành chính')">Giờ hành chính</button>
+              <button type="button" class="admin-chip-btn" (click)="setCodQuickNote('Khách xác nhận đúng màu và kích cỡ, giao sớm')">Đã xác nhận size/màu</button>
+              <button type="button" class="admin-chip-btn" (click)="setCodQuickNote('Thuê bao bận không nghe máy lần 1, sẽ gọi lại')">Không bắt máy L1</button>
+              <button type="button" class="admin-chip-btn" (click)="setCodQuickNote('Khách báo đang bận, hẹn gọi lại sau 17h')">Hẹn gọi lại sau</button>
+            </div>
+            <textarea
+              class="admin-form-control admin-form-textarea"
+              rows="3"
+              required
+              minlength="5"
+              maxlength="500"
+              [value]="codNote()"
+              (input)="codNote.set($any($event.target).value)"
+              placeholder="Nhập nội dung trao đổi, thời gian hẹn giao hoặc lý do cụ thể..."
+            ></textarea>
+          </label>
+
+          @if (actionError()) {
+            <p class="field__error" role="alert" style="margin-top: 8px;">{{ actionError() }}</p>
+          }
+        </div>
+
+        <footer class="admin-modal__footer">
+          <button class="admin-btn admin-btn--ghost" type="button" (click)="closeModal()">Đóng</button>
+          @if (selected(); as ord) {
+            <button class="admin-btn admin-btn--outline" type="button" (click)="closeModal(); openDetail(ord.order_id)">Xem chi tiết đơn</button>
+          }
+          <button
+            class="admin-btn"
+            [class.admin-btn--secondary]="codDecision() === 'confirm' || codDecision() === 'no_answer'"
+            [class.admin-btn--danger]="codDecision() === 'cancel' || codDecision() === 'invalid'"
+            type="submit"
+            [disabled]="submitting()"
+          >
+            {{ submitting() ? 'Đang lưu...' : 'Lưu kết quả &amp; Cập nhật đơn' }}
+          </button>
         </footer>
       </form>
     </section>

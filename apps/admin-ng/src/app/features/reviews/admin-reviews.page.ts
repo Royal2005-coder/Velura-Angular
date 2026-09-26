@@ -11,7 +11,7 @@ import { AdminIcon } from '../../shared/admin-icon';
 import { AdminPagination } from '../../shared/admin-pagination';
 import { AdminTableSkeleton } from '../../shared/admin-table-skeleton';
 
-type ReviewTab = 'all' | 'pending' | 'urgent' | 'processed' | 'logs';
+type ReviewTab = 'all' | 'urgent' | 'processed' | 'logs';
 type ReviewAction = 'approve' | 'hide' | 'unhide' | 'reply' | 'escalate' | null;
 
 /** Không có payload khi tab hiện tại không cần tới danh sách đó. */
@@ -61,10 +61,6 @@ export class AdminReviewsPage {
   readonly detectedRestrictedWords = signal<string[]>([]);
   readonly sentiment = signal<{ label: string; tone: string; score: number } | null>(null);
 
-  // Các con số này đếm trên toàn bộ dữ liệu, không phải trên 10 dòng của trang hiện
-  // tại. Trước đây chúng là `computed` trên `rows()`, nên ở tab "Chờ duyệt" con số
-  // "Chờ duyệt" luôn bằng đúng cỡ trang còn "Đã xử lý" luôn bằng 0.
-  readonly pendingCount = signal(0);
   readonly urgentCount = signal(0);
   readonly hiddenCount = signal(0);
   readonly processedCount = signal(0);
@@ -87,13 +83,10 @@ export class AdminReviewsPage {
     this.loading.set(true);
     this.loadError.set(null);
 
-    // Tab "Cần xử lý gấp" trước đây không đổi tham số truy vấn nào cả, nên nó hiện ra
-    // y hệt tab "Tất cả". Nay lọc thật ở phía máy chủ.
+    // Tab "Cần xử lý gấp" lọc theo cờ urgent trên máy chủ
     const tab = this.tab();
     let status = this.statusFilter();
-    if (tab === 'pending') {
-      status = 'pending';
-    } else if (tab === 'processed') {
+    if (tab === 'processed') {
       status = 'approved';
     }
 
@@ -130,24 +123,19 @@ export class AdminReviewsPage {
    * Tải các chỉ số đầu trang.
    *
    * Tách khỏi `reload()` vì bấm sang trang không làm mấy con số này đổi: gọi lại chúng
-   * ở mỗi lần phân trang là bốn truy vấn thừa cho một thông tin không thay đổi. Chúng
-   * chỉ cần chạy lại khi dữ liệu thật sự đổi — lần đầu vào trang, đổi bộ lọc, và sau
-   * mỗi thao tác duyệt/ẩn.
+   * ở mỗi lần phân trang là các truy vấn thừa cho một thông tin không thay đổi.
    */
   loadCounts(): void {
     const countOnly = (params: Record<string, string>) =>
       this.api.listReviews({ ...params, limit: '1' }).pipe(catchError(() => of(EMPTY_LIST)));
 
     forkJoin({
-      pending: countOnly({ status: 'pending' }),
       approved: countOnly({ status: 'approved' }),
       rejected: countOnly({ status: 'rejected' }),
       urgent: countOnly({ urgent: 'true' }),
     }).subscribe((payload) => {
-      this.pendingCount.set(adminListCount(payload.pending));
       this.hiddenCount.set(adminListCount(payload.rejected));
       this.urgentCount.set(adminListCount(payload.urgent));
-      // "Đã xử lý" là mọi đánh giá đã rời khỏi hàng chờ, gồm cả đã duyệt lẫn đã ẩn.
       this.processedCount.set(adminListCount(payload.approved) + adminListCount(payload.rejected));
     });
   }

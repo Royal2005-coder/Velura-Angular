@@ -94,6 +94,9 @@
                         <img [src]="imageUrl(product)" [alt]="product.name" />
                         <span>
                           <strong>{{ product.name }}</strong>
+                          @if (product.is_combo) {
+                            <span class="admin-badge admin-badge--active" style="margin-left: 6px; font-size: 0.6875rem;">Combo</span>
+                          }
                           <small>{{ product.collection || '' }}</small>
                         </span>
                       </div>
@@ -286,12 +289,12 @@
           </label>
           @if (overlay() === 'create') {
             <label class="admin-form-group">
-              <span class="admin-form-label">Giá gốc</span>
+              <span class="admin-form-label">Giá gốc (niêm yết) <b>*</b></span>
               <input class="admin-form-control" name="basePrice" type="number" min="0" required />
             </label>
             <label class="admin-form-group">
-              <span class="admin-form-label">Giá bán</span>
-              <input class="admin-form-control" name="salePrice" type="number" min="0" />
+              <span class="admin-form-label">Giá bán (khuyến mãi)</span>
+              <input class="admin-form-control" name="salePrice" type="number" min="0" placeholder="Bỏ trống nếu bằng giá gốc" />
             </label>
             <label class="admin-form-group">
               <span class="admin-form-label">Trạng thái</span>
@@ -304,25 +307,157 @@
               <span class="admin-form-label">Tồn kho ban đầu</span>
               <input class="admin-form-control" name="initialStock" type="number" min="0" value="0" />
             </label>
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 0.875rem; margin-top: 8px; cursor: pointer; color: var(--text-body);">
+              <input type="checkbox" name="isCombo" />
+              <strong>Sản phẩm Combo / Bộ phối đồ (Set nhiều món)</strong>
+            </label>
           }
           @if (overlay() === 'edit') {
-            <div class="admin-form-group">
-              <span class="admin-form-label">Giá gốc</span>
-              <p class="admin-table-note">{{ money(selected()?.base_price) }}</p>
-            </div>
-            <div class="admin-form-group">
-              <span class="admin-form-label">Giá bán</span>
-              <p class="admin-table-note">{{ money(selected()?.sale_price) }}</p>
-            </div>
-            <p class="admin-table-note">
-              Giá chỉ đọc tại catalog.
-              @if (canOpenPricing()) {
-                <a routerLink="/pricing" [queryParams]="{ q: selected()?.sku || selected()?.product_id }">Xem / đổi giá &amp; lịch sử</a>
-              } @else {
-                Đổi giá do admin giá thực hiện tại module Pricing.
+            <div style="background: var(--field-bg); padding: 14px; border-radius: var(--radius-md); border: 1px solid var(--line); margin: 10px 0;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <h4 style="margin: 0; font-size: 0.9375rem; font-weight: 600; color: var(--ink);">Chính sách Giá &amp; Khuyến mãi</h4>
+                @if (editDiscountPct() > 0) {
+                  <span class="admin-badge admin-badge--active">Giảm {{ editDiscountPct() }}%</span>
+                }
+              </div>
+
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                <label class="admin-form-group" style="margin: 0;">
+                  <span class="admin-form-label">Giá gốc (niêm yết) <b>*</b></span>
+                  <input
+                    class="admin-form-control"
+                    type="number"
+                    min="0"
+                    step="1000"
+                    [value]="editBasePrice()"
+                    (input)="editBasePrice.set($any($event.target).valueAsNumber || 0)"
+                    [readOnly]="!canMutate()"
+                    required
+                  />
+                </label>
+
+                <label class="admin-form-group" style="margin: 0;">
+                  <span class="admin-form-label">Giá bán (khuyến mãi)</span>
+                  <input
+                    class="admin-form-control"
+                    type="number"
+                    min="0"
+                    step="1000"
+                    [value]="editSalePrice() ?? ''"
+                    (input)="editSalePrice.set($any($event.target).value ? $any($event.target).valueAsNumber : null)"
+                    [readOnly]="!canMutate()"
+                    placeholder="Để trống nếu bằng giá gốc"
+                  />
+                </label>
+              </div>
+
+              @if (editPriceInvalid()) {
+                <p class="field__error" role="alert" style="margin-top: 6px;">Giá bán khuyến mãi không được lớn hơn giá gốc.</p>
               }
-            </p>
-            <h3 class="admin-drawer__section">Lịch sử giá gần đây</h3>
+
+              <label class="admin-form-group" style="margin-top: 10px;">
+                <span class="admin-form-label">Lý do điều chỉnh giá</span>
+                <input
+                  class="admin-form-control"
+                  [value]="editPriceReason()"
+                  (input)="editPriceReason.set($any($event.target).value)"
+                  placeholder="VD: Điều chỉnh giá theo chiến dịch, cập nhật giá nhập xưởng..."
+                  [readOnly]="!canMutate()"
+                />
+              </label>
+            </div>
+
+            <!-- Nếu sản phẩm là Combo: Quản lý thành phần combo ngay tại đây -->
+            @if (selected()?.is_combo) {
+              <div style="background: #fbf8f5; border: 1px solid #ebd9c8; border-radius: var(--radius-md); padding: 14px; margin: 16px 0;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
+                  <div>
+                    <h4 style="margin: 0; font-size: 0.9375rem; font-weight: 600; color: #7c5454;">Thành phần Combo / Set phối đồ</h4>
+                    <small style="color: #6b5c52;">Các sản phẩm con cấu thành set đồ này (mặc định thêm vào là 1 sản phẩm)</small>
+                  </div>
+                  @if (comboItems().length) {
+                    <div style="text-align: right; font-size: 0.8125rem;">
+                      <div>Tổng giá gốc các món: <strong>{{ money(comboTotalOriginal()) }}</strong></div>
+                      @if (comboSavings() > 0) {
+                        <div style="color: #2e7d32; font-weight: 600;">Khách tiết kiệm: {{ money(comboSavings()) }} ({{ comboSavingsPct() }}%)</div>
+                      }
+                    </div>
+                  }
+                </div>
+
+                @if (comboLoading()) {
+                  <p class="admin-table-note">Đang tải thành phần combo...</p>
+                } @else if (comboItems().length) {
+                  <div class="admin-table-wrap" style="margin-bottom: 12px;">
+                    <table class="admin-table" style="font-size: 0.8125rem;">
+                      <thead>
+                        <tr>
+                          <th>Sản phẩm con</th>
+                          <th>Giá đơn lẻ</th>
+                          <th style="width: 110px;">Số lượng</th>
+                          <th>Thành tiền</th>
+                          <th style="width: 50px;"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        @for (item of comboItems(); track item.combo_item_id) {
+                          <tr>
+                            <td>
+                              <div style="display: flex; align-items: center; gap: 8px;">
+                                @if (item.product?.images?.[0]) {
+                                  <img [src]="item.product!.images![0]" style="width: 32px; height: 32px; border-radius: 4px; object-fit: cover;" alt="" />
+                                }
+                                <div>
+                                  <strong>{{ item.product?.name || item.component_product_id }}</strong>
+                                  <small style="display: block; color: var(--muted);">{{ item.product?.sku }}</small>
+                                </div>
+                              </div>
+                            </td>
+                            <td>{{ money(item.product?.sale_price || item.product?.base_price) }}</td>
+                            <td>
+                              <div style="display: inline-flex; align-items: center; gap: 4px;">
+                                <button type="button" class="admin-icon-button admin-icon-button--sm" [disabled]="item.quantity <= 1 || !canMutate()" (click)="changeComboItemQuantity(item, -1)">−</button>
+                                <span style="min-width: 24px; text-align: center; font-weight: 600;">{{ item.quantity }}</span>
+                                <button type="button" class="admin-icon-button admin-icon-button--sm" [disabled]="!canMutate()" (click)="changeComboItemQuantity(item, 1)">+</button>
+                              </div>
+                            </td>
+                            <td><strong>{{ itemTotal(item) }}</strong></td>
+                            <td>
+                              @if (canMutate()) {
+                                <button type="button" class="admin-icon-button admin-icon-button--sm" title="Xóa món này khỏi combo" (click)="removeComboItem(item)" style="color: var(--error);">×</button>
+                              }
+                            </td>
+                          </tr>
+                        }
+                      </tbody>
+                    </table>
+                  </div>
+                } @else {
+                  <p class="admin-table-note" style="margin-bottom: 12px;">Chưa có sản phẩm con nào trong Combo này. Vui lòng thêm bên dưới.</p>
+                }
+
+                @if (canMutate()) {
+                  <div style="display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; background: #fff; padding: 10px 12px; border-radius: 6px; border: 1px solid #ebd9c8;">
+                    <label style="flex: 1 1 240px; margin: 0;">
+                      <span style="display: block; font-size: 0.75rem; color: #6b5c52; margin-bottom: 3px;">Chọn sản phẩm thêm vào combo:</span>
+                      <select class="admin-form-control" [value]="selectedComponentId()" (change)="selectedComponentId.set($any($event.target).value)">
+                        <option value="">-- Chọn sản phẩm --</option>
+                        @for (comp of availableComponentProducts(); track comp.product_id) {
+                          <option [value]="comp.product_id">{{ comp.sku }} - {{ comp.name }} ({{ price(comp) }})</option>
+                        }
+                      </select>
+                    </label>
+                    <label style="width: 80px; margin: 0;">
+                      <span style="display: block; font-size: 0.75rem; color: #6b5c52; margin-bottom: 3px;">Số lượng:</span>
+                      <input class="admin-form-control" type="number" min="1" [value]="addComboQuantity()" (input)="addComboQuantity.set($any($event.target).valueAsNumber || 1)" />
+                    </label>
+                    <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" [disabled]="!selectedComponentId()" (click)="submitAddComboItem()">+ Thêm vào Combo</button>
+                  </div>
+                }
+              </div>
+            }
+
+            <h3 class="admin-drawer__section">Lịch sử điều chỉnh giá</h3>
             @if (priceHistory().length) {
               <div class="admin-table-wrap">
                 <table class="admin-table">
@@ -340,7 +475,7 @@
                 </table>
               </div>
             } @else {
-              <p class="admin-table-note">Chưa có bản ghi price_history. Đổi giá tại module Pricing.</p>
+              <p class="admin-table-note">Chưa có lịch sử thay đổi giá cho sản phẩm này.</p>
             }
           }
           <label class="admin-form-group">

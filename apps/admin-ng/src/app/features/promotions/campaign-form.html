@@ -86,10 +86,13 @@
                 <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="clearBanner()">Gỡ ảnh</button>
               }
             </div>
+            <div style="margin-top: 8px;">
+              <input class="admin-form-control" type="text" [value]="bannerUrl()" (input)="onBannerUrlInput($event)" placeholder="Hoặc dán trực tiếp link ảnh: https://..." [readOnly]="!canMutate()" />
+            </div>
             @if (uploading()) {
-              <p class="admin-form-helper">Đang tải ảnh lên…</p>
+              <p class="admin-form-helper">Đang nén &amp; tải ảnh lên…</p>
             }
-            <small class="admin-form-helper">JPG, PNG, WebP hoặc GIF, tối đa 5 MB.</small>
+            <small class="admin-form-helper">JPG, PNG, WebP hoặc GIF (hệ thống tự động tối ưu chuẩn hiển thị).</small>
           }
         </div>
 

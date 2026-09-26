@@ -201,10 +201,27 @@ export function createProductRepository() {
     },
 
     async getComboItems(productId: string, accessToken: string | null) {
-      return withProductError(() => selectRows("combo_item", {
-        select: "combo_item_id,combo_product_id,component_product_id,component_variant_id,quantity",
-        combo_product_id: `eq.${productId}`
-      }, authOptions(accessToken)));
+      return withProductError(async () => {
+        const result = await selectRows("combo_item", {
+          select: "combo_item_id,combo_product_id,component_product_id,component_variant_id,quantity",
+          combo_product_id: `eq.${productId}`
+        }, authOptions(accessToken));
+        const items = (result.rows || []) as Array<Record<string, unknown>>;
+        if (!items.length) return items;
+        const compIds = [...new Set(items.map((i) => String(i.component_product_id || "")).filter(Boolean))];
+        if (compIds.length > 0) {
+          const compProducts = await selectRows("product", {
+            select: "product_id,name,sku,base_price,sale_price,images",
+            product_id: `in.(${compIds.join(",")})`
+          }, authOptions(accessToken));
+          const compMap = new Map(((compProducts.rows || []) as Array<Record<string, unknown>>).map((p) => [String(p.product_id), p]));
+          return items.map((i) => ({
+            ...i,
+            product: compMap.get(String(i.component_product_id)) || null
+          }));
+        }
+        return items;
+      });
     },
 
     async addComboItem(

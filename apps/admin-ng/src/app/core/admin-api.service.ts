@@ -1,6 +1,6 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable } from 'rxjs';
+import { Observable, map } from 'rxjs';
 import { environment } from '../../environments/environment';
 import { AdminAuthMe } from './admin-session.service';
 import { AdminListPayload } from './admin-http';
@@ -261,6 +261,22 @@ export interface AdminProductRow {
   is_featured?: boolean;
   version?: number;
   variants?: AdminProductVariant[];
+}
+
+export interface AdminComboItemRow {
+  combo_item_id: string;
+  combo_product_id: string;
+  component_product_id: string;
+  component_variant_id?: string | null;
+  quantity: number;
+  product?: {
+    product_id: string;
+    name: string;
+    sku?: string;
+    base_price?: number;
+    sale_price?: number | null;
+    images?: string[];
+  } | null;
 }
 
 export interface AdminCategoryRow {
@@ -871,6 +887,44 @@ export class AdminApiService {
    */
   commitCsv(csv: string): Observable<unknown> {
     return this.http.post(`${this.baseUrl}/api/v1/admin/products/import-csv/commit`, { csv });
+  }
+
+  /**
+   * Danh sách thành phần sản phẩm trong combo.
+   */
+  listComboItems(productId: string): Observable<AdminComboItemRow[]> {
+    return this.http
+      .get<{ data?: AdminComboItemRow[] }>(`${this.baseUrl}/api/v1/admin/products/${encodeURIComponent(productId)}/combo-items`)
+      .pipe(map((res) => res.data || []));
+  }
+
+  /**
+   * Thêm sản phẩm thành phần vào combo.
+   */
+  addComboItem(productId: string, body: { componentProductId: string; componentVariantId?: string | null; quantity: number }): Observable<AdminComboItemRow> {
+    return this.http.post<AdminComboItemRow>(
+      `${this.baseUrl}/api/v1/admin/products/${encodeURIComponent(productId)}/combo-items`,
+      body,
+    );
+  }
+
+  /**
+   * Cập nhật số lượng của sản phẩm thành phần trong combo.
+   */
+  updateComboItem(productId: string, itemId: string, body: { quantity: number }): Observable<AdminComboItemRow> {
+    return this.http.patch<AdminComboItemRow>(
+      `${this.baseUrl}/api/v1/admin/products/${encodeURIComponent(productId)}/combo-items/${encodeURIComponent(itemId)}`,
+      body,
+    );
+  }
+
+  /**
+   * Xóa sản phẩm thành phần khỏi combo.
+   */
+  removeComboItem(productId: string, itemId: string): Observable<unknown> {
+    return this.http.delete(
+      `${this.baseUrl}/api/v1/admin/products/${encodeURIComponent(productId)}/combo-items/${encodeURIComponent(itemId)}`,
+    );
   }
 
   /**

@@ -34,6 +34,12 @@ export async function handleStripeWebhook(req: HttpRequest, res: HttpResponse, c
 }
 
 async function readRawBody(req: HttpRequest): Promise<string> {
+  const reqObj = req as { rawBody?: unknown; body?: unknown };
+  if (typeof reqObj.rawBody === "string") return reqObj.rawBody;
+  if (Buffer.isBuffer(reqObj.rawBody)) return reqObj.rawBody.toString("utf8");
+  if (typeof reqObj.body === "string") return reqObj.body;
+  if (Buffer.isBuffer(reqObj.body)) return reqObj.body.toString("utf8");
+
   const chunks: Buffer[] = [];
   const iterator = req[Symbol.asyncIterator];
   if (typeof iterator !== "function") {

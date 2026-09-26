@@ -1,11 +1,11 @@
 import { Component, computed, inject, signal } from '@angular/core';
-import { RouterLink } from '@angular/router';
 import { forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import {
   AdminApiService,
   AdminAuditRow,
   AdminCategoryRow,
+  AdminComboItemRow,
   AdminPriceHistoryRow,
   AdminProductRow,
   AdminProductVariant,
@@ -60,7 +60,7 @@ interface CsvPreviewResult {
  */
 @Component({
   selector: 'app-admin-products-page',
-  imports: [AdminEmptyState, AdminIcon, AdminPagination, RouterLink, AdminTableSkeleton],
+  imports: [AdminEmptyState, AdminIcon, AdminPagination, AdminTableSkeleton],
   templateUrl: './admin-products.page.html',
 })
 export class AdminProductsPage {
@@ -110,6 +110,55 @@ export class AdminProductsPage {
   readonly imageUploading = signal(false);
   readonly canMutate = computed(() => this.session.canMutate('products'));
   readonly canOpenPricing = computed(() => this.session.canOpen('pricing'));
+
+  // Signals cho điều chỉnh giá & chiết khấu trực tiếp trên Sản phẩm
+  readonly editBasePrice = signal<number>(0);
+  readonly editSalePrice = signal<number | null>(null);
+  readonly editPriceReason = signal<string>('Cập nhật chính sách giá niêm yết & khuyến mãi');
+
+  readonly editDiscountPct = computed(() => {
+    const base = this.editBasePrice();
+    const sale = this.editSalePrice();
+    if (!sale || sale >= base || base <= 0) return 0;
+    return Math.round(((base - sale) / base) * 100);
+  });
+
+  readonly editPriceInvalid = computed(() => {
+    const sale = this.editSalePrice();
+    return sale != null && sale > this.editBasePrice();
+  });
+
+  // Signals cho quản lý thành phần Combo sản phẩm
+  readonly comboItems = signal<AdminComboItemRow[]>([]);
+  readonly comboLoading = signal(false);
+  readonly selectedComponentId = signal<string>('');
+  readonly addComboQuantity = signal<number>(1); // Mặc định là 1 sản phẩm, người dùng có thể điều chỉnh
+
+  readonly comboTotalOriginal = computed(() => {
+    return this.comboItems().reduce((sum, item) => {
+      const p = item.product;
+      const price = Number(p?.sale_price || p?.base_price || 0);
+      return sum + price * Number(item.quantity || 1);
+    }, 0);
+  });
+
+  readonly comboSavings = computed(() => {
+    const totalOrig = this.comboTotalOriginal();
+    const comboPrice = Number(this.editSalePrice() || this.editBasePrice() || 0);
+    return Math.max(0, totalOrig - comboPrice);
+  });
+
+  readonly comboSavingsPct = computed(() => {
+    const totalOrig = this.comboTotalOriginal();
+    if (totalOrig <= 0) return 0;
+    return Math.round((this.comboSavings() / totalOrig) * 100);
+  });
+
+  readonly availableComponentProducts = computed(() => {
+    const currentId = this.selected()?.product_id;
+    const existingIds = new Set(this.comboItems().map((i) => i.component_product_id));
+    return this.products().filter((p) => p.product_id !== currentId && !p.is_combo && !existingIds.has(p.product_id));
+  });
 
   // Signals cho thêm biến thể trong drawer Chi tiết sản phẩm
   readonly newVariantColor = signal('');
@@ -361,6 +410,11 @@ export class AdminProductsPage {
     return adminMoney(value);
   }
 
+  itemTotal(item: AdminComboItemRow): string {
+    const unit = Number(item.product?.sale_price || item.product?.base_price || 0);
+    return this.money(unit * Number(item.quantity || 1));
+  }
+
   /**
    * Opens create overlay with an empty form.
    */
@@ -379,10 +433,22 @@ export class AdminProductsPage {
     this.actionError.set(null);
     this.overlay.set('edit');
     this.priceHistory.set([]);
+    this.comboItems.set([]);
+    this.selectedComponentId.set('');
+    this.addComboQuantity.set(1);
+    this.editBasePrice.set(Number(product.base_price || 0));
+    this.editSalePrice.set(product.sale_price != null ? Number(product.sale_price) : null);
+    this.editPriceReason.set('Cập nhật chính sách giá niêm yết & khuyến mãi');
+
     this.adminApi.getProduct(product.product_id).subscribe({
       next: (row) => {
         this.selected.set(row);
         this.variants.set(row.variants || []);
+        this.editBasePrice.set(Number(row.base_price || 0));
+        this.editSalePrice.set(row.sale_price != null ? Number(row.sale_price) : null);
+        if (row.is_combo) {
+          this.loadComboItems(row.product_id);
+        }
       },
       error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
     });
@@ -392,6 +458,65 @@ export class AdminProductsPage {
     this.adminApi.listPriceHistory({ productId: product.product_id, limit: '10' }).subscribe({
       next: (payload) => this.priceHistory.set(adminListRows(payload)),
       error: () => this.priceHistory.set([]),
+    });
+    if (product.is_combo) {
+      this.loadComboItems(product.product_id);
+    }
+  }
+
+  loadComboItems(productId: string): void {
+    this.comboLoading.set(true);
+    this.adminApi.listComboItems(productId).subscribe({
+      next: (items) => {
+        this.comboItems.set(items);
+        this.comboLoading.set(false);
+      },
+      error: () => {
+        this.comboItems.set([]);
+        this.comboLoading.set(false);
+      },
+    });
+  }
+
+  submitAddComboItem(): void {
+    const product = this.selected();
+    const componentId = this.selectedComponentId();
+    const qty = Math.max(1, Number(this.addComboQuantity() || 1));
+    if (!product || !componentId) return;
+
+    this.adminApi
+      .addComboItem(product.product_id, {
+        componentProductId: componentId,
+        quantity: qty,
+      })
+      .subscribe({
+        next: () => {
+          this.selectedComponentId.set('');
+          this.addComboQuantity.set(1);
+          this.loadComboItems(product.product_id);
+        },
+        error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
+      });
+  }
+
+  changeComboItemQuantity(item: AdminComboItemRow, delta: number): void {
+    const product = this.selected();
+    if (!product) return;
+    const newQty = Math.max(1, item.quantity + delta);
+    if (newQty === item.quantity) return;
+
+    this.adminApi.updateComboItem(product.product_id, item.combo_item_id, { quantity: newQty }).subscribe({
+      next: () => this.loadComboItems(product.product_id),
+      error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
+    });
+  }
+
+  removeComboItem(item: AdminComboItemRow): void {
+    const product = this.selected();
+    if (!product) return;
+    this.adminApi.removeComboItem(product.product_id, item.combo_item_id).subscribe({
+      next: () => this.loadComboItems(product.product_id),
+      error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
     });
   }
 
@@ -490,6 +615,7 @@ export class AdminProductsPage {
       const salePrice = Number((form.elements.namedItem('salePrice') as HTMLInputElement).value || basePrice);
       const status = (form.elements.namedItem('createStatus') as HTMLSelectElement).value || 'on_sale';
       const initialStock = Number((form.elements.namedItem('initialStock') as HTMLInputElement).value || 0);
+      const isCombo = (form.elements.namedItem('isCombo') as HTMLInputElement | null)?.checked ?? false;
       this.adminApi
         .createProduct({
           sku,
@@ -503,6 +629,7 @@ export class AdminProductsPage {
           description,
           images,
           initialStock,
+          isCombo,
           expectedVersion: 0,
         })
         .subscribe({
@@ -519,22 +646,52 @@ export class AdminProductsPage {
       this.actionError.set('Thiếu phiên bản sản phẩm để cập nhật.');
       return;
     }
-    this.adminApi
-      .updateProduct(product.product_id, {
-        name,
-        categoryId,
-        collection,
-        description,
-        images,
-        expectedVersion: product.version,
-      })
-      .subscribe({
-        next: () => {
-          this.closeOverlays();
-          this.reloadCatalog();
-        },
-        error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
-      });
+
+    if (this.editPriceInvalid()) {
+      this.actionError.set('Giá bán khuyến mãi không được lớn hơn giá gốc.');
+      return;
+    }
+
+    const currentBase = Number(product.base_price || 0);
+    const currentSale = product.sale_price != null ? Number(product.sale_price) : null;
+    const newBase = this.editBasePrice();
+    const newSale = this.editSalePrice();
+    const priceChanged = newBase !== currentBase || newSale !== currentSale;
+
+    const saveDetails = () => {
+      this.adminApi
+        .updateProduct(product.product_id, {
+          name,
+          categoryId,
+          collection,
+          description,
+          images,
+          expectedVersion: product.version,
+        })
+        .subscribe({
+          next: () => {
+            this.closeOverlays();
+            this.reloadCatalog();
+          },
+          error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
+        });
+    };
+
+    if (priceChanged) {
+      this.adminApi
+        .changePrice(product.product_id, {
+          newBasePrice: newBase,
+          newSalePrice: newSale,
+          reason: this.editPriceReason() || 'Cập nhật giá từ quản lý sản phẩm',
+          expectedVersion: product.version,
+        })
+        .subscribe({
+          next: () => saveDetails(),
+          error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
+        });
+    } else {
+      saveDetails();
+    }
   }
 
   /**
@@ -835,10 +992,10 @@ export class AdminProductsPage {
           return of({ rows: [] as AdminProductRow[], count: 0 });
         }),
       ),
-      onSale: this.adminApi.listProducts({ status: 'on_sale', limit: '1' }).pipe(catchError(() => of({ rows: [], count: 0 }))),
-      hidden: this.adminApi.listProducts({ status: 'hidden', limit: '1' }).pipe(catchError(() => of({ rows: [], count: 0 }))),
-      out: this.adminApi.listProducts({ status: 'out_of_stock', limit: '1' }).pipe(catchError(() => of({ rows: [], count: 0 }))),
-      low: this.adminApi.listLowStock().pipe(catchError(() => of({ rows: [] as AdminProductRow[] }))),
+      onSale: this.adminApi.listProducts({ status: 'on_sale', limit: '1' }).pipe(catchError(() => of({ rows: [] as AdminProductRow[], count: 0 }))),
+      hidden: this.adminApi.listProducts({ status: 'hidden', limit: '1' }).pipe(catchError(() => of({ rows: [] as AdminProductRow[], count: 0 }))),
+      out: this.adminApi.listProducts({ status: 'out_of_stock', limit: '1' }).pipe(catchError(() => of({ rows: [] as AdminProductRow[], count: 0 }))),
+      low: this.adminApi.listLowStock().pipe(catchError(() => of({ rows: [] as AdminProductRow[], count: 0 }))),
     }).subscribe((payload) => {
       this.products.set(adminListRows(payload.list));
       this.total.set(adminListCount(payload.list));

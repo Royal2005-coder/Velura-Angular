@@ -11,7 +11,7 @@ import {
 } from "../types.js";
 
 const STORAGE_BUCKET = "return-evidence";
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
 /** Nơi cất tệp: kho chứa và thư mục con bên trong kho. */

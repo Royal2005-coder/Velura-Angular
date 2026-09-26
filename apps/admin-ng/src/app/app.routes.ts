@@ -96,10 +96,8 @@ export const routes: Routes = [
       },
       {
         path: 'pricing',
-        loadComponent: () => import('./features/pricing/admin-pricing.page').then((m) => m.AdminPricingPage),
-        canActivate: [adminAuthGuard],
-        data: { title: 'Quản lý giá', page: 'pricing' },
-        title: 'Quản lý giá',
+        redirectTo: 'products',
+        pathMatch: 'full',
       },
       {
         path: 'promotions',

@@ -221,7 +221,9 @@ test("production disables hardcoded OTP shortcuts and fabricated notifications",
   ]);
   assert.match(config, /export function allowDevOtpBypass/);
   assert.match(auth, /allowDevOtpBypass\(\)/);
-  assert.match(orders, /allowDevOtpBypass\(\)/);
+  assert.doesNotMatch(orders, /otp_code\s*!==\s*["']1234["']/);
+  assert.match(orders, /generateCheckoutOtp\(\)/);
+  assert.doesNotMatch(orders, /temp_password/);
   assert.doesNotMatch(notifications, /welcome-default|promo-default/);
   assert.match(notifications, /notifications: \[\]/);
   assert.match(blog, /\/api\/content\/blogs/);

@@ -11,6 +11,7 @@ import {
 } from "../auth-lockout.js";
 import { createNotification } from "./notifications.js";
 import { sendAuthOtpSms } from "../sms/twilio.js";
+import { hashCheckoutActivationToken } from "./checkout-service.js";
 import {
   asJsonObject,
   asString,
@@ -186,6 +187,44 @@ export async function handleAuthRoute(
     }
 
     return sendJson(res, 200, { exists }, corsHeaders);
+  }
+
+  // POST /api/user/auth/activate — guest đặt mật khẩu qua token dùng một lần.
+  if (action === "activate" && req.method === "POST") {
+    const body = await readJson(req);
+    const token = asString(body.token).trim();
+    const password = asString(body.password);
+    if (!token) {
+      throw new HttpError(400, "ACTIVATION_TOKEN_REQUIRED", "Liên kết kích hoạt không hợp lệ");
+    }
+    if (!validatePassword(password)) {
+      throw new HttpError(422, "INVALID_PASSWORD", "Mật khẩu phải dài tối thiểu 8 ký tự, bao gồm ít nhất một chữ hoa, một chữ thường và một số hoặc ký tự đặc biệt");
+    }
+
+    const user = await selectOne("users", {
+      activation_token_hash: `eq.${hashCheckoutActivationToken(token)}`
+    });
+    if (!user || !user.activation_expires_at || new Date(String(user.activation_expires_at)).getTime() <= Date.now()) {
+      throw new HttpError(400, "ACTIVATION_TOKEN_INVALID", "Liên kết kích hoạt không hợp lệ hoặc đã hết hạn");
+    }
+
+    await updateRows("users", { user_id: `eq.${user.user_id}` }, {
+      password_hash: hashPassword(password),
+      is_active: true,
+      activation_token_hash: null,
+      activation_expires_at: null,
+      updated_at: new Date().toISOString()
+    });
+    const jwt = signJwt({
+      user_id: user.user_id,
+      email: user.email || `${user.phone}@velura.vn`,
+      role: "member"
+    });
+    return sendJson(res, 200, {
+      success: true,
+      token: jwt,
+      message: "Tài khoản đã được kích hoạt"
+    }, corsHeaders);
   }
 
   // POST /api/user/auth/signup

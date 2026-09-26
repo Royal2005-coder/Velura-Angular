@@ -61,9 +61,6 @@
             Vui lòng nhập mã OTP để hoàn tất đơn hàng.
           }
         </p>
-        @if (devBypass()) {
-          <p class="otp-modal__desc">Máy local có thể nhập 1234.</p>
-        }
         <form (submit)="$event.preventDefault()">
           <div class="otp-inputs" role="group" aria-label="Mã OTP 4 chữ số">
             @for (digit of digits(); track $index) {

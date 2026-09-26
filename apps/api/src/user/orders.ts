@@ -550,6 +550,7 @@ export async function handleOrdersRoute(
 
     // POST /api/user/orders/:id/switch-cod hoặc POST /api/user/orders/switch-cod
     if (((action && parts[4] === "switch-cod") || action === "switch-cod") && req.method === "POST") {
+      const profile = requireUserAuth(context);
       const body = await readJson(req);
       const targetOrderId = (action !== "switch-cod" ? action : asString(body.order_id || body.orderId)) || "";
       const order = await selectOne("orders", { order_id: `eq.${targetOrderId}` }) ||
@@ -557,6 +558,7 @@ export async function handleOrdersRoute(
       if (!order) {
         throw new HttpError(404, "NOT_FOUND", "Không tìm thấy đơn hàng");
       }
+      assertOrderVisibleTo(order, profile);
       if (order.status !== "pending" && order.status !== "waiting_payment") {
         throw new HttpError(400, "INVALID_STATE", "Đơn hàng không ở trạng thái chờ thanh toán");
       }
@@ -593,26 +595,33 @@ export async function handleOrdersRoute(
 
     // POST /api/user/orders/:id/payment-failed hoặc POST /api/user/orders/payment-failed
     if (((action && parts[4] === "payment-failed") || action === "payment-failed") && req.method === "POST") {
+      const profile = requireUserAuth(context);
       const body = await readJson(req);
       const targetOrderId = (action !== "payment-failed" ? action : asString(body.order_id || body.orderId)) || "";
       const order = await selectOne("orders", { order_id: `eq.${targetOrderId}` }) ||
                     await selectOne("orders", { order_code: `eq.${quotePostgrestValue(targetOrderId.toUpperCase())}` });
-      if (order) {
-        try {
-          await updateRows("payment", { order_id: `eq.${order.order_id}`, payment_status: "eq.pending" }, {
-            payment_status: "failed",
-            gateway_response_code: "TIMEOUT_OR_CANCELLED",
-            updated_at: new Date().toISOString()
-          });
-        } catch {
-          /* ignore */
-        }
+      if (!order) {
+        throw new HttpError(404, "NOT_FOUND", "Không tìm thấy đơn hàng");
+      }
+      assertOrderVisibleTo(order, profile);
+      try {
+        await updateRows("payment", { order_id: `eq.${order.order_id}`, payment_status: "eq.pending" }, {
+          payment_status: "failed",
+          gateway_response_code: "TIMEOUT_OR_CANCELLED",
+          updated_at: new Date().toISOString()
+        });
+      } catch {
+        /* ignore */
       }
       return sendJson(res, 200, { success: true, message: "Đã cập nhật trạng thái thanh toán" }, corsHeaders);
     }
 
     // POST /api/user/orders/:id/confirm-payment hoặc POST /api/user/orders/confirm-payment
     if (((action && parts[4] === "confirm-payment") || action === "confirm-payment") && req.method === "POST") {
+      const profile = requireUserAuth(context);
+      if (config.nodeEnv === "production") {
+        throw new HttpError(403, "DEMO_PAYMENT_DISABLED", "Xác nhận thanh toán demo không được phép trên production");
+      }
       const body = await readJson(req);
       const targetOrderId = (action !== "confirm-payment" ? action : asString(body.order_id || body.orderId)) || "";
       const order = await selectOne("orders", { order_id: `eq.${targetOrderId}` }) ||
@@ -620,6 +629,7 @@ export async function handleOrdersRoute(
       if (!order) {
         throw new HttpError(404, "NOT_FOUND", "Không tìm thấy đơn hàng");
       }
+      assertOrderVisibleTo(order, profile);
       if (order.status !== "pending" && order.status !== "waiting_payment") {
         throw new HttpError(400, "INVALID_STATE", "Đơn hàng không ở trạng thái chờ thanh toán");
       }
@@ -734,11 +744,6 @@ export async function handleOrdersRoute(
         throw new HttpError(503, "OTP_SERVICE_UNAVAILABLE", "Chưa cấu hình dịch vụ SMS hoặc email để gửi mã OTP.");
       }
       
-      const existingUser = await selectOne("users", { phone: `eq.${phone}` });
-      const existingUserByEmail = email ? await selectOne("users", { email: `eq.${email}` }) : null;
-      // Nếu số điện thoại hoặc email đã thuộc thành viên, KHÔNG CHẶN mà vẫn gửi OTP bình thường
-      const userId = existingUser ? existingUser.user_id : (existingUserByEmail ? existingUserByEmail.user_id : null);
-      
       const otpCode = generateCheckoutOtp();
       const otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
       
@@ -820,8 +825,7 @@ export async function handleOrdersRoute(
         message,
         channel,
         masked_phone: maskPhone(phone),
-        masked_email: otpEmail ? maskEmail(otpEmail) : null,
-        user_id: userId
+        masked_email: otpEmail ? maskEmail(otpEmail) : null
       }, corsHeaders);
     }
 
@@ -1282,6 +1286,10 @@ export async function handleOrdersRoute(
       if (body.save_address === true) {
         await appendCheckoutAddress(asString(profile.user_id), memberContact, {
           detail: asString(shipping_address),
+          address: asString(shipping_address),
+          province: asString(body.shipping_province),
+          district: asString(body.shipping_district),
+          ward: asString(body.shipping_ward),
           isDefault: body.address_is_default === true
         });
       }

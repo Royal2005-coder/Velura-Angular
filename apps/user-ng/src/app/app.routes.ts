@@ -24,6 +24,11 @@ export const routes: Routes = [
     title: 'Velura — Đặt lại mật khẩu',
   },
   {
+    path: 'auth/activate',
+    loadComponent: () => import('./features/auth/activate-account.page').then((m) => m.ActivateAccountPage),
+    title: 'Kích hoạt tài khoản - Velura',
+  },
+  {
     path: 'auth/callback',
     loadComponent: () => import('./features/auth/auth-callback.page').then((m) => m.AuthCallbackPage),
     title: 'Xác thực Google - Velura',

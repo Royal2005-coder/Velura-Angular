@@ -87,7 +87,7 @@ test("member checkout appends a saved address without overwriting existing entri
   const result = buildSavedAddressBook(
     [{ id: "old", detail: "Địa chỉ cũ", is_default: true }],
     { fullName: "Nguyễn Văn An", phone: "0912345678", email: null },
-    { detail: "Địa chỉ mới" },
+    { detail: "123 Nguyễn Huệ", province: "TP.HCM", district: "Quận 1", ward: "Bến Nghé" },
     "addr_new"
   );
   assert.equal(result.addresses.length, 2);
@@ -96,7 +96,11 @@ test("member checkout appends a saved address without overwriting existing entri
     id: "addr_new",
     name: "Nguyễn Văn An",
     phone: "0912345678",
-    detail: "Địa chỉ mới",
+    detail: "123 Nguyễn Huệ",
+    address: "123 Nguyễn Huệ",
+    province: "TP.HCM",
+    district: "Quận 1",
+    ward: "Bến Nghé",
     is_default: false
   });
 });

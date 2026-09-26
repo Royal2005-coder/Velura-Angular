@@ -223,6 +223,13 @@ export async function handleAuthRoute(
     return sendJson(res, 200, {
       success: true,
       token: jwt,
+      user: {
+        user_id: user.user_id,
+        email: user.email || null,
+        phone: user.phone || null,
+        full_name: user.full_name,
+        role: "member"
+      },
       message: "Tài khoản đã được kích hoạt"
     }, corsHeaders);
   }

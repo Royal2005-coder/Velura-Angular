@@ -7,6 +7,10 @@ import type { CheckoutContact } from "./checkout-service.js";
 /** Địa chỉ checkout được ghi thêm vào sổ địa chỉ của Member. */
 export interface CheckoutAddressInput {
   detail: string;
+  address?: string;
+  province?: string;
+  district?: string;
+  ward?: string;
   isDefault?: boolean;
 }
 
@@ -34,6 +38,10 @@ export function buildSavedAddressBook(
     name: contact.fullName,
     phone: contact.phone,
     detail,
+    address: String(input.address ?? detail).trim(),
+    province: String(input.province ?? "").trim(),
+    district: String(input.district ?? "").trim(),
+    ward: String(input.ward ?? "").trim(),
     is_default: makeDefault
   };
   return { entry, addresses: [...normalized, entry] };

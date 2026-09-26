@@ -212,10 +212,12 @@ test("profile birthday validation stays on the API contract", async () => {
 });
 
 test("production disables hardcoded OTP shortcuts and fabricated notifications", async () => {
-  const [config, auth, orders, notifications, blog] = await Promise.all([
+  const [config, auth, orders, otpPage, confirmationPage, notifications, blog] = await Promise.all([
     source("apps/api/src/config.ts"),
     source("apps/api/src/user/auth.ts"),
     source("apps/api/src/user/orders.ts"),
+    source("apps/user-ng/src/app/features/checkout/otp.page.ts"),
+    source("apps/user-ng/src/app/features/checkout/checkout-confirm.page.ts"),
     source("apps/api/src/user/notifications.ts"),
     source("apps/user-ng/src/app/core/services/blog-catalog.service.ts")
   ]);
@@ -223,7 +225,12 @@ test("production disables hardcoded OTP shortcuts and fabricated notifications",
   assert.match(auth, /allowDevOtpBypass\(\)/);
   assert.doesNotMatch(orders, /otp_code\s*!==\s*["']1234["']/);
   assert.match(orders, /generateCheckoutOtp\(\)/);
+  assert.match(orders, /action === "switch-cod"[\s\S]{0,300}requireUserAuth\(context\)/);
+  assert.match(orders, /action === "payment-failed"[\s\S]{0,300}requireUserAuth\(context\)/);
+  assert.match(orders, /action === "confirm-payment"[\s\S]{0,300}DEMO_PAYMENT_DISABLED/);
   assert.doesNotMatch(orders, /temp_password/);
+  assert.doesNotMatch(otpPage, /temp_password|guest_temp_password|applySession/);
+  assert.doesNotMatch(confirmationPage, /guest_temp_password/);
   assert.doesNotMatch(notifications, /welcome-default|promo-default/);
   assert.match(notifications, /notifications: \[\]/);
   assert.match(blog, /\/api\/content\/blogs/);

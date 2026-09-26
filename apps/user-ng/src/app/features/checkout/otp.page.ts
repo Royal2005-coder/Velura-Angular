@@ -1,6 +1,5 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
-import { AuthService } from '../../core/services/auth.service';
 import { CartLine } from '../../core/services/cart.store';
 import { CheckoutStore } from '../../core/services/checkout.store';
 import { ApiService } from '../../core/services/api.service';
@@ -13,9 +12,7 @@ import type { VoucherChangedDetails } from '../../core/models/voucher.interface'
 interface OtpVerifyResponse {
   success?: boolean;
   message?: string;
-  token?: string;
-  user?: Record<string, unknown>;
-  temp_password?: string;
+  activation_required?: boolean;
   stripe?: { url?: string };
   order?: {
     order_id?: string;
@@ -34,7 +31,6 @@ interface OtpVerifyResponse {
 export class CheckoutOtpPage {
   private readonly checkout = inject(CheckoutStore);
   private readonly api = inject(ApiService);
-  private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
 
   readonly digits = signal(['', '', '', '']);
@@ -45,7 +41,6 @@ export class CheckoutOtpPage {
   readonly maskedEmail = signal(this.readMaskedEmail());
   readonly maskedPhone = signal(this.readMaskedPhone());
   readonly channel = signal<'sms' | 'email' | 'both'>('sms');
-  readonly devBypass = signal(false);
   readonly items = computed(() => this.checkout.readCheckoutItems());
   readonly totalLabel = computed(() => {
     const total = this.items().reduce((sum, line) => sum + line.unit_price * line.quantity, 0);
@@ -102,7 +97,6 @@ export class CheckoutOtpPage {
         channel?: 'sms' | 'email' | 'both';
         masked_phone?: string;
         masked_email?: string;
-        dev_bypass?: boolean;
       }>('/api/user/orders/otp-send', {
         phone: payload['phone'],
         email: payload['email'] || '',
@@ -122,7 +116,6 @@ export class CheckoutOtpPage {
             if (res.channel) {
               this.channel.set(res.channel);
             }
-            this.devBypass.set(res.dev_bypass === true);
             showToast(res.message || 'Mã OTP mới đã được gửi thành công.');
           } else {
             showToast('Không thể gửi lại mã OTP. Vui lòng thử lại!');
@@ -181,6 +174,7 @@ export class CheckoutOtpPage {
           shipping_name: guestPayload['shipping_name'],
           shipping_phone: guestPayload['phone'],
           shipping_address: guestPayload['shipping_address'],
+          shipping_method: guestPayload['shipping_method'],
           shipping_fee: guestPayload['shipping_fee'],
           voucher_id: guestPayload['voucher_id'],
           decline_voucher: guestPayload['decline_voucher'] === true,
@@ -213,16 +207,13 @@ export class CheckoutOtpPage {
             this.errorMessage.set(res.message || 'Xác thực OTP không thành công');
             return;
           }
-          this.auth.applySession(res.token, res.user);
-          if (res.temp_password) {
-            localStorage.setItem('guest_temp_password', res.temp_password);
-          }
           this.checkout.saveCreatedOrder({
             order_id: res.order.order_id,
             order_code: res.order.order_code,
             payment_method: res.order.payment_method,
             shipping_address: res.order.shipping_address,
             shipping_method: this.checkout.methods().shippingMethod,
+            activation_required: res.activation_required === true,
           });
           this.checkout.completeCheckout((guestPayload['items'] as CartLine[]) || []);
           if (res.stripe?.url) {

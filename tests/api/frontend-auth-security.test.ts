@@ -242,3 +242,19 @@ test("production disables hardcoded OTP shortcuts and fabricated notifications",
   assert.match(blog, /\/api\/content\/blogs/);
   assert.doesNotMatch(blog, /BLOG_POSTS/);
 });
+
+test("KAN-27 purchase flow uses the KAN-28 API model instead of demo mutations", async () => {
+  const [page, model, routes] = await Promise.all([
+    source("apps/user-ng/src/app/features/checkout/purchase-flow.page.ts"),
+    source("apps/user-ng/src/app/core/services/purchase-flow-api.service.ts"),
+    source("apps/user-ng/src/app/app.routes.ts")
+  ]);
+  assert.match(page, /purchaseApi\.sendOtp\(/);
+  assert.match(page, /purchaseApi\.checkoutGuest\(/);
+  assert.match(page, /purchaseApi\.checkoutMember\(/);
+  assert.doesNotMatch(page, /model\.(place|sendOtp|verifyOtp|activateAccount)\(/);
+  assert.match(model, /\/api\/user\/orders\/otp-send/);
+  assert.match(model, /\/api\/user\/orders\/otp-verify/);
+  assert.match(routes, /path: 'checkout\/guest'/);
+  assert.match(routes, /purchase-flow\.page/);
+});

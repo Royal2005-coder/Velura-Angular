@@ -1,0 +1,238 @@
+.selected-address {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  margin: 0 0 24px;
+  border: 1px solid #d9cec4;
+  border-left: 3px solid #775343;
+  border-radius: 8px;
+  background: #fcf7f2;
+}
+.selected-address > div {
+  flex: 1;
+  min-width: 0;
+}
+.selected-address__icon {
+  color: #775343;
+  font-size: 20px;
+}
+.selected-address .text-button {
+  flex-shrink: 0;
+}
+.text-button {
+  min-height: auto;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: #775343;
+  font-size: 13px;
+  text-decoration: underline;
+}
+
+.address-dialog {
+  width: min(620px, calc(100vw - 32px));
+  max-height: min(760px, calc(100vh - 32px));
+  padding: 32px;
+  border: 1px solid #e8dfd6;
+  border-radius: 14px;
+  color: #352c29;
+  background: #fff;
+  box-shadow: 0 18px 60px rgb(53 44 41 / 18%);
+}
+.address-dialog::backdrop {
+  background: rgb(53 44 41 / 38%);
+}
+.modal-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.modal-heading h2 {
+  margin-bottom: 0;
+}
+.address-dialog .close {
+  width: 36px;
+  min-height: 36px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 22px;
+}
+.address-card {
+  padding: 16px;
+  margin: 16px 0;
+  border: 1px solid #d9cec4;
+  border-radius: 9px;
+}
+.address-card.selected {
+  border-color: #775343;
+  background: #fcf7f2;
+}
+.address-card .choice {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.address-card .actions {
+  justify-content: flex-start;
+  margin-top: 8px;
+}
+.wide {
+  width: 100%;
+  margin-top: 10px;
+}
+.check {
+  display: flex;
+  gap: 10px;
+  margin: 14px 0;
+  align-items: center;
+}
+.check input {
+  accent-color: #775343;
+  width: 18px;
+  height: 18px;
+}
+.error {
+  background: #fff0ec;
+  border-left: 3px solid #ad3f30;
+  padding: 14px;
+  color: #8b2d23;
+  border-radius: 4px;
+}
+.error:empty {
+  display: none;
+}
+.fields > .field {
+  margin-top: 0;
+  min-width: 0;
+}
+#checkout-form fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.form-section {
+  background: #faf7f3;
+  border: 1px solid #eee4db;
+  padding: 24px;
+  border-radius: 12px;
+  margin-top: 16px;
+}
+.form-section:first-child {
+  margin-top: 24px;
+}
+.form-section .field:last-child {
+  margin-bottom: 0;
+}
+.phone-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.phone-row input {
+  min-width: 0;
+  flex: 1;
+}
+.phone-row button {
+  flex-shrink: 0;
+}
+.otp-footer {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.checkout-submit {
+  width: 100%;
+  margin-top: 24px;
+}
+.edit-cart {
+  display: block;
+  text-align: center;
+  margin-top: 14px;
+  color: #775343;
+}
+.checkout-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid #e8dfd6;
+}
+.checkout-nav .brand {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 24px;
+  color: #775343;
+}
+.checkout-nav > span {
+  font-size: 13px;
+}
+.panel form > button:not(.secondary):not(.text-button) {
+  width: 100%;
+}
+.panel > .actions,
+.panel > form > .actions {
+  justify-content: flex-end;
+}
+.checkout-summary,
+.flow-order-summary {
+  padding: 24px;
+}
+.checkout-summary h2,
+.flow-order-summary h2 {
+  margin-bottom: 24px;
+}
+.checkout-summary .line:first-of-type {
+  padding-top: 0;
+}
+.order-list > .field {
+  max-width: 320px;
+  margin-bottom: 24px;
+}
+.order-card {
+  display: grid;
+  gap: 8px;
+}
+.order-card .row,
+.order-card p {
+  margin: 0;
+}
+.order-detail > .action:first-child {
+  margin-bottom: 24px;
+}
+.order-detail > .row:first-of-type {
+  align-items: center;
+  margin-top: 0;
+}
+.order-detail > .row:first-of-type h2 {
+  margin-bottom: 0;
+}
+.return-builder > h2:not(:first-child) {
+  margin-top: 32px;
+  padding-top: 32px;
+  border-top: 1px solid #e8dfd6;
+}
+.request-list > .address-card:first-of-type {
+  margin-top: 24px;
+}
+.lookup-card,
+.return-summary {
+  padding: 32px;
+}
+.request-tracking .timeline {
+  margin: 24px 0 32px;
+}
+.success .actions,
+.payment-page .actions {
+  justify-content: center;
+}
+.address-dialog {
+  box-sizing: border-box;
+  margin: auto;
+}

@@ -32,15 +32,11 @@
       </div>
     </div>
 
-    @if (tempPassword) {
+    @if (activationRequired()) {
       <div class="password-notice-container" style="margin: 24px 0; width: 100%;">
         <div style="background: rgba(201, 123, 99, 0.08); border: 1px solid var(--terracotta); border-radius: 8px; padding: 20px;">
           <h4 style="color: var(--terracotta); margin-top: 0; margin-bottom: 8px;">Chào mừng bạn đến với Velura!</h4>
-          <p style="margin: 0 0 12px 0;">Hệ thống đã tự động tạo tài khoản Thành viên cho số điện thoại của bạn.</p>
-          <div style="display: flex; align-items: center; justify-content: space-between; background: #fff; padding: 10px 14px; border-radius: 6px;">
-            <span>Mật khẩu tạm thời:</span>
-            <strong>{{ tempPassword }}</strong>
-          </div>
+          <p style="margin: 0;">Tài khoản đang chờ kích hoạt. Hãy mở liên kết dùng một lần đã gửi qua SMS hoặc email để tự đặt mật khẩu trong vòng 24 giờ.</p>
         </div>
       </div>
     }

@@ -35,6 +35,7 @@ export interface CheckoutMethods {
   paymentMethod: string;
 }
 
+/** Thông tin tối thiểu chuyển từ API checkout sang trang xác nhận đơn hàng. */
 export interface CreatedOrder {
   order_id?: string;
   /** Mã đơn cho khách (`VLR…`). Không phải mã vận đơn. */
@@ -42,6 +43,8 @@ export interface CreatedOrder {
   payment_method?: string;
   shipping_address?: string;
   shipping_method?: string;
+  /** Guest phải kích hoạt tài khoản trước khi đăng nhập và xem đơn trong khu vực Member. */
+  activation_required?: boolean;
 }
 
 const SHIPPING_KEY = 'checkout_shipping';

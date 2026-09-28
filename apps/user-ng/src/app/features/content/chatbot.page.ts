@@ -1,5 +1,5 @@
 import { Component, ElementRef, inject, signal, viewChild } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import {
   ChatAttachment,
   ChatBlog,
@@ -31,6 +31,7 @@ function localGreeting(): ChatMessage {
 export class ChatbotPage {
   private readonly chatbot = inject(ChatbotService);
   private readonly cart = inject(CartStore);
+  private readonly route = inject(ActivatedRoute);
   private readonly messagesEl = viewChild<ElementRef<HTMLElement>>('messagesPane');
   private readonly fileInput = viewChild<ElementRef<HTMLInputElement>>('fileInput');
 
@@ -50,6 +51,10 @@ export class ChatbotPage {
     useBodyClass('page-chatbot');
     this.chatbot.clearSessionId();
     this.refreshSessions();
+    const initialQuery = this.route.snapshot.queryParamMap.get('q');
+    if (initialQuery && initialQuery.trim()) {
+      setTimeout(() => this.send(initialQuery.trim()), 100);
+    }
   }
 
   /**

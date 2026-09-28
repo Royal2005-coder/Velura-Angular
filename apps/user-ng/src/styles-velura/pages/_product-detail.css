@@ -4,6 +4,100 @@
 
 .product-detail-page {
   padding: 40px 0 80px;
+  min-height: calc(100vh - 360px);
+}
+
+/* Product Detail Skeleton Loading State */
+.product-detail-skeleton {
+  width: 100%;
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    #f4eee8 0%,
+    #e9ddd0 50%,
+    #f4eee8 100%
+  );
+  background-size: 200% 100%;
+  animation: skeletonShimmer 1.6s infinite ease-in-out;
+  border-radius: var(--radius-sm, 6px);
+}
+
+@keyframes skeletonShimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.skeleton-breadcrumb {
+  height: 20px;
+  width: 240px;
+  margin-bottom: 32px;
+}
+
+.skeleton-gallery {
+  display: flex;
+  flex-direction: row-reverse;
+  gap: 20px;
+}
+
+.skeleton-main-img {
+  flex: 1;
+  aspect-ratio: 3 / 4;
+  border-radius: var(--radius-md, 8px);
+}
+
+.skeleton-thumbs {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 76px;
+}
+
+.skeleton-thumb {
+  width: 76px;
+  height: 96px;
+  border-radius: var(--radius-sm, 4px);
+}
+
+.skeleton-info {
+  display: flex;
+  flex-direction: column;
+  padding-left: 20px;
+}
+
+.skeleton-line {
+  height: 16px;
+  margin-bottom: 12px;
+  border-radius: 4px;
+}
+
+.skeleton-line--sm {
+  height: 14px;
+}
+
+.skeleton-line--title {
+  height: 28px;
+  margin-bottom: 14px;
+}
+
+.skeleton-line--price {
+  height: 32px;
+}
+
+.skeleton-chip {
+  width: 48px;
+  height: 34px;
+  border-radius: 6px;
+}
+
+.skeleton-btn {
+  height: 48px;
+  border-radius: 8px;
 }
 
 /* Breadcrumbs */

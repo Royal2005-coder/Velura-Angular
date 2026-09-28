@@ -16,3 +16,25 @@
   fill: currentColor;
   display: inline-block;
 }
+
+/* Global Luxury Shimmer Skeleton */
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    #f4eee8 0%,
+    #e9ddd0 50%,
+    #f4eee8 100%
+  );
+  background-size: 200% 100%;
+  animation: skeletonShimmer 1.6s infinite ease-in-out;
+  border-radius: var(--radius-sm, 6px);
+}
+
+@keyframes skeletonShimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}

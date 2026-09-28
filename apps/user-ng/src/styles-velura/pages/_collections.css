@@ -11,6 +11,7 @@
 
 .collections-page {
   padding: 40px 0 88px;
+  min-height: calc(100vh - 360px);
 }
 
 .collections-header {

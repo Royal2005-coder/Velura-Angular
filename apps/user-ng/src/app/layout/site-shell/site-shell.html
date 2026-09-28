@@ -89,7 +89,7 @@
           <span class="chatbot-header__desc">Trực tuyến</span>
         </div>
       </div>
-      <a class="chatbot-header__expand" routerLink="/chatbot" aria-label="Phóng to" (click)="chatOpen.set(false)">
+      <a class="chatbot-header__expand" routerLink="/chatbot" aria-label="Phóng to" (click)="chatOpen.set(false)" title="Mở trang đầy đủ">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="15 3 21 3 21 9"></polyline>
           <polyline points="9 21 3 21 3 15"></polyline>
@@ -100,11 +100,46 @@
     </div>
     <div class="chatbot-messages">
       <div class="chatbot-message chatbot-message--bot">
-        Chào bạn, mình là AI Stylist Velura. Mở trang chatbot để được gợi ý outfit, size và chính sách đầy đủ nhé.
+        Chào bạn, mình là AI Stylist Velura. Bạn cần tư vấn chọn trang phục, phối đồ, hay kiểm tra size hôm nay?
+      </div>
+      <div class="chatbot-quick-prompts">
+        <span class="chatbot-quick-prompts__label">Gợi ý câu hỏi:</span>
+        <div class="chatbot-quick-prompts__list">
+          @for (suggestion of quickSuggestions; track suggestion) {
+            <button type="button" class="chatbot-prompt-chip" (click)="submitChatQuery(suggestion)">
+              {{ suggestion }}
+            </button>
+          }
+        </div>
       </div>
     </div>
-    <div class="chatbot-input-area">
-      <a class="chatbot-send-btn" routerLink="/chatbot" (click)="chatOpen.set(false)">Mở AI Stylist</a>
+    <div class="chatbot-widget-footer">
+      <form class="chatbot-input-form" (submit)="$event.preventDefault(); submitChatQuery()">
+        <input
+          type="text"
+          class="chatbot-widget-input"
+          [value]="chatInput()"
+          (input)="chatInput.set($any($event.target).value)"
+          placeholder="Hỏi AI Stylist về phối đồ, size..."
+        />
+        <button
+          type="submit"
+          class="chatbot-widget-submit"
+          [disabled]="!chatInput().trim()"
+          aria-label="Gửi câu hỏi"
+          title="Gửi câu hỏi"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="22" y1="2" x2="11" y2="13"></line>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+          </svg>
+        </button>
+      </form>
+      <div class="chatbot-expand-row">
+        <a class="chatbot-full-link" routerLink="/chatbot" (click)="chatOpen.set(false)">
+          Mở toàn màn hình AI Stylist →
+        </a>
+      </div>
     </div>
   </div>
 </div>

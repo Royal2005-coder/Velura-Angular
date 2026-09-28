@@ -182,29 +182,41 @@ export function presentOrderForCustomer(order: JsonObject, items: JsonObject[], 
 }
 
 async function attachProductMeta(items: JsonObject[]): Promise<JsonObject[]> {
-  const itemsWithProduct: JsonObject[] = [];
-  for (const item of items) {
-    let productId: unknown = null;
-    let categoryName: unknown = null;
+  if (!items.length) return [];
+  const variantIds = [...new Set(items.map((i) => String(i.variant_id || "")).filter(Boolean))];
+  const metaMap = new Map<string, { productId: string | null; categoryName: string | null }>();
+
+  if (variantIds.length > 0) {
     try {
-      const v = await selectOne("variant", { variant_id: `eq.${item.variant_id}` });
-      if (v) {
-        productId = v.product_id;
-        const product = await selectOne("product", { product_id: `eq.${productId}` });
-        if (product) {
-          const cat = await selectOne("category", { category_id: `eq.${product.category_id}` });
-          if (cat) {
-            categoryName = cat.name;
-          }
-        }
+      const { rows } = await selectRows("variant", {
+        select: "variant_id,product:product(product_id,name,category:category(name))",
+        variant_id: `in.(${variantIds.map(quotePostgrestValue).join(",")})`,
+        limit: variantIds.length
+      }, { count: "none", useAnonKey: true });
+
+      for (const row of rows) {
+        const prod = row.product as JsonObject | null | undefined;
+        const cat = prod?.category as JsonObject | null | undefined;
+        metaMap.set(String(row.variant_id), {
+          productId: prod?.product_id ? String(prod.product_id) : null,
+          categoryName: cat?.name ? String(cat.name) : null
+        });
       }
     } catch (e: unknown) {
-      console.error("Error retrieving variant product_id:", errorMessage(e));
+      console.error("Error batch retrieving variant product_id:", errorMessage(e));
     }
-    itemsWithProduct.push({ ...item, product_id: productId, category_name: categoryName });
   }
-  return itemsWithProduct;
+
+  return items.map((item) => {
+    const meta = metaMap.get(String(item.variant_id || ""));
+    return {
+      ...item,
+      product_id: meta?.productId ?? null,
+      category_name: meta?.categoryName ?? null
+    };
+  });
 }
+
 
 /**
  * Định dạng ghi chú nội bộ cho đơn hàng từ các tùy chọn thông minh phong cách Coolmate
@@ -325,15 +337,29 @@ export async function handleOrdersRoute(
         if (!profile) {
           throw new HttpError(401, "UNAUTHORIZED", "Đăng nhập là bắt buộc");
         }
-        const { rows: orders } = await selectRows("orders", { user_id: `eq.${profile.user_id}` });
+        const { rows: orders } = await selectRows("orders", { user_id: `eq.${profile.user_id}` }, { count: "none" });
         orders.sort((a, b) => new Date(String(b.created_at)).getTime() - new Date(String(a.created_at)).getTime());
-        const ordersWithItems: JsonObject[] = [];
-        for (const order of orders) {
-          const { rows: items } = await selectRows("order_item", { order_id: `eq.${order.order_id}` });
-          const itemsWithProduct = await attachProductMeta(items);
-          ordersWithItems.push(presentOrderForCustomer(order, itemsWithProduct, []));
+        const orderIds = orders.map((o) => String(o.order_id)).filter(Boolean);
+        let allItems: JsonObject[] = [];
+        if (orderIds.length > 0) {
+          const { rows: items } = await selectRows("order_item", {
+            order_id: `in.(${orderIds.map(quotePostgrestValue).join(",")})`
+          }, { count: "none" });
+          allItems = items;
         }
+        const itemsWithProduct = await attachProductMeta(allItems);
+        const itemsByOrderId = new Map<string, JsonObject[]>();
+        for (const item of itemsWithProduct) {
+          const oid = String(item.order_id || "");
+          const list = itemsByOrderId.get(oid) || [];
+          list.push(item);
+          itemsByOrderId.set(oid, list);
+        }
+        const ordersWithItems = orders.map((order) =>
+          presentOrderForCustomer(order, itemsByOrderId.get(String(order.order_id)) || [], [])
+        );
         return sendJson(res, 200, { success: true, orders: ordersWithItems }, corsHeaders);
+
       }
     }
 

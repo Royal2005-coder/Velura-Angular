@@ -14,6 +14,7 @@ import { handleUploadRoute } from "./upload.js";
 import { handleOffersRoute } from "./offers.js";
 import { handleCheckoutRoute } from "./checkout-quote.js";
 import { handleStripeWebhook } from "../payments/stripe-webhook.js";
+import { handleStripeVerify } from "../payments/stripe-verify.js";
 
 import type { AuthContext, HeaderMap, HttpRequest, HttpResponse } from "../types.js";
 
@@ -82,6 +83,9 @@ export async function handleUserRoute(
     case "payments":
       if (action === "stripe" && parts[4] === "webhook") {
         return await handleStripeWebhook(req, res, corsHeaders);
+      }
+      if (action === "stripe" && parts[4] === "verify") {
+        return await handleStripeVerify(req, res, corsHeaders);
       }
       throw new HttpError(404, "NOT_FOUND", "Payment route not found");
       

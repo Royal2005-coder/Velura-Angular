@@ -4,6 +4,7 @@
 
 .product-list-page {
   padding: 40px 0 80px;
+  min-height: calc(100vh - 360px);
 }
 
 .member-lock-badge {

@@ -291,6 +291,38 @@ jobs:
           VERCEL_PROJECT_ID_USER: ${{ secrets.VERCEL_PROJECT_ID_USER }}
           VERCEL_PROJECT_ID_ADMIN: ${{ secrets.VERCEL_PROJECT_ID_ADMIN }}
         run: node deploy/scripts/prepare-vercel-spa.mjs
+      - name: Sync production environment to Vercel API
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          STOREFRONT_ORIGIN: ${{ secrets.STOREFRONT_ORIGIN }}
+          TWILIO_API_KEY_SID: ${{ secrets.TWILIO_API_KEY_SID }}
+          TWILIO_API_KEY_SECRET: ${{ secrets.TWILIO_API_KEY_SECRET }}
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_PHONE_NUMBER: ${{ secrets.TWILIO_PHONE_NUMBER }}
+        run: |
+          if [ -n "$STRIPE_SECRET_KEY" ]; then
+            vercel env add STRIPE_SECRET_KEY production --value "$STRIPE_SECRET_KEY" --cwd apps/api --token "$VERCEL_TOKEN" --yes --force || true
+          fi
+          if [ -n "$STRIPE_WEBHOOK_SECRET" ]; then
+            vercel env add STRIPE_WEBHOOK_SECRET production --value "$STRIPE_WEBHOOK_SECRET" --cwd apps/api --token "$VERCEL_TOKEN" --yes --force || true
+          fi
+          if [ -n "$STOREFRONT_ORIGIN" ]; then
+            vercel env add STOREFRONT_ORIGIN production --value "$STOREFRONT_ORIGIN" --cwd apps/api --token "$VERCEL_TOKEN" --yes --force || true
+          fi
+          if [ -n "$TWILIO_API_KEY_SID" ]; then
+            vercel env add TWILIO_API_KEY_SID production --value "$TWILIO_API_KEY_SID" --cwd apps/api --token "$VERCEL_TOKEN" --yes --force || true
+          fi
+          if [ -n "$TWILIO_API_KEY_SECRET" ]; then
+            vercel env add TWILIO_API_KEY_SECRET production --value "$TWILIO_API_KEY_SECRET" --cwd apps/api --token "$VERCEL_TOKEN" --yes --force || true
+          fi
+          if [ -n "$TWILIO_ACCOUNT_SID" ]; then
+            vercel env add TWILIO_ACCOUNT_SID production --value "$TWILIO_ACCOUNT_SID" --cwd apps/api --token "$VERCEL_TOKEN" --yes --force || true
+          fi
+          if [ -n "$TWILIO_PHONE_NUMBER" ]; then
+            vercel env add TWILIO_PHONE_NUMBER production --value "$TWILIO_PHONE_NUMBER" --cwd apps/api --token "$VERCEL_TOKEN" --yes --force || true
+          fi
       - name: Deploy API to Vercel
         run: vercel deploy --prod --cwd apps/api --token ${{ secrets.VERCEL_TOKEN }} --yes
       - name: Deploy Storefront to Vercel
@@ -310,14 +342,14 @@ jobs:
       - name: Health checks
         run: |
           set -e
-          echo "Verifying Vercel direct deployments..."
+          echo "Verifying Vercel deployments..."
           curl -fsS https://velura-api.vercel.app/health | grep '"ok":true'
           test "$(curl -fsS -o /dev/null -w '%{http_code}' --max-redirs 2 https://velura-storefront.vercel.app/)" = "200"
-          test "$(curl -fsS -o /dev/null -w '%{http_code}' --max-redirs 2 https://velura-admin-mocha.vercel.app/)" = "200"
+          test "$(curl -fsS -o /dev/null -w '%{http_code}' --max-redirs 2 https://velura-admin.vercel.app/)" = "200"
 
-          echo "Checking custom domain routing..."
-          if curl -fsS -m 5 https://velura.royalai.dev/api/health 2>/dev/null | grep -q '"ok":true'; then
-            echo "Custom domain velura.royalai.dev is live and healthy."
-          else
-            echo "::warning::Custom domain velura.royalai.dev is waiting for Cloudflare CNAME update to cname.vercel-dns.com."
+          echo "Checking live custom domains..."
+          if curl -fsS -m 10 https://api.royalai.dev/health 2>/dev/null | grep -q '"ok":true'; then
+            echo "Custom domain api.royalai.dev is live and healthy."
           fi
+          test "$(curl -fsS -o /dev/null -w '%{http_code}' --max-redirs 2 https://velura.royalai.dev/)" = "200"
+          test "$(curl -fsS -o /dev/null -w '%{http_code}' --max-redirs 2 https://admin.royalai.dev/)" = "200"

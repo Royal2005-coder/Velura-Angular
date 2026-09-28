@@ -81,7 +81,7 @@ jobs:
             echo "Feature PR title must start with KAN-n (optional Draft: prefix)."
             exit 1
           }
-          printf '%s\n' "$BODY" | grep -qiE '^##[[:space:]]*(Why|Tại sao)' || {
+          printf '%s\n' "$BODY" | sed '1s/^\xef\xbb\xbf//' | grep -qiE '^[[:space:]]*##[[:space:]]*(Why|Tại sao)' || {
             echo "PR description must include a heading line ## Why"
             exit 1
           }

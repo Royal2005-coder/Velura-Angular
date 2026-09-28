@@ -11,6 +11,7 @@ import {
 } from "../auth-lockout.js";
 import { createNotification } from "./notifications.js";
 import { sendAuthOtpSms } from "../sms/twilio.js";
+import { sendDirectEmail } from "../email/mailer.js";
 import {
   asJsonObject,
   asString,
@@ -234,6 +235,26 @@ export async function handleAuthRoute(
     if (phone) {
       void sendAuthOtpSms(asString(phone), otpCode, "signup");
     }
+    if (email) {
+      const emailBody = `Chào ${full_name || "bạn"},\n\nMã kích hoạt tài khoản Velura của bạn là: ${otpCode}.\n\nMã có hiệu lực trong 5 phút. Vui lòng không chia sẻ mã này cho bất kỳ ai.`;
+      const emailHtml = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eaeaea; border-radius: 8px; overflow: hidden;">
+          <div style="background-color: #222; padding: 20px; text-align: center;">
+            <h1 style="color: #d1b8a8; margin: 0; font-size: 28px; letter-spacing: 3px;">VELURA</h1>
+          </div>
+          <div style="padding: 28px; background-color: #fff;">
+            <h2 style="color: #333; margin-top: 0;">Kích hoạt tài khoản</h2>
+            <p style="color: #555; line-height: 1.6;">Chào <strong>${full_name || "bạn"}</strong>,</p>
+            <p style="color: #555; line-height: 1.6;">Cảm ơn bạn đã đăng ký tài khoản tại Velura. Vui lòng sử dụng mã OTP dưới đây để xác thực:</p>
+            <div style="background-color: #fcfaf8; border: 1px dashed #d1b8a8; border-radius: 8px; padding: 16px; margin: 24px 0; text-align: center;">
+              <span style="font-size: 32px; font-weight: bold; color: #b89b88; letter-spacing: 8px;">${otpCode}</span>
+            </div>
+            <p style="color: #888; font-size: 13px;">Mã có hiệu lực trong 5 phút. Vui lòng không chia sẻ mã này cho bất kỳ ai.</p>
+          </div>
+        </div>
+      `;
+      void sendDirectEmail(email, "Mã kích hoạt tài khoản Velura", emailBody, emailHtml);
+    }
 
     // Create inactive user first (AUTH-05)
     const hashedPassword = hashPassword(asString(password));
@@ -442,6 +463,26 @@ export async function handleAuthRoute(
 
     if (user.phone) {
       void sendAuthOtpSms(asString(user.phone), otpCode, "forgot_password");
+    }
+    if (user.email) {
+      const emailBody = `Chào ${user.full_name || "bạn"},\n\nMã xác thực khôi phục mật khẩu Velura của bạn là: ${otpCode}.\n\nMã có hiệu lực trong 5 phút. Vui lòng không chia sẻ mã này cho bất kỳ ai.`;
+      const emailHtml = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eaeaea; border-radius: 8px; overflow: hidden;">
+          <div style="background-color: #222; padding: 20px; text-align: center;">
+            <h1 style="color: #d1b8a8; margin: 0; font-size: 28px; letter-spacing: 3px;">VELURA</h1>
+          </div>
+          <div style="padding: 28px; background-color: #fff;">
+            <h2 style="color: #333; margin-top: 0;">Khôi phục mật khẩu</h2>
+            <p style="color: #555; line-height: 1.6;">Chào <strong>${user.full_name || "bạn"}</strong>,</p>
+            <p style="color: #555; line-height: 1.6;">Bạn vừa yêu cầu đặt lại mật khẩu cho tài khoản Velura. Vui lòng sử dụng mã OTP dưới đây để xác nhận:</p>
+            <div style="background-color: #fcfaf8; border: 1px dashed #d1b8a8; border-radius: 8px; padding: 16px; margin: 24px 0; text-align: center;">
+              <span style="font-size: 32px; font-weight: bold; color: #b89b88; letter-spacing: 8px;">${otpCode}</span>
+            </div>
+            <p style="color: #888; font-size: 13px;">Mã có hiệu lực trong 5 phút. Nếu bạn không thực hiện yêu cầu này, vui lòng bỏ qua email.</p>
+          </div>
+        </div>
+      `;
+      void sendDirectEmail(user.email, "Mã xác thực khôi phục mật khẩu Velura", emailBody, emailHtml);
     }
 
     return sendJson(res, 200, {

@@ -18,6 +18,8 @@ import {
   maskPhone,
   isTwilioConfigured
 } from "../sms/twilio.js";
+import { maskEmail, sendDirectEmail } from "../email/mailer.js";
+export { maskEmail } from "../email/mailer.js";
 import {
   asJsonObject,
   asString,
@@ -93,46 +95,6 @@ export function requireGuestOtpEmail(value: unknown): string {
     throw new HttpError(400, "EMAIL_REQUIRED", "Email là bắt buộc để nhận mã OTP. Velura chưa gửi OTP qua số điện thoại.");
   }
   return email;
-}
-
-/**
- * Hides the mailbox name before showing the destination on the checkout screen.
- */
-export function maskEmail(email: string): string {
-  const [name, domain] = email.split("@");
-  return `${name.slice(0, 1)}***@${domain}`;
-}
-
-// Helper to send email directly without relying on email_outbox and service role worker
-async function sendDirectEmail(to: unknown, subject: string, text: string, html: string): Promise<void> {
-  if (!config.smtpHost || !config.smtpUser || !config.smtpAppPassword) {
-    if (config.nodeEnv !== "production") {
-      console.log(`[EMAIL MOCK] Sending to ${to}: ${subject}`);
-    }
-    return;
-  }
-  try {
-    const nodemailer = await import("nodemailer");
-    const transporter = nodemailer.default.createTransport({
-      host: config.smtpHost,
-      port: config.smtpPort || 587,
-      secure: config.smtpSecure === true,
-      auth: {
-        user: config.smtpUser,
-        pass: config.smtpAppPassword
-      }
-    });
-    await withTimeout(transporter.sendMail({
-      from: `"Velura" <${config.smtpUser}>`,
-      to: String(to),
-      subject,
-      text,
-      html
-    }), 10000, "SMTP send");
-    console.log(`[EMAIL SENT] Sent successfully to ${to}`);
-  } catch (err: unknown) {
-    console.error(`[EMAIL ERROR] Failed to send email to ${to}:`, errorMessage(err));
-  }
 }
 
 /** Khách được thanh toán lại đơn online trong chừng này kể từ lúc tạo (KAN-59). */
@@ -740,7 +702,8 @@ export async function handleOrdersRoute(
       const existingUser = await selectOne("users", { phone: `eq.${phone}` });
       const existingUserByEmail = email ? await selectOne("users", { email: `eq.${email}` }) : null;
       // Nếu số điện thoại hoặc email đã thuộc thành viên, KHÔNG CHẶN mà vẫn gửi OTP bình thường
-      const userId = existingUser ? existingUser.user_id : (existingUserByEmail ? existingUserByEmail.user_id : null);
+      let targetUser = existingUser || existingUserByEmail;
+      const userId = targetUser ? targetUser.user_id : null;
       
       const otpCode = Math.floor(1000 + Math.random() * 9000).toString(); // 4 digits
       const otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
@@ -753,14 +716,45 @@ export async function handleOrdersRoute(
         console.log(`[CHECKOUT GUEST OTP] OTP requested for ${phone}`);
       }
       
-      // Store OTP and guest info in memory instead of DB
+      // Store OTP and guest info in memory cache
       checkoutOtpAttemptsMap.set(phone, { 
         otpCode, 
         expiresAt: new Date(otpExpiresAt).getTime(),
         email: email || null,
-        full_name: full_name || (existingUser ? existingUser.full_name : "Khách hàng"),
+        full_name: full_name || (targetUser ? targetUser.full_name : "Khách hàng"),
         attempts: 0 
       });
+
+      // Persist OTP to database users table for stateless serverless execution
+      try {
+        if (targetUser) {
+          await updateRows("users", { user_id: `eq.${targetUser.user_id}` }, {
+            otp_code: otpCode,
+            otp_expires_at: otpExpiresAt,
+            login_fail_count: 0,
+            updated_at: new Date().toISOString()
+          });
+        } else {
+          const tempPassword = "VLR" + Math.floor(100000 + Math.random() * 900000).toString();
+          const hashedPassword = hashPassword(tempPassword);
+          await insertRow("users", {
+            full_name: full_name || "Khách hàng",
+            phone: phone,
+            email: email || null,
+            password_hash: hashedPassword,
+            role: "member",
+            is_active: false,
+            otp_code: otpCode,
+            otp_expires_at: otpExpiresAt,
+            login_fail_count: 0,
+            saved_addresses: [],
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          });
+        }
+      } catch (dbErr: unknown) {
+        console.error(`[CHECKOUT OTP DB ERROR] Could not persist OTP to users table:`, errorMessage(dbErr));
+      }
 
       // Gửi OTP qua Twilio SMS
       const smsResult = await sendCheckoutOtpSms(phone, otpCode);
@@ -865,7 +859,27 @@ export async function handleOrdersRoute(
       const items = rawItems.map((item) => asJsonObject(item));
       const phoneKey = asString(phone);
       
-      const sessionState = checkoutOtpAttemptsMap.get(phoneKey);
+      let sessionState = checkoutOtpAttemptsMap.get(phoneKey);
+      let dbUser: JsonObject | null = null;
+
+      if (!sessionState) {
+        // Query users table for serverless instance resilience
+        dbUser = await selectOne("users", { phone: `eq.${phoneKey}` });
+        if (!dbUser && (body.shipping_email || order.shipping_email)) {
+          const checkEmail = asString(body.shipping_email || order.shipping_email);
+          dbUser = await selectOne("users", { email: `eq.${checkEmail}` });
+        }
+        if (dbUser && dbUser.otp_code) {
+          sessionState = {
+            otpCode: String(dbUser.otp_code),
+            expiresAt: dbUser.otp_expires_at ? new Date(String(dbUser.otp_expires_at)).getTime() : 0,
+            email: dbUser.email || body.shipping_email || order.shipping_email || null,
+            full_name: dbUser.full_name || shipping_name,
+            attempts: Number(dbUser.login_fail_count || 0)
+          };
+        }
+      }
+      
       if (!sessionState) {
         throw new HttpError(400, "INVALID_OTP", "Không tìm thấy phiên xác thực. Vui lòng nhận lại mã OTP.");
       }
@@ -879,10 +893,20 @@ export async function handleOrdersRoute(
       }
 
       if (sessionState.otpCode !== otp_code) {
-        if (!allowDevOtpBypass() || otp_code !== "1234") {
+        if (!allowDevOtpBypass() || (otp_code !== "1234" && otp_code !== "123456")) {
           sessionState.attempts += 1;
           checkoutOtpAttemptsMap.set(phoneKey, sessionState);
           
+          if (dbUser) {
+            try {
+              await updateRows("users", { user_id: `eq.${dbUser.user_id}` }, {
+                login_fail_count: sessionState.attempts
+              });
+            } catch {
+              /* ignore */
+            }
+          }
+
           if (sessionState.attempts >= 5) {
             checkoutOtpAttemptsMap.delete(phoneKey);
             throw new HttpError(403, "SESSION_LOCKED", "Phiên xác thực bị khóa do nhập sai quá 5 lần. Vui lòng đặt lại đơn hàng.");
@@ -906,8 +930,19 @@ export async function handleOrdersRoute(
         guestPriced.cart
       );
 
-      // OTP is valid
+      // OTP is valid - clear volatile session and database OTP
       checkoutOtpAttemptsMap.delete(phoneKey);
+      if (dbUser) {
+        try {
+          await updateRows("users", { user_id: `eq.${dbUser.user_id}` }, {
+            otp_code: null,
+            otp_expires_at: null,
+            login_fail_count: 0
+          });
+        } catch {
+          /* ignore */
+        }
+      }
       
       // Stock check
       const affectedItems: JsonObject[] = [];
@@ -951,14 +986,14 @@ export async function handleOrdersRoute(
         is_default: true
       }];
       
-      let guestUser: JsonObject | null = await selectOne("users", { phone: `eq.${phone}` });
+      let guestUser: JsonObject | null = dbUser || await selectOne("users", { phone: `eq.${phone}` });
       if (!guestUser && sessionState.email) {
         guestUser = await selectOne("users", { email: `eq.${sessionState.email}` });
       }
       const isExistingMember = Boolean(guestUser && guestUser.is_active);
       if (!guestUser) {
         guestUser = asJsonObject(await insertRow("users", {
-          full_name: sessionState.full_name,
+          full_name: sessionState.full_name || shipping_name,
           phone: phone,
           email: sessionState.email,
           password_hash: hashedPassword,
@@ -973,6 +1008,8 @@ export async function handleOrdersRoute(
           is_active: true,
           otp_code: null,
           otp_expires_at: null,
+          login_fail_count: 0,
+          full_name: guestUser.full_name || shipping_name,
           password_hash: hashedPassword,
           saved_addresses: savedAddresses,
           updated_at: new Date().toISOString()
@@ -981,73 +1018,9 @@ export async function handleOrdersRoute(
       }
 
       const orderCode = generateOrderCode();
-      assertStripeReady(payment_method);
-      const dbPaymentMethod = (payment_method === "COD" || payment_method === "cod") ? "COD" : "ONLINE_PAYMENT";
       const guestTotal = Math.max(0, guestPriced.subtotal + guestPriced.shippingFee - guestVoucher.discountAmount);
-
-      const shipping_email = body.shipping_email || order.shipping_email;
-      if (shipping_email || guestUser.email) {
-        const targetEmail = shipping_email || guestUser.email;
-        const emailBody = `Chào ${shipping_name},\n\nĐơn hàng ${orderCode} của bạn đã được đặt thành công!\nTổng giá trị: ${guestTotal.toLocaleString('vi-VN')} đ\nPhương thức thanh toán: ${dbPaymentMethod === "COD" ? "Thanh toán khi nhận hàng (COD)" : "Thanh toán trực tuyến"}\nĐịa chỉ nhận: ${shipping_address}\n\nTra cứu đơn hàng tại: https://velura.royalai.dev/account/track?code=${orderCode}\n\nThông tin đăng nhập tài khoản:\n- Số điện thoại: ${phone}\n- Mật khẩu tạm thời: ${tempPassword}`;
-        
-        const emailHtml = `
-          <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eaeaea; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
-            <div style="background-color: #222; padding: 24px; text-align: center;">
-              <h1 style="color: #d1b8a8; margin: 0; font-size: 32px; letter-spacing: 4px; font-weight: 700;">VELURA</h1>
-            </div>
-            <div style="padding: 32px; background-color: #fff;">
-              <h2 style="color: #333; margin-top: 0; font-size: 22px;">Đặt hàng thành công!</h2>
-              <p style="color: #555; line-height: 1.6;">Chào <strong>${shipping_name}</strong>,</p>
-              <p style="color: #555; line-height: 1.6;">Cảm ơn bạn đã mua sắm tại Velura. Đơn hàng của bạn đã được tiếp nhận và đang được xử lý.</p>
-              
-              <div style="background-color: #fcfaf8; border-left: 4px solid #d1b8a8; padding: 20px; margin: 24px 0; border-radius: 0 8px 8px 0;">
-                <h3 style="margin-top: 0; color: #333; font-size: 16px; margin-bottom: 12px;">Thông tin đơn hàng:</h3>
-                <p style="margin: 6px 0; color: #555;">Mã đơn hàng: <strong style="font-size: 18px; color: #7C5454;">${orderCode}</strong></p>
-                <p style="margin: 6px 0; color: #555;">Tổng giá trị: <strong>${guestTotal.toLocaleString('vi-VN')} đ</strong></p>
-                <p style="margin: 6px 0; color: #555;">Phương thức thanh toán: <strong>${dbPaymentMethod === "COD" ? "Thanh toán khi nhận hàng (COD)" : "Thanh toán trực tuyến"}</strong></p>
-                <p style="margin: 6px 0; color: #555;">Địa chỉ giao hàng: <strong>${shipping_address}</strong></p>
-              </div>
-
-              <div style="text-align: center; margin: 28px 0;">
-                <a href="https://velura.royalai.dev/account/track?code=${orderCode}&contact=${encodeURIComponent(String(phone || ''))}" style="display: inline-block; background-color: #7C5454; color: #fff; text-decoration: none; padding: 12px 28px; border-radius: 6px; font-weight: 600;">Tra cứu tiến độ đơn hàng</a>
-              </div>
-
-              ${!isExistingMember ? `
-              <div style="background-color: #f5f5f5; padding: 16px; border-radius: 6px; margin-top: 20px;">
-                <h4 style="margin: 0 0 8px 0; font-size: 14px; color: #555;">Tài khoản thành viên tự động tạo:</h4>
-                <p style="margin: 4px 0; font-size: 13px; color: #666;">Số điện thoại: <strong>${phone}</strong> | Mật khẩu: <span style="font-family: monospace; font-weight: bold;">${tempPassword}</span></p>
-              </div>` : `
-              <div style="background-color: #f5f5f5; padding: 16px; border-radius: 6px; margin-top: 20px;">
-                <p style="margin: 4px 0; font-size: 13px; color: #666;">Đơn hàng đã được liên kết với tài khoản thành viên của bạn (<strong>${phone}</strong>).</p>
-              </div>`}
-            </div>
-            <div style="background-color: #f9f9f9; padding: 16px; text-align: center; border-top: 1px solid #eaeaea;">
-              <p style="color: #aaa; font-size: 12px; margin: 0;">&copy; ${new Date().getFullYear()} Velura. Mọi quyền được bảo lưu.</p>
-            </div>
-          </div>
-        `;
-        
-        await sendDirectEmail(targetEmail, `Xác nhận đơn hàng #${orderCode} tại Velura`, emailBody, emailHtml);
-        
-        try {
-          await insertRow("email_outbox", {
-            recipient: targetEmail,
-            template_code: "order_confirmation",
-            subject: `Xác nhận đơn hàng #${orderCode} tại Velura`,
-            body: emailBody,
-            status: "sent",
-            created_at: new Date().toISOString()
-          });
-        } catch {
-          /* ignore */
-        }
-      }
-
-      // Gửi SMS xác nhận đơn hàng qua Twilio cho khách
-      if (phone) {
-        void sendOrderConfirmationSms(asString(phone), orderCode, guestTotal);
-      }
-      
+      assertStripeReady(payment_method, guestTotal);
+      const dbPaymentMethod = (payment_method === "COD" || payment_method === "cod") ? "COD" : "ONLINE_PAYMENT";
       const guestInternalNote = formatOrderInternalNote(body, formatOrderInternalNote(order));
 
       const newOrder = asJsonObject(await insertRow("orders", {
@@ -1071,7 +1044,11 @@ export async function handleOrdersRoute(
         updated_at: new Date().toISOString()
       }));
 
-      if (dbPaymentMethod !== "COD") {
+      // NOTE: DO NOT insert a pending payment if provider is Stripe.
+      // createStripePaymentIntent (called in openStripePayment) will create the official
+      // pending payment row containing gateway_transaction_ref = stripe session id.
+      // Inserting here would trigger duplicate key violation on unique index `payment_one_open_stripe_session`.
+      if (dbPaymentMethod !== "COD" && String(payment_method || "").toUpperCase() !== "STRIPE") {
         try {
           const provider = String(payment_method || "online_payment").toLowerCase();
           await insertRow("payment", {
@@ -1119,6 +1096,74 @@ export async function handleOrdersRoute(
         await recordVoucherRedemption(guestVoucher.voucherId, guestVoucher.discountAmount);
       }
 
+      // Initialize Stripe checkout session if requested
+      const stripePayment = await openStripePayment(newOrder.order_id, newOrder.total_amount, payment_method);
+
+      // CRITICAL FIX: Send confirmations ONLY AFTER order, items, and payment setup succeed!
+      // This prevents the bug where users receive confirmation emails/SMS while the API returned an error.
+      const shipping_email = body.shipping_email || order.shipping_email;
+      if (shipping_email || guestUser.email) {
+        const targetEmail = shipping_email || guestUser.email;
+        const emailBody = `Chào ${shipping_name},\n\nĐơn hàng ${orderCode} của bạn đã được đặt thành công!\nTổng giá trị: ${guestTotal.toLocaleString('vi-VN')} đ\nPhương thức thanh toán: ${dbPaymentMethod === "COD" ? "Thanh toán khi nhận hàng (COD)" : "Thanh toán trực tuyến"}\nĐịa chỉ nhận: ${shipping_address}\n\nTra cứu đơn hàng tại: https://velura.royalai.dev/account/track?code=${orderCode}\n\nThông tin đăng nhập tài khoản:\n- Số điện thoại: ${phone}\n- Mật khẩu tạm thời: ${tempPassword}`;
+        
+        const emailHtml = `
+          <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eaeaea; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+            <div style="background-color: #222; padding: 24px; text-align: center;">
+              <h1 style="color: #d1b8a8; margin: 0; font-size: 32px; letter-spacing: 4px; font-weight: 700;">VELURA</h1>
+            </div>
+            <div style="padding: 32px; background-color: #fff;">
+              <h2 style="color: #333; margin-top: 0; font-size: 22px;">Đặt hàng thành công!</h2>
+              <p style="color: #555; line-height: 1.6;">Chào <strong>${shipping_name}</strong>,</p>
+              <p style="color: #555; line-height: 1.6;">Cảm ơn bạn đã mua sắm tại Velura. Đơn hàng của bạn đã được tiếp nhận và đang được xử lý.</p>
+              
+              <div style="background-color: #fcfaf8; border-left: 4px solid #d1b8a8; padding: 20px; margin: 24px 0; border-radius: 0 8px 8px 0;">
+                <h3 style="margin-top: 0; color: #333; font-size: 16px; margin-bottom: 12px;">Thông tin đơn hàng:</h3>
+                <p style="margin: 6px 0; color: #555;">Mã đơn hàng: <strong style="font-size: 18px; color: #7C5454;">${orderCode}</strong></p>
+                <p style="margin: 6px 0; color: #555;">Tổng giá trị: <strong>${guestTotal.toLocaleString('vi-VN')} đ</strong></p>
+                <p style="margin: 6px 0; color: #555;">Phương thức thanh toán: <strong>${dbPaymentMethod === "COD" ? "Thanh toán khi nhận hàng (COD)" : "Thanh toán trực tuyến"}</strong></p>
+                <p style="margin: 6px 0; color: #555;">Địa chỉ giao hàng: <strong>${shipping_address}</strong></p>
+              </div>
+
+              <div style="text-align: center; margin: 28px 0;">
+                <a href="https://velura.royalai.dev/account/track?code=${orderCode}&contact=${encodeURIComponent(String(phone || ''))}" style="display: inline-block; background-color: #7C5454; color: #fff; text-decoration: none; padding: 12px 28px; border-radius: 6px; font-weight: 600;">Tra cứu tiến độ đơn hàng</a>
+              </div>
+
+              ${!isExistingMember ? `
+              <div style="background-color: #f5f5f5; padding: 16px; border-radius: 6px; margin-top: 20px;">
+                <h4 style="margin: 0 0 8px 0; font-size: 14px; color: #555;">Tài khoản thành viên tự động tạo:</h4>
+                <p style="margin: 4px 0; font-size: 13px; color: #666;">Số điện thoại: <strong>${phone}</strong> | Mật khẩu: <span style="font-family: monospace; font-weight: bold;">${tempPassword}</span></p>
+              </div>` : `
+              <div style="background-color: #f5f5f5; padding: 16px; border-radius: 6px; margin-top: 20px;">
+                <p style="margin: 4px 0; font-size: 13px; color: #666;">Đơn hàng đã được liên kết với tài khoản thành viên của bạn (<strong>${phone}</strong>).</p>
+              </div>`}
+            </div>
+            <div style="background-color: #f9f9f9; padding: 16px; text-align: center; border-top: 1px solid #eaeaea;">
+              <p style="color: #aaa; font-size: 12px; margin: 0;">&copy; ${new Date().getFullYear()} Velura. Mọi quyền được bảo lưu.</p>
+            </div>
+          </div>
+        `;
+        
+        void sendDirectEmail(targetEmail, `Xác nhận đơn hàng #${orderCode} tại Velura`, emailBody, emailHtml);
+        
+        try {
+          await insertRow("email_outbox", {
+            recipient: targetEmail,
+            template_code: "order_confirmation",
+            subject: `Xác nhận đơn hàng #${orderCode} tại Velura`,
+            body: emailBody,
+            status: "sent",
+            created_at: new Date().toISOString()
+          });
+        } catch {
+          /* ignore */
+        }
+      }
+
+      // Gửi SMS xác nhận đơn hàng qua Twilio cho khách
+      if (phone) {
+        void sendOrderConfirmationSms(asString(phone), orderCode, guestTotal);
+      }
+
       // Send welcome notification
       await createNotification(
         asString(guestUser.user_id),
@@ -1151,7 +1196,7 @@ export async function handleOrdersRoute(
         },
         order: presentOrderForCustomer(newOrder, createdItems as JsonObject[], []),
         temp_password: tempPassword,
-        stripe: await openStripePayment(newOrder.order_id, newOrder.total_amount, payment_method)
+        stripe: stripePayment
       }, corsHeaders);
     }
 
@@ -1216,8 +1261,6 @@ export async function handleOrdersRoute(
       }
 
       const orderCode = generateOrderCode();
-      assertStripeReady(payment_method);
-      const dbPaymentMethod = (payment_method === "COD" || payment_method === "cod") ? "COD" : "ONLINE_PAYMENT";
       const memberPriced = await priceClaimedOrder(orderItems, shipping_fee, body.shipping_method);
       const memberVoucher = await resolveOrderVoucher(
         context,
@@ -1228,6 +1271,8 @@ export async function handleOrdersRoute(
         memberPriced.cart
       );
       const memberTotal = Math.max(0, memberPriced.subtotal + memberPriced.shippingFee - memberVoucher.discountAmount);
+      assertStripeReady(payment_method, memberTotal);
+      const dbPaymentMethod = (payment_method === "COD" || payment_method === "cod") ? "COD" : "ONLINE_PAYMENT";
 
       // Create order row
       const newOrder = asJsonObject(await insertRow("orders", {
@@ -1250,7 +1295,11 @@ export async function handleOrdersRoute(
         updated_at: new Date().toISOString()
       }));
 
-      if (dbPaymentMethod !== "COD") {
+      // NOTE: DO NOT insert generic pending payment if provider is Stripe.
+      // createStripePaymentIntent (called in openStripePayment) will create the official
+      // pending payment row containing gateway_transaction_ref = stripe session id.
+      // Inserting here would trigger duplicate key violation on unique index `payment_one_open_stripe_session`.
+      if (dbPaymentMethod !== "COD" && String(payment_method || "").toUpperCase() !== "STRIPE") {
         try {
           const provider = String(payment_method || "online_payment").toLowerCase();
           await insertRow("payment", {
@@ -1299,6 +1348,10 @@ export async function handleOrdersRoute(
         await recordVoucherRedemption(memberVoucher.voucherId, memberVoucher.discountAmount);
       }
 
+      // Initialize Stripe checkout session if requested
+      const stripePayment = await openStripePayment(newOrder.order_id, newOrder.total_amount, payment_method);
+
+      // Confirmations sent AFTER DB and Stripe initialization succeed
       const memberTargetEmail = body.shipping_email || profile.email;
       if (memberTargetEmail) {
         const emailBody = `Chào ${shipping_name},\n\nĐơn hàng ${orderCode} của bạn đã được đặt thành công!\nTổng giá trị: ${memberTotal.toLocaleString('vi-VN')} đ\nPhương thức thanh toán: ${dbPaymentMethod === "COD" ? "Thanh toán khi nhận hàng (COD)" : "Thanh toán trực tuyến"}\nĐịa chỉ nhận: ${shipping_address}\n\nTra cứu đơn hàng tại: https://velura.royalai.dev/account/track?code=${orderCode}`;
@@ -1347,7 +1400,7 @@ export async function handleOrdersRoute(
       return sendJson(res, 200, {
         success: true,
         order: presentOrderForCustomer(newOrder, createdItems as JsonObject[], []),
-        stripe: await openStripePayment(newOrder.order_id, newOrder.total_amount, payment_method)
+        stripe: stripePayment
       }, corsHeaders);
     }
   }
@@ -1355,10 +1408,13 @@ export async function handleOrdersRoute(
   throw new HttpError(404, "NOT_FOUND", "Route orders not found");
 }
 
-function assertStripeReady(method: unknown): void {
+function assertStripeReady(method: unknown, amount?: number): void {
   if (String(method || "").toUpperCase() !== "STRIPE") return;
   if (!stripeConfigured()) {
     throw new HttpError(503, "STRIPE_NOT_CONFIGURED", "Chưa cấu hình STRIPE_SECRET_KEY. Chọn thanh toán khi nhận hàng hoặc cấu hình Stripe.");
+  }
+  if (amount !== undefined && amount < 10000) {
+    throw new HttpError(400, "STRIPE_AMOUNT_TOO_SMALL", "Stripe sandbox yêu cầu đơn từ 10.000 đồng.");
   }
 }
 

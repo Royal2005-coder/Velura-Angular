@@ -13,7 +13,7 @@ export class CheckoutConfirmPage {
   private readonly checkout = inject(CheckoutStore);
   private readonly route = inject(ActivatedRoute);
   private readonly created = this.checkout.readCreatedOrder();
-  readonly tempPassword = localStorage.getItem('guest_temp_password');
+  readonly claimUrl = sessionStorage.getItem('velura_claim_url');
 
   readonly isStripeSuccess = computed(() => this.route.snapshot.queryParamMap.get('stripe') === 'success');
   readonly orderCode = computed(() => this.created?.order_code || this.created?.order_id || '—');
@@ -47,8 +47,8 @@ export class CheckoutConfirmPage {
 
   constructor() {
     useBodyClass('page-checkout');
-    if (this.tempPassword) {
-      localStorage.removeItem('guest_temp_password');
+    if (this.claimUrl) {
+      sessionStorage.removeItem('velura_claim_url');
     }
   }
 }

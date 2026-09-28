@@ -221,13 +221,20 @@ export async function handleReturnsRoute(
       }
 
       let alreadyReturnedQty = 0;
+      let returnTimes = 0;
       for (const r of existingReturns) {
         if (r.status !== "rejected") {
           const { rows: rItems } = await selectRows("return_item", { return_id: `eq.${r.return_id}`, order_item_id: `eq.${item.order_item_id}` });
+          if (rItems.length) {
+            returnTimes += 1;
+          }
           for (const ri of rItems) {
             alreadyReturnedQty += Number(ri.quantity);
           }
         }
+      }
+      if (returnTimes >= 2) {
+        throw new HttpError(400, "RETURN_LIMIT", "Sản phẩm này đã dùng hết 2 lượt đổi/trả");
       }
 
       if (alreadyReturnedQty + Number(item.quantity) > Number(orderItem.quantity)) {
@@ -347,13 +354,20 @@ export async function handleReturnsRoute(
 
       // Quantity check
       let alreadyReturnedQty = 0;
+      let returnTimes = 0;
       for (const r of existingReturns) {
         if (r.status !== "rejected") {
           const { rows: rItems } = await selectRows("return_item", { return_id: `eq.${r.return_id}`, order_item_id: `eq.${item.order_item_id}` });
+          if (rItems.length) {
+            returnTimes += 1;
+          }
           for (const ri of rItems) {
             alreadyReturnedQty += Number(ri.quantity);
           }
         }
+      }
+      if (returnTimes >= 2) {
+        throw new HttpError(400, "RETURN_LIMIT", "Sản phẩm này đã dùng hết 2 lượt đổi/trả");
       }
 
       if (alreadyReturnedQty + Number(item.quantity) > Number(orderItem.quantity)) {

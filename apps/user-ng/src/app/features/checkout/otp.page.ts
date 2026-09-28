@@ -15,7 +15,7 @@ interface OtpVerifyResponse {
   message?: string;
   token?: string;
   user?: Record<string, unknown>;
-  temp_password?: string;
+  claim_url?: string;
   stripe?: { url?: string };
   order?: {
     order_id?: string;
@@ -38,7 +38,7 @@ export class CheckoutOtpPage {
   private readonly router = inject(Router);
 
   readonly digits = signal(['', '', '', '']);
-  readonly seconds = signal(300);
+  readonly seconds = signal(60);
   readonly errorMessage = signal<string | null>(null);
   readonly submitting = signal(false);
   readonly resending = signal(false);
@@ -112,7 +112,7 @@ export class CheckoutOtpPage {
         next: (res) => {
           this.resending.set(false);
           if (res.success) {
-            this.seconds.set(300);
+            this.seconds.set(60);
             if (res.masked_email) {
               this.maskedEmail.set(res.masked_email);
             }
@@ -191,7 +191,7 @@ export class CheckoutOtpPage {
           shipping_email: guestPayload['email'] || '',
           items: guestPayload['items'],
           note: guestPayload['note'],
-          referral_code: guestPayload['referral_code'],
+          referral_code: undefined,
           is_gift: guestPayload['is_gift'],
           gift_gender: guestPayload['gift_gender'],
           gift_name: guestPayload['gift_name'],
@@ -214,9 +214,12 @@ export class CheckoutOtpPage {
             return;
           }
           this.auth.applySession(res.token, res.user);
-          if (res.temp_password) {
-            localStorage.setItem('guest_temp_password', res.temp_password);
+          if (res.claim_url) {
+            sessionStorage.setItem('velura_claim_url', res.claim_url);
+          } else {
+            sessionStorage.removeItem('velura_claim_url');
           }
+          localStorage.removeItem('guest_temp_password');
           this.checkout.saveCreatedOrder({
             order_id: res.order.order_id,
             order_code: res.order.order_code,

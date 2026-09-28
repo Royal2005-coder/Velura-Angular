@@ -66,16 +66,19 @@ export function sendError(
   extraHeaders: HeaderMap = {},
   requestId = ""
 ): void {
+  const isHttpError = error instanceof HttpError;
   const err = error as ErrorLike;
   const status = err.status || 500;
   if (status >= 500) {
     console.error(`[Internal Server Error] RequestId: ${requestId}`, error);
   }
+  const isExplicit = isHttpError || Boolean(err.code && err.message && status !== 500);
+  const message = isExplicit ? (err.message || errorMessage(error)) : (status >= 500 ? "Internal server error" : err.message || errorMessage(error));
   const payload = {
     error: {
       code: err.code || "INTERNAL_ERROR",
-      message: status >= 500 ? "Internal server error" : err.message || errorMessage(error),
-      details: status >= 500 ? undefined : err.details,
+      message,
+      details: isExplicit ? err.details : (status >= 500 ? undefined : err.details),
       requestId: requestId || undefined,
       timestamp: new Date().toISOString()
     }

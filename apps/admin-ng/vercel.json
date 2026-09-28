@@ -3,6 +3,7 @@
   "buildCommand": "ng build",
   "outputDirectory": "dist/admin-ng/browser",
   "cleanUrls": true,
+  "regions": ["sin1"],
   "rewrites": [
     {
       "source": "/api/:path*",

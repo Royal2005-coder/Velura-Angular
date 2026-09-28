@@ -195,7 +195,7 @@ export async function sendTwilioSms(to: string, body: string): Promise<TwilioSen
  * @param otpCode 4-digit OTP string
  */
 export async function sendCheckoutOtpSms(phone: string, otpCode: string): Promise<TwilioSendResult> {
-  const body = `[Velura] Ma xac thuc don hang cua ban la: ${otpCode}. Ma co hieu luc trong 5 phut. Vui long khong chia se ma cho bat ky ai.`;
+  const body = `[Velura] Ma OTP don hang: ${otpCode}. Hieu luc 1 phut. Toi da 5 lan nhap. Khong chia se ma nay.`;
   return sendTwilioSms(phone, body);
 }
 
@@ -206,6 +206,21 @@ export async function sendCheckoutOtpSms(phone: string, otpCode: string): Promis
  * @param orderCode Unique order tracking code (e.g., "VLR...")
  * @param totalAmount Order total in VND
  */
+/**
+ * SMS lead: order placed + link to set a password and become a member.
+ * Clicking the link is the phone proof; the page only collects the password.
+ */
+export async function sendGuestMembershipSms(
+  phone: string,
+  orderCode: string,
+  claimUrl: string
+): Promise<TwilioSendResult> {
+  const body =
+    `[Velura] Don #${orderCode} da dat thanh cong. ` +
+    `Mo link de tao mat khau, nhan uu dai thanh vien va theo doi don: ${claimUrl}`;
+  return sendTwilioSms(phone, body);
+}
+
 export async function sendOrderConfirmationSms(
   phone: string,
   orderCode: string,

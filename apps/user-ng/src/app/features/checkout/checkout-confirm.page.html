@@ -32,15 +32,12 @@
       </div>
     </div>
 
-    @if (tempPassword) {
+    @if (claimUrl) {
       <div class="password-notice-container" style="margin: 24px 0; width: 100%;">
         <div style="background: rgba(201, 123, 99, 0.08); border: 1px solid var(--terracotta); border-radius: 8px; padding: 20px;">
-          <h4 style="color: var(--terracotta); margin-top: 0; margin-bottom: 8px;">Chào mừng bạn đến với Velura!</h4>
-          <p style="margin: 0 0 12px 0;">Hệ thống đã tự động tạo tài khoản Thành viên cho số điện thoại của bạn.</p>
-          <div style="display: flex; align-items: center; justify-content: space-between; background: #fff; padding: 10px 14px; border-radius: 6px;">
-            <span>Mật khẩu tạm thời:</span>
-            <strong>{{ tempPassword }}</strong>
-          </div>
+          <h4 style="color: var(--terracotta); margin-top: 0; margin-bottom: 8px;">Nhận ưu đãi thành viên</h4>
+          <p style="margin: 0 0 12px 0;">SMS đã gửi link đặt mật khẩu theo số điện thoại vừa mua. Bấm link để tạo tài khoản, đơn hàng sẽ tự gắn vào tài khoản đó.</p>
+          <a class="btn btn--brown" [href]="claimUrl">Đặt mật khẩu thành viên</a>
         </div>
       </div>
     }

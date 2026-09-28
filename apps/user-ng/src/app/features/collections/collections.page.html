@@ -19,7 +19,20 @@
 
     <div class="collections-list">
       @if (loading()) {
-        <div class="collections-state">Đang tải danh sách bộ sưu tập từ cửa hàng...</div>
+        @for (n of [1, 2]; track n) {
+          <section class="collection-detail" style="pointer-events: none; opacity: 0.85;">
+            <div class="collection-detail__cover skeleton-shimmer" style="min-height: 280px;"></div>
+            <div class="collection-detail__body">
+              <aside class="collection-detail__info">
+                <div class="skeleton-shimmer" style="height: 16px; width: 120px; margin-bottom: 12px; border-radius: 4px;"></div>
+                <div class="skeleton-shimmer" style="height: 32px; width: 240px; margin-bottom: 20px; border-radius: 4px;"></div>
+                <div class="skeleton-shimmer" style="height: 14px; width: 100%; margin-bottom: 8px; border-radius: 4px;"></div>
+                <div class="skeleton-shimmer" style="height: 14px; width: 85%; margin-bottom: 8px; border-radius: 4px;"></div>
+                <div class="skeleton-shimmer" style="height: 14px; width: 70%; border-radius: 4px;"></div>
+              </aside>
+            </div>
+          </section>
+        }
       } @else {
         @for (group of groups(); track group.lookbook.id) {
           <section class="collection-detail" [attr.data-category]="group.lookbook.id" [attr.aria-labelledby]="'collection-' + group.lookbook.id">

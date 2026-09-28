@@ -1,6 +1,6 @@
 import { returnWindowOpen } from "./return-window.js";
 import { HttpError, readJson, sendJson } from "../http.js";
-import { selectOne, selectRows, insertRow, updateRows } from "../supabase.js";
+import { quotePostgrestValue, selectOne, selectRows, insertRow, updateRows } from "../supabase.js";
 import { requireUserAuth } from "./auth.js";
 import {
   asJsonObject,
@@ -405,31 +405,52 @@ export async function handleReturnsRoute(
       queryParams.order_id = `eq.${order_id}`;
     }
 
-    const { rows: returns } = await selectRows("return_exchange", queryParams);
-    
-    // Populate items
-    const populatedReturns: JsonObject[] = [];
-    for (const ret of returns) {
-      const { rows: rItems } = await selectRows("return_item", { return_id: `eq.${ret.return_id}` });
-      
-      const itemsWithDetails: JsonObject[] = [];
-      for (const ri of rItems) {
-        const orderItem = await selectOne("order_item", { item_id: `eq.${ri.order_item_id}` });
-        itemsWithDetails.push({
-          ...ri,
-          product_name: orderItem ? orderItem.product_name : "Sản phẩm",
-          product_image: orderItem ? orderItem.product_image : null,
-          unit_price: orderItem ? orderItem.unit_price : 0
-        });
+    const { rows: returns } = await selectRows("return_exchange", queryParams, { count: "none" });
+
+    // Populate items in batches without N+1 queries
+    const returnIds = returns.map((r) => String(r.return_id)).filter(Boolean);
+    let allReturnItems: JsonObject[] = [];
+    if (returnIds.length > 0) {
+      const { rows: rItems } = await selectRows("return_item", {
+        return_id: `in.(${returnIds.map(quotePostgrestValue).join(",")})`
+      }, { count: "none" });
+      allReturnItems = rItems;
+    }
+
+    const orderItemIds = [...new Set(allReturnItems.map((ri) => String(ri.order_item_id || "")).filter(Boolean))];
+    const orderItemMap = new Map<string, JsonObject>();
+    if (orderItemIds.length > 0) {
+      const { rows: orderItems } = await selectRows("order_item", {
+        item_id: `in.(${orderItemIds.map(quotePostgrestValue).join(",")})`
+      }, { count: "none" });
+      for (const oi of orderItems) {
+        orderItemMap.set(String(oi.item_id), oi);
       }
-      populatedReturns.push({
-        ...ret,
-        items: itemsWithDetails
-      });
+    }
+
+    const itemsByReturnId = new Map<string, JsonObject[]>();
+    for (const ri of allReturnItems) {
+      const orderItem = orderItemMap.get(String(ri.order_item_id || ""));
+      const itemDetail = {
+        ...ri,
+        product_name: orderItem ? orderItem.product_name : "Sản phẩm",
+        product_image: orderItem ? orderItem.product_image : null,
+        unit_price: orderItem ? orderItem.unit_price : 0
+      };
+      const rId = String(ri.return_id || "");
+      const list = itemsByReturnId.get(rId) || [];
+      list.push(itemDetail);
+      itemsByReturnId.set(rId, list);
     }
 
     // Sort descending by created_at
-    populatedReturns.sort((a, b) => new Date(String(b.created_at)).getTime() - new Date(String(a.created_at)).getTime());
+    returns.sort((a, b) => new Date(String(b.created_at)).getTime() - new Date(String(a.created_at)).getTime());
+
+    const populatedReturns: JsonObject[] = returns.map((ret) => ({
+      ...ret,
+      items: itemsByReturnId.get(String(ret.return_id)) || []
+    }));
+
 
     return sendJson(res, 200, {
       success: true,

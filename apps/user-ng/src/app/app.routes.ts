@@ -113,7 +113,10 @@ export const routes: Routes = [
         title: 'Tài khoản cá nhân - Velura Store',
       },
       {
-        path: 'account/track',
+        path: 'account/claim',
+        loadComponent: () => import('./features/account/claim.page').then((m) => m.ClaimAccountPage),
+        title: 'Tạo tài khoản thành viên - Velura',
+      },
         loadComponent: () => import('./features/account/track.page').then((m) => m.AccountTrackPage),
         title: 'Theo dõi đơn hàng - Velura Store',
       },

@@ -43,19 +43,19 @@ function prepareVercelOutput(appDir, distSubDir, projectName, projectId, orgId) 
     version: 3,
     routes: [
       {
-        src: "^/api/(.*)$",
+        src: "/api/(.*)",
         dest: "https://velura-api.vercel.app/api/$1"
       },
       {
-        src: "^/supabase/(.*)$",
+        src: "/supabase/(.*)",
         dest: "https://gtyuajboeffmfskofoyh.supabase.co/$1"
       },
       {
         handle: "filesystem"
       },
       {
-        src: "^/.*$",
-        dest: "/index.html"
+        src: "/(.*)",
+        dest: "/"
       }
     ]
   };

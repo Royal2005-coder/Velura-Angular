@@ -76,7 +76,7 @@
             <p class="field__error">{{ errorMessage() }}</p>
           }
           <div style="margin-top:24px">
-            <button class="btn btn--primary btn--full js-otp-btn-confirm" type="button" (click)="confirm()">Xác nhận</button>
+            <button class="btn btn--primary btn--full js-otp-btn-confirm" type="button" [disabled]="submitting()" (click)="confirm()">{{ submitting() ? 'Đang xác thực...' : 'Xác nhận' }}</button>
           </div>
         </form>
       </div>

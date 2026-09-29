@@ -14,6 +14,7 @@ import { returnWindowOpen } from "./return-window.js";
 import {
   sendCheckoutOtpSms,
   sendOrderConfirmationSms,
+  sendGuestMembershipSms,
   sendTwilioSms,
   maskPhone,
   isTwilioConfigured
@@ -731,8 +732,8 @@ export async function handleOrdersRoute(
       let targetUser = existingUser || existingUserByEmail;
       const userId = targetUser ? targetUser.user_id : null;
       
-      const otpCode = Math.floor(1000 + Math.random() * 9000).toString(); // 4 digits
-      const otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+      const otpCode = Math.floor(1000 + Math.random() * 9000).toString();
+      const otpExpiresAt = new Date(Date.now() + 60 * 1000).toISOString();
       
       if (config.nodeEnv !== "production") {
         console.log(`\n==================================================`);
@@ -761,8 +762,7 @@ export async function handleOrdersRoute(
             updated_at: new Date().toISOString()
           });
         } else {
-          const tempPassword = "VLR" + Math.floor(100000 + Math.random() * 900000).toString();
-          const hashedPassword = hashPassword(tempPassword);
+          const hashedPassword = hashPassword(`pending-claim-${Date.now()}-${Math.random()}`);
           await insertRow("users", {
             full_name: full_name || "Khách hàng",
             phone: phone,
@@ -787,7 +787,7 @@ export async function handleOrdersRoute(
 
       // Gửi OTP qua Email nếu có
       if (otpEmail) {
-        const emailBody = `Chào ${full_name || "bạn"},\n\nMã xác thực OTP của bạn là: ${otpCode}.\n\nMã có hiệu lực trong 5 phút. Vui lòng không chia sẻ mã này cho bất kỳ ai.`;
+        const emailBody = `Chào ${full_name || "bạn"},\n\nMã xác thực OTP của bạn là: ${otpCode}.\n\nMã có hiệu lực trong 1 phút, tối đa 5 lần nhập. Vui lòng không chia sẻ mã này.`;
         const emailHtml = `
           <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eaeaea; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
             <div style="background-color: #d1b8a8; padding: 24px; text-align: center;">
@@ -802,7 +802,7 @@ export async function handleOrdersRoute(
                 <span style="font-size: 36px; font-weight: bold; color: #b89b88; letter-spacing: 12px; display: inline-block; margin-left: 12px;">${otpCode}</span>
               </div>
               
-              <p style="color: #888; font-size: 14px; text-align: center; margin-bottom: 0;">Mã có hiệu lực trong <strong>5 phút</strong>. Vui lòng không chia sẻ mã này.</p>
+              <p style="color: #888; font-size: 14px; text-align: center; margin-bottom: 0;">Mã có hiệu lực trong <strong>1 phút</strong>, tối đa 5 lần nhập.</p>
             </div>
             <div style="background-color: #f9f9f9; padding: 16px; text-align: center; border-top: 1px solid #eaeaea;">
               <p style="color: #aaa; font-size: 12px; margin: 0;">&copy; ${new Date().getFullYear()} Velura. Mọi quyền được bảo lưu.</p>
@@ -828,14 +828,22 @@ export async function handleOrdersRoute(
 
       const smsSent = smsResult.success;
       const emailSent = Boolean(otpEmail);
+      if (!smsSent && !emailSent) {
+        const reason = smsResult.error || "Twilio chưa đủ Account SID và số gửi";
+        throw new HttpError(
+          503,
+          "SMS_NOT_CONFIGURED",
+          `Không gửi được OTP qua SMS. ${reason}. Cần TWILIO_ACCOUNT_SID và TWILIO_PHONE_NUMBER hoặc TWILIO_MESSAGING_SERVICE_SID trên server.`
+        );
+      }
       let channel: "sms" | "email" | "both" = "sms";
-      let message = `Mã OTP đã được gửi tới số điện thoại ${maskPhone(phone)}.`;
+      let message = `Mã OTP đã được gửi tới số điện thoại ${maskPhone(phone)}. Hiệu lực 1 phút.`;
       if (smsSent && emailSent) {
         channel = "both";
-        message = `Mã OTP đã được gửi tới số điện thoại ${maskPhone(phone)} và email ${maskEmail(otpEmail!)}.`;
+        message = `Mã OTP đã được gửi tới số điện thoại ${maskPhone(phone)} và email ${maskEmail(otpEmail!)}. Hiệu lực 1 phút.`;
       } else if (emailSent && !smsSent) {
         channel = "email";
-        message = `Mã OTP đã được gửi tới email ${maskEmail(otpEmail!)}.`;
+        message = `SMS chưa gửi được (${smsResult.error || "Twilio chưa cấu hình"}). Mã OTP đã gửi email ${maskEmail(otpEmail!)}. Hiệu lực 1 phút.`;
       }
       
       return sendJson(res, 200, {
@@ -1003,8 +1011,6 @@ export async function handleOrdersRoute(
         }, corsHeaders);
       }
       
-      const tempPassword = "VLR" + Math.floor(100000 + Math.random() * 900000).toString();
-      const hashedPassword = hashPassword(tempPassword);
       const savedAddresses = [{
         name: shipping_name,
         phone: phone,
@@ -1022,21 +1028,20 @@ export async function handleOrdersRoute(
           full_name: sessionState.full_name || shipping_name,
           phone: phone,
           email: sessionState.email,
-          password_hash: hashedPassword,
+          password_hash: hashPassword(`pending-claim-${Date.now()}`),
           role: "member",
-          is_active: true,
+          is_active: false,
           saved_addresses: savedAddresses,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         }));
-      } else if (!guestUser.is_active) {
+      } else if (!isExistingMember) {
         await updateRows("users", { user_id: `eq.${guestUser.user_id}` }, {
-          is_active: true,
+          is_active: false,
           otp_code: null,
           otp_expires_at: null,
           login_fail_count: 0,
           full_name: guestUser.full_name || shipping_name,
-          password_hash: hashedPassword,
           saved_addresses: savedAddresses,
           updated_at: new Date().toISOString()
         });
@@ -1127,10 +1132,17 @@ export async function handleOrdersRoute(
 
       // CRITICAL FIX: Send confirmations ONLY AFTER order, items, and payment setup succeed!
       // This prevents the bug where users receive confirmation emails/SMS while the API returned an error.
+      const claimToken = !isExistingMember
+        ? signJwt({ purpose: "guest_claim", user_id: guestUser.user_id, phone })
+        : "";
+      const claimUrl = claimToken
+        ? `${config.storefrontOrigin}/account/claim?token=${encodeURIComponent(claimToken)}`
+        : "";
+
       const shipping_email = body.shipping_email || order.shipping_email;
       if (shipping_email || guestUser.email) {
         const targetEmail = shipping_email || guestUser.email;
-        const emailBody = `Chào ${shipping_name},\n\nĐơn hàng ${orderCode} của bạn đã được đặt thành công!\nTổng giá trị: ${guestTotal.toLocaleString('vi-VN')} đ\nPhương thức thanh toán: ${dbPaymentMethod === "COD" ? "Thanh toán khi nhận hàng (COD)" : "Thanh toán trực tuyến"}\nĐịa chỉ nhận: ${shipping_address}\n\nTra cứu đơn hàng tại: https://velura.royalai.dev/account/track?code=${orderCode}\n\nThông tin đăng nhập tài khoản:\n- Số điện thoại: ${phone}\n- Mật khẩu tạm thời: ${tempPassword}`;
+        const emailBody = `Chào ${shipping_name},\n\nĐơn hàng ${orderCode} của bạn đã được đặt thành công!\nTổng giá trị: ${guestTotal.toLocaleString('vi-VN')} đ\n${claimUrl ? `Tạo mật khẩu thành viên và theo dõi đơn: ${claimUrl}\n` : "Đơn đã gắn với tài khoản thành viên của số điện thoại này.\n"}`;
         
         const emailHtml = `
           <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eaeaea; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
@@ -1154,10 +1166,10 @@ export async function handleOrdersRoute(
                 <a href="https://velura.royalai.dev/account/track?code=${orderCode}&contact=${encodeURIComponent(String(phone || ''))}" style="display: inline-block; background-color: #7C5454; color: #fff; text-decoration: none; padding: 12px 28px; border-radius: 6px; font-weight: 600;">Tra cứu tiến độ đơn hàng</a>
               </div>
 
-              ${!isExistingMember ? `
+              ${claimUrl ? `
               <div style="background-color: #f5f5f5; padding: 16px; border-radius: 6px; margin-top: 20px;">
-                <h4 style="margin: 0 0 8px 0; font-size: 14px; color: #555;">Tài khoản thành viên tự động tạo:</h4>
-                <p style="margin: 4px 0; font-size: 13px; color: #666;">Số điện thoại: <strong>${phone}</strong> | Mật khẩu: <span style="font-family: monospace; font-weight: bold;">${tempPassword}</span></p>
+                <p style="margin: 0 0 8px 0; font-size: 14px;">Bấm link trong SMS (hoặc nút dưới) để đặt mật khẩu, nhận ưu đãi và theo dõi đơn. Không có mật khẩu tạm.</p>
+                <a href="${claimUrl}" style="color:#7C5454;font-weight:700;">Tạo tài khoản thành viên</a>
               </div>` : `
               <div style="background-color: #f5f5f5; padding: 16px; border-radius: 6px; margin-top: 20px;">
                 <p style="margin: 4px 0; font-size: 13px; color: #666;">Đơn hàng đã được liên kết với tài khoản thành viên của bạn (<strong>${phone}</strong>).</p>
@@ -1187,7 +1199,11 @@ export async function handleOrdersRoute(
 
       // Gửi SMS xác nhận đơn hàng qua Twilio cho khách
       if (phone) {
-        void sendOrderConfirmationSms(asString(phone), orderCode, guestTotal);
+        if (claimUrl) {
+          void sendGuestMembershipSms(asString(phone), orderCode, claimUrl);
+        } else {
+          void sendOrderConfirmationSms(asString(phone), orderCode, guestTotal);
+        }
       }
 
       // Send welcome notification
@@ -1208,20 +1224,23 @@ export async function handleOrdersRoute(
         `/account/orders/${newOrder.order_id}`
       );
       
-      const token = signJwt({ user_id: guestUser.user_id, email: guestUser.email || `${phone}@velura.vn`, role: "member" });
+      const token = isExistingMember
+        ? signJwt({ user_id: guestUser.user_id, email: guestUser.email || `${phone}@velura.vn`, role: "member" })
+        : "";
       
       return sendJson(res, 200, {
         success: true,
-        token,
-        user: {
+        token: token || undefined,
+        claim_url: claimUrl || undefined,
+        membership: isExistingMember ? "linked" : "pending_password",
+        user: isExistingMember ? {
           user_id: guestUser.user_id,
           email: guestUser.email,
           phone: guestUser.phone,
           full_name: guestUser.full_name,
           role: "member"
-        },
+        } : undefined,
         order: presentOrderForCustomer(newOrder, createdItems as JsonObject[], []),
-        temp_password: tempPassword,
         stripe: stripePayment
       }, corsHeaders);
     }

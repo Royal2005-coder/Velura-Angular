@@ -1,5 +1,6 @@
 import { config } from "../config.js";
 import { errorMessage } from "../types.js";
+import { isEsmsConfigured, sendEsms } from "./esms.js";
 
 /**
  * Result of attempting to send an SMS via Twilio.
@@ -94,6 +95,9 @@ export async function sendTwilioSms(to: string, body: string): Promise<TwilioSen
   const formattedTo = toE164(to);
   if (!formattedTo) {
     return { success: false, error: "Số điện thoại không hợp lệ hoặc để trống" };
+  }
+  if (isEsmsConfigured()) {
+    return sendEsms(to, body);
   }
 
   const accountSid = config.twilioAccountSid;

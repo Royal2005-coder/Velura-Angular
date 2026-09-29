@@ -19,6 +19,7 @@ import {
   maskPhone,
   isTwilioConfigured
 } from "../sms/twilio.js";
+import { isEsmsConfigured } from "../sms/esms.js";
 import { maskEmail, sendDirectEmail } from "../email/mailer.js";
 export { maskEmail } from "../email/mailer.js";
 import {
@@ -717,12 +718,12 @@ export async function handleOrdersRoute(
       if (!validatePhone(phone)) {
         throw new HttpError(400, "BAD_REQUEST", "Số điện thoại không hợp lệ (10 số, bắt đầu bằng 0)");
       }
-      const twilioReady = isTwilioConfigured();
+      const smsReady = isTwilioConfigured() || isEsmsConfigured();
       let otpEmail: string | null = null;
-      if (email || !twilioReady) {
+      if (email || !smsReady) {
         otpEmail = requireGuestOtpEmail(email);
       }
-      if (config.nodeEnv === "production" && !twilioReady && (!config.smtpHost || !config.smtpUser || !config.smtpAppPassword)) {
+      if (config.nodeEnv === "production" && !smsReady && (!config.smtpHost || !config.smtpUser || !config.smtpAppPassword)) {
         throw new HttpError(503, "OTP_SERVICE_UNAVAILABLE", "Chưa cấu hình dịch vụ SMS hoặc email để gửi mã OTP.");
       }
       
@@ -842,6 +843,9 @@ export async function handleOrdersRoute(
       if (smsSent && emailSent) {
         channel = "both";
         message = `Mã OTP đã được gửi tới số điện thoại ${maskPhone(phone)} và email ${maskEmail(otpEmail!)}. Hiệu lực 1 phút.`;
+      } else if (smsSent && smsResult.simulated) {
+        channel = "sms";
+        message = "eSMS sandbox đã nhận yêu cầu. Tin không gửi tới máy. Tắt ESMS_SANDBOX để gửi thật.";
       } else if (emailSent && !smsSent) {
         channel = "email";
         message = `SMS chưa gửi được (${smsResult.error || "Twilio chưa cấu hình"}). Mã OTP đã gửi email ${maskEmail(otpEmail!)}. Hiệu lực 1 phút.`;

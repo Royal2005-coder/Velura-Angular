@@ -721,7 +721,7 @@ export class CheckoutShippingPage {
       return;
     }
     if (!this.auth.isLoggedIn() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      showToast('Email không hợp lệ. Mã OTP được gửi tới email, không gửi qua số điện thoại.');
+      showToast('Email không hợp lệ. Nhập email để nhận mã nếu SMS chưa tới.');
       return;
     }
     if (!/^0\d{9}$/.test(phone)) {
@@ -914,7 +914,10 @@ export class CheckoutShippingPage {
             vat_company_address: payload.vat_company_address,
             vat_email: payload.vat_email,
           });
-          showToast('Mã xác thực OTP đã được gửi!');
+          if (res.message) {
+            sessionStorage.setItem('velura_otp_message', res.message);
+          }
+          showToast(res.message || 'Mã xác thực OTP đã được gửi!');
           void this.router.navigateByUrl('/checkout/otp');
         },
         error: (error: Error) => {

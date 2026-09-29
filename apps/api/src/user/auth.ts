@@ -1,6 +1,6 @@
 import { HttpError, readJson, sendJson } from "../http.js";
 import { selectOne, insertRow, updateRows, getAuthUser } from "../supabase.js";
-import { hashPassword, verifyPassword, signJwt } from "../auth-helper.js";
+import { hashPassword, verifyPassword, signJwt, verifyJwt } from "../auth-helper.js";
 import { allowDevOtpBypass } from "../config.js";
 import {
   assertNotLocked,
@@ -530,6 +530,53 @@ export async function handleAuthRoute(
     return sendJson(res, 200, {
       success: true,
       message: "Đặt lại mật khẩu thành công. Vui lòng đăng nhập lại."
+    }, corsHeaders);
+  }
+
+  // POST /api/user/auth/claim-password — guest who bought by phone sets a real password.
+  if (action === "claim-password" && req.method === "POST") {
+    const body = await readJson(req);
+    const token = asString(body.token);
+    const password = asString(body.password);
+    const confirm = asString(body.password_confirm);
+    if (!token || !password) {
+      throw new HttpError(400, "BAD_REQUEST", "Thiếu liên kết hoặc mật khẩu");
+    }
+    if (password !== confirm) {
+      throw new HttpError(400, "BAD_REQUEST", "Mật khẩu nhập lại không khớp");
+    }
+    if (!validatePassword(password)) {
+      throw new HttpError(400, "BAD_REQUEST", "Mật khẩu phải dài tối thiểu 8 ký tự, gồm chữ hoa, chữ thường và số hoặc ký tự đặc biệt");
+    }
+    const decoded = verifyJwt(token);
+    if (!decoded || decoded.purpose !== "guest_claim" || !decoded.user_id) {
+      throw new HttpError(400, "INVALID_TOKEN", "Liên kết tạo tài khoản không hợp lệ hoặc đã hết hạn");
+    }
+    const user = await selectOne("users", { user_id: `eq.${decoded.user_id}` });
+    if (!user) {
+      throw new HttpError(404, "USER_NOT_FOUND", "Không tìm thấy tài khoản gắn với số điện thoại");
+    }
+    await updateRows("users", { user_id: `eq.${user.user_id}` }, {
+      password_hash: hashPassword(password),
+      is_active: true,
+      role: "member",
+      otp_code: null,
+      otp_expires_at: null,
+      login_fail_count: 0,
+      updated_at: new Date().toISOString()
+    });
+    const session = signJwt({ user_id: user.user_id, email: user.email || `${user.phone}@velura.vn`, role: "member" });
+    return sendJson(res, 200, {
+      success: true,
+      token: session,
+      user: {
+        user_id: user.user_id,
+        email: user.email,
+        phone: user.phone,
+        full_name: user.full_name,
+        role: "member"
+      },
+      message: "Tài khoản thành viên đã kích hoạt. Đơn hàng theo số điện thoại đã được liên kết."
     }, corsHeaders);
   }
 

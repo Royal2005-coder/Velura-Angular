@@ -13,7 +13,7 @@ describe('CheckoutOtpPage', () => {
   it('creates the ViewModel with a stub Model (no HttpClient)', async () => {
     const page = await createStorefrontPage(CheckoutOtpPage);
     expect(page).toBeTruthy();
-    expect(page.seconds()).toBe(300);
+    expect(page.seconds()).toBe(60);
     expect(page.digits().join('')).toBe('');
   });
 });

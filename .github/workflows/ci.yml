@@ -300,6 +300,7 @@ jobs:
           TWILIO_API_KEY_SID: ${{ secrets.TWILIO_API_KEY_SID }}
           TWILIO_API_KEY_SECRET: ${{ secrets.TWILIO_API_KEY_SECRET }}
           TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
           TWILIO_PHONE_NUMBER: ${{ secrets.TWILIO_PHONE_NUMBER }}
         run: |
           if [ -n "$STRIPE_SECRET_KEY" ]; then
@@ -319,6 +320,9 @@ jobs:
           fi
           if [ -n "$TWILIO_ACCOUNT_SID" ]; then
             vercel env add TWILIO_ACCOUNT_SID production --value "$TWILIO_ACCOUNT_SID" --cwd apps/api --token "$VERCEL_TOKEN" --yes --force || true
+          fi
+          if [ -n "$TWILIO_AUTH_TOKEN" ]; then
+            vercel env add TWILIO_AUTH_TOKEN production --value "$TWILIO_AUTH_TOKEN" --cwd apps/api --token "$VERCEL_TOKEN" --yes --force || true
           fi
           if [ -n "$TWILIO_PHONE_NUMBER" ]; then
             vercel env add TWILIO_PHONE_NUMBER production --value "$TWILIO_PHONE_NUMBER" --cwd apps/api --token "$VERCEL_TOKEN" --yes --force || true

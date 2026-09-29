@@ -120,10 +120,10 @@ export async function sendTwilioSms(to: string, body: string): Promise<TwilioSen
     };
   }
 
-  // Construct Basic Auth credentials:
-  // Twilio accepts API Key SID as username and API Key Secret as password.
-  const username = config.twilioApiKeySid || config.twilioAccountSid;
-  const password = config.twilioApiKeySecret || config.twilioAuthToken;
+  // Auth Token has account-wide Messages permission. The stored API key was
+  // rejected with 70004, so it is only a fallback when no Auth Token is set.
+  const username = config.twilioAuthToken ? config.twilioAccountSid : (config.twilioApiKeySid || config.twilioAccountSid);
+  const password = config.twilioAuthToken || config.twilioApiKeySecret;
   const authHeader = `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
 
   const endpoint = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;

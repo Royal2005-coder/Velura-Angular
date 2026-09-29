@@ -784,6 +784,7 @@ export async function handleOrdersRoute(
 
       // Gửi OTP qua Twilio SMS
       const smsResult = await sendCheckoutOtpSms(phone, otpCode);
+      console.error(`[TWILIO SMS RESULT] success=${smsResult.success} code=${smsResult.code ?? ""} error=${smsResult.error ?? ""} simulated=${smsResult.simulated === true}`);
 
       // Gửi OTP qua Email nếu có
       if (otpEmail) {
@@ -872,7 +873,7 @@ export async function handleOrdersRoute(
         }
         phone = cleanPhone;
       }
-      const otp_code = body.otp_code || body.otp;
+      const otp_code = String(body.otp_code || body.otp || "").replace(/\D/g, "");
       const shipping_name = body.shipping_name || order.shipping_name;
       const shipping_address = body.shipping_address || order.shipping_address;
       const shipping_fee = body.shipping_fee !== undefined ? body.shipping_fee : order.shipping_fee;
@@ -893,28 +894,26 @@ export async function handleOrdersRoute(
       const items = rawItems.map((item) => asJsonObject(item));
       const phoneKey = asString(phone);
       
+      let dbUser: JsonObject | null = await selectOne("users", { phone: `eq.${phoneKey}` });
+      if (!dbUser && (body.shipping_email || order.shipping_email)) {
+        const checkEmail = asString(body.shipping_email || order.shipping_email);
+        dbUser = await selectOne("users", { email: `eq.${checkEmail}` });
+      }
+      // Database is the source of truth. A warm serverless instance can still
+      // hold an older code in memory after a newer OTP was stored.
       let sessionState = checkoutOtpAttemptsMap.get(phoneKey);
-      let dbUser: JsonObject | null = null;
-
-      if (!sessionState) {
-        // Query users table for serverless instance resilience
-        dbUser = await selectOne("users", { phone: `eq.${phoneKey}` });
-        if (!dbUser && (body.shipping_email || order.shipping_email)) {
-          const checkEmail = asString(body.shipping_email || order.shipping_email);
-          dbUser = await selectOne("users", { email: `eq.${checkEmail}` });
-        }
-        if (dbUser && dbUser.otp_code) {
-          sessionState = {
-            otpCode: String(dbUser.otp_code),
-            expiresAt: dbUser.otp_expires_at ? new Date(String(dbUser.otp_expires_at)).getTime() : 0,
-            email: dbUser.email || body.shipping_email || order.shipping_email || null,
-            full_name: dbUser.full_name || shipping_name,
-            attempts: Number(dbUser.login_fail_count || 0)
-          };
-        }
+      if (dbUser && dbUser.otp_code) {
+        sessionState = {
+          otpCode: String(dbUser.otp_code).trim(),
+          expiresAt: dbUser.otp_expires_at ? new Date(String(dbUser.otp_expires_at)).getTime() : 0,
+          email: dbUser.email || body.shipping_email || order.shipping_email || null,
+          full_name: dbUser.full_name || shipping_name,
+          attempts: Number(dbUser.login_fail_count || 0)
+        };
       }
       
       if (!sessionState) {
+        console.error(`[CHECKOUT OTP VERIFY] no session phone=${phoneKey}`);
         throw new HttpError(400, "INVALID_OTP", "Không tìm thấy phiên xác thực. Vui lòng nhận lại mã OTP.");
       }
       
@@ -923,10 +922,11 @@ export async function handleOrdersRoute(
       }
 
       if (sessionState.expiresAt < Date.now()) {
-        throw new HttpError(400, "EXPIRED_OTP", "Mã xác thực đã hết hạn.");
+        console.error(`[CHECKOUT OTP VERIFY] expired phone=${phoneKey}`);
+        throw new HttpError(400, "EXPIRED_OTP", "Mã xác thực đã hết hạn. Bấm Gửi lại.");
       }
 
-      if (sessionState.otpCode !== otp_code) {
+      if (String(sessionState.otpCode).trim() !== otp_code) {
         if (!allowDevOtpBypass() || (otp_code !== "1234" && otp_code !== "123456")) {
           sessionState.attempts += 1;
           checkoutOtpAttemptsMap.set(phoneKey, sessionState);

@@ -50,17 +50,7 @@
       <div class="otp-modal__content" style="position: relative;">
         <a class="otp-modal__close" routerLink="/checkout/shipping" aria-label="Đóng" style="position: absolute; top: 16px; right: 16px; background: none; border: none; font-size: 24px; cursor: pointer; color: #999;">&times;</a>
         <h2 id="otp-title" class="otp-modal__title">Nhập OTP để hoàn tất đơn hàng</h2>
-        <p class="otp-modal__desc">
-          @if (maskedPhone() && maskedEmail()) {
-            Mã OTP đã được gửi tới số điện thoại {{ maskedPhone() }} và email {{ maskedEmail() }}.
-          } @else if (maskedPhone()) {
-            Mã OTP đã được gửi tới số điện thoại {{ maskedPhone() }}.
-          } @else if (maskedEmail()) {
-            Mã OTP đã được gửi tới email {{ maskedEmail() }}.
-          } @else {
-            Vui lòng nhập mã OTP để hoàn tất đơn hàng.
-          }
-        </p>
+        <p class="otp-modal__desc">{{ deliveryMessage() }}</p>
         @if (devBypass()) {
           <p class="otp-modal__desc">Máy local có thể nhập 1234.</p>
         }

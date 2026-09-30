@@ -172,7 +172,14 @@ async function geminiRequestWithRetry(
       return await geminiRequest(path, payload, options);
     } catch (error: unknown) {
       lastError = error;
-      const isRetryable = error instanceof HttpError && [429, 500, 502, 503].includes(error.status);
+      const aborted = error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError");
+      if (aborted) {
+        throw new HttpError(504, "GEMINI_TIMEOUT", "Gemini quá thời gian phản hồi. Thử lại sau vài giây.");
+      }
+      if (!(error instanceof HttpError)) {
+        throw new HttpError(502, "GEMINI_UNAVAILABLE", `Gemini không phản hồi: ${errorMessage(error)}`);
+      }
+      const isRetryable = [429, 500, 502, 503].includes(error.status);
       if (!isRetryable || attempt === MAX_RETRIES) {
         throw error;
       }

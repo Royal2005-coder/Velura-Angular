@@ -174,6 +174,10 @@ export class AccountReturnsPage {
       this.formError.set('Chọn lý do đổi trả.');
       return;
     }
+    if (!this.evidenceImages().length) {
+      this.formError.set('Bắt buộc tải ít nhất một hình ảnh minh chứng.');
+      return;
+    }
     this.submitting.set(true);
     this.formError.set(null);
     const note = [returnReasonText(this.reason()), this.description().trim()].filter(Boolean).join('. ');
@@ -181,6 +185,7 @@ export class AccountReturnsPage {
       .post<{ success?: boolean }>('/api/user/returns', {
         order_id: order.order_id,
         return_type: this.returnType(),
+        reason: this.reason(),
         description: note,
         evidence_images: this.evidenceImages(),
         items,

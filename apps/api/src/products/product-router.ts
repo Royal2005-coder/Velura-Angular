@@ -1,3 +1,4 @@
+import { analyzeImageWithGemini, generateStudioProductImage, isGeminiConfigured } from "../gemini-client.js";
 import { config } from "../config.js";
 import { HttpError, getRequestIp, readJson, sendJson } from "../http.js";
 import { readMultipartImage, uploadToSupabaseStorage } from "../user/upload.js";
@@ -52,6 +53,52 @@ export async function handleProductRoute({
 
   if (req.method === "GET" && parts[4] === "audit-logs" && parts.length === 5) {
     sendJson(res, 200, await service.listAuditLogs(context, url.searchParams), headers);
+    return true;
+  }
+
+  // POST /api/v1/admin/products/image-advice — mô tả ảnh thật, không sửa pixel.
+  if (req.method === "POST" && parts[4] === "image-advice" && parts.length === 5) {
+    if (!context?.authUser?.id) {
+      throw new HttpError(401, "AUTH_REQUIRED", "Authentication is required");
+    }
+    if (!PRODUCT_ADMIN_ROLES.includes(context.roleCode || "")) {
+      throw new HttpError(403, "RBAC_DENIED", "Chỉ người vận hành sản phẩm mới được đọc ảnh.");
+    }
+    if (!isGeminiConfigured()) {
+      sendJson(res, 200, { source: "none", notes: [] }, headers);
+      return true;
+    }
+    const body = await readJson(req, config.maxBodyBytes);
+    const dataUrl = String(body.dataUrl || "");
+    const mime = String(body.mimeType || "image/jpeg");
+    if (!dataUrl.startsWith("data:image/")) {
+      throw new HttpError(422, "VALIDATION_ERROR", "Thiếu ảnh để nhận xét.");
+    }
+    let note = "";
+    try {
+      note = await analyzeImageWithGemini(
+        dataUrl,
+        mime,
+        "Nhận xét ngắn bằng tiếng Việt ảnh sản phẩm thời trang này: ánh sáng, nền, và độ rõ của sản phẩm. Không bịa thông số. Tối đa 3 câu."
+      );
+    } catch (error: unknown) {
+      console.warn("[PRODUCT IMAGE] Advice was not generated:", error instanceof Error ? error.message : error);
+    }
+    let imageBase64 = "";
+    let imageMime = "";
+    try {
+      const generated = await generateStudioProductImage(dataUrl, mime);
+      imageBase64 = generated.base64;
+      imageMime = generated.mimeType;
+    } catch (error: unknown) {
+      console.warn("[PRODUCT IMAGE] Studio background was not generated:", error instanceof Error ? error.message : error);
+    }
+    sendJson(res, 200, {
+      source: imageBase64 ? "gemini-image" : "gemini",
+      notes: note.split(/(?<=[.!?])\s+/).map((line) => line.trim()).filter(Boolean).slice(0, 3),
+      imageBase64,
+      imageMime
+    }, headers);
     return true;
   }
 

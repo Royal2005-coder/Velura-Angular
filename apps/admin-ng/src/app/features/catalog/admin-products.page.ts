@@ -17,6 +17,7 @@ import { AdminEmptyState } from '../../shared/admin-empty-state';
 import { AdminIcon } from '../../shared/admin-icon';
 import { AdminPagination } from '../../shared/admin-pagination';
 import { AdminTableSkeleton } from '../../shared/admin-table-skeleton';
+import { improveCatalogPhoto } from './product-image';
 
 type ProductTab = 'catalog' | 'csv' | 'logs';
 type ProductOverlay = 'create' | 'edit' | 'status' | 'stock' | null;
@@ -108,6 +109,7 @@ export class AdminProductsPage {
   readonly nextStatus = signal('');
   readonly priceHistory = signal<AdminPriceHistoryRow[]>([]);
   readonly imageUploading = signal(false);
+  readonly imageNote = signal<string | null>(null);
   readonly canMutate = computed(() => this.session.canMutate('products'));
   readonly canOpenPricing = computed(() => this.session.canOpen('pricing'));
 
@@ -879,22 +881,70 @@ export class AdminProductsPage {
     }
     this.imageUploading.set(true);
     this.actionError.set(null);
-    this.adminApi.uploadProductImage(file).subscribe({
-      next: (result) => {
-        this.imageUploading.set(false);
-        const url = result.url || '';
-        if (!url) {
-          this.actionError.set('Kho ảnh không trả về đường dẫn.');
-          return;
-        }
-        const current = images.value.trim();
-        images.value = current ? `${current}\n${url}` : url;
-      },
-      error: (error: unknown) => {
-        this.imageUploading.set(false);
-        this.actionError.set(adminErrorMessage(error, 'Không tải được ảnh sản phẩm.'));
-      },
+    this.imageNote.set(null);
+    void improveCatalogPhoto(file).then((improved) => {
+      this.imageNote.set(`${improved.note} Đang hỏi Gemini dựng nền studio.`);
+      this.finishImageUpload(file, images, improved.file);
+    }).catch(() => {
+      this.imageUploading.set(false);
+      this.actionError.set('Không chỉnh được ảnh. Thử file JPG hoặc PNG khác.');
     });
+  }
+
+  /**
+   * Gemini nhận xét ảnh gốc. Nếu sinh được ảnh nền studio thì lưu ảnh đó; không thì lưu bản đã tăng sáng.
+   */
+  private finishImageUpload(file: File, images: HTMLTextAreaElement, fallback: File): void {
+    const upload = (chosen: File, note: string) => {
+      this.imageNote.set(note);
+      this.adminApi.uploadProductImage(chosen).subscribe({
+        next: (result) => {
+          this.imageUploading.set(false);
+          const url = result.url || '';
+          if (!url) {
+            this.actionError.set('Kho ảnh không trả về đường dẫn.');
+            return;
+          }
+          const current = images.value.trim();
+          images.value = current ? `${current}\n${url}` : url;
+        },
+        error: (error: unknown) => {
+          this.imageUploading.set(false);
+          this.actionError.set(adminErrorMessage(error, 'Không tải được ảnh sản phẩm.'));
+        },
+      });
+    };
+    if (file.size > 4_000_000) {
+      upload(fallback, 'Ảnh lớn hơn 4 MB nên chỉ tăng sáng 8% và tương phản 6%, chưa gửi Gemini.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result || '');
+      if (!dataUrl.startsWith('data:image/')) {
+        upload(fallback, 'Giữ ảnh đã tăng sáng vì không đọc được file gốc.');
+        return;
+      }
+      this.adminApi.adviseProductImage({ dataUrl, mimeType: file.type || 'image/jpeg' }).subscribe({
+        next: (result) => {
+          const notes = (result.notes || []).join(' ');
+          if (result.imageBase64) {
+            const mime = result.imageMime || 'image/png';
+            const binary = atob(result.imageBase64);
+            const bytes = new Uint8Array(binary.length);
+            for (let index = 0; index < binary.length; index += 1) {
+              bytes[index] = binary.charCodeAt(index);
+            }
+            const generated = new File([bytes], 'studio-background.png', { type: mime });
+            upload(generated, ['Gemini đã giữ sản phẩm và thay nền studio.', notes].filter(Boolean).join(' '));
+            return;
+          }
+          upload(fallback, ['Chưa có ảnh nền studio. Đã lưu bản tăng sáng 8% và tương phản 6%.', notes].filter(Boolean).join(' '));
+        },
+        error: () => upload(fallback, 'Gemini không trả ảnh. Đã lưu bản tăng sáng 8% và tương phản 6%.'),
+      });
+    };
+    reader.readAsDataURL(file);
   }
 
   onCsvFile(event: Event): void {

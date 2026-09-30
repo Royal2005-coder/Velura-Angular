@@ -487,9 +487,12 @@
             <textarea #imagesBox class="admin-form-control admin-form-textarea" name="images" [readOnly]="!canMutate()" placeholder="https://... hoặc /assets/images/sp.jpg">{{ (selected()?.images || []).join('\n') }}</textarea>
             @if (canMutate()) {
               <input #imageFile type="file" accept="image/jpeg,image/png,image/webp,image/gif" hidden (change)="uploadImage($event, imagesBox)" />
-              <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" [disabled]="imageUploading()" (click)="imageFile.click()">{{ imageUploading() ? 'Đang tải ảnh...' : 'Tải ảnh lên' }}</button>
+              <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" [disabled]="imageUploading()" (click)="imageFile.click()">{{ imageUploading() ? 'Đang tăng sáng và tải ảnh...' : 'Tải ảnh và cải thiện' }}</button>
             }
-            <small class="admin-form-helper">Ảnh JPG, PNG, WebP hoặc GIF, tối đa 5 MB. URL hiện có vẫn dùng được.</small>
+            @if (imageNote()) {
+              <small class="admin-form-helper">{{ imageNote() }}</small>
+            }
+            <small class="admin-form-helper">Ảnh JPG, PNG, WebP hoặc GIF, tối đa 5 MB. Gemini giữ sản phẩm và thay nền studio; nếu không sinh được ảnh thì lưu bản tăng sáng 8% và tương phản 6%.</small>
           </label>
         </form>
 

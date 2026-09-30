@@ -4,6 +4,7 @@ import type { AuthContext, AuthUser, JsonObject, RequestMeta } from "../types.js
 import { asNumber, asString, errorMessage } from "../types.js";
 import {
   RETURN_OPERATOR_ROLES,
+  RETURN_QA_PASS,
   RETURN_READER_ROLES,
   RETURN_STATUSES,
   RETURN_TRANSITIONS,
@@ -29,6 +30,7 @@ export interface ReturnRefundGateway {
 export interface ReturnService {
   listReturns(context: ReturnContext | undefined, searchParams: URLSearchParams): Promise<{ rows: JsonObject[]; count: number | undefined }>;
   getReturn(context: ReturnContext | undefined, returnId: string): Promise<JsonObject>;
+  recordContact(context: ReturnContext | undefined, returnId: string, body: JsonObject): Promise<unknown>;
   approveRefund(context: ReturnContext | undefined, returnId: string, body: JsonObject): Promise<JsonObject>;
   triggerStripeRefund(context: ReturnContext | undefined, returnId: string, body?: JsonObject): Promise<JsonObject>;
   approveExchange(context: ReturnContext | undefined, returnId: string, body: JsonObject): Promise<JsonObject>;
@@ -111,7 +113,33 @@ export function createReturnService({
       const payment = ret.order_id && repository.getPaymentByOrderId
         ? await repository.getPaymentByOrderId(asString(ret.order_id), context.accessToken)
         : null;
-      return { ...ret, refundable_amount: refundableAmount, payment };
+      const lines = await repository.listReturnLines(returnId, context.accessToken);
+      return { ...ret, refundable_amount: refundableAmount, payment, lines: lines.rows };
+    },
+
+    async recordContact(context, returnId, body) {
+      requireReturnAdmin(context);
+      const result = asString(body.result);
+      const note = asString(body.note);
+      const allowed = ["reached", "no_answer", "waiting_customer"];
+      if (!allowed.includes(result)) {
+        throw new HttpError(422, "VALIDATION_ERROR", "Kết quả liên hệ không hợp lệ.");
+      }
+      if (note.length < 10) {
+        throw new HttpError(422, "VALIDATION_ERROR", "Nội dung liên hệ phải có ít nhất 10 ký tự.");
+      }
+      const expectedVersion = asNumber(body.expectedVersion);
+      if (!expectedVersion) throw new HttpError(422, "VALIDATION_ERROR", "expectedVersion required");
+      const labels: Record<string, string> = {
+        reached: "Liên hệ được",
+        no_answer: "Không liên hệ được",
+        waiting_customer: "Chờ khách bổ sung"
+      };
+      return repository.recordContact(returnId, {
+        result: labels[result],
+        note,
+        expectedVersion
+      }, context.profile?.user_id || context.authUser.id, context.roleCode, context.ipAddress);
     },
 
     async approveRefund(context, returnId, body) {
@@ -223,10 +251,44 @@ export function createReturnService({
           status: [`Từ "${from}" chỉ được chuyển sang: ${allowed.join(", ") || "không trạng thái nào"}`]
         });
       }
+      if (status === "received") {
+        const qa = asString(body.conditionCheckResult);
+        const proof = asString(body.imageProof);
+        const confirmedItemId = asString(body.confirmedItemId);
+        const receivedQuantity = asNumber(body.receivedQuantity);
+        if (qa !== RETURN_QA_PASS) {
+          throw new HttpError(422, "QA_REQUIRED", "Nhận hàng hoàn trả thành công chỉ khi xác nhận đúng hàng của shop.");
+        }
+        if (!proof.startsWith("data:image/") && !proof.startsWith("http://") && !proof.startsWith("https://")) {
+          throw new HttpError(422, "PROOF_REQUIRED", "Phải tải ảnh minh chứng đã kiểm hàng.");
+        }
+        const lines = await repository.listReturnLines(returnId, context.accessToken);
+        const expectedQty = lines.rows.reduce((sum, row) => sum + asNumber(row.quantity), 0);
+        const itemIds = lines.rows.map((row) => asString(row.order_item_id)).filter(Boolean);
+        if (!itemIds.length || confirmedItemId !== itemIds[0]) {
+          throw new HttpError(422, "ITEM_ID_MISMATCH", "Mã dòng hàng nhập lại không khớp phiếu.");
+        }
+        if (receivedQuantity !== expectedQty) {
+          throw new HttpError(422, "QTY_MISMATCH", `Số lượng thực nhận phải bằng số lượng đăng ký (${expectedQty}).`);
+        }
+      }
+      let refundAmount = body.refundAmount ? asNumber(body.refundAmount) : undefined;
+      if (status === "completed" && asString(currentReturn.return_type) !== "exchange") {
+        refundAmount = await repository.getRefundableAmount(returnId, context.accessToken);
+        const payment = currentReturn.order_id
+          ? await repository.getPaymentByOrderId(asString(currentReturn.order_id), context.accessToken)
+          : null;
+        const provider = asString(payment?.payment_provider);
+        if (provider === "stripe" && refunds && refundAmount > 0) {
+          const refundResult = await refunds.refund(asString(currentReturn.order_id), refundAmount);
+          if (refundResult.status === "failed") {
+            throw new HttpError(502, "STRIPE_REFUND_FAILED", refundResult.message || "Stripe không hoàn được đúng số tiền sản phẩm.");
+          }
+        }
+      }
 
       const adminNote = body.adminNote;
       const reason = body.reason;
-      const refundAmount = body.refundAmount ? asNumber(body.refundAmount) : undefined;
       const trackingReturnCode = body.trackingReturnCode;
       const conditionCheckResult = body.conditionCheckResult;
       const imageProof = body.imageProof;
@@ -241,18 +303,6 @@ export function createReturnService({
         imageProof,
         expectedVersion
       }, context.profile?.user_id || context.authUser.id, context.roleCode, context.ipAddress);
-
-      if (status === "completed" && refunds) {
-        const orderId = asString(currentReturn.order_id);
-        const amount = refundAmount ?? asNumber(currentReturn.refund_amount);
-        if (orderId) {
-          try {
-            await refunds.refund(orderId, amount);
-          } catch (err: unknown) {
-            console.error("[RETURN COMPLETE REFUND ERROR]", errorMessage(err));
-          }
-        }
-      }
 
       return updated;
     },

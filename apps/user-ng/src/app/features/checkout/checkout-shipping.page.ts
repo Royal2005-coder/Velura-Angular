@@ -63,6 +63,7 @@ export class CheckoutShippingPage {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly vouchers = inject(VoucherService);
+  private abandoning = false;
 
   readonly submitting = signal(false);
   readonly payment = signal(this.checkout.methods().paymentMethod === 'MOMO' ? 'momo' : this.checkout.methods().paymentMethod === 'VNPAY' ? 'vnpay' : 'cod');
@@ -211,7 +212,10 @@ export class CheckoutShippingPage {
     useBodyClass('page-checkout');
     this.checkout.syncFromCart();
     if (this.route.snapshot.queryParamMap.get('stripe') === 'cancel') {
-      showToast('Giao dịch Stripe đã bị hủy. Bạn có thể chọn lại phương thức thanh toán.');
+      const created = this.checkout.readCreatedOrder();
+      if (created?.order_id) {
+        this.abandonUnpaidOrder(created.order_id, created.order_code);
+      }
     }
     // Báo giá lại mỗi khi giỏ, cách giao hoặc lựa chọn mã đổi. Theo dõi nội dung giỏ chứ
     // không theo dõi tham chiếu mảng để không gọi lặp.
@@ -674,27 +678,50 @@ export class CheckoutShippingPage {
   }
 
   closeQrModal(): void {
-    const order = this.pendingOrder();
-    const items = this.pendingItems();
+    this.abandonUnpaidOrder(this.pendingOrder()?.order_id, this.pendingOrder()?.order_code);
+  }
+
+  /**
+   * Khách hủy hoặc hết hạn thanh toán online: đơn về Chờ xác nhận, rời trang thanh toán.
+   */
+  private abandonUnpaidOrder(orderId?: string, orderCode?: string): void {
+    if (this.abandoning) {
+      return;
+    }
     this.clearQrTimer();
     this.qrModalOpen.set(false);
-    if (order && order.order_id) {
-      this.api.post(`/api/user/orders/${order.order_id}/payment-failed`, {}).pipe(catchError(() => of(null))).subscribe();
-      this.finishOrder(order, items, this.payment().toUpperCase());
+    this.submitting.set(false);
+    if (!orderId) {
+      showToast('Giao dịch đã bị hủy.');
+      void this.router.navigateByUrl('/');
+      return;
     }
+    this.abandoning = true;
+    const items = this.pendingItems().length ? this.pendingItems() : this.items();
+    this.api
+      .post(`/api/user/orders/${orderId}/payment-failed`, {})
+      .pipe(catchError(() => of(null)))
+      .subscribe(() => {
+        this.checkout.completeCheckout(items);
+        sessionStorage.setItem('velura_unpaid_notice', JSON.stringify({
+          orderId,
+          orderCode: orderCode || orderId
+        }));
+        void this.router.navigateByUrl('/');
+      });
   }
 
   private startQrTimer(): void {
     this.clearQrTimer();
     this.qrSeconds.set(900);
     this.qrTimerId = window.setInterval(() => {
-      this.qrSeconds.update((v) => {
-        if (v <= 1) {
-          this.clearQrTimer();
-          return 0;
-        }
-        return v - 1;
-      });
+      const next = this.qrSeconds() - 1;
+      if (next <= 0) {
+        this.qrSeconds.set(0);
+        this.abandonUnpaidOrder(this.pendingOrder()?.order_id, this.pendingOrder()?.order_code);
+        return;
+      }
+      this.qrSeconds.set(next);
     }, 1000);
   }
 

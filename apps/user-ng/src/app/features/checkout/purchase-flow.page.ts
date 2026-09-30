@@ -57,8 +57,9 @@ export class PurchaseFlowPage {
   readonly busy = signal(false);
   readonly error = signal('');
   readonly seconds = signal(300);
+  readonly paymentSeconds = signal(900);
   readonly resendSeconds = signal(0);
-  readonly digits = signal(['', '', '', '']);
+  readonly digits = signal(['', '', '', '', '', '']);
   readonly order = signal<DemoOrder | null>(null);
   readonly paymentResult = signal<'paid' | 'failed' | 'cancelled' | 'expired' | 'confirming'>(
     'confirming',
@@ -82,6 +83,12 @@ export class PurchaseFlowPage {
       `${Math.floor(this.seconds() / 60)
         .toString()
         .padStart(2, '0')}:${(this.seconds() % 60).toString().padStart(2, '0')}`,
+  );
+  readonly paymentClockLabel = computed(
+    () =>
+      `${Math.floor(this.paymentSeconds() / 60)
+        .toString()
+        .padStart(2, '0')}:${(this.paymentSeconds() % 60).toString().padStart(2, '0')}`,
   );
   readonly bookEntries = computed(() => {
     const entries: Array<{ address: DemoAddress; savedIndex: number | null }> = this.model
@@ -156,39 +163,63 @@ export class PurchaseFlowPage {
       };
     }
 
+    const requestedOrder = this.route.snapshot.queryParamMap.get('order');
+    const savedCheckout = this.checkout.readCreatedOrder();
+    const savedOrder =
+      savedCheckout?.checkout_snapshot &&
+      (savedCheckout.order_id === requestedOrder || savedCheckout.order_code === requestedOrder)
+        ? savedCheckout.checkout_snapshot
+        : null;
     const existing = this.model
       .orders()
-      .find((order) => order.id === this.route.snapshot.queryParamMap.get('order'));
-    const canResume = existing && this.model.canAccess(existing);
+      .find((order) => order.id === requestedOrder);
+    const resumableOrder = savedOrder || existing;
+    const canResume = savedOrder || (existing && this.model.canAccess(existing));
     if (existing && !canResume) {
       void this.router.navigate(['/account/track'], {
         queryParams: { order: existing.id },
         replaceUrl: true,
       });
-    } else if (existing && existing.status === 'cancelled') {
+    } else if (resumableOrder && resumableOrder.status === 'cancelled') {
       void this.router.navigate(
-        [this.member() ? '/account/orders' : '/guest/orders', existing.id],
+        [this.member() ? '/account/orders' : '/guest/orders', resumableOrder.id],
         { replaceUrl: true },
       );
-    } else if (existing) {
-      this.order.set(existing);
-      this.lines.set(existing.items);
-      this.address = { ...existing.address };
-      this.step.set(
-        existing.payment === 'VNPAY' && existing.paymentState !== 'paid' ? 'gateway' : 'success',
-      );
+    } else if (resumableOrder) {
+      this.order.set(resumableOrder);
+      this.lines.set(resumableOrder.items);
+      this.address = { ...resumableOrder.address };
+      const expiresAt = Date.parse(savedCheckout?.payment_expires_at || '');
+      const remaining = Number.isFinite(expiresAt)
+        ? Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000))
+        : 900;
+      this.paymentSeconds.set(remaining);
+      if (resumableOrder.payment === 'VNPAY' && resumableOrder.paymentState !== 'paid') {
+        this.paymentResult.set(
+          remaining === 0
+            ? 'expired'
+            : resumableOrder.paymentState === 'pending'
+              ? 'confirming'
+              : resumableOrder.paymentState,
+        );
+        this.step.set(remaining === 0 ? 'result' : 'gateway');
+      } else {
+        this.step.set('success');
+      }
     }
     const timer = setInterval(() => {
       this.seconds.update((value) => Math.max(0, value - 1));
+      this.paymentSeconds.update((value) => Math.max(0, value - 1));
       this.resendSeconds.update((value) => Math.max(0, value - 1));
-      if (this.step() === 'gateway' && this.seconds() === 0 && !this.busy()) this.result('expired');
+      if (this.step() === 'gateway' && this.paymentSeconds() === 0 && !this.busy())
+        this.result('expired');
     }, 1000);
     this.destroyRef.onDestroy(() => {
       clearInterval(timer);
       clearTimeout(this.timeout);
       clearTimeout(this.otpTimeout);
     });
-    if (!existing) this.prefillDefault();
+    if (!resumableOrder) this.prefillDefault();
   }
   /** Edit in place; changing a guest phone immediately invalidates its previous OTP. */
   editField(
@@ -201,7 +232,7 @@ export class PurchaseFlowPage {
       this.sendingOtp.set(false);
       this.otpVerified.set(false);
       this.otpPhone.set('');
-      this.digits.set(['', '', '', '']);
+      this.digits.set(['', '', '', '', '', '']);
       this.otpError.set('');
     }
     if (this.fieldErrors()[field]) this.validateField(field);
@@ -231,7 +262,7 @@ export class PurchaseFlowPage {
         this.otpPhone.set(phone);
         this.seconds.set(300);
         this.resendSeconds.set(30);
-        this.digits.set(['', '', '', '']);
+        this.digits.set(['', '', '', '', '', '']);
         this.sendingOtp.set(false);
       },
       error: (error: Error) => {
@@ -244,8 +275,25 @@ export class PurchaseFlowPage {
   verify(): void {
     if (this.sendingOtp() || this.otpPhone() !== normalizePhone(this.address.phone)) return;
     const otp = this.digits().join('');
-    this.otpVerified.set(/^\d{4}$/.test(otp));
-    this.otpError.set(this.otpVerified() ? '' : 'Vui lòng nhập đủ mã OTP gồm 4 chữ số.');
+    this.otpVerified.set(false);
+    if (!/^\d{6}$/.test(otp)) {
+      this.otpError.set('Vui lòng nhập đủ mã OTP gồm 6 chữ số.');
+      return;
+    }
+    this.sendingOtp.set(true);
+    this.otpError.set('');
+    this.purchaseApi.verifyOtp(this.otpPhone(), otp).subscribe({
+      next: (response) => {
+        this.otpVerified.set(response.success === true);
+        this.otpError.set(response.success === true ? '' : response.message || 'Mã OTP không hợp lệ.');
+        this.sendingOtp.set(false);
+      },
+      error: (error: Error) => {
+        this.otpVerified.set(false);
+        this.otpError.set(error.message || 'Mã OTP không hợp lệ.');
+        this.sendingOtp.set(false);
+      },
+    });
   }
   /** Open a native modal with a separate pending selection, keeping checkout unchanged until confirmed. */
   openAddressBook(): void {
@@ -344,7 +392,7 @@ export class PurchaseFlowPage {
     }
     if (
       !this.member() &&
-      (!this.otpVerified() || normalizePhone(this.address.phone) !== this.model.verifiedPhone())
+      (!this.otpVerified() || normalizePhone(this.address.phone) !== this.otpPhone())
     ) {
       this.otpError.set('Vui lòng xác thực SĐT trước khi hoàn tất đơn hàng.');
       this.error.set('Thông tin giao hàng đã được giữ lại. Bạn chỉ cần xác thực SĐT.');
@@ -380,7 +428,7 @@ export class PurchaseFlowPage {
     this.fillDigits(index, value);
     if (value)
       (
-        input.parentElement?.children[Math.min(3, index + value.length)] as HTMLInputElement
+        input.parentElement?.children[Math.min(5, index + value.length)] as HTMLInputElement
       )?.focus();
   }
   /** Paste a full OTP without requiring six separate keystrokes. */
@@ -467,6 +515,7 @@ export class PurchaseFlowPage {
       createdAt: new Date().toISOString(),
     };
     this.order.set(order);
+    const paymentExpiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
     this.checkout.saveCreatedOrder({
       order_id: response.order.order_id,
       order_code: response.order.order_code,
@@ -474,10 +523,12 @@ export class PurchaseFlowPage {
       shipping_address: [this.address.detail, this.address.ward, this.address.district, this.address.province].filter(Boolean).join(', '),
       shipping_method: 'standard',
       activation_required: response.activation_required === true,
+      checkout_snapshot: order,
+      payment_expires_at: this.payment === 'VNPAY' ? paymentExpiresAt : undefined,
     });
     this.checkout.completeCheckout(this.lines());
     this.busy.set(false);
-    this.seconds.set(300);
+    this.paymentSeconds.set(900);
     if (response.stripe?.url) {
       window.location.assign(response.stripe.url);
       return;
@@ -485,7 +536,7 @@ export class PurchaseFlowPage {
     this.step.set(this.payment === 'COD' ? 'success' : 'gateway');
     void this.router.navigate([], {
       relativeTo: this.route,
-      queryParams: { order: response.order.order_id },
+      queryParams: { order: order.id },
       replaceUrl: true,
     });
   }
@@ -496,36 +547,86 @@ export class PurchaseFlowPage {
     this.paymentResult.set('confirming');
     this.step.set('result');
     this.busy.set(true);
+    if (result === 'paid') {
+      this.purchaseApi.confirmPayment(order.id, normalizePhone(this.address.phone)).subscribe({
+        next: () => {
+          const paidOrder: DemoOrder = { ...order, paymentState: 'paid', status: 'paid' };
+          this.order.set(paidOrder);
+          this.persistPaymentSnapshot(paidOrder);
+          this.paymentResult.set('paid');
+          this.busy.set(false);
+          this.step.set('success');
+        },
+        error: (error: Error) => {
+          this.paymentResult.set('failed');
+          this.error.set(error.message || 'Chưa thể xác nhận thanh toán.');
+          this.busy.set(false);
+        },
+      });
+      return;
+    }
     this.timeout = setTimeout(() => {
-      this.model.paymentResult(order.id, result);
-      this.order.set(this.model.orders().find((row) => row.id === order.id) || null);
+      const updated: DemoOrder = { ...order, paymentState: result, status: 'pending_payment' };
+      this.order.set(updated);
+      this.persistPaymentSnapshot(updated);
       this.paymentResult.set(result);
       this.busy.set(false);
-      if (result === 'paid') this.step.set('success');
     }, 800);
   }
   /** Retry the same payment; its order code remains unchanged. */
   retry(): void {
     const order = this.order();
-    if (order) this.model.paymentResult(order.id, 'pending');
-    this.seconds.set(300);
+    if (order) {
+      const pending: DemoOrder = { ...order, paymentState: 'pending', status: 'pending_payment' };
+      this.order.set(pending);
+      this.persistPaymentSnapshot(pending, new Date(Date.now() + 15 * 60 * 1000).toISOString());
+    }
+    this.paymentSeconds.set(900);
     this.step.set('gateway');
   }
   /** Convert the existing unpaid order to COD. */
   useCod(): void {
     const order = this.order();
-    if (!order) return;
-    this.model.useCod(order.id);
-    this.order.set(this.model.orders().find((row) => row.id === order.id) || null);
-    this.step.set('success');
+    if (!order || this.busy()) return;
+    this.busy.set(true);
+    this.error.set('');
+    this.purchaseApi.switchToCod(order.id, normalizePhone(this.address.phone)).subscribe({
+      next: () => {
+        const codOrder: DemoOrder = {
+          ...order,
+          payment: 'COD',
+          paymentState: 'pending',
+          status: 'pending',
+        };
+        this.order.set(codOrder);
+        this.persistPaymentSnapshot(codOrder);
+        this.busy.set(false);
+        this.step.set('success');
+      },
+      error: (error: Error) => {
+        this.busy.set(false);
+        this.error.set(error.message || 'Chưa thể chuyển đơn sang COD.');
+      },
+    });
+  }
+
+  /** Đồng bộ trạng thái màn thanh toán để reload không rơi về giỏ hàng trống. */
+  private persistPaymentSnapshot(order: DemoOrder, expiresAt?: string): void {
+    const saved = this.checkout.readCreatedOrder();
+    if (!saved) return;
+    this.checkout.saveCreatedOrder({
+      ...saved,
+      checkout_snapshot: order,
+      payment_expires_at: expiresAt ?? saved.payment_expires_at,
+    });
   }
   private fillDigits(index: number, value: string): void {
     const digits = [...this.digits()];
-    const clean = value.replace(/\D/g, '').slice(0, 4 - index);
+    const clean = value.replace(/\D/g, '').slice(0, 6 - index);
     if (!clean) digits[index] = '';
     [...clean].forEach((digit, offset) => (digits[index + offset] = digit));
     this.digits.set(digits);
-    if (digits.join('').length === 4) this.verify();
+    if (digits.join('').length === 6) this.verify();
   }
   private applyAddress(address: DemoAddress): void {
     this.address = {

@@ -321,10 +321,10 @@ export class CheckoutService {
       await this.repository.createPayment({
         order_id: order.order_id,
         amount: input.totalAmount,
-        payment_method: input.paymentProvider.toUpperCase(),
+        payment_method: input.paymentMethod,
         payment_provider: provider,
         payment_status: "pending",
-        transaction_id: `pay_${provider}_${input.orderCode}`,
+        gateway_transaction_ref: `pay_${provider}_${input.orderCode}`,
         created_at: now
       });
     }
@@ -404,7 +404,7 @@ export function validateCheckoutContact(input: {
 
 /** Sinh OTP bằng nguồn ngẫu nhiên mật mã; không có mã cố định cho demo. */
 export function generateCheckoutOtp(): string {
-  return randomInt(0, 10_000).toString().padStart(4, "0");
+  return randomInt(0, 1_000_000).toString().padStart(6, "0");
 }
 
 /** Băm activation token để token thô không bao giờ nằm trong cơ sở dữ liệu. */

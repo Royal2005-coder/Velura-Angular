@@ -62,7 +62,7 @@
           }
         </p>
         <form (submit)="$event.preventDefault()">
-          <div class="otp-inputs" role="group" aria-label="Mã OTP 4 chữ số">
+          <div class="otp-inputs" role="group" aria-label="Mã OTP 6 chữ số">
             @for (digit of digits(); track $index) {
               <input class="otp-input" type="text" inputmode="numeric" maxlength="1" [value]="digit" (input)="onDigit($index, $event)" />
             }

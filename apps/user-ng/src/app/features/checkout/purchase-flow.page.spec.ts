@@ -14,6 +14,7 @@ describe('PurchaseFlowPage with mocked Model', () => {
   const checkoutGuest = vi.fn();
   const checkoutMember = vi.fn();
   const sendOtp = vi.fn();
+  const verifyOtp = vi.fn();
   const model = {
     member: signal(false),
     userId: signal<string | null>(null),
@@ -40,7 +41,9 @@ describe('PurchaseFlowPage with mocked Model', () => {
     checkoutGuest.mockReset();
     checkoutMember.mockReset();
     sendOtp.mockReset();
+    verifyOtp.mockReset();
     sendOtp.mockReturnValue(of({ success: true }));
+    verifyOtp.mockReturnValue(of({ success: true }));
     checkoutGuest.mockReturnValue(of({ success: true, order: { order_id: 'order-1', order_code: 'VLR-1' } }));
     checkoutMember.mockReturnValue(of({ success: true, order: { order_id: 'order-1', order_code: 'VLR-1' } }));
     model.member.set(false);
@@ -52,10 +55,28 @@ describe('PurchaseFlowPage with mocked Model', () => {
       providers: [
         provideRouter([]),
         { provide: ActivatedRoute, useValue: stubActivatedRoute() },
-        { provide: CheckoutStore, useValue: { readCheckoutItems: () => DEMO_LINES } },
+        {
+          provide: CheckoutStore,
+          useValue: {
+            readCheckoutItems: () => DEMO_LINES,
+            readCreatedOrder: () => null,
+            saveCreatedOrder: vi.fn(),
+            completeCheckout: vi.fn(),
+          },
+        },
         { provide: AuthService, useValue: { session: () => null } },
         { provide: PurchaseDemoStore, useValue: model },
-        { provide: PurchaseFlowApiService, useValue: { sendOtp, checkoutGuest, checkoutMember } },
+        {
+          provide: PurchaseFlowApiService,
+          useValue: {
+            sendOtp,
+            verifyOtp,
+            checkoutGuest,
+            checkoutMember,
+            confirmPayment: vi.fn(() => of({ success: true })),
+            switchToCod: vi.fn(() => of({ success: true })),
+          },
+        },
       ],
     }).compileComponents();
   });
@@ -120,6 +141,36 @@ describe('PurchaseFlowPage with mocked Model', () => {
       detail: 'Mẫu',
     };
     expect(page.validateCheckout()).toBe(true);
+  });
+  it('accepts the inline OTP state for the same Guest phone', () => {
+    const page = TestBed.createComponent(PurchaseFlowPage).componentInstance;
+    page.address = {
+      name: 'Nguyễn An',
+      phone: '0912345678',
+      email: 'guest@example.com',
+      province: 'Mẫu',
+      district: 'Mẫu',
+      ward: 'Mẫu',
+      detail: 'Mẫu',
+    };
+    page.otpPhone.set('0912345678');
+    page.otpVerified.set(true);
+
+    expect(page.validateCheckout()).toBe(true);
+    expect(page.otpError()).toBe('');
+  });
+  it('does not mark the phone verified when backend rejects the OTP', () => {
+    const request = new Subject<{ success?: boolean; message?: string }>();
+    verifyOtp.mockReturnValueOnce(request);
+    const page = TestBed.createComponent(PurchaseFlowPage).componentInstance;
+    page.address.phone = '0855808330';
+    page.otpPhone.set('0855808330');
+    page.digits.set(['0', '0', '0', '0', '0', '0']);
+    page.verify();
+    request.error(new Error('Mã OTP không hợp lệ. Bạn còn 3 lần thử.'));
+
+    expect(page.otpVerified()).toBe(false);
+    expect(page.otpError()).toContain('không hợp lệ');
   });
   it('shows the User address book instead of OTP and prefills the current account default', () => {
     model.member.set(true);

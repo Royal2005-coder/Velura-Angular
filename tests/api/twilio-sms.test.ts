@@ -4,8 +4,11 @@ import {
   toE164,
   maskPhone,
   isTwilioConfigured,
+  isStringeeConfigured,
+  createStringeeRestJwt,
   sendTwilioSms,
   sendCheckoutOtpSms,
+  sendGuestOrderWelcomeSms,
   sendOrderConfirmationSms,
   sendAuthOtpSms
 } from "../../apps/api/src/sms/twilio.js";
@@ -46,6 +49,18 @@ test("isTwilioConfigured checks presence of Account SID, credentials, and sender
   assert.equal(typeof configured, "boolean");
 });
 
+test("Stringee configuration check and REST JWT use the documented server credential shape", () => {
+  assert.equal(typeof isStringeeConfigured(), "boolean");
+  const token = createStringeeRestJwt(1_700_000_000);
+  const [headerPart, payloadPart, signaturePart] = token.split(".");
+  const header = JSON.parse(Buffer.from(headerPart, "base64url").toString("utf8"));
+  const payload = JSON.parse(Buffer.from(payloadPart, "base64url").toString("utf8"));
+  assert.deepEqual(header, { typ: "JWT", alg: "HS256", cty: "stringee-api;v=1" });
+  assert.equal(payload.rest_api, true);
+  assert.equal(payload.exp, 1_700_000_300);
+  assert.ok(signaturePart);
+});
+
 test("sendTwilioSms handles invalid phone numbers gracefully", async () => {
   const result = await sendTwilioSms("", "Test message");
   assert.equal(result.success, false);
@@ -68,6 +83,16 @@ test("sendCheckoutOtpSms sends formatted checkout OTP", async () => {
 
 test("sendOrderConfirmationSms sends order confirmation with code and amount", async () => {
   const result = await sendOrderConfirmationSms("0912345678", "VLR123456789", 450000);
+  assert.equal(result.success, true);
+});
+
+test("guest order SMS combines order details with the optional activation link", async () => {
+  const result = await sendGuestOrderWelcomeSms(
+    "0912345678",
+    "VLR123456789",
+    450000,
+    "https://velura.royalai.dev/auth/activate?token=one-time-token"
+  );
   assert.equal(result.success, true);
 });
 

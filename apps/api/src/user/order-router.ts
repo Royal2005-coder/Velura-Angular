@@ -17,10 +17,11 @@ import { customerCanCancel, customerOrderSteps, orderFacts, orderStatusLabel } f
 import { returnWindowOpen } from "./return-window.js";
 import {
   sendCheckoutOtpSms,
+  sendGuestOrderWelcomeSms,
   sendOrderConfirmationSms,
   sendTwilioSms,
   maskPhone,
-  isTwilioConfigured
+  isSmsConfigured
 } from "../sms/twilio.js";
 import {
   asJsonObject,
@@ -79,12 +80,14 @@ export function parseUtcDate(dateStr: unknown): Date {
 }
 
 /**
- * Guest checkout has no SMS provider. The code is emailed, so an address is required.
+ * Chuẩn hoá email nhận OTP của khách guest. Khi chưa cấu hình Twilio thì đây là kênh
+ * duy nhất nên bắt buộc; khi đã có SMS, khách vẫn có thể chọn email nên email sai
+ * định dạng vẫn phải bị từ chối.
  */
 export function requireGuestOtpEmail(value: unknown): string {
   const email = String(value || "").trim();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    throw new HttpError(400, "EMAIL_REQUIRED", "Email là bắt buộc để nhận mã OTP. Velura chưa gửi OTP qua số điện thoại.");
+    throw new HttpError(400, "EMAIL_REQUIRED", "Email không hợp lệ để nhận mã OTP. Vui lòng nhập lại email của bạn.");
   }
   return email;
 }
@@ -97,13 +100,21 @@ export function maskEmail(email: string): string {
   return `${name.slice(0, 1)}***@${domain}`;
 }
 
-// Helper to send email directly without relying on email_outbox and service role worker
-async function sendDirectEmail(to: unknown, subject: string, text: string, html: string): Promise<void> {
+/**
+ * Gửi email trực tiếp qua SMTP, không qua worker email_outbox.
+ * Trả về false khi gửi hỏng để caller không được báo "đã gửi" một cách giả;
+ * OTP phụ thuộc kết quả này nên lỗi được log chứ không ném.
+ *
+ * @returns true khi SMTP nhận tin, false khi thiếu cấu hình hoặc gửi lỗi
+ */
+async function sendDirectEmail(to: unknown, subject: string, text: string, html: string): Promise<boolean> {
   if (!config.smtpHost || !config.smtpUser || !config.smtpAppPassword) {
     if (config.nodeEnv !== "production") {
       console.log(`[EMAIL MOCK] Sending to ${to}: ${subject}`);
+      return true;
     }
-    return;
+    console.error(`[EMAIL ERROR] SMTP chưa cấu hình; bỏ qua email tới ${to}.`);
+    return false;
   }
   try {
     const nodemailer = await import("nodemailer");
@@ -124,8 +135,10 @@ async function sendDirectEmail(to: unknown, subject: string, text: string, html:
       html
     }), 10000, "SMTP send");
     console.log(`[EMAIL SENT] Sent successfully to ${to}`);
+    return true;
   } catch (err: unknown) {
     console.error(`[EMAIL ERROR] Failed to send email to ${to}:`, errorMessage(err));
+    return false;
   }
 }
 
@@ -302,7 +315,7 @@ export async function handleOrdersRoute(
           order = await selectOne("orders", { order_id: `eq.${code}` });
         }
         if (!order) {
-          order = await selectOne("orders", { order_code: `eq.${quotePostgrestValue(code)}` });
+          order = await selectOne("orders", { order_code: `eq.${code}` });
         }
         if (!order) {
           throw new HttpError(404, "NOT_FOUND", "Không tìm thấy đơn hàng");
@@ -338,7 +351,7 @@ export async function handleOrdersRoute(
           order = await selectOne("orders", { order_id: `eq.${action}` });
         }
         if (!order) {
-          order = await selectOne("orders", { order_code: `eq.${quotePostgrestValue(action.toUpperCase())}` });
+          order = await selectOne("orders", { order_code: `eq.${action.toUpperCase()}` });
         }
         if (!order) {
           throw new HttpError(404, "NOT_FOUND", "Không tìm thấy đơn hàng");
@@ -535,15 +548,25 @@ export async function handleOrdersRoute(
 
     // POST /api/user/orders/:id/switch-cod hoặc POST /api/user/orders/switch-cod
     if (((action && parts[4] === "switch-cod") || action === "switch-cod") && req.method === "POST") {
-      const profile = requireUserAuth(context);
       const body = await readJson(req);
       const targetOrderId = (action !== "switch-cod" ? action : asString(body.order_id || body.orderId)) || "";
-      const order = await selectOne("orders", { order_id: `eq.${targetOrderId}` }) ||
-                    await selectOne("orders", { order_code: `eq.${quotePostgrestValue(targetOrderId.toUpperCase())}` });
+      const order = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetOrderId)
+        ? await selectOne("orders", { order_id: `eq.${targetOrderId}` })
+        : await selectOne("orders", { order_code: `eq.${targetOrderId.toUpperCase()}` });
       if (!order) {
         throw new HttpError(404, "NOT_FOUND", "Không tìm thấy đơn hàng");
       }
-      assertOrderVisibleTo(order, profile);
+      let profile: UserProfile | null = null;
+      try {
+        profile = requireUserAuth(context);
+      } catch {
+        profile = null;
+      }
+      if (profile) {
+        assertOrderVisibleTo(order, profile);
+      } else if (normalizeVietnamesePhone(body.phone) !== normalizeVietnamesePhone(order.shipping_phone)) {
+        throw new HttpError(404, "NOT_FOUND", "Không tìm thấy đơn hàng");
+      }
       if (order.status !== "pending" && order.status !== "waiting_payment") {
         throw new HttpError(400, "INVALID_STATE", "Đơn hàng không ở trạng thái chờ thanh toán");
       }
@@ -583,8 +606,9 @@ export async function handleOrdersRoute(
       const profile = requireUserAuth(context);
       const body = await readJson(req);
       const targetOrderId = (action !== "payment-failed" ? action : asString(body.order_id || body.orderId)) || "";
-      const order = await selectOne("orders", { order_id: `eq.${targetOrderId}` }) ||
-                    await selectOne("orders", { order_code: `eq.${quotePostgrestValue(targetOrderId.toUpperCase())}` });
+      const order = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetOrderId)
+        ? await selectOne("orders", { order_id: `eq.${targetOrderId}` })
+        : await selectOne("orders", { order_code: `eq.${targetOrderId.toUpperCase()}` });
       if (!order) {
         throw new HttpError(404, "NOT_FOUND", "Không tìm thấy đơn hàng");
       }
@@ -603,18 +627,28 @@ export async function handleOrdersRoute(
 
     // POST /api/user/orders/:id/confirm-payment hoặc POST /api/user/orders/confirm-payment
     if (((action && parts[4] === "confirm-payment") || action === "confirm-payment") && req.method === "POST") {
-      const profile = requireUserAuth(context);
       if (config.nodeEnv === "production") {
         throw new HttpError(403, "DEMO_PAYMENT_DISABLED", "Xác nhận thanh toán demo không được phép trên production");
       }
       const body = await readJson(req);
       const targetOrderId = (action !== "confirm-payment" ? action : asString(body.order_id || body.orderId)) || "";
-      const order = await selectOne("orders", { order_id: `eq.${targetOrderId}` }) ||
-                    await selectOne("orders", { order_code: `eq.${quotePostgrestValue(targetOrderId.toUpperCase())}` });
+      const order = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetOrderId)
+        ? await selectOne("orders", { order_id: `eq.${targetOrderId}` })
+        : await selectOne("orders", { order_code: `eq.${targetOrderId.toUpperCase()}` });
       if (!order) {
         throw new HttpError(404, "NOT_FOUND", "Không tìm thấy đơn hàng");
       }
-      assertOrderVisibleTo(order, profile);
+      let profile: UserProfile | null = null;
+      try {
+        profile = requireUserAuth(context);
+      } catch {
+        profile = null;
+      }
+      if (profile) {
+        assertOrderVisibleTo(order, profile);
+      } else if (normalizeVietnamesePhone(body.phone) !== normalizeVietnamesePhone(order.shipping_phone)) {
+        throw new HttpError(404, "NOT_FOUND", "Không tìm thấy đơn hàng");
+      }
       if (order.status !== "pending" && order.status !== "waiting_payment") {
         throw new HttpError(400, "INVALID_STATE", "Đơn hàng không ở trạng thái chờ thanh toán");
       }
@@ -701,6 +735,17 @@ export async function handleOrdersRoute(
         );
       }
 
+      const customer = order.user_id
+        ? await selectOne("users", { user_id: `eq.${order.user_id}`, select: "email" })
+        : null;
+      if (customer?.email) {
+        const code = asString(order.order_code);
+        const total = Number(order.total_amount || 0).toLocaleString("vi-VN");
+        const text = `Chào ${asString(order.shipping_name) || "bạn"},\n\nĐơn hàng ${code} đã được thanh toán thành công.\nTổng tiền: ${total} đ.\n\nTra cứu đơn: https://velura.royalai.dev/account/track?code=${encodeURIComponent(code)}`;
+        const html = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto"><h1 style="color:#7c5454">VELURA</h1><h2>Thanh toán thành công</h2><p>Chào <strong>${asString(order.shipping_name) || "bạn"}</strong>,</p><p>Đơn hàng <strong>${code}</strong> đã được thanh toán thành công.</p><p>Tổng tiền: <strong>${total} đ</strong></p><p><a href="https://velura.royalai.dev/account/track?code=${encodeURIComponent(code)}">Tra cứu đơn hàng</a></p></div>`;
+        void sendDirectEmail(customer.email, `Thanh toán thành công đơn hàng #${code} tại Velura`, text, html);
+      }
+
       return sendJson(res, 200, {
         success: true,
         message: "Xác nhận thanh toán thành công",
@@ -725,7 +770,7 @@ export async function handleOrdersRoute(
       });
       const contact = session.contact;
       const phone = contact.phone;
-      const twilioReady = isTwilioConfigured();
+      const twilioReady = isSmsConfigured();
       let otpEmail: string | null = null;
       if (email || !twilioReady) {
         otpEmail = requireGuestOtpEmail(email);
@@ -748,6 +793,7 @@ export async function handleOrdersRoute(
       const smsResult = await sendCheckoutOtpSms(phone, otpCode);
 
       // Gửi OTP qua Email nếu có
+      let emailSent = false;
       if (otpEmail) {
         const emailBody = `Chào ${full_name || "bạn"},\n\nMã xác thực OTP của bạn là: ${otpCode}.\n\nMã có hiệu lực trong 5 phút. Vui lòng không chia sẻ mã này cho bất kỳ ai.`;
         const emailHtml = `
@@ -771,41 +817,55 @@ export async function handleOrdersRoute(
             </div>
           </div>
         `;
-        await sendDirectEmail(otpEmail, "Mã xác thực đơn hàng Velura", emailBody, emailHtml);
-        
+        emailSent = await sendDirectEmail(otpEmail, "Mã xác thực đơn hàng Velura", emailBody, emailHtml);
+
         // Vẫn cố gắng lưu vết vào email_outbox nếu RLS cho phép
-        try {
-          await checkoutService.recordSentEmail({
-            recipient: otpEmail,
-            template_code: "otp_verification",
-            subject: "Mã xác thực đơn hàng Velura",
-            body: emailBody,
-            status: "sent", // Already sent directly, don't let worker resend
-            created_at: new Date().toISOString()
-          });
-        } catch {
-          /* ignore */
+        if (emailSent) {
+          try {
+            await checkoutService.recordSentEmail({
+              recipient: otpEmail,
+              template_code: "otp_verification",
+              subject: "Mã xác thực đơn hàng Velura",
+              body: emailBody,
+              status: "sent", // Already sent directly, don't let worker resend
+              created_at: new Date().toISOString()
+            });
+          } catch {
+            /* ignore */
+          }
         }
       }
 
       const smsSent = smsResult.success;
-      const emailSent = Boolean(otpEmail);
-      let channel: "sms" | "email" | "both" = "sms";
-      let message = `Mã OTP đã được gửi tới số điện thoại ${maskPhone(phone)}.`;
-      if (smsSent && emailSent) {
-        channel = "both";
-        message = `Mã OTP đã được gửi tới số điện thoại ${maskPhone(phone)} và email ${maskEmail(otpEmail!)}.`;
-      } else if (emailSent && !smsSent) {
-        channel = "email";
-        message = `Mã OTP đã được gửi tới email ${maskEmail(otpEmail!)}.`;
+      // Không kênh nào nhận được tin thì báo lỗi, không mở màn nhập OTP vô ích.
+      if (!smsSent && !emailSent) {
+        throw new HttpError(502, "OTP_SEND_FAILED", "Chưa thể gửi mã OTP. Vui lòng thử lại sau.");
       }
-      
+
+      const channel: "sms" | "email" | "both" = smsSent && emailSent ? "both" : emailSent ? "email" : "sms";
+      const destinations = [
+        smsSent ? `số điện thoại ${maskPhone(phone)}` : null,
+        emailSent ? `email ${maskEmail(asString(otpEmail))}` : null
+      ].filter((part): part is string => Boolean(part));
+      const message = `Mã OTP đã được gửi tới ${destinations.join(" và ")}.`;
+
       return sendJson(res, 200, {
         success: true,
         message,
         channel,
         masked_phone: maskPhone(phone),
         masked_email: otpEmail ? maskEmail(otpEmail) : null
+      }, corsHeaders);
+    }
+
+    // POST /api/user/orders/otp-check (Verify OTP without creating or consuming an order)
+    if (action === "otp-check" && req.method === "POST") {
+      const body = await readJson(req);
+      const phone = normalizeVietnamesePhone(body.phone);
+      checkoutOtpService.verify(phone, body.otp_code || body.otp);
+      return sendJson(res, 200, {
+        success: true,
+        message: "Số điện thoại đã được xác thực."
       }, corsHeaders);
     }
 
@@ -872,7 +932,6 @@ export async function handleOrdersRoute(
       
       const guestAccount = await checkoutService.resolveGuest(sessionState.contact, asString(shipping_address));
       const guestUser = guestAccount.user;
-      const isExistingMember = guestAccount.existingMember;
       const activation = guestAccount.activation;
 
       const orderCode = generateOrderCode();
@@ -885,9 +944,15 @@ export async function handleOrdersRoute(
       const activationUrl = activation
         ? `https://velura.royalai.dev/auth/activate?token=${encodeURIComponent(activation.token)}`
         : null;
+      let guestEmailNotification: {
+        targetEmail: unknown;
+        subject: string;
+        text: string;
+        html: string;
+      } | null = null;
       if (shipping_email || guestUser.email) {
         const targetEmail = shipping_email || guestUser.email;
-        const emailBody = `Chào ${shipping_name},\n\nĐơn hàng ${orderCode} của bạn đã được đặt thành công!\nTổng giá trị: ${guestTotal.toLocaleString('vi-VN')} đ\nPhương thức thanh toán: ${dbPaymentMethod === "COD" ? "Thanh toán khi nhận hàng (COD)" : "Thanh toán trực tuyến"}\nĐịa chỉ nhận: ${shipping_address}\n\nTra cứu đơn hàng tại: https://velura.royalai.dev/account/track?code=${orderCode}${activationUrl ? `\n\nKích hoạt tài khoản và tự đặt mật khẩu trong 24 giờ: ${activationUrl}` : ""}`;
+        const emailBody = `Chào ${shipping_name},\n\nĐơn hàng ${orderCode} của bạn đã được đặt thành công!\nTổng giá trị: ${guestTotal.toLocaleString('vi-VN')} đ\nPhương thức thanh toán: ${dbPaymentMethod === "COD" ? "Thanh toán khi nhận hàng (COD)" : "Thanh toán trực tuyến"}\nĐịa chỉ nhận: ${shipping_address}\n\nTra cứu đơn hàng tại: https://velura.royalai.dev/account/track?code=${orderCode}&contact=${encodeURIComponent(String(phone || ""))}\nTài khoản Velura: ${phone}${activationUrl ? `\n\nBạn có thể chọn kích hoạt tài khoản và tự đặt mật khẩu qua liên kết dùng một lần, có hiệu lực trong 24 giờ:\n${activationUrl}` : "\nĐơn hàng đã được liên kết với tài khoản hiện có."}`;
         
         const emailHtml = `
           <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eaeaea; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
@@ -905,16 +970,17 @@ export async function handleOrdersRoute(
                 <p style="margin: 6px 0; color: #555;">Tổng giá trị: <strong>${guestTotal.toLocaleString('vi-VN')} đ</strong></p>
                 <p style="margin: 6px 0; color: #555;">Phương thức thanh toán: <strong>${dbPaymentMethod === "COD" ? "Thanh toán khi nhận hàng (COD)" : "Thanh toán trực tuyến"}</strong></p>
                 <p style="margin: 6px 0; color: #555;">Địa chỉ giao hàng: <strong>${shipping_address}</strong></p>
+                <p style="margin: 6px 0; color: #555;">Tài khoản Velura: <strong>${phone}</strong></p>
               </div>
 
               <div style="text-align: center; margin: 28px 0;">
                 <a href="https://velura.royalai.dev/account/track?code=${orderCode}&contact=${encodeURIComponent(String(phone || ''))}" style="display: inline-block; background-color: #7C5454; color: #fff; text-decoration: none; padding: 12px 28px; border-radius: 6px; font-weight: 600;">Tra cứu tiến độ đơn hàng</a>
               </div>
 
-              ${!isExistingMember ? `
+              ${activationUrl ? `
               <div style="background-color: #f5f5f5; padding: 16px; border-radius: 6px; margin-top: 20px;">
                 <h4 style="margin: 0 0 8px 0; font-size: 14px; color: #555;">Kích hoạt tài khoản thành viên:</h4>
-                <p style="margin: 4px 0; font-size: 13px; color: #666;">Liên kết kích hoạt dùng một lần và có hiệu lực trong 24 giờ.</p>
+                <p style="margin: 4px 0; font-size: 13px; color: #666;">Bạn có thể chọn kích hoạt tài khoản. Liên kết dùng một lần và có hiệu lực trong 24 giờ; mật khẩu do bạn tự đặt.</p>
                 <p style="margin: 12px 0 0;"><a href="${activationUrl}" style="color: #7C5454; font-weight: 600;">Kích hoạt và đặt mật khẩu</a></p>
               </div>` : `
               <div style="background-color: #f5f5f5; padding: 16px; border-radius: 6px; margin-top: 20px;">
@@ -927,30 +993,14 @@ export async function handleOrdersRoute(
           </div>
         `;
         
-        await sendDirectEmail(targetEmail, `Xác nhận đơn hàng #${orderCode} tại Velura`, emailBody, emailHtml);
-        
-        try {
-          await checkoutService.recordSentEmail({
-            recipient: targetEmail,
-            template_code: "order_confirmation",
-            subject: `Xác nhận đơn hàng #${orderCode} tại Velura`,
-            body: emailBody,
-            status: "sent",
-            created_at: new Date().toISOString()
-          });
-        } catch {
-          /* ignore */
-        }
+        guestEmailNotification = {
+          targetEmail,
+          subject: `Xác nhận đơn hàng #${orderCode} tại Velura`,
+          text: emailBody,
+          html: emailHtml
+        };
       }
 
-      // Gửi SMS xác nhận đơn hàng qua Twilio cho khách
-      if (phone) {
-        void sendOrderConfirmationSms(asString(phone), orderCode, guestTotal);
-        if (activationUrl) {
-          void sendTwilioSms(asString(phone), `Velura: Kích hoạt tài khoản và tự đặt mật khẩu trong 24 giờ: ${activationUrl}`);
-        }
-      }
-      
       const guestInternalNote = formatOrderInternalNote(body, formatOrderInternalNote(order));
 
       const persistedGuestOrder = await checkoutService.persistOrder({
@@ -983,6 +1033,30 @@ export async function handleOrdersRoute(
       const createdItems = persistedGuestOrder.items;
       
       await checkoutService.recordVoucher(guestQuote.voucherId, guestQuote.discountAmount);
+
+      // Chỉ thông báo thành công sau khi order, payment, items và voucher đã ghi xong.
+      // Email/SMS là tác vụ phụ nên lỗi nhà cung cấp không được biến đơn đã tạo thành response thất bại.
+      if (dbPaymentMethod === "COD" && guestEmailNotification) {
+        const notice = guestEmailNotification;
+        void sendDirectEmail(notice.targetEmail, notice.subject, notice.text, notice.html).then(async (sent) => {
+          if (!sent) return;
+          try {
+            await checkoutService.recordSentEmail({
+              recipient: notice.targetEmail,
+              template_code: "order_confirmation",
+              subject: notice.subject,
+              body: notice.text,
+              status: "sent",
+              created_at: new Date().toISOString()
+            });
+          } catch {
+            /* notification audit must not fail checkout */
+          }
+        });
+      }
+      if (dbPaymentMethod === "COD" && phone) {
+        void sendGuestOrderWelcomeSms(asString(phone), orderCode, guestTotal, activationUrl);
+      }
 
       // Send welcome notification
       await createNotification(
@@ -1105,7 +1179,7 @@ export async function handleOrdersRoute(
       }
 
       const memberTargetEmail = body.shipping_email || profile.email;
-      if (memberTargetEmail) {
+      if (dbPaymentMethod === "COD" && memberTargetEmail) {
         const emailBody = `Chào ${shipping_name},\n\nĐơn hàng ${orderCode} của bạn đã được đặt thành công!\nTổng giá trị: ${memberTotal.toLocaleString('vi-VN')} đ\nPhương thức thanh toán: ${dbPaymentMethod === "COD" ? "Thanh toán khi nhận hàng (COD)" : "Thanh toán trực tuyến"}\nĐịa chỉ nhận: ${shipping_address}\n\nTra cứu đơn hàng tại: https://velura.royalai.dev/account/track?code=${orderCode}`;
         const emailHtml = `
           <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eaeaea; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
@@ -1137,7 +1211,7 @@ export async function handleOrdersRoute(
         void sendDirectEmail(memberTargetEmail, `Xác nhận đơn hàng #${orderCode} tại Velura`, emailBody, emailHtml);
       }
 
-      if (validPhone) {
+      if (dbPaymentMethod === "COD" && validPhone) {
         void sendOrderConfirmationSms(validPhone, orderCode, memberTotal);
       }
 

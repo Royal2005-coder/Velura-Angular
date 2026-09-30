@@ -33,7 +33,7 @@ export class CheckoutOtpPage {
   private readonly api = inject(ApiService);
   private readonly router = inject(Router);
 
-  readonly digits = signal(['', '', '', '']);
+  readonly digits = signal(['', '', '', '', '', '']);
   readonly seconds = signal(300);
   readonly errorMessage = signal<string | null>(null);
   readonly submitting = signal(false);
@@ -152,12 +152,12 @@ export class CheckoutOtpPage {
   }
 
   /**
-   * Confirms the original 4-digit checkout OTP and places the guest order.
+   * Confirms the original 6-digit checkout OTP and places the guest order.
    */
   confirm(): void {
     const code = this.digits().join('');
-    if (code.length < 4) {
-      this.errorMessage.set('Vui lòng nhập đầy đủ mã OTP 4 chữ số!');
+    if (code.length < 6) {
+      this.errorMessage.set('Vui lòng nhập đầy đủ mã OTP 6 chữ số!');
       return;
     }
     const guestPayload = this.checkout.readGuestPayload();

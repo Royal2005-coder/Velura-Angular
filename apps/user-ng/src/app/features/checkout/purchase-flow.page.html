@@ -270,11 +270,15 @@
                 Mã đơn <strong>{{ order()?.id }}</strong>
               </p>
               <div class="qr-payment">
-                <div class="qr-code" role="img" aria-label="Mã QR thanh toán VNPay"></div>
+                <img
+                  class="qr-code"
+                  src="/assets/images/payment/vietinbank-vietqr-tran-diem-quynh.png"
+                  alt="Mã VietQR VietinBank của Trần Diễm Quỳnh"
+                />
                 <div class="qr-payment__details">
                   <strong>{{ money(order()?.total) }}</strong>
                   <span>Quét mã QR để thanh toán</span>
-                  <small>Thời gian còn lại: {{ seconds() }} giây</small>
+                  <small>Thời gian còn lại: {{ paymentClockLabel() }}</small>
                 </div>
               </div>
               <p class="muted">
@@ -283,7 +287,7 @@
               <div class="payment-simulation">
                 <span class="payment-simulation__label">Mô phỏng kết quả thanh toán</span>
                 <div class="actions">
-                  <button (click)="result('paid')" [disabled]="seconds() === 0">
+                  <button (click)="result('paid')" [disabled]="paymentSeconds() === 0">
                     Thanh toán thành công</button
                   ><button class="secondary" (click)="result('failed')">Thất bại</button
                   ><button class="secondary" (click)="result('cancelled')">Hủy giao dịch</button

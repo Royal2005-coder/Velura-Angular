@@ -168,6 +168,7 @@ export interface AdminReturnRow {
   request_type?: string;
   return_type?: string;
   description?: string;
+  reason?: string;
   created_at?: string;
   resolved_at?: string;
   customer_name?: string;
@@ -179,6 +180,7 @@ export interface AdminReturnRow {
   evidence_images?: string[];
   tracking_return_code?: string;
   condition_check_result?: string;
+  lines?: Array<{ order_item_id?: string; quantity?: number }>;
   payment?: AdminReturnPayment | null;
 }
 
@@ -582,7 +584,9 @@ export interface AdminVoiceInsights {
     ticketsWithoutCsat: number;
     returns: number;
     returnRatePct: number;
+    returnReasons?: Array<{ reason: string; count: number }>;
   };
+  regions?: Array<{ name: string; count: number }>;
   orderFriction: {
     orderCount: number;
     completedOrders: number;
@@ -669,6 +673,21 @@ export class AdminApiService {
   /**
    * Loads the question-driven insight board for one admin module.
    */
+  recommendInsights(params: Record<string, string> = {}): Observable<{ source?: string; lines?: string[]; narrative?: string[] }> {
+    return this.http.post<{ source?: string; lines?: string[]; narrative?: string[] }>(
+      `${this.baseUrl}/api/v1/admin/insights/recommend`,
+      {},
+      { params: this.params(params) },
+    );
+  }
+
+  adviseProductImage(body: { dataUrl: string; mimeType: string }): Observable<{ source?: string; notes?: string[]; imageBase64?: string; imageMime?: string }> {
+    return this.http.post<{ source?: string; notes?: string[]; imageBase64?: string; imageMime?: string }>(
+      `${this.baseUrl}/api/v1/admin/products/image-advice`,
+      body,
+    );
+  }
+
   insights(params: Record<string, string> = {}): Observable<AdminInsightsPayload> {
     return this.http.get<AdminInsightsPayload>(`${this.baseUrl}/api/v1/admin/insights`, { params: this.params(params) });
   }
@@ -767,6 +786,13 @@ export class AdminApiService {
   /**
    * Replies to a review through the original moderation API.
    */
+  suggestReviewReply(reviewId: string): Observable<{ replies?: string[]; source?: string }> {
+    return this.http.post<{ replies?: string[]; source?: string }>(
+      `${this.baseUrl}/api/v1/admin/reviews/${encodeURIComponent(reviewId)}/suggest-reply`,
+      {},
+    );
+  }
+
   replyReview(reviewId: string, body: Record<string, unknown>): Observable<unknown> {
     return this.http.post(`${this.baseUrl}/api/v1/admin/reviews/${encodeURIComponent(reviewId)}/reply`, body);
   }
@@ -1082,6 +1108,10 @@ export class AdminApiService {
   /**
    * Updates a return workflow status.
    */
+  recordReturnContact(returnId: string, body: Record<string, unknown>): Observable<unknown> {
+    return this.http.post(`${this.baseUrl}/api/v1/admin/returns/${encodeURIComponent(returnId)}/contact`, body);
+  }
+
   updateReturnStatus(returnId: string, body: Record<string, unknown>): Observable<unknown> {
     return this.http.post(`${this.baseUrl}/api/v1/admin/returns/${encodeURIComponent(returnId)}/update-status`, body);
   }

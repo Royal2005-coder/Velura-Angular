@@ -70,10 +70,10 @@ test("COD starts pending while online checkout waits for payment", () => {
   });
 });
 
-test("checkout OTP is generated as four digits", () => {
+test("checkout OTP is generated as six digits", () => {
   for (let index = 0; index < 20; index += 1) {
     const otp = generateCheckoutOtp();
-    assert.match(otp, /^\d{4}$/);
+    assert.match(otp, /^\d{6}$/);
   }
 });
 
@@ -195,6 +195,46 @@ test("checkout service persists COD through the repository and decrements stock"
   assert.equal(result.order.order_id, "order-1");
   assert.deepEqual(calls.map((call) => call.operation), ["order", "item", "stock"]);
   assert.equal(calls[2]?.quantity, 8);
+});
+
+test("online checkout stores the gateway reference using the payment schema column", async () => {
+  let payment: JsonObject | null = null;
+  const service = new CheckoutService(checkoutRepositoryStub({
+    createOrder: async (input) => ({ order_id: "order-online", ...input }),
+    createPayment: async (input) => {
+      payment = input;
+    },
+    createOrderItem: async (input) => ({ order_item_id: "item-online", ...input })
+  }));
+
+  await service.persistOrder({
+    userId: "member-1",
+    contact: { fullName: "Nguyen Van An", phone: "0912345678", email: null },
+    shippingAddress: "123 Nguyen Hue",
+    shippingFee: 30_000,
+    voucherId: null,
+    discountAmount: 0,
+    subtotal: 100_000,
+    totalAmount: 130_000,
+    paymentMethod: "ONLINE_PAYMENT",
+    paymentProvider: "VNPAY",
+    orderStatus: "waiting_payment",
+    orderCode: "VLRONLINE",
+    internalNote: null,
+    items: [{
+      variantId: "variant-1",
+      productName: "Ao",
+      productImage: null,
+      quantity: 1,
+      unitPrice: 100_000,
+      subtotal: 100_000
+    }]
+  });
+
+  assert.equal(payment?.gateway_transaction_ref, "pay_vnpay_VLRONLINE");
+  assert.equal(payment?.payment_method, "ONLINE_PAYMENT");
+  assert.equal(payment?.payment_provider, "vnpay");
+  assert.equal("transaction_id" in (payment ?? {}), false);
 });
 
 test("checkout service activates a guest only through the repository", async () => {

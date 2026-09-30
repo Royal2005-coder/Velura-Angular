@@ -231,7 +231,11 @@ test("production disables hardcoded OTP shortcuts and fabricated notifications",
   assert.match(orders, /checkoutService\.persistOrder\(/);
   assert.match(checkoutRepository, /insertRow\("orders"/);
   assert.doesNotMatch(auth, /activation_token_hash:\s*`eq\./);
-  assert.match(orders, /action === "switch-cod"[\s\S]{0,300}requireUserAuth\(context\)/);
+  assert.match(orders, /action === "switch-cod"[\s\S]{0,800}requireUserAuth\(context\)/);
+  assert.match(
+    orders,
+    /action === "switch-cod"[\s\S]{0,1200}normalizeVietnamesePhone\(body\.phone\) !== normalizeVietnamesePhone\(order\.shipping_phone\)/
+  );
   assert.match(orders, /action === "payment-failed"[\s\S]{0,300}requireUserAuth\(context\)/);
   assert.match(orders, /action === "confirm-payment"[\s\S]{0,300}DEMO_PAYMENT_DISABLED/);
   assert.doesNotMatch(orders, /temp_password/);

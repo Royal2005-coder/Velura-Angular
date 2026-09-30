@@ -87,30 +87,14 @@
   background: #faf7f3;
 }
 .qr-code {
-  position: relative;
-  width: 176px;
-  height: 176px;
-  flex: 0 0 176px;
-  border: 10px solid #fff;
-  background: repeating-conic-gradient(#352c29 0 25%, #fff 0 50%) 0 0 / 18px 18px;
+  display: block;
+  width: 220px;
+  height: auto;
+  flex: 0 0 220px;
+  border: 6px solid #fff;
+  border-radius: 12px;
+  object-fit: contain;
   box-shadow: 0 0 0 1px #d9cec4;
-}
-.qr-code::before,
-.qr-code::after {
-  content: '';
-  position: absolute;
-  width: 34px;
-  height: 34px;
-  border: 7px solid #352c29;
-  background: #fff;
-}
-.qr-code::before {
-  top: 0;
-  left: 0;
-}
-.qr-code::after {
-  right: 0;
-  bottom: 0;
 }
 .qr-payment__details {
   display: flex;

@@ -26,7 +26,7 @@ export const config = {
   smtpPort: Number(process.env.SMTP_PORT || 587),
   smtpSecure: process.env.SMTP_SECURE === "true",
   smtpUser: process.env.SMTP_USER || "",
-  smtpAppPassword: process.env.SMTP_APP_PASSWORD || "",
+  smtpAppPassword: normalizeAppPassword(process.env.SMTP_APP_PASSWORD || ""),
   smtpFrom: process.env.SMTP_FROM || "",
   stripeSecretKey: process.env.STRIPE_SECRET_KEY || "",
   stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET || "",
@@ -45,13 +45,41 @@ export const config = {
   geminiModel: process.env.GEMINI_MODEL || process.env.OPENAI_MODEL || "gemini-3.5-flash",
   mistralApiKey: process.env.MISTRAL_API_KEY || "",
   mistralModel: process.env.MISTRAL_MODEL || "mistral-small-latest",
-  twilioAccountSid: process.env.TWILIO_ACCOUNT_SID || "",
+  twilioAccountSid: normalizeTwilioAccountSid(process.env.TWILIO_ACCOUNT_SID || ""),
   twilioApiKeySid: process.env.TWILIO_API_KEY_SID || "",
   twilioApiKeySecret: process.env.TWILIO_API_KEY_SECRET || "",
   twilioAuthToken: process.env.TWILIO_AUTH_TOKEN || "",
   twilioPhoneNumber: process.env.TWILIO_PHONE_NUMBER || "",
-  twilioMessagingServiceSid: process.env.TWILIO_MESSAGING_SERVICE_SID || ""
+  twilioMessagingServiceSid: process.env.TWILIO_MESSAGING_SERVICE_SID || "",
+  smsProvider: (process.env.SMS_PROVIDER || "twilio").trim().toLowerCase(),
+  esmsApiKey: process.env.ESMS_API_KEY || "",
+  esmsSecretKey: process.env.ESMS_SECRET_KEY || "",
+  esmsBrandname: process.env.ESMS_BRANDNAME || "",
+  stringeeApiKeySid: process.env.STRINGEE_API_KEY_SID || "",
+  stringeeApiKeySecret: process.env.STRINGEE_API_KEY_SECRET || "",
+  stringeeBrandname: process.env.STRINGEE_BRANDNAME || ""
 };
+
+/**
+ * Removes presentation whitespace from provider app passwords.
+ * Gmail displays its 16-character app passwords in four groups, while SMTP
+ * authentication expects the compact value.
+ */
+export function normalizeAppPassword(value: string): string {
+  return value.replace(/\s+/g, "");
+}
+
+/**
+ * Accepts either Twilio's full Account SID or the 32 hexadecimal characters
+ * copied without its `AC` type prefix.
+ */
+export function normalizeTwilioAccountSid(value: string): string {
+  const trimmed = value.trim();
+  if (/^[a-f\d]{32}$/i.test(trimmed)) {
+    return `AC${trimmed}`;
+  }
+  return trimmed;
+}
 
 export function assertRuntimeConfig() {
   const missing: string[] = [];

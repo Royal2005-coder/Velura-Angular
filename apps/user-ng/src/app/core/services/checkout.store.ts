@@ -1,5 +1,6 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { CartLine, CartStore } from './cart.store';
+import type { DemoOrder } from './purchase-demo.store';
 
 /**
  * Thông tin giao hàng và các tùy chọn bổ sung chuẩn Coolmate (quà tặng, người nhận thay thế, xuất hóa đơn VAT, mã giới thiệu).
@@ -45,6 +46,10 @@ export interface CreatedOrder {
   shipping_method?: string;
   /** Guest phải kích hoạt tài khoản trước khi đăng nhập và xem đơn trong khu vực Member. */
   activation_required?: boolean;
+  /** Snapshot cho phép màn thanh toán online phục hồi sau reload dù giỏ đã được xoá. */
+  checkout_snapshot?: DemoOrder;
+  /** Hạn của phiên QR; frontend tính lại thời gian còn lại thay vì reset khi reload. */
+  payment_expires_at?: string;
 }
 
 const SHIPPING_KEY = 'checkout_shipping';

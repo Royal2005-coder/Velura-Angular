@@ -487,12 +487,29 @@
             <textarea #imagesBox class="admin-form-control admin-form-textarea" name="images" [readOnly]="!canMutate()" placeholder="https://... hoặc /assets/images/sp.jpg">{{ (selected()?.images || []).join('\n') }}</textarea>
             @if (canMutate()) {
               <input #imageFile type="file" accept="image/jpeg,image/png,image/webp,image/gif" hidden (change)="uploadImage($event, imagesBox)" />
-              <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" [disabled]="imageUploading()" (click)="imageFile.click()">{{ imageUploading() ? 'Đang tăng sáng và tải ảnh...' : 'Tải ảnh và cải thiện' }}</button>
+              <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" [disabled]="imageUploading()" (click)="imageFile.click()">{{ imageUploading() ? 'Đang dựng nền studio...' : 'Xem trước nền studio' }}</button>
+            }
+            @if (imageBefore() || imageAfter()) {
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px;">
+                <figure style="margin:0;">
+                  <img [src]="imageBefore()" alt="Ảnh trước khi cải thiện" style="width:100%; aspect-ratio:1; object-fit:contain; background: var(--field-bg); border: 1px solid var(--line); border-radius: 8px;" />
+                  <figcaption>Trước</figcaption>
+                </figure>
+                <figure style="margin:0;">
+                  <img [src]="imageAfter()" alt="Ảnh sau khi cải thiện" style="width:100%; aspect-ratio:1; object-fit:contain; background: var(--field-bg); border: 1px solid var(--line); border-radius: 8px;" />
+                  <figcaption>{{ imageAfterLabel() }}</figcaption>
+                </figure>
+              </div>
+              <div style="display:flex; gap: 8px; margin-top: 8px;">
+                <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" [disabled]="imageUploading() || !imageAfter()" (click)="useImprovedImage()">Dùng ảnh sau</button>
+                <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" [disabled]="imageUploading()" (click)="useOriginalImage()">Giữ ảnh gốc</button>
+                <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="closeImagePreview()">Đóng</button>
+              </div>
             }
             @if (imageNote()) {
               <small class="admin-form-helper">{{ imageNote() }}</small>
             }
-            <small class="admin-form-helper">Ảnh JPG, PNG, WebP hoặc GIF, tối đa 5 MB. Gemini giữ sản phẩm và thay nền studio; nếu không sinh được ảnh thì lưu bản tăng sáng 8% và tương phản 6%.</small>
+            <small class="admin-form-helper">Ảnh JPG, PNG, WebP hoặc GIF, tối đa 5 MB. Xem trước rồi mới lưu. Cột Sau là nền studio nếu Gemini trả ảnh.</small>
           </label>
         </form>
 

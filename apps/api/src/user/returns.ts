@@ -1,4 +1,5 @@
 import { returnWindowOpen } from "./return-window.js";
+import { normalizeReturnIntake, RETURN_STATUS_LABELS_VI } from "../returns/return-constants.js";
 import { HttpError, readJson, sendJson } from "../http.js";
 import { quotePostgrestValue, selectOne, selectRows, insertRow, updateRows } from "../supabase.js";
 import { requireUserAuth } from "./auth.js";
@@ -165,8 +166,10 @@ export async function handleReturnsRoute(
     const cleanCode = String(body.order_code || "").trim().toUpperCase();
     const cleanContact = String(body.contact || body.phone || body.email || "").trim();
     const return_type = body.return_type;
-    const description = body.description;
-    const evidence_images = body.evidence_images;
+    const intake = normalizeReturnIntake(body.reason || body.reason_code, body.evidence_images, body.description || body.note);
+    if (!intake.ok) {
+      throw new HttpError(400, intake.error, intake.message);
+    }
     const items = body.items;
     if (!cleanCode || !cleanContact || !return_type || !Array.isArray(items) || !items.length) {
       throw new HttpError(400, "BAD_REQUEST", "Thiếu thông tin yêu cầu đổi trả (mã đơn, liên hệ, loại đổi trả hoặc sản phẩm)");
@@ -254,9 +257,9 @@ export async function handleReturnsRoute(
       return_type,
       status: "pending",
       tracking_return_code: trackingReturnCode,
-      reason: description || "Khách hàng yêu cầu đổi trả",
-      description: description || null,
-      evidence_images: Array.isArray(evidence_images) ? evidence_images : [],
+      reason: intake.intake.code,
+      description: intake.intake.description,
+      evidence_images: intake.intake.images,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     }));
@@ -307,7 +310,11 @@ export async function handleReturnsRoute(
   // POST /api/user/returns
   if (req.method === "POST" && !action) {
     const body = await readJson(req);
-    const { order_id, return_type, description, evidence_images, items } = body;
+    const { order_id, return_type, items } = body;
+    const intake = normalizeReturnIntake(body.reason || body.reason_code, body.evidence_images, body.description || body.note);
+    if (!intake.ok) {
+      throw new HttpError(400, intake.error, intake.message);
+    }
 
     if (!order_id || !return_type || !Array.isArray(items) || !items.length) {
       throw new HttpError(400, "BAD_REQUEST", "Thiếu thông tin yêu cầu đổi trả");
@@ -386,8 +393,9 @@ export async function handleReturnsRoute(
       order_id,
       user_id: profile.user_id,
       return_type,
-      description: description || null,
-      evidence_images: evidence_images || null,
+      reason: intake.intake.code,
+      description: intake.intake.description,
+      evidence_images: intake.intake.images,
       status: "pending",
       tracking_return_code: trackingReturnCode,
       created_at: new Date().toISOString()
@@ -462,6 +470,7 @@ export async function handleReturnsRoute(
 
     const populatedReturns: JsonObject[] = returns.map((ret) => ({
       ...ret,
+      status_label: RETURN_STATUS_LABELS_VI[String(ret.status || "")] || ret.status,
       items: itemsByReturnId.get(String(ret.return_id)) || []
     }));
 

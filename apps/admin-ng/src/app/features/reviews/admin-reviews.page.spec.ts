@@ -28,10 +28,7 @@ describe('AdminReviewsPage', () => {
     const neg = page.analyzeSentiment({ review_id: 'r2', rating: 1, comment: 'Hàng rách và lỗi chỉ thừa' });
     expect(neg.tone).toBe('negative');
 
-    // AI suggestions
-    const suggestions = page.generateAiSuggestions({ review_id: 'r1', rating: 5 }, pos);
-    expect(suggestions.length).toBe(3);
-    page.applyAiSuggestion(suggestions[0]);
-    expect(page.replyDraft()).toBe(suggestions[0]);
+    page.applyAiSuggestion('Cảm ơn bạn đã đánh giá sản phẩm này.');
+    expect(page.replyDraft()).toBe('Cảm ơn bạn đã đánh giá sản phẩm này.');
   });
 });

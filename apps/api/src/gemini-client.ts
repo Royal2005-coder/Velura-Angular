@@ -262,6 +262,42 @@ export async function analyzeImageWithGemini(
   return readFirstCandidateText(data);
 }
 
+export interface GeneratedImage {
+  mimeType: string;
+  base64: string;
+}
+
+/**
+ * Giữ đúng sản phẩm và thay nền bằng phông studio. Trả về ảnh do Gemini sinh, không phải bộ lọc sáng.
+ */
+export async function generateStudioProductImage(dataUrl: string, mimeType: string): Promise<GeneratedImage> {
+  requireGeminiKey();
+  const model = process.env.GEMINI_IMAGE_MODEL || "gemini-2.5-flash-image";
+  const cleanBase64 = dataUrl.replace(/^data:image\/[a-zA-Z+.-]+;base64,/, "");
+  const payload: JsonObject = {
+    contents: [{
+      parts: [
+        { inlineData: { mimeType: mimeType || "image/jpeg", data: cleanBase64 } },
+        {
+          text: "Edit this fashion product photo. Keep the garment, color, and shape unchanged. Replace only the background with a clean warm off-white studio backdrop and soft even light. No text, no logo, no extra props. Return the edited image."
+        }
+      ]
+    }],
+    generationConfig: {
+      responseModalities: ["IMAGE", "TEXT"]
+    }
+  };
+  const data = await geminiRequestWithRetry(`/models/${encodeURIComponent(model)}:generateContent`, payload, { timeoutMs: 45000 });
+  for (const part of readCandidateParts(data)) {
+    const inline = isJsonObject(part.inlineData) ? part.inlineData : isJsonObject(part.inline_data) ? part.inline_data : null;
+    const base64 = inline ? asString(inline.data) : "";
+    if (base64) {
+      return { mimeType: asString(inline?.mimeType || inline?.mime_type) || "image/png", base64 };
+    }
+  }
+  throw new HttpError(502, "GEMINI_IMAGE_EMPTY", "Gemini không trả về ảnh nền studio.");
+}
+
 function requireGeminiKey(): void {
   if (!config.geminiApiKey) {
     throw new HttpError(503, "GEMINI_API_KEY_REQUIRED", "Gemini API key is not configured. Set GEMINI_API_KEY in .env");

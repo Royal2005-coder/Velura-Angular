@@ -93,6 +93,21 @@ test("pay again is offered only within 24 hours of an online order waiting for p
   assert.equal(view(recent).can_pay_again, true);
   assert.equal(view(old).can_pay_again, false);
   assert.equal(view(recent, "confirmed").can_pay_again, false);
+  const cancelledPayment = presentOrderForCustomer({
+    order_id: "o10",
+    status: "pending",
+    payment_method: "ONLINE_PAYMENT",
+    created_at: recent
+  }, [], []);
+  const cod = presentOrderForCustomer({
+    order_id: "o11",
+    status: "pending",
+    payment_method: "COD",
+    created_at: recent
+  }, [], []);
+  assert.equal(cancelledPayment.status_label, "Chờ xác nhận");
+  assert.equal(cancelledPayment.can_pay_again, true);
+  assert.equal(cod.can_pay_again, false);
 });
 
 test("a Stripe session younger than its lifetime blocks a second one", () => {

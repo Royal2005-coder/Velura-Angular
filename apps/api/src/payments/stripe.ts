@@ -310,7 +310,15 @@ export async function markStripePaymentPaid(
     await refundStripeOrder(orderId);
     return "refunding";
   }
-  if (asString(order?.status) === "waiting_payment") {
+  let orderStatus = asString(order?.status);
+  if (orderStatus === "pending") {
+    await updateRows("orders", { order_id: `eq.${orderId}`, status: "eq.pending" }, {
+      status: "waiting_payment",
+      updated_at: new Date().toISOString()
+    });
+    orderStatus = "waiting_payment";
+  }
+  if (orderStatus === "waiting_payment") {
     await callRpc("velura_order_service_action", {
       p_order_id: orderId,
       p_action: "payment_succeeded",

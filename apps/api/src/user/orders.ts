@@ -19,6 +19,7 @@ import {
   maskPhone,
   isTwilioConfigured
 } from "../sms/twilio.js";
+import { isEsmsConfigured } from "../sms/esms.js";
 import { maskEmail, sendDirectEmail } from "../email/mailer.js";
 export { maskEmail } from "../email/mailer.js";
 import {
@@ -174,10 +175,12 @@ export function presentOrderForCustomer(order: JsonObject, items: JsonObject[], 
     timeline,
     steps: customerOrderSteps(String(order.status || ""), String(order.payment_method || ""), timeline),
     can_cancel: customerCanCancel(facts),
-    can_pay_again: order.status === "waiting_payment"
-      && order.payment_method === "ONLINE_PAYMENT"
+    can_pay_again: (order.status === "waiting_payment" || order.status === "pending")
+      && order.payment_method !== "COD"
       && Date.now() - createdAt < PAY_AGAIN_WINDOW_MS,
-    pay_again_until: order.status === "waiting_payment" ? new Date(createdAt + PAY_AGAIN_WINDOW_MS).toISOString() : null,
+    pay_again_until: (order.status === "waiting_payment" || order.status === "pending") && order.payment_method !== "COD"
+      ? new Date(createdAt + PAY_AGAIN_WINDOW_MS).toISOString()
+      : null,
     can_request_return: canRequestReturn
   };
 }
@@ -522,6 +525,12 @@ export async function handleOrdersRoute(
           gateway_response_code: "stale_session"
         });
       }
+      if (order.status === "pending") {
+        await updateRows("orders", { order_id: `eq.${order.order_id}` }, {
+          status: "waiting_payment",
+          updated_at: new Date().toISOString()
+        });
+      }
       const stripe = await openStripePayment(order.order_id, order.total_amount, "STRIPE", `/account/orders/${order.order_id}`);
       return sendJson(res, 200, { success: true, stripe }, corsHeaders);
     }
@@ -576,17 +585,44 @@ export async function handleOrdersRoute(
       const order = await selectOne("orders", { order_id: `eq.${targetOrderId}` }) ||
                     await selectOne("orders", { order_code: `eq.${quotePostgrestValue(targetOrderId.toUpperCase())}` });
       if (order) {
+        const nowIso = new Date().toISOString();
+        if (order.status === "waiting_payment") {
+          await updateRows("orders", { order_id: `eq.${order.order_id}` }, {
+            status: "pending",
+            updated_at: nowIso
+          });
+        }
         try {
           await updateRows("payment", { order_id: `eq.${order.order_id}`, payment_status: "eq.pending" }, {
             payment_status: "failed",
             gateway_response_code: "TIMEOUT_OR_CANCELLED",
-            updated_at: new Date().toISOString()
+            updated_at: nowIso
           });
         } catch {
           /* ignore */
         }
+        if (order.status === "waiting_payment") {
+          try {
+            await insertRow("order_status_history", {
+              order_id: order.order_id,
+              old_status: "waiting_payment",
+              new_status: "pending",
+              trigger_type: "customer",
+              changed_by: "customer",
+              changed_at: nowIso,
+              note: "Khách hủy hoặc hết hạn thanh toán online. Đơn chuyển sang chờ xác nhận."
+            });
+          } catch {
+            /* ignore */
+          }
+        }
       }
-      return sendJson(res, 200, { success: true, message: "Đã cập nhật trạng thái thanh toán" }, corsHeaders);
+      return sendJson(res, 200, {
+        success: true,
+        status: "pending",
+        status_label: "Chờ xác nhận",
+        message: "Đơn hàng chờ xác nhận. Vui lòng thanh toán lại hoặc đổi phương thức."
+      }, corsHeaders);
     }
 
     // POST /api/user/orders/:id/confirm-payment hoặc POST /api/user/orders/confirm-payment
@@ -717,12 +753,12 @@ export async function handleOrdersRoute(
       if (!validatePhone(phone)) {
         throw new HttpError(400, "BAD_REQUEST", "Số điện thoại không hợp lệ (10 số, bắt đầu bằng 0)");
       }
-      const twilioReady = isTwilioConfigured();
+      const smsReady = isTwilioConfigured() || isEsmsConfigured();
       let otpEmail: string | null = null;
-      if (email || !twilioReady) {
+      if (email || !smsReady) {
         otpEmail = requireGuestOtpEmail(email);
       }
-      if (config.nodeEnv === "production" && !twilioReady && (!config.smtpHost || !config.smtpUser || !config.smtpAppPassword)) {
+      if (config.nodeEnv === "production" && !smsReady && (!config.smtpHost || !config.smtpUser || !config.smtpAppPassword)) {
         throw new HttpError(503, "OTP_SERVICE_UNAVAILABLE", "Chưa cấu hình dịch vụ SMS hoặc email để gửi mã OTP.");
       }
       
@@ -842,6 +878,9 @@ export async function handleOrdersRoute(
       if (smsSent && emailSent) {
         channel = "both";
         message = `Mã OTP đã được gửi tới số điện thoại ${maskPhone(phone)} và email ${maskEmail(otpEmail!)}. Hiệu lực 1 phút.`;
+      } else if (smsSent && smsResult.simulated) {
+        channel = "sms";
+        message = "eSMS sandbox đã nhận yêu cầu. Tin không gửi tới máy. Tắt ESMS_SANDBOX để gửi thật.";
       } else if (emailSent && !smsSent) {
         channel = "email";
         message = `SMS chưa gửi được (${smsResult.error || "Twilio chưa cấu hình"}). Mã OTP đã gửi email ${maskEmail(otpEmail!)}. Hiệu lực 1 phút.`;

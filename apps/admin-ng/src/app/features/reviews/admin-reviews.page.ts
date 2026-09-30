@@ -58,6 +58,9 @@ export class AdminReviewsPage {
   // Signals trợ lý AI CSKH, nhận diện từ cấm và gợi ý phản hồi
   readonly replyDraft = signal<string>('');
   readonly aiSuggestions = signal<string[]>([]);
+  readonly aiLoading = signal(false);
+  readonly aiError = signal<string | null>(null);
+  readonly aiSource = signal<string | null>(null);
   readonly detectedRestrictedWords = signal<string[]>([]);
   readonly sentiment = signal<{ label: string; tone: string; score: number } | null>(null);
 
@@ -261,27 +264,29 @@ export class AdminReviewsPage {
     return { label: 'Trung tính', tone: 'neutral', score: rating || 3 };
   }
 
-  generateAiSuggestions(row: AdminReviewRow, sentiment: { label: string; tone: string }): string[] {
-    const prodName = this.productName(row) || 'sản phẩm';
-    if (sentiment.tone === 'positive') {
-      return [
-        `Chào bạn, Velura chân thành cảm ơn bạn đã tin tưởng và đánh giá 5 sao cho ${prodName}! Sự hài lòng của bạn là niềm vui và động lực lớn nhất của chúng mình. Chúc bạn luôn rạng rỡ và tự tin mỗi ngày cùng Velura nhé!`,
-        `Dạ Velura xin gửi lời cảm ơn sâu sắc đến quý khách ạ! Velura xin gửi tặng bạn voucher ưu đãi 10% cho đơn hàng kế tiếp. Hy vọng bạn sẽ luôn đồng hành và ủng hộ Velura trong thời gian tới!`,
-        `Cảm ơn bạn đã lựa chọn ${prodName} từ Velura! Để trang phục luôn bền đẹp như mới, bạn lưu ý giặt ở chế độ nhẹ và phơi nơi thoáng mát nhé. Chúc bạn một ngày thật nhiều niềm vui!`,
-      ];
-    }
-    if (sentiment.tone === 'negative') {
-      return [
-        `Chào bạn, Velura thành thật xin lỗi vì trải nghiệm chưa trọn vẹn với ${prodName}. Bộ phận CSKH Velura xin phép liên hệ hỗ trợ đổi trả mới hoặc hoàn tiền ngay trong hôm nay theo chính sách 30 ngày. Rất mong bạn cho Velura cơ hội khắc phục ạ!`,
-        `Dạ Velura chân thành xin lỗi bạn về sự bất tiện này. Chúng mình sẽ liên hệ hỗ trợ bạn đổi size/màu hoặc kiểm tra đổi sản phẩm mới hoàn toàn miễn phí ship 2 chiều ngay hôm nay ạ. Mong bạn thông cảm cho sơ suất của shop nhé!`,
-        `Velura đã ghi nhận phản hồi đóng góp quý báu từ bạn và chuyển ngay cho bộ phận sản xuất kiểm tra chất lượng. CSKH Velura sẽ gọi điện hỗ trợ giải quyết thỏa đáng nhất cho bạn ngay trong ít phút tới ạ. Cảm ơn bạn!`,
-      ];
-    }
-    return [
-      `Chào bạn, cảm ơn bạn đã gửi đánh giá cho sản phẩm ${prodName}. Không biết sản phẩm còn điểm nào chưa hoàn toàn làm bạn ưng ý không ạ? Bạn có thể nhắn tin cho CSKH Velura để được hỗ trợ và tư vấn chu đáo hơn nhé!`,
-      `Dạ Velura cảm ơn quý khách đã tin tưởng mua sắm. Mọi góp ý của bạn là động lực để Velura ngày càng hoàn thiện chất lượng và dịch vụ hơn nữa. Chúc bạn một ngày tốt lành!`,
-      `Chào bạn, nếu bạn cần hỗ trợ thêm về hướng dẫn bảo quản trang phục, đổi size hoặc tư vấn phối đồ, đừng ngần ngại liên hệ CSKH Velura bất cứ lúc nào nhé ạ!`,
-    ];
+  /**
+   * Xin câu phản hồi từ Gemini trên đúng nội dung đánh giá. Không điền câu mẫu khi AI không trả lời.
+   */
+  requestAiReply(reviewId: string): void {
+    this.aiLoading.set(true);
+    this.aiError.set(null);
+    this.aiSuggestions.set([]);
+    this.aiSource.set(null);
+    this.api.suggestReviewReply(reviewId).subscribe({
+      next: (result) => {
+        this.aiLoading.set(false);
+        this.aiSuggestions.set(result.replies || []);
+        this.aiSource.set(result.source || null);
+        if (!(result.replies || []).length) {
+          this.aiError.set('AI không trả về câu phản hồi. Viết tay trong ô bên dưới.');
+        }
+      },
+      error: (error: unknown) => {
+        this.aiLoading.set(false);
+        this.aiSuggestions.set([]);
+        this.aiError.set(adminErrorMessage(error, 'Không lấy được gợi ý AI. Viết phản hồi tay.'));
+      },
+    });
   }
 
   applyAiSuggestion(text: string): void {
@@ -309,7 +314,9 @@ export class AdminReviewsPage {
       this.detectedRestrictedWords.set(this.detectRestrictedWords(comment));
       const s = this.analyzeSentiment(row);
       this.sentiment.set(s);
-      this.aiSuggestions.set(this.generateAiSuggestions(row, s));
+      if (type === 'reply') {
+        this.requestAiReply(reviewId);
+      }
     }
 
     // Tải chi tiết bổ sung (ảnh, thông tin người dùng) nếu có
@@ -324,7 +331,6 @@ export class AdminReviewsPage {
           this.detectedRestrictedWords.set(this.detectRestrictedWords(comment));
           const s = this.analyzeSentiment(fullRow);
           this.sentiment.set(s);
-          this.aiSuggestions.set(this.generateAiSuggestions(fullRow, s));
         }
       },
       error: () => {},

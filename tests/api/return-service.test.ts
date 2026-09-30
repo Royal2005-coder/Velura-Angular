@@ -237,6 +237,8 @@ test("completing a return triggers payment refund gateway if applicable", async 
   const service = createReturnService({
     repository: {
       getReturn: async () => ({ return_id: RETURN_ID, order_id: "order-456", status: "received", refund_amount: 500000, version: 3 }),
+      getRefundableAmount: async () => 500000,
+      getPaymentByOrderId: async () => ({ payment_provider: "stripe" }),
       updateReturnStatus: async (_id, input) => ({ status: input.status, order_id: "order-456" })
     },
     refunds: {

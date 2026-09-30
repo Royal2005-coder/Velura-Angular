@@ -1,4 +1,16 @@
 <main>
+  @if (unpaidNotice(); as notice) {
+    <div class="unpaid-notice" role="dialog" aria-modal="true" aria-labelledby="unpaid-title">
+      <div class="unpaid-notice__card">
+        <h2 id="unpaid-title">Đơn hàng chờ xác nhận</h2>
+        <p>Đơn #{{ notice.orderCode }} thanh toán chưa thành công. Vui lòng thanh toán lại hoặc đổi phương thức.</p>
+        <div class="unpaid-notice__actions">
+          <a class="btn btn--accent" [routerLink]="unpaidOrdersLink()" (click)="dismissUnpaid()">Xem đơn hàng</a>
+          <button class="btn btn--outline" type="button" (click)="dismissUnpaid()">Ở lại trang chủ</button>
+        </div>
+      </div>
+    </div>
+  }
   <section class="hero">
     <div class="hero__video-container">
       <video #heroVideo autoplay loop playsinline muted poster="/assets/images/hero-banner.png">

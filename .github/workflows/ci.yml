@@ -302,6 +302,11 @@ jobs:
           TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
           TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
           TWILIO_PHONE_NUMBER: ${{ secrets.TWILIO_PHONE_NUMBER }}
+          ESMS_API_KEY: ${{ secrets.ESMS_API_KEY }}
+          ESMS_SECRET_KEY: ${{ secrets.ESMS_SECRET_KEY }}
+          ESMS_BRANDNAME: ${{ secrets.ESMS_BRANDNAME }}
+          ESMS_SMS_TYPE: ${{ secrets.ESMS_SMS_TYPE }}
+          ESMS_SANDBOX: ${{ secrets.ESMS_SANDBOX }}
         run: |
           if [ -n "$STRIPE_SECRET_KEY" ]; then
             vercel env add STRIPE_SECRET_KEY production --value "$STRIPE_SECRET_KEY" --cwd apps/api --token "$VERCEL_TOKEN" --yes --force || true
@@ -326,6 +331,21 @@ jobs:
           fi
           if [ -n "$TWILIO_PHONE_NUMBER" ]; then
             vercel env add TWILIO_PHONE_NUMBER production --value "$TWILIO_PHONE_NUMBER" --cwd apps/api --token "$VERCEL_TOKEN" --yes --force || true
+          fi
+          if [ -n "$ESMS_API_KEY" ]; then
+            vercel env add ESMS_API_KEY production --value "$ESMS_API_KEY" --cwd apps/api --token "$VERCEL_TOKEN" --yes --force || true
+          fi
+          if [ -n "$ESMS_SECRET_KEY" ]; then
+            vercel env add ESMS_SECRET_KEY production --value "$ESMS_SECRET_KEY" --cwd apps/api --token "$VERCEL_TOKEN" --yes --force || true
+          fi
+          if [ -n "$ESMS_BRANDNAME" ]; then
+            vercel env add ESMS_BRANDNAME production --value "$ESMS_BRANDNAME" --cwd apps/api --token "$VERCEL_TOKEN" --yes --force || true
+          fi
+          if [ -n "$ESMS_SMS_TYPE" ]; then
+            vercel env add ESMS_SMS_TYPE production --value "$ESMS_SMS_TYPE" --cwd apps/api --token "$VERCEL_TOKEN" --yes --force || true
+          fi
+          if [ -n "$ESMS_SANDBOX" ]; then
+            vercel env add ESMS_SANDBOX production --value "$ESMS_SANDBOX" --cwd apps/api --token "$VERCEL_TOKEN" --yes --force || true
           fi
       - name: Deploy API to Vercel
         run: vercel deploy --prod --cwd apps/api --token ${{ secrets.VERCEL_TOKEN }} --yes

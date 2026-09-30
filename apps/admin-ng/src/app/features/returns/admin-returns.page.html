@@ -148,6 +148,32 @@
           </div>
         </div>
       } @else if (zone() === 'returns') {
+        @if (receiveTarget(); as target) {
+          <section class="admin-card" style="margin-bottom: 16px; padding: 16px;">
+            <h3 style="margin: 0 0 8px;">Nhận hàng hoàn trả — {{ target.return_id }}</h3>
+            <p class="admin-note">Nhập lại một lần: đủ số lượng, đúng hàng, đúng mã dòng. Bắt buộc ảnh minh chứng. Hoàn tiền sau đó lấy đúng giá món trên đơn; đơn Stripe được hoàn qua Stripe.</p>
+            <p class="admin-note">Số lượng đăng ký: {{ expectedQty() }}. Mã dòng hàng: {{ expectedItemId() || '—' }}</p>
+            <label class="form-label" for="qa-qty">Số lượng thực nhận *</label>
+            <input id="qa-qty" type="number" min="1" [value]="qaQty()" (input)="setQaQty($event)" />
+            <label class="form-label" for="qa-item" style="display:block; margin-top: 12px;">Nhập lại mã dòng hàng *</label>
+            <input id="qa-item" type="text" [value]="qaItemId()" (input)="setQaItemId($event)" />
+            <label class="form-label" for="qa-result" style="display:block; margin-top: 12px;">Đúng hàng của shop *</label>
+            <select id="qa-result" class="form-select" [value]="qaResult()" (change)="setQaResult($event)">
+              <option value="">Chọn kết quả kiểm hàng...</option>
+              <option value="qa_pass">Đúng hàng của shop</option>
+              <option value="qa_fail">Không đúng hàng của shop</option>
+            </select>
+            <label class="form-label" for="qa-proof" style="display:block; margin-top: 12px;">Ảnh minh chứng kho *</label>
+            <input id="qa-proof" type="file" accept="image/*" (change)="onQaProof($event)" />
+            @if (qaError()) {
+              <p class="admin-note">{{ qaError() }}</p>
+            }
+            <div style="display:flex; gap: 8px; margin-top: 12px;">
+              <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="confirmReceive()">Ghi nhận thành công</button>
+              <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="closeReceive()">Đóng</button>
+            </div>
+          </section>
+        }
         @if (!returns().length) {
           <app-admin-empty-state kind="empty" icon="refresh" title="Không có phiếu đổi/trả phù hợp" />
         } @else {
@@ -192,7 +218,12 @@
                         </span>
                       </div>
                     </td>
-                    <td><span class="admin-badge admin-badge--order-{{ row.status }}">{{ returnStatusLabel(row.status) }}</span></td>
+                    <td>
+                      <span class="admin-badge admin-badge--order-{{ row.status }}">{{ returnStatusLabel(row.status) }}</span>
+                      @if (contactOverdue(row)) {
+                        <span class="admin-badge admin-badge--warning">Quá 24 giờ chưa liên hệ</span>
+                      }
+                    </td>
                     <td>{{ date(row.created_at) }}</td>
                     <td>
                       <div class="admin-table-actions" style="display: flex; align-items: center; gap: 6px;">
@@ -209,7 +240,11 @@
                             }
                             <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="openReturnAction('reject', row.return_id)">Từ chối</button>
                           } @else if (nextReturnStep(row); as step) {
-                            <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="advanceReturn(row, step.status)">{{ step.label }}</button>
+                            @if (step.status === 'received') {
+                              <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openReceive(row)">{{ step.label }}</button>
+                            } @else {
+                              <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="advanceReturn(row, step.status)">{{ step.label }}</button>
+                            }
                             @if (row.status === 'received') {
                               <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="openReturnAction('reject', row.return_id)">Không đạt</button>
                             }
@@ -458,8 +493,24 @@
           </dd>
         </div>
         <div><dt>Mã vận đơn trả về</dt><dd>{{ selectedReturn()!.tracking_return_code || '—' }}</dd></div>
-        <div><dt>Kết quả kiểm tra kho</dt><dd>{{ selectedReturn()!.condition_check_result || 'Chưa kiểm định' }}</dd></div>
+        <div><dt>Lý do đổi trả</dt><dd>{{ returnReasonLabel(selectedReturn()!) }}</dd></div>
+        <div><dt>Kết quả kiểm tra kho</dt><dd>{{ qaLabel(selectedReturn()!.condition_check_result) }}</dd></div>
         <div><dt>Ghi chú CSKH</dt><dd>{{ selectedReturn()!.admin_note || '—' }}</dd></div>
+        @if (canMutate()) {
+          <div>
+            <dt>Liên hệ trong 24 giờ</dt>
+            <dd>
+              <select [value]="contactResult()" (change)="setContactResult($event)">
+                <option value="reached">Liên hệ được</option>
+                <option value="no_answer">Không liên hệ được</option>
+                <option value="waiting_customer">Chờ khách bổ sung</option>
+              </select>
+              <textarea [value]="contactNote()" (input)="setContactNote($event)" placeholder="Nội dung trao đổi, ít nhất 10 ký tự"></textarea>
+              @if (contactError()) { <p>{{ contactError() }}</p> }
+              <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="saveContact(selectedReturn()!)">Lưu liên hệ</button>
+            </dd>
+          </div>
+        }
         <div><dt>Thời gian tạo phiếu</dt><dd>{{ date(selectedReturn()!.created_at) }}</dd></div>
       </dl>
 

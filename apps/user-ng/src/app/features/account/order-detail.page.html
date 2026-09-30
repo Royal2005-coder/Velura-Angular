@@ -278,13 +278,17 @@
 
               <div style="margin-bottom: 16px;">
                 <label for="js-return-reason-select" style="display: block; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; color: var(--soft); margin-bottom: 8px;">Lý do đổi trả *</label>
-                <select id="js-return-reason-select" (change)="setReturnReason($event)" style="width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 4px; font-size: 0.9375rem; background-color: var(--bg-input, transparent); color: var(--text-dark);">
-                  <option value="Sản phẩm bị lỗi / hỏng khi nhận">Sản phẩm bị lỗi / hỏng khi nhận</option>
-                  <option value="Không vừa kích cỡ / muốn đổi size">Không vừa kích cỡ / muốn đổi size</option>
-                  <option value="Giao sai mẫu mã / sai màu sắc">Giao sai mẫu mã / sai màu sắc</option>
-                  <option value="Sản phẩm khác với mô tả trên web">Sản phẩm khác với mô tả trên web</option>
-                  <option value="Khác">Lý do khác...</option>
+                <select id="js-return-reason-select" [value]="returnReason()" (change)="setReturnReason($event)" style="width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 4px; font-size: 0.9375rem; background-color: var(--bg-input, transparent); color: var(--text-dark);">
+                  <option value="" disabled>Chọn lý do đổi trả...</option>
+                  @for (item of returnReasons; track item[0]) {
+                    <option [value]="item[0]">{{ item[1] }}</option>
+                  }
                 </select>
+              </div>
+              <div style="margin-bottom: 16px;">
+                <label style="display: block; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; color: var(--soft); margin-bottom: 8px;">Hình ảnh minh chứng *</label>
+                <input type="file" accept="image/*" multiple (change)="onReturnFiles($event)" />
+                <p style="margin: 8px 0 0; font-size: 0.8125rem; color: var(--soft);">{{ returnImages().length }}/5 ảnh. Bắt buộc ít nhất 1 ảnh.</p>
               </div>
 
               <div style="margin-bottom: 16px;">

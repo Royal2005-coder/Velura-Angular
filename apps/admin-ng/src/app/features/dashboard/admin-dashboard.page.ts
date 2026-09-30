@@ -25,6 +25,7 @@ const emptyVoice = (): AdminVoiceInsights => ({
     ticketsWithoutCsat: 0,
     returns: 0,
     returnRatePct: 0,
+    returnReasons: [],
   },
   orderFriction: { orderCount: 0, completedOrders: 0, cancelledOrders: 0, failedDelivery: 0, cancelReasons: [] },
 });
@@ -77,6 +78,27 @@ export class AdminDashboardPage {
   readonly business = computed(() => this.data().business);
   readonly logs = computed(() => this.data().recentLogs || []);
   readonly voice = computed(() => this.data().voice || emptyVoice());
+  readonly returnReasons = computed(() => this.voice().serviceQuality.returnReasons || []);
+  readonly regions = computed(() => this.voice().regions || []);
+  readonly recommendation = signal<string[]>([]);
+  readonly recommendationSource = signal<string | null>(null);
+  readonly recommendationLoading = signal(false);
+  readonly recommendationError = signal<string | null>(null);
+
+  /**
+   * Độ rộng thanh so với lý do đông nhất trong kỳ. Không vẽ khi chưa có phiếu.
+   */
+  regionShare(count: number): number {
+    const top = this.regions()[0]?.count || 0;
+    if (!top) return 0;
+    return Math.max(8, Math.round((count / top) * 100));
+  }
+
+  reasonShare(count: number): number {
+    const top = this.returnReasons()[0]?.count || 0;
+    if (!top) return 0;
+    return Math.max(8, Math.round((count / top) * 100));
+  }
   readonly comparisons = computed(() => this.business().comparisons || {});
   readonly periodLabel = computed(() => {
     if (this.range() === 'day') {
@@ -192,7 +214,28 @@ export class AdminDashboardPage {
    */
   setRange(range: AdminInsightRange): void {
     this.range.set(range);
+    this.recommendation.set([]);
     this.reload();
+  }
+
+  /**
+   * Khuyến nghị chỉ từ số liệu kỳ đang chọn. Thiếu Gemini thì hiện đúng bản tóm tắt.
+   */
+  loadRecommendation(): void {
+    this.recommendationLoading.set(true);
+    this.recommendationError.set(null);
+    this.api.recommendInsights({ range: this.range() }).subscribe({
+      next: (result) => {
+        this.recommendationLoading.set(false);
+        this.recommendationSource.set(result.source || 'facts');
+        const narrative = result.narrative || [];
+        this.recommendation.set(narrative.length ? narrative : result.lines || []);
+      },
+      error: (error: unknown) => {
+        this.recommendationLoading.set(false);
+        this.recommendationError.set(adminErrorMessage(error, 'Không đọc được khuyến nghị từ số liệu kỳ này.'));
+      },
+    });
   }
 
   /**

@@ -1,8 +1,10 @@
 import { enrichAuditLogs, REVIEW_AUDIT } from "../audit-enrichment.js";
 import { HttpError } from "../http.js";
 import type { AuthContext, AuthUser, JsonObject } from "../types.js";
-import { asNumber, asString } from "../types.js";
+import { asNumber, asString, isJsonObject } from "../types.js";
+import { generateGeminiJson, isGeminiConfigured } from "../gemini-client.js";
 import { REVIEW_OPERATOR_ROLES, REVIEW_READER_ROLES } from "./review-constants.js";
+import { readReplySuggestions, reviewReplyPrompt } from "./review-reply-ai.js";
 import type { ReviewRepository } from "./review-repository.js";
 
 /**
@@ -14,6 +16,7 @@ export interface ReviewService {
   approve(context: AuthContext | undefined, reviewId: string, body: JsonObject): Promise<unknown>;
   hide(context: AuthContext | undefined, reviewId: string, body: JsonObject): Promise<unknown>;
   reply(context: AuthContext | undefined, reviewId: string, body: JsonObject): Promise<unknown>;
+  suggestReply(context: AuthContext | undefined, reviewId: string): Promise<{ replies: string[]; source: "gemini" }>;
   escalate(context: AuthContext | undefined, reviewId: string, body: JsonObject): Promise<unknown>;
   listAuditLogs(context: AuthContext | undefined, searchParams: URLSearchParams): Promise<{ rows: JsonObject[]; count: number | undefined }>;
 }
@@ -71,6 +74,35 @@ export function createReviewService({ repository }: { repository: ReviewReposito
       const expectedVersion = asNumber(body.expectedVersion);
       if (!expectedVersion) throw new HttpError(422, "VALIDATION_ERROR", "expectedVersion required");
       return repository.hide(reviewId, { reason, expectedVersion }, context.accessToken);
+    },
+
+    async suggestReply(context, reviewId) {
+      requireReviewAdmin(context);
+      if (!isGeminiConfigured()) {
+        throw new HttpError(503, "GEMINI_NOT_CONFIGURED", "Chưa cấu hình Gemini. Không tạo câu trả lời mẫu.");
+      }
+      const review = await repository.get(reviewId, context.accessToken);
+      if (!review) throw new HttpError(404, "REVIEW_NOT_FOUND", "Review not found");
+      const product = isJsonObject(review.product) ? review.product : {};
+      const payload = await generateGeminiJson(
+        reviewReplyPrompt({
+          rating: asNumber(review.rating),
+          comment: asString(review.comment),
+          productName: asString(product.name)
+        }),
+        {
+          type: "object",
+          properties: {
+            replies: { type: "array", items: { type: "string" } }
+          },
+          required: ["replies"]
+        }
+      );
+      const replies = readReplySuggestions(payload);
+      if (!replies.length) {
+        throw new HttpError(502, "GEMINI_REPLY_EMPTY", "Gemini không trả về câu phản hồi dùng được.");
+      }
+      return { replies, source: "gemini" as const };
     },
 
     async reply(context, reviewId, body) {

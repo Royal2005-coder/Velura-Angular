@@ -13,6 +13,7 @@ import {
 import { adminDateTime, adminMoney } from '../../core/admin-format';
 import {
   ORDER_STATUS_LABELS,
+  RETURN_REASON_LABELS,
   RETURN_STATUS_LABELS,
   statusLabelFrom,
   TICKET_STATUS_LABELS,
@@ -92,6 +93,17 @@ export class AdminReturnsPage {
   readonly orderQuery = signal('');
   readonly selectedOrder = signal<AdminOrderRow | null>(null);
   readonly refundSuggestion = signal<number | null>(null);
+  readonly receiveTarget = signal<AdminReturnRow | null>(null);
+  readonly qaResult = signal('');
+  readonly qaProof = signal('');
+  readonly qaQty = signal('');
+  readonly qaItemId = signal('');
+  readonly expectedQty = signal(0);
+  readonly expectedItemId = signal('');
+  readonly qaError = signal<string | null>(null);
+  readonly contactResult = signal('reached');
+  readonly contactNote = signal('');
+  readonly contactError = signal<string | null>(null);
 
   readonly pendingReturns = computed(() => this.pendingReturnCount());
   readonly pendingTickets = computed(() => this.pendingTicketCount());
@@ -687,15 +699,153 @@ export class AdminReturnsPage {
   nextReturnStep(row: AdminReturnRow): { status: string; label: string } | null {
     const steps: Record<string, { status: string; label: string }> = {
       approved: { status: 'shipping_back', label: 'Khách đã gửi hàng' },
-      shipping_back: { status: 'received', label: 'Đã nhận hàng' },
+      shipping_back: { status: 'received', label: 'QA và nhận hàng' },
       received: { status: 'completed', label: 'Hoàn tất' },
     };
     return steps[row.status || ''] || null;
   }
 
   /**
-   * Đẩy phiếu sang bước kế tiếp trong quy trình nhận hàng về.
+   * Nhãn lý do khách đã chọn trong dropdown, không hiện mã tiếng Anh.
    */
+  /**
+   * Phiếu pending quá 24 giờ mà chưa có dòng liên hệ CSKH.
+   */
+  contactOverdue(row: AdminReturnRow): boolean {
+    if (row.status !== 'pending') return false;
+    if ((row.admin_note || '').includes('[CSKH]')) return false;
+    const created = Date.parse(row.created_at || '');
+    if (!Number.isFinite(created)) return false;
+    return Date.now() - created > 24 * 60 * 60 * 1000;
+  }
+
+  setContactResult(event: Event): void {
+    this.contactResult.set((event.target as HTMLSelectElement).value);
+  }
+
+  setContactNote(event: Event): void {
+    this.contactNote.set((event.target as HTMLTextAreaElement).value);
+  }
+
+  /**
+   * Lưu kết quả gọi khách. Không tự duyệt hay từ chối phiếu.
+   */
+  saveContact(row: AdminReturnRow): void {
+    if (row.version == null) {
+      this.contactError.set('Thiếu phiên bản phiếu.');
+      return;
+    }
+    this.contactError.set(null);
+    this.api.recordReturnContact(row.return_id, {
+      result: this.contactResult(),
+      note: this.contactNote().trim(),
+      expectedVersion: row.version,
+    }).subscribe({
+      next: () => {
+        this.contactNote.set('');
+        this.reload();
+      },
+      error: (error: unknown) => this.contactError.set(adminErrorMessage(error)),
+    });
+  }
+
+  returnReasonLabel(row: AdminReturnRow): string {
+    const code = row.reason || '';
+    return RETURN_REASON_LABELS[code] || row.description || 'Chưa chọn lý do';
+  }
+
+  /**
+   * Mở form QA trước khi ghi nhận hàng hoàn trả thành công.
+   */
+  openReceive(row: AdminReturnRow): void {
+    this.receiveTarget.set(row);
+    this.qaResult.set('');
+    this.qaProof.set('');
+    this.qaQty.set('');
+    this.qaItemId.set('');
+    this.expectedQty.set(0);
+    this.expectedItemId.set('');
+    this.qaError.set(null);
+    this.api.getReturn(row.return_id).subscribe({
+      next: (full) => {
+        const lines = full.lines || [];
+        const qty = lines.reduce((sum, line) => sum + Number(line.quantity || 0), 0);
+        this.expectedQty.set(qty);
+        this.expectedItemId.set(lines[0]?.order_item_id || '');
+        this.receiveTarget.set({ ...row, ...full, version: full.version ?? row.version });
+      },
+      error: (error: unknown) => this.qaError.set(adminErrorMessage(error)),
+    });
+  }
+
+  closeReceive(): void {
+    this.receiveTarget.set(null);
+  }
+
+  setQaResult(event: Event): void {
+    this.qaResult.set((event.target as HTMLSelectElement).value);
+  }
+
+  setQaQty(event: Event): void {
+    this.qaQty.set((event.target as HTMLInputElement).value);
+  }
+
+  setQaItemId(event: Event): void {
+    this.qaItemId.set((event.target as HTMLInputElement).value.trim());
+  }
+
+  onQaProof(event: Event): void {
+    const file = (event.target as HTMLInputElement).files?.[0];
+    if (!file || !file.type.startsWith('image/')) {
+      this.qaError.set('Chọn một ảnh minh chứng.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => this.qaProof.set(String(reader.result || ''));
+    reader.readAsDataURL(file);
+  }
+
+  /**
+   * Chỉ chuyển sang nhận hàng hoàn trả thành công khi QA đúng hàng và có ảnh.
+   */
+  confirmReceive(): void {
+    const row = this.receiveTarget();
+    if (!row || row.version == null) {
+      this.qaError.set('Thiếu phiên bản phiếu để thao tác.');
+      return;
+    }
+    if (this.qaResult() !== 'qa_pass') {
+      this.qaError.set('Chọn đúng hàng của shop.');
+      return;
+    }
+    if (Number(this.qaQty()) !== this.expectedQty()) {
+      this.qaError.set(`Số lượng thực nhận phải bằng ${this.expectedQty()}.`);
+      return;
+    }
+    if (!this.expectedItemId() || this.qaItemId() !== this.expectedItemId()) {
+      this.qaError.set('Nhập lại đúng mã dòng hàng trên phiếu.');
+      return;
+    }
+    if (!this.qaProof().startsWith('data:image/')) {
+      this.qaError.set('Tải ảnh minh chứng đã kiểm hàng.');
+      return;
+    }
+    this.api.updateReturnStatus(row.return_id, {
+      status: 'received',
+      expectedVersion: row.version,
+      conditionCheckResult: 'qa_pass',
+      receivedQuantity: Number(this.qaQty()),
+      confirmedItemId: this.qaItemId(),
+      imageProof: this.qaProof(),
+    }).subscribe({
+      next: () => {
+        this.receiveTarget.set(null);
+        this.reload();
+      },
+      error: (error: unknown) => this.qaError.set(adminErrorMessage(error)),
+    });
+  }
+
   advanceReturn(row: AdminReturnRow, status: string): void {
     if (!this.canMutate() || row.version == null) {
       this.actionError.set('Thiếu phiên bản phiếu để thao tác.');
@@ -705,6 +855,15 @@ export class AdminReturnsPage {
       next: () => this.reload(),
       error: (error: unknown) => this.loadError.set(adminErrorMessage(error)),
     });
+  }
+
+  /**
+   * Nhãn kết quả QA kho.
+   */
+  qaLabel(code: string | undefined): string {
+    if (code === 'qa_pass') return 'Đúng hàng của shop';
+    if (code === 'qa_fail') return 'Không đúng hàng của shop';
+    return 'Chưa kiểm định';
   }
 
   /** Nhãn trạng thái phiếu đổi/trả. */

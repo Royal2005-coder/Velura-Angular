@@ -44,7 +44,7 @@ export const RETURN_STATUS_LABELS: Readonly<Record<string, string>> = {
   pending: 'Chờ xử lý',
   approved: 'Đã duyệt',
   shipping_back: 'Đang gửi về',
-  received: 'Đã nhận',
+  received: 'Nhận hàng hoàn trả thành công',
   completed: 'Hoàn tất',
   rejected: 'Từ chối',
 };
@@ -58,6 +58,17 @@ export const TICKET_STATUS_LABELS: Readonly<Record<string, string>> = {
 };
 
 /** Trạng thái đánh giá — `review_status`. */
+/** Cùng mã dropdown phía khách. Dashboard gom top lý do theo mã này. */
+export const RETURN_REASON_LABELS: Readonly<Record<string, string>> = {
+  error: 'Sản phẩm bị lỗi sản xuất',
+  size: 'Không vừa kích cỡ',
+  color: 'Sai màu sắc',
+  mismatch: 'Sản phẩm khác với mô tả',
+  damaged: 'Hàng bị hư hỏng trong vận chuyển',
+  mind_change: 'Thay đổi ý định mua hàng',
+  other: 'Lý do khác',
+};
+
 export const REVIEW_STATUS_LABELS: Readonly<Record<string, string>> = {
   pending: 'Chờ duyệt',
   approved: 'Đã duyệt',

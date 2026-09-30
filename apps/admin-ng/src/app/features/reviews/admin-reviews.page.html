@@ -290,9 +290,15 @@
               </div>
 
               <!-- Gợi ý phản hồi 1-click -->
+              @if (aiLoading()) {
+                <p class="admin-note">Đang đọc đúng nội dung đánh giá để gợi ý phản hồi…</p>
+              }
+              @if (aiError()) {
+                <p class="admin-note">{{ aiError() }}</p>
+              }
               @if (aiSuggestions().length > 0) {
                 <div>
-                  <span style="font-size: 0.75rem; font-weight: 600; color: #2c3e50; text-transform: uppercase;">Gợi ý phản hồi chuẩn mực (Click để tự động điền):</span>
+                  <span style="font-size: 0.75rem; font-weight: 600; color: #2c3e50; text-transform: uppercase;">Gợi ý từ Gemini trên đánh giá này</span>
                   <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 6px;">
                     @for (suggestion of aiSuggestions(); track suggestion; let idx = $index) {
                       <button

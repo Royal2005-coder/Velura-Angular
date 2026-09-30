@@ -3,11 +3,38 @@ import { RouterLink } from '@angular/router';
 import { catchError, forkJoin, of } from 'rxjs';
 import { COLLECTION_LOOKBOOKS } from '../../core/models/collection-lookbook';
 import { CategorySummary, ProductSummary } from '../../core/models/product.interface';
+import { AuthService } from '../../core/services/auth.service';
 import { CatalogService } from '../../core/services/catalog.service';
 import { OffersService } from '../../core/services/offers.service';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { bindHomeCarousel } from '../../core/utils/home-carousel';
 import { ProductCard } from '../../shared/product-card/product-card';
+
+interface UnpaidNotice {
+  orderId: string;
+  orderCode: string;
+}
+
+/**
+ * Đọc thông báo đơn online vừa bị hủy hoặc hết hạn thanh toán, do checkout ghi vào session.
+ */
+function readUnpaidNotice(): UnpaidNotice | null {
+  try {
+    const raw = sessionStorage.getItem('velura_unpaid_notice');
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw) as Partial<UnpaidNotice>;
+    const orderId = parsed.orderId || '';
+    const orderCode = parsed.orderCode || orderId;
+    if (!orderCode) {
+      return null;
+    }
+    return { orderId, orderCode };
+  } catch {
+    return null;
+  }
+}
 
 @Component({
   selector: 'app-home-page',
@@ -17,6 +44,7 @@ import { ProductCard } from '../../shared/product-card/product-card';
 })
 export class HomePage implements AfterViewInit, OnDestroy {
   private readonly catalog = inject(CatalogService);
+  private readonly auth = inject(AuthService);
   private readonly injector = inject(Injector);
   private carouselCleanups: Array<() => void> = [];
 
@@ -33,6 +61,8 @@ export class HomePage implements AfterViewInit, OnDestroy {
   readonly personalized = signal<ProductSummary[]>([]);
   readonly personalizedSubtitle = signal('Được tuyển chọn dựa trên Style Profile cá nhân');
   readonly soundOn = signal(false);
+  readonly unpaidNotice = signal(readUnpaidNotice());
+  readonly unpaidOrdersLink = computed(() => (this.auth.isLoggedIn() ? '/account/orders' : '/account/track'));
   /** Chiến dịch đang chạy cho thanh tin ưu đãi, đọc từ API thay vì mảng viết cứng. */
   readonly banners = toSignal(inject(OffersService).highlights(), { initialValue: [] });
   readonly collections = computed(() => {
@@ -113,6 +143,14 @@ export class HomePage implements AfterViewInit, OnDestroy {
   /**
    * Toggles the original hero video mute control.
    */
+  /**
+   * Đóng popup đơn chờ xác nhận và xóa thông báo để không hiện lại khi tải lại trang chủ.
+   */
+  dismissUnpaid(): void {
+    sessionStorage.removeItem('velura_unpaid_notice');
+    this.unpaidNotice.set(null);
+  }
+
   toggleSound(): void {
     const video = this.heroVideo?.nativeElement;
     if (!video) {

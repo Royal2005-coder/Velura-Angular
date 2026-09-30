@@ -681,8 +681,8 @@ export class AdminApiService {
     );
   }
 
-  adviseProductImage(body: { dataUrl: string; mimeType: string }): Observable<{ source?: string; notes?: string[]; imageBase64?: string; imageMime?: string }> {
-    return this.http.post<{ source?: string; notes?: string[]; imageBase64?: string; imageMime?: string }>(
+  adviseProductImage(body: { dataUrl: string; mimeType: string }): Observable<{ source?: string; notes?: string[]; imageBase64?: string; imageMime?: string; imageError?: string }> {
+    return this.http.post<{ source?: string; notes?: string[]; imageBase64?: string; imageMime?: string; imageError?: string }>(
       `${this.baseUrl}/api/v1/admin/products/image-advice`,
       body,
     );

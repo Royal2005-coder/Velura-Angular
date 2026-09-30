@@ -19,6 +19,48 @@ import { AdminPagination } from '../../shared/admin-pagination';
 import { AdminTableSkeleton } from '../../shared/admin-table-skeleton';
 import { improveCatalogPhoto } from './product-image';
 
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+function dataUrlToFile(dataUrl: string): File {
+  const mime = dataUrl.match(/^data:([^;]+);base64,/)?.[1] || 'image/jpeg';
+  const binary = atob(dataUrl.split(',')[1] || '');
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  const extension = mime.includes('png') ? 'png' : 'jpg';
+  return new File([bytes], `product-image.${extension}`, { type: mime });
+}
+
+function shrinkImageDataUrl(dataUrl: string, mimeType: string): Promise<string> {
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.onload = () => {
+      const maxEdge = 1280;
+      const scale = Math.min(1, maxEdge / Math.max(image.width, image.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(image.width * scale));
+      canvas.height = Math.max(1, Math.round(image.height * scale));
+      const context = canvas.getContext('2d');
+      if (!context) {
+        resolve(dataUrl);
+        return;
+      }
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL(mimeType.includes('png') ? 'image/png' : 'image/jpeg', 0.9));
+    };
+    image.onerror = () => resolve(dataUrl);
+    image.src = dataUrl;
+  });
+}
+
 type ProductTab = 'catalog' | 'csv' | 'logs';
 type ProductOverlay = 'create' | 'edit' | 'status' | 'stock' | null;
 
@@ -110,6 +152,11 @@ export class AdminProductsPage {
   readonly priceHistory = signal<AdminPriceHistoryRow[]>([]);
   readonly imageUploading = signal(false);
   readonly imageNote = signal<string | null>(null);
+  readonly imageBefore = signal<string | null>(null);
+  readonly imageAfter = signal<string | null>(null);
+  readonly imageAfterLabel = signal('');
+  private pendingImageTarget: HTMLTextAreaElement | null = null;
+  private pendingOriginalFile: File | null = null;
   readonly canMutate = computed(() => this.session.canMutate('products'));
   readonly canOpenPricing = computed(() => this.session.canOpen('pricing'));
 
@@ -881,70 +928,98 @@ export class AdminProductsPage {
     }
     this.imageUploading.set(true);
     this.actionError.set(null);
-    this.imageNote.set(null);
-    void improveCatalogPhoto(file).then((improved) => {
-      this.imageNote.set(`${improved.note} Đang hỏi Gemini dựng nền studio.`);
-      this.finishImageUpload(file, images, improved.file);
-    }).catch(() => {
+    this.imageNote.set('Đang dựng nền studio…');
+    this.imageBefore.set(null);
+    this.imageAfter.set(null);
+    this.pendingImageTarget = images;
+    this.pendingOriginalFile = file;
+    void this.prepareImagePreview(file).catch(() => {
       this.imageUploading.set(false);
-      this.actionError.set('Không chỉnh được ảnh. Thử file JPG hoặc PNG khác.');
+      this.actionError.set('Không đọc được ảnh. Thử file JPG hoặc PNG khác.');
     });
   }
 
   /**
-   * Gemini nhận xét ảnh gốc. Nếu sinh được ảnh nền studio thì lưu ảnh đó; không thì lưu bản đã tăng sáng.
+   * Hiện ảnh gốc và ảnh sau khi Gemini thay nền. Chưa lưu cho đến khi bấm dùng ảnh sau.
    */
-  private finishImageUpload(file: File, images: HTMLTextAreaElement, fallback: File): void {
-    const upload = (chosen: File, note: string) => {
-      this.imageNote.set(note);
-      this.adminApi.uploadProductImage(chosen).subscribe({
-        next: (result) => {
-          this.imageUploading.set(false);
-          const url = result.url || '';
-          if (!url) {
-            this.actionError.set('Kho ảnh không trả về đường dẫn.');
-            return;
-          }
-          const current = images.value.trim();
-          images.value = current ? `${current}\n${url}` : url;
-        },
-        error: (error: unknown) => {
-          this.imageUploading.set(false);
-          this.actionError.set(adminErrorMessage(error, 'Không tải được ảnh sản phẩm.'));
-        },
-      });
-    };
-    if (file.size > 4_000_000) {
-      upload(fallback, 'Ảnh lớn hơn 4 MB nên chỉ tăng sáng 8% và tương phản 6%, chưa gửi Gemini.');
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = String(reader.result || '');
-      if (!dataUrl.startsWith('data:image/')) {
-        upload(fallback, 'Giữ ảnh đã tăng sáng vì không đọc được file gốc.');
-        return;
-      }
-      this.adminApi.adviseProductImage({ dataUrl, mimeType: file.type || 'image/jpeg' }).subscribe({
-        next: (result) => {
-          const notes = (result.notes || []).join(' ');
-          if (result.imageBase64) {
-            const mime = result.imageMime || 'image/png';
-            const binary = atob(result.imageBase64);
-            const bytes = new Uint8Array(binary.length);
-            for (let index = 0; index < binary.length; index += 1) {
-              bytes[index] = binary.charCodeAt(index);
-            }
-            const generated = new File([bytes], 'studio-background.png', { type: mime });
-            upload(generated, ['Gemini đã giữ sản phẩm và thay nền studio.', notes].filter(Boolean).join(' '));
-            return;
-          }
-          upload(fallback, ['Chưa có ảnh nền studio. Đã lưu bản tăng sáng 8% và tương phản 6%.', notes].filter(Boolean).join(' '));
-        },
-        error: () => upload(fallback, 'Gemini không trả ảnh. Đã lưu bản tăng sáng 8% và tương phản 6%.'),
-      });
-    };
-    reader.readAsDataURL(file);
+  private async prepareImagePreview(file: File): Promise<void> {
+    const before = await fileToDataUrl(file);
+    this.imageBefore.set(before);
+    const prepared = await shrinkImageDataUrl(before, file.type || 'image/jpeg');
+    const improved = await improveCatalogPhoto(file);
+    const bright = await fileToDataUrl(improved.file);
+    this.adminApi.adviseProductImage({ dataUrl: prepared, mimeType: 'image/jpeg' }).subscribe({
+      next: (result) => {
+        this.imageUploading.set(false);
+        if (result.imageBase64) {
+          const mime = result.imageMime || 'image/png';
+          this.imageAfter.set(`data:${mime};base64,${result.imageBase64}`);
+          this.imageAfterLabel.set('Sau — nền studio');
+          this.imageNote.set('Xem hai ảnh rồi chọn bản sẽ lưu.');
+          return;
+        }
+        this.imageAfter.set(bright);
+        this.imageAfterLabel.set('Sau — chỉ tăng sáng, chưa có nền studio');
+        this.imageNote.set(result.imageError || 'Gemini không trả ảnh nền studio.');
+      },
+      error: (error: unknown) => {
+        this.imageUploading.set(false);
+        this.imageAfter.set(bright);
+        this.imageAfterLabel.set('Sau — chỉ tăng sáng, chưa có nền studio');
+        this.imageNote.set(adminErrorMessage(error, 'Không gọi được Gemini.'));
+      },
+    });
+  }
+
+  /**
+   * Lưu ảnh đang xem ở cột Sau.
+   */
+  useImprovedImage(): void {
+    const dataUrl = this.imageAfter();
+    const target = this.pendingImageTarget;
+    if (!dataUrl || !target) return;
+    this.storeImageFile(dataUrlToFile(dataUrl), target, 'Đã lưu ảnh ở cột Sau.');
+  }
+
+  /**
+   * Lưu đúng file vừa chọn, không dùng bản đã xử lý.
+   */
+  useOriginalImage(): void {
+    const file = this.pendingOriginalFile;
+    const target = this.pendingImageTarget;
+    if (!file || !target) return;
+    this.storeImageFile(file, target, 'Đã lưu ảnh gốc.');
+  }
+
+  closeImagePreview(): void {
+    this.imageBefore.set(null);
+    this.imageAfter.set(null);
+    this.imageNote.set(null);
+    this.pendingImageTarget = null;
+    this.pendingOriginalFile = null;
+  }
+
+  private storeImageFile(file: File, images: HTMLTextAreaElement, note: string): void {
+    this.imageUploading.set(true);
+    this.adminApi.uploadProductImage(file).subscribe({
+      next: (result) => {
+        this.imageUploading.set(false);
+        const url = result.url || '';
+        if (!url) {
+          this.actionError.set('Kho ảnh không trả về đường dẫn.');
+          return;
+        }
+        const current = images.value.trim();
+        images.value = current ? `${current}\n${url}` : url;
+        this.imageNote.set(note);
+        this.imageBefore.set(null);
+        this.imageAfter.set(null);
+      },
+      error: (error: unknown) => {
+        this.imageUploading.set(false);
+        this.actionError.set(adminErrorMessage(error, 'Không tải được ảnh sản phẩm.'));
+      },
+    });
   }
 
   onCsvFile(event: Event): void {

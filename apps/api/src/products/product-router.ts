@@ -1,4 +1,4 @@
-import { analyzeImageWithGemini, generateStudioProductImage, isGeminiConfigured } from "../gemini-client.js";
+import { generateStudioProductImage, isGeminiConfigured } from "../gemini-client.js";
 import { config } from "../config.js";
 import { HttpError, getRequestIp, readJson, sendJson } from "../http.js";
 import { readMultipartImage, uploadToSupabaseStorage } from "../user/upload.js";
@@ -74,30 +74,23 @@ export async function handleProductRoute({
     if (!dataUrl.startsWith("data:image/")) {
       throw new HttpError(422, "VALIDATION_ERROR", "Thiếu ảnh để nhận xét.");
     }
-    let note = "";
-    try {
-      note = await analyzeImageWithGemini(
-        dataUrl,
-        mime,
-        "Nhận xét ngắn bằng tiếng Việt ảnh sản phẩm thời trang này: ánh sáng, nền, và độ rõ của sản phẩm. Không bịa thông số. Tối đa 3 câu."
-      );
-    } catch (error: unknown) {
-      console.warn("[PRODUCT IMAGE] Advice was not generated:", error instanceof Error ? error.message : error);
-    }
     let imageBase64 = "";
     let imageMime = "";
+    let imageError = "";
     try {
       const generated = await generateStudioProductImage(dataUrl, mime);
       imageBase64 = generated.base64;
       imageMime = generated.mimeType;
     } catch (error: unknown) {
-      console.warn("[PRODUCT IMAGE] Studio background was not generated:", error instanceof Error ? error.message : error);
+      imageError = error instanceof HttpError ? error.message : "Không sinh được ảnh nền studio.";
+      console.warn("[PRODUCT IMAGE] Studio background was not generated:", imageError);
     }
     sendJson(res, 200, {
-      source: imageBase64 ? "gemini-image" : "gemini",
-      notes: note.split(/(?<=[.!?])\s+/).map((line) => line.trim()).filter(Boolean).slice(0, 3),
+      source: imageBase64 ? "gemini-image" : "none",
+      notes: [],
       imageBase64,
-      imageMime
+      imageMime,
+      imageError
     }, headers);
     return true;
   }

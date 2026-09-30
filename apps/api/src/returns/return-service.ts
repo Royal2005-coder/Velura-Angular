@@ -274,10 +274,8 @@ export function createReturnService({
       }
       let refundAmount = body.refundAmount ? asNumber(body.refundAmount) : undefined;
       if (status === "completed" && asString(currentReturn.return_type) !== "exchange") {
-        refundAmount = repository.getRefundableAmount
-          ? await repository.getRefundableAmount(returnId, context.accessToken)
-          : (refundAmount ?? asNumber(currentReturn.refund_amount));
-        const payment = repository.getPaymentByOrderId && currentReturn.order_id
+        refundAmount = await repository.getRefundableAmount(returnId, context.accessToken);
+        const payment = currentReturn.order_id
           ? await repository.getPaymentByOrderId(asString(currentReturn.order_id), context.accessToken)
           : null;
         const provider = payment ? asString(payment.payment_provider) : "stripe";

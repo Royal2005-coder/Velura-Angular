@@ -1,7 +1,12 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, provideRouter, Router } from '@angular/router';
-import { DEMO_LINES, DemoOrder, PurchaseDemoStore } from '../../core/services/purchase-demo.store';
+import {
+  DEMO_LINES,
+  DemoOrder,
+  DemoReturn,
+  PurchaseDemoStore,
+} from '../../core/services/purchase-demo.store';
 import { stubActivatedRoute } from '../../../testing/storefront-testing';
 import { OrderFlowPage } from './order-flow.page';
 
@@ -28,18 +33,40 @@ const order: DemoOrder = {
   voucher: 'DEMO10',
   createdAt: '2026-09-24T00:00:00Z',
 };
+const pendingRequest: DemoReturn = {
+  id: 'RET-TEST',
+  orderId: order.id,
+  kind: 'refund',
+  items: [{ variantId: DEMO_LINES[0].variant_id, quantity: 1 }],
+  reason: '',
+  evidenceNames: [],
+  stage: 0,
+  createdAt: '2026-09-25T00:00:00Z',
+};
 describe('OrderFlowPage with mocked Model', () => {
   const model = {
     member: signal(false),
     userId: signal<string | null>(null),
     canAccess: (row: DemoOrder) => !row.member && row.address.phone === '0901234567',
     orders: signal([order]),
-    requests: signal([]),
+    requests: signal<DemoReturn[]>([]),
     verifiedPhone: signal('0901234567'),
+    timeline: () => [
+      'Đã ghi nhận',
+      'Velura đang liên hệ',
+      'Chờ gửi hàng',
+      'Hàng đang về Velura',
+      'Velura đã nhận hàng',
+      'Đang hoàn tiền',
+      'Đã hoàn tiền',
+    ],
+    cancelRequest: vi.fn(),
   };
   beforeEach(async () => {
     model.member.set(false);
     model.verifiedPhone.set('');
+    model.requests.set([]);
+    model.cancelRequest.mockReset();
     await TestBed.configureTestingModule({
       imports: [OrderFlowPage],
       providers: [
@@ -79,5 +106,34 @@ describe('OrderFlowPage with mocked Model', () => {
     );
     expect(buttons.some((button) => button.textContent?.trim() === 'Hủy đơn')).toBe(false);
     expect(fixture.nativeElement.textContent).toContain('không thể hủy tại thời điểm này');
+  });
+  it('lets the customer cancel a return request before it has shipped back', () => {
+    model.requests.set([pendingRequest]);
+    const fixture = TestBed.createComponent(OrderFlowPage);
+    const page = fixture.componentInstance;
+    page.verified.set(true);
+    page.open(order.id);
+    page.track(pendingRequest);
+    fixture.detectChanges();
+    const buttons = Array.from(
+      fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>,
+    );
+    const cancelButton = buttons.find((button) => button.textContent?.trim() === 'Hủy yêu cầu');
+    expect(cancelButton).toBeTruthy();
+    cancelButton?.click();
+    expect(model.cancelRequest).toHaveBeenCalledWith(pendingRequest.id);
+  });
+  it('hides the self-service cancel once the request has shipped back to Velura', () => {
+    model.requests.set([{ ...pendingRequest, stage: 3 }]);
+    const fixture = TestBed.createComponent(OrderFlowPage);
+    const page = fixture.componentInstance;
+    page.verified.set(true);
+    page.open(order.id);
+    page.track({ ...pendingRequest, stage: 3 });
+    fixture.detectChanges();
+    const buttons = Array.from(
+      fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>,
+    );
+    expect(buttons.some((button) => button.textContent?.trim() === 'Hủy yêu cầu')).toBe(false);
   });
 });

@@ -229,7 +229,7 @@
             <!-- Form buttons -->
             <div class="form-actions">
               <a routerLink="/account/orders" class="btn-cancel" id="btn-cancel-return">Hủy</a>
-              <button type="submit" class="btn-submit" id="btn-submit-return" [disabled]="submitting() || submitted()">{{ submitted() ? 'Đã gửi' : 'Gửi yêu cầu' }}</button>
+              <button type="submit" class="btn-submit" id="btn-submit-return" [disabled]="submitting() || submitted() || uploadingCount() > 0">{{ submitted() ? 'Đã gửi' : uploadingCount() > 0 ? 'Đang tải ảnh…' : 'Gửi yêu cầu' }}</button>
             </div>
             @if (formError()) {
               <p class="form-help-text">{{ formError() }}</p>

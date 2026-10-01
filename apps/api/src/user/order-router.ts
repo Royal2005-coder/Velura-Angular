@@ -15,6 +15,8 @@ import {
 import { createStripePaymentIntent, refundStripeOrder, STRIPE_CHECKOUT_TTL_SECONDS, stripeConfigured } from "../payments/stripe.js";
 import { customerCanCancel, customerOrderSteps, orderFacts, orderStatusLabel } from "../orders/order-state-machine.js";
 import { returnWindowOpen } from "./return-window.js";
+import { cancelOrderForCustomer, createCustomerOrderCancelRepository } from "./order-cancel-service.js";
+import { createUserReturnsRepository, type UserReturnsRepository } from "./returns-repository.js";
 import {
   sendCheckoutOtpSms,
   sendGuestOrderWelcomeSms,
@@ -173,7 +175,8 @@ export function generateOrderCode(): string {
 const CUSTOMER_ORDER_FIELDS = [
   "order_id", "order_code", "order_date", "created_at", "updated_at", "delivered_at", "status",
   "shipping_name", "shipping_phone", "shipping_address", "shipping_fee", "subtotal", "discount_amount",
-  "total_amount", "payment_method", "voucher_id", "cancelled_reason", "tracking_code", "carrier", "tracking_url"
+  "total_amount", "payment_method", "voucher_id", "cancelled_reason", "tracking_code", "carrier", "tracking_url",
+  "version"
 ] as const;
 
 export function presentOrderForCustomer(order: JsonObject, items: JsonObject[], history: JsonObject[], payments: JsonObject[] = []): JsonObject {
@@ -231,10 +234,14 @@ async function attachProductMeta(items: JsonObject[]): Promise<JsonObject[]> {
   for (const item of items) {
     let productId: unknown = null;
     let categoryName: unknown = null;
+    let size: unknown = null;
+    let color: unknown = null;
     try {
       const v = await selectOne("variant", { variant_id: `eq.${item.variant_id}` });
       if (v) {
         productId = v.product_id;
+        size = v.size ?? null;
+        color = v.color ?? null;
         const product = await selectOne("product", { product_id: `eq.${productId}` });
         if (product) {
           const cat = await selectOne("category", { category_id: `eq.${product.category_id}` });
@@ -246,9 +253,47 @@ async function attachProductMeta(items: JsonObject[]): Promise<JsonObject[]> {
     } catch (e: unknown) {
       console.error("Error retrieving variant product_id:", errorMessage(e));
     }
-    itemsWithProduct.push({ ...item, product_id: productId, category_name: categoryName });
+    itemsWithProduct.push({ ...item, product_id: productId, category_name: categoryName, size, color });
   }
   return itemsWithProduct;
+}
+
+const userReturnsRepository = createUserReturnsRepository();
+
+/**
+ * Gắn `return_count` (số lần đổi/trả còn hiệu lực, trần U2-02 là 2) và `available_quantity`
+ * (số lượng còn có thể chọn ở lần tiếp theo) vào từng dòng hàng của một đơn đã giao.
+ *
+ * Dùng lại đúng phép đếm "lượt + số lượng đã trả" trong `returns-service.ts` qua
+ * `returns-repository.ts`, để trang khách hàng không tự tính một con số khác với con số
+ * backend thật sự dùng để chặn ở `POST /api/user/returns`. Nhận repository qua tham số để
+ * test được bằng repository giả, không cần DB thật.
+ */
+export async function attachReturnEligibility(
+  repository: UserReturnsRepository,
+  orderId: unknown,
+  items: JsonObject[]
+): Promise<JsonObject[]> {
+  const existingReturns = await repository.listReturnsForOrder(orderId);
+  const result: JsonObject[] = [];
+  for (const item of items) {
+    let returnCount = 0;
+    let returnedQuantity = 0;
+    for (const ret of existingReturns) {
+      if (asString(ret.status) === "rejected") continue;
+      const rItems = await repository.listReturnItemsForOrderItem(ret.return_id, item.item_id);
+      if (!rItems.length) continue;
+      returnCount += 1;
+      for (const ri of rItems) returnedQuantity += Number(ri.quantity);
+    }
+    const quantity = Number(item.quantity) || 0;
+    result.push({
+      ...item,
+      return_count: returnCount,
+      available_quantity: Math.max(0, quantity - returnedQuantity)
+    });
+  }
+  return result;
 }
 
 /**
@@ -339,7 +384,10 @@ export async function handleOrdersRoute(
           selectRows("order_status_history", { order_id: `eq.${order.order_id}`, select: "new_status,changed_at" }),
           selectRows("payment", { order_id: `eq.${order.order_id}`, select: "payment_status,gateway_response_code,created_at" })
         ]);
-        const itemsWithProduct = await attachProductMeta(items);
+        let itemsWithProduct = await attachProductMeta(items);
+        if (order.status === "delivered") {
+          itemsWithProduct = await attachReturnEligibility(userReturnsRepository, order.order_id, itemsWithProduct);
+        }
         return sendJson(res, 200, { success: true, order: presentOrderForCustomer(order, itemsWithProduct, history, payments) }, corsHeaders);
       }
 
@@ -363,7 +411,10 @@ export async function handleOrdersRoute(
           selectRows("order_status_history", { order_id: `eq.${order.order_id}`, select: "new_status,changed_at" }),
           selectRows("payment", { order_id: `eq.${order.order_id}`, select: "payment_status,gateway_response_code,created_at" })
         ]);
-        const itemsWithProduct = await attachProductMeta(items);
+        let itemsWithProduct = await attachProductMeta(items);
+        if (order.status === "delivered") {
+          itemsWithProduct = await attachReturnEligibility(userReturnsRepository, order.order_id, itemsWithProduct);
+        }
         return sendJson(res, 200, presentOrderForCustomer(order, itemsWithProduct, history, payments), corsHeaders);
       }
 
@@ -377,7 +428,10 @@ export async function handleOrdersRoute(
         const ordersWithItems: JsonObject[] = [];
         for (const order of orders) {
           const { rows: items } = await selectRows("order_item", { order_id: `eq.${order.order_id}` });
-          const itemsWithProduct = await attachProductMeta(items);
+          let itemsWithProduct = await attachProductMeta(items);
+          if (order.status === "delivered") {
+            itemsWithProduct = await attachReturnEligibility(userReturnsRepository, order.order_id, itemsWithProduct);
+          }
           ordersWithItems.push(presentOrderForCustomer(order, itemsWithProduct, []));
         }
         return sendJson(res, 200, { success: true, orders: ordersWithItems }, corsHeaders);
@@ -457,7 +511,7 @@ export async function handleOrdersRoute(
     if (req.method === "PATCH") {
       const profile = requireUserAuth(context);
       const body = await readJson(req);
-      const { order_id, status, cancelled_reason } = body;
+      const { order_id, status, cancelled_reason, expectedVersion } = body;
 
       if (!order_id || !status) {
         throw new HttpError(400, "BAD_REQUEST", "Thiếu order_id hoặc status");
@@ -468,36 +522,13 @@ export async function handleOrdersRoute(
         throw new HttpError(400, "BAD_REQUEST", "Khách hàng chỉ có thể huỷ đơn");
       }
 
-      const order = await selectOne("orders", { order_id: `eq.${order_id}` });
-      if (!order) {
-        throw new HttpError(404, "NOT_FOUND", "Không tìm thấy đơn hàng");
-      }
-      if (order.user_id !== profile.user_id) {
-        throw new HttpError(403, "FORBIDDEN", "Bạn không có quyền cập nhật đơn hàng này");
-      }
-
-      // Cùng đường xử lý với admin: kiểm trạng thái (BR-03), trả kho đúng một lần, ghi lịch
-      // sử và nhật ký, chuyển thanh toán sang Chờ hoàn tiền nếu đã trả tiền.
-      const reason = String(cancelled_reason || "").trim().slice(0, 300) || "Khách hàng tự huỷ";
-      let result: JsonObject;
-      try {
-        result = asJsonObject(await callRpc("velura_order_service_action", {
-          p_order_id: order_id,
-          p_action: "customer_cancel",
-          p_actor_id: profile.user_id,
-          p_note: reason,
-          p_payload: { cancel_reason: reason },
-          p_expected_version: null
-        }));
-      } catch (error: unknown) {
-        const code = error instanceof HttpError ? asString(asJsonObject(error.details).message) : "";
-        if (code === "INVALID_ORDER_ACTION" || code === "ORDER_ALREADY_HANDED_OVER") {
-          throw new HttpError(400, code, "Đơn hàng đã được chuẩn bị hoặc giao cho đơn vị vận chuyển, không thể tự huỷ. Vui lòng liên hệ CSKH.");
-        }
-        throw error;
-      }
-      const refund = result.refund_required ? await refundStripeOrder(String(order_id)) : null;
-      const updatedOrder = asJsonObject(result.order);
+      // Rule nghiệp vụ (quyền sở hữu, trạng thái, version) nằm ở order-cancel-service để test
+      // được bằng repository giả, không cần DB thật.
+      const { order: updatedOrder, refundRequired, reason } = await cancelOrderForCustomer(
+        createCustomerOrderCancelRepository(),
+        { orderId: asString(order_id), userId: profile.user_id, reason: cancelled_reason, expectedVersion }
+      );
+      const refund = refundRequired ? await refundStripeOrder(String(order_id)) : null;
 
       await createNotification(
         profile.user_id,

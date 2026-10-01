@@ -76,7 +76,9 @@ export class AccountTrackPage {
   readonly auth = inject(AuthService);
   private readonly route = inject(ActivatedRoute);
 
-  readonly codeQuery = signal(this.route.snapshot.queryParamMap.get('code') || '');
+  readonly codeQuery = signal(
+    this.route.snapshot.paramMap.get('id') || this.route.snapshot.queryParamMap.get('code') || '',
+  );
   readonly contactQuery = signal(this.route.snapshot.queryParamMap.get('contact') || '');
 
   readonly searching = signal(false);

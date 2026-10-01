@@ -6,7 +6,7 @@ import { handleOrdersRoute } from "./order-router.js";
 import { CheckoutOtpRateLimiter, CheckoutOtpService, CheckoutService } from "./checkout-service.js";
 import { createCheckoutRepository } from "./checkout-repository.js";
 import { handleVouchersRoute } from "./vouchers.js";
-import { handleReturnsRoute } from "./returns.js";
+import { handleReturnsRoute } from "./returns-router.js";
 import { handleReviewsRoute } from "./reviews.js";
 import { handleQuizRoute } from "./quiz.js";
 import { handleWishlistRoute } from "./wishlist.js";

@@ -55,9 +55,12 @@ test("the customer view drops admin-only columns", () => {
   }, [], []);
   assert.equal(view.order_code, "VLR1A2B3C4D5");
   assert.equal(view.status_label, "Đã xác nhận");
-  for (const hidden of ["internal_note", "ai_source", "version", "stock_committed_at"]) {
+  for (const hidden of ["internal_note", "ai_source", "stock_committed_at"]) {
     assert.equal(hidden in view, false, `${hidden} must not reach the storefront`);
   }
+  // KAN-32: `version` không còn là cột nội bộ — khách hàng cần đọc lại số này để gửi
+  // `expectedVersion` ở lần hủy đơn kế tiếp (tránh ghi đè một thay đổi đã xảy ra).
+  assert.equal(view.version, 7);
 });
 
 test("a voided waybill is not shown to the customer", () => {

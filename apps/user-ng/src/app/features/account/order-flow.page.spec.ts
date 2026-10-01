@@ -7,6 +7,7 @@ import {
   DemoReturn,
   PurchaseDemoStore,
 } from '../../core/services/purchase-demo.store';
+import { ORDER_ACCOUNT_MODEL } from '../../core/services/order-account.model';
 import { stubActivatedRoute } from '../../../testing/storefront-testing';
 import { OrderFlowPage } from './order-flow.page';
 
@@ -51,6 +52,8 @@ describe('OrderFlowPage with mocked Model', () => {
     orders: signal([order]),
     requests: signal<DemoReturn[]>([]),
     verifiedPhone: signal('0901234567'),
+    cancellableBeforeStage: 3,
+    supportsBankInfo: true,
     timeline: () => [
       'Đã ghi nhận',
       'Velura đang liên hệ',
@@ -67,12 +70,13 @@ describe('OrderFlowPage with mocked Model', () => {
     model.verifiedPhone.set('');
     model.requests.set([]);
     model.cancelRequest.mockReset();
+    model.cancelRequest.mockResolvedValue(undefined);
     await TestBed.configureTestingModule({
       imports: [OrderFlowPage],
       providers: [
         provideRouter([]),
         { provide: ActivatedRoute, useValue: stubActivatedRoute({ id: order.id }) },
-        { provide: PurchaseDemoStore, useValue: model },
+        { provide: ORDER_ACCOUNT_MODEL, useValue: model },
       ],
     }).compileComponents();
     vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);

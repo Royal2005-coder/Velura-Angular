@@ -207,7 +207,7 @@ export async function loadVoiceFacts(
     }),
     safeSelect("review", reviewQuery),
     safeSelect("return_exchange", {
-      select: "return_id,order_id,status,reason,created_at",
+      select: "return_id,order_id,status,description,created_at",
       and: `(created_at.gte.${from},created_at.lt.${to})`,
       limit: 1000
     }),
@@ -315,7 +315,9 @@ export function deriveVoiceInsights(facts: VoiceFacts, range: string): VoiceInsi
   const failedDelivery = facts.orders.filter((row) => String(row.status || "") === "delivery_failed").length;
   const returnReasonMap = new Map<string, number>();
   for (const row of facts.returns) {
-    const label = returnReasonLabel(String(row.reason || "")) || "Chưa phân loại";
+    const fromCode = returnReasonLabel(String(row.reason || ""));
+    const fromText = String(row.description || "").split(".")[0].trim();
+    const label = fromCode || fromText || "Chưa phân loại";
     returnReasonMap.set(label, (returnReasonMap.get(label) || 0) + 1);
   }
   const reasonMap = new Map<string, number>();

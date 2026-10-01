@@ -10,6 +10,7 @@ import { RETURN_SELECT, TICKET_SELECT } from "./return-constants.js";
 export interface ReturnListFilters {
   status?: string;
   search?: string;
+  orderId?: string;
   limit: number;
   offset: number;
 }
@@ -109,6 +110,7 @@ export function createReturnRepository() {
         offset: filters.offset
       };
       if (filters.status) query.status = `eq.${filters.status}`;
+      if (filters.orderId) query.order_id = `eq.${filters.orderId}`;
       if (filters.search) query.or = `(description.ilike.*${filters.search}*)`;
       return selectRows("return_exchange", query, authOptions(accessToken));
     },

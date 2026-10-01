@@ -324,7 +324,7 @@ export class ProductDetailPage {
     localStorage.removeItem('checkout_discount');
     localStorage.removeItem('checkout_voucher_id');
     localStorage.removeItem('checkout_voucher_code');
-    void this.router.navigateByUrl('/checkout/shipping');
+    void this.router.navigateByUrl(this.auth.isLoggedIn() ? '/checkout/user' : '/checkout/guest');
   }
 
   /**
@@ -350,7 +350,7 @@ export class ProductDetailPage {
     localStorage.removeItem('checkout_discount');
     localStorage.removeItem('checkout_voucher_id');
     localStorage.removeItem('checkout_voucher_code');
-    void this.router.navigateByUrl('/checkout/shipping');
+    void this.router.navigateByUrl(this.auth.isLoggedIn() ? '/checkout/user' : '/checkout/guest');
   }
 
   /**

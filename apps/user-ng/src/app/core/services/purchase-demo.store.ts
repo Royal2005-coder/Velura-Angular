@@ -69,6 +69,7 @@ export interface DemoReturn {
   stage: number;
   createdAt: string;
   completedAt?: string;
+  cancelledAt?: string;
   bank?: { name: string; last4: string; holder: string };
   replacementUnavailable?: boolean;
 }
@@ -500,6 +501,33 @@ export class PurchaseDemoStore {
           : row,
       ),
     );
+    this.persist();
+  }
+  /** Self-service cancel ends at stage 3 (hàng đang về Velura); after that only CSKH can act. */
+  cancelRequest(id: string): void {
+    this.assertRequestAccess(id);
+    const request = this.requests().find((row) => row.id === id);
+    if (!request) return;
+    if (request.completedAt || request.cancelledAt)
+      throw new Error('Yêu cầu đã kết thúc, không thể hủy.');
+    if (request.stage >= 3)
+      throw new Error('Hàng đã gửi đi, vui lòng liên hệ CSKH để được hỗ trợ hủy yêu cầu.');
+    this.requests.update((rows) =>
+      rows.map((row) => (row.id === id ? { ...row, cancelledAt: new Date().toISOString() } : row)),
+    );
+    this.update(request.orderId, (current) => ({
+      ...current,
+      items: current.items.map((line) => {
+        const item = request.items.find((selected) => selected.variantId === line.variant_id);
+        return item
+          ? {
+              ...line,
+              returnCount: line.returnCount - 1,
+              availableQuantity: line.availableQuantity + item.quantity,
+            }
+          : line;
+      }),
+    }));
     this.persist();
   }
   /** Complete a simulated cancellation refund without claiming a bank transaction. */

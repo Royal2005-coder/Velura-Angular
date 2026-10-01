@@ -399,6 +399,15 @@ export class OrderFlowPage {
       this.error.set((error as Error).message);
     }
   }
+  /** Self-service cancel of the active request; blocked once the Model reports it shipped. */
+  cancelRequest(): void {
+    try {
+      this.model.cancelRequest(this.requestId());
+      this.error.set('');
+    } catch (error) {
+      this.error.set((error as Error).message);
+    }
+  }
   /** Ask for recipient details only after COD refund contact; retain only a masked account. */
   saveBank(): void {
     try {

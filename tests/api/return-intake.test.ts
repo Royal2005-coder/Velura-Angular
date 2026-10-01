@@ -11,6 +11,10 @@ test("đổi trả bắt buộc lý do trong dropdown và ít nhất một ảnh
   assert.equal(missingImage.ok, false);
   if (!missingImage.ok) assert.equal(missingImage.error, "RETURN_EVIDENCE_REQUIRED");
 
+  const other = normalizeReturnIntake("other", ["data:image/jpeg;base64,abc"], "");
+  assert.equal(other.ok, false);
+  if (!other.ok) assert.equal(other.error, "RETURN_NOTE_REQUIRED");
+
   const ok = normalizeReturnIntake("size", ["data:image/jpeg;base64,abc"], "muốn size M");
   assert.equal(ok.ok, true);
   if (ok.ok) {

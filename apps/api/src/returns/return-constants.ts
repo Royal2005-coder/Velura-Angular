@@ -4,6 +4,13 @@
 export const RETURN_STATUSES: readonly string[] = ["pending", "approved", "shipping_back", "received", "completed", "rejected"];
 
 /**
+ * Mốc nghiệp vụ map vào enum đang có, không thêm trạng thái mới.
+ * Tiếp nhận = pending. Đã duyệt / chờ gửi = approved. Đang gửi về = shipping_back.
+ * Đã nhận hàng = received. Hoàn tất = completed. Từ chối hoặc hủy = rejected.
+ */
+export const OPEN_RETURN_STATUSES: readonly string[] = ["pending", "approved", "shipping_back", "received"];
+
+/**
  * Nhãn tiếng Việt phía khách. Mã tiếng Anh là state machine admin quản lý.
  * `received` chỉ được ghi khi QA xác nhận đúng hàng của shop và admin đã tải ảnh minh chứng.
  */
@@ -46,7 +53,7 @@ export interface ReturnIntake {
 
 export type ReturnIntakeResult =
   | { ok: true; intake: ReturnIntake }
-  | { ok: false; error: "RETURN_REASON_REQUIRED" | "RETURN_EVIDENCE_REQUIRED"; message: string };
+  | { ok: false; error: "RETURN_REASON_REQUIRED" | "RETURN_EVIDENCE_REQUIRED" | "RETURN_NOTE_REQUIRED"; message: string };
 
 /**
  * Lý do phải là một mã trong dropdown và phải có ít nhất một ảnh minh chứng.
@@ -65,6 +72,9 @@ export function normalizeReturnIntake(reasonCode: unknown, images: unknown, note
     return { ok: false, error: "RETURN_EVIDENCE_REQUIRED", message: "Bắt buộc tải ít nhất một hình ảnh minh chứng." };
   }
   const extra = String(note || "").trim();
+  if (code === "other" && extra.length < 5) {
+    return { ok: false, error: "RETURN_NOTE_REQUIRED", message: "Chọn lý do Khác thì phải ghi chú thêm." };
+  }
   return {
     ok: true,
     intake: {

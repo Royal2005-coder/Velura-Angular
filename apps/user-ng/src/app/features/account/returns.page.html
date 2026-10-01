@@ -61,12 +61,18 @@
               <h2>2. Chọn sản phẩm cần đổi/trả</h2>
               <div class="product-selection-list">
                 @for (item of selectedOrder()?.items || []; track item.item_id) {
-                  <button type="button" class="selection-card" [class.is-selected]="selectedItemIds().includes(item.item_id)" (click)="toggleItem(item.item_id)">
-                    <div class="selection-card__content">
+                  <div class="selection-card" [class.is-selected]="selectedItemIds().includes(item.item_id)">
+                    <button type="button" class="selection-card__content" (click)="toggleItem(item.item_id)">
                       <strong>{{ item.product_name || 'Sản phẩm' }}</strong>
-                      <span>Số lượng {{ item.quantity || 1 }}</span>
-                    </div>
-                  </button>
+                      <span>Số lượng {{ item.quantity || 1 }}. Mỗi sản phẩm là một yêu cầu riêng.</span>
+                    </button>
+                    @if (selectedItemIds().includes(item.item_id)) {
+                      <select [value]="itemType(item.item_id)" (change)="setItemType(item.item_id, $event)">
+                        <option value="refund">Trả hàng hoàn tiền</option>
+                        <option value="exchange">Đổi hàng</option>
+                      </select>
+                    }
+                  </div>
                 }
               </div>
             </section>
@@ -165,7 +171,7 @@
 
               <!-- Textarea -->
               <div class="form-group">
-                <label for="returnDesc" class="form-label">Mô tả chi tiết (tùy chọn)</label>
+                <label for="returnDesc" class="form-label">{{ reason() === 'other' ? 'Ghi chú khi chọn Khác *' : 'Mô tả chi tiết (tùy chọn)' }}</label>
                 <textarea id="returnDesc" class="form-textarea" [value]="description()" (input)="setDescription($event)"
                   placeholder="Mô tả cụ thể về vấn đề của sản phẩm..."></textarea>
               </div>

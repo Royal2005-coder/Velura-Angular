@@ -37,6 +37,7 @@ export class AccountReturnsPage {
   readonly selectedOrderId = signal<string | null>(null);
   readonly selectedItemIds = signal<string[]>([]);
   readonly returnType = signal<'refund' | 'exchange'>('refund');
+  readonly itemTypes = signal<Record<string, 'refund' | 'exchange'>>({});
   readonly reason = signal('');
   readonly description = signal('');
   readonly submitting = signal(false);
@@ -103,6 +104,15 @@ export class AccountReturnsPage {
     this.returnType.set(value);
   }
 
+  itemType(itemId: string): 'refund' | 'exchange' {
+    return this.itemTypes()[itemId] || this.returnType();
+  }
+
+  setItemType(itemId: string, event: Event): void {
+    const value = (event.target as HTMLSelectElement).value === 'exchange' ? 'exchange' : 'refund';
+    this.itemTypes.update((current) => ({ ...current, [itemId]: value }));
+  }
+
   /**
    * Reads the reason select.
    */
@@ -163,9 +173,17 @@ export class AccountReturnsPage {
     if (!order || this.submitting()) {
       return;
     }
+    if (this.reason() === 'other' && this.description().trim().length < 5) {
+      this.formError.set('Chọn lý do Khác thì phải ghi chú thêm.');
+      return;
+    }
     const items = (order.items || [])
       .filter((item) => this.selectedItemIds().includes(item.item_id))
-      .map((item) => ({ order_item_id: item.item_id, quantity: item.quantity || 1 }));
+      .map((item) => ({
+        order_item_id: item.item_id,
+        quantity: item.quantity || 1,
+        return_type: this.itemTypes()[item.item_id] || this.returnType(),
+      }));
     if (!items.length) {
       this.formError.set('Chọn ít nhất một sản phẩm.');
       return;

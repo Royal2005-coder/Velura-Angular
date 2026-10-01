@@ -99,6 +99,7 @@ export function createReturnService({
       return repository.listReturns({
         status: searchParams.get("status") || undefined,
         search: searchParams.get("q") || undefined,
+        orderId: searchParams.get("order_id") || undefined,
         limit: Math.min(parseInt(searchParams.get("limit") || "50"), 1000),
         offset: parseInt(searchParams.get("offset") || "0")
       }, context.accessToken);

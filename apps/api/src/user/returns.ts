@@ -1,5 +1,5 @@
 import { returnWindowOpen } from "./return-window.js";
-import { normalizeReturnIntake, RETURN_STATUS_LABELS_VI } from "../returns/return-constants.js";
+import { normalizeReturnIntake, OPEN_RETURN_STATUSES, RETURN_STATUS_LABELS_VI } from "../returns/return-constants.js";
 import { HttpError, readJson, sendJson } from "../http.js";
 import { quotePostgrestValue, selectOne, selectRows, insertRow, updateRows } from "../supabase.js";
 import { requireUserAuth } from "./auth.js";
@@ -376,44 +376,55 @@ export async function handleReturnsRoute(
       if (returnTimes >= 2) {
         throw new HttpError(400, "RETURN_LIMIT", "Sản phẩm này đã dùng hết 2 lượt đổi/trả");
       }
+      for (const row of existingReturns) {
+        if (!OPEN_RETURN_STATUSES.includes(asString(row.status))) continue;
+        const { rows: openItems } = await selectRows("return_item", {
+          return_id: `eq.${row.return_id}`,
+          order_item_id: `eq.${item.order_item_id}`
+        });
+        if (openItems.length) {
+          throw new HttpError(400, "RETURN_ALREADY_OPEN", "Sản phẩm này đang có một yêu cầu đổi trả chưa kết thúc.");
+        }
+      }
 
       if (alreadyReturnedQty + Number(item.quantity) > Number(orderItem.quantity)) {
         throw new HttpError(400, "BAD_REQUEST", "Số lượng đổi trả vượt quá số lượng đã mua");
       }
 
+      const itemType = asString(item.return_type) === "exchange" ? "exchange" : "refund";
       validatedItems.push({
         order_item_id: item.order_item_id,
-        quantity: item.quantity
+        quantity: item.quantity,
+        return_type: item.return_type ? itemType : return_type
       });
     }
 
-    const trackingReturnCode = "RET" + Date.now().toString().slice(-8).toUpperCase();
-
-    const newReturn = asJsonObject(await insertRow("return_exchange", {
-      order_id,
-      user_id: profile.user_id,
-      return_type,
-      reason: intake.intake.code,
-      description: intake.intake.description,
-      evidence_images: intake.intake.images,
-      status: "pending",
-      tracking_return_code: trackingReturnCode,
-      created_at: new Date().toISOString()
-    }));
-
-    const returnItems: unknown[] = [];
+    const created: JsonObject[] = [];
     for (const item of validatedItems) {
+      const trackingReturnCode = "RET" + Date.now().toString().slice(-8).toUpperCase() + created.length;
+      const newReturn = asJsonObject(await insertRow("return_exchange", {
+        order_id,
+        user_id: profile.user_id,
+        return_type: item.return_type,
+        reason: intake.intake.code,
+        description: intake.intake.description,
+        evidence_images: intake.intake.images,
+        status: "pending",
+        tracking_return_code: trackingReturnCode,
+        created_at: new Date().toISOString()
+      }));
       const retItem = await insertRow("return_item", {
         return_id: newReturn.return_id,
         order_item_id: item.order_item_id,
         quantity: item.quantity
       });
-      returnItems.push(retItem);
+      created.push({ ...newReturn, items: [retItem] });
     }
 
     return sendJson(res, 200, {
       success: true,
-      return: { ...newReturn, items: returnItems }
+      returns: created,
+      return: created[0]
     }, corsHeaders);
   }
 

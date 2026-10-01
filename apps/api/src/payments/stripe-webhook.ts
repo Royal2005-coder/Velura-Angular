@@ -34,15 +34,31 @@ export async function handleStripeWebhook(req: HttpRequest, res: HttpResponse, c
 }
 
 async function readRawBody(req: HttpRequest): Promise<string> {
+  const reqObj = req as { rawBody?: unknown; body?: unknown };
+  if (typeof reqObj.rawBody === "string") return reqObj.rawBody;
+  if (Buffer.isBuffer(reqObj.rawBody)) return reqObj.rawBody.toString("utf8");
+  if (typeof reqObj.body === "string") return reqObj.body;
+  if (Buffer.isBuffer(reqObj.body)) return reqObj.body.toString("utf8");
+  if (typeof reqObj.body === "object" && reqObj.body !== null) {
+    return JSON.stringify(reqObj.body);
+  }
+
   const chunks: Buffer[] = [];
   const iterator = req[Symbol.asyncIterator];
   if (typeof iterator !== "function") {
+    if (typeof reqObj.body === "object" && reqObj.body !== null) {
+      return JSON.stringify(reqObj.body);
+    }
     throw new HttpError(400, "BAD_REQUEST", "Webhook body is missing");
   }
   for await (const chunk of { [Symbol.asyncIterator]: () => iterator.call(req) } as AsyncIterable<unknown>) {
     chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk instanceof Uint8Array ? chunk : String(chunk)));
   }
-  return Buffer.concat(chunks).toString("utf8");
+  const collected = Buffer.concat(chunks).toString("utf8");
+  if (!collected && typeof reqObj.body === "object" && reqObj.body !== null) {
+    return JSON.stringify(reqObj.body);
+  }
+  return collected;
 }
 
 function headerValue(value: string | string[] | undefined): string {

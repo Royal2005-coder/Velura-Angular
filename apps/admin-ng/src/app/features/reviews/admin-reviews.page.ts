@@ -11,7 +11,7 @@ import { AdminIcon } from '../../shared/admin-icon';
 import { AdminPagination } from '../../shared/admin-pagination';
 import { AdminTableSkeleton } from '../../shared/admin-table-skeleton';
 
-type ReviewTab = 'all' | 'pending' | 'urgent' | 'processed' | 'logs';
+type ReviewTab = 'all' | 'urgent' | 'processed' | 'logs';
 type ReviewAction = 'approve' | 'hide' | 'unhide' | 'reply' | 'escalate' | null;
 
 /** Không có payload khi tab hiện tại không cần tới danh sách đó. */
@@ -55,10 +55,15 @@ export class AdminReviewsPage {
   readonly lightboxImage = signal<string | null>(null);
   readonly canMutate = computed(() => this.session.canMutate('reviews'));
 
-  // Các con số này đếm trên toàn bộ dữ liệu, không phải trên 10 dòng của trang hiện
-  // tại. Trước đây chúng là `computed` trên `rows()`, nên ở tab "Chờ duyệt" con số
-  // "Chờ duyệt" luôn bằng đúng cỡ trang còn "Đã xử lý" luôn bằng 0.
-  readonly pendingCount = signal(0);
+  // Signals trợ lý AI CSKH, nhận diện từ cấm và gợi ý phản hồi
+  readonly replyDraft = signal<string>('');
+  readonly aiSuggestions = signal<string[]>([]);
+  readonly aiLoading = signal(false);
+  readonly aiError = signal<string | null>(null);
+  readonly aiSource = signal<string | null>(null);
+  readonly detectedRestrictedWords = signal<string[]>([]);
+  readonly sentiment = signal<{ label: string; tone: string; score: number } | null>(null);
+
   readonly urgentCount = signal(0);
   readonly hiddenCount = signal(0);
   readonly processedCount = signal(0);
@@ -81,13 +86,10 @@ export class AdminReviewsPage {
     this.loading.set(true);
     this.loadError.set(null);
 
-    // Tab "Cần xử lý gấp" trước đây không đổi tham số truy vấn nào cả, nên nó hiện ra
-    // y hệt tab "Tất cả". Nay lọc thật ở phía máy chủ.
+    // Tab "Cần xử lý gấp" lọc theo cờ urgent trên máy chủ
     const tab = this.tab();
     let status = this.statusFilter();
-    if (tab === 'pending') {
-      status = 'pending';
-    } else if (tab === 'processed') {
+    if (tab === 'processed') {
       status = 'approved';
     }
 
@@ -124,24 +126,19 @@ export class AdminReviewsPage {
    * Tải các chỉ số đầu trang.
    *
    * Tách khỏi `reload()` vì bấm sang trang không làm mấy con số này đổi: gọi lại chúng
-   * ở mỗi lần phân trang là bốn truy vấn thừa cho một thông tin không thay đổi. Chúng
-   * chỉ cần chạy lại khi dữ liệu thật sự đổi — lần đầu vào trang, đổi bộ lọc, và sau
-   * mỗi thao tác duyệt/ẩn.
+   * ở mỗi lần phân trang là các truy vấn thừa cho một thông tin không thay đổi.
    */
   loadCounts(): void {
     const countOnly = (params: Record<string, string>) =>
       this.api.listReviews({ ...params, limit: '1' }).pipe(catchError(() => of(EMPTY_LIST)));
 
     forkJoin({
-      pending: countOnly({ status: 'pending' }),
       approved: countOnly({ status: 'approved' }),
       rejected: countOnly({ status: 'rejected' }),
       urgent: countOnly({ urgent: 'true' }),
     }).subscribe((payload) => {
-      this.pendingCount.set(adminListCount(payload.pending));
       this.hiddenCount.set(adminListCount(payload.rejected));
       this.urgentCount.set(adminListCount(payload.urgent));
-      // "Đã xử lý" là mọi đánh giá đã rời khỏi hàng chờ, gồm cả đã duyệt lẫn đã ẩn.
       this.processedCount.set(adminListCount(payload.approved) + adminListCount(payload.rejected));
     });
   }
@@ -238,7 +235,70 @@ export class AdminReviewsPage {
   }
 
   /**
-   * Opens approve / hide / reply / escalate modal.
+   * Danh sách từ khóa nhạy cảm / từ cấm / spam cần cảnh báo cho CSKH.
+   */
+  readonly restrictedPatterns: readonly string[] = [
+    'mấy má', 'may ma', 'mấy mẹ', 'nhận xu', 'nhan xu', 'kiếm xu', 'kiem xu',
+    'đm', 'dm', 'đmm', 'vcl', 'vl', 'cl', 'vcc', 'dcm', 'đcm', 'lừa đảo', 'lua dao',
+    'fake', 'fake lòi', 'như cc', 'nhu cc', 'hàng đểu', 'treo đầu dê', 'bố láo', 'mất dạy', 'chó chết'
+  ];
+
+  detectRestrictedWords(text: string): string[] {
+    if (!text) return [];
+    const lower = text.toLowerCase();
+    return this.restrictedPatterns.filter((word) => lower.includes(word));
+  }
+
+  analyzeSentiment(row: AdminReviewRow): { label: string; tone: string; score: number } {
+    const rating = row.rating || 0;
+    const comment = (this.commentOf(row) || '').toLowerCase();
+    const negativeKeywords = ['xấu', 'tệ', 'rách', 'lỗi', 'chật', 'rộng', 'thất vọng', 'kém', 'lừa', 'không giống', 'hỏng'];
+    const hasNegativeKeyword = negativeKeywords.some((w) => comment.includes(w));
+
+    if (rating >= 4 && !hasNegativeKeyword) {
+      return { label: 'Tích cực', tone: 'positive', score: rating };
+    }
+    if (rating <= 2 || hasNegativeKeyword) {
+      return { label: 'Tiêu cực', tone: 'negative', score: rating || 1 };
+    }
+    return { label: 'Trung tính', tone: 'neutral', score: rating || 3 };
+  }
+
+  /**
+   * Xin câu phản hồi từ Gemini trên đúng nội dung đánh giá. Không điền câu mẫu khi AI không trả lời.
+   */
+  requestAiReply(reviewId: string): void {
+    this.aiLoading.set(true);
+    this.aiError.set(null);
+    this.aiSuggestions.set([]);
+    this.aiSource.set(null);
+    this.api.suggestReviewReply(reviewId).subscribe({
+      next: (result) => {
+        this.aiLoading.set(false);
+        this.aiSuggestions.set(result.replies || []);
+        this.aiSource.set(result.source || null);
+        if (!(result.replies || []).length) {
+          this.aiError.set('AI không trả về câu phản hồi. Viết tay trong ô bên dưới.');
+        }
+      },
+      error: (error: unknown) => {
+        this.aiLoading.set(false);
+        this.aiSuggestions.set([]);
+        this.aiError.set(adminErrorMessage(error, 'Không lấy được gợi ý AI. Viết phản hồi tay.'));
+      },
+    });
+  }
+
+  applyAiSuggestion(text: string): void {
+    this.replyDraft.set(text);
+  }
+
+  onReplyInput(event: Event): void {
+    this.replyDraft.set((event.target as HTMLTextAreaElement).value);
+  }
+
+  /**
+   * Opens approve / hide / reply / escalate modal with AI context.
    */
   openAction(type: Exclude<ReviewAction, null>, reviewId: string): void {
     const row = this.rows().find((item) => item.review_id === reviewId) || null;
@@ -247,6 +307,34 @@ export class AdminReviewsPage {
     this.detailOpen.set(false);
     this.actionError.set(null);
     this.menuId.set(null);
+
+    if (row) {
+      this.replyDraft.set(row.admin_reply || '');
+      const comment = this.commentOf(row);
+      this.detectedRestrictedWords.set(this.detectRestrictedWords(comment));
+      const s = this.analyzeSentiment(row);
+      this.sentiment.set(s);
+      if (type === 'reply') {
+        this.requestAiReply(reviewId);
+      }
+    }
+
+    // Tải chi tiết bổ sung (ảnh, thông tin người dùng) nếu có
+    this.api.getReview(reviewId).subscribe({
+      next: (fullRow) => {
+        if (this.selected()?.review_id === reviewId) {
+          this.selected.set(fullRow);
+          if (type === 'reply' && !this.replyDraft()) {
+            this.replyDraft.set(fullRow.admin_reply || '');
+          }
+          const comment = this.commentOf(fullRow);
+          this.detectedRestrictedWords.set(this.detectRestrictedWords(comment));
+          const s = this.analyzeSentiment(fullRow);
+          this.sentiment.set(s);
+        }
+      },
+      error: () => {},
+    });
   }
 
   /**
@@ -258,6 +346,10 @@ export class AdminReviewsPage {
     this.detailOpen.set(false);
     this.actionError.set(null);
     this.lightboxImage.set(null);
+    this.replyDraft.set('');
+    this.aiSuggestions.set([]);
+    this.detectedRestrictedWords.set([]);
+    this.sentiment.set(null);
   }
 
   /**
@@ -287,7 +379,14 @@ export class AdminReviewsPage {
     }
     const form = event.target as HTMLFormElement;
     const note = (form.elements.namedItem('actionNote') as HTMLTextAreaElement | null)?.value || '';
-    const value = (form.elements.namedItem('value') as HTMLTextAreaElement | null)?.value || '';
+    const formValue = (form.elements.namedItem('value') as HTMLTextAreaElement | null)?.value || '';
+    const value = type === 'reply' ? this.replyDraft() : formValue;
+
+    if (type === 'reply' && (!value || !value.trim())) {
+      this.actionError.set('Vui lòng nhập nội dung phản hồi đánh giá.');
+      return;
+    }
+
     const payload = { expectedVersion: row.version };
     const request$ =
       type === 'approve' || type === 'unhide'
@@ -295,7 +394,7 @@ export class AdminReviewsPage {
         : type === 'hide'
           ? this.api.hideReview(row.review_id, { ...payload, reason: value })
           : type === 'reply'
-            ? this.api.replyReview(row.review_id, { ...payload, reply: value })
+            ? this.api.replyReview(row.review_id, { ...payload, reply: value.trim() })
             : this.api.escalateReview(row.review_id, { ...payload, reason: value });
     request$.subscribe({
       next: () => {

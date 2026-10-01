@@ -1,8 +1,10 @@
 import { enrichAuditLogs, REVIEW_AUDIT } from "../audit-enrichment.js";
 import { HttpError } from "../http.js";
 import type { AuthContext, AuthUser, JsonObject } from "../types.js";
-import { asNumber, asString } from "../types.js";
+import { asNumber, asString, errorMessage, isJsonObject } from "../types.js";
+import { generateGeminiText, isGeminiConfigured } from "../gemini-client.js";
 import { REVIEW_OPERATOR_ROLES, REVIEW_READER_ROLES } from "./review-constants.js";
+import { groundedReviewReply, readReplySuggestions, reviewReplyPrompt } from "./review-reply-ai.js";
 import type { ReviewRepository } from "./review-repository.js";
 
 /**
@@ -14,6 +16,7 @@ export interface ReviewService {
   approve(context: AuthContext | undefined, reviewId: string, body: JsonObject): Promise<unknown>;
   hide(context: AuthContext | undefined, reviewId: string, body: JsonObject): Promise<unknown>;
   reply(context: AuthContext | undefined, reviewId: string, body: JsonObject): Promise<unknown>;
+  suggestReply(context: AuthContext | undefined, reviewId: string): Promise<{ replies: string[]; source: "gemini" | "review" }>;
   escalate(context: AuthContext | undefined, reviewId: string, body: JsonObject): Promise<unknown>;
   listAuditLogs(context: AuthContext | undefined, searchParams: URLSearchParams): Promise<{ rows: JsonObject[]; count: number | undefined }>;
 }
@@ -71,6 +74,34 @@ export function createReviewService({ repository }: { repository: ReviewReposito
       const expectedVersion = asNumber(body.expectedVersion);
       if (!expectedVersion) throw new HttpError(422, "VALIDATION_ERROR", "expectedVersion required");
       return repository.hide(reviewId, { reason, expectedVersion }, context.accessToken);
+    },
+
+    async suggestReply(context, reviewId) {
+      requireReviewAdmin(context);
+      const review = await repository.get(reviewId, context.accessToken);
+      if (!review) throw new HttpError(404, "REVIEW_NOT_FOUND", "Review not found");
+      const product = isJsonObject(review.product) ? review.product : {};
+      const source = {
+        rating: asNumber(review.rating),
+        comment: asString(review.comment),
+        productName: asString(product.name)
+      };
+      if (!isGeminiConfigured()) {
+        return { replies: [groundedReviewReply(source)], source: "review" as const };
+      }
+      try {
+        const text = await generateGeminiText(
+          `${reviewReplyPrompt(source)}\nChỉ trả một JSON {"replies":["câu 1"]}.`,
+          { temperature: 0.2, maxOutputTokens: 400, timeoutMs: 20000 }
+        );
+        const replies = readReplySuggestions(text);
+        if (replies.length) {
+          return { replies, source: "gemini" as const };
+        }
+      } catch (error: unknown) {
+        console.error("[REVIEW AI]", errorMessage(error));
+      }
+      return { replies: [groundedReviewReply(source)], source: "review" as const };
     },
 
     async reply(context, reviewId, body) {

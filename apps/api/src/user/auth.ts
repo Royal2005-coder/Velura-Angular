@@ -1,6 +1,6 @@
 import { HttpError, readJson, sendJson } from "../http.js";
 import { selectOne, insertRow, updateRows, getAuthUser } from "../supabase.js";
-import { hashPassword, verifyPassword, signJwt } from "../auth-helper.js";
+import { hashPassword, verifyPassword, signJwt, verifyJwt } from "../auth-helper.js";
 import { allowDevOtpBypass } from "../config.js";
 import {
   assertNotLocked,
@@ -10,6 +10,8 @@ import {
   type LoginLockUser
 } from "../auth-lockout.js";
 import { createNotification } from "./notifications.js";
+import { sendAuthOtpSms } from "../sms/twilio.js";
+import { sendDirectEmail } from "../email/mailer.js";
 import {
   asJsonObject,
   asString,
@@ -230,6 +232,30 @@ export async function handleAuthRoute(
     console.log(`[OTP VERIFICATION] Mã kích hoạt tài khoản của ${email || phone} là: ${otpCode}`);
     console.log(`==================================================\n`);
 
+    if (phone) {
+      void sendAuthOtpSms(asString(phone), otpCode, "signup");
+    }
+    if (email) {
+      const emailBody = `Chào ${full_name || "bạn"},\n\nMã kích hoạt tài khoản Velura của bạn là: ${otpCode}.\n\nMã có hiệu lực trong 5 phút. Vui lòng không chia sẻ mã này cho bất kỳ ai.`;
+      const emailHtml = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eaeaea; border-radius: 8px; overflow: hidden;">
+          <div style="background-color: #222; padding: 20px; text-align: center;">
+            <h1 style="color: #d1b8a8; margin: 0; font-size: 28px; letter-spacing: 3px;">VELURA</h1>
+          </div>
+          <div style="padding: 28px; background-color: #fff;">
+            <h2 style="color: #333; margin-top: 0;">Kích hoạt tài khoản</h2>
+            <p style="color: #555; line-height: 1.6;">Chào <strong>${full_name || "bạn"}</strong>,</p>
+            <p style="color: #555; line-height: 1.6;">Cảm ơn bạn đã đăng ký tài khoản tại Velura. Vui lòng sử dụng mã OTP dưới đây để xác thực:</p>
+            <div style="background-color: #fcfaf8; border: 1px dashed #d1b8a8; border-radius: 8px; padding: 16px; margin: 24px 0; text-align: center;">
+              <span style="font-size: 32px; font-weight: bold; color: #b89b88; letter-spacing: 8px;">${otpCode}</span>
+            </div>
+            <p style="color: #888; font-size: 13px;">Mã có hiệu lực trong 5 phút. Vui lòng không chia sẻ mã này cho bất kỳ ai.</p>
+          </div>
+        </div>
+      `;
+      void sendDirectEmail(email, "Mã kích hoạt tài khoản Velura", emailBody, emailHtml);
+    }
+
     // Create inactive user first (AUTH-05)
     const hashedPassword = hashPassword(asString(password));
     const newUser = asJsonObject(await insertRow("users", {
@@ -379,6 +405,10 @@ export async function handleAuthRoute(
       console.log(`[OTP VERIFICATION] Mã kích hoạt tài khoản của ${identity} là: ${otpCode}`);
       console.log(`==================================================\n`);
 
+      if (user.phone) {
+        void sendAuthOtpSms(asString(user.phone), otpCode, "verify");
+      }
+
       return sendJson(res, 200, {
         success: false,
         otp_required: true,
@@ -431,6 +461,30 @@ export async function handleAuthRoute(
     console.log(`[OTP RESET] Mã khôi phục mật khẩu của ${identity} là: ${otpCode}`);
     console.log(`==================================================\n`);
 
+    if (user.phone) {
+      void sendAuthOtpSms(asString(user.phone), otpCode, "forgot_password");
+    }
+    if (user.email) {
+      const emailBody = `Chào ${user.full_name || "bạn"},\n\nMã xác thực khôi phục mật khẩu Velura của bạn là: ${otpCode}.\n\nMã có hiệu lực trong 5 phút. Vui lòng không chia sẻ mã này cho bất kỳ ai.`;
+      const emailHtml = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eaeaea; border-radius: 8px; overflow: hidden;">
+          <div style="background-color: #222; padding: 20px; text-align: center;">
+            <h1 style="color: #d1b8a8; margin: 0; font-size: 28px; letter-spacing: 3px;">VELURA</h1>
+          </div>
+          <div style="padding: 28px; background-color: #fff;">
+            <h2 style="color: #333; margin-top: 0;">Khôi phục mật khẩu</h2>
+            <p style="color: #555; line-height: 1.6;">Chào <strong>${user.full_name || "bạn"}</strong>,</p>
+            <p style="color: #555; line-height: 1.6;">Bạn vừa yêu cầu đặt lại mật khẩu cho tài khoản Velura. Vui lòng sử dụng mã OTP dưới đây để xác nhận:</p>
+            <div style="background-color: #fcfaf8; border: 1px dashed #d1b8a8; border-radius: 8px; padding: 16px; margin: 24px 0; text-align: center;">
+              <span style="font-size: 32px; font-weight: bold; color: #b89b88; letter-spacing: 8px;">${otpCode}</span>
+            </div>
+            <p style="color: #888; font-size: 13px;">Mã có hiệu lực trong 5 phút. Nếu bạn không thực hiện yêu cầu này, vui lòng bỏ qua email.</p>
+          </div>
+        </div>
+      `;
+      void sendDirectEmail(user.email, "Mã xác thực khôi phục mật khẩu Velura", emailBody, emailHtml);
+    }
+
     return sendJson(res, 200, {
       success: true,
       message: "Mã OTP đã được gửi thành công"
@@ -476,6 +530,53 @@ export async function handleAuthRoute(
     return sendJson(res, 200, {
       success: true,
       message: "Đặt lại mật khẩu thành công. Vui lòng đăng nhập lại."
+    }, corsHeaders);
+  }
+
+  // POST /api/user/auth/claim-password — guest who bought by phone sets a real password.
+  if (action === "claim-password" && req.method === "POST") {
+    const body = await readJson(req);
+    const token = asString(body.token);
+    const password = asString(body.password);
+    const confirm = asString(body.password_confirm);
+    if (!token || !password) {
+      throw new HttpError(400, "BAD_REQUEST", "Thiếu liên kết hoặc mật khẩu");
+    }
+    if (password !== confirm) {
+      throw new HttpError(400, "BAD_REQUEST", "Mật khẩu nhập lại không khớp");
+    }
+    if (!validatePassword(password)) {
+      throw new HttpError(400, "BAD_REQUEST", "Mật khẩu phải dài tối thiểu 8 ký tự, gồm chữ hoa, chữ thường và số hoặc ký tự đặc biệt");
+    }
+    const decoded = verifyJwt(token);
+    if (!decoded || decoded.purpose !== "guest_claim" || !decoded.user_id) {
+      throw new HttpError(400, "INVALID_TOKEN", "Liên kết tạo tài khoản không hợp lệ hoặc đã hết hạn");
+    }
+    const user = await selectOne("users", { user_id: `eq.${decoded.user_id}` });
+    if (!user) {
+      throw new HttpError(404, "USER_NOT_FOUND", "Không tìm thấy tài khoản gắn với số điện thoại");
+    }
+    await updateRows("users", { user_id: `eq.${user.user_id}` }, {
+      password_hash: hashPassword(password),
+      is_active: true,
+      role: "member",
+      otp_code: null,
+      otp_expires_at: null,
+      login_fail_count: 0,
+      updated_at: new Date().toISOString()
+    });
+    const session = signJwt({ user_id: user.user_id, email: user.email || `${user.phone}@velura.vn`, role: "member" });
+    return sendJson(res, 200, {
+      success: true,
+      token: session,
+      user: {
+        user_id: user.user_id,
+        email: user.email,
+        phone: user.phone,
+        full_name: user.full_name,
+        role: "member"
+      },
+      message: "Tài khoản thành viên đã kích hoạt. Đơn hàng theo số điện thoại đã được liên kết."
     }, corsHeaders);
   }
 

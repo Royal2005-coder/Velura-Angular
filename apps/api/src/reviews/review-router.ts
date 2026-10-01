@@ -40,6 +40,11 @@ export async function handleReviewRoute({ req, res, url, parts, context, headers
     return true;
   }
 
+  if (req.method === "POST" && parts[5] === "suggest-reply" && parts.length === 6) {
+    sendJson(res, 200, await service.suggestReply(context, reviewId), headers);
+    return true;
+  }
+
   if (req.method === "POST" && parts[5] === "reply" && parts.length === 6) {
     const body = await readJson(req, config.maxBodyBytes);
     sendJson(res, 200, await service.reply(context, reviewId, body), headers);

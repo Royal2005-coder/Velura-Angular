@@ -24,7 +24,7 @@
         @for (item of items(); track item.variant_id) {
           <article class="product-item">
             <div class="product-item__img">
-              <img [src]="item.product_image" [alt]="item.product_name" width="96" height="128" />
+              <img [src]="imageUrl(item)" [alt]="item.product_name" width="96" height="128" />
             </div>
             <div style="display:flex;flex-direction:column;flex:1">
               <h4 class="product-item__name">{{ item.product_name }}</h4>
@@ -50,13 +50,7 @@
       <div class="otp-modal__content" style="position: relative;">
         <a class="otp-modal__close" routerLink="/checkout/shipping" aria-label="Đóng" style="position: absolute; top: 16px; right: 16px; background: none; border: none; font-size: 24px; cursor: pointer; color: #999;">&times;</a>
         <h2 id="otp-title" class="otp-modal__title">Nhập OTP để hoàn tất đơn hàng</h2>
-        <p class="otp-modal__desc">
-          @if (maskedEmail()) {
-            Mã OTP đã gửi tới email {{ maskedEmail() }}. Velura chưa gửi mã qua số điện thoại.
-          } @else {
-            Nhập email ở bước giao hàng để nhận mã OTP. Velura chưa gửi mã qua số điện thoại.
-          }
-        </p>
+        <p class="otp-modal__desc">{{ deliveryMessage() }}</p>
         @if (devBypass()) {
           <p class="otp-modal__desc">Máy local có thể nhập 1234.</p>
         }
@@ -72,7 +66,7 @@
             <p class="field__error">{{ errorMessage() }}</p>
           }
           <div style="margin-top:24px">
-            <button class="btn btn--primary btn--full js-otp-btn-confirm" type="button" (click)="confirm()">Xác nhận</button>
+            <button class="btn btn--primary btn--full js-otp-btn-confirm" type="button" [disabled]="submitting()" (click)="confirm()">{{ submitting() ? 'Đang xác thực...' : 'Xác nhận' }}</button>
           </div>
         </form>
       </div>

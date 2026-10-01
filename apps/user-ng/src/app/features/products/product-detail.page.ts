@@ -10,6 +10,7 @@ import {
 import { CartLine } from '../../core/services/cart.store';
 import { AuthService } from '../../core/services/auth.service';
 import { CartStore } from '../../core/services/cart.store';
+import { CheckoutStore } from '../../core/services/checkout.store';
 import { CatalogService } from '../../core/services/catalog.service';
 import { WishlistStore } from '../../core/services/wishlist.store';
 import { useBodyClass } from '../../core/utils/body-class';
@@ -67,6 +68,7 @@ export class ProductDetailPage {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly cart = inject(CartStore);
+  private readonly checkout = inject(CheckoutStore);
   private readonly wishlist = inject(WishlistStore);
   private readonly auth = inject(AuthService);
 
@@ -221,8 +223,13 @@ export class ProductDetailPage {
   });
   readonly comboSummary = computed(() => {
     const item = this.product();
-    const retail = this.comboComponents().reduce((sum, component) => sum + (component.base_price || 0), 0);
-    const setPrice = item?.sale_price || item?.base_price || 0;
+    const setQty = Math.max(1, this.quantity() || 1);
+    const retailSingle = this.comboComponents().reduce((sum, component) => {
+      const compQty = component.quantity && component.quantity < 10 ? component.quantity : 1;
+      return sum + ((component.base_price || 0) * compQty);
+    }, 0);
+    const retail = retailSingle * setQty;
+    const setPrice = (item?.sale_price || item?.base_price || 0) * setQty;
     const savings = Math.max(0, retail - setPrice);
     const savingsPct = retail > 0 ? Math.round((savings / retail) * 100) : 0;
     return {
@@ -306,15 +313,14 @@ export class ProductDetailPage {
   }
 
   /**
-   * Adds to cart then opens the original checkout shipping step.
+   * Starts instant checkout for the selected variant without polluting the persistent cart.
    */
   buyNow(): void {
     const item = this.buildCartItem();
     if (!item) {
       return;
     }
-    this.cart.addItem(item);
-    sessionStorage.setItem('checkout_items', JSON.stringify([item]));
+    this.checkout.setCheckoutItems([item]);
     localStorage.removeItem('checkout_discount');
     localStorage.removeItem('checkout_voucher_id');
     localStorage.removeItem('checkout_voucher_code');
@@ -333,14 +339,14 @@ export class ProductDetailPage {
   }
 
   /**
-   * Starts checkout with the selected combo set, matching original buy-now.
+   * Starts checkout with the selected combo set directly, matching instant checkout.
    */
   buyComboNow(): void {
     const lines = this.buildComboLines();
     if (!lines) {
       return;
     }
-    sessionStorage.setItem('checkout_items', JSON.stringify(lines));
+    this.checkout.setCheckoutItems(lines);
     localStorage.removeItem('checkout_discount');
     localStorage.removeItem('checkout_voucher_id');
     localStorage.removeItem('checkout_voucher_code');
@@ -562,15 +568,17 @@ export class ProductDetailPage {
     }
     const comboId = `combo-${item.product_id}-${Date.now()}`;
     const comboPrice = item.sale_price || item.base_price || 0;
+    const setQty = Math.max(1, this.quantity() || 1);
     return this.comboComponents().map((component, index) => {
       const pick = this.comboPicks()[index];
       const variant = this.findVariant(component.variants || [], pick.color, pick.size);
+      const componentItemQty = (component.quantity && component.quantity < 10 ? component.quantity : 1) * setQty;
       return {
         variant_id: variant?.variant_id || component.product_id,
         product_id: component.product_id,
         product_name: component.name,
         product_image: this.comboImage(component),
-        quantity: component.quantity || 1,
+        quantity: componentItemQty,
         unit_price: component.sale_price || component.base_price || 0,
         color: pick.color || variant?.color,
         size: pick.size || variant?.size,

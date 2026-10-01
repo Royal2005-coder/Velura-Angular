@@ -1,3 +1,4 @@
+import { returnReasonLabel } from "./returns/return-constants.js";
 import { selectRows } from "./supabase.js";
 import { HttpError } from "./http.js";
 import { isJsonObject, type JsonObject } from "./types.js";
@@ -89,7 +90,9 @@ export interface VoiceInsights {
     ticketsWithoutCsat: number;
     returns: number;
     returnRatePct: number;
+    returnReasons: Array<{ reason: string; count: number }>;
   };
+  regions?: Array<{ name: string; count: number }>;
   orderFriction: {
     orderCount: number;
     completedOrders: number;
@@ -198,13 +201,13 @@ export async function loadVoiceFacts(
 
   const [orders, reviews, returns, tickets] = await Promise.all([
     safeSelect("orders", {
-      select: "order_id,user_id,status,order_date,cancelled_reason,total_amount",
+      select: "order_id,user_id,status,order_date,cancelled_reason,total_amount,shipping_address",
       and: `(order_date.gte.${from},order_date.lt.${to})`,
       limit: 2000
     }),
     safeSelect("review", reviewQuery),
     safeSelect("return_exchange", {
-      select: "return_id,order_id,status,created_at",
+      select: "return_id,order_id,status,description,created_at",
       and: `(created_at.gte.${from},created_at.lt.${to})`,
       limit: 1000
     }),
@@ -247,6 +250,21 @@ export async function loadVoiceFacts(
     products,
     truncated
   };
+}
+
+function regionBuckets(orders: JsonObject[]): Array<{ name: string; count: number }> {
+  const counts = new Map<string, number>();
+  for (const row of orders) {
+    const address = String(row.shipping_address || "");
+    const parts = address.split(",").map((part) => part.trim()).filter(Boolean);
+    const name = parts[parts.length - 1] || "";
+    if (name.length < 2) continue;
+    counts.set(name, (counts.get(name) || 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 8);
 }
 
 function productBuckets(facts: VoiceFacts): ProductReactionRow[] {
@@ -295,6 +313,13 @@ export function deriveVoiceInsights(facts: VoiceFacts, range: string): VoiceInsi
   const completedOrders = delivered.length;
   const cancelled = facts.orders.filter((row) => String(row.status || "") === "cancelled");
   const failedDelivery = facts.orders.filter((row) => String(row.status || "") === "delivery_failed").length;
+  const returnReasonMap = new Map<string, number>();
+  for (const row of facts.returns) {
+    const fromCode = returnReasonLabel(String(row.reason || ""));
+    const fromText = String(row.description || "").split(".")[0].trim();
+    const label = fromCode || fromText || "Chưa phân loại";
+    returnReasonMap.set(label, (returnReasonMap.get(label) || 0) + 1);
+  }
   const reasonMap = new Map<string, number>();
   for (const row of cancelled) {
     const reason = String(row.cancelled_reason || "Không ghi lý do").trim() || "Không ghi lý do";
@@ -329,8 +354,13 @@ export function deriveVoiceInsights(facts: VoiceFacts, range: string): VoiceInsi
         : null,
       ticketsWithoutCsat,
       returns: facts.returns.length,
-      returnRatePct: pct(facts.returns.length, completedOrders)
+      returnRatePct: pct(facts.returns.length, completedOrders),
+      returnReasons: [...returnReasonMap.entries()]
+        .map(([reason, count]) => ({ reason, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 5)
     },
+    regions: regionBuckets(facts.orders),
     orderFriction: {
       orderCount: facts.orders.length,
       completedOrders,
@@ -429,7 +459,13 @@ function serviceQuestion(voice: VoiceInsights): InsightQuestion {
   }
   const csatText =
     serviceQuality.csatAvg === null ? "chưa có CSAT" : `CSAT ${serviceQuality.csatAvg}/5 từ ${serviceQuality.csatCount} phiếu`;
+  const topReason = serviceQuality.returnReasons[0];
   let answer = `${csatText}. Tỷ lệ đổi trả trên đơn đã giao là ${serviceQuality.returnRatePct}%.`;
+  if (topReason && topReason.reason !== "Chưa phân loại") {
+    answer += ` Lý do đứng đầu là "${topReason.reason}" (${topReason.count} phiếu).`;
+  } else if (serviceQuality.returns > 0 && !topReason) {
+    answer += " Chưa có lý do đổi trả được lưu theo danh mục.";
+  }
   if (serviceQuality.csatAvg !== null && serviceQuality.csatAvg < 4) {
     answer += " KH chưa hài lòng với cách xử lý — ưu tiên SLA và chất lượng phản hồi, không tăng voucher cho xong.";
   } else if (serviceQuality.returnRatePct >= 15) {

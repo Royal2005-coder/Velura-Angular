@@ -1,12 +1,32 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { CartLine, CartStore } from './cart.store';
 
+/**
+ * Thông tin giao hàng và các tùy chọn bổ sung chuẩn Coolmate (quà tặng, người nhận thay thế, xuất hóa đơn VAT, mã giới thiệu).
+ */
 export interface CheckoutShipping {
   name: string;
   phone: string;
   email: string;
   address: string;
   note?: string;
+  province?: string;
+  district?: string;
+  ward?: string;
+  detail?: string;
+  referral_code?: string;
+  is_gift?: boolean;
+  gift_gender?: 'nam' | 'nu';
+  gift_name?: string;
+  gift_message?: string;
+  is_other_recipient?: boolean;
+  other_name?: string;
+  other_phone?: string;
+  is_vat_invoice?: boolean;
+  vat_company_name?: string;
+  vat_tax_code?: string;
+  vat_company_address?: string;
+  vat_email?: string;
 }
 
 export interface CheckoutMethods {
@@ -40,10 +60,71 @@ export class CheckoutStore {
   readonly shipping = signal<CheckoutShipping>(this.readShipping());
   readonly methods = signal<CheckoutMethods>(this.readMethods());
 
-  readonly checkoutItems = computed(() => this.readCheckoutItems());
+  readonly items = signal<CartLine[]>(this.readCheckoutItems());
+  readonly checkoutItems = computed(() => this.items());
   readonly subtotal = computed(() =>
-    this.checkoutItems().reduce((sum, line) => sum + line.unit_price * line.quantity, 0),
+    this.items().reduce((sum, line) => sum + line.unit_price * line.quantity, 0),
   );
+
+  /**
+   * Sets the checkout items directly, updating both reactive signal and sessionStorage.
+   * Prevents stale cart lines when navigating between cart and checkout.
+   */
+  setCheckoutItems(items: CartLine[]): void {
+    this.items.set(items);
+    sessionStorage.setItem(ITEMS_KEY, JSON.stringify(items));
+  }
+
+  /**
+   * Re-syncs checkout lines with the latest persistent cart lines.
+   */
+  syncFromCart(): void {
+    const next = this.readCheckoutItems();
+    this.items.set(next);
+  }
+
+  /**
+   * Updates quantity of an item in checkout and syncs with the persistent cart.
+   */
+  updateItemQty(variantId: string, quantity: number): void {
+    if (quantity <= 0) {
+      this.removeItem(variantId);
+      return;
+    }
+    const next = this.items().map((line) => {
+      if (line.variant_id === variantId) {
+        return { ...line, quantity };
+      }
+      return line;
+    });
+    this.items.set(next);
+    sessionStorage.setItem(ITEMS_KEY, JSON.stringify(next));
+    this.cart.updateQty(variantId, quantity);
+  }
+
+  /**
+   * Replaces a variant in checkout with another variant of the same product, keeping quantity.
+   */
+  replaceItemVariant(fromVariantId: string, next: CartLine): void {
+    const current = this.items();
+    const previous = current.find((line) => line.variant_id === fromVariantId);
+    const quantity = previous?.quantity || next.quantity || 1;
+    const filtered = current.filter((line) => line.variant_id !== fromVariantId);
+    const merged = [...filtered, { ...next, quantity }];
+    this.items.set(merged);
+    sessionStorage.setItem(ITEMS_KEY, JSON.stringify(merged));
+    this.cart.replaceVariant(fromVariantId, next);
+  }
+
+  /**
+   * Removes an item from checkout and syncs with the persistent cart.
+   */
+  removeItem(variantId: string): void {
+    const next = this.items().filter((line) => line.variant_id !== variantId);
+    this.items.set(next);
+    sessionStorage.setItem(ITEMS_KEY, JSON.stringify(next));
+    this.cart.removeItem(variantId);
+  }
 
   /**
    * Persists shipping fields used by vanilla `checkout_shipping`.
@@ -123,6 +204,7 @@ export class CheckoutStore {
   completeCheckout(orderedItems: CartLine[]): void {
     const ordered = new Set(orderedItems.map((line) => line.variant_id));
     this.cart.replaceItems(this.cart.items().filter((line) => !ordered.has(line.variant_id)));
+    this.items.set([]);
     sessionStorage.removeItem(ITEMS_KEY);
     sessionStorage.removeItem(GUEST_PAYLOAD_KEY);
     localStorage.removeItem(SHIPPING_KEY);
@@ -142,6 +224,23 @@ export class CheckoutStore {
         email: raw.email || '',
         address: raw.address || '',
         note: raw.note || '',
+        province: raw.province || '',
+        district: raw.district || '',
+        ward: raw.ward || '',
+        detail: raw.detail || '',
+        referral_code: raw.referral_code || '',
+        is_gift: Boolean(raw.is_gift),
+        gift_gender: raw.gift_gender || 'nam',
+        gift_name: raw.gift_name || '',
+        gift_message: raw.gift_message || '',
+        is_other_recipient: Boolean(raw.is_other_recipient),
+        other_name: raw.other_name || '',
+        other_phone: raw.other_phone || '',
+        is_vat_invoice: Boolean(raw.is_vat_invoice),
+        vat_company_name: raw.vat_company_name || '',
+        vat_tax_code: raw.vat_tax_code || '',
+        vat_company_address: raw.vat_company_address || '',
+        vat_email: raw.vat_email || '',
       };
     } catch {
       return { name: '', phone: '', email: '', address: '' };

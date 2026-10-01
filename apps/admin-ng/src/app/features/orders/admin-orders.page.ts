@@ -28,8 +28,12 @@ import { AdminTableSkeleton } from '../../shared/admin-table-skeleton';
 
 type OrderTab = 'all' | 'attention' | 'payment' | 'cancelled' | 'logs';
 
-/** Modal đang mở: một action của đơn, hoặc đối soát thanh toán. */
-type OrderModal = { kind: 'action'; action: AdminOrderAction } | { kind: 'payment' } | null;
+/** Modal đang mở: một action của đơn, đối soát thanh toán, hoặc gọi xác nhận đơn COD. */
+type OrderModal =
+  | { kind: 'action'; action: AdminOrderAction }
+  | { kind: 'payment' }
+  | { kind: 'cod_call'; order: AdminOrderRow }
+  | null;
 
 /** Lỗi mà trạng thái trên màn đã cũ so với dữ liệu thật: tải lại đơn rồi báo. */
 const STALE_ORDER_CODES = new Set(['VERSION_CONFLICT', 'INVALID_ORDER_ACTION', 'ORDER_ALREADY_HANDED_OVER', 'PAYMENT_VERSION_CONFLICT']);
@@ -58,6 +62,9 @@ const EVENT_LABELS: Readonly<Record<string, string>> = {
   payment_expired: 'Hết hạn thanh toán',
   retry_refund: 'Thử hoàn tiền lại',
   refund_failed: 'Hoàn tiền lỗi',
+  refund_succeeded: 'Hoàn tiền thành công',
+  stripe_refund_succeeded: 'Hoàn tiền Stripe thành công',
+  stripe_refund_requested: 'Yêu cầu hoàn tiền Stripe',
 };
 
 @Component({
@@ -103,6 +110,11 @@ export class AdminOrdersPage {
   readonly notice = signal<string | null>(null);
   readonly submitting = signal(false);
 
+  readonly copiedPhone = signal(false);
+  readonly codDecision = signal<'confirm' | 'cancel' | 'no_answer' | 'invalid'>('confirm');
+  readonly codCancelReason = signal<string>('customer_request');
+  readonly codNote = signal<string>('Đã gọi xác nhận, khách đồng ý nhận hàng');
+
   readonly logs = signal<AdminAuditRow[]>([]);
   readonly logsPage = signal(1);
   readonly logsCount = signal(0);
@@ -119,6 +131,7 @@ export class AdminOrdersPage {
   readonly logRangeLabel = computed(() => adminRangeLabel(this.logsCount(), this.logsPage(), this.pageSize, 'nhật ký'));
 
   readonly selectedItems = computed(() => this.selected()?.items || []);
+  readonly selectedCoolmateMeta = computed(() => parseCoolmateMeta(this.selected()?.internal_note));
   /** Action thường, theo thứ tự API trả. Hủy đơn tách riêng thành nút nguy hiểm (FR-06). */
   readonly primaryActions = computed(() => (this.selected()?.allowed_actions || []).filter((action) => !action.destructive));
   readonly destructiveActions = computed(() => (this.selected()?.allowed_actions || []).filter((action) => action.destructive));
@@ -273,6 +286,110 @@ export class AdminOrdersPage {
   }
 
   /**
+   * Kiểm tra đơn có đang cần người vận hành xử lý hay đã hoàn tất.
+   * Đơn đã giao (delivered), đã hủy (cancelled) hoặc đã hoàn (returned) mà không có lỗi thanh toán
+   * thì chỉ hiển thị biểu tượng xem (eye). Các trạng thái khác hiển thị bút chì (edit).
+   */
+  canProcessOrder(order: AdminOrderRow): boolean {
+    if (order.status === 'delivered' || order.status === 'cancelled' || order.status === 'returned') {
+      return this.isPaymentError(order);
+    }
+    return true;
+  }
+
+  isPendingCod(order: AdminOrderRow | null | undefined): boolean {
+    return !!order && order.payment_method === 'COD' && order.status === 'pending';
+  }
+
+  hasCancelRequest(order: AdminOrderRow | null | undefined): boolean {
+    return (
+      !!order?.tags?.some((t) => t.code === 'CANCEL_REQUESTED') ||
+      String(order?.internal_note || '').toLowerCase().includes('yêu cầu hủy')
+    );
+  }
+
+  handleOrderClick(order: AdminOrderRow): void {
+    if (this.isPendingCod(order)) {
+      this.openCodCallConfirm(order);
+    } else {
+      this.openDetail(order.order_id);
+    }
+  }
+
+  openCodCallConfirm(order: AdminOrderRow): void {
+    this.actionError.set(null);
+    this.copiedPhone.set(false);
+    this.codDecision.set('confirm');
+    this.codCancelReason.set('customer_request');
+    this.codNote.set('Đã gọi xác nhận, khách đồng ý nhận hàng');
+    this.submitting.set(false);
+    this.modal.set({ kind: 'cod_call', order });
+
+    // Tải thông tin đơn hàng mới nhất và đầy đủ items nếu chưa có
+    this.api.getOrder(order.order_id).subscribe({
+      next: (fullOrder) => {
+        this.selected.set(fullOrder);
+        this.modal.set({ kind: 'cod_call', order: fullOrder });
+      },
+      error: () => {
+        this.selected.set(order);
+      },
+    });
+  }
+
+  copyPhone(phone: string | undefined): void {
+    if (!phone) return;
+    navigator.clipboard?.writeText(phone);
+    this.copiedPhone.set(true);
+    setTimeout(() => this.copiedPhone.set(false), 2000);
+  }
+
+  setCodQuickNote(note: string): void {
+    this.codNote.set(note);
+  }
+
+  submitCodCall(event: Event): void {
+    event.preventDefault();
+    const order = this.selected();
+    if (!order || this.submitting()) return;
+    const note = this.codNote().trim();
+    if (note.length < 5) {
+      this.actionError.set('Vui lòng nhập ghi chú cuộc gọi (tối thiểu 5 ký tự).');
+      return;
+    }
+
+    this.submitting.set(true);
+    this.actionError.set(null);
+
+    const decision = this.codDecision();
+    let actionCode = 'confirm_cod';
+    let body: Record<string, string> = { note };
+
+    if (decision === 'confirm') {
+      actionCode = 'confirm_cod';
+    } else if (decision === 'cancel') {
+      actionCode = 'cancel';
+      body['cancelReason'] = this.codCancelReason() || 'customer_request';
+    } else if (decision === 'no_answer') {
+      actionCode = 'call_confirm';
+      body['callResult'] = 'no_answer';
+    } else if (decision === 'invalid') {
+      actionCode = 'cancel';
+      body['cancelReason'] = 'fraud';
+    }
+
+    this.api.performOrderAction(order.order_id, actionCode, { ...body, expectedVersion: order.version }).subscribe({
+      next: (result) => {
+        this.closeModal();
+        this.afterAction(result);
+      },
+      error: (error: unknown) => {
+        this.handleActionError(order.order_id, error);
+      },
+    });
+  }
+
+  /**
    * Gửi action đang mở. Ghi chú bắt buộc (AC-17) được kiểm ở đây để khỏi tốn một lượt
    * gọi, và API kiểm lại.
    */
@@ -364,8 +481,24 @@ export class AdminOrdersPage {
     return statusLabelFrom(ORDER_STATUS_LABELS, status);
   }
 
-  paymentMethodLabel(method: string | undefined): string {
-    return method === 'COD' ? 'COD' : method === 'ONLINE_PAYMENT' ? 'Online (Stripe)' : method || '—';
+  paymentMethodLabel(method: string | undefined, order?: AdminOrderRow | null): string {
+    const target = order ?? this.selected();
+    const payments = Array.isArray(target?.payments) ? target!.payments : [];
+    const provider = String(payments[0]?.payment_provider || payments[0]?.payment_method || '').toLowerCase();
+    const note = String(target?.internal_note || '');
+
+    if (provider === 'vnpay' || note.includes('VNPay') || note.includes('VNPAY')) {
+      return 'VNPay (VietQR)';
+    }
+    if (provider === 'momo' || note.includes('MoMo') || note.includes('MOMO')) {
+      return 'MoMo (VietQR)';
+    }
+    if (provider === 'stripe' || note.includes('Stripe')) {
+      return 'Online (Stripe)';
+    }
+    if (method === 'COD') return 'COD';
+    if (method === 'ONLINE_PAYMENT') return 'Online Payment';
+    return method || '—';
   }
 
   eventLabel(event: AdminOrderEvent): string {
@@ -491,4 +624,76 @@ function refundNotice(refund: AdminOrderActionResult['refund']): string | null {
     default:
       return null;
   }
+}
+
+export interface CoolmateOrderMeta {
+  customerNote?: string;
+  referralCode?: string;
+  paymentGateway?: string;
+  gift?: {
+    gender: string;
+    recipientName: string;
+    message?: string;
+  };
+  otherRecipient?: {
+    name: string;
+    phone: string;
+  };
+  vatInvoice?: {
+    company: string;
+    taxCode: string;
+    address: string;
+    email: string;
+  };
+}
+
+export function parseCoolmateMeta(note?: string | null): CoolmateOrderMeta | null {
+  if (!note) return null;
+  const meta: CoolmateOrderMeta = {};
+  let found = false;
+
+  const lines = note.split('\n');
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (line.startsWith('[Ghi chú khách]:')) {
+      meta.customerNote = line.replace('[Ghi chú khách]:', '').trim();
+      found = true;
+    } else if (line.startsWith('[Mã giới thiệu]:')) {
+      meta.referralCode = line.replace('[Mã giới thiệu]:', '').trim();
+      found = true;
+    } else if (line.startsWith('[Cổng thanh toán]:')) {
+      meta.paymentGateway = line.replace('[Cổng thanh toán]:', '').trim();
+      found = true;
+    } else if (line.startsWith('[Quà tặng - Dành cho')) {
+      const match = line.match(/\[Quà tặng - Dành cho (Nam|Nữ)\]:\s*([^-\n]+)(?:\s*-\s*Lời chúc:\s*"(.*)")?/);
+      if (match) {
+        meta.gift = {
+          gender: match[1] || 'Khác',
+          recipientName: match[2]?.trim() || '',
+          message: match[3]?.trim(),
+        };
+        found = true;
+      }
+    } else if (line.startsWith('[Người nhận khác]:')) {
+      const match = line.match(/\[Người nhận khác\]:\s*(.*?)\s*-\s*SĐT:\s*(.*)/);
+      if (match) {
+        meta.otherRecipient = {
+          name: match[1]?.trim() || '',
+          phone: match[2]?.trim() || '',
+        };
+        found = true;
+      }
+    } else if (line.startsWith('[Hóa đơn VAT]:')) {
+      const content = line.replace('[Hóa đơn VAT]:', '').trim();
+      const parts = content.split('|').map((s) => s.trim());
+      meta.vatInvoice = {
+        company: parts[0]?.replace(/^Cty\s*/, '') || '',
+        taxCode: parts[1]?.replace(/^MST:\s*/, '') || '',
+        address: parts[2]?.replace(/^Đ\/c:\s*/, '') || '',
+        email: parts[3]?.replace(/^Email HĐ:\s*/, '') || '',
+      };
+      found = true;
+    }
+  }
+  return found ? meta : null;
 }

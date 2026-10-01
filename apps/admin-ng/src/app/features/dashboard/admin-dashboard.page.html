@@ -177,6 +177,59 @@
     </section>
   } @else {
     <section class="dashboard-panel" id="dashboard-business">
+      <section class="dashboard-section">
+        <header class="dashboard-section__header">
+          <div>
+            <span class="dashboard-eyebrow">Đổi trả</span>
+            <h3>Top lý do đổi trả</h3>
+          </div>
+          <a class="dashboard-text-action" routerLink="/returns">Mở phiếu đổi trả</a>
+        </header>
+        <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" [disabled]="recommendationLoading()" (click)="loadRecommendation()">
+          {{ recommendationLoading() ? 'Đang đọc số liệu kỳ này…' : 'Khuyến nghị từ số liệu kỳ này' }}
+        </button>
+        @if (recommendationError()) {
+          <p class="admin-note">{{ recommendationError() }}</p>
+        }
+        @if (recommendation().length) {
+          <ul class="admin-note">
+            @for (line of recommendation(); track line) {
+              <li>{{ line }}</li>
+            }
+          </ul>
+          <small class="admin-form-helper">{{ recommendationSource() === 'gemini' ? 'Câu đã được giữ lại chỉ khi mọi con số có trong bản tóm tắt kỳ này.' : 'Gemini không trả câu dùng được. Đây là số liệu đã tính, chưa viết thêm.' }}</small>
+        }
+        @if (regions().length < 3) {
+          <p class="admin-note">Chưa đủ mật độ địa lý trong kỳ này để vẽ heatmap. Cần ít nhất 3 tỉnh hoặc thành trong địa chỉ giao hàng đã lưu.</p>
+        } @else {
+          <div class="dashboard-ranking">
+            @for (row of regions(); track row.name) {
+              <div class="dashboard-ranking__row">
+                <span>{{ row.count }}</span>
+                <div>
+                  <strong>{{ row.name }}</strong>
+                  <i><b [style.width.%]="regionShare(row.count)"></b></i>
+                </div>
+              </div>
+            }
+          </div>
+        }
+        @if (!returnReasons().length) {
+          <p class="admin-note">Chưa đủ phiếu đổi trả có lý do trong kỳ này. Biểu đồ hiện khi khách chọn lý do trong dropdown và gửi ảnh minh chứng.</p>
+        } @else {
+          <div class="dashboard-ranking">
+            @for (row of returnReasons(); track row.reason) {
+              <div class="dashboard-ranking__row">
+                <span>{{ row.count }}</span>
+                <div>
+                  <strong>{{ row.reason }}</strong>
+                  <i><b [style.width.%]="reasonShare(row.count)"></b></i>
+                </div>
+              </div>
+            }
+          </div>
+        }
+      </section>
       <div class="dashboard-kpi-grid dashboard-kpi-grid--business">
         <article class="dashboard-kpi" [class.dashboard-kpi--loading]="loading()">
           <div class="dashboard-kpi__head"><span>Doanh thu</span><i><app-admin-icon name="dashboard" /></i></div>

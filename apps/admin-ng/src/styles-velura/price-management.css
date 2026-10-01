@@ -165,3 +165,31 @@
 .admin-stat-card__title { margin: 0 0 8px; font-size: .8125rem; font-weight: 600; color: var(--muted); }
 .admin-stat-card__value { margin: 0; font-size: 1.75rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 .admin-stat-card__meta { margin: 6px 0 0; font-size: .8125rem; color: var(--muted); }
+
+/* Table standardization */
+.admin-table-subtext {
+  display: block;
+  margin-top: 3px;
+  color: var(--soft);
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+.admin-table-figure {
+  display: block;
+  font-weight: 500;
+  color: var(--ink);
+}
+.admin-table-scope {
+  display: inline-block;
+  max-width: 150px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+.admin-table-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}

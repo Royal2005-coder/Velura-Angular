@@ -1,6 +1,6 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable } from 'rxjs';
+import { Observable, map } from 'rxjs';
 import { environment } from '../../environments/environment';
 import { AdminAuthMe } from './admin-session.service';
 import { AdminListPayload } from './admin-http';
@@ -148,30 +148,56 @@ export interface AdminOrderActionResult {
   refund: { status: 'refunded' | 'requested' | 'failed' | 'skipped'; message?: string } | null;
 }
 
+export interface AdminReturnPayment {
+  payment_id?: string;
+  payment_method?: string;
+  payment_provider?: string;
+  payment_status?: string;
+  amount?: number;
+  gateway_transaction_ref?: string;
+  refund_at?: string;
+  refund_amount?: number;
+  gateway_response_code?: string;
+}
+
 export interface AdminReturnRow {
   return_id: string;
   order_id?: string;
+  user_id?: string;
   status?: string;
   request_type?: string;
   return_type?: string;
   description?: string;
+  reason?: string;
   created_at?: string;
+  resolved_at?: string;
   customer_name?: string;
   version?: number;
-  /**
-   * Tổng tiền đúng những món khách gửi trả, do API tính từ `return_item`.
-   * Không phải tổng đơn: một đơn nhiều món mà khách chỉ trả một món thì hoàn cả đơn
-   * là thất thoát.
-   */
   refundable_amount?: number;
+  refund_amount?: number;
+  admin_note?: string;
+  rejection_reason?: string;
+  evidence_images?: string[];
+  tracking_return_code?: string;
+  condition_check_result?: string;
+  lines?: Array<{ order_item_id?: string; quantity?: number }>;
+  payment?: AdminReturnPayment | null;
 }
 
 export interface AdminTicketRow {
   ticket_id: string;
+  user_id?: string;
   status?: string;
   subject?: string;
+  title?: string;
+  description?: string;
   priority?: string;
+  guest_phone?: string;
+  guest_email?: string;
+  admin_reply?: string;
+  csat_score?: number;
   created_at?: string;
+  resolved_at?: string;
   version?: number;
 }
 
@@ -237,6 +263,22 @@ export interface AdminProductRow {
   is_featured?: boolean;
   version?: number;
   variants?: AdminProductVariant[];
+}
+
+export interface AdminComboItemRow {
+  combo_item_id: string;
+  combo_product_id: string;
+  component_product_id: string;
+  component_variant_id?: string | null;
+  quantity: number;
+  product?: {
+    product_id: string;
+    name: string;
+    sku?: string;
+    base_price?: number;
+    sale_price?: number | null;
+    images?: string[];
+  } | null;
 }
 
 export interface AdminCategoryRow {
@@ -542,7 +584,9 @@ export interface AdminVoiceInsights {
     ticketsWithoutCsat: number;
     returns: number;
     returnRatePct: number;
+    returnReasons?: Array<{ reason: string; count: number }>;
   };
+  regions?: Array<{ name: string; count: number }>;
   orderFriction: {
     orderCount: number;
     completedOrders: number;
@@ -629,6 +673,21 @@ export class AdminApiService {
   /**
    * Loads the question-driven insight board for one admin module.
    */
+  recommendInsights(params: Record<string, string> = {}): Observable<{ source?: string; lines?: string[]; narrative?: string[] }> {
+    return this.http.post<{ source?: string; lines?: string[]; narrative?: string[] }>(
+      `${this.baseUrl}/api/v1/admin/insights/recommend`,
+      {},
+      { params: this.params(params) },
+    );
+  }
+
+  adviseProductImage(body: { dataUrl: string; mimeType: string }): Observable<{ source?: string; notes?: string[]; imageBase64?: string; imageMime?: string; imageError?: string }> {
+    return this.http.post<{ source?: string; notes?: string[]; imageBase64?: string; imageMime?: string; imageError?: string }>(
+      `${this.baseUrl}/api/v1/admin/products/image-advice`,
+      body,
+    );
+  }
+
   insights(params: Record<string, string> = {}): Observable<AdminInsightsPayload> {
     return this.http.get<AdminInsightsPayload>(`${this.baseUrl}/api/v1/admin/insights`, { params: this.params(params) });
   }
@@ -727,6 +786,13 @@ export class AdminApiService {
   /**
    * Replies to a review through the original moderation API.
    */
+  suggestReviewReply(reviewId: string): Observable<{ replies?: string[]; source?: string }> {
+    return this.http.post<{ replies?: string[]; source?: string }>(
+      `${this.baseUrl}/api/v1/admin/reviews/${encodeURIComponent(reviewId)}/suggest-reply`,
+      {},
+    );
+  }
+
   replyReview(reviewId: string, body: Record<string, unknown>): Observable<unknown> {
     return this.http.post(`${this.baseUrl}/api/v1/admin/reviews/${encodeURIComponent(reviewId)}/reply`, body);
   }
@@ -850,6 +916,44 @@ export class AdminApiService {
   }
 
   /**
+   * Danh sách thành phần sản phẩm trong combo.
+   */
+  listComboItems(productId: string): Observable<AdminComboItemRow[]> {
+    return this.http
+      .get<{ data?: AdminComboItemRow[] }>(`${this.baseUrl}/api/v1/admin/products/${encodeURIComponent(productId)}/combo-items`)
+      .pipe(map((res) => res.data || []));
+  }
+
+  /**
+   * Thêm sản phẩm thành phần vào combo.
+   */
+  addComboItem(productId: string, body: { componentProductId: string; componentVariantId?: string | null; quantity: number }): Observable<AdminComboItemRow> {
+    return this.http.post<AdminComboItemRow>(
+      `${this.baseUrl}/api/v1/admin/products/${encodeURIComponent(productId)}/combo-items`,
+      body,
+    );
+  }
+
+  /**
+   * Cập nhật số lượng của sản phẩm thành phần trong combo.
+   */
+  updateComboItem(productId: string, itemId: string, body: { quantity: number }): Observable<AdminComboItemRow> {
+    return this.http.patch<AdminComboItemRow>(
+      `${this.baseUrl}/api/v1/admin/products/${encodeURIComponent(productId)}/combo-items/${encodeURIComponent(itemId)}`,
+      body,
+    );
+  }
+
+  /**
+   * Xóa sản phẩm thành phần khỏi combo.
+   */
+  removeComboItem(productId: string, itemId: string): Observable<unknown> {
+    return this.http.delete(
+      `${this.baseUrl}/api/v1/admin/products/${encodeURIComponent(productId)}/combo-items/${encodeURIComponent(itemId)}`,
+    );
+  }
+
+  /**
    * Lists admin orders with the original filter query.
    */
   listOrders(params: Record<string, string> = {}): Observable<AdminListPayload<AdminOrderRow>> {
@@ -916,6 +1020,13 @@ export class AdminApiService {
   }
 
   /**
+   * Reads one CSKH support ticket detail.
+   */
+  getTicket(ticketId: string): Observable<AdminTicketRow> {
+    return this.http.get<AdminTicketRow>(`${this.baseUrl}/api/v1/admin/support-tickets/${encodeURIComponent(ticketId)}`);
+  }
+
+  /**
    * Lists live-chat sessions for the CSKH workspace.
    */
   listChatSessions(params: Record<string, string> = {}): Observable<AdminListPayload<AdminChatSessionRow>> {
@@ -974,6 +1085,13 @@ export class AdminApiService {
   }
 
   /**
+   * Kích hoạt hoàn tiền Stripe cho phiếu đổi trả (dùng khi phiếu duyệt trước đó hoặc cần thử lại).
+   */
+  triggerStripeRefund(returnId: string, body: Record<string, unknown> = {}): Observable<unknown> {
+    return this.http.post(`${this.baseUrl}/api/v1/admin/returns/${encodeURIComponent(returnId)}/trigger-stripe-refund`, body);
+  }
+
+  /**
    * Approves a return as an exchange.
    */
   approveExchange(returnId: string, body: Record<string, unknown>): Observable<unknown> {
@@ -990,6 +1108,10 @@ export class AdminApiService {
   /**
    * Updates a return workflow status.
    */
+  recordReturnContact(returnId: string, body: Record<string, unknown>): Observable<unknown> {
+    return this.http.post(`${this.baseUrl}/api/v1/admin/returns/${encodeURIComponent(returnId)}/contact`, body);
+  }
+
   updateReturnStatus(returnId: string, body: Record<string, unknown>): Observable<unknown> {
     return this.http.post(`${this.baseUrl}/api/v1/admin/returns/${encodeURIComponent(returnId)}/update-status`, body);
   }

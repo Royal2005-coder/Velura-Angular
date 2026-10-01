@@ -24,4 +24,34 @@ describe('AdminReturnsPage', () => {
     expect(page.showReturnAction({ return_id: '1', return_type: 'refund' }, 'refund')).toBe(true);
     expect(page.showReturnAction({ return_id: '1', return_type: 'refund' }, 'exchange')).toBe(false);
   });
+
+  it('handles detail drawers, stepper steps, and image lightbox', async () => {
+    const page = await createAdminPage(AdminReturnsPage);
+    expect(page.returnDetailOpen()).toBe(false);
+    expect(page.ticketDetailOpen()).toBe(false);
+
+    page.openReturnDetail('ret_123');
+    expect(page.returnDetailOpen()).toBe(true);
+    expect(page.ticketDetailOpen()).toBe(false);
+
+    page.openTicketDetail('tkt_456');
+    expect(page.ticketDetailOpen()).toBe(true);
+    expect(page.returnDetailOpen()).toBe(false);
+
+    page.openLightbox('https://example.com/proof.jpg');
+    expect(page.lightboxImage()).toBe('https://example.com/proof.jpg');
+    page.closeLightbox();
+    expect(page.lightboxImage()).toBeNull();
+
+    expect(page.returnStepIndex('pending')).toBe(0);
+    expect(page.returnStepIndex('approved')).toBe(1);
+    expect(page.returnStepIndex('shipping_back')).toBe(2);
+    expect(page.returnStepIndex('received')).toBe(3);
+    expect(page.returnStepIndex('completed')).toBe(4);
+    expect(page.returnStepIndex('rejected')).toBe(-1);
+
+    page.closeOverlays();
+    expect(page.returnDetailOpen()).toBe(false);
+    expect(page.ticketDetailOpen()).toBe(false);
+  });
 });

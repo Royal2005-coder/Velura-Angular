@@ -172,7 +172,14 @@ async function geminiRequestWithRetry(
       return await geminiRequest(path, payload, options);
     } catch (error: unknown) {
       lastError = error;
-      const isRetryable = error instanceof HttpError && [429, 500, 502, 503].includes(error.status);
+      const aborted = error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError");
+      if (aborted) {
+        throw new HttpError(504, "GEMINI_TIMEOUT", "Gemini quá thời gian phản hồi. Thử lại sau vài giây.");
+      }
+      if (!(error instanceof HttpError)) {
+        throw new HttpError(502, "GEMINI_UNAVAILABLE", `Gemini không phản hồi: ${errorMessage(error)}`);
+      }
+      const isRetryable = [429, 500, 502, 503].includes(error.status);
       if (!isRetryable || attempt === MAX_RETRIES) {
         throw error;
       }
@@ -262,6 +269,49 @@ export async function analyzeImageWithGemini(
   return readFirstCandidateText(data);
 }
 
+export interface GeneratedImage {
+  mimeType: string;
+  base64: string;
+}
+
+/**
+ * Giữ đúng sản phẩm và thay nền bằng phông studio. Trả về ảnh do Gemini sinh, không phải bộ lọc sáng.
+ */
+export async function generateStudioProductImage(dataUrl: string, mimeType: string): Promise<GeneratedImage> {
+  requireGeminiKey();
+  const cleanBase64 = dataUrl.replace(/^data:image\/[a-zA-Z+.-]+;base64,/, "");
+  const models = [
+    process.env.GEMINI_IMAGE_MODEL || "",
+    "gemini-2.5-flash-image",
+    config.geminiModel || config.geminiStylistModel
+  ].filter((model, index, all) => model && all.indexOf(model) === index);
+  let lastError = "Gemini không trả về ảnh nền studio.";
+  for (const model of models) {
+    try {
+      const data = await geminiRequestWithRetry(`/models/${encodeURIComponent(model)}:generateContent`, {
+        contents: [{
+          parts: [
+            { inlineData: { mimeType: mimeType || "image/jpeg", data: cleanBase64 } },
+            {
+              text: "Edit the photo. Keep the foreground subject unchanged. Replace the background with a clean warm off-white studio backdrop and soft even light. Remove glare. Do not add text, logos, or props. Return the edited image."
+            }
+          ]
+        }],
+        generationConfig: {
+          responseModalities: ["TEXT", "IMAGE"]
+        }
+      }, { timeoutMs: 45000 });
+      const image = readGeneratedImage(data);
+      if (image) return image;
+      lastError = `${model} không kèm dữ liệu ảnh.`;
+    } catch (error: unknown) {
+      lastError = error instanceof HttpError ? error.message : errorMessage(error);
+      console.warn(`[PRODUCT IMAGE] ${model}:`, lastError);
+    }
+  }
+  throw new HttpError(502, "GEMINI_IMAGE_EMPTY", lastError);
+}
+
 function requireGeminiKey(): void {
   if (!config.geminiApiKey) {
     throw new HttpError(503, "GEMINI_API_KEY_REQUIRED", "Gemini API key is not configured. Set GEMINI_API_KEY in .env");
@@ -285,6 +335,17 @@ function readEmbeddingValues(data: unknown): unknown[] | null {
     const first = data.embeddings[0];
     if (isJsonObject(first) && Array.isArray(first.values)) {
       return first.values;
+    }
+  }
+  return null;
+}
+
+function readGeneratedImage(data: unknown): GeneratedImage | null {
+  for (const part of readCandidateParts(data)) {
+    const inline = isJsonObject(part.inlineData) ? part.inlineData : isJsonObject(part.inline_data) ? part.inline_data : null;
+    const base64 = inline ? asString(inline.data) : "";
+    if (base64.length > 100) {
+      return { mimeType: asString(inline?.mimeType || inline?.mime_type) || "image/png", base64 };
     }
   }
   return null;

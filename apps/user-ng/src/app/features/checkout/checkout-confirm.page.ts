@@ -1,5 +1,5 @@
 import { Component, computed, inject } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { CheckoutStore } from '../../core/services/checkout.store';
 import { useBodyClass } from '../../core/utils/body-class';
 
@@ -11,11 +11,16 @@ import { useBodyClass } from '../../core/utils/body-class';
 })
 export class CheckoutConfirmPage {
   private readonly checkout = inject(CheckoutStore);
+  private readonly route = inject(ActivatedRoute);
   private readonly created = this.checkout.readCreatedOrder();
-  readonly tempPassword = localStorage.getItem('guest_temp_password');
+  readonly claimUrl = sessionStorage.getItem('velura_claim_url');
 
+  readonly isStripeSuccess = computed(() => this.route.snapshot.queryParamMap.get('stripe') === 'success');
   readonly orderCode = computed(() => this.created?.order_code || this.created?.order_id || '—');
   readonly paymentLabel = computed(() => {
+    if (this.isStripeSuccess()) {
+      return 'Thanh toán trực tuyến (Stripe) — Đã thanh toán thành công';
+    }
     const method = this.created?.payment_method || 'COD';
     if (method === 'COD' || method === 'cod') {
       return 'Thanh toán khi nhận hàng (COD)';
@@ -25,6 +30,9 @@ export class CheckoutConfirmPage {
     }
     if (method === 'VNPAY') {
       return 'Cổng thanh toán VNPay';
+    }
+    if (method === 'STRIPE' || method === 'ONLINE_PAYMENT') {
+      return 'Thanh toán trực tuyến qua thẻ (Stripe)';
     }
     return 'Thanh toán trực tuyến';
   });
@@ -39,8 +47,8 @@ export class CheckoutConfirmPage {
 
   constructor() {
     useBodyClass('page-checkout');
-    if (this.tempPassword) {
-      localStorage.removeItem('guest_temp_password');
+    if (this.claimUrl) {
+      sessionStorage.removeItem('velura_claim_url');
     }
   }
 }

@@ -4,7 +4,7 @@ import { AuthService } from '../../core/services/auth.service';
 import { CartLine } from '../../core/services/cart.store';
 import { CheckoutStore } from '../../core/services/checkout.store';
 import { ApiService } from '../../core/services/api.service';
-import { formatVnd } from '../../core/utils/money';
+import { formatVnd, toPublicAsset } from '../../core/utils/money';
 import { showToast } from '../../core/utils/toast';
 import { useBodyClass } from '../../core/utils/body-class';
 import { ApiRequestError } from '../../core/models/api-request-error';
@@ -15,7 +15,7 @@ interface OtpVerifyResponse {
   message?: string;
   token?: string;
   user?: Record<string, unknown>;
-  temp_password?: string;
+  claim_url?: string;
   stripe?: { url?: string };
   order?: {
     order_id?: string;
@@ -38,17 +38,27 @@ export class CheckoutOtpPage {
   private readonly router = inject(Router);
 
   readonly digits = signal(['', '', '', '']);
-  readonly seconds = signal(300);
+  readonly seconds = signal(60);
   readonly errorMessage = signal<string | null>(null);
   readonly submitting = signal(false);
   readonly resending = signal(false);
   readonly maskedEmail = signal(this.readMaskedEmail());
+  readonly maskedPhone = signal(this.readMaskedPhone());
+  readonly channel = signal<'sms' | 'email' | 'both'>('sms');
   readonly devBypass = signal(false);
+  readonly deliveryMessage = signal(this.readDeliveryMessage());
   readonly items = computed(() => this.checkout.readCheckoutItems());
   readonly totalLabel = computed(() => {
     const total = this.items().reduce((sum, line) => sum + line.unit_price * line.quantity, 0);
     return formatVnd(total) || '0 đ';
   });
+
+  /**
+   * Resolves a checkout thumbnail for Angular public assets.
+   */
+  imageUrl(item: CartLine): string {
+    return toPublicAsset(item.product_image, '/assets/images/placeholder.jpg');
+  }
 
   constructor() {
     useBodyClass('page-checkout');
@@ -87,7 +97,14 @@ export class CheckoutOtpPage {
     }
     this.resending.set(true);
     this.api
-      .post<{ success?: boolean; masked_email?: string; dev_bypass?: boolean }>('/api/user/orders/otp-send', {
+      .post<{
+        success?: boolean;
+        message?: string;
+        channel?: 'sms' | 'email' | 'both';
+        masked_phone?: string;
+        masked_email?: string;
+        dev_bypass?: boolean;
+      }>('/api/user/orders/otp-send', {
         phone: payload['phone'],
         email: payload['email'] || '',
         full_name: payload['shipping_name'],
@@ -96,12 +113,22 @@ export class CheckoutOtpPage {
         next: (res) => {
           this.resending.set(false);
           if (res.success) {
-            this.seconds.set(300);
+            this.seconds.set(60);
             if (res.masked_email) {
               this.maskedEmail.set(res.masked_email);
             }
+            if (res.masked_phone) {
+              this.maskedPhone.set(res.masked_phone);
+            }
+            if (res.channel) {
+              this.channel.set(res.channel);
+            }
             this.devBypass.set(res.dev_bypass === true);
-            showToast('Mã OTP mới đã được gửi tới email.');
+            if (res.message) {
+              sessionStorage.setItem('velura_otp_message', res.message);
+              this.deliveryMessage.set(res.message);
+            }
+            showToast(res.message || 'Mã OTP mới đã được gửi thành công.');
           } else {
             showToast('Không thể gửi lại mã OTP. Vui lòng thử lại!');
           }
@@ -111,6 +138,39 @@ export class CheckoutOtpPage {
           showToast(error.message || 'Lỗi gửi lại mã OTP');
         },
       });
+  }
+
+  /**
+   * Text from the send response. Falls back to the addresses the guest typed.
+   */
+  private readDeliveryMessage(): string {
+    const fromServer = sessionStorage.getItem('velura_otp_message');
+    if (fromServer) {
+      return fromServer;
+    }
+    const phone = this.readMaskedPhone();
+    const email = this.readMaskedEmail();
+    if (phone && email) {
+      return `Mã OTP đã được gửi tới số điện thoại ${phone} và email ${email}.`;
+    }
+    if (phone) {
+      return `Mã OTP đã được gửi tới số điện thoại ${phone}.`;
+    }
+    if (email) {
+      return `Mã OTP đã được gửi tới email ${email}.`;
+    }
+    return 'Vui lòng nhập mã OTP để hoàn tất đơn hàng.';
+  }
+
+  /**
+   * Phone number shown on the OTP dialog.
+   */
+  private readMaskedPhone(): string {
+    const phone = String(this.checkout.readGuestPayload()?.['phone'] || '').trim();
+    if (phone.length < 7) {
+      return phone;
+    }
+    return `${phone.slice(0, 3)}****${phone.slice(-3)}`;
   }
 
   /**
@@ -129,6 +189,13 @@ export class CheckoutOtpPage {
    * Confirms the original 4-digit checkout OTP and places the guest order.
    */
   confirm(): void {
+    const inputs = document.querySelectorAll<HTMLInputElement>('.otp-input');
+    if (inputs.length === 4) {
+      const fromDom = Array.from(inputs).map((input) => input.value.replace(/\D/g, '').slice(-1));
+      if (fromDom.join('').length === 4) {
+        this.digits.set(fromDom);
+      }
+    }
     const code = this.digits().join('');
     if (code.length < 4) {
       this.errorMessage.set('Vui lòng nhập đầy đủ mã OTP 4 chữ số!');
@@ -157,6 +224,20 @@ export class CheckoutOtpPage {
           payment_method: guestPayload['payment_method'],
           shipping_email: guestPayload['email'] || '',
           items: guestPayload['items'],
+          note: guestPayload['note'],
+          referral_code: undefined,
+          is_gift: guestPayload['is_gift'],
+          gift_gender: guestPayload['gift_gender'],
+          gift_name: guestPayload['gift_name'],
+          gift_message: guestPayload['gift_message'],
+          is_other_recipient: guestPayload['is_other_recipient'],
+          other_name: guestPayload['other_name'],
+          other_phone: guestPayload['other_phone'],
+          is_vat_invoice: guestPayload['is_vat_invoice'],
+          vat_company_name: guestPayload['vat_company_name'],
+          vat_tax_code: guestPayload['vat_tax_code'],
+          vat_company_address: guestPayload['vat_company_address'],
+          vat_email: guestPayload['vat_email'],
         },
       })
       .subscribe({
@@ -167,9 +248,12 @@ export class CheckoutOtpPage {
             return;
           }
           this.auth.applySession(res.token, res.user);
-          if (res.temp_password) {
-            localStorage.setItem('guest_temp_password', res.temp_password);
+          if (res.claim_url) {
+            sessionStorage.setItem('velura_claim_url', res.claim_url);
+          } else {
+            sessionStorage.removeItem('velura_claim_url');
           }
+          localStorage.removeItem('guest_temp_password');
           this.checkout.saveCreatedOrder({
             order_id: res.order.order_id,
             order_code: res.order.order_code,
@@ -188,7 +272,9 @@ export class CheckoutOtpPage {
         error: (error: Error) => {
           this.submitting.set(false);
           if (this.handleVoucherChanged(error, guestPayload)) return;
-          this.errorMessage.set(error.message || 'Lỗi xác thực OTP');
+          const message = error.message || 'Lỗi xác thực OTP';
+          this.errorMessage.set(message);
+          showToast(message);
         },
       });
   }

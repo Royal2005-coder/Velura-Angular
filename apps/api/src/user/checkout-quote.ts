@@ -77,6 +77,9 @@ export async function handleCheckoutRoute(
   if (!items.length) throw new HttpError(400, "EMPTY_CART", "Giỏ hàng chưa có sản phẩm nào.");
 
   const cart = await loadVoucherCart(items);
+  if (!cart.lines.length && items.length > 0) {
+    throw new HttpError(400, "INVALID_ITEMS", "Một số sản phẩm trong giỏ hàng không tồn tại hoặc đã ngừng kinh doanh.");
+  }
   const shippingFee = shippingFeeFor(cart.orderValue, shippingMethodFromClaim(body.shipping_fee, body.shipping_method));
   const wallet = await buildWallet(context, cart.orderValue, shippingFee, {
     lines: cart.lines,

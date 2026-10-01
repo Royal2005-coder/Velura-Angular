@@ -76,3 +76,32 @@
 .admin-drawer--busy { opacity:.7; pointer-events:none; }
 .admin-timeline__item--system::before { background:#476e91; }
 .admin-timeline__note { color:var(--muted)!important; font-size:.8125rem!important; line-height:1.45; }
+
+.admin-order-alert-banner { margin:0 0 16px; padding:12px 14px; border-radius:var(--radius-md); font-size:.875rem; line-height:1.5; border-left:4px solid transparent; }
+.admin-order-alert-banner--danger { background:#fdf2f4; border-color:var(--error); color:#961d31; }
+.admin-order-alert-banner--warning { background:#fef8ed; border-color:#d97706; color:#92400e; }
+
+.admin-modal--lg { max-width:680px; width:95vw; }
+.admin-cod-card { background:var(--field-bg, #fbf9f7); border:1px solid var(--line, #e2d9d0); border-radius:var(--radius-md, 8px); padding:14px; display:grid; gap:10px; }
+.admin-cod-card__header { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; border-bottom:1px solid var(--line, #e2d9d0); padding-bottom:8px; }
+.admin-cod-card__badge { background:#e8edf2; color:#235d88; font-size:.75rem; font-weight:600; padding:3px 8px; border-radius:4px; }
+.admin-cod-card__amount { color:var(--brown, #8c4e16); font-size:1.0625rem; font-weight:600; }
+.admin-cod-card__grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; font-size:.875rem; }
+.admin-cod-card__grid small { display:block; color:var(--muted, #7c7267); font-size:.75rem; margin-bottom:2px; }
+.admin-phone-call-btn { display:inline-flex; align-items:center; gap:6px; padding:5px 12px; border-radius:6px; background:#2e7d32; color:#fff!important; font-weight:600; text-decoration:none!important; font-size:.8125rem; transition:opacity .15s; }
+.admin-phone-call-btn:hover { opacity:.9; }
+.admin-copy-btn { padding:4px 8px; border-radius:4px; border:1px solid var(--line, #e2d9d0); background:#fff; font-size:.75rem; cursor:pointer; color:var(--text-body, #2b2520); }
+.admin-copy-btn:hover { background:var(--field-bg, #fbf9f7); }
+.admin-cod-items-list { list-style:none; padding:0; margin:4px 0 0; display:grid; gap:4px; }
+.admin-cod-items-list li { display:flex; justify-content:space-between; align-items:center; font-size:.8125rem; padding:4px 0; border-bottom:1px dashed var(--line, #e2d9d0); }
+.admin-cod-decisions { display:grid; gap:8px; }
+.admin-decision-label { display:flex; align-items:flex-start; gap:10px; padding:10px 12px; border:1px solid var(--line, #e2d9d0); border-radius:8px; cursor:pointer; transition:all .15s ease; background:#fff; }
+.admin-decision-label:hover { border-color:var(--brown, #8c4e16); background:#fdfbf9; }
+.admin-decision-label--active { border-color:var(--brown, #8c4e16)!important; background:#fbf5ef!important; box-shadow:0 0 0 1px var(--brown, #8c4e16); }
+.admin-decision-label input { margin-top:3px; }
+.admin-decision-label strong { display:block; font-size:.875rem; color:var(--ink, #1f1a16); }
+.admin-decision-label p { margin:2px 0 0; font-size:.75rem; color:var(--muted, #7c7267); line-height:1.4; }
+.admin-call-chips { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:6px; }
+.admin-chip-btn { padding:3px 8px; border-radius:999px; border:1px solid #d0c2b4; background:#fff; font-size:.75rem; cursor:pointer; color:var(--text-body, #42382f); transition:background .15s; }
+.admin-chip-btn:hover { background:#f5ede6; }
+

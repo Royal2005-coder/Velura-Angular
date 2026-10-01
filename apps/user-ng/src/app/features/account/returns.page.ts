@@ -37,11 +37,13 @@ export class AccountReturnsPage {
   readonly selectedOrderId = signal<string | null>(null);
   readonly selectedItemIds = signal<string[]>([]);
   readonly returnType = signal<'refund' | 'exchange'>('refund');
+  readonly itemTypes = signal<Record<string, 'refund' | 'exchange'>>({});
   readonly reason = signal('');
   readonly description = signal('');
   readonly submitting = signal(false);
   readonly formError = signal<string | null>(null);
   readonly submitted = signal(false);
+  readonly evidenceImages = signal<string[]>([]);
 
   readonly eligible = computed(() => this.orders().filter((order) => isReturnableOrder(order)));
   readonly selectedOrder = computed(() => this.eligible().find((order) => order.order_id === this.selectedOrderId()) || null);
@@ -102,6 +104,15 @@ export class AccountReturnsPage {
     this.returnType.set(value);
   }
 
+  itemType(itemId: string): 'refund' | 'exchange' {
+    return this.itemTypes()[itemId] || this.returnType();
+  }
+
+  setItemType(itemId: string, event: Event): void {
+    const value = (event.target as HTMLSelectElement).value === 'exchange' ? 'exchange' : 'refund';
+    this.itemTypes.update((current) => ({ ...current, [itemId]: value }));
+  }
+
   /**
    * Reads the reason select.
    */
@@ -117,6 +128,44 @@ export class AccountReturnsPage {
   }
 
   /**
+   * Handles customer selecting proof photos for return.
+   */
+  onFilesSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    if (!input.files || input.files.length === 0) {
+      return;
+    }
+    const current = this.evidenceImages();
+    const remaining = 5 - current.length;
+    if (remaining <= 0) {
+      this.formError.set('Chỉ được tải lên tối đa 5 hình ảnh minh chứng.');
+      return;
+    }
+    const files = Array.from(input.files).slice(0, remaining);
+    for (const file of files) {
+      if (!file.type.startsWith('image/')) {
+        continue;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        if (result) {
+          this.evidenceImages.update((imgs) => (imgs.length < 5 ? [...imgs, result] : imgs));
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+    input.value = '';
+  }
+
+  /**
+   * Removes an attached evidence image.
+   */
+  removeImage(index: number): void {
+    this.evidenceImages.update((imgs) => imgs.filter((_, i) => i !== index));
+  }
+
+  /**
    * Sends the request. The API enforces the 30-day window and the delivered state.
    */
   submit(): void {
@@ -124,15 +173,27 @@ export class AccountReturnsPage {
     if (!order || this.submitting()) {
       return;
     }
+    if (this.reason() === 'other' && this.description().trim().length < 5) {
+      this.formError.set('Chọn lý do Khác thì phải ghi chú thêm.');
+      return;
+    }
     const items = (order.items || [])
       .filter((item) => this.selectedItemIds().includes(item.item_id))
-      .map((item) => ({ order_item_id: item.item_id, quantity: item.quantity || 1 }));
+      .map((item) => ({
+        order_item_id: item.item_id,
+        quantity: item.quantity || 1,
+        return_type: this.itemTypes()[item.item_id] || this.returnType(),
+      }));
     if (!items.length) {
       this.formError.set('Chọn ít nhất một sản phẩm.');
       return;
     }
     if (!this.reason()) {
       this.formError.set('Chọn lý do đổi trả.');
+      return;
+    }
+    if (!this.evidenceImages().length) {
+      this.formError.set('Bắt buộc tải ít nhất một hình ảnh minh chứng.');
       return;
     }
     this.submitting.set(true);
@@ -142,7 +203,9 @@ export class AccountReturnsPage {
       .post<{ success?: boolean }>('/api/user/returns', {
         order_id: order.order_id,
         return_type: this.returnType(),
+        reason: this.reason(),
         description: note,
+        evidence_images: this.evidenceImages(),
         items,
       })
       .subscribe({

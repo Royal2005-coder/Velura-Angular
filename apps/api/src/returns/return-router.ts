@@ -25,9 +25,21 @@ export async function handleReturnRoute({ req, res, url, parts, context, headers
       return true;
     }
 
+    if (req.method === "POST" && parts[5] === "contact" && parts.length === 6) {
+      const body = await readJson(req, config.maxBodyBytes);
+      sendJson(res, 200, await service.recordContact(context, returnId, body), headers);
+      return true;
+    }
+
     if (req.method === "POST" && parts[5] === "approve-refund" && parts.length === 6) {
       const body = await readJson(req, config.maxBodyBytes);
       sendJson(res, 200, await service.approveRefund(context, returnId, body), headers);
+      return true;
+    }
+
+    if (req.method === "POST" && parts[5] === "trigger-stripe-refund" && parts.length === 6) {
+      const body = await readJson(req, config.maxBodyBytes);
+      sendJson(res, 200, await service.triggerStripeRefund(context, returnId, body), headers);
       return true;
     }
 

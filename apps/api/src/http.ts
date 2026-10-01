@@ -66,16 +66,19 @@ export function sendError(
   extraHeaders: HeaderMap = {},
   requestId = ""
 ): void {
+  const isHttpError = error instanceof HttpError;
   const err = error as ErrorLike;
   const status = err.status || 500;
   if (status >= 500) {
     console.error(`[Internal Server Error] RequestId: ${requestId}`, error);
   }
+  const isExplicit = isHttpError || Boolean(err.code && err.message && status !== 500);
+  const message = isExplicit ? (err.message || errorMessage(error)) : (status >= 500 ? "Internal server error" : err.message || errorMessage(error));
   const payload = {
     error: {
       code: err.code || "INTERNAL_ERROR",
-      message: status >= 500 ? "Internal server error" : err.message || errorMessage(error),
-      details: status >= 500 ? undefined : err.details,
+      message,
+      details: isExplicit ? err.details : (status >= 500 ? undefined : err.details),
       requestId: requestId || undefined,
       timestamp: new Date().toISOString()
     }
@@ -87,6 +90,17 @@ export function sendError(
  * Read and parse a JSON request body. Empty bodies become `{}`.
  */
 export async function readJson(req: HttpRequest, maxBytes = 65536): Promise<JsonObject> {
+  const reqWithBody = req as { body?: unknown };
+  if (reqWithBody.body && typeof reqWithBody.body === "object" && reqWithBody.body !== null) {
+    return asJsonObject(reqWithBody.body);
+  }
+  if (typeof reqWithBody.body === "string" && reqWithBody.body.trim()) {
+    try {
+      return asJsonObject(JSON.parse(reqWithBody.body) as unknown);
+    } catch {
+      // fallback to streaming
+    }
+  }
   const chunks: Buffer[] = [];
   let size = 0;
   const iterator = req[Symbol.asyncIterator];
@@ -117,7 +131,11 @@ export async function readJson(req: HttpRequest, maxBytes = 65536): Promise<Json
 /**
  * Split a URL pathname into non-empty segments.
  */
-export function parsePathname(url: URL): string[] {
+export function parsePathname(url: URL, req?: HttpRequest): string[] {
+  const vercelPath = req?.headers?.["x-matched-path"] as string | undefined;
+  if (vercelPath && !vercelPath.startsWith("/api/index") && vercelPath !== "/api") {
+    return vercelPath.split("/").filter(Boolean);
+  }
   return url.pathname.split("/").filter(Boolean);
 }
 

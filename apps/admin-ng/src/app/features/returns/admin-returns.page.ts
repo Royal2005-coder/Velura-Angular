@@ -13,6 +13,7 @@ import {
 import { adminDateTime, adminMoney } from '../../core/admin-format';
 import {
   ORDER_STATUS_LABELS,
+  RETURN_REASON_LABELS,
   RETURN_STATUS_LABELS,
   statusLabelFrom,
   TICKET_STATUS_LABELS,
@@ -70,6 +71,9 @@ export class AdminReturnsPage {
   readonly actionType = signal<ReturnAction>(null);
   readonly selectedReturn = signal<AdminReturnRow | null>(null);
   readonly selectedTicket = signal<AdminTicketRow | null>(null);
+  readonly returnDetailOpen = signal(false);
+  readonly ticketDetailOpen = signal(false);
+  readonly lightboxImage = signal<string | null>(null);
   readonly actionError = signal<string | null>(null);
   readonly chatError = signal<string | null>(null);
   readonly replyDraft = signal('');
@@ -89,6 +93,17 @@ export class AdminReturnsPage {
   readonly orderQuery = signal('');
   readonly selectedOrder = signal<AdminOrderRow | null>(null);
   readonly refundSuggestion = signal<number | null>(null);
+  readonly receiveTarget = signal<AdminReturnRow | null>(null);
+  readonly qaResult = signal('');
+  readonly qaProof = signal('');
+  readonly qaQty = signal('');
+  readonly qaItemId = signal('');
+  readonly expectedQty = signal(0);
+  readonly expectedItemId = signal('');
+  readonly qaError = signal<string | null>(null);
+  readonly contactResult = signal('reached');
+  readonly contactNote = signal('');
+  readonly contactError = signal<string | null>(null);
 
   readonly pendingReturns = computed(() => this.pendingReturnCount());
   readonly pendingTickets = computed(() => this.pendingTicketCount());
@@ -108,7 +123,7 @@ export class AdminReturnsPage {
   readonly logRange = computed(() => adminRangeLabel(this.logsTotal(), this.page(), this.pageSize, 'nhật ký'));
   readonly visibleChats = computed(() => this.chats().filter((session) => session.is_active !== false));
   readonly pendingChatCount = computed(() => this.chats().filter((session) => session.handoff_status === 'requested').length);
-  readonly canReply = computed(() => this.canMutate() && this.selectedChat()?.handoff_status === 'assigned');
+  readonly canReply = computed(() => this.canMutate() && !this.isClosedChat());
   readonly canJoinChat = computed(() => {
     if (!this.canMutate()) {
       return false;
@@ -327,7 +342,7 @@ export class AdminReturnsPage {
   }
 
   /**
-   * Sends an agent reply on the selected chat session.
+   * Sends an agent reply on the selected chat session, tự động tiếp nhận phiên nếu chưa assign.
    */
   sendReply(event: Event): void {
     event.preventDefault();
@@ -336,19 +351,36 @@ export class AdminReturnsPage {
     if (!session || !message || !this.canMutate()) {
       return;
     }
-    this.api.sendChatReply(session.session_id, message).subscribe({
-      next: (payload) => {
-        if (payload.message) {
-          this.messages.update((rows) => [...rows, payload.message!]);
-        }
-        if (payload.session) {
-          this.selectedChat.set(payload.session);
-        }
-        this.replyDraft.set('');
-        this.reload();
-      },
-      error: (error: unknown) => this.chatError.set(adminErrorMessage(error)),
-    });
+
+    const doSend = () => {
+      this.api.sendChatReply(session.session_id, message).subscribe({
+        next: (payload) => {
+          if (payload.message) {
+            this.messages.update((rows) => [...rows, payload.message!]);
+          }
+          if (payload.session) {
+            this.selectedChat.set(payload.session);
+          }
+          this.replyDraft.set('');
+          this.reload();
+        },
+        error: (error: unknown) => this.chatError.set(adminErrorMessage(error)),
+      });
+    };
+
+    if (session.handoff_status !== 'assigned') {
+      this.api.assignChatSession(session.session_id, 'assigned').subscribe({
+        next: (payload) => {
+          if (payload.session) {
+            this.selectedChat.set(payload.session);
+          }
+          doSend();
+        },
+        error: (error: unknown) => this.chatError.set(adminErrorMessage(error)),
+      });
+    } else {
+      doSend();
+    }
   }
 
   /**
@@ -436,7 +468,69 @@ export class AdminReturnsPage {
   }
 
   /**
-   * Closes CSKH action modals.
+   * Opens the return request detail drawer.
+   */
+  openReturnDetail(returnId: string): void {
+    const cached = this.returns().find((r) => r.return_id === returnId) || null;
+    this.selectedReturn.set(cached);
+    this.selectedTicket.set(null);
+    this.returnDetailOpen.set(true);
+    this.ticketDetailOpen.set(false);
+    this.actionType.set(null);
+    this.actionError.set(null);
+    this.api.getReturn(returnId).subscribe({
+      next: (full) => {
+        if (this.selectedReturn()?.return_id === returnId) {
+          this.selectedReturn.set(full);
+        }
+      },
+      error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
+    });
+  }
+
+  /**
+   * Opens the support ticket detail drawer.
+   */
+  openTicketDetail(ticketId: string): void {
+    const cached = this.tickets().find((t) => t.ticket_id === ticketId) || null;
+    this.selectedTicket.set(cached);
+    this.selectedReturn.set(null);
+    this.ticketDetailOpen.set(true);
+    this.returnDetailOpen.set(false);
+    this.actionType.set(null);
+    this.actionError.set(null);
+    this.api.getTicket(ticketId).subscribe({
+      next: (full) => {
+        if (this.selectedTicket()?.ticket_id === ticketId) {
+          this.selectedTicket.set(full);
+        }
+      },
+      error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
+    });
+  }
+
+  openLightbox(image: string): void {
+    this.lightboxImage.set(image);
+  }
+
+  closeLightbox(): void {
+    this.lightboxImage.set(null);
+  }
+
+  returnStepIndex(status: string | undefined): number {
+    switch (status) {
+      case 'pending': return 0;
+      case 'approved': return 1;
+      case 'shipping_back': return 2;
+      case 'received': return 3;
+      case 'completed': return 4;
+      case 'rejected': return -1;
+      default: return 0;
+    }
+  }
+
+  /**
+   * Closes CSKH action modals and detail drawers.
    */
   closeOverlays(): void {
     this.actionType.set(null);
@@ -444,6 +538,9 @@ export class AdminReturnsPage {
     this.selectedTicket.set(null);
     this.actionError.set(null);
     this.refundSuggestion.set(null);
+    this.returnDetailOpen.set(false);
+    this.ticketDetailOpen.set(false);
+    this.lightboxImage.set(null);
   }
 
   /**
@@ -602,15 +699,153 @@ export class AdminReturnsPage {
   nextReturnStep(row: AdminReturnRow): { status: string; label: string } | null {
     const steps: Record<string, { status: string; label: string }> = {
       approved: { status: 'shipping_back', label: 'Khách đã gửi hàng' },
-      shipping_back: { status: 'received', label: 'Đã nhận hàng' },
+      shipping_back: { status: 'received', label: 'QA và nhận hàng' },
       received: { status: 'completed', label: 'Hoàn tất' },
     };
     return steps[row.status || ''] || null;
   }
 
   /**
-   * Đẩy phiếu sang bước kế tiếp trong quy trình nhận hàng về.
+   * Nhãn lý do khách đã chọn trong dropdown, không hiện mã tiếng Anh.
    */
+  /**
+   * Phiếu pending quá 24 giờ mà chưa có dòng liên hệ CSKH.
+   */
+  contactOverdue(row: AdminReturnRow): boolean {
+    if (row.status !== 'pending') return false;
+    if ((row.admin_note || '').includes('[CSKH]')) return false;
+    const created = Date.parse(row.created_at || '');
+    if (!Number.isFinite(created)) return false;
+    return Date.now() - created > 24 * 60 * 60 * 1000;
+  }
+
+  setContactResult(event: Event): void {
+    this.contactResult.set((event.target as HTMLSelectElement).value);
+  }
+
+  setContactNote(event: Event): void {
+    this.contactNote.set((event.target as HTMLTextAreaElement).value);
+  }
+
+  /**
+   * Lưu kết quả gọi khách. Không tự duyệt hay từ chối phiếu.
+   */
+  saveContact(row: AdminReturnRow): void {
+    if (row.version == null) {
+      this.contactError.set('Thiếu phiên bản phiếu.');
+      return;
+    }
+    this.contactError.set(null);
+    this.api.recordReturnContact(row.return_id, {
+      result: this.contactResult(),
+      note: this.contactNote().trim(),
+      expectedVersion: row.version,
+    }).subscribe({
+      next: () => {
+        this.contactNote.set('');
+        this.reload();
+      },
+      error: (error: unknown) => this.contactError.set(adminErrorMessage(error)),
+    });
+  }
+
+  returnReasonLabel(row: AdminReturnRow): string {
+    const code = row.reason || '';
+    return RETURN_REASON_LABELS[code] || row.description || 'Chưa chọn lý do';
+  }
+
+  /**
+   * Mở form QA trước khi ghi nhận hàng hoàn trả thành công.
+   */
+  openReceive(row: AdminReturnRow): void {
+    this.receiveTarget.set(row);
+    this.qaResult.set('');
+    this.qaProof.set('');
+    this.qaQty.set('');
+    this.qaItemId.set('');
+    this.expectedQty.set(0);
+    this.expectedItemId.set('');
+    this.qaError.set(null);
+    this.api.getReturn(row.return_id).subscribe({
+      next: (full) => {
+        const lines = full.lines || [];
+        const qty = lines.reduce((sum, line) => sum + Number(line.quantity || 0), 0);
+        this.expectedQty.set(qty);
+        this.expectedItemId.set(lines[0]?.order_item_id || '');
+        this.receiveTarget.set({ ...row, ...full, version: full.version ?? row.version });
+      },
+      error: (error: unknown) => this.qaError.set(adminErrorMessage(error)),
+    });
+  }
+
+  closeReceive(): void {
+    this.receiveTarget.set(null);
+  }
+
+  setQaResult(event: Event): void {
+    this.qaResult.set((event.target as HTMLSelectElement).value);
+  }
+
+  setQaQty(event: Event): void {
+    this.qaQty.set((event.target as HTMLInputElement).value);
+  }
+
+  setQaItemId(event: Event): void {
+    this.qaItemId.set((event.target as HTMLInputElement).value.trim());
+  }
+
+  onQaProof(event: Event): void {
+    const file = (event.target as HTMLInputElement).files?.[0];
+    if (!file || !file.type.startsWith('image/')) {
+      this.qaError.set('Chọn một ảnh minh chứng.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => this.qaProof.set(String(reader.result || ''));
+    reader.readAsDataURL(file);
+  }
+
+  /**
+   * Chỉ chuyển sang nhận hàng hoàn trả thành công khi QA đúng hàng và có ảnh.
+   */
+  confirmReceive(): void {
+    const row = this.receiveTarget();
+    if (!row || row.version == null) {
+      this.qaError.set('Thiếu phiên bản phiếu để thao tác.');
+      return;
+    }
+    if (this.qaResult() !== 'qa_pass') {
+      this.qaError.set('Chọn đúng hàng của shop.');
+      return;
+    }
+    if (Number(this.qaQty()) !== this.expectedQty()) {
+      this.qaError.set(`Số lượng thực nhận phải bằng ${this.expectedQty()}.`);
+      return;
+    }
+    if (!this.expectedItemId() || this.qaItemId() !== this.expectedItemId()) {
+      this.qaError.set('Nhập lại đúng mã dòng hàng trên phiếu.');
+      return;
+    }
+    if (!this.qaProof().startsWith('data:image/')) {
+      this.qaError.set('Tải ảnh minh chứng đã kiểm hàng.');
+      return;
+    }
+    this.api.updateReturnStatus(row.return_id, {
+      status: 'received',
+      expectedVersion: row.version,
+      conditionCheckResult: 'qa_pass',
+      receivedQuantity: Number(this.qaQty()),
+      confirmedItemId: this.qaItemId(),
+      imageProof: this.qaProof(),
+    }).subscribe({
+      next: () => {
+        this.receiveTarget.set(null);
+        this.reload();
+      },
+      error: (error: unknown) => this.qaError.set(adminErrorMessage(error)),
+    });
+  }
+
   advanceReturn(row: AdminReturnRow, status: string): void {
     if (!this.canMutate() || row.version == null) {
       this.actionError.set('Thiếu phiên bản phiếu để thao tác.');
@@ -622,9 +857,66 @@ export class AdminReturnsPage {
     });
   }
 
+  /**
+   * Nhãn kết quả QA kho.
+   */
+  qaLabel(code: string | undefined): string {
+    if (code === 'qa_pass') return 'Đúng hàng của shop';
+    if (code === 'qa_fail') return 'Không đúng hàng của shop';
+    return 'Chưa kiểm định';
+  }
+
   /** Nhãn trạng thái phiếu đổi/trả. */
   returnStatusLabel(status: string | undefined): string {
     return statusLabelFrom(RETURN_STATUS_LABELS, status);
+  }
+
+  /**
+   * Phương thức thanh toán của đơn gắn với phiếu đổi trả.
+   */
+  returnPaymentMethod(row: AdminReturnRow): string {
+    const provider = row.payment?.payment_provider;
+    const method = row.payment?.payment_method;
+    if (provider === 'stripe') return 'Stripe (Thẻ quốc tế)';
+    if (method === 'COD') return 'COD (Tiền mặt)';
+    if (method === 'ONLINE_PAYMENT') return 'Thanh toán Online';
+    return method || '—';
+  }
+
+  /**
+   * Nhãn trạng thái thanh toán và hoàn tiền của đơn.
+   */
+  returnPaymentStatus(row: AdminReturnRow): string {
+    const status = row.payment?.payment_status;
+    if (status === 'refunded') return 'Đã hoàn tiền (Stripe)';
+    if (status === 'refund_pending') return 'Chờ Stripe xử lý';
+    if (status === 'paid') return 'Đã thanh toán (Chưa hoàn)';
+    if (status === 'pending') return 'Chờ thanh toán';
+    if (status === 'failed') return 'Thanh toán thất bại';
+    return status || '—';
+  }
+
+  isReturnRefunded(row: AdminReturnRow): boolean {
+    return row.payment?.payment_status === 'refunded';
+  }
+
+  canTriggerStripeRefund(row: AdminReturnRow): boolean {
+    return this.canMutate()
+      && row.payment?.payment_provider === 'stripe'
+      && row.payment?.payment_status !== 'refunded'
+      && (row.return_type === 'refund' || row.request_type === 'refund');
+  }
+
+  triggerStripeRefund(row: AdminReturnRow): void {
+    if (!this.canTriggerStripeRefund(row)) return;
+    this.actionError.set(null);
+    this.api.triggerStripeRefund(row.return_id).subscribe({
+      next: () => {
+        this.openReturnDetail(row.return_id);
+        this.reload();
+      },
+      error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
+    });
   }
 
   /** Nhãn trạng thái phiếu hỗ trợ. */

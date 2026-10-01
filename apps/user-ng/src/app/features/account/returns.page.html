@@ -61,12 +61,18 @@
               <h2>2. Chọn sản phẩm cần đổi/trả</h2>
               <div class="product-selection-list">
                 @for (item of selectedOrder()?.items || []; track item.item_id) {
-                  <button type="button" class="selection-card" [class.is-selected]="selectedItemIds().includes(item.item_id)" (click)="toggleItem(item.item_id)">
-                    <div class="selection-card__content">
+                  <div class="selection-card" [class.is-selected]="selectedItemIds().includes(item.item_id)">
+                    <button type="button" class="selection-card__content" (click)="toggleItem(item.item_id)">
                       <strong>{{ item.product_name || 'Sản phẩm' }}</strong>
-                      <span>Số lượng {{ item.quantity || 1 }}</span>
-                    </div>
-                  </button>
+                      <span>Số lượng {{ item.quantity || 1 }}. Mỗi sản phẩm là một yêu cầu riêng.</span>
+                    </button>
+                    @if (selectedItemIds().includes(item.item_id)) {
+                      <select [value]="itemType(item.item_id)" (change)="setItemType(item.item_id, $event)">
+                        <option value="refund">Trả hàng hoàn tiền</option>
+                        <option value="exchange">Đổi hàng</option>
+                      </select>
+                    }
+                  </div>
                 }
               </div>
             </section>
@@ -165,18 +171,18 @@
 
               <!-- Textarea -->
               <div class="form-group">
-                <label for="returnDesc" class="form-label">Mô tả chi tiết (tùy chọn)</label>
+                <label for="returnDesc" class="form-label">{{ reason() === 'other' ? 'Ghi chú khi chọn Khác *' : 'Mô tả chi tiết (tùy chọn)' }}</label>
                 <textarea id="returnDesc" class="form-textarea" [value]="description()" (input)="setDescription($event)"
                   placeholder="Mô tả cụ thể về vấn đề của sản phẩm..."></textarea>
               </div>
 
               <!-- Upload proof images -->
               <div class="form-group">
-                <label class="form-label">Hình ảnh minh chứng</label>
-                <p class="form-help-text">Chụp rõ tình trạng sản phẩm, tem mác, và bao bì (nếu có)</p>
+                <label class="form-label">Hình ảnh minh chứng *</label>
+                <p class="form-help-text">Bắt buộc. Chụp rõ tình trạng sản phẩm, tem mác và bao bì.</p>
                 <div class="upload-container">
                   <div class="upload-actions">
-                    <button type="button" class="btn-upload" id="btn-upload-trigger">
+                    <button type="button" class="btn-upload" id="btn-upload-trigger" (click)="fileInput.click()">
                       <svg width="18" height="18" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
                         fill="none" stroke-linecap="round" stroke-linejoin="round" class="upload-icon">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
@@ -185,10 +191,24 @@
                       </svg>
                       Chọn hình ảnh
                     </button>
-                    <span class="upload-counter" id="js-upload-counter">0/5 ảnh đã tải lên</span>
+                    <span class="upload-counter" id="js-upload-counter">{{ evidenceImages().length }}/5 ảnh đã tải lên</span>
                   </div>
-                  <input type="file" id="fileInput" multiple accept="image/*" style="display:none;" />
-                  <div id="filePreviewList" class="file-preview-list"></div>
+                  <input #fileInput type="file" multiple accept="image/*" style="display:none;" (change)="onFilesSelected($event)" />
+                  @if (evidenceImages().length > 0) {
+                    <div id="filePreviewList" class="file-preview-list" style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px;">
+                      @for (img of evidenceImages(); track $index) {
+                        <div style="position: relative; width: 72px; height: 72px; border-radius: 6px; overflow: hidden; border: 1px solid var(--border-color, #d5c4b5); box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                          <img [src]="img" alt="Minh chứng" style="width: 100%; height: 100%; object-fit: cover;" />
+                          <button
+                            type="button"
+                            (click)="removeImage($index)"
+                            aria-label="Xóa ảnh"
+                            style="position: absolute; top: 2px; right: 2px; background: rgba(0,0,0,0.65); color: #fff; border: none; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-size: 12px; cursor: pointer;"
+                          >&times;</button>
+                        </div>
+                      }
+                    </div>
+                  }
                 </div>
               </div>
             </section>

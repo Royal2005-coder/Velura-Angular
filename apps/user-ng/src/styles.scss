@@ -163,6 +163,48 @@ body.page-chatbot .chatbot-widget {
     url('/assets/images/velura-journal-banner.png');
 }
 
+.unpaid-notice {
+  position: fixed;
+  inset: 0;
+  z-index: 20000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(42, 37, 34, 0.45);
+}
+
+.unpaid-notice__card {
+  width: min(440px, 100%);
+  padding: 28px 24px;
+  border-radius: var(--radius-lg);
+  background: var(--checkout-bg);
+  color: var(--ink);
+  box-shadow: var(--shadow-card);
+}
+
+.unpaid-notice__card h2 {
+  margin: 0 0 8px;
+  font-size: 1.25rem;
+}
+
+.unpaid-notice__card p {
+  margin: 0 0 20px;
+  color: var(--text-body);
+}
+
+.unpaid-notice__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.unpaid-notice__actions .btn {
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: var(--radius-md);
+}
+
 .about-origin,
 .page-about .newsletter-box,
 .blog-hero,

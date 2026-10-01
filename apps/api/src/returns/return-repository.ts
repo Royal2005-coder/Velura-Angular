@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import { callRpc, selectOne, selectRows, updateRows, insertRow } from "../supabase.js";
 import { HttpError } from "../http.js";
-import { asJsonObject, asNumber, type JsonObject } from "../types.js";
+import { asJsonObject, asNumber, asString, type JsonObject } from "../types.js";
 import { RETURN_SELECT, TICKET_SELECT } from "./return-constants.js";
 
 /**
@@ -10,6 +10,7 @@ import { RETURN_SELECT, TICKET_SELECT } from "./return-constants.js";
 export interface ReturnListFilters {
   status?: string;
   search?: string;
+  orderId?: string;
   limit: number;
   offset: number;
 }
@@ -109,8 +110,17 @@ export function createReturnRepository() {
         offset: filters.offset
       };
       if (filters.status) query.status = `eq.${filters.status}`;
+      if (filters.orderId) query.order_id = `eq.${filters.orderId}`;
       if (filters.search) query.or = `(description.ilike.*${filters.search}*)`;
       return selectRows("return_exchange", query, authOptions(accessToken));
+    },
+
+    async listReturnLines(returnId: string, accessToken: string) {
+      return selectRows("return_item", {
+        select: "return_item_id,order_item_id,quantity",
+        return_id: `eq.${returnId}`,
+        limit: 50
+      }, authOptions(accessToken));
     },
 
     async getReturn(returnId: string, accessToken: string) {
@@ -118,6 +128,20 @@ export function createReturnRepository() {
         select: RETURN_SELECT,
         return_id: `eq.${returnId}`
       }, authOptions(accessToken));
+    },
+
+    /**
+     * Thông tin thanh toán mới nhất của đơn hàng gắn với phiếu đổi trả.
+     */
+    async getPaymentByOrderId(orderId: string, accessToken?: string): Promise<JsonObject | null> {
+      const options = accessToken ? authOptions(accessToken) : undefined;
+      const result = await selectRows("payment", {
+        select: "payment_id,payment_method,payment_provider,amount,payment_status,gateway_transaction_ref,refund_at,refund_amount,gateway_response_code,created_at",
+        order_id: `eq.${orderId}`,
+        order: "created_at.desc",
+        limit: 1
+      }, options);
+      return result.rows[0] ? asJsonObject(result.rows[0]) : null;
     },
 
     /**
@@ -163,10 +187,15 @@ export function createReturnRepository() {
         throw new HttpError(422, "REFUND_AMOUNT_REQUIRED", "Refund amount must be positive");
       }
 
+      const note = typeof input.adminNote === "string" ? input.adminNote.trim() : "";
+      const contacted = asString(current.admin_note).includes("[CSKH]");
+      if (!contacted && note.length < 10) {
+        throw new HttpError(422, "CONTACT_OR_REASON_REQUIRED", "Chưa ghi nhận liên hệ CSKH. Duyệt khi chưa liên hệ phải có lý do ít nhất 10 ký tự.");
+      }
       const payload: JsonObject = {
         status: "approved",
         refund_amount: input.refundAmount,
-        admin_note: typeof input.adminNote === "string" ? input.adminNote.trim() : "",
+        admin_note: note || asString(current.admin_note),
         resolved_at: new Date().toISOString(),
         version: asNumber(current.version) + 1,
         updated_at: new Date().toISOString()
@@ -369,7 +398,8 @@ export function createReturnRepository() {
       if (input.trackingReturnCode !== undefined) payload.tracking_return_code = input.trackingReturnCode;
       if (input.conditionCheckResult !== undefined) payload.condition_check_result = input.conditionCheckResult;
       if (input.imageProof !== undefined && input.imageProof !== null) {
-        payload.evidence_images = [input.imageProof];
+        const existing = Array.isArray(current.evidence_images) ? current.evidence_images.map(String) : [];
+        payload.evidence_images = [...existing, String(input.imageProof)];
       }
 
       if (["completed", "rejected"].includes(input.status)) {
@@ -462,6 +492,38 @@ export function createReturnRepository() {
         p_expected_version: input.expectedVersion,
         p_admin_note: input.adminNote || ""
       }, { accessToken });
+    },
+
+    async recordContact(returnId: string, input: { result: string; note: string; expectedVersion: number }, actorId: string, actorRole: string, ipAddress: string | undefined) {
+      const current = await selectOne("return_exchange", { select: RETURN_SELECT, return_id: `eq.${returnId}` });
+      if (!current) throw new HttpError(404, "RETURN_NOT_FOUND", "Return record not found");
+      if (current.version !== input.expectedVersion) {
+        throw new HttpError(409, "VERSION_CONFLICT", "Return record has been modified by another user");
+      }
+      const stamp = new Date().toISOString();
+      const line = `[CSKH ${stamp}] ${input.result}: ${input.note}`;
+      const adminNote = [asString(current.admin_note), line].filter(Boolean).join("\n");
+      const rows = await updateRows("return_exchange", {
+        return_id: `eq.${returnId}`,
+        version: `eq.${input.expectedVersion}`
+      }, {
+        admin_note: adminNote,
+        version: asNumber(current.version) + 1,
+        updated_at: stamp
+      });
+      if (!rows.length) throw new HttpError(409, "VERSION_CONFLICT", "Return record has been modified by another user");
+      await insertRow("audit_log", {
+        actor_id: actorId,
+        actor_role: actorRole,
+        action: "cskh_contact",
+        module: "returns",
+        target_id: returnId,
+        old_value: { version: current.version },
+        new_value: { result: input.result, note: input.note },
+        ip_address: ipAddress || "127.0.0.1",
+        timestamp: stamp
+      });
+      return asJsonObject(rows[0]);
     },
 
     async listAuditLogs(filters: ReturnAuditFilters, accessToken: string) {

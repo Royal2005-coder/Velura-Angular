@@ -78,13 +78,20 @@ export class CampaignForm {
     this.bannerUrl.set('');
   }
 
-  /** Tải ảnh banner lên kho và điền đường dẫn trả về. */
-  uploadBanner(event: Event): void {
+  /** Cập nhật URL banner khi nhập tay. */
+  onBannerUrlInput(event: Event): void {
+    this.bannerUrl.set((event.target as HTMLInputElement).value.trim());
+  }
+
+  /** Tải ảnh banner lên kho và điền đường dẫn trả về, tự động tối ưu dung lượng ảnh tránh lỗi 413. */
+  async uploadBanner(event: Event): Promise<void> {
     const input = event.target as HTMLInputElement;
-    const file = input.files?.[0];
-    if (!file) return;
+    const rawFile = input.files?.[0];
+    if (!rawFile) return;
     this.uploading.set(true);
     this.saveError.set(null);
+
+    const file = await compressImageForBanner(rawFile);
     this.api.uploadPromotionBanner(file).subscribe({
       next: (result) => {
         this.uploading.set(false);
@@ -190,3 +197,62 @@ export class CampaignForm {
     });
   }
 }
+
+/** Tối ưu kích thước và dung lượng ảnh banner phía client trước khi upload. */
+async function compressImageForBanner(file: File): Promise<File> {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return file;
+  if (file.size <= 400 * 1024) return file; // Dưới 400KB giữ nguyên
+
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const maxWidth = 1600;
+        const maxHeight = 900;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxWidth || height > maxHeight) {
+          if (width / maxWidth > height / maxHeight) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          } else {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(file);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob(
+          (blob) => {
+            if (!blob || blob.size >= file.size) {
+              resolve(file);
+            } else {
+              const compressed = new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), {
+                type: 'image/jpeg',
+                lastModified: Date.now(),
+              });
+              resolve(compressed);
+            }
+          },
+          'image/jpeg',
+          0.85
+        );
+      };
+      img.onerror = () => resolve(file);
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = () => resolve(file);
+    reader.readAsDataURL(file);
+  });
+}
+

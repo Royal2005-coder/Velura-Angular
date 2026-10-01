@@ -44,7 +44,18 @@ export const config = {
   openaiModel: process.env.OPENAI_MODEL || "gpt-4o",
   geminiModel: process.env.GEMINI_MODEL || process.env.OPENAI_MODEL || "gemini-3.5-flash",
   mistralApiKey: process.env.MISTRAL_API_KEY || "",
-  mistralModel: process.env.MISTRAL_MODEL || "mistral-small-latest"
+  mistralModel: process.env.MISTRAL_MODEL || "mistral-small-latest",
+  twilioAccountSid: process.env.TWILIO_ACCOUNT_SID || "",
+  twilioApiKeySid: process.env.TWILIO_API_KEY_SID || "",
+  twilioApiKeySecret: process.env.TWILIO_API_KEY_SECRET || "",
+  twilioAuthToken: process.env.TWILIO_AUTH_TOKEN || "",
+  twilioPhoneNumber: process.env.TWILIO_PHONE_NUMBER || "",
+  twilioMessagingServiceSid: process.env.TWILIO_MESSAGING_SERVICE_SID || "",
+  esmsApiKey: process.env.ESMS_API_KEY || "",
+  esmsSecretKey: process.env.ESMS_SECRET_KEY || "",
+  esmsBrandname: process.env.ESMS_BRANDNAME || "",
+  esmsSmsType: process.env.ESMS_SMS_TYPE || "8",
+  esmsSandbox: process.env.ESMS_SANDBOX === "1"
 };
 
 export function assertRuntimeConfig() {

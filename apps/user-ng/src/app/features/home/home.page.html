@@ -1,4 +1,16 @@
 <main>
+  @if (unpaidNotice(); as notice) {
+    <div class="unpaid-notice" role="dialog" aria-modal="true" aria-labelledby="unpaid-title">
+      <div class="unpaid-notice__card">
+        <h2 id="unpaid-title">Đơn hàng chờ xác nhận</h2>
+        <p>Đơn #{{ notice.orderCode }} thanh toán chưa thành công. Vui lòng thanh toán lại hoặc đổi phương thức.</p>
+        <div class="unpaid-notice__actions">
+          <a class="btn btn--accent" [routerLink]="unpaidOrdersLink()" (click)="dismissUnpaid()">Xem đơn hàng</a>
+          <button class="btn btn--outline" type="button" (click)="dismissUnpaid()">Ở lại trang chủ</button>
+        </div>
+      </div>
+    </div>
+  }
   <section class="hero">
     <div class="hero__video-container">
       <video #heroVideo autoplay loop playsinline muted poster="/assets/images/hero-banner.png">
@@ -64,7 +76,13 @@
     </div>
     <div class="categories-section__grid" #categoriesTrack>
       @if (loading()) {
-        <div class="category-card"><span class="category-card__name">Đang tải danh mục...</span></div>
+        @for (n of [1, 2, 3, 4, 5, 6]; track n) {
+          <div class="category-card" aria-hidden="true" style="pointer-events: none;">
+            <div class="skeleton-shimmer" style="width: 82px; height: 82px; border-radius: 50%; margin-bottom: 16px;"></div>
+            <div class="skeleton-shimmer" style="width: 72px; height: 16px; margin-bottom: 6px; border-radius: 4px;"></div>
+            <div class="skeleton-shimmer" style="width: 46px; height: 12px; border-radius: 4px;"></div>
+          </div>
+        }
       } @else if (categories().length === 0) {
         <div class="category-card">
           <span class="category-card__name">{{ loadError() || 'Chưa có danh mục. Hãy chạy db:migrate và db:seed:catalog.' }}</span>
@@ -97,11 +115,23 @@
       </a>
     </div>
     <div class="products-section__grid" #productsTrack>
-      @if (!loading() && products().length === 0) {
+      @if (loading()) {
+        @for (n of [1, 2, 3, 4]; track n) {
+          <div class="product-card" aria-hidden="true" style="pointer-events: none;">
+            <div class="skeleton-shimmer" style="aspect-ratio: 4 / 5; width: 100%; border-radius: var(--radius-md, 8px);"></div>
+            <div style="padding: 14px 4px 6px;">
+              <div class="skeleton-shimmer" style="height: 12px; width: 35%; margin-bottom: 8px; border-radius: 4px;"></div>
+              <div class="skeleton-shimmer" style="height: 18px; width: 85%; margin-bottom: 8px; border-radius: 4px;"></div>
+              <div class="skeleton-shimmer" style="height: 16px; width: 45%; border-radius: 4px;"></div>
+            </div>
+          </div>
+        }
+      } @else if (products().length === 0) {
         <p>Chưa tải được sản phẩm nổi bật. Kiểm tra API và catalog Supabase.</p>
-      }
-      @for (product of products(); track product.product_id) {
-        <app-product-card [product]="product" />
+      } @else {
+        @for (product of products(); track product.product_id) {
+          <app-product-card [product]="product" />
+        }
       }
     </div>
   </section>

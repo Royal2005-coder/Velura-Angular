@@ -1,11 +1,11 @@
 import { Component, computed, inject, signal } from '@angular/core';
-import { RouterLink } from '@angular/router';
 import { forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import {
   AdminApiService,
   AdminAuditRow,
   AdminCategoryRow,
+  AdminComboItemRow,
   AdminPriceHistoryRow,
   AdminProductRow,
   AdminProductVariant,
@@ -17,6 +17,49 @@ import { AdminEmptyState } from '../../shared/admin-empty-state';
 import { AdminIcon } from '../../shared/admin-icon';
 import { AdminPagination } from '../../shared/admin-pagination';
 import { AdminTableSkeleton } from '../../shared/admin-table-skeleton';
+import { improveCatalogPhoto } from './product-image';
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+function dataUrlToFile(dataUrl: string): File {
+  const mime = dataUrl.match(/^data:([^;]+);base64,/)?.[1] || 'image/jpeg';
+  const binary = atob(dataUrl.split(',')[1] || '');
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  const extension = mime.includes('png') ? 'png' : 'jpg';
+  return new File([bytes], `product-image.${extension}`, { type: mime });
+}
+
+function shrinkImageDataUrl(dataUrl: string, mimeType: string): Promise<string> {
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.onload = () => {
+      const maxEdge = 1280;
+      const scale = Math.min(1, maxEdge / Math.max(image.width, image.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(image.width * scale));
+      canvas.height = Math.max(1, Math.round(image.height * scale));
+      const context = canvas.getContext('2d');
+      if (!context) {
+        resolve(dataUrl);
+        return;
+      }
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL(mimeType.includes('png') ? 'image/png' : 'image/jpeg', 0.9));
+    };
+    image.onerror = () => resolve(dataUrl);
+    image.src = dataUrl;
+  });
+}
 
 type ProductTab = 'catalog' | 'csv' | 'logs';
 type ProductOverlay = 'create' | 'edit' | 'status' | 'stock' | null;
@@ -60,7 +103,7 @@ interface CsvPreviewResult {
  */
 @Component({
   selector: 'app-admin-products-page',
-  imports: [AdminEmptyState, AdminIcon, AdminPagination, RouterLink, AdminTableSkeleton],
+  imports: [AdminEmptyState, AdminIcon, AdminPagination, AdminTableSkeleton],
   templateUrl: './admin-products.page.html',
 })
 export class AdminProductsPage {
@@ -108,8 +151,101 @@ export class AdminProductsPage {
   readonly nextStatus = signal('');
   readonly priceHistory = signal<AdminPriceHistoryRow[]>([]);
   readonly imageUploading = signal(false);
+  readonly imageNote = signal<string | null>(null);
+  readonly imageBefore = signal<string | null>(null);
+  readonly imageAfter = signal<string | null>(null);
+  readonly imageAfterLabel = signal('');
+  private pendingImageTarget: HTMLTextAreaElement | null = null;
+  private pendingOriginalFile: File | null = null;
   readonly canMutate = computed(() => this.session.canMutate('products'));
   readonly canOpenPricing = computed(() => this.session.canOpen('pricing'));
+
+  // Signals cho điều chỉnh giá & chiết khấu trực tiếp trên Sản phẩm
+  readonly editBasePrice = signal<number>(0);
+  readonly editSalePrice = signal<number | null>(null);
+  readonly editPriceReason = signal<string>('Cập nhật chính sách giá niêm yết & khuyến mãi');
+
+  readonly editDiscountPct = computed(() => {
+    const base = this.editBasePrice();
+    const sale = this.editSalePrice();
+    if (!sale || sale >= base || base <= 0) return 0;
+    return Math.round(((base - sale) / base) * 100);
+  });
+
+  readonly editPriceInvalid = computed(() => {
+    const sale = this.editSalePrice();
+    return sale != null && sale > this.editBasePrice();
+  });
+
+  // Signals cho quản lý thành phần Combo sản phẩm
+  readonly comboItems = signal<AdminComboItemRow[]>([]);
+  readonly comboLoading = signal(false);
+  readonly selectedComponentId = signal<string>('');
+  readonly addComboQuantity = signal<number>(1); // Mặc định là 1 sản phẩm, người dùng có thể điều chỉnh
+
+  readonly comboTotalOriginal = computed(() => {
+    return this.comboItems().reduce((sum, item) => {
+      const p = item.product;
+      const price = Number(p?.sale_price || p?.base_price || 0);
+      return sum + price * Number(item.quantity || 1);
+    }, 0);
+  });
+
+  readonly comboSavings = computed(() => {
+    const totalOrig = this.comboTotalOriginal();
+    const comboPrice = Number(this.editSalePrice() || this.editBasePrice() || 0);
+    return Math.max(0, totalOrig - comboPrice);
+  });
+
+  readonly comboSavingsPct = computed(() => {
+    const totalOrig = this.comboTotalOriginal();
+    if (totalOrig <= 0) return 0;
+    return Math.round((this.comboSavings() / totalOrig) * 100);
+  });
+
+  readonly availableComponentProducts = computed(() => {
+    const currentId = this.selected()?.product_id;
+    const existingIds = new Set(this.comboItems().map((i) => i.component_product_id));
+    return this.products().filter((p) => p.product_id !== currentId && !p.is_combo && !existingIds.has(p.product_id));
+  });
+
+  // Signals cho thêm biến thể trong drawer Chi tiết sản phẩm
+  readonly newVariantColor = signal('');
+  readonly newVariantSize = signal('');
+  readonly newVariantStock = signal(0);
+  readonly newVariantThreshold = signal(5);
+
+  // Signals & computed cho modal Điều chỉnh tồn kho chuẩn ERP
+  readonly stockAdjustmentType = signal<'in' | 'out' | 'set'>('in');
+  readonly stockAdjustmentQuantity = signal<number>(10);
+  readonly selectedVariantId = signal<string>('');
+  readonly stockReason = signal<string>('Nhập lô hàng mới từ xưởng may');
+  readonly commonStockReasons: readonly string[] = [
+    'Nhập lô hàng mới từ xưởng may',
+    'Khách hoàn hàng, tái nhập kho',
+    'Xuất trả hàng lỗi / bảo hành',
+    'Hàng rách, hỏng, tiêu hủy mẫu trưng bày',
+    'Cân bằng kiểm kê định kỳ',
+  ];
+
+  readonly selectedVariant = computed(() => {
+    const id = this.selectedVariantId();
+    return this.variants().find((v) => v.variant_id === id) || this.variants()[0] || null;
+  });
+
+  readonly currentStock = computed(() => {
+    return Number(this.selectedVariant()?.stock_quantity ?? 0);
+  });
+
+  readonly projectedStock = computed(() => {
+    const current = this.currentStock();
+    const qty = Math.max(0, this.stockAdjustmentQuantity());
+    const type = this.stockAdjustmentType();
+    if (type === 'in') return current + qty;
+    if (type === 'out') return Math.max(0, current - qty);
+    return qty;
+  });
+
   readonly allowedStatuses = computed(() => {
     const current = this.selected()?.status || 'on_sale';
     const next = STATUS_TRANSITIONS[current] || ['hidden'];
@@ -323,6 +459,11 @@ export class AdminProductsPage {
     return adminMoney(value);
   }
 
+  itemTotal(item: AdminComboItemRow): string {
+    const unit = Number(item.product?.sale_price || item.product?.base_price || 0);
+    return this.money(unit * Number(item.quantity || 1));
+  }
+
   /**
    * Opens create overlay with an empty form.
    */
@@ -341,10 +482,22 @@ export class AdminProductsPage {
     this.actionError.set(null);
     this.overlay.set('edit');
     this.priceHistory.set([]);
+    this.comboItems.set([]);
+    this.selectedComponentId.set('');
+    this.addComboQuantity.set(1);
+    this.editBasePrice.set(Number(product.base_price || 0));
+    this.editSalePrice.set(product.sale_price != null ? Number(product.sale_price) : null);
+    this.editPriceReason.set('Cập nhật chính sách giá niêm yết & khuyến mãi');
+
     this.adminApi.getProduct(product.product_id).subscribe({
       next: (row) => {
         this.selected.set(row);
         this.variants.set(row.variants || []);
+        this.editBasePrice.set(Number(row.base_price || 0));
+        this.editSalePrice.set(row.sale_price != null ? Number(row.sale_price) : null);
+        if (row.is_combo) {
+          this.loadComboItems(row.product_id);
+        }
       },
       error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
     });
@@ -354,6 +507,65 @@ export class AdminProductsPage {
     this.adminApi.listPriceHistory({ productId: product.product_id, limit: '10' }).subscribe({
       next: (payload) => this.priceHistory.set(adminListRows(payload)),
       error: () => this.priceHistory.set([]),
+    });
+    if (product.is_combo) {
+      this.loadComboItems(product.product_id);
+    }
+  }
+
+  loadComboItems(productId: string): void {
+    this.comboLoading.set(true);
+    this.adminApi.listComboItems(productId).subscribe({
+      next: (items) => {
+        this.comboItems.set(items);
+        this.comboLoading.set(false);
+      },
+      error: () => {
+        this.comboItems.set([]);
+        this.comboLoading.set(false);
+      },
+    });
+  }
+
+  submitAddComboItem(): void {
+    const product = this.selected();
+    const componentId = this.selectedComponentId();
+    const qty = Math.max(1, Number(this.addComboQuantity() || 1));
+    if (!product || !componentId) return;
+
+    this.adminApi
+      .addComboItem(product.product_id, {
+        componentProductId: componentId,
+        quantity: qty,
+      })
+      .subscribe({
+        next: () => {
+          this.selectedComponentId.set('');
+          this.addComboQuantity.set(1);
+          this.loadComboItems(product.product_id);
+        },
+        error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
+      });
+  }
+
+  changeComboItemQuantity(item: AdminComboItemRow, delta: number): void {
+    const product = this.selected();
+    if (!product) return;
+    const newQty = Math.max(1, item.quantity + delta);
+    if (newQty === item.quantity) return;
+
+    this.adminApi.updateComboItem(product.product_id, item.combo_item_id, { quantity: newQty }).subscribe({
+      next: () => this.loadComboItems(product.product_id),
+      error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
+    });
+  }
+
+  removeComboItem(item: AdminComboItemRow): void {
+    const product = this.selected();
+    if (!product) return;
+    this.adminApi.removeComboItem(product.product_id, item.combo_item_id).subscribe({
+      next: () => this.loadComboItems(product.product_id),
+      error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
     });
   }
 
@@ -369,14 +581,35 @@ export class AdminProductsPage {
   }
 
   /**
-   * Opens stock adjustment for the first or selected variant.
+   * Opens stock adjustment for the first or selected variant with ERP controls.
    */
   openStock(product: AdminProductRow): void {
     this.selected.set(product);
     this.overlay.set('stock');
     this.actionError.set(null);
+    this.stockAdjustmentType.set('in');
+    this.stockAdjustmentQuantity.set(10);
+    this.stockReason.set('Nhập lô hàng mới từ xưởng may');
+
+    // Nạp ngay biến thể sẵn có của sản phẩm để dropdown không bị rỗng
+    const initialVariants = product.variants || [];
+    this.variants.set(initialVariants);
+    if (initialVariants.length > 0) {
+      this.selectedVariantId.set(initialVariants[0].variant_id);
+    } else {
+      this.selectedVariantId.set('');
+    }
+
     this.adminApi.listVariants(product.product_id).subscribe({
-      next: (payload) => this.variants.set(adminListRows(payload)),
+      next: (payload) => {
+        const rows = adminListRows(payload);
+        if (rows.length > 0) {
+          this.variants.set(rows);
+          if (!this.selectedVariantId() || !rows.find((r) => r.variant_id === this.selectedVariantId())) {
+            this.selectedVariantId.set(rows[0].variant_id);
+          }
+        }
+      },
       error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
     });
   }
@@ -431,6 +664,7 @@ export class AdminProductsPage {
       const salePrice = Number((form.elements.namedItem('salePrice') as HTMLInputElement).value || basePrice);
       const status = (form.elements.namedItem('createStatus') as HTMLSelectElement).value || 'on_sale';
       const initialStock = Number((form.elements.namedItem('initialStock') as HTMLInputElement).value || 0);
+      const isCombo = (form.elements.namedItem('isCombo') as HTMLInputElement | null)?.checked ?? false;
       this.adminApi
         .createProduct({
           sku,
@@ -444,6 +678,7 @@ export class AdminProductsPage {
           description,
           images,
           initialStock,
+          isCombo,
           expectedVersion: 0,
         })
         .subscribe({
@@ -460,66 +695,158 @@ export class AdminProductsPage {
       this.actionError.set('Thiếu phiên bản sản phẩm để cập nhật.');
       return;
     }
+
+    if (this.editPriceInvalid()) {
+      this.actionError.set('Giá bán khuyến mãi không được lớn hơn giá gốc.');
+      return;
+    }
+
+    const currentBase = Number(product.base_price || 0);
+    const currentSale = product.sale_price != null ? Number(product.sale_price) : null;
+    const newBase = this.editBasePrice();
+    const newSale = this.editSalePrice();
+    const priceChanged = newBase !== currentBase || newSale !== currentSale;
+
+    const saveDetails = () => {
+      this.adminApi
+        .updateProduct(product.product_id, {
+          name,
+          categoryId,
+          collection,
+          description,
+          images,
+          expectedVersion: product.version,
+        })
+        .subscribe({
+          next: () => {
+            this.closeOverlays();
+            this.reloadCatalog();
+          },
+          error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
+        });
+    };
+
+    if (priceChanged) {
+      this.adminApi
+        .changePrice(product.product_id, {
+          newBasePrice: newBase,
+          newSalePrice: newSale,
+          reason: this.editPriceReason() || 'Cập nhật giá từ quản lý sản phẩm',
+          expectedVersion: product.version,
+        })
+        .subscribe({
+          next: () => saveDetails(),
+          error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
+        });
+    } else {
+      saveDetails();
+    }
+  }
+
+  /**
+   * Adds a variant from the editor variant section.
+   */
+  submitNewVariant(): void {
+    const product = this.selected();
+    if (!product) {
+      return;
+    }
+    const color = this.newVariantColor().trim();
+    const size = this.newVariantSize().trim();
+    if (!color || !size) {
+      this.actionError.set('Vui lòng nhập màu sắc và kích thước cho biến thể mới.');
+      return;
+    }
     this.adminApi
-      .updateProduct(product.product_id, {
-        name,
-        categoryId,
-        collection,
-        description,
-        images,
-        expectedVersion: product.version,
+      .createVariant(product.product_id, {
+        color,
+        size,
+        stockQuantity: this.newVariantStock(),
+        lowStockThreshold: this.newVariantThreshold(),
       })
       .subscribe({
         next: () => {
-          this.closeOverlays();
-          this.reloadCatalog();
+          this.newVariantColor.set('');
+          this.newVariantSize.set('');
+          this.newVariantStock.set(0);
+          this.newVariantThreshold.set(5);
+          this.actionError.set(null);
+          this.openEdit(product);
         },
         error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
       });
   }
 
   /**
-   * Adds a variant from the editor stock form.
+   * Backwards compatible variant form submit.
    */
   submitVariant(event: Event): void {
     event.preventDefault();
-    const product = this.selected();
-    if (!product) {
-      return;
-    }
-    const form = event.target as HTMLFormElement;
-    const color = (form.elements.namedItem('color') as HTMLInputElement).value.trim();
-    const size = (form.elements.namedItem('size') as HTMLInputElement).value.trim();
-    const stockQuantity = Number((form.elements.namedItem('stockQuantity') as HTMLInputElement).value || 0);
-    const lowStockThreshold = Number((form.elements.namedItem('lowStockThreshold') as HTMLInputElement).value || 5);
-    this.adminApi
-      .createVariant(product.product_id, { color, size, stockQuantity, lowStockThreshold })
-      .subscribe({
-        next: () => this.openEdit(product),
-        error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
-      });
+    this.submitNewVariant();
+  }
+
+  setStockAdjustmentType(type: 'in' | 'out' | 'set'): void {
+    this.stockAdjustmentType.set(type);
+  }
+
+  selectStockReason(reason: string): void {
+    this.stockReason.set(reason);
+  }
+
+  onVariantSelect(event: Event): void {
+    this.selectedVariantId.set((event.target as HTMLSelectElement).value);
+  }
+
+  onStockQuantityChange(event: Event): void {
+    const val = Number((event.target as HTMLInputElement).value || 0);
+    this.stockAdjustmentQuantity.set(Math.max(0, val));
+  }
+
+  onStockReasonChange(event: Event): void {
+    this.stockReason.set((event.target as HTMLTextAreaElement).value);
   }
 
   /**
-   * Applies a stock delta on one variant.
+   * Applies an ERP-grade stock adjustment on the selected variant.
    */
   submitStock(event: Event): void {
     event.preventDefault();
     const product = this.selected();
-    if (!product) {
+    const variant = this.selectedVariant();
+    if (!product || !variant) {
+      this.actionError.set('Vui lòng chọn biến thể cần điều chỉnh.');
       return;
     }
-    const form = event.target as HTMLFormElement;
-    const variantId = (form.elements.namedItem('variantId') as HTMLSelectElement).value;
-    const delta = Number((form.elements.namedItem('delta') as HTMLInputElement).value);
-    const reason = (form.elements.namedItem('reason') as HTMLTextAreaElement).value.trim();
-    const variant = this.variants().find((row) => row.variant_id === variantId);
+
+    const current = Number(variant.stock_quantity ?? 0);
+    const qty = this.stockAdjustmentQuantity();
+    const type = this.stockAdjustmentType();
+    let delta = 0;
+    if (type === 'in') {
+      delta = qty;
+    } else if (type === 'out') {
+      delta = -qty;
+    } else {
+      delta = qty - current;
+    }
+
+    if (delta === 0) {
+      this.actionError.set('Số lượng điều chỉnh không làm thay đổi tồn kho.');
+      return;
+    }
+
+    const reason = this.stockReason().trim();
+    if (!reason || reason.length < 5) {
+      this.actionError.set('Vui lòng nhập lý do điều chỉnh từ 5 ký tự.');
+      return;
+    }
+
     this.adminApi
       .updateStock(product.product_id, {
-        variantId,
+        variantId: variant.variant_id,
         delta,
         reason,
-        expectedVersion: variant?.version ?? 1,
+        expectedVersion: variant.version ?? 1,
       })
       .subscribe({
         next: () => {
@@ -601,6 +928,79 @@ export class AdminProductsPage {
     }
     this.imageUploading.set(true);
     this.actionError.set(null);
+    this.imageNote.set('Đang dựng nền studio…');
+    this.imageBefore.set(null);
+    this.imageAfter.set(null);
+    this.pendingImageTarget = images;
+    this.pendingOriginalFile = file;
+    void this.prepareImagePreview(file).catch(() => {
+      this.imageUploading.set(false);
+      this.actionError.set('Không đọc được ảnh. Thử file JPG hoặc PNG khác.');
+    });
+  }
+
+  /**
+   * Hiện ảnh gốc và ảnh sau khi Gemini thay nền. Chưa lưu cho đến khi bấm dùng ảnh sau.
+   */
+  private async prepareImagePreview(file: File): Promise<void> {
+    const before = await fileToDataUrl(file);
+    this.imageBefore.set(before);
+    const prepared = await shrinkImageDataUrl(before, file.type || 'image/jpeg');
+    const improved = await improveCatalogPhoto(file);
+    const bright = await fileToDataUrl(improved.file);
+    this.adminApi.adviseProductImage({ dataUrl: prepared, mimeType: 'image/jpeg' }).subscribe({
+      next: (result) => {
+        this.imageUploading.set(false);
+        if (result.imageBase64) {
+          const mime = result.imageMime || 'image/png';
+          this.imageAfter.set(`data:${mime};base64,${result.imageBase64}`);
+          this.imageAfterLabel.set('Sau — nền studio');
+          this.imageNote.set('Xem hai ảnh rồi chọn bản sẽ lưu.');
+          return;
+        }
+        this.imageAfter.set(bright);
+        this.imageAfterLabel.set('Sau — chỉ tăng sáng, chưa có nền studio');
+        this.imageNote.set(result.imageError || 'Gemini không trả ảnh nền studio.');
+      },
+      error: (error: unknown) => {
+        this.imageUploading.set(false);
+        this.imageAfter.set(bright);
+        this.imageAfterLabel.set('Sau — chỉ tăng sáng, chưa có nền studio');
+        this.imageNote.set(adminErrorMessage(error, 'Không gọi được Gemini.'));
+      },
+    });
+  }
+
+  /**
+   * Lưu ảnh đang xem ở cột Sau.
+   */
+  useImprovedImage(): void {
+    const dataUrl = this.imageAfter();
+    const target = this.pendingImageTarget;
+    if (!dataUrl || !target) return;
+    this.storeImageFile(dataUrlToFile(dataUrl), target, 'Đã lưu ảnh ở cột Sau.');
+  }
+
+  /**
+   * Lưu đúng file vừa chọn, không dùng bản đã xử lý.
+   */
+  useOriginalImage(): void {
+    const file = this.pendingOriginalFile;
+    const target = this.pendingImageTarget;
+    if (!file || !target) return;
+    this.storeImageFile(file, target, 'Đã lưu ảnh gốc.');
+  }
+
+  closeImagePreview(): void {
+    this.imageBefore.set(null);
+    this.imageAfter.set(null);
+    this.imageNote.set(null);
+    this.pendingImageTarget = null;
+    this.pendingOriginalFile = null;
+  }
+
+  private storeImageFile(file: File, images: HTMLTextAreaElement, note: string): void {
+    this.imageUploading.set(true);
     this.adminApi.uploadProductImage(file).subscribe({
       next: (result) => {
         this.imageUploading.set(false);
@@ -611,6 +1011,9 @@ export class AdminProductsPage {
         }
         const current = images.value.trim();
         images.value = current ? `${current}\n${url}` : url;
+        this.imageNote.set(note);
+        this.imageBefore.set(null);
+        this.imageAfter.set(null);
       },
       error: (error: unknown) => {
         this.imageUploading.set(false);
@@ -714,10 +1117,10 @@ export class AdminProductsPage {
           return of({ rows: [] as AdminProductRow[], count: 0 });
         }),
       ),
-      onSale: this.adminApi.listProducts({ status: 'on_sale', limit: '1' }).pipe(catchError(() => of({ rows: [], count: 0 }))),
-      hidden: this.adminApi.listProducts({ status: 'hidden', limit: '1' }).pipe(catchError(() => of({ rows: [], count: 0 }))),
-      out: this.adminApi.listProducts({ status: 'out_of_stock', limit: '1' }).pipe(catchError(() => of({ rows: [], count: 0 }))),
-      low: this.adminApi.listLowStock().pipe(catchError(() => of({ rows: [] as AdminProductRow[] }))),
+      onSale: this.adminApi.listProducts({ status: 'on_sale', limit: '1' }).pipe(catchError(() => of({ rows: [] as AdminProductRow[], count: 0 }))),
+      hidden: this.adminApi.listProducts({ status: 'hidden', limit: '1' }).pipe(catchError(() => of({ rows: [] as AdminProductRow[], count: 0 }))),
+      out: this.adminApi.listProducts({ status: 'out_of_stock', limit: '1' }).pipe(catchError(() => of({ rows: [] as AdminProductRow[], count: 0 }))),
+      low: this.adminApi.listLowStock().pipe(catchError(() => of({ rows: [] as AdminProductRow[], count: 0 }))),
     }).subscribe((payload) => {
       this.products.set(adminListRows(payload.list));
       this.total.set(adminListCount(payload.list));

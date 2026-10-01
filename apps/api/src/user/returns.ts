@@ -1,6 +1,7 @@
 import { returnWindowOpen } from "./return-window.js";
+import { normalizeReturnIntake, OPEN_RETURN_STATUSES, RETURN_STATUS_LABELS_VI } from "../returns/return-constants.js";
 import { HttpError, readJson, sendJson } from "../http.js";
-import { selectOne, selectRows, insertRow, updateRows } from "../supabase.js";
+import { quotePostgrestValue, selectOne, selectRows, insertRow, updateRows } from "../supabase.js";
 import { requireUserAuth } from "./auth.js";
 import {
   asJsonObject,
@@ -159,6 +160,120 @@ export async function handleReturnsRoute(
   corsHeaders: HeaderMap,
   context: AuthContext
 ): Promise<void> {
+  // POST /api/user/returns/guest — Cho phép khách vãng lai gửi yêu cầu đổi/trả
+  if (req.method === "POST" && action === "guest") {
+    const body = await readJson(req);
+    const cleanCode = String(body.order_code || "").trim().toUpperCase();
+    const cleanContact = String(body.contact || body.phone || body.email || "").trim();
+    const return_type = body.return_type;
+    const intake = normalizeReturnIntake(body.reason || body.reason_code, body.evidence_images, body.description || body.note);
+    if (!intake.ok) {
+      throw new HttpError(400, intake.error, intake.message);
+    }
+    const items = body.items;
+    if (!cleanCode || !cleanContact || !return_type || !Array.isArray(items) || !items.length) {
+      throw new HttpError(400, "BAD_REQUEST", "Thiếu thông tin yêu cầu đổi trả (mã đơn, liên hệ, loại đổi trả hoặc sản phẩm)");
+    }
+    let order = await selectOne("orders", { order_code: `eq.${cleanCode}` });
+    if (!order && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanCode)) {
+      order = await selectOne("orders", { order_id: `eq.${cleanCode}` });
+    }
+    if (!order) {
+      throw new HttpError(404, "NOT_FOUND", "Không tìm thấy đơn hàng");
+    }
+
+    const normContact = cleanContact.toLowerCase().replace(/\s/g, "");
+    const normPhone = String(order.shipping_phone || "").replace(/\D/g, "");
+    const normEmail = String(order.shipping_email || "").toLowerCase().trim();
+    const contactMatches = (
+      normContact === normEmail ||
+      (cleanContact.replace(/\D/g, "") && cleanContact.replace(/\D/g, "") === normPhone)
+    );
+    if (!contactMatches) {
+      throw new HttpError(404, "NOT_FOUND", "Mã đơn hàng hoặc thông tin liên hệ không khớp");
+    }
+
+    if (asString(order.status) !== "delivered") {
+      throw new HttpError(400, "BAD_REQUEST", "Đơn hàng phải hoàn thành (giao thành công) mới được yêu cầu đổi trả");
+    }
+
+    const deliveryDate = order.delivered_at ? new Date(String(order.delivered_at)) : new Date(String(order.updated_at || order.created_at));
+    if (!returnWindowOpen(deliveryDate, new Date())) {
+      throw new HttpError(400, "RETURN_WINDOW_CLOSED", "Quá thời hạn đổi/trả (30 ngày kể từ khi giao hàng)");
+    }
+
+    const validatedItems: JsonObject[] = [];
+    const { rows: existingReturns } = await selectRows("return_exchange", { order_id: `eq.${order.order_id}` });
+
+    for (const rawItem of items) {
+      const item = asJsonObject(rawItem);
+      const orderItem = await selectOne("order_item", { item_id: `eq.${item.order_item_id}` });
+      if (!orderItem || orderItem.order_id !== order.order_id) {
+        throw new HttpError(400, "BAD_REQUEST", "Sản phẩm không thuộc đơn hàng này");
+      }
+
+      const variant = await selectOne("variant", { variant_id: `eq.${orderItem.variant_id}` });
+      if (variant) {
+        const product = await selectOne("product", { product_id: `eq.${variant.product_id}` });
+        if (product) {
+          const category = await selectOne("category", { category_id: `eq.${product.category_id}` });
+          if (category && (category.name === "Phụ kiện" || category.slug === "phu-kien")) {
+            throw new HttpError(400, "BAD_REQUEST", `Sản phẩm ${product.name} thuộc danh mục hạn chế đổi trả của Velura`);
+          }
+        }
+      }
+
+      let alreadyReturnedQty = 0;
+      let returnTimes = 0;
+      for (const r of existingReturns) {
+        if (r.status !== "rejected") {
+          const { rows: rItems } = await selectRows("return_item", { return_id: `eq.${r.return_id}`, order_item_id: `eq.${item.order_item_id}` });
+          if (rItems.length) {
+            returnTimes += 1;
+          }
+          for (const ri of rItems) {
+            alreadyReturnedQty += Number(ri.quantity);
+          }
+        }
+      }
+      if (returnTimes >= 2) {
+        throw new HttpError(400, "RETURN_LIMIT", "Sản phẩm này đã dùng hết 2 lượt đổi/trả");
+      }
+
+      if (alreadyReturnedQty + Number(item.quantity) > Number(orderItem.quantity)) {
+        throw new HttpError(400, "BAD_REQUEST", "Số lượng đổi trả vượt quá số lượng đã mua");
+      }
+
+      validatedItems.push({
+        order_item_id: item.order_item_id,
+        quantity: item.quantity
+      });
+    }
+
+    const trackingReturnCode = "RT" + Date.now().toString().slice(-8).toUpperCase();
+    const newReturn = asJsonObject(await insertRow("return_exchange", {
+      order_id: order.order_id,
+      user_id: order.user_id || null,
+      return_type,
+      status: "pending",
+      tracking_return_code: trackingReturnCode,
+      description: intake.intake.description,
+      evidence_images: intake.intake.images,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }));
+
+    for (const vItem of validatedItems) {
+      await insertRow("return_item", {
+        return_id: newReturn.return_id,
+        order_item_id: vItem.order_item_id,
+        quantity: vItem.quantity
+      });
+    }
+
+    return sendJson(res, 201, { success: true, return: newReturn }, corsHeaders);
+  }
+
   const profile = requireUserAuth(context);
 
   // POST /api/user/returns/cancel
@@ -194,7 +309,11 @@ export async function handleReturnsRoute(
   // POST /api/user/returns
   if (req.method === "POST" && !action) {
     const body = await readJson(req);
-    const { order_id, return_type, description, evidence_images, items } = body;
+    const { order_id, return_type, items } = body;
+    const intake = normalizeReturnIntake(body.reason || body.reason_code, body.evidence_images, body.description || body.note);
+    if (!intake.ok) {
+      throw new HttpError(400, intake.error, intake.message);
+    }
 
     if (!order_id || !return_type || !Array.isArray(items) || !items.length) {
       throw new HttpError(400, "BAD_REQUEST", "Thiếu thông tin yêu cầu đổi trả");
@@ -241,12 +360,29 @@ export async function handleReturnsRoute(
 
       // Quantity check
       let alreadyReturnedQty = 0;
+      let returnTimes = 0;
       for (const r of existingReturns) {
         if (r.status !== "rejected") {
           const { rows: rItems } = await selectRows("return_item", { return_id: `eq.${r.return_id}`, order_item_id: `eq.${item.order_item_id}` });
+          if (rItems.length) {
+            returnTimes += 1;
+          }
           for (const ri of rItems) {
             alreadyReturnedQty += Number(ri.quantity);
           }
+        }
+      }
+      if (returnTimes >= 2) {
+        throw new HttpError(400, "RETURN_LIMIT", "Sản phẩm này đã dùng hết 2 lượt đổi/trả");
+      }
+      for (const row of existingReturns) {
+        if (!OPEN_RETURN_STATUSES.includes(asString(row.status))) continue;
+        const { rows: openItems } = await selectRows("return_item", {
+          return_id: `eq.${row.return_id}`,
+          order_item_id: `eq.${item.order_item_id}`
+        });
+        if (openItems.length) {
+          throw new HttpError(400, "RETURN_ALREADY_OPEN", "Sản phẩm này đang có một yêu cầu đổi trả chưa kết thúc.");
         }
       }
 
@@ -254,38 +390,39 @@ export async function handleReturnsRoute(
         throw new HttpError(400, "BAD_REQUEST", "Số lượng đổi trả vượt quá số lượng đã mua");
       }
 
+      const itemType = asString(item.return_type) === "exchange" ? "exchange" : "refund";
       validatedItems.push({
         order_item_id: item.order_item_id,
-        quantity: item.quantity
+        quantity: item.quantity,
+        return_type: item.return_type ? itemType : return_type
       });
     }
 
-    const trackingReturnCode = "RET" + Date.now().toString().slice(-8).toUpperCase();
-
-    const newReturn = asJsonObject(await insertRow("return_exchange", {
-      order_id,
-      user_id: profile.user_id,
-      return_type,
-      description: description || null,
-      evidence_images: evidence_images || null,
-      status: "pending",
-      tracking_return_code: trackingReturnCode,
-      created_at: new Date().toISOString()
-    }));
-
-    const returnItems: unknown[] = [];
+    const created: JsonObject[] = [];
     for (const item of validatedItems) {
+      const trackingReturnCode = "RET" + Date.now().toString().slice(-8).toUpperCase() + created.length;
+      const newReturn = asJsonObject(await insertRow("return_exchange", {
+        order_id,
+        user_id: profile.user_id,
+        return_type: item.return_type,
+        description: intake.intake.description,
+        evidence_images: intake.intake.images,
+        status: "pending",
+        tracking_return_code: trackingReturnCode,
+        created_at: new Date().toISOString()
+      }));
       const retItem = await insertRow("return_item", {
         return_id: newReturn.return_id,
         order_item_id: item.order_item_id,
         quantity: item.quantity
       });
-      returnItems.push(retItem);
+      created.push({ ...newReturn, items: [retItem] });
     }
 
     return sendJson(res, 200, {
       success: true,
-      return: { ...newReturn, items: returnItems }
+      returns: created,
+      return: created[0]
     }, corsHeaders);
   }
 
@@ -299,31 +436,53 @@ export async function handleReturnsRoute(
       queryParams.order_id = `eq.${order_id}`;
     }
 
-    const { rows: returns } = await selectRows("return_exchange", queryParams);
-    
-    // Populate items
-    const populatedReturns: JsonObject[] = [];
-    for (const ret of returns) {
-      const { rows: rItems } = await selectRows("return_item", { return_id: `eq.${ret.return_id}` });
-      
-      const itemsWithDetails: JsonObject[] = [];
-      for (const ri of rItems) {
-        const orderItem = await selectOne("order_item", { item_id: `eq.${ri.order_item_id}` });
-        itemsWithDetails.push({
-          ...ri,
-          product_name: orderItem ? orderItem.product_name : "Sản phẩm",
-          product_image: orderItem ? orderItem.product_image : null,
-          unit_price: orderItem ? orderItem.unit_price : 0
-        });
+    const { rows: returns } = await selectRows("return_exchange", queryParams, { count: "none" });
+
+    // Populate items in batches without N+1 queries
+    const returnIds = returns.map((r) => String(r.return_id)).filter(Boolean);
+    let allReturnItems: JsonObject[] = [];
+    if (returnIds.length > 0) {
+      const { rows: rItems } = await selectRows("return_item", {
+        return_id: `in.(${returnIds.map(quotePostgrestValue).join(",")})`
+      }, { count: "none" });
+      allReturnItems = rItems;
+    }
+
+    const orderItemIds = [...new Set(allReturnItems.map((ri) => String(ri.order_item_id || "")).filter(Boolean))];
+    const orderItemMap = new Map<string, JsonObject>();
+    if (orderItemIds.length > 0) {
+      const { rows: orderItems } = await selectRows("order_item", {
+        item_id: `in.(${orderItemIds.map(quotePostgrestValue).join(",")})`
+      }, { count: "none" });
+      for (const oi of orderItems) {
+        orderItemMap.set(String(oi.item_id), oi);
       }
-      populatedReturns.push({
-        ...ret,
-        items: itemsWithDetails
-      });
+    }
+
+    const itemsByReturnId = new Map<string, JsonObject[]>();
+    for (const ri of allReturnItems) {
+      const orderItem = orderItemMap.get(String(ri.order_item_id || ""));
+      const itemDetail = {
+        ...ri,
+        product_name: orderItem ? orderItem.product_name : "Sản phẩm",
+        product_image: orderItem ? orderItem.product_image : null,
+        unit_price: orderItem ? orderItem.unit_price : 0
+      };
+      const rId = String(ri.return_id || "");
+      const list = itemsByReturnId.get(rId) || [];
+      list.push(itemDetail);
+      itemsByReturnId.set(rId, list);
     }
 
     // Sort descending by created_at
-    populatedReturns.sort((a, b) => new Date(String(b.created_at)).getTime() - new Date(String(a.created_at)).getTime());
+    returns.sort((a, b) => new Date(String(b.created_at)).getTime() - new Date(String(a.created_at)).getTime());
+
+    const populatedReturns: JsonObject[] = returns.map((ret) => ({
+      ...ret,
+      status_label: RETURN_STATUS_LABELS_VI[String(ret.status || "")] || ret.status,
+      items: itemsByReturnId.get(String(ret.return_id)) || []
+    }));
+
 
     return sendJson(res, 200, {
       success: true,

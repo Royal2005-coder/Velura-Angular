@@ -43,6 +43,8 @@ export class AccountReturnsPage {
   readonly formError = signal<string | null>(null);
   readonly submitted = signal(false);
   readonly evidenceImages = signal<string[]>([]);
+  /** Số ảnh đang tải lên Supabase Storage; chặn gửi phiếu khi > 0 để không gửi thiếu URL. */
+  readonly uploadingCount = signal(0);
 
   readonly eligible = computed(() => this.orders().filter((order) => isReturnableOrder(order)));
   readonly selectedOrder = computed(() => this.eligible().find((order) => order.order_id === this.selectedOrderId()) || null);
@@ -118,32 +120,41 @@ export class AccountReturnsPage {
   }
 
   /**
-   * Handles customer selecting proof photos for return.
+   * Handles customer selecting proof photos for return. Mỗi ảnh được tải thẳng lên
+   * `/api/user/upload/evidence` (Supabase Storage bucket `return-evidence`) và chỉ URL công
+   * khai được giữ lại — `evidence_images` trên DB là cột `TEXT[]` dành cho URL, không phải
+   * nơi chứa blob base64 (migration 016 đổi kiểu cột đúng vì lý do này).
    */
   onFilesSelected(event: Event): void {
     const input = event.target as HTMLInputElement;
     if (!input.files || input.files.length === 0) {
       return;
     }
-    const current = this.evidenceImages();
-    const remaining = 5 - current.length;
+    const remaining = 5 - this.evidenceImages().length - this.uploadingCount();
     if (remaining <= 0) {
       this.formError.set('Chỉ được tải lên tối đa 5 hình ảnh minh chứng.');
+      input.value = '';
       return;
     }
-    const files = Array.from(input.files).slice(0, remaining);
+    const files = Array.from(input.files)
+      .filter((file) => file.type.startsWith('image/'))
+      .slice(0, remaining);
     for (const file of files) {
-      if (!file.type.startsWith('image/')) {
-        continue;
-      }
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = reader.result as string;
-        if (result) {
-          this.evidenceImages.update((imgs) => (imgs.length < 5 ? [...imgs, result] : imgs));
-        }
-      };
-      reader.readAsDataURL(file);
+      const formData = new FormData();
+      formData.append('file', file);
+      this.uploadingCount.update((n) => n + 1);
+      this.api.post<{ success?: boolean; url?: string }>('/api/user/upload/evidence', formData).subscribe({
+        next: (result) => {
+          this.uploadingCount.update((n) => n - 1);
+          if (result?.url) {
+            this.evidenceImages.update((imgs) => (imgs.length < 5 ? [...imgs, result.url as string] : imgs));
+          }
+        },
+        error: (error: Error) => {
+          this.uploadingCount.update((n) => n - 1);
+          this.formError.set(error.message || `Không tải được ảnh "${file.name}".`);
+        },
+      });
     }
     input.value = '';
   }
@@ -161,6 +172,10 @@ export class AccountReturnsPage {
   submit(): void {
     const order = this.selectedOrder();
     if (!order || this.submitting()) {
+      return;
+    }
+    if (this.uploadingCount() > 0) {
+      this.formError.set('Vui lòng đợi ảnh minh chứng tải xong.');
       return;
     }
     const items = (order.items || [])

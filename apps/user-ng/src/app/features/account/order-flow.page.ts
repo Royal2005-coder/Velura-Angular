@@ -8,16 +8,21 @@ import {
   DemoReturn,
   DemoReturnLine,
   ORDER_LABELS,
-  PurchaseDemoStore,
   canCancel,
   maskPhone,
   normalizePhone,
   withinReturnWindow,
 } from '../../core/services/purchase-demo.store';
+import { ORDER_ACCOUNT_MODEL, type OrderAccountModel } from '../../core/services/order-account.model';
+import { orderAccountErrorMessage } from '../../core/services/order-account-api.store';
 import { formatVnd, toPublicAsset } from '../../core/utils/money';
 import { isGuestPreview } from '../../core/utils/preview-mode';
 
-/** Guest access, order actions and after-sales are driven by the same isolated demo Model. */
+/**
+ * Guest access, order actions and after-sales share one `OrderAccountModel` injection point:
+ * `PurchaseDemoStore` (via `OrderAccountPreviewAdapter`) under `?preview=1`, the real
+ * `OrderAccountApiStore` otherwise. The view/template below is unaware of which one is live.
+ */
 @Component({
   selector: 'app-order-flow',
   imports: [FormsModule, RouterLink],
@@ -30,7 +35,7 @@ import { isGuestPreview } from '../../core/utils/preview-mode';
   ],
 })
 export class OrderFlowPage {
-  readonly model = inject(PurchaseDemoStore);
+  readonly model: OrderAccountModel = inject(ORDER_ACCOUNT_MODEL);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
@@ -73,7 +78,7 @@ export class OrderFlowPage {
   readonly seconds = signal(300);
   readonly cooldown = signal(0);
   readonly busy = signal(false);
-  readonly evidence = signal<Array<{ name: string; url: string }>>([]);
+  readonly evidence = signal<Array<{ name: string; url: string; file: File }>>([]);
   readonly labels = ORDER_LABELS;
   readonly money = formatVnd;
   readonly image = (url: string) => toPublicAsset(url, '/assets/images/placeholder.jpg');
@@ -105,8 +110,10 @@ export class OrderFlowPage {
       ),
   );
   readonly returnsEntry = this.route.snapshot.routeConfig?.path?.endsWith('returns') || false;
-  mode: 'phone' | 'code' = 'phone';
+  /** Real guest lookup is always by order code + contact; phone-only lookup stays preview-only. */
+  mode: 'phone' | 'code' = this.model.lookupGuest ? 'code' : 'phone';
   query = '';
+  contact = '';
   otp = '';
   reason = 'Tôi muốn thay đổi sản phẩm';
   otherReason = '';
@@ -163,11 +170,38 @@ export class OrderFlowPage {
       this.clearEvidence();
     });
   }
-  /** Both guest lookup methods challenge ownership before exposing order details. */
+  /**
+   * Real guest lookup is one request (order code + contact) with no challenge step — routed
+   * straight to `model.lookupGuest`. The phone/code + OTP challenge below only runs for the
+   * preview Model, which is the only one that implements `sendOtp`/`verifyOtp` meaningfully.
+   */
   lookup(): void {
     this.error.set('');
     this.verified.set(false);
     this.selectedId.set('');
+    if (this.model.lookupGuest) {
+      const code = this.query.trim();
+      const contact = this.contact.trim();
+      if (!code || !contact) {
+        this.error.set('Nhập mã đơn hàng và số điện thoại/email đặt hàng.');
+        return;
+      }
+      this.busy.set(true);
+      this.model
+        .lookupGuest(code, contact)
+        .then(() => {
+          this.busy.set(false);
+          this.verified.set(true);
+          this.error.set('');
+          this.view.set(this.returnsEntry ? 'requests' : 'list');
+          this.open(code, false);
+        })
+        .catch((error) => {
+          this.busy.set(false);
+          this.error.set(orderAccountErrorMessage(error));
+        });
+      return;
+    }
     const order =
       this.mode === 'code'
         ? this.model
@@ -179,49 +213,67 @@ export class OrderFlowPage {
       return;
     }
     const phone = order?.address.phone || this.query;
-    try {
-      this.model.sendOtp(phone);
-      this.challengePhone = normalizePhone(phone);
-      this.challengeOrderId = order?.id || '';
-      this.maskedPhone.set(maskPhone(phone));
-      this.seconds.set(300);
-      this.cooldown.set(30);
-      this.otp = '';
-      this.view.set('otp');
-    } catch (error) {
-      this.error.set((error as Error).message);
-    }
+    this.model
+      .sendOtp(phone)
+      .then(() => {
+        this.challengePhone = normalizePhone(phone);
+        this.challengeOrderId = order?.id || '';
+        this.maskedPhone.set(maskPhone(phone));
+        this.seconds.set(300);
+        this.cooldown.set(30);
+        this.otp = '';
+        this.view.set('otp');
+      })
+      .catch((error) => this.error.set(orderAccountErrorMessage(error)));
   }
   /** Resend only after the challenge cooldown; display only the masked destination. */
   resend(): void {
-    try {
-      this.model.sendOtp(this.challengePhone);
-      this.seconds.set(300);
-      this.cooldown.set(30);
-      this.otp = '';
-      this.error.set('');
-    } catch (error) {
-      this.error.set((error as Error).message);
-    }
+    this.model
+      .sendOtp(this.challengePhone)
+      .then(() => {
+        this.seconds.set(300);
+        this.cooldown.set(30);
+        this.otp = '';
+        this.error.set('');
+      })
+      .catch((error) => this.error.set(orderAccountErrorMessage(error)));
   }
   /** A valid guest challenge exposes only orders belonging to that phone. */
   verify(): void {
-    try {
-      this.model.verifyOtp(this.otp);
-      this.verified.set(true);
-      this.error.set('');
-      this.view.set(this.returnsEntry ? 'requests' : 'list');
-      if (this.challengeOrderId) this.open(this.challengeOrderId);
-    } catch (error) {
-      this.error.set((error as Error).message);
-    }
+    this.model
+      .verifyOtp(this.otp)
+      .then(() => {
+        this.verified.set(true);
+        this.error.set('');
+        this.view.set(this.returnsEntry ? 'requests' : 'list');
+        if (this.challengeOrderId) this.open(this.challengeOrderId);
+      })
+      .catch((error) => this.error.set(orderAccountErrorMessage(error)));
   }
   /** Open an authorized order on its canonical detail URL, unless an internal after-sales view owns the URL. */
   open(id: string, updateUrl = true): void {
-    const order = this.model.orders().find((row) => row.id === id);
-    if (!order || !this.authorized(order)) {
-      this.error.set('Vui lòng xác thực chủ đơn trước khi xem chi tiết.');
-      this.view.set(this.model.member() ? 'list' : 'lookup');
+    const existing = this.model.orders().find((row) => row.id === id);
+    if (existing) {
+      this.openLoaded(existing, id, updateUrl);
+      return;
+    }
+    // Not loaded yet (real mode, direct/cold link) — fetch this one order, then retry.
+    if (this.model.ensureOrderLoaded) {
+      this.model
+        .ensureOrderLoaded(id)
+        .then(() => {
+          const order = this.model.orders().find((row) => row.id === id);
+          if (order) this.openLoaded(order, id, updateUrl);
+          else this.openUnauthorized();
+        })
+        .catch(() => this.openUnauthorized());
+      return;
+    }
+    this.openUnauthorized();
+  }
+  private openLoaded(order: DemoOrder, id: string, updateUrl: boolean): void {
+    if (!this.authorized(order)) {
+      this.openUnauthorized();
       return;
     }
     this.selectedId.set(id);
@@ -256,22 +308,20 @@ export class OrderFlowPage {
     if (!order || this.busy() || !this.authorized(order)) return;
     this.busy.set(true);
     this.timeout = setTimeout(() => {
-      try {
-        this.model.cancel(order.id, this.reason === 'Khác' ? this.otherReason.trim() : this.reason);
-        this.error.set('');
-        this.view.set('detail');
-      } catch (error) {
-        this.error.set((error as Error).message);
-        this.view.set('detail');
-      } finally {
-        this.busy.set(false);
-      }
+      this.model
+        .cancel(order.id, this.reason === 'Khác' ? this.otherReason.trim() : this.reason)
+        .then(() => this.error.set(''))
+        .catch((error) => this.error.set(orderAccountErrorMessage(error)))
+        .finally(() => {
+          this.view.set('detail');
+          this.busy.set(false);
+        });
     }, 350);
   }
-  /** Reviewer controls exercise boundaries without an admin backend. */
+  /** Reviewer-only control, preview Model only — no real order can be fast-forwarded by its own customer. */
   scenario(status: DemoOrderStatus, days = 0): void {
     const order = this.order();
-    if (order) this.model.scenario(order.id, status, days);
+    if (order) this.model.scenario?.(order.id, status, days);
   }
   /** Start a new request with no previous selections or evidence. */
   startReturn(): void {
@@ -326,7 +376,7 @@ export class OrderFlowPage {
     }
     this.evidence.update((rows) => [
       ...rows,
-      ...files.map((file) => ({ name: file.name, url: URL.createObjectURL(file) })),
+      ...files.map((file) => ({ name: file.name, url: URL.createObjectURL(file), file })),
     ]);
     this.error.set('');
     input.value = '';
@@ -356,23 +406,18 @@ export class OrderFlowPage {
     if (!order || !this.authorized(order) || this.busy()) return;
     this.busy.set(true);
     this.timeout = setTimeout(() => {
-      try {
-        const request = this.model.createReturn(
-          order.id,
-          this.returnKind,
-          this.selectedLines(),
-          this.returnReason,
-          this.evidence().map((file) => file.name),
-        );
-        this.requestId.set(request.id);
-        this.error.set('');
-        this.view.set('tracking');
-      } catch (error) {
-        this.error.set((error as Error).message);
-        this.view.set('return');
-      } finally {
-        this.busy.set(false);
-      }
+      this.model
+        .createReturn(order.id, this.returnKind, this.selectedLines(), this.returnReason, this.evidence())
+        .then((request) => {
+          this.requestId.set(request.id);
+          this.error.set('');
+          this.view.set('tracking');
+        })
+        .catch((error) => {
+          this.error.set(orderAccountErrorMessage(error));
+          this.view.set('return');
+        })
+        .finally(() => this.busy.set(false));
     }, 350);
   }
   /** Open a request only from its authorized parent order. */
@@ -390,42 +435,33 @@ export class OrderFlowPage {
     this.open(order.id, false);
     this.track(request);
   }
-  /** Review progression follows the refund or replacement timeline. */
-  advance(): void {
-    try {
-      this.model.advanceRequest(this.requestId());
-      this.error.set('');
-    } catch (error) {
-      this.error.set((error as Error).message);
-    }
-  }
   /** Self-service cancel of the active request; blocked once the Model reports it shipped. */
   cancelRequest(): void {
-    try {
-      this.model.cancelRequest(this.requestId());
-      this.error.set('');
-    } catch (error) {
-      this.error.set((error as Error).message);
-    }
+    this.model
+      .cancelRequest(this.requestId())
+      .then(() => this.error.set(''))
+      .catch((error) => this.error.set(orderAccountErrorMessage(error)));
   }
   /** Ask for recipient details only after COD refund contact; retain only a masked account. */
   saveBank(): void {
-    try {
-      this.model.saveBank(this.requestId(), this.bankName, this.bankAccount, this.bankHolder);
-      this.bankAccount = '';
-      this.error.set('');
-    } catch (error) {
-      this.error.set((error as Error).message);
-    }
+    this.model
+      .saveBank(this.requestId(), this.bankName, this.bankAccount, this.bankHolder)
+      .then(() => {
+        this.bankAccount = '';
+        this.error.set('');
+      })
+      .catch((error) => this.error.set(orderAccountErrorMessage(error)));
+  }
+  /** Reviewer-only control, preview Model only — switches a stuck exchange to a refund. */
+  acceptRefundFallback(id: string): void {
+    this.model.replacementConflict?.(id, true);
   }
   /** Recover from an unavailable replacement without creating a second request. */
   changeUnavailable(variantId: string, replacement: string): void {
-    try {
-      this.model.replaceUnavailable(this.requestId(), variantId, replacement);
-      this.error.set('');
-    } catch (error) {
-      this.error.set((error as Error).message);
-    }
+    this.model
+      .replaceUnavailable(this.requestId(), variantId, replacement)
+      .then(() => this.error.set(''))
+      .catch((error) => this.error.set(orderAccountErrorMessage(error)));
   }
   /** Return labels keep order-level and request-level identifiers distinct. */
   lineFor(id: string): DemoOrderLine | undefined {
@@ -449,6 +485,10 @@ export class OrderFlowPage {
   }
   private authorized(order: DemoOrder): boolean {
     return this.model.canAccess(order) && (this.model.member() || this.verified());
+  }
+  private openUnauthorized(): void {
+    this.error.set('Vui lòng xác thực chủ đơn trước khi xem chi tiết.');
+    this.view.set(this.model.member() ? 'list' : 'lookup');
   }
   private clearEvidence(): void {
     this.evidence().forEach((file) => URL.revokeObjectURL(file.url));

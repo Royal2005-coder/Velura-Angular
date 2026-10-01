@@ -72,25 +72,27 @@
             <p class="muted">
               Xác thực chủ đơn để xem thông tin, hủy hoặc đổi / trả. Không cần tạo tài khoản.
             </p>
-            <div class="split">
-              <label class="choice"
-                ><input
-                  type="radio"
-                  name="lookup"
-                  value="phone"
-                  [(ngModel)]="mode"
-                  (change)="query = ''"
-                />Bằng SĐT</label
-              ><label class="choice"
-                ><input
-                  type="radio"
-                  name="lookup"
-                  value="code"
-                  [(ngModel)]="mode"
-                  (change)="query = ''"
-                />Bằng mã đơn</label
-              >
-            </div>
+            @if (!model.lookupGuest) {
+              <div class="split">
+                <label class="choice"
+                  ><input
+                    type="radio"
+                    name="lookup"
+                    value="phone"
+                    [(ngModel)]="mode"
+                    (change)="query = ''"
+                  />Bằng SĐT</label
+                ><label class="choice"
+                  ><input
+                    type="radio"
+                    name="lookup"
+                    value="code"
+                    [(ngModel)]="mode"
+                    (change)="query = ''"
+                  />Bằng mã đơn</label
+                >
+              </div>
+            }
             <form (ngSubmit)="lookup()">
               <label class="field"
                 >{{ mode === 'phone' ? 'Số điện thoại đặt hàng' : 'Mã đơn hàng'
@@ -98,9 +100,20 @@
                   name="query"
                   [type]="mode === 'phone' ? 'tel' : 'text'"
                   [(ngModel)]="query"
-                  [placeholder]="mode === 'phone' ? '0901234567' : 'DEMO-…'"
+                  [placeholder]="mode === 'phone' ? '0901234567' : (model.lookupGuest ? 'VLR...' : 'DEMO-…')"
                   required /></label
-              ><button type="submit">Tiếp tục · Gửi mã OTP</button>
+              >
+              @if (model.lookupGuest) {
+                <label class="field"
+                  >Số điện thoại hoặc email đặt hàng<input
+                    name="contact"
+                    type="text"
+                    [(ngModel)]="contact"
+                    placeholder="0901234567 hoặc email@vidu.com"
+                    required /></label
+                >
+              }
+              <button type="submit">{{ model.lookupGuest ? 'Tra cứu đơn hàng' : 'Tiếp tục · Gửi mã OTP' }}</button>
             </form>
           </section>
         }
@@ -515,6 +528,11 @@
               @if (request.cancelledAt) {
                 <p class="error">Đã hủy yêu cầu lúc {{ date(request.cancelledAt) }}</p>
               }
+              @if (request.rejectedAt) {
+                <p class="error">
+                  Yêu cầu bị từ chối lúc {{ date(request.rejectedAt) }}@if (request.rejectionReason) {: {{ request.rejectionReason }}}
+                </p>
+              }
               <ol class="timeline">
                 @for (stage of model.timeline(request.kind); track $index) {
                   <li
@@ -558,14 +576,14 @@
                         >
                       }
                     }
-                    <button class="secondary" (click)="model.replacementConflict(request.id, true)">
+                    <button class="secondary" (click)="acceptRefundFallback(request.id)">
                       Chuyển sang hoàn tiền
                     </button>
                   </div>
                 }
                 @if (request.kind === 'refund') {
                   <p>
-                    Số tiền {{ request.stage === 6 ? 'đã hoàn' : 'dự kiến hoàn' }}:
+                    Số tiền {{ request.completedAt ? 'đã hoàn' : 'dự kiến hoàn' }}:
                     <strong>{{ money(refundEstimate(request.items)) }}</strong>
                   </p>
                   <p>
@@ -576,7 +594,7 @@
                         : 'Kênh VNPay ban đầu'
                     }}
                   </p>
-                  @if (order()?.payment === 'COD' && request.stage >= 1 && !request.bank) {
+                  @if (order()?.payment === 'COD' && request.stage >= 1 && !request.bank && model.supportsBankInfo) {
                     <div class="muted">Vui lòng bổ sung thông tin nhận hoàn tiền.</div>
                     <form (ngSubmit)="saveBank()">
                       <label class="field"
@@ -597,7 +615,7 @@
                   }
                   @if (request.bank) {
                     <p>
-                      {{ request.stage === 6 ? 'Tiền đã được chuyển tới' : 'Tài khoản nhận tiền' }}:
+                      {{ request.completedAt ? 'Tiền đã được chuyển tới' : 'Tài khoản nhận tiền' }}:
                       {{ request.bank.name }} · ••••{{ request.bank.last4 }}
                     </p>
                   }
@@ -609,7 +627,7 @@
                 }
               }
               <div class="actions">
-                @if (!request.cancelledAt && !request.completedAt && request.stage < 3) {
+                @if (!request.cancelledAt && !request.completedAt && request.stage < model.cancellableBeforeStage) {
                   <button class="secondary" (click)="cancelRequest()">Hủy yêu cầu</button>
                 }
                 <button class="secondary" (click)="view.set('detail')">Xem chi tiết đơn</button>

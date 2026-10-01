@@ -12,6 +12,7 @@ export type DemoOrderStatus =
   | 'preparing'
   | 'shipping'
   | 'delivered'
+  | 'delivery_failed'
   | 'cancelled';
 /** Delivery details for a demo customer; addresses are only kept in this tab. */
 export interface DemoAddress {
@@ -29,10 +30,16 @@ export interface DemoAddress {
 export interface DemoOrderLine extends CartLine {
   returnCount: number;
   availableQuantity: number;
+  /** Real backend order_item UUID, needed to submit a return for this line; unset in the demo. */
+  itemId?: string;
 }
 /** Demo orders are isolated from the production cart, account and API. */
 export interface DemoOrder {
   id: string;
+  /** Real backend order UUID, distinct from the human-readable `id`; unset in the demo. */
+  orderId?: string;
+  /** Optimistic-concurrency token a real Model needs to send back on mutation; unset in the demo. */
+  expectedVersion?: number;
   member: boolean;
   /** Account ownership is independent of the delivery phone; absent for Guest orders. */
   userId?: string;
@@ -61,6 +68,10 @@ export interface DemoReturnLine {
 /** A return request follows the BA contact, inbound parcel and refund/exchange timeline. */
 export interface DemoReturn {
   id: string;
+  /** Real backend return UUID, distinct from the human-readable `id`; unset in the demo. */
+  returnId?: string;
+  /** Optimistic-concurrency token for real return mutations; unset in the demo. */
+  expectedVersion?: number;
   orderId: string;
   kind: 'refund' | 'exchange';
   items: DemoReturnLine[];
@@ -70,6 +81,9 @@ export interface DemoReturn {
   createdAt: string;
   completedAt?: string;
   cancelledAt?: string;
+  /** CSKH refusing the request — distinct from the customer's own `cancelledAt`; unset in the demo. */
+  rejectedAt?: string;
+  rejectionReason?: string;
   bank?: { name: string; last4: string; holder: string };
   replacementUnavailable?: boolean;
 }
@@ -104,8 +118,11 @@ export const ORDER_LABELS: Record<DemoOrderStatus, string> = {
   preparing: 'Đang chuẩn bị hàng',
   shipping: 'Đang giao hàng',
   delivered: 'Giao hàng thành công',
+  delivery_failed: 'Giao không thành công',
   cancelled: 'Đã hủy',
 };
+/** Self-service cancel ends once the parcel ships — the demo's 7-stage return timeline puts that at index 3. */
+export const DEMO_CANCELLABLE_BEFORE_STAGE = 3;
 /** Vietnam mobile numbers accept domestic or +84 notation and normalize to domestic. */
 export function normalizePhone(value: string): string {
   return value.replace(/[\s.-]/g, '').replace(/^\+84/, '0');
@@ -131,6 +148,9 @@ export function withinReturnWindow(order: DemoOrder, now = Date.now()): boolean 
 @Injectable({ providedIn: 'root' })
 export class PurchaseDemoStore {
   private readonly auth = inject(AuthService);
+  /** Shared with the real Model's `OrderAccountModel` surface — the demo keeps its own value. */
+  readonly cancellableBeforeStage = DEMO_CANCELLABLE_BEFORE_STAGE;
+  readonly supportsBankInfo = true;
   readonly userId = computed(() => this.auth.session()?.userId || null);
   readonly member = computed(() => this.userId() !== null);
   readonly orders = signal<DemoOrder[]>(this.readOrders());

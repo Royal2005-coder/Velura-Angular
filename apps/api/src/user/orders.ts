@@ -7,6 +7,8 @@ import { createNotification } from "./notifications.js";
 import { recordVoucherRedemption, resolveOrderVoucher } from "./vouchers.js";
 import { allowDevOtpBypass, config } from "../config.js";
 import { createStripePaymentIntent, refundStripeOrder, STRIPE_CHECKOUT_TTL_SECONDS, stripeConfigured } from "../payments/stripe.js";
+import { verifyStripeOrder } from "../payments/stripe-verify.js";
+import { maybeRunAutomation } from "../orders/order-service.js";
 import { priceOrder, shippingMethodFromClaim } from "./order-pricing.js";
 import { buildCartLines, loadCatalog, loadCategoryTree } from "./cart-catalog.js";
 import { customerCanCancel, customerOrderSteps, orderFacts, orderStatusLabel } from "../orders/order-state-machine.js";
@@ -284,7 +286,7 @@ export async function handleOrdersRoute(
           order = await selectOne("orders", { order_id: `eq.${code}` });
         }
         if (!order) {
-          order = await selectOne("orders", { order_code: `eq.${quotePostgrestValue(code)}` });
+          order = await selectOne("orders", { order_code: `eq.${code}` });
         }
         if (!order) {
           throw new HttpError(404, "NOT_FOUND", "Không tìm thấy đơn hàng");
@@ -301,6 +303,19 @@ export async function handleOrdersRoute(
 
         if (!isOwner && !contactMatches) {
           throw new HttpError(404, "NOT_FOUND", "Mã đơn hàng hoặc thông tin liên hệ (SĐT/Email) không khớp");
+        }
+
+        // Tự động kiểm tra và đồng bộ trạng thái Stripe nếu đơn đang chờ thanh toán
+        if (order.status === "waiting_payment" && (order.payment_method === "ONLINE_PAYMENT" || order.payment_method === "STRIPE")) {
+          try {
+            const verified = await verifyStripeOrder({ orderId: String(order.order_id) });
+            if (verified.success && verified.paid) {
+              const fresh = await selectOne("orders", { order_id: `eq.${order.order_id}` });
+              if (fresh) order = fresh;
+            }
+          } catch {
+            /* ignore verify errors */
+          }
         }
 
         const [{ rows: items }, { rows: history }, { rows: payments }] = await Promise.all([
@@ -320,13 +335,27 @@ export async function handleOrdersRoute(
           order = await selectOne("orders", { order_id: `eq.${action}` });
         }
         if (!order) {
-          order = await selectOne("orders", { order_code: `eq.${quotePostgrestValue(action.toUpperCase())}` });
+          order = await selectOne("orders", { order_code: `eq.${action.toUpperCase()}` });
         }
         if (!order) {
           throw new HttpError(404, "NOT_FOUND", "Không tìm thấy đơn hàng");
         }
 
         assertOrderVisibleTo(order, profile);
+
+        // Tự động kiểm tra và đồng bộ trạng thái Stripe nếu đơn đang chờ thanh toán
+        if (order.status === "waiting_payment" && (order.payment_method === "ONLINE_PAYMENT" || order.payment_method === "STRIPE")) {
+          try {
+            const verified = await verifyStripeOrder({ orderId: String(order.order_id) });
+            if (verified.success && verified.paid) {
+              const fresh = await selectOne("orders", { order_id: `eq.${order.order_id}` });
+              if (fresh) order = fresh;
+            }
+          } catch {
+            /* ignore verify errors */
+          }
+        }
+
         const [{ rows: items }, { rows: history }, { rows: payments }] = await Promise.all([
           selectRows("order_item", { order_id: `eq.${order.order_id}` }),
           selectRows("order_status_history", { order_id: `eq.${order.order_id}`, select: "new_status,changed_at" }),
@@ -341,6 +370,7 @@ export async function handleOrdersRoute(
         if (!profile) {
           throw new HttpError(401, "UNAUTHORIZED", "Đăng nhập là bắt buộc");
         }
+        void maybeRunAutomation().catch(() => {});
         const { rows: orders } = await selectRows("orders", { user_id: `eq.${profile.user_id}` }, { count: "none" });
         orders.sort((a, b) => new Date(String(b.created_at)).getTime() - new Date(String(a.created_at)).getTime());
         const orderIds = orders.map((o) => String(o.order_id)).filter(Boolean);
@@ -540,7 +570,7 @@ export async function handleOrdersRoute(
       const body = await readJson(req);
       const targetOrderId = (action !== "switch-cod" ? action : asString(body.order_id || body.orderId)) || "";
       const order = await selectOne("orders", { order_id: `eq.${targetOrderId}` }) ||
-                    await selectOne("orders", { order_code: `eq.${quotePostgrestValue(targetOrderId.toUpperCase())}` });
+                    await selectOne("orders", { order_code: `eq.${targetOrderId.toUpperCase()}` });
       if (!order) {
         throw new HttpError(404, "NOT_FOUND", "Không tìm thấy đơn hàng");
       }
@@ -583,45 +613,37 @@ export async function handleOrdersRoute(
       const body = await readJson(req);
       const targetOrderId = (action !== "payment-failed" ? action : asString(body.order_id || body.orderId)) || "";
       const order = await selectOne("orders", { order_id: `eq.${targetOrderId}` }) ||
-                    await selectOne("orders", { order_code: `eq.${quotePostgrestValue(targetOrderId.toUpperCase())}` });
+                    await selectOne("orders", { order_code: `eq.${targetOrderId.toUpperCase()}` });
       if (order) {
         const nowIso = new Date().toISOString();
-        if (order.status === "waiting_payment") {
-          await updateRows("orders", { order_id: `eq.${order.order_id}` }, {
-            status: "pending",
-            updated_at: nowIso
-          });
-        }
         try {
           await updateRows("payment", { order_id: `eq.${order.order_id}`, payment_status: "eq.pending" }, {
             payment_status: "failed",
-            gateway_response_code: "TIMEOUT_OR_CANCELLED",
+            gateway_response_code: "CANCELLED_OR_FAILED",
             updated_at: nowIso
           });
         } catch {
           /* ignore */
         }
-        if (order.status === "waiting_payment") {
-          try {
-            await insertRow("order_status_history", {
-              order_id: order.order_id,
-              old_status: "waiting_payment",
-              new_status: "pending",
-              trigger_type: "customer",
-              changed_by: "customer",
-              changed_at: nowIso,
-              note: "Khách hủy hoặc hết hạn thanh toán online. Đơn chuyển sang chờ xác nhận."
-            });
-          } catch {
-            /* ignore */
-          }
+        try {
+          await insertRow("order_status_history", {
+            order_id: order.order_id,
+            old_status: order.status,
+            new_status: order.status,
+            trigger_type: "customer",
+            changed_by: "customer",
+            changed_at: nowIso,
+            note: "Thanh toán trực tuyến chưa hoàn tất hoặc bị hủy. Đơn tiếp tục chờ thanh toán (AD_ORDER_06)."
+          });
+        } catch {
+          /* ignore */
         }
       }
       return sendJson(res, 200, {
         success: true,
-        status: "pending",
-        status_label: "Chờ xác nhận",
-        message: "Đơn hàng chờ xác nhận. Vui lòng thanh toán lại hoặc đổi phương thức."
+        status: order?.status || "waiting_payment",
+        status_label: order?.status === "waiting_payment" ? "Chờ thanh toán" : "Chờ xác nhận",
+        message: "Thanh toán chưa hoàn tất. Bạn có thể thanh toán lại trong vòng 24 giờ kể từ khi đặt hàng."
       }, corsHeaders);
     }
 
@@ -630,7 +652,7 @@ export async function handleOrdersRoute(
       const body = await readJson(req);
       const targetOrderId = (action !== "confirm-payment" ? action : asString(body.order_id || body.orderId)) || "";
       const order = await selectOne("orders", { order_id: `eq.${targetOrderId}` }) ||
-                    await selectOne("orders", { order_code: `eq.${quotePostgrestValue(targetOrderId.toUpperCase())}` });
+                    await selectOne("orders", { order_code: `eq.${targetOrderId.toUpperCase()}` });
       if (!order) {
         throw new HttpError(404, "NOT_FOUND", "Không tìm thấy đơn hàng");
       }

@@ -93,6 +93,12 @@ export function createOrderService({
     const facts = orderFacts(order);
     const payments = Array.isArray(order.payments) ? order.payments as JsonObject[] : [];
     const latestPayment = [...payments].sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")))[0];
+    const requiresCallConfirmation = facts.status === "pending" &&
+      facts.paymentMethod === "COD" &&
+      facts.isGuest &&
+      facts.totalAmount >= 1_000_000 &&
+      !facts.hasSuccessfulCallConfirm;
+
     return {
       ...order,
       status_label: orderStatusLabel(order.status),
@@ -100,7 +106,10 @@ export function createOrderService({
       payment_status_label: latestPayment?.payment_status ? PAYMENT_STATUS_LABELS[String(latestPayment.payment_status)] ?? String(latestPayment.payment_status) : null,
       tags: tags.map((code) => ({ code, label: ORDER_TAG_LABELS[code] ?? code })),
       allowed_actions: allowedAdminActions(facts, roleCode),
-      can_simulate_carrier: roleCode === "super_admin" && facts.status === "shipping"
+      can_simulate_carrier: roleCode === "super_admin" && facts.status === "shipping",
+      is_guest: facts.isGuest,
+      has_successful_call_confirm: facts.hasSuccessfulCallConfirm,
+      requires_call_confirmation: requiresCallConfirmation
     };
   }
 
@@ -183,6 +192,21 @@ export function createOrderService({
         expectedVersion: input.expectedVersion,
         ipAddress: requestMeta.ipAddress
       }, context.accessToken) as JsonObject;
+
+      // Hỗ trợ luồng một chạm: Nếu gọi xác nhận thành công và chọn duyệt đơn ngay,
+      // tự động chuyển tiếp thực hiện confirm_cod.
+      if (action === "call_confirm" && (body?.confirmOrder === true || body?.confirm_order === true) && input.payload.call_result === "reached") {
+        const afterCall = await repository.findById(orderId, context.accessToken);
+        if (afterCall && afterCall.status === "pending") {
+          await repository.performAction(orderId, {
+            action: "confirm_cod",
+            note: input.note || "Xác nhận đơn sau cuộc gọi liên hệ thành công",
+            payload: {},
+            expectedVersion: afterCall.version,
+            ipAddress: requestMeta.ipAddress
+          }, context.accessToken);
+        }
+      }
 
       const refund = result?.refund_required && refunds ? await refunds.refund(orderId) : null;
       const fresh = await this.get(context, orderId);

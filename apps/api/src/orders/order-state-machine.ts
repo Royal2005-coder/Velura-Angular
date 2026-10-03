@@ -125,6 +125,9 @@ export const CARRIER_OUTCOMES: Readonly<Record<string, string>> = {
 export interface OrderFacts {
   status: string;
   paymentMethod: string;
+  totalAmount: number;
+  isGuest: boolean;
+  hasSuccessfulCallConfirm: boolean;
   trackingCode: string | null;
   shipmentVoidedAt: string | null;
   handedOverAt: string | null;
@@ -167,9 +170,20 @@ export function actionGuard(code: string, facts: OrderFacts): string | null {
   if (!isOrderStatus(facts.status) || !action.from.includes(facts.status)) return "INVALID_ORDER_ACTION";
   switch (code) {
     case "confirm_cod":
+      // FR-04: đơn online không được xác nhận bằng action COD.
+      if (facts.paymentMethod !== "COD") return "COD_ONLY";
+      // Quy trình 3.1.11 (AD_ORDER_04, AD_ORDER_05): Khách vãng lai thanh toán COD từ 1.000.000đ trở lên
+      // bắt buộc phải gọi và lưu kết quả xác nhận với khách trước khi xác nhận đơn.
+      if (facts.isGuest && facts.totalAmount >= 1_000_000 && !facts.hasSuccessfulCallConfirm) {
+        return "CALL_CONFIRMATION_REQUIRED";
+      }
+      return null;
     case "auto_confirm_cod":
       // FR-04: đơn online không được xác nhận bằng action COD.
-      return facts.paymentMethod === "COD" ? null : "COD_ONLY";
+      if (facts.paymentMethod !== "COD") return "COD_ONLY";
+      // Đơn COD >= 1.000.000đ không bao giờ tự động xác nhận sau 24h
+      if (facts.totalAmount >= 1_000_000) return "AUTO_CONFIRM_NOT_DUE";
+      return null;
     case "to_waiting_payment":
     case "payment_succeeded":
       return facts.paymentMethod === "ONLINE_PAYMENT" ? null : "ONLINE_ONLY";
@@ -224,9 +238,27 @@ export function orderFacts(order: Record<string, unknown>): OrderFacts {
   const payments = Array.isArray(order.payments) ? (order.payments as Record<string, unknown>[]) : [];
   const latest = [...payments].sort((a, b) =>
     String(b.created_at || "").localeCompare(String(a.created_at || "")))[0];
+
+  const events = Array.isArray(order.events) ? (order.events as Record<string, unknown>[]) : [];
+  const hasSuccessfulCallConfirm = events.some((e) =>
+    e.action === "call_confirm" &&
+    (e.result === "success" || !e.result) &&
+    (e.payload as Record<string, unknown>)?.call_result === "reached"
+  );
+
+  const user = (order.user && typeof order.user === "object") ? (order.user as Record<string, unknown>) : null;
+  const isGuest = order.is_guest === true ||
+    !order.user_id ||
+    user?.is_active === false ||
+    user?.role === "guest" ||
+    (typeof user?.email === "string" && user.email.includes("@guest."));
+
   return {
     status: String(order.status || ""),
     paymentMethod: String(order.payment_method || ""),
+    totalAmount: typeof order.total_amount === "number" ? order.total_amount : Number(order.total_amount || 0),
+    isGuest: Boolean(isGuest),
+    hasSuccessfulCallConfirm,
     trackingCode: order.tracking_code ? String(order.tracking_code) : null,
     shipmentVoidedAt: order.shipment_voided_at ? String(order.shipment_voided_at) : null,
     handedOverAt: order.handed_over_at ? String(order.handed_over_at) : null,

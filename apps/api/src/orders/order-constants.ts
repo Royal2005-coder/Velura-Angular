@@ -54,7 +54,8 @@ export const ORDER_DETAIL_SELECT = [
   "items:order_item(item_id,order_id,variant_id,product_name,applied_promo_id,quantity,unit_price)",
   `payments:payment(${PAYMENT_SELECT})`,
   "history:order_status_history(history_id,order_id,old_status,new_status,trigger_type,changed_by,changed_at,note)",
-  "events:order_event(event_id,action,actor_type,actor_id,actor_role,from_status,to_status,result,note,payload,created_at)"
+  "events:order_event(event_id,action,actor_type,actor_id,actor_role,from_status,to_status,result,note,payload,created_at)",
+  "user:users(user_id,email,phone,full_name,is_active,role)"
 ].join(",");
 
 /** Order list projection including payment summary. */

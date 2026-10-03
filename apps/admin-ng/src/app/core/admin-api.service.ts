@@ -134,6 +134,18 @@ export interface AdminOrderRow {
   items?: Array<{ product_name?: string; quantity?: number; unit_price?: number }>;
   history?: Array<{ old_status?: string | null; new_status?: string; changed_at?: string; note?: string; trigger_type?: string }>;
   events?: AdminOrderEvent[];
+  user_id?: string;
+  user?: {
+    user_id?: string;
+    email?: string | null;
+    phone?: string | null;
+    full_name?: string | null;
+    is_active?: boolean | null;
+    role?: string | null;
+  } | null;
+  is_guest?: boolean;
+  has_successful_call_confirm?: boolean;
+  requires_call_confirmation?: boolean;
 }
 
 /** Số đơn theo trạng thái và số đơn cần xử lý, đếm ở cơ sở dữ liệu. */

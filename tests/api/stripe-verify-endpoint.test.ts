@@ -136,3 +136,35 @@ test("handleStripeVerify returns status paid immediately when order is already c
     pg.restore();
   }
 });
+
+test("handleStripeVerify finds order by order_code and verifies payment", async () => {
+  const ORDER_ID = "ord_test_456";
+  const ORDER_CODE = "VLR456";
+  const pg = fakePostgrest((call) => {
+    if (call.path === "/rest/v1/orders") {
+      assert.equal(call.query.get("order_code"), `eq.${ORDER_CODE}`);
+      return [{ order_id: ORDER_ID, order_code: ORDER_CODE, status: "waiting_payment" }];
+    }
+    if (call.path === "/rest/v1/payment") {
+      return [{ payment_id: "pay_1", payment_status: "paid", gateway_transaction_ref: "cs_test_1" }];
+    }
+    return [];
+  });
+  try {
+    const req = {
+      method: "POST",
+      url: "/api/user/payments/stripe/verify",
+      headers: { host: "localhost" },
+      body: { order_code: ORDER_CODE }
+    } as unknown as HttpRequest;
+    const res = mockResponse();
+    await handleStripeVerify(req, res, {});
+    assert.equal(res.statusCode, 200);
+    const json = JSON.parse(res.body);
+    assert.equal(json.success, true);
+    assert.equal(json.paid, true);
+    assert.equal(json.order_code, ORDER_CODE);
+  } finally {
+    pg.restore();
+  }
+});

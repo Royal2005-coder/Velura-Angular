@@ -114,10 +114,17 @@ export class AccountOrderDetailPage {
     useBodyClass('page-order-detail');
     const stripe = this.route.snapshot.queryParamMap?.get('stripe');
     if (stripe === 'success') {
-      this.notice.set('Stripe đã nhận thanh toán. Trạng thái đơn cập nhật ngay khi Stripe xác nhận, thường trong vài giây.');
-      this.load();
+      this.notice.set('Giao dịch Stripe đã thanh toán thành công. Đang đồng bộ trạng thái đơn hàng...');
+      const sessionId = this.route.snapshot.queryParamMap?.get('session_id') || undefined;
+      this.api
+        .post('/api/user/payments/stripe/verify', {
+          order_id: this.orderRef,
+          session_id: sessionId,
+        })
+        .pipe(catchError(() => of(null)))
+        .subscribe(() => this.load());
     } else if (stripe === 'cancel') {
-      this.notice.set('Đơn hàng chờ xác nhận. Vui lòng thanh toán lại hoặc đổi phương thức.');
+      this.notice.set('Thanh toán chưa hoàn tất. Bạn có thể thanh toán lại trong vòng 24 giờ kể từ khi đặt hàng.');
       this.api
         .post(`/api/user/orders/${encodeURIComponent(this.orderRef)}/payment-failed`, {})
         .pipe(catchError(() => of(null)))

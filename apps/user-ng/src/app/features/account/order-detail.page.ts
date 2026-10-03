@@ -18,7 +18,9 @@ export interface OrderStep {
 
 interface OrderLine {
   item_id?: string;
+  product_id?: string;
   product_name?: string;
+  product_image?: string;
   quantity?: number;
   unit_price?: number;
   category_name?: string;

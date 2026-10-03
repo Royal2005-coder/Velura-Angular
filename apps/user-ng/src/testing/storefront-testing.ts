@@ -96,10 +96,12 @@ export function stubActivatedRoute(params: Record<string, string> = { id: 'p1', 
     snapshot: {
       paramMap: map,
       queryParamMap: convertToParamMap({}),
+      queryParams: {},
       data: { title: 'Velura', subtitle: 'test' },
     },
     paramMap: of(map),
     queryParamMap: of(convertToParamMap({})),
+    queryParams: of({}),
     data: of({ title: 'Velura', subtitle: 'test' }),
   } as unknown as ActivatedRoute;
 }

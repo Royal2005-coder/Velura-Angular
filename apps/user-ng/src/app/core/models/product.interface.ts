@@ -42,10 +42,14 @@ export interface ComboComponent {
 }
 
 export interface ProductReview {
+  review_id?: string;
   rating?: number;
   comment?: string;
   user_full_name?: string;
   created_at?: string;
+  review_tags?: string[];
+  images?: string[];
+  admin_reply?: string;
 }
 
 export interface ProductColorOption {

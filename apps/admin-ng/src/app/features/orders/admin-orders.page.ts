@@ -405,9 +405,9 @@ export class AdminOrdersPage {
       next: (res) => {
         this.verifyingStripe.set(false);
         if (res.paid) {
-          this.notice.set('✓ Stripe: Giao dịch đã thanh toán thành công! Đơn hàng đã tự động xác nhận.');
+          this.notice.set('Stripe: Giao dịch đã thanh toán thành công! Đơn hàng đã tự động xác nhận.');
         } else {
-          this.notice.set(`ℹ Stripe: Phiên thanh toán chưa hoàn tất (${res.status}).`);
+          this.notice.set(`Stripe: Phiên thanh toán chưa hoàn tất (${res.status}).`);
         }
         this.openDetail(order.order_id);
         this.reload();

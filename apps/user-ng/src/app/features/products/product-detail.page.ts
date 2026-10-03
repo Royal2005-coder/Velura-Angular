@@ -183,6 +183,12 @@ export class ProductDetailPage {
   });
   readonly isOutOfStock = computed(() => this.product()?.status === 'out_of_stock');
   readonly reviews = computed(() => this.product()?.reviews || []);
+  readonly averageRating = computed(() => {
+    const list = this.reviews();
+    if (!list.length) return 5.0;
+    const sum = list.reduce((acc, r) => acc + (r.rating || 5), 0);
+    return Number((sum / list.length).toFixed(1));
+  });
   readonly specRows = computed<SpecRow[]>(() => {
     const item = this.product();
     if (!item) {

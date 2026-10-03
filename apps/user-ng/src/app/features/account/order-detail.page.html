@@ -99,12 +99,22 @@
           <h2 class="detail-section-title">Sản phẩm ({{ items().length }})</h2>
           <div class="detail-products-list">
             @for (item of items(); track item.item_id || $index) {
-              <div class="detail-product-item">
+              <div class="detail-product-item" style="display: flex; justify-content: space-between; align-items: center; gap: 16px;">
                 <div class="detail-product-info">
                   <h3 class="detail-product-name">{{ item.product_name }}</h3>
                   <div class="detail-product-meta">{{ item.category_name ? item.category_name + ' • ' : '' }}x{{ item.quantity }}</div>
                   <div class="detail-product-price">{{ money((item.unit_price || 0) * (item.quantity || 0)) }}</div>
                 </div>
+                @if (order()?.status === 'delivered') {
+                  <a
+                    [routerLink]="['/account/reviews']"
+                    [queryParams]="{ order_id: order()?.order_id, product_id: item.product_id, name: item.product_name, price: item.unit_price, image: item.product_image }"
+                    class="btn btn--secondary btn--sm"
+                    style="font-size: 0.8125rem; padding: 6px 14px; white-space: nowrap; flex-shrink: 0;"
+                  >
+                    Đánh giá
+                  </a>
+                }
               </div>
             }
           </div>

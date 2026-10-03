@@ -275,16 +275,16 @@
                     <span
                       [style.background]="s.tone === 'positive' ? '#e8f5e9' : s.tone === 'negative' ? '#ffebee' : '#fff9c4'"
                       [style.color]="s.tone === 'positive' ? '#2e7d32' : s.tone === 'negative' ? '#c62828' : '#f57f17'"
-                      style="font-size: 0.75rem; font-weight: 600; padding: 2px 8px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px;"
+                      style="font-size: 0.75rem; font-weight: 600; padding: 2px 8px; border-radius: 4px; display: inline-flex; align-items: center; gap: 6px;"
                     >
-                      {{ s.tone === 'positive' ? '🌟' : s.tone === 'negative' ? '⚠️' : '💬' }} Sắc thái: {{ s.label }}
+                      <span class="admin-status-dot" [class.admin-status-dot--success]="s.tone === 'positive'" [class.admin-status-dot--danger]="s.tone === 'negative'" [class.admin-status-dot--warning]="s.tone === 'neutral'"></span> Sắc thái: {{ s.label }}
                     </span>
                   }
                 </div>
 
                 @if (detectedRestrictedWords().length > 0) {
-                  <span style="background: #ffebee; color: #c62828; font-size: 0.75rem; font-weight: 600; padding: 2px 8px; border-radius: 4px; border: 1px solid #ffcdd2;">
-                    ⚠️ Phát hiện từ nhạy cảm / spam: <strong>{{ detectedRestrictedWords().join(', ') }}</strong>
+                  <span style="background: #ffebee; color: #c62828; font-size: 0.75rem; font-weight: 600; padding: 2px 8px; border-radius: 4px; border: 1px solid #ffcdd2; display: inline-flex; align-items: center; gap: 6px;">
+                    <app-admin-icon name="alert" cssClass="admin-line-icon" style="color: #c62828;" /> Phát hiện từ nhạy cảm / spam: <strong>{{ detectedRestrictedWords().join(', ') }}</strong>
                   </span>
                 }
               </div>

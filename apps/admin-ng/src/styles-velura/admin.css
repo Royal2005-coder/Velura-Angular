@@ -12,22 +12,29 @@
 
 .admin-page { background: var(--checkout-bg); }
 .admin-page { --admin-ai-bg: #e5f1fb; --admin-ai-text: #3d6f91; --admin-ai-border: #b8d5ea; }
-.admin-page { scrollbar-color: var(--brown-light) var(--checkout-bg); scrollbar-width: thin; overflow-x: hidden; }
-.admin-page ::-webkit-scrollbar { width: 10px; height: 10px; }
-.admin-page ::-webkit-scrollbar-track { background: var(--checkout-bg); }
-.admin-page ::-webkit-scrollbar-thumb { background: var(--brown-light); border: 2px solid var(--checkout-bg); border-radius: 999px; }
-.admin-page ::-webkit-scrollbar-thumb:hover { background: var(--terracotta); }
-.admin-page ::-webkit-scrollbar-corner { background: var(--checkout-bg); }
+.admin-page { scrollbar-color: #d6d0c7 transparent; scrollbar-width: thin; overflow-x: hidden; }
+.admin-page ::-webkit-scrollbar { width: 8px; height: 8px; }
+.admin-page ::-webkit-scrollbar-track { background: transparent; }
+.admin-page ::-webkit-scrollbar-thumb { background: #d6d0c7; border: 2px solid transparent; background-clip: padding-box; border-radius: 999px; }
+.admin-page ::-webkit-scrollbar-thumb:hover { background: #aba398; }
+.admin-page ::-webkit-scrollbar-corner { background: transparent; }
 html:has(.admin-page),
-body.admin-page { scrollbar-color: var(--brown-light) var(--checkout-bg); scrollbar-width: thin; }
+body.admin-page { scrollbar-color: #d6d0c7 transparent; scrollbar-width: thin; }
 html:has(.admin-page)::-webkit-scrollbar,
-body.admin-page::-webkit-scrollbar { width: 10px; height: 10px; }
+body.admin-page::-webkit-scrollbar { width: 8px; height: 8px; }
 html:has(.admin-page)::-webkit-scrollbar-track,
-body.admin-page::-webkit-scrollbar-track { background: var(--checkout-bg); }
+body.admin-page::-webkit-scrollbar-track { background: transparent; }
 html:has(.admin-page)::-webkit-scrollbar-thumb,
-body.admin-page::-webkit-scrollbar-thumb { background: var(--brown-light); border: 2px solid var(--checkout-bg); border-radius: 999px; }
+body.admin-page::-webkit-scrollbar-thumb { background: #d6d0c7; border: 2px solid transparent; background-clip: padding-box; border-radius: 999px; }
 html:has(.admin-page)::-webkit-scrollbar-thumb:hover,
-body.admin-page::-webkit-scrollbar-thumb:hover { background: var(--terracotta); }
+body.admin-page::-webkit-scrollbar-thumb:hover { background: #aba398; }
+
+.admin-status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; vertical-align: middle; }
+.admin-status-dot--success { background: #2e7d32; box-shadow: 0 0 0 2px rgba(46, 125, 50, 0.15); }
+.admin-status-dot--danger { background: #c53030; box-shadow: 0 0 0 2px rgba(197, 48, 48, 0.15); }
+.admin-status-dot--warning { background: #d97706; box-shadow: 0 0 0 2px rgba(217, 119, 6, 0.15); }
+.admin-status-dot--neutral { background: #64748b; box-shadow: 0 0 0 2px rgba(100, 116, 139, 0.15); }
+.admin-status-dot--info { background: #2563eb; box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15); }
 body.admin-page,
 body.admin-page input,
 body.admin-page button,
@@ -394,6 +401,7 @@ app-admin-pagination { display: block; width: 100%; }
 .admin-modal-overlay {
   backdrop-filter: blur(8px);
   background: rgba(30, 26, 24, 0.48);
+  overflow: hidden;
   transition: all 0.25s ease-out;
 }
 .admin-modal {
@@ -401,6 +409,7 @@ app-admin-pagination { display: block; width: 100%; }
   background: rgba(255, 255, 255, 0.96);
   box-shadow: 0 24px 64px rgba(42, 37, 34, 0.22);
   backdrop-filter: blur(20px);
+  overflow: hidden;
   transform: scale(1);
   animation: modalScaleIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }

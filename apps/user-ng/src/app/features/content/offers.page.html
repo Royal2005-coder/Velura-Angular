@@ -47,7 +47,7 @@
               @if (campaign.highlight_label) {
                 <span class="offer-banner-row__eyebrow">{{ campaign.highlight_label }}</span>
               }
-              <h3 class="offer-banner-row__title">{{ campaign.title }}</h3>
+              <h3 class="offer-banner-row__title">{{ cleanTitle(campaign.title) }}</h3>
               @if (campaign.description) {
                 <p class="offer-banner-row__desc">{{ campaign.description }}</p>
               }
@@ -68,9 +68,22 @@
                 <a class="offer-banner-row__cta" routerLink="/products">Mua sắm ngay →</a>
               }
             </div>
-            @if (campaign.banner_image_url) {
-              <a class="offer-banner-row__image-link" routerLink="/products" [attr.aria-label]="campaign.title">
-                <img class="offer-banner-row__image" [src]="campaign.banner_image_url" [alt]="campaign.title" />
+            @if (campaign.banner_image_url && !failedImages()[campaign.promo_id]) {
+              <a class="offer-banner-row__image-link" routerLink="/products" [attr.aria-label]="cleanTitle(campaign.title)">
+                <img
+                  class="offer-banner-row__image"
+                  [src]="campaign.banner_image_url"
+                  [alt]="cleanTitle(campaign.title)"
+                  (error)="onImageError(campaign.promo_id)"
+                />
+              </a>
+            } @else {
+              <a class="offer-banner-row__image-link" routerLink="/products" [attr.aria-label]="cleanTitle(campaign.title)">
+                <div class="offer-banner-fallback">
+                  <span class="offer-banner-fallback__eyebrow">VELURA SPECIAL</span>
+                  <strong class="offer-banner-fallback__title">{{ cleanTitle(campaign.title) }}</strong>
+                  <span class="offer-banner-fallback__badge">Đặc Quyền Tháng Này</span>
+                </div>
               </a>
             }
           </article>
@@ -95,7 +108,7 @@
 
       @if (focusedCampaign(); as campaign) {
         <div class="offer-voucher-group" id="offer-focused">
-          <h3 class="offer-voucher-group__title">Mã của {{ campaign.title }}</h3>
+          <h3 class="offer-voucher-group__title">Mã của {{ cleanTitle(campaign.title) }}</h3>
           @if (focusedVouchers().length === 0) {
             <p class="offers-state">Chương trình này chưa có mã nào dùng được cho bạn.</p>
           } @else {

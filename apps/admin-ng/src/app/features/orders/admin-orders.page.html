@@ -196,11 +196,16 @@
         </div>
       }
 
-      @if (primaryActions().length || destructiveActions().length || canResolvePayment()) {
+      @if (primaryActions().length || destructiveActions().length || canResolvePayment() || canVerifyStripe()) {
         <section class="admin-order-action-bar" aria-label="Thao tác với đơn">
           <div class="admin-order-action-bar__primary">
+            @if (canVerifyStripe()) {
+              <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" [disabled]="verifyingStripe()" (click)="syncStripePayment()">
+                @if (verifyingStripe()) { Đang kiểm tra Stripe... } @else { 🔄 Đồng bộ Stripe }
+              </button>
+            }
             @for (action of primaryActions(); track action.code; let first = $first) {
-              <button class="admin-btn admin-btn--sm" [class.admin-btn--secondary]="first" [class.admin-btn--outline]="!first" type="button" (click)="openAction(action)">{{ action.label }}</button>
+              <button class="admin-btn admin-btn--sm" [class.admin-btn--secondary]="first && !canVerifyStripe()" [class.admin-btn--outline]="!first || canVerifyStripe()" type="button" (click)="openAction(action)">{{ action.label }}</button>
             }
             @if (canResolvePayment()) {
               <button class="admin-btn admin-btn--outline admin-btn--sm" type="button" (click)="openPaymentResolve()">Đối soát thanh toán</button>

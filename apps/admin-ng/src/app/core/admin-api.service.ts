@@ -968,6 +968,16 @@ export class AdminApiService {
   }
 
   /**
+   * Chủ động đồng bộ và xác thực thanh toán từ cổng Stripe (AD_ORDER_07).
+   */
+  verifyStripePayment(orderId: string): Observable<{ success: boolean; paid: boolean; status: string; message: string }> {
+    return this.http.post<{ success: boolean; paid: boolean; status: string; message: string }>(
+      `${this.baseUrl}/api/user/payments/stripe/verify`,
+      { order_id: orderId },
+    );
+  }
+
+  /**
    * Lists audit rows for one order.
    */
   orderAuditLogs(orderId: string, params: Record<string, string> = {}): Observable<AdminListPayload<AdminAuditRow>> {

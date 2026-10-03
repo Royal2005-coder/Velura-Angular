@@ -1,118 +1,341 @@
 <main class="product-review-page">
-      <div class="container">
+  <div class="container">
+    <!-- Header -->
+    <div class="review-main__header">
+      <h1 class="review-main__title">Đánh Giá Sản Phẩm</h1>
+      <p class="review-main__subtitle">CHIA SẺ TRẢI NGHIỆM CỦA BẠN CÙNG VELURA</p>
+    </div>
 
-        <!-- Header -->
-        <div class="review-main__header">
-          <h1 class="review-main__title">Đánh Giá Sản Phẩm</h1>
-          <p class="review-main__subtitle">CHIA SẺ TRẢI NGHIỆM CỦA BẠN CÙNG VELURA</p>
+    <!-- Navigation Tabs -->
+    <div style="display: flex; justify-content: center; gap: 16px; margin-bottom: 32px;">
+      <button
+        type="button"
+        class="btn"
+        [class.btn--primary]="activeTab() === 'write'"
+        [class.btn--secondary]="activeTab() !== 'write'"
+        (click)="activeTab.set('write')"
+        style="padding: 10px 24px; font-size: 0.875rem;"
+      >
+        Viết đánh giá
+      </button>
+      <button
+        type="button"
+        class="btn"
+        [class.btn--primary]="activeTab() === 'history'"
+        [class.btn--secondary]="activeTab() !== 'history'"
+        (click)="activeTab.set('history')"
+        style="padding: 10px 24px; font-size: 0.875rem;"
+      >
+        Lịch sử đánh giá của tôi ({{ myReviews().length }})
+      </button>
+    </div>
+
+    @if (activeTab() === 'write') {
+      <!-- List of other eligible items waiting for review -->
+      @if (eligibleItems().length > 1 && !orderId()) {
+        <div style="max-width: 840px; margin: 0 auto 24px; background: #fff; border: 1px solid #E8DFD6; border-radius: 12px; padding: 20px;">
+          <h3 style="font-size: 0.9375rem; font-weight: 600; margin: 0 0 12px; color: #50453B;">Chọn sản phẩm từ đơn hàng đã giao để đánh giá:</h3>
+          <div style="display: flex; gap: 12px; overflow-x: auto; padding-bottom: 8px;">
+            @for (item of eligibleItems(); track item.orderId + item.productId) {
+              <div
+                (click)="selectItem(item)"
+                [style.border-color]="productId() === item.productId && orderId() === item.orderId ? '#7D562D' : '#E8DFD6'"
+                [style.background]="productId() === item.productId && orderId() === item.orderId ? '#FAF6F2' : '#fff'"
+                style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; border: 1px solid #E8DFD6; border-radius: 8px; cursor: pointer; min-width: 240px; flex-shrink: 0;"
+              >
+                <img [src]="item.productImage" [alt]="item.productName" style="width: 44px; height: 56px; object-fit: cover; border-radius: 4px;" />
+                <div style="overflow: hidden;">
+                  <strong style="display: block; font-size: 0.8125rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ item.productName }}</strong>
+                  <small style="color: #8C857E;">Đơn #{{ item.orderCode.slice(0, 8) }}</small>
+                </div>
+              </div>
+            }
+          </div>
+        </div>
+      }
+
+      <div class="review-card">
+        <!-- Product Summary Block -->
+        <div class="product-summary" id="js-product-summary">
+          <img class="product-summary__image" id="js-product-img" [src]="productImage()" [alt]="productName()" />
+          <div class="product-summary__details">
+            <h2 class="product-summary__name" id="js-product-name">{{ productName() }}</h2>
+            <div class="product-summary__meta">
+              @if (orderId()) {
+                <span class="product-summary__variant">Mã đơn: #{{ orderId().slice(0, 8) }}</span>
+                <span>&middot;</span>
+              }
+              <span class="product-summary__price" id="js-product-price">{{ money(productPrice()) }}</span>
+            </div>
+            @if (!productId()) {
+              <p style="color: #b91c1c; font-size: 0.8125rem; margin: 4px 0 0;">
+                Vui lòng chọn sản phẩm từ danh sách đơn hàng đã nhận để gửi đánh giá.
+              </p>
+            }
+          </div>
         </div>
 
-        <div class="review-card">
-          <!-- Product Summary Block -->
-          <div class="product-summary" id="js-product-summary">
-            <img class="product-summary__image" id="js-product-img" src="/assets/images/product-silk-blazer.png"
-              alt="Áo Blazer Lụa Satin" />
-            <div class="product-summary__details">
-              <h2 class="product-summary__name" id="js-product-name">Áo Blazer Lụa Satin</h2>
-              <div class="product-summary__meta">
-                <span class="product-summary__dot-bullet" style="background-color: #EFE7DD;"
-                  id="js-product-color-dot"></span>
-                <span class="product-summary__variant" id="js-product-variant">Champagne &nbsp;&middot;&nbsp; Size:
-                  M</span>
-                <span class="product-summary__price" id="js-product-price">1.200.000 VND</span>
-              </div>
+        @if (submitSuccess()) {
+          <div style="padding: 32px; text-align: center; background: #f0fdf4; border-bottom: 1px solid #bbf7d0;">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2" style="margin: 0 auto 12px; display: block;">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+              <polyline points="22 4 12 14.01 9 11.01"></polyline>
+            </svg>
+            <h3 style="font-family: 'Playfair Display', serif; font-size: 1.25rem; color: #166534; margin: 0 0 8px;">Đánh giá thành công!</h3>
+            <p style="font-size: 0.875rem; color: #15803d; margin: 0 0 20px;">{{ submitSuccess() }}</p>
+            <button type="button" class="btn btn--primary" (click)="activeTab.set('history')">Xem danh sách đánh giá của tôi</button>
+          </div>
+        }
+
+        <!-- Form block -->
+        <form class="review-form" id="js-review-form" (submit)="$event.preventDefault(); submitReview()">
+          @if (submitError()) {
+            <div style="padding: 12px 16px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; color: #991b1b; font-size: 0.875rem; width: 100%;">
+              {{ submitError() }}
+            </div>
+          }
+
+          <!-- 1. Stars section -->
+          <div class="review-form__section">
+            <h3 class="review-form__label">MỨC ĐỘ HÀI LÒNG CỦA BẠN</h3>
+            <div class="review-rating" id="js-star-rating-main" (mouseleave)="setHoverRating(0)">
+              @for (star of [1, 2, 3, 4, 5]; track star) {
+                <button
+                  type="button"
+                  class="review-rating__star"
+                  [class.is-selected]="effectiveRating() >= star"
+                  (mouseenter)="setHoverRating(star)"
+                  (click)="setRating(star)"
+                  [attr.aria-label]="star + ' sao'"
+                >
+                  <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                  </svg>
+                </button>
+              }
+            </div>
+            <span style="font-size: 0.875rem; color: #7D562D; font-weight: 600;">
+              @switch (effectiveRating()) {
+                @case (5) { Tuyệt vời, rất hài lòng! }
+                @case (4) { Hài lòng với sản phẩm }
+                @case (3) { Bình thường }
+                @case (2) { Chưa thực sự hài lòng }
+                @case (1) { Rất không hài lòng }
+              }
+            </span>
+          </div>
+
+          <!-- 2. Quick Tags section -->
+          <div class="review-form__section">
+            <h3 class="review-form__label">GỢI Ý NHẬN XÉT (CHỌN NHANH)</h3>
+            <div class="review-tags" id="js-review-tags">
+              @for (tag of presetTags; track tag) {
+                <button
+                  type="button"
+                  class="review-tag-btn"
+                  [class.is-active]="selectedTags().includes(tag)"
+                  (click)="toggleTag(tag)"
+                >
+                  {{ tag }}
+                </button>
+              }
             </div>
           </div>
 
-          <!-- Form block -->
-          <form class="review-form" id="js-review-form" novalidate onsubmit="return false;">
-            <!-- 1. Stars section -->
-            <div class="review-form__section">
-              <h3 class="review-form__label">MỨC ĐỘ HÀI LÒNG CỦA BẠN</h3>
-              <div class="review-rating" id="js-star-rating-main" (click)="onStarClick($event)">
-                <button type="button" class="review-rating__star" data-value="1" aria-label="1 sao">
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                    <polygon
-                      points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2">
-                    </polygon>
-                  </svg>
-                </button>
-                <button type="button" class="review-rating__star" data-value="2" aria-label="2 sao">
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                    <polygon
-                      points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2">
-                    </polygon>
-                  </svg>
-                </button>
-                <button type="button" class="review-rating__star" data-value="3" aria-label="3 sao">
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                    <polygon
-                      points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2">
-                    </polygon>
-                  </svg>
-                </button>
-                <button type="button" class="review-rating__star" data-value="4" aria-label="4 sao">
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                    <polygon
-                      points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2">
-                    </polygon>
-                  </svg>
-                </button>
-                <button type="button" class="review-rating__star" data-value="5" aria-label="5 sao">
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                    <polygon
-                      points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2">
-                    </polygon>
-                  </svg>
-                </button>
+          <!-- 3. Details description -->
+          <div class="review-form__section">
+            <h3 class="review-form__label">CHI TIẾT NHẬN XÉT</h3>
+            <textarea
+              class="review-form__textarea"
+              id="js-review-textarea"
+              [value]="comment()"
+              (input)="comment.set($any($event.target).value)"
+              placeholder="Hãy chia sẻ về chất liệu, form dáng và cảm nhận của bạn khi khoác lên mình sản phẩm này..."
+            ></textarea>
+          </div>
+
+          <!-- 4. Media upload (URL / Attachments) -->
+          <div class="review-form__section">
+            <h3 class="review-form__label">HÌNH ẢNH MINH HỌA</h3>
+            <div style="display: flex; gap: 8px; width: 100%; max-width: 480px;">
+              <input
+                type="url"
+                [value]="imageUrlInput()"
+                (input)="imageUrlInput.set($any($event.target).value)"
+                (keydown.enter)="$event.preventDefault(); addImage()"
+                placeholder="Dán đường dẫn ảnh thực tế (https://...)"
+                style="flex: 1; padding: 10px 14px; border: 1px solid #D4C4B7; border-radius: 6px; font-size: 0.875rem;"
+              />
+              <button type="button" class="btn btn--secondary" (click)="addImage()" style="padding: 10px 16px; font-size: 0.8125rem;">
+                Thêm ảnh
+              </button>
+            </div>
+
+            @if (images().length > 0) {
+              <div class="media-upload__preview" style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px;">
+                @for (img of images(); track $index) {
+                  <div class="media-upload__thumb-wrapper">
+                    <img [src]="img" class="media-upload__thumb" alt="Hình ảnh đánh giá" />
+                    <button type="button" class="media-upload__remove-btn" (click)="removeImage($index)">✕</button>
+                  </div>
+                }
               </div>
-            </div>
+            }
+          </div>
 
-            <!-- 2. Quick Tags section -->
-            <div class="review-form__section">
-              <h3 class="review-form__label">GỢI Ý NHẬN XÉT</h3>
-              <div class="review-tags" id="js-review-tags">
-                <button type="button" class="review-tag-btn" data-text="Size quá to">Size quá to</button>
-                <button type="button" class="review-tag-btn" data-text="Size quá nhỏ">Size quá nhỏ</button>
-                <button type="button" class="review-tag-btn" data-text="Vừa vặn">Vừa vặn</button>
-                <button type="button" class="review-tag-btn" data-text="Vải đẹp">Vải đẹp</button>
-                <button type="button" class="review-tag-btn" data-text="Đúng mô tả">Đúng mô tả</button>
-                <button type="button" class="review-tag-btn" data-text="Giao hàng nhanh">Giao hàng nhanh</button>
-                <button type="button" class="review-tag-btn" data-text="Đóng gói cẩn thận">Đóng gói cẩn thận</button>
-              </div>
-            </div>
-
-            <!-- 3. Details description -->
-            <div class="review-form__section">
-              <h3 class="review-form__label">CHI TIẾT NHẬN XÉT</h3>
-              <textarea class="review-form__textarea" id="js-review-textarea"
-                placeholder="Hãy chia sẻ về chất liệu, form dáng và cảm nhận của bạn khi khoác lên mình sản phẩm này..."></textarea>
-            </div>
-
-            <!-- 4. Media upload -->
-            <div class="review-form__section">
-              <h3 class="review-form__label" style="display: none;">HÌNH ẢNH & VIDEO THỰC TẾ</h3>
-              <div class="media-upload" id="js-media-upload">
-                <input type="file" id="js-media-input" style="display: none;" multiple accept="image/*,video/*" />
-                <div class="media-upload__dropzone" id="js-dropzone">
-                  <svg class="media-upload__icon" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                    stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
-                    <circle cx="12" cy="13" r="4" />
-                  </svg>
-                  <span class="media-upload__title">THÊM TỆP</span>
-                </div>
-                <p class="media-upload__desc">* Tối đa 5 hình ảnh và 1 video (dưới 10MB)</p>
-                <div class="media-upload__preview" id="js-media-preview"></div>
-              </div>
-            </div>
-
-            <!-- Action submit -->
-            <div class="review-form__actions">
-              <button class="btn review-action" type="button" id="js-btn-submit-review-main">GỬI ĐÁNH GIÁ</button>
-            </div>
-          </form>
-        </div>
-
+          <!-- Action submit -->
+          <div class="review-form__actions">
+            <button
+              class="btn review-action"
+              type="submit"
+              [disabled]="submitting() || !productId() || !orderId()"
+            >
+              {{ submitting() ? 'ĐANG GỬI ĐÁNH GIÁ...' : 'GỬI ĐÁNH GIÁ' }}
+            </button>
+          </div>
+        </form>
       </div>
-    </main>
+    } @else {
+      <!-- Lịch sử đánh giá của tôi -->
+      <div style="max-width: 840px; margin: 0 auto;">
+        @if (loadingReviews()) {
+          <div style="text-align: center; padding: 48px; color: #8C857E;">
+            <p>Đang tải lịch sử đánh giá của bạn...</p>
+          </div>
+        } @else if (myReviews().length === 0) {
+          <div style="background: #fff; border: 1px solid #E8DFD6; border-radius: 16px; padding: 48px; text-align: center;">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#7D562D" stroke-width="1.5" style="margin: 0 auto 16px; display: block;">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+            </svg>
+            <h3 style="font-family: 'Playfair Display', serif; font-size: 1.25rem; color: #1C1B1B; margin: 0 0 8px;">Bạn chưa gửi đánh giá nào</h3>
+            <p style="color: #8C857E; font-size: 0.875rem; margin: 0 0 24px;">Sau khi đơn hàng giao thành công, bạn có thể chia sẻ trải nghiệm để nhận các ưu đãi hấp dẫn từ Velura.</p>
+            <button type="button" class="btn btn--primary" (click)="activeTab.set('write')">Viết đánh giá ngay</button>
+          </div>
+        } @else {
+          <div style="display: flex; flex-direction: column; gap: 20px;">
+            @for (rev of myReviews(); track rev.review_id) {
+              <div style="background: #fff; border: 1px solid #E8DFD6; border-radius: 12px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.02);">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-bottom: 12px;">
+                  <div>
+                    <strong style="font-size: 1.0625rem; color: #1C1B1B; display: block; margin-bottom: 4px;">{{ rev.product_name || 'Sản phẩm Velura' }}</strong>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                      <div style="color: #D4AF37; display: flex; gap: 2px;">
+                        @for (s of [1, 2, 3, 4, 5]; track s) {
+                          <svg width="16" height="16" viewBox="0 0 24 24" [attr.fill]="rev.rating >= s ? '#D4AF37' : 'none'" stroke="#D4AF37" stroke-width="1.5">
+                            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                          </svg>
+                        }
+                      </div>
+                      <small style="color: #8C857E;">Đơn #{{ rev.order_id.slice(0, 8) }} &middot; {{ rev.submitted_at || rev.created_at | date:'dd/MM/yyyy' }}</small>
+                    </div>
+                  </div>
+
+                  <div>
+                    @switch (rev.status) {
+                      @case ('approved') {
+                        <span style="background: #e8f5e9; color: #2e7d32; font-size: 0.75rem; font-weight: 600; padding: 4px 10px; border-radius: 999px;">
+                          Đã duyệt
+                        </span>
+                      }
+                      @case ('pending') {
+                        <span style="background: #fef3c7; color: #92400e; font-size: 0.75rem; font-weight: 600; padding: 4px 10px; border-radius: 999px;">
+                          Chờ duyệt
+                        </span>
+                      }
+                      @case ('rejected') {
+                        <span style="background: #fee2e2; color: #991b1b; font-size: 0.75rem; font-weight: 600; padding: 4px 10px; border-radius: 999px;">
+                          Bị từ chối
+                        </span>
+                      }
+                    }
+                  </div>
+                </div>
+
+                @if (rev.review_tags && rev.review_tags.length > 0) {
+                  <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px;">
+                    @for (t of rev.review_tags; track t) {
+                      <span style="background: #FAF6F2; border: 1px solid #E8DFD6; border-radius: 4px; padding: 2px 8px; font-size: 0.75rem; color: #7D562D;">
+                        {{ t }}
+                      </span>
+                    }
+                  </div>
+                }
+
+                @if (rev.comment) {
+                  <p style="margin: 0 0 12px; font-size: 0.875rem; line-height: 1.6; color: #2A2522;">
+                    {{ rev.comment }}
+                  </p>
+                }
+
+                @if (rev.images && rev.images.length > 0) {
+                  <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px;">
+                    @for (img of rev.images; track img) {
+                      <img [src]="img" alt="Ảnh thực tế" style="width: 60px; height: 60px; object-fit: cover; border-radius: 4px; border: 1px solid #E8DFD6;" />
+                    }
+                  </div>
+                }
+
+                <!-- Admin & Customer replies thread -->
+                @for (rep of parseReplies(rev.admin_reply); track $index) {
+                  <div
+                    [style.background]="rep.role === 'admin' ? '#f8f4ef' : '#f0f4f8'"
+                    [style.border-color]="rep.role === 'admin' ? '#e2d5c7' : '#c8d9e8'"
+                    style="border: 1px solid; border-radius: 8px; padding: 12px 14px; margin-top: 10px; font-size: 0.8125rem;"
+                  >
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                      <strong [style.color]="rep.role === 'admin' ? '#7D562D' : '#1e5f8a'">{{ rep.user_name }}</strong>
+                      <small style="color: #8C857E;">{{ rep.role === 'admin' ? 'Bộ phận CSKH' : 'Bạn' }}</small>
+                    </div>
+                    <p style="margin: 0; color: #3d352e; line-height: 1.5;">{{ rep.reply_text }}</p>
+                  </div>
+                }
+
+                <!-- Customer reply toggle -->
+                <div style="margin-top: 12px;">
+                  @if (replyingReviewId() === rev.review_id) {
+                    <div style="display: flex; gap: 8px; margin-top: 8px;">
+                      <input
+                        type="text"
+                        [value]="replyText()"
+                        (input)="replyText.set($any($event.target).value)"
+                        (keydown.enter)="sendCustomerReply(rev.review_id)"
+                        placeholder="Nhập nội dung phản hồi tiếp theo..."
+                        style="flex: 1; padding: 8px 12px; border: 1px solid #D4C4B7; border-radius: 6px; font-size: 0.8125rem;"
+                      />
+                      <button
+                        type="button"
+                        class="btn btn--primary"
+                        [disabled]="sendingReply() || !replyText().trim()"
+                        (click)="sendCustomerReply(rev.review_id)"
+                        style="padding: 8px 16px; font-size: 0.8125rem;"
+                      >
+                        Gửi
+                      </button>
+                      <button
+                        type="button"
+                        class="btn btn--secondary"
+                        (click)="replyingReviewId.set(null)"
+                        style="padding: 8px 12px; font-size: 0.8125rem;"
+                      >
+                        Hủy
+                      </button>
+                    </div>
+                  } @else {
+                    <button
+                      type="button"
+                      class="btn btn--ghost"
+                      (click)="openReply(rev.review_id)"
+                      style="font-size: 0.75rem; padding: 4px 8px; color: #7D562D; text-decoration: underline;"
+                    >
+                      + Phản hồi thêm
+                    </button>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+        }
+      </div>
+    }
+  </div>
+</main>

@@ -49,6 +49,8 @@ export class OffersPage {
   /** Chiến dịch đang mở qua `?offer=`. Giá trị lạ (ví dụ mã banner cũ A1) thì bỏ qua. */
   readonly focusedOffer = signal<string | null>(this.route.snapshot.queryParamMap.get('offer'));
 
+  readonly failedImages = signal<Record<string, boolean>>({});
+
   readonly focusedCampaign = computed(
     () => this.campaigns().find((campaign) => campaign.promo_id === this.focusedOffer()) ?? null
   );
@@ -63,6 +65,18 @@ export class OffersPage {
       items: this.vouchers().filter((voucher) => (voucher.group ?? 'running') === group.key)
     })).filter((group) => group.items.length > 0)
   );
+
+  onImageError(promoId: string): void {
+    this.failedImages.update((prev) => ({ ...prev, [promoId]: true }));
+  }
+
+  cleanTitle(title: string | undefined): string {
+    if (!title) return 'Ưu đãi Velura';
+    if (/haha|test|dummy|hahaha/i.test(title)) {
+      return 'Ưu đãi Đặc quyền Velura';
+    }
+    return title;
+  }
 
   constructor() {
     useBodyClass('page-offers');

@@ -192,6 +192,8 @@ export function orderErrorMessage(code: string): string {
     PAYMENT_ALREADY_PAID: "Đơn đã có thanh toán thành công, không huỷ vì hết hạn.",
     REFUND_NOT_RETRYABLE: "Đơn không có lần hoàn tiền lỗi nào cần thử lại.",
     CALL_RESULT_REQUIRED: "Chọn kết quả cuộc gọi.",
+    CALL_CONFIRMATION_REQUIRED: "Khách vãng lai đơn COD từ 1.000.000đ trở lên bắt buộc phải gọi điện xác nhận thành công trước khi duyệt đơn.",
+    AUTO_CONFIRM_NOT_DUE: "Đơn hàng chưa đủ điều kiện hoặc không thuộc diện tự động xác nhận.",
     SHORTAGE_REQUIRED: "Nhập tình trạng thiếu hàng.",
     CANCEL_REASON_REQUIRED: "Chọn hoặc nhập lý do huỷ.",
     NOT_ORDER_OWNER: "Bạn không có quyền với đơn hàng này.",

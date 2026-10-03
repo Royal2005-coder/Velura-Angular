@@ -105,3 +105,136 @@
 .admin-chip-btn { padding:3px 8px; border-radius:999px; border:1px solid #d0c2b4; background:#fff; font-size:.75rem; cursor:pointer; color:var(--text-body, #42382f); transition:background .15s; }
 .admin-chip-btn:hover { background:#f5ede6; }
 
+/* Odoo-style ERP Status Pipeline Stepper */
+.admin-order-pipeline {
+  display: flex;
+  align-items: center;
+  margin: 0 0 16px;
+  padding: 0;
+  border: 1px solid var(--line, #e2d9d0);
+  border-radius: var(--radius-md, 8px);
+  background: #fff;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.admin-order-pipeline__step {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 8px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--muted, #7c7267);
+  background: #fdfcfb;
+  border-right: 1px solid var(--line, #e2d9d0);
+  white-space: nowrap;
+  user-select: none;
+  transition: all 0.2s ease;
+  text-align: center;
+}
+
+.admin-order-pipeline__step:last-child {
+  border-right: none;
+}
+
+.admin-order-pipeline__step--done {
+  background: #f4f8f3;
+  color: #2e6b2c;
+  font-weight: 500;
+}
+
+.admin-order-pipeline__step--current {
+  background: var(--brown, #8c4e16);
+  color: #fff;
+  font-weight: 600;
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.15);
+}
+
+.admin-order-pipeline__step--cancelled {
+  background: #991b1b;
+  color: #fff;
+  font-weight: 600;
+}
+
+.admin-order-pipeline__step--delivery_failed {
+  background: #c53030;
+  color: #fff;
+  font-weight: 600;
+}
+
+.admin-order-pipeline__step-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  font-size: 0.6875rem;
+  font-weight: bold;
+}
+
+.admin-order-pipeline__step--done .admin-order-pipeline__step-indicator {
+  background: #2e6b2c;
+  color: #fff;
+}
+
+.admin-order-pipeline__step--current .admin-order-pipeline__step-indicator {
+  background: #fff;
+  color: var(--brown, #8c4e16);
+}
+
+.admin-order-pipeline__step--upcoming .admin-order-pipeline__step-indicator {
+  background: var(--line, #e2d9d0);
+  color: var(--muted, #7c7267);
+}
+
+/* Guest vs Member Badge in Drawer Header */
+.admin-customer-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.admin-customer-badge--guest {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+
+.admin-customer-badge--member {
+  background: #e0f2fe;
+  color: #0369a1;
+  border: 1px solid #bae6fd;
+}
+
+/* Call Confirmation Verified Tag */
+.admin-call-verified-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: #e8f5e9;
+  border: 1px solid #c8e6c9;
+  color: #2e7d32;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+/* Disabled lock button */
+.admin-btn--disabled-lock {
+  opacity: 0.65;
+  cursor: not-allowed !important;
+  background: #f8f6f4 !important;
+  color: #8c8074 !important;
+  border: 1px dashed #d5cbc1 !important;
+}
+

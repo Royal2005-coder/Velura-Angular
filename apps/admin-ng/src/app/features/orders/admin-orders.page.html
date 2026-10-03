@@ -162,6 +162,14 @@
         <h2 class="admin-section__title">{{ order.shipping_name }}</h2>
         <div class="admin-status-group">
           <span [class]="'admin-badge admin-badge--order-' + (order.status || 'pending')">{{ orderLabel(order) }}</span>
+          @if (isGuestOrder()) {
+            <span class="admin-customer-badge admin-customer-badge--guest" title="Khách vãng lai (Chưa đăng ký tài khoản)">👤 Khách vãng lai</span>
+          } @else {
+            <span class="admin-customer-badge admin-customer-badge--member" title="Khách hàng thành viên">👑 Thành viên</span>
+          }
+          @if (hasCallConfirmed()) {
+            <span class="admin-call-verified-badge" title="Đã gọi xác nhận thành công">📞 Đã xác nhận cuộc gọi</span>
+          }
           @for (tag of order.tags || []; track tag.code) {
             <span [class]="'admin-order-tag admin-order-tag--' + tag.code">{{ tag.label }}</span>
           }
@@ -189,12 +197,38 @@
           <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
             <div>
               <strong>📞 Đơn hàng COD chờ gọi xác nhận:</strong>
-              <p style="margin: 2px 0 0; font-size: 0.8125rem;">Cần gọi điện thoại xác nhận với khách trước khi duyệt đơn hoặc chuyển sang đóng gói.</p>
+              <p style="margin: 2px 0 0; font-size: 0.8125rem;">
+                @if (requiresCallConfirmation()) {
+                  <span style="color: #991b1b; font-weight: 600;">(Bắt buộc)</span> Khách vãng lai với giá trị từ 1.000.000đ trở lên cần gọi điện xác nhận thành công trước khi duyệt đơn.
+                } @else {
+                  Đơn dưới 1.000.000đ có thể xác nhận thủ công hoặc hệ thống tự động xác nhận sau 24h.
+                }
+              </p>
             </div>
             <button class="admin-btn admin-btn--sm admin-btn--secondary" type="button" (click)="openCodCallConfirm(order)">📞 Gọi xác nhận COD ngay</button>
           </div>
         </div>
       }
+
+      <!-- ERP Status Pipeline (Odoo Style) -->
+      <div class="admin-order-pipeline" aria-label="Tiến trình đơn hàng">
+        @for (step of pipelineSteps(); track step.id) {
+          <div class="admin-order-pipeline__step admin-order-pipeline__step--{{ step.state }}" [class.admin-order-pipeline__step--active]="step.state === 'current'">
+            <div class="admin-order-pipeline__step-indicator">
+              @if (step.state === 'done') {
+                <span>✓</span>
+              } @else if (step.state === 'cancelled') {
+                <span>✕</span>
+              } @else if (step.state === 'delivery_failed') {
+                <span>!</span>
+              } @else {
+                <span>{{ $index + 1 }}</span>
+              }
+            </div>
+            <span class="admin-order-pipeline__step-title">{{ step.label }}</span>
+          </div>
+        }
+      </div>
 
       @if (primaryActions().length || destructiveActions().length || canResolvePayment() || canVerifyStripe()) {
         <section class="admin-order-action-bar" aria-label="Thao tác với đơn">
@@ -204,8 +238,26 @@
                 @if (verifyingStripe()) { Đang kiểm tra Stripe... } @else { 🔄 Đồng bộ Stripe }
               </button>
             }
+            @if (requiresCallConfirmation()) {
+              <button class="admin-btn admin-btn--sm admin-btn--secondary" type="button" (click)="openCodCallConfirm(order)">
+                📞 Gọi xác nhận khách hàng
+              </button>
+              <button class="admin-btn admin-btn--sm admin-btn--disabled-lock" type="button" disabled title="Khách vãng lai đơn COD từ 1.000.000đ trở lên: Bắt buộc gọi điện thoại xác nhận thành công trước khi duyệt đơn.">
+                🔒 Xác nhận đơn (Cần gọi trước)
+              </button>
+            }
             @for (action of primaryActions(); track action.code; let first = $first) {
-              <button class="admin-btn admin-btn--sm" [class.admin-btn--secondary]="first && !canVerifyStripe()" [class.admin-btn--outline]="!first || canVerifyStripe()" type="button" (click)="openAction(action)">{{ action.label }}</button>
+              @if (!requiresCallConfirmation() || action.code !== 'call_confirm') {
+                <button
+                  class="admin-btn admin-btn--sm"
+                  [class.admin-btn--secondary]="first && !canVerifyStripe() && !requiresCallConfirmation()"
+                  [class.admin-btn--outline]="!first || canVerifyStripe() || requiresCallConfirmation()"
+                  type="button"
+                  (click)="action.code === 'call_confirm' ? openCodCallConfirm(order) : openAction(action)"
+                >
+                  {{ action.label }}
+                </button>
+              }
             }
             @if (canResolvePayment()) {
               <button class="admin-btn admin-btn--outline admin-btn--sm" type="button" (click)="openPaymentResolve()">Đối soát thanh toán</button>
@@ -601,6 +653,23 @@
               </label>
             </div>
           </fieldset>
+
+          @if (codDecision() === 'confirm') {
+            <div style="margin-top: 10px; padding: 10px 14px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px;">
+              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.875rem; color: #166534; font-weight: 500;">
+                <input
+                  type="checkbox"
+                  [checked]="codAutoConfirm()"
+                  (change)="codAutoConfirm.set($any($event.target).checked)"
+                  style="width: 16px; height: 16px; accent-color: #16a34a; cursor: pointer;"
+                />
+                <span>✓ Duyệt xác nhận đơn ngay sau khi lưu kết quả cuộc gọi</span>
+              </label>
+              <p style="margin: 4px 0 0 24px; font-size: 0.75rem; color: #15803d;">
+                Hệ thống sẽ lưu vết cuộc gọi và tự động chuyển đơn sang trạng thái "Đã xác nhận" để chuẩn bị đóng gói.
+              </p>
+            </div>
+          }
 
           @if (codDecision() === 'cancel') {
             <label class="admin-form-group">

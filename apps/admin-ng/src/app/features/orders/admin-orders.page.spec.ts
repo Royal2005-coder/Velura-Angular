@@ -162,4 +162,64 @@ describe('AdminOrdersPage', () => {
     submitForm(root);
     expect(page.notice()).toContain('Thử hoàn tiền lại');
   });
+
+  it('requires call confirmation for guest COD >= 1M and locks confirm button', async () => {
+    const page = await createAdminPage(AdminOrdersPage, {
+      getOrder: () => of(pendingCod({
+        total_amount: 1_500_000,
+        user_id: undefined,
+        is_guest: true,
+        requires_call_confirmation: true,
+        allowed_actions: [
+          action('call_confirm', 'Gọi xác nhận', { fields: ['call_result'] }),
+          action('cancel', 'Hủy đơn', { to_status: 'cancelled', fields: ['cancel_reason'], destructive: true }),
+        ],
+      })),
+    });
+    page.openDetail(ORDER_ID);
+    expect(page.isGuestOrder()).toBe(true);
+    expect(page.requiresCallConfirmation()).toBe(true);
+    const root = render();
+    expect(root.querySelector('.admin-customer-badge--guest')).not.toBeNull();
+    expect(root.querySelector('.admin-btn--disabled-lock')).not.toBeNull();
+    expect(root.textContent).toContain('Cần gọi trước');
+  });
+
+  it('renders ERP pipeline steps for order progression', async () => {
+    const page = await createAdminPage(AdminOrdersPage, {
+      getOrder: () => of(pendingCod({ status: 'processing' })),
+    });
+    page.openDetail(ORDER_ID);
+    const steps = page.pipelineSteps();
+    expect(steps).toHaveLength(5);
+    expect(steps[0].state).toBe('done');
+    expect(steps[1].state).toBe('done');
+    expect(steps[2].state).toBe('current');
+    expect(steps[3].state).toBe('upcoming');
+    expect(steps[4].state).toBe('upcoming');
+    const root = render();
+    expect(root.querySelector('.admin-order-pipeline')).not.toBeNull();
+    expect(root.querySelectorAll('.admin-order-pipeline__step')).toHaveLength(5);
+  });
+
+  it('submits COD call confirmation with reached and auto-confirm', async () => {
+    const performOrderAction = vi.fn(() => of({ order: pendingCod({ status: 'confirmed' }), refund: null }));
+    const page = await createAdminPage(AdminOrdersPage, {
+      getOrder: () => of(pendingCod({ is_guest: true, total_amount: 1_200_000 })),
+      performOrderAction,
+    });
+    page.openCodCallConfirm(pendingCod({ is_guest: true, total_amount: 1_200_000 }));
+    page.codDecision.set('confirm');
+    page.codNote.set('Khách nghe máy và xác nhận đúng thông tin đơn hàng');
+    page.codAutoConfirm.set(true);
+
+    const event = new Event('submit');
+    page.submitCodCall(event);
+
+    expect(performOrderAction).toHaveBeenCalledWith(ORDER_ID, 'call_confirm', expect.objectContaining({
+      callResult: 'reached',
+      confirmOrder: true,
+      note: 'Khách nghe máy và xác nhận đúng thông tin đơn hàng',
+    }));
+  });
 });

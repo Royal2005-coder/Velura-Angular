@@ -146,6 +146,14 @@ export class AdminOrdersPage {
     const order = this.selected();
     return !!order && this.canMutate() && this.isPaymentError(order);
   });
+  readonly canVerifyStripe = computed(() => {
+    const order = this.selected();
+    if (!order) return false;
+    const isOnline = order.payment_method === 'ONLINE_PAYMENT' || order.payment_method === 'STRIPE';
+    const isUnconfirmed = order.status === 'waiting_payment' || order.status === 'pending' || order.payment_status === 'pending';
+    return isOnline && isUnconfirmed;
+  });
+  readonly verifyingStripe = signal(false);
   readonly activeAction = computed(() => {
     const modal = this.modal();
     return modal?.kind === 'action' ? modal.action : null;
@@ -277,6 +285,34 @@ export class AdminOrdersPage {
   openPaymentResolve(): void {
     this.modal.set({ kind: 'payment' });
     this.actionError.set(null);
+  }
+
+  /**
+   * Chủ động đồng bộ trạng thái thanh toán từ Stripe với cơ sở dữ liệu (AD_ORDER_07).
+   */
+  syncStripePayment(): void {
+    const order = this.selected();
+    if (!order?.order_id || this.verifyingStripe()) return;
+    this.verifyingStripe.set(true);
+    this.notice.set(null);
+    this.actionError.set(null);
+
+    this.api.verifyStripePayment(order.order_id).subscribe({
+      next: (res) => {
+        this.verifyingStripe.set(false);
+        if (res.paid) {
+          this.notice.set('✓ Stripe: Giao dịch đã thanh toán thành công! Đơn hàng đã tự động xác nhận.');
+        } else {
+          this.notice.set(`ℹ Stripe: Phiên thanh toán chưa hoàn tất (${res.status}).`);
+        }
+        this.openDetail(order.order_id);
+        this.reload();
+      },
+      error: (err: unknown) => {
+        this.verifyingStripe.set(false);
+        this.actionError.set(adminErrorMessage(err, 'Lỗi khi kiểm tra Stripe'));
+      },
+    });
   }
 
   closeModal(): void {

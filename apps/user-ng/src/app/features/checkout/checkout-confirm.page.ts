@@ -1,5 +1,7 @@
 import { Component, computed, inject } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
+import { catchError, of } from 'rxjs';
+import { ApiService } from '../../core/services/api.service';
 import { CheckoutStore } from '../../core/services/checkout.store';
 import { useBodyClass } from '../../core/utils/body-class';
 
@@ -12,11 +14,15 @@ import { useBodyClass } from '../../core/utils/body-class';
 export class CheckoutConfirmPage {
   private readonly checkout = inject(CheckoutStore);
   private readonly route = inject(ActivatedRoute);
+  private readonly api = inject(ApiService);
   private readonly created = this.checkout.readCreatedOrder();
   readonly claimUrl = sessionStorage.getItem('velura_claim_url');
 
   readonly isStripeSuccess = computed(() => this.route.snapshot.queryParamMap.get('stripe') === 'success');
-  readonly orderCode = computed(() => this.created?.order_code || this.created?.order_id || '—');
+  readonly orderCode = computed(() => {
+    const qCode = this.route.snapshot.queryParamMap.get('code');
+    return qCode || this.created?.order_code || this.created?.order_id || '—';
+  });
   readonly paymentLabel = computed(() => {
     if (this.isStripeSuccess()) {
       return 'Thanh toán trực tuyến (Stripe) — Đã thanh toán thành công';
@@ -49,6 +55,20 @@ export class CheckoutConfirmPage {
     useBodyClass('page-checkout');
     if (this.claimUrl) {
       sessionStorage.removeItem('velura_claim_url');
+    }
+    if (this.isStripeSuccess()) {
+      const qp = this.route.snapshot.queryParamMap;
+      const sessionId = qp.get('session_id') || undefined;
+      const orderId = qp.get('order_id') || this.created?.order_id || undefined;
+      const orderCode = qp.get('code') || this.created?.order_code || undefined;
+      this.api
+        .post('/api/user/payments/stripe/verify', {
+          session_id: sessionId,
+          order_id: orderId,
+          order_code: orderCode,
+        })
+        .pipe(catchError(() => of(null)))
+        .subscribe();
     }
   }
 }

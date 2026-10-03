@@ -9,6 +9,8 @@ import {
 } from "./order-constants.js";
 import type { OrderRepository } from "./order-repository.js";
 import { orderErrorMessage } from "./order-repository.js";
+import { runOrderAutomation } from "./order-automation.js";
+import { verifyStripeOrder } from "../payments/stripe-verify.js";
 import {
   CALL_RESULTS,
   CARRIER_OUTCOMES,
@@ -26,6 +28,24 @@ import {
 /** Hoàn tiền qua cổng thanh toán; tách ra để kiểm thử không gọi Stripe thật. */
 export interface OrderRefundGateway {
   refund(orderId: string): Promise<{ status: "refunded" | "requested" | "failed" | "skipped"; message?: string }>;
+}
+
+/** Thời điểm gần nhất chạy tác vụ tự động 24 giờ. */
+let lastAutomationRun = 0;
+
+/**
+ * Tự động chạy tác vụ 24h định kỳ khi truy cập danh sách đơn (AD_ORDER_03 & AD_ORDER_08).
+ * Giới hạn tối đa 1 lần mỗi 60 giây.
+ */
+export async function maybeRunAutomation(): Promise<void> {
+  const now = Date.now();
+  if (now - lastAutomationRun < 60_000) return;
+  lastAutomationRun = now;
+  try {
+    await runOrderAutomation(false);
+  } catch {
+    // Không chặn luồng danh sách nếu tác vụ tự động gặp lỗi mạng / môi trường test
+  }
 }
 
 /**
@@ -87,6 +107,7 @@ export function createOrderService({
   return {
     async list(context, searchParams) {
       requireOrderReader(context);
+      await maybeRunAutomation();
       const payload = await repository.list(parseListFilters(searchParams), context.accessToken);
       const rows = Array.isArray(payload?.rows) ? payload.rows : [];
       const tags = await repository.tagsFor(rows.map((row) => asString(row.order_id)), context.accessToken);
@@ -98,6 +119,7 @@ export function createOrderService({
 
     async summary(context) {
       requireOrderReader(context);
+      await maybeRunAutomation();
       const [byStatus, attention] = await Promise.all([
         repository.countByStatus(ORDER_STATUSES, context.accessToken),
         repository.countAttention(context.accessToken)
@@ -111,8 +133,19 @@ export function createOrderService({
     async get(context, orderId) {
       requireOrderReader(context);
       requireUuid(orderId, "orderId");
-      const order = await repository.findById(orderId, context.accessToken);
+      let order = await repository.findById(orderId, context.accessToken);
       if (!order) throw new HttpError(404, "ORDER_NOT_FOUND", orderErrorMessage("ORDER_NOT_FOUND"));
+      if (order.status === "waiting_payment" && order.payment_method === "ONLINE_PAYMENT") {
+        try {
+          const syncRes = await verifyStripeOrder({ orderId });
+          if (syncRes.paid) {
+            const fresh = await repository.findById(orderId, context.accessToken);
+            if (fresh) order = fresh;
+          }
+        } catch {
+          // Bỏ qua nếu môi trường mock không có Stripe
+        }
+      }
       const tags = await repository.tagsFor([orderId], context.accessToken);
       return decorate(order, tags[orderId] ?? [], context.roleCode);
     },

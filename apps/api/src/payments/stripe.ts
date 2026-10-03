@@ -134,12 +134,16 @@ export async function createStripePaymentIntent(
     throw new HttpError(400, "STRIPE_AMOUNT_TOO_SMALL", "Stripe sandbox yêu cầu đơn từ 10.000 đồng.");
   }
   const origin = config.storefrontOrigin;
+  const returnBase = returnPath ?? "/checkout/confirm";
+  const sep = returnBase.includes("?") ? "&" : "?";
+  const successUrl = `${origin}${returnBase}${sep}stripe=success&session_id={CHECKOUT_SESSION_ID}&order_id=${encodeURIComponent(orderId)}`;
+  const cancelUrl = `${origin}${returnPath ?? "/checkout/shipping"}${sep}stripe=cancel&order_id=${encodeURIComponent(orderId)}`;
   const body = new URLSearchParams({
     mode: "payment",
     // Thanh toán lại từ trang đơn thì quay về chính trang đơn, không về luồng checkout
     // (trang xác nhận checkout không có dữ liệu của đơn cũ).
-    success_url: `${origin}${returnPath ?? "/checkout/confirm"}?stripe=success`,
-    cancel_url: `${origin}${returnPath ?? "/checkout/shipping"}?stripe=cancel`,
+    success_url: successUrl,
+    cancel_url: cancelUrl,
     "line_items[0][quantity]": "1",
     "line_items[0][price_data][currency]": "vnd",
     "line_items[0][price_data][unit_amount]": String(charge),

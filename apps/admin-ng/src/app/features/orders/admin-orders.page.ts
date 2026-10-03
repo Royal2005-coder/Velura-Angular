@@ -114,6 +114,7 @@ export class AdminOrdersPage {
   readonly codDecision = signal<'confirm' | 'cancel' | 'no_answer' | 'invalid'>('confirm');
   readonly codCancelReason = signal<string>('customer_request');
   readonly codNote = signal<string>('Đã gọi xác nhận, khách đồng ý nhận hàng');
+  readonly codAutoConfirm = signal(true);
 
   readonly logs = signal<AdminAuditRow[]>([]);
   readonly logsPage = signal(1);
@@ -157,6 +158,109 @@ export class AdminOrdersPage {
   readonly activeAction = computed(() => {
     const modal = this.modal();
     return modal?.kind === 'action' ? modal.action : null;
+  });
+
+  /** Kiểm tra đơn hàng có phải của khách vãng lai (chưa đăng ký tài khoản) */
+  readonly isGuestOrder = computed(() => {
+    const order = this.selected();
+    if (!order) return false;
+    return Boolean(
+      order.is_guest ||
+      !order.user_id ||
+      (order.user && (order.user.role === 'guest' || order.user.is_active === false || (typeof order.user.email === 'string' && order.user.email.includes('@guest.'))))
+    );
+  });
+
+  /** Đơn đã ghi nhận cuộc gọi xác nhận thành công */
+  readonly hasCallConfirmed = computed(() => {
+    const order = this.selected();
+    if (!order) return false;
+    if (order.has_successful_call_confirm) return true;
+    const events = Array.isArray(order.events) ? order.events : [];
+    return events.some(
+      (e) => e.action === 'call_confirm' && (e.payload as Record<string, unknown> | null)?.['call_result'] === 'reached',
+    );
+  });
+
+  /**
+   * Ràng buộc nghiệp vụ 3.1.11: Đơn COD của khách vãng lai >= 1.000.000đ
+   * bắt buộc phải gọi điện xác nhận thành công trước khi duyệt đơn.
+   */
+  readonly requiresCallConfirmation = computed(() => {
+    const order = this.selected();
+    if (!order) return false;
+    const actions = order.allowed_actions || [];
+    if (actions.length === 0) return false;
+
+    if (typeof order.requires_call_confirmation === 'boolean') {
+      return order.requires_call_confirmation;
+    }
+    const hasConfirmAction = actions.some((a) => a.code === 'confirm_cod');
+    if (hasConfirmAction) return false;
+
+    const isCod = order.payment_method === 'COD';
+    const isPending = order.status === 'pending';
+    const isOver1M = Number(order.total_amount || 0) >= 1_000_000;
+    return isCod && isPending && isOver1M && this.isGuestOrder() && !this.hasCallConfirmed();
+  });
+
+  /**
+   * Tiến trình xử lý đơn hàng theo chuẩn ERP Odoo Sales Pipeline.
+   */
+  readonly pipelineSteps = computed(() => {
+    const order = this.selected();
+    if (!order) return [];
+
+    const isOnline = order.payment_method === 'ONLINE_PAYMENT' || order.payment_method === 'STRIPE';
+    const firstStepLabel = isOnline ? '1. Chờ thanh toán' : '1. Chờ xác nhận';
+
+    const baseSteps = [
+      { id: 'pending', label: firstStepLabel },
+      { id: 'confirmed', label: '2. Đã xác nhận' },
+      { id: 'processing', label: '3. Chuẩn bị hàng' },
+      { id: 'shipping', label: '4. Đang giao hàng' },
+      { id: 'delivered', label: '5. Giao thành công' },
+    ];
+
+    const status = order.status;
+    if (status === 'cancelled') {
+      const events = Array.isArray(order.events) ? order.events : [];
+      let lastIndex = 0;
+      if (events.some((e) => e.action === 'confirm_handover' || e.action === 'carrier_failed_retrying')) lastIndex = 3;
+      else if (events.some((e) => e.action === 'start_processing' || e.action === 'record_shortage' || e.action === 'upsert_shipment')) lastIndex = 2;
+      else if (events.some((e) => e.action === 'confirm_cod' || e.action === 'payment_succeeded' || e.action === 'auto_confirm_cod')) lastIndex = 1;
+
+      return [
+        ...baseSteps.slice(0, lastIndex).map((s) => ({ ...s, state: 'done' as const })),
+        { id: 'cancelled', label: 'Đã hủy', state: 'cancelled' as const },
+      ];
+    }
+
+    if (status === 'delivery_failed') {
+      return [
+        ...baseSteps.slice(0, 4).map((s) => ({ ...s, state: 'done' as const })),
+        { id: 'delivery_failed', label: 'Giao thất bại', state: 'delivery_failed' as const },
+      ];
+    }
+
+    const currentIndex = status === 'waiting_payment' || status === 'pending'
+      ? 0
+      : status === 'confirmed'
+      ? 1
+      : status === 'processing'
+      ? 2
+      : status === 'shipping'
+      ? 3
+      : status === 'delivered'
+      ? 4
+      : 0;
+
+    return baseSteps.map((step, idx) => {
+      let state: 'done' | 'current' | 'upcoming' = 'upcoming';
+      if (idx < currentIndex) state = 'done';
+      else if (idx === currentIndex) state = 'current';
+      return { ...step, state };
+    });
   });
 
   constructor() {
@@ -358,6 +462,7 @@ export class AdminOrdersPage {
     this.codDecision.set('confirm');
     this.codCancelReason.set('customer_request');
     this.codNote.set('Đã gọi xác nhận, khách đồng ý nhận hàng');
+    this.codAutoConfirm.set(true);
     this.submitting.set(false);
     this.modal.set({ kind: 'cod_call', order });
 
@@ -398,11 +503,15 @@ export class AdminOrdersPage {
     this.actionError.set(null);
 
     const decision = this.codDecision();
-    let actionCode = 'confirm_cod';
-    let body: Record<string, string> = { note };
+    let actionCode = 'call_confirm';
+    const body: Record<string, unknown> = { note };
 
     if (decision === 'confirm') {
-      actionCode = 'confirm_cod';
+      actionCode = 'call_confirm';
+      body['callResult'] = 'reached';
+      if (this.codAutoConfirm()) {
+        body['confirmOrder'] = true;
+      }
     } else if (decision === 'cancel') {
       actionCode = 'cancel';
       body['cancelReason'] = this.codCancelReason() || 'customer_request';
@@ -411,7 +520,7 @@ export class AdminOrdersPage {
       body['callResult'] = 'no_answer';
     } else if (decision === 'invalid') {
       actionCode = 'cancel';
-      body['cancelReason'] = 'fraud';
+      body['cancelReason'] = 'suspected_fraud';
     }
 
     this.api.performOrderAction(order.order_id, actionCode, { ...body, expectedVersion: order.version }).subscribe({

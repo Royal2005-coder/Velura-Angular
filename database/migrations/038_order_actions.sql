@@ -140,6 +140,27 @@ begin
   if p_action in ('confirm_cod', 'auto_confirm_cod') and v_before.payment_method::text <> 'COD' then
     raise sqlstate 'PT422' using message = 'COD_ONLY';
   end if;
+  -- Quy trình 3.1.11 (AD_ORDER_04, AD_ORDER_05): Khách vãng lai COD >= 1.000.000đ
+  -- bắt buộc phải gọi điện xác nhận và có kết quả "reached" trước khi được phép duyệt đơn.
+  if p_action = 'confirm_cod'
+     and v_before.total_amount >= 1000000
+     and (
+       v_before.user_id is null
+       or exists (
+         select 1 from public.users u
+         where u.user_id = v_before.user_id
+           and (u.is_active is false or u.role::text = 'guest' or u.email like '%@guest.%')
+       )
+     ) then
+    if not exists (
+      select 1 from public.order_event oe
+      where oe.order_id = p_order_id
+        and oe.action = 'call_confirm'
+        and coalesce(oe.payload->>'call_result', '') = 'reached'
+    ) then
+      raise sqlstate 'PT422' using message = 'CALL_CONFIRMATION_REQUIRED';
+    end if;
+  end if;
   if p_action = 'auto_confirm_cod' and (
        v_before.total_amount >= 1000000
        or v_before.created_at > (now() at time zone 'utc') - interval '24 hours') then

@@ -15,6 +15,9 @@ function facts(overrides = {}) {
   return {
     status: "pending",
     paymentMethod: "COD",
+    totalAmount: 500_000,
+    isGuest: false,
+    hasSuccessfulCallConfirm: false,
     trackingCode: null,
     shipmentVoidedAt: null,
     handedOverAt: null,
@@ -52,6 +55,33 @@ test("KAN-59 pending COD: call, confirm, cancel — and call never changes state
   assert.deepEqual(codes(actions), ["call_confirm", "confirm_cod", "cancel"]);
   assert.equal(actions.find((a) => a.code === "call_confirm").to_status, null);
   assert.equal(actions.find((a) => a.code === "cancel").destructive, true);
+});
+
+test("AD_ORDER_04/AD_ORDER_05: Guest COD >= 1.000.000 locks confirm_cod until call reaches customer", () => {
+  // Khách vãng lai, COD >= 1M, chưa gọi điện xác nhận thành công
+  const guestHighCod = facts({ totalAmount: 1_200_000, isGuest: true, hasSuccessfulCallConfirm: false });
+  assert.equal(actionGuard("confirm_cod", guestHighCod), "CALL_CONFIRMATION_REQUIRED");
+  // Trên giao diện: nút Xác nhận đơn bị ẩn/khóa, chỉ còn Gọi xác nhận và Hủy đơn
+  const actions = allowedAdminActions(guestHighCod, "admin_operator_donhang");
+  assert.deepEqual(codes(actions), ["call_confirm", "cancel"]);
+
+  // Sau khi gọi điện xác nhận thành công (reached)
+  const confirmedCall = facts({ totalAmount: 1_200_000, isGuest: true, hasSuccessfulCallConfirm: true });
+  assert.equal(actionGuard("confirm_cod", confirmedCall), null);
+  const unlockedActions = allowedAdminActions(confirmedCall, "admin_operator_donhang");
+  assert.deepEqual(codes(unlockedActions), ["call_confirm", "confirm_cod", "cancel"]);
+});
+
+test("AD_ORDER_03: COD < 1.000.000 and registered members >= 1M do not require mandatory call", () => {
+  // COD dưới 1 triệu (kể cả khách vãng lai): gọi điện là tùy chọn, cho phép duyệt trực tiếp
+  const smallCod = facts({ totalAmount: 990_000, isGuest: true, hasSuccessfulCallConfirm: false });
+  assert.equal(actionGuard("confirm_cod", smallCod), null);
+  assert.deepEqual(codes(allowedAdminActions(smallCod, "admin_operator_donhang")), ["call_confirm", "confirm_cod", "cancel"]);
+
+  // Thành viên có tài khoản COD >= 1 triệu: duyệt thủ công, không bắt buộc ghi nhận cuộc gọi trước
+  const memberHighCod = facts({ totalAmount: 2_500_000, isGuest: false, hasSuccessfulCallConfirm: false });
+  assert.equal(actionGuard("confirm_cod", memberHighCod), null);
+  assert.deepEqual(codes(allowedAdminActions(memberHighCod, "admin_operator_donhang")), ["call_confirm", "confirm_cod", "cancel"]);
 });
 
 test("FR-04: an online order cannot be confirmed with the COD action", () => {
@@ -124,6 +154,46 @@ test("orderFacts reads the latest payment and the REFUND_FAILED marker", () => {
   });
   assert.equal(read.paymentStatus, "refund_pending");
   assert.equal(read.refundFailed, true);
+});
+
+test("orderFacts extracts totalAmount, isGuest and hasSuccessfulCallConfirm from events and user", () => {
+  const guestOrderWithCall = orderFacts({
+    status: "pending",
+    payment_method: "COD",
+    total_amount: 1500000,
+    user_id: "00000000-0000-0000-0000-000000000001",
+    user: { is_active: false, email: "guest@guest.velura.vn" },
+    events: [
+      { action: "call_confirm", result: "success", payload: { call_result: "no_answer" } },
+      { action: "call_confirm", result: "success", payload: { call_result: "reached" } }
+    ]
+  });
+  assert.equal(guestOrderWithCall.totalAmount, 1500000);
+  assert.equal(guestOrderWithCall.isGuest, true);
+  assert.equal(guestOrderWithCall.hasSuccessfulCallConfirm, true);
+
+  const guestOrderNoCall = orderFacts({
+    status: "pending",
+    payment_method: "COD",
+    total_amount: 800000,
+    user_id: null,
+    events: []
+  });
+  assert.equal(guestOrderNoCall.totalAmount, 800000);
+  assert.equal(guestOrderNoCall.isGuest, true);
+  assert.equal(guestOrderNoCall.hasSuccessfulCallConfirm, false);
+
+  const memberOrder = orderFacts({
+    status: "pending",
+    payment_method: "COD",
+    total_amount: 2000000,
+    user_id: "11111111-1111-1111-1111-111111111111",
+    user: { is_active: true, role: "member", email: "member@gmail.com" },
+    events: []
+  });
+  assert.equal(memberOrder.totalAmount, 2000000);
+  assert.equal(memberOrder.isGuest, false);
+  assert.equal(memberOrder.hasSuccessfulCallConfirm, false);
 });
 
 test("customer steps: passed milestones from history, then the rest of the normal path", () => {

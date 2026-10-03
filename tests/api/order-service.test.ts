@@ -179,6 +179,73 @@ test("payment resolution validates versions and decision", async () => {
   );
 });
 
+test("Guest COD >= 1.000.000 blocks confirm_cod until call reaches customer", async () => {
+  const highGuestCod = {
+    order_id: ORDER_ID,
+    status: "pending",
+    payment_method: "COD",
+    total_amount: 1500000,
+    is_guest: true,
+    version: 1,
+    events: [],
+    payments: []
+  };
+  const { repo } = repository(highGuestCod);
+  const service = createOrderService({ repository: repo });
+
+  // 1. Kiểm tra decorate()
+  const detail = await service.get(context("admin_operator_donhang"), ORDER_ID);
+  assert.equal(detail.requires_call_confirmation, true);
+  assert.equal(detail.is_guest, true);
+  assert.deepEqual(detail.allowed_actions.map((a) => a.code), ["call_confirm", "cancel"]);
+
+  // 2. Kiểm tra chặn performAction khi cố tình duyệt đơn
+  await assert.rejects(
+    () => service.performAction(context("admin_operator_donhang"), ORDER_ID, "confirm_cod", { note: "Duyệt đơn không gọi điện", expectedVersion: 1 }, meta()),
+    (error) => error.status === 422 && error.code === "CALL_CONFIRMATION_REQUIRED"
+  );
+});
+
+test("call_confirm with confirmOrder: true and reached chains confirm_cod", async () => {
+  let callCount = 0;
+  const highGuestCod = {
+    order_id: ORDER_ID,
+    status: "pending",
+    payment_method: "COD",
+    total_amount: 1500000,
+    is_guest: true,
+    version: 1,
+    events: [],
+    payments: []
+  };
+  const actionsPerformed = [];
+  const repo = {
+    list: async () => ({ rows: [highGuestCod], count: 1 }),
+    tagsFor: async () => ({ [ORDER_ID]: [] }),
+    findById: async () => highGuestCod,
+    performAction: async (_id, input) => {
+      actionsPerformed.push(input.action);
+      return { order: highGuestCod, refund_required: false };
+    }
+  };
+  const service = createOrderService({ repository: repo });
+
+  await service.performAction(
+    context("admin_operator_donhang"),
+    ORDER_ID,
+    "call_confirm",
+    {
+      callResult: "reached",
+      note: "Đã gọi xác nhận, khách hẹn giao sáng mai",
+      confirmOrder: true,
+      expectedVersion: 1
+    },
+    meta()
+  );
+
+  assert.deepEqual(actionsPerformed, ["call_confirm", "confirm_cod"]);
+});
+
 function meta() {
   return { ipAddress: "127.0.0.1" };
 }

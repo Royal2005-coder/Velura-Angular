@@ -1171,7 +1171,7 @@ export class AdminProductsPage {
       onSale: listProducts({ status: 'on_sale', limit: '1' }).pipe(catchError(() => of({ rows: [] as AdminProductRow[], count: 0 }))),
       hidden: listProducts({ status: 'hidden', limit: '1' }).pipe(catchError(() => of({ rows: [] as AdminProductRow[], count: 0 }))),
       out: listProducts({ status: 'out_of_stock', limit: '1' }).pipe(catchError(() => of({ rows: [] as AdminProductRow[], count: 0 }))),
-      low: (this.canReadCatalog() ? this.adminApi.listLowStock() : of({ rows: [] as AdminProductRow[], count: 0 })).pipe(catchError(() => of({ rows: [] as AdminProductRow[], count: 0 }))),
+      low: this.canReadCatalog() ? this.adminApi.listLowStock().pipe(catchError(() => of({ rows: [] as AdminProductRow[], count: 0 }))) : of({ rows: [] as AdminProductRow[], count: 0 }),
     }).subscribe((payload) => {
       this.products.set(adminListRows(payload.list));
       this.total.set(adminListCount(payload.list));

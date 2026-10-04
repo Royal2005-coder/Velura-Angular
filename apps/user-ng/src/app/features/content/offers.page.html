@@ -7,6 +7,7 @@
     </p>
   </section>
 
+  @if (!loading() && !loadError()) {
   @if (birthdayPrompt(); as prompt) {
     <section class="container offers-prompt">
       <div class="offers-prompt__card">
@@ -17,6 +18,7 @@
         <a class="btn-primary" [routerLink]="prompt.action_route">{{ prompt.action_label }}</a>
       </div>
     </section>
+  }
   }
 
   <section class="offer-list-section container" aria-labelledby="offer-list-title">
@@ -74,6 +76,8 @@
                   class="offer-banner-row__image"
                   [src]="campaign.banner_image_url"
                   [alt]="cleanTitle(campaign.title)"
+                  loading="lazy"
+                  decoding="async"
                   (error)="onImageError(campaign.promo_id)"
                 />
               </a>
@@ -92,7 +96,7 @@
     }
   </section>
 
-  @if (vouchers().length > 0) {
+  @if (!loading() && !loadError() && vouchers().length > 0) {
     <section class="offer-list-section container" aria-labelledby="offer-voucher-title">
       <div class="offer-list-section__header">
         <span class="hot-banner-section__eyebrow">Ví Voucher</span>

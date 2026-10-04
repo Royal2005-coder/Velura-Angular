@@ -1,8 +1,9 @@
 import { TestBed } from '@angular/core/testing';
-import { of, throwError } from 'rxjs';
+import { signal } from '@angular/core';
+import { of, Subject, throwError } from 'rxjs';
 import { VoucherWallet } from './voucher-wallet';
 import { VoucherService } from '../../core/services/voucher.service';
-import type { AppliedVoucher, WalletVoucher } from '../../core/models/voucher.interface';
+import type { AppliedVoucher, WalletVoucher, VoucherApplyResponse, VoucherWalletResponse } from '../../core/models/voucher.interface';
 
 function walletVoucher(overrides: Partial<WalletVoucher> = {}): WalletVoucher {
   return {
@@ -153,5 +154,82 @@ describe('VoucherWallet', () => {
     const best = walletVoucher({ voucher_id: 'v-big', code: 'BIG', discount_amount: 90000 });
     const fixture = createWallet(stubVoucherService([best], 'v-big'), 'KHONGCO');
     expect(fixture.componentInstance.preferredNotice()).toContain('KHONGCO');
+  });
+
+  it('discards an earlier wallet when the cart request or customer changes', () => {
+    const first = new Subject<VoucherWalletResponse>();
+    const second = new Subject<VoucherWalletResponse>();
+    const customerSession = signal({ userId: 'A' });
+    const loadWallet = vi.fn().mockReturnValueOnce(first).mockReturnValueOnce(second);
+    const service = { ...stubVoucherService([], null), loadWallet, customerSession } as unknown as VoucherService;
+    const fixture = createWallet(service);
+    const wallet = fixture.componentInstance;
+    wallet.refresh(1000000, 30000);
+    const fresh = walletVoucher({ voucher_id: 'fresh', code: 'FRESH' });
+    second.next({ success: true, vouchers: [fresh], best_voucher_id: fresh.voucher_id, order_value: 1000000, shipping_fee: 30000, eligible_count: 1 });
+    first.next({ success: true, vouchers: [walletVoucher()], best_voucher_id: 'v-1', order_value: 1000000, shipping_fee: 30000, eligible_count: 1 });
+    expect(wallet.selected()?.code).toBe('FRESH');
+    customerSession.set({ userId: 'B' });
+    second.next({ success: true, vouchers: [walletVoucher()], best_voucher_id: 'v-1', order_value: 1000000, shipping_fee: 30000, eligible_count: 1 });
+    expect(wallet.selected()?.code).toBe('FRESH');
+    loadWallet.mockReturnValue(of({ success: true, vouchers: [], best_voucher_id: null }));
+    fixture.detectChanges();
+    expect(wallet.items()).toEqual([]);
+    expect(wallet.selected()).toBeNull();
+  });
+
+  it('clears the parent discount when revalidating the wallet fails', () => {
+    const service = stubVoucherService([walletVoucher()], 'v-1');
+    const fixture = createWallet(service);
+    const emissions: Array<AppliedVoucher | null> = [];
+    fixture.componentInstance.applied.subscribe((value) => emissions.push(value));
+    vi.spyOn(service, 'loadWallet').mockReturnValue(throwError(() => new Error('Không thể kiểm tra ưu đãi')));
+    fixture.componentInstance.refresh(1000000, 30000);
+    expect(fixture.componentInstance.selected()).toBeNull();
+    expect(emissions.at(-1)).toBeNull();
+  });
+
+  it('does not apply a pending manual code to a changed cart', () => {
+    const manual = new Subject<VoucherApplyResponse>();
+    const service = stubVoucherService([], null);
+    vi.spyOn(service, 'applyCode').mockReturnValue(manual);
+    const fixture = createWallet(service);
+    const wallet = fixture.componentInstance;
+    wallet.manualCode.set('PRIVATE');
+    const emissions: Array<AppliedVoucher | null> = [];
+    wallet.applied.subscribe((value) => emissions.push(value));
+    wallet.submitManualCode();
+    fixture.componentRef.setInput('orderValue', 2000000);
+    manual.next({ success: true, applied: true, voucher_id: 'manual', discount_amount: 100000 });
+    expect(emissions).toEqual([]);
+    fixture.detectChanges();
+    expect(wallet.applying()).toBe(false);
+  });
+
+  it('opens the wallet in a modal dialog and closes it on Escape', () => {
+    // The DOM test runner omits the browser top-layer API; mock that platform boundary.
+    const original = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, 'showModal');
+    const originalClose = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, 'close');
+    const showModal = vi.fn(function (this: HTMLDialogElement) { this.setAttribute('open', ''); });
+    Object.defineProperty(HTMLDialogElement.prototype, 'showModal', { configurable: true, value: showModal });
+    Object.defineProperty(HTMLDialogElement.prototype, 'close', { configurable: true, value: function (this: HTMLDialogElement) { this.removeAttribute('open'); } });
+    try {
+    const fixture = createWallet(stubVoucherService([], null));
+    fixture.componentInstance.openModal();
+    fixture.detectChanges();
+    const dialog = fixture.nativeElement.querySelector('dialog') as HTMLDialogElement;
+    expect(dialog).toBeTruthy();
+    expect(dialog.open).toBe(true);
+    expect(showModal).toHaveBeenCalledOnce();
+    dialog.dispatchEvent(new Event('cancel'));
+    fixture.detectChanges();
+    expect(fixture.componentInstance.modalOpen()).toBe(false);
+    expect(fixture.nativeElement.querySelector('dialog')).toBeNull();
+    } finally {
+      if (original) Object.defineProperty(HTMLDialogElement.prototype, 'showModal', original);
+      else Reflect.deleteProperty(HTMLDialogElement.prototype, 'showModal');
+      if (originalClose) Object.defineProperty(HTMLDialogElement.prototype, 'close', originalClose);
+      else Reflect.deleteProperty(HTMLDialogElement.prototype, 'close');
+    }
   });
 });

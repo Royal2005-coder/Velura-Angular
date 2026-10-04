@@ -9,10 +9,11 @@ import { CheckoutLineEditorService } from './checkout-line-editor.service';
 describe('CheckoutLineEditorService', () => {
   const original: CartLine = { variant_id: 'black-m', product_id: 'shirt', product_name: 'Shirt', product_image: '', unit_price: 100, quantity: 1 };
   const cart = { items: signal<CartLine[]>([]), replaceItems: vi.fn() };
-  const checkout = { setCheckoutItems: vi.fn() };
+  const checkout = { setCheckoutItems: vi.fn(), source: signal<'cart' | 'buy_now'>('cart') };
   let editor: CheckoutLineEditorService;
   beforeEach(() => {
     cart.items.set([]); cart.replaceItems.mockReset(); checkout.setCheckoutItems.mockReset();
+    checkout.source.set('cart');
     TestBed.configureTestingModule({ providers: [
       CheckoutLineEditorService,
       { provide: CatalogService, useValue: { getProduct: () => of({ variants: [{ variant_id: 'black-m', stock_quantity: 5, reserved_quantity: 4 }] }) } },
@@ -44,5 +45,13 @@ describe('CheckoutLineEditorService', () => {
     cart.items.set([combo, part, original]);
     expect(editor.remove(combo, [combo, part, original])).toEqual([original]);
     expect(cart.replaceItems).toHaveBeenCalledWith([original]);
+  });
+  it('keeps an existing matching cart line unchanged when editing or removing a buy-now line', () => {
+    checkout.source.set('buy_now');
+    cart.items.set([original]);
+    editor.edit(original, { variant_id: 'white-m', available: 3 }, 2, [original]);
+    editor.remove(original, [original]);
+    expect(cart.replaceItems).not.toHaveBeenCalled();
+    expect(cart.items()).toEqual([original]);
   });
 });

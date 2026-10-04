@@ -10,6 +10,11 @@ import {
   RETURN_TRANSITIONS,
   SUPPORT_TICKET_TRANSITIONS
 } from "./return-constants.js";
+import {
+  sendRefundSuccessEmail,
+  sendExchangeShippingEmail,
+  sendExchangeCompletedEmail
+} from "./return-email.js";
 import type { ReturnRepository } from "./return-repository.js";
 
 /**
@@ -193,6 +198,9 @@ export function createReturnService({
       const payment = await repository.getPaymentByOrderId(orderId,context.accessToken);
       if (payment?.payment_provider !== "stripe") throw new HttpError(422,"STRIPE_PAYMENT_REQUIRED","Use the verified manual refund operation for non-Stripe payments");
       const result = await refunds.refund(orderId, amount, returnId, version);
+      if (result.status === "refunded") {
+        void sendRefundSuccessEmail(returnId, { method: "stripe" });
+      }
       return { success: true, refund: result };
     },
 
@@ -206,8 +214,11 @@ export function createReturnService({
       if (!payment || payment.payment_provider === "stripe" || !["paid","refund_pending"].includes(asString(payment.payment_status))) throw new HttpError(422,"CAPTURED_NON_STRIPE_REQUIRED","A captured non-Stripe payment is required");
       const reference = asString(body.transferReference).trim();
       const proof = asString(body.imageProof);
-      if (reference.length < 6 || (!proof.startsWith("https://") && !proof.startsWith("data:image/"))) throw new HttpError(422,"TRANSFER_PROOF_REQUIRED","Transfer reference and proof image are required");
-      return repository.recordManualRefund(returnId,Number(body.expectedVersion),reference,proof,context.profile?.user_id || context.authUser.id);
+      if (reference.length < 6) throw new HttpError(422,"TRANSFER_REFERENCE_REQUIRED","Mã giao dịch chuyển tiền phải có ít nhất 6 ký tự.");
+      if (!proof.startsWith("https://") && !proof.startsWith("data:image/")) throw new HttpError(422,"TRANSFER_PROOF_REQUIRED","Vui lòng tải lên ảnh chụp chứng từ chuyển khoản thành công.");
+      const updated = await repository.recordManualRefund(returnId,Number(body.expectedVersion),reference,proof,context.profile?.user_id || context.authUser.id, context.ipAddress);
+      void sendRefundSuccessEmail(returnId, { method: "manual", reference });
+      return updated;
     },
     async approveExchange(context, returnId, body) {
       requireReturnAdmin(context);
@@ -292,7 +303,7 @@ export function createReturnService({
       if (["RETURN_IN_TRANSIT","EXCHANGE_SHIPPING"].includes(status) && !asString(body.trackingReturnCode)) throw new HttpError(422,"TRACKING_REQUIRED","Shipment tracking is required");
       if (status === "EXCHANGE_PREPARING") {
         if (currentReturn.return_type !== "exchange" || currentReturn.condition_check_result !== RETURN_QA_PASS) throw new HttpError(422,"WAREHOUSE_QA_REQUIRED","Exchange requires warehouse QA");
-        return repository.prepareExchange(returnId,expectedVersion,context.profile?.user_id || context.authUser.id);
+        return repository.prepareExchange(returnId,expectedVersion,context.profile?.user_id || context.authUser.id, context.ipAddress);
       }
 
       const adminNote = body.adminNote;
@@ -312,6 +323,18 @@ export function createReturnService({
         receipts: status === "RECEIVED" ? body.items : undefined,
         expectedVersion
       }, context.profile?.user_id || context.authUser.id, context.roleCode, context.ipAddress);
+
+      if (status === "EXCHANGE_SHIPPING") {
+        void sendExchangeShippingEmail(returnId, asString(trackingReturnCode) || undefined);
+      }
+
+      if (status === "COMPLETED") {
+        if (currentReturn.return_type === "refund") {
+          void sendRefundSuccessEmail(returnId, { method: "completed" });
+        } else if (currentReturn.return_type === "exchange") {
+          void sendExchangeCompletedEmail(returnId);
+        }
+      }
 
       return updated;
     },

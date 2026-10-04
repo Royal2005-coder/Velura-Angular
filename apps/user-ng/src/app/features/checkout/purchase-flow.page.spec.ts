@@ -78,6 +78,8 @@ describe('PurchaseFlowPage with mocked Model', () => {
         {
           provide: CheckoutStore,
           useValue: {
+            source: () => 'cart',
+            shipping: () => ({ referral_code: '' }),
             readCheckoutItems: () => DEMO_LINES,
             readCreatedOrder: () => null,
             saveCreatedOrder: vi.fn(),
@@ -264,6 +266,14 @@ describe('PurchaseFlowPage with mocked Model', () => {
     page.place();
     expect(checkoutGuest).not.toHaveBeenCalled();
     expect(page.error()).toContain('chưa khả dụng');
+  });
+
+  it('preserves a voucher refusal saved by the cart instead of automatically reapplying a code', () => {
+    localStorage.setItem('checkout_voucher_declined', '1');
+    const page = createCheckoutFixture().componentInstance;
+    expect(page.voucherDeclined()).toBe(true);
+    expect(quote).toHaveBeenLastCalledWith(expect.any(Array), 'standard', expect.objectContaining({ decline: true }));
+    localStorage.removeItem('checkout_voucher_declined');
   });
 
   it('requires alternate recipient contact and complete invoice information only when requested', () => {

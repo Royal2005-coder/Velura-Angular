@@ -26,6 +26,7 @@ export class VoucherWallet {
   private manualRequest?: Subscription;
   private requestVersion = 0;
   private manualVersion = 0;
+  private modalTrigger: HTMLElement | null = null;
 
   readonly orderValue = input.required<number>();
   readonly shippingFee = input(0);
@@ -209,13 +210,18 @@ export class VoucherWallet {
 
   /** Mở bảng chọn mã. */
   openModal(): void {
+    this.modalTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     this.manualError.set(null);
     this.modalOpen.set(true);
   }
 
   /** Đóng bảng chọn mã. */
   closeModal(): void {
+    const dialog = this.dialog()?.nativeElement;
+    if (dialog?.open) dialog.close();
     this.modalOpen.set(false);
+    if (this.modalTrigger?.isConnected) this.modalTrigger.focus();
+    this.modalTrigger = null;
   }
 
   /**

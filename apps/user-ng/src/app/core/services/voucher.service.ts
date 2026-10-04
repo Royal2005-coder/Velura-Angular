@@ -31,7 +31,7 @@ export class VoucherService {
   private readonly api = inject(ApiService);
   private readonly auth = inject(AuthService);
   /** Identity scope for wallet requests; a changed session must discard earlier personalized offers. */
-  readonly customerSession = computed(() => this.auth.session());
+  readonly customerSession = computed(() => (typeof this.auth?.session === 'function' ? this.auth.session() : null));
 
   /**
    * Lấy ví voucher đã đánh giá theo giỏ hàng hiện tại.

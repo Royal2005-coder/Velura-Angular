@@ -2,6 +2,7 @@ import { HttpErrorResponse, HttpInterceptorFn } from '@angular/common/http';
 import { inject } from '@angular/core';
 import { catchError, throwError } from 'rxjs';
 import { AuthService } from '../services/auth.service';
+import { guestSessionId as currentGuestSessionId } from '../utils/guest-session';
 
 const PUBLIC_API_PREFIXES = ['/api/user/products', '/api/user/categories'];
 
@@ -13,11 +14,7 @@ const PUBLIC_API_PREFIXES = ['/api/user/products', '/api/user/categories'];
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
   const auth = inject(AuthService);
   const token = localStorage.getItem('velura_token');
-  let guestSessionId = localStorage.getItem('velura_guest_session_id');
-  if (!guestSessionId) {
-    guestSessionId = `gs_${crypto.randomUUID()}`;
-    localStorage.setItem('velura_guest_session_id', guestSessionId);
-  }
+  const guestSessionId = currentGuestSessionId();
 
   const isPublicCatalog = PUBLIC_API_PREFIXES.some((prefix) => req.url.includes(prefix));
   const isAuthApi = req.url.includes('/api/user/auth');
@@ -35,7 +32,6 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
         Boolean(token) &&
         !isAuthApi &&
         (req.method === 'GET' ||
-          req.url.includes('/api/user/style-quiz') ||
           req.url.includes('/api/v1/chat'));
       if (!canRetryAsGuest) {
         return throwError(() => error);

@@ -23,6 +23,7 @@ import { createStripePaymentIntent, refundStripeOrder, STRIPE_CHECKOUT_TTL_SECON
 import { assertLocalGatewayReady, openLocalGateway, type HostedPayment } from "../payments/local-gateways.js";
 import { customerCanCancel, customerOrderSteps, orderFacts, orderStatusLabel } from "../orders/order-state-machine.js";
 import { returnWindowOpen } from "./return-window.js";
+import { OPEN_RETURN_STATUSES } from "../returns/return-constants.js";
 import { cancelOrderForCustomer, createCustomerOrderCancelRepository } from "./order-cancel-service.js";
 import { createUserReturnsRepository, type UserReturnsRepository } from "./returns-repository.js";
 import {
@@ -195,6 +196,7 @@ async function attachProductMeta(items: JsonObject[]): Promise<JsonObject[]> {
     let categoryName: unknown = null;
     let size: unknown = null;
     let color: unknown = null;
+    let isCombo = false;
     try {
       const v = await selectOne("variant", { variant_id: `eq.${item.variant_id}` });
       if (v) {
@@ -203,6 +205,7 @@ async function attachProductMeta(items: JsonObject[]): Promise<JsonObject[]> {
         color = v.color ?? null;
         const product = await selectOne("product", { product_id: `eq.${productId}` });
         if (product) {
+          isCombo = Boolean(product.is_combo || /combo/i.test(String(product.name || "")) || /set\s+/i.test(String(product.name || "")));
           const cat = await selectOne("category", { category_id: `eq.${product.category_id}` });
           if (cat) {
             categoryName = cat.name;
@@ -212,7 +215,10 @@ async function attachProductMeta(items: JsonObject[]): Promise<JsonObject[]> {
     } catch (e: unknown) {
       console.error("Error retrieving variant product_id:", errorMessage(e));
     }
-    itemsWithProduct.push({ ...item, product_id: productId, category_name: categoryName, size, color });
+    if (!isCombo) {
+      isCombo = Boolean(/combo/i.test(String(item.product_name || "")) || /set\s+/i.test(String(item.product_name || "")));
+    }
+    itemsWithProduct.push({ ...item, product_id: productId, category_name: categoryName, is_combo: isCombo, size, color });
   }
   return itemsWithProduct;
 }
@@ -227,6 +233,9 @@ const userReturnsRepository = createUserReturnsRepository();
  * `returns-repository.ts`, để trang khách hàng không tự tính một con số khác với con số
  * backend thật sự dùng để chặn ở `POST /api/user/returns`. Nhận repository qua tham số để
  * test được bằng repository giả, không cần DB thật.
+ *
+ * Nếu sản phẩm đang có yêu cầu đổi/trả nằm trong tiến trình (`OPEN_RETURN_STATUSES`),
+ * sản phẩm đó bị khóa (`is_in_progress = true`, `available_quantity = 0`) để tránh tạo trùng lặp.
  */
 export async function attachReturnEligibility(
   repository: UserReturnsRepository,
@@ -238,18 +247,37 @@ export async function attachReturnEligibility(
   for (const item of items) {
     let returnCount = 0;
     let returnedQuantity = 0;
+    let isInProgress = false;
+    let inProgressCode: string | null = null;
+    let inProgressStatus: string | null = null;
+
     for (const ret of existingReturns) {
-      if (asString(ret.status) === "rejected") continue;
+      const status = asString(ret.status);
+      if (["CANCELLED", "REJECTED", "rejected"].includes(status)) continue;
       const rItems = await repository.listReturnItemsForOrderItem(ret.return_id, item.item_id);
       if (!rItems.length) continue;
+
+      if (OPEN_RETURN_STATUSES.includes(status) || status === "pending") {
+        isInProgress = true;
+        inProgressCode = asString(ret.tracking_return_code || ret.return_id);
+        inProgressStatus = status;
+      }
+
       returnCount += 1;
       for (const ri of rItems) returnedQuantity += Number(ri.quantity);
     }
     const quantity = Number(item.quantity) || 0;
+    const availableQuantity = isInProgress
+      ? 0
+      : Math.max(0, quantity - returnedQuantity);
+
     result.push({
       ...item,
       return_count: returnCount,
-      available_quantity: Math.max(0, quantity - returnedQuantity)
+      available_quantity: availableQuantity,
+      is_in_progress: isInProgress,
+      in_progress_return_code: inProgressCode,
+      in_progress_status: inProgressStatus
     });
   }
   return result;
@@ -277,6 +305,20 @@ export function formatOrderInternalNote(body: JsonObject, existingNote?: string)
   }
   if (body.is_vat_invoice && body.vat_tax_code) {
     parts.push(`[Hóa đơn VAT]: Cty ${String(body.vat_company_name || '').trim()} | MST: ${String(body.vat_tax_code).trim()} | Đ/c: ${String(body.vat_company_address || '').trim()} | Email HĐ: ${String(body.vat_email || '').trim()}`);
+  }
+  if (Array.isArray(body.items)) {
+    for (const it of body.items as JsonObject[]) {
+      if (it.is_combo && Array.isArray(it.sub_items) && it.sub_items.length > 0) {
+        const subDetails = (it.sub_items as JsonObject[]).map(s => {
+          const name = s.product_name || 'Món';
+          const color = s.color || 'Mặc định';
+          const size = s.size || 'Free';
+          const qty = s.quantity ? `${s.quantity}x ` : '';
+          return `${qty}${name} (${color} / ${size})`;
+        }).join('; ');
+        parts.push(`[Chi tiết Set "${it.product_name || 'Combo'}"]: ${subDetails}`);
+      }
+    }
   }
   if (existingNote) parts.push(existingNote);
   return parts.join('\n');

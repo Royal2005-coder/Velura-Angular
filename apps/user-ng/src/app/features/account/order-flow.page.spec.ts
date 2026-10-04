@@ -52,6 +52,8 @@ describe('OrderFlowPage with mocked Model', () => {
     orders: signal([order]),
     requests: signal<DemoReturn[]>([]),
     verifiedPhone: signal('0901234567'),
+    loading: signal(false),
+    error: signal<string | null>(null),
     cancellableBeforeStage: 3,
     supportsBankInfo: true,
     timeline: () => [
@@ -69,6 +71,8 @@ describe('OrderFlowPage with mocked Model', () => {
     model.member.set(false);
     model.verifiedPhone.set('');
     model.requests.set([]);
+    model.loading.set(false);
+    model.error.set(null);
     model.cancelRequest.mockReset();
     model.cancelRequest.mockResolvedValue(undefined);
     await TestBed.configureTestingModule({
@@ -89,6 +93,32 @@ describe('OrderFlowPage with mocked Model', () => {
     expect(fixture.componentInstance.order()).toBeNull();
     expect(fixture.componentInstance.visibleOrders()).toEqual([]);
     expect(fixture.nativeElement.textContent).not.toContain('756.000');
+  });
+  it('shows an empty order result only after a successful completed load', () => {
+    const fixture = TestBed.createComponent(OrderFlowPage);
+    const page = fixture.componentInstance;
+    fixture.detectChanges();
+    page.view.set('list');
+    model.loading.set(true);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).not.toContain('Chưa có đơn hàng phù hợp');
+    model.loading.set(false);
+    model.error.set('Không tải được danh sách đơn hàng.');
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Không tải được danh sách đơn hàng.');
+    expect(fixture.nativeElement.textContent).not.toContain('Chưa có đơn hàng phù hợp');
+    expect(fixture.nativeElement.querySelector('input')?.placeholder).not.toContain('DEMO');
+    model.error.set(null);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Chưa có đơn hàng phù hợp');
+  });
+  it('does not claim there are no returns when their list failed', () => {
+    const fixture = TestBed.createComponent(OrderFlowPage);
+    fixture.detectChanges();
+    fixture.componentInstance.view.set('requests');
+    model.error.set('Không tải được yêu cầu đổi trả.');
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).not.toContain('Chưa có yêu cầu đổi / trả.');
   });
   it('keeps an OTP-verified guest authorized across canonical order routes', () => {
     model.verifiedPhone.set('0901234567');

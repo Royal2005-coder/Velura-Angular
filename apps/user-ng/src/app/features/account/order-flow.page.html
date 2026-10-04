@@ -203,8 +203,11 @@
                 [routerLink]="model.member() ? '/account/orders' : '/guest/orders'"
                 >← Danh sách đơn</a
               >
-              <div class="row">
+              <div class="row" style="align-items: center; gap: 8px;">
                 <h2>{{ item.id }}</h2>
+                @if (item.id.startsWith('EXC')) {
+                  <span class="badge" style="background: #e0f2fe; color: #0369a1; font-weight: 600;">Đơn đổi hàng</span>
+                }
                 <span class="badge">{{ labels[item.status] }}</span>
               </div>
               <p class="muted">Ngày đặt: {{ date(item.createdAt) }}</p>
@@ -237,7 +240,12 @@
                 <article class="line">
                   <img [src]="image(line.product_image)" [alt]="line.product_name" />
                   <div>
-                    <h3>{{ line.product_name }}</h3>
+                    <h3>
+                      {{ line.product_name }}
+                      @if (line.is_combo) {
+                        <span class="badge" style="background: #ede9fe; color: #6d28d9; font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; margin-left: 6px;">Combo Set</span>
+                      }
+                    </h3>
                     <p class="muted">{{ line.size }} / {{ line.color }} · SL {{ line.quantity }}</p>
                     <strong>{{ money(line.quantity * line.unit_price) }}</strong>
                     @if (item.status === 'delivered') {
@@ -249,6 +257,11 @@
                         }}
                         · {{ line.availableQuantity }} sản phẩm khả dụng
                       </p>
+                      @if (line.isInProgress) {
+                        <p class="muted" style="color: #b45309; background: #fef3c7; padding: 2px 8px; border-radius: 4px; display: inline-block; font-size: 0.8rem; margin: 4px 0 0;">
+                          ⏳ Đang xử lý đổi/trả (Phiếu #{{ line.inProgressCode }}) — Vui lòng chờ hoàn tất.
+                        </p>
+                      }
                     }
                   </div>
                 </article>
@@ -388,12 +401,15 @@
                         type="checkbox"
                         [checked]="!!selections()[line.variant_id]"
                         [disabled]="
-                          line.returnCount >= 2 || line.availableQuantity < 1 || !withinWindow(item)
+                          line.isInProgress || line.returnCount >= 2 || line.availableQuantity < 1 || !withinWindow(item)
                         "
                         [ngModel]="!!selections()[line.variant_id]"
                         (ngModelChange)="select(line, $event)"
-                      /><strong>{{ line.product_name }}</strong></label
-                    >
+                      /><strong>{{ line.product_name }}</strong>
+                      @if (line.is_combo) {
+                        <span class="badge" style="background: #ede9fe; color: #6d28d9; font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; margin-left: 6px;">Combo Set</span>
+                      }
+                    </label>
                     <p class="muted">
                       {{ line.size }} / {{ line.color }} · Đã mua {{ line.quantity }} · Có thể xử lý
                       {{ line.availableQuantity }}
@@ -401,20 +417,35 @@
                     <p class="muted">
                       Đã dùng {{ line.returnCount }}/2 lượt · Còn {{ 2 - line.returnCount }} lượt
                     </p>
-                    @if (line.returnCount >= 2) {
-                      <p class="error">Đã sử dụng đủ 2 lượt đổi/trả.</p>
+                    @if (line.isInProgress) {
+                      <p class="muted" style="color: #b45309; background: #fef3c7; padding: 4px 8px; border-radius: 4px; display: inline-block; font-size: 0.8rem; margin: 4px 0 0;">
+                        ⏳ Đang xử lý đổi/trả (Phiếu #{{ line.inProgressCode }}) — Vui lòng chờ hoàn tất.
+                      </p>
+                    } @else if (line.returnCount >= 2) {
+                      <p class="error">Đã sử dụng đủ 2 lượt đổi/trả cho sản phẩm này.</p>
                     } @else if (line.availableQuantity === 0) {
-                      <p class="muted">Sản phẩm đang được xử lý hoặc đã hoàn trả.</p>
+                      <p class="muted">Sản phẩm đã được hoàn trả hoặc đổi mới.</p>
+                    }
+                    @if (line.is_combo) {
+                      <p class="muted" style="color: #6d28d9; font-size: 0.8rem; margin-top: 4px;">
+                        * Quy tắc Combo: Hoàn trả nguyên bộ cả combo, hoặc chọn size/màu mới cho từng món khi đổi hàng.
+                      </p>
                     }
                     @if (selections()[line.variant_id]) {
-                      <label class="field"
-                        >Số lượng<input
-                          type="number"
-                          min="1"
-                          [max]="line.availableQuantity"
-                          [ngModel]="selections()[line.variant_id].quantity"
-                          (ngModelChange)="quantity(line, $event)"
-                      /></label>
+                      @if (line.is_combo && returnKind === 'refund') {
+                        <p style="font-size: 0.85rem; font-weight: 600; color: #4b5563; margin-top: 6px;">
+                          Số lượng hoàn trả: {{ line.availableQuantity }} (Nguyên bộ combo)
+                        </p>
+                      } @else {
+                        <label class="field"
+                          >Số lượng<input
+                            type="number"
+                            min="1"
+                            [max]="line.availableQuantity"
+                            [ngModel]="selections()[line.variant_id].quantity"
+                            (ngModelChange)="quantity(line, $event)"
+                        /></label>
+                      }
                     }
                   </div>
                 </article>
@@ -438,18 +469,62 @@
                 }
                 @for (selected of selectedLines(); track selected.variantId) {
                   @if (lineFor(selected.variantId); as line) {
-                    <label class="field"
-                      >{{ line.product_name }} · {{ line.size }} / {{ line.color }} →<select
-                        [ngModel]="selected.replacementVariantId || selected.replacement || ''"
-                        [disabled]="!!model.replacementsLoading?.()"
-                        (ngModelChange)="replacement(line, $event)"
-                      >
-                        <option value="">Chọn size / màu mới</option>
-                        @for (variant of replacementChoices(line); track variant.id) {
-                          <option [value]="variant.id" [disabled]="variant.stock !== undefined && variant.stock < selected.quantity">{{ variant.label }}@if (variant.stock !== undefined) { · Còn {{ variant.stock }}}</option>
+                    @if (line.is_combo) {
+                      <div class="combo-exchange-group" style="margin: 12px 0 20px; padding: 14px 16px; background: #faf5ff; border: 1.5px solid #d8b4fe; border-radius: 8px;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+                          <div>
+                            <strong style="color: #581c87; font-size: 0.95rem;">{{ line.product_name }}</strong>
+                            <span class="badge" style="background: #ede9fe; color: #6d28d9; font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; margin-left: 6px;">Combo Set</span>
+                          </div>
+                          <span style="font-size: 0.75rem; color: #7e22ce; font-weight: 500;">Chọn lại từng món</span>
+                        </div>
+                        <p class="muted" style="margin: 0 0 12px; font-size: 0.8125rem; color: #6b21a8;">
+                          * Chọn size hoặc màu mới cho từng món trong combo bạn muốn đổi:
+                        </p>
+                        @if (comboComponents(line).length === 0 && !model.replacementsLoading?.()) {
+                          <p class="muted" style="font-size: 0.8125rem;">Đang tải danh sách các món trong combo…</p>
                         }
-                      </select></label
-                    >
+                        <div style="display: flex; flex-direction: column; gap: 10px;">
+                          @for (comp of comboComponents(line); track comp.productId) {
+                            <div style="display: flex; flex-direction: column; gap: 4px; padding: 8px 12px; background: #ffffff; border: 1px solid #e9d5ff; border-radius: 6px;">
+                              <span style="font-size: 0.875rem; font-weight: 600; color: #374151;">
+                                {{ comp.name }}
+                                @if (comp.originalSize || comp.originalColor) {
+                                  <small style="color: #6b7280; font-weight: normal;">(Hiện tại: {{ comp.originalSize }} / {{ comp.originalColor }})</small>
+                                }
+                                →
+                              </span>
+                              <select
+                                [ngModel]="selectedComboVariant(selected, comp.productId)"
+                                [disabled]="!!model.replacementsLoading?.()"
+                                (ngModelChange)="comboComponentReplacement(line, comp, $event)"
+                                style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.875rem; background: #fff; color: #111827;"
+                              >
+                                <option value="">-- Giữ nguyên hoặc chọn size / màu mới --</option>
+                                @for (choice of comp.choices; track choice.id) {
+                                  <option [value]="choice.id" [disabled]="choice.stock !== undefined && choice.stock < selected.quantity">
+                                    {{ choice.label }}@if (choice.stock !== undefined) { · Còn {{ choice.stock }}}
+                                  </option>
+                                }
+                              </select>
+                            </div>
+                          }
+                        </div>
+                      </div>
+                    } @else {
+                      <label class="field"
+                        >{{ line.product_name }} · {{ line.size }} / {{ line.color }} →<select
+                          [ngModel]="selected.replacementVariantId || selected.replacement || ''"
+                          [disabled]="!!model.replacementsLoading?.()"
+                          (ngModelChange)="replacement(line, $event)"
+                        >
+                          <option value="">Chọn size / màu mới</option>
+                          @for (variant of replacementChoices(line); track variant.id) {
+                            <option [value]="variant.id" [disabled]="variant.stock !== undefined && variant.stock < selected.quantity">{{ variant.label }}@if (variant.stock !== undefined) { · Còn {{ variant.stock }}}</option>
+                          }
+                        </select></label
+                      >
+                    }
                   }
                 }
               }

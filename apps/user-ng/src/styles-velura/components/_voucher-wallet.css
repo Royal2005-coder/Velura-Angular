@@ -9,6 +9,8 @@
 
 .voucher-wallet {
   min-width: 0;
+  container-type: inline-size;
+  container-name: voucher-wallet;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -146,6 +148,7 @@
 .voucher-card__actions {
   display: flex;
   gap: 12px;
+  white-space: nowrap;
 }
 
 .voucher-wallet .btn-link {
@@ -343,6 +346,24 @@ button.offer-banner-row__cta {
   cursor: pointer;
   font-family: inherit;
 }
+
+/* Summary columns can be narrow even on wide screens. Adapt to their actual width. */
+@container voucher-wallet (max-width: 350px) {
+  .voucher-wallet__head { flex-wrap: wrap; align-items: flex-start; }
+  .voucher-wallet .voucher-card { flex-direction: column; }
+  .voucher-wallet .voucher-card__side {
+    max-width: none;
+    align-items: flex-start;
+    padding: 12px 0 0;
+    border-left: 0;
+    border-top: 1px dashed var(--line);
+  }
+  .voucher-wallet .voucher-card__actions { flex-wrap: wrap; gap: 16px; }
+  .voucher-wallet .voucher-card__saving { white-space: normal; }
+}
+
+/* Purchase inputs must remain reachable; support stays available through header/footer links. */
+body:has(app-purchase-flow, app-order-flow, app-cart-page, app-checkout-shipping-page, app-checkout-otp-page, app-checkout-confirm-page) :is(.hot-offer-widget, .chatbot-widget) { display: none; }
 
 @media (max-width: 480px) {
   .offer-voucher-grid { grid-template-columns: 1fr; }

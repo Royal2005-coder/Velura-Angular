@@ -39,7 +39,7 @@ export class CheckoutLineEditorService {
     if (collision) collision.quantity += quantity;
     else rest.push({ ...line, variant_id: variant.variant_id, color: variant.color, size: variant.size, quantity, unit_price: !line.combo_id && variant.unitPrice !== undefined ? variant.unitPrice : line.unit_price });
     const currentCart = this.cart.items();
-    if (currentCart.some(same)) {
+    if (this.checkout.source() === 'cart' && currentCart.some(same)) {
       const cartRest = currentCart.filter(candidate => !same(candidate)).map(candidate => ({ ...candidate }));
       const cartCollision = cartRest.find(candidate => candidate.variant_id === variant.variant_id && candidate.combo_id === line.combo_id);
       if (cartCollision) cartCollision.quantity += quantity;
@@ -50,11 +50,76 @@ export class CheckoutLineEditorService {
     return rest;
   }
 
+  /** Updates variant (color/size) for a specific sub-item within a combo line. */
+  editComboSubItem(
+    line: CartLine,
+    componentProductId: string,
+    newVariant: { variant_id: string; color?: string; size?: string },
+    lines: CartLine[]
+  ): CartLine[] {
+    const isContainer = (candidate: CartLine) =>
+      candidate.variant_id === line.variant_id || (line.combo_id && candidate.combo_id === line.combo_id && candidate.is_combo);
+    const isComponentLine = (candidate: CartLine) =>
+      line.combo_id && candidate.combo_id === line.combo_id && candidate.product_id === componentProductId;
+
+    const updateItem = (candidate: CartLine): CartLine => {
+      if (isContainer(candidate)) {
+        const updatedSub = (candidate.sub_items || []).map(sub => {
+          if (sub.product_id === componentProductId) {
+            return {
+              ...sub,
+              variant_id: newVariant.variant_id,
+              color: newVariant.color ?? sub.color,
+              size: newVariant.size ?? sub.size,
+            };
+          }
+          return sub;
+        });
+        const updatedItems = (candidate.items || []).map(it => {
+          if (it.product_id === componentProductId) {
+            return {
+              ...it,
+              variant_id: newVariant.variant_id,
+              color: newVariant.color ?? it.color,
+              size: newVariant.size ?? it.size,
+            };
+          }
+          return it;
+        });
+        return {
+          ...candidate,
+          sub_items: updatedSub.length > 0 ? updatedSub : candidate.sub_items,
+          items: updatedItems.length > 0 ? updatedItems : candidate.items,
+        };
+      }
+      if (isComponentLine(candidate)) {
+        return {
+          ...candidate,
+          variant_id: newVariant.variant_id,
+          color: newVariant.color ?? candidate.color,
+          size: newVariant.size ?? candidate.size,
+        };
+      }
+      return candidate;
+    };
+
+    const next = lines.map(updateItem);
+
+    if (this.checkout.source() === 'cart') {
+      const currentCart = this.cart.items();
+      const updatedCart = currentCart.map(updateItem);
+      this.cart.replaceItems(updatedCart);
+    }
+    this.checkout.setCheckoutItems(next);
+    return next;
+  }
+
   /** Removes a whole combo or a single regular line, preserving unrelated cart items. */
   remove(line: CartLine, lines: CartLine[]): CartLine[] {
-    const keep = (candidate: CartLine) => line.combo_id ? candidate.combo_id !== line.combo_id : candidate.variant_id !== line.variant_id || !!candidate.combo_id;
+    const keep = (candidate: CartLine) =>
+      line.combo_id ? candidate.combo_id !== line.combo_id : candidate.variant_id !== line.variant_id || !!candidate.combo_id;
     const next = lines.filter(keep);
-    this.cart.replaceItems(this.cart.items().filter(keep));
+    if (this.checkout.source() === 'cart') this.cart.replaceItems(this.cart.items().filter(keep));
     this.checkout.setCheckoutItems(next);
     return next;
   }

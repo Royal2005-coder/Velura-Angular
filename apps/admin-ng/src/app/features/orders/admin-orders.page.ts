@@ -117,7 +117,7 @@ export class AdminOrdersPage {
   readonly codDecision = signal<'' | 'confirm' | 'cancel' | 'no_answer' | 'invalid'>('');
   readonly codCancelReason = signal<string>('customer_request');
   readonly codNote = signal<string>('');
-  readonly codAutoConfirm = signal(false);
+  readonly codCallStarted = signal(false);
 
   readonly logs = signal<AdminAuditRow[]>([]);
   readonly logsPage = signal(1);
@@ -183,7 +183,7 @@ export class AdminOrdersPage {
     if (order.has_successful_call_confirm) return true;
     const events = Array.isArray(order.events) ? order.events : [];
     return events.some(
-      (e) => e.action === 'call_confirm' && (e.payload as Record<string, unknown> | null)?.['call_result'] === 'reached',
+      (e) => e.action === 'call_confirm' && e.result === 'success' && (e.payload as Record<string, unknown> | null)?.['call_result'] === 'reached',
     );
   });
 
@@ -465,7 +465,7 @@ export class AdminOrdersPage {
     this.codDecision.set('');
     this.codCancelReason.set('customer_request');
     this.codNote.set('');
-    this.codAutoConfirm.set(false);
+    this.codCallStarted.set(false);
     this.submitting.set(false);
     this.modal.set({ kind: 'cod_call', order });
 
@@ -495,15 +495,21 @@ export class AdminOrdersPage {
     this.codNote.set(note);
   }
 
-  /** Enables confirmation only when the operator explicitly chooses it after contact. */
-  setCodAutoConfirm(event: Event): void {
-    this.codAutoConfirm.set((event.target as HTMLInputElement).checked);
+  /** Starting the telephone action unlocks outcome entry; it never proves successful contact. */
+  startCodCall(): void {
+    if (this.detailLoading() || this.submitting() || !this.selected()?.shipping_phone) return;
+    this.codCallStarted.set(true);
+    this.actionError.set(null);
   }
 
   submitCodCall(event: Event): void {
     event.preventDefault();
     const order = this.selected();
     if (!order || this.submitting() || this.detailLoading()) return;
+    if (!this.codCallStarted()) {
+      this.actionError.set('Bấm Gọi để bắt đầu liên hệ, rồi ghi nhận kết quả thực tế.');
+      return;
+    }
     const note = this.codNote().trim();
     if (note.length < 5) {
       this.actionError.set('Vui lòng nhập ghi chú cuộc gọi (tối thiểu 5 ký tự).');
@@ -521,9 +527,6 @@ export class AdminOrdersPage {
     if (decision === 'confirm') {
       actionCode = 'call_confirm';
       body['callResult'] = 'reached';
-      if (this.codAutoConfirm()) {
-        body['confirmOrder'] = true;
-      }
     } else if (decision === 'cancel') {
       actionCode = 'cancel';
       body['cancelReason'] = this.codCancelReason() || 'customer_request';

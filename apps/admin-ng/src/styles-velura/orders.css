@@ -240,4 +240,9 @@
   color: #8c8074 !important;
   border: 1px dashed #d5cbc1 !important;
 }
+.admin-decision-label--disabled {
+  opacity: .55;
+  cursor: not-allowed;
+  background: var(--surface-muted, #f7f5f4);
+}
 

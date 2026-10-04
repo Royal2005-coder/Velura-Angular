@@ -1,4 +1,4 @@
-import { Type } from '@angular/core';
+import { Type, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { convertToParamMap, provideRouter, ActivatedRoute } from '@angular/router';
 import { of } from 'rxjs';
@@ -7,6 +7,7 @@ import { CatalogService } from '../app/core/services/catalog.service';
 import { ChatbotService } from '../app/core/services/chatbot.service';
 import { ProductSummary } from '../app/core/models/product.interface';
 import { AddressGeographyService } from '../app/core/services/address-geography.service';
+import { StyleProfileService } from '../app/core/services/style-profile.service';
 import type { GeographyMode } from '../app/core/models/address-geography';
 
 /** Page specs receive administrative data from a mocked Model, never HttpClient. */
@@ -135,6 +136,7 @@ export async function createStorefrontPage<T>(page: Type<T>, apiOverrides: Parti
     imports: [page],
     providers: [
       { provide: AddressGeographyService, useValue: stubAddressGeographyService() },
+      { provide: StyleProfileService, useValue: { revision: signal(0), guestAnswers: () => null, saveQuiz: () => of(undefined), loadRecommendations: () => of({ quiz: null, combos: [], categories: [] }) } },
       provideRouter([]),
       { provide: ApiService, useValue: { ...stubApiService(), ...apiOverrides } },
       { provide: CatalogService, useValue: stubCatalogService() },

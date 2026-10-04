@@ -6,6 +6,7 @@ import { CategorySummary, ProductSummary } from '../../core/models/product.inter
 import { AuthService } from '../../core/services/auth.service';
 import { CatalogService } from '../../core/services/catalog.service';
 import { OffersService } from '../../core/services/offers.service';
+import { StyleProfileService } from '../../core/services/style-profile.service';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { bindHomeCarousel } from '../../core/utils/home-carousel';
 import { ProductCard } from '../../shared/product-card/product-card';
@@ -45,6 +46,7 @@ function readUnpaidNotice(): UnpaidNotice | null {
 export class HomePage implements AfterViewInit, OnDestroy {
   private readonly catalog = inject(CatalogService);
   private readonly auth = inject(AuthService);
+  private readonly styleProfile = inject(StyleProfileService);
   private readonly injector = inject(Injector);
   private carouselCleanups: Array<() => void> = [];
 
@@ -167,7 +169,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
   private bindPersonalized(catalog: ProductSummary[]): void {
     let bodyShape = '';
     try {
-      const raw = JSON.parse(localStorage.getItem('velura_guest_quiz_data') || 'null') as { body_shape?: string } | null;
+      const raw = this.styleProfile.guestAnswers();
       bodyShape = raw?.body_shape || '';
     } catch {
       bodyShape = '';

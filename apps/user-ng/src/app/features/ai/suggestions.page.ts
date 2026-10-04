@@ -1,41 +1,16 @@
-import { Component, ElementRef, computed, inject, signal, viewChild } from '@angular/core';
+import { Component, DestroyRef, ElementRef, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
-import { catchError, of, switchMap } from 'rxjs';
+import type { Subscription } from 'rxjs';
 import { ProductSummary } from '../../core/models/product.interface';
 import { AuthService } from '../../core/services/auth.service';
-import { ApiService } from '../../core/services/api.service';
+import { StyleProfileService } from '../../core/services/style-profile.service';
+import type { OutfitCombo, RecommendationCategory, StyleQuizRecord } from '../../core/models/style-profile.interface';
 import { CartStore } from '../../core/services/cart.store';
 import { formatVnd, toPublicAsset } from '../../core/utils/money';
 import { showToast } from '../../core/utils/toast';
 import { useBodyClass } from '../../core/utils/body-class';
 import { ProductCard } from '../../shared/product-card/product-card';
-
-interface StyleQuizRecord {
-  body_shape?: string;
-  style_tags?: string[] | string;
-}
-
-interface OutfitCombo {
-  name: string;
-  reason?: string;
-  description?: string;
-  sale_price?: number;
-  base_price?: number;
-  images?: string[];
-  products: ProductSummary[];
-}
-
-interface RecommendationCategory {
-  category_id: string;
-  category_name: string;
-  products: ProductSummary[];
-}
-
-interface StyleProfileRecommendations {
-  quiz?: StyleQuizRecord | null;
-  combos?: OutfitCombo[];
-  categories?: RecommendationCategory[];
-}
 
 const BODY_SHAPE_MAP: Record<string, string> = {
   Hourglass: 'Đồng hồ cát',
@@ -63,16 +38,20 @@ const STYLE_TAG_MAP: Record<string, string> = {
   templateUrl: './suggestions.page.html',
 })
 export class AiSuggestionsPage {
-  private readonly api = inject(ApiService);
+  private readonly profile = inject(StyleProfileService);
+  private readonly destroyRef = inject(DestroyRef);
+  private request?: Subscription;
+  private requestVersion = 0;
   private readonly auth = inject(AuthService);
   private readonly cart = inject(CartStore);
   private readonly comboTrack = viewChild<ElementRef<HTMLElement>>('comboTrack');
   private readonly profileTrack = viewChild<ElementRef<HTMLElement>>('profileTrack');
 
   readonly loading = signal(true);
+  readonly loadError = signal('');
   readonly hasQuiz = signal(false);
-  readonly styleLabel = signal('Tối giản');
-  readonly bodyShapeLabel = signal('Cân đối');
+  readonly styleLabel = signal('Chưa chọn phong cách');
+  readonly bodyShapeLabel = signal('Chưa khai báo');
   readonly combos = signal<OutfitCombo[]>([]);
   readonly categories = signal<RecommendationCategory[]>([]);
   readonly activeCategoryId = signal<string | null>(null);
@@ -98,7 +77,12 @@ export class AiSuggestionsPage {
 
   constructor() {
     useBodyClass('page-ai');
-    this.loadRecommendations();
+    effect(() => {
+      this.auth.session();
+      this.profile.revision();
+      untracked(() => this.loadRecommendations());
+    });
+    this.destroyRef.onDestroy(() => document.body.classList.remove('modal-open'));
   }
 
   /**
@@ -208,46 +192,37 @@ export class AiSuggestionsPage {
     return index === 0 ? 'Áo' : index === 1 ? 'Quần' : 'Phụ kiện';
   }
 
-  private loadRecommendations(): void {
+  /** Reload the current user's recommendations with a recoverable error, without inventing profile data. */
+  loadRecommendations(): void {
+    this.request?.unsubscribe();
+    const version = ++this.requestVersion;
+    const session = this.auth.session();
     this.loading.set(true);
-    this.api
-      .get<StyleProfileRecommendations>('/api/user/recommendations/style-profile')
-      .pipe(
-        catchError(() => of<StyleProfileRecommendations>({ quiz: null, combos: [], categories: [] })),
-        switchMap((response) => {
-          const quiz = this.normalizeQuiz(response.quiz);
-          if (quiz && (quiz.body_shape || quiz.style_tags)) {
-            return of({ ...response, quiz });
-          }
-          const localQuiz = this.readGuestQuiz();
-          if (!localQuiz || this.auth.isLoggedIn()) {
-            return of({ ...response, quiz: null });
-          }
-          return this.api.post<unknown>('/api/user/style-quiz', localQuiz).pipe(
-            switchMap(() =>
-              this.api.get<StyleProfileRecommendations>('/api/user/recommendations/style-profile').pipe(
-                catchError(() => of<StyleProfileRecommendations>({ quiz: localQuiz, combos: [], categories: [] })),
-              ),
-            ),
-            catchError(() => of<StyleProfileRecommendations>({ quiz: null, combos: [], categories: [] })),
-          );
-        }),
-      )
-      .subscribe((response) => {
+    this.loadError.set('');
+    this.hasQuiz.set(false);
+    this.combos.set([]);
+    this.categories.set([]);
+    this.closeCombo();
+    this.request = this.profile.loadRecommendations().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ next: (response) => {
+        if (version !== this.requestVersion || session !== this.auth.session()) return;
         const quiz = this.normalizeQuiz(response.quiz);
-        const hasQuiz = Boolean(quiz && (quiz.body_shape || quiz.style_tags));
+        const hasQuiz = Boolean(quiz);
         this.hasQuiz.set(hasQuiz);
         if (hasQuiz && quiz) {
           const tags = Array.isArray(quiz.style_tags) ? quiz.style_tags : [];
-          this.styleLabel.set(STYLE_TAG_MAP[tags[0] || ''] || tags[0] || 'Tối giản');
-          this.bodyShapeLabel.set(BODY_SHAPE_MAP[quiz.body_shape || ''] || quiz.body_shape || 'Cân đối');
+          this.styleLabel.set(STYLE_TAG_MAP[tags[0] || ''] || tags[0] || 'Chưa chọn phong cách');
+          this.bodyShapeLabel.set(BODY_SHAPE_MAP[quiz.body_shape || ''] || quiz.body_shape || 'Chưa khai báo');
         }
         this.combos.set(response.combos || []);
         const categories = response.categories || [];
         this.categories.set(categories);
         this.activeCategoryId.set(categories[0]?.category_id || null);
         this.loading.set(false);
-      });
+      }, error: (error: Error) => {
+        if (version !== this.requestVersion || session !== this.auth.session()) return;
+        this.loading.set(false);
+        this.loadError.set(error.message || 'Chưa tải được gợi ý phong cách. Vui lòng thử lại.');
+      } });
   }
 
   private normalizeQuiz(quiz: StyleQuizRecord | null | undefined): StyleQuizRecord | null {
@@ -256,7 +231,7 @@ export class AiSuggestionsPage {
     }
     const tags = quiz.style_tags;
     if (typeof tags === 'string') {
-      quiz.style_tags = this.parsePgArray(tags);
+      return { ...quiz, style_tags: this.parsePgArray(tags) };
     }
     return quiz;
   }
@@ -272,12 +247,4 @@ export class AiSuggestionsPage {
       .filter(Boolean);
   }
 
-  private readGuestQuiz(): Record<string, unknown> | null {
-    try {
-      const raw = localStorage.getItem('velura_guest_quiz_data');
-      return raw ? (JSON.parse(raw) as Record<string, unknown>) : null;
-    } catch {
-      return null;
-    }
-  }
 }

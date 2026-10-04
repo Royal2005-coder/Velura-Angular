@@ -57,6 +57,10 @@ export interface CreatedOrder {
 const SHIPPING_KEY = 'checkout_shipping';
 const METHODS_KEY = 'checkout_methods';
 const ITEMS_KEY = 'checkout_items';
+const SOURCE_KEY = 'checkout_source';
+
+/** Buy-now lines are independent of the saved cart, even when variants match. */
+export type CheckoutSource = 'cart' | 'buy_now';
 const GUEST_PAYLOAD_KEY = 'guest_checkout_payload';
 const CREATED_ORDER_KEY = 'created_order';
 
@@ -71,6 +75,7 @@ export class CheckoutStore {
   readonly methods = signal<CheckoutMethods>(this.readMethods());
 
   readonly items = signal<CartLine[]>(this.readCheckoutItems());
+  readonly source = signal<CheckoutSource>(sessionStorage.getItem(SOURCE_KEY) === 'buy_now' ? 'buy_now' : 'cart');
   readonly checkoutItems = computed(() => this.items());
   readonly subtotal = computed(() =>
     this.items().reduce((sum, line) => sum + line.unit_price * line.quantity, 0),
@@ -80,7 +85,9 @@ export class CheckoutStore {
    * Sets the checkout items directly, updating both reactive signal and sessionStorage.
    * Prevents stale cart lines when navigating between cart and checkout.
    */
-  setCheckoutItems(items: CartLine[]): void {
+  setCheckoutItems(items: CartLine[], source: CheckoutSource = this.source()): void {
+    this.source.set(source);
+    sessionStorage.setItem(SOURCE_KEY, source);
     this.items.set(items);
     sessionStorage.setItem(ITEMS_KEY, JSON.stringify(items));
   }
@@ -109,7 +116,7 @@ export class CheckoutStore {
     });
     this.items.set(next);
     sessionStorage.setItem(ITEMS_KEY, JSON.stringify(next));
-    this.cart.updateQty(variantId, quantity);
+    if (this.source() === 'cart') this.cart.updateQty(variantId, quantity);
   }
 
   /**
@@ -123,7 +130,7 @@ export class CheckoutStore {
     const merged = [...filtered, { ...next, quantity }];
     this.items.set(merged);
     sessionStorage.setItem(ITEMS_KEY, JSON.stringify(merged));
-    this.cart.replaceVariant(fromVariantId, next);
+    if (this.source() === 'cart') this.cart.replaceVariant(fromVariantId, next);
   }
 
   /**
@@ -133,7 +140,7 @@ export class CheckoutStore {
     const next = this.items().filter((line) => line.variant_id !== variantId);
     this.items.set(next);
     sessionStorage.setItem(ITEMS_KEY, JSON.stringify(next));
-    this.cart.removeItem(variantId);
+    if (this.source() === 'cart') this.cart.removeItem(variantId);
   }
 
   /**
@@ -160,7 +167,7 @@ export class CheckoutStore {
       const raw = sessionStorage.getItem(ITEMS_KEY);
       if (raw) {
         const items = JSON.parse(raw) as CartLine[];
-        if (Array.isArray(items) && items.length) {
+        if (Array.isArray(items)) {
           return items;
         }
       }
@@ -217,10 +224,22 @@ export class CheckoutStore {
    * Removes checked-out lines from the cart and clears checkout session keys.
    */
   completeCheckout(orderedItems: CartLine[]): void {
-    const ordered = new Set(orderedItems.map((line) => line.variant_id));
-    this.cart.replaceItems(this.cart.items().filter((line) => !ordered.has(line.variant_id)));
+    if (this.source() === 'cart') {
+      const identity = (line: CartLine) => JSON.stringify([line.variant_id, line.combo_id || null]);
+      const remaining = new Map<string, number>();
+      for (const line of orderedItems) remaining.set(identity(line), (remaining.get(identity(line)) || 0) + line.quantity);
+      const next = this.cart.items().flatMap(line => {
+        const key = identity(line);
+        const consumed = Math.min(line.quantity, remaining.get(key) || 0);
+        remaining.set(key, (remaining.get(key) || 0) - consumed);
+        return consumed < line.quantity ? [{ ...line, quantity: line.quantity - consumed }] : [];
+      });
+      this.cart.replaceItems(next);
+    }
     this.items.set([]);
     sessionStorage.removeItem(ITEMS_KEY);
+    sessionStorage.removeItem(SOURCE_KEY);
+    this.source.set('cart');
     sessionStorage.removeItem(GUEST_PAYLOAD_KEY);
     localStorage.removeItem(SHIPPING_KEY);
     localStorage.removeItem(METHODS_KEY);

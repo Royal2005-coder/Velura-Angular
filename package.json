@@ -30,7 +30,9 @@
     "node": ">=22 <25"
   },
   "devDependencies": {
+    "@types/pg": "^8.23.1",
     "@vercel/routing-utils": "^6.6.0",
+    "pg": "^8.23.1",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2"
   },

@@ -1,12 +1,13 @@
-import { returnReasonLabel } from "../returns/return-constants.js";
+import { OPEN_RETURN_STATUSES, returnReasonLabel } from "../returns/return-constants.js";
 import { hasGuestOrderAccess } from "./order-access.js";
 import { HttpError } from "../http.js";
 import { returnWindowOpen } from "./return-window.js";
 import { asJsonObject, asNumber, asString, type JsonObject, type UserProfile } from "../types.js";
 import type { UserReturnsRepository } from "./returns-repository.js";
 
-const RESTRICTED_CATEGORY_NAMES = ["Phụ kiện"];
-const RESTRICTED_CATEGORY_SLUGS = ["phu-kien"];
+/** Danh mục phụ kiện, túi xách, giày dép... đều được phép đổi trả theo chính sách Velura. */
+const RESTRICTED_CATEGORY_NAMES: readonly string[] = [];
+const RESTRICTED_CATEGORY_SLUGS: readonly string[] = [];
 
 /** U2-02: mỗi `order_item` chỉ được xử lý đổi/trả tối đa 2 lần, tính trên cả đơn, không phải trên toàn bộ lịch sử khách. */
 const MAX_RETURN_ATTEMPTS_PER_ITEM = 2;
@@ -31,7 +32,8 @@ function requireDeliveredWithinWindow(order: JsonObject): void {
 async function validateItemsAgainstOrder(
   repository: UserReturnsRepository,
   order: JsonObject,
-  rawItems: unknown[]
+  rawItems: unknown[],
+  returnType: string
 ): Promise<JsonObject[]> {
   const validated: JsonObject[] = [];
   const seen = new Set<string>();
@@ -48,9 +50,11 @@ async function validateItemsAgainstOrder(
     }
 
     const variant = await repository.findVariant(orderItem.variant_id);
+    let isCombo = false;
     if (variant) {
       const product = await repository.findProduct(variant.product_id);
       if (product) {
+        isCombo = Boolean(product.is_combo || /combo/i.test(asString(product.name)) || /set\s+/i.test(asString(product.name)));
         const category = await repository.findCategory(product.category_id);
         if (
           category &&
@@ -61,13 +65,36 @@ async function validateItemsAgainstOrder(
         }
       }
     }
+    if (!isCombo) {
+      isCombo = /combo/i.test(asString(orderItem.product_name)) || /set\s+/i.test(asString(orderItem.product_name));
+    }
+
+    // Quy tắc Combo: Nếu là combo thì khi hoàn tiền phải hoàn đủ số lượng cả bộ combo
+    if (isCombo && returnType === "refund" && Number(item.quantity) < Number(orderItem.quantity)) {
+      throw new HttpError(
+        400,
+        "COMBO_FULL_RETURN_REQUIRED",
+        `Sản phẩm Combo "${asString(orderItem.product_name)}" phải hoàn trả nguyên bộ, không tách lẻ số lượng hoàn tiền.`
+      );
+    }
 
     let alreadyReturnedQty = 0;
     let activeAttempts = 0;
     for (const existing of existingReturns) {
-      if (["CANCELLED","CANCELLED","CANCELLED"].includes(asString(existing.status))) continue;
+      const status = asString(existing.status);
+      if (["CANCELLED", "REJECTED", "rejected"].includes(status)) continue;
       const rItems = await repository.listReturnItemsForOrderItem(existing.return_id, item.order_item_id);
       if (!rItems.length) continue;
+
+      // Khóa nếu đang có yêu cầu đổi/trả trong tiến trình xử lý
+      if (OPEN_RETURN_STATUSES.includes(status) || status === "pending") {
+        throw new HttpError(
+          400,
+          "ITEM_RETURN_IN_PROGRESS",
+          `Sản phẩm "${asString(orderItem.product_name) || "này"}" đang có yêu cầu đổi/trả (${asString(existing.tracking_return_code) || asString(existing.return_id)}) đang xử lý. Vui lòng chờ hoàn tất.`
+        );
+      }
+
       activeAttempts += 1;
       for (const ri of rItems) alreadyReturnedQty += Number(ri.quantity);
     }
@@ -79,7 +106,7 @@ async function validateItemsAgainstOrder(
       throw new HttpError(400, "BAD_REQUEST", "Số lượng đổi trả vượt quá số lượng đã mua");
     }
 
-        const replacementId = asString(item.replacement_variant_id);
+    const replacementId = asString(item.replacement_variant_id);
     if (replacementId) {
       const replacement = await repository.findVariant(replacementId);
       if (!variant || !replacement || replacement.product_id !== variant.product_id) throw new HttpError(422,"EXCHANGE_SAME_PRODUCT_REQUIRED","Replacement must be a variant of the same product");
@@ -88,6 +115,29 @@ async function validateItemsAgainstOrder(
   }
 
   return validated;
+}
+
+/**
+ * Tính số tiền hoàn dự kiến dựa trên số lượng sản phẩm và giá mua thực tế, trừ tỉ lệ giảm giá nếu có.
+ */
+async function calculateEstimatedRefundAmount(
+  repository: UserReturnsRepository,
+  order: JsonObject,
+  validatedItems: JsonObject[]
+): Promise<number> {
+  let subtotal = 0;
+  for (const item of validatedItems) {
+    const orderItem = await repository.findOrderItem(item.order_item_id);
+    if (orderItem) {
+      subtotal += Number(orderItem.unit_price || 0) * Number(item.quantity || 1);
+    }
+  }
+  const orderSubtotal = Number(order.subtotal || order.total_amount || 0);
+  const orderDiscount = Number(order.discount_amount || 0);
+  if (orderSubtotal > 0 && orderDiscount > 0) {
+    return Math.max(0, Math.round(subtotal * (1 - orderDiscount / orderSubtotal)));
+  }
+  return Math.max(0, Math.round(subtotal));
 }
 
 /**
@@ -107,18 +157,37 @@ export function createUserReturnsService(repository: UserReturnsRepository) {
       }
       requireDeliveredWithinWindow(order);
       const reason = returnReasonLabel(asString(body.reason_code || body.reasonCode));
-      const intake = {description:[reason,asString(description)].filter(Boolean).join(". "),images:Array.isArray(evidence_images) ? evidence_images.filter(value => typeof value === "string" && (value.startsWith("https://") || value.startsWith("data:image/"))).slice(0,5) : []};
+      const comboNotes = (items as JsonObject[])
+        .filter((it) => it.replacement_text)
+        .map((it) => asString(it.replacement_text))
+        .filter(Boolean);
+      const combinedDescription = [
+        comboNotes.length ? `[Chi tiết đổi hàng]: ${comboNotes.join("; ")}` : "",
+        reason,
+        asString(description)
+      ].filter(Boolean).join(". ");
+      const intake = {
+        description: combinedDescription,
+        images: Array.isArray(evidence_images)
+          ? evidence_images.filter(value => typeof value === "string" && (value.startsWith("https://") || value.startsWith("data:image/"))).slice(0, 5)
+          : []
+      };
       if (!["refund","exchange"].includes(asString(return_type))) throw new HttpError(422,"INVALID_RETURN_TYPE","Choose refund or exchange");
-      const validatedItems = await validateItemsAgainstOrder(repository, order, items);
+      const validatedItems = await validateItemsAgainstOrder(repository, order, items, asString(return_type));
 
       const trackingReturnCode = "RET" + Date.now().toString().slice(-8).toUpperCase();
-      if (repository.createReturnBundle) return repository.createReturnBundle({order_id:order.order_id,user_id:order.user_id,return_type,description:intake.description,evidence_images:intake.images},validatedItems);
+      const calculatedRefund = return_type === "refund"
+        ? await calculateEstimatedRefundAmount(repository, order, validatedItems)
+        : 0;
+
+      if (repository.createReturnBundle) return repository.createReturnBundle({order_id:order.order_id,user_id:order.user_id,return_type,refund_amount:calculatedRefund,description:intake.description,evidence_images:intake.images},validatedItems);
       const newReturn = await repository.insertReturn({
         order_id,
         user_id: profile.user_id,
         return_type,
-        description: description || null,
-        evidence_images: evidence_images || null,
+        refund_amount: calculatedRefund,
+        description: intake.description || description || null,
+        evidence_images: intake.images || evidence_images || null,
         status: "REQUESTED",
         tracking_return_code: trackingReturnCode,
         created_at: new Date().toISOString()
@@ -139,9 +208,7 @@ export function createUserReturnsService(repository: UserReturnsRepository) {
     },
 
     /**
-     * Nhánh khách vãng lai: xác thực bằng khớp SĐT/email với đơn, không qua OTP. Hành vi giữ
-     * nguyên như trước khi tách layer (KAN-32 chỉ tách code, không đổi bảo mật nhánh này —
-     * OTP hoá guest-return là việc khác).
+     * Nhánh khách vãng lai: xác thực bằng khớp SĐT/email với đơn, không qua OTP.
      */
     async createForGuest(body: JsonObject) {
       const cleanCode = String(body.order_code || "").trim().toUpperCase();
@@ -160,17 +227,32 @@ export function createUserReturnsService(repository: UserReturnsRepository) {
       if (!hasGuestOrderAccess(order, body)) throw new HttpError(404,"NOT_FOUND","Order not found");
 
       requireDeliveredWithinWindow(order);
-      const validatedItems = await validateItemsAgainstOrder(repository, order, items);
+      if (!["refund","exchange"].includes(asString(return_type))) throw new HttpError(422,"INVALID_RETURN_TYPE","Choose refund or exchange");
+      const validatedItems = await validateItemsAgainstOrder(repository, order, items, asString(return_type));
 
       const trackingReturnCode = "RT" + Date.now().toString().slice(-8).toUpperCase();
+      const calculatedRefund = return_type === "refund"
+        ? await calculateEstimatedRefundAmount(repository, order, validatedItems)
+        : 0;
+
+      const comboNotes = (items as JsonObject[])
+        .filter((it) => it.replacement_text)
+        .map((it) => asString(it.replacement_text))
+        .filter(Boolean);
+      const combinedDescription = [
+        comboNotes.length ? `[Chi tiết đổi hàng]: ${comboNotes.join("; ")}` : "",
+        asString(description)
+      ].filter(Boolean).join(". ") || null;
+
       const newReturn = await repository.insertReturn({
         order_id: order.order_id,
         user_id: order.user_id || null,
         return_type,
+        refund_amount: calculatedRefund,
         status: "REQUESTED",
         tracking_return_code: trackingReturnCode,
-        reason: description || "Khách hàng yêu cầu đổi trả",
-        description: description || null,
+        reason: combinedDescription || "Khách hàng yêu cầu đổi trả",
+        description: combinedDescription,
         evidence_images: Array.isArray(evidence_images) ? evidence_images : [],
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()

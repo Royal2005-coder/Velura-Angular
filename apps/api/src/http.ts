@@ -92,7 +92,7 @@ export function sendError(
 /**
  * Read and parse a JSON request body. Empty bodies become `{}`.
  */
-export async function readJson(req: HttpRequest, maxBytes = 65536): Promise<JsonObject> {
+export async function readJson(req: HttpRequest, maxBytes = 15728640): Promise<JsonObject> {
   const reqWithBody = req as { body?: unknown };
   if (reqWithBody.body && typeof reqWithBody.body === "object" && reqWithBody.body !== null) {
     return asJsonObject(reqWithBody.body);

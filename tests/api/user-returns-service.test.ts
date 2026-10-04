@@ -66,12 +66,32 @@ test("a return request past the 30-day window is rejected (U2-01)", async () => 
   );
 });
 
-test("a third return request on the same order_item is rejected (U2-02)", async () => {
-  // Hai yêu cầu còn hiệu lực (không `rejected`) đã dùng hết 2 lượt của item này.
+test("an in-progress return request on the same order_item is blocked (ITEM_RETURN_IN_PROGRESS)", async () => {
   const repository = fakeRepository({
     listReturnsForOrder: async () => [
-      { return_id: "ret-a", status: "REQUESTED" },
-      { return_id: "ret-b", status: "WAITING_RETURN" }
+      { return_id: "ret-a", status: "REQUESTED", tracking_return_code: "RET12345678" }
+    ],
+    listReturnItemsForOrderItem: async () => [{ order_item_id: ITEM_ID, quantity: 1 }]
+  });
+  const service = createUserReturnsService(repository);
+
+  await assert.rejects(
+    () =>
+      service.createForMember(profile, {
+        order_id: ORDER_ID,
+        return_type: "refund", reason_code: "size", evidence_images: ["https://example.com/evidence.png"],
+        items: [{ order_item_id: ITEM_ID, quantity: 1 }]
+      }),
+    (error: unknown) => error instanceof HttpError && error.status === 400 && error.code === "ITEM_RETURN_IN_PROGRESS"
+  );
+});
+
+test("a third return request on the same order_item is rejected (U2-02)", async () => {
+  // Hai yêu cầu đã hoàn tất (không `rejected`) đã dùng hết 2 lượt của item này.
+  const repository = fakeRepository({
+    listReturnsForOrder: async () => [
+      { return_id: "ret-a", status: "COMPLETED" },
+      { return_id: "ret-b", status: "COMPLETED" }
     ],
     listReturnItemsForOrderItem: async (returnId) =>
       returnId === "ret-a" || returnId === "ret-b" ? [{ order_item_id: ITEM_ID, quantity: 1 }] : []

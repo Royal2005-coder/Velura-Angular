@@ -560,7 +560,9 @@ export async function handleOrdersRoute(
       }
 
       const existingPhoneUser = await checkoutService.findUserByPhone(phone);
-      if (existingPhoneUser?.email && otpEmail && asString(existingPhoneUser.email).toLowerCase() !== otpEmail.toLowerCase()) throw new HttpError(422,"OTP_CHANNEL_MISMATCH","Use SMS or the account email for this phone");
+      if (existingPhoneUser?.is_active && existingPhoneUser?.email && otpEmail && asString(existingPhoneUser.email).toLowerCase() !== otpEmail.toLowerCase()) {
+        throw new HttpError(422, "OTP_CHANNEL_MISMATCH", "Số điện thoại này đã gắn với email tài khoản khác. Vui lòng nhập đúng email tài khoản hoặc đăng nhập để tiếp tục.");
+      }
       const otpCode = session.otpCode;
 
       if (config.nodeEnv !== "production") {
@@ -799,7 +801,7 @@ export async function handleOrdersRoute(
       const guestInternalNote = formatOrderInternalNote(body, formatOrderInternalNote(order));
 
       const persistedGuestOrder = await checkoutService.persistOrder({
-        userId: asString(guestUser.user_id),
+        userId: guestUser?.user_id ? asString(guestUser.user_id) : "",
         isGuest: true,
         idempotencyKey: asString(body.idempotency_key || order.idempotency_key),
         contact,

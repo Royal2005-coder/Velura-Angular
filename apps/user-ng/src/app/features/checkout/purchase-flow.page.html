@@ -65,10 +65,11 @@
                       /><small class="error">{{ fieldErrors()['name'] }}</small></label
                     >
                     <label class="field"
-                      >Email (tùy chọn)<input
+                      >{{ member() ? 'Email (tùy chọn)' : 'Email nhận mã OTP & ưu đãi thành viên *' }}<input
                         name="email"
                         type="email"
                         autocomplete="email"
+                        [placeholder]="member() ? 'example@gmail.com' : 'Nhập email nhận OTP và quà chào mừng'"
                         [ngModel]="address.email"
                         (ngModelChange)="editField('email', $event)"
                         (blur)="validateField('email')"

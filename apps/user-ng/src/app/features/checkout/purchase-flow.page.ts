@@ -429,6 +429,18 @@ export class PurchaseFlowPage {
     this.validateField('phone');
     if (!validPhone(this.address.phone)) return;
     const phone = normalizePhone(this.address.phone);
+    if (!this.member()) {
+      if (!this.address.name?.trim() || this.address.name.trim().split(/\s+/).length < 2) {
+        this.fieldErrors.update((f) => ({ ...f, name: 'Họ và tên phải có ít nhất 2 từ.' }));
+        this.otpError.set('Vui lòng nhập họ tên đầy đủ trước khi nhận mã OTP.');
+        return;
+      }
+      if (!this.address.email?.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(this.address.email.trim())) {
+        this.fieldErrors.update((f) => ({ ...f, email: 'Vui lòng nhập email hợp lệ để nhận mã xác thực OTP.' }));
+        this.otpError.set('Vui lòng nhập email để nhận mã xác thực OTP.');
+        return;
+      }
+    }
     this.sendingOtp.set(true);
     this.otpVerified.set(false);
     this.guestCheckoutToken = '';

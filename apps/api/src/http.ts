@@ -88,12 +88,23 @@ function extractBusinessError(err: ErrorLike): { code: string; message: string; 
     RETURN_WINDOW_CLOSED: "Thời hạn đổi/trả hàng cho sản phẩm này đã kết thúc.",
     EXCHANGE_SAME_PRODUCT_REQUIRED: "Chỉ được đổi sang cùng một sản phẩm với phân loại khác.",
     OTP_PHONE_RATE_LIMIT: "Bạn đã yêu cầu mã OTP quá nhiều lần. Vui lòng thử lại sau.",
-    OTP_IP_RATE_LIMIT: "Kết nối mạng này đã gửi quá nhiều yêu cầu OTP. Vui lòng thử lại sau."
+    OTP_IP_RATE_LIMIT: "Kết nối mạng này đã gửi quá nhiều yêu cầu OTP. Vui lòng thử lại sau.",
+    OTP_CHANNEL_MISMATCH: "Số điện thoại này đã gắn với email tài khoản khác. Vui lòng nhập đúng email tài khoản hoặc đăng nhập.",
+    EMAIL_REQUIRED: "Vui lòng nhập địa chỉ email hợp lệ để nhận mã xác thực OTP.",
+    INVALID_FULL_NAME: "Họ và tên người nhận phải có ít nhất 2 từ.",
+    INVALID_ADDRESS: "Địa chỉ nhận hàng không hợp lệ hoặc chưa đầy đủ.",
+    INVALID_OTP: "Mã xác thực OTP không chính xác hoặc đã hết hạn.",
+    EXPIRED_OTP: "Mã xác thực OTP đã hết hạn. Vui lòng gửi lại mã mới.",
+    SESSION_LOCKED: "Phiên xác thực bị khóa do nhập sai nhiều lần. Vui lòng thử lại sau.",
+    CHECKOUT_PROOF_REQUIRED: "Phiên xác thực thanh toán đã hết hạn. Vui lòng xác thực lại SĐT.",
+    PAYMENT_SESSION_OPEN: "Đang có phiên thanh toán trực tuyến chưa hoàn tất. Vui lòng chờ vài phút hoặc thanh toán lại.",
+    PRICE_MISMATCH: "Giá sản phẩm trong giỏ hàng đã thay đổi. Vui lòng làm mới đơn hàng.",
+    UNKNOWN_VARIANT: "Không tìm thấy thông tin sản phẩm trong giỏ hàng."
   };
 
   for (const [code, msg] of Object.entries(businessCodes)) {
     if (rawMsg === code || rawMsg.includes(code) || rawCode === code) {
-      const status = code === "INSUFFICIENT_STOCK" || code === "VOUCHER_CHANGED" || code === "VERSION_CONFLICT" || code === "REFUND_ALREADY_REQUESTED"
+      const status = code === "INSUFFICIENT_STOCK" || code === "VOUCHER_CHANGED" || code === "VERSION_CONFLICT" || code === "REFUND_ALREADY_REQUESTED" || code === "PAYMENT_SESSION_OPEN"
         ? 409
         : code.includes("NOT_FOUND") ? 404 : code.includes("RATE_LIMIT") ? 429 : 422;
       return { code, message: msg, status, details };

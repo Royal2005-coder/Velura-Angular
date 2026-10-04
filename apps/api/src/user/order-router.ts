@@ -683,12 +683,28 @@ export async function handleOrdersRoute(
       const items = rawItems.map((item) => asJsonObject(item));
       const sessionState = checkoutOtpService.verifyForCheckout(phone, otp_code, body.guest_checkout_token);
 
-      // Chốt tiền trước khi tiêu mã OTP. Giá lệch bảng giá hoặc mã giảm giá vừa đổi
-      // (409 VOUCHER_CHANGED) thì khách phải xác nhận lại tổng mới; nếu OTP đã bị xoá
-      // thì khách phải xin mã lần nữa chỉ vì một mã giảm giá, và tài khoản khách bên
-      // dưới đã được tạo thừa.
+      const guestAccount = await checkoutService.resolveGuest(contact, asString(shipping_address));
+      const guestUser = guestAccount.user;
+      const activation = guestAccount.activation;
+
+      // Chốt tiền với danh tính user đã resolve.
+      // Nếu là thành viên cũ hoặc khách đã dùng mã trước đó, kiểm tra đúng hạn mức voucher.
+      // Nếu có lỗi (409 VOUCHER_CHANGED), OTP chưa bị consume nên khách có thể xác nhận lại tổng mới ngay lập tức.
+      const guestContext: AuthContext = {
+        ...context,
+        profile: guestUser?.user_id
+          ? {
+              user_id: asString(guestUser.user_id),
+              email: asString(guestUser.email) || null,
+              phone: asString(guestUser.phone) || null,
+              role: asString(guestUser.role) || "member",
+              is_active: Boolean(guestUser.is_active)
+            }
+          : context.profile
+      };
+
       const guestQuote = await checkoutService.quote(
-        context,
+        guestContext,
         items,
         shipping_fee,
         body.shipping_method || order.shipping_method,
@@ -714,10 +730,6 @@ export async function handleOrdersRoute(
           }
         }, corsHeaders);
       }
-
-      const guestAccount = await checkoutService.resolveGuest(contact, asString(shipping_address));
-      const guestUser = guestAccount.user;
-      const activation = guestAccount.activation;
 
       const orderCode = generateOrderCode();
       assertStripeReady(payment_method);

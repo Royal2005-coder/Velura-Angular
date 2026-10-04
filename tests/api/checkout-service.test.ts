@@ -251,3 +251,35 @@ test("checkout service activates a guest only through the repository", async () 
   assert.equal(user.user_id, "guest-1");
   assert.equal(activatedUserId, "guest-1");
 });
+
+test("resolveGuest does not hijack an existing account when phone numbers differ", async () => {
+  let createdPayload: JsonObject | null = null;
+  const service = new CheckoutService(checkoutRepositoryStub({
+    findUserByPhone: async () => null,
+    findUserByEmail: async (email) => ({
+      user_id: "admin-user",
+      email,
+      phone: "0823733503",
+      is_active: true
+    }),
+    createGuestUser: async (input) => {
+      if (input.email) throw new Error("users_email_key duplicate");
+      createdPayload = input;
+      return { user_id: "new-guest-id", ...input };
+    }
+  }));
+
+  const result = await service.resolveGuest(
+    { fullName: "Hoang Gia", phone: "0913956506", email: "admin@velura.vn" },
+    "123 Duong ABC"
+  );
+
+  assert.equal(result.existingMember, false);
+  assert.notEqual(result.activation, null);
+  assert.equal(result.user.user_id, "new-guest-id");
+  assert.equal(result.user.phone, "0913956506");
+  assert.equal(result.user.email, null);
+  assert.equal(createdPayload?.phone, "0913956506");
+  assert.equal(createdPayload?.email, null);
+});
+

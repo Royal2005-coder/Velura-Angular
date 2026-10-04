@@ -17,7 +17,7 @@ import { OrderAccountApiStore } from '../../core/services/order-account-api.stor
 import { CheckoutStore, type CheckoutShipping } from '../../core/services/checkout.store';
 import { VoucherService } from '../../core/services/voucher.service';
 import { VoucherWallet } from '../../shared/voucher-wallet/voucher-wallet';
-import type { AppliedVoucher, CheckoutQuote } from '../../core/models/voucher.interface';
+import type { AppliedVoucher, CheckoutQuote, VoucherChangedDetails } from '../../core/models/voucher.interface';
 import { ApiRequestError } from '../../core/models/api-request-error';
 import {
   PurchaseFlowApiService,
@@ -741,8 +741,18 @@ export class PurchaseFlowPage {
         if (userId !== this.model.userId()) return;
         this.busy.set(false);
         if (error instanceof ApiRequestError && error.code === 'VOUCHER_CHANGED') {
+          const details = (error.details || {}) as Partial<VoucherChangedDetails>;
+          const replacement = details?.replacement ?? null;
+          this.voucherId.set(replacement?.voucher_id ?? null);
+          if (replacement?.voucher_id) {
+            localStorage.setItem('checkout_voucher_id', replacement.voucher_id);
+          } else {
+            localStorage.removeItem('checkout_voucher_id');
+          }
           this.refreshQuote();
-          this.voucherNotice.set('Tổng thanh toán đã thay đổi. Vui lòng kiểm tra và xác nhận lại.');
+          const requested = details?.requested_code ? `Mã ${details.requested_code}` : 'Mã giảm giá đã chọn';
+          const next = replacement ? ` Đã chuyển sang mã ${replacement.code}.` : ' Đơn hàng được giữ lại không áp mã.';
+          this.voucherNotice.set(`${requested} không còn dùng được: ${details?.reason_text || error.message}.${next} Vui lòng kiểm tra lại tổng tiền và bấm hoàn tất.`);
         }
         if (error instanceof ApiRequestError && (error.code === 'CHECKOUT_PROOF_REQUIRED' || error.code === 'INVALID_OTP' || error.code === 'EXPIRED_OTP')) {
           this.otpVerified.set(false);

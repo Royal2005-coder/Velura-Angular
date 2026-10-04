@@ -123,6 +123,8 @@ export class CheckoutOtpRateLimiter {
 /** Quản lý vòng đời OTP checkout, tách rule khỏi HTTP router. */
 export class CheckoutOtpService {
   private readonly sessions = new Map<string, CheckoutOtpSession>();
+  private readonly consumedPhones = new Set<string>();
+  private readonly consumedTokens = new Set<string>();
 
   constructor(private readonly limiter = new CheckoutOtpRateLimiter()) {}
 
@@ -137,6 +139,7 @@ export class CheckoutOtpService {
       attempts: 0
     };
     this.sessions.set(contact.phone, session);
+    this.consumedPhones.delete(contact.phone);
     return session;
   }
 
@@ -160,26 +163,53 @@ export class CheckoutOtpService {
   }
 
   /** Tiêu thụ OTP đúng một lần sau khi giá và voucher đã được chốt thành công. */
-  consume(phoneInput: unknown): void {
-    this.sessions.delete(normalizeVietnamesePhone(phoneInput));
+  consume(phoneInput: unknown, tokenInput?: unknown): void {
+    const phone = normalizeVietnamesePhone(phoneInput);
+    this.sessions.delete(phone);
+    this.consumedPhones.add(phone);
+    if (tokenInput) {
+      this.consumedTokens.add(asString(tokenInput));
+    }
   }
 
   /** Successful OTP grants 15 minutes to finish the same checkout challenge. */
   prove(phoneInput: unknown, otpInput: unknown): string {
     const session = this.verify(phoneInput, otpInput);
-    return signJwt({ purpose: "guest_checkout", phone: session.contact.phone, challenge: this.challenge(session) }, 15 * 60);
+    return signJwt({
+      purpose: "guest_checkout",
+      phone: session.contact.phone,
+      contact: session.contact,
+      challenge: this.challenge(session)
+    }, 15 * 60);
   }
 
   /** A proof survives code expiry and is invalidated by consumption or resending. */
   verifyForCheckout(phoneInput: unknown, otpInput: unknown, tokenInput: unknown): CheckoutOtpSession {
     if (!tokenInput) return this.verify(phoneInput, otpInput);
     const phone = normalizeVietnamesePhone(phoneInput);
-    const claims = verifyJwt(asString(tokenInput));
-    const session = this.sessions.get(phone);
-    if (!session || claims?.purpose !== "guest_checkout" || claims.phone !== phone || claims.challenge !== this.challenge(session)) {
+    const rawToken = asString(tokenInput);
+    const claims = verifyJwt(rawToken);
+    if (!claims || claims.purpose !== "guest_checkout" || claims.phone !== phone) {
       throw new HttpError(401, "CHECKOUT_PROOF_REQUIRED", "Xác thực checkout đã hết hạn hoặc không khớp số điện thoại.");
     }
-    return session;
+    if (this.consumedPhones.has(phone) || this.consumedTokens.has(rawToken)) {
+      throw new HttpError(401, "CHECKOUT_PROOF_REQUIRED", "Phiên xác thực thanh toán đã được sử dụng. Vui lòng xác thực lại SĐT.");
+    }
+    const session = this.sessions.get(phone);
+    if (session) {
+      if (claims.challenge && claims.challenge !== this.challenge(session)) {
+        throw new HttpError(401, "CHECKOUT_PROOF_REQUIRED", "Xác thực checkout đã hết hạn hoặc không khớp số điện thoại.");
+      }
+      return session;
+    }
+    // Phục vụ môi trường serverless: tái tạo session từ token JWT đã được xác thực chữ ký số HMAC
+    const contact = (claims.contact as CheckoutContact) || { fullName: "", phone, email: null };
+    return {
+      otpCode: "",
+      expiresAt: (typeof claims.exp === "number" ? claims.exp : Math.floor(Date.now() / 1000) + 900) * 1000,
+      contact,
+      attempts: 0
+    };
   }
 
   private challenge(session: CheckoutOtpSession): string {

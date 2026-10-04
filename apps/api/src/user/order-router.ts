@@ -715,7 +715,7 @@ export async function handleOrdersRoute(
         }, corsHeaders);
       }
 
-      const guestAccount = await checkoutService.resolveGuest(sessionState.contact, asString(shipping_address));
+      const guestAccount = await checkoutService.resolveGuest(contact, asString(shipping_address));
       const guestUser = guestAccount.user;
       const activation = guestAccount.activation;
 
@@ -832,6 +832,7 @@ export async function handleOrdersRoute(
       const createdItems = persistedGuestOrder.items;
 
       await checkoutService.recordVoucher(guestQuote.voucherId, guestQuote.discountAmount);
+      checkoutOtpService.consume(phone, body.guest_checkout_token);
 
       // Chỉ thông báo thành công sau khi order, payment, items và voucher đã ghi xong.
       // Email/SMS là tác vụ phụ nên lỗi nhà cung cấp không được biến đơn đã tạo thành response thất bại.

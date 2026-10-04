@@ -1,6 +1,8 @@
-import { Component, computed, inject, signal } from '@angular/core';
-import { forkJoin, of } from 'rxjs';
-import { catchError } from 'rxjs/operators';
+import { AdminDialogDirective } from '../../shared/admin-dialog.directive';
+import { AdminRefreshService } from '../../core/admin-refresh.service';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { forkJoin, of , Subscription } from 'rxjs';
+import { catchError, finalize } from 'rxjs/operators';
 import {
   AdminApiService,
   AdminAuditRow,
@@ -103,10 +105,11 @@ interface CsvPreviewResult {
  */
 @Component({
   selector: 'app-admin-products-page',
-  imports: [AdminEmptyState, AdminIcon, AdminPagination, AdminTableSkeleton],
+  imports: [AdminDialogDirective, AdminEmptyState, AdminIcon, AdminPagination, AdminTableSkeleton],
   templateUrl: './admin-products.page.html',
 })
 export class AdminProductsPage {
+  private listRequest = new Subscription();
   private readonly adminApi = inject(AdminApiService);
   private readonly session = inject(AdminSessionService);
 
@@ -158,6 +161,12 @@ export class AdminProductsPage {
   private pendingImageTarget: HTMLTextAreaElement | null = null;
   private pendingOriginalFile: File | null = null;
   readonly canMutate = computed(() => this.session.canMutate('products'));
+  readonly canChangePrice = computed(() => this.session.canMutate('pricing'));
+  readonly canReadCatalog = computed(() => this.session.canAccessModule('products'));
+  readonly priceOnly = computed(() => this.canChangePrice() && !this.canReadCatalog());
+  readonly priceTarget = signal<AdminProductRow | null>(null);
+  readonly priceSaving = signal(false);
+  readonly priceError = signal<string | null>(null);
   readonly canOpenPricing = computed(() => this.session.canOpen('pricing'));
 
   // Signals cho điều chỉnh giá & chiết khấu trực tiếp trên Sản phẩm
@@ -272,8 +281,12 @@ export class AdminProductsPage {
   );
 
   constructor() {
+    inject(DestroyRef).onDestroy(() => this.listRequest.unsubscribe());
+    inject(AdminRefreshService).register(() => {
+      if (!this.loading() && !this.overlay() && !this.priceTarget()) this.reloadCatalog();
+    }, inject(DestroyRef));
     this.reloadCatalog();
-    this.adminApi.listCategories().subscribe({
+    if (!this.priceOnly()) this.adminApi.listCategories().subscribe({
       next: (payload) => this.categories.set(adminListRows(payload)),
     });
   }
@@ -282,6 +295,7 @@ export class AdminProductsPage {
    * Switches catalog / CSV / log tabs.
    */
   setTab(tab: ProductTab): void {
+    if (tab !== 'catalog' && !this.canReadCatalog()) return;
     this.tab.set(tab);
     if (tab === 'logs') {
       this.loadLogs();
@@ -453,10 +467,40 @@ export class AdminProductsPage {
   }
 
   /**
-   * Read-only catalog price. Mutations belong on `/pricing`.
+   * Formats price consistently for both catalog and its integrated price controls.
    */
   money(value: number | null | undefined): string {
     return adminMoney(value);
+  }
+
+  /** Opens an independent price form without granting catalog editing privileges. */
+  openPrice(product: AdminProductRow): void {
+    if (!this.canChangePrice() || product.version == null) return;
+    this.priceTarget.set(product); this.priceError.set(null);
+  }
+
+  /** Dismisses the price form while preserving any in-flight mutation. */
+  closePrice(): void {
+    if (!this.priceSaving()) this.priceTarget.set(null);
+  }
+
+  /** Changes prices with explicit audit reason and the product's current version. */
+  submitPrice(event: Event): void {
+    event.preventDefault();
+    const product = this.priceTarget(), form = event.target as HTMLFormElement;
+    if (!product || product.version == null || !this.canChangePrice() || this.priceSaving()) return;
+    const base = (form.elements.namedItem('base') as HTMLInputElement | null)?.value.trim() || '';
+    const sale = (form.elements.namedItem('sale') as HTMLInputElement | null)?.value.trim() || '';
+    const reason = (form.elements.namedItem('reason') as HTMLTextAreaElement | null)?.value.trim() || '';
+    const newBasePrice = Number(base), newSalePrice = sale ? Number(sale) : null;
+    if (!base || !Number.isFinite(newBasePrice) || newBasePrice <= 0 || (newSalePrice != null && (!Number.isFinite(newSalePrice) || newSalePrice <= 0 || newSalePrice > newBasePrice)) || reason.length < 10) {
+      this.priceError.set('Giá phải lớn hơn 0, giá bán không vượt giá gốc; ghi rõ lý do ít nhất 10 ký tự.'); return;
+    }
+    this.priceSaving.set(true);
+    this.adminApi.changePrice(product.product_id, { newBasePrice, newSalePrice, reason, expectedVersion: product.version }).pipe(finalize(() => this.priceSaving.set(false))).subscribe({
+      next: (updated) => { this.priceTarget.set(null); if (this.selected()?.product_id === product.product_id) this.selected.set(updated); this.reloadCatalog(); },
+      error: (error: unknown) => this.priceError.set(adminErrorMessage(error)),
+    });
   }
 
   itemTotal(item: AdminComboItemRow): string {
@@ -707,7 +751,8 @@ export class AdminProductsPage {
     const newSale = this.editSalePrice();
     const priceChanged = newBase !== currentBase || newSale !== currentSale;
 
-    const saveDetails = () => {
+    if (priceChanged && !this.canChangePrice()) { this.actionError.set('Bạn không có quyền điều chỉnh giá. Liên hệ người quản lý giá.'); return; }
+    const saveDetails = (expectedVersion: number) => {
       this.adminApi
         .updateProduct(product.product_id, {
           name,
@@ -715,7 +760,7 @@ export class AdminProductsPage {
           collection,
           description,
           images,
-          expectedVersion: product.version,
+          expectedVersion,
         })
         .subscribe({
           next: () => {
@@ -735,11 +780,15 @@ export class AdminProductsPage {
           expectedVersion: product.version,
         })
         .subscribe({
-          next: () => saveDetails(),
+          next: (updated) => {
+            if (updated.version == null) { this.actionError.set('Giá đã được lưu. Phản hồi thiếu phiên bản mới; mở lại sản phẩm trước khi lưu thông tin.'); return; }
+            this.selected.set(updated);
+            saveDetails(updated.version);
+          },
           error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
         });
     } else {
-      saveDetails();
+      saveDetails(product.version);
     }
   }
 
@@ -1101,6 +1150,7 @@ export class AdminProductsPage {
    * Reloads the server-paged catalog list and KPI counts.
    */
   reloadCatalog(): void {
+    this.listRequest.unsubscribe();
     this.loading.set(true);
     this.loadError.set(null);
     const params = {
@@ -1110,17 +1160,18 @@ export class AdminProductsPage {
       limit: String(this.pageSize),
       offset: adminOffset(this.page(), this.pageSize),
     };
-    forkJoin({
-      list: this.adminApi.listProducts(params).pipe(
+    const listProducts = (filters: Record<string, string>) => this.priceOnly() ? this.adminApi.listPricingProducts(filters) : this.adminApi.listProducts(filters);
+    this.listRequest = forkJoin({
+      list: listProducts(params).pipe(
         catchError((error: unknown) => {
           this.loadError.set(adminErrorMessage(error, 'Không tải được danh mục sản phẩm.'));
           return of({ rows: [] as AdminProductRow[], count: 0 });
         }),
       ),
-      onSale: this.adminApi.listProducts({ status: 'on_sale', limit: '1' }).pipe(catchError(() => of({ rows: [] as AdminProductRow[], count: 0 }))),
-      hidden: this.adminApi.listProducts({ status: 'hidden', limit: '1' }).pipe(catchError(() => of({ rows: [] as AdminProductRow[], count: 0 }))),
-      out: this.adminApi.listProducts({ status: 'out_of_stock', limit: '1' }).pipe(catchError(() => of({ rows: [] as AdminProductRow[], count: 0 }))),
-      low: this.adminApi.listLowStock().pipe(catchError(() => of({ rows: [] as AdminProductRow[], count: 0 }))),
+      onSale: listProducts({ status: 'on_sale', limit: '1' }).pipe(catchError(() => of({ rows: [] as AdminProductRow[], count: 0 }))),
+      hidden: listProducts({ status: 'hidden', limit: '1' }).pipe(catchError(() => of({ rows: [] as AdminProductRow[], count: 0 }))),
+      out: listProducts({ status: 'out_of_stock', limit: '1' }).pipe(catchError(() => of({ rows: [] as AdminProductRow[], count: 0 }))),
+      low: (this.canReadCatalog() ? this.adminApi.listLowStock() : of({ rows: [] as AdminProductRow[], count: 0 })).pipe(catchError(() => of({ rows: [] as AdminProductRow[], count: 0 }))),
     }).subscribe((payload) => {
       this.products.set(adminListRows(payload.list));
       this.total.set(adminListCount(payload.list));

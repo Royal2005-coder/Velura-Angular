@@ -1,0 +1,42 @@
+<main class="velura-auth-page" aria-label="Kích hoạt tài khoản Velura">
+  <div class="login-page">
+    <a class="logo-container" routerLink="/" aria-label="Về trang chủ Velura">
+      <img src="/assets/images/auth/logo_velura.png" alt="Velura" class="logo" />
+    </a>
+    <img src="/assets/images/auth/model_main.png" alt="" class="main-model" aria-hidden="true" />
+
+    <form class="login-container" [formGroup]="form" (ngSubmit)="submit()" novalidate>
+      <header class="header">
+        <h1>Kích hoạt tài khoản</h1>
+        <p>Tự đặt mật khẩu để kích hoạt tài khoản thành viên được tạo sau đơn hàng Guest.</p>
+      </header>
+
+      <div class="form-group">
+        <label for="activation-password">Mật khẩu mới <span class="field__required">*</span></label>
+        <div class="input-wrapper">
+          <input id="activation-password" [type]="showPassword() ? 'text' : 'password'" formControlName="password" autocomplete="new-password" />
+          <button class="toggle-password" type="button" aria-label="Hiển thị mật khẩu" (click)="showPassword.set(!showPassword())"><span aria-hidden="true">◉</span></button>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="activation-confirm">Xác nhận mật khẩu <span class="field__required">*</span></label>
+        <div class="input-wrapper">
+          <input id="activation-confirm" [type]="showConfirm() ? 'text' : 'password'" formControlName="password_confirm" autocomplete="new-password" />
+          <button class="toggle-password" type="button" aria-label="Hiển thị mật khẩu xác nhận" (click)="showConfirm.set(!showConfirm())"><span aria-hidden="true">◉</span></button>
+        </div>
+      </div>
+
+      @if (errorMessage()) {
+        <div class="field__error" aria-live="polite">{{ errorMessage() }}</div>
+      }
+      @if (successMessage()) {
+        <p class="input-hint" aria-live="polite">{{ successMessage() }}</p>
+      }
+
+      <button type="submit" class="btn-login" [disabled]="submitting()">
+        {{ submitting() ? 'Đang kích hoạt…' : 'Kích hoạt tài khoản' }}
+      </button>
+    </form>
+  </div>
+</main>

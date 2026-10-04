@@ -4,7 +4,8 @@
 
 .admin-chat-layout {
   display: flex;
-  height: 520px;
+  height: clamp(420px, calc(100dvh - 240px), 820px);
+  min-width: 0;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   overflow: hidden;
@@ -46,11 +47,19 @@
 }
 
 .admin-chat-session-list {
+  min-height: 0;
+  overflow-x: hidden;
   flex: 1;
   overflow-y: auto;
 }
 
 .admin-chat-session-item {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
   padding: 12px 16px;
   border-bottom: 1px solid var(--line);
   cursor: pointer;
@@ -74,6 +83,9 @@
 }
 
 .admin-chat-session-item__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 0.8125rem;
   font-weight: 600;
   color: var(--ink);
@@ -85,6 +97,7 @@
 }
 
 .admin-chat-session-item__status {
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   min-height: 20px;
@@ -224,6 +237,8 @@
 }
 
 .admin-chat-msg__text {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
   padding: 10px 14px;
   font-size: 0.8125rem;
   line-height: 1.45;
@@ -303,7 +318,8 @@
 @media (max-width: 768px) {
   .admin-chat-layout {
     flex-direction: column;
-    height: auto;
+    height: min(760px, calc(100dvh - 180px));
+    min-height: 480px;
   }
   .admin-chat-sidebar {
     width: 100%;

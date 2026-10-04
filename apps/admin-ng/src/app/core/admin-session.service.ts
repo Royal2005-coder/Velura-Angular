@@ -166,6 +166,7 @@ export class AdminSessionService {
    * Maps vanilla HTML page keys onto Angular admin routes.
    */
   toRoute(page: string): string {
+    if (page === 'pricing') return '/products';
     if (page === 'returns-cskh') {
       return '/returns';
     }

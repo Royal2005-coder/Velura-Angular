@@ -1,4 +1,6 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Subscription } from 'rxjs';
+import { AdminRefreshService } from '../../core/admin-refresh.service';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import {
   AdminApiService,
@@ -6,11 +8,28 @@ import {
   AdminDashboardSummary,
   AdminInsightRange,
   AdminVoiceInsights,
+  AdminManagementAction,
+  AdminManagementGroup,
+  AdminManagementGroupId,
 } from '../../core/admin-api.service';
+import { AdminSessionService } from '../../core/admin-session.service';
 import { adminErrorMessage } from '../../core/admin-http';
 import { AdminIcon } from '../../shared/admin-icon';
 
 type DashboardTab = 'operations' | 'business';
+
+/** Layout remains stable when a group is awaiting an authoritative data source. */
+const MANAGEMENT_GROUPS: ReadonlyArray<{ id: AdminManagementGroupId; title: string }> = [
+  { id: 'AD_DB_01', title: 'Hiệu quả bán hàng và doanh thu' },
+  { id: 'AD_DB_02', title: 'Điểm nghẽn đơn hàng và SLA' },
+  { id: 'AD_DB_03', title: 'Sản phẩm bán chạy và than phiền' },
+  { id: 'AD_DB_04', title: 'Đơn giao chưa được đánh giá' },
+  { id: 'AD_DB_05', title: 'Mức hài lòng dịch vụ CSKH' },
+  { id: 'AD_DB_06', title: 'Hiệu quả khuyến mãi và voucher' },
+  { id: 'AD_DB_07', title: 'Đổi trả theo dòng sản phẩm' },
+  { id: 'AD_DB_08', title: 'Khuyến mãi và mức độ hài lòng' },
+  { id: 'AD_DB_09', title: 'Giữ chân khách hàng' },
+];
 
 const emptyVoice = (): AdminVoiceInsights => ({
   range: 'week',
@@ -63,7 +82,11 @@ const emptyDashboard = (): AdminDashboardSummary => ({
   templateUrl: './admin-dashboard.page.html',
 })
 export class AdminDashboardPage {
+  private listRequest = new Subscription();
   private readonly api = inject(AdminApiService);
+  private readonly session = inject(AdminSessionService);
+  private cooldownTimer: ReturnType<typeof setTimeout> | null = null;
+  private recommendationRequest = new Subscription();
 
   readonly tab = signal<DashboardTab>('operations');
   readonly range = signal<AdminInsightRange>('week');
@@ -73,6 +96,19 @@ export class AdminDashboardPage {
   readonly loadError = signal<string | null>(null);
   readonly data = signal<AdminDashboardSummary>(emptyDashboard());
   readonly generatedAt = signal('');
+  readonly lastSyncedAt = signal('');
+  readonly loadedPeriodLabel = signal('');
+  readonly hasLoadedOnce = signal(false);
+  readonly refreshCooldown = signal(false);
+  readonly refreshMessage = signal('');
+  readonly canRefresh = computed(() => !this.loading() && !this.refreshCooldown());
+  readonly managementGroups = computed(() => MANAGEMENT_GROUPS.map((definition): AdminManagementGroup => {
+    const group = this.data().management?.groups.find((candidate) => candidate.id === definition.id);
+    if (group && group.availability !== 'insufficient_data' && [group.phenomenon, group.scope, group.magnitude, group.consequence].every((part) => typeof part === 'string' && part.trim().length > 0)) return group;
+    return { ...definition, availability: 'insufficient_data', severity: 'watch', dataNote: group?.dataNote || 'Chưa đủ dữ liệu nguồn đã xác minh để phân tích nhóm này. Insight sẽ xuất hiện khi có đủ bằng chứng.' };
+  }));
+  readonly managementWarnings = computed(() => this.managementGroups().filter((group) => group.availability !== 'insufficient_data' && (group.severity === 'critical' || group.severity === 'high' || group.availability === 'oltp_fallback')));
+  readonly viewerOnly = computed(() => this.session.session()?.roleCode === 'admin_viewer');
 
   readonly ops = computed(() => this.data().operations);
   readonly business = computed(() => this.data().business);
@@ -89,13 +125,13 @@ export class AdminDashboardPage {
    * Độ rộng thanh so với lý do đông nhất trong kỳ. Không vẽ khi chưa có phiếu.
    */
   regionShare(count: number): number {
-    const top = this.regions()[0]?.count || 0;
+    const top = Math.max(...this.regions().map((region) => region.count), 0);
     if (!top) return 0;
     return Math.max(8, Math.round((count / top) * 100));
   }
 
   reasonShare(count: number): number {
-    const top = this.returnReasons()[0]?.count || 0;
+    const top = Math.max(...this.returnReasons().map((reason) => reason.count), 0);
     if (!top) return 0;
     return Math.max(8, Math.round((count / top) * 100));
   }
@@ -199,6 +235,13 @@ export class AdminDashboardPage {
   );
 
   constructor() {
+    inject(DestroyRef).onDestroy(() => {
+      this.listRequest.unsubscribe(); this.recommendationRequest.unsubscribe();
+      if (this.cooldownTimer) clearTimeout(this.cooldownTimer);
+    });
+    inject(AdminRefreshService).register(() => {
+      this.refresh();
+    }, inject(DestroyRef));
     this.reload();
   }
 
@@ -213,6 +256,8 @@ export class AdminDashboardPage {
    * Applies the fixed day / week / month window.
    */
   setRange(range: AdminInsightRange): void {
+    if (range === this.range()) return;
+    this.recommendationRequest.unsubscribe(); this.recommendationLoading.set(false);
     this.range.set(range);
     this.recommendation.set([]);
     this.reload();
@@ -222,9 +267,10 @@ export class AdminDashboardPage {
    * Khuyến nghị chỉ từ số liệu kỳ đang chọn. Thiếu Gemini thì hiện đúng bản tóm tắt.
    */
   loadRecommendation(): void {
+    if (this.recommendationLoading()) return;
     this.recommendationLoading.set(true);
     this.recommendationError.set(null);
-    this.api.recommendInsights({ range: this.range() }).subscribe({
+    this.recommendationRequest = this.api.recommendInsights({ range: this.range() }).subscribe({
       next: (result) => {
         this.recommendationLoading.set(false);
         this.recommendationSource.set(result.source || 'facts');
@@ -242,6 +288,7 @@ export class AdminDashboardPage {
    * Reloads `/api/v1/admin/dashboard` for the active fixed period.
    */
   reload(): void {
+    this.listRequest.unsubscribe();
     this.loading.set(true);
     this.loadError.set(null);
     const params: Record<string, string> = { range: this.range() };
@@ -251,7 +298,7 @@ export class AdminDashboardPage {
     if (this.categoryId()) {
       params['categoryId'] = this.categoryId() as string;
     }
-    this.api.dashboard(params).subscribe({
+    this.listRequest = this.api.dashboard(params).subscribe({
       next: (summary) => {
         this.data.set({
           ...emptyDashboard(),
@@ -261,8 +308,9 @@ export class AdminDashboardPage {
           voice: summary.voice || emptyVoice(),
           meta: summary.meta,
         });
-        const generated = summary.meta?.generatedAt ? new Date(summary.meta.generatedAt) : new Date();
-        this.generatedAt.set(
+        const timestamp = summary.meta?.generatedAt;
+        const generated = timestamp ? new Date(timestamp) : null;
+        this.generatedAt.set(generated && Number.isFinite(generated.getTime()) ?
           generated.toLocaleString('vi-VN', {
             timeZone: 'Asia/Ho_Chi_Minh',
             hour: '2-digit',
@@ -270,16 +318,40 @@ export class AdminDashboardPage {
             day: '2-digit',
             month: '2-digit',
             year: 'numeric',
-          }),
+          }) : '',
         );
+        const synchronized = summary.management?.lastSyncedAt ? new Date(summary.management.lastSyncedAt) : null;
+        this.lastSyncedAt.set(synchronized && Number.isFinite(synchronized.getTime()) ? synchronized.toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) : '');
+        this.loadedPeriodLabel.set(this.periodLabel());
+        this.hasLoadedOnce.set(true);
         this.loading.set(false);
+        this.refreshMessage.set('Đã cập nhật báo cáo kỳ đang chọn.');
       },
       error: (error: unknown) => {
-        this.data.set(emptyDashboard());
         this.loadError.set(adminErrorMessage(error, 'Không thể tải dữ liệu dashboard'));
+        this.refreshMessage.set('Không thể đồng bộ. Bản đã xác minh gần nhất được giữ để đối chiếu.');
         this.loading.set(false);
       },
     });
+  }
+
+  /** Prevents repeated synchronization within ten seconds and concurrent refreshes. */
+  refresh(): void {
+    if (!this.canRefresh()) return;
+    this.refreshCooldown.set(true); this.refreshMessage.set('Đang đồng bộ dữ liệu phân tích…');
+    this.cooldownTimer = setTimeout(() => { this.refreshCooldown.set(false); this.cooldownTimer = null; }, 10_000);
+    this.reload();
+  }
+
+  /** Shows target links only to users allowed to read that business module. */
+  canOpenModule(module: string): boolean {
+    return this.session.canAccessModule(module);
+  }
+
+  /** Limits navigation to known local modules; target guards enforce viewer restrictions. */
+  canOpenManagementAction(action: AdminManagementAction): boolean {
+    const routes: Record<AdminManagementAction['module'], string> = { orders: '/orders', returns: '/returns', products: '/products', reviews: '/reviews', promotions: '/promotions', pricing: '/pricing', accounts: '/accounts' };
+    return this.canOpenModule(action.module) && !/[?#]/.test(action.route) && !action.route.includes('..') && !action.route.includes('//') && (action.route === routes[action.module] || action.route.startsWith(routes[action.module] + '/'));
   }
 
   /**

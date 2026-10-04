@@ -15,6 +15,19 @@ describe('ProductDetailPage', () => {
     expect(page.quantity()).toBe(1);
   });
 
+  it('marks a reserved-out variant unavailable and never invents reviews', async () => {
+    const page = await createStorefrontPage(ProductDetailPage);
+    const product = page.product();
+    expect(product).toBeTruthy();
+    page.product.set({ ...product!, variants: [{ variant_id: 'reserved', color: 'Black', size: 'M', stock_quantity: 2, reserved_quantity: 2 }], reviews: [] });
+    page.selectedColor.set('Black');
+    page.selectedSize.set('M');
+    expect(page.isOutOfStock()).toBe(true);
+    expect(page.stockLabel()).toBe('Hết hàng');
+    expect(page.addToCart()).toBe(false);
+    expect(page.averageRating()).toBe(0);
+  });
+
   it('manages combo set quantity stepper and scales line items and summary accordingly', async () => {
     const page = await createStorefrontPage(ProductDetailPage);
     const comboProduct = {

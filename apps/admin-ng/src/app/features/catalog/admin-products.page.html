@@ -1,3 +1,20 @@
+@if (priceTarget(); as pricedProduct) {
+  <div class="admin-modal-overlay">
+    <section class="admin-modal" appAdminDialog (appAdminDialogClose)="closePrice()">
+      <form (submit)="submitPrice($event)">
+        <header class="admin-modal__header"><div><p class="admin-product-code">{{ pricedProduct.sku }}</p><h2>Điều chỉnh giá sản phẩm</h2></div><button class="admin-icon-button" type="button" [disabled]="priceSaving()" (click)="closePrice()" aria-label="Đóng">×</button></header>
+        <div class="admin-modal__body">
+          <p class="admin-note">{{ pricedProduct.name }} · Giá mới áp dụng cho các đơn mua sau khi lưu. Giá trên đơn đã đặt được giữ theo từng dòng hàng.</p>
+          <label class="admin-form-group"><span class="admin-form-label">Giá gốc *</span><input class="admin-form-control" name="base" type="number" min="1" required [value]="pricedProduct.base_price" [disabled]="priceSaving()" /></label>
+          <label class="admin-form-group"><span class="admin-form-label">Giá bán ưu đãi</span><input class="admin-form-control" name="sale" type="number" min="1" [value]="pricedProduct.sale_price ?? ''" [disabled]="priceSaving()" /><small class="admin-form-helper">Để trống để bán theo giá gốc.</small></label>
+          <label class="admin-form-group"><span class="admin-form-label">Lý do điều chỉnh *</span><textarea class="admin-form-control admin-form-textarea" name="reason" minlength="10" required [disabled]="priceSaving()"></textarea></label>
+          @if (priceError()) { <p class="field__error" role="alert">{{ priceError() }}</p> }
+        </div>
+        <footer class="admin-modal__footer"><button class="admin-btn admin-btn--ghost" type="button" [disabled]="priceSaving()" (click)="closePrice()">Đóng</button><button class="admin-btn admin-btn--secondary" type="submit" [disabled]="priceSaving()">{{ priceSaving() ? 'Đang lưu…' : 'Lưu giá' }}</button></footer>
+      </form>
+    </section>
+  </div>
+}
 <main class="admin-content">
   <p class="admin-page-crumb">Sản phẩm / Danh mục</p>
   <section class="admin-kpi-grid admin-product-kpis" aria-label="Số liệu danh mục">
@@ -32,8 +49,10 @@
       <button class="admin-tab" [class.admin-tab--active]="tab() === 'catalog'" type="button" (click)="setTab('catalog')">
         Danh sách sản phẩm <span>{{ total() }}</span>
       </button>
-      <button class="admin-tab" [class.admin-tab--active]="tab() === 'csv'" type="button" (click)="setTab('csv')">Nhập CSV</button>
-      <button class="admin-tab" [class.admin-tab--active]="tab() === 'logs'" type="button" (click)="setTab('logs')">Nhật ký sản phẩm</button>
+      @if (canReadCatalog()) {
+        <button class="admin-tab" [class.admin-tab--active]="tab() === 'csv'" type="button" (click)="setTab('csv')">Nhập CSV</button>
+        <button class="admin-tab" [class.admin-tab--active]="tab() === 'logs'" type="button" (click)="setTab('logs')">Nhật ký sản phẩm</button>
+      }
     </div>
     @if (tab() === 'catalog') {
       <div class="admin-tab-content">
@@ -42,12 +61,14 @@
             <app-admin-icon name="search" />
             <input class="admin-form-control" name="q" type="search" [value]="query()" placeholder="Tìm theo tên hoặc mã sản phẩm..." />
           </label>
+          @if (canReadCatalog()) {
           <select class="admin-form-control" name="categoryId" [value]="categoryId()">
             <option value="">Tất cả danh mục</option>
             @for (row of categories(); track row.category_id) {
               <option [value]="row.category_id">{{ row.name }}</option>
             }
           </select>
+          }
           <select class="admin-form-control" name="status" [value]="status()">
             <option value="">Tất cả trạng thái</option>
             <option value="on_sale">Đang bán</option>
@@ -113,9 +134,10 @@
                     <td>{{ updatedAt(product.updated_at) }}</td>
                     <td>
                       <div class="admin-table-actions">
-                        <button class="admin-icon-button admin-icon-button--sm" type="button" title="Chi tiết" (click)="openEdit(product)">
+                        @if (canReadCatalog()) { <button class="admin-icon-button admin-icon-button--sm" type="button" title="Chi tiết" (click)="openEdit(product)">
                           <app-admin-icon name="eye" />
-                        </button>
+                        </button> }
+                        @if (canChangePrice()) { <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="openPrice(product)">Điều chỉnh giá</button> }
                         @if (canMutate()) {
                           <button class="admin-icon-button admin-icon-button--sm" type="button" title="Tồn kho" (click)="openStock(product)">
                             <app-admin-icon name="box" />
@@ -249,7 +271,7 @@
 
 @if (overlay() === 'create' || overlay() === 'edit') {
   <div class="admin-modal-overlay">
-    <section class="admin-modal admin-drawer--wide">
+    <section class="admin-modal admin-drawer--wide" appAdminDialog (appAdminDialogClose)="closeOverlays()">
       <header class="admin-modal__header">
         <div>
           <h2>{{ overlay() === 'create' ? 'Thêm sản phẩm' : 'Chi tiết sản phẩm' }}</h2>
@@ -331,7 +353,7 @@
                     step="1000"
                     [value]="editBasePrice()"
                     (input)="editBasePrice.set($any($event.target).valueAsNumber || 0)"
-                    [readOnly]="!canMutate()"
+                    [readOnly]="!canChangePrice()"
                     required
                   />
                 </label>
@@ -345,7 +367,7 @@
                     step="1000"
                     [value]="editSalePrice() ?? ''"
                     (input)="editSalePrice.set($any($event.target).value ? $any($event.target).valueAsNumber : null)"
-                    [readOnly]="!canMutate()"
+                    [readOnly]="!canChangePrice()"
                     placeholder="Để trống nếu bằng giá gốc"
                   />
                 </label>
@@ -362,7 +384,7 @@
                   [value]="editPriceReason()"
                   (input)="editPriceReason.set($any($event.target).value)"
                   placeholder="VD: Điều chỉnh giá theo chiến dịch, cập nhật giá nhập xưởng..."
-                  [readOnly]="!canMutate()"
+                  [readOnly]="!canChangePrice()"
                 />
               </label>
             </div>
@@ -480,11 +502,11 @@
           }
           <label class="admin-form-group">
             <span class="admin-form-label">Mô tả</span>
-            <textarea class="admin-form-control admin-form-textarea" name="description" [readOnly]="!canMutate()">{{ selected()?.description || '' }}</textarea>
+            <textarea class="admin-form-control admin-form-textarea" name="description" [readOnly]="!canChangePrice()">{{ selected()?.description || '' }}</textarea>
           </label>
           <label class="admin-form-group">
             <span class="admin-form-label">Ảnh (mỗi URL một dòng)</span>
-            <textarea #imagesBox class="admin-form-control admin-form-textarea" name="images" [readOnly]="!canMutate()" placeholder="https://... hoặc /assets/images/sp.jpg">{{ (selected()?.images || []).join('\n') }}</textarea>
+            <textarea #imagesBox class="admin-form-control admin-form-textarea" name="images" [readOnly]="!canChangePrice()" placeholder="https://... hoặc /assets/images/sp.jpg">{{ (selected()?.images || []).join('\n') }}</textarea>
             @if (canMutate()) {
               <input #imageFile type="file" accept="image/jpeg,image/png,image/webp,image/gif" hidden (change)="uploadImage($event, imagesBox)" />
               <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" [disabled]="imageUploading()" (click)="imageFile.click()">{{ imageUploading() ? 'Đang dựng nền studio...' : 'Xem trước nền studio' }}</button>
@@ -595,7 +617,7 @@
 
 @if (overlay() === 'status' && selected()) {
   <div class="admin-modal-overlay">
-    <section class="admin-modal">
+    <section class="admin-modal" appAdminDialog (appAdminDialogClose)="closeOverlays()">
       <form (submit)="submitStatus($event)">
         <header class="admin-modal__header">
           <h2>Ẩn / đổi trạng thái - {{ selected()!.sku }}</h2>
@@ -633,7 +655,7 @@
 
 @if (overlay() === 'stock' && selected()) {
   <div class="admin-modal-overlay">
-    <section class="admin-modal admin-modal--lg">
+    <section class="admin-modal admin-modal--lg" appAdminDialog (appAdminDialogClose)="closeOverlays()">
       <form (submit)="submitStock($event)">
         <header class="admin-modal__header">
           <div>

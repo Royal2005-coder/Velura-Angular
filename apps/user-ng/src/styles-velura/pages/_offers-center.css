@@ -117,3 +117,40 @@
   .offers-center__list { grid-template-columns: 1fr; }
   .offers-center__hero { padding-top: 36px; }
 }
+
+/* Live campaign page uses the same global tokens as the account wallet. */
+.offers-page { width: 100%; padding-bottom: 64px; }
+.offers-page .offers-hero { padding: 56px 24px 28px; }
+.offers-page .offer-banner-list { max-width: none; }
+.offers-prompt { margin: 16px auto 36px; }
+.offers-prompt__card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--tab-bg);
+}
+.offers-prompt__title { margin: 0 0 6px; color: var(--ink); font: 600 1.1rem "DM Sans", sans-serif; }
+.offers-prompt__desc { margin: 0; color: var(--text-body); font-size: .9rem; line-height: 1.6; }
+.offers-prompt__card .btn-primary { flex-shrink: 0; text-decoration: none; }
+.offers-page .offer-banner-row { grid-template-columns: minmax(0, .9fr) minmax(0, 1.35fr); }
+.offers-page .offer-banner-row--reverse { grid-template-columns: minmax(0, 1.35fr) minmax(0, .9fr); }
+.offers-page .offer-banner-row__copy { min-width: 0; overflow-wrap: anywhere; }
+.offers-page .offer-banner-row__image-link { width: 100%; }
+.offers-page .offer-banner-fallback { height: 100%; min-height: 0; padding: 24px; }
+.offers-page .offer-banner-row__cta { margin-top: 12px; line-height: 1.5; padding: 10px 18px; text-align: center; }
+.offers-page .offer-list-section__header { max-width: 760px; }
+.page-offers .hot-offer-widget { display: none; }
+.page-shell:has(.chatbot-widget--open) ~ .hot-offer-widget,
+app-site-shell:has(.chatbot-widget--open) .hot-offer-widget { visibility: hidden; }
+@media (max-width: 760px) {
+  .offers-page .offers-hero { padding-top: 36px; }
+  .offers-prompt__card { align-items: stretch; flex-direction: column; gap: 16px; padding: 20px; }
+  .offers-page .offer-banner-row,
+  .offers-page .offer-banner-row--reverse { grid-template-columns: minmax(0, 1fr); }
+  .offers-page .offer-banner-row--reverse .offer-banner-row__copy,
+  .offers-page .offer-banner-row--reverse .offer-banner-row__image-link { grid-column: auto; grid-row: auto; text-align: left; align-items: flex-start; }
+}

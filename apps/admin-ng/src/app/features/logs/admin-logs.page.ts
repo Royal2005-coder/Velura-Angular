@@ -1,5 +1,6 @@
-import { Component, computed, inject, signal } from '@angular/core';
-import { forkJoin, of } from 'rxjs';
+import { AdminRefreshService } from '../../core/admin-refresh.service';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { forkJoin, of , Subscription } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { AdminApiService, AdminAuditRow } from '../../core/admin-api.service';
 import { adminDateTime } from '../../core/admin-format';
@@ -18,6 +19,7 @@ const EMPTY_LOGS = { rows: [] as AdminAuditRow[], count: 0 };
   templateUrl: './admin-logs.page.html',
 })
 export class AdminLogsPage {
+  private listRequest = new Subscription();
   private readonly api = inject(AdminApiService);
 
   readonly tab = signal<LogTab>('all');
@@ -26,6 +28,7 @@ export class AdminLogsPage {
   readonly rows = signal<AdminAuditRow[]>([]);
   readonly loadError = signal<string | null>(null);
   readonly loading = signal(true);
+  readonly hasLoadedOnce = signal(false);
   readonly page = signal(1);
   readonly pageSize = 10;
   readonly total = signal(0);
@@ -47,6 +50,10 @@ export class AdminLogsPage {
   readonly rangeLabel = computed(() => adminRangeLabel(this.total(), this.page(), this.pageSize, 'nhật ký'));
 
   constructor() {
+    inject(DestroyRef).onDestroy(() => this.listRequest.unsubscribe());
+    inject(AdminRefreshService).register(() => {
+      if (!this.loading()) this.reload();
+    }, inject(DestroyRef));
     this.reload();
   }
 
@@ -54,10 +61,11 @@ export class AdminLogsPage {
    * Reloads the server-paged audit list for the active tab and filters.
    */
   reload(): void {
+    this.listRequest.unsubscribe();
     this.loading.set(true);
     this.loadError.set(null);
     const listParams = this.listParams();
-    forkJoin({
+    this.listRequest = forkJoin({
       logs: this.api.listAuditLogs(listParams).pipe(
         catchError((error: unknown) => {
           this.loadError.set(adminErrorMessage(error));
@@ -76,6 +84,7 @@ export class AdminLogsPage {
       this.systemCount.set(adminListCount(payload.system));
       this.aiCount.set(adminListCount(payload.ai));
       this.loading.set(false);
+      this.hasLoadedOnce.set(true);
     });
   }
 

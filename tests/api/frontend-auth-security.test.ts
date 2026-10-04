@@ -212,18 +212,49 @@ test("profile birthday validation stays on the API contract", async () => {
 });
 
 test("production disables hardcoded OTP shortcuts and fabricated notifications", async () => {
-  const [config, auth, orders, notifications, blog] = await Promise.all([
+  const [config, auth, orders, checkoutService, checkoutRepository, otpPage, confirmationPage, notifications, blog] = await Promise.all([
     source("apps/api/src/config.ts"),
     source("apps/api/src/user/auth.ts"),
-    source("apps/api/src/user/orders.ts"),
+    source("apps/api/src/user/order-router.ts"),
+    source("apps/api/src/user/checkout-service.ts"),
+    source("apps/api/src/user/checkout-repository.ts"),
+    source("apps/user-ng/src/app/features/checkout/otp.page.ts"),
+    source("apps/user-ng/src/app/features/checkout/checkout-confirm.page.ts"),
     source("apps/api/src/user/notifications.ts"),
     source("apps/user-ng/src/app/core/services/blog-catalog.service.ts")
   ]);
   assert.match(config, /export function allowDevOtpBypass/);
   assert.match(auth, /allowDevOtpBypass\(\)/);
-  assert.match(orders, /allowDevOtpBypass\(\)/);
+  assert.doesNotMatch(orders, /otp_code\s*!==\s*["']1234["']/);
+  assert.match(checkoutService, /generateCheckoutOtp\(\)/);
+  assert.match(orders, /checkoutService\.quote\(/);
+  assert.match(orders, /checkoutService\.persistOrder\(/);
+  assert.match(checkoutRepository, /insertRow\("orders"/);
+  assert.doesNotMatch(auth, /activation_token_hash:\s*`eq\./);
+  assert.match(orders, /requireCustomerOrderAccess\(order, context, body\)/);
+  assert.match(orders, /velura_switch_order_to_cod/);
+  assert.match(orders, /action === "confirm-payment"[\s\S]{0,300}DEMO_PAYMENT_DISABLED/);
+  assert.doesNotMatch(orders, /temp_password/);
+  assert.doesNotMatch(otpPage, /temp_password|guest_temp_password|applySession/);
+  assert.doesNotMatch(confirmationPage, /guest_temp_password/);
   assert.doesNotMatch(notifications, /welcome-default|promo-default/);
   assert.match(notifications, /notifications: \[\]/);
   assert.match(blog, /\/api\/content\/blogs/);
   assert.doesNotMatch(blog, /BLOG_POSTS/);
+});
+
+test("KAN-27 purchase flow uses the KAN-28 API model instead of demo mutations", async () => {
+  const [page, model, routes] = await Promise.all([
+    source("apps/user-ng/src/app/features/checkout/purchase-flow.page.ts"),
+    source("apps/user-ng/src/app/core/services/purchase-flow-api.service.ts"),
+    source("apps/user-ng/src/app/app.routes.ts")
+  ]);
+  assert.match(page, /purchaseApi\.sendOtp\(/);
+  assert.match(page, /purchaseApi\.checkoutGuest\(/);
+  assert.match(page, /purchaseApi\.checkoutMember\(/);
+  assert.doesNotMatch(page, /model\.(place|sendOtp|verifyOtp|activateAccount)\(/);
+  assert.match(model, /\/api\/user\/orders\/otp-send/);
+  assert.match(model, /\/api\/user\/orders\/otp-verify/);
+  assert.match(routes, /path: 'checkout\/guest'/);
+  assert.match(routes, /purchase-flow\.page/);
 });

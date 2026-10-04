@@ -1,6 +1,7 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, computed, inject } from '@angular/core';
 import { Observable, map } from 'rxjs';
 import { ApiService } from './api.service';
+import { AuthService } from './auth.service';
 import type {
   CartItemRef,
   CheckoutQuote,
@@ -28,6 +29,9 @@ export interface QuoteVoucherChoice {
 @Injectable({ providedIn: 'root' })
 export class VoucherService {
   private readonly api = inject(ApiService);
+  private readonly auth = inject(AuthService);
+  /** Identity scope for wallet requests; a changed session must discard earlier personalized offers. */
+  readonly customerSession = computed(() => this.auth.session());
 
   /**
    * Lấy ví voucher đã đánh giá theo giỏ hàng hiện tại.

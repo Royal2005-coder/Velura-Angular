@@ -22,7 +22,7 @@
           <app-admin-icon name="users" cssClass="admin-menu-icon" />Quản lý tài khoản
         </a>
       }
-      @if (canSee('products')) {
+      @if (canSee('products') || canSee('pricing')) {
         <a class="admin-menu-item" routerLink="/products" routerLinkActive="admin-menu-item--active" [routerLinkActiveOptions]="{ exact: true }">
           <app-admin-icon name="box" cssClass="admin-menu-icon" />Quản lý sản phẩm
         </a>
@@ -100,7 +100,7 @@
 
 @if (logoutConfirmOpen()) {
   <div class="admin-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="admin-logout-title">
-    <section class="admin-modal">
+    <section class="admin-modal" appAdminDialog (appAdminDialogClose)="cancelLogout()">
       <header class="admin-modal__header">
         <h2 id="admin-logout-title">Đăng xuất?</h2>
         <button class="admin-icon-button" type="button" (click)="cancelLogout()">×</button>

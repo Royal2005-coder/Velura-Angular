@@ -35,7 +35,7 @@
                 <p class="voucher-card__meta">HSD: {{ expiryLabel(item.end_date) }}</p>
               </div>
               <div class="voucher-card__side">
-                <a class="btn-outline" routerLink="/cart">Dùng ngay</a>
+                <a class="btn-outline" routerLink="/cart" [queryParams]="{ voucher: item.code }">Dùng mã</a>
               </div>
             </article>
           </li>
@@ -53,7 +53,7 @@
                 <p class="voucher-card__code">{{ item.code }}</p>
                 <p class="voucher-card__name">{{ discountLabel(item) }}</p>
                 <p class="voucher-card__meta">HSD: {{ expiryLabel(item.end_date) }}</p>
-                <p class="voucher-card__reason">** {{ item.reason_text }}</p>
+                <p class="voucher-card__reason">{{ item.reason_text }}</p>
               </div>
             </article>
           </li>

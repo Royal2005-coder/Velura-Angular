@@ -1,6 +1,8 @@
+import { AdminDialogDirective } from '../../shared/admin-dialog.directive';
+import { AdminRefreshService } from '../../core/admin-refresh.service';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, computed, inject, signal } from '@angular/core';
-import { of } from 'rxjs';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { of , Subscription } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import {
   AdminApiService,
@@ -69,10 +71,11 @@ const EVENT_LABELS: Readonly<Record<string, string>> = {
 
 @Component({
   selector: 'app-admin-orders-page',
-  imports: [AdminEmptyState, AdminIcon, AdminPagination, AdminTableSkeleton],
+  imports: [AdminDialogDirective, AdminEmptyState, AdminIcon, AdminPagination, AdminTableSkeleton],
   templateUrl: './admin-orders.page.html',
 })
 export class AdminOrdersPage {
+  private listRequest = new Subscription();
   private readonly api = inject(AdminApiService);
   private readonly session = inject(AdminSessionService);
 
@@ -111,16 +114,18 @@ export class AdminOrdersPage {
   readonly submitting = signal(false);
 
   readonly copiedPhone = signal(false);
-  readonly codDecision = signal<'confirm' | 'cancel' | 'no_answer' | 'invalid'>('confirm');
+  readonly codDecision = signal<'' | 'confirm' | 'cancel' | 'no_answer' | 'invalid'>('');
   readonly codCancelReason = signal<string>('customer_request');
-  readonly codNote = signal<string>('Đã gọi xác nhận, khách đồng ý nhận hàng');
-  readonly codAutoConfirm = signal(true);
+  readonly codNote = signal<string>('');
+  readonly codAutoConfirm = signal(false);
 
   readonly logs = signal<AdminAuditRow[]>([]);
   readonly logsPage = signal(1);
   readonly logsCount = signal(0);
 
   readonly canMutate = computed(() => this.session.canMutate('orders'));
+  readonly canCallConfirmation = computed(() => this.primaryActions().some((action) => action.code === 'call_confirm'));
+  private detailRequest = new Subscription();
   readonly statusOptions = computed(() =>
     this.summary()?.by_status ?? Object.entries(ORDER_STATUS_LABELS).map(([status, label]) => ({ status, label, count: 0 })),
   );
@@ -134,7 +139,7 @@ export class AdminOrdersPage {
   readonly selectedItems = computed(() => this.selected()?.items || []);
   readonly selectedCoolmateMeta = computed(() => parseCoolmateMeta(this.selected()?.internal_note));
   /** Action thường, theo thứ tự API trả. Hủy đơn tách riêng thành nút nguy hiểm (FR-06). */
-  readonly primaryActions = computed(() => (this.selected()?.allowed_actions || []).filter((action) => !action.destructive));
+  readonly primaryActions = computed(() => (this.selected()?.allowed_actions || []).filter((action) => !action.destructive && !(action.code === 'confirm_cod' && this.requiresCallConfirmation())));
   readonly destructiveActions = computed(() => (this.selected()?.allowed_actions || []).filter((action) => action.destructive));
   readonly events = computed(() =>
     [...(this.selected()?.events || [])].sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))),
@@ -152,7 +157,7 @@ export class AdminOrdersPage {
     if (!order) return false;
     const isOnline = order.payment_method === 'ONLINE_PAYMENT' || order.payment_method === 'STRIPE';
     const isUnconfirmed = order.status === 'waiting_payment' || order.status === 'pending' || order.payment_status === 'pending';
-    return isOnline && isUnconfirmed;
+    return this.canMutate() && isOnline && isUnconfirmed;
   });
   readonly verifyingStripe = signal(false);
   readonly activeAction = computed(() => {
@@ -183,25 +188,12 @@ export class AdminOrdersPage {
   });
 
   /**
-   * Ràng buộc nghiệp vụ 3.1.11: Đơn COD của khách vãng lai >= 1.000.000đ
+   * Ràng buộc nghiệp vụ 3.1.11: Mọi đơn COD >= 1.000.000đ
    * bắt buộc phải gọi điện xác nhận thành công trước khi duyệt đơn.
    */
   readonly requiresCallConfirmation = computed(() => {
     const order = this.selected();
-    if (!order) return false;
-    const actions = order.allowed_actions || [];
-    if (actions.length === 0) return false;
-
-    if (typeof order.requires_call_confirmation === 'boolean') {
-      return order.requires_call_confirmation;
-    }
-    const hasConfirmAction = actions.some((a) => a.code === 'confirm_cod');
-    if (hasConfirmAction) return false;
-
-    const isCod = order.payment_method === 'COD';
-    const isPending = order.status === 'pending';
-    const isOver1M = Number(order.total_amount || 0) >= 1_000_000;
-    return isCod && isPending && isOver1M && this.isGuestOrder() && !this.hasCallConfirmed();
+    return !!order && order.payment_method === 'COD' && order.status === 'pending' && Number(order.total_amount || 0) >= 1_000_000 && !this.hasCallConfirmed();
   });
 
   /**
@@ -264,6 +256,11 @@ export class AdminOrdersPage {
   });
 
   constructor() {
+    inject(DestroyRef).onDestroy(() => this.detailRequest.unsubscribe());
+    inject(DestroyRef).onDestroy(() => this.listRequest.unsubscribe());
+    inject(AdminRefreshService).register(() => {
+      if (!this.loading() && !this.submitting() && !this.modal()) this.reload();
+    }, inject(DestroyRef));
     this.reload();
   }
 
@@ -286,6 +283,7 @@ export class AdminOrdersPage {
    * đơn, không chỉ trên trang đang xem.
    */
   reload(): void {
+    this.listRequest.unsubscribe();
     this.loading.set(true);
     this.loadError.set(null);
     const tab = this.tab();
@@ -299,7 +297,7 @@ export class AdminOrdersPage {
     };
     if (tab === 'attention') params['attention'] = 'true';
     if (tab === 'payment') params['tag'] = 'PAYMENT_ATTENTION';
-    this.api
+    this.listRequest = this.api
       .listOrders(params)
       .pipe(
         catchError((error: unknown) => {
@@ -360,9 +358,10 @@ export class AdminOrdersPage {
    * Mở drawer chi tiết. Luôn đọc lại đơn: action hợp lệ tính theo dữ liệu mới nhất.
    */
   openDetail(orderId: string): void {
+    this.detailRequest.unsubscribe();
     this.notice.set(null);
     this.detailLoading.set(true);
-    this.api.getOrder(orderId).subscribe({
+    this.detailRequest = this.api.getOrder(orderId).subscribe({
       next: (order) => {
         this.selected.set(order);
         this.detailLoading.set(false);
@@ -375,6 +374,8 @@ export class AdminOrdersPage {
   }
 
   closeDetail(): void {
+    this.detailRequest.unsubscribe();
+    this.detailLoading.set(false);
     this.selected.set(null);
     this.closeModal();
     this.notice.set(null);
@@ -457,23 +458,28 @@ export class AdminOrdersPage {
   }
 
   openCodCallConfirm(order: AdminOrderRow): void {
+    if (!order.allowed_actions?.some((action) => action.code === 'call_confirm')) return;
+    this.detailRequest.unsubscribe(); this.selected.set(order); this.detailLoading.set(true);
     this.actionError.set(null);
     this.copiedPhone.set(false);
-    this.codDecision.set('confirm');
+    this.codDecision.set('');
     this.codCancelReason.set('customer_request');
-    this.codNote.set('Đã gọi xác nhận, khách đồng ý nhận hàng');
-    this.codAutoConfirm.set(true);
+    this.codNote.set('');
+    this.codAutoConfirm.set(false);
     this.submitting.set(false);
     this.modal.set({ kind: 'cod_call', order });
 
     // Tải thông tin đơn hàng mới nhất và đầy đủ items nếu chưa có
-    this.api.getOrder(order.order_id).subscribe({
+    this.detailRequest = this.api.getOrder(order.order_id).subscribe({
       next: (fullOrder) => {
+        this.detailLoading.set(false);
         this.selected.set(fullOrder);
         this.modal.set({ kind: 'cod_call', order: fullOrder });
       },
-      error: () => {
-        this.selected.set(order);
+      error: (error: unknown) => {
+        this.detailLoading.set(false);
+        this.actionError.set(adminErrorMessage(error, 'Không đọc được trạng thái mới nhất. Mở lại đơn trước khi lưu.'));
+        this.selected.set(null);
       },
     });
   }
@@ -489,10 +495,15 @@ export class AdminOrdersPage {
     this.codNote.set(note);
   }
 
+  /** Enables confirmation only when the operator explicitly chooses it after contact. */
+  setCodAutoConfirm(event: Event): void {
+    this.codAutoConfirm.set((event.target as HTMLInputElement).checked);
+  }
+
   submitCodCall(event: Event): void {
     event.preventDefault();
     const order = this.selected();
-    if (!order || this.submitting()) return;
+    if (!order || this.submitting() || this.detailLoading()) return;
     const note = this.codNote().trim();
     if (note.length < 5) {
       this.actionError.set('Vui lòng nhập ghi chú cuộc gọi (tối thiểu 5 ký tự).');
@@ -503,6 +514,7 @@ export class AdminOrdersPage {
     this.actionError.set(null);
 
     const decision = this.codDecision();
+    if (!decision) { this.submitting.set(false); this.actionError.set('Chọn kết quả liên hệ thực tế trước khi lưu.'); return; }
     let actionCode = 'call_confirm';
     const body: Record<string, unknown> = { note };
 
@@ -523,6 +535,7 @@ export class AdminOrdersPage {
       body['cancelReason'] = 'suspected_fraud';
     }
 
+    if (!order.allowed_actions?.some((action) => action.code === actionCode)) { this.submitting.set(false); this.actionError.set('Thao tác không còn được phép. Mở lại đơn để kiểm tra.'); return; }
     this.api.performOrderAction(order.order_id, actionCode, { ...body, expectedVersion: order.version }).subscribe({
       next: (result) => {
         this.closeModal();
@@ -543,6 +556,10 @@ export class AdminOrdersPage {
     const order = this.selected();
     const action = this.activeAction();
     if (!order || !action || this.submitting()) return;
+    if (action.code === 'confirm_cod' && this.requiresCallConfirmation()) {
+      this.actionError.set('Đơn COD từ 1.000.000đ bắt buộc ghi nhận cuộc gọi xác nhận thành công trước khi duyệt.');
+      return;
+    }
     const body = actionBody(action, event.target as HTMLFormElement);
     const note = String(body['note'] || '');
     if (action.requires_note && note.length < 5) {

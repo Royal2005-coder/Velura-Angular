@@ -29,4 +29,26 @@ describe('AccountReviewsPage', () => {
     page.activeTab.set('history');
     expect(page.activeTab()).toBe('history');
   });
+
+  it('shows every delivered product selector after the first item is selected', async () => {
+    const page = await createStorefrontPage(AccountReviewsPage);
+    const item = { orderId: 'delivered', orderCode: 'VLR1', productId: 'p1', productName: 'Shirt', unitPrice: 100000 };
+    page.eligibleItems.set([item, { ...item, productId: 'p2', productName: 'Skirt' }]);
+    page.selectItem(item);
+    page.comment.set('First item');
+    page.selectItem(page.eligibleItems()[1]);
+    expect(page.productId()).toBe('p2');
+    expect(page.comment()).toBe('');
+    expect(page.images()).toEqual([]);
+  });
+
+  it('rejects active-content and credential-bearing image URLs', async () => {
+    const page = await createStorefrontPage(AccountReviewsPage);
+    for (const url of ['javascript:alert(1)', 'data:image/svg+xml,test', 'https://user:pass@example.test/a.png']) {
+      page.imageUrlInput.set(url);
+      page.addImage();
+    }
+    expect(page.images()).toEqual([]);
+    expect(page.submitError()).toContain('HTTPS');
+  });
 });

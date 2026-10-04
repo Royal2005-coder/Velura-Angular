@@ -1,4 +1,5 @@
-import { afterNextRender, Component, computed, inject, signal } from '@angular/core';
+import { afterNextRender, Component, computed, DestroyRef, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router, RouterLink } from '@angular/router';
 import { ApiService } from '../../core/services/api.service';
 import { useBodyClass } from '../../core/utils/body-class';
@@ -12,10 +13,12 @@ import { useBodyClass } from '../../core/utils/body-class';
 export class StyleQuizPage {
   private readonly api = inject(ApiService);
   private readonly router = inject(Router);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly step = signal(1);
   readonly showSummary = signal(false);
   readonly analyzing = signal(false);
+  readonly submitError = signal('');
   readonly analyzingMessage = signal('Đang xử lý dữ liệu số đo hình thể...');
   readonly height = signal(162);
   readonly weight = signal(52);
@@ -147,7 +150,9 @@ export class StyleQuizPage {
   }
 
   private submitQuiz(): void {
+    if (this.analyzing()) return;
     this.analyzing.set(true);
+    this.submitError.set('');
     const payload = {
       height_cm: this.height(),
       weight_kg: this.weight(),
@@ -163,12 +168,18 @@ export class StyleQuizPage {
       age_group: this.selectedValue('age') || '25-34',
       favorite_colors: this.selectedValues('colors'),
     };
-    localStorage.setItem('velura_guest_quiz_completed', 'true');
-    localStorage.setItem('velura_guest_quiz_data', JSON.stringify(payload));
-    localStorage.setItem('velura_suggestions_enabled', 'true');
-    this.api.post<unknown>('/api/user/style-quiz', payload).subscribe({
-      next: () => void this.router.navigateByUrl('/ai/suggestions?isNewQuiz=true'),
-      error: () => void this.router.navigateByUrl('/ai/suggestions?isNewQuiz=true'),
+    this.api.post<unknown>('/api/user/style-quiz', payload).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: () => {
+        localStorage.setItem('velura_guest_quiz_completed', 'true');
+        localStorage.setItem('velura_guest_quiz_data', JSON.stringify(payload));
+        localStorage.setItem('velura_suggestions_enabled', 'true');
+        this.analyzing.set(false);
+        void this.router.navigateByUrl('/ai/suggestions?isNewQuiz=true');
+      },
+      error: (error: Error) => {
+        this.analyzing.set(false);
+        this.submitError.set(error.message || 'Chưa lưu được hồ sơ phong cách. Hãy thử lại.');
+      },
     });
   }
 }

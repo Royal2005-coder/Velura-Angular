@@ -28,7 +28,7 @@ export async function handleStripeWebhook(req: HttpRequest, res: HttpResponse, c
   const result = action.kind === "paid"
     ? await markStripePaymentPaid(action.orderId, action.paymentIntentId, action.sessionId)
     : action.kind === "refunded"
-      ? await markStripeRefunded(action.paymentIntentId)
+      ? await markStripeRefunded(action.paymentIntentId,action.amount,action.refunds)
       : await closeStripePayment(action.orderId, action.reason, action.sessionId);
   sendJson(res, 200, { received: true, result }, corsHeaders);
 }

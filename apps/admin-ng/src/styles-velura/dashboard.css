@@ -260,3 +260,20 @@
   .insight-board__questions { grid-template-columns: 1fr; }
   .insight-question:nth-child(odd) { border-right: 0; }
 }
+.dashboard-management-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.dashboard-management-card { min-width: 0; padding: 20px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--card-bg, white); }
+.dashboard-management-card h4 { margin: 6px 0 16px; color: var(--ink); font-size: .9375rem; line-height: 1.5; }
+.dashboard-management-card--unavailable { background: var(--field-bg); color: var(--muted); }
+.dashboard-management-card p { font-size: .8125rem; line-height: 1.7; }
+.dashboard-management-card__status { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.dashboard-management-facts { margin: 0 0 18px; }
+.dashboard-management-facts > div { padding: 10px 0; border-top: 1px solid var(--line); }
+.dashboard-management-facts dt { margin-bottom: 5px; color: var(--muted); font-size: .75rem; font-weight: 600; }
+.dashboard-management-facts dd { margin: 0; color: var(--ink); font-size: .8125rem; line-height: 1.6; overflow-wrap: anywhere; }
+.dashboard-heatmap { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; padding: 16px; }
+.dashboard-heatmap__cell { display: grid; gap: 8px; padding: 16px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--terracotta) calc(12% + var(--intensity) * 35%), var(--field-bg)); color: var(--ink); }
+.dashboard-heatmap__cell strong, .dashboard-heatmap__cell span { font-size: .8125rem; overflow-wrap: anywhere; }
+.dashboard-heatmap__cell:focus-visible, .dashboard-chart__hit:focus-visible { outline: 2px solid var(--terracotta); outline-offset: 3px; }
+.dashboard-analysis-footer { margin-top: 24px; color: var(--muted); font-size: .75rem; line-height: 1.6; }
+@media (max-width: 1100px) { .dashboard-management-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .dashboard-management-grid { grid-template-columns: minmax(0, 1fr); }.dashboard-controls { flex-wrap: wrap; }.dashboard-data-status { flex-wrap: wrap; } }

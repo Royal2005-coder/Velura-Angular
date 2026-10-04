@@ -1,3 +1,4 @@
+import { createProductRepository } from "../products/product-repository.js";
 import { callRpc, selectOne, selectRows } from "../supabase.js";
 import { HttpError } from "../http.js";
 import { asJsonObject, asString, type JsonObject } from "../types.js";
@@ -23,6 +24,8 @@ export type PricingRepository = ReturnType<typeof createPricingRepository>;
  */
 export function createPricingRepository() {
   return {
+    /** Reads catalog prices under pricing permissions without granting catalog mutations. */
+    listPricingProducts: (filters:JsonObject,accessToken:string|null) => createProductRepository().list(filters,accessToken),
     async listPriceHistory(filters: JsonObject, accessToken: string | null) {
       const query: Record<string, unknown> = {
         select: PRICE_HISTORY_SELECT,

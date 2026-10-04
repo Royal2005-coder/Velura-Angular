@@ -134,7 +134,7 @@
                 />
               </div>
               <div class="form-group">
-                <label for="guest-email">Email *</label>
+                <label for="guest-email">Email (tùy chọn)</label>
                 <input
                   class="form-input"
                   type="email"
@@ -144,47 +144,6 @@
                   placeholder="email@example.com"
                   [value]="email()"
                   (input)="setField('email', $event)"
-                />
-              </div>
-            </div>
-            <div class="form-row form-row--three">
-              <div class="form-group">
-                <label for="address-province">Tỉnh/Thành phố *</label>
-                <input
-                  class="form-input"
-                  type="text"
-                  id="address-province"
-                  name="address-level1"
-                  autocomplete="address-level1"
-                  placeholder="Chọn Tỉnh/Thành phố"
-                  [value]="province()"
-                  (input)="setField('province', $event)"
-                />
-              </div>
-              <div class="form-group">
-                <label for="address-district">Quận/Huyện *</label>
-                <input
-                  class="form-input"
-                  type="text"
-                  id="address-district"
-                  name="address-level2"
-                  autocomplete="address-level2"
-                  placeholder="Chọn Quận/Huyện"
-                  [value]="district()"
-                  (input)="setField('district', $event)"
-                />
-              </div>
-              <div class="form-group">
-                <label for="address-ward">Phường/Xã *</label>
-                <input
-                  class="form-input"
-                  type="text"
-                  id="address-ward"
-                  name="address-level3"
-                  autocomplete="address-level3"
-                  placeholder="Chọn Phường/Xã"
-                  [value]="ward()"
-                  (input)="setField('ward', $event)"
                 />
               </div>
             </div>
@@ -216,6 +175,8 @@
               </div>
             }
           }
+
+          <app-address-selector [value]="{province:province(),district:district(),ward:ward()}" (selectionChange)="updateGeography($event)" />
 
           <!-- Coolmate: Gọi người khác nhận hàng -->
           <div class="coolmate-toggle-box">

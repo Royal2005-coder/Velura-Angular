@@ -32,12 +32,19 @@
 
     @if (activeTab() === 'write') {
       <!-- List of other eligible items waiting for review -->
-      @if (eligibleItems().length > 1 && !orderId()) {
+      @if (loadingEligible()) {
+        <p role="status">Đang tải sản phẩm đã giao…</p>
+      } @else if (eligibleError()) {
+        <p role="alert">{{ eligibleError() }} <button type="button" class="btn btn--outline" (click)="loadEligibleItems()">Thử lại</button></p>
+      } @else if (eligibleItems().length === 0) {
+        <p>Bạn chưa có sản phẩm đã giao để đánh giá. <a routerLink="/account/orders">Xem đơn hàng</a></p>
+      }
+      @if (eligibleItems().length > 0) {
         <div style="max-width: 840px; margin: 0 auto 24px; background: #fff; border: 1px solid #E8DFD6; border-radius: 12px; padding: 20px;">
           <h3 style="font-size: 0.9375rem; font-weight: 600; margin: 0 0 12px; color: #50453B;">Chọn sản phẩm từ đơn hàng đã giao để đánh giá:</h3>
           <div style="display: flex; gap: 12px; overflow-x: auto; padding-bottom: 8px;">
             @for (item of eligibleItems(); track item.orderId + item.productId) {
-              <div
+              <button type="button"
                 (click)="selectItem(item)"
                 [style.border-color]="productId() === item.productId && orderId() === item.orderId ? '#7D562D' : '#E8DFD6'"
                 [style.background]="productId() === item.productId && orderId() === item.orderId ? '#FAF6F2' : '#fff'"
@@ -48,7 +55,7 @@
                   <strong style="display: block; font-size: 0.8125rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ item.productName }}</strong>
                   <small style="color: #8C857E;">Đơn #{{ item.orderCode.slice(0, 8) }}</small>
                 </div>
-              </div>
+              </button>
             }
           </div>
         </div>
@@ -202,6 +209,9 @@
           <div style="text-align: center; padding: 48px; color: #8C857E;">
             <p>Đang tải lịch sử đánh giá của bạn...</p>
           </div>
+        } @else if (historyError()) {
+          <p role="alert">{{ historyError() }}</p>
+          <button type="button" class="btn btn--outline" (click)="loadReviews()">Thử lại</button>
         } @else if (myReviews().length === 0) {
           <div style="background: #fff; border: 1px solid #E8DFD6; border-radius: 16px; padding: 48px; text-align: center;">
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#7D562D" stroke-width="1.5" style="margin: 0 auto 16px; display: block;">

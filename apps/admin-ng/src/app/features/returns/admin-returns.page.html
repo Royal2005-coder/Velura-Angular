@@ -14,7 +14,7 @@
       <button class="admin-tab" [class.admin-tab--active]="zone() === 'logs'" type="button" (click)="setZone('logs')">Nhật ký xử lý</button>
     </div>
     <div class="admin-tab-content">
-      @if (loading()) {
+      @if (loading() && !hasLoadedOnce()) {
         <app-admin-empty-state kind="loading" icon="clock" title="Đang tải CSKH" />
       } @else if (loadError()) {
         <app-admin-empty-state kind="error" icon="alert" title="Không tải được đổi trả" [message]="loadError() || ''" />
@@ -96,6 +96,7 @@
                     }
                   </div>
                 </header>
+                @if (chatLoading()) { <p class="admin-refresh-status" role="status">Đang cập nhật hội thoại…</p> }
                 @if (chatError()) {
                   <p class="admin-note">{{ chatError() }}</p>
                 }
@@ -138,10 +139,10 @@
                     type="text"
                     [value]="replyDraft()"
                     (input)="onReplyInput($event)"
-                    [disabled]="!canReply()"
+                    [disabled]="!canReply() || submitting()"
                     [placeholder]="isClosedChat() ? 'Phiên chat đã đóng' : canReply() ? 'Nhập tin nhắn phản hồi...' : 'Tiếp nhận phiên trước khi phản hồi...'"
                   />
-                  <button class="admin-btn admin-btn--secondary" type="submit" [disabled]="!canReply()">Gửi</button>
+                  <button class="admin-btn admin-btn--secondary" type="submit" [disabled]="!canReply() || submitting()">Gửi</button>
                 </form>
               </div>
             }
@@ -149,22 +150,27 @@
         </div>
       } @else if (zone() === 'returns') {
         @if (receiveTarget(); as target) {
-          <section class="admin-card" style="margin-bottom: 16px; padding: 16px;">
+          <section class="admin-card admin-qa-panel">
             <h3 style="margin: 0 0 8px;">Nhận hàng hoàn trả — {{ target.return_id }}</h3>
             <p class="admin-note">Nhập lại một lần: đủ số lượng, đúng hàng, đúng mã dòng. Bắt buộc ảnh minh chứng. Hoàn tiền sau đó lấy đúng giá món trên đơn; đơn Stripe được hoàn qua Stripe.</p>
             <p class="admin-note">Số lượng đăng ký: {{ expectedQty() }}. Mã dòng hàng: {{ expectedItemId() || '—' }}</p>
-            <label class="form-label" for="qa-qty">Số lượng thực nhận *</label>
-            <input id="qa-qty" type="number" min="1" [value]="qaQty()" (input)="setQaQty($event)" />
-            <label class="form-label" for="qa-item" style="display:block; margin-top: 12px;">Nhập lại mã dòng hàng *</label>
-            <input id="qa-item" type="text" [value]="qaItemId()" (input)="setQaItemId($event)" />
-            <label class="form-label" for="qa-result" style="display:block; margin-top: 12px;">Đúng hàng của shop *</label>
-            <select id="qa-result" class="form-select" [value]="qaResult()" (change)="setQaResult($event)">
-              <option value="">Chọn kết quả kiểm hàng...</option>
-              <option value="qa_pass">Đúng hàng của shop</option>
-              <option value="qa_fail">Không đúng hàng của shop</option>
-            </select>
-            <label class="form-label" for="qa-proof" style="display:block; margin-top: 12px;">Ảnh minh chứng kho *</label>
-            <input id="qa-proof" type="file" accept="image/*" (change)="onQaProof($event)" />
+            @if (qaLoading()) { <p class="admin-refresh-status" role="status">Đang đối chiếu dòng hàng…</p> }
+            @for (line of qaLines(); track line.orderItemId) {
+              <fieldset class="admin-form-group admin-qa-line">
+                <legend class="admin-form-label">Dòng {{ line.orderItemId }} · {{ line.expectedQuantity }} sản phẩm</legend>
+                <label class="admin-form-label" [for]="'qa-qty-' + line.orderItemId">Số lượng thực nhận *</label>
+                <input class="admin-form-control" [id]="'qa-qty-' + line.orderItemId" type="number" min="1" [max]="line.expectedQuantity" [disabled]="qaSubmitting()" [value]="line.receivedQuantity" (input)="setQaLineQuantity(line.orderItemId, $event)" />
+                <label class="admin-form-label" [for]="'qa-id-' + line.orderItemId">Nhập lại mã dòng hàng *</label>
+                <input class="admin-form-control" [id]="'qa-id-' + line.orderItemId" [disabled]="qaSubmitting()" [value]="line.confirmedItemId" (input)="setQaLineId(line.orderItemId, $event)" />
+                <label class="admin-form-check"><input type="checkbox" [disabled]="qaSubmitting()" [checked]="line.matchesProduct" (change)="setQaLineMatch(line.orderItemId, $event)" />Đúng sản phẩm của shop</label>
+              </fieldset>
+            }
+            <div class="admin-form-group"><label class="admin-form-label" for="qa-result">Kết quả kiểm hàng *</label><select id="qa-result" class="admin-form-control" [disabled]="!qaReady() || qaSubmitting()" [value]="qaResult()" (change)="setQaResult($event)"><option value="">Chọn kết quả kiểm hàng…</option><option value="qa_pass">Đúng hàng của shop</option><option value="qa_fail">Không đúng hàng của shop</option></select></div>
+            <div class="admin-form-group"><label class="admin-form-label" for="qa-proof">Ảnh minh chứng kho *</label><input class="admin-form-control" id="qa-proof" type="file" accept="image/*" [disabled]="!qaReady() || qaSubmitting()" (change)="onQaProof($event)" />@if (qaProof()) { <img class="admin-qa-proof" [src]="qaProof()" alt="Minh chứng kiểm hàng" /> }</div>
+            @if (qaResult() === 'qa_fail') {
+              <label class="admin-form-group"><span class="admin-form-label">Mô tả sai lệch *</span><textarea class="admin-form-control admin-form-textarea" [value]="qaFailureNote()" (input)="setQaFailureNote($event)" [disabled]="qaSubmitting()" minlength="10"></textarea></label>
+              <button class="admin-btn admin-btn--secondary" type="button" [disabled]="qaSubmitting()" (click)="reportQaFailure()">Chuyển CSKH xử lý sai lệch</button>
+            }
             @if (qaError()) {
               <p class="admin-note">{{ qaError() }}</p>
             }
@@ -231,22 +237,25 @@
                           <app-admin-icon name="eye" />
                         </button>
                         @if (canMutate()) {
-                          @if (row.status === 'pending') {
+                          @if (row.status === 'REQUESTED') {
+                            <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openReturnDetail(row.return_id)">Liên hệ khách hàng</button>
+                          }
+                          @if (row.status === 'REQUESTED' || row.status === 'WAITING_RETURN') {
+                            <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="openReturnAction('reject', row.return_id)">Hủy yêu cầu</button>
+                          }
+                          @if (row.status === 'CONTACTING') {
                             @if (showReturnAction(row, 'refund')) {
                               <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openReturnAction('refund', row.return_id)">Duyệt hoàn tiền</button>
                             }
                             @if (showReturnAction(row, 'exchange')) {
                               <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openReturnAction('exchange', row.return_id)">Duyệt đổi hàng</button>
                             }
-                            <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="openReturnAction('reject', row.return_id)">Từ chối</button>
+                            <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="openReturnAction('reject', row.return_id)">Hủy yêu cầu</button>
                           } @else if (nextReturnStep(row); as step) {
-                            @if (step.status === 'received') {
+                            @if (step.status === 'RECEIVED') {
                               <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openReceive(row)">{{ step.label }}</button>
                             } @else {
                               <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="advanceReturn(row, step.status)">{{ step.label }}</button>
-                            }
-                            @if (row.status === 'received') {
-                              <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="openReturnAction('reject', row.return_id)">Không đạt</button>
                             }
                           }
                         }
@@ -359,7 +368,7 @@
 
 @if (actionType()) {
   <div class="admin-modal-overlay">
-    <section class="admin-modal">
+    <section class="admin-modal" appAdminDialog (appAdminDialogClose)="closeOverlays()">
       <form (submit)="submitAction($event)">
         <header class="admin-modal__header">
           <h2>{{ actionTitle() }}</h2>
@@ -385,8 +394,43 @@
         </div>
         <footer class="admin-modal__footer">
           <button class="admin-btn admin-btn--ghost" type="button" (click)="closeOverlays()">Đóng</button>
-          <button class="admin-btn admin-btn--secondary" type="submit">Xác nhận</button>
+          <button class="admin-btn admin-btn--secondary" type="submit" [disabled]="submitting()">{{ submitting() ? 'Đang lưu…' : 'Xác nhận' }}</button>
         </footer>
+      </form>
+    </section>
+  </div>
+}
+
+@if (shipmentTarget(); as shipment) {
+  <div class="admin-modal-overlay">
+    <section class="admin-modal" appAdminDialog (appAdminDialogClose)="!submitting() && shipmentTarget.set(null)">
+      <form (submit)="submitShipment($event)">
+        <header class="admin-modal__header"><h2>{{ shipment.status === 'RETURN_IN_TRANSIT' ? 'Khách gửi hàng trả' : 'Giao hàng thay thế' }}</h2><button type="button" class="admin-icon-button" [disabled]="submitting()" (click)="shipmentTarget.set(null)" aria-label="Đóng">×</button></header>
+        <div class="admin-modal__body">
+          <label class="admin-form-group"><span class="admin-form-label">Mã vận đơn của lần gửi này *</span><input class="admin-form-control" name="tracking" required [disabled]="submitting()" /></label>
+          <p class="admin-note">Ghi đúng vận đơn để đối chiếu giao nhận. Mỗi lần gửi trả và gửi hàng thay thế dùng mã riêng.</p>
+          @if (shipmentError()) { <p class="field__error" role="alert">{{ shipmentError() }}</p> }
+        </div>
+        <footer class="admin-modal__footer"><button class="admin-btn admin-btn--ghost" type="button" [disabled]="submitting()" (click)="shipmentTarget.set(null)">Đóng</button><button class="admin-btn admin-btn--secondary" type="submit" [disabled]="submitting()">{{ submitting() ? 'Đang lưu…' : 'Ghi nhận gửi hàng' }}</button></footer>
+      </form>
+    </section>
+  </div>
+}
+
+@if (manualRefundTarget(); as refund) {
+  <div class="admin-modal-overlay">
+    <section class="admin-modal" appAdminDialog (appAdminDialogClose)="!submitting() && manualRefundTarget.set(null)">
+      <form (submit)="submitManualRefund($event)">
+        <header class="admin-modal__header"><h2>Ghi nhận chuyển khoản hoàn tiền</h2><button type="button" class="admin-icon-button" [disabled]="submitting()" (click)="manualRefundTarget.set(null)" aria-label="Đóng">×</button></header>
+        <div class="admin-modal__body">
+          <p class="admin-note">Chỉ ghi nhận sau khi chuyển tiền thành công. Hệ thống tính số tiền theo dòng hàng trả và số dư đã thanh toán.</p>
+          <label class="admin-form-group"><span class="admin-form-label">Mã giao dịch chuyển tiền *</span><input class="admin-form-control" name="reference" required [disabled]="submitting()" /></label>
+          <label class="admin-form-group"><span class="admin-form-label">Nội dung xử lý *</span><textarea class="admin-form-control admin-form-textarea" name="note" required minlength="10" [disabled]="submitting()"></textarea></label>
+          <label class="admin-form-group"><span class="admin-form-label">Ảnh giao dịch thành công *</span><input class="admin-form-control" type="file" accept="image/*" required [disabled]="submitting()" (change)="onManualRefundProof($event)" /></label>
+          @if (manualRefundProof()) { <img class="admin-qa-proof" [src]="manualRefundProof()" alt="Minh chứng chuyển khoản hoàn tiền" /> }
+          @if (actionError()) { <p class="field__error" role="alert">{{ actionError() }}</p> }
+        </div>
+        <footer class="admin-modal__footer"><button class="admin-btn admin-btn--ghost" type="button" [disabled]="submitting()" (click)="manualRefundTarget.set(null)">Đóng</button><button class="admin-btn admin-btn--secondary" type="submit" [disabled]="submitting()">{{ submitting() ? 'Đang lưu…' : 'Lưu bằng chứng hoàn tiền' }}</button></footer>
       </form>
     </section>
   </div>
@@ -395,7 +439,7 @@
 <!-- Detail Drawer: Phiếu Đổi / Trả hàng (A2) -->
 @if (returnDetailOpen() && selectedReturn()) {
   <div class="admin-drawer-backdrop" (click)="closeOverlays()"></div>
-  <aside class="admin-drawer admin-drawer--wide">
+  <aside class="admin-drawer admin-drawer--wide" appAdminDialog (appAdminDialogClose)="closeOverlays()">
     <header class="admin-drawer__header">
       <div>
         <p class="admin-product-code" style="margin: 0;">Phiếu đổi / trả: {{ selectedReturn()!.return_id }}</p>
@@ -414,15 +458,9 @@
       <!-- Tiến trình State Machine (Stepper) -->
       <div style="background: #faf8f5; border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px;">
         <span style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: var(--muted); letter-spacing: 0.04em;">Tiến trình xử lý đổi trả:</span>
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 12px; gap: 4px; overflow-x: auto; padding-bottom: 4px;">
-          @for (step of [
-            { label: 'Chờ duyệt', idx: 0 },
-            { label: 'Đã duyệt', idx: 1 },
-            { label: 'Khách gửi hàng', idx: 2 },
-            { label: 'Kho đã nhận', idx: 3 },
-            { label: 'Hoàn tất', idx: 4 }
-          ]; track step.idx) {
-            <div style="display: flex; flex-direction: column; align-items: center; flex: 1; text-align: center; min-width: 70px;">
+        <div class="admin-return-pipeline">
+          @for (step of returnPipeline(); track step.status) {
+            <div class="admin-return-pipeline__step" [class.admin-return-pipeline__step--done]="returnStepIndex(selectedReturn()!.status) >= step.idx" [attr.aria-current]="selectedReturn()!.status === step.status ? 'step' : null">
               <div
                 [style.background]="returnStepIndex(selectedReturn()!.status) >= step.idx ? '#7C5454' : '#e0d8ce'"
                 [style.color]="returnStepIndex(selectedReturn()!.status) >= step.idx ? '#fff' : '#666'"
@@ -438,14 +476,11 @@
                 {{ step.label }}
               </span>
             </div>
-            @if (step.idx < 4) {
-              <div [style.background]="returnStepIndex(selectedReturn()!.status) > step.idx ? '#7C5454' : '#e0d8ce'" style="height: 2px; flex: 1; margin: 0 2px;"></div>
-            }
           }
         </div>
-        @if (selectedReturn()!.status === 'rejected') {
+        @if (selectedReturn()!.status === 'CANCELLED') {
           <div style="margin-top: 10px; padding: 8px 12px; background: #ffebee; border-radius: 6px; color: #c62828; font-size: 0.8125rem; display: flex; align-items: center; gap: 6px;">
-            <app-admin-icon name="alert" cssClass="admin-line-icon" style="color: #c62828;" /> <strong>Phiếu đã bị từ chối.</strong> Lý do: {{ selectedReturn()!.rejection_reason || 'Không đạt điều kiện đổi trả' }}
+            <app-admin-icon name="alert" cssClass="admin-line-icon" style="color: #c62828;" /> <strong>Yêu cầu đã hủy.</strong> Lý do: {{ selectedReturn()!.rejection_reason || selectedReturn()!.admin_note || 'Xem nhật ký xử lý' }}
           </div>
         }
       </div>
@@ -497,21 +532,24 @@
           </dd>
         </div>
         <div><dt>Mã vận đơn trả về</dt><dd>{{ selectedReturn()!.tracking_return_code || '—' }}</dd></div>
+        <div><dt>Mã vận đơn hàng thay thế</dt><dd>{{ selectedReturn()!.exchange_tracking_code || '—' }}</dd></div>
         <div><dt>Lý do đổi trả</dt><dd>{{ returnReasonLabel(selectedReturn()!) }}</dd></div>
         <div><dt>Kết quả kiểm tra kho</dt><dd>{{ qaLabel(selectedReturn()!.condition_check_result) }}</dd></div>
         <div><dt>Ghi chú CSKH</dt><dd>{{ selectedReturn()!.admin_note || '—' }}</dd></div>
-        @if (canMutate()) {
+        @if (canMutate() && ['REQUESTED', 'CONTACTING', 'NEEDS_SUPPORT'].includes(selectedReturn()!.status || '')) {
           <div>
             <dt>Liên hệ trong 24 giờ</dt>
             <dd>
-              <select [value]="contactResult()" (change)="setContactResult($event)">
+              <select class="admin-form-control" [value]="contactResult()" (change)="setContactResult($event)">
+                <option value="">Chọn kết quả liên hệ thực tế…</option>
                 <option value="reached">Liên hệ được</option>
                 <option value="no_answer">Không liên hệ được</option>
                 <option value="waiting_customer">Chờ khách bổ sung</option>
               </select>
-              <textarea [value]="contactNote()" (input)="setContactNote($event)" placeholder="Nội dung trao đổi, ít nhất 10 ký tự"></textarea>
+              <textarea class="admin-form-control admin-form-textarea" [value]="contactNote()" (input)="setContactNote($event)" placeholder="Nội dung trao đổi, ít nhất 10 ký tự"></textarea>
               @if (contactError()) { <p>{{ contactError() }}</p> }
-              <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="saveContact(selectedReturn()!)">Lưu liên hệ</button>
+              <p class="admin-note">Quá 24 giờ được đánh dấu để ưu tiên xử lý; yêu cầu không tự hủy.</p>
+              <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" [disabled]="submitting()" (click)="saveContact(selectedReturn()!)">Lưu liên hệ</button>
             </dd>
           </div>
         }
@@ -521,23 +559,26 @@
       <!-- Thao tác trực tiếp từ Drawer nếu có quyền -->
       @if (canMutate()) {
         <div style="display: flex; gap: 10px; justify-content: flex-end; padding-top: 14px; border-top: 1px solid var(--line);">
-          @if (selectedReturn()!.status === 'pending') {
+          @if (selectedReturn()!.status === 'REQUESTED' || selectedReturn()!.status === 'WAITING_RETURN') {
+            <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="openReturnAction('reject', selectedReturn()!.return_id)">Hủy yêu cầu</button>
+          }
+          @if (selectedReturn()!.status === 'CONTACTING') {
             @if (showReturnAction(selectedReturn()!, 'refund')) {
               <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openReturnAction('refund', selectedReturn()!.return_id)">Duyệt hoàn tiền</button>
             }
             @if (showReturnAction(selectedReturn()!, 'exchange')) {
               <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openReturnAction('exchange', selectedReturn()!.return_id)">Duyệt đổi hàng</button>
             }
-            <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="openReturnAction('reject', selectedReturn()!.return_id)">Từ chối yêu cầu</button>
+            <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="openReturnAction('reject', selectedReturn()!.return_id)">Hủy yêu cầu</button>
           } @else {
             @if (canTriggerStripeRefund(selectedReturn()!)) {
-              <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="triggerStripeRefund(selectedReturn()!)">Hoàn tiền qua Stripe</button>
+              <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" [disabled]="submitting()" (click)="triggerStripeRefund(selectedReturn()!)">{{ selectedReturn()!.status === 'REFUND_PROCESSING' ? 'Đối soát hoàn tiền Stripe' : 'Hoàn tiền qua Stripe' }}</button>
+            }
+            @if (canRecordManualRefund(selectedReturn()!)) {
+              <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openManualRefund(selectedReturn()!)">Ghi nhận chuyển khoản hoàn tiền</button>
             }
             @if (nextReturnStep(selectedReturn()!); as step) {
-              <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="advanceReturn(selectedReturn()!, step.status)">{{ step.label }}</button>
-              @if (selectedReturn()!.status === 'received') {
-                <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="openReturnAction('reject', selectedReturn()!.return_id)">Không đạt kiểm tra</button>
-              }
+              @if (step.status === 'RECEIVED') { <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openReceive(selectedReturn()!); returnDetailOpen.set(false)">{{ step.label }}</button> } @else { <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" [disabled]="submitting()" (click)="advanceReturn(selectedReturn()!, step.status)">{{ step.label }}</button> }
             }
           }
         </div>
@@ -549,7 +590,7 @@
 <!-- Detail Drawer: Phiếu hỗ trợ khách hàng (Support Ticket) -->
 @if (ticketDetailOpen() && selectedTicket()) {
   <div class="admin-drawer-backdrop" (click)="closeOverlays()"></div>
-  <aside class="admin-drawer admin-drawer--wide">
+  <aside class="admin-drawer admin-drawer--wide" appAdminDialog (appAdminDialogClose)="closeOverlays()">
     <header class="admin-drawer__header">
       <div>
         <p class="admin-product-code" style="margin: 0;">Phiếu hỗ trợ: {{ selectedTicket()!.ticket_id }}</p>

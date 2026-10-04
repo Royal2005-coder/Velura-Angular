@@ -7,6 +7,8 @@ import { AuthService } from '../../core/services/auth.service';
 import { ApiService } from '../../core/services/api.service';
 import { useBodyClass } from '../../core/utils/body-class';
 import { showToast } from '../../core/utils/toast';
+import { AddressSelector } from '../../shared/address-selector/address-selector';
+import type { AddressGeographySelection } from '../../core/models/address-geography';
 
 interface MemberProfile {
   full_name?: string;
@@ -42,7 +44,7 @@ interface StyleQuiz {
 
 @Component({
   selector: 'app-account-profile-page',
-  imports: [RouterLink],
+  imports: [RouterLink, AddressSelector],
   host: { class: 'page-profile', style: 'display:block' },
   templateUrl: './profile.page.html',
 })
@@ -54,7 +56,9 @@ export class AccountProfilePage {
   readonly tab = signal('profile');
   readonly displayName = signal(this.auth.session()?.fullName || 'Tên khách hàng');
   readonly addressModalOpen = signal(false);
-  private savedAddresses: NonNullable<MemberProfile['saved_addresses']> = [];
+  readonly addressGeography = signal<AddressGeographySelection>({ province: '', district: '', ward: '', mode: 'current', valid: false });
+  /** Saved address fields render as Angular text bindings, never interpreted HTML. */
+  readonly savedAddresses = signal<NonNullable<MemberProfile['saved_addresses']>>([]);
   private readonly offers = inject(OffersService);
 
   /**
@@ -183,13 +187,14 @@ export class AccountProfilePage {
     document.querySelector('.js-btn-save-settings')?.addEventListener('click', () => {
       showToast('Đã lưu các cài đặt thành công!');
     });
-    document.querySelector('.js-btn-add-address')?.addEventListener('click', () => this.openAddressModal());
   }
 
   /**
    * Opens the original add-address modal.
    */
   openAddressModal(): void {
+    document.querySelector<HTMLFormElement>('#address-modal form')?.reset();
+    this.addressGeography.set({ province: '', district: '', ward: '', mode: 'current', valid: false });
     this.addressModalOpen.set(true);
   }
 
@@ -207,22 +212,23 @@ export class AccountProfilePage {
     event.preventDefault();
     const name = (document.getElementById('address-fullname') as HTMLInputElement | null)?.value.trim() || '';
     const phone = (document.getElementById('address-phone') as HTMLInputElement | null)?.value.trim() || '';
-    const province = (document.getElementById('address-province') as HTMLInputElement | null)?.value.trim() || '';
-    const district = (document.getElementById('address-district') as HTMLInputElement | null)?.value.trim() || '';
-    const ward = (document.getElementById('address-ward') as HTMLInputElement | null)?.value.trim() || '';
+    const { province, district, ward, valid } = this.addressGeography();
     const street = (document.getElementById('address-detail') as HTMLInputElement | null)?.value.trim() || '';
     const isDefault = Boolean((document.getElementById('address-is-default') as HTMLInputElement | null)?.checked);
-    if (!name || !phone || !street) {
+    if (name.length < 2 || !/^0\d{9}$/.test(phone) || !street || !valid) {
       showToast('Vui lòng nhập họ tên, số điện thoại và địa chỉ chi tiết.');
       return;
     }
     const detail = [street, ward, district, province].filter(Boolean).join(', ');
-    const next = this.savedAddresses.map((addr) => ({ ...addr, is_default: isDefault ? false : addr.is_default }));
+    const next = this.savedAddresses().map((addr) => ({ ...addr, is_default: isDefault ? false : addr.is_default }));
     next.push({
       id: crypto.randomUUID(),
       name,
       phone,
-      detail,
+      province,
+      district,
+      ward,
+      detail: street,
       address: detail,
       is_default: isDefault || next.length === 0,
     });
@@ -237,31 +243,7 @@ export class AccountProfilePage {
   }
 
   private renderAddresses(addresses: NonNullable<MemberProfile['saved_addresses']>): void {
-    this.savedAddresses = addresses;
-    const list = document.querySelector('.address-list');
-    if (!list) {
-      return;
-    }
-    if (!addresses.length) {
-      list.innerHTML = '<p style="color:var(--soft);font-size:0.875rem;padding:16px 0;">Bạn chưa lưu địa chỉ nào.</p>';
-      return;
-    }
-    list.innerHTML = addresses
-      .map(
-        (addr) => `
-        <div class="address-card ${addr.is_default ? 'address-card--default' : ''}" data-id="${addr.id || ''}">
-          <div class="address-card__content">
-            <div class="address-card__header">
-              <span class="address-card__name">${addr.name || ''}</span>
-              <span class="address-card__separator">·</span>
-              <span class="address-card__phone">${addr.phone || ''}</span>
-              ${addr.is_default ? '<span class="badge badge--default">Mặc định</span>' : ''}
-            </div>
-            <p class="address-card__detail">${addr.detail || addr.address || ''}</p>
-          </div>
-        </div>`,
-      )
-      .join('');
+    this.savedAddresses.set(addresses);
   }
 
   setOfferFilter(filter: 'ALL' | 'AVAILABLE' | 'LOCKED'): void {

@@ -1,7 +1,7 @@
 import { enrichAuditLogs, RETURN_AUDIT } from "../audit-enrichment.js";
 import { HttpError } from "../http.js";
 import type { AuthContext, AuthUser, JsonObject, RequestMeta } from "../types.js";
-import { asNumber, asString, errorMessage } from "../types.js";
+import { asJsonObject, asNumber, asString, errorMessage } from "../types.js";
 import {
   RETURN_OPERATOR_ROLES,
   RETURN_QA_PASS,
@@ -21,7 +21,7 @@ type ReturnContext = AuthContext & Partial<RequestMeta>;
  * Hoàn tiền qua cổng thanh toán cho đơn hàng gắn với phiếu đổi trả.
  */
 export interface ReturnRefundGateway {
-  refund(orderId: string, amount?: number): Promise<{ status: "refunded" | "requested" | "failed" | "skipped"; message?: string }>;
+  refund(orderId: string, amount?: number, returnId?: string, expectedVersion?: number): Promise<{ status: "refunded" | "requested" | "failed" | "skipped"; message?: string }>;
 }
 
 /**
@@ -32,6 +32,8 @@ export interface ReturnService {
   getReturn(context: ReturnContext | undefined, returnId: string): Promise<JsonObject>;
   recordContact(context: ReturnContext | undefined, returnId: string, body: JsonObject): Promise<unknown>;
   approveRefund(context: ReturnContext | undefined, returnId: string, body: JsonObject): Promise<JsonObject>;
+  /** Records non-Stripe refund only with transfer proof after warehouse QA. */
+  recordManualRefund(context: ReturnContext | undefined, returnId:string, body:JsonObject):Promise<JsonObject>;
   triggerStripeRefund(context: ReturnContext | undefined, returnId: string, body?: JsonObject): Promise<JsonObject>;
   approveExchange(context: ReturnContext | undefined, returnId: string, body: JsonObject): Promise<JsonObject>;
   reject(context: ReturnContext | undefined, returnId: string, body: JsonObject): Promise<JsonObject>;
@@ -173,18 +175,7 @@ export function createReturnService({
       );
 
       // Kích hoạt hoàn tiền Stripe nếu đơn hàng thanh toán qua Stripe
-      const current = repository.getReturn ? await repository.getReturn(returnId, context.accessToken) : null;
-      const orderId = asString(current?.order_id || updated.order_id);
-      let refundResult: unknown = null;
-      if (orderId && refunds) {
-        try {
-          refundResult = await refunds.refund(orderId, requested);
-        } catch (err: unknown) {
-          console.error("[RETURN REFUND GATEWAY ERROR]", errorMessage(err));
-        }
-      }
-
-      return { ...updated, refund: refundResult };
+      return {...updated,refund:null};
     },
 
     async triggerStripeRefund(context, returnId, body = {}) {
@@ -194,11 +185,30 @@ export function createReturnService({
       const orderId = asString(current.order_id);
       if (!orderId) throw new HttpError(422, "MISSING_ORDER_ID", "Phiếu không có mã đơn hàng hợp lệ");
       if (!refunds) throw new HttpError(503, "GATEWAY_UNAVAILABLE", "Cổng hoàn tiền Stripe chưa sẵn sàng");
-      const amount = body.refundAmount ? asNumber(body.refundAmount) : asNumber(current.refund_amount);
-      const result = await refunds.refund(orderId, amount);
+      const version = asNumber(body.expectedVersion);
+      if (!Number.isInteger(version) || version !== Number(current.version)) throw new HttpError(409,"VERSION_CONFLICT","Return changed");
+      if (!["RECEIVED","REFUND_PROCESSING"].includes(asString(current.status)) || current.condition_check_result !== RETURN_QA_PASS || current.return_type === "exchange") throw new HttpError(422,"WAREHOUSE_QA_REQUIRED","Warehouse QA must pass before refund");
+      const amount = await repository.getRefundableAmount(returnId, context.accessToken);
+      if (amount <= 0) throw new HttpError(422,"NOTHING_TO_REFUND","No refundable balance");
+      const payment = await repository.getPaymentByOrderId(orderId,context.accessToken);
+      if (payment?.payment_provider !== "stripe") throw new HttpError(422,"STRIPE_PAYMENT_REQUIRED","Use the verified manual refund operation for non-Stripe payments");
+      const result = await refunds.refund(orderId, amount, returnId, version);
       return { success: true, refund: result };
     },
 
+    async recordManualRefund(context,returnId,body) {
+      requireReturnAdmin(context);
+      const current = await repository.getReturn(returnId,context.accessToken);
+      if (!current) throw new HttpError(404,"RETURN_NOT_FOUND","Return not found");
+      if (Number(body.expectedVersion) !== Number(current.version)) throw new HttpError(409,"VERSION_CONFLICT","Return changed");
+      if (!["RECEIVED","REFUND_PROCESSING"].includes(asString(current.status)) || current.condition_check_result !== RETURN_QA_PASS) throw new HttpError(422,"WAREHOUSE_QA_REQUIRED","Warehouse QA must pass");
+      const payment = await repository.getPaymentByOrderId(asString(current.order_id),context.accessToken);
+      if (!payment || payment.payment_provider === "stripe" || !["paid","refund_pending"].includes(asString(payment.payment_status))) throw new HttpError(422,"CAPTURED_NON_STRIPE_REQUIRED","A captured non-Stripe payment is required");
+      const reference = asString(body.transferReference).trim();
+      const proof = asString(body.imageProof);
+      if (reference.length < 6 || (!proof.startsWith("https://") && !proof.startsWith("data:image/"))) throw new HttpError(422,"TRANSFER_PROOF_REQUIRED","Transfer reference and proof image are required");
+      return repository.recordManualRefund(returnId,Number(body.expectedVersion),reference,proof,context.profile?.user_id || context.authUser.id);
+    },
     async approveExchange(context, returnId, body) {
       requireReturnAdmin(context);
       const expectedVersion = asNumber(body.expectedVersion);
@@ -230,7 +240,7 @@ export function createReturnService({
     async updateReturnStatus(context, returnId, body) {
       requireReturnAdmin(context);
       const status = asString(body.status);
-      if (!RETURN_STATUSES.includes(status)) {
+      if (!RETURN_STATUSES.some(code => code === status)) {
         throw new HttpError(422, "VALIDATION_ERROR", "Invalid return status");
       }
       const expectedVersion = asNumber(body.expectedVersion);
@@ -245,6 +255,7 @@ export function createReturnService({
       if (!currentReturn) {
         throw new HttpError(404, "RETURN_NOT_FOUND", "Return not found");
       }
+      if (Number(currentReturn.version) !== expectedVersion) throw new HttpError(409,"VERSION_CONFLICT","Return changed");
       const from = asString(currentReturn.status);
       const allowed = RETURN_TRANSITIONS[from] || [];
       if (!allowed.includes(status)) {
@@ -252,7 +263,8 @@ export function createReturnService({
           status: [`Từ "${from}" chỉ được chuyển sang: ${allowed.join(", ") || "không trạng thái nào"}`]
         });
       }
-      if (status === "received") {
+      if (status === "NEEDS_SUPPORT" && (!asString(body.imageProof) || asString(body.reason).trim().length < 10)) throw new HttpError(422,"QA_FAILURE_EVIDENCE_REQUIRED","Evidence image and reason are required for QA failure");
+      if (status === "RECEIVED") {
         const qa = asString(body.conditionCheckResult);
         const proof = asString(body.imageProof);
         const confirmedItemId = asString(body.confirmedItemId);
@@ -264,28 +276,23 @@ export function createReturnService({
           throw new HttpError(422, "PROOF_REQUIRED", "Phải tải ảnh minh chứng đã kiểm hàng.");
         }
         const lines = await repository.listReturnLines(returnId, context.accessToken);
-        const expectedQty = lines.rows.reduce((sum, row) => sum + asNumber(row.quantity), 0);
-        const itemIds = lines.rows.map((row) => asString(row.order_item_id)).filter(Boolean);
-        if (!itemIds.length || confirmedItemId !== itemIds[0]) {
-          throw new HttpError(422, "ITEM_ID_MISMATCH", "Mã dòng hàng nhập lại không khớp phiếu.");
-        }
-        if (receivedQuantity !== expectedQty) {
-          throw new HttpError(422, "QTY_MISMATCH", `Số lượng thực nhận phải bằng số lượng đăng ký (${expectedQty}).`);
+        const receipts = Array.isArray(body.items) ? body.items.map(asJsonObject) : lines.rows.length === 1 ? [{orderItemId:confirmedItemId,receivedQuantity,matchesProduct:true}] : [];
+        if (!lines.rows.length || receipts.length !== lines.rows.length || new Set(receipts.map(row => asString(row.orderItemId))).size !== lines.rows.length) throw new HttpError(422,"ITEM_ID_MISMATCH","Confirm every returned line exactly once");
+        body.items = receipts;
+        for (const line of lines.rows) {
+          const receipt = receipts.find(row => row.orderItemId === line.order_item_id);
+          if (!receipt || receipt.matchesProduct !== true) throw new HttpError(422,"ITEM_ID_MISMATCH","Returned product does not match");
+          const qty = Number(receipt.receivedQuantity);
+          if (!Number.isInteger(qty) || qty < 1 || qty !== Number(line.quantity)) throw new HttpError(422,"QTY_MISMATCH","Received quantity does not match the registered line");
         }
       }
+      if (["REFUND_PROCESSING","REFUNDED"].includes(status)) throw new HttpError(422,"GATEWAY_STATE_REQUIRED","Refund states are advanced by payment gateway evidence");
       let refundAmount = body.refundAmount ? asNumber(body.refundAmount) : undefined;
-      if (status === "completed" && asString(currentReturn.return_type) !== "exchange") {
-        refundAmount = await repository.getRefundableAmount(returnId, context.accessToken);
-        const payment = currentReturn.order_id
-          ? await repository.getPaymentByOrderId(asString(currentReturn.order_id), context.accessToken)
-          : null;
-        const provider = payment ? asString(payment.payment_provider) : "stripe";
-        if (provider === "stripe" && refunds && refundAmount > 0) {
-          const refundResult = await refunds.refund(asString(currentReturn.order_id), refundAmount);
-          if (refundResult.status === "failed") {
-            throw new HttpError(502, "STRIPE_REFUND_FAILED", refundResult.message || "Stripe không hoàn được đúng số tiền sản phẩm.");
-          }
-        }
+      if (status === "COMPLETED" && currentReturn.return_type === "refund" && from !== "REFUNDED") throw new HttpError(422,"REFUND_REQUIRED","Gateway must confirm the refund before completion");
+      if (["RETURN_IN_TRANSIT","EXCHANGE_SHIPPING"].includes(status) && !asString(body.trackingReturnCode)) throw new HttpError(422,"TRACKING_REQUIRED","Shipment tracking is required");
+      if (status === "EXCHANGE_PREPARING") {
+        if (currentReturn.return_type !== "exchange" || currentReturn.condition_check_result !== RETURN_QA_PASS) throw new HttpError(422,"WAREHOUSE_QA_REQUIRED","Exchange requires warehouse QA");
+        return repository.prepareExchange(returnId,expectedVersion,context.profile?.user_id || context.authUser.id);
       }
 
       const adminNote = body.adminNote;
@@ -302,6 +309,7 @@ export function createReturnService({
         trackingReturnCode,
         conditionCheckResult,
         imageProof,
+        receipts: status === "RECEIVED" ? body.items : undefined,
         expectedVersion
       }, context.profile?.user_id || context.authUser.id, context.roleCode, context.ipAddress);
 

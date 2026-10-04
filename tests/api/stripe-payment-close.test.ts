@@ -195,18 +195,12 @@ test("webhook gửi lại khi payment đã đóng thì bỏ qua", async () => {
   }
 });
 
-test("PaymentIntent bị huỷ đóng theo đơn khi không có mã phiên", async () => {
-  const pg = fakePostgrest((call) => (call.method === "PATCH" ? [{ payment_id: "pay_1" }] : []));
+test("unbound cancelled PaymentIntent never closes another pending checkout", async () => {
+  const pg = fakePostgrest(() => []);
   try {
-    await closeStripePayment(ORDER, "payment_intent.canceled", null);
-    const patch = pg.calls.find((c) => c.method === "PATCH");
-    assert.ok(patch);
-    assert.equal(patch.query.get("gateway_transaction_ref"), null);
-    assert.equal(patch.query.get("order_id"), `eq.${ORDER}`);
-    assert.equal(releaseCalls(pg.calls).length, 0);
-  } finally {
-    pg.restore();
-  }
+    assert.equal(await closeStripePayment(ORDER, "payment_intent.canceled", null),"ignored");
+    assert.equal(pg.calls.length,0);
+  } finally {pg.restore();}
 });
 
 test("webhook thành công gửi lại không chuyển đơn lần hai", async () => {

@@ -14,7 +14,7 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
 import { OrderAccountApiStore } from '../../core/services/order-account-api.store';
-import { CheckoutStore } from '../../core/services/checkout.store';
+import { CheckoutStore, type CheckoutShipping } from '../../core/services/checkout.store';
 import { VoucherService } from '../../core/services/voucher.service';
 import { VoucherWallet } from '../../shared/voucher-wallet/voucher-wallet';
 import type { AppliedVoucher, CheckoutQuote } from '../../core/models/voucher.interface';
@@ -22,6 +22,7 @@ import { ApiRequestError } from '../../core/models/api-request-error';
 import {
   PurchaseFlowApiService,
   type PurchaseCheckoutResponse,
+  type PurchasePaymentProvider,
 } from '../../core/services/purchase-flow-api.service';
 import {
   DemoAddress,
@@ -34,6 +35,8 @@ import { formatVnd, toPublicAsset } from '../../core/utils/money';
 import { AddressSelector } from '../../shared/address-selector/address-selector';
 import type { AddressGeographySelection, GeographyMode } from '../../core/models/address-geography';
 import { PurchaseCustomerStore } from '../../core/services/purchase-customer.store';
+import { CheckoutLineEditorService, type CheckoutVariantChoice } from '../../core/services/checkout-line-editor.service';
+import type { CartLine } from '../../core/services/cart.store';
 
 /** Checkout một trang của KAN-27; mọi mutation đơn hàng đi qua Model API KAN-28. */
 @Component({
@@ -62,6 +65,10 @@ export class PurchaseFlowPage {
   );
   readonly member = this.model.member;
   readonly lines = signal(this.checkout.readCheckoutItems().map((line) => ({ ...line })));
+  private readonly lineEditor = inject(CheckoutLineEditorService);
+  readonly variantChoices = signal<Record<string, CheckoutVariantChoice[]>>({});
+  readonly lineEditError = signal('');
+  private readonly variantRequests = new Set<string>();
   private readonly vouchers = inject(VoucherService);
   readonly serverQuote = signal<CheckoutQuote | null>(null);
   readonly quoteLoading = signal(false);
@@ -80,6 +87,8 @@ export class PurchaseFlowPage {
     voucher: this.serverQuote()?.voucher?.name || 'Chưa áp dụng mã giảm giá',
   });
   readonly busy = signal(false);
+  readonly paymentProviders = signal<PurchasePaymentProvider[]>([{ code: 'COD', enabled: true }, { code: 'STRIPE', enabled: false }, { code: 'VNPAY', enabled: false }, { code: 'MOMO', enabled: false }]);
+  readonly providerLabel: Record<PurchasePaymentProvider['code'], string> = { COD: 'Thanh toán khi nhận hàng (COD)', STRIPE: 'Thanh toán bằng thẻ', VNPAY: 'VNPay', MOMO: 'Ví MoMo' };
   readonly resumeLoading = signal(false);
   readonly resumeLocked = signal(false);
   readonly error = signal('');
@@ -155,12 +164,55 @@ export class PurchaseFlowPage {
     detail: '',
   };
   saveAddress = false;
+  /** Optional fulfillment and invoice requests are persisted with the same order. */
+  orderOptions: Partial<Pick<CheckoutShipping, 'referral_code' | 'is_gift' | 'gift_gender' | 'gift_name' | 'gift_message' | 'is_other_recipient' | 'other_name' | 'other_phone' | 'is_vat_invoice' | 'vat_company_name' | 'vat_tax_code' | 'vat_company_address' | 'vat_email'>> = {};
 
   selectedAddress = -1;
   private timeout: ReturnType<typeof setTimeout> | undefined;
   private otpTimeout: ReturnType<typeof setTimeout> | undefined;
 
+  /** Changes a checkout variant or quantity and invalidates the prior price quote. */
+  editLine(line: CartLine, variantId: string, quantity: number): void {
+    if (this.busy() || this.order() || this.resumeLocked()) return;
+    const choice = this.variantChoices()[line.product_id]?.find(variant => variant.variant_id === variantId);
+    if (!choice) { this.lineEditError.set('Vui lòng chờ tải biến thể sản phẩm.'); return; }
+    try {
+      const next = this.lineEditor.edit(line, choice, quantity, this.lines());
+      this.serverQuote.set(null);
+      this.lineEditError.set('');
+      this.stockProblem.set('');
+      this.lines.set(next);
+    } catch (error: unknown) {
+      this.lineEditError.set(error instanceof Error ? error.message : 'Không thể cập nhật sản phẩm.');
+    }
+  }
+
+  /** Removes a selected item before ordering; combo components are removed together. */
+  removeLine(line: CartLine): void {
+    if (this.busy() || this.order() || this.resumeLocked()) return;
+    this.serverQuote.set(null);
+    this.lineEditError.set('');
+    this.lines.set(this.lineEditor.remove(line, this.lines()));
+  }
+
   constructor() {
+    this.purchaseApi.providers().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: response => this.paymentProviders.set(response.providers),
+      error: () => this.paymentProviders.set([{ code: 'COD', enabled: true }, { code: 'STRIPE', enabled: false }, { code: 'VNPAY', enabled: false }, { code: 'MOMO', enabled: false }]),
+    });
+    effect(() => {
+      const lines = this.lines();
+      untracked(() => {
+        for (const line of lines) {
+          if (this.variantRequests.has(line.product_id)) continue;
+          this.variantRequests.add(line.product_id);
+          this.lineEditor.choices(line.product_id).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+            next: choices => this.variantChoices.update(current => ({ ...current, [line.product_id]: choices })),
+            error: () => { this.variantRequests.delete(line.product_id); this.lineEditError.set('Chưa tải được biến thể. Thử tải lại trang trước khi chỉnh sản phẩm.'); },
+          });
+        }
+      });
+    });
     effect(() => {
       this.lines(); this.shippingMethod(); this.voucherId(); this.voucherDeclined(); this.model.userId();
       untracked(() => this.refreshQuote());
@@ -169,6 +221,7 @@ export class PurchaseFlowPage {
     effect(() => {
       const currentUser = this.model.userId();
       if (currentUser !== initialUser) {
+        this.orderOptions = {};
         initialUser = currentUser;
         clearTimeout(this.timeout);
         clearTimeout(this.otpTimeout);
@@ -213,7 +266,7 @@ export class PurchaseFlowPage {
       this.seconds.update((value) => Math.max(0, value - 1));
       this.paymentSeconds.update((value) => Math.max(0, value - 1));
       this.resendSeconds.update((value) => Math.max(0, value - 1));
-      if (this.step() === 'gateway' && this.paymentSeconds() === 0 && !this.busy())
+      if (this.step() === 'gateway' && this.paymentSeconds() === 0 && !this.busy() && Number.isFinite(Date.parse(this.checkout.readCreatedOrder()?.payment_expires_at || '')))
         this.result('expired');
     }, 1000);
     this.destroyRef.onDestroy(() => {
@@ -268,8 +321,8 @@ export class PurchaseFlowPage {
         : order.paymentState === 'failed' ? 'failed'
         : order.paymentState === 'expired' || (Number.isFinite(expires) && seconds === 0) ? 'expired' : 'confirming');
       this.step.set(Number.isFinite(expires) && seconds > 0 && this.paymentResult() === 'confirming' ? 'gateway' : 'result');
-      if (order.payment === 'STRIPE') {
-        this.purchaseApi.verifyPayment(order.orderId || order.id, this.member() ? undefined : token)
+      {
+        this.purchaseApi.verifyPayment(order.orderId || order.id, this.member() ? undefined : token, order.payment)
           .pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
             next: (result) => {
               if (session !== this.auth.session() || this.order()?.orderId !== order.orderId) return;
@@ -476,6 +529,8 @@ export class PurchaseFlowPage {
   /** Validate everything at the single final action, including ownership of the current phone. */
   validateCheckout(): boolean {
     const errors = this.addressErrors(this.address);
+    if (this.orderOptions.is_other_recipient && (!this.orderOptions.other_name?.trim() || !validPhone(this.orderOptions.other_phone || ''))) errors['options'] = 'Nhập tên và số điện thoại hợp lệ của người nhận khác.';
+    if (this.orderOptions.is_vat_invoice && (!this.orderOptions.vat_company_name?.trim() || !this.orderOptions.vat_tax_code?.trim() || !this.orderOptions.vat_company_address?.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(this.orderOptions.vat_email || ''))) errors['options'] = 'Điền đầy đủ công ty, mã số thuế, địa chỉ và email nhận hóa đơn.';
     this.fieldErrors.set(errors);
     if (Object.keys(errors).length) {
       this.error.set('Vui lòng kiểm tra các thông tin được đánh dấu bên dưới.');
@@ -503,8 +558,8 @@ export class PurchaseFlowPage {
   }
   /** Reads authoritative prices and ignores an obsolete quote after an account or cart change. */
   refreshQuote(): void {
-    if (!this.lines().length || this.order()) return;
     const version = ++this.quoteVersion;
+    if (!this.lines().length || this.order()) { this.quoteLoading.set(false); return; }
     this.serverQuote.set(null);
     this.quoteLoading.set(true);
     this.quoteError.set('');
@@ -555,6 +610,10 @@ export class PurchaseFlowPage {
   /** Tạo đơn thật đúng một lần qua API KAN-28 và giữ nguyên form nếu backend từ chối. */
   place(): void {
     if (this.resumeLocked() || this.busy() || this.order() || this.quoteLoading() || !this.serverQuote() || !this.validateCheckout()) return;
+    if (!this.paymentProviders().some(provider => provider.code === this.payment && provider.enabled)) {
+      this.error.set('Phương thức thanh toán này tạm chưa khả dụng. Vui lòng chọn phương thức khác.');
+      return;
+    }
     this.busy.set(true);
     this.error.set('');
     const shippingAddress = [
@@ -565,6 +624,19 @@ export class PurchaseFlowPage {
     ].filter(Boolean).join(', ');
     const quote = this.quote();
     const payload: Record<string, unknown> = {
+      referral_code: this.orderOptions.referral_code?.trim(),
+      is_gift: !!this.orderOptions.is_gift,
+      gift_gender: this.orderOptions.is_gift ? this.orderOptions.gift_gender || 'nu' : undefined,
+      gift_name: this.orderOptions.is_gift ? this.orderOptions.gift_name?.trim() : undefined,
+      gift_message: this.orderOptions.is_gift ? this.orderOptions.gift_message?.trim() : undefined,
+      is_other_recipient: !!this.orderOptions.is_other_recipient,
+      other_name: this.orderOptions.is_other_recipient ? this.orderOptions.other_name?.trim() : undefined,
+      other_phone: this.orderOptions.is_other_recipient ? normalizePhone(this.orderOptions.other_phone || '') : undefined,
+      is_vat_invoice: !!this.orderOptions.is_vat_invoice,
+      vat_company_name: this.orderOptions.is_vat_invoice ? this.orderOptions.vat_company_name?.trim() : undefined,
+      vat_tax_code: this.orderOptions.is_vat_invoice ? this.orderOptions.vat_tax_code?.trim() : undefined,
+      vat_company_address: this.orderOptions.is_vat_invoice ? this.orderOptions.vat_company_address?.trim() : undefined,
+      vat_email: this.orderOptions.is_vat_invoice ? this.orderOptions.vat_email?.trim() : undefined,
       shipping_name: this.address.name,
       shipping_phone: normalizePhone(this.address.phone),
       shipping_email: this.address.email,
@@ -632,7 +704,7 @@ export class PurchaseFlowPage {
       createdAt: new Date().toISOString(),
     };
     this.order.set(order);
-    const paymentExpiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+    const paymentExpiresAt = response.payment?.expires_at;
     this.checkout.saveCreatedOrder({
       order_id: response.order.order_id,
       order_code: response.order.order_code,
@@ -647,8 +719,9 @@ export class PurchaseFlowPage {
     this.checkout.completeCheckout(this.lines());
     this.busy.set(false);
     this.paymentSeconds.set(900);
-    if (response.stripe?.url) {
-      window.location.assign(response.stripe.url);
+    const gatewayUrl = response.payment?.url || response.stripe?.url;
+    if (gatewayUrl) {
+      window.location.assign(gatewayUrl);
       return;
     }
     this.step.set(this.payment === 'COD' ? 'success' : 'result');
@@ -681,7 +754,7 @@ export class PurchaseFlowPage {
     this.busy.set(true);
     const userId = this.model.userId();
     this.purchaseApi.retryPayment(order.orderId || order.id, normalizePhone(this.address.phone), this.checkout.readCreatedOrder()?.order_access_token).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: (response) => { if (userId !== this.model.userId()) return; this.busy.set(false); if (response.stripe?.url) window.location.assign(response.stripe.url); else this.error.set(response.message || 'Chưa mở được phiên thanh toán mới.'); },
+      next: (response) => { if (userId !== this.model.userId()) return; this.busy.set(false); const url = response.payment?.url || response.stripe?.url; if (url) window.location.assign(url); else this.error.set(response.message || 'Chưa mở được phiên thanh toán mới.'); },
       error: (error: Error) => { if (userId !== this.model.userId()) return; this.busy.set(false); this.error.set(error.message); },
     });
   }

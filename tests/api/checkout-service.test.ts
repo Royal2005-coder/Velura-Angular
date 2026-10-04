@@ -197,7 +197,7 @@ test("checkout service persists COD through the repository and decrements stock"
   assert.equal(calls[2]?.quantity, 8);
 });
 
-test("online checkout stores the gateway reference using the payment schema column", async () => {
+test("online checkout delegates real gateway attempt creation without fabricated references", async () => {
   let payment: JsonObject | null = null;
   const service = new CheckoutService(checkoutRepositoryStub({
     createOrder: async (input) => ({ order_id: "order-online", ...input }),
@@ -231,10 +231,7 @@ test("online checkout stores the gateway reference using the payment schema colu
     }]
   });
 
-  assert.equal(payment?.gateway_transaction_ref, "pay_vnpay_VLRONLINE");
-  assert.equal(payment?.payment_method, "ONLINE_PAYMENT");
-  assert.equal(payment?.payment_provider, "vnpay");
-  assert.equal("transaction_id" in (payment ?? {}), false);
+  assert.equal(payment, null, "A real hosted gateway owns its durable attempt; checkout must not fabricate a reference");
 });
 
 test("checkout service activates a guest only through the repository", async () => {

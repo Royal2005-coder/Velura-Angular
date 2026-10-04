@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { HttpError } from "../http.js";
 import { callRpc, selectOne } from "../supabase.js";
 import { asJsonObject, asString, type JsonObject } from "../types.js";
-import { isSmsConfigured, sendCheckoutOtpSms } from "../sms/twilio.js";
+import { isSmsConfigured, sendCheckoutOtpSms, maskPhone } from "../sms/twilio.js";
 import { generateCheckoutOtp, normalizeVietnamesePhone } from "./checkout-service.js";
 import { issueGuestPhoneAccess } from "./order-access.js";
 
@@ -29,7 +29,7 @@ export async function sendGuestTrackingOtp(body: JsonObject, ip: string): Promis
   });
   const delivered = await sendCheckoutOtpSms(phone, code);
   if (!delivered.success || delivered.simulated) throw new HttpError(502, "OTP_SEND_FAILED", "Chưa gửi được SMS xác thực");
-  return { success: true, phone, expires_in: 60 };
+  return { success: true, masked_phone: maskPhone(phone), expires_in: 60 };
 }
 
 /** Atomic attempt accounting grants one 15-minute session after a valid, unconsumed code. */

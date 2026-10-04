@@ -39,7 +39,7 @@ export type StripeEventAction =
   | {
     kind: "closed";
     orderId: string;
-    reason: "checkout.session.expired" | "payment_intent.canceled";
+    reason: "checkout.session.expired" | "checkout.session.async_payment_failed" | "payment_intent.canceled";
     /** Mã phiên Checkout khi sự kiện mang theo, để chỉ đóng đúng phiên đó. */
     sessionId: string | null;
   }
@@ -73,20 +73,21 @@ export function classifyStripeEvent(event: JsonObject): StripeEventAction {
     return { kind: "ignore", reason: "missing_order" };
   }
 
-  if (type === "payment_intent.succeeded" || type === "checkout.session.completed") {
-    const rawIntent = type === "checkout.session.completed" ? object?.payment_intent : object?.id;
+  if (type === "payment_intent.succeeded" || type === "checkout.session.completed" || type === "checkout.session.async_payment_succeeded") {
+    if (type === "checkout.session.completed" && object?.payment_status && object.payment_status !== "paid") return {kind:"ignore",reason:"capture_pending"};
+    const rawIntent = type.startsWith("checkout.session.") ? object?.payment_intent : object?.id;
     const paymentIntentId = typeof rawIntent === "string" ? rawIntent : (rawIntent as JsonObject | undefined)?.id;
     if (typeof paymentIntentId !== "string" || !paymentIntentId) {
       return { kind: "ignore", reason: "missing_payment_intent" };
     }
-    const sessionId = type === "checkout.session.completed" && typeof object?.id === "string" ? object.id : null;
+    const sessionId = type.startsWith("checkout.session.") && typeof object?.id === "string" ? object.id : null;
     return { kind: "paid", orderId, paymentIntentId, sessionId };
   }
 
-  if (type === "checkout.session.expired" || type === "payment_intent.canceled") {
+  if (type === "checkout.session.expired" || type === "checkout.session.async_payment_failed" || type === "payment_intent.canceled") {
     // Với phiên Checkout, `object.id` là mã phiên `cs_…`, cũng chính là
     // `gateway_transaction_ref` đã lưu lúc mở phiên. PaymentIntent thì không.
-    const sessionId = type === "checkout.session.expired" && typeof object?.id === "string"
+    const sessionId = type.startsWith("checkout.session.") && typeof object?.id === "string"
       ? object.id
       : null;
     return { kind: "closed", orderId, reason: type, sessionId };
@@ -232,6 +233,7 @@ async function markOneStripePaymentPaid(orderId: string, patch: JsonObject, sess
     order_id: `eq.${orderId}`,
     payment_provider: "eq.stripe",
     payment_status: "eq.pending",
+    gateway_transaction_ref: `eq.${asString(patch.gateway_transaction_ref)}`,
     select: "payment_id"
   });
   if (rows.length !== 1) return null;
@@ -256,9 +258,10 @@ async function markOneStripePaymentPaid(orderId: string, patch: JsonObject, sess
  */
 export async function closeStripePayment(
   orderId: string,
-  reason: "checkout.session.expired" | "payment_intent.canceled",
+  reason: "checkout.session.expired" | "checkout.session.async_payment_failed" | "payment_intent.canceled",
   sessionId: string | null
 ): Promise<"closed" | "ignored"> {
+  if (!sessionId) return "ignored"; // An unbound PaymentIntent cannot close another checkout attempt.
   const closed = await transitionPendingStripePayment(orderId, {
     payment_status: "failed",
     gateway_response_code: reason

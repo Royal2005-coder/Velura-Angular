@@ -1,4 +1,4 @@
-import { HttpError } from "../http.js";
+import { HttpError, sendJson } from "../http.js";
 import { handleAuthRoute } from "./auth.js";
 import { handleProfileRoute } from "./profile.js";
 import { handleProductsRoute } from "./products.js";
@@ -17,6 +17,13 @@ import { handleOffersRoute } from "./offers.js";
 import { handleCheckoutRoute } from "./checkout-quote.js";
 import { handleStripeWebhook } from "../payments/stripe-webhook.js";
 import { handleStripeVerify } from "../payments/stripe-verify.js";
+import { handleLocalGatewayIpn, localGatewayConfigured } from "../payments/local-gateways.js";
+import { stripeConfigured } from "../payments/stripe.js";
+import { requireCustomerOrderAccess } from "./order-access.js";
+import { customerPaymentFacts } from "./order-payment-presentation.js";
+import { readJson } from "../http.js";
+import { selectOne, selectRows } from "../supabase.js";
+import { asString } from "../types.js";
 
 import type { AuthContext, HeaderMap, HttpRequest, HttpResponse } from "../types.js";
 
@@ -96,6 +103,27 @@ export async function handleUserRoute(
       return await handleOffersRoute(req, res, corsHeaders, context);
 
     case "payments":
+      if (action === "verify" && req.method === "POST") {
+        const body = await readJson(req);
+        const identity = asString(body.order_id || body.order_code).trim();
+        const order = await selectOne("orders", /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(identity)
+          ? {order_id:`eq.${identity}`} : {order_code:`eq.${identity.toUpperCase()}`});
+        if (!order) throw new HttpError(404,"NOT_FOUND","Không tìm thấy đơn hàng");
+        requireCustomerOrderAccess(order,context,body);
+        const {rows} = await selectRows("payment",{order_id:`eq.${order.order_id}`,order:"created_at.desc"});
+        const facts = customerPaymentFacts(rows);
+        return sendJson(res,200,{success:true,paid:["paid","refund_pending","refunded"].includes(asString(facts.payment_status)),status:facts.payment_status,order_id:order.order_id,order_code:order.order_code,...facts},corsHeaders);
+      }
+      if (action === "providers" && req.method === "GET") {
+        return sendJson(res, 200, { providers: [
+          { code: "COD", enabled: true },
+          { code: "STRIPE", enabled: stripeConfigured() },
+          ...(["VNPAY", "MOMO"] as const).map(code => ({ code, enabled: localGatewayConfigured(code), ...(!localGatewayConfigured(code) ? { reason: "not_configured" } : {}) }))
+        ] }, corsHeaders);
+      }
+      if ((action === "vnpay" || action === "momo") && parts[4] === "ipn") {
+        return handleLocalGatewayIpn(req, res, new URL(req.url || "/", "http://localhost"), action === "vnpay" ? "VNPAY" : "MOMO", corsHeaders);
+      }
       if (action === "stripe" && parts[4] === "webhook") {
         return await handleStripeWebhook(req, res, corsHeaders);
       }

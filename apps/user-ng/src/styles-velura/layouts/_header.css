@@ -412,8 +412,8 @@
 .account-dropdown-menu {
   position: absolute;
   top: 100%;
-  right: 50%;
-  transform: translateX(50%) translateY(10px);
+  right: 0;
+  transform: translateY(10px);
   background-color: #ffffff;
   min-width: 160px;
   border-radius: 8px;
@@ -430,19 +430,20 @@
 }
 
 /* Hover to show dropdown */
-.header-account-dropdown:hover .account-dropdown-menu {
+.header-account-dropdown:hover .account-dropdown-menu,
+.header-account-dropdown:focus-within .account-dropdown-menu {
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
-  transform: translateX(50%) translateY(4px);
+  transform: translateY(4px);
 }
 
 /* Dropdown upward arrow */
 .account-dropdown-arrow {
   position: absolute;
   top: -6px;
-  right: 50%;
-  transform: translateX(50%) rotate(45deg);
+  right: 14px;
+  transform: rotate(45deg);
   width: 10px;
   height: 10px;
   background-color: #ffffff;

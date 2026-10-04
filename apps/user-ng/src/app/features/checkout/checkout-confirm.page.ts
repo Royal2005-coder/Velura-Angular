@@ -76,6 +76,7 @@ export class CheckoutConfirmPage {
           session_id: sessionId,
           order_id: orderId,
           order_code: orderCode,
+          order_access_token: this.created?.order_access_token,
         })
         .pipe(takeUntilDestroyed(this.destroyRef))
         .subscribe({

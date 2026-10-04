@@ -37,7 +37,6 @@ export async function handleQuizRoute(
     let quizData: JsonObject | undefined = undefined;
     if (guestSessionId) {
       quizData = guestStyleProfiles.get(guestSessionId);
-      guestStyleProfiles.delete(guestSessionId);
     }
     
     // Fallback/merge: Read body in case frontend sends sessionStorage data directly
@@ -80,12 +79,11 @@ export async function handleQuizRoute(
     };
 
     const existing = await selectOne("style_profile", { user_id: `eq.${profile.user_id}` });
-    let result: unknown;
     if (existing) {
-      result = await updateRows("style_profile", { user_id: `eq.${profile.user_id}` }, payload);
-    } else {
-      result = await insertRow("style_profile", payload);
+      return sendJson(res, 200, { success: true, migrated: false, quiz: existing }, corsHeaders);
     }
+    const result = await insertRow("style_profile", payload);
+    if (guestSessionId) guestStyleProfiles.delete(guestSessionId);
 
     await createNotification(
       profile.user_id,

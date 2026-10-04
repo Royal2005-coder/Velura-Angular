@@ -11,6 +11,7 @@ import { VoucherService } from '../../core/services/voucher.service';
 import { PurchaseFlowPage } from './purchase-flow.page';
 import { PurchaseFlowApiService } from '../../core/services/purchase-flow-api.service';
 import { OrderAccountApiStore } from '../../core/services/order-account-api.store';
+import { CheckoutLineEditorService } from '../../core/services/checkout-line-editor.service';
 import { of, Subject } from 'rxjs';
 
 function createCheckoutFixture() {
@@ -84,6 +85,7 @@ describe('PurchaseFlowPage with mocked Model', () => {
           },
         },
         { provide: AuthService, useValue: { session: () => null } },
+        { provide: CheckoutLineEditorService, useValue: { choices: () => of([]), edit: vi.fn(), remove: vi.fn() } },
         { provide: PurchaseCustomerStore, useValue: model },
         { provide: OrderAccountApiStore, useValue: { canAccess: () => false, guestAccessToken: () => null, loadPaymentOrder } },
         { provide: AddressGeographyService, useValue: stubAddressGeographyService() },
@@ -91,6 +93,7 @@ describe('PurchaseFlowPage with mocked Model', () => {
         {
           provide: PurchaseFlowApiService,
           useValue: {
+            providers: () => of({ providers: [{ code: 'COD', enabled: true }, { code: 'STRIPE', enabled: true }] }),
             sendOtp,
             verifyOtp,
             checkoutGuest,
@@ -252,5 +255,24 @@ describe('PurchaseFlowPage with mocked Model', () => {
     page.place();
     expect(checkoutMember).not.toHaveBeenCalled();
     expect(checkoutGuest).not.toHaveBeenCalled();
+  });
+
+  it('blocks an unavailable gateway before an order can be created', () => {
+    const page = createCheckoutFixture().componentInstance;
+    vi.spyOn(page, 'validateCheckout').mockReturnValue(true);
+    page.payment = 'MOMO';
+    page.place();
+    expect(checkoutGuest).not.toHaveBeenCalled();
+    expect(page.error()).toContain('chưa khả dụng');
+  });
+
+  it('requires alternate recipient contact and complete invoice information only when requested', () => {
+    const page = createCheckoutFixture().componentInstance;
+    page.orderOptions = { is_other_recipient: true, other_name: 'An', other_phone: 'invalid' };
+    expect(page.validateCheckout()).toBe(false);
+    expect(page.fieldErrors()['options']).toContain('số điện thoại');
+    page.orderOptions = { is_vat_invoice: true, vat_company_name: 'Company' };
+    expect(page.validateCheckout()).toBe(false);
+    expect(page.fieldErrors()['options']).toContain('hóa đơn');
   });
 });

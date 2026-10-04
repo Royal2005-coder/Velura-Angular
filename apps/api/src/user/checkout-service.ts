@@ -348,7 +348,7 @@ export class CheckoutService {
       created_at: now,
       updated_at: now
     });
-    if (input.paymentMethod !== "COD" && input.paymentProvider.toLowerCase() !== "stripe") {
+    if (input.paymentMethod !== "COD" && !["stripe", "vnpay", "momo"].includes(input.paymentProvider.toLowerCase())) {
       const provider = input.paymentProvider.toLowerCase();
       await this.repository.createPayment({
         order_id: order.order_id,

@@ -20,6 +20,7 @@ import {
   validateCheckoutContact
 } from "./checkout-service.js";
 import { createStripePaymentIntent, refundStripeOrder, STRIPE_CHECKOUT_TTL_SECONDS, stripeConfigured } from "../payments/stripe.js";
+import { assertLocalGatewayReady, openLocalGateway, type HostedPayment } from "../payments/local-gateways.js";
 import { customerCanCancel, customerOrderSteps, orderFacts, orderStatusLabel } from "../orders/order-state-machine.js";
 import { returnWindowOpen } from "./return-window.js";
 import { cancelOrderForCustomer, createCustomerOrderCancelRepository } from "./order-cancel-service.js";
@@ -476,9 +477,17 @@ export async function handleOrdersRoute(
         const updated = await callRpc("velura_switch_order_to_cod", {p_order_id:order.order_id,p_expected_version:Number(body.expectedVersion || order.version)});
         return sendJson(res,200,{success:true,order:updated},corsHeaders);
       }
-      const {rows: payments} = await selectRows("payment", {order_id:"eq."+order.order_id,payment_provider:"eq.stripe",order:"created_at.desc"});
+      const {rows: payments} = await selectRows("payment", {order_id:"eq."+order.order_id,order:"created_at.desc"});
       if (!presentOrderForCustomer(order,[],[],payments).can_pay_again || payments.some(p => ["paid","refunded","refund_pending"].includes(asString(p.payment_status)))) throw new HttpError(409,"PAY_AGAIN_NOT_ALLOWED","Order is not awaiting payment");
-      const pending = payments.filter(p => p.payment_status === "pending");
+      const method = asString(body.payment_method || payments.find(p => ["stripe","vnpay","momo"].includes(asString(p.payment_provider)))?.payment_provider || "STRIPE").toUpperCase();
+      assertStripeReady(method);
+      if (method === "VNPAY" || method === "MOMO") {
+        const payment = await openLocalGateway(asString(order.order_id), method, checkoutClientIp(req.headers,req.socket?.remoteAddress));
+        return sendJson(res,200,{success:true,payment,stripe:null,order:presentOrderForCustomer(order,[],[],payments)},corsHeaders);
+      }
+      const liveLocal = payments.some(p => p.payment_status === "pending" && ["vnpay","momo"].includes(asString(p.payment_provider)) && Date.parse(asString(p.gateway_expires_at)) > Date.now());
+      if (liveLocal) throw new HttpError(409,"PAYMENT_SESSION_OPEN","Phiên thanh toán trước vẫn còn hiệu lực.");
+      const pending = payments.filter(p => p.payment_status === "pending" && p.payment_provider === "stripe");
       if (hasOpenStripeSession(pending)) throw new HttpError(409,"PAYMENT_SESSION_OPEN","Previous Stripe session remains open");
       for (const stale of pending) await updateRows("payment",{payment_id:"eq."+stale.payment_id,payment_status:"eq.pending"},{payment_status:"failed",gateway_response_code:"stale_session"});
       const stripe = await openStripePayment(order.order_id,order.total_amount,"STRIPE", order.is_guest ? "/checkout/confirm?code="+encodeURIComponent(asString(order.order_code)) : "/account/orders/"+order.order_id);
@@ -668,6 +677,7 @@ export async function handleOrdersRoute(
 
       const orderCode = generateOrderCode();
       assertStripeReady(payment_method);
+      validateCheckoutExtras(body);
       const paymentState = checkoutPaymentState(payment_method);
       const dbPaymentMethod = paymentState.method;
       const guestTotal = guestQuote.totalAmount;
@@ -793,14 +803,6 @@ export async function handleOrdersRoute(
       }
 
       // Send welcome notification
-      await createNotification(
-        asString(guestUser.user_id),
-        "system",
-        "Chào mừng bạn đến với Velura! 🎉",
-        "Chúc mừng bạn đã đăng ký tài khoản thành viên thành công. Nhận ngay ưu đãi thành viên và bắt đầu mua sắm ngay!",
-        "/src/pages/products/list.html"
-      );
-
       // Send order placed notification
       await createNotification(
         asString(guestUser.user_id),
@@ -815,7 +817,7 @@ export async function handleOrdersRoute(
         activation_required: Boolean(activation),
         order_access_token: issueGuestOrderAccess(asString(newOrder.order_id)),
         order: presentOrderForCustomer(newOrder, createdItems as JsonObject[], []),
-        stripe: await openStripePayment(newOrder.order_id, newOrder.total_amount, payment_method)
+        ...await openPersistedOrderPayment(newOrder,payment_method,checkoutClientIp(req.headers,req.socket?.remoteAddress))
       }, corsHeaders);
     }
 
@@ -859,6 +861,7 @@ export async function handleOrdersRoute(
 
       const orderCode = generateOrderCode();
       assertStripeReady(payment_method);
+      validateCheckoutExtras(body);
       const paymentState = checkoutPaymentState(payment_method);
       const dbPaymentMethod = paymentState.method;
       const memberQuote = await checkoutService.quote(
@@ -963,7 +966,7 @@ export async function handleOrdersRoute(
       return sendJson(res, 200, {
         success: true,
         order: presentOrderForCustomer(newOrder, createdItems as JsonObject[], []),
-        stripe: await openStripePayment(newOrder.order_id, newOrder.total_amount, payment_method)
+        ...await openPersistedOrderPayment(newOrder,payment_method,checkoutClientIp(req.headers,req.socket?.remoteAddress))
       }, corsHeaders);
     }
   }
@@ -972,9 +975,49 @@ export async function handleOrdersRoute(
 }
 
 function assertStripeReady(method: unknown): void {
+  const normalized = String(method || "COD").toUpperCase();
+  if (normalized === "VNPAY" || normalized === "MOMO") return assertLocalGatewayReady(normalized);
+  if (!["COD","STRIPE"].includes(normalized)) throw new HttpError(422,"PAYMENT_PROVIDER_INVALID","Phương thức thanh toán không hợp lệ.");
   if (String(method || "").toUpperCase() !== "STRIPE") return;
   if (!stripeConfigured()) {
     throw new HttpError(503, "STRIPE_NOT_CONFIGURED", "Chưa cấu hình STRIPE_SECRET_KEY. Chọn thanh toán khi nhận hàng hoặc cấu hình Stripe.");
+  }
+}
+
+/** Validate optional fulfillment instructions without changing the verified buyer OTP destination. */
+export function validateCheckoutExtras(body: JsonObject): void {
+  for (const flag of ["is_gift","is_other_recipient","is_vat_invoice"]) {
+    if (body[flag] !== undefined && typeof body[flag] !== "boolean") throw new HttpError(422,"INVALID_CHECKOUT_OPTION","Tùy chọn giao hàng không hợp lệ.");
+  }
+  const limits: Record<string,number> = {gift_name:120,gift_gender:30,gift_message:500,other_name:120,other_phone:30,vat_company_name:200,vat_tax_code:20,vat_company_address:500,vat_email:254,referral_code:64};
+  for (const [field,maximum] of Object.entries(limits)) {
+    if (body[field] !== undefined && body[field] !== null && (typeof body[field] !== "string" || asString(body[field]).length > maximum)) throw new HttpError(422,"INVALID_CHECKOUT_OPTION","Thông tin giao hàng hoặc hóa đơn vượt giới hạn cho phép.");
+  }
+  if (body.shipping_method !== undefined && !["standard","express"].includes(asString(body.shipping_method))) throw new HttpError(422,"INVALID_SHIPPING_METHOD","Phương thức giao hàng không hợp lệ.");
+  if (body.is_other_recipient === true) validateCheckoutContact({fullName:body.other_name,phone:body.other_phone});
+  if (body.is_vat_invoice === true) {
+    if (!asString(body.vat_company_name).trim() || !asString(body.vat_company_address).trim()
+      || !/^\d{10}(?:-?\d{3})?$/.test(asString(body.vat_tax_code).trim())
+      || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(asString(body.vat_email).trim())) {
+      throw new HttpError(422,"INVALID_VAT_INVOICE","Vui lòng nhập đủ tên công ty, mã số thuế, địa chỉ và email nhận hóa đơn hợp lệ.");
+    }
+  }
+}
+
+async function openLocalPayment(orderId: unknown, method: unknown, clientIp: string): Promise<HostedPayment|null> {
+  const provider = asString(method).toUpperCase();
+  return provider === "VNPAY" || provider === "MOMO" ? openLocalGateway(asString(orderId),provider,clientIp) : null;
+}
+
+async function openPersistedOrderPayment(order: JsonObject, method: unknown, clientIp: string): Promise<JsonObject> {
+  try {
+    const stripe = await openStripePayment(order.order_id,order.total_amount,method);
+    const payment = await openLocalPayment(order.order_id,method,clientIp);
+    return {stripe,payment:payment ? {...payment} : null};
+  } catch (error) {
+    // Placement succeeded. Keep its saved snapshot and capability visible so retries never create a second order.
+    console.error("[PAYMENT_OPEN_FAILED]", {order_id:order.order_id,code:error instanceof HttpError ? error.code : "PROVIDER_NETWORK_ERROR"});
+    return {stripe:null,payment:null,payment_error:{code:error instanceof HttpError ? error.code : "PAYMENT_PROVIDER_UNAVAILABLE",message:"Đơn hàng đã được lưu. Chưa mở được phiên thanh toán; vui lòng thanh toán lại trên đơn hàng này."}};
   }
 }
 

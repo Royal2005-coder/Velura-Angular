@@ -57,7 +57,7 @@ const orderService = createOrderService({ repository: createOrderRepository(), r
 const reviewService = createReviewService({ repository: createReviewRepository() });
 const returnService = createReturnService({
   repository: createReturnRepository(),
-  refunds: { refund: (orderId, amount) => refundStripeOrder(orderId, { amount }) }
+  refunds: { refund: (orderId, amount, returnId, expectedVersion) => refundStripeOrder(orderId, { amount, returnId, expectedVersion }) }
 });
 const pricingService = createPricingService({ repository: createPricingRepository() });
 const auditLogService = createAuditLogService({ repository: createAuditLogRepository() });

@@ -2,6 +2,7 @@ import { callRpc } from "./supabase.js";
 import { HttpError } from "./http.js";
 import { asJsonObject, isJsonObject, type JsonObject } from "./types.js";
 import { loadVoiceInsights, type VoiceInsights } from "./insights.js";
+import { buildManagementInsights } from "./insights/management-insights.js";
 
 const BUSINESS_TIMEZONE_OFFSET_MS = 7 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -182,9 +183,9 @@ async function loadOlapSummary(
   period: { from: Date; to: Date },
   categoryId: string | null,
   productId: string | null
-): Promise<JsonObject | null> {
+): Promise<{ summary: JsonObject; lastSyncedAt?: string } | null> {
   try {
-    await callRpc(
+    const refresh = await callRpc(
       "refresh_analytics_star",
       { p_max_age: "5 minutes" },
       { silentError: true }
@@ -200,7 +201,9 @@ async function loadOlapSummary(
       { silentError: true }
     );
     if (!summary || typeof summary !== "object") return null;
-    return asJsonObject(summary);
+    const refreshMeta = isJsonObject(refresh) ? refresh : {};
+    const refreshedAt = typeof refreshMeta.refreshedAt === 'string' && Number.isFinite(Date.parse(refreshMeta.refreshedAt)) ? refreshMeta.refreshedAt : undefined;
+    return { summary: asJsonObject(summary), lastSyncedAt: refreshedAt };
   } catch {
     return null;
   }
@@ -215,7 +218,7 @@ export async function buildDashboardSummary(searchParams: URLSearchParams | null
   const productId = optionalUuid(searchParams, "productId");
   const olap = await loadOlapSummary(period, categoryId, productId);
   const summary =
-    olap ||
+    olap?.summary ||
     (await callRpc("get_admin_dashboard_summary", {
       p_from: period.from.toISOString(),
       p_to: period.to.toISOString()
@@ -241,6 +244,7 @@ export async function buildDashboardSummary(searchParams: URLSearchParams | null
       productId
     },
     voice,
+    management: buildManagementInsights(mapped, voice, Boolean(olap), olap?.lastSyncedAt),
     meta: {
       ...existingMeta,
       ...dashboardProvenance(Boolean(olap), voice)

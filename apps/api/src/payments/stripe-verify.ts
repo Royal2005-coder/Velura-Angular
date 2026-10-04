@@ -1,4 +1,4 @@
-import { config, allowDevOtpBypass } from "../config.js";
+import { config } from "../config.js";
 import { HttpError, readJson, sendJson } from "../http.js";
 import { selectOne, selectRows } from "../supabase.js";
 import { asString, type HeaderMap, type HttpRequest, type HttpResponse, type JsonObject } from "../types.js";
@@ -64,18 +64,6 @@ export async function verifyStripeOrder(params: {
   const currentOrderId = asString(order.order_id);
   const currentOrderCode = asString(order.order_code);
 
-  // 2. Nếu đơn đã ở trạng thái đã xác nhận trở lên (đã qua bước thanh toán)
-  if (order.status !== "waiting_payment" && order.status !== "pending") {
-    return {
-      success: true,
-      paid: true,
-      status: "paid",
-      order_id: currentOrderId,
-      order_code: currentOrderCode,
-      message: "Đơn hàng đã được ghi nhận thanh toán thành công."
-    };
-  }
-
   // 3. Tra cứu lịch sử payment của đơn
   const { rows: paymentRows } = await selectRows("payment", {
     order_id: `eq.${currentOrderId}`,
@@ -84,7 +72,8 @@ export async function verifyStripeOrder(params: {
     limit: "5"
   }, { count: "none" });
 
-  const paidPayment = paymentRows.find((p) => p.payment_status === "paid");
+  if ((sessionId || paymentIntentId) && !paymentRows.some(p => p.gateway_transaction_ref === (sessionId || paymentIntentId) || (sessionId && p.gateway_session_id === sessionId))) throw new HttpError(422,"PAYMENT_SESSION_MISMATCH","Payment does not belong to this order");
+  const paidPayment = paymentRows.find((p) => ["paid","refund_pending","refunded"].includes(asString(p.payment_status)));
   if (paidPayment) {
     if (order.status === "waiting_payment") {
       try {
@@ -124,8 +113,10 @@ export async function verifyStripeOrder(params: {
             payment_status?: string;
             status?: string;
             payment_intent?: string | { id?: string };
+            metadata?: {order_id?:string}; amount_total?:number; currency?:string;
           };
 
+          if (session.metadata?.order_id !== currentOrderId || session.amount_total !== Math.round(Number(order.total_amount)) || session.currency !== "vnd") throw new HttpError(422,"PAYMENT_SESSION_MISMATCH","Stripe session order, amount or currency mismatch");
           if (session.payment_status === "paid") {
             const rawIntent = session.payment_intent;
             const intent = typeof rawIntent === "string" ? rawIntent : (rawIntent?.id || targetSessionId);
@@ -154,6 +145,7 @@ export async function verifyStripeOrder(params: {
           }
         }
       } catch (err: unknown) {
+        if (err instanceof HttpError) throw err;
         console.error("[STRIPE VERIFY SESSION ERROR]", err);
       }
     }
@@ -165,7 +157,8 @@ export async function verifyStripeOrder(params: {
         });
 
         if (stripeRes.ok) {
-          const pi = await stripeRes.json() as { status?: string };
+          const pi = await stripeRes.json() as { status?: string; metadata?: {order_id?:string}; amount?:number; currency?:string };
+          if (pi.metadata?.order_id !== currentOrderId || pi.amount !== Math.round(Number(order.total_amount)) || pi.currency !== "vnd") throw new HttpError(422,"PAYMENT_SESSION_MISMATCH","Stripe intent order, amount or currency mismatch");
           if (pi.status === "succeeded") {
             await markStripePaymentPaid(currentOrderId, targetIntentId, null);
 
@@ -180,21 +173,10 @@ export async function verifyStripeOrder(params: {
           }
         }
       } catch (err: unknown) {
+        if (err instanceof HttpError) throw err;
         console.error("[STRIPE VERIFY INTENT ERROR]", err);
       }
     }
-  } else if (allowDevOtpBypass() && order.status === "waiting_payment") {
-    // Trong môi trường dev không cấu hình key Stripe thật, cho phép giả lập xác thực
-    await markStripePaymentPaid(currentOrderId, `pi_dev_${Date.now()}`, targetSessionId || null);
-    return {
-      success: true,
-      paid: true,
-      status: "paid",
-      simulated: true,
-      order_id: currentOrderId,
-      order_code: currentOrderCode,
-      message: "Xác thực Stripe thành công (Dev Mode)."
-    };
   }
 
   return {

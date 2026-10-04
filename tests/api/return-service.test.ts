@@ -60,7 +60,7 @@ test("a return cannot skip the physical steps between approval and completion", 
   let wrote = false;
   const service = createReturnService({
     repository: {
-      getReturn: async () => ({ return_id: RETURN_ID, status: "approved", version: 5 }),
+      getReturn: async () => ({ return_id: RETURN_ID, status: "WAITING_RETURN", version: 5 }),
       updateReturnStatus: async (returnId, input) => {
         wrote = true;
         return { return_id: returnId, status: input.status };
@@ -72,12 +72,12 @@ test("a return cannot skip the physical steps between approval and completion", 
   // `approved` chỉ được đi tiếp sang `shipping_back`; nhảy thẳng sang hoàn tất là bỏ
   // qua cả bước nhận hàng lẫn bước kiểm tra tình trạng.
   await assert.rejects(
-    () => service.updateReturnStatus(ctx, RETURN_ID, { status: "completed", expectedVersion: 5 }),
+    () => service.updateReturnStatus(ctx, RETURN_ID, { status: "COMPLETED", expectedVersion: 5 }),
     (error) => error.status === 422 && error.code === "INVALID_TRANSITION"
   );
   assert.equal(wrote, false);
 
-  await service.updateReturnStatus(ctx, RETURN_ID, { status: "shipping_back", expectedVersion: 5 });
+  await service.updateReturnStatus(ctx, RETURN_ID, { status: "RETURN_IN_TRANSIT", trackingReturnCode:"RETURN-SHIP-001", expectedVersion: 5 });
   assert.equal(wrote, true);
 });
 
@@ -102,7 +102,7 @@ test("service audit logs are protected by the A05 reader matrix", async () => {
 test("updateReturnStatus validates status and enforces permissions", async () => {
   let receivedInput;
   const service = createReturnService({ repository: {
-    getReturn: async () => ({ return_id: RETURN_ID, status: "approved", version: 5 }),
+    getReturn: async () => ({ return_id: RETURN_ID, status: "WAITING_RETURN", version: 5 }),
     updateReturnStatus: async (returnId, input, actorId, roleCode, ipAddress) => {
       receivedInput = { returnId, input, actorId, roleCode, ipAddress };
       return { return_id: returnId, status: input.status };
@@ -111,9 +111,9 @@ test("updateReturnStatus validates status and enforces permissions", async () =>
 
   // 1. Authorized CSKH operator can transition status
   const ctx = { authUser: { id: "admin-user-id" }, roleCode: "admin_operator_cskh_dt", ipAddress: "127.0.0.1", accessToken: "jwt-token" };
-  const res = await service.updateReturnStatus(ctx, RETURN_ID, { status: "shipping_back", expectedVersion: 5, adminNote: "Updating status" });
-  assert.equal(res.status, "shipping_back");
-  assert.equal(receivedInput.input.status, "shipping_back");
+  const res = await service.updateReturnStatus(ctx, RETURN_ID, { status: "RETURN_IN_TRANSIT", trackingReturnCode:"RETURN-SHIP-001", expectedVersion: 5, adminNote: "Updating status" });
+  assert.equal(res.status, "RETURN_IN_TRANSIT");
+  assert.equal(receivedInput.input.status, "RETURN_IN_TRANSIT");
   assert.equal(receivedInput.input.expectedVersion, 5);
   assert.equal(receivedInput.actorId, "admin-user-id");
 
@@ -121,11 +121,11 @@ test("updateReturnStatus validates status and enforces permissions", async () =>
   await assert.rejects(() => service.updateReturnStatus(ctx, RETURN_ID, { status: "invalid_status", expectedVersion: 5 }), (error) => error.status === 422);
 
   // 3. Reject missing expectedVersion
-  await assert.rejects(() => service.updateReturnStatus(ctx, RETURN_ID, { status: "shipping_back" }), (error) => error.status === 422);
+  await assert.rejects(() => service.updateReturnStatus(ctx, RETURN_ID, { status: "RETURN_IN_TRANSIT" }), (error) => error.status === 422);
 
   // 4. Unauthorized role is blocked
   const badCtx = { authUser: { id: "other-user" }, roleCode: "admin_operator_donhang", ipAddress: "127.0.0.1", accessToken: "jwt-token" };
-  await assert.rejects(() => service.updateReturnStatus(badCtx, RETURN_ID, { status: "shipping_back", expectedVersion: 5 }), (error) => error.status === 403);
+  await assert.rejects(() => service.updateReturnStatus(badCtx, RETURN_ID, { status: "RETURN_IN_TRANSIT", trackingReturnCode:"RETURN-SHIP-001", expectedVersion: 5 }), (error) => error.status === 403);
 });
 
 test("a support ticket cannot jump straight from open to resolved", async () => {
@@ -210,13 +210,13 @@ test("replying twice to the same processing ticket is not a transition and stays
   assert.equal(calls, 2);
 });
 
-test("approving a refund triggers payment refund gateway with orderId and requested amount", async () => {
+test("approving a refund records approval and never transfers money before warehouse QA", async () => {
   let refundCall: { orderId: string; amount?: number } | null = null;
   const service = createReturnService({
     repository: {
       getRefundableAmount: async () => 350000,
       approveRefund: async (_id, input) => ({ order_id: "order-123", refund_amount: input.refundAmount }),
-      getReturn: async () => ({ return_id: RETURN_ID, order_id: "order-123", status: "pending", version: 1 })
+      getReturn: async () => ({ return_id: RETURN_ID, order_id: "order-123", status: "REQUESTED", version: 1 })
     },
     refunds: {
       refund: async (orderId, amount) => {
@@ -227,16 +227,15 @@ test("approving a refund triggers payment refund gateway with orderId and reques
   });
 
   const res = await service.approveRefund(context("admin_operator_cskh_dt"), RETURN_ID, { refundAmount: 300000, expectedVersion: 1 });
-  assert.equal(refundCall?.orderId, "order-123");
-  assert.equal(refundCall?.amount, 300000);
-  assert.deepEqual(res.refund, { status: "refunded" });
+  assert.equal(refundCall, null);
+  assert.equal(res.refund, null);
 });
 
-test("completing a return triggers payment refund gateway if applicable", async () => {
+test("a return cannot complete before gateway-confirmed refund", async () => {
   let refundCall: { orderId: string; amount?: number } | null = null;
   const service = createReturnService({
     repository: {
-      getReturn: async () => ({ return_id: RETURN_ID, order_id: "order-456", status: "received", refund_amount: 500000, version: 3 }),
+      getReturn: async () => ({ return_id: RETURN_ID, order_id: "order-456", status: "RECEIVED", refund_amount: 500000, version: 3 }),
       getRefundableAmount: async () => 500000,
       getPaymentByOrderId: async () => ({ payment_provider: "stripe" }),
       updateReturnStatus: async (_id, input) => ({ status: input.status, order_id: "order-456" })
@@ -249,16 +248,17 @@ test("completing a return triggers payment refund gateway if applicable", async 
     }
   });
 
-  await service.updateReturnStatus(context("admin_operator_cskh_dt"), RETURN_ID, { status: "completed", expectedVersion: 3 });
-  assert.equal(refundCall?.orderId, "order-456");
-  assert.equal(refundCall?.amount, 500000);
+  await assert.rejects(() => service.updateReturnStatus(context("admin_operator_cskh_dt"), RETURN_ID, {status:"COMPLETED",expectedVersion:3}), error => error.code === "INVALID_TRANSITION");
+  assert.equal(refundCall,null);
 });
 
 test("triggerStripeRefund manually executes payment refund gateway", async () => {
   let refundCall: { orderId: string; amount?: number } | null = null;
   const service = createReturnService({
     repository: {
-      getReturn: async () => ({ return_id: RETURN_ID, order_id: "order-789", status: "completed", refund_amount: 200000, version: 4 })
+      getReturn: async () => ({ return_id: RETURN_ID, order_id: "order-789", status: "RECEIVED",condition_check_result:"qa_pass", return_type:"refund", refund_amount: 200000, version: 4 }),
+      getRefundableAmount:async()=>200000,
+      getPaymentByOrderId:async()=>({payment_provider:"stripe"})
     },
     refunds: {
       refund: async (orderId, amount) => {
@@ -268,7 +268,7 @@ test("triggerStripeRefund manually executes payment refund gateway", async () =>
     }
   });
 
-  const res = await service.triggerStripeRefund(context("admin_operator_cskh_dt"), RETURN_ID, { refundAmount: 200000 });
+  const res = await service.triggerStripeRefund(context("admin_operator_cskh_dt"), RETURN_ID, { refundAmount: 200000, expectedVersion:4 });
   assert.equal(refundCall?.orderId, "order-789");
   assert.equal(refundCall?.amount, 200000);
   assert.equal(res.success, true);

@@ -172,6 +172,10 @@ export interface AdminReturnPayment {
   gateway_response_code?: string;
 }
 
+/** Persisted KAN-31/KAN-32 states, shared with the return API and migration. */
+export type AdminReturnStatus = 'REQUESTED' | 'CONTACTING' | 'WAITING_RETURN' | 'RETURN_IN_TRANSIT' | 'RECEIVED' | 'REFUND_PROCESSING' | 'REFUNDED' | 'EXCHANGE_PREPARING' | 'EXCHANGE_SHIPPING' | 'COMPLETED' | 'CANCELLED' | 'NEEDS_SUPPORT';
+
+/** Customer return request; QA and gateway facts constrain available operations. */
 export interface AdminReturnRow {
   return_id: string;
   order_id?: string;
@@ -191,6 +195,8 @@ export interface AdminReturnRow {
   rejection_reason?: string;
   evidence_images?: string[];
   tracking_return_code?: string;
+  /** Outbound replacement leg must never reuse the customer's return tracking. */
+  exchange_tracking_code?: string;
   condition_check_result?: string;
   lines?: Array<{ order_item_id?: string; quantity?: number }>;
   payment?: AdminReturnPayment | null;
@@ -481,6 +487,8 @@ export interface AdminPriceHistoryRow {
 }
 
 export interface AdminDashboardSummary {
+  /** Evidence-based nine-group report; absent source data is never a measured zero. */
+  management?: AdminManagementReport;
   operations: {
     pendingOrders: number;
     paymentErrors: number;
@@ -545,6 +553,37 @@ export interface AdminDashboardSummary {
 
 export type AdminInsightRange = 'day' | 'week' | 'month';
 export type AdminInsightSeverity = 'critical' | 'high' | 'watch' | 'ok';
+
+/** Fixed business rule IDs in system design table 3.15. */
+export type AdminManagementGroupId = 'AD_DB_01' | 'AD_DB_02' | 'AD_DB_03' | 'AD_DB_04' | 'AD_DB_05' | 'AD_DB_06' | 'AD_DB_07' | 'AD_DB_08' | 'AD_DB_09';
+
+/** Permitted drill target; target module permissions remain canonical at the API. */
+export interface AdminManagementAction {
+  label: string;
+  route: string;
+  query?: Record<string, string>;
+  module: 'orders' | 'returns' | 'products' | 'reviews' | 'promotions' | 'pricing' | 'accounts';
+}
+
+/** Four required facts for a management insight, with explicit source availability. */
+export interface AdminManagementGroup {
+  id: AdminManagementGroupId;
+  title: string;
+  availability: 'ready' | 'insufficient_data' | 'oltp_fallback';
+  dataNote?: string;
+  severity: AdminInsightSeverity;
+  phenomenon?: string;
+  scope?: string;
+  magnitude?: string;
+  consequence?: string;
+  action?: AdminManagementAction;
+}
+
+/** Nine metric groups and the server's actual analysis synchronization time. */
+export interface AdminManagementReport {
+  groups: AdminManagementGroup[];
+  lastSyncedAt?: string;
+}
 
 export interface AdminInsightQuestion {
   id: string;
@@ -1113,6 +1152,11 @@ export class AdminApiService {
     return this.http.post(`${this.baseUrl}/api/v1/admin/returns/${encodeURIComponent(returnId)}/trigger-stripe-refund`, body);
   }
 
+  /** Records transfer reference and evidence for a captured non-Stripe refund. */
+  recordManualRefund(returnId: string, body: Record<string, unknown>): Observable<unknown> {
+    return this.http.post(`${this.baseUrl}/api/v1/admin/returns/${encodeURIComponent(returnId)}/manual-refund`, body);
+  }
+
   /**
    * Approves a return as an exchange.
    */
@@ -1163,6 +1207,11 @@ export class AdminApiService {
   /**
    * Lists price-change history.
    */
+  /** Reads price rows with pricing permission instead of catalog access. */
+  listPricingProducts(params: Record<string, string> = {}): Observable<AdminListPayload<AdminProductRow>> {
+    return this.http.get<AdminListPayload<AdminProductRow>>(this.baseUrl + '/api/v1/admin/pricing/products', { params: this.params(params) });
+  }
+
   listPriceHistory(params: Record<string, string> = {}): Observable<AdminListPayload<AdminPriceHistoryRow>> {
     return this.http.get<AdminListPayload<AdminPriceHistoryRow>>(`${this.baseUrl}/api/v1/admin/pricing/history`, {
       params: this.params(params),
@@ -1172,8 +1221,8 @@ export class AdminApiService {
   /**
    * Updates catalog prices through the original pricing API.
    */
-  changePrice(productId: string, body: Record<string, unknown>): Observable<unknown> {
-    return this.http.post(`${this.baseUrl}/api/v1/admin/products/${encodeURIComponent(productId)}/change-price`, body);
+  changePrice(productId: string, body: Record<string, unknown>): Observable<AdminProductRow> {
+    return this.http.post<AdminProductRow>(`${this.baseUrl}/api/v1/admin/products/${encodeURIComponent(productId)}/change-price`, body);
   }
 
   /**

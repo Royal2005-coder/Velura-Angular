@@ -1,5 +1,7 @@
-import { Component, computed, inject, signal } from '@angular/core';
-import { forkJoin, of } from 'rxjs';
+import { AdminDialogDirective } from '../../shared/admin-dialog.directive';
+import { AdminRefreshService } from '../../core/admin-refresh.service';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { forkJoin, of , Subscription } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { AdminApiService, AdminAuditRow, AdminReviewRow } from '../../core/admin-api.service';
 import { adminDateTime, adminStars } from '../../core/admin-format';
@@ -19,10 +21,11 @@ const EMPTY_LIST = { rows: [] as AdminReviewRow[], count: 0 };
 
 @Component({
   selector: 'app-admin-reviews-page',
-  imports: [AdminEmptyState, AdminIcon, AdminPagination, AdminTableSkeleton],
+  imports: [AdminDialogDirective, AdminEmptyState, AdminIcon, AdminPagination, AdminTableSkeleton],
   templateUrl: './admin-reviews.page.html',
 })
 export class AdminReviewsPage {
+  private listRequest = new Subscription();
   private readonly api = inject(AdminApiService);
   private readonly session = inject(AdminSessionService);
 
@@ -75,6 +78,10 @@ export class AdminReviewsPage {
   readonly logRangeLabel = computed(() => adminRangeLabel(this.logsCount(), this.logsPage(), this.pageSize, 'nhật ký'));
 
   constructor() {
+    inject(DestroyRef).onDestroy(() => this.listRequest.unsubscribe());
+    inject(AdminRefreshService).register(() => {
+      if (!this.loading() && !this.actionType()) this.reload();
+    }, inject(DestroyRef));
     this.reload();
     this.loadCounts();
   }
@@ -83,6 +90,7 @@ export class AdminReviewsPage {
    * Reloads reviews from `/api/v1/admin/reviews`.
    */
   reload(): void {
+    this.listRequest.unsubscribe();
     this.loading.set(true);
     this.loadError.set(null);
 
@@ -106,7 +114,7 @@ export class AdminReviewsPage {
 
     // Mỗi KPI là một truy vấn đếm `limit=1`: máy chủ trả về tổng số qua tiêu đề count
     // mà không phải tải dữ liệu về.
-    this.api
+    this.listRequest = this.api
       .listReviews(listParams)
       .pipe(
         catchError((error: unknown) => {

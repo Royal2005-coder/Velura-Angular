@@ -167,7 +167,7 @@
 
 @if (detailOpen() && selected()) {
   <div class="admin-drawer-backdrop" (click)="closeOverlays()"></div>
-  <aside class="admin-drawer admin-drawer--wide">
+  <aside class="admin-drawer admin-drawer--wide" appAdminDialog (appAdminDialogClose)="closeOverlays()">
     <header class="admin-drawer__header">
       <div>
         <p class="admin-product-code">{{ selected()!.review_id }}</p>
@@ -205,7 +205,7 @@
 
 @if (actionType() && selected()) {
   <div class="admin-modal-overlay">
-    <section class="admin-modal" [class.admin-modal--lg]="actionType() === 'reply'">
+    <section class="admin-modal" appAdminDialog (appAdminDialogClose)="closeOverlays()" [class.admin-modal--lg]="actionType() === 'reply'">
       <form (submit)="submitAction($event)">
         <header class="admin-modal__header">
           <div>

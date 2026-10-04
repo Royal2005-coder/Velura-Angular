@@ -1,5 +1,6 @@
-import { Component, computed, inject, signal } from '@angular/core';
-import { forkJoin, of } from 'rxjs';
+import { AdminRefreshService } from '../../core/admin-refresh.service';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { forkJoin, of , Subscription } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import {
   AdminApiService,
@@ -26,6 +27,7 @@ import { VoucherForm, voucherCategoryIds } from './voucher-form';
   templateUrl: './admin-promotions.page.html',
 })
 export class AdminPromotionsPage {
+  private listRequest = new Subscription();
   private readonly api = inject(AdminApiService);
   private readonly session = inject(AdminSessionService);
 
@@ -34,6 +36,7 @@ export class AdminPromotionsPage {
   readonly vouchers = signal<AdminVoucherRow[]>([]);
   readonly loadError = signal<string | null>(null);
   readonly loading = signal(true);
+  readonly hasLoadedOnce = signal(false);
   readonly page = signal(1);
   readonly pageSize = 10;
   readonly promoCount = signal(0);
@@ -105,6 +108,10 @@ export class AdminPromotionsPage {
   readonly voucherRange = computed(() => adminRangeLabel(this.voucherCount(), this.page(), this.pageSize, 'mã giảm giá'));
 
   constructor() {
+    inject(DestroyRef).onDestroy(() => this.listRequest.unsubscribe());
+    inject(AdminRefreshService).register(() => {
+      if (!this.loading() && !this.formOpen() && !this.voucherFormOpen()) this.reload();
+    }, inject(DestroyRef));
     this.reload();
   }
 
@@ -531,11 +538,12 @@ export class AdminPromotionsPage {
    * Reloads campaigns and vouchers after a mutation.
    */
   reload(): void {
+    this.listRequest.unsubscribe();
     this.loading.set(true);
     this.loadError.set(null);
     const pageParams = { limit: String(this.pageSize), offset: adminOffset(this.page(), this.pageSize) };
     const voucherParams = this.voucherPromoFilter() ? { ...pageParams, promoId: this.voucherPromoFilter() } : pageParams;
-    forkJoin({
+    this.listRequest = forkJoin({
       promotions: this.api.listPromotions(pageParams).pipe(catchError((error: unknown) => {
         this.loadError.set(adminErrorMessage(error));
         return of({ rows: [] as AdminPromotionRow[], count: 0, summary: undefined } as AdminPromotionListPayload);
@@ -557,6 +565,7 @@ export class AdminPromotionsPage {
       this.allCampaigns.set(adminListRows(payload.allCampaigns));
       this.categories.set(adminListRows(payload.categories));
       this.loading.set(false);
+      this.hasLoadedOnce.set(true);
     });
   }
 

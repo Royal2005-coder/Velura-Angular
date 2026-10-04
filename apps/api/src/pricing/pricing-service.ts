@@ -22,6 +22,8 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
  * Admin pricing use-cases used by `handlePricingRoute`.
  */
 export interface PricingService {
+  /** Lists price-editable products for authorized pricing readers. */
+  listPricingProducts(context:AuthContext|undefined,searchParams:URLSearchParams):Promise<unknown>;
   listPriceHistory(context: AuthContext | undefined, searchParams: URLSearchParams): Promise<unknown>;
   changePrice(context: AuthContext | undefined, productId: string, body: JsonObject): Promise<unknown>;
   listPromotions(context: AuthContext | undefined, searchParams: URLSearchParams): Promise<unknown>;
@@ -58,6 +60,10 @@ export function createPricingService({ repository }: { repository: PricingReposi
   }
 
   return {
+    async listPricingProducts(context,searchParams) {
+      requirePricingReader(context);
+      return repository.listPricingProducts({limit:Math.min(100,Math.max(1,Number(searchParams.get("limit")) || 50)),offset:Math.max(0,Number(searchParams.get("offset")) || 0),q:searchParams.get("q"),status:searchParams.get("status"),order:"updated_at.desc"},context.accessToken);
+    },
     async listPriceHistory(context, searchParams) {
       if (!context?.authUser?.id) throw new HttpError(401, "AUTH_REQUIRED", "Authentication is required");
       const historyReaders = [...PROMOTION_READER_ROLES, "admin_operator_sanpham", "admin_viewer"];

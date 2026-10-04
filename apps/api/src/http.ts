@@ -73,12 +73,15 @@ export function sendError(
     console.error(`[Internal Server Error] RequestId: ${requestId}`, error);
   }
   const isExplicit = isHttpError || Boolean(err.code && err.message && status !== 500);
-  const message = isExplicit ? (err.message || errorMessage(error)) : (status >= 500 ? "Internal server error" : err.message || errorMessage(error));
+  const isDatabaseError = err.code === "SUPABASE_ERROR" || /^(?:[0-9A-Z]{5}|PGRST\d+)$/.test(err.code || "");
+  const message = isDatabaseError
+    ? "Không thể xử lý dữ liệu. Vui lòng kiểm tra thông tin và thử lại."
+    : isExplicit ? (err.message || errorMessage(error)) : (status >= 500 ? "Internal server error" : err.message || errorMessage(error));
   const payload = {
     error: {
       code: err.code || "INTERNAL_ERROR",
       message,
-      details: isExplicit ? err.details : (status >= 500 ? undefined : err.details),
+      details: isDatabaseError ? undefined : isExplicit ? err.details : (status >= 500 ? undefined : err.details),
       requestId: requestId || undefined,
       timestamp: new Date().toISOString()
     }

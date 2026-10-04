@@ -11,6 +11,8 @@ import { useBodyClass } from '../../core/utils/body-class';
 import { VoucherWallet } from '../../shared/voucher-wallet/voucher-wallet';
 import { VoucherService } from '../../core/services/voucher.service';
 import { ApiRequestError } from '../../core/models/api-request-error';
+import { AddressSelector } from '../../shared/address-selector/address-selector';
+import type { AddressGeographySelection } from '../../core/models/address-geography';
 import type {
   AppliedVoucher,
   CartItemRef,
@@ -49,7 +51,7 @@ interface PlaceOrderResponse {
 
 @Component({
   selector: 'app-checkout-shipping-page',
-  imports: [RouterLink, VoucherWallet],
+  imports: [RouterLink, VoucherWallet, AddressSelector],
   host: {
     style: 'display:block',
     '(document:click)': 'closeAllDropdowns()',
@@ -72,6 +74,7 @@ export class CheckoutShippingPage {
   readonly phone = signal(this.checkout.shipping().phone);
   readonly email = signal(this.checkout.shipping().email);
   readonly province = signal(this.checkout.shipping().province || '');
+  readonly addressGeographyValid = signal(false);
   readonly district = signal(this.checkout.shipping().district || '');
   readonly ward = signal(this.checkout.shipping().ward || '');
   readonly detail = signal(this.checkout.shipping().detail || this.checkout.shipping().address);
@@ -378,8 +381,8 @@ export class CheckoutShippingPage {
     if (mode === 'default') {
       const def = this.defaultAddress() || this.savedAddresses()[0];
       if (def) {
-        if (def.name) this.name.set(def.name);
-        if (def.phone) this.phone.set(this.normalizeVnPhone(def.phone));
+        this.name.set(def.name || '');
+        this.phone.set(this.normalizeVnPhone(def.phone || ''));
         this.detail.set(def.detail || def.address || '');
         this.province.set(def.province || '');
         this.district.set(def.district || '');
@@ -404,14 +407,12 @@ export class CheckoutShippingPage {
   }
 
   selectSavedAddress(addr: NonNullable<MemberProfile['saved_addresses']>[number]): void {
-    if (addr.name) this.name.set(addr.name);
-    if (addr.phone) this.phone.set(this.normalizeVnPhone(addr.phone));
-    if (addr.detail || addr.address) {
-      this.detail.set(addr.detail || addr.address || '');
-    }
-    if (addr.province) this.province.set(addr.province);
-    if (addr.district) this.district.set(addr.district);
-    if (addr.ward) this.ward.set(addr.ward);
+    this.name.set(addr.name || '');
+    this.phone.set(this.normalizeVnPhone(addr.phone || ''));
+    this.detail.set(addr.detail || addr.address || '');
+    this.province.set(addr.province || '');
+    this.district.set(addr.district || '');
+    this.ward.set(addr.ward || '');
     this.addressMode.set(addr.is_default ? 'default' : 'saved');
     this.saveNewAddress.set(false);
     this.addressModalOpen.set(false);
@@ -434,6 +435,14 @@ export class CheckoutShippingPage {
       localStorage.removeItem('checkout_voucher_id');
     }
     localStorage.removeItem('checkout_discount');
+  }
+
+  /** Select administrative units from one verified hierarchy. */
+  updateGeography(selection: AddressGeographySelection): void {
+    this.province.set(selection.province);
+    this.district.set(selection.district);
+    this.ward.set(selection.ward);
+    this.addressGeographyValid.set(selection.valid);
   }
 
   /** Ví báo khách chủ động bỏ mã hoặc chọn lại mã. */
@@ -736,6 +745,10 @@ export class CheckoutShippingPage {
    * Saves shipping fields and places the order or sends guest OTP.
    */
   submit(): void {
+    if (!this.addressGeographyValid()) {
+      showToast('Vui lòng chọn đầy đủ địa phương hợp lệ.');
+      return;
+    }
     if (this.submitting()) {
       return;
     }
@@ -743,16 +756,20 @@ export class CheckoutShippingPage {
     const phone = this.normalizeVnPhone(this.phone());
     const email = this.email().trim();
     const address = this.composeAddress();
-    if (!name || !phone || !address || (!this.auth.isLoggedIn() && !email)) {
-      showToast('Vui lòng điền đầy đủ Họ tên, Số điện thoại, Email và Địa chỉ giao hàng!');
+    if (!name || !phone || !address) {
+      showToast('Vui lòng điền đầy đủ Họ tên, Số điện thoại và Địa chỉ giao hàng!');
       return;
     }
-    if (!this.auth.isLoggedIn() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      showToast('Email không hợp lệ. Nhập email để nhận mã nếu SMS chưa tới.');
+    if (name.split(/\s+/).filter(Boolean).length < 2) {
+      showToast('Họ và tên phải có ít nhất 2 từ.');
       return;
     }
-    if (!/^0\d{9}$/.test(phone)) {
-      showToast('Số điện thoại không hợp lệ (10 số, bắt đầu bằng 0)!');
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      showToast('Email không hợp lệ. Bạn có thể để trống nếu nhận OTP qua SMS.');
+      return;
+    }
+    if (!/^0(?:3|5|7|8|9)\d{8}$/.test(phone)) {
+      showToast('Số điện thoại di động Việt Nam không hợp lệ!');
       return;
     }
     const items = this.items();
@@ -812,6 +829,10 @@ export class CheckoutShippingPage {
       shipping_name: name,
       shipping_phone: phone,
       shipping_address: address,
+      shipping_province: this.province().trim(),
+      shipping_district: this.district().trim(),
+      shipping_ward: this.ward().trim(),
+      shipping_method: this.shipping(),
       shipping_fee: this.shippingFee(),
       voucher_id: this.declinedVoucher() ? null : this.selectedVoucherId(),
       decline_voucher: this.declinedVoucher(),
@@ -836,6 +857,8 @@ export class CheckoutShippingPage {
       vat_tax_code: this.vatTaxCode().trim(),
       vat_company_address: this.vatCompanyAddress().trim(),
       vat_email: this.vatEmail().trim(),
+      save_address: this.auth.isLoggedIn() && this.saveNewAddress(),
+      address_is_default: false,
     };
 
     this.submitting.set(true);
@@ -846,21 +869,6 @@ export class CheckoutShippingPage {
             this.submitting.set(false);
             showToast(res.message || 'Đặt hàng thất bại');
             return;
-          }
-          if (this.auth.isLoggedIn() && this.saveNewAddress()) {
-            this.api.post('/api/user/addresses', {
-              name,
-              phone,
-              detail: this.detail().trim(),
-              province: this.province().trim(),
-              district: this.district().trim(),
-              ward: this.ward().trim(),
-              address,
-              is_default: false,
-            }).subscribe({
-              next: () => {},
-              error: () => {},
-            });
           }
           if (res.stripe?.url) {
             this.checkout.saveCreatedOrder({
@@ -917,6 +925,7 @@ export class CheckoutShippingPage {
             phone,
             shipping_name: name,
             shipping_address: address,
+            shipping_method: this.shipping(),
             shipping_fee: this.shippingFee(),
             voucher_id: payload.voucher_id,
             decline_voucher: payload.decline_voucher,
@@ -1042,9 +1051,9 @@ export class CheckoutShippingPage {
       this.name.set(this.name() || addr.name || profile.full_name || '');
       this.phone.set(this.phone() || this.normalizeVnPhone(addr.phone || profile.phone || ''));
       this.detail.set(addr.detail || addr.address || '');
-      if (addr.province) this.province.set(addr.province);
-      if (addr.district) this.district.set(addr.district);
-      if (addr.ward) this.ward.set(addr.ward);
+      this.province.set(addr.province || '');
+      this.district.set(addr.district || '');
+      this.ward.set(addr.ward || '');
     }
   }
 

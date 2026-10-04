@@ -8,6 +8,7 @@
     <p class="voucher-wallet__state">Đang tìm ưu đãi tốt nhất cho đơn của bạn…</p>
   } @else if (loadError()) {
     <p class="voucher-wallet__state voucher-wallet__state--error">{{ loadError() }}</p>
+    <button type="button" class="btn-outline" (click)="refresh(orderValue(), shippingFee())">Thử lại</button>
   } @else if (selected(); as current) {
     <article class="voucher-card voucher-card--applied">
       <div class="voucher-card__main">
@@ -16,7 +17,7 @@
         <p class="voucher-card__meta">HSD: {{ expiryLabel(current.end_date) }}</p>
       </div>
       <div class="voucher-card__side">
-        <span class="voucher-card__badge">✓ Đã áp dụng</span>
+        <span class="voucher-card__badge">Đã áp dụng</span>
         <p class="voucher-card__saving">Tiết kiệm {{ money(current.discount_amount) }}</p>
         <div class="voucher-card__actions">
           <button type="button" class="btn-link" (click)="openModal()">Đổi mã</button>
@@ -52,7 +53,7 @@
 </section>
 
 @if (modalOpen()) {
-  <div class="voucher-modal" role="dialog" aria-modal="true" aria-labelledby="voucher-modal-title">
+  <dialog #walletDialog class="voucher-modal" aria-labelledby="voucher-modal-title" (cancel)="closeModal()" (close)="closeModal()">
     <div class="voucher-modal__backdrop" (click)="closeModal()"></div>
     <div class="voucher-modal__panel">
       <header class="voucher-modal__head">
@@ -73,9 +74,9 @@
             placeholder="Ví dụ: VLR10"
             [value]="manualCode()"
             (input)="setManualCode($event)"
-            (keyup.enter)="submitManualCode()"
+            (keydown.enter)="$event.preventDefault(); submitManualCode()"
           />
-          <button type="button" class="btn-primary" [disabled]="applying()" (click)="submitManualCode()">
+          <button type="button" class="btn-primary" [disabled]="applying() || loading()" (click)="submitManualCode()">
             {{ applying() ? 'Đang kiểm tra…' : 'Áp dụng' }}
           </button>
         </div>
@@ -84,6 +85,11 @@
         }
       </div>
 
+      @if (loading()) {
+        <p class="voucher-modal__empty" role="status">Đang kiểm tra điều kiện ưu đãi…</p>
+      } @else if (loadError()) {
+        <div class="voucher-modal__empty" role="alert"><p>{{ loadError() }}</p><button type="button" class="btn-outline" (click)="refresh(orderValue(), shippingFee())">Thử lại</button></div>
+      } @else {
       @if (eligible().length > 0) {
         <h3 class="voucher-modal__group">Dùng được cho đơn này</h3>
         <ul class="voucher-modal__list">
@@ -93,6 +99,8 @@
                 type="button"
                 class="voucher-card voucher-card--selectable"
                 [class.voucher-card--active]="item.voucher_id === selectedId()"
+                [attr.aria-pressed]="item.voucher_id === selectedId()"
+                [disabled]="applying()"
                 (click)="choose(item)"
               >
                 <div class="voucher-card__main">
@@ -143,6 +151,7 @@
       @if (!hasAnyVoucher()) {
         <p class="voucher-modal__empty">Bạn chưa có mã giảm giá nào. Theo dõi trang Ưu đãi để nhận mã mới.</p>
       }
+      }
     </div>
-  </div>
+  </dialog>
 }

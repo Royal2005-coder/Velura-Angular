@@ -155,7 +155,7 @@
 
 @if (selected(); as order) {
   <div class="admin-drawer-backdrop" (click)="closeDetail()"></div>
-  <aside class="admin-drawer admin-drawer--wide" aria-label="Chi tiết đơn hàng" [class.admin-drawer--busy]="detailLoading()">
+  <aside class="admin-drawer admin-drawer--wide" appAdminDialog (appAdminDialogClose)="closeDetail()" aria-label="Chi tiết đơn hàng" [class.admin-drawer--busy]="detailLoading()">
     <header class="admin-drawer__header">
       <div>
         <p class="admin-product-code">{{ order.order_code || order.order_id }} · {{ dateTime(order.order_date) }}</p>
@@ -193,7 +193,7 @@
         </div>
       }
 
-      @if (isPendingCod(order)) {
+      @if (isPendingCod(order) && canCallConfirmation()) {
         <div class="admin-order-alert-banner admin-order-alert-banner--warning">
           <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
             <div style="display: flex; align-items: flex-start; gap: 8px;">
@@ -217,7 +217,7 @@
       <!-- ERP Status Pipeline (Odoo Style) -->
       <div class="admin-order-pipeline" aria-label="Tiến trình đơn hàng">
         @for (step of pipelineSteps(); track step.id) {
-          <div class="admin-order-pipeline__step admin-order-pipeline__step--{{ step.state }}" [class.admin-order-pipeline__step--active]="step.state === 'current'">
+          <div class="admin-order-pipeline__step admin-order-pipeline__step--{{ step.state }}" [attr.aria-current]="step.state === 'current' ? 'step' : null" [class.admin-order-pipeline__step--active]="step.state === 'current'">
             <div class="admin-order-pipeline__step-indicator">
               @if (step.state === 'done') {
                 <app-admin-icon name="check" cssClass="admin-line-icon" style="width: 12px; height: 12px;" />
@@ -436,7 +436,7 @@
 
 @if (activeAction(); as action) {
   <div class="admin-modal-overlay">
-    <section class="admin-modal" role="dialog" aria-modal="true" [attr.aria-label]="action.label">
+    <section class="admin-modal" appAdminDialog (appAdminDialogClose)="closeModal()" role="dialog" aria-modal="true" [attr.aria-label]="action.label">
       <form (submit)="submitAction($event)">
         <header class="admin-modal__header">
           <h2>{{ action.label }}</h2>
@@ -527,7 +527,7 @@
 
 @if (modal()?.kind === 'payment') {
   <div class="admin-modal-overlay">
-    <section class="admin-modal" role="dialog" aria-modal="true" aria-label="Đối soát thanh toán">
+    <section class="admin-modal" appAdminDialog (appAdminDialogClose)="closeModal()" role="dialog" aria-modal="true" aria-label="Đối soát thanh toán">
       <form (submit)="submitPaymentResolve($event)">
         <header class="admin-modal__header">
           <h2>Đối soát thanh toán</h2>
@@ -560,7 +560,7 @@
 
 @if (modal()?.kind === 'cod_call') {
   <div class="admin-modal-overlay">
-    <section class="admin-modal admin-modal--lg" role="dialog" aria-modal="true" aria-label="Gọi xác nhận đơn hàng COD">
+    <section class="admin-modal admin-modal--lg" appAdminDialog (appAdminDialogClose)="closeModal()" role="dialog" aria-modal="true" aria-label="Gọi xác nhận đơn hàng COD">
       <form (submit)="submitCodCall($event)">
         <header class="admin-modal__header">
           <div>
@@ -668,7 +668,7 @@
                 <input
                   type="checkbox"
                   [checked]="codAutoConfirm()"
-                  (change)="codAutoConfirm.set($any($event.target).checked)"
+                  (change)="setCodAutoConfirm($event)"
                   style="width: 16px; height: 16px; accent-color: #16a34a; cursor: pointer;"
                 />
                 <span>Duyệt xác nhận đơn ngay sau khi lưu kết quả cuộc gọi</span>

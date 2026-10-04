@@ -68,6 +68,9 @@ export class ApiService {
       const code = body?.error?.code || body?.code || null;
       const details = body?.error?.details || (body?.items ? { items: body.items } : body?.details);
       let message = body?.error?.message || body?.message;
+      if (message && /invalid input syntax|violates .*constraint|column .*does not exist|relation .*does not exist|PostgREST|SQLSTATE|schema cache/i.test(message)) {
+        message = 'Chưa xử lý được dữ liệu yêu cầu. Vui lòng tải lại và thử lại.';
+      }
 
       if (code === 'INSUFFICIENT_STOCK' && Array.isArray(body?.items) && body.items.length > 0) {
         const itemDescriptions = body.items.map((it) => {
@@ -76,7 +79,11 @@ export class ApiService {
         }).join('; ');
         message = `Một số sản phẩm không đủ tồn kho: ${itemDescriptions}. Vui lòng giảm số lượng hoặc chọn màu/size khác.`;
       } else if (!message) {
-        message = error.message || 'Lỗi API';
+        message = error.status === 0
+          ? 'Chưa kết nối được với hệ thống. Vui lòng kiểm tra kết nối và thử lại.'
+          : error.status >= 500
+            ? 'Hệ thống chưa xử lý được yêu cầu. Vui lòng thử lại sau.'
+            : 'Không thực hiện được yêu cầu. Vui lòng kiểm tra thông tin và thử lại.';
       }
 
       return throwError(() => new ApiRequestError(message, error.status, code, details));

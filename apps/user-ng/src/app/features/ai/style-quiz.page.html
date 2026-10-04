@@ -541,6 +541,9 @@
             </div>
 
             <!-- Quiz Actions footer -->
+            @if (submitError()) {
+              <p class="form-error" role="alert">{{ submitError() }}</p>
+            }
             <div class="quiz-actions">
               <button type="button" class="btn btn--outline quiz-btn-prev" id="js-btn-prev" [style.visibility]="step() === 1 ? 'hidden' : 'visible'" (click)="prev()">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
@@ -550,7 +553,7 @@
                 Quay lại
               </button>
               <div style="flex-grow: 1;"></div>
-              <button type="button" class="btn btn--primary quiz-btn-next" id="js-btn-next" (click)="next()">
+              <button type="button" class="btn btn--primary quiz-btn-next" id="js-btn-next" [disabled]="analyzing()" (click)="next()">
                 {{ nextLabel() }}
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
                   style="margin-left: 4px;">

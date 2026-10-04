@@ -1,6 +1,9 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, DestroyRef, effect, inject, signal, untracked } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import type { Subscription } from 'rxjs';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { ApiService } from '../../core/services/api.service';
+import { AuthService } from '../../core/services/auth.service';
 import { useBodyClass } from '../../core/utils/body-class';
 import type {
   BirthdayPrompt,
@@ -37,7 +40,11 @@ const VOUCHER_GROUPS: ReadonlyArray<{ key: OfferVoucherGroup; title: string }> =
 })
 export class OffersPage {
   private readonly api = inject(ApiService);
+  private readonly auth = inject(AuthService);
   private readonly route = inject(ActivatedRoute);
+  private readonly destroyRef = inject(DestroyRef);
+  private request?: Subscription;
+  private scrollTimer?: ReturnType<typeof setTimeout>;
 
   readonly loading = signal(true);
   readonly loadError = signal<string | null>(null);
@@ -62,35 +69,47 @@ export class OffersPage {
   readonly voucherGroups = computed(() =>
     VOUCHER_GROUPS.map((group) => ({
       ...group,
-      items: this.vouchers().filter((voucher) => (voucher.group ?? 'running') === group.key)
+      items: this.vouchers().filter((voucher) =>
+        (voucher.group ?? 'running') === group.key &&
+        !this.focusedVouchers().some((focused) => focused.voucher_id === voucher.voucher_id))
     })).filter((group) => group.items.length > 0)
   );
 
+  /** Present a fallback when a campaign image cannot be loaded. */
   onImageError(promoId: string): void {
     this.failedImages.update((prev) => ({ ...prev, [promoId]: true }));
   }
 
+  /** Display the administrator's campaign title without inventing replacement content. */
   cleanTitle(title: string | undefined): string {
-    if (!title) return 'Ưu đãi Velura';
-    if (/haha|test|dummy|hahaha/i.test(title)) {
-      return 'Ưu đãi Đặc quyền Velura';
-    }
-    return title;
+    return title?.trim() || 'Ưu đãi Velura';
   }
 
   constructor() {
+    this.destroyRef.onDestroy(() => clearTimeout(this.scrollTimer));
     useBodyClass('page-offers');
-    this.load();
+    effect(() => {
+      this.auth.session();
+      untracked(() => {
+        this.vouchers.set([]);
+        this.birthdayPrompt.set(null);
+        this.isMember.set(false);
+        this.load();
+      });
+    });
   }
 
   /**
    * Tải danh sách chiến dịch và mã đang chạy.
    */
   load(): void {
+    this.request?.unsubscribe();
     this.loading.set(true);
     this.loadError.set(null);
-    this.api.get<OffersResponse>('/api/user/offers').subscribe({
+    const session = this.auth.session();
+    this.request = this.api.get<OffersResponse>('/api/user/offers').pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (response) => {
+        if (session !== this.auth.session()) return;
         this.loading.set(false);
         this.campaigns.set(response.campaigns ?? []);
         this.featured.set(response.featured ?? []);
@@ -100,6 +119,7 @@ export class OffersPage {
         this.scrollToFocused();
       },
       error: (error: Error) => {
+        if (session !== this.auth.session()) return;
         this.loading.set(false);
         this.loadError.set(error.message || 'Không tải được danh sách ưu đãi.');
       }
@@ -137,6 +157,7 @@ export class OffersPage {
   private scrollToFocused(): void {
     if (!this.focusedCampaign()) return;
     // Chờ lượt vẽ kế tiếp để khối mã của chiến dịch đã có trong DOM.
-    setTimeout(() => document.getElementById('offer-focused')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    clearTimeout(this.scrollTimer);
+    this.scrollTimer = setTimeout(() => document.getElementById('offer-focused')?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' }));
   }
 }

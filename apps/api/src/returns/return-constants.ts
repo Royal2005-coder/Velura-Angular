@@ -1,26 +1,12 @@
 /**
  * Allowed return / exchange statuses.
  */
-export const RETURN_STATUSES: readonly string[] = ["pending", "approved", "shipping_back", "received", "completed", "rejected"];
-
-/**
- * Mốc nghiệp vụ map vào enum đang có, không thêm trạng thái mới.
- * Tiếp nhận = pending. Đã duyệt / chờ gửi = approved. Đang gửi về = shipping_back.
- * Đã nhận hàng = received. Hoàn tất = completed. Từ chối hoặc hủy = rejected.
- */
-export const OPEN_RETURN_STATUSES: readonly string[] = ["pending", "approved", "shipping_back", "received"];
-
-/**
- * Nhãn tiếng Việt phía khách. Mã tiếng Anh là state machine admin quản lý.
- * `received` chỉ được ghi khi QA xác nhận đúng hàng của shop và admin đã tải ảnh minh chứng.
- */
-export const RETURN_STATUS_LABELS_VI: Readonly<Record<string, string>> = {
-  pending: "Chờ xử lý",
-  approved: "Đã duyệt",
-  shipping_back: "Đang gửi hàng về",
-  received: "Nhận hàng hoàn trả thành công",
-  completed: "Hoàn tất đổi/trả",
-  rejected: "Từ chối"
+export const RETURN_STATUSES = ["REQUESTED","CONTACTING","WAITING_RETURN","RETURN_IN_TRANSIT","RECEIVED","REFUND_PROCESSING","REFUNDED","EXCHANGE_PREPARING","EXCHANGE_SHIPPING","COMPLETED","CANCELLED","NEEDS_SUPPORT"] as const;
+/** Active business requests reserve item return quota until completed or cancelled. */
+export const OPEN_RETURN_STATUSES: readonly string[] = ["REQUESTED","CONTACTING","WAITING_RETURN","RETURN_IN_TRANSIT","RECEIVED","REFUND_PROCESSING","EXCHANGE_PREPARING","EXCHANGE_SHIPPING","NEEDS_SUPPORT"];
+/** Customer and administrator consume the same canonical stored workflow codes. */
+export const RETURN_STATUS_LABELS_VI: Readonly<Record<string,string>> = {
+  REQUESTED:"Chờ xử lý", CONTACTING:"Đang liên hệ", WAITING_RETURN:"Chờ gửi hàng", RETURN_IN_TRANSIT:"Hàng đang gửi về", RECEIVED:"Nhận hàng hoàn trả thành công", REFUND_PROCESSING:"Đang hoàn tiền", REFUNDED:"Đã hoàn tiền", EXCHANGE_PREPARING:"Đang chuẩn bị hàng đổi", EXCHANGE_SHIPPING:"Đang giao hàng đổi", COMPLETED:"Hoàn tất", CANCELLED:"Đã hủy", NEEDS_SUPPORT:"Cần hỗ trợ"
 };
 
 /** Lý do đổi trả bắt buộc, dạng mã cố định để gom top lý do trên dashboard. */
@@ -89,16 +75,12 @@ export function normalizeReturnIntake(reasonCode: unknown, images: unknown, note
 /**
  * Legal status transitions for return / exchange records.
  */
-export const RETURN_TRANSITIONS: Record<string, readonly string[]> = {
-  pending: ["approved", "rejected"],
-  // `approved` sang `rejected` là đường khách tự huỷ yêu cầu sau khi đã được duyệt
-  // nhưng chưa gửi hàng đi (`apps/api/src/user/returns.ts`). Đây là hành vi nghiệp vụ
-  // có thật và đang chạy, nên bảng này phải công nhận thay vì để code đi vòng.
-  approved: ["shipping_back", "rejected"],
-  shipping_back: ["received"],
-  received: ["completed", "rejected"],
-  completed: [],
-  rejected: []
+export const RETURN_TRANSITIONS: Record<string,readonly string[]> = {
+REQUESTED:["CONTACTING","CANCELLED"], CONTACTING:["WAITING_RETURN","CANCELLED","NEEDS_SUPPORT"],
+WAITING_RETURN:["RETURN_IN_TRANSIT","CANCELLED"], RETURN_IN_TRANSIT:["RECEIVED","NEEDS_SUPPORT"],
+RECEIVED:["REFUND_PROCESSING","EXCHANGE_PREPARING","NEEDS_SUPPORT"], REFUND_PROCESSING:["REFUNDED","NEEDS_SUPPORT"],
+REFUNDED:["COMPLETED"], EXCHANGE_PREPARING:["EXCHANGE_SHIPPING","NEEDS_SUPPORT"], EXCHANGE_SHIPPING:["COMPLETED","NEEDS_SUPPORT"],
+COMPLETED:[], CANCELLED:[], NEEDS_SUPPORT:["CONTACTING"]
 };
 
 /**
@@ -140,7 +122,7 @@ export const RETURN_SELECT = [
   "return_id", "order_id", "user_id", "return_type", "description",
   "status", "condition_check_result", "admin_note", "rejection_reason",
   "exchange_order_id", "refund_amount", "tracking_return_code",
-  "created_at", "resolved_at", "version", "evidence_images"
+  "created_at", "resolved_at", "version", "evidence_images", "contact_due_at", "exchange_tracking_code", "warehouse_proof", "qa_item_receipts"
 ].join(",");
 
 /**

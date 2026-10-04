@@ -1,7 +1,8 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { of, throwError } from 'rxjs';
-import { createStorefrontPage } from '../../../testing/storefront-testing';
+import { createStorefrontPage, stubAddressGeographyService } from '../../../testing/storefront-testing';
+import { AddressGeographyService } from '../../core/services/address-geography.service';
 import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { ApiRequestError } from '../../core/models/api-request-error';
@@ -38,6 +39,7 @@ async function createPage(options: {
   quoteFor?: (body: Record<string, unknown>) => CheckoutQuote;
   orderResult?: () => ReturnType<ApiService['post']>;
   productResult?: (path: string) => ReturnType<ApiService['get']>;
+  authLoggedIn?: boolean;
 }) {
   sessionStorage.clear();
   localStorage.clear();
@@ -58,6 +60,9 @@ async function createPage(options: {
       if (path === '/api/user/orders' && options.orderResult) {
         return options.orderResult();
       }
+      if (path === '/api/user/orders/otp-send') {
+        return of({ success: true, channel: 'sms', masked_phone: '090****567' });
+      }
       return of({});
     },
   } as unknown as ApiService;
@@ -68,7 +73,8 @@ async function createPage(options: {
     providers: [
       provideRouter([{ path: '**', component: class {} }]),
       { provide: ApiService, useValue: api },
-      { provide: AuthService, useValue: { isLoggedIn: () => true } },
+      { provide: AddressGeographyService, useValue: stubAddressGeographyService() },
+      { provide: AuthService, useValue: { isLoggedIn: () => options.authLoggedIn !== false } },
     ],
   }).compileComponents();
   const fixture = TestBed.createComponent(CheckoutShippingPage);
@@ -82,6 +88,7 @@ function fillShipping(page: CheckoutShippingPage): void {
   page.phone.set('0901234567');
   page.email.set('a@velura.test');
   page.detail.set('12 Lê Lợi, Quận 1');
+  page.updateGeography({ province: 'Thành phố Hồ Chí Minh', district: '', ward: 'Xã Châu Pha', mode: 'current', valid: true });
 }
 
 describe('CheckoutShippingPage', () => {
@@ -251,5 +258,33 @@ describe('CheckoutShippingPage', () => {
     expect(page.selectedAddressIsDefault()).toBe(true);
     expect(page.composeAddress()).toBe('456 Hai Bà Trưng, Phường Bến Nghé, Quận 1');
   });
-});
 
+  it('Member gửi yêu cầu lưu địa chỉ ngay trong checkout, không gọi API địa chỉ lần hai', async () => {
+    const { page, calls } = await createPage({
+      orderResult: () => of({ success: true, order: { order_id: 'ord-1', payment_method: 'COD' } }),
+    });
+    fillShipping(page);
+    page.province.set('TP.HCM');
+    page.district.set('Quận 1');
+    page.ward.set('Bến Nghé');
+    page.saveNewAddress.set(true);
+    page.submit();
+
+    const orderCall = calls.find((call) => call.path === '/api/user/orders');
+    expect(orderCall?.body['save_address']).toBe(true);
+    expect(orderCall?.body['shipping_province']).toBe('TP.HCM');
+    expect(orderCall?.body['shipping_method']).toBe('standard');
+    expect(calls.some((call) => call.path === '/api/user/addresses')).toBe(false);
+  });
+
+  it('Guest có thể xin OTP qua SMS khi bỏ trống email', async () => {
+    const { page, calls } = await createPage({ authLoggedIn: false });
+    fillShipping(page);
+    page.email.set('');
+    page.submit();
+
+    const otpCall = calls.find((call) => call.path === '/api/user/orders/otp-send');
+    expect(otpCall?.body['email']).toBe('');
+    expect(page.submitting()).toBe(false);
+  });
+});

@@ -41,12 +41,18 @@ export const PAYMENT_STATUS_LABELS: Readonly<Record<string, string>> = {
 
 /** Trạng thái phiếu đổi/trả — `RETURN_STATUSES`. */
 export const RETURN_STATUS_LABELS: Readonly<Record<string, string>> = {
-  pending: 'Chờ xử lý',
-  approved: 'Đã duyệt',
-  shipping_back: 'Đang gửi về',
-  received: 'Nhận hàng hoàn trả thành công',
-  completed: 'Hoàn tất',
-  rejected: 'Từ chối',
+  REQUESTED: 'Mới yêu cầu',
+  CONTACTING: 'Đang liên hệ',
+  WAITING_RETURN: 'Chờ khách gửi hàng',
+  RETURN_IN_TRANSIT: 'Hàng trả đang vận chuyển',
+  RECEIVED: 'Kho đã nhận và kiểm hàng',
+  REFUND_PROCESSING: 'Đang xử lý hoàn tiền',
+  REFUNDED: 'Đã hoàn tiền',
+  EXCHANGE_PREPARING: 'Chuẩn bị hàng thay thế',
+  EXCHANGE_SHIPPING: 'Đang giao hàng thay thế',
+  COMPLETED: 'Hoàn tất',
+  CANCELLED: 'Đã hủy yêu cầu',
+  NEEDS_SUPPORT: 'Cần CSKH xử lý',
 };
 
 /** Trạng thái phiếu hỗ trợ — `SUPPORT_TICKET_STATUSES`. */

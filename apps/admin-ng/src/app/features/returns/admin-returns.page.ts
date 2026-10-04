@@ -1,5 +1,8 @@
-import { Component, computed, inject, signal } from '@angular/core';
-import { forkJoin, of } from 'rxjs';
+import { AdminDialogDirective } from '../../shared/admin-dialog.directive';
+import { finalize } from 'rxjs';
+import { AdminRefreshService } from '../../core/admin-refresh.service';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { forkJoin, of , Subscription } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import {
   AdminApiService,
@@ -8,6 +11,7 @@ import {
   AdminChatSessionRow,
   AdminOrderRow,
   AdminReturnRow,
+  AdminReturnStatus,
   AdminTicketRow,
 } from '../../core/admin-api.service';
 import { adminDateTime, adminMoney } from '../../core/admin-format';
@@ -27,6 +31,9 @@ import { AdminPagination } from '../../shared/admin-pagination';
 type ServiceZone = 'chat' | 'returns' | 'support' | 'orders' | 'logs';
 type ReturnAction = 'refund' | 'exchange' | 'reject' | 'reply' | 'resolve' | 'close' | null;
 type TicketAction = 'reply' | 'resolve' | 'close';
+/** A warehouse check for one registered return line. */
+interface ReceiptLine { orderItemId: string; expectedQuantity: number; receivedQuantity: string; confirmedItemId: string; matchesProduct: boolean; }
+
 
 /**
  * Máy trạng thái phiếu hỗ trợ, khớp với `SUPPORT_TICKET_TRANSITIONS` phía API.
@@ -51,10 +58,14 @@ const TICKET_ACTION_TARGET: Record<TicketAction, string> = {
 
 @Component({
   selector: 'app-admin-returns-page',
-  imports: [AdminEmptyState, AdminIcon, AdminPagination],
+  imports: [AdminDialogDirective, AdminEmptyState, AdminIcon, AdminPagination],
   templateUrl: './admin-returns.page.html',
 })
 export class AdminReturnsPage {
+  private listRequest = new Subscription();
+  private messageRequest = new Subscription();
+  private receiveRequest = new Subscription();
+  private returnDetailRequest = new Subscription();
   private readonly api = inject(AdminApiService);
   private readonly session = inject(AdminSessionService);
 
@@ -67,6 +78,13 @@ export class AdminReturnsPage {
   readonly messages = signal<AdminChatMessageRow[]>([]);
   readonly loadError = signal<string | null>(null);
   readonly loading = signal(true);
+  readonly hasLoadedOnce = signal(false);
+  readonly chatLoading = signal(false);
+  readonly submitting = signal(false);
+  readonly qaLoading = signal(false);
+  readonly qaSubmitting = signal(false);
+  readonly qaLines = signal<ReceiptLine[]>([]);
+  readonly qaReady = computed(() => !this.qaLoading() && this.qaLines().length > 0);
   readonly selectedChat = signal<AdminChatSessionRow | null>(null);
   readonly actionType = signal<ReturnAction>(null);
   readonly selectedReturn = signal<AdminReturnRow | null>(null);
@@ -101,9 +119,15 @@ export class AdminReturnsPage {
   readonly expectedQty = signal(0);
   readonly expectedItemId = signal('');
   readonly qaError = signal<string | null>(null);
-  readonly contactResult = signal('reached');
+  readonly qaFailureNote = signal('');
+  readonly contactResult = signal('');
   readonly contactNote = signal('');
   readonly contactError = signal<string | null>(null);
+  readonly shipmentTarget = signal<{ row: AdminReturnRow; status: 'RETURN_IN_TRANSIT' | 'EXCHANGE_SHIPPING' } | null>(null);
+  readonly shipmentTracking = signal('');
+  readonly shipmentError = signal<string | null>(null);
+  readonly manualRefundTarget = signal<AdminReturnRow | null>(null);
+  readonly manualRefundProof = signal('');
 
   readonly pendingReturns = computed(() => this.pendingReturnCount());
   readonly pendingTickets = computed(() => this.pendingTicketCount());
@@ -134,6 +158,11 @@ export class AdminReturnsPage {
   readonly isClosedChat = computed(() => this.selectedChat()?.handoff_status === 'closed');
 
   constructor() {
+    inject(DestroyRef).onDestroy(() => { this.messageRequest.unsubscribe(); this.receiveRequest.unsubscribe(); this.returnDetailRequest.unsubscribe(); });
+    inject(DestroyRef).onDestroy(() => this.listRequest.unsubscribe());
+    inject(AdminRefreshService).register(() => {
+      if (!this.loading() && !this.submitting() && !this.actionType() && !this.receiveTarget() && !this.shipmentTarget() && !this.manualRefundTarget()) this.reload();
+    }, inject(DestroyRef));
     this.reload();
   }
 
@@ -141,11 +170,12 @@ export class AdminReturnsPage {
    * Reloads the active CSKH zone from server-paged APIs.
    */
   reload(): void {
+    this.listRequest.unsubscribe();
     this.loading.set(true);
     this.loadError.set(null);
     const pageParams = { limit: String(this.pageSize), offset: adminOffset(this.page(), this.pageSize) };
     const zone = this.zone();
-    forkJoin({
+    this.listRequest = forkJoin({
       returns:
         zone === 'returns'
           ? this.api.listReturns(pageParams).pipe(
@@ -154,18 +184,18 @@ export class AdminReturnsPage {
                 return of({ rows: [] as AdminReturnRow[], count: 0 });
               }),
             )
-          : this.api.listReturns({ status: 'pending', limit: '1' }).pipe(catchError(() => of({ rows: [] as AdminReturnRow[], count: 0 }))),
-      pendingReturns: this.api.listReturns({ status: 'pending', limit: '1' }).pipe(catchError(() => of({ rows: [] as AdminReturnRow[], count: 0 }))),
+          : this.api.listReturns({ status: 'REQUESTED', limit: '1' }).pipe(catchError(() => of({ rows: [] as AdminReturnRow[], count: 0 }))),
+      pendingReturns: this.api.listReturns({ status: 'REQUESTED', limit: '1' }).pipe(catchError(() => of({ rows: [] as AdminReturnRow[], count: 0 }))),
       completedReturns: this.api
-        .listReturns({ status: 'completed', limit: '1' })
+        .listReturns({ status: 'COMPLETED', limit: '1' })
         .pipe(catchError(() => of({ rows: [] as AdminReturnRow[], count: 0 }))),
       tickets:
         zone === 'support'
-          ? this.api.listTickets(pageParams).pipe(catchError(() => of({ rows: [] as AdminTicketRow[], count: 0 })))
+          ? this.api.listTickets(pageParams).pipe(catchError((error: unknown) => { this.loadError.set(adminErrorMessage(error, 'Không thể tải phiếu hỗ trợ')); return of({ rows: [] as AdminTicketRow[], count: 0 }); }))
           : this.api.listTickets({ status: 'open', limit: '1' }).pipe(catchError(() => of({ rows: [] as AdminTicketRow[], count: 0 }))),
       chats: this.api
         .listChatSessions(this.chatListParams())
-        .pipe(catchError(() => of({ rows: [] as AdminChatSessionRow[] }))),
+        .pipe(catchError((error: unknown) => { if (zone === 'chat') this.loadError.set(adminErrorMessage(error, 'Không thể tải phiên chat')); return of({ rows: [] as AdminChatSessionRow[] }); })),
       allReturns: this.api.listReturns({ limit: '1' }).pipe(catchError(() => of({ rows: [] as AdminReturnRow[], count: 0 }))),
       allTickets: this.api.listTickets({ limit: '1' }).pipe(catchError(() => of({ rows: [] as AdminTicketRow[], count: 0 }))),
       pendingTickets: this.api.listTickets({ status: 'open', limit: '1' }).pipe(catchError(() => of({ rows: [] as AdminTicketRow[], count: 0 }))),
@@ -219,6 +249,8 @@ export class AdminReturnsPage {
         this.ordersTotal.set(adminListCount(payload.orders));
       }
       this.loading.set(false);
+      this.hasLoadedOnce.set(true);
+      if (zone === 'chat' && this.selectedChat()) this.loadChatMessages(this.selectedChat()!.session_id);
     });
   }
 
@@ -270,14 +302,19 @@ export class AdminReturnsPage {
    * Selects a chat session and loads its messages.
    */
   selectChat(session: AdminChatSessionRow): void {
-    this.selectedChat.set(session);
-    this.chatError.set(null);
-    this.api.getChatMessages(session.session_id, { limit: '150' }).subscribe({
+    this.selectedChat.set(session); this.chatError.set(null); this.messages.set([]); this.chatProducts.set([]); this.replyDraft.set('');
+    this.loadChatMessages(session.session_id);
+  }
+
+  /** Updates conversation data without discarding the agent's current draft. */
+  private loadChatMessages(sessionId: string): void {
+    this.messageRequest.unsubscribe(); this.chatLoading.set(true);
+    this.messageRequest = this.api.getChatMessages(sessionId, { limit: '150' }).subscribe({
       next: (payload) => {
-        this.messages.set(payload.messages || []);
-        this.chatProducts.set(payload.products || []);
+        if (this.selectedChat()?.session_id !== sessionId) return;
+        this.chatLoading.set(false); this.messages.set(payload.messages || []); this.chatProducts.set(payload.products || []);
       },
-      error: (error: unknown) => this.chatError.set(adminErrorMessage(error)),
+      error: (error: unknown) => { this.chatLoading.set(false); if (this.selectedChat()?.session_id === sessionId) this.chatError.set(adminErrorMessage(error)); },
     });
   }
 
@@ -308,12 +345,13 @@ export class AdminReturnsPage {
    */
   assignChat(): void {
     const session = this.selectedChat();
-    if (!session || !this.canMutate()) {
+    if (!session || !this.canJoinChat() || this.submitting()) {
       return;
     }
-    this.api.assignChatSession(session.session_id, 'assigned').subscribe({
+    this.submitting.set(true);
+    this.api.assignChatSession(session.session_id, 'assigned').pipe(finalize(() => this.submitting.set(false))).subscribe({
       next: (payload) => {
-        if (payload.session) {
+        if (payload.session && this.selectedChat()?.session_id === session.session_id) {
           this.selectedChat.set(payload.session);
         }
         this.reload();
@@ -327,12 +365,13 @@ export class AdminReturnsPage {
    */
   closeChat(): void {
     const session = this.selectedChat();
-    if (!session || !this.canMutate()) {
+    if (!session || !this.canMutate() || this.isClosedChat() || this.submitting()) {
       return;
     }
-    this.api.assignChatSession(session.session_id, 'closed').subscribe({
+    this.submitting.set(true);
+    this.api.assignChatSession(session.session_id, 'closed').pipe(finalize(() => this.submitting.set(false))).subscribe({
       next: (payload) => {
-        if (payload.session) {
+        if (payload.session && this.selectedChat()?.session_id === session.session_id) {
           this.selectedChat.set(payload.session);
         }
         this.reload();
@@ -348,13 +387,15 @@ export class AdminReturnsPage {
     event.preventDefault();
     const session = this.selectedChat();
     const message = this.replyDraft().trim();
-    if (!session || !message || !this.canMutate()) {
+    if (!session || !message || !this.canReply() || this.submitting()) {
       return;
     }
 
+    this.submitting.set(true);
     const doSend = () => {
-      this.api.sendChatReply(session.session_id, message).subscribe({
+      this.api.sendChatReply(session.session_id, message).pipe(finalize(() => this.submitting.set(false))).subscribe({
         next: (payload) => {
+          if (this.selectedChat()?.session_id !== session.session_id) return;
           if (payload.message) {
             this.messages.update((rows) => [...rows, payload.message!]);
           }
@@ -364,19 +405,19 @@ export class AdminReturnsPage {
           this.replyDraft.set('');
           this.reload();
         },
-        error: (error: unknown) => this.chatError.set(adminErrorMessage(error)),
+        error: (error: unknown) => { this.submitting.set(false); this.chatError.set(adminErrorMessage(error)); },
       });
     };
 
     if (session.handoff_status !== 'assigned') {
       this.api.assignChatSession(session.session_id, 'assigned').subscribe({
         next: (payload) => {
-          if (payload.session) {
+          if (payload.session && this.selectedChat()?.session_id === session.session_id) {
             this.selectedChat.set(payload.session);
           }
           doSend();
         },
-        error: (error: unknown) => this.chatError.set(adminErrorMessage(error)),
+        error: (error: unknown) => { this.submitting.set(false); this.chatError.set(adminErrorMessage(error)); },
       });
     } else {
       doSend();
@@ -416,7 +457,8 @@ export class AdminReturnsPage {
    * Opens a return or ticket action modal.
    */
   openReturnAction(type: 'refund' | 'exchange' | 'reject', returnId: string): void {
-    const row = this.returns().find((item) => item.return_id === returnId) || null;
+    const row = this.returns().find((item) => item.return_id === returnId) || (this.selectedReturn()?.return_id === returnId ? this.selectedReturn() : null);
+    if (!row || !this.canMutate() || (type !== 'reject' && row.status !== 'CONTACTING') || (type === 'reject' && !['REQUESTED', 'CONTACTING', 'WAITING_RETURN'].includes(row.status || ''))) return;
     this.selectedReturn.set(row);
     this.selectedTicket.set(null);
     this.actionType.set(type);
@@ -430,6 +472,7 @@ export class AdminReturnsPage {
         next: (detail) => {
           // Bỏ qua phản hồi cũ nếu CSKH đã chuyển sang phiếu khác.
           if (this.selectedReturn()?.return_id === returnId) {
+            this.selectedReturn.set(detail);
             this.refundSuggestion.set(Number(detail.refundable_amount) || null);
           }
         },
@@ -471,6 +514,7 @@ export class AdminReturnsPage {
    * Opens the return request detail drawer.
    */
   openReturnDetail(returnId: string): void {
+    this.returnDetailRequest.unsubscribe();
     const cached = this.returns().find((r) => r.return_id === returnId) || null;
     this.selectedReturn.set(cached);
     this.selectedTicket.set(null);
@@ -478,9 +522,10 @@ export class AdminReturnsPage {
     this.ticketDetailOpen.set(false);
     this.actionType.set(null);
     this.actionError.set(null);
-    this.api.getReturn(returnId).subscribe({
+    this.contactResult.set(''); this.contactNote.set(''); this.contactError.set(null);
+    this.returnDetailRequest = this.api.getReturn(returnId).subscribe({
       next: (full) => {
-        if (this.selectedReturn()?.return_id === returnId) {
+        if (this.returnDetailOpen() && (!this.selectedReturn() || this.selectedReturn()?.return_id === returnId)) {
           this.selectedReturn.set(full);
         }
       },
@@ -518,21 +563,22 @@ export class AdminReturnsPage {
   }
 
   returnStepIndex(status: string | undefined): number {
-    switch (status) {
-      case 'pending': return 0;
-      case 'approved': return 1;
-      case 'shipping_back': return 2;
-      case 'received': return 3;
-      case 'completed': return 4;
-      case 'rejected': return -1;
-      default: return 0;
-    }
+    return this.returnPipeline().findIndex((step) => step.status === status);
   }
+
+  /** Shows the actual branch; exception/cancellation states remain explicit badges. */
+  readonly returnPipeline = computed(() => {
+    const exchange = this.selectedReturn()?.return_type === 'exchange' || this.selectedReturn()?.request_type === 'exchange';
+    const codes: AdminReturnStatus[] = ['REQUESTED', 'CONTACTING', 'WAITING_RETURN', 'RETURN_IN_TRANSIT', 'RECEIVED', ...(exchange ? ['EXCHANGE_PREPARING', 'EXCHANGE_SHIPPING'] as const : ['REFUND_PROCESSING', 'REFUNDED'] as const), 'COMPLETED'];
+    return codes.map((status, idx) => ({ status, idx, label: RETURN_STATUS_LABELS[status] }));
+  });
 
   /**
    * Closes CSKH action modals and detail drawers.
    */
   closeOverlays(): void {
+    if (this.submitting()) return;
+    this.returnDetailRequest.unsubscribe();
     this.actionType.set(null);
     this.selectedReturn.set(null);
     this.selectedTicket.set(null);
@@ -555,21 +601,36 @@ export class AdminReturnsPage {
    */
   submitAction(event: Event): void {
     event.preventDefault();
+    if (this.submitting() || !this.canMutate()) return;
     const type = this.actionType();
+    if (!type) return;
     const form = event.target as HTMLFormElement;
     const note = (form.elements.namedItem('note') as HTMLTextAreaElement | null)?.value.trim() || '';
     const amount = Number((form.elements.namedItem('amount') as HTMLInputElement | null)?.value || 0);
     const ret = this.selectedReturn();
     const ticket = this.selectedTicket();
-    if (ret && ret.version) {
+    if (note.length < 10) {
+      this.actionError.set('Ghi rõ nội dung xử lý, tối thiểu 10 ký tự.');
+      return;
+    }
+    if (type === 'refund' && (!Number.isFinite(amount) || amount <= 0 || (this.refundSuggestion() != null && amount > this.refundSuggestion()!))) {
+      this.actionError.set('Số tiền hoàn phải lớn hơn 0 và không vượt giá trị hàng trả.');
+      return;
+    }
+    if (ret && ret.version != null && ['refund', 'exchange', 'reject'].includes(type)) {
+      if ((type !== 'reject' && ret.status !== 'CONTACTING') || (type === 'reject' && !['REQUESTED', 'CONTACTING', 'WAITING_RETURN'].includes(ret.status || ''))) {
+        this.actionError.set('Liên hệ khách hàng trước khi duyệt; trạng thái phiếu phải còn cho phép xử lý.'); return;
+      }
+      this.submitting.set(true);
       const request$ =
         type === 'refund'
           ? this.api.approveRefund(ret.return_id, { refundAmount: amount, adminNote: note, expectedVersion: ret.version })
           : type === 'exchange'
             ? this.api.approveExchange(ret.return_id, { adminNote: note, expectedVersion: ret.version })
             : this.api.rejectReturn(ret.return_id, { reason: note, expectedVersion: ret.version });
-      request$.subscribe({
+      request$.pipe(finalize(() => this.submitting.set(false))).subscribe({
         next: () => {
+          this.submitting.set(false);
           this.closeOverlays();
           this.reload();
         },
@@ -577,21 +638,26 @@ export class AdminReturnsPage {
       });
       return;
     }
-    if (ticket && ticket.version) {
+    if (ticket && ticket.version != null && ['reply', 'resolve', 'close'].includes(type)) {
+      if (!this.canTicketAction(ticket, type as TicketAction)) return;
+      this.submitting.set(true);
       const request$ =
         type === 'reply'
           ? this.api.respondTicket(ticket.ticket_id, { response: note, expectedVersion: ticket.version })
           : type === 'resolve'
             ? this.api.resolveTicket(ticket.ticket_id, { adminNote: note, expectedVersion: ticket.version })
             : this.api.closeTicket(ticket.ticket_id, { reason: note, expectedVersion: ticket.version });
-      request$.subscribe({
+      request$.pipe(finalize(() => this.submitting.set(false))).subscribe({
         next: () => {
+          this.submitting.set(false);
           this.closeOverlays();
           this.reload();
         },
         error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
       });
+      return;
     }
+    this.actionError.set('Thiếu phiên bản mới nhất của phiếu. Mở lại trước khi xử lý.');
   }
 
   /**
@@ -689,19 +755,18 @@ export class AdminReturnsPage {
   }
 
   /**
-   * Bước kế tiếp hợp lệ của một phiếu đã duyệt.
-   *
-   * Trước đây bảng chỉ có nút ở trạng thái `pending`, nên mọi phiếu duyệt xong nằm lại
-   * ở `approved` vĩnh viễn: `shipping_back`, `received`, `completed` có trong máy trạng
-   * thái nhưng không nơi nào ghi được, và KPI "Hoàn tất hôm nay" vì thế luôn bằng 0.
-   * Thứ tự ở đây khớp `RETURN_TRANSITIONS` phía API, nơi chốt tính hợp lệ thật sự.
+   * Offers only operator transitions; payment gateway owns both refund states.
    */
   nextReturnStep(row: AdminReturnRow): { status: string; label: string } | null {
     const steps: Record<string, { status: string; label: string }> = {
-      approved: { status: 'shipping_back', label: 'Khách đã gửi hàng' },
-      shipping_back: { status: 'received', label: 'QA và nhận hàng' },
-      received: { status: 'completed', label: 'Hoàn tất' },
+      WAITING_RETURN: { status: 'RETURN_IN_TRANSIT', label: 'Ghi nhận khách gửi hàng' },
+      RETURN_IN_TRANSIT: { status: 'RECEIVED', label: 'QA và nhận hàng' },
+      REFUNDED: { status: 'COMPLETED', label: 'Hoàn tất yêu cầu' },
+      EXCHANGE_PREPARING: { status: 'EXCHANGE_SHIPPING', label: 'Giao hàng thay thế' },
+      EXCHANGE_SHIPPING: { status: 'COMPLETED', label: 'Xác nhận giao hàng thay thế' },
+      NEEDS_SUPPORT: { status: 'CONTACTING', label: 'Tiếp tục hỗ trợ' },
     };
+    if (row.status === 'RECEIVED' && row.condition_check_result === 'qa_pass' && (row.return_type === 'exchange' || row.request_type === 'exchange')) return { status: 'EXCHANGE_PREPARING', label: 'Chuẩn bị đơn hàng thay thế' };
     return steps[row.status || ''] || null;
   }
 
@@ -709,10 +774,10 @@ export class AdminReturnsPage {
    * Nhãn lý do khách đã chọn trong dropdown, không hiện mã tiếng Anh.
    */
   /**
-   * Phiếu pending quá 24 giờ mà chưa có dòng liên hệ CSKH.
+   * Flags an untouched request after 24 hours; never cancels or rejects it.
    */
   contactOverdue(row: AdminReturnRow): boolean {
-    if (row.status !== 'pending') return false;
+    if (row.status !== 'REQUESTED') return false;
     if ((row.admin_note || '').includes('[CSKH]')) return false;
     const created = Date.parse(row.created_at || '');
     if (!Number.isFinite(created)) return false;
@@ -731,18 +796,25 @@ export class AdminReturnsPage {
    * Lưu kết quả gọi khách. Không tự duyệt hay từ chối phiếu.
    */
   saveContact(row: AdminReturnRow): void {
+    if (!this.canMutate() || this.submitting() || !['REQUESTED', 'CONTACTING', 'NEEDS_SUPPORT'].includes(row.status || '')) return;
+    if (!this.contactResult() || this.contactNote().trim().length < 10) {
+      this.contactError.set('Chọn kết quả liên hệ thực tế và ghi chú ít nhất 10 ký tự.'); return;
+    }
     if (row.version == null) {
       this.contactError.set('Thiếu phiên bản phiếu.');
       return;
     }
     this.contactError.set(null);
+    this.submitting.set(true);
     this.api.recordReturnContact(row.return_id, {
       result: this.contactResult(),
       note: this.contactNote().trim(),
       expectedVersion: row.version,
-    }).subscribe({
+    }).pipe(finalize(() => this.submitting.set(false))).subscribe({
       next: () => {
+        this.contactResult.set('');
         this.contactNote.set('');
+        this.openReturnDetail(row.return_id);
         this.reload();
       },
       error: (error: unknown) => this.contactError.set(adminErrorMessage(error)),
@@ -758,28 +830,25 @@ export class AdminReturnsPage {
    * Mở form QA trước khi ghi nhận hàng hoàn trả thành công.
    */
   openReceive(row: AdminReturnRow): void {
-    this.receiveTarget.set(row);
-    this.qaResult.set('');
-    this.qaProof.set('');
-    this.qaQty.set('');
-    this.qaItemId.set('');
-    this.expectedQty.set(0);
-    this.expectedItemId.set('');
-    this.qaError.set(null);
-    this.api.getReturn(row.return_id).subscribe({
+    if (!this.canMutate() || this.qaSubmitting() || row.status !== 'RETURN_IN_TRANSIT') return;
+    this.receiveRequest.unsubscribe(); this.receiveTarget.set(row); this.qaResult.set(''); this.qaProof.set(''); this.qaQty.set(''); this.qaItemId.set(''); this.expectedQty.set(0); this.expectedItemId.set(''); this.qaLines.set([]); this.qaError.set(null); this.qaFailureNote.set(''); this.qaLoading.set(true);
+    this.receiveRequest = this.api.getReturn(row.return_id).subscribe({
       next: (full) => {
+        if (this.receiveTarget()?.return_id !== row.return_id) return;
         const lines = full.lines || [];
-        const qty = lines.reduce((sum, line) => sum + Number(line.quantity || 0), 0);
-        this.expectedQty.set(qty);
-        this.expectedItemId.set(lines[0]?.order_item_id || '');
+        this.qaLoading.set(false);
+        if (!lines.length || lines.some((line) => !line.order_item_id || Number(line.quantity) < 1)) { this.qaError.set('Phiếu thiếu mã hoặc số lượng dòng hàng hợp lệ. Đối chiếu với CSKH trước khi nhận hàng.'); return; }
+        this.expectedQty.set(lines.reduce((sum, line) => sum + Number(line.quantity), 0)); this.expectedItemId.set(lines[0].order_item_id || '');
+        this.qaLines.set(lines.map((line) => ({ orderItemId: line.order_item_id!, expectedQuantity: Number(line.quantity), receivedQuantity: '', confirmedItemId: '', matchesProduct: false })));
         this.receiveTarget.set({ ...row, ...full, version: full.version ?? row.version });
       },
-      error: (error: unknown) => this.qaError.set(adminErrorMessage(error)),
+      error: (error: unknown) => { this.qaLoading.set(false); this.qaError.set(adminErrorMessage(error)); },
     });
   }
 
   closeReceive(): void {
-    this.receiveTarget.set(null);
+    if (this.qaSubmitting()) return;
+    this.receiveRequest.unsubscribe(); this.receiveTarget.set(null);
   }
 
   setQaResult(event: Event): void {
@@ -794,14 +863,28 @@ export class AdminReturnsPage {
     this.qaItemId.set((event.target as HTMLInputElement).value.trim());
   }
 
+  /** Records quantity actually received for one registered line. */
+  setQaLineQuantity(orderItemId: string, event: Event): void {
+    const receivedQuantity = (event.target as HTMLInputElement).value;
+    this.qaLines.update((lines) => lines.map((line) => line.orderItemId === orderItemId ? { ...line, receivedQuantity } : line));
+  }
+  /** Confirms the physical line ID for warehouse reconciliation. */
+  setQaLineId(orderItemId: string, event: Event): void {
+    const confirmedItemId = (event.target as HTMLInputElement).value.trim();
+    this.qaLines.update((lines) => lines.map((line) => line.orderItemId === orderItemId ? { ...line, confirmedItemId } : line));
+  }
+  /** Records physical product matching for one line. */
+  setQaLineMatch(orderItemId: string, event: Event): void {
+    const matchesProduct = (event.target as HTMLInputElement).checked;
+    this.qaLines.update((lines) => lines.map((line) => line.orderItemId === orderItemId ? { ...line, matchesProduct } : line));
+  }
   onQaProof(event: Event): void {
+    this.qaProof.set('');
     const file = (event.target as HTMLInputElement).files?.[0];
-    if (!file || !file.type.startsWith('image/')) {
-      this.qaError.set('Chọn một ảnh minh chứng.');
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => this.qaProof.set(String(reader.result || ''));
+    if (!file || !file.type.startsWith('image/')) { this.qaError.set('Chọn một ảnh minh chứng.'); return; }
+    if (file.size > 5 * 1024 * 1024) { this.qaError.set('Ảnh minh chứng tối đa 5 MB.'); return; }
+    const returnId = this.receiveTarget()?.return_id, reader = new FileReader();
+    reader.onload = () => { if (this.receiveTarget()?.return_id === returnId) this.qaProof.set(String(reader.result || '')); };
     reader.readAsDataURL(file);
   }
 
@@ -809,57 +892,99 @@ export class AdminReturnsPage {
    * Chỉ chuyển sang nhận hàng hoàn trả thành công khi QA đúng hàng và có ảnh.
    */
   confirmReceive(): void {
+    if (!this.qaReady() || this.qaSubmitting() || !this.canMutate()) return;
     const row = this.receiveTarget();
-    if (!row || row.version == null) {
-      this.qaError.set('Thiếu phiên bản phiếu để thao tác.');
-      return;
-    }
-    if (this.qaResult() !== 'qa_pass') {
-      this.qaError.set('Chọn đúng hàng của shop.');
-      return;
-    }
-    if (Number(this.qaQty()) !== this.expectedQty()) {
-      this.qaError.set(`Số lượng thực nhận phải bằng ${this.expectedQty()}.`);
-      return;
-    }
-    if (!this.expectedItemId() || this.qaItemId() !== this.expectedItemId()) {
-      this.qaError.set('Nhập lại đúng mã dòng hàng trên phiếu.');
-      return;
-    }
-    if (!this.qaProof().startsWith('data:image/')) {
-      this.qaError.set('Tải ảnh minh chứng đã kiểm hàng.');
-      return;
-    }
-    this.api.updateReturnStatus(row.return_id, {
-      status: 'received',
-      expectedVersion: row.version,
-      conditionCheckResult: 'qa_pass',
-      receivedQuantity: Number(this.qaQty()),
-      confirmedItemId: this.qaItemId(),
-      imageProof: this.qaProof(),
-    }).subscribe({
-      next: () => {
-        this.receiveTarget.set(null);
-        this.reload();
-      },
-      error: (error: unknown) => this.qaError.set(adminErrorMessage(error)),
+    if (!row || row.version == null) { this.qaError.set('Thiếu phiên bản phiếu để thao tác.'); return; }
+    if (row.status !== 'RETURN_IN_TRANSIT') { this.qaError.set('Chỉ kiểm nhận khi hàng trả đang vận chuyển.'); return; }
+    const lines = this.qaLines();
+    if (this.qaResult() !== 'qa_pass' || lines.some((line) => !line.matchesProduct || line.confirmedItemId !== line.orderItemId || Number(line.receivedQuantity) !== line.expectedQuantity)) { this.qaError.set('Đối chiếu từng dòng: đúng mã, đủ số lượng và đúng sản phẩm của shop.'); return; }
+    if (!this.qaProof().startsWith('data:image/')) { this.qaError.set('Tải ảnh minh chứng đã kiểm hàng.'); return; }
+    this.qaSubmitting.set(true);
+    this.api.updateReturnStatus(row.return_id, { status: 'RECEIVED', expectedVersion: row.version, conditionCheckResult: 'qa_pass', imageProof: this.qaProof(), items: lines.map((line) => ({ orderItemId: line.orderItemId, receivedQuantity: Number(line.receivedQuantity), matchesProduct: line.matchesProduct })) }).pipe(finalize(() => this.qaSubmitting.set(false))).subscribe({
+      next: () => { this.receiveTarget.set(null); this.reload(); }, error: (error: unknown) => this.qaError.set(adminErrorMessage(error)),
     });
+  }
+
+  /** Routes mismatched warehouse evidence to CSKH without completing receipt/refund. */
+  reportQaFailure(): void {
+    const row = this.receiveTarget();
+    if (!row || row.version == null || row.status !== 'RETURN_IN_TRANSIT' || !this.canMutate() || this.qaSubmitting() || !this.qaReady()) return;
+    if (this.qaResult() !== 'qa_fail' || !this.qaProof().startsWith('data:image/') || this.qaFailureNote().trim().length < 10) {
+      this.qaError.set('Ghi rõ sai lệch ít nhất 10 ký tự, chọn kết quả không đạt và tải ảnh kho.'); return;
+    }
+    this.qaSubmitting.set(true);
+    this.api.updateReturnStatus(row.return_id, { status: 'NEEDS_SUPPORT', expectedVersion: row.version, conditionCheckResult: 'qa_fail', imageProof: this.qaProof(), reason: this.qaFailureNote().trim() }).pipe(finalize(() => this.qaSubmitting.set(false))).subscribe({
+      next: () => { this.receiveTarget.set(null); this.reload(); }, error: (error: unknown) => this.qaError.set(adminErrorMessage(error)),
+    });
+  }
+
+  /** Captures the warehouse discrepancy for operator follow-up. */
+  setQaFailureNote(event: Event): void {
+    this.qaFailureNote.set((event.target as HTMLTextAreaElement).value);
   }
 
   advanceReturn(row: AdminReturnRow, status: string): void {
-    if (!this.canMutate() || row.version == null) {
-      this.actionError.set('Thiếu phiên bản phiếu để thao tác.');
-      return;
+    if (this.submitting()) return;
+    if (!this.canMutate() || row.version == null) { this.actionError.set('Thiếu quyền hoặc phiên bản phiếu để thao tác.'); return; }
+    if (this.nextReturnStep(row)?.status !== status) { this.actionError.set('Bước xử lý không hợp lệ. Mở lại phiếu để kiểm tra.'); return; }
+    if (status === 'RECEIVED') { this.openReceive(row); return; }
+    if (status === 'RETURN_IN_TRANSIT' || status === 'EXCHANGE_SHIPPING') {
+      this.shipmentTarget.set({ row, status }); this.shipmentTracking.set(''); this.shipmentError.set(null); return;
     }
-    this.api.updateReturnStatus(row.return_id, { status, expectedVersion: row.version }).subscribe({
-      next: () => this.reload(),
-      error: (error: unknown) => this.loadError.set(adminErrorMessage(error)),
+    this.submitting.set(true);
+    this.api.updateReturnStatus(row.return_id, { status, expectedVersion: row.version }).pipe(finalize(() => this.submitting.set(false))).subscribe({ next: () => this.reload(), error: (error: unknown) => this.loadError.set(adminErrorMessage(error)) });
+  }
+
+  /** Records a physical shipment; each return/replacement leg has its own tracking. */
+  submitShipment(event: Event): void {
+    event.preventDefault();
+    const target = this.shipmentTarget(), form = event.target as HTMLFormElement;
+    const trackingReturnCode = (form.elements.namedItem('tracking') as HTMLInputElement | null)?.value.trim() || '';
+    if (!target || this.submitting() || !this.canMutate() || target.row.version == null) return;
+    if (!trackingReturnCode) { this.shipmentError.set('Nhập mã vận đơn thực tế của lần gửi hàng này.'); return; }
+    this.submitting.set(true);
+    this.api.updateReturnStatus(target.row.return_id, { status: target.status, trackingReturnCode, expectedVersion: target.row.version }).pipe(finalize(() => this.submitting.set(false))).subscribe({
+      next: () => { this.shipmentTarget.set(null); this.returnDetailOpen.set(false); this.reload(); },
+      error: (error: unknown) => this.shipmentError.set(adminErrorMessage(error)),
     });
   }
 
-  /**
-   * Nhãn kết quả QA kho.
-   */
+  /** Allows recorded transfer evidence only for captured payments outside Stripe. */
+  canRecordManualRefund(row: AdminReturnRow): boolean {
+    return this.canMutate() && row.status === 'RECEIVED' && row.condition_check_result === 'qa_pass' && row.payment?.payment_status === 'paid' && row.payment.payment_provider !== 'stripe' && (row.return_type === 'refund' || row.request_type === 'refund');
+  }
+
+  /** Starts transfer evidence recording after warehouse QA. */
+  openManualRefund(row: AdminReturnRow): void {
+    if (!this.canRecordManualRefund(row)) return;
+    this.manualRefundTarget.set(row); this.manualRefundProof.set(''); this.actionError.set(null);
+  }
+
+  /** Reads image evidence without assuming the transaction succeeded. */
+  onManualRefundProof(event: Event): void {
+    this.manualRefundProof.set('');
+    const file = (event.target as HTMLInputElement).files?.[0], returnId = this.manualRefundTarget()?.return_id;
+    if (!file?.type.startsWith('image/') || file.size > 5 * 1024 * 1024) { this.actionError.set('Chọn ảnh giao dịch tối đa 5 MB.'); return; }
+    const reader = new FileReader();
+    reader.onload = () => { if (this.manualRefundTarget()?.return_id === returnId) this.manualRefundProof.set(String(reader.result || '')); };
+    reader.readAsDataURL(file);
+  }
+
+  /** Records transfer evidence once; the server calculates the net refund amount. */
+  submitManualRefund(event: Event): void {
+    event.preventDefault();
+    const row = this.manualRefundTarget(), form = event.target as HTMLFormElement;
+    if (!row || !this.canRecordManualRefund(row) || this.submitting() || row.version == null) return;
+    const transferReference = (form.elements.namedItem('reference') as HTMLInputElement | null)?.value.trim() || '';
+    const adminNote = (form.elements.namedItem('note') as HTMLTextAreaElement | null)?.value.trim() || '';
+    if (!transferReference || adminNote.length < 10 || !this.manualRefundProof().startsWith('data:image/')) { this.actionError.set('Nhập mã giao dịch, ghi chú ít nhất 10 ký tự và ảnh chuyển tiền thành công.'); return; }
+    this.submitting.set(true);
+    this.api.recordManualRefund(row.return_id, { expectedVersion: row.version, transferReference, adminNote, imageProof: this.manualRefundProof() }).pipe(finalize(() => this.submitting.set(false))).subscribe({
+      next: () => { this.manualRefundTarget.set(null); this.returnDetailOpen.set(false); this.reload(); }, error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
+    });
+  }
+
+  /** Nhãn kết quả QA kho. */
   qaLabel(code: string | undefined): string {
     if (code === 'qa_pass') return 'Đúng hàng của shop';
     if (code === 'qa_fail') return 'Không đúng hàng của shop';
@@ -901,22 +1026,13 @@ export class AdminReturnsPage {
   }
 
   canTriggerStripeRefund(row: AdminReturnRow): boolean {
-    return this.canMutate()
-      && row.payment?.payment_provider === 'stripe'
-      && row.payment?.payment_status !== 'refunded'
-      && (row.return_type === 'refund' || row.request_type === 'refund');
+    return this.canMutate() && row.payment?.payment_provider === 'stripe' && row.payment?.payment_status !== 'refunded' && ['RECEIVED', 'REFUND_PROCESSING'].includes(row.status || '') && row.condition_check_result === 'qa_pass' && row.version != null && (row.return_type === 'refund' || row.request_type === 'refund');
   }
 
   triggerStripeRefund(row: AdminReturnRow): void {
-    if (!this.canTriggerStripeRefund(row)) return;
-    this.actionError.set(null);
-    this.api.triggerStripeRefund(row.return_id).subscribe({
-      next: () => {
-        this.openReturnDetail(row.return_id);
-        this.reload();
-      },
-      error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
-    });
+    if (!this.canTriggerStripeRefund(row) || this.submitting()) return;
+    this.submitting.set(true); this.actionError.set(null);
+    this.api.triggerStripeRefund(row.return_id, { expectedVersion: row.version }).pipe(finalize(() => this.submitting.set(false))).subscribe({ next: () => { this.openReturnDetail(row.return_id); this.reload(); }, error: (error: unknown) => this.actionError.set(adminErrorMessage(error)) });
   }
 
   /** Nhãn trạng thái phiếu hỗ trợ. */

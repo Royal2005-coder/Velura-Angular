@@ -8,7 +8,7 @@
       <button class="admin-tab" [class.admin-tab--active]="view() === 'stats'" type="button" (click)="setView('stats')">Thống kê</button>
     </div>
     <div class="admin-tab-content">
-      @if (loading()) {
+      @if (loading() && !hasLoadedOnce()) {
         <app-admin-empty-state kind="loading" icon="clock" title="Đang tải khuyến mãi" />
       } @else if (loadError() && view() === 'campaigns' && !promotions().length) {
         <app-admin-empty-state kind="error" icon="alert" title="Không tải được khuyến mãi" [message]="loadError() || ''" />

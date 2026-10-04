@@ -43,12 +43,15 @@ describe('AdminReturnsPage', () => {
     page.closeLightbox();
     expect(page.lightboxImage()).toBeNull();
 
-    expect(page.returnStepIndex('pending')).toBe(0);
-    expect(page.returnStepIndex('approved')).toBe(1);
-    expect(page.returnStepIndex('shipping_back')).toBe(2);
-    expect(page.returnStepIndex('received')).toBe(3);
-    expect(page.returnStepIndex('completed')).toBe(4);
-    expect(page.returnStepIndex('rejected')).toBe(-1);
+    expect(page.returnStepIndex('REQUESTED')).toBe(0);
+    expect(page.returnStepIndex('CONTACTING')).toBe(1);
+    expect(page.returnStepIndex('WAITING_RETURN')).toBe(2);
+    expect(page.returnStepIndex('RETURN_IN_TRANSIT')).toBe(3);
+    expect(page.returnStepIndex('RECEIVED')).toBe(4);
+    expect(page.returnStepIndex('REFUND_PROCESSING')).toBe(5);
+    expect(page.returnStepIndex('REFUNDED')).toBe(6);
+    expect(page.returnStepIndex('COMPLETED')).toBe(7);
+    expect(page.returnStepIndex('CANCELLED')).toBe(-1);
 
     page.closeOverlays();
     expect(page.returnDetailOpen()).toBe(false);

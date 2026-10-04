@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { assertOrderVisibleTo, hasOpenStripeSession, presentOrderForCustomer } from "../../apps/api/src/user/orders.js";
+import { assertOrderVisibleTo, hasOpenStripeSession, presentOrderForCustomer } from "../../apps/api/src/user/order-router.js";
 
 const OWNER = { user_id: "11111111-1111-4111-8111-111111111111" };
 const STRANGER = { user_id: "22222222-2222-4222-8222-222222222222" };
@@ -55,9 +55,12 @@ test("the customer view drops admin-only columns", () => {
   }, [], []);
   assert.equal(view.order_code, "VLR1A2B3C4D5");
   assert.equal(view.status_label, "Đã xác nhận");
-  for (const hidden of ["internal_note", "ai_source", "version", "stock_committed_at"]) {
+  for (const hidden of ["internal_note", "ai_source", "stock_committed_at"]) {
     assert.equal(hidden in view, false, `${hidden} must not reach the storefront`);
   }
+  // KAN-32: `version` không còn là cột nội bộ — khách hàng cần đọc lại số này để gửi
+  // `expectedVersion` ở lần hủy đơn kế tiếp (tránh ghi đè một thay đổi đã xảy ra).
+  assert.equal(view.version, 7);
 });
 
 test("a voided waybill is not shown to the customer", () => {
@@ -106,7 +109,7 @@ test("pay again is offered only within 24 hours of an online order waiting for p
     created_at: recent
   }, [], []);
   assert.equal(cancelledPayment.status_label, "Chờ xác nhận");
-  assert.equal(cancelledPayment.can_pay_again, true);
+  assert.equal(cancelledPayment.can_pay_again, false);
   assert.equal(cod.can_pay_again, false);
 });
 
@@ -118,7 +121,7 @@ test("a Stripe session younger than its lifetime blocks a second one", () => {
 });
 
 test("formatOrderInternalNote formats Coolmate options (gift, VAT, other recipient, referral)", async () => {
-  const { formatOrderInternalNote } = await import("../../apps/api/src/user/orders.js");
+  const { formatOrderInternalNote } = await import("../../apps/api/src/user/order-router.js");
   const note = formatOrderInternalNote({
     note: "Giao sau 18h",
     referral_code: "BANBE2026",

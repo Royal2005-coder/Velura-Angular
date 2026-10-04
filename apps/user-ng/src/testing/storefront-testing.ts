@@ -6,6 +6,19 @@ import { ApiService } from '../app/core/services/api.service';
 import { CatalogService } from '../app/core/services/catalog.service';
 import { ChatbotService } from '../app/core/services/chatbot.service';
 import { ProductSummary } from '../app/core/models/product.interface';
+import { AddressGeographyService } from '../app/core/services/address-geography.service';
+import type { GeographyMode } from '../app/core/models/address-geography';
+
+/** Page specs receive administrative data from a mocked Model, never HttpClient. */
+export function stubAddressGeographyService(): Pick<AddressGeographyService, 'load'> {
+  return { load: (mode: GeographyMode) => of({ mode, source: 'fixture', retrieved_at: '', provinces: mode === 'current' ? [
+    { code: 79, name: 'Thành phố Hồ Chí Minh', wards: [{ code: 26728, name: 'Xã Châu Pha' }, { code: 26704, name: 'Phường An Khánh' }] },
+    { code: 1, name: 'Thành phố Hà Nội', wards: [{ code: 4, name: 'Phường Ba Đình' }] },
+  ] : [
+    { code: 79, name: 'Thành phố Hồ Chí Minh', districts: [{ code: 760, name: 'Quận 1', wards: [{ code: 26734, name: 'Phường Bến Nghé' }] }] },
+    { code: 1, name: 'Thành phố Hà Nội', districts: [{ code: 1, name: 'Quận Ba Đình', wards: [{ code: 1, name: 'Phường Phúc Xá' }] }] },
+  ] }) };
+}
 
 const sampleProduct: ProductSummary = {
   product_id: 'p1',
@@ -121,6 +134,7 @@ export async function createStorefrontPage<T>(page: Type<T>, apiOverrides: Parti
   await TestBed.configureTestingModule({
     imports: [page],
     providers: [
+      { provide: AddressGeographyService, useValue: stubAddressGeographyService() },
       provideRouter([]),
       { provide: ApiService, useValue: { ...stubApiService(), ...apiOverrides } },
       { provide: CatalogService, useValue: stubCatalogService() },

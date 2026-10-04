@@ -63,6 +63,8 @@ export interface RejectReturnInput {
  * Input for a generic return status update.
  */
 export interface UpdateReturnStatusInput {
+  /** Per-line warehouse QA facts persisted with the receipt state transition. */
+  receipts?: unknown;
   status: string;
   adminNote?: unknown;
   reason?: unknown;
@@ -102,6 +104,10 @@ export interface CloseTicketInput {
  */
 export function createReturnRepository() {
   return {
+    /** Creates one real replacement order atomically after warehouse QA. */
+    /** Commits audited transfer evidence and server-authoritative net refund ledger. */
+    async recordManualRefund(returnId:string,expectedVersion:number,reference:string,proof:string,actorId:string) {return asJsonObject(await callRpc("velura_record_manual_return_refund",{p_return_id:returnId,p_expected_version:expectedVersion,p_reference:reference,p_proof:proof,p_actor_id:actorId}));},
+    async prepareExchange(returnId:string,expectedVersion:number,actorId:string) { return asJsonObject(await callRpc("velura_prepare_exchange",{p_return_id:returnId,p_expected_version:expectedVersion,p_actor_id:actorId})); },
     async listReturns(filters: ReturnListFilters, accessToken: string) {
       const query: Record<string, unknown> = {
         select: RETURN_SELECT,
@@ -136,7 +142,7 @@ export function createReturnRepository() {
     async getPaymentByOrderId(orderId: string, accessToken?: string): Promise<JsonObject | null> {
       const options = accessToken ? authOptions(accessToken) : undefined;
       const result = await selectRows("payment", {
-        select: "payment_id,payment_method,payment_provider,amount,payment_status,gateway_transaction_ref,refund_at,refund_amount,gateway_response_code,created_at",
+        select: "payment_id,payment_method,payment_provider,amount,payment_status,gateway_transaction_ref,refund_at,refund_amount,gateway_response_code,created_at,refunded_amount",
         order_id: `eq.${orderId}`,
         order: "created_at.desc",
         limit: 1
@@ -156,17 +162,7 @@ export function createReturnRepository() {
      * đặt, chứ không lấy giá hiện hành của sản phẩm.
      */
     async getRefundableAmount(returnId: string, accessToken: string): Promise<number> {
-      const result = await selectRows("return_item", {
-        select: "quantity,order_item:order_item_id(unit_price)",
-        return_id: `eq.${returnId}`,
-        limit: 200
-      }, { ...authOptions(accessToken), count: "none" });
-
-      return (result.rows || []).reduce((total, row) => {
-        const quantity = asNumber(row.quantity);
-        const unitPrice = asNumber(asJsonObject(row.order_item)?.unit_price);
-        return total + quantity * unitPrice;
-      }, 0);
+      return asNumber(await callRpc("velura_return_refundable_amount", {p_return_id:returnId}, {accessToken}));
     },
 
     async approveRefund(returnId: string, input: ApproveRefundInput, actorId: string, actorRole: string, ipAddress: string | undefined) {
@@ -180,7 +176,7 @@ export function createReturnRepository() {
       if (current.version !== input.expectedVersion) {
         throw new HttpError(409, "VERSION_CONFLICT", "Return record has been modified by another user");
       }
-      if (current.status !== "pending") {
+      if (current.status !== "CONTACTING") {
         throw new HttpError(422, "RETURN_NOT_PENDING", "Return record is not pending");
       }
       if (!input.refundAmount || input.refundAmount <= 0) {
@@ -188,12 +184,12 @@ export function createReturnRepository() {
       }
 
       const note = typeof input.adminNote === "string" ? input.adminNote.trim() : "";
-      const contacted = asString(current.admin_note).includes("[CSKH]");
+      const contacted = /\[CSKH(?:\s|\])/.test(asString(current.admin_note));
       if (!contacted && note.length < 10) {
         throw new HttpError(422, "CONTACT_OR_REASON_REQUIRED", "Chưa ghi nhận liên hệ CSKH. Duyệt khi chưa liên hệ phải có lý do ít nhất 10 ký tự.");
       }
       const payload: JsonObject = {
-        status: "approved",
+        status: "WAITING_RETURN",
         refund_amount: input.refundAmount,
         admin_note: note || asString(current.admin_note),
         resolved_at: new Date().toISOString(),
@@ -237,59 +233,12 @@ export function createReturnRepository() {
       if (current.version !== input.expectedVersion) {
         throw new HttpError(409, "VERSION_CONFLICT", "Return record has been modified by another user");
       }
-      if (current.status !== "pending") {
+      if (current.status !== "REQUESTED") {
         throw new HttpError(422, "RETURN_NOT_PENDING", "Return record is not pending");
       }
 
-      // Fetch original order details
-      const originalOrder = await selectOne("orders", {
-        order_id: `eq.${current.order_id}`
-      });
-      if (!originalOrder) {
-        throw new HttpError(404, "ORDER_NOT_FOUND", "Original order not found");
-      }
-
-      const newOrderId = crypto.randomUUID();
-
-      // Create the replacement exchange order record first
-      await insertRow("orders", {
-        order_id: newOrderId,
-        user_id: originalOrder.user_id,
-        shipping_name: originalOrder.shipping_name,
-        shipping_phone: originalOrder.shipping_phone,
-        shipping_address: originalOrder.shipping_address,
-        shipping_fee: 0,
-        subtotal: 0,
-        total_amount: 0,
-        payment_method: originalOrder.payment_method,
-        internal_note: `Đơn đổi hàng cho yêu cầu đổi trả ${returnId}`
-      });
-
-      // Fetch returned items to clone them
-      const { rows: returnItems } = await selectRows("return_item", {
-        return_id: `eq.${returnId}`
-      });
-
-      for (const item of returnItems) {
-        const origItem = await selectOne("order_item", {
-          item_id: `eq.${item.order_item_id}`
-        });
-        if (origItem) {
-          await insertRow("order_item", {
-            order_id: newOrderId,
-            variant_id: origItem.variant_id,
-            product_name: origItem.product_name,
-            product_image: origItem.product_image || null,
-            quantity: item.quantity,
-            unit_price: origItem.unit_price,
-            subtotal_item: asNumber(origItem.unit_price) * asNumber(item.quantity)
-          });
-        }
-      }
-
       const payload: JsonObject = {
-        status: "approved",
-        exchange_order_id: newOrderId,
+        status: "WAITING_RETURN",
         admin_note: typeof input.adminNote === "string" ? input.adminNote.trim() : "",
         resolved_at: new Date().toISOString(),
         version: asNumber(current.version) + 1,
@@ -313,7 +262,7 @@ export function createReturnRepository() {
         module: "returns",
         target_id: returnId,
         old_value: { status: current.status, version: current.version },
-        new_value: { status: updated.status, version: updated.version, exchange_order_id: newOrderId },
+        new_value: { status: updated.status, version: updated.version },
         ip_address: ipAddress || "127.0.0.1",
         timestamp: new Date().toISOString()
       });
@@ -332,7 +281,7 @@ export function createReturnRepository() {
       if (current.version !== input.expectedVersion) {
         throw new HttpError(409, "VERSION_CONFLICT", "Return record has been modified by another user");
       }
-      if (current.status !== "pending") {
+      if (current.status !== "REQUESTED") {
         throw new HttpError(422, "RETURN_NOT_PENDING", "Return record is not pending");
       }
       if (!input.reason || input.reason.trim().length < 10) {
@@ -340,7 +289,7 @@ export function createReturnRepository() {
       }
 
       const payload: JsonObject = {
-        status: "rejected",
+        status: "CANCELLED",
         rejection_reason: input.reason.trim(),
         resolved_at: new Date().toISOString(),
         version: asNumber(current.version) + 1,
@@ -396,13 +345,16 @@ export function createReturnRepository() {
       if (input.reason !== undefined) payload.rejection_reason = input.reason;
       if (input.refundAmount !== undefined && input.refundAmount !== null) payload.refund_amount = input.refundAmount;
       if (input.trackingReturnCode !== undefined) payload.tracking_return_code = input.trackingReturnCode;
+      if (input.receipts !== undefined) payload.qa_item_receipts = input.receipts;
+      if (input.imageProof !== undefined && input.status === "RECEIVED") payload.warehouse_proof = input.imageProof;
+      if (input.trackingReturnCode !== undefined && input.status === "EXCHANGE_SHIPPING") payload.exchange_tracking_code = input.trackingReturnCode;
       if (input.conditionCheckResult !== undefined) payload.condition_check_result = input.conditionCheckResult;
       if (input.imageProof !== undefined && input.imageProof !== null) {
         const existing = Array.isArray(current.evidence_images) ? current.evidence_images.map(String) : [];
         payload.evidence_images = [...existing, String(input.imageProof)];
       }
 
-      if (["completed", "rejected"].includes(input.status)) {
+      if (["COMPLETED", "CANCELLED"].includes(input.status)) {
         payload.resolved_at = new Date().toISOString();
       }
 
@@ -417,8 +369,8 @@ export function createReturnRepository() {
 
       // Map status to a valid audit_action enum value
       // Valid values: create, update, delete, approve, reject, lock, unlock
-      const auditAction = input.status === "rejected" ? "reject"
-        : input.status === "approved" ? "approve"
+      const auditAction = input.status === "CANCELLED" ? "reject"
+        : input.status === "WAITING_RETURN" ? "approve"
         : "update";
 
       const updated = asJsonObject(rows[0]);
@@ -507,6 +459,7 @@ export function createReturnRepository() {
         return_id: `eq.${returnId}`,
         version: `eq.${input.expectedVersion}`
       }, {
+        status: ["REQUESTED","NEEDS_SUPPORT"].includes(asString(current.status)) ? "CONTACTING" : current.status,
         admin_note: adminNote,
         version: asNumber(current.version) + 1,
         updated_at: stamp
@@ -515,7 +468,7 @@ export function createReturnRepository() {
       await insertRow("audit_log", {
         actor_id: actorId,
         actor_role: actorRole,
-        action: "cskh_contact",
+        action: "update",
         module: "returns",
         target_id: returnId,
         old_value: { version: current.version },

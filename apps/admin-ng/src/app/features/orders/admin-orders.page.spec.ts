@@ -23,7 +23,7 @@ const pendingCod = (overrides: Partial<AdminOrderRow> = {}): AdminOrderRow => ({
   status: 'pending',
   status_label: 'Chờ xác nhận',
   payment_method: 'COD',
-  total_amount: 1_200_000,
+  total_amount: 900_000,
   version: 3,
   tags: [{ code: 'PRIORITY_REVIEW', label: 'Ưu tiên duyệt' }],
   allowed_actions: [

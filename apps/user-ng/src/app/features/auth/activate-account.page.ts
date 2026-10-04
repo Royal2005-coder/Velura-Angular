@@ -25,6 +25,8 @@ export class ActivateAccountPage {
   private readonly api = inject(ApiService);
   private readonly auth = inject(AuthService);
 
+  readonly phone = signal(this.route.snapshot.queryParamMap.get('phone') || '');
+  readonly email = signal(this.route.snapshot.queryParamMap.get('email') || '');
   readonly errorMessage = signal<string | null>(null);
   readonly successMessage = signal<string | null>(null);
   readonly submitting = signal(false);
@@ -66,8 +68,8 @@ export class ActivateAccountPage {
           return;
         }
         this.auth.applySession(response.token, response.user);
-        this.successMessage.set('Kích hoạt tài khoản thành công.');
-        window.setTimeout(() => void this.router.navigateByUrl('/account/orders'), 800);
+        this.successMessage.set('Kích hoạt tài khoản thành công! Đang chuyển bạn đến Kho Ưu Đãi...');
+        window.setTimeout(() => void this.router.navigateByUrl('/account/vouchers'), 1000);
       },
       error: (error: Error) => {
         this.submitting.set(false);

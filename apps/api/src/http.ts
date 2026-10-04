@@ -1,6 +1,7 @@
 import {
   asJsonObject,
   errorMessage,
+  isJsonObject,
   type HeaderMap,
   type HttpRequest,
   type HttpResponse,
@@ -57,6 +58,51 @@ type ErrorLike = {
   details?: unknown;
 };
 
+function extractBusinessError(err: ErrorLike): { code: string; message: string; status?: number; details?: unknown } | null {
+  const details = isJsonObject(err.details) ? err.details : {};
+  const rawMsg = String(details.message || details.msg || err.message || "");
+  const rawCode = String(details.code || err.code || "");
+  const rawDetails = String(details.details || "");
+
+  if (rawMsg.includes("users_email_key") || rawDetails.includes("email") || (rawCode === "23505" && rawMsg.includes("email"))) {
+    return { code: "EMAIL_ALREADY_EXISTS", message: "Email này đã được sử dụng bởi tài khoản khác. Vui lòng đăng nhập hoặc sử dụng email khác.", status: 409 };
+  }
+  if (rawMsg.includes("users_phone_key") || rawDetails.includes("phone") || (rawCode === "23505" && rawMsg.includes("phone"))) {
+    return { code: "PHONE_ALREADY_EXISTS", message: "Số điện thoại này đã được sử dụng. Vui lòng đăng nhập để tiếp tục.", status: 409 };
+  }
+
+  const businessCodes: Record<string, string> = {
+    INSUFFICIENT_STOCK: "Một số sản phẩm trong giỏ hàng đã hết hàng hoặc không đủ tồn kho.",
+    VOUCHER_CHANGED: "Mã giảm giá đã thay đổi hoặc hết lượt sử dụng. Vui lòng kiểm tra lại đơn hàng.",
+    ORDER_TOTAL_MISMATCH: "Tổng tiền đơn hàng không khớp với bảng giá hiện tại. Vui lòng thử lại.",
+    INVALID_PAYMENT_METHOD: "Phương thức thanh toán không hợp lệ.",
+    DUPLICATE_VARIANT: "Sản phẩm trong đơn hàng bị trùng lặp.",
+    VARIANT_NOT_FOUND: "Không tìm thấy thông tin sản phẩm trong hệ thống.",
+    ORDER_ITEMS_REQUIRED: "Đơn hàng phải có ít nhất một sản phẩm.",
+    INVALID_QUANTITY: "Số lượng sản phẩm không hợp lệ.",
+    ORDER_NOT_FOUND: "Không tìm thấy thông tin đơn hàng.",
+    ORDER_CANNOT_CANCEL: "Đơn hàng đang ở trạng thái không thể hủy.",
+    VERSION_CONFLICT: "Dữ liệu đơn hàng vừa được cập nhật bởi thao tác khác. Vui lòng thử lại.",
+    QA_REQUIRED: "Yêu cầu kiểm tra chất lượng trước khi tiếp tục.",
+    REFUND_ALREADY_REQUESTED: "Yêu cầu hoàn tiền cho đơn hàng này đã được gửi trước đó.",
+    RETURN_WINDOW_CLOSED: "Thời hạn đổi/trả hàng cho sản phẩm này đã kết thúc.",
+    EXCHANGE_SAME_PRODUCT_REQUIRED: "Chỉ được đổi sang cùng một sản phẩm với phân loại khác.",
+    OTP_PHONE_RATE_LIMIT: "Bạn đã yêu cầu mã OTP quá nhiều lần. Vui lòng thử lại sau.",
+    OTP_IP_RATE_LIMIT: "Kết nối mạng này đã gửi quá nhiều yêu cầu OTP. Vui lòng thử lại sau."
+  };
+
+  for (const [code, msg] of Object.entries(businessCodes)) {
+    if (rawMsg === code || rawMsg.includes(code) || rawCode === code) {
+      const status = code === "INSUFFICIENT_STOCK" || code === "VOUCHER_CHANGED" || code === "VERSION_CONFLICT" || code === "REFUND_ALREADY_REQUESTED"
+        ? 409
+        : code.includes("NOT_FOUND") ? 404 : code.includes("RATE_LIMIT") ? 429 : 422;
+      return { code, message: msg, status, details };
+    }
+  }
+
+  return null;
+}
+
 /**
  * Map an thrown value to the standard JSON error envelope.
  */
@@ -72,6 +118,21 @@ export function sendError(
   if (status >= 500) {
     console.error(`[Internal Server Error] RequestId: ${requestId}`, error);
   }
+  const business = extractBusinessError(err);
+  if (business) {
+    const payload = {
+      error: {
+        code: business.code,
+        message: business.message,
+        details: isHttpError ? err.details : business.details,
+        requestId: requestId || undefined,
+        timestamp: new Date().toISOString()
+      }
+    };
+    sendJson(res, business.status || status, payload, extraHeaders);
+    return;
+  }
+
   const isExplicit = isHttpError || Boolean(err.code && err.message && status !== 500);
   const isDatabaseError = err.code === "SUPABASE_ERROR" || /^(?:[0-9A-Z]{5}|PGRST\d+)$/.test(err.code || "");
   const message = isDatabaseError

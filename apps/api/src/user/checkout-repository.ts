@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { HttpError } from "../http.js";
 import { callRpc, insertRow, selectOne, updateRows } from "../supabase.js";
-import { asJsonObject, type JsonObject } from "../types.js";
+import { asJsonObject, asString, type JsonObject } from "../types.js";
 import type { CheckoutContact, PersistCheckoutOrderInput, PersistedCheckoutOrder } from "./checkout-service.js";
 
 /** Địa chỉ checkout được ghi thêm vào sổ địa chỉ của Member. */
@@ -56,14 +56,53 @@ export interface CheckoutRepository {
 export function createCheckoutRepository(): CheckoutRepository {
   return {
     async createOrderBundle(input) {
-      const result = asJsonObject(await callRpc("velura_create_checkout_order", { p_input: input }));
-      return { order: asJsonObject(result.order), items: Array.isArray(result.items) ? result.items.map(asJsonObject) : [] };
+      try {
+        const result = asJsonObject(await callRpc("velura_create_checkout_order", { p_input: input }));
+        return { order: asJsonObject(result.order), items: Array.isArray(result.items) ? result.items.map(asJsonObject) : [] };
+      } catch (error: unknown) {
+        if (error instanceof HttpError && error.code === "SUPABASE_ERROR") {
+          const details = asJsonObject(error.details);
+          const rawCode = asString(details.message) || asString(details.code) || "";
+          if (rawCode === "INSUFFICIENT_STOCK") {
+            throw new HttpError(409, "INSUFFICIENT_STOCK", "Một số sản phẩm trong giỏ hàng đã hết hàng hoặc không đủ tồn kho.", details);
+          }
+          if (rawCode === "VOUCHER_CHANGED") {
+            throw new HttpError(409, "VOUCHER_CHANGED", "Mã giảm giá đã thay đổi hoặc hết lượt sử dụng. Vui lòng kiểm tra lại đơn hàng.", details);
+          }
+          if (rawCode === "ORDER_TOTAL_MISMATCH") {
+            throw new HttpError(422, "ORDER_TOTAL_MISMATCH", "Tổng tiền đơn hàng không khớp với bảng giá hiện tại. Vui lòng thử lại.", details);
+          }
+          if (rawCode === "INVALID_PAYMENT_METHOD") {
+            throw new HttpError(422, "INVALID_PAYMENT_METHOD", "Phương thức thanh toán không hợp lệ.", details);
+          }
+          if (rawCode === "DUPLICATE_VARIANT") {
+            throw new HttpError(422, "DUPLICATE_VARIANT", "Sản phẩm trong giỏ hàng bị trùng lặp.", details);
+          }
+        }
+        throw error;
+      }
     },
     findVariant: (variantId) => selectOne("variant", { variant_id: `eq.${variantId}` }),
     findUserByPhone: (phone) => selectOne("users", { phone: `eq.${phone}` }),
     findUserByEmail: (email) => selectOne("users", { email: `eq.${email}` }),
     findUserByActivationHash: (tokenHash) => selectOne("users", { activation_token_hash: `eq.${tokenHash}` }),
-    createGuestUser: async (input) => asJsonObject(await insertRow("users", input)),
+    createGuestUser: async (input) => {
+      try {
+        return asJsonObject(await insertRow("users", input));
+      } catch (error: unknown) {
+        if (error instanceof HttpError && error.code === "SUPABASE_ERROR") {
+          const details = asJsonObject(error.details);
+          const rawMsg = asString(details.message) || asString(details.details) || "";
+          if (rawMsg.includes("users_email_key")) {
+            throw new HttpError(409, "EMAIL_ALREADY_EXISTS", "Email này đã thuộc về tài khoản khác. Vui lòng đăng nhập hoặc đổi email.", details);
+          }
+          if (rawMsg.includes("users_phone_key")) {
+            throw new HttpError(409, "PHONE_ALREADY_EXISTS", "Số điện thoại này đã được sử dụng. Vui lòng đăng nhập để tiếp tục.", details);
+          }
+        }
+        throw error;
+      }
+    },
     updateGuestUser: async (userId, input) => {
       await updateRows("users", { user_id: `eq.${userId}` }, input);
     },
@@ -75,6 +114,14 @@ export function createCheckoutRepository(): CheckoutRepository {
         activation_expires_at: null,
         updated_at: new Date().toISOString()
       });
+      const user = await selectOne("users", { user_id: `eq.${userId}` });
+      if (user?.phone) {
+        await updateRows("orders", { shipping_phone: `eq.${user.phone}` }, {
+          user_id: userId,
+          is_guest: false,
+          updated_at: new Date().toISOString()
+        });
+      }
     },
     createOrder: async (input) => asJsonObject(await insertRow("orders", input)),
     createPayment: async (input) => {

@@ -307,7 +307,14 @@ export class CheckoutService {
     existingMember: boolean;
   }> {
     let user = await this.repository.findUserByPhone(contact.phone);
-    if (!user && contact.email) user = await this.repository.findUserByEmail(contact.email);
+    if (!user && contact.email) {
+      const byEmail = await this.repository.findUserByEmail(contact.email);
+      // Chỉ gắn với tài khoản tìm theo email nếu tài khoản đó chưa có SĐT hoặc khớp chính xác SĐT này.
+      // Tuyệt đối không gắn vào tài khoản của SĐT khác tránh chiếm quyền tài khoản và lỗi vượt hạn mức voucher chéo.
+      if (byEmail && (!byEmail.phone || normalizeVietnamesePhone(asString(byEmail.phone)) === contact.phone)) {
+        user = byEmail;
+      }
+    }
     const existingMember = Boolean(user?.is_active);
     const activation = existingMember ? null : createCheckoutActivation();
     const now = new Date().toISOString();
@@ -327,28 +334,22 @@ export class CheckoutService {
           created_at: now,
           updated_at: now
         });
-      } catch (insertError: unknown) {
-        if (contact.email) {
-          const existingByEmail = await this.repository.findUserByEmail(contact.email);
-          if (existingByEmail) {
-            user = existingByEmail;
-          }
-        }
-        if (!user) {
-          user = await this.repository.createGuestUser({
-            full_name: contact.fullName,
-            phone: contact.phone,
-            email: null,
-            password_hash: hashPassword(randomUUID() + randomUUID()),
-            role: "member",
-            is_active: false,
-            activation_token_hash: activation?.tokenHash,
-            activation_expires_at: activation?.expiresAt,
-            saved_addresses: savedAddresses,
-            created_at: now,
-            updated_at: now
-          });
-        }
+      } catch {
+        // Nếu email trùng với tài khoản khác (users_email_key), tạo user guest với email: null theo đúng SĐT.
+        // Đơn hàng và email kích hoạt vẫn được gửi chính xác tới contact.email thông qua shipping_email.
+        user = await this.repository.createGuestUser({
+          full_name: contact.fullName,
+          phone: contact.phone,
+          email: null,
+          password_hash: hashPassword(randomUUID() + randomUUID()),
+          role: "member",
+          is_active: false,
+          activation_token_hash: activation?.tokenHash,
+          activation_expires_at: activation?.expiresAt,
+          saved_addresses: savedAddresses,
+          created_at: now,
+          updated_at: now
+        });
       }
     } else if (!existingMember) {
       await this.repository.updateGuestUser(asString(user.user_id), {

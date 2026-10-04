@@ -17,7 +17,8 @@ import {
 import { ORDER_ACCOUNT_MODEL, type OrderAccountModel, type ReplacementChoice, type ReturnReasonCode } from '../../core/services/order-account.model';
 import { orderAccountErrorMessage } from '../../core/services/order-account-api.store';
 import { formatVnd, toPublicAsset } from '../../core/utils/money';
-import { isGuestPreview } from '../../core/utils/preview-mode';
+import { isGuestPreview, isPreviewMode } from '../../core/utils/preview-mode';
+import { DeliverySimulation } from '../../shared/delivery-simulation/delivery-simulation';
 
 /**
  * Guest access, order actions and after-sales share one `OrderAccountModel` injection point:
@@ -26,7 +27,7 @@ import { isGuestPreview } from '../../core/utils/preview-mode';
  */
 @Component({
   selector: 'app-order-flow',
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, DeliverySimulation],
   templateUrl: './order-flow.page.html',
   styleUrls: [
     '../shared/purchase-flow.css',
@@ -36,6 +37,7 @@ import { isGuestPreview } from '../../core/utils/preview-mode';
   ],
 })
 export class OrderFlowPage {
+  readonly preview = isPreviewMode();
   readonly model: OrderAccountModel = inject(ORDER_ACCOUNT_MODEL);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
@@ -318,6 +320,7 @@ export class OrderFlowPage {
     if (updateUrl) {
       void this.router.navigate([this.model.member() ? '/account/orders' : '/guest/orders', order.id], {
         replaceUrl: true,
+        ...(this.preview ? { queryParams: { preview: '1' } } : {}),
       });
     }
   }
@@ -356,6 +359,7 @@ export class OrderFlowPage {
   }
   /** Reviewer-only control, preview Model only — no real order can be fast-forwarded by its own customer. */
   scenario(status: DemoOrderStatus, days = 0): void {
+    if (!this.preview) return;
     const order = this.order();
     if (order) this.model.scenario?.(order.id, status, days);
   }

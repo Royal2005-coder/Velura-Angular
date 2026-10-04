@@ -493,6 +493,13 @@ export class PurchaseFlowPage {
       },
     });
   }
+  /** Cho phép khách vãng lai đặt lại trạng thái xác thực để gửi lại OTP hoặc đổi thông tin. */
+  reverifyPhone(): void {
+    this.otpVerified.set(false);
+    this.guestCheckoutToken = '';
+    this.digits.set(['', '', '', '', '', '']);
+    this.otpError.set('');
+  }
   /** Open a native modal with a separate pending selection, keeping checkout unchanged until confirmed. */
   openAddressBook(): void {
     if (!this.member()) return;
@@ -733,7 +740,14 @@ export class PurchaseFlowPage {
       error: (error: Error) => {
         if (userId !== this.model.userId()) return;
         this.busy.set(false);
-        if (error instanceof ApiRequestError && error.code === 'VOUCHER_CHANGED') { this.refreshQuote(); this.voucherNotice.set('Tổng thanh toán đã thay đổi. Vui lòng kiểm tra và xác nhận lại.'); }
+        if (error instanceof ApiRequestError && error.code === 'VOUCHER_CHANGED') {
+          this.refreshQuote();
+          this.voucherNotice.set('Tổng thanh toán đã thay đổi. Vui lòng kiểm tra và xác nhận lại.');
+        }
+        if (error instanceof ApiRequestError && (error.code === 'CHECKOUT_PROOF_REQUIRED' || error.code === 'INVALID_OTP' || error.code === 'EXPIRED_OTP')) {
+          this.otpVerified.set(false);
+          this.guestCheckoutToken = '';
+        }
         this.error.set(error.message || 'Chưa thể tạo đơn. Thông tin của bạn đã được giữ lại.');
       },
     });

@@ -1,4 +1,5 @@
 <main class="flow flow--orders">
+  @if (preview) { <p class="badge" role="status">Dữ liệu xem thử · thao tác không thay đổi đơn hàng thật</p> }
   <header class="flow-header flow-header--orders">
     <div class="flow-heading">
       <p class="eyebrow">Velura / Chăm sóc đơn hàng</p>
@@ -207,6 +208,13 @@
                 <span class="badge">{{ labels[item.status] }}</span>
               </div>
               <p class="muted">Ngày đặt: {{ date(item.createdAt) }}</p>
+              @if (preview) {
+                <label class="field">Kịch bản xem thử
+                  <select [ngModel]="item.status" (ngModelChange)="scenario($event)">
+                    <option value="pending">Chờ xác nhận</option><option value="confirmed">Đã xác nhận</option><option value="preparing">Chuẩn bị hàng</option><option value="shipping">Đang giao hàng</option><option value="delivered">Giao thành công</option>
+                  </select>
+                </label>
+              }
               @if (item.status !== 'cancelled') {
                 <details>
                   <summary>Tiến trình đơn hàng</summary>
@@ -221,6 +229,9 @@
                     }
                   </ol>
                 </details>
+              }
+              @if (item.status === 'shipping' || item.status === 'delivered') {
+                <app-delivery-simulation [orderCode]="item.id" [destination]="item.address.province" [delivered]="item.status === 'delivered'" />
               }
               @for (line of item.items; track line.variant_id) {
                 <article class="line">

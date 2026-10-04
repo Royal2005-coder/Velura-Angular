@@ -8,6 +8,8 @@ import type { ProductVariant } from '../models/product.interface';
 /** Live choices for an existing checkout line; reserved units cannot be purchased. */
 export interface CheckoutVariantChoice extends ProductVariant {
   available: number;
+  /** Current catalog unit price; checkout still requires the authoritative server quote. */
+  unitPrice?: number;
 }
 
 /** Edits the selected checkout and matching cart lines before an order is created. */
@@ -22,6 +24,7 @@ export class CheckoutLineEditorService {
     return this.catalog.getProduct(productId).pipe(map(product => (product.variants || []).map(variant => ({
       ...variant,
       available: Math.max(0, (variant.stock_quantity || 0) - (variant.reserved_quantity || 0)),
+      unitPrice: product.sale_price ?? product.base_price,
     }))));
   }
 
@@ -34,13 +37,13 @@ export class CheckoutLineEditorService {
     const variantTotal = rest.filter(candidate => candidate.variant_id === variant.variant_id).reduce((sum, candidate) => sum + candidate.quantity, quantity);
     if (variantTotal > variant.available) throw new Error('Số lượng vượt quá tồn kho có thể bán. Vui lòng chọn lại.');
     if (collision) collision.quantity += quantity;
-    else rest.push({ ...line, variant_id: variant.variant_id, color: variant.color, size: variant.size, quantity });
+    else rest.push({ ...line, variant_id: variant.variant_id, color: variant.color, size: variant.size, quantity, unit_price: !line.combo_id && variant.unitPrice !== undefined ? variant.unitPrice : line.unit_price });
     const currentCart = this.cart.items();
     if (currentCart.some(same)) {
       const cartRest = currentCart.filter(candidate => !same(candidate)).map(candidate => ({ ...candidate }));
       const cartCollision = cartRest.find(candidate => candidate.variant_id === variant.variant_id && candidate.combo_id === line.combo_id);
       if (cartCollision) cartCollision.quantity += quantity;
-      else cartRest.push({ ...line, variant_id: variant.variant_id, color: variant.color, size: variant.size, quantity });
+      else cartRest.push({ ...line, variant_id: variant.variant_id, color: variant.color, size: variant.size, quantity, unit_price: !line.combo_id && variant.unitPrice !== undefined ? variant.unitPrice : line.unit_price });
       this.cart.replaceItems(cartRest);
     }
     this.checkout.setCheckoutItems(rest);

@@ -57,7 +57,12 @@ export function createCheckoutRepository(): CheckoutRepository {
   return {
     async createOrderBundle(input) {
       try {
-        const result = asJsonObject(await callRpc("velura_create_checkout_order", { p_input: input }));
+        const payload = {
+          ...input,
+          userId: input.userId ? String(input.userId).trim() || null : null,
+          voucherId: input.voucherId ? String(input.voucherId).trim() || null : null
+        };
+        const result = asJsonObject(await callRpc("velura_create_checkout_order", { p_input: payload }));
         return { order: asJsonObject(result.order), items: Array.isArray(result.items) ? result.items.map(asJsonObject) : [] };
       } catch (error: unknown) {
         if (error instanceof HttpError && error.code === "SUPABASE_ERROR") {
@@ -77,6 +82,15 @@ export function createCheckoutRepository(): CheckoutRepository {
           }
           if (rawCode === "DUPLICATE_VARIANT") {
             throw new HttpError(422, "DUPLICATE_VARIANT", "Sản phẩm trong giỏ hàng bị trùng lặp.", details);
+          }
+          if (rawCode === "ORDER_ITEMS_REQUIRED") {
+            throw new HttpError(422, "ORDER_ITEMS_REQUIRED", "Đơn hàng phải có ít nhất một sản phẩm.", details);
+          }
+          if (rawCode === "INVALID_QUANTITY") {
+            throw new HttpError(422, "INVALID_QUANTITY", "Số lượng sản phẩm không hợp lệ.", details);
+          }
+          if (rawCode === "VARIANT_NOT_FOUND") {
+            throw new HttpError(404, "VARIANT_NOT_FOUND", "Không tìm thấy thông tin sản phẩm trong hệ thống.", details);
           }
         }
         throw error;

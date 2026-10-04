@@ -7,7 +7,7 @@ import {
   ProductSummary,
   ProductVariant,
 } from '../../core/models/product.interface';
-import { CartLine } from '../../core/services/cart.store';
+import { CartLine, CartComboSubItem } from '../../core/services/cart.store';
 import { AuthService } from '../../core/services/auth.service';
 import { CartStore } from '../../core/services/cart.store';
 import { CheckoutStore } from '../../core/services/checkout.store';
@@ -330,7 +330,7 @@ export class ProductDetailPage {
     if (!item) {
       return;
     }
-    this.checkout.setCheckoutItems([item]);
+    this.checkout.setCheckoutItems([item], 'buy_now');
     localStorage.removeItem('checkout_discount');
     localStorage.removeItem('checkout_voucher_id');
     localStorage.removeItem('checkout_voucher_code');
@@ -356,7 +356,7 @@ export class ProductDetailPage {
     if (!lines) {
       return;
     }
-    this.checkout.setCheckoutItems(lines);
+    this.checkout.setCheckoutItems(lines, 'buy_now');
     localStorage.removeItem('checkout_discount');
     localStorage.removeItem('checkout_voucher_id');
     localStorage.removeItem('checkout_voucher_code');
@@ -594,24 +594,45 @@ export class ProductDetailPage {
       showToast('Số lượng set đã chọn vượt quá tồn kho khả dụng. Vui lòng giảm số lượng.');
       return null;
     }
-    return this.comboComponents().map((component, index) => {
+    const subItems: CartComboSubItem[] = this.comboComponents().map((component, index) => {
       const pick = this.comboPicks()[index];
-      const variant = this.findVariant(component.variants || [], pick.color, pick.size);
-      const componentItemQty = Math.max(1, component.quantity || 1) * setQty;
+      const variant = this.findVariant(component.variants || [], pick?.color || '', pick?.size || '');
       return {
-        variant_id: variant?.variant_id || component.product_id,
         product_id: component.product_id,
         product_name: component.name,
         product_image: this.comboImage(component),
-        quantity: componentItemQty,
-        unit_price: component.sale_price || component.base_price || 0,
-        color: pick.color || variant?.color,
-        size: pick.size || variant?.size,
-        combo_id: comboId,
-        combo_name: item.name,
-        combo_price: comboPrice,
+        variant_id: variant?.variant_id || component.product_id,
+        color: pick?.color || variant?.color || '',
+        size: pick?.size || variant?.size || '',
+        quantity: Math.max(1, component.quantity || 1),
+        available_variants: (component.variants || []).map((v) => ({
+          variant_id: v.variant_id,
+          color: v.color,
+          size: v.size,
+          stock_quantity: v.stock_quantity,
+          reserved_quantity: v.reserved_quantity,
+        })),
       };
     });
+
+    const comboVariant = item.variants?.[0];
+    const comboVariantId = comboVariant?.variant_id || item.product_id;
+
+    const comboLine: CartLine = {
+      variant_id: comboVariantId,
+      product_id: item.product_id,
+      product_name: item.name,
+      product_image: this.imageUrl(),
+      quantity: setQty,
+      unit_price: comboPrice,
+      is_combo: true,
+      sub_items: subItems,
+      combo_id: comboId,
+      combo_name: item.name,
+      combo_price: comboPrice,
+      combo_image: this.imageUrl(),
+    };
+    return [comboLine];
   }
 
   private buildCartItem(): CartLine | null {

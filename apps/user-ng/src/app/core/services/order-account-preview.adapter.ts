@@ -1,4 +1,4 @@
-import { DemoOrder, DemoOrderLine, DemoReturn, DemoReturnLine, PurchaseDemoStore } from './purchase-demo.store';
+import { ComboComponentItem, DemoOrder, DemoOrderLine, DemoReturn, DemoReturnLine, PurchaseDemoStore } from './purchase-demo.store';
 import type { OrderAccountModel } from './order-account.model';
 
 /**
@@ -76,6 +76,11 @@ export class OrderAccountPreviewAdapter implements OrderAccountModel {
   /** Lists fixture replacement choices. */
   replacements(line: DemoOrderLine): string[] {
     return this.demo.replacements(line);
+  }
+
+  /** Lists fixture combo component choices. */
+  comboComponents(line: DemoOrderLine): ComboComponentItem[] {
+    return this.demo.comboComponents(line);
   }
 
   /** Lists the richer fixture timeline without claiming it is persisted. */

@@ -32,6 +32,10 @@ export interface DemoOrderLine extends CartLine {
   availableQuantity: number;
   /** Real backend order_item UUID, needed to submit a return for this line; unset in the demo. */
   itemId?: string;
+  is_combo?: boolean;
+  isInProgress?: boolean;
+  inProgressCode?: string;
+  inProgressStatus?: string;
 }
 /** Demo orders are isolated from the production cart, account and API. */
 export interface DemoOrder {
@@ -74,7 +78,28 @@ export interface DemoReturnLine {
   replacement?: string;
   /** Actual same-product replacement variant; preview labels never authorize a real exchange. */
   replacementVariantId?: string;
+  /** Replacements selected for individual items in a combo set. */
+  comboReplacements?: Record<string, {
+    productId: string;
+    productName: string;
+    variantId: string;
+    variantLabel: string;
+  }>;
 }
+
+/** A replacement variant choice from current inventory. */
+export interface ReplacementChoice { id: string; label: string; stock?: number; }
+
+/** An item in a combo set available for individual variant exchange. */
+export interface ComboComponentItem {
+  productId: string;
+  name: string;
+  quantity: number;
+  originalSize?: string;
+  originalColor?: string;
+  choices: ReplacementChoice[];
+}
+
 /** A return request follows the BA contact, inbound parcel and refund/exchange timeline. */
 export type ReturnWorkflowStatus = 'REQUESTED' | 'CONTACTING' | 'WAITING_RETURN' | 'RETURN_IN_TRANSIT' | 'RECEIVED'
   | 'REFUND_PROCESSING' | 'REFUNDED' | 'EXCHANGE_PREPARING' | 'EXCHANGE_SHIPPING' | 'COMPLETED' | 'CANCELLED' | 'NEEDS_SUPPORT';
@@ -386,6 +411,49 @@ export class PurchaseDemoStore {
     return ['S / Kem', 'M / Kem', 'L / Kem', 'S / Nâu', 'M / Nâu'].filter(
       (value) => value !== `${line.size} / ${line.color}`,
     );
+  }
+  /** Demo combo items have components available for per-item exchange. */
+  comboComponents(line: DemoOrderLine): ComboComponentItem[] {
+    if (line.sub_items?.length) {
+      return line.sub_items.map((sub) => ({
+        productId: sub.product_id,
+        name: sub.product_name,
+        quantity: sub.quantity || 1,
+        originalSize: sub.size,
+        originalColor: sub.color,
+        choices: (sub.available_variants || []).map((v) => ({
+          id: v.variant_id,
+          label: [v.size, v.color].filter(Boolean).join(' / '),
+          stock: v.stock_quantity,
+        })),
+      }));
+    }
+    return [
+      {
+        productId: 'demo-comp-1',
+        name: 'Áo Thành Phần (Set)',
+        quantity: 1,
+        originalSize: 'M',
+        originalColor: 'Slate Blue',
+        choices: [
+          { id: 'v-ao-s', label: 'S / Slate Blue', stock: 10 },
+          { id: 'v-ao-m', label: 'M / Slate Blue', stock: 15 },
+          { id: 'v-ao-l', label: 'L / Slate Blue', stock: 8 },
+        ],
+      },
+      {
+        productId: 'demo-comp-2',
+        name: 'Quần / Chân Váy Thành Phần (Set)',
+        quantity: 1,
+        originalSize: 'M',
+        originalColor: 'Ivory',
+        choices: [
+          { id: 'v-quan-s', label: 'S / Ivory', stock: 12 },
+          { id: 'v-quan-m', label: 'M / Ivory', stock: 20 },
+          { id: 'v-quan-l', label: 'L / Ivory', stock: 6 },
+        ],
+      },
+    ];
   }
   /** Validate each entitlement again and reserve quantities for the active request. */
   createReturn(

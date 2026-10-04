@@ -78,6 +78,10 @@ export class ProductCard {
       showToast('Sản phẩm hiện đã hết hàng.');
       return;
     }
+    if (product.is_combo) {
+      void this.router.navigate(['/products', product.product_id]);
+      return;
+    }
     const variant = product.variants?.[0];
     this.cart.addItem({
       variant_id: variant?.variant_id || product.product_id,

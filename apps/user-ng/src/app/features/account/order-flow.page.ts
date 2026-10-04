@@ -14,7 +14,7 @@ import {
   normalizePhone,
   withinReturnWindow,
 } from '../../core/services/purchase-demo.store';
-import { ORDER_ACCOUNT_MODEL, type OrderAccountModel, type ReplacementChoice, type ReturnReasonCode } from '../../core/services/order-account.model';
+import { ORDER_ACCOUNT_MODEL, type ComboComponentItem, type OrderAccountModel, type ReplacementChoice, type ReturnReasonCode } from '../../core/services/order-account.model';
 import { orderAccountErrorMessage } from '../../core/services/order-account-api.store';
 import { formatVnd, toPublicAsset } from '../../core/utils/money';
 import { isGuestPreview, isPreviewMode } from '../../core/utils/preview-mode';
@@ -375,12 +375,12 @@ export class OrderFlowPage {
     this.view.set('return');
     void this.model.loadReplacementChoices?.(order.id);
   }
-  /** Per-item selection respects remaining quantities and the two-request cap. */
+  /** Per-item selection respects remaining quantities, combo bundle, and the two-request cap. */
   select(line: DemoOrderLine, checked: boolean): void {
-    if (checked && (line.returnCount >= 2 || line.availableQuantity < 1)) return;
+    if (checked && (line.isInProgress || line.returnCount >= 2 || line.availableQuantity < 1)) return;
     this.selections.update((rows) => {
       const next = { ...rows };
-      if (checked) next[line.variant_id] = { variantId: line.variant_id, quantity: 1 };
+      if (checked) next[line.variant_id] = { variantId: line.variant_id, quantity: line.is_combo ? line.availableQuantity : 1 };
       else delete next[line.variant_id];
       return next;
     });
@@ -404,6 +404,45 @@ export class OrderFlowPage {
   /** Real inventory supplies identities and counts; preview fixtures supply isolated labels only. */
   replacementChoices(line: DemoOrderLine): ReplacementChoice[] {
     return this.model.replacementChoices?.(line) || this.model.replacements(line).map((label) => ({ id: label, label }));
+  }
+  /** Combo component list for items in a combo set. */
+  comboComponents(line: DemoOrderLine): ComboComponentItem[] {
+    return this.model.comboComponents?.(line) || [];
+  }
+  /** Read current variant selected for a specific item in a combo set. */
+  selectedComboVariant(selected: DemoReturnLine, productId: string): string {
+    return selected.comboReplacements?.[productId]?.variantId || '';
+  }
+  /** Update replacement variant for one item within a combo set. */
+  comboComponentReplacement(line: DemoOrderLine, comp: ComboComponentItem, variantId: string): void {
+    const choice = comp.choices.find((row) => row.id === variantId);
+    this.selections.update((rows) => {
+      const current = rows[line.variant_id] || { variantId: line.variant_id, quantity: line.availableQuantity };
+      const currentCombo = current.comboReplacements ? { ...current.comboReplacements } : {};
+      if (choice) {
+        currentCombo[comp.productId] = {
+          productId: comp.productId,
+          productName: comp.name,
+          variantId: choice.id,
+          variantLabel: choice.label,
+        };
+      } else {
+        delete currentCombo[comp.productId];
+      }
+      const summaryText = Object.values(currentCombo)
+        .map((c) => `${c.productName}: ${c.variantLabel}`)
+        .join('; ');
+
+      return {
+        ...rows,
+        [line.variant_id]: {
+          ...current,
+          comboReplacements: currentCombo,
+          replacement: summaryText,
+          replacementVariantId: undefined,
+        },
+      };
+    });
   }
   /** Validate optional image evidence before local preview, without uploading. */
   files(event: Event): void {
@@ -437,12 +476,39 @@ export class OrderFlowPage {
   /** Review the old-to-new variants before submitting either branch. */
   reviewReturn(): void {
     if (!this.selectedLines().length) {
-      this.error.set('Chọn ít nhất một sản phẩm.');
+      this.error.set('Vui lòng chọn ít nhất một sản phẩm cần đổi/trả.');
       return;
     }
-    if (this.returnKind === 'exchange' && this.selectedLines().some((line) => !line.replacement)) {
-      this.error.set('Chọn size / màu mới cho từng sản phẩm.');
-      return;
+    const order = this.order();
+    for (const selected of this.selectedLines()) {
+      const line = order?.items.find((item) => item.variant_id === selected.variantId);
+      if (line?.isInProgress) {
+        this.error.set(`Sản phẩm "${line.product_name}" đang có yêu cầu đổi/trả đang xử lý. Vui lòng chờ hoàn tất.`);
+        return;
+      }
+      if (this.returnKind === 'refund' && line?.is_combo && selected.quantity < line.quantity) {
+        this.error.set(`Sản phẩm Combo "${line.product_name}" phải hoàn trả nguyên bộ, không tách lẻ số lượng.`);
+        return;
+      }
+    }
+    if (this.returnKind === 'exchange') {
+      for (const selected of this.selectedLines()) {
+        const line = this.lineFor(selected.variantId);
+        if (line?.is_combo) {
+          const comps = this.comboComponents(line);
+          const comboReplacements = selected.comboReplacements || {};
+          const selectedCount = Object.keys(comboReplacements).length;
+          if (comps.length > 0 && selectedCount === 0) {
+            this.error.set(`Vui lòng chọn size / màu mới cho ít nhất một món trong combo "${line.product_name}".`);
+            return;
+          }
+        } else {
+          if (!selected.replacement && !selected.replacementVariantId) {
+            this.error.set(`Vui lòng chọn size / màu mới cho sản phẩm "${line?.product_name || 'cần đổi'}".`);
+            return;
+          }
+        }
+      }
     }
     this.error.set('');
     this.view.set('return-summary');

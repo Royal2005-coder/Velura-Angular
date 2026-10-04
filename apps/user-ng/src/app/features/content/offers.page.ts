@@ -111,6 +111,7 @@ export class OffersPage {
       next: (response) => {
         if (session !== this.auth.session()) return;
         this.loading.set(false);
+        this.failedImages.set({});
         this.campaigns.set(response.campaigns ?? []);
         this.featured.set(response.featured ?? []);
         this.vouchers.set(response.vouchers ?? []);

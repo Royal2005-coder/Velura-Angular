@@ -179,6 +179,7 @@ export type AdminReturnStatus = 'REQUESTED' | 'CONTACTING' | 'WAITING_RETURN' | 
 export interface AdminReturnRow {
   return_id: string;
   order_id?: string;
+  order_code?: string;
   user_id?: string;
   status?: string;
   request_type?: string;
@@ -188,6 +189,10 @@ export interface AdminReturnRow {
   created_at?: string;
   resolved_at?: string;
   customer_name?: string;
+  customer_phone?: string;
+  customer_address?: string;
+  order_total?: number;
+  payment_method?: string;
   version?: number;
   refundable_amount?: number;
   refund_amount?: number;
@@ -197,6 +202,9 @@ export interface AdminReturnRow {
   tracking_return_code?: string;
   /** Outbound replacement leg must never reuse the customer's return tracking. */
   exchange_tracking_code?: string;
+  exchange_order_id?: string;
+  exchange_order_code?: string;
+  exchange_order_status?: string;
   condition_check_result?: string;
   lines?: Array<{ order_item_id?: string; quantity?: number }>;
   payment?: AdminReturnPayment | null;

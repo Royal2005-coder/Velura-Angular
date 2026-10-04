@@ -434,11 +434,16 @@
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                       <div>
                         <strong style="font-size: 0.9375rem; color: #1C1B1B;">{{ review.user_full_name || 'Khách hàng Velura' }}</strong>
-                        <span style="font-size: 0.75rem; color: #2e7d32; margin-left: 8px; font-weight: 500;">✓ Đã mua hàng</span>
+                        @if (review.verified_purchase === true) {
+                          <span class="product-review__purchase">Đã mua hàng</span>
+                          @if (review.variant_size || review.variant_color) {
+                            <small class="product-review__variant">{{ review.variant_color }}{{ review.variant_color && review.variant_size ? ' / ' : '' }}{{ review.variant_size }}</small>
+                          }
+                        }
                       </div>
                       <div style="display: flex; gap: 2px; color: #D4AF37;">
                         @for (s of [1, 2, 3, 4, 5]; track s) {
-                          <svg width="14" height="14" viewBox="0 0 24 24" [attr.fill]="(review.rating || 5) >= s ? '#D4AF37' : 'none'" stroke="#D4AF37" stroke-width="1.5">
+                          <svg width="14" height="14" viewBox="0 0 24 24" [attr.fill]="(review.rating || 0) >= s ? '#D4AF37' : 'none'" stroke="#D4AF37" stroke-width="1.5">
                             <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
                           </svg>
                         }

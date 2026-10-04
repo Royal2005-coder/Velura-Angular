@@ -50,6 +50,11 @@ export interface ProductReview {
   review_tags?: string[];
   images?: string[];
   admin_reply?: string;
+  /** Server-confirmed delivered purchase of this product; omitted/false never receives a buyer badge. */
+  verified_purchase?: boolean;
+  variant_id?: string | null;
+  variant_size?: string | null;
+  variant_color?: string | null;
 }
 
 export interface ProductColorOption {

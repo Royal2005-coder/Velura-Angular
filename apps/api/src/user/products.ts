@@ -50,17 +50,24 @@ export async function handleProductsRoute(
         if (!product) {
           throw new HttpError(404, "NOT_FOUND", "Không tìm thấy sản phẩm");
         }
-        let variants: JsonObject[] = [];
+        const { rows: dbVariants } = await selectRows("variant", {
+          product_id: `eq.${action}`
+        }, { count: "none", useAnonKey: true });
+        let variants: JsonObject[] = dbVariants;
+
         if (product.is_combo) {
           const { rows: comboItems } = await selectRows("combo_item", {
             combo_product_id: `eq.${product.product_id}`
           }, { count: "none", useAnonKey: true });
-          const variantIds = comboItems.map((ci) => ci.component_variant_id).filter(Boolean);
-          if (variantIds.length > 0) {
-            const { rows: compVariants } = await selectRows("variant", {
-              variant_id: `in.(${variantIds.join(",")})`
-            }, { count: "none", useAnonKey: true });
-            variants = compVariants.map((v) => ({ ...v, product_id: product.product_id }));
+
+          if (variants.length === 0) {
+            const variantIds = comboItems.map((ci) => ci.component_variant_id).filter(Boolean);
+            if (variantIds.length > 0) {
+              const { rows: compVariants } = await selectRows("variant", {
+                variant_id: `in.(${variantIds.join(",")})`
+              }, { count: "none", useAnonKey: true });
+              variants = compVariants.map((v) => ({ ...v, product_id: product.product_id }));
+            }
           }
 
           // Fetch full component product details for combo display
@@ -128,11 +135,6 @@ export async function handleProductsRoute(
           product.combo_components = comboComponents;
           product.total_original_price = comboComponents.reduce((sum, c) => sum + (Number(c.base_price) * Number(c.quantity)), 0);
           product.combo_savings = Number(product.total_original_price) - Number(product.sale_price || product.base_price);
-        } else {
-          const { rows: dbVariants } = await selectRows("variant", {
-            product_id: `eq.${action}`
-          }, { count: "none", useAnonKey: true });
-          variants = dbVariants;
         }
 
         const category = product.category || (product.category_id ? await selectOne("category", { category_id: `eq.${product.category_id}` }, { count: "none", useAnonKey: true }) : null);

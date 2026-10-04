@@ -13,6 +13,16 @@ import { OrderAccountPreviewAdapter } from './order-account-preview.adapter';
 /** A replacement variant comes from the original product's current inventory. */
 export interface ReplacementChoice { id: string; label: string; stock?: number; }
 
+/** An item in a combo set available for individual variant exchange. */
+export interface ComboComponentItem {
+  productId: string;
+  name: string;
+  quantity: number;
+  originalSize?: string;
+  originalColor?: string;
+  choices: ReplacementChoice[];
+}
+
 /** Optional customer reason classification; warehouse inspection remains a separate mandatory proof. */
 export type ReturnReasonCode = 'size' | 'color' | 'error' | 'mismatch' | 'damaged' | 'mind_change' | 'other';
 
@@ -75,6 +85,8 @@ export interface OrderAccountModel {
   loadReplacementChoices?(orderId: string): Promise<void>;
   /** Present real current variant identities for the selected original line. */
   replacementChoices?(line: DemoOrderLine): ReplacementChoice[];
+  /** Present components with choices for combo lines. */
+  comboComponents?(line: DemoOrderLine): ComboComponentItem[];
   timeline(kind: DemoReturn['kind']): string[];
   /** Upserts one order into `orders()` by id/code — real Model only, for cold direct links. */
   ensureOrderLoaded?(id: string): Promise<void>;

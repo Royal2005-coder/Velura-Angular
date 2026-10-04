@@ -42,6 +42,7 @@ export class OffersService {
       this.cachedAt = Date.now();
       this.cachedSession = session;
       const request = this.api.get<OffersResponse>('/api/user/offers').pipe(
+        map((response) => session === this.auth.session() ? response : EMPTY),
         catchError(() => {
           // Lần sau thử lại, không giữ kết quả lỗi suốt năm phút.
           if (this.cached$ === request) this.cached$ = null;

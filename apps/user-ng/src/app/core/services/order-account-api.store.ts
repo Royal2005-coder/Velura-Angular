@@ -12,7 +12,7 @@ import {
   RETURN_WORKFLOW_LABELS,
   ReturnWorkflowStatus,
 } from './purchase-demo.store';
-import type { OrderAccountModel, ReplacementChoice, ReturnReasonCode } from './order-account.model';
+import type { ComboComponentItem, OrderAccountModel, ReplacementChoice, ReturnReasonCode } from './order-account.model';
 import type { ProductSummary } from '../models/product.interface';
 
 /** Real order status → the `DemoOrderStatus` token the KAN-31 template already renders. */
@@ -52,6 +52,10 @@ interface ApiOrderItem {
   unit_price?: number;
   return_count?: number;
   available_quantity?: number;
+  is_combo?: boolean;
+  is_in_progress?: boolean;
+  in_progress_return_code?: string | null;
+  in_progress_status?: string | null;
 }
 
 interface ApiOrder {
@@ -128,6 +132,10 @@ function mapOrderItem(item: ApiOrderItem): DemoOrderLine {
     returnCount: item.return_count ?? 0,
     availableQuantity: item.available_quantity ?? item.quantity ?? 0,
     itemId: item.item_id,
+    is_combo: Boolean(item.is_combo || /combo/i.test(item.product_name || '') || /set\s+/i.test(item.product_name || '')),
+    isInProgress: Boolean(item.is_in_progress),
+    inProgressCode: item.in_progress_return_code || undefined,
+    inProgressStatus: item.in_progress_status || undefined,
   };
 }
 
@@ -216,6 +224,7 @@ export class OrderAccountApiStore implements OrderAccountModel {
   readonly replacementsLoading = signal(false);
   readonly replacementsError = signal('');
   private readonly replacementByProduct = signal<Record<string, ReplacementChoice[]>>({});
+  private readonly comboComponentsByProduct = signal<Record<string, ComboComponentItem[]>>({});
   private replacementVersion = 0;
   readonly cancellableBeforeStage = 3;
   readonly supportsBankInfo = false;
@@ -379,8 +388,23 @@ export class OrderAccountApiStore implements OrderAccountModel {
     if (!order) throw new Error('Không tìm thấy đơn hàng.');
     if (!this.canAccess(order)) throw new Error('Vui lòng xác thực chủ đơn trước.');
     const context = this.context();
+    if (items.some((item) => {
+      const line = order.items.find((row) => row.variant_id === item.variantId);
+      return line?.isInProgress;
+    })) {
+      throw new Error('Sản phẩm đã chọn đang có yêu cầu đổi/trả đang xử lý. Vui lòng chờ hoàn tất.');
+    }
+    if (kind === 'refund' && items.some((item) => {
+      const line = order.items.find((row) => row.variant_id === item.variantId);
+      return line?.is_combo && item.quantity < line.quantity;
+    })) {
+      throw new Error('Sản phẩm Combo phải hoàn trả nguyên bộ, không tách lẻ số lượng.');
+    }
     if (kind === 'exchange' && items.some((item) => {
       const line = order.items.find((row) => row.variant_id === item.variantId);
+      if (line?.is_combo) {
+        return !item.replacement && !item.comboReplacements;
+      }
       const choice = line && this.replacementChoices(line).find((row) => row.id === item.replacementVariantId);
       return !choice || (choice.stock ?? 0) < item.quantity;
     })) throw new Error('Vui lòng chọn variant cùng sản phẩm còn đủ số lượng để đổi.');
@@ -402,7 +426,8 @@ export class OrderAccountApiStore implements OrderAccountModel {
       items: items.map((item) => ({
         order_item_id: this.orderItemIdFor(order, item.variantId),
         quantity: item.quantity,
-        ...(kind === 'exchange' ? { replacement_variant_id: item.replacementVariantId } : {}),
+        ...(kind === 'exchange' && item.replacementVariantId ? { replacement_variant_id: item.replacementVariantId } : {}),
+        ...(item.comboReplacements && item.replacement ? { replacement_text: item.replacement } : {}),
       })),
     };
     const data = context.userId
@@ -423,6 +448,7 @@ export class OrderAccountApiStore implements OrderAccountModel {
     if (!data.success || !data.return?.return_id) throw new Error('Chưa ghi nhận được yêu cầu đổi trả. Vui lòng thử lại.');
     const created = { ...mapReturn(data.return || {}), orderId: order.id, items: items.map((item) => ({ ...item })) };
     this.requests.update((rows) => [created, ...rows]);
+    void this.refresh();
     return created;
   }
 
@@ -472,6 +498,7 @@ export class OrderAccountApiStore implements OrderAccountModel {
     this.replacementsLoading.set(true);
     this.replacementsError.set('');
     this.replacementByProduct.set({});
+    this.comboComponentsByProduct.set({});
     try {
       const ids = [...new Set(order.items.map((line) => line.product_id).filter(Boolean))];
       const products = await Promise.all(ids.map(async (id) => {
@@ -484,6 +511,24 @@ export class OrderAccountApiStore implements OrderAccountModel {
       this.replacementByProduct.set(Object.fromEntries(products.map((product) => [product.product_id, (product.variants || [])
         .filter((variant) => (variant.stock_quantity || 0) > 0)
         .map((variant) => ({ id: variant.variant_id, label: [variant.size, variant.color].filter(Boolean).join(' / '), stock: variant.stock_quantity }))])));
+      const comboMap: Record<string, ComboComponentItem[]> = {};
+      for (const product of products) {
+        if (product.is_combo && product.combo_components?.length) {
+          comboMap[product.product_id] = product.combo_components.map((comp) => ({
+            productId: comp.product_id,
+            name: comp.name,
+            quantity: comp.quantity || 1,
+            choices: (comp.variants || [])
+              .filter((v) => (v.stock_quantity || 0) > 0)
+              .map((v) => ({
+                id: v.variant_id,
+                label: [v.size, v.color].filter(Boolean).join(' / '),
+                stock: v.stock_quantity,
+              })),
+          }));
+        }
+      }
+      this.comboComponentsByProduct.set(comboMap);
     } catch (error) {
       if (this.current(context) && version === this.replacementVersion) this.replacementsError.set(orderAccountErrorMessage(error));
     } finally { if (this.current(context) && version === this.replacementVersion) this.replacementsLoading.set(false); }
@@ -492,6 +537,31 @@ export class OrderAccountApiStore implements OrderAccountModel {
   /** Exclude the original variant and unavailable inventory without inferring substitutes. */
   replacementChoices(line: DemoOrderLine): ReplacementChoice[] {
     return (this.replacementByProduct()[line.product_id] || []).filter((choice) => choice.id !== line.variant_id);
+  }
+
+  /** Present components with choices for combo lines. */
+  comboComponents(line: DemoOrderLine): ComboComponentItem[] {
+    const fromMap = this.comboComponentsByProduct()[line.product_id];
+    if (fromMap && fromMap.length > 0) return fromMap;
+
+    if (line.sub_items?.length) {
+      return line.sub_items.map((sub) => ({
+        productId: sub.product_id,
+        name: sub.product_name,
+        quantity: sub.quantity || 1,
+        originalSize: sub.size,
+        originalColor: sub.color,
+        choices: (sub.available_variants || [])
+          .filter((v) => (v.stock_quantity || 0) > 0)
+          .map((v) => ({
+            id: v.variant_id,
+            label: [v.size, v.color].filter(Boolean).join(' / '),
+            stock: v.stock_quantity,
+          })),
+      }));
+    }
+
+    return [];
   }
 
   /** Present the canonical refund or exchange branch after the common receipt workflow. */

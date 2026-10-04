@@ -146,8 +146,8 @@ begin
   perform set_config('app.return_actor_type','admin',true);
   update public.return_exchange set status = 'EXCHANGE_PREPARING',exchange_order_id = v_order.order_id,
     version = version+1,updated_at = now() where return_id = p_return_id returning * into v_return;
-  insert into public.audit_log(actor_id,actor_role,action,module,target_id,new_value,timestamp)
-    values(p_actor_id,'admin_operator_cskh_dt','update','returns',p_return_id,to_jsonb(v_return),now());
+  insert into public.audit_log(actor_id,actor_role,action,module,target_id,new_value,ip_address,timestamp)
+    values(p_actor_id,'admin_operator_cskh_dt','update','returns',p_return_id,to_jsonb(v_return),'127.0.0.1',now());
   return to_jsonb(v_return);
 end; $$;
 revoke all on function public.velura_prepare_exchange(uuid,integer,uuid) from public,anon,authenticated;
@@ -169,9 +169,9 @@ begin
   perform set_config('app.return_actor_type','admin',true);
   v_operation := public.velura_prepare_return_refund(p_return_id,v_return.order_id,p_expected_version);
   perform public.velura_complete_return_refund(p_return_id,'manual:' || p_reference);
-  insert into public.audit_log(actor_id,actor_role,action,module,target_id,new_value,timestamp)
+  insert into public.audit_log(actor_id,actor_role,action,module,target_id,new_value,ip_address,timestamp)
     values(p_actor_id,'admin_operator_cskh_dt','update','returns',p_return_id,
-      jsonb_build_object('transfer_reference',p_reference,'transfer_proof',p_proof,'refund',v_operation),now());
+      jsonb_build_object('transfer_reference',p_reference,'transfer_proof',p_proof,'refund',v_operation),'127.0.0.1',now());
   select * into v_return from public.return_exchange where return_id = p_return_id;
   return to_jsonb(v_return);
 end; $$;

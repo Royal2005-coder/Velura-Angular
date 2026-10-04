@@ -377,21 +377,72 @@
               <img [src]="image(line.product_image)" [alt]="line.product_name" />
               <div>
                 <h3>{{ line.product_name }}</h3>
-                <p class="muted">{{ line.size }} / {{ line.color }} · SL {{ line.quantity }}</p>
-                <strong>{{ money(line.unit_price * line.quantity) }}</strong>
-                <div class="checkout-line-controls">
-                  <label>Màu / Kích cỡ
-                    <select [ngModel]="line.variant_id" (ngModelChange)="editLine(line, $event, line.quantity)" [disabled]="busy() || resumeLocked() || !!order() || !variantChoices()[line.product_id]" [attr.aria-label]="'Biến thể ' + line.product_name">
-                      @for (variant of variantChoices()[line.product_id] || []; track variant.variant_id) {
-                        <option [value]="variant.variant_id" [disabled]="variant.available < line.quantity">{{ variant.color || 'Mặc định' }} / {{ variant.size || 'Free' }}{{ variant.available < line.quantity ? ' · Hết hàng' : '' }}</option>
+                @if (line.is_combo) {
+                  <p class="muted">
+                    <span style="background: #ede9fe; color: #6d28d9; font-size: 0.75rem; font-weight: 600; padding: 2px 6px; border-radius: 4px; margin-right: 6px;">Combo Set</span>
+                    SL {{ line.quantity }}
+                  </p>
+                  <strong>{{ money(line.unit_price * line.quantity) }}</strong>
+                  <div class="checkout-line-controls">
+                    <label>Số lượng set
+                      <input type="number" min="1" step="1" [ngModel]="line.quantity" (ngModelChange)="editLine(line, line.variant_id, $event)" [disabled]="busy() || resumeLocked() || !!order()" [attr.aria-label]="'Số lượng ' + line.product_name" />
+                    </label>
+                    <button class="text-button" type="button" (click)="removeLine(line)" [disabled]="busy() || resumeLocked() || !!order()">Xóa cả bộ</button>
+                  </div>
+                  @if (line.sub_items && line.sub_items.length) {
+                    <div class="checkout-combo-subitems" style="margin-top: 10px; border-top: 1px dashed #e5d8cb; padding-top: 8px; display: flex; flex-direction: column; gap: 8px;">
+                      <div style="font-size: 0.75rem; font-weight: 600; color: #785a44; text-transform: uppercase;">Chi tiết các món trong set (chọn size / màu):</div>
+                      @for (sub of line.sub_items; track sub.product_id) {
+                        <div style="display: flex; align-items: center; justify-content: space-between; font-size: 0.8125rem; background: #fffcf9; padding: 6px 8px; border-radius: 6px; border: 1px solid #ebd9c8; gap: 6px;">
+                          <div style="display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1;">
+                            <img [src]="image(sub.product_image)" [alt]="sub.product_name" style="width: 26px; height: 34px; object-fit: cover; border-radius: 4px; flex-shrink: 0;" />
+                            <div style="min-width: 0; flex: 1;">
+                              <span style="font-weight: 500; color: var(--text-dark); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                {{ sub.product_name }}
+                              </span>
+                              <span style="font-size: 0.725rem; color: #8c857e;">
+                                {{ sub.color || 'Mặc định' }} / {{ sub.size || 'Free' }}
+                              </span>
+                            </div>
+                          </div>
+                          @if (getSubVariantChoices(sub).length > 1) {
+                            <label style="margin: 0; font-size: 0.75rem; display: flex; align-items: center; gap: 4px; flex-shrink: 0;">
+                              <select
+                                [ngModel]="sub.variant_id"
+                                (ngModelChange)="editComboSubVariant(line, sub, $event)"
+                                [disabled]="busy() || resumeLocked() || !!order()"
+                                style="padding: 2px 4px; font-size: 0.75rem; border-radius: 4px; border: 1px solid #d5c8be; background: #fff; max-width: 140px;"
+                                [attr.aria-label]="'Đổi biến thể ' + sub.product_name"
+                              >
+                                @for (v of getSubVariantChoices(sub); track v.variant_id) {
+                                  <option [value]="v.variant_id" [disabled]="v.available < line.quantity">
+                                    {{ v.color || 'Mặc định' }} / {{ v.size || 'Free' }}{{ v.available < line.quantity ? ' · Hết' : '' }}
+                                  </option>
+                                }
+                              </select>
+                            </label>
+                          }
+                        </div>
                       }
-                    </select>
-                  </label>
-                  <label>Số lượng
-                    <input type="number" min="1" step="1" [ngModel]="line.quantity" (ngModelChange)="editLine(line, line.variant_id, $event)" [disabled]="busy() || resumeLocked() || !!order() || !variantChoices()[line.product_id]" [attr.aria-label]="'Số lượng ' + line.product_name" />
-                  </label>
-                  <button class="text-button" type="button" (click)="removeLine(line)" [disabled]="busy() || resumeLocked() || !!order()">{{ line.combo_id ? 'Xóa cả bộ' : 'Xóa' }}</button>
-                </div>
+                    </div>
+                  }
+                } @else {
+                  <p class="muted">{{ line.size }} / {{ line.color }} · SL {{ line.quantity }}</p>
+                  <strong>{{ money(line.unit_price * line.quantity) }}</strong>
+                  <div class="checkout-line-controls">
+                    <label>Màu / Kích cỡ
+                      <select [ngModel]="line.variant_id" (ngModelChange)="editLine(line, $event, line.quantity)" [disabled]="busy() || resumeLocked() || !!order() || !variantChoices()[line.product_id]" [attr.aria-label]="'Biến thể ' + line.product_name">
+                        @for (variant of variantChoices()[line.product_id] || []; track variant.variant_id) {
+                          <option [value]="variant.variant_id" [disabled]="variant.available < line.quantity">{{ variant.color || 'Mặc định' }} / {{ variant.size || 'Free' }}{{ variant.available < line.quantity ? ' · Hết hàng' : '' }}</option>
+                        }
+                      </select>
+                    </label>
+                    <label>Số lượng
+                      <input type="number" min="1" step="1" [ngModel]="line.quantity" (ngModelChange)="editLine(line, line.variant_id, $event)" [disabled]="busy() || resumeLocked() || !!order() || !variantChoices()[line.product_id]" [attr.aria-label]="'Số lượng ' + line.product_name" />
+                    </label>
+                    <button class="text-button" type="button" (click)="removeLine(line)" [disabled]="busy() || resumeLocked() || !!order()">Xóa</button>
+                  </div>
+                }
                 @if ($index === 0 && stockProblem()) {
                   <p class="error" role="alert">{{ stockProblem() }}</p>
                 }

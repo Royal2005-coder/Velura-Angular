@@ -33,7 +33,7 @@ test("an item with no prior return keeps its full quantity available", async () 
   assert.equal(item.available_quantity, 3);
 });
 
-test("an active return reduces available_quantity and counts toward the U2-02 attempt cap", async () => {
+test("an active in-progress return locks the item (available_quantity=0, is_in_progress=true)", async () => {
   const repository = fakeRepository({
     listReturnsForOrder: async () => [{ return_id: "ret-1", status: "pending" }],
     listReturnItemsForOrderItem: async (returnId, orderItemId) =>
@@ -41,6 +41,19 @@ test("an active return reduces available_quantity and counts toward the U2-02 at
   });
   const [item] = await attachReturnEligibility(repository, ORDER_ID, [{ item_id: ITEM_ID, quantity: 3 }]);
   assert.equal(item.return_count, 1);
+  assert.equal(item.is_in_progress, true);
+  assert.equal(item.available_quantity, 0);
+});
+
+test("a completed return reduces available_quantity for the second attempt", async () => {
+  const repository = fakeRepository({
+    listReturnsForOrder: async () => [{ return_id: "ret-1", status: "COMPLETED" }],
+    listReturnItemsForOrderItem: async (returnId, orderItemId) =>
+      returnId === "ret-1" && orderItemId === ITEM_ID ? [{ order_item_id: ITEM_ID, quantity: 1 }] : []
+  });
+  const [item] = await attachReturnEligibility(repository, ORDER_ID, [{ item_id: ITEM_ID, quantity: 3 }]);
+  assert.equal(item.return_count, 1);
+  assert.equal(item.is_in_progress, false);
   assert.equal(item.available_quantity, 2);
 });
 
@@ -54,11 +67,11 @@ test("a rejected return does not consume an attempt or the quantity", async () =
   assert.equal(item.available_quantity, 3);
 });
 
-test("two active returns reach the U2-02 cap and leave the matched quantity unavailable", async () => {
+test("two returns reach the U2-02 cap and leave the item unavailable", async () => {
   const repository = fakeRepository({
     listReturnsForOrder: async () => [
-      { return_id: "ret-1", status: "pending" },
-      { return_id: "ret-2", status: "completed" }
+      { return_id: "ret-1", status: "COMPLETED" },
+      { return_id: "ret-2", status: "COMPLETED" }
     ],
     listReturnItemsForOrderItem: async (returnId) =>
       returnId === "ret-1" || returnId === "ret-2" ? [{ order_item_id: ITEM_ID, quantity: 1 }] : []

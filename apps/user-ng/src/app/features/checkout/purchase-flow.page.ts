@@ -36,7 +36,7 @@ import { AddressSelector } from '../../shared/address-selector/address-selector'
 import type { AddressGeographySelection, GeographyMode } from '../../core/models/address-geography';
 import { PurchaseCustomerStore } from '../../core/services/purchase-customer.store';
 import { CheckoutLineEditorService, type CheckoutVariantChoice } from '../../core/services/checkout-line-editor.service';
-import type { CartLine } from '../../core/services/cart.store';
+import type { CartLine, CartComboSubItem } from '../../core/services/cart.store';
 
 /** Checkout một trang của KAN-27; mọi mutation đơn hàng đi qua Model API KAN-28. */
 @Component({
@@ -75,7 +75,7 @@ export class PurchaseFlowPage {
   readonly quoteError = signal('');
   readonly shippingMethod = signal('standard');
   readonly voucherId = signal<string | null>(localStorage.getItem('checkout_voucher_id'));
-  readonly voucherDeclined = signal(localStorage.getItem('checkout_voucher_declined') === 'true');
+  readonly voucherDeclined = signal(['true', '1'].includes(localStorage.getItem('checkout_voucher_declined') || ''));
   readonly preferredVoucher = localStorage.getItem('checkout_voucher_code') || this.voucherId();
   private quoteVersion = 0;
   private guestCheckoutToken = '';
@@ -174,6 +174,18 @@ export class PurchaseFlowPage {
   /** Changes a checkout variant or quantity and invalidates the prior price quote. */
   editLine(line: CartLine, variantId: string, quantity: number): void {
     if (this.busy() || this.order() || this.resumeLocked()) return;
+    if (line.is_combo) {
+      if (!Number.isInteger(quantity) || quantity < 1) {
+        this.lineEditError.set('Số lượng phải là số nguyên lớn hơn 0.');
+        return;
+      }
+      const next = this.lines().map(l => (l.variant_id === line.variant_id || (line.combo_id && l.combo_id === line.combo_id)) ? { ...l, quantity } : l);
+      this.lines.set(next);
+      this.checkout.updateItemQty(line.variant_id, quantity);
+      this.serverQuote.set(null);
+      this.lineEditError.set('');
+      return;
+    }
     const choice = this.variantChoices()[line.product_id]?.find(variant => variant.variant_id === variantId);
     if (!choice) { this.lineEditError.set('Vui lòng chờ tải biến thể sản phẩm.'); return; }
     try {
@@ -187,6 +199,34 @@ export class PurchaseFlowPage {
     }
   }
 
+  /** Lấy danh sách biến thể khả dụng cho một sub-item trong combo set. */
+  getSubVariantChoices(sub: CartComboSubItem): CheckoutVariantChoice[] {
+    const fromLoaded = this.variantChoices()[sub.product_id];
+    if (fromLoaded && fromLoaded.length > 0) return fromLoaded;
+    if (sub.available_variants && sub.available_variants.length > 0) {
+      return sub.available_variants.map(v => ({
+        ...v,
+        available: Math.max(0, (v.stock_quantity || 0) - (v.reserved_quantity || 0)),
+      }));
+    }
+    return [];
+  }
+
+  /** Đổi biến thể (màu sắc, size) của một món thành phần trong combo set. */
+  editComboSubVariant(line: CartLine, sub: CartComboSubItem, newVariantId: string): void {
+    if (this.busy() || this.order() || this.resumeLocked()) return;
+    const choices = this.getSubVariantChoices(sub);
+    const chosen = choices.find(v => v.variant_id === newVariantId);
+    if (!chosen) return;
+    try {
+      const next = this.lineEditor.editComboSubItem(line, sub.product_id, chosen, this.lines());
+      this.lines.set(next);
+      this.lineEditError.set('');
+    } catch (error: unknown) {
+      this.lineEditError.set(error instanceof Error ? error.message : 'Không thể cập nhật biến thể món trong set.');
+    }
+  }
+
   /** Removes a selected item before ordering; combo components are removed together. */
   removeLine(line: CartLine): void {
     if (this.busy() || this.order() || this.resumeLocked()) return;
@@ -196,6 +236,7 @@ export class PurchaseFlowPage {
   }
 
   constructor() {
+    if (this.checkout.source() === 'cart') this.orderOptions.referral_code = this.checkout.shipping().referral_code || '';
     this.purchaseApi.providers().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: response => this.paymentProviders.set(response.providers),
       error: () => this.paymentProviders.set([{ code: 'COD', enabled: true }, { code: 'STRIPE', enabled: false }, { code: 'VNPAY', enabled: false }, { code: 'MOMO', enabled: false }]),
@@ -204,12 +245,20 @@ export class PurchaseFlowPage {
       const lines = this.lines();
       untracked(() => {
         for (const line of lines) {
-          if (this.variantRequests.has(line.product_id)) continue;
-          this.variantRequests.add(line.product_id);
-          this.lineEditor.choices(line.product_id).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-            next: choices => this.variantChoices.update(current => ({ ...current, [line.product_id]: choices })),
-            error: () => { this.variantRequests.delete(line.product_id); this.lineEditError.set('Chưa tải được biến thể. Thử tải lại trang trước khi chỉnh sản phẩm.'); },
-          });
+          const productIds = [line.product_id];
+          if (line.is_combo && line.sub_items?.length) {
+            for (const sub of line.sub_items) {
+              if (sub.product_id) productIds.push(sub.product_id);
+            }
+          }
+          for (const pid of productIds) {
+            if (this.variantRequests.has(pid)) continue;
+            this.variantRequests.add(pid);
+            this.lineEditor.choices(pid).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+              next: choices => this.variantChoices.update(current => ({ ...current, [pid]: choices })),
+              error: () => { this.variantRequests.delete(pid); },
+            });
+          }
         }
       });
     });

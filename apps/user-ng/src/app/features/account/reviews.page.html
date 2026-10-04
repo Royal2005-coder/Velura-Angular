@@ -236,7 +236,7 @@
                           </svg>
                         }
                       </div>
-                      <small style="color: #8C857E;">Đơn #{{ rev.order_id.slice(0, 8) }} &middot; {{ rev.submitted_at || rev.created_at | date:'dd/MM/yyyy' }}</small>
+                      <small style="color: #8C857E;">@if (rev.order_id) { Đơn #{{ rev.order_id.slice(0, 8) }} &middot; } {{ rev.submitted_at || rev.created_at | date:'dd/MM/yyyy' }}</small>
                     </div>
                   </div>
 

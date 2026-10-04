@@ -1,3 +1,4 @@
+import { RouterLink } from '@angular/router';
 import { AdminDialogDirective } from '../../shared/admin-dialog.directive';
 import { finalize } from 'rxjs';
 import { AdminRefreshService } from '../../core/admin-refresh.service';
@@ -56,9 +57,68 @@ const TICKET_ACTION_TARGET: Record<TicketAction, string> = {
   close: 'closed',
 };
 
+/**
+ * Nén ảnh bằng HTML5 Canvas để tránh vượt ngưỡng payload của API và Vercel Serverless.
+ * Giới hạn cạnh dài nhất tối đa 1280px, chất lượng JPEG 0.82 (dung lượng thường < 150KB).
+ */
+function compressImageFile(file: File, maxDimension = 1280, quality = 0.82): Promise<string> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onerror = () => resolve('');
+    reader.onload = () => {
+      const rawDataUrl = String(reader.result || '');
+      if (typeof window === 'undefined' || typeof document === 'undefined' || typeof Image === 'undefined') {
+        resolve(rawDataUrl);
+        return;
+      }
+      try {
+        const img = new Image();
+        img.onerror = () => resolve(rawDataUrl);
+        img.onload = () => {
+          try {
+            let width = img.naturalWidth || img.width;
+            let height = img.naturalHeight || img.height;
+            if (!width || !height) {
+              resolve(rawDataUrl);
+              return;
+            }
+            if (width > maxDimension || height > maxDimension) {
+              if (width > height) {
+                height = Math.round((height * maxDimension) / width);
+                width = maxDimension;
+              } else {
+                width = Math.round((width * maxDimension) / height);
+                height = maxDimension;
+              }
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+              resolve(rawDataUrl);
+              return;
+            }
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, width, height);
+            ctx.drawImage(img, 0, 0, width, height);
+            resolve(canvas.toDataURL('image/jpeg', quality));
+          } catch {
+            resolve(rawDataUrl);
+          }
+        };
+        img.src = rawDataUrl;
+      } catch {
+        resolve(rawDataUrl);
+      }
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 @Component({
   selector: 'app-admin-returns-page',
-  imports: [AdminDialogDirective, AdminEmptyState, AdminIcon, AdminPagination],
+  imports: [AdminDialogDirective, AdminEmptyState, AdminIcon, AdminPagination, RouterLink],
   templateUrl: './admin-returns.page.html',
 })
 export class AdminReturnsPage {
@@ -129,11 +189,57 @@ export class AdminReturnsPage {
   readonly manualRefundTarget = signal<AdminReturnRow | null>(null);
   readonly manualRefundProof = signal('');
 
+  readonly searchQuery = signal('');
+  readonly statusFilter = signal('');
+  readonly typeFilter = signal('');
+  readonly returnTab = signal<'all' | 'attention' | 'warehouse' | 'refund' | 'completed'>('all');
+
   readonly pendingReturns = computed(() => this.pendingReturnCount());
   readonly pendingTickets = computed(() => this.pendingTicketCount());
   readonly highPriority = computed(() => this.pendingReturnCount() + this.pendingTicketCount());
   readonly completedToday = computed(() => this.completedReturnCount());
-  readonly pagedReturns = computed(() => this.returns());
+  readonly filteredReturns = computed(() => {
+    let list = this.returns();
+    const tab = this.returnTab();
+    if (tab === 'attention') {
+      list = list.filter((r) => ['REQUESTED', 'CONTACTING', 'NEEDS_SUPPORT'].includes(r.status || ''));
+    } else if (tab === 'warehouse') {
+      list = list.filter((r) => ['WAITING_RETURN', 'RETURN_IN_TRANSIT', 'RECEIVED'].includes(r.status || ''));
+    } else if (tab === 'refund') {
+      list = list.filter((r) => ['REFUND_PROCESSING'].includes(r.status || ''));
+    } else if (tab === 'completed') {
+      list = list.filter((r) => ['COMPLETED', 'REFUNDED'].includes(r.status || ''));
+    }
+    const status = this.statusFilter();
+    if (status) {
+      list = list.filter((r) => r.status === status);
+    }
+    const type = this.typeFilter();
+    if (type) {
+      list = list.filter((r) => (r.return_type || r.request_type) === type);
+    }
+    const q = this.searchQuery().trim().toLowerCase();
+    if (q) {
+      list = list.filter((r) => {
+        const retId = (r.return_id || '').toLowerCase();
+        const code = (this.returnCode(r) || '').toLowerCase();
+        const ordCode = (this.orderCode(r) || '').toLowerCase();
+        const ordId = (r.order_id || '').toLowerCase();
+        const name = (r.customer_name || '').toLowerCase();
+        const phone = (r.customer_phone || '').toLowerCase();
+        const track = (r.tracking_return_code || '').toLowerCase();
+        return retId.includes(q) || code.includes(q) || ordCode.includes(q) || ordId.includes(q) || name.includes(q) || phone.includes(q) || track.includes(q);
+      });
+    }
+    return list;
+  });
+
+  readonly attentionReturnsCount = computed(() => this.returns().filter((r) => ['REQUESTED', 'CONTACTING', 'NEEDS_SUPPORT'].includes(r.status || '')).length);
+  readonly warehouseReturnsCount = computed(() => this.returns().filter((r) => ['WAITING_RETURN', 'RETURN_IN_TRANSIT', 'RECEIVED'].includes(r.status || '')).length);
+  readonly refundProcessingCount = computed(() => this.returns().filter((r) => ['REFUND_PROCESSING'].includes(r.status || '')).length);
+  readonly completedReturnsCount = computed(() => this.returns().filter((r) => ['COMPLETED', 'REFUNDED'].includes(r.status || '')).length);
+
+  readonly pagedReturns = computed(() => this.filteredReturns());
   readonly pagedTickets = computed(() => this.tickets());
   readonly pagedOrders = computed(() => this.orders());
   readonly pagedLogs = computed(() => this.logs());
@@ -173,8 +279,14 @@ export class AdminReturnsPage {
     this.listRequest.unsubscribe();
     this.loading.set(true);
     this.loadError.set(null);
-    const pageParams = { limit: String(this.pageSize), offset: adminOffset(this.page(), this.pageSize) };
+    const pageParams: Record<string, string> = { limit: String(this.pageSize), offset: adminOffset(this.page(), this.pageSize) };
     const zone = this.zone();
+    if (zone === 'returns') {
+      const q = this.searchQuery().trim();
+      if (q) pageParams['q'] = q;
+      const status = this.statusFilter();
+      if (status) pageParams['status'] = status;
+    }
     this.listRequest = forkJoin({
       returns:
         zone === 'returns'
@@ -839,7 +951,7 @@ export class AdminReturnsPage {
         this.qaLoading.set(false);
         if (!lines.length || lines.some((line) => !line.order_item_id || Number(line.quantity) < 1)) { this.qaError.set('Phiếu thiếu mã hoặc số lượng dòng hàng hợp lệ. Đối chiếu với CSKH trước khi nhận hàng.'); return; }
         this.expectedQty.set(lines.reduce((sum, line) => sum + Number(line.quantity), 0)); this.expectedItemId.set(lines[0].order_item_id || '');
-        this.qaLines.set(lines.map((line) => ({ orderItemId: line.order_item_id!, expectedQuantity: Number(line.quantity), receivedQuantity: '', confirmedItemId: '', matchesProduct: false })));
+        this.qaLines.set(lines.map((line) => ({ orderItemId: line.order_item_id!, expectedQuantity: Number(line.quantity), receivedQuantity: String(line.quantity), confirmedItemId: line.order_item_id!, matchesProduct: true })));
         this.receiveTarget.set({ ...row, ...full, version: full.version ?? row.version });
       },
       error: (error: unknown) => { this.qaLoading.set(false); this.qaError.set(adminErrorMessage(error)); },
@@ -873,19 +985,23 @@ export class AdminReturnsPage {
     const confirmedItemId = (event.target as HTMLInputElement).value.trim();
     this.qaLines.update((lines) => lines.map((line) => line.orderItemId === orderItemId ? { ...line, confirmedItemId } : line));
   }
-  /** Records physical product matching for one line. */
+  /** Records physical product matching for one line and auto-syncs confirmedItemId. */
   setQaLineMatch(orderItemId: string, event: Event): void {
     const matchesProduct = (event.target as HTMLInputElement).checked;
-    this.qaLines.update((lines) => lines.map((line) => line.orderItemId === orderItemId ? { ...line, matchesProduct } : line));
+    this.qaLines.update((lines) => lines.map((line) => line.orderItemId === orderItemId ? { ...line, matchesProduct, confirmedItemId: matchesProduct ? line.orderItemId : '' } : line));
   }
   onQaProof(event: Event): void {
     this.qaProof.set('');
     const file = (event.target as HTMLInputElement).files?.[0];
     if (!file || !file.type.startsWith('image/')) { this.qaError.set('Chọn một ảnh minh chứng.'); return; }
-    if (file.size > 5 * 1024 * 1024) { this.qaError.set('Ảnh minh chứng tối đa 5 MB.'); return; }
-    const returnId = this.receiveTarget()?.return_id, reader = new FileReader();
-    reader.onload = () => { if (this.receiveTarget()?.return_id === returnId) this.qaProof.set(String(reader.result || '')); };
-    reader.readAsDataURL(file);
+    if (file.size > 15 * 1024 * 1024) { this.qaError.set('Ảnh minh chứng tối đa 15 MB.'); return; }
+    const returnId = this.receiveTarget()?.return_id;
+    compressImageFile(file).then((dataUrl) => {
+      if (this.receiveTarget()?.return_id === returnId) {
+        this.qaProof.set(dataUrl);
+        this.qaError.set(null);
+      }
+    });
   }
 
   /**
@@ -932,7 +1048,23 @@ export class AdminReturnsPage {
       this.shipmentTarget.set({ row, status }); this.shipmentTracking.set(''); this.shipmentError.set(null); return;
     }
     this.submitting.set(true);
-    this.api.updateReturnStatus(row.return_id, { status, expectedVersion: row.version }).pipe(finalize(() => this.submitting.set(false))).subscribe({ next: () => this.reload(), error: (error: unknown) => this.loadError.set(adminErrorMessage(error)) });
+    this.actionError.set(null);
+    this.api.updateReturnStatus(row.return_id, { status, expectedVersion: row.version }).pipe(finalize(() => this.submitting.set(false))).subscribe({
+      next: () => {
+        this.actionError.set(null);
+        this.reload();
+        if (this.returnDetailOpen() && this.selectedReturn()?.return_id === row.return_id) {
+          this.openReturnDetail(row.return_id);
+        }
+      },
+      error: (error: unknown) => {
+        this.actionError.set(adminErrorMessage(error));
+        this.reload();
+        if (this.returnDetailOpen() && this.selectedReturn()?.return_id === row.return_id) {
+          this.openReturnDetail(row.return_id);
+        }
+      }
+    });
   }
 
   /** Records a physical shipment; each return/replacement leg has its own tracking. */
@@ -944,19 +1076,40 @@ export class AdminReturnsPage {
     if (!trackingReturnCode) { this.shipmentError.set('Nhập mã vận đơn thực tế của lần gửi hàng này.'); return; }
     this.submitting.set(true);
     this.api.updateReturnStatus(target.row.return_id, { status: target.status, trackingReturnCode, expectedVersion: target.row.version }).pipe(finalize(() => this.submitting.set(false))).subscribe({
-      next: () => { this.shipmentTarget.set(null); this.returnDetailOpen.set(false); this.reload(); },
-      error: (error: unknown) => this.shipmentError.set(adminErrorMessage(error)),
+      next: () => {
+        this.shipmentTarget.set(null);
+        this.reload();
+        if (this.returnDetailOpen() && this.selectedReturn()?.return_id === target.row.return_id) {
+          this.openReturnDetail(target.row.return_id);
+        }
+      },
+      error: (error: unknown) => {
+        this.shipmentError.set(adminErrorMessage(error));
+        this.reload();
+        if (this.returnDetailOpen() && this.selectedReturn()?.return_id === target.row.return_id) {
+          this.openReturnDetail(target.row.return_id);
+        }
+      },
     });
   }
 
   /** Allows recorded transfer evidence only for captured payments outside Stripe. */
   canRecordManualRefund(row: AdminReturnRow): boolean {
-    return this.canMutate() && row.status === 'RECEIVED' && row.condition_check_result === 'qa_pass' && row.payment?.payment_status === 'paid' && row.payment.payment_provider !== 'stripe' && (row.return_type === 'refund' || row.request_type === 'refund');
+    const isRefund = row.return_type === 'refund' || row.request_type === 'refund';
+    const isReceivedPass = row.status === 'RECEIVED' && row.condition_check_result === 'qa_pass';
+    if (!this.canMutate() || !isRefund || !isReceivedPass) return false;
+    if (row.payment) {
+      return row.payment.payment_provider !== 'stripe' && ['paid', 'refund_pending'].includes(row.payment.payment_status || '');
+    }
+    return row.payment_method !== 'stripe';
   }
 
   /** Starts transfer evidence recording after warehouse QA. */
   openManualRefund(row: AdminReturnRow): void {
-    if (!this.canRecordManualRefund(row)) return;
+    if (!this.canRecordManualRefund(row)) {
+      this.openReturnDetail(row.return_id);
+      return;
+    }
     this.manualRefundTarget.set(row); this.manualRefundProof.set(''); this.actionError.set(null);
   }
 
@@ -964,10 +1117,14 @@ export class AdminReturnsPage {
   onManualRefundProof(event: Event): void {
     this.manualRefundProof.set('');
     const file = (event.target as HTMLInputElement).files?.[0], returnId = this.manualRefundTarget()?.return_id;
-    if (!file?.type.startsWith('image/') || file.size > 5 * 1024 * 1024) { this.actionError.set('Chọn ảnh giao dịch tối đa 5 MB.'); return; }
-    const reader = new FileReader();
-    reader.onload = () => { if (this.manualRefundTarget()?.return_id === returnId) this.manualRefundProof.set(String(reader.result || '')); };
-    reader.readAsDataURL(file);
+    if (!file || !file.type.startsWith('image/')) { this.actionError.set('Chọn một ảnh giao dịch.'); return; }
+    if (file.size > 15 * 1024 * 1024) { this.actionError.set('Ảnh giao dịch tối đa 15 MB.'); return; }
+    compressImageFile(file).then((dataUrl) => {
+      if (this.manualRefundTarget()?.return_id === returnId) {
+        this.manualRefundProof.set(dataUrl);
+        this.actionError.set(null);
+      }
+    });
   }
 
   /** Records transfer evidence once; the server calculates the net refund amount. */
@@ -977,10 +1134,40 @@ export class AdminReturnsPage {
     if (!row || !this.canRecordManualRefund(row) || this.submitting() || row.version == null) return;
     const transferReference = (form.elements.namedItem('reference') as HTMLInputElement | null)?.value.trim() || '';
     const adminNote = (form.elements.namedItem('note') as HTMLTextAreaElement | null)?.value.trim() || '';
-    if (!transferReference || adminNote.length < 10 || !this.manualRefundProof().startsWith('data:image/')) { this.actionError.set('Nhập mã giao dịch, ghi chú ít nhất 10 ký tự và ảnh chuyển tiền thành công.'); return; }
+    if (transferReference.length < 6) {
+      this.actionError.set('Mã giao dịch chuyển tiền phải có ít nhất 6 ký tự (ví dụ: FT2409012345).');
+      return;
+    }
+    if (adminNote.length < 10) {
+      this.actionError.set('Nội dung / Ghi chú kế toán phải có ít nhất 10 ký tự.');
+      return;
+    }
+    if (!this.manualRefundProof() || (!this.manualRefundProof().startsWith('data:image/') && !this.manualRefundProof().startsWith('https://'))) {
+      this.actionError.set('Vui lòng tải lên ảnh chụp biên lai chuyển tiền thành công.');
+      return;
+    }
+    this.actionError.set(null);
     this.submitting.set(true);
-    this.api.recordManualRefund(row.return_id, { expectedVersion: row.version, transferReference, adminNote, imageProof: this.manualRefundProof() }).pipe(finalize(() => this.submitting.set(false))).subscribe({
-      next: () => { this.manualRefundTarget.set(null); this.returnDetailOpen.set(false); this.reload(); }, error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
+    this.api.recordManualRefund(row.return_id, {
+      expectedVersion: row.version,
+      transferReference,
+      adminNote,
+      imageProof: this.manualRefundProof(),
+    }).pipe(finalize(() => this.submitting.set(false))).subscribe({
+      next: () => {
+        this.manualRefundTarget.set(null);
+        this.reload();
+        if (this.returnDetailOpen() && this.selectedReturn()?.return_id === row.return_id) {
+          this.openReturnDetail(row.return_id);
+        }
+      },
+      error: (error: unknown) => {
+        this.actionError.set(adminErrorMessage(error));
+        this.reload();
+        if (this.returnDetailOpen() && this.selectedReturn()?.return_id === row.return_id) {
+          this.openReturnDetail(row.return_id);
+        }
+      },
     });
   }
 
@@ -996,15 +1183,72 @@ export class AdminReturnsPage {
     return statusLabelFrom(RETURN_STATUS_LABELS, status);
   }
 
+  /** Tên khách hàng gắn với phiếu đổi trả */
+  customerName(row: AdminReturnRow | null | undefined): string {
+    return row?.customer_name || 'Khách vãng lai';
+  }
+
+  /** Số điện thoại khách hàng */
+  customerPhone(row: AdminReturnRow | null | undefined): string {
+    return row?.customer_phone || '';
+  }
+
+  /** Mã đơn hàng ngắn gọn dễ nhìn */
+  orderCode(row: AdminReturnRow | null | undefined): string {
+    return row?.order_code || (row?.order_id ? row.order_id.slice(0, 8).toUpperCase() : '—');
+  }
+
+  /** Mã phiếu chuẩn RET-XXXX */
+  returnCode(row: AdminReturnRow | null | undefined): string {
+    if (!row) return '—';
+    return row.tracking_return_code || ('RET-' + row.return_id.slice(0, 8).toUpperCase());
+  }
+
+  setReturnTab(tab: 'all' | 'attention' | 'warehouse' | 'refund' | 'completed'): void {
+    this.returnTab.set(tab);
+  }
+
+  applyReturnFilters(event: Event): void {
+    event.preventDefault();
+    this.page.set(1);
+    this.reload();
+  }
+
+  resetReturnFilters(event: Event): void {
+    event.preventDefault();
+    this.searchQuery.set('');
+    this.statusFilter.set('');
+    this.typeFilter.set('');
+    this.returnTab.set('all');
+    this.page.set(1);
+    this.reload();
+  }
+
+  onSearchInput(event: Event): void {
+    this.searchQuery.set((event.target as HTMLInputElement).value);
+  }
+
+  onStatusFilter(event: Event): void {
+    this.statusFilter.set((event.target as HTMLSelectElement).value);
+    this.page.set(1);
+  }
+
+  onTypeFilter(event: Event): void {
+    this.typeFilter.set((event.target as HTMLSelectElement).value);
+    this.page.set(1);
+  }
+
   /**
    * Phương thức thanh toán của đơn gắn với phiếu đổi trả.
    */
   returnPaymentMethod(row: AdminReturnRow): string {
+    const method = row.payment_method || row.payment?.payment_method;
     const provider = row.payment?.payment_provider;
-    const method = row.payment?.payment_method;
-    if (provider === 'stripe') return 'Stripe (Thẻ quốc tế)';
-    if (method === 'COD') return 'COD (Tiền mặt)';
-    if (method === 'ONLINE_PAYMENT') return 'Thanh toán Online';
+    if (provider === 'stripe' || method === 'STRIPE') return 'Stripe';
+    if (method === 'COD') return 'COD';
+    if (method === 'ONLINE_PAYMENT') return 'Online';
+    if (method === 'VNPAY') return 'VNPay';
+    if (method === 'MOMO') return 'MoMo';
     return method || '—';
   }
 
@@ -1026,7 +1270,13 @@ export class AdminReturnsPage {
   }
 
   canTriggerStripeRefund(row: AdminReturnRow): boolean {
-    return this.canMutate() && row.payment?.payment_provider === 'stripe' && row.payment?.payment_status !== 'refunded' && ['RECEIVED', 'REFUND_PROCESSING'].includes(row.status || '') && row.condition_check_result === 'qa_pass' && row.version != null && (row.return_type === 'refund' || row.request_type === 'refund');
+    const isRefund = row.return_type === 'refund' || row.request_type === 'refund';
+    const isReceivedPass = ['RECEIVED', 'REFUND_PROCESSING'].includes(row.status || '') && row.condition_check_result === 'qa_pass' && row.version != null;
+    if (!this.canMutate() || !isRefund || !isReceivedPass) return false;
+    if (row.payment) {
+      return row.payment.payment_provider === 'stripe' && row.payment.payment_status !== 'refunded';
+    }
+    return row.payment_method === 'stripe';
   }
 
   triggerStripeRefund(row: AdminReturnRow): void {

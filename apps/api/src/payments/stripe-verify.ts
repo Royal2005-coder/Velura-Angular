@@ -120,12 +120,12 @@ export async function verifyStripeOrder(params: {
           if (session.payment_status === "paid") {
             const rawIntent = session.payment_intent;
             const intent = typeof rawIntent === "string" ? rawIntent : (rawIntent?.id || targetSessionId);
-            await markStripePaymentPaid(currentOrderId, intent, targetSessionId);
+            const capture = await markStripePaymentPaid(currentOrderId, intent, targetSessionId);
 
             return {
               success: true,
-              paid: true,
-              status: "paid",
+              paid: capture !== "ignored",
+              status: capture === "paid" ? "paid" : capture === "refunding" ? "refund_pending" : "pending",
               order_id: currentOrderId,
               order_code: currentOrderCode,
               message: "Xác thực Stripe thành công! Đơn hàng đã chuyển sang trạng thái đã thanh toán."
@@ -160,12 +160,12 @@ export async function verifyStripeOrder(params: {
           const pi = await stripeRes.json() as { status?: string; metadata?: {order_id?:string}; amount?:number; currency?:string };
           if (pi.metadata?.order_id !== currentOrderId || pi.amount !== Math.round(Number(order.total_amount)) || pi.currency !== "vnd") throw new HttpError(422,"PAYMENT_SESSION_MISMATCH","Stripe intent order, amount or currency mismatch");
           if (pi.status === "succeeded") {
-            await markStripePaymentPaid(currentOrderId, targetIntentId, null);
+            const capture = await markStripePaymentPaid(currentOrderId, targetIntentId, null);
 
             return {
               success: true,
-              paid: true,
-              status: "paid",
+              paid: capture !== "ignored",
+              status: capture === "paid" ? "paid" : capture === "refunding" ? "refund_pending" : "pending",
               order_id: currentOrderId,
               order_code: currentOrderCode,
               message: "Xác thực Stripe thành công! Đơn hàng đã chuyển sang trạng thái đã thanh toán."

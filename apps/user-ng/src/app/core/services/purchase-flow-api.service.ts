@@ -2,6 +2,13 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiService } from './api.service';
 
+/** Server-configured payment providers; disabled methods cannot start a payment attempt. */
+export interface PurchasePaymentProvider {
+  code: 'COD' | 'STRIPE' | 'VNPAY' | 'MOMO';
+  enabled: boolean;
+  reason?: string;
+}
+
 /** Phản hồi gửi OTP checkout của API KAN-28. */
 export interface PurchaseOtpResponse {
   success?: boolean;
@@ -29,6 +36,7 @@ export interface PurchaseCheckoutResponse {
   order_access_token?: string;
   order?: PurchaseCreatedOrder;
   stripe?: { url?: string } | null;
+  payment?: { provider: PurchasePaymentProvider['code']; url?: string; payment_id?: string; expires_at?: string } | null;
 }
 
 /** Result of an authorized payment-method change persisted by the backend. */
@@ -42,6 +50,11 @@ export interface PurchasePaymentResponse {
 @Injectable({ providedIn: 'root' })
 export class PurchaseFlowApiService {
   private readonly api = inject(ApiService);
+
+  /** Loads actual gateway configuration without exposing provider secrets to the browser. */
+  providers(): Observable<{ providers: PurchasePaymentProvider[] }> {
+    return this.api.get('/api/user/payments/providers');
+  }
 
   /** Yêu cầu OTP cho Guest bằng contact hiện tại. */
   sendOtp(input: { full_name: string; phone: string; email: string }): Observable<PurchaseOtpResponse> {
@@ -79,7 +92,7 @@ export class PurchaseFlowApiService {
     return this.api.post<PurchaseCheckoutResponse>('/api/user/orders/retry-payment', { order_id: orderId, phone, order_access_token: orderAccessToken });
   }
   /** Reads a provider-verified result; browser query parameters and snapshots cannot assert payment. */
-  verifyPayment(orderId: string, orderAccessToken?: string): Observable<{ paid?: boolean; payment_status?: string }> {
-    return this.api.post('/api/user/payments/stripe/verify', { order_id: orderId, order_access_token: orderAccessToken });
+  verifyPayment(orderId: string, orderAccessToken?: string, provider: PurchasePaymentProvider['code'] = 'STRIPE'): Observable<{ paid?: boolean; payment_status?: string }> {
+    return this.api.post(provider === 'STRIPE' ? '/api/user/payments/stripe/verify' : '/api/user/payments/verify', { order_id: orderId, order_access_token: orderAccessToken });
   }
 }

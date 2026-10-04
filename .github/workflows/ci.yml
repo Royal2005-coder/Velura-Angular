@@ -307,46 +307,15 @@ jobs:
           ESMS_BRANDNAME: ${{ secrets.ESMS_BRANDNAME }}
           ESMS_SMS_TYPE: ${{ secrets.ESMS_SMS_TYPE }}
           ESMS_SANDBOX: ${{ secrets.ESMS_SANDBOX }}
-        run: |
-          if [ -n "$STRIPE_SECRET_KEY" ]; then
-            vercel env add STRIPE_SECRET_KEY production --value "$STRIPE_SECRET_KEY" --cwd apps/api --token "$VERCEL_TOKEN" --yes --force || true
-          fi
-          if [ -n "$STRIPE_WEBHOOK_SECRET" ]; then
-            vercel env add STRIPE_WEBHOOK_SECRET production --value "$STRIPE_WEBHOOK_SECRET" --cwd apps/api --token "$VERCEL_TOKEN" --yes --force || true
-          fi
-          if [ -n "$STOREFRONT_ORIGIN" ]; then
-            vercel env add STOREFRONT_ORIGIN production --value "$STOREFRONT_ORIGIN" --cwd apps/api --token "$VERCEL_TOKEN" --yes --force || true
-          fi
-          if [ -n "$TWILIO_API_KEY_SID" ]; then
-            vercel env add TWILIO_API_KEY_SID production --value "$TWILIO_API_KEY_SID" --cwd apps/api --token "$VERCEL_TOKEN" --yes --force || true
-          fi
-          if [ -n "$TWILIO_API_KEY_SECRET" ]; then
-            vercel env add TWILIO_API_KEY_SECRET production --value "$TWILIO_API_KEY_SECRET" --cwd apps/api --token "$VERCEL_TOKEN" --yes --force || true
-          fi
-          if [ -n "$TWILIO_ACCOUNT_SID" ]; then
-            vercel env add TWILIO_ACCOUNT_SID production --value "$TWILIO_ACCOUNT_SID" --cwd apps/api --token "$VERCEL_TOKEN" --yes --force || true
-          fi
-          if [ -n "$TWILIO_AUTH_TOKEN" ]; then
-            vercel env add TWILIO_AUTH_TOKEN production --value "$TWILIO_AUTH_TOKEN" --cwd apps/api --token "$VERCEL_TOKEN" --yes --force || true
-          fi
-          if [ -n "$TWILIO_PHONE_NUMBER" ]; then
-            vercel env add TWILIO_PHONE_NUMBER production --value "$TWILIO_PHONE_NUMBER" --cwd apps/api --token "$VERCEL_TOKEN" --yes --force || true
-          fi
-          if [ -n "$ESMS_API_KEY" ]; then
-            vercel env add ESMS_API_KEY production --value "$ESMS_API_KEY" --cwd apps/api --token "$VERCEL_TOKEN" --yes --force || true
-          fi
-          if [ -n "$ESMS_SECRET_KEY" ]; then
-            vercel env add ESMS_SECRET_KEY production --value "$ESMS_SECRET_KEY" --cwd apps/api --token "$VERCEL_TOKEN" --yes --force || true
-          fi
-          if [ -n "$ESMS_BRANDNAME" ]; then
-            vercel env add ESMS_BRANDNAME production --value "$ESMS_BRANDNAME" --cwd apps/api --token "$VERCEL_TOKEN" --yes --force || true
-          fi
-          if [ -n "$ESMS_SMS_TYPE" ]; then
-            vercel env add ESMS_SMS_TYPE production --value "$ESMS_SMS_TYPE" --cwd apps/api --token "$VERCEL_TOKEN" --yes --force || true
-          fi
-          if [ -n "$ESMS_SANDBOX" ]; then
-            vercel env add ESMS_SANDBOX production --value "$ESMS_SANDBOX" --cwd apps/api --token "$VERCEL_TOKEN" --yes --force || true
-          fi
+          API_PUBLIC_ORIGIN: ${{ secrets.API_PUBLIC_ORIGIN }}
+          VNPAY_TMN_CODE: ${{ secrets.VNPAY_TMN_CODE }}
+          VNPAY_HASH_SECRET: ${{ secrets.VNPAY_HASH_SECRET }}
+          VNPAY_PAYMENT_URL: ${{ secrets.VNPAY_PAYMENT_URL }}
+          MOMO_PARTNER_CODE: ${{ secrets.MOMO_PARTNER_CODE }}
+          MOMO_ACCESS_KEY: ${{ secrets.MOMO_ACCESS_KEY }}
+          MOMO_SECRET_KEY: ${{ secrets.MOMO_SECRET_KEY }}
+          MOMO_API_ORIGIN: ${{ secrets.MOMO_API_ORIGIN }}
+        run: node deploy/scripts/sync-production-env.mjs
       - name: Deploy API to Vercel
         run: vercel deploy --prod --cwd apps/api --token ${{ secrets.VERCEL_TOKEN }} --yes
       - name: Deploy Storefront to Vercel

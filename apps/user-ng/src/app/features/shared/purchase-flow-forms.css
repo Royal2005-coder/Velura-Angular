@@ -236,3 +236,11 @@
   box-sizing: border-box;
   margin: auto;
 }
+/* Inline edits remain inside checkout; the server recalculates every changed basket. */
+.checkout-line-controls { display: grid; grid-template-columns: minmax(0, 1fr) 5.5rem; gap: .65rem; margin-top: .8rem; }
+.checkout-line-controls label { display: grid; gap: .3rem; font-size: .78rem; color: var(--color-text-muted, #756b65); }
+.checkout-line-controls select, .checkout-line-controls input { width: 100%; min-width: 0; box-sizing: border-box; border: 1px solid var(--color-border, #e4d5cc); border-radius: .5rem; padding: .55rem; background: #fff; color: var(--color-text, #342a25); font: inherit; }
+.checkout-line-controls button { justify-self: start; grid-column: 1 / -1; }
+.checkout-order-options { margin-top: 1rem; border-top: 1px solid var(--color-border, #e4d5cc); padding-top: 1rem; }
+.checkout-order-options summary { cursor: pointer; font-weight: 600; padding-block: .4rem; }
+.checkout-order-options .check { margin-block: .9rem; }

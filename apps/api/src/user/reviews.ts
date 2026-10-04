@@ -34,7 +34,7 @@ export async function handleReviewsRoute(
     }
 
     const review = await selectOne("review", { review_id: `eq.${action}` });
-    if (!review) {
+    if (!review || review.user_id !== profile.user_id) {
       throw new HttpError(404, "NOT_FOUND", "Không tìm thấy đánh giá");
     }
 
@@ -92,6 +92,9 @@ export async function handleReviewsRoute(
     if (!product_id || !order_id || !rating) {
       throw new HttpError(400, "BAD_REQUEST", "Thiếu thông tin product_id, order_id hoặc rating");
     }
+    if (!Number.isInteger(Number(rating)) || Number(rating) < 1 || Number(rating) > 5) {
+      throw new HttpError(422, "INVALID_RATING", "Điểm đánh giá phải là số nguyên từ 1 đến 5.");
+    }
 
     // Check if order belongs to user
     const order = await selectOne("orders", { order_id: `eq.${order_id}` });
@@ -102,6 +105,13 @@ export async function handleReviewsRoute(
     if (order.status !== "delivered") {
       throw new HttpError(400, "BAD_REQUEST", "Chỉ có thể đánh giá sản phẩm sau khi đơn hàng đã giao thành công hoặc hoàn thành");
     }
+    const { rows: purchasedItems } = await selectRows("order_item", { order_id: `eq.${order_id}`, select: "variant_id" });
+    let productPurchased = false;
+    for (const item of purchasedItems) {
+      const variant = await selectOne("variant", { variant_id: `eq.${item.variant_id}`, select: "product_id" });
+      if (variant?.product_id === product_id) { productPurchased = true; break; }
+    }
+    if (!productPurchased) throw new HttpError(403, "PRODUCT_NOT_PURCHASED", "Sản phẩm không thuộc đơn hàng đã giao.");
 
     // Check if review already exists for this product in this order
     const existingReview = await selectOne("review", {

@@ -225,24 +225,49 @@
                       placeholder="Ví dụ: Giao giờ hành chính"
                       [(ngModel)]="address.note"
                   /></label>
+                  <details class="checkout-order-options">
+                    <summary>Tùy chọn bổ sung cho đơn hàng</summary>
+                    <div class="fields">
+                      <label class="field">Mã giới thiệu (tùy chọn)<input name="referral" maxlength="50" [(ngModel)]="orderOptions.referral_code" /></label>
+                    </div>
+                    <label class="check"><input type="checkbox" name="gift" [(ngModel)]="orderOptions.is_gift" />Đây là quà tặng</label>
+                    @if (orderOptions.is_gift) {
+                      <div class="fields">
+                        <label class="field">Tên người nhận quà<input name="giftName" maxlength="100" [(ngModel)]="orderOptions.gift_name" /></label>
+                        <label class="field">Quà dành cho<select name="giftGender" [(ngModel)]="orderOptions.gift_gender"><option value="nu">Nữ</option><option value="nam">Nam</option></select></label>
+                        <label class="field">Lời chúc<input name="giftMessage" maxlength="300" [(ngModel)]="orderOptions.gift_message" /></label>
+                      </div>
+                    }
+                    <label class="check"><input type="checkbox" name="otherRecipient" [(ngModel)]="orderOptions.is_other_recipient" />Người khác nhận hàng</label>
+                    @if (orderOptions.is_other_recipient) {
+                      <div class="fields">
+                        <label class="field">Họ tên người nhận *<input name="otherName" maxlength="100" [(ngModel)]="orderOptions.other_name" required /></label>
+                        <label class="field">Điện thoại người nhận *<input name="otherPhone" type="tel" autocomplete="tel" [(ngModel)]="orderOptions.other_phone" required /></label>
+                      </div>
+                    }
+                    <label class="check"><input type="checkbox" name="vat" [(ngModel)]="orderOptions.is_vat_invoice" />Yêu cầu xuất hóa đơn VAT</label>
+                    @if (orderOptions.is_vat_invoice) {
+                      <div class="fields">
+                        <label class="field">Tên công ty *<input name="vatCompany" maxlength="200" [(ngModel)]="orderOptions.vat_company_name" required /></label>
+                        <label class="field">Mã số thuế *<input name="vatTax" maxlength="30" [(ngModel)]="orderOptions.vat_tax_code" required /></label>
+                        <label class="field">Địa chỉ công ty *<input name="vatAddress" maxlength="300" [(ngModel)]="orderOptions.vat_company_address" required /></label>
+                        <label class="field">Email nhận hóa đơn *<input name="vatEmail" type="email" [(ngModel)]="orderOptions.vat_email" required /></label>
+                      </div>
+                    }
+                    @if (fieldErrors()['options']) { <p class="error" role="alert">{{ fieldErrors()['options'] }}</p> }
+                  </details>
                 </section>
                 <section class="form-section">
                   <div class="section-heading">
                     <span class="number">4</span>
                     <h3>Phương thức thanh toán</h3>
                   </div>
-                  <label class="choice" [class.selected]="payment === 'COD'"
-                    ><input type="radio" name="payment" value="COD" [(ngModel)]="payment" /><span
-                      ><strong>Thanh toán khi nhận hàng (COD)</strong
-                      ><small>Thanh toán cho người giao hàng.</small></span
-                    ></label
-                  >
-                  <label class="choice" [class.selected]="payment === 'STRIPE'"
-                    ><input type="radio" name="payment" value="STRIPE" [(ngModel)]="payment" /><span
-                      ><strong>Thanh toán bằng thẻ</strong
-                      ><small>Chuyển đến cổng thanh toán sau khi đặt hàng.</small></span
-                    ></label
-                  >
+                  @for (provider of paymentProviders(); track provider.code) {
+                    <label class="choice" [class.selected]="payment === provider.code" [class.unavailable]="!provider.enabled">
+                      <input type="radio" name="payment" [value]="provider.code" [(ngModel)]="payment" [disabled]="!provider.enabled" />
+                      <span><strong>{{ providerLabel[provider.code] }}</strong><small>{{ !provider.enabled ? 'Tạm chưa khả dụng' : provider.code === 'COD' ? 'Thanh toán cho người giao hàng.' : 'Chuyển đến cổng thanh toán an toàn sau khi tạo đơn.' }}</small></span>
+                    </label>
+                  }
                 </section>
               </fieldset>
             </form>
@@ -274,6 +299,7 @@
               <p>Mã đơn {{ order()?.id }} được giữ nguyên.</p>
               @if (!busy()) {
                 <div class="actions">
+                  @if (paymentResult() === 'confirming') { <button type="button" (click)="retryOrderLoad()" [disabled]="resumeLoading()">Kiểm tra thanh toán</button> }
                   <button (click)="retry()">Thanh toán lại</button
                   ><button class="secondary" (click)="useCod()">Đổi sang COD</button
                   ><a
@@ -294,7 +320,7 @@
                 <strong>{{ order()?.id }}</strong>
               </p>
               <span class="badge">{{
-                order()?.payment === 'COD' ? 'Chờ xác nhận' : order()?.paymentState === 'paid' ? 'Đã thanh toán' : 'Chờ thanh toán'
+                order()?.payment === 'COD' ? 'Đơn hàng: Chờ xác nhận' : order()?.paymentState === 'paid' ? 'Thanh toán: Đã thanh toán' : 'Thanh toán: Chờ thanh toán'
               }}</span>
               <p>
                 Tổng thanh toán: <strong>{{ money(order()?.total) }}</strong>
@@ -342,6 +368,7 @@
       @if (step() === 'form') {
         <aside class="panel summary checkout-summary">
           <h2>Đơn hàng của bạn</h2>
+          @if (lineEditError()) { <p class="error" role="alert">{{ lineEditError() }}</p> }
           @for (line of lines(); track $index) {
             <article
               class="line"
@@ -352,6 +379,19 @@
                 <h3>{{ line.product_name }}</h3>
                 <p class="muted">{{ line.size }} / {{ line.color }} · SL {{ line.quantity }}</p>
                 <strong>{{ money(line.unit_price * line.quantity) }}</strong>
+                <div class="checkout-line-controls">
+                  <label>Màu / Kích cỡ
+                    <select [ngModel]="line.variant_id" (ngModelChange)="editLine(line, $event, line.quantity)" [disabled]="busy() || resumeLocked() || !!order() || !variantChoices()[line.product_id]" [attr.aria-label]="'Biến thể ' + line.product_name">
+                      @for (variant of variantChoices()[line.product_id] || []; track variant.variant_id) {
+                        <option [value]="variant.variant_id" [disabled]="variant.available < line.quantity">{{ variant.color || 'Mặc định' }} / {{ variant.size || 'Free' }}{{ variant.available < line.quantity ? ' · Hết hàng' : '' }}</option>
+                      }
+                    </select>
+                  </label>
+                  <label>Số lượng
+                    <input type="number" min="1" step="1" [ngModel]="line.quantity" (ngModelChange)="editLine(line, line.variant_id, $event)" [disabled]="busy() || resumeLocked() || !!order() || !variantChoices()[line.product_id]" [attr.aria-label]="'Số lượng ' + line.product_name" />
+                  </label>
+                  <button class="text-button" type="button" (click)="removeLine(line)" [disabled]="busy() || resumeLocked() || !!order()">{{ line.combo_id ? 'Xóa cả bộ' : 'Xóa' }}</button>
+                </div>
                 @if ($index === 0 && stockProblem()) {
                   <p class="error" role="alert">{{ stockProblem() }}</p>
                 }
@@ -390,7 +430,6 @@
                   : 'Thanh toán trực tuyến →'
             }}
           </button>
-          <a class="edit-cart" routerLink="/cart">Chỉnh sửa giỏ hàng</a>
         </aside>
       }
     </div>

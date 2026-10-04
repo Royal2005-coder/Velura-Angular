@@ -725,8 +725,9 @@ export async function handleOrdersRoute(
       const guestTotal = guestQuote.totalAmount;
 
       const shipping_email = body.shipping_email || order.shipping_email;
+      const targetContactEmail = shipping_email || guestUser.email;
       const activationUrl = activation
-        ? `https://velura.royalai.dev/auth/activate?token=${encodeURIComponent(activation.token)}`
+        ? `https://velura.royalai.dev/auth/activate?token=${encodeURIComponent(activation.token)}&phone=${encodeURIComponent(phone)}&email=${encodeURIComponent(String(targetContactEmail || ""))}`
         : null;
       let guestEmailNotification: {
         targetEmail: unknown;
@@ -734,9 +735,12 @@ export async function handleOrdersRoute(
         text: string;
         html: string;
       } | null = null;
-      if (shipping_email || guestUser.email) {
-        const targetEmail = shipping_email || guestUser.email;
-        const emailBody = `Chào ${shipping_name},\n\nĐơn hàng ${orderCode} của bạn đã được đặt thành công!\nTổng giá trị: ${guestTotal.toLocaleString('vi-VN')} đ\nPhương thức thanh toán: ${dbPaymentMethod === "COD" ? "Thanh toán khi nhận hàng (COD)" : "Thanh toán trực tuyến"}\nĐịa chỉ nhận: ${shipping_address}\n\nTra cứu đơn hàng tại: https://velura.royalai.dev/account/track?code=${orderCode}&contact=${encodeURIComponent(String(phone || ""))}\nTài khoản Velura: ${phone}${activationUrl ? `\n\nBạn có thể chọn kích hoạt tài khoản và tự đặt mật khẩu qua liên kết dùng một lần, có hiệu lực trong 24 giờ:\n${activationUrl}` : "\nĐơn hàng đã được liên kết với tài khoản hiện có."}`;
+      if (targetContactEmail) {
+        const targetEmail = targetContactEmail;
+        const emailSubject = activationUrl
+          ? `[Velura] Chúc mừng bạn! Số điện thoại ${phone} nhận gói ưu đãi Thành Viên Mới`
+          : `Xác nhận đơn hàng #${orderCode} tại Velura`;
+        const emailBody = `Chào ${shipping_name},\n\nĐơn hàng ${orderCode} của bạn đã được đặt thành công!\nTổng giá trị: ${guestTotal.toLocaleString('vi-VN')} đ\nPhương thức thanh toán: ${dbPaymentMethod === "COD" ? "Thanh toán khi nhận hàng (COD)" : "Thanh toán trực tuyến"}\nĐịa chỉ nhận: ${shipping_address}\n\nTra cứu đơn hàng tại: https://velura.royalai.dev/account/track?code=${orderCode}&contact=${encodeURIComponent(String(phone || ""))}\nTài khoản Velura: ${phone}${activationUrl ? `\n\nSố điện thoại ${phone} của bạn đủ điều kiện nhận gói ưu đãi Thành Viên Mới từ Kho Ưu Đãi Velura! Bạn có thể chọn kích hoạt tài khoản qua liên kết dùng một lần, có hiệu lực trong 24 giờ; mật khẩu do bạn tự đặt:\n${activationUrl}` : "\nĐơn hàng đã được liên kết với tài khoản hiện có."}`;
 
         const emailHtml = `
           <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eaeaea; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
@@ -762,10 +766,17 @@ export async function handleOrdersRoute(
               </div>
 
               ${activationUrl ? `
-              <div style="background-color: #f5f5f5; padding: 16px; border-radius: 6px; margin-top: 20px;">
-                <h4 style="margin: 0 0 8px 0; font-size: 14px; color: #555;">Kích hoạt tài khoản thành viên:</h4>
-                <p style="margin: 4px 0; font-size: 13px; color: #666;">Bạn có thể chọn kích hoạt tài khoản. Liên kết dùng một lần và có hiệu lực trong 24 giờ; mật khẩu do bạn tự đặt.</p>
-                <p style="margin: 12px 0 0;"><a href="${activationUrl}" style="color: #7C5454; font-weight: 600;">Kích hoạt và đặt mật khẩu</a></p>
+              <div style="background: linear-gradient(135deg, #fff9f5 0%, #fdf4ee 100%); border: 1px solid #f3dfd5; padding: 20px; border-radius: 8px; margin-top: 24px;">
+                <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                  <span style="font-size: 20px; margin-right: 8px;">🎁</span>
+                  <h4 style="margin: 0; font-size: 16px; color: #7C5454; font-weight: 700;">Gói ưu đãi Thành Viên Mới từ Kho Ưu Đãi</h4>
+                </div>
+                <p style="margin: 6px 0 12px 0; font-size: 14px; color: #555; line-height: 1.5;">
+                  Số điện thoại <strong>${phone}</strong> của bạn đủ điều kiện nhận gói ưu đãi Thành Viên Mới từ <strong>Kho Ưu Đãi Velura</strong>. Thông tin đã được xác thực an toàn qua đơn hàng, bạn chỉ cần nhập mật khẩu để hoàn tất tạo tài khoản và nhận quà ngay!
+                </p>
+                <div style="text-align: center; margin-top: 16px;">
+                  <a href="${activationUrl}" style="display: inline-block; background-color: #92584A; color: #fff; text-decoration: none; padding: 10px 24px; border-radius: 6px; font-weight: 600; font-size: 14px;">Kích hoạt tài khoản & Nhận ưu đãi</a>
+                </div>
               </div>` : `
               <div style="background-color: #f5f5f5; padding: 16px; border-radius: 6px; margin-top: 20px;">
                 <p style="margin: 4px 0; font-size: 13px; color: #666;">Đơn hàng đã được liên kết với tài khoản thành viên của bạn (<strong>${phone}</strong>).</p>
@@ -779,7 +790,7 @@ export async function handleOrdersRoute(
 
         guestEmailNotification = {
           targetEmail,
-          subject: `Xác nhận đơn hàng #${orderCode} tại Velura`,
+          subject: emailSubject,
           text: emailBody,
           html: emailHtml
         };

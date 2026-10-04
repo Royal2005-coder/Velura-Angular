@@ -357,9 +357,9 @@ export async function sendGuestOrderWelcomeSms(
 ): Promise<TwilioSendResult> {
   const formattedTotal = `${totalAmount.toLocaleString("vi-VN")}d`;
   const accountHelp = activationUrl
-    ? ` Tai khoan: ${toE164(phone)}. Neu muon tro thanh vien, kich hoat va tu dat mat khau trong 24 gio: ${activationUrl}`
+    ? ` So dien thoai ${toE164(phone)} du dieu kien nhan uu dai Thanh Vien Moi tu Kho Uu Dai Velura! Mo link de tao mat khau va nhan qua: ${activationUrl}`
     : " Don hang da duoc lien ket voi tai khoan Velura hien co.";
-  const body = `Velura da tiep nhan don ${orderCode}. Tong thanh toan: ${formattedTotal}. Tra cuu: https://velura.royalai.dev/account/track?code=${encodeURIComponent(orderCode)}.${accountHelp}`;
+  const body = `[Velura] Don #${orderCode} tiep nhan thanh cong (${formattedTotal}).${accountHelp}`;
   return sendTwilioSms(phone, body);
 }
 

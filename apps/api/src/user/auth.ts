@@ -266,6 +266,17 @@ export async function handleAuthRoute(
       email: user.email || `${user.phone}@velura.vn`,
       role: "member"
     });
+    try {
+      await createNotification(
+        asString(user.user_id),
+        "system",
+        "Chào mừng Thành Viên Mới! 🎁",
+        "Tài khoản của bạn đã được kích hoạt thành công. Ưu đãi thành viên mới đã sẵn sàng trong Kho Ưu Đãi!",
+        "/account/vouchers"
+      );
+    } catch {
+      /* notification is best-effort */
+    }
     return sendJson(res, 200, {
       success: true,
       token: jwt,
@@ -276,7 +287,7 @@ export async function handleAuthRoute(
         full_name: user.full_name,
         role: "member"
       },
-      message: "Tài khoản đã được kích hoạt"
+      message: "Tài khoản đã được kích hoạt thành công"
     }, corsHeaders);
   }
 

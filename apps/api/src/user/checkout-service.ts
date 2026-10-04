@@ -283,19 +283,43 @@ export class CheckoutService {
     const now = new Date().toISOString();
     const savedAddresses = [{ name: contact.fullName, phone: contact.phone, detail: shippingAddress, is_default: true }];
     if (!user) {
-      user = await this.repository.createGuestUser({
-        full_name: contact.fullName,
-        phone: contact.phone,
-        email: contact.email,
-        password_hash: hashPassword(randomUUID() + randomUUID()),
-        role: "member",
-        is_active: false,
-        activation_token_hash: activation?.tokenHash,
-        activation_expires_at: activation?.expiresAt,
-        saved_addresses: savedAddresses,
-        created_at: now,
-        updated_at: now
-      });
+      try {
+        user = await this.repository.createGuestUser({
+          full_name: contact.fullName,
+          phone: contact.phone,
+          email: contact.email,
+          password_hash: hashPassword(randomUUID() + randomUUID()),
+          role: "member",
+          is_active: false,
+          activation_token_hash: activation?.tokenHash,
+          activation_expires_at: activation?.expiresAt,
+          saved_addresses: savedAddresses,
+          created_at: now,
+          updated_at: now
+        });
+      } catch (insertError: unknown) {
+        if (contact.email) {
+          const existingByEmail = await this.repository.findUserByEmail(contact.email);
+          if (existingByEmail) {
+            user = existingByEmail;
+          }
+        }
+        if (!user) {
+          user = await this.repository.createGuestUser({
+            full_name: contact.fullName,
+            phone: contact.phone,
+            email: null,
+            password_hash: hashPassword(randomUUID() + randomUUID()),
+            role: "member",
+            is_active: false,
+            activation_token_hash: activation?.tokenHash,
+            activation_expires_at: activation?.expiresAt,
+            saved_addresses: savedAddresses,
+            created_at: now,
+            updated_at: now
+          });
+        }
+      }
     } else if (!existingMember) {
       await this.repository.updateGuestUser(asString(user.user_id), {
         activation_token_hash: activation?.tokenHash,

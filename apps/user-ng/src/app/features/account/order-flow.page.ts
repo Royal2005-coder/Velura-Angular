@@ -77,6 +77,7 @@ export class OrderFlowPage {
   );
   readonly error = signal('');
   readonly maskedPhone = signal('');
+  readonly maskedEmail = computed(() => this.model.maskedEmail ? this.model.maskedEmail() : '');
   readonly verified = signal(false);
   readonly seconds = signal(300);
   readonly cooldown = signal(0);

@@ -17,7 +17,7 @@ export async function sendRefundSuccessEmail(
 ): Promise<boolean> {
   try {
     const returnRecord = await selectOne("return_exchange", {
-      select: "return_id,order_id,user_id,return_type,refund_amount,status,tracking_return_code,reason,admin_note",
+      select: "return_id,order_id,user_id,return_type,refund_amount,status,tracking_return_code,rejection_reason,description,admin_note",
       return_id: `eq.${returnId}`
     });
     if (!returnRecord) return false;

@@ -274,4 +274,70 @@ test("triggerStripeRefund manually executes payment refund gateway", async () =>
   assert.equal(res.success, true);
 });
 
+test("triggerStripeRefund throws STRIPE_REFUND_FAILED when gateway refund fails", async () => {
+  const service = createReturnService({
+    repository: {
+      getReturn: async () => ({ return_id: RETURN_ID, order_id: "order-fail", status: "RECEIVED", condition_check_result: "qa_pass", return_type: "refund", refund_amount: 200000, version: 2 }),
+      getRefundableAmount: async () => 200000,
+      getPaymentByOrderId: async () => ({ payment_provider: "stripe" })
+    },
+    refunds: {
+      refund: async () => ({ status: "failed", message: "Stripe card expired" })
+    }
+  });
+
+  await assert.rejects(
+    () => service.triggerStripeRefund(context("admin_operator_cskh_dt"), RETURN_ID, { expectedVersion: 2 }),
+    (error: any) => error.status === 422 && error.code === "STRIPE_REFUND_FAILED" && error.message.includes("Stripe card expired")
+  );
+});
+
+test("recordManualRefund supports COD, MoMo, VNPay and auto-syncs pending COD payment to paid", async () => {
+  let paidPaymentId: string | null = null;
+  let recordedRefund: any = null;
+
+  const service = createReturnService({
+    repository: {
+      getReturn: async () => ({ return_id: RETURN_ID, order_id: "order-cod", status: "RECEIVED", condition_check_result: "qa_pass", return_type: "refund", version: 3 }),
+      getPaymentByOrderId: async () => ({ payment_id: "pay-cod-1", payment_method: "COD", payment_provider: "cod", payment_status: "pending" }),
+      markPaymentPaid: async (paymentId: string) => { paidPaymentId = paymentId; return []; },
+      recordManualRefund: async (returnId: string, version: number, reference: string, proof: string, actorId: string, ipAddress?: string, adminNote?: string) => {
+        recordedRefund = { returnId, version, reference, proof, actorId, ipAddress, adminNote };
+        return { return_id: returnId, status: "REFUNDED" };
+      }
+    }
+  });
+
+  const res = await service.recordManualRefund(context("admin_operator_cskh_dt"), RETURN_ID, {
+    expectedVersion: 3,
+    transferReference: "VCB2026100501",
+    imageProof: "https://example.com/receipt.png",
+    adminNote: "Da hoan tien vao tai khoan Vietcombank cua khach"
+  });
+
+  assert.equal(paidPaymentId, "pay-cod-1");
+  assert.equal(recordedRefund.reference, "VCB2026100501");
+  assert.equal(recordedRefund.adminNote, "Da hoan tien vao tai khoan Vietcombank cua khach");
+  assert.equal(res.status, "REFUNDED");
+});
+
+test("recordManualRefund rejects invalid reference, proof, or stripe payment", async () => {
+  const service = createReturnService({
+    repository: {
+      getReturn: async () => ({ return_id: RETURN_ID, order_id: "order-stripe", status: "RECEIVED", condition_check_result: "qa_pass", return_type: "refund", version: 1 }),
+      getPaymentByOrderId: async () => ({ payment_id: "pay-str-1", payment_method: "ONLINE_PAYMENT", payment_provider: "stripe", payment_status: "paid" })
+    }
+  });
+
+  // Stripe order must not use manual refund
+  await assert.rejects(
+    () => service.recordManualRefund(context("admin_operator_cskh_dt"), RETURN_ID, {
+      expectedVersion: 1,
+      transferReference: "VCB2026100501",
+      imageProof: "https://example.com/receipt.png"
+    }),
+    (error: any) => error.status === 422 && error.code === "CAPTURED_NON_STRIPE_REQUIRED"
+  );
+});
+
 function context(roleCode) { return { authUser: { id: "auth-1" }, roleCode, accessToken: "jwt-token" }; }

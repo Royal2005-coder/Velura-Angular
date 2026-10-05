@@ -523,7 +523,18 @@
       <form (submit)="submitManualRefund($event)">
         <header class="admin-modal__header"><h2>Ghi nhận chuyển khoản hoàn tiền</h2><button type="button" class="admin-icon-button" [disabled]="submitting()" (click)="manualRefundTarget.set(null)" aria-label="Đóng">×</button></header>
         <div class="admin-modal__body">
-          <p class="admin-note">Chỉ ghi nhận sau khi kế toán đã chuyển tiền thành công cho khách hàng qua ngân hàng.</p>
+          <div class="admin-refund-summary" style="background: var(--bg-subtle, #f8fafc); border: 1px solid var(--border, #e2e8f0); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <span style="font-size: 0.85rem; color: var(--muted, #64748b);">Số tiền cần hoàn trả:</span>
+              <strong style="font-size: 1.15rem; color: var(--primary, #0ea5e9);">{{ money(refund.refund_amount || refund.refundable_amount || refund.order_total || 0) }}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--muted, #64748b);">
+              <span>Đơn: <strong>{{ orderCode(refund) }}</strong></span>
+              <span>Khách: <strong>{{ refund.customer_name || 'Khách hàng' }}</strong></span>
+              <span>PTTT: <strong>{{ returnPaymentMethod(refund) }}</strong></span>
+            </div>
+          </div>
+          <p class="admin-note" style="margin-bottom: 12px;">Chỉ ghi nhận sau khi kế toán đã chuyển tiền thành công cho khách hàng qua ngân hàng.</p>
           <label class="admin-form-group">
             <span class="admin-form-label">Mã giao dịch chuyển tiền (tối thiểu 6 ký tự) *</span>
             <input class="admin-form-control" name="reference" required minlength="6" placeholder="Ví dụ: FT2409012345 hoặc VCB123456" [disabled]="submitting()" />

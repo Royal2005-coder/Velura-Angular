@@ -190,16 +190,20 @@ export function createReturnService({
       const orderId = asString(current.order_id);
       if (!orderId) throw new HttpError(422, "MISSING_ORDER_ID", "Phiếu không có mã đơn hàng hợp lệ");
       if (!refunds) throw new HttpError(503, "GATEWAY_UNAVAILABLE", "Cổng hoàn tiền Stripe chưa sẵn sàng");
-      const version = asNumber(body.expectedVersion);
-      if (!Number.isInteger(version) || version !== Number(current.version)) throw new HttpError(409,"VERSION_CONFLICT","Return changed");
-      if (!["RECEIVED","REFUND_PROCESSING"].includes(asString(current.status)) || current.condition_check_result !== RETURN_QA_PASS || current.return_type === "exchange") throw new HttpError(422,"WAREHOUSE_QA_REQUIRED","Warehouse QA must pass before refund");
+      const version = body.expectedVersion != null ? asNumber(body.expectedVersion) : Number(current.version);
+      if (!Number.isInteger(version) || version !== Number(current.version)) throw new HttpError(409,"VERSION_CONFLICT","Dữ liệu yêu cầu đổi/trả đã bị thay đổi bởi thao tác khác. Vui lòng tải lại trang.");
+      if (!["RECEIVED","REFUND_PROCESSING"].includes(asString(current.status)) || current.condition_check_result !== RETURN_QA_PASS || current.return_type === "exchange") throw new HttpError(422,"WAREHOUSE_QA_REQUIRED","Hàng hoàn trả phải được kho tiếp nhận và kiểm tra đạt yêu cầu (QA Pass) trước khi hoàn tiền.");
       const amount = await repository.getRefundableAmount(returnId, context.accessToken);
-      if (amount <= 0) throw new HttpError(422,"NOTHING_TO_REFUND","No refundable balance");
+      if (amount <= 0) throw new HttpError(422,"NOTHING_TO_REFUND","Đơn hàng không có số dư hợp lệ để thực hiện hoàn tiền.");
       const payment = await repository.getPaymentByOrderId(orderId,context.accessToken);
-      if (payment?.payment_provider !== "stripe") throw new HttpError(422,"STRIPE_PAYMENT_REQUIRED","Use the verified manual refund operation for non-Stripe payments");
+      if (payment?.payment_provider !== "stripe") throw new HttpError(422,"STRIPE_PAYMENT_REQUIRED","Chỉ đơn hàng thanh toán qua Stripe mới có thể hoàn tiền trực tuyến qua Stripe. Đơn hàng hiện tại vui lòng dùng tính năng Ghi nhận chuyển khoản hoàn tiền.");
       const result = await refunds.refund(orderId, amount, returnId, version);
       if (result.status === "refunded") {
         void sendRefundSuccessEmail(returnId, { method: "stripe" });
+      } else if (result.status === "failed") {
+        throw new HttpError(422, "STRIPE_REFUND_FAILED", result.message || "Hoàn tiền qua Stripe thất bại. Vui lòng kiểm tra lại giao dịch thanh toán trên Stripe.");
+      } else if (result.status === "skipped") {
+        throw new HttpError(422, "STRIPE_PAYMENT_REQUIRED", result.message || "Không tìm thấy giao dịch thanh toán Stripe hợp lệ để hoàn tiền.");
       }
       return { success: true, refund: result };
     },
@@ -207,16 +211,33 @@ export function createReturnService({
     async recordManualRefund(context,returnId,body) {
       requireReturnAdmin(context);
       const current = await repository.getReturn(returnId,context.accessToken);
-      if (!current) throw new HttpError(404,"RETURN_NOT_FOUND","Return not found");
-      if (Number(body.expectedVersion) !== Number(current.version)) throw new HttpError(409,"VERSION_CONFLICT","Return changed");
-      if (!["RECEIVED","REFUND_PROCESSING"].includes(asString(current.status)) || current.condition_check_result !== RETURN_QA_PASS) throw new HttpError(422,"WAREHOUSE_QA_REQUIRED","Warehouse QA must pass");
-      const payment = await repository.getPaymentByOrderId(asString(current.order_id),context.accessToken);
-      if (!payment || payment.payment_provider === "stripe" || !["paid","refund_pending"].includes(asString(payment.payment_status))) throw new HttpError(422,"CAPTURED_NON_STRIPE_REQUIRED","A captured non-Stripe payment is required");
+      if (!current) throw new HttpError(404,"RETURN_NOT_FOUND","Không tìm thấy yêu cầu đổi/trả tương ứng");
+      if (Number(body.expectedVersion) !== Number(current.version)) throw new HttpError(409,"VERSION_CONFLICT","Dữ liệu yêu cầu đổi/trả đã bị thay đổi bởi thao tác khác. Vui lòng tải lại trang.");
+      if (!["RECEIVED","REFUND_PROCESSING"].includes(asString(current.status)) || current.condition_check_result !== RETURN_QA_PASS) throw new HttpError(422,"WAREHOUSE_QA_REQUIRED","Hàng hoàn trả phải được kho tiếp nhận và kiểm tra đạt yêu cầu (QA Pass) trước khi ghi nhận hoàn tiền.");
+      const orderId = asString(current.order_id);
+      let payment = await repository.getPaymentByOrderId(orderId,context.accessToken);
+
+      // Tự động đồng bộ payment cho đơn COD đã nhận hàng thành công
+      if (payment && asString(payment.payment_status) === "pending" && asString(payment.payment_method).toUpperCase() === "COD") {
+        await repository.markPaymentPaid(asString(payment.payment_id));
+        payment = { ...payment, payment_status: "paid" };
+      }
+
+      if (!payment || payment.payment_provider === "stripe" || !["paid","refund_pending"].includes(asString(payment.payment_status))) throw new HttpError(422,"CAPTURED_NON_STRIPE_REQUIRED","Chỉ áp dụng ghi nhận chuyển khoản cho đơn hàng thanh toán ngoài Stripe (COD, MoMo, VNPay) đã thanh toán thành công.");
       const reference = asString(body.transferReference).trim();
       const proof = asString(body.imageProof);
+      const adminNote = asString(body.adminNote).trim();
       if (reference.length < 6) throw new HttpError(422,"TRANSFER_REFERENCE_REQUIRED","Mã giao dịch chuyển tiền phải có ít nhất 6 ký tự.");
-      if (!proof.startsWith("https://") && !proof.startsWith("data:image/")) throw new HttpError(422,"TRANSFER_PROOF_REQUIRED","Vui lòng tải lên ảnh chụp chứng từ chuyển khoản thành công.");
-      const updated = await repository.recordManualRefund(returnId,Number(body.expectedVersion),reference,proof,context.profile?.user_id || context.authUser.id, context.ipAddress);
+      if (!proof.startsWith("https://") && !proof.startsWith("data:image/") && !proof.startsWith("http://")) throw new HttpError(422,"TRANSFER_PROOF_REQUIRED","Vui lòng tải lên ảnh chụp chứng từ chuyển khoản thành công.");
+      const updated = await repository.recordManualRefund(
+        returnId,
+        Number(body.expectedVersion),
+        reference,
+        proof,
+        context.profile?.user_id || context.authUser.id,
+        context.ipAddress,
+        adminNote
+      );
       void sendRefundSuccessEmail(returnId, { method: "manual", reference });
       return updated;
     },

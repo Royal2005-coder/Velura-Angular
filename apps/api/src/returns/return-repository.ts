@@ -104,42 +104,110 @@ export interface CloseTicketInput {
  */
 export function createReturnRepository() {
   return {
-    /** Creates one real replacement order atomically after warehouse QA. */
-    async recordManualRefund(returnId: string, expectedVersion: number, reference: string, proof: string, actorId: string, ipAddress?: string) {
-      try {
-        return asJsonObject(await callRpc("velura_record_manual_return_refund", {
-          p_return_id: returnId,
-          p_expected_version: expectedVersion,
-          p_reference: reference,
-          p_proof: proof,
-          p_actor_id: actorId
-        }));
-      } catch (err: unknown) {
-        const ret = await selectOne("return_exchange", { return_id: `eq.${returnId}` });
-        if (!ret) throw err;
-        const orderId = asString(ret.order_id);
-        const op = await callRpc("velura_prepare_return_refund", {
-          p_return_id: returnId,
-          p_order_id: orderId,
-          p_expected_version: expectedVersion
-        });
+    /**
+     * Ghi nhận bằng chứng chuyển khoản hoàn tiền (áp dụng cho đơn thanh toán ngoài Stripe: COD, MoMo, VNPay).
+     */
+    async recordManualRefund(
+      returnId: string,
+      expectedVersion: number,
+      reference: string,
+      proof: string,
+      actorId: string,
+      ipAddress?: string,
+      adminNote?: string
+    ) {
+      const cleanRef = reference.trim();
+      const providerRef = `manual:${cleanRef}`;
+
+      // 1. Kiểm tra trùng mã giao dịch trước khi gọi hàm DB (tránh Postgres 23505)
+      const existingRefund = await selectOne("payment_refund", {
+        provider_ref: `eq.${providerRef}`
+      }).catch(() => null);
+      if (existingRefund) {
+        throw new HttpError(
+          409,
+          "DUPLICATE_TRANSFER_REFERENCE",
+          `Mã giao dịch "${cleanRef}" đã được sử dụng cho một giao dịch hoàn tiền trước đó. Vui lòng kiểm tra và nhập mã giao dịch khác.`
+        );
+      }
+
+      // 2. Kiểm tra bản ghi return_exchange
+      const ret = await selectOne("return_exchange", { return_id: `eq.${returnId}` });
+      if (!ret) {
+        throw new HttpError(404, "RETURN_NOT_FOUND", "Không tìm thấy yêu cầu đổi/trả tương ứng");
+      }
+      if (Number(ret.version) !== expectedVersion) {
+        throw new HttpError(409, "VERSION_CONFLICT", "Dữ liệu yêu cầu đổi/trả đã bị thay đổi bởi thao tác khác. Vui lòng tải lại trang.");
+      }
+      const status = asString(ret.status);
+      if (!["RECEIVED", "REFUND_PROCESSING"].includes(status) || ret.condition_check_result !== "qa_pass") {
+        throw new HttpError(422, "WAREHOUSE_QA_REQUIRED", "Hàng hoàn trả phải được kho tiếp nhận và kiểm tra đạt yêu cầu (QA Pass) trước khi ghi nhận hoàn tiền.");
+      }
+
+      const orderId = asString(ret.order_id);
+
+      // 3. Chuẩn bị bản ghi payment_refund nếu chưa có
+      const existingReturnRefund = await selectOne("payment_refund", {
+        return_id: `eq.${returnId}`
+      }).catch(() => null);
+
+      let op: JsonObject | null = existingReturnRefund;
+      if (!existingReturnRefund || existingReturnRefund.status !== "succeeded") {
+        if (!existingReturnRefund) {
+          op = asJsonObject(await callRpc("velura_prepare_return_refund", {
+            p_return_id: returnId,
+            p_order_id: orderId,
+            p_expected_version: expectedVersion
+          }));
+        }
+
+        // 4. Hoàn tất hoàn tiền với provider_ref = manual:<reference>
         await callRpc("velura_complete_return_refund", {
           p_return_id: returnId,
-          p_provider_ref: "manual:" + reference
+          p_provider_ref: providerRef
         });
-        await insertRow("audit_log", {
-          actor_id: actorId,
-          actor_role: "admin_operator_cskh_dt",
-          action: "update",
-          module: "returns",
-          target_id: returnId,
-          new_value: { transfer_reference: reference, transfer_proof: proof, refund: op },
-          ip_address: ipAddress || "127.0.0.1",
-          timestamp: new Date().toISOString()
-        }).catch(() => null);
-        const finalReturn = await selectOne("return_exchange", { return_id: `eq.${returnId}` });
-        return asJsonObject(finalReturn);
       }
+
+      // 5. Cập nhật bằng chứng ảnh và ghi chú kế toán nếu có
+      const patch: JsonObject = {
+        updated_at: new Date().toISOString()
+      };
+      if (proof) {
+        const existingImages = Array.isArray(ret.evidence_images) ? ret.evidence_images.map(String) : [];
+        if (!existingImages.includes(proof)) {
+          patch.evidence_images = [...existingImages, proof];
+        }
+      }
+      if (adminNote) {
+        const currentNote = asString(ret.admin_note);
+        const stamp = new Date().toISOString();
+        const noteLine = `[Kế toán ${stamp}] Hoàn tiền thủ công (${cleanRef}): ${adminNote.trim()}`;
+        patch.admin_note = currentNote ? `${currentNote}\n${noteLine}` : noteLine;
+      }
+      await updateRows("return_exchange", { return_id: `eq.${returnId}` }, patch).catch(() => null);
+
+      // 6. Ghi audit log với ip_address an toàn
+      await insertRow("audit_log", {
+        actor_id: actorId,
+        actor_role: "admin_operator_cskh_dt",
+        action: "update",
+        module: "returns",
+        target_id: returnId,
+        new_value: {
+          transfer_reference: cleanRef,
+          transfer_proof: proof,
+          accounting_note: adminNote || undefined,
+          refund: op
+        },
+        ip_address: ipAddress || "127.0.0.1",
+        timestamp: new Date().toISOString()
+      }).catch((e: unknown) => {
+        console.warn("[AuditLog] Failed to insert audit log for manual refund:", e);
+      });
+
+      // 7. Lấy lại bản ghi sau khi cập nhật
+      const finalReturn = await selectOne("return_exchange", { return_id: `eq.${returnId}` });
+      return asJsonObject(finalReturn || ret);
     },
     async prepareExchange(returnId: string, expectedVersion: number, actorId: string, ipAddress?: string) {
       try {
@@ -486,6 +554,17 @@ export function createReturnRepository() {
         }
       }
       return null;
+    },
+
+    /**
+     * Cập nhật trạng thái payment thành 'paid' (dùng khi COD đã giao hàng hoặc kế toán xác nhận).
+     */
+    async markPaymentPaid(paymentId: string) {
+      return updateRows("payment", { payment_id: `eq.${paymentId}` }, {
+        payment_status: "paid",
+        paid_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
     },
 
     /**

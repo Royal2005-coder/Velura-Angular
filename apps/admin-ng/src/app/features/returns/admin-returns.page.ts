@@ -1096,12 +1096,12 @@ export class AdminReturnsPage {
   /** Allows recorded transfer evidence only for captured payments outside Stripe. */
   canRecordManualRefund(row: AdminReturnRow): boolean {
     const isRefund = row.return_type === 'refund' || row.request_type === 'refund';
-    const isReceivedPass = row.status === 'RECEIVED' && row.condition_check_result === 'qa_pass';
+    const isReceivedPass = ['RECEIVED', 'REFUND_PROCESSING'].includes(row.status || '') && row.condition_check_result === 'qa_pass';
     if (!this.canMutate() || !isRefund || !isReceivedPass) return false;
     if (row.payment) {
-      return row.payment.payment_provider !== 'stripe' && ['paid', 'refund_pending'].includes(row.payment.payment_status || '');
+      return row.payment.payment_provider !== 'stripe';
     }
-    return row.payment_method !== 'stripe';
+    return row.payment_method !== 'stripe' && row.payment_method !== 'STRIPE';
   }
 
   /** Starts transfer evidence recording after warehouse QA. */
@@ -1256,9 +1256,14 @@ export class AdminReturnsPage {
    * Nhãn trạng thái thanh toán và hoàn tiền của đơn.
    */
   returnPaymentStatus(row: AdminReturnRow): string {
+    const isRefunded = row.status === 'REFUNDED' || row.payment?.payment_status === 'refunded';
+    if (isRefunded) {
+      return (row.payment?.payment_provider === 'stripe' || row.payment_method === 'stripe')
+        ? 'Đã hoàn tiền (Stripe)'
+        : 'Đã hoàn tiền (Chuyển khoản)';
+    }
     const status = row.payment?.payment_status;
-    if (status === 'refunded') return 'Đã hoàn tiền (Stripe)';
-    if (status === 'refund_pending') return 'Chờ Stripe xử lý';
+    if (status === 'refund_pending') return 'Đang xử lý hoàn tiền';
     if (status === 'paid') return 'Đã thanh toán (Chưa hoàn)';
     if (status === 'pending') return 'Chờ thanh toán';
     if (status === 'failed') return 'Thanh toán thất bại';
@@ -1266,7 +1271,7 @@ export class AdminReturnsPage {
   }
 
   isReturnRefunded(row: AdminReturnRow): boolean {
-    return row.payment?.payment_status === 'refunded';
+    return row.status === 'REFUNDED' || row.payment?.payment_status === 'refunded';
   }
 
   canTriggerStripeRefund(row: AdminReturnRow): boolean {

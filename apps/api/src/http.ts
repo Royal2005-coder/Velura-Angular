@@ -70,6 +70,17 @@ function extractBusinessError(err: ErrorLike): { code: string; message: string; 
   if (rawMsg.includes("users_phone_key") || rawDetails.includes("phone") || (rawCode === "23505" && rawMsg.includes("phone"))) {
     return { code: "PHONE_ALREADY_EXISTS", message: "Số điện thoại này đã được sử dụng. Vui lòng đăng nhập để tiếp tục.", status: 409 };
   }
+  if (
+    rawMsg.includes("payment_refund_provider_ref_key") ||
+    rawDetails.includes("payment_refund_provider_ref_key") ||
+    (rawCode === "23505" && (rawMsg.includes("payment_refund") || rawMsg.includes("provider_ref")))
+  ) {
+    return {
+      code: "DUPLICATE_TRANSFER_REFERENCE",
+      message: "Mã giao dịch chuyển tiền này đã được ghi nhận cho một giao dịch hoàn tiền trước đó. Vui lòng kiểm tra và nhập mã giao dịch khác.",
+      status: 409
+    };
+  }
 
   const businessCodes: Record<string, string> = {
     INSUFFICIENT_STOCK: "Một số sản phẩm trong giỏ hàng đã hết hàng hoặc không đủ tồn kho.",
@@ -83,7 +94,8 @@ function extractBusinessError(err: ErrorLike): { code: string; message: string; 
     ORDER_NOT_FOUND: "Không tìm thấy thông tin đơn hàng.",
     ORDER_CANNOT_CANCEL: "Đơn hàng đang ở trạng thái không thể hủy.",
     VERSION_CONFLICT: "Dữ liệu đơn hàng vừa được cập nhật bởi thao tác khác. Vui lòng thử lại.",
-    QA_REQUIRED: "Yêu cầu kiểm tra chất lượng trước khi tiếp tục.",
+    QA_REQUIRED: "Hàng hoàn trả phải được kho tiếp nhận và kiểm tra đạt yêu cầu (QA Pass) trước khi tiếp tục.",
+    WAREHOUSE_QA_REQUIRED: "Hàng hoàn trả phải được kho tiếp nhận và kiểm tra đạt yêu cầu (QA Pass) trước khi xử lý.",
     REFUND_ALREADY_REQUESTED: "Yêu cầu hoàn tiền cho đơn hàng này đã được gửi trước đó.",
     RETURN_WINDOW_CLOSED: "Thời hạn đổi/trả hàng cho sản phẩm này đã kết thúc.",
     EXCHANGE_SAME_PRODUCT_REQUIRED: "Chỉ được đổi sang cùng một sản phẩm với phân loại khác.",
@@ -99,12 +111,29 @@ function extractBusinessError(err: ErrorLike): { code: string; message: string; 
     CHECKOUT_PROOF_REQUIRED: "Phiên xác thực thanh toán đã hết hạn. Vui lòng xác thực lại SĐT.",
     PAYMENT_SESSION_OPEN: "Đang có phiên thanh toán trực tuyến chưa hoàn tất. Vui lòng chờ vài phút hoặc thanh toán lại.",
     PRICE_MISMATCH: "Giá sản phẩm trong giỏ hàng đã thay đổi. Vui lòng làm mới đơn hàng.",
-    UNKNOWN_VARIANT: "Không tìm thấy thông tin sản phẩm trong giỏ hàng."
+    UNKNOWN_VARIANT: "Không tìm thấy thông tin sản phẩm trong giỏ hàng.",
+    DUPLICATE_TRANSFER_REFERENCE: "Mã giao dịch chuyển tiền này đã được ghi nhận cho một giao dịch hoàn tiền trước đó. Vui lòng kiểm tra và nhập mã giao dịch khác.",
+    REFUND_BALANCE_EXHAUSTED: "Số tiền hoàn đã vượt quá số dư có thể hoàn lại cho đơn hàng này.",
+    CAPTURED_PAYMENT_REQUIRED: "Đơn hàng phải được ghi nhận thanh toán thành công trước khi hoàn tiền.",
+    CAPTURED_NON_STRIPE_REQUIRED: "Chỉ áp dụng ghi nhận chuyển khoản cho đơn hàng thanh toán ngoài Stripe (COD, MoMo, VNPay) đã thanh toán thành công.",
+    TRANSFER_PROOF_REQUIRED: "Vui lòng tải lên ảnh chụp chứng từ chuyển khoản thành công.",
+    TRANSFER_REFERENCE_REQUIRED: "Mã giao dịch chuyển tiền phải có ít nhất 6 ký tự.",
+    STRIPE_PAYMENT_REQUIRED: "Chỉ đơn hàng thanh toán qua Stripe mới có thể hoàn tiền trực tuyến qua Stripe.",
+    STRIPE_REFUND_FAILED: "Hoàn tiền qua Stripe không thành công. Vui lòng kiểm tra lại giao dịch thanh toán trên Stripe.",
+    NOTHING_TO_REFUND: "Đơn hàng không có số dư hợp lệ để thực hiện hoàn tiền.",
+    INVALID_RETURN_TRANSITION: "Trạng thái phiếu đổi/trả không hợp lệ cho thao tác này.",
+    EXCHANGE_ORDER_REQUIRED: "Chưa có đơn hàng đổi thay thế được tạo.",
+    TRACKING_REQUIRED: "Vui lòng nhập mã vận đơn để cập nhật trạng thái giao hàng.",
+    EXCHANGE_TRACKING_REQUIRED: "Vui lòng nhập mã vận đơn cho kiện hàng đổi gửi đi.",
+    CONTACT_OR_REASON_REQUIRED: "Chưa ghi nhận liên hệ CSKH. Duyệt khi chưa liên hệ phải có lý do ít nhất 10 ký tự.",
+    REFUND_AMOUNT_REQUIRED: "Số tiền hoàn phải lớn hơn 0.",
+    RETURN_NOT_PENDING: "Yêu cầu đổi/trả không ở trạng thái chờ duyệt.",
+    RETURN_NOT_FOUND: "Không tìm thấy yêu cầu đổi/trả tương ứng."
   };
 
   for (const [code, msg] of Object.entries(businessCodes)) {
     if (rawMsg === code || rawMsg.includes(code) || rawCode === code) {
-      const status = code === "INSUFFICIENT_STOCK" || code === "VOUCHER_CHANGED" || code === "VERSION_CONFLICT" || code === "REFUND_ALREADY_REQUESTED" || code === "PAYMENT_SESSION_OPEN"
+      const status = code === "INSUFFICIENT_STOCK" || code === "VOUCHER_CHANGED" || code === "VERSION_CONFLICT" || code === "REFUND_ALREADY_REQUESTED" || code === "PAYMENT_SESSION_OPEN" || code === "DUPLICATE_TRANSFER_REFERENCE"
         ? 409
         : code.includes("NOT_FOUND") ? 404 : code.includes("RATE_LIMIT") ? 429 : 422;
       return { code, message: msg, status, details };

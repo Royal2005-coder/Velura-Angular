@@ -1,3 +1,4 @@
+import { AiImageWorkbench } from '../../shared/ai-image-workbench/ai-image-workbench';
 import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -59,7 +60,7 @@ const SHAPE_MAP: Record<string, string> = {
 
 @Component({
   selector: 'app-product-detail-page',
-  imports: [ProductCard, RouterLink],
+  imports: [ProductCard, RouterLink, AiImageWorkbench],
   host: { style: 'display:block' },
   templateUrl: './product-detail.page.html',
 })
@@ -76,6 +77,7 @@ export class ProductDetailPage {
   readonly loadError = signal<string | null>(null);
   readonly product = signal<ProductSummary | null>(null);
   readonly related = signal<ProductSummary[]>([]);
+  readonly aiVariantId = computed(() => this.product()?.variants?.find(v => v.color === this.selectedColor() && v.size === this.selectedSize())?.variant_id || '');
   readonly quantity = signal(1);
   readonly activeImage = signal(0);
   readonly selectedColor = signal<string | null>(null);
@@ -147,10 +149,46 @@ export class ProductDetailPage {
     rows.push({ kind: 'stock', label: this.stockLabel() });
     return rows;
   });
+  readonly comboMaxStock = computed(() => {
+    const components = this.comboComponents();
+    if (!components.length) {
+      return 0;
+    }
+    const picks = this.comboPicks();
+    if (!picks.length) {
+      return 0;
+    }
+    const limits = components.map((comp, index) => {
+      const required = Math.max(1, comp.quantity || 1);
+      const stock = this.comboStock(index);
+      return Math.floor(stock / required);
+    });
+    return Math.max(0, Math.min(...limits));
+  });
+
+  readonly maxAvailableStock = computed(() => {
+    if (this.isCombo()) {
+      return Math.min(99, this.comboMaxStock());
+    }
+    const variant = this.activeVariant();
+    if (variant) {
+      const available = Math.max(0, (variant.stock_quantity || 0) - (variant.reserved_quantity || 0));
+      return Math.min(99, available);
+    }
+    const variants = this.product()?.variants || [];
+    if (variants.length > 0) {
+      const total = variants.reduce(
+        (sum, v) => sum + Math.max(0, (v.stock_quantity || 0) - (v.reserved_quantity || 0)),
+        0
+      );
+      return Math.min(99, total);
+    }
+    return 99;
+  });
+
   readonly stockLabel = computed(() => {
     if (this.isCombo()) {
-      const stocks = this.comboComponents().map((_, index) => this.comboStock(index));
-      const stock = stocks.length ? Math.min(...stocks) : 0;
+      const stock = this.comboMaxStock();
       if (stock <= 0) {
         return 'Hết hàng';
       }
@@ -183,8 +221,26 @@ export class ProductDetailPage {
   });
   readonly isOutOfStock = computed(() => {
     if (this.product()?.status === 'out_of_stock') return true;
+    if (this.isCombo()) {
+      const components = this.comboComponents();
+      if (!components.length) return true;
+      const picks = this.comboPicks();
+      if (!picks.length) return false;
+      return this.comboMaxStock() <= 0;
+    }
     const variant = this.activeVariant();
-    return !!variant && (variant.stock_quantity || 0) - (variant.reserved_quantity || 0) <= 0;
+    if (variant) {
+      return (variant.stock_quantity || 0) - (variant.reserved_quantity || 0) <= 0;
+    }
+    const variants = this.product()?.variants || [];
+    if (variants.length > 0) {
+      const totalAvailable = variants.reduce(
+        (sum, v) => sum + Math.max(0, (v.stock_quantity || 0) - (v.reserved_quantity || 0)),
+        0
+      );
+      return totalAvailable <= 0;
+    }
+    return false;
   });
   readonly reviews = computed(() => this.product()?.reviews || []);
   readonly averageRating = computed(() => {
@@ -300,13 +356,20 @@ export class ProductDetailPage {
    * Increases the selected quantity.
    */
   increment(): void {
-    this.quantity.update((value) => Math.min(99, value + 1));
+    if (this.isOutOfStock()) {
+      return;
+    }
+    const max = this.maxAvailableStock();
+    this.quantity.update((value) => Math.min(max > 0 ? max : 99, value + 1));
   }
 
   /**
    * Decreases the selected quantity.
    */
   decrement(): void {
+    if (this.isOutOfStock()) {
+      return;
+    }
     this.quantity.update((value) => Math.max(1, value - 1));
   }
 
@@ -314,6 +377,10 @@ export class ProductDetailPage {
    * Adds the current variant to the original localStorage cart.
    */
   addToCart(): boolean {
+    if (this.isOutOfStock()) {
+      showToast('Sản phẩm hiện đã hết hàng.');
+      return false;
+    }
     const item = this.buildCartItem();
     if (!item) {
       return false;
@@ -326,6 +393,10 @@ export class ProductDetailPage {
    * Starts instant checkout for the selected variant without polluting the persistent cart.
    */
   buyNow(): void {
+    if (this.isOutOfStock()) {
+      showToast('Sản phẩm hiện đã hết hàng.');
+      return;
+    }
     const item = this.buildCartItem();
     if (!item) {
       return;
@@ -341,6 +412,10 @@ export class ProductDetailPage {
    * Adds every selected combo variant using the original set payload.
    */
   addComboToCart(): void {
+    if (this.isOutOfStock()) {
+      showToast('Set combo hiện đã hết hàng do có sản phẩm thành phần không khả dụng.');
+      return;
+    }
     const lines = this.buildComboLines();
     if (!lines) {
       return;
@@ -352,6 +427,10 @@ export class ProductDetailPage {
    * Starts checkout with the selected combo set directly, matching instant checkout.
    */
   buyComboNow(): void {
+    if (this.isOutOfStock()) {
+      showToast('Set combo hiện đã hết hàng do có sản phẩm thành phần không khả dụng.');
+      return;
+    }
     const lines = this.buildComboLines();
     if (!lines) {
       return;
@@ -398,6 +477,7 @@ export class ProductDetailPage {
     const sizes = this.componentSizes(component, color);
     const size = sizes[0] || '';
     this.patchComboPick(index, color, size);
+    this.clampQuantity();
   }
 
   /**
@@ -409,6 +489,7 @@ export class ProductDetailPage {
       return;
     }
     this.patchComboPick(index, pick.color, size);
+    this.clampQuantity();
   }
 
   /**
@@ -499,6 +580,7 @@ export class ProductDetailPage {
     if (sizes.length && !sizes.includes(this.selectedSize() || '')) {
       this.selectedSize.set(sizes[0]);
     }
+    this.clampQuantity();
   }
 
   /**
@@ -506,6 +588,34 @@ export class ProductDetailPage {
    */
   selectSize(size: string): void {
     this.selectedSize.set(size);
+    this.clampQuantity();
+  }
+
+  /**
+   * Checks if a size variant is out of stock for the selected color.
+   */
+  isSizeOutOfStock(size: string): boolean {
+    const variants = this.product()?.variants || [];
+    const color = this.selectedColor();
+    const variant = variants.find((v) => (!color || v.color === color) && v.size === size);
+    if (!variant) return false;
+    return (variant.stock_quantity || 0) - (variant.reserved_quantity || 0) <= 0;
+  }
+
+  /**
+   * Checks if a combo component size variant is out of stock for the given color.
+   */
+  isComboSizeOutOfStock(component: ComboComponent, color: string, size: string): boolean {
+    const variant = this.findVariant(component.variants || [], color, size);
+    if (!variant) return false;
+    return (variant.stock_quantity || 0) - (variant.reserved_quantity || 0) <= 0;
+  }
+
+  private clampQuantity(): void {
+    const max = this.maxAvailableStock();
+    if (max > 0 && this.quantity() > max) {
+      this.quantity.set(max);
+    }
   }
 
   /**

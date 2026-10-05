@@ -1,3 +1,4 @@
+import { AiEngineService } from '../app/core/services/ai-engine.service';
 import { Type, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { convertToParamMap, provideRouter, ActivatedRoute } from '@angular/router';
@@ -135,6 +136,7 @@ export async function createStorefrontPage<T>(page: Type<T>, apiOverrides: Parti
   await TestBed.configureTestingModule({
     imports: [page],
     providers: [
+      { provide: AiEngineService, useValue: { capabilities: () => of({enabled:false,local_only:true,tasks:[],max_upload_bytes:5242880,private_ttl_seconds:900}) } },
       { provide: AddressGeographyService, useValue: stubAddressGeographyService() },
       { provide: StyleProfileService, useValue: { revision: signal(0), guestAnswers: () => null, saveQuiz: () => of(undefined), loadRecommendations: () => of({ quiz: null, combos: [], categories: [] }) } },
       provideRouter([]),

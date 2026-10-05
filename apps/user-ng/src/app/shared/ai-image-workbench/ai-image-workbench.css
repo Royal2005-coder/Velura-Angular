@@ -1,0 +1,97 @@
+dialog {
+  margin: auto;
+  box-sizing: border-box;
+  width: min(680px, calc(100vw - 24px));
+  max-height: 90dvh;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 24px;
+  background: var(--surface, white);
+  color: var(--text);
+}
+dialog::backdrop {
+  background: rgb(0 0 0 / 0.45);
+}
+header,
+.actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+h2 {
+  margin: 0;
+  font-size: 24px;
+}
+label {
+  display: block;
+  margin: 14px 0;
+}
+fieldset {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.mode-options label {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  margin: 10px 16px 10px 0;
+}
+input[type='file'],
+select {
+  display: block;
+  width: 100%;
+  padding: 12px;
+  margin-top: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface, white);
+}
+.photo {
+  max-width: 100%;
+  width: 100%;
+  max-height: 480px;
+  object-fit: contain;
+  border-radius: 10px;
+}
+p {
+  line-height: 1.6;
+}
+.crop-preview {
+  position: relative;
+  width: min(100%, 360px);
+  margin-inline: auto;
+  overflow: hidden;
+  border-radius: 10px;
+}
+.crop-preview img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.crop-selection {
+  position: absolute;
+  box-sizing: border-box;
+  border: 2px solid var(--terracotta);
+  box-shadow: 0 0 0 1000px rgb(0 0 0 / 0.3);
+  pointer-events: none;
+}
+.crop-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.crop-controls label {
+  margin: 0;
+}
+.crop-controls input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface, white);
+}

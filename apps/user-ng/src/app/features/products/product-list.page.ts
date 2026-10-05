@@ -1,3 +1,4 @@
+import { AiImageWorkbench } from '../../shared/ai-image-workbench/ai-image-workbench';
 import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
@@ -90,7 +91,7 @@ type CatalogView = 'grid' | 'large' | 'list';
 
 @Component({
   selector: 'app-product-list-page',
-  imports: [ProductCard, RouterLink],
+  imports: [ProductCard, RouterLink, AiImageWorkbench],
   host: { style: 'display:block' },
   templateUrl: './product-list.page.html',
 })
@@ -100,6 +101,9 @@ export class ProductListPage {
   private readonly api = inject(ApiService);
   private readonly auth = inject(AuthService);
 
+  readonly imageMatches = signal<string[] | null>(null);
+  /** Intersects AI results with the existing category, price, color and size filters. */
+  applyImageMatches(ids: string[]): void { this.imageMatches.set(ids); this.currentPage.set(1); }
   readonly loading = signal(true);
   readonly loadError = signal<string | null>(null);
   readonly allProducts = signal<ProductSummary[]>([]);
@@ -149,7 +153,7 @@ export class ProductListPage {
     return this.isLoggedIn() ? 'empty' : 'guest';
   });
 
-  readonly filteredProducts = computed(() => {
+  readonly catalogFilteredProducts = computed(() => {
     const slugs = this.selectedSlugs();
     const query = this.searchQuery().toLowerCase().trim();
     const minPrice = this.minPrice();
@@ -248,6 +252,15 @@ export class ProductListPage {
     });
 
     return rows.map((row) => row.product);
+  });
+  readonly imageSearchCandidates = computed(() => this.catalogFilteredProducts().map(product => product.product_id));
+  readonly filteredProducts = computed(() => {
+    const matches = this.imageMatches();
+    const rows = this.catalogFilteredProducts();
+    if (matches === null) return rows;
+    const ranked = rows.filter(product => matches.includes(product.product_id));
+    return this.sort() === 'newest'
+      ? ranked.sort((a, b) => matches.indexOf(a.product_id) - matches.indexOf(b.product_id)) : ranked;
   });
   readonly productCount = computed(() => this.filteredProducts().length);
   readonly totalPages = computed(() => Math.max(1, Math.ceil(this.productCount() / ITEMS_PER_PAGE)));

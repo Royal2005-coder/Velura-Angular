@@ -1,3 +1,4 @@
+﻿import { AdminAiEngineService } from '../app/core/admin-ai-engine.service';
 import { Type } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
@@ -111,6 +112,7 @@ export async function createAdminPage<T>(page: Type<T>, apiOverrides: Record<str
   await TestBed.configureTestingModule({
     imports: [page],
     providers: [
+      { provide: AdminAiEngineService, useValue: { capabilities: () => of({enabled:false, local_only:true, tasks:[], max_upload_bytes:5242880, private_ttl_seconds:900}) } },
       provideRouter([]),
       { provide: AdminApiService, useValue: stubAdminApi(apiOverrides) },
       {

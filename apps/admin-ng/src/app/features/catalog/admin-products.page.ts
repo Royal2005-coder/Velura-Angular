@@ -1,3 +1,4 @@
+﻿import { AiProductImage } from '../../shared/ai-product-image/ai-product-image';
 import { AdminDialogDirective } from '../../shared/admin-dialog.directive';
 import { AdminRefreshService } from '../../core/admin-refresh.service';
 import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
@@ -19,7 +20,6 @@ import { AdminEmptyState } from '../../shared/admin-empty-state';
 import { AdminIcon } from '../../shared/admin-icon';
 import { AdminPagination } from '../../shared/admin-pagination';
 import { AdminTableSkeleton } from '../../shared/admin-table-skeleton';
-import { improveCatalogPhoto } from './product-image';
 
 function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -105,7 +105,7 @@ interface CsvPreviewResult {
  */
 @Component({
   selector: 'app-admin-products-page',
-  imports: [AdminDialogDirective, AdminEmptyState, AdminIcon, AdminPagination, AdminTableSkeleton],
+  imports: [AiProductImage, AdminDialogDirective, AdminEmptyState, AdminIcon, AdminPagination, AdminTableSkeleton],
   templateUrl: './admin-products.page.html',
 })
 export class AdminProductsPage {
@@ -968,6 +968,9 @@ export class AdminProductsPage {
   /**
    * Uploads one catalog photo and appends its public URL to the image list.
    */
+  /** Adds the explicitly approved AI source to the editor; product mutation still requires Save. */
+  acceptAiImage(file: File, images: HTMLTextAreaElement): void { this.storeImageFile(file, images, 'Approved image added to editor. Save the product to publish.'); }
+
   uploadImage(event: Event, images: HTMLTextAreaElement): void {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
@@ -977,7 +980,7 @@ export class AdminProductsPage {
     }
     this.imageUploading.set(true);
     this.actionError.set(null);
-    this.imageNote.set('Đang dựng nền studio…');
+    this.imageNote.set('Đang đọc ảnh gốc…');
     this.imageBefore.set(null);
     this.imageAfter.set(null);
     this.pendingImageTarget = images;
@@ -989,35 +992,13 @@ export class AdminProductsPage {
   }
 
   /**
-   * Hiện ảnh gốc và ảnh sau khi Gemini thay nền. Chưa lưu cho đến khi bấm dùng ảnh sau.
+   * Hiện ảnh gốc trước khi xác nhận. Xử lý AI dùng Model riêng và không tự thay ảnh.
    */
   private async prepareImagePreview(file: File): Promise<void> {
-    const before = await fileToDataUrl(file);
-    this.imageBefore.set(before);
-    const prepared = await shrinkImageDataUrl(before, file.type || 'image/jpeg');
-    const improved = await improveCatalogPhoto(file);
-    const bright = await fileToDataUrl(improved.file);
-    this.adminApi.adviseProductImage({ dataUrl: prepared, mimeType: 'image/jpeg' }).subscribe({
-      next: (result) => {
-        this.imageUploading.set(false);
-        if (result.imageBase64) {
-          const mime = result.imageMime || 'image/png';
-          this.imageAfter.set(`data:${mime};base64,${result.imageBase64}`);
-          this.imageAfterLabel.set('Sau — nền studio');
-          this.imageNote.set('Xem hai ảnh rồi chọn bản sẽ lưu.');
-          return;
-        }
-        this.imageAfter.set(bright);
-        this.imageAfterLabel.set('Sau — chỉ tăng sáng, chưa có nền studio');
-        this.imageNote.set(result.imageError || 'Gemini không trả ảnh nền studio.');
-      },
-      error: (error: unknown) => {
-        this.imageUploading.set(false);
-        this.imageAfter.set(bright);
-        this.imageAfterLabel.set('Sau — chỉ tăng sáng, chưa có nền studio');
-        this.imageNote.set(adminErrorMessage(error, 'Không gọi được Gemini.'));
-      },
-    });
+    this.imageBefore.set(await fileToDataUrl(file));
+    this.imageAfter.set(null);
+    this.imageUploading.set(false);
+    this.imageNote.set('Original preview. AI processing is available in the separate consent workflow below.');
   }
 
   /**

@@ -51,4 +51,45 @@ describe('AccountReviewsPage', () => {
     expect(page.images()).toEqual([]);
     expect(page.submitError()).toContain('HTTPS');
   });
+
+  it('removes an image correctly via removeImage', async () => {
+    const page = await createStorefrontPage(AccountReviewsPage);
+    page.images.set(['https://example.com/img1.jpg', 'https://example.com/img2.jpg']);
+    expect(page.images().length).toBe(2);
+    page.removeImage(0);
+    expect(page.images()).toEqual(['https://example.com/img2.jpg']);
+  });
+
+  it('masks phone number correctly for guest presentation', async () => {
+    const page = await createStorefrontPage(AccountReviewsPage);
+    expect(page.maskPhone('0987654321')).toBe('098****321');
+    expect(page.maskPhone('123')).toBe('123');
+  });
+
+  it('validates Vietnamese phone format before sending OTP', async () => {
+    const page = await createStorefrontPage(AccountReviewsPage);
+    page.guestPhone.set('123456');
+    await page.sendGuestOtp();
+    expect(page.guestAuthError()).toContain('hợp lệ');
+    expect(page.guestOtpSent()).toBe(false);
+  });
+
+  it('resets guest authentication state properly', async () => {
+    const page = await createStorefrontPage(AccountReviewsPage);
+    page.guestToken.set('test-token');
+    page.guestVerifiedPhone.set('0987654321');
+    page.guestOtpSent.set(true);
+    page.resetGuestAuth();
+    expect(page.guestToken()).toBe('');
+    expect(page.guestVerifiedPhone()).toBe('');
+    expect(page.guestOtpSent()).toBe(false);
+  });
+
+  it('rejects non-image files in processFiles', async () => {
+    const page = await createStorefrontPage(AccountReviewsPage);
+    const mockFile = new File(['hello'], 'document.pdf', { type: 'application/pdf' });
+    await page.processFiles([mockFile]);
+    expect(page.submitError()).toContain('hình ảnh');
+    expect(page.images().length).toBe(0);
+  });
 });

@@ -160,16 +160,33 @@ export async function buildWallet(
   ]);
 
   const orders = orderResult.rows || [];
+  const now = new Date();
+  const rawDob = profile?.date_of_birth || profile?.birthday || profile?.birthdate || profile?.dob;
+  let hasBirthday = false;
+  let isBirthdayMonth = false;
+  let birthMonth: number | null = null;
+  if (rawDob) {
+    const d = new Date(String(rawDob));
+    if (!isNaN(d.getTime())) {
+      hasBirthday = true;
+      birthMonth = d.getMonth() + 1;
+      isBirthdayMonth = birthMonth === (now.getMonth() + 1);
+    }
+  }
+
   const evaluationContext: VoucherEvaluationContext = {
     orderValue,
     shippingFee,
-    now: new Date(),
+    now,
     isMember: Boolean(profile?.user_id),
     isFirstOrder: countBillableOrders(orders) === 0,
     usageByVoucherId: buildUsageMap(orders),
     promotionByPromoId: buildPromotionStateMap(promotionResult.rows || []),
     lines: cart?.lines,
-    categoryNameById: cart?.categoryNameById
+    categoryNameById: cart?.categoryNameById,
+    isBirthdayMonth,
+    hasBirthday,
+    birthMonth
   };
 
   const items = evaluateVouchers(voucherResult.rows || [], evaluationContext);

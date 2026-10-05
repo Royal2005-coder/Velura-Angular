@@ -174,7 +174,11 @@ export const routes: Routes = [
       },
       {
         path: 'account/reviews',
-        canActivate: [authGuard],
+        loadComponent: () => import('./features/account/reviews.page').then((m) => m.AccountReviewsPage),
+        title: 'Đánh giá sản phẩm - Velura Store',
+      },
+      {
+        path: 'guest/reviews',
         loadComponent: () => import('./features/account/reviews.page').then((m) => m.AccountReviewsPage),
         title: 'Đánh giá sản phẩm - Velura Store',
       },

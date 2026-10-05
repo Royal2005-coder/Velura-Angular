@@ -13,3 +13,11 @@ Thumbs.db
 .idea/
 .vscode/
 .vercel/
+apps/api/.local-demo/
+apps/ai-worker/.venv/
+apps/ai-worker/jobs/
+apps/ai-worker/weights/
+apps/ai-worker/__pycache__/
+scratch/ai-private/
+scratch/ai-studio/
+scratch/ai-uat-private/

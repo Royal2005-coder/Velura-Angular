@@ -1,7 +1,9 @@
 import { HttpError, readJson, sendJson } from "../http.js";
 import { selectOne, selectRows, insertRow, updateRows, deleteRows } from "../supabase.js";
-import { requireUserAuth } from "./auth.js";
 import { createNotification } from "./notifications.js";
+import { guestSessionPhone } from "./order-access.js";
+import { sendGuestTrackingOtp, verifyGuestTrackingOtp } from "./guest-order-session.js";
+import { checkoutClientIp, normalizeVietnamesePhone } from "./checkout-service.js";
 import {
   asJsonObject,
   asString,
@@ -12,7 +14,7 @@ import {
 } from "../types.js";
 
 /**
- * Authenticated review list, create with auto-moderation, and customer reply.
+ * Authenticated member or phone-verified guest review management, create with auto-moderation, and customer reply.
  */
 export async function handleReviewsRoute(
   req: HttpRequest,
@@ -22,20 +24,68 @@ export async function handleReviewsRoute(
   corsHeaders: HeaderMap,
   context: AuthContext
 ): Promise<void> {
-  const profile = requireUserAuth(context);
+  // 1. Phục vụ các endpoint OTP dành cho khách vãng lai
+  if (action === "otp-send" && req.method === "POST") {
+    const body = await readJson(req);
+    const result = await sendGuestTrackingOtp(body, checkoutClientIp(req.headers, req.socket?.remoteAddress));
+    return sendJson(res, 200, {
+      ...result,
+      challenge_id: result.phone || asString(body.phone)
+    }, corsHeaders);
+  }
+
+  if ((action === "otp-check" || action === "otp-verify") && req.method === "POST") {
+    const body = await readJson(req);
+    const result = await verifyGuestTrackingOtp(body);
+    return sendJson(res, 200, {
+      success: true,
+      guest_review_token: result.guest_access_token,
+      guest_access_token: result.guest_access_token,
+      expires_in: 900,
+      phone: result.phone
+    }, corsHeaders);
+  }
+
+  // 2. Xác thực danh tính: Thành viên đăng nhập hoặc Khách vãng lai đã xác thực SĐT qua OTP
+  const profile = context.profile;
+  const url = new URL(req.url || "/", "http://localhost");
+  const guestHeader = asString(req.headers["x-guest-access-token"] || "");
+  let guestToken = (url.searchParams.get("guest_access_token") || url.searchParams.get("guest_review_token") || guestHeader).trim();
 
   // POST /api/user/reviews/:id/reply
   if (action && parts[4] === "reply" && req.method === "POST") {
     const body = await readJson(req);
     const replyText = asString(body.reply_text);
+    if (!guestToken) {
+      guestToken = asString(body.guest_access_token || body.guest_review_token).trim();
+    }
+    const guestPhone = !profile && guestToken ? guestSessionPhone(guestToken) : null;
+
+    if (!profile && !guestPhone) {
+      throw new HttpError(401, "UNAUTHORIZED", "Vui lòng đăng nhập hoặc xác thực số điện thoại để phản hồi");
+    }
 
     if (!replyText || !replyText.trim()) {
       throw new HttpError(400, "BAD_REQUEST", "Nội dung phản hồi không được để trống");
     }
 
     const review = await selectOne("review", { review_id: `eq.${action}` });
-    if (!review || review.user_id !== profile.user_id) {
+    if (!review) {
       throw new HttpError(404, "NOT_FOUND", "Không tìm thấy đánh giá");
+    }
+
+    let customerName = "Khách hàng";
+    if (profile) {
+      if (review.user_id !== profile.user_id) {
+        throw new HttpError(404, "NOT_FOUND", "Không tìm thấy đánh giá");
+      }
+      customerName = profile.full_name || "Khách hàng";
+    } else if (guestPhone) {
+      const order = await selectOne("orders", { order_id: `eq.${review.order_id}` });
+      if (!order || normalizeVietnamesePhone(order.shipping_phone) !== guestPhone) {
+        throw new HttpError(404, "NOT_FOUND", "Không tìm thấy đánh giá");
+      }
+      customerName = asString(order.shipping_name) || "Khách hàng";
     }
 
     let replies: unknown[] = [];
@@ -63,7 +113,7 @@ export async function handleReviewsRoute(
     }
 
     replies.push({
-      user_name: profile.full_name || "Khách hàng",
+      user_name: customerName,
       role: "customer",
       reply_text: replyText.trim(),
       created_at: new Date().toISOString()
@@ -80,14 +130,38 @@ export async function handleReviewsRoute(
 
   // GET /api/user/reviews
   if (req.method === "GET") {
-    const { rows: reviews } = await selectRows("review", { user_id: `eq.${profile.user_id}` });
-    return sendJson(res, 200, { success: true, reviews }, corsHeaders);
+    const guestPhone = !profile && guestToken ? guestSessionPhone(guestToken) : null;
+    if (profile) {
+      const { rows: reviews } = await selectRows("review", { user_id: `eq.${profile.user_id}`, order: "submitted_at.desc" });
+      return sendJson(res, 200, { success: true, reviews }, corsHeaders);
+    }
+    if (guestPhone) {
+      const { rows: orders } = await selectRows("orders", { shipping_phone: `eq.${guestPhone}` });
+      if (!orders.length) {
+        return sendJson(res, 200, { success: true, reviews: [] }, corsHeaders);
+      }
+      const orderIds = orders.map((o) => asString(o.order_id));
+      const { rows: reviews } = await selectRows("review", {
+        order_id: `in.(${orderIds.join(",")})`,
+        order: "submitted_at.desc"
+      });
+      return sendJson(res, 200, { success: true, reviews }, corsHeaders);
+    }
+    throw new HttpError(401, "UNAUTHORIZED", "Vui lòng đăng nhập hoặc xác thực số điện thoại để xem đánh giá.");
   }
 
   // POST /api/user/reviews
   if (req.method === "POST") {
     const body = await readJson(req);
     const { product_id, order_id, rating, comment, images, review_tags } = body;
+    if (!guestToken) {
+      guestToken = asString(body.guest_access_token || body.guest_review_token).trim();
+    }
+    const guestPhone = !profile && guestToken ? guestSessionPhone(guestToken) : null;
+
+    if (!profile && !guestPhone) {
+      throw new HttpError(401, "UNAUTHORIZED", "Vui lòng đăng nhập hoặc xác thực số điện thoại trước khi đánh giá.");
+    }
 
     if (!product_id || !order_id || !rating) {
       throw new HttpError(400, "BAD_REQUEST", "Thiếu thông tin product_id, order_id hoặc rating");
@@ -96,10 +170,20 @@ export async function handleReviewsRoute(
       throw new HttpError(422, "INVALID_RATING", "Điểm đánh giá phải là số nguyên từ 1 đến 5.");
     }
 
-    // Check if order belongs to user
+    // Check if order belongs to user or guest
     const order = await selectOne("orders", { order_id: `eq.${order_id}` });
-    if (!order || order.user_id !== profile.user_id) {
-      throw new HttpError(403, "FORBIDDEN", "Đơn hàng không hợp lệ");
+    if (!order) {
+      throw new HttpError(404, "NOT_FOUND", "Không tìm thấy đơn hàng");
+    }
+
+    if (profile) {
+      if (order.user_id !== profile.user_id) {
+        throw new HttpError(403, "FORBIDDEN", "Đơn hàng không thuộc về tài khoản của bạn");
+      }
+    } else if (guestPhone) {
+      if (normalizeVietnamesePhone(order.shipping_phone) !== guestPhone) {
+        throw new HttpError(403, "FORBIDDEN", "Đơn hàng không thuộc về số điện thoại đã xác thực");
+      }
     }
 
     if (order.status !== "delivered") {
@@ -116,8 +200,7 @@ export async function handleReviewsRoute(
     // Check if review already exists for this product in this order
     const existingReview = await selectOne("review", {
       product_id: `eq.${product_id}`,
-      order_id: `eq.${order_id}`,
-      user_id: `eq.${profile.user_id}`
+      order_id: `eq.${order_id}`
     });
 
     if (existingReview) {
@@ -129,10 +212,12 @@ export async function handleReviewsRoute(
       }
     }
 
+    const reviewerUserId = profile?.user_id || asString(order.user_id);
+
     // 1. Save initially as 'pending'
     const review = asJsonObject(await insertRow("review", {
       product_id,
-      user_id: profile.user_id,
+      user_id: reviewerUserId,
       order_id,
       rating,
       comment: comment || null,
@@ -198,22 +283,24 @@ export async function handleReviewsRoute(
     const finalReview = updatedRows[0] || review;
 
     // Send moderation notification
-    if (finalStatus === "approved") {
-      await createNotification(
-        profile.user_id,
-        "review_moderation",
-        "Đánh giá của bạn đã được duyệt ✅",
-        "Cảm ơn bạn! Đánh giá sản phẩm trong đơn hàng của bạn đã được duyệt thành công.",
-        "/src/pages/account/my-orders.html"
-      );
-    } else if (finalStatus === "rejected") {
-      await createNotification(
-        profile.user_id,
-        "review_moderation",
-        "Đánh giá không đạt kiểm duyệt ❌",
-        `Đánh giá sản phẩm của bạn bị từ chối. Lý do: ${rejectionReason || "Không xác định"}`,
-        "/src/pages/account/my-orders.html"
-      );
+    if (profile) {
+      if (finalStatus === "approved") {
+        await createNotification(
+          profile.user_id,
+          "review_moderation",
+          "Đánh giá của bạn đã được duyệt ✅",
+          "Cảm ơn bạn! Đánh giá sản phẩm trong đơn hàng của bạn đã được duyệt thành công.",
+          "/account/reviews"
+        );
+      } else if (finalStatus === "rejected") {
+        await createNotification(
+          profile.user_id,
+          "review_moderation",
+          "Đánh giá không đạt kiểm duyệt ❌",
+          `Đánh giá sản phẩm của bạn bị từ chối. Lý do: ${rejectionReason || "Không xác định"}`,
+          "/account/reviews"
+        );
+      }
     }
 
     console.log(`[AUTO-MODERATION Result] Đánh giá ${review.review_id} -> Kết quả: ${finalStatus.toUpperCase()}${rejectionReason ? ` (Lý do: ${rejectionReason})` : ""}`);

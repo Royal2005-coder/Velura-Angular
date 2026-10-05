@@ -9,6 +9,8 @@
     <p class="product-list-header__subtitle">
       Khám phá hơn 1.200 thiết kế thời trang nữ sang trọng và thời thượng
     </p>
+  <app-ai-image-workbench task="image_embedding" [candidateProductIds]="imageSearchCandidates()" (matches)="applyImageMatches($event)" />
+    @if (imageMatches() !== null) { <button type="button" class="btn btn--outline" (click)="imageMatches.set(null)">Xóa kết quả tìm bằng ảnh</button> }
   </header>
 
   <div class="product-list-layout">
@@ -254,7 +256,7 @@
           <div class="grid-controls__sort">
             <label for="sort-select" class="visually-hidden">Sắp xếp</label>
             <select id="sort-select" (change)="onSortChange($event)">
-              <option value="newest" selected>Mới nhất</option>
+              <option value="newest" selected>{{ imageMatches() !== null ? 'Phù hợp với ảnh nhất' : 'Mới nhất' }}</option>
               <option value="price-asc">Giá: Thấp đến Cao</option>
               <option value="price-desc">Giá: Cao đến Thấp</option>
               <option value="popular">Bán chạy nhất</option>

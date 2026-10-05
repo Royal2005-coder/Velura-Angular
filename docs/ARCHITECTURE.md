@@ -38,6 +38,12 @@ Pipeline: [HOW-IT-WORKS.md](./HOW-IT-WORKS.md)
 
 **Không** viết HTTP API bằng Angular. **Không** gọi Supabase service-role từ browser.
 
+AI hình ảnh local: `apps/api/src/ai` giữ quyền truy cập, consent, hàng đợi, TTL và catalog;
+`apps/ai-worker` chỉ thực hiện inference Python qua Colab CLI trong WSL. Browser không
+nhận thông tin đăng nhập Colab. CLIP ảnh 512 chiều tách khỏi Gemini text vector 1536 chiều;
+chatbot tiếp tục dùng Gemini. Colab có phiên tạm thời, nên adapter này chặn production.
+Mô hình, sản phẩm/biến thể thử đồ và ảnh studio phải được xác thực trước khi bật capability.
+
 ---
 
 ## 2. Cây dự án (ổn định)

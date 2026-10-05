@@ -43,6 +43,7 @@ import { createFixedWindowLimiter } from "./rate-limit.js";
 import { handleUserRoute } from "./user/index.js";
 import { handleWishlistRoute } from "./v1-wishlist-routes.js";
 import { handleRecommendationRoute } from "./recommendation.controller.js";
+import { handleAiRoute } from "./ai/ai-router.js";
 import { asJsonObject, asString } from "./types.js";
 import type { AccountService } from "./accounts/account-service.js";
 import type { ProductService } from "./products/product-service.js";
@@ -102,6 +103,7 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
     }
 
     const context = await buildAuthContext(req);
+    if (await handleAiRoute(req,res,parts,corsHeaders,context)) return;
 
     if (parts[1] === "content") {
       const handled = await handleContentRoute({

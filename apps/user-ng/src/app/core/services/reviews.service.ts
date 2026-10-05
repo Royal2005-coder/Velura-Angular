@@ -76,16 +76,26 @@ export class ReviewsService {
   }
 
   /**
-   * Fetches reviews submitted by current user.
+   * Fetches reviews submitted by current user or verified phone guest.
    */
   getMyReviews(): Observable<{ success: boolean; reviews: UserReviewItem[] }> {
     return defer(() => {
       const session = this.auth.session();
-      return this.api.get<{ success: boolean; reviews: UserReviewItem[] }>('/api/user/reviews').pipe(map((response) => {
+      const proof = this.proof();
+      const path = !session && proof?.token
+        ? `/api/user/reviews?guest_access_token=${encodeURIComponent(proof.token)}`
+        : '/api/user/reviews';
+      return this.api.get<{ success: boolean; reviews: UserReviewItem[] }>(path).pipe(map((response) => {
         this.assertScope(session);
         return response;
       }));
     });
+  }
+
+  /** Expose the verified token for guest image evidence uploads */
+  getProofToken(): string | null {
+    const proof = this.proof();
+    return proof && proof.expiresAt > Date.now() ? proof.token : null;
   }
 
   /**
@@ -98,7 +108,10 @@ export class ReviewsService {
       if (!payload.product_id || !Number.isInteger(payload.rating) || payload.rating < 1 || payload.rating > 5) throw new Error('Chọn sản phẩm và số sao hợp lệ (1–5).');
       const proof = this.proof();
       if (!session && (!proof || proof.expiresAt <= Date.now())) { this.clearGuestProof(); throw new Error('Xác thực số điện thoại trước khi gửi đánh giá.'); }
-      return this.api.post<{ success: boolean; review: UserReviewItem }>('/api/user/reviews', { ...payload, ...(!session ? { guest_review_token: proof!.token } : {}) }).pipe(map((response) => {
+      return this.api.post<{ success: boolean; review: UserReviewItem }>('/api/user/reviews', {
+        ...payload,
+        ...(!session ? { guest_review_token: proof!.token, guest_access_token: proof!.token } : {})
+      }).pipe(map((response) => {
         this.assertScope(session, !session ? version : undefined);
         if (!response.success || !response.review) throw new Error('Chưa gửi được đánh giá. Vui lòng thử lại.');
         return response;
@@ -112,7 +125,12 @@ export class ReviewsService {
   replyReview(reviewId: string, replyText: string): Observable<{ success: boolean; review: UserReviewItem }> {
     return defer(() => {
       const session = this.auth.session();
-      return this.api.post<{ success: boolean; review: UserReviewItem }>(`/api/user/reviews/${reviewId}/reply`, { reply_text: replyText }).pipe(map((response) => {
+      const proof = this.proof();
+      const body = {
+        reply_text: replyText,
+        ...(!session && proof?.token ? { guest_access_token: proof.token, guest_review_token: proof.token } : {})
+      };
+      return this.api.post<{ success: boolean; review: UserReviewItem }>(`/api/user/reviews/${reviewId}/reply`, body).pipe(map((response) => {
         this.assertScope(session);
         return response;
       }));

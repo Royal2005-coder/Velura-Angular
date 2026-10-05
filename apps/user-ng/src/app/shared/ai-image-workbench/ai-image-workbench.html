@@ -1,0 +1,189 @@
+﻿<button type="button" class="btn btn--outline" (click)="open()">{{ title() }}</button>
+<dialog #dialog [attr.aria-labelledby]="titleId">
+  <header>
+    <h2 [id]="titleId">{{ title() }}</h2>
+    <button type="button" class="btn btn--outline" (click)="close()" aria-label="Đóng">Đóng</button>
+  </header>
+  <p>Ảnh được xử lý riêng tư và tự hết hạn. Kết quả AI không xác định kích cỡ vừa vặn thực tế.</p>
+  @if (!capabilities()) {
+    <p role="status">Đang kiểm tra dịch vụ AI…</p>
+  }
+  @if (task() === 'virtual_try_on' && capabilities()?.product_supported === false) {
+    <p role="status">
+      Sản phẩm này chưa hỗ trợ thử đồ với AI. Bạn vẫn có thể xem ảnh và chọn mua bình thường.
+    </p>
+  } @else if (task() === 'virtual_try_on' && capabilities()?.variant_supported === false) {
+    <p role="status">Màu hoặc cỡ này chưa có ảnh phù hợp để thử đồ. Chọn biến thể khác.</p>
+  } @else if (capabilities() && !available()) {
+    <p role="status">Tính năng chưa sẵn sàng. Cần mô hình AI và dữ liệu sản phẩm đã lập chỉ mục.</p>
+  }
+  @if (error()) {
+    <p role="alert">{{ error() }}</p>
+  }
+  @if (task() === 'virtual_try_on') {
+    <fieldset class="mode-options" [disabled]="busy()">
+      <legend>Ảnh người mẫu</legend>
+      <label
+        ><input
+          type="radio"
+          name="ai-mode"
+          [checked]="mode() === 'personal'"
+          (change)="chooseMode('personal')"
+        />Ảnh của tôi</label
+      >
+      <label
+        ><input
+          type="radio"
+          name="ai-mode"
+          [checked]="mode() === 'studio'"
+          [disabled]="!capabilities()?.studio_assets?.length"
+          (change)="chooseMode('studio')"
+        />Người mẫu studio của shop</label
+      >
+    </fieldset>
+  }
+  @if (mode() === 'personal') {
+    <label
+      >Chọn ảnh JPG, PNG hoặc WebP<input
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        [disabled]="busy() || !available()"
+        (change)="select($event)"
+    /></label>
+    <p>Ảnh rõ nét, ánh sáng đều; thử đồ cần một người đứng thẳng, thấy rõ thân người và nền gọn.</p>
+  } @else {
+    <label
+      >Người mẫu studio<select
+        [disabled]="busy()"
+        [value]="studio()"
+        (change)="selectStudio($event)"
+      >
+        <option value="">Chọn người mẫu</option>
+        @for (asset of capabilities()?.studio_assets || []; track asset.id) {
+          <option [value]="asset.id">{{ asset.label }}</option>
+        }
+      </select></label
+    >
+    <p>Đây là người mẫu nam/nữ mô phỏng, không phải người thật và không ghép khuôn mặt của bạn.</p>
+    @if (studioLoading()) {
+      <p role="status">Đang tải ảnh người mẫu để bạn xem trước…</p>
+    }
+    @if (studioImage()) {
+      <img
+        class="photo"
+        [src]="studioImage()"
+        alt="Người mẫu studio mô phỏng được chọn trước khi thử đồ"
+        (error)="studioPreviewFailed()"
+      />
+    }
+  }
+  @if (preview() && mode() === 'personal') {
+    @if (task() === 'image_embedding') {
+      <div class="crop-preview">
+        <img [src]="preview()" alt="Ảnh bạn chọn; khung viền thể hiện vùng trang phục cần tìm" />
+        <span class="crop-selection" aria-hidden="true" [style.left.%]="crop().x"
+          [style.top.%]="crop().y" [style.width.%]="crop().width" [style.height.%]="crop().height"></span>
+      </div>
+    } @else {
+      <img class="photo" [src]="preview()" alt="Ảnh bạn chọn trước khi xử lý" />
+    }
+  }
+  @if (task() === 'virtual_try_on' && (!productId() || !variantId())) {
+    <p role="status">Chọn màu và cỡ sản phẩm trước khi thử đồ.</p>
+  }
+  @if (task() === 'image_embedding' && preview()) {
+    <fieldset class="crop-controls" [disabled]="busy()">
+      <legend>Chọn vùng trang phục cần tìm (% ảnh)</legend>
+      <label
+        >Từ trái<input
+          type="number"
+          min="0"
+          max="99"
+          [value]="crop().x"
+          (input)="setCrop($event, 'x')"
+      /></label>
+      <label
+        >Từ trên<input
+          type="number"
+          min="0"
+          max="99"
+          [value]="crop().y"
+          (input)="setCrop($event, 'y')"
+      /></label>
+      <label
+        >Chiều rộng<input
+          type="number"
+          min="1"
+          max="100"
+          [value]="crop().width"
+          (input)="setCrop($event, 'width')"
+      /></label>
+      <label
+        >Chiều cao<input
+          type="number"
+          min="1"
+          max="100"
+          [value]="crop().height"
+          (input)="setCrop($event, 'height')"
+      /></label>
+      <button type="button" class="btn btn--outline" (click)="applyCrop()">
+        Xem trước vùng ảnh
+      </button>
+    </fieldset>
+    <p>
+      Kết quả tiếp tục dùng bộ lọc danh mục, màu, cỡ và giá hiện tại. Nhận dạng ảnh chỉ tìm mức
+      tương đồng, không xác nhận cùng sản phẩm.
+    </p>
+  }
+  <label
+    ><input
+      type="checkbox"
+      [checked]="consent()"
+      [disabled]="busy() || (mode() === 'studio' && (!studioImage() || studioLoading()))"
+      (change)="setConsent($event)"
+    />Tôi có quyền sử dụng ảnh và đồng ý xử lý ảnh cho tác vụ này.</label
+  >
+  <div class="actions">
+    @if (task() === 'virtual_try_on' && mode() === 'personal' && !qualityPassed()) {
+      <button
+        type="button"
+        class="btn btn--primary"
+        [disabled]="!consent() || !preview() || busy() || !available()"
+        (click)="validate()"
+      >
+        Kiểm tra ảnh
+      </button>
+    } @else {
+      <button
+        type="button"
+        class="btn btn--primary"
+        [disabled]="
+          !consent() ||
+          busy() ||
+          !available() ||
+          (mode() === 'personal' && !preview()) ||
+          (mode() === 'studio' && (!studio() || !studioImage() || studioLoading()))
+        "
+        (click)="generate()"
+      >
+        Xác nhận và xử lý
+      </button>
+    }
+    @if (busy()) {
+      <button type="button" class="btn btn--outline" (click)="cancel()">Hủy tác vụ</button>
+    }
+    @if (!busy()) {
+      <button type="button" class="btn btn--outline" (click)="resume()">Tiếp tục tác vụ</button>
+    }
+  </div>
+  @if (job(); as current) {
+    <p aria-live="polite">{{ statusLabel(current) }}</p>
+    @for (reason of current.gate?.reasons || []; track reason) {
+      <p>{{ reasonLabel(reason) }}</p>
+    }
+  }
+  @if (result()) {
+    <img class="photo" [src]="result()" alt="Kết quả thử đồ mô phỏng từ AI" />
+    <p>Ảnh mô phỏng; màu, họa tiết và độ vừa vặn có thể khác sản phẩm thực tế.</p>
+  }
+</dialog>

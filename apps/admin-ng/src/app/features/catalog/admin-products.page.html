@@ -1,4 +1,4 @@
-@if (priceTarget(); as pricedProduct) {
+﻿@if (priceTarget(); as pricedProduct) {
   <div class="admin-modal-overlay">
     <section class="admin-modal" appAdminDialog (appAdminDialogClose)="closePrice()">
       <form (submit)="submitPrice($event)">
@@ -509,8 +509,9 @@
             <textarea #imagesBox class="admin-form-control admin-form-textarea" name="images" [readOnly]="!canChangePrice()" placeholder="https://... hoặc /assets/images/sp.jpg">{{ (selected()?.images || []).join('\n') }}</textarea>
             @if (canMutate()) {
               <input #imageFile type="file" accept="image/jpeg,image/png,image/webp,image/gif" hidden (change)="uploadImage($event, imagesBox)" />
-              <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" [disabled]="imageUploading()" (click)="imageFile.click()">{{ imageUploading() ? 'Đang dựng nền studio...' : 'Xem trước nền studio' }}</button>
+              <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" [disabled]="imageUploading()" (click)="imageFile.click()">{{ imageUploading() ? 'Đang đọc ảnh...' : 'Xem trước ảnh gốc' }}</button>
             }
+            @if (canMutate()) { <app-ai-product-image [productId]="selected()?.product_id || ''" (accepted)="acceptAiImage($event, imagesBox)" /> }
             @if (imageBefore() || imageAfter()) {
               <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px;">
                 <figure style="margin:0;">

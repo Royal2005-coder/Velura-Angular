@@ -3,8 +3,196 @@
     <!-- Header -->
     <div class="review-main__header">
       <h1 class="review-main__title">Đánh Giá Sản Phẩm</h1>
-      <p class="review-main__subtitle">CHIA SẺ TRẢI NGHIỆM CỦA BẠN CÙNG VELURA</p>
+      <p class="review-main__subtitle">CHIA SẺ TRẢI NGHIỆM THỰC TẾ &amp; ĐÓNG GÓP Ý KIẾN CÙNG VELURA</p>
     </div>
+
+    <!-- Khối Xác Thực Người Dùng / Khách Vãng Lai -->
+    @if (!isAuthenticated()) {
+      <div style="max-width: 840px; margin: 0 auto 32px; background: #fff; border: 1px solid #E8DFD6; border-radius: 16px; padding: 28px; box-shadow: 0 4px 16px rgba(0,0,0,0.03);">
+        <div style="text-align: center; margin-bottom: 24px;">
+          <span style="display: inline-block; background: #FAF6F2; color: #7D562D; border: 1px solid #E8DFD6; padding: 4px 14px; border-radius: 999px; font-size: 0.75rem; font-weight: 600; letter-spacing: 1px; margin-bottom: 8px;">
+            CHỨNG NHẬN NGƯỜI MUA HÀNG
+          </span>
+          <h2 style="font-family: 'Playfair Display', serif; font-size: 1.375rem; color: #2A2522; margin: 0 0 6px;">
+            Xác Thực Để Gửi Đánh Giá Sản Phẩm
+          </h2>
+          <p style="font-size: 0.875rem; color: #8C857E; margin: 0;">
+            Để đảm bảo mỗi đánh giá đều chân thực từ khách hàng đã mua sản phẩm, vui lòng chọn 1 trong 2 hình thức:
+          </p>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
+          <!-- Lựa chọn 1: Thành viên có tài khoản -->
+          <div style="background: #FAF8F6; border: 1px solid #E8DFD6; border-radius: 12px; padding: 22px; display: flex; flex-direction: column; justify-content: space-between;">
+            <div>
+              <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7D562D" stroke-width="2">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                  <circle cx="12" cy="7" r="4"></circle>
+                </svg>
+                <h3 style="font-size: 1rem; font-weight: 600; color: #2A2522; margin: 0;">1. Tài Khoản Thành Viên</h3>
+              </div>
+              <p style="font-size: 0.8125rem; color: #665E57; line-height: 1.5; margin: 0 0 16px;">
+                Nếu bạn đã tạo tài khoản hoặc đặt hàng khi đã đăng nhập, hãy đăng nhập để tự động tải danh sách sản phẩm đã nhận.
+              </p>
+            </div>
+            <a
+              routerLink="/auth/signin"
+              [queryParams]="{ returnUrl: '/account/reviews' }"
+              class="btn btn--primary"
+              style="text-align: center; text-decoration: none; padding: 12px; font-size: 0.875rem; font-weight: 600;"
+            >
+              ĐĂNG NHẬP THÀNH VIÊN
+            </a>
+          </div>
+
+          <!-- Lựa chọn 2: Khách vãng lai qua Số điện thoại + OTP -->
+          <div style="background: #FAF8F6; border: 1px solid #E8DFD6; border-radius: 12px; padding: 22px;">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7D562D" stroke-width="2">
+                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
+              </svg>
+              <h3 style="font-size: 1rem; font-weight: 600; color: #2A2522; margin: 0;">2. Khách Mua Hàng Vãng Lai</h3>
+            </div>
+            <p style="font-size: 0.8125rem; color: #665E57; line-height: 1.5; margin: 0 0 14px;">
+              Nhập số điện thoại đã dùng để đặt hàng. Hệ thống sẽ gửi mã OTP để mở danh sách đơn hàng của bạn:
+            </p>
+
+            @if (guestAuthError()) {
+              <div style="padding: 8px 12px; background: #FEF2F2; border: 1px solid #FECACA; border-radius: 6px; color: #991B1B; font-size: 0.75rem; margin-bottom: 12px;">
+                {{ guestAuthError() }}
+              </div>
+            }
+
+            @if (guestAuthSuccess()) {
+              <div style="padding: 8px 12px; background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 6px; color: #166534; font-size: 0.75rem; margin-bottom: 12px;">
+                {{ guestAuthSuccess() }}
+              </div>
+            }
+
+            @if (!guestOtpSent()) {
+              <!-- Form nhập SĐT và Email để gửi OTP -->
+              <div style="display: flex; flex-direction: column; gap: 10px;">
+                <div>
+                  <label for="guestPhoneInput" style="display: block; font-size: 0.75rem; font-weight: 600; color: #50453B; margin-bottom: 4px;">
+                    Số điện thoại đặt hàng *
+                  </label>
+                  <input
+                    id="guestPhoneInput"
+                    type="tel"
+                    [value]="guestPhone()"
+                    (input)="guestPhone.set($any($event.target).value)"
+                    placeholder="VD: 0987654321"
+                    style="width: 100%; padding: 10px 12px; border: 1px solid #D4C4B7; border-radius: 6px; font-size: 0.875rem; box-sizing: border-box;"
+                  />
+                </div>
+                <div>
+                  <label for="guestEmailInput" style="display: block; font-size: 0.75rem; font-weight: 600; color: #50453B; margin-bottom: 4px;">
+                    Email nhận mã OTP demo (nếu có)
+                  </label>
+                  <input
+                    id="guestEmailInput"
+                    type="email"
+                    [value]="guestEmail()"
+                    (input)="guestEmail.set($any($event.target).value)"
+                    placeholder="VD: email@example.com (để nhận mã OTP demo)"
+                    style="width: 100%; padding: 10px 12px; border: 1px solid #D4C4B7; border-radius: 6px; font-size: 0.875rem; box-sizing: border-box;"
+                  />
+                </div>
+                <button
+                  type="button"
+                  class="btn btn--primary"
+                  [disabled]="sendingOtp() || !guestPhone().trim()"
+                  (click)="sendGuestOtp()"
+                  style="padding: 11px; font-size: 0.8125rem; font-weight: 600; margin-top: 4px;"
+                >
+                  {{ sendingOtp() ? 'ĐANG GỬI MÃ OTP...' : 'GỬI MÃ XÁC THỰC OTP' }}
+                </button>
+              </div>
+            } @else {
+              <!-- Form nhập mã 6 số OTP -->
+              <div style="display: flex; flex-direction: column; gap: 10px;">
+                <div>
+                  <label for="guestOtpInput" style="display: block; font-size: 0.75rem; font-weight: 600; color: #50453B; margin-bottom: 4px;">
+                    Mã xác thực OTP (6 chữ số) *
+                  </label>
+                  <input
+                    id="guestOtpInput"
+                    type="text"
+                    maxlength="6"
+                    [value]="guestOtp()"
+                    (input)="guestOtp.set($any($event.target).value)"
+                    (keydown.enter)="verifyGuestOtp()"
+                    placeholder="Nhập mã 6 chữ số"
+                    style="width: 100%; padding: 10px 12px; border: 1px solid #7D562D; border-radius: 6px; font-size: 1.125rem; font-weight: bold; letter-spacing: 4px; text-align: center; box-sizing: border-box;"
+                  />
+                </div>
+                <button
+                  type="button"
+                  class="btn btn--primary"
+                  [disabled]="verifyingOtp() || guestOtp().trim().length !== 6"
+                  (click)="verifyGuestOtp()"
+                  style="padding: 11px; font-size: 0.8125rem; font-weight: 600;"
+                >
+                  {{ verifyingOtp() ? 'ĐANG XÁC THỰC...' : 'XÁC THỰC &amp; TẢI ĐƠN HÀNG' }}
+                </button>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px;">
+                  <button
+                    type="button"
+                    class="btn btn--ghost"
+                    (click)="sendGuestOtp()"
+                    [disabled]="sendingOtp()"
+                    style="font-size: 0.75rem; color: #7D562D; padding: 0; text-decoration: underline;"
+                  >
+                    Gửi lại mã OTP
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn--ghost"
+                    (click)="guestOtpSent.set(false)"
+                    style="font-size: 0.75rem; color: #8C857E; padding: 0;"
+                  >
+                    Đổi số điện thoại khác
+                  </button>
+                </div>
+              </div>
+            }
+          </div>
+        </div>
+      </div>
+    } @else {
+      <!-- Thanh Thông Tin Người Dùng Đã Xác Thực -->
+      <div style="max-width: 840px; margin: 0 auto 24px; background: #FAF6F2; border: 1px solid #E8DFD6; border-radius: 12px; padding: 14px 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+          </svg>
+          <div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <strong style="font-size: 0.875rem; color: #2A2522;">{{ customerDisplayName() }}</strong>
+              <span style="background: #e8f5e9; color: #2e7d32; font-size: 0.6875rem; font-weight: 700; padding: 2px 8px; border-radius: 999px;">
+                {{ isLoggedIn() ? 'THÀNH VIÊN' : 'NGƯỜI MUA ĐÃ XÁC THỰC' }}
+              </span>
+            </div>
+            <small style="color: #8C857E; font-size: 0.75rem;">
+              {{ isLoggedIn() ? 'Tự động đồng bộ lịch sử mua sắm' : 'Đã xác thực qua OTP số điện thoại' }}
+            </small>
+          </div>
+        </div>
+
+        @if (isGuestVerified()) {
+          <button
+            type="button"
+            class="btn btn--secondary"
+            (click)="resetGuestAuth()"
+            style="padding: 6px 14px; font-size: 0.75rem;"
+          >
+            Đổi số điện thoại khác
+          </button>
+        }
+      </div>
+    }
 
     <!-- Navigation Tabs -->
     <div style="display: flex; justify-content: center; gap: 16px; margin-bottom: 32px;">
@@ -31,195 +219,330 @@
     </div>
 
     @if (activeTab() === 'write') {
-      <!-- List of other eligible items waiting for review -->
-      @if (loadingEligible()) {
-        <p role="status">Đang tải sản phẩm đã giao…</p>
-      } @else if (eligibleError()) {
-        <p role="alert">{{ eligibleError() }} <button type="button" class="btn btn--outline" (click)="loadEligibleItems()">Thử lại</button></p>
-      } @else if (eligibleItems().length === 0) {
-        <p>Bạn chưa có sản phẩm đã giao để đánh giá. <a routerLink="/account/orders">Xem đơn hàng</a></p>
-      }
-      @if (eligibleItems().length > 0) {
-        <div style="max-width: 840px; margin: 0 auto 24px; background: #fff; border: 1px solid #E8DFD6; border-radius: 12px; padding: 20px;">
-          <h3 style="font-size: 0.9375rem; font-weight: 600; margin: 0 0 12px; color: #50453B;">Chọn sản phẩm từ đơn hàng đã giao để đánh giá:</h3>
-          <div style="display: flex; gap: 12px; overflow-x: auto; padding-bottom: 8px;">
-            @for (item of eligibleItems(); track item.orderId + item.productId) {
-              <button type="button"
-                (click)="selectItem(item)"
-                [style.border-color]="productId() === item.productId && orderId() === item.orderId ? '#7D562D' : '#E8DFD6'"
-                [style.background]="productId() === item.productId && orderId() === item.orderId ? '#FAF6F2' : '#fff'"
-                style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; border: 1px solid #E8DFD6; border-radius: 8px; cursor: pointer; min-width: 240px; flex-shrink: 0;"
-              >
-                <img [src]="item.productImage" [alt]="item.productName" style="width: 44px; height: 56px; object-fit: cover; border-radius: 4px;" />
-                <div style="overflow: hidden;">
-                  <strong style="display: block; font-size: 0.8125rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ item.productName }}</strong>
-                  <small style="color: #8C857E;">Đơn #{{ item.orderCode.slice(0, 8) }}</small>
-                </div>
-              </button>
-            }
-          </div>
+      @if (!isAuthenticated()) {
+        <div style="max-width: 840px; margin: 0 auto; background: #fff; border: 1px dashed #D4C4B7; border-radius: 12px; padding: 48px 24px; text-align: center;">
+          <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#7D562D" stroke-width="1.5" style="margin: 0 auto 16px; display: block;">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+          </svg>
+          <h3 style="font-family: 'Playfair Display', serif; font-size: 1.25rem; color: #2A2522; margin: 0 0 8px;">
+            Vui lòng đăng nhập hoặc xác thực số điện thoại ở trên
+          </h3>
+          <p style="color: #8C857E; font-size: 0.875rem; max-width: 500px; margin: 0 auto 20px;">
+            Sau khi xác thực, hệ thống sẽ tự động hiển thị các sản phẩm từ đơn hàng đã giao để bạn viết đánh giá và chia sẻ trải nghiệm cùng hình ảnh thực tế.
+          </p>
         </div>
-      }
-
-      <div class="review-card">
-        <!-- Product Summary Block -->
-        <div class="product-summary" id="js-product-summary">
-          <img class="product-summary__image" id="js-product-img" [src]="productImage()" [alt]="productName()" />
-          <div class="product-summary__details">
-            <h2 class="product-summary__name" id="js-product-name">{{ productName() }}</h2>
-            <div class="product-summary__meta">
-              @if (orderId()) {
-                <span class="product-summary__variant">Mã đơn: #{{ orderId().slice(0, 8) }}</span>
-                <span>&middot;</span>
-              }
-              <span class="product-summary__price" id="js-product-price">{{ money(productPrice()) }}</span>
-            </div>
-            @if (!productId()) {
-              <p style="color: #b91c1c; font-size: 0.8125rem; margin: 4px 0 0;">
-                Vui lòng chọn sản phẩm từ danh sách đơn hàng đã nhận để gửi đánh giá.
-              </p>
-            }
+      } @else {
+        <!-- List of eligible items waiting for review -->
+        @if (loadingEligible()) {
+          <div style="text-align: center; padding: 24px; color: #8C857E;">
+            <p role="status">Đang tải danh sách sản phẩm từ các đơn hàng đã nhận…</p>
           </div>
-        </div>
-
-        @if (submitSuccess()) {
-          <div style="padding: 32px; text-align: center; background: #f0fdf4; border-bottom: 1px solid #bbf7d0;">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2" style="margin: 0 auto 12px; display: block;">
-              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-              <polyline points="22 4 12 14.01 9 11.01"></polyline>
+        } @else if (eligibleError()) {
+          <div style="max-width: 840px; margin: 0 auto 20px; padding: 14px 20px; background: #FEF2F2; border: 1px solid #FECACA; border-radius: 8px; color: #991B1B; font-size: 0.875rem; display: flex; justify-content: space-between; align-items: center;">
+            <span>{{ eligibleError() }}</span>
+            <button type="button" class="btn btn--secondary" (click)="loadEligibleItems()" style="padding: 6px 14px; font-size: 0.75rem;">
+              Thử lại
+            </button>
+          </div>
+        } @else if (eligibleItems().length === 0) {
+          <div style="max-width: 840px; margin: 0 auto 24px; background: #fff; border: 1px solid #E8DFD6; border-radius: 12px; padding: 40px; text-align: center;">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#8C857E" stroke-width="1.5" style="margin: 0 auto 12px; display: block;">
+              <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+              <line x1="8" y1="21" x2="16" y2="21"></line>
+              <line x1="12" y1="17" x2="12" y2="21"></line>
             </svg>
-            <h3 style="font-family: 'Playfair Display', serif; font-size: 1.25rem; color: #166534; margin: 0 0 8px;">Đánh giá thành công!</h3>
-            <p style="font-size: 0.875rem; color: #15803d; margin: 0 0 20px;">{{ submitSuccess() }}</p>
-            <button type="button" class="btn btn--primary" (click)="activeTab.set('history')">Xem danh sách đánh giá của tôi</button>
+            <h3 style="font-family: 'Playfair Display', serif; font-size: 1.125rem; color: #2A2522; margin: 0 0 6px;">
+              Chưa có sản phẩm nào đã giao để đánh giá
+            </h3>
+            <p style="font-size: 0.8125rem; color: #8C857E; margin: 0 0 16px;">
+              Chỉ các sản phẩm thuộc đơn hàng có trạng thái "Đã giao hàng thành công" mới có thể gửi đánh giá.
+            </p>
+            @if (isLoggedIn()) {
+              <a routerLink="/account/orders" class="btn btn--secondary" style="padding: 8px 20px; font-size: 0.8125rem; text-decoration: none;">
+                Xem danh sách đơn hàng
+              </a>
+            }
           </div>
         }
 
-        <!-- Form block -->
-        <form class="review-form" id="js-review-form" (submit)="$event.preventDefault(); submitReview()">
-          @if (submitError()) {
-            <div style="padding: 12px 16px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; color: #991b1b; font-size: 0.875rem; width: 100%;">
-              {{ submitError() }}
-            </div>
-          }
-
-          <!-- 1. Stars section -->
-          <div class="review-form__section">
-            <h3 class="review-form__label">MỨC ĐỘ HÀI LÒNG CỦA BẠN</h3>
-            <div class="review-rating" id="js-star-rating-main" (mouseleave)="setHoverRating(0)">
-              @for (star of [1, 2, 3, 4, 5]; track star) {
+        @if (eligibleItems().length > 0) {
+          <div style="max-width: 840px; margin: 0 auto 24px; background: #fff; border: 1px solid #E8DFD6; border-radius: 12px; padding: 20px;">
+            <h3 style="font-size: 0.9375rem; font-weight: 600; margin: 0 0 12px; color: #50453B;">
+              Chọn sản phẩm từ đơn hàng đã giao để đánh giá:
+            </h3>
+            <div style="display: flex; gap: 12px; overflow-x: auto; padding-bottom: 8px;">
+              @for (item of eligibleItems(); track item.orderId + item.productId) {
                 <button
                   type="button"
-                  class="review-rating__star"
-                  [class.is-selected]="effectiveRating() >= star"
-                  (mouseenter)="setHoverRating(star)"
-                  (click)="setRating(star)"
-                  [attr.aria-label]="star + ' sao'"
+                  (click)="selectItem(item)"
+                  [style.border-color]="productId() === item.productId && orderId() === item.orderId ? '#7D562D' : '#E8DFD6'"
+                  [style.background]="productId() === item.productId && orderId() === item.orderId ? '#FAF6F2' : '#fff'"
+                  style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; border: 1px solid #E8DFD6; border-radius: 8px; cursor: pointer; min-width: 240px; flex-shrink: 0; text-align: left;"
                 >
-                  <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
-                  </svg>
-                </button>
-              }
-            </div>
-            <span style="font-size: 0.875rem; color: #7D562D; font-weight: 600;">
-              @switch (effectiveRating()) {
-                @case (5) { Tuyệt vời, rất hài lòng! }
-                @case (4) { Hài lòng với sản phẩm }
-                @case (3) { Bình thường }
-                @case (2) { Chưa thực sự hài lòng }
-                @case (1) { Rất không hài lòng }
-              }
-            </span>
-          </div>
-
-          <!-- 2. Quick Tags section -->
-          <div class="review-form__section">
-            <h3 class="review-form__label">GỢI Ý NHẬN XÉT (CHỌN NHANH)</h3>
-            <div class="review-tags" id="js-review-tags">
-              @for (tag of presetTags; track tag) {
-                <button
-                  type="button"
-                  class="review-tag-btn"
-                  [class.is-active]="selectedTags().includes(tag)"
-                  (click)="toggleTag(tag)"
-                >
-                  {{ tag }}
-                </button>
-              }
-            </div>
-          </div>
-
-          <!-- 3. Details description -->
-          <div class="review-form__section">
-            <h3 class="review-form__label">CHI TIẾT NHẬN XÉT</h3>
-            <textarea
-              class="review-form__textarea"
-              id="js-review-textarea"
-              [value]="comment()"
-              (input)="comment.set($any($event.target).value)"
-              placeholder="Hãy chia sẻ về chất liệu, form dáng và cảm nhận của bạn khi khoác lên mình sản phẩm này..."
-            ></textarea>
-          </div>
-
-          <!-- 4. Media upload (URL / Attachments) -->
-          <div class="review-form__section">
-            <h3 class="review-form__label">HÌNH ẢNH MINH HỌA</h3>
-            <div style="display: flex; gap: 8px; width: 100%; max-width: 480px;">
-              <input
-                type="url"
-                [value]="imageUrlInput()"
-                (input)="imageUrlInput.set($any($event.target).value)"
-                (keydown.enter)="$event.preventDefault(); addImage()"
-                placeholder="Dán đường dẫn ảnh thực tế (https://...)"
-                style="flex: 1; padding: 10px 14px; border: 1px solid #D4C4B7; border-radius: 6px; font-size: 0.875rem;"
-              />
-              <button type="button" class="btn btn--secondary" (click)="addImage()" style="padding: 10px 16px; font-size: 0.8125rem;">
-                Thêm ảnh
-              </button>
-            </div>
-
-            @if (images().length > 0) {
-              <div class="media-upload__preview" style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px;">
-                @for (img of images(); track $index) {
-                  <div class="media-upload__thumb-wrapper">
-                    <img [src]="img" class="media-upload__thumb" alt="Hình ảnh đánh giá" />
-                    <button type="button" class="media-upload__remove-btn" (click)="removeImage($index)">✕</button>
+                  <img [src]="item.productImage" [alt]="item.productName" style="width: 44px; height: 56px; object-fit: cover; border-radius: 4px;" />
+                  <div style="overflow: hidden;">
+                    <strong style="display: block; font-size: 0.8125rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #2A2522;">{{ item.productName }}</strong>
+                    <small style="color: #8C857E;">Đơn #{{ item.orderCode.slice(0, 8) }}</small>
                   </div>
-                }
+                </button>
+              }
+            </div>
+          </div>
+        }
+
+        @if (productId() && orderId()) {
+          <div class="review-card">
+            <!-- Product Summary Block -->
+            <div class="product-summary" id="js-product-summary">
+              <img class="product-summary__image" id="js-product-img" [src]="productImage()" [alt]="productName()" />
+              <div class="product-summary__details">
+                <h2 class="product-summary__name" id="js-product-name">{{ productName() }}</h2>
+                <div class="product-summary__meta">
+                  @if (orderId()) {
+                    <span class="product-summary__variant">Mã đơn: #{{ orderId().slice(0, 8) }}</span>
+                    <span>&middot;</span>
+                  }
+                  <span class="product-summary__price" id="js-product-price">{{ money(productPrice()) }}</span>
+                </div>
+              </div>
+            </div>
+
+            @if (submitSuccess()) {
+              <div style="padding: 32px; text-align: center; background: #F0FDF4; border-bottom: 1px solid #BBF7D0;">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2" style="margin: 0 auto 12px; display: block;">
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                  <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                </svg>
+                <h3 style="font-family: 'Playfair Display', serif; font-size: 1.25rem; color: #166534; margin: 0 0 8px;">Đánh giá thành công!</h3>
+                <p style="font-size: 0.875rem; color: #15803d; margin: 0 0 20px;">{{ submitSuccess() }}</p>
+                <button type="button" class="btn btn--primary" (click)="activeTab.set('history')">Xem danh sách đánh giá của tôi</button>
               </div>
             }
-          </div>
 
-          <!-- Action submit -->
-          <div class="review-form__actions">
-            <button
-              class="btn review-action"
-              type="submit"
-              [disabled]="submitting() || !productId() || !orderId()"
-            >
-              {{ submitting() ? 'ĐANG GỬI ĐÁNH GIÁ...' : 'GỬI ĐÁNH GIÁ' }}
-            </button>
+            <!-- Form block -->
+            <form class="review-form" id="js-review-form" (submit)="$event.preventDefault(); submitReview()">
+              @if (submitError()) {
+                <div style="padding: 12px 16px; background: #FEF2F2; border: 1px solid #FECACA; border-radius: 8px; color: #991B1B; font-size: 0.875rem; width: 100%; box-sizing: border-box;">
+                  {{ submitError() }}
+                </div>
+              }
+
+              <!-- 1. Stars section -->
+              <div class="review-form__section">
+                <h3 class="review-form__label">MỨC ĐỘ HÀI LÒNG CỦA BẠN</h3>
+                <div class="review-rating" id="js-star-rating-main" (mouseleave)="setHoverRating(0)">
+                  @for (star of [1, 2, 3, 4, 5]; track star) {
+                    <button
+                      type="button"
+                      class="review-rating__star"
+                      [class.is-selected]="effectiveRating() >= star"
+                      (mouseenter)="setHoverRating(star)"
+                      (click)="setRating(star)"
+                      [attr.aria-label]="star + ' sao'"
+                    >
+                      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                      </svg>
+                    </button>
+                  }
+                </div>
+                <span style="font-size: 0.875rem; color: #7D562D; font-weight: 600;">
+                  @switch (effectiveRating()) {
+                    @case (5) { Tuyệt vời, rất hài lòng! }
+                    @case (4) { Hài lòng với sản phẩm }
+                    @case (3) { Bình thường }
+                    @case (2) { Chưa thực sự hài lòng }
+                    @case (1) { Rất không hài lòng }
+                  }
+                </span>
+              </div>
+
+              <!-- 2. Quick Tags section -->
+              <div class="review-form__section">
+                <h3 class="review-form__label">GỢI Ý NHẬN XÉT (CHỌN NHANH)</h3>
+                <div class="review-tags" id="js-review-tags">
+                  @for (tag of presetTags; track tag) {
+                    <button
+                      type="button"
+                      class="review-tag-btn"
+                      [class.is-active]="selectedTags().includes(tag)"
+                      (click)="toggleTag(tag)"
+                    >
+                      {{ tag }}
+                    </button>
+                  }
+                </div>
+              </div>
+
+              <!-- 3. Details description -->
+              <div class="review-form__section">
+                <h3 class="review-form__label">CHI TIẾT NHẬN XÉT</h3>
+                <textarea
+                  class="review-form__textarea"
+                  id="js-review-textarea"
+                  [value]="comment()"
+                  (input)="comment.set($any($event.target).value)"
+                  placeholder="Hãy chia sẻ về chất liệu, form dáng và cảm nhận thực tế của bạn khi khoác lên mình sản phẩm này..."
+                ></textarea>
+              </div>
+
+              <!-- 4. Media upload (Trực tiếp từ thiết bị / Kéo thả) -->
+              <div class="review-form__section">
+                <h3 class="review-form__label">HÌNH ẢNH THỰC TẾ SẢN PHẨM</h3>
+                
+                <div class="media-upload">
+                  <!-- Input file ẩn -->
+                  <input
+                    #fileInput
+                    type="file"
+                    multiple
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    (change)="onFilesSelected($event)"
+                    style="display: none;"
+                  />
+
+                  <!-- Vùng Dropzone trực quan -->
+                  <div
+                    class="media-upload__dropzone"
+                    [style.border-color]="isDragging() ? '#7D562D' : ''"
+                    [style.background-color]="isDragging() ? '#FAF6F2' : ''"
+                    (click)="fileInput.click()"
+                    (dragover)="onDragOver($event)"
+                    (dragleave)="onDragLeave($event)"
+                    (drop)="onFileDrop($event)"
+                  >
+                    <svg class="media-upload__icon" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                      <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                      <polyline points="21 15 16 10 5 21"></polyline>
+                    </svg>
+                    <span class="media-upload__title">TẢI ẢNH THỰC TẾ LÊN (TỐI ĐA 5 ẢNH)</span>
+                    <p class="media-upload__desc">
+                      Nhấp để chọn tệp từ máy hoặc kéo thả hình ảnh vào đây<br />
+                      <span style="font-size: 0.625rem; color: #a19a94;">(Hỗ trợ JPG, PNG, WebP, GIF dưới 10MB)</span>
+                    </p>
+                    <button
+                      type="button"
+                      class="btn btn--secondary"
+                      style="padding: 6px 16px; font-size: 0.75rem; pointer-events: none;"
+                    >
+                      CHỌN ẢNH TỪ THIẾT BỊ
+                    </button>
+                  </div>
+
+                  @if (uploadingCount() > 0) {
+                    <p style="font-size: 0.8125rem; color: #7D562D; font-weight: 500; margin: 4px 0 0;">
+                      Đang xử lý tải lên {{ uploadingCount() }} ảnh...
+                    </p>
+                  }
+
+                  <!-- Danh sách thumbnail ảnh đã tải lên -->
+                  @if (images().length > 0) {
+                    <div class="media-upload__preview" style="display: flex; gap: 12px; flex-wrap: wrap; margin-top: 12px; justify-content: center;">
+                      @for (img of images(); track $index) {
+                        <div class="media-upload__thumb-wrapper">
+                          <img [src]="img" class="media-upload__thumb" alt="Ảnh đánh giá" />
+                          <button
+                            type="button"
+                            class="media-upload__remove-btn"
+                            (click)="removeImage($index)"
+                            aria-label="Xóa ảnh"
+                            title="Xóa ảnh"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      }
+                    </div>
+                  }
+
+                  <!-- Tùy chọn dán URL bổ sung -->
+                  <div style="margin-top: 8px; text-align: center;">
+                    <button
+                      type="button"
+                      class="btn btn--ghost"
+                      (click)="showUrlInput.set(!showUrlInput())"
+                      style="font-size: 0.75rem; color: #8C857E; padding: 4px 8px;"
+                    >
+                      {{ showUrlInput() ? '▲ Thu gọn nhập URL' : '+ Hoặc dán đường dẫn ảnh HTTPS nếu có' }}
+                    </button>
+
+                    @if (showUrlInput()) {
+                      <div style="display: flex; gap: 8px; width: 100%; max-width: 480px; margin: 8px auto 0;">
+                        <input
+                          type="url"
+                          [value]="imageUrlInput()"
+                          (input)="imageUrlInput.set($any($event.target).value)"
+                          (keydown.enter)="$event.preventDefault(); addImage()"
+                          placeholder="Dán đường dẫn ảnh (https://...)"
+                          style="flex: 1; padding: 8px 12px; border: 1px solid #D4C4B7; border-radius: 6px; font-size: 0.8125rem;"
+                        />
+                        <button type="button" class="btn btn--secondary" (click)="addImage()" style="padding: 8px 14px; font-size: 0.75rem;">
+                          Thêm URL
+                        </button>
+                      </div>
+                    }
+                  </div>
+                </div>
+              </div>
+
+              <!-- Action submit -->
+              <div class="review-form__actions">
+                <button
+                  class="btn review-action"
+                  type="submit"
+                  [disabled]="submitting() || !productId() || !orderId() || uploadingCount() > 0"
+                >
+                  {{ submitting() ? 'ĐANG GỬI ĐÁNH GIÁ...' : 'GỬI ĐÁNH GIÁ' }}
+                </button>
+              </div>
+            </form>
           </div>
-        </form>
-      </div>
+        }
+      }
     } @else {
       <!-- Lịch sử đánh giá của tôi -->
       <div style="max-width: 840px; margin: 0 auto;">
-        @if (loadingReviews()) {
+        @if (!isAuthenticated()) {
+          <div style="background: #fff; border: 1px dashed #D4C4B7; border-radius: 16px; padding: 48px; text-align: center;">
+            <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#7D562D" stroke-width="1.5" style="margin: 0 auto 16px; display: block;">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+              <circle cx="12" cy="7" r="4"></circle>
+            </svg>
+            <h3 style="font-family: 'Playfair Display', serif; font-size: 1.25rem; color: #1C1B1B; margin: 0 0 8px;">
+              Vui lòng xác thực tài khoản hoặc số điện thoại
+            </h3>
+            <p style="color: #8C857E; font-size: 0.875rem; margin: 0 0 20px;">
+              Đăng nhập hoặc xác thực số điện thoại ở trên để xem lại toàn bộ các đánh giá bạn đã gửi tại Velura.
+            </p>
+          </div>
+        } @else if (loadingReviews()) {
           <div style="text-align: center; padding: 48px; color: #8C857E;">
             <p>Đang tải lịch sử đánh giá của bạn...</p>
           </div>
         } @else if (historyError()) {
-          <p role="alert">{{ historyError() }}</p>
-          <button type="button" class="btn btn--outline" (click)="loadReviews()">Thử lại</button>
+          <div style="padding: 16px 20px; background: #FEF2F2; border: 1px solid #FECACA; border-radius: 8px; color: #991B1B; font-size: 0.875rem; display: flex; justify-content: space-between; align-items: center;">
+            <span>{{ historyError() }}</span>
+            <button type="button" class="btn btn--secondary" (click)="loadReviews()" style="padding: 6px 14px; font-size: 0.75rem;">
+              Thử lại
+            </button>
+          </div>
         } @else if (myReviews().length === 0) {
           <div style="background: #fff; border: 1px solid #E8DFD6; border-radius: 16px; padding: 48px; text-align: center;">
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#7D562D" stroke-width="1.5" style="margin: 0 auto 16px; display: block;">
               <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
             </svg>
-            <h3 style="font-family: 'Playfair Display', serif; font-size: 1.25rem; color: #1C1B1B; margin: 0 0 8px;">Bạn chưa gửi đánh giá nào</h3>
-            <p style="color: #8C857E; font-size: 0.875rem; margin: 0 0 24px;">Sau khi đơn hàng giao thành công, bạn có thể chia sẻ trải nghiệm để nhận các ưu đãi hấp dẫn từ Velura.</p>
-            <button type="button" class="btn btn--primary" (click)="activeTab.set('write')">Viết đánh giá ngay</button>
+            <h3 style="font-family: 'Playfair Display', serif; font-size: 1.25rem; color: #1C1B1B; margin: 0 0 8px;">
+              Bạn chưa gửi đánh giá nào
+            </h3>
+            <p style="color: #8C857E; font-size: 0.875rem; margin: 0 0 24px;">
+              Sau khi đơn hàng giao thành công, bạn có thể chia sẻ trải nghiệm để nhận các ưu đãi hấp dẫn từ Velura.
+            </p>
+            <button type="button" class="btn btn--primary" (click)="activeTab.set('write')">
+              Viết đánh giá ngay
+            </button>
           </div>
         } @else {
           <div style="display: flex; flex-direction: column; gap: 20px;">
@@ -236,7 +559,10 @@
                           </svg>
                         }
                       </div>
-                      <small style="color: #8C857E;">@if (rev.order_id) { Đơn #{{ rev.order_id.slice(0, 8) }} &middot; } {{ rev.submitted_at || rev.created_at | date:'dd/MM/yyyy' }}</small>
+                      <small style="color: #8C857E;">
+                        @if (rev.order_id) { Đơn #{{ rev.order_id.slice(0, 8) }} &middot; }
+                        {{ rev.submitted_at || rev.created_at | date:'dd/MM/yyyy' }}
+                      </small>
                     </div>
                   </div>
 

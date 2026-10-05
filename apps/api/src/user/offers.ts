@@ -75,7 +75,7 @@ export async function handleOffersRoute(
     featured: campaigns.filter((campaign) => campaign.is_featured),
     campaigns,
     vouchers: wallet.items.map((item) => toVoucherCard(item, now, isMember)),
-    birthday_prompt: buildBirthdayPrompt(profile)
+    birthday_prompt: buildBirthdayPrompt(profile, now)
   }, corsHeaders);
 }
 
@@ -107,7 +107,10 @@ function toCampaignCard(promotion: JsonObject, now: Date): JsonObject {
  * "Dành riêng cho bạn" là mã nhắm một nhóm khách cụ thể mà khách đang đăng nhập đạt,
  * không phải mã mở cho mọi khách. Mã sắp hết hạn tách riêng để khách thấy trước.
  */
-export function voucherGroup(item: Pick<EvaluatedVoucher, "audience" | "endDate">, usable: boolean, isMember: boolean, now: Date): "personal" | "ending" | "running" {
+export function voucherGroup(item: Pick<EvaluatedVoucher, "audience" | "endDate"> & { code?: string }, usable: boolean, isMember: boolean, now: Date): "personal" | "ending" | "running" {
+  if (item.code && (item.code.toUpperCase().startsWith("HPBD") || item.code.toUpperCase().includes("SINHNHAT"))) {
+    return "personal";
+  }
   const daysLeft = item.endDate ? (new Date(item.endDate).getTime() - now.getTime()) / 86400000 : null;
   if (daysLeft !== null && daysLeft <= ENDING_SOON_DAYS) return "ending";
   if (isMember && usable && item.audience !== "all_users") return "personal";
@@ -154,15 +157,69 @@ function describeDiscount(item: {
   return `Giảm ${formatMoney(item.discountValue)}`;
 }
 
-function buildBirthdayPrompt(profile: UserProfile | null): JsonObject | null {
-  if (!profile?.user_id) return null;
-  const birthday = profile.date_of_birth || profile.birthday || profile.birthdate || profile.dob;
-  if (birthday) return null;
+export function buildBirthdayPrompt(profile: UserProfile | null, now: Date): JsonObject | null {
+  const isMember = Boolean(profile?.user_id);
+  const fullName = profile?.full_name ? String(profile.full_name).trim() : "bạn";
+
+  if (!profile || !profile.user_id) {
+    return {
+      title: "Đặc quyền sinh nhật thành viên",
+      description: "Đăng ký hoặc đăng nhập tài khoản Velura để nhận voucher giảm 20% và quà tặng đặc quyền trong tháng sinh nhật của bạn.",
+      action_label: "Đăng nhập / Đăng ký",
+      action_route: "/auth/signin?returnUrl=/offers",
+      is_birthday_month: false
+    };
+  }
+
+  const rawBirthday = profile.date_of_birth || profile.birthday || profile.birthdate || profile.dob;
+  if (!rawBirthday) {
+    return {
+      title: "Ưu đãi sinh nhật thành viên",
+      description: "Bổ sung ngày sinh trong hồ sơ cá nhân để Velura chuẩn bị voucher giảm 20% và quà tặng riêng trong tháng sinh nhật của bạn.",
+      action_label: "Bổ sung ngày sinh",
+      action_route: "/account/profile",
+      is_birthday_month: false
+    };
+  }
+
+  const d = new Date(String(rawBirthday));
+  if (isNaN(d.getTime())) {
+    return {
+      title: "Ưu đãi sinh nhật",
+      description: "Bổ sung ngày sinh hợp lệ trong hồ sơ để nhận quà sinh nhật từ Velura.",
+      action_label: "Cập nhật ngày sinh",
+      action_route: "/account/profile",
+      is_birthday_month: false
+    };
+  }
+
+  const birthDay = d.getDate();
+  const birthMonth = d.getMonth() + 1;
+  const currentMonth = now.getMonth() + 1;
+  const currentDay = now.getDate();
+  const isBirthdayMonth = birthMonth === currentMonth;
+  const isBirthdayToday = isBirthdayMonth && birthDay === currentDay;
+
+  if (isBirthdayMonth) {
+    const todayGreeting = isBirthdayToday
+      ? `🎂 Chúc mừng sinh nhật ${fullName} hôm nay!`
+      : `🎉 Chúc mừng tháng sinh nhật của ${fullName}!`;
+    return {
+      title: todayGreeting,
+      description: `Tháng ${currentMonth} này là tháng sinh nhật của bạn! Velura gửi tặng bạn mã voucher đặc quyền HPBD2026 (giảm 20% tối đa 200.000đ) áp dụng cho mọi đơn hàng trong suốt tháng!`,
+      action_label: "Xem voucher sinh nhật",
+      action_route: "/account/vouchers",
+      is_birthday_month: true,
+      voucher_code: "HPBD2026"
+    };
+  }
+
   return {
-    title: "Ưu đãi sinh nhật",
-    description: "Bổ sung ngày sinh để Velura chuẩn bị voucher và quà trong tháng sinh nhật của bạn.",
-    action_label: "Bổ sung ngày sinh",
-    action_route: "/account/profile"
+    title: `Đặc quyền sinh nhật đã kích hoạt 🎂`,
+    description: `Ngày sinh của bạn: ${String(birthDay).padStart(2, '0')}/${String(birthMonth).padStart(2, '0')}. Món quà sinh nhật đặc biệt cùng voucher giảm 20% sẽ tự động được gửi tặng vào đầu tháng ${birthMonth}!`,
+    action_label: "Xem hồ sơ cá nhân",
+    action_route: "/account/profile",
+    is_birthday_month: false
   };
 }
 

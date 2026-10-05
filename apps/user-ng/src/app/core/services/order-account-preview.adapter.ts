@@ -1,3 +1,4 @@
+import { signal } from '@angular/core';
 import { ComboComponentItem, DemoOrder, DemoOrderLine, DemoReturn, DemoReturnLine, PurchaseDemoStore } from './purchase-demo.store';
 import type { OrderAccountModel } from './order-account.model';
 
@@ -12,6 +13,7 @@ export class OrderAccountPreviewAdapter implements OrderAccountModel {
   readonly member;
   readonly userId;
   readonly verifiedPhone;
+  readonly maskedEmail = signal('');
   readonly cancellableBeforeStage;
   readonly supportsBankInfo;
 

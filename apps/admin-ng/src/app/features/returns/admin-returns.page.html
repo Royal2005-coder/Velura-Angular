@@ -188,6 +188,15 @@
             </div>
           </section>
         }
+        @if (actionError() && !actionType() && !manualRefundTarget() && !returnDetailOpen() && !contactTarget() && !shipmentTarget()) {
+          <div class="admin-form-alert--error" style="margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; color: #991b1b;" role="alert">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <app-admin-icon name="alert" cssClass="admin-line-icon" />
+              <span>{{ actionError() }}</span>
+            </div>
+            <button type="button" class="admin-icon-button" (click)="actionError.set(null)" aria-label="Đóng cảnh báo" style="color: #991b1b; background: transparent; border: none; font-size: 1.25rem; cursor: pointer;">×</button>
+          </div>
+        }
         <!-- Quick Filter Pills theo Odoo ERP Lifecycle -->
         <div class="admin-return-pills" role="tablist" aria-label="Phân nhóm xử lý đổi trả">
           <button type="button" class="admin-return-pill" [class.is-active]="returnTab() === 'all'" (click)="setReturnTab('all')">
@@ -320,7 +329,7 @@
                         </button>
                         @if (canMutate()) {
                           @if (row.status === 'REQUESTED') {
-                            <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openReturnDetail(row.return_id)">Liên hệ khách</button>
+                            <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openContact(row)">Liên hệ khách</button>
                             <button class="admin-btn admin-btn--danger-soft admin-btn--sm" type="button" (click)="openReturnAction('reject', row.return_id)">Từ chối</button>
                           } @else if (row.status === 'CONTACTING') {
                             @if (showReturnAction(row, 'refund')) {
@@ -349,11 +358,19 @@
                             } @else if (nextReturnStep(row); as step) {
                               <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="advanceReturn(row, step.status)">{{ step.label }}</button>
                             }
+                          } @else if (row.status === 'REFUND_PROCESSING') {
+                            @if (canTriggerStripeRefund(row)) {
+                              <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" [disabled]="submitting()" (click)="triggerStripeRefund(row)">Đối soát Stripe</button>
+                            } @else if (canRecordManualRefund(row)) {
+                              <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openManualRefund(row)">Ghi nhận hoàn tiền</button>
+                            } @else {
+                              <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openReturnDetail(row.return_id)">Xem trạng thái hoàn</button>
+                            }
                           } @else if (nextReturnStep(row); as step) {
                             @if (step.status === 'RECEIVED') {
                               <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openReceive(row)">{{ step.label }}</button>
                             } @else {
-                              <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="advanceReturn(row, step.status)">{{ step.label }}</button>
+                              <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" [disabled]="submitting()" (click)="advanceReturn(row, step.status)">{{ step.label }}</button>
                             }
                           } @else if (['COMPLETED', 'REFUNDED', 'CANCELLED', 'REJECTED'].includes(row.status || '')) {
                             <span class="admin-table-action-done">{{ row.status === 'COMPLETED' ? 'Đã hoàn tất' : (row.status === 'REFUNDED' ? 'Đã hoàn tiền' : 'Đã kết thúc') }}</span>
@@ -476,17 +493,31 @@
         </header>
         <div class="admin-modal__body">
           @if (actionType() === 'refund') {
-            <label class="admin-form-group">
-              <span class="admin-form-label">Số tiền hoàn</span>
-              <input class="admin-form-control" name="amount" type="number" min="0" placeholder="VD: 500000" [value]="refundSuggestion()" required />
-              @if (refundSuggestion() != null) {
-                <small class="admin-note">Tính theo giá trị hàng khách gửi trả: {{ money(refundSuggestion()) }}. Không được hoàn quá số này.</small>
-              }
-            </label>
+            <div class="admin-form-group">
+              <span class="admin-form-label">Số tiền hoàn trả (cố định theo sản phẩm mua)</span>
+              <div style="display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; background: #f0fdf4; border: 1.5px solid #86efac; border-radius: 8px; margin-top: 4px;">
+                <div>
+                  <div style="font-size: 0.8125rem; color: #166534; font-weight: 600;">Giá trị hoàn cho khách hàng:</div>
+                  <small style="font-size: 0.75rem; color: #15803d;">Khóa cố định theo giá trị hàng khách mua &amp; gửi trả</small>
+                </div>
+                <strong style="font-size: 1.35rem; color: #15803d; font-family: monospace; letter-spacing: -0.02em;">
+                  {{ money(fixedRefundAmount()) }}
+                </strong>
+              </div>
+              <input type="hidden" name="amount" [value]="fixedRefundAmount()" />
+              <small class="admin-note" style="color: #166534; margin-top: 6px; display: block;">
+                ✓ Số tiền hoàn được cố định chính xác theo giá trị hàng khách mua/gửi trả. Không chỉnh sửa thủ công để đảm bảo chuẩn xác kế toán.
+              </small>
+            </div>
+          }
+          @if (actionType() === 'reject') {
+            <p class="admin-note" style="color: #b91c1c; margin-bottom: 8px;">
+              Lưu ý: Từ chối yêu cầu này sẽ kết thúc quy trình đổi trả. Hãy ghi rõ lý do để thông báo minh bạch cho khách hàng.
+            </p>
           }
           <label class="admin-form-group">
-            <span class="admin-form-label">Ghi chú / lý do</span>
-            <textarea class="admin-form-control admin-form-textarea" name="note" minlength="10" required></textarea>
+            <span class="admin-form-label">{{ actionType() === 'reject' ? 'Lý do từ chối (tối thiểu 10 ký tự) *' : 'Ghi chú duyệt / lý do (tối thiểu 10 ký tự) *' }}</span>
+            <textarea class="admin-form-control admin-form-textarea" name="note" minlength="10" required [placeholder]="actionType() === 'reject' ? 'Ghi rõ lý do từ chối đổi trả...' : 'Ghi chú xác nhận thỏa thuận với khách hàng...'"></textarea>
           </label>
           @if (actionError()) {
             <p class="field__error">{{ actionError() }}</p>
@@ -494,7 +525,67 @@
         </div>
         <footer class="admin-modal__footer">
           <button class="admin-btn admin-btn--ghost" type="button" (click)="closeOverlays()">Đóng</button>
-          <button class="admin-btn admin-btn--secondary" type="submit" [disabled]="submitting()">{{ submitting() ? 'Đang lưu…' : 'Xác nhận' }}</button>
+          <button class="admin-btn admin-btn--secondary" type="submit" [disabled]="submitting()">{{ submitting() ? 'Đang lưu…' : (actionType() === 'reject' ? 'Xác nhận từ chối' : 'Xác nhận duyệt') }}</button>
+        </footer>
+      </form>
+    </section>
+  </div>
+}
+
+@if (contactTarget(); as target) {
+  <div class="admin-modal-overlay">
+    <section class="admin-modal" appAdminDialog (appAdminDialogClose)="closeContact()">
+      <form (submit)="submitContact($event)">
+        <header class="admin-modal__header">
+          <h2>Ghi nhận liên hệ khách hàng</h2>
+          <button type="button" class="admin-icon-button" [disabled]="submitting()" (click)="closeContact()" aria-label="Đóng">×</button>
+        </header>
+        <div class="admin-modal__body">
+          <div style="background: var(--bg-subtle, #f8fafc); border: 1px solid var(--border, #e2e8f0); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px;">
+            <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 4px;">
+              <span>Phiếu: <strong style="font-family: monospace;">{{ returnCode(target) }}</strong></span>
+              <span>Đơn: <strong>#{{ orderCode(target) }}</strong></span>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--muted, #64748b);">
+              <span>Khách: <strong>{{ customerName(target) }}</strong></span>
+              @if (customerPhone(target)) {
+                <span>SĐT: <strong style="font-family: monospace;">{{ customerPhone(target) }}</strong></span>
+              }
+            </div>
+          </div>
+          <div class="admin-form-group">
+            <label class="admin-form-label" for="contact-target-result">Kết quả liên hệ *</label>
+            <select id="contact-target-result" class="admin-form-control" [value]="contactResult()" (change)="setContactResult($event)" required>
+              <option value="reached">Liên hệ thành công - Khách xác nhận yêu cầu</option>
+              <option value="no_answer">Không nghe máy / Thuê bao không liên lạc được</option>
+              <option value="waiting_customer">Đã liên hệ - Chờ khách bổ sung ảnh / hàng</option>
+            </select>
+          </div>
+          <label class="admin-form-group">
+            <span class="admin-form-label">Nội dung trao đổi với khách (tối thiểu 10 ký tự) *</span>
+            <textarea
+              class="admin-form-control admin-form-textarea"
+              name="contactNote"
+              required
+              minlength="10"
+              [value]="contactNote()"
+              (input)="setContactNote($event)"
+              placeholder="Ví dụ: Đã gọi điện xác nhận lý do đổi size, khách đồng ý gửi hàng về kho..."
+              [disabled]="submitting()"
+            ></textarea>
+          </label>
+          @if (contactError()) {
+            <div class="admin-form-alert--error" role="alert" style="margin-top: 8px;">
+              <app-admin-icon name="alert" cssClass="admin-line-icon" />
+              <span>{{ contactError() }}</span>
+            </div>
+          }
+        </div>
+        <footer class="admin-modal__footer">
+          <button class="admin-btn admin-btn--ghost" type="button" [disabled]="submitting()" (click)="closeContact()">Đóng</button>
+          <button class="admin-btn admin-btn--secondary" type="submit" [disabled]="submitting()">
+            {{ submitting() ? 'Đang lưu…' : 'Lưu kết quả & Tiếp nhận' }}
+          </button>
         </footer>
       </form>
     </section>
@@ -719,6 +810,7 @@
       @if (canMutate()) {
         <div style="display: flex; gap: 10px; justify-content: flex-end; align-items: center; padding-top: 14px; border-top: 1px solid var(--line);">
           @if (selectedReturn()!.status === 'REQUESTED') {
+            <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openContact(selectedReturn()!)">Ghi nhận liên hệ khách</button>
             <button class="admin-btn admin-btn--danger-soft admin-btn--sm" type="button" (click)="openReturnAction('reject', selectedReturn()!.return_id)">Từ chối yêu cầu</button>
           } @else if (selectedReturn()!.status === 'CONTACTING') {
             @if (showReturnAction(selectedReturn()!, 'refund')) {
@@ -735,7 +827,7 @@
             <button class="admin-btn admin-btn--danger-soft admin-btn--sm" type="button" (click)="openReturnAction('reject', selectedReturn()!.return_id)">Hủy yêu cầu</button>
           } @else if (selectedReturn()!.status === 'RETURN_IN_TRANSIT') {
             <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openReceive(selectedReturn()!); returnDetailOpen.set(false)">QA và nhận hàng</button>
-          } @else if (selectedReturn()!.status === 'RECEIVED' && (selectedReturn()!.return_type === 'refund' || selectedReturn()!.request_type === 'refund')) {
+          } @else if (['RECEIVED', 'REFUND_PROCESSING'].includes(selectedReturn()!.status || '') && (selectedReturn()!.return_type === 'refund' || selectedReturn()!.request_type === 'refund')) {
             @if (canTriggerStripeRefund(selectedReturn()!)) {
               <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" [disabled]="submitting()" (click)="triggerStripeRefund(selectedReturn()!)">{{ selectedReturn()!.status === 'REFUND_PROCESSING' ? 'Đối soát hoàn tiền Stripe' : 'Hoàn tiền qua Stripe' }}</button>
             }

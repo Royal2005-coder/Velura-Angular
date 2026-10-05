@@ -171,6 +171,16 @@ export class AdminReturnsPage {
   readonly orderQuery = signal('');
   readonly selectedOrder = signal<AdminOrderRow | null>(null);
   readonly refundSuggestion = signal<number | null>(null);
+  readonly fixedRefundAmount = computed(() => {
+    const row = this.selectedReturn();
+    const suggestion = this.refundSuggestion();
+    if (suggestion != null && suggestion > 0) {
+      return suggestion;
+    }
+    const fallback = Number(row?.refundable_amount ?? row?.refund_amount ?? row?.order_total ?? 0);
+    return fallback > 0 ? fallback : 0;
+  });
+  readonly contactTarget = signal<AdminReturnRow | null>(null);
   readonly receiveTarget = signal<AdminReturnRow | null>(null);
   readonly qaResult = signal('');
   readonly qaProof = signal('');
@@ -267,7 +277,7 @@ export class AdminReturnsPage {
     inject(DestroyRef).onDestroy(() => { this.messageRequest.unsubscribe(); this.receiveRequest.unsubscribe(); this.returnDetailRequest.unsubscribe(); });
     inject(DestroyRef).onDestroy(() => this.listRequest.unsubscribe());
     inject(AdminRefreshService).register(() => {
-      if (!this.loading() && !this.submitting() && !this.actionType() && !this.receiveTarget() && !this.shipmentTarget() && !this.manualRefundTarget()) this.reload();
+      if (!this.loading() && !this.submitting() && !this.actionType() && !this.receiveTarget() && !this.shipmentTarget() && !this.manualRefundTarget() && !this.contactTarget()) this.reload();
     }, inject(DestroyRef));
     this.reload();
   }
@@ -575,7 +585,8 @@ export class AdminReturnsPage {
     this.selectedTicket.set(null);
     this.actionType.set(type);
     this.actionError.set(null);
-    this.refundSuggestion.set(null);
+    const initialAmount = Number(row.refundable_amount ?? row.refund_amount ?? row.order_total ?? 0);
+    this.refundSuggestion.set(initialAmount > 0 ? initialAmount : null);
     if (type === 'refund') {
       // Số tiền hoàn lấy theo đúng những món khách gửi trả (API tính từ return_item),
       // không lấy tổng đơn: một đơn nhiều món mà khách chỉ trả một món thì hoàn cả đơn
@@ -585,13 +596,14 @@ export class AdminReturnsPage {
           // Bỏ qua phản hồi cũ nếu CSKH đã chuyển sang phiếu khác.
           if (this.selectedReturn()?.return_id === returnId) {
             this.selectedReturn.set(detail);
-            this.refundSuggestion.set(Number(detail.refundable_amount) || null);
+            const detailAmount = Number(detail.refundable_amount ?? detail.refund_amount ?? detail.order_total ?? 0);
+            if (detailAmount > 0) {
+              this.refundSuggestion.set(detailAmount);
+            }
           }
         },
         error: () => {
-          if (this.selectedReturn()?.return_id === returnId) {
-            this.refundSuggestion.set(null);
-          }
+          // Giữ initialAmount nếu getReturn gặp lỗi mạng tạm thời
         },
       });
     }
@@ -699,6 +711,7 @@ export class AdminReturnsPage {
     this.returnDetailOpen.set(false);
     this.ticketDetailOpen.set(false);
     this.lightboxImage.set(null);
+    this.contactTarget.set(null);
   }
 
   /**
@@ -718,15 +731,15 @@ export class AdminReturnsPage {
     if (!type) return;
     const form = event.target as HTMLFormElement;
     const note = (form.elements.namedItem('note') as HTMLTextAreaElement | null)?.value.trim() || '';
-    const amount = Number((form.elements.namedItem('amount') as HTMLInputElement | null)?.value || 0);
+    const amount = type === 'refund' ? this.fixedRefundAmount() : 0;
     const ret = this.selectedReturn();
     const ticket = this.selectedTicket();
     if (note.length < 10) {
       this.actionError.set('Ghi rõ nội dung xử lý, tối thiểu 10 ký tự.');
       return;
     }
-    if (type === 'refund' && (!Number.isFinite(amount) || amount <= 0 || (this.refundSuggestion() != null && amount > this.refundSuggestion()!))) {
-      this.actionError.set('Số tiền hoàn phải lớn hơn 0 và không vượt giá trị hàng trả.');
+    if (type === 'refund' && (!Number.isFinite(amount) || amount <= 0)) {
+      this.actionError.set('Không xác định được số tiền hoàn hợp lệ (> 0đ) cho phiếu này.');
       return;
     }
     if (ret && ret.version != null && ['refund', 'exchange', 'reject'].includes(type)) {
@@ -928,6 +941,59 @@ export class AdminReturnsPage {
         this.contactNote.set('');
         this.openReturnDetail(row.return_id);
         this.reload();
+      },
+      error: (error: unknown) => this.contactError.set(adminErrorMessage(error)),
+    });
+  }
+
+  /**
+   * Mở modal ghi nhận liên hệ khách hàng trực tiếp từ bảng hoặc drawer.
+   */
+  openContact(row: AdminReturnRow): void {
+    if (!this.canMutate() || !['REQUESTED', 'CONTACTING', 'NEEDS_SUPPORT'].includes(row.status || '')) return;
+    this.contactTarget.set(row);
+    this.contactResult.set('reached');
+    this.contactNote.set('');
+    this.contactError.set(null);
+  }
+
+  /**
+   * Đóng modal ghi nhận liên hệ.
+   */
+  closeContact(): void {
+    if (this.submitting()) return;
+    this.contactTarget.set(null);
+    this.contactError.set(null);
+  }
+
+  /**
+   * Gửi kết quả liên hệ từ modal trực tiếp và chuyển trạng thái sang CONTACTING.
+   */
+  submitContact(event: Event): void {
+    event.preventDefault();
+    const row = this.contactTarget();
+    if (!row || !this.canMutate() || this.submitting() || row.version == null) return;
+    const result = this.contactResult();
+    const note = this.contactNote().trim();
+    if (!result || note.length < 10) {
+      this.contactError.set('Vui lòng chọn kết quả liên hệ và nhập ghi chú trao đổi ít nhất 10 ký tự.');
+      return;
+    }
+    this.submitting.set(true);
+    this.contactError.set(null);
+    this.api.recordReturnContact(row.return_id, {
+      result,
+      note,
+      expectedVersion: row.version,
+    }).pipe(finalize(() => this.submitting.set(false))).subscribe({
+      next: () => {
+        this.contactTarget.set(null);
+        this.contactResult.set('');
+        this.contactNote.set('');
+        this.reload();
+        if (this.returnDetailOpen() && this.selectedReturn()?.return_id === row.return_id) {
+          this.openReturnDetail(row.return_id);
+        }
       },
       error: (error: unknown) => this.contactError.set(adminErrorMessage(error)),
     });

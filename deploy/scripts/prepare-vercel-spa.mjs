@@ -44,7 +44,7 @@ function prepareVercelOutput(appDir, distSubDir, projectName, projectId, orgId) 
     routes: [
       {
         src: "/api/(.*)",
-        dest: "https://velura-api.vercel.app/api/$1"
+        dest: "https://api.royalai.dev/api/$1"
       },
       {
         src: "/supabase/(.*)",
@@ -55,7 +55,7 @@ function prepareVercelOutput(appDir, distSubDir, projectName, projectId, orgId) 
       },
       {
         src: "/(.*)",
-        dest: "/"
+        dest: "/index.html"
       }
     ]
   };

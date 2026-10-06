@@ -884,14 +884,14 @@ export class AdminReturnsPage {
    */
   nextReturnStep(row: AdminReturnRow): { status: string; label: string } | null {
     const steps: Record<string, { status: string; label: string }> = {
-      WAITING_RETURN: { status: 'RETURN_IN_TRANSIT', label: 'Ghi nhận khách gửi hàng' },
-      RETURN_IN_TRANSIT: { status: 'RECEIVED', label: 'QA và nhận hàng' },
-      REFUNDED: { status: 'COMPLETED', label: 'Hoàn tất yêu cầu' },
-      EXCHANGE_PREPARING: { status: 'EXCHANGE_SHIPPING', label: 'Giao hàng thay thế' },
-      EXCHANGE_SHIPPING: { status: 'COMPLETED', label: 'Xác nhận giao hàng thay thế' },
-      NEEDS_SUPPORT: { status: 'CONTACTING', label: 'Tiếp tục hỗ trợ' },
+      WAITING_RETURN: { status: 'RETURN_IN_TRANSIT', label: 'Xác nhận gửi' },
+      RETURN_IN_TRANSIT: { status: 'RECEIVED', label: 'Nhận hàng & QA' },
+      REFUNDED: { status: 'COMPLETED', label: 'Hoàn tất' },
+      EXCHANGE_PREPARING: { status: 'EXCHANGE_SHIPPING', label: 'Giao hàng đổi' },
+      EXCHANGE_SHIPPING: { status: 'COMPLETED', label: 'Hoàn tất đổi' },
+      NEEDS_SUPPORT: { status: 'CONTACTING', label: 'Hỗ trợ lại' },
     };
-    if (row.status === 'RECEIVED' && row.condition_check_result === 'qa_pass' && (row.return_type === 'exchange' || row.request_type === 'exchange')) return { status: 'EXCHANGE_PREPARING', label: 'Chuẩn bị đơn hàng thay thế' };
+    if (row.status === 'RECEIVED' && row.condition_check_result === 'qa_pass' && (row.return_type === 'exchange' || row.request_type === 'exchange')) return { status: 'EXCHANGE_PREPARING', label: 'Soạn hàng đổi' };
     return steps[row.status || ''] || null;
   }
 

@@ -2,7 +2,7 @@ import { RouterLink } from '@angular/router';
 import { AdminDialogDirective } from '../../shared/admin-dialog.directive';
 import { finalize } from 'rxjs';
 import { AdminRefreshService } from '../../core/admin-refresh.service';
-import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, HostListener, computed, inject, signal } from '@angular/core';
 import { forkJoin, of , Subscription } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import {
@@ -203,6 +203,7 @@ export class AdminReturnsPage {
   readonly statusFilter = signal('');
   readonly typeFilter = signal('');
   readonly returnTab = signal<'all' | 'attention' | 'warehouse' | 'refund' | 'completed'>('all');
+  readonly menuId = signal<string | null>(null);
 
   readonly pendingReturns = computed(() => this.pendingReturnCount());
   readonly pendingTickets = computed(() => this.pendingTicketCount());
@@ -635,9 +636,31 @@ export class AdminReturnsPage {
   }
 
   /**
+   * Opens or closes the row action menu.
+   */
+  toggleMenu(returnId: string): void {
+    this.menuId.update((current) => (current === returnId ? null : returnId));
+  }
+
+  /**
+   * Closes the row action menu.
+   */
+  closeMenu(): void {
+    this.menuId.set(null);
+  }
+
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(event: MouseEvent): void {
+    if (this.menuId() && !(event.target as HTMLElement)?.closest('.admin-return-actions')) {
+      this.menuId.set(null);
+    }
+  }
+
+  /**
    * Opens the return request detail drawer.
    */
   openReturnDetail(returnId: string): void {
+    this.menuId.set(null);
     this.returnDetailRequest.unsubscribe();
     const cached = this.returns().find((r) => r.return_id === returnId) || null;
     this.selectedReturn.set(cached);
@@ -702,6 +725,7 @@ export class AdminReturnsPage {
    */
   closeOverlays(): void {
     if (this.submitting()) return;
+    this.menuId.set(null);
     this.returnDetailRequest.unsubscribe();
     this.actionType.set(null);
     this.selectedReturn.set(null);

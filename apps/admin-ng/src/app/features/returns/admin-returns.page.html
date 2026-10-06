@@ -324,7 +324,7 @@
                     </td>
                     <td>
                       <div class="admin-table-actions admin-table-actions--returns">
-                        <button class="admin-icon-button admin-icon-button--sm" type="button" title="Xem chi tiết phiếu {{ returnCode(row) }}" (click)="openReturnDetail(row.return_id)">
+                        <button class="admin-icon-button admin-icon-button--sm admin-table-action-view" type="button" title="Xem chi tiết phiếu {{ returnCode(row) }}" (click)="openReturnDetail(row.return_id)">
                           <app-admin-icon name="eye" />
                         </button>
                         @if (canMutate()) {
@@ -345,15 +345,15 @@
                             }
                             <button class="admin-btn admin-btn--danger-soft admin-btn--sm" type="button" (click)="openReturnAction('reject', row.return_id)">Hủy phiếu</button>
                           } @else if (row.status === 'RETURN_IN_TRANSIT') {
-                            <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openReceive(row)">QA và nhận hàng</button>
+                            <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openReceive(row)">Nhận hàng &amp; QA</button>
                           } @else if (row.status === 'RECEIVED') {
                             @if (row.return_type === 'refund' || row.request_type === 'refund') {
                               @if (canTriggerStripeRefund(row)) {
                                 <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" [disabled]="submitting()" (click)="triggerStripeRefund(row)">Hoàn Stripe</button>
                               } @else if (canRecordManualRefund(row)) {
-                                <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openManualRefund(row)">Ghi nhận hoàn tiền</button>
+                                <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openManualRefund(row)">Ghi nhận hoàn</button>
                               } @else {
-                                <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openReturnDetail(row.return_id)">Xử lý hoàn tiền</button>
+                                <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openReturnDetail(row.return_id)">Xử lý hoàn</button>
                               }
                             } @else if (nextReturnStep(row); as step) {
                               <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="advanceReturn(row, step.status)">{{ step.label }}</button>
@@ -362,7 +362,7 @@
                             @if (canTriggerStripeRefund(row)) {
                               <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" [disabled]="submitting()" (click)="triggerStripeRefund(row)">Đối soát Stripe</button>
                             } @else if (canRecordManualRefund(row)) {
-                              <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openManualRefund(row)">Ghi nhận hoàn tiền</button>
+                              <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openManualRefund(row)">Ghi nhận hoàn</button>
                             } @else {
                               <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openReturnDetail(row.return_id)">Xem trạng thái hoàn</button>
                             }
@@ -373,7 +373,22 @@
                               <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" [disabled]="submitting()" (click)="advanceReturn(row, step.status)">{{ step.label }}</button>
                             }
                           } @else if (['COMPLETED', 'REFUNDED', 'CANCELLED', 'REJECTED'].includes(row.status || '')) {
-                            <span class="admin-table-action-done">{{ row.status === 'COMPLETED' ? 'Đã hoàn tất' : (row.status === 'REFUNDED' ? 'Đã hoàn tiền' : 'Đã kết thúc') }}</span>
+                            @if (row.status === 'COMPLETED') {
+                              <span class="admin-action-badge admin-action-badge--completed">
+                                <app-admin-icon name="check" cssClass="admin-badge-icon" />
+                                <span>Hoàn tất</span>
+                              </span>
+                            } @else if (row.status === 'REFUNDED') {
+                              <span class="admin-action-badge admin-action-badge--refunded">
+                                <app-admin-icon name="check" cssClass="admin-badge-icon" />
+                                <span>Đã hoàn tiền</span>
+                              </span>
+                            } @else {
+                              <span class="admin-action-badge admin-action-badge--neutral">
+                                <app-admin-icon name="x" cssClass="admin-badge-icon" />
+                                <span>{{ row.status === 'REJECTED' ? 'Đã từ chối' : 'Đã kết thúc' }}</span>
+                              </span>
+                            }
                           }
                         }
                       </div>
@@ -826,7 +841,7 @@
             }
             <button class="admin-btn admin-btn--danger-soft admin-btn--sm" type="button" (click)="openReturnAction('reject', selectedReturn()!.return_id)">Hủy yêu cầu</button>
           } @else if (selectedReturn()!.status === 'RETURN_IN_TRANSIT') {
-            <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openReceive(selectedReturn()!); returnDetailOpen.set(false)">QA và nhận hàng</button>
+            <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openReceive(selectedReturn()!); returnDetailOpen.set(false)">Nhận hàng &amp; QA</button>
           } @else if (['RECEIVED', 'REFUND_PROCESSING'].includes(selectedReturn()!.status || '') && (selectedReturn()!.return_type === 'refund' || selectedReturn()!.request_type === 'refund')) {
             @if (canTriggerStripeRefund(selectedReturn()!)) {
               <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" [disabled]="submitting()" (click)="triggerStripeRefund(selectedReturn()!)">{{ selectedReturn()!.status === 'REFUND_PROCESSING' ? 'Đối soát hoàn tiền Stripe' : 'Hoàn tiền qua Stripe' }}</button>

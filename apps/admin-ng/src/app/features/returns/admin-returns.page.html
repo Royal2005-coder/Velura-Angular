@@ -271,7 +271,7 @@
                   <th>Giá trị hoàn</th>
                   <th>Trạng thái</th>
                   <th>Ngày tạo</th>
-                  <th style="min-width: 260px;">Thao tác</th>
+                  <th style="width: 100px; text-align: center;">Thao tác</th>
                 </tr>
               </thead>
               <tbody>
@@ -322,74 +322,138 @@
                     <td>
                       <span style="font-size: 0.8125rem; color: var(--ink); white-space: nowrap;">{{ date(row.created_at) }}</span>
                     </td>
-                    <td>
-                      <div class="admin-table-actions admin-table-actions--returns">
+                    <td style="text-align: center;">
+                      <div class="admin-return-actions">
                         <button class="admin-icon-button admin-icon-button--sm admin-table-action-view" type="button" title="Xem chi tiết phiếu {{ returnCode(row) }}" (click)="openReturnDetail(row.return_id)">
                           <app-admin-icon name="eye" />
                         </button>
-                        @if (canMutate()) {
-                          @if (row.status === 'REQUESTED') {
-                            <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openContact(row)">Liên hệ khách</button>
-                            <button class="admin-btn admin-btn--danger-soft admin-btn--sm" type="button" (click)="openReturnAction('reject', row.return_id)">Từ chối</button>
-                          } @else if (row.status === 'CONTACTING') {
-                            @if (showReturnAction(row, 'refund')) {
-                              <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openReturnAction('refund', row.return_id)">Duyệt hoàn</button>
-                            }
-                            @if (showReturnAction(row, 'exchange')) {
-                              <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openReturnAction('exchange', row.return_id)">Duyệt đổi</button>
-                            }
-                            <button class="admin-btn admin-btn--danger-soft admin-btn--sm" type="button" (click)="openReturnAction('reject', row.return_id)">Từ chối</button>
-                          } @else if (row.status === 'WAITING_RETURN') {
-                            @if (nextReturnStep(row); as step) {
-                              <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="advanceReturn(row, step.status)">{{ step.label }}</button>
-                            }
-                            <button class="admin-btn admin-btn--danger-soft admin-btn--sm" type="button" (click)="openReturnAction('reject', row.return_id)">Hủy phiếu</button>
-                          } @else if (row.status === 'RETURN_IN_TRANSIT') {
-                            <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openReceive(row)">Nhận hàng &amp; QA</button>
-                          } @else if (row.status === 'RECEIVED') {
-                            @if (row.return_type === 'refund' || row.request_type === 'refund') {
-                              @if (canTriggerStripeRefund(row)) {
-                                <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" [disabled]="submitting()" (click)="triggerStripeRefund(row)">Hoàn Stripe</button>
-                              } @else if (canRecordManualRefund(row)) {
-                                <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openManualRefund(row)">Ghi nhận hoàn</button>
-                              } @else {
-                                <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openReturnDetail(row.return_id)">Xử lý hoàn</button>
+                        <button class="admin-icon-button admin-icon-button--sm" [class.is-active]="menuId() === row.return_id" type="button" title="Thao tác xử lý" (click)="toggleMenu(row.return_id)">
+                          <app-admin-icon name="edit" />
+                        </button>
+
+                        @if (menuId() === row.return_id) {
+                          <div class="admin-dropdown admin-table-action-menu admin-return-action-menu">
+                            <button type="button" (click)="openReturnDetail(row.return_id); closeMenu()">
+                              <app-admin-icon name="eye" />
+                              <span>Xem chi tiết phiếu</span>
+                            </button>
+
+                            @if (canMutate()) {
+                              @if (row.status === 'REQUESTED') {
+                                <div class="admin-dropdown-divider"></div>
+                                <button type="button" (click)="openContact(row); closeMenu()">
+                                  <app-admin-icon name="phone" />
+                                  <span>Liên hệ khách hàng</span>
+                                </button>
+                                <button class="admin-table-action-menu__danger" type="button" (click)="openReturnAction('reject', row.return_id); closeMenu()">
+                                  <app-admin-icon name="x" />
+                                  <span>Từ chối yêu cầu</span>
+                                </button>
+                              } @else if (row.status === 'CONTACTING') {
+                                <div class="admin-dropdown-divider"></div>
+                                @if (showReturnAction(row, 'refund')) {
+                                  <button type="button" (click)="openReturnAction('refund', row.return_id); closeMenu()">
+                                    <app-admin-icon name="credit-card" />
+                                    <span>Duyệt hoàn tiền</span>
+                                  </button>
+                                }
+                                @if (showReturnAction(row, 'exchange')) {
+                                  <button type="button" (click)="openReturnAction('exchange', row.return_id); closeMenu()">
+                                    <app-admin-icon name="refresh" />
+                                    <span>Duyệt đổi hàng</span>
+                                  </button>
+                                }
+                                <button type="button" (click)="openContact(row); closeMenu()">
+                                  <app-admin-icon name="phone" />
+                                  <span>Cập nhật liên hệ</span>
+                                </button>
+                                <button class="admin-table-action-menu__danger" type="button" (click)="openReturnAction('reject', row.return_id); closeMenu()">
+                                  <app-admin-icon name="x" />
+                                  <span>Từ chối yêu cầu</span>
+                                </button>
+                              } @else if (row.status === 'WAITING_RETURN') {
+                                <div class="admin-dropdown-divider"></div>
+                                @if (nextReturnStep(row); as step) {
+                                  <button type="button" (click)="advanceReturn(row, step.status); closeMenu()">
+                                    <app-admin-icon name="box" />
+                                    <span>{{ step.label }}</span>
+                                  </button>
+                                }
+                                <button class="admin-table-action-menu__danger" type="button" (click)="openReturnAction('reject', row.return_id); closeMenu()">
+                                  <app-admin-icon name="x" />
+                                  <span>Hủy phiếu</span>
+                                </button>
+                              } @else if (row.status === 'RETURN_IN_TRANSIT') {
+                                <div class="admin-dropdown-divider"></div>
+                                <button type="button" (click)="openReceive(row); closeMenu()">
+                                  <app-admin-icon name="check" />
+                                  <span>Nhận hàng &amp; QA</span>
+                                </button>
+                              } @else if (row.status === 'RECEIVED') {
+                                <div class="admin-dropdown-divider"></div>
+                                @if (row.return_type === 'refund' || row.request_type === 'refund') {
+                                  @if (canTriggerStripeRefund(row)) {
+                                    <button type="button" [disabled]="submitting()" (click)="triggerStripeRefund(row); closeMenu()">
+                                      <app-admin-icon name="zap" />
+                                      <span>Hoàn tiền qua Stripe</span>
+                                    </button>
+                                  } @else if (canRecordManualRefund(row)) {
+                                    <button type="button" (click)="openManualRefund(row); closeMenu()">
+                                      <app-admin-icon name="credit-card" />
+                                      <span>Ghi nhận hoàn tiền</span>
+                                    </button>
+                                  } @else {
+                                    <button type="button" (click)="openReturnDetail(row.return_id); closeMenu()">
+                                      <app-admin-icon name="credit-card" />
+                                      <span>Xử lý hoàn tiền</span>
+                                    </button>
+                                  }
+                                } @else if (nextReturnStep(row); as step) {
+                                  <button type="button" (click)="advanceReturn(row, step.status); closeMenu()">
+                                    <app-admin-icon name="box" />
+                                    <span>{{ step.label }}</span>
+                                  </button>
+                                }
+                              } @else if (row.status === 'REFUND_PROCESSING') {
+                                <div class="admin-dropdown-divider"></div>
+                                @if (canTriggerStripeRefund(row)) {
+                                  <button type="button" [disabled]="submitting()" (click)="triggerStripeRefund(row); closeMenu()">
+                                    <app-admin-icon name="zap" />
+                                    <span>Đối soát hoàn Stripe</span>
+                                  </button>
+                                } @else if (canRecordManualRefund(row)) {
+                                  <button type="button" (click)="openManualRefund(row); closeMenu()">
+                                    <app-admin-icon name="credit-card" />
+                                    <span>Ghi nhận hoàn tiền</span>
+                                  </button>
+                                } @else {
+                                  <button type="button" (click)="openReturnDetail(row.return_id); closeMenu()">
+                                    <app-admin-icon name="eye" />
+                                    <span>Xem trạng thái hoàn</span>
+                                  </button>
+                                }
+                              } @else if (nextReturnStep(row); as step) {
+                                <div class="admin-dropdown-divider"></div>
+                                @if (step.status === 'RECEIVED') {
+                                  <button type="button" (click)="openReceive(row); closeMenu()">
+                                    <app-admin-icon name="check" />
+                                    <span>{{ step.label }}</span>
+                                  </button>
+                                } @else {
+                                  <button type="button" [disabled]="submitting()" (click)="advanceReturn(row, step.status); closeMenu()">
+                                    <app-admin-icon name="box" />
+                                    <span>{{ step.label }}</span>
+                                  </button>
+                                }
+                              } @else if (['COMPLETED', 'REFUNDED', 'CANCELLED', 'REJECTED'].includes(row.status || '')) {
+                                <div class="admin-dropdown-divider"></div>
+                                <div class="admin-dropdown-status" [class.admin-dropdown-status--success]="row.status === 'COMPLETED' || row.status === 'REFUNDED'" [class.admin-dropdown-status--danger]="row.status === 'REJECTED'" [class.admin-dropdown-status--neutral]="row.status === 'CANCELLED'">
+                                  <app-admin-icon [name]="row.status === 'COMPLETED' || row.status === 'REFUNDED' ? 'check' : 'x'" cssClass="admin-badge-icon" />
+                                  <span>{{ row.status === 'COMPLETED' ? 'Đã hoàn tất quy trình' : (row.status === 'REFUNDED' ? 'Đã hoàn tiền thành công' : (row.status === 'REJECTED' ? 'Yêu cầu đã bị từ chối' : 'Yêu cầu đã bị hủy')) }}</span>
+                                </div>
                               }
-                            } @else if (nextReturnStep(row); as step) {
-                              <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="advanceReturn(row, step.status)">{{ step.label }}</button>
                             }
-                          } @else if (row.status === 'REFUND_PROCESSING') {
-                            @if (canTriggerStripeRefund(row)) {
-                              <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" [disabled]="submitting()" (click)="triggerStripeRefund(row)">Đối soát Stripe</button>
-                            } @else if (canRecordManualRefund(row)) {
-                              <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openManualRefund(row)">Ghi nhận hoàn</button>
-                            } @else {
-                              <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openReturnDetail(row.return_id)">Xem trạng thái hoàn</button>
-                            }
-                          } @else if (nextReturnStep(row); as step) {
-                            @if (step.status === 'RECEIVED') {
-                              <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openReceive(row)">{{ step.label }}</button>
-                            } @else {
-                              <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" [disabled]="submitting()" (click)="advanceReturn(row, step.status)">{{ step.label }}</button>
-                            }
-                          } @else if (['COMPLETED', 'REFUNDED', 'CANCELLED', 'REJECTED'].includes(row.status || '')) {
-                            @if (row.status === 'COMPLETED') {
-                              <span class="admin-action-badge admin-action-badge--completed">
-                                <app-admin-icon name="check" cssClass="admin-badge-icon" />
-                                <span>Hoàn tất</span>
-                              </span>
-                            } @else if (row.status === 'REFUNDED') {
-                              <span class="admin-action-badge admin-action-badge--refunded">
-                                <app-admin-icon name="check" cssClass="admin-badge-icon" />
-                                <span>Đã hoàn tiền</span>
-                              </span>
-                            } @else {
-                              <span class="admin-action-badge admin-action-badge--neutral">
-                                <app-admin-icon name="x" cssClass="admin-badge-icon" />
-                                <span>{{ row.status === 'REJECTED' ? 'Đã từ chối' : 'Đã kết thúc' }}</span>
-                              </span>
-                            }
-                          }
+                          </div>
                         }
                       </div>
                     </td>

@@ -203,6 +203,11 @@ export const routes: Routes = [
         title: 'Thanh toán thành viên — Velura',
       },
       {
+        path: 'checkout',
+        pathMatch: 'full',
+        redirectTo: '/checkout/shipping',
+      },
+      {
         path: 'checkout/shipping',
         pathMatch: 'full',
         redirectTo: '/checkout/guest',

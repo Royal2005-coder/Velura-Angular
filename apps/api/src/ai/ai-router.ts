@@ -11,13 +11,19 @@ import type {
 import { AiService } from "./ai-service.js";
 import { LocalAiRepository } from "./ai-repository.js";
 import { ColabAiWorker } from "./colab-worker.js";
+import { ClusterAiWorker } from "./cluster-worker.js";
 import { ShopAiCatalog } from "./ai-catalog.js";
+
+const aiWorker =
+  process.env.AI_ENGINE_MODE === "colab-local"
+    ? new ColabAiWorker()
+    : new ClusterAiWorker();
 
 const service = new AiService(
   new LocalAiRepository(
     resolve(process.env.AI_PRIVATE_ROOT || "scratch/ai-private"),
   ),
-  new ColabAiWorker(),
+  aiWorker,
   new ShopAiCatalog(),
 );
 let recovery: Promise<void> | undefined;

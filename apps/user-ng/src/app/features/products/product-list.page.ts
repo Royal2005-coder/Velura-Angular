@@ -312,6 +312,10 @@ export class ProductListPage {
       const slug = CATEGORY_QUERY_MAP[category] || category;
       this.selectedSlugs.set(slug ? [slug] : []);
       this.searchQuery.set((params.get('q') || '').trim());
+      const matchIds = params.get('match_ids');
+      if (matchIds) {
+        this.imageMatches.set(matchIds.split(',').filter(Boolean));
+      }
       this.currentPage.set(1);
     });
     this.catalog

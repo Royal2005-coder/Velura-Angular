@@ -1,0 +1,142 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: observability
+data:
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: VictoriaMetrics
+        type: prometheus
+        access: proxy
+        url: http://victoriametrics.observability.svc:8428
+        isDefault: true
+        editable: false
+        jsonData:
+          httpMethod: POST
+          timeInterval: 15s
+      - name: Loki
+        type: loki
+        access: proxy
+        url: http://loki.observability.svc:3100
+        editable: false
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: grafana-data
+  namespace: observability
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: observability
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/part-of: velura-infrastructure
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      securityContext:
+        fsGroup: 472
+      containers:
+      - name: grafana
+        image: grafana/grafana:11.2.0
+        imagePullPolicy: IfNotPresent
+        ports:
+          - name: http
+            containerPort: 3000
+        env:
+          - name: GF_SECURITY_ADMIN_USER
+            value: "admin"
+          - name: GF_SECURITY_ADMIN_PASSWORD
+            value: "VeluraAdmin2026!"
+          - name: GF_USERS_ALLOW_SIGN_UP
+            value: "false"
+          - name: GF_SERVER_ROOT_URL
+            value: "https://grafana.royalai.dev/"
+          - name: GF_AUTH_GENERIC_OAUTH_ENABLED
+            value: "true"
+          - name: GF_AUTH_GENERIC_OAUTH_NAME
+            value: "Keycloak"
+          - name: GF_AUTH_GENERIC_OAUTH_CLIENT_ID
+            value: "grafana"
+          - name: GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET
+            value: "velura_grafana_oauth_secret_2026"
+          - name: GF_AUTH_GENERIC_OAUTH_SCOPES
+            value: "openid profile email"
+          - name: GF_AUTH_GENERIC_OAUTH_AUTH_URL
+            value: "https://auth.royalai.dev/realms/velura/protocol/openid-connect/auth"
+          - name: GF_AUTH_GENERIC_OAUTH_TOKEN_URL
+            value: "https://auth.royalai.dev/realms/velura/protocol/openid-connect/token"
+          - name: GF_AUTH_GENERIC_OAUTH_API_URL
+            value: "https://auth.royalai.dev/realms/velura/protocol/openid-connect/userinfo"
+          - name: GF_AUTH_GENERIC_OAUTH_ALLOW_SIGN_UP
+            value: "true"
+          - name: GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_PATH
+            value: "contains(realm_access.roles[*], 'super_admin') && 'Admin' || contains(realm_access.roles[*], 'developer') && 'Editor' || 'Viewer'"
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 384Mi
+        volumeMounts:
+          - name: data
+            mountPath: /var/lib/grafana
+          - name: datasources
+            mountPath: /etc/grafana/provisioning/datasources
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+          initialDelaySeconds: 20
+          periodSeconds: 15
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: grafana-data
+        - name: datasources
+          configMap:
+            name: grafana-datasources
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: observability
+  labels:
+    app.kubernetes.io/name: grafana
+spec:
+  type: NodePort
+  ports:
+    - port: 3000
+      targetPort: 3000
+      nodePort: 30300
+      name: http
+  selector:
+    app: grafana

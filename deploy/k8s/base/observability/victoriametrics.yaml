@@ -1,0 +1,160 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: victoriametrics
+  namespace: observability
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: victoriametrics
+rules:
+  - apiGroups: [""]
+    resources:
+      - nodes
+      - nodes/proxy
+      - nodes/metrics
+      - services
+      - endpoints
+      - pods
+    verbs: ["get", "list", "watch"]
+  - nonResourceURLs: ["/metrics"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: victoriametrics
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: victoriametrics
+subjects:
+  - kind: ServiceAccount
+    name: victoriametrics
+    namespace: observability
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: victoriametrics-scrape-config
+  namespace: observability
+data:
+  scrape.yaml: |
+    global:
+      scrape_interval: 15s
+    scrape_configs:
+      - job_name: 'kubernetes-nodes'
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          insecure_skip_verify: true
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        kubernetes_sd_configs:
+          - role: node
+        relabel_configs:
+          - action: labelmap
+            regex: __meta_kubernetes_node_label_(.+)
+          - target_label: __address__
+            replacement: kubernetes.default.svc:443
+          - source_labels: [__meta_kubernetes_node_name]
+            regex: (.+)
+            target_label: __metrics_path__
+            replacement: /api/v1/nodes/${1}/proxy/metrics
+      - job_name: 'victoriametrics'
+        static_configs:
+          - targets: ['localhost:8428']
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: victoriametrics-data
+  namespace: observability
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: victoriametrics
+  namespace: observability
+  labels:
+    app.kubernetes.io/name: victoriametrics
+    app.kubernetes.io/part-of: velura-infrastructure
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: victoriametrics
+  template:
+    metadata:
+      labels:
+        app: victoriametrics
+    spec:
+      serviceAccountName: victoriametrics
+      containers:
+      - name: victoriametrics
+        image: victoriametrics/victoria-metrics:v1.104.0
+        imagePullPolicy: IfNotPresent
+        args:
+          - "-storageDataPath=/vmetrics-data"
+          - "-httpListenAddr=:8428"
+          - "-promscrape.config=/etc/victoriametrics/scrape.yaml"
+          - "-promscrape.config.strictParse=false"
+          - "-retentionPeriod=14d"
+        ports:
+          - name: http
+            containerPort: 8428
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 384Mi
+        volumeMounts:
+          - name: data
+            mountPath: /vmetrics-data
+          - name: config
+            mountPath: /etc/victoriametrics
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8428
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8428
+          initialDelaySeconds: 5
+          periodSeconds: 10
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: victoriametrics-data
+        - name: config
+          configMap:
+            name: victoriametrics-scrape-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: victoriametrics
+  namespace: observability
+  labels:
+    app.kubernetes.io/name: victoriametrics
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8428
+      targetPort: 8428
+      name: http
+  selector:
+    app: victoriametrics

@@ -1,4 +1,10 @@
-﻿<button type="button" class="btn btn--outline" (click)="open()">{{ title() }}</button>
+@if (!hideTrigger()) {
+  <button type="button" class="btn btn--outline ai-workbench-trigger" (click)="open()">
+    <span class="ai-trigger-sparkle">✨</span>
+    <span>{{ title() }}</span>
+    <span class="ai-trigger-badge">AI Try-On</span>
+  </button>
+}
 <dialog #dialog [attr.aria-labelledby]="titleId">
   <header>
     <h2 [id]="titleId">{{ title() }}</h2>

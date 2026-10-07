@@ -1,4 +1,4 @@
-﻿import {
+import {
   Component,
   DestroyRef,
   ElementRef,
@@ -33,6 +33,7 @@ export class AiImageWorkbench {
   readonly task = input<AiTask>('virtual_try_on');
   readonly productId = input<string>('');
   readonly variantId = input<string>('');
+  readonly hideTrigger = input<boolean>(false);
   /** Published products surviving the catalog's current filters; undefined leaves retrieval unrestricted. */
   readonly candidateProductIds = input<string[] | undefined>();
   readonly matches = output<string[]>();

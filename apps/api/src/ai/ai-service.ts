@@ -79,7 +79,9 @@ export class AiService {
     const ready =
       !this.storageBlocked &&
       this.worker.ready() &&
-      process.env.NODE_ENV !== "production";
+      (process.env.AI_ENABLE === "true" ||
+        process.env.AI_ENGINE_MODE === "cluster" ||
+        process.env.NODE_ENV !== "production");
     const enabled = ready && TASKS.some((task) => verified.includes(task));
     const registry = asJsonObject(
       JSON.parse(process.env.AI_STUDIO_ASSETS || "{}") as unknown,

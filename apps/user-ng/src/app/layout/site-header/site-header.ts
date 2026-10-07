@@ -1,12 +1,13 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal, viewChild } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
 import { CartStore } from '../../core/services/cart.store';
 import { WishlistStore } from '../../core/services/wishlist.store';
+import { AiImageWorkbench } from '../../shared/ai-image-workbench/ai-image-workbench';
 
 @Component({
   selector: 'app-site-header',
-  imports: [RouterLink, RouterLinkActive],
+  imports: [RouterLink, RouterLinkActive, AiImageWorkbench],
   templateUrl: './site-header.html',
 })
 export class SiteHeader {
@@ -34,6 +35,26 @@ export class SiteHeader {
    */
   logout(): void {
     this.auth.signOut();
+  }
+
+  readonly headerWorkbench = viewChild<AiImageWorkbench>('headerWorkbench');
+
+  /**
+   * Opens the AI visual image search workbench modal.
+   */
+  openVisualSearch(event: Event): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.headerWorkbench()?.open();
+  }
+
+  /**
+   * Routes visual search vector matches to the catalog product list.
+   */
+  onVisualSearchMatches(ids: string[]): void {
+    void this.router.navigate(['/products'], {
+      queryParams: { match_ids: ids.join(',') },
+    });
   }
 
   /**

@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oauth2-proxy
+  namespace: networking
+  labels:
+    app.kubernetes.io/name: oauth2-proxy
+    app.kubernetes.io/part-of: velura-infrastructure
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: oauth2-proxy
+  template:
+    metadata:
+      labels:
+        app: oauth2-proxy
+    spec:
+      containers:
+      - name: oauth2-proxy
+        image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
+        args:
+          - --provider=keycloak-oidc
+          - --client-id=oauth2-proxy
+          - --client-secret=velura_proxy_oauth_secret_2026
+          - --oidc-issuer-url=https://auth.royalai.dev/realms/velura
+          - --http-address=0.0.0.0:4180
+          - --upstream=http://s3-service.storage.svc.cluster.local:8888
+          - --redirect-url=https://s3.royalai.dev/oauth2/callback
+          - --cookie-secret=velura_s3_secret_cookie_32byte_!
+          - --cookie-secure=true
+          - --cookie-domain=.royalai.dev
+          - --email-domain=*
+          - --pass-basic-auth=false
+          - --pass-access-token=true
+          - --set-xauthrequest=true
+          - --reverse-proxy=true
+        ports:
+          - name: http
+            containerPort: 4180
+        resources:
+          requests:
+            cpu: 20m
+            memory: 32Mi
+          limits:
+            cpu: 100m
+            memory: 64Mi
+        livenessProbe:
+          httpGet:
+            path: /ping
+            port: 4180
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ping
+            port: 4180
+          initialDelaySeconds: 3
+          periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: oauth2-proxy
+  namespace: networking
+  labels:
+    app.kubernetes.io/name: oauth2-proxy
+spec:
+  type: ClusterIP
+  ports:
+    - port: 4180
+      targetPort: 4180
+      name: http
+  selector:
+    app: oauth2-proxy

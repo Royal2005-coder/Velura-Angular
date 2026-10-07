@@ -1,0 +1,13 @@
+scope: infra/k3s/cluster.tf
+active:
+  - sha: 96b7b20ebd13
+    decision: "the k3s API advertises the LAN VIP 10.10.0.10, never a tailnet address"
+    rejected:
+      - advertise the tailscale IP (workers go NotReady whenever the tailnet flaps)
+      - a managed load balancer in front of the API (paid SPOF outside the lab)
+    reversible: never
+    oracle: drift
+    runs: ["2026-04-03T02:00:00Z pass -> none"]
+superseded: []
+orphaned: []
+open_incidents: []

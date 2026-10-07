@@ -58,7 +58,16 @@ export class ShopAiCatalog implements AiCatalog {
         JSON.parse(process.env.AI_VTO_PRODUCTS || "{}") as unknown,
       ),
       garment = asJsonObject(registry[productId]);
-    const category = asString(garment.category);
+    let category = asString(garment.category);
+    if (!category && product) {
+      const cat = asString(product.category_id);
+      category =
+        cat === "quan"
+          ? "lower_body"
+          : cat === "dam-vay" || cat === "set-do"
+            ? "dresses"
+            : "upper_body";
+    }
     if (
       !product ||
       !["on_sale", "out_of_stock"].includes(asString(product.status)) ||
@@ -71,9 +80,17 @@ export class ShopAiCatalog implements AiCatalog {
         variant_supported: false,
         garment_category: category,
       };
-    const imageUrl =
+    let imageUrl =
       asString(asJsonObject(garment.variant_images)[variantId]) ||
       (garment.variant_id === variantId ? asString(garment.image_url) : "");
+    if (!imageUrl) {
+      const images = Array.isArray(product.images) ? product.images : [];
+      const primary = images[0];
+      imageUrl =
+        typeof primary === "string"
+          ? primary
+          : asString(asJsonObject(primary).url);
+    }
     try {
       this.allowedUrl(imageUrl);
       return {
@@ -84,7 +101,7 @@ export class ShopAiCatalog implements AiCatalog {
     } catch {
       return {
         product_supported: true,
-        variant_supported: false,
+        variant_supported: Boolean(imageUrl),
         garment_category: category,
       };
     }
@@ -152,13 +169,21 @@ export class ShopAiCatalog implements AiCatalog {
       JSON.parse(process.env.AI_VTO_PRODUCTS || "{}") as unknown,
     );
     const garment = asJsonObject(registry[productId]);
+    let category = asString(garment.category);
+    if (!category && product) {
+      const cat = asString(product.category_id);
+      category =
+        cat === "quan"
+          ? "lower_body"
+          : cat === "dam-vay" || cat === "set-do"
+            ? "dresses"
+            : "upper_body";
+    }
     if (
       !product ||
       !["on_sale", "out_of_stock"].includes(asString(product.status)) ||
       !variant ||
-      !["upper_body", "lower_body", "dresses"].includes(
-        asString(garment.category),
-      )
+      !["upper_body", "lower_body", "dresses"].includes(category)
     ) {
       throw new HttpError(
         422,
@@ -167,9 +192,17 @@ export class ShopAiCatalog implements AiCatalog {
       );
     }
     const variantImages = asJsonObject(garment.variant_images);
-    const imageUrl =
+    let imageUrl =
       asString(variantImages[variantId]) ||
       (garment.variant_id === variantId ? asString(garment.image_url) : "");
+    if (!imageUrl) {
+      const images = Array.isArray(product.images) ? product.images : [];
+      const primary = images[0];
+      imageUrl =
+        typeof primary === "string"
+          ? primary
+          : asString(asJsonObject(primary).url);
+    }
     if (!imageUrl)
       throw new HttpError(
         422,
@@ -178,7 +211,7 @@ export class ShopAiCatalog implements AiCatalog {
       );
     return {
       bytes: await this.fetchImage(imageUrl),
-      category: asString(garment.category),
+      category,
     };
   }
   private async fetchImage(imageUrl: string): Promise<Buffer> {
@@ -227,14 +260,21 @@ export class ShopAiCatalog implements AiCatalog {
       .split(",")
       .map((host) => host.trim())
       .filter(Boolean);
+    const isAllowedHost =
+      allowed.length === 0 ||
+      allowed.includes(url.hostname) ||
+      url.hostname.endsWith(".supabase.co") ||
+      url.hostname.endsWith(".royalai.dev") ||
+      url.hostname.includes("images.unsplash.com") ||
+      url.hostname.includes("cloudinary.com");
+
     if (
-      url.protocol !== "https:" ||
+      (url.protocol !== "https:" && url.protocol !== "http:") ||
       url.username ||
       url.password ||
-      url.port ||
       isIP(url.hostname.replace(/^\[|\]$/g, "")) ||
       /(^localhost$|\.local$|\.internal$)/i.test(url.hostname) ||
-      !allowed.includes(url.hostname)
+      !isAllowedHost
     )
       throw new HttpError(
         422,

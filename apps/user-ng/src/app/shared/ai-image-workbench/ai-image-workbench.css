@@ -95,3 +95,47 @@ p {
   border-radius: 8px;
   background: var(--surface, white);
 }
+
+.ai-workbench-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #FFF9F7 0%, #F5ECE6 100%);
+  border: 1px solid #C97B63;
+  color: #731F21;
+  font-weight: 600;
+  font-size: 0.875rem;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(115, 31, 33, 0.08);
+  transition: all 0.25s ease;
+  margin-bottom: 16px;
+}
+
+.ai-workbench-trigger:hover {
+  background: linear-gradient(135deg, #731F21 0%, #8E2B2D 100%);
+  color: #FFFFFF;
+  box-shadow: 0 4px 14px rgba(115, 31, 33, 0.22);
+  transform: translateY(-1px);
+}
+
+.ai-trigger-sparkle {
+  font-size: 1rem;
+}
+
+.ai-trigger-badge {
+  font-size: 0.6875rem;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(115, 31, 33, 0.12);
+  color: inherit;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.ai-workbench-trigger:hover .ai-trigger-badge {
+  background: rgba(255, 255, 255, 0.25);
+  color: #FFFFFF;
+}

@@ -153,17 +153,35 @@ export async function buildWallet(
   const profile = resolveProfile(context);
 
   const actor = loyaltyActor(context);
+  const fetchVouchers = async () => {
+    try {
+      return await selectRows("voucher", {
+        is_active: "eq.true",
+        ...(actor ? { or: `(reward_member_id.is.null,reward_member_id.eq.${actor})` } : { reward_member_id: "is.null" }),
+        limit: 200
+      });
+    } catch (err: unknown) {
+      const errStr = String((err as any)?.message || (err as any)?.details || (err as any)?.code || "");
+      if (errStr.includes("reward_member_id") || (err as any)?.code === "42703") {
+        return await selectRows("voucher", { is_active: "eq.true", limit: 200 });
+      }
+      throw err;
+    }
+  };
+
   const [voucherResult, promotionResult, orderResult] = await Promise.all([
-    selectRows("voucher", {
-      is_active: "eq.true",
-      ...(actor ? { or: `(reward_member_id.is.null,reward_member_id.eq.${actor})` } : { reward_member_id: "is.null" }),
-      limit: 200
-    }),
+    fetchVouchers(),
     selectRows("promotion", { limit: 200 }),
     profile?.user_id
       ? selectRows("orders", { user_id: `eq.${profile.user_id}`, limit: 500 })
       : Promise.resolve({ rows: [] as JsonObject[] })
   ]);
+
+  const rawVouchers = voucherResult.rows || [];
+  const activeVouchers = rawVouchers.filter((v: any) => {
+    if (v.reward_member_id == null) return true;
+    return actor ? v.reward_member_id === actor : false;
+  });
 
   const orders = orderResult.rows || [];
   const now = new Date();
@@ -195,7 +213,7 @@ export async function buildWallet(
     birthMonth
   };
 
-  const items = evaluateVouchers(voucherResult.rows || [], evaluationContext);
+  const items = evaluateVouchers(activeVouchers, evaluationContext);
   return { items, best: pickBestVoucher(items) };
 }
 

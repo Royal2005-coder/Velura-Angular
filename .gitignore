@@ -22,3 +22,6 @@ scratch/
 scratch/ai-private/
 scratch/ai-studio/
 scratch/ai-uat-private/
+__pycache__/
+*.pyc
+~$*

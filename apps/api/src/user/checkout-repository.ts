@@ -3,6 +3,7 @@ import { HttpError } from "../http.js";
 import { callRpc, insertRow, selectOne, updateRows } from "../supabase.js";
 import { asJsonObject, asString, type JsonObject } from "../types.js";
 import type { CheckoutContact, PersistCheckoutOrderInput, PersistedCheckoutOrder } from "./checkout-service.js";
+import { loyaltyDatabaseError } from "../loyalty/loyalty-repository.js";
 
 /** Địa chỉ checkout được ghi thêm vào sổ địa chỉ của Member. */
 export interface CheckoutAddressInput {
@@ -93,7 +94,7 @@ export function createCheckoutRepository(): CheckoutRepository {
             throw new HttpError(404, "VARIANT_NOT_FOUND", "Không tìm thấy thông tin sản phẩm trong hệ thống.", details);
           }
         }
-        throw error;
+        return loyaltyDatabaseError(error);
       }
     },
     findVariant: (variantId) => selectOne("variant", { variant_id: `eq.${variantId}` }),
@@ -128,14 +129,6 @@ export function createCheckoutRepository(): CheckoutRepository {
         activation_expires_at: null,
         updated_at: new Date().toISOString()
       });
-      const user = await selectOne("users", { user_id: `eq.${userId}` });
-      if (user?.phone) {
-        await updateRows("orders", { shipping_phone: `eq.${user.phone}` }, {
-          user_id: userId,
-          is_guest: false,
-          updated_at: new Date().toISOString()
-        });
-      }
     },
     createOrder: async (input) => asJsonObject(await insertRow("orders", input)),
     createPayment: async (input) => {

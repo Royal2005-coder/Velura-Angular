@@ -1,64 +1,87 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: cloudflared-config
+  name: cloudflared-ingress-contract
   namespace: networking
-  labels:
-    app.kubernetes.io/name: cloudflared
-    app.kubernetes.io/part-of: velura-infrastructure
 data:
-  config.yaml: |
-    tunnel: 96cb38bf-7ca6-417a-aebb-075f365c5773
-    credentials-file: /etc/cloudflared/creds/credentials.json
-    metrics: 0.0.0.0:2000
-    no-autoupdate: true
+  ingress.yaml: |
     ingress:
-      # Direct API Gateway
-      - hostname: api.royalai.dev
-        service: http://velura-api.velura.svc.cluster.local:3000
-
-      # Storefront API reverse-proxy fallback
-      - hostname: velura.royalai.dev
-        path: ^/api(/.*)?$
-        service: http://velura-api.velura.svc.cluster.local:3000
-
-      # Storefront SPA
-      - hostname: velura.royalai.dev
-        service: http://velura-storefront.velura.svc.cluster.local:80
-
-      # Storefront alternative alias (shop.royalai.dev)
-      - hostname: shop.royalai.dev
-        path: ^/api(/.*)?$
-        service: http://velura-api.velura.svc.cluster.local:3000
-      - hostname: shop.royalai.dev
-        service: http://velura-storefront.velura.svc.cluster.local:80
-
-      # Admin API reverse-proxy fallback
-      - hostname: admin.royalai.dev
-        path: ^/api(/.*)?$
-        service: http://velura-api.velura.svc.cluster.local:3000
-
-      # Admin Portal SPA
-      - hostname: admin.royalai.dev
-        service: http://velura-admin.velura.svc.cluster.local:80
-
-      # Central IAM / Keycloak SSO
       - hostname: auth.royalai.dev
-        service: http://keycloak.auth.svc.cluster.local:8080
-
-      # Observability / Grafana Dashboard
+        path: ^/(admin|realms/master)(/.*)?$
+        service: http_status:403
+      - hostname: auth.royalai.dev
+        service: http://keycloak.auth.svc:8080
+      - hostname: api.royalai.dev
+        path: ^/(metrics|api/metrics)(/.*)?$
+        service: http_status:403
+      - hostname: api.royalai.dev
+        service: http://velura-api.velura.svc:3000
+      - hostname: velura.royalai.dev
+        path: ^/(metrics|api/metrics)(/.*)?$
+        service: http_status:403
+      - hostname: velura.royalai.dev
+        path: ^/api(/.*)?$
+        service: http://velura-api.velura.svc:3000
+      - hostname: velura.royalai.dev
+        service: http://velura-storefront.velura.svc:80
+      - hostname: shop.royalai.dev
+        path: ^/(metrics|api/metrics)(/.*)?$
+        service: http_status:403
+      - hostname: shop.royalai.dev
+        path: ^/api(/.*)?$
+        service: http://velura-api.velura.svc:3000
+      - hostname: shop.royalai.dev
+        service: http://velura-storefront.velura.svc:80
+      - hostname: admin.royalai.dev
+        path: ^/(metrics|api/metrics)(/.*)?$
+        service: http_status:403
+      - hostname: admin.royalai.dev
+        path: ^/api(/.*)?$
+        service: http://velura-api.velura.svc:3000
+      - hostname: admin.royalai.dev
+        service: http://velura-admin.velura.svc:80
+      - hostname: staging.royalai.dev
+        path: ^/(metrics|api/metrics)(/.*)?$
+        service: http_status:403
+      - hostname: staging.royalai.dev
+        path: ^/api(/.*)?$
+        service: http://velura-api.velura-staging.svc:3000
+        originRequest:
+          access: &staging-access
+            required: true
+            teamName: ${CLOUDFLARE_ACCESS_TEAM}
+            audTag: ["${CLOUDFLARE_ACCESS_STAGING_AUD}"]
+      - hostname: staging.royalai.dev
+        service: http://velura-storefront.velura-staging.svc:80
+        originRequest:
+          access: *staging-access
+      - hostname: staging-admin.royalai.dev
+        path: ^/(metrics|api/metrics)(/.*)?$
+        service: http_status:403
+      - hostname: staging-admin.royalai.dev
+        path: ^/api(/.*)?$
+        service: http://velura-api.velura-staging.svc:3000
+        originRequest:
+          access: *staging-access
+      - hostname: staging-admin.royalai.dev
+        service: http://velura-admin.velura-staging.svc:80
+        originRequest:
+          access: *staging-access
+      - hostname: iam-admin.royalai.dev
+        service: http://keycloak.auth.svc:8080
+        originRequest:
+          access: &admin-access
+            required: true
+            teamName: ${CLOUDFLARE_ACCESS_TEAM}
+            audTag: ["${CLOUDFLARE_ACCESS_ADMIN_AUD}"]
       - hostname: grafana.royalai.dev
-        service: http://grafana.observability.svc.cluster.local:3000
-
-      # AI Gateway / LiteLLM Proxy
-      - hostname: ai.royalai.dev
-        service: http://litellm.observability.svc.cluster.local:4000
-
-      # Storage UI / SeaweedFS S3 protected by Keycloak SSO
+        service: http://grafana.observability.svc:3000
+        originRequest:
+          access: *admin-access
       - hostname: s3.royalai.dev
-        service: http://oauth2-proxy.networking.svc.cluster.local:4180
-
-      # Catch-all
+        service: http://oauth2-proxy.networking.svc:4180
+        originRequest:
+          access: *admin-access
       - service: http_status:404
 ---
 apiVersion: apps/v1
@@ -66,11 +89,8 @@ kind: Deployment
 metadata:
   name: cloudflared
   namespace: networking
-  labels:
-    app.kubernetes.io/name: cloudflared
-    app.kubernetes.io/part-of: velura-infrastructure
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: cloudflared
@@ -79,28 +99,46 @@ spec:
       labels:
         app: cloudflared
     spec:
+      automountServiceAccountToken: false
+      priorityClassName: velura-platform
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
       containers:
       - name: cloudflared
         image: cloudflare/cloudflared:2026.10.0
-        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 2000
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 250m
+            memory: 128Mi
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 2000
+        livenessProbe:
+          httpGet:
+            path: /ready
+            port: 2000
         args:
         - tunnel
         - --config
         - /etc/cloudflared/config/config.yaml
         - run
-        livenessProbe:
-          httpGet:
-            path: /ready
-            port: 2000
-          initialDelaySeconds: 10
-          periodSeconds: 15
-        resources:
-          requests:
-            cpu: 50m
-            memory: 64Mi
-          limits:
-            cpu: 250m
-            memory: 256Mi
         volumeMounts:
         - name: config
           mountPath: /etc/cloudflared/config
@@ -110,8 +148,14 @@ spec:
           readOnly: true
       volumes:
       - name: config
-        configMap:
-          name: cloudflared-config
+        secret:
+          secretName: cloudflare-tunnel-config
+          items:
+          - key: config.yaml
+            path: config.yaml
       - name: creds
         secret:
           secretName: cloudflare-tunnel-credentials
+          items:
+          - key: credentials.json
+            path: credentials.json

@@ -3,11 +3,11 @@ import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
 import { CartStore } from '../../core/services/cart.store';
 import { WishlistStore } from '../../core/services/wishlist.store';
-import { AiImageWorkbench } from '../../shared/ai-image-workbench/ai-image-workbench';
+import { VisualSearchWorkbench } from '../../shared/visual-search-workbench/visual-search-workbench';
 
 @Component({
   selector: 'app-site-header',
-  imports: [RouterLink, RouterLinkActive, AiImageWorkbench],
+  imports: [RouterLink, RouterLinkActive, VisualSearchWorkbench],
   templateUrl: './site-header.html',
 })
 export class SiteHeader {
@@ -37,7 +37,7 @@ export class SiteHeader {
     this.auth.signOut();
   }
 
-  readonly headerWorkbench = viewChild<AiImageWorkbench>('headerWorkbench');
+  readonly headerWorkbench = viewChild<VisualSearchWorkbench>('headerWorkbench');
 
   /**
    * Opens the AI visual image search workbench modal.

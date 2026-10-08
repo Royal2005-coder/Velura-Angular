@@ -1,0 +1,39 @@
+@if (!hideTrigger()) { <button type="button" class="btn btn--outline" (click)="open()">Máy ảnh · Tìm trang phục</button> }
+<dialog #dialog [attr.aria-labelledby]="titleId" (cancel)="escape($event)" (paste)="paste($event)">
+  <header><h2 [id]="titleId">Tìm trang phục bằng ảnh</h2><button type="button" aria-label="Đóng tìm bằng ảnh" (click)="close()">×</button></header>
+  <p>Chọn đúng một trang phục. JPG, PNG hoặc WEBP không quá 5 MB. Có thể kéo thả hoặc dán ảnh tại đây.</p>
+  <section class="drop-zone" (dragover)="$event.preventDefault()" (drop)="drop($event)">
+    <button type="button" class="btn btn--outline" [disabled]="busy()" (click)="uploadInput.click()">Chọn ảnh</button>
+    <input #uploadInput type="file" aria-label="Chọn ảnh trang phục" accept="image/jpeg,image/png,image/webp" [disabled]="busy()" (change)="select($event)" />
+    <button type="button" class="btn btn--outline" [disabled]="busy()" (click)="captureInput.click()">Chụp bằng thiết bị</button>
+    <input #captureInput type="file" aria-label="Chụp ảnh trang phục" accept="image/jpeg,image/png,image/webp" capture="environment" [disabled]="busy()" (change)="select($event)" />
+    <button type="button" class="btn btn--outline" [disabled]="busy()" (click)="camera()">Mở máy ảnh</button>
+  </section>
+  @if (cameraOpen()) { <video #video autoplay playsinline muted></video><button type="button" class="btn" (click)="capture()">Chụp ảnh</button> }
+  @if (preview()) {
+    <figure class="preview"><img [src]="preview()" alt="Ảnh trang phục chờ xác nhận" /><span class="crop-region" aria-hidden="true" [style.left.%]="crop().x" [style.top.%]="crop().y" [style.width.%]="crop().width" [style.height.%]="crop().height"></span></figure>
+    <fieldset [disabled]="busy()"><legend>Vùng trang phục (mặc định toàn ảnh)</legend>
+      @for (key of cropKeys; track key) { <label>{{ cropLabels[key] }} (%)<input type="number" min="0" max="100" [value]="crop()[key]" (input)="setCrop($event,key)" /></label> }
+      <button type="button" class="btn btn--outline" (click)="applyCrop()">Áp dụng vùng ảnh</button>
+    </fieldset>
+    <label class="consent"><input type="checkbox" [checked]="consent()" [disabled]="busy()" (change)="setConsent($event)" />Tôi xác nhận ảnh xem trước có đúng một trang phục và đồng ý xử lý ảnh để tìm sản phẩm. Ảnh được xóa khi kết thúc, kể cả khi lỗi hoặc hủy.</label>
+    <button type="button" class="btn" [disabled]="!consent() || busy()" (click)="search()">Tìm trang phục</button>
+  }
+  @if (busy()) { <p role="status">Đang phân tích và tìm sản phẩm… tối đa 15 giây tổng cộng.</p><button type="button" class="btn btn--outline" (click)="cancel()">Hủy tìm kiếm</button> }
+  @if (error()) { <p role="alert" class="error">{{ error() }}</p> }
+  @if (result(); as response) {
+    <fieldset [disabled]="busy()"><legend>Chỉnh hoặc xóa thuộc tính · không cần tải lại ảnh</legend>
+      @for (key of attributeKeys; track key) { <label>{{ labels[key] }}<input type="text" maxlength="80" [value]="attributes()[key] || ''" (input)="edit($event,key)" /></label> }
+      <label>Từ khóa bổ sung<input type="text" maxlength="300" [value]="keywords()" (input)="editKeywords($event)" /></label>
+      <button type="button" class="btn" (click)="refine()">Tìm lại với chỉnh sửa</button>
+    </fieldset>
+    <p>Danh mục phiên bản {{ response.catalog_version }} · {{ response.personalized ? 'Đã sắp xếp theo hồ sơ phong cách xác nhận' : 'Sắp xếp theo độ tương đồng' }}</p>
+    @if (response.matches.length) {
+      <h3>Sản phẩm tương đồng ({{ response.matches.length }})</h3>
+      <div class="results">@for (product of response.matches; track product.product_id) { <div><app-product-card [product]="product" /><small>Độ tương đồng: {{ (product.similarity * 100).toFixed(1) }}%</small></div> }</div>
+    } @else {
+      <h3>Không có sản phẩm đạt mức tương đồng</h3><p>Thử bỏ một thuộc tính, đổi từ khóa hoặc vùng ảnh. Các sản phẩm nổi bật dưới đây không phải kết quả khớp ảnh.</p>
+      <div class="results">@for (product of response.featured; track product.product_id) { <app-product-card [product]="product" /> }</div>
+    }
+  }
+</dialog>

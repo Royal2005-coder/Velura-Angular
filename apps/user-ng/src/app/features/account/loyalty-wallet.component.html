@@ -1,0 +1,27 @@
+<section class="sp-section" aria-labelledby="loyalty-title">
+  <h3 id="loyalty-title">Ví điểm & giới thiệu bạn bè</h3>
+  @if (busy()) { <p role="status">Đang tải ví điểm…</p> }
+  @if (error()) { <p role="alert">{{ error() }}</p> }
+  <button type="button" class="btn btn--outline" [disabled]="busy()" (click)="reload()">Tải lại ví</button>
+  @if (wallet(); as wallet) {
+    <p>Số dư: <strong>{{ wallet.balance_points }} điểm</strong> · Giá trị quy đổi theo máy chủ: {{ money(wallet.amount_vnd) }}.</p>
+    <p>Có thể sử dụng: {{ wallet.available_points }} điểm. Đơn hàng được báo giá lại tại thanh toán; điểm chỉ giảm tối đa 50% tiền hàng sau voucher, không giảm phí giao hàng.</p>
+    @if (!wallet.policy.spending_enabled || !wallet.policy.policy_approved_at) { <p role="status">Sử dụng điểm đang chờ phê duyệt chính sách làm tròn và hết hạn. Không thể đổi điểm lúc này.</p> }
+    @if (wallet.balance_points < 0) { <p role="status">Số dư âm sau điều chỉnh đơn hàng; không thể sử dụng điểm cho đến khi số dư được bù.</p> }
+    <h4>Điểm sắp hết hạn</h4>
+    <ul>@for (lot of wallet.expiries; track $index) { <li>{{ lot.points }} điểm · hết hạn {{ date(lot.expires_at) }}</li> } @empty { <li>Không có điểm còn hạn.</li> }</ul>
+    <h4>Lịch sử điểm</h4>
+    <ul>@for (entry of wallet.history; track entry.entry_id) { <li>{{ date(entry.created_at) }} · {{ entry.kind }}: {{ entry.points }} điểm @if (entry.expires_at) { · hạn {{ date(entry.expires_at) }} } @if (entry.order_id) { <a [routerLink]="['/account/orders', entry.order_id]">Xem đơn hàng</a> }</li> } @empty { <li>Chưa có giao dịch điểm.</li> }</ul>
+    @if (hasOlder()) { <button type="button" class="btn btn--outline" [disabled]="busy()" (click)="older()">Lịch sử cũ hơn</button> }
+    <h4>Mã giới thiệu: {{ wallet.referral_code }}</h4>
+    <p>Mã chỉ được gắn khi bạn bè đăng ký. Voucher giảm 20%, đơn từ 1.000.000đ, tối đa 500.000đ, dùng một lần trong 60 ngày. Người giới thiệu nhận ưu đãi sau đơn giao thành công đầu tiên đủ điều kiện.</p>
+    <label>Liên kết giới thiệu<input type="text" readonly [value]="referralLink()" aria-label="Liên kết giới thiệu để sao chép" /></label>
+    <button type="button" class="btn btn--outline" (click)="copyReferral()">Sao chép liên kết</button>
+    @if (notice()) { <p role="status">{{ notice() }}</p> }
+    <ul>@for (referral of wallet.referrals; track referral.attribution_id) { <li>{{ date(referral.created_at) }} · {{ state(referral.state) }}</li> } @empty { <li>Chưa có lượt giới thiệu.</li> }</ul>
+    <h4>Lịch sử voucher giới thiệu</h4>
+    <p>Nếu đơn không còn đủ điều kiện, voucher chưa dùng được thu hồi. Voucher đã dùng được chuyển sang CSKH xem xét thủ công, không tự động thu tiền.</p>
+    <ul>@for (reward of wallet.reward_vouchers; track reward.voucher_id) { <li><strong>{{ reward.code }}</strong> · {{ state(reward.state) }} · hạn {{ date(reward.expires_at) }}<ul>@for (event of reward.history; track event.history_id) { <li>{{ date(event.created_at) }} · {{ event.action }}</li> }</ul></li> } @empty { <li>Chưa có voucher giới thiệu.</li> }</ul>
+    <a routerLink="/account/vouchers">Xem ví voucher</a> · <a routerLink="/cart">Đến giỏ hàng</a>
+  }
+</section>

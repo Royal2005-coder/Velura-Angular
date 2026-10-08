@@ -1,253 +1,109 @@
-import { callRpc } from "./supabase.js";
-import { HttpError } from "./http.js";
-import { asJsonObject, isJsonObject, type JsonObject } from "./types.js";
-import { loadVoiceInsights, type VoiceInsights } from "./insights.js";
-import { buildManagementInsights } from "./insights/management-insights.js";
+import { HttpError } from './http.js';
+import { isJsonObject, type JsonObject } from './types.js';
+import type { VoiceInsights } from './insights.js';
+import { buildManagementInsights } from './insights/management-insights.js';
+import { analyticsRepository, type AnalyticsRepository } from './insights/analytics-repository.js';
+import { validateManagementFacts } from './insights/management-source-service.js';
 
-const BUSINESS_TIMEZONE_OFFSET_MS = 7 * 60 * 60 * 1000;
-const DAY_MS = 24 * 60 * 60 * 1000;
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const OFFSET = 7 * 60 * 60 * 1000;
+const DAY = 24 * 60 * 60 * 1000;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export const DASHBOARD_MIN_REVIEW_SAMPLE = 30;
 export const DASHBOARD_MIN_CSAT_SAMPLE = 20;
 
-function localDateParts(now = new Date()) {
-  const vietnam = new Date(now.getTime() + BUSINESS_TIMEZONE_OFFSET_MS);
-  return {
-    year: vietnam.getUTCFullYear(),
-    month: vietnam.getUTCMonth(),
-    day: vietnam.getUTCDate()
-  };
-}
-
-function vietnamMidnightUtc(year: number, month: number, day: number) {
-  return new Date(Date.UTC(year, month, day) - BUSINESS_TIMEZONE_OFFSET_MS);
-}
-
-export function optionalUuid(searchParams: URLSearchParams | null, key: string): string | null {
-  const value = searchParams?.get(key)?.trim() || "";
+/** Validate a dimension filter before querying private analytics. */
+export function optionalUuid(params: URLSearchParams | null, key: string): string | null {
+  const value = params?.get(key)?.trim() || '';
   if (!value) return null;
-  if (!UUID_RE.test(value)) {
-    throw new HttpError(400, "INVALID_DASHBOARD_FILTER", `${key} phải là UUID`);
-  }
+  if (!UUID.test(value)) throw new HttpError(400, 'INVALID_DASHBOARD_FILTER', `${key} phải là UUID`);
   return value;
 }
-
-/**
- * Resolve the dashboard reporting window. Only day / week / month — no custom dates.
- */
-export function resolveDashboardPeriod(searchParams: URLSearchParams | null, now = new Date()) {
-  if (searchParams?.get("from") || searchParams?.get("to")) {
-    throw new HttpError(
-      400,
-      "CUSTOM_DASHBOARD_RANGE_DISABLED",
-      "Khoảng thời gian chỉ hỗ trợ ngày, tuần hoặc tháng"
-    );
-  }
-  const requestedRange = searchParams?.get("range") || "week";
-  if (!["day", "week", "month"].includes(requestedRange)) {
-    throw new HttpError(400, "INVALID_DASHBOARD_RANGE", "Khoảng xem chỉ hỗ trợ ngày, tuần hoặc tháng");
-  }
-
-  const { year, month, day } = localDateParts(now);
-  const today = vietnamMidnightUtc(year, month, day);
-  const days = requestedRange === "day" ? 1 : requestedRange === "week" ? 7 : 30;
-  const from = new Date(today.getTime() - (days - 1) * DAY_MS);
-  const to = new Date(today.getTime() + DAY_MS);
-  return { range: requestedRange, from, to, days };
+/** Rolling complete Vietnam business-day windows, with an adjacent equally sized previous period. */
+export function resolveDashboardPeriod(params: URLSearchParams | null, now = new Date()) {
+  if (params?.get('from') || params?.get('to')) throw new HttpError(400, 'CUSTOM_DASHBOARD_RANGE_DISABLED', 'Khoảng thời gian chỉ hỗ trợ ngày, tuần hoặc tháng');
+  const range = params?.get('range') || 'week';
+  if (!['day', 'week', 'month'].includes(range)) throw new HttpError(400, 'INVALID_DASHBOARD_RANGE', 'Khoảng xem chỉ hỗ trợ ngày, tuần hoặc tháng');
+  const local = new Date(now.getTime() + OFFSET);
+  const midnight = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate()) - OFFSET;
+  const days = range === 'day' ? 1 : range === 'week' ? 7 : 30;
+  const from = new Date(midnight - (days - 1) * DAY), to = new Date(midnight + DAY);
+  return { range, days, from, to, previousFrom: new Date(from.getTime() - days * DAY), previousTo: from };
 }
-
-function asFiniteNumber(value: unknown): number {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : 0;
+/** Missing/invalid values are unavailable, never fabricated zero observations. */
+export function dashboardNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === '' || typeof value === 'boolean') return null;
+  const n = typeof value === 'number' || typeof value === 'string' ? Number(value) : NaN;
+  return Number.isFinite(n) ? n : null;
 }
+const object = (value: unknown): JsonObject => isJsonObject(value) ? value : {};
+const rows = (value: unknown): JsonObject[] => Array.isArray(value) ? value.filter(isJsonObject) : [];
 
-function mapBestSellers(raw: unknown) {
-  if (!Array.isArray(raw)) return [];
-  return raw.map((item) => {
-    const row = isJsonObject(item) ? item : {};
-    const stockStatus = String(row.stockStatus || "");
-    const statusClass = String(row.statusClass || "");
-    return {
-      product_id: typeof row.product_id === "string" ? row.product_id : undefined,
-      sku: typeof row.sku === "string" ? row.sku : undefined,
-      name: String(row.name || "Sản phẩm"),
-      sold: asFiniteNumber(row.sold ?? row.qty),
-      revenue: asFiniteNumber(row.revenue),
-      lowStock:
-        row.lowStock === true ||
-        stockStatus === "Sắp hết" ||
-        stockStatus === "Hết hàng" ||
-        statusClass === "warning" ||
-        statusClass === "danger"
-    };
-  });
-}
-
-function mapCategories(raw: unknown) {
-  if (!Array.isArray(raw)) return [];
-  return raw.map((item) => {
-    const row = isJsonObject(item) ? item : {};
-    return {
-      category_id: typeof row.category_id === "string" ? row.category_id : undefined,
-      name: String(row.name || "Khác"),
-      revenue: asFiniteNumber(row.revenue),
-      pct: asFiniteNumber(row.pct)
-    };
-  });
-}
-
-function mapTrend(raw: unknown) {
-  if (!Array.isArray(raw)) return [];
-  return raw.map((item) => {
-    const row = isJsonObject(item) ? item : {};
-    return {
-      date: String(row.date || ""),
-      dateStr: String(row.dateStr || row.date || ""),
-      revenue: asFiniteNumber(row.revenue),
-      orderCount: asFiniteNumber(row.orderCount)
-    };
-  });
-}
-
-/**
- * Labels the KPI source and refuses to treat tiny VoC samples as planning facts.
- */
-export function dashboardProvenance(olapUsed: boolean, voice: VoiceInsights | null | undefined) {
-  const reviews = asFiniteNumber(voice?.productReaction?.reviewCount);
-  const csat = asFiniteNumber(voice?.serviceQuality?.csatCount);
-  const deliveredOrders = asFiniteNumber(voice?.coverage?.deliveredOrders);
-  return {
-    generatedAt: new Date().toISOString(),
-    source: olapUsed ? "analytics.star" : "oltp.rpc",
-    definitions: {
-      revenue: "Tổng doanh thu đơn trong kỳ",
-      orderCount: "Số đơn trong kỳ",
-      averageOrderValue: "Doanh thu / số đơn",
-      completionRate: "Tỷ lệ đơn hoàn tất trong kỳ"
-    },
-    samples: { reviews, csat, deliveredOrders },
-    reliable: {
-      reviews: reviews >= DASHBOARD_MIN_REVIEW_SAMPLE,
-      csat: csat >= DASHBOARD_MIN_CSAT_SAMPLE,
-      // Kỳ có nhiều dữ liệu hơn trần đọc thì mọi chỉ số tiếng nói khách hàng ở trên
-      // chỉ tính trên một phần. Nói ra ở đây để giao diện không trình bày một con số
-      // thiếu như thể là đủ.
-      complete: !voice?.truncated
-    }
-  };
-}
-
-/**
- * Maps RPC JSON (OLAP or legacy OLTP) onto the Angular dashboard contract.
- */
+/** Normalize only observed scalar values; null denominators remain null. */
 export function normalizeDashboardSummary(summary: JsonObject): JsonObject {
-  const business = isJsonObject(summary.business) ? { ...summary.business } : {};
-  const operations = isJsonObject(summary.operations) ? { ...summary.operations } : {};
-  const comparisons = isJsonObject(business.comparisons) ? { ...business.comparisons } : {};
-  if (comparisons.orderCountPct === null) {
-    comparisons.completionRatePoints = null;
-  }
-  const customers = asFiniteNumber(business.customers ?? business.customerCount);
-
-  return {
-    ...summary,
-    operations: {
-      pendingOrders: asFiniteNumber(operations.pendingOrders),
-      paymentErrors: asFiniteNumber(operations.paymentErrors),
-      openReturns: asFiniteNumber(operations.openReturns),
-      openSupportTickets: asFiniteNumber(operations.openSupportTickets),
-      lowStockProducts: asFiniteNumber(operations.lowStockProducts),
-      urgentReviews: asFiniteNumber(operations.urgentReviews),
-      returnsDueSoon: asFiniteNumber(operations.returnsDueSoon)
-    },
-    business: {
-      ...business,
-      revenue: asFiniteNumber(business.revenue),
-      orderCount: asFiniteNumber(business.orderCount),
-      customers,
-      customerCount: customers,
-      averageOrderValue: asFiniteNumber(business.averageOrderValue),
-      completionRate: asFiniteNumber(business.completionRate),
-      promotionRevenue: asFiniteNumber(business.promotionRevenue),
-      promotionRevenueShare: asFiniteNumber(business.promotionRevenueShare),
-      pendingReviews: asFiniteNumber(business.pendingReviews),
-      comparisons,
-      categoryContributions: mapCategories(business.categoryContributions),
-      bestSellers: mapBestSellers(business.bestSellers),
-      revenueTrend: mapTrend(business.revenueTrend)
-    }
+  const b = object(summary.business), o = object(summary.operations), comparisons = { ...object(b.comparisons) };
+  if (comparisons.orderCountPct === null) comparisons.completionRatePoints = null;
+  const business: JsonObject = { ...b, comparisons };
+  for (const key of ['revenue','orderCount','averageOrderValue','completionRate','promotionRevenue','promotionRevenueShare','pendingReviews']) business[key] = dashboardNumber(b[key]);
+  business.customers = business.customerCount = dashboardNumber(b.customers ?? b.customerCount);
+  const operations: JsonObject = {};
+  for (const key of ['pendingOrders','paymentErrors','openReturns','openSupportTickets','lowStockProducts','urgentReviews','returnsDueSoon']) operations[key] = dashboardNumber(o[key]);
+  business.bestSellers = rows(b.bestSellers).map(row => ({
+    product_id: typeof row.product_id === 'string' ? row.product_id : undefined,
+    sku: typeof row.sku === 'string' ? row.sku : undefined, name: String(row.name || 'Sản phẩm'),
+    sold: dashboardNumber(row.sold ?? row.qty), revenue: dashboardNumber(row.revenue),
+    lowStock: row.lowStock === true || ['Sắp hết','Hết hàng'].includes(String(row.stockStatus)) || ['warning','danger'].includes(String(row.statusClass)),
+  }));
+  business.categoryContributions = rows(b.categoryContributions).map(row => ({ ...row, revenue: dashboardNumber(row.revenue), pct: dashboardNumber(row.pct) }));
+  business.revenueTrend = rows(b.revenueTrend).map(row => ({ ...row, revenue: dashboardNumber(row.revenue), orderCount: dashboardNumber(row.orderCount) }));
+  return { ...summary, operations, business };
+}
+/** Sample size describes observed rows; completeness additionally requires an uncapped source. */
+export function dashboardProvenance(olap: boolean, voice: VoiceInsights | JsonObject | null | undefined) {
+  const payload = object(voice), meta = object(payload.meta);
+  const reviews = dashboardNumber(object(payload.productReaction).reviewCount), csat = dashboardNumber(object(payload.serviceQuality).csatCount);
+  const truncated = payload.truncated === true || payload.rowsCapped === true || meta.truncated === true || meta.rowsCapped === true;
+  return { source: olap ? 'analytics.star' : 'oltp.rpc',
+    samples: { reviews, csat, deliveredOrders: dashboardNumber(object(payload.coverage).deliveredOrders) },
+    reliable: { reviews: reviews !== null && reviews >= DASHBOARD_MIN_REVIEW_SAMPLE, csat: csat !== null && csat >= DASHBOARD_MIN_CSAT_SAMPLE, complete: !!voice && !truncated },
   };
 }
-
-async function loadOlapSummary(
-  period: { from: Date; to: Date },
-  categoryId: string | null,
-  productId: string | null
-): Promise<{ summary: JsonObject; lastSyncedAt?: string } | null> {
-  try {
-    const refresh = await callRpc(
-      "refresh_analytics_star",
-      { p_max_age: "5 minutes" },
-      { silentError: true }
-    );
-    const summary = await callRpc(
-      "get_admin_olap_summary",
-      {
-        p_from: period.from.toISOString(),
-        p_to: period.to.toISOString(),
-        p_category_id: categoryId,
-        p_product_id: productId
-      },
-      { silentError: true }
-    );
-    if (!summary || typeof summary !== "object") return null;
-    const refreshMeta = isJsonObject(refresh) ? refresh : {};
-    const refreshedAt = typeof refreshMeta.refreshedAt === 'string' && Number.isFinite(Date.parse(refreshMeta.refreshedAt)) ? refreshMeta.refreshedAt : undefined;
-    return { summary: asJsonObject(summary), lastSyncedAt: refreshedAt };
-  } catch {
-    return null;
+/** Read validated persisted snapshots without refreshing as a side effect of GET. */
+export async function buildDashboardSummary(params: URLSearchParams | null, now = new Date(), repository: AnalyticsRepository = analyticsRepository) {
+  const period = resolveDashboardPeriod(params, now), categoryId = optionalUuid(params, 'categoryId'), productId = optionalUuid(params, 'productId');
+  const raw = await repository.read({ from: period.from.toISOString(), to: period.to.toISOString(), categoryId, productId });
+  if (!isJsonObject(raw) || raw.schemaVersion !== 3 || raw.dataset !== 'operational' || raw.source !== 'analytics.star.v3' || !isJsonObject(raw.summary) || !['fresh','stale','unavailable'].includes(String(raw.freshness))) {
+    throw new HttpError(502, 'INVALID_DASHBOARD_SOURCE', 'Nguồn phân tích chưa có hợp đồng dữ liệu hợp lệ.');
   }
-}
-
-/**
- * Build the admin dashboard summary for a query range, or the default week when params are null.
- */
-export async function buildDashboardSummary(searchParams: URLSearchParams | null, now = new Date()) {
-  const period = resolveDashboardPeriod(searchParams, now);
-  const categoryId = optionalUuid(searchParams, "categoryId");
-  const productId = optionalUuid(searchParams, "productId");
-  const olap = await loadOlapSummary(period, categoryId, productId);
-  const summary =
-    olap?.summary ||
-    (await callRpc("get_admin_dashboard_summary", {
-      p_from: period.from.toISOString(),
-      p_to: period.to.toISOString()
-    }));
-
-  if (!summary || typeof summary !== "object") {
-    throw new HttpError(502, "INVALID_DASHBOARD_SUMMARY", "Supabase không trả về dữ liệu dashboard hợp lệ");
+  const snapshotAt = typeof raw.snapshotAt === 'string' && Number.isFinite(Date.parse(raw.snapshotAt)) && Date.parse(raw.snapshotAt) <= now.getTime() + 60_000 ? raw.snapshotAt : undefined;
+  const lastSyncedAt = raw.reconciled === true ? snapshotAt : undefined;
+  const validated = lastSyncedAt && raw.freshness !== 'unavailable' && isJsonObject(raw.facts) && raw.facts.snapshotAt === lastSyncedAt ? validateManagementFacts(raw.facts) : null;
+  const facts = validated?.availability === 'ready' ? validated.facts : null;
+  const mapped = normalizeDashboardSummary(raw.summary);
+  if (!facts) {
+    const b = object(mapped.business);
+    for (const key of ['revenue','orderCount','customers','customerCount','averageOrderValue','completionRate','promotionRevenue','promotionRevenueShare']) b[key] = null;
+    b.comparisons = {}; b.bestSellers = []; b.categoryContributions = []; b.revenueTrend = []; b.insights = {};
   }
-
-  const mapped = normalizeDashboardSummary(asJsonObject(summary));
-  const voice = await loadVoiceInsights(period, productId);
-  const existingMeta = isJsonObject(mapped.meta) ? mapped.meta : {};
-  return {
-    ...mapped,
-    operations: mapped.operations,
-    business: mapped.business,
-    range: period.range,
-    from: period.from.toISOString(),
-    to: new Date(period.to.getTime() - 1).toISOString(),
-    periodDays: period.days,
-    filters: {
-      categoryId,
-      productId
+  const management = buildManagementInsights(mapped, !!facts, lastSyncedAt, facts);
+  return { ...mapped, range: period.range, from: period.from.toISOString(), to: new Date(period.to.getTime()-1).toISOString(),
+    toExclusive: period.to.toISOString(), previousFrom: period.previousFrom.toISOString(), previousToExclusive: period.previousTo.toISOString(),
+    periodDays: period.days, filters: { categoryId, productId }, voice: null, management,
+    meta: { ...object(raw.summary.meta), ...dashboardProvenance(!!facts, null), generatedAt: lastSyncedAt ?? null,
+      updated_at: lastSyncedAt ?? null, source: facts ? 'analytics.star' : 'unavailable', freshness: facts ? raw.freshness : 'unavailable',
+      validated: !!facts, reconciled: raw.reconciled === true, pendingEvents: dashboardNumber(raw.pendingEvents),
+      operationsSource: 'oltp.live-queues', lastSync: raw.lastSync, schemaVersion: 3,
+      sourceWarning: facts ? null : validated?.reason ?? 'Đồng bộ và đối chiếu nguồn trước khi sử dụng KPI kinh doanh.',
+      openDefinitions: ['contractual_sla','promotion_roi_costs','predicted_ltv','discount_to_csat_join'],
     },
-    voice,
-    management: buildManagementInsights(mapped, voice, Boolean(olap), olap?.lastSyncedAt),
-    meta: {
-      ...existingMeta,
-      ...dashboardProvenance(Boolean(olap), voice)
-    }
   };
+}
+/** Surface persisted throttling/failure as non-success; the last verified snapshot is unchanged. */
+export async function refreshDashboard(actorId: string, repository: AnalyticsRepository = analyticsRepository): Promise<JsonObject> {
+  const result = await repository.refresh(actorId);
+  if (!isJsonObject(result)) throw new HttpError(502, 'INVALID_ANALYTICS_SYNC', 'Không nhận được kết quả đồng bộ hợp lệ.');
+  if (result.success !== true || result.status !== 'succeeded' || typeof result.snapshotAt !== 'string' || !Number.isFinite(Date.parse(result.snapshotAt))) {
+    const throttled = result.status === 'busy' || result.status === 'throttled';
+    throw new HttpError(throttled ? 429 : 502, throttled ? 'ANALYTICS_REFRESH_THROTTLED' : 'ANALYTICS_SYNC_FAILED', throttled ? 'Chờ 10 giây trước khi đồng bộ lại.' : 'Đồng bộ thất bại; giữ bản đã xác minh gần nhất.', result);
+  }
+  return result;
 }

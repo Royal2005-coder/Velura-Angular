@@ -45,6 +45,8 @@ export interface AiJob extends AiJobView {
   directory: string;
   worker: Record<string, unknown>;
   product_id?: string;
+  variant_id?: string;
+  processing_version?: string;
   catalog_metadata?: Omit<
     import("./image-vector-repository.js").CatalogImageVector,
     "embedding"
@@ -65,6 +67,8 @@ export interface AiWorkerResult {
   embedding?: number[];
   model?: string;
   dimensions?: number;
+  processing_version?: string;
+  binding?: { request_id: string; product_id: string; variant_id: string };
   batch_embeddings?: Array<{
     image: string;
     embedding?: number[];
@@ -73,6 +77,8 @@ export interface AiWorkerResult {
 }
 /** Adapter is isolated so tests exercise ownership and queue rules without consuming GPU. */
 export interface AiWorker {
-  ready(): boolean;
+  ready(task?: AiTask): boolean;
+  /** Refresh authenticated backend health before advertising or enqueuing a capability. */
+  refreshReadiness?(): Promise<void>;
   run(directory: string, signal: AbortSignal): Promise<AiWorkerResult>;
 }

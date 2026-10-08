@@ -10,6 +10,7 @@ import {
 import { generateGeminiEmbedding, isGeminiConfigured, vectorLiteral } from "../gemini-client.js";
 import { asJsonObject, asNumber, asString, errorMessage, isJsonObject, type JsonObject } from "../types.js";
 import { CHAT_MESSAGE_SELECT, CHAT_PRODUCT_SELECT, CHAT_SESSION_SELECT } from "./chatbot-constants.js";
+import type { ChatActor } from "./chatbot-types.js";
 
 const CHAT_DB_OPTIONS = Object.freeze({ useAnonKey: false });
 
@@ -53,24 +54,6 @@ interface InsertAiLogInput {
   escalatedToHuman?: boolean;
 }
 
-interface CreateSupportTicketInput {
-  profileUserId?: string | null;
-  guestPhone?: string | null;
-  guestEmail?: string | null;
-  title: string;
-  description: string;
-  priority?: string;
-  aiLogId?: unknown;
-}
-
-interface QueueEmailInput {
-  recipient?: string | null;
-  templateCode: string;
-  subject: string;
-  body: string;
-  relatedUserId?: string | null;
-  metadata?: JsonObject;
-}
 
 function selectRows(table: string, query: Record<string, unknown>) {
   return supabaseSelectRows(table, query, CHAT_DB_OPTIONS);
@@ -114,6 +97,85 @@ async function getEmbedding(text: string): Promise<string | null> {
  */
 export function createChatbotRepository() {
   return {
+    /** Append a user turn and capture the epoch under the same session lock. */
+    async appendUserTurn(sessionId: string, actor: ChatActor, text: string, metadata: JsonObject) {
+      return withChatError(async () => asJsonObject(await callRpc("chat_append_user_turn", {
+        p_session: sessionId, p_profile: actor.profileUserId || null, p_guest: actor.guestId,
+        p_text: text, p_metadata: metadata
+      })));
+    },
+
+    /** Only an unchanged AI epoch/latest user turn can commit an assistant response. */
+    async commitAiTurn(sessionId: string, epoch: number, sequence: number, draft: JsonObject, sources: JsonObject[]) {
+      return withChatError(async () => asJsonObject(await callRpc("chat_commit_ai_turn", {
+        p_session: sessionId, p_epoch: epoch, p_user_sequence: sequence, p_draft: draft, p_sources: sources
+      })));
+    },
+
+    /** Persistent issue/failure counters are updated under the session lock. */
+    async recordAnalysis(sessionId: string, messageId: string, issueKey: string, analysis: JsonObject, failed: boolean) {
+      return withChatError(async () => asJsonObject(await callRpc("chat_record_analysis", {
+        p_session: sessionId, p_message: messageId, p_issue: issueKey, p_analysis: analysis, p_failed: failed
+      })));
+    },
+
+    /** Human takeover and ticket creation are one idempotent transaction. */
+    async handoff(sessionId: string, actor: ChatActor, summary: JsonObject, reason: string, supervisor: boolean) {
+      return withChatError(async () => asJsonObject(await callRpc("chat_handoff", {
+        p_session: sessionId, p_profile: actor.profileUserId || null, p_guest: actor.guestId,
+        p_summary: summary, p_reason: reason, p_supervisor: supervisor
+      })));
+    },
+
+    /** Active staff identity is verified again inside the service-role RPC. */
+    async staffAction(sessionId: string, actorId: string, action: string, payload: JsonObject) {
+      return withChatError(async () => asJsonObject(await callRpc("chat_staff_action", {
+        p_session: sessionId, p_actor: actorId, p_action: action, p_payload: payload
+      })));
+    },
+
+    /** Bind a verified phone challenge to one expiring session/order grant. */
+    async grantOrder(sessionId: string, guestId: string, orderId: string, verifiedPhone: string, expiresAt: string, challengeId: string) {
+      return withChatError(() => callRpc("chat_grant_order", {
+        p_session: sessionId, p_guest: guestId, p_order: orderId, p_phone: verifiedPhone, p_expires: expiresAt, p_challenge: challengeId
+      }));
+    },
+
+    /** Private order facts are returned only for member ownership or the exact OTP grant. */
+    async readAuthorizedOrder(sessionId: string, actor: ChatActor, orderId: string) {
+      return withChatError(async () => asJsonObject(await callRpc("chat_read_order", {
+        p_session: sessionId, p_profile: actor.profileUserId || null, p_guest: actor.guestId, p_order: orderId
+      })));
+    },
+
+    /** Explicit current-version approvals, never automatic policy promotion. */
+    async listPolicyApprovals() {
+      return withChatError(() => selectRows("chat_policy_approval", {
+        select: "policy_id,source_updated_at,expires_at", expires_at: `gt.${new Date().toISOString()}`
+      }));
+    },
+
+    /** Published store pages are official L0 facts. */
+    async listOfficialPages() {
+      return withChatError(() => selectRows("static_page", {
+        select: "static_page_id,slug,title,content,updated_at", status: "eq.published"
+      }));
+    },
+
+    /** Moderated originals are never included in ordinary staff transcript responses. */
+    async getModeratedOriginal(sessionId: string, messageId: string, actorId: string) {
+      return withChatError(() => callRpc("chat_read_moderated_original", {
+        p_session: sessionId, p_message: messageId, p_actor: actorId
+      }));
+    },
+
+    /** Only a supervisor can approve the current official policy version for L2. */
+    async approvePolicy(policyId: string, actorId: string, expiresAt: string) {
+      return withChatError(() => callRpc("chat_approve_policy", {
+        p_policy: policyId, p_actor: actorId, p_expires: expiresAt
+      }));
+    },
+
     async listSessions(filters: SessionListFilters) {
       const query: Record<string, unknown> = {
         select: CHAT_SESSION_SELECT,
@@ -123,7 +185,10 @@ export function createChatbotRepository() {
         offset: filters.offset
       };
       if (filters.profileUserId) query.profile_user_id = `eq.${filters.profileUserId}`;
-      else query.guest_id = `eq.${filters.guestId}`;
+      else {
+        query.guest_id = `eq.${filters.guestId}`;
+        query.profile_user_id = "is.null";
+      }
       return withChatError(() => selectRows("chat_session", query));
     },
 
@@ -166,15 +231,6 @@ export function createChatbotRepository() {
       }));
     },
 
-    async updateSession(sessionId: string, patch: JsonObject) {
-      const rows = await withChatError(() => updateRows("chat_session", {
-        session_id: `eq.${sessionId}`
-      }, {
-        ...patch,
-        updated_at: new Date().toISOString()
-      }));
-      return rows[0] || null;
-    },
 
     async closeSession(sessionId: string) {
       const rows = await withChatError(() => updateRows("chat_session", {
@@ -187,13 +243,15 @@ export function createChatbotRepository() {
       return rows[0] || null;
     },
 
+    /** Return the newest bounded history in stable sender sequence order. */
     async listMessages(sessionId: string, limit = 100) {
-      return withChatError(() => selectRows("chat_message", {
+      const result = await withChatError(() => selectRows("chat_message", {
         select: CHAT_MESSAGE_SELECT,
         session_id: `eq.${sessionId}`,
-        order: "created_at.asc",
+        order: "sequence.desc",
         limit
       }));
+      return { ...result, rows: (result.rows || []).reverse() };
     },
 
     async insertMessage(input: InsertMessageInput) {
@@ -310,21 +368,14 @@ export function createChatbotRepository() {
       }));
     },
 
-    async listCategories() {
-      return withChatError(() => selectRows("category", {
-        select: "category_id,name,slug",
-        order: "name.asc",
-        limit: 50
-      }));
-    },
 
+    /** Reads published official policies with their current version; draft content is never model knowledge. */
     async listPolicies() {
       return withChatError(async () => {
         const result = await selectRows("policy", {
           select: "policy_id,slug,title,summary,content,display_order,status,updated_at",
           status: "eq.published",
           order: "display_order.asc,title.asc",
-          limit: 20
         });
 
         return {
@@ -342,70 +393,6 @@ export function createChatbotRepository() {
       });
     },
 
-    async getProductById(productId: string) {
-      const result = await withChatError(() => selectRows("product", {
-        select: CHAT_PRODUCT_SELECT,
-        product_id: `eq.${productId}`,
-        limit: 1
-      }));
-      const product = result.rows?.[0] || null;
-      if (product && product.is_combo) {
-        try {
-          const { rows: comboItems } = await selectRows("combo_item", {
-            select: "combo_item_id,combo_product_id,component_product_id,component_variant_id,quantity",
-            combo_product_id: `eq.${productId}`
-          });
-          if (comboItems && comboItems.length > 0) {
-            const compIds = comboItems.map((ci) => ci.component_product_id).filter(Boolean);
-            if (compIds.length > 0) {
-              const compProducts = await selectRows("product", {
-                select: "product_id,name,sku,base_price,sale_price",
-                product_id: `in.(${compIds.join(",")})`
-              });
-              const compMap = new Map((compProducts.rows || []).map((p) => [p.product_id, p]));
-              product.combo_components = comboItems.map((ci) => ({
-                ...ci,
-                product: compMap.get(ci.component_product_id) || null
-              }));
-            } else {
-              product.combo_components = [];
-            }
-          } else {
-            product.combo_components = [];
-          }
-        } catch (err: unknown) {
-          console.warn("[COMBO-DETAILS] Failed to fetch combo components:", errorMessage(err));
-          product.combo_components = [];
-        }
-      }
-      return product;
-    },
-
-    async searchOrders(filter: Record<string, unknown>) {
-      return withChatError(() => selectRows("orders", {
-        select: "order_id,order_date,status,shipping_name,shipping_phone,total_amount,tracking_code",
-        limit: 5,
-        ...filter
-      }));
-    },
-
-    async getStyleProfile(userId: string | null | undefined) {
-      if (!userId) return null;
-      return withChatError(() => selectOne("style_profile", {
-        user_id: `eq.${userId}`
-      }));
-    },
-
-    async updateStyleProfile(userId: string | null | undefined, patch: JsonObject) {
-      if (!userId) return null;
-      const rows = await withChatError(() => updateRows("style_profile", {
-        user_id: `eq.${userId}`
-      }, {
-        ...patch,
-        updated_at: new Date().toISOString()
-      }));
-      return rows[0] || null;
-    },
 
     async insertAiLog(input: InsertAiLogInput) {
       return withChatError(() => insertRow("ai_log", {
@@ -423,125 +410,6 @@ export function createChatbotRepository() {
       }));
     },
 
-    async createSupportTicket(input: CreateSupportTicketInput) {
-      return withChatError(() => insertRow("support_ticket", {
-        ticket_id: randomUUID(),
-        user_id: input.profileUserId || null,
-        guest_phone: input.guestPhone || null,
-        guest_email: input.guestEmail || null,
-        title: input.title,
-        description: input.description,
-        priority: input.priority || "high",
-        status: "open",
-        admin_reply: null,
-        ai_log_id: input.aiLogId || null,
-        created_at: new Date().toISOString()
-      }));
-    },
-
-    async updateSupportTicket(ticketId: unknown, patch: JsonObject) {
-      if (!ticketId) return null;
-      const rows = await withChatError(() => updateRows("support_ticket", {
-        ticket_id: `eq.${ticketId}`
-      }, {
-        ...patch,
-        updated_at: new Date().toISOString()
-      }));
-      return rows[0] || null;
-    },
-
-    async queueEmail(input: QueueEmailInput) {
-      if (!input.recipient) return null;
-      return withChatError(() => insertRow("email_outbox", {
-        recipient: input.recipient,
-        template_code: input.templateCode,
-        subject: input.subject,
-        body: input.body,
-        related_user_id: input.relatedUserId || null,
-        metadata: input.metadata || {}
-      }));
-    },
-
-    async searchPolicies(query: unknown) {
-      const rawValue = String(query || "").trim();
-      if (!rawValue) {
-        return withChatError(() => selectRows("policy", {
-          select: "policy_id,slug,title,summary,content",
-          limit: 6
-        }));
-      }
-
-      try {
-        const embedding = await getEmbedding(rawValue);
-        if (embedding) {
-          console.log("[RAG-VECTOR] Searching policies by embedding similarity...");
-          const matchRows = rpcRows(await callRpc("match_policies", {
-            query_embedding: embedding,
-            match_threshold: 0.15,
-            match_count: 5
-          }));
-          if (matchRows.length > 0) {
-            return { rows: matchRows };
-          }
-        }
-      } catch (err: unknown) {
-        console.warn("[RAG-VECTOR] Policy embedding search failed, falling back to text search:", errorMessage(err));
-      }
-
-      const value = sanitizeSearch(rawValue);
-      return withChatError(() => selectRows("policy", {
-        select: "policy_id,slug,title,summary,content",
-        or: `(title.ilike.*${value}*,summary.ilike.*${value}*)`,
-        limit: 5
-      }));
-    },
-
-    async searchBlogs(query: unknown) {
-      const rawValue = String(query || "").trim();
-      if (!rawValue) {
-        return withChatError(() => selectRows("blog", {
-          select: "blog_id,slug,title,excerpt,content,image_url,author,read_minutes",
-          status: "eq.published",
-          limit: 6
-        }));
-      }
-
-      try {
-        const embedding = await getEmbedding(rawValue);
-        if (embedding) {
-          console.log("[RAG-VECTOR] Searching blogs by embedding similarity...");
-          const matchRows = rpcRows(await callRpc("match_blogs", {
-            query_embedding: embedding,
-            match_threshold: 0.15,
-            match_count: 5
-          }));
-          if (matchRows.length > 0) {
-            return { rows: matchRows };
-          }
-        }
-      } catch (err: unknown) {
-        console.warn("[RAG-VECTOR] Blog embedding search failed, falling back to text search:", errorMessage(err));
-      }
-
-      const value = sanitizeSearch(rawValue);
-      return withChatError(() => selectRows("blog", {
-        select: "blog_id,slug,title,excerpt,content,image_url,author,read_minutes",
-        status: "eq.published",
-        or: `(title.ilike.*${value}*,excerpt.ilike.*${value}*,content.ilike.*${value}*)`,
-        limit: 5
-      }));
-    },
-
-    async listBlogsByIds(blogIds: unknown) {
-      const ids = uniqueUuidList(blogIds);
-      if (!ids.length) return { rows: [], count: 0 };
-      return withChatError(() => selectRows("blog", {
-        select: "blog_id,slug,title,excerpt,content,image_url,author,read_minutes",
-        blog_id: `in.(${ids.join(",")})`,
-        status: "eq.published",
-        limit: Math.min(ids.length, 12)
-      }));
-    }
   };
 }
 

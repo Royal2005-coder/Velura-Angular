@@ -13,6 +13,7 @@ import { createNotification } from "./notifications.js";
 import { isSmsConfigured, requireSmsDelivery, sendAuthOtpSms } from "../sms/twilio.js";
 import { checkoutClientIp, type CheckoutService } from "./checkout-service.js";
 import { sendDirectEmail } from "../email/mailer.js";
+import { loyaltyService } from "../loyalty/loyalty-router.js";
 import {
   asJsonObject,
   asString,
@@ -362,7 +363,7 @@ export async function handleAuthRoute(
 
     // Create inactive user first (AUTH-05)
     const hashedPassword = hashPassword(asString(password));
-    const newUser = asJsonObject(await insertRow("users", {
+    const newUser = await loyaltyService.register({
       email: email || null,
       phone: phone || null,
       password_hash: hashedPassword,
@@ -371,7 +372,7 @@ export async function handleAuthRoute(
       otp_code: otpCode,
       otp_expires_at: otpExpiresAt,
       role: "member"
-    }));
+    }, body.referral_code);
 
     return sendJson(res, 200, {
       success: true,

@@ -3,6 +3,7 @@ import { of, Subject, throwError } from 'rxjs';
 import { AiEngineService, AiJob } from '../../core/services/ai-engine.service';
 import { AiImageWorkbench } from './ai-image-workbench';
 import { AuthService } from '../../core/services/auth.service';
+import type { Mock } from 'vitest';
 
 const quality: AiJob = {
   id: 'job-quality',
@@ -14,10 +15,11 @@ const quality: AiJob = {
 };
 describe('AiImageWorkbench', () => {
   let model: {
-    upload: ReturnType<typeof vi.fn>;
-    create: ReturnType<typeof vi.fn>;
-    cancel: ReturnType<typeof vi.fn>;
-    studioPreview: ReturnType<typeof vi.fn>;
+    upload: Mock;
+    create: Mock;
+    cancel: Mock;
+    studioPreview: Mock;
+    job: Mock;
   };
   beforeEach(() => {
     sessionStorage.clear();
@@ -27,6 +29,7 @@ describe('AiImageWorkbench', () => {
       create: vi.fn(() => of({ job: quality })),
       cancel: vi.fn(() => of({})),
       studioPreview: vi.fn(() => of(new Blob(['image'], { type: 'image/png' }))),
+      job: vi.fn(() => of({ job: { ...quality, status: 'cancelled' as const } })),
     };
     TestBed.configureTestingModule({
       imports: [AiImageWorkbench],
@@ -84,6 +87,24 @@ describe('AiImageWorkbench', () => {
     p.consent.set(true);
     await p.validate();
     expect(model.create).not.toHaveBeenCalled();
+  });
+  it('cannot upload or queue an unsupported variant even after a successful quality proof', async () => {
+    const p = page();
+    ready(p); photo(p);
+    p.capabilities.update(value => value ? { ...value, variant_supported: false } : value);
+    p.consent.set(true); p.qualityPassed.set(true);
+    await p.generate();
+    expect(model.upload).not.toHaveBeenCalled();
+    expect(model.create).not.toHaveBeenCalled();
+  });
+  it('adopts actual server state after cancellation instead of fabricating cancelled success', async () => {
+    const p = page();
+    p.job.set({ ...quality, status: 'running', expires_at: new Date(Date.now() + 60000).toISOString() });
+    model.job.mockReturnValue(of({ job: { ...quality, status: 'failed' } }));
+    await p.cancel();
+    expect(p.job()?.status).toBe('failed');
+    expect(p.result()).toBe('');
+    expect(p.busy()).toBe(false);
   });
   it('studio selection does not transfer an unused personal photo', async () => {
     const p = page();

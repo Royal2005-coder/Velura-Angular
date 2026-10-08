@@ -24,7 +24,9 @@
     "test:ng": "npm run test:user && npm run test:admin",
     "test": "npm run test:api && npm run test:ng",
     "db:check": "node scripts/run-migrations.mjs --check",
-    "db:migrate": "node scripts/run-migrations.mjs"
+    "db:migrate": "node scripts/run-migrations.mjs",
+    "ops": "node tools/ops/velura-ops.mjs",
+    "test:ops": "node --test tools/ops/velura-ops.test.mjs"
   },
   "engines": {
     "node": ">=22 <25"

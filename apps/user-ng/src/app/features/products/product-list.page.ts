@@ -1,4 +1,5 @@
-import { AiImageWorkbench } from '../../shared/ai-image-workbench/ai-image-workbench';
+import { VisualSearchWorkbench } from '../../shared/visual-search-workbench/visual-search-workbench';
+import type { VisualResult, VisualFilters } from '../../core/services/visual-search.service';
 import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
@@ -91,7 +92,7 @@ type CatalogView = 'grid' | 'large' | 'list';
 
 @Component({
   selector: 'app-product-list-page',
-  imports: [ProductCard, RouterLink, AiImageWorkbench],
+  imports: [ProductCard, RouterLink, VisualSearchWorkbench],
   host: { style: 'display:block' },
   templateUrl: './product-list.page.html',
 })
@@ -104,6 +105,17 @@ export class ProductListPage {
   readonly imageMatches = signal<string[] | null>(null);
   /** Intersects AI results with the existing category, price, color and size filters. */
   applyImageMatches(ids: string[]): void { this.imageMatches.set(ids); this.currentPage.set(1); }
+  readonly visualFeatured = signal<ProductSummary[]>([]);
+  /** Preserve server-confirmed featured suggestions distinctly from similarity matches. */
+  applyVisualResult(result: VisualResult): void {
+    this.visualFeatured.set(result.featured);
+    this.applyImageMatches(result.matches.map(product => product.product_id));
+  }
+  readonly visualFilters = computed<VisualFilters>(() => ({
+    min_price: this.minPrice(), max_price: this.maxPrice(),
+    ...(this.selectedSize() ? { size: this.selectedSize() } : {}),
+    ...(this.selectedShapes()[0] ? { body_shape: this.selectedShapes()[0] } : {}),
+  }));
   readonly loading = signal(true);
   readonly loadError = signal<string | null>(null);
   readonly allProducts = signal<ProductSummary[]>([]);
@@ -123,7 +135,9 @@ export class ProductListPage {
   readonly viewMode = signal<CatalogView>('grid');
   readonly quiz = signal<StyleQuiz | null>(null);
   readonly suggestionsEnabled = signal(localStorage.getItem(SUGGESTIONS_KEY) !== 'false');
-  readonly featuredFallback = computed(() => this.allProducts().filter((item) => item.is_featured).slice(0, 4));
+  readonly featuredFallback = computed(() => this.imageMatches() !== null
+    ? this.visualFeatured()
+    : this.allProducts().filter(item => item.is_featured && item.status === 'on_sale').slice(0, 4));
   readonly colorSwatches = [
     { title: 'Đen', hex: '#2A2522' },
     { title: 'Trắng', hex: '#FFFFFF' },
@@ -140,7 +154,7 @@ export class ProductListPage {
   readonly bodyShapes = BODY_SHAPES;
   readonly isLoggedIn = this.auth.isLoggedIn;
   readonly hasStyleProfile = computed(() => Boolean(this.quiz()?.body_shape || this.quiz()?.style_tags));
-  readonly bodyShapeUnlocked = computed(() => this.hasStyleProfile());
+  readonly bodyShapeUnlocked = computed(() => this.isLoggedIn() && this.hasStyleProfile());
   readonly bodyShapeLabel = computed(() => {
     const shape = (this.quiz()?.body_shape || '').toLowerCase();
     return BODY_SHAPE_LABELS[shape] || this.quiz()?.body_shape || '';
@@ -313,9 +327,8 @@ export class ProductListPage {
       this.selectedSlugs.set(slug ? [slug] : []);
       this.searchQuery.set((params.get('q') || '').trim());
       const matchIds = params.get('match_ids');
-      if (matchIds) {
-        this.imageMatches.set(matchIds.split(',').filter(Boolean));
-      }
+      this.imageMatches.set(matchIds === null ? null : matchIds.split(',').filter(Boolean));
+      this.visualFeatured.set([]);
       this.currentPage.set(1);
     });
     this.catalog

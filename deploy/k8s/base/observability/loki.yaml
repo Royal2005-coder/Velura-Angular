@@ -4,56 +4,26 @@ metadata:
   name: loki-config
   namespace: observability
 data:
-  loki.yaml: |
-    auth_enabled: false
-    server:
-      http_listen_port: 3100
-      grpc_listen_port: 9096
-      log_level: info
-    common:
-      path_prefix: /loki-data
-      storage:
-        filesystem:
-          chunks_directory: /loki-data/chunks
-          rules_directory: /loki-data/rules
-      replication_factor: 1
-      ring:
-        instance_addr: 127.0.0.1
-        kvstore:
-          store: inmemory
-    schema_config:
-      configs:
-        - from: 2024-01-01
-          store: tsdb
-          object_store: filesystem
-          schema: v13
-          index:
-            prefix: index_
-            period: 24h
-    storage_config:
-      tsdb_shipper:
-        active_index_directory: /loki-data/tsdb-index
-        cache_location: /loki-data/tsdb-cache
-      filesystem:
-        directory: /loki-data/chunks
-    limits_config:
-      reject_old_samples: true
-      reject_old_samples_max_age: 168h
-      retention_period: 336h
-      max_query_length: 721h
-    compactor:
-      working_directory: /loki-data/retention
-      retention_enabled: true
-      delete_request_store: filesystem
+  loki.yaml: "auth_enabled: false\nserver:\n  http_listen_port: 3100\ncommon:\n  path_prefix:\
+    \ /loki-data\n  storage:\n    filesystem:\n      chunks_directory: /loki-data/chunks\n\
+    \      rules_directory: /loki-data/rules\n  replication_factor: 1\n  ring:\n \
+    \   instance_addr: 127.0.0.1\n    kvstore:\n      store: inmemory\nschema_config:\n\
+    \  configs:\n  - from: '2024-01-01'\n    store: tsdb\n    object_store: filesystem\n\
+    \    schema: v13\n    index:\n      prefix: index_\n      period: 24h\nlimits_config:\n\
+    \  retention_period: 336h\n  allow_structured_metadata: true\ncompactor:\n  working_directory:\
+    \ /loki-data/retention\n  retention_enabled: true\n  delete_request_store: filesystem\n"
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: loki-data
   namespace: observability
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
 spec:
   accessModes:
-    - ReadWriteOnce
+  - ReadWriteOnce
+  storageClassName: local-path
   resources:
     requests:
       storage: 10Gi
@@ -63,13 +33,8 @@ kind: Deployment
 metadata:
   name: loki
   namespace: observability
-  labels:
-    app.kubernetes.io/name: loki
-    app.kubernetes.io/part-of: velura-infrastructure
 spec:
   replicas: 1
-  strategy:
-    type: Recreate
   selector:
     matchLabels:
       app: loki
@@ -78,203 +43,69 @@ spec:
       labels:
         app: loki
     spec:
+      automountServiceAccountToken: false
+      priorityClassName: velura-platform
       securityContext:
-        fsGroup: 10001
-        runAsUser: 10001
         runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
       containers:
       - name: loki
-        image: grafana/loki:3.1.1
-        imagePullPolicy: IfNotPresent
-        args:
-          - "-config.file=/etc/loki/loki.yaml"
+        image: grafana/loki:3.4.2
         ports:
-          - name: http
-            containerPort: 3100
+        - name: http
+          containerPort: 3100
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
         resources:
           requests:
             cpu: 50m
-            memory: 64Mi
+            memory: 128Mi
           limits:
-            cpu: 300m
-            memory: 256Mi
-        volumeMounts:
-          - name: config
-            mountPath: /etc/loki
-          - name: data
-            mountPath: /loki-data
+            cpu: 400m
+            memory: 384Mi
         readinessProbe:
           httpGet:
             path: /ready
             port: 3100
-          initialDelaySeconds: 15
-          periodSeconds: 10
         livenessProbe:
           httpGet:
             path: /ready
             port: 3100
-          initialDelaySeconds: 20
-          periodSeconds: 15
-      volumes:
-        - name: config
-          configMap:
-            name: loki-config
+        args:
+        - -config.file=/etc/loki/loki.yaml
+        volumeMounts:
         - name: data
-          persistentVolumeClaim:
-            claimName: loki-data
+          mountPath: /loki-data
+        - name: config
+          mountPath: /etc/loki
+          readOnly: true
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: loki-data
+      - name: config
+        configMap:
+          name: loki-config
+  strategy:
+    type: Recreate
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: loki
   namespace: observability
-  labels:
-    app.kubernetes.io/name: loki
 spec:
   type: ClusterIP
-  ports:
-    - port: 3100
-      targetPort: 3100
-      name: http
   selector:
     app: loki
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: promtail
-  namespace: observability
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: promtail
-rules:
-  - apiGroups: [""]
-    resources:
-      - nodes
-      - nodes/proxy
-      - services
-      - endpoints
-      - pods
-    verbs: ["get", "watch", "list"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: promtail
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: promtail
-subjects:
-  - kind: ServiceAccount
-    name: promtail
-    namespace: observability
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: promtail-config
-  namespace: observability
-data:
-  promtail.yaml: |
-    server:
-      http_listen_port: 9080
-      grpc_listen_port: 0
-    positions:
-      filename: /run/promtail/positions.yaml
-    clients:
-      - url: http://loki.observability.svc:3100/loki/api/v1/push
-    scrape_configs:
-      - job_name: kubernetes-pods
-        kubernetes_sd_configs:
-          - role: pod
-        pipeline_stages:
-          - cri: {}
-        relabel_configs:
-          - source_labels: [__meta_kubernetes_pod_annotation_promtail_io_scrape]
-            action: keep
-            regex: true
-          - source_labels: [__meta_kubernetes_pod_annotation_promtail_io_path]
-            action: replace
-            target_label: __path__
-            regex: (.+)
-          - action: labelmap
-            regex: __meta_kubernetes_pod_label_(.+)
-          - source_labels: [__meta_kubernetes_namespace]
-            action: replace
-            target_label: namespace
-          - source_labels: [__meta_kubernetes_pod_name]
-            action: replace
-            target_label: pod
-          - source_labels: [__meta_kubernetes_pod_container_name]
-            action: replace
-            target_label: container
-          - replacement: /var/log/pods/*$1/*.log
-            separator: /
-            source_labels:
-              - __meta_kubernetes_pod_uid
-              - __meta_kubernetes_pod_container_name
-            target_label: __path__
-      - job_name: system-pods
-        static_configs:
-          - targets: [localhost]
-            labels:
-              job: varlogs
-              __path__: /var/log/pods/*/*/*.log
----
-apiVersion: apps/v1
-kind: DaemonSet
-metadata:
-  name: promtail
-  namespace: observability
-  labels:
-    app.kubernetes.io/name: promtail
-    app.kubernetes.io/part-of: velura-infrastructure
-spec:
-  selector:
-    matchLabels:
-      app: promtail
-  template:
-    metadata:
-      labels:
-        app: promtail
-    spec:
-      serviceAccountName: promtail
-      containers:
-      - name: promtail
-        image: grafana/promtail:3.1.1
-        imagePullPolicy: IfNotPresent
-        args:
-          - "-config.file=/etc/promtail/promtail.yaml"
-        resources:
-          requests:
-            cpu: 30m
-            memory: 40Mi
-          limits:
-            cpu: 150m
-            memory: 96Mi
-        volumeMounts:
-          - name: config
-            mountPath: /etc/promtail
-          - name: varlogpods
-            mountPath: /var/log/pods
-            readOnly: true
-          - name: varlibdockercontainers
-            mountPath: /var/lib/docker/containers
-            readOnly: true
-          - name: positions
-            mountPath: /run/promtail
-      volumes:
-        - name: config
-          configMap:
-            name: promtail-config
-        - name: varlogpods
-          hostPath:
-            path: /var/log/pods
-        - name: varlibdockercontainers
-          hostPath:
-            path: /var/lib/docker/containers
-        - name: positions
-          emptyDir: {}
+  ports:
+  - name: http
+    port: 3100
+    targetPort: 3100

@@ -5,11 +5,12 @@ import { convertToParamMap, provideRouter, ActivatedRoute } from '@angular/route
 import { of } from 'rxjs';
 import { ApiService } from '../app/core/services/api.service';
 import { CatalogService } from '../app/core/services/catalog.service';
-import { ChatbotService } from '../app/core/services/chatbot.service';
+import { ChatbotService, type ChatHandoffStatus } from '../app/core/services/chatbot.service';
 import { ProductSummary } from '../app/core/models/product.interface';
 import { AddressGeographyService } from '../app/core/services/address-geography.service';
 import { StyleProfileService } from '../app/core/services/style-profile.service';
 import type { GeographyMode } from '../app/core/models/address-geography';
+import { VisualSearchModel } from '../app/core/services/visual-search.service';
 
 /** Page specs receive administrative data from a mocked Model, never HttpClient. */
 export function stubAddressGeographyService(): Pick<AddressGeographyService, 'load'> {
@@ -92,9 +93,11 @@ export function stubCatalogService(): Pick<CatalogService, 'getCategories' | 'ge
 
 export function stubChatbotService(): Pick<
   ChatbotService,
-  'sendMessage' | 'listSessions' | 'listMessages' | 'deleteSession' | 'guestId' | 'saveSessionId' | 'clearSessionId'
+  'sendMessage' | 'listSessions' | 'listMessages' | 'deleteSession' | 'guestId' | 'saveSessionId' | 'clearSessionId' | 'activeHandoff' | 'activeSession'
 > {
   return {
+    activeHandoff: signal<ChatHandoffStatus>('ai'),
+    activeSession: signal(''),
     sendMessage: () => of({ messages: [], products: [], blogs: [] }),
     listSessions: () => of({ rows: [] }),
     listMessages: () => of({ messages: [], products: [], blogs: [] }),
@@ -137,6 +140,7 @@ export async function createStorefrontPage<T>(page: Type<T>, apiOverrides: Parti
     imports: [page],
     providers: [
       { provide: AiEngineService, useValue: { capabilities: () => of({enabled:false,local_only:true,tasks:[],max_upload_bytes:5242880,private_ttl_seconds:900}) } },
+      { provide: VisualSearchModel, useValue: { cancel: () => of({}) } },
       { provide: AddressGeographyService, useValue: stubAddressGeographyService() },
       { provide: StyleProfileService, useValue: { revision: signal(0), guestAnswers: () => null, saveQuiz: () => of(undefined), loadRecommendations: () => of({ quiz: null, combos: [], categories: [] }) } },
       provideRouter([]),

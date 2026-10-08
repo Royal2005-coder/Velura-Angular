@@ -445,6 +445,7 @@
                 <h2 class="account-main__title">Style Profile</h2>
                 <p class="account-main__subtitle">Hồ sơ phong cách cá nhân — được tạo từ Style Quiz</p>
               </div>
+              @if (tab() === 'style-profile') { <app-personal-color /> }
 
               <!-- Empty State -->
               <div class="sp-empty" id="js-style-profile-empty" style="display:none;">
@@ -711,6 +712,7 @@
                 <h2 class="account-main__title">Ưu đãi của tôi</h2>
                 <p class="account-main__subtitle">Quyền lợi thành viên của bạn tại Velura</p>
               </div>
+              @if (tab() === 'offers') { <app-loyalty-wallet /> }
               <div class="offers-center" data-offers-center style="padding: 0; min-height: auto; background: transparent;">
                 <div class="offers-center__filters" role="group" aria-label="Lọc ưu đãi" style="margin-top: 0; margin-bottom: 24px;">
                   <button type="button" [class.is-active]="offerFilter() === 'ALL'" [attr.aria-pressed]="offerFilter() === 'ALL'" (click)="setOfferFilter('ALL')">Tất cả</button>

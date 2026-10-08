@@ -31,6 +31,11 @@ export async function loadManagementFacts(
     throw new HttpError(400, 'INVALID_ANALYTICS_FILTER', 'Khoảng thời gian hoặc bộ lọc phân tích không hợp lệ.');
   }
   const raw = await repository.read(query);
+  return validateManagementFacts(raw);
+}
+
+/** Validate the source envelope and measured numeric domains before any rule consumes a fact. */
+export function validateManagementFacts(raw: unknown): ManagementSourceResult {
   if (!isJsonObject(raw) || raw.source !== 'analytics.star.v2' || raw.dataset !== 'operational' ||
     typeof raw.snapshotAt !== 'string' || !Number.isFinite(Date.parse(raw.snapshotAt))) {
     return { availability: 'insufficient_data', facts: null, reason: 'Kho phân tích chưa có bản đồng bộ đã xác minh.' };
@@ -45,6 +50,66 @@ export async function loadManagementFacts(
   if (promotion.costAvailable !== false || promotion.roi !== null || retention.predictedLtvAvailable !== false ||
     sla.contractualSlaAvailable !== false || refunds.profitImpactAvailable !== false || raw.discountCsatJoinAvailable !== false) {
     return { availability: 'insufficient_data', facts: null, reason: 'Định nghĩa nguồn dữ liệu đã thay đổi; cần đối chiếu trước khi kết luận.' };
+  }
+  const counts: Record<string, readonly string[]> = {
+    sla: ['active_orders', 'known_state_orders', 'attention_orders_24h'],
+    promotion: ['redemptions'],
+    retention: ['known_customers', 'repeat_customers'],
+    csat: ['tickets', 'sample_count', 'closed_without_score'],
+    reviewCoverage: ['delivered_orders', 'reviewed_orders'],
+  };
+  const measurements: Record<string, readonly string[]> = {
+    sla: ['attention_rate_pct', 'average_hours_in_state'],
+    promotion: ['discountAmount', 'associatedOrderValue'],
+    retention: ['repeat_purchase_rate_pct', 'observed_lifetime_order_value_avg'],
+    csat: ['average_score'],
+    refunds: ['completedAmount', 'pendingAmount'],
+  };
+  const nonnegative = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0;
+  const validCount = (value: unknown): value is number => nonnegative(value) && Number.isSafeInteger(value);
+  const nullable = (row: JsonObject, key: string): boolean => key in row && (row[key] === null || nonnegative(row[key]));
+  const ratio = (value: unknown, numerator: number, denominator: number): boolean =>
+    denominator === 0 ? value === null : nonnegative(value) && Math.abs(value - numerator / denominator * 100) <= 0.011;
+  const rating = (value: unknown, sample: number): boolean =>
+    sample === 0 ? value === null : nonnegative(value) && value >= 1 && value <= 5;
+  const invalid = (): ManagementSourceResult => ({ availability: 'insufficient_data', facts: null, reason: 'Mẫu số và chỉ số nguồn không đối chiếu được.' });
+  for (const [section, keys] of Object.entries(counts)) {
+    const value = raw[section] as JsonObject;
+    if (keys.some(key => !validCount(value[key]))) return invalid();
+  }
+  for (const [section, keys] of Object.entries(measurements)) {
+    if (keys.some(key => !nullable(raw[section] as JsonObject, key))) return invalid();
+  }
+  const coverage = raw.reviewCoverage as JsonObject, csat = raw.csat as JsonObject;
+  if (Number(coverage.reviewed_orders) > Number(coverage.delivered_orders) ||
+    Number(csat.sample_count) + Number(csat.closed_without_score) > Number(csat.tickets) ||
+    !rating(csat.average_score, Number(csat.sample_count)) ||
+    Number(sla.attention_orders_24h) > Number(sla.known_state_orders) ||
+    Number(sla.known_state_orders) > Number(sla.active_orders) ||
+    !ratio(sla.attention_rate_pct, Number(sla.attention_orders_24h), Number(sla.known_state_orders)) ||
+    (Number(sla.known_state_orders) === 0 ? sla.average_hours_in_state !== null : sla.average_hours_in_state === null) ||
+    Number(retention.repeat_customers) > Number(retention.known_customers) ||
+    !ratio(retention.repeat_purchase_rate_pct, Number(retention.repeat_customers), Number(retention.known_customers))) return invalid();
+  const collectionCounts: Record<typeof COLLECTIONS[number], readonly string[]> = {
+    skuReturns: ['delivered_units', 'requested_units', 'received_units', 'rating_count', 'low_rating_count'],
+    categoryReturns: ['delivered_units', 'requested_units', 'received_units'],
+    returnReasons: ['requested_units'],
+    discountSatisfaction: ['orders', 'reviewed_orders', 'review_count', 'low_rating_count'],
+  };
+  for (const key of COLLECTIONS) {
+    for (const row of raw[key] as JsonObject[]) {
+      if (collectionCounts[key].some(name => !validCount(row[name]))) return invalid();
+      if (key === 'skuReturns' || key === 'categoryReturns') {
+        if (Number(row.received_units) > Number(row.requested_units) || Number(row.requested_units) > Number(row.delivered_units) ||
+          !ratio(row.requested_rate_pct, Number(row.requested_units), Number(row.delivered_units)) ||
+          !ratio(row.received_rate_pct, Number(row.received_units), Number(row.delivered_units))) return invalid();
+      }
+      if (key === 'skuReturns' && (!nullable(row, 'net_item_value') ||
+        Number(row.low_rating_count) > Number(row.rating_count) || !rating(row.average_rating, Number(row.rating_count)))) return invalid();
+      if (key === 'discountSatisfaction' && (Number(row.reviewed_orders) > Number(row.orders) ||
+        Number(row.reviewed_orders) > Number(row.review_count) ||
+        Number(row.low_rating_count) > Number(row.review_count) || !rating(row.average_rating, Number(row.review_count)))) return invalid();
+    }
   }
   return { availability: 'ready', facts: raw };
 }

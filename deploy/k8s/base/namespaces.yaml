@@ -2,33 +2,82 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: database
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: v1.30
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
 ---
 apiVersion: v1
 kind: Namespace
 metadata:
   name: storage
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: v1.30
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
 ---
 apiVersion: v1
 kind: Namespace
 metadata:
   name: auth
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: v1.30
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
 ---
 apiVersion: v1
 kind: Namespace
 metadata:
   name: networking
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: v1.30
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
 ---
 apiVersion: v1
 kind: Namespace
 metadata:
   name: observability
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: v1.30
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
 ---
 apiVersion: v1
 kind: Namespace
 metadata:
   name: ai
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: v1.30
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
 ---
 apiVersion: v1
 kind: Namespace
 metadata:
   name: velura
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: v1.30
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled

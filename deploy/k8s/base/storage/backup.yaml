@@ -1,0 +1,67 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: storage-external-backup
+  namespace: storage
+spec:
+  schedule: 45 2 * * *
+  timeZone: Etc/UTC
+  suspend: true
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 7200
+      template:
+        metadata:
+          labels:
+            app: storage-backup
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          priorityClassName: velura-batch
+          securityContext:
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+            runAsUser: 1000
+            runAsGroup: 1000
+            fsGroup: 1000
+          containers:
+          - name: external-object-copy
+            image: rclone/rclone:1.71.1
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                - ALL
+            command:
+            - sh
+            - -ec
+            args:
+            - 'stamp=$(date -u +%Y%m%dT%H%M%SZ); rclone --config=/etc/rclone/rclone.conf
+              copy seaweed: external:velura-backups/objects/$stamp --checksum; rclone
+              --config=/etc/rclone/rclone.conf check seaweed: external:velura-backups/objects/$stamp
+              --one-way --download; rclone --config=/etc/rclone/rclone.conf lsjson
+              external:velura-backups/objects/$stamp --recursive --files-only'
+            resources:
+              requests:
+                cpu: 50m
+                memory: 64Mi
+              limits:
+                cpu: 500m
+                memory: 256Mi
+            volumeMounts:
+            - name: config
+              mountPath: /etc/rclone
+              readOnly: true
+          volumes:
+          - name: config
+            secret:
+              secretName: storage-external-backup
+              items:
+              - key: rclone.conf
+                path: rclone.conf

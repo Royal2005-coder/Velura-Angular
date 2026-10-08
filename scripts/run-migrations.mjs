@@ -1,29 +1,17 @@
 #!/usr/bin/env node
 /**
- * Chạy migration SQL lên cơ sở dữ liệu Supabase.
+ * Apply explicit SQL migrations only to an independently configured staging database.
+ * Production writes remain frozen while off-site restore and recovery console are unverified.
  *
- * Kho này trước đây không có cách nào chạy migration ngoài việc dán tay vào SQL Editor
- * của Supabase, nên các bản 025-027 nằm trong `database/migrations` mà không ai biết đã
- * chạy hay chưa. Script này lấp chỗ đó.
+ * node scripts/run-migrations.mjs --check
+ * node scripts/run-migrations.mjs --check --environment=staging
+ * node scripts/run-migrations.mjs --environment=staging 049 050 051 052 053 054 055
+ * node scripts/run-migrations.mjs --dry-run 049
  *
- *   node scripts/run-migrations.mjs --check              # chỉ đọc, không ghi gì
- *   node scripts/run-migrations.mjs 025 026 027          # chạy theo đúng thứ tự đã liệt kê
- *   node scripts/run-migrations.mjs --dry-run 027        # in ra SQL sẽ chạy rồi dừng
- *
- * Chuỗi kết nối đọc từ SUPABASE_DB_URL trong .env ở gốc kho. Script không in chuỗi đó
- * ra màn hình hay nhật ký.
- *
- * Máy chủ trực tiếp `db.<ref>.supabase.co` chỉ có bản ghi AAAA. Máy nào không có đường
- * ra IPv6 sẽ gặp ENETUNREACH; khi đó dùng pooler ở chế độ phiên (cổng 5432 — chế độ
- * giao dịch ở cổng 6543 không chạy được DDL):
- *
- *   postgresql://postgres.<ref>:<mật khẩu>@aws-0-<vùng>.pooler.supabase.com:5432/postgres
- *
- * Dự án này nằm ở vùng ap-southeast-2.
- *
- * Mỗi tệp chạy trong một giao dịch riêng: hỏng giữa chừng thì tệp đó quay lui trọn vẹn,
- * các tệp đã xong trước đó vẫn giữ nguyên. Postgres cho phép DDL trong giao dịch nên
- * điều này áp dụng cho cả `create table` lẫn `drop function`.
+ * Staging requires STAGING_SUPABASE_DB_URL and STAGING_SUPABASE_DB_CA_CERT.
+ * Read-only production checks use SUPABASE_DB_URL and SUPABASE_DB_CA_CERT.
+ * Each migration runs in one transaction; failures preserve earlier committed files.
+ * Credentials are never printed and TLS certificate verification cannot be disabled.
  */
 
 import { execFileSync } from "node:child_process";
@@ -143,6 +131,10 @@ async function main() {
   const dryRun = args.includes("--dry-run");
   const checkOnly = args.includes("--check");
   const prefixes = args.filter((arg) => !arg.startsWith("--"));
+  const environment = args.find(arg => arg.startsWith("--environment="))?.slice("--environment=".length) || "production";
+  if (!["staging", "production"].includes(environment)) throw new Error("Environment must be staging or production.");
+  if (!checkOnly && !dryRun && environment !== "staging") throw new Error("Production migration is frozen. Use --environment=staging with independent staging credentials.");
+  if (!checkOnly && !dryRun && (!prefixes.length || prefixes.some(prefix => !/^\d{3}$/.test(prefix)))) throw new Error("Supply explicit three-digit migration numbers.");
 
   if (dryRun) {
     for (const prefix of prefixes) {
@@ -153,35 +145,27 @@ async function main() {
     return;
   }
 
-  const connectionString = readEnv("SUPABASE_DB_URL");
-  if (!connectionString) {
-    console.error("Thiếu SUPABASE_DB_URL trong .env ở gốc kho.");
-    process.exit(1);
+  const connectionKey = environment === "staging" ? "STAGING_SUPABASE_DB_URL" : "SUPABASE_DB_URL";
+  const connectionString = readEnv(connectionKey);
+  if (!connectionString) throw new Error(`Missing ${connectionKey}.`);
+  if (environment === "staging") {
+    const production = readEnv("SUPABASE_DB_URL");
+    const stage = new URL(connectionString);
+    if (production) {
+      const live = new URL(production);
+      const sharedPooler = /\.pooler\.supabase\.com$/i.test(stage.hostname);
+      const stageUser = decodeURIComponent(stage.username), liveUser = decodeURIComponent(live.username);
+      const distinctProject = sharedPooler && /^[a-z_]+\.[a-z0-9]{20}$/i.test(stageUser) &&
+        /^[a-z_]+\.[a-z0-9]{20}$/i.test(liveUser) && stageUser.split(".")[1] !== liveUser.split(".")[1];
+      if (stage.hostname === live.hostname && stage.pathname === live.pathname &&
+          !distinctProject) throw new Error("Staging database identity matches production; refusing migration.");
+    }
   }
 
-  // Script này cầm chuỗi kết nối cơ sở dữ liệu production và đẩy nguyên văn DDL qua đó.
-  // Bản trước đặt thẳng `rejectUnauthorized: false`, nghĩa là bất kỳ ai chen được vào
-  // giữa cũng đọc được thông tin kết nối và toàn bộ nội dung migration.
-  //
-  // Supabase ký chứng chỉ bằng CA riêng nên kho tin cậy mặc định của Node không xác thực
-  // được; cách đúng là trỏ tới CA của họ (tải ở Dashboard > Settings > Database > SSL).
-  // Không có CA thì script dừng và nói rõ hai lựa chọn, thay vì âm thầm hạ tiêu chuẩn.
-  const caPath = readEnv("SUPABASE_DB_CA_CERT");
-  const allowInsecureTls = readEnv("SUPABASE_DB_ALLOW_INSECURE_TLS") === "true";
-
-  let ssl;
-  if (caPath) {
-    ssl = { ca: readFileSync(caPath, "utf8"), rejectUnauthorized: true };
-  } else if (allowInsecureTls) {
-    console.warn("CẢNH BÁO: đang bỏ qua xác thực chứng chỉ TLS tới cơ sở dữ liệu.");
-    console.warn("Chỉ dùng tạm. Đặt SUPABASE_DB_CA_CERT trỏ tới CA của Supabase để chạy an toàn.");
-    ssl = { rejectUnauthorized: false };
-  } else {
-    console.error("Thiếu cấu hình TLS cho kết nối cơ sở dữ liệu. Chọn một trong hai:");
-    console.error("  1. SUPABASE_DB_CA_CERT=<đường dẫn tới CA của Supabase>   (khuyến nghị)");
-    console.error("  2. SUPABASE_DB_ALLOW_INSECURE_TLS=true                    (chỉ khi chạy tạm)");
-    process.exit(1);
-  }
+  const caKey = environment === "staging" ? "STAGING_SUPABASE_DB_CA_CERT" : "SUPABASE_DB_CA_CERT";
+  const caPath = readEnv(caKey);
+  if (!caPath) throw new Error(`Missing ${caKey}; certificate verification is required.`);
+  const ssl = { ca: readFileSync(caPath, "utf8"), rejectUnauthorized: true };
 
   const dbUrl = new URL(connectionString);
   const resolvedAddress = await resolveHostAddress(dbUrl.hostname);
@@ -200,7 +184,7 @@ async function main() {
   }
 
   const { Client } = require("pg");
-  const client = new Client(clientConfig);
+  const client = new Client({ ...clientConfig, connectionTimeoutMillis: 10_000, statement_timeout: 120_000 });
   await client.connect();
 
   try {

@@ -5,6 +5,7 @@ import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/route
 import { of } from 'rxjs';
 import { AdminApiService, AdminDashboardSummary, AdminInsightsPayload } from '../app/core/admin-api.service';
 import { emptyInsightBoard } from '../app/core/admin-insight-state';
+import { AdminChatReviewService } from '../app/core/admin-chat-review.service';
 
 const emptyDashboard = (): AdminDashboardSummary => ({
   operations: {
@@ -113,6 +114,7 @@ export async function createAdminPage<T>(page: Type<T>, apiOverrides: Record<str
     imports: [page],
     providers: [
       { provide: AdminAiEngineService, useValue: { capabilities: () => of({enabled:false, local_only:true, tasks:[], max_upload_bytes:5242880, private_ttl_seconds:900}) } },
+      { provide: AdminChatReviewService, useValue: { review: () => of({}), original: () => of({}) } },
       provideRouter([]),
       { provide: AdminApiService, useValue: stubAdminApi(apiOverrides) },
       {

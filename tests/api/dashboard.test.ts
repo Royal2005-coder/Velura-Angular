@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { normalizeDashboardSummary, resolveDashboardPeriod, dashboardProvenance } from "../../apps/api/src/dashboard.js";
+import { buildDashboardSummary, refreshDashboard, normalizeDashboardSummary, resolveDashboardPeriod, dashboardProvenance } from "../../apps/api/src/dashboard.js";
+import type { AnalyticsRepository } from "../../apps/api/src/insights/analytics-repository.js";
+import { emptyManagementFacts } from './analytics-fixtures.js';
+import { HttpError } from '../../apps/api/src/http.js';
+import { handleDashboardRoute } from '../../apps/api/src/dashboard-router.js';
+import type { RouteArgs } from '../../apps/api/src/types.js';
 
 test("dashboard week is seven complete Vietnam calendar days", () => {
   const params = new URLSearchParams("range=week");
@@ -87,19 +92,94 @@ test("dashboard provenance refuses to treat a single review or CSAT as reliable"
   assert.equal(enough.reliable.csat, true);
 });
 
-test("provenance marks the period incomplete when the source rows were capped", () => {
-  const voice = { productReaction: { reviewCount: 40 }, serviceQuality: { csatCount: 25 }, coverage: { deliveredOrders: 100 }, truncated: true };
-  const capped = dashboardProvenance(false, voice);
-  assert.equal(capped.reliable.complete, false);
-  // Cỡ mẫu vẫn đủ lớn để tin được từng chỉ số riêng lẻ; hai chuyện khác nhau.
-  assert.equal(capped.reliable.reviews, true);
-  assert.equal(capped.reliable.csat, true);
-
-  const whole = dashboardProvenance(false, { ...voice, truncated: false });
-  assert.equal(whole.reliable.complete, true);
+test("capped rows keep observed sample reliability distinct from complete period coverage", () => {
+  const voice = { productReaction: { reviewCount: 40 }, serviceQuality: { csatCount: 25 }, coverage: { deliveredOrders: 100 } };
+  for (const flags of [{ truncated: true }, { meta: { truncated: true } }, { rowsCapped: true }, { meta: { rowsCapped: true } }]) {
+    const capped = dashboardProvenance(false, { ...voice, ...flags });
+    assert.equal(capped.reliable.complete, false);
+    assert.equal(capped.reliable.reviews, true);
+    assert.equal(capped.reliable.csat, true);
+  }
+  assert.equal(dashboardProvenance(false, { ...voice, truncated: false }).reliable.complete, true);
 });
 
-test("provenance treats a missing voice payload as complete rather than as truncated", () => {
-  // Không có dữ liệu tiếng nói khách hàng là một chuyện; có nhưng bị cắt là chuyện khác.
-  assert.equal(dashboardProvenance(false, null).reliable.complete, true);
+test("missing voice has no complete period or reliable samples", () => {
+  for (const voice of [null, undefined]) {
+    assert.deepEqual(dashboardProvenance(false, voice).reliable, { complete: false, reviews: false, csat: false });
+  }
+});
+
+const now = new Date('2026-10-04T01:00:00Z');
+function analyticsSnapshot() {
+  return {
+    schemaVersion: 3, source: 'analytics.star.v3', dataset: 'operational',
+    snapshotAt: '2026-10-04T00:00:00Z', reconciled: true, freshness: 'stale', pendingEvents: 2,
+    lastSync: { status: 'failed' },
+    facts: emptyManagementFacts(),
+    summary: { operations: { pendingOrders: 2 }, business: { revenue: 100, orderCount: 2, averageOrderValue: 50 } },
+  };
+}
+const repositoryFor = (value: unknown): AnalyticsRepository => ({
+  read: async () => value,
+  refresh: async () => { throw new Error('GET must never refresh'); },
+});
+
+test('a failed latest sync does not invalidate or redate the last verified snapshot', async () => {
+  const result = await buildDashboardSummary(null, now, repositoryFor(analyticsSnapshot()));
+  assert.equal(result.business.revenue, 100);
+  assert.equal(result.meta.validated, true);
+  assert.equal(result.meta.freshness, 'stale');
+  assert.equal(result.meta.updated_at, '2026-10-04T00:00:00Z');
+  assert.equal(result.meta.lastSync.status, 'failed');
+  assert.equal(result.management.groups[0].kpis?.aov, 50);
+});
+
+test('unverified, mismatched or unavailable snapshots cannot expose business metrics as zero or OLTP fallback', async () => {
+  const valid = analyticsSnapshot();
+  for (const source of [
+    { ...valid, reconciled: false }, { ...valid, snapshotAt: null },
+    { ...valid, snapshotAt: '2099-01-01T00:00:00Z' },
+    { ...valid, facts: { ...valid.facts, snapshotAt: '2026-10-03T00:00:00Z' } },
+    { ...valid, freshness: 'unavailable' }, { ...valid, facts: null },
+  ]) {
+    const result = await buildDashboardSummary(null, now, repositoryFor(source));
+    assert.equal(result.business.revenue, null);
+    assert.equal(result.business.averageOrderValue, null);
+    assert.equal(result.operations.pendingOrders, 2);
+    assert.equal(result.meta.source, 'unavailable');
+    assert.equal(result.meta.freshness, 'unavailable');
+    assert.equal(result.meta.validated, false);
+    assert.ok(result.management.groups.every(group => group.availability === 'insufficient_data'));
+    if (source.reconciled === false || !source.snapshotAt || source.snapshotAt.startsWith('2099')) assert.equal(result.meta.updated_at, null);
+  }
+});
+
+test('dashboard reads preserve fixed period and dimension filters without synchronization', async () => {
+  let readQuery: unknown;
+  const source = analyticsSnapshot();
+  const repository: AnalyticsRepository = {
+    read: async query => { readQuery = query; return source; },
+    refresh: async () => { throw new Error('Unexpected refresh'); },
+  };
+  const result = await buildDashboardSummary(new URLSearchParams('range=day&productId=00000000-0000-4000-8000-000000000001'), now, repository);
+  assert.deepEqual(readQuery, { from: result.from, to: result.toExclusive, categoryId: null, productId: '00000000-0000-4000-8000-000000000001' });
+  assert.equal(result.previousToExclusive, result.from);
+  assert.equal(Date.parse(result.toExclusive) - Date.parse(result.from), 86400000);
+});
+
+test('busy, throttled, failed and malformed sync results reject instead of reporting success', async () => {
+  for (const status of ['busy', 'throttled', 'failed', 'succeeded']) {
+    const repository: AnalyticsRepository = { read: async () => null, refresh: async () => ({ status, success: status === 'succeeded', snapshotAt: null }) };
+    await assert.rejects(() => refreshDashboard('actor', repository), (error: unknown) =>
+      error instanceof HttpError && error.status === (status === 'busy' || status === 'throttled' ? 429 : 502));
+  }
+});
+
+test('dashboard viewer writes are denied before reaching the refresh repository', async () => {
+  const args = {
+    req: { method: 'POST' }, res: {}, url: new URL('https://velura.test/api/v1/admin/dashboard/refresh'),
+    parts: ['api', 'v1', 'admin', 'dashboard', 'refresh'], headers: {},
+    context: { authUser: { id: 'viewer' }, roleCode: 'admin_viewer', isAdmin: true, allowedModules: ['dashboard'], profile: { user_id: 'viewer', role: 'admin', admin_role: 'admin_viewer', is_active: true } },
+  } as unknown as RouteArgs;
+  await assert.rejects(() => handleDashboardRoute(args), (error: unknown) => error instanceof HttpError && error.status === 403);
 });

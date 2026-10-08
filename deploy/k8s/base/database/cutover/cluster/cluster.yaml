@@ -1,0 +1,183 @@
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: external-keycloak-backup
+  namespace: database
+spec:
+  retentionPolicy: 30d
+  configuration:
+    destinationPath: ${CNPG_BACKUP_DESTINATION}
+    endpointURL: ${CNPG_BACKUP_ENDPOINT}
+    s3Credentials:
+      accessKeyId:
+        name: cnpg-backup-credentials
+        key: access-key-id
+      secretAccessKey:
+        name: cnpg-backup-credentials
+        key: secret-access-key
+    wal:
+      compression: gzip
+    data:
+      compression: gzip
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: keycloak-pg
+  namespace: database
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+spec:
+  instances: 1
+  imageName: ghcr.io/cloudnative-pg/postgresql:16.10
+  enableSuperuserAccess: false
+  bootstrap:
+    initdb:
+      database: keycloak
+      owner: keycloak
+      secret:
+        name: keycloak-database
+      import:
+        type: microservice
+        databases:
+        - keycloak
+        source:
+          externalCluster: legacy
+  externalClusters:
+  - name: legacy
+    connectionParameters:
+      host: postgres.database.svc
+      user: postgres
+      dbname: keycloak
+    password:
+      name: postgres-secret
+      key: POSTGRES_PASSWORD
+  storage:
+    size: 20Gi
+    storageClass: local-path
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 768Mi
+  postgresql:
+    parameters:
+      shared_buffers: 128MB
+      max_connections: '50'
+      archive_timeout: 300s
+  plugins:
+  - name: barman-cloud.cloudnative-pg.io
+    isWALArchiver: true
+    parameters:
+      barmanObjectName: external-keycloak-backup
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: keycloak-daily
+  namespace: database
+spec:
+  schedule: 0 0 3 * * *
+  backupOwnerReference: self
+  cluster:
+    name: keycloak-pg
+  method: plugin
+  pluginConfiguration:
+    name: barman-cloud.cloudnative-pg.io
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cnpg-cutover
+  namespace: database
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/cluster: keycloak-pg
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: auth
+      podSelector:
+        matchLabels:
+          app: keycloak
+    ports:
+    - protocol: TCP
+      port: 5432
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: cnpg-system
+    ports:
+    - protocol: TCP
+      port: 8000
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: observability
+      podSelector:
+        matchLabels:
+          app: victoriametrics
+    ports:
+    - protocol: TCP
+      port: 9187
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: database
+      podSelector:
+        matchLabels:
+          app: postgres
+    ports:
+    - protocol: TCP
+      port: 5432
+  - to:
+    - ipBlock:
+        cidr: 10.43.0.1/32
+    ports:
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 6443
+  - to:
+    - ipBlock:
+        cidr: 0.0.0.0/0
+        except:
+        - 10.0.0.0/8
+        - 172.16.0.0/12
+        - 192.168.0.0/16
+        - 169.254.0.0/16
+        - 127.0.0.0/8
+    ports:
+    - protocol: TCP
+      port: 443
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: legacy-import-source
+  namespace: database
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: database
+      podSelector:
+        matchLabels:
+          cnpg.io/cluster: keycloak-pg
+    ports:
+    - protocol: TCP
+      port: 5432

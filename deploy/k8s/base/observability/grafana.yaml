@@ -4,32 +4,22 @@ metadata:
   name: grafana-datasources
   namespace: observability
 data:
-  datasources.yaml: |
-    apiVersion: 1
-    datasources:
-      - name: VictoriaMetrics
-        type: prometheus
-        access: proxy
-        url: http://victoriametrics.observability.svc:8428
-        isDefault: true
-        editable: false
-        jsonData:
-          httpMethod: POST
-          timeInterval: 15s
-      - name: Loki
-        type: loki
-        access: proxy
-        url: http://loki.observability.svc:3100
-        editable: false
+  datasources.yaml: "apiVersion: 1\ndatasources:\n- name: VictoriaMetrics\n  type:\
+    \ prometheus\n  access: proxy\n  url: http://victoriametrics:8428\n  isDefault:\
+    \ true\n  editable: false\n- name: Loki\n  type: loki\n  access: proxy\n  url:\
+    \ http://loki:3100\n  editable: false\n"
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: grafana-data
   namespace: observability
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
 spec:
   accessModes:
-    - ReadWriteOnce
+  - ReadWriteOnce
+  storageClassName: local-path
   resources:
     requests:
       storage: 5Gi
@@ -39,13 +29,8 @@ kind: Deployment
 metadata:
   name: grafana
   namespace: observability
-  labels:
-    app.kubernetes.io/name: grafana
-    app.kubernetes.io/part-of: velura-infrastructure
 spec:
   replicas: 1
-  strategy:
-    type: Recreate
   selector:
     matchLabels:
       app: grafana
@@ -54,89 +39,107 @@ spec:
       labels:
         app: grafana
     spec:
+      automountServiceAccountToken: false
+      priorityClassName: velura-platform
       securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+        runAsUser: 472
+        runAsGroup: 472
         fsGroup: 472
       containers:
       - name: grafana
-        image: grafana/grafana:11.2.0
-        imagePullPolicy: IfNotPresent
+        image: grafana/grafana:11.6.5
         ports:
-          - name: http
-            containerPort: 3000
-        env:
-          - name: GF_SECURITY_ADMIN_USER
-            value: "admin"
-          - name: GF_SECURITY_ADMIN_PASSWORD
-            value: "VeluraAdmin2026!"
-          - name: GF_USERS_ALLOW_SIGN_UP
-            value: "false"
-          - name: GF_SERVER_ROOT_URL
-            value: "https://grafana.royalai.dev/"
-          - name: GF_AUTH_GENERIC_OAUTH_ENABLED
-            value: "true"
-          - name: GF_AUTH_GENERIC_OAUTH_NAME
-            value: "Keycloak"
-          - name: GF_AUTH_GENERIC_OAUTH_CLIENT_ID
-            value: "grafana"
-          - name: GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET
-            value: "velura_grafana_oauth_secret_2026"
-          - name: GF_AUTH_GENERIC_OAUTH_SCOPES
-            value: "openid profile email"
-          - name: GF_AUTH_GENERIC_OAUTH_AUTH_URL
-            value: "https://auth.royalai.dev/realms/velura/protocol/openid-connect/auth"
-          - name: GF_AUTH_GENERIC_OAUTH_TOKEN_URL
-            value: "https://auth.royalai.dev/realms/velura/protocol/openid-connect/token"
-          - name: GF_AUTH_GENERIC_OAUTH_API_URL
-            value: "https://auth.royalai.dev/realms/velura/protocol/openid-connect/userinfo"
-          - name: GF_AUTH_GENERIC_OAUTH_ALLOW_SIGN_UP
-            value: "true"
-          - name: GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_PATH
-            value: "contains(realm_access.roles[*], 'super_admin') && 'Admin' || contains(realm_access.roles[*], 'developer') && 'Editor' || 'Viewer'"
+        - name: http
+          containerPort: 3000
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
         resources:
           requests:
-            cpu: 100m
+            cpu: 50m
             memory: 128Mi
           limits:
-            cpu: 500m
+            cpu: 400m
             memory: 384Mi
-        volumeMounts:
-          - name: data
-            mountPath: /var/lib/grafana
-          - name: datasources
-            mountPath: /etc/grafana/provisioning/datasources
-        livenessProbe:
-          httpGet:
-            path: /api/health
-            port: 3000
-          initialDelaySeconds: 20
-          periodSeconds: 15
         readinessProbe:
           httpGet:
             path: /api/health
             port: 3000
-          initialDelaySeconds: 10
-          periodSeconds: 10
-      volumes:
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+        env:
+        - name: GF_SECURITY_ADMIN_USER
+          valueFrom:
+            secretKeyRef:
+              name: grafana-credentials
+              key: admin-user
+        - name: GF_SECURITY_ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: grafana-credentials
+              key: admin-password
+        - name: GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: grafana-credentials
+              key: oauth-client-secret
+        - name: GF_USERS_ALLOW_SIGN_UP
+          value: 'false'
+        - name: GF_SERVER_ROOT_URL
+          value: https://grafana.royalai.dev/
+        - name: GF_AUTH_GENERIC_OAUTH_ENABLED
+          value: 'true'
+        - name: GF_AUTH_GENERIC_OAUTH_CLIENT_ID
+          value: grafana
+        - name: GF_AUTH_GENERIC_OAUTH_SCOPES
+          value: openid profile email roles
+        - name: GF_AUTH_GENERIC_OAUTH_AUTH_URL
+          value: https://auth.royalai.dev/realms/velura/protocol/openid-connect/auth
+        - name: GF_AUTH_GENERIC_OAUTH_TOKEN_URL
+          value: https://auth.royalai.dev/realms/velura/protocol/openid-connect/token
+        - name: GF_AUTH_GENERIC_OAUTH_API_URL
+          value: https://auth.royalai.dev/realms/velura/protocol/openid-connect/userinfo
+        - name: GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_STRICT
+          value: 'true'
+        - name: GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_PATH
+          value: contains(realm_access.roles[*], 'super_admin') && 'Admin' || contains(realm_access.roles[*],
+            'developer') && 'Editor' || contains(realm_access.roles[*], 'observability_viewer')
+            && 'Viewer'
+        - name: GF_AUTH_DISABLE_LOGIN_FORM
+          value: 'true'
+        volumeMounts:
         - name: data
-          persistentVolumeClaim:
-            claimName: grafana-data
+          mountPath: /var/lib/grafana
         - name: datasources
-          configMap:
-            name: grafana-datasources
+          mountPath: /etc/grafana/provisioning/datasources
+          readOnly: true
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: grafana-data
+      - name: datasources
+        configMap:
+          name: grafana-datasources
+  strategy:
+    type: Recreate
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: grafana
   namespace: observability
-  labels:
-    app.kubernetes.io/name: grafana
 spec:
-  type: NodePort
-  ports:
-    - port: 3000
-      targetPort: 3000
-      nodePort: 30300
-      name: http
+  type: ClusterIP
   selector:
     app: grafana
+  ports:
+  - name: http
+    port: 3000
+    targetPort: 3000

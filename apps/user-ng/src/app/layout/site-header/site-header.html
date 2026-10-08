@@ -85,7 +85,7 @@
             </svg>
           </button>
         </label>
-        <app-ai-image-workbench #headerWorkbench [hideTrigger]="true" task="image_embedding" (matches)="onVisualSearchMatches($event)" />
+        <app-visual-search-workbench #headerWorkbench [hideTrigger]="true" (matches)="onVisualSearchMatches($event)" />
       </div>
       <nav class="center-row center-row--bottom site-header__nav" aria-label="Chính" [class.is-open]="navOpen()">
         <a routerLink="/" routerLinkActive="is-active" [routerLinkActiveOptions]="{exact: true}" class="nav-link">Trang chủ</a>

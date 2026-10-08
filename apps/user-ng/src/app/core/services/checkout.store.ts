@@ -15,7 +15,6 @@ export interface CheckoutShipping {
   district?: string;
   ward?: string;
   detail?: string;
-  referral_code?: string;
   is_gift?: boolean;
   gift_gender?: 'nam' | 'nu';
   gift_name?: string;
@@ -262,7 +261,6 @@ export class CheckoutStore {
         district: raw.district || '',
         ward: raw.ward || '',
         detail: raw.detail || '',
-        referral_code: raw.referral_code || '',
         is_gift: Boolean(raw.is_gift),
         gift_gender: raw.gift_gender || 'nam',
         gift_name: raw.gift_name || '',

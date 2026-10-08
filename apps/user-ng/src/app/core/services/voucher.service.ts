@@ -14,6 +14,7 @@ export interface QuoteVoucherChoice {
   voucherId?: string | null;
   code?: string | null;
   decline?: boolean;
+  pointsSpent?: number;
 }
 
 /**
@@ -80,7 +81,8 @@ export class VoucherService {
         shipping_method: shippingMethod,
         voucher_id: choice.voucherId || null,
         code: choice.code || null,
-        decline_voucher: choice.decline === true
+        decline_voucher: choice.decline === true,
+        points_spent: choice.pointsSpent ?? 0
       })
       .pipe(map((response) => response.quote));
   }

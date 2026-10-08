@@ -55,8 +55,8 @@
               <span class="chatbot-header__status"></span>
             </div>
             <div>
-              <h4 class="chatbot-header__title">AI Stylist</h4>
-              <span class="chatbot-header__desc">Trực tuyến</span>
+              <h4 class="chatbot-header__title">{{ humanTakeover() ? 'CSKH — HUMAN' : 'AI Stylist' }}</h4>
+              <span class="chatbot-header__desc">{{ handoffStatus() === 'assigned' ? 'Nhân viên đã tiếp nhận · AI đã dừng' : handoffStatus() === 'requested' ? 'Đang chờ CSKH · AI đã dừng' : handoffStatus() === 'closed' ? 'Phiên CSKH đã đóng · AI đã dừng' : 'Tư vấn bằng AI' }}</span>
             </div>
           </div>
           <div class="chatbot-state-switcher" style="display:flex;align-items:center;gap:12px;">
@@ -69,6 +69,9 @@
             </button>
           </div>
         </div>
+        @if (humanTakeover()) { <p role="status">Tin nhắn của bạn được gửi cho CSKH, không tạo câu trả lời AI.</p><button type="button" (click)="refreshMessages()" [disabled]="loading()">Tải lại tin nhắn CSKH</button> }
+        @else { <button type="button" (click)="requestHuman()" [disabled]="loading()">Gặp nhân viên CSKH</button> }
+        @if (chatError()) { <p role="alert">{{ chatError() }}</p> }
 
         <div class="chatbot-messages" #messagesPane>
           @for (message of messages(); track message.message_id) {
@@ -103,9 +106,9 @@
                 [class.chatbot-message--typing]="message.metadata?.typing"
                 [class.chatbot-message--has-rich-content]="productsFor(message).length > 0"
               >
-                @if (message.sender === 'agent') {
-                  <span class="chatbot-message__sender">CSKH</span>
-                }
+                @if (message.metadata?.system) { <span class="chatbot-message__sender">SYSTEM</span> }
+                @else if (message.sender === 'agent') { <span class="chatbot-message__sender">HUMAN · {{ message.metadata?.agent_name || 'CSKH' }}</span> }
+                @else if (message.sender === 'bot') { <span class="chatbot-message__sender">AI</span> }
                 @if (message.metadata?.typing) {
                   <div class="chatbot-message__text"><span class="typing-dots"><span>.</span><span>.</span><span>.</span></span></div>
                 } @else {

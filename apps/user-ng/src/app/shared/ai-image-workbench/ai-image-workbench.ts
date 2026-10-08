@@ -203,12 +203,16 @@ export class AiImageWorkbench {
       this.variantId();
       untracked(() => {
         this.generation++;
+        this.capabilities.set(null);
         this.clearTimer();
         this.release(this.result());
         this.result.set('');
         this.job.set(null);
         this.busy.set(false);
         this.clearStudio();
+        this.pendingKey = '';
+        this.pendingFingerprint = '';
+        if (this.dialog()?.nativeElement.open) void this.open();
       });
     });
     this.destroy.onDestroy(() => {
@@ -221,19 +225,19 @@ export class AiImageWorkbench {
   }
   /** Opens a keyboard-accessible modal and reads readiness before uploading anything. */
   async open(): Promise<void> {
-    this.dialog()?.nativeElement.showModal();
+    const dialog = this.dialog()?.nativeElement;
+    if (dialog && !dialog.open) dialog.showModal();
+    const epoch = this.generation;
+    this.capabilities.set(null);
     this.error.set('');
     try {
-      this.capabilities.set(
-        await firstValueFrom(
-          this.model.capabilities(
-            this.task() === 'virtual_try_on' ? this.productId() : undefined,
-            this.task() === 'virtual_try_on' ? this.variantId() : undefined,
-          ),
-        ),
-      );
+      const capabilities = await firstValueFrom(this.model.capabilities(
+        this.task() === 'virtual_try_on' ? this.productId() : undefined,
+        this.task() === 'virtual_try_on' ? this.variantId() : undefined,
+      ));
+      if (epoch === this.generation) this.capabilities.set(capabilities);
     } catch {
-      this.error.set('Chưa kết nối được dịch vụ AI. Vui lòng thử lại.');
+      if (epoch === this.generation) this.error.set('Chưa kết nối được dịch vụ AI. Vui lòng thử lại.');
     }
   }
   /** Native close restores focus to the opener. Work stays resumable within the owner session. */
@@ -286,14 +290,23 @@ export class AiImageWorkbench {
     const id = this.job()?.id;
     this.generation++;
     this.clearTimer();
-    this.busy.set(false);
+    this.busy.set(true);
     if (id) {
+      const epoch = this.generation;
       try {
         await firstValueFrom(this.model.cancel(id));
-        this.job.update((j) => (j ? { ...j, status: 'cancelled' } : null));
+        const response = await firstValueFrom(this.model.job(id));
+        if (epoch !== this.generation) return;
+        this.job.set(response.job);
+        await this.poll(epoch);
       } catch {
-        this.error.set('Chưa xác nhận được thao tác hủy. Tiếp tục tác vụ để kiểm tra trạng thái.');
+        if (epoch === this.generation) {
+          this.busy.set(false);
+          this.error.set('Chưa xác nhận được thao tác hủy. Tiếp tục tác vụ để kiểm tra trạng thái.');
+        }
       }
+    } else {
+      this.busy.set(false);
     }
   }
   private async start(task: AiTask): Promise<void> {
@@ -363,6 +376,11 @@ export class AiImageWorkbench {
     const current = this.job();
     if (!current || epoch !== this.generation) return;
     if (current.status === 'queued' || current.status === 'running') {
+      if (!Number.isFinite(Date.parse(current.expires_at)) || Date.parse(current.expires_at) <= Date.now()) {
+        this.busy.set(false);
+        this.error.set('Tác vụ đã vượt thời gian lưu tạm. Tiếp tục tác vụ để đọc trạng thái máy chủ; chưa có kết quả thành công.');
+        return;
+      }
       this.timer = setTimeout(async () => {
         try {
           const response = await firstValueFrom(this.model.job(current.id));

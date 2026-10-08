@@ -59,6 +59,8 @@ Không lắp Vendure/Medusa/Strapi. `apps/api` `rbac.ts` `rolePages` là canonic
 7. **Lazy route:** `loadComponent` trong `apps/admin-ng` và `apps/user-ng` `app.routes.ts`.
 8. **Test:** empty / error / filter trên `*.page.spec.ts`; mock Model, không gọi mạng.
 
+Catalog `/products` includes reviewed image replacement and single/bulk content drafts. New image files require measurement, deliberate selection and approval; the editor saves the returned immutable URL without uploading output bytes again. Migration 051 binds that URL to the reviewer and product version; unchanged published images are not reassessed. Save price changes separately before reviewing a replacement image. CSV does not provide approval for new image URLs and must reject them. Content generation and draft approval do not change live copy; publication and verified-source changes reload the saved product/version. Migrations 051 and 055 and their API routes must be available on staging before exercising these flows.
+
 ## Gap (ticket / MR tiếp)
 
 | Gap | Việc | Jira |

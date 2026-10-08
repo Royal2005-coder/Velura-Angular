@@ -1,11 +1,13 @@
 import { randomUUID, createHash } from "node:crypto";
-import { copyFile, writeFile, mkdir, rm } from "node:fs/promises";
+import { copyFile, writeFile, readFile, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { resolve, sep } from "node:path";
 import { HttpError } from "../http.js";
 import { asString, asJsonObject, type JsonObject } from "../types.js";
 import { LocalAiRepository } from "./ai-repository.js";
+import sharp from "sharp";
+import type { EnhancementEvidence, EnhancementSelection } from "./enhancement-approval-service.js";
 import {
   LocalImageVectorRepository,
   normalizedImageVector,
@@ -76,13 +78,9 @@ export class AiService {
   /** Report actual operator-enabled runtime state; no fabricated readiness. */
   capabilities() {
     const verified = (process.env.AI_VERIFIED_TASKS || "").split(",");
-    const ready =
-      !this.storageBlocked &&
-      this.worker.ready() &&
-      (process.env.AI_ENABLE === "true" ||
-        process.env.AI_ENGINE_MODE === "cluster" ||
-        process.env.NODE_ENV !== "production");
-    const enabled = ready && TASKS.some((task) => verified.includes(task));
+    const allowed = !this.storageBlocked && process.env.AI_DISABLE !== "true" && process.env.AI_ENABLE !== "false" &&
+      (process.env.AI_ENABLE === "true" || process.env.NODE_ENV !== "production");
+    const enabled = allowed && TASKS.some(task => verified.includes(task) && this.worker.ready(task));
     const registry = asJsonObject(
       JSON.parse(process.env.AI_STUDIO_ASSETS || "{}") as unknown,
     );
@@ -115,8 +113,8 @@ export class AiService {
       studio_assets,
       tasks: TASKS.map((task) => ({
         task,
-        enabled: ready && verified.includes(task),
-        ...(ready && verified.includes(task)
+        enabled: allowed && this.worker.ready(task) && verified.includes(task),
+        ...(allowed && this.worker.ready(task) && verified.includes(task)
           ? {}
           : { reason: "AI_ENGINE_UNAVAILABLE" }),
       })),
@@ -138,6 +136,10 @@ export class AiService {
     )
       return { product_supported: false, variant_supported: false };
     return this.catalog.support(productId, variantId);
+  }
+  /** Refresh authenticated task readiness before accepting work; a stale observation cannot enable inference. */
+  async refreshReadiness(): Promise<void> {
+    await this.worker.refreshReadiness?.();
   }
   /** Preview only a registered licensed studio image before the customer consents to VTO. */
   async studioPreview(id: string): Promise<{ bytes: Buffer; mime: string }> {
@@ -178,7 +180,10 @@ export class AiService {
     bytes: Buffer,
     mime: string,
   ): Promise<{ asset_id: string; expires_at: string }> {
-    this.enabled();
+    if (this.storageBlocked || process.env.AI_DISABLE === "true" || process.env.AI_ENABLE === "false" ||
+        (process.env.NODE_ENV === "production" && process.env.AI_ENABLE !== "true")) {
+      throw new HttpError(503, "AI_ENGINE_UNAVAILABLE", "Kho ảnh riêng chưa được bật.");
+    }
     if (bytes.length < 12 || bytes.length > 8 * 1024 * 1024)
       throw new HttpError(413, "INVALID_IMAGE", "Ảnh phải dưới 8 MB.");
     const valid =
@@ -199,6 +204,15 @@ export class AiService {
         "INVALID_IMAGE",
         "Chỉ nhận ảnh JPEG, PNG hoặc WebP hợp lệ.",
       );
+    try {
+      const decoder = sharp(bytes, { failOn: "warning", limitInputPixels: 20_000_000, animated: false });
+      const metadata = await decoder.metadata();
+      const expected = mime === "image/jpeg" ? "jpeg" : mime === "image/png" ? "png" : "webp";
+      if (metadata.format !== expected || !metadata.width || !metadata.height || (metadata.pages || 1) !== 1) throw new Error("IMAGE_FORMAT");
+      const raster = decoder.rotate();
+      bytes = await (expected === "jpeg" ? raster.jpeg({ quality: 95 }) : expected === "png" ? raster.png() : raster.webp({ quality: 95 })).toBuffer();
+      if (bytes.length > 8 * 1024 * 1024) throw new Error("IMAGE_SIZE");
+    } catch { throw new HttpError(422, "INVALID_IMAGE", "Ảnh không đọc được hoặc vượt giới hạn điểm ảnh."); }
     await this.repo.purge();
     const id = randomUUID();
     const asset: AiAsset = {
@@ -224,6 +238,36 @@ export class AiService {
       throw new HttpError(404, "ASSET_NOT_FOUND", "Ảnh không còn khả dụng.");
     return asset;
   }
+  /** Read a current private asset for the same verified principal; no path or URL comes from the caller. */
+  async readOwnedAsset(owner: string, id: string): Promise<{ bytes: Buffer; mime: string; expires_at: string }> {
+    const asset = await this.asset(owner, id);
+    return { bytes: await readFile(asset.path), mime: asset.mime, expires_at: asset.expires_at };
+  }
+  /** Erase an owner's source image at completion, including expired assets; foreign IDs are not exposed. */
+  async deleteOwnedAsset(owner: string, id: string): Promise<void> {
+    if (!UUID.test(id)) throw new HttpError(404, "ASSET_NOT_FOUND", "Ảnh không còn khả dụng.");
+    const asset = await this.repo.asset(id);
+    if (!asset || asset.owner !== owner) throw new HttpError(404, "ASSET_NOT_FOUND", "Ảnh không còn khả dụng.");
+    await this.repo.deleteAsset(id);
+  }
+  /** Attest selected bytes from a successful owner-bound quality/enhancement job, never client measurements. */
+  async approvalEvidence(owner: string, id: string, selection: EnhancementSelection): Promise<EnhancementEvidence> {
+    const job = await this.owned(owner, id);
+    if (job.status !== "success" || job.task !== (selection === "original" ? "image_quality" : "product_image_enhance") ||
+        job.gate?.valid !== true || !job.processing_version) {
+      throw new HttpError(422, "IMAGE_NOT_APPROVABLE", "Ảnh chưa có kết quả kiểm tra hợp lệ.");
+    }
+    const source = await readFile(join(job.directory, "input.image"));
+    const bytes = selection === "original" ? source : await this.repo.result(job);
+    const decoder = sharp(bytes, { failOn: "warning", limitInputPixels: 20_000_000, animated: false });
+    const metadata = await decoder.metadata();
+    if (!["jpeg", "png", "webp"].includes(metadata.format || "") || (metadata.pages || 1) !== 1) throw new HttpError(422, "INVALID_IMAGE_EVIDENCE", "Không đọc được ảnh đã chọn.");
+    await decoder.stats();
+    return {
+      bytes, mime: metadata.format === "jpeg" ? "image/jpeg" : metadata.format === "png" ? "image/png" : "image/webp",
+      sourceRevision: createHash("sha256").update(source).digest("hex"), processingVersion: job.processing_version, gate: job.gate,
+    };
+  }
   /** Serialize enqueue to make duplicate submissions idempotent even while inputs are copied. */
   async create(
     owner: string,
@@ -241,6 +285,7 @@ export class AiService {
     body: JsonObject,
     admin: boolean,
   ): Promise<AiJobView> {
+    await this.refreshReadiness();
     this.enabled();
     await this.repo.purge();
     const task = asString(body.task) as AiTask;
@@ -307,6 +352,9 @@ export class AiService {
       directory = join(this.repo.root, "jobs", id);
     const worker: Record<string, unknown> = {
       task,
+      request_id: id,
+      product_id: "",
+      variant_id: "",
       consent: true,
       confirmed: true,
     };
@@ -328,6 +376,8 @@ export class AiService {
             "INVALID_PRODUCT",
             "Chọn sản phẩm, biến thể và chế độ thử đồ hợp lệ.",
           );
+        const support = await this.productCapabilities(productId, variantId);
+        if (!support.product_supported || !support.variant_supported) throw new HttpError(422, "VTO_PRODUCT_UNAVAILABLE", "Sản phẩm hoặc biến thể chưa hỗ trợ thử đồ.");
         const garment = await this.catalog.garment(productId, variantId);
         await writeFile(join(directory, "garment.image"), garment.bytes, {
           mode: 0o600,
@@ -346,6 +396,9 @@ export class AiService {
         Object.assign(worker, {
           mode: body.mode,
           garment_category: garment.category,
+          product_id: productId,
+          variant_id: variantId,
+          garment_photo_type: "flat-lay",
           garment: "garment.image",
           person: "person.image",
         });
@@ -464,6 +517,7 @@ export class AiService {
         fingerprint,
         directory,
         worker,
+        ...(task === "virtual_try_on" ? { product_id: asString(body.product_id), variant_id: asString(body.variant_id) } : {}),
         catalog_metadata,
         catalog_batch_metadata,
         ...(inputErrors.length
@@ -548,6 +602,7 @@ export class AiService {
   }
   /** Return only owner-authorized state; polling also resumes a stopped local queue. */
   async get(owner: string, id: string): Promise<AiJobView> {
+    if (this.storageBlocked) throw new HttpError(503, "AI_QUEUE_STORAGE_FAILED", "Kho tác vụ tạm thời không khả dụng.");
     const job = await this.owned(owner, id);
     this.startPump();
     return this.view(job);
@@ -606,7 +661,7 @@ export class AiService {
   }
   /** Stop maintenance when a local test/server closes; does not claim remote inference stopped. */
   async close(): Promise<void> {
-    if (this.maintenance) clearInterval(this.maintenance);
+    clearInterval(this.maintenance);
     for (const controller of this.controllers.values()) controller.abort();
     await this.work;
   }
@@ -618,11 +673,12 @@ export class AiService {
     });
   }
   private async pump(): Promise<void> {
-    if (this.pumping || !this.worker.ready()) return;
+    if (this.pumping) return;
     this.pumping = true;
     try {
+      await this.refreshReadiness();
       for (;;) {
-        if (!this.worker.ready()) break;
+        await this.refreshReadiness();
         const job = (await this.repo.jobs())
           .filter(
             (row) =>
@@ -631,6 +687,10 @@ export class AiService {
           )
           .sort((a, b) => a.created_at.localeCompare(b.created_at))[0];
         if (!job) break;
+        if (!this.worker.ready(job.task)) {
+          await this.repo.transition(job.id, ["queued"], { status: "failed", error: "AI_ENGINE_UNAVAILABLE" });
+          continue;
+        }
         if (
           !(await this.repo.transition(job.id, ["queued"], {
             status: "running",
@@ -640,7 +700,7 @@ export class AiService {
         job.status = "running";
         const controller = new AbortController();
         this.controllers.set(job.id, controller);
-        const timeout = setTimeout(() => controller.abort(), 20 * 60_000);
+        const timeout = setTimeout(() => controller.abort(), job.task === "virtual_try_on" ? 180_000 : 60_000);
         timeout.unref();
         try {
           const result = await this.worker.run(
@@ -649,13 +709,23 @@ export class AiService {
           );
           const current = await this.repo.job(job.id);
           if (current?.status === "cancelled") continue;
+          if (job.task === "virtual_try_on") {
+            if (!result.binding || result.binding.request_id !== job.id ||
+                result.binding.product_id !== job.product_id || result.binding.variant_id !== job.variant_id) throw new Error("AI_WORKER_BINDING_MISMATCH");
+            const support = await this.productCapabilities(job.product_id!, job.variant_id);
+            if (!support.variant_supported) throw new Error("VTO_PRODUCT_UNAVAILABLE");
+          }
           job.status = result.status;
           job.gate = result.gate;
+          job.processing_version = result.processing_version;
           if (
             result.result_file === "result.png" &&
             result.status === "success"
           ) {
-            await this.repo.result(job);
+            const output = sharp(await this.repo.result(job), { failOn: "warning", limitInputPixels: 20_000_000 });
+            const metadata = await output.metadata();
+            if (metadata.format !== "png" || (metadata.pages || 1) !== 1) throw new Error("INVALID_IMAGE_RESULT");
+            await output.stats();
             job.result_url = `jobs/${job.id}/result`;
           }
           if (job.task === "image_embedding" && result.status === "success") {
@@ -748,6 +818,7 @@ export class AiService {
           result_url: job.result_url,
           matches: job.matches,
           index_summary: job.index_summary,
+          processing_version: job.processing_version,
         });
       }
     } finally {

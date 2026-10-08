@@ -79,7 +79,7 @@ describe('PurchaseFlowPage with mocked Model', () => {
           provide: CheckoutStore,
           useValue: {
             source: () => 'cart',
-            shipping: () => ({ referral_code: '' }),
+            shipping: () => ({}),
             readCheckoutItems: () => DEMO_LINES,
             readCreatedOrder: () => null,
             saveCreatedOrder: vi.fn(),
@@ -110,6 +110,31 @@ describe('PurchaseFlowPage with mocked Model', () => {
   afterEach(() => {
     TestBed.resetTestingModule();
     vi.useRealTimers();
+  });
+  it('caps member redemption at both the server balance and order limit, never local merchandise arithmetic', () => {
+    const page = createCheckoutFixture().componentInstance;
+    model.member.set(true);
+    page.serverQuote.set({ subtotal: 840000, shipping_fee: 0, discount_amount: 50000, total_amount: 790000, voucher: null, voucher_change: null, free_shipping_threshold: 500000, free_shipping_shortfall: 0,
+      loyalty: { available_points: 7, max_points: 12, points_spent: 0, points_discount_amount: 0, spending_enabled: true, policy_approved: true } });
+    const input = { value: '99' };
+    page.setPoints({ target: input } as unknown as Event);
+    expect(page.requestedPoints()).toBe(7);
+    expect(input.value).toBe('7');
+    page.refreshQuote();
+    expect(quote.mock.calls.at(-1)?.[2].pointsSpent).toBe(7);
+    model.member.set(false);
+    page.setPoints({ target: { value: '3' } } as unknown as Event);
+    expect(page.requestedPoints()).toBe(0);
+  });
+
+  it('disabled point spending and fractional input never create redemption requests', () => {
+    const page = createCheckoutFixture().componentInstance;
+    model.member.set(true);
+    page.setPoints({ target: { value: '10' } } as unknown as Event);
+    expect(page.requestedPoints()).toBe(0);
+    page.serverQuote.update(current => current ? { ...current, loyalty: { available_points: 20, max_points: 10, points_spent: 0, points_discount_amount: 0, spending_enabled: true, policy_approved: true } } : current);
+    page.setPoints({ target: { value: '1.5' } } as unknown as Event);
+    expect(page.requestedPoints()).toBe(0);
   });
   it('renders the delivery form and inline OTP for guests', () => {
     const fixture = createCheckoutFixture();

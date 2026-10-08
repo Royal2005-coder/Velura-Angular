@@ -1,8 +1,12 @@
-import { Component, ElementRef, inject, signal, viewChild } from '@angular/core';
+import { Component, DestroyRef, ElementRef, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { exhaustMap, filter, timer } from 'rxjs';
+import { AuthService } from '../../core/services/auth.service';
 import {
   ChatAttachment,
   ChatBlog,
+  ChatSendResponse,
   ChatMessage,
   ChatProduct,
   ChatSession,
@@ -33,6 +37,12 @@ export class ChatbotPage {
   private readonly cart = inject(CartStore);
   private readonly route = inject(ActivatedRoute);
   private readonly messagesEl = viewChild<ElementRef<HTMLElement>>('messagesPane');
+  private readonly destroy = inject(DestroyRef);
+  private readonly auth = inject(AuthService);
+  private generation = 0;
+  readonly handoffStatus = signal<'ai' | 'requested' | 'assigned' | 'closed'>('ai');
+  readonly humanTakeover = computed(() => this.handoffStatus() !== 'ai');
+  readonly chatError = signal('');
   private readonly fileInput = viewChild<ElementRef<HTMLInputElement>>('fileInput');
 
   readonly draft = signal('');
@@ -52,9 +62,21 @@ export class ChatbotPage {
     this.chatbot.clearSessionId();
     this.refreshSessions();
     const initialQuery = this.route.snapshot.queryParamMap.get('q');
-    if (initialQuery && initialQuery.trim()) {
-      setTimeout(() => this.send(initialQuery.trim()), 100);
-    }
+    const initialSession = this.route.snapshot.queryParamMap.get('session');
+    if (initialSession) this.openSession({ session_id: initialSession, handoff_status: this.chatbot.activeHandoff() });
+    else if (initialQuery?.trim()) setTimeout(() => this.send(initialQuery.trim()), 100);
+    let identity = this.auth.session();
+    effect(() => { const session = this.auth.session(); if (session !== identity) { identity = session; untracked(() => this.newChat()); } });
+    timer(3000, 3000).pipe(
+      filter(() => this.humanTakeover() && this.handoffStatus() !== 'closed' && !!this.sessionId() && !this.loading()),
+      exhaustMap(() => {
+        const id = this.sessionId(), generation = this.generation;
+        return this.chatbot.listMessages(id, this.chatbot.guestId()).pipe(
+          filter(() => generation === this.generation && id === this.sessionId()),
+        );
+      }),
+      takeUntilDestroyed(this.destroy),
+    ).subscribe({ next: data => { this.adoptTranscript(data); this.scrollToBottom(); }, error: () => this.chatError.set('Chưa cập nhật được phản hồi CSKH. Dùng nút tải lại tin nhắn.') });
   }
 
   /**
@@ -81,9 +103,10 @@ export class ChatbotPage {
       created_at: new Date().toISOString(),
       metadata: { typing: true },
     };
-    this.messages.update((rows) => [...rows.filter((row) => !row.metadata?.local_greeting), userMessage, typing]);
+    this.messages.update((rows) => [...rows.filter((row) => !row.metadata?.local_greeting), userMessage, ...(this.humanTakeover() ? [] : [typing])]);
     this.loading.set(true);
     this.scrollToBottom();
+    const generation = this.generation;
     const attachment = this.attachment;
     this.clearPreview();
     this.chatbot
@@ -96,31 +119,20 @@ export class ChatbotPage {
       })
       .subscribe({
         next: (data) => {
+          if (generation !== this.generation) return;
           if (data.session?.session_id) {
             this.sessionId.set(data.session.session_id);
             this.chatbot.saveSessionId(data.session.session_id);
           }
-          this.rememberProducts(data.products || []);
-          this.rememberBlogs(data.blogs || []);
-          this.messages.update((rows) =>
-            rows
-              .filter((row) => row.message_id !== userMessage.message_id && row.message_id !== 'typing')
-              .concat(data.messages || []),
-          );
+          this.adoptTranscript(data);
           this.loading.set(false);
           this.refreshSessions();
           this.scrollToBottom();
         },
         error: () => {
-          this.messages.update((rows) =>
-            rows.filter((row) => row.message_id !== 'typing').concat({
-              message_id: `err-${Date.now()}`,
-              sender: 'bot',
-              text: 'Hiện mình chưa kết nối được hệ thống tư vấn sản phẩm của Velura. Bạn thử lại sau hoặc liên hệ CSKH nhé.',
-              created_at: new Date().toISOString(),
-              metadata: { error: true },
-            }),
-          );
+          if (generation !== this.generation) return;
+          this.messages.update(rows => rows.filter(row => row.message_id !== 'typing'));
+          this.chatError.set('Chưa gửi được tin nhắn. Vui lòng thử lại hoặc liên hệ CSKH.');
           this.loading.set(false);
           this.scrollToBottom();
         },
@@ -146,6 +158,12 @@ export class ChatbotPage {
    * Starts a fresh conversation with the original greeting card.
    */
   newChat(): void {
+    this.generation++;
+    this.loading.set(false);
+    this.handoffStatus.set('ai');
+    this.chatbot.activeHandoff.set('ai');
+    this.chatbot.activeSession.set('');
+    this.chatError.set('');
     this.sessionId.set('');
     this.chatbot.clearSessionId();
     this.draft.set('');
@@ -165,23 +183,52 @@ export class ChatbotPage {
    * Opens a stored session from the original history list.
    */
   openSession(session: ChatSession): void {
+    this.generation++;
+    const generation = this.generation;
+    this.handoffStatus.set(session.handoff_status || 'ai');
+    this.chatbot.activeHandoff.set(this.handoffStatus());
+    this.chatbot.activeSession.set(session.session_id);
     this.sessionId.set(session.session_id);
     this.chatbot.saveSessionId(session.session_id);
     this.sidebarOpen.set(false);
     this.loading.set(true);
     this.chatbot.listMessages(session.session_id, this.chatbot.guestId()).subscribe({
       next: (data) => {
-        this.rememberProducts(data.products || []);
-        this.rememberBlogs(data.blogs || []);
-        const rows = data.messages || [];
-        this.messages.set(rows.length ? rows : [localGreeting()]);
+        if (generation !== this.generation) return;
+        this.adoptTranscript(data);
         this.loading.set(false);
         this.scrollToBottom();
       },
       error: () => {
+        if (generation !== this.generation) return;
         this.loading.set(false);
       },
     });
+  }
+
+  /** Human escalation uses the normal customer-turn API; the backend decides ticket creation. */
+  requestHuman(): void { if (!this.humanTakeover()) this.send('Tôi muốn gặp nhân viên CSKH.'); }
+
+  /** Reload authoritative messages and routing without generating an AI turn. */
+  refreshMessages(): void {
+    const id = this.sessionId(), generation = this.generation;
+    if (!id || this.loading()) return;
+    this.chatError.set('');
+    this.chatbot.listMessages(id, this.chatbot.guestId()).pipe(takeUntilDestroyed(this.destroy)).subscribe({
+      next: data => { if (generation === this.generation) this.adoptTranscript(data); },
+      error: () => { if (generation === this.generation) this.chatError.set('Chưa tải được tin nhắn CSKH.'); },
+    });
+  }
+
+  private adoptTranscript(data: ChatSendResponse): void {
+    const status = data.session?.handoff_status || data.handoff?.status || this.handoffStatus();
+    this.handoffStatus.set(status);
+    this.chatbot.activeHandoff.set(status);
+    this.chatbot.activeSession.set(this.sessionId());
+    this.rememberProducts(data.products || []);
+    this.rememberBlogs(data.blogs || []);
+    const rows = data.messages || [];
+    this.messages.set(rows.length ? rows : status === 'ai' ? [localGreeting()] : []);
   }
 
   /**

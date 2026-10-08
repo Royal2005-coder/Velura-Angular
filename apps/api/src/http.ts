@@ -64,10 +64,10 @@ function extractBusinessError(err: ErrorLike): { code: string; message: string; 
   const rawCode = String(details.code || err.code || "");
   const rawDetails = String(details.details || "");
 
-  if (rawMsg.includes("users_email_key") || rawDetails.includes("email") || (rawCode === "23505" && rawMsg.includes("email"))) {
+  if (rawMsg.includes("users_email_key") || rawDetails.includes("users_email_key") || (rawCode === "23505" && (rawMsg.includes("email") || rawDetails.includes("email")))) {
     return { code: "EMAIL_ALREADY_EXISTS", message: "Email này đã được sử dụng bởi tài khoản khác. Vui lòng đăng nhập hoặc sử dụng email khác.", status: 409 };
   }
-  if (rawMsg.includes("users_phone_key") || rawDetails.includes("phone") || (rawCode === "23505" && rawMsg.includes("phone"))) {
+  if (rawMsg.includes("users_phone_key") || rawDetails.includes("users_phone_key") || (rawCode === "23505" && (rawMsg.includes("phone") || rawDetails.includes("phone")))) {
     return { code: "PHONE_ALREADY_EXISTS", message: "Số điện thoại này đã được sử dụng. Vui lòng đăng nhập để tiếp tục.", status: 409 };
   }
   if (

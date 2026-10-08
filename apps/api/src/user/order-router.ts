@@ -191,34 +191,54 @@ export function presentOrderForCustomer(order: JsonObject, items: JsonObject[], 
 }
 
 async function attachProductMeta(items: JsonObject[]): Promise<JsonObject[]> {
-  return Promise.all(items.map(async (item) => {
+  if (!items.length) return [];
+  const variantIds = Array.from(new Set(items.map(it => it.variant_id).filter(Boolean)));
+  if (!variantIds.length) {
+    return items.map(item => ({
+      ...item,
+      product_id: null,
+      category_name: null,
+      is_combo: Boolean(item.is_combo || /combo/i.test(String(item.product_name || "")) || /set\s+/i.test(String(item.product_name || ""))),
+      size: item.size ?? null,
+      color: item.color ?? null
+    }));
+  }
+
+  const { rows: variants } = await selectRows("variant", { variant_id: `in.(${variantIds.join(",")})` });
+  const variantMap = new Map(variants.map(v => [String(v.variant_id), v]));
+
+  const productIds = Array.from(new Set(variants.map(v => v.product_id).filter(Boolean)));
+  const { rows: products } = productIds.length ? await selectRows("product", { product_id: `in.(${productIds.join(",")})` }) : { rows: [] };
+  const productMap = new Map(products.map(p => [String(p.product_id), p]));
+
+  const categoryIds = Array.from(new Set(products.map(p => p.category_id).filter(Boolean)));
+  const { rows: categories } = categoryIds.length ? await selectRows("category", { category_id: `in.(${categoryIds.join(",")})` }) : { rows: [] };
+  const categoryMap = new Map(categories.map(c => [String(c.category_id), c]));
+
+  return items.map((item) => {
     let productId: unknown = null;
     let categoryName: unknown = null;
     let size: unknown = item.size ?? null;
     let color: unknown = item.color ?? null;
     let isCombo = Boolean(item.is_combo || /combo/i.test(String(item.product_name || "")) || /set\s+/i.test(String(item.product_name || "")));
     if (item.variant_id) {
-      try {
-        const v = await selectOne("variant", { variant_id: `eq.${item.variant_id}` });
-        if (v) {
-          productId = v.product_id;
-          size = v.size ?? size;
-          color = v.color ?? color;
-          const product = await selectOne("product", { product_id: `eq.${productId}` });
-          if (product) {
-            isCombo = isCombo || Boolean(product.is_combo || /combo/i.test(String(product.name || "")) || /set\s+/i.test(String(product.name || "")));
-            const cat = await selectOne("category", { category_id: `eq.${product.category_id}` });
-            if (cat) {
-              categoryName = cat.name;
-            }
+      const v = variantMap.get(String(item.variant_id));
+      if (v) {
+        productId = v.product_id;
+        size = v.size ?? size;
+        color = v.color ?? color;
+        const product = productMap.get(String(productId));
+        if (product) {
+          isCombo = isCombo || Boolean(product.is_combo || /combo/i.test(String(product.name || "")) || /set\s+/i.test(String(product.name || "")));
+          const cat = categoryMap.get(String(product.category_id));
+          if (cat) {
+            categoryName = cat.name;
           }
         }
-      } catch (e: unknown) {
-        console.error("Error retrieving variant product_id:", errorMessage(e));
       }
     }
     return { ...item, product_id: productId, category_name: categoryName, is_combo: isCombo, size, color };
-  }));
+  });
 }
 
 const userReturnsRepository = createUserReturnsRepository();

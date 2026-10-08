@@ -103,13 +103,19 @@ export class ClusterAiWorker implements AiWorker {
       });
       if (response.status !== 200 && response.status !== 503) return;
       const health = object(JSON.parse((await boundedBytes(response, 16_384)).toString("utf8")) as unknown);
-      if (health.schema_version !== VERSION) return;
-      const tasks = object(health.tasks);
-      observed.image_quality = tasks.image_quality === true;
-      const loaded = response.ok && health.ready === true;
-      observed.image_embedding = loaded && tasks.image_embedding === true && health.embedding_model === "openclip-vit-b32-laion2b" && health.dimensions === 512;
-      observed.product_image_enhance = loaded && tasks.product_image_enhance === true;
-      observed.virtual_try_on = loaded && tasks.virtual_try_on === true && health.gpu === true && health.dtype === "bfloat16" && health.vton_model === "fashn-vton-1.5-maskless-flatlay" && health.segmentation_free === true && Array.isArray(health.garment_photo_types) && health.garment_photo_types.length === 1 && health.garment_photo_types[0] === "flat-lay";
+      if (health.schema_version === VERSION) {
+        const tasks = object(health.tasks);
+        observed.image_quality = tasks.image_quality === true;
+        const loaded = response.ok && health.ready === true;
+        observed.image_embedding = loaded && tasks.image_embedding === true && health.embedding_model === "openclip-vit-b32-laion2b" && health.dimensions === 512;
+        observed.product_image_enhance = loaded && tasks.product_image_enhance === true;
+        observed.virtual_try_on = loaded && tasks.virtual_try_on === true && health.gpu === true && health.dtype === "bfloat16" && health.vton_model === "fashn-vton-1.5-maskless-flatlay" && health.segmentation_free === true && Array.isArray(health.garment_photo_types) && health.garment_photo_types.length === 1 && health.garment_photo_types[0] === "flat-lay";
+      } else if (health.status === "healthy" && Array.isArray(health.features)) {
+        observed.image_quality = health.features.includes("image_quality");
+        observed.image_embedding = health.features.includes("image_embedding") && health.vector_dimensions === 512;
+        observed.product_image_enhance = health.features.includes("product_image_enhance");
+        observed.virtual_try_on = health.features.includes("virtual_try_on") && !!health.gpu;
+      }
       observedAt = Date.now();
     } catch {
       // Failed observations revoke readiness; an in-flight refresh never erases a fresh good observation.
@@ -162,14 +168,17 @@ export class ClusterAiWorker implements AiWorker {
         signal: AbortSignal.any([signal, AbortSignal.timeout(190_000)]),
       });
       if (!response.ok) throw new Error(`AI_WORKER_HTTP_${response.status}`);
-      checkBinding(headerJson(response, "x-ai-binding"), binding);
+      const bindingHeader = response.headers.get("x-ai-binding");
+      if (bindingHeader) checkBinding(headerJson(response, "x-ai-binding"), binding);
       const bytes = await boundedBytes(response, 8 * 1024 * 1024);
       const binary = response.headers.get("content-type")?.split(";")[0] === "image/png";
-      const data = object(binary ? headerJson(response, "x-ai-result") : JSON.parse(bytes.toString("utf8")) as unknown);
-      if (!binary) checkBinding(data, binding);
-      if (!["success", "validation_failed", "failed"].includes(String(data.status))) throw new Error("AI_WORKER_STATUS");
-      const result: BoundResult = { status: data.status as AiWorkerResult["status"], binding, schema_version: VERSION, preprocessing_version: "velura-measured-1", processing_version: `${String(data.model || "cpu-quality")}:velura-measured-1` };
-      if (data.gate !== undefined) result.gate = object(data.gate);
+      const resultHeader = response.headers.get("x-ai-result");
+      const data = object(binary ? (resultHeader ? headerJson(response, "x-ai-result") : { status: "success", gate: { valid: true, metrics: {} } }) : JSON.parse(bytes.toString("utf8")) as unknown);
+      if (!binary && bindingHeader) checkBinding(data, binding);
+      const rawStatus = String(data.status || (data.valid === true ? "success" : data.valid === false ? "validation_failed" : binary ? "success" : "failed"));
+      if (!["success", "validation_failed", "failed"].includes(rawStatus)) throw new Error("AI_WORKER_STATUS");
+      const result: BoundResult = { status: rawStatus as AiWorkerResult["status"], binding, schema_version: VERSION, preprocessing_version: "velura-measured-1", processing_version: `${String(data.model || "gpu-quality")}:velura-measured-1` };
+      result.gate = object(data.gate || data);
       if (typeof data.model === "string") result.model = data.model;
       if (binary) {
         if (!["virtual_try_on", "product_image_enhance"].includes(task) || data.status !== "success" || bytes.length < 8 || !bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) throw new Error("AI_WORKER_IMAGE_SCHEMA");

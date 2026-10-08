@@ -39,7 +39,7 @@ spec:
         fsGroup: 999
       containers:
       - name: postgres
-        image: pgvector/pgvector:0.8.0-pg16
+        image: pgvector/pgvector:0.8.0-pg16@sha256:a132765ec351c65111b5b675928a3a0515a466a40f97277329db8b8209ad8bc9
         ports:
         - name: http
           containerPort: 5432

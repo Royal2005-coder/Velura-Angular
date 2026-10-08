@@ -50,7 +50,7 @@ spec:
         fsGroup: 472
       containers:
       - name: grafana
-        image: grafana/grafana:11.6.5
+        image: grafana/grafana:11.6.5@sha256:0434860e36acddf5cbda1bb40666247ab54e66080b1425790a8e61dda6971181
         ports:
         - name: http
           containerPort: 3000

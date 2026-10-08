@@ -66,7 +66,15 @@ export async function runtimeReadiness(): Promise<{ ready: boolean; checks: { da
 export async function handleRuntimeRoute(req: IncomingMessage, res: ServerResponse, url: URL, headers: HeaderMap): Promise<boolean> {
   if (req.method !== "GET") return false;
   if (url.pathname === "/metrics") {
-    res.writeHead(200, { ...headers, "content-type": "text/plain; version=0.0.4; charset=utf-8", "cache-control": "no-store" }); res.end(runtimeMetrics()); return true;
+    const expected = process.env.METRICS_SCRAPE_BEARER_TOKEN || "";
+    const supplied = typeof req.headers.authorization === "string" ? req.headers.authorization.replace(/^Bearer /, "") : "";
+    const actual = Buffer.from(supplied), wanted = Buffer.from(expected);
+    if (!expected || actual.length !== wanted.length || !timingSafeEqual(actual, wanted)) {
+      throw new HttpError(403, "METRICS_ACCESS_DENIED", "Collector bearer credential is required");
+    }
+    res.writeHead(200, { ...headers, "content-type": "text/plain; version=0.0.4; charset=utf-8", "cache-control": "no-store" });
+    res.end(runtimeMetrics());
+    return true;
   }
   if (url.pathname === "/ready") {
     const result = await runtimeReadiness(); sendJson(res, result.ready ? 200 : 503, result, { ...headers, "cache-control": "no-store" }); return true;

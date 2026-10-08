@@ -64,7 +64,7 @@ spec:
         fsGroup: 1000
       containers:
       - name: velura-api
-        image: ghcr.io/royal2005-coder/velura-api:sha-b3df517c1daa2c4147ca7c5db0a32213a748c683
+        image: ghcr.io/royal2005-coder/velura-api:sha-b3df517c1daa2c4147ca7c5db0a32213a748c683@sha256:02fb777124f7457ea5e13306aa8a40ceda78a334492f45f350697d4adf8c91fe
         ports:
         - name: http
           containerPort: 3000
@@ -111,6 +111,11 @@ spec:
             secretKeyRef:
               name: velura-api-secrets
               key: AI_WORKER_KEY
+        - name: METRICS_SCRAPE_BEARER_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: velura-api-secrets
+              key: METRICS_SCRAPE_BEARER_TOKEN
         volumeMounts:
         - name: private
           mountPath: /app/scratch/ai-private

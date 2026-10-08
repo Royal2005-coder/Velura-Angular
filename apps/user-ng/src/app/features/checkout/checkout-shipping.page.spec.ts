@@ -74,7 +74,7 @@ async function createPage(options: {
       provideRouter([{ path: '**', component: class {} }]),
       { provide: ApiService, useValue: api },
       { provide: AddressGeographyService, useValue: stubAddressGeographyService() },
-      { provide: AuthService, useValue: { isLoggedIn: () => options.authLoggedIn !== false } },
+      { provide: AuthService, useValue: { session: () => null, isLoggedIn: () => options.authLoggedIn !== false } },
     ],
   }).compileComponents();
   const fixture = TestBed.createComponent(CheckoutShippingPage);

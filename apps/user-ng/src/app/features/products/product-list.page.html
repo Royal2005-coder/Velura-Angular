@@ -9,7 +9,7 @@
     <p class="product-list-header__subtitle">
       Khám phá hơn 1.200 thiết kế thời trang nữ sang trọng và thời thượng
     </p>
-  <app-ai-image-workbench task="image_embedding" [candidateProductIds]="imageSearchCandidates()" (matches)="applyImageMatches($event)" />
+  <app-visual-search-workbench [candidateProductIds]="imageSearchCandidates()" [filters]="visualFilters()" (searchResult)="applyVisualResult($event)" />
     @if (imageMatches() !== null) { <button type="button" class="btn btn--outline" (click)="imageMatches.set(null)">Xóa kết quả tìm bằng ảnh</button> }
   </header>
 
@@ -287,7 +287,7 @@
             <button class="btn btn--sm btn--primary" type="button" style="margin-top: 16px;" (click)="clearFilters()">Đặt lại bộ lọc</button>
             @if (featuredFallback().length) {
               <div style="margin-top: 48px; text-align: left;">
-                <h3 style="font-family: 'Playfair Display', serif; font-size: 1.5rem; margin-bottom: 24px; text-align: center; color: var(--text-dark);">Gợi ý sản phẩm nổi bật dành cho bạn</h3>
+                <h3 style="font-family: 'Playfair Display', serif; font-size: 1.5rem; margin-bottom: 24px; text-align: center; color: var(--text-dark);">{{ imageMatches() !== null ? 'Sản phẩm nổi bật — không phải kết quả khớp ảnh' : 'Gợi ý sản phẩm nổi bật dành cho bạn' }}</h3>
                 <div class="product-grid">
                   @for (product of featuredFallback(); track product.product_id) {
                     <app-product-card [product]="product" appearance="catalog" />

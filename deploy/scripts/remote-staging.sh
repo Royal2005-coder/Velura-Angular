@@ -6,18 +6,17 @@ DEPLOY_USER="${1:-azureuser}"
 sudo mkdir -p /var/www/velura-staging/user /var/www/velura-staging/admin /opt/velura-staging/api
 sudo chown -R "${DEPLOY_USER}:${DEPLOY_USER}" /var/www/velura-staging /opt/velura-staging
 
-if [ -f /opt/velura/.env ] && [ ! -f /opt/velura-staging/.env ]; then
-  sudo cp /opt/velura/.env /opt/velura-staging/.env
-  sudo chown "${DEPLOY_USER}:${DEPLOY_USER}" /opt/velura-staging/.env
-fi
-
-if [ -f /opt/velura-staging/.env ]; then
-  if grep -q '^PORT=' /opt/velura-staging/.env; then
-    sudo sed -i 's/^PORT=.*/PORT=8788/' /opt/velura-staging/.env
-  else
-    echo 'PORT=8788' | sudo tee -a /opt/velura-staging/.env >/dev/null
-  fi
-fi
+# Staging credentials must be provisioned separately; production secrets are never copied.
+test -f /opt/velura-staging/.env || {
+  printf '%s\n' 'Provision isolated /opt/velura-staging/.env before staging deployment.' >&2
+  exit 1
+}
+test "$(stat -c %a /opt/velura-staging/.env)" = 600 || {
+  printf '%s\n' 'Staging environment file must have mode 600.' >&2
+  exit 1
+}
+grep -q '^PORT=8788$' /opt/velura-staging/.env
+grep -q '^AI_ENABLE=false$' /opt/velura-staging/.env
 
 cd /opt/velura-staging/api
 npm install --omit=dev

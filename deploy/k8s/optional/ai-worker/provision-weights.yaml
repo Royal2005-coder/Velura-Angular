@@ -1,0 +1,83 @@
+# Opt-in only: applying this Job explicitly accepts weights-manifest velura-worker-v1.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ai-worker-provision-weights-v1
+  namespace: ai-staging
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 7200
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app: ai-worker-provision-weights
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      priorityClassName: velura-inference-staging
+      imagePullSecrets:
+        - name: velura-registry
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: provision
+          image: ${AI_WORKER_IMAGE}
+          command: [python, /app/bootstrap_weights.py]
+          args: [--weights-dir, /weights, --accept-license-manifest, velura-worker-v1]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests: {cpu: 250m, memory: 256Mi}
+            limits: {cpu: '1', memory: 512Mi}
+          volumeMounts:
+            - name: weights
+              mountPath: /weights
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: weights
+          persistentVolumeClaim:
+            claimName: ai-worker-weights
+        - name: tmp
+          emptyDir:
+            sizeLimit: 128Mi
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: weights-provisioning-egress
+  namespace: ai-staging
+spec:
+  podSelector:
+    matchLabels:
+      app: ai-worker-provision-weights
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 127.0.0.0/8]
+      ports:
+        - protocol: TCP
+          port: 443

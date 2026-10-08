@@ -2,20 +2,20 @@ import { HttpError, readJson, sendJson } from "../http.js";
 import { selectOne, insertRow, updateRows } from "../supabase.js";
 import { requireUserAuth } from "./auth.js";
 import { createNotification } from "./notifications.js";
+import { confirmedPersonalColor, loadPersonalColorPolicy } from "../personal-color/personal-color-policy.js";
 import {
   asJsonObject,
   type AuthContext,
   type HeaderMap,
   type HttpRequest,
   type HttpResponse,
-  type JsonObject,
-  type UserProfile
+  type JsonObject
 } from "../types.js";
 
 /**
  * In-memory guest style-quiz answers keyed by `X-Guest-Session-ID`.
  */
-export const guestStyleProfiles = new Map<string | string[], JsonObject>();
+export const guestStyleProfiles = new Map<string, JsonObject>();
 
 /**
  * Guest and member style-quiz read, write, and migrate-to-account.
@@ -28,12 +28,17 @@ export async function handleQuizRoute(
 ): Promise<void> {
   const parts = req.url ? new URL(req.url, "http://localhost").pathname.split("/").filter(Boolean) : [];
   const action = parts[3]; // e.g. "migrate"
+  const guestHeader = req.headers["x-guest-session-id"];
+  if (guestHeader !== undefined && (typeof guestHeader !== "string" || !/^gs_[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(guestHeader))) {
+    throw new HttpError(400, "GUEST_SESSION_REQUIRED", "Hãy mở lại phiên trình duyệt.");
+  }
+  const guestSessionId = typeof guestHeader === "string" ? guestHeader : undefined;
 
   // 1. POST /api/user/style-quiz/migrate
   if (action === "migrate" && req.method === "POST") {
     const profile = requireUserAuth(context);
-    const guestSessionId = req.headers["x-guest-session-id"];
     
+    const trustedGuestProfile = guestSessionId ? guestStyleProfiles.get(guestSessionId) : undefined;
     let quizData: JsonObject | undefined = undefined;
     if (guestSessionId) {
       quizData = guestStyleProfiles.get(guestSessionId);
@@ -74,6 +79,7 @@ export async function handleQuizRoute(
       budget_range: budget_range || null,
       age_group: age_group || null,
       favorite_colors: favorite_colors || null,
+      personal_color: confirmedPersonalColor(trustedGuestProfile, loadPersonalColorPolicy()),
       quiz_completed_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
@@ -96,13 +102,10 @@ export async function handleQuizRoute(
     return sendJson(res, 200, { success: true, migrated: true, quiz: result }, corsHeaders);
   }
 
-  // Check authentication
-  let profile: UserProfile | null = null;
-  try {
-    profile = requireUserAuth(context);
-  } catch {
-    // Guest flow
-  }
+  // An invalid member credential must never become a guest write.
+  const profile = context.authUser || context.profile || req.headers.authorization
+    ? requireUserAuth(context)
+    : null;
 
   // 2. Member Flow
   if (profile) {
@@ -160,7 +163,6 @@ export async function handleQuizRoute(
     }
   } else {
     // 3. Guest Flow
-    const guestSessionId = req.headers["x-guest-session-id"];
     if (!guestSessionId) {
       throw new HttpError(400, "BAD_REQUEST", "Missing X-Guest-Session-ID header");
     }
@@ -174,8 +176,12 @@ export async function handleQuizRoute(
     // POST /api/user/style-quiz
     if (req.method === "POST") {
       const body = await readJson(req);
-      guestStyleProfiles.set(guestSessionId, body);
-      return sendJson(res, 200, { success: true, quiz: body }, corsHeaders);
+      const previous = guestStyleProfiles.get(guestSessionId);
+      const answerKeys = ["height_cm", "weight_kg", "chest_cm", "waist_cm", "hip_cm", "body_shape", "skin_tone", "style_tags", "preferred_occasions", "favorite_brands", "budget_range", "age_group", "favorite_colors"];
+      const answers = Object.fromEntries(answerKeys.filter((key) => Object.hasOwn(body, key)).map((key) => [key, body[key]]));
+      const quiz = { ...answers, ...(previous?.personal_color ? { personal_color: previous.personal_color } : {}), style_profile_version: Number(previous?.style_profile_version ?? -1) + 1 };
+      guestStyleProfiles.set(guestSessionId, quiz);
+      return sendJson(res, 200, { success: true, quiz }, corsHeaders);
     }
   }
 

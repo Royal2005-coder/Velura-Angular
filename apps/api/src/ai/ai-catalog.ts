@@ -7,6 +7,8 @@ import { HttpError } from "../http.js";
 import { asString, asJsonObject, type JsonObject } from "../types.js";
 import type { AiCatalog } from "./ai-service.js";
 import type { CatalogImageVector } from "./image-vector-repository.js";
+import sharp from "sharp";
+import { fetchPublicCatalogImage } from "./public-image-fetch.js";
 
 /** Repository/network seams let QA verify SKU binding and SSRF guards without touching live products. */
 export interface AiCatalogDependencies {
@@ -21,7 +23,7 @@ const dependencies: AiCatalogDependencies = {
       variant_id: `eq.${variantId}`,
       product_id: `eq.${productId}`,
     }),
-  fetchImage: (url, options) => fetch(url, options),
+  fetchImage: fetchPublicCatalogImage,
 };
 
 /** Resolve only explicitly configured shop garment references and licensed studio assets. */
@@ -48,62 +50,26 @@ export class ShopAiCatalog implements AiCatalog {
   async support(
     productId: string,
     variantId?: string,
-  ): Promise<{
-    product_supported: boolean;
-    variant_supported: boolean;
-    garment_category?: string;
-  }> {
+  ): Promise<{ product_supported: boolean; variant_supported: boolean; garment_category?: string }> {
     const product = await this.deps.product(productId);
-    const registry = asJsonObject(
-        JSON.parse(process.env.AI_VTO_PRODUCTS || "{}") as unknown,
-      ),
-      garment = asJsonObject(registry[productId]);
-    let category = asString(garment.category);
-    if (!category && product) {
-      const cat = asString(product.category_id);
-      category =
-        cat === "quan"
-          ? "lower_body"
-          : cat === "dam-vay" || cat === "set-do"
-            ? "dresses"
-            : "upper_body";
-    }
-    if (
-      !product ||
-      !["on_sale", "out_of_stock"].includes(asString(product.status)) ||
-      !["upper_body", "lower_body", "dresses"].includes(category)
-    )
+    const registry = asJsonObject(JSON.parse(process.env.AI_VTO_PRODUCTS || "{}") as unknown);
+    const garment = asJsonObject(registry[productId]);
+    const category = asString(garment.category);
+    if (!product || product.status !== "on_sale" || garment.verified !== true ||
+        garment.photo_type !== "flat-lay" || !["upper_body", "lower_body", "dresses"].includes(category)) {
       return { product_supported: false, variant_supported: false };
-    if (!variantId || !(await this.deps.variant(productId, variantId)))
-      return {
-        product_supported: true,
-        variant_supported: false,
-        garment_category: category,
-      };
-    let imageUrl =
-      asString(asJsonObject(garment.variant_images)[variantId]) ||
-      (garment.variant_id === variantId ? asString(garment.image_url) : "");
-    if (!imageUrl) {
-      const images = Array.isArray(product.images) ? product.images : [];
-      const primary = images[0];
-      imageUrl =
-        typeof primary === "string"
-          ? primary
-          : asString(asJsonObject(primary).url);
     }
+    const variant = variantId ? await this.deps.variant(productId, variantId) : null;
+    if (!variant || variant.variant_id !== variantId || variant.product_id !== productId) {
+      return { product_supported: true, variant_supported: false, garment_category: category };
+    }
+    const imageUrl = asString(asJsonObject(garment.variant_images)[variantId!]) ||
+      (garment.variant_id === variantId ? asString(garment.image_url) : "");
     try {
       this.allowedUrl(imageUrl);
-      return {
-        product_supported: true,
-        variant_supported: true,
-        garment_category: category,
-      };
+      return { product_supported: true, variant_supported: true, garment_category: category };
     } catch {
-      return {
-        product_supported: true,
-        variant_supported: Boolean(imageUrl),
-        garment_category: category,
-      };
+      return { product_supported: true, variant_supported: false, garment_category: category };
     }
   }
   /** Embed only the published shop's own catalog image and bounded style metadata. */
@@ -159,60 +125,15 @@ export class ShopAiCatalog implements AiCatalog {
     };
   }
   /** Validate SKU ownership and supported category against operator-controlled VTO config. */
-  async garment(
-    productId: string,
-    variantId: string,
-  ): Promise<{ bytes: Buffer; category: string }> {
-    const product = await this.deps.product(productId);
-    const variant = await this.deps.variant(productId, variantId);
-    const registry = asJsonObject(
-      JSON.parse(process.env.AI_VTO_PRODUCTS || "{}") as unknown,
-    );
+  async garment(productId: string, variantId: string): Promise<{ bytes: Buffer; category: string }> {
+    const support = await this.support(productId, variantId);
+    if (!support.product_supported) throw new HttpError(422, "VTO_PRODUCT_UNAVAILABLE", "Sản phẩm chưa có ảnh flat-lay đã xác minh.");
+    if (!support.variant_supported) throw new HttpError(422, "VTO_VARIANT_UNAVAILABLE", "Biến thể chưa có ảnh thử đồ đúng SKU.");
+    const registry = asJsonObject(JSON.parse(process.env.AI_VTO_PRODUCTS || "{}") as unknown);
     const garment = asJsonObject(registry[productId]);
-    let category = asString(garment.category);
-    if (!category && product) {
-      const cat = asString(product.category_id);
-      category =
-        cat === "quan"
-          ? "lower_body"
-          : cat === "dam-vay" || cat === "set-do"
-            ? "dresses"
-            : "upper_body";
-    }
-    if (
-      !product ||
-      !["on_sale", "out_of_stock"].includes(asString(product.status)) ||
-      !variant ||
-      !["upper_body", "lower_body", "dresses"].includes(category)
-    ) {
-      throw new HttpError(
-        422,
-        "VTO_PRODUCT_UNAVAILABLE",
-        "Sản phẩm này chưa có ảnh thử đồ phù hợp.",
-      );
-    }
-    const variantImages = asJsonObject(garment.variant_images);
-    let imageUrl =
-      asString(variantImages[variantId]) ||
+    const imageUrl = asString(asJsonObject(garment.variant_images)[variantId]) ||
       (garment.variant_id === variantId ? asString(garment.image_url) : "");
-    if (!imageUrl) {
-      const images = Array.isArray(product.images) ? product.images : [];
-      const primary = images[0];
-      imageUrl =
-        typeof primary === "string"
-          ? primary
-          : asString(asJsonObject(primary).url);
-    }
-    if (!imageUrl)
-      throw new HttpError(
-        422,
-        "VTO_VARIANT_UNAVAILABLE",
-        "Biến thể này chưa có ảnh thử đồ phù hợp.",
-      );
-    return {
-      bytes: await this.fetchImage(imageUrl),
-      category,
-    };
+    return { bytes: await this.fetchImage(imageUrl), category: support.garment_category! };
   }
   private async fetchImage(imageUrl: string): Promise<Buffer> {
     const url = this.allowedUrl(imageUrl);
@@ -243,7 +164,13 @@ export class ShopAiCatalog implements AiCatalog {
         throw new HttpError(413, "IMAGE_TOO_LARGE", "Ảnh sản phẩm quá lớn.");
       chunks.push(chunk);
     }
-    return Buffer.concat(chunks);
+    const bytes = Buffer.concat(chunks, length);
+    try {
+      const decoder = sharp(bytes, { failOn: "warning", limitInputPixels: 20_000_000, animated: false });
+      const meta = await decoder.metadata();
+      if (!["jpeg", "png", "webp"].includes(meta.format || "") || (meta.pages || 1) !== 1) throw new Error("IMAGE_FORMAT");
+      return await decoder.rotate().png().toBuffer();
+    } catch { throw new HttpError(422, "INVALID_GARMENT_IMAGE", "Ảnh sản phẩm không đọc được hoặc sai định dạng."); }
   }
   private allowedUrl(imageUrl: string): URL {
     let url: URL;
@@ -260,18 +187,13 @@ export class ShopAiCatalog implements AiCatalog {
       .split(",")
       .map((host) => host.trim())
       .filter(Boolean);
-    const isAllowedHost =
-      allowed.length === 0 ||
-      allowed.includes(url.hostname) ||
-      url.hostname.endsWith(".supabase.co") ||
-      url.hostname.endsWith(".royalai.dev") ||
-      url.hostname.includes("images.unsplash.com") ||
-      url.hostname.includes("cloudinary.com");
+    const isAllowedHost = allowed.includes(url.hostname.toLowerCase());
 
     if (
-      (url.protocol !== "https:" && url.protocol !== "http:") ||
+      url.protocol !== "https:" ||
       url.username ||
       url.password ||
+      (url.port !== "" && url.port !== "443") ||
       isIP(url.hostname.replace(/^\[|\]$/g, "")) ||
       /(^localhost$|\.local$|\.internal$)/i.test(url.hostname) ||
       !isAllowedHost

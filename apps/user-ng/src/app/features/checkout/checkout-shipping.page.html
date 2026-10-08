@@ -573,31 +573,23 @@
           }
         </div>
 
-        <!-- Coolmate: Mã giới thiệu bạn bè -->
-        <div class="coolmate-referral-checkout" style="margin-bottom: 16px; padding: 12px; background: #fff; border-radius: 8px; border: 1px solid var(--line, #e8dfd6);">
-          <label style="display: block; font-size: 0.8125rem; font-weight: 600; color: var(--dark, #2a2522); margin-bottom: 6px;">Mã giới thiệu bạn bè</label>
-          <div style="display: flex; gap: 8px;">
-            <input
-              type="text"
-              class="form-input"
-              placeholder="Nhập mã giới thiệu..."
-              [value]="referralCode()"
-              (input)="setReferralCode($event)"
-              style="padding: 8px 12px; font-size: 0.8125rem;"
-            />
-            <button
-              type="button"
-              class="btn btn--outline btn--sm"
-              style="white-space: nowrap; padding: 8px 14px; font-size: 0.8125rem; font-weight: 600;"
-              (click)="applyReferralCode()"
-            >
-              {{ referralApplied() ? 'Đã lưu' : 'Áp dụng' }}
-            </button>
-          </div>
-          @if (referralApplied()) {
-            <span style="display: block; margin-top: 6px; font-size: 0.75rem; color: #2e7d32; font-weight: 500;">✓ Mã giới thiệu sẽ được áp dụng vào đơn</span>
-          }
-        </div>
+        @if (auth.isLoggedIn()) {
+          <section class="loyalty-checkout" aria-label="Sử dụng điểm thành viên">
+            <label for="checkout-points">Điểm thành viên (1 điểm = 1.000đ)</label>
+            <input id="checkout-points" type="number" min="0" step="1"
+              [max]="quote()?.loyalty?.max_points ?? 0"
+              [value]="requestedPoints()" (input)="setPoints($event)"
+              [disabled]="!quote()?.loyalty?.spending_enabled || submitting()" />
+            <p>Khả dụng: {{ quote()?.loyalty?.available_points ?? 0 }} điểm.
+              Đơn này tối đa {{ quote()?.loyalty?.max_points ?? 0 }} điểm, sau voucher và không tính phí giao hàng.</p>
+            @if (quote()?.loyalty && !quote()?.loyalty?.spending_enabled) {
+              <p role="status">Sử dụng điểm đang chờ phê duyệt chính sách làm tròn và hết hạn. Điểm tích lũy vẫn được giữ trong ví.</p>
+            }
+            <a routerLink="/account/profile" [queryParams]="{tab: 'offers'}">Xem ví điểm, hạn sử dụng và mã giới thiệu</a>
+          </section>
+        } @else {
+          <p>Điểm thưởng dành cho thành viên đã đăng nhập. Mã giới thiệu chỉ được ghi nhận khi đăng ký tài khoản mới.</p>
+        }
 
         <app-voucher-wallet
           [orderValue]="subtotal()"
@@ -627,6 +619,9 @@
           <div class="summary-line summary-line--shipping"><span>Vận chuyển</span><span class="summary-line__value">{{ shippingLabel() }}</span></div>
           @if (discount() > 0) {
             <div class="summary-line"><span>Giảm giá</span><span class="summary-line__value">{{ discountLabel() }}</span></div>
+          }
+          @if ((quote()?.loyalty?.points_discount_amount ?? 0) > 0) {
+            <div class="summary-line"><span>Điểm thành viên</span><span class="summary-line__value">-{{ pointsLabel() }}</span></div>
           }
         </div>
         <div class="summary-total">

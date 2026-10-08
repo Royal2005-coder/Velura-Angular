@@ -46,8 +46,6 @@ export class CartPage {
   readonly appliedVoucher = signal<AppliedVoucher | null>(null);
   readonly voucherDeclined = signal(false);
 
-  readonly referralCode = signal(this.checkoutStore.shipping().referral_code || '');
-  readonly referralApplied = signal(Boolean(this.checkoutStore.shipping().referral_code));
 
   readonly currentPage = signal(1);
   readonly selectedIds = signal<string[]>(this.readSelectedIds());
@@ -518,22 +516,6 @@ export class CartPage {
     document.querySelector('.cart-header')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
-  onReferralInput(event: Event): void {
-    this.referralCode.set((event.target as HTMLInputElement).value);
-  }
-
-  applyReferralCode(): void {
-    const code = this.referralCode().trim();
-    if (!code) {
-      this.referralApplied.set(false);
-      this.checkoutStore.saveShipping({ ...this.checkoutStore.shipping(), referral_code: '' });
-      showToast('Đã xóa mã giới thiệu');
-      return;
-    }
-    this.referralApplied.set(true);
-    this.checkoutStore.saveShipping({ ...this.checkoutStore.shipping(), referral_code: code });
-    showToast(`Đã ghi nhận mã giới thiệu: ${code}`);
-  }
 
   /**
    * Starts checkout with the originally selected cart rows.
@@ -546,7 +528,6 @@ export class CartPage {
     }
     const expanded = this.cart.expandGroupedItems(selected);
     this.checkoutStore.setCheckoutItems(expanded, 'cart');
-    this.checkoutStore.saveShipping({ ...this.checkoutStore.shipping(), referral_code: this.referralCode().trim() });
     sessionStorage.setItem(CHECKOUT_ITEMS_KEY, JSON.stringify(expanded));
     localStorage.removeItem('checkout_discount');
     localStorage.removeItem('checkout_voucher_code');

@@ -6,6 +6,8 @@ import type { CheckoutAddressInput, CheckoutRepository } from "./checkout-reposi
 import { buildCartLines, loadCatalog, loadCategoryTree } from "./cart-catalog.js";
 import { priceOrder, shippingMethodFromClaim, type PricedOrderLine } from "./order-pricing.js";
 import { recordVoucherRedemption, resolveOrderVoucher } from "./vouchers.js";
+import { loyaltyService } from "../loyalty/loyalty-router.js";
+import type { LoyaltyQuote } from "../loyalty/loyalty-service.js";
 
 const VIETNAMESE_PHONE = /^0(?:3|5|7|8|9)\d{8}$/;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -59,6 +61,9 @@ export interface PersistCheckoutOrderInput {
   /** Immutable buyer classification and retry identity for this checkout. */
   isGuest?: boolean;
   idempotencyKey?: string;
+  /** Authenticated actor is separate from a phone-resolved guest order owner. */
+  actorId?: string | null;
+  pointsSpent?: number;
   contact: CheckoutContact;
   shippingAddress: string;
   shippingFee: number;
@@ -88,6 +93,7 @@ export interface CheckoutQuote {
   voucherId: string | null;
   discountAmount: number;
   totalAmount: number;
+  loyalty: LoyaltyQuote;
 }
 
 /** Bộ giới hạn gửi OTP checkout theo số điện thoại và địa chỉ IP. */
@@ -249,7 +255,8 @@ export class CheckoutService {
     claimedFee: unknown,
     claimedMethod: unknown,
     voucherId: string | null,
-    declineVoucher: boolean
+    declineVoucher: boolean,
+    points: unknown = 0
   ): Promise<CheckoutQuote> {
     const claims = rawItems.map((item) => ({
       variantId: asString(item.variant_id),
@@ -281,13 +288,15 @@ export class CheckoutService {
       declineVoucher,
       { lines: cartLines.lines, categoryNameById: tree.nameById }
     );
+    const loyalty = await loyaltyService.quote(context, priced.subtotal, priced.shippingFee, voucher.merchandiseDiscount, points);
     return {
       items: priced.items,
       subtotal: priced.subtotal,
       shippingFee: priced.shippingFee,
       voucherId: voucher.voucherId,
       discountAmount: voucher.discountAmount,
-      totalAmount: Math.max(0, priced.subtotal + priced.shippingFee - voucher.discountAmount)
+      totalAmount: Math.max(0, priced.subtotal + priced.shippingFee - voucher.discountAmount - loyalty.points_discount_amount),
+      loyalty
     };
   }
 
@@ -382,6 +391,7 @@ export class CheckoutService {
   /** Ghi đơn, payment và item qua repository; COD mới trừ tồn ngay. */
   async persistOrder(input: PersistCheckoutOrderInput): Promise<PersistedCheckoutOrder> {
     if (this.repository.createOrderBundle) return this.repository.createOrderBundle(input);
+    if ((input.pointsSpent || 0) > 0) throw new HttpError(503, "LOYALTY_TRANSACTION_REQUIRED", "Sử dụng điểm cần giao dịch cơ sở dữ liệu nguyên tử.");
     const now = new Date().toISOString();
     const order = await this.repository.createOrder({
       user_id: input.userId,

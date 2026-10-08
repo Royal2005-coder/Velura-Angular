@@ -1,376 +1,127 @@
 <main class="admin-content dashboard-content">
-  <p class="admin-page-crumb">Dashboard quản trị / Tổng quan</p>
+  <p class="admin-page-crumb">Dashboard quản trị / Phân tích đã đối chiếu</p>
   <div class="dashboard-controls">
-    <div class="dashboard-view-tabs" role="tablist" aria-label="Góc nhìn Dashboard">
-      <button class="dashboard-view-tab" [class.is-active]="tab() === 'operations'" type="button" (click)="setTab('operations')">
-        <app-admin-icon name="settings" />Quản trị
-      </button>
-      <button class="dashboard-view-tab" [class.is-active]="tab() === 'business'" type="button" (click)="setTab('business')">
-        <app-admin-icon name="dashboard" />Kinh doanh
-      </button>
+    <div class="dashboard-view-tabs" role="tablist" aria-label="Góc nhìn báo cáo">
+      <button type="button" class="dashboard-view-tab" [class.is-active]="tab() === 'operations'" (click)="setTab('operations')">Quản trị</button>
+      <button type="button" class="dashboard-view-tab" [class.is-active]="tab() === 'business'" (click)="setTab('business')">Kinh doanh</button>
     </div>
-    <div class="dashboard-time-filter" role="group" aria-label="Khoảng thời gian xem dữ liệu" title="Kỳ ngày, tuần và tháng được cố định để đối chiếu nhất quán.">
-      <button type="button" [class.is-active]="range() === 'day'" (click)="setRange('day')">Ngày</button>
-      <button type="button" [class.is-active]="range() === 'week'" (click)="setRange('week')">Tuần</button>
-      <button type="button" [class.is-active]="range() === 'month'" (click)="setRange('month')">Tháng</button>
+    <div class="dashboard-time-filter" role="group" aria-label="Khoảng thời gian">
+      <button type="button" [disabled]="syncing()" [class.is-active]="range() === 'day'" (click)="setRange('day')">Ngày</button>
+      <button type="button" [disabled]="syncing()" [class.is-active]="range() === 'week'" (click)="setRange('week')">Tuần (7 ngày)</button>
+      <button type="button" [disabled]="syncing()" [class.is-active]="range() === 'month'" (click)="setRange('month')">Tháng (30 ngày)</button>
     </div>
-    <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" [disabled]="!canRefresh()" (click)="refresh()">{{ loading() ? 'Đang đồng bộ…' : refreshCooldown() ? 'Chờ 10 giây để làm mới' : 'Làm mới báo cáo' }}</button>
+    @if (canMutate()) {
+      <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" [disabled]="!canRefresh()" (click)="refresh()">{{ syncing() ? 'Đang đồng bộ…' : refreshCooldown() ? 'Chờ 10 giây' : 'Đồng bộ báo cáo' }}</button>
+    } @else { <span class="admin-badge">Chỉ đọc · không được đồng bộ</span> }
+    <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" [disabled]="loading() || syncing()" (click)="reload()">Đọc lại bản hiện có</button>
   </div>
   <div class="dashboard-data-status" aria-live="polite">
-    <span class="dashboard-data-status__dot" [class.dashboard-data-status__dot--error]="loadError()"></span>
     @if (loadError()) {
-      <strong>Không thể xác minh dữ liệu</strong>
-      <span>{{ loadError() }}</span>
-      @if (hasLoadedOnce()) { <span>Đang hiển thị bản đã xác minh của kỳ {{ loadedPeriodLabel() }}; số liệu có thể chưa cập nhật.</span> }
-      <button type="button" [disabled]="!canRefresh()" (click)="refresh()">Thử lại</button>
-    } @else if (loading()) {
-      <strong>Đang đọc KPI</strong>
-      <span>DT / DS / AOV / hàng đợi vận hành từ {{ sourceLabel() }}…</span>
-    } @else {
-      <strong>Số liệu từ {{ sourceLabel() }}</strong>
-      <span>{{ generatedAt() ? 'Báo cáo cập nhật ' + generatedAt() : 'Chưa có thời gian cập nhật từ hệ thống' }} · {{ periodLabel() }}</span>
-    }
+      <strong>Không thể xác minh yêu cầu mới</strong><span>{{ loadError() }}</span>
+      @if (hasLoadedOnce()) { <span>Giữ nguyên bản của kỳ {{ loadedPeriodLabel() }}; không coi đây là đồng bộ thành công.</span> }
+    } @else if (loading()) { <strong>Đang đọc bản dữ liệu hiện có…</strong> }
+    @else { <strong>{{ sourceLabel() }}</strong><span>{{ generatedAt() || 'Chưa có thời gian cập nhật đã xác minh' }} · {{ loadedPeriodLabel() }}</span> }
   </div>
-  @if (!loading() && !loadError() && !voiceReliable()) {
-    <div class="dashboard-data-status dashboard-data-status--warn">
-      <span class="dashboard-data-status__dot"></span>
-      <strong>Đánh giá / CSAT chưa đủ mẫu</strong>
-      <span>{{ reviewTrustCopy() }}</span>
-    </div>
-  }
-  @if (filterChips().length) {
-    <div class="dashboard-filter-chips">
-      @for (chip of filterChips(); track chip.key) {
-        <button type="button" (click)="clearFilter(chip.key)">{{ chip.label }} ×</button>
-      }
-    </div>
-  }
-
-  @if (hasLoadedOnce()) {
-  @if (tab() === 'operations') {
-    <section class="dashboard-panel" id="dashboard-operations">
-      <div class="dashboard-kpi-grid">
-        <article class="dashboard-kpi" [class.dashboard-kpi--loading]="loading()">
-          <div class="dashboard-kpi__head"><span>Đơn chờ xử lý</span><i><app-admin-icon name="cart" /></i></div>
-          <strong>{{ num(ops().pendingOrders) }}</strong>
-          <div><small>Hàng đợi xác nhận / chuẩn bị</small></div>
-        </article>
-        <article class="dashboard-kpi" [class.dashboard-kpi--loading]="loading()">
-          <div class="dashboard-kpi__head"><span>Lỗi thanh toán</span><i><app-admin-icon name="alert" /></i></div>
-          <strong>{{ num(ops().paymentErrors) }}</strong>
-          <div><small>Đơn lệch / thất bại thanh toán</small></div>
-        </article>
-        <article class="dashboard-kpi" [class.dashboard-kpi--loading]="loading()">
-          <div class="dashboard-kpi__head"><span>Đổi trả đang mở</span><i><app-admin-icon name="support" /></i></div>
-          <strong>{{ num(ops().openReturns) }}</strong>
-          <div><small>Yêu cầu chưa đóng</small></div>
-        </article>
-        <article class="dashboard-kpi" [class.dashboard-kpi--loading]="loading()">
-          <div class="dashboard-kpi__head"><span>Phiếu hỗ trợ</span><i><app-admin-icon name="support" /></i></div>
-          <strong>{{ num(ops().openSupportTickets) }}</strong>
-          <div><small>Ticket CSKH còn mở</small></div>
-        </article>
-        <article class="dashboard-kpi" [class.dashboard-kpi--loading]="loading()">
-          <div class="dashboard-kpi__head"><span>Sắp hết hàng</span><i><app-admin-icon name="box" /></i></div>
-          <strong>{{ num(ops().lowStockProducts) }}</strong>
-          <div><small>{{ num(ops().urgentReviews) }} đánh giá cần xử lý</small></div>
-        </article>
+  @for (chip of filterChips(); track chip.key) { <button type="button" class="admin-btn admin-btn--ghost admin-btn--sm" [disabled]="syncing()" (click)="clearFilter(chip.key)">{{ chip.label }} ×</button> }
+  @if (data(); as snapshot) {
+    @if (snapshot.meta.freshness !== 'fresh' || snapshot.meta.pendingEvents || snapshot.meta.lastSync?.status === 'failed') {
+      <div class="dashboard-data-status dashboard-data-status--warn" role="status">
+        <strong>{{ snapshot.meta.freshness === 'unavailable' ? 'Kho phân tích chưa khả dụng' : 'Bản đồng bộ có thể chưa phản ánh nguồn mới' }}</strong>
+        <span>{{ snapshot.meta.sourceWarning }} · {{ num(snapshot.meta.pendingEvents) }} sự kiện chưa xử lý.</span>
+        @if (snapshot.meta.lastSync?.status === 'failed') { <span>Lần đồng bộ gần nhất thất bại. Không thay thế bản tốt trước đó.</span> }
       </div>
-
-      <div class="dashboard-command-grid">
-        <section class="dashboard-section dashboard-alert-center">
-          <header class="dashboard-section__header">
-            <div><span class="dashboard-eyebrow">Hàng đợi vận hành</span><h3>Việc cần xử lý</h3></div>
-            <span class="dashboard-text-action">{{ alertTotal() }} tín hiệu</span>
-          </header>
-          <div class="dashboard-alert-list">
-            <article class="dashboard-alert dashboard-alert--critical">
-              <span class="admin-badge admin-badge--danger dashboard-alert__level">Đơn</span>
-              <div>
-                <h4>{{ num(ops().pendingOrders) }} đơn chờ · {{ num(ops().paymentErrors) }} lỗi thanh toán</h4>
-                <p>Đếm từ trạng thái đơn và thanh toán, không suy diễn từ đánh giá.</p>
-              </div>
-              @if (canOpenModule('orders')) { <a routerLink="/orders">Xử lý đơn</a> }
-            </article>
-            <article class="dashboard-alert dashboard-alert--high">
-              <span class="admin-badge admin-badge--warning dashboard-alert__level">CSKH</span>
-              <div>
-                <h4>{{ num(ops().openReturns) }} đổi trả mở · {{ num(ops().openSupportTickets) }} phiếu hỗ trợ</h4>
-                <p>Hàng đợi ticket / đổi trả đang mở trên OLTP.</p>
-              </div>
-              @if (canOpenModule('returns')) { <a routerLink="/returns">Mở CSKH</a> }
-            </article>
-            <article class="dashboard-alert dashboard-alert--medium">
-              <span class="admin-badge admin-badge--pending dashboard-alert__level">Kho</span>
-              <div>
-                <h4>{{ num(ops().lowStockProducts) }} SKU dưới ngưỡng tồn</h4>
-                <p>Đếm biến thể dưới low_stock_threshold.</p>
-              </div>
-              @if (canOpenModule('products')) { <a routerLink="/products">Xem tồn</a> }
-            </article>
-            <article class="dashboard-alert dashboard-alert--medium">
-              <span class="admin-badge admin-badge--pending dashboard-alert__level">Đánh giá</span>
-              <div>
-                <h4>{{ num(ops().urgentReviews) }} đánh giá gấp · {{ num(business().pendingReviews) }} chờ duyệt</h4>
-                <p>Số phiếu trong queue duyệt — chưa phải điểm CSAT hay tỷ lệ hài lòng.</p>
-              </div>
-              @if (canOpenModule('reviews')) { <a routerLink="/reviews">Mở đánh giá</a> }
-            </article>
-          </div>
-        </section>
-
-        <section class="dashboard-section dashboard-module-health">
-          <header class="dashboard-section__header"><div><span class="dashboard-eyebrow">Phân hệ</span><h3>Trạng thái hàng đợi</h3></div></header>
-          <div class="dashboard-health-list">
-            @if (canOpenModule('orders')) { <a class="dashboard-health-card" routerLink="/orders">
-              <div class="dashboard-health-card__head"><i><app-admin-icon name="cart" /></i><span class="admin-badge" [class]="'admin-badge--' + healthOrders().tone">{{ healthOrders().label }}</span></div>
-              <div class="dashboard-health-card__title"><span class="dashboard-health-dot" [class]="'dashboard-health-dot--' + healthOrders().tone"></span><strong>Đơn hàng</strong></div>
-              <small>{{ num(ops().pendingOrders) }} chờ · {{ num(ops().paymentErrors) }} lỗi TT</small>
-            </a> }
-            @if (canOpenModule('products')) { <a class="dashboard-health-card" routerLink="/products">
-              <div class="dashboard-health-card__head"><i><app-admin-icon name="box" /></i><span class="admin-badge" [class]="'admin-badge--' + healthProducts().tone">{{ healthProducts().label }}</span></div>
-              <div class="dashboard-health-card__title"><span class="dashboard-health-dot" [class]="'dashboard-health-dot--' + healthProducts().tone"></span><strong>Sản phẩm</strong></div>
-              <small>{{ num(ops().lowStockProducts) }} SKU sắp hết</small>
-            </a> }
-            @if (canOpenModule('reviews')) { <a class="dashboard-health-card" routerLink="/reviews">
-              <div class="dashboard-health-card__head"><i><app-admin-icon name="star" /></i><span class="admin-badge" [class]="'admin-badge--' + healthReviews().tone">{{ healthReviews().label }}</span></div>
-              <div class="dashboard-health-card__title"><span class="dashboard-health-dot" [class]="'dashboard-health-dot--' + healthReviews().tone"></span><strong>Đánh giá</strong></div>
-              <small>{{ num(business().pendingReviews) }} chờ duyệt · {{ num(ops().urgentReviews) }} gấp</small>
-            </a> }
-            @if (canOpenModule('returns')) { <a class="dashboard-health-card" routerLink="/returns">
-              <div class="dashboard-health-card__head"><i><app-admin-icon name="support" /></i><span class="admin-badge" [class]="'admin-badge--' + healthReturns().tone">{{ healthReturns().label }}</span></div>
-              <div class="dashboard-health-card__title"><span class="dashboard-health-dot" [class]="'dashboard-health-dot--' + healthReturns().tone"></span><strong>CSKH</strong></div>
-              <small>{{ num(ops().openReturns) }} đổi trả · {{ num(ops().openSupportTickets) }} phiếu</small>
-            </a> }
-            @if (canOpenModule('promotions')) { <a class="dashboard-health-card" routerLink="/promotions">
-              <div class="dashboard-health-card__head"><i><app-admin-icon name="tag" /></i><span class="admin-badge admin-badge--success">Ổn</span></div>
-              <div class="dashboard-health-card__title"><span class="dashboard-health-dot dashboard-health-dot--success"></span><strong>Giá &amp; KM</strong></div>
-              <small>{{ num(business().promotionRevenueShare) }}% doanh thu có KM</small>
-            </a> }
-            @if (canOpenModule('accounts')) { <a class="dashboard-health-card" routerLink="/accounts">
-              <div class="dashboard-health-card__head"><i><app-admin-icon name="users" /></i><span class="admin-badge admin-badge--success">Ổn</span></div>
-              <div class="dashboard-health-card__title"><span class="dashboard-health-dot dashboard-health-dot--success"></span><strong>Tài khoản</strong></div>
-              <small>Nhật ký gần đây: {{ num(logs().length) }} bản ghi</small>
-            </a> }
-          </div>
-        </section>
-      </div>
-      <div class="dashboard-lower-grid">
-        <section class="dashboard-section dashboard-activity">
-          <header class="dashboard-section__header"><div><span class="dashboard-eyebrow">Nhật ký rút gọn</span><h3>Hoạt động gần đây</h3></div>@if (canOpenModule('logs')) { <a class="dashboard-text-action" routerLink="/logs">Mở nhật ký</a> }</header>
-          <div class="dashboard-timeline">
-            @if (!recentActivity().length) {
-              <div style="padding: 24px; text-align: center; color: var(--muted); font-size: 0.85rem;">Chưa có hoạt động gần đây</div>
-            } @else {
-              @for (item of recentActivity(); track item.log.audit_id || item.log.timestamp) {
-                <article>
-                  <time>{{ item.copy.time }}</time>
-                  <span></span>
-                  <div>
-                    <strong>{{ item.copy.actor }}</strong>
-                    <p>{{ item.copy.desc }}</p>
-                    <small>{{ item.copy.module }} · Thành công</small>
-                  </div>
-                </article>
-              }
-            }
-          </div>
-        </section>
-      </div>
-    </section>
-  } @else {
-    <section class="dashboard-panel" id="dashboard-business">
-      <header class="dashboard-section__header"><div><span class="dashboard-eyebrow">Tầng 1 · Tổng quan</span><h3>Kết quả kỳ đang chọn</h3></div></header>
-      <div class="dashboard-kpi-grid dashboard-kpi-grid--business">
-        <article class="dashboard-kpi" [class.dashboard-kpi--loading]="loading()">
-          <div class="dashboard-kpi__head"><span>Doanh thu</span><i><app-admin-icon name="dashboard" /></i></div>
-          <strong>{{ money(business().revenue) }}</strong>
-          <div><small [class]="trendClass(comparisons().revenuePct)">{{ trend(comparisons().revenuePct) }}</small></div>
-        </article>
-        <article class="dashboard-kpi" [class.dashboard-kpi--loading]="loading()">
-          <div class="dashboard-kpi__head"><span>Số đơn</span><i><app-admin-icon name="cart" /></i></div>
-          <strong>{{ num(business().orderCount) }}</strong>
-          <div><small [class]="trendClass(comparisons().orderCountPct)">{{ trend(comparisons().orderCountPct) }}</small></div>
-        </article>
-        <article class="dashboard-kpi" [class.dashboard-kpi--loading]="loading()">
-          <div class="dashboard-kpi__head"><span>AOV</span><i><app-admin-icon name="tag" /></i></div>
-          <strong>{{ money(business().averageOrderValue) }}</strong>
-          <div><small [class]="trendClass(comparisons().aovPct)">{{ trend(comparisons().aovPct) }}</small></div>
-        </article>
-        <article class="dashboard-kpi" [class.dashboard-kpi--loading]="loading()">
-          <div class="dashboard-kpi__head"><span>Tỷ lệ hoàn tất</span><i><app-admin-icon name="star" /></i></div>
-          <strong>{{ num(business().completionRate) }}%</strong>
-          <div><small [class]="trendClass(comparisons().completionRatePoints)">{{ trend(comparisons().completionRatePoints, ' điểm so với kỳ trước') }}</small></div>
-        </article>
-        <article class="dashboard-kpi" [class.dashboard-kpi--loading]="loading()">
-          <div class="dashboard-kpi__head"><span>Khách hàng</span><i><app-admin-icon name="users" /></i></div>
-          <strong>{{ num(business().customers || business().customerCount) }}</strong>
-          <div><small>Khách có đơn trong kỳ</small></div>
-        </article>
-      </div>
-      <section class="dashboard-section dashboard-revenue">
-        <header class="dashboard-section__header">
-          <div><span class="dashboard-eyebrow">Tầng 2 · Xu hướng và so sánh</span><h3>Doanh thu và số đơn theo ngày</h3></div>
-          <div class="dashboard-chart-legend">
-            <span><i></i>Doanh thu</span>
-            <span><i></i>Số đơn</span>
-          </div>
-        </header>
-        <div class="dashboard-revenue__layout">
-          <div class="dashboard-chart">
-            <div class="dashboard-chart__grid">
-              <span>{{ chartMaxLabel() }}</span>
-              <span></span>
-              <span></span>
-              <span>0</span>
-            </div>
-            @if (chartBars().length) {
-              <div class="dashboard-chart__bars" [style.grid-template-columns]="chartColumns()">
-                @for (point of chartBars(); track point.date) {
-                  <div [style.--bar]="point.revenuePct" [style.--orders]="point.orderPct">
-                    <div class="dashboard-chart__hit" tabindex="0" [attr.aria-label]="point.dateStr + ': doanh thu ' + money(point.revenue) + ', ' + num(point.orderCount) + ' đơn'" [attr.title]="point.dateStr + ': doanh thu ' + money(point.revenue) + ', ' + num(point.orderCount) + ' đơn'">
-                      <i></i>
-                      <b></b>
-                    </div>
-                    <span>{{ point.dateStr }}</span>
-                  </div>
-                }
-              </div>
-            } @else {
-              <p class="admin-note dashboard-chart__empty">Không có dữ liệu trong kỳ.</p>
-            }
-          </div>
-          <aside class="dashboard-chart-insight">
-            <span>Đọc DT/DS</span>
-            <h4>{{ hasBusinessData() ? 'Nhịp mua trong kỳ' : 'Chưa có giao dịch' }}</h4>
-            <p>{{ hasBusinessData() ? peakInsight() : 'Không có DT/DS trong ngày, tuần hoặc tháng đang chọn. Đổi kỳ cố định, không mở khoảng tùy chọn.' }}</p>
-          </aside>
-        </div>
-      </section>
-      <section class="dashboard-section">
-        <header class="dashboard-section__header"><div><span class="dashboard-eyebrow">Tầng 3 · Cảnh báo</span><h3>Tín hiệu cần theo dõi</h3></div></header>
-        <div class="dashboard-alert-list">
-          @for (group of managementWarnings(); track group.id) {
-            <article class="dashboard-alert" [class.dashboard-alert--critical]="group.severity === 'critical'" [class.dashboard-alert--high]="group.severity === 'high'">
-              <span class="admin-badge" [class.admin-badge--danger]="group.severity === 'critical'" [class.admin-badge--warning]="group.severity !== 'critical'">{{ group.availability === 'oltp_fallback' ? 'Chờ OLAP' : 'Cần theo dõi' }}</span>
-              <div><h4>{{ group.title }}</h4><p>{{ group.dataNote || group.magnitude }}</p></div>
-            </article>
-          } @empty { <p class="admin-note">Chưa có cảnh báo được xác minh từ các nhóm dữ liệu sẵn sàng. Các nhóm thiếu nguồn được ghi rõ bên dưới.</p> }
-        </div>
-      </section>
-      <section class="dashboard-section">
-        <header class="dashboard-section__header"><div><span class="dashboard-eyebrow">Tầng 4 · Management Insight</span><h3>Chín nhóm chỉ số quản trị</h3></div></header>
-        <div class="dashboard-management-grid">
-          @for (group of managementGroups(); track group.id) {
-            <article class="dashboard-management-card" [class.dashboard-management-card--unavailable]="group.availability === 'insufficient_data'">
-              <header><span class="dashboard-eyebrow">{{ group.id }}</span><h4>{{ group.title }}</h4></header>
-              @if (group.availability === 'insufficient_data') {
-                <p class="dashboard-management-card__status"><app-admin-icon name="alert" />Chưa đủ dữ liệu phân tích</p>
-                <p>{{ group.dataNote }}</p>
-              } @else {
-                @if (group.dataNote) { <p class="admin-note">{{ group.dataNote }}</p> }
-                <dl class="dashboard-management-facts"><div><dt>Hiện tượng</dt><dd>{{ group.phenomenon }}</dd></div><div><dt>Phạm vi</dt><dd>{{ group.scope }}</dd></div><div><dt>Mức độ</dt><dd>{{ group.magnitude }}</dd></div><div><dt>Hệ quả quản trị</dt><dd>{{ group.consequence }}</dd></div></dl>
-                @if (group.action; as action) {
-                  @if (canOpenManagementAction(action)) { <a class="admin-btn admin-btn--ghost admin-btn--sm" [routerLink]="action.route" [queryParams]="action.query">{{ action.label }}</a> }
-                }
-              }
+    }
+    @if (tab() === 'operations') {
+      <section class="dashboard-panel">
+        <header class="dashboard-section__header"><div><span class="dashboard-eyebrow">Hàng đợi vận hành · OLTP trực tiếp</span><h3>Việc cần xử lý</h3></div></header>
+        <div class="dashboard-kpi-grid">
+          @for (item of operations(); track item.key) {
+            <article class="dashboard-kpi"><span>{{ item.label }}</span><strong>{{ num(item.value) }}</strong>
+              @if (canOpenModule(item.module)) { <a [routerLink]="item.route">Mở phân hệ</a> }
             </article>
           }
         </div>
+        <section class="dashboard-section"><header class="dashboard-section__header"><h3>Hoạt động gần đây</h3></header>
+          @for (log of snapshot.recentLogs || []; track log.audit_id || $index) {
+            <p>{{ log.timestamp }} · {{ log.actor_name || log.actor_id || 'Hệ thống' }} · {{ log.module }} · {{ log.action }}</p>
+          } @empty { <p class="admin-note">Không có nhật ký nguồn trong bản đọc này.</p> }
+        </section>
       </section>
-      <header class="dashboard-section__header"><div><span class="dashboard-eyebrow">Tầng 5 · Khoan sâu</span><h3>Danh mục, sản phẩm và địa lý</h3></div>@if (viewerOnly()) { <span class="admin-badge">Chỉ xem</span> }</header>
-      <div class="dashboard-business-grid">
+    } @else {
+      <section class="dashboard-panel">
+        <header class="dashboard-section__header"><div><span class="dashboard-eyebrow">Tầng 1 · KPI</span><h3>Kết quả {{ loadedPeriodLabel() }}</h3></div></header>
+        <p class="admin-note">Kỳ hiện tại [{{ snapshot.from }}, {{ snapshot.toExclusive }}); kỳ trước [{{ snapshot.previousFrom }}, {{ snapshot.previousToExclusive }}). Doanh thu là giá trị đơn hợp lệ, không phải lợi nhuận hay doanh thu tiền đã thu.</p>
+        <div class="dashboard-kpi-grid dashboard-kpi-grid--business">
+          <article class="dashboard-kpi"><span>Giá trị đơn hợp lệ</span><strong>{{ money(snapshot.business.revenue) }}</strong><small>{{ trend(snapshot.business.comparisons['revenuePct']) }}</small></article>
+          <article class="dashboard-kpi"><span>Tổng số đơn gốc</span><strong>{{ num(snapshot.business.orderCount) }}</strong><small>{{ trend(snapshot.business.comparisons['orderCountPct']) }}</small></article>
+          <article class="dashboard-kpi"><span>AOV đơn hợp lệ</span><strong>{{ money(snapshot.business.averageOrderValue) }}</strong><small>{{ trend(snapshot.business.comparisons['aovPct']) }}</small></article>
+          <article class="dashboard-kpi"><span>Tỷ lệ hoàn tất (%)</span><strong>{{ num(snapshot.business.completionRate) }}</strong><small>{{ num(snapshot.business.comparisons['completionRatePoints']) }} điểm so kỳ trước</small></article>
+          <article class="dashboard-kpi"><span>Khách có đơn hợp lệ</span><strong>{{ num(snapshot.business.customers) }}</strong></article>
+        </div>
         <section class="dashboard-section">
-          <header class="dashboard-section__header"><div><span class="dashboard-eyebrow">Bán chạy</span><h3>Doanh thu theo SKU</h3></div>@if (canOpenModule('products')) { <a class="dashboard-text-action" routerLink="/products">Mở sản phẩm</a> }</header>
+          <header class="dashboard-section__header"><div><span class="dashboard-eyebrow">Tầng 2 · Xu hướng</span><h3>Giá trị đơn theo ngày</h3></div></header>
           <div class="dashboard-ranking">
-            @for (item of bestSellers(); track item.product_id || item.rank) {
-              <button type="button" class="dashboard-ranking__row" (click)="drillProduct(item.product_id)">
-                <span>{{ item.rank }}</span>
-                <div>
-                  <strong>{{ item.name }}</strong>
-                  <i><b [style.width.%]="bestSellerWidth(item.revenue)"></b></i>
-                  <small>{{ item.sku || '—' }} · {{ num(item.sold) }} bán</small>
-                </div>
-                <strong>{{ money(item.revenue) }}</strong>
-              </button>
-            } @empty {
-              <p class="admin-note">Chưa có SKU phát sinh doanh thu trong kỳ.</p>
+            @for (point of chartBars(); track point.date) {
+              <div class="dashboard-ranking__row"><span>{{ point.dateStr }}</span><div><strong>{{ money(point.revenue) }}</strong>
+                @if (point.revenuePct !== null) { <i><b [style.width.%]="point.revenuePct"></b></i> }
+                <small>{{ num(point.orderCount) }} đơn</small></div></div>
+            } @empty { <p class="admin-note">Không có chuỗi thời gian đã đối chiếu. Không dựng dữ liệu giả.</p> }
+          </div>
+        </section>
+        <section class="dashboard-section">
+          <header class="dashboard-section__header"><div><span class="dashboard-eyebrow">Tầng 3 · Cảnh báo</span><h3>Tín hiệu cần đối chiếu</h3></div></header>
+          @for (group of managementWarnings(); track group.id) { <p><strong>{{ group.title }}</strong> · {{ group.magnitude }} · {{ group.consequence }}</p> }
+          @empty { <p class="admin-note">Không có cảnh báo từ quy tắc khả dụng. Nhóm thiếu dữ liệu không được coi là khỏe.</p> }
+          <p class="admin-note">Định nghĩa còn mở: SLA hợp đồng, chi phí/đối chứng ROI khuyến mãi, LTV dự báo, liên kết đơn–CSAT. Không suy ra các KPI này từ nguồn khác.</p>
+        </section>
+        <section class="dashboard-section">
+          <header class="dashboard-section__header"><div><span class="dashboard-eyebrow">Tầng 4 · Thẻ phân tích</span><h3>Chín nhóm bằng chứng</h3></div></header>
+          <div class="dashboard-management-grid">
+            @for (group of managementGroups(); track group.id) {
+              <article class="dashboard-management-card"><h4>{{ group.title }}</h4>
+                @if (group.availability === 'insufficient_data') { <span class="admin-badge">Không đủ dữ liệu</span><p>{{ group.dataNote }}</p> }
+                @else {
+                  <p class="admin-note">{{ group.dataNote }}</p>
+                  <dl class="dashboard-management-facts"><div><dt>Quan sát</dt><dd>{{ group.phenomenon }}</dd></div><div><dt>Phạm vi</dt><dd>{{ group.scope }}</dd></div><div><dt>Tác động định lượng</dt><dd>{{ group.magnitude }}</dd></div><div><dt>Khuyến nghị (không phải nguyên nhân)</dt><dd>{{ group.consequence }}</dd></div></dl>
+                  @if (group.action; as action) { @if (canOpenManagementAction(action)) { <a [routerLink]="action.route" [queryParams]="action.query">{{ action.label }}</a> } }
+                }
+                <small>{{ group.id }} · management.v3 · {{ sourceLabel() }} · {{ lastSyncedAt() || 'chưa đồng bộ' }}</small>
+              </article>
             }
           </div>
         </section>
         <section class="dashboard-section">
-          <header class="dashboard-section__header"><div><span class="dashboard-eyebrow">Danh mục</span><h3>Đóng góp doanh thu</h3></div></header>
-          <div class="dashboard-ranking">
-            @for (item of categories(); track item.category_id || item.name) {
-              <button type="button" class="dashboard-ranking__row" (click)="drillCategory(item.category_id)">
-                <span>{{ num(item.pct) }}%</span>
-                <div>
-                  <strong>{{ item.name }}</strong>
-                  <i><b [style.width.%]="item.pct"></b></i>
-                </div>
-                <strong>{{ money(item.revenue) }}</strong>
-              </button>
-            } @empty {
-              <p class="admin-note">Chưa có đóng góp danh mục trong kỳ.</p>
-            }
+          <header class="dashboard-section__header"><div><span class="dashboard-eyebrow">Tầng 5 · Khoan sâu</span><h3>Sản phẩm và danh mục</h3></div></header>
+          <div class="dashboard-business-grid">
+            <div class="dashboard-ranking">
+              @for (item of snapshot.business.bestSellers; track item.product_id || $index) {
+                <button type="button" class="dashboard-ranking__row" [disabled]="syncing()" (click)="drillProduct(item.product_id)"><span>{{ item.sku || '—' }}</span><div><strong>{{ item.name }}</strong><small>{{ num(item.sold) }} bán · {{ money(item.revenue) }}</small></div></button>
+              } @empty { <p class="admin-note">Chưa có bảng bán chạy đã đối chiếu.</p> }
+            </div>
+            <div class="dashboard-ranking">
+              @for (item of snapshot.business.categoryContributions; track item.category_id || item.name) {
+                <button type="button" class="dashboard-ranking__row" [disabled]="syncing()" (click)="drillCategory(item.category_id)"><span>{{ num(item.pct) }}%</span><div><strong>{{ item.name }}</strong><small>{{ money(item.revenue) }}</small></div></button>
+              } @empty { <p class="admin-note">Chưa có đóng góp danh mục đã đối chiếu.</p> }
+            </div>
           </div>
         </section>
-      </div>
-
-      <section class="dashboard-section">
-        <header class="dashboard-section__header">
-          <div>
-            <span class="dashboard-eyebrow">Đổi trả</span>
-            <h3>Top lý do đổi trả</h3>
-          </div>
-          @if (canOpenModule('returns')) { <a class="dashboard-text-action" routerLink="/returns">Mở phiếu đổi trả</a> }
-        </header>
-        <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" [disabled]="recommendationLoading()" (click)="loadRecommendation()">
-          {{ recommendationLoading() ? 'Đang đọc số liệu kỳ này…' : 'Khuyến nghị từ số liệu kỳ này' }}
-        </button>
-        @if (recommendationError()) {
-          <p class="admin-note">{{ recommendationError() }}</p>
-        }
-        @if (recommendation().length) {
-          <ul class="admin-note">
-            @for (line of recommendation(); track line) {
-              <li>{{ line }}</li>
-            }
-          </ul>
-          <small class="admin-form-helper">{{ recommendationSource() === 'gemini' ? 'Nhận định được đối chiếu với số liệu kỳ đang chọn.' : 'Bản tóm tắt từ số liệu đã xác minh trong kỳ.' }}</small>
-        }
-        @if (regions().length < 3) {
-          <p class="admin-note">Chưa đủ mật độ địa lý trong kỳ này để vẽ heatmap. Cần ít nhất 3 tỉnh hoặc thành trong địa chỉ giao hàng đã lưu.</p>
-        } @else {
-          <div class="dashboard-heatmap" role="list" aria-label="Mật độ đơn theo tỉnh và thành phố">
-            @for (row of regions(); track row.name) {
-              <div class="dashboard-heatmap__cell" role="listitem" tabindex="0" [style.--intensity]="regionShare(row.count) / 100" [attr.title]="row.name + ': ' + num(row.count) + ' đơn trong kỳ'">
-                <strong>{{ row.name }}</strong><span>{{ num(row.count) }} đơn</span>
-              </div>
-            }
-          </div>
-        }
-        @if (!returnReasons().length) {
-          <p class="admin-note">Chưa đủ phiếu đổi trả có lý do trong kỳ này. Biểu đồ hiện khi khách chọn lý do trong dropdown và gửi ảnh minh chứng.</p>
-        } @else {
-          <div class="dashboard-ranking">
-            @for (row of returnReasons(); track row.reason) {
-              <div class="dashboard-ranking__row">
-                <span>{{ row.count }}</span>
-                <div>
-                  <strong>{{ row.reason }}</strong>
-                  <i><b [style.width.%]="reasonShare(row.count)"></b></i>
-                </div>
-              </div>
-            }
-          </div>
-        }
+        <section class="dashboard-section">
+          <details><summary>KPI nguồn chi tiết · mẫu số, CSAT, SLA, chương trình, danh mục và nhóm giảm giá</summary>
+            <p class="admin-note">Giữ cả số đo của mẫu nhỏ để kiểm tra; không biến chúng thành kết luận có độ tin cậy. “Không khả dụng” khác giá trị đo được bằng 0.</p>
+            <table class="admin-table"><thead><tr><th scope="col">KPI / dòng nguồn</th><th scope="col">Số đo</th></tr></thead><tbody>
+              @for (row of evidenceRows(); track row.key) { <tr><td>{{ row.key }}</td><td>{{ num(row.value) }}</td></tr> }
+              @empty { <tr><td colspan="2">Chưa có dữ liệu nguồn đã đối chiếu.</td></tr> }
+            </tbody></table>
+          </details>
+        </section>
+        <section class="dashboard-section"><h3>Diễn giải bằng chứng (tùy chọn)</h3>
+          @if (canMutate()) { <button type="button" class="admin-btn admin-btn--secondary admin-btn--sm" [disabled]="recommendationLoading() || loading() || !!loadError() || !snapshot.meta.validated" (click)="loadRecommendation()">{{ recommendationLoading() ? 'Đang diễn giải…' : 'Diễn giải KPI đã xác minh' }}</button> }
+          @if (recommendationError()) { <p role="status">{{ recommendationError() }}</p> }
+          @for (line of recommendation(); track line) { <p>{{ line }}</p> }
+          <p class="admin-note">AI chỉ chọn câu bằng chứng đã xác minh và tham chiếu kỳ, nguồn, quy tắc, KPI. Không có giả thuyết nguyên nhân đã kiểm chứng; không tạo nhận định nhân quả. Khi AI không khả dụng, KPI vẫn hiển thị.</p>
+        </section>
       </section>
-          </section>
+    }
   }
-  }
-  <footer class="dashboard-analysis-footer">
-    <p role="status">{{ loading() ? 'Đang đồng bộ dữ liệu phân tích…' : refreshMessage() }}</p>
-    <p>{{ lastSyncedAt() ? 'Kho phân tích đồng bộ lần cuối: ' + lastSyncedAt() : 'Chưa xác nhận được thời gian đồng bộ kho phân tích.' }} Số liệu giao dịch mới có thể khác báo cáo phân tích định kỳ.</p>
-  </footer>
+  <footer class="dashboard-analysis-footer"><p role="status">{{ refreshMessage() }}</p><p>Cập nhật kho: {{ lastSyncedAt() || 'chưa xác minh' }}. Hàng đợi OLTP mới có thể khác bản phân tích.</p></footer>
 </main>

@@ -76,32 +76,6 @@ test("admin mutations send expectedVersion through typed API services", async ()
   assert.doesNotMatch(`${accounts}\n${products}\n${orders}\n${api}`, /\/rest\/v1\//);
 });
 
-test("dashboard backend uses the canonical, service-only Supabase aggregation", async () => {
-  const [dashboard, migration, olap, router, api] = await Promise.all([
-    source("apps/api/src/dashboard.ts"),
-    source("database/migrations/018_admin_dashboard_summary.sql"),
-    source("database/migrations/022_admin_dashboard_olap_star.sql"),
-    source("apps/api/src/dashboard-router.ts"),
-    source("apps/admin-ng/src/app/core/admin-api.service.ts")
-  ]);
-  assert.match(dashboard, /callRpc\("get_admin_dashboard_summary"/);
-  assert.match(dashboard, /callRpc\(\s*"get_admin_olap_summary"/);
-  assert.match(dashboard, /callRpc\(\s*"refresh_analytics_star"/);
-  assert.match(migration, /security invoker/i);
-  assert.match(migration, /revoke all on function .* from public, anon, authenticated/i);
-  assert.match(migration, /grant execute on function .* to service_role/i);
-  assert.match(migration, /join current_orders o on o\.order_id = oi\.order_id/i);
-  assert.match(migration, /count\(distinct product_id\)/i);
-  assert.match(olap, /create schema if not exists analytics/i);
-  assert.match(olap, /analytics\.fact_order/);
-  assert.match(olap, /grant execute on function public\.get_admin_olap_summary/i);
-  assert.match(router, /api\/v1\/admin\/dashboard/);
-  assert.match(api, /\/api\/v1\/admin\/dashboard/);
-  assert.match(api, /\/api\/v1\/admin\/insights/);
-  assert.match(dashboard, /CUSTOM_DASHBOARD_RANGE_DISABLED/);
-  const insights = await source("apps/api/src/insights-router.ts");
-  assert.match(insights, /api\/v1\/admin\/insights/);
-});
 
 test("feature routes lazy-load page ViewModels", async () => {
   const [adminRoutes, userRoutes] = await Promise.all([

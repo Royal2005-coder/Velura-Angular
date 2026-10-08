@@ -1,0 +1,213 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions id="Definitions_quan_ly_san_pham" name="Hình 3.12 - Quy trình quản lý sản phẩm" xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" targetNamespace="http://velura.vn/bpmn/admin">
+  <bpmn:collaboration id="Collaboration_quan_ly_san_pham">
+    <bpmn:participant id="Participant_velura" name="Velura" processRef="Process_velura" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_velura" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_velura">
+      <bpmn:lane id="lane_admin" name="Quản trị viên quản lý sản phẩm">
+        <bpmn:flowNodeRef>e_start</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_ds</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>g_chon</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>a_nhap</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>b_nhap</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c_nhap</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>d_nhap</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>e_nhap</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>a_anh</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="lane_sys" name="Hệ thống">
+        <bpmn:flowNodeRef>a_kiem</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>a_gw</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>a_luu</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>a_loi</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>b_kiem</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>b_gw</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>b_luu</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>b_loi</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c_kiem</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c_gw</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c_luu</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c_loi</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>d_kiem</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>d_gw</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>d_luu</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>d_loi</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>e_kiem</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>e_gw</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>e_luu</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>e_loi</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>g_hoi</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_kho</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>g_nguong</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_canhbao</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_binhthuong</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_log</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>ds_log</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>e_end</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="e_start" name="Vào trang Quản lý Sản phẩm"><bpmn:outgoing>Flow_e_start__t_ds</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:userTask id="t_ds" name="Xem danh sách, lọc và tìm kiếm sản phẩm"><bpmn:incoming>Flow_e_start__t_ds</bpmn:incoming><bpmn:outgoing>Flow_t_ds__g_chon</bpmn:outgoing></bpmn:userTask>
+    <bpmn:exclusiveGateway id="g_chon" name="Chọn thao tác?"><bpmn:incoming>Flow_t_ds__g_chon</bpmn:incoming><bpmn:outgoing>Flow_g_chon__a_nhap</bpmn:outgoing><bpmn:outgoing>Flow_g_chon__b_nhap</bpmn:outgoing><bpmn:outgoing>Flow_g_chon__c_nhap</bpmn:outgoing><bpmn:outgoing>Flow_g_chon__d_nhap</bpmn:outgoing><bpmn:outgoing>Flow_g_chon__e_nhap</bpmn:outgoing></bpmn:exclusiveGateway>
+    <bpmn:userTask id="a_nhap" name="Nhập hoặc chỉnh thông tin sản phẩm: tên, SKU, danh mục, mô tả, size, màu, tồn kho"><bpmn:incoming>Flow_g_chon__a_nhap</bpmn:incoming><bpmn:outgoing>Flow_a_nhap__a_anh</bpmn:outgoing></bpmn:userTask>
+    <bpmn:serviceTask id="a_kiem" name="Kiểm tra SKU, giá, danh mục, ảnh và tồn kho"><bpmn:incoming>Flow_a_anh__a_kiem</bpmn:incoming><bpmn:outgoing>Flow_a_kiem__a_gw</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="a_gw" name="Dữ liệu hợp lệ?"><bpmn:incoming>Flow_a_kiem__a_gw</bpmn:incoming><bpmn:outgoing>Flow_a_gw__a_luu</bpmn:outgoing><bpmn:outgoing>Flow_a_gw__a_loi</bpmn:outgoing></bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="a_luu" name="Lưu sản phẩm, kiểm tra phiên bản bản ghi"><bpmn:incoming>Flow_a_gw__a_luu</bpmn:incoming><bpmn:outgoing>Flow_a_luu__g_hoi</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:endEvent id="a_loi" name="Hủy thao tác"><bpmn:incoming>Flow_a_gw__a_loi</bpmn:incoming></bpmn:endEvent>
+    <bpmn:userTask id="b_nhap" name="Chọn sản phẩm, nhập giá gốc, giá bán và lý do đổi giá"><bpmn:incoming>Flow_g_chon__b_nhap</bpmn:incoming><bpmn:outgoing>Flow_b_nhap__b_kiem</bpmn:outgoing></bpmn:userTask>
+    <bpmn:serviceTask id="b_kiem" name="Kiểm tra quyền giá, giá bán không vượt giá gốc, lý do 10–500 ký tự"><bpmn:incoming>Flow_b_nhap__b_kiem</bpmn:incoming><bpmn:outgoing>Flow_b_kiem__b_gw</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="b_gw" name="Giá hợp lệ?"><bpmn:incoming>Flow_b_kiem__b_gw</bpmn:incoming><bpmn:outgoing>Flow_b_gw__b_luu</bpmn:outgoing><bpmn:outgoing>Flow_b_gw__b_loi</bpmn:outgoing></bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="b_luu" name="Cập nhật giá, ghi lịch sử giá cũ và giá mới"><bpmn:incoming>Flow_b_gw__b_luu</bpmn:incoming><bpmn:outgoing>Flow_b_luu__g_hoi</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:endEvent id="b_loi" name="Hủy đổi giá"><bpmn:incoming>Flow_b_gw__b_loi</bpmn:incoming></bpmn:endEvent>
+    <bpmn:userTask id="c_nhap" name="Chọn combo, thêm, sửa số lượng hoặc bỏ sản phẩm thành phần"><bpmn:incoming>Flow_g_chon__c_nhap</bpmn:incoming><bpmn:outgoing>Flow_c_nhap__c_kiem</bpmn:outgoing></bpmn:userTask>
+    <bpmn:serviceTask id="c_kiem" name="Kiểm tra sản phẩm thành phần và số lượng nguyên từ 1"><bpmn:incoming>Flow_c_nhap__c_kiem</bpmn:incoming><bpmn:outgoing>Flow_c_kiem__c_gw</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="c_gw" name="Thành phần hợp lệ?"><bpmn:incoming>Flow_c_kiem__c_gw</bpmn:incoming><bpmn:outgoing>Flow_c_gw__c_luu</bpmn:outgoing><bpmn:outgoing>Flow_c_gw__c_loi</bpmn:outgoing></bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="c_luu" name="Cập nhật thành phần của combo"><bpmn:incoming>Flow_c_gw__c_luu</bpmn:incoming><bpmn:outgoing>Flow_c_luu__g_hoi</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:endEvent id="c_loi" name="Hủy thao tác"><bpmn:incoming>Flow_c_gw__c_loi</bpmn:incoming></bpmn:endEvent>
+    <bpmn:userTask id="d_nhap" name="Chọn sản phẩm, trạng thái mới và lý do thay đổi"><bpmn:incoming>Flow_g_chon__d_nhap</bpmn:incoming><bpmn:outgoing>Flow_d_nhap__d_kiem</bpmn:outgoing></bpmn:userTask>
+    <bpmn:serviceTask id="d_kiem" name="Kiểm tra sản phẩm tồn tại, quyền thao tác và luồng chuyển trạng thái"><bpmn:incoming>Flow_d_nhap__d_kiem</bpmn:incoming><bpmn:outgoing>Flow_d_kiem__d_gw</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="d_gw" name="Thao tác hợp lệ?"><bpmn:incoming>Flow_d_kiem__d_gw</bpmn:incoming><bpmn:outgoing>Flow_d_gw__d_luu</bpmn:outgoing><bpmn:outgoing>Flow_d_gw__d_loi</bpmn:outgoing></bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="d_luu" name="Cập nhật trạng thái: Đang bán, Tạm ẩn, Hết hàng hoặc Ngừng bán"><bpmn:incoming>Flow_d_gw__d_luu</bpmn:incoming><bpmn:outgoing>Flow_d_luu__g_hoi</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:endEvent id="d_loi" name="Hủy thao tác"><bpmn:incoming>Flow_d_gw__d_loi</bpmn:incoming></bpmn:endEvent>
+    <bpmn:userTask id="e_nhap" name="Tải file CSV theo mẫu chuẩn lên hệ thống"><bpmn:incoming>Flow_g_chon__e_nhap</bpmn:incoming><bpmn:outgoing>Flow_e_nhap__e_kiem</bpmn:outgoing></bpmn:userTask>
+    <bpmn:serviceTask id="e_kiem" name="Kiểm tra cả file: cột bắt buộc, SKU, giá, tối đa 500 dòng"><bpmn:incoming>Flow_e_nhap__e_kiem</bpmn:incoming><bpmn:outgoing>Flow_e_kiem__e_gw</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="e_gw" name="File hợp lệ?"><bpmn:incoming>Flow_e_kiem__e_gw</bpmn:incoming><bpmn:outgoing>Flow_e_gw__e_luu</bpmn:outgoing><bpmn:outgoing>Flow_e_gw__e_loi</bpmn:outgoing></bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="e_luu" name="Thêm mới hoặc cập nhật sản phẩm theo SKU"><bpmn:incoming>Flow_e_gw__e_luu</bpmn:incoming><bpmn:outgoing>Flow_e_luu__g_hoi</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:endEvent id="e_loi" name="Từ chối cả file"><bpmn:incoming>Flow_e_gw__e_loi</bpmn:incoming></bpmn:endEvent>
+    <bpmn:callActivity id="a_anh" name="Xử lý ảnh sản phẩm bằng AI (Hình 3.12a)"><bpmn:incoming>Flow_a_nhap__a_anh</bpmn:incoming><bpmn:outgoing>Flow_a_anh__a_kiem</bpmn:outgoing></bpmn:callActivity>
+    <bpmn:exclusiveGateway id="g_hoi" name=""><bpmn:incoming>Flow_a_luu__g_hoi</bpmn:incoming><bpmn:incoming>Flow_b_luu__g_hoi</bpmn:incoming><bpmn:incoming>Flow_c_luu__g_hoi</bpmn:incoming><bpmn:incoming>Flow_d_luu__g_hoi</bpmn:incoming><bpmn:incoming>Flow_e_luu__g_hoi</bpmn:incoming><bpmn:outgoing>Flow_g_hoi__t_kho</bpmn:outgoing></bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="t_kho" name="Đồng bộ trạng thái tồn kho: Hết hàng hoặc Đang bán"><bpmn:incoming>Flow_g_hoi__t_kho</bpmn:incoming><bpmn:outgoing>Flow_t_kho__g_nguong</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="g_nguong" name="Dưới ngưỡng tối thiểu?"><bpmn:incoming>Flow_t_kho__g_nguong</bpmn:incoming><bpmn:outgoing>Flow_g_nguong__t_canhbao</bpmn:outgoing><bpmn:outgoing>Flow_g_nguong__t_binhthuong</bpmn:outgoing></bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="t_canhbao" name="Gửi cảnh báo Sắp hết hàng qua Dashboard và Email"><bpmn:incoming>Flow_g_nguong__t_canhbao</bpmn:incoming><bpmn:outgoing>Flow_t_canhbao__t_log</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:serviceTask id="t_binhthuong" name="Ghi nhận trạng thái tồn kho bình thường"><bpmn:incoming>Flow_g_nguong__t_binhthuong</bpmn:incoming><bpmn:outgoing>Flow_t_binhthuong__t_log</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:serviceTask id="t_log" name="Ghi nhật ký: người thao tác, thời gian, dữ liệu trước và sau, kết quả"><bpmn:incoming>Flow_t_canhbao__t_log</bpmn:incoming><bpmn:incoming>Flow_t_binhthuong__t_log</bpmn:incoming><bpmn:outgoing>Flow_t_log__e_end</bpmn:outgoing><bpmn:dataOutputAssociation id="DataAssoc_ds_log"><bpmn:targetRef>ds_log</bpmn:targetRef></bpmn:dataOutputAssociation></bpmn:serviceTask>
+    <bpmn:dataStoreReference id="ds_log" name="Nhật ký Sản phẩm" />
+    <bpmn:endEvent id="e_end" name="Hoàn tất"><bpmn:incoming>Flow_t_log__e_end</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_e_start__t_ds" name="" sourceRef="e_start" targetRef="t_ds" />
+    <bpmn:sequenceFlow id="Flow_t_ds__g_chon" name="" sourceRef="t_ds" targetRef="g_chon" />
+    <bpmn:sequenceFlow id="Flow_g_chon__a_nhap" name="Thêm / sửa" sourceRef="g_chon" targetRef="a_nhap" />
+    <bpmn:sequenceFlow id="Flow_a_kiem__a_gw" name="" sourceRef="a_kiem" targetRef="a_gw" />
+    <bpmn:sequenceFlow id="Flow_a_gw__a_luu" name="Có" sourceRef="a_gw" targetRef="a_luu" />
+    <bpmn:sequenceFlow id="Flow_a_gw__a_loi" name="Không" sourceRef="a_gw" targetRef="a_loi" />
+    <bpmn:sequenceFlow id="Flow_a_luu__g_hoi" name="" sourceRef="a_luu" targetRef="g_hoi" />
+    <bpmn:sequenceFlow id="Flow_g_chon__b_nhap" name="Đổi giá" sourceRef="g_chon" targetRef="b_nhap" />
+    <bpmn:sequenceFlow id="Flow_b_kiem__b_gw" name="" sourceRef="b_kiem" targetRef="b_gw" />
+    <bpmn:sequenceFlow id="Flow_b_gw__b_luu" name="Có" sourceRef="b_gw" targetRef="b_luu" />
+    <bpmn:sequenceFlow id="Flow_b_gw__b_loi" name="Không" sourceRef="b_gw" targetRef="b_loi" />
+    <bpmn:sequenceFlow id="Flow_b_luu__g_hoi" name="" sourceRef="b_luu" targetRef="g_hoi" />
+    <bpmn:sequenceFlow id="Flow_g_chon__c_nhap" name="Combo" sourceRef="g_chon" targetRef="c_nhap" />
+    <bpmn:sequenceFlow id="Flow_c_kiem__c_gw" name="" sourceRef="c_kiem" targetRef="c_gw" />
+    <bpmn:sequenceFlow id="Flow_c_gw__c_luu" name="Có" sourceRef="c_gw" targetRef="c_luu" />
+    <bpmn:sequenceFlow id="Flow_c_gw__c_loi" name="Không" sourceRef="c_gw" targetRef="c_loi" />
+    <bpmn:sequenceFlow id="Flow_c_luu__g_hoi" name="" sourceRef="c_luu" targetRef="g_hoi" />
+    <bpmn:sequenceFlow id="Flow_g_chon__d_nhap" name="Ẩn / hiện" sourceRef="g_chon" targetRef="d_nhap" />
+    <bpmn:sequenceFlow id="Flow_d_kiem__d_gw" name="" sourceRef="d_kiem" targetRef="d_gw" />
+    <bpmn:sequenceFlow id="Flow_d_gw__d_luu" name="Có" sourceRef="d_gw" targetRef="d_luu" />
+    <bpmn:sequenceFlow id="Flow_d_gw__d_loi" name="Không" sourceRef="d_gw" targetRef="d_loi" />
+    <bpmn:sequenceFlow id="Flow_d_luu__g_hoi" name="" sourceRef="d_luu" targetRef="g_hoi" />
+    <bpmn:sequenceFlow id="Flow_g_chon__e_nhap" name="Nhập CSV" sourceRef="g_chon" targetRef="e_nhap" />
+    <bpmn:sequenceFlow id="Flow_e_kiem__e_gw" name="" sourceRef="e_kiem" targetRef="e_gw" />
+    <bpmn:sequenceFlow id="Flow_e_gw__e_luu" name="Có" sourceRef="e_gw" targetRef="e_luu" />
+    <bpmn:sequenceFlow id="Flow_e_gw__e_loi" name="Không" sourceRef="e_gw" targetRef="e_loi" />
+    <bpmn:sequenceFlow id="Flow_e_luu__g_hoi" name="" sourceRef="e_luu" targetRef="g_hoi" />
+    <bpmn:sequenceFlow id="Flow_a_nhap__a_anh" name="" sourceRef="a_nhap" targetRef="a_anh" />
+    <bpmn:sequenceFlow id="Flow_a_anh__a_kiem" name="" sourceRef="a_anh" targetRef="a_kiem" />
+    <bpmn:sequenceFlow id="Flow_b_nhap__b_kiem" name="" sourceRef="b_nhap" targetRef="b_kiem" />
+    <bpmn:sequenceFlow id="Flow_c_nhap__c_kiem" name="" sourceRef="c_nhap" targetRef="c_kiem" />
+    <bpmn:sequenceFlow id="Flow_d_nhap__d_kiem" name="" sourceRef="d_nhap" targetRef="d_kiem" />
+    <bpmn:sequenceFlow id="Flow_e_nhap__e_kiem" name="" sourceRef="e_nhap" targetRef="e_kiem" />
+    <bpmn:sequenceFlow id="Flow_g_hoi__t_kho" name="" sourceRef="g_hoi" targetRef="t_kho" />
+    <bpmn:sequenceFlow id="Flow_t_kho__g_nguong" name="" sourceRef="t_kho" targetRef="g_nguong" />
+    <bpmn:sequenceFlow id="Flow_g_nguong__t_canhbao" name="Có" sourceRef="g_nguong" targetRef="t_canhbao" />
+    <bpmn:sequenceFlow id="Flow_g_nguong__t_binhthuong" name="Không" sourceRef="g_nguong" targetRef="t_binhthuong" />
+    <bpmn:sequenceFlow id="Flow_t_canhbao__t_log" name="" sourceRef="t_canhbao" targetRef="t_log" />
+    <bpmn:sequenceFlow id="Flow_t_binhthuong__t_log" name="" sourceRef="t_binhthuong" targetRef="t_log" />
+    <bpmn:sequenceFlow id="Flow_t_log__e_end" name="" sourceRef="t_log" targetRef="e_end" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_quan_ly_san_pham">
+    <bpmndi:BPMNPlane id="BPMNPlane_quan_ly_san_pham" bpmnElement="Collaboration_quan_ly_san_pham">
+      <bpmndi:BPMNShape id="Participant_velura_di" bpmnElement="Participant_velura" isHorizontal="true"><dc:Bounds x="40" y="40" width="2310" height="1557.5" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="lane_admin_di" bpmnElement="lane_admin" isHorizontal="true"><dc:Bounds x="70" y="40" width="2280" height="560" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="lane_sys_di" bpmnElement="lane_sys" isHorizontal="true"><dc:Bounds x="70" y="600" width="2280" height="997.5" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_start_di" bpmnElement="e_start"><dc:Bounds x="142" y="302" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="103.9" y="341" width="112.2" height="36" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_ds_di" bpmnElement="t_ds"><dc:Bounds x="224.5" y="276" width="176" height="88" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_chon_di" bpmnElement="g_chon" isMarkerVisible="true"><dc:Bounds x="485" y="295" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="391.8" y="253" width="112.2" height="18" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="a_nhap_di" bpmnElement="a_nhap"><dc:Bounds x="634.5" y="52" width="176" height="88" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="a_kiem_di" bpmnElement="a_kiem"><dc:Bounds x="869.5" y="704.75" width="176" height="88" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="a_gw_di" bpmnElement="a_gw" isMarkerVisible="true"><dc:Bounds x="1102.5" y="723.75" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="1060.4" y="663.75" width="61.1" height="36" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="a_luu_di" bpmnElement="a_luu"><dc:Bounds x="1194.5" y="704.75" width="176" height="88" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="a_loi_di" bpmnElement="a_loi"><dc:Bounds x="1109.5" y="797.25" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1149.5" y="806.25" width="97.6" height="18" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_nhap_di" bpmnElement="b_nhap"><dc:Bounds x="634.5" y="164" width="176" height="88" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_kiem_di" bpmnElement="b_kiem"><dc:Bounds x="869.5" y="879.75" width="176" height="88" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_gw_di" bpmnElement="b_gw" isMarkerVisible="true"><dc:Bounds x="1102.5" y="898.75" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="1060.4" y="838.75" width="61.1" height="36" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_luu_di" bpmnElement="b_luu"><dc:Bounds x="1194.5" y="879.75" width="176" height="88" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_loi_di" bpmnElement="b_loi"><dc:Bounds x="1109.5" y="972.25" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1149.5" y="981.25" width="90.3" height="18" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c_nhap_di" bpmnElement="c_nhap"><dc:Bounds x="634.5" y="276" width="176" height="88" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c_kiem_di" bpmnElement="c_kiem"><dc:Bounds x="869.5" y="1054.75" width="176" height="88" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c_gw_di" bpmnElement="c_gw" isMarkerVisible="true"><dc:Bounds x="1102.5" y="1073.75" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="1038.5" y="1013.75" width="83" height="36" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c_luu_di" bpmnElement="c_luu"><dc:Bounds x="1194.5" y="1054.75" width="176" height="88" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c_loi_di" bpmnElement="c_loi"><dc:Bounds x="1109.5" y="1147.25" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1149.5" y="1156.25" width="97.6" height="18" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="d_nhap_di" bpmnElement="d_nhap"><dc:Bounds x="634.5" y="388" width="176" height="88" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="d_kiem_di" bpmnElement="d_kiem"><dc:Bounds x="869.5" y="1229.75" width="176" height="88" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="d_gw_di" bpmnElement="d_gw" isMarkerVisible="true"><dc:Bounds x="1102.5" y="1248.75" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="1053.1" y="1188.75" width="68.4" height="36" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="d_luu_di" bpmnElement="d_luu"><dc:Bounds x="1194.5" y="1229.75" width="176" height="88" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="d_loi_di" bpmnElement="d_loi"><dc:Bounds x="1109.5" y="1322.25" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1149.5" y="1331.25" width="97.6" height="18" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_nhap_di" bpmnElement="e_nhap"><dc:Bounds x="634.5" y="500" width="176" height="88" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_kiem_di" bpmnElement="e_kiem"><dc:Bounds x="869.5" y="1404.75" width="176" height="88" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_gw_di" bpmnElement="e_gw" isMarkerVisible="true"><dc:Bounds x="1102.5" y="1423.75" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="1060.4" y="1363.75" width="61.1" height="36" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_luu_di" bpmnElement="e_luu"><dc:Bounds x="1194.5" y="1404.75" width="176" height="88" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_loi_di" bpmnElement="e_loi"><dc:Bounds x="1109.5" y="1497.25" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1149.5" y="1506.25" width="119.5" height="18" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="a_anh_di" bpmnElement="a_anh"><dc:Bounds x="869.5" y="52" width="176" height="88" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_hoi_di" bpmnElement="g_hoi" isMarkerVisible="true"><dc:Bounds x="1412.5" y="1073.75" width="50" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_kho_di" bpmnElement="t_kho"><dc:Bounds x="1504.5" y="1054.75" width="176" height="88" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_nguong_di" bpmnElement="g_nguong" isMarkerVisible="true"><dc:Bounds x="1722.5" y="1073.75" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="1651.2" y="1013.75" width="90.3" height="36" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_canhbao_di" bpmnElement="t_canhbao"><dc:Bounds x="1814.5" y="967.25" width="176" height="88" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_binhthuong_di" bpmnElement="t_binhthuong"><dc:Bounds x="1814.5" y="1142.25" width="176" height="88" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_log_di" bpmnElement="t_log"><dc:Bounds x="2019.5" y="1054.75" width="176" height="88" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ds_log_di" bpmnElement="ds_log"><dc:Bounds x="2052.5" y="1245.5" width="110" height="74" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_end_di" bpmnElement="e_end"><dc:Bounds x="2242" y="1080.75" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="2225.8" y="1119.75" width="68.4" height="18" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_e_start__t_ds_di" bpmnElement="Flow_e_start__t_ds"><di:waypoint x="178" y="320" /><di:waypoint x="224.5" y="320" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_t_ds__g_chon_di" bpmnElement="Flow_t_ds__g_chon"><di:waypoint x="400.5" y="320" /><di:waypoint x="485" y="320" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_g_chon__a_nhap_di" bpmnElement="Flow_g_chon__a_nhap"><di:waypoint x="510" y="295" /><di:waypoint x="510" y="96" /><di:waypoint x="634.5" y="96" /><bpmndi:BPMNLabel><dc:Bounds x="518" y="125.8" width="82" height="20" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_a_kiem__a_gw_di" bpmnElement="Flow_a_kiem__a_gw"><di:waypoint x="1045.5" y="748.75" /><di:waypoint x="1102.5" y="748.75" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_a_gw__a_luu_di" bpmnElement="Flow_a_gw__a_luu"><di:waypoint x="1152.5" y="748.75" /><di:waypoint x="1194.5" y="748.75" /><bpmndi:BPMNLabel><dc:Bounds x="1160.5" y="738.75" width="26" height="20" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_a_gw__a_loi_di" bpmnElement="Flow_a_gw__a_loi"><di:waypoint x="1127.5" y="773.75" /><di:waypoint x="1127.5" y="797.25" /><bpmndi:BPMNLabel><dc:Bounds x="1135.5" y="775.5" width="47" height="20" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_a_luu__g_hoi_di" bpmnElement="Flow_a_luu__g_hoi"><di:waypoint x="1370.5" y="748.75" /><di:waypoint x="1437.5" y="748.75" /><di:waypoint x="1437.5" y="1073.75" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_g_chon__b_nhap_di" bpmnElement="Flow_g_chon__b_nhap"><di:waypoint x="535" y="320" /><di:waypoint x="616.5" y="320" /><di:waypoint x="616.5" y="208" /><di:waypoint x="634.5" y="208" /><bpmndi:BPMNLabel><dc:Bounds x="569.7" y="310" width="61" height="20" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_b_kiem__b_gw_di" bpmnElement="Flow_b_kiem__b_gw"><di:waypoint x="1045.5" y="923.75" /><di:waypoint x="1102.5" y="923.75" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_b_gw__b_luu_di" bpmnElement="Flow_b_gw__b_luu"><di:waypoint x="1152.5" y="923.75" /><di:waypoint x="1194.5" y="923.75" /><bpmndi:BPMNLabel><dc:Bounds x="1160.5" y="913.75" width="26" height="20" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_b_gw__b_loi_di" bpmnElement="Flow_b_gw__b_loi"><di:waypoint x="1127.5" y="948.75" /><di:waypoint x="1127.5" y="972.25" /><bpmndi:BPMNLabel><dc:Bounds x="1135.5" y="950.5" width="47" height="20" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_b_luu__g_hoi_di" bpmnElement="Flow_b_luu__g_hoi"><di:waypoint x="1370.5" y="923.75" /><di:waypoint x="1388.5" y="923.75" /><di:waypoint x="1388.5" y="1068.25" /><di:waypoint x="1437.5" y="1068.25" /><di:waypoint x="1437.5" y="1073.75" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_g_chon__c_nhap_di" bpmnElement="Flow_g_chon__c_nhap"><di:waypoint x="510" y="345" /><di:waypoint x="510" y="351" /><di:waypoint x="616.5" y="351" /><di:waypoint x="616.5" y="320" /><di:waypoint x="634.5" y="320" /><bpmndi:BPMNLabel><dc:Bounds x="555.725" y="341" width="47" height="20" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_c_kiem__c_gw_di" bpmnElement="Flow_c_kiem__c_gw"><di:waypoint x="1045.5" y="1098.75" /><di:waypoint x="1102.5" y="1098.75" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_c_gw__c_luu_di" bpmnElement="Flow_c_gw__c_luu"><di:waypoint x="1152.5" y="1098.75" /><di:waypoint x="1194.5" y="1098.75" /><bpmndi:BPMNLabel><dc:Bounds x="1160.5" y="1088.75" width="26" height="20" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_c_gw__c_loi_di" bpmnElement="Flow_c_gw__c_loi"><di:waypoint x="1127.5" y="1123.75" /><di:waypoint x="1127.5" y="1147.25" /><bpmndi:BPMNLabel><dc:Bounds x="1135.5" y="1125.5" width="47" height="20" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_c_luu__g_hoi_di" bpmnElement="Flow_c_luu__g_hoi"><di:waypoint x="1370.5" y="1098.75" /><di:waypoint x="1412.5" y="1098.75" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_g_chon__d_nhap_di" bpmnElement="Flow_g_chon__d_nhap"><di:waypoint x="510" y="345" /><di:waypoint x="510" y="432" /><di:waypoint x="634.5" y="432" /><bpmndi:BPMNLabel><dc:Bounds x="497.4" y="422" width="75" height="20" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_d_kiem__d_gw_di" bpmnElement="Flow_d_kiem__d_gw"><di:waypoint x="1045.5" y="1273.75" /><di:waypoint x="1102.5" y="1273.75" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_d_gw__d_luu_di" bpmnElement="Flow_d_gw__d_luu"><di:waypoint x="1152.5" y="1273.75" /><di:waypoint x="1194.5" y="1273.75" /><bpmndi:BPMNLabel><dc:Bounds x="1160.5" y="1263.75" width="26" height="20" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_d_gw__d_loi_di" bpmnElement="Flow_d_gw__d_loi"><di:waypoint x="1127.5" y="1298.75" /><di:waypoint x="1127.5" y="1322.25" /><bpmndi:BPMNLabel><dc:Bounds x="1135.5" y="1300.5" width="47" height="20" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_d_luu__g_hoi_di" bpmnElement="Flow_d_luu__g_hoi"><di:waypoint x="1370.5" y="1273.75" /><di:waypoint x="1388.5" y="1273.75" /><di:waypoint x="1388.5" y="1129.25" /><di:waypoint x="1437.5" y="1129.25" /><di:waypoint x="1437.5" y="1123.75" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_g_chon__e_nhap_di" bpmnElement="Flow_g_chon__e_nhap"><di:waypoint x="535" y="320" /><di:waypoint x="541" y="320" /><di:waypoint x="541" y="544" /><di:waypoint x="634.5" y="544" /><bpmndi:BPMNLabel><dc:Bounds x="549" y="455.6" width="68" height="20" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_e_kiem__e_gw_di" bpmnElement="Flow_e_kiem__e_gw"><di:waypoint x="1045.5" y="1448.75" /><di:waypoint x="1102.5" y="1448.75" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_e_gw__e_luu_di" bpmnElement="Flow_e_gw__e_luu"><di:waypoint x="1152.5" y="1448.75" /><di:waypoint x="1194.5" y="1448.75" /><bpmndi:BPMNLabel><dc:Bounds x="1160.5" y="1438.75" width="26" height="20" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_e_gw__e_loi_di" bpmnElement="Flow_e_gw__e_loi"><di:waypoint x="1127.5" y="1473.75" /><di:waypoint x="1127.5" y="1497.25" /><bpmndi:BPMNLabel><dc:Bounds x="1135.5" y="1475.5" width="47" height="20" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_e_luu__g_hoi_di" bpmnElement="Flow_e_luu__g_hoi"><di:waypoint x="1370.5" y="1448.75" /><di:waypoint x="1437.5" y="1448.75" /><di:waypoint x="1437.5" y="1123.75" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_a_nhap__a_anh_di" bpmnElement="Flow_a_nhap__a_anh"><di:waypoint x="810.5" y="96" /><di:waypoint x="869.5" y="96" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_a_anh__a_kiem_di" bpmnElement="Flow_a_anh__a_kiem"><di:waypoint x="957.5" y="140" /><di:waypoint x="957.5" y="704.75" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_b_nhap__b_kiem_di" bpmnElement="Flow_b_nhap__b_kiem"><di:waypoint x="810.5" y="208" /><di:waypoint x="851.5" y="208" /><di:waypoint x="851.5" y="923.75" /><di:waypoint x="869.5" y="923.75" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_c_nhap__c_kiem_di" bpmnElement="Flow_c_nhap__c_kiem"><di:waypoint x="810.5" y="320" /><di:waypoint x="828.5" y="320" /><di:waypoint x="828.5" y="1098.75" /><di:waypoint x="869.5" y="1098.75" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_d_nhap__d_kiem_di" bpmnElement="Flow_d_nhap__d_kiem"><di:waypoint x="810.5" y="432" /><di:waypoint x="823.5" y="432" /><di:waypoint x="823.5" y="1273.75" /><di:waypoint x="869.5" y="1273.75" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_e_nhap__e_kiem_di" bpmnElement="Flow_e_nhap__e_kiem"><di:waypoint x="810.5" y="544" /><di:waypoint x="812" y="544" /><di:waypoint x="812" y="1448.75" /><di:waypoint x="869.5" y="1448.75" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_g_hoi__t_kho_di" bpmnElement="Flow_g_hoi__t_kho"><di:waypoint x="1462.5" y="1098.75" /><di:waypoint x="1504.5" y="1098.75" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_t_kho__g_nguong_di" bpmnElement="Flow_t_kho__g_nguong"><di:waypoint x="1680.5" y="1098.75" /><di:waypoint x="1722.5" y="1098.75" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_g_nguong__t_canhbao_di" bpmnElement="Flow_g_nguong__t_canhbao"><di:waypoint x="1747.5" y="1073.75" /><di:waypoint x="1747.5" y="1011.25" /><di:waypoint x="1814.5" y="1011.25" /><bpmndi:BPMNLabel><dc:Bounds x="1747.9" y="1001.25" width="26" height="20" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_g_nguong__t_binhthuong_di" bpmnElement="Flow_g_nguong__t_binhthuong"><di:waypoint x="1747.5" y="1123.75" /><di:waypoint x="1747.5" y="1186.25" /><di:waypoint x="1814.5" y="1186.25" /><bpmndi:BPMNLabel><dc:Bounds x="1737.4" y="1176.25" width="47" height="20" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_t_canhbao__t_log_di" bpmnElement="Flow_t_canhbao__t_log"><di:waypoint x="1990.5" y="1011.25" /><di:waypoint x="2107.5" y="1011.25" /><di:waypoint x="2107.5" y="1054.75" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_t_binhthuong__t_log_di" bpmnElement="Flow_t_binhthuong__t_log"><di:waypoint x="1990.5" y="1186.25" /><di:waypoint x="2001.5" y="1186.25" /><di:waypoint x="2001.5" y="1098.75" /><di:waypoint x="2019.5" y="1098.75" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_t_log__e_end_di" bpmnElement="Flow_t_log__e_end"><di:waypoint x="2195.5" y="1098.75" /><di:waypoint x="2242" y="1098.75" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DataAssoc_ds_log_di" bpmnElement="DataAssoc_ds_log"><di:waypoint x="2107.5" y="1142.75" /><di:waypoint x="2107.5" y="1245.5" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

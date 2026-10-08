@@ -57,6 +57,16 @@ export interface CheckoutQuote {
   total_amount: number;
   voucher: { voucher_id: string; code: string; name: string; discount_amount: number } | null;
   voucher_change: VoucherChange | null;
+  /** Atomic checkout revalidates this advisory wallet snapshot before reserving points. */
+  loyalty?: {
+    available_points: number;
+    balance_points?: number;
+    max_points: number;
+    points_spent: number;
+    points_discount_amount: number;
+    spending_enabled: boolean;
+    policy_approved: boolean;
+  };
 }
 
 /** Chi tiết của lỗi 409 `VOUCHER_CHANGED` khi đặt đơn. */

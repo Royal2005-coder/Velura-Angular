@@ -221,7 +221,6 @@ export class CheckoutOtpPage {
           shipping_email: guestPayload['email'] || '',
           items: guestPayload['items'],
           note: guestPayload['note'],
-          referral_code: undefined,
           is_gift: guestPayload['is_gift'],
           gift_gender: guestPayload['gift_gender'],
           gift_name: guestPayload['gift_name'],

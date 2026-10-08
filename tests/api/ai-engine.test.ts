@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
+import sharp from "sharp";
+import { mkdtemp, rm, writeFile, readFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AiService, type AiCatalog } from "../../apps/api/src/ai/ai-service.js";
@@ -17,7 +18,7 @@ import { aiOwner } from "../../apps/api/src/ai/ai-router.js";
 import { ShopAiCatalog } from "../../apps/api/src/ai/ai-catalog.js";
 import type { AuthContext } from "../../apps/api/src/types.js";
 
-const PNG = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0, 0]);
+const PNG = await sharp({ create: { width: 32, height: 32, channels: 3, background: "#ffffff" } }).png().toBuffer();
 const vector = Array.from({ length: 512 }, (_, i) => (i === 0 ? 1 : 0));
 const product = "12345678-1234-4234-8234-123456789012";
 test("Catalog candidates are applied before visual top-match truncation, including an empty filter result", async () => {
@@ -72,13 +73,13 @@ const catalog: AiCatalog = {
     };
   },
 };
-async function setup(worker: AiWorker) {
+async function setup(worker: AiWorker, source: AiCatalog = catalog) {
   process.env.NODE_ENV = "test";
   process.env.AI_VERIFIED_TASKS =
     "image_quality,image_embedding,virtual_try_on,product_image_enhance";
   const root = await mkdtemp(join(tmpdir(), "velura-ai-"));
   const repo = new LocalAiRepository(root);
-  const service = new AiService(repo, worker, catalog);
+  const service = new AiService(repo, worker, source);
   return {
     root,
     repo,
@@ -90,7 +91,7 @@ async function setup(worker: AiWorker) {
   };
 }
 async function terminal(service: AiService, owner: string, id: string) {
-  for (let i = 0; i < 200; i++) {
+  for (let i = 0; i < 2000; i++) {
     const job = await service.get(owner, id);
     if (!["queued", "running"].includes(job.status)) return job;
     await new Promise((resolve) => setTimeout(resolve, 5));
@@ -386,6 +387,8 @@ test("Shop garment enforces variant mapping and refuses arbitrary hosts and redi
   });
   process.env.AI_VTO_PRODUCTS = JSON.stringify({
     [product]: {
+      verified: true,
+      photo_type: "flat-lay",
       category: "upper_body",
       variant_images: { [variant]: "https://images.shop.test/garment.png" },
     },
@@ -398,16 +401,18 @@ test("Shop garment enforces variant mapping and refuses arbitrary hosts and redi
   process.env.AI_VTO_PRODUCTS = JSON.stringify({
     [product]: {
       category: "upper_body",
+      verified: true,
+      photo_type: "flat-lay",
       variant_images: { [variant]: "https://attacker.test/garment.png" },
     },
   });
-  await assert.rejects(() => shop.garment(product, variant), {
-    code: "INVALID_GARMENT_IMAGE",
-  });
+  await assert.rejects(() => shop.garment(product, variant));
   assert.equal(calls, 0);
   process.env.AI_VTO_PRODUCTS = JSON.stringify({
     [product]: {
       category: "upper_body",
+      verified: true,
+      photo_type: "flat-lay",
       variant_images: { [variant]: "https://images.shop.test/garment.png" },
     },
   });
@@ -416,6 +421,62 @@ test("Shop garment enforces variant mapping and refuses arbitrary hosts and redi
     /Redirect not followed/,
   );
   assert.equal(calls, 1);
+});
+test("A catalog primary photo never enables an unverified or wrong-variant try-on", async () => {
+  const variant = "22222222-2222-4222-8222-222222222222";
+  const shop = new ShopAiCatalog({
+    async product() { return { status: "on_sale", images: ["https://images.shop.test/primary.png"] }; },
+    async variant() { return { variant_id: variant, product_id: product }; },
+    async fetchImage() { throw new Error("Must reject before download"); },
+  });
+  process.env.AI_CATALOG_IMAGE_HOSTS = "images.shop.test";
+  process.env.AI_VTO_PRODUCTS = JSON.stringify({ [product]: { category: "upper_body" } });
+  assert.equal((await shop.support(product, variant)).product_supported, false);
+  process.env.AI_VTO_PRODUCTS = JSON.stringify({ [product]: { category: "upper_body", verified: true, photo_type: "flat-lay", variant_images: {} } });
+  assert.equal((await shop.support(product, variant)).variant_supported, false);
+  await assert.rejects(shop.garment(product, variant), { code: "VTO_VARIANT_UNAVAILABLE" });
+});
+test("An image signature without a decodable raster is rejected before storage or inference", async () => {
+  const fixture = await setup(worker);
+  try {
+    await assert.rejects(fixture.service.upload("a", Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0, 0]), "image/png"), { code: "INVALID_IMAGE" });
+  } finally { await fixture.close(); }
+});
+test("Unsupported try-on products never download garments or queue inference", async () => {
+  let runs = 0;
+  const fixture = await setup({ ready: () => true, async run() { runs++; return { status: "success" }; } }, {
+    ...catalog, async support() { return { product_supported: false, variant_supported: false }; },
+    async garment() { throw new Error("Must reject before garment download"); },
+  });
+  try {
+    const asset = await fixture.service.upload("a", PNG, "image/png");
+    await assert.rejects(fixture.service.create("a", {
+      task: "virtual_try_on", product_id: product, variant_id: "22222222-2222-4222-8222-222222222222",
+      mode: "personal", person_asset_id: asset.asset_id, consent: true, confirmed: true, idempotency_key: "unsupported-vto-123",
+    }), { code: "VTO_PRODUCT_UNAVAILABLE" });
+    assert.equal(runs, 0);
+    assert.deepEqual(await fixture.repo.jobs(), []);
+  } finally { await fixture.close(); }
+});
+test("A successful inference with another variant binding cannot expose an image", async () => {
+  const fixture = await setup({
+    ready: () => true,
+    async run(directory) {
+      const request = JSON.parse(await readFile(join(directory, "job.json"), "utf8")) as { request_id: string };
+      await writeFile(join(directory, "result.png"), PNG);
+      return { status: "success", result_file: "result.png", gate: { valid: true },
+        binding: { request_id: request.request_id, product_id: product, variant_id: "33333333-3333-4333-8333-333333333333" } };
+    },
+  }, { ...catalog, async support() { return { product_supported: true, variant_supported: true, garment_category: "upper_body" }; } });
+  try {
+    const asset = await fixture.service.upload("a", PNG, "image/png");
+    const job = await fixture.service.create("a", {
+      task: "virtual_try_on", product_id: product, variant_id: "22222222-2222-4222-8222-222222222222",
+      mode: "personal", person_asset_id: asset.asset_id, consent: true, confirmed: true, idempotency_key: "variant-bound-vto-123",
+    });
+    assert.equal((await terminal(fixture.service, "a", job.id)).status, "failed");
+    await assert.rejects(fixture.service.result("a", job.id), { code: "RESULT_UNAVAILABLE" });
+  } finally { await fixture.close(); }
 });
 test("Catalog indexing can use a secondary approved shop photo when the primary image is unavailable", async () => {
   process.env.AI_CATALOG_IMAGE_HOSTS = "images.shop.test";

@@ -275,6 +275,9 @@ export interface AdminProductRow {
   name: string;
   slug?: string;
   description?: string | null;
+  /** Published SEO fields returned unchanged from the product repository. */
+  seo_title?: string | null;
+  seo_description?: string | null;
   category_id?: string;
   category_name?: string | null;
   category?: { category_id?: string; name?: string };
@@ -740,12 +743,6 @@ export class AdminApiService {
     );
   }
 
-  adviseProductImage(body: { dataUrl: string; mimeType: string }): Observable<{ source?: string; notes?: string[]; imageBase64?: string; imageMime?: string; imageError?: string }> {
-    return this.http.post<{ source?: string; notes?: string[]; imageBase64?: string; imageMime?: string; imageError?: string }>(
-      `${this.baseUrl}/api/v1/admin/products/image-advice`,
-      body,
-    );
-  }
 
   insights(params: Record<string, string> = {}): Observable<AdminInsightsPayload> {
     return this.http.get<AdminInsightsPayload>(`${this.baseUrl}/api/v1/admin/insights`, { params: this.params(params) });
@@ -953,16 +950,6 @@ export class AdminApiService {
   /**
    * Previews a product CSV import.
    */
-  /**
-   * Stores one catalog photo and returns its public URL.
-   * The product form keeps that URL on the image list.
-   */
-  uploadProductImage(file: File): Observable<{ url?: string }> {
-    const body = new FormData();
-    body.append("file", file);
-    return this.http.post<{ url?: string }>(`${this.baseUrl}/api/v1/admin/products/image`, body);
-  }
-
   previewCsv(csv: string): Observable<unknown> {
     return this.http.post(`${this.baseUrl}/api/v1/admin/products/import-csv`, { csv });
   }

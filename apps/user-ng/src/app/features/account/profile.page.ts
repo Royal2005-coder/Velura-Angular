@@ -9,6 +9,8 @@ import { useBodyClass } from '../../core/utils/body-class';
 import { showToast } from '../../core/utils/toast';
 import { AddressSelector } from '../../shared/address-selector/address-selector';
 import type { AddressGeographySelection } from '../../core/models/address-geography';
+import { PersonalColorComponent } from '../ai/personal-color.component';
+import { LoyaltyWalletComponent } from './loyalty-wallet.component';
 
 interface MemberProfile {
   full_name?: string;
@@ -44,7 +46,7 @@ interface StyleQuiz {
 
 @Component({
   selector: 'app-account-profile-page',
-  imports: [RouterLink, AddressSelector],
+  imports: [RouterLink, AddressSelector, PersonalColorComponent, LoyaltyWalletComponent],
   host: { class: 'page-profile', style: 'display:block' },
   templateUrl: './profile.page.html',
 })

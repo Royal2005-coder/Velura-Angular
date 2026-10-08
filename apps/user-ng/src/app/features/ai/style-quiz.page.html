@@ -543,6 +543,10 @@
                   </tbody>
                 </table>
               </div>
+              @if (quizSaved()) {
+                <p role="status">Đã lưu hồ sơ. Bạn có thể phân tích màu (không bắt buộc) hoặc xem gợi ý ngay.</p>
+                <app-personal-color />
+              }
             </div>
 
             <!-- Quiz Actions footer -->

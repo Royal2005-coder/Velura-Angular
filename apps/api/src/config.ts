@@ -42,7 +42,7 @@ export const config = {
   supportAlertTo: process.env.SUPPORT_ALERT_TO || process.env.SMTP_USER || "",
   n8nChatWebhookUrl: process.env.N8N_CHAT_WEBHOOK_URL || "",
   n8nChatWebhookToken: process.env.N8N_CHAT_WEBHOOK_TOKEN || "",
-  geminiApiKey: process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY || "",
+  geminiApiKey: process.env.GEMINI_API_KEY || "",
   geminiEmbeddingModel: process.env.GEMINI_EMBEDDING_MODEL || "gemini-embedding-2",
   geminiEmbeddingDimensions: Number(process.env.GEMINI_EMBEDDING_DIMENSIONS || 1536),
   geminiStylistModel: process.env.GEMINI_STYLIST_MODEL || "gemini-3.5-flash",
@@ -91,15 +91,21 @@ export function normalizeTwilioAccountSid(value: string): string {
   return trimmed;
 }
 
+/** Refuse to start with missing data access or a bypassed production AI gateway. */
 export function assertRuntimeConfig() {
   const missing: string[] = [];
   if (!config.supabaseUrl) missing.push("VELURA_SUPABASE_URL");
   if (!config.supabaseAnonKey) missing.push("VELURA_SUPABASE_ANON_KEY");
+  if (config.nodeEnv === "production") {
+    if (!process.env.LITELLM_ENDPOINT) missing.push("LITELLM_ENDPOINT");
+    if (!process.env.LITELLM_API_KEY) missing.push("LITELLM_API_KEY");
+  }
   if (missing.length) {
     throw new Error(`Missing required API environment: ${missing.join(", ")}`);
   }
 }
 
+/** Return the server-only database credential; never expose this value to clients. */
 export function getSupabaseServiceKey() {
   return config.supabaseServiceRoleKey;
 }

@@ -4,35 +4,47 @@ metadata:
   name: velura-api-config
   namespace: velura
 data:
-  NODE_ENV: "production"
-  PORT: "3000"
-  CORS_ORIGIN: "http://100.77.166.27:30080,http://100.77.166.27:30081,http://localhost:4001,http://localhost:4002,https://velura.royalai.dev,https://admin.royalai.dev,https://shop.royalai.dev,https://api.royalai.dev,https://velura.vn,https://admin.velura.vn"
-  STOREFRONT_ORIGIN: "https://velura.royalai.dev"
-  DATABASE_URL: "postgres://postgres:placeholder-password@postgres.database.svc:5432/velura_db"
-  S3_ENDPOINT: "http://s3-storage.storage.svc:9000"
-  LITELLM_ENDPOINT: "http://litellm.observability.svc:4000"
-  AI_CLIP_ENDPOINT: "http://ai-clip.ai.svc:8000"
-  AI_CLUSTER_ENDPOINT: "http://ai-clip.ai.svc:8000"
-  AI_ENGINE_MODE: "cluster"
-  AI_ENABLE: "true"
-  AI_VERIFIED_TASKS: "image_quality,image_embedding,virtual_try_on,product_image_enhance"
-  AI_PRIVATE_ROOT: "/app/scratch/ai-private"
-  LOKI_ENDPOINT: "http://loki.observability.svc:3100"
-  KEYCLOAK_URL: "http://keycloak.auth.svc:8080"
-  VERCEL: "0"
-  GEMINI_MODEL: "gemini-1.5-flash"
-  N8N_CHAT_WEBHOOK_URL: "https://gianth.app.n8n.cloud/webhook/ai-ecommerce-customer-support"
+  NODE_ENV: production
+  RELEASE_REVISION: b3df517c1daa2c4147ca7c5db0a32213a748c683
+  PORT: '3000'
+  CORS_ORIGIN: https://velura.royalai.dev,https://admin.royalai.dev,https://shop.royalai.dev
+  STOREFRONT_ORIGIN: https://velura.royalai.dev
+  S3_ENDPOINT: http://s3-service.storage.svc:9000
+  LITELLM_ENDPOINT: http://litellm.observability.svc:4000
+  GEMINI_MODEL: commerce-text
+  GEMINI_STYLIST_MODEL: commerce-text
+  GEMINI_EMBEDDING_MODEL: commerce-embedding
+  LITELLM_IMAGE_MODEL: commerce-image-edit
+  AI_CLUSTER_ENDPOINT: http://ai-worker.ai.svc:8000
+  AI_ENGINE_MODE: cluster
+  AI_ENABLE: 'false'
+  AI_PRIVATE_ROOT: /app/scratch/ai-private
+  VERCEL: '0'
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ai-private-data
+  namespace: velura
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 20Gi
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: velura-api
   namespace: velura
-  labels:
-    app.kubernetes.io/name: velura-api
-    app.kubernetes.io/part-of: velura-core
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: velura-api
@@ -41,59 +53,86 @@ spec:
       labels:
         app: velura-api
     spec:
+      automountServiceAccountToken: false
+      priorityClassName: velura-application
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
       containers:
       - name: velura-api
-        image: ghcr.io/boygia757-netizen/velura-api:latest
-        imagePullPolicy: IfNotPresent
+        image: ghcr.io/royal2005-coder/velura-api:sha-b3df517c1daa2c4147ca7c5db0a32213a748c683
         ports:
-          - name: http
-            containerPort: 3000
-        envFrom:
-          - configMapRef:
-              name: velura-api-config
-          - secretRef:
-              name: velura-api-secrets
+        - name: http
+          containerPort: 3000
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
         resources:
           requests:
-            cpu: 100m
+            cpu: 50m
             memory: 128Mi
           limits:
             cpu: 600m
             memory: 384Mi
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 3000
         livenessProbe:
           httpGet:
             path: /health
             port: 3000
-          initialDelaySeconds: 15
-          periodSeconds: 20
-        readinessProbe:
-          httpGet:
-            path: /health
-            port: 3000
-          initialDelaySeconds: 5
-          periodSeconds: 10
+          initialDelaySeconds: 30
+        envFrom:
+        - configMapRef:
+            name: velura-api-config
+        - secretRef:
+            name: velura-api-secrets
+        env:
+        - name: PRODUCTION_VERIFY_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: velura-api-secrets
+              key: PRODUCTION_VERIFY_TOKEN
+        - name: LITELLM_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: velura-api-secrets
+              key: LITELLM_API_KEY
+        - name: AI_WORKER_KEY
+          valueFrom:
+            secretKeyRef:
+              name: velura-api-secrets
+              key: AI_WORKER_KEY
         volumeMounts:
-          - name: ai-private-data
-            mountPath: /app/scratch/ai-private
+        - name: private
+          mountPath: /app/scratch/ai-private
+        - name: tmp
+          mountPath: /tmp
       volumes:
-        - name: ai-private-data
-          hostPath:
-            path: /var/velura/ai-private
-            type: DirectoryOrCreate
+      - name: private
+        persistentVolumeClaim:
+          claimName: ai-private-data
+      - name: tmp
+        emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: velura-api
   namespace: velura
-  labels:
-    app.kubernetes.io/name: velura-api
 spec:
-  type: NodePort
-  ports:
-    - port: 3000
-      targetPort: 3000
-      nodePort: 30030
-      name: http
+  type: ClusterIP
   selector:
     app: velura-api
+  ports:
+  - name: http
+    port: 3000
+    targetPort: 3000

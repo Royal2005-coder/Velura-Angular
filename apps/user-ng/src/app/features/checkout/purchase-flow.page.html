@@ -238,9 +238,6 @@
                   /></label>
                   <details class="checkout-order-options">
                     <summary>Tùy chọn bổ sung cho đơn hàng</summary>
-                    <div class="fields">
-                      <label class="field">Mã giới thiệu (tùy chọn)<input name="referral" maxlength="50" [(ngModel)]="orderOptions.referral_code" /></label>
-                    </div>
                     <label class="check"><input type="checkbox" name="gift" [(ngModel)]="orderOptions.is_gift" />Đây là quà tặng</label>
                     @if (orderOptions.is_gift) {
                       <div class="fields">
@@ -463,6 +460,18 @@
           @if (quoteLoading()) { <p role="status">Đang cập nhật tổng thanh toán…</p> }
           @if (quoteError()) { <p role="alert" class="error">{{ quoteError() }}</p><button type="button" (click)="refreshQuote()">Thử tải lại</button> }
           <app-voucher-wallet [orderValue]="quote().subtotal" [shippingFee]="quote().shipping" [cartItems]="lines()" [autoApply]="!voucherDeclined()" [preferred]="preferredVoucher" (applied)="selectVoucher($event)" (declined)="declineVoucher($event)" />
+          @if (member()) {
+            <section aria-labelledby="member-points-label">
+              <label id="member-points-label" for="member-points">Dùng điểm thành viên (1 điểm = 1.000đ)</label>
+              <input id="member-points" name="memberPoints" type="number" min="0" step="1"
+                [max]="serverQuote()?.loyalty?.max_points ?? 0" [value]="requestedPoints()"
+                [disabled]="busy() || quoteLoading() || !serverQuote()?.loyalty?.spending_enabled"
+                (input)="setPoints($event)" />
+              <p class="muted">Khả dụng {{ serverQuote()?.loyalty?.available_points ?? 0 }} điểm · đơn này tối đa {{ serverQuote()?.loyalty?.max_points ?? 0 }} điểm. Giảm tối đa 50% tiền hàng sau voucher, không gồm phí giao hàng.</p>
+              @if (serverQuote()?.loyalty && !serverQuote()?.loyalty?.spending_enabled) { <p role="status">Sử dụng điểm đang chờ phê duyệt chính sách làm tròn và hết hạn.</p> }
+              <a routerLink="/account/profile" [queryParams]="{tab: 'offers'}">Ví điểm, hạn sử dụng & mã giới thiệu</a>
+            </section>
+          }
           <div class="row">
             <span>Tiền hàng</span><span>{{ serverQuote() ? money(quote().subtotal) : '—' }}</span>
           </div>
@@ -473,6 +482,9 @@
           <div class="row">
             <span>Giảm giá</span><span>{{ serverQuote() ? '−' + money(quote().discount) : '—' }}</span>
           </div>
+          @if ((serverQuote()?.loyalty?.points_discount_amount ?? 0) > 0) {
+            <div class="row"><span>Điểm thành viên ({{ serverQuote()?.loyalty?.points_spent }})</span><span>−{{ money(serverQuote()?.loyalty?.points_discount_amount ?? 0) }}</span></div>
+          }
           <p class="muted">{{ quote().voucher }}</p>
           <div class="row total">
             <span>Tổng thanh toán</span><span>{{ serverQuote() ? money(quote().total) : '—' }}</span>

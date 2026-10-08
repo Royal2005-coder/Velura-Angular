@@ -3,9 +3,6 @@ kind: Deployment
 metadata:
   name: velura-storefront
   namespace: velura
-  labels:
-    app.kubernetes.io/name: velura-storefront
-    app.kubernetes.io/part-of: velura-core
 spec:
   replicas: 1
   selector:
@@ -16,46 +13,60 @@ spec:
       labels:
         app: velura-storefront
     spec:
+      automountServiceAccountToken: false
+      priorityClassName: velura-application
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+        runAsUser: 101
+        runAsGroup: 101
+        fsGroup: 101
       containers:
       - name: velura-storefront
-        image: ghcr.io/boygia757-netizen/velura-storefront:latest
-        imagePullPolicy: IfNotPresent
+        image: ghcr.io/royal2005-coder/velura-storefront:sha-b3df517c1daa2c4147ca7c5db0a32213a748c683
         ports:
-          - name: http
-            containerPort: 80
+        - name: http
+          containerPort: 8080
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
         resources:
           requests:
-            cpu: 30m
+            cpu: 50m
             memory: 32Mi
           limits:
             cpu: 250m
             memory: 128Mi
-        livenessProbe:
-          httpGet:
-            path: /
-            port: 80
-          initialDelaySeconds: 10
-          periodSeconds: 15
         readinessProbe:
-          httpGet:
-            path: /
-            port: 80
-          initialDelaySeconds: 5
+          tcpSocket:
+            port: 8080
           periodSeconds: 10
+        livenessProbe:
+          tcpSocket:
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 20
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: velura-storefront
   namespace: velura
-  labels:
-    app.kubernetes.io/name: velura-storefront
 spec:
-  type: NodePort
-  ports:
-    - port: 80
-      targetPort: 80
-      nodePort: 30080
-      name: http
+  type: ClusterIP
   selector:
     app: velura-storefront
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080

@@ -22,6 +22,7 @@ import {
   type UserProfile
 } from "../types.js";
 
+import { loyaltyActor } from "../loyalty/loyalty-service.js";
 /**
  * Ví voucher và engine chọn mã tốt nhất — dùng chung cho khách vãng lai và thành viên.
  *
@@ -117,8 +118,8 @@ export async function resolveOrderVoucher(
   requestedVoucherId: string | null,
   decline: boolean,
   cart: VoucherCart | null = null
-): Promise<{ voucherId: string | null; discountAmount: number }> {
-  if (decline) return { voucherId: null, discountAmount: 0 };
+): Promise<{ voucherId: string | null; discountAmount: number; merchandiseDiscount: number }> {
+  if (decline) return { voucherId: null, discountAmount: 0, merchandiseDiscount: 0 };
   const wallet = await buildWallet(context, orderValue, shippingFee, cart);
   const { applied, change } = chooseOrderVoucher(wallet, { voucherId: requestedVoucherId, code: null, decline });
   if (change) {
@@ -132,8 +133,8 @@ export async function resolveOrderVoucher(
     });
   }
   return applied
-    ? { voucherId: applied.voucherId, discountAmount: applied.discountAmount }
-    : { voucherId: null, discountAmount: 0 };
+    ? { voucherId: applied.voucherId, discountAmount: applied.discountAmount, merchandiseDiscount: applied.discountType === "free_shipping" ? 0 : applied.discountAmount }
+    : { voucherId: null, discountAmount: 0, merchandiseDiscount: 0 };
 }
 
 /**
@@ -151,8 +152,13 @@ export async function buildWallet(
 ): Promise<{ items: EvaluatedVoucher[]; best: EvaluatedVoucher | null }> {
   const profile = resolveProfile(context);
 
+  const actor = loyaltyActor(context);
   const [voucherResult, promotionResult, orderResult] = await Promise.all([
-    selectRows("voucher", { is_active: "eq.true", limit: 200 }),
+    selectRows("voucher", {
+      is_active: "eq.true",
+      ...(actor ? { or: `(reward_member_id.is.null,reward_member_id.eq.${actor})` } : { reward_member_id: "is.null" }),
+      limit: 200
+    }),
     selectRows("promotion", { limit: 200 }),
     profile?.user_id
       ? selectRows("orders", { user_id: `eq.${profile.user_id}`, limit: 500 })

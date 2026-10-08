@@ -1,0 +1,112 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgres-external-backup
+  namespace: database
+spec:
+  schedule: 15 2 * * *
+  timeZone: Etc/UTC
+  suspend: true
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 3600
+      template:
+        metadata:
+          labels:
+            app: postgres-backup
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          priorityClassName: velura-batch
+          securityContext:
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+            runAsUser: 1000
+            runAsGroup: 1000
+            fsGroup: 1000
+          initContainers:
+          - name: dump
+            image: postgres:16.10-alpine
+            securityContext: &id001
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                - ALL
+            command:
+            - sh
+            - -ec
+            args:
+            - umask 077; pg_dumpall --host=postgres.database.svc --username="$PGUSER"
+              --file=/backup/cluster.sql; test -s /backup/cluster.sql
+            env:
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_USER
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_PASSWORD
+            resources:
+              requests:
+                cpu: 50m
+                memory: 64Mi
+              limits:
+                cpu: 300m
+                memory: 256Mi
+            volumeMounts:
+            - name: dump
+              mountPath: /backup
+          containers:
+          - name: external-backup
+            image: restic/restic:0.18.0
+            securityContext: *id001
+            command:
+            - sh
+            - -ec
+            args:
+            - |
+              case "$RESTIC_REPOSITORY" in
+                s3:https://*) ;;
+                *) echo "External HTTPS S3 repository is required" >&2; exit 1;;
+              esac
+              : "${CLUSTER_UID:?Cluster UID is required}"
+              : "${BACKUP_ENVIRONMENT:?Backup environment is required}"
+              test "$BACKUP_ENVIRONMENT" = production
+              restic cat config >/dev/null
+              restic backup /backup --tag velura-postgres --tag "velura-cluster:$CLUSTER_UID" --tag "environment:$BACKUP_ENVIRONMENT" --host velura-production
+              restic check --read-data-subset=5%
+              restic snapshots --latest 1 --json
+            envFrom:
+            - secretRef:
+                name: postgres-external-backup
+            env:
+            - name: RESTIC_CACHE_DIR
+              value: /tmp/restic
+            resources:
+              requests:
+                cpu: 50m
+                memory: 128Mi
+              limits:
+                cpu: 500m
+                memory: 384Mi
+            volumeMounts:
+            - name: dump
+              mountPath: /backup
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+          volumes:
+          - name: dump
+            emptyDir:
+              sizeLimit: 5Gi
+          - name: tmp
+            emptyDir: {}

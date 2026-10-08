@@ -4,10 +4,11 @@ import { Router, RouterLink } from '@angular/router';
 import { StyleProfileService } from '../../core/services/style-profile.service';
 import type { StyleQuizAnswers } from '../../core/models/style-profile.interface';
 import { useBodyClass } from '../../core/utils/body-class';
+import { PersonalColorComponent } from './personal-color.component';
 
 @Component({
   selector: 'app-style-quiz-page',
-  imports: [RouterLink],
+  imports: [RouterLink, PersonalColorComponent],
   host: { class: 'page-quiz-flow' },
   templateUrl: './style-quiz.page.html',
 })
@@ -18,6 +19,7 @@ export class StyleQuizPage {
 
   readonly step = signal(1);
   readonly showSummary = signal(false);
+  readonly quizSaved = signal(false);
   readonly analyzing = signal(false);
   readonly submitError = signal('');
   readonly fieldErrors = signal<Record<string, string>>({});
@@ -27,7 +29,7 @@ export class StyleQuizPage {
   readonly weight = signal(52);
   readonly displayStep = computed(() => (this.showSummary() ? 8 : this.step()));
   readonly progressPercent = computed(() => (this.showSummary() ? 100 : (this.step() / 8) * 100));
-  readonly nextLabel = computed(() => (this.showSummary() ? 'Lưu & xem gợi ý' : this.step() === 8 ? 'Xem tóm tắt' : 'Tiếp tục'));
+  readonly nextLabel = computed(() => (this.showSummary() ? this.quizSaved() ? 'Xem gợi ý' : 'Lưu hồ sơ & chọn phân tích màu' : this.step() === 8 ? 'Xem tóm tắt' : 'Tiếp tục'));
 
   constructor() {
     useBodyClass('page-quiz-flow');
@@ -46,6 +48,7 @@ export class StyleQuizPage {
     if (!group) {
       return;
     }
+    this.quizSaved.set(false);
     const multi = group.getAttribute('data-multi') === 'true';
     if (multi) {
       target.classList.toggle('is-selected');
@@ -61,6 +64,7 @@ export class StyleQuizPage {
   onQuizInput(event: Event): void {
     const input = event.target as HTMLInputElement;
     this.validateControl(input);
+    if (['input-height', 'input-weight', 'input-vong1', 'input-vong2', 'input-vong3'].includes(input.id)) this.quizSaved.set(false);
     if (input.id === 'input-height') {
       this.height.set(Number(input.value));
       const label = document.getElementById('height-val');
@@ -98,7 +102,8 @@ export class StyleQuizPage {
     document.querySelectorAll<HTMLInputElement>(`.quiz-step-content[data-quiz-step="${this.step()}"] input`).forEach((input) => this.validateControl(input));
     if (this.invalidFields()) return;
     if (this.showSummary()) {
-      this.submitQuiz();
+      if (this.quizSaved()) void this.router.navigateByUrl('/ai/suggestions?isNewQuiz=true');
+      else this.submitQuiz();
       return;
     }
     if (this.step() === 8) {
@@ -185,7 +190,7 @@ export class StyleQuizPage {
     this.profile.saveQuiz(payload).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: () => {
         this.analyzing.set(false);
-        void this.router.navigateByUrl('/ai/suggestions?isNewQuiz=true');
+        this.quizSaved.set(true);
       },
       error: (error: Error) => {
         this.analyzing.set(false);

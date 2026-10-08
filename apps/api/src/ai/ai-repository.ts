@@ -3,7 +3,7 @@ import { join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { AiAsset, AiJob } from "./ai-types.js";
 
-/** Local-only private ledger; production must replace this with durable distributed storage. */
+/** Single-writer private ledger on a persistent volume; off-site backup is required and this is not HA. */
 export class LocalAiRepository {
   readonly root: string;
   private writes = new Map<string, Promise<unknown>>();
@@ -29,6 +29,14 @@ export class LocalAiRepository {
     } catch {
       return null;
     }
+  }
+  /** Delete only a generated asset identity; owner authorization belongs to the service. */
+  async deleteAsset(id: string): Promise<void> {
+    if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(id)) throw new Error("INVALID_ASSET_ID");
+    await Promise.all([
+      rm(join(this.root, "assets", `${id}.image`), { force: true }),
+      rm(join(this.root, "assets", `${id}.json`), { force: true }),
+    ]);
   }
   /** Store job state atomically to avoid partial JSON during polling or restart. */
   async saveJob(job: AiJob): Promise<void> {

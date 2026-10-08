@@ -1,0 +1,9 @@
+:host { display: block; margin-block: 1.5rem; }
+.personal-color { border: 1px solid var(--border-color, currentColor); border-radius: 1rem; padding: 1.5rem; }
+.personal-color h2, .personal-color h3 { margin-block: 0.5rem; }
+.personal-color button { margin: 0.75rem 0.75rem 0 0; }
+.consent { display: block; margin-block: 1rem; }
+.portrait-preview { display: block; max-width: 16rem; max-height: 20rem; object-fit: contain; margin-block: 1rem; }
+.color-result { padding: 1rem; margin-block: 1rem; border: 1px solid var(--border-color, currentColor); border-radius: 0.75rem; }
+.swatches { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.swatch { display: inline-flex; align-items: end; min-width: 4rem; min-height: 4rem; padding: 0.25rem; border: 1px solid currentColor; border-radius: 0.5rem; text-shadow: 0 0 3px var(--bg-primary); }

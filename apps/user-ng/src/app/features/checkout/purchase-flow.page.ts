@@ -73,6 +73,7 @@ export class PurchaseFlowPage {
   readonly serverQuote = signal<CheckoutQuote | null>(null);
   readonly quoteLoading = signal(false);
   readonly quoteError = signal('');
+  readonly requestedPoints = signal(0);
   readonly shippingMethod = signal('standard');
   readonly voucherId = signal<string | null>(localStorage.getItem('checkout_voucher_id'));
   readonly voucherDeclined = signal(['true', '1'].includes(localStorage.getItem('checkout_voucher_declined') || ''));
@@ -165,7 +166,7 @@ export class PurchaseFlowPage {
   };
   saveAddress = false;
   /** Optional fulfillment and invoice requests are persisted with the same order. */
-  orderOptions: Partial<Pick<CheckoutShipping, 'referral_code' | 'is_gift' | 'gift_gender' | 'gift_name' | 'gift_message' | 'is_other_recipient' | 'other_name' | 'other_phone' | 'is_vat_invoice' | 'vat_company_name' | 'vat_tax_code' | 'vat_company_address' | 'vat_email'>> = {};
+  orderOptions: Partial<Pick<CheckoutShipping, 'is_gift' | 'gift_gender' | 'gift_name' | 'gift_message' | 'is_other_recipient' | 'other_name' | 'other_phone' | 'is_vat_invoice' | 'vat_company_name' | 'vat_tax_code' | 'vat_company_address' | 'vat_email'>> = {};
 
   selectedAddress = -1;
   private timeout: ReturnType<typeof setTimeout> | undefined;
@@ -236,7 +237,6 @@ export class PurchaseFlowPage {
   }
 
   constructor() {
-    if (this.checkout.source() === 'cart') this.orderOptions.referral_code = this.checkout.shipping().referral_code || '';
     this.purchaseApi.providers().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: response => this.paymentProviders.set(response.providers),
       error: () => this.paymentProviders.set([{ code: 'COD', enabled: true }, { code: 'STRIPE', enabled: false }, { code: 'VNPAY', enabled: false }, { code: 'MOMO', enabled: false }]),
@@ -263,7 +263,7 @@ export class PurchaseFlowPage {
       });
     });
     effect(() => {
-      this.lines(); this.shippingMethod(); this.voucherId(); this.voucherDeclined(); this.model.userId();
+      this.lines(); this.shippingMethod(); this.voucherId(); this.voucherDeclined(); this.model.userId(); this.requestedPoints();
       untracked(() => this.refreshQuote());
     });
     let initialUser = this.model.userId();
@@ -271,6 +271,7 @@ export class PurchaseFlowPage {
       const currentUser = this.model.userId();
       if (currentUser !== initialUser) {
         this.orderOptions = {};
+        this.requestedPoints.set(0);
         initialUser = currentUser;
         clearTimeout(this.timeout);
         clearTimeout(this.otpTimeout);
@@ -624,6 +625,17 @@ export class PurchaseFlowPage {
     this.voucherDeclined.set(declined);
     localStorage.setItem('checkout_voucher_declined', String(declined));
   }
+  /** Accept whole points within the last authoritative balance and merchandise limit. */
+  setPoints(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const value = Number(input.value);
+    const loyalty = this.serverQuote()?.loyalty;
+    const maximum = this.member() && loyalty?.spending_enabled ? Math.min(loyalty.available_points, loyalty.max_points) : 0;
+    const points = Number.isSafeInteger(value) && value >= 0 ? Math.min(value, maximum) : 0;
+    input.value = String(points);
+    this.requestedPoints.set(points);
+  }
+
   /** Reads authoritative prices and ignores an obsolete quote after an account or cart change. */
   refreshQuote(): void {
     const version = ++this.quoteVersion;
@@ -631,16 +643,18 @@ export class PurchaseFlowPage {
     this.serverQuote.set(null);
     this.quoteLoading.set(true);
     this.quoteError.set('');
-    this.vouchers.quote(this.lines(), this.shippingMethod(), { voucherId: this.voucherId(), decline: this.voucherDeclined() })
+    this.vouchers.quote(this.lines(), this.shippingMethod(), { voucherId: this.voucherId(), decline: this.voucherDeclined(), pointsSpent: this.member() ? this.requestedPoints() : 0 })
       .pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
         next: (quote) => {
           if (version !== this.quoteVersion) return;
           this.serverQuote.set(quote); this.quoteLoading.set(false);
+          if (quote.loyalty && quote.loyalty.points_spent !== this.requestedPoints()) this.requestedPoints.set(quote.loyalty.points_spent);
           this.voucherNotice.set(quote.voucher_change?.reason_text || '');
         },
         error: (error: Error) => {
           if (version !== this.quoteVersion) return;
           this.quoteLoading.set(false); this.quoteError.set(error.message || 'Chưa tải được tổng thanh toán.');
+          if (error instanceof ApiRequestError && ['POINTS_CHANGED', 'LOYALTY_POLICY_APPROVAL_REQUIRED'].includes(error.code || '') && this.requestedPoints() > 0) this.requestedPoints.set(0);
         },
       });
   }
@@ -692,7 +706,6 @@ export class PurchaseFlowPage {
     ].filter(Boolean).join(', ');
     const quote = this.quote();
     const payload: Record<string, unknown> = {
-      referral_code: this.orderOptions.referral_code?.trim(),
       is_gift: !!this.orderOptions.is_gift,
       gift_gender: this.orderOptions.is_gift ? this.orderOptions.gift_gender || 'nu' : undefined,
       gift_name: this.orderOptions.is_gift ? this.orderOptions.gift_name?.trim() : undefined,
@@ -719,6 +732,7 @@ export class PurchaseFlowPage {
       total_amount: quote.total,
       voucher_id: this.serverQuote()?.voucher?.voucher_id || null,
       decline_voucher: this.voucherDeclined(),
+      points_spent: this.member() ? this.serverQuote()?.loyalty?.points_spent ?? 0 : 0,
       payment_method: this.payment,
       items: this.lines(),
       save_address: this.member() && this.saveAddress,
@@ -740,6 +754,11 @@ export class PurchaseFlowPage {
       error: (error: Error) => {
         if (userId !== this.model.userId()) return;
         this.busy.set(false);
+        if (error instanceof ApiRequestError && ['POINTS_CHANGED', 'LOYALTY_POLICY_APPROVAL_REQUIRED', 'REWARD_VOUCHER_CHANGED'].includes(error.code || '')) {
+          this.requestedPoints.set(0);
+          this.refreshQuote();
+          this.voucherNotice.set(`${error.message} Kiểm tra lại tổng tiền rồi bấm hoàn tất.`);
+        }
         if (error instanceof ApiRequestError && error.code === 'VOUCHER_CHANGED') {
           const details = (error.details || {}) as Partial<VoucherChangedDetails>;
           const replacement = details?.replacement ?? null;

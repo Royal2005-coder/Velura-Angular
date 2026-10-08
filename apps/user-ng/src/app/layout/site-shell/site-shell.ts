@@ -4,6 +4,7 @@ import { Router, RouterLink, RouterOutlet } from '@angular/router';
 import { OffersService } from '../../core/services/offers.service';
 import { SiteFooter } from '../site-footer/site-footer';
 import { SiteHeader } from '../site-header/site-header';
+import { ChatbotService } from '../../core/services/chatbot.service';
 
 @Component({
   selector: 'app-site-shell',
@@ -16,6 +17,9 @@ export class SiteShell {
   readonly quizOpen = signal(false);
   readonly chatOpen = signal(false);
   readonly chatInput = signal('');
+  private readonly chatbot = inject(ChatbotService);
+  readonly activeHandoff = this.chatbot.activeHandoff;
+  readonly activeChatSession = this.chatbot.activeSession;
 
   readonly quickSuggestions = [
     'Tư vấn outfit đi tiệc sang trọng',
@@ -44,7 +48,9 @@ export class SiteShell {
     const q = (text ?? this.chatInput()).trim();
     this.chatOpen.set(false);
     this.chatInput.set('');
-    if (q) {
+    if (this.chatbot.activeHandoff() !== 'ai' && this.chatbot.activeSession()) {
+      void this.router.navigate(['/chatbot'], { queryParams: { session: this.chatbot.activeSession() } });
+    } else if (q) {
       void this.router.navigate(['/chatbot'], { queryParams: { q } });
     } else {
       void this.router.navigate(['/chatbot']);

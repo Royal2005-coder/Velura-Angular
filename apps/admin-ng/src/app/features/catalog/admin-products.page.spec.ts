@@ -1,5 +1,7 @@
 import { createAdminPage } from '../../../testing/admin-testing';
 import { AdminProductsPage } from './admin-products.page';
+import { TestBed } from '@angular/core/testing';
+import { AdminSessionService } from '../../core/admin-session.service';
 
 describe('AdminProductsPage', () => {
   it('creates the ViewModel with a stub AdminApiService', async () => {
@@ -109,5 +111,56 @@ describe('AdminProductsPage', () => {
     // Combo sale price: 399k -> Savings: 550k - 399k = 151k
     expect(page.comboSavings()).toBe(151_000);
     expect(page.comboSavingsPct()).toBe(27);
+  });
+
+  it('replaces only the deliberately selected image with the approved URL without publishing', async () => {
+    const page = await createAdminPage(AdminProductsPage);
+    TestBed.inject(AdminSessionService).applyAuthContext({
+      user: { id: 'operator' }, role: 'admin_operator_sanpham', isAdmin: true, allowedModules: ['products'], allowedPages: ['products'],
+    });
+    page.selected.set({ product_id: 'p1', name: 'Áo', version: 3, images: ['old-a', 'old-b'] });
+    page.sourceFile.set(new File(['source'], 'source.png', { type: 'image/png' }));
+    page.imageIndex.set(1);
+    const images = document.createElement('textarea');
+    images.value = 'old-a\nold-b';
+    const approval = { approvalId: 'review', url: 'https://storage/ai-reviewed/review.png',
+      sourceRevision: 'hash', processingVersion: 'quality-v1', expiresAt: new Date(Date.now() + 60_000).toISOString() };
+    page.acceptAiImage(approval, images);
+    expect(images.value).toBe(`old-a\n${approval.url}`);
+    expect(page.selected()?.images).toEqual(['old-a', 'old-b']);
+    expect(page.imageApprovals()).toEqual([approval]);
+    expect(page.sourceApproved()).toBe(true);
+  });
+
+  it('ignores expired approval and keeps the previous published content', async () => {
+    const page = await createAdminPage(AdminProductsPage);
+    TestBed.inject(AdminSessionService).applyAuthContext({
+      user: { id: 'operator' }, role: 'admin_operator_sanpham', isAdmin: true, allowedModules: ['products'], allowedPages: ['products'],
+    });
+    page.selected.set({ product_id: 'p1', name: 'Published title', description: 'Published description',
+      seo_title: 'Published SEO', seo_description: 'Published meta', slug: 'published', version: 3, images: ['old'] });
+    page.sourceFile.set(new File(['source'], 'source.png', { type: 'image/png' }));
+    const images = document.createElement('textarea');
+    images.value = 'old';
+    page.acceptAiImage({ approvalId: 'expired', url: 'new', sourceRevision: 'hash', processingVersion: 'v1', expiresAt: '2000-01-01' }, images);
+    expect(images.value).toBe('old');
+    expect(page.imageApprovals()).toEqual([]);
+    expect(page.liveContent()).toEqual({ title: 'Published title', description: 'Published description',
+      seoTitle: 'Published SEO', metaDescription: 'Published meta', slug: 'published' });
+  });
+
+  it('keeps bulk content selection version-bound and removes unchecked rows', async () => {
+    const page = await createAdminPage(AdminProductsPage);
+    TestBed.inject(AdminSessionService).applyAuthContext({
+      user: { id: 'operator' }, role: 'admin_operator_sanpham', isAdmin: true, allowedModules: ['products'], allowedPages: ['products'],
+    });
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox'; checkbox.checked = true;
+    const product = { product_id: 'p1', name: 'Áo', version: 3 };
+    page.toggleContentProduct(product, { target: checkbox } as unknown as Event);
+    expect(page.bulkSelection()).toEqual([{ productId: 'p1', expectedVersion: 3 }]);
+    checkbox.checked = false;
+    page.toggleContentProduct(product, { target: checkbox } as unknown as Event);
+    expect(page.bulkSelection()).toEqual([]);
   });
 });

@@ -1,12 +1,7 @@
-import { generateStudioProductImage, isGeminiConfigured } from "../gemini-client.js";
 import { config } from "../config.js";
 import { HttpError, getRequestIp, readJson, sendJson } from "../http.js";
-import { readMultipartImage, uploadToSupabaseStorage } from "../user/upload.js";
 import type { RouteArgs } from "../types.js";
-import { PRODUCT_ADMIN_ROLES } from "./product-constants.js";
 import type { ProductService } from "./product-service.js";
-
-const PRODUCT_IMAGE_STORAGE = { bucket: "product-images", prefix: "catalog" };
 
 /**
  * Admin product HTTP routes under `/api/v1/admin/products`.
@@ -56,58 +51,6 @@ export async function handleProductRoute({
     return true;
   }
 
-  // POST /api/v1/admin/products/image-advice — mô tả ảnh thật, không sửa pixel.
-  if (req.method === "POST" && parts[4] === "image-advice" && parts.length === 5) {
-    if (!context?.authUser?.id) {
-      throw new HttpError(401, "AUTH_REQUIRED", "Authentication is required");
-    }
-    if (!PRODUCT_ADMIN_ROLES.includes(context.roleCode || "")) {
-      throw new HttpError(403, "RBAC_DENIED", "Chỉ người vận hành sản phẩm mới được đọc ảnh.");
-    }
-    if (!isGeminiConfigured()) {
-      sendJson(res, 200, { source: "none", notes: [] }, headers);
-      return true;
-    }
-    const body = await readJson(req, config.maxBodyBytes);
-    const dataUrl = String(body.dataUrl || "");
-    const mime = String(body.mimeType || "image/jpeg");
-    if (!dataUrl.startsWith("data:image/")) {
-      throw new HttpError(422, "VALIDATION_ERROR", "Thiếu ảnh để nhận xét.");
-    }
-    let imageBase64 = "";
-    let imageMime = "";
-    let imageError = "";
-    try {
-      const generated = await generateStudioProductImage(dataUrl, mime);
-      imageBase64 = generated.base64;
-      imageMime = generated.mimeType;
-    } catch (error: unknown) {
-      imageError = error instanceof HttpError ? error.message : "Không sinh được ảnh nền studio.";
-      console.warn("[PRODUCT IMAGE] Studio background was not generated:", imageError);
-    }
-    sendJson(res, 200, {
-      source: imageBase64 ? "gemini-image" : "none",
-      notes: [],
-      imageBase64,
-      imageMime,
-      imageError
-    }, headers);
-    return true;
-  }
-
-  // POST /api/v1/admin/products/image — catalog photo for the product form.
-  if (req.method === "POST" && parts[4] === "image" && parts.length === 5) {
-    if (!context?.authUser?.id) {
-      throw new HttpError(401, "AUTH_REQUIRED", "Authentication is required");
-    }
-    if (!PRODUCT_ADMIN_ROLES.includes(context.roleCode || "")) {
-      throw new HttpError(403, "RBAC_DENIED", "Chỉ người vận hành sản phẩm mới được tải ảnh.");
-    }
-    const image = await readMultipartImage(req);
-    const url = await uploadToSupabaseStorage(image.fileBuffer, image.fileName, image.mimeType, PRODUCT_IMAGE_STORAGE);
-    sendJson(res, 200, { url }, headers);
-    return true;
-  }
 
   // POST /api/v1/admin/products/import-csv - validate and preview a CSV file.
   if (req.method === "POST" && parts[4] === "import-csv" && parts.length === 5) {

@@ -26,6 +26,8 @@ const service = new AiService(
   aiWorker,
   new ShopAiCatalog(),
 );
+/** Shared engine enforces one private ledger and queue for image approvals and Personal Color assets. */
+export function getAiService(): AiService { return service; }
 let recovery: Promise<void> | undefined;
 const rates = new Map<string, { count: number; expires: number }>();
 
@@ -69,6 +71,7 @@ export async function handleAiRoute(
   const offset = admin ? 2 : 3,
     action = parts[offset];
   if (action === "capabilities" && req.method === "GET") {
+    await service.refreshReadiness();
     const url = new URL(req.url || "/", "http://localhost");
     const productId = url.searchParams.get("product_id"),
       variantId = url.searchParams.get("variant_id") || undefined;

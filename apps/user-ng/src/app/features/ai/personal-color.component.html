@@ -1,0 +1,44 @@
+<section class="personal-color" aria-labelledby="personal-color-title">
+  <h2 id="personal-color-title">Personal Color — màu sắc cá nhân</h2>
+  <p>Màu sắc bổ sung cho dáng người, phong cách, dịp mặc và ngân sách; không thay thế các lựa chọn trong Style Quiz.</p>
+  <p>Phân loại 4 mùa: Spring (Xuân), Summer (Hè), Autumn (Thu), Winter (Đông). Chỉ kết quả đã xác nhận mới dùng trong hồ sơ và gợi ý.</p>
+  @if (profile()?.personal_color?.status === 'CONFIRMED') {
+    @let confirmed = profile()!.personal_color!;
+    <div class="color-result" aria-label="Màu đã xác nhận">
+      <h3>Đã xác nhận: {{ confirmed.season }}</h3>
+      <p>Kết quả này được giữ khi phân tích lại cho đến khi bạn xác nhận kết quả mới.</p>
+      <div class="swatches">@for (color of confirmed.palette; track color) { <span class="swatch" [style.background-color]="capabilities()?.palette?.[color]" [attr.aria-label]="color" [title]="color">{{ color }}</span> }</div>
+      <p>Nên tránh: @for (color of confirmed.avoided; track color) { <span>{{ color }} </span> }</p>
+    </div>
+  }
+  @if (!capabilities()?.enabled) {
+    <p role="status">Phân tích màu chưa khả dụng. Mô hình và chính sách ảnh/độ tin cậy cần được phê duyệt; Style Quiz và gợi ý hiện tại vẫn hoạt động.</p>
+    @if (capabilities()?.reason) { <p role="status">{{ capabilities()?.reason }}</p> }
+  } @else {
+    <h3>Hướng dẫn ảnh</h3>
+    <ul>
+      <li>Chụp khuôn mặt rõ nét, da tự nhiên, không trang điểm đậm, không che mặt.</li>
+      <li>Dùng ánh sáng ban ngày trung tính; tránh ánh sáng màu, cháy sáng và bóng tối.</li>
+      <li>Không dùng bộ lọc làm đẹp hoặc chỉnh màu. Chỉ nhận JPEG/PNG.</li>
+    </ul>
+    <p>Giới hạn {{ capabilities()?.max_upload_bytes }} byte. Ảnh riêng tư chỉ dùng cho lần phân tích này, được xoá sau xử lý; giới hạn lưu tạm {{ capabilities()?.retention_seconds }} giây. Chính sách: {{ capabilities()?.policy_version }}.</p>
+    <label>Chọn ảnh chân dung <input type="file" accept="image/jpeg,image/png" [disabled]="busy()" (change)="selectFile($event)"></label>
+    @if (previewUrl()) { <img class="portrait-preview" [src]="previewUrl()" alt="Ảnh bạn chọn, chỉ xem trước trên thiết bị"> }
+    <label class="consent"><input type="checkbox" [checked]="consent()" [disabled]="busy()" (change)="setConsent($event)"> Tôi đồng ý tải ảnh lên kho riêng tư và xử lý bằng mô hình thị giác theo chính sách hiện hành. Đồng ý này chưa xác nhận kết quả.</label>
+    <button type="button" [disabled]="!canAnalyze()" (click)="analyze()">{{ profile()?.personal_color ? 'Phân tích lại' : 'Phân tích màu' }}</button>
+    @if (analysis(); as analysis) {
+      <p role="status">{{ statusLabel() }}</p>
+      @if (analysis.result; as result) {
+        <div class="color-result" aria-label="Bản xem trước chưa xác nhận">
+          <h3>Bản xem trước: {{ result.season }}</h3>
+          <p>Độ tin cậy: {{ result.confidence }} (0–1). Chưa dùng cho gợi ý sản phẩm.</p>
+          <div class="swatches">@for (color of result.palette; track color) { <span class="swatch" [style.background-color]="capabilities()?.palette?.[color]" [attr.aria-label]="color" [title]="color">{{ color }}</span> }</div>
+          <p>Nên tránh: @for (color of result.avoided; track color) { <span>{{ color }} </span> }</p>
+        </div>
+      }
+      @if (analysis.status === 'SUCCESS') { <button type="button" [disabled]="!canConfirm()" (click)="confirm()">Xác nhận & lưu màu vào hồ sơ phong cách</button> }
+      @if (analysis.status === 'RUNNING' || analysis.status === 'SUCCESS' || analysis.status === 'LOW_CONFIDENCE') { <button type="button" (click)="cancel()">Huỷ phân tích — giữ màu cũ</button> }
+    }
+  }
+  @if (error()) { <p role="alert">{{ error() }}</p><button type="button" [disabled]="busy()" (click)="reload()">Tải lại hồ sơ & chính sách</button> }
+</section>

@@ -167,9 +167,10 @@ export async function verifyGuestTrackingOtp(body: JsonObject): Promise<JsonObje
   const phone = await phoneForTracking(body);
   const row = await selectOne("guest_tracking_otp", { phone: `eq.${phone}`, consumed_at: "is.null", order: "created_at.desc", limit: 1 });
   if (!row) throw new HttpError(400, "INVALID_OTP", "Không tìm thấy phiên xác thực");
+  const otpInput = asString(body.otp_code || body.otp || body.code);
   const result = asJsonObject(await callRpc("velura_verify_guest_tracking_otp", {
     p_id: row.challenge_id,
-    p_hash: createHash("sha256").update(`${asString(row.nonce)}:${asString(body.otp_code || body.otp)}`).digest("hex")
+    p_hash: createHash("sha256").update(`${asString(row.nonce)}:${otpInput}`).digest("hex")
   }));
   if (!result.verified) throw new HttpError(400, asString(result.code) || "INVALID_OTP", "Mã xác thực không hợp lệ hoặc hết hạn");
   return { success: true, phone, guest_access_token: signJwt({

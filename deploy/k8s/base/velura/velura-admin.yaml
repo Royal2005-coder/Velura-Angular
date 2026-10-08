@@ -24,7 +24,7 @@ spec:
         fsGroup: 101
       containers:
       - name: velura-admin
-        image: ghcr.io/royal2005-coder/velura-admin:sha-b3df517c1daa2c4147ca7c5db0a32213a748c683
+        image: ghcr.io/royal2005-coder/velura-admin:sha-b3df517c1daa2c4147ca7c5db0a32213a748c683@sha256:7ed8ae854e394939dc4e9c3e4e3e4c2a6ba6fd361cd6a680f0c2cd361a6699dc
         ports:
         - name: http
           containerPort: 8080

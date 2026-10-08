@@ -39,7 +39,7 @@ spec:
         fsGroup: 1000
       containers:
       - name: s3-storage
-        image: chrislusf/seaweedfs:3.85
+        image: chrislusf/seaweedfs:3.85@sha256:49312939c00c01e5ee6afbd7d728b18027821d3764c35a797a72acd4fdf3296a
         ports:
         - name: http
           containerPort: 9000

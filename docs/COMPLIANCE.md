@@ -76,3 +76,19 @@ Catalog `/products` includes reviewed image replacement and single/bulk content 
 | Cổng thanh toán MoMo/VNPay | checkout chỉ ghi nhãn; chưa create-intent + HMAC IPN | Hoãn (cần khóa merchant) |
 | SMS OTP provider | local OTP shortcut chỉ khi `NODE_ENV !== production` | Hoãn (cần nhà mạng) |
 | Biểu đồ doanh thu | dashboard dùng RPC thật; cột CSS, chưa chart lib | Hoãn |
+## Production Readiness & Hạ tầng K3s (Staging Gate Audit)
+
+Hạ tầng production tuân thủ nguyên tắc **STAGING FIRST** và **Context as Code**. Không bypass gate an toàn khi chưa có bằng chứng phục hồi độc lập.
+
+| Hạng mục | Trạng thái | Bằng chứng / Gate |
+|---|---|---|
+| Cluster identity | PASS | UID `a9517754-4868-46b9-8e8f-8c2370e53cff` xác thực qua `tools/ops/velura-ops.mjs` |
+| Base manifests validation | PASS | 107 resources: strict YAML, Kustomize render, Kubernetes 1.30 schema, digest-pinned OCI images |
+| Staging overlay validation | PASS | 15 resources: strict schema và policy pass 100% |
+| Scrape metrics authentication | PASS | `/metrics` bảo vệ bằng `METRICS_SCRAPE_BEARER_TOKEN` (timing-safe, fail-closed) + VictoriaMetrics secret volume |
+| Workload test suite | PASS | 908 tests pass (API: 530, Storefront: 211, Admin: 142, Ops: 25), 0 failures |
+| Database migrations freeze | FROZEN | Migration production đóng băng cho tới khi có bằng chứng restore off-site đã kiểm chứng |
+| Cluster live pods | BLOCKED | 2 pod cũ crashloop (`velura-admin-5b48...`, `velura-api-6764...`); cần dọn pod cũ trên cluster |
+| GitOps Flux ready | BLOCKED | K3s node chưa có `GitRepository velura-repo` và `Kustomization` active, non-suspended |
+| Default-deny NetworkPolicy | BLOCKED | Namespace production chưa áp dụng default-deny ingress/egress cho toàn bộ pod |
+| GPU VTO inference proof | STAGED | Endpoint FastAPI chạy thật; tải trọng VTO yêu cầu GPU thật và weights cấp phép chính thức |

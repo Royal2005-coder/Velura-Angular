@@ -667,9 +667,9 @@ export class AiService {
   }
   private startPump(): void {
     if (this.pumping) return;
-    this.work = this.pump().catch(() => {
+    this.work = this.pump().catch((err) => {
       this.storageBlocked = true;
-      console.error("AI_QUEUE_STORAGE_FAILED");
+      console.error("AI_QUEUE_STORAGE_FAILED", err);
     });
   }
   private async pump(): Promise<void> {

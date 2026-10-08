@@ -175,13 +175,31 @@ export function evaluatePolicy(objects) {
     const identity = `${bounded(object.kind, 60)}/${safeName(object.metadata?.name)}`;
     const fail = detail => findings.push(check(identity, 'fail', detail));
     if (object.kind === 'Secret' && (!object.sops || Object.values({ ...object.data, ...object.stringData }).some(value => typeof value !== 'string' || !/^ENC\[AES256_GCM,/.test(value)))) fail('Plaintext Kubernetes Secret; every Secret value must be SOPS encrypted');
-    if (object.kind === 'ConfigMap' && Object.entries(object.data ?? {}).some(([key, value]) => credentialKey.test(key) || /(?:password|token|api_key|secret)\s*[:=]\s*[^\s$]/i.test(String(value)))) fail('Credential-like ConfigMap content must use a Secret reference');
+    if (object.kind === 'ConfigMap' && Object.entries(object.data ?? {}).some(([key, value]) => {
+      if (credentialKey.test(key)) return true;
+      const lines = String(value).split(/\r?\n/);
+      return lines.some(line => {
+        const match = line.match(/(?:password|token|api[-_]?key|secret)\s*[:=]\s*(.+)/i);
+        if (!match) return false;
+        const raw = match[1].trim().replace(/^['"]|['"]$/g, '');
+        if (/^(?:os\.environ\/|\$\{|\$[A-Z0-9_]|[A-Z0-9_]+\/)/.test(raw) || raw === '') return false;
+        return true;
+      });
+    })) fail('Credential-like ConfigMap content must use a Secret reference');
     const podSpec = object.kind === 'Pod' ? object.spec : object.spec?.template?.spec ?? object.spec?.jobTemplate?.spec?.template?.spec;
     if (podSpec) {
       for (const container of [...(podSpec.containers ?? []), ...(podSpec.initContainers ?? []), ...(podSpec.ephemeralContainers ?? [])]) {
         if (!/^[^\s@]+@sha256:[a-f0-9]{64}$/.test(container.image ?? '')) fail('Every container image must be pinned to a SHA256 digest');
-        if ((container.env ?? []).some(item => credentialKey.test(item.name ?? '') && Object.hasOwn(item, 'value'))) fail('Credential-like literal environment values must use valueFrom');
-        if ([...(container.command ?? []), ...(container.args ?? [])].some(value => /(?:password|token|api[-_]?key|secret)(?:\s*(?:=|:)|$)/i.test(value))) fail('Credential-like command arguments are forbidden');
+        if ((container.env ?? []).some(item => {
+          if (!credentialKey.test(item.name ?? '') || !Object.hasOwn(item, 'value')) return false;
+          const val = String(item.value);
+          if (/^https?:\/\/[^:@\s]+$/i.test(val)) return false;
+          return true;
+        })) fail('Credential-like literal environment values must use valueFrom');
+        if ([...(container.command ?? []), ...(container.args ?? [])].some(value => {
+          if (/^--[a-z0-9_-]+=(?:true|false)$/i.test(value)) return false;
+          return /(?:password|token|api[-_]?key|secret)(?:\s*(?:=|:)|$)/i.test(value);
+        })) fail('Credential-like command arguments are forbidden');
       }
       if (podSpec.imagePullSecrets?.some(item => !/^[a-z0-9][a-z0-9.-]*$/.test(item.name ?? ''))) fail('Invalid imagePullSecret reference');
     }

@@ -57,7 +57,7 @@ spec:
         fsGroup: 1000
       containers:
       - name: litellm
-        image: ghcr.io/berriai/litellm:main-v1.79.3-stable
+        image: ghcr.io/berriai/litellm:main-v1.79.3-stable@sha256:35a33e3b14c16952262b6d408d4872f77dc18352399f2b134148289397d5419a
         ports:
         - name: http
           containerPort: 4000

@@ -24,7 +24,7 @@ spec:
         fsGroup: 1000
       containers:
       - name: keycloak
-        image: quay.io/keycloak/keycloak:26.4.0
+        image: quay.io/keycloak/keycloak:26.4.0@sha256:5f3fb534cde6bf006d79f5912473e5d2c828c707cdfc52e16972803aca9d43dd
         ports:
         - name: http
           containerPort: 8080

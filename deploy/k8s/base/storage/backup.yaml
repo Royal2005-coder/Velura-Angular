@@ -32,7 +32,7 @@ spec:
             fsGroup: 1000
           containers:
           - name: external-object-copy
-            image: rclone/rclone:1.71.1
+            image: rclone/rclone:1.71.1@sha256:d5971950c2b370fb04dd3292541b5bda6d9103143fd7e345aeb435a399388afc
             securityContext:
               allowPrivilegeEscalation: false
               capabilities:

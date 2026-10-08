@@ -56,6 +56,7 @@ data:
             target_label: __metrics_path__
             replacement: /api/v1/nodes/${1}/proxy/metrics/cadvisor
       - job_name: velura-http
+        bearer_token_file: /etc/velura-metrics-key/metrics-token
         static_configs:
           - targets: [velura-api.velura.svc:3000]
       - job_name: litellm
@@ -113,7 +114,7 @@ spec:
         fsGroup: 1000
       containers:
       - name: victoriametrics
-        image: victoriametrics/victoria-metrics:v1.104.0
+        image: victoriametrics/victoria-metrics:v1.104.0@sha256:4a03f2881108571949f83764069f5ecc325de5cbbae676c2742f0a2e7523a682
         ports:
         - name: http
           containerPort: 8428
@@ -153,6 +154,9 @@ spec:
         - name: metrics-key
           mountPath: /etc/metrics-key
           readOnly: true
+        - name: velura-metrics-key
+          mountPath: /etc/velura-metrics-key
+          readOnly: true
       serviceAccountName: victoriametrics
       volumes:
       - name: data
@@ -167,6 +171,12 @@ spec:
           items:
           - key: master-key
             path: master-key
+      - name: velura-metrics-key
+        secret:
+          secretName: velura-metrics-collector-credentials
+          items:
+          - key: metrics-token
+            path: metrics-token
   strategy:
     type: Recreate
 ---

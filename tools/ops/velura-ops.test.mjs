@@ -168,6 +168,22 @@ test('strict manifest policy catches mutable init images, literal credentials an
   assert.doesNotMatch(JSON.stringify(findings), /synthetic-sensitive-value|cGxhaW4=/);
   assert.equal(evaluatePolicy([workload])[0].status, 'pass');
 });
+test('manifest policy distinguishes environment secret references and boolean flags from literal credentials', () => {
+  const goodConfig = { kind: 'ConfigMap', metadata: { name: 'litellm-config' }, data: { 'config.yaml': 'model_list:\n  - litellm_params:\n      api_key: os.environ/GEMINI_API_KEY\n' } };
+  const goodDeployment = structuredClone(workload);
+  goodDeployment.spec.template.spec.containers[0].args = ['--pass-access-token=false'];
+  goodDeployment.spec.template.spec.containers[0].env = [{ name: 'GF_AUTH_GENERIC_OAUTH_TOKEN_URL', value: 'https://auth.royalai.dev/realms/velura/protocol/openid-connect/token' }];
+  const passed = evaluatePolicy([goodConfig, goodDeployment]);
+  assert.equal(passed.every(p => p.status === 'pass'), true);
+
+  const badConfig = { kind: 'ConfigMap', metadata: { name: 'leaked-config' }, data: { 'config.yaml': 'api_key: AIzaSyD_literal_secret_key\n' } };
+  const badArg = structuredClone(workload);
+  badArg.spec.template.spec.containers[0].args = ['--token=literal-token-secret'];
+  const badEnv = structuredClone(workload);
+  badEnv.spec.template.spec.containers[0].env = [{ name: 'AUTH_TOKEN', value: 'literal-token-value' }];
+  const failed = evaluatePolicy([badConfig, badArg, badEnv]);
+  assert.equal(failed.filter(f => f.status === 'fail').length, 3);
+});
 
 test('manifest validation never exposes rendered credentials or image locations', async () => {
   await withFiles({}, async (_paths, dir) => {

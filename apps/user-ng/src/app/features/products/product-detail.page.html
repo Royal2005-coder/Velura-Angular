@@ -90,7 +90,7 @@
               } @else if (badge.kind === 'combo') {
                 <span class="product-badge product-badge--combo">{{ badge.label }}</span>
               } @else {
-                <span class="product-badge product-badge--stock">{{ badge.label }}</span>
+                <span class="product-badge product-badge--stock" [class.product-badge--out-of-stock]="isOutOfStock()">{{ badge.label }}</span>
               }
             }
           </div>
@@ -278,9 +278,13 @@
                   </svg>
                   {{ isOutOfStock() ? 'Set combo tạm hết hàng' : 'Thêm set vào giỏ' }}
                 </button>
-                @if (!isOutOfStock()) {
-                  <button type="button" class="btn btn--primary combo-buy-now" (click)="buyComboNow()">Mua ngay set này</button>
-                }
+                <button
+                  type="button"
+                  class="btn btn--primary combo-buy-now"
+                  [disabled]="isOutOfStock()"
+                  [class.btn--disabled]="isOutOfStock()"
+                  (click)="buyComboNow()"
+                >{{ isOutOfStock() ? 'Hết hàng' : 'Mua ngay set này' }}</button>
               </div>
               <button type="button" class="btn btn--secondary combo-wishlist" [class.is-wishlist-active]="wishlisted()" (click)="toggleWishlist()">
                 <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.67">
@@ -394,9 +398,13 @@
               </svg>
               {{ isOutOfStock() ? 'Sản phẩm hết hàng' : 'Thêm vào giỏ' }}
             </button>
-            @if (!isOutOfStock()) {
-              <button type="button" class="btn btn--primary buy-now-btn" (click)="buyNow()">Mua ngay</button>
-            }
+            <button
+              type="button"
+              class="btn btn--primary buy-now-btn"
+              [disabled]="isOutOfStock()"
+              [class.btn--disabled]="isOutOfStock()"
+              (click)="buyNow()"
+            >{{ isOutOfStock() ? 'Hết hàng' : 'Mua ngay' }}</button>
           </div>
           <button type="button" class="btn btn--secondary wishlist-btn" [class.active]="wishlisted()" aria-label="Thêm vào danh sách yêu thích" (click)="toggleWishlist()">
             <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.67" style="margin-right: 8px;">

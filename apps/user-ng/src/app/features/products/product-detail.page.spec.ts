@@ -173,4 +173,52 @@ describe('ProductDetailPage', () => {
     page.increment(); // should not exceed 3
     expect(page.quantity()).toBe(3);
   });
+
+  it('correctly disables purchase when selecting out-of-stock variant and enables when selecting in-stock variant (TC-ADMIN-02)', async () => {
+    const page = await createStorefrontPage(ProductDetailPage);
+    const product = {
+      product_id: 'dam-da-hoi-lua',
+      name: 'Đầm Dạ Hội Lụa Hoàng Gia Velura',
+      slug: 'dam-da-hoi-lua-hoang-gia-velura',
+      base_price: 1500000,
+      sale_price: 1250000,
+      variants: [
+        {
+          variant_id: 'var-red-s',
+          color: 'Đỏ Ruby',
+          size: 'S',
+          stock_quantity: 0,
+          reserved_quantity: 0,
+        },
+        {
+          variant_id: 'var-red-m',
+          color: 'Đỏ Ruby',
+          size: 'M',
+          stock_quantity: 15,
+          reserved_quantity: 0,
+        },
+      ],
+      reviews: [],
+    };
+    page.product.set(product as unknown as ProductSummary);
+
+    // 1. Khi chọn Đỏ Ruby - Size S (Tồn kho = 0)
+    page.selectColor('Đỏ Ruby');
+    page.selectSize('S');
+
+    expect(page.selectedColor()).toBe('Đỏ Ruby');
+    expect(page.selectedSize()).toBe('S');
+    expect(page.isOutOfStock()).toBe(true);
+    expect(page.stockLabel()).toBe('Hết hàng');
+    expect(page.addToCart()).toBe(false);
+
+    // 2. Khi chọn Đỏ Ruby - Size M (Tồn kho = 15)
+    page.selectSize('M');
+
+    expect(page.selectedSize()).toBe('M');
+    expect(page.isOutOfStock()).toBe(false);
+    expect(page.stockLabel()).toBe('Còn 15 sản phẩm');
+    expect(page.maxAvailableStock()).toBe(15);
+    expect(page.addToCart()).toBe(true);
+  });
 });

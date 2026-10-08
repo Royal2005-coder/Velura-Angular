@@ -8,6 +8,7 @@ import {
   validateStatusChange,
   validateStockUpdate
 } from "../../apps/api/src/products/product-service.js";
+import type { ProductRepository } from "../../apps/api/src/products/product-repository.js";
 
 const PRODUCT_ID = "30000000-0000-4000-8000-000000000001";
 const CATEGORY_ID = "40000000-0000-4000-8000-000000000001";
@@ -314,6 +315,46 @@ test("product create seeds a default variant with the caller token", async () =>
   }, { ipAddress: "127.0.0.1" });
   assert.equal(variantArgs[2], "sanpham-token");
   assert.equal(variantArgs[1].stockQuantity, 4);
+});
+
+test("product create creates all SKU matrix variants when variants array is provided", async () => {
+  const createdVariants: Array<Record<string, unknown>> = [];
+  const service = createProductService({
+    repository: {
+      createProduct: async () => ({ product_id: PRODUCT_ID }),
+      createVariant: async (_pid, input) => {
+        createdVariants.push(input as Record<string, unknown>);
+        return { variant_id: "var-" + createdVariants.length, ...input };
+      },
+      findById: async () => ({ product_id: PRODUCT_ID, status: "on_sale", version: 1 }),
+      listVariants: async () => createdVariants,
+      changeStatus: async () => {}
+    } as unknown as ProductRepository
+  });
+  await service.create(sanPhamContext(), {
+    sku: "VLR-DAM01",
+    name: "Đầm Dạ Hội Lụa Hoàng Gia Velura",
+    categoryId: CATEGORY_ID,
+    basePrice: 1200000,
+    material: "Lụa Tơ Tằm",
+    variants: [
+      { color: "Đen", size: "S", stockQuantity: 10, lowStockThreshold: 5 },
+      { color: "Đen", size: "M", stockQuantity: 10, lowStockThreshold: 5 },
+      { color: "Đen", size: "L", stockQuantity: 10, lowStockThreshold: 5 },
+      { color: "Đỏ Ruby", size: "S", stockQuantity: 0, lowStockThreshold: 5 },
+      { color: "Đỏ Ruby", size: "M", stockQuantity: 15, lowStockThreshold: 5 },
+      { color: "Đỏ Ruby", size: "L", stockQuantity: 10, lowStockThreshold: 5 }
+    ],
+    expectedVersion: 0
+  }, { ipAddress: "127.0.0.1" });
+
+  assert.equal(createdVariants.length, 6);
+  assert.equal(createdVariants[3].color, "Đỏ Ruby");
+  assert.equal(createdVariants[3].size, "S");
+  assert.equal(createdVariants[3].stockQuantity, 0);
+  assert.equal(createdVariants[4].color, "Đỏ Ruby");
+  assert.equal(createdVariants[4].size, "M");
+  assert.equal(createdVariants[4].stockQuantity, 15);
 });
 
 test("product service allows product operator to create products", async () => {

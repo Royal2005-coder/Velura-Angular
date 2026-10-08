@@ -281,6 +281,13 @@
   border: 1px solid var(--line);
 }
 
+.product-badge--out-of-stock {
+  background: #fee2e2 !important;
+  color: #dc2626 !important;
+  border-color: #fca5a5 !important;
+  font-weight: 700;
+}
+
 .product-info__title {
   font-family: "Playfair Display", Georgia, serif;
   font-size: clamp(1.75rem, 3vw, 2.5rem);
@@ -602,6 +609,19 @@
 
 .buy-now-btn:hover {
   background: var(--terracotta-h);
+}
+
+.add-to-cart-btn:disabled,
+.add-to-cart-btn.btn--disabled,
+.buy-now-btn:disabled,
+.buy-now-btn.btn--disabled {
+  opacity: 0.55;
+  cursor: not-allowed !important;
+  pointer-events: none;
+  background: var(--field-bg, #f3f4f6) !important;
+  color: var(--text-muted, #9ca3af) !important;
+  border-color: var(--line, #e5e7eb) !important;
+  box-shadow: none !important;
 }
 
 .product-actions-grid .wishlist-btn {

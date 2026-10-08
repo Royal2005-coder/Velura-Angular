@@ -43,15 +43,17 @@ export async function handleProductsRoute(
   if (subRoute === "products") {
     if (req.method === "GET") {
       if (action) {
+        const isActionUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(action);
+        const filter = isActionUuid ? { product_id: `eq.${action}` } : { slug: `eq.${action}` };
         const product = await selectOne("product", {
           select: "*,category:category_id(*)",
-          product_id: `eq.${action}`
+          ...filter
         }, { count: "none", useAnonKey: true });
         if (!product) {
           throw new HttpError(404, "NOT_FOUND", "Không tìm thấy sản phẩm");
         }
         const { rows: dbVariants } = await selectRows("variant", {
-          product_id: `eq.${action}`
+          product_id: `eq.${product.product_id}`
         }, { count: "none", useAnonKey: true });
         let variants: JsonObject[] = dbVariants;
 
@@ -141,7 +143,7 @@ export async function handleProductsRoute(
 
         // Fetch approved reviews for this product
         const { rows: dbReviews } = await selectRows("review", {
-          product_id: `eq.${action}`,
+          product_id: `eq.${product.product_id}`,
           status: "eq.approved"
         }, { count: "none", useAnonKey: true });
 

@@ -94,7 +94,15 @@ export class CatalogContentService {
   private kick(): void {
     if (this.closed) return;
     while (this.workers.size < 2) {
-      const worker = this.workOne().catch(() => undefined).finally(() => this.workers.delete(worker));
+      const worker = this.workOne()
+        .catch((err: unknown) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          if (msg.includes("catalog_content_operation")) {
+            console.warn("[CATALOG_CONTENT_WORKER_PAUSED] Function catalog_content_operation not found; pausing background worker.");
+            this.stop();
+          }
+        })
+        .finally(() => this.workers.delete(worker));
       this.workers.add(worker);
     }
   }

@@ -191,37 +191,34 @@ export function presentOrderForCustomer(order: JsonObject, items: JsonObject[], 
 }
 
 async function attachProductMeta(items: JsonObject[]): Promise<JsonObject[]> {
-  const itemsWithProduct: JsonObject[] = [];
-  for (const item of items) {
+  return Promise.all(items.map(async (item) => {
     let productId: unknown = null;
     let categoryName: unknown = null;
-    let size: unknown = null;
-    let color: unknown = null;
-    let isCombo = false;
-    try {
-      const v = await selectOne("variant", { variant_id: `eq.${item.variant_id}` });
-      if (v) {
-        productId = v.product_id;
-        size = v.size ?? null;
-        color = v.color ?? null;
-        const product = await selectOne("product", { product_id: `eq.${productId}` });
-        if (product) {
-          isCombo = Boolean(product.is_combo || /combo/i.test(String(product.name || "")) || /set\s+/i.test(String(product.name || "")));
-          const cat = await selectOne("category", { category_id: `eq.${product.category_id}` });
-          if (cat) {
-            categoryName = cat.name;
+    let size: unknown = item.size ?? null;
+    let color: unknown = item.color ?? null;
+    let isCombo = Boolean(item.is_combo || /combo/i.test(String(item.product_name || "")) || /set\s+/i.test(String(item.product_name || "")));
+    if (item.variant_id) {
+      try {
+        const v = await selectOne("variant", { variant_id: `eq.${item.variant_id}` });
+        if (v) {
+          productId = v.product_id;
+          size = v.size ?? size;
+          color = v.color ?? color;
+          const product = await selectOne("product", { product_id: `eq.${productId}` });
+          if (product) {
+            isCombo = isCombo || Boolean(product.is_combo || /combo/i.test(String(product.name || "")) || /set\s+/i.test(String(product.name || "")));
+            const cat = await selectOne("category", { category_id: `eq.${product.category_id}` });
+            if (cat) {
+              categoryName = cat.name;
+            }
           }
         }
+      } catch (e: unknown) {
+        console.error("Error retrieving variant product_id:", errorMessage(e));
       }
-    } catch (e: unknown) {
-      console.error("Error retrieving variant product_id:", errorMessage(e));
     }
-    if (!isCombo) {
-      isCombo = Boolean(/combo/i.test(String(item.product_name || "")) || /set\s+/i.test(String(item.product_name || "")));
-    }
-    itemsWithProduct.push({ ...item, product_id: productId, category_name: categoryName, is_combo: isCombo, size, color });
-  }
-  return itemsWithProduct;
+    return { ...item, product_id: productId, category_name: categoryName, is_combo: isCombo, size, color };
+  }));
 }
 
 const userReturnsRepository = createUserReturnsRepository();
@@ -352,17 +349,16 @@ export async function handleOrdersRoute(
       const token = url.searchParams.get("guest_access_token") || "";
       const phone = guestSessionPhone(token);
       if (!phone) throw new HttpError(401, "GUEST_SESSION_REQUIRED", "Verify your phone to view orders");
-      const { rows } = await selectRows("orders", {shipping_phone: "eq." + phone, order: "created_at.desc", limit: "100"});
-      const orders: JsonObject[] = [];
-      for (const order of rows) {
-        const [{rows: items}, {rows: history}, {rows: payments}] = await Promise.all([
-          selectRows("order_item", {order_id: "eq." + order.order_id}),
-          selectRows("order_status_history", {order_id: "eq." + order.order_id, select:"new_status,changed_at"}),
-          selectRows("payment", {order_id:"eq." + order.order_id, select:"payment_status,created_at,refund_amount,refunded_amount"})
+      const { rows } = await selectRows("orders", { shipping_phone: "eq." + phone, order: "created_at.desc", limit: "50" });
+      const orders = await Promise.all(rows.map(async (order) => {
+        const [{ rows: items }, { rows: history }, { rows: payments }] = await Promise.all([
+          selectRows("order_item", { order_id: "eq." + order.order_id }),
+          selectRows("order_status_history", { order_id: "eq." + order.order_id, select: "new_status,changed_at" }),
+          selectRows("payment", { order_id: "eq." + order.order_id, select: "payment_status,created_at,refund_amount,refunded_amount" })
         ]);
-        orders.push(presentOrderForCustomer(order, await attachProductMeta(items), history, payments));
-      }
-      return sendJson(res, 200, {success:true, orders, guest_access_token:token}, corsHeaders);
+        return presentOrderForCustomer(order, await attachProductMeta(items), history, payments);
+      }));
+      return sendJson(res, 200, { success: true, orders, guest_access_token: token }, corsHeaders);
     }
     if (req.method === "GET") {
       let profile: UserProfile | null = null;

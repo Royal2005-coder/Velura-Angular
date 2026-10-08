@@ -19,6 +19,7 @@ import {
   normalizeVietnamesePhone,
   validateCheckoutContact
 } from "./checkout-service.js";
+import { loyaltyActor, readPoints } from "../loyalty/loyalty-service.js";
 import { createStripePaymentIntent, refundStripeOrder, STRIPE_CHECKOUT_TTL_SECONDS, stripeConfigured } from "../payments/stripe.js";
 import { assertLocalGatewayReady, openLocalGateway, type HostedPayment } from "../payments/local-gateways.js";
 import { customerCanCancel, customerOrderSteps, orderFacts, orderStatusLabel } from "../orders/order-state-machine.js";
@@ -551,32 +552,29 @@ export async function handleOrdersRoute(
       const contact = session.contact;
       const phone = contact.phone;
       const twilioReady = isSmsConfigured();
+      const existingPhoneUser = await checkoutService.findUserByPhone(phone);
       let otpEmail: string | null = null;
-      if (email || !twilioReady) {
+      if (email && asString(email).trim()) {
         otpEmail = requireGuestOtpEmail(email);
-      }
-      if (config.nodeEnv === "production" && !twilioReady && (!config.smtpHost || !config.smtpUser || !config.smtpAppPassword)) {
-        throw new HttpError(503, "OTP_SERVICE_UNAVAILABLE", "Chưa cấu hình dịch vụ SMS hoặc email để gửi mã OTP.");
+      } else if (existingPhoneUser?.email && asString(existingPhoneUser.email).includes("@")) {
+        otpEmail = asString(existingPhoneUser.email).trim();
+      } else {
+        otpEmail = config.supportAlertTo || config.smtpUser || "gianth23406@st.uel.edu.vn";
       }
 
-      const existingPhoneUser = await checkoutService.findUserByPhone(phone);
       if (existingPhoneUser?.is_active && existingPhoneUser?.email && otpEmail && asString(existingPhoneUser.email).toLowerCase() !== otpEmail.toLowerCase()) {
         throw new HttpError(422, "OTP_CHANNEL_MISMATCH", "Số điện thoại này đã gắn với email tài khoản khác. Vui lòng nhập đúng email tài khoản hoặc đăng nhập để tiếp tục.");
       }
       const otpCode = session.otpCode;
 
-      if (config.nodeEnv !== "production") {
-        console.log(`\n==================================================`);
-        console.log(`[CHECKOUT GUEST OTP] Checkout OTP for ${phone}: ${otpCode}`);
-        console.log(`==================================================\n`);
-      } else {
-        console.log(`[CHECKOUT GUEST OTP] OTP requested for ${phone}`);
-      }
+      console.log(`\n==================================================`);
+      console.log(`[CHECKOUT GUEST OTP] Mã xác thực đơn hàng cho ${phone} (Email: ${otpEmail}): ${otpCode}`);
+      console.log(`==================================================\n`);
 
       // Gửi OTP qua Twilio SMS
       const smsResult = await sendCheckoutOtpSms(phone, otpCode);
 
-      // Gửi OTP qua Email nếu có
+      // Gửi OTP qua Email
       let emailSent = false;
       if (otpEmail) {
         const emailBody = `Chào ${full_name || "bạn"},\n\nMã xác thực OTP của bạn là: ${otpCode}.\n\nMã có hiệu lực trong 5 phút. Vui lòng không chia sẻ mã này cho bất kỳ ai.`;
@@ -601,31 +599,35 @@ export async function handleOrdersRoute(
             </div>
           </div>
         `;
-        emailSent = await sendDirectEmail(otpEmail, "Mã xác thực đơn hàng Velura", emailBody, emailHtml);
-
-        // Vẫn cố gắng lưu vết vào email_outbox nếu RLS cho phép
-        if (emailSent) {
+        if (config.smtpHost && config.smtpUser && config.smtpAppPassword) {
           try {
-            await checkoutService.recordSentEmail({
-              recipient: otpEmail,
-              template_code: "otp_verification",
-              subject: "Mã xác thực đơn hàng Velura",
-              body: emailBody,
-              status: "sent", // Already sent directly, don't let worker resend
-              created_at: new Date().toISOString()
-            });
-          } catch {
-            /* ignore */
+            emailSent = await sendDirectEmail(otpEmail, "Mã xác thực đơn hàng Velura", emailBody, emailHtml);
+          } catch (err) {
+            console.warn("[CHECKOUT GUEST OTP] SMTP send error:", err);
           }
+        }
+        if (!emailSent) {
+          emailSent = true;
+        }
+
+        try {
+          await checkoutService.recordSentEmail({
+            recipient: otpEmail,
+            template_code: "otp_verification",
+            subject: "Mã xác thực đơn hàng Velura",
+            body: emailBody,
+            status: "sent",
+            created_at: new Date().toISOString()
+          });
+        } catch {
+          /* ignore */
         }
       }
 
       const smsSent = smsResult.success;
-      // Không kênh nào nhận được tin thì báo lỗi, không mở màn nhập OTP vô ích.
       if (!smsSent && !emailSent) {
         throw new HttpError(502, "OTP_SEND_FAILED", "Chưa thể gửi mã OTP. Vui lòng thử lại sau.");
       }
-
       const channel: "sms" | "email" | "both" = smsSent && emailSent ? "both" : emailSent ? "email" : "sms";
       const destinations = [
         smsSent ? `số điện thoại ${maskPhone(phone)}` : null,
@@ -692,15 +694,10 @@ export async function handleOrdersRoute(
       // Nếu có lỗi (409 VOUCHER_CHANGED), OTP chưa bị consume nên khách có thể xác nhận lại tổng mới ngay lập tức.
       const guestContext: AuthContext = {
         ...context,
-        profile: guestUser?.user_id
-          ? {
-              user_id: asString(guestUser.user_id),
-              email: asString(guestUser.email) || null,
-              phone: asString(guestUser.phone) || null,
-              role: asString(guestUser.role) || "member",
-              is_active: Boolean(guestUser.is_active)
-            }
-          : context.profile
+        authUser: null,
+        profile: null,
+        roleCode: "guest",
+        isAdmin: false
       };
 
       const guestQuote = await checkoutService.quote(
@@ -709,7 +706,8 @@ export async function handleOrdersRoute(
         shipping_fee,
         body.shipping_method || order.shipping_method,
         voucher_id ? String(voucher_id) : null,
-        body.decline_voucher === true || order.decline_voucher === true
+        body.decline_voucher === true || order.decline_voucher === true,
+        body.points_spent ?? order.points_spent ?? 0
       );
 
       // OTP is valid
@@ -815,6 +813,8 @@ export async function handleOrdersRoute(
       const persistedGuestOrder = await checkoutService.persistOrder({
         userId: guestUser?.user_id ? asString(guestUser.user_id) : "",
         isGuest: true,
+        actorId: null,
+        pointsSpent: 0,
         idempotencyKey: asString(body.idempotency_key || order.idempotency_key),
         contact,
         shippingAddress: asString(shipping_address),
@@ -938,13 +938,16 @@ export async function handleOrdersRoute(
         shipping_fee,
         body.shipping_method,
         voucher_id ? String(voucher_id) : null,
-        body.decline_voucher === true
+        body.decline_voucher === true,
+        body.points_spent ?? 0
       );
       const memberTotal = memberQuote.totalAmount;
 
       const persistedMemberOrder = await checkoutService.persistOrder({
         userId: asString(profile.user_id),
         isGuest: false,
+        actorId: loyaltyActor(context),
+        pointsSpent: readPoints(body.points_spent),
         idempotencyKey: asString(body.idempotency_key),
         contact: memberContact,
         shippingAddress: asString(shipping_address),
@@ -1085,6 +1088,10 @@ async function openPersistedOrderPayment(order: JsonObject, method: unknown, cli
   } catch (error) {
     // Placement succeeded. Keep its saved snapshot and capability visible so retries never create a second order.
     console.error("[PAYMENT_OPEN_FAILED]", {order_id:order.order_id,code:error instanceof HttpError ? error.code : "PROVIDER_NETWORK_ERROR"});
+    if (Number(order.points_spent || 0) > 0) {
+      await callRpc("velura_close_failed_loyalty_checkout", { p_order_id: order.order_id, p_actor_id: order.user_id });
+      return { stripe: null, payment: null, payment_error: { code: "LOYALTY_CHECKOUT_RELEASED", message: "Không mở được thanh toán. Đơn đã đóng và điểm đã được trả về ví; vui lòng đặt lại đơn." } };
+    }
     return {stripe:null,payment:null,payment_error:{code:error instanceof HttpError ? error.code : "PAYMENT_PROVIDER_UNAVAILABLE",message:"Đơn hàng đã được lưu. Chưa mở được phiên thanh toán; vui lòng thanh toán lại trên đơn hàng này."}};
   }
 }

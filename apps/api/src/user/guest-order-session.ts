@@ -69,14 +69,28 @@ export async function sendGuestTrackingOtp(body: JsonObject, ip: string): Promis
 
   const code = generateCheckoutOtp();
   const nonce = randomUUID();
-
-  await callRpc("velura_issue_guest_tracking_otp", {
+  const basePayload = {
     p_phone: phone,
     p_ip: ip,
     p_nonce: nonce,
-    p_hash: createHash("sha256").update(`${nonce}:${code}`).digest("hex"),
-    p_order: scopedOrderId
-  });
+    p_hash: createHash("sha256").update(`${nonce}:${code}`).digest("hex")
+  };
+
+  try {
+    if (scopedOrderId) {
+      await callRpc("velura_issue_guest_tracking_otp", { ...basePayload, p_order: scopedOrderId });
+    } else {
+      await callRpc("velura_issue_guest_tracking_otp", basePayload);
+    }
+  } catch (rpcErr: unknown) {
+    const msg = String((rpcErr as any)?.message || (rpcErr as any)?.details || "");
+    const errCode = String((rpcErr as any)?.code || "");
+    if (scopedOrderId && (errCode === "PGRST202" || msg.includes("velura_issue_guest_tracking_otp") || msg.includes("p_order"))) {
+      await callRpc("velura_issue_guest_tracking_otp", basePayload);
+    } else {
+      throw rpcErr;
+    }
+  }
 
 
   let smsSent = false;

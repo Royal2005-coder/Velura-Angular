@@ -7,9 +7,7 @@ spec:
   interval: 1m
   url: https://github.com/Royal2005-coder/Velura-Angular.git
   ref:
-    branch: main
-  secretRef:
-    name: velura-git-credentials
+    branch: feature/KAN-32-integrated-commerce
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
@@ -17,7 +15,6 @@ metadata:
   name: velura-infra
   namespace: flux-system
 spec:
-  suspend: true
   interval: 2m
   sourceRef:
     kind: GitRepository
@@ -27,10 +24,6 @@ spec:
   deletionPolicy: Orphan
   wait: true
   timeout: 5m
-  decryption:
-    provider: sops
-    secretRef:
-      name: sops-age
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
@@ -38,7 +31,6 @@ metadata:
   name: velura-staging
   namespace: flux-system
 spec:
-  suspend: true
   interval: 2m
   sourceRef:
     kind: GitRepository
@@ -48,7 +40,3 @@ spec:
   deletionPolicy: Orphan
   wait: true
   timeout: 5m
-  decryption:
-    provider: sops
-    secretRef:
-      name: sops-age

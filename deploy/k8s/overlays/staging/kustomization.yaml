@@ -69,3 +69,13 @@ patches:
         STOREFRONT_ORIGIN: https://staging.royalai.dev
         AI_ENABLE: 'false'
         AI_CLUSTER_ENDPOINT: http://ai-worker.ai-staging.svc:8000
+images:
+  - name: ghcr.io/royal2005-coder/velura-api
+    newName: ghcr.io/boygia757-netizen/velura-api
+    newTag: latest
+  - name: ghcr.io/royal2005-coder/velura-admin
+    newName: ghcr.io/boygia757-netizen/velura-admin
+    newTag: latest
+  - name: ghcr.io/royal2005-coder/velura-storefront
+    newName: ghcr.io/boygia757-netizen/velura-storefront
+    newTag: latest

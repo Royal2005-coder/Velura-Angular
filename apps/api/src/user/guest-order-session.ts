@@ -93,6 +93,10 @@ export async function sendGuestTrackingOtp(body: JsonObject, ip: string): Promis
   }
 
 
+  console.log(`\n==================================================`);
+  console.log(`[GUEST TRACKING OTP] Mã tra cứu đơn cho ${phone} (Email: ${recipientEmail}): ${code}`);
+  console.log(`==================================================\n`);
+
   let smsSent = false;
 
   if (isSmsConfigured()) {
@@ -139,9 +143,6 @@ export async function sendGuestTrackingOtp(body: JsonObject, ip: string): Promis
   }
 
   if (!smsSent && !emailSent && recipientEmail) {
-    console.log(`\n==================================================`);
-    console.log(`[GUEST TRACKING OTP] Mã tra cứu đơn cho ${phone} (Email: ${recipientEmail}): ${code}`);
-    console.log(`==================================================\n`);
     emailSent = true;
   }
 

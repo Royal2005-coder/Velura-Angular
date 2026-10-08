@@ -128,11 +128,17 @@
           <section class="panel lookup-card">
             <h2>Xác thực chủ đơn</h2>
             <p>
-              Mã xác thực đã được gửi đến tin nhắn SMS <strong>{{ maskedPhone() }}</strong>.
-              @if (maskedEmail()) {
-                <br /><span class="muted" style="display: inline-block; margin-top: 6px; color: var(--terracotta, #c97b63); font-weight: 500;">
-                  (Hệ thống cũng đã gửi mã OTP tới email <strong>{{ maskedEmail() }}</strong> để bạn nhận mã thuận tiện)
-                </span>
+              @if (model.otpChannel?.() === 'both') {
+                Mã xác thực đã được gửi đến tin nhắn SMS <strong>{{ maskedPhone() }}</strong> và email <strong>{{ maskedEmail() }}</strong>.
+              } @else if (model.otpChannel?.() === 'email' || (maskedEmail() && model.otpChannel?.() !== 'sms')) {
+                Mã xác thực đã được gửi đến email <strong>{{ maskedEmail() }}</strong>.
+              } @else {
+                Mã xác thực đã được gửi đến tin nhắn SMS <strong>{{ maskedPhone() }}</strong>.
+                @if (maskedEmail()) {
+                  <br /><span class="muted" style="display: inline-block; margin-top: 6px; color: var(--terracotta, #c97b63); font-weight: 500;">
+                    (Hệ thống cũng đã gửi mã OTP tới email <strong>{{ maskedEmail() }}</strong> để bạn nhận mã thuận tiện)
+                  </span>
+                }
               }
             </p>
             <p class="muted">Hiệu lực {{ seconds() }} giây.</p>

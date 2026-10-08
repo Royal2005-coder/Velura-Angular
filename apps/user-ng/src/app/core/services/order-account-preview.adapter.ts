@@ -14,6 +14,7 @@ export class OrderAccountPreviewAdapter implements OrderAccountModel {
   readonly userId;
   readonly verifiedPhone;
   readonly maskedEmail = signal('');
+  readonly otpChannel = signal<'sms' | 'email' | 'both'>('sms');
   readonly cancellableBeforeStage;
   readonly supportsBankInfo;
 

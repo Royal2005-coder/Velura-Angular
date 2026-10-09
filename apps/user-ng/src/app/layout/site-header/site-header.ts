@@ -48,13 +48,13 @@ export class SiteHeader {
   readonly recentlyViewed = signal<ProductSummary[]>([]);
 
   readonly quickCategories = [
-    { name: 'Đầm & Váy', slug: 'dam-vay', image: '/assets/category-icons/icon-dam-vay.png' },
-    { name: 'Set đồ & Combo', slug: 'set-do', image: '/assets/category-icons/icon-set-do.png' },
-    { name: 'Áo kiểu & Sơ mi', slug: 'ao', image: '/assets/category-icons/icon-ao.png' },
-    { name: 'Quần & Jeans', slug: 'quan', image: '/assets/category-icons/icon-quan.png' },
-    { name: 'Áo khoác & Blazer', slug: 'ao-khoac', image: '/assets/category-icons/icon-ao-khoac.png' },
-    { name: 'Giày dép', slug: 'giay-dep', image: '/assets/category-icons/icon-giay-dep.png' },
-    { name: 'Phụ kiện', slug: 'phu-kien', image: '/assets/category-icons/icon-phu-kien.png' },
+    { name: 'Đầm & Váy', slug: 'dam-vay', image: '/assets/images/category-icons/icon-dam-vay.png' },
+    { name: 'Set đồ & Combo', slug: 'set-do', image: '/assets/images/category-icons/icon-set-do.png' },
+    { name: 'Áo kiểu & Sơ mi', slug: 'ao', image: '/assets/images/category-icons/icon-ao.png' },
+    { name: 'Quần & Jeans', slug: 'quan', image: '/assets/images/category-icons/icon-quan.png' },
+    { name: 'Áo khoác & Blazer', slug: 'ao-khoac', image: '/assets/images/category-icons/icon-ao-khoac.png' },
+    { name: 'Giày dép', slug: 'giay-dep', image: '/assets/images/category-icons/icon-giay-dep.png' },
+    { name: 'Phụ kiện', slug: 'phu-kien', image: '/assets/images/category-icons/icon-phu-kien.png' },
   ];
 
   readonly trendingKeywords = [

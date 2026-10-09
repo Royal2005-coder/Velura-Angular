@@ -16,10 +16,6 @@ export const CHAT_SESSION_SELECT = [
   "metadata",
   "assigned_to",
   "created_at",
-  "ai_epoch",
-  "ai_failures",
-  "issue_counts",
-  "risk_level",
   "updated_at",
   "support_ticket:support_ticket(ticket_id,status,priority,admin_reply,created_at,resolved_at,version)"
 ].join(",");
@@ -32,8 +28,6 @@ export const CHAT_MESSAGE_SELECT = [
   "session_id",
   "sender",
   "text",
-  "sequence",
-  "moderation_status",
   "metadata",
   "product_ids",
   "created_at"

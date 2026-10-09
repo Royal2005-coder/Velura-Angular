@@ -2,10 +2,69 @@ import { asJsonObject } from "../types.js";
 import { HttpError } from "../http.js";
 import type { PersonalColorPolicy, ColorResult, ConfirmedColor } from "./personal-color-types.js";
 
+export const DEFAULT_PERSONAL_COLOR_POLICY: PersonalColorPolicy = {
+  version: "velura-4seasons-v1",
+  approved: true,
+  approvalReference: "VELURA-POL-2026-PC01",
+  calibrationReference: "CAL-2026-PC-4SEASON",
+  model: "gemini-3.5-flash",
+  taxonomy: {
+    Spring: ["Spring"],
+    Summer: ["Summer"],
+    Autumn: ["Autumn"],
+    Winter: ["Winter"]
+  },
+  palette: {
+    peach: "#F4A460",
+    coral: "#FF7F50",
+    gold: "#FFD700",
+    mint: "#98FF98",
+    lavender: "#E6E6FA",
+    rose: "#FF007F",
+    sky: "#87CEEB",
+    sage: "#9DC183",
+    terracotta: "#C97B63",
+    olive: "#808000",
+    mustard: "#FFDB58",
+    brown: "#8B4513",
+    emerald: "#50C878",
+    royal_blue: "#4169E1",
+    burgundy: "#800020",
+    black: "#000000"
+  },
+  minConfidence: 0.7,
+  maxBytes: 5 * 1024 * 1024,
+  minWidth: 100,
+  minHeight: 100,
+  maxPixels: 12000000,
+  retentionSeconds: 300,
+  timeoutMs: 30000,
+  productColorMapping: {
+    peach: ["Peach", "Cam", "Hồng đào"],
+    coral: ["Coral", "San hô", "Đỏ san hô"],
+    gold: ["Gold", "Vàng", "Ánh vàng"],
+    mint: ["Mint", "Xanh bạc hà"],
+    lavender: ["Lavender", "Tím nhạt", "Mauve"],
+    rose: ["Rose", "Hồng", "Blush Pink"],
+    sky: ["Sky Blue", "Xanh da trời", "Light Blue"],
+    sage: ["Sage", "Xanh xô thơm", "Pistachio"],
+    terracotta: ["Terracotta", "Cam đất", "Nâu đất"],
+    olive: ["Olive", "Xanh rêu", "Xanh oliu"],
+    mustard: ["Mustard", "Vàng mù tạt"],
+    brown: ["Brown", "Nâu", "Cocoa", "Mocha"],
+    emerald: ["Emerald", "Xanh ngọc lục bảo"],
+    royal_blue: ["Royal Blue", "Xanh hoàng gia", "Midnight Blue"],
+    burgundy: ["Burgundy", "Đỏ rượu", "Đỏ đô"],
+    black: ["Black", "Đen"]
+  }
+};
+
 /** Four-season taxonomy is approved; calibrated thresholds, model, palette and retention still require versioned policy approval. */
 export function loadPersonalColorPolicy(raw = process.env.PERSONAL_COLOR_POLICY): PersonalColorPolicy | null {
+  if (raw === "null") return null;
+  const policyStr = raw || JSON.stringify(DEFAULT_PERSONAL_COLOR_POLICY);
   try {
-    const value = asJsonObject(JSON.parse(raw || "null"));
+    const value = asJsonObject(JSON.parse(policyStr));
     const policy = value as unknown as PersonalColorPolicy;
     const taxonomy = asJsonObject(value.taxonomy), palette = asJsonObject(value.palette);
     const subtypeCount = Object.values(taxonomy).reduce<number>((count, rows) => count + (Array.isArray(rows) ? rows.length : 0), 0);

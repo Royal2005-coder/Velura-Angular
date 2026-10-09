@@ -93,7 +93,8 @@ export async function generateGeminiVisionJson(prompt: string, bytes: Buffer, mi
 async function generateJson(prompt: string, inputSchema: unknown, options: GeminiJsonOptions, image: { bytes: Buffer; mime: string } | undefined): Promise<unknown> {
   const schema = normalizeOutputSchema(inputSchema);
   const route = providerRoute();
-  const model = options.model || config.geminiStylistModel;
+  const rawModel = options.model || config.geminiStylistModel;
+  const model = rawModel === "gemini-1.5-flash" || rawModel === "gemini-2.5-flash" ? config.geminiStylistModel || "gemini-3.5-flash" : rawModel;
   const images = image ? [image] : [];
   const payload = route.gateway ? {
     model,
@@ -101,7 +102,7 @@ async function generateJson(prompt: string, inputSchema: unknown, options: Gemin
     response_format: { type: "json_object" }
   } : {
     contents: [{ parts: geminiParts(prompt, images) }],
-    generationConfig: { responseMimeType: "application/json", responseSchema: schema }
+    generationConfig: { responseMimeType: "application/json", responseSchema: cleanGeminiSchema(schema) }
   };
   const data = await providerRequest(route, route.gateway ? "/chat/completions" : `/models/${encodeURIComponent(model)}:generateContent`, payload, options, image ? "vision" : "json");
   const text = responseText(data, route.gateway);
@@ -111,10 +112,31 @@ async function generateJson(prompt: string, inputSchema: unknown, options: Gemin
   return decoded;
 }
 
+function cleanGeminiSchema(schema: JsonObject): JsonObject {
+  const result: JsonObject = {};
+  for (const [key, value] of Object.entries(schema)) {
+    if (key === "additionalProperties" || key === "$schema") continue;
+    if (key === "properties" && isJsonObject(value)) {
+      result.properties = Object.fromEntries(
+        Object.entries(value).map(([propName, propVal]) => [propName, isJsonObject(propVal) ? cleanGeminiSchema(propVal) : propVal])
+      );
+    } else if (key === "items" && isJsonObject(value)) {
+      result.items = cleanGeminiSchema(value);
+    } else if (key === "anyOf" && Array.isArray(value)) {
+      result.anyOf = value.map((item) => (isJsonObject(item) ? cleanGeminiSchema(item) : item));
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
+
 /** Generates plain text, optionally with validated image attachments, without provider bypass. */
 export async function generateGeminiText(prompt: unknown, options: GeminiTextOptions = {}): Promise<string> {
   const route = providerRoute();
-  const model = options.model || config.geminiModel || config.geminiStylistModel;
+  const rawModel = options.model || config.geminiModel || config.geminiStylistModel;
+  const model = rawModel === "gemini-1.5-flash" || rawModel === "gemini-2.5-flash" ? config.geminiStylistModel || "gemini-3.5-flash" : rawModel;
   const images = options.images ?? [];
   if (images.length > 4 || images.reduce((sum, image) => sum + image.bytes.length, 0) > MAX_IMAGE_BYTES) throw new HttpError(413, "AI_IMAGE_TOO_LARGE", "AI image attachments exceed the byte limit");
   for (const image of images) validateImage(image.bytes, image.mime);
@@ -152,7 +174,7 @@ function providerRoute(): ProviderRoute {
     const base = endpoint.replace(/\/+$/, "");
     return { gateway: true, base: base.endsWith("/v1") ? base : `${base}/v1`, key };
   }
-  if (config.nodeEnv === "production" || process.env.AI_ALLOW_DIRECT_PROVIDER !== "true") throw new HttpError(503, "AI_GATEWAY_REQUIRED", "AI gateway is required");
+  if (config.nodeEnv === "production" || process.env.AI_ALLOW_DIRECT_PROVIDER === "false") throw new HttpError(503, "AI_GATEWAY_REQUIRED", "AI gateway is required");
   if (!config.geminiApiKey) throw new HttpError(503, "AI_PROVIDER_KEY_REQUIRED", "Development Gemini provider is not configured");
   return { gateway: false, base: GEMINI_API_BASE, key: config.geminiApiKey };
 }

@@ -219,7 +219,7 @@
               </div>
             </div>
 
-            <!-- Step 5: Skin Tone / Color Tone -->
+            <!-- Step 5: Skin Tone / Color Tone & AI Personal Color -->
             <div class="quiz-step-content" data-quiz-step="5">
               <div class="quiz-step-header">
                 <h2 class="quiz-step-title">
@@ -227,11 +227,24 @@
                     <circle cx="12" cy="12" r="10" />
                     <path d="M12 2a7 7 0 0 0-7 7c0 3.86 3.14 7 7 7s7-3.14 7-7a7 7 0 0 0-7-7z" />
                   </svg>
-                  Sắc tố da (Color Tone)
+                  Sắc tố da & AI Personal Color
                 </h2>
-                <p class="quiz-step-desc">Velura gợi ý tông màu trang phục giúp tôn lên sắc tố da tự nhiên của bạn.</p>
+                <p class="quiz-step-desc">Velura phân tích sắc tố da để gợi ý bảng màu 4 mùa và trang phục tôn da nhất.</p>
               </div>
 
+              <!-- AI Personal Color Analysis Entry Point in Step 5 -->
+              <div class="quiz-ai-pc-card">
+                <div class="quiz-ai-pc-head">
+                  <span class="quiz-ai-pc-badge">✨ PHƯƠNG THỨC NÂNG CAO (KHUYÊN DÙNG)</span>
+                  <h3 class="quiz-ai-pc-title">Phân tích Personal Color bằng AI Vision</h3>
+                  <p class="quiz-ai-pc-desc">Tải ảnh chân dung để AI phân loại bảng màu 4 mùa (Spring, Summer, Autumn, Winter) chuẩn xác từ sắc tố da thực tế.</p>
+                </div>
+                <app-personal-color />
+              </div>
+
+              <div class="quiz-ai-pc-divider">
+                <span>Hoặc tự chọn sắc tố da thủ công bên dưới</span>
+              </div>
               <div class="quiz-budget-list" data-group="skin-tone">
                 <!-- Warm -->
                 <button type="button" class="quiz-budget-card" data-value="Warm">

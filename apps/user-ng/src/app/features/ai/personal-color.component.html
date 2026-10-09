@@ -1,44 +1,205 @@
-<section class="personal-color" aria-labelledby="personal-color-title">
-  <h2 id="personal-color-title">Personal Color — màu sắc cá nhân</h2>
-  <p>Màu sắc bổ sung cho dáng người, phong cách, dịp mặc và ngân sách; không thay thế các lựa chọn trong Style Quiz.</p>
-  <p>Phân loại 4 mùa: Spring (Xuân), Summer (Hè), Autumn (Thu), Winter (Đông). Chỉ kết quả đã xác nhận mới dùng trong hồ sơ và gợi ý.</p>
+<section class="pc-container" aria-labelledby="personal-color-title">
+  <div class="pc-header">
+    <div class="pc-badge">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10" />
+        <path d="M12 2a7 7 0 0 0-7 7c0 3.86 3.14 7 7 7s7-3.14 7-7a7 7 0 0 0-7-7z" />
+      </svg>
+      <span>AI PERSONAL COLOR ANALYSIS</span>
+    </div>
+    <h2 id="personal-color-title" class="pc-title">Phân tích sắc tố da & Bảng màu 4 mùa</h2>
+    <p class="pc-subtitle">
+      AI nhận diện tone da (warm/cool), độ tương phản và phân loại theo hệ 4 mùa:
+      <strong>Spring (Xuân) · Summer (Hè) · Autumn (Thu) · Winter (Đông)</strong>
+      để gợi ý trang phục tôn vinh làn da của bạn.
+    </p>
+  </div>
+
   @if (profile()?.personal_color?.status === 'CONFIRMED') {
     @let confirmed = profile()!.personal_color!;
-    <div class="color-result" aria-label="Màu đã xác nhận">
-      <h3>Đã xác nhận: {{ confirmed.season }}</h3>
-      <p>Kết quả này được giữ khi phân tích lại cho đến khi bạn xác nhận kết quả mới.</p>
-      <div class="swatches">@for (color of confirmed.palette; track color) { <span class="swatch" [style.background-color]="capabilities()?.palette?.[color]" [attr.aria-label]="color" [title]="color">{{ color }}</span> }</div>
-      <p>Nên tránh: @for (color of confirmed.avoided; track color) { <span>{{ color }} </span> }</p>
-    </div>
-  }
-  @if (!capabilities()?.enabled) {
-    <p role="status">Phân tích màu chưa khả dụng. Mô hình và chính sách ảnh/độ tin cậy cần được phê duyệt; Style Quiz và gợi ý hiện tại vẫn hoạt động.</p>
-    @if (capabilities()?.reason) { <p role="status">{{ capabilities()?.reason }}</p> }
-  } @else {
-    <h3>Hướng dẫn ảnh</h3>
-    <ul>
-      <li>Chụp khuôn mặt rõ nét, da tự nhiên, không trang điểm đậm, không che mặt.</li>
-      <li>Dùng ánh sáng ban ngày trung tính; tránh ánh sáng màu, cháy sáng và bóng tối.</li>
-      <li>Không dùng bộ lọc làm đẹp hoặc chỉnh màu. Chỉ nhận JPEG/PNG.</li>
-    </ul>
-    <p>Giới hạn {{ capabilities()?.max_upload_bytes }} byte. Ảnh riêng tư chỉ dùng cho lần phân tích này, được xoá sau xử lý; giới hạn lưu tạm {{ capabilities()?.retention_seconds }} giây. Chính sách: {{ capabilities()?.policy_version }}.</p>
-    <label>Chọn ảnh chân dung <input type="file" accept="image/jpeg,image/png" [disabled]="busy()" (change)="selectFile($event)"></label>
-    @if (previewUrl()) { <img class="portrait-preview" [src]="previewUrl()" alt="Ảnh bạn chọn, chỉ xem trước trên thiết bị"> }
-    <label class="consent"><input type="checkbox" [checked]="consent()" [disabled]="busy()" (change)="setConsent($event)"> Tôi đồng ý tải ảnh lên kho riêng tư và xử lý bằng mô hình thị giác theo chính sách hiện hành. Đồng ý này chưa xác nhận kết quả.</label>
-    <button type="button" [disabled]="!canAnalyze()" (click)="analyze()">{{ profile()?.personal_color ? 'Phân tích lại' : 'Phân tích màu' }}</button>
-    @if (analysis(); as analysis) {
-      <p role="status">{{ statusLabel() }}</p>
-      @if (analysis.result; as result) {
-        <div class="color-result" aria-label="Bản xem trước chưa xác nhận">
-          <h3>Bản xem trước: {{ result.season }}</h3>
-          <p>Độ tin cậy: {{ result.confidence }} (0–1). Chưa dùng cho gợi ý sản phẩm.</p>
-          <div class="swatches">@for (color of result.palette; track color) { <span class="swatch" [style.background-color]="capabilities()?.palette?.[color]" [attr.aria-label]="color" [title]="color">{{ color }}</span> }</div>
-          <p>Nên tránh: @for (color of result.avoided; track color) { <span>{{ color }} </span> }</p>
+    <div class="pc-result-card pc-result-card--confirmed" aria-label="Màu đã xác nhận">
+      <div class="pc-result-badge">ĐÃ XÁC NHẬN TRONG STYLE PROFILE</div>
+      <div class="pc-result-head">
+        <h3 class="pc-season-title">Mùa của bạn: {{ confirmed.season }}</h3>
+        @if (confirmed.subtype) {
+          <span class="pc-subtype-tag">{{ confirmed.subtype }}</span>
+        }
+      </div>
+      <p class="pc-result-desc">
+        Hệ thống đang ưu tiên các sản phẩm mang bảng màu này khi hiển thị gợi ý phối đồ và tư vấn AI Stylist.
+      </p>
+
+      <div class="pc-palette-section">
+        <span class="pc-palette-label">Bảng màu phù hợp nhất (Palette):</span>
+        <div class="pc-swatches">
+          @for (color of confirmed.palette; track color) {
+            <div class="pc-swatch" [style.background-color]="capabilities()?.palette?.[color] || '#DDD'" [attr.aria-label]="color" [title]="color">
+              <span class="pc-swatch-name">{{ color }}</span>
+            </div>
+          }
+        </div>
+      </div>
+
+      @if (confirmed.avoided.length) {
+        <div class="pc-avoided-section">
+          <span class="pc-avoided-label">Màu nên hạn chế:</span>
+          <div class="pc-avoided-chips">
+            @for (color of confirmed.avoided; track color) {
+              <span class="pc-avoided-chip">{{ color }}</span>
+            }
+          </div>
         </div>
       }
-      @if (analysis.status === 'SUCCESS') { <button type="button" [disabled]="!canConfirm()" (click)="confirm()">Xác nhận & lưu màu vào hồ sơ phong cách</button> }
-      @if (analysis.status === 'RUNNING' || analysis.status === 'SUCCESS' || analysis.status === 'LOW_CONFIDENCE') { <button type="button" (click)="cancel()">Huỷ phân tích — giữ màu cũ</button> }
+    </div>
+  }
+
+  @if (!capabilities()?.enabled) {
+    <div class="pc-notice pc-notice--disabled" role="status">
+      <p>Hệ thống AI Personal Color đang chuẩn hóa mô hình và chính sách kiểm duyệt. Style Quiz và các gợi ý thời trang hiện tại vẫn hoạt động bình thường.</p>
+      @if (capabilities()?.reason) { <p class="pc-notice-reason">{{ capabilities()?.reason }}</p> }
+    </div>
+  } @else {
+    <!-- Photo Guidelines Box -->
+    <div class="pc-guide-box">
+      <h4 class="pc-guide-title">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        Hướng dẫn chọn ảnh để AI phân tích chuẩn xác nhất
+      </h4>
+      <div class="pc-guide-grid">
+        <div class="pc-guide-item">
+          <span class="pc-guide-dot">✓</span>
+          <span>Chụp cận khuôn mặt, da mộc tự nhiên, không che trán và gò má.</span>
+        </div>
+        <div class="pc-guide-item">
+          <span class="pc-guide-dot">✓</span>
+          <span>Ánh sáng ban ngày tự nhiên, trung tính, tránh đèn vàng hoặc quá tối.</span>
+        </div>
+        <div class="pc-guide-item">
+          <span class="pc-guide-dot">✓</span>
+          <span>Không sử dụng filter làm đẹp hoặc chỉnh màu làm sai lệch sắc tố thực.</span>
+        </div>
+      </div>
+      <div class="pc-guide-meta">
+        Định dạng JPEG/PNG, tối đa {{ (capabilities()?.max_upload_bytes || 5242880) / 1048576 | number:'1.0-0' }} MB. Ảnh được mã hóa bảo mật và tự động xóa sau khi phân tích.
+      </div>
+    </div>
+
+    <!-- Upload and Preview Zone -->
+    <div class="pc-upload-section">
+      <input #photoInput type="file" accept="image/jpeg,image/png" [disabled]="busy()" (change)="selectFile($event)" style="display: none;" />
+
+      @if (!previewUrl()) {
+        <button type="button" class="btn btn--outline pc-upload-btn" [disabled]="busy()" (click)="photoInput.click()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          {{ profile()?.personal_color ? 'Chọn ảnh phân tích lại' : 'Tải ảnh khuôn mặt / chân dung' }}
+        </button>
+      }
+
+      @if (previewUrl()) {
+        <div class="pc-preview-wrap">
+          <figure class="pc-portrait-figure">
+            <img class="pc-portrait-img" [src]="previewUrl()" alt="Ảnh xem trước phân tích cá nhân" />
+            <div class="pc-viewfinder">
+              <span class="pc-vf-c pc-vf-tl"></span>
+              <span class="pc-vf-c pc-vf-tr"></span>
+              <span class="pc-vf-c pc-vf-bl"></span>
+              <span class="pc-vf-c pc-vf-br"></span>
+            </div>
+            @if (busy()) {
+              <div class="pc-scanner-bar"></div>
+            }
+          </figure>
+
+          @if (!busy() && !analysis()?.result) {
+            <label class="pc-consent-check">
+              <input type="checkbox" [checked]="consent()" [disabled]="busy()" (change)="setConsent($event)" />
+              <span>Tôi xác nhận ảnh chụp đúng khuôn mặt và đồng ý để AI phân tích màu sắc cá nhân theo chính sách bảo mật của Velura.</span>
+            </label>
+
+            <div class="pc-action-buttons">
+              <button type="button" class="btn btn--primary pc-btn-analyze" [disabled]="!canAnalyze()" (click)="analyze()">
+                Bắt đầu phân tích Personal Color
+              </button>
+              <button type="button" class="btn btn--outline" (click)="photoInput.click()">
+                Đổi ảnh khác
+              </button>
+            </div>
+          }
+        </div>
+      }
+    </div>
+
+    <!-- Busy & Status Indicator -->
+    @if (busy()) {
+      <div class="pc-status-panel" role="status">
+        <span class="pc-spinner"></span>
+        <span>{{ statusLabel() }}</span>
+      </div>
+    }
+
+    <!-- Analysis Result Preview -->
+    @if (analysis(); as currentAnalysis) {
+      @if (currentAnalysis.status !== 'RUNNING' && currentAnalysis.status !== 'CONFIRMED') {
+        <p class="pc-status-text" role="status">{{ statusLabel() }}</p>
+      }
+
+      @if (currentAnalysis.result; as result) {
+        <div class="pc-result-card pc-result-card--preview" aria-label="Bản xem trước kết quả AI">
+          <div class="pc-result-badge pc-result-badge--preview">BẢN XEM TRƯỚC AI (CHƯA LƯU)</div>
+          <div class="pc-result-head">
+            <h3 class="pc-season-title">Mùa nhận diện: {{ result.season }}</h3>
+            @if (result.subtype) {
+              <span class="pc-subtype-tag">{{ result.subtype }}</span>
+            }
+            <span class="pc-confidence-chip">Độ tin cậy: {{ (result.confidence * 100).toFixed(0) }}%</span>
+          </div>
+          <p class="pc-result-desc">
+            Xác nhận để lưu kết quả này vào Style Profile của bạn và nhận gợi ý trang phục theo đúng bảng màu tự nhiên.
+          </p>
+
+          <div class="pc-palette-section">
+            <span class="pc-palette-label">Bảng màu phù hợp nhất:</span>
+            <div class="pc-swatches">
+              @for (color of result.palette; track color) {
+                <div class="pc-swatch" [style.background-color]="capabilities()?.palette?.[color] || '#DDD'" [attr.aria-label]="color" [title]="color">
+                  <span class="pc-swatch-name">{{ color }}</span>
+                </div>
+              }
+            </div>
+          </div>
+
+          @if (result.avoided.length) {
+            <div class="pc-avoided-section">
+              <span class="pc-avoided-label">Màu sắc nên hạn chế:</span>
+              <div class="pc-avoided-chips">
+                @for (color of result.avoided; track color) {
+                  <span class="pc-avoided-chip">{{ color }}</span>
+                }
+              </div>
+            </div>
+          }
+
+          <div class="pc-confirm-actions">
+            @if (currentAnalysis.status === 'SUCCESS') {
+              <button type="button" class="btn btn--primary pc-btn-confirm" [disabled]="!canConfirm()" (click)="confirm()">
+                Xác nhận & lưu màu vào Style Profile
+              </button>
+            }
+            @if (currentAnalysis.status === 'RUNNING' || currentAnalysis.status === 'SUCCESS' || currentAnalysis.status === 'LOW_CONFIDENCE') {
+              <button type="button" class="btn btn--outline" (click)="cancel()">
+                Huỷ phân tích — giữ nguyên hồ sơ
+              </button>
+            }
+          </div>
+        </div>
+      }
     }
   }
-  @if (error()) { <p role="alert">{{ error() }}</p><button type="button" [disabled]="busy()" (click)="reload()">Tải lại hồ sơ & chính sách</button> }
+
+  @if (error()) {
+    <div class="pc-error-box" role="alert">
+      <p>{{ error() }}</p>
+      <button type="button" class="btn btn--outline btn--sm" [disabled]="busy()" (click)="reload()">Tải lại dữ liệu</button>
+    </div>
+  }
 </section>

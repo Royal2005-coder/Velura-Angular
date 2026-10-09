@@ -5,9 +5,9 @@ import type { ColorPrincipal } from "./personal-color-types.js";
 
 /** Verified auth identity or the existing guest-session header owns all color operations. */
 export function colorPrincipal(req: HttpRequest, context: AuthContext): ColorPrincipal {
-  if (context.authUser && context.profile?.is_active !== false) {
-    if (!context.profile?.user_id) throw new HttpError(401, "AUTH_REQUIRED", "Phiên đăng nhập không hợp lệ.");
-    return { owner: `member:${context.authUser.id}`, userId: context.profile.user_id, context };
+  const userId = context.profile?.user_id || context.authUser?.id;
+  if (context.authUser && context.profile?.is_active !== false && userId) {
+    return { owner: `member:${context.authUser.id}`, userId, context };
   }
   if (req.headers.authorization || context.authUser) throw new HttpError(401, "AUTH_REQUIRED", "Phiên đăng nhập không hợp lệ.");
   const guest = req.headers["x-guest-session-id"];

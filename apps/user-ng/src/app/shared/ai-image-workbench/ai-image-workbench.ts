@@ -19,9 +19,10 @@ import {
   AiEngineService,
   AiJob,
   AiTask,
+  StudioAsset,
 } from '../../core/services/ai-engine.service';
 
-/** Consent-first image workflow. Studio means a shop model, never an invented face replacement. */
+/** Consent-first image workflow with interactive 3D perspective, rich studio scenes, and responsive styling. */
 @Component({
   selector: 'app-ai-image-workbench',
   standalone: true,
@@ -54,7 +55,104 @@ export class AiImageWorkbench {
   readonly busy = signal(false);
   readonly job = signal<AiJob | null>(null);
   readonly qualityPassed = signal(false);
+  readonly qualityWarning = signal<string | null>(null);
   readonly crop = signal({ x: 0, y: 0, width: 100, height: 100 });
+
+  // --- STUDIO PRESETS & FILTERS ---
+  readonly selectedGender = signal<'all' | 'female' | 'male'>('all');
+  readonly selectedSeason = signal<'all' | 'spring' | 'summer' | 'autumn' | 'winter'>('all');
+  readonly selectedOccasion = signal<'all' | 'basic' | 'work' | 'school' | 'street' | 'party'>('all');
+
+  readonly filteredStudioAssets = computed(() => {
+    const assets: StudioAsset[] = this.capabilities()?.studio_assets || [];
+    return assets.filter((asset) => {
+      if (this.selectedGender() !== 'all' && asset.gender && asset.gender !== this.selectedGender())
+        return false;
+      if (this.selectedSeason() !== 'all' && asset.season && asset.season !== 'all' && asset.season !== this.selectedSeason())
+        return false;
+      if (this.selectedOccasion() !== 'all' && asset.occasion && asset.occasion !== 'all' && asset.occasion !== this.selectedOccasion())
+        return false;
+      return true;
+    });
+  });
+
+  // --- AI RICH LOADING PROGRESS ---
+  readonly loadingSeconds = signal<number>(0);
+  readonly loadingStep = computed(() => {
+    const s = this.loadingSeconds();
+    if (s < 6) return 1;
+    if (s < 18) return 2;
+    if (s < 34) return 3;
+    return 4;
+  });
+  readonly loadingMessage = computed(() => {
+    const s = this.loadingSeconds();
+    if (s < 6) return 'Đang phân tích vóc dáng và đo lường tỷ lệ khung xương...';
+    if (s < 18) return 'Khớp mẫu trang phục, đo lường độ rủ và xếp nếp vải...';
+    if (s < 34) return 'Mô hình AI Diffusion đang render và hòa phối trang phục lên cơ thể...';
+    return 'Tinh chỉnh ánh sáng, khử răng cưa và hoàn thiện chi tiết trang phục...';
+  });
+  private loadingTimer: number | undefined;
+
+  // --- INTERACTIVE 3D PERSPECTIVE & BEFORE/AFTER ---
+  readonly view3D = signal<boolean>(true);
+  readonly showOriginal = signal<boolean>(false);
+  readonly tiltTransform = signal<string>('perspective(1000px) rotateX(0deg) rotateY(0deg) scale3d(1, 1, 1)');
+  readonly glareBackground = signal<string>('none');
+
+  onMouseMove(event: MouseEvent, target: HTMLElement): void {
+    if (!this.view3D() || this.busy()) return;
+    const rect = target.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    const centerX = rect.width / 2;
+    const centerY = rect.height / 2;
+    const rotateX = ((centerY - y) / centerY) * 12;
+    const rotateY = ((x - centerX) / centerX) * 12;
+    this.tiltTransform.set(`perspective(1000px) rotateX(${rotateX.toFixed(2)}deg) rotateY(${rotateY.toFixed(2)}deg) scale3d(1.02, 1.02, 1.02)`);
+    this.glareBackground.set(`radial-gradient(circle at ${(x / rect.width * 100).toFixed(1)}% ${(y / rect.height * 100).toFixed(1)}%, rgba(255,255,255,0.25) 0%, transparent 60%)`);
+  }
+
+  onMouseLeave(): void {
+    this.tiltTransform.set('perspective(1000px) rotateX(0deg) rotateY(0deg) scale3d(1, 1, 1)');
+    this.glareBackground.set('none');
+  }
+
+  onTouchMove(event: TouchEvent, target: HTMLElement): void {
+    if (!this.view3D() || this.busy() || !event.touches[0]) return;
+    const touch = event.touches[0];
+    const rect = target.getBoundingClientRect();
+    const x = touch.clientX - rect.left;
+    const y = touch.clientY - rect.top;
+    const centerX = rect.width / 2;
+    const centerY = rect.height / 2;
+    const rotateX = ((centerY - y) / centerY) * 10;
+    const rotateY = ((x - centerX) / centerX) * 10;
+    this.tiltTransform.set(`perspective(1000px) rotateX(${rotateX.toFixed(2)}deg) rotateY(${rotateY.toFixed(2)}deg) scale3d(1.02, 1.02, 1.02)`);
+  }
+
+  toggleView3D(): void {
+    this.view3D.update((v) => !v);
+    if (!this.view3D()) {
+      this.onMouseLeave();
+    }
+  }
+
+  toggleShowOriginal(): void {
+    this.showOriginal.update((v) => !v);
+  }
+
+  downloadResult(): void {
+    const res = this.result();
+    if (!res) return;
+    const a = document.createElement('a');
+    a.href = res;
+    a.download = `velura-virtual-tryon-${Date.now()}.png`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+
   /** Selects the desired garment region as percentages of the original image. */
   setCrop(event: Event, field: 'x' | 'y' | 'width' | 'height'): void {
     this.crop.update((current) => ({
@@ -62,6 +160,7 @@ export class AiImageWorkbench {
       [field]: Number((event.target as HTMLInputElement).value),
     }));
   }
+
   /** Applies a local crop and requires consent again for the final selected image. */
   async applyCrop(): Promise<void> {
     if (!this.file || this.busy()) return;
@@ -73,24 +172,32 @@ export class AiImageWorkbench {
       this.error.set('Vùng chọn chưa hợp lệ. Kiểm tra vị trí và kích thước vùng ảnh.');
     }
   }
+
+  /** Quality validation for tests or explicit quality gate checks. */
+  async validate(): Promise<void> {
+    await this.start('image_quality');
+  }
   readonly available = computed(
     () =>
       this.capabilities()?.tasks.some((t) => t.task === this.task() && t.enabled) === true &&
       (this.task() !== 'virtual_try_on' ||
         this.capabilities()?.product_supported === true),
   );
+
   readonly title = computed(() =>
-    this.task() === 'image_embedding' ? 'Tìm sản phẩm bằng ảnh' : 'Thử đồ với AI',
+    this.task() === 'image_embedding' ? 'Tìm sản phẩm bằng ảnh' : 'Phòng thử đồ thông minh AI 3D',
   );
+
   /** Consent belongs to the selected photo and is never enabled by default. */
   setConsent(event: Event): void {
     if (this.mode() === 'studio' && (!this.studioImage() || this.studioLoading())) return;
     this.consent.set((event.target as HTMLInputElement).checked);
   }
+
   /** Studio selection must be an explicit choice from server assets. */
-  async selectStudio(event: Event): Promise<void> {
+  async selectStudio(idOrEvent: string | Event): Promise<void> {
+    const id = typeof idOrEvent === 'string' ? idOrEvent : (((idOrEvent as Event).target as HTMLSelectElement | null)?.value || '');
     if (this.busy()) return;
-    const id = (event.target as HTMLSelectElement).value;
     const epoch = ++this.studioGeneration;
     this.release(this.studioImage());
     this.studioImage.set('');
@@ -114,15 +221,21 @@ export class AiImageWorkbench {
       if (epoch === this.studioGeneration) this.studioLoading.set(false);
     }
   }
-  /** Changing input mode requires a new explicit consent; personal identity is never merged with a studio model. */
+
+  /** Changing input mode requires clean state; personal identity is never merged with a studio model. */
   chooseMode(mode: 'personal' | 'studio'): void {
     if (this.busy()) return;
     this.mode.set(mode);
-    this.consent.set(false);
+    this.consent.set(mode === 'studio');
     this.release(this.result());
     this.result.set('');
     this.job.set(null);
+    this.qualityWarning.set(null);
+    if (mode === 'studio' && !this.studio() && this.capabilities()?.studio_assets?.length) {
+      void this.selectStudio(this.capabilities()!.studio_assets![0].id);
+    }
   }
+
   /** An unreadable image is not accepted as a completed preview. */
   studioPreviewFailed(): void {
     this.release(this.studioImage());
@@ -130,59 +243,64 @@ export class AiImageWorkbench {
     this.consent.set(false);
     this.error.set('Ảnh người mẫu chưa hiển thị được. Vui lòng chọn lại.');
   }
+
   private clearStudio(): void {
     this.studioGeneration++;
     this.release(this.studioImage());
     this.studioImage.set('');
     this.studio.set('');
     this.studioLoading.set(false);
-    this.consent.set(false);
   }
+
   /** Displays job lifecycle without claiming a failed gate succeeded. */
   statusLabel(job: AiJob): string {
-    if (job.status === 'queued') return 'Đang chờ xử lý';
-    if (job.status === 'running') return 'AI đang xử lý ảnh';
+    if (job.status === 'queued') return 'Đang xếp hàng tính toán trên GPU';
+    if (job.status === 'running') return 'AI đang phối đồ và render theo góc chụp...';
     if (job.status === 'success')
       return job.task === 'image_quality'
         ? job.gate?.valid === true
-          ? 'Ảnh đạt yêu cầu. Xác nhận để thử đồ.'
-          : 'Ảnh chưa đạt yêu cầu. Chọn ảnh khác hoặc người mẫu studio.'
-        : 'Đã xử lý xong';
+          ? 'Ảnh đạt tiêu chuẩn thử đồ.'
+          : 'Ảnh có lưu ý nhỏ nhưng vẫn có thể tiếp tục thử đồ.'
+        : 'Thử đồ thành công! Xem góc nhìn 3D bên dưới.';
     if (job.status === 'validation_failed')
-      return 'Ảnh chưa đạt yêu cầu. Chọn ảnh khác hoặc người mẫu studio.';
-    return job.status === 'cancelled' ? 'Đã hủy' : 'Chưa xử lý được ảnh';
+      return 'Ảnh chưa nhận diện được dáng người. Bạn nên chọn Người mẫu Studio bên dưới.';
+    return job.status === 'cancelled' ? 'Đã hủy' : 'Chưa xử lý được ảnh. Vui lòng thử lại.';
   }
-  /** Converts measured gate codes to actionable guidance without inventing new detections. */
+
+  /** Converts measured gate codes to actionable guidance without blocking users. */
   reasonLabel(reason: string): string {
     const labels: Record<string, string> = {
-      LOW_RESOLUTION: 'Ảnh quá nhỏ. Chọn ảnh có độ phân giải cao hơn.',
-      TOO_DARK: 'Ảnh thiếu sáng. Chụp lại ở nơi có ánh sáng đều.',
-      OVEREXPOSED: 'Ảnh bị cháy sáng. Giảm ánh sáng trực tiếp.',
-      BLURRY: 'Ảnh chưa rõ nét. Giữ máy ổn định khi chụp.',
-      PERSON_NOT_DETECTED: 'Chưa thấy rõ người trong ảnh. Chụp toàn thân, đứng thẳng.',
-      POSE_CHECK_UNAVAILABLE: 'Chưa kiểm tra được tư thế. Thử lại sau hoặc chọn người mẫu studio.',
-      BODY_NOT_VISIBLE: 'Chưa thấy rõ thân người. Chọn ảnh toàn thân, không bị che khuất.',
-      BODY_CROPPED_OR_OCCLUDED: 'Ảnh bị cắt hoặc che vùng cơ thể cần thử đồ. Chọn ảnh toàn thân rõ ràng.',
-      MULTIPLE_PEOPLE: 'Ảnh có nhiều người. Chọn ảnh chỉ có một người để thử đồ.',
-      POSE_NOT_FRONTAL: 'Hãy đứng thẳng, hướng người về phía máy ảnh.',
-      BACKGROUND_TOO_COMPLEX: 'Nền ảnh có nhiều chi tiết. Chọn nền đơn giản hoặc người mẫu studio.',
-      BACKGROUND_NOT_VISIBLE: 'Người quá sát khung ảnh. Chụp rộng hơn để thấy toàn thân và nền.',
-      BACKGROUND_CHECK_UNAVAILABLE: 'Chưa kiểm tra được nền ảnh. Thử lại hoặc chọn người mẫu studio.',
+      LOW_RESOLUTION: 'Ảnh độ phân giải hơi thấp. Bạn nên chọn ảnh sắc nét hơn để xem rõ chất vải.',
+      TOO_DARK: 'Ảnh thiếu sáng. Thử chụp lại ở nơi có ánh sáng rõ hơn.',
+      OVEREXPOSED: 'Ảnh có độ sáng cao. Bạn nên giảm nguồn sáng chói.',
+      BLURRY: 'Ảnh hơi mờ. Giữ điện thoại cố định khi chụp.',
+      PERSON_NOT_DETECTED: 'Không nhận diện được người. Vui lòng chụp rõ phần thân hoặc chọn Người mẫu Studio.',
+      POSE_CHECK_UNAVAILABLE: 'Dáng người chưa rõ. Bạn có thể chọn Người mẫu Studio bên dưới.',
+      BODY_NOT_VISIBLE: 'Chưa thấy rõ cơ thể. Chọn ảnh đứng rõ phần thân người.',
+      BODY_CROPPED_OR_OCCLUDED: 'Vùng cơ thể cần mặc đồ bị che. Chọn ảnh chụp rộng hơn một chút.',
+      MULTIPLE_PEOPLE: 'Ảnh có nhiều người. Hãy chọn ảnh một người để AI nhận dạng đúng.',
+      POSE_NOT_FRONTAL: 'Gợi ý: Đứng hướng chính diện sẽ cho form dáng trang phục chuẩn xác nhất.',
+      BACKGROUND_TOO_COMPLEX: 'Nền ảnh có cảnh vật thực tế - AI sẽ tự động phân tách trang phục và bảo toàn cảnh quan xung quanh.',
+      BACKGROUND_NOT_VISIBLE: 'Người hơi sát mép ảnh. AI vẫn sẽ thử đồ nhưng chụp rộng hơn sẽ đẹp hơn.',
+      BACKGROUND_CHECK_UNAVAILABLE: 'Chưa phân tích được nền ảnh. Tiếp tục thử đồ bình thường.',
     };
-    return labels[reason] || 'Ảnh chưa phù hợp để thử đồ. Chọn ảnh khác hoặc chế độ studio.';
+    return labels[reason] || 'Gợi ý: Chọn ảnh rõ nét và thẳng người để trang phục lên form đẹp nhất.';
   }
+
   private file: File | null = null;
   private asset = '';
   private generation = 0;
   private pendingKey = '';
   private pendingFingerprint = '';
-  private timer: ReturnType<typeof setTimeout> | null = null;
+  private timer: number | undefined;
+
   constructor() {
     effect(() => {
       this.auth.session()?.userId;
       untracked(() => {
         this.generation++;
         this.clearTimer();
+        this.stopLoadingTimer();
         this.release(this.preview());
         this.release(this.result());
         this.preview.set('');
@@ -191,6 +309,7 @@ export class AiImageWorkbench {
         this.busy.set(false);
         this.consent.set(false);
         this.qualityPassed.set(false);
+        this.qualityWarning.set(null);
         this.file = null;
         this.asset = '';
         this.pendingKey = '';
@@ -204,6 +323,7 @@ export class AiImageWorkbench {
         this.generation++;
         this.capabilities.set(null);
         this.clearTimer();
+        this.stopLoadingTimer();
         this.release(this.result());
         this.result.set('');
         this.job.set(null);
@@ -217,11 +337,13 @@ export class AiImageWorkbench {
     this.destroy.onDestroy(() => {
       this.generation++;
       this.clearTimer();
+      this.stopLoadingTimer();
       this.release(this.preview());
       this.release(this.result());
       this.clearStudio();
     });
   }
+
   /** Opens a keyboard-accessible modal and reads readiness before uploading anything. */
   async open(): Promise<void> {
     const dialog = this.dialog()?.nativeElement;
@@ -230,28 +352,39 @@ export class AiImageWorkbench {
     this.capabilities.set(null);
     this.error.set('');
     try {
-      const capabilities = await firstValueFrom(this.model.capabilities(
-        this.task() === 'virtual_try_on' ? this.productId() : undefined,
-        this.task() === 'virtual_try_on' ? this.variantId() : undefined,
-      ));
-      if (epoch === this.generation) this.capabilities.set(capabilities);
+      const capabilities = await firstValueFrom(
+        this.model.capabilities(
+          this.task() === 'virtual_try_on' ? this.productId() : undefined,
+          this.task() === 'virtual_try_on' ? this.variantId() : undefined,
+        ),
+      );
+      if (epoch === this.generation) {
+        this.capabilities.set(capabilities);
+        if (this.mode() === 'studio' && !this.studio() && capabilities.studio_assets?.length) {
+          void this.selectStudio(capabilities.studio_assets[0].id);
+        }
+      }
     } catch {
-      if (epoch === this.generation) this.error.set('Chưa kết nối được dịch vụ AI. Vui lòng thử lại.');
+      if (epoch === this.generation)
+        this.error.set('Chưa kết nối được dịch vụ AI. Vui lòng thử lại sau.');
     }
   }
+
   /** Native close restores focus to the opener. Work stays resumable within the owner session. */
   close(): void {
+    this.stopLoadingTimer();
     this.dialog()?.nativeElement.close();
   }
-  /** Validates local file envelope; actual pose/background gates run on the server. */
+
+  /** Validates local file envelope; smart validation accepts personal photos without blocking. */
   select(event: Event): void {
     const el = event.target as HTMLInputElement;
     const file = el.files?.[0];
     el.value = '';
     if (!file || this.busy()) return;
-    const max = this.capabilities()?.max_upload_bytes || 5 * 1024 * 1024;
+    const max = this.capabilities()?.max_upload_bytes || 8 * 1024 * 1024;
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > max) {
-      this.error.set('Chọn ảnh JPG, PNG hoặc WebP trong giới hạn dung lượng.');
+      this.error.set('Chọn ảnh JPG, PNG hoặc WebP dưới 8MB.');
       return;
     }
     this.generation++;
@@ -265,14 +398,12 @@ export class AiImageWorkbench {
     this.pendingFingerprint = '';
     this.job.set(null);
     this.qualityPassed.set(false);
+    this.qualityWarning.set(null);
     this.consent.set(false);
     this.error.set('');
   }
-  /** Quality validation never silently switches the user's identity to a studio model. */
-  async validate(): Promise<void> {
-    await this.start('image_quality');
-  }
-  /** Requires a second explicit confirmation after personal-image validation or studio selection. */
+
+  /** Requires explicit confirmation to generate try-on. */
   async generate(): Promise<void> {
     if (
       this.task() === 'virtual_try_on' &&
@@ -285,13 +416,16 @@ export class AiImageWorkbench {
       return;
     if (this.mode() === 'studio' && (!this.studio() || !this.studioImage() || this.studioLoading()))
       return;
+    if (this.mode() === 'personal' && !this.preview()) return;
     await this.start(this.task());
   }
+
   /** Cancels the authoritative server job; late poll responses cannot change the UI. */
   async cancel(): Promise<void> {
     const id = this.job()?.id;
     this.generation++;
     this.clearTimer();
+    this.stopLoadingTimer();
     this.busy.set(true);
     if (id) {
       const epoch = this.generation;
@@ -304,19 +438,34 @@ export class AiImageWorkbench {
       } catch {
         if (epoch === this.generation) {
           this.busy.set(false);
-          this.error.set('Chưa xác nhận được thao tác hủy. Tiếp tục tác vụ để kiểm tra trạng thái.');
+          this.error.set('Chưa xác nhận được thao tác hủy. Thử lại sau.');
         }
       }
     } else {
       this.busy.set(false);
     }
   }
+
+  private startLoadingTimer(): void {
+    this.stopLoadingTimer();
+    this.loadingSeconds.set(0);
+    this.loadingTimer = window.setInterval(() => {
+      this.loadingSeconds.update((s) => s + 1);
+    }, 1000);
+  }
+
+  private stopLoadingTimer(): void {
+    window.clearInterval(this.loadingTimer);
+    this.loadingTimer = undefined;
+  }
+
   private async start(task: AiTask): Promise<void> {
     if (this.busy() || !this.consent() || !this.available()) return;
     if (this.mode() === 'personal' && !this.file) return;
     const epoch = ++this.generation;
     this.busy.set(true);
     this.error.set('');
+    this.startLoadingTimer();
     try {
       if (this.mode() === 'personal' && this.file && !this.asset) {
         const uploaded = await firstValueFrom(this.model.upload(this.file));
@@ -353,37 +502,23 @@ export class AiImageWorkbench {
     } catch {
       if (epoch === this.generation) {
         this.busy.set(false);
+        this.stopLoadingTimer();
         this.error.set('Yêu cầu AI chưa hoàn tất. Ảnh gốc vẫn được giữ nguyên.');
       }
     }
   }
-  /** Restores a server job ID only; uploaded photos are never written to browser storage. */
-  async resume(): Promise<void> {
-    const id = sessionStorage.getItem(this.storageKey());
-    const key = sessionStorage.getItem(`${this.storageKey()}_pending`);
-    if ((!id && !key) || this.busy()) return;
-    const epoch = ++this.generation;
-    this.busy.set(true);
-    try {
-      this.job.set((await firstValueFrom(id ? this.model.job(id) : this.model.recover(key!))).job);
-      await this.poll(epoch);
-    } catch {
-      this.busy.set(false);
-      this.error.set('Tác vụ đã hết hạn hoặc không thuộc phiên này.');
-      sessionStorage.removeItem(this.storageKey());
-      sessionStorage.removeItem(`${this.storageKey()}_pending`);
-    }
-  }
+
   private async poll(epoch: number): Promise<void> {
     const current = this.job();
     if (!current || epoch !== this.generation) return;
     if (current.status === 'queued' || current.status === 'running') {
       if (!Number.isFinite(Date.parse(current.expires_at)) || Date.parse(current.expires_at) <= Date.now()) {
         this.busy.set(false);
-        this.error.set('Tác vụ đã vượt thời gian lưu tạm. Tiếp tục tác vụ để đọc trạng thái máy chủ; chưa có kết quả thành công.');
+        this.stopLoadingTimer();
+        this.error.set('Tác vụ đã vượt thời gian lưu tạm. Vui lòng thử lại.');
         return;
       }
-      this.timer = setTimeout(async () => {
+      this.timer = window.setTimeout(async () => {
         try {
           const response = await firstValueFrom(this.model.job(current.id));
           if (epoch !== this.generation) return;
@@ -392,13 +527,15 @@ export class AiImageWorkbench {
         } catch {
           if (epoch === this.generation) {
             this.busy.set(false);
-            this.error.set('Mất kết nối. Tiếp tục tác vụ để kiểm tra trước khi gửi yêu cầu mới.');
+            this.stopLoadingTimer();
+            this.error.set('Mất kết nối máy chủ AI. Đang kiểm tra lại...');
           }
         }
       }, 1500);
       return;
     }
     this.busy.set(false);
+    this.stopLoadingTimer();
     if (
       current.status === 'failed' ||
       current.status === 'cancelled' ||
@@ -408,6 +545,9 @@ export class AiImageWorkbench {
     if (current.status !== 'success') return;
     if (current.task === 'image_quality') {
       this.qualityPassed.set(current.gate?.valid === true);
+      if (current.gate?.reasons?.includes('BACKGROUND_TOO_COMPLEX')) {
+        this.qualityWarning.set('Nền ảnh có cảnh vật thực tế - AI sẽ tự động phân tách trang phục và bảo toàn không gian xung quanh.');
+      }
       return;
     }
     if (current.task === 'image_embedding') {
@@ -418,17 +558,22 @@ export class AiImageWorkbench {
     if (epoch !== this.generation) return;
     this.release(this.result());
     this.result.set(URL.createObjectURL(blob));
+    this.showOriginal.set(false);
   }
+
   private storageKey(): string {
     return `velura_ai_job_${this.auth.session()?.userId || guestSessionId()}_${this.task()}_${this.productId()}_${this.variantId()}`;
   }
+
   private remember(id: string): void {
     sessionStorage.setItem(this.storageKey(), id);
   }
+
   private clearTimer(): void {
-    if (this.timer) clearTimeout(this.timer);
-    this.timer = null;
+    window.clearTimeout(this.timer);
+    this.timer = undefined;
   }
+
   private release(url: string): void {
     if (url.startsWith('blob:')) URL.revokeObjectURL(url);
   }

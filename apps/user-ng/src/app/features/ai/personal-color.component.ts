@@ -30,7 +30,11 @@ export class PersonalColorComponent {
   readonly canAnalyze = computed(() => !!this.capabilities()?.enabled && !!this.profile() && !!this.previewUrl() && this.consent() && !this.busy());
   readonly canConfirm = computed(() => this.analysis()?.status === 'SUCCESS' && this.analysis()?.profile_version === this.profile()?.version && !this.busy());
   readonly statusLabel = computed(() => {
-    const status = this.analysis()?.status;
+    const analysis = this.analysis();
+    const status = analysis?.status;
+    if (status === 'FAILED' && analysis?.error === 'COLOR_RATE_LIMITED') {
+      return 'Hệ thống AI đang xử lý nhiều lượt cùng lúc. Vui lòng bấm phân tích lại sau giây lát.';
+    }
     const labels: Record<string, string> = { RUNNING: 'Đang kiểm tra ảnh và phân tích…', SUCCESS: 'Bản xem trước — chưa lưu', LOW_CONFIDENCE: 'Độ tin cậy thấp — không thể xác nhận. Hãy chụp ảnh khác.', VALIDATION_FAILED: 'Ảnh chưa đáp ứng hướng dẫn. Hãy chụp lại.', FAILED: 'Phân tích thất bại. Màu đã xác nhận vẫn được giữ.', TIMEOUT: 'Phân tích đã hết thời gian. Màu đã xác nhận vẫn được giữ.', CANCELLED: 'Đã huỷ. Màu đã xác nhận vẫn được giữ.', CONFIRMED: 'Đã xác nhận và lưu vào hồ sơ phong cách.' };
     return status ? labels[status] : '';
   });

@@ -213,7 +213,7 @@ async function providerRequest(route: ProviderRoute, path: string, payload: Json
         if (retryable && attempt < retries) {
           metric.retries++;
           const retryAfter = Number(response.headers.get("retry-after"));
-          const pause = Number.isFinite(retryAfter) && retryAfter > 0 ? Math.min(retryAfter * 1000, 10000) : 250 * (attempt + 1);
+          const pause = Number.isFinite(retryAfter) && retryAfter > 0 ? Math.min(retryAfter * 1000, 10000) : (response.status === 429 ? 1500 * (attempt + 1) : 250 * (attempt + 1));
           await delay(pause, undefined, { signal: controller.signal });
           continue;
         }

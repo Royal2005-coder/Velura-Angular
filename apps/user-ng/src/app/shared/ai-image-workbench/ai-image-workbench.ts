@@ -59,22 +59,48 @@ export class AiImageWorkbench {
   readonly crop = signal({ x: 0, y: 0, width: 100, height: 100 });
 
   // --- STUDIO PRESETS & FILTERS ---
-  readonly selectedGender = signal<'all' | 'female' | 'male'>('all');
-  readonly selectedSeason = signal<'all' | 'spring' | 'summer' | 'autumn' | 'winter'>('all');
-  readonly selectedOccasion = signal<'all' | 'basic' | 'work' | 'school' | 'street' | 'party'>('all');
+  readonly selectedGender = signal<'female' | 'male'>('female');
+  readonly selectedScene = signal<string>('all');
 
   readonly filteredStudioAssets = computed(() => {
     const assets: StudioAsset[] = this.capabilities()?.studio_assets || [];
     return assets.filter((asset) => {
-      if (this.selectedGender() !== 'all' && asset.gender && asset.gender !== this.selectedGender())
+      if (asset.gender && asset.gender !== this.selectedGender())
         return false;
-      if (this.selectedSeason() !== 'all' && asset.season && asset.season !== 'all' && asset.season !== this.selectedSeason())
-        return false;
-      if (this.selectedOccasion() !== 'all' && asset.occasion && asset.occasion !== 'all' && asset.occasion !== this.selectedOccasion())
-        return false;
-      return true;
+      const scene = this.selectedScene();
+      if (scene === 'all') return true;
+      if (scene === 'basic') return asset.occasion === 'basic';
+      if (['spring', 'summer', 'autumn', 'winter'].includes(scene)) return asset.season === scene;
+      return asset.occasion === scene;
     });
   });
+
+  switchGender(gender: 'female' | 'male'): void {
+    if (this.busy()) return;
+    this.selectedGender.set(gender);
+    const first = this.filteredStudioAssets()[0];
+    if (first) {
+      void this.selectStudio(first.id);
+    }
+  }
+
+  switchScene(scene: string): void {
+    if (this.busy()) return;
+    this.selectedScene.set(scene);
+    const first = this.filteredStudioAssets()[0];
+    if (first) {
+      void this.selectStudio(first.id);
+    }
+  }
+
+  modelDisplayTitle(asset: StudioAsset): string {
+    return (
+      asset.label
+        .replace(/^(Nữ|Nam)\s*[-–]\s*(Bối cảnh\s*)?/i, '')
+        .replace(/\s*\/\s*(Đi làm|Đi học|Đi chơi|Party|Sang trọng)/i, '')
+        .trim() || asset.label
+    );
+  }
 
   // --- AI RICH LOADING PROGRESS ---
   readonly loadingSeconds = signal<number>(0);
@@ -407,9 +433,9 @@ export class AiImageWorkbench {
   async generate(): Promise<void> {
     if (
       this.task() === 'virtual_try_on' &&
-      (!this.productId() || this.capabilities()?.product_supported === false)
+      (!this.productId() || !this.variantId() || this.capabilities()?.variant_supported === false)
     ) {
-      this.error.set('Sản phẩm này chưa hỗ trợ thử đồ với AI.');
+      this.error.set('Chọn màu và cỡ sản phẩm trước khi thử đồ.');
       return;
     }
     if (this.task() === 'virtual_try_on' && this.mode() === 'personal' && !this.qualityPassed())

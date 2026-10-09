@@ -53,6 +53,7 @@ interface MemberOrderItem {
   product_id?: string;
   variant_id?: string;
   price?: number;
+  unit_price?: number;
   quantity?: number;
   color?: string;
   size?: string;
@@ -94,7 +95,7 @@ export class AccountProfilePage {
   // Analytics & Orders
   readonly orders = signal<MemberOrder[]>([]);
   readonly allProducts = signal<ProductSummary[]>([]);
-
+  readonly analyticsLoading = signal(true);
   /**
    * Ưu đãi của tôi. Trước đây là sáu banner viết cứng ghi bằng `innerHTML`, không liên
    * quan gì tới mã khách thật sự dùng được. Giờ là ví mã của chính tài khoản này.
@@ -130,11 +131,16 @@ export class AccountProfilePage {
     this.api
       .get<{ orders?: MemberOrder[] }>('/api/user/orders')
       .pipe(catchError(() => of({ orders: [] as MemberOrder[] })))
-      .subscribe((data) => this.orders.set(data.orders || []));
+      .subscribe((data) => {
+        this.orders.set(data.orders || []);
+        this.analyticsLoading.set(false);
+      });
     this.catalog
       .getProducts()
       .pipe(catchError(() => of([] as ProductSummary[])))
-      .subscribe((prods) => this.allProducts.set(prods || []));
+      .subscribe((prods) => {
+        this.allProducts.set(prods || []);
+      });
   }
 
   // Analytics Computeds
@@ -218,14 +224,15 @@ export class AccountProfilePage {
       for (const it of o.items || []) {
         const cat = it.category_name || (it.is_combo ? 'Set đồ & Combo' : 'Thời trang nữ');
         const current = map.get(cat) || { name: cat, amount: 0, count: 0 };
-        current.amount += (it.price || 0) * (it.quantity || 1);
+        const price = Number(it.unit_price ?? it.price ?? 0);
+        current.amount += price * (it.quantity || 1);
         current.count += (it.quantity || 1);
         map.set(cat, current);
       }
     }
     const total = Array.from(map.values()).reduce((sum, c) => sum + c.amount, 0) || 1;
     return Array.from(map.values())
-      .map((c) => ({ ...c, percent: Math.round((c.amount / total) * 100) }))
+      .map((c) => ({ ...c, percent: Math.max(1, Math.round((c.amount / total) * 100)) }))
       .sort((a, b) => b.amount - a.amount);
   });
 
@@ -236,11 +243,12 @@ export class AccountProfilePage {
       for (const it of o.items || []) {
         const key = it.product_name || it.product_id || '';
         if (key && !map.has(key)) {
+          const price = Number(it.unit_price ?? it.price ?? 0);
           map.set(key, {
             product_id: it.product_id || '',
             name: it.product_name || '',
             image: it.product_image || '',
-            price: it.price || 0,
+            price,
             slug: it.slug || '',
             order_date: o.created_at,
             is_combo: it.is_combo,
@@ -248,11 +256,26 @@ export class AccountProfilePage {
         }
       }
     }
-    return Array.from(map.values());
+    return Array.from(map.values()).filter((p) => p.name && !p.name.toLowerCase().includes('uat'));
   });
 
+  readonly validCatalogProducts = computed(() =>
+    this.allProducts().filter((p) => {
+      const name = (p.name || '').toLowerCase();
+      return (
+        !name.includes('test') &&
+        !name.includes('validation') &&
+        !name.includes('commit') &&
+        !name.includes('gà rán') &&
+        !name.includes('ga ran') &&
+        !name.includes('prd02') &&
+        !name.includes('demo')
+      );
+    })
+  );
+
   readonly deepDiscountProducts = computed(() =>
-    this.allProducts()
+    this.validCatalogProducts()
       .filter((p) => p.sale_price && p.base_price && p.base_price > p.sale_price)
       .map((p) => ({
         ...p,
@@ -263,11 +286,10 @@ export class AccountProfilePage {
   );
 
   readonly newArrivalProducts = computed(() =>
-    [...this.allProducts()]
+    [...this.validCatalogProducts()]
       .sort((a, b) => new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime())
       .slice(0, 4)
   );
-
   readonly recommendedVouchers = computed(() => this.myVouchers().slice(0, 3));
 
   reorderProduct(item: { name: string; image: string; price: number; product_id?: string; is_combo?: boolean }): void {

@@ -769,8 +769,16 @@
                 <p class="account-main__subtitle">Tổng quan ngân sách mua sắm, tiến độ hạng thành viên và các gợi ý thời trang tối ưu cho bạn</p>
               </div>
 
-              <!-- 4 KPI Metrics Grid -->
-              <div class="analytics-kpi-grid">
+              <!-- 4 KPI Metrics Grid with Shimmer Skeleton -->
+              @if (analyticsLoading()) {
+                <div class="analytics-loading-grid">
+                  <div class="analytics-loading-card"></div>
+                  <div class="analytics-loading-card"></div>
+                  <div class="analytics-loading-card"></div>
+                  <div class="analytics-loading-card"></div>
+                </div>
+              } @else {
+                <div class="analytics-kpi-grid">
                 <div class="analytics-kpi-card">
                   <div class="analytics-kpi-card__top">
                     <span class="analytics-kpi-card__label">Tổng chi tiêu tích lũy</span>
@@ -827,7 +835,8 @@
                   <div class="analytics-kpi-card__value text-success">{{ totalSaved() | number:'1.0-0' }}đ</div>
                   <div class="analytics-kpi-card__sub">Ước tính từ voucher & chương trình ưu đãi</div>
                 </div>
-              </div>
+                </div>
+              }
 
               <!-- Category Spending Breakdown -->
               <div class="analytics-section card">

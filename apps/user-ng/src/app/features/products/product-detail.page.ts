@@ -77,7 +77,10 @@ export class ProductDetailPage {
   readonly loadError = signal<string | null>(null);
   readonly product = signal<ProductSummary | null>(null);
   readonly related = signal<ProductSummary[]>([]);
-  readonly aiVariantId = computed(() => this.product()?.variants?.find(v => v.color === this.selectedColor() && v.size === this.selectedSize())?.variant_id || '');
+  readonly aiVariantId = computed(() =>
+    this.product()?.variants?.find(v => v.color === this.selectedColor() && v.size === this.selectedSize())?.variant_id ||
+    this.product()?.variants?.[0]?.variant_id || ''
+  );
   readonly quantity = signal(1);
   readonly activeImage = signal(0);
   readonly selectedColor = signal<string | null>(null);

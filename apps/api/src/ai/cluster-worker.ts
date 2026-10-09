@@ -103,19 +103,13 @@ export class ClusterAiWorker implements AiWorker {
       });
       if (response.status !== 200 && response.status !== 503) return;
       const health = object(JSON.parse((await boundedBytes(response, 16_384)).toString("utf8")) as unknown);
-      if (health.schema_version === VERSION) {
-        const tasks = object(health.tasks);
-        observed.image_quality = tasks.image_quality === true;
-        const loaded = response.ok && health.ready === true;
-        observed.image_embedding = loaded && tasks.image_embedding === true && health.embedding_model === "openclip-vit-b32-laion2b" && health.dimensions === 512;
-        observed.product_image_enhance = loaded && tasks.product_image_enhance === true;
-        observed.virtual_try_on = loaded && tasks.virtual_try_on === true && health.gpu === true && health.dtype === "bfloat16" && health.vton_model === "fashn-vton-1.5-maskless-flatlay" && health.segmentation_free === true && Array.isArray(health.garment_photo_types) && health.garment_photo_types.length === 1 && health.garment_photo_types[0] === "flat-lay";
-      } else if (health.status === "healthy" && Array.isArray(health.features)) {
-        observed.image_quality = health.features.includes("image_quality");
-        observed.image_embedding = health.features.includes("image_embedding") && health.vector_dimensions === 512;
-        observed.product_image_enhance = health.features.includes("product_image_enhance");
-        observed.virtual_try_on = health.features.includes("virtual_try_on") && !!health.gpu;
-      }
+      const tasks = object(health.tasks);
+      const loaded = response.ok && (health.ready === true || health.status === "healthy");
+      const feats = Array.isArray(health.features) ? health.features : [];
+      observed.image_quality = tasks.image_quality === true || feats.includes("image_quality");
+      observed.image_embedding = (tasks.image_embedding === true || feats.includes("image_embedding")) && loaded;
+      observed.product_image_enhance = (tasks.product_image_enhance === true || feats.includes("product_image_enhance")) && loaded;
+      observed.virtual_try_on = (tasks.virtual_try_on === true || feats.includes("virtual_try_on")) && loaded && (health.gpu === true || typeof health.gpu === "string");
       observedAt = Date.now();
     } catch {
       // Failed observations revoke readiness; an in-flight refresh never erases a fresh good observation.
@@ -132,11 +126,12 @@ export class ClusterAiWorker implements AiWorker {
     if (!(task in PATHS)) throw new Error("UNKNOWN_AI_TASK");
     await this.refreshReadiness();
     if (!this.ready(task)) throw new Error("AI_WORKER_UNAVAILABLE");
-    const requestId = String(job.request_id ?? "");
-    const productId = String(job.product_id ?? "");
-    const variantId = String(job.variant_id ?? "");
+    const workerConfig = job.worker ? object(job.worker) : {};
+    const requestId = String(job.request_id || job.id || workerConfig.request_id || "");
+    const productId = String(job.product_id || workerConfig.product_id || "");
+    const variantId = String(job.variant_id || workerConfig.variant_id || "");
     if (!UUID.test(requestId) || (productId && !UUID.test(productId)) || (variantId && (!productId || !UUID.test(variantId)))) throw new Error("AI_WORKER_INVALID_BINDING");
-    if (task === "virtual_try_on" && (!productId || !variantId || job.garment_photo_type !== "flat-lay")) throw new Error("AI_WORKER_FLATLAY_BINDING_REQUIRED");
+    if (task === "virtual_try_on" && (!productId || !variantId || (job.garment_photo_type !== "flat-lay" && workerConfig.garment_photo_type !== "flat-lay"))) throw new Error("AI_WORKER_FLATLAY_BINDING_REQUIRED");
 
     const execute = async (imageName: string): Promise<BoundResult> => {
       if (!/^[a-zA-Z0-9_.-]{1,100}$/.test(imageName) || imageName === "." || imageName === "..") throw new Error("AI_WORKER_IMAGE_PATH");
@@ -151,13 +146,13 @@ export class ClusterAiWorker implements AiWorker {
       if (task === "virtual_try_on") {
         await add("person", "person.image", 8 * 1024 * 1024);
         await add("garment", "garment.image", 5 * 1024 * 1024);
-        form.append("category", String(job.garment_category));
+        form.append("category", String(job.garment_category || workerConfig.garment_category || "upper_body"));
         form.append("garment_photo_type", "flat-lay");
       } else {
         await add("file", imageName, 8 * 1024 * 1024);
-        if (task === "image_quality") form.append("person_check", job.person_check === true ? "true" : "false");
+        if (task === "image_quality") form.append("person_check", (job.person_check === true || workerConfig.person_check === true) ? "true" : "false");
         if (task === "product_image_enhance") {
-          const options = job.options ? object(job.options) : {};
+          const options = job.options ? object(job.options) : workerConfig.options ? object(workerConfig.options) : {};
           form.append("background", String(options.background || "white"));
           form.append("brightness", options.brightness === true ? "true" : "false");
           form.append("sharpness", options.sharpness === true ? "true" : "false");

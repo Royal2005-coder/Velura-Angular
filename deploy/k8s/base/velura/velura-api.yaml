@@ -15,9 +15,11 @@ data:
   GEMINI_STYLIST_MODEL: commerce-text
   GEMINI_EMBEDDING_MODEL: commerce-embedding
   LITELLM_IMAGE_MODEL: commerce-image-edit
-  AI_CLUSTER_ENDPOINT: http://ai-worker.ai.svc:8000
+  AI_CLUSTER_ENDPOINT: http://ai-worker.ai-staging.svc:8000
   AI_ENGINE_MODE: cluster
-  AI_ENABLE: 'false'
+  AI_ENABLE: 'true'
+  AI_VERIFIED_TASKS: image_quality,image_embedding,virtual_try_on,product_image_enhance
+  AI_CATALOG_IMAGE_HOSTS: cdn.jsdelivr.net,images.velura.vn
   AI_PRIVATE_ROOT: /app/scratch/ai-private
   VERCEL: '0'
 ---

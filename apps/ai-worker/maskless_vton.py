@@ -94,6 +94,8 @@ class MasklessVton:
         gp = pad(garment_pose, interpolation=cv2.INTER_NEAREST_EXACT)
 
         def tensor(image):
+            if image.ndim == 2:
+                image = image[..., None]
             return normalize_uint8_to_neg1_1(numpy_to_torch(image).unsqueeze(0)).to(self.device, dtype=self.dtype)
 
         kwargs = {"ca_images": tensor(ca), "garment_images": tensor(cloth),

@@ -1008,6 +1008,42 @@ export class AdminReturnsPage {
     }
     return 'ai';
   }
+  /**
+   * Risk level badge for mental health & safety governance.
+   */
+  chatRiskBadge(session: AdminChatSessionRow | null | undefined): { label: string; tone: string; icon: string } {
+    const raw = (session as unknown as Record<string, unknown>)?.['risk_level'] || (session as unknown as Record<string, Record<string, Record<string, unknown>>>)?.['metadata']?.['handoff_summary']?.['risk'] || 'green';
+    const risk = String(raw).toLowerCase();
+    if (risk === 'red') return { label: 'Khẩn cấp / Cần giám sát', tone: 'danger', icon: '🔴' };
+    if (risk === 'orange') return { label: 'Cảnh báo tiêu cực', tone: 'caution', icon: '🟠' };
+    if (risk === 'yellow') return { label: 'Cần chú ý', tone: 'warning', icon: '🟡' };
+    return { label: 'Bình thường', tone: 'success', icon: '🟢' };
+  }
+
+  /**
+   * Sentiment label for customer emotion tracking.
+   */
+  chatSentimentBadge(session: AdminChatSessionRow | null | undefined): { label: string; tone: string } {
+    const sentiment = (session as unknown as Record<string, Record<string, Record<string, unknown>>>)?.['metadata']?.['handoff_summary']?.['sentiment'];
+    if (sentiment === 'positive') return { label: 'Tích cực', tone: 'success' };
+    if (sentiment === 'negative') return { label: 'Tiêu cực / Bức xúc', tone: 'danger' };
+    return { label: 'Trung tính', tone: 'neutral' };
+  }
+
+  /**
+   * Summary problem and wanted outcome.
+   */
+  chatSummaryInfo(session: AdminChatSessionRow | null | undefined) {
+    const summary = (session as unknown as Record<string, Record<string, Record<string, unknown>>>)?.['metadata']?.['handoff_summary'];
+    if (!summary) return null;
+    return {
+      problem: String(summary['problem'] || summary['summary'] || ''),
+      wanted: String(summary['wanted'] || ''),
+      failedApproaches: Array.isArray(summary['failed_approaches']) ? summary['failed_approaches'] as string[] : [],
+      verifiedStatus: String(summary['verified_status'] || ''),
+      supervisorRequired: Boolean((session as unknown as Record<string, Record<string, unknown>>)?.['metadata']?.['supervisor_required']),
+    };
+  }
 
   /**
    * Product cards attached to a chat message.

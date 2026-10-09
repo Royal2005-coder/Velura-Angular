@@ -1,4 +1,6 @@
 import { verifyJwt } from "../auth-helper.js";
+import { config } from "../config.js";
+import { sendDirectEmail } from "../email/mailer.js";
 import { analyzeImageWithGemini } from "../gemini-client.js";
 import { HttpError } from "../http.js";
 import { asJsonObject, asNumber, asString, isJsonObject, type AuthContext, type JsonObject } from "../types.js";
@@ -67,6 +69,14 @@ export function createChatbotService({ repository, model = createLLMService() }:
       verified_status: actor.profileUserId ? "member_account" : verified ? "guest_order_otp" : "unverified_guest",
       risk: analysis.risk, intent: analysis.intent, issue: analysis.issue, user_message_id: message.message_id
     }, reason, analysis.risk === "red");
+    void notifyStaffEscalation({
+      sessionId: asString(session.session_id),
+      ticketId: asString(result.ticket_id || session.support_ticket_id),
+      reason,
+      analysis,
+      actor,
+      summary: restricted ? "[Nội dung được kiểm duyệt — cần giám sát]" : `${analysis.context.problem} — ${analysis.context.wanted}`
+    });
     return transcript(isJsonObject(result.session) ? result.session : { ...session, handoff_status: "requested", support_ticket_id: result.ticket_id });
   }
 
@@ -106,7 +116,6 @@ export function createChatbotService({ repository, model = createLLMService() }:
       const turn = await repository.appendUserTurn(sessionId, actor, input.message, { attachment: input.attachment, source: "web" });
       session = isJsonObject(turn.session) ? turn.session : session;
       const userMessage = asJsonObject(turn.message);
-      if (session.handoff_status !== "ai") return transcript(session);
       const history = (await repository.listMessages(sessionId, 16)).rows || [];
       let analysis: ChatAnalysis;
       if (detectHandoffIntent(input.message)) {
@@ -124,6 +133,12 @@ export function createChatbotService({ repository, model = createLLMService() }:
       if (analysis.moderation === "none" && ["orange", "red"].includes(analysis.risk)) analysis.risk = "yellow";
       const issueKey = `${analysis.issue}:${input.orderId || "conversation"}:${analysis.context.issueKey.normalize("NFKC").toLocaleLowerCase("vi").replace(/\s+/g, " ").trim()}`;
       const state = await repository.recordAnalysis(sessionId, asString(userMessage.message_id), issueKey, analysis as unknown as JsonObject, false);
+      if (session.handoff_status !== "ai") {
+        if (analysis.risk === "red") {
+          await repository.staffAction(sessionId, actor.profileUserId || "00000000-0000-0000-0000-000000000000", "supervisor", { text: "AI cảnh báo nguy cơ an toàn nghiêm trọng trong cuộc trò chuyện" }).catch(() => undefined);
+        }
+        return transcript(session);
+      }
       if (analysis.intent === "human" || analysis.level === "L3" || analysis.context.authorityExceeded || analysis.context.compromiseFailed || analysis.risk === "red" || asNumber(state.occurrences) >= 3) {
         const reason = analysis.context.authorityExceeded ? "AUTHORITY_EXCEEDED" : analysis.context.compromiseFailed ? "COMPROMISE_FAILED" : analysis.risk === "red" ? "SEVERE_CONTENT" : asNumber(state.occurrences) >= 3 ? "THIRD_SAME_ISSUE" : "HUMAN_REQUEST";
         return escalate(session, actor, userMessage, analysis, history, reason, Boolean(order));
@@ -345,6 +360,64 @@ function boundedText(value: unknown, maximum: number): string {
   const text = asString(value).trim();
   if (!text || text.length > maximum) throw new HttpError(422, "VALIDATION_ERROR", `Text must contain 1–${maximum} characters`);
   return text;
+}
+async function notifyStaffEscalation(params: {
+  sessionId: string;
+  ticketId: string;
+  reason: string;
+  analysis: ChatAnalysis;
+  actor: ChatActor;
+  summary: string;
+}): Promise<void> {
+  const cskhEmail = config.smtpUser || "support@velura.vn";
+  const riskLabels: Record<string, string> = {
+    green: "🟢 Bình thường (Green)",
+    yellow: "🟡 Cần chú ý (Yellow)",
+    orange: "🟠 Cảnh báo tiêu cực (Orange)",
+    red: "🔴 Khẩn cấp / Cần giám sát (Red)",
+  };
+  const sentimentLabels: Record<string, string> = {
+    positive: "Tích cực",
+    neutral: "Trung tính",
+    negative: "Tiêu cực / Bức xúc",
+  };
+  const origin = config.storefrontOrigin || "https://shop.royalai.dev";
+  const subject = `[Velura CSKH] ⚠️ Cuộc trò chuyện cần nhân viên hỗ trợ (#${params.sessionId.slice(0, 8)}) - Mức rủi ro: ${params.analysis.risk.toUpperCase()}`;
+  const text = `Cuộc trò chuyện #${params.sessionId} đã được chuyển tới CSKH.\nLý do: ${params.reason}\nMức rủi ro: ${riskLabels[params.analysis.risk] || params.analysis.risk}\nCảm xúc: ${sentimentLabels[params.analysis.sentiment] || params.analysis.sentiment}\nVấn đề: ${params.analysis.context.problem}\nMong muốn khách: ${params.analysis.context.wanted}\nXem tại: ${origin}/admin/returns?zone=chat&sessionId=${params.sessionId}`;
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; padding: 20px; border: 1px solid #E8DFD6; border-radius: 8px;">
+      <h2 style="color: #C97B63; margin-top: 0;">Cuộc trò chuyện cần nhân viên tiếp nhận</h2>
+      <p><strong>Mã phiên:</strong> <code>${params.sessionId}</code></p>
+      <p><strong>Lý do chuyển:</strong> ${params.reason}</p>
+      <p><strong>Mức rủi ro:</strong> ${riskLabels[params.analysis.risk] || params.analysis.risk}</p>
+      <p><strong>Cảm xúc khách hàng:</strong> ${sentimentLabels[params.analysis.sentiment] || params.analysis.sentiment}</p>
+      <hr style="border: 0; border-top: 1px solid #E8DFD6;" />
+      <p><strong>Vấn đề của khách:</strong> ${params.analysis.context.problem || "Chưa xác định"}</p>
+      <p><strong>Mong muốn giải quyết:</strong> ${params.analysis.context.wanted || "Gặp nhân viên CSKH"}</p>
+      <div style="margin-top: 24px;">
+        <a href="${origin}/admin/returns?zone=chat&sessionId=${params.sessionId}" style="background-color: #C97B63; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Tiếp nhận phiên chat ngay</a>
+      </div>
+    </div>
+  `;
+  await sendDirectEmail(cskhEmail, subject, text, html).catch(() => false);
+
+  if (config.n8nChatWebhookUrl) {
+    await fetch(config.n8nChatWebhookUrl, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        event: "chat_escalated",
+        sessionId: params.sessionId,
+        ticketId: params.ticketId,
+        reason: params.reason,
+        risk: params.analysis.risk,
+        sentiment: params.analysis.sentiment,
+        problem: params.analysis.context.problem,
+        wanted: params.analysis.context.wanted,
+        timestamp: new Date().toISOString()
+      })
+    }).catch(() => undefined);
+  }
 }
 function integer(value: string | null, fallback: number, maximum: number): number {
   const parsed = Number(value);

@@ -49,16 +49,26 @@
                   >
                     <div class="admin-chat-session-item__header">
                       <span class="admin-chat-session-item__name">{{ chatName(session) }}</span>
-                      <span
-                        class="admin-chat-session-item__status"
-                        [class.admin-chat-session-item__status--pending]="chatStatusTone(session) === 'pending'"
-                        [class.admin-chat-session-item__status--assigned]="chatStatusTone(session) === 'assigned'"
-                        [class.admin-chat-session-item__status--closed]="chatStatusTone(session) === 'closed'"
-                        [class.admin-chat-session-item__status--ai]="chatStatusTone(session) === 'ai'"
-                      >{{ chatStatus(session) }}</span>
+                      <div class="admin-chat-session-item__badges">
+                        <span class="admin-chat-risk-dot" [class]="'admin-chat-risk-dot--' + chatRiskBadge(session).tone" [title]="'Rủi ro: ' + chatRiskBadge(session).label">
+                          {{ chatRiskBadge(session).icon }}
+                        </span>
+                        <span
+                          class="admin-chat-session-item__status"
+                          [class.admin-chat-session-item__status--pending]="chatStatusTone(session) === 'pending'"
+                          [class.admin-chat-session-item__status--assigned]="chatStatusTone(session) === 'assigned'"
+                          [class.admin-chat-session-item__status--closed]="chatStatusTone(session) === 'closed'"
+                          [class.admin-chat-session-item__status--ai]="chatStatusTone(session) === 'ai'"
+                        >{{ chatStatus(session) }}</span>
+                      </div>
                     </div>
                     <p class="admin-chat-session-item__preview">{{ chatPreview(session) }}</p>
-                    <small class="admin-chat-session-item__time">{{ date(session.last_message_at || session.created_at) }}</small>
+                    <div class="admin-chat-session-item__footer">
+                      @if (session.metadata?.supervisor_required) {
+                        <span class="admin-badge admin-badge--danger admin-badge--xs">⚠️ Cần Giám Sát</span>
+                      }
+                      <small class="admin-chat-session-item__time">{{ date(session.last_message_at || session.created_at) }}</small>
+                    </div>
                   </button>
                 }
               }
@@ -106,6 +116,54 @@
                 @if (selectedChat()?.metadata?.supervisor_required) {
                   <p class="admin-note" role="status">Phiên này cần giám sát xử lý. Chỉ giám sát được tiếp nhận, phản hồi và đóng phiên.</p>
                 }
+                <!-- Live AI Intelligence & Customer Sentiment Panel -->
+                @if (chatSummaryInfo(selectedChat()); as summary) {
+                  <div class="admin-chat-ai-panel">
+                    <div class="admin-chat-ai-panel__head">
+                      <div class="admin-chat-ai-panel__title">
+                        <span class="admin-chat-ai-panel__icon">🧠</span>
+                        <strong>Bản tóm tắt ngữ cảnh AI &amp; Bảo vệ CSKH</strong>
+                      </div>
+                      <div class="admin-chat-ai-panel__indicators">
+                        <span class="admin-chat-risk-pill" [class]="'admin-chat-risk-pill--' + chatRiskBadge(selectedChat()).tone">
+                          {{ chatRiskBadge(selectedChat()).icon }} Rủi ro: {{ chatRiskBadge(selectedChat()).label }}
+                        </span>
+                        <span class="admin-chat-sentiment-pill" [class]="'admin-chat-sentiment-pill--' + chatSentimentBadge(selectedChat()).tone">
+                          Cảm xúc: {{ chatSentimentBadge(selectedChat()).label }}
+                        </span>
+                      </div>
+                    </div>
+                    <div class="admin-chat-ai-panel__body">
+                      @if (summary.problem) {
+                        <div class="admin-chat-ai-panel__row">
+                          <span class="admin-chat-ai-panel__label">Vấn đề của khách:</span>
+                          <span class="admin-chat-ai-panel__val">{{ summary.problem }}</span>
+                        </div>
+                      }
+                      @if (summary.wanted) {
+                        <div class="admin-chat-ai-panel__row">
+                          <span class="admin-chat-ai-panel__label">Mong muốn xử lý:</span>
+                          <span class="admin-chat-ai-panel__val">{{ summary.wanted }}</span>
+                        </div>
+                      }
+                      @if (summary.failedApproaches.length) {
+                        <div class="admin-chat-ai-panel__row">
+                          <span class="admin-chat-ai-panel__label">Phương án đã thử:</span>
+                          <div class="admin-chat-ai-panel__tags">
+                            @for (app of summary.failedApproaches; track app) {
+                              <span class="admin-chat-ai-tag">{{ app }}</span>
+                            }
+                          </div>
+                        </div>
+                      }
+                      @if (summary.supervisorRequired) {
+                        <div class="admin-chat-ai-panel__alert">
+                          ⚠️ <strong>Cảnh báo Giám sát:</strong> Cuộc trò chuyện này có mức rủi ro cao hoặc đe dọa, cần Super Admin / Giám sát tiếp nhận và giải quyết.
+                        </div>
+                      }
+                    </div>
+                  </div>
+                }
                 <div class="admin-chat-messages">
                   @if (!messages().length) {
                     <p class="admin-note admin-note--centered-padded">Chưa có tin nhắn</p>
@@ -118,7 +176,22 @@
                         [class.admin-chat-msg--bot]="message.sender !== 'user' && message.sender !== 'agent'"
                       >
                         <span class="admin-chat-msg__sender">{{ messageLabel(message) }}</span>
-                        <div class="admin-chat-msg__text">{{ message.text || '—' }}</div>
+                        @if (message.moderation_status === 'restricted') {
+                          <div class="admin-chat-msg__moderated-box">
+                            <div class="admin-chat-msg__moderated-head">
+                              <span class="admin-shield-icon">🛡️</span>
+                              <strong>Nội dung đã được AI lọc tự động để bảo vệ sức khỏe tinh thần CSKH</strong>
+                            </div>
+                            <p class="admin-chat-msg__moderated-text">{{ message.text }}</p>
+                            @if (isChatSupervisor() && message.message_id) {
+                              <button class="admin-btn admin-btn--ghost admin-btn--xs" type="button" (click)="openChatReview(message)">
+                                👁️ Rà soát nội dung gốc (Giám sát)
+                              </button>
+                            }
+                          </div>
+                        } @else {
+                          <div class="admin-chat-msg__text">{{ message.text || '—' }}</div>
+                        }
                         @if (message.metadata?.classification; as classification) {
                           <dl class="admin-note">
                             @for (field of chatClassificationFields; track field) {

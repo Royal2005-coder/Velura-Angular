@@ -284,14 +284,24 @@
   line-height: 1.3;
 }
 
-.search-dd__lens-badge {
-  font-size: 0.65rem;
-  font-weight: 800;
-  padding: 0.15rem 0.4rem;
+.search-dd__lens-arrow {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #ffffff;
+  color: var(--terracotta, #C97B63);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(42, 37, 34, 0.08);
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.search-dd__lens-card:hover .search-dd__lens-arrow {
+  transform: translateX(3px);
   background: var(--terracotta, #C97B63);
   color: #ffffff;
-  border-radius: 4px;
-  letter-spacing: 0.05em;
 }
 
 /* Sections */
@@ -326,11 +336,12 @@
   gap: 0.4rem;
 }
 
-.search-dd__cat-chip {
+.search-dd__cat-btn {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 0.5rem;
-  padding: 0.45rem 0.65rem;
+  padding: 0.5rem 0.75rem;
   border-radius: 8px;
   border: 1px solid var(--line, #E8DFD6);
   background: #ffffff;
@@ -340,22 +351,51 @@
   text-align: left;
 }
 
-.search-dd__cat-chip:hover {
+.search-dd__cat-btn:hover {
   background: var(--field-bg, #FAF7F2);
   border-color: var(--terracotta, #C97B63);
   color: var(--terracotta, #C97B63);
+  transform: translateY(-1px);
 }
 
-.search-dd__cat-icon {
-  font-size: 1rem;
-  line-height: 1;
+.search-dd__cat-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--terracotta, #C97B63);
+  opacity: 0.6;
+  flex-shrink: 0;
+  transition: opacity 0.15s ease;
+}
+
+.search-dd__cat-btn:hover .search-dd__cat-dot {
+  opacity: 1;
+  transform: scale(1.3);
 }
 
 .search-dd__cat-name {
   font-size: 0.78rem;
   font-weight: 600;
+  flex: 1;
 }
 
+.search-dd__cat-arrow {
+  color: var(--muted, #6B635D);
+  opacity: 0.5;
+  transition: all 0.15s ease;
+}
+
+.search-dd__cat-btn:hover .search-dd__cat-arrow {
+  opacity: 1;
+  color: var(--terracotta, #C97B63);
+  transform: translateX(2px);
+}
+
+.search-dd__trend-hash {
+  color: var(--terracotta, #C97B63);
+  font-weight: 700;
+  font-size: 0.75rem;
+}
 /* Trending Keywords */
 .search-dd__trending-wrap {
   display: flex;

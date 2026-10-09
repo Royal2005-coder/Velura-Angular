@@ -47,13 +47,13 @@ export class SiteHeader {
   readonly allProducts = signal<ProductSummary[]>([]);
 
   readonly quickCategories = [
-    { name: 'Đầm & Váy', slug: 'dam-vay', icon: '👗' },
-    { name: 'Set đồ & Combo', slug: 'set-do', icon: '✨' },
-    { name: 'Áo kiểu & Sơ mi', slug: 'ao', icon: '👚' },
-    { name: 'Quần & Jeans', slug: 'quan', icon: '👖' },
-    { name: 'Áo khoác & Blazer', slug: 'ao-khoac', icon: '🧥' },
-    { name: 'Giày dép', slug: 'giay-dep', icon: '👠' },
-    { name: 'Phụ kiện', slug: 'phu-kien', icon: '👜' },
+    { name: 'Đầm & Váy', slug: 'dam-vay' },
+    { name: 'Set đồ & Combo', slug: 'set-do' },
+    { name: 'Áo kiểu & Sơ mi', slug: 'ao' },
+    { name: 'Quần & Jeans', slug: 'quan' },
+    { name: 'Áo khoác & Blazer', slug: 'ao-khoac' },
+    { name: 'Giày dép thời trang', slug: 'giay-dep' },
+    { name: 'Phụ kiện cao cấp', slug: 'phu-kien' },
   ];
 
   readonly trendingKeywords = [

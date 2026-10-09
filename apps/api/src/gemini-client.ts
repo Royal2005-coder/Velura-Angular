@@ -94,7 +94,7 @@ async function generateJson(prompt: string, inputSchema: unknown, options: Gemin
   const schema = normalizeOutputSchema(inputSchema);
   const route = providerRoute();
   const rawModel = options.model || config.geminiStylistModel;
-  const model = rawModel === "gemini-1.5-flash" || rawModel === "gemini-2.5-flash" ? config.geminiStylistModel || "gemini-3.5-flash" : rawModel;
+  const model = rawModel === "gemini-1.5-flash" || rawModel === "gemini-2.5-flash" || rawModel === "gemini-3.5-flash" ? config.geminiStylistModel || "gemini-3.5-flash-lite" : rawModel;
   const images = image ? [image] : [];
   const payload = route.gateway ? {
     model,
@@ -136,7 +136,7 @@ function cleanGeminiSchema(schema: JsonObject): JsonObject {
 export async function generateGeminiText(prompt: unknown, options: GeminiTextOptions = {}): Promise<string> {
   const route = providerRoute();
   const rawModel = options.model || config.geminiModel || config.geminiStylistModel;
-  const model = rawModel === "gemini-1.5-flash" || rawModel === "gemini-2.5-flash" ? config.geminiStylistModel || "gemini-3.5-flash" : rawModel;
+  const model = rawModel === "gemini-1.5-flash" || rawModel === "gemini-2.5-flash" || rawModel === "gemini-3.5-flash" ? config.geminiStylistModel || "gemini-3.5-flash-lite" : rawModel;
   const images = options.images ?? [];
   if (images.length > 4 || images.reduce((sum, image) => sum + image.bytes.length, 0) > MAX_IMAGE_BYTES) throw new HttpError(413, "AI_IMAGE_TOO_LARGE", "AI image attachments exceed the byte limit");
   for (const image of images) validateImage(image.bytes, image.mime);

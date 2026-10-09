@@ -26,6 +26,8 @@ export interface VisualCandidate {
   product_id: string;
   similarity: number;
   rank_score?: number;
+  /** `strong` khi ảnh gần như trùng ảnh sản phẩm, `similar` khi chỉ cùng kiểu dáng. */
+  tier?: "strong" | "similar";
   name?: string;
   slug?: string;
   images?: string[];
@@ -37,6 +39,7 @@ export interface VisualCandidate {
   suitable_body_shapes?: string[];
   status?: string;
   category_slug?: string;
+  is_combo?: boolean;
 }
 /** Search state carries attributes only; a source image never outlives one request. */
 export interface VisualSearchResult {
@@ -45,6 +48,34 @@ export interface VisualSearchResult {
   featured: VisualCandidate[];
   catalog_version: string;
   personalized: boolean;
+  /**
+   * Present only when no photo cleared the similarity floor: the category and
+   * colour tone voted from the closest neighbours, so the client can label the
+   * suggestion rail (for example "Gợi ý theo danh mục Áo · tông màu Ấm").
+   */
+  fallback?: VisualFallback | null;
+}
+/** Why the fallback rail is showing and what the customer was looking at. */
+export interface VisualFallback {
+  category: string | null;
+  category_name: string | null;
+  color_tone: string | null;
+  color_name: string | null;
+}
+/** Vietnamese display names for catalog slugs, reused by the fallback rail. */
+const CATEGORY_LABELS: Record<string, string> = {
+  ao: "Áo", quan: "Quần", "dam-vay": "Đầm & Váy", "ao-khoac": "Áo khoác",
+  "set-do": "Set đồ", "phu-kien": "Phụ kiện", "giay-dep": "Giày dép",
+};
+/** Vietnamese display names for the three catalogue colour tones. */
+const TONE_LABELS: Record<string, string> = { Neutral: "Trung tính", Warm: "Ấm", Cool: "Mát" };
+/** Catalog slug → customer-facing name; unknown slugs have no label to invent. */
+export function categoryLabel(slug: string | null): string | null {
+  return slug ? (CATEGORY_LABELS[slug] ?? null) : null;
+}
+/** Colour tone → customer-facing name; unknown tones have no label to invent. */
+export function toneLabel(tone: string | null): string | null {
+  return tone ? (TONE_LABELS[tone] ?? null) : null;
 }
 /** Validate refinements and catalog IDs before they reach SQL or provider prompts. */
 export function validateFilters(raw: unknown): SearchFilters {
@@ -88,6 +119,27 @@ export function dominantCategory(neighbors: VisualCandidate[], take = 12): strin
   for (const [slug, count] of counts) {
     if (best === null || count > counts.get(best)!) best = slug;
     else if (count === counts.get(best) && closest.get(slug)! > closest.get(best)!) best = slug;
+  }
+  return best;
+}
+/**
+ * Nearest-neighbour vote for the colour tone of the garment in the photo.
+ * Same rules as `dominantCategory`: only the closest rows vote and a tie prefers
+ * the tone of the single closest neighbour, so a mixed photo cannot average
+ * unrelated colours into the fallback rail.
+ */
+export function dominantTone(neighbors: VisualCandidate[], take = 12): string | null {
+  const counts = new Map<string, number>(), closest = new Map<string, number>();
+  for (const row of neighbors.slice(0, take)) {
+    const tone = row.color_tone;
+    if (!tone) continue;
+    counts.set(tone, (counts.get(tone) || 0) + 1);
+    if (!closest.has(tone)) closest.set(tone, row.similarity);
+  }
+  let best: string | null = null;
+  for (const [tone, count] of counts) {
+    if (best === null || count > counts.get(best)!) best = tone;
+    else if (count === counts.get(best) && closest.get(tone)! > closest.get(best)!) best = tone;
   }
   return best;
 }

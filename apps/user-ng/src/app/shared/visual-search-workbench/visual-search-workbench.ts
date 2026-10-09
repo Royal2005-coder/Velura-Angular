@@ -1,10 +1,13 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, DestroyRef, ElementRef, effect, inject, input, output, signal, untracked, viewChild } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { Subscription } from 'rxjs';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import type { Subscription } from 'rxjs';
+import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { VisualSearchModel, type VisualFilters, type VisualResult } from '../../core/services/visual-search.service';
 import { ProductCard } from '../product-card/product-card';
+import type { OffersResponse } from '../../core/models/offer.interface';
 
 /** Maps Gemini Vision detected categories to Velura catalog slugs. */
 const CATEGORY_QUERY_MAP: Record<string, string> = {
@@ -38,8 +41,11 @@ export class VisualSearchWorkbench {
   readonly busy = signal(false);
   readonly error = signal('');
   readonly result = signal<VisualResult | null>(null);
+  /** Running campaigns and voucher codes, loaded only when the fallback rail shows. */
+  readonly offers = signal<OffersResponse | null>(null);
   readonly cameraOpen = signal(false);
   private readonly model = inject(VisualSearchModel);
+  private readonly api = inject(ApiService);
   private readonly auth = inject(AuthService);
   private readonly destroy = inject(DestroyRef);
   private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('dialog');
@@ -48,15 +54,30 @@ export class VisualSearchWorkbench {
   private stream?: MediaStream;
   private requestId = '';
   private subscription?: Subscription;
+  private offersSubscription?: Subscription;
   private epoch = 0;
   constructor() {
-    effect(() => { this.auth.session(); untracked(() => { this.cancel(); this.result.set(null); }); });
+    effect(() => { this.auth.session(); untracked(() => { this.cancel(); this.result.set(null); this.offers.set(null); }); });
     this.destroy.onDestroy(() => this.cancel());
   }
   /** Existing header camera calls the same accessible modal entry point. */
-  open(): void { this.error.set(''); this.dialog()?.nativeElement.showModal(); }
+  open(): void { this.error.set(''); this.offers.set(null); this.dialog()?.nativeElement.showModal(); }
   /** Close and cancel both browser and server work, revoking every source preview. */
   close(): void { this.cancel(); this.dialog()?.nativeElement.close(); }
+  /**
+   * Load the public deals rail exactly when the fallback shows, so a customer
+   * who found no exact product still sees the shop's running campaigns and
+   * voucher codes. A failed load never blocks the suggestions themselves.
+   */
+  private loadOffers(): void {
+    this.offersSubscription?.unsubscribe();
+    this.offersSubscription = this.api.get<OffersResponse>('/api/user/offers')
+      .pipe(takeUntilDestroyed(this.destroy))
+      .subscribe({
+        next: (response) => this.offers.set(response),
+        error: () => this.offers.set(null),
+      });
+  }
   /** Handle the dialog Escape event without leaving inference or camera streams running. */
   escape(event: Event): void { event.preventDefault(); this.close(); }
   /** Upload picker and mobile capture both use the same decoded image validation. */
@@ -145,6 +166,7 @@ export class VisualSearchWorkbench {
         if (epoch !== this.epoch) return;
         this.result.set(response);
         this.matches.emit(response.matches.map(row => row.product_id)); this.searchResult.emit(response);
+        if (response.fallback) this.loadOffers();
         this.finish();
       },
       error: (error: unknown) => {
@@ -174,8 +196,27 @@ export class VisualSearchWorkbench {
     });
   }
   private finish(): void { this.requestId = ''; this.busy.set(false); this.clearSource(); }
-  private clearSource(): void { if (this.preview()) URL.revokeObjectURL(this.preview()); this.preview.set(''); this.file = null; this.consent.set(false); }
-  private stopCamera(): void { this.stream?.getTracks().forEach(track => track.stop()); this.stream = undefined; this.cameraOpen.set(false); }
+  clearSource(): void { if (this.preview()) URL.revokeObjectURL(this.preview()); this.preview.set(''); this.file = null; this.consent.set(false); }
+  stopCamera(): void { this.stream?.getTracks().forEach(track => track.stop()); this.stream = undefined; this.cameraOpen.set(false); }
+  /** Title of the matches rail: an exact photo match, or merely a look-alike. */
+  protected matchesTitle(result: VisualResult): string {
+    return result.matches.some((row) => row.tier === 'strong') ? 'Tìm thấy sản phẩm' : 'Sản phẩm tương tự';
+  }
+  /** One-line explanation of why the suggestion rail is showing. */
+  protected fallbackSentence(result: VisualResult): string {
+    const fallback = result.fallback;
+    if (fallback?.category_name) {
+      return `Không tìm thấy sản phẩm khớp chính xác. Ảnh của bạn thuộc danh mục "${fallback.category_name}"${fallback.color_name ? ` · tông màu ${fallback.color_name}` : ''}:`;
+    }
+    if (result.attributes.category) {
+      return `Không tìm thấy sản phẩm khớp chính xác. Gợi ý theo danh mục "${this.categoryLabel(result.attributes.category)}":`;
+    }
+    return 'Không có sản phẩm nào của shop trùng với ảnh này. Tham khảo gợi ý dưới đây:';
+  }
+  /** Voucher codes the current visitor can actually use, capped for the modal. */
+  protected usableVouchers(offers: OffersResponse): OffersResponse['vouchers'] {
+    return offers.vouchers.filter((voucher) => voucher.usable).slice(0, 4);
+  }
   /** Map Gemini Vision category to Velura catalog slug for routing. */
   mapCategory(category: string | null): string {
     if (!category) return '';

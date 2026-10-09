@@ -3,7 +3,7 @@ import { selectOne, selectRows } from "../supabase.js";
 import { asJsonObject, type JsonObject } from "../types.js";
 import { guestStyleProfiles } from "../user/quiz.js";
 import { LocalImageVectorRepository } from "../ai/image-vector-repository.js";
-import { dominantCategory, type SearchFilters, type VisualCandidate } from "./visual-search-types.js";
+import { dominantCategory, dominantTone, type SearchFilters, type VisualCandidate } from "./visual-search-types.js";
 
 /** Retrieval/profile boundary keeps provider orchestration independent of the database. */
 export interface VisualSearchRepository {
@@ -43,7 +43,7 @@ export class ShopVisualSearchRepository implements VisualSearchRepository {
       this.vectors.version(),
     ]);
     const neighbors = await this.hydrate(candidates, filters);
-    return { neighbors, featured: await this.categoryFallback(dominantCategory(neighbors) || ""), catalog_version };
+    return { neighbors, featured: await this.categoryFallback(dominantCategory(neighbors) || "", dominantTone(neighbors)), catalog_version };
   }
   /** Hydration keeps CLIP order, so score ties never reorder the neighbour vote. */
   private async hydrate(candidates: Array<{ product_id: string; score: number }>, filters: SearchFilters): Promise<VisualCandidate[]> {
@@ -54,7 +54,7 @@ export class ShopVisualSearchRepository implements VisualSearchRepository {
       selectRows("product", {
         product_id: `in.(${ids})`,
         status: "eq.on_sale",
-        select: "product_id,name,slug,images,base_price,sale_price,status,color_tone,style_tags,occasions,suitable_body_shapes,category(slug)",
+        select: "product_id,name,slug,images,base_price,sale_price,status,is_combo,color_tone,style_tags,occasions,suitable_body_shapes,category(slug)",
         limit: "100",
       }, { count: "none", silentError: true }),
       wantsVariants
@@ -87,6 +87,7 @@ export class ShopVisualSearchRepository implements VisualSearchRepository {
         occasions: Array.isArray(row.occasions) ? row.occasions as string[] : [],
         suitable_body_shapes: Array.isArray(row.suitable_body_shapes) ? row.suitable_body_shapes as string[] : [],
         category_slug: category?.slug ? String(category.slug) : undefined,
+        is_combo: Boolean(row.is_combo),
       };
       if (!matchesFilters(built, filters)) return [];
       const variantsForProduct = stock.get(candidate.product_id);
@@ -95,16 +96,43 @@ export class ShopVisualSearchRepository implements VisualSearchRepository {
       return [built];
     });
   }
-  /** Highest-signal on-sale rows of a category; empty slug falls back to featured products. */
-  private async categoryFallback(categorySlug: string): Promise<VisualCandidate[]> {
+  /**
+   * Highest-signal on-sale rows of a category, narrowed by the voted colour
+   * tone; empty slug falls back to featured products. The tone is a soft
+   * signal — fewer than four rows means the vote was unreliable, so the
+   * filter is dropped rather than showing the customer an empty rail.
+   */
+  private async categoryFallback(categorySlug: string, colorTone?: string | null): Promise<VisualCandidate[]> {
+    if (categorySlug === "set-do" || categorySlug === "combo") {
+      const { rows: comboRows } = await selectRows("product", {
+        status: "eq.on_sale",
+        is_combo: "eq.true",
+        order: "is_featured.desc,updated_at.desc",
+        limit: "8",
+      }, { count: "none", silentError: true });
+      if (comboRows.length) return comboRows.map(row => this.toCandidate(row, "set-do"));
+    }
     const category = categorySlug ? await selectOne("category", { slug: `eq.${categorySlug}` }) : null;
-    const { rows } = await selectRows("product", {
-      ...(category?.category_id ? { category_id: `eq.${category.category_id}` } : {}),
+    const base: Record<string, unknown> = {
       status: "eq.on_sale",
       order: "is_featured.desc,updated_at.desc",
       limit: "8",
-    }, { count: "none", silentError: true });
-    return rows.map(row => ({
+    };
+    if (category?.category_id) base.category_id = `eq.${category.category_id}`;
+    let rows: JsonObject[] = [];
+    if (colorTone) {
+      const toned = await selectRows("product", { ...base, color_tone: `eq.${colorTone}` }, { count: "exact", silentError: true });
+      rows = toned.rows;
+      if ((toned.count ?? rows.length) < 4) rows = [];
+    }
+    if (!rows.length) {
+      const { rows: relaxed } = await selectRows("product", base, { count: "none", silentError: true });
+      rows = relaxed;
+    }
+    return rows.map(row => this.toCandidate(row, categorySlug));
+  }
+  private toCandidate(row: JsonObject, categorySlug: string): VisualCandidate {
+    return {
       product_id: String(row.product_id),
       similarity: 0,
       name: String(row.name || ""),
@@ -114,6 +142,7 @@ export class ShopVisualSearchRepository implements VisualSearchRepository {
       sale_price: row.sale_price !== null && row.sale_price !== undefined ? Number(row.sale_price) : null,
       status: "on_sale",
       category_slug: categorySlug || undefined,
-    }));
+      is_combo: Boolean(row.is_combo),
+    };
   }
 }

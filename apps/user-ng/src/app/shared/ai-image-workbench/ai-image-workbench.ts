@@ -407,9 +407,9 @@ export class AiImageWorkbench {
   async generate(): Promise<void> {
     if (
       this.task() === 'virtual_try_on' &&
-      (!this.productId() || !this.variantId() || this.capabilities()?.variant_supported === false)
+      (!this.productId() || this.capabilities()?.product_supported === false)
     ) {
-      this.error.set('Chọn màu và cỡ sản phẩm trước khi thử đồ.');
+      this.error.set('Sản phẩm này chưa hỗ trợ thử đồ với AI.');
       return;
     }
     if (this.task() === 'virtual_try_on' && this.mode() === 'personal' && !this.qualityPassed())

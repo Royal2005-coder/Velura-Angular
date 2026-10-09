@@ -330,6 +330,140 @@
   }
 }
 
+/* AI Intelligence Panel & Mental Health Protection */
+.admin-chat-session-item__badges {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.admin-chat-risk-dot {
+  font-size: 0.7rem;
+  line-height: 1;
+}
+.admin-chat-session-item__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 4px;
+}
+.admin-badge--xs {
+  font-size: 0.65rem;
+  padding: 1px 6px;
+}
+
+.admin-chat-ai-panel {
+  background: linear-gradient(135deg, #FFFDFB 0%, #FBF6F1 100%);
+  border-bottom: 1px solid var(--line);
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.admin-chat-ai-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.admin-chat-ai-panel__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8125rem;
+  color: var(--ink);
+}
+.admin-chat-ai-panel__indicators {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.admin-chat-risk-pill, .admin-chat-sentiment-pill {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 99px;
+  letter-spacing: 0.02em;
+}
+.admin-chat-risk-pill--success { background: #e8f5e9; color: #2e7d32; border: 1px solid #c8e6c9; }
+.admin-chat-risk-pill--warning { background: #fef9c3; color: #854d0e; border: 1px solid #fef08a; }
+.admin-chat-risk-pill--caution { background: #ffedd5; color: #c2410c; border: 1px solid #fed7aa; }
+.admin-chat-risk-pill--danger { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
+
+.admin-chat-sentiment-pill--success { background: #e8f5e9; color: #2e7d32; }
+.admin-chat-sentiment-pill--neutral { background: var(--field-bg); color: var(--muted); }
+.admin-chat-sentiment-pill--danger { background: #fee2e2; color: #b91c1c; }
+
+.admin-chat-ai-panel__body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.admin-chat-ai-panel__row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  margin: 0;
+}
+.admin-chat-ai-panel__label {
+  color: var(--muted);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.admin-chat-ai-panel__val {
+  color: var(--ink);
+}
+.admin-chat-ai-panel__tags {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.admin-chat-ai-tag {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  font-size: 0.72rem;
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: var(--muted);
+}
+.admin-chat-ai-panel__alert {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  font-size: 0.75rem;
+  padding: 6px 10px;
+  border-radius: 6px;
+  margin-top: 4px;
+}
+
+/* Mental Health Protection Shield Box */
+.admin-chat-msg__moderated-box {
+  background: #FFF7ED;
+  border: 1px dashed #FDBA74;
+  border-radius: 8px;
+  padding: 10px 12px;
+  max-width: 420px;
+}
+.admin-chat-msg__moderated-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  color: #C2410C;
+  margin-bottom: 4px;
+}
+.admin-chat-shield-icon {
+  font-size: 0.85rem;
+}
+.admin-chat-msg__moderated-text {
+  font-size: 0.8125rem;
+  color: #7C2D12;
+  font-style: italic;
+  margin: 0 0 6px 0;
+}
 /* ============================================================
    RETURNS & EXCHANGES ENTERPRISE ERP STYLES
    ============================================================ */

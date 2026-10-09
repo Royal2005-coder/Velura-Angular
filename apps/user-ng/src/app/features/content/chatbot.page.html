@@ -55,8 +55,8 @@
               <span class="chatbot-header__status"></span>
             </div>
             <div>
-              <h4 class="chatbot-header__title">{{ humanTakeover() ? 'CSKH — HUMAN' : 'AI Stylist' }}</h4>
-              <span class="chatbot-header__desc">{{ handoffStatus() === 'assigned' ? 'Nhân viên đã tiếp nhận · AI đã dừng' : handoffStatus() === 'requested' ? 'Đang chờ CSKH · AI đã dừng' : handoffStatus() === 'closed' ? 'Phiên CSKH đã đóng · AI đã dừng' : 'Tư vấn bằng AI' }}</span>
+              <h4 class="chatbot-header__title">{{ humanTakeover() ? 'CSKH Velura' : 'AI Stylist Velura' }}</h4>
+              <span class="chatbot-header__desc">{{ handoffStatus() === 'assigned' ? 'Nhân viên CSKH đang hỗ trợ trực tiếp' : handoffStatus() === 'requested' ? 'Đang chuyển giao tới nhân viên CSKH' : handoffStatus() === 'closed' ? 'Phiên CSKH đã đóng' : 'Trợ lý AI trực tuyến' }}</span>
             </div>
           </div>
           <div class="chatbot-state-switcher" style="display:flex;align-items:center;gap:12px;">
@@ -69,8 +69,24 @@
             </button>
           </div>
         </div>
-        @if (humanTakeover()) { <p role="status">Tin nhắn của bạn được gửi cho CSKH, không tạo câu trả lời AI.</p><button type="button" (click)="refreshMessages()" [disabled]="loading()">Tải lại tin nhắn CSKH</button> }
-        @else { <button type="button" (click)="requestHuman()" [disabled]="loading()">Gặp nhân viên CSKH</button> }
+        @if (humanTakeover()) {
+          <div class="chatbot-handoff-banner" style="display:flex;align-items:center;justify-content:space-between;gap:12px;background:#FAF2EB;border:1px solid #E8DFD6;border-radius:10px;padding:10px 16px;margin:8px 16px;">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <span style="font-size:1.3rem;">🧑‍💼</span>
+              <div style="font-size:0.8rem;line-height:1.4;color:#2A2522;">
+                <strong>Cuộc trò chuyện đã được chuyển tới nhân viên CSKH</strong>
+                <p style="margin:2px 0 0 0;color:#6B635D;">Nhân viên đã nắm được bản tóm tắt từ AI và sẽ phản hồi sớm nhất. Bạn không cần kể lại từ đầu.</p>
+              </div>
+            </div>
+            <button type="button" class="btn btn--outline btn--sm" (click)="refreshMessages()" [disabled]="loading()" style="font-size:0.75rem;padding:6px 12px;white-space:nowrap;">Tải lại tin nhắn</button>
+          </div>
+        } @else {
+          <div style="padding:6px 16px;display:flex;justify-content:flex-end;">
+            <button type="button" class="chatbot-human-btn" (click)="requestHuman()" [disabled]="loading()" style="background:transparent;border:1px solid #E8DFD6;color:#6B635D;border-radius:99px;font-size:0.75rem;padding:4px 12px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;">
+              <span>💬</span> Gặp nhân viên CSKH
+            </button>
+          </div>
+        }
         @if (chatError()) { <p role="alert">{{ chatError() }}</p> }
 
         <div class="chatbot-messages" #messagesPane>

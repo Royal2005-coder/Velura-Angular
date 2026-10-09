@@ -29,7 +29,20 @@ export interface AdminReviewedChatMessage extends AdminChatMessageRow {
 
 /** Supervisor-only handling remains enforced by the API; this metadata is a UI permission hint. */
 export interface AdminReviewedChatSession extends AdminChatSessionRow {
-  metadata?: { guest_email?: string; supervisor_required?: boolean; handoff_summary?: { summary?: string; verified_status?: string; risk?: string } };
+  risk_level?: 'green' | 'yellow' | 'orange' | 'red';
+  metadata?: {
+    guest_email?: string;
+    supervisor_required?: boolean;
+    handoff_summary?: {
+      summary?: string;
+      problem?: string;
+      wanted?: string;
+      failed_approaches?: string[];
+      verified_status?: string;
+      risk?: string;
+      sentiment?: string;
+    };
+  };
 }
 
 /** Moderation requires deliberate confirmation; corrections and outcomes are audit records only. */

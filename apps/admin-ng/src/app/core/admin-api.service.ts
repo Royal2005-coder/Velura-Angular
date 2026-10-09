@@ -238,7 +238,12 @@ export interface AdminChatSessionRow {
   created_at?: string;
   guest_id?: string;
   handoff_status?: string;
-  metadata?: { guest_email?: string };
+  risk_level?: 'green' | 'yellow' | 'orange' | 'red';
+  metadata?: {
+    guest_email?: string;
+    supervisor_required?: boolean;
+    handoff_summary?: Record<string, unknown>;
+  };
 }
 
 export interface AdminChatMessageRow {

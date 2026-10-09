@@ -327,7 +327,8 @@ export class ProductListPage {
       this.selectedSlugs.set(slug ? [slug] : []);
       this.searchQuery.set((params.get('q') || '').trim());
       const matchIds = params.get('match_ids');
-      this.imageMatches.set(matchIds === null ? null : matchIds.split(',').filter(Boolean));
+      const parsedIds = matchIds === null ? null : matchIds.split(',').filter(Boolean);
+      this.imageMatches.set(parsedIds?.length ? parsedIds : matchIds === null ? null : null);
       this.visualFeatured.set([]);
       this.currentPage.set(1);
     });

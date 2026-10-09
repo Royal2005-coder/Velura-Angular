@@ -117,7 +117,14 @@ export class VisualSearchService {
     for (const [key, value] of this.refinements) if (value.expires <= Date.now()) this.refinements.delete(key);
     if (this.refinements.size >= 5000 && !this.refinements.has(token)) this.refinements.delete(this.refinements.keys().next().value!);
     this.refinements.set(token, { owner, attributes, keywords, expires: Date.now() + 1800000 });
-    return { refinement_token: token, attributes, keywords, matches, featured: matches.length ? [] : catalog.featured, catalog_version: catalog.catalog_version, personalized: !!profile };
+    let featured = catalog.featured;
+    if (!matches.length && attributes.category && this.repo.categoryFallback) {
+      try {
+        const fallback = await this.repo.categoryFallback(attributes.category);
+        if (fallback.length) featured = fallback;
+      } catch { /* fallback to default featured */ }
+    }
+    return { refinement_token: token, attributes, keywords, matches, featured: matches.length ? [] : featured, catalog_version: catalog.catalog_version, personalized: !!profile };
   }
   private async operation<T>(owner: string, requestId: string, run: (signal: AbortSignal, retry: (call: (remaining: number) => Promise<unknown>) => Promise<unknown>) => Promise<T>): Promise<T> {
     if ((this.cancelled.get(`${owner}:${requestId}`) || 0) > Date.now()) throw new HttpError(409, "VISUAL_SEARCH_CANCELLED", "Đã hủy tìm kiếm.");

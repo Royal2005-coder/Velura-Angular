@@ -7,7 +7,7 @@ export const DEFAULT_PERSONAL_COLOR_POLICY: PersonalColorPolicy = {
   approved: true,
   approvalReference: "VELURA-POL-2026-PC01",
   calibrationReference: "CAL-2026-PC-4SEASON",
-  model: "gemini-3.5-flash",
+  model: "gemini-3.5-flash-lite",
   taxonomy: {
     Spring: ["Spring"],
     Summer: ["Summer"],

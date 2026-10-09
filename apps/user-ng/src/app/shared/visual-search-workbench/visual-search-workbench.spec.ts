@@ -6,15 +6,14 @@ import { VisualSearchModel, type VisualResult } from '../../core/services/visual
 import { sampleProduct } from '../../../testing/storefront-testing';
 import { VisualSearchWorkbench } from './visual-search-workbench';
 
-const result: VisualResult = { refinement_token: 'private-owner-token', attributes: { category: 'dress', color: null, fit: null, material: null, style: null }, keywords: '', matches: [], featured: [sampleProduct], catalog_version: 'v1', personalized: false };
+const result: VisualResult = { attributes: { category: 'dam-vay', color: null, fit: null, material: null, style: null }, matches: [], featured: [sampleProduct], catalog_version: 'v1', personalized: false };
 describe('VisualSearchWorkbench', () => {
-  const model = { validate: vi.fn(), search: vi.fn(), refine: vi.fn(), cancel: vi.fn(), crop: vi.fn(), camera: vi.fn() };
+  const model = { validate: vi.fn(), search: vi.fn(), cancel: vi.fn(), crop: vi.fn(), camera: vi.fn() };
   beforeEach(() => {
     model.validate.mockResolvedValue(undefined);
     model.search.mockReturnValue(of(result));
-    model.refine.mockReturnValue(of(result));
     model.cancel.mockReturnValue(of({}));
-    model.search.mockClear(); model.refine.mockClear();
+    model.search.mockClear();
     TestBed.configureTestingModule({ imports: [VisualSearchWorkbench], providers: [{ provide: VisualSearchModel, useValue: model }, { provide: AuthService, useValue: { session: signal(null) } }] });
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:garment');
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
@@ -35,8 +34,6 @@ describe('VisualSearchWorkbench', () => {
     expect(matches).toHaveBeenCalledWith([]);
     expect(page.result()?.featured[0].product_id).toBe(sampleProduct.product_id);
     expect(page.preview()).toBe('');
-    page.refine();
-    expect(model.refine.mock.calls[0][0].refinement_token).toBe('private-owner-token');
     expect(model.search).toHaveBeenCalledTimes(1);
   });
   it('requires a visible crop before uploading and ignores late cancelled results', async () => {

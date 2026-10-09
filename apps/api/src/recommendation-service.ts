@@ -130,30 +130,6 @@ export async function buildStyleProfileRecommendations(
   }
 }
 
-/**
- * Flatten a product row into embedding text for Gemini.
- */
-export async function buildProductEmbeddingText(product: JsonObject): Promise<string> {
-  const category = asJsonObject(product.category);
-  const variants = asObjectList(product.variants);
-  const sizes = [...new Set(variants.map((variant) => variant.size).filter(Boolean))].slice(0, 16);
-  const colors = [...new Set(variants.map((variant) => variant.color).filter(Boolean))].slice(0, 16);
-
-  return [
-    `title: ${product.name || "Sản phẩm Velura"}`,
-    `text: ${product.description || ""}`,
-    `Danh mục: ${category.name || product.category_name || ""}`,
-    `Thương hiệu: ${product.brand || "Velura"}`,
-    `Màu chủ đạo: ${product.color_tone || ""}`,
-    `Phong cách: ${arrayText(product.style_tags)}`,
-    `Dịp mặc: ${arrayText(product.occasions)}`,
-    `Dáng người phù hợp: ${arrayText(product.suitable_body_shapes)}`,
-    `Size có sẵn: ${sizes.join(", ")}`,
-    `Màu biến thể: ${colors.join(", ")}`,
-    `Giá: ${Number(product.sale_price || product.base_price || 0)}`
-  ].join(" | ");
-}
-
 async function getStyleProfile(context: AuthContext, req: HttpRequest): Promise<JsonObject | null> {
   if (context?.profile?.user_id) {
     return selectOne("style_profile", { user_id: `eq.${context.profile.user_id}` });

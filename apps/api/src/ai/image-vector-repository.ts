@@ -1,6 +1,6 @@
 import { readFile, writeFile, mkdir, rename } from "node:fs/promises";
 import { join } from "node:path";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { HttpError } from "../http.js";
 
 /** Catalog image vector excludes private customer photos and Gemini's text vector namespace. */
@@ -63,6 +63,14 @@ export class LocalImageVectorRepository {
     return new Map(
       (await this.rows()).map((row) => [row.product_id, row.image_revision]),
     );
+  }
+  /** Stable digest of every indexed SKU revision, so clients can tell a refreshed index from a stale cache. */
+  async version(): Promise<string> {
+    const rows = await this.rows();
+    return createHash("sha1")
+      .update(rows.map((row) => `${row.product_id}:${row.image_revision}`).join("|"))
+      .digest("hex")
+      .slice(0, 12);
   }
   /** Replace one SKU image revision after successful catalog-only embedding. */
   async upsert(row: CatalogImageVector): Promise<void> {

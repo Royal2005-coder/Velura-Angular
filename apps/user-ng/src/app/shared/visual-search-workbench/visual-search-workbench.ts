@@ -3,7 +3,7 @@ import { Component, DestroyRef, ElementRef, effect, inject, input, output, signa
 import { RouterLink } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { AuthService } from '../../core/services/auth.service';
-import { VisualSearchModel, type VisualAttributes, type VisualFilters, type VisualResult } from '../../core/services/visual-search.service';
+import { VisualSearchModel, type VisualFilters, type VisualResult } from '../../core/services/visual-search.service';
 import { ProductCard } from '../product-card/product-card';
 
 /** Maps Gemini Vision detected categories to Velura catalog slugs. */
@@ -21,7 +21,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   'set-do': 'Set đồ', 'phu-kien': 'Phụ kiện', 'giay-dep': 'Giày dép',
 };
 
-/** Consent-first camera search with single-garment crop and source-free refinements. */
+/** Consent-first camera search with a single-garment crop and CLIP similarity results. */
 @Component({ selector: 'app-visual-search-workbench', standalone: true, imports: [ProductCard, RouterLink], templateUrl: './visual-search-workbench.html', styleUrl: './visual-search-workbench.css' })
 export class VisualSearchWorkbench {
   readonly hideTrigger = input(false);
@@ -29,8 +29,6 @@ export class VisualSearchWorkbench {
   readonly filters = input<VisualFilters>({});
   readonly matches = output<string[]>();
   readonly searchResult = output<VisualResult>();
-  readonly attributeKeys: Array<keyof VisualAttributes> = ['category', 'color', 'fit', 'material', 'style'];
-  readonly labels: Record<keyof VisualAttributes, string> = { category: 'Loại trang phục', color: 'Màu sắc', fit: 'Phom dáng', material: 'Chất liệu', style: 'Phong cách' };
   readonly cropKeys = ['x', 'y', 'width', 'height'] as const;
   readonly cropLabels = { x: 'Vị trí ngang', y: 'Vị trí dọc', width: 'Chiều rộng', height: 'Chiều cao' };
   readonly titleId = `visual-${crypto.randomUUID()}`;
@@ -40,8 +38,6 @@ export class VisualSearchWorkbench {
   readonly busy = signal(false);
   readonly error = signal('');
   readonly result = signal<VisualResult | null>(null);
-  readonly attributes = signal<VisualAttributes>({ category: null, color: null, fit: null, material: null, style: null });
-  readonly keywords = signal('');
   readonly cameraOpen = signal(false);
   private readonly model = inject(VisualSearchModel);
   private readonly auth = inject(AuthService);
@@ -53,18 +49,9 @@ export class VisualSearchWorkbench {
   private requestId = '';
   private subscription?: Subscription;
   private epoch = 0;
-  private refineTimer?: ReturnType<typeof setTimeout>;
   constructor() {
     effect(() => { this.auth.session(); untracked(() => { this.cancel(); this.result.set(null); }); });
-    effect(() => {
-      this.candidateProductIds(); this.filters();
-      untracked(() => {
-        if (!this.result() || this.busy()) return;
-        clearTimeout(this.refineTimer);
-        this.refineTimer = setTimeout(() => this.refine(), 350);
-      });
-    });
-    this.destroy.onDestroy(() => { clearTimeout(this.refineTimer); this.cancel(); });
+    this.destroy.onDestroy(() => this.cancel());
   }
   /** Existing header camera calls the same accessible modal entry point. */
   open(): void { this.error.set(''); this.dialog()?.nativeElement.showModal(); }
@@ -130,17 +117,10 @@ export class VisualSearchWorkbench {
     if (!this.file || !this.consent() || this.busy()) return;
     const crop = this.crop();
     if (crop.x || crop.y || crop.width !== 100 || crop.height !== 100) { this.error.set('Áp dụng vùng ảnh trước khi xác nhận tìm kiếm.'); return; }
-    this.begin(false);
+    this.begin();
   }
-  /** Attributes may be changed or removed without uploading the deleted source image. */
-  edit(event: Event, key: keyof VisualAttributes): void { this.attributes.update(value => ({ ...value, [key]: (event.target as HTMLInputElement).value.trim() || null })); }
-  /** Keywords are independent of extracted attributes and can be cleared. */
-  editKeywords(event: Event): void { this.keywords.set((event.target as HTMLInputElement).value); }
-  /** Requery current attributes and catalog filters using the refinement token only. */
-  refine(): void { if (this.result() && !this.busy()) this.begin(true); }
   /** Abort HTTP callbacks and revoke source data on all cancellation paths. */
   cancel(): void {
-    clearTimeout(this.refineTimer);
     this.epoch++;
     this.subscription?.unsubscribe();
     if (this.requestId) this.model.cancel(this.requestId).subscribe({ error: () => undefined });
@@ -155,16 +135,15 @@ export class VisualSearchWorkbench {
       this.file = file; this.preview.set(URL.createObjectURL(file)); this.crop.set({ x: 0, y: 0, width: 100, height: 100 });
     } catch (error) { if (epoch === this.epoch) this.error.set(error instanceof Error ? error.message : 'Không đọc được ảnh.'); }
   }
-  private begin(refine: boolean): void {
-    const result = this.result();
+  private begin(): void {
     const requestId = crypto.randomUUID(), epoch = ++this.epoch;
     this.requestId = requestId; this.busy.set(true); this.error.set('');
     const filters = { ...this.filters(), ...(this.candidateProductIds() !== undefined ? { product_ids: this.candidateProductIds() } : {}) };
-    const request = refine && result ? this.model.refine(result, requestId, this.attributes(), this.keywords(), filters) : this.model.search(this.file!, requestId, filters);
+    const request = this.model.search(this.file!, requestId, filters);
     this.subscription = request.subscribe({
       next: response => {
         if (epoch !== this.epoch) return;
-        this.result.set(response); this.attributes.set(response.attributes); this.keywords.set(response.keywords);
+        this.result.set(response);
         this.matches.emit(response.matches.map(row => row.product_id)); this.searchResult.emit(response);
         this.finish();
       },

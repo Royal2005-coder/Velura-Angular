@@ -11,7 +11,7 @@ export interface VisualAttributes { category: string | null; color: string | nul
 export interface VisualFilters { product_ids?: string[]; category_id?: string; min_price?: number; max_price?: number; color?: string; size?: string; body_shape?: string; }
 /** Actual matches and explicitly separate featured suggestions. */
 export interface VisualResult {
-  refinement_token: string; attributes: VisualAttributes; keywords: string;
+  attributes: VisualAttributes;
   matches: Array<ProductSummary & { similarity: number; rank_score?: number }>;
   featured: ProductSummary[]; catalog_version: string; personalized: boolean;
 }
@@ -65,10 +65,6 @@ export class VisualSearchModel {
     body.append('file', file);
     body.append('metadata', JSON.stringify({ request_id: requestId, filters, consent: true, confirmed: true }));
     return this.http.post<VisualResult>(this.base, body);
-  }
-  /** Requery attributes/keywords/filters using only the owner-bound source-free token. */
-  refine(result: VisualResult, requestId: string, attributes: VisualAttributes, keywords: string, filters: VisualFilters): Observable<VisualResult> {
-    return this.http.post<VisualResult>(`${this.base}/refine`, { refinement_token: result.refinement_token, request_id: requestId, attributes, keywords, filters });
   }
   /** Stop server work as well as ignoring late callbacks. */
   cancel(requestId: string): Observable<unknown> { return this.http.delete(`${this.base}/requests/${requestId}`); }

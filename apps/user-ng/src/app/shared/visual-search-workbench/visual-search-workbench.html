@@ -62,20 +62,11 @@
     @if (error()) { <p role="alert" class="error">{{ error() }}</p> }
 
     @if (result(); as response) {
-      <fieldset [disabled]="busy()">
-        <legend>Chỉnh hoặc xóa thuộc tính · không cần tải lại ảnh</legend>
-        @for (key of attributeKeys; track key) {
-          <label>{{ labels[key] }}<input type="text" maxlength="80" [value]="attributes()[key] || ''" (input)="edit($event,key)" /></label>
-        }
-        <label>Từ khóa bổ sung<input type="text" maxlength="300" [value]="keywords()" (input)="editKeywords($event)" /></label>
-        <button type="button" class="btn btn--primary" (click)="refine()">Tìm lại với chỉnh sửa</button>
-      </fieldset>
-
       <p class="vs-catalog-info">Danh mục phiên bản {{ response.catalog_version }} · {{ response.personalized ? 'Đã sắp xếp theo hồ sơ phong cách' : 'Sắp xếp theo độ tương đồng' }}</p>
 
       @if (response.matches.length) {
         <div class="results-section">
-          <h3>Sản phẩm tương đồng ({{ response.matches.length }})</h3>
+          <h3>Sản phẩm tương đồng{{ response.attributes.category ? ' · ' + categoryLabel(response.attributes.category) : '' }} ({{ response.matches.length }})</h3>
           <div class="results">
             @for (product of response.matches; track product.product_id) {
               <div><app-product-card [product]="product" /><small>Độ tương đồng: {{ (product.similarity * 100).toFixed(1) }}%</small></div>
@@ -88,7 +79,7 @@
             @if (response.attributes.category) {
               Không tìm thấy sản phẩm khớp chính xác. Gợi ý theo danh mục "{{ categoryLabel(response.attributes.category) }}":
             } @else {
-              Không có sản phẩm đạt mức tương đồng. Thử đổi thuộc tính hoặc vùng ảnh.
+              Không có sản phẩm nào của shop trùng với ảnh này. Thử ảnh có trang phục rõ hơn.
             }
           </div>
           @if (response.featured.length) {

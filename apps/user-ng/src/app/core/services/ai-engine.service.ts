@@ -17,6 +17,15 @@ export interface AiJob {
   error?: string;
   matches?: { product_id: string; score: number }[];
 }
+export interface StudioAsset {
+  id: string;
+  label: string;
+  gender?: string;
+  season?: string;
+  occasion?: string;
+  badge?: string;
+  preview_url?: string;
+}
 /** Runtime readiness is authoritative, including the installed model and catalog vector index. */
 export interface AiCapabilities {
   product_supported?: boolean;
@@ -27,7 +36,7 @@ export interface AiCapabilities {
   max_upload_bytes: number;
   private_ttl_seconds: number;
   tasks: { task: AiTask; enabled: boolean; reason?: string }[];
-  studio_assets?: { id: string; label: string; preview_url?: string }[];
+  studio_assets?: StudioAsset[];
 }
 /** Explicitly consented input; product and studio IDs are validated against server allowlists. */
 export interface AiJobInput {

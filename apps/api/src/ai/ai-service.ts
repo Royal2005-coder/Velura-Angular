@@ -101,6 +101,9 @@ export class AiService {
               id,
               label: asString(asset.label) || id,
               gender: asString(asset.gender) || "unspecified",
+              season: asString(asset.season) || undefined,
+              occasion: asString(asset.occasion) || undefined,
+              badge: asString(asset.badge) || undefined,
             },
           ]
         : [];

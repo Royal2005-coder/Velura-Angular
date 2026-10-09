@@ -65,11 +65,13 @@ class MasklessVton:
         if len(subset) != 1:
             return ["MULTIPLE_PEOPLE"]
         points = bodies["candidate"]
-        # DWPose/OpenPose shoulder/hip indices, not MediaPipe indices.
-        required = (2, 5, 8, 11)
-        if any(subset[0, index] < 0 or not np.all((points[index, :2] > .02) & (points[index, :2] < .98)) for index in required):
+        # OpenPose keypoints: 2=R-Shoulder, 5=L-Shoulder, 8=R-Hip, 11=L-Hip.
+        # Accept upper body photos (shoulders visible) for tops, and full body photos.
+        has_shoulders = subset[0, 2] >= 0 and subset[0, 5] >= 0
+        has_hips = subset[0, 8] >= 0 and subset[0, 11] >= 0
+        if not has_shoulders and not has_hips:
             return ["BODY_CROPPED_OR_OCCLUDED"]
-        if abs(float(points[2, 0] - points[5, 0])) < .1:
+        if has_shoulders and abs(float(points[2, 0] - points[5, 0])) < .08:
             return ["POSE_NOT_FRONTAL"]
         return []
 

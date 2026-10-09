@@ -46,7 +46,6 @@ import { handleRecommendationRoute } from "./recommendation.controller.js";
 import { handleAiRoute, getAiService } from "./ai/ai-router.js";
 import { handleRuntimeRoute, observeHttpRequest } from "./ops-runtime.js";
 import { handleVisualSearchRoute } from "./visual-search/visual-search-router.js";
-import { startVisualCatalogRefresh } from "./visual-search/visual-search-repository.js";
 import { handlePersonalColorRoute } from "./personal-color/personal-color-router.js";
 import { createPersonalColorService } from "./personal-color/personal-color-module.js";
 import { handleLoyaltyRoute, loyaltyService } from "./loyalty/loyalty-router.js";
@@ -439,11 +438,9 @@ export const server = createServer(handleApiRequest);
 
 if (process.env.VERCEL !== "1") {
   const timers = [startAccountMaintenance(), startEmailOutboxWorker(), startPromotionScheduler(), startOrderAutomation()];
-  const stopVisualRefresh = startVisualCatalogRefresh();
   catalogContentService.start();
   const shutdown = () => {
     for (const timer of timers) clearInterval(timer || undefined);
-    stopVisualRefresh();
     catalogContentService.stop();
     personalColorService.close();
     server.close(() => { void getAiService().close(); });

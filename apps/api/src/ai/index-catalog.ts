@@ -47,7 +47,6 @@ async function main(): Promise<void> {
     {
       select: "product_id,images,updated_at",
       status: "in.(on_sale,out_of_stock)",
-      is_combo: "eq.false",
       order: "product_id.asc",
       limit,
     },

@@ -29,10 +29,6 @@
         <div class="alert alert--warning" role="status">
           Sản phẩm này chưa cấu hình ảnh flat-lay thử đồ. Bạn vẫn có thể xem ảnh và đặt mua bình thường.
         </div>
-      } @else if (task() === 'virtual_try_on' && capabilities()?.variant_supported === false) {
-        <div class="alert alert--warning" role="status">
-          Màu hoặc kích cỡ này chưa có ảnh chuẩn SKU. Bạn vui lòng chọn màu/cỡ khác để thử đồ.
-        </div>
       } @else if (capabilities() && !available()) {
         <div class="alert alert--warning" role="status">
           Hệ thống AI đang khởi động trên cụm máy chủ. Vui lòng thử lại sau giây lát.

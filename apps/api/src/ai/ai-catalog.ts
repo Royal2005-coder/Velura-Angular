@@ -59,12 +59,14 @@ export class ShopAiCatalog implements AiCatalog {
         garment.photo_type !== "flat-lay" || !["upper_body", "lower_body", "dresses"].includes(category)) {
       return { product_supported: false, variant_supported: false };
     }
-    const variant = variantId ? await this.deps.variant(productId, variantId) : null;
-    if (!variant || variant.variant_id !== variantId || variant.product_id !== productId) {
-      return { product_supported: true, variant_supported: false, garment_category: category };
+    if (variantId) {
+      const variant = await this.deps.variant(productId, variantId);
+      if (variant && variant.product_id !== productId) {
+        return { product_supported: true, variant_supported: false, garment_category: category };
+      }
     }
-    const imageUrl = asString(asJsonObject(garment.variant_images)[variantId!]) ||
-      (garment.variant_id === variantId ? asString(garment.image_url) : "");
+    const imageUrl = (variantId ? asString(asJsonObject(garment.variant_images)[variantId]) : "") ||
+      asString(garment.image_url);
     try {
       this.allowedUrl(imageUrl);
       return { product_supported: true, variant_supported: true, garment_category: category };
@@ -132,7 +134,7 @@ export class ShopAiCatalog implements AiCatalog {
     const registry = asJsonObject(JSON.parse(process.env.AI_VTO_PRODUCTS || "{}") as unknown);
     const garment = asJsonObject(registry[productId]);
     const imageUrl = asString(asJsonObject(garment.variant_images)[variantId]) ||
-      (garment.variant_id === variantId ? asString(garment.image_url) : "");
+      asString(garment.image_url);
     return { bytes: await this.fetchImage(imageUrl), category: support.garment_category! };
   }
   private async fetchImage(imageUrl: string): Promise<Buffer> {

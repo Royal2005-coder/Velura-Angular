@@ -1,3 +1,4 @@
+import { DecimalPipe } from '@angular/common';
 import { Component, DestroyRef, computed, effect, inject, signal, untracked } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Subscription, exhaustMap, takeWhile, timer } from 'rxjs';
@@ -8,6 +9,7 @@ import { PersonalColorModel, type ColorCapabilities, type PersonalColorAnalysis,
 @Component({
   selector: 'app-personal-color',
   standalone: true,
+  imports: [DecimalPipe],
   templateUrl: './personal-color.component.html',
   styleUrl: './personal-color.component.css',
 })

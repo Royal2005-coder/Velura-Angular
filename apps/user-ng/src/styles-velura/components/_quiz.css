@@ -877,3 +877,70 @@ body.page-quiz-flow {
     grid-template-columns: repeat(3, 1fr);
   }
 }
+
+/* ---------- Quiz Step 5: AI Personal Color Card ---------- */
+.quiz-ai-pc-card {
+  background: #ffffff;
+  border: 1.5px solid var(--terracotta, #C97B63);
+  border-radius: var(--radius-md, 16px);
+  padding: 24px;
+  margin-bottom: 24px;
+  box-shadow: 0 8px 24px rgba(201, 123, 99, 0.08);
+}
+
+.quiz-ai-pc-head {
+  margin-bottom: 16px;
+}
+
+.quiz-ai-pc-badge {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--terracotta, #C97B63);
+  background: #FAF2EB;
+  padding: 4px 10px;
+  border-radius: 99px;
+  margin-bottom: 8px;
+  letter-spacing: 0.04em;
+}
+
+.quiz-ai-pc-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--ink, #2A2522);
+  margin: 0 0 6px 0;
+}
+
+.quiz-ai-pc-desc {
+  font-size: 0.82rem;
+  color: var(--muted, #6B635D);
+  line-height: 1.45;
+  margin: 0;
+}
+
+.quiz-ai-pc-divider {
+  position: relative;
+  text-align: center;
+  margin: 24px 0 20px 0;
+}
+
+.quiz-ai-pc-divider::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--line, #E8DFD6);
+}
+
+.quiz-ai-pc-divider span {
+  position: relative;
+  background: #FAF6F2;
+  padding: 0 16px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--soft, #8C857E);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}

@@ -220,6 +220,7 @@ def create_app(loader=None, key: str | None = None) -> FastAPI:
         except WorkerError as error:
             return JSONResponse({**envelope, "status": "failed", "error_code": error.code}, status_code=error.status, headers=headers)
         except Exception:
+            import traceback; traceback.print_exc()
             return JSONResponse({**envelope, "status": "failed", "error_code": "INFERENCE_FAILED"}, status_code=500, headers=headers)
 
     for path in TASKS:

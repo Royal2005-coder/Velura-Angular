@@ -77,8 +77,7 @@ export class AiImageWorkbench {
     () =>
       this.capabilities()?.tasks.some((t) => t.task === this.task() && t.enabled) === true &&
       (this.task() !== 'virtual_try_on' ||
-        (this.capabilities()?.product_supported === true &&
-          this.capabilities()?.variant_supported === true)),
+        this.capabilities()?.product_supported === true),
   );
   readonly title = computed(() =>
     this.task() === 'image_embedding' ? 'Tìm sản phẩm bằng ảnh' : 'Thử đồ với AI',
@@ -275,7 +274,10 @@ export class AiImageWorkbench {
   }
   /** Requires a second explicit confirmation after personal-image validation or studio selection. */
   async generate(): Promise<void> {
-    if (this.task() === 'virtual_try_on' && (!this.productId() || !this.variantId())) {
+    if (
+      this.task() === 'virtual_try_on' &&
+      (!this.productId() || !this.variantId() || this.capabilities()?.variant_supported === false)
+    ) {
       this.error.set('Chọn màu và cỡ sản phẩm trước khi thử đồ.');
       return;
     }

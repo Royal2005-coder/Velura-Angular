@@ -25,7 +25,13 @@ def verify_file(path: Path, item: dict) -> str:
     if not path.is_file() or path.stat().st_size != item["size"]:
         raise ValueError("WEIGHTS_MISSING_OR_SIZE")
     sha = hashlib.sha256()
-    legacy = hashlib.md5(usedforsecurity=False) if "md5" in item else None
+    if "md5" in item:
+        try:
+            legacy = hashlib.md5(usedforsecurity=False)
+        except TypeError:
+            legacy = hashlib.md5()
+    else:
+        legacy = None
     with path.open("rb") as stream:
         while chunk := stream.read(1024 * 1024):
             sha.update(chunk)

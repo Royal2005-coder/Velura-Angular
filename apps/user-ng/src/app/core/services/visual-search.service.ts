@@ -12,8 +12,12 @@ export interface VisualFilters { product_ids?: string[]; category_id?: string; m
 /** Actual matches and explicitly separate featured suggestions. */
 export interface VisualResult {
   attributes: VisualAttributes;
-  matches: Array<ProductSummary & { similarity: number; rank_score?: number }>;
+  matches: Array<ProductSummary & { similarity: number; rank_score?: number; tier?: 'strong' | 'similar' }>;
   featured: ProductSummary[]; catalog_version: string; personalized: boolean;
+  fallback?: {
+    category: string | null; category_name: string | null;
+    color_tone: string | null; color_name: string | null;
+  } | null;
 }
 /** Camera/decode/crop and HTTP stay in the Model, never a page. */
 @Injectable({ providedIn: 'root' })

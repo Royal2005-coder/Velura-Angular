@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import sharp from "sharp";
 import { HttpError } from "../../apps/api/src/http.js";
 import { VisualSearchService, decodeSearchImage, rankVisualMatches, type VisualProviders } from "../../apps/api/src/visual-search/visual-search-service.js";
-import { dominantCategory, validateFilters, type VisualCandidate } from "../../apps/api/src/visual-search/visual-search-types.js";
+import { dominantCategory, dominantTone, categoryLabel, toneLabel, validateFilters, type VisualCandidate } from "../../apps/api/src/visual-search/visual-search-types.js";
 import type { VisualSearchRepository } from "../../apps/api/src/visual-search/visual-search-repository.js";
 import { readVisualUpload } from "../../apps/api/src/visual-search/visual-search-router.js";
 
@@ -22,7 +22,7 @@ function fixture(overrides: Partial<VisualProviders> = {}, profile: Record<strin
     async imageSearch(_vector, filters) { searchCalls++; lastFilters = filters; return { neighbors, featured, catalog_version: version }; },
   };
   const providers: VisualProviders = {
-    async decode(bytes) { return Buffer.from(bytes); },
+    async decode(bytes) { return { bytes: Buffer.from(bytes), mime: "image/png" }; },
     async embedImage() { embedCalls++; return clipVector; },
     ...overrides,
   };
@@ -32,7 +32,11 @@ function fixture(overrides: Partial<VisualProviders> = {}, profile: Record<strin
 
 test("Decode rejects unreadable, wrong MIME, over-5MB and non-raster sources", async () => {
   const png = await sharp({ create: { width: 8, height: 8, channels: 3, background: "white" } }).png().toBuffer();
-  assert.ok((await decodeSearchImage(png, "image/png")).length > 0);
+  const decoded = await decodeSearchImage(png, "image/png");
+  assert.ok(decoded.bytes.length > 0);
+  assert.equal(decoded.mime, "image/png");
+  const jpeg = await sharp({ create: { width: 8, height: 8, channels: 3, background: "white" } }).jpeg().toBuffer();
+  assert.equal((await decodeSearchImage(jpeg, "image/jpeg")).mime, "image/jpeg");
   await assert.rejects(decodeSearchImage(png, "image/jpeg"), { code: "VISUAL_IMAGE_UNREADABLE" });
   await assert.rejects(decodeSearchImage(Buffer.alloc(5 * 1024 * 1024 + 1), "image/png"), { code: "VISUAL_IMAGE_SIZE" });
   await assert.rejects(decodeSearchImage(Buffer.from("not an image"), "image/png"), { code: "VISUAL_IMAGE_UNREADABLE" });
@@ -61,21 +65,41 @@ test("Nearest neighbours vote for the detected category and rows without one abs
   assert.equal(dominantCategory(mixed), "quan");
 });
 
-test("CLIP .6 boundary, max20 and absent-profile order preserve visual similarity", () => {
+test("CLIP .45 similar floor, max20 and absent-profile order preserve visual similarity", () => {
   const rows: VisualCandidate[] = Array.from({ length: 25 }, (_, i) => neighbor(String(i), 0.6 + i / 100));
-  rows.push(neighbor("below", 0.599999), neighbor("hidden", 1));
+  rows.push(neighbor("below", 0.449999), neighbor("hidden", 1));
   rows[rows.length - 1].status = "hidden";
   const ranked = rankVisualMatches(rows, null);
   assert.equal(ranked.length, 20); assert.equal(ranked[0].product_id, "24");
   assert.equal(rankVisualMatches([rows[0]], null)[0].similarity, 0.6);
   assert.ok(ranked.every(row => row.rank_score === row.similarity));
-  assert.deepEqual(rankVisualMatches([neighbor("x", 0.59)], null), []);
+  assert.deepEqual(rankVisualMatches([neighbor("x", 0.44)], null), []);
+});
+
+test("A person wearing the garment lands in the similar tier, a studio photo in the strong tier", () => {
+  const ranked = rankVisualMatches([neighbor("person", 0.52, "ao"), neighbor("studio", 0.88, "ao")], null);
+  assert.equal(ranked[0].product_id, "studio");
+  assert.equal(ranked[0].tier, "strong");
+  assert.equal(ranked[1].product_id, "person");
+  assert.equal(ranked[1].tier, "similar");
+});
+
+test("The tone vote follows the closest rows and abstains without tones", () => {
+  const rows = [neighbor("a", 0.8, "ao"), neighbor("b", 0.7, "ao")];
+  rows[0].color_tone = "Warm"; rows[1].color_tone = "Warm";
+  assert.equal(dominantTone(rows), "Warm");
+  assert.equal(dominantTone([neighbor("a", 0.8)]), null);
+  assert.equal(dominantTone([]), null);
+  // A tie prefers the tone of the single closest neighbour.
+  const tie = [neighbor("a", 0.8), neighbor("b", 0.7)];
+  tie[0].color_tone = "Cool"; tie[1].color_tone = "Warm";
+  assert.equal(dominantTone(tie), "Cool");
 });
 
 test("Confirmed profile reranks body/style/color/occasion/budget but cannot admit low similarity", () => {
   const profile = { body_shape: "pear", style_tags: ["minimal"], favorite_colors: ["black"], preferred_occasions: ["office"], budget_range: "under_300k" };
   const matched: VisualCandidate = { ...neighbor("personal", 0.6), suitable_body_shapes: ["Pear"], style_tags: ["minimal"], color_tone: "black", occasions: ["office"], sale_price: 200000 };
-  const ranked = rankVisualMatches([matched, { ...neighbor("plain", 0.7) }, neighbor("below", 0.59)], profile);
+  const ranked = rankVisualMatches([matched, { ...neighbor("plain", 0.7) }, neighbor("below", 0.44)], profile);
   assert.equal(ranked[0].product_id, "personal"); assert.equal(ranked.length, 2);
 });
 
@@ -91,19 +115,20 @@ test("A matching photo returns ranked neighbours with its detected category and 
   assert.deepEqual(f.counters().lastFilters, { min_price: 100 });
 });
 
-test("Neighbours below the match threshold fall back to featured rows of the detected category", async () => {
+test("Neighbours below the similar floor fall back to featured rows of the detected category", async () => {
   const f = fixture();
-  f.setNeighbors([neighbor("near", 0.55, "dam-vay"), neighbor("nearer", 0.52, "dam-vay")]);
+  f.setNeighbors([neighbor("near", 0.44, "dam-vay"), neighbor("nearer", 0.43, "dam-vay")]);
   f.setFeatured([neighbor("featured", 0, "dam-vay")]);
   const result = await f.service.search("guest:a", randomUUID(), Buffer.from("source"), "image/png", {});
   assert.deepEqual(result.matches, []);
   assert.equal(result.attributes.category, "dam-vay");
   assert.deepEqual(result.featured.map(row => row.product_id), ["featured"]);
+  assert.deepEqual(result.fallback, { category: "dam-vay", category_name: "Đầm & Váy", color_tone: null, color_name: null });
 });
 
-test("A photo with no catalog neighbour is rejected instead of pretending to match", async () => {
+test("A photo with no garment signal is rejected instead of pretending to match", async () => {
   const f = fixture();
-  f.setNeighbors([neighbor("far", 0.4, "ao")]);
+  f.setNeighbors([neighbor("far", 0.29, "ao")]);
   const bytes = Buffer.from("source");
   await assert.rejects(f.service.search("guest:a", randomUUID(), bytes, "image/png", {}), { code: "NOT_A_GARMENT" });
   assert.ok(bytes.every(value => value === 0));
@@ -163,6 +188,16 @@ test("Session rate limit counts failures and does not block unrelated sessions",
   const f = fixture(); for (let i = 0; i < 15; i++) f.service.consume("guest:a");
   assert.throws(() => f.service.consume("guest:a"), { code: "VISUAL_SEARCH_RATE_LIMIT" });
   assert.doesNotThrow(() => f.service.consume("guest:b"));
+});
+
+test("Category and tone labels name known slugs only", () => {
+  assert.equal(categoryLabel("ao"), "Áo");
+  assert.equal(categoryLabel("set-do"), "Set đồ");
+  assert.equal(categoryLabel("unknown"), null);
+  assert.equal(categoryLabel(null), null);
+  assert.equal(toneLabel("Warm"), "Ấm");
+  assert.equal(toneLabel("Neon"), null);
+  assert.equal(toneLabel(null), null);
 });
 
 test("Multipart source bytes never remain in request chunks after parsing/release", async () => {

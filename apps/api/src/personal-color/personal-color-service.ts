@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { setTimeout as delay } from "node:timers/promises";
 import sharp from "sharp";
 import { HttpError } from "../http.js";
 import { asJsonObject } from "../types.js";
@@ -81,6 +82,7 @@ export class PersonalColorService {
           return { status: "VALIDATION_FAILED" as const, error: "COLOR_PICTURE_GUIDANCE" };
         }
         if (controller.signal.aborted) throw new Error("COLOR_CANCELLED");
+        await delay(600, undefined, { signal: controller.signal });
         const output = await this.vision.generate(`Analyze personal color only from this validated portrait. Use exactly the approved taxonomy ${JSON.stringify(policy.taxonomy)} and palette IDs ${JSON.stringify(policy.palette)}. Return season, subtype, palette, avoided and confidence (0..1). Palette and avoided must be distinct nonempty lists. Do not force high confidence when evidence is uncertain. Do not infer ethnicity, health or identity.`, image,
           { type: "object", additionalProperties: false, required: ["season", "subtype", "palette", "avoided", "confidence"], properties: { season: { type: "string", enum: Object.keys(policy.taxonomy) }, subtype: { type: "string", enum: Object.values(policy.taxonomy).flat() }, palette: { type: "array", items: { type: "string", enum: Object.keys(policy.palette) } }, avoided: { type: "array", items: { type: "string", enum: Object.keys(policy.palette) } }, confidence: { type: "number", minimum: 0, maximum: 1 } } }, { model: policy.model, signal: controller.signal });
         const result = validateColorResult(output, policy);
@@ -92,7 +94,11 @@ export class PersonalColorService {
       if (!timedOut && !controller.signal.aborted) {
         console.error("[PERSONAL_COLOR_INFERENCE_ERROR]", err);
       }
-      await this.repo.finish(principal, analysis.id, { status: timedOut ? "TIMEOUT" : controller.signal.aborted ? "CANCELLED" : "FAILED", error: timedOut ? "COLOR_TIMEOUT" : "COLOR_ANALYSIS_FAILED" }).catch(() => undefined);
+      const isRateLimit = err instanceof HttpError && (err.status === 429 || err.code === "AI_PROVIDER_RATE_LIMITED");
+      await this.repo.finish(principal, analysis.id, {
+        status: timedOut ? "TIMEOUT" : controller.signal.aborted ? "CANCELLED" : "FAILED",
+        error: timedOut ? "COLOR_TIMEOUT" : isRateLimit ? "COLOR_RATE_LIMITED" : "COLOR_ANALYSIS_FAILED"
+      }).catch(() => undefined);
     } finally {
       clearTimeout(timer);
       this.controllers.delete(analysis.id);

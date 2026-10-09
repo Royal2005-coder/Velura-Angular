@@ -9,6 +9,6 @@ export function createPersonalColorService(assets: ColorAssets): PersonalColorSe
   const policy = loadPersonalColorPolicy();
   return new PersonalColorService(new PersonalColorRepository(policy), assets, {
     ready: isGeminiConfigured,
-    generate: (prompt, image, schema, options) => generateGeminiVisionJson(prompt, image.bytes, image.mime, schema, { ...options, timeoutMs: policy?.timeoutMs, maxRetries: 0 }),
+    generate: (prompt, image, schema, options) => generateGeminiVisionJson(prompt, image.bytes, image.mime, schema, { ...options, timeoutMs: policy?.timeoutMs, maxRetries: 2 }),
   }, policy);
 }

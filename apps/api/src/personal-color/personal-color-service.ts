@@ -88,7 +88,10 @@ export class PersonalColorService {
       };
       const patch = await Promise.race([inference(), deadline]);
       if (!controller.signal.aborted) await this.repo.finish(principal, analysis.id, patch);
-    } catch {
+    } catch (err) {
+      if (!timedOut && !controller.signal.aborted) {
+        console.error("[PERSONAL_COLOR_INFERENCE_ERROR]", err);
+      }
       await this.repo.finish(principal, analysis.id, { status: timedOut ? "TIMEOUT" : controller.signal.aborted ? "CANCELLED" : "FAILED", error: timedOut ? "COLOR_TIMEOUT" : "COLOR_ANALYSIS_FAILED" }).catch(() => undefined);
     } finally {
       clearTimeout(timer);

@@ -1,3 +1,4 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { Component, DestroyRef, ElementRef, effect, inject, input, output, signal, untracked, viewChild } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { Subscription } from 'rxjs';
@@ -169,8 +170,27 @@ export class VisualSearchWorkbench {
       },
       error: (error: unknown) => {
         if (epoch !== this.epoch) return;
-        const payload = error as { error?: { code?: string; message?: string; error?: string } };
-        this.error.set(payload.error?.message || payload.error?.error || 'Chưa tìm được bằng ảnh. Vui lòng thử lại.'); this.finish();
+        let message = 'Chưa tìm được bằng ảnh. Vui lòng thử lại.';
+        if (error instanceof HttpErrorResponse) {
+          const body = error.error as Record<string, unknown> | string | null;
+          if (typeof body === 'string') {
+            message = body;
+          } else if (body && typeof body === 'object') {
+            const nested = body['error'];
+            if (typeof nested === 'string') {
+              message = nested;
+            } else if (nested && typeof nested === 'object') {
+              const nestedMsg = (nested as Record<string, unknown>)['message'];
+              if (typeof nestedMsg === 'string') message = nestedMsg;
+            } else if (typeof body['message'] === 'string') {
+              message = body['message'];
+            }
+          }
+        } else if (error instanceof Error) {
+          message = error.message;
+        }
+        this.error.set(message);
+        this.finish();
       },
     });
   }

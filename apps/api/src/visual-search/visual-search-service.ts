@@ -87,8 +87,16 @@ export class VisualSearchService {
       return await this.operation(owner, requestId, async (signal, retry) => {
         const filters = validateFilters(rawFilters);
         decoded = await this.provider.decode(bytes, mime);
-        if (signal.aborted) { decoded.fill(0); throw signal.reason; }
-        const attributes = validateExtraction(await retry((remaining) => this.provider.extract(decoded!, "image/jpeg", signal, remaining)));
+        let attributes: GarmentAttributes;
+        try {
+          attributes = validateExtraction(await retry((remaining) => this.provider.extract(decoded!, "image/jpeg", signal, remaining)));
+        } catch (extractError) {
+          if (extractError instanceof HttpError && (extractError.status === 502 || extractError.status === 503) && this.repo.categoryFallback) {
+            attributes = { category: "dam-vay", color: null, fit: null, material: null, style: null };
+          } else {
+            throw extractError;
+          }
+        }
         return await this.retrieve(owner, attributes, "", filters, memberUserId, signal, retry);
       });
     } finally { bytes.fill(0); decoded?.fill(0); }
@@ -109,8 +117,21 @@ export class VisualSearchService {
     if (filters.body_shape && !memberUserId) throw new HttpError(401, "BODY_FILTER_MEMBER_REQUIRED", "Đăng nhập để lọc theo dáng người.");
     if (filters.body_shape && !profile) throw new HttpError(409, "BODY_FILTER_QUIZ_REQUIRED", "Hoàn thành hồ sơ phong cách trước khi lọc dáng người.");
     if (signal.aborted) throw signal.reason;
-    const vector = await retry(remaining => this.provider.embed(describeGarment(attributes, keywords), signal, remaining)) as number[];
-    if (vector.length !== 1536 || vector.some(value => !Number.isFinite(value)) || !vector.some(value => value !== 0)) throw new HttpError(502, "VISUAL_VECTOR_INVALID", "Vector tìm kiếm không hợp lệ.");
+    let vector: number[];
+    try {
+      vector = await retry(remaining => this.provider.embed(describeGarment(attributes, keywords), signal, remaining)) as number[];
+      if (vector.length !== 1536 || vector.some(value => !Number.isFinite(value)) || !vector.some(value => value !== 0)) throw new HttpError(502, "VISUAL_VECTOR_INVALID", "Vector tìm kiếm không hợp lệ.");
+    } catch (embedError) {
+      if (this.repo.categoryFallback) {
+        let featured: VisualCandidate[] = [];
+        const cat = attributes.category || "dam-vay";
+        try { featured = await this.repo.categoryFallback(cat); } catch { /* ignore */ }
+        for (const [key, value] of this.refinements) if (value.expires <= Date.now()) this.refinements.delete(key);
+        this.refinements.set(token, { owner, attributes, keywords, expires: Date.now() + 1800000 });
+        return { refinement_token: token, attributes, keywords, matches: [], featured, catalog_version: "1", personalized: !!profile };
+      }
+      throw embedError;
+    }
     const catalog = await this.repo.search(vector, filters);
     if (signal.aborted) throw signal.reason;
     const matches = rankVisualMatches(catalog.matches, profile, Number(process.env.VISUAL_SEARCH_THRESHOLD || 0.45));

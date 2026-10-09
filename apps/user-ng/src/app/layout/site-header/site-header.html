@@ -104,6 +104,7 @@
             <div class="search-backdrop" (click)="closeSearch()"></div>
             <div class="site-header__search-dropdown">
               <!-- Google Lens Shortcut Banner -->
+              <!-- Google Lens Feature Card -->
               <div class="search-dd__lens-card" (click)="openVisualSearch($event)">
                 <div class="search-dd__lens-icon">
                   <svg class="icon icon-lens" viewBox="0 0 24 24" fill="none" style="width: 18px; height: 18px;">
@@ -116,10 +117,12 @@
                   </svg>
                 </div>
                 <div class="search-dd__lens-info">
-                  <div class="search-dd__lens-title">Tìm bằng Google Lens AI</div>
-                  <div class="search-dd__lens-desc">Tải ảnh bất kỳ để tìm trang phục tương tự ngay</div>
+                  <div class="search-dd__lens-title">Tìm kiếm bằng Google Lens AI</div>
+                  <div class="search-dd__lens-desc">Nhận diện trang phục & tìm sản phẩm tương đồng qua ảnh</div>
                 </div>
-                <span class="search-dd__lens-badge">MỚI</span>
+                <span class="search-dd__lens-arrow">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                </span>
               </div>
 
               <!-- Instant Suggestions when typing -->
@@ -161,13 +164,14 @@
                 <!-- Default state: Categories & Trending -->
                 <div class="search-dd__section">
                   <div class="search-dd__section-title">
-                    <span>Danh mục nổi bật</span>
+                    <span>Danh mục thời trang</span>
                   </div>
                   <div class="search-dd__categories-grid">
                     @for (cat of quickCategories; track cat.slug) {
-                      <button type="button" class="search-dd__cat-chip" (click)="selectCategory(cat.slug)">
-                        <span class="search-dd__cat-icon">{{ cat.icon }}</span>
+                      <button type="button" class="search-dd__cat-btn" (click)="selectCategory(cat.slug)">
+                        <span class="search-dd__cat-dot"></span>
                         <span class="search-dd__cat-name">{{ cat.name }}</span>
+                        <svg class="search-dd__cat-arrow" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
                       </button>
                     }
                   </div>
@@ -175,12 +179,12 @@
 
                 <div class="search-dd__section">
                   <div class="search-dd__section-title">
-                    <span>Xu hướng tìm kiếm 🔥</span>
+                    <span>Tìm kiếm phổ biến</span>
                   </div>
                   <div class="search-dd__trending-wrap">
                     @for (kw of trendingKeywords; track kw) {
                       <button type="button" class="search-dd__trending-pill" (click)="selectKeyword(kw)">
-                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                        <span class="search-dd__trend-hash">#</span>
                         <span>{{ kw }}</span>
                       </button>
                     }

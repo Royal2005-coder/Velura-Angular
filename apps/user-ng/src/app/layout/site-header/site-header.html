@@ -69,26 +69,127 @@
           </svg>
           <span>TRA CỨU ĐƠN HÀNG</span>
         </a>
-        <label class="site-header__search">
-          <svg class="icon icon-search" aria-hidden="true" style="width: 14px; height: 14px;"><use href="#icon-search"></use></svg>
-          <input type="search" class="js-search-input" placeholder="Tìm kiếm sản phẩm..." aria-label="Tìm kiếm sản phẩm" (keydown)="onSearch($event)" />
-          <button
-            type="button"
-            class="site-header__search-ai-btn"
-            (click)="openVisualSearch($event)"
-            title="Tìm kiếm bằng Google Lens AI"
-            aria-label="Tìm kiếm bằng Google Lens AI"
-          >
-            <svg class="icon icon-lens" viewBox="0 0 24 24" fill="none" style="width: 17px; height: 17px;">
-              <path d="M3 7V5a2 2 0 0 1 2-2h2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-              <path d="M17 3h2a2 2 0 0 1 2 2v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-              <path d="M21 17v2a2 2 0 0 1-2 2h-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-              <path d="M7 21H5a2 2 0 0 1-2-2v-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-              <circle cx="12" cy="12" r="3.5" stroke="currentColor" stroke-width="2"/>
-              <circle cx="12" cy="12" r="1.2" fill="currentColor"/>
-            </svg>
-          </button>
-        </label>
+        <div class="site-header__search-wrap">
+          <label class="site-header__search" [class.is-focused]="searchOpen()">
+            <svg class="icon icon-search" aria-hidden="true" style="width: 14px; height: 14px;"><use href="#icon-search"></use></svg>
+            <input
+              type="search"
+              class="js-search-input"
+              [value]="searchQuery()"
+              placeholder="Tìm kiếm sản phẩm..."
+              aria-label="Tìm kiếm sản phẩm"
+              (focus)="onSearchFocus()"
+              (input)="onSearchInput($event)"
+              (keydown)="onSearch($event)"
+            />
+            <button
+              type="button"
+              class="site-header__search-ai-btn"
+              (click)="openVisualSearch($event)"
+              title="Tìm kiếm bằng Google Lens AI"
+              aria-label="Tìm kiếm bằng Google Lens AI"
+            >
+              <svg class="icon icon-lens" viewBox="0 0 24 24" fill="none" style="width: 17px; height: 17px;">
+                <path d="M3 7V5a2 2 0 0 1 2-2h2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                <path d="M17 3h2a2 2 0 0 1 2 2v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                <path d="M21 17v2a2 2 0 0 1-2 2h-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                <path d="M7 21H5a2 2 0 0 1-2-2v-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                <circle cx="12" cy="12" r="3.5" stroke="currentColor" stroke-width="2"/>
+                <circle cx="12" cy="12" r="1.2" fill="currentColor"/>
+              </svg>
+            </button>
+          </label>
+
+          @if (searchOpen()) {
+            <div class="search-backdrop" (click)="closeSearch()"></div>
+            <div class="site-header__search-dropdown">
+              <!-- Google Lens Shortcut Banner -->
+              <div class="search-dd__lens-card" (click)="openVisualSearch($event)">
+                <div class="search-dd__lens-icon">
+                  <svg class="icon icon-lens" viewBox="0 0 24 24" fill="none" style="width: 18px; height: 18px;">
+                    <path d="M3 7V5a2 2 0 0 1 2-2h2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    <path d="M17 3h2a2 2 0 0 1 2 2v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    <path d="M21 17v2a2 2 0 0 1-2 2h-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    <path d="M7 21H5a2 2 0 0 1-2-2v-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    <circle cx="12" cy="12" r="3.5" stroke="currentColor" stroke-width="2"/>
+                    <circle cx="12" cy="12" r="1.2" fill="currentColor"/>
+                  </svg>
+                </div>
+                <div class="search-dd__lens-info">
+                  <div class="search-dd__lens-title">Tìm bằng Google Lens AI</div>
+                  <div class="search-dd__lens-desc">Tải ảnh bất kỳ để tìm trang phục tương tự ngay</div>
+                </div>
+                <span class="search-dd__lens-badge">MỚI</span>
+              </div>
+
+              <!-- Instant Suggestions when typing -->
+              @if (searchQuery().trim().length >= 2) {
+                <div class="search-dd__section">
+                  <div class="search-dd__section-title">
+                    <span>Gợi ý sản phẩm</span>
+                    @if (instantSuggestions().length) {
+                      <span class="search-dd__count">{{ instantSuggestions().length }} kết quả</span>
+                    }
+                  </div>
+                  @if (instantSuggestions().length) {
+                    <div class="search-dd__products">
+                      @for (p of instantSuggestions(); track p.product_id) {
+                        <div class="search-dd__product-item" (click)="selectProduct(p.slug || p.product_id)">
+                          <img [src]="(p.images && p.images[0]) || ''" [alt]="p.name" class="search-dd__product-img" />
+                          <div class="search-dd__product-info">
+                            <span class="search-dd__product-name">{{ p.name }}</span>
+                            <span class="search-dd__product-price">
+                              {{ (p.sale_price || p.base_price) | number:'1.0-0' }}đ
+                              @if (p.is_combo) {
+                                <span class="search-dd__combo-tag">Combo</span>
+                              }
+                            </span>
+                          </div>
+                        </div>
+                      }
+                    </div>
+                    <button type="button" class="search-dd__view-all-btn" (click)="executeSearch(searchQuery())">
+                      Xem tất cả kết quả cho "{{ searchQuery() }}" →
+                    </button>
+                  } @else {
+                    <div class="search-dd__empty">
+                      Không tìm thấy sản phẩm phù hợp. Thử tìm bằng Google Lens hoặc từ khóa khác.
+                    </div>
+                  }
+                </div>
+              } @else {
+                <!-- Default state: Categories & Trending -->
+                <div class="search-dd__section">
+                  <div class="search-dd__section-title">
+                    <span>Danh mục nổi bật</span>
+                  </div>
+                  <div class="search-dd__categories-grid">
+                    @for (cat of quickCategories; track cat.slug) {
+                      <button type="button" class="search-dd__cat-chip" (click)="selectCategory(cat.slug)">
+                        <span class="search-dd__cat-icon">{{ cat.icon }}</span>
+                        <span class="search-dd__cat-name">{{ cat.name }}</span>
+                      </button>
+                    }
+                  </div>
+                </div>
+
+                <div class="search-dd__section">
+                  <div class="search-dd__section-title">
+                    <span>Xu hướng tìm kiếm 🔥</span>
+                  </div>
+                  <div class="search-dd__trending-wrap">
+                    @for (kw of trendingKeywords; track kw) {
+                      <button type="button" class="search-dd__trending-pill" (click)="selectKeyword(kw)">
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                        <span>{{ kw }}</span>
+                      </button>
+                    }
+                  </div>
+                </div>
+              }
+            </div>
+          }
+        </div>
         <app-visual-search-workbench #headerWorkbench [hideTrigger]="true" (matches)="onVisualSearchMatches($event)" (searchResult)="onVisualSearchResult($event)" />
       </div>
       <nav class="center-row center-row--bottom site-header__nav" aria-label="Chính" [class.is-open]="navOpen()">

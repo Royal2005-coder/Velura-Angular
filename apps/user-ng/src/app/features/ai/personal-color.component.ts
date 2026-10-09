@@ -38,6 +38,48 @@ export class PersonalColorComponent {
     const labels: Record<string, string> = { RUNNING: 'Đang kiểm tra ảnh và phân tích…', SUCCESS: 'Bản xem trước — chưa lưu', LOW_CONFIDENCE: 'Độ tin cậy thấp — không thể xác nhận. Hãy chụp ảnh khác.', VALIDATION_FAILED: 'Ảnh chưa đáp ứng hướng dẫn. Hãy chụp lại.', FAILED: 'Phân tích thất bại. Màu đã xác nhận vẫn được giữ.', TIMEOUT: 'Phân tích đã hết thời gian. Màu đã xác nhận vẫn được giữ.', CANCELLED: 'Đã huỷ. Màu đã xác nhận vẫn được giữ.', CONFIRMED: 'Đã xác nhận và lưu vào hồ sơ phong cách.' };
     return status ? labels[status] : '';
   });
+  readonly colorLabels: Record<string, string> = {
+    peach: 'Hồng đào (Peach)',
+    coral: 'San hô (Coral)',
+    gold: 'Ánh vàng (Gold)',
+    mint: 'Xanh bạc hà (Mint)',
+    lavender: 'Tím oải hương (Lavender)',
+    rose: 'Hồng cánh sen (Rose)',
+    sky: 'Xanh da trời (Sky Blue)',
+    sage: 'Xanh xô thơm (Sage)',
+    terracotta: 'Cam đất (Terracotta)',
+    olive: 'Xanh rêu (Olive)',
+    mustard: 'Vàng mù tạt (Mustard)',
+    brown: 'Nâu trầm (Brown)',
+    emerald: 'Ngọc lục bảo (Emerald)',
+    royal_blue: 'Xanh hoàng gia (Royal Blue)',
+    burgundy: 'Đỏ rượu vang (Burgundy)',
+    black: 'Đen tuyền (Black)',
+  };
+
+  colorLabel(key: string): string {
+    return this.colorLabels[key] || key;
+  }
+
+  seasonTitle(season: string): string {
+    const titles: Record<string, string> = {
+      Spring: 'Mùa Xuân (Spring)',
+      Summer: 'Mùa Hè (Summer)',
+      Autumn: 'Mùa Thu (Autumn)',
+      Winter: 'Mùa Đông (Winter)',
+    };
+    return titles[season] || season;
+  }
+
+  seasonUndertone(season: string): string {
+    const tones: Record<string, string> = {
+      Spring: 'Tone da Ấm (Warm Undertone)',
+      Summer: 'Tone da Lạnh (Cool Undertone)',
+      Autumn: 'Tone da Ấm (Warm Undertone)',
+      Winter: 'Tone da Lạnh (Cool Undertone)',
+    };
+    return tones[season] || 'Tone da Tự nhiên';
+  }
 
   constructor() {
     effect(() => {

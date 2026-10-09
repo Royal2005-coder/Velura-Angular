@@ -18,23 +18,25 @@
   @if (profile()?.personal_color?.status === 'CONFIRMED') {
     @let confirmed = profile()!.personal_color!;
     <div class="pc-result-card pc-result-card--confirmed" aria-label="Màu đã xác nhận">
-      <div class="pc-result-badge">ĐÃ XÁC NHẬN TRONG STYLE PROFILE</div>
+      <div class="pc-result-badge pc-result-badge--confirmed">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+        ĐÃ XÁC NHẬN TRONG STYLE PROFILE
+      </div>
       <div class="pc-result-head">
-        <h3 class="pc-season-title">Mùa của bạn: {{ confirmed.season }}</h3>
-        @if (confirmed.subtype) {
-          <span class="pc-subtype-tag">{{ confirmed.subtype }}</span>
-        }
+        <h3 class="pc-season-title">Mùa của bạn: {{ seasonTitle(confirmed.season) }}</h3>
+        <span class="pc-undertone-tag">{{ seasonUndertone(confirmed.season) }}</span>
       </div>
       <p class="pc-result-desc">
         Hệ thống đang ưu tiên các sản phẩm mang bảng màu này khi hiển thị gợi ý phối đồ và tư vấn AI Stylist.
       </p>
 
       <div class="pc-palette-section">
-        <span class="pc-palette-label">Bảng màu phù hợp nhất (Palette):</span>
+        <span class="pc-palette-label">Bảng màu tôn da phù hợp nhất:</span>
         <div class="pc-swatches">
           @for (color of confirmed.palette; track color) {
-            <div class="pc-swatch" [style.background-color]="capabilities()?.palette?.[color] || '#DDD'" [attr.aria-label]="color" [title]="color">
-              <span class="pc-swatch-name">{{ color }}</span>
+            <div class="pc-swatch" [title]="colorLabel(color)">
+              <span class="pc-swatch-circle" [style.background-color]="capabilities()?.palette?.[color] || '#DDD'"></span>
+              <span class="pc-swatch-name">{{ colorLabel(color) }}</span>
             </div>
           }
         </div>
@@ -42,10 +44,13 @@
 
       @if (confirmed.avoided.length) {
         <div class="pc-avoided-section">
-          <span class="pc-avoided-label">Màu nên hạn chế:</span>
+          <span class="pc-avoided-label">Màu sắc nên hạn chế:</span>
           <div class="pc-avoided-chips">
             @for (color of confirmed.avoided; track color) {
-              <span class="pc-avoided-chip">{{ color }}</span>
+              <span class="pc-avoided-chip">
+                <span class="pc-avoided-dot" [style.background-color]="capabilities()?.palette?.[color] || '#888'"></span>
+                {{ colorLabel(color) }}
+              </span>
             }
           </div>
         </div>
@@ -145,24 +150,25 @@
 
       @if (currentAnalysis.result; as result) {
         <div class="pc-result-card pc-result-card--preview" aria-label="Bản xem trước kết quả AI">
-          <div class="pc-result-badge pc-result-badge--preview">BẢN XEM TRƯỚC AI (CHƯA LƯU)</div>
-          <div class="pc-result-head">
-            <h3 class="pc-season-title">Mùa nhận diện: {{ result.season }}</h3>
-            @if (result.subtype) {
-              <span class="pc-subtype-tag">{{ result.subtype }}</span>
-            }
+          <div class="pc-result-top-row">
+            <span class="pc-result-badge pc-result-badge--preview">BẢN XEM TRƯỚC AI (CHƯA LƯU)</span>
             <span class="pc-confidence-chip">Độ tin cậy: {{ (result.confidence * 100).toFixed(0) }}%</span>
+          </div>
+          <div class="pc-result-head">
+            <h3 class="pc-season-title">Mùa nhận diện: {{ seasonTitle(result.season) }}</h3>
+            <span class="pc-undertone-tag">{{ seasonUndertone(result.season) }}</span>
           </div>
           <p class="pc-result-desc">
             Xác nhận để lưu kết quả này vào Style Profile của bạn và nhận gợi ý trang phục theo đúng bảng màu tự nhiên.
           </p>
 
           <div class="pc-palette-section">
-            <span class="pc-palette-label">Bảng màu phù hợp nhất:</span>
+            <span class="pc-palette-label">Bảng màu tôn da phù hợp nhất:</span>
             <div class="pc-swatches">
               @for (color of result.palette; track color) {
-                <div class="pc-swatch" [style.background-color]="capabilities()?.palette?.[color] || '#DDD'" [attr.aria-label]="color" [title]="color">
-                  <span class="pc-swatch-name">{{ color }}</span>
+                <div class="pc-swatch" [title]="colorLabel(color)">
+                  <span class="pc-swatch-circle" [style.background-color]="capabilities()?.palette?.[color] || '#DDD'"></span>
+                  <span class="pc-swatch-name">{{ colorLabel(color) }}</span>
                 </div>
               }
             </div>
@@ -173,7 +179,10 @@
               <span class="pc-avoided-label">Màu sắc nên hạn chế:</span>
               <div class="pc-avoided-chips">
                 @for (color of result.avoided; track color) {
-                  <span class="pc-avoided-chip">{{ color }}</span>
+                  <span class="pc-avoided-chip">
+                    <span class="pc-avoided-dot" [style.background-color]="capabilities()?.palette?.[color] || '#888'"></span>
+                    {{ colorLabel(color) }}
+                  </span>
                 }
               </div>
             </div>
@@ -182,11 +191,12 @@
           <div class="pc-confirm-actions">
             @if (currentAnalysis.status === 'SUCCESS') {
               <button type="button" class="btn btn--primary pc-btn-confirm" [disabled]="!canConfirm()" (click)="confirm()">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
                 Xác nhận & lưu màu vào Style Profile
               </button>
             }
             @if (currentAnalysis.status === 'RUNNING' || currentAnalysis.status === 'SUCCESS' || currentAnalysis.status === 'LOW_CONFIDENCE') {
-              <button type="button" class="btn btn--outline" (click)="cancel()">
+              <button type="button" class="btn btn--outline pc-btn-cancel" (click)="cancel()">
                 Huỷ phân tích — giữ nguyên hồ sơ
               </button>
             }

@@ -72,9 +72,22 @@ export class HomePage implements AfterViewInit, OnDestroy {
     const matched = COLLECTION_LOOKBOOKS.filter((item) => names.has(item.name));
     return matched.length ? matched : COLLECTION_LOOKBOOKS;
   });
+  readonly quizPopupOpen = signal(false);
 
   constructor() {
     this.loadHome();
+    if (typeof sessionStorage !== 'undefined' && !sessionStorage.getItem('velura_quiz_popup_dismissed')) {
+      setTimeout(() => {
+        this.quizPopupOpen.set(true);
+      }, 1200);
+    }
+  }
+
+  closeQuizPopup(): void {
+    this.quizPopupOpen.set(false);
+    try {
+      sessionStorage.setItem('velura_quiz_popup_dismissed', '1');
+    } catch {}
   }
 
   /**

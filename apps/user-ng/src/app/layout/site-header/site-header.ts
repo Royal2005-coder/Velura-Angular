@@ -45,24 +45,27 @@ export class SiteHeader {
   readonly searchOpen = signal(false);
   readonly searchQuery = signal('');
   readonly allProducts = signal<ProductSummary[]>([]);
+  readonly recentlyViewed = signal<ProductSummary[]>([]);
 
   readonly quickCategories = [
-    { name: 'Đầm & Váy', slug: 'dam-vay' },
-    { name: 'Set đồ & Combo', slug: 'set-do' },
-    { name: 'Áo kiểu & Sơ mi', slug: 'ao' },
-    { name: 'Quần & Jeans', slug: 'quan' },
-    { name: 'Áo khoác & Blazer', slug: 'ao-khoac' },
-    { name: 'Giày dép thời trang', slug: 'giay-dep' },
-    { name: 'Phụ kiện cao cấp', slug: 'phu-kien' },
+    { name: 'Đầm & Váy', slug: 'dam-vay', image: '/assets/category-icons/icon-dam-vay.png' },
+    { name: 'Set đồ & Combo', slug: 'set-do', image: '/assets/category-icons/icon-set-do.png' },
+    { name: 'Áo kiểu & Sơ mi', slug: 'ao', image: '/assets/category-icons/icon-ao.png' },
+    { name: 'Quần & Jeans', slug: 'quan', image: '/assets/category-icons/icon-quan.png' },
+    { name: 'Áo khoác & Blazer', slug: 'ao-khoac', image: '/assets/category-icons/icon-ao-khoac.png' },
+    { name: 'Giày dép', slug: 'giay-dep', image: '/assets/category-icons/icon-giay-dep.png' },
+    { name: 'Phụ kiện', slug: 'phu-kien', image: '/assets/category-icons/icon-phu-kien.png' },
   ];
 
   readonly trendingKeywords = [
-    'Set đồ mùa thu',
+    'Áo thun',
+    'Quần Shorts',
+    'Áo Polo',
     'Đầm dạ hội',
-    'Áo tweed croptop',
+    'Set đồ mùa thu',
     'Chân váy xếp ly',
-    'Linen dạo biển',
-    'Blazer công sở',
+    'Áo khoác chống nắng',
+    'Quần dài',
   ];
 
   readonly instantSuggestions = computed(() => {
@@ -142,6 +145,20 @@ export class SiteHeader {
 
   onSearchFocus(): void {
     this.searchOpen.set(true);
+    this.loadRecentlyViewed();
+  }
+
+  loadRecentlyViewed(): void {
+    try {
+      const raw = localStorage.getItem('velura_recently_viewed');
+      if (raw) {
+        this.recentlyViewed.set(JSON.parse(raw) as ProductSummary[]);
+      } else {
+        this.recentlyViewed.set([]);
+      }
+    } catch {
+      this.recentlyViewed.set([]);
+    }
   }
 
   onSearchInput(event: Event): void {

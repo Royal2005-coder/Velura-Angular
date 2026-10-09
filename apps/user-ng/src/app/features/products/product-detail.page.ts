@@ -329,6 +329,13 @@ export class ProductDetailPage {
       this.catalog.getProduct(id).subscribe({
         next: (row) => {
           this.product.set(row);
+          try {
+            const raw = localStorage.getItem('velura_recently_viewed');
+            const list = raw ? (JSON.parse(raw) as ProductSummary[]) : [];
+            const filtered = list.filter((p) => p.product_id !== row.product_id);
+            filtered.unshift(row);
+            localStorage.setItem('velura_recently_viewed', JSON.stringify(filtered.slice(0, 8)));
+          } catch {}
           this.activeImage.set(0);
           this.quantity.set(1);
           this.comboExpanded.set(null);

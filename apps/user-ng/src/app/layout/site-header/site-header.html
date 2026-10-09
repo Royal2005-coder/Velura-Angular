@@ -82,6 +82,17 @@
               (input)="onSearchInput($event)"
               (keydown)="onSearch($event)"
             />
+            @if (searchOpen()) {
+              <button
+                type="button"
+                class="site-header__search-close-btn"
+                (click)="closeSearch(); $event.stopPropagation()"
+                title="Đóng tìm kiếm"
+                aria-label="Đóng tìm kiếm"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+              </button>
+            }
             <button
               type="button"
               class="site-header__search-ai-btn"
@@ -99,7 +110,6 @@
               </svg>
             </button>
           </label>
-
           @if (searchOpen()) {
             <div class="search-backdrop" (click)="closeSearch()"></div>
             <div class="site-header__search-dropdown">
@@ -162,14 +172,29 @@
                 </div>
               } @else {
                 <!-- Default state: Categories & Trending -->
+                <!-- Trending Keywords (Từ khóa nổi bật ngày hôm nay) -->
                 <div class="search-dd__section">
                   <div class="search-dd__section-title">
-                    <span>Danh mục thời trang</span>
+                    <span>Từ khóa nổi bật ngày hôm nay</span>
+                  </div>
+                  <div class="search-dd__trending-wrap">
+                    @for (kw of trendingKeywords; track kw) {
+                      <button type="button" class="search-dd__trending-pill" (click)="selectKeyword(kw)">
+                        <span>{{ kw }}</span>
+                      </button>
+                    }
+                  </div>
+                </div>
+
+                <!-- Categories (Danh mục thời trang nổi bật) -->
+                <div class="search-dd__section">
+                  <div class="search-dd__section-title">
+                    <span>Danh mục nổi bật</span>
                   </div>
                   <div class="search-dd__categories-grid">
                     @for (cat of quickCategories; track cat.slug) {
                       <button type="button" class="search-dd__cat-btn" (click)="selectCategory(cat.slug)">
-                        <span class="search-dd__cat-dot"></span>
+                        <img [src]="cat.image" [alt]="cat.name" class="search-dd__cat-thumb" />
                         <span class="search-dd__cat-name">{{ cat.name }}</span>
                         <svg class="search-dd__cat-arrow" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
                       </button>
@@ -177,18 +202,29 @@
                   </div>
                 </div>
 
+                <!-- Recently Viewed Products (Sản phẩm đã xem gần đây) -->
                 <div class="search-dd__section">
                   <div class="search-dd__section-title">
-                    <span>Tìm kiếm phổ biến</span>
-                  </div>
-                  <div class="search-dd__trending-wrap">
-                    @for (kw of trendingKeywords; track kw) {
-                      <button type="button" class="search-dd__trending-pill" (click)="selectKeyword(kw)">
-                        <span class="search-dd__trend-hash">#</span>
-                        <span>{{ kw }}</span>
-                      </button>
+                    <span>Sản phẩm đã xem gần đây</span>
+                    @if (recentlyViewed().length) {
+                      <span class="search-dd__count">{{ recentlyViewed().length }} sản phẩm</span>
                     }
                   </div>
+                  @if (recentlyViewed().length) {
+                    <div class="search-dd__recent-list">
+                      @for (item of recentlyViewed().slice(0, 4); track item.product_id) {
+                        <div class="search-dd__recent-item" (click)="selectProduct(item.slug || item.product_id)">
+                          <img [src]="(item.images && item.images[0]) || ''" [alt]="item.name" class="search-dd__recent-img" />
+                          <div class="search-dd__recent-info">
+                            <span class="search-dd__recent-name">{{ item.name }}</span>
+                            <span class="search-dd__recent-price">{{ (item.sale_price || item.base_price) | number:'1.0-0' }}đ</span>
+                          </div>
+                        </div>
+                      }
+                    </div>
+                  } @else {
+                    <p class="search-dd__empty-recent">Không có sản phẩm đã xem gần đây</p>
+                  }
                 </div>
               }
             </div>

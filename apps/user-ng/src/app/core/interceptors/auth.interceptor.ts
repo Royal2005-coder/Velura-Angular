@@ -32,7 +32,9 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
         Boolean(token) &&
         !isAuthApi &&
         (req.method === 'GET' ||
-          req.url.includes('/api/v1/chat'));
+          req.url.includes('/api/v1/chat') ||
+          req.url.includes('/api/user/visual-search') ||
+          req.url.includes('/api/user/ai'));
       if (!canRetryAsGuest) {
         return throwError(() => error);
       }

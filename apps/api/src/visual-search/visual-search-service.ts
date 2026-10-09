@@ -9,7 +9,7 @@ import { describeGarment, validateAttributes, validateExtraction, validateFilter
 const MAX_BYTES = 5 * 1024 * 1024;
 const schema = { type: "object", additionalProperties: false, required: ["is_clothing", "garment_count", "attributes"], properties: {
   is_clothing: { type: "boolean" }, garment_count: { type: "integer" }, attributes: { type: "object", additionalProperties: false,
-    required: ["category", "color", "fit", "material", "style"], properties: Object.fromEntries(["category", "color", "fit", "material", "style"].map(key => [key, { type: ["string", "null"] }])) },
+    required: ["category", "color", "fit", "material", "style"], properties: Object.fromEntries(["category", "color", "fit", "material", "style"].map(key => [key, { type: "string", nullable: true }])) },
 } };
 /** Provider adapters accept one total operation deadline and no hidden retries. */
 export interface VisualProviders {

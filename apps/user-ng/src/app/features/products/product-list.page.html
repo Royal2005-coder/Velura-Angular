@@ -9,7 +9,7 @@
     <p class="product-list-header__subtitle">
       Khám phá hơn 1.200 thiết kế thời trang nữ sang trọng và thời thượng
     </p>
-  <app-visual-search-workbench [candidateProductIds]="imageSearchCandidates()" [filters]="visualFilters()" (searchResult)="applyVisualResult($event)" />
+    <app-visual-search-workbench [hideTrigger]="true" [candidateProductIds]="imageSearchCandidates()" [filters]="visualFilters()" (searchResult)="applyVisualResult($event)" />
     @if (imageMatches() !== null) { <button type="button" class="btn btn--outline" (click)="imageMatches.set(null)">Xóa kết quả tìm bằng ảnh</button> }
   </header>
 

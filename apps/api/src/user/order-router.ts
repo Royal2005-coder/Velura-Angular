@@ -457,16 +457,40 @@ export async function handleOrdersRoute(
         }
         const { rows: orders } = await selectRows("orders", { user_id: `eq.${profile.user_id}` });
         orders.sort((a, b) => new Date(String(b.created_at)).getTime() - new Date(String(a.created_at)).getTime());
-        const ordersWithItems: JsonObject[] = [];
-        for (const order of orders) {
-          const { rows: items } = await selectRows("order_item", { order_id: `eq.${order.order_id}` });
-          let itemsWithProduct = await attachProductMeta(items);
-          if (order.status === "delivered") {
-            itemsWithProduct = await attachReturnEligibility(userReturnsRepository, order.order_id, itemsWithProduct);
-          }
-          const { rows: payments } = await selectRows("payment", { order_id: `eq.${order.order_id}`, select: "payment_status,gateway_response_code,created_at,refund_amount,refunded_amount" });
-          ordersWithItems.push(presentOrderForCustomer(order, itemsWithProduct, [], payments));
+        if (!orders.length) {
+          return sendJson(res, 200, { success: true, orders: [] }, corsHeaders);
         }
+        const orderIds = orders.map(o => String(o.order_id)).filter(Boolean);
+        const [allItemsRes, allPaymentsRes] = await Promise.all([
+          selectRows("order_item", { order_id: `in.(${orderIds.join(",")})` }),
+          selectRows("payment", { order_id: `in.(${orderIds.join(",")})`, select: "order_id,payment_status,gateway_response_code,created_at,refund_amount,refunded_amount" }),
+        ]);
+        const itemsWithProduct = await attachProductMeta(allItemsRes.rows);
+        const itemsByOrder = new Map<string, JsonObject[]>();
+        for (const it of itemsWithProduct) {
+          const oid = String(it.order_id);
+          const list = itemsByOrder.get(oid) || [];
+          list.push(it);
+          itemsByOrder.set(oid, list);
+        }
+        const paymentsByOrder = new Map<string, JsonObject[]>();
+        for (const p of allPaymentsRes.rows) {
+          const oid = String(p.order_id);
+          const list = paymentsByOrder.get(oid) || [];
+          list.push(p);
+          paymentsByOrder.set(oid, list);
+        }
+        const ordersWithItems = await Promise.all(orders.map(async (order) => {
+          const oid = String(order.order_id);
+          let items = itemsByOrder.get(oid) || [];
+          if (order.status === "delivered") {
+            try {
+              items = await attachReturnEligibility(userReturnsRepository, order.order_id, items);
+            } catch {}
+          }
+          const payments = paymentsByOrder.get(oid) || [];
+          return presentOrderForCustomer(order, items, [], payments);
+        }));
         return sendJson(res, 200, { success: true, orders: ordersWithItems }, corsHeaders);
       }
     }

@@ -10,7 +10,18 @@ import type { SearchFilters, VisualCandidate } from "./visual-search-types.js";
 export interface VisualSearchRepository {
   profile(owner: string, memberUserId?: string): Promise<JsonObject | null>;
   search(vector: number[], filters: SearchFilters): Promise<{ matches: VisualCandidate[]; featured: VisualCandidate[]; catalog_version: string }>;
+  categoryFallback?(category: string): Promise<VisualCandidate[]>;
 }
+
+const CATEGORY_MAP: Record<string, string> = {
+  top: "ao", blouse: "ao", shirt: "ao", tshirt: "ao",
+  pants: "quan", trousers: "quan", jeans: "quan",
+  dress: "dam-vay", skirt: "dam-vay",
+  jacket: "ao-khoac", coat: "ao-khoac", blazer: "ao-khoac",
+  set: "set-do", suit: "set-do",
+  accessories: "phu-kien", bag: "phu-kien", hat: "phu-kien", scarf: "phu-kien",
+  shoes: "giay-dep", sandals: "giay-dep", boots: "giay-dep", sneakers: "giay-dep",
+};
 /** Uses the same configured text model for query and refreshed sale-catalog vectors. */
 export class ShopVisualSearchRepository implements VisualSearchRepository {
   /** Only completed member quizzes or explicitly accepted same-session guest quizzes personalize retrieval. */
@@ -28,6 +39,29 @@ export class ShopVisualSearchRepository implements VisualSearchRepository {
       match_threshold: Number(process.env.VISUAL_SEARCH_THRESHOLD || 0.45), filters,
     }, { silentError: true }));
     return { matches: (raw.matches || []) as VisualCandidate[], featured: (raw.featured || []) as VisualCandidate[], catalog_version: String(raw.catalog_version) };
+  }
+  /** Fallback to top-rated shop products in the detected category when no vector matches meet threshold. */
+  async categoryFallback(category: string): Promise<VisualCandidate[]> {
+    const slug = CATEGORY_MAP[category.toLowerCase().trim()] || category.toLowerCase().trim();
+    const cat = await selectOne("category", { slug: `eq.${slug}` });
+    if (!cat?.category_id) return [];
+    const { rows } = await selectRows("product", {
+      category_id: `eq.${cat.category_id}`,
+      status: "eq.on_sale",
+      is_combo: "eq.false",
+      order: "rating_avg.desc,sold_count.desc",
+      limit: "8",
+    }, { count: "none", silentError: true });
+    return rows.map(r => ({
+      product_id: String(r.product_id),
+      similarity: 0,
+      name: String(r.name || ""),
+      slug: String(r.slug || ""),
+      images: Array.isArray(r.images) ? r.images as string[] : [],
+      base_price: Number(r.base_price || 0),
+      sale_price: r.sale_price !== null && r.sale_price !== undefined ? Number(r.sale_price) : null,
+      status: "on_sale",
+    }));
   }
 }
 /** Durable outbox refresh resumes after restart and replaces vectors only for the read revision. */

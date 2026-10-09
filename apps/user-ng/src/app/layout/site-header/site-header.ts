@@ -3,7 +3,19 @@ import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
 import { CartStore } from '../../core/services/cart.store';
 import { WishlistStore } from '../../core/services/wishlist.store';
+import type { VisualResult } from '../../core/services/visual-search.service';
 import { VisualSearchWorkbench } from '../../shared/visual-search-workbench/visual-search-workbench';
+
+/** Maps Gemini Vision detected categories to Velura catalog slugs for routing. */
+const CATEGORY_QUERY_MAP: Record<string, string> = {
+  top: 'ao', blouse: 'ao', shirt: 'ao', tshirt: 'ao',
+  pants: 'quan', trousers: 'quan', jeans: 'quan',
+  dress: 'dam-vay', skirt: 'dam-vay',
+  jacket: 'ao-khoac', coat: 'ao-khoac', blazer: 'ao-khoac',
+  set: 'set-do', suit: 'set-do',
+  accessories: 'phu-kien', bag: 'phu-kien', hat: 'phu-kien', scarf: 'phu-kien',
+  shoes: 'giay-dep', sandals: 'giay-dep', boots: 'giay-dep', sneakers: 'giay-dep',
+};
 
 @Component({
   selector: 'app-site-header',
@@ -52,9 +64,27 @@ export class SiteHeader {
    * Routes visual search vector matches to the catalog product list.
    */
   onVisualSearchMatches(ids: string[]): void {
-    void this.router.navigate(['/products'], {
-      queryParams: { match_ids: ids.join(',') },
-    });
+    if (ids.length) {
+      void this.router.navigate(['/products'], {
+        queryParams: { match_ids: ids.join(',') },
+      });
+    }
+    // Empty ids handled by onVisualSearchResult category fallback
+  }
+
+  /**
+   * Routes visual search results: if no similarity matches found but a category was detected,
+   * falls back to navigating to the detected category page instead of an empty product list.
+   */
+  onVisualSearchResult(result: VisualResult): void {
+    if (result.matches.length > 0) return; // matches route handled by onVisualSearchMatches
+    const category = result.attributes.category?.toLowerCase().trim();
+    if (category) {
+      const slug = CATEGORY_QUERY_MAP[category] || category;
+      void this.router.navigate(['/products'], { queryParams: { category: slug } });
+    } else {
+      void this.router.navigate(['/products'], { queryParams: { match_ids: '' } });
+    }
   }
 
   /**

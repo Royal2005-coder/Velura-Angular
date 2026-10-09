@@ -1,1 +1,72 @@
-:host{display:block}dialog{width:min(900px,94vw);max-height:90vh;overflow:auto;border:1px solid var(--color-border);border-radius:var(--radius-lg,12px);padding:1.5rem;color:var(--color-text);background:var(--color-surface)}dialog::backdrop{background:var(--color-overlay,rgba(0,0,0,.5))}header{display:flex;justify-content:space-between;align-items:center;gap:1rem}header button{font-size:1.5rem}.drop-zone{display:flex;flex-wrap:wrap;gap:.75rem;border:2px dashed var(--color-border);padding:1rem;margin-block:1rem}.drop-zone input{display:none}.preview{position:relative;width:fit-content;max-width:100%;margin:1rem auto}.preview img,video{display:block;max-width:100%;max-height:340px}.crop-region{position:absolute;box-sizing:border-box;border:3px solid var(--color-primary);pointer-events:none}fieldset{display:flex;flex-wrap:wrap;gap:.75rem;padding:1rem;margin-block:1rem;border:1px solid var(--color-border)}fieldset label{display:grid;gap:.25rem;flex:1 1 180px}input[type=text],input[type=number]{padding:.5rem;border:1px solid var(--color-border);border-radius:var(--radius-sm,4px);background:var(--color-surface);color:inherit;width:100%;box-sizing:border-box}.consent{display:flex;gap:.5rem;margin-block:1rem}.error{color:var(--color-danger)}.results{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem}.results small{display:block;margin:.5rem}button:disabled{opacity:.55}
+/* Visual Search Workbench — Velura Design Tokens */
+:host{display:block}
+
+/* ---- DIALOG ---- */
+dialog{
+  width:min(720px,94vw);max-height:90vh;overflow:auto;
+  border:1px solid var(--line,#E8DFD6);border-radius:var(--radius-lg,16px);
+  padding:0;color:var(--ink,#2A2522);background:#fff;
+  box-shadow:0 25px 50px -12px rgba(0,0,0,.25)
+}
+dialog::backdrop{background:rgba(42,37,34,.6)}
+
+/* ---- INNER CONTAINER ---- */
+.vs-body{padding:1.5rem 1.75rem 1.75rem}
+
+/* ---- HEADER ---- */
+.vs-header{display:flex;justify-content:space-between;align-items:center;padding:1.25rem 1.75rem;border-bottom:1px solid var(--line,#E8DFD6)}
+.vs-header h2{font-size:1.1rem;font-weight:700;margin:0;letter-spacing:-.01em}
+.vs-header__close{width:32px;height:32px;border-radius:50%;border:none;background:var(--field-bg,#F3F3F5);
+  color:var(--ink,#2A2522);font-size:1.1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s}
+.vs-header__close:hover{background:var(--line,#E8DFD6)}
+
+/* ---- SUBTITLE ---- */
+.vs-subtitle{font-size:.82rem;color:var(--muted,#6B635D);line-height:1.5;margin-bottom:1rem}
+
+/* ---- DROP ZONE ---- */
+.drop-zone{display:flex;flex-wrap:wrap;gap:.6rem;border:2px dashed var(--line,#E8DFD6);border-radius:var(--radius-md,8px);
+  padding:1.25rem;background:var(--checkout-bg,#FDFAF8);transition:border-color .2s}
+.drop-zone:hover{border-color:var(--terracotta,#C97B63)}
+.drop-zone input{display:none}
+
+/* ---- BUTTONS ---- */
+.btn{padding:.6rem 1.2rem;border-radius:var(--radius-sm,4px);border:none;font-size:.82rem;font-weight:600;cursor:pointer;transition:all .2s}
+.btn--primary{background:var(--ink,#2A2522);color:#fff}
+.btn--primary:hover{background:var(--terracotta,#C97B63)}
+.btn--outline{background:#fff;color:var(--ink,#2A2522);border:1.5px solid var(--line,#E8DFD6)}
+.btn--outline:hover{border-color:var(--terracotta,#C97B63);color:var(--terracotta,#C97B63)}
+button:disabled{opacity:.5;cursor:not-allowed}
+
+/* ---- PREVIEW ---- */
+.preview{position:relative;width:fit-content;max-width:100%;margin:1rem auto;border-radius:var(--radius-md,8px);overflow:hidden}
+.preview img,video{display:block;max-width:100%;max-height:340px;border-radius:var(--radius-md,8px)}
+.crop-region{position:absolute;box-sizing:border-box;border:3px solid var(--terracotta,#C97B63);pointer-events:none;border-radius:2px}
+
+/* ---- FIELDSET ---- */
+fieldset{display:flex;flex-wrap:wrap;gap:.75rem;padding:1rem;margin-block:1rem;border:1px solid var(--line,#E8DFD6);border-radius:var(--radius-md,8px);background:var(--checkout-bg,#FDFAF8)}
+fieldset legend{font-size:.8rem;font-weight:600;color:var(--muted,#6B635D);padding:0 .4rem}
+fieldset label{display:grid;gap:.25rem;flex:1 1 180px;font-size:.78rem;font-weight:500;color:var(--text-secondary,#827473)}
+input[type=text],input[type=number]{padding:.5rem .6rem;border:1px solid var(--line,#E8DFD6);border-radius:var(--radius-sm,4px);
+  background:#fff;color:var(--ink,#2A2522);width:100%;box-sizing:border-box;font-size:.82rem;transition:border-color .15s}
+input[type=text]:focus,input[type=number]:focus{outline:none;border-color:var(--terracotta,#C97B63);box-shadow:0 0 0 2px rgba(201,123,99,.15)}
+
+/* ---- CONSENT ---- */
+.consent{display:flex;gap:.6rem;margin-block:1rem;font-size:.8rem;color:var(--text-body,#504444);line-height:1.5;align-items:flex-start}
+.consent input[type=checkbox]{margin-top:2px;width:16px;height:16px;accent-color:var(--terracotta,#C97B63);flex-shrink:0}
+
+/* ---- BUSY / ERROR ---- */
+.vs-status{font-size:.82rem;color:var(--muted,#6B635D);padding:.8rem 1rem;background:var(--checkout-bg,#FDFAF8);border-radius:var(--radius-md,8px);text-align:center;margin:.75rem 0}
+.error{color:var(--error,#D4183D);font-size:.82rem;font-weight:500;margin:.5rem 0}
+
+/* ---- RESULTS ---- */
+.results-section h3{font-size:.9rem;font-weight:700;margin:.75rem 0 .5rem}
+.results-section p{font-size:.8rem;color:var(--muted,#6B635D)}
+.results{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:.75rem}
+.results small{display:block;margin-top:.35rem;font-size:.72rem;color:var(--text-secondary,#827473)}
+.vs-catalog-info{font-size:.72rem;color:var(--soft,#8C857E);margin:.5rem 0}
+
+/* ---- CATEGORY FALLBACK ---- */
+.vs-category-fallback{background:var(--checkout-bg,#FDFAF8);border:1px solid var(--line,#E8DFD6);border-radius:var(--radius-md,8px);padding:1rem;margin:.75rem 0}
+.vs-category-fallback__title{font-size:.85rem;font-weight:600;margin-bottom:.5rem}
+.vs-category-fallback__link{display:inline-flex;align-items:center;gap:.35rem;color:var(--terracotta,#C97B63);font-weight:600;font-size:.82rem;text-decoration:none;margin-top:.5rem}
+.vs-category-fallback__link:hover{text-decoration:underline}

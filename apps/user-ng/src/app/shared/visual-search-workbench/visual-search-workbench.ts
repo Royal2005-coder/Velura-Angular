@@ -1,11 +1,27 @@
 import { Component, DestroyRef, ElementRef, effect, inject, input, output, signal, untracked, viewChild } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { AuthService } from '../../core/services/auth.service';
 import { VisualSearchModel, type VisualAttributes, type VisualFilters, type VisualResult } from '../../core/services/visual-search.service';
 import { ProductCard } from '../product-card/product-card';
 
+/** Maps Gemini Vision detected categories to Velura catalog slugs. */
+const CATEGORY_QUERY_MAP: Record<string, string> = {
+  top: 'ao', blouse: 'ao', shirt: 'ao', tshirt: 'ao',
+  pants: 'quan', trousers: 'quan', jeans: 'quan',
+  dress: 'dam-vay', skirt: 'dam-vay',
+  jacket: 'ao-khoac', coat: 'ao-khoac', blazer: 'ao-khoac',
+  set: 'set-do', suit: 'set-do',
+  accessories: 'phu-kien', bag: 'phu-kien', hat: 'phu-kien', scarf: 'phu-kien',
+  shoes: 'giay-dep', sandals: 'giay-dep', boots: 'giay-dep', sneakers: 'giay-dep',
+};
+const CATEGORY_LABELS: Record<string, string> = {
+  ao: 'Áo', quan: 'Quần', 'dam-vay': 'Đầm & Váy', 'ao-khoac': 'Áo khoác',
+  'set-do': 'Set đồ', 'phu-kien': 'Phụ kiện', 'giay-dep': 'Giày dép',
+};
+
 /** Consent-first camera search with single-garment crop and source-free refinements. */
-@Component({ selector: 'app-visual-search-workbench', standalone: true, imports: [ProductCard], templateUrl: './visual-search-workbench.html', styleUrl: './visual-search-workbench.css' })
+@Component({ selector: 'app-visual-search-workbench', standalone: true, imports: [ProductCard, RouterLink], templateUrl: './visual-search-workbench.html', styleUrl: './visual-search-workbench.css' })
 export class VisualSearchWorkbench {
   readonly hideTrigger = input(false);
   readonly candidateProductIds = input<string[] | undefined>();
@@ -161,4 +177,15 @@ export class VisualSearchWorkbench {
   private finish(): void { this.requestId = ''; this.busy.set(false); this.clearSource(); }
   private clearSource(): void { if (this.preview()) URL.revokeObjectURL(this.preview()); this.preview.set(''); this.file = null; this.consent.set(false); }
   private stopCamera(): void { this.stream?.getTracks().forEach(track => track.stop()); this.stream = undefined; this.cameraOpen.set(false); }
+  /** Map Gemini Vision category to Velura catalog slug for routing. */
+  mapCategory(category: string | null): string {
+    if (!category) return '';
+    const lower = category.toLowerCase().trim();
+    return CATEGORY_QUERY_MAP[lower] || lower;
+  }
+  /** Human-readable Vietnamese category label for UI display. */
+  categoryLabel(category: string | null): string {
+    const slug = this.mapCategory(category);
+    return CATEGORY_LABELS[slug] || category || '';
+  }
 }

@@ -1,4 +1,4 @@
-import { callRpc, selectOne, updateRows } from "../supabase.js";
+import { callRpc, insertRow, selectOne, updateRows } from "../supabase.js";
 import { HttpError } from "../http.js";
 import { guestStyleProfiles } from "../user/quiz.js";
 import { confirmedPersonalColor } from "./personal-color-policy.js";
@@ -20,14 +20,13 @@ export class PersonalColorRepository implements ColorRepository {
         if (err instanceof HttpError && (err.status === 401 || err.status === 409)) throw err;
         const cached = this.confirmedMemberColors.get(principal.owner);
         if (cached) return cached;
-        const row = await selectOne("style_profile", { user_id: `eq.${principal.userId}` });
-        if (!row) throw new HttpError(409, "STYLE_PROFILE_REQUIRED", "Lưu Style Quiz trước khi phân tích màu.");
-        return { version: Number(row["style_profile_version"] || 1), personal_color: confirmedPersonalColor(row, this.policy) };
+        const row = await selectOne("style_profile", { user_id: `eq.${principal.userId}` }).catch(() => null);
+        return { version: Number(row?.["style_profile_version"] ?? 0), personal_color: confirmedPersonalColor(row, this.policy) };
       }
     }
     const profile = guestStyleProfiles.get(principal.guestId || "");
-    if (!profile) throw new HttpError(409, "STYLE_PROFILE_REQUIRED", "Lưu Style Quiz trước khi phân tích màu.");
-    return { version: Number(profile.style_profile_version || 0), personal_color: confirmedPersonalColor(profile, this.policy) };
+    if (!profile) return { version: 0, personal_color: null };
+    return { version: Number(profile.style_profile_version ?? 0), personal_color: confirmedPersonalColor(profile, this.policy) };
   }
 
   /** Bind immutable snapshot version to a unique analysis; stale begins are rejected atomically. */
@@ -95,13 +94,22 @@ export class PersonalColorRepository implements ColorRepository {
     const personal_color: ConfirmedColor = { ...row.value.result, status: "CONFIRMED", analysis_id: id, confirmed_at: new Date().toISOString() };
     row.value = { ...row.value, status: "CONFIRMED" };
     if (principal.guestId) {
-      const gProfile = guestStyleProfiles.get(principal.guestId || "");
-      if (gProfile) guestStyleProfiles.set(principal.guestId || "", { ...gProfile, personal_color, style_profile_version: version + 1 });
+      const gProfile = guestStyleProfiles.get(principal.guestId || "") || {};
+      guestStyleProfiles.set(principal.guestId || "", { ...gProfile, personal_color, style_profile_version: version + 1 });
     }
     if (principal.userId) {
       this.confirmedMemberColors.set(principal.owner, { version: version + 1, personal_color });
       const skin_tone = ["Spring", "Autumn"].includes(personal_color.season) ? "Warm" : "Cool";
-      await updateRows("style_profile", { skin_tone }, { user_id: `eq.${principal.userId}` }).catch(() => undefined);
+      const existing = await selectOne("style_profile", { user_id: `eq.${principal.userId}` }).catch(() => null);
+      if (existing) {
+        await updateRows("style_profile", { user_id: `eq.${principal.userId}` }, { skin_tone, personal_color }).catch(() => {
+          return updateRows("style_profile", { user_id: `eq.${principal.userId}` }, { skin_tone }).catch(() => undefined);
+        });
+      } else {
+        await insertRow("style_profile", { user_id: principal.userId, skin_tone, personal_color, style_profile_version: version + 1 }).catch(() => {
+          return insertRow("style_profile", { user_id: principal.userId, skin_tone, style_profile_version: version + 1 }).catch(() => undefined);
+        });
+      }
     }
     return { version: version + 1, personal_color };
   }

@@ -1,3 +1,4 @@
+import { DecimalPipe } from '@angular/common';
 import { afterNextRender, Component, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { catchError, of } from 'rxjs';
@@ -5,13 +6,15 @@ import { OffersService } from '../../core/services/offers.service';
 import type { OfferVoucher } from '../../core/models/offer.interface';
 import { AuthService } from '../../core/services/auth.service';
 import { ApiService } from '../../core/services/api.service';
+import { CatalogService } from '../../core/services/catalog.service';
+import { CartStore } from '../../core/services/cart.store';
+import type { ProductSummary } from '../../core/models/product.interface';
 import { useBodyClass } from '../../core/utils/body-class';
 import { showToast } from '../../core/utils/toast';
 import { AddressSelector } from '../../shared/address-selector/address-selector';
 import type { AddressGeographySelection } from '../../core/models/address-geography';
 import { PersonalColorComponent } from '../ai/personal-color.component';
 import { LoyaltyWalletComponent } from './loyalty-wallet.component';
-
 interface MemberProfile {
   full_name?: string;
   email?: string;
@@ -43,10 +46,34 @@ interface StyleQuiz {
   budget_range?: string;
   age_group?: string;
 }
+interface MemberOrderItem {
+  product_name?: string;
+  product_image?: string;
+  slug?: string;
+  product_id?: string;
+  variant_id?: string;
+  price?: number;
+  quantity?: number;
+  color?: string;
+  size?: string;
+  category_name?: string;
+  is_combo?: boolean;
+}
+
+interface MemberOrder {
+  order_id: string;
+  order_code?: string;
+  status?: string;
+  status_label?: string;
+  created_at?: string;
+  total_amount?: number;
+  item_count?: number;
+  items?: MemberOrderItem[];
+}
 
 @Component({
   selector: 'app-account-profile-page',
-  imports: [RouterLink, AddressSelector, PersonalColorComponent, LoyaltyWalletComponent],
+  imports: [RouterLink, DecimalPipe, AddressSelector, PersonalColorComponent, LoyaltyWalletComponent],
   host: { class: 'page-profile', style: 'display:block' },
   templateUrl: './profile.page.html',
 })
@@ -55,13 +82,18 @@ export class AccountProfilePage {
   private readonly api = inject(ApiService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly cart = inject(CartStore);
+  private readonly catalog = inject(CatalogService);
+  private readonly offers = inject(OffersService);
   readonly tab = signal('profile');
   readonly displayName = signal(this.auth.session()?.fullName || 'Tên khách hàng');
   readonly addressModalOpen = signal(false);
   readonly addressGeography = signal<AddressGeographySelection>({ province: '', district: '', ward: '', mode: 'current', valid: false });
-  /** Saved address fields render as Angular text bindings, never interpreted HTML. */
   readonly savedAddresses = signal<NonNullable<MemberProfile['saved_addresses']>>([]);
-  private readonly offers = inject(OffersService);
+
+  // Analytics & Orders
+  readonly orders = signal<MemberOrder[]>([]);
+  readonly allProducts = signal<ProductSummary[]>([]);
 
   /**
    * Ưu đãi của tôi. Trước đây là sáu banner viết cứng ghi bằng `innerHTML`, không liên
@@ -95,6 +127,165 @@ export class AccountProfilePage {
       .get<{ success?: boolean; quiz?: StyleQuiz }>('/api/user/style-quiz')
       .pipe(catchError(() => of({ quiz: undefined })))
       .subscribe((res) => this.bindStyleProfile(res.quiz));
+    this.api
+      .get<{ orders?: MemberOrder[] }>('/api/user/orders')
+      .pipe(catchError(() => of({ orders: [] as MemberOrder[] })))
+      .subscribe((data) => this.orders.set(data.orders || []));
+    this.catalog
+      .getProducts()
+      .pipe(catchError(() => of([] as ProductSummary[])))
+      .subscribe((prods) => this.allProducts.set(prods || []));
+  }
+
+  // Analytics Computeds
+  readonly completedOrders = computed(() =>
+    this.orders().filter((o) =>
+      ['delivered', 'confirmed', 'shipping', 'processing', 'completed'].includes(o.status || '')
+    )
+  );
+
+  readonly totalSpent = computed(() =>
+    this.completedOrders().reduce((sum, o) => sum + Number(o.total_amount || 0), 0)
+  );
+
+  readonly averageOrderValue = computed(() => {
+    const count = this.completedOrders().length;
+    return count ? Math.round(this.totalSpent() / count) : 0;
+  });
+
+  readonly totalItemsPurchased = computed(() =>
+    this.completedOrders().reduce(
+      (sum, o) => sum + (o.items?.reduce((s, it) => s + (it.quantity || 1), 0) || o.item_count || 1),
+      0
+    )
+  );
+
+  readonly totalSaved = computed(() => Math.round(this.totalSpent() * 0.12));
+
+  readonly membershipTier = computed(() => {
+    const spent = this.totalSpent();
+    if (spent >= 7000000) {
+      return {
+        name: 'Kim Cương (Diamond VIP)',
+        badge: 'DIAMOND',
+        rate: 'Tích 5% điểm thưởng',
+        privilege: 'Freeship 2h · Stylist 1-1 riêng biệt · Quà sinh nhật 200.000đ',
+        progress: 100,
+        nextTier: null,
+        remaining: 0,
+      };
+    }
+    if (spent >= 3000000) {
+      const progress = Math.min(100, Math.round(((spent - 3000000) / 4000000) * 100));
+      return {
+        name: 'Hạng Vàng (Gold)',
+        badge: 'GOLD',
+        rate: 'Tích 3% điểm thưởng',
+        privilege: 'Freeship mọi đơn hàng · Quà sinh nhật 100.000đ',
+        progress,
+        nextTier: 'Kim Cương (VIP)',
+        remaining: 7000000 - spent,
+      };
+    }
+    if (spent >= 1000000) {
+      const progress = Math.min(100, Math.round(((spent - 1000000) / 2000000) * 100));
+      return {
+        name: 'Hạng Bạc (Silver)',
+        badge: 'SILVER',
+        rate: 'Tích 2% điểm thưởng',
+        privilege: 'Freeship đơn từ 300.000đ · Quà sinh nhật 50.000đ',
+        progress,
+        nextTier: 'Hạng Vàng (Gold)',
+        remaining: 3000000 - spent,
+      };
+    }
+    const progress = Math.min(100, Math.round((spent / 1000000) * 100));
+    return {
+      name: 'Thành viên Mới',
+      badge: 'MEMBER',
+      rate: 'Tích 1% điểm thưởng',
+      privilege: 'Voucher chào mừng 10% · Đổi trả miễn phí 30 ngày',
+      progress,
+      nextTier: 'Hạng Bạc (Silver)',
+      remaining: 1000000 - spent,
+    };
+  });
+
+  readonly categorySpending = computed(() => {
+    const orders = this.completedOrders();
+    const map = new Map<string, { name: string; amount: number; count: number }>();
+    for (const o of orders) {
+      for (const it of o.items || []) {
+        const cat = it.category_name || (it.is_combo ? 'Set đồ & Combo' : 'Thời trang nữ');
+        const current = map.get(cat) || { name: cat, amount: 0, count: 0 };
+        current.amount += (it.price || 0) * (it.quantity || 1);
+        current.count += (it.quantity || 1);
+        map.set(cat, current);
+      }
+    }
+    const total = Array.from(map.values()).reduce((sum, c) => sum + c.amount, 0) || 1;
+    return Array.from(map.values())
+      .map((c) => ({ ...c, percent: Math.round((c.amount / total) * 100) }))
+      .sort((a, b) => b.amount - a.amount);
+  });
+
+  readonly purchasedProducts = computed(() => {
+    const orders = this.completedOrders();
+    const map = new Map<string, { product_id: string; name: string; image: string; price: number; slug?: string; order_date?: string; is_combo?: boolean }>();
+    for (const o of orders) {
+      for (const it of o.items || []) {
+        const key = it.product_name || it.product_id || '';
+        if (key && !map.has(key)) {
+          map.set(key, {
+            product_id: it.product_id || '',
+            name: it.product_name || '',
+            image: it.product_image || '',
+            price: it.price || 0,
+            slug: it.slug || '',
+            order_date: o.created_at,
+            is_combo: it.is_combo,
+          });
+        }
+      }
+    }
+    return Array.from(map.values());
+  });
+
+  readonly deepDiscountProducts = computed(() =>
+    this.allProducts()
+      .filter((p) => p.sale_price && p.base_price && p.base_price > p.sale_price)
+      .map((p) => ({
+        ...p,
+        discountPercent: Math.round(((p.base_price! - p.sale_price!) / p.base_price!) * 100),
+      }))
+      .sort((a, b) => b.discountPercent - a.discountPercent)
+      .slice(0, 4)
+  );
+
+  readonly newArrivalProducts = computed(() =>
+    [...this.allProducts()]
+      .sort((a, b) => new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime())
+      .slice(0, 4)
+  );
+
+  readonly recommendedVouchers = computed(() => this.myVouchers().slice(0, 3));
+
+  reorderProduct(item: { name: string; image: string; price: number; product_id?: string; is_combo?: boolean }): void {
+    this.cart.addItem({
+      variant_id: item.product_id || `reorder-${Date.now()}`,
+      product_id: item.product_id || '',
+      product_name: item.name,
+      product_image: item.image,
+      quantity: 1,
+      unit_price: item.price,
+      is_combo: item.is_combo,
+    });
+    showToast(`Đã thêm ${item.name} vào giỏ hàng!`);
+  }
+
+  copyVoucher(code: string): void {
+    void navigator.clipboard?.writeText(code);
+    showToast(`Đã sao chép mã ưu đãi ${code}!`);
   }
 
   /**

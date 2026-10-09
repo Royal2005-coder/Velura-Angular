@@ -1,0 +1,4 @@
+KAN-32
+Photo search reads the CLIP index at AI_PRIVATE_ROOT/catalog-image-vectors.json (cluster hostPath, 269 of 284 catalog SKUs). The local scratch copy cannot be refreshed without a reachable GPU worker, so local dev sees a smaller index than the cluster.
+
+Do not add docs/KAN-n.md. Types/JSDoc = what. This note + MR = why.

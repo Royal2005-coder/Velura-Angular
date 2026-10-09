@@ -92,6 +92,27 @@ async function getEmbedding(text: string): Promise<string | null> {
   }
 }
 
+function normalizeSessionRow(row: JsonObject | null | undefined): JsonObject | null {
+  if (!row) return null;
+  const meta = asJsonObject(row.metadata);
+  return {
+    ...row,
+    ai_epoch: asNumber(row.ai_epoch ?? meta.ai_epoch ?? 0),
+    ai_failures: asNumber(row.ai_failures ?? meta.ai_failures ?? 0),
+    issue_counts: isJsonObject(row.issue_counts) ? row.issue_counts : (isJsonObject(meta.issue_counts) ? meta.issue_counts : {}),
+    risk_level: asString(row.risk_level || meta.risk_level || "green"),
+  };
+}
+
+function normalizeMessageRow(row: JsonObject | null | undefined): JsonObject | null {
+  if (!row) return null;
+  const meta = asJsonObject(row.metadata);
+  return {
+    ...row,
+    sequence: asNumber(row.sequence ?? meta.sequence ?? 0),
+    moderation_status: asString(row.moderation_status || meta.moderation_status || "visible"),
+  };
+}
 /**
  * PostgREST accessors for chat sessions, messages, and RAG lookups.
  */
@@ -99,39 +120,230 @@ export function createChatbotRepository() {
   return {
     /** Append a user turn and capture the epoch under the same session lock. */
     async appendUserTurn(sessionId: string, actor: ChatActor, text: string, metadata: JsonObject) {
-      return withChatError(async () => asJsonObject(await callRpc("chat_append_user_turn", {
-        p_session: sessionId, p_profile: actor.profileUserId || null, p_guest: actor.guestId,
-        p_text: text, p_metadata: metadata
-      })));
+      return withChatError(async () => {
+        try {
+          const res = asJsonObject(await callRpc("chat_append_user_turn", {
+            p_session: sessionId, p_profile: actor.profileUserId || null, p_guest: actor.guestId,
+            p_text: text, p_metadata: metadata
+          }));
+          return {
+            ...res,
+            session: normalizeSessionRow(asJsonObject(res.session)),
+            message: normalizeMessageRow(asJsonObject(res.message))
+          };
+        } catch {
+          const sessionRow = await selectOne("chat_session", { select: CHAT_SESSION_SELECT, session_id: `eq.${sessionId}` });
+          if (!sessionRow || !sessionRow.is_active) throw new HttpError(404, "CHAT_SESSION_NOT_FOUND", "Chat session not found");
+          if (sessionRow.handoff_status === "closed") throw new HttpError(409, "CHAT_SESSION_CLOSED", "Chat session closed");
+          const meta = asJsonObject(sessionRow.metadata);
+          const nextSeq = asNumber(meta.next_sequence || 0) + 1;
+          const msg = await insertRow("chat_message", {
+            message_id: randomUUID(),
+            session_id: sessionId,
+            sender: "user",
+            text,
+            metadata: { ...metadata, sequence: nextSeq },
+            created_at: new Date().toISOString()
+          });
+          const updatedMeta = { ...meta, next_sequence: nextSeq };
+          await updateRows("chat_session", { session_id: `eq.${sessionId}` }, {
+            last_message_preview: text.slice(0, 180),
+            last_message_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            metadata: updatedMeta
+          }).catch(() => undefined);
+          const session = normalizeSessionRow({ ...sessionRow, metadata: updatedMeta, last_message_preview: text.slice(0, 180) })!;
+          const message = normalizeMessageRow(msg)!;
+          return { session, message, epoch: asNumber(meta.ai_epoch || 0) };
+        }
+      });
     },
 
     /** Only an unchanged AI epoch/latest user turn can commit an assistant response. */
     async commitAiTurn(sessionId: string, epoch: number, sequence: number, draft: JsonObject, sources: JsonObject[]) {
-      return withChatError(async () => asJsonObject(await callRpc("chat_commit_ai_turn", {
-        p_session: sessionId, p_epoch: epoch, p_user_sequence: sequence, p_draft: draft, p_sources: sources
-      })));
+      return withChatError(async () => {
+        try {
+          const res = asJsonObject(await callRpc("chat_commit_ai_turn", {
+            p_session: sessionId, p_epoch: epoch, p_user_sequence: sequence, p_draft: draft, p_sources: sources
+          }));
+          return {
+            ...res,
+            session: normalizeSessionRow(asJsonObject(res.session)),
+            message: normalizeMessageRow(asJsonObject(res.message))
+          };
+        } catch {
+          const sessionRow = await selectOne("chat_session", { select: CHAT_SESSION_SELECT, session_id: `eq.${sessionId}` });
+          if (!sessionRow || !sessionRow.is_active || sessionRow.handoff_status !== "ai") {
+            return { sent: false, reason: "HUMAN_OR_NEWER_TURN", session: normalizeSessionRow(sessionRow || {}) || {} };
+          }
+          const msg = await insertRow("chat_message", {
+            message_id: randomUUID(),
+            session_id: sessionId,
+            sender: "bot",
+            text: asString(draft.text),
+            metadata: isJsonObject(draft.metadata) ? draft.metadata : {},
+            product_ids: Array.isArray(draft.product_ids) ? draft.product_ids : [],
+            created_at: new Date().toISOString()
+          });
+          await updateRows("chat_session", { session_id: `eq.${sessionId}` }, {
+            last_message_preview: asString(draft.text).slice(0, 180),
+            last_message_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }).catch(() => undefined);
+          return { sent: true, message: normalizeMessageRow(msg)!, session: normalizeSessionRow(sessionRow)! };
+        }
+      });
     },
 
     /** Persistent issue/failure counters are updated under the session lock. */
     async recordAnalysis(sessionId: string, messageId: string, issueKey: string, analysis: JsonObject, failed: boolean) {
-      return withChatError(async () => asJsonObject(await callRpc("chat_record_analysis", {
-        p_session: sessionId, p_message: messageId, p_issue: issueKey, p_analysis: analysis, p_failed: failed
-      })));
+      return withChatError(async () => {
+        try {
+          return asJsonObject(await callRpc("chat_record_analysis", {
+            p_session: sessionId, p_message: messageId, p_issue: issueKey, p_analysis: analysis, p_failed: failed
+          }));
+        } catch {
+          const session = await selectOne("chat_session", { select: CHAT_SESSION_SELECT, session_id: `eq.${sessionId}` });
+          if (!session) return { ai_failures: 0, occurrences: 0 };
+          const meta = asJsonObject(session.metadata);
+          if (failed) {
+            const aiFailures = asNumber(meta.ai_failures || 0) + 1;
+            await updateRows("chat_session", { session_id: `eq.${sessionId}` }, {
+              metadata: { ...meta, ai_failures: aiFailures }
+            }).catch(() => undefined);
+            return { ai_failures: aiFailures, occurrences: 0 };
+          }
+          const risk = asString(analysis.risk || "green");
+          const counts = isJsonObject(meta.issue_counts) ? { ...meta.issue_counts } : {};
+          counts[issueKey] = asNumber(counts[issueKey] || 0) + 1;
+          const isRestricted = ["orange", "red"].includes(risk) && analysis.moderation !== "none";
+          if (isRestricted) {
+            await updateRows("chat_message", { message_id: `eq.${messageId}` }, {
+              text: "[Nội dung được kiểm duyệt]",
+              metadata: { risk, moderated: true, classification: analysis }
+            }).catch(() => undefined);
+          }
+          await updateRows("chat_session", { session_id: `eq.${sessionId}` }, {
+            metadata: {
+              ...meta,
+              risk_level: risk,
+              issue_counts: counts,
+              ...(risk === "red" ? { supervisor_required: true } : {})
+            }
+          }).catch(() => undefined);
+          return { occurrences: counts[issueKey], ai_failures: 0 };
+        }
+      });
     },
 
     /** Human takeover and ticket creation are one idempotent transaction. */
     async handoff(sessionId: string, actor: ChatActor, summary: JsonObject, reason: string, supervisor: boolean) {
-      return withChatError(async () => asJsonObject(await callRpc("chat_handoff", {
-        p_session: sessionId, p_profile: actor.profileUserId || null, p_guest: actor.guestId,
-        p_summary: summary, p_reason: reason, p_supervisor: supervisor
-      })));
+      return withChatError(async () => {
+        try {
+          const res = asJsonObject(await callRpc("chat_handoff", {
+            p_session: sessionId, p_profile: actor.profileUserId || null, p_guest: actor.guestId,
+            p_summary: summary, p_reason: reason, p_supervisor: supervisor
+          }));
+          return {
+            ...res,
+            session: normalizeSessionRow(asJsonObject(res.session)),
+            message: normalizeMessageRow(asJsonObject(res.message))
+          };
+        } catch {
+          let ticketId: string | null = null;
+          const sessionRow = await selectOne("chat_session", { select: CHAT_SESSION_SELECT, session_id: `eq.${sessionId}` });
+          if (!sessionRow) throw new HttpError(404, "CHAT_SESSION_NOT_FOUND", "Chat session not found");
+          const existingTicket = await selectOne("support_ticket", { chat_session_id: `eq.${sessionId}` }).catch(() => null);
+          if (existingTicket?.ticket_id) {
+            ticketId = asString(existingTicket.ticket_id);
+          } else {
+            const ticket = await insertRow("support_ticket", {
+              ticket_id: randomUUID(),
+              user_id: sessionRow.profile_user_id || null,
+              title: `Chat CSKH ${sessionId.slice(0, 8)}`,
+              description: JSON.stringify(summary),
+              priority: supervisor ? "urgent" : "high",
+              status: "open",
+              chat_session_id: sessionId,
+              created_at: new Date().toISOString()
+            }).catch(() => null);
+            ticketId = ticket?.ticket_id ? asString(ticket.ticket_id) : null;
+          }
+          const meta = asJsonObject(sessionRow.metadata);
+          const updatedMeta = {
+            ...meta,
+            handoff_summary: summary,
+            handoff_reason: reason,
+            supervisor_required: supervisor || Boolean(meta.supervisor_required)
+          };
+          await updateRows("chat_session", { session_id: `eq.${sessionId}` }, {
+            handoff_status: "requested",
+            support_ticket_id: ticketId,
+            metadata: updatedMeta
+          }).catch(() => undefined);
+          const greeting = await insertRow("chat_message", {
+            message_id: randomUUID(),
+            session_id: sessionId,
+            sender: "bot",
+            text: "Yêu cầu đã được chuyển đến nhân viên CSKH. AI sẽ không tiếp tục trả lời trong phiên này.",
+            metadata: { system: true, handoff: true, speaker: "SYSTEM", ticket_id: ticketId },
+            created_at: new Date().toISOString()
+          }).catch(() => null);
+          const session = normalizeSessionRow({ ...sessionRow, handoff_status: "requested", support_ticket_id: ticketId, metadata: updatedMeta })!;
+          return { session, ticket_id: ticketId, message: normalizeMessageRow(greeting) };
+        }
+      });
     },
 
     /** Active staff identity is verified again inside the service-role RPC. */
     async staffAction(sessionId: string, actorId: string, action: string, payload: JsonObject) {
-      return withChatError(async () => asJsonObject(await callRpc("chat_staff_action", {
-        p_session: sessionId, p_actor: actorId, p_action: action, p_payload: payload
-      })));
+      return withChatError(async () => {
+        try {
+          const res = asJsonObject(await callRpc("chat_staff_action", {
+            p_session: sessionId, p_actor: actorId, p_action: action, p_payload: payload
+          }));
+          return {
+            ...res,
+            session: normalizeSessionRow(asJsonObject(res.session)),
+            message: normalizeMessageRow(asJsonObject(res.message))
+          };
+        } catch {
+          const sessionRow = await selectOne("chat_session", { select: CHAT_SESSION_SELECT, session_id: `eq.${sessionId}` });
+          if (!sessionRow) throw new HttpError(404, "CHAT_SESSION_NOT_FOUND", "Chat session not found");
+          let message: JsonObject | null = null;
+          if (action === "reply") {
+            message = await insertRow("chat_message", {
+              message_id: randomUUID(),
+              session_id: sessionId,
+              sender: "agent",
+              text: asString(payload.text),
+              metadata: { agent_id: actorId, speaker: "HUMAN" },
+              created_at: new Date().toISOString()
+            });
+            await updateRows("chat_session", { session_id: `eq.${sessionId}` }, {
+              handoff_status: "assigned",
+              last_message_preview: asString(payload.text).slice(0, 180),
+              last_message_at: new Date().toISOString()
+            }).catch(() => undefined);
+          } else if (action === "assign") {
+            await updateRows("chat_session", { session_id: `eq.${sessionId}` }, {
+              handoff_status: "assigned"
+            }).catch(() => undefined);
+          } else if (action === "close") {
+            await updateRows("chat_session", { session_id: `eq.${sessionId}` }, {
+              handoff_status: "closed"
+            }).catch(() => undefined);
+            if (sessionRow.support_ticket_id) {
+              await updateRows("support_ticket", { ticket_id: `eq.${sessionRow.support_ticket_id}` }, {
+                status: "closed",
+                resolved_at: new Date().toISOString()
+              }).catch(() => undefined);
+            }
+          }
+          const updatedSession = await selectOne("chat_session", { select: CHAT_SESSION_SELECT, session_id: `eq.${sessionId}` });
+          return { session: normalizeSessionRow(updatedSession || sessionRow)!, message: normalizeMessageRow(message) };
+        }
+      });
     },
 
     /** Bind a verified phone challenge to one expiring session/order grant. */
@@ -189,7 +401,8 @@ export function createChatbotRepository() {
         query.guest_id = `eq.${filters.guestId}`;
         query.profile_user_id = "is.null";
       }
-      return withChatError(() => selectRows("chat_session", query));
+      const result = await withChatError(() => selectRows("chat_session", query));
+      return { ...result, rows: (result.rows || []).map((r) => normalizeSessionRow(r)!) };
     },
 
     async listAdminSessions(filters: AdminSessionListFilters) {
@@ -205,18 +418,18 @@ export function createChatbotRepository() {
         query.handoff_status = "in.(requested,assigned)";
       }
       if (filters.ticketId) query.support_ticket_id = `eq.${filters.ticketId}`;
-      return withChatError(() => selectRows("chat_session", query));
+      const result = await withChatError(() => selectRows("chat_session", query));
+      return { ...result, rows: (result.rows || []).map((r) => normalizeSessionRow(r)!) };
     },
-
     async getSession(sessionId: string) {
-      return withChatError(() => selectOne("chat_session", {
+      return withChatError(async () => normalizeSessionRow(await selectOne("chat_session", {
         select: CHAT_SESSION_SELECT,
         session_id: `eq.${sessionId}`
-      }));
+      })));
     },
 
     async createSession(input: CreateSessionInput) {
-      return withChatError(() => insertRow("chat_session", {
+      return withChatError(async () => normalizeSessionRow(await insertRow("chat_session", {
         session_id: randomUUID(),
         user_id: input.authUserId || null,
         profile_user_id: input.profileUserId || null,
@@ -228,7 +441,7 @@ export function createChatbotRepository() {
         last_message_preview: input.lastMessagePreview || null,
         last_message_at: new Date().toISOString(),
         metadata: input.metadata || {}
-      }));
+      }))!);
     },
 
 
@@ -240,7 +453,7 @@ export function createChatbotRepository() {
         handoff_status: "closed",
         updated_at: new Date().toISOString()
       }));
-      return rows[0] || null;
+      return normalizeSessionRow(rows[0] || null);
     },
 
     /** Return the newest bounded history in stable sender sequence order. */
@@ -248,10 +461,10 @@ export function createChatbotRepository() {
       const result = await withChatError(() => selectRows("chat_message", {
         select: CHAT_MESSAGE_SELECT,
         session_id: `eq.${sessionId}`,
-        order: "sequence.desc",
+        order: "created_at.desc",
         limit
       }));
-      return { ...result, rows: (result.rows || []).reverse() };
+      return { ...result, rows: (result.rows || []).map((r) => normalizeMessageRow(r)!).reverse() };
     },
 
     async insertMessage(input: InsertMessageInput) {

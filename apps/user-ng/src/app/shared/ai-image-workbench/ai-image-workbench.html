@@ -132,119 +132,98 @@
       <!-- STUDIO MODEL CUSTOMIZATION -->
       @if (mode() === 'studio') {
         <div class="studio-section">
-          <!-- GENDER FILTER -->
-          <div class="filter-group">
-            <span class="filter-label">Dáng người:</span>
-            <div class="filter-chips">
-              <button
-                type="button"
-                class="chip"
-                [class.chip--active]="selectedGender() === 'all'"
-                [disabled]="busy()"
-                (click)="selectedGender.set('all')"
-              >Tất cả</button>
-              <button
-                type="button"
-                class="chip"
-                [class.chip--active]="selectedGender() === 'female'"
-                [disabled]="busy()"
-                (click)="selectedGender.set('female')"
-              >👩 Nữ</button>
-              <button
-                type="button"
-                class="chip"
-                [class.chip--active]="selectedGender() === 'male'"
-                [disabled]="busy()"
-                (click)="selectedGender.set('male')"
-              >👨 Nam</button>
-            </div>
+          <!-- GENDER SEGMENTED TABS -->
+          <div class="studio-gender-tabs">
+            <button
+              type="button"
+              class="gender-tab"
+              [class.gender-tab--active]="selectedGender() === 'female'"
+              [disabled]="busy()"
+              (click)="switchGender('female')"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="5"></circle><path d="M12 13v8"></path><path d="M9 18h6"></path></svg>
+              <span>Người mẫu Nữ</span>
+            </button>
+            <button
+              type="button"
+              class="gender-tab"
+              [class.gender-tab--active]="selectedGender() === 'male'"
+              [disabled]="busy()"
+              (click)="switchGender('male')"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10" cy="14" r="5"></circle><path d="M19 5l-5.4 5.4"></path><path d="M19 5h-5"></path><path d="M19 5v5"></path></svg>
+              <span>Người mẫu Nam</span>
+            </button>
           </div>
 
-          <!-- SEASON FILTER -->
-          <div class="filter-group">
-            <span class="filter-label">Mùa trong năm:</span>
-            <div class="filter-chips">
-              <button
-                type="button"
-                class="chip"
-                [class.chip--active]="selectedSeason() === 'all'"
-                [disabled]="busy()"
-                (click)="selectedSeason.set('all')"
-              >Tất cả mùa</button>
-              <button
-                type="button"
-                class="chip"
-                [class.chip--active]="selectedSeason() === 'spring'"
-                [disabled]="busy()"
-                (click)="selectedSeason.set('spring')"
-              >🌸 Mùa Xuân</button>
-              <button
-                type="button"
-                class="chip"
-                [class.chip--active]="selectedSeason() === 'summer'"
-                [disabled]="busy()"
-                (click)="selectedSeason.set('summer')"
-              >☀️ Mùa Hạ</button>
-              <button
-                type="button"
-                class="chip"
-                [class.chip--active]="selectedSeason() === 'autumn'"
-                [disabled]="busy()"
-                (click)="selectedSeason.set('autumn')"
-              >🍂 Mùa Thu</button>
-              <button
-                type="button"
-                class="chip"
-                [class.chip--active]="selectedSeason() === 'winter'"
-                [disabled]="busy()"
-                (click)="selectedSeason.set('winter')"
-              >❄️ Mùa Đông</button>
-            </div>
+          <!-- SINGLE WRAPPED ROW OF SCENE PILLS -->
+          <div class="scene-pills">
+            <button
+              type="button"
+              class="scene-pill"
+              [class.scene-pill--active]="selectedScene() === 'all'"
+              [disabled]="busy()"
+              (click)="switchScene('all')"
+            >Tất cả</button>
+            <button
+              type="button"
+              class="scene-pill"
+              [class.scene-pill--active]="selectedScene() === 'basic'"
+              [disabled]="busy()"
+              (click)="switchScene('basic')"
+            >Studio Chuẩn</button>
+            <button
+              type="button"
+              class="scene-pill"
+              [class.scene-pill--active]="selectedScene() === 'spring'"
+              [disabled]="busy()"
+              (click)="switchScene('spring')"
+            >Mùa Xuân</button>
+            <button
+              type="button"
+              class="scene-pill"
+              [class.scene-pill--active]="selectedScene() === 'summer'"
+              [disabled]="busy()"
+              (click)="switchScene('summer')"
+            >Mùa Hạ</button>
+            <button
+              type="button"
+              class="scene-pill"
+              [class.scene-pill--active]="selectedScene() === 'autumn'"
+              [disabled]="busy()"
+              (click)="switchScene('autumn')"
+            >Mùa Thu</button>
+            <button
+              type="button"
+              class="scene-pill"
+              [class.scene-pill--active]="selectedScene() === 'winter'"
+              [disabled]="busy()"
+              (click)="switchScene('winter')"
+            >Mùa Đông</button>
+            <button
+              type="button"
+              class="scene-pill"
+              [class.scene-pill--active]="selectedScene() === 'work'"
+              [disabled]="busy()"
+              (click)="switchScene('work')"
+            >Công sở</button>
+            <button
+              type="button"
+              class="scene-pill"
+              [class.scene-pill--active]="selectedScene() === 'street'"
+              [disabled]="busy()"
+              (click)="switchScene('street')"
+            >Dạo phố</button>
+            <button
+              type="button"
+              class="scene-pill"
+              [class.scene-pill--active]="selectedScene() === 'party'"
+              [disabled]="busy()"
+              (click)="switchScene('party')"
+            >Dạ tiệc</button>
           </div>
 
-          <!-- OCCASION FILTER -->
-          <div class="filter-group">
-            <span class="filter-label">Dịp xuất hiện:</span>
-            <div class="filter-chips">
-              <button
-                type="button"
-                class="chip"
-                [class.chip--active]="selectedOccasion() === 'all'"
-                [disabled]="busy()"
-                (click)="selectedOccasion.set('all')"
-              >Tất cả dịp</button>
-              <button
-                type="button"
-                class="chip"
-                [class.chip--active]="selectedOccasion() === 'work'"
-                [disabled]="busy()"
-                (click)="selectedOccasion.set('work')"
-              >💼 Đi làm / Công sở</button>
-              <button
-                type="button"
-                class="chip"
-                [class.chip--active]="selectedOccasion() === 'school'"
-                [disabled]="busy()"
-                (click)="selectedOccasion.set('school')"
-              >🎓 Đi học / Campus</button>
-              <button
-                type="button"
-                class="chip"
-                [class.chip--active]="selectedOccasion() === 'street'"
-                [disabled]="busy()"
-                (click)="selectedOccasion.set('street')"
-              >🚶 Dạo phố / Casual</button>
-              <button
-                type="button"
-                class="chip"
-                [class.chip--active]="selectedOccasion() === 'party'"
-                [disabled]="busy()"
-                (click)="selectedOccasion.set('party')"
-              >🍸 Dạ tiệc / Party</button>
-            </div>
-          </div>
-
-          <!-- STUDIO MODEL CARDS GRID -->
+          <!-- CLEAN STUDIO CARDS GRID -->
           <div class="studio-grid">
             @for (asset of filteredStudioAssets(); track asset.id) {
               <div
@@ -253,17 +232,19 @@
                 [class.studio-card--disabled]="busy()"
                 (click)="selectStudio(asset.id)"
               >
-                <div class="studio-card__avatar">
-                  @if (asset.gender === 'male') { 👨 } @else { 👩 }
+                <div class="studio-card__icon">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
                 </div>
                 <div class="studio-card__info">
-                  <div class="studio-card__title">{{ asset.label }}</div>
+                  <div class="studio-card__title">{{ modelDisplayTitle(asset) }}</div>
                   @if (asset.badge) {
                     <span class="studio-card__badge">{{ asset.badge }}</span>
                   }
                 </div>
                 @if (studio() === asset.id) {
-                  <span class="studio-card__check">✓</span>
+                  <span class="studio-card__check">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  </span>
                 }
               </div>
             }

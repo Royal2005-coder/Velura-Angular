@@ -554,12 +554,20 @@ export class ProductDetailPage {
   }
 
   /**
-   * Selects a gallery image by index.
+   * Selects a gallery image by index and syncs matching color.
    */
   selectImage(index: number): void {
     this.activeImage.set(index);
+    const colors = this.colors();
+    if (colors[index]) {
+      this.selectedColor.set(colors[index].name);
+      const sizes = this.sizes();
+      if (sizes.length && !sizes.includes(this.selectedSize() || '')) {
+        this.selectedSize.set(sizes[0]);
+      }
+      this.clampQuantity();
+    }
   }
-
   /**
    * Shows the previous gallery image.
    */
@@ -582,17 +590,28 @@ export class ProductDetailPage {
   }
 
   /**
-   * Selects a color swatch from the original option list.
+   * Selects a color swatch and switches the gallery image to match.
    */
   selectColor(color: string): void {
     this.selectedColor.set(color);
+    const gallery = this.gallery();
+    const colors = this.colors();
+    const colorIndex = colors.findIndex((c) => c.name === color);
+    if (colorIndex >= 0 && colorIndex < gallery.length) {
+      this.activeImage.set(colorIndex);
+    } else {
+      const slug = color.toLowerCase().replace(/\s+/g, '-');
+      const foundIdx = gallery.findIndex((url) => url.toLowerCase().includes(slug));
+      if (foundIdx >= 0) {
+        this.activeImage.set(foundIdx);
+      }
+    }
     const sizes = this.sizes();
     if (sizes.length && !sizes.includes(this.selectedSize() || '')) {
       this.selectedSize.set(sizes[0]);
     }
     this.clampQuantity();
   }
-
   /**
    * Selects a size option from the original option list.
    */

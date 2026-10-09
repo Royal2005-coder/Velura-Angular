@@ -49,7 +49,7 @@ export class ShopVisualSearchRepository implements VisualSearchRepository {
       category_id: `eq.${cat.category_id}`,
       status: "eq.on_sale",
       is_combo: "eq.false",
-      order: "rating_avg.desc,sold_count.desc",
+      order: "is_featured.desc,updated_at.desc",
       limit: "8",
     }, { count: "none", silentError: true });
     return rows.map(r => ({

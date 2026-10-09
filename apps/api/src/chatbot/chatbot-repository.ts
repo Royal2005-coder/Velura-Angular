@@ -253,18 +253,16 @@ export function createChatbotRepository() {
           let ticketId: string | null = null;
           const sessionRow = await selectOne("chat_session", { select: CHAT_SESSION_SELECT, session_id: `eq.${sessionId}` });
           if (!sessionRow) throw new HttpError(404, "CHAT_SESSION_NOT_FOUND", "Chat session not found");
-          const existingTicket = await selectOne("support_ticket", { chat_session_id: `eq.${sessionId}` }).catch(() => null);
-          if (existingTicket?.ticket_id) {
-            ticketId = asString(existingTicket.ticket_id);
+          if (sessionRow.support_ticket_id) {
+            ticketId = asString(sessionRow.support_ticket_id);
           } else {
             const ticket = await insertRow("support_ticket", {
               ticket_id: randomUUID(),
               user_id: sessionRow.profile_user_id || null,
               title: `Chat CSKH ${sessionId.slice(0, 8)}`,
-              description: JSON.stringify(summary),
+              description: JSON.stringify({ ...summary, chat_session_id: sessionId }),
               priority: supervisor ? "urgent" : "high",
               status: "open",
-              chat_session_id: sessionId,
               created_at: new Date().toISOString()
             }).catch(() => null);
             ticketId = ticket?.ticket_id ? asString(ticket.ticket_id) : null;
@@ -364,7 +362,7 @@ export function createChatbotRepository() {
     async listPolicyApprovals() {
       return withChatError(() => selectRows("chat_policy_approval", {
         select: "policy_id,source_updated_at,expires_at", expires_at: `gt.${new Date().toISOString()}`
-      }));
+      }).catch(() => ({ rows: [] })));
     },
 
     /** Published store pages are official L0 facts. */

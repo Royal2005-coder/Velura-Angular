@@ -54,6 +54,40 @@ export class PersonalColorService {
     validateColorResult({ season: analysis.result.season, subtype: analysis.result.subtype, palette: analysis.result.palette, avoided: analysis.result.avoided, confidence: analysis.result.confidence }, this.policy);
     return this.repo.confirm(principal, id, Number(version));
   }
+  /** Confirm manual personal color choice with atomic version validation and policy taxonomy alignment. */
+  async confirmManual(principal: ColorPrincipal, body: Record<string, unknown>) {
+    const policy = this.policy;
+    if (!policy?.approved) throw new HttpError(503, "COLOR_UNAVAILABLE", "Chính sách phân tích màu chưa được bật.");
+    const season = typeof body["season"] === "string" ? body["season"] : "";
+    if (!season || !Object.keys(policy.taxonomy).includes(season)) {
+      throw new HttpError(400, "COLOR_SEASON_INVALID", "Mùa màu sắc không hợp lệ (hỗ trợ Spring, Summer, Autumn, Winter).");
+    }
+    const version = Number(body["expected_version"]);
+    if (!Number.isSafeInteger(version) || version < 0) {
+      throw new HttpError(400, "COLOR_VERSION_INVALID", "Phiên bản hồ sơ không hợp lệ.");
+    }
+    const SEASON_PALETTES: Record<string, { palette: string[]; avoided: string[] }> = {
+      Spring: { palette: ["peach", "coral", "gold", "mint"], avoided: ["black", "burgundy", "royal_blue"] },
+      Summer: { palette: ["lavender", "rose", "sky", "sage"], avoided: ["terracotta", "mustard", "brown"] },
+      Autumn: { palette: ["terracotta", "olive", "mustard", "brown"], avoided: ["sky", "lavender", "mint"] },
+      Winter: { palette: ["emerald", "royal_blue", "burgundy", "black"], avoided: ["peach", "gold", "mustard"] }
+    };
+    const standard = SEASON_PALETTES[season] || SEASON_PALETTES.Spring;
+    const subtype = typeof body["subtype"] === "string" && body["subtype"] ? body["subtype"] : season;
+    const personal_color = {
+      season,
+      subtype,
+      palette: standard.palette,
+      avoided: standard.avoided,
+      confidence: 1.0,
+      policy_version: policy.version,
+      status: "CONFIRMED" as const,
+      analysis_id: `manual-${randomUUID()}`,
+      confirmed_at: new Date().toISOString()
+    };
+    return this.repo.confirmManual(principal, personal_color, version);
+  }
+
   /** Stop active analyses during API shutdown; persistent polling still reports their bounded expiry. */
   close(): void {
     for (const controller of this.controllers.values()) controller.abort();

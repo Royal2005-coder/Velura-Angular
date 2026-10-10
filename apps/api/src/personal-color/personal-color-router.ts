@@ -33,6 +33,8 @@ export async function handlePersonalColorRoute(req: HttpRequest, res: HttpRespon
     else if (parts.length === 6 && req.method === "POST" && parts[5] === "cancel") sendJson(res, 200, await service.cancel(principal, parts[4]), responseHeaders);
     else if (parts.length === 6 && req.method === "POST" && parts[5] === "confirm") sendJson(res, 200, await service.confirm(principal, parts[4], (await readJson(req)).expected_version), responseHeaders);
     else throw new HttpError(404, "NOT_FOUND", "Không tìm thấy thao tác phân tích màu.");
+  } else if (parts[3] === "manual" && parts.length === 4 && req.method === "POST") {
+    sendJson(res, 200, await service.confirmManual(principal, await readJson(req)), responseHeaders);
   } else throw new HttpError(404, "NOT_FOUND", "Không tìm thấy thao tác phân tích màu.");
   return true;
 }

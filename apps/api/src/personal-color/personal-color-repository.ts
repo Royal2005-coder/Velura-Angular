@@ -116,6 +116,33 @@ export class PersonalColorRepository implements ColorRepository {
     }
     return { version: version + 1, personal_color };
   }
+  /** Atomically confirm a manual 4-season choice against the current Style Profile version. */
+  async confirmManual(principal: ColorPrincipal, personal_color: ConfirmedColor, version: number): Promise<{ version: number; personal_color: ConfirmedColor }> {
+    const profile = await this.profile(principal);
+    if (!profile || profile.version !== version) {
+      throw new HttpError(409, "COLOR_PROFILE_CONFLICT", "Hồ sơ đã thay đổi. Vui lòng tải lại.");
+    }
+    if (principal.guestId) {
+      const gProfile = guestStyleProfiles.get(principal.guestId || "") || {};
+      guestStyleProfiles.set(principal.guestId || "", { ...gProfile, personal_color, style_profile_version: version + 1 });
+    }
+    if (principal.userId) {
+      this.confirmedMemberColors.set(principal.owner, { version: version + 1, personal_color });
+      const skin_tone = ["Spring", "Autumn"].includes(personal_color.season) ? "Warm" : "Cool";
+      const existing = await selectOne("style_profile", { user_id: `eq.${principal.userId}` }).catch(() => null);
+      if (existing) {
+        await updateRows("style_profile", { user_id: `eq.${principal.userId}` }, { skin_tone, personal_color }).catch(() => {
+          return updateRows("style_profile", { user_id: `eq.${principal.userId}` }, { skin_tone }).catch(() => undefined);
+        });
+      } else {
+        await insertRow("style_profile", { user_id: principal.userId, skin_tone, personal_color, style_profile_version: version + 1 }).catch(() => {
+          return insertRow("style_profile", { user_id: principal.userId, skin_tone, style_profile_version: version + 1 }).catch(() => undefined);
+        });
+      }
+    }
+    return { version: version + 1, personal_color };
+  }
+
 
   private purgeGuests(): void {
     for (const [id, row] of this.guestAnalyses) if (Date.parse(row.value.expires_at) <= Date.now()) this.guestAnalyses.delete(id);

@@ -265,6 +265,8 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
       }, corsHeaders);
     }
 
+    if (await handleVisualSearchRoute(req, res, parts, corsHeaders, context)) return;
+
     if (parts[1] === "user") {
       if (parts[2] === "recommendations" && parts[3] === "style-profile") {
         await handleRecommendationRoute(req, res, parts, corsHeaders, context);
@@ -305,7 +307,6 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
       }
       if (await handleEnhancementApprovalRoute({ req, res, url, parts, context, headers: corsHeaders, service: enhancementApprovalService })) return;
       if (await handleCatalogContentRoute({ req, res, url, parts, context, headers: corsHeaders, service: catalogContentService })) return;
-      if (await handleVisualSearchRoute(req, res, parts, corsHeaders, context)) return;
       const dashboardHandled = await handleDashboardRoute({
         req,
         res,

@@ -69,9 +69,11 @@
           </svg>
           <span>TRA CỨU ĐƠN HÀNG</span>
         </a>
-        <div class="site-header__search-wrap">
+        <form class="site-header__search-wrap" role="search" (submit)="onSearchSubmit($event)">
           <label class="site-header__search" [class.is-focused]="searchOpen()">
-            <svg class="icon icon-search" aria-hidden="true" style="width: 14px; height: 14px;"><use href="#icon-search"></use></svg>
+            <button type="submit" class="site-header__search-icon-btn" aria-label="Tìm kiếm">
+              <svg class="icon icon-search" aria-hidden="true" style="width: 14px; height: 14px;"><use href="#icon-search"></use></svg>
+            </button>
             <input
               type="search"
               class="js-search-input"
@@ -229,7 +231,7 @@
               }
             </div>
           }
-        </div>
+        </form>
         <app-visual-search-workbench #headerWorkbench [hideTrigger]="true" (matches)="onVisualSearchMatches($event)" (searchResult)="onVisualSearchResult($event)" />
       </div>
       <nav class="center-row center-row--bottom site-header__nav" aria-label="Chính" [class.is-open]="navOpen()">

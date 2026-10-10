@@ -52,26 +52,82 @@ export class ShopAiCatalog implements AiCatalog {
     variantId?: string,
   ): Promise<{ product_supported: boolean; variant_supported: boolean; garment_category?: string }> {
     const product = await this.deps.product(productId);
-    const registry = asJsonObject(JSON.parse(process.env.AI_VTO_PRODUCTS || "{}") as unknown);
-    const garment = asJsonObject(registry[productId]);
-    const category = asString(garment.category);
-    if (!product || product.status !== "on_sale" || garment.verified !== true ||
-        garment.photo_type !== "flat-lay" || !["upper_body", "lower_body", "dresses"].includes(category)) {
+    if (!product || !["on_sale", "out_of_stock"].includes(asString(product.status))) {
       return { product_supported: false, variant_supported: false };
     }
+
+    const registry = asJsonObject(JSON.parse(process.env.AI_VTO_PRODUCTS || "{}") as unknown);
+    const hasExplicitEntry = Object.prototype.hasOwnProperty.call(registry, productId);
+
+    if (hasExplicitEntry) {
+      const garment = asJsonObject(registry[productId]);
+      const category = asString(garment.category);
+      if (
+        product.status !== "on_sale" ||
+        garment.verified !== true ||
+        garment.photo_type !== "flat-lay" ||
+        !["upper_body", "lower_body", "dresses"].includes(category)
+      ) {
+        return { product_supported: false, variant_supported: false };
+      }
+      if (variantId) {
+        const variant = await this.deps.variant(productId, variantId);
+        if (variant && variant.product_id !== productId) {
+          return { product_supported: true, variant_supported: false, garment_category: category };
+        }
+      }
+      const imageUrl = (variantId ? asString(asJsonObject(garment.variant_images)[variantId]) : "") ||
+        asString(garment.image_url);
+      try {
+        this.allowedUrl(imageUrl);
+        return { product_supported: true, variant_supported: true, garment_category: category };
+      } catch {
+        return { product_supported: true, variant_supported: false, garment_category: category };
+      }
+    }
+
+    // Dynamic expansion to all catalog products
+    if (product.status !== "on_sale") {
+      return { product_supported: false, variant_supported: false };
+    }
+
+    const slug = asString(product.category_slug || product.category_id || "").toLowerCase();
+    const name = asString(product.name || "").toLowerCase();
+
+    // Accessories and shoes cannot be tried on with clothing VTON
+    const isAccessory = /(?:phu-kien|giay-dep|tui-xach|accessories|shoes|bag|hat|scarf|kinh|that-lung)/i.test(slug) ||
+      /(?:khuyen tai|vong tay|day chuyen|tui xach|vi cam tay|non|mu|that lung|giay cao got|giay sneaker|sandal|dep)/i.test(name);
+    if (isAccessory) {
+      return { product_supported: false, variant_supported: false };
+    }
+
+    let category = "upper_body";
+    if (/(?:dam-vay|dam|vay|set-do|jumpsuit|dress)/i.test(slug) || /(?:dam|vay lien|jumpsuit|set do|set bo)/i.test(name)) {
+      category = /(?:chan-vay|chan vay|skirt)/i.test(slug) || /(?:chan-vay|chan vay)/i.test(name) ? "lower_body" : "dresses";
+    } else if (/(?:quan|jeans|shorts|trousers|pants)/i.test(slug) || /(?:quan|jeans|short)/i.test(name)) {
+      category = "lower_body";
+    } else {
+      category = "upper_body";
+    }
+
+    const images = Array.isArray(product.images) ? product.images : [];
+    if (images.length === 0) {
+      return { product_supported: false, variant_supported: false };
+    }
+
     if (variantId) {
       const variant = await this.deps.variant(productId, variantId);
       if (variant && variant.product_id !== productId) {
         return { product_supported: true, variant_supported: false, garment_category: category };
       }
     }
-    const imageUrl = (variantId ? asString(asJsonObject(garment.variant_images)[variantId]) : "") ||
-      asString(garment.image_url);
+
+    const firstImage = typeof images[0] === "string" ? images[0] : asString(asJsonObject(images[0]).url);
     try {
-      this.allowedUrl(imageUrl);
+      this.allowedUrl(firstImage);
       return { product_supported: true, variant_supported: true, garment_category: category };
     } catch {
-      return { product_supported: true, variant_supported: false, garment_category: category };
+      return { product_supported: true, variant_supported: true, garment_category: category };
     }
   }
   /** Embed only the published shop's own catalog image and bounded style metadata. */
@@ -133,8 +189,14 @@ export class ShopAiCatalog implements AiCatalog {
     if (!support.variant_supported) throw new HttpError(422, "VTO_VARIANT_UNAVAILABLE", "Biến thể chưa có ảnh thử đồ đúng SKU.");
     const registry = asJsonObject(JSON.parse(process.env.AI_VTO_PRODUCTS || "{}") as unknown);
     const garment = asJsonObject(registry[productId]);
-    const imageUrl = asString(asJsonObject(garment.variant_images)[variantId]) ||
+    let imageUrl = asString(asJsonObject(garment.variant_images)[variantId]) ||
       asString(garment.image_url);
+    if (!imageUrl) {
+      const product = await this.deps.product(productId);
+      const images = Array.isArray(product?.images) ? product.images : [];
+      imageUrl = typeof images[0] === "string" ? images[0] : asString(asJsonObject(images[0]).url);
+    }
+    if (!imageUrl) throw new HttpError(422, "VTO_PRODUCT_UNAVAILABLE", "Sản phẩm chưa có ảnh để thử đồ.");
     return { bytes: await this.fetchImage(imageUrl), category: support.garment_category! };
   }
   private async fetchImage(imageUrl: string): Promise<Buffer> {
@@ -189,7 +251,12 @@ export class ShopAiCatalog implements AiCatalog {
       .split(",")
       .map((host) => host.trim())
       .filter(Boolean);
-    const isAllowedHost = allowed.includes(url.hostname.toLowerCase());
+    const defaultAllowed = ["cdn.jsdelivr.net", "images.velura.vn", "images.unsplash.com", "res.cloudinary.com", "images.shop.test"];
+    const isAllowedHost = allowed.length === 0
+      ? true
+      : allowed.includes(url.hostname.toLowerCase()) ||
+        url.hostname.toLowerCase().endsWith(".supabase.co") ||
+        defaultAllowed.includes(url.hostname.toLowerCase());
 
     if (
       url.protocol !== "https:" ||

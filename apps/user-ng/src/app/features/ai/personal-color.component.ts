@@ -23,12 +23,68 @@ export class PersonalColorComponent {
   readonly capabilities = signal<ColorCapabilities | null>(null);
   readonly profile = signal<PersonalColorProfile | null>(null);
   readonly analysis = signal<PersonalColorAnalysis | null>(null);
+  readonly activeTab = signal<'ai' | 'manual'>('ai');
+  readonly selectedManualSeason = signal<'Spring' | 'Summer' | 'Autumn' | 'Winter'>('Spring');
   readonly consent = signal(false);
   readonly previewUrl = signal('');
   readonly busy = signal(false);
   readonly error = signal('');
   readonly canAnalyze = computed(() => !!this.capabilities()?.enabled && !!this.profile() && !!this.previewUrl() && this.consent() && !this.busy());
   readonly canConfirm = computed(() => this.analysis()?.status === 'SUCCESS' && this.analysis()?.profile_version === this.profile()?.version && !this.busy());
+  readonly canConfirmManual = computed(() => !!this.profile() && !this.busy());
+  readonly isManualConfirmed = computed(() => Boolean(this.profile()?.personal_color?.analysis_id?.startsWith('manual-')));
+  readonly seasons: Array<{
+    id: 'Spring' | 'Summer' | 'Autumn' | 'Winter';
+    name: string;
+    english: string;
+    undertone: string;
+    undertoneBadge: string;
+    description: string;
+    palette: string[];
+    avoided: string[];
+  }> = [
+    {
+      id: 'Spring',
+      name: 'Mùa Xuân',
+      english: 'Spring',
+      undertone: 'Tone da Ấm (Warm & Bright)',
+      undertoneBadge: 'Sắc da ấm · Tươi sáng',
+      description: 'Làn da ấm áp, tươi tắn, ánh vàng nhẹ. Rất hợp với các gam màu rạng rỡ, ngập tràn sức sống như cam đào, san hô, vàng hoàng yến, xanh mint tươi mát.',
+      palette: ['peach', 'coral', 'gold', 'mint'],
+      avoided: ['black', 'burgundy', 'royal_blue'],
+    },
+    {
+      id: 'Summer',
+      name: 'Mùa Hè',
+      english: 'Summer',
+      undertone: 'Tone da Lạnh (Cool & Soft)',
+      undertoneBadge: 'Sắc da lạnh · Dịu nhẹ',
+      description: 'Làn da tông lạnh, trong trẻo, ánh hồng nhẹ. Tôn da nhất với các gam màu pastel nhã nhặn, thanh lịch như tím oải hương, hồng phấn, xanh da trời, xô thơm.',
+      palette: ['lavender', 'rose', 'sky', 'sage'],
+      avoided: ['terracotta', 'mustard', 'brown'],
+    },
+    {
+      id: 'Autumn',
+      name: 'Mùa Thu',
+      english: 'Autumn',
+      undertone: 'Tone da Ấm (Warm & Deep)',
+      undertoneBadge: 'Sắc da ấm · Trầm sâu',
+      description: 'Làn da ấm, đậm nét quý phái, cổ điển. Đẹp hoàn hảo với các tone màu đất ấm nồng như cam đất terracotta, xanh rêu oliu, vàng mù tạt, nâu trầm mocha.',
+      palette: ['terracotta', 'olive', 'mustard', 'brown'],
+      avoided: ['sky', 'lavender', 'mint'],
+    },
+    {
+      id: 'Winter',
+      name: 'Mùa Đông',
+      english: 'Winter',
+      undertone: 'Tone da Lạnh (Cool & Bright)',
+      undertoneBadge: 'Sắc da lạnh · Tương phản cao',
+      description: 'Làn da lạnh sắc sảo, độ tương phản ngũ quan rõ rệt. Tỏa sáng tuyệt đối với những gam màu đá quý quyền lực: xanh ngọc lục bảo, xanh hoàng gia, đỏ rượu, đen tuyền.',
+      palette: ['emerald', 'royal_blue', 'burgundy', 'black'],
+      avoided: ['peach', 'gold', 'mustard'],
+    },
+  ];
+  readonly selectedSeasonData = computed(() => this.seasons.find((s) => s.id === this.selectedManualSeason()) || this.seasons[0]);
   readonly statusLabel = computed(() => {
     const analysis = this.analysis();
     const status = analysis?.status;
@@ -168,5 +224,44 @@ export class PersonalColorComponent {
       error: (error: Error) => { if (generation === this.generation) { this.busy.set(false); this.error.set(error.message); this.reload(); } },
     });
   }
+  /** Selects one of the 4 standard seasons manually. */
+  selectManualSeason(season: 'Spring' | 'Summer' | 'Autumn' | 'Winter'): void {
+    this.selectedManualSeason.set(season);
+  }
+
+  /** Switches to the manual configuration mode with optional initial season choice. */
+  editManually(season?: string): void {
+    if (season && ['Spring', 'Summer', 'Autumn', 'Winter'].includes(season)) {
+      this.selectedManualSeason.set(season as 'Spring' | 'Summer' | 'Autumn' | 'Winter');
+    }
+    this.activeTab.set('manual');
+  }
+
+  /** Confirms the selected standard season directly into the user Style Profile. */
+  confirmManual(): void {
+    const profile = this.profile();
+    if (!profile || this.busy()) return;
+    this.busy.set(true);
+    this.error.set('');
+    const generation = this.generation;
+    this.model
+      .confirmManual(this.selectedManualSeason(), profile.version)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (updated) => {
+          if (generation === this.generation) {
+            this.profile.set(updated);
+            this.busy.set(false);
+          }
+        },
+        error: (err: Error) => {
+          if (generation === this.generation) {
+            this.error.set(err.message || 'Không thể lưu mùa màu sắc. Vui lòng thử lại.');
+            this.busy.set(false);
+          }
+        },
+      });
+  }
+
   private clearFile(): void { if (this.previewUrl()) URL.revokeObjectURL(this.previewUrl()); this.previewUrl.set(''); this.file = null; }
 }

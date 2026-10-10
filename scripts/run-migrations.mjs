@@ -1,15 +1,17 @@
 #!/usr/bin/env node
 /**
- * Apply explicit SQL migrations only to an independently configured staging database.
- * Production writes remain frozen while off-site restore and recovery console are unverified.
+ * Apply explicit ordered SQL migrations to staging, or the current database with explicit owner approval.
+ * Production stays read-only unless --environment=production --owner-approved-production is supplied.
  *
  * node scripts/run-migrations.mjs --check
  * node scripts/run-migrations.mjs --check --environment=staging
- * node scripts/run-migrations.mjs --environment=staging 049 050 051 052 053 054 055
+ * node scripts/run-migrations.mjs --environment=staging 054 056 057 058
+ * node scripts/run-migrations.mjs --check --environment=staging --require-chatbot-schema
+ * node scripts/run-migrations.mjs --environment=production --owner-approved-production 054 056 057 058
  * node scripts/run-migrations.mjs --dry-run 049
  *
  * Staging requires STAGING_SUPABASE_DB_URL and STAGING_SUPABASE_DB_CA_CERT.
- * Read-only production checks use SUPABASE_DB_URL and SUPABASE_DB_CA_CERT.
+ * Current-database checks and owner-approved writes use SUPABASE_DB_URL and SUPABASE_DB_CA_CERT.
  * Each migration runs in one transaction; failures preserve earlier committed files.
  * Credentials are never printed and TLS certificate verification cannot be disabled.
  */
@@ -44,9 +46,7 @@ function findEnvFile() {
     // Không phải kho git, hoặc không có git — chỉ còn đường dẫn mặc định.
   }
   const found = candidates.find((candidate) => existsSync(candidate));
-  if (!found) {
-    throw new Error(`Không tìm thấy .env. Đã tìm ở:\n  ${candidates.join("\n  ")}`);
-  }
+  if (!found) return null;
   return found;
 }
 
@@ -60,7 +60,9 @@ function readEnv(name) {
   const fromProcess = process.env[name];
   if (fromProcess !== undefined && fromProcess !== "") return fromProcess.trim();
 
-  const text = readFileSync(findEnvFile(), "utf8");
+  const envFile = findEnvFile();
+  if (!envFile) return "";
+  const text = readFileSync(envFile, "utf8");
   const match = text.match(new RegExp(`^${name}=(.*)$`, "m"));
   if (!match) return "";
   return match[1].trim().replace(/^["']|["']$/g, "");
@@ -107,34 +109,59 @@ function findMigration(prefix) {
   return matches[0];
 }
 
-/** Đọc hiện trạng những thứ mà 025-027 đụng tới. */
+/** Inspect prerequisites using catalog metadata only; no customer, promotion or transcript rows are read. */
 const CHECK_SQL = `
 select
-  (select count(*) from information_schema.columns
-    where table_schema = 'public' and table_name = 'promotion'
-      and column_name in ('description','banner_image_url','highlight_label','display_order','is_featured')
-  ) as cot_trinh_bay_026,
-  (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-    where n.nspname = 'public' and p.proname in
-      ('velura_record_voucher_redemption','velura_release_voucher_redemption','velura_sync_promotion_schedule')
-  ) as rpc_025,
-  (select string_agg(distinct p.pronargs::text, ',') from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-    where n.nspname = 'public' and p.proname = 'admin_update_promotion'
-  ) as so_tham_so_admin_update_promotion,
-  (select count(*) from public.promotion) as so_chien_dich,
-  (select count(*) from public.voucher) as so_voucher,
-  (select coalesce(sum(total_discount_issued), 0) from public.promotion) as tong_da_giam;
+  to_regprocedure('public.chat_append_user_turn(uuid,uuid,uuid,text,jsonb)') is not null
+    and to_regprocedure('public.chat_record_analysis(uuid,uuid,text,jsonb,boolean)') is not null
+    and to_regprocedure('public.chat_staff_action(uuid,uuid,text,jsonb)') is not null
+    and (select count(*) = 5 from information_schema.columns where table_schema='public'
+      and table_name='chat_session' and column_name in ('ai_epoch','next_sequence','ai_failures','issue_counts','risk_level'))
+    and exists(select 1 from information_schema.columns where table_schema='public'
+      and table_name='chat_message' and column_name='moderation_status') as governance054,
+  exists(select 1 from information_schema.columns where table_schema='public'
+    and table_name='chat_session' and column_name='context_revision')
+    and to_regclass('public.chat_issue_state') is not null
+    and to_regprocedure('public.chat_owner_lifecycle(uuid,uuid,uuid,text,jsonb)') is not null as session056,
+  to_regclass('public.chat_support_offer_claim') is not null
+    and to_regprocedure('public.chat_list_eligible_support_offers(uuid)') is not null
+    and to_regprocedure('public.chat_confirm_support_offer(uuid,uuid,uuid)') is not null as promotions057,
+  to_regprocedure('public.chat_schema_readiness()') is not null as readiness_rpc;
 `;
+
+/** Fail closed on an incomplete installed contract without invoking any mutation RPC. */
+async function requireChatbotSchema(client) {
+  const metadata = (await client.query(CHECK_SQL)).rows[0];
+  if (!metadata.readiness_rpc) throw new Error("Chatbot schema is not ready: install prerequisites 054, 056, 057 and 058.");
+  const state = (await client.query("select public.chat_schema_readiness() as schema")).rows[0].schema;
+  console.log("Chatbot schema:", JSON.stringify(state));
+  if (state?.contract !== "chatbot-3.1.7" || state.ready !== true ||
+      !["governance054", "session056", "promotions057", "reports058"].every(key => state.checks?.[key] === true)) {
+    throw new Error("Chatbot schema readiness failed; do not deploy this release.");
+  }
+}
 
 async function main() {
   const args = process.argv.slice(2);
   const dryRun = args.includes("--dry-run");
   const checkOnly = args.includes("--check");
+  const requireSchema = args.includes("--require-chatbot-schema");
+  const ownerApprovedProduction = args.includes("--owner-approved-production");
   const prefixes = args.filter((arg) => !arg.startsWith("--"));
   const environment = args.find(arg => arg.startsWith("--environment="))?.slice("--environment=".length) || "production";
   if (!["staging", "production"].includes(environment)) throw new Error("Environment must be staging or production.");
-  if (!checkOnly && !dryRun && environment !== "staging") throw new Error("Production migration is frozen. Use --environment=staging with independent staging credentials.");
+  if (ownerApprovedProduction && !args.includes("--environment=production")) {
+    throw new Error("Owner-approved current-database writes require explicit --environment=production.");
+  }
+  if (!checkOnly && !dryRun && environment === "production" && !ownerApprovedProduction) {
+    throw new Error("Production is read-only by default. Owner-approved writes require --environment=production --owner-approved-production and explicit migration numbers.");
+  }
   if (!checkOnly && !dryRun && (!prefixes.length || prefixes.some(prefix => !/^\d{3}$/.test(prefix)))) throw new Error("Supply explicit three-digit migration numbers.");
+  if (requireSchema && !checkOnly) throw new Error("--require-chatbot-schema requires --check.");
+  if (prefixes.length && (prefixes.some(prefix => !/^\d{3}$/.test(prefix)) ||
+      new Set(prefixes).size !== prefixes.length || prefixes.some((prefix, index) => index > 0 && prefix <= prefixes[index - 1]))) {
+    throw new Error("Migration numbers must be unique explicit three-digit numbers in ascending order.");
+  }
 
   if (dryRun) {
     for (const prefix of prefixes) {
@@ -168,8 +195,11 @@ async function main() {
   const ssl = { ca: readFileSync(caPath, "utf8"), rejectUnauthorized: true };
 
   const dbUrl = new URL(connectionString);
+  if (process.env.NODE_TLS_REJECT_UNAUTHORIZED === "0") throw new Error("TLS verification cannot be disabled.");
+  // pg connection-string SSL flags must not override the independently trusted CA.
+  for (const key of ["sslmode", "sslcert", "sslkey", "sslrootcert", "ssl"]) dbUrl.searchParams.delete(key);
   const resolvedAddress = await resolveHostAddress(dbUrl.hostname);
-  const clientConfig = { connectionString, ssl };
+  const clientConfig = { connectionString: dbUrl.toString(), ssl };
   if (resolvedAddress) {
     console.log(`DNS của hệ điều hành không trả lời; dùng địa chỉ phân giải trực tiếp cho ${dbUrl.hostname}.`);
     // `pg` ưu tiên connectionString hơn các trường rời, nên phải bỏ hẳn chuỗi đó đi
@@ -190,9 +220,18 @@ async function main() {
   try {
     const before = await client.query(CHECK_SQL);
     console.log("Hiện trạng trước:", JSON.stringify(before.rows[0]));
-    if (checkOnly) return;
+    if (checkOnly) {
+      if (requireSchema) await requireChatbotSchema(client);
+      return;
+    }
 
     for (const prefix of prefixes) {
+      if (["056", "057", "058"].includes(prefix)) {
+        const installed = (await client.query(CHECK_SQL)).rows[0];
+        if (!installed.governance054) throw new Error(`${prefix} requires installed migration 054; no repository fallback is acceptable.`);
+        if (prefix !== "056" && !installed.session056) throw new Error(`${prefix} requires installed migration 056.`);
+        if (prefix === "058" && !installed.promotions057) throw new Error("058 requires installed migration 057.");
+      }
       const file = findMigration(prefix);
       const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf8");
       process.stdout.write(`Đang chạy ${file} … `);
@@ -215,6 +254,7 @@ async function main() {
 
     const after = await client.query(CHECK_SQL);
     console.log("Hiện trạng sau: ", JSON.stringify(after.rows[0]));
+    if (prefixes.includes("058")) await requireChatbotSchema(client);
   } finally {
     await client.end();
   }

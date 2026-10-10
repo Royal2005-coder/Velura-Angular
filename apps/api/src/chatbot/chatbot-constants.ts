@@ -15,9 +15,14 @@ export const CHAT_SESSION_SELECT = [
   "last_message_at",
   "metadata",
   "assigned_to",
+  "ai_epoch",
+  "next_sequence",
+  "ai_failures",
+  "issue_counts",
+  "risk_level",
   "created_at",
   "updated_at",
-  "support_ticket:support_ticket(ticket_id,status,priority,admin_reply,created_at,resolved_at,version)"
+  "support_ticket:support_ticket!chat_session_support_ticket_id_fkey(ticket_id,status,priority,admin_reply,created_at,resolved_at,version)"
 ].join(",");
 
 /**
@@ -30,6 +35,8 @@ export const CHAT_MESSAGE_SELECT = [
   "text",
   "metadata",
   "product_ids",
+  "sequence",
+  "moderation_status",
   "created_at"
 ].join(",");
 

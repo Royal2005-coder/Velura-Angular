@@ -48,18 +48,39 @@ export function runtimeMetrics(): string {
   return lines.join("\n") + "\n";
 }
 
-/** Verify reachable data and gateway services without inference, sensitive rows or provider credential disclosure. */
-export async function runtimeReadiness(): Promise<{ ready: boolean; checks: { database: boolean; gateway: boolean } }> {
+/** Verify the installed governance contract through a metadata-only, service-role RPC; never call mutation RPCs. */
+async function chatbotSchemaReadiness(url: string, key: string): Promise<boolean> {
+  try {
+    const response = await fetch(`${url}/rest/v1/rpc/chat_schema_readiness`, {
+      method: "GET", headers: { apikey: key, authorization: `Bearer ${key}` },
+      redirect: "error", signal: AbortSignal.timeout(3000),
+    });
+    if (!response.ok) { await response.body?.cancel(); return false; }
+    const result: unknown = await response.json();
+    if (!result || typeof result !== "object" || !("contract" in result) || result.contract !== "chatbot-3.1.7" ||
+        !("ready" in result) || result.ready !== true || !("checks" in result)) return false;
+    const checks = result.checks;
+    return !!checks && typeof checks === "object" &&
+      "governance054" in checks && checks.governance054 === true &&
+      "session056" in checks && checks.session056 === true &&
+      "promotions057" in checks && checks.promotions057 === true &&
+      "reports058" in checks && checks.reports058 === true;
+  } catch { return false; }
+}
+
+/** Verify data, chatbot schema and gateway readiness without inference, sensitive rows or credential disclosure. */
+export async function runtimeReadiness(): Promise<{ ready: boolean; checks: { database: boolean; gateway: boolean; chatbotSchema: boolean } }> {
   async function check(url: string, headers: Record<string, string>): Promise<boolean> {
     try { const response = await fetch(url, { headers, redirect: "error", signal: AbortSignal.timeout(3000) }); await response.body?.cancel(); return response.ok; } catch { return false; }
   }
   const databaseKey = config.supabaseServiceRoleKey || config.supabaseAnonKey;
   const endpoint = process.env.LITELLM_ENDPOINT?.replace(/\/v1\/?$/, "").replace(/\/$/, "");
-  const [database, gateway] = await Promise.all([
+  const [database, gateway, chatbotSchema] = await Promise.all([
     config.supabaseUrl && databaseKey ? check(`${config.supabaseUrl}/rest/v1/product?select=product_id&limit=0`, { apikey: databaseKey, authorization: `Bearer ${databaseKey}` }) : false,
     endpoint && process.env.LITELLM_API_KEY ? check(`${endpoint}/health/readiness`, { authorization: `Bearer ${process.env.LITELLM_API_KEY}` }) : false,
+    config.supabaseUrl && config.supabaseServiceRoleKey ? chatbotSchemaReadiness(config.supabaseUrl, config.supabaseServiceRoleKey) : false,
   ]);
-  return { ready: database && gateway, checks: { database, gateway } };
+  return { ready: database && gateway && chatbotSchema, checks: { database, gateway, chatbotSchema } };
 }
 
 /** Keep private metrics separate from owner-authenticated release verification; neither claims Flux proof. */

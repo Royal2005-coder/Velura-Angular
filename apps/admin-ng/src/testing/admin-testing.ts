@@ -103,8 +103,9 @@ let lastFixture: ComponentFixture<unknown> | undefined;
 /**
  * Boots an admin page ViewModel with a stub AdminApiService (no HttpClient).
  * `apiOverrides` thay từng hàm của API giả cho ca test cần dữ liệu riêng.
+ * `queryParams` exercises report links that select a case outside the current sidebar page.
  */
-export async function createAdminPage<T>(page: Type<T>, apiOverrides: Record<string, unknown> = {}): Promise<T> {
+export async function createAdminPage<T>(page: Type<T>, apiOverrides: Record<string, unknown> = {}, queryParams: Record<string, string> = {}): Promise<T> {
   lastFixture?.destroy();
   lastFixture = undefined;
   sessionStorage.clear();
@@ -120,9 +121,9 @@ export async function createAdminPage<T>(page: Type<T>, apiOverrides: Record<str
       {
         provide: ActivatedRoute,
         useValue: {
-          snapshot: { paramMap: convertToParamMap({}), queryParamMap: convertToParamMap({}), data: { title: 'Admin', subtitle: 'test' } },
+          snapshot: { paramMap: convertToParamMap({}), queryParamMap: convertToParamMap(queryParams), data: { title: 'Admin', subtitle: 'test' } },
           paramMap: of(convertToParamMap({})),
-          queryParamMap: of(convertToParamMap({})),
+          queryParamMap: of(convertToParamMap(queryParams)),
           data: of({ title: 'Admin', subtitle: 'test' }),
         },
       },

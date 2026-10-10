@@ -14,9 +14,9 @@ export interface AdminChatClassification {
   moderation: 'none' | 'abuse' | 'threat' | 'illegal' | 'sensitive';
 }
 
-/** Ordinary transcripts omit restricted originals and classification context. */
+/** Public turns expose filtered text only; originals require a separate audited supervisor request. */
 export interface AdminReviewedChatMessage extends AdminChatMessageRow {
-  moderation_status?: 'visible' | 'restricted';
+  moderation_status?: 'pending' | 'visible' | 'restricted';
   metadata?: {
     product_ids?: string[];
     risk?: string;
@@ -28,31 +28,21 @@ export interface AdminReviewedChatMessage extends AdminChatMessageRow {
 }
 
 /** Supervisor-only handling remains enforced by the API; this metadata is a UI permission hint. */
-export interface AdminReviewedChatSession extends AdminChatSessionRow {
-  risk_level?: 'green' | 'yellow' | 'orange' | 'red';
-  metadata?: {
-    guest_email?: string;
-    supervisor_required?: boolean;
-    handoff_summary?: {
-      summary?: string;
-      problem?: string;
-      wanted?: string;
-      failed_approaches?: string[];
-      verified_status?: string;
-      risk?: string;
-      sentiment?: string;
-    };
-  };
-}
+export type AdminReviewedChatSession = AdminChatSessionRow;
 
-/** Moderation requires deliberate confirmation; corrections and outcomes are audit records only. */
+/** Confirmed human decisions update the case without training a model or issuing financial benefits. */
 export interface AdminChatReviewInput {
-  action: 'correction' | 'outcome' | 'supervisor' | 'moderate';
+  action: 'correction' | 'outcome' | 'supervisor' | 'moderate' | 'refilter' | 'summary' | 'resolve' | 'reopen' | 'offer' | 'report_retry';
   text: string;
   messageId?: string;
   classification?: AdminChatClassification;
   risk?: 'yellow' | 'orange' | 'red';
-  confirmed?: boolean;
+  confirmed: true;
+  summary?: { problem: string; wanted: string; failed_approaches: string[] };
+  outcome?: { resolution: string; finalSentiment: 'positive' | 'neutral' | 'negative' };
+  offerId?: string;
+  reportId?: string;
+  filteredText?: string;
 }
 
 /** The server audits each supervisor original-content access. Never cache this response. */
@@ -61,6 +51,7 @@ export interface AdminChatOriginal {
   original_text: string;
   risk: string;
   reason: string;
+  original_metadata?: { attachment?: { data?: string; filename?: string; mimeType?: string } };
 }
 
 /** Restricted review HTTP Model used by the existing Returns/CSKH page. */
@@ -69,7 +60,7 @@ export class AdminChatReviewService {
   private readonly http = inject(HttpClient);
   private readonly base = environment.apiUrl;
 
-  /** Records a human correction/outcome or requests moderation/supervision, without training a model. */
+  /** Persists confirmed review decisions; HTTP failure never implies a saved correction or offer. */
   review(sessionId: string, body: AdminChatReviewInput): Observable<AdminChatMessagesPayload> {
     return this.http.post<AdminChatMessagesPayload>(`${this.base}/api/v1/admin/chat-sessions/${encodeURIComponent(sessionId)}/review`, body);
   }

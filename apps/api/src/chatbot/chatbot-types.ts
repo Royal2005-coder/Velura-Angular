@@ -10,7 +10,7 @@ export interface ChatActor {
 /** Official source snapshot; approved policy sources alone authorize L2 advice. */
 export interface ChatSource {
   id: string;
-  kind: "policy" | "product" | "order" | "page";
+  kind: "policy" | "product" | "order" | "page" | "promotion";
   recordId: string;
   version: string;
   content: string;
@@ -27,6 +27,10 @@ export interface ChatAnalysis {
   sentiment: "positive" | "neutral" | "negative";
   risk: "green" | "yellow" | "orange" | "red";
   moderation: "none" | "abuse" | "threat" | "illegal" | "sensitive";
+  /** Neutral publishable paraphrase retaining the legitimate request, never quoted abuse, identifiers or attachment data. */
+  filtered: { text: string; problem: string; wanted: string; failedApproaches: string[] };
+  confidence: number;
+  reasons: string[];
 }
 
 /** Every factual claim cites a verbatim passage from an official source. */

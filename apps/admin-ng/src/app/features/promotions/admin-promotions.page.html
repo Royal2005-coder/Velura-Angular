@@ -56,7 +56,14 @@
               <tbody>
                 @for (row of pagedCampaigns(); track row.promo_id || row.promotion_id || campaignName(row)) {
                   <tr>
-                    <td>{{ campaignName(row) }}</td>
+                    <td>
+                      {{ campaignName(row) }}
+                      @if (row.recovery_revision) {
+                        <small class="admin-table-subtext">
+                          CSKH: {{ row.recovery_approved ? 'Đã phê duyệt' : 'Chưa được phép đề xuất' }} · phiên bản {{ row.recovery_revision }} · tối đa {{ row.recovery_max_offers }} ca
+                        </small>
+                      }
+                    </td>
                     <td>{{ campaignType(row) }}</td>
                     <td>{{ campaignPeriod(row) }}</td>
                     <td>
@@ -140,6 +147,9 @@
                       <div class="admin-review-product">
                         <strong>{{ row.code || row.name }}</strong>
                         <small>{{ voucherType(row) }}</small>
+                        @if (row.recovery_revision) {
+                          <small>CSKH: {{ row.recovery_approved ? 'Đã phê duyệt' : 'Chưa được phép đề xuất' }} · phiên bản {{ row.recovery_revision }}</small>
+                        }
                       </div>
                     </td>
                     <td>{{ voucherCampaign(row) }}</td>

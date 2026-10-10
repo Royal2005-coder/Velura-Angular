@@ -163,6 +163,14 @@ export class CampaignForm {
       );
       return;
     }
+    const recoveryApproved = (form.elements.namedItem('recoveryApproved') as HTMLInputElement | null)?.checked === true;
+    const recoveryConditions = read('recoveryConditions');
+    const recoveryMaxOffers = Number(read('recoveryMaxOffers') || 0);
+    if (!Number.isInteger(recoveryMaxOffers) || recoveryMaxOffers < 0
+      || (recoveryApproved && (!recoveryConditions || recoveryMaxOffers < 1 || budgetLimit <= 0))) {
+      this.saveError.set('Ưu đãi CSKH cần điều kiện cụ thể, ngân sách hữu hạn và số ca hỗ trợ tối đa từ 1.');
+      return;
+    }
 
     const payload: Record<string, unknown> = {
       name,
@@ -174,6 +182,9 @@ export class CampaignForm {
       highlightLabel: read('highlightLabel'),
       displayOrder: Number(read('displayOrder') || 0),
       isFeatured: (form.elements.namedItem('isFeatured') as HTMLInputElement | null)?.checked === true,
+      recoveryApproved,
+      recoveryConditions,
+      recoveryMaxOffers,
     };
 
     this.saving.set(true);

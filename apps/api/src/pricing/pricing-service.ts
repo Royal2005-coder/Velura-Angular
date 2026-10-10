@@ -122,6 +122,7 @@ export function createPricingService({ repository }: { repository: PricingReposi
       requirePricingAdmin(context);
       if (body.type && !PROMOTION_TYPES.includes(body.type as string)) throw new HttpError(422, "VALIDATION_ERROR", `Invalid promo type. Valid: ${PROMOTION_TYPES.join(", ")}`);
       validatePromotionSchedule(body);
+      validateRecoveryConfiguration(body);
       return repository.createPromotion({
         ...body,
         ...normalizePromotionPresentation(body, "create"),
@@ -133,6 +134,7 @@ export function createPricingService({ repository }: { repository: PricingReposi
       requirePricingAdmin(context);
       const expectedVersion = parseInt((body?.expectedVersion || "0") as string);
       if (!expectedVersion) throw new HttpError(422, "VALIDATION_ERROR", "expectedVersion required");
+      validateRecoveryConfiguration(body);
       return repository.updatePromotion(promotionId, {
         ...body,
         ...normalizePromotionPresentation(body, "update")
@@ -179,6 +181,7 @@ export function createPricingService({ repository }: { repository: PricingReposi
       requirePricingAdmin(context);
       if (!body?.code) throw new HttpError(422, "VALIDATION_ERROR", "Code required");
       if (!VOUCHER_TYPES.includes(body?.type as string)) throw new HttpError(422, "VALIDATION_ERROR", "Invalid voucher type");
+      validateRecoveryConfiguration(body);
       const audience = String(body.applicableUserGroup || "all_users");
       if (!["guest", "member", "all_users", "new_user", "loyal_user", "churn_risk_user"].includes(audience)) {
         throw new HttpError(422, "VALIDATION_ERROR", "Đối tượng mã phải là khách vãng lai, thành viên hoặc mọi khách");
@@ -194,6 +197,7 @@ export function createPricingService({ repository }: { repository: PricingReposi
       requirePricingAdmin(context);
       const expectedVersion = parseInt((body?.expectedVersion || "0") as string);
       if (!expectedVersion) throw new HttpError(422, "VALIDATION_ERROR", "expectedVersion required");
+      validateRecoveryConfiguration(body);
       if (body?.type !== undefined && body.type !== null && !VOUCHER_TYPES.includes(body.type as string)) {
         throw new HttpError(422, "VALIDATION_ERROR", "Invalid voucher type");
       }
@@ -241,6 +245,22 @@ export function createPricingService({ repository }: { repository: PricingReposi
       return buildPromotionStatistics(asJsonObject(raw), summarizePromotionRows(summarySource, activeVouchers?.count, new Date()), new Date(), { from, to });
     }
   };
+}
+
+/** Recovery approval is explicit and bounded; discount values are always ordinary admin-configured voucher terms. */
+function validateRecoveryConfiguration(body: JsonObject): void {
+  if (body.recoveryApproved !== undefined && typeof body.recoveryApproved !== "boolean") {
+    throw new HttpError(422, "VALIDATION_ERROR", "recoveryApproved phải là giá trị đúng/sai.");
+  }
+  if (body.recoveryConditions !== undefined && (typeof body.recoveryConditions !== "string" || body.recoveryConditions.length > 2000)) {
+    throw new HttpError(422, "VALIDATION_ERROR", "Điều kiện ưu đãi CSKH phải là văn bản tối đa 2000 ký tự.");
+  }
+  if (body.recoveryMaxOffers !== undefined && (!Number.isInteger(body.recoveryMaxOffers) || Number(body.recoveryMaxOffers) < 0)) {
+    throw new HttpError(422, "VALIDATION_ERROR", "Số ca hỗ trợ tối đa phải là số nguyên không âm.");
+  }
+  if (body.recoveryApproved === true && (!asString(body.recoveryConditions)?.trim() || Number(body.recoveryMaxOffers) < 1 || body.recoveryMaxOffers === undefined)) {
+    throw new HttpError(422, "RECOVERY_TERMS_REQUIRED", "Phê duyệt ưu đãi CSKH cần điều kiện cụ thể và giới hạn số ca từ 1.");
+  }
 }
 
 /**

@@ -1,6 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
 import { signJwt } from "../auth-helper.js";
-import { config } from "../config.js";
 import { maskEmail, sendDirectEmail } from "../email/mailer.js";
 import { HttpError } from "../http.js";
 import { isSmsConfigured, maskPhone, sendCheckoutOtpSms } from "../sms/twilio.js";
@@ -62,9 +61,6 @@ export async function sendGuestTrackingOtp(body: JsonObject, ip: string): Promis
       customerName = String(user.full_name || "").trim() || customerName;
     }
   }
-  if (!recipientEmail) {
-    recipientEmail = config.supportAlertTo || config.smtpUser || "gianth23406@st.uel.edu.vn";
-  }
 
 
   const code = generateCheckoutOtp();
@@ -76,26 +72,10 @@ export async function sendGuestTrackingOtp(body: JsonObject, ip: string): Promis
     p_hash: createHash("sha256").update(`${nonce}:${code}`).digest("hex")
   };
 
-  try {
-    if (scopedOrderId) {
-      await callRpc("velura_issue_guest_tracking_otp", { ...basePayload, p_order: scopedOrderId });
-    } else {
-      await callRpc("velura_issue_guest_tracking_otp", basePayload);
-    }
-  } catch (rpcErr: unknown) {
-    const msg = String((rpcErr as any)?.message || (rpcErr as any)?.details || "");
-    const errCode = String((rpcErr as any)?.code || "");
-    if (scopedOrderId && (errCode === "PGRST202" || msg.includes("velura_issue_guest_tracking_otp") || msg.includes("p_order"))) {
-      await callRpc("velura_issue_guest_tracking_otp", basePayload);
-    } else {
-      throw rpcErr;
-    }
-  }
-
-
-  console.log(`\n==================================================`);
-  console.log(`[GUEST TRACKING OTP] Mã tra cứu đơn cho ${phone} (Email: ${recipientEmail}): ${code}`);
-  console.log(`==================================================\n`);
+  await callRpc("velura_issue_guest_tracking_otp", {
+    ...basePayload,
+    ...(scopedOrderId ? { p_order: scopedOrderId } : {})
+  });
 
   let smsSent = false;
 
@@ -121,7 +101,7 @@ export async function sendGuestTrackingOtp(body: JsonObject, ip: string): Promis
         </div>
         <div style="padding: 32px 28px;">
           <h2 style="color: #2a2522; margin-top: 0; font-size: 20px; font-weight: 600;">Tra cứu &amp; Quản lý đơn hàng</h2>
-          <p style="color: #555; line-height: 1.6; font-size: 15px;">Chào <strong>${greeting}</strong>,</p>
+          <p style="color: #555; line-height: 1.6; font-size: 15px;">Chào <strong>${escapeHtml(greeting)}</strong>,</p>
           <p style="color: #555; line-height: 1.6; font-size: 15px;">Bạn đang thực hiện tra cứu thông tin hành trình đơn hàng tại Velura cho số điện thoại <strong>${maskPhone(phone)}</strong>. Vui lòng sử dụng mã xác thực OTP dưới đây:</p>
 
           <div style="background-color: #fcfaf8; border: 1px dashed #b89b88; border-radius: 8px; padding: 20px; margin: 24px 0; text-align: center;">
@@ -142,9 +122,6 @@ export async function sendGuestTrackingOtp(body: JsonObject, ip: string): Promis
     }
   }
 
-  if (!smsSent && !emailSent && recipientEmail) {
-    emailSent = true;
-  }
 
   if (!smsSent && !emailSent) {
     await updateRows("guest_tracking_otp", { nonce: `eq.${nonce}`, consumed_at: "is.null" }, { consumed_at: new Date().toISOString() });
@@ -177,4 +154,10 @@ export async function verifyGuestTrackingOtp(body: JsonObject): Promise<JsonObje
     purpose: "guest_order_session", phone, otp_challenge_id: row.challenge_id,
     verified_order_id: row.scoped_order_id || null
   }, 15 * 60) };
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;"
+  })[character]!);
 }

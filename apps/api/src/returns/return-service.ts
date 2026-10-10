@@ -62,6 +62,19 @@ export function createReturnService({
   repository: ReturnRepository;
   refunds?: ReturnRefundGateway;
 }): ReturnService {
+  /** Linked chatbot cases use exclusive ownership, filtered replies and audited lifecycle actions. */
+  async function requireStandaloneTicket(
+    context: ReturnContext & { authUser: AuthUser },
+    ticketId: string
+  ): Promise<JsonObject> {
+    const ticket = await repository.getTicket(ticketId, context.accessToken);
+    if (!ticket) throw new HttpError(404, "TICKET_NOT_FOUND", "Không tìm thấy phiếu hỗ trợ");
+    if (ticket.chat_session_id) {
+      throw new HttpError(409, "CHAT_TICKET_GOVERNED", "Mở hội thoại để xử lý phiếu chatbot qua nội dung đã lọc");
+    }
+    return ticket;
+  }
+
   /**
    * Chặn bước chuyển trạng thái phiếu hỗ trợ không có trong `SUPPORT_TICKET_TRANSITIONS`.
    *
@@ -73,8 +86,7 @@ export function createReturnService({
     ticketId: string,
     target: string
   ): Promise<void> {
-    const ticket = await repository.getTicket(ticketId, context.accessToken);
-    if (!ticket) throw new HttpError(404, "TICKET_NOT_FOUND", "Không tìm thấy phiếu hỗ trợ");
+    const ticket = await requireStandaloneTicket(context, ticketId);
     const from = asString(ticket.status);
     // Ghi lại chính trạng thái đang có không phải là bước chuyển, luôn hợp lệ.
     if (from === target) return;
@@ -382,6 +394,7 @@ export function createReturnService({
       if (!assignedTo) throw new HttpError(422, "VALIDATION_ERROR", "assignedTo required");
       const expectedVersion = asNumber(body.expectedVersion);
       if (!expectedVersion) throw new HttpError(422, "VALIDATION_ERROR", "expectedVersion required");
+      await requireStandaloneTicket(context, ticketId);
       return repository.assignTicket(ticketId, { assignedTo, expectedVersion }, context.accessToken);
     },
 

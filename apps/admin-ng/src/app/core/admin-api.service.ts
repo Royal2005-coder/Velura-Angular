@@ -210,8 +210,10 @@ export interface AdminReturnRow {
   payment?: AdminReturnPayment | null;
 }
 
+/** Linked chat tickets are read-only here; moderation and lifecycle actions use their canonical chat session. */
 export interface AdminTicketRow {
   ticket_id: string;
+  chat_session_id?: string | null;
   user_id?: string;
   status?: string;
   subject?: string;
@@ -227,6 +229,20 @@ export interface AdminTicketRow {
   version?: number;
 }
 
+/** Filtered, continuously refreshed context; pending/outage is not a safe classification. */
+export interface AdminChatContext {
+  guest_email?: string;
+  supervisor_required?: boolean;
+  handoff_summary?: { summary?: string; problem?: string; wanted?: string; failed_approaches?: string[]; verified_status?: string; risk?: string; sentiment?: string };
+  intelligence?: { confidence?: number; reasons?: string[]; trend?: string; updated_at?: string; source_seq?: number; filter_status?: 'ready' | 'pending' | 'outage'; corrected?: boolean; customer_sentiment?: string; staff_sentiment?: string };
+  warnings?: Array<{ id: string; text: string; action?: string; resolved?: boolean }>;
+  report_status?: { report_id?: string; state?: string; last_error?: string; updated_at?: string; attempts?: number; next_attempt_at?: string };
+  eligible_offers?: Array<{ offer_id: string; title: string; description?: string }>;
+  summary_confirmation?: { confirmed: boolean; by?: string; at?: string };
+  outcome?: { resolution?: string; finalSentiment?: string; rating?: number };
+}
+
+/** Staff-owned case; all previews and metadata are filtered by the server. */
 export interface AdminChatSessionRow {
   session_id: string;
   is_active?: boolean;
@@ -239,17 +255,16 @@ export interface AdminChatSessionRow {
   guest_id?: string;
   handoff_status?: string;
   risk_level?: 'green' | 'yellow' | 'orange' | 'red';
-  metadata?: {
-    guest_email?: string;
-    supervisor_required?: boolean;
-    handoff_summary?: Record<string, unknown>;
-  };
+  assigned_to?: string | null;
+  metadata?: AdminChatContext;
 }
 
+/** Public transcript excludes originals and quarantines pending turns. */
 export interface AdminChatMessageRow {
   message_id?: string;
   sender?: string;
   text?: string;
+  moderation_status?: 'pending' | 'visible' | 'restricted';
   created_at?: string;
   product_ids?: string[];
   metadata?: { product_ids?: string[] };
@@ -363,6 +378,13 @@ export interface AdminPromotionRow {
   highlight_label?: string | null;
   display_order?: number | null;
   is_featured?: boolean | null;
+  /** Approval is separate from activation; AI only proposes programs with approved bounded terms. */
+  recovery_approved?: boolean;
+  recovery_conditions?: string | null;
+  recovery_max_offers?: number;
+  recovery_revision?: number;
+  recovery_approved_by?: string | null;
+  recovery_approved_at?: string | null;
 }
 
 /**
@@ -466,6 +488,13 @@ export interface AdminVoucherRow {
   promo_id?: string | null;
   applicable_user_group?: string;
   version?: number;
+  /** Recovery codes require explicit staff confirmation for the eligible customer before checkout. */
+  recovery_approved?: boolean;
+  recovery_conditions?: string | null;
+  recovery_max_offers?: number;
+  recovery_revision?: number;
+  recovery_approved_by?: string | null;
+  recovery_approved_at?: string | null;
 }
 
 export interface AdminAuditRow {
@@ -1112,12 +1141,12 @@ export class AdminApiService {
   }
 
   /**
-   * Assigns or closes a CSKH chat session.
+   * Exclusively claims a CSKH case for the current staff member; resolution uses confirmed review.
    */
-  assignChatSession(sessionId: string, status: string): Observable<AdminChatMessagesPayload> {
+  assignChatSession(sessionId: string): Observable<AdminChatMessagesPayload> {
     return this.http.post<AdminChatMessagesPayload>(
       `${this.baseUrl}/api/v1/admin/chat-sessions/${encodeURIComponent(sessionId)}/assign`,
-      { status },
+      { status: 'assigned' },
     );
   }
 

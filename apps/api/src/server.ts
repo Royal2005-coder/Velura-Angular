@@ -36,6 +36,7 @@ import { handleAuditLogRoute } from "./audit-logs/audit-log-router.js";
 import { createChatbotRepository } from "./chatbot/chatbot-repository.js";
 import { createChatbotService } from "./chatbot/chatbot-service.js";
 import { handleChatbotRoute } from "./chatbot/chatbot-router.js";
+import { startChatReportWorker } from "./chatbot/chatbot-reports.js";
 import { createContentRepository } from "./content/content-repository.js";
 import { createContentService } from "./content/content-service.js";
 import { handleContentRoute } from "./content/content-router.js";
@@ -437,7 +438,7 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
 export const server = createServer(handleApiRequest);
 
 if (process.env.VERCEL !== "1") {
-  const timers = [startAccountMaintenance(), startEmailOutboxWorker(), startPromotionScheduler(), startOrderAutomation()];
+  const timers = [startAccountMaintenance(), startEmailOutboxWorker(), startPromotionScheduler(), startOrderAutomation(), startChatReportWorker()];
   catalogContentService.start();
   const shutdown = () => {
     for (const timer of timers) clearInterval(timer || undefined);

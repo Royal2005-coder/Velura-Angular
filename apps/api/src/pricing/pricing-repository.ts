@@ -2,7 +2,7 @@ import { createProductRepository } from "../products/product-repository.js";
 import { callRpc, selectOne, selectRows } from "../supabase.js";
 import { HttpError } from "../http.js";
 import { asJsonObject, asString, type JsonObject } from "../types.js";
-import { PRICE_HISTORY_SELECT, PROMOTION_BASE_SELECT, PROMOTION_SELECT, PROMOTION_SUMMARY_CAP, VOUCHER_BASE_SELECT, VOUCHER_SELECT } from "./pricing-constants.js";
+import { PRICE_HISTORY_SELECT, PROMOTION_BASE_SELECT, PROMOTION_SELECT, VOUCHER_BASE_SELECT, VOUCHER_SELECT } from "./pricing-constants.js";
 
 /**
  * Số chiến dịch tối đa kéo về để tính chỉ số tổng hợp và phát hiện chồng lấn.
@@ -253,7 +253,7 @@ export function createPricingRepository() {
       const maxDiscountAmount = input.maxDiscountAmount !== undefined ? input.maxDiscountAmount : input.maxDiscount !== undefined ? input.maxDiscount : null;
       const usageLimitTotal = input.usageLimitTotal !== undefined ? input.usageLimitTotal : input.maxUses !== undefined ? input.maxUses : null;
       const usageLimitPerUser = input.usageLimitPerUser !== undefined ? input.usageLimitPerUser : input.maxPerUser !== undefined ? input.maxPerUser : 1;
-      const normalizedInput = {
+      const normalizedInput: JsonObject = {
         ...input,
         type: discountType,
         value: discountValue,
@@ -299,7 +299,7 @@ export function createPricingRepository() {
       const maxDiscountAmount = input.maxDiscountAmount !== undefined ? input.maxDiscountAmount : input.maxDiscount;
       const usageLimitTotal = input.usageLimitTotal !== undefined ? input.usageLimitTotal : input.maxUses;
       const usageLimitPerUser = input.usageLimitPerUser !== undefined ? input.usageLimitPerUser : input.maxPerUser;
-      const normalizedInput = {
+      const normalizedInput: JsonObject = {
         ...input,
         type: discountType,
         value: discountValue,

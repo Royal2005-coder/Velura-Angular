@@ -1,6 +1,6 @@
 import { enrichAuditLogs, PRICING_AUDIT } from "../audit-enrichment.js";
 import { HttpError } from "../http.js";
-import { asJsonObject, asString, type AuthContext, type JsonObject } from "../types.js";
+import { asJsonObject, asNumber, asString, type AuthContext, type JsonObject } from "../types.js";
 import { PROMOTION_OPERATOR_ROLES, PROMOTION_READER_ROLES, PROMOTION_TYPES, VOUCHER_TYPES } from "./pricing-constants.js";
 import type { PricingRepository } from "./pricing-repository.js";
 import {

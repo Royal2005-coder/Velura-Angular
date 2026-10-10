@@ -210,6 +210,32 @@ test("replying twice to the same processing ticket is not a transition and stays
   assert.equal(calls, 2);
 });
 
+test("linked chatbot tickets cannot bypass filtered replies, ownership or case lifecycle", async () => {
+  const writes: string[] = [];
+  const service = createReturnService({
+    repository: {
+      getTicket: async () => ({
+        ticket_id: TICKET_ID, status: "processing", version: 3,
+        chat_session_id: "60000000-0000-4000-8000-000000000001"
+      }),
+      assignTicket: async () => { writes.push("assign"); },
+      respondTicket: async () => { writes.push("reply"); },
+      closeTicket: async () => { writes.push("close"); },
+      updateTicketStatus: async () => { writes.push("resolve"); }
+    }
+  });
+  const staff = context("admin_operator_cskh_dt");
+  for (const mutate of [
+    () => service.assignTicket(staff, TICKET_ID, { assignedTo: staff.authUser.id, expectedVersion: 3 }),
+    () => service.respondTicket(staff, TICKET_ID, { response: "Unfiltered staff reply", expectedVersion: 3 }),
+    () => service.closeTicket(staff, TICKET_ID, { reason: "Close outside case", expectedVersion: 3 }),
+    () => service.resolveTicket(staff, TICKET_ID, { adminNote: "Resolve outside case", expectedVersion: 3 })
+  ]) {
+    await assert.rejects(mutate, (error) => error.status === 409 && error.code === "CHAT_TICKET_GOVERNED");
+  }
+  assert.deepEqual(writes, []);
+});
+
 test("approving a refund records approval and never transfers money before warehouse QA", async () => {
   let refundCall: { orderId: string; amount?: number } | null = null;
   const service = createReturnService({

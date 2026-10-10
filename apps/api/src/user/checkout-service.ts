@@ -248,7 +248,7 @@ export class CheckoutService {
     return unavailable;
   }
 
-  /** Chốt giá catalog, phí giao và voucher trong tầng nghiệp vụ checkout. */
+  /** Chốt giá và voucher; verifiedGuestPhone chỉ được truyền sau khi xác thực OTP checkout. */
   async quote(
     context: AuthContext,
     rawItems: readonly JsonObject[],
@@ -256,7 +256,8 @@ export class CheckoutService {
     claimedMethod: unknown,
     voucherId: string | null,
     declineVoucher: boolean,
-    points: unknown = 0
+    points: unknown = 0,
+    verifiedGuestPhone: string | null = null
   ): Promise<CheckoutQuote> {
     const claims = rawItems.map((item) => ({
       variantId: asString(item.variant_id),
@@ -286,7 +287,8 @@ export class CheckoutService {
       priced.shippingFee,
       voucherId,
       declineVoucher,
-      { lines: cartLines.lines, categoryNameById: tree.nameById }
+      { lines: cartLines.lines, categoryNameById: tree.nameById },
+      verifiedGuestPhone
     );
     const loyalty = await loyaltyService.quote(context, priced.subtotal, priced.shippingFee, voucher.merchandiseDiscount, points);
     return {

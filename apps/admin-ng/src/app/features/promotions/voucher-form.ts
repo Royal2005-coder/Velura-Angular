@@ -187,7 +187,8 @@ export class VoucherForm {
     const form = event.target as HTMLFormElement;
     const read = (field: string): string =>
       ((form.elements.namedItem(field) as HTMLInputElement | null)?.value || '').trim();
-    const payload = this.buildPayload(read);
+    const recoveryApproved = (form.elements.namedItem('recoveryApproved') as HTMLInputElement | null)?.checked === true;
+    const payload = this.buildPayload(read, recoveryApproved);
     if (typeof payload === 'string') {
       this.saveError.set(payload);
       return;
@@ -212,7 +213,7 @@ export class VoucherForm {
   }
 
   /** Dựng body gửi API, hoặc trả câu báo lỗi đầu tiên. */
-  private buildPayload(read: (field: string) => string): Record<string, unknown> | string {
+  private buildPayload(read: (field: string) => string, recoveryApproved: boolean): Record<string, unknown> | string {
     const code = read('code').toUpperCase();
     if (!this.isEdit() && !CODE_PATTERN.test(code)) {
       return 'Mã dài 3 đến 30 ký tự, chỉ gồm chữ không dấu, số, gạch ngang hoặc gạch dưới.';
@@ -245,6 +246,14 @@ export class VoucherForm {
     const endDate = new Date(endLocal);
     if (endDate <= startDate) return 'Ngày kết thúc phải sau ngày bắt đầu.';
     if (this.campaignFull()) return 'Chiến dịch đã phát đủ số mã tối đa. Chọn chiến dịch khác hoặc nâng trần trước.';
+    const recoveryConditions = read('recoveryConditions');
+    const recoveryMaxOffers = Number(read('recoveryMaxOffers') || 0);
+    const campaign = this.campaigns().find((row) => this.campaignValue(row) === this.promoId());
+    if (!Number.isInteger(recoveryMaxOffers) || recoveryMaxOffers < 0) return 'Số ca hỗ trợ tối đa phải là số nguyên không âm.';
+    if (recoveryApproved && (!campaign?.recovery_approved || !recoveryConditions || recoveryMaxOffers < 1
+      || maxUses === null || (type === 'percentage' && (!maxDiscount || maxDiscount <= 0)))) {
+      return 'Ưu đãi CSKH cần chiến dịch đã duyệt, điều kiện cụ thể, giới hạn ca/lượt và trần giảm tiền cho mã phần trăm.';
+    }
 
     const categories = this.selectedCategories();
     return {
@@ -257,6 +266,9 @@ export class VoucherForm {
       maxUses,
       maxPerUser,
       applicableUserGroup: read('applicableUserGroup') || 'all_users',
+      recoveryApproved,
+      recoveryConditions,
+      recoveryMaxOffers,
       // Tạo mới không chọn danh mục thì để trống hẳn; lúc sửa, mảng rỗng là lệnh xoá.
       applicableCategories: categories.length ? categories : this.isEdit() ? [] : null,
       startDate: startDate.toISOString(),

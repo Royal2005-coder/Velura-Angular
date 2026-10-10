@@ -126,6 +126,21 @@
           </select>
         </label>
 
+        <p class="admin-form-section">Phê duyệt ưu đãi CSKH</p>
+        <label class="admin-form-check">
+          <input type="checkbox" name="recoveryApproved" [checked]="voucher()?.recovery_approved === true" [disabled]="!canMutate()" />
+          <span>Cho CSKH đề xuất mã này sau khi kiểm tra điều kiện</span>
+        </label>
+        <label class="admin-form-group">
+          <span class="admin-form-label">Điều kiện được duyệt cho mã</span>
+          <textarea class="admin-form-control admin-form-textarea" name="recoveryConditions" maxlength="2000" rows="3" [readOnly]="!canMutate()">{{ voucher()?.recovery_conditions || '' }}</textarea>
+        </label>
+        <label class="admin-form-group">
+          <span class="admin-form-label">Số ca hỗ trợ tối đa cho mã</span>
+          <input class="admin-form-control" name="recoveryMaxOffers" type="number" min="0" step="1" [value]="voucher()?.recovery_max_offers ?? 0" [readOnly]="!canMutate()" />
+          <small class="admin-form-helper">Phiên bản phê duyệt: {{ voucher()?.recovery_revision ?? 0 }}. Có thể tạo chương trình 20% bằng loại “Theo phần trăm”, giá trị 20 và trần giảm cụ thể. AI không tự tạo mã; CSKH phải xác nhận từng ca trước khi khách dùng.</small>
+        </label>
+
         <hr class="admin-form-divider" />
         <p class="admin-form-section">Danh mục áp dụng</p>
         @if (!categoryOptions().length) {

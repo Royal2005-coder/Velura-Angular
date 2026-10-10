@@ -4,8 +4,7 @@ import {
   callRpc as supabaseCallRpc,
   insertRow as supabaseInsertRow,
   selectOne as supabaseSelectOne,
-  selectRows as supabaseSelectRows,
-  updateRows as supabaseUpdateRows
+  selectRows as supabaseSelectRows
 } from "../supabase.js";
 import { generateGeminiEmbedding, isGeminiConfigured, vectorLiteral } from "../gemini-client.js";
 import { asJsonObject, asNumber, asString, errorMessage, isJsonObject, type JsonObject } from "../types.js";
@@ -68,10 +67,6 @@ async function insertRow(table: string, payload: unknown): Promise<JsonObject> {
   return isJsonObject(row) ? row : asJsonObject(row);
 }
 
-async function updateRows(table: string, query: Record<string, unknown>, payload: unknown): Promise<JsonObject[]> {
-  const rows = await supabaseUpdateRows(table, query, payload, CHAT_DB_OPTIONS);
-  return rows.filter(isJsonObject);
-}
 
 function callRpc(name: string, payload: unknown) {
   return supabaseCallRpc(name, payload, CHAT_DB_OPTIONS);
@@ -93,26 +88,9 @@ async function getEmbedding(text: string): Promise<string | null> {
 }
 
 function normalizeSessionRow(row: JsonObject | null | undefined): JsonObject | null {
-  if (!row) return null;
-  const meta = asJsonObject(row.metadata);
-  return {
-    ...row,
-    ai_epoch: asNumber(row.ai_epoch ?? meta.ai_epoch ?? 0),
-    ai_failures: asNumber(row.ai_failures ?? meta.ai_failures ?? 0),
-    issue_counts: isJsonObject(row.issue_counts) ? row.issue_counts : (isJsonObject(meta.issue_counts) ? meta.issue_counts : {}),
-    risk_level: asString(row.risk_level || meta.risk_level || "green"),
-  };
+  return row || null;
 }
 
-function normalizeMessageRow(row: JsonObject | null | undefined): JsonObject | null {
-  if (!row) return null;
-  const meta = asJsonObject(row.metadata);
-  return {
-    ...row,
-    sequence: asNumber(row.sequence ?? meta.sequence ?? 0),
-    moderation_status: asString(row.moderation_status || meta.moderation_status || "visible"),
-  };
-}
 /**
  * PostgREST accessors for chat sessions, messages, and RAG lookups.
  */
@@ -120,228 +98,47 @@ export function createChatbotRepository() {
   return {
     /** Append a user turn and capture the epoch under the same session lock. */
     async appendUserTurn(sessionId: string, actor: ChatActor, text: string, metadata: JsonObject) {
-      return withChatError(async () => {
-        try {
-          const res = asJsonObject(await callRpc("chat_append_user_turn", {
-            p_session: sessionId, p_profile: actor.profileUserId || null, p_guest: actor.guestId,
-            p_text: text, p_metadata: metadata
-          }));
-          return {
-            ...res,
-            session: normalizeSessionRow(asJsonObject(res.session)),
-            message: normalizeMessageRow(asJsonObject(res.message))
-          };
-        } catch {
-          const sessionRow = await selectOne("chat_session", { select: CHAT_SESSION_SELECT, session_id: `eq.${sessionId}` });
-          if (!sessionRow || !sessionRow.is_active) throw new HttpError(404, "CHAT_SESSION_NOT_FOUND", "Chat session not found");
-          if (sessionRow.handoff_status === "closed") throw new HttpError(409, "CHAT_SESSION_CLOSED", "Chat session closed");
-          const meta = asJsonObject(sessionRow.metadata);
-          const nextSeq = asNumber(meta.next_sequence || 0) + 1;
-          const msg = await insertRow("chat_message", {
-            message_id: randomUUID(),
-            session_id: sessionId,
-            sender: "user",
-            text,
-            metadata: { ...metadata, sequence: nextSeq },
-            created_at: new Date().toISOString()
-          });
-          const updatedMeta = { ...meta, next_sequence: nextSeq };
-          await updateRows("chat_session", { session_id: `eq.${sessionId}` }, {
-            last_message_preview: text.slice(0, 180),
-            last_message_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            metadata: updatedMeta
-          }).catch(() => undefined);
-          const session = normalizeSessionRow({ ...sessionRow, metadata: updatedMeta, last_message_preview: text.slice(0, 180) })!;
-          const message = normalizeMessageRow(msg)!;
-          return { session, message, epoch: asNumber(meta.ai_epoch || 0) };
-        }
-      });
+      return withChatError(async () => asJsonObject(await callRpc("chat_append_user_turn", {
+        p_session: sessionId, p_profile: actor.profileUserId || null, p_guest: actor.guestId,
+        p_text: text, p_metadata: metadata
+      })));
     },
 
-    /** Only an unchanged AI epoch/latest user turn can commit an assistant response. */
+    /** SQL checks assignment, epoch, latest customer sequence and every live source atomically. */
     async commitAiTurn(sessionId: string, epoch: number, sequence: number, draft: JsonObject, sources: JsonObject[]) {
-      return withChatError(async () => {
-        try {
-          const res = asJsonObject(await callRpc("chat_commit_ai_turn", {
-            p_session: sessionId, p_epoch: epoch, p_user_sequence: sequence, p_draft: draft, p_sources: sources
-          }));
-          return {
-            ...res,
-            session: normalizeSessionRow(asJsonObject(res.session)),
-            message: normalizeMessageRow(asJsonObject(res.message))
-          };
-        } catch {
-          const sessionRow = await selectOne("chat_session", { select: CHAT_SESSION_SELECT, session_id: `eq.${sessionId}` });
-          if (!sessionRow || !sessionRow.is_active || sessionRow.handoff_status !== "ai") {
-            return { sent: false, reason: "HUMAN_OR_NEWER_TURN", session: normalizeSessionRow(sessionRow || {}) || {} };
-          }
-          const msg = await insertRow("chat_message", {
-            message_id: randomUUID(),
-            session_id: sessionId,
-            sender: "bot",
-            text: asString(draft.text),
-            metadata: isJsonObject(draft.metadata) ? draft.metadata : {},
-            product_ids: Array.isArray(draft.product_ids) ? draft.product_ids : [],
-            created_at: new Date().toISOString()
-          });
-          await updateRows("chat_session", { session_id: `eq.${sessionId}` }, {
-            last_message_preview: asString(draft.text).slice(0, 180),
-            last_message_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          }).catch(() => undefined);
-          return { sent: true, message: normalizeMessageRow(msg)!, session: normalizeSessionRow(sessionRow)! };
-        }
-      });
+      return withChatError(async () => asJsonObject(await callRpc("chat_commit_ai_turn", {
+        p_session: sessionId, p_epoch: epoch, p_user_sequence: sequence, p_draft: draft, p_sources: sources
+      })));
     },
 
-    /** Persistent issue/failure counters are updated under the session lock. */
+    /** Publishes only filtered context; failure leaves the original quarantined and marks an outage. */
     async recordAnalysis(sessionId: string, messageId: string, issueKey: string, analysis: JsonObject, failed: boolean) {
-      return withChatError(async () => {
-        try {
-          return asJsonObject(await callRpc("chat_record_analysis", {
-            p_session: sessionId, p_message: messageId, p_issue: issueKey, p_analysis: analysis, p_failed: failed
-          }));
-        } catch {
-          const session = await selectOne("chat_session", { select: CHAT_SESSION_SELECT, session_id: `eq.${sessionId}` });
-          if (!session) return { ai_failures: 0, occurrences: 0 };
-          const meta = asJsonObject(session.metadata);
-          if (failed) {
-            const aiFailures = asNumber(meta.ai_failures || 0) + 1;
-            await updateRows("chat_session", { session_id: `eq.${sessionId}` }, {
-              metadata: { ...meta, ai_failures: aiFailures }
-            }).catch(() => undefined);
-            return { ai_failures: aiFailures, occurrences: 0 };
-          }
-          const risk = asString(analysis.risk || "green");
-          const counts = isJsonObject(meta.issue_counts) ? { ...meta.issue_counts } : {};
-          counts[issueKey] = asNumber(counts[issueKey] || 0) + 1;
-          const isRestricted = ["orange", "red"].includes(risk) && analysis.moderation !== "none";
-          if (isRestricted) {
-            await updateRows("chat_message", { message_id: `eq.${messageId}` }, {
-              text: "[Nội dung được kiểm duyệt]",
-              metadata: { risk, moderated: true, classification: analysis }
-            }).catch(() => undefined);
-          }
-          await updateRows("chat_session", { session_id: `eq.${sessionId}` }, {
-            metadata: {
-              ...meta,
-              risk_level: risk,
-              issue_counts: counts,
-              ...(risk === "red" ? { supervisor_required: true } : {})
-            }
-          }).catch(() => undefined);
-          return { occurrences: counts[issueKey], ai_failures: 0 };
-        }
-      });
+      return withChatError(async () => asJsonObject(await callRpc("chat_record_analysis", {
+        p_session: sessionId, p_message: messageId, p_issue: issueKey, p_analysis: analysis, p_failed: failed
+      })));
     },
 
     /** Human takeover and ticket creation are one idempotent transaction. */
     async handoff(sessionId: string, actor: ChatActor, summary: JsonObject, reason: string, supervisor: boolean) {
-      return withChatError(async () => {
-        try {
-          const res = asJsonObject(await callRpc("chat_handoff", {
-            p_session: sessionId, p_profile: actor.profileUserId || null, p_guest: actor.guestId,
-            p_summary: summary, p_reason: reason, p_supervisor: supervisor
-          }));
-          return {
-            ...res,
-            session: normalizeSessionRow(asJsonObject(res.session)),
-            message: normalizeMessageRow(asJsonObject(res.message))
-          };
-        } catch {
-          let ticketId: string | null = null;
-          const sessionRow = await selectOne("chat_session", { select: CHAT_SESSION_SELECT, session_id: `eq.${sessionId}` });
-          if (!sessionRow) throw new HttpError(404, "CHAT_SESSION_NOT_FOUND", "Chat session not found");
-          if (sessionRow.support_ticket_id) {
-            ticketId = asString(sessionRow.support_ticket_id);
-          } else {
-            const ticket = await insertRow("support_ticket", {
-              ticket_id: randomUUID(),
-              user_id: sessionRow.profile_user_id || null,
-              title: `Chat CSKH ${sessionId.slice(0, 8)}`,
-              description: JSON.stringify({ ...summary, chat_session_id: sessionId }),
-              priority: supervisor ? "urgent" : "high",
-              status: "open",
-              created_at: new Date().toISOString()
-            }).catch(() => null);
-            ticketId = ticket?.ticket_id ? asString(ticket.ticket_id) : null;
-          }
-          const meta = asJsonObject(sessionRow.metadata);
-          const updatedMeta = {
-            ...meta,
-            handoff_summary: summary,
-            handoff_reason: reason,
-            supervisor_required: supervisor || Boolean(meta.supervisor_required)
-          };
-          await updateRows("chat_session", { session_id: `eq.${sessionId}` }, {
-            handoff_status: "requested",
-            support_ticket_id: ticketId,
-            metadata: updatedMeta
-          }).catch(() => undefined);
-          const greeting = await insertRow("chat_message", {
-            message_id: randomUUID(),
-            session_id: sessionId,
-            sender: "bot",
-            text: "Yêu cầu đã được chuyển đến nhân viên CSKH. AI sẽ không tiếp tục trả lời trong phiên này.",
-            metadata: { system: true, handoff: true, speaker: "SYSTEM", ticket_id: ticketId },
-            created_at: new Date().toISOString()
-          }).catch(() => null);
-          const session = normalizeSessionRow({ ...sessionRow, handoff_status: "requested", support_ticket_id: ticketId, metadata: updatedMeta })!;
-          return { session, ticket_id: ticketId, message: normalizeMessageRow(greeting) };
-        }
-      });
+      return withChatError(async () => asJsonObject(await callRpc("chat_handoff", {
+        p_session: sessionId, p_profile: actor.profileUserId || null, p_guest: actor.guestId,
+        p_summary: summary, p_reason: reason, p_supervisor: supervisor
+      })));
     },
 
-    /** Active staff identity is verified again inside the service-role RPC. */
+    /** Active staff identity and exclusive assignment are checked inside the service-role RPC. */
     async staffAction(sessionId: string, actorId: string, action: string, payload: JsonObject) {
-      return withChatError(async () => {
-        try {
-          const res = asJsonObject(await callRpc("chat_staff_action", {
-            p_session: sessionId, p_actor: actorId, p_action: action, p_payload: payload
-          }));
-          return {
-            ...res,
-            session: normalizeSessionRow(asJsonObject(res.session)),
-            message: normalizeMessageRow(asJsonObject(res.message))
-          };
-        } catch {
-          const sessionRow = await selectOne("chat_session", { select: CHAT_SESSION_SELECT, session_id: `eq.${sessionId}` });
-          if (!sessionRow) throw new HttpError(404, "CHAT_SESSION_NOT_FOUND", "Chat session not found");
-          let message: JsonObject | null = null;
-          if (action === "reply") {
-            message = await insertRow("chat_message", {
-              message_id: randomUUID(),
-              session_id: sessionId,
-              sender: "agent",
-              text: asString(payload.text),
-              metadata: { agent_id: actorId, speaker: "HUMAN" },
-              created_at: new Date().toISOString()
-            });
-            await updateRows("chat_session", { session_id: `eq.${sessionId}` }, {
-              handoff_status: "assigned",
-              last_message_preview: asString(payload.text).slice(0, 180),
-              last_message_at: new Date().toISOString()
-            }).catch(() => undefined);
-          } else if (action === "assign") {
-            await updateRows("chat_session", { session_id: `eq.${sessionId}` }, {
-              handoff_status: "assigned"
-            }).catch(() => undefined);
-          } else if (action === "close") {
-            await updateRows("chat_session", { session_id: `eq.${sessionId}` }, {
-              handoff_status: "closed"
-            }).catch(() => undefined);
-            if (sessionRow.support_ticket_id) {
-              await updateRows("support_ticket", { ticket_id: `eq.${sessionRow.support_ticket_id}` }, {
-                status: "closed",
-                resolved_at: new Date().toISOString()
-              }).catch(() => undefined);
-            }
-          }
-          const updatedSession = await selectOne("chat_session", { select: CHAT_SESSION_SELECT, session_id: `eq.${sessionId}` });
-          return { session: normalizeSessionRow(updatedSession || sessionRow)!, message: normalizeMessageRow(message) };
-        }
-      });
+      return withChatError(async () => asJsonObject(await callRpc("chat_staff_action", {
+        p_session: sessionId, p_actor: actorId, p_action: action, p_payload: payload
+      })));
+    },
+
+    /** Owner-authenticated closure, bounded reopening/linking and post-resolution ratings. */
+    async ownerLifecycle(sessionId: string, actor: ChatActor, action: string, payload: JsonObject) {
+      return withChatError(async () => asJsonObject(await callRpc("chat_owner_lifecycle", {
+        p_session: sessionId, p_profile: actor.profileUserId || null, p_guest: actor.guestId,
+        p_action: action, p_payload: payload
+      })));
     },
 
     /** Bind a verified phone challenge to one expiring session/order grant. */
@@ -362,7 +159,7 @@ export function createChatbotRepository() {
     async listPolicyApprovals() {
       return withChatError(() => selectRows("chat_policy_approval", {
         select: "policy_id,source_updated_at,expires_at", expires_at: `gt.${new Date().toISOString()}`
-      }).catch(() => ({ rows: [] })));
+      }));
     },
 
     /** Published store pages are official L0 facts. */
@@ -443,26 +240,15 @@ export function createChatbotRepository() {
     },
 
 
-    async closeSession(sessionId: string) {
-      const rows = await withChatError(() => updateRows("chat_session", {
-        session_id: `eq.${sessionId}`
-      }, {
-        is_active: false,
-        handoff_status: "closed",
-        updated_at: new Date().toISOString()
-      }));
-      return normalizeSessionRow(rows[0] || null);
-    },
-
     /** Return the newest bounded history in stable sender sequence order. */
     async listMessages(sessionId: string, limit = 100) {
       const result = await withChatError(() => selectRows("chat_message", {
         select: CHAT_MESSAGE_SELECT,
         session_id: `eq.${sessionId}`,
-        order: "created_at.desc",
+        order: "sequence.desc",
         limit
       }));
-      return { ...result, rows: (result.rows || []).map((r) => normalizeMessageRow(r)!).reverse() };
+      return { ...result, rows: [...(result.rows || [])].reverse() };
     },
 
     async insertMessage(input: InsertMessageInput) {

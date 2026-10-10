@@ -23,6 +23,7 @@ import {
 } from "../types.js";
 
 import { loyaltyActor } from "../loyalty/loyalty-service.js";
+import { listConfirmedSupportVoucherIds } from "../chatbot/chatbot-promotions.js";
 /**
  * Ví voucher và engine chọn mã tốt nhất — dùng chung cho khách vãng lai và thành viên.
  *
@@ -117,10 +118,11 @@ export async function resolveOrderVoucher(
   shippingFee: number,
   requestedVoucherId: string | null,
   decline: boolean,
-  cart: VoucherCart | null = null
+  cart: VoucherCart | null = null,
+  verifiedGuestPhone: string | null = null
 ): Promise<{ voucherId: string | null; discountAmount: number; merchandiseDiscount: number }> {
   if (decline) return { voucherId: null, discountAmount: 0, merchandiseDiscount: 0 };
-  const wallet = await buildWallet(context, orderValue, shippingFee, cart);
+  const wallet = await buildWallet(context, orderValue, shippingFee, cart, verifiedGuestPhone);
   const { applied, change } = chooseOrderVoucher(wallet, { voucherId: requestedVoucherId, code: null, decline });
   if (change) {
     throw new HttpError(409, "VOUCHER_CHANGED", change.reasonText, {
@@ -148,39 +150,34 @@ export async function buildWallet(
   context: AuthContext,
   orderValue: number,
   shippingFee: number,
-  cart: VoucherCart | null = null
+  cart: VoucherCart | null = null,
+  verifiedGuestPhone: string | null = null
 ): Promise<{ items: EvaluatedVoucher[]; best: EvaluatedVoucher | null }> {
   const profile = resolveProfile(context);
 
   const actor = loyaltyActor(context);
-  const fetchVouchers = async () => {
-    try {
-      return await selectRows("voucher", {
-        is_active: "eq.true",
-        ...(actor ? { or: `(reward_member_id.is.null,reward_member_id.eq.${actor})` } : { reward_member_id: "is.null" }),
-        limit: 200
-      });
-    } catch (err: unknown) {
-      const errStr = String((err as any)?.message || (err as any)?.details || (err as any)?.code || "");
-      if (errStr.includes("reward_member_id") || (err as any)?.code === "42703") {
-        return await selectRows("voucher", { is_active: "eq.true", limit: 200 });
-      }
-      throw err;
-    }
-  };
+  const fetchVouchers = () => selectRows("voucher", {
+    is_active: "eq.true",
+    ...(actor ? { or: `(reward_member_id.is.null,reward_member_id.eq.${actor})` } : { reward_member_id: "is.null" }),
+    limit: 200
+  });
 
-  const [voucherResult, promotionResult, orderResult] = await Promise.all([
+  const [voucherResult, promotionResult, orderResult, confirmedOfferIds] = await Promise.all([
     fetchVouchers(),
     selectRows("promotion", { limit: 200 }),
     profile?.user_id
       ? selectRows("orders", { user_id: `eq.${profile.user_id}`, limit: 500 })
-      : Promise.resolve({ rows: [] as JsonObject[] })
+      : Promise.resolve({ rows: [] as JsonObject[] }),
+    listConfirmedSupportVoucherIds(profile?.user_id || null, verifiedGuestPhone)
   ]);
 
   const rawVouchers = voucherResult.rows || [];
-  const activeVouchers = rawVouchers.filter((v: any) => {
-    if (v.reward_member_id == null) return true;
-    return actor ? v.reward_member_id === actor : false;
+  const confirmedOffers = new Set(confirmedOfferIds);
+  const recoveryCampaigns = new Set((promotionResult.rows || []).filter((p) => Number(p.recovery_revision || 0) > 0).map((p) => String(p.promo_id)));
+  const activeVouchers = rawVouchers.filter((v) => {
+    if (v.reward_member_id != null && (!actor || v.reward_member_id !== actor)) return false;
+    const recoveryOnly = Number(v.recovery_revision || 0) > 0 || recoveryCampaigns.has(String(v.promo_id));
+    return !recoveryOnly || confirmedOffers.has(String(v.voucher_id));
   });
 
   const orders = orderResult.rows || [];

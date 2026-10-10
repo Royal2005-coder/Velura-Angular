@@ -25,3 +25,4 @@ scratch/ai-uat-private/
 __pycache__/
 *.pyc
 ~$*
+.pi/

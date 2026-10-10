@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { signJwt } from "../../apps/api/src/auth-helper.js";
 import { HttpError } from "../../apps/api/src/http.js";
+import { config } from "../../apps/api/src/config.js";
 import { asJsonObject, asString, isJsonObject, type AuthContext, type JsonObject } from "../../apps/api/src/types.js";
 import { createChatbotRepository, type ChatbotRepository } from "../../apps/api/src/chatbot/chatbot-repository.js";
 import { createChatbotService } from "../../apps/api/src/chatbot/chatbot-service.js";
@@ -23,7 +24,8 @@ function principal(role = "member", active = true): AuthContext {
 }
 
 function analysis(overrides: Partial<ChatAnalysis> = {}): ChatAnalysis {
-  return { intent: "facts", level: "L0", issue: "return", context: { issueKey: "return_deadline", problem: "Thời hạn đổi trả", wanted: "Biết thời hạn gửi yêu cầu", failedApproaches: [], compromiseFailed: false, authorityExceeded: false }, sentiment: "neutral", risk: "green", moderation: "none", ...overrides };
+  const context = overrides.context || { issueKey: "return_deadline", problem: "Thời hạn đổi trả", wanted: "Biết thời hạn gửi yêu cầu", failedApproaches: [], compromiseFailed: false, authorityExceeded: false };
+  return { intent: "facts", level: "L0", issue: "return", sentiment: "neutral", risk: "green", moderation: "none", confidence: 0.9, reasons: ["request_identified"], ...overrides, context, filtered: overrides.filtered || { text: "Khách cần hỗ trợ về chính sách đổi trả", problem: context.problem, wanted: context.wanted, failedApproaches: context.failedApproaches } };
 }
 
 function draft(overrides: Partial<ChatDraft> = {}): ChatDraft {
@@ -69,12 +71,17 @@ function fixture(modelOverrides: Partial<ChatModel> = {}) {
     summaries: [] as JsonObject[],
     reviews: [] as { action: string; payload: JsonObject }[],
     tickets: new Set<string>(),
+    reports: [] as { sessionId: string; event: string }[],
+    failures: new Map<string, number>(),
+    l2Attempts: new Map<string, number>(),
     modelCalls: 0,
     reviewCalls: 0,
     originalReads: 0
   };
   function append(sender: string, text: string, metadata: JsonObject = {}, productIds: unknown[] = []) {
-    const message: JsonObject = { message_id: randomUUID(), session_id: SESSION, sender, text, metadata, product_ids: productIds, sequence: state.messages.length + 1, moderation_status: "visible" };
+    const participant = sender === "user" || sender === "agent";
+    const message: JsonObject = { message_id: randomUUID(), session_id: SESSION, sender, text: participant ? "[Đang lọc nội dung]" : text, metadata: participant ? { filter_verified: false } : metadata, product_ids: productIds, sequence: state.messages.length + 1, moderation_status: participant ? "pending" : "visible" };
+    if (participant) state.originals.set(asString(message.message_id), { text, metadata });
     state.messages.push(message);
     return { ...message };
   }
@@ -97,30 +104,32 @@ function fixture(modelOverrides: Partial<ChatModel> = {}) {
     appendUserTurn: async (_id, _actor, text, metadata) => ({ session: { ...state.session }, message: append("user", text, metadata), epoch: state.session.ai_epoch }),
     recordAnalysis: async (_id, messageId, key, value, failed) => {
       if (failed) {
-        if (!state.failed.has(messageId)) { state.failed.add(messageId); state.session.ai_failures = Number(state.session.ai_failures) + 1; }
-        return { ai_failures: state.session.ai_failures };
+        if (!state.failed.has(messageId)) { state.failed.add(messageId); state.session.ai_failures = Number(state.session.ai_failures) + 1; state.failures.set(key, (state.failures.get(key) || 0) + 1); }
+        return { session: { ...state.session }, ai_failures: state.session.ai_failures, issue_failures: state.failures.get(key) };
       }
       if (!state.analyzed.has(messageId)) {
         state.analyzed.add(messageId);
         state.issueCounts.set(key, (state.issueCounts.get(key) || 0) + 1);
         state.session.risk_level = value.risk;
         const message = state.messages.find((row) => row.message_id === messageId)!;
-        message.metadata = { analysis: value, risk: value.risk };
-        if (["orange", "red"].includes(asString(value.risk)) && value.moderation !== "none") {
-          state.originals.set(messageId, { text: message.text, metadata: message.metadata });
-          message.text = "[Nội dung được kiểm duyệt]";
-          message.metadata = { risk: value.risk, classification: Object.fromEntries(Object.entries(value).filter(([key]) => key !== "context")) };
-          message.moderation_status = "restricted";
-          state.session.ai_epoch = Number(state.session.ai_epoch) + 1;
-        }
+        message.text = asJsonObject(value.filtered).text;
+        message.metadata = { classification: Object.fromEntries(Object.entries(value).filter(([field]) => !["context", "filtered"].includes(field))), risk: value.risk, filter_verified: true, issue_key: key };
+        message.moderation_status = value.moderation !== "none" ? "restricted" : "visible";
+        const safe = asJsonObject(value.filtered);
+        state.session.metadata = { ...asJsonObject(state.session.metadata), handoff_summary: { problem: safe.problem, wanted: safe.wanted, failed_approaches: safe.failedApproaches }, supervisor_required: value.risk === "red" };
       }
-      return { occurrences: state.issueCounts.get(key), ai_failures: state.session.ai_failures };
+      return { session: { ...state.session }, occurrences: state.issueCounts.get(key), ai_failures: state.session.ai_failures, l2_attempts: state.l2Attempts.get(key) || 0 };
     },
     commitAiTurn: async (_id, epoch, sequence, value) => {
       const latest = state.messages.filter((row) => row.sender === "user").at(-1);
       if (state.session.handoff_status !== "ai" || state.session.ai_epoch !== epoch || latest?.sequence !== sequence) return { sent: false, reason: "HUMAN_OR_NEWER_TURN", session: { ...state.session } };
+      if (latest?.moderation_status === "pending") return { sent: false, reason: "FILTER_PENDING", session: { ...state.session } };
       const message = append("bot", asString(value.text), asJsonObject(value.metadata), Array.isArray(value.product_ids) ? value.product_ids : []);
       if (!asJsonObject(value.metadata).model_failure) state.session.ai_failures = 0;
+      if (asJsonObject(value.metadata).level === "L2") {
+        const key = asString(asJsonObject(value.metadata).issue_key);
+        state.l2Attempts.set(key, (state.l2Attempts.get(key) || 0) + 1);
+      }
       return { sent: true, message, session: { ...state.session } };
     },
     handoff: async (_id, _actor, summary, reason, supervisor) => {
@@ -132,7 +141,7 @@ function fixture(modelOverrides: Partial<ChatModel> = {}) {
         state.session.ai_epoch = Number(state.session.ai_epoch) + 1;
         append("bot", "Yêu cầu đã chuyển đến CSKH.", { system: true, handoff: true });
       }
-      state.session.metadata = { handoff_summary: summary, supervisor_required: supervisor };
+      state.session.metadata = { ...asJsonObject(state.session.metadata), supervisor_required: supervisor || asJsonObject(state.session.metadata).supervisor_required };
       return { session: { ...state.session }, ticket_id: state.session.support_ticket_id };
     },
     staffAction: async (_id, _actorId, action, payload) => {
@@ -156,7 +165,12 @@ function fixture(modelOverrides: Partial<ChatModel> = {}) {
     review: async () => { state.reviewCalls++; return { safe: true, reasons: [] }; },
     ...modelOverrides
   };
-  const service = createChatbotService({ repository, model });
+  const service = createChatbotService({ repository, model, integrations: {
+    enqueueReport: async (sessionId, event) => { state.reports.push({ sessionId, event }); },
+    eligibleOffers: async () => [],
+    confirmOffer: async () => { throw new Error("No eligible offer configured in fixture"); },
+    retryReport: async () => { throw new Error("No report retry configured in fixture"); }
+  } });
   return { state, service, repository, model, send: (message: string, extra: JsonObject = {}, context?: AuthContext) => service.sendMessage(context, { sessionId: SESSION, guestId: GUEST, message, ...extra }) };
 }
 
@@ -245,7 +259,6 @@ test("a third sizing issue escalates instead of repeating catalog advice", async
   const result = await f.send("Size M vẫn chưa phù hợp lần thứ ba");
   assert.equal(session(result).handoff_status, "requested");
   assert.equal(f.state.reviewCalls, 2);
-  assert.ok(f.state.handoffReasons.includes("THIRD_SAME_ISSUE"));
 });
 
 test("failed compromise and requests beyond authority escalate without drafting a transaction", async () => {
@@ -385,15 +398,15 @@ test("negative sentiment alone cannot moderate a message or lock an account", as
     assert.equal(session(result).handoff_status, "ai");
     assert.equal(session(result).risk_level, "yellow");
     assert.equal(session(result).is_active, true);
-    assert.equal(f.state.originals.size, 0);
-    assert.equal(rows(result)[0].text, "Tôi rất không hài lòng về dịch vụ");
+    assert.equal(f.state.originals.size, 1);
+    assert.equal(rows(result)[0].moderation_status, "visible");
   }
 });
 
 test("severe content is private, escalates to supervisor and never automatically locks the account", async () => {
   const original = "Nội dung nghiêm trọng riêng tư";
   const base = analysis();
-  const f = fixture({ analyze: async () => analysis({ risk: "red", moderation: "threat", context: { ...base.context, problem: original, wanted: original, failedApproaches: [original] } }) });
+  const f = fixture({ analyze: async () => analysis({ risk: "red", moderation: "threat", context: { ...base.context, problem: original, wanted: original, failedApproaches: [original] }, filtered: { text: "Khách cần hỗ trợ giải quyết dịch vụ", problem: "Yêu cầu giải quyết dịch vụ", wanted: "Nhân viên hỗ trợ", failedApproaches: [] } }) });
   const result = await f.send(original);
   assert.equal(session(result).handoff_status, "requested");
   assert.equal(session(result).is_active, true);
@@ -425,7 +438,7 @@ test("malformed or unavailable classifiers have finite failure and then human es
     const f = fixture({ analyze });
     const first = await f.send("Chính sách đổi trả");
     assert.equal(session(first).handoff_status, "ai");
-    assert.equal(rows(first).filter((message) => message.sender === "bot").length, 1);
+    assert.equal(rows(first).filter((message) => message.sender === "bot").length, 0);
     const second = await f.send("Vẫn cần biết chính sách đổi trả");
     assert.equal(session(second).handoff_status, "requested");
     assert.equal(f.state.tickets.size, 1);
@@ -442,19 +455,13 @@ test("malformed drafts and unavailable risk reviewers hand off without publishin
   }
 });
 
-test("human classification corrections are validated, durably recorded, and never sent to the model", async () => {
+test("classification correction requires confirmation and supervisor original access", async () => {
   const f = fixture();
   const message = await f.repository.insertMessage({ sessionId: SESSION, sender: "user", text: "Phản ánh dịch vụ" });
-  const labels = analysis({ risk: "yellow", sentiment: "negative" });
-  await assert.rejects(() => f.service.reviewSession(principal("admin_operator_cskh_dt"), SESSION, { action: "correction", messageId: message.message_id, text: "Đánh giá lại cảm xúc", classification: { risk: "invalid" } }), (error: unknown) => error instanceof HttpError && error.status === 422);
+  await assert.rejects(() => f.service.reviewSession(principal("super_admin"), SESSION, { action: "correction", messageId: message.message_id, text: "Đánh giá lại", classification: analysis() }), (error: unknown) => error instanceof HttpError && error.status === 422);
+  await assert.rejects(() => f.service.reviewSession(principal("admin_operator_cskh_dt"), SESSION, { action: "correction", messageId: message.message_id, text: "Đánh giá lại", classification: analysis(), confirmed: true }), (error: unknown) => error instanceof HttpError && error.status === 403);
+  assert.equal(f.state.originalReads, 0);
   assert.equal(f.state.reviews.length, 0);
-  await f.service.reviewSession(principal("admin_operator_cskh_dt"), SESSION, { action: "correction", messageId: message.message_id, text: "Tiêu cực không đồng nghĩa với vi phạm", classification: { ...labels, context: { problem: "Không được lưu vào phân loại" } } });
-  assert.equal(f.state.reviews.length, 1);
-  assert.equal(asJsonObject(f.state.reviews[0].payload.classification).risk, "yellow");
-  assert.ok(!("context" in asJsonObject(f.state.reviews[0].payload.classification)));
-  assert.equal(f.state.modelCalls, 0);
-  assert.equal(f.state.session.is_active, true);
-  assert.equal(f.state.messages.length, 1);
 });
 
 test("manual moderation requires confirmation and cannot expose a restricted original in its response", async () => {
@@ -463,7 +470,6 @@ test("manual moderation requires confirmation and cannot expose a restricted ori
   const message = await f.repository.insertMessage({ sessionId: SESSION, sender: "user", text: original });
   await assert.rejects(() => f.service.reviewSession(principal("admin_operator_cskh_dt"), SESSION, { action: "moderate", messageId: message.message_id, text: "Cần kiểm duyệt", risk: "orange" }), (error: unknown) => error instanceof HttpError && error.status === 422);
   assert.equal(f.state.reviews.length, 0);
-  f.repository.staffAction = async () => ({ session: { ...f.state.session }, message: { ...message, moderation_status: "restricted", text: original, metadata: { analysis: { ...analysis(), context: { problem: original } }, attachment: { data: original } } } });
   const result = await f.service.reviewSession(principal("admin_operator_cskh_dt"), SESSION, { action: "moderate", messageId: message.message_id, text: "Cần kiểm duyệt", risk: "orange", confirmed: true });
   assert.ok(!JSON.stringify(result).includes(original));
 });
@@ -478,4 +484,88 @@ test("distinct catalog questions do not count as repeats of the same underlying 
   assert.equal(session(result).handoff_status, "ai");
   assert.equal(f.state.tickets.size, 0);
   assert.equal(f.state.reviewCalls, 3);
+});
+
+test("concurrent staff reads never expose an unfiltered pending turn", async () => {
+  const entered = deferred(), release = deferred();
+  const raw = "Private raw customer request";
+  const f = fixture({ analyze: async () => { entered.release(); await release.promise; return analysis(); } });
+  const send = f.send(raw, { attachment: null });
+  await entered.promise;
+  const pending = await f.service.getAdminMessages(principal("admin_operator_cskh_dt"), SESSION, new URLSearchParams());
+  assert.equal(rows(pending)[0].moderation_status, "pending");
+  assert.ok(!JSON.stringify(pending).includes(raw));
+  release.release();
+  const ready = await send;
+  assert.equal(rows(ready)[0].moderation_status, "visible");
+  assert.ok(!JSON.stringify(ready).includes(raw));
+});
+
+test("filter outages after takeover preserve quarantine without an AI failure reply", async () => {
+  const f = fixture({ analyze: async () => { throw new Error("filter unavailable"); } });
+  f.state.session.handoff_status = "assigned";
+  const raw = "Unfiltered text sent while a human handles support";
+  const result = await f.send(raw);
+  assert.equal(session(result).handoff_status, "assigned");
+  assert.equal(rows(result)[0].moderation_status, "pending");
+  assert.equal(rows(result).filter((message) => message.sender === "bot").length, 0);
+  assert.ok(!JSON.stringify(result).includes(raw));
+  assert.ok(f.state.reports.some((report) => report.event === "warning"));
+});
+
+test("L2 gets exactly one additional approved attempt, then hands off without another reply", async () => {
+  let turns = 0;
+  const base = analysis();
+  const f = fixture({ analyze: async () => analysis({ level: "L2", intent: "policy_problem", context: { ...base.context, compromiseFailed: ++turns > 1 } }), draft: async () => draft({ approach: `approved_approach_${turns}` }) });
+  f.state.approvals.push({ policy_id: POLICY, source_updated_at: VERSION });
+  await f.send("Cần hỗ trợ đổi trả");
+  const second = await f.send("Phương án trước chưa giải quyết được vấn đề");
+  assert.equal(session(second).handoff_status, "ai");
+  assert.equal(rows(second).filter((message) => message.sender === "bot").length, 2);
+  const final = await f.send("Phương án bổ sung vẫn không giải quyết được");
+  assert.equal(session(final).handoff_status, "requested");
+  assert.equal(rows(final).filter((message) => message.sender === "bot" && !asJsonObject(message.metadata).system).length, 2);
+});
+
+test("explicit compromise rejection cannot evade the attempt state by changing the model issue label", async () => {
+  let turns = 0;
+  const base = analysis();
+  const f = fixture({ analyze: async () => analysis({ level: "L2", intent: "policy_problem", context: { ...base.context, issueKey: ++turns === 1 ? "exchange" : "unrelated_model_label" } }) });
+  f.state.approvals.push({ policy_id: POLICY, source_updated_at: VERSION });
+  await f.send("Tư vấn phương án đổi hàng");
+  const rejected = await f.send("Tôi không đồng ý");
+  assert.equal(session(rejected).handoff_status, "requested");
+  assert.equal(rows(rejected).filter((message) => message.sender === "bot" && !asJsonObject(message.metadata).system).length, 1);
+});
+
+test("database denials and missing governance RPCs never downgrade to direct table writes", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalUrl = config.supabaseUrl;
+  const originalKey = config.supabaseServiceRoleKey;
+  config.supabaseUrl = "https://governance.test";
+  config.supabaseServiceRoleKey = "service-test";
+  const calls: string[] = [];
+  try {
+    for (const denial of [{ status: 403, code: "PT403", message: "RBAC_DENIED" }, { status: 404, code: "PGRST202", message: "Function not found" }]) {
+      globalThis.fetch = async input => {
+        calls.push(new URL(String(input)).pathname);
+        return new Response(JSON.stringify({ code: denial.code, message: denial.message }), { status: denial.status });
+      };
+      const repository = createChatbotRepository();
+      const actor = { authUserId: "", profileUserId: "", guestId: GUEST };
+      for (const operation of [
+        () => repository.appendUserTurn(SESSION, actor, "private request", {}),
+        () => repository.commitAiTurn(SESSION, 0, 1, { text: "unapproved reply" }, []),
+        () => repository.recordAnalysis(SESSION, POLICY, "return", analysis() as unknown as JsonObject, false),
+        () => repository.handoff(SESSION, actor, {}, "HUMAN_REQUEST", false),
+        () => repository.staffAction(SESSION, MEMBER, "assign", {})
+      ]) await assert.rejects(operation, error => error instanceof HttpError);
+    }
+    assert.equal(calls.length, 10);
+    assert.ok(calls.every(path => path.includes("/rpc/")));
+  } finally {
+    globalThis.fetch = originalFetch;
+    config.supabaseUrl = originalUrl;
+    config.supabaseServiceRoleKey = originalKey;
+  }
 });

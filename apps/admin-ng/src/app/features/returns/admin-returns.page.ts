@@ -1,4 +1,5 @@
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AdminDialogDirective } from '../../shared/admin-dialog.directive';
 import { finalize } from 'rxjs';
 import { AdminRefreshService } from '../../core/admin-refresh.service';
@@ -132,6 +133,7 @@ export class AdminReturnsPage {
   private readonly api = inject(AdminApiService);
   private readonly session = inject(AdminSessionService);
   private readonly chatReview = inject(AdminChatReviewService);
+  private readonly route = inject(ActivatedRoute);
 
   readonly zone = signal<ServiceZone>('chat');
   readonly returns = signal<AdminReturnRow[]>([]);
@@ -165,6 +167,14 @@ export class AdminReturnsPage {
   readonly chatReviewTarget = signal<AdminReviewedChatMessage | null>(null);
   readonly chatReviewAction = signal<AdminChatReviewInput['action']>('outcome');
   readonly chatReviewNote = signal('');
+  readonly summaryProblem = signal('');
+  readonly summaryWanted = signal('');
+  readonly summaryFailed = signal('');
+  readonly finalSentiment = signal<'positive' | 'neutral' | 'negative'>('neutral');
+  readonly selectedOfferId = signal('');
+  readonly correctedText = signal('');
+  private reportSessionId = '';
+  private reviewSourceSequence: number | undefined;
   readonly chatReviewRisk = signal<'yellow' | 'orange' | 'red'>('orange');
   readonly chatReviewConfirmed = signal(false);
   readonly chatReviewBusy = signal(false);
@@ -293,11 +303,12 @@ export class AdminReturnsPage {
   readonly pendingChatCount = computed(() => this.chats().filter((session) => session.handoff_status === 'requested').length);
   readonly isChatSupervisor = computed(() => this.canMutate() && this.session.session()?.roleCode === 'super_admin' && this.session.session()?.isActive === true);
   readonly canHandleChat = computed(() => !this.selectedChat()?.metadata?.supervisor_required || this.isChatSupervisor());
-  readonly canReply = computed(() => this.canMutate() && this.canHandleChat() && !this.isClosedChat());
+  readonly canReply = computed(() => this.canMutate() && this.canHandleChat() && !this.isClosedChat() && (!this.selectedChat()?.assigned_to || this.selectedChat()?.assigned_to === this.session.session()?.id));
   readonly canJoinChat = computed(() => {
     if (!this.canMutate() || !this.canHandleChat()) {
       return false;
     }
+    if (this.selectedChat()?.assigned_to && this.selectedChat()?.assigned_to !== this.session.session()?.id) return false;
     const status = this.selectedChat()?.handoff_status || 'ai';
     return status === 'ai' || status === 'requested';
   });
@@ -307,9 +318,16 @@ export class AdminReturnsPage {
     inject(DestroyRef).onDestroy(() => { this.messageRequest.unsubscribe(); this.receiveRequest.unsubscribe(); this.returnDetailRequest.unsubscribe(); this.clearChatReview(); });
     inject(DestroyRef).onDestroy(() => this.listRequest.unsubscribe());
     inject(AdminRefreshService).register(() => {
-      if (!this.loading() && !this.submitting() && !this.chatReviewOpen() && !this.actionType() && !this.receiveTarget() && !this.shipmentTarget() && !this.manualRefundTarget() && !this.contactTarget()) this.reload();
+      if (!this.loading() && !this.submitting() && !this.actionType() && !this.receiveTarget() && !this.shipmentTarget() && !this.manualRefundTarget() && !this.contactTarget()) this.reload();
     }, inject(DestroyRef));
+    this.reportSessionId = this.route.snapshot.queryParamMap.get('sessionId') || this.route.snapshot.queryParamMap.get('session') || '';
     this.reload();
+    this.route.queryParamMap.pipe(takeUntilDestroyed()).subscribe(params => {
+      const id = params.get('sessionId') || params.get('session');
+      if (id && id !== this.selectedChat()?.session_id) {
+        this.zone.set('chat'); this.selectChat(this.chats().find(session => session.session_id === id) || { session_id: id });
+      }
+    });
   }
 
   /**
@@ -389,9 +407,11 @@ export class AdminReturnsPage {
       this.chats.set(adminListRows(payload.chats).filter((session) => session.is_active !== false));
       const selectedId = this.selectedChat()?.session_id;
       if (selectedId) {
-        const next = this.chats().find((session) => session.session_id === selectedId) || null;
-        this.selectedChat.set(next);
-        if (!next) this.clearChatReview();
+        const next = this.chats().find((session) => session.session_id === selectedId);
+        if (next) this.selectedChat.set(next);
+      } else if (this.reportSessionId) {
+        const id = this.reportSessionId; this.reportSessionId = '';
+        this.selectChat(this.chats().find(session => session.session_id === id) || { session_id: id });
       }
       if (zone === 'logs') {
         this.logs.set(adminListRows(payload.logs));
@@ -468,6 +488,10 @@ export class AdminReturnsPage {
       next: (payload) => {
         if (this.selectedChat()?.session_id !== sessionId) return;
         this.chatLoading.set(false); this.messages.set(payload.messages || []); this.chatProducts.set(payload.products || []);
+        if (this.chatReviewOpen() && payload.session?.metadata?.intelligence?.source_seq !== this.reviewSourceSequence) {
+          this.chatReviewConfirmed.set(false);
+          this.chatReviewError.set('Ngữ cảnh đã cập nhật. Rà soát lại nội dung trước khi xác nhận.');
+        }
         if (payload.session) this.selectedChat.set(payload.session);
       },
       error: (error: unknown) => { this.chatLoading.set(false); if (this.selectedChat()?.session_id === sessionId) this.chatError.set(adminErrorMessage(error)); },
@@ -505,7 +529,7 @@ export class AdminReturnsPage {
       return;
     }
     this.submitting.set(true);
-    this.api.assignChatSession(session.session_id, 'assigned').pipe(finalize(() => this.submitting.set(false))).subscribe({
+    this.api.assignChatSession(session.session_id).pipe(finalize(() => this.submitting.set(false))).subscribe({
       next: (payload) => {
         if (payload.session && this.selectedChat()?.session_id === session.session_id) {
           this.selectedChat.set(payload.session);
@@ -517,27 +541,15 @@ export class AdminReturnsPage {
   }
 
   /**
-   * Closes the selected chat session.
+   * Opens outcome review; closing requires a resolution, final sentiment and explicit confirmation.
    */
   closeChat(): void {
-    const session = this.selectedChat();
-    if (!session || !this.canMutate() || !this.canHandleChat() || this.isClosedChat() || this.submitting()) {
-      return;
-    }
-    this.submitting.set(true);
-    this.api.assignChatSession(session.session_id, 'closed').pipe(finalize(() => this.submitting.set(false))).subscribe({
-      next: (payload) => {
-        if (payload.session && this.selectedChat()?.session_id === session.session_id) {
-          this.selectedChat.set(payload.session);
-        }
-        this.reload();
-      },
-      error: (error: unknown) => this.chatError.set(adminErrorMessage(error)),
-    });
+    if (!this.canReply() || this.submitting()) return;
+    this.openChatReview(); this.chatReviewAction.set('resolve');
   }
 
   /**
-   * Sends an agent reply on the selected chat session, tự động tiếp nhận phiên nếu chưa assign.
+   * Claims an unowned case before submitting a staff turn to the continuous filtering pipeline.
    */
   sendReply(event: Event): void {
     event.preventDefault();
@@ -566,7 +578,7 @@ export class AdminReturnsPage {
     };
 
     if (session.handoff_status !== 'assigned') {
-      this.api.assignChatSession(session.session_id, 'assigned').subscribe({
+      this.api.assignChatSession(session.session_id).subscribe({
         next: (payload) => {
           if (payload.session && this.selectedChat()?.session_id === session.session_id) {
             this.selectedChat.set(payload.session);
@@ -598,9 +610,14 @@ export class AdminReturnsPage {
     if (!this.selectedChat() || !this.canMutate() || this.chatReviewBusy()) return;
     this.clearChatReview();
     this.chatReviewTarget.set(message);
-    this.chatReviewAction.set(message ? 'correction' : 'outcome');
+    this.chatReviewAction.set(message?.moderation_status === 'pending' ? 'refilter' : message ? 'correction' : 'outcome');
     if (message?.metadata?.classification) this.chatReviewClassification.set({ ...message.metadata.classification });
     this.chatReviewOpen.set(true);
+    this.reviewSourceSequence = this.selectedChat()?.metadata?.intelligence?.source_seq;
+    const summary = this.selectedChat()?.metadata?.handoff_summary;
+    this.summaryProblem.set(summary?.problem || summary?.summary || '');
+    this.summaryWanted.set(summary?.wanted || '');
+    this.summaryFailed.set((summary?.failed_approaches || []).join('\n'));
   }
 
   /** Discards local review/original state; an in-flight write must finish before user dismissal. */
@@ -615,13 +632,15 @@ export class AdminReturnsPage {
     this.chatReviewBusy.set(false); this.chatOriginalBusy.set(false);
     this.chatReviewConfirmed.set(false); this.chatOriginalConfirmed.set(false);
     this.chatReviewNote.set(''); this.chatReviewError.set(null); this.chatReviewFeedback.set(null);
+    this.selectedOfferId.set(''); this.summaryProblem.set(''); this.summaryWanted.set(''); this.summaryFailed.set('');
+    this.correctedText.set('');
     this.chatReviewClassification.set({ intent: 'facts', level: 'L0', issue: 'general', sentiment: 'neutral', risk: 'green', moderation: 'none' });
   }
 
   /** Selects an audited review action and requires a new confirmation before submission. */
   onChatReviewAction(event: Event): void {
     const value = (event.target as HTMLSelectElement).value;
-    if (!['correction', 'outcome', 'supervisor', 'moderate'].includes(value)) return;
+    if (!['correction', 'outcome', 'supervisor', 'moderate', 'refilter', 'summary', 'resolve', 'reopen', 'offer', 'report_retry'].includes(value)) return;
     this.chatReviewAction.set(value as AdminChatReviewInput['action']);
     this.chatReviewConfirmed.set(false); this.chatReviewError.set(null);
   }
@@ -650,6 +669,7 @@ export class AdminReturnsPage {
   /** Records the staff member's explicit confirmation of the visible review action. */
   confirmChatReview(event: Event): void {
     this.chatReviewConfirmed.set((event.target as HTMLInputElement).checked);
+    if (this.chatReviewConfirmed()) this.reviewSourceSequence = this.selectedChat()?.metadata?.intelligence?.source_seq;
   }
 
   /** Records acknowledgement that original-content access is privileged and audited. */
@@ -664,21 +684,35 @@ export class AdminReturnsPage {
   saveChatReview(event: Event): void {
     event.preventDefault();
     const session = this.selectedChat(), target = this.chatReviewTarget(), action = this.chatReviewAction();
-    if (!session || !this.canMutate() || this.chatReviewBusy()) return;
+    if (!session || !this.canMutate() || !this.canHandleChat() || this.chatReviewBusy()) return;
     const text = this.chatReviewNote().trim();
-    if (!text || text.length > 2000 || !this.chatReviewConfirmed() || (['correction', 'moderate'].includes(action) && !target?.message_id)) {
+    if (!text || text.length > 2000 || !this.chatReviewConfirmed() || (['correction', 'moderate', 'refilter'].includes(action) && !target?.message_id)) {
       this.chatReviewError.set('Chọn tin nhắn khi cần, nhập ghi chú và xác nhận thao tác trước khi lưu.'); return;
     }
-    const body: AdminChatReviewInput = { action, text, ...(target?.message_id ? { messageId: target.message_id } : {}) };
+    const body: AdminChatReviewInput = { action, text, confirmed: true, ...(target?.message_id ? { messageId: target.message_id } : {}) };
     if (action === 'correction') body.classification = { ...this.chatReviewClassification() };
+    if (action === 'correction' && this.isChatSupervisor() && this.correctedText().trim()) body.filteredText = this.correctedText().trim();
     if (action === 'moderate') { body.risk = this.chatReviewRisk(); body.confirmed = true; }
+    if (action === 'summary') {
+      if (!this.summaryProblem().trim() || !this.summaryWanted().trim()) { this.chatReviewError.set('Nhập vấn đề và mong muốn đã xác minh.'); return; }
+      body.summary = { problem: this.summaryProblem().trim(), wanted: this.summaryWanted().trim(), failed_approaches: this.summaryFailed().split('\n').map(value => value.trim()).filter(Boolean) };
+    }
+    if (action === 'resolve') body.outcome = { resolution: text, finalSentiment: this.finalSentiment() };
+    if (action === 'offer') {
+      if (!session.metadata?.eligible_offers?.some(offer => offer.offer_id === this.selectedOfferId())) { this.chatReviewError.set('Chọn ưu đãi đủ điều kiện đã được duyệt.'); return; }
+      body.offerId = this.selectedOfferId();
+    }
+    if (action === 'report_retry') {
+      if (!session.metadata?.report_status?.report_id) { this.chatReviewError.set('Chưa có báo cáo để gửi lại.'); return; }
+      body.reportId = session.metadata.report_status.report_id;
+    }
     this.chatReviewBusy.set(true); this.chatReviewError.set(null); this.chatReviewFeedback.set(null);
     this.chatReviewRequest = this.chatReview.review(session.session_id, body).pipe(finalize(() => this.chatReviewBusy.set(false))).subscribe({
       next: (payload) => {
         if (this.selectedChat()?.session_id !== session.session_id || !this.chatReviewOpen()) return;
         if (payload.session) this.selectedChat.set(payload.session);
         this.chatReviewConfirmed.set(false); this.chatReviewNote.set('');
-        this.chatReviewFeedback.set('Đã lưu nhật ký rà soát. Dữ liệu không được tự động dùng để huấn luyện AI.');
+        this.chatReviewFeedback.set(action === 'report_retry' ? 'Đã ghi nhận yêu cầu gửi lại. Xem trạng thái báo cáo để biết kết quả.' : 'Đã lưu quyết định và cập nhật trạng thái phiên. Không tự động huấn luyện AI.');
         this.loadChatMessages(session.session_id);
       },
       error: (error: unknown) => { if (this.selectedChat()?.session_id === session.session_id) this.chatReviewError.set(adminErrorMessage(error, 'Không lưu được nhật ký rà soát.')); },
@@ -699,6 +733,51 @@ export class AdminReturnsPage {
       },
       error: (error: unknown) => { if (this.selectedChat()?.session_id === session.session_id) this.chatReviewError.set(adminErrorMessage(error, 'Không được truy cập bản gốc hoặc bản gốc không còn tồn tại.')); },
     });
+  }
+
+  /** Updates structured summary/offer drafts and invalidates the previous confirmation. */
+  setChatCaseField(field: 'summaryProblem' | 'summaryWanted' | 'summaryFailed' | 'selectedOfferId' | 'correctedText', event: Event): void {
+    this[field].set((event.target as HTMLInputElement).value); this.chatReviewConfirmed.set(false);
+  }
+
+  /** Records staff assessment of final customer sentiment, never defaulting an unknown live signal. */
+  setFinalSentiment(event: Event): void {
+    const value = (event.target as HTMLSelectElement).value;
+    if (value === 'positive' || value === 'neutral' || value === 'negative') this.finalSentiment.set(value);
+    this.chatReviewConfirmed.set(false);
+  }
+
+  /** Refreshes authoritative filtered context while preserving reply and correction drafts. */
+  refreshChatContext(): void { const id = this.selectedChat()?.session_id; if (id) this.loadChatMessages(id); }
+
+  /** Missing moderation state is quarantined just like pending state; raw server text is never a fallback. */
+  safeChatText(message: AdminReviewedChatMessage): string {
+    return this.chatMessageReady(message) ? message.text || '—' : 'Đang lọc nội dung. CSKH chỉ xem sau khi kiểm tra hoàn tất.';
+  }
+
+  /** An unprocessed customer/staff turn is not eligible for review or product rendering. */
+  chatMessageReady(message: AdminReviewedChatMessage): boolean { return message.moderation_status === 'visible' || message.moderation_status === 'restricted'; }
+
+  /** Names the exclusive case owner without pretending the viewer owns another staff member's case. */
+  chatOwner(): string {
+    const owner = this.selectedChat()?.assigned_to;
+    return !owner ? 'Chưa tiếp nhận' : owner === this.session.session()?.id ? 'Bạn đang phụ trách' : `Nhân viên ${owner}`;
+  }
+
+  /** Shows freshness separately from confidence so stale context is never treated as current. */
+  chatFreshness(): string {
+    const intelligence = this.selectedChat()?.metadata?.intelligence;
+    if (intelligence?.filter_status === 'outage') return 'Bộ lọc gián đoạn · Nội dung chưa kiểm tra bị giữ riêng';
+    if (intelligence?.filter_status === 'pending') return 'Đang cập nhật ngữ cảnh';
+    if (!intelligence?.updated_at) return 'Chưa có thời điểm phân tích';
+    const age = Date.now() - Date.parse(intelligence.updated_at);
+    return `${age > 120000 ? 'Ngữ cảnh cần cập nhật' : 'Ngữ cảnh mới nhất'} · ${this.date(intelligence.updated_at)}`;
+  }
+
+  /** Confidence is an estimate, not a verified business fact. */
+  chatConfidence(): string {
+    const value = this.selectedChat()?.metadata?.intelligence?.confidence;
+    return value == null ? 'Chưa đánh giá' : `${Math.round(value <= 1 ? value * 100 : value)}%`;
   }
 
   /**
@@ -764,6 +843,7 @@ export class AdminReturnsPage {
    * được phép; các thao tác còn lại phải nằm trong bảng chuyển.
    */
   canTicketAction(row: AdminTicketRow, type: TicketAction): boolean {
+    if (row.chat_session_id) return false;
     const from = row.status || '';
     const target = TICKET_ACTION_TARGET[type];
     if (from === target) {
@@ -776,10 +856,22 @@ export class AdminReturnsPage {
    * Opens a ticket reply/resolve/close modal.
    */
   openTicketAction(type: TicketAction, ticketId: string): void {
-    this.selectedTicket.set(this.tickets().find((row) => row.ticket_id === ticketId) || null);
+    const selected = this.selectedTicket();
+    const ticket = selected?.ticket_id === ticketId ? selected : this.tickets().find(row => row.ticket_id === ticketId) || null;
+    if (!ticket || !this.canTicketAction(ticket, type)) return;
+    this.selectedTicket.set(ticket);
     this.selectedReturn.set(null);
     this.actionType.set(type);
     this.actionError.set(null);
+  }
+
+  /** Opens the linked session so replies, filtering and resolution cannot bypass chat governance. */
+  openLinkedTicketChat(ticket: AdminTicketRow): void {
+    if (!ticket.chat_session_id) return;
+    const id = ticket.chat_session_id;
+    this.closeOverlays();
+    this.selectChat(this.chats().find(session => session.session_id === id) || { session_id: id });
+    this.setZone('chat');
   }
 
   /**
@@ -905,6 +997,11 @@ export class AdminReturnsPage {
     const amount = type === 'refund' ? this.fixedRefundAmount() : 0;
     const ret = this.selectedReturn();
     const ticket = this.selectedTicket();
+    if (ticket?.chat_session_id) {
+      this.actionType.set(null);
+      this.actionError.set('Phiếu liên kết hội thoại chỉ được xử lý trong Chat trực tuyến.');
+      return;
+    }
     if (note.length < 10) {
       this.actionError.set('Ghi rõ nội dung xử lý, tối thiểu 10 ký tự.');
       return;
@@ -975,7 +1072,8 @@ export class AdminReturnsPage {
    * Preview line used by the original chat sidebar.
    */
   chatPreview(session: AdminChatSessionRow): string {
-    return session.last_message_preview || session.title || session.preview || 'Chat';
+    if (session.metadata?.intelligence?.filter_status !== 'ready') return 'Ngữ cảnh đang được lọc / chờ cập nhật';
+    return session.last_message_preview || 'Hội thoại đã lọc';
   }
 
   /**
@@ -1012,36 +1110,37 @@ export class AdminReturnsPage {
    * Risk level badge for mental health & safety governance.
    */
   chatRiskBadge(session: AdminChatSessionRow | null | undefined): { label: string; tone: string; icon: string } {
-    const raw = (session as unknown as Record<string, unknown>)?.['risk_level'] || (session as unknown as Record<string, Record<string, Record<string, unknown>>>)?.['metadata']?.['handoff_summary']?.['risk'] || 'green';
+    const raw = session?.risk_level || session?.metadata?.handoff_summary?.risk;
+    if (!raw || session?.metadata?.intelligence?.filter_status !== 'ready') return { label: 'Chưa đánh giá / Chờ lọc', tone: 'neutral', icon: '—' };
     const risk = String(raw).toLowerCase();
     if (risk === 'red') return { label: 'Khẩn cấp / Cần giám sát', tone: 'danger', icon: '🔴' };
     if (risk === 'orange') return { label: 'Cảnh báo tiêu cực', tone: 'caution', icon: '🟠' };
     if (risk === 'yellow') return { label: 'Cần chú ý', tone: 'warning', icon: '🟡' };
-    return { label: 'Bình thường', tone: 'success', icon: '🟢' };
+    return risk === 'green' ? { label: 'Bình thường', tone: 'success', icon: '🟢' } : { label: 'Chưa đánh giá', tone: 'neutral', icon: '—' };
   }
 
   /**
    * Sentiment label for customer emotion tracking.
    */
   chatSentimentBadge(session: AdminChatSessionRow | null | undefined): { label: string; tone: string } {
-    const sentiment = (session as unknown as Record<string, Record<string, Record<string, unknown>>>)?.['metadata']?.['handoff_summary']?.['sentiment'];
+    const sentiment = session?.metadata?.handoff_summary?.sentiment;
     if (sentiment === 'positive') return { label: 'Tích cực', tone: 'success' };
     if (sentiment === 'negative') return { label: 'Tiêu cực / Bức xúc', tone: 'danger' };
-    return { label: 'Trung tính', tone: 'neutral' };
+    return { label: sentiment === 'neutral' ? 'Trung tính' : 'Chưa đánh giá', tone: 'neutral' };
   }
 
   /**
    * Summary problem and wanted outcome.
    */
   chatSummaryInfo(session: AdminChatSessionRow | null | undefined) {
-    const summary = (session as unknown as Record<string, Record<string, Record<string, unknown>>>)?.['metadata']?.['handoff_summary'];
+    const summary = session?.metadata?.handoff_summary;
     if (!summary) return null;
     return {
-      problem: String(summary['problem'] || summary['summary'] || ''),
-      wanted: String(summary['wanted'] || ''),
-      failedApproaches: Array.isArray(summary['failed_approaches']) ? summary['failed_approaches'] as string[] : [],
-      verifiedStatus: String(summary['verified_status'] || ''),
-      supervisorRequired: Boolean((session as unknown as Record<string, Record<string, unknown>>)?.['metadata']?.['supervisor_required']),
+      problem: summary.problem || summary.summary || '',
+      wanted: summary.wanted || '',
+      failedApproaches: summary.failed_approaches || [],
+      verifiedStatus: summary.verified_status || '',
+      supervisorRequired: Boolean(session?.metadata?.supervisor_required),
     };
   }
 
@@ -1049,6 +1148,7 @@ export class AdminReturnsPage {
    * Product cards attached to a chat message.
    */
   productsOf(message: AdminChatMessageRow): Array<{ product_id: string; name?: string; image_url?: string; sale_price?: number; base_price?: number }> {
+    if (!this.chatMessageReady(message)) return [];
     const ids = new Set([...(message.product_ids || []), ...(message.metadata?.product_ids || [])]);
     return this.chatProducts().filter((product) => ids.has(product.product_id));
   }

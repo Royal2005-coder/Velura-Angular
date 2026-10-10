@@ -1,4 +1,4 @@
-import { createAdminPage } from '../../../testing/admin-testing';
+import { createAdminPage, lastAdminFixture } from '../../../testing/admin-testing';
 import { AdminReturnsPage } from './admin-returns.page';
 import { TestBed } from '@angular/core/testing';
 import { HttpErrorResponse } from '@angular/common/http';
@@ -188,5 +188,122 @@ describe('AdminReturnsPage', () => {
     expect(saved?.confirmed).toBe(true);
     expect(saved?.action).toBe('moderate');
     expect(saved?.messageId).toBe('message');
+  });
+
+  it('quarantines pending text and products rather than trusting a raw server turn', async () => {
+    const page = await createAdminPage(AdminReturnsPage);
+    const pending: AdminReviewedChatMessage = { message_id: 'pending', text: 'unsafe raw text', moderation_status: 'pending', product_ids: ['product'] };
+    page.chatProducts.set([{ product_id: 'product' }]);
+    expect(page.safeChatText(pending)).not.toContain('unsafe raw text');
+    expect(page.productsOf(pending)).toEqual([]);
+    expect(page.chatMessageReady(pending)).toBe(false);
+    expect(page.chatRiskBadge({ session_id: 's', risk_level: 'green', metadata: { intelligence: { filter_status: 'outage' } } }).tone).toBe('neutral');
+    page.selectedChat.set({ session_id: 's' }); page.messages.set([pending]);
+    const fixture = lastAdminFixture(); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).not.toContain('unsafe raw text');
+  });
+
+  it('does not allow replies or takeover when another staff member owns the case', async () => {
+    const page = await createAdminPage(AdminReturnsPage);
+    TestBed.inject(AdminSessionService).applyAuthContext({ role: 'admin_operator_cskh_dt', isAdmin: true, user: { id: 'viewer' }, profile: { is_active: true }, allowedModules: ['returns'] });
+    page.selectedChat.set({ session_id: 's', assigned_to: 'other-staff', handoff_status: 'assigned' });
+    expect(page.canReply()).toBe(false);
+    expect(page.canJoinChat()).toBe(false);
+  });
+
+  it('requires re-confirmation after structured summary corrections and sends those fields', async () => {
+    const page = await createAdminPage(AdminReturnsPage);
+    TestBed.inject(AdminSessionService).applyAuthContext({ role: 'admin_operator_cskh_dt', isAdmin: true, profile: { is_active: true }, allowedModules: ['returns'] });
+    page.selectedChat.set({ session_id: 's', metadata: { handoff_summary: { problem: 'Giao hàng muộn', wanted: 'Xác minh lịch giao', failed_approaches: ['Tra cứu'] } } });
+    page.openChatReview(); page.chatReviewAction.set('summary'); page.chatReviewNote.set('Đã xác minh nội dung'); page.chatReviewConfirmed.set(true);
+    const input = document.createElement('input'); input.value = 'Cập nhật lịch giao';
+    page.setChatCaseField('summaryWanted', { target: input } as unknown as Event);
+    const review = vi.spyOn(TestBed.inject(AdminChatReviewService), 'review').mockReturnValue(of({}));
+    page.saveChatReview(new Event('submit'));
+    expect(review).not.toHaveBeenCalled();
+    page.chatReviewConfirmed.set(true); page.saveChatReview(new Event('submit'));
+    expect(review).toHaveBeenCalledWith('s', expect.objectContaining({ action: 'summary', confirmed: true, summary: { problem: 'Giao hàng muộn', wanted: 'Cập nhật lịch giao', failed_approaches: ['Tra cứu'] } }));
+  });
+
+  it('refuses an offer that is no longer in the server eligible set', async () => {
+    const page = await createAdminPage(AdminReturnsPage);
+    TestBed.inject(AdminSessionService).applyAuthContext({ role: 'admin_operator_cskh_dt', isAdmin: true, profile: { is_active: true }, allowedModules: ['returns'] });
+    page.selectedChat.set({ session_id: 's', metadata: { eligible_offers: [{ offer_id: 'approved', title: 'Ưu đãi thật' }] } });
+    page.openChatReview(); page.chatReviewAction.set('offer'); page.selectedOfferId.set('expired');
+    page.chatReviewNote.set('Xác nhận điều kiện'); page.chatReviewConfirmed.set(true);
+    const review = vi.spyOn(TestBed.inject(AdminChatReviewService), 'review');
+    page.saveChatReview(new Event('submit'));
+    expect(review).not.toHaveBeenCalled();
+    expect(page.chatReviewError()).not.toBeNull();
+  });
+
+  it('opens the exact reported case even when it is outside the current sidebar page', async () => {
+    const getChatMessages = vi.fn(() => of({ session: { session_id: 'reported-case' }, messages: [] }));
+    const page = await createAdminPage(AdminReturnsPage, { getChatMessages }, { zone: 'chat', sessionId: 'reported-case' });
+    expect(page.selectedChat()?.session_id).toBe('reported-case');
+    expect(getChatMessages).toHaveBeenCalledWith('reported-case', { limit: '150' });
+  });
+
+  it('refreshes context during human review without discarding drafts and invalidates stale confirmation', async () => {
+    const page = await createAdminPage(AdminReturnsPage, { getChatMessages: () => of({ session: { session_id: 's', metadata: { intelligence: { source_seq: 2, filter_status: 'ready' } } }, messages: [] }) });
+    TestBed.inject(AdminSessionService).applyAuthContext({ role: 'admin_operator_cskh_dt', isAdmin: true, profile: { is_active: true }, allowedModules: ['returns'] });
+    page.selectedChat.set({ session_id: 's', metadata: { intelligence: { source_seq: 1, filter_status: 'ready' } } });
+    page.openChatReview(); page.chatReviewNote.set('Nhận xét đang soạn'); page.chatReviewConfirmed.set(true); page.replyDraft.set('Phản hồi đang soạn');
+    page.refreshChatContext();
+    expect(page.chatReviewConfirmed()).toBe(false);
+    expect(page.chatReviewNote()).toBe('Nhận xét đang soạn');
+    expect(page.replyDraft()).toBe('Phản hồi đang soạn');
+    expect(page.selectedChat()?.metadata?.intelligence?.source_seq).toBe(2);
+  });
+
+  it('requires explicit confirmation before retrying the actual persisted failed report', async () => {
+    const page = await createAdminPage(AdminReturnsPage);
+    TestBed.inject(AdminSessionService).applyAuthContext({ role: 'admin_operator_cskh_dt', isAdmin: true, profile: { is_active: true }, allowedModules: ['returns'] });
+    page.selectedChat.set({ session_id: 's', metadata: { report_status: { report_id: 'real-report', state: 'failed' } } });
+    page.openChatReview(); page.chatReviewAction.set('report_retry'); page.chatReviewNote.set('Đã cập nhật cấu hình nhận báo cáo');
+    const response = new Subject<AdminChatMessagesPayload>();
+    const review = vi.spyOn(TestBed.inject(AdminChatReviewService), 'review').mockReturnValue(response);
+    page.saveChatReview(new Event('submit'));
+    expect(review).not.toHaveBeenCalled();
+    page.chatReviewConfirmed.set(true); page.saveChatReview(new Event('submit'));
+    expect(review).toHaveBeenCalledWith('s', expect.objectContaining({ action: 'report_retry', reportId: 'real-report', confirmed: true }));
+    expect(page.chatReviewFeedback()).toBeNull();
+    response.error(new Error('configuration still invalid'));
+    expect(page.chatReviewFeedback()).toBeNull();
+    expect(page.chatReviewNote()).toBe('Đã cập nhật cấu hình nhận báo cáo');
+  });
+
+  it('keeps linked tickets out of legacy replies and lifecycle writes and opens canonical filtered chat', async () => {
+    const respondTicket = vi.fn(() => of({}));
+    const resolveTicket = vi.fn(() => of({}));
+    const closeTicket = vi.fn(() => of({}));
+    const getChatMessages = vi.fn(() => of({ session: { session_id: 'canonical-chat' }, messages: [{ message_id: 'filtered', text: 'Ngữ cảnh đã lọc', moderation_status: 'visible' }] }));
+    const page = await createAdminPage(AdminReturnsPage, { respondTicket, resolveTicket, closeTicket, getChatMessages });
+    TestBed.inject(AdminSessionService).applyAuthContext({ role: 'admin_operator_cskh_dt', isAdmin: true, profile: { is_active: true }, allowedModules: ['returns'] });
+    const linked = { ticket_id: 'linked-ticket', chat_session_id: 'canonical-chat', status: 'processing', version: 1, title: 'Raw legacy title', description: 'Raw legacy description', admin_reply: 'Raw legacy response' };
+    page.tickets.set([linked]); page.zone.set('support');
+    const form = document.createElement('form');
+    const note = document.createElement('textarea'); note.name = 'note'; note.value = 'Raw response must not bypass the filter'; form.append(note);
+    for (const action of ['reply', 'resolve', 'close'] as const) {
+      expect(page.canTicketAction(linked, action)).toBe(false);
+      page.openTicketAction(action, linked.ticket_id);
+      expect(page.actionType()).toBeNull();
+      page.selectedTicket.set(linked); page.actionType.set(action);
+      page.submitAction({ preventDefault: () => undefined, target: form } as unknown as Event);
+    }
+    expect(respondTicket).not.toHaveBeenCalled();
+    expect(resolveTicket).not.toHaveBeenCalled();
+    expect(closeTicket).not.toHaveBeenCalled();
+    page.selectedTicket.set(linked); page.ticketDetailOpen.set(true);
+    const fixture = lastAdminFixture(); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).not.toContain('Raw legacy title');
+    expect(fixture.nativeElement.textContent).not.toContain('Raw legacy description');
+    expect(fixture.nativeElement.textContent).not.toContain('Raw legacy response');
+    page.openLinkedTicketChat(linked);
+    expect(page.zone()).toBe('chat');
+    expect(page.selectedChat()?.session_id).toBe('canonical-chat');
+    expect(page.ticketDetailOpen()).toBe(false);
+    expect(getChatMessages).toHaveBeenCalledWith('canonical-chat', { limit: '150' });
+    expect(page.messages()[0]?.text).toBe('Ngữ cảnh đã lọc');
   });
 });

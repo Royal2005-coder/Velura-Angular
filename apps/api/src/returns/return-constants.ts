@@ -131,5 +131,5 @@ export const RETURN_SELECT = [
 export const TICKET_SELECT = [
   "ticket_id", "user_id", "guest_phone", "guest_email", "title",
   "description", "priority", "status", "admin_reply", "csat_score",
-  "created_at", "resolved_at", "version"
+  "created_at", "resolved_at", "version", "chat_session_id"
 ].join(",");

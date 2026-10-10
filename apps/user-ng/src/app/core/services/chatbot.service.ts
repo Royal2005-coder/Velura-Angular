@@ -5,6 +5,7 @@ import { AuthService } from './auth.service';
 
 /** Server-owned conversation routing; every non-AI state suppresses new AI output. */
 export type ChatHandoffStatus = 'ai' | 'requested' | 'assigned' | 'closed';
+/** Public filtered turn; pending text and attachments are not publishable transcript content. */
 export interface ChatMessage {
   message_id: string;
   session_id?: string;
@@ -12,6 +13,7 @@ export interface ChatMessage {
   text: string;
   created_at: string;
   product_ids?: string[];
+  moderation_status?: 'pending' | 'visible' | 'restricted';
   metadata?: {
     local_greeting?: boolean;
     typing?: boolean;
@@ -23,6 +25,7 @@ export interface ChatMessage {
     system?: boolean;
     speaker?: 'SYSTEM' | 'HUMAN' | 'AI' | 'CUSTOMER';
     agent_name?: string;
+    otp_required?: boolean;
   };
 }
 
@@ -33,6 +36,7 @@ export interface ChatAttachment {
   mimeType: string;
 }
 
+/** Live catalog card; a missing variant cannot be replaced with a product ID at checkout. */
 export interface ChatProduct {
   product_id: string;
   name: string;
@@ -59,6 +63,7 @@ export interface ChatBlog {
   read_minutes?: number;
 }
 
+/** Owned conversation history with server-controlled lifecycle routing. */
 export interface ChatSession {
   session_id: string;
   title?: string;
@@ -67,8 +72,9 @@ export interface ChatSession {
   handoff_status?: ChatHandoffStatus;
 }
 
+/** Authoritative filtered transcript and current catalog state returned after reads or committed actions. */
 export interface ChatSendResponse {
-  session?: { session_id?: string; handoff_status?: ChatHandoffStatus };
+  session?: { session_id?: string; handoff_status?: ChatHandoffStatus; metadata?: { outcome?: { resolution?: string; finalSentiment?: string; rating?: number }; rating?: number; previous_session_id?: string } };
   messages?: ChatMessage[];
   products?: ChatProduct[];
   blogs?: ChatBlog[];
@@ -107,6 +113,8 @@ export class ChatbotService {
     mode: string;
     message: string;
     attachment?: ChatAttachment | null;
+    orderId?: string;
+    guestAccessToken?: string;
   }): Observable<ChatSendResponse> {
     return this.api.post<ChatSendResponse>('/api/v1/chat/messages', payload);
   }
@@ -125,6 +133,11 @@ export class ChatbotService {
     return this.api.get<ChatSendResponse>(
       `/api/v1/chat/${encodeURIComponent(sessionId)}/messages?guestId=${encodeURIComponent(guestId)}&limit=150`,
     );
+  }
+
+  /** Reopens the owned closed case or records its customer rating; server validates lifecycle state. */
+  lifecycle(sessionId: string, body: { guestId: string; action: 'reopen' | 'rating'; text?: string; rating?: number }): Observable<ChatSendResponse> {
+    return this.api.post<ChatSendResponse>(`/api/v1/chat/${encodeURIComponent(sessionId)}/lifecycle`, body);
   }
 
   /**

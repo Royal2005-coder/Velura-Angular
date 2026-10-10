@@ -93,7 +93,7 @@ export function stubCatalogService(): Pick<CatalogService, 'getCategories' | 'ge
 
 export function stubChatbotService(): Pick<
   ChatbotService,
-  'sendMessage' | 'listSessions' | 'listMessages' | 'deleteSession' | 'guestId' | 'saveSessionId' | 'clearSessionId' | 'activeHandoff' | 'activeSession'
+  'sendMessage' | 'listSessions' | 'listMessages' | 'deleteSession' | 'lifecycle' | 'guestId' | 'saveSessionId' | 'clearSessionId' | 'activeHandoff' | 'activeSession'
 > {
   return {
     activeHandoff: signal<ChatHandoffStatus>('ai'),
@@ -102,6 +102,7 @@ export function stubChatbotService(): Pick<
     listSessions: () => of({ rows: [] }),
     listMessages: () => of({ messages: [], products: [], blogs: [] }),
     deleteSession: () => of({}),
+    lifecycle: () => of({}),
     guestId: () => '00000000-0000-4000-8000-000000000001',
     saveSessionId: () => undefined,
     clearSessionId: () => undefined,

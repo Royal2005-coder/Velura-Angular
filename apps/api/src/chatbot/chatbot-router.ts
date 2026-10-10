@@ -53,6 +53,12 @@ export async function handleChatbotRoute({ req, res, url, parts, context, header
       return true;
     }
 
+    if (req.method === "POST" && parts[4] === "lifecycle" && parts.length === 5) {
+      applyChatRateLimit(req, res, limiter, requestMeta.ipAddress);
+      sendJson(res, 200, await service.lifecycle(context, sessionId, await readJson(req, config.maxBodyBytes)), headers);
+      return true;
+    }
+
     if (req.method === "DELETE" && parts.length === 4) {
       applyChatRateLimit(req, res, limiter, requestMeta.ipAddress);
       const body = await readJson(req, config.maxBodyBytes).catch(() => ({}));

@@ -52,6 +52,18 @@ export class PersonalColorModel {
       return profile;
     }));
   }
+  /** Refresh personalization with an atomic manual season choice. */
+  confirmManual(season: string, version: number, subtype?: string): Observable<PersonalColorProfile> {
+    return this.scoped(() => this.api.post<PersonalColorProfile>('/api/user/personal-color/manual', {
+      season,
+      subtype: subtype || season,
+      expected_version: version,
+    })).pipe(map((profile) => {
+      if (profile.personal_color?.status !== 'CONFIRMED') throw new Error('Kết quả chưa được xác nhận.');
+      this.profileModel.revision.update((revision) => revision + 1);
+      return profile;
+    }));
+  }
   private scoped<T>(request: () => Observable<T>): Observable<T> {
     return defer(() => {
       const session = this.auth.session(), guest = guestSessionId();

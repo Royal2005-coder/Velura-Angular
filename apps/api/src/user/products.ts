@@ -187,18 +187,35 @@ export async function handleProductsRoute(
 
       const requestUrl = new URL(req.url || "/api/user/products", "http://localhost");
       const lite = requestUrl.searchParams.get("lite") === "1";
+      const searchQuery = (requestUrl.searchParams.get("q") || requestUrl.searchParams.get("search") || "").trim();
       const now = Date.now();
+
+      const filterBySearch = <T extends JsonObject>(items: T[]): T[] => {
+        if (!searchQuery) return items;
+        const normQ = searchQuery.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[đĐ]/g, "d");
+        const tokens = normQ.split(/\s+/).filter(Boolean);
+        return items.filter((p) => {
+          const name = String(p.name || "").toLowerCase();
+          const normName = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[đĐ]/g, "d");
+          const cat = String(p.category_name || "").toLowerCase();
+          const normCat = cat.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[đĐ]/g, "d");
+          const brand = String(p.brand || "").toLowerCase();
+          const normBrand = brand.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[đĐ]/g, "d");
+          if (name.includes(searchQuery.toLowerCase()) || normName.includes(normQ) || cat.includes(searchQuery.toLowerCase()) || normCat.includes(normQ)) return true;
+          return tokens.some((t) => normName.includes(t) || normCat.includes(t) || normBrand.includes(t));
+        });
+      };
 
       if (lite) {
         if (liteProductsCache && (now - liteProductsCache.cachedAt < liteProductsCache.ttlMs)) {
-          return sendJson(res, 200, liteProductsCache.data, {
+          return sendJson(res, 200, filterBySearch(liteProductsCache.data), {
             ...corsHeaders,
             "cache-control": "public, max-age=15, s-maxage=30, stale-while-revalidate=120"
           });
         }
       } else {
         if (productsCache && (now - productsCache.cachedAt < productsCache.ttlMs)) {
-          return sendJson(res, 200, productsCache.data, {
+          return sendJson(res, 200, filterBySearch(productsCache.data), {
             ...corsHeaders,
             "cache-control": "public, max-age=15, s-maxage=30, stale-while-revalidate=120"
           });
@@ -255,7 +272,7 @@ export async function handleProductsRoute(
           };
         });
         liteProductsCache = { data: liteRows, cachedAt: now, ttlMs: PRODUCTS_CACHE_TTL_MS };
-        return sendJson(res, 200, liteRows, {
+        return sendJson(res, 200, filterBySearch(liteRows), {
           ...corsHeaders,
           "cache-control": "public, max-age=15, s-maxage=30, stale-while-revalidate=120"
         });
@@ -293,7 +310,7 @@ export async function handleProductsRoute(
       });
 
       productsCache = { data: productsWithVariants, cachedAt: now, ttlMs: PRODUCTS_CACHE_TTL_MS };
-      return sendJson(res, 200, productsWithVariants, {
+      return sendJson(res, 200, filterBySearch(productsWithVariants), {
         ...corsHeaders,
         "cache-control": "public, max-age=15, s-maxage=30, stale-while-revalidate=120"
       });

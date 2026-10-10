@@ -48,6 +48,7 @@ export interface ColorRepository {
   get(principal: ColorPrincipal, id: string): Promise<ColorAnalysis>;
   finish(principal: ColorPrincipal, id: string, patch: Pick<ColorAnalysis, "status" | "result" | "error">): Promise<ColorAnalysis>;
   confirm(principal: ColorPrincipal, id: string, version: number): Promise<{ version: number; personal_color: ConfirmedColor }>;
+  confirmManual(principal: ColorPrincipal, personalColor: ConfirmedColor, version: number): Promise<{ version: number; personal_color: ConfirmedColor }>;
 }
 /** Adapter must read and delete only owner-authorized private AI assets. */
 export interface ColorAssets {

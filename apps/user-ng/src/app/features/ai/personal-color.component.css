@@ -502,3 +502,239 @@
   align-items: center;
   gap: 12px;
 }
+
+/* Mode Switcher Tabs */
+.pc-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 20px 0;
+  border-bottom: 2px solid var(--line, #E8DFD6);
+  padding-bottom: 8px;
+}
+
+.pc-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  background: #FAF8F5;
+  border: 1px solid var(--line, #E8DFD6);
+  border-radius: 24px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--muted, #6B635D);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.pc-tab-btn:hover {
+  color: var(--ink, #2A2522);
+  border-color: var(--terracotta, #C97B63);
+  background: #ffffff;
+}
+
+.pc-tab-btn.is-active {
+  background: var(--terracotta, #C97B63);
+  border-color: var(--terracotta, #C97B63);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(201, 123, 99, 0.25);
+}
+
+/* Manual 4-Season Selection Grid */
+.pc-manual-section {
+  margin: 16px 0;
+}
+
+.pc-manual-intro {
+  margin-bottom: 16px;
+}
+
+.pc-manual-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--ink, #2A2522);
+  margin: 0 0 6px 0;
+}
+
+.pc-manual-desc {
+  font-size: 0.84rem;
+  color: var(--muted, #6B635D);
+  margin: 0;
+  line-height: 1.45;
+}
+
+.pc-seasons-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+@media (max-width: 768px) {
+  .pc-seasons-grid {
+    grid-template-columns: 1fr;
+  }
+  .pc-tabs {
+    flex-direction: column;
+  }
+}
+
+.pc-season-card {
+  background: #ffffff;
+  border: 2px solid var(--line, #E8DFD6);
+  border-radius: 12px;
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+}
+
+.pc-season-card:hover {
+  border-color: #D1B8AC;
+  background: #FDFBF9;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(42, 37, 34, 0.05);
+}
+
+.pc-season-card.is-selected {
+  border-color: var(--terracotta, #C97B63);
+  background: #FFF9F6;
+  box-shadow: 0 0 0 1px var(--terracotta, #C97B63), 0 4px 16px rgba(201, 123, 99, 0.12);
+}
+
+.pc-season-card__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.pc-season-card__radio {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--line, #E8DFD6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: #fff;
+}
+
+.pc-season-card.is-selected .pc-season-card__radio {
+  border-color: var(--terracotta, #C97B63);
+}
+
+.pc-radio-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: transparent;
+  transition: background 0.15s ease;
+}
+
+.pc-radio-dot.is-checked {
+  background: var(--terracotta, #C97B63);
+}
+
+.pc-season-card__names {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex: 1;
+}
+
+.pc-season-card__title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--ink, #2A2522);
+}
+
+.pc-season-card__eng {
+  font-size: 0.8rem;
+  color: var(--muted, #6B635D);
+}
+
+.pc-season-card__badge {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  background: #F4EAE4;
+  color: var(--terracotta, #C97B63);
+  border-radius: 12px;
+}
+
+.pc-season-card__desc {
+  font-size: 0.8rem;
+  color: var(--muted, #6B635D);
+  line-height: 1.45;
+  margin: 0 0 12px 0;
+  flex: 1;
+}
+
+.pc-season-card__swatches-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.pc-season-card__label {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--ink, #2A2522);
+  min-width: 60px;
+}
+
+.pc-season-card__swatches {
+  display: flex;
+  gap: 6px;
+}
+
+.pc-card-swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.pc-season-card__avoided-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pc-season-card__avoided-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.pc-card-avoid-chip {
+  font-size: 0.7rem;
+  padding: 2px 7px;
+  background: #F5F3F0;
+  color: #7A726C;
+  border-radius: 4px;
+}
+
+/* Manual Confirm Bar */
+.pc-manual-confirm-bar {
+  background: #FAF8F5;
+  border: 1px solid var(--line, #E8DFD6);
+  border-radius: 12px;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.pc-manual-confirm-info {
+  font-size: 0.88rem;
+  color: var(--ink, #2A2522);
+}
+

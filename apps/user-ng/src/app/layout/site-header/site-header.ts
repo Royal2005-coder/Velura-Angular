@@ -9,6 +9,7 @@ import { CatalogService } from '../../core/services/catalog.service';
 import { WishlistStore } from '../../core/services/wishlist.store';
 import type { VisualResult } from '../../core/services/visual-search.service';
 import { VisualSearchWorkbench } from '../../shared/visual-search-workbench/visual-search-workbench';
+import { matchesSearchText } from '../../core/utils/search';
 
 /** Maps Gemini Vision detected categories to Velura catalog slugs for routing. */
 const CATEGORY_QUERY_MAP: Record<string, string> = {
@@ -69,16 +70,17 @@ export class SiteHeader {
   ];
 
   readonly instantSuggestions = computed(() => {
-    const q = this.searchQuery().trim().toLowerCase();
+    const q = this.searchQuery().trim();
     if (q.length < 2) return [];
     return this.allProducts()
       .filter((p) => {
-        const nameMatch = p.name.toLowerCase().includes(q);
-        const tagMatch = p.style_tags?.some((t) => t.toLowerCase().includes(q));
-        const colorMatch = p.color_tone?.toLowerCase().includes(q);
-        return nameMatch || tagMatch || colorMatch;
+        const nameMatch = matchesSearchText(p.name, q);
+        const tagMatch = p.style_tags?.some((t) => matchesSearchText(t, q));
+        const colorMatch = matchesSearchText(p.color_tone, q);
+        const catMatch = matchesSearchText(p.category_name, q);
+        return nameMatch || tagMatch || colorMatch || catMatch;
       })
-      .slice(0, 5);
+      .slice(0, 6);
   });
 
   constructor() {
@@ -189,6 +191,14 @@ export class SiteHeader {
     this.searchOpen.set(false);
     void this.router.navigate(['/products'], { queryParams: trimmed ? { q: trimmed } : {} });
   }
+  /**
+   * Handles form submission from pressing Enter or clicking search button.
+   */
+  onSearchSubmit(event: Event): void {
+    event.preventDefault();
+    this.executeSearch(this.searchQuery());
+  }
+
 
   closeSearch(): void {
     this.searchOpen.set(false);

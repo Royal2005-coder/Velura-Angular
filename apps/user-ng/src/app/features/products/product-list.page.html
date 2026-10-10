@@ -11,6 +11,12 @@
     </p>
     <app-visual-search-workbench [hideTrigger]="true" [candidateProductIds]="imageSearchCandidates()" [filters]="visualFilters()" (searchResult)="applyVisualResult($event)" />
     @if (imageMatches() !== null) { <button type="button" class="btn btn--outline" (click)="imageMatches.set(null)">Xóa kết quả tìm bằng ảnh</button> }
+    @if (searchQuery()) {
+      <div class="product-search-active-bar" style="display: flex; align-items: center; justify-content: center; gap: 10px; margin: 12px 0 6px;">
+        <span style="font-size: 0.9375rem; color: var(--ink, #2A2522);">Kết quả tìm kiếm cho: <strong style="color: var(--terracotta, #C97B63);">"{{ searchQuery() }}"</strong></span>
+        <button type="button" class="btn btn--outline btn--sm" (click)="clearSearch()" style="padding: 4px 12px; font-size: 0.8125rem; border-radius: 16px;">✕ Xóa từ khóa</button>
+      </div>
+    }
   </header>
 
   <div class="product-list-layout">

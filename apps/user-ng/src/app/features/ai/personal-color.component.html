@@ -20,7 +20,7 @@
     <div class="pc-result-card pc-result-card--confirmed" aria-label="Màu đã xác nhận">
       <div class="pc-result-badge pc-result-badge--confirmed">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-        ĐÃ XÁC NHẬN TRONG STYLE PROFILE
+        {{ isManualConfirmed() ? 'ĐÃ XÁC NHẬN (CHỌN THỦ CÔNG)' : 'ĐÃ XÁC NHẬN (AI PHÂN TÍCH)' }}
       </div>
       <div class="pc-result-head">
         <h3 class="pc-season-title">Mùa của bạn: {{ seasonTitle(confirmed.season) }}</h3>
@@ -55,15 +55,121 @@
           </div>
         </div>
       }
+      <div class="pc-confirmed-actions" style="margin-top: 18px; display: flex; gap: 10px; flex-wrap: wrap;">
+        <button type="button" class="btn btn--outline btn--sm" (click)="editManually(confirmed.season)">
+          🎨 Đổi mùa sắc tố khác (Thủ công)
+        </button>
+        <button type="button" class="btn btn--outline btn--sm" (click)="activeTab.set('ai')">
+          📸 Chụp ảnh phân tích lại (AI)
+        </button>
+      </div>
     </div>
   }
 
-  @if (!capabilities()?.enabled) {
-    <div class="pc-notice pc-notice--disabled" role="status">
-      <p>Hệ thống AI Personal Color đang chuẩn hóa mô hình và chính sách kiểm duyệt. Style Quiz và các gợi ý thời trang hiện tại vẫn hoạt động bình thường.</p>
-      @if (capabilities()?.reason) { <p class="pc-notice-reason">{{ capabilities()?.reason }}</p> }
+  <!-- Mode Switcher Tabs -->
+  <div class="pc-tabs" role="tablist" aria-label="Phương thức xác định màu sắc cá nhân">
+    <button
+      type="button"
+      class="pc-tab-btn"
+      role="tab"
+      [attr.aria-selected]="activeTab() === 'ai'"
+      [class.is-active]="activeTab() === 'ai'"
+      (click)="activeTab.set('ai')"
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+        <circle cx="12" cy="13" r="4"/>
+      </svg>
+      <span>AI Phân tích qua ảnh chân dung</span>
+    </button>
+    <button
+      type="button"
+      class="pc-tab-btn"
+      role="tab"
+      [attr.aria-selected]="activeTab() === 'manual'"
+      [class.is-active]="activeTab() === 'manual'"
+      (click)="activeTab.set('manual')"
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M12 2a7 7 0 0 0-7 7c0 3.86 3.14 7 7 7s7-3.14 7-7a7 7 0 0 0-7-7z"/>
+      </svg>
+      <span>Chọn thủ công chuẩn 4 mùa (Manual)</span>
+    </button>
+  </div>
+
+  @if (activeTab() === 'manual') {
+    <div class="pc-manual-section">
+      <div class="pc-manual-intro">
+        <h4 class="pc-manual-title">Bảng phân loại 4 mùa sắc tố cá nhân chuẩn quốc tế</h4>
+        <p class="pc-manual-desc">
+          Nếu bạn đã biết rõ mùa sắc tố của mình hoặc muốn tự chọn phong cách phù hợp nhất, hãy chọn 1 trong 4 mùa bên dưới:
+        </p>
+      </div>
+
+      <div class="pc-seasons-grid">
+        @for (s of seasons; track s.id) {
+          <div
+            class="pc-season-card"
+            [class.is-selected]="selectedManualSeason() === s.id"
+            (click)="selectManualSeason(s.id)"
+          >
+            <div class="pc-season-card__header">
+              <div class="pc-season-card__radio">
+                <span class="pc-radio-dot" [class.is-checked]="selectedManualSeason() === s.id"></span>
+              </div>
+              <div class="pc-season-card__names">
+                <strong class="pc-season-card__title">{{ s.name }}</strong>
+                <span class="pc-season-card__eng">({{ s.english }})</span>
+              </div>
+              <span class="pc-season-card__badge">{{ s.undertoneBadge }}</span>
+            </div>
+
+            <p class="pc-season-card__desc">{{ s.description }}</p>
+
+            <div class="pc-season-card__swatches-wrap">
+              <span class="pc-season-card__label">Bảng màu tôn da:</span>
+              <div class="pc-season-card__swatches">
+                @for (c of s.palette; track c) {
+                  <span class="pc-card-swatch" [style.background-color]="capabilities()?.palette?.[c] || '#DDD'" [title]="colorLabel(c)"></span>
+                }
+              </div>
+            </div>
+
+            <div class="pc-season-card__avoided-wrap">
+              <span class="pc-season-card__label">Hạn chế:</span>
+              <div class="pc-season-card__avoided-chips">
+                @for (c of s.avoided; track c) {
+                  <span class="pc-card-avoid-chip">{{ colorLabel(c) }}</span>
+                }
+              </div>
+            </div>
+          </div>
+        }
+      </div>
+
+      <div class="pc-manual-confirm-bar">
+        <div class="pc-manual-confirm-info">
+          <span>Đang chọn: <strong>{{ selectedSeasonData().name }} ({{ selectedSeasonData().english }})</strong> — {{ selectedSeasonData().undertone }}</span>
+        </div>
+        <button
+          type="button"
+          class="btn btn--primary pc-btn-confirm"
+          [disabled]="!canConfirmManual()"
+          (click)="confirmManual()"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+          Xác nhận & lưu mùa này vào Style Profile
+        </button>
+      </div>
     </div>
   } @else {
+    @if (!capabilities()?.enabled) {
+      <div class="pc-notice pc-notice--disabled" role="status">
+        <p>Hệ thống AI Personal Color đang chuẩn hóa mô hình và chính sách kiểm duyệt. Bạn có thể sử dụng tab <strong>Chọn thủ công chuẩn 4 mùa</strong> ở trên để xác nhận màu sắc ngay.</p>
+        @if (capabilities()?.reason) { <p class="pc-notice-reason">{{ capabilities()?.reason }}</p> }
+      </div>
+    } @else {
     <!-- Photo Guidelines Box -->
     <div class="pc-guide-box">
       <h4 class="pc-guide-title">
@@ -200,10 +306,14 @@
                 Huỷ phân tích — giữ nguyên hồ sơ
               </button>
             }
+              <button type="button" class="btn btn--outline" (click)="editManually(result.season)">
+                🎨 Tùy chỉnh / Chọn thủ công mùa này
+              </button>
           </div>
         </div>
       }
     }
+  }
   }
 
   @if (error()) {

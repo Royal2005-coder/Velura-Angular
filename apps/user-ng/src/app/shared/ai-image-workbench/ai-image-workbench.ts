@@ -525,11 +525,15 @@ export class AiImageWorkbench {
       this.job.set(response.job);
       this.remember(response.job.id);
       await this.poll(epoch);
-    } catch {
+    } catch (err: unknown) {
       if (epoch === this.generation) {
         this.busy.set(false);
         this.stopLoadingTimer();
-        this.error.set('Yêu cầu AI chưa hoàn tất. Ảnh gốc vẫn được giữ nguyên.');
+        let message = 'Yêu cầu AI chưa hoàn tất. Ảnh gốc vẫn được giữ nguyên.';
+        if (err instanceof Error && err.message) {
+          message = err.message;
+        }
+        this.error.set(message);
       }
     }
   }
@@ -568,6 +572,9 @@ export class AiImageWorkbench {
       current.status === 'validation_failed'
     )
       this.pendingKey = '';
+    if (current.status === 'failed' || current.status === 'validation_failed') {
+      this.error.set(this.statusLabel(current));
+    }
     if (current.status !== 'success') return;
     if (current.task === 'image_quality') {
       this.qualityPassed.set(current.gate?.valid === true);

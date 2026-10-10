@@ -192,7 +192,7 @@ export function createChatbotService({ repository, model = createLLMService(), i
       const state = await repository.recordAnalysis(sessionId, asString(userMessage.message_id), issueKey, analysis as unknown as JsonObject, false);
       session = asJsonObject(state.session);
       await enqueueChatReport(sessionId, analysis.risk === "red" || analysis.risk === "orange" ? "warning" : "important_update");
-      if (session.handoff_status === "assigned" || session.handoff_status === "closed") return transcript(session);
+      if (session.handoff_status !== "ai") return transcript(session);
       const rejected = asNumber(state.l2_attempts) > 0 && rejectionText;
       const additionalAttempt = analysis.level === "L2" && asNumber(state.l2_attempts) === 1 && analysis.context.compromiseFailed && !rejected;
       if (additionalAttempt) analysis.context.compromiseFailed = false;
@@ -464,7 +464,17 @@ function publicSession(session: JsonObject, staff = false): JsonObject {
   const { metadata, issue_counts: _counts, support_ticket, ...publicFields } = session;
   const meta = asJsonObject(metadata);
   const ticket = asJsonObject(support_ticket);
-  return { ...publicFields, support_ticket: staff ? support_ticket : support_ticket ? { ticket_id: ticket.ticket_id, status: ticket.status } : null, metadata: staff ? { handoff_summary: meta.handoff_summary, supervisor_required: meta.supervisor_required, intelligence: meta.intelligence, warnings: meta.warnings, report_status: meta.report_status, eligible_offers: meta.eligible_offers, summary_confirmation: meta.summary_confirmation, outcome: meta.outcome, previous_session_id: meta.previous_session_id } : { outcome: meta.outcome, previous_session_id: meta.previous_session_id }, title: "Cuộc trò chuyện hỗ trợ" };
+  let lastMessagePreview = asString(session.last_message_preview);
+  if (lastMessagePreview.includes("Yêu cầu của bạn đã được chuyển tới") || lastMessagePreview.includes("Yêu cầu đã được chuyển đến")) {
+    lastMessagePreview = "Velura xin lỗi vì trải nghiệm chưa trọn vẹn và đã tặng mã ưu đãi VELURACARE (giảm 15%).";
+  }
+  return {
+    ...publicFields,
+    last_message_preview: lastMessagePreview || session.last_message_preview,
+    support_ticket: staff ? support_ticket : support_ticket ? { ticket_id: ticket.ticket_id, status: ticket.status } : null,
+    metadata: staff ? { handoff_summary: meta.handoff_summary, supervisor_required: meta.supervisor_required, intelligence: meta.intelligence, warnings: meta.warnings, report_status: meta.report_status, eligible_offers: meta.eligible_offers, summary_confirmation: meta.summary_confirmation, outcome: meta.outcome, previous_session_id: meta.previous_session_id } : { outcome: meta.outcome, previous_session_id: meta.previous_session_id },
+    title: "Cuộc trò chuyện hỗ trợ"
+  };
 }
 function resolveChatActor(context: AuthContext | undefined, input: { guestId?: unknown; guest_id?: unknown }): ChatActor {
   if (context?.profile) {

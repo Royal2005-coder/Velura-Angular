@@ -171,14 +171,14 @@ export function createChatbotService({ repository, model = createLLMService(), i
       const state = await repository.recordAnalysis(sessionId, asString(userMessage.message_id), issueKey, analysis as unknown as JsonObject, false);
       session = asJsonObject(state.session);
       await enqueueChatReport(sessionId, analysis.risk === "red" || analysis.risk === "orange" ? "warning" : "important_update");
-      if (session.handoff_status !== "ai") return transcript(session);
+      if (session.handoff_status === "assigned" || session.handoff_status === "closed") return transcript(session);
       const rejected = asNumber(state.l2_attempts) > 0 && rejectionText;
       const additionalAttempt = analysis.level === "L2" && asNumber(state.l2_attempts) === 1 && analysis.context.compromiseFailed && !rejected;
       if (additionalAttempt) analysis.context.compromiseFailed = false;
-      if (analysis.intent === "human" || analysis.level === "L3" || analysis.context.authorityExceeded || analysis.context.compromiseFailed || rejected || analysis.risk === "red" || (analysis.level === "L2" && asNumber(state.l2_attempts) >= 2) || asNumber(state.occurrences) >= 3) {
+      if (session.handoff_status === "ai" && (analysis.intent === "human" || analysis.level === "L3" || analysis.context.authorityExceeded || analysis.context.compromiseFailed || rejected || analysis.risk === "red" || (analysis.level === "L2" && asNumber(state.l2_attempts) >= 2) || asNumber(state.occurrences) >= 3)) {
         return escalate(session, actor, userMessage, analysis, history, rejected ? "COMPROMISE_REJECTED" : analysis.context.authorityExceeded ? "AUTHORITY_EXCEEDED" : analysis.context.compromiseFailed ? "COMPROMISE_FAILED" : analysis.risk === "red" ? "SEVERE_CONTENT" : "ISSUE_ATTEMPTS_EXHAUSTED", Boolean(order));
       }
-      if (analysis.risk === "orange" && analysis.moderation !== "none") return escalate(session, actor, userMessage, analysis, history, "CONTENT_MODERATION", Boolean(order));
+      if (session.handoff_status === "ai" && analysis.risk === "orange" && analysis.moderation !== "none") return escalate(session, actor, userMessage, analysis, history, "CONTENT_MODERATION", Boolean(order));
       if (analysis.intent === "order" && !order) {
         const result = await repository.commitAiTurn(sessionId, asNumber(turn.epoch), asNumber(userMessage.sequence), { text: "Để bảo vệ thông tin riêng tư, hãy chọn đúng đơn hàng và đăng nhập tài khoản sở hữu đơn hoặc xác thực OTP của đơn đó.", metadata: { system: true, otp_required: !actor.profileUserId }, product_ids: [] }, []);
         return transcript(isJsonObject(result.session) ? result.session : session);

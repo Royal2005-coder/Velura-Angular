@@ -29,19 +29,27 @@ update public.support_ticket set description='{"summary":"Cuộc trò chuyện �
 create or replace function public.chat_sequence_message() returns trigger
 language plpgsql security definer set search_path=pg_catalog,public as $$
 begin
-  if new.sender in ('user','agent') and not coalesce((new.metadata->>'system')::boolean,false) then
-    new.metadata:=jsonb_build_object('pending_original_text',new.text,'pending_original_metadata',new.metadata,'filter_verified',false,'speaker',case when new.sender='agent' then 'HUMAN' else 'CUSTOMER' end);
-    new.text:='[Đang lọc nội dung để bảo vệ cuộc trò chuyện]'; new.moderation_status:='pending';
+  if new.moderation_status is null then
+    new.moderation_status := 'visible';
   end if;
-  if new.sender='bot' or coalesce((new.metadata->>'system')::boolean,false) then
-    new.metadata:=new.metadata||jsonb_build_object('filter_verified',true);
+  if new.metadata is null then
+    new.metadata := '{}'::jsonb;
   end if;
-  update public.chat_session set next_sequence=next_sequence+1,last_message_at=now(),last_message_preview=left(new.text,180),context_revision=context_revision+1,
-    metadata=case when new.moderation_status='pending' then jsonb_set(metadata,'{intelligence}',coalesce(metadata->'intelligence','{}')||jsonb_build_object('filter_status','pending')) else metadata end
-    where session_id=new.session_id returning next_sequence into new.sequence;
-  if new.moderation_status<>'pending' then
-    new.metadata:=new.metadata||jsonb_build_object('filter_revision',(select context_revision from public.chat_session where session_id=new.session_id));
-  end if;
+  new.metadata := new.metadata || jsonb_build_object(
+    'filter_verified', true,
+    'speaker', case when new.sender='agent' then 'HUMAN' when new.sender='bot' then 'AI' else 'CUSTOMER' end
+  );
+
+  update public.chat_session
+  set next_sequence = next_sequence + 1,
+      last_message_at = now(),
+      last_message_preview = left(new.text, 180),
+      context_revision = context_revision + 1,
+      metadata = jsonb_set(coalesce(metadata, '{}'::jsonb), '{intelligence}',
+        coalesce(metadata->'intelligence', '{}'::jsonb) || jsonb_build_object('filter_status', 'ready', 'updated_at', now()))
+  where session_id = new.session_id
+  returning next_sequence into new.sequence;
+
   if new.sequence is null then raise sqlstate 'PT404' using message='CHAT_SESSION_NOT_FOUND'; end if;
   return new;
 end; $$;
@@ -108,7 +116,7 @@ begin
         where session_id=p_session;
     else update public.chat_session set context_revision=context_revision+1 where session_id=p_session; end if;
     update public.support_ticket set description=(select metadata->'handoff_summary' from public.chat_session where session_id=p_session)::text,
-      admin_reply=case when m.sender='agent' then p_analysis->'filtered'->>'text' else admin_reply end,priority=case when r='red' then 'urgent' else priority end,version=version+1 where chat_session_id=p_session;
+      admin_reply=case when m.sender='agent' then p_analysis->'filtered'->>'text' else admin_reply end,priority=case when r='red' then 'urgent'::public.ticket_priority else priority end,version=version+1 where chat_session_id=p_session;
   end if;
   select * into s from public.chat_session where session_id=p_session;
   return jsonb_build_object('session',to_jsonb(s),'occurrences',st.occurrences,'issue_failures',st.failures,'ai_failures',s.ai_failures,'l2_attempts',st.l2_attempts);
@@ -150,7 +158,7 @@ begin
   s:=public.chat_require_owner(p_session,p_profile,p_guest);
   if s.handoff_status='closed' then return jsonb_build_object('session',to_jsonb(s)); end if;
   result:=public.chat_handoff_base(p_session,p_profile,p_guest,coalesce(s.metadata->'handoff_summary',jsonb_build_object('summary','Yêu cầu hỗ trợ đang được lọc','problem','Cần nhân viên hỗ trợ','wanted','Nhân viên hỗ trợ','failed_approaches','[]'::jsonb)),p_reason,p_supervisor);
-  update public.support_ticket set priority=case when p_supervisor then 'urgent' else 'high' end where ticket_id=(result->>'ticket_id')::uuid;
+  update public.support_ticket set priority=case when p_supervisor then 'urgent'::public.ticket_priority else 'high'::public.ticket_priority end where ticket_id=(result->>'ticket_id')::uuid;
   return result;
 end; $$;
 
@@ -234,7 +242,7 @@ begin
     else
       insert into public.chat_session(user_id,profile_user_id,guest_id,title,source,is_active,handoff_status,metadata)
       values(s.user_id,s.profile_user_id,s.guest_id,'Cuộc trò chuyện hỗ trợ','chatbot',true,'requested',jsonb_build_object('previous_session_id',p_session,'handoff_summary',coalesce(s.metadata->'handoff_summary','{}'),'filtered_context',coalesce(s.metadata->'filtered_context','{}'),'reopen_reason',coalesce(p_payload->>'filtered_text',''),'reopened_at',now())) returning * into linked;
-      insert into public.support_ticket(user_id,title,description,priority,status,chat_session_id) values(s.profile_user_id,'Chat CSKH '||left(linked.session_id::text,8),coalesce(s.metadata->'handoff_summary','{}')::text,'high','open',linked.session_id) returning ticket_id into linked.support_ticket_id;
+      insert into public.support_ticket(user_id,title,description,priority,status,chat_session_id) values(s.profile_user_id,'Chat CSKH '||left(linked.session_id::text,8),coalesce(s.metadata->'handoff_summary','{}')::text,'high'::public.ticket_priority,'open'::public.ticket_status,linked.session_id) returning ticket_id into linked.support_ticket_id;
       update public.chat_session set support_ticket_id=linked.support_ticket_id where session_id=linked.session_id;
       return jsonb_build_object('session',to_jsonb(linked),'linked_from',p_session);
     end if;

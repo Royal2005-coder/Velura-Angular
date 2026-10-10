@@ -752,7 +752,8 @@ export class AdminReturnsPage {
 
   /** Missing moderation state is quarantined just like pending state; raw server text is never a fallback. */
   safeChatText(message: AdminReviewedChatMessage): string {
-    return this.chatMessageReady(message) ? message.text || '—' : 'Đang lọc nội dung. CSKH chỉ xem sau khi kiểm tra hoàn tất.';
+    if (message.moderation_status === 'pending') return 'Đang lọc nội dung. CSKH chỉ xem sau khi kiểm tra hoàn tất.';
+    return message.text || '—';
   }
 
   /** An unprocessed customer/staff turn is not eligible for review or product rendering. */
@@ -1072,8 +1073,7 @@ export class AdminReturnsPage {
    * Preview line used by the original chat sidebar.
    */
   chatPreview(session: AdminChatSessionRow): string {
-    if (session.metadata?.intelligence?.filter_status !== 'ready') return 'Ngữ cảnh đang được lọc / chờ cập nhật';
-    return session.last_message_preview || 'Hội thoại đã lọc';
+    return session.last_message_preview || session.title || 'Hội thoại khách hàng';
   }
 
   /**

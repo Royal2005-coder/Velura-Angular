@@ -69,7 +69,7 @@
           </svg>
           <span>TRA CỨU ĐƠN HÀNG</span>
         </a>
-        <form class="site-header__search-wrap" role="search" (submit)="onSearchSubmit($event)">
+        <form class="site-header__search-wrap" [class.is-open]="searchOpen()" role="search" (submit)="onSearchSubmit($event)">
           <label class="site-header__search" [class.is-focused]="searchOpen()">
             <button type="submit" class="site-header__search-icon-btn" aria-label="Tìm kiếm">
               <svg class="icon icon-search" aria-hidden="true" style="width: 14px; height: 14px;"><use href="#icon-search"></use></svg>
@@ -115,6 +115,28 @@
           @if (searchOpen()) {
             <div class="search-backdrop" (click)="closeSearch()"></div>
             <div class="site-header__search-dropdown">
+              <!-- Dedicated Search Input Row inside Dropdown -->
+              <div class="search-dd__input-row">
+                <svg class="icon icon-search" aria-hidden="true" style="width: 18px; height: 18px; color: var(--terracotta, #C97B63); flex-shrink: 0;"><use href="#icon-search"></use></svg>
+                <input
+                  type="search"
+                  class="search-dd__input"
+                  [value]="searchQuery()"
+                  placeholder="Nhập tên trang phục, đầm, áo, phong cách thời trang..."
+                  aria-label="Nhập từ khóa tìm kiếm"
+                  (input)="onSearchInput($event)"
+                  (keydown)="onSearch($event)"
+                />
+                @if (searchQuery()) {
+                  <button type="button" class="search-dd__clear-query-btn" (click)="searchQuery.set('')" title="Xóa từ khóa" aria-label="Xóa từ khóa">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                  </button>
+                }
+                <button type="button" class="btn btn--primary search-dd__submit-btn" (click)="executeSearch(searchQuery())">
+                  Tìm kiếm
+                </button>
+              </div>
+
               <!-- Google Lens Shortcut Banner -->
               <!-- Google Lens Feature Card -->
               <div class="search-dd__lens-card" (click)="openVisualSearch($event)">

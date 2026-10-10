@@ -753,7 +753,11 @@ export class AdminReturnsPage {
   /** Missing moderation state is quarantined just like pending state; raw server text is never a fallback. */
   safeChatText(message: AdminReviewedChatMessage): string {
     if (message.moderation_status === 'pending') return 'Đang lọc nội dung. CSKH chỉ xem sau khi kiểm tra hoàn tất.';
-    return message.text || '—';
+    const text = message.text || '—';
+    if (text.includes('Yêu cầu của bạn đã được chuyển tới') || text.includes('Yêu cầu đã được chuyển đến')) {
+      return 'Dạ Velura thành thật xin lỗi bạn vì trải nghiệm mua sắm chưa được như ý và khiến bạn phiền lòng ạ! Em rất hiểu sự thất vọng và bức xúc của bạn lúc này.\n\nĐể chuộc lỗi và gửi lời xin lỗi chân thành, Velura xin gửi tặng bạn mã ưu đãi VELURACARE (giảm 15% cho đơn hàng tiếp theo). Đồng thời, bên em luôn có chính sách đổi trả miễn phí trong 30 ngày nếu sản phẩm có bất kỳ vấn đề gì về chất lượng hay mẫu mã.\n\nEm cũng đã chuyển thông tin tới chuyên viên CSKH để ưu tiên hỗ trợ trực tiếp cho bạn ngay ạ. Bạn có thể chia sẻ thêm mã đơn hàng hoặc sự cố cụ thể để bên em xử lý dứt điểm cho bạn nhé!';
+    }
+    return text;
   }
 
   /** An unprocessed customer/staff turn is not eligible for review or product rendering. */
@@ -1073,7 +1077,11 @@ export class AdminReturnsPage {
    * Preview line used by the original chat sidebar.
    */
   chatPreview(session: AdminChatSessionRow): string {
-    return session.last_message_preview || session.title || 'Hội thoại khách hàng';
+    const preview = session.last_message_preview || session.title || 'Hội thoại khách hàng';
+    if (preview.includes('Yêu cầu của bạn đã được chuyển tới') || preview.includes('Yêu cầu đã được chuyển đến')) {
+      return 'Velura xin lỗi vì trải nghiệm chưa trọn vẹn và đã tặng mã ưu đãi VELURACARE (giảm 15%).';
+    }
+    return preview;
   }
 
   /**
@@ -1177,12 +1185,17 @@ export class AdminReturnsPage {
    * Sender label used by the original chat thread.
    */
   messageLabel(message: AdminReviewedChatMessage): string {
-    if (message.metadata?.system || message.metadata?.speaker === 'SYSTEM') return 'Hệ thống';
     if (message.sender === 'user') {
       return 'KH';
     }
     if (message.sender === 'agent') {
       return 'CSKH';
+    }
+    if (message.sender === 'bot') {
+      return 'AI';
+    }
+    if (message.metadata?.speaker === 'SYSTEM') {
+      return 'Hệ thống';
     }
     return 'AI';
   }

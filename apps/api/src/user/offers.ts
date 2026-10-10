@@ -2,7 +2,7 @@ import { HttpError, sendJson } from "../http.js";
 import { selectRows } from "../supabase.js";
 import { requireUserAuth } from "./auth.js";
 import { buildWallet } from "./vouchers.js";
-import { loadCategoryTree } from "./cart-catalog.js";
+import { loadCategoryTree, type CategoryTree } from "./cart-catalog.js";
 import { promotionLifecycle, toLifecycleInput } from "../pricing/promotion-lifecycle.js";
 import type { EvaluatedVoucher } from "./voucher-engine.js";
 import {

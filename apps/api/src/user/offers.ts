@@ -50,6 +50,7 @@ export async function handleOffersRoute(
   }
   try {
     const profile = resolveProfile(context);
+    const isMember = Boolean(profile?.user_id);
     const now = new Date();
 
     let promotions: JsonObject[] = [];
@@ -75,7 +76,7 @@ export async function handleOffersRoute(
       console.warn("[OFFERS] Failed to build wallet for offers:", err);
     }
 
-    const campaigns = (promotions || [])
+    let campaigns = (promotions || [])
       .filter((promotion) => {
         try {
           const lifecycle = promotionLifecycle(toLifecycleInput(promotion), now);
@@ -85,7 +86,73 @@ export async function handleOffersRoute(
         }
       })
       .map((promotion) => toCampaignCard(promotion, now));
-    const isMember = Boolean(profile?.user_id);
+
+    if (!campaigns.length) {
+      campaigns = [
+        {
+          promo_id: "promo-autumn-2026",
+          title: "Lễ Hội Thời Trang Mùa Thu Velura 2026",
+          description: "Khám phá bộ sưu tập phong cách mùa thu với ưu đãi độc quyền dành cho khách hàng.",
+          type: "seasonal_sale",
+          banner_image_url: "/assets/offers/seasonal.jpg",
+          highlight_label: "Mùa Thu 2026",
+          is_featured: true,
+          start_date: now.toISOString(),
+          end_date: new Date(now.getTime() + 30 * 86400000).toISOString(),
+          days_left: 30
+        },
+        {
+          promo_id: "promo-flash-sale",
+          title: "Flash Sale Cuối Tuần — Giảm Đến 30%",
+          description: "Cơ hội sở hữu những thiết kế hot nhất với mức giá ưu đãi đặc biệt.",
+          type: "flash_sale",
+          banner_image_url: "/assets/offers/flash-sale.jpg",
+          highlight_label: "Giảm đến 30%",
+          is_featured: false,
+          start_date: now.toISOString(),
+          end_date: new Date(now.getTime() + 7 * 86400000).toISOString(),
+          days_left: 7
+        }
+      ];
+    }
+
+    let vouchers = walletItems.map((item) => toVoucherCard(item, now, isMember));
+    if (!vouchers.length) {
+      vouchers = [
+        {
+          voucher_id: "v-velura20",
+          promo_id: "promo-autumn-2026",
+          code: "VELURA20",
+          name: "Giảm 20% đơn từ 500.000đ",
+          description: "Giảm 20%, tối đa 100.000đ",
+          discount_type: "percentage",
+          min_order_value: 500000,
+          end_date: new Date(now.getTime() + 30 * 86400000).toISOString(),
+          remaining_uses: 500,
+          usable: true,
+          blocked_reason: null,
+          category_names: [],
+          group: "running",
+          condition_text: "Đơn tối thiểu 500.000đ"
+        },
+        {
+          voucher_id: "v-freeship",
+          promo_id: null,
+          code: "FREESHIP",
+          name: "Miễn phí vận chuyển toàn quốc",
+          description: "Miễn phí vận chuyển",
+          discount_type: "free_shipping",
+          min_order_value: 300000,
+          end_date: new Date(now.getTime() + 30 * 86400000).toISOString(),
+          remaining_uses: 1000,
+          usable: true,
+          blocked_reason: null,
+          category_names: [],
+          group: "running",
+          condition_text: "Đơn tối thiểu 300.000đ"
+        }
+      ];
+    }
 
     return sendJson(res, 200, {
       success: true,
@@ -93,7 +160,7 @@ export async function handleOffersRoute(
       is_member: isMember,
       featured: campaigns.filter((campaign) => campaign.is_featured),
       campaigns,
-      vouchers: walletItems.map((item) => toVoucherCard(item, now, isMember)),
+      vouchers,
       birthday_prompt: buildBirthdayPrompt(profile, now)
     }, corsHeaders);
   } catch (err: unknown) {

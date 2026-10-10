@@ -265,7 +265,6 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
       }, corsHeaders);
     }
 
-    if (await handleVisualSearchRoute(req, res, parts, corsHeaders, context)) return;
 
     if (parts[1] === "user") {
       if (parts[2] === "recommendations" && parts[3] === "style-profile") {

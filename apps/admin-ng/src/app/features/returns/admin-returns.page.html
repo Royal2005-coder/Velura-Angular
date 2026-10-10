@@ -126,7 +126,7 @@
                   @if (selectedChat()?.metadata?.report_status; as report) {
                     <p role="status">Báo cáo CSKH: {{ report.state || 'Chưa có trạng thái' }} · {{ date(report.updated_at) }}</p>
                     <p class="admin-note">Số lần gửi: {{ report.attempts ?? '—' }} · Lần thử tiếp: {{ date(report.next_attempt_at) }}</p>
-                    @if (report.last_error) { <p class="admin-form-alert--error">Gửi báo cáo chưa thành công: {{ report.last_error }}. Kiểm tra cấu hình và nhật ký gửi báo cáo.</p> }
+                    @if (report.last_error && report.state === 'failed') { <p class="admin-note" style="color: #9C4221; font-size: 0.8rem;">Ghi chú gửi báo cáo: {{ report.last_error }}</p> }
                     @if (report.state === 'delivered') { <p class="admin-note">Kênh gửi đã chấp nhận báo cáo; trạng thái này không xác nhận người nhận đã đọc.</p> }
                   } @else { <p class="admin-note">Chưa có trạng thái báo cáo CSKH.</p> }
                   @for (warning of selectedChat()?.metadata?.warnings || []; track warning.id) {

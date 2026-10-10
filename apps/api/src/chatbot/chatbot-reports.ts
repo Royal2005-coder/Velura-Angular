@@ -18,7 +18,7 @@ export type ChatReportWorkerTimer = NodeJS.Timeout;
 function targets(): { email: string | null; webhook: string | null } {
   return {
     email: process.env.CHAT_REPORT_EMAIL?.trim() || process.env.SUPPORT_ALERT_TO?.trim() || null,
-    webhook: process.env.CHAT_REPORT_WEBHOOK_URL?.trim() || config.n8nChatWebhookUrl?.trim() || null
+    webhook: process.env.CHAT_REPORT_WEBHOOK_URL?.trim() || null
   };
 }
 

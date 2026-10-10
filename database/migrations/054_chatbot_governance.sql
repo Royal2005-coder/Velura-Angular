@@ -187,7 +187,7 @@ begin
     select ticket_id into ticket from public.support_ticket where chat_session_id=p_session;
     if ticket is null then
       insert into public.support_ticket(user_id,title,description,priority,status,chat_session_id)
-      values(s.profile_user_id,'Chat CSKH '||left(p_session::text,8),p_summary::text,'high','open',p_session) returning ticket_id into ticket;
+      values(s.profile_user_id,'Chat CSKH '||left(p_session::text,8),p_summary::text,'high'::public.ticket_priority,'open'::public.ticket_status,p_session) returning ticket_id into ticket;
     end if;
   end if;
   update public.chat_session set support_ticket_id=ticket where session_id=p_session and support_ticket_id is null;
@@ -195,7 +195,7 @@ begin
     update public.chat_session set handoff_status='requested',ai_epoch=ai_epoch+1,support_ticket_id=ticket,
       metadata=metadata||jsonb_build_object('handoff_summary',p_summary,'handoff_reason',p_reason,'supervisor_required',p_supervisor) where session_id=p_session;
     insert into public.chat_message(session_id,sender,text,metadata) values(p_session,'bot',
-      'Yêu cầu đã được chuyển đến nhân viên CSKH. AI sẽ không tiếp tục trả lời trong phiên này.',jsonb_build_object('system',true,'handoff',true,'speaker','SYSTEM','ticket_id',ticket)) returning * into m;
+      'Yêu cầu của bạn đã được chuyển tới nhân viên CSKH. Chuyên viên tư vấn sẽ phản hồi trong ít phút để hỗ trợ bạn chu đáo nhất.',jsonb_build_object('system',true,'handoff',true,'speaker','CSKH','ticket_id',ticket)) returning * into m;
   elsif p_supervisor then
     update public.chat_session set metadata=metadata||'{"supervisor_required":true}' where session_id=p_session;
   end if;
@@ -230,7 +230,7 @@ begin
         jsonb_build_object('summary','Staff takeover','problem',coalesce(s.last_message_preview,''),'wanted','Human support',
           'attempts',(select coalesce(jsonb_agg(jsonb_build_object('text',text,'sender',sender)),'[]') from
             (select text,sender from public.chat_message where session_id=p_session order by sequence desc limit 12) history),
-          'verified_status',case when s.profile_user_id is not null then 'member_account' else 'unverified_guest' end)::text,'high','open',p_session)
+          'verified_status',case when s.profile_user_id is not null then 'member_account' else 'unverified_guest' end)::text,'high'::public.ticket_priority,'open'::public.ticket_status,p_session)
       on conflict(chat_session_id) where chat_session_id is not null do update set updated_at=now() returning ticket_id into s.support_ticket_id;
     update public.chat_session set support_ticket_id=s.support_ticket_id where session_id=p_session;
   end if;

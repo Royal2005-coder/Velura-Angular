@@ -54,7 +54,7 @@ export class ChatbotPage {
   readonly lifecycleNote = signal('');
   private generation = 0;
   readonly handoffStatus = signal<'ai' | 'requested' | 'assigned' | 'closed'>('ai');
-  readonly humanTakeover = computed(() => this.handoffStatus() !== 'ai');
+  readonly humanTakeover = computed(() => this.handoffStatus() === 'assigned');
   readonly chatError = signal('');
   private readonly fileInput = viewChild<ElementRef<HTMLInputElement>>('fileInput');
 

@@ -55,8 +55,8 @@
               <span class="chatbot-header__status"></span>
             </div>
             <div>
-              <h4 class="chatbot-header__title">{{ humanTakeover() ? 'CSKH Velura' : 'AI Stylist Velura' }}</h4>
-              <span class="chatbot-header__desc">{{ handoffStatus() === 'assigned' ? 'Nhân viên CSKH đang hỗ trợ trực tiếp' : handoffStatus() === 'requested' ? 'Đang chuyển giao tới nhân viên CSKH' : handoffStatus() === 'closed' ? 'Phiên CSKH đã đóng' : 'Trợ lý AI trực tuyến' }}</span>
+              <h4 class="chatbot-header__title">{{ handoffStatus() === 'assigned' ? 'CSKH Velura' : 'AI Stylist Velura' }}</h4>
+              <span class="chatbot-header__desc">{{ handoffStatus() === 'assigned' ? 'Nhân viên CSKH đang hỗ trợ trực tiếp' : handoffStatus() === 'requested' ? 'Đang kết nối chuyên viên CSKH' : handoffStatus() === 'closed' ? 'Phiên CSKH đã đóng' : 'Trợ lý AI trực tuyến' }}</span>
             </div>
           </div>
           <div class="chatbot-state-switcher" style="display:flex;align-items:center;gap:12px;">
@@ -69,18 +69,18 @@
             </button>
           </div>
         </div>
-        @if (humanTakeover()) {
+        @if (handoffStatus() === 'assigned' || handoffStatus() === 'closed') {
           <div class="chatbot-handoff-banner" style="display:flex;align-items:center;justify-content:space-between;gap:12px;background:#FAF2EB;border:1px solid #E8DFD6;border-radius:10px;padding:10px 16px;margin:8px 16px;">
             <div style="display:flex;align-items:center;gap:10px;">
               <span style="font-size:1.3rem;">🧑‍💼</span>
               <div style="font-size:0.8rem;line-height:1.4;color:#2A2522;">
-                <strong>{{ handoffStatus() === 'closed' ? 'Phiên hỗ trợ đã kết thúc' : handoffStatus() === 'assigned' ? 'Nhân viên CSKH đang hỗ trợ' : 'Đang chuyển giao tới nhân viên CSKH' }}</strong>
-                <p style="margin:2px 0 0 0;color:#6B635D;">{{ handoffStatus() === 'closed' ? 'Cảm ơn bạn đã liên hệ Velura. Chúc bạn một ngày tốt lành!' : 'Nhân viên CSKH đã nắm được thông tin và sẽ phản hồi sớm nhất. Bạn không cần kể lại từ đầu.' }}</p>
+                <strong>{{ handoffStatus() === 'closed' ? 'Phiên hỗ trợ đã kết thúc' : 'Nhân viên CSKH đang hỗ trợ' }}</strong>
+                <p style="margin:2px 0 0 0;color:#6B635D;">{{ handoffStatus() === 'closed' ? 'Cảm ơn bạn đã liên hệ Velura. Chúc bạn một ngày tốt lành!' : 'Nhân viên CSKH đã tham gia hội thoại và đang trực tiếp hỗ trợ bạn.' }}</p>
               </div>
             </div>
             <button type="button" class="btn btn--outline btn--sm" (click)="refreshMessages()" [disabled]="loading()" style="font-size:0.75rem;padding:6px 12px;white-space:nowrap;">Tải lại tin nhắn</button>
           </div>
-        } @else {
+        } @else if (handoffStatus() === 'ai') {
           <div style="padding:6px 16px;display:flex;justify-content:flex-end;">
             <button type="button" class="chatbot-human-btn" (click)="requestHuman()" [disabled]="loading()" style="background:transparent;border:1px solid #E8DFD6;color:#6B635D;border-radius:99px;font-size:0.75rem;padding:4px 12px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;">
               <span>💬</span> Gặp nhân viên CSKH

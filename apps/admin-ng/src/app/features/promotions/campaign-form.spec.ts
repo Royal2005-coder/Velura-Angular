@@ -110,22 +110,6 @@ describe('CampaignForm', () => {
     expect(calls.update[0].body['type']).toBeUndefined();
   });
 
-  it('approval requires finite campaign limits and sends an explicit conditions version', async () => {
-    const component = await create({ promo_id: 'p1', version: 7 });
-    const form = buildForm({ ...VALID, recoveryConditions: 'Đơn giao trễ đã được CSKH xác minh', recoveryMaxOffers: '30', budgetLimit: '0' });
-    const checkbox = document.createElement('input');
-    checkbox.name = 'recoveryApproved';
-    checkbox.type = 'checkbox';
-    checkbox.checked = true;
-    form.appendChild(checkbox);
-    submit(component, form);
-    expect(calls.update.length).toBe(0);
-    (form.elements.namedItem('budgetLimit') as HTMLInputElement).value = '10000000';
-    submit(component, form);
-    expect(calls.update[0].body['recoveryApproved']).toBe(true);
-    expect(calls.update[0].body['recoveryMaxOffers']).toBe(30);
-    expect(calls.update[0].body['expectedVersion']).toBe(7);
-  });
 
   it('chặn ngày kết thúc không sau ngày bắt đầu', async () => {
     const form = await create(null);

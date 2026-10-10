@@ -216,7 +216,7 @@ export function createPricingRepository() {
     async listVouchers(filters: JsonObject, accessToken: string | null) {
       const query: Record<string, unknown> = {
         select: VOUCHER_SELECT,
-        order: "start_date.desc,created_at.desc",
+        order: "start_date.desc,code.asc",
         limit: filters.limit,
         offset: filters.offset
       };

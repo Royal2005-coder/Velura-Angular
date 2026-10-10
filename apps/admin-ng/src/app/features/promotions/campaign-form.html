@@ -60,22 +60,6 @@
           }
         </label>
 
-        <p class="admin-form-section">Chương trình phục hồi trải nghiệm CSKH</p>
-        <label class="admin-form-check">
-          <input type="checkbox" name="recoveryApproved" [checked]="campaign()?.recovery_approved === true" [disabled]="!canMutate()" />
-          <span>Phê duyệt phiên bản điều kiện này để CSKH đề xuất</span>
-        </label>
-        <label class="admin-form-group">
-          <span class="admin-form-label">Điều kiện được duyệt</span>
-          <textarea class="admin-form-control admin-form-textarea" name="recoveryConditions" maxlength="2000" rows="3" [readOnly]="!canMutate()">{{ campaign()?.recovery_conditions || '' }}</textarea>
-          <small class="admin-form-helper">Ghi rõ trường hợp áp dụng và điều kiện CSKH phải xác nhận. Ngân sách phải lớn hơn 0; ngày kết thúc là hạn chương trình.</small>
-        </label>
-        <label class="admin-form-group">
-          <span class="admin-form-label">Số ca hỗ trợ tối đa toàn chiến dịch</span>
-          <input class="admin-form-control" name="recoveryMaxOffers" type="number" min="0" step="1" [value]="campaign()?.recovery_max_offers ?? 0" [readOnly]="!canMutate()" />
-          <small class="admin-form-helper">Phiên bản phê duyệt: {{ campaign()?.recovery_revision ?? 0 }}. Lưu lại điều kiện là một phiên bản mới; không tự cấp quyền lợi cho mọi khách.</small>
-        </label>
-
         <hr class="admin-form-divider" />
         <p class="admin-form-section">Nội dung hiển thị trên trang Ưu đãi của khách</p>
 

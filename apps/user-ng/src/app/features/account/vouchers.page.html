@@ -17,10 +17,45 @@
       <a class="btn-outline" routerLink="/offers">Xem ưu đãi đang chạy</a>
     </div>
   } @else {
-    @if (usable().length > 0) {
+    @if (birthdayVouchers().length > 0) {
+      <div class="birthday-voucher-banner" style="background: linear-gradient(135deg, #FFF9F5, #FAF2EB); border: 2px solid #C97B63; border-radius: 16px; padding: 20px 24px; margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+        <div>
+          <span style="display: inline-block; background: #C97B63; color: #fff; font-size: 0.72rem; font-weight: 700; padding: 3px 10px; border-radius: 99px; margin-bottom: 6px; letter-spacing: 0.5px;">
+            🎂 ĐẶC QUYỀN SINH NHẬT THÀNH VIÊN
+          </span>
+          <h2 style="font-size: 1.15rem; font-weight: 700; color: #2A2522; margin: 0 0 4px 0;">Chúc mừng tháng sinh nhật của bạn!</h2>
+          <p style="font-size: 0.875rem; color: #6B635D; margin: 0;">Món quà sinh nhật đặc quyền đã sẵn sàng trong ví của bạn để mua sắm trong suốt tháng này.</p>
+        </div>
+        <a class="btn btn--primary" routerLink="/cart" [queryParams]="{ voucher: birthdayVouchers()[0].code }" style="padding: 10px 20px; font-weight: 600; text-decoration: none;">
+          Dùng voucher sinh nhật ngay
+        </a>
+      </div>
+
+      <h2 class="account-page__section" style="color: #C97B63;">🎁 Quà tặng Sinh nhật của bạn</h2>
+      <ul class="offer-voucher-grid" style="margin-bottom: 32px;">
+        @for (item of birthdayVouchers(); track item.voucher_id) {
+          <li>
+            <article class="voucher-card voucher-card--birthday" style="border: 2px solid #C97B63; background: #FFFAF7;">
+              <div class="voucher-card__main">
+                <span class="voucher-card__badge" style="background: #C97B63; color: white; margin-bottom: 8px;">Quà tặng Sinh nhật</span>
+                <p class="voucher-card__code" style="color: #C97B63; font-size: 1.15rem; font-weight: 700;">{{ item.code }}</p>
+                <p class="voucher-card__name" style="font-weight: 600;">{{ discountLabel(item) }}</p>
+                <p class="voucher-card__meta">{{ conditionLabel(item) }}</p>
+                <p class="voucher-card__meta">HSD: {{ expiryLabel(item.end_date) }}</p>
+              </div>
+              <div class="voucher-card__side">
+                <a class="btn-primary" routerLink="/cart" [queryParams]="{ voucher: item.code }">Dùng mã</a>
+              </div>
+            </article>
+          </li>
+        }
+      </ul>
+    }
+
+    @if (regularUsable().length > 0) {
       <h2 class="account-page__section">Đang có hiệu lực</h2>
       <ul class="offer-voucher-grid">
-        @for (item of usable(); track item.voucher_id) {
+        @for (item of regularUsable(); track item.voucher_id) {
           <li>
             <article class="voucher-card">
               <div class="voucher-card__main">

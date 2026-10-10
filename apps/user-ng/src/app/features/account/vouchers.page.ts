@@ -37,6 +37,21 @@ export class AccountVouchersPage {
   readonly blocked = computed(() =>
     this.items().filter((item) => !item.eligible && item.reason !== 'MIN_ORDER_NOT_MET')
   );
+  /** Kiểm tra xem mã có phải voucher quà tặng sinh nhật không. */
+  isBirthdayVoucher(item: WalletVoucher): boolean {
+    const code = String(item.code || '').toUpperCase();
+    const name = String(item.name || '').toLowerCase();
+    return code.startsWith('HPBD') || name.includes('sinh nhật') || name.includes('birthday');
+  }
+
+  readonly birthdayVouchers = computed(() =>
+    this.usable().filter((item) => this.isBirthdayVoucher(item))
+  );
+
+  readonly regularUsable = computed(() =>
+    this.usable().filter((item) => !this.isBirthdayVoucher(item))
+  );
+
 
   constructor() {
     useBodyClass('page-account-vouchers');

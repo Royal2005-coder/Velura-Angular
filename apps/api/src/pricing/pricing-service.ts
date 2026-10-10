@@ -123,11 +123,26 @@ export function createPricingService({ repository }: { repository: PricingReposi
       if (body.type && !PROMOTION_TYPES.includes(body.type as string)) throw new HttpError(422, "VALIDATION_ERROR", `Invalid promo type. Valid: ${PROMOTION_TYPES.join(", ")}`);
       validatePromotionSchedule(body);
       validateRecoveryConfiguration(body);
-      return repository.createPromotion({
+      const created = await repository.createPromotion({
         ...body,
         ...normalizePromotionPresentation(body, "create"),
         createdBy: context.profile?.user_id || context.authUser?.id
       }, context.accessToken);
+
+      const promoId = asString((created as JsonObject)?.promo_id);
+      const startIso = asString((created as JsonObject)?.start_date || body.startDate);
+      const endIso = asString((created as JsonObject)?.end_date || body.endDate);
+      const now = new Date().toISOString();
+      if (promoId && startIso && endIso && startIso <= now && now <= endIso) {
+        try {
+          await repository.activatePromotion(promoId, { expectedVersion: 1 }, context.accessToken);
+          (created as JsonObject).is_active = true;
+          (created as JsonObject).version = (asNumber((created as JsonObject).version) || 1) + 1;
+        } catch {
+          // Activation failed, keep created state
+        }
+      }
+      return created;
     },
 
     async updatePromotion(context, promotionId, body) {
@@ -183,8 +198,8 @@ export function createPricingService({ repository }: { repository: PricingReposi
       if (!VOUCHER_TYPES.includes(body?.type as string)) throw new HttpError(422, "VALIDATION_ERROR", "Invalid voucher type");
       validateRecoveryConfiguration(body);
       const audience = String(body.applicableUserGroup || "all_users");
-      if (!["guest", "member", "all_users", "new_user", "loyal_user", "churn_risk_user"].includes(audience)) {
-        throw new HttpError(422, "VALIDATION_ERROR", "Đối tượng mã phải là khách vãng lai, thành viên hoặc mọi khách");
+      if (!["guest", "member", "all_users", "new_user", "loyal_user", "churn_risk_user", "birthday"].includes(audience)) {
+        throw new HttpError(422, "VALIDATION_ERROR", "Đối tượng mã phải là khách vãng lai, thành viên, quà sinh nhật hoặc mọi khách");
       }
 
       // Trần `max_vouchers_allowed` của chiến dịch do RPC chốt khi đang khoá dòng chiến

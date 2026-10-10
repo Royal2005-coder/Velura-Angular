@@ -200,6 +200,36 @@ export async function buildWallet(
       isBirthdayMonth = birthMonth === (now.getMonth() + 1);
     }
   }
+  if (isBirthdayMonth && Boolean(profile?.user_id)) {
+    const hasHpbd = activeVouchers.some((v) => {
+      const code = String(v.code || "").toUpperCase();
+      const name = String(v.name || "").toLowerCase();
+      return code.startsWith("HPBD") || name.includes("sinh nhật") || name.includes("birthday");
+    });
+    if (!hasHpbd) {
+      const endOfMonth = new Date(Date.UTC(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59));
+      activeVouchers.unshift({
+        voucher_id: "hpbd-2026-member-birthday-gift",
+        code: "HPBD2026",
+        name: "Quà tặng sinh nhật thành viên",
+        discount_type: "fixed_amount",
+        discount_value: 150000,
+        max_discount_amount: null,
+        min_order_value: 600000,
+        usage_limit_total: null,
+        usage_limit_per_user: 1,
+        used_count: 0,
+        applicable_categories: null,
+        applicable_user_group: "member",
+        start_date: new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1)).toISOString(),
+        end_date: endOfMonth.toISOString(),
+        is_active: true,
+        created_by: null,
+        version: 1
+      });
+    }
+  }
+
 
   const evaluationContext: VoucherEvaluationContext = {
     orderValue,

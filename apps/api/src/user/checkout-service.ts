@@ -77,6 +77,7 @@ export interface PersistCheckoutOrderInput {
   orderCode: string;
   internalNote: string | null;
   items: readonly PersistedCheckoutItem[];
+  rawItems?: readonly JsonObject[];
 }
 
 /** Kết quả service tạo đơn và các dòng hàng tương ứng. */
@@ -392,7 +393,19 @@ export class CheckoutService {
 
   /** Ghi đơn, payment và item qua repository; COD mới trừ tồn ngay. */
   async persistOrder(input: PersistCheckoutOrderInput): Promise<PersistedCheckoutOrder> {
-    if (this.repository.createOrderBundle) return this.repository.createOrderBundle(input);
+    if (this.repository.createOrderBundle) {
+      try {
+        const bundle = await this.repository.createOrderBundle(input);
+        await this.decrementComboStock(input);
+        return bundle;
+      } catch (err: unknown) {
+        if (err instanceof HttpError && err.code === "VARIANT_NOT_FOUND") {
+          // Fall through to manual item inserts if bundle RPC failed on missing combo variant row
+        } else {
+          throw err;
+        }
+      }
+    }
     if ((input.pointsSpent || 0) > 0) throw new HttpError(503, "LOYALTY_TRANSACTION_REQUIRED", "Sử dụng điểm cần giao dịch cơ sở dữ liệu nguyên tử.");
     const now = new Date().toISOString();
     const order = await this.repository.createOrder({
@@ -411,7 +424,7 @@ export class CheckoutService {
       payment_method: input.paymentMethod,
       order_code: input.orderCode,
       internal_note: input.internalNote,
-      stock_committed_at: input.paymentMethod === "COD" ? now : null,
+      stock_committed_at: now,
       created_at: now,
       updated_at: now
     });
@@ -429,23 +442,51 @@ export class CheckoutService {
     }
     const createdItems: JsonObject[] = [];
     for (const item of input.items) {
+      let targetVariantId = item.variantId;
+      const variant = await this.repository.findVariant(item.variantId);
+      if (!variant) {
+        const raw = Array.isArray(input.rawItems)
+          ? input.rawItems.find((r) => asString(r.variant_id || r.variantId) === item.variantId || asString(r.product_id) === item.variantId)
+          : null;
+        if (raw && Array.isArray(raw.sub_items) && raw.sub_items.length > 0) {
+          const firstSub = raw.sub_items[0] as JsonObject;
+          if (firstSub?.variant_id) targetVariantId = asString(firstSub.variant_id);
+        }
+      }
       createdItems.push(await this.repository.createOrderItem({
         order_id: order.order_id,
-        variant_id: item.variantId,
+        variant_id: targetVariantId,
         product_name: item.productName,
         product_image: item.productImage || null,
         quantity: item.quantity,
         unit_price: item.unitPrice,
         subtotal_item: item.subtotal
       }));
-      if (input.paymentMethod === "COD") {
-        const variant = await this.repository.findVariant(item.variantId);
-        if (variant) {
-          await this.repository.updateVariantStock(item.variantId, Math.max(0, Number(variant.stock_quantity) - item.quantity));
+      if (variant) {
+        await this.repository.updateVariantStock(item.variantId, Math.max(0, Number(variant.stock_quantity) - item.quantity));
+      }
+    }
+    await this.decrementComboStock(input);
+    return { order: asJsonObject(order), items: createdItems.map(asJsonObject) };
+  }
+
+  private async decrementComboStock(input: PersistCheckoutOrderInput): Promise<void> {
+    if (!Array.isArray(input.rawItems)) return;
+    for (const raw of input.rawItems) {
+      if (raw.is_combo && Array.isArray(raw.sub_items)) {
+        const setQty = Math.max(1, Number(raw.quantity) || 1);
+        for (const sub of raw.sub_items as JsonObject[]) {
+          const subVariantId = asString(sub.variant_id);
+          const subQty = Math.max(1, Number(sub.quantity) || 1) * setQty;
+          if (subVariantId) {
+            const subVariant = await this.repository.findVariant(subVariantId);
+            if (subVariant) {
+              await this.repository.updateVariantStock(subVariantId, Math.max(0, Number(subVariant.stock_quantity) - subQty));
+            }
+          }
         }
       }
     }
-    return { order: asJsonObject(order), items: createdItems.map(asJsonObject) };
   }
 
   /** Lưu địa chỉ khi Member chủ động chọn tùy chọn này. */

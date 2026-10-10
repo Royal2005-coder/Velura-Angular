@@ -755,7 +755,7 @@ export class ProductDetailPage {
     });
 
     const comboVariant = item.variants?.[0];
-    const comboVariantId = comboVariant?.variant_id || item.product_id;
+    const comboVariantId = comboVariant?.variant_id || subItems[0]?.variant_id || item.product_id;
 
     const comboLine: CartLine = {
       variant_id: comboVariantId,

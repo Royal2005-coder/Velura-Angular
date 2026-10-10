@@ -879,7 +879,8 @@ export async function handleOrdersRoute(
             unitPrice: line.unitPrice,
             subtotal: line.subtotal
           };
-        })
+        }),
+        rawItems: Array.isArray(body.items) ? (body.items as JsonObject[]) : undefined
       });
       const newOrder = persistedGuestOrder.order;
       const createdItems = persistedGuestOrder.items;
@@ -1012,7 +1013,8 @@ export async function handleOrdersRoute(
             unitPrice: line.unitPrice,
             subtotal: line.subtotal
           };
-        })
+        }),
+        rawItems: Array.isArray(body.items) ? (body.items as JsonObject[]) : undefined
       });
       const newOrder = persistedMemberOrder.order;
       const createdItems = persistedMemberOrder.items;

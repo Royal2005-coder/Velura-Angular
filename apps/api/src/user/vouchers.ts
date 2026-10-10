@@ -156,11 +156,17 @@ export async function buildWallet(
   const profile = resolveProfile(context);
 
   const actor = loyaltyActor(context);
-  const fetchVouchers = () => selectRows("voucher", {
-    is_active: "eq.true",
-    ...(actor ? { or: `(reward_member_id.is.null,reward_member_id.eq.${actor})` } : { reward_member_id: "is.null" }),
-    limit: 200
-  });
+  const fetchVouchers = async () => {
+    try {
+      return await selectRows("voucher", {
+        is_active: "eq.true",
+        ...(actor ? { or: `(reward_member_id.is.null,reward_member_id.eq.${actor})` } : { reward_member_id: "is.null" }),
+        limit: 200
+      });
+    } catch {
+      return await selectRows("voucher", { is_active: "eq.true", limit: 200 });
+    }
+  };
 
   const [voucherResult, promotionResult, orderResult, confirmedOfferIds] = await Promise.all([
     fetchVouchers(),

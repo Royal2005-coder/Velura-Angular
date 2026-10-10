@@ -200,10 +200,14 @@ export class VoucherWallet {
       this.emit(match);
       return true;
     }
+    const isUuid = /^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$/i.test(wanted);
+    const codeName = isUuid ? (localStorage.getItem('checkout_voucher_code') || '') : upper;
     this.preferredNotice.set(
       match
         ? `Mã ${match.code} chưa dùng được cho đơn này: ${match.reason_text || 'chưa đủ điều kiện'}`
-        : `Không tìm thấy mã ${upper} trong ví của bạn. Mã có thể đã hết hạn hoặc không dành cho tài khoản này.`
+        : codeName && !/^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$/i.test(codeName)
+          ? `Không tìm thấy mã ${codeName} trong ví của bạn. Mã có thể đã hết hạn hoặc không dành cho tài khoản này.`
+          : 'Mã giảm giá đã chọn không còn khả dụng hoặc đã hết hiệu lực.'
     );
     return false;
   }
@@ -234,6 +238,8 @@ export class VoucherWallet {
     this.declined.emit(false);
     this.selectedId.set(item.voucher_id);
     this.emit(item);
+    localStorage.setItem('checkout_voucher_id', item.voucher_id);
+    localStorage.setItem('checkout_voucher_code', item.code);
     this.closeModal();
   }
 
@@ -248,6 +254,8 @@ export class VoucherWallet {
     this.declined.emit(true);
     this.selectedId.set(null);
     this.applied.emit(null);
+    localStorage.removeItem('checkout_voucher_id');
+    localStorage.removeItem('checkout_voucher_code');
   }
 
   /** Cập nhật ô nhập mã thủ công. */
@@ -286,6 +294,8 @@ export class VoucherWallet {
         this.declined.emit(false);
         this.selectedId.set(response.voucher_id);
         this.manualCode.set('');
+        localStorage.setItem('checkout_voucher_id', response.voucher_id);
+        localStorage.setItem('checkout_voucher_code', response.code ?? code);
         this.applied.emit({
           voucher_id: response.voucher_id,
           code: response.code ?? code,
@@ -299,7 +309,11 @@ export class VoucherWallet {
       error: (error: Error) => {
         if (!current()) return;
         this.applying.set(false);
-        this.manualError.set(error.message || 'Mã giảm giá không hợp lệ.');
+        let msg = error.message || 'Mã giảm giá không hợp lệ.';
+        if (msg.includes('NOT_FOUND') || msg.includes('không tồn tại')) {
+          msg = `Mã giảm giá "${code}" không tồn tại hoặc đã hết hiệu lực.`;
+        }
+        this.manualError.set(msg);
       }
     });
   }

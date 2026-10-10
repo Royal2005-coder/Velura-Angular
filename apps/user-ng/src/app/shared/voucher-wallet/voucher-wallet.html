@@ -42,6 +42,30 @@
   @if (preferredNotice()) {
     <p class="voucher-wallet__state voucher-wallet__state--error" role="status">{{ preferredNotice() }}</p>
   }
+  <div class="voucher-wallet__inline-input" style="display: flex; gap: 8px; margin-top: 12px;">
+    <input
+      type="text"
+      class="form-input"
+      style="flex: 1; padding: 8px 12px; font-size: 0.875rem; border-radius: 8px; border: 1px solid var(--line, #E8DFD6);"
+      placeholder="Nhập mã voucher (VD: VELURA20, HPBD2026...)"
+      [value]="manualCode()"
+      (input)="setManualCode($event)"
+      (keydown.enter)="$event.preventDefault(); submitManualCode()"
+    />
+    <button
+      type="button"
+      class="btn-primary"
+      style="padding: 8px 16px; font-size: 0.875rem; border-radius: 8px; white-space: nowrap;"
+      [disabled]="applying() || loading() || !manualCode().trim()"
+      (click)="submitManualCode()"
+    >
+      {{ applying() ? 'Đang kiểm tra…' : 'Áp dụng' }}
+    </button>
+  </div>
+  @if (manualError()) {
+    <p class="field__error" style="color: #b91c1c; font-size: 0.8125rem; margin-top: 6px;">{{ manualError() }}</p>
+  }
+
 
   @if (nearestGoal(); as goal) {
     <div class="voucher-wallet__goal">

@@ -216,7 +216,7 @@ export function createPricingRepository() {
     async listVouchers(filters: JsonObject, accessToken: string | null) {
       const query: Record<string, unknown> = {
         select: VOUCHER_SELECT,
-        order: "start_date.desc",
+        order: "start_date.desc,created_at.desc",
         limit: filters.limit,
         offset: filters.offset
       };
@@ -248,26 +248,45 @@ export function createPricingRepository() {
 
     /** Creates an existing checkout voucher with separately approved support terms. */
     async createVoucher(input: JsonObject, accessToken: string | null) {
+      const discountType = (input.discountType || input.type || "fixed_amount") as string;
+      const discountValue = input.discountValue !== undefined ? Number(input.discountValue) : input.value !== undefined ? Number(input.value) : 0;
+      const maxDiscountAmount = input.maxDiscountAmount !== undefined ? input.maxDiscountAmount : input.maxDiscount !== undefined ? input.maxDiscount : null;
+      const usageLimitTotal = input.usageLimitTotal !== undefined ? input.usageLimitTotal : input.maxUses !== undefined ? input.maxUses : null;
+      const usageLimitPerUser = input.usageLimitPerUser !== undefined ? input.usageLimitPerUser : input.maxPerUser !== undefined ? input.maxPerUser : 1;
+      const normalizedInput = {
+        ...input,
+        type: discountType,
+        value: discountValue,
+        maxDiscount: maxDiscountAmount,
+        maxUses: usageLimitTotal,
+        maxPerUser: usageLimitPerUser,
+        discountType,
+        discountValue,
+        maxDiscountAmount,
+        usageLimitTotal,
+        usageLimitPerUser
+      };
+
       return withPricingError(async () => {
         try {
           return asJsonObject(await callRpc("admin_save_recovery_voucher", {
-            p_input: input, p_id: null
+            p_input: normalizedInput, p_id: null
           }, { accessToken }));
         } catch {
           return asJsonObject(await callRpc("admin_create_voucher", {
-            p_code: input.code,
-            p_name: input.name || input.code,
-            p_discount_type: input.discountType,
-            p_discount_value: input.discountValue,
-            p_start_date: input.startDate,
-            p_end_date: input.endDate,
-            p_promo_id: input.promoId ?? null,
-            p_max_discount_amount: input.maxDiscountAmount ?? null,
-            p_min_order_value: input.minOrderValue ?? null,
-            p_usage_limit_total: input.usageLimitTotal ?? null,
-            p_usage_limit_per_user: input.usageLimitPerUser ?? null,
-            p_applicable_categories: input.applicableCategories ?? null,
-            p_applicable_user_group: input.applicableUserGroup ?? null
+            p_code: normalizedInput.code,
+            p_name: normalizedInput.name || normalizedInput.code,
+            p_discount_type: normalizedInput.discountType,
+            p_discount_value: normalizedInput.discountValue,
+            p_start_date: normalizedInput.startDate,
+            p_end_date: normalizedInput.endDate,
+            p_promo_id: normalizedInput.promoId ?? null,
+            p_max_discount_amount: normalizedInput.maxDiscountAmount ?? null,
+            p_min_order_value: normalizedInput.minOrderValue ?? null,
+            p_usage_limit_total: normalizedInput.usageLimitTotal ?? null,
+            p_usage_limit_per_user: normalizedInput.usageLimitPerUser ?? null,
+            p_applicable_categories: normalizedInput.applicableCategories ?? null,
+            p_applicable_user_group: normalizedInput.applicableUserGroup ?? null
           }, { accessToken }));
         }
       });
@@ -275,27 +294,46 @@ export function createPricingRepository() {
 
     /** Updates voucher terms and recovery approval atomically under its version guard. */
     async updateVoucher(voucherId: string, input: JsonObject, accessToken: string | null) {
+      const discountType = input.discountType !== undefined ? input.discountType : input.type;
+      const discountValue = input.discountValue !== undefined ? Number(input.discountValue) : input.value !== undefined ? Number(input.value) : undefined;
+      const maxDiscountAmount = input.maxDiscountAmount !== undefined ? input.maxDiscountAmount : input.maxDiscount;
+      const usageLimitTotal = input.usageLimitTotal !== undefined ? input.usageLimitTotal : input.maxUses;
+      const usageLimitPerUser = input.usageLimitPerUser !== undefined ? input.usageLimitPerUser : input.maxPerUser;
+      const normalizedInput = {
+        ...input,
+        type: discountType,
+        value: discountValue,
+        maxDiscount: maxDiscountAmount,
+        maxUses: usageLimitTotal,
+        maxPerUser: usageLimitPerUser,
+        discountType,
+        discountValue,
+        maxDiscountAmount,
+        usageLimitTotal,
+        usageLimitPerUser
+      };
+
       return withPricingError(async () => {
         try {
           return asJsonObject(await callRpc("admin_save_recovery_voucher", {
-            p_input: input, p_id: voucherId
+            p_input: normalizedInput, p_id: voucherId
           }, { accessToken }));
         } catch {
           return asJsonObject(await callRpc("admin_update_voucher", {
             p_voucher_id: voucherId,
-            p_expected_version: input.expectedVersion,
-            p_name: input.name ?? null,
-            p_discount_type: input.discountType ?? null,
-            p_discount_value: input.discountValue ?? null,
-            p_max_discount_amount: input.maxDiscountAmount ?? null,
-            p_min_order_value: input.minOrderValue ?? null,
-            p_usage_limit_total: input.usageLimitTotal ?? null,
-            p_usage_limit_per_user: input.usageLimitPerUser ?? null,
-            p_applicable_categories: input.applicableCategories ?? null,
-            p_applicable_user_group: input.applicableUserGroup ?? null,
-            p_start_date: input.startDate ?? null,
-            p_end_date: input.endDate ?? null,
-            p_is_active: input.isActive ?? null
+            p_expected_version: normalizedInput.expectedVersion,
+            p_name: normalizedInput.name ?? null,
+            p_discount_type: normalizedInput.discountType ?? null,
+            p_discount_value: normalizedInput.discountValue ?? null,
+            p_max_discount_amount: normalizedInput.maxDiscountAmount ?? null,
+            p_min_order_value: normalizedInput.minOrderValue ?? null,
+            p_usage_limit_total: normalizedInput.usageLimitTotal ?? null,
+            p_usage_limit_per_user: normalizedInput.usageLimitPerUser ?? null,
+            p_applicable_user_group: normalizedInput.applicableUserGroup ?? null,
+            p_applicable_categories: normalizedInput.applicableCategories ?? null,
+            p_start_date: normalizedInput.startDate ?? null,
+            p_end_date: normalizedInput.endDate ?? null,
+            p_is_active: normalizedInput.isActive ?? null
           }, { accessToken }));
         }
       });

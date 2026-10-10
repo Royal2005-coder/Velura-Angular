@@ -48,49 +48,68 @@ export async function handleOffersRoute(
   if (req.method !== "GET") {
     throw new HttpError(405, "METHOD_NOT_ALLOWED", "Phương thức không được hỗ trợ");
   }
-
-  const profile = resolveProfile(context);
-  const now = new Date();
-
-  // Đánh giá mã ở giá trị đơn bằng 0: ví voucher ở trang Ưu đãi cho khách xem mã nào
-  // đang có và điều kiện của từng mã, chưa gắn với một giỏ hàng cụ thể nào. Cây danh
-  // mục tải kèm để mã theo danh mục nói được tên danh mục thay vì "danh mục khác".
-  let promotions: JsonObject[] = [];
-  let tree: CategoryTree = { pathById: new Map(), nameById: {} };
   try {
-    const [promoResult, treeResult] = await Promise.all([
-      selectRows("promotion", { is_active: "eq.true", limit: 100 }),
-      loadCategoryTree().catch(() => ({ pathById: new Map(), nameById: {} }))
-    ]);
-    promotions = (promoResult.rows || []).sort((a, b) => Number(a.display_order || 0) - Number(b.display_order || 0));
-    tree = treeResult;
-  } catch (err: unknown) {
-    console.warn("[OFFERS] Failed to load promotions or categories:", err);
-  }
+    const profile = resolveProfile(context);
+    const now = new Date();
 
-  let walletItems: EvaluatedVoucher[] = [];
-  try {
-    const wallet = await buildWallet(context, 0, 0, { lines: [], categoryNameById: tree.nameById });
-    walletItems = wallet.items;
-  } catch (err: unknown) {
-    console.warn("[OFFERS] Failed to build wallet for offers:", err);
-  }
-  // Cùng quy tắc vòng đời với bảng chiến dịch bên admin: chiến dịch cạn ngân sách vẫn
-  // còn cờ bật nhưng không còn giảm được, nên không được mời khách vào.
-  const campaigns = (promotions || [])
-    .filter((promotion) => promotionLifecycle(toLifecycleInput(promotion), now) === "running")
-    .map((promotion) => toCampaignCard(promotion, now));
-  const isMember = Boolean(profile?.user_id);
+    let promotions: JsonObject[] = [];
+    let tree: CategoryTree = { pathById: new Map(), nameById: {} };
+    try {
+      const [promoResult, treeResult] = await Promise.all([
+        selectRows("promotion", { limit: 100 }),
+        loadCategoryTree().catch(() => ({ pathById: new Map(), nameById: {} }))
+      ]);
+      promotions = (promoResult.rows || [])
+        .filter((row) => row.is_active === true || (row.start_date && !row.paused_at && String(row.start_date) <= now.toISOString() && String(row.end_date) >= now.toISOString()))
+        .sort((a, b) => Number(a.display_order || 0) - Number(b.display_order || 0));
+      tree = treeResult;
+    } catch (err: unknown) {
+      console.warn("[OFFERS] Failed to load promotions or categories:", err);
+    }
 
-  return sendJson(res, 200, {
-    success: true,
-    generated_at: now.toISOString(),
-    is_member: isMember,
-    featured: campaigns.filter((campaign) => campaign.is_featured),
-    campaigns,
-    vouchers: walletItems.map((item) => toVoucherCard(item, now, isMember)),
-    birthday_prompt: buildBirthdayPrompt(profile, now)
-  }, corsHeaders);
+    let walletItems: EvaluatedVoucher[] = [];
+    try {
+      const wallet = await buildWallet(context, 0, 0, { lines: [], categoryNameById: tree.nameById });
+      walletItems = wallet.items || [];
+    } catch (err: unknown) {
+      console.warn("[OFFERS] Failed to build wallet for offers:", err);
+    }
+
+    const campaigns = (promotions || [])
+      .filter((promotion) => {
+        try {
+          const lifecycle = promotionLifecycle(toLifecycleInput(promotion), now);
+          return lifecycle === "running";
+        } catch {
+          return false;
+        }
+      })
+      .map((promotion) => toCampaignCard(promotion, now));
+    const isMember = Boolean(profile?.user_id);
+
+    return sendJson(res, 200, {
+      success: true,
+      generated_at: now.toISOString(),
+      is_member: isMember,
+      featured: campaigns.filter((campaign) => campaign.is_featured),
+      campaigns,
+      vouchers: walletItems.map((item) => toVoucherCard(item, now, isMember)),
+      birthday_prompt: buildBirthdayPrompt(profile, now)
+    }, corsHeaders);
+  } catch (err: unknown) {
+    console.error("[OFFERS] Unexpected failure in handleOffersRoute:", err);
+    const profile = resolveProfile(context);
+    const now = new Date();
+    return sendJson(res, 200, {
+      success: true,
+      generated_at: now.toISOString(),
+      is_member: Boolean(profile?.user_id),
+      featured: [],
+      campaigns: [],
+      vouchers: [],
+      birthday_prompt: buildBirthdayPrompt(profile, now)
+    }, corsHeaders);
+  }
 }
 
 function toCampaignCard(promotion: JsonObject, now: Date): JsonObject {
@@ -134,9 +153,10 @@ export function voucherGroup(item: Pick<EvaluatedVoucher, "audience" | "endDate"
 export function toVoucherCard(item: EvaluatedVoucher, now: Date, isMember: boolean): JsonObject {
   const cartDependent = item.reason !== null && CART_DEPENDENT_REASONS.has(item.reason);
   const usable = item.eligible || cartDependent;
+  const catNames = Array.isArray(item.categoryNames) ? item.categoryNames : [];
   const conditions = [
-    item.minOrderValue > 0 ? `Đơn tối thiểu ${formatMoney(item.minOrderValue)}` : "Không yêu cầu giá trị tối thiểu",
-    item.categoryNames.length ? `Áp cho ${item.categoryNames.join(", ")}` : null
+    Number(item.minOrderValue || 0) > 0 ? `Đơn tối thiểu ${formatMoney(item.minOrderValue)}` : "Không yêu cầu giá trị tối thiểu",
+    catNames.length ? `Áp cho ${catNames.join(", ")}` : null
   ].filter(Boolean);
   return {
     voucher_id: item.voucherId,

@@ -115,33 +115,21 @@
           @if (searchOpen()) {
             <div class="search-backdrop" (click)="closeSearch()"></div>
             <div class="site-header__search-dropdown">
-              <!-- Dedicated Search Input Row inside Dropdown -->
-              <div class="search-dd__input-row">
-                <svg class="icon icon-search" aria-hidden="true" style="width: 18px; height: 18px; color: var(--terracotta, #C97B63); flex-shrink: 0;"><use href="#icon-search"></use></svg>
-                <input
-                  type="search"
-                  class="search-dd__input"
-                  [value]="searchQuery()"
-                  placeholder="Nhập tên trang phục, đầm, áo, phong cách thời trang..."
-                  aria-label="Nhập từ khóa tìm kiếm"
-                  (input)="onSearchInput($event)"
-                  (keydown)="onSearch($event)"
-                />
-                @if (searchQuery()) {
-                  <button type="button" class="search-dd__clear-query-btn" (click)="searchQuery.set('')" title="Xóa từ khóa" aria-label="Xóa từ khóa">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                  </button>
-                }
-                <button type="button" class="btn btn--primary search-dd__submit-btn" (click)="executeSearch(searchQuery())">
-                  Tìm kiếm
+              <!-- When typing a search query: always show clear actionable search banner -->
+              @if (searchQuery().trim().length >= 1) {
+                <button type="button" class="search-dd__action-btn" (click)="executeSearch(searchQuery())">
+                  <span class="search-dd__action-icon">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="7.33" cy="7.33" r="5.33" stroke="currentColor" stroke-width="1.33"/><path d="M14 14l-2.87-2.87" stroke="currentColor" stroke-width="1.33" stroke-linecap="round"/></svg>
+                  </span>
+                  <span class="search-dd__action-text">Tìm kiếm sản phẩm: <strong>"{{ searchQuery() }}"</strong></span>
+                  <span class="search-dd__action-hint">Nhấn Enter ↵</span>
                 </button>
-              </div>
+              }
 
               <!-- Google Lens Shortcut Banner -->
-              <!-- Google Lens Feature Card -->
               <div class="search-dd__lens-card" (click)="openVisualSearch($event)">
                 <div class="search-dd__lens-icon">
-                  <svg class="icon icon-lens" viewBox="0 0 24 24" fill="none" style="width: 18px; height: 18px;">
+                  <svg class="icon icon-lens" viewBox="0 0 24 24" fill="none" style="width: 16px; height: 16px;">
                     <path d="M3 7V5a2 2 0 0 1 2-2h2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                     <path d="M17 3h2a2 2 0 0 1 2 2v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                     <path d="M21 17v2a2 2 0 0 1-2 2h-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
@@ -163,7 +151,7 @@
               @if (searchQuery().trim().length >= 2) {
                 <div class="search-dd__section">
                   <div class="search-dd__section-title">
-                    <span>Gợi ý sản phẩm</span>
+                    <span>Gợi ý sản phẩm nhanh</span>
                     @if (instantSuggestions().length) {
                       <span class="search-dd__count">{{ instantSuggestions().length }} kết quả</span>
                     }
@@ -189,44 +177,48 @@
                       Xem tất cả kết quả cho "{{ searchQuery() }}" →
                     </button>
                   } @else {
-                    <div class="search-dd__empty">
-                      Không tìm thấy sản phẩm phù hợp. Thử tìm bằng Google Lens hoặc từ khóa khác.
+                    <div class="search-dd__empty-box">
+                      <p>Không có sản phẩm gợi ý nhanh cho <strong>"{{ searchQuery() }}"</strong>.</p>
+                      <button type="button" class="btn btn--outline btn--sm" (click)="executeSearch(searchQuery())">
+                        Tìm kiếm toàn bộ kho hàng với "{{ searchQuery() }}" →
+                      </button>
                     </div>
                   }
                 </div>
-              } @else {
-                <!-- Default state: Categories & Trending -->
-                <!-- Trending Keywords (Từ khóa nổi bật ngày hôm nay) -->
-                <div class="search-dd__section">
-                  <div class="search-dd__section-title">
-                    <span>Từ khóa nổi bật ngày hôm nay</span>
-                  </div>
-                  <div class="search-dd__trending-wrap">
-                    @for (kw of trendingKeywords; track kw) {
-                      <button type="button" class="search-dd__trending-pill" (click)="selectKeyword(kw)">
-                        <span>{{ kw }}</span>
-                      </button>
-                    }
-                  </div>
-                </div>
+              }
 
-                <!-- Categories (Danh mục thời trang nổi bật) -->
-                <div class="search-dd__section">
-                  <div class="search-dd__section-title">
-                    <span>Danh mục nổi bật</span>
-                  </div>
-                  <div class="search-dd__categories-grid">
-                    @for (cat of quickCategories; track cat.slug) {
-                      <button type="button" class="search-dd__cat-btn" (click)="selectCategory(cat.slug)">
-                        <img [src]="cat.image" [alt]="cat.name" class="search-dd__cat-thumb" />
-                        <span class="search-dd__cat-name">{{ cat.name }}</span>
-                        <svg class="search-dd__cat-arrow" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
-                      </button>
-                    }
-                  </div>
+              <!-- Trending Keywords: ALWAYS VISIBLE so user never gets stranded -->
+              <div class="search-dd__section">
+                <div class="search-dd__section-title">
+                  <span>{{ searchQuery().trim().length >= 2 ? 'Gợi ý từ khóa thịnh hành' : 'Từ khóa nổi bật ngày hôm nay' }}</span>
                 </div>
+                <div class="search-dd__trending-wrap">
+                  @for (kw of trendingKeywords; track kw) {
+                    <button type="button" class="search-dd__trending-pill" (click)="selectKeyword(kw)">
+                      <span>{{ kw }}</span>
+                    </button>
+                  }
+                </div>
+              </div>
 
-                <!-- Recently Viewed Products (Sản phẩm đã xem gần đây) -->
+              <!-- Categories: ALWAYS VISIBLE -->
+              <div class="search-dd__section">
+                <div class="search-dd__section-title">
+                  <span>Danh mục nổi bật</span>
+                </div>
+                <div class="search-dd__categories-grid">
+                  @for (cat of quickCategories; track cat.slug) {
+                    <button type="button" class="search-dd__cat-btn" (click)="selectCategory(cat.slug)">
+                      <img [src]="cat.image" [alt]="cat.name" class="search-dd__cat-thumb" />
+                      <span class="search-dd__cat-name">{{ cat.name }}</span>
+                      <svg class="search-dd__cat-arrow" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    </button>
+                  }
+                </div>
+              </div>
+
+              <!-- Recently Viewed: only when query is short -->
+              @if (searchQuery().trim().length < 2) {
                 <div class="search-dd__section">
                   <div class="search-dd__section-title">
                     <span>Sản phẩm đã xem gần đây</span>

@@ -47,7 +47,12 @@ export class LoyaltyService {
     const actor = loyaltyActor(context);
     if (!actor && requested > 0) throw new HttpError(403, "LOYALTY_MEMBER_REQUIRED", "Khách vãng lai không được sử dụng điểm thành viên.");
     if (!actor) return { available_points: 0, max_points: 0, points_spent: 0, points_discount_amount: 0, policy_approved: false, spending_enabled: false };
-    return this.repository.quote(actor, subtotal, shipping, voucherDiscount, requested);
+    try {
+      return await this.repository.quote(actor, subtotal, shipping, voucherDiscount, requested);
+    } catch (err: unknown) {
+      console.warn("[LOYALTY_QUOTE] velura_loyalty_quote unavailable:", err);
+      return { available_points: 0, max_points: 0, points_spent: 0, points_discount_amount: 0, policy_approved: false, spending_enabled: false };
+    }
   }
 
   /** Creates the inactive registration and optional immutable referral attribution atomically. */

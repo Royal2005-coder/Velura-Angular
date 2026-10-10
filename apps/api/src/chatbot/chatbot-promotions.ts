@@ -48,9 +48,14 @@ export async function confirmSupportOffer(sessionId: string, actorId: string, of
 /** Resolves confirmed recovery claims for an authenticated member or a phone already verified by checkout OTP. */
 export async function listConfirmedSupportVoucherIds(profileId: string | null, verifiedGuestPhone: string | null = null): Promise<string[]> {
   if (!profileId && !verifiedGuestPhone) return [];
-  const result = await callRpc("chat_support_wallet_offer_ids", {
-    p_profile: profileId, p_guest_phone: verifiedGuestPhone
-  });
-  if (!Array.isArray(result)) throw new HttpError(503, "SUPPORT_OFFER_CLAIMS_UNAVAILABLE", "Không đọc được ưu đãi CSKH đã xác nhận.");
-  return result.filter((value: unknown): value is string => typeof value === "string");
+  try {
+    const result = await callRpc("chat_support_wallet_offer_ids", {
+      p_profile: profileId, p_guest_phone: verifiedGuestPhone
+    });
+    if (!Array.isArray(result)) return [];
+    return result.filter((value: unknown): value is string => typeof value === "string");
+  } catch (err: unknown) {
+    console.warn("[SUPPORT_OFFERS] chat_support_wallet_offer_ids unavailable:", err);
+    return [];
+  }
 }

@@ -1,5 +1,5 @@
 import { DecimalPipe } from '@angular/common';
-import { Component, DestroyRef, computed, inject, signal, viewChild } from '@angular/core';
+import { Component, DestroyRef, ElementRef, computed, inject, signal, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 import type { ProductSummary } from '../../core/models/product.interface';
@@ -108,6 +108,7 @@ export class SiteHeader {
   }
 
   readonly headerWorkbench = viewChild<VisualSearchWorkbench>('headerWorkbench');
+  readonly overlayInput = viewChild<ElementRef<HTMLInputElement>>('overlaySearchInput');
 
   /**
    * Opens the AI visual image search workbench modal.
@@ -148,6 +149,9 @@ export class SiteHeader {
   onSearchFocus(): void {
     this.searchOpen.set(true);
     this.loadRecentlyViewed();
+    setTimeout(() => {
+      this.overlayInput()?.nativeElement.focus();
+    }, 10);
   }
 
   loadRecentlyViewed(): void {

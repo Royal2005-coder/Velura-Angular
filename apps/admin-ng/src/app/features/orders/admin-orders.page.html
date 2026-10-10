@@ -155,7 +155,7 @@
 
 @if (selected(); as order) {
   <div class="admin-drawer-backdrop" (click)="closeDetail()"></div>
-  <aside class="admin-drawer admin-drawer--wide" aria-label="Chi tiết đơn hàng" [class.admin-drawer--busy]="detailLoading()">
+  <aside class="admin-drawer admin-drawer--wide" appAdminDialog (appAdminDialogClose)="closeDetail()" aria-label="Chi tiết đơn hàng" [class.admin-drawer--busy]="detailLoading()">
     <header class="admin-drawer__header">
       <div>
         <p class="admin-product-code">{{ order.order_code || order.order_id }} · {{ dateTime(order.order_date) }}</p>
@@ -193,7 +193,7 @@
         </div>
       }
 
-      @if (isPendingCod(order)) {
+      @if (isPendingCod(order) && canCallConfirmation()) {
         <div class="admin-order-alert-banner admin-order-alert-banner--warning">
           <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
             <div style="display: flex; align-items: flex-start; gap: 8px;">
@@ -217,7 +217,7 @@
       <!-- ERP Status Pipeline (Odoo Style) -->
       <div class="admin-order-pipeline" aria-label="Tiến trình đơn hàng">
         @for (step of pipelineSteps(); track step.id) {
-          <div class="admin-order-pipeline__step admin-order-pipeline__step--{{ step.state }}" [class.admin-order-pipeline__step--active]="step.state === 'current'">
+          <div class="admin-order-pipeline__step admin-order-pipeline__step--{{ step.state }}" [attr.aria-current]="step.state === 'current' ? 'step' : null" [class.admin-order-pipeline__step--active]="step.state === 'current'">
             <div class="admin-order-pipeline__step-indicator">
               @if (step.state === 'done') {
                 <app-admin-icon name="check" cssClass="admin-line-icon" style="width: 12px; height: 12px;" />
@@ -436,7 +436,7 @@
 
 @if (activeAction(); as action) {
   <div class="admin-modal-overlay">
-    <section class="admin-modal" role="dialog" aria-modal="true" [attr.aria-label]="action.label">
+    <section class="admin-modal" appAdminDialog (appAdminDialogClose)="closeModal()" role="dialog" aria-modal="true" [attr.aria-label]="action.label">
       <form (submit)="submitAction($event)">
         <header class="admin-modal__header">
           <h2>{{ action.label }}</h2>
@@ -527,7 +527,7 @@
 
 @if (modal()?.kind === 'payment') {
   <div class="admin-modal-overlay">
-    <section class="admin-modal" role="dialog" aria-modal="true" aria-label="Đối soát thanh toán">
+    <section class="admin-modal" appAdminDialog (appAdminDialogClose)="closeModal()" role="dialog" aria-modal="true" aria-label="Đối soát thanh toán">
       <form (submit)="submitPaymentResolve($event)">
         <header class="admin-modal__header">
           <h2>Đối soát thanh toán</h2>
@@ -560,7 +560,7 @@
 
 @if (modal()?.kind === 'cod_call') {
   <div class="admin-modal-overlay">
-    <section class="admin-modal admin-modal--lg" role="dialog" aria-modal="true" aria-label="Gọi xác nhận đơn hàng COD">
+    <section class="admin-modal admin-modal--lg" appAdminDialog (appAdminDialogClose)="closeModal()" role="dialog" aria-modal="true" aria-label="Gọi xác nhận đơn hàng COD">
       <form (submit)="submitCodCall($event)">
         <header class="admin-modal__header">
           <div>
@@ -588,8 +588,8 @@
               <div>
                 <small>Số điện thoại liên hệ:</small>
                 <div style="display: flex; align-items: center; gap: 8px; margin-top: 2px;">
-                  <a [href]="'tel:' + selected()?.shipping_phone" class="admin-phone-call-btn">
-                    <app-admin-icon name="phone" cssClass="admin-line-icon" /> {{ selected()?.shipping_phone }}
+                  <a [href]="'tel:' + selected()?.shipping_phone" class="admin-phone-call-btn" (click)="startCodCall()" [attr.aria-disabled]="detailLoading() || submitting()">
+                    <app-admin-icon name="phone" cssClass="admin-line-icon" /> Gọi {{ selected()?.shipping_phone }}
                   </a>
                   <button type="button" class="admin-copy-btn" (click)="copyPhone(selected()?.shipping_phone)">
                     <app-admin-icon [name]="copiedPhone() ? 'check' : 'edit'" cssClass="admin-line-icon" />
@@ -628,16 +628,16 @@
               Kết quả liên hệ &amp; Quyết định đơn hàng <b>*</b>
             </legend>
             <div class="admin-cod-decisions">
-              <label class="admin-decision-label" [class.admin-decision-label--active]="codDecision() === 'confirm'">
-                <input type="radio" name="codDecisionRadio" value="confirm" [checked]="codDecision() === 'confirm'" (change)="codDecision.set('confirm')" />
+              <label class="admin-decision-label" [class.admin-decision-label--disabled]="!codCallStarted() || detailLoading()" [class.admin-decision-label--active]="codDecision() === 'confirm'">
+                <input type="radio" name="codDecisionRadio" value="confirm" [disabled]="!codCallStarted() || detailLoading()" [checked]="codDecision() === 'confirm'" (change)="codDecision.set('confirm')" />
                 <div>
                   <strong><span class="admin-status-dot admin-status-dot--success"></span> Khách đồng ý nhận hàng</strong>
-                  <p>Khách nghe máy, xác nhận đúng thông tin đơn hàng và đồng ý nhận. Đơn sẽ chuyển sang 'Đã xác nhận' để chuẩn bị đóng gói.</p>
+                  <p>Ghi nhận khách đã nghe máy và đồng ý nhận. Sau khi máy chủ lưu kết quả thành công, bạn có thể xác nhận đơn ở phần chi tiết.</p>
                 </div>
               </label>
 
               <label class="admin-decision-label" [class.admin-decision-label--active]="codDecision() === 'cancel'">
-                <input type="radio" name="codDecisionRadio" value="cancel" [checked]="codDecision() === 'cancel'" (change)="codDecision.set('cancel')" />
+                <input type="radio" name="codDecisionRadio" value="cancel" [disabled]="!codCallStarted() || detailLoading()" [checked]="codDecision() === 'cancel'" (change)="codDecision.set('cancel')" />
                 <div>
                   <strong><span class="admin-status-dot admin-status-dot--danger"></span> Khách yêu cầu hủy đơn hàng</strong>
                   <p>Khách đổi ý, đặt nhầm hoặc không còn nhu cầu. Đơn hàng sẽ được chuyển sang 'Đã hủy'.</p>
@@ -645,7 +645,7 @@
               </label>
 
               <label class="admin-decision-label" [class.admin-decision-label--active]="codDecision() === 'no_answer'">
-                <input type="radio" name="codDecisionRadio" value="no_answer" [checked]="codDecision() === 'no_answer'" (change)="codDecision.set('no_answer')" />
+                <input type="radio" name="codDecisionRadio" value="no_answer" [disabled]="!codCallStarted() || detailLoading()" [checked]="codDecision() === 'no_answer'" (change)="codDecision.set('no_answer')" />
                 <div>
                   <strong><span class="admin-status-dot admin-status-dot--warning"></span> Không nghe máy / Thuê bao (Lưu lịch sử &amp; Gọi lại sau)</strong>
                   <p>Khách không bắt máy. Ghi nhận cuộc gọi vào nhật ký và giữ nguyên trạng thái Chờ xác nhận để nhân viên liên hệ lại.</p>
@@ -653,7 +653,7 @@
               </label>
 
               <label class="admin-decision-label" [class.admin-decision-label--active]="codDecision() === 'invalid'">
-                <input type="radio" name="codDecisionRadio" value="invalid" [checked]="codDecision() === 'invalid'" (change)="codDecision.set('invalid')" />
+                <input type="radio" name="codDecisionRadio" value="invalid" [disabled]="!codCallStarted() || detailLoading()" [checked]="codDecision() === 'invalid'" (change)="codDecision.set('invalid')" />
                 <div>
                   <strong><span class="admin-status-dot admin-status-dot--danger"></span> Sai số điện thoại / Đơn ảo / Bom hàng</strong>
                   <p>Số điện thoại không tồn tại, thuê bao nhiều lần hoặc có dấu hiệu đơn giả. Đơn hàng sẽ được hủy với lý do gian lận.</p>
@@ -662,22 +662,7 @@
             </div>
           </fieldset>
 
-          @if (codDecision() === 'confirm') {
-            <div style="margin-top: 10px; padding: 10px 14px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px;">
-              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.875rem; color: #166534; font-weight: 500;">
-                <input
-                  type="checkbox"
-                  [checked]="codAutoConfirm()"
-                  (change)="codAutoConfirm.set($any($event.target).checked)"
-                  style="width: 16px; height: 16px; accent-color: #16a34a; cursor: pointer;"
-                />
-                <span>Duyệt xác nhận đơn ngay sau khi lưu kết quả cuộc gọi</span>
-              </label>
-              <p style="margin: 4px 0 0 24px; font-size: 0.75rem; color: #15803d;">
-                Hệ thống sẽ lưu vết cuộc gọi và tự động chuyển đơn sang trạng thái "Đã xác nhận" để chuẩn bị đóng gói.
-              </p>
-            </div>
-          }
+          <p class="admin-order-subtext" aria-live="polite">{{ codCallStarted() ? 'Đã bắt đầu gọi. Chỉ ghi nhận kết quả sau khi liên hệ thực tế; bấm Gọi chưa xác nhận khách đồng ý.' : 'Bấm Gọi số điện thoại ở trên để bắt đầu. Kết quả và xác nhận đơn đang được khóa.' }}</p>
 
           @if (codDecision() === 'cancel') {
             <label class="admin-form-group">
@@ -727,9 +712,9 @@
             [class.admin-btn--secondary]="codDecision() === 'confirm' || codDecision() === 'no_answer'"
             [class.admin-btn--danger]="codDecision() === 'cancel' || codDecision() === 'invalid'"
             type="submit"
-            [disabled]="submitting()"
+            [disabled]="submitting() || detailLoading() || !codCallStarted() || !codDecision()"
           >
-            {{ submitting() ? 'Đang lưu...' : 'Lưu kết quả &amp; Cập nhật đơn' }}
+            {{ submitting() ? 'Đang lưu...' : 'Lưu kết quả cuộc gọi' }}
           </button>
         </footer>
       </form>

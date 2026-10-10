@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: velura-admin
+  namespace: velura
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: velura-admin
+  template:
+    metadata:
+      labels:
+        app: velura-admin
+    spec:
+      automountServiceAccountToken: false
+      priorityClassName: velura-application
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+        runAsUser: 101
+        runAsGroup: 101
+        fsGroup: 101
+      containers:
+      - name: velura-admin
+        image: ghcr.io/royal2005-coder/velura-admin:sha-b3df517c1daa2c4147ca7c5db0a32213a748c683@sha256:7ed8ae854e394939dc4e9c3e4e3e4c2a6ba6fd361cd6a680f0c2cd361a6699dc
+        ports:
+        - name: http
+          containerPort: 8080
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+        resources:
+          requests:
+            cpu: 50m
+            memory: 32Mi
+          limits:
+            cpu: 250m
+            memory: 128Mi
+        readinessProbe:
+          tcpSocket:
+            port: 8080
+          periodSeconds: 10
+        livenessProbe:
+          tcpSocket:
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 20
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: velura-admin
+  namespace: velura
+spec:
+  type: ClusterIP
+  selector:
+    app: velura-admin
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080

@@ -1,0 +1,23 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - namespaces.yaml
+  - security/quotas.yaml
+  - security/network-policies.yaml
+  - database/postgres.yaml
+  - database/backup.yaml
+  - storage/s3-storage.yaml
+  - storage/backup.yaml
+  - auth/keycloak.yaml
+  - observability/victoriametrics.yaml
+  - observability/grafana.yaml
+  - observability/litellm.yaml
+  - observability/loki.yaml
+  - observability/alloy.yaml
+  - observability/alerts.yaml
+  - velura/velura-api.yaml
+  - velura/velura-storefront.yaml
+  - velura/velura-admin.yaml
+  - networking/cloudflared.yaml
+  - networking/oauth2-proxy.yaml

@@ -85,11 +85,11 @@
           <span class="chatbot-header__status"></span>
         </div>
         <div>
-          <h4 class="chatbot-header__title">AI Stylist — Velura</h4>
-          <span class="chatbot-header__desc">Trực tuyến</span>
+          <h4 class="chatbot-header__title">{{ activeHandoff() === 'ai' ? 'AI Stylist — Velura' : 'CSKH — HUMAN' }}</h4>
+          <span class="chatbot-header__desc">{{ activeHandoff() === 'ai' ? 'Mở cuộc trò chuyện để được tư vấn' : 'AI đã dừng · Tiếp tục phiên CSKH' }}</span>
         </div>
       </div>
-      <a class="chatbot-header__expand" routerLink="/chatbot" aria-label="Phóng to" (click)="chatOpen.set(false)" title="Mở trang đầy đủ">
+      <a class="chatbot-header__expand" routerLink="/chatbot" [queryParams]="activeHandoff() !== 'ai' ? {session: activeChatSession()} : {}" aria-label="Phóng to" (click)="chatOpen.set(false)" title="Mở trang đầy đủ">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="15 3 21 3 21 9"></polyline>
           <polyline points="9 21 3 21 3 15"></polyline>
@@ -99,8 +99,12 @@
       </a>
     </div>
     <div class="chatbot-messages">
+      @if (activeHandoff() !== 'ai') {
+        <p role="status">Phiên đã chuyển sang CSKH. Không tạo câu trả lời AI trong phiên này.</p>
+        <button type="button" class="btn btn--outline" (click)="submitChatQuery()">Tiếp tục trò chuyện với CSKH</button>
+      } @else {
       <div class="chatbot-message chatbot-message--bot">
-        Chào bạn, mình là AI Stylist Velura. Bạn cần tư vấn chọn trang phục, phối đồ, hay kiểm tra size hôm nay?
+        Chào bạn, mình là AI Stylist Velura. Mở cuộc trò chuyện để được tư vấn chọn trang phục, phối đồ, hoặc kiểm tra size.
       </div>
       <div class="chatbot-quick-prompts">
         <span class="chatbot-quick-prompts__label">Gợi ý câu hỏi:</span>
@@ -112,6 +116,7 @@
           }
         </div>
       </div>
+      }
     </div>
     <div class="chatbot-widget-footer">
       <form class="chatbot-input-form" (submit)="$event.preventDefault(); submitChatQuery()">

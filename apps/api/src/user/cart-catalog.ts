@@ -129,6 +129,23 @@ export async function loadCatalog(variantIds: readonly string[]): Promise<Map<st
       categoryId: product.category_id ? String(product.category_id) : null
     });
   }
+  const missingIds = unique.filter((id) => !catalog.has(id));
+  if (missingIds.length > 0) {
+    const { rows: prodRows } = await selectRows("product", {
+      select: "product_id,name,sale_price,base_price,category_id",
+      product_id: `in.(${missingIds.map(quotePostgrestValue).join(",")})`,
+      limit: missingIds.length
+    });
+    for (const prod of prodRows) {
+      const prodId = String(prod.product_id);
+      catalog.set(prodId, {
+        variantId: prodId,
+        unitPrice: catalogUnitPrice(prod.sale_price, prod.base_price),
+        productName: String(prod.name || ""),
+        categoryId: prod.category_id ? String(prod.category_id) : null
+      });
+    }
+  }
   return catalog;
 }
 

@@ -1,0 +1,63 @@
+@if (canWrite()) {
+<section class="catalog-content" aria-label="Mô tả sản phẩm và SEO">
+  <h3>Mô tả sản phẩm &amp; SEO bằng AI</h3>
+  <p>AI chỉ chọn dữ liệu đã xác nhận. Tạo lại không thay nội dung đang bán. Duyệt nháp và xuất bản là hai thao tác riêng.</p>
+  <button type="button" [disabled]="busy() || (!productId() && !products().length)" (click)="generate()">{{ products().length ? 'Tạo nháp AI hàng loạt' : 'Tạo / tạo lại nháp bằng AI' }}</button>
+  @if (productId()) { <button type="button" [disabled]="busy()" (click)="load()">Tải lại nguồn và lịch sử</button> }
+  @if (busy()) { <p role="status">Đang xử lý…</p> }
+  @if (error()) { <p role="alert" class="error">{{ error() }}</p> }
+  @if (message()) { <p role="status">{{ message() }}</p> }
+  @if (batch(); as batch) {
+    <h4>Tiến độ {{ batch.completed }} / {{ batch.total }}</h4>
+    <ul>@for (item of batch.items; track item.id) {
+      <li>{{ item.product_id }}: {{ item.status }} @if (item.error) { <span class="error">{{ item.error }}</span> }</li>
+    }</ul>
+  }
+  @if (source(); as source) {
+    <details><summary>Nguồn đã xác nhận — phiên bản {{ source.version }}</summary>
+      <dl>@for (field of sourceFields(); track field.field) { <dt>{{ field.field }}</dt><dd>{{ field.value }}</dd> }</dl>
+      <p>Thiếu chất liệu, nguồn gốc hoặc hướng dẫn chăm sóc: không được tự suy diễn.</p>
+      <label>Dữ liệu đã kiểm tra (JSON: material, features, styling, care, tags — mỗi trường là danh sách chuỗi)
+        <textarea rows="8" [value]="factsEditor()" (input)="editFacts($event)" [disabled]="busy()"></textarea>
+      </label>
+      <button type="button" [disabled]="busy()" (click)="saveFacts()">Tôi đã kiểm tra — xác nhận nguồn</button>
+    </details>
+  }
+  @if (drafts().length) {
+    <h4>Lịch sử nháp</h4>
+    <ul>@for (draft of drafts(); track draft.id) {
+      <li><button type="button" [disabled]="busy()" (click)="select(draft)">{{ draft.created_at }} · {{ draft.status }} · v{{ draft.version }}</button></li>
+    }</ul>
+  }
+  @if (selected(); as draft) {
+    <h4>Nháp {{ draft.status }} · nguồn v{{ draft.source.version }} · nháp v{{ draft.version }}</h4>
+    <p>Mô hình {{ draft.metadata.model }} · schema {{ draft.metadata.schema }} · prompt {{ draft.metadata.prompt }}</p>
+    <div class="comparison">
+      <section><h4>Đang bán (không đổi khi tạo nháp)</h4><strong>{{ liveContent().title }}</strong><p>{{ liveContent().description }}</p><p>SEO: {{ liveContent().seoTitle }}</p><p>{{ liveContent().metaDescription }}</p><p>{{ liveContent().slug }}</p></section>
+      <section><h4>Nháp AI ban đầu (bất biến)</h4><strong>{{ draft.generated.title.text }}</strong><p>{{ draft.generated.short.text }}</p><p>{{ draft.generated.long.text }}</p><p>SEO: {{ draft.generated.seoTitle.text }}</p><p>{{ draft.generated.metaDescription.text }}</p><p>{{ draft.generated.proposedSlug }}</p></section>
+    </div>
+    @if (preview(); as preview) {
+      <h4>Nội dung đang duyệt</h4>
+      <p>{{ preview.title?.text }}</p><p>{{ preview.short?.text }}</p><p>{{ preview.long?.text }}</p>
+      <label>Tiêu đề SEO (tối đa 60 ký tự)<input maxlength="60" [value]="preview.seoTitle?.text || ''" (input)="editSeo($event, 'seoTitle')" [disabled]="busy() || draft.status === 'published' || draft.status === 'rejected'"></label>
+      <label>Mô tả tìm kiếm (tối đa 160 ký tự)<input maxlength="160" [value]="preview.metaDescription?.text || ''" (input)="editSeo($event, 'metaDescription')" [disabled]="busy() || draft.status === 'published' || draft.status === 'rejected'"></label>
+      <label>Slug đề xuất (phải khớp tiêu đề nháp)<input maxlength="120" [value]="preview.proposedSlug || ''" (input)="editSeo($event, 'proposedSlug')" [disabled]="busy() || draft.status === 'published' || draft.status === 'rejected'"></label>
+      <h5>Đặc điểm</h5><ul>@for (claim of preview.highlights || []; track $index) { <li>{{ claim.text }}</li> }</ul>
+      <h5>Phối đồ</h5><ul>@for (claim of preview.styling || []; track $index) { <li>{{ claim.text }}</li> } @empty { <li>Chưa có dữ liệu xác nhận.</li> }</ul>
+      <h5>Chăm sóc</h5><ul>@for (claim of preview.care || []; track $index) { <li>{{ claim.text }}</li> } @empty { <li>Chưa có dữ liệu xác nhận.</li> }</ul>
+      <h5>Từ khóa chính / phụ</h5><ul>@for (claim of preview.primaryKeywords || []; track $index) { <li>{{ claim.text }}</li> } @for (claim of preview.secondaryKeywords || []; track $index) { <li>{{ claim.text }}</li> }</ul>
+      <h5>Alt và nhãn</h5><ul>@for (alt of preview.alt || []; track $index) { <li>{{ alt.photo }} — {{ alt.claim.text }}</li> } @for (claim of preview.tags || []; track $index) { <li>{{ claim.text }}</li> }</ul>
+    }
+    <label>Nội dung và bằng chứng (JSON)
+      <textarea rows="18" [value]="editor()" (input)="edit($event)" [disabled]="busy() || draft.status === 'published' || draft.status === 'rejected'"></textarea>
+    </label>
+    <p>Mỗi text phải ghép đúng các quote từ fields nguồn. Sửa text cần sửa bằng chứng tương ứng. Không thêm chất liệu, xuất xứ, công dụng hoặc lời khuyên chưa xác nhận. Lưu chỉnh sửa sẽ bỏ duyệt cũ.</p>
+    @if (draft.status !== 'published' && draft.status !== 'rejected') {
+      <button type="button" [disabled]="busy()" (click)="review('save')">Lưu chỉnh sửa</button>
+      <button type="button" [disabled]="busy()" (click)="review('approve')">Duyệt nội dung</button>
+      <button type="button" [disabled]="busy()" (click)="review('reject')">Từ chối</button>
+      <button type="button" [disabled]="busy() || draft.status !== 'approved' || changedSinceApproval()" (click)="publish()">Xuất bản nội dung đã duyệt</button>
+    }
+  }
+</section>
+}

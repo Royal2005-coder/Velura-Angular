@@ -1912,3 +1912,392 @@ select.profile-form__input {
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+/* ============================================================
+   Analytics & Spending Dashboard Styles (Luxury E-commerce)
+   ============================================================ */
+
+.analytics-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.analytics-kpi-card {
+  background: #ffffff;
+  border: 1px solid var(--card-border, #E8DFD6);
+  border-radius: var(--radius-md, 12px);
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-shadow: 0 2px 8px rgba(42, 37, 34, 0.04);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.analytics-kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(42, 37, 34, 0.08);
+}
+
+.analytics-kpi-card__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.analytics-kpi-card__label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted, #6B635D);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.analytics-kpi-card__icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.analytics-kpi-card__icon--primary {
+  background: #FAF2EB;
+  color: var(--terracotta, #C97B63);
+}
+
+.analytics-kpi-card__icon--accent {
+  background: #F0F4F8;
+  color: #2563EB;
+}
+
+.analytics-kpi-card__icon--gold {
+  background: #FEF9C3;
+  color: #CA8A04;
+}
+
+.analytics-kpi-card__icon--green {
+  background: #DCFCE7;
+  color: #16A34A;
+}
+
+.analytics-kpi-card__value {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--ink, #2A2522);
+  letter-spacing: -0.02em;
+}
+
+.analytics-kpi-card__sub {
+  font-size: 0.75rem;
+  color: var(--soft, #8C857E);
+  line-height: 1.3;
+}
+
+.analytics-tier-badge {
+  font-size: 1rem;
+  color: var(--terracotta, #C97B63);
+}
+
+.analytics-progress-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.analytics-progress-bar {
+  width: 100%;
+  height: 6px;
+  background: #E8DFD6;
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.analytics-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--terracotta, #C97B63), #E09079);
+  border-radius: 99px;
+  transition: width 0.4s ease;
+}
+
+.analytics-progress-text {
+  font-size: 0.7rem;
+  color: var(--soft, #8C857E);
+}
+
+/* Analytics Sections */
+.analytics-section {
+  background: #ffffff;
+  border: 1px solid var(--card-border, #E8DFD6);
+  border-radius: var(--radius-md, 12px);
+  padding: 24px;
+  margin-bottom: 24px;
+}
+
+.analytics-section__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 18px;
+  border-bottom: 1px solid var(--line, #E8DFD6);
+  padding-bottom: 12px;
+}
+
+.analytics-section__title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--ink, #2A2522);
+  margin: 0;
+}
+
+.analytics-section__hint {
+  font-size: 0.75rem;
+  color: var(--soft, #8C857E);
+}
+
+.analytics-empty-hint {
+  font-size: 0.85rem;
+  color: var(--soft, #8C857E);
+  text-align: center;
+  padding: 20px 0;
+  margin: 0;
+  font-style: italic;
+}
+
+/* Category Spending Bars */
+.analytics-cat-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.analytics-cat-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.analytics-cat-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.82rem;
+}
+
+.analytics-cat-name {
+  font-weight: 600;
+  color: var(--ink, #2A2522);
+}
+
+.analytics-cat-amount {
+  color: var(--muted, #6B635D);
+  font-weight: 500;
+}
+
+.analytics-cat-bar-bg {
+  width: 100%;
+  height: 8px;
+  background: #FAF2EB;
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.analytics-cat-bar-fill {
+  height: 100%;
+  background: var(--terracotta, #C97B63);
+  border-radius: 99px;
+  transition: width 0.4s ease;
+}
+
+/* Vouchers Grid */
+.analytics-vouchers-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+.analytics-voucher-card {
+  background: linear-gradient(135deg, #FAF7F2 0%, #FFFFFF 100%);
+  border: 1.5px dashed var(--terracotta, #C97B63);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: relative;
+}
+
+.analytics-voucher-badge {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #ffffff;
+  background: var(--terracotta, #C97B63);
+  padding: 2px 8px;
+  border-radius: 4px;
+  width: fit-content;
+  letter-spacing: 0.05em;
+}
+
+.analytics-voucher-code {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--ink, #2A2522);
+  font-family: monospace;
+  letter-spacing: 0.05em;
+}
+
+.analytics-voucher-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ink, #2A2522);
+}
+
+.analytics-voucher-cond {
+  font-size: 0.72rem;
+  color: var(--soft, #8C857E);
+}
+
+.analytics-voucher-btn {
+  margin-top: auto;
+  width: 100%;
+  text-align: center;
+}
+
+/* Products Grid (Purchased & Recommended) */
+.analytics-products-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.analytics-product-card {
+  border: 1px solid var(--line, #E8DFD6);
+  border-radius: 10px;
+  overflow: hidden;
+  background: #ffffff;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.analytics-product-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(42, 37, 34, 0.08);
+}
+
+.analytics-product-img {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  height: auto;
+  object-fit: cover;
+  background: #f1f5f9;
+  display: block;
+}
+
+.analytics-discount-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: #DC2626;
+  color: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.analytics-product-info {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+}
+
+.analytics-product-name {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ink, #2A2522);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.analytics-product-price {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--terracotta, #C97B63);
+}
+
+.analytics-product-pricing {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.analytics-product-sale {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--terracotta, #C97B63);
+}
+
+.analytics-product-base {
+  font-size: 0.75rem;
+  color: var(--soft, #8C857E);
+  text-decoration: line-through;
+}
+
+.analytics-reorder-btn,
+.analytics-view-btn {
+  margin-top: auto;
+  width: 100%;
+  text-align: center;
+}
+
+/* Responsive Breakpoints */
+@media (max-width: 992px) {
+  .analytics-kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .analytics-vouchers-grid {
+    grid-template-columns: 1fr;
+  }
+  .analytics-products-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 576px) {
+  .analytics-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+  .analytics-products-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Loading Shimmer Skeleton */
+.analytics-loading-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.analytics-loading-card {
+  height: 100px;
+  background: linear-gradient(90deg, #FAF7F2 25%, #F0EAE1 50%, #FAF7F2 75%);
+  background-size: 200% 100%;
+  animation: analyticsShimmer 1.5s infinite;
+  border-radius: var(--radius-md, 12px);
+  border: 1px solid var(--line, #E8DFD6);
+}
+
+@keyframes analyticsShimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}

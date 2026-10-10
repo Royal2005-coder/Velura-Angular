@@ -69,6 +69,14 @@
                 </svg>
                 Ưu đãi của tôi
               </a>
+              <a href="#" class="account-sidebar__link" data-tab="analytics">
+                <svg class="account-sidebar__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="18" y1="20" x2="18" y2="10" />
+                  <line x1="12" y1="20" x2="12" y2="4" />
+                  <line x1="6" y1="20" x2="6" y2="14" />
+                </svg>
+                Quản lý chi tiêu & Gợi ý
+              </a>
               <a href="#" class="account-sidebar__link" data-tab="style-profile">
                 <svg class="account-sidebar__icon" width="16" height="16" viewBox="0 0 24 24" fill="none"
                   stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -220,7 +228,7 @@
                   <h2 class="account-main__title">Sổ địa chỉ</h2>
                   <p class="account-main__subtitle">Quản lý địa chỉ giao hàng</p>
                 </div>
-                <button class="btn btn--outline js-btn-add-address" type="button">
+                <button class="btn btn--outline js-btn-add-address" type="button" (click)="openAddressModal()">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                     <line x1="12" y1="5" x2="12" y2="19"></line>
                     <line x1="5" y1="12" x2="19" y2="12"></line>
@@ -231,113 +239,21 @@
 
               <!-- Addresses List -->
               <div class="address-list">
-                <!-- Address 1 (Default) -->
-                <div class="address-card address-card--default" data-id="1">
-                  <div class="address-card__icon-wrapper">
-                    <svg class="address-card__location-icon" width="16" height="16" viewBox="0 0 24 24" fill="none"
-                      stroke="currentColor" stroke-width="2">
-                      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-                      <circle cx="12" cy="10" r="3" />
-                    </svg>
-                  </div>
-                  <div class="address-card__content">
-                    <div class="address-card__header">
-                      <span class="address-card__name">Nguyễn Thanh Hà</span>
-                      <span class="address-card__separator">·</span>
-                      <span class="address-card__phone">0901 234 567</span>
-                      <span class="badge badge--default">Mặc định</span>
+                @for (addr of savedAddresses(); track addr.id || $index) {
+                  <div class="address-card" [class.address-card--default]="addr.is_default" [attr.data-id]="addr.id">
+                    <div class="address-card__content">
+                      <div class="address-card__header">
+                        <span class="address-card__name">{{ addr.name }}</span>
+                        <span class="address-card__separator">·</span>
+                        <span class="address-card__phone">{{ addr.phone }}</span>
+                        @if (addr.is_default) { <span class="badge badge--default">Mặc định</span> }
+                      </div>
+                      <p class="address-card__detail">{{ addr.address || addr.detail }}</p>
                     </div>
-                    <p class="address-card__detail">Số 24, Lý Tự Trọng, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh</p>
                   </div>
-                  <div class="address-card__actions">
-                    <button class="address-card__btn js-btn-edit-address" aria-label="Chỉnh sửa" type="button">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M12 20h9" />
-                        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-                      </svg>
-                    </button>
-                    <button class="address-card__btn js-btn-delete-address" aria-label="Xóa" type="button">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="3 6 5 6 21 6" />
-                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-
-                <!-- Address 2 -->
-                <div class="address-card" data-id="2">
-                  <div class="address-card__icon-wrapper">
-                    <svg class="address-card__location-icon" width="16" height="16" viewBox="0 0 24 24" fill="none"
-                      stroke="currentColor" stroke-width="2">
-                      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-                      <circle cx="12" cy="10" r="3" />
-                    </svg>
-                  </div>
-                  <div class="address-card__content">
-                    <div class="address-card__header">
-                      <span class="address-card__name">Nguyễn Thanh Hà</span>
-                      <span class="address-card__separator">·</span>
-                      <span class="address-card__phone">0901 234 567</span>
-                      <span class="badge badge--default d-none">Mặc định</span>
-                    </div>
-                    <p class="address-card__detail">12 Trần Hưng Đạo, Phường Hàng Bài, Quận Hoàn Kiếm, Hà Nội</p>
-                  </div>
-                  <div class="address-card__actions">
-                    <button class="address-card__btn js-btn-edit-address" aria-label="Chỉnh sửa" type="button">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M12 20h9" />
-                        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-                      </svg>
-                    </button>
-                    <button class="address-card__btn js-btn-delete-address" aria-label="Xóa" type="button">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="3 6 5 6 21 6" />
-                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-
-                <!-- Address 3 -->
-                <div class="address-card" data-id="3">
-                  <div class="address-card__icon-wrapper">
-                    <svg class="address-card__location-icon" width="16" height="16" viewBox="0 0 24 24" fill="none"
-                      stroke="currentColor" stroke-width="2">
-                      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-                      <circle cx="12" cy="10" r="3" />
-                    </svg>
-                  </div>
-                  <div class="address-card__content">
-                    <div class="address-card__header">
-                      <span class="address-card__name">Mẹ Hà</span>
-                      <span class="address-card__separator">·</span>
-                      <span class="address-card__phone">0938 112 233</span>
-                      <span class="badge badge--default d-none">Mặc định</span>
-                    </div>
-                    <p class="address-card__detail">98 Nguyễn Văn Linh, Phường Tân Phong, Quận 7, TP. Hồ Chí Minh</p>
-                  </div>
-                  <div class="address-card__actions">
-                    <button class="address-card__btn js-btn-edit-address" aria-label="Chỉnh sửa" type="button">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M12 20h9" />
-                        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-                      </svg>
-                    </button>
-                    <button class="address-card__btn js-btn-delete-address" aria-label="Xóa" type="button">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="3 6 5 6 21 6" />
-                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
+                } @empty {
+                  <p class="account-main__subtitle">Bạn chưa lưu địa chỉ nào.</p>
+                }
               </div>
             </div>
 
@@ -537,6 +453,7 @@
                 <h2 class="account-main__title">Style Profile</h2>
                 <p class="account-main__subtitle">Hồ sơ phong cách cá nhân — được tạo từ Style Quiz</p>
               </div>
+              @if (tab() === 'style-profile') { <app-personal-color /> }
 
               <!-- Empty State -->
               <div class="sp-empty" id="js-style-profile-empty" style="display:none;">
@@ -803,6 +720,7 @@
                 <h2 class="account-main__title">Ưu đãi của tôi</h2>
                 <p class="account-main__subtitle">Quyền lợi thành viên của bạn tại Velura</p>
               </div>
+              @if (tab() === 'offers') { <app-loyalty-wallet /> }
               <div class="offers-center" data-offers-center style="padding: 0; min-height: auto; background: transparent;">
                 <div class="offers-center__filters" role="group" aria-label="Lọc ưu đãi" style="margin-top: 0; margin-bottom: 24px;">
                   <button type="button" [class.is-active]="offerFilter() === 'ALL'" [attr.aria-pressed]="offerFilter() === 'ALL'" (click)="setOfferFilter('ALL')">Tất cả</button>
@@ -844,6 +762,190 @@
                 </section>
               </div>
             </div>
+            <!-- Tab Analytics: Quản lý chi tiêu & Gợi ý thông minh -->
+            <div class="account-tab-content" id="tab-analytics">
+              <div class="account-main__header">
+                <h2 class="account-main__title">Quản lý chi tiêu & Gợi ý thông minh</h2>
+                <p class="account-main__subtitle">Tổng quan ngân sách mua sắm, tiến độ hạng thành viên và các gợi ý thời trang tối ưu cho bạn</p>
+              </div>
+
+              <!-- 4 KPI Metrics Grid with Shimmer Skeleton -->
+              @if (analyticsLoading()) {
+                <div class="analytics-loading-grid">
+                  <div class="analytics-loading-card"></div>
+                  <div class="analytics-loading-card"></div>
+                  <div class="analytics-loading-card"></div>
+                  <div class="analytics-loading-card"></div>
+                </div>
+              } @else {
+                <div class="analytics-kpi-grid">
+                <div class="analytics-kpi-card">
+                  <div class="analytics-kpi-card__top">
+                    <span class="analytics-kpi-card__label">Tổng chi tiêu tích lũy</span>
+                    <div class="analytics-kpi-card__icon analytics-kpi-card__icon--primary">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+                    </div>
+                  </div>
+                  <div class="analytics-kpi-card__value">{{ totalSpent() | number:'1.0-0' }}đ</div>
+                  <div class="analytics-kpi-card__sub">Hoàn tất {{ completedOrders().length }} đơn hàng thành công</div>
+                </div>
+
+                <div class="analytics-kpi-card">
+                  <div class="analytics-kpi-card__top">
+                    <span class="analytics-kpi-card__label">Chi tiêu trung bình (AOV)</span>
+                    <div class="analytics-kpi-card__icon analytics-kpi-card__icon--accent">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+                    </div>
+                  </div>
+                  <div class="analytics-kpi-card__value">{{ averageOrderValue() | number:'1.0-0' }}đ</div>
+                  <div class="analytics-kpi-card__sub">Tổng {{ totalItemsPurchased() }} sản phẩm đã mua</div>
+                </div>
+
+                <div class="analytics-kpi-card">
+                  <div class="analytics-kpi-card__top">
+                    <span class="analytics-kpi-card__label">Hạng thành viên</span>
+                    <div class="analytics-kpi-card__icon analytics-kpi-card__icon--gold">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                    </div>
+                  </div>
+                  <div class="analytics-kpi-card__value analytics-tier-badge">
+                    {{ membershipTier().name }}
+                  </div>
+                  <div class="analytics-progress-wrap">
+                    <div class="analytics-progress-bar">
+                      <div class="analytics-progress-fill" [style.width.%]="membershipTier().progress"></div>
+                    </div>
+                    <span class="analytics-progress-text">
+                      @if (membershipTier().nextTier) {
+                        Chi thêm {{ membershipTier().remaining | number:'1.0-0' }}đ lên {{ membershipTier().nextTier }}
+                      } @else {
+                        Đã đạt hạng thành viên cao nhất
+                      }
+                    </span>
+                  </div>
+                </div>
+
+                <div class="analytics-kpi-card">
+                  <div class="analytics-kpi-card__top">
+                    <span class="analytics-kpi-card__label">Tiết kiệm tích lũy</span>
+                    <div class="analytics-kpi-card__icon analytics-kpi-card__icon--green">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 12v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8"/><path d="M2 7h20v5H2z"/><path d="M12 22V7"/></svg>
+                    </div>
+                  </div>
+                  <div class="analytics-kpi-card__value text-success">{{ totalSaved() | number:'1.0-0' }}đ</div>
+                  <div class="analytics-kpi-card__sub">Ước tính từ voucher & chương trình ưu đãi</div>
+                </div>
+                </div>
+              }
+
+              <!-- Category Spending Breakdown -->
+              <div class="analytics-section card">
+                <div class="analytics-section__head">
+                  <h3 class="analytics-section__title">Phân bổ chi tiêu theo danh mục</h3>
+                  <span class="analytics-section__hint">Dựa trên các đơn hàng đã giao thành công</span>
+                </div>
+                @if (categorySpending().length) {
+                  <div class="analytics-cat-bars">
+                    @for (cat of categorySpending(); track cat.name) {
+                      <div class="analytics-cat-row">
+                        <div class="analytics-cat-meta">
+                          <span class="analytics-cat-name">{{ cat.name }} ({{ cat.count }} món)</span>
+                          <span class="analytics-cat-amount">{{ cat.amount | number:'1.0-0' }}đ ({{ cat.percent }}%)</span>
+                        </div>
+                        <div class="analytics-cat-bar-bg">
+                          <div class="analytics-cat-bar-fill" [style.width.%]="cat.percent"></div>
+                        </div>
+                      </div>
+                    }
+                  </div>
+                } @else {
+                  <p class="analytics-empty-hint">Chưa có dữ liệu phân bổ chi tiêu. Đặt hàng ngay để trải nghiệm phân tích chi tiêu thông minh!</p>
+                }
+              </div>
+
+              <!-- Best Recommended Vouchers -->
+              <div class="analytics-section card">
+                <div class="analytics-section__head">
+                  <h3 class="analytics-section__title">Voucher khuyến nghị tốt nhất cho bạn</h3>
+                  <span class="analytics-section__hint">Ưu đãi tối ưu dựa trên ngân sách và hạng thành viên</span>
+                </div>
+                @if (recommendedVouchers().length) {
+                  <div class="analytics-vouchers-grid">
+                    @for (v of recommendedVouchers(); track v.voucher_id) {
+                      <div class="analytics-voucher-card">
+                        <div class="analytics-voucher-badge">
+                          ƯU ĐÃI
+                        </div>
+                        <div class="analytics-voucher-info">
+                          <div class="analytics-voucher-code">{{ v.code }}</div>
+                          <div class="analytics-voucher-name">{{ v.name }}</div>
+                          @if (v.condition_text) {
+                            <div class="analytics-voucher-cond">{{ v.condition_text }}</div>
+                          }
+                        </div>
+                        <button type="button" class="btn btn--outline btn--sm analytics-voucher-btn" (click)="copyVoucher(v.code)">
+                          Sao chép mã
+                        </button>
+                      </div>
+                    }
+                  </div>
+                } @else {
+                  <p class="analytics-empty-hint">Ghé thăm mục "Ưu đãi của tôi" để xem toàn bộ danh sách mã khuyến mãi đang có!</p>
+                }
+              </div>
+
+              <!-- Purchased Products (Mua lại nhanh) -->
+              <div class="analytics-section card">
+                <div class="analytics-section__head">
+                  <h3 class="analytics-section__title">Sản phẩm bạn đã mua · Mua lại nhanh</h3>
+                  <span class="analytics-section__hint">Các món đồ yêu thích từ những đơn hàng trước</span>
+                </div>
+                @if (purchasedProducts().length) {
+                  <div class="analytics-products-grid">
+                    @for (item of purchasedProducts().slice(0, 4); track item.name) {
+                      <div class="analytics-product-card">
+                        <img [src]="item.image || '/assets/images/placeholder.jpg'" [alt]="item.name" class="analytics-product-img" />
+                        <div class="analytics-product-info">
+                          <div class="analytics-product-name">{{ item.name }}</div>
+                          <div class="analytics-product-price">{{ item.price | number:'1.0-0' }}đ</div>
+                          <button type="button" class="btn btn--primary btn--sm analytics-reorder-btn" (click)="reorderProduct(item)">
+                            Mua lại ngay
+                          </button>
+                        </div>
+                      </div>
+                    }
+                  </div>
+                } @else {
+                  <p class="analytics-empty-hint">Bạn chưa có sản phẩm đã mua nào. Hãy bắt đầu chọn sắm từ bộ sưu tập của Velura!</p>
+                }
+              </div>
+
+              <!-- Deep Discounts & New Arrivals -->
+              <div class="analytics-section card">
+                <div class="analytics-section__head">
+                  <h3 class="analytics-section__title">Gợi ý sản phẩm giảm giá sâu & Hàng mới về</h3>
+                  <span class="analytics-section__hint">Được tuyển chọn theo xu hướng dành cho bạn</span>
+                </div>
+                <div class="analytics-products-grid">
+                  @for (prod of deepDiscountProducts(); track prod.product_id) {
+                    <div class="analytics-product-card">
+                      <div class="analytics-discount-badge">-{{ prod.discountPercent }}%</div>
+                      <img [src]="(prod.images && prod.images[0]) || '/assets/images/placeholder.jpg'" [alt]="prod.name" class="analytics-product-img" />
+                      <div class="analytics-product-info">
+                        <div class="analytics-product-name">{{ prod.name }}</div>
+                        <div class="analytics-product-pricing">
+                          <span class="analytics-product-sale">{{ prod.sale_price | number:'1.0-0' }}đ</span>
+                          <span class="analytics-product-base">{{ prod.base_price | number:'1.0-0' }}đ</span>
+                        </div>
+                        <a [routerLink]="['/products', prod.slug || prod.product_id]" class="btn btn--outline btn--sm analytics-view-btn">
+                          Xem chi tiết
+                        </a>
+                      </div>
+                    </div>
+                  }
+                </div>
+              </div>
+            </div>
           </section>
         </div>
       </div>
@@ -856,34 +958,23 @@
             <h3 class="modal__title">Thêm địa chỉ mới</h3>
             <button class="modal__close" type="button" aria-label="Đóng modal" (click)="closeAddressModal()">×</button>
           </div>
-          <form class="modal__form" (submit)="saveAddress($event)" novalidate>
+          <form class="modal__form" (submit)="$event.preventDefault()" novalidate>
             <div class="profile-form__row-grid">
               <div class="profile-form__group">
                 <label for="address-fullname">Họ và tên</label>
-                <input class="profile-form__input" type="text" id="address-fullname" placeholder="Nhập họ và tên" required />
+                <input class="profile-form__input" type="text" id="address-fullname" autocomplete="name" placeholder="Nhập họ và tên" required />
               </div>
               <div class="profile-form__group">
                 <label for="address-phone">Số điện thoại</label>
-                <input class="profile-form__input" type="tel" id="address-phone" placeholder="Nhập số điện thoại" required />
+                <input class="profile-form__input" type="tel" id="address-phone" autocomplete="tel" placeholder="Nhập số điện thoại" required />
               </div>
             </div>
-            <div class="profile-form__row-grid profile-form__row-grid--three">
-              <div class="profile-form__group">
-                <label for="address-province">Tỉnh/Thành phố</label>
-                <input class="profile-form__input" type="text" id="address-province" placeholder="Chọn Tỉnh/Thành" required />
-              </div>
-              <div class="profile-form__group">
-                <label for="address-district">Quận/Huyện</label>
-                <input class="profile-form__input" type="text" id="address-district" placeholder="Chọn Quận/Huyện" required />
-              </div>
-              <div class="profile-form__group">
-                <label for="address-ward">Phường/Xã</label>
-                <input class="profile-form__input" type="text" id="address-ward" placeholder="Chọn Phường/Xã" required />
-              </div>
-            </div>
+            @if (addressModalOpen()) {
+              <app-address-selector [value]="addressGeography()" (selectionChange)="addressGeography.set($event)" />
+            }
             <div class="profile-form__group" style="margin-top: 24px;">
               <label for="address-detail">Địa chỉ chi tiết</label>
-              <input class="profile-form__input" type="text" id="address-detail" placeholder="Số nhà, tên đường, khu phố..." required />
+              <input class="profile-form__input" type="text" id="address-detail" autocomplete="street-address" placeholder="Số nhà, tên đường, khu phố..." required />
             </div>
             <div class="profile-form__group" style="margin-top: 20px;">
               <label class="checkbox-label" style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
@@ -892,7 +983,7 @@
               </label>
             </div>
             <div class="profile-form__actions" style="margin-top: 32px;">
-              <button class="btn btn--primary" type="submit">Lưu địa chỉ</button>
+              <button class="btn btn--primary" type="button" (click)="saveAddress($event)" [disabled]="!addressGeography().valid">Lưu địa chỉ</button>
               <button class="btn btn--outline" type="button" (click)="closeAddressModal()">Hủy</button>
             </div>
           </form>

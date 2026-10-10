@@ -1,6 +1,12 @@
 import crypto from "node:crypto";
+import { config } from "./config.js";
 
-const JWT_SECRET = process.env.VELURA_SUPABASE_SERVICE_ROLE_KEY || "velura-secret";
+function jwtSecret(): string {
+  const secret = process.env.JWT_SIGNING_SECRET || config.supabaseServiceRoleKey;
+  if (secret) return secret;
+  if (config.nodeEnv === "production") throw new Error("JWT signing secret is not configured");
+  return "velura-development-only-secret";
+}
 
 const SCRYPT_PREFIX = "scrypt";
 const SCRYPT_KEYLEN = 64;
@@ -40,30 +46,36 @@ function legacySha256(password: string): string {
   return crypto.createHash("sha256").update(password).digest("hex");
 }
 
-export function signJwt(payload: Record<string, unknown>): string {
+/** Sign scoped credentials with an explicit lifetime and a configured production secret. */
+export function signJwt(payload: Record<string, unknown>, expiresInSeconds = 24 * 60 * 60): string {
   const header = { alg: "HS256", typ: "JWT" };
   const sHeader = Buffer.from(JSON.stringify(header)).toString("base64url");
   const sPayload = Buffer.from(JSON.stringify({
     ...payload,
-    exp: Math.floor(Date.now() / 1000) + (24 * 60 * 60) // 24 hours expiry
+    exp: Math.floor(Date.now() / 1000) + expiresInSeconds
   })).toString("base64url");
   const signature = crypto
-    .createHmac("sha256", JWT_SECRET)
+    .createHmac("sha256", jwtSecret())
     .update(`${sHeader}.${sPayload}`)
     .digest("base64url");
   return `${sHeader}.${sPayload}.${signature}`;
 }
 
+/** Reject invalid algorithm, signature and expiration before trusting claims. */
 export function verifyJwt(token: string): Record<string, unknown> | null {
   try {
+    if (token.split(".").length !== 3) return null;
     const [sHeader, sPayload, signature] = token.split(".");
     const expectedSignature = crypto
-      .createHmac("sha256", JWT_SECRET)
+      .createHmac("sha256", jwtSecret())
       .update(`${sHeader}.${sPayload}`)
       .digest("base64url");
-    if (signature !== expectedSignature) return null;
-    const payload = JSON.parse(Buffer.from(sPayload, "base64url").toString("utf8"));
-    if (payload.exp && Date.now() / 1000 > payload.exp) return null;
+    const header = JSON.parse(Buffer.from(sHeader, "base64url").toString("utf8")) as { alg?: unknown };
+    if (header.alg !== "HS256") return null;
+    const actual = Buffer.from(signature), expected = Buffer.from(expectedSignature);
+    if (actual.length !== expected.length || !crypto.timingSafeEqual(actual, expected)) return null;
+    const payload = JSON.parse(Buffer.from(sPayload, "base64url").toString("utf8")) as Record<string, unknown>;
+    if (typeof payload.exp !== "number" || Date.now() / 1000 >= payload.exp) return null;
     return payload;
   } catch {
     return null;

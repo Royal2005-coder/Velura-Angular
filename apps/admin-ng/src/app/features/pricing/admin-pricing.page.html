@@ -73,7 +73,7 @@
             <button class="admin-btn admin-btn--ghost admin-btn--sm" type="reset">Đặt lại</button>
           </div>
         </form>
-        @if (loading()) {
+        @if (loading() && !hasLoadedOnce()) {
           <app-admin-empty-state kind="loading" icon="clock" title="Đang tải bảng giá" />
         } @else if (loadError()) {
           <app-admin-empty-state kind="error" icon="alert" title="Không tải được bảng giá" [message]="loadError() || ''" />
@@ -133,7 +133,7 @@
 
 @if (detailOpen() && selected()) {
   <div class="admin-drawer-backdrop" (click)="closeOverlays()"></div>
-  <aside class="admin-drawer admin-drawer--wide">
+  <aside class="admin-drawer admin-drawer--wide" appAdminDialog (appAdminDialogClose)="closeOverlays()">
     <header class="admin-drawer__header">
       <div>
         <p class="admin-product-code">{{ selected()!.sku }}</p>
@@ -158,7 +158,7 @@
 
 @if (actionOpen() && selected()) {
   <div class="admin-modal-overlay">
-    <section class="admin-modal admin-price-modal">
+    <section class="admin-modal admin-price-modal" appAdminDialog (appAdminDialogClose)="closeOverlays()">
       <form (submit)="submitPrice($event)">
         <header class="admin-modal__header">
           <h2>Cập nhật giá - {{ selected()!.sku }}</h2>

@@ -1,3 +1,20 @@
+@if (priceTarget(); as pricedProduct) {
+  <div class="admin-modal-overlay">
+    <section class="admin-modal" appAdminDialog (appAdminDialogClose)="closePrice()">
+      <form (submit)="submitPrice($event)">
+        <header class="admin-modal__header"><div><p class="admin-product-code">{{ pricedProduct.sku }}</p><h2>Điều chỉnh giá sản phẩm</h2></div><button class="admin-icon-button" type="button" [disabled]="priceSaving()" (click)="closePrice()" aria-label="Đóng">×</button></header>
+        <div class="admin-modal__body">
+          <p class="admin-note">{{ pricedProduct.name }} · Giá mới áp dụng cho các đơn mua sau khi lưu. Giá trên đơn đã đặt được giữ theo từng dòng hàng.</p>
+          <label class="admin-form-group"><span class="admin-form-label">Giá gốc *</span><input class="admin-form-control" name="base" type="number" min="1" required [value]="pricedProduct.base_price" [disabled]="priceSaving()" /></label>
+          <label class="admin-form-group"><span class="admin-form-label">Giá bán ưu đãi</span><input class="admin-form-control" name="sale" type="number" min="1" [value]="pricedProduct.sale_price ?? ''" [disabled]="priceSaving()" /><small class="admin-form-helper">Để trống để bán theo giá gốc.</small></label>
+          <label class="admin-form-group"><span class="admin-form-label">Lý do điều chỉnh *</span><textarea class="admin-form-control admin-form-textarea" name="reason" minlength="10" required [disabled]="priceSaving()"></textarea></label>
+          @if (priceError()) { <p class="field__error" role="alert">{{ priceError() }}</p> }
+        </div>
+        <footer class="admin-modal__footer"><button class="admin-btn admin-btn--ghost" type="button" [disabled]="priceSaving()" (click)="closePrice()">Đóng</button><button class="admin-btn admin-btn--secondary" type="submit" [disabled]="priceSaving()">{{ priceSaving() ? 'Đang lưu…' : 'Lưu giá' }}</button></footer>
+      </form>
+    </section>
+  </div>
+}
 <main class="admin-content">
   <p class="admin-page-crumb">Sản phẩm / Danh mục</p>
   <section class="admin-kpi-grid admin-product-kpis" aria-label="Số liệu danh mục">
@@ -32,8 +49,10 @@
       <button class="admin-tab" [class.admin-tab--active]="tab() === 'catalog'" type="button" (click)="setTab('catalog')">
         Danh sách sản phẩm <span>{{ total() }}</span>
       </button>
-      <button class="admin-tab" [class.admin-tab--active]="tab() === 'csv'" type="button" (click)="setTab('csv')">Nhập CSV</button>
-      <button class="admin-tab" [class.admin-tab--active]="tab() === 'logs'" type="button" (click)="setTab('logs')">Nhật ký sản phẩm</button>
+      @if (canReadCatalog()) {
+        <button class="admin-tab" [class.admin-tab--active]="tab() === 'csv'" type="button" (click)="setTab('csv')">Nhập CSV</button>
+        <button class="admin-tab" [class.admin-tab--active]="tab() === 'logs'" type="button" (click)="setTab('logs')">Nhật ký sản phẩm</button>
+      }
     </div>
     @if (tab() === 'catalog') {
       <div class="admin-tab-content">
@@ -42,12 +61,14 @@
             <app-admin-icon name="search" />
             <input class="admin-form-control" name="q" type="search" [value]="query()" placeholder="Tìm theo tên hoặc mã sản phẩm..." />
           </label>
+          @if (canReadCatalog()) {
           <select class="admin-form-control" name="categoryId" [value]="categoryId()">
             <option value="">Tất cả danh mục</option>
             @for (row of categories(); track row.category_id) {
               <option [value]="row.category_id">{{ row.name }}</option>
             }
           </select>
+          }
           <select class="admin-form-control" name="status" [value]="status()">
             <option value="">Tất cả trạng thái</option>
             <option value="on_sale">Đang bán</option>
@@ -63,6 +84,12 @@
             }
           </div>
         </form>
+        @if (canMutate()) {
+          <button type="button" class="admin-btn admin-btn--secondary admin-btn--sm" [disabled]="!bulkSelection().length" (click)="bulkContentOpen.set(!bulkContentOpen())">Nội dung / SEO cho {{ bulkSelection().length }} sản phẩm đã chọn</button>
+          @if (bulkContentOpen()) {
+            <app-catalog-content-editor [products]="bulkSelection()" (published)="reloadContentProduct($event)" (sourceChanged)="reloadContentProduct($event)" />
+          }
+        }
         @if (showSkeleton()) {
           <app-admin-table-skeleton [headers]="['Sản phẩm', 'SKU', 'Danh mục', 'Giá bán', 'Tồn kho', 'Trạng thái', 'Cập nhật', 'Thao tác']" [rows]="pageSize" />
         } @else if (loadError()) {
@@ -90,6 +117,7 @@
                 @for (product of products(); track product.product_id) {
                   <tr>
                     <td>
+                      @if (canMutate()) { <label><input type="checkbox" [checked]="contentProductSelected(product.product_id)" [disabled]="product.version == null" (change)="toggleContentProduct(product, $event)" /> Chọn SEO</label> }
                       <div class="admin-table__entity">
                         <img [src]="imageUrl(product)" [alt]="product.name" />
                         <span>
@@ -113,9 +141,10 @@
                     <td>{{ updatedAt(product.updated_at) }}</td>
                     <td>
                       <div class="admin-table-actions">
-                        <button class="admin-icon-button admin-icon-button--sm" type="button" title="Chi tiết" (click)="openEdit(product)">
+                        @if (canReadCatalog()) { <button class="admin-icon-button admin-icon-button--sm" type="button" title="Chi tiết" (click)="openEdit(product)">
                           <app-admin-icon name="eye" />
-                        </button>
+                        </button> }
+                        @if (canChangePrice()) { <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="openPrice(product)">Điều chỉnh giá</button> }
                         @if (canMutate()) {
                           <button class="admin-icon-button admin-icon-button--sm" type="button" title="Tồn kho" (click)="openStock(product)">
                             <app-admin-icon name="box" />
@@ -147,7 +176,7 @@
           </header>
           <div class="admin-csv-checklist">
             <h3>Cột bắt buộc</h3>
-            <p>sku, name, base_price, category_id (UUID danh mục). SKU dạng VL-AO001. Ảnh để trống được.</p>
+            <p>sku, name, base_price, category_id (UUID danh mục). Ảnh mới qua URL CSV không được hỗ trợ: dùng trình sửa sản phẩm để kiểm tra và phê duyệt ảnh.</p>
           </div>
           <div class="admin-csv-dropzone">
             <app-admin-icon name="box" />
@@ -249,7 +278,7 @@
 
 @if (overlay() === 'create' || overlay() === 'edit') {
   <div class="admin-modal-overlay">
-    <section class="admin-modal admin-drawer--wide">
+    <section class="admin-modal admin-drawer--wide" appAdminDialog (appAdminDialogClose)="closeOverlays()">
       <header class="admin-modal__header">
         <div>
           <h2>{{ overlay() === 'create' ? 'Thêm sản phẩm' : 'Chi tiết sản phẩm' }}</h2>
@@ -263,25 +292,29 @@
         <form id="productEditorForm" (submit)="submitEditor($event)">
           <label class="admin-form-group">
             <span class="admin-form-label">Tên *</span>
-            <input class="admin-form-control" name="name" required minlength="2" [value]="selected()?.name || ''" [readOnly]="!canMutate()" />
+            <input class="admin-form-control" name="name" required minlength="2" [value]="overlay() === 'create' ? createName() : (selected()?.name || '')" (input)="onNameInput($event)" [readOnly]="!canMutate()" />
           </label>
           <label class="admin-form-group">
             <span class="admin-form-label">SKU *</span>
-            <input class="admin-form-control" name="sku" [value]="selected()?.sku || ''" [readOnly]="overlay() === 'edit'" placeholder="VLR-AO001" />
+            <input class="admin-form-control" name="sku" [value]="overlay() === 'create' ? createBaseSku() : (selected()?.sku || '')" (input)="onSkuInput($event)" [readOnly]="overlay() === 'edit'" placeholder="VL-DAM001" />
             <small class="admin-form-helper">Dạng VLR-AO001 hoặc VL-AO001. Không dùng khoảng trắng.</small>
           </label>
           <label class="admin-form-group">
             <span class="admin-form-label">Slug</span>
-            <input class="admin-form-control" name="slug" [value]="selected()?.slug || ''" [readOnly]="overlay() === 'edit'" />
+            <input class="admin-form-control" name="slug" [value]="overlay() === 'create' ? createSlug() : (selected()?.slug || '')" (input)="createSlug.set($any($event.target).value)" [readOnly]="overlay() === 'edit'" />
           </label>
           <label class="admin-form-group">
             <span class="admin-form-label">Danh mục *</span>
             <select class="admin-form-control" name="categoryId" required [disabled]="!canMutate()">
               <option value="">Chọn danh mục</option>
               @for (row of categories(); track row.category_id) {
-                <option [value]="row.category_id" [selected]="row.category_id === selected()?.category_id || row.category_id === selected()?.category?.category_id">{{ row.name }}</option>
+                <option [value]="row.category_id" [selected]="row.category_id === selected()?.category_id || row.category_id === selected()?.category?.category_id || (overlay() === 'create' && (row.name === 'Đầm' || row.slug === 'dam'))">{{ row.name }}</option>
               }
             </select>
+          </label>
+          <label class="admin-form-group">
+            <span class="admin-form-label">Chất liệu</span>
+            <input class="admin-form-control" name="material" [value]="createMaterial()" (input)="createMaterial.set($any($event.target).value)" placeholder="VD: Lụa Tơ Tằm, Voan Hàn..." [readOnly]="!canMutate()" />
           </label>
           <label class="admin-form-group">
             <span class="admin-form-label">Bộ sưu tập</span>
@@ -290,7 +323,7 @@
           @if (overlay() === 'create') {
             <label class="admin-form-group">
               <span class="admin-form-label">Giá gốc (niêm yết) <b>*</b></span>
-              <input class="admin-form-control" name="basePrice" type="number" min="0" required />
+              <input class="admin-form-control" name="basePrice" type="number" min="0" value="1250000" required />
             </label>
             <label class="admin-form-group">
               <span class="admin-form-label">Giá bán (khuyến mãi)</span>
@@ -304,13 +337,131 @@
               </select>
             </label>
             <label class="admin-form-group">
-              <span class="admin-form-label">Tồn kho ban đầu</span>
-              <input class="admin-form-control" name="initialStock" type="number" min="0" value="0" />
+              <span class="admin-form-label">Tồn kho tổng</span>
+              <input class="admin-form-control" name="initialStock" type="number" min="0" [value]="createVariants().length > 0 ? totalMatrixStock() : 0" [readOnly]="createVariants().length > 0" />
+              @if (createVariants().length > 0) {
+                <small class="admin-form-helper" style="color: #2e7d32; font-weight: 600;">Tự động tính từ tổng tồn kho các biến thể SKU ({{ totalMatrixStock() }} cái).</small>
+              }
             </label>
             <label style="display: flex; align-items: center; gap: 8px; font-size: 0.875rem; margin-top: 8px; cursor: pointer; color: var(--text-body);">
               <input type="checkbox" name="isCombo" />
               <strong>Sản phẩm Combo / Bộ phối đồ (Set nhiều món)</strong>
             </label>
+
+            <!-- Cấu hình Ma trận Biến thể (SKU Matrix) TC-ADMIN-02 -->
+            <div style="background: #faf8f5; border: 1px solid #e2d9cf; border-radius: 8px; padding: 16px; margin: 18px 0;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+                <div>
+                  <h4 style="margin: 0; font-size: 0.9375rem; font-weight: 700; color: #4a4039;">Cấu hình Biến thể &amp; Ma trận SKU (SKU Matrix)</h4>
+                  <small style="color: #7a6e65;">Tự động sinh các biến thể SKU theo Màu sắc x Kích cỡ và cho phép cấu hình tồn kho ban đầu từng SKU</small>
+                </div>
+                @if (createVariants().length > 0) {
+                  <span class="admin-badge admin-badge--active">{{ createVariants().length }} biến thể · Tổng tồn: {{ totalMatrixStock() }}</span>
+                }
+              </div>
+
+              <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 12px; align-items: end; margin-bottom: 14px;">
+                <label class="admin-form-group" style="margin: 0;">
+                  <span class="admin-form-label" style="font-size: 0.75rem;">Màu sắc (phân tách bởi dấu phẩy)</span>
+                  <input
+                    class="admin-form-control"
+                    [value]="createMatrixColors()"
+                    (input)="createMatrixColors.set($any($event.target).value)"
+                    placeholder="VD: Đen, Đỏ Ruby, Trắng"
+                  />
+                </label>
+                <label class="admin-form-group" style="margin: 0;">
+                  <span class="admin-form-label" style="font-size: 0.75rem;">Kích thước / Size (phân tách bởi dấu phẩy)</span>
+                  <input
+                    class="admin-form-control"
+                    [value]="createMatrixSizes()"
+                    (input)="createMatrixSizes.set($any($event.target).value)"
+                    placeholder="VD: S, M, L"
+                  />
+                </label>
+                <button
+                  type="button"
+                  class="admin-btn admin-btn--secondary admin-btn--sm"
+                  style="height: 38px; white-space: nowrap;"
+                  (click)="generateSkuMatrix()"
+                >
+                  ⚡ Tạo ma trận biến thể
+                </button>
+              </div>
+
+              @if (createVariants().length > 0) {
+                <div class="admin-table-wrap" style="background: #fff; border: 1px solid var(--line); border-radius: 6px; overflow: hidden;">
+                  <table class="admin-table" style="font-size: 0.8125rem;">
+                    <thead>
+                      <tr>
+                        <th>Mã SKU biến thể</th>
+                        <th>Màu sắc</th>
+                        <th>Size</th>
+                        <th style="width: 120px;">Tồn kho ban đầu</th>
+                        <th style="width: 120px;">Ngưỡng cảnh báo</th>
+                        <th style="width: 40px;"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (row of createVariants(); track row.sku; let idx = $index) {
+                        <tr>
+                          <td>
+                            <strong style="font-family: monospace; color: var(--terracotta);">{{ row.sku }}</strong>
+                          </td>
+                          <td>
+                            <div style="display: inline-flex; align-items: center; gap: 6px;">
+                              <span style="width: 14px; height: 14px; border-radius: 50%; border: 1px solid #ccc; display: inline-block;" [style.background]="row.colorHex"></span>
+                              <span>{{ row.color }}</span>
+                            </div>
+                          </td>
+                          <td>
+                            <span class="admin-badge admin-badge--neutral" style="font-weight: 700;">{{ row.size }}</span>
+                          </td>
+                          <td>
+                            <input
+                              class="admin-form-control"
+                              type="number"
+                              min="0"
+                              style="height: 30px; font-size: 0.8125rem; width: 100%;"
+                              [value]="row.stockQuantity"
+                              (input)="updateMatrixVariantStock(idx, +$any($event.target).value)"
+                            />
+                          </td>
+                          <td>
+                            <input
+                              class="admin-form-control"
+                              type="number"
+                              min="0"
+                              style="height: 30px; font-size: 0.8125rem; width: 100%;"
+                              [value]="row.lowStockThreshold"
+                              (input)="updateMatrixVariantThreshold(idx, +$any($event.target).value)"
+                            />
+                          </td>
+                          <td>
+                            <button
+                              type="button"
+                              class="admin-icon-button admin-icon-button--sm"
+                              style="color: var(--error);"
+                              title="Xóa biến thể này"
+                              (click)="removeMatrixVariant(idx)"
+                            >×</button>
+                          </td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+                <div style="display: flex; justify-content: flex-end; margin-top: 8px;">
+                  <button type="button" class="admin-btn admin-btn--ghost admin-btn--sm" (click)="clearMatrixVariants()" style="color: var(--muted); font-size: 0.75rem;">
+                    Xóa tất cả ma trận
+                  </button>
+                </div>
+              } @else {
+                <p class="admin-table-note" style="margin: 0; padding: 10px 0; text-align: center; color: #8c7e73;">
+                  Chưa sinh ma trận biến thể. Bấm nút <strong>"⚡ Tạo ma trận biến thể"</strong> để tự động tạo danh sách 6 SKU và điều chỉnh tồn kho trước khi lưu.
+                </p>
+              }
+            </div>
           }
           @if (overlay() === 'edit') {
             <div style="background: var(--field-bg); padding: 14px; border-radius: var(--radius-md); border: 1px solid var(--line); margin: 10px 0;">
@@ -331,7 +482,7 @@
                     step="1000"
                     [value]="editBasePrice()"
                     (input)="editBasePrice.set($any($event.target).valueAsNumber || 0)"
-                    [readOnly]="!canMutate()"
+                    [readOnly]="!canChangePrice()"
                     required
                   />
                 </label>
@@ -345,7 +496,7 @@
                     step="1000"
                     [value]="editSalePrice() ?? ''"
                     (input)="editSalePrice.set($any($event.target).value ? $any($event.target).valueAsNumber : null)"
-                    [readOnly]="!canMutate()"
+                    [readOnly]="!canChangePrice()"
                     placeholder="Để trống nếu bằng giá gốc"
                   />
                 </label>
@@ -362,7 +513,7 @@
                   [value]="editPriceReason()"
                   (input)="editPriceReason.set($any($event.target).value)"
                   placeholder="VD: Điều chỉnh giá theo chiến dịch, cập nhật giá nhập xưởng..."
-                  [readOnly]="!canMutate()"
+                  [readOnly]="!canChangePrice()"
                 />
               </label>
             </div>
@@ -483,35 +634,25 @@
             <textarea class="admin-form-control admin-form-textarea" name="description" [readOnly]="!canMutate()">{{ selected()?.description || '' }}</textarea>
           </label>
           <label class="admin-form-group">
-            <span class="admin-form-label">Ảnh (mỗi URL một dòng)</span>
-            <textarea #imagesBox class="admin-form-control admin-form-textarea" name="images" [readOnly]="!canMutate()" placeholder="https://... hoặc /assets/images/sp.jpg">{{ (selected()?.images || []).join('\n') }}</textarea>
+            <span class="admin-form-label">Ảnh đã công bố / đã duyệt (mỗi URL một dòng)</span>
+            <textarea #imagesBox class="admin-form-control admin-form-textarea" name="images" readonly>{{ (selected()?.images || []).join('\n') }}</textarea>
             @if (canMutate()) {
-              <input #imageFile type="file" accept="image/jpeg,image/png,image/webp,image/gif" hidden (change)="uploadImage($event, imagesBox)" />
-              <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" [disabled]="imageUploading()" (click)="imageFile.click()">{{ imageUploading() ? 'Đang dựng nền studio...' : 'Xem trước nền studio' }}</button>
+              <span class="admin-form-label">Vị trí ảnh cần thay</span>
+              <select class="admin-form-control" [value]="imageIndex()" (change)="chooseImageIndex($event)">
+                @for (url of selected()?.images || []; track $index) { <option [value]="$index">Thay ảnh {{ $index + 1 }}</option> }
+                <option [value]="selected()?.images?.length || 0">Thêm ảnh mới</option>
+              </select>
+              <input #imageFile type="file" accept="image/jpeg,image/png,image/webp" hidden (change)="uploadImage($event)" />
+              <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="imageFile.click()">Chọn ảnh nguồn mới</button>
+              <app-ai-product-image [productId]="selected()?.product_id || ''" [expectedVersion]="selected()?.version || 0" [sourceFile]="sourceFile()" [existingImage]="selected()?.images?.[imageIndex()] || ''" (accepted)="acceptAiImage($event, imagesBox)" />
             }
-            @if (imageBefore() || imageAfter()) {
-              <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px;">
-                <figure style="margin:0;">
-                  <img [src]="imageBefore()" alt="Ảnh trước khi cải thiện" style="width:100%; aspect-ratio:1; object-fit:contain; background: var(--field-bg); border: 1px solid var(--line); border-radius: 8px;" />
-                  <figcaption>Trước</figcaption>
-                </figure>
-                <figure style="margin:0;">
-                  <img [src]="imageAfter()" alt="Ảnh sau khi cải thiện" style="width:100%; aspect-ratio:1; object-fit:contain; background: var(--field-bg); border: 1px solid var(--line); border-radius: 8px;" />
-                  <figcaption>{{ imageAfterLabel() }}</figcaption>
-                </figure>
-              </div>
-              <div style="display:flex; gap: 8px; margin-top: 8px;">
-                <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" [disabled]="imageUploading() || !imageAfter()" (click)="useImprovedImage()">Dùng ảnh sau</button>
-                <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" [disabled]="imageUploading()" (click)="useOriginalImage()">Giữ ảnh gốc</button>
-                <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="closeImagePreview()">Đóng</button>
-              </div>
-            }
-            @if (imageNote()) {
-              <small class="admin-form-helper">{{ imageNote() }}</small>
-            }
-            <small class="admin-form-helper">Ảnh JPG, PNG, WebP hoặc GIF, tối đa 5 MB. Xem trước rồi mới lưu. Cột Sau là nền studio nếu Gemini trả ảnh.</small>
+            @if (imageNote()) { <small class="admin-form-helper">{{ imageNote() }}</small> }
+            <small class="admin-form-helper">Ảnh JPG, PNG hoặc WebP, tối đa 5 MB. Ảnh hiện có không cần đánh giá lại. Chỉ URL đã phê duyệt được lưu; không tải lại ảnh kết quả.</small>
           </label>
         </form>
+        @if (overlay() === 'edit' && selected(); as product) {
+          <app-catalog-content-editor [productId]="product.product_id" [expectedVersion]="product.version || 0" [liveContent]="liveContent()" (published)="reloadContentProduct($event)" (sourceChanged)="reloadContentProduct($event)" />
+        }
 
         @if (overlay() === 'edit') {
           <div style="margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--line);">
@@ -554,25 +695,51 @@
 
             @if (canMutate() && selected()) {
               <div style="margin-top: 16px; padding: 14px; background: #faf8f5; border: 1px solid var(--line); border-radius: 8px;">
-                <h4 style="margin: 0 0 10px 0; font-size: 0.875rem; font-weight: 600; color: #4a4039;">Thêm biến thể mới</h4>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                  <h4 style="margin: 0; font-size: 0.875rem; font-weight: 600; color: #4a4039;">Thêm biến thể mới</h4>
+                  @if (variantSaving()) {
+                    <span style="font-size: 0.8125rem; color: var(--terracotta); font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">
+                      <span class="admin-spinner" style="width: 14px; height: 14px; display: inline-block;"></span> Đang lưu biến thể...
+                    </span>
+                  }
+                </div>
+
+                @if (variantSuccess()) {
+                  <div style="background: #e8f5e9; color: #2e7d32; border: 1px solid #c8e6c9; border-radius: 6px; padding: 8px 12px; margin-bottom: 10px; font-size: 0.8125rem; font-weight: 600;">
+                    ✓ {{ variantSuccess() }}
+                  </div>
+                }
+
+                @if (variantError()) {
+                  <div style="background: #ffebee; color: #c62828; border: 1px solid #ffcdd2; border-radius: 6px; padding: 8px 12px; margin-bottom: 10px; font-size: 0.8125rem; font-weight: 600;">
+                    ⚠ {{ variantError() }}
+                  </div>
+                }
+
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)) auto; gap: 10px; align-items: end;">
                   <label class="admin-form-group" style="margin: 0;">
                     <span class="admin-form-label" style="font-size: 0.75rem;">Màu sắc *</span>
-                    <input class="admin-form-control" [value]="newVariantColor()" (input)="newVariantColor.set($any($event.target).value)" placeholder="VD: Trắng" />
+                    <input class="admin-form-control" [value]="newVariantColor()" (input)="newVariantColor.set($any($event.target).value)" placeholder="VD: Trắng" [disabled]="variantSaving()" />
                   </label>
                   <label class="admin-form-group" style="margin: 0;">
                     <span class="admin-form-label" style="font-size: 0.75rem;">Size *</span>
-                    <input class="admin-form-control" [value]="newVariantSize()" (input)="newVariantSize.set($any($event.target).value)" placeholder="VD: L" />
+                    <input class="admin-form-control" [value]="newVariantSize()" (input)="newVariantSize.set($any($event.target).value)" placeholder="VD: L" [disabled]="variantSaving()" />
                   </label>
                   <label class="admin-form-group" style="margin: 0;">
                     <span class="admin-form-label" style="font-size: 0.75rem;">Tồn kho</span>
-                    <input class="admin-form-control" type="number" min="0" [value]="newVariantStock()" (input)="newVariantStock.set(+$any($event.target).value)" />
+                    <input class="admin-form-control" type="number" min="0" [value]="newVariantStock()" (input)="newVariantStock.set(+$any($event.target).value)" [disabled]="variantSaving()" />
                   </label>
                   <label class="admin-form-group" style="margin: 0;">
                     <span class="admin-form-label" style="font-size: 0.75rem;">Ngưỡng thấp</span>
-                    <input class="admin-form-control" type="number" min="0" [value]="newVariantThreshold()" (input)="newVariantThreshold.set(+$any($event.target).value)" />
+                    <input class="admin-form-control" type="number" min="0" [value]="newVariantThreshold()" (input)="newVariantThreshold.set(+$any($event.target).value)" [disabled]="variantSaving()" />
                   </label>
-                  <button class="admin-btn admin-btn--outline admin-btn--sm" type="button" (click)="submitNewVariant()">+ Thêm</button>
+                  <button class="admin-btn admin-btn--outline admin-btn--sm" type="button" [disabled]="variantSaving() || !newVariantColor() || !newVariantSize()" (click)="submitNewVariant()">
+                    @if (variantSaving()) {
+                      Đang lưu...
+                    } @else {
+                      + Thêm
+                    }
+                  </button>
                 </div>
               </div>
             }
@@ -595,7 +762,7 @@
 
 @if (overlay() === 'status' && selected()) {
   <div class="admin-modal-overlay">
-    <section class="admin-modal">
+    <section class="admin-modal" appAdminDialog (appAdminDialogClose)="closeOverlays()">
       <form (submit)="submitStatus($event)">
         <header class="admin-modal__header">
           <h2>Ẩn / đổi trạng thái - {{ selected()!.sku }}</h2>
@@ -633,7 +800,7 @@
 
 @if (overlay() === 'stock' && selected()) {
   <div class="admin-modal-overlay">
-    <section class="admin-modal admin-modal--lg">
+    <section class="admin-modal admin-modal--lg" appAdminDialog (appAdminDialogClose)="closeOverlays()">
       <form (submit)="submitStock($event)">
         <header class="admin-modal__header">
           <div>

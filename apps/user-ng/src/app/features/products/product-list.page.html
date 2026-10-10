@@ -9,6 +9,14 @@
     <p class="product-list-header__subtitle">
       Khám phá hơn 1.200 thiết kế thời trang nữ sang trọng và thời thượng
     </p>
+    <app-visual-search-workbench [hideTrigger]="true" [candidateProductIds]="imageSearchCandidates()" [filters]="visualFilters()" (searchResult)="applyVisualResult($event)" />
+    @if (imageMatches() !== null) { <button type="button" class="btn btn--outline" (click)="imageMatches.set(null)">Xóa kết quả tìm bằng ảnh</button> }
+    @if (searchQuery()) {
+      <div class="product-search-active-bar" style="display: flex; align-items: center; justify-content: center; gap: 10px; margin: 12px 0 6px;">
+        <span style="font-size: 0.9375rem; color: var(--ink, #2A2522);">Kết quả tìm kiếm cho: <strong style="color: var(--terracotta, #C97B63);">"{{ searchQuery() }}"</strong></span>
+        <button type="button" class="btn btn--outline btn--sm" (click)="clearSearch()" style="padding: 4px 12px; font-size: 0.8125rem; border-radius: 16px;">✕ Xóa từ khóa</button>
+      </div>
+    }
   </header>
 
   <div class="product-list-layout">
@@ -254,7 +262,7 @@
           <div class="grid-controls__sort">
             <label for="sort-select" class="visually-hidden">Sắp xếp</label>
             <select id="sort-select" (change)="onSortChange($event)">
-              <option value="newest" selected>Mới nhất</option>
+              <option value="newest" selected>{{ imageMatches() !== null ? 'Phù hợp với ảnh nhất' : 'Mới nhất' }}</option>
               <option value="price-asc">Giá: Thấp đến Cao</option>
               <option value="price-desc">Giá: Cao đến Thấp</option>
               <option value="popular">Bán chạy nhất</option>
@@ -285,7 +293,7 @@
             <button class="btn btn--sm btn--primary" type="button" style="margin-top: 16px;" (click)="clearFilters()">Đặt lại bộ lọc</button>
             @if (featuredFallback().length) {
               <div style="margin-top: 48px; text-align: left;">
-                <h3 style="font-family: 'Playfair Display', serif; font-size: 1.5rem; margin-bottom: 24px; text-align: center; color: var(--text-dark);">Gợi ý sản phẩm nổi bật dành cho bạn</h3>
+                <h3 style="font-family: 'Playfair Display', serif; font-size: 1.5rem; margin-bottom: 24px; text-align: center; color: var(--text-dark);">{{ imageMatches() !== null ? 'Sản phẩm nổi bật — không phải kết quả khớp ảnh' : 'Gợi ý sản phẩm nổi bật dành cho bạn' }}</h3>
                 <div class="product-grid">
                   @for (product of featuredFallback(); track product.product_id) {
                     <app-product-card [product]="product" appearance="catalog" />

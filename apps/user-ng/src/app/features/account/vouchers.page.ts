@@ -1,4 +1,6 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, effect, inject, signal, untracked } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import type { Subscription } from 'rxjs';
 import { RouterLink } from '@angular/router';
 import { VoucherService } from '../../core/services/voucher.service';
 import { useBodyClass } from '../../core/utils/body-class';
@@ -20,6 +22,9 @@ import type { WalletVoucher } from '../../core/models/voucher.interface';
 })
 export class AccountVouchersPage {
   private readonly vouchers = inject(VoucherService);
+  private readonly destroyRef = inject(DestroyRef);
+  private request?: Subscription;
+  private version = 0;
 
   readonly loading = signal(true);
   readonly loadError = signal<string | null>(null);
@@ -32,23 +37,47 @@ export class AccountVouchersPage {
   readonly blocked = computed(() =>
     this.items().filter((item) => !item.eligible && item.reason !== 'MIN_ORDER_NOT_MET')
   );
+  /** Kiểm tra xem mã có phải voucher quà tặng sinh nhật không. */
+  isBirthdayVoucher(item: WalletVoucher): boolean {
+    const code = String(item.code || '').toUpperCase();
+    const name = String(item.name || '').toLowerCase();
+    return code.startsWith('HPBD') || name.includes('sinh nhật') || name.includes('birthday');
+  }
+
+  readonly birthdayVouchers = computed(() =>
+    this.usable().filter((item) => this.isBirthdayVoucher(item))
+  );
+
+  readonly regularUsable = computed(() =>
+    this.usable().filter((item) => !this.isBirthdayVoucher(item))
+  );
+
 
   constructor() {
     useBodyClass('page-account-vouchers');
-    this.load();
+    effect(() => {
+      this.vouchers.customerSession?.();
+      untracked(() => { this.items.set([]); this.load(); });
+    });
   }
 
   /** Tải toàn bộ mã của thành viên. */
   load(): void {
+    this.request?.unsubscribe();
+    const version = ++this.version;
+    const session = this.vouchers.customerSession?.();
     this.loading.set(true);
     this.loadError.set(null);
-    this.vouchers.loadWallet(0, 0).subscribe({
+    this.request = this.vouchers.loadWallet(0, 0).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (response) => {
+        if (version !== this.version || session !== this.vouchers.customerSession?.()) return;
         this.loading.set(false);
         this.items.set(response.vouchers ?? []);
       },
       error: (error: Error) => {
+        if (version !== this.version || session !== this.vouchers.customerSession?.()) return;
         this.loading.set(false);
+        this.items.set([]);
         this.loadError.set(error.message || 'Không tải được ví voucher.');
       }
     });

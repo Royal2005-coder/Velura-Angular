@@ -110,6 +110,7 @@ describe('CampaignForm', () => {
     expect(calls.update[0].body['type']).toBeUndefined();
   });
 
+
   it('chặn ngày kết thúc không sau ngày bắt đầu', async () => {
     const form = await create(null);
     submit(form, buildForm({ ...VALID, endDate: '2026-10-01T08:00' }));

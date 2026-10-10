@@ -1,6 +1,9 @@
+import { VisualSearchWorkbench } from '../../shared/visual-search-workbench/visual-search-workbench';
+import type { VisualResult, VisualFilters } from '../../core/services/visual-search.service';
 import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { normalizeSearchText } from '../../core/utils/search';
 import { catchError, finalize, of } from 'rxjs';
 import { ProductSummary } from '../../core/models/product.interface';
 import { ApiService } from '../../core/services/api.service';
@@ -90,7 +93,7 @@ type CatalogView = 'grid' | 'large' | 'list';
 
 @Component({
   selector: 'app-product-list-page',
-  imports: [ProductCard, RouterLink],
+  imports: [ProductCard, RouterLink, VisualSearchWorkbench],
   host: { style: 'display:block' },
   templateUrl: './product-list.page.html',
 })
@@ -99,7 +102,22 @@ export class ProductListPage {
   private readonly route = inject(ActivatedRoute);
   private readonly api = inject(ApiService);
   private readonly auth = inject(AuthService);
+  private readonly router = inject(Router);
 
+  readonly imageMatches = signal<string[] | null>(null);
+  /** Intersects AI results with the existing category, price, color and size filters. */
+  applyImageMatches(ids: string[]): void { this.imageMatches.set(ids); this.currentPage.set(1); }
+  readonly visualFeatured = signal<ProductSummary[]>([]);
+  /** Preserve server-confirmed featured suggestions distinctly from similarity matches. */
+  applyVisualResult(result: VisualResult): void {
+    this.visualFeatured.set(result.featured);
+    this.applyImageMatches(result.matches.map(product => product.product_id));
+  }
+  readonly visualFilters = computed<VisualFilters>(() => ({
+    min_price: this.minPrice(), max_price: this.maxPrice(),
+    ...(this.selectedSize() ? { size: this.selectedSize() } : {}),
+    ...(this.selectedShapes()[0] ? { body_shape: this.selectedShapes()[0] } : {}),
+  }));
   readonly loading = signal(true);
   readonly loadError = signal<string | null>(null);
   readonly allProducts = signal<ProductSummary[]>([]);
@@ -119,7 +137,9 @@ export class ProductListPage {
   readonly viewMode = signal<CatalogView>('grid');
   readonly quiz = signal<StyleQuiz | null>(null);
   readonly suggestionsEnabled = signal(localStorage.getItem(SUGGESTIONS_KEY) !== 'false');
-  readonly featuredFallback = computed(() => this.allProducts().filter((item) => item.is_featured).slice(0, 4));
+  readonly featuredFallback = computed(() => this.imageMatches() !== null
+    ? this.visualFeatured()
+    : this.allProducts().filter(item => item.is_featured && item.status === 'on_sale').slice(0, 4));
   readonly colorSwatches = [
     { title: 'Đen', hex: '#2A2522' },
     { title: 'Trắng', hex: '#FFFFFF' },
@@ -136,7 +156,7 @@ export class ProductListPage {
   readonly bodyShapes = BODY_SHAPES;
   readonly isLoggedIn = this.auth.isLoggedIn;
   readonly hasStyleProfile = computed(() => Boolean(this.quiz()?.body_shape || this.quiz()?.style_tags));
-  readonly bodyShapeUnlocked = computed(() => this.hasStyleProfile());
+  readonly bodyShapeUnlocked = computed(() => this.isLoggedIn() && this.hasStyleProfile());
   readonly bodyShapeLabel = computed(() => {
     const shape = (this.quiz()?.body_shape || '').toLowerCase();
     return BODY_SHAPE_LABELS[shape] || this.quiz()?.body_shape || '';
@@ -149,9 +169,10 @@ export class ProductListPage {
     return this.isLoggedIn() ? 'empty' : 'guest';
   });
 
-  readonly filteredProducts = computed(() => {
+  readonly catalogFilteredProducts = computed(() => {
     const slugs = this.selectedSlugs();
-    const query = this.searchQuery().toLowerCase().trim();
+    const query = this.searchQuery().trim().toLowerCase();
+    const normQuery = normalizeSearchText(query);
     const minPrice = this.minPrice();
     const maxPrice = this.maxPrice();
     const color = this.selectedColor().toLowerCase();
@@ -160,28 +181,51 @@ export class ProductListPage {
     const shapes = this.selectedShapes().map((shape) => shape.toLowerCase());
     const sort = this.sort();
     const tokens = query.split(/\s+/).filter((token) => token.length > 0);
+    const normTokens = normQuery.split(/\s+/).filter((token) => token.length > 0);
 
     const scored = this.allProducts().map((product) => {
       let score = 0;
       if (query) {
-        if ((product.name || '').toLowerCase().includes(query)) {
+        const prodName = product.name || '';
+        const normName = normalizeSearchText(prodName);
+        const prodDesc = product.description || '';
+        const normDesc = normalizeSearchText(prodDesc);
+        const prodBrand = product.brand || '';
+        const normBrand = normalizeSearchText(prodBrand);
+        const prodCat = product.category_name || '';
+        const normCat = normalizeSearchText(prodCat);
+        const prodSlug = product.category_slug || '';
+        const normSlug = normalizeSearchText(prodSlug);
+        const styleTags = (product.style_tags || []).join(' ');
+        const normTags = normalizeSearchText(styleTags);
+
+        if (prodName.toLowerCase().includes(query) || (normQuery && normName.includes(normQuery))) {
           score += 100;
         }
-        for (const token of tokens) {
-          if ((product.name || '').toLowerCase().includes(token)) {
-            score += 15;
+        if (prodCat.toLowerCase().includes(query) || (normQuery && normCat.includes(normQuery))) {
+          score += 35;
+        }
+
+        for (let i = 0; i < tokens.length; i++) {
+          const token = tokens[i];
+          const nToken = normTokens[i] || normalizeSearchText(token);
+          if (prodName.toLowerCase().includes(token) || (nToken && normName.includes(nToken))) {
+            score += 20;
           }
-          if ((product.description || '').toLowerCase().includes(token)) {
-            score += 2;
+          if (prodCat.toLowerCase().includes(token) || (nToken && normCat.includes(nToken))) {
+            score += 10;
           }
-          if ((product.brand || '').toLowerCase().includes(token)) {
+          if (prodSlug.toLowerCase().includes(token) || (nToken && normSlug.includes(nToken))) {
+            score += 10;
+          }
+          if (styleTags.toLowerCase().includes(token) || (nToken && normTags.includes(nToken))) {
+            score += 8;
+          }
+          if (prodBrand.toLowerCase().includes(token) || (nToken && normBrand.includes(nToken))) {
             score += 5;
           }
-          if ((product.category_name || '').toLowerCase().includes(token)) {
-            score += 8;
-          }
-          if ((product.category_slug || '').toLowerCase().includes(token)) {
-            score += 8;
+          if (prodDesc.toLowerCase().includes(token) || (nToken && normDesc.includes(nToken))) {
+            score += 2;
           }
         }
       }
@@ -249,6 +293,15 @@ export class ProductListPage {
 
     return rows.map((row) => row.product);
   });
+  readonly imageSearchCandidates = computed(() => this.catalogFilteredProducts().map(product => product.product_id));
+  readonly filteredProducts = computed(() => {
+    const matches = this.imageMatches();
+    const rows = this.catalogFilteredProducts();
+    if (matches === null) return rows;
+    const ranked = rows.filter(product => matches.includes(product.product_id));
+    return this.sort() === 'newest'
+      ? ranked.sort((a, b) => matches.indexOf(a.product_id) - matches.indexOf(b.product_id)) : ranked;
+  });
   readonly productCount = computed(() => this.filteredProducts().length);
   readonly totalPages = computed(() => Math.max(1, Math.ceil(this.productCount() / ITEMS_PER_PAGE)));
   readonly pagedProducts = computed(() => {
@@ -299,6 +352,10 @@ export class ProductListPage {
       const slug = CATEGORY_QUERY_MAP[category] || category;
       this.selectedSlugs.set(slug ? [slug] : []);
       this.searchQuery.set((params.get('q') || '').trim());
+      const matchIds = params.get('match_ids');
+      const parsedIds = matchIds === null ? null : matchIds.split(',').filter(Boolean);
+      this.imageMatches.set(parsedIds?.length ? parsedIds : matchIds === null ? null : null);
+      this.visualFeatured.set([]);
       this.currentPage.set(1);
     });
     this.catalog
@@ -426,6 +483,17 @@ export class ProductListPage {
     this.specials.set(input.checked ? [...current, value] : current.filter((item) => item !== value));
     this.currentPage.set(1);
   }
+  /**
+   * Clears the active search query and updates route parameters.
+   */
+  clearSearch(): void {
+    this.searchQuery.set('');
+    void this.router.navigate(['/products'], {
+      queryParams: { ...this.route.snapshot.queryParams, q: null },
+      queryParamsHandling: 'merge',
+    });
+  }
+
 
   /**
    * Toggles a body-shape checkbox from the original catalog sidebar.

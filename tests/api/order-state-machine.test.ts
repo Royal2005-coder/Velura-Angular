@@ -72,7 +72,7 @@ test("AD_ORDER_04/AD_ORDER_05: Guest COD >= 1.000.000 locks confirm_cod until ca
   assert.deepEqual(codes(unlockedActions), ["call_confirm", "confirm_cod", "cancel"]);
 });
 
-test("AD_ORDER_03: COD < 1.000.000 and registered members >= 1M do not require mandatory call", () => {
+test("AD_ORDER_03: COD below threshold is optional; every actor at or above 1M requires reached call", () => {
   // COD dưới 1 triệu (kể cả khách vãng lai): gọi điện là tùy chọn, cho phép duyệt trực tiếp
   const smallCod = facts({ totalAmount: 990_000, isGuest: true, hasSuccessfulCallConfirm: false });
   assert.equal(actionGuard("confirm_cod", smallCod), null);
@@ -80,8 +80,8 @@ test("AD_ORDER_03: COD < 1.000.000 and registered members >= 1M do not require m
 
   // Thành viên có tài khoản COD >= 1 triệu: duyệt thủ công, không bắt buộc ghi nhận cuộc gọi trước
   const memberHighCod = facts({ totalAmount: 2_500_000, isGuest: false, hasSuccessfulCallConfirm: false });
-  assert.equal(actionGuard("confirm_cod", memberHighCod), null);
-  assert.deepEqual(codes(allowedAdminActions(memberHighCod, "admin_operator_donhang")), ["call_confirm", "confirm_cod", "cancel"]);
+  assert.equal(actionGuard("confirm_cod", memberHighCod), "CALL_CONFIRMATION_REQUIRED");
+  assert.deepEqual(codes(allowedAdminActions(memberHighCod, "admin_operator_donhang")), ["call_confirm", "cancel"]);
 });
 
 test("FR-04: an online order cannot be confirmed with the COD action", () => {

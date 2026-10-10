@@ -195,18 +195,12 @@ test("webhook gửi lại khi payment đã đóng thì bỏ qua", async () => {
   }
 });
 
-test("PaymentIntent bị huỷ đóng theo đơn khi không có mã phiên", async () => {
-  const pg = fakePostgrest((call) => (call.method === "PATCH" ? [{ payment_id: "pay_1" }] : []));
+test("unbound cancelled PaymentIntent never closes another pending checkout", async () => {
+  const pg = fakePostgrest(() => []);
   try {
-    await closeStripePayment(ORDER, "payment_intent.canceled", null);
-    const patch = pg.calls.find((c) => c.method === "PATCH");
-    assert.ok(patch);
-    assert.equal(patch.query.get("gateway_transaction_ref"), null);
-    assert.equal(patch.query.get("order_id"), `eq.${ORDER}`);
-    assert.equal(releaseCalls(pg.calls).length, 0);
-  } finally {
-    pg.restore();
-  }
+    assert.equal(await closeStripePayment(ORDER, "payment_intent.canceled", null),"ignored");
+    assert.equal(pg.calls.length,0);
+  } finally {pg.restore();}
 });
 
 test("webhook thành công gửi lại không chuyển đơn lần hai", async () => {
@@ -215,6 +209,7 @@ test("webhook thành công gửi lại không chuyển đơn lần hai", async (
   const pg = fakePostgrest((call) => {
     if (call.method === "PATCH" && call.path === "/rest/v1/payment") return [];
     if (call.method === "GET" && call.path === "/rest/v1/payment") {
+      if (call.query.get("payment_id")?.startsWith("neq.")) return [];
       return [{ payment_id: "pay_1", payment_status: "paid" }];
     }
     return [];
@@ -382,24 +377,21 @@ test("không có payment nào chờ hoàn thì không gọi Stripe", async () =>
   }
 });
 
-test("webhook charge.refunded chốt Đã hoàn tiền một lần; gửi lại thì bỏ qua", async () => {
-  let hits = 0;
-  const pg = fakePostgrest((call) => {
-    if (call.method === "PATCH" && call.path === "/rest/v1/payment") {
-      hits += 1;
-      return hits === 1 ? [{ payment_id: "pay_1" }] : [];
-    }
+test("partial refund callback changes only the captured refunded amount and is idempotent",async()=>{
+  let refunded = 0;
+  const pg = fakePostgrest(call=>{
+    if(call.path === "/rest/v1/payment" && call.method === "GET") return [{payment_id:"pay_1",amount:500000,refunded_amount:refunded,payment_status:"paid"}];
+    if(call.path === "/rest/v1/payment" && call.method === "PATCH") {refunded=Number(call.body.refunded_amount);return [{payment_id:"pay_1"}];}
     return [];
   });
   try {
-    assert.equal(await markStripeRefunded("pi_paid"), "refunded");
-    assert.equal(await markStripeRefunded("pi_paid"), "ignored");
-    const patch = pg.calls.find((c) => c.method === "PATCH");
-    assert.equal(patch?.query.get("gateway_transaction_ref"), "eq.pi_paid");
-    assert.equal(patch?.query.get("payment_status"), "in.(paid,refund_pending)");
-  } finally {
-    pg.restore();
-  }
+    assert.equal(await markStripeRefunded("pi_paid",200000),"refunded");
+    assert.equal(await markStripeRefunded("pi_paid",200000),"ignored");
+    const patch=pg.calls.find(call=>call.method === "PATCH");
+    assert.equal(patch?.body.payment_status,"paid");
+    assert.equal(patch?.body.refunded_amount,200000);
+    assert.equal(await markStripeRefunded("pi_paid",600000),"ignored");
+  }finally{pg.restore();}
 });
 
 test("sự kiện có mã phiên chỉ ghi tiền cho đúng phiên đó, kể cả phiên đã bị đóng", async () => {

@@ -1,379 +1,441 @@
-# Feature → PR into develop: validate + test + build (+ PR trace). No deploy.
-# Push develop: validate + test + build (integration only).
-# develop → PR into main: same gate. Push main: deploy + verify production.
 name: CI
-
 on:
   push:
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 permissions:
   contents: read
-  pull-requests: write
-
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 env:
   npm_config_fund: false
-  npm_config_cache: ${{ github.workspace }}/.npm
-
 jobs:
   validate:
-    name: validate
     runs-on: ubuntu-latest
+    outputs:
+      publish: ${{ steps.changes.outputs.publish }}
     steps:
-      - uses: actions/checkout@v4
-      - name: Workspace contract
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Workspace and safe input contract
+        env:
+          MESSAGE: ${{ github.event.head_commit.message }}
+          TITLE: ${{ github.event.pull_request.title }}
         run: |
+          set -euo pipefail
+          test -f apps/api/src/server.ts
           test -f apps/admin-ng/package.json
           test -f apps/user-ng/package.json
-          test -f apps/api/src/server.ts
-          test -f apps/api/tsconfig.json
-          test -f .env.example
-      - name: Forbid skip ci
+          if printf '%s\n' "$MESSAGE" "$TITLE" | grep -qiE '\[skip ci\]|\[ci skip\]'; then exit 1; fi
+          if grep -R --exclude-dir=.git --exclude-dir=node_modules --include='*.pem' --include='*.key' -n 'BEGIN .*PRIVATE KEY' .; then exit 1; fi
+          if grep -R --include='*.ts' -n '@ts-nocheck' apps/api; then exit 1; fi
+      - name: Detect application release changes
+        id: changes
+        env:
+          BEFORE: ${{ github.event.before }}
+          EVENT: ${{ github.event_name }}
         run: |
-          if echo "${{ github.event.head_commit.message }}${{ github.event.pull_request.title }}" | grep -qiE '\[skip ci\]|\[ci skip\]'; then
-            echo "[skip ci] is forbidden. Pipeline must always run."
-            exit 1
+          set -euo pipefail
+          if [ "$EVENT" != push ] || [ "$BEFORE" = 0000000000000000000000000000000000000000 ]; then
+            echo 'publish=true' >> "$GITHUB_OUTPUT"
+          elif git diff --name-only "$BEFORE" HEAD | grep -qE '^(apps/|packages/|database/migrations/|scripts/run-migrations\.mjs$|package(-lock)?\.json$|deploy/docker/)'; then
+            echo 'publish=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'publish=false' >> "$GITHUB_OUTPUT"
           fi
-      - name: No private keys in repo
-        run: |
-          if grep -R --exclude-dir=.git --exclude-dir=node_modules --include='*.pem' --include='*.key' -n "BEGIN .*PRIVATE KEY" . ; then
-            echo "Private keys must not be in the repository"
-            exit 1
-          fi
-      - name: No @ts-nocheck in API
-        run: |
-          if grep -R --include='*.ts' -n '@ts-nocheck' apps/api ; then
-            echo "apps/api must not use @ts-nocheck. Type the file or narrow unknown."
-            exit 1
-          fi
-
   validate-pr-contract:
-    name: validate-pr-contract
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - name: PR title / branch contract
+      - name: Enforce production and PR contract
         env:
           TITLE: ${{ github.event.pull_request.title }}
           BODY: ${{ github.event.pull_request.body }}
           SRC: ${{ github.head_ref }}
           TGT: ${{ github.base_ref }}
         run: |
-          set -e
-          echo "PR title=[$TITLE]"
-          echo "PR source=[$SRC] target=[$TGT]"
-          if [ "$SRC" = "develop" ] && [ "$TGT" = "main" ]; then
-            echo "Promote contract OK: develop → main."
-            exit 0
-          fi
-          if [ "$TGT" = "main" ]; then
-            echo "Production is only promoted from develop. Close this PR."
-            echo "New PR: source=develop target=main."
-            exit 1
-          fi
-          echo "$TITLE" | grep -Eqi '^(Draft:[[:space:]]*)?KAN-[0-9]+' || {
-            echo "Feature PR title must start with KAN-n (optional Draft: prefix)."
-            exit 1
-          }
-          printf '%s\n' "$BODY" | sed '1s/^\xef\xbb\xbf//' | grep -qiE '^[[:space:]]*##[[:space:]]*(Why|Tại sao)' || {
-            echo "PR description must include a heading line ## Why"
-            exit 1
-          }
-          case "$SRC" in
-            feature/*|hotfix/*|develop) ;;
-            *)
-              echo "Source branch must be feature/KAN-*, hotfix/KAN-*, or develop"
-              exit 1
-              ;;
-          esac
-
+          set -euo pipefail
+          if [ "$TGT" = main ] && [ "$SRC" != develop ]; then exit 1; fi
+          printf '%s\n' "$TITLE" | grep -Eqi '^(Draft:[[:space:]]*)?KAN-[0-9]+'
+          printf '%s\n' "$BODY" | grep -qiE '^[[:space:]]*##[[:space:]]*(Why|Tại sao)'
+          case "$SRC" in feature/KAN-*|hotfix/KAN-*|develop) ;; *) exit 1;; esac
   test-api:
-    name: test-api
     runs-on: ubuntu-latest
-    needs: [validate]
+    needs: validate
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with: {node-version: '22', cache: npm}
       - run: npm ci
       - run: npm run typecheck:api
       - run: npm run test:api
-
+      - run: node --test tools/ops/velura-ops.test.mjs
   test-angular:
-    name: test-angular
     runs-on: ubuntu-latest
-    needs: [validate]
     timeout-minutes: 20
+    needs: validate
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: {node-version: '22', cache: npm}
       - run: npm ci
       - run: npm run test:ng
-
+  test-ai-worker:
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: apps/ai-worker/requirements-test.txt
+      - run: python -m pip install -r apps/ai-worker/requirements-test.txt
+      - run: python -m unittest discover -s apps/ai-worker -p 'test_*.py'
   build:
-    name: build
     runs-on: ubuntu-latest
-    needs: [validate]
+    needs: validate
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: {node-version: '22', cache: npm}
       - run: npm ci
-      - run: npm run build:api
-      - run: npm run build:user
-      - run: npm run build:admin
-      - run: |
-          test -f apps/api/dist/server.js
-          test -d apps/user-ng/dist/user-ng/browser
-          test -d apps/admin-ng/dist/admin-ng/browser
-      - uses: actions/upload-artifact@v4
-        with:
-          name: velura-dist
-          retention-days: 14
-          path: |
-            apps/user-ng/dist
-            apps/admin-ng/dist
-            apps/api/dist
-            apps/api/package.json
-            deploy
-
+      - run: npm run build:api && npm run build:user && npm run build:admin
+  manifests:
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with: {python-version: '3.11'}
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with: {go-version: '1.23.8', cache: false}
+      - name: Install explicit manifest rendering dependencies
+        run: |
+          python -m pip install PyYAML==6.0.2
+          go install sigs.k8s.io/kustomize/kustomize/v5@v5.6.0
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Reject duplicate YAML keys and render each isolated overlay
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import subprocess, yaml
+          class UniqueLoader(yaml.SafeLoader):
+              pass
+          def mapping(loader, node, deep=False):
+              keys = [loader.construct_object(key, deep=deep) for key, value in node.value]
+              if len(keys) != len(set(keys)):
+                  raise ValueError('Duplicate YAML mapping key')
+              return yaml.SafeLoader.construct_mapping(loader, node, deep=deep)
+          UniqueLoader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, mapping)
+          paths = [Path('.github/workflows/ci.yml'), *Path('deploy/k8s').rglob('*.yaml')]
+          for path in paths:
+              list(yaml.load_all(path.read_text(), Loader=UniqueLoader))
+          for path in ('deploy/k8s/overlays/staging', 'deploy/k8s/overlays/production', 'deploy/k8s/optional/ai-worker'):
+              rendered = subprocess.run(['kustomize', 'build', path], check=True, capture_output=True, text=True).stdout
+              objects = list(yaml.load_all(rendered, Loader=UniqueLoader))
+              if not objects: raise ValueError('No rendered resources')
+              for item in objects:
+                  if item.get('kind') == 'ConfigMap':
+                      for name, value in item.get('data', {}).items():
+                          if name.endswith('.yaml'): list(yaml.load_all(value, Loader=UniqueLoader))
+          PY
   migrations:
-    name: Kiểm tra migration
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      # Migration được đánh số tuần tự và không sửa lại bản đã chạy. Hai nhánh cùng
-      # thêm một số thứ tự là lỗi hay gặp nhất khi merge, và nếu không chặn ở đây thì
-      # chỉ lộ ra lúc chạy thật trên production.
-      #
-      # Chỉ chặn từ 025 trở đi: kho hiện đã có sẵn trùng số ở 005 (005/005b/005c) và
-      # 015 (ba file). Đó là nợ cũ, dọn riêng — không để nó làm đỏ mọi lần chạy.
-      - name: Chặn trùng số thứ tự migration mới
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with: {persist-credentials: false}
+      - name: Reject duplicate new migration numbers
         run: |
-          set -euo pipefail
-          duplicates=$(ls database/migrations \
-            | grep -oE '^[0-9]+' \
-            | awk '$1 + 0 >= 25' \
-            | sort \
-            | uniq -d || true)
-          if [ -n "$duplicates" ]; then
-            echo "::error::Trùng số thứ tự migration: $duplicates"
-            for n in $duplicates; do ls database/migrations | grep -E "^${n}"; done
-            exit 1
-          fi
-          echo "Không có migration mới nào trùng số."
-
-      - name: Liệt kê nợ trùng số cũ (chỉ cảnh báo)
+          python - <<'PY'
+          from pathlib import Path
+          from collections import Counter
+          import re
+          numbers = [int(re.match(r'\d+', p.name)[0]) for p in Path('database/migrations').glob('*.sql') if re.match(r'\d+', p.name)]
+          duplicates = [n for n,c in Counter(numbers).items() if n >= 25 and c > 1]
+          if duplicates: raise SystemExit(f'Duplicate migrations: {duplicates}')
+          PY
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with: {python-version: '3.11'}
+      - name: Parse chatbot release SQL and require its dependency chain
         run: |
-          legacy=$(ls database/migrations \
-            | grep -oE '^[0-9]+' \
-            | awk '$1 + 0 < 25' \
-            | sort \
-            | uniq -d || true)
-          if [ -n "$legacy" ]; then
-            echo "::warning::Migration cũ đang trùng số: $legacy — cần đánh số lại khi có dịp."
-          fi
-
+          python -m pip install pglast==7.7
+          python - <<'PY'
+          from pathlib import Path
+          from pglast import ast, parse_sql
+          migrations = Path('database/migrations')
+          for number in ('054', '056', '057', '058'):
+              files = list(migrations.glob(f'{number}_*.sql'))
+              if len(files) != 1: raise SystemExit(f'Missing or ambiguous prerequisite migration {number}')
+              for raw in parse_sql(files[0].read_text(encoding='utf-8')):
+                  if isinstance(raw.stmt, ast.CreateFunctionStmt):
+                      options = {option.defname: option.arg for option in raw.stmt.options}
+                      if options.get('language') and options['language'].sval == 'sql':
+                          parse_sql(options['as'][0].sval)
+          reports = next(migrations.glob('058_*.sql')).read_text(encoding='utf-8')
+          if 'public.chat_schema_readiness()' not in reports:
+              raise SystemExit('Chatbot release requires read-only installed-schema readiness RPC')
+          PY
   note-pr:
-    name: note-pr
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    needs: [validate-pr-contract, test-api, test-angular, test-ai-worker, build, migrations, manifests]
     runs-on: ubuntu-latest
-    needs: [validate, validate-pr-contract, test-api, test-angular, build]
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Write PR trace
-        env:
-          TITLE: ${{ github.event.pull_request.title }}
-          SRC: ${{ github.head_ref }}
-          TGT: ${{ github.base_ref }}
-          SHA: ${{ github.sha }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          set -e
-          BASE="${{ github.event.pull_request.base.sha }}"
-          LOG=$(git log --oneline "${BASE}..HEAD" | head -n 30)
-          STAT=$(git diff --stat "${BASE}...HEAD" | tail -n 40)
-          {
-            echo "## Trace log (required CI note)"
-            echo
-            echo "- Title: \`$TITLE\`"
-            echo "- Source: \`$SRC\` → target: \`$TGT\`"
-            echo "- SHA: \`${SHA:0:8}\` (\`$SHA\`)"
-            echo "- Run: $RUN_URL"
-            echo
-            echo "### git log"
-            echo '```'
-            echo "$LOG"
-            echo '```'
-            echo
-            echo "### diff --stat"
-            echo '```'
-            echo "$STAT"
-            echo '```'
-          } > pr-trace.md
-          cat pr-trace.md
-      - uses: actions/upload-artifact@v4
-        with:
-          name: pr-trace
-          path: pr-trace.md
-          retention-days: 30
-      - name: Comment PR
-        uses: actions/github-script@v7
+      - uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
         with:
           script: |
-            const fs = require('fs');
-            const body = fs.readFileSync('pr-trace.md', 'utf8');
-            const { data: comments } = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-            });
             const marker = '## Trace log (required CI note)';
-            const existing = comments.find(c => c.user.type === 'Bot' && c.body.includes(marker));
-            if (existing) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: existing.id,
-                body,
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body,
-              });
-            }
-
+            const body = `${marker}\n- Revision: ${context.sha}\n- Run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const args = {...context.repo, issue_number: context.issue.number};
+            const comments = await github.paginate(github.rest.issues.listComments, args);
+            const existing = comments.find(c => c.user.type === 'Bot' && c.body.startsWith(marker));
+            if (existing) await github.rest.issues.updateComment({...context.repo, comment_id: existing.id, body});
+            else await github.rest.issues.createComment({...args, body});
   deploy-production:
-    name: deploy-production
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Publishes artifacts only. Cluster changes occur only after a reviewed develop -> main promotion.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.validate.outputs.publish == 'true'
+    needs: [validate, test-api, test-angular, test-ai-worker, build, migrations, manifests]
     runs-on: ubuntu-latest
-    needs: [test-api, test-angular, build]
-    environment:
-      name: production
-      url: https://velura.royalai.dev/
-    concurrency:
-      group: velura-production
-      cancel-in-progress: false
+    timeout-minutes: 45
+    environment: production
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [api, storefront, admin, ai-worker]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: velura-dist
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
-      - name: Install Vercel CLI
-        run: npm install -g vercel@latest
-      - name: Prepare Vercel outputs
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with: {persist-credentials: false}
+      - name: Resolve canonical image repository
+        id: image
         env:
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID_API: ${{ secrets.VERCEL_PROJECT_ID_API }}
-          VERCEL_PROJECT_ID_USER: ${{ secrets.VERCEL_PROJECT_ID_USER }}
-          VERCEL_PROJECT_ID_ADMIN: ${{ secrets.VERCEL_PROJECT_ID_ADMIN }}
-        run: node deploy/scripts/prepare-vercel-spa.mjs
-      - name: Sync production environment to Vercel API
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
-          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
-          STOREFRONT_ORIGIN: ${{ secrets.STOREFRONT_ORIGIN }}
-          TWILIO_API_KEY_SID: ${{ secrets.TWILIO_API_KEY_SID }}
-          TWILIO_API_KEY_SECRET: ${{ secrets.TWILIO_API_KEY_SECRET }}
-          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
-          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
-          TWILIO_PHONE_NUMBER: ${{ secrets.TWILIO_PHONE_NUMBER }}
-          ESMS_API_KEY: ${{ secrets.ESMS_API_KEY }}
-          ESMS_SECRET_KEY: ${{ secrets.ESMS_SECRET_KEY }}
-          ESMS_BRANDNAME: ${{ secrets.ESMS_BRANDNAME }}
-          ESMS_SMS_TYPE: ${{ secrets.ESMS_SMS_TYPE }}
-          ESMS_SANDBOX: ${{ secrets.ESMS_SANDBOX }}
+          OWNER: ${{ github.repository_owner }}
+          APP: ${{ matrix.app }}
+        run: echo "name=ghcr.io/${OWNER,,}/velura-$APP" >> "$GITHUB_OUTPUT"
+      - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+      - name: Resolve immutable worker Python base
+        if: matrix.app == 'ai-worker'
+        id: python
         run: |
-          if [ -n "$STRIPE_SECRET_KEY" ]; then
-            vercel env add STRIPE_SECRET_KEY production --value "$STRIPE_SECRET_KEY" --cwd apps/api --token "$VERCEL_TOKEN" --yes --force || true
-          fi
-          if [ -n "$STRIPE_WEBHOOK_SECRET" ]; then
-            vercel env add STRIPE_WEBHOOK_SECRET production --value "$STRIPE_WEBHOOK_SECRET" --cwd apps/api --token "$VERCEL_TOKEN" --yes --force || true
-          fi
-          if [ -n "$STOREFRONT_ORIGIN" ]; then
-            vercel env add STOREFRONT_ORIGIN production --value "$STOREFRONT_ORIGIN" --cwd apps/api --token "$VERCEL_TOKEN" --yes --force || true
-          fi
-          if [ -n "$TWILIO_API_KEY_SID" ]; then
-            vercel env add TWILIO_API_KEY_SID production --value "$TWILIO_API_KEY_SID" --cwd apps/api --token "$VERCEL_TOKEN" --yes --force || true
-          fi
-          if [ -n "$TWILIO_API_KEY_SECRET" ]; then
-            vercel env add TWILIO_API_KEY_SECRET production --value "$TWILIO_API_KEY_SECRET" --cwd apps/api --token "$VERCEL_TOKEN" --yes --force || true
-          fi
-          if [ -n "$TWILIO_ACCOUNT_SID" ]; then
-            vercel env add TWILIO_ACCOUNT_SID production --value "$TWILIO_ACCOUNT_SID" --cwd apps/api --token "$VERCEL_TOKEN" --yes --force || true
-          fi
-          if [ -n "$TWILIO_AUTH_TOKEN" ]; then
-            vercel env add TWILIO_AUTH_TOKEN production --value "$TWILIO_AUTH_TOKEN" --cwd apps/api --token "$VERCEL_TOKEN" --yes --force || true
-          fi
-          if [ -n "$TWILIO_PHONE_NUMBER" ]; then
-            vercel env add TWILIO_PHONE_NUMBER production --value "$TWILIO_PHONE_NUMBER" --cwd apps/api --token "$VERCEL_TOKEN" --yes --force || true
-          fi
-          if [ -n "$ESMS_API_KEY" ]; then
-            vercel env add ESMS_API_KEY production --value "$ESMS_API_KEY" --cwd apps/api --token "$VERCEL_TOKEN" --yes --force || true
-          fi
-          if [ -n "$ESMS_SECRET_KEY" ]; then
-            vercel env add ESMS_SECRET_KEY production --value "$ESMS_SECRET_KEY" --cwd apps/api --token "$VERCEL_TOKEN" --yes --force || true
-          fi
-          if [ -n "$ESMS_BRANDNAME" ]; then
-            vercel env add ESMS_BRANDNAME production --value "$ESMS_BRANDNAME" --cwd apps/api --token "$VERCEL_TOKEN" --yes --force || true
-          fi
-          if [ -n "$ESMS_SMS_TYPE" ]; then
-            vercel env add ESMS_SMS_TYPE production --value "$ESMS_SMS_TYPE" --cwd apps/api --token "$VERCEL_TOKEN" --yes --force || true
-          fi
-          if [ -n "$ESMS_SANDBOX" ]; then
-            vercel env add ESMS_SANDBOX production --value "$ESMS_SANDBOX" --cwd apps/api --token "$VERCEL_TOKEN" --yes --force || true
-          fi
-      - name: Deploy API to Vercel
-        run: vercel deploy --prod --cwd apps/api --token ${{ secrets.VERCEL_TOKEN }} --yes
-      - name: Deploy Storefront to Vercel
-        run: vercel deploy --prebuilt --prod --cwd apps/user-ng --token ${{ secrets.VERCEL_TOKEN }} --yes
-      - name: Deploy Admin to Vercel
-        run: vercel deploy --prebuilt --prod --cwd apps/admin-ng --token ${{ secrets.VERCEL_TOKEN }} --yes
-
+          set -euo pipefail
+          digest=$(docker buildx imagetools inspect python:3.11.13-slim-bookworm --format '{{.Manifest.Digest}}')
+          [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+          echo "image=python:3.11.13-slim-bookworm@$digest" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        id: build
+        with:
+          context: .
+          file: deploy/docker/${{ matrix.app }}/Dockerfile
+          push: true
+          tags: ${{ steps.image.outputs.name }}:sha-${{ github.sha }}
+          labels: org.opencontainers.image.revision=${{ github.sha }}
+          build-args: |
+            PYTHON_IMAGE=${{ steps.python.outputs.image }}
+            RELEASE_REVISION=${{ github.sha }}
+          provenance: mode=max
+          sbom: true
+      - name: Scan exact published digest
+        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # v0.33.1
+        with:
+          image-ref: ${{ steps.image.outputs.name }}@${{ steps.build.outputs.digest }}
+          scanners: vuln,secret
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+          format: json
+          output: scan-${{ matrix.app }}.json
+      - name: Generate SPDX SBOM for digest
+        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8
+        with:
+          image-ref: ${{ steps.image.outputs.name }}@${{ steps.build.outputs.digest }}
+          format: spdx-json
+          output: sbom-${{ matrix.app }}.json
+          exit-code: '0'
+      - uses: sigstore/cosign-installer@d58896d6a1865668819e1d91763c7751a165e159 # v3.9.2
+      - name: Sign and attest immutable release
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}@${{ steps.build.outputs.digest }}
+          APP: ${{ matrix.app }}
+        run: |
+          set -euo pipefail
+          cosign sign --yes "$IMAGE"
+          cosign attest --yes --type spdxjson --predicate "sbom-$APP.json" "$IMAGE"
+          printf '%s\n' "$IMAGE" > "image-$APP.txt"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-${{ matrix.app }}
+          path: |
+            image-${{ matrix.app }}.txt
+            scan-${{ matrix.app }}.json
+            sbom-${{ matrix.app }}.json
+          retention-days: 90
+  promote-images:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.validate.outputs.publish == 'true'
+    needs: [validate, deploy-production]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: develop
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: release
+      - name: Open authenticated image update PR in this repository
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os, re
+          from pathlib import Path
+          for app in ('api', 'storefront', 'admin', 'ai-worker'):
+              image = Path(f'release/image-{app}.txt').read_text().strip()
+              if not re.fullmatch(r'ghcr\.io/[a-z0-9_.-]+/velura-(?:api|storefront|admin|ai-worker)@sha256:[a-f0-9]{64}', image):
+                  raise SystemExit('Invalid immutable image reference')
+              paths = [Path('deploy/k8s/optional/ai-worker/worker.yaml'), Path('deploy/k8s/optional/ai-worker/provision-weights.yaml')] if app == 'ai-worker' else [Path(f'deploy/k8s/base/velura/velura-{app}.yaml')]
+              for p in paths:
+                  text, count = re.subn(r'(?m)^(\s*image:)\s+\S+', lambda m: m[1] + ' ' + image, p.read_text())
+                  if count != 1: raise SystemExit('Expected exactly one application image')
+                  if app == 'api':
+                      text, count = re.subn(r'(?m)^  RELEASE_REVISION:.*$', '  RELEASE_REVISION: ' + os.environ['RELEASE_SHA'], text)
+                      if count != 1: raise SystemExit('Missing release revision contract')
+                  p.write_text(text)
+          PY
+          branch="feature/KAN-32-images-${RELEASE_SHA:0:12}"
+          git switch -c "$branch"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deploy/k8s/base/velura deploy/k8s/optional/ai-worker/worker.yaml deploy/k8s/optional/ai-worker/provision-weights.yaml
+          git diff --cached --quiet && exit 0
+          git commit -m 'KAN-32 why: promote scanned signed immutable application images'
+          gh auth setup-git
+          git push origin "$branch"
+          gh pr create --repo "$GH_REPO" --base develop --head "$branch" --title 'KAN-32: promote signed application image digests' --body "$(printf '## Why\nPromote immutable images built from approved main revision %s after Trivy, SPDX SBOM, and Cosign signing. Review then promote develop to main; no CI cluster credentials.' "$RELEASE_SHA")"
+  verify-staging:
+    # Independent staging remains default; an owner may explicitly choose current-database MVP rollout.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.validate.outputs.publish == 'false' && vars.VELURA_OWNER_DIRECT_ROLLOUT != 'true'
+    needs: [validate, test-api, test-angular, test-ai-worker, build, migrations, manifests]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: staging
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: {node-version: '22', cache: npm}
+      - run: npm ci
+      - name: Require independently provisioned staging chatbot schema
+        env:
+          STAGING_SUPABASE_DB_URL: ${{ secrets.STAGING_SUPABASE_DB_URL }}
+          STAGING_DB_CA_PEM: ${{ secrets.STAGING_SUPABASE_DB_CA_CERT }}
+        run: |
+          set -euo pipefail
+          test -n "$STAGING_SUPABASE_DB_URL"
+          test -n "$STAGING_DB_CA_PEM"
+          ca=$(mktemp)
+          trap 'rm -f "$ca"' EXIT
+          chmod 600 "$ca"
+          printf '%s\n' "$STAGING_DB_CA_PEM" > "$ca"
+          STAGING_SUPABASE_DB_CA_CERT="$ca" node scripts/run-migrations.mjs --check --environment=staging --require-chatbot-schema
+      - name: Verify independently provisioned staging application
+        env:
+          VERIFY_TOKEN: ${{ secrets.PRODUCTION_VERIFY_TOKEN }}
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          set -euo pipefail
+          test -n "$VERIFY_TOKEN"
+          test -n "$CF_ACCESS_CLIENT_ID"
+          test -n "$CF_ACCESS_CLIENT_SECRET"
+          expected=$(python -c "import re,pathlib; print(re.search(r'^  RELEASE_REVISION: (.+)$', pathlib.Path('deploy/k8s/base/velura/velura-api.yaml').read_text(), re.M)[1].strip())")
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent --show-error --max-time 15 -H "Authorization: Bearer $VERIFY_TOKEN" -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" https://staging-admin.royalai.dev/api/ops/revision > staging-revision.json && jq -e --arg expected "$expected" '.ready == true and .checks.chatbotSchema == true and .revision == $expected' staging-revision.json; then
+              curl --fail --silent --show-error --max-time 15 -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" https://staging.royalai.dev/ > /dev/null
+              exit 0
+            fi
+            sleep 10
+          done
+          echo 'Staging revision did not converge' >&2
+          exit 1
   verify-production:
-    name: verify-production
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Runs after the image update PR has been approved and promoted to main, not before it is deployed.
+    if: >-
+      ${{ !cancelled() && needs.validate.result == 'success'
+      && needs['test-api'].result == 'success' && needs['test-angular'].result == 'success'
+      && needs['test-ai-worker'].result == 'success' && needs.build.result == 'success'
+      && needs.migrations.result == 'success' && needs.manifests.result == 'success'
+      && github.event_name == 'push' && github.ref == 'refs/heads/main'
+      && needs.validate.outputs.publish == 'false' && vars.VELURA_VERIFY_PRODUCTION == 'true'
+      && (needs.verify-staging.result == 'success'
+      || (vars.VELURA_OWNER_DIRECT_ROLLOUT == 'true' && needs.verify-staging.result == 'skipped')) }}
+    needs: [validate, test-api, test-angular, test-ai-worker, build, migrations, manifests, verify-staging]
     runs-on: ubuntu-latest
-    needs: [deploy-production]
-    environment:
-      name: production
-      url: https://velura.royalai.dev/
+    timeout-minutes: 15
+    environment: production
     steps:
-      - name: Health checks
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: {node-version: '22', cache: npm}
+      - run: npm ci
+      - name: Require owner-provisioned production chatbot schema without writes
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          DB_CA_PEM: ${{ secrets.SUPABASE_DB_CA_CERT }}
         run: |
-          set -e
-          echo "Verifying Vercel deployments..."
-          curl -fsS https://velura-api.vercel.app/health | grep '"ok":true'
-          test "$(curl -fsS -o /dev/null -w '%{http_code}' --max-redirs 2 https://velura-storefront.vercel.app/)" = "200"
-          test "$(curl -fsS -o /dev/null -w '%{http_code}' --max-redirs 2 https://velura-admin.vercel.app/)" = "200"
-
-          echo "Checking live custom domains..."
-          if curl -fsS -m 10 https://api.royalai.dev/health 2>/dev/null | grep -q '"ok":true'; then
-            echo "Custom domain api.royalai.dev is live and healthy."
-          fi
-          test "$(curl -fsS -o /dev/null -w '%{http_code}' --max-redirs 2 https://velura.royalai.dev/)" = "200"
-          test "$(curl -fsS -o /dev/null -w '%{http_code}' --max-redirs 2 https://admin.royalai.dev/)" = "200"
+          set -euo pipefail
+          test -n "$SUPABASE_DB_URL"
+          test -n "$DB_CA_PEM"
+          ca=$(mktemp)
+          trap 'rm -f "$ca"' EXIT
+          chmod 600 "$ca"
+          printf '%s\n' "$DB_CA_PEM" > "$ca"
+          SUPABASE_DB_CA_CERT="$ca" node scripts/run-migrations.mjs --check --require-chatbot-schema
+      - name: Verify actual read-only health and deployed application revision
+        env:
+          VERIFY_TOKEN: ${{ secrets.PRODUCTION_VERIFY_TOKEN }}
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          set -euo pipefail
+          test -n "$VERIFY_TOKEN"
+          test -n "$CF_ACCESS_CLIENT_ID"
+          test -n "$CF_ACCESS_CLIENT_SECRET"
+          expected=$(python -c "import re,pathlib; print(re.search(r'^  RELEASE_REVISION: (.+)$', pathlib.Path('deploy/k8s/base/velura/velura-api.yaml').read_text(), re.M)[1].strip())")
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent --show-error --max-time 15 -H "Authorization: Bearer $VERIFY_TOKEN" -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" https://admin.royalai.dev/api/ops/revision > revision.json && jq -e --arg expected "$expected" '.ready == true and .checks.chatbotSchema == true and .revision == $expected' revision.json; then
+              curl --fail --silent --show-error --max-time 15 https://velura.royalai.dev/api/health
+              curl --fail --silent --show-error --max-time 15 https://velura.royalai.dev/ > /dev/null
+              exit 0
+            fi
+            sleep 10
+          done
+          echo 'Production revision did not converge' >&2
+          exit 1

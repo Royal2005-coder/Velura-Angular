@@ -65,25 +65,108 @@
                       <span class="cart-item__tag" style="background: #f4e4dc; color: var(--terracotta); font-weight: 500;">Set phối đồ gợi ý</span>
                       <span class="cart-item__tag" style="white-space: normal; line-height: 1.4;">Gồm: {{ comboIncludes(item) }}</span>
                     </div>
-                    @if (item.items?.length) {
-                      <div class="cart-combo-components" style="margin: 8px 0; display: flex; flex-direction: column; gap: 6px;">
-                        @for (sub of item.items; track sub.variant_id) {
-                          <div style="display: flex; align-items: center; justify-content: space-between; font-size: 0.8125rem; background: #fdfaf8; padding: 6px 10px; border-radius: 6px; border: 1px dashed #ebd9c8;">
-                            <div style="display: flex; align-items: center; gap: 8px; min-width: 0;">
+                    @if ((item.sub_items && item.sub_items.length) || (item.items && item.items.length)) {
+                      <div class="cart-combo-components" style="margin: 10px 0; display: flex; flex-direction: column; gap: 8px;">
+                        <div style="font-size: 0.78125rem; font-weight: 600; color: #785a44; text-transform: uppercase; letter-spacing: 0.5px;">
+                          Tùy chỉnh size & màu cho từng món trong set:
+                        </div>
+                        @for (sub of (item.sub_items || item.items || []); track sub.product_id || sub.variant_id) {
+                          <div style="display: flex; align-items: center; justify-content: space-between; font-size: 0.8125rem; background: #fffcf9; padding: 8px 12px; border-radius: 8px; border: 1px solid #ebd9c8; gap: 8px;">
+                            <div style="display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1;">
                               <a [routerLink]="['/products', sub.product_id]" target="_blank" style="display: block; line-height: 0; flex-shrink: 0;" title="Xem sản phẩm riêng lẻ">
-                                <img [src]="sub.product_image" [alt]="sub.product_name" style="width: 28px; height: 36px; object-fit: cover; border-radius: 4px;" />
+                                <img [src]="imageUrl(sub)" [alt]="sub.product_name" style="width: 32px; height: 42px; object-fit: cover; border-radius: 4px;" />
                               </a>
-                              <div style="min-width: 0;">
+                              <div style="min-width: 0; flex: 1;">
                                 <a [routerLink]="['/products', sub.product_id]" target="_blank" style="color: var(--text-dark); text-decoration: none; font-weight: 500; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="Xem sản phẩm riêng lẻ">
                                   {{ sub.product_name }}
                                 </a>
-                                <span style="font-size: 0.75rem; color: #8c857e;">{{ sub.color }} / {{ sub.size }}</span>
+                                <div style="font-size: 0.75rem; color: #8c857e; margin-top: 1px;">
+                                  {{ sub.color || 'Mặc định' }} / {{ sub.size || 'Free' }}
+                                </div>
                               </div>
                             </div>
-                            <a [routerLink]="['/products', sub.product_id]" target="_blank" style="font-size: 0.75rem; color: var(--terracotta); text-decoration: none; font-weight: 600; flex-shrink: 0; margin-left: 8px; padding: 2px 6px; border-radius: 4px; background: rgba(161, 130, 101, 0.08);" title="Xem sản phẩm riêng lẻ">
-                              <span>Xem lẻ</span>
-                              <span aria-hidden="true">&rarr;</span>
-                            </a>
+
+                            <!-- Interactive variant pills for this sub-item -->
+                            <div class="coolmate-variant-row" style="margin-top: 0; flex-shrink: 0; gap: 6px;">
+                              <div class="coolmate-pill-wrap">
+                                <button
+                                  type="button"
+                                  class="coolmate-pill-btn"
+                                  style="padding: 2px 7px; font-size: 0.75rem; height: 26px;"
+                                  [class.is-active]="isComboSubDropdownOpen(item, sub, 'color')"
+                                  (click)="toggleComboSubDropdown(item, sub, 'color', $event)"
+                                >
+                                  <span>{{ sub.color || 'Màu' }}</span>
+                                  <span class="coolmate-pill-arrow">⌵</span>
+                                </button>
+                                @if (isComboSubDropdownOpen(item, sub, 'color')) {
+                                  <div class="coolmate-dropdown-card" (click)="$event.stopPropagation()">
+                                    @if (loadingVariants()) {
+                                      <div class="coolmate-dropdown-empty">Đang tải...</div>
+                                    } @else {
+                                      @for (c of getColorsForSub(sub); track c) {
+                                        <button
+                                          type="button"
+                                          class="coolmate-dropdown-item"
+                                          [class.is-selected]="sub.color === c"
+                                          (click)="pickComboSubColor(item, sub, c)"
+                                        >
+                                          <span>{{ c }}</span>
+                                          @if (sub.color === c) {
+                                            <span>✓</span>
+                                          }
+                                        </button>
+                                      }
+                                      @if (getColorsForSub(sub).length === 0) {
+                                        <div class="coolmate-dropdown-empty">Không có màu khác</div>
+                                      }
+                                    }
+                                  </div>
+                                }
+                              </div>
+
+                              <div class="coolmate-pill-wrap">
+                                <button
+                                  type="button"
+                                  class="coolmate-pill-btn"
+                                  style="padding: 2px 7px; font-size: 0.75rem; height: 26px;"
+                                  [class.is-active]="isComboSubDropdownOpen(item, sub, 'size')"
+                                  (click)="toggleComboSubDropdown(item, sub, 'size', $event)"
+                                >
+                                  <span>{{ sub.size || 'Size' }}</span>
+                                  <span class="coolmate-pill-arrow">⌵</span>
+                                </button>
+                                @if (isComboSubDropdownOpen(item, sub, 'size')) {
+                                  <div class="coolmate-dropdown-card" (click)="$event.stopPropagation()">
+                                    @if (loadingVariants()) {
+                                      <div class="coolmate-dropdown-empty">Đang tải...</div>
+                                    } @else {
+                                      @for (s of getSizesForSub(sub); track s) {
+                                        <button
+                                          type="button"
+                                          class="coolmate-dropdown-item"
+                                          [class.is-selected]="sub.size === s"
+                                          (click)="pickComboSubSize(item, sub, s)"
+                                        >
+                                          <span>{{ s }}</span>
+                                          @if (sub.size === s) {
+                                            <span>✓</span>
+                                          }
+                                        </button>
+                                      }
+                                      @if (getSizesForSub(sub).length === 0) {
+                                        <div class="coolmate-dropdown-empty">Không có size khác</div>
+                                      }
+                                    }
+                                  </div>
+                                }
+                              </div>
+
+                              <a [routerLink]="['/products', sub.product_id]" target="_blank" style="font-size: 0.75rem; color: var(--terracotta); text-decoration: none; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: rgba(161, 130, 101, 0.08); display: flex; align-items: center; gap: 2px;" title="Xem sản phẩm riêng lẻ">
+                                <span>Xem lẻ</span>
+                                <span aria-hidden="true">&rarr;</span>
+                              </a>
+                            </div>
                           </div>
                         }
                       </div>
@@ -265,29 +348,9 @@
               }
             }
           </div>
-          <!-- Coolmate Referral Code Input -->
-          <div class="cart-referral-block" style="margin-top: 14px; margin-bottom: 12px;">
-            <label style="display: block; font-size: 0.8125rem; font-weight: 600; color: var(--text-dark, #2a2522); margin-bottom: 6px;">Mã giới thiệu bạn bè</label>
-            <div style="display: flex; gap: 8px;">
-              <input
-                type="text"
-                placeholder="Nhập mã giới thiệu..."
-                [value]="referralCode()"
-                (input)="onReferralInput($event)"
-                style="flex: 1; padding: 8px 12px; border: 1px solid var(--card-border, #E8DFD6); border-radius: 6px; font-size: 0.8125rem; background: #fff;"
-              />
-              <button
-                type="button"
-                (click)="applyReferralCode()"
-                style="padding: 8px 14px; background: var(--terracotta, #C97B63); color: #fff; border: none; border-radius: 6px; font-size: 0.8125rem; font-weight: 600; cursor: pointer;"
-              >
-                {{ referralApplied() ? 'Đã lưu' : 'Áp dụng' }}
-              </button>
-            </div>
-            @if (referralApplied()) {
-              <span style="font-size: 0.75rem; color: #2e7d32; display: inline-block; margin-top: 4px;">✓ Mã giới thiệu sẽ được lưu vào đơn hàng</span>
-            }
-          </div>
+          <p>Mã giới thiệu chỉ dùng khi đăng ký tài khoản mới, không gắn lại vào đơn hàng.
+            <a routerLink="/account/profile" [queryParams]="{tab: 'offers'}">Xem ví điểm và ưu đãi giới thiệu</a>
+          </p>
 
           @if (selectedItems().length) {
             <app-voucher-wallet

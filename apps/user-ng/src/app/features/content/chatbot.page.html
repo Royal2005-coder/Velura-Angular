@@ -55,8 +55,8 @@
               <span class="chatbot-header__status"></span>
             </div>
             <div>
-              <h4 class="chatbot-header__title">AI Stylist</h4>
-              <span class="chatbot-header__desc">Trực tuyến</span>
+              <h4 class="chatbot-header__title">{{ handoffStatus() === 'assigned' ? 'CSKH Velura' : 'AI Stylist Velura' }}</h4>
+              <span class="chatbot-header__desc">{{ handoffStatus() === 'assigned' ? 'Nhân viên CSKH đang hỗ trợ trực tiếp' : handoffStatus() === 'requested' ? 'Đang kết nối chuyên viên CSKH' : handoffStatus() === 'closed' ? 'Phiên CSKH đã đóng' : 'Trợ lý AI trực tuyến' }}</span>
             </div>
           </div>
           <div class="chatbot-state-switcher" style="display:flex;align-items:center;gap:12px;">
@@ -69,6 +69,34 @@
             </button>
           </div>
         </div>
+        @if (handoffStatus() === 'assigned' || handoffStatus() === 'closed') {
+          <div class="chatbot-handoff-banner" style="display:flex;align-items:center;justify-content:space-between;gap:12px;background:#FAF2EB;border:1px solid #E8DFD6;border-radius:10px;padding:10px 16px;margin:8px 16px;">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <span style="font-size:1.3rem;">🧑‍💼</span>
+              <div style="font-size:0.8rem;line-height:1.4;color:#2A2522;">
+                <strong>{{ handoffStatus() === 'closed' ? 'Phiên hỗ trợ đã kết thúc' : 'Nhân viên CSKH đang hỗ trợ' }}</strong>
+                <p style="margin:2px 0 0 0;color:#6B635D;">{{ handoffStatus() === 'closed' ? 'Cảm ơn bạn đã liên hệ Velura. Chúc bạn một ngày tốt lành!' : 'Nhân viên CSKH đã tham gia hội thoại và đang trực tiếp hỗ trợ bạn.' }}</p>
+              </div>
+            </div>
+            <button type="button" class="btn btn--outline btn--sm" (click)="refreshMessages()" [disabled]="loading()" style="font-size:0.75rem;padding:6px 12px;white-space:nowrap;">Tải lại tin nhắn</button>
+          </div>
+        } @else if (handoffStatus() === 'ai') {
+          <div style="padding:6px 16px;display:flex;justify-content:flex-end;">
+            <button type="button" class="chatbot-human-btn" (click)="requestHuman()" [disabled]="loading()" style="background:transparent;border:1px solid #E8DFD6;color:#6B635D;border-radius:99px;font-size:0.75rem;padding:4px 12px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;">
+              <span>💬</span> Gặp nhân viên CSKH
+            </button>
+          </div>
+        }
+        @if (chatError()) { <p role="alert">{{ chatError() }}</p> }
+        @if (handoffStatus() === 'closed') {
+          <div class="chatbot-closed-notice" style="margin: 8px 16px; padding: 12px 16px; background: #FAF7F5; border: 1px solid #EAE3DE; border-radius: 10px; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+            <div style="font-size: 0.825rem; color: #5C544E;">
+              <strong style="color: #2A2522;">Cuộc trò chuyện đã kết thúc.</strong>
+              <span> Cảm ơn bạn đã liên hệ Velura!</span>
+            </div>
+            <button type="button" class="btn btn--outline btn--sm" (click)="updateLifecycle('reopen')" [disabled]="loading()" style="font-size: 0.75rem; padding: 5px 12px; white-space: nowrap;">💬 Tiếp tục trò chuyện</button>
+          </div>
+        }
 
         <div class="chatbot-messages" #messagesPane>
           @for (message of messages(); track message.message_id) {
@@ -103,15 +131,15 @@
                 [class.chatbot-message--typing]="message.metadata?.typing"
                 [class.chatbot-message--has-rich-content]="productsFor(message).length > 0"
               >
-                @if (message.sender === 'agent') {
-                  <span class="chatbot-message__sender">CSKH</span>
-                }
+                @if (message.metadata?.system) { <span class="chatbot-message__sender">Thông báo</span> }
+                @else if (message.sender === 'agent') { <span class="chatbot-message__sender">Chuyên viên CSKH</span> }
+                @else if (message.sender === 'bot') { <span class="chatbot-message__sender">AI Stylist</span> }
                 @if (message.metadata?.typing) {
                   <div class="chatbot-message__text"><span class="typing-dots"><span>.</span><span>.</span><span>.</span></span></div>
                 } @else {
-                  <div class="chatbot-message__text" [innerHTML]="formatBotText(message.text)"></div>
+                  <div class="chatbot-message__text" [innerHTML]="formatBotText(message.moderation_status === 'pending' ? 'Tin nhắn đang được xử lý...' : message.text)"></div>
                 }
-                @if (message.metadata?.attachment?.data) {
+                @if (message.moderation_status === 'visible' && message.metadata?.attachment?.data) {
                   <div class="chatbot-message__attachment" style="margin-top: 8px;">
                     <img [src]="message.metadata?.attachment?.data" style="max-width: 150px; max-height: 150px; border-radius: 8px; border: 1px solid rgba(115,71,36,0.15); object-fit: cover;" alt="" />
                   </div>
@@ -126,6 +154,7 @@
                         <div class="chat-product-card__info">
                           <h4 class="chat-product-card__title">{{ product.name }}</h4>
                           <p class="chat-product-card__price">{{ productPrice(product) }}</p>
+                          @if (product.variant) { <p>{{ product.variant.color }} · {{ product.variant.size }}</p> }
                           @if (isOutOfStock(product)) {
                             <span class="chat-product-card__stock-note">Tạm hết hàng</span>
                           }
@@ -183,7 +212,7 @@
           </div>
           <form class="chatbot-input-area" (submit)="onSubmit($event)">
             <input #fileInput type="file" accept="image/*" hidden (change)="onFileChange($event)" />
-            <button class="chatbot-attach-btn" type="button" aria-label="Đính kèm ảnh" (click)="pickImage()">
+            <button class="chatbot-attach-btn" type="button" aria-label="Đính kèm ảnh" (click)="pickImage()" [disabled]="loading()">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
                 <circle cx="8.5" cy="8.5" r="1.5"></circle>
@@ -198,6 +227,7 @@
                 aria-label="Nội dung chat"
                 [value]="draft()"
                 (input)="onDraftInput($event)"
+                [disabled]="loading()"
               />
               <button class="chatbot-send-btn" type="submit" aria-label="Gửi tin nhắn" [disabled]="loading()">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

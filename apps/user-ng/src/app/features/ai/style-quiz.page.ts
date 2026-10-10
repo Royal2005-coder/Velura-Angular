@@ -1,27 +1,35 @@
-import { afterNextRender, Component, computed, inject, signal } from '@angular/core';
+import { afterNextRender, Component, computed, DestroyRef, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router, RouterLink } from '@angular/router';
-import { ApiService } from '../../core/services/api.service';
+import { StyleProfileService } from '../../core/services/style-profile.service';
+import type { StyleQuizAnswers } from '../../core/models/style-profile.interface';
 import { useBodyClass } from '../../core/utils/body-class';
+import { PersonalColorComponent } from './personal-color.component';
 
 @Component({
   selector: 'app-style-quiz-page',
-  imports: [RouterLink],
+  imports: [RouterLink, PersonalColorComponent],
   host: { class: 'page-quiz-flow' },
   templateUrl: './style-quiz.page.html',
 })
 export class StyleQuizPage {
-  private readonly api = inject(ApiService);
+  private readonly profile = inject(StyleProfileService);
   private readonly router = inject(Router);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly step = signal(1);
   readonly showSummary = signal(false);
+  readonly quizSaved = signal(false);
   readonly analyzing = signal(false);
-  readonly analyzingMessage = signal('Đang xử lý dữ liệu số đo hình thể...');
+  readonly submitError = signal('');
+  readonly fieldErrors = signal<Record<string, string>>({});
+  readonly invalidFields = computed(() => Object.values(this.fieldErrors()).some(Boolean));
+  readonly analyzingMessage = signal('Đang lưu thông tin bạn đã xác nhận…');
   readonly height = signal(162);
   readonly weight = signal(52);
   readonly displayStep = computed(() => (this.showSummary() ? 8 : this.step()));
   readonly progressPercent = computed(() => (this.showSummary() ? 100 : (this.step() / 8) * 100));
-  readonly nextLabel = computed(() => (this.showSummary() ? 'Hoàn tất & Phân tích' : this.step() === 8 ? 'Xem tóm tắt' : 'Tiếp tục'));
+  readonly nextLabel = computed(() => (this.showSummary() ? this.quizSaved() ? 'Xem gợi ý' : 'Lưu hồ sơ & chọn phân tích màu' : this.step() === 8 ? 'Xem tóm tắt' : 'Tiếp tục'));
 
   constructor() {
     useBodyClass('page-quiz-flow');
@@ -40,6 +48,7 @@ export class StyleQuizPage {
     if (!group) {
       return;
     }
+    this.quizSaved.set(false);
     const multi = group.getAttribute('data-multi') === 'true';
     if (multi) {
       target.classList.toggle('is-selected');
@@ -54,6 +63,8 @@ export class StyleQuizPage {
    */
   onQuizInput(event: Event): void {
     const input = event.target as HTMLInputElement;
+    this.validateControl(input);
+    if (['input-height', 'input-weight', 'input-vong1', 'input-vong2', 'input-vong3'].includes(input.id)) this.quizSaved.set(false);
     if (input.id === 'input-height') {
       this.height.set(Number(input.value));
       const label = document.getElementById('height-val');
@@ -87,8 +98,12 @@ export class StyleQuizPage {
    * Moves forward or submits the original style-quiz payload.
    */
   next(): void {
+    if (this.analyzing()) return;
+    document.querySelectorAll<HTMLInputElement>(`.quiz-step-content[data-quiz-step="${this.step()}"] input`).forEach((input) => this.validateControl(input));
+    if (this.invalidFields()) return;
     if (this.showSummary()) {
-      this.submitQuiz();
+      if (this.quizSaved()) void this.router.navigateByUrl('/ai/suggestions?isNewQuiz=true');
+      else this.submitQuiz();
       return;
     }
     if (this.step() === 8) {
@@ -111,6 +126,13 @@ export class StyleQuizPage {
       const step = Number(node.getAttribute('data-quiz-step') || '0');
       node.classList.toggle('is-active', !summary && step === this.step());
     });
+  }
+
+  private validateControl(input: HTMLInputElement): void {
+    if (!['input-height', 'input-weight', 'input-vong1', 'input-vong2', 'input-vong3'].includes(input.id)) return;
+    const labels: Record<string, string> = { 'input-height': 'Chiều cao', 'input-weight': 'Cân nặng', 'input-vong1': 'Vòng ngực', 'input-vong2': 'Vòng eo', 'input-vong3': 'Vòng hông' };
+    const message = input.checkValidity() ? '' : `${labels[input.id]} cần nằm trong khoảng ${input.min}–${input.max}.`;
+    this.fieldErrors.update((errors) => ({ ...errors, [input.id]: message }));
   }
 
   private selectedValue(group: string): string {
@@ -147,28 +169,33 @@ export class StyleQuizPage {
   }
 
   private submitQuiz(): void {
+    if (this.analyzing()) return;
     this.analyzing.set(true);
-    const payload = {
+    this.submitError.set('');
+    const payload: StyleQuizAnswers = {
       height_cm: this.height(),
       weight_kg: this.weight(),
       chest_cm: Number((document.getElementById('input-vong1') as HTMLInputElement | null)?.value || 0),
       waist_cm: Number((document.getElementById('input-vong2') as HTMLInputElement | null)?.value || 0),
       hip_cm: Number((document.getElementById('input-vong3') as HTMLInputElement | null)?.value || 0),
-      body_shape: this.selectedValue('body-shape') || 'Hourglass',
-      skin_tone: this.selectedValue('skin-tone') || 'Neutral',
+      body_shape: this.selectedValue('body-shape'),
+      skin_tone: this.selectedValue('skin-tone'),
       style_tags: this.selectedValues('main-style'),
       preferred_occasions: [this.selectedValue('context')].filter(Boolean),
-      favorite_brands: ['Velura'],
-      budget_range: this.selectedValue('budget') || '300k_700k',
-      age_group: this.selectedValue('age') || '25-34',
+      favorite_brands: [],
+      budget_range: this.selectedValue('budget'),
+      age_group: this.selectedValue('age'),
       favorite_colors: this.selectedValues('colors'),
     };
-    localStorage.setItem('velura_guest_quiz_completed', 'true');
-    localStorage.setItem('velura_guest_quiz_data', JSON.stringify(payload));
-    localStorage.setItem('velura_suggestions_enabled', 'true');
-    this.api.post<unknown>('/api/user/style-quiz', payload).subscribe({
-      next: () => void this.router.navigateByUrl('/ai/suggestions?isNewQuiz=true'),
-      error: () => void this.router.navigateByUrl('/ai/suggestions?isNewQuiz=true'),
+    this.profile.saveQuiz(payload).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: () => {
+        this.analyzing.set(false);
+        this.quizSaved.set(true);
+      },
+      error: (error: Error) => {
+        this.analyzing.set(false);
+        this.submitError.set(error.message || 'Chưa lưu được hồ sơ phong cách. Hãy thử lại.');
+      },
     });
   }
 }

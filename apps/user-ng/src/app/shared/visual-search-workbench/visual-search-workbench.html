@@ -1,0 +1,165 @@
+@if (!hideTrigger()) { <button type="button" class="btn btn--outline" (click)="open()">Máy ảnh · Tìm trang phục</button> }
+<dialog #dialog [attr.aria-labelledby]="titleId" (cancel)="escape($event)" (paste)="paste($event)">
+  <div class="vs-header">
+    <div class="vs-header__title-group">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" class="vs-header__icon">
+        <path d="M3 7V5a2 2 0 0 1 2-2h2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        <path d="M17 3h2a2 2 0 0 1 2 2v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        <path d="M21 17v2a2 2 0 0 1-2 2h-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        <path d="M7 21H5a2 2 0 0 1-2-2v-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        <circle cx="12" cy="12" r="3.5" stroke="currentColor" stroke-width="2"/>
+        <circle cx="12" cy="12" r="1.2" fill="currentColor"/>
+      </svg>
+      <h2 [id]="titleId">Tìm kiếm trang phục bằng ảnh</h2>
+    </div>
+    <button type="button" class="vs-header__close" aria-label="Đóng tìm bằng ảnh" (click)="close()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+    </button>
+  </div>
+  <div class="vs-body">
+    @if (!preview()) {
+      <p class="vs-subtitle">Tải ảnh hoặc chụp ảnh trang phục để tìm sản phẩm tương đồng nhất trong bộ sưu tập Velura.</p>
+      <section class="drop-zone" (dragover)="$event.preventDefault()" (drop)="drop($event)">
+        <button type="button" class="btn btn--outline" [disabled]="busy()" (click)="uploadInput.click()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+          Chọn ảnh từ máy
+        </button>
+        <input #uploadInput type="file" aria-label="Chọn ảnh trang phục" accept="image/jpeg,image/png,image/webp" [disabled]="busy()" (change)="select($event)" />
+        <button type="button" class="btn btn--outline" [disabled]="busy()" (click)="captureInput.click()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+          Chụp bằng thiết bị
+        </button>
+        <input #captureInput type="file" aria-label="Chụp ảnh trang phục" accept="image/jpeg,image/png,image/webp" capture="environment" [disabled]="busy()" (change)="select($event)" />
+        <button type="button" class="btn btn--outline" [disabled]="busy()" (click)="camera()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+          Mở máy ảnh
+        </button>
+      </section>
+    }
+
+    @if (cameraOpen()) {
+      <div class="camera-stream">
+        <video #video autoplay playsinline muted></video>
+        <div class="camera-actions">
+          <button type="button" class="btn btn--primary" (click)="capture()">Chụp ảnh</button>
+          <button type="button" class="btn btn--outline" (click)="stopCamera()">Đóng máy ảnh</button>
+        </div>
+      </div>
+    }
+
+    @if (preview()) {
+      <div class="vs-preview-wrapper">
+        <figure class="preview">
+          <img [src]="preview()" alt="Ảnh trang phục tìm kiếm" />
+          <div class="lens-frame" aria-hidden="true">
+            <span class="lens-corner lens-corner--tl"></span>
+            <span class="lens-corner lens-corner--tr"></span>
+            <span class="lens-corner lens-corner--bl"></span>
+            <span class="lens-corner lens-corner--br"></span>
+          </div>
+          @if (busy()) {
+            <div class="lens-laser-scanner"></div>
+          }
+        </figure>
+
+        @if (!busy() && !result()) {
+          <label class="consent">
+            <input type="checkbox" [checked]="consent()" [disabled]="busy()" (change)="setConsent($event)" />
+            <span>Tôi đồng ý xử lý hình ảnh này để tìm kiếm sản phẩm tương đồng với AI</span>
+          </label>
+          <div class="vs-actions">
+            <button type="button" class="btn btn--primary vs-btn-search" [disabled]="!consent() || busy()" (click)="search()">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              Tìm kiếm trang phục
+            </button>
+            <button type="button" class="btn btn--outline" [disabled]="busy()" (click)="clearSource()">
+              Đổi ảnh khác
+            </button>
+          </div>
+        }
+      </div>
+    }
+
+    @if (busy()) {
+      <div class="vs-status" role="status">
+        <span class="vs-spinner"></span>
+        AI đang phân tích và tìm kiếm sản phẩm tương đồng trong catalog…
+      </div>
+      <div class="vs-cancel-wrap">
+        <button type="button" class="btn btn--outline" (click)="cancel()">Hủy tìm kiếm</button>
+      </div>
+    }
+
+    @if (error()) { <p role="alert" class="error">{{ error() }}</p> }
+
+    @if (result(); as response) {
+      <div class="vs-results-container">
+        @if (response.matches.length) {
+          <div class="results-section">
+            <div class="results-header">
+              <h3>{{ matchesTitle(response) }}{{ response.attributes.category ? ' · ' + categoryLabel(response.attributes.category) : '' }} ({{ response.matches.length }})</h3>
+              <button type="button" class="btn btn--outline vs-btn-sm" (click)="clearSource()">Tìm ảnh khác</button>
+            </div>
+            <div class="results">
+              @for (product of response.matches; track product.product_id) {
+                <div class="product-result-card">
+                  <app-product-card [product]="product" />
+                  <div class="product-result-meta">
+                    <span class="similarity-chip" [class.similarity-chip--strong]="product.tier === 'strong'">
+                      {{ (product.similarity * 100).toFixed(0) }}% tương đồng
+                    </span>
+                    @if (product.is_combo || product.category_slug === 'set-do') {
+                      <span class="combo-badge">Set Combo</span>
+                    }
+                  </div>
+                </div>
+              }
+            </div>
+          </div>
+        } @else {
+          <div class="vs-category-fallback">
+            <div class="results-header">
+              <div class="vs-category-fallback__title">{{ fallbackSentence(response) }}</div>
+              <button type="button" class="btn btn--outline vs-btn-sm" (click)="clearSource()">Tìm ảnh khác</button>
+            </div>
+            @if (response.featured.length) {
+              <div class="results">
+                @for (product of response.featured; track product.product_id) {
+                  <div class="product-result-card">
+                    <app-product-card [product]="product" />
+                    @if (product.is_combo || product.category_slug === 'set-do') {
+                      <div class="product-result-meta"><span class="combo-badge">Set Combo</span></div>
+                    }
+                  </div>
+                }
+              </div>
+            }
+            @if (response.attributes.category) {
+              <a class="vs-category-fallback__link" [routerLink]="['/products']" [queryParams]="{ category: mapCategory(response.attributes.category) }" (click)="close()">
+                Xem tất cả {{ categoryLabel(response.attributes.category) }}
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+              </a>
+            }
+            @if (offers(); as offersData) {
+              <section class="vs-offers" aria-label="Ưu đãi hấp dẫn">
+                <h3>Ưu đãi hấp dẫn</h3>
+                @for (campaign of offersData.featured.slice(0, 2); track campaign.promo_id) {
+                  <article class="vs-offer">
+                    @if (campaign.banner_image_url) {
+                      <img class="vs-offer__banner" [src]="campaign.banner_image_url" [alt]="campaign.title" loading="lazy" />
+                    }
+                    <div class="vs-offer__body">
+                      <strong>{{ campaign.title }}</strong>
+                      @if (campaign.highlight_label) { <span class="vs-offer__label">{{ campaign.highlight_label }}</span> }
+                      @if (campaign.description) { <p>{{ campaign.description }}</p> }
+                    </div>
+                  </article>
+                }
+              </section>
+            }
+          </div>
+        }
+      </div>
+    }
+  </div>
+</dialog>

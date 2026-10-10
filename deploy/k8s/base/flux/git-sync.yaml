@@ -1,0 +1,42 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: velura-repo
+  namespace: flux-system
+spec:
+  interval: 1m
+  url: https://github.com/Royal2005-coder/Velura-Angular.git
+  ref:
+    branch: feature/KAN-32-integrated-commerce
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: velura-infra
+  namespace: flux-system
+spec:
+  interval: 2m
+  sourceRef:
+    kind: GitRepository
+    name: velura-repo
+  path: ./deploy/k8s/overlays/production
+  prune: true
+  deletionPolicy: Orphan
+  wait: true
+  timeout: 5m
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: velura-staging
+  namespace: flux-system
+spec:
+  interval: 2m
+  sourceRef:
+    kind: GitRepository
+    name: velura-repo
+  path: ./deploy/k8s/overlays/staging
+  prune: true
+  deletionPolicy: Orphan
+  wait: true
+  timeout: 5m

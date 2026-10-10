@@ -1,6 +1,6 @@
 import { enrichAuditLogs, PRICING_AUDIT } from "../audit-enrichment.js";
 import { HttpError } from "../http.js";
-import { asJsonObject, asString, type AuthContext, type JsonObject } from "../types.js";
+import { asJsonObject, asNumber, asString, type AuthContext, type JsonObject } from "../types.js";
 import { PROMOTION_OPERATOR_ROLES, PROMOTION_READER_ROLES, PROMOTION_TYPES, VOUCHER_TYPES } from "./pricing-constants.js";
 import type { PricingRepository } from "./pricing-repository.js";
 import {
@@ -22,6 +22,8 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
  * Admin pricing use-cases used by `handlePricingRoute`.
  */
 export interface PricingService {
+  /** Lists price-editable products for authorized pricing readers. */
+  listPricingProducts(context:AuthContext|undefined,searchParams:URLSearchParams):Promise<unknown>;
   listPriceHistory(context: AuthContext | undefined, searchParams: URLSearchParams): Promise<unknown>;
   changePrice(context: AuthContext | undefined, productId: string, body: JsonObject): Promise<unknown>;
   listPromotions(context: AuthContext | undefined, searchParams: URLSearchParams): Promise<unknown>;
@@ -58,6 +60,10 @@ export function createPricingService({ repository }: { repository: PricingReposi
   }
 
   return {
+    async listPricingProducts(context,searchParams) {
+      requirePricingReader(context);
+      return repository.listPricingProducts({limit:Math.min(100,Math.max(1,Number(searchParams.get("limit")) || 50)),offset:Math.max(0,Number(searchParams.get("offset")) || 0),q:searchParams.get("q"),status:searchParams.get("status"),order:"updated_at.desc"},context.accessToken);
+    },
     async listPriceHistory(context, searchParams) {
       if (!context?.authUser?.id) throw new HttpError(401, "AUTH_REQUIRED", "Authentication is required");
       const historyReaders = [...PROMOTION_READER_ROLES, "admin_operator_sanpham", "admin_viewer"];
@@ -116,17 +122,34 @@ export function createPricingService({ repository }: { repository: PricingReposi
       requirePricingAdmin(context);
       if (body.type && !PROMOTION_TYPES.includes(body.type as string)) throw new HttpError(422, "VALIDATION_ERROR", `Invalid promo type. Valid: ${PROMOTION_TYPES.join(", ")}`);
       validatePromotionSchedule(body);
-      return repository.createPromotion({
+      validateRecoveryConfiguration(body);
+      const created = await repository.createPromotion({
         ...body,
         ...normalizePromotionPresentation(body, "create"),
         createdBy: context.profile?.user_id || context.authUser?.id
       }, context.accessToken);
+
+      const promoId = asString((created as JsonObject)?.promo_id);
+      const startIso = asString((created as JsonObject)?.start_date || body.startDate);
+      const endIso = asString((created as JsonObject)?.end_date || body.endDate);
+      const now = new Date().toISOString();
+      if (promoId && startIso && endIso && startIso <= now && now <= endIso) {
+        try {
+          await repository.activatePromotion(promoId, { expectedVersion: 1 }, context.accessToken);
+          (created as JsonObject).is_active = true;
+          (created as JsonObject).version = (asNumber((created as JsonObject).version) || 1) + 1;
+        } catch {
+          // Activation failed, keep created state
+        }
+      }
+      return created;
     },
 
     async updatePromotion(context, promotionId, body) {
       requirePricingAdmin(context);
       const expectedVersion = parseInt((body?.expectedVersion || "0") as string);
       if (!expectedVersion) throw new HttpError(422, "VALIDATION_ERROR", "expectedVersion required");
+      validateRecoveryConfiguration(body);
       return repository.updatePromotion(promotionId, {
         ...body,
         ...normalizePromotionPresentation(body, "update")
@@ -173,9 +196,10 @@ export function createPricingService({ repository }: { repository: PricingReposi
       requirePricingAdmin(context);
       if (!body?.code) throw new HttpError(422, "VALIDATION_ERROR", "Code required");
       if (!VOUCHER_TYPES.includes(body?.type as string)) throw new HttpError(422, "VALIDATION_ERROR", "Invalid voucher type");
+      validateRecoveryConfiguration(body);
       const audience = String(body.applicableUserGroup || "all_users");
-      if (!["guest", "member", "all_users", "new_user", "loyal_user", "churn_risk_user"].includes(audience)) {
-        throw new HttpError(422, "VALIDATION_ERROR", "Đối tượng mã phải là khách vãng lai, thành viên hoặc mọi khách");
+      if (!["guest", "member", "all_users", "new_user", "loyal_user", "churn_risk_user", "birthday"].includes(audience)) {
+        throw new HttpError(422, "VALIDATION_ERROR", "Đối tượng mã phải là khách vãng lai, thành viên, quà sinh nhật hoặc mọi khách");
       }
 
       // Trần `max_vouchers_allowed` của chiến dịch do RPC chốt khi đang khoá dòng chiến
@@ -188,6 +212,7 @@ export function createPricingService({ repository }: { repository: PricingReposi
       requirePricingAdmin(context);
       const expectedVersion = parseInt((body?.expectedVersion || "0") as string);
       if (!expectedVersion) throw new HttpError(422, "VALIDATION_ERROR", "expectedVersion required");
+      validateRecoveryConfiguration(body);
       if (body?.type !== undefined && body.type !== null && !VOUCHER_TYPES.includes(body.type as string)) {
         throw new HttpError(422, "VALIDATION_ERROR", "Invalid voucher type");
       }
@@ -235,6 +260,22 @@ export function createPricingService({ repository }: { repository: PricingReposi
       return buildPromotionStatistics(asJsonObject(raw), summarizePromotionRows(summarySource, activeVouchers?.count, new Date()), new Date(), { from, to });
     }
   };
+}
+
+/** Recovery approval is explicit and bounded; discount values are always ordinary admin-configured voucher terms. */
+function validateRecoveryConfiguration(body: JsonObject): void {
+  if (body.recoveryApproved !== undefined && typeof body.recoveryApproved !== "boolean") {
+    throw new HttpError(422, "VALIDATION_ERROR", "recoveryApproved phải là giá trị đúng/sai.");
+  }
+  if (body.recoveryConditions !== undefined && (typeof body.recoveryConditions !== "string" || body.recoveryConditions.length > 2000)) {
+    throw new HttpError(422, "VALIDATION_ERROR", "Điều kiện ưu đãi CSKH phải là văn bản tối đa 2000 ký tự.");
+  }
+  if (body.recoveryMaxOffers !== undefined && (!Number.isInteger(body.recoveryMaxOffers) || Number(body.recoveryMaxOffers) < 0)) {
+    throw new HttpError(422, "VALIDATION_ERROR", "Số ca hỗ trợ tối đa phải là số nguyên không âm.");
+  }
+  if (body.recoveryApproved === true && (!asString(body.recoveryConditions)?.trim() || Number(body.recoveryMaxOffers) < 1 || body.recoveryMaxOffers === undefined)) {
+    throw new HttpError(422, "RECOVERY_TERMS_REQUIRED", "Phê duyệt ưu đãi CSKH cần điều kiện cụ thể và giới hạn số ca từ 1.");
+  }
 }
 
 /**

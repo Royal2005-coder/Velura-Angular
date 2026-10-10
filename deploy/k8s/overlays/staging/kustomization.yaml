@@ -1,0 +1,81 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: velura-staging
+resources:
+  - namespace.yaml
+  - ../../base/velura
+patches:
+  - target:
+      kind: Deployment
+      name: velura-api
+    patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: velura-api
+      spec:
+        template:
+          spec:
+            priorityClassName: velura-staging
+            containers:
+              - name: velura-api
+                resources:
+                  requests: {cpu: 25m, memory: 128Mi}
+                  limits: {cpu: 500m, memory: 256Mi}
+  - target:
+      kind: Deployment
+      name: velura-admin
+    patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: velura-admin
+      spec:
+        template:
+          spec:
+            priorityClassName: velura-staging
+            containers:
+              - name: velura-admin
+                resources:
+                  requests: {cpu: 25m, memory: 32Mi}
+                  limits: {cpu: 250m, memory: 96Mi}
+  - target:
+      kind: Deployment
+      name: velura-storefront
+    patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: velura-storefront
+      spec:
+        template:
+          spec:
+            priorityClassName: velura-staging
+            containers:
+              - name: velura-storefront
+                resources:
+                  requests: {cpu: 25m, memory: 32Mi}
+                  limits: {cpu: 250m, memory: 96Mi}
+  - target:
+      kind: ConfigMap
+      name: velura-api-config
+    patch: |-
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: velura-api-config
+      data:
+        CORS_ORIGIN: https://staging.royalai.dev,https://staging-admin.royalai.dev
+        STOREFRONT_ORIGIN: https://staging.royalai.dev
+        AI_ENABLE: 'false'
+        AI_CLUSTER_ENDPOINT: http://ai-worker.ai-staging.svc:8000
+images:
+  - name: ghcr.io/royal2005-coder/velura-api
+    newName: ghcr.io/boygia757-netizen/velura-api
+    newTag: latest
+  - name: ghcr.io/royal2005-coder/velura-admin
+    newName: ghcr.io/boygia757-netizen/velura-admin
+    newTag: latest
+  - name: ghcr.io/royal2005-coder/velura-storefront
+    newName: ghcr.io/boygia757-netizen/velura-storefront
+    newTag: latest

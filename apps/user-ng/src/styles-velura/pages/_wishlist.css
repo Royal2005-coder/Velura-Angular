@@ -232,9 +232,16 @@
   min-height: 40px;
 }
 
-.wishlist-card__actions .btn-buy:hover {
+.wishlist-card__actions .btn-buy:hover:not(:disabled) {
   background: #e8c9be;
   color: var(--terracotta-h, #b36a53);
+}
+
+.wishlist-card__actions .btn-buy:disabled,
+.wishlist-card__action-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 
 .wishlist-card__actions .btn-buy svg {
@@ -255,11 +262,11 @@
   border: none;
   cursor: pointer;
   flex-shrink: 0;
-  transition: background 0.2s ease, color 0.2s ease;
+  transition: background 0.2s ease, color 0.2s ease, opacity 0.2s ease;
   padding: 0;
 }
 
-.wishlist-card__action-btn:hover {
+.wishlist-card__action-btn:hover:not(:disabled) {
   background: var(--terracotta);
   color: #ffffff;
 }

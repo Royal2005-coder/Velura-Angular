@@ -43,24 +43,33 @@ export async function handleProductsRoute(
   if (subRoute === "products") {
     if (req.method === "GET") {
       if (action) {
+        const isActionUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(action);
+        const filter = isActionUuid ? { product_id: `eq.${action}` } : { slug: `eq.${action}` };
         const product = await selectOne("product", {
           select: "*,category:category_id(*)",
-          product_id: `eq.${action}`
+          ...filter
         }, { count: "none", useAnonKey: true });
         if (!product) {
           throw new HttpError(404, "NOT_FOUND", "Không tìm thấy sản phẩm");
         }
-        let variants: JsonObject[] = [];
+        const { rows: dbVariants } = await selectRows("variant", {
+          product_id: `eq.${product.product_id}`
+        }, { count: "none", useAnonKey: true });
+        let variants: JsonObject[] = dbVariants;
+
         if (product.is_combo) {
           const { rows: comboItems } = await selectRows("combo_item", {
             combo_product_id: `eq.${product.product_id}`
           }, { count: "none", useAnonKey: true });
-          const variantIds = comboItems.map((ci) => ci.component_variant_id).filter(Boolean);
-          if (variantIds.length > 0) {
-            const { rows: compVariants } = await selectRows("variant", {
-              variant_id: `in.(${variantIds.join(",")})`
-            }, { count: "none", useAnonKey: true });
-            variants = compVariants.map((v) => ({ ...v, product_id: product.product_id }));
+
+          if (variants.length === 0) {
+            const variantIds = comboItems.map((ci) => ci.component_variant_id).filter(Boolean);
+            if (variantIds.length > 0) {
+              const { rows: compVariants } = await selectRows("variant", {
+                variant_id: `in.(${variantIds.join(",")})`
+              }, { count: "none", useAnonKey: true });
+              variants = compVariants.map((v) => ({ ...v, product_id: product.product_id }));
+            }
           }
 
           // Fetch full component product details for combo display
@@ -128,18 +137,13 @@ export async function handleProductsRoute(
           product.combo_components = comboComponents;
           product.total_original_price = comboComponents.reduce((sum, c) => sum + (Number(c.base_price) * Number(c.quantity)), 0);
           product.combo_savings = Number(product.total_original_price) - Number(product.sale_price || product.base_price);
-        } else {
-          const { rows: dbVariants } = await selectRows("variant", {
-            product_id: `eq.${action}`
-          }, { count: "none", useAnonKey: true });
-          variants = dbVariants;
         }
 
         const category = product.category || (product.category_id ? await selectOne("category", { category_id: `eq.${product.category_id}` }, { count: "none", useAnonKey: true }) : null);
 
         // Fetch approved reviews for this product
         const { rows: dbReviews } = await selectRows("review", {
-          product_id: `eq.${action}`,
+          product_id: `eq.${product.product_id}`,
           status: "eq.approved"
         }, { count: "none", useAnonKey: true });
 
@@ -183,18 +187,35 @@ export async function handleProductsRoute(
 
       const requestUrl = new URL(req.url || "/api/user/products", "http://localhost");
       const lite = requestUrl.searchParams.get("lite") === "1";
+      const searchQuery = (requestUrl.searchParams.get("q") || requestUrl.searchParams.get("search") || "").trim();
       const now = Date.now();
+
+      const filterBySearch = <T extends JsonObject>(items: T[]): T[] => {
+        if (!searchQuery) return items;
+        const normQ = searchQuery.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[đĐ]/g, "d");
+        const tokens = normQ.split(/\s+/).filter(Boolean);
+        return items.filter((p) => {
+          const name = String(p.name || "").toLowerCase();
+          const normName = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[đĐ]/g, "d");
+          const cat = String(p.category_name || "").toLowerCase();
+          const normCat = cat.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[đĐ]/g, "d");
+          const brand = String(p.brand || "").toLowerCase();
+          const normBrand = brand.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[đĐ]/g, "d");
+          if (name.includes(searchQuery.toLowerCase()) || normName.includes(normQ) || cat.includes(searchQuery.toLowerCase()) || normCat.includes(normQ)) return true;
+          return tokens.some((t) => normName.includes(t) || normCat.includes(t) || normBrand.includes(t));
+        });
+      };
 
       if (lite) {
         if (liteProductsCache && (now - liteProductsCache.cachedAt < liteProductsCache.ttlMs)) {
-          return sendJson(res, 200, liteProductsCache.data, {
+          return sendJson(res, 200, filterBySearch(liteProductsCache.data), {
             ...corsHeaders,
             "cache-control": "public, max-age=15, s-maxage=30, stale-while-revalidate=120"
           });
         }
       } else {
         if (productsCache && (now - productsCache.cachedAt < productsCache.ttlMs)) {
-          return sendJson(res, 200, productsCache.data, {
+          return sendJson(res, 200, filterBySearch(productsCache.data), {
             ...corsHeaders,
             "cache-control": "public, max-age=15, s-maxage=30, stale-while-revalidate=120"
           });
@@ -251,7 +272,7 @@ export async function handleProductsRoute(
           };
         });
         liteProductsCache = { data: liteRows, cachedAt: now, ttlMs: PRODUCTS_CACHE_TTL_MS };
-        return sendJson(res, 200, liteRows, {
+        return sendJson(res, 200, filterBySearch(liteRows), {
           ...corsHeaders,
           "cache-control": "public, max-age=15, s-maxage=30, stale-while-revalidate=120"
         });
@@ -289,7 +310,7 @@ export async function handleProductsRoute(
       });
 
       productsCache = { data: productsWithVariants, cachedAt: now, ttlMs: PRODUCTS_CACHE_TTL_MS };
-      return sendJson(res, 200, productsWithVariants, {
+      return sendJson(res, 200, filterBySearch(productsWithVariants), {
         ...corsHeaders,
         "cache-control": "public, max-age=15, s-maxage=30, stale-while-revalidate=120"
       });

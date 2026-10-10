@@ -33,6 +33,15 @@
       </div>
 
       <div class="form-group">
+        <label for="referral-signup">Mã giới thiệu <span class="field__optional">(không bắt buộc)</span></label>
+        <div class="input-wrapper">
+          <input id="referral-signup" type="text" formControlName="referral_code" autocomplete="off" maxlength="19" aria-describedby="referral-terms" />
+        </div>
+        <p id="referral-terms">Voucher giảm 20%, đơn từ 1.000.000đ, tối đa 500.000đ, dùng một lần trong 60 ngày.
+          Người giới thiệu nhận cùng ưu đãi sau đơn giao thành công đầu tiên đủ điều kiện. Mã chỉ được gắn lúc đăng ký.</p>
+      </div>
+
+      <div class="form-group">
         <label for="password-signup">Mật khẩu <span class="field__required">*</span></label>
         <div class="input-wrapper">
           <input

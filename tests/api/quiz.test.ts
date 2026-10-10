@@ -1,72 +1,43 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { Readable } from "node:stream";
 import { handleQuizRoute, guestStyleProfiles } from "../../apps/api/src/user/quiz.js";
+import { asJsonObject, type AuthContext, type HttpRequest, type HttpResponse, type JsonObject } from "../../apps/api/src/types.js";
 
-test("handleQuizRoute processes guest GET/POST operations", async () => {
-  // Clear any existing guest state
-  guestStyleProfiles.clear();
+const guest: AuthContext = { authUser: null, profile: null, roleCode: "guest", roleName: "Guest", isAdmin: false, allowedPages: [], allowedModules: [], accessToken: "" };
 
-  // Test 1: GET empty guest profile
-  const reqGet = {
-    method: "GET",
-    url: "/api/user/style-quiz",
-    headers: { "x-guest-session-id": "test-guest-session" }
-  };
-  
-  let status = null;
-  let json = null;
-  const resGet = {
-    setHeader: () => {},
-    writeHead: (code) => { status = code; },
-    end: (str) => { json = JSON.parse(str); }
-  };
+function submission(id: string, body: JsonObject, authorization?: string) {
+  const req: HttpRequest = Object.assign(Readable.from([JSON.stringify(body)]), {
+    method: "POST", url: "/api/user/style-quiz", headers: { "x-guest-session-id": id, ...(authorization ? { authorization } : {}) },
+  });
+  const res: HttpResponse = { writeHead: () => undefined, setHeader: () => undefined, end: () => undefined };
+  return handleQuizRoute(req, res, {}, guest);
+}
 
-  await handleQuizRoute(reqGet, resGet, {}, {});
-  assert.equal(status, 200);
-  assert.equal(json.success, true);
-  assert.equal(json.quiz, null);
+test("quiz updates preserve confirmed color and invalidate pending analysis versions", async () => {
+  const id = `gs_${randomUUID()}`;
+  const confirmed: JsonObject = { status: "CONFIRMED", season: "Spring", analysis_id: randomUUID() };
+  guestStyleProfiles.set(id, { body_shape: "Pear", personal_color: confirmed, style_profile_version: 4 });
+  try {
+    await submission(id, { body_shape: "Hourglass", personal_color: { season: "Winter" }, style_profile_version: 900, role: "admin" });
+    const saved = asJsonObject(guestStyleProfiles.get(id));
+    assert.equal(saved.body_shape, "Hourglass");
+    assert.deepEqual(saved.personal_color, confirmed);
+    assert.equal(saved.style_profile_version, 5);
+    assert.equal(saved.role, undefined);
+  } finally { guestStyleProfiles.delete(id); }
+});
 
-  // Test 2: POST guest profile
-  const quizData = { height_cm: 170, weight_kg: 60, body_shape: "Pear" };
-  const reqPost = Readable.from([JSON.stringify(quizData)]);
-  reqPost.method = "POST";
-  reqPost.url = "/api/user/style-quiz";
-  reqPost.headers = { "x-guest-session-id": "test-guest-session" };
+test("an invalid member credential cannot fall back to guest profile mutation", async () => {
+  const id = `gs_${randomUUID()}`;
+  try {
+    await assert.rejects(submission(id, { body_shape: "Pear" }, "Bearer invalid-token"), { status: 401 });
+    assert.equal(guestStyleProfiles.has(id), false);
+  } finally { guestStyleProfiles.delete(id); }
+});
 
-  let postStatus = null;
-  let postJson = null;
-  const resPost = {
-    setHeader: () => {},
-    writeHead: (code) => { postStatus = code; },
-    end: (str) => { postJson = JSON.parse(str); }
-  };
-
-  await handleQuizRoute(reqPost, resPost, {}, {});
-  assert.equal(postStatus, 200);
-  assert.equal(postJson.success, true);
-  assert.deepEqual(postJson.quiz, quizData);
-
-  // Verify in-memory map has it
-  assert.deepEqual(guestStyleProfiles.get("test-guest-session"), quizData);
-
-  // Test 3: GET now returns the saved profile
-  const reqGet2 = {
-    method: "GET",
-    url: "/api/user/style-quiz",
-    headers: { "x-guest-session-id": "test-guest-session" }
-  };
-  
-  let get2Status = null;
-  let get2Json = null;
-  const resGet2 = {
-    setHeader: () => {},
-    writeHead: (code) => { get2Status = code; },
-    end: (str) => { get2Json = JSON.parse(str); }
-  };
-
-  await handleQuizRoute(reqGet2, resGet2, {}, {});
-  assert.equal(get2Status, 200);
-  assert.equal(get2Json.success, true);
-  assert.deepEqual(get2Json.quiz, quizData);
+test("predictable guest identifiers are rejected before storing a profile", async () => {
+  await assert.rejects(submission("shared-guest", { body_shape: "Pear" }), { status: 400 });
+  assert.equal(guestStyleProfiles.has("shared-guest"), false);
 });

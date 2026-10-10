@@ -23,7 +23,8 @@ const pendingCod = (overrides: Partial<AdminOrderRow> = {}): AdminOrderRow => ({
   status: 'pending',
   status_label: 'Chờ xác nhận',
   payment_method: 'COD',
-  total_amount: 1_200_000,
+  total_amount: 900_000,
+  shipping_phone: '0901234567',
   version: 3,
   tags: [{ code: 'PRIORITY_REVIEW', label: 'Ưu tiên duyệt' }],
   allowed_actions: [
@@ -202,7 +203,7 @@ describe('AdminOrdersPage', () => {
     expect(root.querySelectorAll('.admin-order-pipeline__step')).toHaveLength(5);
   });
 
-  it('submits COD call confirmation with reached and auto-confirm', async () => {
+  it('records reached after call initiation without automatically confirming the order', async () => {
     const performOrderAction = vi.fn(() => of({ order: pendingCod({ status: 'confirmed' }), refund: null }));
     const page = await createAdminPage(AdminOrdersPage, {
       getOrder: () => of(pendingCod({ is_guest: true, total_amount: 1_200_000 })),
@@ -211,14 +212,13 @@ describe('AdminOrdersPage', () => {
     page.openCodCallConfirm(pendingCod({ is_guest: true, total_amount: 1_200_000 }));
     page.codDecision.set('confirm');
     page.codNote.set('Khách nghe máy và xác nhận đúng thông tin đơn hàng');
-    page.codAutoConfirm.set(true);
+    page.startCodCall();
 
     const event = new Event('submit');
     page.submitCodCall(event);
 
     expect(performOrderAction).toHaveBeenCalledWith(ORDER_ID, 'call_confirm', expect.objectContaining({
       callResult: 'reached',
-      confirmOrder: true,
       note: 'Khách nghe máy và xác nhận đúng thông tin đơn hàng',
     }));
   });

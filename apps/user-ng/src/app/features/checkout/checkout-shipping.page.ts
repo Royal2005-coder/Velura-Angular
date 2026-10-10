@@ -11,6 +11,8 @@ import { useBodyClass } from '../../core/utils/body-class';
 import { VoucherWallet } from '../../shared/voucher-wallet/voucher-wallet';
 import { VoucherService } from '../../core/services/voucher.service';
 import { ApiRequestError } from '../../core/models/api-request-error';
+import { AddressSelector } from '../../shared/address-selector/address-selector';
+import type { AddressGeographySelection } from '../../core/models/address-geography';
 import type {
   AppliedVoucher,
   CartItemRef,
@@ -49,7 +51,7 @@ interface PlaceOrderResponse {
 
 @Component({
   selector: 'app-checkout-shipping-page',
-  imports: [RouterLink, VoucherWallet],
+  imports: [RouterLink, VoucherWallet, AddressSelector],
   host: {
     style: 'display:block',
     '(document:click)': 'closeAllDropdowns()',
@@ -72,14 +74,12 @@ export class CheckoutShippingPage {
   readonly phone = signal(this.checkout.shipping().phone);
   readonly email = signal(this.checkout.shipping().email);
   readonly province = signal(this.checkout.shipping().province || '');
+  readonly addressGeographyValid = signal(false);
   readonly district = signal(this.checkout.shipping().district || '');
   readonly ward = signal(this.checkout.shipping().ward || '');
   readonly detail = signal(this.checkout.shipping().detail || this.checkout.shipping().address);
   readonly note = signal(this.checkout.shipping().note || '');
 
-  /** Coolmate options: mã giới thiệu, quà tặng, người nhận khác, hóa đơn VAT, giao hàng HC */
-  readonly referralCode = signal(this.checkout.shipping().referral_code || '');
-  readonly referralApplied = signal(Boolean(this.checkout.shipping().referral_code));
   readonly isGift = signal(this.checkout.shipping().is_gift || false);
   readonly giftGender = signal<'nam' | 'nu'>(this.checkout.shipping().gift_gender || 'nam');
   readonly giftName = signal(this.checkout.shipping().gift_name || '');
@@ -123,6 +123,9 @@ export class CheckoutShippingPage {
   readonly quoteLoading = signal(false);
   /** Câu báo khi mã khách chọn vừa hết hiệu lực lúc đặt đơn (D1). */
   readonly voucherNotice = signal<string | null>(null);
+  readonly requestedPoints = signal(0);
+  readonly pointsLabel = computed(() => formatVnd(this.quote()?.loyalty?.points_discount_amount ?? 0));
+  private quoteRequestVersion = 0;
 
   /** Quản lý Coolmate variant selector pills và dropdowns. */
   readonly activeDropdown = signal<{ variantId: string; type: 'color' | 'size' } | null>(null);
@@ -224,7 +227,9 @@ export class CheckoutShippingPage {
       const shipping = this.shipping();
       const voucherId = this.selectedVoucherId();
       const declined = this.declinedVoucher();
-      untracked(() => this.refreshQuote(cartKey, shipping, voucherId, declined));
+      const points = this.requestedPoints();
+      this.auth.session();
+      untracked(() => this.refreshQuote(cartKey, shipping, voucherId, declined, points));
     });
     if (this.auth.isLoggedIn()) {
       this.api
@@ -346,19 +351,15 @@ export class CheckoutShippingPage {
     else if (field === 'email') this.vatEmail.set(val);
   }
 
-  setReferralCode(event: Event): void {
-    this.referralCode.set((event.target as HTMLInputElement).value);
-  }
-
-  applyReferralCode(): void {
-    const code = this.referralCode().trim();
-    if (!code) {
-      this.referralApplied.set(false);
-      showToast('Đã xóa mã giới thiệu');
-      return;
-    }
-    this.referralApplied.set(true);
-    showToast(`Đã ghi nhận mã giới thiệu: ${code}`);
+  /** Selects integer points; the server enforces ownership, expiry, debt and the 50% cap. */
+  setPoints(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const value = Number(input.value);
+    const loyalty = this.quote()?.loyalty;
+    const maximum = loyalty?.spending_enabled ? Math.min(loyalty.available_points, loyalty.max_points) : 0;
+    const points = Number.isSafeInteger(value) && value >= 0 ? Math.min(value, maximum) : 0;
+    input.value = String(points);
+    this.requestedPoints.set(points);
   }
 
   toggleDeliveryPolicy(): void {
@@ -378,8 +379,8 @@ export class CheckoutShippingPage {
     if (mode === 'default') {
       const def = this.defaultAddress() || this.savedAddresses()[0];
       if (def) {
-        if (def.name) this.name.set(def.name);
-        if (def.phone) this.phone.set(this.normalizeVnPhone(def.phone));
+        this.name.set(def.name || '');
+        this.phone.set(this.normalizeVnPhone(def.phone || ''));
         this.detail.set(def.detail || def.address || '');
         this.province.set(def.province || '');
         this.district.set(def.district || '');
@@ -404,14 +405,12 @@ export class CheckoutShippingPage {
   }
 
   selectSavedAddress(addr: NonNullable<MemberProfile['saved_addresses']>[number]): void {
-    if (addr.name) this.name.set(addr.name);
-    if (addr.phone) this.phone.set(this.normalizeVnPhone(addr.phone));
-    if (addr.detail || addr.address) {
-      this.detail.set(addr.detail || addr.address || '');
-    }
-    if (addr.province) this.province.set(addr.province);
-    if (addr.district) this.district.set(addr.district);
-    if (addr.ward) this.ward.set(addr.ward);
+    this.name.set(addr.name || '');
+    this.phone.set(this.normalizeVnPhone(addr.phone || ''));
+    this.detail.set(addr.detail || addr.address || '');
+    this.province.set(addr.province || '');
+    this.district.set(addr.district || '');
+    this.ward.set(addr.ward || '');
     this.addressMode.set(addr.is_default ? 'default' : 'saved');
     this.saveNewAddress.set(false);
     this.addressModalOpen.set(false);
@@ -434,6 +433,14 @@ export class CheckoutShippingPage {
       localStorage.removeItem('checkout_voucher_id');
     }
     localStorage.removeItem('checkout_discount');
+  }
+
+  /** Select administrative units from one verified hierarchy. */
+  updateGeography(selection: AddressGeographySelection): void {
+    this.province.set(selection.province);
+    this.district.set(selection.district);
+    this.ward.set(selection.ward);
+    this.addressGeographyValid.set(selection.valid);
   }
 
   /** Ví báo khách chủ động bỏ mã hoặc chọn lại mã. */
@@ -736,6 +743,10 @@ export class CheckoutShippingPage {
    * Saves shipping fields and places the order or sends guest OTP.
    */
   submit(): void {
+    if (!this.addressGeographyValid()) {
+      showToast('Vui lòng chọn đầy đủ địa phương hợp lệ.');
+      return;
+    }
     if (this.submitting()) {
       return;
     }
@@ -743,16 +754,20 @@ export class CheckoutShippingPage {
     const phone = this.normalizeVnPhone(this.phone());
     const email = this.email().trim();
     const address = this.composeAddress();
-    if (!name || !phone || !address || (!this.auth.isLoggedIn() && !email)) {
-      showToast('Vui lòng điền đầy đủ Họ tên, Số điện thoại, Email và Địa chỉ giao hàng!');
+    if (!name || !phone || !address) {
+      showToast('Vui lòng điền đầy đủ Họ tên, Số điện thoại và Địa chỉ giao hàng!');
       return;
     }
-    if (!this.auth.isLoggedIn() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      showToast('Email không hợp lệ. Nhập email để nhận mã nếu SMS chưa tới.');
+    if (name.split(/\s+/).filter(Boolean).length < 2) {
+      showToast('Họ và tên phải có ít nhất 2 từ.');
       return;
     }
-    if (!/^0\d{9}$/.test(phone)) {
-      showToast('Số điện thoại không hợp lệ (10 số, bắt đầu bằng 0)!');
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      showToast('Email không hợp lệ. Bạn có thể để trống nếu nhận OTP qua SMS.');
+      return;
+    }
+    if (!/^0(?:3|5|7|8|9)\d{8}$/.test(phone)) {
+      showToast('Số điện thoại di động Việt Nam không hợp lệ!');
       return;
     }
     const items = this.items();
@@ -788,7 +803,6 @@ export class CheckoutShippingPage {
       district: this.district().trim(),
       ward: this.ward().trim(),
       detail: this.detail().trim(),
-      referral_code: this.referralCode().trim(),
       is_gift: this.isGift(),
       gift_gender: this.giftGender(),
       gift_name: this.giftName().trim(),
@@ -812,9 +826,14 @@ export class CheckoutShippingPage {
       shipping_name: name,
       shipping_phone: phone,
       shipping_address: address,
+      shipping_province: this.province().trim(),
+      shipping_district: this.district().trim(),
+      shipping_ward: this.ward().trim(),
+      shipping_method: this.shipping(),
       shipping_fee: this.shippingFee(),
       voucher_id: this.declinedVoucher() ? null : this.selectedVoucherId(),
       decline_voucher: this.declinedVoucher(),
+      points_spent: this.auth.isLoggedIn() ? this.requestedPoints() : 0,
       // Máy chủ tự tính lại mọi con số; gửi kèm chỉ để đối chiếu trong nhật ký.
       discount_amount: this.discount(),
       subtotal: this.subtotal(),
@@ -823,7 +842,6 @@ export class CheckoutShippingPage {
       shipping_email: email,
       items,
       note: this.note().trim(),
-      referral_code: this.referralCode().trim(),
       is_gift: this.isGift(),
       gift_gender: this.giftGender(),
       gift_name: this.giftName().trim(),
@@ -836,6 +854,8 @@ export class CheckoutShippingPage {
       vat_tax_code: this.vatTaxCode().trim(),
       vat_company_address: this.vatCompanyAddress().trim(),
       vat_email: this.vatEmail().trim(),
+      save_address: this.auth.isLoggedIn() && this.saveNewAddress(),
+      address_is_default: false,
     };
 
     this.submitting.set(true);
@@ -846,21 +866,6 @@ export class CheckoutShippingPage {
             this.submitting.set(false);
             showToast(res.message || 'Đặt hàng thất bại');
             return;
-          }
-          if (this.auth.isLoggedIn() && this.saveNewAddress()) {
-            this.api.post('/api/user/addresses', {
-              name,
-              phone,
-              detail: this.detail().trim(),
-              province: this.province().trim(),
-              district: this.district().trim(),
-              ward: this.ward().trim(),
-              address,
-              is_default: false,
-            }).subscribe({
-              next: () => {},
-              error: () => {},
-            });
           }
           if (res.stripe?.url) {
             this.checkout.saveCreatedOrder({
@@ -887,6 +892,12 @@ export class CheckoutShippingPage {
         error: (error: Error) => {
           this.submitting.set(false);
           if (this.handleVoucherChanged(error)) return;
+          if (error instanceof ApiRequestError && ['POINTS_CHANGED', 'LOYALTY_POLICY_APPROVAL_REQUIRED', 'REWARD_VOUCHER_CHANGED'].includes(error.code || '')) {
+            this.requestedPoints.set(0);
+            this.refreshQuote(this.cartRefs().map(item => `${item.variant_id}:${item.quantity}`).join(','), this.shipping(), this.selectedVoucherId(), this.declinedVoucher(), 0);
+            showToast(`${error.message} Kiểm tra lại tổng tiền trước khi đặt hàng.`);
+            return;
+          }
           if (error instanceof ApiRequestError && error.code === 'INSUFFICIENT_STOCK') {
             const details = error.details as { items?: Array<{ variant_id: string }> } | undefined;
             if (details?.items?.length) {
@@ -917,6 +928,7 @@ export class CheckoutShippingPage {
             phone,
             shipping_name: name,
             shipping_address: address,
+            shipping_method: this.shipping(),
             shipping_fee: this.shippingFee(),
             voucher_id: payload.voucher_id,
             decline_voucher: payload.decline_voucher,
@@ -927,7 +939,6 @@ export class CheckoutShippingPage {
             email,
             items,
             note: payload.note,
-            referral_code: payload.referral_code,
             is_gift: payload.is_gift,
             gift_gender: payload.gift_gender,
             gift_name: payload.gift_name,
@@ -977,23 +988,33 @@ export class CheckoutShippingPage {
     return true;
   }
 
-  private refreshQuote(cartKey: string, shipping: string, voucherId: string | null, declined: boolean): void {
+  private refreshQuote(cartKey: string, shipping: string, voucherId: string | null, declined: boolean, points = 0): void {
+    const version = ++this.quoteRequestVersion;
     if (!cartKey) {
       this.quote.set(null);
       return;
     }
     this.quoteLoading.set(true);
-    this.vouchers.quote(this.cartRefs(), shipping, { voucherId, decline: declined }).subscribe({
+    this.voucherError.set(null);
+    this.vouchers.quote(this.cartRefs(), shipping, { voucherId, decline: declined, pointsSpent: this.auth.isLoggedIn() ? points : 0 }).subscribe({
       next: (quote) => {
+        if (version !== this.quoteRequestVersion) return;
         this.quoteLoading.set(false);
         this.quote.set(quote ?? null);
+        if (quote?.loyalty && this.requestedPoints() !== quote.loyalty.points_spent) {
+          this.requestedPoints.set(quote.loyalty.points_spent);
+        }
         if (quote?.voucher_change) {
           this.voucherNotice.set(`${quote.voucher_change.reason_text} Tổng tiền đã được tính lại.`);
         }
       },
       error: (error: Error) => {
+        if (version !== this.quoteRequestVersion) return;
         this.quoteLoading.set(false);
         this.quote.set(null);
+        if (error instanceof ApiRequestError && ['POINTS_CHANGED', 'LOYALTY_POLICY_APPROVAL_REQUIRED'].includes(error.code || '') && points > 0) {
+          this.requestedPoints.set(0);
+        }
         this.voucherError.set(error.message || 'Không tính được tổng tiền. Vui lòng thử lại.');
       },
     });
@@ -1042,9 +1063,9 @@ export class CheckoutShippingPage {
       this.name.set(this.name() || addr.name || profile.full_name || '');
       this.phone.set(this.phone() || this.normalizeVnPhone(addr.phone || profile.phone || ''));
       this.detail.set(addr.detail || addr.address || '');
-      if (addr.province) this.province.set(addr.province);
-      if (addr.district) this.district.set(addr.district);
-      if (addr.ward) this.ward.set(addr.ward);
+      this.province.set(addr.province || '');
+      this.district.set(addr.district || '');
+      this.ward.set(addr.ward || '');
     }
   }
 

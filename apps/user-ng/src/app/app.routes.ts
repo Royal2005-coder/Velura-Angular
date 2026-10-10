@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './core/guards/auth.guard';
+import { purchaseFlowGuard } from './core/guards/purchase-flow.guard';
 import { SiteShell } from './layout/site-shell/site-shell';
 
 export const routes: Routes = [
@@ -22,6 +23,11 @@ export const routes: Routes = [
     path: 'auth/reset-password',
     loadComponent: () => import('./features/auth/reset-password.page').then((m) => m.ResetPasswordPage),
     title: 'Velura — Đặt lại mật khẩu',
+  },
+  {
+    path: 'auth/activate',
+    loadComponent: () => import('./features/auth/activate-account.page').then((m) => m.ActivateAccountPage),
+    title: 'Kích hoạt tài khoản - Velura',
   },
   {
     path: 'auth/callback',
@@ -118,31 +124,61 @@ export const routes: Routes = [
         title: 'Tạo tài khoản thành viên - Velura',
       },
       {
+        path: 'guest/orders',
+        canActivate: [purchaseFlowGuard],
+        data: { audience: 'guest', area: 'orders' },
+        loadComponent: () => import('./features/account/order-flow.page').then((m) => m.OrderFlowPage),
+        title: 'Tra cứu đơn hàng — Velura',
+      },
+      {
+        path: 'guest/orders/:id',
+        canActivate: [purchaseFlowGuard],
+        data: { audience: 'guest', area: 'orders' },
+        loadComponent: () => import('./features/account/order-flow.page').then((m) => m.OrderFlowPage),
+        title: 'Chi tiết đơn hàng khách — Velura',
+      },
+      {
+        path: 'guest/returns',
+        canActivate: [purchaseFlowGuard],
+        data: { audience: 'guest', area: 'orders' },
+        loadComponent: () => import('./features/account/order-flow.page').then((m) => m.OrderFlowPage),
+        title: 'Tra cứu đổi trả — Velura',
+      },
+      {
         path: 'account/track',
-        loadComponent: () => import('./features/account/track.page').then((m) => m.AccountTrackPage),
+        canActivate: [purchaseFlowGuard],
+        data: { audience: 'entry', area: 'orders' },
+        loadComponent: () => import('./features/account/order-flow.page').then((m) => m.OrderFlowPage),
         title: 'Theo dõi đơn hàng - Velura Store',
       },
       {
         path: 'account/orders',
-        canActivate: [authGuard],
-        loadComponent: () => import('./features/account/orders.page').then((m) => m.AccountOrdersPage),
+        canActivate: [purchaseFlowGuard],
+        data: { audience: 'user', area: 'orders' },
+        loadComponent: () => import('./features/account/order-flow.page').then((m) => m.OrderFlowPage),
         title: 'Đơn hàng của tôi - Velura Store',
       },
       {
         path: 'account/orders/:id',
-        canActivate: [authGuard],
-        loadComponent: () => import('./features/account/order-detail.page').then((m) => m.AccountOrderDetailPage),
+        canActivate: [purchaseFlowGuard],
+        data: { audience: 'user', area: 'orders' },
+        loadComponent: () => import('./features/account/order-flow.page').then((m) => m.OrderFlowPage),
         title: 'Chi tiết đơn hàng - Velura Store',
       },
       {
         path: 'account/returns',
-        canActivate: [authGuard],
-        loadComponent: () => import('./features/account/returns.page').then((m) => m.AccountReturnsPage),
+        canActivate: [purchaseFlowGuard],
+        data: { audience: 'user', area: 'orders' },
+        loadComponent: () => import('./features/account/order-flow.page').then((m) => m.OrderFlowPage),
         title: 'Yêu cầu đổi trả - Velura',
       },
       {
         path: 'account/reviews',
-        canActivate: [authGuard],
+        loadComponent: () => import('./features/account/reviews.page').then((m) => m.AccountReviewsPage),
+        title: 'Đánh giá sản phẩm - Velura Store',
+      },
+      {
+        path: 'guest/reviews',
         loadComponent: () => import('./features/account/reviews.page').then((m) => m.AccountReviewsPage),
         title: 'Đánh giá sản phẩm - Velura Store',
       },
@@ -153,9 +189,28 @@ export const routes: Routes = [
         title: 'Ví Voucher - Velura Store',
       },
       {
+        path: 'checkout/guest',
+        canActivate: [purchaseFlowGuard],
+        data: { audience: 'guest', area: 'checkout' },
+        loadComponent: () => import('./features/checkout/purchase-flow.page').then((m) => m.PurchaseFlowPage),
+        title: 'Thanh toán khách — Velura',
+      },
+      {
+        path: 'checkout/user',
+        canActivate: [purchaseFlowGuard],
+        data: { audience: 'user', area: 'checkout' },
+        loadComponent: () => import('./features/checkout/purchase-flow.page').then((m) => m.PurchaseFlowPage),
+        title: 'Thanh toán thành viên — Velura',
+      },
+      {
+        path: 'checkout',
+        pathMatch: 'full',
+        redirectTo: '/checkout/shipping',
+      },
+      {
         path: 'checkout/shipping',
-        loadComponent: () => import('./features/checkout/checkout-shipping.page').then((m) => m.CheckoutShippingPage),
-        title: 'Vận chuyển & Thanh toán',
+        pathMatch: 'full',
+        redirectTo: '/checkout/guest',
       },
       {
         path: 'checkout/payment',

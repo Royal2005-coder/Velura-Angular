@@ -1,0 +1,9 @@
+.catalog-content { border: 1px solid var(--border-color, var(--border)); border-radius: var(--radius-md, 8px); padding: 1rem; margin-block: 1rem; color: var(--text-primary); background: var(--surface); }
+.catalog-content label { display: grid; gap: .35rem; margin-block: .75rem; }
+.catalog-content input, .catalog-content textarea { width: 100%; box-sizing: border-box; color: inherit; background: var(--surface); border: 1px solid var(--border-color, var(--border)); padding: .5rem; }
+.catalog-content textarea { font-family: monospace; resize: vertical; }
+.catalog-content button { margin: .25rem; padding: .5rem .75rem; }
+.catalog-content .error { color: var(--danger, var(--color-danger)); }
+.catalog-content .comparison { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
+.catalog-content dd { margin-block-end: .5rem; overflow-wrap: anywhere; }
+.catalog-content p, .catalog-content li { overflow-wrap: anywhere; white-space: pre-wrap; }

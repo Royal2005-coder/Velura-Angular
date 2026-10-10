@@ -1,7 +1,7 @@
 import { HttpError, readJson, sendJson } from "../http.js";
 import { selectOne, insertRow, updateRows, getAuthUser } from "../supabase.js";
 import { hashPassword, verifyPassword, signJwt, verifyJwt } from "../auth-helper.js";
-import { allowDevOtpBypass } from "../config.js";
+import { allowDevOtpBypass, config } from "../config.js";
 import {
   assertNotLocked,
   clearLoginFailures,
@@ -10,8 +10,10 @@ import {
   type LoginLockUser
 } from "../auth-lockout.js";
 import { createNotification } from "./notifications.js";
-import { sendAuthOtpSms } from "../sms/twilio.js";
+import { isSmsConfigured, requireSmsDelivery, sendAuthOtpSms } from "../sms/twilio.js";
+import { checkoutClientIp, type CheckoutService } from "./checkout-service.js";
 import { sendDirectEmail } from "../email/mailer.js";
+import { loyaltyService } from "../loyalty/loyalty-router.js";
 import {
   asJsonObject,
   asString,
@@ -66,6 +68,72 @@ export function requireUserAuth(context: AuthContext | null | undefined): UserPr
     throw new HttpError(401, "UNAUTHORIZED", "Đăng nhập là bắt buộc để thực hiện thao tác này");
   }
   return context.profile;
+}
+
+/**
+ * Ngân sách gửi OTP theo định danh và IP. SMS thật bị tính tiền theo tin nên endpoint
+ * gửi mã phải bị chặn rate trước khi gọi nhà cung cấp, nếu không bất kỳ ai cũng đốt được credit.
+ */
+export class AuthOtpRateLimiter {
+  private readonly sendsByIdentity = new Map<string, number[]>();
+  private readonly sendsByIp = new Map<string, number[]>();
+
+  /**
+   * Cho phép tối đa 3 lần/định danh/15 phút và 10 lần/IP/giờ.
+   *
+   * @param identity Email hoặc số điện thoại người nhận mã
+   * @param ip Địa chỉ IP gọi endpoint
+   * @param now Mốc thời gian hiện tại, injectable để test
+   */
+  consume(identity: string, ip: string, now = Date.now()): void {
+    const identityWindowStart = now - 15 * 60 * 1000;
+    const identitySends = (this.sendsByIdentity.get(identity) ?? []).filter((at) => at > identityWindowStart);
+    if (identitySends.length >= 3) {
+      throw new HttpError(429, "OTP_SEND_RATE_LIMIT", "Bạn đã yêu cầu mã OTP quá nhiều lần. Vui lòng thử lại sau 15 phút.");
+    }
+
+    const ipWindowStart = now - 60 * 60 * 1000;
+    const ipSends = (this.sendsByIp.get(ip) ?? []).filter((at) => at > ipWindowStart);
+    if (ipSends.length >= 10) {
+      throw new HttpError(429, "OTP_SEND_IP_RATE_LIMIT", "Có quá nhiều yêu cầu mã OTP từ kết nối này. Vui lòng thử lại sau.");
+    }
+
+    identitySends.push(now);
+    ipSends.push(now);
+    this.sendsByIdentity.set(identity, identitySends);
+    this.sendsByIp.set(ip, ipSends);
+  }
+}
+
+/** Một phiên chạy API dùng chung bộ đếm OTP cho toàn bộ route auth. */
+const authOtpLimiter = new AuthOtpRateLimiter();
+
+/**
+ * Chặn ngay trước khi gửi OTP qua SMS: production không có cấu hình Twilio thì báo
+ * 503 thay vì tạo tài khoản chờ mã không bao giờ tới.
+ */
+function requireOtpSmsChannel(): void {
+  if (isSmsConfigured() || config.nodeEnv !== "production") return;
+  console.error("[otp-send] Twilio chưa cấu hình trong production; từ chối tạo OTP SMS.");
+  throw new HttpError(503, "OTP_SERVICE_UNAVAILABLE", "Hiện không thể gửi mã OTP qua số điện thoại. Vui lòng thử lại sau.");
+}
+
+/**
+ * Gửi OTP auth qua SMS và chỉ trả về khi nhà cung cấp đã nhận tin.
+ * Ném lỗi nếu gửi hỏng để router không báo "đã gửi thành công" một cách giả.
+ *
+ * @param phone Số điện thoại nhận mã
+ * @param otpCode Mã OTP đã sinh
+ * @param purpose Mục đích mã để chọn nội dung tin
+ */
+async function deliverAuthOtp(
+  phone: string,
+  otpCode: string,
+  purpose: "signup" | "forgot_password" | "verify"
+): Promise<void> {
+  requireOtpSmsChannel();
+  const result = await sendAuthOtpSms(phone, otpCode, purpose);
+  requireSmsDelivery(result, "Chưa thể gửi mã OTP. Vui lòng thử lại sau.");
 }
 
 function normalizeSocialProvider(provider: unknown): "google" | "facebook" | null {
@@ -162,7 +230,8 @@ export async function handleAuthRoute(
   res: HttpResponse,
   action: string | undefined,
   corsHeaders: HeaderMap,
-  context: AuthContext
+  context: AuthContext,
+  checkoutService: CheckoutService
 ): Promise<void> {
   // GET /api/user/auth/check-exists?email=...&phone=...
   if (action === "check-exists" && req.method === "GET") {
@@ -187,6 +256,40 @@ export async function handleAuthRoute(
     }
 
     return sendJson(res, 200, { exists }, corsHeaders);
+  }
+
+  // POST /api/user/auth/activate — guest đặt mật khẩu qua token dùng một lần.
+  if (action === "activate" && req.method === "POST") {
+    const body = await readJson(req);
+    const user = await checkoutService.activateGuest(body.token, body.password);
+    const jwt = signJwt({
+      user_id: user.user_id,
+      email: user.email || `${user.phone}@velura.vn`,
+      role: "member"
+    });
+    try {
+      await createNotification(
+        asString(user.user_id),
+        "system",
+        "Chào mừng Thành Viên Mới! 🎁",
+        "Tài khoản của bạn đã được kích hoạt thành công. Ưu đãi thành viên mới đã sẵn sàng trong Kho Ưu Đãi!",
+        "/account/vouchers"
+      );
+    } catch {
+      /* notification is best-effort */
+    }
+    return sendJson(res, 200, {
+      success: true,
+      token: jwt,
+      user: {
+        user_id: user.user_id,
+        email: user.email || null,
+        phone: user.phone || null,
+        full_name: user.full_name,
+        role: "member"
+      },
+      message: "Tài khoản đã được kích hoạt thành công"
+    }, corsHeaders);
   }
 
   // POST /api/user/auth/signup
@@ -226,14 +329,16 @@ export async function handleAuthRoute(
 
     // Generate OTP code
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString(); // 6 digits
-    const otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString(); // 5 minutes (AUTH-05)
+    const otpExpiresAt = new Date(Date.now() + 60 * 1000).toISOString(); // 5 minutes (AUTH-05)
 
     console.log(`\n==================================================`);
     console.log(`[OTP VERIFICATION] Mã kích hoạt tài khoản của ${email || phone} là: ${otpCode}`);
     console.log(`==================================================\n`);
 
+    // Gửi trước khi tạo user: SMS hỏng thì không để lại tài khoản nửa vời chờ OTP.
     if (phone) {
-      void sendAuthOtpSms(asString(phone), otpCode, "signup");
+      authOtpLimiter.consume(asString(phone), checkoutClientIp(req.headers, req.socket?.remoteAddress));
+      await deliverAuthOtp(asString(phone), otpCode, "signup");
     }
     if (email) {
       const emailBody = `Chào ${full_name || "bạn"},\n\nMã kích hoạt tài khoản Velura của bạn là: ${otpCode}.\n\nMã có hiệu lực trong 5 phút. Vui lòng không chia sẻ mã này cho bất kỳ ai.`;
@@ -258,7 +363,7 @@ export async function handleAuthRoute(
 
     // Create inactive user first (AUTH-05)
     const hashedPassword = hashPassword(asString(password));
-    const newUser = asJsonObject(await insertRow("users", {
+    const newUser = await loyaltyService.register({
       email: email || null,
       phone: phone || null,
       password_hash: hashedPassword,
@@ -267,7 +372,7 @@ export async function handleAuthRoute(
       otp_code: otpCode,
       otp_expires_at: otpExpiresAt,
       role: "member"
-    }));
+    }, body.referral_code);
 
     return sendJson(res, 200, {
       success: true,
@@ -395,19 +500,22 @@ export async function handleAuthRoute(
     // Check if user is active (AUTH-05 verification check)
     if (!user.is_active) {
       const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-      const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
-      await updateRows("users", { user_id: `eq.${user.user_id}` }, {
-        otp_code: otpCode,
-        otp_expires_at: otpExpiresAt
-      });
+      const otpExpiresAt = new Date(Date.now() + 60 * 1000).toISOString();
 
       console.log(`\n==================================================`);
       console.log(`[OTP VERIFICATION] Mã kích hoạt tài khoản của ${identity} là: ${otpCode}`);
       console.log(`==================================================\n`);
 
       if (user.phone) {
-        void sendAuthOtpSms(asString(user.phone), otpCode, "verify");
+        authOtpLimiter.consume(asString(user.phone), checkoutClientIp(req.headers, req.socket?.remoteAddress));
+        await deliverAuthOtp(asString(user.phone), otpCode, "verify");
       }
+
+      // Chỉ lưu mã sau khi tin đã gửi được, để không còn mã rác chưa ai nhận.
+      await updateRows("users", { user_id: `eq.${user.user_id}` }, {
+        otp_code: otpCode,
+        otp_expires_at: otpExpiresAt
+      });
 
       return sendJson(res, 200, {
         success: false,
@@ -450,19 +558,14 @@ export async function handleAuthRoute(
     }
 
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-    const otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString(); // 5 minutes (AUTH-05)
-
-    await updateRows("users", { user_id: `eq.${user.user_id}` }, {
-      otp_code: otpCode,
-      otp_expires_at: otpExpiresAt
-    });
+    const otpExpiresAt = new Date(Date.now() + 60 * 1000).toISOString(); // 5 minutes (AUTH-05)
 
     console.log(`\n==================================================`);
     console.log(`[OTP RESET] Mã khôi phục mật khẩu của ${identity} là: ${otpCode}`);
     console.log(`==================================================\n`);
 
-    if (user.phone) {
-      void sendAuthOtpSms(asString(user.phone), otpCode, "forgot_password");
+    if (!user.phone) {
+      throw new HttpError(400, "OTP_PHONE_REQUIRED", "Tài khoản này chưa có số điện thoại nên không nhận được mã OTP. Vui lòng liên hệ bộ phận hỗ trợ.");
     }
     if (user.email) {
       const emailBody = `Chào ${user.full_name || "bạn"},\n\nMã xác thực khôi phục mật khẩu Velura của bạn là: ${otpCode}.\n\nMã có hiệu lực trong 5 phút. Vui lòng không chia sẻ mã này cho bất kỳ ai.`;
@@ -484,6 +587,15 @@ export async function handleAuthRoute(
       `;
       void sendDirectEmail(user.email, "Mã xác thực khôi phục mật khẩu Velura", emailBody, emailHtml);
     }
+
+    authOtpLimiter.consume(asString(user.phone), checkoutClientIp(req.headers, req.socket?.remoteAddress));
+    await deliverAuthOtp(asString(user.phone), otpCode, "forgot_password");
+
+    // Chỉ lưu mã sau khi tin đã gửi được, để không còn mã rác chưa ai nhận.
+    await updateRows("users", { user_id: `eq.${user.user_id}` }, {
+      otp_code: otpCode,
+      otp_expires_at: otpExpiresAt
+    });
 
     return sendJson(res, 200, {
       success: true,

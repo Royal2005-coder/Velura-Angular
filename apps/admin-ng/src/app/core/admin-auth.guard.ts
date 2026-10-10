@@ -69,7 +69,9 @@ export const adminAuthGuard: CanActivateFn = (route) => {
       if (!page) {
         return router.parseUrl(session.firstRoute(next));
       }
-      if (!session.canOpen(page, next)) {
+      const alternatives: unknown = route.data['alternativePages'];
+      const canOpenAlternative = Array.isArray(alternatives) && alternatives.some((alternative: unknown) => typeof alternative === 'string' && session.canOpen(alternative, next));
+      if (!session.canOpen(page, next) && !canOpenAlternative) {
         if (page === 'dashboard') {
           return router.parseUrl(session.firstRoute(next));
         }

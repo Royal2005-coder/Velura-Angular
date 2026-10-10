@@ -1,0 +1,142 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: litellm-config
+  namespace: observability
+data:
+  config.yaml: |
+    model_list:
+      - model_name: commerce-text
+        litellm_params:
+          model: os.environ/LITELLM_TEXT_MODEL
+          api_key: os.environ/GEMINI_API_KEY
+          rpm: 60
+          tpm: 60000
+      - model_name: commerce-embedding
+        litellm_params:
+          model: os.environ/LITELLM_EMBEDDING_MODEL
+          api_key: os.environ/GEMINI_API_KEY
+          rpm: 60
+      - model_name: commerce-image-edit
+        litellm_params:
+          model: os.environ/LITELLM_IMAGE_MODEL
+          api_key: os.environ/GEMINI_API_KEY
+          rpm: 10
+    litellm_settings:
+      callbacks: [prometheus]
+      telemetry: false
+      request_timeout: 30
+      num_retries: 0
+    general_settings:
+      master_key: os.environ/LITELLM_MASTER_KEY
+      require_auth_for_metrics_endpoint: true
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: litellm
+  namespace: observability
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: litellm
+  template:
+    metadata:
+      labels:
+        app: litellm
+    spec:
+      automountServiceAccountToken: false
+      priorityClassName: velura-platform
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+      - name: litellm
+        image: ghcr.io/berriai/litellm:main-v1.79.3-stable@sha256:35a33e3b14c16952262b6d408d4872f77dc18352399f2b134148289397d5419a
+        ports:
+        - name: http
+          containerPort: 4000
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: 50m
+            memory: 192Mi
+          limits:
+            cpu: 600m
+            memory: 512Mi
+        readinessProbe:
+          httpGet:
+            path: /health/readiness
+            port: 4000
+        livenessProbe:
+          httpGet:
+            path: /health/liveliness
+            port: 4000
+        args:
+        - --config
+        - /etc/litellm/config.yaml
+        - --port
+        - '4000'
+        - --num_workers
+        - '1'
+        env:
+        - name: GEMINI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: litellm-credentials
+              key: provider-api-key
+        - name: LITELLM_MASTER_KEY
+          valueFrom:
+            secretKeyRef:
+              name: litellm-credentials
+              key: master-key
+        - name: LITELLM_TEXT_MODEL
+          valueFrom:
+            secretKeyRef:
+              name: litellm-credentials
+              key: text-model
+        - name: LITELLM_EMBEDDING_MODEL
+          valueFrom:
+            secretKeyRef:
+              name: litellm-credentials
+              key: embedding-model
+        - name: LITELLM_IMAGE_MODEL
+          valueFrom:
+            secretKeyRef:
+              name: litellm-credentials
+              key: image-model
+        volumeMounts:
+        - name: config
+          mountPath: /etc/litellm
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: config
+        configMap:
+          name: litellm-config
+      - name: tmp
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: litellm
+  namespace: observability
+spec:
+  type: ClusterIP
+  selector:
+    app: litellm
+  ports:
+  - name: http
+    port: 4000
+    targetPort: 4000

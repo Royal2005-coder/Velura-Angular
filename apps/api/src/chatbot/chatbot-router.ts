@@ -53,12 +53,24 @@ export async function handleChatbotRoute({ req, res, url, parts, context, header
       return true;
     }
 
+    if (req.method === "POST" && parts[4] === "lifecycle" && parts.length === 5) {
+      applyChatRateLimit(req, res, limiter, requestMeta.ipAddress);
+      sendJson(res, 200, await service.lifecycle(context, sessionId, await readJson(req, config.maxBodyBytes)), headers);
+      return true;
+    }
+
     if (req.method === "DELETE" && parts.length === 4) {
       applyChatRateLimit(req, res, limiter, requestMeta.ipAddress);
       const body = await readJson(req, config.maxBodyBytes).catch(() => ({}));
       sendJson(res, 200, await service.deleteSession(context, sessionId, body), headers);
       return true;
     }
+  }
+
+  if (parts[2] === "admin" && parts[3] === "chat-policies" && parts[4] && parts[5] === "approval" && parts.length === 6 && req.method === "POST") {
+    applyChatRateLimit(req, res, limiter, requestMeta.ipAddress);
+    sendJson(res, 200, await service.approvePolicy(context, parts[4], await readJson(req, config.maxBodyBytes)), headers);
+    return true;
   }
 
   if (parts[2] === "admin" && parts[3] === "chat-sessions") {
@@ -84,6 +96,16 @@ export async function handleChatbotRoute({ req, res, url, parts, context, header
       applyChatRateLimit(req, res, limiter, requestMeta.ipAddress);
       const body = await readJson(req, config.maxBodyBytes);
       sendJson(res, 200, await service.assignSession(context, sessionId, body), headers);
+      return true;
+    }
+    if (req.method === "POST" && sessionId && parts[5] === "review" && parts.length === 6) {
+      applyChatRateLimit(req, res, limiter, requestMeta.ipAddress);
+      sendJson(res, 200, await service.reviewSession(context, sessionId, await readJson(req, config.maxBodyBytes)), headers);
+      return true;
+    }
+
+    if (req.method === "GET" && sessionId && parts[5] === "moderated" && parts[6] && parts.length === 7) {
+      sendJson(res, 200, await service.moderatedOriginal(context, sessionId, parts[6]), headers);
       return true;
     }
   }

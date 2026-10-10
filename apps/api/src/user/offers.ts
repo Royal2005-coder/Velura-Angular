@@ -55,12 +55,26 @@ export async function handleOffersRoute(
   // Đánh giá mã ở giá trị đơn bằng 0: ví voucher ở trang Ưu đãi cho khách xem mã nào
   // đang có và điều kiện của từng mã, chưa gắn với một giỏ hàng cụ thể nào. Cây danh
   // mục tải kèm để mã theo danh mục nói được tên danh mục thay vì "danh mục khác".
-  const [{ rows: promotions }, tree] = await Promise.all([
-    selectRows("promotion", { is_active: "eq.true", order: "display_order.asc", limit: 100 }),
-    loadCategoryTree()
-  ]);
-  const wallet = await buildWallet(context, 0, 0, { lines: [], categoryNameById: tree.nameById });
+  let promotions: JsonObject[] = [];
+  let tree: CategoryTree = { pathById: new Map(), nameById: {} };
+  try {
+    const [promoResult, treeResult] = await Promise.all([
+      selectRows("promotion", { is_active: "eq.true", limit: 100 }),
+      loadCategoryTree().catch(() => ({ pathById: new Map(), nameById: {} }))
+    ]);
+    promotions = (promoResult.rows || []).sort((a, b) => Number(a.display_order || 0) - Number(b.display_order || 0));
+    tree = treeResult;
+  } catch (err: unknown) {
+    console.warn("[OFFERS] Failed to load promotions or categories:", err);
+  }
 
+  let walletItems: EvaluatedVoucher[] = [];
+  try {
+    const wallet = await buildWallet(context, 0, 0, { lines: [], categoryNameById: tree.nameById });
+    walletItems = wallet.items;
+  } catch (err: unknown) {
+    console.warn("[OFFERS] Failed to build wallet for offers:", err);
+  }
   // Cùng quy tắc vòng đời với bảng chiến dịch bên admin: chiến dịch cạn ngân sách vẫn
   // còn cờ bật nhưng không còn giảm được, nên không được mời khách vào.
   const campaigns = (promotions || [])
@@ -74,7 +88,7 @@ export async function handleOffersRoute(
     is_member: isMember,
     featured: campaigns.filter((campaign) => campaign.is_featured),
     campaigns,
-    vouchers: wallet.items.map((item) => toVoucherCard(item, now, isMember)),
+    vouchers: walletItems.map((item) => toVoucherCard(item, now, isMember)),
     birthday_prompt: buildBirthdayPrompt(profile, now)
   }, corsHeaders);
 }

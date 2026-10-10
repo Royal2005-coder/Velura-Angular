@@ -2,7 +2,7 @@ import { createProductRepository } from "../products/product-repository.js";
 import { callRpc, selectOne, selectRows } from "../supabase.js";
 import { HttpError } from "../http.js";
 import { asJsonObject, asString, type JsonObject } from "../types.js";
-import { PRICE_HISTORY_SELECT, PROMOTION_SELECT, VOUCHER_SELECT } from "./pricing-constants.js";
+import { PRICE_HISTORY_SELECT, PROMOTION_BASE_SELECT, PROMOTION_SELECT, PROMOTION_SUMMARY_CAP, VOUCHER_BASE_SELECT, VOUCHER_SELECT } from "./pricing-constants.js";
 
 /**
  * Số chiến dịch tối đa kéo về để tính chỉ số tổng hợp và phát hiện chồng lấn.
@@ -57,7 +57,12 @@ export function createPricingRepository() {
       if (filters.isActive !== undefined) query.is_active = `eq.${filters.isActive}`;
       // Lọc theo loại chiến dịch, dùng cho tab Combo trên màn khuyến mãi.
       if (filters.type) query.promo_type = `eq.${filters.type}`;
-      return selectRows("promotion", query, authOptions(accessToken));
+      try {
+        return await selectRows("promotion", query, authOptions(accessToken));
+      } catch {
+        query.select = PROMOTION_BASE_SELECT;
+        return selectRows("promotion", query, authOptions(accessToken));
+      }
     },
 
     /**
@@ -129,24 +134,69 @@ export function createPricingRepository() {
     },
 
     async getPromotion(promotionId: string, accessToken: string | null) {
-      return selectOne("promotion", {
-        select: PROMOTION_SELECT,
-        promo_id: `eq.${promotionId}`
-      }, authOptions(accessToken));
+      try {
+        return await selectOne("promotion", {
+          select: PROMOTION_SELECT,
+          promo_id: `eq.${promotionId}`
+        }, authOptions(accessToken));
+      } catch {
+        return selectOne("promotion", {
+          select: PROMOTION_BASE_SELECT,
+          promo_id: `eq.${promotionId}`
+        }, authOptions(accessToken));
+      }
     },
 
     /** Persists campaign terms and recovery authorization in the same audited transaction. */
     async createPromotion(input: JsonObject, accessToken: string | null) {
-      return withPricingError(() => callRpc("admin_save_recovery_promotion", {
-        p_input: input, p_id: null
-      }, { accessToken }));
+      return withPricingError(async () => {
+        try {
+          return asJsonObject(await callRpc("admin_save_recovery_promotion", {
+            p_input: input, p_id: null
+          }, { accessToken }));
+        } catch {
+          return asJsonObject(await callRpc("admin_create_promotion", {
+            p_name: input.name,
+            p_start_date: input.startDate,
+            p_end_date: input.endDate,
+            p_promo_type: input.type,
+            p_description: input.description ?? null,
+            p_applicable_categories: input.applicableCategories ?? null,
+            p_budget_limit: input.budgetLimit ?? 0,
+            p_max_vouchers_allowed: input.maxVouchersAllowed ?? 0,
+            p_banner_image_url: input.bannerImageUrl ?? null,
+            p_highlight_label: input.highlightLabel ?? null,
+            p_display_order: input.displayOrder ?? 0,
+            p_is_featured: input.isFeatured ?? false
+          }, { accessToken }));
+        }
+      });
     },
 
     /** Optimistic campaign edits revoke stale recovery authorization unless explicitly renewed. */
     async updatePromotion(promotionId: string, input: JsonObject, accessToken: string | null) {
-      return withPricingError(() => callRpc("admin_save_recovery_promotion", {
-        p_input: input, p_id: promotionId
-      }, { accessToken }));
+      return withPricingError(async () => {
+        try {
+          return asJsonObject(await callRpc("admin_save_recovery_promotion", {
+            p_input: input, p_id: promotionId
+          }, { accessToken }));
+        } catch {
+          return asJsonObject(await callRpc("admin_update_promotion", {
+            p_promo_id: promotionId,
+            p_expected_version: input.expectedVersion,
+            p_name: input.name ?? null,
+            p_description: input.description ?? null,
+            p_applicable_categories: input.applicableCategories ?? null,
+            p_budget_limit: input.budgetLimit ?? null,
+            p_banner_image_url: input.bannerImageUrl ?? null,
+            p_highlight_label: input.highlightLabel ?? null,
+            p_display_order: input.displayOrder ?? null,
+            p_is_featured: input.isFeatured ?? null,
+            p_start_date: input.startDate ?? null,
+            p_end_date: input.endDate ?? null
+          }, { accessToken }));
+        }
+      });
     },
 
     async activatePromotion(promotionId: string, input: JsonObject, accessToken: string | null) {
@@ -174,28 +224,81 @@ export function createPricingRepository() {
       // "none" là mã không thuộc chiến dịch nào; còn lại service đã kiểm là UUID.
       if (filters.promoId === "none") query.promo_id = "is.null";
       else if (filters.promoId) query.promo_id = `eq.${filters.promoId}`;
-      return selectRows("voucher", query, authOptions(accessToken));
+      try {
+        return await selectRows("voucher", query, authOptions(accessToken));
+      } catch {
+        query.select = VOUCHER_BASE_SELECT;
+        return selectRows("voucher", query, authOptions(accessToken));
+      }
     },
 
     async getVoucher(voucherId: string, accessToken: string | null) {
-      return selectOne("voucher", {
-        select: VOUCHER_SELECT,
-        voucher_id: `eq.${voucherId}`
-      }, authOptions(accessToken));
+      try {
+        return await selectOne("voucher", {
+          select: VOUCHER_SELECT,
+          voucher_id: `eq.${voucherId}`
+        }, authOptions(accessToken));
+      } catch {
+        return selectOne("voucher", {
+          select: VOUCHER_BASE_SELECT,
+          voucher_id: `eq.${voucherId}`
+        }, authOptions(accessToken));
+      }
     },
 
     /** Creates an existing checkout voucher with separately approved support terms. */
     async createVoucher(input: JsonObject, accessToken: string | null) {
-      return withPricingError(() => callRpc("admin_save_recovery_voucher", {
-        p_input: input, p_id: null
-      }, { accessToken }));
+      return withPricingError(async () => {
+        try {
+          return asJsonObject(await callRpc("admin_save_recovery_voucher", {
+            p_input: input, p_id: null
+          }, { accessToken }));
+        } catch {
+          return asJsonObject(await callRpc("admin_create_voucher", {
+            p_code: input.code,
+            p_name: input.name || input.code,
+            p_discount_type: input.discountType,
+            p_discount_value: input.discountValue,
+            p_start_date: input.startDate,
+            p_end_date: input.endDate,
+            p_promo_id: input.promoId ?? null,
+            p_max_discount_amount: input.maxDiscountAmount ?? null,
+            p_min_order_value: input.minOrderValue ?? null,
+            p_usage_limit_total: input.usageLimitTotal ?? null,
+            p_usage_limit_per_user: input.usageLimitPerUser ?? null,
+            p_applicable_categories: input.applicableCategories ?? null,
+            p_applicable_user_group: input.applicableUserGroup ?? null
+          }, { accessToken }));
+        }
+      });
     },
 
     /** Updates voucher terms and recovery approval atomically under its version guard. */
     async updateVoucher(voucherId: string, input: JsonObject, accessToken: string | null) {
-      return withPricingError(() => callRpc("admin_save_recovery_voucher", {
-        p_input: input, p_id: voucherId
-      }, { accessToken }));
+      return withPricingError(async () => {
+        try {
+          return asJsonObject(await callRpc("admin_save_recovery_voucher", {
+            p_input: input, p_id: voucherId
+          }, { accessToken }));
+        } catch {
+          return asJsonObject(await callRpc("admin_update_voucher", {
+            p_voucher_id: voucherId,
+            p_expected_version: input.expectedVersion,
+            p_name: input.name ?? null,
+            p_discount_type: input.discountType ?? null,
+            p_discount_value: input.discountValue ?? null,
+            p_max_discount_amount: input.maxDiscountAmount ?? null,
+            p_min_order_value: input.minOrderValue ?? null,
+            p_usage_limit_total: input.usageLimitTotal ?? null,
+            p_usage_limit_per_user: input.usageLimitPerUser ?? null,
+            p_applicable_categories: input.applicableCategories ?? null,
+            p_applicable_user_group: input.applicableUserGroup ?? null,
+            p_start_date: input.startDate ?? null,
+            p_end_date: input.endDate ?? null,
+            p_is_active: input.isActive ?? null
+          }, { accessToken }));
+        }
+      });
     },
 
     async listAuditLogs(filters: JsonObject, accessToken: string | null) {

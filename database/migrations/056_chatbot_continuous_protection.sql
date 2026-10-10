@@ -157,7 +157,7 @@ declare s public.chat_session%rowtype; result jsonb;
 begin
   s:=public.chat_require_owner(p_session,p_profile,p_guest);
   if s.handoff_status='closed' then return jsonb_build_object('session',to_jsonb(s)); end if;
-  result:=public.chat_handoff_base(p_session,p_profile,p_guest,coalesce(s.metadata->'handoff_summary',jsonb_build_object('summary','Yêu cầu hỗ trợ đang được lọc','problem','Cần nhân viên hỗ trợ','wanted','Nhân viên hỗ trợ','failed_approaches','[]'::jsonb)),p_reason,p_supervisor);
+  result:=public.chat_handoff_base(p_session,p_profile,p_guest,coalesce(nullif(p_summary,'{}'::jsonb),s.metadata->'handoff_summary',jsonb_build_object('summary','Yêu cầu hỗ trợ đang được lọc','problem','Cần nhân viên hỗ trợ','wanted','Nhân viên hỗ trợ','failed_approaches','[]'::jsonb)),p_reason,p_supervisor);
   update public.support_ticket set priority=case when p_supervisor then 'urgent'::public.ticket_priority else 'high'::public.ticket_priority end where ticket_id=(result->>'ticket_id')::uuid;
   return result;
 end; $$;

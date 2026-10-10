@@ -195,7 +195,8 @@ begin
     update public.chat_session set handoff_status='requested',ai_epoch=ai_epoch+1,support_ticket_id=ticket,
       metadata=metadata||jsonb_build_object('handoff_summary',p_summary,'handoff_reason',p_reason,'supervisor_required',p_supervisor) where session_id=p_session;
     insert into public.chat_message(session_id,sender,text,metadata) values(p_session,'bot',
-      'Yêu cầu của bạn đã được chuyển tới nhân viên CSKH. Chuyên viên tư vấn sẽ phản hồi trong ít phút để hỗ trợ bạn chu đáo nhất.',jsonb_build_object('system',true,'handoff',true,'speaker','CSKH','ticket_id',ticket)) returning * into m;
+      coalesce(p_summary->>'message', 'Dạ Velura thành thật xin lỗi bạn vì trải nghiệm mua sắm chưa được như ý và khiến bạn phiền lòng ạ! Em rất hiểu sự thất vọng và bức xúc của bạn lúc này. Để chuộc lỗi và gửi lời xin lỗi chân thành, Velura xin gửi tặng bạn mã ưu đãi VELURACARE (giảm 15% cho đơn hàng tiếp theo). Đồng thời, bên em luôn có chính sách đổi trả miễn phí trong 30 ngày nếu sản phẩm có bất kỳ vấn đề gì về chất lượng hay mẫu mã. Em cũng đã chuyển thông tin tới chuyên viên CSKH để ưu tiên hỗ trợ trực tiếp cho bạn ngay ạ. Bạn có thể chia sẻ thêm mã đơn hàng hoặc sự cố cụ thể để bên em xử lý dứt điểm cho bạn nhé!'),
+      jsonb_build_object('system',false,'handoff',true,'speaker','AI Stylist','ticket_id',ticket)) returning * into m;
   elsif p_supervisor then
     update public.chat_session set metadata=metadata||'{"supervisor_required":true}' where session_id=p_session;
   end if;

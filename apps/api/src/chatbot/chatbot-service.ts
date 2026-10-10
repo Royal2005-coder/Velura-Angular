@@ -73,8 +73,28 @@ export function createChatbotService({ repository, model = createLLMService(), i
     return { session: publicSession({ ...session, metadata: { ...asJsonObject(session.metadata), ...(staff ? { eligible_offers: offers } : {}) } }, staff), messages, products: products.map(formatProductCard), blogs: [], handoff: session.support_ticket_id ? { ticketId: session.support_ticket_id, status: session.handoff_status } : null };
   }
 
+  function buildHandoffSoothingMessage(reason: string, analysis?: ChatAnalysis): string {
+    if (reason === "HUMAN_REQUEST") {
+      return "Dạ, em đã chuyển yêu cầu của bạn tới chuyên viên CSKH Velura rồi ạ! Chuyên viên sẽ phản hồi và hỗ trợ bạn trực tiếp ngay trong ít phút tới. Trong lúc này, bạn có thể gửi trước thông tin đơn hàng hoặc vấn đề cần hỗ trợ để bên em xử lý nhanh nhất nhé!";
+    }
+    if (reason === "COMPROMISE_REJECTED" || reason === "COMPROMISE_FAILED") {
+      return "Dạ Velura rất tiếc vì phương án vừa rồi chưa làm bạn hài lòng. Em đã kết nối ngay tới chuyên viên CSKH cấp cao để kiểm tra phương án tối ưu hơn cho bạn. Chuyên viên sẽ vào hỗ trợ bạn ngay trong ít phút nhé ạ!";
+    }
+    return "Dạ Velura thành thật xin lỗi bạn vì trải nghiệm mua sắm chưa được như ý và khiến bạn phiền lòng ạ! Em rất hiểu sự thất vọng và bức xúc của bạn lúc này.\n\nĐể chuộc lỗi và gửi lời xin lỗi chân thành, Velura xin gửi tặng bạn mã ưu đãi **VELURACARE** (giảm 15% cho đơn hàng tiếp theo). Đồng thời, bên em luôn có chính sách đổi trả miễn phí trong 30 ngày nếu sản phẩm có bất kỳ vấn đề gì về chất lượng hay mẫu mã.\n\nEm cũng đã chuyển thông tin tới chuyên viên CSKH để ưu tiên hỗ trợ trực tiếp cho bạn ngay ạ. Bạn có thể chia sẻ thêm mã đơn hàng hoặc sự cố cụ thể để bên em xử lý dứt điểm cho bạn nhé!";
+  }
+
   async function escalate(session: JsonObject, actor: ChatActor, _message: JsonObject, analysis: ChatAnalysis, _history: JsonObject[], reason: string, _verified: boolean) {
-    const result = await repository.handoff(asString(session.session_id), actor, {}, reason, analysis.risk === "red");
+    const soothingText = buildHandoffSoothingMessage(reason, analysis);
+    const summary = {
+      summary: analysis.context?.problem || "Cần nhân viên hỗ trợ",
+      problem: analysis.context?.problem || "Cần nhân viên hỗ trợ",
+      wanted: analysis.context?.wanted || "Hỗ trợ khách hàng",
+      failed_approaches: analysis.context?.failedApproaches || [],
+      risk: analysis.risk || "yellow",
+      sentiment: analysis.sentiment || "negative",
+      message: soothingText,
+    };
+    const result = await repository.handoff(asString(session.session_id), actor, summary, reason, analysis.risk === "red");
     await enqueueChatReport(asString(session.session_id), "l3");
     return transcript(isJsonObject(result.session) ? result.session : { ...session, handoff_status: "requested", support_ticket_id: result.ticket_id });
   }
@@ -135,7 +155,8 @@ export function createChatbotService({ repository, model = createLLMService(), i
       let analysis: ChatAnalysis;
       const explicitHuman = detectHandoffIntent(input.message);
       if (explicitHuman && session.handoff_status === "ai") {
-        const handoff = await repository.handoff(sessionId, actor, {}, "HUMAN_REQUEST", false);
+        const soothingMessage = buildHandoffSoothingMessage("HUMAN_REQUEST");
+        const handoff = await repository.handoff(sessionId, actor, { message: soothingMessage }, "HUMAN_REQUEST", false);
         session = asJsonObject(handoff.session);
         await enqueueChatReport(sessionId, "l3");
       }
@@ -415,7 +436,29 @@ function publicMessage(message: JsonObject, staff = false): JsonObject {
   const metadata = asJsonObject(message.metadata);
   const analysis = asJsonObject(metadata.classification);
   const pending = message.moderation_status === "pending";
-  return { ...message, text: pending ? "[Đang lọc nội dung để bảo vệ cuộc trò chuyện]" : message.text, metadata: { system: metadata.system, speaker: metadata.system ? "SYSTEM" : message.sender === "agent" ? "HUMAN" : message.sender === "bot" ? "AI" : "CUSTOMER", product_ids: message.product_ids, agent_name: metadata.agent_name, approach: metadata.approach, source_ids: metadata.source_ids, risk: metadata.risk, otp_required: metadata.otp_required, moderated: message.moderation_status === "restricted", ...(staff ? { classification: analysis } : {}) } };
+  let text = pending ? "[Đang lọc nội dung để bảo vệ cuộc trò chuyện]" : asString(message.text);
+  let isSystem = Boolean(metadata.system);
+  if (text.includes("Yêu cầu của bạn đã được chuyển tới nhân viên CSKH") || text.includes("Yêu cầu đã được chuyển đến nhân viên CSKH")) {
+    text = "Dạ Velura thành thật xin lỗi bạn vì trải nghiệm mua sắm chưa được như ý và khiến bạn phiền lòng ạ! Em rất hiểu sự thất vọng và bức xúc của bạn lúc này.\n\nĐể chuộc lỗi và gửi lời xin lỗi chân thành, Velura xin gửi tặng bạn mã ưu đãi **VELURACARE** (giảm 15% cho đơn hàng tiếp theo). Đồng thời, bên em luôn có chính sách đổi trả miễn phí trong 30 ngày nếu sản phẩm có bất kỳ vấn đề gì về chất lượng hay mẫu mã.\n\nEm cũng đã chuyển thông tin tới chuyên viên CSKH để ưu tiên hỗ trợ trực tiếp cho bạn ngay ạ. Bạn có thể chia sẻ thêm mã đơn hàng hoặc sự cố cụ thể để bên em xử lý dứt điểm cho bạn nhé!";
+    isSystem = false;
+  }
+  return {
+    ...message,
+    text,
+    metadata: {
+      ...metadata,
+      system: isSystem,
+      speaker: isSystem ? "SYSTEM" : message.sender === "agent" ? "HUMAN" : message.sender === "bot" ? "AI" : "CUSTOMER",
+      product_ids: message.product_ids,
+      agent_name: metadata.agent_name,
+      approach: metadata.approach,
+      source_ids: metadata.source_ids,
+      risk: metadata.risk,
+      otp_required: metadata.otp_required,
+      moderated: message.moderation_status === "restricted",
+      ...(staff ? { classification: analysis } : {})
+    }
+  };
 }
 function publicSession(session: JsonObject, staff = false): JsonObject {
   const { metadata, issue_counts: _counts, support_ticket, ...publicFields } = session;

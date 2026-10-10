@@ -26,11 +26,15 @@ export const PRICE_HISTORY_SELECT = [
 ].join(",");
 
 /** Safe column projection for promotion rows. */
-export const PROMOTION_SELECT = [
+export const PROMOTION_BASE_SELECT = [
   "promo_id", "promo_name", "promo_type", "applicable_categories",
   "start_date", "end_date", "is_active", "paused_at", "paused_by", "budget_limit",
   "max_vouchers_allowed", "total_discount_issued", "created_by", "version",
-  "description", "banner_image_url", "highlight_label", "display_order", "is_featured",
+  "description", "banner_image_url", "highlight_label", "display_order", "is_featured"
+].join(",");
+
+export const PROMOTION_SELECT = [
+  PROMOTION_BASE_SELECT,
   "recovery_approved", "recovery_conditions", "recovery_max_offers", "recovery_revision",
   "recovery_approved_by", "recovery_approved_at"
 ].join(",");
@@ -48,12 +52,16 @@ export const PROMOTION_SELECT = [
 export const PROMOTION_BANNER_STORAGE = { bucket: "promotion-banners", prefix: "campaign" };
 
 /** Safe column projection for voucher rows. */
-export const VOUCHER_SELECT = [
+export const VOUCHER_BASE_SELECT = [
   "voucher_id", "promo_id", "code", "name", "discount_type",
   "discount_value", "max_discount_amount", "min_order_value",
   "usage_limit_total", "usage_limit_per_user", "used_count",
   "applicable_categories", "applicable_user_group",
-  "start_date", "end_date", "is_active", "created_by", "version",
+  "start_date", "end_date", "is_active", "created_by", "version"
+].join(",");
+
+export const VOUCHER_SELECT = [
+  VOUCHER_BASE_SELECT,
   "recovery_approved", "recovery_conditions", "recovery_max_offers", "recovery_revision",
   "recovery_approved_by", "recovery_approved_at"
 ].join(",");

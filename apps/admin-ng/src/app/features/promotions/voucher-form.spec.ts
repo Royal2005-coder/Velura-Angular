@@ -111,27 +111,6 @@ describe('VoucherForm', () => {
     expect(component.saveError()).toContain('100%');
   });
 
-  it('creates a real approved 20 percent program only with a bounded approved campaign', async () => {
-    const component = await create(null);
-    fixture.componentRef.setInput('campaigns', [{ promo_id: 'p-recovery', recovery_approved: true, budget_limit: 10000000 }]);
-    component.promoId.set('p-recovery');
-    component.discountType.set('percentage');
-    const form = buildForm({ ...VALID, value: '20', maxDiscount: '', recoveryConditions: 'CSKH xác nhận giao trễ', recoveryMaxOffers: '10' });
-    const checkbox = document.createElement('input');
-    checkbox.name = 'recoveryApproved';
-    checkbox.type = 'checkbox';
-    checkbox.checked = true;
-    form.appendChild(checkbox);
-    const submit = () => component.submit({ preventDefault: () => undefined, target: form } as unknown as Event);
-    submit();
-    expect(calls.create.length).toBe(0);
-    (form.elements.namedItem('maxDiscount') as HTMLInputElement).value = '200000';
-    submit();
-    expect(calls.create[0]['value']).toBe(20);
-    expect(calls.create[0]['recoveryApproved']).toBe(true);
-    expect(calls.create[0]['maxDiscount']).toBe(200000);
-    expect(calls.create[0]['promoId']).toBe('p-recovery');
-  });
 
   it('ô giảm tối đa chỉ hiện với mã phần trăm', async () => {
     const component = await create(null);

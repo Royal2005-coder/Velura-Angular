@@ -217,6 +217,7 @@ export class OrderAccountApiStore implements OrderAccountModel {
   readonly userId = computed(() => this.auth.session()?.userId || null);
   readonly verifiedPhone = signal('');
   readonly maskedEmail = signal('');
+  readonly maskedPhone = signal('');
   readonly otpChannel = signal<'sms' | 'email' | 'both'>('email');
   readonly orders = signal<DemoOrder[]>([]);
   readonly requests = signal<DemoReturn[]>([]);
@@ -284,11 +285,12 @@ export class OrderAccountApiStore implements OrderAccountModel {
     if (this.member()) throw new Error('Vui lòng mở đơn hàng của tài khoản đã đăng nhập.');
     const context = this.context();
     const challenge = mode === 'code' ? { order_code: value.trim() } : { phone: value.trim() };
-    const response = await firstValueFrom(this.api.post<{ success?: boolean; message?: string; masked_email?: string; channel?: 'sms' | 'email' | 'both' }>('/api/user/orders/track-otp-send', challenge));
+    const response = await firstValueFrom(this.api.post<{ success?: boolean; message?: string; masked_phone?: string; masked_email?: string; channel?: 'sms' | 'email' | 'both' }>('/api/user/orders/track-otp-send', challenge));
     this.assertCurrent(context);
     if (!response.success) throw new Error(response.message || 'Chưa gửi được mã xác thực.');
+    this.maskedPhone.set(response.masked_phone || '');
     this.maskedEmail.set(response.masked_email || '');
-    if (response.channel) this.otpChannel.set(response.channel);
+    this.otpChannel.set('sms');
     this.challenge = challenge;
   }
 
@@ -302,6 +304,8 @@ export class OrderAccountApiStore implements OrderAccountModel {
     this.generation++;
     this.guestProof = { token: response.guest_access_token, phone: response.phone, expiresAt: Date.now() + 15 * 60 * 1000 };
     sessionStorage.setItem('guest_order_session', JSON.stringify(this.guestProof));
+    sessionStorage.setItem('velura_guest_review_phone', response.phone);
+    sessionStorage.setItem('velura_guest_review_token', response.guest_access_token);
     this.verifiedPhone.set(response.phone);
     this.orders.set([]);
     this.requests.set([]);

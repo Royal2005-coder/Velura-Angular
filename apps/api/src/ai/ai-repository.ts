@@ -68,6 +68,13 @@ export class LocalAiRepository {
           throw error;
         await new Promise((resolve) => setTimeout(resolve, 10 * (attempt + 1)));
       }
+      finally {
+        // Audit only lifecycle metadata: never owner, paths, payloads, or image bytes.
+        if (attempt === 0) console.info("AI_JOB_STATE", {
+          request_id: job.id, status: job.status, time: new Date().toISOString(),
+          error: job.error, attempt: job.attempt, retry_of: job.retry_of,
+        });
+      }
     }
   }
   /** Compare-and-set serialized job transition keeps late inference from overwriting cancellation. */

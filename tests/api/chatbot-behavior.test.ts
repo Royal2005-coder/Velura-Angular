@@ -76,7 +76,9 @@ function fixture(modelOverrides: Partial<ChatModel> = {}) {
     l2Attempts: new Map<string, number>(),
     modelCalls: 0,
     reviewCalls: 0,
-    originalReads: 0
+    originalReads: 0,
+    queuedTurns: [] as { epoch: number; sequence: number; payload: JsonObject }[],
+    lifecycleActions: [] as { action: string; payload: JsonObject }[]
   };
   function append(sender: string, text: string, metadata: JsonObject = {}, productIds: unknown[] = []) {
     const participant = sender === "user" || sender === "agent";
@@ -131,6 +133,28 @@ function fixture(modelOverrides: Partial<ChatModel> = {}) {
         state.l2Attempts.set(key, (state.l2Attempts.get(key) || 0) + 1);
       }
       return { sent: true, message, session: { ...state.session } };
+    },
+    commitQueuedTurn: async (_id, epoch, sequence, payload) => {
+      const latest = state.messages.filter((row) => row.sender === "user").at(-1);
+      if (state.session.handoff_status !== "requested" || state.session.ai_epoch !== epoch || latest?.sequence !== sequence || latest?.moderation_status === "pending") {
+        return { sent: false, reason: "HUMAN_OR_NEWER_TURN", session: { ...state.session } };
+      }
+      state.queuedTurns.push({ epoch, sequence, payload });
+      const ack = payload.kind === "distress"
+        ? "Mình hiểu việc phải chờ có thể khiến bạn thêm phiền lòng. Mình đã ghi nhận điều bạn vừa chia sẻ để nhân viên CSKH tiếp tục hỗ trợ khi tiếp nhận cuộc trò chuyện."
+        : "Mình đã ghi nhận thông tin bạn vừa chia sẻ. Cuộc trò chuyện vẫn đang chờ nhân viên CSKH tiếp nhận; bạn có thể bổ sung thông tin nếu cần.";
+      const message = append("bot", ack, { queued_acknowledgement: true, user_sequence: sequence });
+      return { sent: true, message, session: { ...state.session } };
+    },
+    ownerLifecycle: async (_id, _actor, action, payload) => {
+      state.lifecycleActions.push({ action, payload });
+      if (action === "confirm_summary") {
+        state.session.metadata = {
+          ...asJsonObject(state.session.metadata),
+          summary_confirmation: { confirmed: true, by: "customer", source_seq: payload.source_sequence }
+        };
+      }
+      return { session: { ...state.session } };
     },
     handoff: async (_id, _actor, summary, reason, supervisor) => {
       state.handoffReasons.push(reason);
@@ -568,4 +592,105 @@ test("database denials and missing governance RPCs never downgrade to direct tab
     config.supabaseUrl = originalUrl;
     config.supabaseServiceRoleKey = originalKey;
   }
+});
+
+test("queued customer turns receive empathetic acknowledgement without offers, and stop once staff joins", async () => {
+  const f = fixture({ analyze: async () => analysis({ sentiment: "negative" }) });
+  f.state.session.handoff_status = "requested";
+  const queued = await f.send("Tôi đang chờ nhân viên kiểm tra đơn trễ");
+  assert.equal(f.state.queuedTurns.length, 1);
+  assert.equal(f.state.queuedTurns[0].payload.kind, "distress");
+  assert.ok(!JSON.stringify(queued).includes("VELURACARE"));
+  await f.service.assignSession(principal("admin_operator_cskh_dt"), SESSION, {});
+  await f.send("Tôi gửi thêm thông tin cho nhân viên");
+  assert.equal(f.state.queuedTurns.length, 1);
+});
+
+test("customer summary confirmation validates sourceSequence and staff corrections reject unsafe overrides", async () => {
+  const f = fixture({ analyze: async () => analysis({ moderation: "threat", risk: "red" }) });
+  await assert.rejects(
+    () => f.service.lifecycle(undefined, SESSION, { guestId: GUEST, action: "confirm_summary", confirmed: true, sourceSequence: 0 }),
+    (error: unknown) => error instanceof HttpError && error.status === 422
+  );
+  const confirmed = await f.service.lifecycle(undefined, SESSION, { guestId: GUEST, action: "confirm_summary", confirmed: true, sourceSequence: 2 });
+  assert.equal(asJsonObject(asJsonObject(session(confirmed).metadata).summary_confirmation).confirmed, true);
+
+  const msg = await f.repository.insertMessage({ sessionId: SESSION, sender: "user", text: "Đe dọa" });
+  await assert.rejects(
+    () => f.service.reviewSession(principal("super_admin"), SESSION, {
+      action: "correction",
+      messageId: msg.message_id,
+      text: "Không được xóa cờ vi phạm",
+      confirmed: true,
+      classification: { intent: "facts", level: "L0", issue: "general", sentiment: "neutral", risk: "green", moderation: "none" }
+    }),
+    (error: unknown) => error instanceof HttpError && error.code === "UNSAFE_CORRECTION_OVERRIDE"
+  );
+});
+
+test("parseChatAnalysis enforces independent emotion/risk fields and escalates angry order complaints or third repeats", () => {
+  const angryOrder = parseChatAnalysis({
+    intent: "order",
+    level: "L0",
+    issue: "delivery",
+    context: {
+      issueKey: "late_delivery",
+      problem: "Đơn hàng giao trễ",
+      wanted: "Kiểm tra và xử lý giao hàng",
+      failedApproaches: [],
+      compromiseFailed: false,
+      authorityExceeded: false,
+      repeatCount: 1,
+      escalationTrend: "rising",
+      rejectedApproach: false
+    },
+    sentiment: "negative",
+    emotion: { state: "angry", confidence: 0.92, reasons: ["delivery_delay"] },
+    risk: "green",
+    riskAssessment: { confidence: 0.88, reasons: ["no_abuse"] },
+    moderation: "none",
+    filtered: {
+      text: "Khách phản ánh đơn hàng giao trễ",
+      problem: "Đơn hàng giao trễ",
+      wanted: "Kiểm tra và xử lý giao hàng",
+      failedApproaches: []
+    },
+    confidence: 0.9,
+    reasons: ["delivery_complaint"]
+  });
+  assert.equal(angryOrder.intent, "policy_problem");
+  assert.equal(angryOrder.level, "L2");
+  assert.equal(angryOrder.risk, "yellow");
+
+  const repeated = parseChatAnalysis({
+    intent: "catalog",
+    level: "L1",
+    issue: "sizing",
+    context: {
+      issueKey: "size_mismatch",
+      problem: "Chưa chọn được size",
+      wanted: "Hỗ trợ chọn size",
+      failedApproaches: ["size_table"],
+      compromiseFailed: false,
+      authorityExceeded: false,
+      repeatCount: 3,
+      escalationTrend: "rising",
+      rejectedApproach: false
+    },
+    sentiment: "neutral",
+    emotion: { state: "frustrated", confidence: 0.8, reasons: ["repeated_question"] },
+    risk: "red",
+    riskAssessment: { confidence: 0.85, reasons: ["no_violation"] },
+    moderation: "none",
+    filtered: {
+      text: "Khách hỏi lại về size lần thứ ba",
+      problem: "Chưa chọn được size",
+      wanted: "Hỗ trợ chọn size",
+      failedApproaches: ["size_table"]
+    },
+    confidence: 0.86,
+    reasons: ["repeat_limit"]
+  });
+  assert.equal(repeated.level, "L3");
+  assert.equal(repeated.risk, "yellow");
 });

@@ -1,6 +1,7 @@
 import { signJwt, verifyJwt } from "../auth-helper.js";
 import { HttpError } from "../http.js";
 import { asString, type AuthContext, type JsonObject } from "../types.js";
+import { normalizeVietnamesePhone } from "./checkout-service.js";
 
 /** A guest checkout grants access to one order, never a member account. */
 export function issueGuestOrderAccess(orderId: string): string {
@@ -21,7 +22,7 @@ export function guestSessionPhone(token: unknown): string | null {
 /** Verify a guest's phone session or the capability of a newly placed order. */
 export function hasGuestOrderAccess(order: JsonObject, body: JsonObject): boolean {
   const phone = guestSessionPhone(body.guest_access_token || body.order_access_token);
-  if (phone && phone === order.shipping_phone) return true;
+  if (phone && normalizeVietnamesePhone(order.shipping_phone) === normalizeVietnamesePhone(phone)) return true;
   const claims = verifyJwt(asString(body.order_access_token || body.guest_access_token));
   return claims?.purpose === "guest_order_access" && claims.order_id === order.order_id;
 }

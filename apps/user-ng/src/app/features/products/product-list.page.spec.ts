@@ -27,4 +27,16 @@ describe('ProductListPage', () => {
     expect(page.productCount()).toBe(1);
     expect(page.activeCategoryLabel()).toContain('linen');
   });
+
+  it('displays and clears active promotional voucher code', async () => {
+    const page = await createStorefrontPage(ProductListPage);
+    expect(page.activeVoucherCode()).toBeNull();
+
+    page.activeVoucherCode.set('FALL10');
+    expect(page.activeVoucherCode()).toBe('FALL10');
+
+    page.clearActiveVoucher();
+    expect(page.activeVoucherCode()).toBeNull();
+    expect(localStorage.getItem('checkout_voucher_code')).toBeNull();
+  });
 });

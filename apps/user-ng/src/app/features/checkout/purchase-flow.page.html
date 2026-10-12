@@ -409,7 +409,7 @@
                                 {{ sub.product_name }}
                               </span>
                               <span style="font-size: 0.725rem; color: #8c857e;">
-                                {{ sub.color || 'Mặc định' }} / {{ sub.size || 'Free' }}
+                                {{ sub.color || 'Mặc định' }} / {{ displaySize(sub.size) || 'Free' }}
                               </span>
                             </div>
                           </div>
@@ -424,7 +424,7 @@
                               >
                                 @for (v of getSubVariantChoices(sub); track v.variant_id) {
                                   <option [value]="v.variant_id" [disabled]="v.available < line.quantity">
-                                    {{ v.color || 'Mặc định' }} / {{ v.size || 'Free' }}{{ v.available < line.quantity ? ' · Hết' : '' }}
+                                    {{ v.color || 'Mặc định' }} / {{ displaySize(v.size) || 'Free' }}{{ v.available < line.quantity ? ' · Hết' : '' }}
                                   </option>
                                 }
                               </select>
@@ -435,13 +435,13 @@
                     </div>
                   }
                 } @else {
-                  <p class="muted">{{ line.size }} / {{ line.color }} · SL {{ line.quantity }}</p>
+                  <p class="muted">{{ displaySize(line.size) }} / {{ line.color }} · SL {{ line.quantity }}</p>
                   <strong>{{ money(line.unit_price * line.quantity) }}</strong>
                   <div class="checkout-line-controls">
                     <label>Màu / Kích cỡ
                       <select [ngModel]="line.variant_id" (ngModelChange)="editLine(line, $event, line.quantity)" [disabled]="busy() || resumeLocked() || !!order() || !variantChoices()[line.product_id]" [attr.aria-label]="'Biến thể ' + line.product_name">
                         @for (variant of variantChoices()[line.product_id] || []; track variant.variant_id) {
-                          <option [value]="variant.variant_id" [disabled]="variant.available < line.quantity">{{ variant.color || 'Mặc định' }} / {{ variant.size || 'Free' }}{{ variant.available < line.quantity ? ' · Hết hàng' : '' }}</option>
+                          <option [value]="variant.variant_id" [disabled]="variant.available < line.quantity">{{ variant.color || 'Mặc định' }} / {{ displaySize(variant.size) || 'Free' }}{{ variant.available < line.quantity ? ' · Hết hàng' : '' }}</option>
                         }
                       </select>
                     </label>

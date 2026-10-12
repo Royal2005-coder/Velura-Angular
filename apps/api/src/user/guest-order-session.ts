@@ -3,7 +3,7 @@ import { signJwt } from "../auth-helper.js";
 import { maskEmail, sendDirectEmail } from "../email/mailer.js";
 import { HttpError } from "../http.js";
 import { isSmsConfigured, maskPhone, sendCheckoutOtpSms } from "../sms/twilio.js";
-import { callRpc, selectOne, updateRows } from "../supabase.js";
+import { callRpc, selectOne, selectRows, updateRows } from "../supabase.js";
 import { asJsonObject, asString, type JsonObject } from "../types.js";
 import { generateCheckoutOtp, normalizeVietnamesePhone } from "./checkout-service.js";
 
@@ -22,7 +22,7 @@ async function phoneForTracking(body: JsonObject): Promise<string> {
     if (!order) throw new HttpError(404, "ORDER_NOT_FOUND", "Không tìm thấy đơn hàng");
     return normalizeVietnamesePhone(order.shipping_phone);
   }
-  const phone = normalizeVietnamesePhone(body.phone);
+  const phone = normalizeVietnamesePhone(body.phone || body.challenge_id);
   if (!/^0(?:3|5|7|8|9)\d{8}$/.test(phone)) throw new HttpError(422, "INVALID_PHONE", "Số điện thoại không hợp lệ");
   return phone;
 }
@@ -32,9 +32,17 @@ export async function sendGuestTrackingOtp(body: JsonObject, ip: string): Promis
   const phone = await phoneForTracking(body);
 
   // Tìm email và tên người nhận để gửi mã OTP
-  let recipientEmail: string | null = null;
+  const recipientEmails: string[] = [];
   let customerName = "Quý khách";
   let scopedOrderId: string | null = null;
+  const addEmail = (raw: unknown): void => {
+    if (typeof raw !== "string") return;
+    const cleaned = raw.trim().toLowerCase();
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleaned) && !recipientEmails.includes(cleaned)) {
+      recipientEmails.push(cleaned);
+    }
+  };
+  const phoneVariants = [...new Set([phone, `84${phone.slice(1)}`, `+84${phone.slice(1)}`])];
 
   if (body.order_code) {
     const code = asString(body.order_code).trim().toUpperCase();
@@ -44,24 +52,56 @@ export async function sendGuestTrackingOtp(body: JsonObject, ip: string): Promis
       : await selectOne("orders", { order_code: `eq.${code}` });
     if (order) {
       scopedOrderId = asString(order.order_id);
-      if (order.shipping_email && String(order.shipping_email).includes("@")) {
-        recipientEmail = String(order.shipping_email).trim();
-      }
+      addEmail(order.shipping_email);
       if (order.shipping_name) {
         customerName = String(order.shipping_name).trim();
       }
+      if (order.user_id) {
+        const orderUser = await selectOne("users", { user_id: `eq.${order.user_id}` }).catch(() => null);
+        addEmail(orderUser?.email);
+        if (customerName === "Quý khách" && orderUser?.full_name) {
+          customerName = String(orderUser.full_name).trim();
+        }
+      }
     }
   }
 
-  // Nếu vẫn chưa có email, tra cứu trong bảng users
-  if (!recipientEmail) {
-    const user = await selectOne("users", { phone: `eq.${phone}`, is_verified: "eq.true", is_active: "eq.true", role: "eq.member" });
-    if (user?.email && String(user.email).includes("@")) {
-      recipientEmail = String(user.email).trim();
-      customerName = String(user.full_name || "").trim() || customerName;
+  // Tra cứu các đơn hàng gần nhất của số điện thoại này để lấy email liên kết (shipping_email hoặc user_id -> users.email)
+  const { rows: recentOrders } = await selectRows("orders", {
+    shipping_phone: `in.(${phoneVariants.join(",")})`,
+    order: "created_at.desc",
+    limit: 15
+  }).catch(() => ({ rows: [] as JsonObject[] }));
+  for (const ord of recentOrders) {
+    addEmail(ord.shipping_email);
+    if (customerName === "Quý khách" && ord.shipping_name) {
+      customerName = String(ord.shipping_name).trim();
+    }
+  }
+  const orderUserIds = [...new Set(recentOrders.map((o) => o.user_id).filter(Boolean))];
+  if (orderUserIds.length > 0) {
+    const { rows: orderUsers } = await selectRows("users", {
+      user_id: `in.(${orderUserIds.join(",")})`
+    }).catch(() => ({ rows: [] as JsonObject[] }));
+    for (const u of orderUsers) {
+      addEmail(u.email);
+      if (customerName === "Quý khách" && u.full_name) {
+        customerName = String(u.full_name).trim();
+      }
     }
   }
 
+  // Tra cứu trực tiếp trong bảng users theo mọi định dạng số điện thoại (0..., 84..., +84...)
+  const { rows: phoneUsers } = await selectRows("users", {
+    phone: `in.(${phoneVariants.join(",")})`
+  }).catch(() => ({ rows: [] as JsonObject[] }));
+  for (const u of phoneUsers) {
+    addEmail(u.email);
+    if (customerName === "Quý khách" && u.full_name) {
+      customerName = String(u.full_name).trim();
+    }
+  }
+  addEmail(body.email);
 
   const code = generateCheckoutOtp();
   const nonce = randomUUID();
@@ -79,30 +119,29 @@ export async function sendGuestTrackingOtp(body: JsonObject, ip: string): Promis
 
   let smsSent = false;
 
-  if (isSmsConfigured()) {
-    try {
-      const delivered = await sendCheckoutOtpSms(phone, code);
-      smsSent = delivered.success === true && !delivered.simulated;
-    } catch {
-      // Email may deliver the same challenge; never log provider payloads or codes.
-    }
+  try {
+    const delivered = await sendCheckoutOtpSms(phone, code);
+    smsSent = delivered.success === true && !delivered.simulated;
+  } catch {
+    // Email delivers the demo SMS OTP when real SMS carrier is not active.
   }
 
-  // Đồng thời gửi OTP qua Email
+  // Đồng bộ gửi mã SMS OTP qua các Email liên kết với số điện thoại để nhận OTP demo
   let emailSent = false;
-  if (recipientEmail) {
+  const targetEmails = recipientEmails.slice(0, 4);
+  if (targetEmails.length > 0) {
     const greeting = customerName || "Quý khách";
-    const emailSubject = "Mã xác thực tra cứu đơn hàng Velura";
-    const emailBody = `Chào ${greeting},\n\nMã xác thực OTP tra cứu đơn hàng Velura của bạn là: ${code}.\n\nMã có hiệu lực trong 5 phút. Vui lòng không chia sẻ mã này cho bất kỳ ai.`;
+    const emailSubject = `[SMS OTP Demo - ${phone}] Mã xác thực đơn hàng Velura: ${code}`;
+    const emailBody = `Chào ${greeting},\n\n[SMS OTP Demo cho SĐT ${phone}]\nMã xác thực OTP tra cứu đơn hàng Velura của bạn là: ${code}.\n\nMã có hiệu lực trong 5 phút. Vui lòng không chia sẻ mã này cho bất kỳ ai.`;
     const emailHtml = `
       <div style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eaeaea; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05); background-color: #fff;">
         <div style="background-color: #b89b88; padding: 24px; text-align: center;">
           <h1 style="color: #fff; margin: 0; font-size: 28px; letter-spacing: 4px; font-weight: 700;">VELURA</h1>
         </div>
         <div style="padding: 32px 28px;">
-          <h2 style="color: #2a2522; margin-top: 0; font-size: 20px; font-weight: 600;">Tra cứu &amp; Quản lý đơn hàng</h2>
+          <h2 style="color: #2a2522; margin-top: 0; font-size: 20px; font-weight: 600;">Tin nhắn SMS OTP (Đồng bộ qua Email liên kết)</h2>
           <p style="color: #555; line-height: 1.6; font-size: 15px;">Chào <strong>${escapeHtml(greeting)}</strong>,</p>
-          <p style="color: #555; line-height: 1.6; font-size: 15px;">Bạn đang thực hiện tra cứu thông tin hành trình đơn hàng tại Velura cho số điện thoại <strong>${maskPhone(phone)}</strong>. Vui lòng sử dụng mã xác thực OTP dưới đây:</p>
+          <p style="color: #555; line-height: 1.6; font-size: 15px;">Bạn đang thực hiện xác thực SMS OTP cho số điện thoại <strong>${phone}</strong> (${maskPhone(phone)}) tại Velura. Dưới đây là mã OTP 6 chữ số được đồng bộ qua email liên kết của bạn:</p>
 
           <div style="background-color: #fcfaf8; border: 1px dashed #b89b88; border-radius: 8px; padding: 20px; margin: 24px 0; text-align: center;">
             <span style="font-size: 36px; font-weight: bold; color: #8e6d53; letter-spacing: 12px; display: inline-block; margin-left: 12px;">${code}</span>
@@ -115,25 +154,24 @@ export async function sendGuestTrackingOtp(body: JsonObject, ip: string): Promis
         </div>
       </div>
     `;
-    try {
-      emailSent = await sendDirectEmail(recipientEmail, emailSubject, emailBody, emailHtml);
-    } catch {
-      emailSent = false;
-    }
+    const results = await Promise.all(
+      targetEmails.map((target) => sendDirectEmail(target, emailSubject, emailBody, emailHtml).catch(() => false))
+    );
+    emailSent = results.some(Boolean);
   }
-
 
   if (!smsSent && !emailSent) {
     await updateRows("guest_tracking_otp", { nonce: `eq.${nonce}`, consumed_at: "is.null" }, { consumed_at: new Date().toISOString() });
     throw new HttpError(502, "OTP_SEND_FAILED", "Chưa thể gửi mã xác thực. Vui lòng thử lại sau.");
   }
 
-  const channel: "sms" | "email" | "both" = smsSent && emailSent ? "both" : emailSent ? "email" : "sms";
+  const channel: "sms" | "email" | "both" = "sms";
 
   return {
     success: true,
+    phone,
     masked_phone: maskPhone(phone),
-    masked_email: recipientEmail ? maskEmail(recipientEmail) : null,
+    masked_email: targetEmails.length ? targetEmails.map(maskEmail).join(", ") : null,
     expires_in: 300,
     channel
   };

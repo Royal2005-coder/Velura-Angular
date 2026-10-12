@@ -122,6 +122,7 @@ function compressImageFile(file: File, maxDimension = 1280, quality = 0.82): Pro
   selector: 'app-admin-returns-page',
   imports: [AdminDialogDirective, AdminEmptyState, AdminIcon, AdminPagination, RouterLink],
   templateUrl: './admin-returns.page.html',
+  styleUrl: './admin-returns.page.css',
 })
 export class AdminReturnsPage {
   private listRequest = new Subscription();
@@ -303,7 +304,7 @@ export class AdminReturnsPage {
   readonly pendingChatCount = computed(() => this.chats().filter((session) => session.handoff_status === 'requested').length);
   readonly isChatSupervisor = computed(() => this.canMutate() && this.session.session()?.roleCode === 'super_admin' && this.session.session()?.isActive === true);
   readonly canHandleChat = computed(() => !this.selectedChat()?.metadata?.supervisor_required || this.isChatSupervisor());
-  readonly canReply = computed(() => this.canMutate() && this.canHandleChat() && !this.isClosedChat() && (!this.selectedChat()?.assigned_to || this.selectedChat()?.assigned_to === this.session.session()?.id));
+  readonly canReply = computed(() => this.canMutate() && this.canHandleChat() && this.selectedChat()?.handoff_status === 'assigned' && !!this.selectedChat()?.assigned_to && this.selectedChat()?.assigned_to === this.session.session()?.id);
   readonly canJoinChat = computed(() => {
     if (!this.canMutate() || !this.canHandleChat()) {
       return false;
@@ -549,7 +550,7 @@ export class AdminReturnsPage {
   }
 
   /**
-   * Claims an unowned case before submitting a staff turn to the continuous filtering pipeline.
+   * Sends only after explicit server-confirmed Join; session changes discard late UI updates.
    */
   sendReply(event: Event): void {
     event.preventDefault();
@@ -560,36 +561,18 @@ export class AdminReturnsPage {
     }
 
     this.submitting.set(true);
-    const doSend = () => {
-      this.api.sendChatReply(session.session_id, message).pipe(finalize(() => this.submitting.set(false))).subscribe({
-        next: (payload) => {
-          if (this.selectedChat()?.session_id !== session.session_id) return;
-          if (payload.message) {
-            this.messages.update((rows) => [...rows, payload.message!]);
-          }
-          if (payload.session) {
-            this.selectedChat.set(payload.session);
-          }
-          this.replyDraft.set('');
-          this.reload();
-        },
-        error: (error: unknown) => { this.submitting.set(false); this.chatError.set(adminErrorMessage(error)); },
-      });
-    };
-
-    if (session.handoff_status !== 'assigned') {
-      this.api.assignChatSession(session.session_id).subscribe({
-        next: (payload) => {
-          if (payload.session && this.selectedChat()?.session_id === session.session_id) {
-            this.selectedChat.set(payload.session);
-          }
-          doSend();
-        },
-        error: (error: unknown) => { this.submitting.set(false); this.chatError.set(adminErrorMessage(error)); },
-      });
-    } else {
-      doSend();
-    }
+    this.api.sendChatReply(session.session_id, message).pipe(finalize(() => this.submitting.set(false))).subscribe({
+      next: (payload) => {
+        if (this.selectedChat()?.session_id !== session.session_id) return;
+        if (payload.message) this.messages.update((rows) => [...rows, payload.message!]);
+        if (payload.session) this.selectedChat.set(payload.session);
+        this.replyDraft.set('');
+        this.reload();
+      },
+      error: (error: unknown) => {
+        if (this.selectedChat()?.session_id === session.session_id) this.chatError.set(adminErrorMessage(error));
+      },
+    });
   }
 
   /**
@@ -752,12 +735,8 @@ export class AdminReturnsPage {
 
   /** Missing moderation state is quarantined just like pending state; raw server text is never a fallback. */
   safeChatText(message: AdminReviewedChatMessage): string {
-    if (message.moderation_status === 'pending') return 'Đang lọc nội dung. CSKH chỉ xem sau khi kiểm tra hoàn tất.';
-    const text = message.text || '—';
-    if (text.includes('Yêu cầu của bạn đã được chuyển tới') || text.includes('Yêu cầu đã được chuyển đến')) {
-      return 'Dạ Velura thành thật xin lỗi bạn vì trải nghiệm mua sắm chưa được như ý và khiến bạn phiền lòng ạ! Em rất hiểu sự thất vọng và bức xúc của bạn lúc này.\n\nĐể chuộc lỗi và gửi lời xin lỗi chân thành, Velura xin gửi tặng bạn mã ưu đãi VELURACARE (giảm 15% cho đơn hàng tiếp theo). Đồng thời, bên em luôn có chính sách đổi trả miễn phí trong 30 ngày nếu sản phẩm có bất kỳ vấn đề gì về chất lượng hay mẫu mã.\n\nEm cũng đã chuyển thông tin tới chuyên viên CSKH để ưu tiên hỗ trợ trực tiếp cho bạn ngay ạ. Bạn có thể chia sẻ thêm mã đơn hàng hoặc sự cố cụ thể để bên em xử lý dứt điểm cho bạn nhé!';
-    }
-    return text;
+    if (!this.chatMessageReady(message)) return 'Đang lọc nội dung. CSKH chỉ xem sau khi kiểm tra hoàn tất.';
+    return message.text || '—';
   }
 
   /** An unprocessed customer/staff turn is not eligible for review or product rendering. */
@@ -766,7 +745,8 @@ export class AdminReturnsPage {
   /** Names the exclusive case owner without pretending the viewer owns another staff member's case. */
   chatOwner(): string {
     const owner = this.selectedChat()?.assigned_to;
-    return !owner ? 'Chưa tiếp nhận' : owner === this.session.session()?.id ? 'Bạn đang phụ trách' : `Nhân viên ${owner}`;
+    const agentName = this.selectedChat()?.assigned_agent_name;
+    return !owner ? 'Chưa tiếp nhận' : owner === this.session.session()?.id ? 'Bạn đang phụ trách' : `Nhân viên ${agentName || owner}`;
   }
 
   /** Shows freshness separately from confidence so stale context is never treated as current. */
@@ -779,10 +759,39 @@ export class AdminReturnsPage {
     return `${age > 120000 ? 'Ngữ cảnh cần cập nhật' : 'Ngữ cảnh mới nhất'} · ${this.date(intelligence.updated_at)}`;
   }
 
-  /** Confidence is an estimate, not a verified business fact. */
-  chatConfidence(): string {
-    const value = this.selectedChat()?.metadata?.intelligence?.confidence;
-    return value == null ? 'Chưa đánh giá' : `${Math.round(value <= 1 ? value * 100 : value)}%`;
+  /** Confidence is a server estimate, never a verified business fact or a UI-derived metric. */
+  chatConfidence(value = this.selectedChat()?.metadata?.intelligence?.confidence): string {
+    return value == null || !Number.isFinite(value) || value < 0 || value > 100
+      ? 'Chưa đánh giá' : `${Math.round(value <= 1 ? value * 100 : value)}%`;
+  }
+
+  /** Only current filtered intelligence supplies the branch; a message label is not a session decision. */
+  readonly chatDecision = computed(() => this.selectedChat()?.metadata?.intelligence?.filter_status === 'ready'
+    ? this.selectedChat()?.metadata?.intelligence?.classification : undefined);
+
+  /** Latency is displayed only when the provider recorded a finite nonnegative measurement. */
+  chatLatency(value: number | undefined): string {
+    return value == null || !Number.isFinite(value) || value < 0 ? 'Chưa có số liệu' : `${Math.round(value)} ms`;
+  }
+
+  /** Localizes an observed trend without interpreting an absent observation as stable. */
+  chatTrend(): string {
+    const trend = this.chatDecision()?.context?.escalationTrend || this.selectedChat()?.metadata?.intelligence?.trend;
+    return trend === 'rising' ? 'Đang tăng' : trend === 'falling' ? 'Đang giảm' : trend === 'stable' ? 'Ổn định' : 'Chưa đánh giá';
+  }
+
+  /** Emotion is an estimate of customer state, not a moderation violation. */
+  chatEmotion(): string {
+    const state = this.chatDecision()?.emotion?.state;
+    return state === 'calm' ? 'Bình tĩnh' : state === 'frustrated' ? 'Thất vọng' : state === 'angry' ? 'Bức xúc' : state === 'distressed' ? 'Lo lắng / căng thẳng' : 'Chưa đánh giá';
+  }
+
+  /** Opens an explicit confirmation flow; a recommendation never performs a write on click. */
+  openChatCaseAction(action: 'summary' | 'offer' | 'report_retry', offerId = ''): void {
+    if (!this.canMutate() || !this.canHandleChat() || this.chatReviewBusy()) return;
+    this.openChatReview();
+    this.chatReviewAction.set(action);
+    this.selectedOfferId.set(offerId);
   }
 
   /**
@@ -1077,11 +1086,8 @@ export class AdminReturnsPage {
    * Preview line used by the original chat sidebar.
    */
   chatPreview(session: AdminChatSessionRow): string {
-    const preview = session.last_message_preview || session.title || 'Hội thoại khách hàng';
-    if (preview.includes('Yêu cầu của bạn đã được chuyển tới') || preview.includes('Yêu cầu đã được chuyển đến')) {
-      return 'Velura xin lỗi vì trải nghiệm chưa trọn vẹn và đã tặng mã ưu đãi VELURACARE (giảm 15%).';
-    }
-    return preview;
+    if (session.metadata?.intelligence?.filter_status !== 'ready') return 'Nội dung đang chờ kiểm tra';
+    return session.last_message_preview || 'Hội thoại khách hàng';
   }
 
   /**
@@ -1090,10 +1096,10 @@ export class AdminReturnsPage {
   chatStatus(session: AdminChatSessionRow): string {
     const status = session.handoff_status || 'ai';
     if (status === 'requested') {
-      return 'Chờ';
+      return 'Chờ CSKH';
     }
     if (status === 'assigned') {
-      return 'Đang xử lý';
+      return 'CSKH';
     }
     if (status === 'closed') {
       return 'Đã đóng';
@@ -1122,7 +1128,7 @@ export class AdminReturnsPage {
     if (!raw || session?.metadata?.intelligence?.filter_status !== 'ready') return { label: 'Chưa đánh giá / Chờ lọc', tone: 'neutral', icon: '—' };
     const risk = String(raw).toLowerCase();
     if (risk === 'red') return { label: 'Khẩn cấp / Cần giám sát', tone: 'danger', icon: '🔴' };
-    if (risk === 'orange') return { label: 'Cảnh báo tiêu cực', tone: 'caution', icon: '🟠' };
+    if (risk === 'orange') return { label: 'Cần kiểm duyệt', tone: 'caution', icon: 'Cam' };
     if (risk === 'yellow') return { label: 'Cần chú ý', tone: 'warning', icon: '🟡' };
     return risk === 'green' ? { label: 'Bình thường', tone: 'success', icon: '🟢' } : { label: 'Chưa đánh giá', tone: 'neutral', icon: '—' };
   }
@@ -1131,7 +1137,8 @@ export class AdminReturnsPage {
    * Sentiment label for customer emotion tracking.
    */
   chatSentimentBadge(session: AdminChatSessionRow | null | undefined): { label: string; tone: string } {
-    const sentiment = session?.metadata?.handoff_summary?.sentiment;
+    if (session?.metadata?.intelligence?.filter_status !== 'ready') return { label: 'Chưa đánh giá', tone: 'neutral' };
+    const sentiment = session.metadata.intelligence.customer_sentiment || session.metadata.handoff_summary?.sentiment;
     if (sentiment === 'positive') return { label: 'Tích cực', tone: 'success' };
     if (sentiment === 'negative') return { label: 'Tiêu cực / Bức xúc', tone: 'danger' };
     return { label: sentiment === 'neutral' ? 'Trung tính' : 'Chưa đánh giá', tone: 'neutral' };

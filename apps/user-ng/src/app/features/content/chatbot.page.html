@@ -69,13 +69,13 @@
             </button>
           </div>
         </div>
-        @if (handoffStatus() === 'assigned' || handoffStatus() === 'closed') {
+        @if (handoffStatus() === 'requested' || handoffStatus() === 'assigned' || handoffStatus() === 'closed') {
           <div class="chatbot-handoff-banner" style="display:flex;align-items:center;justify-content:space-between;gap:12px;background:#FAF2EB;border:1px solid #E8DFD6;border-radius:10px;padding:10px 16px;margin:8px 16px;">
             <div style="display:flex;align-items:center;gap:10px;">
               <span style="font-size:1.3rem;">🧑‍💼</span>
               <div style="font-size:0.8rem;line-height:1.4;color:#2A2522;">
-                <strong>{{ handoffStatus() === 'closed' ? 'Phiên hỗ trợ đã kết thúc' : 'Nhân viên CSKH đang hỗ trợ' }}</strong>
-                <p style="margin:2px 0 0 0;color:#6B635D;">{{ handoffStatus() === 'closed' ? 'Cảm ơn bạn đã liên hệ Velura. Chúc bạn một ngày tốt lành!' : 'Nhân viên CSKH đã tham gia hội thoại và đang trực tiếp hỗ trợ bạn.' }}</p>
+                <strong>{{ handoffStatus() === 'closed' ? 'Phiên hỗ trợ đã kết thúc' : handoffStatus() === 'assigned' ? 'Nhân viên CSKH đang hỗ trợ' : 'Đang chờ nhân viên CSKH tiếp nhận' }}</strong>
+                <p style="margin:2px 0 0 0;color:#6B635D;">{{ handoffStatus() === 'closed' ? 'Cảm ơn bạn đã liên hệ Velura. Chúc bạn một ngày tốt lành!' : handoffStatus() === 'assigned' ? 'Nhân viên CSKH đã tham gia hội thoại và đang trực tiếp hỗ trợ bạn.' : 'Yêu cầu của bạn đã vào hàng đợi CSKH. Bạn vẫn có thể nhắn thêm thông tin bên dưới trong lúc chờ.' }}</p>
               </div>
             </div>
             <button type="button" class="btn btn--outline btn--sm" (click)="refreshMessages()" [disabled]="loading()" style="font-size:0.75rem;padding:6px 12px;white-space:nowrap;">Tải lại tin nhắn</button>
@@ -87,14 +87,46 @@
             </button>
           </div>
         }
+        @if ((handoffStatus() === 'requested' || handoffStatus() === 'assigned') && summaryProblem()) {
+          <div class="chatbot-summary-card" style="margin:0 16px 8px;padding:10px 14px;background:#FFFDFB;border:1px solid #E8DFD6;border-radius:10px;font-size:0.8rem;color:#2A2522;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+              <div>
+                <strong>Tóm tắt bàn giao CSKH:</strong> {{ summaryProblem() }}
+                @if (summaryWanted()) { <span> · Mong muốn: {{ summaryWanted() }}</span> }
+              </div>
+              @if (summaryConfirmed()) {
+                <span style="font-size:0.75rem;color:#2e6f40;font-weight:600;white-space:nowrap;">✓ Đã xác nhận</span>
+              } @else if (summarySequence()) {
+                <button type="button" class="btn btn--outline btn--sm" (click)="confirmSummary()" [disabled]="loading()" style="font-size:0.75rem;padding:4px 10px;white-space:nowrap;">Xác nhận đúng</button>
+              }
+            </div>
+            <small style="display:block;margin-top:4px;color:#6B635D;">Nếu cần bổ sung hoặc đính chính, bạn có thể nhắn trực tiếp ở khung chat bên dưới mà không làm gián đoạn thứ tự hỗ trợ.</small>
+          </div>
+        }
         @if (chatError()) { <p role="alert">{{ chatError() }}</p> }
         @if (handoffStatus() === 'closed') {
-          <div class="chatbot-closed-notice" style="margin: 8px 16px; padding: 12px 16px; background: #FAF7F5; border: 1px solid #EAE3DE; border-radius: 10px; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
-            <div style="font-size: 0.825rem; color: #5C544E;">
-              <strong style="color: #2A2522;">Cuộc trò chuyện đã kết thúc.</strong>
-              <span> Cảm ơn bạn đã liên hệ Velura!</span>
+          <div class="chatbot-closed-notice" style="margin: 8px 16px; padding: 12px 16px; background: #FAF7F5; border: 1px solid #EAE3DE; border-radius: 10px; display: flex; flex-direction: column; gap: 8px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+              <div style="font-size: 0.825rem; color: #5C544E;">
+                <strong style="color: #2A2522;">Cuộc trò chuyện đã kết thúc.</strong>
+                @if (caseOutcome()) { <span> Kết quả: {{ caseOutcome() }}</span> }
+                @else { <span> Cảm ơn bạn đã liên hệ Velura!</span> }
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <select aria-label="Đánh giá hỗ trợ" [value]="ratingDraft()" (change)="setRating($event)" [disabled]="loading()" style="font-size:0.75rem;padding:4px 8px;border:1px solid #E8DFD6;border-radius:6px;">
+                  <option value="5">5 ★ Rất hài lòng</option>
+                  <option value="4">4 ★ Hài lòng</option>
+                  <option value="3">3 ★ Bình thường</option>
+                  <option value="2">2 ★ Chưa hài lòng</option>
+                  <option value="1">1 ★ Kém</option>
+                </select>
+                <button type="button" class="btn btn--outline btn--sm" (click)="updateLifecycle('rating')" [disabled]="loading()" style="font-size:0.75rem;padding:5px 10px;white-space:nowrap;">Gửi đánh giá</button>
+              </div>
             </div>
-            <button type="button" class="btn btn--outline btn--sm" (click)="updateLifecycle('reopen')" [disabled]="loading()" style="font-size: 0.75rem; padding: 5px 12px; white-space: nowrap;">💬 Tiếp tục trò chuyện</button>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <input type="text" class="chatbot-input" placeholder="Nhập lý do cần mở lại hoặc phản hồi..." aria-label="Ghi chú mở lại phiên" [value]="lifecycleNote()" (input)="setCaseInput('lifecycleNote', $event)" [disabled]="loading()" style="font-size:0.75rem;padding:6px 10px;flex:1;" />
+              <button type="button" class="btn btn--outline btn--sm" (click)="updateLifecycle('reopen')" [disabled]="loading() || !lifecycleNote().trim()" style="font-size: 0.75rem; padding: 5px 12px; white-space: nowrap;">💬 Tiếp tục trò chuyện</button>
+            </div>
           </div>
         }
 
@@ -227,9 +259,9 @@
                 aria-label="Nội dung chat"
                 [value]="draft()"
                 (input)="onDraftInput($event)"
-                [disabled]="loading()"
+                [disabled]="loading() || handoffStatus() === 'closed'"
               />
-              <button class="chatbot-send-btn" type="submit" aria-label="Gửi tin nhắn" [disabled]="loading()">
+              <button class="chatbot-send-btn" type="submit" aria-label="Gửi tin nhắn" [disabled]="loading() || handoffStatus() === 'closed'">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <line x1="22" y1="2" x2="11" y2="13"></line>
                   <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>

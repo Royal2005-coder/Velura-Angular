@@ -30,6 +30,11 @@
           [routerLink]="model.member() ? '/account/returns' : '/guest/returns'"
           >Yêu cầu đổi / trả</a
         >
+        <a
+          class="action secondary"
+          [routerLink]="model.member() ? '/account/reviews' : '/guest/reviews'"
+          >Đánh giá sản phẩm</a
+        >
       }
       @if (!model.member()) {
         <a class="action secondary" routerLink="/auth/signin">Đăng nhập tài khoản</a>
@@ -128,17 +133,11 @@
           <section class="panel lookup-card">
             <h2>Xác thực chủ đơn</h2>
             <p>
-              @if (model.otpChannel?.() === 'both') {
-                Mã xác thực đã được gửi đến tin nhắn SMS <strong>{{ maskedPhone() }}</strong> và email <strong>{{ maskedEmail() }}</strong>.
-              } @else if (model.otpChannel?.() === 'email' || (maskedEmail() && model.otpChannel?.() !== 'sms')) {
-                Mã xác thực đã được gửi đến email <strong>{{ maskedEmail() }}</strong>.
-              } @else {
-                Mã xác thực đã được gửi đến tin nhắn SMS <strong>{{ maskedPhone() }}</strong>.
-                @if (maskedEmail()) {
-                  <br /><span class="muted" style="display: inline-block; margin-top: 6px; color: var(--terracotta, #c97b63); font-weight: 500;">
-                    (Hệ thống cũng đã gửi mã OTP tới email <strong>{{ maskedEmail() }}</strong> để bạn nhận mã thuận tiện)
-                  </span>
-                }
+              Mã xác thực <strong>SMS OTP</strong> đã được gửi đến số điện thoại <strong>{{ maskedPhone() }}</strong>.
+              @if (maskedEmail()) {
+                <br /><span class="muted" style="display: inline-block; margin-top: 8px; padding: 8px 12px; background: #FAF2EB; border: 1px solid #E8DFD6; border-radius: 8px; color: var(--terracotta, #c97b63); font-weight: 500;">
+                  📩 Đồng bộ nhận SMS OTP Demo: Mã OTP của số điện thoại <strong>{{ maskedPhone() }}</strong> đã được gửi qua email liên kết <strong>{{ maskedEmail() }}</strong>. Vui lòng kiểm tra hộp thư email để lấy mã 6 chữ số.
+                </span>
               }
             </p>
             <p class="muted">Hiệu lực {{ seconds() }} giây.</p>
@@ -190,8 +189,24 @@
                 </div>
                 <p class="muted">{{ date(item.createdAt) }} · {{ item.items.length }} sản phẩm</p>
                 <div class="row">
-                  <strong>{{ money(item.total) }}</strong
-                  ><button (click)="open(item.id)">Xem chi tiết</button>
+                  <strong>{{ money(item.total) }}</strong>
+                  <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                    @if (item.status === 'delivered' && item.items.length) {
+                      <a
+                        class="action secondary"
+                        [routerLink]="model.member() ? '/account/reviews' : '/guest/reviews'"
+                        [queryParams]="{
+                          order_id: item.orderId || item.id,
+                          product_id: item.items[0].product_id,
+                          name: item.items[0].product_name,
+                          price: item.items[0].unit_price,
+                          image: item.items[0].product_image
+                        }"
+                        >★ Đánh giá</a
+                      >
+                    }
+                    <button (click)="open(item.id)">Xem chi tiết</button>
+                  </div>
                 </div>
               </article>
             } @empty {
@@ -256,7 +271,7 @@
                         <span class="badge" style="background: #ede9fe; color: #6d28d9; font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; margin-left: 6px;">Combo Set</span>
                       }
                     </h3>
-                    <p class="muted">{{ line.size }} / {{ line.color }} · SL {{ line.quantity }}</p>
+                    <p class="muted">{{ displaySize(line.size) }} / {{ line.color }} · SL {{ line.quantity }}</p>
                     <strong>{{ money(line.quantity * line.unit_price) }}</strong>
                     @if (item.status === 'delivered') {
                       <p class="muted">
@@ -272,6 +287,21 @@
                           ⏳ Đang xử lý đổi/trả (Phiếu #{{ line.inProgressCode }}) — Vui lòng chờ hoàn tất.
                         </p>
                       }
+                      <div style="margin-top: 8px;">
+                        <a
+                          class="action secondary"
+                          [routerLink]="model.member() ? '/account/reviews' : '/guest/reviews'"
+                          [queryParams]="{
+                            order_id: item.orderId || item.id,
+                            product_id: line.product_id,
+                            name: line.product_name,
+                            price: line.unit_price,
+                            image: line.product_image
+                          }"
+                          style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; font-size: 0.8125rem;"
+                          >★ Đánh giá sản phẩm</a
+                        >
+                      </div>
                     }
                   </div>
                 </article>
@@ -323,6 +353,20 @@
                 }
                 @if (withinWindow(item)) {
                   <button (click)="startReturn()">Đổi / Trả hàng</button>
+                }
+                @if (item.status === 'delivered' && item.items.length) {
+                  <a
+                    class="action secondary"
+                    [routerLink]="model.member() ? '/account/reviews' : '/guest/reviews'"
+                    [queryParams]="{
+                      order_id: item.orderId || item.id,
+                      product_id: item.items[0].product_id,
+                      name: item.items[0].product_name,
+                      price: item.items[0].unit_price,
+                      image: item.items[0].product_image
+                    }"
+                    >★ Đánh giá đơn hàng</a
+                  >
                 }
               </div>
               @if (item.status === 'pending_payment' && item.can_pay_again !== false) {
@@ -421,7 +465,7 @@
                       }
                     </label>
                     <p class="muted">
-                      {{ line.size }} / {{ line.color }} · Đã mua {{ line.quantity }} · Có thể xử lý
+                      {{ displaySize(line.size) }} / {{ line.color }} · Đã mua {{ line.quantity }} · Có thể xử lý
                       {{ line.availableQuantity }}
                     </p>
                     <p class="muted">
@@ -523,7 +567,7 @@
                       </div>
                     } @else {
                       <label class="field"
-                        >{{ line.product_name }} · {{ line.size }} / {{ line.color }} →<select
+                        >{{ line.product_name }} · {{ displaySize(line.size) }} / {{ line.color }} →<select
                           [ngModel]="selected.replacementVariantId || selected.replacement || ''"
                           [disabled]="!!model.replacementsLoading?.()"
                           (ngModelChange)="replacement(line, $event)"
@@ -598,7 +642,7 @@
                 <div>
                   <h3>{{ lineFor(selected.variantId)?.product_name }}</h3>
                   <p>
-                    {{ lineFor(selected.variantId)?.size }} /
+                    {{ displaySize(lineFor(selected.variantId)?.size) }} /
                     {{ lineFor(selected.variantId)?.color }} · SL {{ selected.quantity }}
                   </p>
                   @if (returnKind === 'exchange') {
@@ -662,7 +706,7 @@
                   <strong>{{ lineFor(item.variantId)?.product_name }}</strong> · SL
                   {{ item.quantity }}
                   @if (request.kind === 'exchange') {
-                    <br />{{ lineFor(item.variantId)?.size }} /
+                    <br />{{ displaySize(lineFor(item.variantId)?.size) }} /
                     {{ lineFor(item.variantId)?.color }} → {{ item.replacement }}
                   }
                 </p>

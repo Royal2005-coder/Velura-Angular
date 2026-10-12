@@ -32,6 +32,7 @@ import {
   validPhone,
 } from '../../core/services/purchase-demo.store';
 import { formatVnd, toPublicAsset } from '../../core/utils/money';
+import { formatSizeDisplay } from '../../core/utils/size';
 import { AddressSelector } from '../../shared/address-selector/address-selector';
 import type { AddressGeographySelection, GeographyMode } from '../../core/models/address-geography';
 import { PurchaseCustomerStore } from '../../core/services/purchase-customer.store';
@@ -63,6 +64,7 @@ export class PurchaseFlowPage {
   readonly step = signal<'form' | 'gateway' | 'result' | 'success' | 'invite' | 'activated'>(
     'form',
   );
+  readonly displaySize = formatSizeDisplay;
   readonly member = this.model.member;
   readonly lines = signal(this.checkout.readCheckoutItems().map((line) => ({ ...line })));
   private readonly lineEditor = inject(CheckoutLineEditorService);

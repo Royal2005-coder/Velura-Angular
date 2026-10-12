@@ -48,6 +48,8 @@ export interface ProductReview {
   user_full_name?: string;
   created_at?: string;
   review_tags?: string[];
+  submitted_at?: string;
+  helpful_count?: number;
   images?: string[];
   admin_reply?: string;
   /** Server-confirmed delivered purchase of this product; omitted/false never receives a buyer badge. */

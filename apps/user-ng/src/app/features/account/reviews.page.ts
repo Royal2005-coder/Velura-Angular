@@ -162,9 +162,30 @@ export class AccountReviewsPage implements OnInit {
   /** Restore existing guest verification token and phone number from browser session */
   private restoreGuestSession(): void {
     try {
-      const storedPhone = sessionStorage.getItem(GUEST_PHONE_KEY);
-      const storedToken = sessionStorage.getItem(GUEST_TOKEN_KEY);
+      let storedPhone = sessionStorage.getItem(GUEST_PHONE_KEY);
+      let storedToken = sessionStorage.getItem(GUEST_TOKEN_KEY);
       const proofToken = this.reviewsService.getProofToken();
+
+      if (!storedPhone || !storedToken) {
+        const rawGuestOrder = sessionStorage.getItem('guest_order_session');
+        if (rawGuestOrder) {
+          const parsed: unknown = JSON.parse(rawGuestOrder);
+          if (
+            parsed &&
+            typeof parsed === 'object' &&
+            'phone' in parsed &&
+            'token' in parsed &&
+            'expiresAt' in parsed &&
+            typeof parsed.phone === 'string' &&
+            typeof parsed.token === 'string' &&
+            typeof parsed.expiresAt === 'number' &&
+            parsed.expiresAt > Date.now()
+          ) {
+            storedPhone = parsed.phone;
+            storedToken = parsed.token;
+          }
+        }
+      }
 
       const activeToken = storedToken || proofToken || '';
       if (storedPhone && activeToken) {
@@ -219,9 +240,9 @@ export class AccountReviewsPage implements OnInit {
       this.guestChallengeId.set(res.challenge_id || rawPhone);
 
       const targetDesc = res.masked_email
-        ? `qua SMS và Email demo (${res.masked_email})`
-        : 'qua tin nhắn SMS (mô phỏng)';
-      this.guestAuthSuccess.set(`Mã OTP đã được gửi ${targetDesc}. Vui lòng kiểm tra mã xác thực gồm 6 chữ số.`);
+        ? `đến SĐT ${this.maskPhone(rawPhone)} (Đồng bộ nhận SMS OTP Demo qua email liên kết: ${res.masked_email})`
+        : `qua tin nhắn SMS ${this.maskPhone(rawPhone)}`;
+      this.guestAuthSuccess.set(`Mã xác thực SMS OTP đã được gửi ${targetDesc}. Vui lòng kiểm tra mã xác thực gồm 6 chữ số.`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Không thể gửi mã xác thực. Vui lòng kiểm tra lại.';
       this.guestAuthError.set(msg);
@@ -384,7 +405,9 @@ export class AccountReviewsPage implements OnInit {
           // If no product is selected yet and we have eligible items, select the first one
           const currentPId = this.productId();
           const currentOId = this.orderId();
-          const selected = items.find((item) => item.orderId === currentOId && item.productId === currentPId);
+          const selected = items.find(
+            (item) => (item.orderId === currentOId || item.orderCode === currentOId) && item.productId === currentPId,
+          );
           if (selected || items.length > 0) {
             this.selectItem(selected || items[0]);
           } else {
@@ -614,7 +637,7 @@ export class AccountReviewsPage implements OnInit {
           this.submitSuccess.set(
             res.review.status === 'approved'
               ? 'Cảm ơn bạn! Đánh giá đã được ghi nhận và phê duyệt thành công.'
-              : 'Cảm ơn bạn! Đánh giá đã được ghi nhận và đang chờ duyệt.'
+              : `Đánh giá không đạt kiểm duyệt tự động: ${res.review.rejection_reason || 'Nội dung chưa hợp lệ.'}`
           );
           this.comment.set('');
           this.images.set([]);

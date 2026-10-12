@@ -102,4 +102,21 @@ describe('OffersPage', () => {
     expect(page.focusedCampaign()).toBeNull();
     expect(page.voucherGroups().length).toBe(3);
   });
+
+  it('navigates to products page with voucher and category params when using a voucher', async () => {
+    const page = await createPage(null);
+    const testVoucher: OfferVoucher = voucher({
+      code: 'FALL10',
+      voucher_id: 'v-fall10',
+      category_names: ['Áo'],
+    });
+
+    const params = page.useVoucherParams(testVoucher);
+    expect(params['voucher']).toBe('FALL10');
+    expect(params['category']).toBe('ao');
+
+    page.onUseVoucher(testVoucher);
+    expect(localStorage.getItem('checkout_voucher_code')).toBe('FALL10');
+    expect(localStorage.getItem('checkout_voucher_id')).toBe('v-fall10');
+  });
 });

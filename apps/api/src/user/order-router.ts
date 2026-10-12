@@ -369,7 +369,8 @@ export async function handleOrdersRoute(
       const token = url.searchParams.get("guest_access_token") || "";
       const phone = guestSessionPhone(token);
       if (!phone) throw new HttpError(401, "GUEST_SESSION_REQUIRED", "Verify your phone to view orders");
-      const { rows } = await selectRows("orders", { shipping_phone: "eq." + phone, order: "created_at.desc", limit: "50" });
+      const phoneVariants = [...new Set([phone, `84${phone.slice(1)}`, `+84${phone.slice(1)}`])];
+      const { rows } = await selectRows("orders", { shipping_phone: `in.(${phoneVariants.join(",")})`, order: "created_at.desc", limit: "50" });
       const orders = await Promise.all(rows.map(async (order) => {
         const [{ rows: items }, { rows: history }, { rows: payments }] = await Promise.all([
           selectRows("order_item", { order_id: "eq." + order.order_id }),

@@ -751,7 +751,7 @@
                             </div>
                             @if (voucher.usable) {
                               <div class="voucher-card__side">
-                                <a class="btn-outline voucher-card__use" routerLink="/cart" [queryParams]="{ voucher: voucher.code }">Dùng mã</a>
+                                <a class="btn-outline voucher-card__use" [routerLink]="['/products']" [queryParams]="{ voucher: voucher.code }">Dùng mã</a>
                               </div>
                             }
                           </article>

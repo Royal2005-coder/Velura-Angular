@@ -659,3 +659,77 @@ test("Studio preview reads only registered licensed raster assets and rejects tr
     await fixture.close();
   }
 });
+test("VTO enforces configured retry limits, tracks retry_of lineage, and re-verifies product availability on result", async () => {
+  let available = true;
+  const vtoCatalog: AiCatalog = {
+    ...catalog,
+    async support() {
+      return { product_supported: available, variant_supported: available, garment_category: "upper_body" };
+    },
+  };
+  const fixture = await setup({
+    ready: () => true,
+    async run(directory) {
+      const request = JSON.parse(await readFile(join(directory, "job.json"), "utf8")) as { request_id: string };
+      await writeFile(join(directory, "result.png"), PNG);
+      return {
+        status: "success",
+        result_file: "result.png",
+        gate: { valid: true },
+        binding: { request_id: request.request_id, product_id: product, variant_id: "22222222-2222-4222-8222-222222222222" },
+      };
+    },
+  }, vtoCatalog);
+  const prevMax = process.env.AI_VTO_MAX_ATTEMPTS;
+  process.env.AI_VTO_MAX_ATTEMPTS = "2";
+  try {
+    const asset = await fixture.service.upload("a", PNG, "image/png");
+    const first = await fixture.service.create("a", {
+      task: "virtual_try_on",
+      product_id: product,
+      variant_id: "22222222-2222-4222-8222-222222222222",
+      mode: "personal",
+      person_asset_id: asset.asset_id,
+      consent: true,
+      confirmed: true,
+      idempotency_key: "vto-attempt-1",
+    });
+    assert.equal(first.attempt, 1);
+    await terminal(fixture.service, "a", first.id);
+    const second = await fixture.service.create("a", {
+      task: "virtual_try_on",
+      product_id: product,
+      variant_id: "22222222-2222-4222-8222-222222222222",
+      mode: "personal",
+      person_asset_id: asset.asset_id,
+      consent: true,
+      confirmed: true,
+      idempotency_key: "vto-attempt-2",
+    });
+    assert.equal(second.attempt, 2);
+    assert.equal(second.retry_of, first.id);
+    await terminal(fixture.service, "a", second.id);
+    await assert.rejects(
+      () =>
+        fixture.service.create("a", {
+          task: "virtual_try_on",
+          product_id: product,
+          variant_id: "22222222-2222-4222-8222-222222222222",
+          mode: "personal",
+          person_asset_id: asset.asset_id,
+          consent: true,
+          confirmed: true,
+          idempotency_key: "vto-attempt-3",
+        }),
+      { code: "AI_RETRY_LIMIT" },
+    );
+    available = false;
+    await assert.rejects(() => fixture.service.result("a", second.id), {
+      code: "VTO_PRODUCT_UNAVAILABLE",
+    });
+  } finally {
+    if (prevMax === undefined) delete process.env.AI_VTO_MAX_ATTEMPTS;
+    else process.env.AI_VTO_MAX_ATTEMPTS = prevMax;
+    await fixture.close();
+  }
+});

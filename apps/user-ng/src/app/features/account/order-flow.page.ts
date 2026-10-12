@@ -17,6 +17,7 @@ import {
 import { ORDER_ACCOUNT_MODEL, type ComboComponentItem, type OrderAccountModel, type ReplacementChoice, type ReturnReasonCode } from '../../core/services/order-account.model';
 import { orderAccountErrorMessage } from '../../core/services/order-account-api.store';
 import { formatVnd, toPublicAsset } from '../../core/utils/money';
+import { formatSizeDisplay } from '../../core/utils/size';
 import { isGuestPreview, isPreviewMode } from '../../core/utils/preview-mode';
 import { DeliverySimulation } from '../../shared/delivery-simulation/delivery-simulation';
 
@@ -37,6 +38,7 @@ import { DeliverySimulation } from '../../shared/delivery-simulation/delivery-si
   ],
 })
 export class OrderFlowPage {
+  readonly displaySize = formatSizeDisplay;
   readonly preview = isPreviewMode();
   readonly model: OrderAccountModel = inject(ORDER_ACCOUNT_MODEL);
   private readonly route = inject(ActivatedRoute);
@@ -204,7 +206,7 @@ export class OrderFlowPage {
         this.challengePhone = value;
         this.challengeMode = this.mode;
         this.challengeOrderId = this.mode === 'code' ? value : '';
-        this.maskedPhone.set(this.mode === 'phone' ? maskPhone(value) : 'số điện thoại đặt hàng');
+        this.maskedPhone.set(this.model.maskedPhone?.() || (this.mode === 'phone' ? maskPhone(value) : 'số điện thoại đặt hàng'));
         this.seconds.set(300);
         this.cooldown.set(60);
         this.otp = '';

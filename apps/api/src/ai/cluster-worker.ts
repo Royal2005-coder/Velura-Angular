@@ -168,8 +168,9 @@ export class ClusterAiWorker implements AiWorker {
       const bytes = await boundedBytes(response, 8 * 1024 * 1024);
       const binary = response.headers.get("content-type")?.split(";")[0] === "image/png";
       const resultHeader = response.headers.get("x-ai-result");
-      const data = object(binary ? (resultHeader ? headerJson(response, "x-ai-result") : { status: "success", gate: { valid: true, metrics: {} } }) : JSON.parse(bytes.toString("utf8")) as unknown);
-      if (!binary && bindingHeader) checkBinding(data, binding);
+      if (binary && (!bindingHeader || !resultHeader)) throw new Error("AI_WORKER_ATTESTATION_REQUIRED");
+      const data = object(binary ? headerJson(response, "x-ai-result") : JSON.parse(bytes.toString("utf8")) as unknown);
+      if (!binary) checkBinding(data, binding);
       const rawStatus = String(data.status || (data.valid === true ? "success" : data.valid === false ? "validation_failed" : binary ? "success" : "failed"));
       if (!["success", "validation_failed", "failed"].includes(rawStatus)) throw new Error("AI_WORKER_STATUS");
       const result: BoundResult = { status: rawStatus as AiWorkerResult["status"], binding, schema_version: VERSION, preprocessing_version: "velura-measured-1", processing_version: `${String(data.model || "gpu-quality")}:velura-measured-1` };

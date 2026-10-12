@@ -221,4 +221,110 @@ describe('ProductDetailPage', () => {
     expect(page.maxAvailableStock()).toBe(15);
     expect(page.addToCart()).toBe(true);
   });
+
+  it('sorts sizes logically from smallest to largest (TC-CART-02)', async () => {
+    const page = await createStorefrontPage(ProductDetailPage);
+    const product = {
+      product_id: 'silk-shirt',
+      name: 'Áo Sơ Mi Lụa Cao Cấp',
+      variants: [
+        { variant_id: 'v-m', color: 'Burgundy Wine', size: 'M', stock_quantity: 20, reserved_quantity: 0 },
+        { variant_id: 'v-l', color: 'Burgundy Wine', size: 'L', stock_quantity: 20, reserved_quantity: 0 },
+        { variant_id: 'v-xl', color: 'Burgundy Wine', size: 'XL', stock_quantity: 20, reserved_quantity: 0 },
+        { variant_id: 'v-xxl', color: 'Burgundy Wine', size: 'XXL', stock_quantity: 20, reserved_quantity: 0 },
+        { variant_id: 'v-xs', color: 'Burgundy Wine', size: 'XS', stock_quantity: 20, reserved_quantity: 0 },
+        { variant_id: 'v-s', color: 'Burgundy Wine', size: 'S', stock_quantity: 20, reserved_quantity: 0 },
+      ],
+      images: ['/images/burgundy.jpg'],
+      reviews: [],
+    };
+    page.product.set(product as unknown as ProductSummary);
+    page.selectColor('Burgundy Wine');
+
+    expect(page.sizes()).toEqual(['XS', 'S', 'M', 'L', 'XL', 'XXL']);
+  });
+
+  it('formats freesize variants as FREE SIZE (TC-CART-04)', async () => {
+    const page = await createStorefrontPage(ProductDetailPage);
+    expect(page.displaySize('F')).toBe('FREE SIZE');
+    expect(page.displaySize('Free')).toBe('FREE SIZE');
+    expect(page.displaySize('FREESIZE')).toBe('FREE SIZE');
+    expect(page.displaySize('M')).toBe('M');
+  });
+
+  it('clicking a thumbnail switches active image without scrambling selected color (TC-CART-02)', async () => {
+    const page = await createStorefrontPage(ProductDetailPage);
+    const product = {
+      product_id: 'shirt-multi',
+      name: 'Áo Sơ Mi',
+      variants: [
+        { variant_id: 'v1', color: 'Trắng', size: 'S', stock_quantity: 10, reserved_quantity: 0 },
+        { variant_id: 'v2', color: 'Đen', size: 'S', stock_quantity: 10, reserved_quantity: 0 },
+        { variant_id: 'v3', color: 'Be', size: 'S', stock_quantity: 10, reserved_quantity: 0 },
+      ],
+      images: ['/images/beige-1.jpg', '/images/beige-2.jpg'],
+      reviews: [],
+    };
+    page.product.set(product as unknown as ProductSummary);
+    page.selectColor('Be');
+    page.selectSize('S');
+
+    expect(page.selectedColor()).toBe('Be');
+    expect(page.selectedSize()).toBe('S');
+
+    page.selectImage(1);
+    expect(page.activeImage()).toBe(1);
+    expect(page.selectedColor()).toBe('Be');
+    expect(page.selectedSize()).toBe('S');
+  });
+
+  it('provides interactive zoom controls for inspecting fabric details (TC-CART-03)', async () => {
+    const page = await createStorefrontPage(ProductDetailPage);
+    expect(page.isZoomOpen()).toBe(false);
+
+    page.openImageZoom();
+    expect(page.isZoomOpen()).toBe(true);
+    expect(page.zoomScale()).toBe(1);
+
+    page.zoomIn();
+    expect(page.zoomScale()).toBe(1.5);
+
+    page.zoomIn();
+    expect(page.zoomScale()).toBe(2);
+
+    page.zoomOut();
+    expect(page.zoomScale()).toBe(1.5);
+
+    page.resetZoom();
+    expect(page.zoomScale()).toBe(1);
+
+    page.toggleZoom();
+    expect(page.zoomScale()).toBe(2);
+
+    page.closeImageZoom();
+    expect(page.isZoomOpen()).toBe(false);
+    expect(page.zoomScale()).toBe(1);
+  });
+
+  it('blocks purchase and displays out-of-stock when selecting variant with 0 stock (TC-CART-04)', async () => {
+    const page = await createStorefrontPage(ProductDetailPage);
+    const product = {
+      product_id: 'shirt-stock-test',
+      name: 'Áo Sơ Mi Lụa Cao Cấp (SP-001)',
+      variants: [
+        { variant_id: 'v-black-s', color: 'Đen', size: 'S', stock_quantity: 10, reserved_quantity: 0 },
+        { variant_id: 'v-black-xl', color: 'Đen', size: 'XL', stock_quantity: 0, reserved_quantity: 0 },
+      ],
+      reviews: [],
+    };
+    page.product.set(product as unknown as ProductSummary);
+    page.selectColor('Đen');
+    page.selectSize('XL');
+
+    expect(page.isOutOfStock()).toBe(true);
+    expect(page.stockLabel()).toBe('Hết hàng');
+    expect(page.addToCart()).toBe(false);
+    expect(page.isSizeOutOfStock('XL')).toBe(true);
+    expect(page.isSizeOutOfStock('S')).toBe(false);
+  });
 });

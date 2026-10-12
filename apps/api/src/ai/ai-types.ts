@@ -27,6 +27,12 @@ export interface AiJobView {
   status: AiStatus;
   created_at: string;
   expires_at: string;
+  /** Exact catalog selection attached to VTO; clients reject a mismatching resumed result. */
+  product_id?: string;
+  variant_id?: string;
+  /** A retry is a new durable request; its predecessor remains available until expiry. */
+  attempt?: number;
+  retry_of?: string;
   result_url?: string;
   gate?: Record<string, unknown>;
   error?: string;
@@ -44,8 +50,6 @@ export interface AiJob extends AiJobView {
   fingerprint: string;
   directory: string;
   worker: Record<string, unknown>;
-  product_id?: string;
-  variant_id?: string;
   processing_version?: string;
   catalog_metadata?: Omit<
     import("./image-vector-repository.js").CatalogImageVector,

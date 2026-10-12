@@ -218,4 +218,55 @@ describe('CartPage', () => {
     expect(single.color).toBe('Đen');
     expect(single.size).toBe('L');
   });
+
+  it('prompts delete confirmation modal instead of deleting immediately when clicking remove (TC-CART-09)', async () => {
+    const page = await createStorefrontPage(CartPage);
+    const cart = TestBed.inject(CartStore);
+    cart.addItem(
+      { variant_id: 'v-del-1', product_id: 'p-del-1', product_name: 'Đầm Lụa Midi', product_image: '', quantity: 2, unit_price: 500000 },
+      { silent: true },
+    );
+
+    const item = page.groupedItems()[0];
+    expect(item).toBeTruthy();
+    expect(page.pendingDeleteItem()).toBeNull();
+
+    // Bấm xóa -> Hiển thị modal xác nhận, CHƯA xóa ngay khỏi giỏ
+    page.remove(item);
+    expect(page.pendingDeleteItem()?.variant_id).toBe('v-del-1');
+    expect(page.groupedItems().length).toBe(1);
+
+    // Bấm Giữ lại -> Hủy modal, sản phẩm vẫn còn nguyên
+    page.cancelDelete();
+    expect(page.pendingDeleteItem()).toBeNull();
+    expect(page.groupedItems().length).toBe(1);
+
+    // Bấm xóa -> Xác nhận xóa
+    page.confirmDelete(item);
+    page.executeDelete();
+    expect(page.pendingDeleteItem()).toBeNull();
+    expect(page.groupedItems().length).toBe(0);
+  });
+
+  it('prompts warning confirmation modal when decrementing quantity from 1 to 0 instead of deleting silently (TC-CART-09)', async () => {
+    const page = await createStorefrontPage(CartPage);
+    const cart = TestBed.inject(CartStore);
+    cart.addItem(
+      { variant_id: 'v-qty-1', product_id: 'p-qty-1', product_name: 'Áo Sơ Mi Silk', product_image: '', quantity: 1, unit_price: 350000 },
+      { silent: true },
+    );
+
+    const item = page.groupedItems()[0];
+    expect(item.quantity).toBe(1);
+
+    // Khi SL = 1 và bấm trừ (-1) -> Cảnh báo xác nhận xóa thay vì tự động xóa mất hút
+    page.changeQty(item, -1);
+    expect(page.pendingDeleteItem()?.variant_id).toBe('v-qty-1');
+    expect(page.groupedItems().length).toBe(1);
+    expect(page.groupedItems()[0].quantity).toBe(1);
+
+    // Xác nhận xóa -> Xóa sản phẩm, chuyển sang empty state
+    page.executeDelete();
+    expect(page.groupedItems().length).toBe(0);
+  });
 });

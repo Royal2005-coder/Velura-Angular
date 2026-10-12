@@ -17,6 +17,15 @@
         <button type="button" class="btn btn--outline btn--sm" (click)="clearSearch()" style="padding: 4px 12px; font-size: 0.8125rem; border-radius: 16px;">✕ Xóa từ khóa</button>
       </div>
     }
+    @if (activeVoucherCode()) {
+      <div class="product-voucher-active-banner">
+        <div class="product-voucher-active-banner__content">
+          <span class="product-voucher-badge">🎟️ Mã ưu đãi: <strong>{{ activeVoucherCode() }}</strong></span>
+          <span class="product-voucher-text">Đang chọn mã ưu đãi. Mua sắm các sản phẩm thỏa điều kiện để tự động giảm giá khi thanh toán!</span>
+        </div>
+        <button type="button" class="product-voucher-close" (click)="clearActiveVoucher()" aria-label="Bỏ chọn mã" title="Bỏ chọn mã">✕</button>
+      </div>
+    }
   </header>
 
   <div class="product-list-layout">

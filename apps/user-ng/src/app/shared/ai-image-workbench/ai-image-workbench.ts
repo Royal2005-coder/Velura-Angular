@@ -252,7 +252,7 @@ export class AiImageWorkbench {
   chooseMode(mode: 'personal' | 'studio'): void {
     if (this.busy()) return;
     this.mode.set(mode);
-    this.consent.set(mode === 'studio');
+    this.consent.set(false);
     this.release(this.result());
     this.result.set('');
     this.job.set(null);
@@ -373,7 +373,7 @@ export class AiImageWorkbench {
   /** Opens a keyboard-accessible modal and reads readiness before uploading anything. */
   async open(): Promise<void> {
     const dialog = this.dialog()?.nativeElement;
-    if (dialog && !dialog.open) dialog.showModal();
+    if (dialog && !dialog.open) dialog.showModal?.();
     const epoch = this.generation;
     this.capabilities.set(null);
     this.error.set('');
@@ -389,6 +389,30 @@ export class AiImageWorkbench {
         if (this.mode() === 'studio' && !this.studio() && capabilities.studio_assets?.length) {
           void this.selectStudio(capabilities.studio_assets[0].id);
         }
+        if (capabilities.enabled && !this.job()) {
+          const savedId = sessionStorage.getItem(this.storageKey());
+          const savedPending = sessionStorage.getItem(`${this.storageKey()}_pending`);
+          if (savedId || savedPending) {
+            try {
+              const recovered = await firstValueFrom(savedId ? this.model.job(savedId) : this.model.recover(savedPending!));
+              const job = recovered.job;
+              const sameSelection = this.task() !== 'virtual_try_on' ||
+                ((!job.product_id || job.product_id === this.productId()) &&
+                  (!job.variant_id || !this.variantId() || job.variant_id === this.variantId()));
+              if (epoch === this.generation && sameSelection) {
+                this.job.set(job);
+                if (job.status === 'queued' || job.status === 'running') {
+                  this.busy.set(true);
+                  this.startLoadingTimer();
+                }
+                await this.poll(epoch);
+              }
+            } catch {
+              sessionStorage.removeItem(this.storageKey());
+              sessionStorage.removeItem(`${this.storageKey()}_pending`);
+            }
+          }
+        }
       }
     } catch {
       if (epoch === this.generation)
@@ -399,7 +423,7 @@ export class AiImageWorkbench {
   /** Native close restores focus to the opener. Work stays resumable within the owner session. */
   close(): void {
     this.stopLoadingTimer();
-    this.dialog()?.nativeElement.close();
+    this.dialog()?.nativeElement.close?.();
   }
 
   /** Validates local file envelope; smart validation accepts personal photos without blocking. */
@@ -587,11 +611,25 @@ export class AiImageWorkbench {
       this.matches.emit((current.matches || []).map((match) => match.product_id));
       return;
     }
-    const blob = await firstValueFrom(this.model.result(current.id));
-    if (epoch !== this.generation) return;
-    this.release(this.result());
-    this.result.set(URL.createObjectURL(blob));
-    this.showOriginal.set(false);
+    if (
+      current.task === 'virtual_try_on' &&
+      ((current.product_id && current.product_id !== this.productId()) ||
+        (current.variant_id && this.variantId() && current.variant_id !== this.variantId()))
+    ) {
+      return;
+    }
+    try {
+      const blob = await firstValueFrom(this.model.result(current.id));
+      if (epoch !== this.generation) return;
+      this.release(this.result());
+      this.result.set(URL.createObjectURL(blob));
+      this.showOriginal.set(false);
+    } catch {
+      if (epoch !== this.generation) return;
+      this.release(this.result());
+      this.result.set('');
+      this.error.set('Không thể tải kết quả thử đồ hoặc sản phẩm không còn khả dụng. Vui lòng thử lại.');
+    }
   }
 
   private storageKey(): string {

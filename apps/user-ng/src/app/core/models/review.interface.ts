@@ -17,6 +17,7 @@ export interface UserReviewItem {
   images?: string[] | null;
   review_tags?: string[] | null;
   status: 'pending' | 'approved' | 'rejected';
+  rejection_reason?: string | null;
   submitted_at?: string;
   created_at?: string;
   admin_reply?: string | null;

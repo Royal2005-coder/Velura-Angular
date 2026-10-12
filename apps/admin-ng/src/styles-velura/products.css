@@ -694,6 +694,193 @@
   font-weight: 600;
 }
 
+/* Interactive AI SEO & Keyword Workspace */
+.admin-seo-keyword-workspace {
+  background: #fdfbf8;
+  border: 1px solid #e6d9cc;
+  border-radius: 10px;
+  padding: 14px;
+  margin-bottom: 14px;
+}
+.admin-seo-keyword-workspace__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.admin-ai-keyword-recommend-box {
+  background: #f4faf6;
+  border: 1px solid #c3e2cc;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+.admin-ai-keyword-recommend-box__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+  font-size: 0.78rem;
+  color: #1f5432;
+}
+.admin-ai-kw-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px dashed #74b889;
+  background: #fff;
+  color: #245b37;
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.admin-ai-kw-chip:hover {
+  background: #e6f5ec;
+  border-style: solid;
+}
+.admin-ai-kw-chip.is-selected {
+  background: #236c3e;
+  border: 1px solid #236c3e;
+  color: #fff;
+}
+
+.admin-ai-snippet-inserter {
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: #faf6f1;
+  border: 1px solid #e5d8ca;
+  border-radius: 8px;
+}
+.admin-ai-snippet-inserter small {
+  display: block;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: #6a5a4e;
+  margin-bottom: 6px;
+}
+.admin-ai-snippet-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.admin-ai-snippet-btn {
+  appearance: none;
+  text-align: left;
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px solid #ded0c1;
+  background: #fff;
+  color: #463a32;
+  font-size: 0.74rem;
+  line-height: 1.35;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.admin-ai-snippet-btn:hover {
+  border-color: #b8664b;
+  background: #fffaf6;
+  color: #9b4830;
+}
+.admin-ai-snippet-btn--care {
+  border-color: #cadbce;
+  background: #f9fcf9;
+}
+
+.admin-ai-field-suggestions {
+  margin-top: 6px;
+}
+.admin-ai-field-suggestions small {
+  display: block;
+  font-size: 0.73rem;
+  font-weight: 600;
+  color: #7c6f65;
+  margin-bottom: 4px;
+}
+.admin-ai-suggestion-list {
+  display: grid;
+  gap: 5px;
+}
+.admin-ai-suggestion-item {
+  appearance: none;
+  text-align: left;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid #e2d5c8;
+  background: #fcfaf7;
+  color: #453932;
+  font-size: 0.76rem;
+  line-height: 1.35;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.admin-ai-suggestion-item:hover {
+  border-color: #b8664b;
+  background: #fff;
+}
+.admin-ai-suggestion-item.is-active {
+  border-color: #256b3e;
+  background: #f0f9f3;
+  color: #1b5430;
+  font-weight: 600;
+}
+
+/* Non-overflowing Variant Table & Add Variant Box */
+.admin-product-editor-modal .admin-table {
+  min-width: 0 !important;
+  width: 100% !important;
+}
+.admin-variant-table-wrap {
+  max-height: 260px;
+  overflow-y: auto;
+  overflow-x: hidden !important;
+  border: 1px solid var(--line, #e4dad0);
+  border-radius: 8px;
+}
+.admin-variant-table th,
+.admin-variant-table td {
+  padding: 9px 12px !important;
+  font-size: 0.8125rem;
+}
+.admin-variant-add-box {
+  margin-top: 14px;
+  padding: 14px;
+  background: #faf8f5;
+  border: 1px solid var(--line, #e4dad0);
+  border-radius: 10px;
+  box-sizing: border-box;
+  max-width: 100%;
+  overflow: hidden;
+}
+.admin-variant-add-box__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.admin-variant-add-box__head h4 {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #3f352f;
+}
+.admin-variant-add-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+}
+.admin-variant-add-grid .admin-form-control {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
 @media (max-width: 980px) {
   .admin-product-editor__grid {
     grid-template-columns: 1fr;
@@ -703,4 +890,9 @@
     grid-template-columns: 1fr;
   }
 }
-
+@media (max-width: 520px) {
+  .admin-variant-add-grid,
+  .admin-editor-fields-grid {
+    grid-template-columns: 1fr;
+  }
+}

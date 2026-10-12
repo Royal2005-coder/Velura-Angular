@@ -359,8 +359,9 @@ export interface AdminProductFashionSeoResult {
   description: string;
   seoTitle: string;
   seoDescription: string;
+  titleSuggestions?: string[];
+  metaSuggestions?: string[];
   slug: string;
-  brand: string;
   collection: string;
   material: string;
   colorTone: 'Warm' | 'Cool' | 'Neutral';

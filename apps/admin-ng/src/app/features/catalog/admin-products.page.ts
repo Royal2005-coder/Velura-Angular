@@ -1612,6 +1612,33 @@ export class AdminProductsPage {
       });
   }
 
+  applyAllAiKeywords(): void {
+    if (!this.canMutate()) return;
+    const res = this.aiSeoResult();
+    if (!res) return;
+    const merged = [...new Set([...this.editorStyleTags(), ...(res.seoKeywords || []), ...(res.styleTags || [])])].slice(0, 18);
+    this.editorStyleTags.set(merged);
+    this.aiSeoSuccess.set('✓ Đã áp dụng toàn bộ từ khóa AI vào ô Từ khóa Tìm kiếm & SEO!');
+  }
+
+  insertSnippetToDescription(snippet: string): void {
+    if (!this.canMutate() || !snippet.trim()) return;
+    const current = this.editorDescription().trim();
+    const formatted = `• ${snippet.replace(/^[•\-*]\s*/, '').trim()}`;
+    if (current.includes(formatted) || current.includes(snippet.trim())) return;
+    this.editorDescription.set(current ? `${current}\n${formatted}` : formatted);
+  }
+
+  applyAiTitleSuggestion(title: string): void {
+    if (!this.canMutate() || !title.trim()) return;
+    this.editorSeoTitle.set(title.trim());
+  }
+
+  applyAiMetaSuggestion(meta: string): void {
+    if (!this.canMutate() || !meta.trim()) return;
+    this.editorSeoDescription.set(meta.trim());
+  }
+
   private resetAiSeoState(): void {
     this.aiSeoBusy.set(false);
     this.aiSeoError.set(null);

@@ -467,12 +467,20 @@
       <div class="tabs-content">
         @if (infoTab() === 'desc') {
           <div class="tab-panel active">
-            <p>{{ product()?.description || 'Đang cập nhật thông tin mô tả chi tiết...' }}</p>
+            <p style="white-space: pre-line; line-height: 1.75; margin-bottom: 18px;">{{ product()?.description || 'Đang cập nhật thông tin mô tả chi tiết...' }}</p>
             <ul class="product-spec-grid">
               @for (row of specRows(); track row.label) {
                 <li><strong>{{ row.label }}:</strong> {{ row.value }}</li>
               }
             </ul>
+            @if (product()?.style_tags?.length) {
+              <div style="margin-top: 18px; padding-top: 14px; border-top: 1px dashed #e6ddd3; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <span style="font-size: 0.8125rem; font-weight: 600; color: #7a6e65;">Từ khóa &amp; Phong cách:</span>
+                @for (tag of product()!.style_tags!; track tag) {
+                  <a [routerLink]="['/products']" [queryParams]="{ q: tag }" style="font-size: 0.78rem; padding: 4px 10px; border-radius: 999px; background: #f8f4ef; border: 1px solid #e5d9cc; color: #4a3f39; text-decoration: none;">#{{ tag }}</a>
+                }
+              </div>
+            }
           </div>
         }
         @if (infoTab() === 'size') {

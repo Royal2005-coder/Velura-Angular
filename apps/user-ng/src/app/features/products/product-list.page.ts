@@ -199,12 +199,34 @@ export class ProductListPage {
         const normSlug = normalizeSearchText(prodSlug);
         const styleTags = (product.style_tags || []).join(' ');
         const normTags = normalizeSearchText(styleTags);
+        const seoTitle = product.seo_title || '';
+        const normSeoTitle = normalizeSearchText(seoTitle);
+        const seoDesc = product.seo_description || '';
+        const normSeoDesc = normalizeSearchText(seoDesc);
+        const prodCollection = product.collection || '';
+        const normCollection = normalizeSearchText(prodCollection);
+        const prodSku = product.sku || '';
+        const normSku = normalizeSearchText(prodSku);
+        const occasions = (product.occasions || []).join(' ');
+        const normOccasions = normalizeSearchText(occasions);
 
         if (prodName.toLowerCase().includes(query) || (normQuery && normName.includes(normQuery))) {
           score += 100;
         }
+        if (prodSku.toLowerCase().includes(query) || (normQuery && normSku.includes(normQuery))) {
+          score += 90;
+        }
+        if (seoTitle.toLowerCase().includes(query) || (normQuery && normSeoTitle.includes(normQuery))) {
+          score += 75;
+        }
         if (prodCat.toLowerCase().includes(query) || (normQuery && normCat.includes(normQuery))) {
           score += 35;
+        }
+        if (styleTags.toLowerCase().includes(query) || (normQuery && normTags.includes(normQuery))) {
+          score += 30;
+        }
+        if (seoDesc.toLowerCase().includes(query) || (normQuery && normSeoDesc.includes(normQuery))) {
+          score += 25;
         }
 
         for (let i = 0; i < tokens.length; i++) {
@@ -213,6 +235,9 @@ export class ProductListPage {
           if (prodName.toLowerCase().includes(token) || (nToken && normName.includes(nToken))) {
             score += 20;
           }
+          if (seoTitle.toLowerCase().includes(token) || (nToken && normSeoTitle.includes(nToken))) {
+            score += 15;
+          }
           if (prodCat.toLowerCase().includes(token) || (nToken && normCat.includes(nToken))) {
             score += 10;
           }
@@ -220,13 +245,22 @@ export class ProductListPage {
             score += 10;
           }
           if (styleTags.toLowerCase().includes(token) || (nToken && normTags.includes(nToken))) {
+            score += 10;
+          }
+          if (prodCollection.toLowerCase().includes(token) || (nToken && normCollection.includes(nToken))) {
             score += 8;
+          }
+          if (occasions.toLowerCase().includes(token) || (nToken && normOccasions.includes(nToken))) {
+            score += 6;
+          }
+          if (seoDesc.toLowerCase().includes(token) || (nToken && normSeoDesc.includes(nToken))) {
+            score += 6;
           }
           if (prodBrand.toLowerCase().includes(token) || (nToken && normBrand.includes(nToken))) {
             score += 5;
           }
           if (prodDesc.toLowerCase().includes(token) || (nToken && normDesc.includes(nToken))) {
-            score += 2;
+            score += 3;
           }
         }
       }

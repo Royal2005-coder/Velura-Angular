@@ -68,6 +68,27 @@ export async function handleProductRoute({
     return true;
   }
 
+  // POST /api/v1/admin/products/ai-image-analyze - AI quality assessment & studio recommendation
+  if (req.method === "POST" && parts[4] === "ai-image-analyze" && parts.length === 5) {
+    const body = await readJson(req, Math.max(config.maxBodyBytes, 15 * 1024 * 1024));
+    sendJson(res, 200, await service.analyzeImageQuality(context, body), headers);
+    return true;
+  }
+
+  // POST /api/v1/admin/products/ai-image-enhance - AI studio image enhancement (U2Net + studio lighting/backdrop)
+  if (req.method === "POST" && parts[4] === "ai-image-enhance" && parts.length === 5) {
+    const body = await readJson(req, Math.max(config.maxBodyBytes, 15 * 1024 * 1024));
+    sendJson(res, 200, await service.enhanceProductImage(context, body), headers);
+    return true;
+  }
+
+  // POST /api/v1/admin/products/ai-seo-optimize - Gemini Fashion SEO & product attributes generation
+  if (req.method === "POST" && parts[4] === "ai-seo-optimize" && parts.length === 5) {
+    const body = await readJson(req, config.maxBodyBytes);
+    sendJson(res, 200, await service.optimizeProductSeo(context, body), headers);
+    return true;
+  }
+
   // All routes below require a productId
   const productId = parts[4];
   if (!productId) return false;

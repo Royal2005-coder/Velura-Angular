@@ -284,14 +284,25 @@ export async function handleProductsRoute(
         const normQ = searchQuery.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[đĐ]/g, "d");
         const tokens = normQ.split(/\s+/).filter(Boolean);
         return items.filter((p) => {
-          const name = String(p.name || "").toLowerCase();
-          const normName = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[đĐ]/g, "d");
-          const cat = String(p.category_name || "").toLowerCase();
-          const normCat = cat.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[đĐ]/g, "d");
-          const brand = String(p.brand || "").toLowerCase();
-          const normBrand = brand.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[đĐ]/g, "d");
-          if (name.includes(searchQuery.toLowerCase()) || normName.includes(normQ) || cat.includes(searchQuery.toLowerCase()) || normCat.includes(normQ)) return true;
-          return tokens.some((t) => normName.includes(t) || normCat.includes(t) || normBrand.includes(t));
+          const tags = Array.isArray(p.style_tags) ? p.style_tags.join(" ") : "";
+          const occasions = Array.isArray(p.occasions) ? p.occasions.join(" ") : "";
+          const combined = [
+            p.name,
+            p.sku,
+            p.category_name,
+            p.brand,
+            p.collection,
+            p.seo_title,
+            p.seo_description,
+            tags,
+            occasions
+          ]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase();
+          const normCombined = combined.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[đĐ]/g, "d");
+          if (combined.includes(searchQuery.toLowerCase()) || normCombined.includes(normQ)) return true;
+          return tokens.some((t) => normCombined.includes(t));
         });
       };
 
@@ -347,6 +358,7 @@ export async function handleProductsRoute(
             sku: p.sku,
             name: p.name,
             slug: p.slug,
+            brand: p.brand || null,
             base_price: p.base_price,
             sale_price: p.sale_price,
             images: p.images,
@@ -355,6 +367,12 @@ export async function handleProductsRoute(
             status: p.status,
             sold_count: p.sold_count || 0,
             collection: p.collection || null,
+            style_tags: p.style_tags || [],
+            color_tone: p.color_tone || null,
+            occasions: p.occasions || [],
+            suitable_body_shapes: p.suitable_body_shapes || [],
+            seo_title: p.seo_title || null,
+            seo_description: p.seo_description || null,
             updated_at: p.updated_at || null,
             category_slug: cat ? cat.slug : null,
             category_name: cat ? cat.name : null

@@ -18,6 +18,12 @@ import {
   CSV_REQUIRED_COLUMNS
 } from "./product-constants.js";
 import type { ProductRepository } from "./product-repository.js";
+import { invalidateCatalogCache } from "../user/products.js";
+import {
+  analyzeProductImageQuality,
+  enhanceProductImageStudio,
+  generateProductFashionSeo
+} from "./product-ai-studio.js";
 
 /**
  * Admin product use-cases used by `handleProductRoute`.
@@ -47,6 +53,9 @@ export interface ProductService {
     requestMeta: RequestMeta
   ): Promise<unknown>;
   removeComboItem(context: AuthContext | undefined, productId: string, itemId: string): Promise<unknown>;
+  analyzeImageQuality(context: AuthContext | undefined, body: JsonObject): Promise<unknown>;
+  enhanceProductImage(context: AuthContext | undefined, body: JsonObject): Promise<unknown>;
+  optimizeProductSeo(context: AuthContext | undefined, body: JsonObject): Promise<unknown>;
 }
 
 /**
@@ -165,7 +174,7 @@ export function createProductService({ repository }: { repository: ProductReposi
 
         await syncProductStockStatus(repository, context, product.product_id as string, "Khởi tạo tồn kho sản phẩm mới", input.ipAddress);
       }
-
+      invalidateCatalogCache();
       return product;
     },
 
@@ -214,7 +223,7 @@ export function createProductService({ repository }: { repository: ProductReposi
           }
         }
       }
-
+      invalidateCatalogCache();
       return result;
     },
 
@@ -228,7 +237,9 @@ export function createProductService({ repository }: { repository: ProductReposi
         throw validationError("status", `Cannot change status from ${current.status} to ${input.status}`);
       }
       input.ipAddress = requestMeta.ipAddress || "0.0.0.0";
-      return repository.changeStatus(productId, input, context.accessToken);
+      const changed = await repository.changeStatus(productId, input, context.accessToken);
+      invalidateCatalogCache();
+      return changed;
     },
 
     async updateStock(context, productId, body, requestMeta) {
@@ -539,6 +550,21 @@ export function createProductService({ repository }: { repository: ProductReposi
       requireUuid(productId, "productId");
       requireUuid(itemId, "itemId");
       return repository.removeComboItem(productId, itemId, context.accessToken);
+    },
+
+    async analyzeImageQuality(context, body) {
+      requireProductViewer(context);
+      return analyzeProductImageQuality(asJsonObject(body));
+    },
+
+    async enhanceProductImage(context, body) {
+      requireProductAdmin(context, true);
+      return enhanceProductImageStudio(asJsonObject(body));
+    },
+
+    async optimizeProductSeo(context, body) {
+      requireProductAdmin(context, true);
+      return generateProductFashionSeo(asJsonObject(body));
     }
   };
 }

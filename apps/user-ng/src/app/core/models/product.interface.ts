@@ -24,6 +24,8 @@ export interface ProductSummary {
   created_at?: string | null;
   updated_at?: string | null;
   description?: string;
+  seo_title?: string | null;
+  seo_description?: string | null;
   variants?: ProductVariant[];
   combo_components?: ComboComponent[];
   reviews?: ProductReview[];

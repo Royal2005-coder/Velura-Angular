@@ -307,11 +307,71 @@ export interface AdminProductRow {
   status?: string;
   images?: string[];
   collection?: string | null;
+  style_tags?: string[];
+  color_tone?: string | null;
+  occasions?: string[];
+  suitable_body_shapes?: string[];
   updated_at?: string | null;
   is_combo?: boolean;
   is_featured?: boolean;
   version?: number;
   variants?: AdminProductVariant[];
+}
+
+export interface AdminImageCriterion {
+  key: 'lighting' | 'background' | 'sharpness' | 'resolution';
+  label: string;
+  score: number;
+  status: 'good' | 'warning' | 'poor';
+  detail: string;
+}
+
+export interface AdminImageQualityAnalysis {
+  overallScore: number;
+  passed: boolean;
+  needsEnhancement: boolean;
+  grade: 'A' | 'B' | 'C' | 'D';
+  statusLabel: string;
+  summary: string;
+  metrics: {
+    width: number;
+    height: number;
+    brightness: number;
+    contrast: number;
+    sharpnessScore: number;
+    backgroundScore: number;
+  };
+  criteria: AdminImageCriterion[];
+  recommendations: string[];
+  uploadedUrl?: string;
+}
+
+export interface AdminImageEnhanceResult {
+  enhancedUrl: string;
+  previewDataUrl: string;
+  modelUsed: string;
+  improvements: string[];
+  beforeAnalysis: AdminImageQualityAnalysis;
+  afterAnalysis: AdminImageQualityAnalysis;
+}
+
+export interface AdminProductFashionSeoResult {
+  description: string;
+  seoTitle: string;
+  seoDescription: string;
+  slug: string;
+  brand: string;
+  collection: string;
+  material: string;
+  colorTone: 'Warm' | 'Cool' | 'Neutral';
+  styleTags: string[];
+  occasions: string[];
+  suitableBodyShapes: string[];
+  highlights: string[];
+  careInstructions: string[];
+  seoKeywords: string[];
+  seoScore: number;
+  modelUsed: string;
 }
 
 export interface AdminComboItemRow {
@@ -938,6 +998,26 @@ export class AdminApiService {
     return this.http.patch<AdminProductRow>(`${this.baseUrl}/api/v1/admin/products/${encodeURIComponent(productId)}`, body);
   }
 
+  /**
+   * Evaluates product image studio quality (resolution, lighting, background, sharpness) + Gemini Vision recommendation.
+   */
+  analyzeProductImage(body: Record<string, unknown>): Observable<AdminImageQualityAnalysis> {
+    return this.http.post<AdminImageQualityAnalysis>(`${this.baseUrl}/api/v1/admin/products/ai-image-analyze`, body);
+  }
+
+  /**
+   * Enhances a new or existing product image using K3s U2Net + Studio lighting/sharpness/backdrop pipeline.
+   */
+  enhanceProductImage(body: Record<string, unknown>): Observable<AdminImageEnhanceResult> {
+    return this.http.post<AdminImageEnhanceResult>(`${this.baseUrl}/api/v1/admin/products/ai-image-enhance`, body);
+  }
+
+  /**
+   * Generates Fashion SEO metadata, rich description, and User PDP attributes using Gemini.
+   */
+  optimizeProductSeo(body: Record<string, unknown>): Observable<AdminProductFashionSeoResult> {
+    return this.http.post<AdminProductFashionSeoResult>(`${this.baseUrl}/api/v1/admin/products/ai-seo-optimize`, body);
+  }
   /**
    * Lists variants for one product.
    */

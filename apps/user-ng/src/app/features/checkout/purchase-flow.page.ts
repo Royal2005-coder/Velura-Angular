@@ -970,7 +970,11 @@ export class PurchaseFlowPage {
     );
   }
   private prefillDefault(): void {
-    const index = this.model.addresses().findIndex((address) => address.isDefault);
-    if (index >= 0 && this.member()) this.chooseAddress(index);
+    if (!this.member()) return;
+    const addresses = this.model.addresses();
+    if (!addresses.length) return;
+    const defaultIndex = addresses.findIndex((address) => address.isDefault);
+    const index = defaultIndex >= 0 ? defaultIndex : 0;
+    this.chooseAddress(index);
   }
 }

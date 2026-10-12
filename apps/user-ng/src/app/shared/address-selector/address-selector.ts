@@ -111,26 +111,41 @@ export class AddressSelector {
   }
 
   private restore(): void {
-    const find = (units: GeographyUnit[], name: string | undefined) => units.find((unit) => normalize(unit.name) === normalize(name || ''));
+    const find = (units: GeographyUnit[] | undefined, name: string | undefined) =>
+      (units || []).find((unit) => normalize(unit.name) === normalize(name || ''));
+
     const province = find(this.provinces(), this.pending.province);
     this.provinceCode.set(province ? String(province.code) : '');
-    const district = find(this.districts(), this.pending.district);
+
+    const districtsList = this.mode() === 'legacy' ? province?.districts ?? [] : [];
+    const district = find(districtsList, this.pending.district);
     this.districtCode.set(district ? String(district.code) : '');
-    const ward = find(this.wards(), this.pending.ward);
+
+    const wardsList = this.mode() === 'legacy' ? district?.wards ?? [] : province?.wards ?? [];
+    const ward = find(wardsList, this.pending.ward);
     this.wardCode.set(ward ? String(ward.code) : '');
+
     if ((this.pending.province && !province) || (this.pending.district && !district) || (this.pending.ward && !ward)) {
       this.restoreNotice.set('Địa chỉ đã lưu chưa khớp danh mục. Vui lòng chọn lại địa phương.');
+    } else {
+      this.restoreNotice.set('');
     }
     this.publish();
   }
 
   private publish(): void {
+    const province = this.province() || this.provinces().find((u) => String(u.code) === this.provinceCode());
+    const districtsList = this.mode() === 'legacy' ? province?.districts ?? [] : [];
+    const district = this.district() || districtsList.find((u) => String(u.code) === this.districtCode());
+    const wardsList = this.mode() === 'legacy' ? district?.wards ?? [] : province?.wards ?? [];
+    const ward = this.ward() || wardsList.find((u) => String(u.code) === this.wardCode());
+
     const selection: AddressGeographySelection = {
-      province: this.province()?.name || '',
-      district: this.mode() === 'legacy' ? this.district()?.name || '' : '',
-      ward: this.ward()?.name || '',
+      province: province?.name || '',
+      district: this.mode() === 'legacy' ? district?.name || '' : '',
+      ward: ward?.name || '',
       mode: this.mode(),
-      valid: Boolean(this.province() && this.ward() && (this.mode() === 'current' || this.district())),
+      valid: Boolean(province && ward && (this.mode() === 'current' || district)),
     };
     this.pending = selection;
     this.signature = JSON.stringify([selection.province, selection.district, selection.ward]);
@@ -139,5 +154,12 @@ export class AddressSelector {
 }
 
 function normalize(value: string): string {
-  return value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/^(thanh pho|tinh|tp\.?|quan|huyen|phuong|xa)\s+/i, '').trim();
+  if (!value) return '';
+  return value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/^(thanh pho|tinh|tp\.?|quan|huyen|thi xa|tx\.?|thi tran|tt\.?|phuong|xa)\s+/i, '')
+    .trim();
 }

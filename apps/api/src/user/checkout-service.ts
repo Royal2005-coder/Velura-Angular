@@ -8,7 +8,7 @@ import { priceOrder, shippingMethodFromClaim, type PricedOrderLine } from "./ord
 import { recordVoucherRedemption, resolveOrderVoucher } from "./vouchers.js";
 import { loyaltyService } from "../loyalty/loyalty-router.js";
 import type { LoyaltyQuote } from "../loyalty/loyalty-service.js";
-
+import { invalidateCatalogCache } from "./products.js";
 const VIETNAMESE_PHONE = /^0(?:3|5|7|8|9)\d{8}$/;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -467,6 +467,7 @@ export class CheckoutService {
       }
     }
     await this.decrementComboStock(input);
+    invalidateCatalogCache();
     return { order: asJsonObject(order), items: createdItems.map(asJsonObject) };
   }
 

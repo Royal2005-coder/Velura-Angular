@@ -272,12 +272,21 @@ export async function attachReturnEligibility(
     for (const ret of existingReturns) {
       const status = asString(ret.status);
       if (["CANCELLED", "REJECTED", "rejected"].includes(status)) continue;
-      const rItems = await repository.listReturnItemsForOrderItem(ret.return_id, item.item_id);
+      let rItems = await repository.listReturnItemsForOrderItem(ret.return_id, item.item_id);
+      if (!rItems.length && items.length === 1) {
+        const allForRet = repository.listReturnItemsForReturn ? await repository.listReturnItemsForReturn(ret.return_id).catch(() => []) : [];
+        if (!allForRet.length) {
+          rItems = [{ quantity: item.quantity || 1 }];
+        }
+      }
       if (!rItems.length) continue;
 
       if (OPEN_RETURN_STATUSES.includes(status) || status === "pending") {
         isInProgress = true;
-        inProgressCode = asString(ret.tracking_return_code || ret.return_id);
+        const rawCode = asString(ret.tracking_return_code || ret.return_id);
+        inProgressCode = /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(rawCode)
+          ? `RET${rawCode.replace(/-/g, "").slice(0, 8).toUpperCase()}`
+          : rawCode;
         inProgressStatus = status;
       }
 
@@ -377,7 +386,13 @@ export async function handleOrdersRoute(
           selectRows("order_status_history", { order_id: "eq." + order.order_id, select: "new_status,changed_at" }),
           selectRows("payment", { order_id: "eq." + order.order_id, select: "payment_status,created_at,refund_amount,refunded_amount" })
         ]);
-        return presentOrderForCustomer(order, await attachProductMeta(items), history, payments);
+        let itemsWithProduct = await attachProductMeta(items);
+        if (order.status === "delivered") {
+          try {
+            itemsWithProduct = await attachReturnEligibility(userReturnsRepository, order.order_id, itemsWithProduct);
+          } catch {}
+        }
+        return presentOrderForCustomer(order, itemsWithProduct, history, payments);
       }));
       return sendJson(res, 200, { success: true, orders, guest_access_token: token }, corsHeaders);
     }

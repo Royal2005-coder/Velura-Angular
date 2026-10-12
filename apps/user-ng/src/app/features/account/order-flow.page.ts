@@ -366,11 +366,113 @@ export class OrderFlowPage {
     const order = this.order();
     if (order) this.model.scenario?.(order.id, status, days);
   }
-  /** Start a new request with no previous selections or evidence. */
+  /** Returns whether an order has at least one item eligible for a new return request. */
+  canStartReturn(order: DemoOrder | null | undefined): boolean {
+    if (!order || !this.withinWindow(order)) return false;
+    const items = order.items || [];
+    if (!items.length) return false;
+    const activeReq = this.orderActiveReturn(order);
+    if (items.length === 1 && activeReq) return false;
+    return items.some((line) => !line.isInProgress && (line.returnCount ?? 0) < 2 && (line.availableQuantity ?? 1) > 0);
+  }
+
+  /** Finds an active (in-progress) return request for the given order. */
+  orderActiveReturn(order: DemoOrder | null | undefined): DemoReturn | null {
+    if (!order) return null;
+    const activeStatuses = ['REQUESTED', 'CONTACTING', 'WAITING_RETURN', 'RETURN_IN_TRANSIT', 'RECEIVED', 'REFUND_PROCESSING', 'EXCHANGE_PREPARING', 'EXCHANGE_SHIPPING', 'NEEDS_SUPPORT'];
+    const req = this.model.requests().find(
+      (r) =>
+        (r.orderId === order.id || r.orderId === order.orderId) &&
+        r.status !== 'CANCELLED' &&
+        r.status !== 'REFUNDED' &&
+        r.status !== 'COMPLETED' &&
+        !r.cancelledAt &&
+        !r.rejectedAt &&
+        !r.completedAt &&
+        (!r.status || activeStatuses.includes(r.status)),
+    );
+    return req || null;
+  }
+
+  /** Computes a summary return status badge for order cards and detail header. */
+  orderReturnStatusBadge(order: DemoOrder | null | undefined): { kind: 'in_progress' | 'completed' | 'partial'; label: string; code?: string } | null {
+    if (!order || order.status !== 'delivered') return null;
+    const items = order.items || [];
+    const inProgLine = items.find((l) => l.isInProgress);
+    const activeReq = this.orderActiveReturn(order);
+    if (inProgLine || activeReq) {
+      const statusKey = activeReq?.status || (inProgLine?.inProgressStatus as keyof typeof RETURN_WORKFLOW_LABELS | undefined);
+      const statusText = activeReq
+        ? this.requestLabel(activeReq)
+        : statusKey && statusKey in RETURN_WORKFLOW_LABELS
+          ? RETURN_WORKFLOW_LABELS[statusKey]
+          : 'Đang chờ xử lý';
+      const code = activeReq?.id || inProgLine?.inProgressCode || '';
+      return {
+        kind: 'in_progress',
+        label: `Đang đổi/trả: ${statusText}`,
+        code,
+      };
+    }
+    if (items.length > 0 && items.every((l) => (l.availableQuantity ?? 1) === 0 && (l.returnCount ?? 0) > 0)) {
+      return { kind: 'completed', label: 'Đã hoàn tất đổi/trả' };
+    }
+    if (items.some((l) => (l.returnCount ?? 0) > 0)) {
+      const count = items.filter((l) => (l.returnCount ?? 0) > 0).length;
+      return { kind: 'partial', label: `Đã đổi/trả ${count}/${items.length} SP` };
+    }
+    return null;
+  }
+
+  /** Explains why starting a new return request is blocked on a delivered order. */
+  returnBlockedReason(order: DemoOrder | null | undefined): string | null {
+    if (!order || !this.withinWindow(order)) return null;
+    const items = order.items || [];
+    if (!items.length || this.canStartReturn(order)) return null;
+    const inProg = items.find((l) => l.isInProgress);
+    const activeReq = this.orderActiveReturn(order);
+    if (inProg || activeReq) {
+      const code = activeReq?.id || inProg?.inProgressCode || '';
+      const statusKey = activeReq?.status || (inProg?.inProgressStatus as keyof typeof RETURN_WORKFLOW_LABELS | undefined);
+      const statusText = activeReq
+        ? this.requestLabel(activeReq)
+        : statusKey && statusKey in RETURN_WORKFLOW_LABELS
+          ? RETURN_WORKFLOW_LABELS[statusKey]
+          : 'Đang chờ CSKH xử lý';
+      if (items.length === 1) {
+        return `Đơn hàng đang trong tiến trình đổi/trả (${code ? '#' + code + ' · ' : ''}${statusText}). Đã khóa tạo yêu cầu trùng lặp.`;
+      }
+      return `Tất cả sản phẩm trong đơn đang trong tiến trình đổi/trả (${statusText}).`;
+    }
+    if (items.every((l) => (l.returnCount ?? 0) >= 2)) {
+      return 'Đã sử dụng tối đa 2/2 lượt đổi/trả trong 30 ngày cho đơn hàng này.';
+    }
+    return 'Tất cả sản phẩm trong đơn đã được hoàn trả hoặc đổi mới.';
+  }
+
+  /** Returns human-readable status for an item's in-progress return. */
+  lineInProgressLabel(line: DemoOrderLine): string {
+    const statusKey = line.inProgressStatus as keyof typeof RETURN_WORKFLOW_LABELS | undefined;
+    if (statusKey && statusKey in RETURN_WORKFLOW_LABELS) {
+      return RETURN_WORKFLOW_LABELS[statusKey];
+    }
+    return 'Đang chờ CSKH xử lý';
+  }
+
+  /** Start a new request; auto-selects the sole item when order has only 1 eligible item. */
   startReturn(): void {
     const order = this.order();
-    if (!order || !this.authorized(order) || !this.withinWindow(order)) return;
-    this.selections.set({});
+    if (!order || !this.authorized(order) || !this.canStartReturn(order)) return;
+    const eligibleLines = order.items.filter((l) => !l.isInProgress && (l.returnCount ?? 0) < 2 && (l.availableQuantity ?? 1) > 0);
+    const initialSelections: Record<string, DemoReturnLine> = {};
+    if (order.items.length === 1 && eligibleLines.length === 1) {
+      const sole = eligibleLines[0];
+      initialSelections[sole.variant_id] = {
+        variantId: sole.variant_id,
+        quantity: sole.is_combo ? sole.availableQuantity : 1,
+      };
+    }
+    this.selections.set(initialSelections);
     this.clearEvidence();
     this.returnReason = '';
     this.returnReasonCode = '';
@@ -378,9 +480,12 @@ export class OrderFlowPage {
     this.view.set('return');
     void this.model.loadReplacementChoices?.(order.id);
   }
+
   /** Per-item selection respects remaining quantities, combo bundle, and the two-request cap. */
   select(line: DemoOrderLine, checked: boolean): void {
     if (checked && (line.isInProgress || line.returnCount >= 2 || line.availableQuantity < 1)) return;
+    const order = this.order();
+    if (!checked && order && order.items.length === 1) return;
     this.selections.update((rows) => {
       const next = { ...rows };
       if (checked) next[line.variant_id] = { variantId: line.variant_id, quantity: line.is_combo ? line.availableQuantity : 1 };
@@ -388,6 +493,7 @@ export class OrderFlowPage {
       return next;
     });
   }
+
   /** Quantities stay integers within that line's remaining entitlement. */
   quantity(line: DemoOrderLine, value: number): void {
     const quantity = Math.min(line.availableQuantity, Math.max(1, Math.floor(value || 1)));
@@ -395,6 +501,12 @@ export class OrderFlowPage {
       ...rows,
       [line.variant_id]: { ...rows[line.variant_id], variantId: line.variant_id, quantity },
     }));
+  }
+
+  /** Increments or decrements return quantity within [1, line.availableQuantity]. */
+  stepQuantity(line: DemoOrderLine, delta: number): void {
+    const current = this.selections()[line.variant_id]?.quantity || 1;
+    this.quantity(line, current + delta);
   }
   /** Store a replacement only for the selected original product. */
   replacement(line: DemoOrderLine, value: string): void {

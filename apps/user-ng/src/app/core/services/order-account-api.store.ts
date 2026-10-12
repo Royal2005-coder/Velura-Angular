@@ -119,7 +119,17 @@ function mapAddress(order: ApiOrder) {
   };
 }
 
+function formatReturnCode(raw: string | undefined | null): string {
+  if (!raw) return '';
+  const trimmed = raw.trim();
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(trimmed)) {
+    return `RET${trimmed.replace(/-/g, '').slice(0, 8).toUpperCase()}`;
+  }
+  return trimmed;
+}
+
 function mapOrderItem(item: ApiOrderItem): DemoOrderLine {
+  const code = formatReturnCode(item.in_progress_return_code);
   return {
     product_id: item.product_id || '',
     variant_id: item.variant_id || '',
@@ -134,7 +144,7 @@ function mapOrderItem(item: ApiOrderItem): DemoOrderLine {
     itemId: item.item_id,
     is_combo: Boolean(item.is_combo || /combo/i.test(item.product_name || '') || /set\s+/i.test(item.product_name || '')),
     isInProgress: Boolean(item.is_in_progress),
-    inProgressCode: item.in_progress_return_code || undefined,
+    inProgressCode: code || undefined,
     inProgressStatus: item.in_progress_status || undefined,
   };
 }
@@ -181,7 +191,7 @@ function mapReturn(row: ApiReturn): DemoReturn {
   const status = row.status && row.status in RETURN_WORKFLOW_LABELS ? row.status as ReturnWorkflowStatus : 'NEEDS_SUPPORT';
   const kind = row.return_type || 'refund';
   return {
-    id: row.tracking_return_code || row.return_id || '',
+    id: formatReturnCode(row.tracking_return_code || row.return_id),
     returnId: row.return_id,
     expectedVersion: row.version,
     orderId: row.order_code || row.order_id || '',
@@ -269,6 +279,7 @@ export class OrderAccountApiStore implements OrderAccountModel {
     try {
       if (context.userId) await Promise.all([this.loadOrders(context, version), this.loadReturns(context, version)]);
       else { await this.loadOrders(context, version); if (this.current(context) && version === this.refreshVersion) await this.loadReturns(context, version); }
+      if (this.current(context) && version === this.refreshVersion) this.reconcileOrderReturnState(this.requests());
     }
     catch (error) { if (this.current(context) && version === this.refreshVersion) this.error.set(orderAccountErrorMessage(error)); }
     finally { if (this.current(context) && version === this.refreshVersion) this.loading.set(false); }
@@ -580,7 +591,9 @@ export class OrderAccountApiStore implements OrderAccountModel {
   private async loadOrders(context: OrderContext, version: number): Promise<void> {
     const path = context.userId ? '/api/user/orders' : `/api/user/orders/guest?guest_access_token=${encodeURIComponent(context.guestToken)}`;
     const data = await firstValueFrom(this.api.get<{ orders?: ApiOrder[] }>(path));
-    if (this.current(context) && version === this.refreshVersion) this.orders.set((data.orders || []).map((order) => mapOrder(order, !!context.userId, context.userId)));
+    if (this.current(context) && version === this.refreshVersion) {
+      this.orders.set((data.orders || []).map((order) => mapOrder(order, !!context.userId, context.userId)));
+    }
   }
 
   private async loadReturns(context: OrderContext, version: number): Promise<void> {
@@ -591,13 +604,50 @@ export class OrderAccountApiStore implements OrderAccountModel {
         )));
     if (this.current(context) && version === this.refreshVersion) {
       const rows = responses.flatMap((data) => data.returns || []);
-      this.requests.set(rows.map((row) => {
+      const mappedReturns = rows.map((row) => {
         const mapped = mapReturn(row);
         return { ...mapped, orderId: this.orders().find((order) => order.orderId === row.order_id)?.id || mapped.orderId };
-      }));
+      });
+      this.requests.set(mappedReturns);
     }
   }
 
+  private reconcileOrderReturnState(requests: DemoReturn[]): void {
+    if (!requests.length || !this.orders().length) return;
+    const activeStatuses = new Set(['REQUESTED', 'CONTACTING', 'WAITING_RETURN', 'RETURN_IN_TRANSIT', 'RECEIVED', 'REFUND_PROCESSING', 'EXCHANGE_PREPARING', 'EXCHANGE_SHIPPING', 'NEEDS_SUPPORT']);
+    this.orders.update((orders) =>
+      orders.map((order) => {
+        const orderReturns = requests.filter((r) => (r.orderId === order.id || r.orderId === order.orderId) && r.status !== 'CANCELLED' && !r.cancelledAt && !r.rejectedAt);
+        if (!orderReturns.length) return order;
+        const isSingleItemOrder = order.items.length === 1;
+        const updatedItems = order.items.map((line) => {
+          const lineReturns = orderReturns.filter((r) =>
+            r.items.some((ri) => ri.variantId === line.variant_id) || (isSingleItemOrder && r.items.length === 0),
+          );
+          if (!lineReturns.length) return line;
+          const inProg = lineReturns.find((r) => r.status && activeStatuses.has(r.status));
+          const isInProgress = Boolean(line.isInProgress || inProg);
+          const inProgressCode = line.inProgressCode || inProg?.id;
+          const inProgressStatus = line.inProgressStatus || inProg?.status;
+          const returnCount = Math.max(line.returnCount, lineReturns.length);
+          const returnedQty = lineReturns.reduce((sum, r) => {
+            const match = r.items.find((ri) => ri.variantId === line.variant_id);
+            return sum + (match?.quantity || (isSingleItemOrder ? 1 : 0));
+          }, 0);
+          const availableQuantity = isInProgress ? 0 : Math.min(line.availableQuantity, Math.max(0, line.quantity - returnedQty));
+          return {
+            ...line,
+            isInProgress,
+            inProgressCode,
+            inProgressStatus,
+            returnCount,
+            availableQuantity,
+          };
+        });
+        return { ...order, items: updatedItems };
+      }),
+    );
+  }
   private async refreshOrder(id: string, context: OrderContext): Promise<void> {
     const data = context.userId
       ? await firstValueFrom(this.api.get<ApiOrder>(`/api/user/orders/${encodeURIComponent(id)}`))

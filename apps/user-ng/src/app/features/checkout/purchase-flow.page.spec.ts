@@ -234,6 +234,31 @@ describe('PurchaseFlowPage with mocked Model', () => {
     expect(fixture.nativeElement.querySelector('[aria-label="Mở sổ địa chỉ"]')).not.toBeNull();
     expect(fixture.componentInstance.address.detail).toBe('Địa chỉ A');
   });
+
+  it('switches seamlessly between 2 saved addresses in the address book (TC-CHECKOUT-06)', () => {
+    model.member.set(true);
+    model.userId.set('shopper-001');
+    const addr1 = { name: 'Trần Quốc Bảo', phone: '0911223344', email: 'shopper.checkout@velura.test', province: 'Thành phố Hồ Chí Minh', district: 'Quận 1', ward: 'Phường Bến Nghé', detail: '123 Lê Lợi', isDefault: true };
+    const addr2 = { name: 'Trần Quốc Bảo (Hà Nội)', phone: '0911223344', email: 'shopper.checkout@velura.test', province: 'Thành phố Hà Nội', district: 'Quận Ba Đình', ward: 'Phường Phúc Xá', detail: '456 Hoàng Hoa Thám', isDefault: false };
+    model.addresses.set([addr1, addr2]);
+
+    const fixture = createCheckoutFixture();
+    fixture.detectChanges();
+    const page = fixture.componentInstance;
+
+    expect(page.address.name).toBe('Trần Quốc Bảo');
+    expect(page.address.province).toBe('Thành phố Hồ Chí Minh');
+    expect(page.address.district).toBe('Quận 1');
+    expect(page.address.ward).toBe('Phường Bến Nghé');
+    expect(page.address.detail).toBe('123 Lê Lợi');
+
+    page.chooseAddress(1);
+    expect(page.address.name).toBe('Trần Quốc Bảo (Hà Nội)');
+    expect(page.address.province).toBe('Thành phố Hà Nội');
+    expect(page.address.district).toBe('Quận Ba Đình');
+    expect(page.address.ward).toBe('Phường Phúc Xá');
+    expect(page.address.detail).toBe('456 Hoàng Hoa Thám');
+  });
   it('invalidates Guest OTP when the delivery phone changes', () => {
     const page = createCheckoutFixture().componentInstance;
     page.otpPhone.set('0901234567');

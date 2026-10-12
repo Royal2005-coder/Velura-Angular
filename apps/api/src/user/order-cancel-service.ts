@@ -1,9 +1,9 @@
 import { HttpError } from "../http.js";
-import { callRpc, selectOne } from "../supabase.js";
+import { callRpc, selectOne, updateRows } from "../supabase.js";
 import { orderErrorMessage } from "../orders/order-repository.js";
 import { actionGuard, orderFacts } from "../orders/order-state-machine.js";
 import { asJsonObject, asNumber, asString, type JsonObject } from "../types.js";
-
+import { invalidateCatalogCache } from "./products.js";
 /**
  * Data an order mutation needs from the caller, kept here instead of the router so the
  * business rule (ownership, status guard, version check) can run against a fake repository
@@ -21,15 +21,22 @@ export interface CustomerOrderCancelRepository {
 export function createCustomerOrderCancelRepository(): CustomerOrderCancelRepository {
   return {
     findOrder: (orderId) => selectOne("orders", { order_id: `eq.${orderId}` }),
-    cancel: (orderId, input) =>
-      callRpc("velura_order_service_action", {
+    cancel: async (orderId, input) => {
+      const existing = await selectOne("orders", { order_id: `eq.${orderId}` }).catch(() => null);
+      if (existing && !existing.stock_committed_at) {
+        await updateRows("orders", { order_id: `eq.${orderId}` }, { stock_committed_at: existing.created_at || new Date().toISOString() }).catch(() => null);
+      }
+      const res = await callRpc("velura_order_service_action", {
         p_order_id: orderId,
         p_action: "customer_cancel",
         p_actor_id: input.actorId,
         p_note: input.note,
         p_payload: { cancel_reason: input.note },
         p_expected_version: input.expectedVersion
-      })
+      });
+      invalidateCatalogCache();
+      return res;
+    }
   };
 }
 

@@ -56,26 +56,51 @@
       @switch (view()) {
         @case ('requests') {
           <section class="panel request-list">
-            <h2>Yêu cầu đổi / trả</h2>
+            <div class="request-list__head">
+              <h2>Danh sách yêu cầu đổi / trả</h2>
+              <span class="badge">{{ visibleRequests().length }} phiếu</span>
+            </div>
             @for (item of visibleRequests(); track item.id) {
-              <article class="address-card">
-                <h3>
-                  {{ item.id }} · {{ item.kind === 'refund' ? 'Trả hàng & hoàn tiền' : 'Đổi hàng' }}
-                </h3>
-                <p>Đơn {{ item.orderId }} · {{ date(item.createdAt) }}</p>
-                <p class="badge">{{ requestLabel(item) }}</p>
-                <button type="button" (click)="openRequest(item)">Theo dõi yêu cầu</button>
+              <article class="return-request-card">
+                <div class="return-request-card__main">
+                  <div class="return-request-card__head">
+                    <span class="return-request-card__code">#{{ item.id }}</span>
+                    <span class="return-request-card__kind" [class.is-exchange]="item.kind === 'exchange'">
+                      {{ item.kind === 'refund' ? 'Trả hàng & hoàn tiền' : 'Đổi hàng' }}
+                    </span>
+                  </div>
+                  <p class="return-request-card__meta">
+                    Đơn hàng: <strong>#{{ item.orderId }}</strong> &nbsp;·&nbsp; {{ date(item.createdAt) }}
+                  </p>
+                  @if (item.reason) {
+                    <p class="return-request-card__reason">Lý do: {{ item.reason }}</p>
+                  }
+                </div>
+                <div class="return-request-card__actions">
+                  <span
+                    class="badge return-status-pill"
+                    [class.is-completed]="item.status === 'REFUNDED' || item.status === 'COMPLETED'"
+                    [class.is-cancelled]="item.status === 'CANCELLED'"
+                    [class.is-support]="item.status === 'NEEDS_SUPPORT'"
+                  >{{ requestLabel(item) }}</span>
+                  <button type="button" class="return-track-btn" (click)="openRequest(item)">Theo dõi yêu cầu →</button>
+                </div>
               </article>
             } @empty {
               @if (!model.loading?.() && !model.error?.() && !error()) {
-                <p>Chưa có yêu cầu đổi / trả. Chọn đơn đã giao trong danh sách đơn để bắt đầu.</p>
+                <div class="empty">
+                  <h3>Chưa có yêu cầu đổi / trả</h3>
+                  <p class="muted">Chọn một đơn hàng đã giao thành công trong danh sách đơn để bắt đầu yêu cầu đổi/trả.</p>
+                </div>
               }
             }
-            <a
-              class="action secondary"
-              [routerLink]="model.member() ? '/account/orders' : '/guest/orders'"
-              >Xem danh sách đơn</a
-            >
+            <div class="actions" style="justify-content: flex-start; margin-top: 20px;">
+              <a
+                class="action secondary"
+                [routerLink]="model.member() ? '/account/orders' : '/guest/orders'"
+                >← Xem danh sách đơn hàng</a
+              >
+            </div>
           </section>
         }
         @case ('lookup') {
@@ -183,17 +208,53 @@
             /></label>
             @for (item of visibleOrders(); track item.id) {
               <article class="panel order-card">
-                <div class="row">
-                  <strong>{{ item.id }}</strong
-                  ><span class="badge">{{ labels[item.status] }}</span>
+                <div class="row order-card__head">
+                  <div class="order-card__title-group">
+                    <strong class="order-card__code">#{{ item.id }}</strong>
+                    <span class="muted">{{ date(item.createdAt) }} · {{ item.items.length }} sản phẩm</span>
+                  </div>
+                  <div class="order-card__badges">
+                    @if (orderReturnStatusBadge(item); as retBadge) {
+                      <span class="badge return-progress-pill" [attr.data-kind]="retBadge.kind">
+                        @if (retBadge.kind === 'in_progress') {⏳ } @else if (retBadge.kind === 'completed') {✓ }{{ retBadge.label }}@if (retBadge.code) { · #{{ retBadge.code }}}
+                      </span>
+                    }
+                    <span class="badge order-status-pill" [attr.data-status]="item.status">{{ labels[item.status] }}</span>
+                  </div>
                 </div>
-                <p class="muted">{{ date(item.createdAt) }} · {{ item.items.length }} sản phẩm</p>
-                <div class="row">
-                  <strong>{{ money(item.total) }}</strong>
-                  <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                @if (item.items.length) {
+                  <div class="order-card__items-preview">
+                    @for (line of item.items.slice(0, 2); track line.variant_id) {
+                      <div class="order-card__item-row">
+                        <img [src]="image(line.product_image)" [alt]="line.product_name" class="order-card__item-thumb" />
+                        <div class="order-card__item-info">
+                          <span class="order-card__item-name">{{ line.product_name }}</span>
+                          <span class="order-card__item-meta">{{ displaySize(line.size) }} / {{ line.color }} · x{{ line.quantity }}</span>
+                        </div>
+                        @if (line.isInProgress) {
+                          <span class="order-card__item-tag is-progress">⏳ Đang đổi/trả</span>
+                        } @else if (line.availableQuantity === 0 && line.returnCount > 0) {
+                          <span class="order-card__item-tag is-done">✓ Đã đổi/trả</span>
+                        }
+                      </div>
+                    }
+                    @if (item.items.length > 2) {
+                      <p class="muted" style="font-size: 12px; margin: 4px 0 0;">+ {{ item.items.length - 2 }} sản phẩm khác trong đơn</p>
+                    }
+                  </div>
+                }
+                <div class="row order-card__foot">
+                  <div class="order-card__total">
+                    <span class="muted">Tổng thanh toán:</span>
+                    <strong>{{ money(item.total) }}</strong>
+                  </div>
+                  <div class="order-card__actions">
+                    @if (orderActiveReturn(item); as activeReq) {
+                      <button type="button" class="secondary btn-compact" (click)="openRequest(activeReq)">Theo dõi đổi/trả</button>
+                    }
                     @if (item.status === 'delivered' && item.items.length) {
                       <a
-                        class="action secondary"
+                        class="action secondary btn-compact"
                         [routerLink]="model.member() ? '/account/reviews' : '/guest/reviews'"
                         [queryParams]="{
                           order_id: item.orderId || item.id,
@@ -205,7 +266,7 @@
                         >★ Đánh giá</a
                       >
                     }
-                    <button (click)="open(item.id)">Xem chi tiết</button>
+                    <button type="button" class="btn-compact" (click)="open(item.id)">Xem chi tiết</button>
                   </div>
                 </div>
               </article>
@@ -228,12 +289,17 @@
                 [routerLink]="model.member() ? '/account/orders' : '/guest/orders'"
                 >← Danh sách đơn</a
               >
-              <div class="row" style="align-items: center; gap: 8px;">
-                <h2>{{ item.id }}</h2>
+              <div class="row" style="align-items: center; gap: 10px; flex-wrap: wrap;">
+                <h2 style="margin: 0;">#{{ item.id }}</h2>
                 @if (item.id.startsWith('EXC')) {
                   <span class="badge" style="background: #e0f2fe; color: #0369a1; font-weight: 600;">Đơn đổi hàng</span>
                 }
-                <span class="badge">{{ labels[item.status] }}</span>
+                @if (orderReturnStatusBadge(item); as retBadge) {
+                  <span class="badge return-progress-pill" [attr.data-kind]="retBadge.kind">
+                    @if (retBadge.kind === 'in_progress') {⏳ } @else if (retBadge.kind === 'completed') {✓ }{{ retBadge.label }}@if (retBadge.code) { · #{{ retBadge.code }}}
+                  </span>
+                }
+                <span class="badge order-status-pill" [attr.data-status]="item.status">{{ labels[item.status] }}</span>
               </div>
               <p class="muted">Ngày đặt: {{ date(item.createdAt) }}</p>
               @if (preview) {
@@ -274,18 +340,26 @@
                     <p class="muted">{{ displaySize(line.size) }} / {{ line.color }} · SL {{ line.quantity }}</p>
                     <strong>{{ money(line.quantity * line.unit_price) }}</strong>
                     @if (item.status === 'delivered') {
-                      <p class="muted">
-                        {{
-                          line.returnCount >= 2
-                            ? 'Đã sử dụng đủ 2 lượt đổi/trả'
-                            : 'Còn ' + (2 - line.returnCount) + ' lượt đổi/trả'
-                        }}
-                        · {{ line.availableQuantity }} sản phẩm khả dụng
-                      </p>
+                      <div class="line-return-quota-row">
+                        <span class="line-quota-chip">
+                          Lượt đổi/trả (30 ngày): <strong>{{ line.returnCount }}/2</strong> (Còn {{ 2 - line.returnCount > 0 ? 2 - line.returnCount : 0 }} lượt)
+                        </span>
+                        <span class="line-quota-chip">
+                          SL khả dụng: <strong>{{ line.availableQuantity }}/{{ line.quantity }}</strong>
+                        </span>
+                      </div>
                       @if (line.isInProgress) {
-                        <p class="muted" style="color: #b45309; background: #fef3c7; padding: 2px 8px; border-radius: 4px; display: inline-block; font-size: 0.8rem; margin: 4px 0 0;">
-                          ⏳ Đang xử lý đổi/trả (Phiếu #{{ line.inProgressCode }}) — Vui lòng chờ hoàn tất.
-                        </p>
+                        <div class="line-return-banner line-return-banner--progress">
+                          ⏳ Đang trong tiến trình đổi/trả ({{ line.inProgressCode ? 'Mã #' + line.inProgressCode + ' · ' : '' }}{{ lineInProgressLabel(line) }}) — Đã khóa tạo yêu cầu mới cho sản phẩm này.
+                        </div>
+                      } @else if (line.returnCount >= 2) {
+                        <div class="line-return-banner line-return-banner--exhausted">
+                          🔒 Sản phẩm đã sử dụng hết tối đa 2/2 lượt đổi/trả theo chính sách.
+                        </div>
+                      } @else if (line.availableQuantity === 0) {
+                        <div class="line-return-banner line-return-banner--done">
+                          ✓ Sản phẩm đã hoàn tất đổi/trả toàn bộ số lượng mua.
+                        </div>
                       }
                       <div style="margin-top: 8px;">
                         <a
@@ -347,12 +421,27 @@
                   <p class="error">Đã hết thời hạn đổi/trả.</p>
                 }
               }
+              @if (withinWindow(item) && !canStartReturn(item)) {
+                @if (returnBlockedReason(item); as blockedMsg) {
+                  <div class="order-return-locked-notice" role="status">
+                    <div class="order-return-locked-notice__info">
+                      <strong>🔒 Đã khóa tạo thêm yêu cầu đổi/trả</strong>
+                      <p>{{ blockedMsg }}</p>
+                    </div>
+                    @if (orderActiveReturn(item); as activeReq) {
+                      <button type="button" class="secondary btn-compact" (click)="track(activeReq)">Theo dõi tiến trình →</button>
+                    }
+                  </div>
+                }
+              }
               <div class="actions">
                 @if (canCancel(item)) {
                   <button class="secondary" (click)="startCancel()">Hủy đơn</button>
                 }
-                @if (withinWindow(item)) {
-                  <button (click)="startReturn()">Đổi / Trả hàng</button>
+                @if (canStartReturn(item)) {
+                  <button type="button" (click)="startReturn()">
+                    {{ item.items.length > 1 ? 'Chọn sản phẩm Đổi / Trả' : 'Yêu cầu Đổi / Trả hàng' }}
+                  </button>
                 }
                 @if (item.status === 'delivered' && item.items.length) {
                   <a
@@ -444,61 +533,103 @@
         @case ('return') {
           @if (order(); as item) {
             <section class="panel return-builder">
-              <h2>1. Chọn sản phẩm</h2>
-              <p class="muted">Trong 30 ngày từ khi nhận hàng · Tối đa 2 lượt mỗi sản phẩm.</p>
+              <h2>1. Chọn sản phẩm cần đổi / trả</h2>
+              <p class="muted">
+                @if (item.items.length === 1) {
+                  Đơn hàng 1 sản phẩm · Hệ thống đã tự động chọn và khóa cố định theo số lượng mua thực tế (Chính sách 30 ngày · Tối đa 2 lượt/SP).
+                } @else {
+                  Đơn hàng nhiều sản phẩm · Vui lòng tích chọn các sản phẩm còn khả dụng cần đổi/trả (Sản phẩm đang trong tiến trình đổi/trả sẽ tự động khóa).
+                }
+              </p>
               @for (line of item.items; track line.variant_id) {
-                <article class="line">
+                <article
+                  class="line return-line-card"
+                  [class.is-selected]="!!selections()[line.variant_id]"
+                  [class.is-locked]="line.isInProgress || line.returnCount >= 2 || line.availableQuantity < 1"
+                >
                   <img [src]="image(line.product_image)" [alt]="line.product_name" />
                   <div>
-                    <label class="check"
-                      ><input
-                        type="checkbox"
-                        [checked]="!!selections()[line.variant_id]"
-                        [disabled]="
-                          line.isInProgress || line.returnCount >= 2 || line.availableQuantity < 1 || !withinWindow(item)
-                        "
-                        [ngModel]="!!selections()[line.variant_id]"
-                        (ngModelChange)="select(line, $event)"
-                      /><strong>{{ line.product_name }}</strong>
-                      @if (line.is_combo) {
-                        <span class="badge" style="background: #ede9fe; color: #6d28d9; font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; margin-left: 6px;">Combo Set</span>
+                    <div class="return-line-card__head">
+                      <label class="check" style="margin: 0;">
+                        <input
+                          type="checkbox"
+                          [checked]="!!selections()[line.variant_id]"
+                          [disabled]="
+                            line.isInProgress || line.returnCount >= 2 || line.availableQuantity < 1 || !withinWindow(item) || item.items.length === 1
+                          "
+                          [ngModel]="!!selections()[line.variant_id]"
+                          (ngModelChange)="select(line, $event)"
+                        />
+                        <strong>{{ line.product_name }}</strong>
+                        @if (line.is_combo) {
+                          <span class="badge" style="background: #ede9fe; color: #6d28d9; font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; margin-left: 6px;">Combo Set</span>
+                        }
+                      </label>
+                      @if (line.isInProgress) {
+                        <span class="badge return-progress-pill" data-kind="in_progress">⏳ Đang trong tiến trình</span>
+                      } @else if (line.returnCount >= 2 || line.availableQuantity < 1) {
+                        <span class="badge return-progress-pill" data-kind="completed">🔒 Đã khóa</span>
+                      } @else if (item.items.length === 1) {
+                        <span class="badge return-progress-pill" data-kind="partial">✓ Đã chọn mặc định</span>
                       }
-                    </label>
+                    </div>
                     <p class="muted">
-                      {{ displaySize(line.size) }} / {{ line.color }} · Đã mua {{ line.quantity }} · Có thể xử lý
-                      {{ line.availableQuantity }}
+                      Phân loại: <strong>{{ displaySize(line.size) }} / {{ line.color }}</strong> &nbsp;·&nbsp; Đơn giá hóa đơn: <strong>{{ money(line.unit_price) }}</strong>
                     </p>
-                    <p class="muted">
-                      Đã dùng {{ line.returnCount }}/2 lượt · Còn {{ 2 - line.returnCount }} lượt
-                    </p>
+                    <div class="line-return-quota-row">
+                      <span class="line-quota-chip">Đã mua: <strong>{{ line.quantity }}</strong></span>
+                      <span class="line-quota-chip">Khả dụng đổi/trả: <strong>{{ line.availableQuantity }}</strong></span>
+                      <span class="line-quota-chip">Lượt đổi/trả (30 ngày): <strong>{{ line.returnCount }}/2</strong></span>
+                    </div>
                     @if (line.isInProgress) {
-                      <p class="muted" style="color: #b45309; background: #fef3c7; padding: 4px 8px; border-radius: 4px; display: inline-block; font-size: 0.8rem; margin: 4px 0 0;">
-                        ⏳ Đang xử lý đổi/trả (Phiếu #{{ line.inProgressCode }}) — Vui lòng chờ hoàn tất.
-                      </p>
+                      <div class="line-return-banner line-return-banner--progress">
+                        ⏳ Đang xử lý đổi/trả ({{ line.inProgressCode ? 'Phiếu #' + line.inProgressCode + ' · ' : '' }}{{ lineInProgressLabel(line) }}) — Đã khóa không cho chọn lại.
+                      </div>
                     } @else if (line.returnCount >= 2) {
-                      <p class="error">Đã sử dụng đủ 2 lượt đổi/trả cho sản phẩm này.</p>
+                      <div class="line-return-banner line-return-banner--exhausted">
+                        🔒 Đã sử dụng đủ 2/2 lượt đổi/trả trong 30 ngày cho sản phẩm này.
+                      </div>
                     } @else if (line.availableQuantity === 0) {
-                      <p class="muted">Sản phẩm đã được hoàn trả hoặc đổi mới.</p>
+                      <div class="line-return-banner line-return-banner--done">
+                        ✓ Sản phẩm đã được hoàn trả hoặc đổi mới toàn bộ số lượng mua.
+                      </div>
                     }
                     @if (line.is_combo) {
-                      <p class="muted" style="color: #6d28d9; font-size: 0.8rem; margin-top: 4px;">
+                      <p class="muted" style="color: #6d28d9; font-size: 0.8rem; margin-top: 6px;">
                         * Quy tắc Combo: Hoàn trả nguyên bộ cả combo, hoặc chọn size/màu mới cho từng món khi đổi hàng.
                       </p>
                     }
                     @if (selections()[line.variant_id]) {
                       @if (line.is_combo && returnKind === 'refund') {
-                        <p style="font-size: 0.85rem; font-weight: 600; color: #4b5563; margin-top: 6px;">
-                          Số lượng hoàn trả: {{ line.availableQuantity }} (Nguyên bộ combo)
-                        </p>
+                        <div class="qty-locked-pill">
+                          🔒 Số lượng hoàn trả: <strong>{{ line.availableQuantity }} bộ</strong> (Nguyên bộ Combo)
+                        </div>
+                      } @else if (line.availableQuantity <= 1) {
+                        <div class="qty-locked-pill">
+                          🔒 Số lượng đổi/trả: <strong>1 / {{ line.quantity }} sản phẩm</strong> (Đã khóa cố định theo số lượng mua)
+                        </div>
                       } @else {
-                        <label class="field"
-                          >Số lượng<input
-                            type="number"
-                            min="1"
-                            [max]="line.availableQuantity"
-                            [ngModel]="selections()[line.variant_id].quantity"
-                            (ngModelChange)="quantity(line, $event)"
-                        /></label>
+                        <div class="return-qty-stepper-row">
+                          <span class="return-qty-label">Số lượng cần đổi/trả:</span>
+                          <div class="return-qty-stepper">
+                            <button
+                              type="button"
+                              class="qty-step-btn"
+                              [disabled]="selections()[line.variant_id].quantity <= 1"
+                              (click)="stepQuantity(line, -1)"
+                              aria-label="Giảm số lượng"
+                            >−</button>
+                            <span class="qty-step-value">{{ selections()[line.variant_id].quantity }}</span>
+                            <button
+                              type="button"
+                              class="qty-step-btn"
+                              [disabled]="selections()[line.variant_id].quantity >= line.availableQuantity"
+                              (click)="stepQuantity(line, 1)"
+                              aria-label="Tăng số lượng"
+                            >+</button>
+                          </div>
+                          <small class="muted">(Tối đa {{ line.availableQuantity }} sản phẩm đã mua)</small>
+                        </div>
                       }
                     }
                   </div>
@@ -516,6 +647,17 @@
                   ><small>Đổi size hoặc màu của cùng sản phẩm.</small></span
                 ></label
               >
+              @if (returnKind === 'refund') {
+                <div class="refund-fixed-box">
+                  <div class="refund-fixed-box__row">
+                    <span class="refund-fixed-box__label">🔒 Số tiền hoàn dự kiến (cố định theo hóa đơn):</span>
+                    <strong class="refund-fixed-box__amount">{{ money(refundEstimate(selectedLines())) }}</strong>
+                  </div>
+                  <small class="refund-fixed-box__note">
+                    Hệ thống khóa cố định số tiền hoàn dựa trên đơn giá thực tế khách đã thanh toán cho sản phẩm.
+                  </small>
+                </div>
+              }
               @if (returnKind === 'exchange') {
                 @if (model.replacementsLoading?.()) { <p role="status">Đang tải size / màu còn hàng…</p> }
                 @if (model.replacementsError?.()) {

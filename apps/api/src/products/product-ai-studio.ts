@@ -49,6 +49,8 @@ export interface ProductFashionSeoResult {
   description: string;
   seoTitle: string;
   seoDescription: string;
+  titleSuggestions: string[];
+  metaSuggestions: string[];
   slug: string;
   brand: string;
   collection: string;
@@ -772,27 +774,48 @@ export async function generateProductFashionSeo(body: JsonObject): Promise<Produ
     ? parsed!.styleTags.map((x) => String(x || "").trim()).filter(Boolean)
     : [];
   const baseStyleTags = rawStyleTags.length > 0 ? rawStyleTags : ["Elegant", "Smart Casual", "Minimalist"];
-  const mergedStyleTags = [...new Set([...baseStyleTags, ...seoKeywords.slice(0, 4)])].slice(0, 12);
+  const allRecommendedKeywords = [...new Set([...seoKeywords, ...baseStyleTags])].slice(0, 12);
+  const mergedStyleTags = [...new Set([...baseStyleTags, ...seoKeywords.slice(0, 6)])].slice(0, 14);
 
-  const fallbackDescription = [
-    `${name} thuộc bộ sưu tập ${outCollection} của ${brand} là tuyên ngôn của vẻ đẹp thanh lịch đương đại. Thiết kế được chế tác từ chất liệu ${outMaterial}, mang lại bề mặt mềm mịn, độ rủ tự nhiên và cảm giác thoáng nhẹ tối đa khi diện trên người.`,
-    `Điểm nhấn thiết kế: ${highlights.join(" ")}`,
-    `Hướng dẫn bảo quản: ${careInstructions.join(" ")}`,
-  ].join("\n\n");
-
-  const description =
-    asString(parsed?.description).trim().length >= 60
+  const introParagraph =
+    asString(parsed?.description).trim().length >= 50
       ? asString(parsed?.description).trim().replace(/\*\*/g, "")
-      : fallbackDescription;
+      : `${name} thuộc bộ sưu tập ${outCollection} của ${brand} là tuyên ngôn của vẻ đẹp thanh lịch đương đại. Thiết kế được chế tác từ chất liệu ${outMaterial}, mang lại bề mặt mềm mịn, độ rủ tự nhiên và cảm giác thoáng nhẹ tối đa khi diện trên người.`;
+
+  const hasHighlightsInDesc = /Đặc điểm nổi bật|Điểm nhấn thiết kế/i.test(introParagraph);
+  const structuredParts = [introParagraph];
+  if (!hasHighlightsInDesc && highlights.length > 0) {
+    structuredParts.push(
+      `Đặc điểm nổi bật:\n${highlights.map((h) => `• ${h.replace(/^[•\-*]\s*/, "")}`).join("\n")}`,
+    );
+  }
+  if (!/Hướng dẫn bảo quản/i.test(introParagraph) && careInstructions.length > 0) {
+    structuredParts.push(
+      `Hướng dẫn bảo quản:\n${careInstructions.map((c) => `• ${c.replace(/^[•\-*]\s*/, "")}`).join("\n")}`,
+    );
+  }
+  const description = structuredParts.join("\n\n");
 
   const rawSeoTitle = asString(parsed?.seoTitle).trim();
   const seoTitle = (rawSeoTitle || `${name} - ${outCollection} | ${brand}`).slice(0, 70);
+  const titleSuggestions = [
+    seoTitle,
+    `${name} Chất Liệu ${outMaterial} | ${brand}`.slice(0, 70),
+    `${name} (${sku}) - BST ${outCollection} | ${brand} Atelier`.slice(0, 70),
+  ].filter((v, idx, arr) => Boolean(v) && arr.indexOf(v) === idx);
 
   const rawSeoDesc = asString(parsed?.seoDescription).trim();
   const seoDescription = (
     rawSeoDesc ||
     `Khám phá ${name} (${sku}) chất liệu ${outMaterial} cao cấp từ BST ${outCollection} tại Velura Atelier. Thiết kế tôn dáng, thanh lịch, đổi trả 30 ngày.`
   ).slice(0, 165);
+  const metaSuggestions = [
+    seoDescription,
+    `Mua ngay ${name} chính hãng ${brand}. Chất liệu ${outMaterial} mềm mịn, phom dáng chuẩn công sở & dạo phố. Miễn phí giao hàng đơn từ 500k, đổi trả 30 ngày.`.slice(
+      0,
+      165,
+    ),
+  ].filter((v, idx, arr) => Boolean(v) && arr.indexOf(v) === idx);
 
   const slug = slugifyVi(name) || slugifyVi(sku);
 
@@ -800,6 +823,8 @@ export async function generateProductFashionSeo(body: JsonObject): Promise<Produ
     description,
     seoTitle,
     seoDescription,
+    titleSuggestions,
+    metaSuggestions,
     slug,
     brand,
     collection: outCollection,
@@ -810,7 +835,7 @@ export async function generateProductFashionSeo(body: JsonObject): Promise<Produ
     suitableBodyShapes,
     highlights,
     careInstructions,
-    seoKeywords,
+    seoKeywords: allRecommendedKeywords,
     seoScore: 96,
     modelUsed,
   };

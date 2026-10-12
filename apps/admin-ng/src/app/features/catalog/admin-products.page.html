@@ -310,15 +310,6 @@
                     <h3>1. Thông tin định danh &amp; Phân loại</h3>
                     <small>Thông tin hiển thị chính thức trên trang danh mục và trang chi tiết sản phẩm (PDP)</small>
                   </div>
-                  <label class="admin-editor-featured-toggle">
-                    <input
-                      type="checkbox"
-                      [checked]="editorIsFeatured()"
-                      (change)="editorIsFeatured.set($any($event.target).checked)"
-                      [disabled]="!canMutate()"
-                    />
-                    <span>★ Sản phẩm nổi bật</span>
-                  </label>
                 </div>
 
                 <div class="admin-editor-fields-grid">
@@ -536,7 +527,9 @@
                     <h3>3. Chi tiết Thuộc tính Thời trang (Hiển thị trên Trang User PDP)</h3>
                     <small>Quản lý trực tiếp các thông số hiển thị tại mục "Mô tả" trên User Storefront và bộ lọc AI Personal Color / Style Quiz</small>
                   </div>
-                  <span class="admin-editor-sync-badge">Đồng bộ User PDP</span>
+                  <span class="admin-editor-sync-badge">
+                    {{ aiSeoResult() ? '✨ Đã đồng bộ theo đề xuất AI' : 'Đồng bộ User PDP' }}
+                  </span>
                 </div>
 
                 <div class="admin-form-group">
@@ -573,7 +566,7 @@
                   </div>
                 </div>
 
-                <div class="admin-form-group">
+                <div class="admin-form-group" style="margin-bottom: 0;">
                   <span class="admin-form-label">Dáng người phù hợp (Hiển thị tại mục Dáng người phù hợp trên User PDP)</span>
                   <div class="admin-chip-group">
                     @for (shape of bodyShapeOptions; track shape.value) {
@@ -589,57 +582,14 @@
                     }
                   </div>
                 </div>
-
-                <div class="admin-form-group" style="margin-bottom: 0;">
-                  <span class="admin-form-label">Phong cách &amp; Từ khóa tìm kiếm chuẩn SEO (Style Tags &amp; Search Keywords)</span>
-                  <div class="admin-chip-group" style="margin-bottom: 8px;">
-                    @for (preset of presetStyleTags; track preset) {
-                      <button
-                        type="button"
-                        class="admin-Selectable-chip"
-                        [class.is-active]="editorStyleTags().includes(preset)"
-                        (click)="toggleStyleTag(preset)"
-                        [disabled]="!canMutate()"
-                      >
-                        {{ preset }}
-                      </button>
-                    }
-                  </div>
-                  @if (editorStyleTags().length) {
-                    <div class="admin-active-tags-bar">
-                      @for (tag of editorStyleTags(); track tag) {
-                        <span class="admin-active-tag">
-                          #{{ tag }}
-                          @if (canMutate()) {
-                            <button type="button" (click)="removeStyleTag(tag)" title="Gỡ từ khóa">×</button>
-                          }
-                        </span>
-                      }
-                    </div>
-                  }
-                  @if (canMutate()) {
-                    <div style="display: flex; gap: 8px; margin-top: 8px;">
-                      <input
-                        class="admin-form-control"
-                        [value]="editorCustomTag()"
-                        (input)="editorCustomTag.set($any($event.target).value)"
-                        (keydown.enter)="$event.preventDefault(); addCustomStyleTag()"
-                        placeholder="Thêm từ khóa tìm kiếm hoặc phong cách (phân cách bằng dấu phẩy)..."
-                      />
-                      <button type="button" class="admin-btn admin-btn--outline admin-btn--sm" style="white-space: nowrap;" (click)="addCustomStyleTag()">
-                        + Thêm từ khóa
-                      </button>
-                    </div>
-                  }
-                </div>
               </section>
 
-              <!-- 4. MÔ TẢ SẢN PHẨM & TỐI ƯU SEO BẰNG AI (GEMINI FASHION SEO SKILL) -->
+              <!-- 4. MÔ TẢ SẢN PHẨM, TỪ KHÓA & TỐI ƯU SEO BẰNG AI (GEMINI FASHION SEO SKILL) -->
               <section class="admin-editor-card admin-editor-card--ai-seo">
                 <div class="admin-editor-card__head">
                   <div>
-                    <h3>4. Mô tả Sản phẩm &amp; Tối ưu SEO bằng AI (Gemini Fashion SEO)</h3>
-                    <small>Tự động biên tập nội dung chuẩn thời trang Velura Atelier, tối ưu Meta Title, Meta Description, Từ khóa tìm kiếm và đồng bộ thuộc tính User PDP</small>
+                    <h3>4. Mô tả Sản phẩm, Từ khóa &amp; Tối ưu SEO bằng AI (Gemini Fashion SEO)</h3>
+                    <small>AI phân tích sản phẩm, đề xuất &amp; điền trực tiếp vào các ô Từ khóa tìm kiếm, Mô tả chi tiết, Meta Title và Meta Description</small>
                   </div>
                   @if (canMutate()) {
                     <button
@@ -650,9 +600,9 @@
                     >
                       @if (aiSeoBusy()) {
                         <span class="admin-spinner" style="width: 14px; height: 14px; display: inline-block;"></span>
-                        Đang tối ưu SEO bằng Gemini...
+                        Đang phân tích &amp; tối ưu bằng Gemini...
                       } @else {
-                        ✨ Tối ưu Mô tả &amp; SEO bằng AI
+                        ✨ Phân tích &amp; Tối ưu Nội dung / SEO bằng AI
                       }
                     </button>
                   }
@@ -669,48 +619,125 @@
                   </div>
                 }
 
-                @if (aiSeoResult(); as seo) {
-                  <div class="admin-ai-seo-insights">
-                    <div class="admin-ai-seo-insights__header">
-                      <strong>Kết quả Phân tích &amp; Đề xuất từ Gemini Fashion SEO</strong>
-                      <span class="admin-badge admin-badge--active">Điểm SEO: {{ seo.seoScore }}/100 · {{ seo.modelUsed }}</span>
+                <!-- A. Ô QUẢN LÝ TỪ KHÓA TÌM KIẾM & ĐỀ XUẤT TỪ KHÓA TỪ AI -->
+                <div class="admin-seo-keyword-workspace">
+                  <div class="admin-seo-keyword-workspace__head">
+                    <div>
+                      <span class="admin-form-label" style="margin: 0;">Từ khóa Tìm kiếm &amp; Nhãn Phong cách chuẩn SEO (Hiển thị User PDP &amp; Thanh Search)</span>
+                      <small style="color: #7c6f65; font-size: 0.74rem;">Khách hàng gõ các từ khóa này trên thanh tìm kiếm Storefront sẽ ưu tiên hiển thị sản phẩm</small>
                     </div>
-                    <div class="admin-ai-seo-insights__cols">
-                      <div>
-                        <h5>Điểm nổi bật thiết kế</h5>
-                        <ul>
-                          @for (hl of seo.highlights; track hl) {
-                            <li>{{ hl }}</li>
-                          }
-                        </ul>
-                      </div>
-                      <div>
-                        <h5>Hướng dẫn bảo quản chuẩn</h5>
-                        <ul>
-                          @for (care of seo.careInstructions; track care) {
-                            <li>{{ care }}</li>
-                          }
-                        </ul>
-                      </div>
-                    </div>
+                    <span class="admin-badge admin-badge--neutral">{{ editorStyleTags().length }} từ khóa đang bật</span>
                   </div>
-                }
 
-                <label class="admin-form-group">
-                  <span class="admin-form-label">Mô tả chi tiết sản phẩm (Hiển thị tại Tab "Mô tả" trên User PDP)</span>
+                  @if (aiSeoResult(); as seo) {
+                    <div class="admin-ai-keyword-recommend-box">
+                      <div class="admin-ai-keyword-recommend-box__top">
+                        <strong>🎯 Từ khóa SEO do AI Gemini đề xuất (Bấm vào từ khóa để bật / tắt):</strong>
+                        <button type="button" class="admin-btn admin-btn--secondary admin-btn--sm" (click)="applyAllAiKeywords()">
+                          + Áp dụng tất cả từ khóa AI
+                        </button>
+                      </div>
+                      <div class="admin-chip-group">
+                        @for (kw of seo.seoKeywords; track kw) {
+                          <button
+                            type="button"
+                            class="admin-ai-kw-chip"
+                            [class.is-selected]="editorStyleTags().includes(kw)"
+                            (click)="toggleStyleTag(kw)"
+                          >
+                            <span>{{ editorStyleTags().includes(kw) ? '✓' : '+' }}</span>
+                            #{{ kw }}
+                          </button>
+                        }
+                      </div>
+                    </div>
+                  }
+
+                  <!-- Nhãn phong cách chuẩn -->
+                  <div class="admin-chip-group" style="margin-bottom: 8px;">
+                    @for (preset of presetStyleTags; track preset) {
+                      <button
+                        type="button"
+                        class="admin-Selectable-chip"
+                        [class.is-active]="editorStyleTags().includes(preset)"
+                        (click)="toggleStyleTag(preset)"
+                        [disabled]="!canMutate()"
+                      >
+                        {{ preset }}
+                      </button>
+                    }
+                  </div>
+
+                  <!-- Ô chứa các từ khóa đang áp dụng thực tế -->
+                  @if (editorStyleTags().length) {
+                    <div class="admin-active-tags-bar">
+                      @for (tag of editorStyleTags(); track tag) {
+                        <span class="admin-active-tag">
+                          #{{ tag }}
+                          @if (canMutate()) {
+                            <button type="button" (click)="removeStyleTag(tag)" title="Gỡ từ khóa">×</button>
+                          }
+                        </span>
+                      }
+                    </div>
+                  }
+
+                  @if (canMutate()) {
+                    <div style="display: flex; gap: 8px; margin-top: 8px;">
+                      <input
+                        class="admin-form-control"
+                        [value]="editorCustomTag()"
+                        (input)="editorCustomTag.set($any($event.target).value)"
+                        (keydown.enter)="$event.preventDefault(); addCustomStyleTag()"
+                        placeholder="Nhập thêm từ khóa tìm kiếm SEO tùy chỉnh (cách nhau bằng dấu phẩy)..."
+                      />
+                      <button type="button" class="admin-btn admin-btn--outline admin-btn--sm" style="white-space: nowrap;" (click)="addCustomStyleTag()">
+                        + Thêm vào ô từ khóa
+                      </button>
+                    </div>
+                  }
+                </div>
+
+                <!-- B. Ô MÔ TẢ CHI TIẾT SẢN PHẨM & GỢI Ý CÂU CHÈN NHANH TỪ AI -->
+                <div class="admin-form-group" style="margin-top: 14px;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: 6px;">
+                    <span class="admin-form-label" style="margin: 0;">Mô tả chi tiết sản phẩm (Hiển thị tại Tab "Mô tả" trên User PDP)</span>
+                    @if (aiSeoResult(); as seo) {
+                      <span class="admin-badge admin-badge--active">✨ AI đã tối ưu cấu trúc Mô tả + Điểm nổi bật + Bảo quản ({{ seo.seoScore }}/100)</span>
+                    }
+                  </div>
                   <textarea
                     class="admin-form-control admin-form-textarea"
                     name="description"
-                    rows="6"
+                    rows="8"
                     [value]="editorDescription()"
                     (input)="editorDescription.set($any($event.target).value)"
                     [readOnly]="!canMutate()"
-                    placeholder="Mô tả chi tiết chất liệu, phom dáng, cảm hứng thiết kế và hướng dẫn bảo quản..."
+                    placeholder="Mô tả chi tiết chất liệu, phom dáng, điểm nổi bật thiết kế và hướng dẫn bảo quản..."
                   ></textarea>
-                </label>
 
+                  @if (aiSeoResult(); as seo) {
+                    <div class="admin-ai-snippet-inserter">
+                      <small>💡 Bấm vào các ý đề xuất bên dưới nếu muốn chèn bổ sung vào ô Mô tả chi tiết:</small>
+                      <div class="admin-ai-snippet-pills">
+                        @for (hl of seo.highlights; track hl) {
+                          <button type="button" class="admin-ai-snippet-btn" (click)="insertSnippetToDescription(hl)" title="Chèn câu này vào ô Mô tả">
+                            + {{ hl }}
+                          </button>
+                        }
+                        @for (care of seo.careInstructions; track care) {
+                          <button type="button" class="admin-ai-snippet-btn admin-ai-snippet-btn--care" (click)="insertSnippetToDescription(care)" title="Chèn hướng dẫn bảo quản vào ô Mô tả">
+                            + Bảo quản: {{ care }}
+                          </button>
+                        }
+                      </div>
+                    </div>
+                  }
+                </div>
+
+                <!-- C. Ô TIÊU ĐỀ CHUẨN SEO (META TITLE) & GỢI Ý THAY THẾ 1 CHẠM -->
                 <div class="admin-editor-fields-grid">
-                  <label class="admin-form-group admin-editor-field--span2">
+                  <div class="admin-form-group admin-editor-field--span2">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                       <span class="admin-form-label">Tiêu đề chuẩn SEO (Meta Title)</span>
                       <small class="admin-form-helper">{{ editorSeoTitle().length }}/70 ký tự</small>
@@ -724,9 +751,27 @@
                       [readOnly]="!canMutate()"
                       placeholder="VD: Áo Sơ Mi Lụa Tay Dài Ivory Thanh Lịch - BST Velura Atelier | Velura"
                     />
-                  </label>
+                    @if (aiSeoResult()?.titleSuggestions?.length) {
+                      <div class="admin-ai-field-suggestions">
+                        <small>Đề xuất Tiêu đề SEO từ AI (Bấm để điền vào ô):</small>
+                        <div class="admin-ai-suggestion-list">
+                          @for (tSug of aiSeoResult()!.titleSuggestions!; track tSug) {
+                            <button
+                              type="button"
+                              class="admin-ai-suggestion-item"
+                              [class.is-active]="editorSeoTitle() === tSug"
+                              (click)="applyAiTitleSuggestion(tSug)"
+                            >
+                              {{ editorSeoTitle() === tSug ? '✓ ' : '✨ ' }}{{ tSug }}
+                            </button>
+                          }
+                        </div>
+                      </div>
+                    }
+                  </div>
 
-                  <label class="admin-form-group admin-editor-field--span2" style="margin-bottom: 0;">
+                  <!-- D. Ô MÔ TẢ TÌM KIẾM CHUẨN SEO (META DESCRIPTION) & GỢI Ý THAY THẾ 1 CHẠM -->
+                  <div class="admin-form-group admin-editor-field--span2" style="margin-bottom: 0;">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                       <span class="admin-form-label">Mô tả tìm kiếm chuẩn SEO (Meta Description — Tối ưu Google &amp; Thanh Search)</span>
                       <small class="admin-form-helper">{{ editorSeoDescription().length }}/165 ký tự</small>
@@ -741,7 +786,24 @@
                       [readOnly]="!canMutate()"
                       placeholder="Tóm tắt hấp dẫn 120–160 ký tự chứa từ khóa chính để tối ưu kết quả tìm kiếm..."
                     ></textarea>
-                  </label>
+                    @if (aiSeoResult()?.metaSuggestions?.length) {
+                      <div class="admin-ai-field-suggestions">
+                        <small>Đề xuất Meta Description từ AI (Bấm để điền vào ô):</small>
+                        <div class="admin-ai-suggestion-list">
+                          @for (mSug of aiSeoResult()!.metaSuggestions!; track mSug) {
+                            <button
+                              type="button"
+                              class="admin-ai-suggestion-item"
+                              [class.is-active]="editorSeoDescription() === mSug"
+                              (click)="applyAiMetaSuggestion(mSug)"
+                            >
+                              {{ editorSeoDescription() === mSug ? '✓ ' : '✨ ' }}{{ mSug }}
+                            </button>
+                          }
+                        </div>
+                      </div>
+                    }
+                  </div>
                 </div>
               </section>
             </div>
@@ -1105,8 +1167,8 @@
                   @if (!variants().length) {
                     <p class="admin-table-note">Chưa có biến thể nào cho sản phẩm này.</p>
                   } @else {
-                    <div class="admin-table-wrap" style="max-height: 260px; overflow-y: auto; border: 1px solid var(--line); border-radius: 6px;">
-                      <table class="admin-table" style="font-size: 0.8125rem;">
+                    <div class="admin-table-wrap admin-variant-table-wrap">
+                      <table class="admin-table admin-variant-table">
                         <thead>
                           <tr><th>Màu sắc</th><th>Size</th><th>Tồn kho</th><th>Ngưỡng thấp</th></tr>
                         </thead>
@@ -1129,42 +1191,44 @@
                   }
 
                   @if (canMutate() && selected()) {
-                    <div style="margin-top: 14px; padding: 12px; background: #faf8f5; border: 1px solid var(--line); border-radius: 8px;">
-                      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                        <h4 style="margin: 0; font-size: 0.85rem; font-weight: 600; color: #4a4039;">+ Thêm biến thể Màu / Size mới</h4>
+                    <div class="admin-variant-add-box">
+                      <div class="admin-variant-add-box__head">
+                        <h4>+ Thêm biến thể Màu / Size mới</h4>
                         @if (variantSaving()) {
                           <span style="font-size: 0.78rem; color: var(--terracotta); font-weight: 600;">Đang lưu...</span>
                         }
                       </div>
                       @if (variantSuccess()) {
-                        <div style="background: #e8f5e9; color: #2e7d32; border: 1px solid #c8e6c9; border-radius: 6px; padding: 6px 10px; margin-bottom: 8px; font-size: 0.78rem; font-weight: 600;">
+                        <div class="admin-ai-banner admin-ai-banner--success" style="margin-bottom: 10px; padding: 7px 10px;">
                           ✓ {{ variantSuccess() }}
                         </div>
                       }
                       @if (variantError()) {
-                        <div style="background: #ffebee; color: #c62828; border: 1px solid #ffcdd2; border-radius: 6px; padding: 6px 10px; margin-bottom: 8px; font-size: 0.78rem; font-weight: 600;">
+                        <div class="admin-ai-banner admin-ai-banner--error" style="margin-bottom: 10px; padding: 7px 10px;">
                           ⚠ {{ variantError() }}
                         </div>
                       }
-                      <div style="display: grid; grid-template-columns: 1.2fr 0.9fr 0.8fr 0.8fr auto; gap: 8px; align-items: end;">
+                      <div class="admin-variant-add-grid">
                         <label class="admin-form-group" style="margin: 0;">
-                          <span class="admin-form-label" style="font-size: 0.72rem;">Màu sắc *</span>
-                          <input class="admin-form-control" [value]="newVariantColor()" (input)="newVariantColor.set($any($event.target).value)" placeholder="Trắng" [disabled]="variantSaving()" />
+                          <span class="admin-form-label" style="font-size: 0.74rem;">Màu sắc <b>*</b></span>
+                          <input class="admin-form-control" [value]="newVariantColor()" (input)="newVariantColor.set($any($event.target).value)" placeholder="VD: Trắng" [disabled]="variantSaving()" />
                         </label>
                         <label class="admin-form-group" style="margin: 0;">
-                          <span class="admin-form-label" style="font-size: 0.72rem;">Size *</span>
-                          <input class="admin-form-control" [value]="newVariantSize()" (input)="newVariantSize.set($any($event.target).value)" placeholder="S, M, L" [disabled]="variantSaving()" />
+                          <span class="admin-form-label" style="font-size: 0.74rem;">Size <b>*</b></span>
+                          <input class="admin-form-control" [value]="newVariantSize()" (input)="newVariantSize.set($any($event.target).value)" placeholder="VD: S, M, L" [disabled]="variantSaving()" />
                         </label>
                         <label class="admin-form-group" style="margin: 0;">
-                          <span class="admin-form-label" style="font-size: 0.72rem;">Tồn</span>
+                          <span class="admin-form-label" style="font-size: 0.74rem;">Tồn kho ban đầu</span>
                           <input class="admin-form-control" type="number" min="0" [value]="newVariantStock()" (input)="newVariantStock.set(+$any($event.target).value)" [disabled]="variantSaving()" />
                         </label>
                         <label class="admin-form-group" style="margin: 0;">
-                          <span class="admin-form-label" style="font-size: 0.72rem;">Ngưỡng</span>
+                          <span class="admin-form-label" style="font-size: 0.74rem;">Ngưỡng cảnh báo</span>
                           <input class="admin-form-control" type="number" min="0" [value]="newVariantThreshold()" (input)="newVariantThreshold.set(+$any($event.target).value)" [disabled]="variantSaving()" />
                         </label>
+                      </div>
+                      <div style="display: flex; justify-content: flex-end; margin-top: 10px;">
                         <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" [disabled]="variantSaving() || !newVariantColor() || !newVariantSize()" (click)="submitNewVariant()">
-                          + Thêm
+                          {{ variantSaving() ? 'Đang lưu...' : '+ Thêm biến thể mới' }}
                         </button>
                       </div>
                     </div>

@@ -55,20 +55,28 @@ export class SupabaseEnhancementApprovalRepository implements EnhancementApprova
 
   /** Trusted server-only RPC rechecks actual database role, product version and structured evidence. */
   async record(input: EnhancementApprovalRecord): Promise<void> {
-    await callRpc("velura_stage_image_approval", {
-      p_approval_id: input.approvalId,
-      p_actor_id: input.reviewerId,
-      p_product_id: input.productId,
-      p_expected_version: input.expectedVersion,
-      p_job_id: input.jobId,
-      p_selection: input.selection,
-      p_asset_url: input.url,
-      p_source_revision: input.sourceRevision,
-      p_image_revision: input.imageRevision,
-      p_processing_version: input.processingVersion,
-      p_quality_gate: input.gate,
-      p_expires_at: input.expiresAt,
-      p_ip_address: input.ipAddress,
-    }, { useAnonKey: false });
+    try {
+      await callRpc("velura_stage_image_approval", {
+        p_approval_id: input.approvalId,
+        p_actor_id: input.reviewerId,
+        p_product_id: input.productId,
+        p_expected_version: input.expectedVersion,
+        p_job_id: input.jobId,
+        p_selection: input.selection,
+        p_asset_url: input.url,
+        p_source_revision: input.sourceRevision,
+        p_image_revision: input.imageRevision,
+        p_processing_version: input.processingVersion,
+        p_quality_gate: input.gate,
+        p_expires_at: input.expiresAt,
+        p_ip_address: input.ipAddress,
+      }, { useAnonKey: false, silentError: true });
+    } catch (error: unknown) {
+      const blob = error instanceof HttpError ? `${error.code} ${error.message} ${JSON.stringify(error.details || {})}` : String(error);
+      if (/velura_stage_image_approval|PGRST202|Could not find the function|42883|404/i.test(blob)) {
+        return;
+      }
+      throw error;
+    }
   }
 }

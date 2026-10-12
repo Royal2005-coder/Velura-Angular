@@ -448,6 +448,13 @@ export class ProductDetailPage {
       this.catalog.getProduct(id).subscribe({
         next: (row) => {
           this.product.set(row);
+          if (typeof document !== 'undefined') {
+            document.title = row.seo_title || `${row.name} | Velura Atelier`;
+            const metaDesc = document.querySelector('meta[name="description"]');
+            if (metaDesc && (row.seo_description || row.description)) {
+              metaDesc.setAttribute('content', String(row.seo_description || row.description).slice(0, 160));
+            }
+          }
           try {
             const raw = localStorage.getItem('velura_recently_viewed');
             const list = raw ? (JSON.parse(raw) as ProductSummary[]) : [];

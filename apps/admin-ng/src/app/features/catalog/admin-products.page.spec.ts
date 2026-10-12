@@ -1,3 +1,4 @@
+import { of } from 'rxjs';
 import { createAdminPage } from '../../../testing/admin-testing';
 import { AdminProductsPage } from './admin-products.page';
 import { TestBed } from '@angular/core/testing';
@@ -162,5 +163,98 @@ describe('AdminProductsPage', () => {
     checkbox.checked = false;
     page.toggleContentProduct(product, { target: checkbox } as unknown as Event);
     expect(page.bulkSelection()).toEqual([]);
+  });
+
+  it('optimizes description, SEO fields, and User PDP attributes via Gemini Fashion SEO', async () => {
+    const page = await createAdminPage(AdminProductsPage, {
+      optimizeProductSeo: () =>
+        of({
+          description: 'Áo sơ mi lụa cao cấp thuộc BST Timeless Silk, chất liệu mềm mịn thoáng mát.',
+          seoTitle: 'Áo Sơ Mi Lụa Tay Dài Ivory - Timeless Silk | Velura',
+          seoDescription: 'Khám phá Áo Sơ Mi Lụa Tay Dài Ivory cao cấp tại Velura Atelier.',
+          slug: 'ao-so-mi-lua-tay-dai-ivory',
+          brand: 'Velura',
+          collection: 'Timeless Silk',
+          material: 'Lụa Tơ Tằm Thượng Hạng',
+          colorTone: 'Warm',
+          styleTags: ['Elegant', 'Smart Casual', 'ao so mi lua'],
+          occasions: ['Office', 'Party'],
+          suitableBodyShapes: ['Hourglass', 'Rectangle'],
+          highlights: ['Chất liệu lụa mềm mịn', 'Phom dáng thanh lịch'],
+          careInstructions: ['Giặt tay nhẹ nhàng', 'Ủi hơi nước nhiệt độ thấp'],
+          seoKeywords: ['ao so mi lua', 'so mi velura'],
+          seoScore: 96,
+          modelUsed: 'gemini-3.5-flash-lite',
+        }),
+    });
+    TestBed.inject(AdminSessionService).applyAuthContext({
+      user: { id: 'operator' },
+      role: 'admin_operator_sanpham',
+      isAdmin: true,
+      allowedModules: ['products'],
+      allowedPages: ['products'],
+    });
+    page.selected.set({ product_id: 'p1', name: 'Áo Sơ Mi Lụa Tay Dài Ivory', sku: 'VLR-AO-002', version: 2 });
+    page.optimizeSeoWithAi();
+    expect(page.editorSeoTitle()).toBe('Áo Sơ Mi Lụa Tay Dài Ivory - Timeless Silk | Velura');
+    expect(page.editorCollection()).toBe('Timeless Silk');
+    expect(page.editorColorTone()).toBe('Warm');
+    expect(page.editorOccasions()).toEqual(['Office', 'Party']);
+    expect(page.editorBodyShapes()).toEqual(['Hourglass', 'Rectangle']);
+    expect(page.aiSeoResult()?.seoScore).toBe(96);
+  });
+
+  it('enhances product image via AI Studio and applies approved URL into gallery', async () => {
+    const page = await createAdminPage(AdminProductsPage, {
+      enhanceProductImage: () =>
+        of({
+          enhancedUrl: 'https://storage/product-images/ai-studio/enhanced-1.png',
+          previewDataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=',
+          modelUsed: 'k3s-u2net-apache2 + velura-studio-v2',
+          improvements: ['Tách nền AI U2Net & chuẩn hóa nền Trắng Studio (#FFFFFF)'],
+          beforeAnalysis: {
+            overallScore: 68,
+            passed: false,
+            needsEnhancement: true,
+            grade: 'C',
+            statusLabel: 'Cần cải thiện',
+            summary: 'Ảnh hơi tối',
+            metrics: { width: 800, height: 800, brightness: 95, contrast: 30, sharpnessScore: 70, backgroundScore: 60 },
+            criteria: [],
+            recommendations: [],
+          },
+          afterAnalysis: {
+            overallScore: 95,
+            passed: true,
+            needsEnhancement: false,
+            grade: 'A',
+            statusLabel: 'Đạt chuẩn Studio',
+            summary: 'Ảnh đạt chuẩn',
+            metrics: { width: 1080, height: 1080, brightness: 165, contrast: 48, sharpnessScore: 92, backgroundScore: 96 },
+            criteria: [],
+            recommendations: [],
+          },
+        }),
+    });
+    TestBed.inject(AdminSessionService).applyAuthContext({
+      user: { id: 'operator' },
+      role: 'admin_operator_sanpham',
+      isAdmin: true,
+      allowedModules: ['products'],
+      allowedPages: ['products'],
+    });
+    page.editorImages.set(['/assets/images/old.jpg']);
+    page.imageIndex.set(0);
+    page.generateAiEnhancedImage();
+    expect(page.aiEnhanceResult()?.enhancedUrl).toBe('https://storage/product-images/ai-studio/enhanced-1.png');
+    expect(page.aiImageAnalysis()?.overallScore).toBe(95);
+
+    const box = document.createElement('textarea');
+    box.value = '/assets/images/old.jpg';
+    page.applyAiEnhancedImage(box);
+    expect(page.editorImages()[0]).toBe('https://storage/product-images/ai-studio/enhanced-1.png');
+    expect(box.value).toBe('https://storage/product-images/ai-studio/enhanced-1.png');
+    expect(page.sourceApproved()).toBe(true);
+    expect(page.imageApprovals().length).toBe(1);
   });
 });

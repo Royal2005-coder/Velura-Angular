@@ -75,10 +75,27 @@ export class SiteHeader {
     return this.allProducts()
       .filter((p) => {
         const nameMatch = matchesSearchText(p.name, q);
+        const skuMatch = matchesSearchText(p.sku, q);
+        const seoTitleMatch = matchesSearchText(p.seo_title, q);
+        const seoDescMatch = matchesSearchText(p.seo_description, q);
+        const collMatch = matchesSearchText(p.collection, q);
+        const brandMatch = matchesSearchText(p.brand, q);
         const tagMatch = p.style_tags?.some((t) => matchesSearchText(t, q));
+        const occMatch = p.occasions?.some((o) => matchesSearchText(o, q));
         const colorMatch = matchesSearchText(p.color_tone, q);
         const catMatch = matchesSearchText(p.category_name, q);
-        return nameMatch || tagMatch || colorMatch || catMatch;
+        return (
+          nameMatch ||
+          skuMatch ||
+          seoTitleMatch ||
+          seoDescMatch ||
+          collMatch ||
+          brandMatch ||
+          tagMatch ||
+          occMatch ||
+          colorMatch ||
+          catMatch
+        );
       })
       .slice(0, 6);
   });

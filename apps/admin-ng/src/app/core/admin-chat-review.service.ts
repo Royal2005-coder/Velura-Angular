@@ -23,12 +23,49 @@ export interface AdminReviewedChatMessage extends AdminChatMessageRow {
     moderated?: boolean;
     system?: boolean;
     speaker?: string;
-    classification?: AdminChatClassification;
+    classification?: AdminChatObservedClassification;
   };
 }
 
-/** Supervisor-only handling remains enforced by the API; this metadata is a UI permission hint. */
-export type AdminReviewedChatSession = AdminChatSessionRow;
+/** Actual provider measurements, without prompts, credentials or generated timing estimates. */
+export interface AdminChatTrace {
+  operation: string;
+  provider: 'mistral' | 'gemini';
+  transport: 'gateway' | 'direct';
+  requestedModel: string;
+  model: string | null;
+  latencyMs: number;
+  outcome: string;
+  streamed: boolean;
+}
+
+/** Model observations remain separate from the labels staff can correct. */
+export interface AdminChatObservedClassification extends AdminChatClassification {
+  emotion?: { state: 'calm' | 'frustrated' | 'angry' | 'distressed'; confidence: number; reasons: string[] };
+  riskAssessment?: { confidence: number; reasons: string[] };
+  context?: { escalationTrend?: 'stable' | 'rising' | 'falling' };
+  trace?: AdminChatTrace[];
+}
+
+/** Missing server observations remain unknown even while staff continue replying. */
+export interface AdminChatObservation {
+  classification?: AdminChatObservedClassification;
+  trace?: AdminChatTrace[];
+}
+
+/** Safe case context extends the API row without granting access to originals or inventing telemetry. */
+export interface AdminReviewedChatSession extends AdminChatSessionRow {
+  assigned_agent_name?: string;
+  metadata?: NonNullable<AdminChatSessionRow['metadata']> & {
+    intelligence?: NonNullable<NonNullable<AdminChatSessionRow['metadata']>['intelligence']> & AdminChatObservation;
+    handoff_summary?: NonNullable<NonNullable<AdminChatSessionRow['metadata']>['handoff_summary']> & {
+      confirmed_facts?: string[];
+      unconfirmed_claims?: string[];
+      unresolved_need?: string;
+      recommendations?: string[];
+    };
+  };
+}
 
 /** Confirmed human decisions update the case without training a model or issuing financial benefits. */
 export interface AdminChatReviewInput {

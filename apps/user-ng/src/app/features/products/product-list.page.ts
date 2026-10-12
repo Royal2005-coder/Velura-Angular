@@ -118,6 +118,7 @@ export class ProductListPage {
     ...(this.selectedSize() ? { size: this.selectedSize() } : {}),
     ...(this.selectedShapes()[0] ? { body_shape: this.selectedShapes()[0] } : {}),
   }));
+  readonly activeVoucherCode = signal<string | null>(null);
   readonly loading = signal(true);
   readonly loadError = signal<string | null>(null);
   readonly allProducts = signal<ProductSummary[]>([]);
@@ -357,6 +358,17 @@ export class ProductListPage {
       this.imageMatches.set(parsedIds?.length ? parsedIds : matchIds === null ? null : null);
       this.visualFeatured.set([]);
       this.currentPage.set(1);
+      const voucherParam = params.get('voucher');
+      if (voucherParam) {
+        this.activeVoucherCode.set(voucherParam.trim());
+        localStorage.setItem('checkout_voucher_code', voucherParam.trim());
+        localStorage.removeItem('checkout_voucher_declined');
+      } else {
+        const stored = localStorage.getItem('checkout_voucher_code');
+        if (stored) {
+          this.activeVoucherCode.set(stored.trim());
+        }
+      }
     });
     this.catalog
       .getProducts()
@@ -490,6 +502,20 @@ export class ProductListPage {
     this.searchQuery.set('');
     void this.router.navigate(['/products'], {
       queryParams: { ...this.route.snapshot.queryParams, q: null },
+      queryParamsHandling: 'merge',
+    });
+  }
+
+  /**
+   * Clears the active promotional voucher banner and session preference.
+   */
+  clearActiveVoucher(): void {
+    this.activeVoucherCode.set(null);
+    localStorage.removeItem('checkout_voucher_code');
+    localStorage.removeItem('checkout_voucher_id');
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { voucher: null },
       queryParamsHandling: 'merge',
     });
   }

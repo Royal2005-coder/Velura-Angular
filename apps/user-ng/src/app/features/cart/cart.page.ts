@@ -5,6 +5,7 @@ import { CheckoutStore } from '../../core/services/checkout.store';
 import { ApiService } from '../../core/services/api.service';
 import { formatVnd, toPublicAsset } from '../../core/utils/money';
 import { showToast } from '../../core/utils/toast';
+import { formatSizeDisplay, sortSizes } from '../../core/utils/size';
 import { useBodyClass } from '../../core/utils/body-class';
 import { VoucherWallet } from '../../shared/voucher-wallet/voucher-wallet';
 import type { AppliedVoucher, CartItemRef } from '../../core/models/voucher.interface';
@@ -32,7 +33,9 @@ export class CartPage {
   private readonly cart = inject(CartStore);
   private readonly checkoutStore = inject(CheckoutStore);
   private readonly api = inject(ApiService);
+  readonly displaySize = formatSizeDisplay;
   readonly editingVariantId = signal<string | null>(null);
+  readonly pendingDeleteItem = signal<GroupedCartItem | null>(null);
   readonly variantChoices = signal<Array<{ variant_id: string; size?: string; color?: string; stock_quantity?: number }>>([]);
   readonly activeDropdown = signal<{ variantId: string; type: 'color' | 'size' } | null>(null);
   private readonly variantsCache = new Map<string, Array<{ variant_id: string; size?: string; color?: string; stock_quantity?: number }>>();
@@ -41,8 +44,8 @@ export class CartPage {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
 
-  /** Mã mang theo từ nút "Dùng mã" ở trang Ưu đãi (`/cart?voucher=CODE`). */
-  readonly preferredVoucher = this.route.snapshot.queryParamMap.get('voucher');
+  /** Mã mang theo từ nút "Dùng mã" ở trang Ưu đãi hoặc lưu trong phiên. */
+  readonly preferredVoucher = this.route.snapshot.queryParamMap.get('voucher') || localStorage.getItem('checkout_voucher_code') || localStorage.getItem('checkout_voucher_id');
   readonly appliedVoucher = signal<AppliedVoucher | null>(null);
   readonly voucherDeclined = signal(false);
 
@@ -210,10 +213,28 @@ export class CartPage {
    * Removes a variant line or combo set using the original cart payload key.
    */
   remove(item: GroupedCartItem): void {
+    this.confirmDelete(item);
+  }
+
+  confirmDelete(item: GroupedCartItem): void {
+    this.pendingDeleteItem.set(item);
+  }
+
+  cancelDelete(): void {
+    this.pendingDeleteItem.set(null);
+  }
+
+  executeDelete(): void {
+    const item = this.pendingDeleteItem();
+    if (!item) {
+      return;
+    }
     this.cart.removeItem(item.variant_id);
     this.selectedIds.update((ids) => ids.filter((id) => id !== item.variant_id));
     this.persistSelected();
     this.clampPage();
+    this.pendingDeleteItem.set(null);
+    showToast(`Đã xóa ${item.product_name} khỏi giỏ hàng.`);
   }
 
   /**
@@ -295,7 +316,7 @@ export class CartPage {
     for (const v of list) {
       if (v.size) set.add(v.size);
     }
-    return Array.from(set);
+    return sortSizes(Array.from(set));
   }
 
   pickColor(item: GroupedCartItem, color: string): void {
@@ -411,7 +432,7 @@ export class CartPage {
     for (const v of list) {
       if (v.size) set.add(v.size);
     }
-    return Array.from(set);
+    return sortSizes(Array.from(set));
   }
 
   pickComboSubColor(item: GroupedCartItem, sub: CartComboSubItem, color: string): void {
@@ -482,6 +503,10 @@ export class CartPage {
    * Steps the original cart quantity control for a line or combo set.
    */
   changeQty(item: GroupedCartItem, delta: number): void {
+    if (delta < 0 && item.quantity <= 1) {
+      this.confirmDelete(item);
+      return;
+    }
     this.cart.updateQty(item.variant_id, item.quantity + delta);
     this.clampPage();
   }

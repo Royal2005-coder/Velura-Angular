@@ -4,6 +4,7 @@ import type { Subscription } from 'rxjs';
 import { RouterLink } from '@angular/router';
 import { VoucherService } from '../../core/services/voucher.service';
 import { useBodyClass } from '../../core/utils/body-class';
+import { showToast } from '../../core/utils/toast';
 import type { WalletVoucher } from '../../core/models/voucher.interface';
 
 /**
@@ -52,7 +53,11 @@ export class AccountVouchersPage {
     this.usable().filter((item) => !this.isBirthdayVoucher(item))
   );
 
-
+  onUseVoucher(code: string): void {
+    localStorage.setItem('checkout_voucher_code', code);
+    localStorage.removeItem('checkout_voucher_declined');
+    showToast(`Đã lưu mã ${code}! Hãy chọn sản phẩm thỏa điều kiện để áp dụng.`);
+  }
   constructor() {
     useBodyClass('page-account-vouchers');
     effect(() => {

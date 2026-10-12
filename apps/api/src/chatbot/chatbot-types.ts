@@ -18,19 +18,35 @@ export interface ChatSource {
   snapshot: JsonObject;
 }
 
+/** Content-free provider measurements; model is null when the provider supplies no identity. */
+export interface ChatModelTrace {
+  operation: "analysis" | "filter_review" | "draft" | "response_review";
+  provider: "mistral" | "gemini";
+  transport: "gateway" | "direct";
+  requestedModel: string;
+  model: string | null;
+  latencyMs: number;
+  outcome: "ok" | "rejected" | "unavailable" | "invalid";
+  streamed: boolean;
+}
+
 /** Parsed model classification; issueKey correlates the same unresolved problem across paraphrases, and risk never changes account access. */
 export interface ChatAnalysis {
   intent: "facts" | "catalog" | "policy_problem" | "order" | "human";
   level: "L0" | "L1" | "L2" | "L3";
   issue: "general" | "catalog" | "sizing" | "delivery" | "return" | "payment" | "cancellation";
-  context: { issueKey: string; problem: string; wanted: string; failedApproaches: string[]; compromiseFailed: boolean; authorityExceeded: boolean };
+  context: { issueKey: string; problem: string; wanted: string; failedApproaches: string[]; compromiseFailed: boolean; authorityExceeded: boolean; repeatCount?: number; escalationTrend?: "stable" | "rising" | "falling"; rejectedApproach?: boolean };
   sentiment: "positive" | "neutral" | "negative";
   risk: "green" | "yellow" | "orange" | "red";
   moderation: "none" | "abuse" | "threat" | "illegal" | "sensitive";
-  /** Neutral publishable paraphrase retaining the legitimate request, never quoted abuse, identifiers or attachment data. */
+  /** Staff-safe transcript preserving legitimate requests with profanity replaced by *** and identifiers removed. */
   filtered: { text: string; problem: string; wanted: string; failedApproaches: string[] };
   confidence: number;
   reasons: string[];
+  /** Emotion and content risk are independent; anger alone is not abuse. */
+  emotion?: { state: "calm" | "frustrated" | "angry" | "distressed"; confidence: number; reasons: string[] };
+  riskAssessment?: { confidence: number; reasons: string[] };
+  trace?: ChatModelTrace[];
 }
 
 /** Every factual claim cites a verbatim passage from an official source. */
@@ -40,12 +56,14 @@ export interface ChatDraft {
   claims: { sourceId: string; quote: string }[];
   approach: string;
   promisedActions: string[];
+  trace?: ChatModelTrace[];
 }
 
 /** Fail-closed response review result; rejected drafts are never message rows. */
 export interface ChatRiskResult {
   safe: boolean;
   reasons: string[];
+  trace?: ChatModelTrace[];
 }
 
 /** Provider calls are injectable for behavior tests, never replaced in production. */

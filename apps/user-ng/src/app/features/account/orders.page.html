@@ -43,7 +43,15 @@
                 <span class="order-card__count">Tổng cộng ({{ order.item_count || 0 }} sản phẩm)</span>
                 <span class="order-card__total">{{ totalLabel(order) }}</span>
               </div>
-              <div class="order-card__actions">
+              <div class="order-card__actions" style="display: flex; gap: 8px; align-items: center;">
+                @if (order.status === 'delivered') {
+                  <a
+                    [routerLink]="['/account/reviews']"
+                    [queryParams]="{ order_id: order.order_id }"
+                    class="btn btn--secondary btn--sm"
+                    style="font-size: 0.8125rem; padding: 6px 14px;"
+                  >★ Đánh giá</a>
+                }
                 <a [routerLink]="['/account/orders', order.order_id]" class="btn btn--primary btn-detail-action">Chi tiết &gt;</a>
               </div>
             </div>

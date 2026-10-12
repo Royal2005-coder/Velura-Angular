@@ -75,6 +75,18 @@ export class AiService {
     private readonly catalog: AiCatalog,
     private readonly vectors = new LocalImageVectorRepository(repo.root),
   ) {}
+  private retentionSeconds(): number {
+    const seconds = Number(process.env.AI_PRIVATE_TTL_SECONDS || 3600);
+    if (!Number.isSafeInteger(seconds) || seconds < 1)
+      throw new HttpError(503, "AI_RETENTION_NOT_CONFIGURED", "Chính sách lưu ảnh chưa hợp lệ.");
+    return seconds;
+  }
+  private maxVtoAttempts(): number {
+    const attempts = Number(process.env.AI_VTO_MAX_ATTEMPTS || 3);
+    if (!Number.isSafeInteger(attempts) || attempts < 1)
+      throw new HttpError(503, "AI_RETRY_NOT_CONFIGURED", "Chính sách thử lại chưa hợp lệ.");
+    return attempts;
+  }
   /** Report actual operator-enabled runtime state; no fabricated readiness. */
   capabilities() {
     const verified = (process.env.AI_VERIFIED_TASKS || "").split(",");
@@ -112,7 +124,8 @@ export class AiService {
       enabled,
       local_only: true,
       max_upload_bytes: 8 * 1024 * 1024,
-      private_ttl_seconds: 3600,
+      private_ttl_seconds: this.retentionSeconds(),
+      max_vto_attempts: this.maxVtoAttempts(),
       studio_assets,
       tasks: TASKS.map((task) => ({
         task,
@@ -223,7 +236,7 @@ export class AiService {
       owner,
       path: join(this.repo.root, "assets", `${id}.image`),
       mime,
-      expires_at: new Date(Date.now() + 3600_000).toISOString(),
+      expires_at: new Date(Date.now() + this.retentionSeconds() * 1000).toISOString(),
     };
     await this.repo.saveAsset(asset, bytes);
     return { asset_id: id, expires_at: asset.expires_at };
@@ -338,6 +351,12 @@ export class AiService {
         ["queued", "running"].includes(job.status),
     );
     if (active) return this.view(active);
+    const attempts = task === "virtual_try_on"
+      ? jobs.filter(job => job.owner === owner && job.fingerprint === fingerprint)
+        .sort((a, b) => a.created_at.localeCompare(b.created_at))
+      : [];
+    if (task === "virtual_try_on" && attempts.length >= this.maxVtoAttempts())
+      throw new HttpError(429, "AI_RETRY_LIMIT", "Đã đạt giới hạn thử lại cho ảnh và sản phẩm này.");
     if (
       jobs.filter((job) => ["queued", "running"].includes(job.status)).length >=
         12 ||
@@ -521,6 +540,10 @@ export class AiService {
         directory,
         worker,
         ...(task === "virtual_try_on" ? { product_id: asString(body.product_id), variant_id: asString(body.variant_id) } : {}),
+        ...(task === "virtual_try_on" ? {
+          attempt: attempts.length + 1,
+          retry_of: attempts.at(-1)?.id,
+        } : {}),
         catalog_metadata,
         catalog_batch_metadata,
         ...(inputErrors.length
@@ -533,7 +556,7 @@ export class AiService {
             }
           : {}),
         created_at: now,
-        expires_at: new Date(Date.now() + 3600_000).toISOString(),
+        expires_at: new Date(Date.now() + this.retentionSeconds() * 1000).toISOString(),
       };
       // Query filters are private worker metadata and never customer image embeddings persisted in the catalog.
       const filters = asJsonObject(body.filters);
@@ -588,6 +611,8 @@ export class AiService {
       status: job.status,
       created_at: job.created_at,
       expires_at: job.expires_at,
+      ...(job.task === "virtual_try_on" ? { product_id: job.product_id, variant_id: job.variant_id } : {}),
+      ...(job.attempt ? { attempt: job.attempt, retry_of: job.retry_of } : {}),
       ...(job.result_url ? { result_url: job.result_url } : {}),
       ...(job.gate ? { gate: job.gate } : {}),
       ...(job.error ? { error: job.error } : {}),
@@ -636,6 +661,12 @@ export class AiService {
   /** Serve private bounded output bytes only for a successfully completed owned job. */
   async result(owner: string, id: string): Promise<Buffer> {
     const job = await this.owned(owner, id);
+    if (this.storageBlocked) throw new HttpError(503, "AI_QUEUE_STORAGE_FAILED", "Kho tác vụ tạm thời không khả dụng.");
+    if (job.task === "virtual_try_on") {
+      const support = await this.productCapabilities(job.product_id!, job.variant_id);
+      if (!support.product_supported || !support.variant_supported)
+        throw new HttpError(409, "VTO_PRODUCT_UNAVAILABLE", "Sản phẩm hoặc biến thể không còn hỗ trợ thử đồ.");
+    }
     if (job.status !== "success" || !job.result_url)
       throw new HttpError(
         409,
@@ -670,9 +701,9 @@ export class AiService {
   }
   private startPump(): void {
     if (this.pumping) return;
-    this.work = this.pump().catch((err) => {
+    this.work = this.pump().catch(() => {
       this.storageBlocked = true;
-      console.error("AI_QUEUE_STORAGE_FAILED", err);
+      console.error("AI_QUEUE_STORAGE_FAILED");
     });
   }
   private async pump(): Promise<void> {
@@ -710,17 +741,22 @@ export class AiService {
             job.directory,
             controller.signal,
           );
+          if (controller.signal.aborted) throw new Error("AI_JOB_TIMEOUT");
           const current = await this.repo.job(job.id);
           if (current?.status === "cancelled") continue;
           if (job.task === "virtual_try_on") {
             if (!result.binding || result.binding.request_id !== job.id ||
                 result.binding.product_id !== job.product_id || result.binding.variant_id !== job.variant_id) throw new Error("AI_WORKER_BINDING_MISMATCH");
             const support = await this.productCapabilities(job.product_id!, job.variant_id);
-            if (!support.variant_supported) throw new Error("VTO_PRODUCT_UNAVAILABLE");
+            if (!support.product_supported || !support.variant_supported) throw new Error("VTO_PRODUCT_UNAVAILABLE");
           }
           job.status = result.status;
           job.gate = result.gate;
           job.processing_version = result.processing_version;
+          if (result.status === "success" &&
+              ["virtual_try_on", "product_image_enhance"].includes(job.task) &&
+              (result.result_file !== "result.png" || result.gate?.valid !== true))
+            throw new Error("INVALID_IMAGE_RESULT");
           if (
             result.result_file === "result.png" &&
             result.status === "success"

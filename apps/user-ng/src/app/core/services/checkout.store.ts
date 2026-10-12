@@ -222,30 +222,58 @@ export class CheckoutStore {
   /**
    * Removes checked-out lines from the cart and clears checkout session keys.
    */
-  completeCheckout(orderedItems: CartLine[]): void {
-    if (this.source() === 'cart') {
-      const identity = (line: CartLine) => JSON.stringify([line.variant_id, line.combo_id || null]);
-      const remaining = new Map<string, number>();
-      for (const line of orderedItems) remaining.set(identity(line), (remaining.get(identity(line)) || 0) + line.quantity);
-      const next = this.cart.items().flatMap(line => {
-        const key = identity(line);
-        const consumed = Math.min(line.quantity, remaining.get(key) || 0);
-        remaining.set(key, (remaining.get(key) || 0) - consumed);
-        return consumed < line.quantity ? [{ ...line, quantity: line.quantity - consumed }] : [];
-      });
-      this.cart.replaceItems(next);
-    }
+  completeCheckout(orderedItems?: CartLine[]): void {
+    const items = [...(orderedItems?.length ? orderedItems : this.readCheckoutItems())];
+    const remainingToConsume = items.map((it) => ({ ...it }));
+
+    const nextCart = this.cart.items().flatMap((cartLine) => {
+      let remainingQty = cartLine.quantity;
+      for (const ordered of remainingToConsume) {
+        if (remainingQty <= 0) break;
+        if (ordered.quantity <= 0) continue;
+        if (this.isLineMatch(cartLine, ordered)) {
+          const consume = Math.min(remainingQty, ordered.quantity);
+          remainingQty -= consume;
+          ordered.quantity -= consume;
+        }
+      }
+      return remainingQty > 0 ? [{ ...cartLine, quantity: remainingQty }] : [];
+    });
+
+    this.cart.replaceItems(nextCart);
+
     this.items.set([]);
     sessionStorage.removeItem(ITEMS_KEY);
     sessionStorage.removeItem(SOURCE_KEY);
     this.source.set('cart');
     sessionStorage.removeItem(GUEST_PAYLOAD_KEY);
+    sessionStorage.removeItem('selected_cart_items');
+    localStorage.removeItem('selected_cart_items');
     localStorage.removeItem(SHIPPING_KEY);
     localStorage.removeItem(METHODS_KEY);
     localStorage.removeItem('checkout_discount');
     localStorage.removeItem('checkout_voucher_id');
     localStorage.removeItem('checkout_voucher_code');
     localStorage.removeItem('checkout_voucher_declined');
+  }
+
+  private isLineMatch(a: CartLine, b: CartLine): boolean {
+    if ((a.is_combo || a.combo_id) && (b.is_combo || b.combo_id)) {
+      const aKey = a.combo_id || a.variant_id;
+      const bKey = b.combo_id || b.variant_id;
+      return aKey === bKey;
+    }
+    if (a.variant_id && b.variant_id && a.variant_id === b.variant_id) {
+      return true;
+    }
+    if (a.product_id && b.product_id && a.product_id === b.product_id) {
+      const colorA = (a.color || '').trim().toLowerCase();
+      const colorB = (b.color || '').trim().toLowerCase();
+      const sizeA = (a.size || '').trim().toLowerCase();
+      const sizeB = (b.size || '').trim().toLowerCase();
+      return colorA === colorB && sizeA === sizeB;
+    }
+    return false;
   }
 
   private readShipping(): CheckoutShipping {

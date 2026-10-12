@@ -20,10 +20,10 @@
         <app-admin-empty-state kind="error" icon="alert" title="Không tải được đổi trả" [message]="loadError() || ''" />
       } @else if (zone() === 'chat') {
         <div class="admin-chat-layout">
-          <div class="admin-chat-sidebar">
+          <nav class="admin-chat-sidebar" aria-label="Danh sách phiên chat">
             <div class="admin-chat-sidebar__header">
-              <h4>Phiên chat</h4>
-              <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" title="Làm mới" (click)="reload()">
+              <h2>Phiên chat <span class="admin-note">· {{ pendingChatCount() }} chờ</span></h2>
+              <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" aria-label="Làm mới danh sách phiên" (click)="reload()">
                 <app-admin-icon name="refresh" />
               </button>
             </div>
@@ -45,6 +45,7 @@
                     type="button"
                     class="admin-chat-session-item"
                     [class.is-active]="selectedChat()?.session_id === session.session_id"
+                    [attr.aria-current]="selectedChat()?.session_id === session.session_id ? 'true' : null"
                     (click)="selectChat(session)"
                   >
                     <div class="admin-chat-session-item__header">
@@ -65,7 +66,7 @@
                     <p class="admin-chat-session-item__preview">{{ chatPreview(session) }}</p>
                     <div class="admin-chat-session-item__footer">
                       @if (session.metadata?.supervisor_required) {
-                        <span class="admin-badge admin-badge--danger admin-badge--xs">⚠️ Cần Giám Sát</span>
+                        <span class="admin-badge admin-badge--danger admin-badge--xs">Cần giám sát</span>
                       }
                       <small class="admin-chat-session-item__time">{{ date(session.last_message_at || session.created_at) }}</small>
                     </div>
@@ -73,7 +74,7 @@
                 }
               }
             </div>
-          </div>
+          </nav>
           <div class="admin-chat-main">
             @if (!selectedChat()) {
               <div class="admin-chat-empty">
@@ -99,7 +100,7 @@
                       {{ chatStatus(selectedChat()!) }}
                     </span>
                     @if (canMutate() && canJoinChat()) {
-                      <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="assignChat()">Tiếp nhận</button>
+                      <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="assignChat()" [disabled]="submitting()">Join · Tiếp nhận</button>
                     }
                     @if (canMutate() && canHandleChat() && !isClosedChat()) {
                       <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="closeChat()" [disabled]="!canReply()">Giải quyết và kết thúc</button>
@@ -112,85 +113,22 @@
                 </header>
                 @if (chatLoading()) { <p class="admin-refresh-status" role="status">Đang cập nhật hội thoại…</p> }
                 @if (chatError()) {
-                  <p class="admin-note">{{ chatError() }}</p>
+                  <p class="admin-note" role="alert">{{ chatError() }}</p>
                 }
                 @if (selectedChat()?.metadata?.supervisor_required) {
                   <p class="admin-note" role="status">Phiên này cần giám sát xử lý. Chỉ giám sát được tiếp nhận, phản hồi và đóng phiên.</p>
                 }
-                <section class="admin-chat-governance" aria-label="Trạng thái bảo vệ CSKH">
-                  <p><strong>{{ chatOwner() }}</strong> · {{ chatFreshness() }}</p>
-                  <p>Độ tin cậy: {{ chatConfidence() }} · Xu hướng: {{ selectedChat()?.metadata?.intelligence?.trend || 'Chưa đánh giá' }} · Nguồn lượt: {{ selectedChat()?.metadata?.intelligence?.source_seq ?? '—' }}</p>
-                  <p>Cảm xúc khách: {{ selectedChat()?.metadata?.intelligence?.customer_sentiment || 'Chưa đánh giá' }} · Cảm xúc CSKH: {{ selectedChat()?.metadata?.intelligence?.staff_sentiment || 'Chưa đánh giá' }}</p>
-                  @if (selectedChat()?.metadata?.intelligence?.corrected) { <p role="status">Phân loại hiện tại đã được nhân viên hiệu chỉnh.</p> }
-                  @for (reason of selectedChat()?.metadata?.intelligence?.reasons || []; track reason) { <p class="admin-note">{{ reason }}</p> }
-                  @if (selectedChat()?.metadata?.report_status; as report) {
-                    <p role="status">Báo cáo CSKH: {{ report.state || 'Chưa có trạng thái' }} · {{ date(report.updated_at) }}</p>
-                    <p class="admin-note">Số lần gửi: {{ report.attempts ?? '—' }} · Lần thử tiếp: {{ date(report.next_attempt_at) }}</p>
-                    @if (report.last_error && report.state === 'failed') { <p class="admin-note" style="color: #9C4221; font-size: 0.8rem;">Ghi chú gửi báo cáo: {{ report.last_error }}</p> }
-                    @if (report.state === 'delivered') { <p class="admin-note">Kênh gửi đã chấp nhận báo cáo; trạng thái này không xác nhận người nhận đã đọc.</p> }
-                  } @else { <p class="admin-note">Chưa có trạng thái báo cáo CSKH.</p> }
-                  @for (warning of selectedChat()?.metadata?.warnings || []; track warning.id) {
-                    @if (!warning.resolved) {
-                      <div class="admin-chat-filter-warning" role="alert">
-                        <p>{{ warning.text }}</p>
-                        @if (warning.action) { <p class="admin-note">{{ warning.action }}</p> }
-                        <button type="button" class="admin-btn admin-btn--ghost admin-btn--sm" (click)="openChatReview()" [disabled]="!canMutate()">Rà soát / chuyển giám sát</button>
-                      </div>
-                    }
+                <div class="chat-ownership" role="status">
+                  <strong>{{ chatOwner() }}</strong>
+                  @if (selectedChat()?.handoff_status === 'assigned') {
+                    <span>CSKH đang trả lời · AI đã khóa phản hồi công khai.</span>
+                  } @else if (selectedChat()?.handoff_status === 'requested') {
+                    <span>Đang chờ CSKH · Bấm <strong>Join · Tiếp nhận</strong> để khóa AI và phản hồi khách hàng.</span>
+                  } @else if (!isClosedChat()) {
+                    <span>AI đang hỗ trợ · Bấm <strong>Join · Tiếp nhận</strong> nếu cần can thiệp trực tiếp.</span>
                   }
-                  @if (selectedChat()?.metadata?.outcome; as outcome) { <p>Kết quả: {{ outcome.resolution }} · Cảm xúc cuối: {{ outcome.finalSentiment || 'Chưa đánh giá' }} · Đánh giá: {{ outcome.rating ?? 'Chưa có' }}</p> }
-                </section>
-                <!-- Live AI Intelligence & Customer Sentiment Panel -->
-                @if (chatSummaryInfo(selectedChat()); as summary) {
-                  <div class="admin-chat-ai-panel">
-                    <div class="admin-chat-ai-panel__head">
-                      <div class="admin-chat-ai-panel__title">
-                        <span class="admin-chat-ai-panel__icon">🧠</span>
-                        <strong>Bản tóm tắt ngữ cảnh AI &amp; Bảo vệ CSKH</strong>
-                      </div>
-                      <div class="admin-chat-ai-panel__indicators">
-                        <span class="admin-chat-risk-pill" [class]="'admin-chat-risk-pill--' + chatRiskBadge(selectedChat()).tone">
-                          {{ chatRiskBadge(selectedChat()).icon }} Rủi ro: {{ chatRiskBadge(selectedChat()).label }}
-                        </span>
-                        <span class="admin-chat-sentiment-pill" [class]="'admin-chat-sentiment-pill--' + chatSentimentBadge(selectedChat()).tone">
-                          Cảm xúc: {{ chatSentimentBadge(selectedChat()).label }}
-                        </span>
-                      </div>
-                    </div>
-                    <div class="admin-chat-ai-panel__body">
-                      @if (summary.problem) {
-                        <div class="admin-chat-ai-panel__row">
-                          <span class="admin-chat-ai-panel__label">Vấn đề của khách:</span>
-                          <span class="admin-chat-ai-panel__val">{{ summary.problem }}</span>
-                        </div>
-                      }
-                      @if (summary.wanted) {
-                        <div class="admin-chat-ai-panel__row">
-                          <span class="admin-chat-ai-panel__label">Mong muốn xử lý:</span>
-                          <span class="admin-chat-ai-panel__val">{{ summary.wanted }}</span>
-                        </div>
-                      }
-                      @if (summary.failedApproaches.length) {
-                        <div class="admin-chat-ai-panel__row">
-                          <span class="admin-chat-ai-panel__label">Phương án đã thử:</span>
-                          <div class="admin-chat-ai-panel__tags">
-                            @for (app of summary.failedApproaches; track app) {
-                              <span class="admin-chat-ai-tag">{{ app }}</span>
-                            }
-                          </div>
-                        </div>
-                      }
-                      <p class="admin-note">Xác minh đơn hàng: {{ summary.verifiedStatus || 'Chưa xác minh' }}</p>
-                      <p class="admin-note">{{ selectedChat()?.metadata?.summary_confirmation?.confirmed ? 'Tóm tắt đã được CSKH xác nhận' : 'Tóm tắt chưa được CSKH xác nhận' }}</p>
-                      @if (summary.supervisorRequired) {
-                        <div class="admin-chat-ai-panel__alert">
-                          ⚠️ <strong>Cảnh báo Giám sát:</strong> Cuộc trò chuyện này có mức rủi ro cao hoặc đe dọa, cần Super Admin / Giám sát tiếp nhận và giải quyết.
-                        </div>
-                      }
-                    </div>
-                  </div>
-                }
-                <div class="admin-chat-messages">
+                </div>
+                <div class="admin-chat-messages" role="log" aria-label="Hội thoại đã lọc" aria-live="polite" aria-relevant="additions" tabindex="0">
                   @if (!messages().length) {
                     <p class="admin-note admin-note--centered-padded">Chưa có tin nhắn</p>
                   } @else {
@@ -202,34 +140,38 @@
                         [class.admin-chat-msg--bot]="message.sender !== 'user' && message.sender !== 'agent'"
                       >
                         <span class="admin-chat-msg__sender">{{ messageLabel(message) }}</span>
-                        @if (message.moderation_status === 'pending') {
+                        @if (!chatMessageReady(message)) {
                           <p class="admin-chat-filter-warning" role="status">{{ safeChatText(message) }}</p>
                           @if (canMutate()) { <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="openChatReview(message)">Yêu cầu lọc lại</button> }
                         } @else if (message.moderation_status === 'restricted') {
                           <div class="admin-chat-msg__moderated-box">
                             <div class="admin-chat-msg__moderated-head">
-                              <span class="admin-shield-icon">🛡️</span>
-                              <strong>Nội dung đã được AI lọc tự động để bảo vệ sức khỏe tinh thần CSKH</strong>
+                              <strong>Nội dung đã lọc · từ ngữ không phù hợp được thay bằng ***</strong>
                             </div>
                             <p class="admin-chat-msg__moderated-text">{{ safeChatText(message) }}</p>
                             @if (isChatSupervisor() && message.message_id) {
                               <button class="admin-btn admin-btn--ghost admin-btn--xs" type="button" (click)="openChatReview(message)">
-                                👁️ Rà soát nội dung gốc (Giám sát)
+                                Rà soát riêng tư (Giám sát)
                               </button>
                             }
                           </div>
                         } @else {
                           <div class="admin-chat-msg__text">{{ safeChatText(message) }}</div>
                         }
-                        @if (message.moderation_status !== 'pending' && message.metadata?.classification; as classification) {
-                          <dl class="admin-note">
-                            @for (field of chatClassificationFields; track field) {
-                              <dt>{{ chatClassificationLabels[field] }}</dt><dd>{{ chatClassificationLabel(field, classification[field]) }}</dd>
-                            }
-                          </dl>
+                        @if (chatMessageReady(message) && message.sender === 'user' && message.metadata?.classification; as classification) {
+                          @if (classification.level) {
+                            <details class="chat-message-details">
+                              <summary>{{ classification.level }} · {{ chatClassificationLabel('intent', classification.intent) }} · {{ chatClassificationLabel('sentiment', classification.sentiment) }}</summary>
+                              <dl class="chat-facts">
+                                @for (field of chatClassificationFields; track field) {
+                                  <dt>{{ chatClassificationLabels[field] }}</dt><dd>{{ chatClassificationLabel(field, classification[field]) }}</dd>
+                                }
+                              </dl>
+                            </details>
+                          }
                         }
-                        @if (canMutate() && message.message_id && chatMessageReady(message)) {
-                          <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="openChatReview(message)" [disabled]="chatReviewBusy()">Rà soát / hiệu chỉnh</button>
+                        @if (canMutate() && message.sender === 'user' && message.message_id && chatMessageReady(message)) {
+                          <button class="admin-btn admin-btn--ghost admin-btn--xs" type="button" (click)="openChatReview(message)" [disabled]="chatReviewBusy()">Rà soát / hiệu chỉnh</button>
                         }
                         @if (productsOf(message).length) {
                           <div class="admin-chat-msg__products">
@@ -255,15 +197,16 @@
                   <input
                     class="admin-form-control"
                     type="text"
+                    aria-label="Phản hồi khách hàng từ CSKH"
                     [value]="replyDraft()"
                     (input)="onReplyInput($event)"
                     [disabled]="!canReply() || submitting()"
                     [placeholder]="isClosedChat() ? 'Phiên chat đã đóng' : canReply() ? 'Nhập tin nhắn phản hồi...' : 'Tiếp nhận phiên trước khi phản hồi...'"
                   />
-                  <button class="admin-btn admin-btn--secondary" type="submit" [disabled]="!canReply() || submitting()">Gửi</button>
+                  <button class="admin-btn admin-btn--secondary" type="submit" [disabled]="!canReply() || submitting() || !replyDraft().trim()">Gửi</button>
                 </form>
                 @if (chatReviewOpen()) {
-                  <section class="admin-card" aria-label="Rà soát chất lượng hội thoại">
+                  <section class="admin-card chat-review" aria-label="Rà soát chất lượng hội thoại">
                     <h4>Rà soát chất lượng hội thoại</h4>
                     <p class="admin-note">Quyết định đã xác nhận cập nhật phiên và được ghi nhật ký. Ưu đãi chỉ từ nguồn thật đã duyệt; không tự động hoàn tiền, phát hành voucher hay huấn luyện AI.</p>
                     @if (chatReviewError()) { <p class="admin-form-alert--error" role="alert">{{ chatReviewError() }}</p> }
@@ -360,6 +303,99 @@
               </div>
             }
           </div>
+          @if (selectedChat(); as session) {
+            <aside class="chat-context" aria-label="Ngữ cảnh và giám sát hội thoại">
+              <header class="chat-context__header"><h2>Ngữ cảnh &amp; giám sát</h2><span class="admin-note">Chỉ dữ liệu đã lọc</span></header>
+              <section class="chat-context__section">
+                <h3>Ý định &amp; nhánh xử lý</h3>
+                @if (chatDecision(); as decision) {
+                  <strong class="chat-branch">{{ chatClassificationLabel('level', decision.level) }}</strong>
+                  <p>{{ chatClassificationLabel('intent', decision.intent) }} · {{ chatClassificationLabel('issue', decision.issue) }}</p>
+                } @else { <p class="admin-note">Chưa có quyết định phân loại hiện tại.</p> }
+                <details>
+                  <summary>Lý do chọn nhánh</summary>
+                  <ul>@for (reason of session.metadata?.intelligence?.reasons || []; track $index) { <li>{{ reason }}</li> } @empty { <li>Chưa có lý do từ hệ thống.</li> }</ul>
+                </details>
+                @if (session.metadata?.intelligence?.corrected) { <p class="admin-note">Đã được nhân viên hiệu chỉnh.</p> }
+              </section>
+              <section class="chat-context__section" aria-label="Cảm xúc và rủi ro độc lập">
+                <h3>Tín hiệu độc lập</h3>
+                <div class="chat-signals">
+                  <div><span>Rủi ro</span><strong class="admin-chat-risk-pill" [class]="'admin-chat-risk-pill--' + chatRiskBadge(session).tone">{{ chatRiskBadge(session).label }}</strong><small>Tin cậy: {{ chatConfidence(chatDecision()?.riskAssessment?.confidence) }}</small></div>
+                  <div><span>Cảm xúc khách</span><strong class="admin-chat-sentiment-pill" [class]="'admin-chat-sentiment-pill--' + chatSentimentBadge(session).tone">{{ chatSentimentBadge(session).label }}</strong><small>{{ chatEmotion() }} · {{ chatConfidence(chatDecision()?.emotion?.confidence) }}</small></div>
+                </div>
+                <p class="admin-note">Cảm xúc tiêu cực không đồng nghĩa vi phạm hoặc bị khóa tài khoản.</p>
+                <dl class="chat-facts">
+                  <dt>Tin cậy chung</dt><dd>{{ chatConfidence() }}</dd>
+                  <dt>Xu hướng</dt><dd>{{ chatTrend() }}</dd>
+                  <dt>Cảm xúc CSKH</dt><dd>{{ chatClassificationLabel('sentiment', session.metadata?.intelligence?.staff_sentiment || '') }}</dd>
+                </dl>
+                <details><summary>Căn cứ cảm xúc / rủi ro</summary>
+                  <h4>Cảm xúc</h4><ul>@for (reason of chatDecision()?.emotion?.reasons || []; track $index) { <li>{{ reason }}</li> } @empty { <li>Chưa có căn cứ.</li> }</ul>
+                  <h4>Rủi ro</h4><ul>@for (reason of chatDecision()?.riskAssessment?.reasons || []; track $index) { <li>{{ reason }}</li> } @empty { <li>Chưa có căn cứ.</li> }</ul>
+                </details>
+              </section>
+              <section class="chat-context__section">
+                <h3>Tóm tắt trung lập</h3>
+                <p class="admin-badge" [class.admin-badge--success]="session.metadata?.summary_confirmation?.confirmed">{{ session.metadata?.summary_confirmation?.confirmed ? 'CSKH đã xác nhận tóm tắt' : 'Chưa được CSKH xác nhận' }}</p>
+                @if (chatSummaryInfo(session); as summary) {
+                  <dl class="chat-facts">
+                    <dt>Vấn đề</dt><dd>{{ summary.problem || 'Chưa đủ thông tin' }}</dd>
+                    <dt>Khách mong muốn</dt><dd>{{ summary.wanted || 'Chưa ghi nhận' }}</dd>
+                    <dt>Cần giải quyết</dt><dd>{{ session.metadata?.handoff_summary?.unresolved_need || 'Chưa có đánh giá nhu cầu còn tồn đọng' }}</dd>
+                    <dt>Đơn hàng</dt><dd>{{ summary.verifiedStatus || 'Chưa xác minh' }}</dd>
+                  </dl>
+                  <h4>Phương án đã thử</h4>
+                  <ul>@for (approach of summary.failedApproaches; track $index) { <li>{{ approach }}</li> } @empty { <li>Chưa ghi nhận phương án đã thử.</li> }</ul>
+                } @else { <p class="admin-note">Chưa có tóm tắt. Hội thoại vẫn có thể được CSKH xử lý.</p> }
+                <details><summary>Dữ kiện và nội dung cần xác minh</summary>
+                  <h4>Đã xác minh</h4><ul>@for (fact of session.metadata?.handoff_summary?.confirmed_facts || []; track $index) { <li>{{ fact }}</li> } @empty { <li>Chưa có dữ kiện xác minh riêng.</li> }</ul>
+                  <h4>Chưa xác minh</h4><ul>@for (claim of session.metadata?.handoff_summary?.unconfirmed_claims || []; track $index) { <li>{{ claim }}</li> } @empty { <li>Chưa có danh sách. Không xem tóm tắt AI là bằng chứng.</li> }</ul>
+                </details>
+                @if (canMutate() && canHandleChat()) { <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="openChatCaseAction('summary')" [disabled]="chatReviewBusy()">Xác minh / sửa tóm tắt</button> }
+              </section>
+              <section class="chat-context__section">
+                <h3>Hướng xử lý cho CSKH</h3>
+                <ul>@for (recommendation of session.metadata?.handoff_summary?.recommendations || []; track $index) { <li>{{ recommendation }}</li> } @empty { <li>Chưa có đề xuất từ hệ thống. Kiểm tra dữ kiện và chính sách đã duyệt trước khi cam kết.</li> }</ul>
+                <h4>Ưu đãi đủ điều kiện</h4>
+                @for (offer of session.metadata?.eligible_offers || []; track offer.offer_id) {
+                  <div class="chat-offer"><strong>{{ offer.title }}</strong><p>{{ offer.description }}</p>
+                    @if (!isClosedChat() && canMutate() && canHandleChat()) { <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="openChatCaseAction('offer', offer.offer_id)" [disabled]="chatReviewBusy()">Rà soát điều kiện</button> }
+                  </div>
+                } @empty { <p class="admin-note">Không có ưu đãi đã duyệt cho phiên này.</p> }
+                <p class="admin-note">Đề xuất không tự phát hành voucher, hoàn tiền hoặc cam kết thời hạn.</p>
+                @if (session.metadata?.outcome; as outcome) { <p>Kết quả: {{ outcome.resolution }} · Cảm xúc cuối: {{ chatClassificationLabel('sentiment', outcome.finalSentiment || '') }} · Đánh giá: {{ outcome.rating ?? 'Chưa có' }}</p> }
+              </section>
+              <section class="chat-context__section">
+                <h3>Bộ lọc &amp; độ mới</h3>
+                <p role="status">{{ chatFreshness() }}</p>
+                <dl class="chat-facts"><dt>Trạng thái lọc</dt><dd>{{ session.metadata?.intelligence?.filter_status || 'Chưa có trạng thái' }}</dd><dt>Cập nhật lúc</dt><dd>{{ date(session.metadata?.intelligence?.updated_at) }}</dd><dt>Nguồn lượt</dt><dd>{{ session.metadata?.intelligence?.source_seq ?? 'Chưa có' }}</dd></dl>
+                @for (warning of session.metadata?.warnings || []; track warning.id) {
+                  @if (!warning.resolved) {
+                    <div class="admin-chat-filter-warning" role="alert"><p>{{ warning.text }}</p>@if (warning.action) { <p>{{ warning.action }}</p> }
+                      <button type="button" class="admin-btn admin-btn--ghost admin-btn--sm" (click)="openChatReview()" [disabled]="!canMutate() || chatReviewBusy()">Rà soát / chuyển giám sát</button>
+                    </div>
+                  }
+                }
+              </section>
+              <section class="chat-context__section">
+                <h3>Báo cáo khẩn CSKH</h3>
+                @if (session.metadata?.report_status; as report) {
+                  <p role="status">{{ report.state || 'Chưa có trạng thái' }} · {{ date(report.updated_at) }}</p>
+                  <dl class="chat-facts"><dt>Số lần gửi</dt><dd>{{ report.attempts ?? 'Chưa có' }}</dd><dt>Thử lại lúc</dt><dd>{{ date(report.next_attempt_at) }}</dd></dl>
+                  @if (report.state === 'failed' || report.state === 'blocked') { <p class="admin-note">Báo cáo chưa gửi được. Kiểm tra kênh nhận với giám sát trước khi thử lại.</p> }
+                  @if (report.state === 'delivered') { <p class="admin-note">Kênh gửi đã chấp nhận; chưa xác nhận người nhận đã đọc.</p> }
+                  @if (report.report_id && ['blocked', 'failed', 'retry'].includes(report.state || '') && canMutate() && canHandleChat()) { <button type="button" class="admin-btn admin-btn--ghost admin-btn--sm" (click)="openChatCaseAction('report_retry')" [disabled]="chatReviewBusy()">Rà soát và gửi lại báo cáo</button> }
+                } @else { <p class="admin-note">Chưa có trạng thái gửi báo cáo.</p> }
+              </section>
+              <details class="chat-context__section">
+                <summary>Trace mô hình &amp; độ trễ</summary>
+                @for (trace of session.metadata?.intelligence?.trace || []; track $index) {
+                  <dl class="chat-facts"><dt>Tác vụ</dt><dd>{{ trace.operation }}</dd><dt>Nhà cung cấp</dt><dd>{{ trace.provider }} · {{ trace.transport }}</dd><dt>Mô hình thực tế</dt><dd>{{ trace.model || 'Nhà cung cấp chưa trả tên mô hình' }}</dd><dt>Mô hình yêu cầu</dt><dd>{{ trace.requestedModel }}</dd><dt>Phiên bản</dt><dd>Chưa có dữ liệu phiên bản</dd><dt>Độ trễ</dt><dd>{{ chatLatency(trace.latencyMs) }}</dd><dt>Kết quả</dt><dd>{{ trace.outcome }}</dd><dt>Luồng phản hồi</dt><dd>{{ trace.streamed ? 'Streaming' : 'Không streaming' }}</dd></dl>
+                } @empty { <p class="admin-note">Chưa có trace thực tế. Thiếu giám sát không ngăn CSKH xử lý hội thoại.</p> }
+              </details>
+            </aside>
+          }
         </div>
       } @else if (zone() === 'returns') {
         @if (receiveTarget(); as target) {

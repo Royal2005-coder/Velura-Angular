@@ -7,6 +7,7 @@ import { CartLine } from '../../core/services/cart.store';
 import { CheckoutStore } from '../../core/services/checkout.store';
 import { formatVnd, toPublicAsset } from '../../core/utils/money';
 import { showToast } from '../../core/utils/toast';
+import { formatSizeDisplay, sortSizes } from '../../core/utils/size';
 import { useBodyClass } from '../../core/utils/body-class';
 import { VoucherWallet } from '../../shared/voucher-wallet/voucher-wallet';
 import { VoucherService } from '../../core/services/voucher.service';
@@ -60,6 +61,7 @@ interface PlaceOrderResponse {
 })
 export class CheckoutShippingPage {
   private readonly checkout = inject(CheckoutStore);
+  readonly displaySize = formatSizeDisplay;
   private readonly api = inject(ApiService);
   readonly auth = inject(AuthService);
   private readonly router = inject(Router);

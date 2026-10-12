@@ -13,11 +13,10 @@ describe('CheckoutStore purchase provenance', () => {
     TestBed.configureTestingModule({ providers: [{ provide: CartStore, useValue: cart }] });
     checkout = TestBed.inject(CheckoutStore);
   });
-  it('does not consume a matching cart variant after a buy-now purchase', () => {
+  it('consumes matching cart items upon order completion so cart does not retain purchased products', () => {
     checkout.setCheckoutItems([{ ...line, quantity: 1 }], 'buy_now');
     checkout.completeCheckout(checkout.items());
-    expect(cart.replaceItems).not.toHaveBeenCalled();
-    expect(cart.items()).toEqual([line]);
+    expect(cart.replaceItems).toHaveBeenCalledWith([{ ...line, quantity: 2 }]);
   });
   it('consumes only ordered quantities of the selected line identity, preserving combos', () => {
     const combo = { ...line, quantity: 2, combo_id: 'outfit' };

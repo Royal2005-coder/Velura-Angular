@@ -1,7 +1,7 @@
 import { Component, DestroyRef, ElementRef, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { EMPTY, catchError, exhaustMap, filter, timer } from 'rxjs';
+import { EMPTY, catchError, exhaustMap, filter, fromEvent, merge, timer } from 'rxjs';
 import { AuthService } from '../../core/services/auth.service';
 import { OrderAccountApiStore } from '../../core/services/order-account-api.store';
 import {
@@ -52,7 +52,15 @@ export class ChatbotPage {
   readonly previousSessionId = signal('');
   readonly ratingDraft = signal(5);
   readonly lifecycleNote = signal('');
+  readonly summaryProblem = signal('');
+  readonly summaryWanted = signal('');
+  readonly summarySequence = signal<number | null>(null);
+  readonly summaryConfirmed = signal(false);
   private generation = 0;
+  private transcriptEpoch = 0;
+  private readSequence = 0;
+  private appliedRead = 0;
+  readonly connected = signal(navigator.onLine);
   readonly handoffStatus = signal<'ai' | 'requested' | 'assigned' | 'closed'>('ai');
   readonly humanTakeover = computed(() => this.handoffStatus() === 'assigned');
   readonly chatError = signal('');
@@ -72,21 +80,25 @@ export class ChatbotPage {
 
   constructor() {
     useBodyClass('page-chatbot');
-    this.chatbot.clearSessionId();
+    this.destroy.onDestroy(() => { this.generation++; });
     this.refreshSessions();
     const initialQuery = this.route.snapshot.queryParamMap.get('q');
-    const initialSession = this.route.snapshot.queryParamMap.get('session');
-    if (initialSession) this.openSession({ session_id: initialSession, handoff_status: this.chatbot.activeHandoff() });
-    else if (initialQuery?.trim()) setTimeout(() => this.send(initialQuery.trim()), 100);
+    const initialSession = this.route.snapshot.queryParamMap.get('session') || (!initialQuery?.trim() ? this.chatbot.savedSessionId() : '');
+    if (initialSession) this.openSession({ session_id: initialSession });
+    else if (initialQuery?.trim()) this.send(initialQuery.trim());
     let identity = this.auth.session();
     effect(() => { const session = this.auth.session(); if (session !== identity) { identity = session; untracked(() => { this.newChat(); this.sessions.set([]); this.refreshSessions(); }); } });
-    timer(3000, 3000).pipe(
-      filter(() => !!this.sessionId() && !this.loading()),
+    fromEvent(window, 'offline').pipe(takeUntilDestroyed(this.destroy)).subscribe(() => this.connected.set(false));
+    merge(timer(3000, 3000), fromEvent(window, 'online')).pipe(
+      filter(() => !!this.sessionId()),
       exhaustMap(() => {
-        const id = this.sessionId(), generation = this.generation;
+        this.connected.set(navigator.onLine);
+        const id = this.sessionId(), generation = this.generation, identity = this.auth.session();
+        const epoch = this.transcriptEpoch, sequence = ++this.readSequence;
         return this.chatbot.listMessages(id, this.chatbot.guestId()).pipe(
-          filter(() => generation === this.generation && id === this.sessionId()),
-          catchError(() => { if (generation === this.generation) this.chatError.set('Chưa cập nhật được hội thoại. Hệ thống sẽ tự thử lại.'); return EMPTY; }),
+          filter(() => generation === this.generation && identity === this.auth.session() && id === this.sessionId() && epoch === this.transcriptEpoch && sequence > this.appliedRead),
+          filter(() => { this.appliedRead = sequence; return true; }),
+          catchError(() => { if (generation === this.generation && identity === this.auth.session()) this.chatError.set('Chưa cập nhật được hội thoại. Hệ thống sẽ tự thử lại.'); return EMPTY; }),
         );
       }),
       takeUntilDestroyed(this.destroy),
@@ -113,14 +125,18 @@ export class ChatbotPage {
     const typing: ChatMessage = {
       message_id: 'typing',
       sender: 'bot',
-      text: 'Velura Stylist đang chọn gợi ý phù hợp...',
+      text: 'Đang xử lý và kiểm tra phản hồi…',
       created_at: new Date().toISOString(),
       metadata: { typing: true },
     };
-    this.messages.update((rows) => [...rows.filter((row) => !row.metadata?.local_greeting), userMessage, ...(this.humanTakeover() ? [] : [typing])]);
+    this.messages.update((rows) => [...rows.filter((row) => !row.metadata?.local_greeting), userMessage, ...(this.handoffStatus() === 'ai' ? [typing] : [])]);
     this.loading.set(true);
     this.scrollToBottom();
     const generation = this.generation;
+    const identity = this.auth.session();
+    this.transcriptEpoch++;
+    this.chatError.set('');
+    const orderId = this.selectedOrderId() || undefined;
     const attachment = this.attachment;
     this.clearPreview();
     this.chatbot
@@ -130,27 +146,33 @@ export class ChatbotPage {
         mode: localStorage.getItem('velura_token') ? 'user' : 'guest',
         message: payloadText,
         attachment,
-        orderId: this.selectedOrderId() || undefined,
-        guestAccessToken: this.orderAccount.guestAccessToken() || undefined,
+        orderId,
+        guestAccessToken: orderId ? this.orderAccount.guestAccessToken() || undefined : undefined,
       })
+      .pipe(takeUntilDestroyed(this.destroy))
       .subscribe({
         next: (data) => {
-          if (generation !== this.generation) return;
+          if (generation !== this.generation || identity !== this.auth.session()) return;
+          this.transcriptEpoch++;
           if (data.session?.session_id) {
             this.sessionId.set(data.session.session_id);
             this.chatbot.saveSessionId(data.session.session_id);
           }
-          this.adoptTranscript(data);
+          const staleRouting = this.handoffStatus() !== 'ai' && data.session?.handoff_status === 'ai';
+          if (!staleRouting) this.adoptTranscript(data);
           this.loading.set(false);
+          if (staleRouting) this.refreshMessages();
           this.refreshSessions();
           this.scrollToBottom();
         },
         error: () => {
-          if (generation !== this.generation) return;
+          if (generation !== this.generation || identity !== this.auth.session()) return;
+          this.transcriptEpoch++;
           this.messages.update(rows => rows.filter(row => row.message_id !== 'typing' && row.message_id !== userMessage.message_id));
           this.draft.set(message);
           this.chatError.set('Chưa gửi được tin nhắn. Vui lòng thử lại hoặc liên hệ CSKH.');
           this.loading.set(false);
+          this.refreshMessages();
           this.scrollToBottom();
         },
       });
@@ -189,6 +211,8 @@ export class ChatbotPage {
     this.productsById.set({}); this.blogsById.set({});
     this.caseOutcome.set(''); this.caseRating.set(null); this.lifecycleNote.set('');
     this.previousSessionId.set('');
+    this.summaryProblem.set(''); this.summaryWanted.set(''); this.summarySequence.set(null); this.summaryConfirmed.set(false);
+    this.ratingDraft.set(5);
     this.selectedOrderId.set(''); this.otpSent.set(false); this.otpCode.set(''); this.otpTarget.set(''); this.orderFeedback.set(''); this.orderBusy.set(false);
     this.sidebarOpen.set(false);
   }
@@ -204,8 +228,9 @@ export class ChatbotPage {
    * Opens a stored session from the original history list.
    */
   openSession(session: ChatSession): void {
-    this.generation++;
+    this.newChat();
     const generation = this.generation;
+    const identity = this.auth.session();
     this.handoffStatus.set(session.handoff_status || 'ai');
     this.chatbot.activeHandoff.set(this.handoffStatus());
     this.chatbot.activeSession.set(session.session_id);
@@ -213,15 +238,15 @@ export class ChatbotPage {
     this.chatbot.saveSessionId(session.session_id);
     this.sidebarOpen.set(false);
     this.loading.set(true);
-    this.chatbot.listMessages(session.session_id, this.chatbot.guestId()).subscribe({
+    this.chatbot.listMessages(session.session_id, this.chatbot.guestId()).pipe(takeUntilDestroyed(this.destroy)).subscribe({
       next: (data) => {
-        if (generation !== this.generation) return;
+        if (generation !== this.generation || identity !== this.auth.session()) return;
         this.adoptTranscript(data);
         this.loading.set(false);
         this.scrollToBottom();
       },
       error: () => {
-        if (generation !== this.generation) return;
+        if (generation !== this.generation || identity !== this.auth.session()) return;
         this.loading.set(false);
         this.chatError.set('Chưa tải được hội thoại. Hệ thống sẽ tự thử lại.');
       },
@@ -229,20 +254,26 @@ export class ChatbotPage {
   }
 
   /** Human escalation uses the normal customer-turn API; the backend decides ticket creation. */
-  requestHuman(): void { if (!this.humanTakeover()) this.send('Tôi muốn gặp nhân viên CSKH.'); }
+  requestHuman(): void { if (this.handoffStatus() === 'ai') this.send('Tôi muốn gặp nhân viên CSKH.'); }
 
   /** Reload authoritative messages and routing without generating an AI turn. */
   refreshMessages(): void {
-    const id = this.sessionId(), generation = this.generation;
-    if (!id || this.loading()) return;
+    const id = this.sessionId(), generation = this.generation, identity = this.auth.session();
+    const epoch = this.transcriptEpoch, sequence = ++this.readSequence;
+    if (!id) return;
     this.chatError.set('');
     this.chatbot.listMessages(id, this.chatbot.guestId()).pipe(takeUntilDestroyed(this.destroy)).subscribe({
-      next: data => { if (generation === this.generation) this.adoptTranscript(data); },
-      error: () => { if (generation === this.generation) this.chatError.set('Chưa tải được tin nhắn CSKH.'); },
+      next: data => {
+        if (generation !== this.generation || identity !== this.auth.session() || id !== this.sessionId() || epoch !== this.transcriptEpoch || sequence <= this.appliedRead) return;
+        this.appliedRead = sequence;
+        this.adoptTranscript(data);
+      },
+      error: () => { if (generation === this.generation && identity === this.auth.session()) this.chatError.set('Chưa tải được tin nhắn CSKH.'); },
     });
   }
 
   private adoptTranscript(data: ChatSendResponse): void {
+    if (data.session?.session_id && data.session.session_id !== this.sessionId()) return;
     const status = data.session?.handoff_status || data.handoff?.status || this.handoffStatus();
     this.handoffStatus.set(status);
     this.chatbot.activeHandoff.set(status);
@@ -250,9 +281,17 @@ export class ChatbotPage {
     this.caseOutcome.set(data.session?.metadata?.outcome?.resolution || '');
     this.caseRating.set(data.session?.metadata?.outcome?.rating ?? data.session?.metadata?.rating ?? null);
     this.previousSessionId.set(data.session?.metadata?.previous_session_id || '');
+    const summary = data.session?.metadata?.handoff_summary;
+    this.summaryProblem.set(summary?.problem || '');
+    this.summaryWanted.set(summary?.wanted || '');
+    this.summarySequence.set(typeof summary?.source_sequence === 'number' ? summary.source_sequence : null);
+    this.summaryConfirmed.set(data.session?.metadata?.summary_confirmation?.confirmed === true);
     this.rememberProducts(data.products || []);
     this.rememberBlogs(data.blogs || []);
-    const rows = data.messages || [];
+    const rows = (data.messages || []).filter(message => !message.session_id || message.session_id === this.sessionId()).map<ChatMessage>(message => {
+      if (message.moderation_status !== 'pending' && message.moderation_status !== 'restricted') return message;
+      return { message_id: message.message_id, session_id: message.session_id, sender: message.sender, created_at: message.created_at, moderation_status: message.moderation_status, text: message.moderation_status === 'pending' ? 'Tin nhắn đang được xử lý…' : 'Nội dung không thể hiển thị.' };
+    }).filter(message => !message.metadata?.typing || status === 'ai');
     this.messages.set(rows.length ? rows : status === 'ai' ? [localGreeting()] : []);
   }
 
@@ -306,6 +345,23 @@ export class ChatbotPage {
         this.loading.set(false); this.adoptTranscript(data); this.refreshSessions();
       },
       error: () => { if (generation !== this.generation) return; this.loading.set(false); this.chatError.set('Chưa lưu được thao tác. Vui lòng thử lại.'); },
+    });
+  }
+
+  /** Confirms the current filtered handoff summary without delaying staff routing. */
+  confirmSummary(): void {
+    const id = this.sessionId(), seq = this.summarySequence(), generation = this.generation;
+    if (!id || !seq || this.loading() || this.summaryConfirmed()) return;
+    this.loading.set(true); this.chatError.set('');
+    this.chatbot.lifecycle(id, { guestId: this.chatbot.guestId(), action: 'confirm_summary', confirmed: true, sourceSequence: seq }).pipe(takeUntilDestroyed(this.destroy)).subscribe({
+      next: data => {
+        if (generation !== this.generation) return;
+        this.loading.set(false); this.adoptTranscript(data);
+      },
+      error: () => {
+        if (generation !== this.generation) return;
+        this.loading.set(false); this.chatError.set('Chưa xác nhận được tóm tắt. Bạn vẫn có thể nhắn trực tiếp bên dưới.');
+      },
     });
   }
 

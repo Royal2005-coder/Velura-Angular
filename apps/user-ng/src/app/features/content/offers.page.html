@@ -113,8 +113,7 @@
         <span class="hot-banner-section__eyebrow">Ví Voucher</span>
         <h2 class="hot-banner-section__title" id="offer-voucher-title">Mã giảm giá của bạn</h2>
         <p class="offers-state">
-          Bấm "Dùng mã" để sang giỏ hàng với mã đã chọn sẵn. Mỗi đơn áp được một mã, và ở bước thanh
-          toán hệ thống vẫn kiểm lại điều kiện theo giỏ hàng thật.
+          Bấm "Dùng mã" để chuyển đến danh mục sản phẩm và mua sắm thỏa điều kiện áp dụng mã.
         </p>
         @if (!isMember()) {
           <p class="offers-state">Đăng nhập để thấy thêm mã dành riêng cho thành viên.</p>
@@ -147,7 +146,7 @@
               </div>
               @if (voucher.usable) {
                 <div class="voucher-card__side">
-                  <a class="btn-outline voucher-card__use" routerLink="/cart" [queryParams]="{ voucher: voucher.code }">Dùng mã</a>
+                  <a class="btn-outline voucher-card__use" [routerLink]="['/products']" [queryParams]="useVoucherParams(voucher)" (click)="onUseVoucher(voucher)">Dùng mã</a>
                 </div>
               }
             </article>
@@ -181,7 +180,7 @@
               </div>
               @if (voucher.usable) {
                 <div class="voucher-card__side">
-                  <a class="btn-outline voucher-card__use" routerLink="/cart" [queryParams]="{ voucher: voucher.code }">Dùng mã</a>
+                  <a class="btn-outline voucher-card__use" [routerLink]="['/products']" [queryParams]="useVoucherParams(voucher)" (click)="onUseVoucher(voucher)">Dùng mã</a>
                 </div>
               }
             </article>

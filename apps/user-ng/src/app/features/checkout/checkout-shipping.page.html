@@ -468,7 +468,7 @@
                   <h4 class="checkout-item__name">{{ line.product_name }}</h4>
                 </div>
 
-                <span class="checkout-item__subtitle">{{ line.color || 'Màu' }} / {{ line.size || 'Size' }}</span>
+                <span class="checkout-item__subtitle">{{ line.color || 'Màu' }} / {{ displaySize(line.size) || 'Size' }}</span>
 
                 @if (outOfStockVariantIds().has(line.variant_id)) {
                   <div class="checkout-item__stock-alert">
@@ -522,7 +522,7 @@
                       [class.is-active]="isDropdownOpen(line, 'size')"
                       (click)="toggleDropdown(line, 'size', $event)"
                     >
-                      <span>{{ line.size || 'Size' }}</span>
+                      <span>{{ displaySize(line.size) || 'Size' }}</span>
                       <span class="coolmate-pill-arrow">⌵</span>
                     </button>
                     @if (isDropdownOpen(line, 'size')) {
@@ -537,7 +537,7 @@
                               [class.is-selected]="line.size === size"
                               (click)="pickSize(line, size)"
                             >
-                              <span>{{ size }}</span>
+                              <span>{{ displaySize(size) }}</span>
                               @if (line.size === size) {
                                 <span>✓</span>
                               }

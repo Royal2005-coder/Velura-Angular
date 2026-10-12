@@ -23,6 +23,70 @@
   box-shadow: 0 10px 26px rgba(45, 39, 34, 0.08);
 }
 
+/* Active Voucher Banner (from Dùng mã) */
+.product-voucher-active-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: linear-gradient(135deg, #fff9f5 0%, #fef3ed 100%);
+  border: 1px solid #ebd9c8;
+  border-left: 4px solid var(--terracotta);
+  border-radius: 8px;
+  padding: 12px 18px;
+  margin: 16px 0 20px;
+  box-shadow: 0 4px 12px rgba(201, 123, 99, 0.08);
+  animation: fadeIn 0.25s ease-out;
+}
+
+.product-voucher-active-banner__content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.product-voucher-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #ffffff;
+  border: 1px solid rgba(201, 123, 99, 0.25);
+  border-radius: 20px;
+  padding: 4px 12px;
+  font-size: 0.8125rem;
+  color: var(--terracotta);
+  font-weight: 600;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+
+.product-voucher-text {
+  font-size: 0.875rem;
+  color: #554d46;
+  font-weight: 500;
+}
+
+.product-voucher-close {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: #8c857e;
+  font-size: 0.875rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.product-voucher-close:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: #2a2522;
+}
+
 .product-list-header {
   margin-bottom: 40px;
 }

@@ -113,7 +113,7 @@ const authOtpLimiter = new AuthOtpRateLimiter();
  * 503 thay vì tạo tài khoản chờ mã không bao giờ tới.
  */
 function requireOtpSmsChannel(): void {
-  if (isSmsConfigured() || config.nodeEnv !== "production") return;
+  if (isSmsConfigured() || config.nodeEnv !== "production" || Boolean(config.smtpHost && config.smtpUser && config.smtpAppPassword)) return;
   console.error("[otp-send] Twilio chưa cấu hình trong production; từ chối tạo OTP SMS.");
   throw new HttpError(503, "OTP_SERVICE_UNAVAILABLE", "Hiện không thể gửi mã OTP qua số điện thoại. Vui lòng thử lại sau.");
 }

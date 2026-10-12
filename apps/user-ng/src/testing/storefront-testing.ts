@@ -83,17 +83,18 @@ export function stubApiService(): ApiService {
   } as unknown as ApiService;
 }
 
-export function stubCatalogService(): Pick<CatalogService, 'getCategories' | 'getProducts' | 'getProduct'> {
+export function stubCatalogService(): Pick<CatalogService, 'getCategories' | 'getProducts' | 'getProduct' | 'likeReview'> {
   return {
     getCategories: () => of([{ category_id: 'c1', name: 'Áo', slug: 'ao' }]),
     getProducts: () => of([sampleProduct]),
     getProduct: () => of(sampleProduct),
+    likeReview: (reviewId: string) => of({ success: true, review_id: reviewId, helpful_count: 1 }),
   };
 }
 
 export function stubChatbotService(): Pick<
   ChatbotService,
-  'sendMessage' | 'listSessions' | 'listMessages' | 'deleteSession' | 'lifecycle' | 'guestId' | 'saveSessionId' | 'clearSessionId' | 'activeHandoff' | 'activeSession'
+  'sendMessage' | 'listSessions' | 'listMessages' | 'deleteSession' | 'lifecycle' | 'guestId' | 'saveSessionId' | 'savedSessionId' | 'clearSessionId' | 'activeHandoff' | 'activeSession'
 > {
   return {
     activeHandoff: signal<ChatHandoffStatus>('ai'),
@@ -105,6 +106,7 @@ export function stubChatbotService(): Pick<
     lifecycle: () => of({}),
     guestId: () => '00000000-0000-4000-8000-000000000001',
     saveSessionId: () => undefined,
+    savedSessionId: () => '',
     clearSessionId: () => undefined,
   };
 }

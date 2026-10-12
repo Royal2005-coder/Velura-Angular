@@ -5,6 +5,7 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { useBodyClass } from '../../core/utils/body-class';
+import { showToast } from '../../core/utils/toast';
 import type {
   BirthdayPrompt,
   OfferCampaign,
@@ -85,6 +86,50 @@ export class OffersPage {
     return title?.trim() || 'Ưu đãi Velura';
   }
 
+  useVoucherParams(voucher: OfferVoucher): Record<string, string> {
+    const params: Record<string, string> = { voucher: voucher.code };
+    const categorySlug = this.getCategorySlugForVoucher(voucher);
+    if (categorySlug) {
+      params['category'] = categorySlug;
+    }
+    return params;
+  }
+
+  onUseVoucher(voucher: OfferVoucher): void {
+    localStorage.setItem('checkout_voucher_code', voucher.code);
+    if (voucher.voucher_id) {
+      localStorage.setItem('checkout_voucher_id', voucher.voucher_id);
+    }
+    localStorage.removeItem('checkout_voucher_declined');
+    showToast(`Đã lưu mã ${voucher.code}! Hãy chọn sản phẩm thỏa điều kiện để áp dụng mã.`);
+  }
+
+  private getCategorySlugForVoucher(voucher: OfferVoucher): string | null {
+    if (!voucher.category_names || !voucher.category_names.length) {
+      return null;
+    }
+    const map: Record<string, string> = {
+      'áo': 'ao',
+      'ao': 'ao',
+      'quần': 'quan',
+      'quan': 'quan',
+      'đầm & váy': 'dam-vay',
+      'đầm': 'dam-vay',
+      'váy': 'dam-vay',
+      'dam': 'dam-vay',
+      'vay': 'dam-vay',
+      'áo khoác': 'ao-khoac',
+      'ao khoac': 'ao-khoac',
+      'set đồ': 'set-do',
+      'set do': 'set-do',
+      'phụ kiện': 'phu-kien',
+      'phu kien': 'phu-kien',
+      'giày dép': 'giay-dep',
+      'giay dep': 'giay-dep',
+    };
+    const first = voucher.category_names[0].trim().toLowerCase();
+    return map[first] || null;
+  }
   constructor() {
     this.destroyRef.onDestroy(() => clearTimeout(this.scrollTimer));
     useBodyClass('page-offers');

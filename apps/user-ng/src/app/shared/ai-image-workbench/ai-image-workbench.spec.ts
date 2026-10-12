@@ -3,6 +3,7 @@ import { of, Subject, throwError } from 'rxjs';
 import { AiEngineService, AiJob } from '../../core/services/ai-engine.service';
 import { AiImageWorkbench } from './ai-image-workbench';
 import { AuthService } from '../../core/services/auth.service';
+import { guestSessionId } from '../../core/utils/guest-session';
 import type { Mock } from 'vitest';
 
 const quality: AiJob = {
@@ -193,5 +194,55 @@ describe('AiImageWorkbench', () => {
     await p.generate();
     expect(model.create).not.toHaveBeenCalled();
     expect(p.studioImage()).toBe('');
+  });
+  it('resumes only a stored job matching the current product and variant on open', async () => {
+    const p = page();
+    const capabilities = {
+      enabled: true,
+      product_supported: true,
+      variant_supported: true,
+      studio_assets: [],
+      tasks: [{ task: 'virtual_try_on' as const, enabled: true }],
+      max_upload_bytes: 100,
+      private_ttl_seconds: 900,
+      local_only: true,
+    };
+    Object.assign(model, {
+      capabilities: vi.fn(() => of(capabilities)),
+      result: vi.fn(() => of(new Blob(['image'], { type: 'image/png' }))),
+    });
+    sessionStorage.setItem(
+      `velura_ai_job_${guestSessionId()}_virtual_try_on_product_variant`,
+      'resumed-job',
+    );
+    model.job.mockReturnValueOnce(
+      of({
+        job: {
+          ...quality,
+          id: 'resumed-job',
+          task: 'virtual_try_on',
+          status: 'success',
+          product_id: 'other-product',
+          variant_id: 'variant',
+        },
+      }),
+    );
+    await p.open();
+    expect(p.job()).toBeNull();
+    model.job.mockReturnValueOnce(
+      of({
+        job: {
+          ...quality,
+          id: 'resumed-job',
+          task: 'virtual_try_on',
+          status: 'success',
+          product_id: 'product',
+          variant_id: 'variant',
+        },
+      }),
+    );
+    await p.open();
+    expect(p.job()?.id).toBe('resumed-job');
+    expect(p.result()).toBe('blob:preview');
   });
 });

@@ -13,6 +13,10 @@ export interface AiJob {
   status: 'queued' | 'running' | 'success' | 'validation_failed' | 'failed' | 'cancelled';
   created_at: string;
   expires_at: string;
+  product_id?: string;
+  variant_id?: string;
+  attempt?: number;
+  retry_of?: string;
   gate?: { valid?: boolean; reasons?: string[]; metrics?: Record<string, number> };
   error?: string;
   matches?: { product_id: string; score: number }[];
@@ -35,6 +39,7 @@ export interface AiCapabilities {
   local_only: boolean;
   max_upload_bytes: number;
   private_ttl_seconds: number;
+  max_vto_attempts?: number;
   tasks: { task: AiTask; enabled: boolean; reason?: string }[];
   studio_assets?: StudioAsset[];
 }

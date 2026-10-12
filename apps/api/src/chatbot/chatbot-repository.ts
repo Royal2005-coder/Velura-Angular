@@ -111,6 +111,13 @@ export function createChatbotRepository() {
       })));
     },
 
+    /** Queued sessions may acknowledge only the latest filtered customer turn, never after human assignment. */
+    async commitQueuedTurn(sessionId: string, epoch: number, sequence: number, payload: JsonObject) {
+      return withChatError(async () => asJsonObject(await callRpc("chat_commit_queued_turn", {
+        p_session: sessionId, p_epoch: epoch, p_user_sequence: sequence, p_payload: payload
+      })));
+    },
+
     /** Publishes only filtered context; failure leaves the original quarantined and marks an outage. */
     async recordAnalysis(sessionId: string, messageId: string, issueKey: string, analysis: JsonObject, failed: boolean) {
       return withChatError(async () => asJsonObject(await callRpc("chat_record_analysis", {

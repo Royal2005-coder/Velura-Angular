@@ -27,7 +27,18 @@ export async function handleChatbotRoute({ req, res, url, parts, context, header
     if (req.method === "POST" && parts[3] === "messages" && parts.length === 4) {
       applyChatRateLimit(req, res, limiter, requestMeta.ipAddress);
       const body = await readJson(req, config.maxBodyBytes);
-      sendJson(res, 200, await service.sendMessage(context, body), headers);
+      const payload = await service.sendMessage(context, body);
+      if (String(req.headers.accept || "").includes("text/event-stream")) {
+        res.writeHead(200, {
+          ...headers,
+          "content-type": "text/event-stream; charset=utf-8",
+          "cache-control": "no-cache, no-transform",
+          connection: "keep-alive"
+        });
+        res.end(`event: status\ndata: ${JSON.stringify({ stage: "processing" })}\n\nevent: response\ndata: ${JSON.stringify(payload)}\n\n`);
+        return true;
+      }
+      sendJson(res, 200, payload, headers);
       return true;
     }
 

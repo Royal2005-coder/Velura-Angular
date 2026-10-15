@@ -43,15 +43,51 @@ metadata:
   name: alloy-config
   namespace: observability
 data:
-  config.alloy: "discovery.kubernetes \"pods\" {\n  role = \"pod\"\n}\ndiscovery.relabel\
-    \ \"pods\" {\n  targets = discovery.kubernetes.pods.targets\n  rule {\n    source_labels\
-    \ = [\"__meta_kubernetes_namespace\"]\n    target_label = \"namespace\"\n  }\n\
-    \  rule {\n    source_labels = [\"__meta_kubernetes_pod_name\"]\n    target_label\
-    \ = \"pod\"\n  }\n  rule {\n    source_labels = [\"__meta_kubernetes_pod_container_name\"\
-    ]\n    target_label = \"container\"\n  }\n}\nloki.source.kubernetes \"pods\" {\n\
-    \  targets = discovery.relabel.pods.output\n  forward_to = [loki.write.local.receiver]\n\
-    }\nloki.write \"local\" {\n  endpoint {\n    url = \"http://loki:3100/loki/api/v1/push\"\
-    \n  }\n}\n"
+  config.alloy: |
+    // API log streaming needs no hostPath, privileged container or node daemon.
+    discovery.kubernetes "pods" {
+      role = "pod"
+      namespaces {
+        names = ["velura", "velura-staging", "observability", "auth", "storage", "database", "flux-system", "kube-system"]
+      }
+    }
+    discovery.relabel "pods" {
+      targets = discovery.kubernetes.pods.targets
+      rule {
+        source_labels = ["__meta_kubernetes_namespace"]
+        target_label = "namespace"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_name"]
+        target_label = "pod"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_container_name"]
+        target_label = "container"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_node_name"]
+        target_label = "node"
+      }
+      rule {
+        target_label = "job"
+        replacement = "kubernetes-pods"
+      }
+      // Do not promote arbitrary pod labels, log fields, URLs or identities.
+      rule {
+        action = "labelkeep"
+        regex = "__meta_kubernetes_namespace|__meta_kubernetes_pod_name|__meta_kubernetes_pod_container_name|__meta_kubernetes_pod_uid|namespace|pod|container|node|job"
+      }
+    }
+    loki.source.kubernetes "pods" {
+      targets = discovery.relabel.pods.output
+      forward_to = [loki.write.local.receiver]
+    }
+    loki.write "local" {
+      endpoint {
+        url = "http://loki:3100/loki/api/v1/push"
+      }
+    }
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -60,6 +96,8 @@ metadata:
   namespace: observability
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: alloy
@@ -96,11 +134,13 @@ spec:
             cpu: 300m
             memory: 256Mi
         readinessProbe:
-          tcpSocket:
+          httpGet:
+            path: /-/ready
             port: 12345
           periodSeconds: 10
         livenessProbe:
-          tcpSocket:
+          httpGet:
+            path: /-/healthy
             port: 12345
           initialDelaySeconds: 30
           periodSeconds: 20
@@ -122,3 +162,17 @@ spec:
           name: alloy-config
       - name: data
         emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alloy
+  namespace: observability
+spec:
+  type: ClusterIP
+  selector:
+    app: alloy
+  ports:
+  - name: http
+    port: 12345
+    targetPort: http

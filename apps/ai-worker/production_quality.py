@@ -4,13 +4,14 @@ from image_gate import assess
 
 
 def quality(image, person=False, pose_detector=None) -> dict:
-    """Report actual photometric/pose measurements with a versioned border heuristic score."""
+    """Measure image quality; a requested but unavailable pose check always fails closed."""
     gate = assess(image, person=person, pose_detector=pose_detector)
     score = math.exp(-gate["metrics"]["border_variance"] / 45)
     gate["metrics"]["background_score"] = round(score, 6)
     if score < .5:
         gate.setdefault("warnings", []).append("BACKGROUND_TOO_COMPLEX")
-    fatal = {"PERSON_NOT_DETECTED", "TOO_DARK", "OVEREXPOSED", "BLURRY", "LOW_RESOLUTION", "MULTIPLE_PEOPLE"}
+    fatal = {"PERSON_NOT_DETECTED", "POSE_CHECK_UNAVAILABLE", "TOO_DARK", "OVEREXPOSED",
+             "BLURRY", "LOW_RESOLUTION", "MULTIPLE_PEOPLE"}
     gate["valid"] = not any(reason in fatal for reason in gate["reasons"])
     gate["threshold_version"] = "velura-measured-1"
     gate["calibration_status"] = "requires_licensed_validation_dataset"

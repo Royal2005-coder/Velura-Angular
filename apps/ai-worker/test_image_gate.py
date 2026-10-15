@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 from image_gate import assess, read_image, validate_pose_landmarks
+from production_quality import quality
 from types import SimpleNamespace
 
 
@@ -25,6 +26,19 @@ class ImageGateTests(unittest.TestCase):
         self.assertFalse(result["valid"])
         self.assertFalse(result["pose_checked"])
         self.assertIn("POSE_CHECK_UNAVAILABLE", result["reasons"])
+
+    def test_production_quality_keeps_unavailable_person_checks_fatal(self):
+        photo = Image.fromarray(np.random.default_rng(1).integers(
+            50, 200, (512, 512, 3), dtype=np.uint8))
+        for detector in (None, lambda _: ["POSE_CHECK_UNAVAILABLE"]):
+            with self.subTest(detector_available=detector is not None):
+                result = quality(photo, person=True, pose_detector=detector)
+                self.assertFalse(result["valid"])
+                self.assertFalse(result["pose_checked"])
+                self.assertIn("POSE_CHECK_UNAVAILABLE", result["reasons"])
+        measured = quality(photo, person=True, pose_detector=lambda _: [])
+        self.assertTrue(measured["valid"])
+        self.assertTrue(measured["pose_checked"])
 
     def test_decode_uses_content_not_filename_and_rejects_animation(self):
         with tempfile.TemporaryDirectory() as root:

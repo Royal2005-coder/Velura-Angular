@@ -14,6 +14,7 @@ const SERVICES = {
   'velura-api': 'velura', 'velura-admin': 'velura', 'velura-storefront': 'velura',
   'ai-worker': 'ai-staging', 'litellm': 'observability', 'grafana': 'observability',
   'loki': 'observability', 'victoriametrics': 'observability', 'cloudflared': 'networking',
+  'alloy': 'observability', 'vmalert': 'observability', 'alertmanager': 'observability',
   'oauth2-proxy': 'networking', 'keycloak': 'auth', 'source-controller': 'flux-system',
   'kustomize-controller': 'flux-system',
 };
@@ -28,6 +29,7 @@ const COMMANDS = {
   logs: { description: 'Read bounded logs from an allowlisted deployment; return only timestamps/severity and counts, never message bodies.', options: [...CLUSTER_OPTIONS, 'service', 'tail'], prerequisites: ['Allowlisted deployment and pods/log read permission'] },
   reconcile: { description: 'Plan Flux reconciliation; execute only an approved, SHA-pinned Git source already fetched by Flux.', options: [...CLUSTER_OPTIONS, 'environment', 'revision', 'execute', 'approval'], prerequisites: ['Owner approval file for execution', 'GitRepository flux-system/velura-repo pinned spec.ref.commit', 'Kustomization flux-system/velura-staging or velura-infra matching environment', 'Matching artifact revision'], mutation: 'Only explicit --execute annotates the environment-specific Flux Kustomization; never applies YAML or unsuspends production' },
   'backup-check': { description: 'Verify external Restic snapshot identity/freshness and separately declared restore evidence.', options: ['backup-provider', 'evidence', 'environment', 'expected-cluster', 'timeout'], prerequisites: ['restic', 'RESTIC_REPOSITORY external provider and noninteractive credentials', 'Fresh external restore evidence file'] },
+  'k3s-backup': { description: 'Inspect the active default-layout SQLite datastore and recovery inputs; create a protected local online backup only with explicit approval. Never claims offsite or restore proof.', options: ['ssh', 'expected-cluster', 'timeout', 'environment', 'revision', 'execute', 'approval'], prerequisites: ['Explicit SSH alias and kube-system UID', 'Root noninteractive python3 with sqlite3 and running default-layout K3s SQLite service', 'Owner approval for creation; independent encrypted offsite provider and isolated recovery host remain separate'], mutation: 'Only --execute creates a root-only local SQLite backup/recovery bundle; no restart, etcd command, Kubernetes mutation or Secret export' },
   acceptance: { description: 'Enumerate every requirement. External attestations remain unknown pending independent verification, never automatic pass.', options: [...CLUSTER_OPTIONS, 'namespace', 'requirements', 'evidence'], prerequisites: ['Requirement catalog; optional external evidence and explicit cluster identity for runtime checks'] },
   'rollback-plan': { description: 'Prepare Git revert in a clean working tree only; no commit/push/direct Kubernetes image mutation.', options: [...CLUSTER_OPTIONS, 'environment', 'revision', 'execute', 'approval', 'repo', 'mainline'], prerequisites: ['git', 'Full commit SHA', 'Clean worktree', 'Owner approval and matching cluster identity for execution'], mutation: 'Only explicit --execute runs git revert --no-commit; merge commits require --mainline 1' },
   schema: { description: 'Return exact catalog, option syntax, JSON file contracts and exit codes.', options: [], prerequisites: [] },
@@ -69,6 +71,7 @@ export function parseArgs(argv, env = {}) {
     }
   }
   ensure(!(seen.has('ssh') && seen.has('context')), EXIT.usage, 'Choose SSH or an explicit context, not both');
+  if (command === 'k3s-backup') ensure(seen.has('ssh'), EXIT.usage, 'K3s backup requires an explicitly selected --ssh alias');
   if (COMMANDS[command].options.includes('ssh') && !opts.context) opts.ssh = opts.ssh ?? env.VELURA_OPS_SSH_ALIAS ?? 'ai1-k3s';
   if (opts.ssh) ensure(/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(opts.ssh), EXIT.usage, 'SSH target must be a configured alias, not a host address or shell expression');
   if (opts.context) ensure(/^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/.test(opts.context), EXIT.usage, 'Invalid context');
@@ -76,13 +79,14 @@ export function parseArgs(argv, env = {}) {
   if (opts.namespace) ensure(NAMESPACES.includes(opts.namespace), EXIT.usage, 'Namespace is not allowlisted');
   if (opts.service) ensure(Object.hasOwn(SERVICES, opts.service), EXIT.usage, 'Service is not allowlisted');
   if (opts.environment) ensure(/^[a-z][a-z0-9-]{0,31}$/.test(opts.environment), EXIT.usage, 'Invalid environment');
-  if (['reconcile', 'rollback-plan'].includes(command)) ensure(['staging', 'production'].includes(opts.environment), EXIT.usage, 'Mutation plans require --environment staging or production');
+  if (['reconcile', 'rollback-plan', 'k3s-backup'].includes(command)) ensure(['staging', 'production'].includes(opts.environment), EXIT.usage, 'Mutation plans require --environment staging or production');
   if (opts.revision) ensure(/^[a-f0-9]{40}$/.test(opts.revision), EXIT.usage, 'Revision must be a full lowercase Git commit SHA');
   if (opts.mainline) ensure(opts.mainline === '1', EXIT.usage, 'Only --mainline 1 is supported');
   if (seen.has('timeout')) {
     ensure(/^\d+$/.test(opts.timeout) && +opts.timeout >= 1000 && +opts.timeout <= 60000, EXIT.usage, 'Timeout must be 1000–60000 milliseconds');
     opts.timeout = +opts.timeout;
   }
+  if (command === 'k3s-backup') ensure(opts.timeout >= 10000, EXIT.usage, 'K3s backup timeout must allow at least 10000 milliseconds for SSH and safe helper shutdown');
   if (opts.tail) ensure(/^\d+$/.test(opts.tail) && +opts.tail >= 1 && +opts.tail <= 200, EXIT.usage, 'Tail must be 1–200');
   for (const key of ['path', 'schema-location', 'approval', 'evidence', 'requirements', 'repo']) {
     if (opts[key]) ensure(!/[\x00-\x1f]/.test(opts[key]) && !opts[key].startsWith('-') && opts[key].length <= 1024, EXIT.usage, 'Invalid file path');
@@ -96,12 +100,13 @@ export function catalog() {
     schemaVersion: VERSION, usage: 'node tools/ops/velura-ops.mjs <command> [--option value] [--execute]',
     commands: COMMANDS, namespaces: NAMESPACES, services: SERVICES, exitCodes: EXIT,
     defaults: { ssh: 'VELURA_OPS_SSH_ALIAS or existing ai1-k3s alias', path: 'deploy/k8s/base', timeout: 15000, tail: 50, requirements: 'tools/ops/production-requirements.json' },
-    safeguards: ['Readonly by default', 'Every cluster operation requires --expected-cluster kube-system UID', 'Local kubectl always requires --context', 'No shell, prompts, insecure TLS, apply, upgrade, reboot or secret rotation', 'No Secret/config/env/message-body output', 'External evidence is not runtime proof'],
-    optionConstraints: { syntax: '--option value (no positional arguments or option=value)', ssh: 'configured alias matching [A-Za-z][A-Za-z0-9_-]{0,63}', context: 'explicit named kubecontext; never current-context', 'expected-cluster': 'kube-system namespace UID required before any cluster read/write', namespace: NAMESPACES, service: Object.keys(SERVICES), environment: 'lowercase identifier, 1–32 characters', revision: '40 lowercase hexadecimal Git SHA characters', timeout: 'milliseconds, 1000–60000; total command deadline 180000', tail: 'lines, 1–200', execute: 'boolean flag; only reconcile and rollback-plan accept it', 'schema-location': 'local kubeconform schema template path, e.g. schemas/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json', mainline: '1, required for reverting merge commits' },
+    safeguards: ['Readonly by default', 'Every cluster operation requires --expected-cluster kube-system UID', 'Local kubectl always requires --context', 'No arbitrary shell, prompts, insecure TLS, apply, upgrade, reboot or secret rotation', 'No Secret/config/env/message-body output', 'External evidence is not runtime proof', 'SQLite backup uses only the reviewed internal Python helper through strict SSH; protected local bundles are not offsite proof'],
+    sqliteBackupPolicy: { ssh: 'Explicit --ssh is required; alias defaults do not apply', timeout: '10000–60000 milliseconds; internal whole-helper deadline is min(55, timeout / 1000 - 5) seconds', revision: 'Operator-declared full Git SHA, not proof of the running Flux revision', defaultOperation: 'Read-only prerequisite inspection; no directory or snapshot creation', execution: '--execute plus matching owner approval creates only /var/backups/velura-k3s root-only local recovery material', outcome: 'Exit 1 remains expected while offsite-backup and cluster-restore are unknown; inspect data.backup and executed for the local operation outcome' },
+    optionConstraints: { syntax: '--option value (no positional arguments or option=value)', ssh: 'configured alias matching [A-Za-z][A-Za-z0-9_-]{0,63}', context: 'explicit named kubecontext; never current-context', 'expected-cluster': 'kube-system namespace UID required before any cluster read/write', namespace: NAMESPACES, service: Object.keys(SERVICES), environment: 'lowercase identifier, 1–32 characters', revision: '40 lowercase hexadecimal Git SHA characters', timeout: 'milliseconds, 1000–60000; total command deadline 180000', tail: 'lines, 1–200', execute: 'boolean flag; only reconcile, rollback-plan and k3s-backup accept it', 'schema-location': 'local kubeconform schema template path, e.g. schemas/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json', mainline: '1, required for reverting merge commits' },
     files: {
       requirements: { version: 1, requirements: [{ id: 'unique-id', description: 'Exact acceptance criterion', runtime: 'optional supported verifier: flux-ready|defaultdeny|resource-limits|immutable-images' }] },
       acceptanceEvidence: { version: 1, clusterUid: 'kube-system UID', evidence: [{ id: 'requirement-id', status: 'pass|fail|unknown', source: 'https://external-audit-or-restore-record', observedAt: 'ISO timestamp', expiresAt: 'ISO timestamp', verifier: 'named human or external verifier', type: 'manual|signed', signature: 'optional signature reference; CLI does not validate authenticity' }] },
-      approval: { version: 1, approvedBy: 'owner identifier', environment: 'production', clusterUid: 'kube-system UID', command: 'reconcile|rollback-plan', revision: '40-character Git SHA', expiresAt: 'ISO timestamp (within 24h)' },
+      approval: { version: 1, approvedBy: 'owner identifier', environment: 'production', clusterUid: 'kube-system UID', command: 'reconcile|rollback-plan|k3s-backup', revision: '40-character Git SHA', expiresAt: 'ISO timestamp (within 24h)' },
       backupEvidence: { version: 1, provider: 'restic', environment: 'production', clusterUid: 'kube-system UID', repositorySha256: 'SHA256 of RESTIC_REPOSITORY (do not store plaintext repository credentials)', snapshotId: 'full snapshot id', restoredSnapshotId: 'full snapshot id', backupAt: 'ISO timestamp', restoreVerifiedAt: 'ISO timestamp', restoreDurationSeconds: 120, rpoSeconds: 86400, rtoSeconds: 3600, restoreMaxAgeSeconds: 2592000, storageLocation: 'external', source: 'https://restore-record', verifiedBy: 'restore operator', verificationType: 'manual|signed' },
     },
   };
@@ -399,6 +404,25 @@ export async function runCli(argv, dependencies = {}) {
       data.plan = { operation: 'Prepare Git revert for review/promotion', revision: opts.revision, environment: opts.environment, command: ['git', ...args], executed: false, next: 'Review resulting diff, commit and submit approved promotion PR; never directly mutate images' };
       if (opts.execute) { data.plan.executionAttempted = true; await call('git', args, { cwd }); data.plan.executed = true; }
       checks.push(check('git-rollback', 'pass', opts.execute ? 'Git revert prepared without commit/push; review is required' : 'Readonly rollback plan'));
+    } else if (opts.command === 'k3s-backup') {
+      ensure(opts.ssh && opts.environment && opts.revision, EXIT.usage, 'K3s backup requires SSH, --environment and --revision; local-context execution is not supported');
+      if (opts.execute) await approval();
+      await identity();
+      const helper = await readFile(new URL('./k3s-sqlite-backup.py', import.meta.url), 'utf8');
+      data.plan = { operation: 'Create consistent SQLite database and protected K3s recovery inputs in /var/backups/velura-k3s', environment: opts.environment, revision: opts.revision, storageLocation: 'local', executed: false };
+      if (opts.execute) data.plan.executionAttempted = true;
+      const response = parseJson(await call('ssh', sshArgs(opts.ssh, ['sudo', '-n', 'python3', '-', opts.execute ? 'create' : 'inspect', opts['expected-cluster'], opts.environment, opts.revision, String(Math.min(55, Math.max(1, opts.timeout / 1000 - 5)))]), { input: helper }), 'SQLite backup helper');
+      ensure(!response.error, EXIT.checksFailed, bounded(response.error, 240));
+      ensure(response.datastore === 'sqlite' && response.created === !!opts.execute && response.protectedServerToken === true && response.storageLocation === 'local' && response.offsiteVerified === false && response.restoreVerified === false, EXIT.execution, 'SQLite helper returned an invalid or unsafe recovery result');
+      data.backup = { datastore: 'sqlite', created: response.created, protectedServerToken: true, storageLocation: 'local', offsiteVerified: false, restoreVerified: false };
+      if (opts.execute) {
+        ensure(/^\/var\/backups\/velura-k3s\/\d{8}T\d{6}Z-[a-zA-Z0-9_-]+$/.test(response.bundle ?? '') && /^[a-f0-9]{64}$/.test(response.manifestSha256 ?? '') && response.integrityCheck === 'ok', EXIT.execution, 'SQLite helper did not return a verified local bundle');
+        Object.assign(data.backup, { bundle: response.bundle, manifestSha256: response.manifestSha256, integrityCheck: 'ok' });
+        data.plan.executed = true;
+      }
+      checks.push(check('sqlite-local-backup', 'pass', opts.execute ? 'SQLite online backup passed integrity_check; server token/configuration remain root-only in the local recovery bundle' : 'Active SQLite/default layout, server token and recovery inputs inspected without creating a backup'));
+      checks.push(check('offsite-backup', 'unknown', 'Local VM copies are not disaster recovery; independent encrypted external transfer and provider verification are required'));
+      checks.push(check('cluster-restore', 'unknown', 'No recovery service started; separate owner-approved recovery host, offsite snapshot, age recovery key and measured restore drill are required'));
     } else if (opts.command === 'backup-check') {
       ensure(opts['backup-provider'] === 'restic' && opts.evidence && opts.environment && opts['expected-cluster'], EXIT.usage, 'Backup check requires --backup-provider restic, --evidence, --environment and --expected-cluster');
       const repository = env.RESTIC_REPOSITORY;

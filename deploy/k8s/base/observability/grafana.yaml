@@ -4,10 +4,26 @@ metadata:
   name: grafana-datasources
   namespace: observability
 data:
-  datasources.yaml: "apiVersion: 1\ndatasources:\n- name: VictoriaMetrics\n  type:\
-    \ prometheus\n  access: proxy\n  url: http://victoriametrics:8428\n  isDefault:\
-    \ true\n  editable: false\n- name: Loki\n  type: loki\n  access: proxy\n  url:\
-    \ http://loki:3100\n  editable: false\n"
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: VictoriaMetrics
+        uid: velura-metrics
+        type: prometheus
+        access: proxy
+        url: http://victoriametrics:8428
+        isDefault: true
+        editable: false
+        jsonData:
+          timeInterval: 30s
+      - name: Loki
+        uid: velura-logs
+        type: loki
+        access: proxy
+        url: http://loki:3100
+        editable: false
+        jsonData:
+          maxLines: 200
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -120,6 +136,12 @@ spec:
         - name: datasources
           mountPath: /etc/grafana/provisioning/datasources
           readOnly: true
+        - name: dashboard-provider
+          mountPath: /etc/grafana/provisioning/dashboards
+          readOnly: true
+        - name: dashboards
+          mountPath: /var/lib/grafana/dashboards
+          readOnly: true
       volumes:
       - name: data
         persistentVolumeClaim:
@@ -127,6 +149,12 @@ spec:
       - name: datasources
         configMap:
           name: grafana-datasources
+      - name: dashboard-provider
+        configMap:
+          name: grafana-dashboard-provider
+      - name: dashboards
+        configMap:
+          name: grafana-dashboards
   strategy:
     type: Recreate
 ---

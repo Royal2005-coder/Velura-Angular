@@ -12,6 +12,7 @@ resources:
   - auth/keycloak.yaml
   - observability/victoriametrics.yaml
   - observability/grafana.yaml
+  - observability/grafana-dashboards.yaml
   - observability/litellm.yaml
   - observability/loki.yaml
   - observability/alloy.yaml

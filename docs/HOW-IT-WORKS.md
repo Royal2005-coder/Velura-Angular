@@ -286,6 +286,62 @@ Record measured peak VRAM, latency and output review. GPU metrics exporter and
 alert delivery need independent configuration/evidence; this worker does not
 advertise a nonexistent Prometheus scrape endpoint.
 
+### Monitoring operations
+
+Grafana provisions four read-only dashboards under the **Velura** folder:
+[overview](https://grafana.royalai.dev/d/velura-overview),
+[workloads](https://grafana.royalai.dev/d/velura-workloads),
+[HTTP/LLM](https://grafana.royalai.dev/d/velura-http-llm) and
+[logs](https://grafana.royalai.dev/d/velura-logs). Datasource UIDs are
+`velura-metrics` and `velura-logs`. Keep Grafana authenticated; do not expose
+Loki directly or enable anonymous access for verification.
+
+Alloy replaces Promtail after recent labeled streams are verified in Loki.
+Select logs with `job="kubernetes-pods"` and `namespace`, `pod`, `container`;
+never turn request bodies, identities or arbitrary parsed fields into labels.
+Use aggregate LogQL for shared evidence:
+
+```logql
+sum by(namespace,pod,container) (count_over_time({job="kubernetes-pods",namespace="velura"}[5m]))
+```
+
+VictoriaMetrics needs `velura-metrics-collector-credentials/metrics-token`
+matching the API's `METRICS_SCRAPE_BEARER_TOKEN`, and
+`litellm-credentials/master-key`. Protect `/metrics`; never remove bearer
+authentication to make a scrape green. NetworkPolicies must permit the
+collector to API port 3000, Alloy port 12345 and the actual Kubernetes Service
+and API endpoint addresses. Revalidate the pinned API addresses after recovery.
+The desired Keycloak management endpoint is port 9000; an older installed
+Keycloak or LiteLLM without metrics enabled remains a real coverage failure,
+not a reason to suppress `ScrapeTargetDown`.
+
+Alertmanager requires `alertmanager-config` with `alertmanager.yaml` and
+`smtp-auth-password`. Use `smtp_auth_password_file:
+/etc/alertmanager/smtp-auth-password`, mandatory STARTTLS on the configured
+SMTP endpoint and an established operations recipient. The reviewed egress
+policy permits public SMTP port 587; other transports need a separate review.
+Never commit the populated Secret. A short-lived
+`VeluraMonitoringDeliveryDrill` notification may verify the real path without
+stopping a workload. Check the email notification/failure counters and obtain
+recipient acknowledgement; SMTP acceptance alone does not prove inbox receipt.
+
+Check `up` by job, recent labeled logs and
+`vmalert_alerting_rules_errors_total` after a change. Missing backup evidence
+must keep `BackupTooOld` actionable. No GPU exporter or Kubernetes object-state
+exporter is installed by these dashboards: cAdvisor charts are measurements,
+not deployment readiness, restart counts or peak-inference acceptance.
+Keep metric and log retention at 14 days unless a measured storage budget and
+data-retention policy approve a change.
+
+Selective live observability changes must preserve installed images, auth
+configuration and PVCs until staged upgrades are approved. Keep production
+Flux suspended and promote the matching manifest changes through the normal
+PR flow before resuming reconciliation. A staging frontend uses `Recreate`
+within its quota, accepting temporary staging downtime rather than requiring
+surge memory that the quota cannot supply. A manual staging fix can be reverted
+by reconciliation until the matching Git change is promoted.
+
+
 ### Offsite backup bootstrap and restore drill
 
 Agree RPO/RTO and retention with the owner before unsuspending schedules.
@@ -326,6 +382,42 @@ never run etcd restore commands against an unverified SQLite installation.
 Keep offsite copies of Git revision, age recovery key and relevant cluster
 configuration, and prove recovery on a separate host before any production
 stateful cutover. Repository snapshots alone do not prove cluster recovery.
+
+For the verified default-layout SQLite service, the canonical CLI can inspect
+recovery inputs without writing, then create a local snapshot with approval:
+
+```bash
+node tools/ops/velura-ops.mjs k3s-backup --ssh ai1-k3s --expected-cluster "$CLUSTER_UID" --environment production --revision "$APPROVED_SHA" --timeout 60000
+node tools/ops/velura-ops.mjs k3s-backup --ssh ai1-k3s --expected-cluster "$CLUSTER_UID" --environment production --revision "$APPROVED_SHA" --timeout 60000 --execute --approval "$OWNER_APPROVAL_JSON"
+```
+
+The approval contract is returned by `schema`; it must match command
+`k3s-backup`, environment, cluster UID, revision and expiry. This helper uses
+Python's online SQLite backup API, verifies integrity, and atomically publishes
+`/var/backups/velura-k3s/<timestamp-id>` with directory mode 700 and file mode
+600. The manifest covers the database, server token, effective service unit
+and supported config/environment/encryption inputs. Preserve all materials;
+the server token is required for recovery and must never appear in logs.
+The helper supports the host's Python 3.8 standard library.
+
+A successful local snapshot still exits 1 while offsite and cluster-restore
+proof remain unknown; inspect `executed`, `data.backup.created` and
+`integrityCheck` instead of treating it as a failed SQLite copy or a passed DR
+gate. Copying that snapshot into a temporary local database and checking it
+does not prove an independent K3s boot, PostgreSQL/Supabase/object recovery or
+agreed RPO/RTO. Do not unsuspend backup schedules without real external
+credentials and a verified destination.
+
+Before changing management access, prove a second independent administration
+path and keep the existing key-authenticated session open. Root-only kubeconfig
+permissions must also be preserved by the reviewed K3s startup configuration;
+a one-time chmod does not prove permissions after restart. Secrets encryption,
+key rotation and OS/K3s upgrades require approved maintenance, independent
+restore evidence and rollback material. Upgrade Kubernetes one supported minor
+at a time; never combine an untested datastore/OS migration with that change.
+A single-node local-path cluster cannot meet HA requirements by adding replicas;
+the owner must agree RPO/RTO and additional failure domains separately.
+
 
 ```bash
 node tools/ops/velura-ops.mjs backup-check --backup-provider restic --environment production --expected-cluster "$CLUSTER_UID" --evidence "$RESTORE_EVIDENCE_JSON"

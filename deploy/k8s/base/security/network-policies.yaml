@@ -780,7 +780,10 @@ spec:
   egress:
   - to:
     - ipBlock:
-        cidr: 10.43.0.1/32
+        # Approved Velura API Service and endpoint; verify again after node recovery.
+        cidr: 10.96.0.1/32
+    - ipBlock:
+        cidr: 10.43.58.57/32
     ports:
     - protocol: TCP
       port: 443
@@ -801,6 +804,8 @@ spec:
       port: 8880
     - protocol: TCP
       port: 9093
+    - protocol: TCP
+      port: 12345
   - to:
     - namespaceSelector:
         matchLabels:
@@ -837,7 +842,9 @@ spec:
   egress:
   - to:
     - ipBlock:
-        cidr: 10.43.0.1/32
+        cidr: 10.96.0.1/32
+    - ipBlock:
+        cidr: 10.43.58.57/32
     ports:
     - protocol: TCP
       port: 443
@@ -937,6 +944,8 @@ spec:
     ports:
     - protocol: TCP
       port: 443
+    - protocol: TCP
+      port: 587
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -1007,3 +1016,49 @@ spec:
     ports:
     - protocol: TCP
       port: 443
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: alloy-metrics
+  namespace: observability
+spec:
+  podSelector:
+    matchLabels:
+      app: alloy
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: observability
+      podSelector:
+        matchLabels:
+          app: victoriametrics
+    ports:
+    - protocol: TCP
+      port: 12345
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-metrics
+  namespace: velura
+spec:
+  podSelector:
+    matchLabels:
+      app: velura-api
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: observability
+      podSelector:
+        matchLabels:
+          app: victoriametrics
+    ports:
+    - protocol: TCP
+      port: 3000

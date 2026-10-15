@@ -31,6 +31,10 @@ patches:
       metadata:
         name: velura-admin
       spec:
+        # No surge capacity: staging admin is unavailable until its replacement is Ready.
+        strategy:
+          type: Recreate
+          rollingUpdate: null
         template:
           spec:
             priorityClassName: velura-staging
@@ -48,6 +52,10 @@ patches:
       metadata:
         name: velura-storefront
       spec:
+        # No surge capacity: staging storefront is unavailable until its replacement is Ready.
+        strategy:
+          type: Recreate
+          rollingUpdate: null
         template:
           spec:
             priorityClassName: velura-staging

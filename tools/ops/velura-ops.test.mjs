@@ -64,7 +64,7 @@ test('help and schema expose every command, prerequisites, constraints and stabl
     const result = await runCli(args, { execute: () => assert.fail('help must not execute') });
     assert.equal(result.exitCode, 0);
     assert.equal(result.result.ok, true);
-    for (const command of ['doctor', 'inventory', 'render', 'validate', 'status', 'health', 'logs', 'reconcile', 'backup-check', 'acceptance', 'rollback-plan']) {
+    for (const command of ['doctor', 'inventory', 'render', 'validate', 'status', 'health', 'logs', 'reconcile', 'backup-check', 'k3s-backup', 'acceptance', 'rollback-plan']) {
       assert.ok(result.result.data.commands[command].prerequisites.length);
     }
   }
@@ -320,6 +320,78 @@ test('backup-check queries declared provider snapshot and keeps restore attestat
     assert.equal(result.result.data.backup.runtimeRestoreVerified, false);
     assert.equal(result.result.checks.find(item => item.id === 'restore-evidence').status, 'unknown');
     assert.doesNotMatch(JSON.stringify(result.result), /synthetic-sensitive-value|external-provider/);
+  });
+});
+
+const sqliteBackupFlags = ['k3s-backup', '--ssh', 'ai1-k3s', '--expected-cluster', uid, '--environment', 'staging', '--revision', sha, '--timeout', '60000'];
+function sqliteBackupFixture(response = {}) {
+  return fixture({ execute: async (binary, args) => {
+    assert.equal(binary, 'ssh');
+    const command = args.at(-1);
+    if (command.includes("'get' 'namespace' 'kube-system'")) return JSON.stringify({ metadata: { uid } });
+    assert.match(command, /'sudo' '-n' 'python3' '-' '(inspect|create)'/);
+    return JSON.stringify({ datastore: 'sqlite', created: command.includes("'create'"), protectedServerToken: true, storageLocation: 'local', offsiteVerified: false, restoreVerified: false, bundle: '/var/backups/velura-k3s/20261008T120000Z-example', manifestSha256: 'e'.repeat(64), integrityCheck: 'ok', ...response });
+  } });
+}
+
+test('SQLite backup requires explicit SSH, identity and bounded deadline before helper execution', async () => {
+  for (const args of [
+    ['k3s-backup', '--environment', 'staging', '--revision', sha],
+    [...sqliteBackupFlags.slice(0, -2), '--timeout', '1000'],
+    ['k3s-backup', '--context', 'staging', '--environment', 'staging', '--revision', sha],
+    ['k3s-backup', '--ssh', 'ai1-k3s', '--environment', 'staging', '--revision', sha],
+  ]) {
+    const result = await runCli(args, { nodeVersion, execute: () => assert.fail('invalid identity must not run helper') });
+    assert.ok([2, 4].includes(result.exitCode));
+  }
+  const wrong = fixture({ execute: async () => JSON.stringify({ metadata: { uid: 'wrong-cluster' } }) });
+  const result = await runCli(sqliteBackupFlags, wrong.dependencies);
+  assert.equal(result.exitCode, 4);
+  assert.equal(wrong.calls.length, 1);
+});
+
+test('SQLite inspect streams reviewed helper over strict SSH without enabling creation or claiming DR', async () => {
+  const f = sqliteBackupFixture();
+  const result = await runCli(sqliteBackupFlags, f.dependencies);
+  assert.equal(result.exitCode, 1);
+  assert.equal(result.result.executed, false);
+  assert.equal(result.result.data.backup.created, false);
+  assert.equal(result.result.data.backup.offsiteVerified, false);
+  assert.equal(f.calls.length, 2);
+  const call = f.calls[1];
+  assert.match(call.args.at(-1), /'inspect'/);
+  assert.match(call.args.at(-1), /'55'$/);
+  assert.ok(call.args.includes('StrictHostKeyChecking=yes'));
+  assert.match(call.options.input, /source\.backup\(target/);
+  assert.deepEqual(result.result.blockers.map(item => item.id), ['offsite-backup', 'cluster-restore']);
+});
+
+test('SQLite execution requires command-matching approval and reports only verified local creation', async () => {
+  const missing = sqliteBackupFixture();
+  const refused = await runCli([...sqliteBackupFlags, '--execute'], missing.dependencies);
+  assert.equal(refused.exitCode, 5);
+  assert.equal(missing.calls.length, 0);
+  await withFiles({ wrong: approval('reconcile'), approved: approval('k3s-backup') }, async paths => {
+    const wrong = sqliteBackupFixture();
+    assert.equal((await runCli([...sqliteBackupFlags, '--execute', '--approval', paths.wrong], wrong.dependencies)).exitCode, 5);
+    assert.equal(wrong.calls.length, 0);
+    const f = sqliteBackupFixture();
+    const result = await runCli([...sqliteBackupFlags, '--execute', '--approval', paths.approved], f.dependencies);
+    assert.equal(result.exitCode, 1);
+    assert.equal(result.result.executed, true);
+    assert.equal(result.result.data.backup.integrityCheck, 'ok');
+    assert.equal(result.result.data.backup.restoreVerified, false);
+    assert.match(f.calls[1].args.at(-1), /'create'/);
+    const unsafe = sqliteBackupFixture({ offsiteVerified: true });
+    const rejected = await runCli([...sqliteBackupFlags, '--execute', '--approval', paths.approved], unsafe.dependencies);
+    assert.equal(rejected.exitCode, 6);
+    assert.equal(rejected.result.executed, false);
+    assert.equal(rejected.result.mutationAttempted, true);
+    const failed = sqliteBackupFixture({ error: 'Insufficient disk space for a bounded local SQLite backup' });
+    const failure = await runCli([...sqliteBackupFlags, '--execute', '--approval', paths.approved], failed.dependencies);
+    assert.equal(failure.exitCode, 1);
+    assert.equal(failure.result.executed, false);
+    assert.equal(failure.result.mutationAttempted, true);
   });
 });
 

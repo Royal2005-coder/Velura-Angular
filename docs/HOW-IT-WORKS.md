@@ -341,6 +341,15 @@ within its quota, accepting temporary staging downtime rather than requiring
 surge memory that the quota cannot supply. A manual staging fix can be reverted
 by reconciliation until the matching Git change is promoted.
 
+Flux controllers use default-deny with explicit API/DNS exceptions.
+Only source-controller may fetch public HTTPS Git repositories; kustomize-controller
+may read source-controller artifacts on port 9090, not arbitrary public HTTPS.
+Retire the bootstrap blanket `allow-egress` policy only after the replacement
+rules exist. Verify a fresh source fetch, artifact access from the controller's
+network namespace, and a denied unrelated egress path; Pod readiness alone does
+not test these boundaries. Neither source fetching nor this network check
+requires resuming suspended application Kustomizations.
+
 
 ### Offsite backup bootstrap and restore drill
 

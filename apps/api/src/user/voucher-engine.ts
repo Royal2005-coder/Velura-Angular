@@ -49,6 +49,10 @@ export interface VoucherEvaluationContext {
   lines?: readonly VoucherCartLine[];
   /** Tên danh mục theo mã, để câu giải thích gọi đúng tên thay vì mã UUID. */
   categoryNameById?: Readonly<Record<string, string>>;
+  /** Ngữ cảnh ngày sinh của thành viên */
+  isBirthdayMonth?: boolean;
+  hasBirthday?: boolean;
+  birthMonth?: number | null;
 }
 
 /**
@@ -260,6 +264,22 @@ export function evaluateVoucher(
   }
   if (group === "new_user" && !context.isFirstOrder) {
     return reject("GROUP_MISMATCH", "Mã chỉ dành cho khách hàng mua lần đầu.");
+  }
+
+  const isBirthdayVoucher = String(voucher.code || "").toUpperCase().startsWith("HPBD")
+    || group === "birthday"
+    || /sinh\s*nh[aậ]t/i.test(String(voucher.name || ""));
+
+  if (isBirthdayVoucher) {
+    if (!context.isMember) {
+      return reject("GROUP_MISMATCH", "Mã sinh nhật chỉ dành riêng cho thành viên Velura.");
+    }
+    if (!context.hasBirthday) {
+      return reject("GROUP_MISMATCH", "Vui lòng cập nhật ngày sinh trong hồ sơ cá nhân để nhận ưu đãi.");
+    }
+    if (!context.isBirthdayMonth) {
+      return reject("GROUP_MISMATCH", `Mã ưu đãi sinh nhật chỉ áp dụng trong tháng sinh nhật của bạn (tháng ${context.birthMonth || ""}).`);
+    }
   }
 
   // Sai danh mục xét sau nhóm khách và trước lượt của khách: giỏ không có món nào thuộc

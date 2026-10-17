@@ -1,0 +1,13 @@
+scope: "infra/storage/isaac-scratch.yaml:11-11"
+active: []
+superseded:
+  - sha: ae513a49e054 -> by 977dc999a221
+    decision: Isaac Sim recording output lands on a 500Gi Longhorn RWO PVC
+    rejected: ["hostPath on the node NVMe (pins the pod to a single node, no rescheduling)", "the z8-2 NFS export (that box already loopback-mounts its own export)"]
+    reversible: "true"
+    oracle: test
+    reason: Longhorn replica traffic wedges the node under Isaac write load (INC-2026-014)
+    runs: ["2026-05-12T02:00:00Z pass -> none", "2026-06-28T21:14:00Z fail -> INC-2026-014"]
+orphaned: []
+open_incidents:
+  - ae513a49e054: z8-2 wedged in D-state during a 40GB Isaac recording; Longhorn replica sync starved kubelet I/O

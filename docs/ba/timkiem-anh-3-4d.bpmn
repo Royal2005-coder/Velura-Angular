@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions id="Definitions_3_4d" xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" targetNamespace="http://velura.vn/bpmn/timkiem-anh">
+  <bpmn:collaboration id="Collaboration_3_4d">
+    <bpmn:participant id="Participant_C" name="Velura - Tìm kiếm bằng hình ảnh (3/3)" processRef="Process_C" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_C" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_C">
+      <bpmn:lane id="lane_u_C" name="Người dùng">
+        <bpmn:flowNodeRef>c_start</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c_gw2</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c_pick</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c_ref</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="lane_s_C" name="Hệ thống">
+        <bpmn:flowNodeRef>c_chk</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c_store</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c_gw1</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c_score</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c_banner</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c_show</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c_cart</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c_end_cart</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c_redo</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c_end_ref</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="c_start" name="Danh sách tương đồng sẵn sàng (từ Hình 3.4c)"><bpmn:outgoing>f_c_start_c_chk</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:serviceTask id="c_chk" name="Kiểm tra Style Profile của người dùng (Member: CSDL, Guest: phiên)"><bpmn:incoming>f_c_start_c_chk</bpmn:incoming><bpmn:outgoing>f_c_chk_c_gw1</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="c_gw1" name="Đã có Style Profile?"><bpmn:incoming>f_c_chk_c_gw1</bpmn:incoming><bpmn:outgoing>f_c_gw1_c_score</bpmn:outgoing><bpmn:outgoing>f_c_gw1_c_banner</bpmn:outgoing></bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="c_score" name="Chấm điểm lại theo dáng người, phong cách, tone da, dịp, ngân sách và gắn nhãn Hợp dáng"><bpmn:incoming>f_c_gw1_c_score</bpmn:incoming><bpmn:outgoing>f_c_score_c_show</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:sendTask id="c_banner" name="Giữ thứ tự tương đồng, khóa lọc Dáng người và mời làm Style Quiz"><bpmn:incoming>f_c_gw1_c_banner</bpmn:incoming><bpmn:outgoing>f_c_banner_c_show</bpmn:outgoing></bpmn:sendTask>
+    <bpmn:serviceTask id="c_show" name="Hiển thị trang kết quả: ảnh gốc, chip thuộc tính, bộ lọc, lưới sản phẩm"><bpmn:incoming>f_c_score_c_show</bpmn:incoming><bpmn:incoming>f_c_banner_c_show</bpmn:incoming><bpmn:outgoing>f_c_show_c_gw2</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="c_gw2" name="Người dùng muốn làm gì?"><bpmn:incoming>f_c_show_c_gw2</bpmn:incoming><bpmn:outgoing>f_c_gw2_c_pick</bpmn:outgoing><bpmn:outgoing>f_c_gw2_c_ref</bpmn:outgoing></bpmn:exclusiveGateway>
+    <bpmn:userTask id="c_pick" name="Nhấp sản phẩm, chọn size, màu và nhấn Thêm vào giỏ hàng"><bpmn:incoming>f_c_gw2_c_pick</bpmn:incoming><bpmn:outgoing>f_c_pick_c_cart</bpmn:outgoing></bpmn:userTask>
+    <bpmn:serviceTask id="c_cart" name="Kiểm tồn kho, gợi ý size và cập nhật giỏ hàng như quy trình Hình 3.4"><bpmn:incoming>f_c_pick_c_cart</bpmn:incoming><bpmn:outgoing>f_c_cart_c_end_cart</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:endEvent id="c_end_cart" name="Sản phẩm đã vào giỏ hàng"><bpmn:incoming>f_c_cart_c_end_cart</bpmn:incoming></bpmn:endEvent>
+    <bpmn:userTask id="c_ref" name="Sửa chip thuộc tính, thêm từ khóa hoặc chọn bộ lọc"><bpmn:incoming>f_c_gw2_c_ref</bpmn:incoming><bpmn:outgoing>f_c_ref_c_redo</bpmn:outgoing></bpmn:userTask>
+    <bpmn:serviceTask id="c_redo" name="Áp dụng chỉnh sửa và tìm lại, không cần tải lại ảnh"><bpmn:incoming>f_c_ref_c_redo</bpmn:incoming><bpmn:outgoing>f_c_redo_c_end_ref</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:endEvent id="c_end_ref" name="Kết quả được cập nhật, người dùng tiếp tục xem"><bpmn:incoming>f_c_redo_c_end_ref</bpmn:incoming></bpmn:endEvent>
+    <bpmn:dataStoreReference id="c_store" name="Style Profile" />
+    <bpmn:sequenceFlow id="f_c_start_c_chk" name="" sourceRef="c_start" targetRef="c_chk" />
+    <bpmn:sequenceFlow id="f_c_chk_c_gw1" name="" sourceRef="c_chk" targetRef="c_gw1" />
+    <bpmn:sequenceFlow id="f_c_gw1_c_score" name="Rồi" sourceRef="c_gw1" targetRef="c_score" />
+    <bpmn:sequenceFlow id="f_c_gw1_c_banner" name="Chưa" sourceRef="c_gw1" targetRef="c_banner" />
+    <bpmn:sequenceFlow id="f_c_score_c_show" name="" sourceRef="c_score" targetRef="c_show" />
+    <bpmn:sequenceFlow id="f_c_banner_c_show" name="" sourceRef="c_banner" targetRef="c_show" />
+    <bpmn:sequenceFlow id="f_c_show_c_gw2" name="" sourceRef="c_show" targetRef="c_gw2" />
+    <bpmn:sequenceFlow id="f_c_gw2_c_pick" name="Xem chi tiết" sourceRef="c_gw2" targetRef="c_pick" />
+    <bpmn:sequenceFlow id="f_c_gw2_c_ref" name="Tinh chỉnh" sourceRef="c_gw2" targetRef="c_ref" />
+    <bpmn:sequenceFlow id="f_c_pick_c_cart" name="" sourceRef="c_pick" targetRef="c_cart" />
+    <bpmn:sequenceFlow id="f_c_cart_c_end_cart" name="" sourceRef="c_cart" targetRef="c_end_cart" />
+    <bpmn:sequenceFlow id="f_c_ref_c_redo" name="" sourceRef="c_ref" targetRef="c_redo" />
+    <bpmn:sequenceFlow id="f_c_redo_c_end_ref" name="" sourceRef="c_redo" targetRef="c_end_ref" />
+    <bpmn:association id="a_c_chk_c_store" sourceRef="c_chk" targetRef="c_store" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_3_4d">
+    <bpmndi:BPMNPlane id="BPMNPlane_3_4d" bpmnElement="Collaboration_3_4d">
+      <bpmndi:BPMNShape id="Participant_C_di" bpmnElement="Participant_C" isHorizontal="true"><dc:Bounds x="40" y="40" width="2245" height="700" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="lane_u_C_di" bpmnElement="lane_u_C" isHorizontal="true"><dc:Bounds x="70" y="40" width="2215" height="280" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="lane_s_C_di" bpmnElement="lane_s_C" isHorizontal="true"><dc:Bounds x="70" y="320" width="2215" height="420" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c_start_di" bpmnElement="c_start"><dc:Bounds x="172" y="92" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c_chk_di" bpmnElement="c_chk"><dc:Bounds x="330" y="320" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c_store_di" bpmnElement="c_store"><dc:Bounds x="350" y="488" width="150" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c_gw1_di" bpmnElement="c_gw1" isMarkerVisible="true"><dc:Bounds x="637" y="339" width="46" height="46" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c_score_di" bpmnElement="c_score"><dc:Bounds x="800" y="320" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c_banner_di" bpmnElement="c_banner"><dc:Bounds x="565" y="488" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c_show_di" bpmnElement="c_show"><dc:Bounds x="1035" y="320" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c_gw2_di" bpmnElement="c_gw2" isMarkerVisible="true"><dc:Bounds x="1342" y="157" width="46" height="46" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c_pick_di" bpmnElement="c_pick"><dc:Bounds x="1505" y="68" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c_cart_di" bpmnElement="c_cart"><dc:Bounds x="1740" y="320" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c_end_cart_di" bpmnElement="c_end_cart"><dc:Bounds x="2052" y="344" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c_ref_di" bpmnElement="c_ref"><dc:Bounds x="1505" y="208" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c_redo_di" bpmnElement="c_redo"><dc:Bounds x="1505" y="488" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c_end_ref_di" bpmnElement="c_end_ref"><dc:Bounds x="1817" y="512" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f_c_start_c_chk_di" bpmnElement="f_c_start_c_chk"><di:waypoint x="208" y="110" /><di:waypoint x="330" y="110" /><di:waypoint x="330" y="362" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_c_chk_c_gw1_di" bpmnElement="f_c_chk_c_gw1"><di:waypoint x="520" y="362" /><di:waypoint x="637" y="362" /><di:waypoint x="637" y="362" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="a_c_chk_c_store_di" bpmnElement="a_c_chk_c_store"><di:waypoint x="520" y="362" /><di:waypoint x="350" y="362" /><di:waypoint x="350" y="530" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_c_gw1_c_score_di" bpmnElement="f_c_gw1_c_score"><di:waypoint x="683" y="362" /><di:waypoint x="800" y="362" /><di:waypoint x="800" y="362" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_c_gw1_c_banner_di" bpmnElement="f_c_gw1_c_banner"><di:waypoint x="637" y="362" /><di:waypoint x="755" y="362" /><di:waypoint x="755" y="530" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_c_score_c_show_di" bpmnElement="f_c_score_c_show"><di:waypoint x="990" y="362" /><di:waypoint x="1035" y="362" /><di:waypoint x="1035" y="362" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_c_banner_c_show_di" bpmnElement="f_c_banner_c_show"><di:waypoint x="755" y="530" /><di:waypoint x="1035" y="530" /><di:waypoint x="1035" y="362" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_c_show_c_gw2_di" bpmnElement="f_c_show_c_gw2"><di:waypoint x="1225" y="362" /><di:waypoint x="1342" y="362" /><di:waypoint x="1342" y="180" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_c_gw2_c_pick_di" bpmnElement="f_c_gw2_c_pick"><di:waypoint x="1388" y="180" /><di:waypoint x="1505" y="180" /><di:waypoint x="1505" y="110" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_c_gw2_c_ref_di" bpmnElement="f_c_gw2_c_ref"><di:waypoint x="1388" y="180" /><di:waypoint x="1505" y="180" /><di:waypoint x="1505" y="250" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_c_pick_c_cart_di" bpmnElement="f_c_pick_c_cart"><di:waypoint x="1695" y="110" /><di:waypoint x="1740" y="110" /><di:waypoint x="1740" y="362" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_c_cart_c_end_cart_di" bpmnElement="f_c_cart_c_end_cart"><di:waypoint x="1930" y="362" /><di:waypoint x="2052" y="362" /><di:waypoint x="2052" y="362" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_c_ref_c_redo_di" bpmnElement="f_c_ref_c_redo"><di:waypoint x="1695" y="250" /><di:waypoint x="1505" y="250" /><di:waypoint x="1505" y="530" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_c_redo_c_end_ref_di" bpmnElement="f_c_redo_c_end_ref"><di:waypoint x="1695" y="530" /><di:waypoint x="1817" y="530" /><di:waypoint x="1817" y="530" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

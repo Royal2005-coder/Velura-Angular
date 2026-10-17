@@ -3,6 +3,7 @@ import { generateGeminiEmbedding, generateGeminiJson, isGeminiConfigured, vector
 import { HttpError } from "./http.js";
 import { callRpc, selectOne, selectRows } from "./supabase.js";
 import { guestStyleProfiles } from "./user/quiz.js";
+import { confirmedPersonalColor, loadPersonalColorPolicy, personalColorProductScore } from "./personal-color/personal-color-policy.js";
 import {
   asJsonObject,
   asString,
@@ -12,6 +13,7 @@ import {
   type JsonObject
 } from "./types.js";
 
+const PERSONAL_COLOR_POLICY = loadPersonalColorPolicy();
 const PRODUCT_SELECT = [
   "product_id",
   "sku",
@@ -128,37 +130,13 @@ export async function buildStyleProfileRecommendations(
   }
 }
 
-/**
- * Flatten a product row into embedding text for Gemini.
- */
-export async function buildProductEmbeddingText(product: JsonObject): Promise<string> {
-  const category = asJsonObject(product.category);
-  const variants = asObjectList(product.variants);
-  const sizes = [...new Set(variants.map((variant) => variant.size).filter(Boolean))].slice(0, 16);
-  const colors = [...new Set(variants.map((variant) => variant.color).filter(Boolean))].slice(0, 16);
-
-  return [
-    `title: ${product.name || "Sản phẩm Velura"}`,
-    `text: ${product.description || ""}`,
-    `Danh mục: ${category.name || product.category_name || ""}`,
-    `Thương hiệu: ${product.brand || "Velura"}`,
-    `Màu chủ đạo: ${product.color_tone || ""}`,
-    `Phong cách: ${arrayText(product.style_tags)}`,
-    `Dịp mặc: ${arrayText(product.occasions)}`,
-    `Dáng người phù hợp: ${arrayText(product.suitable_body_shapes)}`,
-    `Size có sẵn: ${sizes.join(", ")}`,
-    `Màu biến thể: ${colors.join(", ")}`,
-    `Giá: ${Number(product.sale_price || product.base_price || 0)}`
-  ].join(" | ");
-}
-
 async function getStyleProfile(context: AuthContext, req: HttpRequest): Promise<JsonObject | null> {
   if (context?.profile?.user_id) {
     return selectOne("style_profile", { user_id: `eq.${context.profile.user_id}` });
   }
 
-  const guestSessionId = req.headers["x-guest-session-id"] || "";
-  if (!guestSessionId) return null;
+  const guestSessionId = req.headers["x-guest-session-id"];
+  if (typeof guestSessionId !== "string" || !/^gs_[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(guestSessionId)) return null;
 
   // Retrieve from in-memory guest store if available
   const inMemory = guestStyleProfiles.get(guestSessionId);
@@ -375,10 +353,12 @@ function buildProfileEmbeddingText(quiz: JsonObject, profile: JsonObject | null 
     "above_1.5m": "Trên 1.5 triệu"
   };
   const budgetKey = asString(quiz.budget_range);
+  const personalColor = confirmedPersonalColor(quiz, PERSONAL_COLOR_POLICY);
   return [
     `Người dùng: ${profile?.full_name || "Khách hàng Velura"}`,
     `Dáng người: ${quiz.body_shape || ""}`,
     `Tông da: ${quiz.skin_tone || ""}`,
+    ...(personalColor ? [`Màu đã xác nhận: ${personalColor.season}/${personalColor.subtype}; ưu tiên ${personalColor.palette.join(", ")}; tránh ${personalColor.avoided.join(", ")}; vẫn cân bằng dáng, phong cách, dịp và ngân sách`] : []),
     `Phong cách yêu thích: ${arrayText(quiz.style_tags)}`,
     `Dịp mặc ưu tiên: ${arrayText(quiz.preferred_occasions)}`,
     `Thương hiệu yêu thích: ${arrayText(quiz.favorite_brands)}`,
@@ -399,6 +379,8 @@ function formatQuiz(quiz: JsonObject | null): JsonObject | null {
   if (!quiz) return null;
   return {
     profile_id: quiz.profile_id,
+    style_profile_version: quiz.style_profile_version,
+    personal_color: confirmedPersonalColor(quiz, PERSONAL_COLOR_POLICY),
     body_shape: quiz.body_shape,
     skin_tone: quiz.skin_tone,
     style_tags: quiz.style_tags,
@@ -486,6 +468,10 @@ export function attachRecommendationScore(product: JsonObject, quiz: JsonObject 
     score += 2;
     reasons.push("skin_tone");
   }
+
+  const colorScore = personalColorProductScore(quiz, Array.isArray(product.variants) ? product.variants.map((variant) => asJsonObject(variant).color) : product.color, PERSONAL_COLOR_POLICY);
+  score += colorScore;
+  if (colorScore !== 0) reasons.push(colorScore > 0 ? "personal_color" : "personal_color_avoided");
 
   const occasionMatches = overlapCount(signals.occasions, productOccasions);
   if (occasionMatches) {

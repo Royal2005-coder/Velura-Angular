@@ -208,3 +208,56 @@
     height: 520px;
   }
 }
+
+.chatbot-order-access,
+.chatbot-case-outcome {
+  flex: 0 0 auto;
+  max-height: 30vh;
+  overflow-y: auto;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+  background: #faf8f6;
+  font-size: 0.8125rem;
+}
+
+.chatbot-order-access summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.chatbot-order-access label,
+.chatbot-case-outcome label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.chatbot-order-access input,
+.chatbot-order-access select,
+.chatbot-case-outcome input,
+.chatbot-case-outcome select {
+  max-width: 100%;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+}
+
+.chatbot-order-access button,
+.chatbot-case-outcome button {
+  padding: 6px 10px;
+  margin: 4px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.chatbot-order-access button:disabled,
+.chatbot-case-outcome button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

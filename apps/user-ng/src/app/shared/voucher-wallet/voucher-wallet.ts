@@ -1,4 +1,6 @@
-import { Component, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
+import { Component, DestroyRef, ElementRef, computed, effect, inject, input, output, signal, untracked, viewChild } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import type { Subscription } from 'rxjs';
 import { VoucherService } from '../../core/services/voucher.service';
 import type { AppliedVoucher, CartItemRef, WalletVoucher } from '../../core/models/voucher.interface';
 
@@ -18,6 +20,13 @@ import type { AppliedVoucher, CartItemRef, WalletVoucher } from '../../core/mode
 })
 export class VoucherWallet {
   private readonly vouchers = inject(VoucherService);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('walletDialog');
+  private walletRequest?: Subscription;
+  private manualRequest?: Subscription;
+  private requestVersion = 0;
+  private manualVersion = 0;
+  private modalTrigger: HTMLElement | null = null;
 
   readonly orderValue = input.required<number>();
   readonly shippingFee = input(0);
@@ -70,7 +79,7 @@ export class VoucherWallet {
   /** Mã dùng được tốt nhất mà khách CHƯA chọn — dùng cho gợi ý "còn mã lợi hơn". */
   readonly betterOption = computed(() => {
     const current = this.selected();
-    const best = this.eligible()[0];
+    const best = this.eligible().reduce<WalletVoucher | null>((best, item) => !best || item.discount_amount > best.discount_amount ? item : best, null);
     if (!best || !current) return null;
     return best.discount_amount > current.discount_amount ? best : null;
   });
@@ -80,18 +89,36 @@ export class VoucherWallet {
     const candidates = this.ineligible().filter(
       (item) => item.reason === 'MIN_ORDER_NOT_MET' && item.shortfall !== null
     );
-    return candidates.length > 0 ? candidates[0] : null;
+    return candidates.reduce<WalletVoucher | null>((nearest, item) => !nearest || Number(item.shortfall) < Number(nearest.shortfall) ? item : nearest, null);
   });
 
   constructor() {
+    let previousSession = this.vouchers.customerSession?.();
     effect(() => {
       const value = this.orderValue();
       const shipping = this.shippingFee();
       // Chỉ theo dõi nội dung giỏ, không theo dõi tham chiếu mảng, để trang cha dựng lại
       // mảng mới mỗi lần render không làm ví tải lại liên tục.
       const cartKey = this.cartKey();
-      untracked(() => this.refresh(value, shipping));
+      const session = this.vouchers.customerSession?.();
+      untracked(() => {
+        if (session !== previousSession) {
+          previousSession = session;
+          this.items.set([]);
+          this.selectedId.set(null);
+          this.preferredHandled = false;
+          this.preferredNotice.set(null);
+          this.manualCode.set('');
+          this.manualError.set(null);
+          this.applied.emit(null);
+        }
+        this.refresh(value, shipping);
+      });
       void cartKey;
+    });
+    effect(() => {
+      const dialog = this.dialog()?.nativeElement;
+      if (this.modalOpen() && dialog && !dialog.open) dialog.showModal();
     });
   }
 
@@ -99,17 +126,29 @@ export class VoucherWallet {
    * Tải lại ví theo giá trị đơn hiện tại và tự áp mã lợi nhất nếu được phép.
    */
   refresh(orderValue: number, shippingFee: number): void {
+    this.walletRequest?.unsubscribe();
+    this.manualRequest?.unsubscribe();
+    this.manualVersion++;
+    this.applying.set(false);
+    const version = ++this.requestVersion;
+    const cartKey = this.cartKey();
+    const session = this.vouchers.customerSession?.();
+    const current = () => version === this.requestVersion && cartKey === this.cartKey() && session === this.vouchers.customerSession?.() && orderValue === this.orderValue() && shippingFee === this.shippingFee();
     this.loading.set(true);
     this.loadError.set(null);
-    this.vouchers.loadWallet(orderValue, shippingFee, this.cartItems()).subscribe({
+    this.walletRequest = this.vouchers.loadWallet(orderValue, shippingFee, this.cartItems()).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (response) => {
+        if (!current()) return;
         this.loading.set(false);
         this.items.set(response.vouchers ?? []);
         this.reconcileSelection(response.best_voucher_id);
       },
       error: (error: Error) => {
+        if (!current()) return;
         this.loading.set(false);
         this.items.set([]);
+        this.selectedId.set(null);
+        this.applied.emit(null);
         this.loadError.set(error.message || 'Không tải được danh sách ưu đãi.');
       }
     });
@@ -161,35 +200,46 @@ export class VoucherWallet {
       this.emit(match);
       return true;
     }
+    const isUuid = /^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$/i.test(wanted);
+    const codeName = isUuid ? (localStorage.getItem('checkout_voucher_code') || '') : upper;
     this.preferredNotice.set(
       match
         ? `Mã ${match.code} chưa dùng được cho đơn này: ${match.reason_text || 'chưa đủ điều kiện'}`
-        : `Không tìm thấy mã ${upper} trong ví của bạn. Mã có thể đã hết hạn hoặc không dành cho tài khoản này.`
+        : codeName && !/^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$/i.test(codeName)
+          ? `Không tìm thấy mã ${codeName} trong ví của bạn. Mã có thể đã hết hạn hoặc không dành cho tài khoản này.`
+          : 'Mã giảm giá đã chọn không còn khả dụng hoặc đã hết hiệu lực.'
     );
     return false;
   }
 
   /** Mở bảng chọn mã. */
   openModal(): void {
+    this.modalTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     this.manualError.set(null);
     this.modalOpen.set(true);
   }
 
   /** Đóng bảng chọn mã. */
   closeModal(): void {
+    const dialog = this.dialog()?.nativeElement;
+    if (dialog?.open) dialog.close();
     this.modalOpen.set(false);
+    if (this.modalTrigger?.isConnected) this.modalTrigger.focus();
+    this.modalTrigger = null;
   }
 
   /**
    * Khách chọn một mã cụ thể trong ví.
    */
   choose(item: WalletVoucher): void {
-    if (!item.eligible) return;
+    if (this.loading() || this.applying() || !this.items().some((current) => current.voucher_id === item.voucher_id && current.eligible)) return;
     this.preferredNotice.set(null);
     this.dismissed.set(false);
     this.declined.emit(false);
     this.selectedId.set(item.voucher_id);
     this.emit(item);
+    localStorage.setItem('checkout_voucher_id', item.voucher_id);
+    localStorage.setItem('checkout_voucher_code', item.code);
     this.closeModal();
   }
 
@@ -197,10 +247,15 @@ export class VoucherWallet {
    * Bỏ mã đang áp. Khách chủ động bỏ thì hệ thống không tự áp lại.
    */
   clear(): void {
+    this.manualRequest?.unsubscribe();
+    this.manualVersion++;
+    this.applying.set(false);
     this.dismissed.set(true);
     this.declined.emit(true);
     this.selectedId.set(null);
     this.applied.emit(null);
+    localStorage.removeItem('checkout_voucher_id');
+    localStorage.removeItem('checkout_voucher_code');
   }
 
   /** Cập nhật ô nhập mã thủ công. */
@@ -214,14 +269,22 @@ export class VoucherWallet {
    * người quen giới thiệu sẽ không thấy mã đó trong ví của mình.
    */
   submitManualCode(): void {
+    if (this.applying() || this.loading()) return;
     const code = this.manualCode().trim();
     if (!code) {
       this.manualError.set('Nhập mã giảm giá.');
       return;
     }
     this.applying.set(true);
-    this.vouchers.applyCode(code, this.orderValue(), this.shippingFee(), this.cartItems()).subscribe({
+    const version = ++this.manualVersion;
+    const cartKey = this.cartKey();
+    const orderValue = this.orderValue();
+    const shippingFee = this.shippingFee();
+    const session = this.vouchers.customerSession?.();
+    const current = () => version === this.manualVersion && cartKey === this.cartKey() && orderValue === this.orderValue() && shippingFee === this.shippingFee() && session === this.vouchers.customerSession?.();
+    this.manualRequest = this.vouchers.applyCode(code, orderValue, shippingFee, this.cartItems()).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (response) => {
+        if (!current()) return;
         this.applying.set(false);
         if (!response.applied || !response.voucher_id) {
           this.manualError.set(response.message || 'Không áp dụng được mã này.');
@@ -231,6 +294,8 @@ export class VoucherWallet {
         this.declined.emit(false);
         this.selectedId.set(response.voucher_id);
         this.manualCode.set('');
+        localStorage.setItem('checkout_voucher_id', response.voucher_id);
+        localStorage.setItem('checkout_voucher_code', response.code ?? code);
         this.applied.emit({
           voucher_id: response.voucher_id,
           code: response.code ?? code,
@@ -242,8 +307,13 @@ export class VoucherWallet {
         this.closeModal();
       },
       error: (error: Error) => {
+        if (!current()) return;
         this.applying.set(false);
-        this.manualError.set(error.message || 'Mã giảm giá không hợp lệ.');
+        let msg = error.message || 'Mã giảm giá không hợp lệ.';
+        if (msg.includes('NOT_FOUND') || msg.includes('không tồn tại')) {
+          msg = `Mã giảm giá "${code}" không tồn tại hoặc đã hết hiệu lực.`;
+        }
+        this.manualError.set(msg);
       }
     });
   }

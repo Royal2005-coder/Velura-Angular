@@ -279,7 +279,7 @@ app-admin-pagination { display: block; width: 100%; }
 .admin-table-actions { display:flex; align-items:center; justify-content:flex-start; gap:4px; min-height:32px; }
 .admin-table-actions .admin-icon-button { display:grid; flex:0 0 32px; align-self:center; vertical-align:middle; }
 .admin-table-actions .admin-line-icon { display:block; }
-.admin-drawer .admin-action-row .admin-btn--ghost { display:none; }
+.admin-drawer .admin-action-row .admin-btn--ghost { display:inline-flex; }
 @media (max-width: 768px) {
   .admin-list-footer,
   .admin-log-footer,
@@ -755,3 +755,13 @@ input:checked + .admin-sim-slider:before {
 .admin-segmented__item:hover { color: var(--ink); }
 .admin-segmented__item:focus-visible { outline: 2px solid var(--terracotta); outline-offset: 1px; }
 .admin-segmented__item--active { background: #fff; color: var(--ink); box-shadow: 0 1px 2px rgba(0, 0, 0, .06); }
+
+/* Keep operational fields and actions reachable across viewport sizes and zoom. */
+.admin-drawer{height:100dvh;max-height:100dvh;max-width:100%}.admin-drawer__header{flex-shrink:0;min-width:0}.admin-drawer__header>div{min-width:0;overflow-wrap:anywhere}.admin-drawer__body{min-height:0;min-width:0;overflow-x:hidden;overscroll-behavior:contain}.admin-data-list dd{min-width:0;overflow-wrap:anywhere}.admin-modal{max-height:min(90dvh,900px)}.admin-form-control{max-width:100%}.admin-qa-panel{margin-bottom:20px;padding:20px}.admin-qa-panel h3{margin:0 0 12px;overflow-wrap:anywhere}.admin-qa-line{padding:16px;border:1px solid var(--line);border-radius:var(--radius-sm)}.admin-qa-proof{max-width:240px;max-height:160px;object-fit:contain;border-radius:var(--radius-sm)}.admin-refresh-status{margin:0 0 12px;color:var(--muted);font-size:.8125rem}.admin-icon-button:focus-visible,.admin-btn:focus-visible,.admin-chat-session-item:focus-visible,.admin-tab:focus-visible{outline:2px solid var(--terracotta);outline-offset:2px}
+@media(max-width:640px){.admin-drawer--wide{width:100%}.admin-drawer__header,.admin-drawer__body{padding:18px}.admin-order-pipeline{grid-template-columns:repeat(2,minmax(0,1fr))}.admin-cod-card__grid{grid-template-columns:minmax(0,1fr)}.admin-topbar__leading{min-width:0}.admin-topbar__actions{gap:8px;min-width:0}.admin-profile__copy{display:none}.admin-modal__footer{flex-wrap:wrap}}
+@media(prefers-reduced-motion:reduce){.admin-page *,.admin-page *::before,.admin-page *::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+/* Return branches stay legible at drawer widths without a horizontal track. */
+.admin-return-pipeline { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+.admin-return-pipeline__step { display: flex; flex-direction: column; align-items: center; min-width: 0; text-align: center; overflow-wrap: anywhere; }
+.admin-return-pipeline__step[aria-current="step"] { outline: 1px solid var(--terracotta); border-radius: 6px; padding: 4px; }
+@media (max-width: 480px) { .admin-return-pipeline { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

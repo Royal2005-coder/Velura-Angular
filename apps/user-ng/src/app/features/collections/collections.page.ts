@@ -1,11 +1,13 @@
 import { Component, computed, inject, signal } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { COLLECTION_LOOKBOOKS } from '../../core/models/collection-lookbook';
 import { ProductSummary } from '../../core/models/product.interface';
-import { CartStore } from '../../core/services/cart.store';
+import { CartLine, CartStore } from '../../core/services/cart.store';
 import { CatalogService } from '../../core/services/catalog.service';
+import { CheckoutStore } from '../../core/services/checkout.store';
 import { formatVnd, toPublicAsset } from '../../core/utils/money';
 import { useBodyClass } from '../../core/utils/body-class';
+import { showToast } from '../../core/utils/toast';
 
 @Component({
   selector: 'app-collections-page',
@@ -16,6 +18,8 @@ import { useBodyClass } from '../../core/utils/body-class';
 export class CollectionsPage {
   private readonly catalog = inject(CatalogService);
   private readonly cart = inject(CartStore);
+  private readonly checkout = inject(CheckoutStore);
+  private readonly router = inject(Router);
 
   readonly loading = signal(true);
   readonly products = signal<ProductSummary[]>([]);
@@ -64,11 +68,33 @@ export class CollectionsPage {
     return formatVnd(product.sale_price || product.base_price);
   }
 
+  isOutOfStock(product: ProductSummary): boolean {
+    if (product.status === 'out_of_stock') return true;
+    const variants = product.variants || [];
+    if (variants.length > 0) {
+      const totalAvailable = variants.reduce(
+        (sum, v) => sum + Math.max(0, (v.stock_quantity || 0) - (v.reserved_quantity || 0)),
+        0,
+      );
+      return totalAvailable <= 0;
+    }
+    return false;
+  }
+
   /**
-   * Adds a combo look to the original cart payload.
+   * Adds a combo look to the cart and displays confirmation toast.
    */
-  addToCart(product: ProductSummary): void {
-    const variant = product.variants?.[0];
+  addToCart(product: ProductSummary, event?: Event): void {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    if (this.isOutOfStock(product)) {
+      showToast('Sản phẩm hiện đã hết hàng.');
+      return;
+    }
+    const variants = product.variants || [];
+    const variant = variants.find((v) => ((v.stock_quantity ?? 1) - (v.reserved_quantity ?? 0)) > 0) || variants[0];
     this.cart.addItem({
       variant_id: variant?.variant_id || product.product_id,
       product_id: product.product_id,
@@ -79,6 +105,37 @@ export class CollectionsPage {
       color: variant?.color,
       size: variant?.size,
     });
+  }
+
+  /**
+   * Directly initiates checkout and navigates to /checkout/shipping.
+   */
+  buyNow(product: ProductSummary, event?: Event): void {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    if (this.isOutOfStock(product)) {
+      showToast('Sản phẩm hiện đã hết hàng.');
+      return;
+    }
+    const variants = product.variants || [];
+    const variant = variants.find((v) => ((v.stock_quantity ?? 1) - (v.reserved_quantity ?? 0)) > 0) || variants[0];
+    const line: CartLine = {
+      variant_id: variant?.variant_id || product.product_id,
+      product_id: product.product_id,
+      product_name: product.name,
+      product_image: this.imageUrl(product),
+      quantity: 1,
+      unit_price: product.sale_price || product.base_price || 0,
+      color: variant?.color,
+      size: variant?.size,
+    };
+    this.checkout.setCheckoutItems([line], 'buy_now');
+    localStorage.removeItem('checkout_discount');
+    localStorage.removeItem('checkout_voucher_id');
+    localStorage.removeItem('checkout_voucher_code');
+    void this.router.navigateByUrl('/checkout/shipping');
   }
 
   /**

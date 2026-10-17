@@ -1,0 +1,11 @@
+scope: infra/registry/gitlab.tf
+active:
+  - sha: 0002a28bd8c3
+    decision: "the GitLab-integrated registry on Garage replaces Harbor; one fewer system to operate, and image auth follows repo permissions instead of a separate robot-account scheme"
+    rejected:
+      - keep Harbor and add SSO in front of it (still two systems to patch and back up)
+    reversible: restore-only
+    oracle: contract
+superseded: []
+orphaned: []
+open_incidents: []

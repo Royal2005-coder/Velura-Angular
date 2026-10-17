@@ -25,6 +25,6 @@ test("đổi trả bắt buộc lý do trong dropdown và ít nhất một ảnh
 });
 
 test("nhãn khách của received là nhận hàng hoàn trả thành công", () => {
-  assert.equal(RETURN_STATUS_LABELS_VI.received, "Nhận hàng hoàn trả thành công");
-  assert.equal(RETURN_STATUS_LABELS_VI.pending, "Chờ xử lý");
+  assert.equal(RETURN_STATUS_LABELS_VI.RECEIVED, "Nhận hàng hoàn trả thành công");
+  assert.equal(RETURN_STATUS_LABELS_VI.REQUESTED, "Chờ xử lý");
 });

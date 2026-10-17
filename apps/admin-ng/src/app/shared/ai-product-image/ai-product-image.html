@@ -1,0 +1,59 @@
+<section aria-label="Kiểm tra và cải thiện ảnh sản phẩm">
+  <header>
+    <h3>Kiểm tra ảnh mới & cải thiện tùy chọn</h3>
+    <button type="button" class="admin-btn admin-btn--secondary" [disabled]="!canMutate() || busy()" (click)="load()">Kiểm tra dịch vụ ảnh</button>
+  </header>
+  <p>Ảnh đang công bố không tự thay đổi. Chọn ảnh, phê duyệt rồi bấm Lưu sản phẩm để công bố. Lưu lỗi giữ ảnh đang công bố.</p>
+  @if (!preview() && existingImage()) {
+    <figure>
+      <img [src]="existingImage()" alt="Ảnh sản phẩm đang công bố" />
+      <figcaption>Ảnh hiện tại được giữ nguyên; không gửi lại để xử lý AI.</figcaption>
+    </figure>
+  }
+  @if (preview()) {
+    <label><input type="checkbox" [checked]="consent()" [disabled]="busy() || !!approved()" (change)="agree($event)" />Tôi có quyền sử dụng và xử lý ảnh này.</label>
+    <p>Kiểm tra ánh sáng, độ nét và nền ảnh không cần mô hình tạo ảnh. Ảnh gốc đạt ngưỡng có thể dùng ngay sau phê duyệt, không cần Cải thiện.</p>
+    <button type="button" class="admin-btn admin-btn--secondary" [disabled]="!consent() || busy() || !canAssess() || !!originalJob() || !!approved()" (click)="assess()">Kiểm tra chất lượng ảnh gốc</button>
+    @if (capabilities() && !canEnhance()) {
+      <p role="status">Cải thiện ảnh chưa sẵn sàng. Vẫn có thể kiểm tra và chọn ảnh gốc nếu dịch vụ đo chất lượng hoạt động.</p>
+    }
+    <fieldset [disabled]="busy() || !!approved() || !canEnhance()">
+      <legend>Cải thiện tùy chọn — chỉ xử lý khi bấm Cải thiện</legend>
+      <label>Nền ảnh<select [value]="background()" (change)="chooseBackground($event)"><option value="white">Nền trắng</option><option value="transparent">Nền trong suốt</option></select></label>
+      <label><input type="checkbox" [checked]="brightness()" (change)="adjust($event, 'brightness')" />Điều chỉnh sáng nhẹ</label>
+      <label><input type="checkbox" [checked]="sharpness()" (change)="adjust($event, 'sharpness')" />Điều chỉnh nét nhẹ</label>
+      <p>Tách nền và điều chỉnh sáng/nét có giới hạn, không chủ ý đổi màu, hình dáng hoặc họa tiết. Số đo chất lượng không chứng minh độ trung thực thời trang; cần người quản lý so sánh.</p>
+      <button type="button" class="admin-btn admin-btn--primary" [disabled]="!consent() || busy() || !canEnhance() || !!approved()" (click)="enhance()">Cải thiện</button>
+    </fieldset>
+    @if (busy() && !approved()) {
+      <button type="button" class="admin-btn admin-btn--secondary" (click)="cancel()">Hủy xử lý</button>
+    }
+    @if (job(); as current) {
+      <p aria-live="polite">{{ statusLabel(current) }}</p>
+      @for (reason of current.gate?.reasons || []; track reason) { <p>{{ reasonLabel(reason) }}</p> }
+    }
+    <div class="preview">
+      <figure>
+        <img [src]="preview()" alt="Ảnh gốc được chọn để so sánh" />
+        <figcaption>Ảnh gốc</figcaption>
+        <button type="button" class="admin-btn admin-btn--secondary" [disabled]="busy() || !qualityPassed() || !!approved()" [attr.aria-pressed]="selected() === 'original'" (click)="useOriginal()">Chọn ảnh gốc</button>
+      </figure>
+      @if (result()) {
+        <figure>
+          <img [src]="result()" alt="Ảnh sau cải thiện để so sánh với ảnh gốc" />
+          <figcaption>Ảnh sau cải thiện — kiểm tra màu, hình dáng, logo và họa tiết.</figcaption>
+          <button type="button" class="admin-btn admin-btn--secondary" [disabled]="busy() || !enhancedPassed() || !!approved()" [attr.aria-pressed]="selected() === 'enhanced'" (click)="useEnhanced()">Chọn ảnh sau cải thiện</button>
+        </figure>
+      }
+    </div>
+    @if (selected()) {
+      <label><input type="checkbox" [checked]="visuallyReviewed()" [disabled]="busy() || !!approved()" (change)="review($event)" />Tôi đã kiểm tra màu sắc, hình dáng, logo, họa tiết và nền của ảnh được chọn.</label>
+      <button type="button" class="admin-btn admin-btn--primary" [disabled]="!canApprove()" (click)="approve()">Phê duyệt ảnh đã chọn</button>
+    }
+    @if (approved(); as approval) {
+      <p role="status">Đã phê duyệt ảnh cho bản chỉnh sửa; chưa công bố. Bấm Lưu sản phẩm trước khi phê duyệt hết hạn.</p>
+      <p>Phiên bản xử lý: {{ approval.processingVersion }}</p>
+    }
+  }
+  @if (error()) { <p role="alert">{{ error() }}</p> }
+</section>

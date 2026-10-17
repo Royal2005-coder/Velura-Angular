@@ -26,9 +26,8 @@
       <div>
         <h4>Hỗ trợ</h4>
         <ul>
-          <li><a routerLink="/account/orders">Đơn hàng của tôi</a></li>
-          <li><a routerLink="/account/track">Theo dõi đơn hàng</a></li>
-          <li><a routerLink="/account/returns">Trả hàng &amp; Hoàn tiền</a></li>
+          <li><a [routerLink]="auth.isLoggedIn() ? '/account/orders' : '/guest/orders'">{{ auth.isLoggedIn() ? 'Đơn hàng của tôi' : 'Tra cứu đơn hàng' }}</a></li>
+          <li><a [routerLink]="auth.isLoggedIn() ? '/account/returns' : '/guest/returns'">Trả hàng &amp; Hoàn tiền</a></li>
           <li><a routerLink="/policies" [queryParams]="{tab: 'returns'}">Chính sách đổi trả</a></li>
           <li><a routerLink="/policies" [queryParams]="{tab: 'shipping'}">Chính sách vận chuyển</a></li>
           <li><a routerLink="/policies" [queryParams]="{tab: 'faq'}">Câu hỏi thường gặp</a></li>

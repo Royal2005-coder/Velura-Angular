@@ -1,6 +1,7 @@
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { vi } from 'vitest';
 import { createStorefrontPage, lastStorefrontFixture } from '../../../testing/storefront-testing';
+import { ApiRequestError } from '../../core/models/api-request-error';
 import { AccountOrderDetailPage, MemberOrderDetail } from './order-detail.page';
 
 const order = (overrides: Partial<MemberOrderDetail> = {}): MemberOrderDetail => ({
@@ -9,6 +10,7 @@ const order = (overrides: Partial<MemberOrderDetail> = {}): MemberOrderDetail =>
   status: 'confirmed',
   status_label: 'Đã xác nhận',
   payment_method: 'COD',
+  version: 3,
   created_at: '2026-09-24 03:00:00',
   items: [{ item_id: 'i1', product_name: 'Áo sơ mi linen', quantity: 2, unit_price: 450000 }],
   steps: [
@@ -70,8 +72,33 @@ describe('AccountOrderDetailPage', () => {
     const page = await createStorefrontPage(AccountOrderDetailPage, { get, patch });
     page.openCancel();
     page.submitCancel();
-    expect(patch).toHaveBeenCalledWith('/api/user/orders', expect.objectContaining({ order_id: 'o1', status: 'cancelled' }));
+    expect(patch).toHaveBeenCalledWith(
+      '/api/user/orders',
+      expect.objectContaining({ order_id: 'o1', status: 'cancelled', expectedVersion: 3 }),
+    );
     expect(get).toHaveBeenCalledTimes(2);
     expect(page.notice()).toContain('hủy');
+  });
+
+  it('refuses to cancel without a version instead of sending an incomplete request', async () => {
+    const get = vi.fn(() => of(order({ version: undefined })));
+    const patch = vi.fn(() => of({ refund: null }));
+    const page = await createStorefrontPage(AccountOrderDetailPage, { get, patch });
+    page.openCancel();
+    page.submitCancel();
+    expect(patch).not.toHaveBeenCalled();
+    expect(page.cancelError()).toContain('tải lại');
+  });
+
+  it('a stale version (409) tells the customer to look at the reloaded order, not a generic error', async () => {
+    const get = vi.fn(() => of(order()));
+    const patch = vi.fn(() =>
+      throwError(() => new ApiRequestError('VERSION_CONFLICT', 409, 'VERSION_CONFLICT', null)),
+    );
+    const page = await createStorefrontPage(AccountOrderDetailPage, { get, patch });
+    page.openCancel();
+    page.submitCancel();
+    expect(get).toHaveBeenCalledTimes(2);
+    expect(page.cancelError()).toContain('cập nhật');
   });
 });

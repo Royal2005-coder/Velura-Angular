@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions id="Definitions_3_4c" xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" targetNamespace="http://velura.vn/bpmn/timkiem-anh">
+  <bpmn:collaboration id="Collaboration_3_4c">
+    <bpmn:participant id="Participant_B" name="Velura - Tìm kiếm bằng hình ảnh (2/3)" processRef="Process_B" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_B" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_B">
+      <bpmn:lane id="lane_u_B" name="Người dùng">
+        <bpmn:flowNodeRef>b_start</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>b_end</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="lane_s_B" name="Hệ thống">
+        <bpmn:flowNodeRef>b_recv</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>b_gw1</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>b_rate</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>b_end_rate</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>b_ai</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>b_gw2</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>b_aierr</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>b_end_ai</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>b_gw3</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>b_nf</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>b_end_nf</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>b_match</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>b_store</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>b_gw4</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>b_empty</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>b_end_empty</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="b_start" name="Ảnh đã sẵn sàng (từ Hình 3.4b)"><bpmn:outgoing>f_b_start_b_recv</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:serviceTask id="b_recv" name="Nhận ảnh đã chọn vùng và kiểm tra giới hạn tần suất"><bpmn:incoming>f_b_start_b_recv</bpmn:incoming><bpmn:outgoing>f_b_recv_b_gw1</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="b_gw1" name="Trong giới hạn tần suất?"><bpmn:incoming>f_b_recv_b_gw1</bpmn:incoming><bpmn:outgoing>f_b_gw1_b_rate</bpmn:outgoing><bpmn:outgoing>f_b_gw1_b_ai</bpmn:outgoing></bpmn:exclusiveGateway>
+    <bpmn:sendTask id="b_rate" name="Báo vượt tần suất kèm thời gian chờ"><bpmn:incoming>f_b_gw1_b_rate</bpmn:incoming><bpmn:outgoing>f_b_rate_b_end_rate</bpmn:outgoing></bpmn:sendTask>
+    <bpmn:endEvent id="b_end_rate" name="Người dùng chờ rồi thử lại"><bpmn:incoming>f_b_rate_b_end_rate</bpmn:incoming></bpmn:endEvent>
+    <bpmn:serviceTask id="b_ai" name="Gọi AI nhận diện trang phục: loại, màu, phom, chất liệu, phong cách"><bpmn:incoming>f_b_gw1_b_ai</bpmn:incoming><bpmn:outgoing>f_b_ai_b_gw2</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="b_gw2" name="AI phản hồi hợp lệ?"><bpmn:incoming>f_b_ai_b_gw2</bpmn:incoming><bpmn:outgoing>f_b_gw2_b_aierr</bpmn:outgoing><bpmn:outgoing>f_b_gw2_b_gw3</bpmn:outgoing></bpmn:exclusiveGateway>
+    <bpmn:sendTask id="b_aierr" name="Báo dịch vụ tạm thời lỗi, cho phép thử lại"><bpmn:incoming>f_b_gw2_b_aierr</bpmn:incoming><bpmn:outgoing>f_b_aierr_b_end_ai</bpmn:outgoing></bpmn:sendTask>
+    <bpmn:endEvent id="b_end_ai" name="Người dùng chọn thử lại"><bpmn:incoming>f_b_aierr_b_end_ai</bpmn:incoming></bpmn:endEvent>
+    <bpmn:exclusiveGateway id="b_gw3" name="Ảnh là trang phục?"><bpmn:incoming>f_b_gw2_b_gw3</bpmn:incoming><bpmn:outgoing>f_b_gw3_b_nf</bpmn:outgoing><bpmn:outgoing>f_b_gw3_b_match</bpmn:outgoing></bpmn:exclusiveGateway>
+    <bpmn:sendTask id="b_nf" name="Báo không nhận diện được, gợi ý chụp lại một món rõ nét"><bpmn:incoming>f_b_gw3_b_nf</bpmn:incoming><bpmn:outgoing>f_b_nf_b_end_nf</bpmn:outgoing></bpmn:sendTask>
+    <bpmn:endEvent id="b_end_nf" name="Người dùng chọn ảnh khác hoặc tìm bằng từ khóa"><bpmn:incoming>f_b_nf_b_end_nf</bpmn:incoming></bpmn:endEvent>
+    <bpmn:serviceTask id="b_match" name="Tạo vector từ mô tả thuộc tính rồi truy vấn sản phẩm đang bán (ngưỡng 0.45, tối đa 20)"><bpmn:incoming>f_b_gw3_b_match</bpmn:incoming><bpmn:outgoing>f_b_match_b_gw4</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="b_gw4" name="Có sản phẩm tương đồng?"><bpmn:incoming>f_b_match_b_gw4</bpmn:incoming><bpmn:outgoing>f_b_gw4_b_empty</bpmn:outgoing><bpmn:outgoing>f_b_gw4_b_end</bpmn:outgoing></bpmn:exclusiveGateway>
+    <bpmn:sendTask id="b_empty" name="Báo chưa có sản phẩm tương đồng kèm khối Sản phẩm nổi bật"><bpmn:incoming>f_b_gw4_b_empty</bpmn:incoming><bpmn:outgoing>f_b_empty_b_end_empty</bpmn:outgoing></bpmn:sendTask>
+    <bpmn:endEvent id="b_end_empty" name="Người dùng xem sản phẩm nổi bật hoặc tìm bằng từ khóa"><bpmn:incoming>f_b_empty_b_end_empty</bpmn:incoming></bpmn:endEvent>
+    <bpmn:endEvent id="b_end" name="Danh sách tương đồng sẵn sàng (chuyển Hình 3.4d)"><bpmn:incoming>f_b_gw4_b_end</bpmn:incoming></bpmn:endEvent>
+    <bpmn:dataStoreReference id="b_store" name="Kho sản phẩm và vector embedding" />
+    <bpmn:sequenceFlow id="f_b_gw1_b_rate" name="Không" sourceRef="b_gw1" targetRef="b_rate" />
+    <bpmn:sequenceFlow id="f_b_rate_b_end_rate" name="" sourceRef="b_rate" targetRef="b_end_rate" />
+    <bpmn:sequenceFlow id="f_b_gw2_b_aierr" name="Lỗi hoặc quá 15 giây" sourceRef="b_gw2" targetRef="b_aierr" />
+    <bpmn:sequenceFlow id="f_b_aierr_b_end_ai" name="" sourceRef="b_aierr" targetRef="b_end_ai" />
+    <bpmn:sequenceFlow id="f_b_gw3_b_nf" name="Không" sourceRef="b_gw3" targetRef="b_nf" />
+    <bpmn:sequenceFlow id="f_b_nf_b_end_nf" name="" sourceRef="b_nf" targetRef="b_end_nf" />
+    <bpmn:sequenceFlow id="f_b_gw4_b_empty" name="Không" sourceRef="b_gw4" targetRef="b_empty" />
+    <bpmn:sequenceFlow id="f_b_empty_b_end_empty" name="" sourceRef="b_empty" targetRef="b_end_empty" />
+    <bpmn:sequenceFlow id="f_b_start_b_recv" name="" sourceRef="b_start" targetRef="b_recv" />
+    <bpmn:sequenceFlow id="f_b_recv_b_gw1" name="" sourceRef="b_recv" targetRef="b_gw1" />
+    <bpmn:sequenceFlow id="f_b_gw1_b_ai" name="Có" sourceRef="b_gw1" targetRef="b_ai" />
+    <bpmn:sequenceFlow id="f_b_ai_b_gw2" name="" sourceRef="b_ai" targetRef="b_gw2" />
+    <bpmn:sequenceFlow id="f_b_gw2_b_gw3" name="Có" sourceRef="b_gw2" targetRef="b_gw3" />
+    <bpmn:sequenceFlow id="f_b_gw3_b_match" name="Có" sourceRef="b_gw3" targetRef="b_match" />
+    <bpmn:sequenceFlow id="f_b_match_b_gw4" name="" sourceRef="b_match" targetRef="b_gw4" />
+    <bpmn:sequenceFlow id="f_b_gw4_b_end" name="Có" sourceRef="b_gw4" targetRef="b_end" />
+    <bpmn:association id="a_b_match_b_store" sourceRef="b_match" targetRef="b_store" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_3_4c">
+    <bpmndi:BPMNPlane id="BPMNPlane_3_4c" bpmnElement="Collaboration_3_4c">
+      <bpmndi:BPMNShape id="Participant_B_di" bpmnElement="Participant_B" isHorizontal="true"><dc:Bounds x="40" y="40" width="2245" height="686" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="lane_u_B_di" bpmnElement="lane_u_B" isHorizontal="true"><dc:Bounds x="70" y="40" width="2215" height="196" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="lane_s_B_di" bpmnElement="lane_s_B" isHorizontal="true"><dc:Bounds x="70" y="236" width="2215" height="490" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_start_di" bpmnElement="b_start"><dc:Bounds x="172" y="120" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_recv_di" bpmnElement="b_recv"><dc:Bounds x="330" y="271" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_gw1_di" bpmnElement="b_gw1" isMarkerVisible="true"><dc:Bounds x="637" y="290" width="46" height="46" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_rate_di" bpmnElement="b_rate"><dc:Bounds x="565" y="439" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_end_rate_di" bpmnElement="b_end_rate"><dc:Bounds x="642" y="631" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_ai_di" bpmnElement="b_ai"><dc:Bounds x="800" y="271" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_gw2_di" bpmnElement="b_gw2" isMarkerVisible="true"><dc:Bounds x="1107" y="290" width="46" height="46" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_aierr_di" bpmnElement="b_aierr"><dc:Bounds x="1035" y="439" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_end_ai_di" bpmnElement="b_end_ai"><dc:Bounds x="1112" y="631" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_gw3_di" bpmnElement="b_gw3" isMarkerVisible="true"><dc:Bounds x="1342" y="290" width="46" height="46" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_nf_di" bpmnElement="b_nf"><dc:Bounds x="1270" y="439" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_end_nf_di" bpmnElement="b_end_nf"><dc:Bounds x="1347" y="631" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_match_di" bpmnElement="b_match"><dc:Bounds x="1505" y="271" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_store_di" bpmnElement="b_store"><dc:Bounds x="1525" y="439" width="150" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_gw4_di" bpmnElement="b_gw4" isMarkerVisible="true"><dc:Bounds x="1812" y="290" width="46" height="46" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_empty_di" bpmnElement="b_empty"><dc:Bounds x="1740" y="439" width="190" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_end_empty_di" bpmnElement="b_end_empty"><dc:Bounds x="1817" y="631" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_end_di" bpmnElement="b_end"><dc:Bounds x="2052" y="120" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f_b_gw1_b_rate_di" bpmnElement="f_b_gw1_b_rate"><di:waypoint x="637" y="313" /><di:waypoint x="755" y="313" /><di:waypoint x="755" y="481" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_b_rate_b_end_rate_di" bpmnElement="f_b_rate_b_end_rate"><di:waypoint x="755" y="481" /><di:waypoint x="642" y="481" /><di:waypoint x="642" y="649" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_b_gw2_b_aierr_di" bpmnElement="f_b_gw2_b_aierr"><di:waypoint x="1107" y="313" /><di:waypoint x="1225" y="313" /><di:waypoint x="1225" y="481" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_b_aierr_b_end_ai_di" bpmnElement="f_b_aierr_b_end_ai"><di:waypoint x="1225" y="481" /><di:waypoint x="1112" y="481" /><di:waypoint x="1112" y="649" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_b_gw3_b_nf_di" bpmnElement="f_b_gw3_b_nf"><di:waypoint x="1342" y="313" /><di:waypoint x="1460" y="313" /><di:waypoint x="1460" y="481" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_b_nf_b_end_nf_di" bpmnElement="f_b_nf_b_end_nf"><di:waypoint x="1460" y="481" /><di:waypoint x="1347" y="481" /><di:waypoint x="1347" y="649" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_b_gw4_b_empty_di" bpmnElement="f_b_gw4_b_empty"><di:waypoint x="1812" y="313" /><di:waypoint x="1930" y="313" /><di:waypoint x="1930" y="481" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_b_empty_b_end_empty_di" bpmnElement="f_b_empty_b_end_empty"><di:waypoint x="1930" y="481" /><di:waypoint x="1817" y="481" /><di:waypoint x="1817" y="649" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_b_start_b_recv_di" bpmnElement="f_b_start_b_recv"><di:waypoint x="208" y="138" /><di:waypoint x="330" y="138" /><di:waypoint x="330" y="313" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_b_recv_b_gw1_di" bpmnElement="f_b_recv_b_gw1"><di:waypoint x="520" y="313" /><di:waypoint x="637" y="313" /><di:waypoint x="637" y="313" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_b_gw1_b_ai_di" bpmnElement="f_b_gw1_b_ai"><di:waypoint x="683" y="313" /><di:waypoint x="800" y="313" /><di:waypoint x="800" y="313" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_b_ai_b_gw2_di" bpmnElement="f_b_ai_b_gw2"><di:waypoint x="990" y="313" /><di:waypoint x="1107" y="313" /><di:waypoint x="1107" y="313" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_b_gw2_b_gw3_di" bpmnElement="f_b_gw2_b_gw3"><di:waypoint x="1153" y="313" /><di:waypoint x="1342" y="313" /><di:waypoint x="1342" y="313" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_b_gw3_b_match_di" bpmnElement="f_b_gw3_b_match"><di:waypoint x="1388" y="313" /><di:waypoint x="1505" y="313" /><di:waypoint x="1505" y="313" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_b_match_b_gw4_di" bpmnElement="f_b_match_b_gw4"><di:waypoint x="1695" y="313" /><di:waypoint x="1812" y="313" /><di:waypoint x="1812" y="313" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_b_gw4_b_end_di" bpmnElement="f_b_gw4_b_end"><di:waypoint x="1858" y="313" /><di:waypoint x="2052" y="313" /><di:waypoint x="2052" y="138" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="a_b_match_b_store_di" bpmnElement="a_b_match_b_store"><di:waypoint x="1695" y="313" /><di:waypoint x="1525" y="313" /><di:waypoint x="1525" y="481" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

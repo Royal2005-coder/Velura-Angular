@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions id="Definitions_quan_ly_san_pham_anh_ai" name="Hình 3.12a - Xử lý ảnh sản phẩm bằng AI" xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" targetNamespace="http://velura.vn/bpmn/admin">
+  <bpmn:collaboration id="Collaboration_quan_ly_san_pham_anh_ai">
+    <bpmn:participant id="Participant_velura" name="Velura" processRef="Process_velura" />
+    <bpmn:participant id="Participant_gemini" name="Google Gemini (dịch vụ AI bên ngoài)" />
+    <bpmn:messageFlow id="Msg_t_gui__gemini" name="Ảnh gốc và yêu cầu" sourceRef="t_gui" targetRef="Participant_gemini" />
+    <bpmn:messageFlow id="Msg_gemini__t_nhan" name="Nhận xét và ảnh nền studio" sourceRef="Participant_gemini" targetRef="t_nhan" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_velura" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_velura">
+      <bpmn:lane id="lane_admin" name="Quản trị viên quản lý sản phẩm">
+        <bpmn:flowNodeRef>e_start</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_chon</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_xem</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>g_nhan</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>e_end</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="lane_sys" name="Hệ thống">
+        <bpmn:flowNodeRef>t_sang</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>g_size</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_gui</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_nhan</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>g_studio</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_studio</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_banSang</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>t_luu</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>ds_anh</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="e_start" name="Cần ảnh sản phẩm"><bpmn:outgoing>Flow_e_start__t_chon</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:userTask id="t_chon" name="Chọn ảnh sản phẩm từ máy (một lần chọn, hệ thống tự xử lý)"><bpmn:incoming>Flow_e_start__t_chon</bpmn:incoming><bpmn:incoming>Flow_g_nhan__t_chon</bpmn:incoming><bpmn:outgoing>Flow_t_chon__t_sang</bpmn:outgoing></bpmn:userTask>
+    <bpmn:serviceTask id="t_sang" name="Tăng sáng 8% và tương phản 6% trên ảnh gốc"><bpmn:incoming>Flow_t_chon__t_sang</bpmn:incoming><bpmn:outgoing>Flow_t_sang__g_size</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="g_size" name="Ảnh ≤ 4 MB?"><bpmn:incoming>Flow_t_sang__g_size</bpmn:incoming><bpmn:outgoing>Flow_g_size__t_gui</bpmn:outgoing><bpmn:outgoing>Flow_g_size__t_banSang</bpmn:outgoing></bpmn:exclusiveGateway>
+    <bpmn:sendTask id="t_gui" name="Gửi ảnh cho Gemini: xin nhận xét và dựng nền studio"><bpmn:incoming>Flow_g_size__t_gui</bpmn:incoming><bpmn:outgoing>Flow_t_gui__t_nhan</bpmn:outgoing></bpmn:sendTask>
+    <bpmn:receiveTask id="t_nhan" name="Nhận tối đa 3 câu nhận xét và ảnh nền studio"><bpmn:incoming>Flow_t_gui__t_nhan</bpmn:incoming><bpmn:outgoing>Flow_t_nhan__g_studio</bpmn:outgoing></bpmn:receiveTask>
+    <bpmn:exclusiveGateway id="g_studio" name="Gemini trả về ảnh nền studio?"><bpmn:incoming>Flow_t_nhan__g_studio</bpmn:incoming><bpmn:outgoing>Flow_g_studio__t_studio</bpmn:outgoing><bpmn:outgoing>Flow_g_studio__t_banSang</bpmn:outgoing></bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="t_studio" name="Dùng ảnh nền studio: giữ sản phẩm, thay nền và ánh sáng"><bpmn:incoming>Flow_g_studio__t_studio</bpmn:incoming><bpmn:outgoing>Flow_t_studio__t_luu</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:serviceTask id="t_banSang" name="Dùng bản ảnh đã tăng sáng 8%, tương phản 6%"><bpmn:incoming>Flow_g_size__t_banSang</bpmn:incoming><bpmn:incoming>Flow_g_studio__t_banSang</bpmn:incoming><bpmn:outgoing>Flow_t_banSang__t_luu</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:serviceTask id="t_luu" name="Lưu ảnh vào kho ảnh sản phẩm, thêm đường dẫn vào danh sách ảnh"><bpmn:incoming>Flow_t_studio__t_luu</bpmn:incoming><bpmn:incoming>Flow_t_banSang__t_luu</bpmn:incoming><bpmn:outgoing>Flow_t_luu__t_xem</bpmn:outgoing><bpmn:dataOutputAssociation id="DataAssoc_ds_anh"><bpmn:targetRef>ds_anh</bpmn:targetRef></bpmn:dataOutputAssociation></bpmn:serviceTask>
+    <bpmn:userTask id="t_xem" name="Xem nhận xét của AI và ảnh kết quả"><bpmn:incoming>Flow_t_luu__t_xem</bpmn:incoming><bpmn:outgoing>Flow_t_xem__g_nhan</bpmn:outgoing></bpmn:userTask>
+    <bpmn:exclusiveGateway id="g_nhan" name="Chấp nhận ảnh?"><bpmn:incoming>Flow_t_xem__g_nhan</bpmn:incoming><bpmn:outgoing>Flow_g_nhan__e_end</bpmn:outgoing><bpmn:outgoing>Flow_g_nhan__t_chon</bpmn:outgoing></bpmn:exclusiveGateway>
+    <bpmn:endEvent id="e_end" name="Ảnh sẵn sàng gắn vào sản phẩm"><bpmn:incoming>Flow_g_nhan__e_end</bpmn:incoming></bpmn:endEvent>
+    <bpmn:dataStoreReference id="ds_anh" name="Kho ảnh sản phẩm" />
+    <bpmn:sequenceFlow id="Flow_e_start__t_chon" name="" sourceRef="e_start" targetRef="t_chon" />
+    <bpmn:sequenceFlow id="Flow_t_chon__t_sang" name="" sourceRef="t_chon" targetRef="t_sang" />
+    <bpmn:sequenceFlow id="Flow_t_sang__g_size" name="" sourceRef="t_sang" targetRef="g_size" />
+    <bpmn:sequenceFlow id="Flow_g_size__t_gui" name="Có" sourceRef="g_size" targetRef="t_gui" />
+    <bpmn:sequenceFlow id="Flow_g_size__t_banSang" name="Không" sourceRef="g_size" targetRef="t_banSang" />
+    <bpmn:sequenceFlow id="Flow_t_gui__t_nhan" name="" sourceRef="t_gui" targetRef="t_nhan" />
+    <bpmn:sequenceFlow id="Flow_t_nhan__g_studio" name="" sourceRef="t_nhan" targetRef="g_studio" />
+    <bpmn:sequenceFlow id="Flow_g_studio__t_studio" name="Có" sourceRef="g_studio" targetRef="t_studio" />
+    <bpmn:sequenceFlow id="Flow_g_studio__t_banSang" name="Không" sourceRef="g_studio" targetRef="t_banSang" />
+    <bpmn:sequenceFlow id="Flow_t_studio__t_luu" name="" sourceRef="t_studio" targetRef="t_luu" />
+    <bpmn:sequenceFlow id="Flow_t_banSang__t_luu" name="" sourceRef="t_banSang" targetRef="t_luu" />
+    <bpmn:sequenceFlow id="Flow_t_luu__t_xem" name="" sourceRef="t_luu" targetRef="t_xem" />
+    <bpmn:sequenceFlow id="Flow_t_xem__g_nhan" name="" sourceRef="t_xem" targetRef="g_nhan" />
+    <bpmn:sequenceFlow id="Flow_g_nhan__e_end" name="Có" sourceRef="g_nhan" targetRef="e_end" />
+    <bpmn:sequenceFlow id="Flow_g_nhan__t_chon" name="Không, chọn ảnh khác" sourceRef="g_nhan" targetRef="t_chon" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_quan_ly_san_pham_anh_ai">
+    <bpmndi:BPMNPlane id="BPMNPlane_quan_ly_san_pham_anh_ai" bpmnElement="Collaboration_quan_ly_san_pham_anh_ai">
+      <bpmndi:BPMNShape id="Participant_velura_di" bpmnElement="Participant_velura" isHorizontal="true"><dc:Bounds x="40" y="40" width="2070" height="479" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="lane_admin_di" bpmnElement="lane_admin" isHorizontal="true"><dc:Bounds x="70" y="40" width="2040" height="180" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="lane_sys_di" bpmnElement="lane_sys" isHorizontal="true"><dc:Bounds x="70" y="220" width="2040" height="299" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Participant_gemini_di" bpmnElement="Participant_gemini" isHorizontal="true"><dc:Bounds x="40" y="615" width="2070" height="64" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_start_di" bpmnElement="e_start"><dc:Bounds x="144.5" y="112" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="128.3" y="151" width="68.4" height="36" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_chon_di" bpmnElement="t_chon"><dc:Bounds x="229.5" y="86" width="176" height="88" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_sang_di" bpmnElement="t_sang"><dc:Bounds x="434.5" y="393.1" width="176" height="88" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_size_di" bpmnElement="g_size" isMarkerVisible="true"><dc:Bounds x="652.5" y="412.1" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="581.2" y="370.1" width="90.3" height="18" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_gui_di" bpmnElement="t_gui"><dc:Bounds x="744.5" y="393.1" width="176" height="88" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_nhan_di" bpmnElement="t_nhan"><dc:Bounds x="949.5" y="393.1" width="176" height="88" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_studio_di" bpmnElement="g_studio" isMarkerVisible="true"><dc:Bounds x="1167.5" y="412.1" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="1067" y="352.1" width="119.5" height="36" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_studio_di" bpmnElement="t_studio"><dc:Bounds x="1259.5" y="393.1" width="176" height="88" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_banSang_di" bpmnElement="t_banSang"><dc:Bounds x="1259.5" y="244.9" width="176" height="88" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_luu_di" bpmnElement="t_luu"><dc:Bounds x="1464.5" y="393.1" width="176" height="88" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_xem_di" bpmnElement="t_xem"><dc:Bounds x="1669.5" y="86" width="176" height="88" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_nhan_di" bpmnElement="g_nhan" isMarkerVisible="true"><dc:Bounds x="1887.5" y="105" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="1830.8" y="45" width="75.7" height="36" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_end_di" bpmnElement="e_end"><dc:Bounds x="1999.5" y="112" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1954.1" y="151" width="126.8" height="36" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ds_anh_di" bpmnElement="ds_anh"><dc:Bounds x="1749" y="400.1" width="110" height="74" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_e_start__t_chon_di" bpmnElement="Flow_e_start__t_chon"><di:waypoint x="180.5" y="130" /><di:waypoint x="229.5" y="130" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_t_chon__t_sang_di" bpmnElement="Flow_t_chon__t_sang"><di:waypoint x="405.5" y="130" /><di:waypoint x="416.5" y="130" /><di:waypoint x="416.5" y="437.1" /><di:waypoint x="434.5" y="437.1" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_t_sang__g_size_di" bpmnElement="Flow_t_sang__g_size"><di:waypoint x="610.5" y="437.1" /><di:waypoint x="652.5" y="437.1" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_g_size__t_gui_di" bpmnElement="Flow_g_size__t_gui"><di:waypoint x="702.5" y="437.1" /><di:waypoint x="744.5" y="437.1" /><bpmndi:BPMNLabel><dc:Bounds x="710.5" y="427.1" width="26" height="20" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_g_size__t_banSang_di" bpmnElement="Flow_g_size__t_banSang"><di:waypoint x="677.5" y="412.1" /><di:waypoint x="677.5" y="288.9" /><di:waypoint x="1259.5" y="288.9" /><bpmndi:BPMNLabel><dc:Bounds x="857.7" y="278.9" width="47" height="20" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_t_gui__t_nhan_di" bpmnElement="Flow_t_gui__t_nhan"><di:waypoint x="920.5" y="437.1" /><di:waypoint x="949.5" y="437.1" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_t_nhan__g_studio_di" bpmnElement="Flow_t_nhan__g_studio"><di:waypoint x="1125.5" y="437.1" /><di:waypoint x="1167.5" y="437.1" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_g_studio__t_studio_di" bpmnElement="Flow_g_studio__t_studio"><di:waypoint x="1217.5" y="437.1" /><di:waypoint x="1259.5" y="437.1" /><bpmndi:BPMNLabel><dc:Bounds x="1225.5" y="427.1" width="26" height="20" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_g_studio__t_banSang_di" bpmnElement="Flow_g_studio__t_banSang"><di:waypoint x="1192.5" y="412.1" /><di:waypoint x="1192.5" y="350.9" /><di:waypoint x="1347.5" y="350.9" /><di:waypoint x="1347.5" y="332.9" /><bpmndi:BPMNLabel><dc:Bounds x="1223.25" y="340.9" width="47" height="20" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_t_studio__t_luu_di" bpmnElement="Flow_t_studio__t_luu"><di:waypoint x="1435.5" y="437.1" /><di:waypoint x="1464.5" y="437.1" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_t_banSang__t_luu_di" bpmnElement="Flow_t_banSang__t_luu"><di:waypoint x="1435.5" y="288.9" /><di:waypoint x="1552.5" y="288.9" /><di:waypoint x="1552.5" y="393.1" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_t_luu__t_xem_di" bpmnElement="Flow_t_luu__t_xem"><di:waypoint x="1640.5" y="437.1" /><di:waypoint x="1651.5" y="437.1" /><di:waypoint x="1651.5" y="130" /><di:waypoint x="1669.5" y="130" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_t_xem__g_nhan_di" bpmnElement="Flow_t_xem__g_nhan"><di:waypoint x="1845.5" y="130" /><di:waypoint x="1887.5" y="130" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_g_nhan__e_end_di" bpmnElement="Flow_g_nhan__e_end"><di:waypoint x="1937.5" y="130" /><di:waypoint x="1999.5" y="130" /><bpmndi:BPMNLabel><dc:Bounds x="1955.5" y="120" width="26" height="20" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_g_nhan__t_chon_di" bpmnElement="Flow_g_nhan__t_chon"><di:waypoint x="1912.5" y="105" /><di:waypoint x="1912.5" y="39" /><di:waypoint x="317.5" y="39" /><di:waypoint x="317.5" y="86" /><bpmndi:BPMNLabel><dc:Bounds x="1039" y="29" width="152" height="20" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Msg_t_gui__gemini_di" bpmnElement="Msg_t_gui__gemini"><di:waypoint x="832.5" y="481.1" /><di:waypoint x="832.5" y="615" /><bpmndi:BPMNLabel><dc:Bounds x="840.5" y="538.05" width="138" height="20" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Msg_gemini__t_nhan_di" bpmnElement="Msg_gemini__t_nhan"><di:waypoint x="1037.5" y="615" /><di:waypoint x="1037.5" y="481.1" /><bpmndi:BPMNLabel><dc:Bounds x="1045.5" y="538.05" width="194" height="20" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DataAssoc_ds_anh_di" bpmnElement="DataAssoc_ds_anh"><di:waypoint x="1552.5" y="481.1" /><di:waypoint x="1552.5" y="487.1" /><di:waypoint x="1804" y="487.1" /><di:waypoint x="1804" y="474.1" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

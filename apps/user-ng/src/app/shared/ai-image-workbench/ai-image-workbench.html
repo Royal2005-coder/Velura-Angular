@@ -1,0 +1,447 @@
+@if (!hideTrigger()) {
+  <button type="button" class="btn btn--outline ai-workbench-trigger" (click)="open()">
+    <span class="ai-trigger-sparkle">✨</span>
+    <span>{{ title() }}</span>
+    <span class="ai-trigger-badge">AI 3D Try-On</span>
+  </button>
+}
+
+<dialog #dialog [attr.aria-labelledby]="titleId" class="ai-workbench-dialog">
+  <div class="dialog-content">
+    <header class="workbench-header">
+      <div class="workbench-header__title-group">
+        <span class="workbench-header__icon">✨</span>
+        <h2 [id]="titleId" class="workbench-header__title">{{ title() }}</h2>
+      </div>
+      <button type="button" class="btn-close" (click)="close()" aria-label="Đóng">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </header>
+
+    <div class="workbench-body">
+      @if (!capabilities()) {
+        <div class="alert alert--info" role="status">
+          <span class="spinner-inline"></span> Đang kết nối dịch vụ AI GPU trên K3s…
+        </div>
+      }
+
+      @if (task() === 'virtual_try_on' && capabilities()?.product_supported === false) {
+        <div class="alert alert--warning" role="status">
+          Sản phẩm này chưa cấu hình ảnh flat-lay thử đồ. Bạn vẫn có thể xem ảnh và đặt mua bình thường.
+        </div>
+      } @else if (capabilities() && !available()) {
+        <div class="alert alert--warning" role="status">
+          Hệ thống AI đang khởi động trên cụm máy chủ. Vui lòng thử lại sau giây lát.
+        </div>
+      }
+
+      @if (error()) {
+        <div class="alert alert--danger" role="alert">
+          {{ error() }}
+        </div>
+      }
+
+      @if (qualityWarning()) {
+        <div class="alert alert--tip" role="status">
+          <span class="tip-icon">💡</span>
+          <span>{{ qualityWarning() }}</span>
+        </div>
+      }
+
+      <!-- MODE SELECTOR TABS -->
+      @if (task() === 'virtual_try_on') {
+        <div class="mode-tabs" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            class="mode-tab"
+            [class.mode-tab--active]="mode() === 'personal'"
+            [disabled]="busy()"
+            (click)="chooseMode('personal')"
+          >
+            <span class="tab-icon">👤</span>
+            <span class="tab-text">Ảnh của tôi</span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            class="mode-tab"
+            [class.mode-tab--active]="mode() === 'studio'"
+            [disabled]="busy() || !capabilities()?.studio_assets?.length"
+            (click)="chooseMode('studio')"
+          >
+            <span class="tab-icon">✨</span>
+            <span class="tab-text">Người mẫu Studio 3D</span>
+            <span class="tab-badge">Mới</span>
+          </button>
+        </div>
+      }
+
+      <!-- PERSONAL PHOTO UPLOAD -->
+      @if (mode() === 'personal') {
+        <div class="upload-section">
+          @if (!preview()) {
+            <label class="dropzone" [class.dropzone--disabled]="busy() || !available()">
+              <input
+                type="file"
+                class="dropzone__input"
+                accept="image/jpeg,image/png,image/webp"
+                [disabled]="busy() || !available()"
+                (change)="select($event)"
+              />
+              <div class="dropzone__content">
+                <div class="dropzone__icon">📸</div>
+                <div class="dropzone__title">Tải ảnh chụp của bạn lên</div>
+                <div class="dropzone__subtitle">Kéo thả ảnh hoặc bấm để duyệt từ thiết bị (JPG, PNG, WebP)</div>
+                <div class="dropzone__tips">
+                  <span>✓ Áo: Chỉ cần rõ phần thân trên</span>
+                  <span>✓ Quần/Váy: Thấy rõ thân dưới hoặc toàn thân</span>
+                  <span>✓ Nền ảnh bất kỳ: AI tự xử lý</span>
+                </div>
+              </div>
+            </label>
+          } @else {
+            <div class="preview-card">
+              <div class="preview-card__header">
+                <span class="badge badge--success">✓ Đã chọn ảnh của bạn</span>
+                <label class="btn-change">
+                  Đổi ảnh khác
+                  <input
+                    type="file"
+                    class="visually-hidden"
+                    accept="image/jpeg,image/png,image/webp"
+                    [disabled]="busy()"
+                    (change)="select($event)"
+                  />
+                </label>
+              </div>
+
+              <div class="preview-card__media">
+                <img [src]="preview()" alt="Ảnh bạn chọn trước khi thử đồ" class="preview-img" />
+
+                <!-- SCANNING LASER BEAM EFFECT DURING LOADING -->
+                @if (busy()) {
+                  <div class="laser-scanner" aria-hidden="true"></div>
+                }
+              </div>
+            </div>
+          }
+        </div>
+      }
+
+      <!-- STUDIO MODEL CUSTOMIZATION -->
+      @if (mode() === 'studio') {
+        <div class="studio-section">
+          <!-- GENDER SEGMENTED TABS -->
+          <div class="studio-gender-tabs">
+            <button
+              type="button"
+              class="gender-tab"
+              [class.gender-tab--active]="selectedGender() === 'female'"
+              [disabled]="busy()"
+              (click)="switchGender('female')"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="5"></circle><path d="M12 13v8"></path><path d="M9 18h6"></path></svg>
+              <span>Người mẫu Nữ</span>
+            </button>
+            <button
+              type="button"
+              class="gender-tab"
+              [class.gender-tab--active]="selectedGender() === 'male'"
+              [disabled]="busy()"
+              (click)="switchGender('male')"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10" cy="14" r="5"></circle><path d="M19 5l-5.4 5.4"></path><path d="M19 5h-5"></path><path d="M19 5v5"></path></svg>
+              <span>Người mẫu Nam</span>
+            </button>
+          </div>
+
+          <!-- SINGLE WRAPPED ROW OF SCENE PILLS -->
+          <div class="scene-pills">
+            <button
+              type="button"
+              class="scene-pill"
+              [class.scene-pill--active]="selectedScene() === 'all'"
+              [disabled]="busy()"
+              (click)="switchScene('all')"
+            >Tất cả</button>
+            <button
+              type="button"
+              class="scene-pill"
+              [class.scene-pill--active]="selectedScene() === 'basic'"
+              [disabled]="busy()"
+              (click)="switchScene('basic')"
+            >Studio Chuẩn</button>
+            <button
+              type="button"
+              class="scene-pill"
+              [class.scene-pill--active]="selectedScene() === 'spring'"
+              [disabled]="busy()"
+              (click)="switchScene('spring')"
+            >Mùa Xuân</button>
+            <button
+              type="button"
+              class="scene-pill"
+              [class.scene-pill--active]="selectedScene() === 'summer'"
+              [disabled]="busy()"
+              (click)="switchScene('summer')"
+            >Mùa Hạ</button>
+            <button
+              type="button"
+              class="scene-pill"
+              [class.scene-pill--active]="selectedScene() === 'autumn'"
+              [disabled]="busy()"
+              (click)="switchScene('autumn')"
+            >Mùa Thu</button>
+            <button
+              type="button"
+              class="scene-pill"
+              [class.scene-pill--active]="selectedScene() === 'winter'"
+              [disabled]="busy()"
+              (click)="switchScene('winter')"
+            >Mùa Đông</button>
+            <button
+              type="button"
+              class="scene-pill"
+              [class.scene-pill--active]="selectedScene() === 'work'"
+              [disabled]="busy()"
+              (click)="switchScene('work')"
+            >Công sở</button>
+            <button
+              type="button"
+              class="scene-pill"
+              [class.scene-pill--active]="selectedScene() === 'street'"
+              [disabled]="busy()"
+              (click)="switchScene('street')"
+            >Dạo phố</button>
+            <button
+              type="button"
+              class="scene-pill"
+              [class.scene-pill--active]="selectedScene() === 'party'"
+              [disabled]="busy()"
+              (click)="switchScene('party')"
+            >Dạ tiệc</button>
+          </div>
+
+          <!-- CLEAN STUDIO CARDS GRID -->
+          <div class="studio-grid">
+            @for (asset of filteredStudioAssets(); track asset.id) {
+              <div
+                class="studio-card"
+                [class.studio-card--selected]="studio() === asset.id"
+                [class.studio-card--disabled]="busy()"
+                (click)="selectStudio(asset.id)"
+              >
+                <div class="studio-card__icon">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                </div>
+                <div class="studio-card__info">
+                  <div class="studio-card__title">{{ modelDisplayTitle(asset) }}</div>
+                  @if (asset.badge) {
+                    <span class="studio-card__badge">{{ asset.badge }}</span>
+                  }
+                </div>
+                @if (studio() === asset.id) {
+                  <span class="studio-card__check">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  </span>
+                }
+              </div>
+            }
+          </div>
+
+          <!-- SELECTED STUDIO MODEL PREVIEW -->
+          @if (studioLoading()) {
+            <div class="studio-preview-placeholder">
+              <span class="spinner-inline"></span> Đang tải ảnh người mẫu xem trước…
+            </div>
+          } @else if (studioImage()) {
+            <div class="studio-preview-container">
+              <img
+                class="studio-preview-img"
+                [src]="studioImage()"
+                alt="Người mẫu studio được chọn"
+                (error)="studioPreviewFailed()"
+              />
+              @if (busy()) {
+                <div class="laser-scanner" aria-hidden="true"></div>
+              }
+            </div>
+          }
+        </div>
+      }
+
+      <!-- RICH AI LOADING EXPERIENCE OVERLAY -->
+      @if (busy()) {
+        <div class="ai-loading-panel" aria-live="polite">
+          <div class="ai-loading-panel__header">
+            <div class="pulse-sparkle">✨</div>
+            <div class="ai-loading-panel__title">AI Đang Render Thử Đồ</div>
+            <div class="ai-loading-panel__timer">{{ loadingSeconds() }}s</div>
+          </div>
+
+          <!-- 4-STEP AI PROGRESS BAR -->
+          <div class="stepper">
+            <div class="step" [class.step--active]="loadingStep() >= 1" [class.step--current]="loadingStep() === 1">
+              <div class="step__num">1</div>
+              <div class="step__text">Quét dáng</div>
+            </div>
+            <div class="step__line" [class.step__line--active]="loadingStep() >= 2"></div>
+            <div class="step" [class.step--active]="loadingStep() >= 2" [class.step--current]="loadingStep() === 2">
+              <div class="step__num">2</div>
+              <div class="step__text">Đo vải</div>
+            </div>
+            <div class="step__line" [class.step__line--active]="loadingStep() >= 3"></div>
+            <div class="step" [class.step--active]="loadingStep() >= 3" [class.step--current]="loadingStep() === 3">
+              <div class="step__num">3</div>
+              <div class="step__text">Diffusion</div>
+            </div>
+            <div class="step__line" [class.step__line--active]="loadingStep() >= 4"></div>
+            <div class="step" [class.step--active]="loadingStep() >= 4" [class.step--current]="loadingStep() === 4">
+              <div class="step__num">4</div>
+              <div class="step__text">Hoàn thiện</div>
+            </div>
+          </div>
+
+          <div class="ai-loading-panel__message">
+            <span class="shimmer-text">{{ loadingMessage() }}</span>
+          </div>
+
+          <div class="ai-loading-panel__hint">
+            Hệ thống đang chạy mạng nơ-ron sinh ảnh trên GPU RTX 4060. Vui lòng không đóng cửa sổ.
+          </div>
+        </div>
+      }
+
+      <!-- CONSENT CHECKBOX -->
+      <label class="consent-checkbox">
+        <input
+          type="checkbox"
+          [checked]="consent()"
+          [disabled]="busy() || (mode() === 'studio' && (!studioImage() || studioLoading()))"
+          (change)="setConsent($event)"
+        />
+        <span>Tôi có quyền sử dụng ảnh và đồng ý xử lý ảnh cho tác vụ thử đồ AI này.</span>
+      </label>
+
+      <!-- ACTION BUTTONS (NO REDUNDANT BUTTONS) -->
+      <div class="actions">
+        @if (busy()) {
+          <button type="button" class="btn btn--outline" (click)="cancel()">Hủy tác vụ</button>
+        } @else if (task() === 'virtual_try_on' && mode() === 'personal' && !qualityPassed()) {
+          <button
+            type="button"
+            class="btn btn--gradient-tryon"
+            [disabled]="!consent() || !preview() || busy() || !available()"
+            (click)="validate()"
+          >
+            <span class="btn-sparkle">🔍</span>
+            <span>Kiểm tra ảnh & Sẵn sàng thử đồ</span>
+          </button>
+        } @else {
+          <button
+            type="button"
+            class="btn btn--gradient-tryon"
+            [disabled]="
+              !consent() ||
+              busy() ||
+              !available() ||
+              (mode() === 'personal' && !preview()) ||
+              (mode() === 'studio' && (!studio() || !studioImage() || studioLoading()))
+            "
+            (click)="generate()"
+          >
+            <span class="btn-sparkle">✨</span>
+            <span>Xác nhận & Thử đồ AI</span>
+          </button>
+        }
+      </div>
+
+      @if (job(); as current) {
+        <div class="job-status" aria-live="polite">
+          <div class="job-status__title">{{ statusLabel(current) }}</div>
+          @for (reason of current.gate?.reasons || []; track reason) {
+            <div class="job-status__reason">{{ reasonLabel(reason) }}</div>
+          }
+        </div>
+      }
+
+      <!-- RESULTS SECTION WITH INTERACTIVE 3D PERSPECTIVE VIEWER -->
+      @if (result()) {
+        <div class="result-section">
+          <div class="result-toolbar">
+            <div class="result-toolbar__left">
+              <button
+                type="button"
+                class="view-btn"
+                [class.view-btn--active]="view3D()"
+                (click)="toggleView3D()"
+                title="Bật/Tắt hiệu ứng góc nhìn 3D"
+              >
+                <span>{{ view3D() ? '🌐 Góc nhìn 3D: Đang bật' : '🖼️ Góc nhìn 2D tĩnh' }}</span>
+              </button>
+              <button
+                type="button"
+                class="view-btn"
+                [class.view-btn--active]="showOriginal()"
+                (click)="toggleShowOriginal()"
+                title="So sánh với ảnh gốc"
+              >
+                <span>{{ showOriginal() ? '👁️ Đang xem: Ảnh gốc' : '✨ Đang xem: Đã thử đồ' }}</span>
+              </button>
+            </div>
+            <div class="result-toolbar__right">
+              <button type="button" class="btn-download" (click)="downloadResult()" title="Tải ảnh về máy">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                Tải ảnh
+              </button>
+            </div>
+          </div>
+
+          @if (view3D() && !showOriginal()) {
+            <div class="hint-3d">
+              💡 <strong>Chế độ 3D:</strong> Rê chuột trên ảnh (hoặc vuốt cảm ứng) để xoay chuyển góc nhìn tương tác với ánh sáng nổi.
+            </div>
+          }
+
+          <!-- 3D PERSPECTIVE CARD -->
+          <div class="perspective-stage">
+            <div
+              #card
+              class="perspective-card"
+              [style.transform]="view3D() ? tiltTransform() : 'none'"
+              (mousemove)="onMouseMove($event, card)"
+              (mouseleave)="onMouseLeave()"
+              (touchmove)="onTouchMove($event, card)"
+            >
+              @if (showOriginal()) {
+                <img
+                  class="perspective-card__img"
+                  [src]="mode() === 'personal' ? preview() : studioImage()"
+                  alt="Ảnh gốc trước khi thử đồ"
+                />
+                <span class="perspective-card__tag">Ảnh gốc</span>
+              } @else {
+                <img
+                  class="perspective-card__img"
+                  [src]="result()"
+                  alt="Kết quả thử đồ AI 3D"
+                />
+                <span class="perspective-card__tag perspective-card__tag--ai">AI Virtual Try-On</span>
+              }
+
+              <!-- SPECULAR 3D GLARE LIGHT EFFECT -->
+              @if (view3D()) {
+                <div class="perspective-card__glare" [style.background]="glareBackground()" aria-hidden="true"></div>
+              }
+            </div>
+          </div>
+
+          <p class="result-disclaimer">
+            * Ảnh kết quả được AI mô phỏng theo tỷ lệ trang phục; nếp vải và ánh sáng phản chiếu chân thực theo góc nhìn.
+          </p>
+        </div>
+      }
+    </div>
+  </div>
+</dialog>

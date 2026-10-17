@@ -1,11 +1,27 @@
-import { Type } from '@angular/core';
+import { AiEngineService } from '../app/core/services/ai-engine.service';
+import { Type, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { convertToParamMap, provideRouter, ActivatedRoute } from '@angular/router';
 import { of } from 'rxjs';
 import { ApiService } from '../app/core/services/api.service';
 import { CatalogService } from '../app/core/services/catalog.service';
-import { ChatbotService } from '../app/core/services/chatbot.service';
+import { ChatbotService, type ChatHandoffStatus } from '../app/core/services/chatbot.service';
 import { ProductSummary } from '../app/core/models/product.interface';
+import { AddressGeographyService } from '../app/core/services/address-geography.service';
+import { StyleProfileService } from '../app/core/services/style-profile.service';
+import type { GeographyMode } from '../app/core/models/address-geography';
+import { VisualSearchModel } from '../app/core/services/visual-search.service';
+
+/** Page specs receive administrative data from a mocked Model, never HttpClient. */
+export function stubAddressGeographyService(): Pick<AddressGeographyService, 'load'> {
+  return { load: (mode: GeographyMode) => of({ mode, source: 'fixture', retrieved_at: '', provinces: mode === 'current' ? [
+    { code: 79, name: 'Thành phố Hồ Chí Minh', wards: [{ code: 26728, name: 'Xã Châu Pha' }, { code: 26704, name: 'Phường An Khánh' }] },
+    { code: 1, name: 'Thành phố Hà Nội', wards: [{ code: 4, name: 'Phường Ba Đình' }] },
+  ] : [
+    { code: 79, name: 'Thành phố Hồ Chí Minh', districts: [{ code: 760, name: 'Quận 1', wards: [{ code: 26734, name: 'Phường Bến Nghé' }] }] },
+    { code: 1, name: 'Thành phố Hà Nội', districts: [{ code: 1, name: 'Quận Ba Đình', wards: [{ code: 1, name: 'Phường Phúc Xá' }] }] },
+  ] }) };
+}
 
 const sampleProduct: ProductSummary = {
   product_id: 'p1',
@@ -67,25 +83,30 @@ export function stubApiService(): ApiService {
   } as unknown as ApiService;
 }
 
-export function stubCatalogService(): Pick<CatalogService, 'getCategories' | 'getProducts' | 'getProduct'> {
+export function stubCatalogService(): Pick<CatalogService, 'getCategories' | 'getProducts' | 'getProduct' | 'likeReview'> {
   return {
     getCategories: () => of([{ category_id: 'c1', name: 'Áo', slug: 'ao' }]),
     getProducts: () => of([sampleProduct]),
     getProduct: () => of(sampleProduct),
+    likeReview: (reviewId: string) => of({ success: true, review_id: reviewId, helpful_count: 1 }),
   };
 }
 
 export function stubChatbotService(): Pick<
   ChatbotService,
-  'sendMessage' | 'listSessions' | 'listMessages' | 'deleteSession' | 'guestId' | 'saveSessionId' | 'clearSessionId'
+  'sendMessage' | 'listSessions' | 'listMessages' | 'deleteSession' | 'lifecycle' | 'guestId' | 'saveSessionId' | 'savedSessionId' | 'clearSessionId' | 'activeHandoff' | 'activeSession'
 > {
   return {
+    activeHandoff: signal<ChatHandoffStatus>('ai'),
+    activeSession: signal(''),
     sendMessage: () => of({ messages: [], products: [], blogs: [] }),
     listSessions: () => of({ rows: [] }),
     listMessages: () => of({ messages: [], products: [], blogs: [] }),
     deleteSession: () => of({}),
+    lifecycle: () => of({}),
     guestId: () => '00000000-0000-4000-8000-000000000001',
     saveSessionId: () => undefined,
+    savedSessionId: () => '',
     clearSessionId: () => undefined,
   };
 }
@@ -121,6 +142,10 @@ export async function createStorefrontPage<T>(page: Type<T>, apiOverrides: Parti
   await TestBed.configureTestingModule({
     imports: [page],
     providers: [
+      { provide: AiEngineService, useValue: { capabilities: () => of({enabled:false,local_only:true,tasks:[],max_upload_bytes:5242880,private_ttl_seconds:900}) } },
+      { provide: VisualSearchModel, useValue: { cancel: () => of({}) } },
+      { provide: AddressGeographyService, useValue: stubAddressGeographyService() },
+      { provide: StyleProfileService, useValue: { revision: signal(0), guestAnswers: () => null, saveQuiz: () => of(undefined), loadRecommendations: () => of({ quiz: null, combos: [], categories: [] }) } },
       provideRouter([]),
       { provide: ApiService, useValue: { ...stubApiService(), ...apiOverrides } },
       { provide: CatalogService, useValue: stubCatalogService() },

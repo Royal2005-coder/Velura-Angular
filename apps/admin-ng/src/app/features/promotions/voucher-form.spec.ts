@@ -111,6 +111,7 @@ describe('VoucherForm', () => {
     expect(component.saveError()).toContain('100%');
   });
 
+
   it('ô giảm tối đa chỉ hiện với mã phần trăm', async () => {
     const component = await create(null);
     expect(fixture.nativeElement.querySelector('input[name="maxDiscount"]')).toBeNull();

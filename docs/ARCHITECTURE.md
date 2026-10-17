@@ -38,6 +38,13 @@ Pipeline: [HOW-IT-WORKS.md](./HOW-IT-WORKS.md)
 
 **Không** viết HTTP API bằng Angular. **Không** gọi Supabase service-role từ browser.
 
+AI hình ảnh: `apps/api/src/ai` giữ consent, quyền sở hữu, hàng đợi và TTL; worker
+private Python thực hiện FASHN segmentation-free flat-lay, DWPose CPU và CLIP CPU.
+Vector `ViT-B-32/laion2b_s34b_b79k` giữ namespace 512 chiều, tách khỏi text vector
+1536 chiều. Staging mặc định `AI_ENABLE=false`; worker GPU opt-in, weights được
+pin/checksum/license và inference thật phải được chứng minh trước khi bật AI.
+Colab là adapter development, không phải production. Runbook: [HOW-IT-WORKS.md](./HOW-IT-WORKS.md#k3s-staging-first-runbook).
+
 ---
 
 ## 2. Cây dự án (ổn định)
@@ -128,7 +135,7 @@ database/migrations/
 | Test API | `tests/api/*.test.ts` + `npm run test:api` / `typecheck:api` |
 | Test Angular | `*.page.spec.ts` cạnh page + `npm run test:ng` |
 | CI | `.github/workflows/ci.yml` |
-| Deploy artifacts | `deploy/nginx`, `deploy/systemd` → VPS qua job `deploy-production` |
+| Deploy artifacts | `deploy/docker` → registry digests; `deploy/k8s` → staging-first GitOps qua PR được duyệt, không CI kubeconfig |
 
 ---
 

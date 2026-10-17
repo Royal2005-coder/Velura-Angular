@@ -34,6 +34,23 @@ export async function handleQuizRoute(
   }
   const guestSessionId = typeof guestHeader === "string" ? guestHeader : undefined;
 
+  // POST /api/user/style-quiz/draft — member-only partial profile, never completion.
+  if (action === "draft" && req.method === "POST") {
+    const profile = requireUserAuth(context);
+    const body = await readJson(req);
+    const answerKeys = ["height_cm", "weight_kg", "chest_cm", "waist_cm", "hip_cm", "body_shape", "skin_tone", "style_tags", "preferred_occasions", "favorite_brands", "budget_range", "age_group", "favorite_colors"];
+    const answers = Object.fromEntries(answerKeys.filter((key) => Object.hasOwn(body, key)).map((key) => [key, body[key]]));
+    const existing = await selectOne("style_profile", { user_id: `eq.${profile.user_id}` });
+    if (existing?.quiz_completed_at) {
+      return sendJson(res, 200, { success: true, migrated: false, quiz: existing }, corsHeaders);
+    }
+    const payload = { ...answers, user_id: profile.user_id, quiz_completed_at: null, updated_at: new Date().toISOString() };
+    const quiz = existing
+      ? await updateRows("style_profile", { user_id: `eq.${profile.user_id}` }, payload)
+      : await insertRow("style_profile", payload);
+    return sendJson(res, 200, { success: true, migrated: true, quiz }, corsHeaders);
+  }
+
   // 1. POST /api/user/style-quiz/migrate
   if (action === "migrate" && req.method === "POST") {
     const profile = requireUserAuth(context);

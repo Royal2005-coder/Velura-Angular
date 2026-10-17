@@ -145,7 +145,12 @@ export async function createStorefrontPage<T>(page: Type<T>, apiOverrides: Parti
       { provide: AiEngineService, useValue: { capabilities: () => of({enabled:false,local_only:true,tasks:[],max_upload_bytes:5242880,private_ttl_seconds:900}) } },
       { provide: VisualSearchModel, useValue: { cancel: () => of({}) } },
       { provide: AddressGeographyService, useValue: stubAddressGeographyService() },
-      { provide: StyleProfileService, useValue: { revision: signal(0), guestAnswers: () => null, saveQuiz: () => of(undefined), loadRecommendations: () => of({ quiz: null, combos: [], categories: [] }) } },
+      { provide: StyleProfileService, useValue: {
+        revision: signal(0), guestAnswers: () => null, guestDraft: () => null,
+        saveGuestDraft: () => undefined, claimGuestDraft: () => of(undefined),
+        saveQuiz: () => of(undefined), loadQuiz: () => of(null),
+        loadRecommendations: () => of({ quiz: null, combos: [], categories: [] }),
+      } },
       provideRouter([]),
       { provide: ApiService, useValue: { ...stubApiService(), ...apiOverrides } },
       { provide: CatalogService, useValue: stubCatalogService() },

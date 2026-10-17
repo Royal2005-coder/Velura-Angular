@@ -1,5 +1,6 @@
 import { Injectable, computed, signal } from '@angular/core';
 import { UserSession } from '../models/user-session.interface';
+import { rotateGuestSession } from '../utils/guest-session';
 
 /**
  * Session ViewModel store. No HTTP. Auth API belongs in a dedicated command service later.
@@ -64,6 +65,7 @@ export class AuthService {
     localStorage.removeItem('velura-oauth-pkce-code-verifier');
     sessionStorage.removeItem('velura_token');
     sessionStorage.removeItem('velura_user');
+    rotateGuestSession();
     this.sessionState.set(null);
   }
 

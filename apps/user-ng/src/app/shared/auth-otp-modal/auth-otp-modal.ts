@@ -20,6 +20,7 @@ export class AuthOtpModal implements OnDestroy {
   readonly identity = input.required<string>();
   readonly purpose = input('');
   readonly open = input(false);
+  readonly developmentCode = input('');
 
   readonly verified = output<AuthOtpResult>();
   readonly cancelled = output<void>();

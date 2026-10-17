@@ -15,6 +15,15 @@ export function loyaltyDatabaseError(error: unknown): never {
   if (error instanceof HttpError && error.code === "SUPABASE_ERROR") {
     const details = asJsonObject(error.details);
     const code = asString(details.message);
+    const databaseCode = asString(details.code);
+    if (databaseCode === "PGRST202" && code.includes("velura_register_member")) {
+      throw new HttpError(
+        503,
+        "SIGNUP_SCHEMA_NOT_READY",
+        "Hệ thống đăng ký đang được cập nhật. Vui lòng thử lại sau.",
+        { requiredMigration: "050_loyalty_referral.sql" }
+      );
+    }
     const messages: Record<string, string> = {
       LOYALTY_MEMBER_REQUIRED: "Vui lòng đăng nhập tài khoản thành viên.",
       LOYALTY_ACTOR_MISMATCH: "Không được sử dụng ví điểm của tài khoản khác.",

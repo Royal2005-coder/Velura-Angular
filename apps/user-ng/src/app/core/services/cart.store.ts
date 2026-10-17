@@ -1,5 +1,8 @@
-import { Injectable, computed, signal } from '@angular/core';
+import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { showToast } from '../utils/toast';
+import { ApiService } from './api.service';
+import { AuthService } from './auth.service';
+import { guestSessionId } from '../utils/guest-session';
 
 export interface CartComboSubItem {
   product_id: string;
@@ -52,24 +55,39 @@ export interface GroupedCartItem {
 
 const CART_KEY = 'velura_cart';
 const COUNT_KEY = 'velura_cart_count';
+interface CartResponse { success: boolean; items?: unknown[]; warnings?: string[]; }
 
 /**
- * Cart badge and line items. Reads the same `velura_cart` key as the vanilla storefront.
+ * Identity-scoped cart: members use their server cart and guests use only the current tab session.
  */
 @Injectable({ providedIn: 'root' })
 export class CartStore {
-  readonly items = signal<CartLine[]>(this.readLines());
+  private readonly api = inject(ApiService);
+  private readonly auth = inject(AuthService);
+  private identity = '';
+  private syncVersion = 0;
+  readonly items = signal<CartLine[]>([]);
   readonly itemCount = computed(() => this.items().reduce((sum, line) => sum + line.quantity, 0));
   readonly subtotal = computed(() =>
     this.items().reduce((sum, line) => sum + line.unit_price * line.quantity, 0),
   );
+
+  constructor() {
+    localStorage.removeItem(CART_KEY);
+    localStorage.removeItem(COUNT_KEY);
+    effect(() => {
+      const session = this.auth.session();
+      const identity = session?.userId ? `member:${session.userId}` : `guest:${guestSessionId()}`;
+      untracked(() => this.switchIdentity(identity));
+    });
+  }
 
   /**
    * Replaces the header badge from an explicit count (legacy callers).
    */
   setCount(count: number): void {
     const safe = Number.isFinite(count) && count > 0 ? Math.floor(count) : 0;
-    localStorage.setItem(COUNT_KEY, String(safe));
+    sessionStorage.setItem(this.countKey(), String(safe));
   }
 
   /**
@@ -327,17 +345,54 @@ export class CartStore {
 
   private persist(cart: CartLine[]): void {
     this.items.set(cart);
-    localStorage.setItem(CART_KEY, JSON.stringify(cart));
-    localStorage.setItem(COUNT_KEY, String(cart.reduce((sum, line) => sum + line.quantity, 0)));
+    const identity = this.identity;
+    const version = ++this.syncVersion;
+    if (identity.startsWith('guest:')) {
+      sessionStorage.setItem(this.cartKey(), JSON.stringify(cart));
+      sessionStorage.setItem(this.countKey(), String(cart.reduce((sum, line) => sum + line.quantity, 0)));
+      return;
+    }
+    this.api.post<CartResponse>('/api/user/cart', { items: cart }).subscribe({
+      next: (response) => {
+        if (this.identity !== identity || this.syncVersion !== version || response.success !== true) return;
+        this.items.set(this.parseLines(response.items));
+      },
+      error: () => undefined,
+    });
   }
 
-  private readLines(): CartLine[] {
+  private switchIdentity(identity: string): void {
+    if (identity === this.identity) return;
+    this.identity = identity;
+    const version = ++this.syncVersion;
+    this.items.set([]);
+    if (identity.startsWith('guest:')) {
+      this.items.set(this.readGuestLines());
+      return;
+    }
+    this.api.get<CartResponse>('/api/user/cart').subscribe({
+      next: (response) => {
+        if (this.identity !== identity || this.syncVersion !== version || response.success !== true) return;
+        this.items.set(this.parseLines(response.items));
+      },
+      error: () => undefined,
+    });
+  }
+
+  private cartKey(): string { return `${CART_KEY}:${this.identity}`; }
+  private countKey(): string { return `${COUNT_KEY}:${this.identity}`; }
+
+  private readGuestLines(): CartLine[] {
     try {
-      const raw = JSON.parse(localStorage.getItem(CART_KEY) || '[]') as unknown;
-      if (!Array.isArray(raw)) {
-        return [];
-      }
-      return raw
+      return this.parseLines(JSON.parse(sessionStorage.getItem(this.cartKey()) || '[]') as unknown);
+    } catch {
+      return [];
+    }
+  }
+
+  private parseLines(raw: unknown): CartLine[] {
+    if (!Array.isArray(raw)) return [];
+    return raw
         .map((row) => {
           const item = row as Record<string, unknown>;
           return {
@@ -358,8 +413,5 @@ export class CartStore {
           };
         })
         .filter((line) => line.variant_id || line.product_id);
-    } catch {
-      return [];
-    }
   }
 }

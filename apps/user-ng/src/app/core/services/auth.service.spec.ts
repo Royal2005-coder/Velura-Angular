@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { AuthService } from './auth.service';
+import { guestSessionId } from '../utils/guest-session';
 
 describe('AuthService', () => {
   beforeEach(() => {
@@ -32,5 +33,17 @@ describe('AuthService', () => {
     const auth = TestBed.inject(AuthService);
 
     expect(auth.consumeNewMemberWelcome()).toBe(false);
+  });
+
+  it('rotates to a new guest identity immediately when a member signs out', () => {
+    localStorage.setItem('velura_token', 'token');
+    localStorage.setItem('velura_user', JSON.stringify({ user_id: 'member-1', role: 'member' }));
+    const previousGuestId = guestSessionId();
+    const auth = TestBed.inject(AuthService);
+
+    auth.signOut();
+
+    expect(auth.session()).toBeNull();
+    expect(guestSessionId()).not.toBe(previousGuestId);
   });
 });

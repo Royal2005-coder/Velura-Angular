@@ -1,0 +1,11 @@
+scope: apps/vllm/values.yaml
+active:
+  - sha: 3adde565af04
+    decision: json_object guided decoding only; no per-request JSON schema
+    rejected:
+      - schema-constrained decoding (the FSM blows the 16Gi budget under load)
+    reversible: "true"
+    oracle: drift
+superseded: []
+orphaned: []
+open_incidents: []

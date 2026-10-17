@@ -1,0 +1,16 @@
+scope: infra/registry/harbor.tf
+removed:
+  by: 0002a28bd8c3
+  at: "2026-08-25T13:00:00+07:00"
+  decision: "the GitLab-integrated registry on Garage replaces Harbor; one fewer system to operate, and image auth follows repo permissions instead of a separate robot-account scheme"
+  reversible: restore-only
+  oracle: contract
+  renamed_to: infra/registry/gitlab.tf
+active: []
+superseded: []
+orphaned:
+  - sha: 54fcc7a64ea0
+    decision: "Harbor as the container registry, backed by local disk"
+    reversible: restore-only
+    oracle: test
+open_incidents: []

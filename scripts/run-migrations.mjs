@@ -1,29 +1,19 @@
 #!/usr/bin/env node
 /**
- * Chạy migration SQL lên cơ sở dữ liệu Supabase.
+ * Apply explicit ordered SQL migrations to staging, or the current database with explicit owner approval.
+ * Production stays read-only unless --environment=production --owner-approved-production is supplied.
  *
- * Kho này trước đây không có cách nào chạy migration ngoài việc dán tay vào SQL Editor
- * của Supabase, nên các bản 025-027 nằm trong `database/migrations` mà không ai biết đã
- * chạy hay chưa. Script này lấp chỗ đó.
+ * node scripts/run-migrations.mjs --check
+ * node scripts/run-migrations.mjs --check --environment=staging
+ * node scripts/run-migrations.mjs --environment=staging 054 056 057 058
+ * node scripts/run-migrations.mjs --check --environment=staging --require-chatbot-schema
+ * node scripts/run-migrations.mjs --environment=production --owner-approved-production 054 056 057 058
+ * node scripts/run-migrations.mjs --dry-run 049
  *
- *   node scripts/run-migrations.mjs --check              # chỉ đọc, không ghi gì
- *   node scripts/run-migrations.mjs 025 026 027          # chạy theo đúng thứ tự đã liệt kê
- *   node scripts/run-migrations.mjs --dry-run 027        # in ra SQL sẽ chạy rồi dừng
- *
- * Chuỗi kết nối đọc từ SUPABASE_DB_URL trong .env ở gốc kho. Script không in chuỗi đó
- * ra màn hình hay nhật ký.
- *
- * Máy chủ trực tiếp `db.<ref>.supabase.co` chỉ có bản ghi AAAA. Máy nào không có đường
- * ra IPv6 sẽ gặp ENETUNREACH; khi đó dùng pooler ở chế độ phiên (cổng 5432 — chế độ
- * giao dịch ở cổng 6543 không chạy được DDL):
- *
- *   postgresql://postgres.<ref>:<mật khẩu>@aws-0-<vùng>.pooler.supabase.com:5432/postgres
- *
- * Dự án này nằm ở vùng ap-southeast-2.
- *
- * Mỗi tệp chạy trong một giao dịch riêng: hỏng giữa chừng thì tệp đó quay lui trọn vẹn,
- * các tệp đã xong trước đó vẫn giữ nguyên. Postgres cho phép DDL trong giao dịch nên
- * điều này áp dụng cho cả `create table` lẫn `drop function`.
+ * Staging requires STAGING_SUPABASE_DB_URL and STAGING_SUPABASE_DB_CA_CERT.
+ * Current-database checks and owner-approved writes use SUPABASE_DB_URL and SUPABASE_DB_CA_CERT.
+ * Each migration runs in one transaction; failures preserve earlier committed files.
+ * Credentials are never printed and TLS certificate verification cannot be disabled.
  */
 
 import { execFileSync } from "node:child_process";
@@ -56,9 +46,7 @@ function findEnvFile() {
     // Không phải kho git, hoặc không có git — chỉ còn đường dẫn mặc định.
   }
   const found = candidates.find((candidate) => existsSync(candidate));
-  if (!found) {
-    throw new Error(`Không tìm thấy .env. Đã tìm ở:\n  ${candidates.join("\n  ")}`);
-  }
+  if (!found) return null;
   return found;
 }
 
@@ -72,7 +60,9 @@ function readEnv(name) {
   const fromProcess = process.env[name];
   if (fromProcess !== undefined && fromProcess !== "") return fromProcess.trim();
 
-  const text = readFileSync(findEnvFile(), "utf8");
+  const envFile = findEnvFile();
+  if (!envFile) return "";
+  const text = readFileSync(envFile, "utf8");
   const match = text.match(new RegExp(`^${name}=(.*)$`, "m"));
   if (!match) return "";
   return match[1].trim().replace(/^["']|["']$/g, "");
@@ -119,30 +109,59 @@ function findMigration(prefix) {
   return matches[0];
 }
 
-/** Đọc hiện trạng những thứ mà 025-027 đụng tới. */
+/** Inspect prerequisites using catalog metadata only; no customer, promotion or transcript rows are read. */
 const CHECK_SQL = `
 select
-  (select count(*) from information_schema.columns
-    where table_schema = 'public' and table_name = 'promotion'
-      and column_name in ('description','banner_image_url','highlight_label','display_order','is_featured')
-  ) as cot_trinh_bay_026,
-  (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-    where n.nspname = 'public' and p.proname in
-      ('velura_record_voucher_redemption','velura_release_voucher_redemption','velura_sync_promotion_schedule')
-  ) as rpc_025,
-  (select string_agg(distinct p.pronargs::text, ',') from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-    where n.nspname = 'public' and p.proname = 'admin_update_promotion'
-  ) as so_tham_so_admin_update_promotion,
-  (select count(*) from public.promotion) as so_chien_dich,
-  (select count(*) from public.voucher) as so_voucher,
-  (select coalesce(sum(total_discount_issued), 0) from public.promotion) as tong_da_giam;
+  to_regprocedure('public.chat_append_user_turn(uuid,uuid,uuid,text,jsonb)') is not null
+    and to_regprocedure('public.chat_record_analysis(uuid,uuid,text,jsonb,boolean)') is not null
+    and to_regprocedure('public.chat_staff_action(uuid,uuid,text,jsonb)') is not null
+    and (select count(*) = 5 from information_schema.columns where table_schema='public'
+      and table_name='chat_session' and column_name in ('ai_epoch','next_sequence','ai_failures','issue_counts','risk_level'))
+    and exists(select 1 from information_schema.columns where table_schema='public'
+      and table_name='chat_message' and column_name='moderation_status') as governance054,
+  exists(select 1 from information_schema.columns where table_schema='public'
+    and table_name='chat_session' and column_name='context_revision')
+    and to_regclass('public.chat_issue_state') is not null
+    and to_regprocedure('public.chat_owner_lifecycle(uuid,uuid,uuid,text,jsonb)') is not null as session056,
+  to_regclass('public.chat_support_offer_claim') is not null
+    and to_regprocedure('public.chat_list_eligible_support_offers(uuid)') is not null
+    and to_regprocedure('public.chat_confirm_support_offer(uuid,uuid,uuid)') is not null as promotions057,
+  to_regprocedure('public.chat_schema_readiness()') is not null as readiness_rpc;
 `;
+
+/** Fail closed on an incomplete installed contract without invoking any mutation RPC. */
+async function requireChatbotSchema(client) {
+  const metadata = (await client.query(CHECK_SQL)).rows[0];
+  if (!metadata.readiness_rpc) throw new Error("Chatbot schema is not ready: install prerequisites 054, 056, 057 and 058.");
+  const state = (await client.query("select public.chat_schema_readiness() as schema")).rows[0].schema;
+  console.log("Chatbot schema:", JSON.stringify(state));
+  if (state?.contract !== "chatbot-3.1.7" || state.ready !== true ||
+      !["governance054", "session056", "promotions057", "reports058"].every(key => state.checks?.[key] === true)) {
+    throw new Error("Chatbot schema readiness failed; do not deploy this release.");
+  }
+}
 
 async function main() {
   const args = process.argv.slice(2);
   const dryRun = args.includes("--dry-run");
   const checkOnly = args.includes("--check");
+  const requireSchema = args.includes("--require-chatbot-schema");
+  const ownerApprovedProduction = args.includes("--owner-approved-production");
   const prefixes = args.filter((arg) => !arg.startsWith("--"));
+  const environment = args.find(arg => arg.startsWith("--environment="))?.slice("--environment=".length) || "production";
+  if (!["staging", "production"].includes(environment)) throw new Error("Environment must be staging or production.");
+  if (ownerApprovedProduction && !args.includes("--environment=production")) {
+    throw new Error("Owner-approved current-database writes require explicit --environment=production.");
+  }
+  if (!checkOnly && !dryRun && environment === "production" && !ownerApprovedProduction) {
+    throw new Error("Production is read-only by default. Owner-approved writes require --environment=production --owner-approved-production and explicit migration numbers.");
+  }
+  if (!checkOnly && !dryRun && (!prefixes.length || prefixes.some(prefix => !/^\d{3}$/.test(prefix)))) throw new Error("Supply explicit three-digit migration numbers.");
+  if (requireSchema && !checkOnly) throw new Error("--require-chatbot-schema requires --check.");
+  if (prefixes.length && (prefixes.some(prefix => !/^\d{3}$/.test(prefix)) ||
+      new Set(prefixes).size !== prefixes.length || prefixes.some((prefix, index) => index > 0 && prefix <= prefixes[index - 1]))) {
+    throw new Error("Migration numbers must be unique explicit three-digit numbers in ascending order.");
+  }
 
   if (dryRun) {
     for (const prefix of prefixes) {
@@ -153,39 +172,34 @@ async function main() {
     return;
   }
 
-  const connectionString = readEnv("SUPABASE_DB_URL");
-  if (!connectionString) {
-    console.error("Thiếu SUPABASE_DB_URL trong .env ở gốc kho.");
-    process.exit(1);
+  const connectionKey = environment === "staging" ? "STAGING_SUPABASE_DB_URL" : "SUPABASE_DB_URL";
+  const connectionString = readEnv(connectionKey);
+  if (!connectionString) throw new Error(`Missing ${connectionKey}.`);
+  if (environment === "staging") {
+    const production = readEnv("SUPABASE_DB_URL");
+    const stage = new URL(connectionString);
+    if (production) {
+      const live = new URL(production);
+      const sharedPooler = /\.pooler\.supabase\.com$/i.test(stage.hostname);
+      const stageUser = decodeURIComponent(stage.username), liveUser = decodeURIComponent(live.username);
+      const distinctProject = sharedPooler && /^[a-z_]+\.[a-z0-9]{20}$/i.test(stageUser) &&
+        /^[a-z_]+\.[a-z0-9]{20}$/i.test(liveUser) && stageUser.split(".")[1] !== liveUser.split(".")[1];
+      if (stage.hostname === live.hostname && stage.pathname === live.pathname &&
+          !distinctProject) throw new Error("Staging database identity matches production; refusing migration.");
+    }
   }
 
-  // Script này cầm chuỗi kết nối cơ sở dữ liệu production và đẩy nguyên văn DDL qua đó.
-  // Bản trước đặt thẳng `rejectUnauthorized: false`, nghĩa là bất kỳ ai chen được vào
-  // giữa cũng đọc được thông tin kết nối và toàn bộ nội dung migration.
-  //
-  // Supabase ký chứng chỉ bằng CA riêng nên kho tin cậy mặc định của Node không xác thực
-  // được; cách đúng là trỏ tới CA của họ (tải ở Dashboard > Settings > Database > SSL).
-  // Không có CA thì script dừng và nói rõ hai lựa chọn, thay vì âm thầm hạ tiêu chuẩn.
-  const caPath = readEnv("SUPABASE_DB_CA_CERT");
-  const allowInsecureTls = readEnv("SUPABASE_DB_ALLOW_INSECURE_TLS") === "true";
-
-  let ssl;
-  if (caPath) {
-    ssl = { ca: readFileSync(caPath, "utf8"), rejectUnauthorized: true };
-  } else if (allowInsecureTls) {
-    console.warn("CẢNH BÁO: đang bỏ qua xác thực chứng chỉ TLS tới cơ sở dữ liệu.");
-    console.warn("Chỉ dùng tạm. Đặt SUPABASE_DB_CA_CERT trỏ tới CA của Supabase để chạy an toàn.");
-    ssl = { rejectUnauthorized: false };
-  } else {
-    console.error("Thiếu cấu hình TLS cho kết nối cơ sở dữ liệu. Chọn một trong hai:");
-    console.error("  1. SUPABASE_DB_CA_CERT=<đường dẫn tới CA của Supabase>   (khuyến nghị)");
-    console.error("  2. SUPABASE_DB_ALLOW_INSECURE_TLS=true                    (chỉ khi chạy tạm)");
-    process.exit(1);
-  }
+  const caKey = environment === "staging" ? "STAGING_SUPABASE_DB_CA_CERT" : "SUPABASE_DB_CA_CERT";
+  const caPath = readEnv(caKey);
+  if (!caPath) throw new Error(`Missing ${caKey}; certificate verification is required.`);
+  const ssl = { ca: readFileSync(caPath, "utf8"), rejectUnauthorized: true };
 
   const dbUrl = new URL(connectionString);
+  if (process.env.NODE_TLS_REJECT_UNAUTHORIZED === "0") throw new Error("TLS verification cannot be disabled.");
+  // pg connection-string SSL flags must not override the independently trusted CA.
+  for (const key of ["sslmode", "sslcert", "sslkey", "sslrootcert", "ssl"]) dbUrl.searchParams.delete(key);
   const resolvedAddress = await resolveHostAddress(dbUrl.hostname);
-  const clientConfig = { connectionString, ssl };
+  const clientConfig = { connectionString: dbUrl.toString(), ssl };
   if (resolvedAddress) {
     console.log(`DNS của hệ điều hành không trả lời; dùng địa chỉ phân giải trực tiếp cho ${dbUrl.hostname}.`);
     // `pg` ưu tiên connectionString hơn các trường rời, nên phải bỏ hẳn chuỗi đó đi
@@ -200,15 +214,24 @@ async function main() {
   }
 
   const { Client } = require("pg");
-  const client = new Client(clientConfig);
+  const client = new Client({ ...clientConfig, connectionTimeoutMillis: 10_000, statement_timeout: 120_000 });
   await client.connect();
 
   try {
     const before = await client.query(CHECK_SQL);
     console.log("Hiện trạng trước:", JSON.stringify(before.rows[0]));
-    if (checkOnly) return;
+    if (checkOnly) {
+      if (requireSchema) await requireChatbotSchema(client);
+      return;
+    }
 
     for (const prefix of prefixes) {
+      if (["056", "057", "058"].includes(prefix)) {
+        const installed = (await client.query(CHECK_SQL)).rows[0];
+        if (!installed.governance054) throw new Error(`${prefix} requires installed migration 054; no repository fallback is acceptable.`);
+        if (prefix !== "056" && !installed.session056) throw new Error(`${prefix} requires installed migration 056.`);
+        if (prefix === "058" && !installed.promotions057) throw new Error("058 requires installed migration 057.");
+      }
       const file = findMigration(prefix);
       const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf8");
       process.stdout.write(`Đang chạy ${file} … `);
@@ -231,6 +254,7 @@ async function main() {
 
     const after = await client.query(CHECK_SQL);
     console.log("Hiện trạng sau: ", JSON.stringify(after.rows[0]));
+    if (prefixes.includes("058")) await requireChatbotSchema(client);
   } finally {
     await client.end();
   }

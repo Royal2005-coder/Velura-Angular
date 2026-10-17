@@ -638,13 +638,24 @@
   font-weight: 600;
   line-height: 1.2;
   text-align: center;
-  transition: background 0.2s ease, color 0.2s ease;
+  transition: background 0.2s ease, color 0.2s ease, opacity 0.2s ease;
   min-height: 40px;
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
+  font-family: inherit;
 }
 
-.product-card__actions .btn-buy:hover {
+.product-card__actions .btn-buy:hover:not(:disabled) {
   background: #e8c9be;
   color: var(--terracotta-h, #b36a53);
+}
+
+.product-card__actions .btn-buy:disabled,
+.product-card__btn-cart:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 
 .product-card__actions .btn-buy svg {
@@ -666,6 +677,7 @@
   cursor: pointer;
   flex-shrink: 0;
   padding: 0;
+  transition: background 0.2s ease, color 0.2s ease, opacity 0.2s ease;
 }
 
 .product-card__btn-cart svg {
@@ -675,7 +687,7 @@
   stroke-width: 2;
 }
 
-.product-card__btn-cart:hover {
+.product-card__btn-cart:hover:not(:disabled) {
   background: var(--terracotta);
   color: #ffffff;
 }

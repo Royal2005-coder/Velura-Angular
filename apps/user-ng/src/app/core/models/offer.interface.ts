@@ -34,12 +34,14 @@ export interface OfferVoucher {
 
 export type OfferVoucherGroup = 'personal' | 'running' | 'ending';
 
-/** Lời mời bổ sung ngày sinh để nhận ưu đãi sinh nhật. */
+/** Lời mời hoặc thông điệp đặc quyền ưu đãi sinh nhật. */
 export interface BirthdayPrompt {
   title: string;
   description: string;
   action_label: string;
   action_route: string;
+  is_birthday_month?: boolean;
+  voucher_code?: string;
 }
 
 /** Phản hồi của `GET /api/user/offers`. */

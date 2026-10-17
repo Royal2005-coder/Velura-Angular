@@ -8,6 +8,9 @@
    ============================================================ */
 
 .voucher-wallet {
+  min-width: 0;
+  container-type: inline-size;
+  container-name: voucher-wallet;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -145,7 +148,26 @@
 .voucher-card__actions {
   display: flex;
   gap: 12px;
+  white-space: nowrap;
 }
+
+.voucher-wallet .btn-link {
+  min-height: 36px;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: var(--terracotta);
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.voucher-wallet .btn-link--muted { color: var(--muted); }
+.voucher-wallet :where(button, a):focus-visible,
+.voucher-modal :where(button, input):focus-visible { outline: 2px solid var(--brown); outline-offset: 3px; }
+.voucher-card__main { overflow-wrap: anywhere; }
+.voucher-modal .voucher-card { background: var(--checkout-bg); cursor: pointer; }
+.voucher-modal .voucher-card:disabled { cursor: wait; }
 
 .voucher-card--applied {
   border-color: var(--terracotta);
@@ -174,17 +196,26 @@
 .voucher-modal {
   position: fixed;
   inset: 0;
-  z-index: 1000;
+  z-index: 20000;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 16px;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  color: var(--ink);
+  background: transparent;
 }
+.voucher-modal::backdrop { background: rgba(42, 37, 34, 0.45); }
 
 .voucher-modal__backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(42, 37, 34, 0.45);
+  background: transparent;
 }
 
 .voucher-modal__panel {
@@ -193,9 +224,10 @@
   flex-direction: column;
   gap: 14px;
   width: min(560px, 100%);
-  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
   padding: 20px;
   overflow-y: auto;
+  overscroll-behavior: contain;
   border-radius: var(--radius-lg);
   background: #fff;
   box-shadow: var(--shadow-card);
@@ -275,9 +307,10 @@
    Trang Ưu đãi
    ------------------------------------------------------------ */
 .offer-voucher-grid {
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
   gap: 16px;
 }
+.offer-voucher-grid > li { min-width: 0; }
 
 .offer-voucher-group {
   margin-top: 28px;
@@ -314,7 +347,36 @@ button.offer-banner-row__cta {
   font-family: inherit;
 }
 
+/* Summary columns can be narrow even on wide screens. Adapt to their actual width. */
+@container voucher-wallet (max-width: 350px) {
+  .voucher-wallet__head { flex-wrap: wrap; align-items: flex-start; }
+  .voucher-wallet .voucher-card { flex-direction: column; }
+  .voucher-wallet .voucher-card__side {
+    max-width: none;
+    align-items: flex-start;
+    padding: 12px 0 0;
+    border-left: 0;
+    border-top: 1px dashed var(--line);
+  }
+  .voucher-wallet .voucher-card__actions { flex-wrap: wrap; gap: 16px; }
+  .voucher-wallet .voucher-card__saving { white-space: normal; }
+}
+
+/* Purchase inputs must remain reachable; support stays available through header/footer links. */
+body:has(app-purchase-flow, app-order-flow, app-cart-page, app-checkout-shipping-page, app-checkout-otp-page, app-checkout-confirm-page) :is(.hot-offer-widget, .chatbot-widget) { display: none; }
+
 @media (max-width: 480px) {
   .offer-voucher-grid { grid-template-columns: 1fr; }
   .voucher-card__side { padding-left: 12px; }
+  .voucher-wallet__head { align-items: flex-start; }
+  .voucher-wallet { padding: 12px; }
+  .voucher-wallet .voucher-card,
+  .voucher-modal .voucher-card,
+  .offer-voucher-grid .voucher-card { gap: 10px; padding: 12px; }
+  .voucher-card__side { max-width: 45%; }
+  .voucher-card__saving { white-space: normal; font-size: .85rem; }
+  .voucher-modal__panel { padding: 16px; }
+  .voucher-modal__manual-row { flex-wrap: wrap; }
+  .voucher-modal__manual-row .form-input { flex-basis: 100%; }
+  .voucher-modal__manual-row .btn-primary { width: 100%; }
 }

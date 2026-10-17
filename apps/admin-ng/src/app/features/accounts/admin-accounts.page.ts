@@ -1,5 +1,7 @@
-import { Component, computed, inject, signal } from '@angular/core';
-import { forkJoin, of } from 'rxjs';
+import { AdminDialogDirective } from '../../shared/admin-dialog.directive';
+import { AdminRefreshService } from '../../core/admin-refresh.service';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { forkJoin, of , Subscription } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 import { AdminAccountRow, AdminApiService, AdminAuditRow, AdminRoleRequestRow } from '../../core/admin-api.service';
 import { adminDateTime, adminInitials, adminWordCount } from '../../core/admin-format';
@@ -31,10 +33,11 @@ const EMPTY_LOGS = { rows: [] as AdminAuditRow[], count: 0 };
 
 @Component({
   selector: 'app-admin-accounts-page',
-  imports: [AdminEmptyState, AdminIcon, AdminPagination, AdminTableSkeleton],
+  imports: [AdminDialogDirective, AdminEmptyState, AdminIcon, AdminPagination, AdminTableSkeleton],
   templateUrl: './admin-accounts.page.html',
 })
 export class AdminAccountsPage {
+  private listRequest = new Subscription();
   private readonly api = inject(AdminApiService);
   private readonly session = inject(AdminSessionService);
 
@@ -101,6 +104,10 @@ export class AdminAccountsPage {
   readonly requestRangeLabel = computed(() => adminRangeLabel(this.requestTotal(), this.page(), this.pageSize, 'yêu cầu'));
 
   constructor() {
+    inject(DestroyRef).onDestroy(() => this.listRequest.unsubscribe());
+    inject(AdminRefreshService).register(() => {
+      if (!this.loading() && !this.actionType() && !this.createOpen()) this.reload();
+    }, inject(DestroyRef));
     this.reload();
   }
 
@@ -108,11 +115,12 @@ export class AdminAccountsPage {
    * Reloads the active accounts tab from server-paged APIs.
    */
   reload(): void {
+    this.listRequest.unsubscribe();
     this.loading.set(true);
     this.loadError.set(null);
     const pageParams = { limit: String(this.pageSize), offset: adminOffset(this.page(), this.pageSize) };
     const tab = this.tab();
-    forkJoin({
+    this.listRequest = forkJoin({
       accounts:
         tab === 'promotions' || tab === 'logs'
           ? of(EMPTY_ACCOUNTS)

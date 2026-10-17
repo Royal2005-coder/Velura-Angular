@@ -126,7 +126,7 @@ PR source = develop → target = main
 Title gợi ý: KAN-n: promote develop → main (…)
 ```
 
-Chỉ Lead / người được chỉ định mở promote PR. Sau merge `main`: job `deploy-production` + `verify-production`.
+Chỉ Lead / người được chỉ định mở promote PR. Sau merge `main`, CI publish image digest thật và mở PR cập nhật image; staging kiểm chứng trước, production Flux vẫn suspended đến khi owner phê duyệt.
 
 ### 3.4 Đọc lại version (trước khi sửa code cũ)
 
@@ -170,8 +170,10 @@ PR develop → main        (cùng cổng PR)
        ↓ merge
 Push main
   …tests/build…
-  deploy-production      (rsync SSH — secrets Environment production)
-  verify-production      (HTTP 200 + /api/health + admin)
+  deploy-production      (publish digest + scan/SBOM/sign; không SSH/apply)
+  promote-images         (PR digest vào develop rồi promote main)
+  verify-staging         (revision + DB/gateway thật; secrets Environment staging)
+  verify-production      (owner opt-in VELURA_VERIFY_PRODUCTION=true sau staging)
 ```
 
 ### 4.2 Job nào fail nghĩa là gì
@@ -183,8 +185,8 @@ Push main
 | `test-api` / `test-angular` | Test hoặc typecheck đỏ | Chạy cùng lệnh local rồi push lại |
 | `build` | Build không ra `dist` | `npm run build` local |
 | `note-pr` | Không ghi được trace | Thường do job trước; xem log |
-| `deploy-production` | Secrets / SSH / nginx trên VPS | **Lead** — không phải thiếu key trên máy bạn |
-| `verify-production` | Site/API chưa healthy sau deploy | Lead / ops |
+| `deploy-production` / `promote-images` | Registry build/scan/sign hoặc PR promotion thất bại | Lead; không tự sửa cluster image |
+| `verify-staging` / `verify-production` | App revision hoặc DB/gateway chưa ready | Ops; endpoint này không chứng minh Flux |
 
 ### 4.3 Secrets production (chỉ Lead)
 
@@ -193,12 +195,15 @@ Push main
 
 | Secret | Vai trò |
 |---|---|
-| `SSH_PRIVATE_KEY` | PEM SSH lên VPS |
-| `SSH_KNOWN_HOSTS` | host key |
-| `DEPLOY_HOST` | IP / host |
-| `DEPLOY_USER` | user SSH |
+| `PRODUCTION_VERIFY_TOKEN` | Bearer riêng từng Environment, khớp namespace-local API Secret |
+| `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` | Service token được cấp cho đúng staging/production audience |
+| `GITHUB_TOKEN` | Token Actions để publish/sign và tạo PR; quyền repo phải được owner cho phép |
 
 Dev thường **không** cần và **không** được yêu cầu secrets này để code.
+
+Environment `staging` phải được tạo riêng, không dùng lại credentials production.
+`VELURA_VERIFY_PRODUCTION=true` là opt-in của owner cho job kiểm chứng, không tự
+resume Flux. Bootstrap, offsite restore và GPU smoke: [HOW-IT-WORKS.md](./HOW-IT-WORKS.md#k3s-staging-first-runbook).
 
 ### 4.4 Xem pipeline
 

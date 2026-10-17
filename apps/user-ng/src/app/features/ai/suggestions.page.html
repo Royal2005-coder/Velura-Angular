@@ -4,9 +4,13 @@
       <div class="ai-loading-container" style="text-align: center; padding: 80px 24px; color: #6b635d;">
         <p style="font-family: 'DM Sans', sans-serif; font-size: 0.875rem;">Đang chuẩn bị gợi ý cho riêng bạn...</p>
       </div>
+    } @else if (loadError()) {
+      <section class="offers-state offers-state--error" role="alert">
+        <p>{{ loadError() }}</p>
+        <button type="button" class="btn-outline" (click)="loadRecommendations()">Thử lại</button>
+      </section>
     } @else if (!hasQuiz()) {
       <div id="ai-empty-state" style="text-align: center; padding: 60px 24px; background: white; border-radius: 16px; margin: 40px 0; border: 1px dashed var(--line, #E8DFD6);">
-        <div style="font-size: 40px; margin-bottom: 16px;">✨</div>
         <h2 style="font-family: 'Playfair Display', serif; font-size: 1.75rem; color: #1a1a1a; margin-bottom: 12px;">Bạn chưa thực hiện Style Quiz</h2>
         <p style="font-family: 'DM Sans', sans-serif; color: #666; max-width: 480px; margin: 0 auto 24px; line-height: 1.6;">
           Hãy dành ra 1 phút làm bài trắc nghiệm phong cách nhanh để AI của Velura đề xuất các combo phối đồ và sản phẩm dành riêng cho vóc dáng và phong cách của bạn.

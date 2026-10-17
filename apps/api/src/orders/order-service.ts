@@ -9,7 +9,7 @@ import {
 } from "./order-constants.js";
 import type { OrderRepository } from "./order-repository.js";
 import { orderErrorMessage } from "./order-repository.js";
-import { runOrderAutomation } from "./order-automation.js";
+import { orderAutomationMode, runOrderAutomation } from "./order-automation.js";
 import { verifyStripeOrder } from "../payments/stripe-verify.js";
 import {
   CALL_RESULTS,
@@ -38,6 +38,7 @@ let lastAutomationRun = 0;
  * Giới hạn tối đa 1 lần mỗi 60 giây.
  */
 export async function maybeRunAutomation(): Promise<void> {
+  if (orderAutomationMode() !== "on") return;
   const now = Date.now();
   if (now - lastAutomationRun < 60_000) return;
   lastAutomationRun = now;
@@ -95,7 +96,6 @@ export function createOrderService({
     const latestPayment = [...payments].sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")))[0];
     const requiresCallConfirmation = facts.status === "pending" &&
       facts.paymentMethod === "COD" &&
-      facts.isGuest &&
       facts.totalAmount >= 1_000_000 &&
       !facts.hasSuccessfulCallConfirm;
 

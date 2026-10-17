@@ -56,13 +56,28 @@
     </nav>
     <div class="product-detail-layout">
       <div class="product-detail__gallery">
-        <div class="gallery-main">
+        <div class="gallery-main" (click)="openImageZoom()">
           <img [src]="imageUrl()" [alt]="product()?.name || ''" class="gallery-main__img product-detail__main-img" />
+          <button
+            type="button"
+            class="gallery-expand-btn"
+            (click)="$event.stopPropagation(); openImageZoom()"
+            aria-label="Phóng to ảnh (Kính lúp)"
+            title="Phóng to ảnh (Kính lúp)"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              <line x1="11" y1="8" x2="11" y2="14"></line>
+              <line x1="8" y1="11" x2="14" y2="11"></line>
+            </svg>
+            <span>Phóng to</span>
+          </button>
           @if (gallery().length > 1) {
-            <button type="button" class="gallery-nav-btn gallery-nav-btn--prev" aria-label="Hình trước" (click)="prevImage()">
+            <button type="button" class="gallery-nav-btn gallery-nav-btn--prev" aria-label="Hình trước" (click)="$event.stopPropagation(); prevImage()">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
             </button>
-            <button type="button" class="gallery-nav-btn gallery-nav-btn--next" aria-label="Hình sau" (click)="nextImage()">
+            <button type="button" class="gallery-nav-btn gallery-nav-btn--next" aria-label="Hình sau" (click)="$event.stopPropagation(); nextImage()">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
             </button>
           }
@@ -77,6 +92,7 @@
       </div>
 
       <div class="product-detail__info">
+        <app-ai-image-workbench [productId]="product()?.product_id || ''" [variantId]="aiVariantId()" />
         <div class="product-info__head">
           <div class="product-info__badge-group">
             @for (badge of badges(); track badge.kind + badge.label) {
@@ -89,7 +105,7 @@
               } @else if (badge.kind === 'combo') {
                 <span class="product-badge product-badge--combo">{{ badge.label }}</span>
               } @else {
-                <span class="product-badge product-badge--stock">{{ badge.label }}</span>
+                <span class="product-badge product-badge--stock" [class.product-badge--out-of-stock]="isOutOfStock()">{{ badge.label }}</span>
               }
             }
           </div>
@@ -104,7 +120,7 @@
                 }
               }
             </div>
-            <span class="rating-count">{{ ratingLabel() }} &nbsp;·&nbsp; {{ product()?.rating_count || 0 }} đánh giá từ khách hàng</span>
+            <span class="rating-count">{{ ratingLabel() }} &nbsp;·&nbsp; {{ ratingCount() }} đánh giá từ khách hàng</span>
           </div>
         </div>
 
@@ -140,6 +156,9 @@
                       </a>
                       <div class="combo-component-item__price-row">
                         <span class="combo-component-item__price">{{ comboRetailLabel(component) }}</span>
+                        @if (comboStock(i) <= 0) {
+                          <span class="combo-stock-tag combo-stock-tag--out">Hết hàng</span>
+                        }
                         <a [routerLink]="['/products', component.slug || component.product_id]" target="_blank" class="combo-component-item__view-single" title="Xem và mua riêng lẻ sản phẩm này">
                           <span>Xem lẻ</span>
                           <span aria-hidden="true">&rarr;</span>
@@ -185,8 +204,9 @@
                                 type="button"
                                 class="combo-size-btn"
                                 [class.is-selected]="comboPicks()[i]?.size === size"
+                                [class.is-out-of-stock]="isComboSizeOutOfStock(component, comboPicks()[i]?.color || '', size)"
                                 (click)="selectComboSize(i, size)"
-                              >{{ size }}</button>
+                              >{{ displaySize(size) }}</button>
                             }
                           </div>
                         </div>
@@ -218,26 +238,68 @@
               </div>
             </div>
 
-            <div class="product-quantity combo-quantity">
+            <div class="product-quantity combo-quantity" [class.is-disabled]="isOutOfStock()">
               <span class="product-option__title">Số lượng set combo</span>
-              <div class="quantity-selector">
-                <button type="button" class="quantity-btn" (click)="decrement()" aria-label="Giảm số lượng set combo">-</button>
-                <input type="number" class="quantity-input" [value]="quantity()" readonly aria-label="Số lượng set combo" />
-                <button type="button" class="quantity-btn" (click)="increment()" aria-label="Tăng số lượng set combo">+</button>
+              <div class="quantity-selector" [class.is-disabled]="isOutOfStock()">
+                <button
+                  type="button"
+                  class="quantity-btn"
+                  [disabled]="isOutOfStock() || quantity() <= 1"
+                  (click)="decrement()"
+                  aria-label="Giảm số lượng set combo"
+                >-</button>
+                <input
+                  type="number"
+                  class="quantity-input"
+                  [value]="isOutOfStock() ? 0 : quantity()"
+                  [disabled]="isOutOfStock()"
+                  readonly
+                  aria-label="Số lượng set combo"
+                />
+                <button
+                  type="button"
+                  class="quantity-btn"
+                  [disabled]="isOutOfStock() || quantity() >= maxAvailableStock()"
+                  (click)="increment()"
+                  aria-label="Tăng số lượng set combo"
+                >+</button>
               </div>
             </div>
 
+            @if (isOutOfStock()) {
+              <div class="stock-alert-banner">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="12" y1="8" x2="12" y2="12"></line>
+                  <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                </svg>
+                <span>Set combo tạm thời không thể đặt mua do có sản phẩm thành phần đã hết hàng. Vui lòng chọn màu/size khác hoặc mua lẻ các món còn hàng.</span>
+              </div>
+            }
+
             <div class="combo-actions">
               <div class="combo-actions__row">
-                <button type="button" class="btn btn--outline combo-add-cart" (click)="addComboToCart()">
+                <button
+                  type="button"
+                  class="btn btn--outline combo-add-cart"
+                  [disabled]="isOutOfStock()"
+                  [class.btn--disabled]="isOutOfStock()"
+                  (click)="addComboToCart()"
+                >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="9" cy="21" r="1"></circle>
                     <circle cx="20" cy="21" r="1"></circle>
                     <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
                   </svg>
-                  Thêm set vào giỏ
+                  {{ isOutOfStock() ? 'Set combo tạm hết hàng' : 'Thêm set vào giỏ' }}
                 </button>
-                <button type="button" class="btn btn--primary combo-buy-now" (click)="buyComboNow()">Mua ngay set này</button>
+                <button
+                  type="button"
+                  class="btn btn--primary combo-buy-now"
+                  [disabled]="isOutOfStock()"
+                  [class.btn--disabled]="isOutOfStock()"
+                  (click)="buyComboNow()"
+                >{{ isOutOfStock() ? 'Hết hàng' : 'Mua ngay set này' }}</button>
               </div>
               <button type="button" class="btn btn--secondary combo-wishlist" [class.is-wishlist-active]="wishlisted()" (click)="toggleWishlist()">
                 <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.67">
@@ -270,12 +332,18 @@
         @if (!isCombo() && sizes().length) {
           <div class="product-option option-size">
             <div class="product-option__header">
-              <h3 class="product-option__title">Kích cỡ: <span class="option-selected-label">{{ selectedSize() }}</span></h3>
+              <h3 class="product-option__title">Kích cỡ: <span class="option-selected-label">{{ displaySize(selectedSize()) }}</span></h3>
               <a href="#" class="size-guide-link" (click)="$event.preventDefault(); setInfoTab('size')">Hướng dẫn chọn size</a>
             </div>
             <div class="product-option__list">
               @for (size of sizes(); track size) {
-                <button type="button" class="size-btn" [class.is-selected]="selectedSize() === size" (click)="selectSize(size)">{{ size }}</button>
+                <button
+                  type="button"
+                  class="size-btn"
+                  [class.is-selected]="selectedSize() === size"
+                  [class.is-out-of-stock]="isSizeOutOfStock(size)"
+                  (click)="selectSize(size)"
+                >{{ displaySize(size) }}</button>
               }
             </div>
           </div>
@@ -293,21 +361,51 @@
         }
 
         @if (!isCombo()) {
-        <div class="product-quantity">
+        <div class="product-quantity" [class.is-disabled]="isOutOfStock()">
           <span class="product-option__title">Số lượng</span>
-          <div class="quantity-selector">
-            <button type="button" class="quantity-btn" (click)="decrement()" aria-label="Giảm số lượng">-</button>
-            <input type="number" class="quantity-input" [value]="quantity()" readonly aria-label="Số lượng" />
-            <button type="button" class="quantity-btn" (click)="increment()" aria-label="Tăng số lượng">+</button>
+          <div class="quantity-selector" [class.is-disabled]="isOutOfStock()">
+            <button
+              type="button"
+              class="quantity-btn"
+              [disabled]="isOutOfStock() || quantity() <= 1"
+              (click)="decrement()"
+              aria-label="Giảm số lượng"
+            >-</button>
+            <input
+              type="number"
+              class="quantity-input"
+              [value]="isOutOfStock() ? 0 : quantity()"
+              [disabled]="isOutOfStock()"
+              readonly
+              aria-label="Số lượng"
+            />
+            <button
+              type="button"
+              class="quantity-btn"
+              [disabled]="isOutOfStock() || quantity() >= maxAvailableStock()"
+              (click)="increment()"
+              aria-label="Tăng số lượng"
+            >+</button>
           </div>
         </div>
 
         }
 
+        @if (!isCombo() && isOutOfStock()) {
+          <div class="stock-alert-banner">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="8" x2="12" y2="12"></line>
+              <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+            <span>Phiên bản sản phẩm đã chọn hiện đã hết hàng. Vui lòng chọn màu hoặc kích thước khác.</span>
+          </div>
+        }
+
         @if (!isCombo()) {
         <div class="product-actions-grid">
           <div class="product-actions-main">
-            <button type="button" class="btn btn--outline add-to-cart-btn" [disabled]="isOutOfStock()" (click)="addToCart()">
+            <button type="button" class="btn btn--outline add-to-cart-btn" [disabled]="isOutOfStock()" [class.btn--disabled]="isOutOfStock()" (click)="addToCart()">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px;">
                 <circle cx="9" cy="21" r="1"></circle>
                 <circle cx="20" cy="21" r="1"></circle>
@@ -315,9 +413,13 @@
               </svg>
               {{ isOutOfStock() ? 'Sản phẩm hết hàng' : 'Thêm vào giỏ' }}
             </button>
-            @if (!isOutOfStock()) {
-              <button type="button" class="btn btn--primary buy-now-btn" (click)="buyNow()">Mua ngay</button>
-            }
+            <button
+              type="button"
+              class="btn btn--primary buy-now-btn"
+              [disabled]="isOutOfStock()"
+              [class.btn--disabled]="isOutOfStock()"
+              (click)="buyNow()"
+            >{{ isOutOfStock() ? 'Hết hàng' : 'Mua ngay' }}</button>
           </div>
           <button type="button" class="btn btn--secondary wishlist-btn" [class.active]="wishlisted()" aria-label="Thêm vào danh sách yêu thích" (click)="toggleWishlist()">
             <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.67" style="margin-right: 8px;">
@@ -359,18 +461,26 @@
       <div class="tabs-header" role="tablist" aria-label="Thông tin sản phẩm">
         <button type="button" class="tab-title" [class.active]="infoTab() === 'desc'" (click)="setInfoTab('desc')">Mô tả</button>
         <button type="button" class="tab-title" [class.active]="infoTab() === 'size'" (click)="setInfoTab('size')">Bảng size</button>
-        <button type="button" class="tab-title" [class.active]="infoTab() === 'reviews'" (click)="setInfoTab('reviews')">Đánh giá</button>
+        <button type="button" class="tab-title" [class.active]="infoTab() === 'reviews'" (click)="setInfoTab('reviews')">Đánh giá ({{ reviews().length }})</button>
         <button type="button" class="tab-title" [class.active]="infoTab() === 'shipping'" (click)="setInfoTab('shipping')">Vận chuyển</button>
       </div>
       <div class="tabs-content">
         @if (infoTab() === 'desc') {
           <div class="tab-panel active">
-            <p>{{ product()?.description || 'Đang cập nhật thông tin mô tả chi tiết...' }}</p>
+            <p style="white-space: pre-line; line-height: 1.75; margin-bottom: 18px;">{{ product()?.description || 'Đang cập nhật thông tin mô tả chi tiết...' }}</p>
             <ul class="product-spec-grid">
               @for (row of specRows(); track row.label) {
                 <li><strong>{{ row.label }}:</strong> {{ row.value }}</li>
               }
             </ul>
+            @if (product()?.style_tags?.length) {
+              <div style="margin-top: 18px; padding-top: 14px; border-top: 1px dashed #e6ddd3; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <span style="font-size: 0.8125rem; font-weight: 600; color: #7a6e65;">Từ khóa &amp; Phong cách:</span>
+                @for (tag of product()!.style_tags!; track tag) {
+                  <a [routerLink]="['/products']" [queryParams]="{ q: tag }" style="font-size: 0.78rem; padding: 4px 10px; border-radius: 999px; background: #f8f4ef; border: 1px solid #e5d9cc; color: #4a3f39; text-decoration: none;">#{{ tag }}</a>
+                }
+              </div>
+            }
           </div>
         }
         @if (infoTab() === 'size') {
@@ -390,89 +500,324 @@
           </div>
         }
         @if (infoTab() === 'reviews') {
-          <div class="tab-panel active">
-            <div class="reviews-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; margin-bottom: 24px; border-bottom: 1px solid var(--border, #E8DFD6); padding-bottom: 16px;">
-              <div>
-                <h2 class="reviews-header__title" style="margin: 0 0 6px;">Đánh giá khách hàng</h2>
-                <div style="display: flex; align-items: center; gap: 8px;">
-                  <div style="display: flex; gap: 2px; color: #D4AF37;">
-                    @for (s of [1, 2, 3, 4, 5]; track s) {
-                      <svg width="18" height="18" viewBox="0 0 24 24" [attr.fill]="averageRating() >= s ? '#D4AF37' : 'none'" stroke="#D4AF37" stroke-width="1.5">
-                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
-                      </svg>
-                    }
+          <div class="tab-panel active velura-reviews-section">
+            <!-- 1. TỔNG QUAN ĐIỂM ĐÁNH GIÁ & PHÂN BỔ SAO -->
+            <div class="velura-reviews-dashboard">
+              <div class="velura-reviews-dashboard__score">
+                <div class="velura-reviews-dashboard__big-num">{{ averageRating().toFixed(1) }}<span>/5</span></div>
+                <div class="velura-reviews-dashboard__stars" aria-label="Điểm đánh giá trung bình">
+                  @for (s of [1, 2, 3, 4, 5]; track s) {
+                    <svg width="20" height="20" viewBox="0 0 24 24" [attr.fill]="averageRating() >= s - 0.25 ? '#D4AF37' : 'none'" stroke="#D4AF37" stroke-width="1.6">
+                      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                    </svg>
+                  }
+                </div>
+                <p class="velura-reviews-dashboard__count">{{ reviews().length }} nhận xét từ khách đã mua</p>
+                <a
+                  routerLink="/account/reviews"
+                  [queryParams]="{ product_id: product()?.product_id, name: product()?.name, price: product()?.sale_price || product()?.base_price, image: gallery()[0] }"
+                  class="velura-reviews-write-btn"
+                >
+                  ✎ Viết đánh giá sản phẩm
+                </a>
+              </div>
+
+              <div class="velura-reviews-dashboard__bars">
+                @for (row of starBreakdown(); track row.star) {
+                  <button
+                    type="button"
+                    class="velura-star-bar-row"
+                    [class.is-active]="reviewStarFilter() === row.star"
+                    (click)="setReviewStarFilter(row.star, reviewsTrack)"
+                    [attr.aria-label]="'Lọc đánh giá ' + row.star + ' sao'"
+                  >
+                    <span class="velura-star-bar-row__label">{{ row.star }} ★</span>
+                    <span class="velura-star-bar-row__track">
+                      <span class="velura-star-bar-row__fill" [style.width.%]="row.percent"></span>
+                    </span>
+                    <span class="velura-star-bar-row__count">{{ row.count }} ({{ row.percent }}%)</span>
+                  </button>
+                }
+              </div>
+
+              <div class="velura-reviews-dashboard__badges">
+                <div class="velura-reviews-verified-pill">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                  </svg>
+                  <span>100% Đánh giá từ đơn hàng đã mua &amp; giao thành công</span>
+                </div>
+                <div class="velura-reviews-quick-metrics">
+                  <div class="velura-reviews-metric">
+                    <strong>{{ reviewsWithPhotosCount() }}</strong>
+                    <span>Có hình ảnh thực tế</span>
                   </div>
-                  <strong style="font-size: 1rem; color: #1C1B1B;">{{ averageRating() }}/5</strong>
-                  <span style="color: #8C857E; font-size: 0.875rem;">({{ reviews().length }} nhận xét)</span>
+                  <div class="velura-reviews-metric">
+                    <strong>{{ reviewsWithReplyCount() }}</strong>
+                    <span>Phản hồi từ CSKH</span>
+                  </div>
                 </div>
               </div>
-              <a
-                [routerLink]="['/account/reviews']"
-                [queryParams]="{ product_id: product()?.product_id, name: product()?.name, price: product()?.sale_price || product()?.base_price, image: product()?.thumbnail_url }"
-                class="btn btn--primary"
-                style="padding: 10px 20px; font-size: 0.875rem;"
-              >
-                Viết đánh giá
-              </a>
             </div>
 
-            <div class="reviews-list" style="display: flex; flex-direction: column; gap: 16px;">
-              @if (reviews().length === 0) {
-                <div style="text-align: center; padding: 32px; color: #8C857E; background: #FAF6F2; border-radius: 8px;">
-                  <p style="margin: 0 0 12px;">Chưa có đánh giá nào cho sản phẩm này.</p>
-                  <a
-                    [routerLink]="['/account/reviews']"
-                    [queryParams]="{ product_id: product()?.product_id, name: product()?.name, price: product()?.sale_price || product()?.base_price, image: product()?.thumbnail_url }"
-                    class="btn btn--secondary btn--sm"
+            <!-- 2. BỘ LỌC THEO SAO, HÌNH ẢNH, NHÃN NHẬN XÉT & SẮP XẾP + NÚT CUỘN NGANG -->
+            <div class="velura-reviews-toolbar">
+              <div class="velura-reviews-filters">
+                <div class="velura-reviews-filter-group" role="group" aria-label="Bộ lọc đánh giá">
+                  <button
+                    type="button"
+                    class="velura-filter-pill"
+                    [class.is-active]="!hasActiveReviewFilter()"
+                    (click)="resetReviewFilters(reviewsTrack)"
                   >
-                    Hãy là người đầu tiên đánh giá
-                  </a>
+                    Tất cả ({{ reviews().length }})
+                  </button>
+                  @for (row of starBreakdown(); track row.star) {
+                    @if (row.count > 0) {
+                      <button
+                        type="button"
+                        class="velura-filter-pill"
+                        [class.is-active]="reviewStarFilter() === row.star"
+                        (click)="setReviewStarFilter(row.star, reviewsTrack)"
+                      >
+                        {{ row.star }} Sao ({{ row.count }})
+                      </button>
+                    }
+                  }
+                  @if (reviewsWithPhotosCount() > 0) {
+                    <button
+                      type="button"
+                      class="velura-filter-pill"
+                      [class.is-active]="reviewMediaFilter() === 'with_photos'"
+                      (click)="setReviewMediaFilter('with_photos', reviewsTrack)"
+                    >
+                      Có hình ảnh ({{ reviewsWithPhotosCount() }})
+                    </button>
+                  }
+                  @if (reviewsWithReplyCount() > 0) {
+                    <button
+                      type="button"
+                      class="velura-filter-pill"
+                      [class.is-active]="reviewMediaFilter() === 'with_reply'"
+                      (click)="setReviewMediaFilter('with_reply', reviewsTrack)"
+                    >
+                      Phản hồi CSKH ({{ reviewsWithReplyCount() }})
+                    </button>
+                  }
                 </div>
-              } @else {
-                @for (review of reviews(); track review.review_id || $index) {
-                  <article class="review-card" style="padding: 16px 20px; border: 1px solid #E8DFD6; border-radius: 8px; background: #fff;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                      <div>
-                        <strong style="font-size: 0.9375rem; color: #1C1B1B;">{{ review.user_full_name || 'Khách hàng Velura' }}</strong>
-                        <span style="font-size: 0.75rem; color: #2e7d32; margin-left: 8px; font-weight: 500;">✓ Đã mua hàng</span>
-                      </div>
-                      <div style="display: flex; gap: 2px; color: #D4AF37;">
-                        @for (s of [1, 2, 3, 4, 5]; track s) {
-                          <svg width="14" height="14" viewBox="0 0 24 24" [attr.fill]="(review.rating || 5) >= s ? '#D4AF37' : 'none'" stroke="#D4AF37" stroke-width="1.5">
-                            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
-                          </svg>
-                        }
-                      </div>
-                    </div>
 
-                    @if (review.review_tags && review.review_tags.length) {
-                      <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px;">
-                        @for (t of review.review_tags; track t) {
-                          <span style="background: #FAF6F2; border: 1px solid #E8DFD6; border-radius: 4px; padding: 2px 8px; font-size: 0.75rem; color: #7D562D;">{{ t }}</span>
-                        }
-                      </div>
+                @if (availableReviewTags().length > 0) {
+                  <div class="velura-reviews-tag-filters">
+                    <span class="velura-reviews-tag-filters__label">Lọc nhanh chủ đề:</span>
+                    @for (item of availableReviewTags(); track item.tag) {
+                      <button
+                        type="button"
+                        class="velura-tag-chip"
+                        [class.is-active]="reviewTagFilter() === item.tag"
+                        (click)="toggleReviewTagFilter(item.tag, reviewsTrack)"
+                      >
+                        # {{ item.tag }} <span>({{ item.count }})</span>
+                      </button>
                     }
-
-                    <p style="margin: 0; font-size: 0.875rem; line-height: 1.6; color: #3d352e;">{{ review.comment || '' }}</p>
-
-                    @if (review.images && review.images.length) {
-                      <div style="display: flex; gap: 8px; margin-top: 10px;">
-                        @for (img of review.images; track img) {
-                          <img [src]="img" alt="Ảnh đánh giá" style="width: 56px; height: 56px; object-fit: cover; border-radius: 4px; border: 1px solid #E8DFD6;" />
-                        }
-                      </div>
+                    @if (hasActiveReviewFilter()) {
+                      <button type="button" class="velura-clear-filter-btn" (click)="resetReviewFilters(reviewsTrack)">
+                        ✕ Xóa bộ lọc
+                      </button>
                     }
-
-                    @if (review.admin_reply) {
-                      <div style="margin-top: 12px; padding: 10px 14px; background: #FAF6F2; border-left: 3px solid #7D562D; border-radius: 4px; font-size: 0.8125rem;">
-                        <strong style="color: #7D562D; display: block; margin-bottom: 2px;">Phản hồi từ Velura CSKH:</strong>
-                        <p style="margin: 0; color: #50453B; line-height: 1.5;">{{ review.admin_reply }}</p>
-                      </div>
-                    }
-                  </article>
+                  </div>
                 }
+              </div>
+
+              <div class="velura-reviews-controls">
+                <label class="velura-reviews-sort">
+                  <span>Sắp xếp:</span>
+                  <select
+                    [value]="reviewSort()"
+                    (change)="setReviewSort($any($event.target).value, reviewsTrack)"
+                    aria-label="Sắp xếp đánh giá"
+                  >
+                    <option value="newest">Mới nhất</option>
+                    <option value="helpful">Hữu ích nhất</option>
+                    <option value="rating_desc">Số sao cao nhất</option>
+                    <option value="rating_asc">Số sao thấp nhất</option>
+                  </select>
+                </label>
+
+                <div class="velura-carousel-nav" aria-label="Điều hướng cuộn ngang đánh giá">
+                  <span class="velura-carousel-counter">
+                    {{ filteredReviews().length > 0 ? (reviewCarouselIndex() + 1) + ' / ' + filteredReviews().length : '0 / 0' }}
+                  </span>
+                  <button
+                    type="button"
+                    class="velura-carousel-arrow"
+                    [disabled]="filteredReviews().length <= 1 || !canScrollReviewsPrev()"
+                    (click)="scrollReviewsCarousel(-1, reviewsTrack)"
+                    aria-label="Xem đánh giá trước"
+                    title="Cuộn qua trái"
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="15 18 9 12 15 6"></polyline>
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    class="velura-carousel-arrow"
+                    [disabled]="filteredReviews().length <= 1"
+                    (click)="scrollReviewsCarousel(1, reviewsTrack)"
+                    aria-label="Xem đánh giá tiếp theo"
+                    title="Cuộn qua phải"
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="9 18 15 12 9 6"></polyline>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 3. BỐ CỤC CUỘN NGANG (HORIZONTAL CAROUSEL) TỐI ƯU UI-UX -->
+            <div class="velura-reviews-carousel-wrap">
+              <div
+                #reviewsTrack
+                class="velura-reviews-track"
+                (scroll)="onReviewsTrackScroll($event)"
+                role="region"
+                aria-label="Danh sách đánh giá cuộn ngang"
+              >
+                @if (filteredReviews().length === 0) {
+                  <div class="velura-reviews-empty">
+                    <p>Không tìm thấy đánh giá nào phù hợp với bộ lọc đã chọn.</p>
+                    @if (hasActiveReviewFilter()) {
+                      <button type="button" class="velura-filter-pill is-active" (click)="resetReviewFilters(reviewsTrack)">
+                        Xem tất cả {{ reviews().length }} đánh giá
+                      </button>
+                    }
+                  </div>
+                } @else {
+                  @for (review of filteredReviews(); track review.review_id || $index; let i = $index) {
+                    <article
+                      class="velura-review-hcard"
+                      [class.is-spotlight]="reviewCarouselIndex() === i"
+                    >
+                      <div class="velura-review-hcard__top">
+                        <div class="velura-review-hcard__user">
+                          <div class="velura-review-hcard__avatar" aria-hidden="true">
+                            {{ reviewerInitials(review.user_full_name) }}
+                          </div>
+                          <div class="velura-review-hcard__meta">
+                            <div class="velura-review-hcard__name-row">
+                              <strong class="velura-review-hcard__name">{{ review.user_full_name || 'Khách hàng Velura' }}</strong>
+                              @if (review.verified_purchase !== false) {
+                                <span class="velura-review-hcard__verified">✓ Đã mua hàng</span>
+                              }
+                            </div>
+                            <div class="velura-review-hcard__submeta">
+                              @if (formatReviewDate(review.submitted_at || review.created_at)) {
+                                <span>{{ formatReviewDate(review.submitted_at || review.created_at) }}</span>
+                              }
+                              @if (review.variant_size || review.variant_color) {
+                                <span class="velura-review-hcard__variant">
+                                  Phân loại: {{ review.variant_color }}{{ review.variant_color && review.variant_size ? ' · Size ' : '' }}{{ review.variant_size }}
+                                </span>
+                              }
+                            </div>
+                          </div>
+                        </div>
+
+                        <div class="velura-review-hcard__stars" [attr.aria-label]="(review.rating || 5) + ' trên 5 sao'">
+                          @for (s of [1, 2, 3, 4, 5]; track s) {
+                            <svg width="15" height="15" viewBox="0 0 24 24" [attr.fill]="(review.rating || 0) >= s ? '#D4AF37' : 'none'" stroke="#D4AF37" stroke-width="1.6">
+                              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                            </svg>
+                          }
+                        </div>
+                      </div>
+
+                      @if (review.review_tags && review.review_tags.length) {
+                        <div class="velura-review-hcard__tags">
+                          @for (t of review.review_tags; track t) {
+                            <button
+                              type="button"
+                              class="velura-review-hcard__tag"
+                              [class.is-active]="reviewTagFilter() === t"
+                              (click)="toggleReviewTagFilter(t, reviewsTrack)"
+                            >
+                              {{ t }}
+                            </button>
+                          }
+                        </div>
+                      }
+
+                      <p class="velura-review-hcard__comment">{{ review.comment || '' }}</p>
+
+                      @if (review.images && review.images.length) {
+                        <div class="velura-review-hcard__photos">
+                          @for (img of review.images; track img) {
+                            <button
+                              type="button"
+                              class="velura-review-hcard__photo-btn"
+                              (click)="openReviewImageLightbox(gallerySrc(img))"
+                              aria-label="Phóng to ảnh đánh giá thực tế"
+                            >
+                              <img [src]="gallerySrc(img)" alt="Ảnh thực tế khách hàng đánh giá" loading="lazy" />
+                              <span class="velura-review-hcard__photo-zoom">🔍</span>
+                            </button>
+                          }
+                        </div>
+                      }
+
+                      @if (review.admin_reply) {
+                        <div class="velura-review-hcard__reply">
+                          <strong>Phản hồi từ Velura CSKH</strong>
+                          <p>{{ review.admin_reply }}</p>
+                        </div>
+                      }
+
+                      <div class="velura-review-hcard__footer">
+                        <span class="velura-review-hcard__authentic">Đánh giá thực tế tại Velura</span>
+                        <button
+                          type="button"
+                          class="velura-review-heart-btn"
+                          [class.is-liked]="isReviewLiked(review)"
+                          [attr.aria-pressed]="isReviewLiked(review)"
+                          (click)="toggleReviewLike(review)"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" [attr.fill]="isReviewLiked(review) ? '#C94A4A' : 'none'" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                          </svg>
+                          <span>Hữu ích ({{ reviewLikeCount(review) }})</span>
+                        </button>
+                      </div>
+                    </article>
+                  }
+                }
+              </div>
+
+              @if (filteredReviews().length > 1) {
+                <div class="velura-reviews-dots" role="tablist" aria-label="Vị trí thẻ đánh giá">
+                  @for (review of filteredReviews(); track review.review_id || $index; let idx = $index) {
+                    <button
+                      type="button"
+                      class="velura-reviews-dot"
+                      [class.is-active]="reviewCarouselIndex() === idx"
+                      (click)="scrollToReviewSlide(idx, reviewsTrack)"
+                      [attr.aria-label]="'Chuyển tới đánh giá số ' + (idx + 1)"
+                    ></button>
+                  }
+                </div>
               }
             </div>
+
+            <!-- Lightbox xem ảnh thực tế đánh giá -->
+            @if (previewReviewImage()) {
+              <div class="velura-review-lightbox" (click)="closeReviewImageLightbox()" role="dialog" aria-label="Xem ảnh đánh giá">
+                <div class="velura-review-lightbox__inner" (click)="$event.stopPropagation()">
+                  <button type="button" class="velura-review-lightbox__close" (click)="closeReviewImageLightbox()" aria-label="Đóng">✕</button>
+                  <img [src]="previewReviewImage()!" alt="Ảnh thực tế đánh giá sản phẩm" />
+                </div>
+              </div>
+            }
           </div>
         }
         @if (infoTab() === 'shipping') {
@@ -496,5 +841,188 @@
         }
       </div>
     </section>
+    @if (isZoomOpen()) {
+      <div
+        class="gallery-zoom-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Xem chi tiết ảnh và chất liệu vải"
+        (click)="closeImageZoom()"
+        (keydown.escape)="closeImageZoom()"
+      >
+        <div class="gallery-zoom-modal__dialog" (click)="$event.stopPropagation()">
+          <div class="gallery-zoom-modal__header">
+            <div class="gallery-zoom-modal__counter">
+              <span class="zoom-counter-badge">{{ activeImage() + 1 }} / {{ gallery().length }}</span>
+              <span class="zoom-color-badge">{{ selectedColor() }}</span>
+            </div>
+            <div class="gallery-zoom-modal__toolbar">
+              <button
+                type="button"
+                class="zoom-tool-btn"
+                (click)="zoomOut()"
+                [disabled]="zoomScale() <= 1"
+                aria-label="Thu nhỏ (Kính lúp zoom ra)"
+                title="Thu nhỏ (Kính lúp zoom ra)"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="11" cy="11" r="8"></circle>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                  <line x1="8" y1="11" x2="14" y2="11"></line>
+                </svg>
+              </button>
+              <button
+                type="button"
+                class="zoom-scale-btn"
+                (click)="toggleZoom()"
+                aria-label="Chuyển đổi phóng to"
+                title="Click để phóng to 200%"
+              >
+                {{ Math.round(zoomScale() * 100) }}%
+              </button>
+              <button
+                type="button"
+                class="zoom-tool-btn"
+                (click)="zoomIn()"
+                [disabled]="zoomScale() >= 3"
+                aria-label="Phóng to (Kính lúp zoom dô)"
+                title="Phóng to (Kính lúp zoom dô)"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="11" cy="11" r="8"></circle>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                  <line x1="11" y1="8" x2="11" y2="14"></line>
+                  <line x1="8" y1="11" x2="14" y2="11"></line>
+                </svg>
+              </button>
+              <button
+                type="button"
+                class="zoom-tool-btn"
+                (click)="resetZoom()"
+                aria-label="Đặt lại kích thước ban đầu"
+                title="Đặt lại kích thước ban đầu (100%)"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+                  <polyline points="3 3 3 8 8 8"></polyline>
+                </svg>
+              </button>
+            </div>
+            <button
+              type="button"
+              class="gallery-zoom-modal__close"
+              (click)="closeImageZoom()"
+              aria-label="Đóng xem chi tiết"
+            >
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+          </div>
+
+          <div
+            class="gallery-zoom-modal__viewport"
+            [class.is-zoomed]="zoomScale() > 1"
+            [class.is-dragging]="isDragging()"
+            (wheel)="onZoomWheel($event)"
+            (mousedown)="onPanStart($event)"
+            (mousemove)="onPanMove($event)"
+            (mouseup)="onPanEnd()"
+            (mouseleave)="onPanEnd()"
+            (dblclick)="toggleZoom()"
+          >
+            <div
+              class="gallery-zoom-modal__canvas"
+              [style.transform]="'translate(' + panX() + 'px, ' + panY() + 'px) scale(' + zoomScale() + ')'"
+            >
+              <img
+                [src]="imageUrl()"
+                [alt]="product()?.name || ''"
+                class="gallery-zoom-modal__img"
+                draggable="false"
+              />
+            </div>
+
+
+            <div class="gallery-zoom-floating-bar" (click)="$event.stopPropagation()">
+              <button
+                type="button"
+                class="zoom-float-btn"
+                (click)="zoomOut()"
+                [disabled]="zoomScale() <= 1"
+                aria-label="Kính lúp zoom ra"
+                title="Kính lúp zoom ra"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="11" cy="11" r="8"></circle>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                  <line x1="8" y1="11" x2="14" y2="11"></line>
+                </svg>
+              </button>
+              <span class="zoom-float-scale">{{ Math.round(zoomScale() * 100) }}%</span>
+              <button
+                type="button"
+                class="zoom-float-btn"
+                (click)="zoomIn()"
+                [disabled]="zoomScale() >= 3"
+                aria-label="Kính lúp zoom dô"
+                title="Kính lúp zoom dô"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="11" cy="11" r="8"></circle>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                  <line x1="11" y1="8" x2="11" y2="14"></line>
+                  <line x1="8" y1="11" x2="14" y2="11"></line>
+                </svg>
+              </button>
+              <button
+                type="button"
+                class="zoom-float-btn"
+                (click)="resetZoom()"
+                aria-label="Đặt lại 100%"
+                title="Đặt lại 100%"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+                  <polyline points="3 3 3 8 8 8"></polyline>
+                </svg>
+              </button>
+            </div>
+            @if (gallery().length > 1) {
+              <button
+                type="button"
+                class="gallery-zoom-nav gallery-zoom-nav--prev"
+                aria-label="Hình trước"
+                (click)="prevZoomImage()"
+              >
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
+              </button>
+              <button
+                type="button"
+                class="gallery-zoom-nav gallery-zoom-nav--next"
+                aria-label="Hình sau"
+                (click)="nextZoomImage()"
+              >
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+              </button>
+            }
+          </div>
+
+          @if (gallery().length > 1) {
+            <div class="gallery-zoom-modal__thumbs">
+              @for (image of gallery(); track image; let i = $index) {
+                <button
+                  type="button"
+                  class="gallery-zoom-thumb"
+                  [class.active]="activeImage() === i"
+                  (click)="selectImage(i); resetZoom()"
+                  [attr.aria-label]="'Xem góc chụp ' + (i + 1)"
+                >
+                  <img [src]="gallerySrc(image)" [alt]="product()?.name || ''" />
+                </button>
+              }
+            </div>
+          }
+        </div>
+      </div>
+    }
   }
 </main>

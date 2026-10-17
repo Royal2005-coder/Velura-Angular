@@ -1,0 +1,250 @@
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: velura-platform
+value: 10000
+globalDefault: false
+preemptionPolicy: Never
+description: Core platform on the single production node
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: velura-application
+value: 1000
+globalDefault: false
+preemptionPolicy: Never
+description: Application tier
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: velura-batch
+value: 100
+globalDefault: false
+preemptionPolicy: Never
+description: Backups and staging cannot evict serving workloads
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: workload-budget
+  namespace: database
+spec:
+  hard:
+    requests.memory: 1Gi
+    limits.memory: 2Gi
+    requests.cpu: '3'
+    limits.cpu: '6'
+    pods: '8'
+    requests.storage: 100Gi
+    persistentvolumeclaims: '8'
+    services.nodeports: '0'
+    services.loadbalancers: '0'
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: container-defaults
+  namespace: database
+spec:
+  limits:
+  - type: Container
+    default:
+      cpu: 300m
+      memory: 256Mi
+    defaultRequest:
+      cpu: 25m
+      memory: 64Mi
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: workload-budget
+  namespace: storage
+spec:
+  hard:
+    requests.memory: 512Mi
+    limits.memory: 1Gi
+    requests.cpu: '3'
+    limits.cpu: '6'
+    pods: '6'
+    requests.storage: 100Gi
+    persistentvolumeclaims: '8'
+    services.nodeports: '0'
+    services.loadbalancers: '0'
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: container-defaults
+  namespace: storage
+spec:
+  limits:
+  - type: Container
+    default:
+      cpu: 300m
+      memory: 256Mi
+    defaultRequest:
+      cpu: 25m
+      memory: 64Mi
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: workload-budget
+  namespace: auth
+spec:
+  hard:
+    requests.memory: 512Mi
+    limits.memory: 1Gi
+    requests.cpu: '3'
+    limits.cpu: '6'
+    pods: '4'
+    requests.storage: 100Gi
+    persistentvolumeclaims: '8'
+    services.nodeports: '0'
+    services.loadbalancers: '0'
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: container-defaults
+  namespace: auth
+spec:
+  limits:
+  - type: Container
+    default:
+      cpu: 300m
+      memory: 256Mi
+    defaultRequest:
+      cpu: 25m
+      memory: 64Mi
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: workload-budget
+  namespace: networking
+spec:
+  hard:
+    requests.memory: 256Mi
+    limits.memory: 512Mi
+    requests.cpu: '3'
+    limits.cpu: '6'
+    pods: '6'
+    requests.storage: 100Gi
+    persistentvolumeclaims: '8'
+    services.nodeports: '0'
+    services.loadbalancers: '0'
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: container-defaults
+  namespace: networking
+spec:
+  limits:
+  - type: Container
+    default:
+      cpu: 300m
+      memory: 256Mi
+    defaultRequest:
+      cpu: 25m
+      memory: 64Mi
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: workload-budget
+  namespace: observability
+spec:
+  hard:
+    requests.memory: 1Gi
+    limits.memory: 3Gi
+    requests.cpu: '3'
+    limits.cpu: '6'
+    pods: '12'
+    requests.storage: 100Gi
+    persistentvolumeclaims: '8'
+    services.nodeports: '0'
+    services.loadbalancers: '0'
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: container-defaults
+  namespace: observability
+spec:
+  limits:
+  - type: Container
+    default:
+      cpu: 300m
+      memory: 256Mi
+    defaultRequest:
+      cpu: 25m
+      memory: 64Mi
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: workload-budget
+  namespace: velura
+spec:
+  hard:
+    requests.memory: 512Mi
+    limits.memory: 1Gi
+    requests.cpu: '3'
+    limits.cpu: '6'
+    pods: '8'
+    requests.storage: 100Gi
+    persistentvolumeclaims: '8'
+    services.nodeports: '0'
+    services.loadbalancers: '0'
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: container-defaults
+  namespace: velura
+spec:
+  limits:
+  - type: Container
+    default:
+      cpu: 300m
+      memory: 256Mi
+    defaultRequest:
+      cpu: 25m
+      memory: 64Mi
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: workload-budget
+  namespace: ai
+spec:
+  hard:
+    requests.memory: 1Gi
+    limits.memory: 3Gi
+    requests.cpu: '3'
+    limits.cpu: '6'
+    pods: '4'
+    requests.storage: 100Gi
+    persistentvolumeclaims: '8'
+    services.nodeports: '0'
+    services.loadbalancers: '0'
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: container-defaults
+  namespace: ai
+spec:
+  limits:
+  - type: Container
+    default:
+      cpu: 300m
+      memory: 256Mi
+    defaultRequest:
+      cpu: 25m
+      memory: 64Mi

@@ -70,7 +70,7 @@ export const routes: Routes = [
         path: 'products',
         loadComponent: () => import('./features/catalog/admin-products.page').then((m) => m.AdminProductsPage),
         canActivate: [adminAuthGuard],
-        data: { title: 'Quản lý sản phẩm', page: 'products' },
+        data: { title: 'Quản lý sản phẩm', page: 'products', alternativePages: ['pricing'] },
         title: 'Quản lý sản phẩm',
       },
       {

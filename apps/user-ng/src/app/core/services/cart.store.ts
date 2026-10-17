@@ -1,6 +1,23 @@
 import { Injectable, computed, signal } from '@angular/core';
 import { showToast } from '../utils/toast';
 
+export interface CartComboSubItem {
+  product_id: string;
+  product_name: string;
+  product_image: string;
+  variant_id: string;
+  color?: string;
+  size?: string;
+  quantity?: number;
+  available_variants?: Array<{
+    variant_id: string;
+    color?: string;
+    size?: string;
+    stock_quantity?: number;
+    reserved_quantity?: number;
+  }>;
+}
+
 export interface CartLine {
   variant_id: string;
   product_id: string;
@@ -10,10 +27,13 @@ export interface CartLine {
   unit_price: number;
   color?: string;
   size?: string;
+  is_combo?: boolean;
+  sub_items?: CartComboSubItem[];
   combo_id?: string;
   combo_name?: string;
   combo_price?: number;
   combo_image?: string;
+  items?: CartLine[];
 }
 
 export interface GroupedCartItem {
@@ -26,6 +46,7 @@ export interface GroupedCartItem {
   unit_price: number;
   color?: string;
   size?: string;
+  sub_items?: CartComboSubItem[];
   items?: CartLine[];
 }
 
@@ -104,14 +125,69 @@ export class CartStore {
   }
 
   /**
+   * Updates a specific sub-item variant (e.g. changing color/size of component) within a combo set.
+   * Handles both container combo lines (with sub_items) and multi-line combos (sharing combo_id).
+   */
+  updateComboSubVariant(
+    comboVariantId: string,
+    subProductId: string,
+    newVariant: { variant_id: string; color?: string; size?: string }
+  ): void {
+    const next = this.items().map((line) => {
+      // Trường hợp 1: Dòng này là combo container có sub_items
+      if (line.variant_id === comboVariantId || (line.is_combo && line.combo_id === comboVariantId)) {
+        const subItems = (line.sub_items || []).map((sub) => {
+          if (sub.product_id === subProductId) {
+            return {
+              ...sub,
+              variant_id: newVariant.variant_id,
+              color: newVariant.color ?? sub.color,
+              size: newVariant.size ?? sub.size,
+            };
+          }
+          return sub;
+        });
+        const items = (line.items || []).map((it) => {
+          if (it.product_id === subProductId) {
+            return {
+              ...it,
+              variant_id: newVariant.variant_id,
+              color: newVariant.color ?? it.color,
+              size: newVariant.size ?? it.size,
+            };
+          }
+          return it;
+        });
+        return {
+          ...line,
+          sub_items: subItems.length > 0 ? subItems : line.sub_items,
+          items: items.length > 0 ? items : line.items,
+        };
+      }
+      // Trường hợp 2: Dòng này là sản phẩm thành phần của combo đa dòng (chung combo_id)
+      if (line.combo_id === comboVariantId && line.product_id === subProductId) {
+        return {
+          ...line,
+          variant_id: newVariant.variant_id,
+          color: newVariant.color ?? line.color,
+          size: newVariant.size ?? line.size,
+        };
+      }
+      return line;
+    });
+    this.persist(next);
+  }
+
+  /**
    * Removes a variant line or every component of a combo set.
    */
   removeItem(variantId: string): void {
     const isCombo = variantId.startsWith('combo-');
     this.persist(
-      isCombo
-        ? this.items().filter((line) => line.combo_id !== variantId)
-        : this.items().filter((line) => line.variant_id !== variantId),
+      this.items().filter((line) => {
+        if (isCombo) return line.combo_id !== variantId && line.variant_id !== variantId;
+        return line.variant_id !== variantId && line.combo_id !== variantId;
+      }),
     );
   }
 
@@ -122,6 +198,29 @@ export class CartStore {
     const grouped: GroupedCartItem[] = [];
     const comboMap = new Map<string, GroupedCartItem>();
     for (const item of cart) {
+      if (item.is_combo && item.sub_items && item.sub_items.length > 0) {
+        grouped.push({
+          is_combo: true,
+          variant_id: item.variant_id,
+          product_id: item.product_id,
+          product_name: item.product_name,
+          product_image: item.product_image,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          sub_items: item.sub_items,
+          items: item.sub_items.map((sub) => ({
+            variant_id: sub.variant_id,
+            product_id: sub.product_id,
+            product_name: sub.product_name,
+            product_image: sub.product_image,
+            quantity: (sub.quantity || 1) * item.quantity,
+            unit_price: 0,
+            color: sub.color,
+            size: sub.size,
+          })),
+        });
+        continue;
+      }
       if (!item.combo_id) {
         grouped.push({ ...item, is_combo: false });
         continue;
@@ -131,16 +230,29 @@ export class CartStore {
         comboGroup = {
           is_combo: true,
           variant_id: item.combo_id,
-          product_id: item.combo_id,
+          product_id: item.product_id || item.combo_id,
           product_name: item.combo_name || 'Set đồ phối sẵn',
           product_image: item.combo_image || item.product_image || '',
           quantity: item.quantity,
           unit_price: 0,
           items: [],
+          sub_items: [],
         };
         comboMap.set(item.combo_id, comboGroup);
       }
       comboGroup.items = [...(comboGroup.items || []), item];
+      comboGroup.sub_items = [
+        ...(comboGroup.sub_items || []),
+        {
+          product_id: item.product_id,
+          product_name: item.product_name,
+          product_image: item.product_image,
+          variant_id: item.variant_id,
+          color: item.color,
+          size: item.size,
+          quantity: item.quantity,
+        },
+      ];
     }
     for (const comboGroup of comboMap.values()) {
       const parts = comboGroup.items || [];
@@ -161,10 +273,21 @@ export class CartStore {
   expandGroupedItems(items: GroupedCartItem[]): CartLine[] {
     const expanded: CartLine[] = [];
     for (const item of items) {
-      if (item.is_combo && item.items?.length) {
-        for (const sub of item.items) {
-          expanded.push({ ...sub, quantity: sub.quantity });
-        }
+      if (item.is_combo) {
+        expanded.push({
+          variant_id: item.variant_id,
+          product_id: item.product_id,
+          product_name: item.product_name,
+          product_image: item.product_image,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          is_combo: true,
+          sub_items: item.sub_items || [],
+          items: item.items || [],
+          combo_id: item.variant_id,
+          combo_name: item.product_name,
+          combo_price: item.unit_price,
+        });
       } else {
         expanded.push({
           variant_id: item.variant_id,
@@ -226,6 +349,8 @@ export class CartStore {
             unit_price: Number(item['unit_price'] || 0),
             color: typeof item['color'] === 'string' ? item['color'] : undefined,
             size: typeof item['size'] === 'string' ? item['size'] : undefined,
+            is_combo: Boolean(item['is_combo']),
+            sub_items: Array.isArray(item['sub_items']) ? (item['sub_items'] as CartComboSubItem[]) : undefined,
             combo_id: typeof item['combo_id'] === 'string' ? item['combo_id'] : undefined,
             combo_name: typeof item['combo_name'] === 'string' ? item['combo_name'] : undefined,
             combo_price: typeof item['combo_price'] === 'number' ? item['combo_price'] : undefined,

@@ -1,0 +1,11 @@
+{
+  "version": "velura-worker-v1",
+  "source_revision": "7c0f10af3f91ad4048fe9729c470a13ef905d25a",
+  "artifacts": [
+    {"path":"model.safetensors","repo":"fashn-ai/fashn-vton-1.5","revision":"7720683168567eb5a2a4c67f15116c6e29c83ded","file":"model.safetensors","size":1943668048,"sha256":"d6cd38286885bc29fa487ea9383f80ffeb95862e7747c630d42c5d3c05bdd35a","license":"Apache-2.0","license_evidence":"https://huggingface.co/fashn-ai/fashn-vton-1.5/raw/7720683168567eb5a2a4c67f15116c6e29c83ded/README.md"},
+    {"path":"dwpose/yolox_l.onnx","repo":"fashn-ai/DWPose","revision":"548b5df25b84d9f4aac0611dfa1c2a7a12f15571","file":"yolox_l.onnx","size":216746733,"sha256":"7860ae79de6c89a3c1eb72ae9a2756c0ccfbe04b7791bb5880afabd97855a411","license":"Apache-2.0","license_evidence":"https://huggingface.co/fashn-ai/DWPose/raw/548b5df25b84d9f4aac0611dfa1c2a7a12f15571/README.md"},
+    {"path":"dwpose/dw-ll_ucoco_384.onnx","repo":"fashn-ai/DWPose","revision":"548b5df25b84d9f4aac0611dfa1c2a7a12f15571","file":"dw-ll_ucoco_384.onnx","size":134399116,"sha256":"724f4ff2439ed61afb86fb8a1951ec39c6220682803b4a8bd4f598cd913b1843","license":"Apache-2.0","license_evidence":"https://huggingface.co/fashn-ai/DWPose/raw/548b5df25b84d9f4aac0611dfa1c2a7a12f15571/README.md"},
+    {"path":"clip/open_clip_model.safetensors","repo":"laion/CLIP-ViT-B-32-laion2B-s34B-b79K","revision":"1a25a446712ba5ee05982a381eed697ef9b435cf","file":"open_clip_model.safetensors","size":605143316,"sha256":"ac4f8c4b88af6d963118cbf40ad93176d092abbedfcb752601ae1866352656e6","license":"MIT","license_evidence":"https://huggingface.co/laion/CLIP-ViT-B-32-laion2B-s34B-b79K/raw/1a25a446712ba5ee05982a381eed697ef9b435cf/README.md"},
+    {"path":"u2net.onnx","revision":"github-release-asset-85857932","url":"https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2net.onnx","size":175997641,"md5":"60024c5c889badc19c04ad937298a77b","license":"Apache-2.0","license_evidence":"https://github.com/xuebinqin/U-2-Net/blob/master/LICENSE","checksum_evidence":"https://github.com/danielgatis/rembg/blob/v2.0.67/rembg/sessions/u2net.py"}
+  ]
+}

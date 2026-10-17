@@ -1,0 +1,44 @@
+﻿def dia_image_ai():
+    T, G = 205, 105
+    d = Diagram("quan_ly_san_pham_anh_ai", "Hình 3.12a - Xử lý ảnh sản phẩm bằng AI",
+                [G, T, T, T, T, G, T, T, T, G, G])
+    d.pool("velura", "Velura", [
+        (ADMIN, "Quản trị viên quản lý sản phẩm", 1.5, 120),
+        (SYS, "Hệ thống", 2.3, 130),
+    ])
+    d.blackbox("gemini", "Google Gemini (dịch vụ AI bên ngoài)", 64)
+
+    BYP, MAIN = -0.62, 0.52
+    d.event("e_start", ADMIN, 0, 0, "Cần ảnh\nsản phẩm", "start")
+    d.task("t_chon", ADMIN, 1, 0, "Nhấn Xem trước nền studio, chọn ảnh JPG, PNG, WebP hoặc GIF (tối đa 5 MB)", "user")
+    d.task("t_sang", SYS, 2, MAIN, "Thu nhỏ cạnh dài tối đa 1280 px, tăng sáng 8% và tương phản 6%", "service")
+    d.task("t_gui", SYS, 3, MAIN, "Gửi ảnh cho Gemini: giữ sản phẩm, dựng nền studio và ánh sáng mềm", "send")
+    d.task("t_nhan", SYS, 4, MAIN, "Nhận ảnh nền studio (kèm tối đa 3 câu nhận xét nếu có)", "receive")
+    d.gateway("g_studio", SYS, 5, MAIN, "Gemini trả về\nảnh nền studio?")
+    d.task("t_studio", SYS, 6, MAIN, "Đặt ảnh nền studio vào cột Sau", "service")
+    d.task("t_banSang", SYS, 6, BYP, "Đặt bản ảnh đã tăng sáng vào cột Sau, ghi chú lý do chưa có nền studio", "service")
+    d.task("t_xem", ADMIN, 7, 0, "So sánh ảnh Trước và Sau, đọc ghi chú, chọn Dùng ảnh sau hoặc Giữ ảnh gốc", "user")
+    d.gateway("g_luu", ADMIN, 8, 0, "Đã chọn ảnh\nđể lưu?")
+    d.task("t_luu", SYS, 9, MAIN, "Tải ảnh được chọn lên kho ảnh, thêm đường dẫn vào danh sách ảnh", "service")
+    d.event("e_end", ADMIN, 10, 0, "Ảnh sẵn sàng gắn\nvào sản phẩm", "end")
+    d.event("e_huy", ADMIN, 8, 0.95, "Đóng, không lưu ảnh", "end", lab="right")
+    d.store("ds_anh", SYS, 10.2, MAIN, "Kho ảnh\nsản phẩm")
+
+    d.seq("e_start", "t_chon")
+    d.seq("t_chon", "t_sang")
+    d.seq("t_sang", "t_gui")
+    d.seq("t_gui", "t_nhan")
+    d.seq("t_nhan", "g_studio")
+    d.seq("g_studio", "t_studio", "Có")
+    d.seq("g_studio", "t_banSang", "Không")
+    d.seq("t_studio", "t_xem")
+    d.seq("t_banSang", "t_xem")
+    d.seq("t_xem", "g_luu")
+    d.seq("g_luu", "t_luu", "Có")
+    d.seq("g_luu", "e_huy", "Không")
+    d.seq("t_luu", "e_end")
+
+    d.msg("t_gui", "gemini", "Ảnh đã thu nhỏ và yêu cầu")
+    d.msg("gemini", "t_nhan", "Ảnh nền studio")
+    d.assoc("t_luu", "ds_anh")
+    return d

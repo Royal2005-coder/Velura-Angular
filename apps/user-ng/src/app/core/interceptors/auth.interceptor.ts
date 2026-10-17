@@ -41,7 +41,7 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
       auth.signOut();
       return next(
         req.clone({
-          headers: req.headers.delete('Authorization').set('X-Guest-Session-ID', guestSessionId),
+          headers: req.headers.delete('Authorization').set('X-Guest-Session-ID', currentGuestSessionId()),
         }),
       );
     }),

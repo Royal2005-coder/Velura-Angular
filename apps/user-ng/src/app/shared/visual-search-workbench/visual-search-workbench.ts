@@ -80,7 +80,7 @@ export class VisualSearchWorkbench {
   }
   /** Handle the dialog Escape event without leaving inference or camera streams running. */
   escape(event: Event): void { event.preventDefault(); this.close(); }
-  /** Upload picker and mobile capture both use the same decoded image validation. */
+  /** The single upload picker validates the selected local image before preview. */
   select(event: Event): void {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0]; if (file) void this.accept(file);

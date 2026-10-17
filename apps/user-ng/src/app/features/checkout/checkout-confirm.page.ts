@@ -1,6 +1,6 @@
-import { Component, computed, inject } from '@angular/core';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { catchError, of } from 'rxjs';
 import { ApiService } from '../../core/services/api.service';
 import { CheckoutStore } from '../../core/services/checkout.store';
 import { useBodyClass } from '../../core/utils/body-class';
@@ -15,8 +15,13 @@ export class CheckoutConfirmPage {
   private readonly checkout = inject(CheckoutStore);
   private readonly route = inject(ActivatedRoute);
   private readonly api = inject(ApiService);
+  private readonly destroyRef = inject(DestroyRef);
   private readonly created = this.checkout.readCreatedOrder();
-  readonly claimUrl = sessionStorage.getItem('velura_claim_url');
+  readonly activationRequired = computed(() => this.created?.activation_required === true);
+  readonly verification = signal<'pending' | 'paid' | 'failed'>('pending');
+  readonly verificationError = signal('');
+  readonly codCreated = computed(() => !!this.created?.order_id && this.created.payment_method?.toUpperCase() === 'COD');
+  readonly canThankCustomer = computed(() => this.codCreated() || this.verification() === 'paid');
 
   readonly isStripeSuccess = computed(() => this.route.snapshot.queryParamMap.get('stripe') === 'success');
   readonly orderCode = computed(() => {
@@ -25,7 +30,7 @@ export class CheckoutConfirmPage {
   });
   readonly paymentLabel = computed(() => {
     if (this.isStripeSuccess()) {
-      return 'Thanh toán trực tuyến (Stripe) — Đã thanh toán thành công';
+      return this.verification() === 'paid' ? 'Thanh toán trực tuyến (Stripe) — Đã thanh toán' : 'Thanh toán trực tuyến (Stripe) — Chưa xác minh thành công';
     }
     const method = this.created?.payment_method || 'COD';
     if (method === 'COD' || method === 'cod') {
@@ -53,22 +58,30 @@ export class CheckoutConfirmPage {
 
   constructor() {
     useBodyClass('page-checkout');
-    if (this.claimUrl) {
-      sessionStorage.removeItem('velura_claim_url');
-    }
     if (this.isStripeSuccess()) {
+      this.verifyPayment();
+    }
+  }
+
+  /** Only the backend gateway verification can make an online order eligible for thanks. */
+  verifyPayment(): void {
+      this.verification.set('pending');
+      this.verificationError.set('');
       const qp = this.route.snapshot.queryParamMap;
       const sessionId = qp.get('session_id') || undefined;
       const orderId = qp.get('order_id') || this.created?.order_id || undefined;
       const orderCode = qp.get('code') || this.created?.order_code || undefined;
       this.api
-        .post('/api/user/payments/stripe/verify', {
+        .post<{ paid?: boolean; payment_status?: string }>('/api/user/payments/stripe/verify', {
           session_id: sessionId,
           order_id: orderId,
           order_code: orderCode,
+          order_access_token: this.created?.order_access_token,
         })
-        .pipe(catchError(() => of(null)))
-        .subscribe();
-    }
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe({
+          next: (result) => this.verification.set(result.paid === true || result.payment_status === 'paid' ? 'paid' : 'pending'),
+          error: (error: Error) => { this.verification.set('failed'); this.verificationError.set(error.message || 'Chưa xác minh được thanh toán.'); },
+        });
   }
 }

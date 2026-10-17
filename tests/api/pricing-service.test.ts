@@ -23,6 +23,16 @@ test("pricing operator reads production data with the caller token", async () =>
   assert.equal(received.token, "jwt-token");
 });
 
+test("recovery approval rejects implicit or unbounded configuration before persistence", async () => {
+  const service = createPricingService({ repository: { createVoucher: async (input) => input } });
+  const input = { code: "SUPPORT20", type: "percentage", value: 20 };
+  await assert.rejects(() => service.createVoucher(context("admin_operator_gia_km"), { ...input, recoveryApproved: "true" }), (error) => error.status === 422);
+  await assert.rejects(() => service.createVoucher(context("admin_operator_gia_km"), { ...input, recoveryApproved: true, recoveryConditions: "Verified late delivery", recoveryMaxOffers: 0 }), (error) => error.status === 422);
+  const result = await service.createVoucher(context("admin_operator_gia_km"), { ...input, recoveryApproved: true, recoveryConditions: "Verified late delivery", recoveryMaxOffers: 10 });
+  assert.equal(result.value, 20);
+  assert.equal(result.recoveryMaxOffers, 10);
+});
+
 test("promotion KPIs count every campaign, not just the page being viewed", async () => {
   // Trang hiện tại chỉ có 1 chiến dịch, nhưng hệ thống có 4. Các chỉ số đầu trang phải
   // nói về cả 4.

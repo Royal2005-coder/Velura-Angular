@@ -1,4 +1,4 @@
-import { HttpInterceptorFn } from '@angular/common/http';
+import { HttpErrorResponse, HttpInterceptorFn } from '@angular/common/http';
 import { catchError, tap, throwError } from 'rxjs';
 
 /**
@@ -11,7 +11,7 @@ export const loggingInterceptor: HttpInterceptorFn = (req, next) => {
       console.info(`[Velura API] ${req.method} ${req.url} ${Date.now() - started}ms`);
     }),
     catchError((error: unknown) => {
-      console.error(`[Velura API] ${req.method} ${req.url} failed`, error);
+      console.error(`[Velura API] ${req.method} ${req.url} failed (status ${error instanceof HttpErrorResponse ? error.status : 'unknown'})`);
       return throwError(() => error);
     }),
   );

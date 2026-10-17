@@ -1,5 +1,7 @@
+import { AdminRefreshService } from '../core/admin-refresh.service';
+import { AdminDialogDirective } from '../shared/admin-dialog.directive';
 import { Component, computed, inject, signal } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { catchError, filter, finalize, map, of, startWith } from 'rxjs';
 import { AdminApiService } from '../core/admin-api.service';
@@ -9,13 +11,14 @@ import { AdminIcon } from '../shared/admin-icon';
 
 @Component({
   selector: 'app-admin-shell',
-  imports: [RouterLink, RouterLinkActive, RouterOutlet, AdminIcon],
+  imports: [AdminDialogDirective, RouterLink, RouterLinkActive, RouterOutlet, AdminIcon],
   host: { class: 'admin-page' },
   templateUrl: './admin-shell.html',
 })
 export class AdminShell {
   private readonly router = inject(Router);
   private readonly api = inject(AdminApiService);
+  private readonly refreshModel = inject(AdminRefreshService);
   readonly session = inject(AdminSessionService);
   readonly sidebarCollapsed = signal(false);
   readonly mobileNavOpen = signal(false);
@@ -32,7 +35,7 @@ export class AdminShell {
 
   constructor() {
     useBodyClass('admin-page');
-    this.router.events.pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd)).subscribe(() => {
+    this.router.events.pipe(takeUntilDestroyed(), filter((event): event is NavigationEnd => event instanceof NavigationEnd)).subscribe(() => {
       this.mobileNavOpen.set(false);
     });
   }
@@ -78,10 +81,10 @@ export class AdminShell {
   }
 
   /**
-   * Reloads the current Angular admin view the same way vanilla "Làm mới" does.
+   * Refreshes active workspace data while preserving filters and draft forms.
    */
   refresh(): void {
-    window.location.reload();
+    this.refreshModel.refresh();
   }
 
   /**

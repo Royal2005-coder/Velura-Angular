@@ -1,6 +1,6 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { WishlistStore } from '../../core/services/wishlist.store';
@@ -19,6 +19,7 @@ export class SignUpPage {
   private readonly auth = inject(AuthService);
   private readonly wishlist = inject(WishlistStore);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
 
   readonly errorMessage = signal<string | null>(null);
   readonly showPassword = signal(false);
@@ -31,6 +32,7 @@ export class SignUpPage {
     fullname: ['', Validators.required],
     phone: ['', Validators.required],
     email: [''],
+    referral_code: [this.route.snapshot.queryParamMap.get('referral') || ''],
     password: ['', [Validators.required, Validators.minLength(8)]],
     password_confirm: ['', Validators.required],
   });
@@ -52,6 +54,7 @@ export class SignUpPage {
         phone: this.form.controls.phone.value,
         email: this.form.controls.email.value || undefined,
         password: this.form.controls.password.value,
+        referral_code: this.form.controls.referral_code.value.trim().toUpperCase() || undefined,
       })
       .subscribe({
         next: (response) => {

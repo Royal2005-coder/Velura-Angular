@@ -43,6 +43,10 @@ export async function handleReturnRoute({ req, res, url, parts, context, headers
       return true;
     }
 
+    if (req.method === "POST" && parts[5] === "manual-refund" && parts.length === 6) {
+      sendJson(res,200,await service.recordManualRefund(context,returnId,await readJson(req,config.maxBodyBytes)),headers);
+      return true;
+    }
     if (req.method === "POST" && parts[5] === "approve-exchange" && parts.length === 6) {
       const body = await readJson(req, config.maxBodyBytes);
       sendJson(res, 200, await service.approveExchange(context, returnId, body), headers);

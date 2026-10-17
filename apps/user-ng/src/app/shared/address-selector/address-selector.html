@@ -1,0 +1,34 @@
+<div class="geography">
+  <label class="geography__scheme" [for]="id + '-scheme'">Danh mục địa chỉ
+    <select [id]="id + '-scheme'" [value]="mode()" (change)="changeMode($event)">
+      <option value="current">Địa chỉ hiện hành</option>
+      <option value="legacy">Địa chỉ trước 01/07/2025</option>
+    </select>
+  </label>
+  <div class="geography__fields" [class.geography__fields--legacy]="mode() === 'legacy'">
+    <label [for]="id + '-province'">Tỉnh / Thành phố *
+      <select [id]="id + '-province'" [name]="id + '-province'" autocomplete="address-level1" [value]="provinceCode()" (change)="selectProvince($event)" [disabled]="loading() || !!error()" required>
+        <option value="">Chọn Tỉnh / Thành phố</option>
+        @for (unit of provinces(); track unit.code) { <option [value]="unit.code">{{ unit.name }}</option> }
+      </select>
+    </label>
+    @if (mode() === 'legacy') {
+      <label [for]="id + '-district'">Quận / Huyện (địa chỉ cũ) *
+        <select [id]="id + '-district'" [name]="id + '-district'" autocomplete="address-level2" [value]="districtCode()" (change)="selectDistrict($event)" [disabled]="loading() || !province()" required>
+          <option value="">Chọn Quận / Huyện</option>
+          @for (unit of districts(); track unit.code) { <option [value]="unit.code">{{ unit.name }}</option> }
+        </select>
+      </label>
+    }
+    <label [for]="id + '-ward'">Phường / Xã / Đặc khu *
+      <select [id]="id + '-ward'" [name]="id + '-ward'" [attr.autocomplete]="mode() === 'current' ? 'address-level2' : 'address-level3'" [value]="wardCode()" (change)="selectWard($event)" [disabled]="loading() || !wards().length" required>
+        <option value="">Chọn Phường / Xã / Đặc khu</option>
+        @for (unit of wards(); track unit.code) { <option [value]="unit.code">{{ unit.name }}</option> }
+      </select>
+    </label>
+  </div>
+  @if (loading()) { <p class="geography__notice" role="status">Đang tải danh sách địa chỉ…</p> }
+  @if (error()) { <p class="geography__error" role="alert">{{ error() }} <button type="button" (click)="retry()">Thử lại</button></p> }
+  @if (restoreNotice()) { <p class="geography__notice" role="status">{{ restoreNotice() }}</p> }
+  @if (mode() === 'current') { <p class="geography__notice">Địa chỉ hiện hành gồm Tỉnh / Thành phố và Phường / Xã, không yêu cầu Quận / Huyện.</p> }
+</div>

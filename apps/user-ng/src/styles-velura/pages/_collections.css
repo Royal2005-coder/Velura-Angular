@@ -523,9 +523,16 @@
   min-height: 40px;
 }
 
-.collection-product-card__actions .btn-buy:hover {
+.collection-product-card__actions .btn-buy:hover:not(:disabled) {
   background: #e8c9be;
   color: var(--terracotta-h, #b36a53);
+}
+
+.collection-product-card__actions .btn-buy:disabled,
+.collection-product-card__btn-cart:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 
 .collection-product-card__btn-cart {
@@ -539,12 +546,12 @@
   border: none;
   cursor: pointer;
   color: var(--terracotta, #C97B63);
-  transition: background 0.2s ease, transform 0.2s ease;
+  transition: background 0.2s ease, transform 0.2s ease, opacity 0.2s ease;
   padding: 0;
   flex-shrink: 0;
 }
 
-.collection-product-card__btn-cart:hover {
+.collection-product-card__btn-cart:hover:not(:disabled) {
   background: #e8c9be;
   transform: scale(1.05);
 }

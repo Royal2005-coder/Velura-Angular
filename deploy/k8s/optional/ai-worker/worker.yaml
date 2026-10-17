@@ -1,0 +1,214 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-staging
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: v1.30
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: velura-inference-staging
+value: 50
+globalDefault: false
+preemptionPolicy: Never
+description: Optional inference must not preempt production workloads
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: worker-budget
+  namespace: ai-staging
+spec:
+  hard:
+    requests.cpu: '2'
+    limits.cpu: '4'
+    requests.memory: 4Gi
+    limits.memory: 6Gi
+    requests.nvidia.com/gpu: '1'
+    pods: '1'
+    persistentvolumeclaims: '2'
+    requests.storage: 20Gi
+    services.nodeports: '0'
+    services.loadbalancers: '0'
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ai-worker-weights
+  namespace: ai-staging
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ai-worker-private
+  namespace: ai-staging
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-worker
+  namespace: ai-staging
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: ai-worker
+  template:
+    metadata:
+      labels:
+        app: ai-worker
+    spec:
+      runtimeClassName: nvidia
+      priorityClassName: velura-inference-staging
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 210
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: worker
+          image: velura-ai-worker:latest
+          imagePullPolicy: Never
+          ports:
+            - name: http
+              containerPort: 8000
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: '2'
+              memory: 4Gi
+              nvidia.com/gpu: '1'
+            limits:
+              cpu: '4'
+              memory: 6Gi
+              nvidia.com/gpu: '1'
+          env:
+            - name: AI_WORKER_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ai-worker-auth
+                  key: AI_WORKER_KEY
+            - name: AI_WEIGHTS_DIR
+              value: /weights
+            - name: TMPDIR
+              value: /private
+          startupProbe:
+            httpGet:
+              path: /live
+              port: http
+            failureThreshold: 120
+            periodSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /live
+              port: http
+            periodSeconds: 20
+          volumeMounts:
+            - name: weights
+              mountPath: /weights
+              readOnly: true
+            - name: private
+              mountPath: /private
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: weights
+          persistentVolumeClaim:
+            claimName: ai-worker-weights
+        - name: private
+          persistentVolumeClaim:
+            claimName: ai-worker-private
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-worker
+  namespace: ai-staging
+spec:
+  type: ClusterIP
+  selector:
+    app: ai-worker
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: ai-staging
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress: []
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-ingress
+  namespace: ai-staging
+spec:
+  podSelector:
+    matchLabels:
+      app: ai-worker
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: velura-staging
+          podSelector:
+            matchLabels:
+              app: velura-api
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: velura
+          podSelector:
+            matchLabels:
+              app: velura-api
+      ports:
+        - protocol: TCP
+          port: 8000

@@ -50,12 +50,223 @@ describe('CartPage', () => {
     page.checkout();
 
     expect(localStorage.getItem('checkout_voucher_id')).toBeNull();
-    expect(localStorage.getItem('checkout_voucher_declined')).toBe('1');
+    expect(localStorage.getItem('checkout_voucher_declined')).toBe('true');
   });
 
   it('tiền giảm ước tính ở giỏ không trừ mã miễn phí vận chuyển', async () => {
     const page = await createStorefrontPage(CartPage);
     page.onVoucherApplied({ voucher_id: 'v-fs', code: 'FREESHIP', name: 'Miễn phí vận chuyển', discount_amount: 30000, discount_type: 'free_shipping' });
     expect(page.estimatedDiscount()).toBe(0);
+  });
+
+  it('phân tách rõ ràng sub-items khi giỏ hàng có đồng thời 1 sản phẩm đơn và 1 combo set', async () => {
+    const page = await createStorefrontPage(CartPage);
+    const cart = TestBed.inject(CartStore);
+
+    // 1. Thêm 1 sản phẩm đơn lẻ
+    cart.addItem(
+      {
+        variant_id: 'v-single-1',
+        product_id: 'p-single-1',
+        product_name: 'Áo Thun Basic',
+        product_image: '',
+        quantity: 1,
+        unit_price: 200000,
+        color: 'Đen',
+        size: 'L',
+      },
+      { silent: true },
+    );
+
+    // 2. Thêm 1 combo set gồm 2 sản phẩm con
+    cart.addItem(
+      {
+        variant_id: 'combo-set-1',
+        product_id: 'p-combo-1',
+        product_name: 'Set Phối Đồ Công Sở',
+        product_image: '',
+        quantity: 1,
+        unit_price: 650000,
+        is_combo: true,
+        sub_items: [
+          {
+            product_id: 'sub-p-1',
+            product_name: 'Áo Sơ Mi Oxford',
+            product_image: '',
+            variant_id: 'sub-v-1',
+            color: 'Trắng',
+            size: 'M',
+            available_variants: [
+              { variant_id: 'sub-v-1', color: 'Trắng', size: 'M', stock_quantity: 10 },
+              { variant_id: 'sub-v-2', color: 'Xanh nhạt', size: 'M', stock_quantity: 8 },
+              { variant_id: 'sub-v-3', color: 'Trắng', size: 'L', stock_quantity: 5 },
+            ],
+          },
+          {
+            product_id: 'sub-p-2',
+            product_name: 'Quần Tây Slimfit',
+            product_image: '',
+            variant_id: 'sub-v-4',
+            color: 'Đen',
+            size: '32',
+            available_variants: [
+              { variant_id: 'sub-v-4', color: 'Đen', size: '32', stock_quantity: 12 },
+              { variant_id: 'sub-v-5', color: 'Xám', size: '32', stock_quantity: 6 },
+            ],
+          },
+        ],
+      },
+      { silent: true },
+    );
+
+    const grouped = page.groupedItems();
+    expect(grouped.length).toBe(2);
+
+    const singleItem = grouped.find((i) => !i.is_combo);
+    const comboItem = grouped.find((i) => i.is_combo);
+
+    expect(singleItem).toBeTruthy();
+    expect(singleItem?.product_name).toBe('Áo Thun Basic');
+    expect(singleItem?.color).toBe('Đen');
+    expect(singleItem?.size).toBe('L');
+
+    expect(comboItem).toBeTruthy();
+    expect(comboItem?.product_name).toBe('Set Phối Đồ Công Sở');
+    expect(comboItem?.sub_items?.length).toBe(2);
+    expect(comboItem?.sub_items?.[0].product_name).toBe('Áo Sơ Mi Oxford');
+    expect(comboItem?.sub_items?.[1].product_name).toBe('Quần Tây Slimfit');
+  });
+
+  it('điều chỉnh variant (màu sắc, size) độc lập cho từng sub-item trong combo không làm ảnh hưởng sản phẩm đơn', async () => {
+    const page = await createStorefrontPage(CartPage);
+    const cart = TestBed.inject(CartStore);
+
+    cart.addItem(
+      {
+        variant_id: 'v-single-1',
+        product_id: 'p-single-1',
+        product_name: 'Áo Thun Basic',
+        product_image: '',
+        quantity: 1,
+        unit_price: 200000,
+        color: 'Đen',
+        size: 'L',
+      },
+      { silent: true },
+    );
+
+    cart.addItem(
+      {
+        variant_id: 'combo-set-1',
+        product_id: 'p-combo-1',
+        product_name: 'Set Phối Đồ Công Sở',
+        product_image: '',
+        quantity: 1,
+        unit_price: 650000,
+        is_combo: true,
+        sub_items: [
+          {
+            product_id: 'sub-p-1',
+            product_name: 'Áo Sơ Mi Oxford',
+            product_image: '',
+            variant_id: 'sub-v-1',
+            color: 'Trắng',
+            size: 'M',
+            available_variants: [
+              { variant_id: 'sub-v-1', color: 'Trắng', size: 'M', stock_quantity: 10 },
+              { variant_id: 'sub-v-2', color: 'Xanh nhạt', size: 'M', stock_quantity: 8 },
+            ],
+          },
+          {
+            product_id: 'sub-p-2',
+            product_name: 'Quần Tây Slimfit',
+            product_image: '',
+            variant_id: 'sub-v-4',
+            color: 'Đen',
+            size: '32',
+            available_variants: [
+              { variant_id: 'sub-v-4', color: 'Đen', size: '32', stock_quantity: 12 },
+              { variant_id: 'sub-v-5', color: 'Xám', size: '32', stock_quantity: 6 },
+            ],
+          },
+        ],
+      },
+      { silent: true },
+    );
+
+    const comboItem = page.groupedItems().find((i) => i.is_combo)!;
+    const subAo = comboItem.sub_items![0];
+
+    // Đổi màu sub-item Áo Sơ Mi sang 'Xanh nhạt'
+    page.pickComboSubColor(comboItem, subAo, 'Xanh nhạt');
+
+    // Kiểm tra sub-item được cập nhật sang variant_id mới và màu mới
+    const updatedCombo = page.groupedItems().find((i) => i.is_combo)!;
+    expect(updatedCombo.sub_items![0].variant_id).toBe('sub-v-2');
+    expect(updatedCombo.sub_items![0].color).toBe('Xanh nhạt');
+
+    // Đổi màu sub-item Quần Tây sang 'Xám'
+    const subQuan = updatedCombo.sub_items![1];
+    page.pickComboSubColor(updatedCombo, subQuan, 'Xám');
+    const updatedCombo2 = page.groupedItems().find((i) => i.is_combo)!;
+    expect(updatedCombo2.sub_items![1].variant_id).toBe('sub-v-5');
+    expect(updatedCombo2.sub_items![1].color).toBe('Xám');
+
+    // Kiểm tra sản phẩm đơn lẻ KHÔNG bị ảnh hưởng
+    const single = page.groupedItems().find((i) => !i.is_combo)!;
+    expect(single.variant_id).toBe('v-single-1');
+    expect(single.color).toBe('Đen');
+    expect(single.size).toBe('L');
+  });
+
+  it('prompts delete confirmation modal instead of deleting immediately when clicking remove (TC-CART-09)', async () => {
+    const page = await createStorefrontPage(CartPage);
+    const cart = TestBed.inject(CartStore);
+    cart.addItem(
+      { variant_id: 'v-del-1', product_id: 'p-del-1', product_name: 'Đầm Lụa Midi', product_image: '', quantity: 2, unit_price: 500000 },
+      { silent: true },
+    );
+
+    const item = page.groupedItems()[0];
+    expect(item).toBeTruthy();
+    expect(page.pendingDeleteItem()).toBeNull();
+
+    // Bấm xóa -> Hiển thị modal xác nhận, CHƯA xóa ngay khỏi giỏ
+    page.remove(item);
+    expect(page.pendingDeleteItem()?.variant_id).toBe('v-del-1');
+    expect(page.groupedItems().length).toBe(1);
+
+    // Bấm Giữ lại -> Hủy modal, sản phẩm vẫn còn nguyên
+    page.cancelDelete();
+    expect(page.pendingDeleteItem()).toBeNull();
+    expect(page.groupedItems().length).toBe(1);
+
+    // Bấm xóa -> Xác nhận xóa
+    page.confirmDelete(item);
+    page.executeDelete();
+    expect(page.pendingDeleteItem()).toBeNull();
+    expect(page.groupedItems().length).toBe(0);
+  });
+
+  it('prompts warning confirmation modal when decrementing quantity from 1 to 0 instead of deleting silently (TC-CART-09)', async () => {
+    const page = await createStorefrontPage(CartPage);
+    const cart = TestBed.inject(CartStore);
+    cart.addItem(
+      { variant_id: 'v-qty-1', product_id: 'p-qty-1', product_name: 'Áo Sơ Mi Silk', product_image: '', quantity: 1, unit_price: 350000 },
+      { silent: true },
+    );
+
+    const item = page.groupedItems()[0];
+    expect(item.quantity).toBe(1);
+
+    // Khi SL = 1 và bấm trừ (-1) -> Cảnh báo xác nhận xóa thay vì tự động xóa mất hút
+    page.changeQty(item, -1);
+    expect(page.pendingDeleteItem()?.variant_id).toBe('v-qty-1');
+    expect(page.groupedItems().length).toBe(1);
+    expect(page.groupedItems()[0].quantity).toBe(1);
+
+    // Xác nhận xóa -> Xóa sản phẩm, chuyển sang empty state
+    page.executeDelete();
+    expect(page.groupedItems().length).toBe(0);
   });
 });

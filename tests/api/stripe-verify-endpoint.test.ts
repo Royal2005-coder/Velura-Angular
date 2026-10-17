@@ -111,7 +111,7 @@ test("handleStripeVerify throws 404 when order cannot be found", async () => {
   }
 });
 
-test("handleStripeVerify returns status paid immediately when order is already confirmed", async () => {
+test("handleStripeVerify does not treat confirmed COD as evidence of a Stripe capture", async () => {
   const ORDER_ID = "ord_test_123";
   const pg = fakePostgrest((call) => {
     if (call.path === "/rest/v1/orders") {
@@ -130,8 +130,8 @@ test("handleStripeVerify returns status paid immediately when order is already c
     assert.equal(res.statusCode, 200);
     const json = JSON.parse(res.body);
     assert.equal(json.success, true);
-    assert.equal(json.paid, true);
-    assert.equal(json.status, "paid");
+    assert.equal(json.paid, false);
+    assert.equal(json.status, "pending");
   } finally {
     pg.restore();
   }

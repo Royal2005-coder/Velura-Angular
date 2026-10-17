@@ -30,7 +30,7 @@
           <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="resetFilters()">Đặt lại</button>
         </div>
       </form>
-      @if (loading()) {
+      @if (loading() && !hasLoadedOnce()) {
         <app-admin-empty-state kind="loading" icon="clock" title="Đang tải nhật ký hệ thống" />
       } @else if (loadError()) {
         <app-admin-empty-state kind="error" icon="alert" title="Không tải được nhật ký" [message]="loadError() || ''">

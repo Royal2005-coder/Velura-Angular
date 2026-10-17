@@ -1,0 +1,16 @@
+scope: infra/edge/vps-forwarder.tf
+removed:
+  by: 2d3dd3855647
+  at: "2026-09-02T11:00:00+07:00"
+  decision: "hyperion (in-cluster Traefik) is now the sole ingress; the VPS forwarder is fully decommissioned, not just idle"
+  reversible: never
+  oracle: drift
+active: []
+superseded: []
+orphaned:
+  - sha: 9456b2010e24
+    decision: "a small VPS terminates TLS and forwards into the tailnet, since the lab has no static public IP of its own"
+    rejected: ["a cloud load balancer in front of the cluster (recurring cost for capacity the lab does not need)"]
+    reversible: restore-only
+    oracle: test
+open_incidents: []

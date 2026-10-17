@@ -1,0 +1,5 @@
+# CPU gate and private image normalization; Leffa dependencies stay in its own environment.
+Pillow==11.3.0
+numpy==1.26.4
+opencv-python-headless==4.11.0.86
+mediapipe==0.10.21

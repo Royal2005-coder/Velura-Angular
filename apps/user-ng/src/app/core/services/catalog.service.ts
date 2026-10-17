@@ -36,4 +36,14 @@ export class CatalogService {
   getProduct(productId: string): Observable<ProductSummary> {
     return this.api.get<ProductSummary>(`/api/user/products/${productId}`);
   }
+
+  /**
+   * Toggles helpful heart count on a verified product review.
+   */
+  likeReview(reviewId: string, liked: boolean): Observable<{ success: boolean; review_id: string; helpful_count: number }> {
+    return this.api.post<{ success: boolean; review_id: string; helpful_count: number }>(
+      `/api/user/reviews/${encodeURIComponent(reviewId)}/like`,
+      { liked },
+    );
+  }
 }

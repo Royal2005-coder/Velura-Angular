@@ -21,6 +21,12 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timeoutId));
 }
 
+/** Optional delivery classification and a stable provider message identifier. */
+export interface DirectEmailOptions {
+  priority?: "high" | "normal" | "low";
+  messageId?: string;
+}
+
 /**
  * Sends an email directly via SMTP (nodemailer) without relying on background queue workers.
  * Essential for Serverless (Vercel) environments where persistent background workers do not run.
@@ -29,13 +35,15 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
  * @param subject Email subject
  * @param text Plain text body
  * @param html HTML formatted body
- * @returns Boolean indicating whether email was successfully sent
+ * @param options Optional priority and stable message identifier
+ * @returns True only when SMTP accepts the recipient
  */
 export async function sendDirectEmail(
   to: unknown,
   subject: string,
   text: string,
-  html: string
+  html: string,
+  options: DirectEmailOptions = {}
 ): Promise<boolean> {
   const recipient = String(to || "").trim();
   if (!recipient || !recipient.includes("@")) {
@@ -64,17 +72,28 @@ export async function sendDirectEmail(
     });
 
     const sender = config.smtpFrom || `"Velura" <${config.smtpUser}>`;
-    await withTimeout(
+    const result = await withTimeout(
       transporter.sendMail({
         from: sender,
         to: recipient,
         subject,
         text,
-        html
+        html,
+        priority: options.priority,
+        messageId: options.messageId
       }),
       10000,
       "SMTP send"
     );
+    const accepted = Array.isArray(result.accepted) && result.accepted.some(
+      (address: string | { address: string }) => (
+        typeof address === "string" ? address : address.address
+      ).toLowerCase() === recipient.toLowerCase()
+    );
+    if (!accepted) {
+      console.warn("[EMAIL WARNING] SMTP did not accept the configured recipient");
+      return false;
+    }
 
     console.log(`[EMAIL SENT] Successfully delivered to ${recipient}`);
     return true;

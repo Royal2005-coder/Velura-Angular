@@ -1,0 +1,355 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: velura-alert-rules
+  namespace: observability
+data:
+  rules.yaml: |
+    groups:
+      - name: velura-production
+        interval: 30s
+        rules:
+          - alert: ScrapeTargetDown
+            expr: up == 0
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: 'Metrics target unavailable: {{ $labels.job }} / {{ $labels.instance }}'
+              description: Check the target endpoints, network policy, TLS and collector credentials. A failed protected scrape is not evidence the business workload is down.
+          - alert: RequiredScrapeJobMissing
+            expr: absent(up{job="kubernetes-nodes"}) or absent(up{job="kubernetes-cadvisor"}) or absent(up{job="velura-http"}) or absent(up{job="litellm"}) or absent(up{job="keycloak"}) or absent(up{job="victoriametrics"}) or absent(up{job="vmalert"}) or absent(up{job="alertmanager"}) or absent(up{job="loki"}) or absent(up{job="alloy"})
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: 'Required scrape job missing: {{ $labels.job }}'
+              description: Check the installed scrape ConfigMap and service discovery. Missing targets do not create up=0; restore the configured job instead of silencing this alert.
+          - alert: HttpErrorRate
+            expr: (sum(rate(velura_http_requests_total{job="velura-http",route!~"/(health|ready|metrics)",status="5xx"}[5m])) / sum(rate(velura_http_requests_total{job="velura-http",route!~"/(health|ready|metrics)"}[5m])) > 0.05) and (sum(increase(velura_http_requests_total{job="velura-http",route!~"/(health|ready|metrics)"}[5m])) >= 20)
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: Business API HTTP 5xx exceed 5% with at least 20 requests per 5 minutes
+              description: Inspect the HTTP dashboard by bounded route and private workload logs. Health, readiness and metrics probes are excluded; status labels are classes such as 5xx.
+          - alert: HttpLatencyP95
+            expr: (histogram_quantile(0.95, sum by(le) (rate(velura_http_request_duration_seconds_bucket{job="velura-http",route!~"/(health|ready|metrics)"}[5m]))) > 2) and (sum(increase(velura_http_request_duration_seconds_count{job="velura-http",route!~"/(health|ready|metrics)"}[5m])) >= 20)
+            for: 10m
+            labels:
+              severity: warning
+            annotations:
+              summary: Business API approximate p95 latency exceeds 2 seconds
+              description: Uses the real cumulative buckets from apps/api/src/ops-runtime.ts, not synthetic buckets. Check the installed metric contract before enabling this rule against an older API image, then inspect slow route families and dependencies.
+          - alert: HttpMetricsMissing
+            expr: absent(velura_http_requests_total{job="velura-http"})
+            for: 10m
+            labels:
+              severity: critical
+            annotations:
+              summary: HTTP metrics absent; monitoring contract broken
+              description: Check API scrape status, installed image and matching collector token. Regular metrics scrapes should create the /metrics route counter even with no business traffic.
+          - alert: HttpHistogramMissing
+            expr: absent(velura_http_request_duration_seconds_bucket{job="velura-http",le="+Inf"})
+            for: 10m
+            labels:
+              severity: warning
+            annotations:
+              summary: HTTP histogram coverage missing
+              description: Confirm the deployed API exposes genuine cumulative buckets, count and sum before trusting latency percentiles. Do not fabricate buckets to clear this alert.
+          - alert: LlmGatewayErrors
+            expr: (sum by(operation) (increase(velura_ai_failures_total{job="velura-http"}[10m])) >= 3) and (sum by(operation) (increase(velura_ai_failures_total{job="velura-http"}[10m])) / sum by(operation) (increase(velura_ai_requests_total{job="velura-http"}[10m])) > 0.1)
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: 'AI gateway failures elevated: {{ $labels.operation }}'
+              description: At least three failures and over 10% of requests in ten minutes. Inspect API gateway logs, upstream quotas and real credentials; do not issue paid inference as a health probe.
+          - alert: ContainerMemoryPressure
+            expr: max by(node,namespace,pod,container) (container_memory_working_set_bytes{job="kubernetes-cadvisor",container!="",container!="POD"}) / on(node,namespace,pod,container) (max by(node,namespace,pod,container) (container_spec_memory_limit_bytes{job="kubernetes-cadvisor",container!="",container!="POD"}) > 0 < 1e15) > 0.9
+            for: 10m
+            labels:
+              severity: warning
+            annotations:
+              summary: 'Container using over 90% of finite memory limit: {{ $labels.namespace }}/{{ $labels.pod }}/{{ $labels.container }}'
+              description: Inspect memory working set and OOM events. Diagnose leaks or measured capacity requirements before changing limits; missing or unlimited cgroups are excluded.
+          - alert: ContainerOom
+            expr: sum by(node,namespace,pod,container) (increase(container_oom_events_total{job="kubernetes-cadvisor",container!="",container!="POD"}[10m])) > 0
+            labels:
+              severity: critical
+            annotations:
+              summary: 'OOM event observed: {{ $labels.namespace }}/{{ $labels.pod }}/{{ $labels.container }}'
+              description: Check private workload logs and node/container memory usage. Runtime cgroup event coverage is not a Kubernetes restart counter.
+          - alert: ContainerCpuThrottling
+            expr: sum by(node,namespace,pod,container) (rate(container_cpu_cfs_throttled_periods_total{job="kubernetes-cadvisor",container!="",container!="POD"}[5m])) / sum by(node,namespace,pod,container) (rate(container_cpu_cfs_periods_total{job="kubernetes-cadvisor",container!="",container!="POD"}[5m])) > 0.5
+            for: 15m
+            labels:
+              severity: warning
+            annotations:
+              summary: 'Over half of CPU periods throttled: {{ $labels.namespace }}/{{ $labels.pod }}/{{ $labels.container }}'
+              description: Correlate with HTTP latency and node CPU before adjusting CPU limits. This is a period ratio, not percentage of CPU time lost.
+          - alert: NodeMemoryPressure
+            expr: max by(node) (container_memory_working_set_bytes{job="kubernetes-cadvisor",id="/"}) / on(node) max by(node) (machine_memory_bytes{job="kubernetes-cadvisor"}) > 0.9
+            for: 10m
+            labels:
+              severity: critical
+            annotations:
+              summary: 'Node working set exceeds 90% physical memory: {{ $labels.node }}'
+              description: Check workload memory and eviction logs. This measured ratio is not the Kubernetes MemoryPressure condition; keep platform services available while reducing load.
+          - alert: NodeCpuSaturation
+            expr: max by(node) (rate(container_cpu_usage_seconds_total{job="kubernetes-cadvisor",id="/"}[5m])) / on(node) max by(node) (machine_cpu_cores{job="kubernetes-cadvisor"}) > 0.9
+            for: 15m
+            labels:
+              severity: warning
+            annotations:
+              summary: 'Node CPU use exceeds 90% of physical cores: {{ $labels.node }}'
+              description: Inspect the workload CPU dashboard and kubelet operation errors. Correlate with latency; avoid restarting business workloads as a diagnostic.
+          - alert: NodeFilesystemAlmostFull
+            expr: max by(node,device) (container_fs_usage_bytes{job="kubernetes-cadvisor",id="/"}) / on(node,device) (max by(node,device) (container_fs_limit_bytes{job="kubernetes-cadvisor",id="/"}) > 0) > 0.85
+            for: 10m
+            labels:
+              severity: critical
+            annotations:
+              summary: 'Node filesystem over 85% full: {{ $labels.node }} / {{ $labels.device }}'
+              description: Check actual host free bytes and inodes, Loki/metrics retention and backup storage. Never delete database files or PVC data to clear space. Root filesystem cAdvisor coverage is runtime-dependent.
+          - alert: NodeResourceMetricsMissing
+            expr: (up{job="kubernetes-cadvisor"} == 1 unless on(node) container_memory_working_set_bytes{job="kubernetes-cadvisor",id="/"}) or (up{job="kubernetes-cadvisor"} == 1 unless on(node) machine_memory_bytes{job="kubernetes-cadvisor"}) or (up{job="kubernetes-cadvisor"} == 1 unless on(node) container_cpu_usage_seconds_total{job="kubernetes-cadvisor",id="/"}) or (up{job="kubernetes-cadvisor"} == 1 unless on(node) machine_cpu_cores{job="kubernetes-cadvisor"})
+            for: 15m
+            labels:
+              severity: warning
+            annotations:
+              summary: 'Node CPU/memory coverage missing despite successful scrape: {{ $labels.node }}'
+              description: Inspect the installed kubelet cAdvisor output and collector filtering. A successful HTTP scrape with no machine/root cgroup metrics is not resource coverage.
+          - alert: NodeFilesystemMetricsMissing
+            expr: (up{job="kubernetes-cadvisor"} == 1 unless on(node) container_fs_usage_bytes{job="kubernetes-cadvisor",id="/"}) or (up{job="kubernetes-cadvisor"} == 1 unless on(node) (container_fs_limit_bytes{job="kubernetes-cadvisor",id="/"} > 0))
+            for: 15m
+            labels:
+              severity: warning
+            annotations:
+              summary: 'Node disk capacity coverage missing: {{ $labels.node }}'
+              description: Verify host free bytes and inodes through the owner operations check. This stack has no node-exporter; do not claim disk protection if cAdvisor omits root filesystem metrics.
+          - alert: WorkloadMetricsMissing
+            expr: up{job="kubernetes-cadvisor"} == 1 unless on(node) container_memory_working_set_bytes{job="kubernetes-cadvisor",namespace!="",container!="",container!="POD"}
+            for: 15m
+            labels:
+              severity: warning
+            annotations:
+              summary: 'Labeled workload resource metrics missing: {{ $labels.node }}'
+              description: Inspect namespace/pod/container labels in cAdvisor output and the collector allowlist. Scrape success without workload series does not prove workload health.
+          - alert: LogEntriesDropped
+            expr: sum(increase(loki_write_dropped_entries_total{job="alloy"}[10m])) > 0
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: Alloy has dropped workload log entries after exhausting delivery retries
+              description: Inspect Loki readiness, disk space, limits, Alloy delivery metrics and network policy. Alloy component health alone does not report delivery failures; dropped data cannot be recovered from its in-memory queue.
+          - alert: LogDeliveryMetricsMissing
+            expr: absent(loki_write_sent_entries_total{job="alloy"})
+            for: 15m
+            labels:
+              severity: warning
+            annotations:
+              summary: Workload log delivery coverage unavailable
+              description: Check Alloy discovery permissions, component configuration and the Loki write client. Verify recent namespace/pod/container streams using private LogQL; scrape success alone does not prove collection.
+          - alert: AlertNotificationFailures
+            expr: sum(increase(alertmanager_notifications_failed_total{job="alertmanager"}[10m])) > 0
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: Alertmanager notification delivery is failing
+              description: Inspect Alertmanager status, the real SMTP receiver Secret, STARTTLS and network policy. This alert uses the same notification path, so dashboard inspection and independent delivery confirmation remain required.
+          - alert: AlertmanagerConfigUnhealthy
+            expr: absent(alertmanager_config_last_reload_successful{job="alertmanager"}) or alertmanager_config_last_reload_successful{job="alertmanager"} != 1
+            for: 15m
+            labels:
+              severity: warning
+            annotations:
+              summary: Alertmanager configuration health unavailable or reload failed
+              description: Inspect the mounted receiver Secret and Alertmanager status. Configuration health and zero notification failures never prove delivery; require an acknowledged receiver test.
+          - alert: AlertEvaluationFailures
+            expr: sum(increase(vmalert_alerting_rules_errors_total{job="vmalert"}[10m])) > 0
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: Alert rule evaluations are failing
+              description: Inspect vmalert rule errors and datasource connectivity. Invalid expressions or unreachable metrics can suppress unrelated alerts.
+          - alert: BackupTooOld
+            expr: time() - velura_backup_last_success_timestamp_seconds > 90000 or absent(velura_backup_last_success_timestamp_seconds)
+            for: 10m
+            labels:
+              severity: critical
+            annotations:
+              summary: External backup evidence missing or older than 25 hours
+              description: Verify a real off-host backup job, repository and independent restore evidence. Local files and untested backups do not satisfy recovery; no backup exporter is installed by these monitoring manifests.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vmalert
+  namespace: observability
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vmalert
+  template:
+    metadata:
+      labels:
+        app: vmalert
+    spec:
+      automountServiceAccountToken: false
+      priorityClassName: velura-platform
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+      - name: vmalert
+        image: victoriametrics/vmalert:v1.104.0@sha256:a21e26fc334a4ba10bc69810c3b85000d852db5cd5e73269947c2732c272db36
+        ports:
+        - name: http
+          containerPort: 8880
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: 50m
+            memory: 32Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+        readinessProbe:
+          tcpSocket:
+            port: 8880
+          periodSeconds: 10
+        livenessProbe:
+          tcpSocket:
+            port: 8880
+          initialDelaySeconds: 30
+          periodSeconds: 20
+        args:
+        - -rule=/etc/vmalert/rules.yaml
+        - -datasource.url=http://victoriametrics:8428
+        - -remoteWrite.url=http://victoriametrics:8428
+        - -remoteRead.url=http://victoriametrics:8428
+        - -notifier.url=http://alertmanager:9093
+        volumeMounts:
+        - name: rules
+          mountPath: /etc/vmalert
+          readOnly: true
+      volumes:
+      - name: rules
+        configMap:
+          name: velura-alert-rules
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vmalert
+  namespace: observability
+spec:
+  type: ClusterIP
+  selector:
+    app: vmalert
+  ports:
+  - name: http
+    port: 8880
+    targetPort: 8880
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertmanager
+  namespace: observability
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alertmanager
+  template:
+    metadata:
+      labels:
+        app: alertmanager
+    spec:
+      automountServiceAccountToken: false
+      priorityClassName: velura-platform
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+      containers:
+      - name: alertmanager
+        image: prom/alertmanager:v0.28.1@sha256:27c475db5fb156cab31d5c18a4251ac7ed567746a2483ff264516437a39b15ba
+        ports:
+        - name: http
+          containerPort: 9093
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: 50m
+            memory: 32Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+        readinessProbe:
+          tcpSocket:
+            port: 9093
+          periodSeconds: 10
+        livenessProbe:
+          tcpSocket:
+            port: 9093
+          initialDelaySeconds: 30
+          periodSeconds: 20
+        args:
+        - --config.file=/etc/alertmanager/alertmanager.yaml
+        - --storage.path=/var/lib/alertmanager
+        - --cluster.listen-address=
+        volumeMounts:
+        - name: config
+          mountPath: /etc/alertmanager
+          readOnly: true
+        - name: data
+          mountPath: /var/lib/alertmanager
+      volumes:
+      - name: config
+        secret:
+          # Operator-provisioned, required: alertmanager.yaml plus smtp-auth-password.
+          # Build only from verified existing SMTP_HOST/PORT=587/USER/FROM,
+          # SUPPORT_ALERT_TO and SMTP_APP_PASSWORD; never print them or use a dummy receiver.
+          # alertmanager.yaml must use smtp_auth_password_file:
+          # /etc/alertmanager/smtp-auth-password and smtp_require_tls: true.
+          # Route all groups to the real support email receiver with send_resolved: true.
+          # Missing/invalid destination remains a deployment blocker; no empty fallback.
+          secretName: alertmanager-config
+      - name: data
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alertmanager
+  namespace: observability
+spec:
+  type: ClusterIP
+  selector:
+    app: alertmanager
+  ports:
+  - name: http
+    port: 9093
+    targetPort: 9093

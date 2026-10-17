@@ -2,6 +2,7 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { catchError, of } from 'rxjs';
 import { ApiService } from '../../core/services/api.service';
+import { ApiRequestError } from '../../core/models/api-request-error';
 import { formatVnd } from '../../core/utils/money';
 import { useBodyClass } from '../../core/utils/body-class';
 import { formatOrderTime } from '../../core/utils/order-time';
@@ -48,6 +49,8 @@ export interface MemberOrderDetail {
   carrier?: string | null;
   tracking_url?: string | null;
   cancelled_reason?: string | null;
+  /** Optimistic concurrency token — gửi lại nguyên giá trị này khi hủy đơn (KAN-32). */
+  version?: number;
   items?: OrderLine[];
   steps?: OrderStep[];
   can_cancel?: boolean;
@@ -185,6 +188,13 @@ export class AccountOrderDetailPage {
       this.cancelError.set('Nhập lý do hủy.');
       return;
     }
+    if (order.version === undefined) {
+      // Dữ liệu đơn chưa có version (tải lỗi/phiên bản cũ) — nạp lại thay vì gửi thiếu,
+      // vì backend giờ bắt buộc expectedVersion cho mọi lần hủy.
+      this.cancelError.set('Dữ liệu đơn chưa sẵn sàng, đang tải lại…');
+      this.load();
+      return;
+    }
     this.cancelling.set(true);
     this.cancelError.set(null);
     this.api
@@ -192,6 +202,7 @@ export class AccountOrderDetailPage {
         order_id: order.order_id,
         status: 'cancelled',
         cancelled_reason: reason,
+        expectedVersion: order.version,
       })
       .subscribe({
         next: (result) => {
@@ -204,7 +215,11 @@ export class AccountOrderDetailPage {
         },
         error: (error: Error) => {
           this.cancelling.set(false);
-          this.cancelError.set(error.message || 'Không hủy được đơn.');
+          this.cancelError.set(
+            error instanceof ApiRequestError && error.status === 409
+              ? 'Đơn hàng vừa được cập nhật, đang tải lại dữ liệu mới nhất…'
+              : error.message || 'Không hủy được đơn.',
+          );
           this.load();
         },
       });

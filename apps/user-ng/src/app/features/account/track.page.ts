@@ -5,6 +5,7 @@ import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { useBodyClass } from '../../core/utils/body-class';
 import { formatVnd, toPublicAsset } from '../../core/utils/money';
+import { formatSizeDisplay } from '../../core/utils/size';
 import { formatOrderTime } from '../../core/utils/order-time';
 import { showToast } from '../../core/utils/toast';
 
@@ -23,6 +24,7 @@ export interface OrderStep {
  */
 export interface TrackOrderItem {
   item_id?: string;
+  product_id?: string;
   variant_id?: string;
   product_name?: string;
   product_image?: string;
@@ -73,10 +75,13 @@ export interface TrackOrderResult {
 })
 export class AccountTrackPage {
   private readonly api = inject(ApiService);
+  readonly displaySize = formatSizeDisplay;
   readonly auth = inject(AuthService);
   private readonly route = inject(ActivatedRoute);
 
-  readonly codeQuery = signal(this.route.snapshot.queryParamMap.get('code') || '');
+  readonly codeQuery = signal(
+    this.route.snapshot.paramMap.get('id') || this.route.snapshot.queryParamMap.get('code') || '',
+  );
   readonly contactQuery = signal(this.route.snapshot.queryParamMap.get('contact') || '');
 
   readonly searching = signal(false);

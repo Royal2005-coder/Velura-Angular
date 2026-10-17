@@ -12,6 +12,10 @@ export async function handlePricingRoute({ req, res, url, parts, context, header
   if (parts[0] !== "api" || parts[1] !== "v1" || parts[2] !== "admin") return false;
 
   if (parts[3] === "pricing") {
+    if (req.method === "GET" && parts[4] === "products" && parts.length === 5) {
+      sendJson(res,200,await service.listPricingProducts(context,url.searchParams),headers);
+      return true;
+    }
     if (req.method === "GET" && parts[4] === "history" && parts.length === 5) {
       sendJson(res, 200, await service.listPriceHistory(context, url.searchParams), headers);
       return true;

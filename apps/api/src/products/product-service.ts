@@ -18,6 +18,12 @@ import {
   CSV_REQUIRED_COLUMNS
 } from "./product-constants.js";
 import type { ProductRepository } from "./product-repository.js";
+import { invalidateCatalogCache } from "../user/products.js";
+import {
+  analyzeProductImageQuality,
+  enhanceProductImageStudio,
+  generateProductFashionSeo
+} from "./product-ai-studio.js";
 
 /**
  * Admin product use-cases used by `handleProductRoute`.
@@ -47,6 +53,9 @@ export interface ProductService {
     requestMeta: RequestMeta
   ): Promise<unknown>;
   removeComboItem(context: AuthContext | undefined, productId: string, itemId: string): Promise<unknown>;
+  analyzeImageQuality(context: AuthContext | undefined, body: JsonObject): Promise<unknown>;
+  enhanceProductImage(context: AuthContext | undefined, body: JsonObject): Promise<unknown>;
+  optimizeProductSeo(context: AuthContext | undefined, body: JsonObject): Promise<unknown>;
 }
 
 /**
@@ -126,24 +135,46 @@ export function createProductService({ repository }: { repository: ProductReposi
       requireProductAdmin(context, body?.isCombo === true);
       const input = validateCreateProduct(body);
       input.ipAddress = requestMeta.ipAddress || "0.0.0.0";
+
+      // If material is specified and not in description, append it
+      if (body?.material && typeof body.material === "string") {
+        const mat = body.material.trim();
+        if (mat && !input.description?.includes(mat)) {
+          input.description = input.description ? `${input.description}\nChất liệu: ${mat}` : `Chất liệu: ${mat}`;
+        }
+      }
+
+      // Pre-validate all custom variants if passed
+      let validatedVariants: Array<ReturnType<typeof validateCreateVariant>> | null = null;
+      if (Array.isArray(body?.variants) && body.variants.length > 0) {
+        validatedVariants = body.variants.map((v) => validateCreateVariant(v as JsonObject));
+      }
+
       const product = asJsonObject(await repository.createProduct(input, context.accessToken));
 
-      // Auto-create a default variant with the initial stock and threshold if repository method exists
+      // Auto-create variants with initial stock
       if (repository && typeof repository.createVariant === "function") {
-        const initialStock = body.initialStock !== undefined ? Number(body.initialStock) : 0;
-        const lowStockThreshold = body.lowStockThreshold !== undefined ? Number(body.lowStockThreshold) : 5;
+        if (validatedVariants && validatedVariants.length > 0) {
+          for (const vInput of validatedVariants) {
+            vInput.ipAddress = input.ipAddress;
+            await repository.createVariant(product.product_id as string, vInput, context.accessToken);
+          }
+        } else {
+          const initialStock = body.initialStock !== undefined ? Number(body.initialStock) : 0;
+          const lowStockThreshold = body.lowStockThreshold !== undefined ? Number(body.lowStockThreshold) : 5;
 
-        await repository.createVariant(product.product_id as string, {
-          color: "Mặc định",
-          colorHex: "#FFFFFF",
-          size: "F",
-          stockQuantity: Number.isInteger(initialStock) && initialStock >= 0 ? initialStock : 0,
-          lowStockThreshold: Number.isInteger(lowStockThreshold) && lowStockThreshold >= 0 ? lowStockThreshold : 5
-        }, context.accessToken);
+          await repository.createVariant(product.product_id as string, {
+            color: "Mặc định",
+            colorHex: "#FFFFFF",
+            size: "F",
+            stockQuantity: Number.isInteger(initialStock) && initialStock >= 0 ? initialStock : 0,
+            lowStockThreshold: Number.isInteger(lowStockThreshold) && lowStockThreshold >= 0 ? lowStockThreshold : 5
+          }, context.accessToken);
+        }
 
         await syncProductStockStatus(repository, context, product.product_id as string, "Khởi tạo tồn kho sản phẩm mới", input.ipAddress);
       }
-
+      invalidateCatalogCache();
       return product;
     },
 
@@ -192,7 +223,7 @@ export function createProductService({ repository }: { repository: ProductReposi
           }
         }
       }
-
+      invalidateCatalogCache();
       return result;
     },
 
@@ -206,7 +237,9 @@ export function createProductService({ repository }: { repository: ProductReposi
         throw validationError("status", `Cannot change status from ${current.status} to ${input.status}`);
       }
       input.ipAddress = requestMeta.ipAddress || "0.0.0.0";
-      return repository.changeStatus(productId, input, context.accessToken);
+      const changed = await repository.changeStatus(productId, input, context.accessToken);
+      invalidateCatalogCache();
+      return changed;
     },
 
     async updateStock(context, productId, body, requestMeta) {
@@ -402,17 +435,26 @@ export function createProductService({ repository }: { repository: ProductReposi
       const parsedRows = Array.isArray(parsed.rows) ? parsed.rows as JsonObject[] : [];
       if (parsedRows.length === 0) throw validationError("csv", "Không có dòng hợp lệ để nhập");
 
-      const results: JsonObject[] = [];
+      const staged: Array<{ row: JsonObject; existing: JsonObject | null }> = [];
       for (const row of parsedRows) {
+        const existing = repository.findBySku ? await repository.findBySku(row.sku as string, context.accessToken) : null;
+        const images = Array.isArray(row.images) ? row.images : [];
+        const published = existing && Array.isArray(existing.images) ? existing.images : [];
+        if (images.some(image => !published.includes(image))) {
+          throw new HttpError(422, "CSV_IMAGE_REVIEW_REQUIRED", "Ảnh mới phải được kiểm tra và phê duyệt trong Product Editor trước khi nhập CSV.", { sku: row.sku });
+        }
+        staged.push({ row, existing });
+      }
+      const results: JsonObject[] = [];
+      for (const { row, existing } of staged) {
         try {
-          const existing = repository.findBySku ? await repository.findBySku(row.sku as string, context.accessToken) : null;
           if (existing) {
             // Update existing product
             const updateInput = {
               name: row.name,
               description: row.description,
               categoryId: row.category_id,
-              images: row.images,
+              images: Array.isArray(row.images) && row.images.length ? row.images : existing.images,
               isFeatured: row.is_featured,
               expectedVersion: existing.version,
               ipAddress: requestMeta.ipAddress || "0.0.0.0"
@@ -508,6 +550,21 @@ export function createProductService({ repository }: { repository: ProductReposi
       requireUuid(productId, "productId");
       requireUuid(itemId, "itemId");
       return repository.removeComboItem(productId, itemId, context.accessToken);
+    },
+
+    async analyzeImageQuality(context, body) {
+      requireProductViewer(context);
+      return analyzeProductImageQuality(asJsonObject(body));
+    },
+
+    async enhanceProductImage(context, body) {
+      requireProductAdmin(context, true);
+      return enhanceProductImageStudio(asJsonObject(body));
+    },
+
+    async optimizeProductSeo(context, body) {
+      requireProductAdmin(context, true);
+      return generateProductFashionSeo(asJsonObject(body));
     }
   };
 }

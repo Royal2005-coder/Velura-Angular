@@ -1,0 +1,33 @@
+section {
+  border: 1px solid var(--line);
+  padding: 18px;
+  border-radius: 12px;
+  margin: 16px 0;
+}
+header,
+.actions,
+.preview {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+figure {
+  flex: 1;
+  min-width: 180px;
+  margin: 0;
+}
+img {
+  width: 100%;
+  height: 240px;
+  object-fit: contain;
+  background: var(--field-bg);
+  border-radius: 8px;
+}
+label {
+  display: block;
+  margin: 12px 0;
+}
+p {
+  line-height: 1.6;
+}

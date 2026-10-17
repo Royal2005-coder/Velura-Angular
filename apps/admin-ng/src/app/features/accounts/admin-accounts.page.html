@@ -206,7 +206,7 @@
 
 @if (selected() && !actionType()) {
   <div class="admin-drawer-backdrop" (click)="closeOverlays()"></div>
-  <aside class="admin-drawer admin-drawer--wide admin-member-drawer">
+  <aside class="admin-drawer admin-drawer--wide admin-member-drawer" appAdminDialog (appAdminDialogClose)="closeOverlays()">
     <header class="admin-drawer__header">
       <div class="admin-member-profile">
         <span class="admin-avatar admin-avatar--lg">{{ initials(selected()!) }}</span>
@@ -239,7 +239,7 @@
 
 @if (actionType() && selected()) {
   <div class="admin-modal-overlay">
-    <section class="admin-modal">
+    <section class="admin-modal" appAdminDialog (appAdminDialogClose)="closeOverlays()">
       <form (submit)="submitAction($event)">
         <header class="admin-modal__header">
           <h2>{{ actionType() === 'role' ? 'Thay đổi vai trò' : actionType() === 'lock' ? 'Khóa tài khoản' : 'Mở khóa tài khoản' }}</h2>
@@ -302,7 +302,7 @@
 
 @if (createOpen()) {
   <div class="admin-modal-overlay">
-    <section class="admin-modal">
+    <section class="admin-modal" appAdminDialog (appAdminDialogClose)="closeCreate()">
       @if (createdAccount()) {
         <header class="admin-modal__header">
           <h2>Tạo tài khoản thành công</h2>
@@ -377,7 +377,7 @@
 
 @if (requestAction() && selectedRequest()) {
   <div class="admin-modal-overlay">
-    <section class="admin-modal">
+    <section class="admin-modal" appAdminDialog (appAdminDialogClose)="closeOverlays()">
       <form (submit)="submitRequest($event)">
         <header class="admin-modal__header">
           <h2>{{ requestAction() === 'approve' ? 'Duyệt yêu cầu nâng quyền' : 'Từ chối yêu cầu nâng quyền' }}</h2>

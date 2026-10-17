@@ -36,6 +36,7 @@ import { handleAuditLogRoute } from "./audit-logs/audit-log-router.js";
 import { createChatbotRepository } from "./chatbot/chatbot-repository.js";
 import { createChatbotService } from "./chatbot/chatbot-service.js";
 import { handleChatbotRoute } from "./chatbot/chatbot-router.js";
+import { startChatReportWorker } from "./chatbot/chatbot-reports.js";
 import { createContentRepository } from "./content/content-repository.js";
 import { createContentService } from "./content/content-service.js";
 import { handleContentRoute } from "./content/content-router.js";
@@ -43,6 +44,18 @@ import { createFixedWindowLimiter } from "./rate-limit.js";
 import { handleUserRoute } from "./user/index.js";
 import { handleWishlistRoute } from "./v1-wishlist-routes.js";
 import { handleRecommendationRoute } from "./recommendation.controller.js";
+import { handleAiRoute, getAiService } from "./ai/ai-router.js";
+import { handleRuntimeRoute, observeHttpRequest } from "./ops-runtime.js";
+import { handleVisualSearchRoute } from "./visual-search/visual-search-router.js";
+import { handlePersonalColorRoute } from "./personal-color/personal-color-router.js";
+import { createPersonalColorService } from "./personal-color/personal-color-module.js";
+import { handleLoyaltyRoute, loyaltyService } from "./loyalty/loyalty-router.js";
+import { EnhancementApprovalService } from "./ai/enhancement-approval-service.js";
+import { SupabaseEnhancementApprovalRepository } from "./ai/enhancement-approval-repository.js";
+import { handleEnhancementApprovalRoute } from "./ai/enhancement-approval-router.js";
+import { CatalogContentService } from "./catalog-content/catalog-content-service.js";
+import { createCatalogContentRepository } from "./catalog-content/catalog-content-repository.js";
+import { handleCatalogContentRoute } from "./catalog-content/catalog-content-router.js";
 import { asJsonObject, asString } from "./types.js";
 import type { AccountService } from "./accounts/account-service.js";
 import type { ProductService } from "./products/product-service.js";
@@ -57,12 +70,15 @@ const orderService = createOrderService({ repository: createOrderRepository(), r
 const reviewService = createReviewService({ repository: createReviewRepository() });
 const returnService = createReturnService({
   repository: createReturnRepository(),
-  refunds: { refund: (orderId, amount) => refundStripeOrder(orderId, { amount }) }
+  refunds: { refund: (orderId, amount, returnId, expectedVersion) => refundStripeOrder(orderId, { amount, returnId, expectedVersion }) }
 });
 const pricingService = createPricingService({ repository: createPricingRepository() });
 const auditLogService = createAuditLogService({ repository: createAuditLogRepository() });
 const chatbotService: ChatbotService = createChatbotService({ repository: createChatbotRepository() });
 const contentService = createContentService({ repository: createContentRepository() });
+const personalColorService = createPersonalColorService(getAiService());
+const enhancementApprovalService = new EnhancementApprovalService(getAiService(), new SupabaseEnhancementApprovalRepository());
+const catalogContentService = new CatalogContentService(createCatalogContentRepository());
 const mutationLimiter = createFixedWindowLimiter({
   limit: config.adminMutationLimitPerMinute,
   windowMs: 60_000
@@ -72,6 +88,7 @@ const chatLimiter = createFixedWindowLimiter({
   windowMs: 60_000
 });
 export async function handleApiRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  observeHttpRequest(req, res);
   const requestId = String(req.headers["x-request-id"] || randomUUID()).slice(0, 128);
   applySecurityHeaders(res, config.nodeEnv);
   res.setHeader("x-request-id", requestId);
@@ -96,12 +113,17 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
         time: new Date().toISOString()
       }, corsHeaders);
     }
+    if (await handleRuntimeRoute(req, res, url, corsHeaders)) return;
 
     if (parts[0] !== "api") {
       throw new HttpError(404, "NOT_FOUND", "Route not found");
     }
 
     const context = await buildAuthContext(req);
+    if (await handleAiRoute(req,res,parts,corsHeaders,context)) return;
+    if (await handlePersonalColorRoute(req, res, parts, corsHeaders, context, personalColorService)) return;
+    if (parts[1] === "user" && parts[2] === "visual-search" && await handleVisualSearchRoute(req, res, parts, corsHeaders, context)) return;
+    if (await handleLoyaltyRoute({ req, res, url, parts, headers: corsHeaders, context, service: loyaltyService })) return;
 
     if (parts[1] === "content") {
       const handled = await handleContentRoute({
@@ -243,6 +265,7 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
       }, corsHeaders);
     }
 
+
     if (parts[1] === "user") {
       if (parts[2] === "recommendations" && parts[3] === "style-profile") {
         await handleRecommendationRoute(req, res, parts, corsHeaders, context);
@@ -281,6 +304,8 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
           throw new HttpError(429, "RATE_LIMITED", "Too many admin mutation requests");
         }
       }
+      if (await handleEnhancementApprovalRoute({ req, res, url, parts, context, headers: corsHeaders, service: enhancementApprovalService })) return;
+      if (await handleCatalogContentRoute({ req, res, url, parts, context, headers: corsHeaders, service: catalogContentService })) return;
       const dashboardHandled = await handleDashboardRoute({
         req,
         res,
@@ -413,10 +438,16 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
 export const server = createServer(handleApiRequest);
 
 if (process.env.VERCEL !== "1") {
-  startAccountMaintenance();
-  startEmailOutboxWorker();
-  startPromotionScheduler();
-  startOrderAutomation();
+  const timers = [startAccountMaintenance(), startEmailOutboxWorker(), startPromotionScheduler(), startOrderAutomation(), startChatReportWorker()];
+  catalogContentService.start();
+  const shutdown = () => {
+    for (const timer of timers) clearInterval(timer || undefined);
+    catalogContentService.stop();
+    personalColorService.close();
+    server.close(() => { void getAiService().close(); });
+  };
+  process.once("SIGTERM", shutdown);
+  process.once("SIGINT", shutdown);
 
   server.listen(config.port, () => {
     console.log(`Velura API listening on http://localhost:${config.port}`);

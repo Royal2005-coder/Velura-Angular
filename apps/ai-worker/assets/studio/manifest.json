@@ -1,0 +1,13 @@
+{
+  "purpose": "Synthetic, clearly labeled adult studio inputs for local virtual try-on",
+  "created_at": "2026-10-05",
+  "provider": "Built-in image_gen tool",
+  "user_choice": "AI-generated fictional studio models",
+  "subjects_are_fictional": true,
+  "face_replacement_supported": false,
+  "generation_brief": "Fictional adult male and female models, full body facing the camera, neutral standing pose, visible hands and feet, fitted neutral gray shirt and dark straight trousers, plain light-gray studio background, even soft lighting, no text, logos or resemblance to a real person.",
+  "assets": [
+    {"id": "female-front-v1", "file": "female-front-v1.png", "gender": "female", "label": "Người mẫu nữ mô phỏng", "pose": "front standing, full body, neutral studio light"},
+    {"id": "male-front-v1", "file": "male-front-v1.png", "gender": "male", "label": "Người mẫu nam mô phỏng", "pose": "front standing, full body, neutral studio light"}
+  ]
+}

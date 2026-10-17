@@ -20,4 +20,17 @@ describe('AccountProfilePage', () => {
     expect(list.querySelector('[onerror]')).toBeNull();
     expect(list.querySelector('.address-card')?.getAttribute('data-id')).toBe(hostileId);
   });
+
+  it('keeps spending analytics and exposes the loyalty wallet in its own tab', async () => {
+    const page = await createStorefrontPage(AccountProfilePage);
+    const fixture = lastStorefrontFixture();
+
+    expect(fixture.nativeElement.querySelector('[data-tab="analytics"]')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-tab="loyalty"]')?.textContent).toContain('Point');
+
+    page.tab.set('loyalty');
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('#tab-loyalty app-loyalty-wallet')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('#tab-offers app-loyalty-wallet')).toBeNull();
+  });
 });

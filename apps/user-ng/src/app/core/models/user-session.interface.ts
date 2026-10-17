@@ -4,4 +4,6 @@ export interface UserSession {
   fullName: string | null;
   phone: string | null;
   avatarUrl: string | null;
+  role?: string | null;
+  isNewUser?: boolean;
 }

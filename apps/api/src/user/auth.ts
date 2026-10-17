@@ -518,7 +518,8 @@ export async function handleAuthRoute(
         email: user.email,
         phone: user.phone,
         full_name: user.full_name,
-        role: user.role
+        role: user.role,
+        is_new_user: wasInactive
       }
     }, corsHeaders);
   }
@@ -596,7 +597,8 @@ export async function handleAuthRoute(
         email: user.email,
         phone: user.phone,
         full_name: user.full_name,
-        role: user.role
+        role: user.role,
+        is_new_user: false
       }
     }, corsHeaders);
   }

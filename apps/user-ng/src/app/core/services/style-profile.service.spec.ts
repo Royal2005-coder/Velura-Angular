@@ -111,4 +111,34 @@ describe('StyleProfileService account and guest isolation', () => {
     await expect(firstValueFrom(profile.saveQuiz(ANSWERS))).rejects.toThrow('Chưa lưu được');
     expect(profile.revision()).toBe(0);
   });
+
+  it('keeps an incomplete guest draft in the tab and claims it after signup', async () => {
+    const profile = model();
+    profile.saveGuestDraft({ step: 3, answers: { height_cm: 165, body_shape: 'Pear' } });
+    expect(profile.guestDraft()).toEqual({ step: 3, answers: { height_cm: 165, body_shape: 'Pear' } });
+
+    session.set(member('new-member'));
+    await firstValueFrom(profile.claimGuestDraft());
+
+    expect(post).toHaveBeenLastCalledWith('/api/user/style-quiz/draft', { height_cm: 165, body_shape: 'Pear' });
+    expect(sessionStorage.getItem('velura_session_style_quiz_draft')).toBeNull();
+  });
+
+  it('loads and normalizes the member answers that will be edited in Style Quiz', async () => {
+    session.set(member('member-with-style'));
+    get.mockReturnValue(of({ success: true, quiz: {
+      height_cm: 171, weight_kg: 63, body_shape: 'Rectangle', skin_tone: 'Cool',
+      style_tags: '["Classic","Street"]', preferred_occasions: 'Travel, Party',
+      favorite_colors: ['Onyx', 'Camel'], budget_range: '700k_1.5m', age_group: '35-44',
+    } }));
+
+    const answers = await firstValueFrom(model().loadQuiz());
+
+    expect(get).toHaveBeenCalledWith('/api/user/style-quiz');
+    expect(answers).toMatchObject({
+      height_cm: 171, weight_kg: 63, body_shape: 'Rectangle', skin_tone: 'Cool',
+      style_tags: ['Classic', 'Street'], preferred_occasions: ['Travel', 'Party'],
+      favorite_colors: ['Onyx', 'Camel'], budget_range: '700k_1.5m', age_group: '35-44',
+    });
+  });
 });

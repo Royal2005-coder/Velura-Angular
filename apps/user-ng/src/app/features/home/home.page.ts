@@ -76,7 +76,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
 
   constructor() {
     this.loadHome();
-    if (typeof sessionStorage !== 'undefined' && !sessionStorage.getItem('velura_quiz_popup_dismissed')) {
+    if (this.auth.consumeNewMemberWelcome()) {
       setTimeout(() => {
         this.quizPopupOpen.set(true);
       }, 1200);
@@ -85,9 +85,6 @@ export class HomePage implements AfterViewInit, OnDestroy {
 
   closeQuizPopup(): void {
     this.quizPopupOpen.set(false);
-    try {
-      sessionStorage.setItem('velura_quiz_popup_dismissed', '1');
-    } catch {}
   }
 
   /**

@@ -6,6 +6,13 @@ import { isSmsConfigured, maskPhone, sendCheckoutOtpSms } from "../sms/twilio.js
 import { callRpc, selectOne, selectRows, updateRows } from "../supabase.js";
 import { asJsonObject, asString, type JsonObject } from "../types.js";
 import { generateCheckoutOtp, normalizeVietnamesePhone } from "./checkout-service.js";
+import { allowDevOtpBypass } from "../config.js";
+
+/** Tracking notices reveal only the final three digits of the order phone. */
+export function maskTrackingPhone(phone: string): string {
+  const normalized = normalizeVietnamesePhone(phone);
+  return normalized ? `${"*".repeat(Math.max(0, normalized.length - 3))}${normalized.slice(-3)}` : "";
+}
 
 /** Resolve a tracking challenge by phone or order code while keeping delivery server-controlled. */
 async function phoneForTracking(body: JsonObject): Promise<string> {
@@ -103,7 +110,8 @@ export async function sendGuestTrackingOtp(body: JsonObject, ip: string): Promis
   }
   addEmail(body.email);
 
-  const code = generateCheckoutOtp();
+  const developmentOtp = allowDevOtpBypass();
+  const code = developmentOtp ? "123456" : generateCheckoutOtp();
   const nonce = randomUUID();
   const basePayload = {
     p_phone: phone,
@@ -160,7 +168,7 @@ export async function sendGuestTrackingOtp(body: JsonObject, ip: string): Promis
     emailSent = results.some(Boolean);
   }
 
-  if (!smsSent && !emailSent) {
+  if (!developmentOtp && !smsSent && !emailSent) {
     await updateRows("guest_tracking_otp", { nonce: `eq.${nonce}`, consumed_at: "is.null" }, { consumed_at: new Date().toISOString() });
     throw new HttpError(502, "OTP_SEND_FAILED", "Chưa thể gửi mã xác thực. Vui lòng thử lại sau.");
   }
@@ -169,11 +177,14 @@ export async function sendGuestTrackingOtp(body: JsonObject, ip: string): Promis
 
   return {
     success: true,
-    phone,
-    masked_phone: maskPhone(phone),
+    masked_phone: maskTrackingPhone(phone),
     masked_email: targetEmails.length ? targetEmails.map(maskEmail).join(", ") : null,
     expires_in: 300,
-    channel
+    channel,
+    message: developmentOtp
+      ? "Nhập mã OTP mặc định 123456 để xác thực tra cứu đơn hàng."
+      : `Mã OTP đã được gửi tới số điện thoại ${maskTrackingPhone(phone)}.`,
+    development_otp: developmentOtp ? "123456" : undefined
   };
 }
 

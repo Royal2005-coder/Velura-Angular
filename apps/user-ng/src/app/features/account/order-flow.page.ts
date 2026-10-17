@@ -80,6 +80,7 @@ export class OrderFlowPage {
   readonly error = signal('');
   readonly maskedPhone = signal('');
   readonly maskedEmail = computed(() => this.model.maskedEmail ? this.model.maskedEmail() : '');
+  readonly developmentOtp = computed(() => this.model.developmentOtp ? this.model.developmentOtp() : '');
   readonly verified = signal(false);
   readonly seconds = signal(300);
   readonly cooldown = signal(0);
@@ -445,7 +446,7 @@ export class OrderFlowPage {
       return `Tất cả sản phẩm trong đơn đang trong tiến trình đổi/trả (${statusText}).`;
     }
     if (items.every((l) => (l.returnCount ?? 0) >= 2)) {
-      return 'Đã sử dụng tối đa 2/2 lượt đổi/trả trong 30 ngày cho đơn hàng này.';
+      return 'Đã sử dụng tối đa 2/2 lượt đổi/trả trong 7 ngày cho đơn hàng này.';
     }
     return 'Tất cả sản phẩm trong đơn đã được hoàn trả hoặc đổi mới.';
   }

@@ -45,6 +45,8 @@ export interface OrderAccountModel {
   readonly maskedPhone?: Signal<string>;
   /** Delivery channel for tracking challenge OTP. */
   readonly otpChannel?: Signal<'sms' | 'email' | 'both'>;
+  /** Local-only fixed OTP returned by the API; absent in production. */
+  readonly developmentOtp?: Signal<string>;
   /** Return-request stage at and after which self-service cancel (U2-24) is no longer offered. */
   readonly cancellableBeforeStage: number;
   /** Whether the COD refund bank-details step has anywhere real to persist to. */

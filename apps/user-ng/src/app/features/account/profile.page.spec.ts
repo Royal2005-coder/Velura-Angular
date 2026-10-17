@@ -21,6 +21,17 @@ describe('AccountProfilePage', () => {
     expect(list.querySelector('.address-card')?.getAttribute('data-id')).toBe(hostileId);
   });
 
+  it('replaces the member loading placeholder with loaded account information', async () => {
+    await createStorefrontPage(AccountProfilePage, { get: (path: string) => of(path === '/api/user/profile'
+      ? { full_name: 'Test2', phone: '0855808333', email: '' }
+      : {}) });
+    const root: HTMLElement = lastStorefrontFixture().nativeElement;
+
+    expect(root.querySelector('.profile-avatar-name')?.textContent).toContain('Test2');
+    expect(root.querySelector('.profile-avatar-meta')?.textContent).toContain('0855808333');
+    expect(root.querySelector('.profile-avatar-meta')?.textContent).not.toContain('Đang tải');
+  });
+
   it('keeps spending analytics and exposes the loyalty wallet in its own tab', async () => {
     const page = await createStorefrontPage(AccountProfilePage);
     const fixture = lastStorefrontFixture();

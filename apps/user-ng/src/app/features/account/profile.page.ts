@@ -88,6 +88,7 @@ export class AccountProfilePage {
   private readonly offers = inject(OffersService);
   readonly tab = signal('profile');
   readonly displayName = signal(this.auth.session()?.fullName || 'Tên khách hàng');
+  readonly memberMeta = signal(this.auth.session()?.email || this.auth.session()?.phone || 'Thành viên Velura');
   readonly addressModalOpen = signal(false);
   readonly addressGeography = signal<AddressGeographySelection>({ province: '', district: '', ward: '', mode: 'current', valid: false });
   readonly savedAddresses = signal<NonNullable<MemberProfile['saved_addresses']>>([]);
@@ -369,6 +370,7 @@ export class AccountProfilePage {
     if (profile?.full_name) {
       this.displayName.set(profile.full_name);
     }
+    this.memberMeta.set(profile?.email || profile?.phone || this.auth.session()?.email || this.auth.session()?.phone || 'Thành viên Velura');
     const name = document.getElementById('profile-name') as HTMLInputElement | null;
     const email = document.getElementById('profile-email') as HTMLInputElement | null;
     const phone = document.getElementById('profile-phone') as HTMLInputElement | null;

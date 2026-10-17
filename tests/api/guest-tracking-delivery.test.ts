@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { config } from "../../apps/api/src/config.js";
 import { HttpError } from "../../apps/api/src/http.js";
-import { sendGuestTrackingOtp } from "../../apps/api/src/user/guest-order-session.js";
+import { maskTrackingPhone, sendGuestTrackingOtp } from "../../apps/api/src/user/guest-order-session.js";
 
 const ORDER = "44444444-4444-4444-8444-444444444444";
 
@@ -44,5 +44,19 @@ test("an undelivered customer OTP is invalidated instead of sent to staff or rep
     await assert.rejects(sendGuestTrackingOtp({ order_code: ORDER }, "127.0.0.1"), (error: unknown) => error instanceof HttpError && error.code === "OTP_SEND_FAILED");
     assert.equal(gateway.invalidated, true);
     assert.equal(gateway.scopeLost, false);
+  } finally { gateway.restore(); }
+});
+
+test("local tracking uses the shared 123456 shortcut and reveals only the final phone digits", async () => {
+  const gateway = trackingGateway();
+  config.nodeEnv = "development";
+  try {
+    const response = await sendGuestTrackingOtp({ order_code: ORDER }, "127.0.0.1");
+    assert.equal(response.success, true);
+    assert.equal(response.development_otp, "123456");
+    assert.equal(response.masked_phone, "*******678");
+    assert.equal("phone" in response, false);
+    assert.equal(maskTrackingPhone("+84912345678"), "*******678");
+    assert.equal(gateway.invalidated, false);
   } finally { gateway.restore(); }
 });

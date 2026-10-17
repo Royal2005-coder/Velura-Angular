@@ -1,5 +1,5 @@
 /** Days after delivery during which the buyer can open a return. Matches the API. */
-export const RETURN_WINDOW_DAYS = 30;
+export const RETURN_WINDOW_DAYS = 7;
 
 /** Reason codes on the return form, stored as the Vietnamese sentence CSKH reads. */
 export const RETURN_REASON_LABELS: Readonly<Record<string, string>> = {
@@ -27,7 +27,7 @@ export interface ReturnableOrder {
 }
 
 /**
- * Đơn Giao thành công còn trong 30 ngày. Bộ trạng thái KAN-59 không còn `completed`.
+ * Đơn Giao thành công còn trong 7 ngày. Bộ trạng thái KAN-59 không còn `completed`.
  */
 export function isReturnableOrder(order: ReturnableOrder, now = new Date()): boolean {
   if (order.status !== 'delivered') {

@@ -35,7 +35,7 @@ function fakeRepository(overrides: Partial<UserReturnsRepository> = {}): UserRet
   };
 }
 
-test("a member can request a return within the 30-day window", async () => {
+test("a member can request a return within the 7-day window", async () => {
   const repository = fakeRepository();
   const service = createUserReturnsService(repository);
 
@@ -49,9 +49,9 @@ test("a member can request a return within the 30-day window", async () => {
   assert.equal((result.items as JsonObject[]).length, 1);
 });
 
-test("a return request past the 30-day window is rejected (U2-01)", async () => {
+test("a return request past the 7-day window is rejected (U2-01)", async () => {
   const repository = fakeRepository({
-    findOrderById: async () => ({ order_id: ORDER_ID, user_id: USER_ID, status: "delivered", delivered_at: daysAgo(31) })
+    findOrderById: async () => ({ order_id: ORDER_ID, user_id: USER_ID, status: "delivered", delivered_at: daysAgo(8) })
   });
   const service = createUserReturnsService(repository);
 

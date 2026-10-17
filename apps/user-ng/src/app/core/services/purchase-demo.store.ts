@@ -190,10 +190,10 @@ export function maskPhone(value: string): string {
 export function canCancel(order: DemoOrder): boolean {
   return ['pending_payment', 'pending', 'paid', 'confirmed'].includes(order.status);
 }
-/** Missing delivery dates fail closed; the inclusive window is 30 elapsed days. */
+/** Missing delivery dates fail closed; the inclusive window is seven elapsed days. */
 export function withinReturnWindow(order: DemoOrder, now = Date.now()): boolean {
   const age = now - Date.parse(order.deliveredAt || '');
-  return order.status === 'delivered' && Number.isFinite(age) && age >= 0 && age <= 30 * 86400000;
+  return order.status === 'delivered' && Number.isFinite(age) && age >= 0 && age <= 7 * 86400000;
 }
 /** Session-only simulation Model. No API mutations, authentication tokens or real bank data. */
 @Injectable({ providedIn: 'root' })

@@ -4,9 +4,11 @@
     <div class="otp-card" role="dialog" aria-modal="true" aria-labelledby="otp-title">
       <h3 id="otp-title" class="otp-card__title">Xác minh tài khoản</h3>
       <p class="otp-card__desc">Nhập mã OTP 6 chữ số được gửi tới<br /><strong>{{ identity() }}</strong></p>
-      <p class="otp-card__notice" style="color:#d9534f;font-size:0.8rem;margin-bottom:8px;">
-        ⚠️ Dev mode: xem mã OTP trong console terminal của API server
-      </p>
+      @if (developmentCode()) {
+        <p class="otp-card__notice" style="color:#b64638;font-size:0.8rem;margin-bottom:8px;">
+          Môi trường thử nghiệm: nhập mã <strong>{{ developmentCode() }}</strong>
+        </p>
+      }
       <div class="otp-timer-row">
         <span>Mã hết hạn sau: </span>
         <strong [style.color]="expired() ? '#d9534f' : null">{{ timerText() }}</strong>

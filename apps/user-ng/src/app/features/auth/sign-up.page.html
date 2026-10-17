@@ -23,6 +23,9 @@
         <div class="input-wrapper">
           <input id="phone-signup" type="tel" formControlName="phone" placeholder="0912 345 678" autocomplete="tel" inputmode="numeric" />
         </div>
+        @if (duplicatePhone()) {
+          <div class="field__error" aria-live="polite">Số điện thoại này đã có tài khoản.</div>
+        }
       </div>
 
       <div class="form-group">
@@ -30,6 +33,9 @@
         <div class="input-wrapper">
           <input id="email-signup" type="email" formControlName="email" placeholder="example@velura.com" autocomplete="email" />
         </div>
+        @if (duplicateEmail()) {
+          <div class="field__error" aria-live="polite">Email này đã có tài khoản.</div>
+        }
       </div>
 
       <div class="form-group">
@@ -37,8 +43,9 @@
         <div class="input-wrapper">
           <input id="referral-signup" type="text" formControlName="referral_code" autocomplete="off" maxlength="19" aria-describedby="referral-terms" />
         </div>
-        <p id="referral-terms">Voucher giảm 20%, đơn từ 1.000.000đ, tối đa 500.000đ, dùng một lần trong 60 ngày.
-          Người giới thiệu nhận cùng ưu đãi sau đơn giao thành công đầu tiên đủ điều kiện. Mã chỉ được gắn lúc đăng ký.</p>
+        <p id="referral-terms" class="input-hint referral-terms">
+          Nhập mã để nhận voucher giảm 20% (tối đa 500.000đ) cho đơn từ 1.000.000đ. Mã chỉ được thêm khi đăng ký.
+        </p>
       </div>
 
       <div class="form-group">
@@ -78,7 +85,9 @@
         <div class="field__error" aria-live="polite">{{ errorMessage() }}</div>
       }
 
-      <button type="submit" class="btn-login" [disabled]="submitting()">Đăng ký</button>
+      <button type="submit" class="btn-login" [disabled]="submitting() || checkingIdentity() || duplicateEmail() || duplicatePhone()">
+        {{ checkingIdentity() ? 'Đang kiểm tra...' : 'Đăng ký' }}
+      </button>
       <p class="footer">Đã có tài khoản? <a routerLink="/auth/signin">Đăng nhập</a></p>
     </form>
   </div>
@@ -86,6 +95,7 @@
 <app-auth-otp-modal
   [open]="otpOpen()"
   [identity]="otpIdentity()"
+  [developmentCode]="otpDevelopmentCode()"
   (verified)="onOtpVerified($event)"
   (cancelled)="onOtpCancelled()"
 />

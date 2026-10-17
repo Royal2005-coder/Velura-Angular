@@ -11,12 +11,13 @@ export interface LoyaltyRepository {
 }
 
 /** Maps SQL policy/ownership conflicts without hiding database failures. */
-export function loyaltyDatabaseError(error: unknown): never {
+export function loyaltyDatabaseError(error: unknown, rpcName = ''): never {
   if (error instanceof HttpError && error.code === "SUPABASE_ERROR") {
     const details = asJsonObject(error.details);
     const code = asString(details.message);
     const databaseCode = asString(details.code);
-    if (databaseCode === "PGRST202" && code.includes("velura_register_member")) {
+    const missingSignupRpc = rpcName === "velura_register_member" && error.status === 404;
+    if (missingSignupRpc || (databaseCode === "PGRST202" && code.includes("velura_register_member"))) {
       throw new HttpError(
         503,
         "SIGNUP_SCHEMA_NOT_READY",
@@ -42,7 +43,7 @@ export function loyaltyDatabaseError(error: unknown): never {
 /** Service-role calls still pass an actor derived by the server, not the request body. */
 export function createLoyaltyRepository(): LoyaltyRepository {
   const rpc = async (name: string, input: JsonObject): Promise<JsonObject> => {
-    try { return asJsonObject(await callRpc(name, input)); } catch (error: unknown) { return loyaltyDatabaseError(error); }
+    try { return asJsonObject(await callRpc(name, input)); } catch (error: unknown) { return loyaltyDatabaseError(error, name); }
   };
   return {
     snapshot: (actorId, before) => rpc("velura_loyalty_snapshot", { p_actor_id: actorId, p_before: before }),

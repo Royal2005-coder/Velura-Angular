@@ -6,6 +6,7 @@ import { catchError, combineLatest, debounceTime, map, of, startWith, switchMap,
 import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { WishlistStore } from '../../core/services/wishlist.store';
+import { StyleProfileService } from '../../core/services/style-profile.service';
 import { showToast } from '../../core/utils/toast';
 import { AuthOtpModal, AuthOtpResult } from '../../shared/auth-otp-modal/auth-otp-modal';
 
@@ -20,6 +21,7 @@ export class SignUpPage {
   private readonly api = inject(ApiService);
   private readonly auth = inject(AuthService);
   private readonly wishlist = inject(WishlistStore);
+  private readonly styleProfile = inject(StyleProfileService);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly destroyRef = inject(DestroyRef);
@@ -140,7 +142,10 @@ export class SignUpPage {
     this.auth.applySession(response.token, response.user);
     this.wishlist.refresh();
     showToast('Đăng ký tài khoản thành công! Chào mừng bạn đến với Velura 🎉');
-    void this.router.navigateByUrl('/');
+    this.styleProfile.claimGuestDraft().subscribe({
+      next: () => void this.router.navigateByUrl('/'),
+      error: () => void this.router.navigateByUrl('/ai/style-quiz'),
+    });
   }
 
   private normalizePhone(phone: string): string {

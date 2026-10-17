@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { loyaltyActor, readPoints, LoyaltyService } from "../../apps/api/src/loyalty/loyalty-service.js";
 import type { AuthContext, AuthUser, UserProfile } from "../../apps/api/src/types.js";
 import type { LoyaltyRepository } from "../../apps/api/src/loyalty/loyalty-repository.js";
+import { loyaltyDatabaseError } from "../../apps/api/src/loyalty/loyalty-repository.js";
+import { HttpError } from "../../apps/api/src/http.js";
 
 const memberUser: AuthUser = {
   id: "user-123",
@@ -149,4 +151,16 @@ test("LoyaltyService.register validates referral code format", async () => {
   const validCode = "VLR" + "A".repeat(16);
   const res = await service.register({}, validCode);
   assert.equal(res.code, validCode);
+});
+
+test("loyaltyDatabaseError identifies a missing atomic signup migration", () => {
+  const databaseError = new HttpError(404, "SUPABASE_ERROR", "RPC unavailable", {
+    code: "PGRST202",
+    message: "Could not find the function public.velura_register_member(p_input, p_referral_code) in the schema cache"
+  });
+
+  assert.throws(
+    () => loyaltyDatabaseError(databaseError),
+    { status: 503, code: "SIGNUP_SCHEMA_NOT_READY", message: "Hệ thống đăng ký đang được cập nhật. Vui lòng thử lại sau." }
+  );
 });

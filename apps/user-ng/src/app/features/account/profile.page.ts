@@ -45,6 +45,9 @@ interface StyleQuiz {
   skin_tone?: string;
   budget_range?: string;
   age_group?: string;
+  favorite_colors?: string[] | string;
+  preferred_occasions?: string[] | string;
+  favorite_brands?: string[] | string;
 }
 interface MemberOrderItem {
   product_name?: string;
@@ -88,6 +91,7 @@ export class AccountProfilePage {
   private readonly offers = inject(OffersService);
   readonly tab = signal('profile');
   readonly displayName = signal(this.auth.session()?.fullName || 'Tên khách hàng');
+  readonly memberMeta = signal(this.auth.session()?.email || this.auth.session()?.phone || 'Thành viên Velura');
   readonly addressModalOpen = signal(false);
   readonly addressGeography = signal<AddressGeographySelection>({ province: '', district: '', ward: '', mode: 'current', valid: false });
   readonly savedAddresses = signal<NonNullable<MemberProfile['saved_addresses']>>([]);
@@ -369,6 +373,7 @@ export class AccountProfilePage {
     if (profile?.full_name) {
       this.displayName.set(profile.full_name);
     }
+    this.memberMeta.set(profile?.email || profile?.phone || this.auth.session()?.email || this.auth.session()?.phone || 'Thành viên Velura');
     const name = document.getElementById('profile-name') as HTMLInputElement | null;
     const email = document.getElementById('profile-email') as HTMLInputElement | null;
     const phone = document.getElementById('profile-phone') as HTMLInputElement | null;
@@ -494,7 +499,11 @@ export class AccountProfilePage {
     if (!hasQuiz || !quiz) {
       return;
     }
-    const tags = Array.isArray(quiz.style_tags) ? quiz.style_tags.join(', ') : String(quiz.style_tags || '');
+    const styleTags = this.styleValues(quiz.style_tags);
+    const colors = this.styleValues(quiz.favorite_colors);
+    const occasions = this.styleValues(quiz.preferred_occasions);
+    const brands = this.styleValues(quiz.favorite_brands);
+    const tags = styleTags.join(', ');
     const setText = (id: string, value: string) => {
       const node = document.getElementById(id);
       if (node) {
@@ -510,6 +519,48 @@ export class AccountProfilePage {
     setText('js-sp-hip', quiz.hip_cm ? `${quiz.hip_cm} cm` : '—');
     setText('js-sp-tone', quiz.skin_tone || '—');
     setText('js-sp-age', quiz.age_group ? `Nhóm tuổi ${quiz.age_group}` : '—');
-    setText('js-sp-budget', quiz.budget_range || '—');
+    setText('js-sp-budget', this.budgetLabel(quiz.budget_range));
+    setText('js-sp-brands', brands.join(', ') || 'Chưa thu thập trong Style Quiz');
+    setText('js-tip-style', tags || '—');
+    setText('js-tip-body', quiz.body_shape || '—');
+    setText('js-tip-colors', colors.join(', ') || '—');
+    setText('js-tip-items', occasions.length ? `Trang phục phù hợp cho ${occasions.join(', ')}` : '—');
+    this.renderStyleValues('js-sp-style-tags', styleTags, 'sp-overview__tag');
+    this.renderStyleValues('js-sp-colors', colors, 'sp-prefs__chip');
+    this.renderStyleValues('js-sp-occasions', occasions, 'sp-prefs__chip');
+  }
+
+  private styleValues(value: string[] | string | undefined): string[] {
+    if (Array.isArray(value)) return value.map((item) => String(item).trim()).filter(Boolean);
+    if (!value) return [];
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      if (Array.isArray(parsed)) return parsed.map((item) => String(item).trim()).filter(Boolean);
+    } catch {
+      // Legacy rows may contain comma-separated values instead of JSON arrays.
+    }
+    return value.split(',').map((item) => item.trim()).filter(Boolean);
+  }
+
+  private renderStyleValues(id: string, values: string[], className: string): void {
+    const container = document.getElementById(id);
+    if (!container) return;
+    const nodes = (values.length ? values : ['—']).map((value) => {
+      const item = document.createElement('span');
+      item.className = className;
+      item.textContent = value;
+      return item;
+    });
+    container.replaceChildren(...nodes);
+  }
+
+  private budgetLabel(value: string | undefined): string {
+    const labels: Record<string, string> = {
+      under_300k: 'Dưới 300.000đ',
+      '300k_700k': '300.000đ – 700.000đ',
+      '700k_1.5m': '700.000đ – 1.500.000đ',
+      'above_1.5m': 'Trên 1.500.000đ',
+    };
+    return value ? labels[value] || value : '—';
   }
 }

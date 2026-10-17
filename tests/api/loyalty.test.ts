@@ -164,3 +164,12 @@ test("loyaltyDatabaseError identifies a missing atomic signup migration", () => 
     { status: 503, code: "SIGNUP_SCHEMA_NOT_READY", message: "Hệ thống đăng ký đang được cập nhật. Vui lòng thử lại sau." }
   );
 });
+
+test("loyaltyDatabaseError identifies a sanitized 404 from the signup RPC", () => {
+  const databaseError = new HttpError(404, "SUPABASE_ERROR", "RPC unavailable");
+
+  assert.throws(
+    () => loyaltyDatabaseError(databaseError, "velura_register_member"),
+    { status: 503, code: "SIGNUP_SCHEMA_NOT_READY" }
+  );
+});

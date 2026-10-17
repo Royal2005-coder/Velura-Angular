@@ -17,10 +17,27 @@ export interface StyleQuizAnswers {
   favorite_colors: string[];
 }
 
+/** Incomplete same-tab quiz state; it is not a completed Style Profile. */
+export interface StyleQuizDraft {
+  step: number;
+  answers: Partial<StyleQuizAnswers>;
+}
+
 /** Persisted profile fields consumed by existing personalization. */
 export interface StyleQuizRecord {
-  body_shape?: string;
-  style_tags?: string[] | string;
+  height_cm?: number | null;
+  weight_kg?: number | null;
+  chest_cm?: number | null;
+  waist_cm?: number | null;
+  hip_cm?: number | null;
+  body_shape?: string | null;
+  style_tags?: string[] | string | null;
+  skin_tone?: string | null;
+  preferred_occasions?: string[] | string | null;
+  favorite_brands?: string[] | string | null;
+  budget_range?: string | null;
+  age_group?: string | null;
+  favorite_colors?: string[] | string | null;
 }
 
 /** Actual products in a recommended outfit; purchasable variants still require inventory validation. */

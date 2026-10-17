@@ -1,8 +1,10 @@
-import { afterNextRender, Component, computed, DestroyRef, inject, signal } from '@angular/core';
+import { afterNextRender, Component, computed, DestroyRef, HostListener, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { Router, RouterLink } from '@angular/router';
+import { Router, RouterLink, UrlTree } from '@angular/router';
+import { Observable, Subject } from 'rxjs';
 import { StyleProfileService } from '../../core/services/style-profile.service';
-import type { StyleQuizAnswers } from '../../core/models/style-profile.interface';
+import { AuthService } from '../../core/services/auth.service';
+import type { StyleQuizAnswers, StyleQuizDraft } from '../../core/models/style-profile.interface';
 import { useBodyClass } from '../../core/utils/body-class';
 import { PersonalColorComponent } from './personal-color.component';
 
@@ -14,12 +16,15 @@ import { PersonalColorComponent } from './personal-color.component';
 })
 export class StyleQuizPage {
   private readonly profile = inject(StyleProfileService);
+  private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
 
   readonly step = signal(1);
   readonly showSummary = signal(false);
   readonly quizSaved = signal(false);
+  readonly draftDirty = signal(false);
+  readonly exitPromptOpen = signal(false);
   readonly analyzing = signal(false);
   readonly submitError = signal('');
   readonly fieldErrors = signal<Record<string, string>>({});
@@ -30,10 +35,50 @@ export class StyleQuizPage {
   readonly displayStep = computed(() => (this.showSummary() ? 8 : this.step()));
   readonly progressPercent = computed(() => (this.showSummary() ? 100 : (this.step() / 8) * 100));
   readonly nextLabel = computed(() => (this.showSummary() ? this.quizSaved() ? 'Xem gợi ý' : 'Lưu hồ sơ & chọn phân tích màu' : this.step() === 8 ? 'Xem tóm tắt' : 'Tiếp tục'));
+  private exitDecision: Subject<boolean | UrlTree> | null = null;
+  private exitApproved = false;
 
   constructor() {
     useBodyClass('page-quiz-flow');
-    afterNextRender(() => this.syncStepDom());
+    afterNextRender(() => {
+      this.restoreAnswers();
+      this.syncStepDom();
+    });
+  }
+
+  /** Warns the browser before a guest closes a tab containing an incomplete draft. */
+  @HostListener('window:beforeunload', ['$event'])
+  beforeUnload(event: BeforeUnloadEvent): void {
+    if (!this.shouldProtectDraft()) return;
+    event.preventDefault();
+    event.returnValue = '';
+  }
+
+  /** Opens the in-app decision dialog before Angular leaves an incomplete guest quiz. */
+  confirmDeactivate(): boolean | Observable<boolean | UrlTree> {
+    if (this.exitApproved) return true;
+    if (!this.shouldProtectDraft()) return true;
+    if (this.exitDecision) return this.exitDecision.asObservable();
+    this.persistDraft();
+    this.exitPromptOpen.set(true);
+    this.exitDecision = new Subject<boolean | UrlTree>();
+    return this.exitDecision.asObservable();
+  }
+
+  /** Resolves the pending route with stay, session-save, or signup. */
+  resolveExit(action: 'stay' | 'leave' | 'signup'): void {
+    const decision = this.exitDecision;
+    if (!decision) return;
+    this.exitPromptOpen.set(false);
+    if (action === 'stay') {
+      decision.next(false);
+    } else {
+      this.exitApproved = true;
+      if (action === 'signup') decision.next(this.router.parseUrl('/auth/signup?claimStyleDraft=1'));
+      else decision.next(true);
+    }
+    decision.complete();
+    this.exitDecision = null;
   }
 
   /**
@@ -49,13 +94,16 @@ export class StyleQuizPage {
       return;
     }
     this.quizSaved.set(false);
+    this.draftDirty.set(true);
     const multi = group.getAttribute('data-multi') === 'true';
     if (multi) {
       target.classList.toggle('is-selected');
+      this.persistDraft();
       return;
     }
     group.querySelectorAll('[data-value]').forEach((node) => node.classList.remove('is-selected'));
     target.classList.add('is-selected');
+    this.persistDraft();
   }
 
   /**
@@ -65,6 +113,7 @@ export class StyleQuizPage {
     const input = event.target as HTMLInputElement;
     this.validateControl(input);
     if (['input-height', 'input-weight', 'input-vong1', 'input-vong2', 'input-vong3'].includes(input.id)) this.quizSaved.set(false);
+    this.draftDirty.set(true);
     if (input.id === 'input-height') {
       this.height.set(Number(input.value));
       const label = document.getElementById('height-val');
@@ -79,6 +128,7 @@ export class StyleQuizPage {
         label.textContent = String(this.weight());
       }
     }
+    this.persistDraft();
   }
 
   /**
@@ -91,6 +141,7 @@ export class StyleQuizPage {
       return;
     }
     this.step.update((step) => Math.max(1, step - 1));
+    this.persistDraft();
     this.syncStepDom();
   }
 
@@ -113,6 +164,8 @@ export class StyleQuizPage {
       return;
     }
     this.step.update((step) => Math.min(8, step + 1));
+    this.draftDirty.set(true);
+    this.persistDraft();
     this.syncStepDom();
   }
 
@@ -191,11 +244,76 @@ export class StyleQuizPage {
       next: () => {
         this.analyzing.set(false);
         this.quizSaved.set(true);
+        this.draftDirty.set(false);
       },
       error: (error: Error) => {
         this.analyzing.set(false);
         this.submitError.set(error.message || 'Chưa lưu được hồ sơ phong cách. Hãy thử lại.');
       },
     });
+  }
+
+  private shouldProtectDraft(): boolean {
+    return !this.auth.session() && this.draftDirty() && !this.quizSaved();
+  }
+
+  private persistDraft(): void {
+    if (!this.shouldProtectDraft()) return;
+    this.profile.saveGuestDraft({ step: this.step(), answers: this.collectDraftAnswers() });
+  }
+
+  private collectDraftAnswers(): Partial<StyleQuizAnswers> {
+    const numberValue = (id: string) => Number((document.getElementById(id) as HTMLInputElement | null)?.value || 0);
+    return {
+      height_cm: this.height(), weight_kg: this.weight(), chest_cm: numberValue('input-vong1'),
+      waist_cm: numberValue('input-vong2'), hip_cm: numberValue('input-vong3'),
+      body_shape: this.selectedValue('body-shape'), skin_tone: this.selectedValue('skin-tone'),
+      style_tags: this.selectedValues('main-style'), preferred_occasions: [this.selectedValue('context')].filter(Boolean),
+      favorite_brands: [], budget_range: this.selectedValue('budget'), age_group: this.selectedValue('age'),
+      favorite_colors: this.selectedValues('colors'),
+    };
+  }
+
+  private restoreAnswers(): void {
+    if (this.auth.session()) {
+      this.profile.loadQuiz().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+        next: (answers) => {
+          if (!answers) return;
+          this.applyAnswers(answers);
+          this.quizSaved.set(true);
+        },
+        error: (error: Error) => this.submitError.set(error.message || 'Chưa tải được Style Profile. Hãy thử lại.'),
+      });
+      return;
+    }
+    const draft: StyleQuizDraft | null = this.profile.guestDraft();
+    if (!draft) return;
+    this.step.set(Math.min(8, Math.max(1, draft.step || 1)));
+    this.applyAnswers(draft.answers);
+    this.draftDirty.set(true);
+  }
+
+  private applyAnswers(answers: Partial<StyleQuizAnswers>): void {
+    const setInput = (id: string, value: number | undefined) => {
+      const input = document.getElementById(id) as HTMLInputElement | null;
+      if (input && value !== undefined) input.value = String(value);
+    };
+    if (answers.height_cm !== undefined) this.height.set(answers.height_cm);
+    if (answers.weight_kg !== undefined) this.weight.set(answers.weight_kg);
+    setInput('input-height', answers.height_cm); setInput('input-weight', answers.weight_kg);
+    setInput('input-vong1', answers.chest_cm); setInput('input-vong2', answers.waist_cm); setInput('input-vong3', answers.hip_cm);
+    const select = (group: string, values: string[]) => {
+      document.querySelectorAll(`[data-group="${group}"] [data-value]`).forEach((node) => {
+        node.classList.toggle('is-selected', values.includes(node.getAttribute('data-value') || ''));
+      });
+    };
+    select('context', answers.preferred_occasions || []); select('age', answers.age_group ? [answers.age_group] : []);
+    select('body-shape', answers.body_shape ? [answers.body_shape] : []); select('skin-tone', answers.skin_tone ? [answers.skin_tone] : []);
+    select('main-style', answers.style_tags || []); select('colors', answers.favorite_colors || []);
+    select('budget', answers.budget_range ? [answers.budget_range] : []);
+    const heightLabel = document.getElementById('height-val');
+    const weightLabel = document.getElementById('weight-val');
+    if (heightLabel) heightLabel.textContent = String(this.height());
+    if (weightLabel) weightLabel.textContent = String(this.weight());
   }
 }

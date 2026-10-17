@@ -32,6 +32,29 @@ export class AuthService {
   }
 
   /**
+   * Consumes the one-time welcome flag created by successful member registration.
+   * The persisted payload is cleared before the banner opens so refresh/login cannot replay it.
+   */
+  consumeNewMemberWelcome(): boolean {
+    const session = this.sessionState();
+    if (!session?.isNewUser || session.role !== 'member') {
+      return false;
+    }
+    const raw = localStorage.getItem('velura_user');
+    if (raw) {
+      try {
+        const user = JSON.parse(raw) as Record<string, unknown>;
+        user['is_new_user'] = false;
+        localStorage.setItem('velura_user', JSON.stringify(user));
+      } catch {
+        localStorage.removeItem('velura_user');
+      }
+    }
+    this.sessionState.set({ ...session, isNewUser: false });
+    return true;
+  }
+
+  /**
    * Clears the persisted user session and leftover OAuth/storage keys.
    */
   signOut(): void {
@@ -61,6 +84,8 @@ export class AuthService {
         fullName: typeof fullNameCandidate === 'string' ? fullNameCandidate : null,
         phone: typeof parsed['phone'] === 'string' ? parsed['phone'] : null,
         avatarUrl: typeof avatarCandidate === 'string' ? avatarCandidate : null,
+        role: typeof parsed['role'] === 'string' ? parsed['role'] : null,
+        isNewUser: parsed['is_new_user'] === true,
       };
     } catch {
       return null;

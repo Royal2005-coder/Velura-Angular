@@ -600,3 +600,17 @@
         <p class="ai-loading-overlay__message">{{ analyzingMessage() }}</p>
       </div>
     </div>
+    @if (exitPromptOpen()) {
+      <div class="quiz-exit-dialog" role="dialog" aria-modal="true" aria-labelledby="quiz-exit-title">
+        <div class="quiz-exit-dialog__backdrop"></div>
+        <div class="quiz-exit-dialog__card">
+          <h2 id="quiz-exit-title">Bạn chưa hoàn tất Style Quiz</h2>
+          <p>Dữ liệu đã làm sẽ được giữ trong phiên này. Đăng ký tài khoản để lưu phần dang dở và tiếp tục sau.</p>
+          <div class="quiz-exit-dialog__actions">
+            <button type="button" class="btn btn--primary" (click)="resolveExit('signup')">Đăng ký để lưu</button>
+            <button type="button" class="btn btn--outline" (click)="resolveExit('leave')">Lưu trong phiên và rời đi</button>
+            <button type="button" class="btn btn--ghost" (click)="resolveExit('stay')">Tiếp tục làm quiz</button>
+          </div>
+        </div>
+      </div>
+    }

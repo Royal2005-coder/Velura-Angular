@@ -46,4 +46,28 @@ describe('SignUpPage', () => {
     expect(page.form.controls.email.valid).toBe(true);
     expect(page.form.valid).toBe(true);
   });
+
+  it('opens OTP reliably for phone-only signup and exposes the development code', async () => {
+    const page = await createStorefrontPage(SignUpPage, {
+      post: (path: string) => path === '/api/user/auth/signup-availability'
+        ? of({ emailExists: false, phoneExists: false, pairExists: false })
+        : of({ otp_required: true, development_otp: '123456' }),
+    });
+
+    page.form.patchValue({
+      fullname: 'Nguyễn Văn A',
+      phone: '0855808333',
+      email: '',
+      password: 'Password1',
+      password_confirm: 'Password1',
+    });
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    page.submit();
+
+    expect(page.errorMessage()).toBeNull();
+    expect(page.otpIdentity()).toBe('0855808333');
+    expect(page.otpDevelopmentCode()).toBe('123456');
+    expect(page.otpOpen()).toBe(true);
+  });
 });

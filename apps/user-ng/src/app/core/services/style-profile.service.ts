@@ -3,7 +3,7 @@ import { Observable, defer, map, of, switchMap } from 'rxjs';
 import { ApiService } from './api.service';
 import { AuthService } from './auth.service';
 import { guestSessionId, rotateGuestSession } from '../utils/guest-session';
-import type { StyleProfileRecommendations, StyleQuizAnswers, StyleQuizRecord } from '../models/style-profile.interface';
+import type { StyleProfileRecommendations, StyleQuizAnswers, StyleQuizDraft, StyleQuizRecord } from '../models/style-profile.interface';
 
 /** Guest snapshot belongs to this tab's API identity; member profiles are stored only by the server. */
 interface GuestProfileSnapshot { sessionId: string; answers: StyleQuizAnswers; claimedBy?: string; }
@@ -11,6 +11,7 @@ interface GuestProfileSnapshot { sessionId: string; answers: StyleQuizAnswers; c
 interface QuizResponse { success: boolean; quiz?: StyleQuizRecord | null; migrated?: boolean; }
 
 const SNAPSHOT_KEY = 'velura_session_style_profile';
+const DRAFT_KEY = 'velura_session_style_quiz_draft';
 
 /** Shared Style Profile Model, preserving member data and rejecting callbacks from another account. */
 @Injectable({ providedIn: 'root' })
@@ -53,6 +54,48 @@ export class StyleProfileService {
   guestAnswers(): StyleQuizAnswers | null {
     if (this.auth.session()) return null;
     return this.readSnapshot();
+  }
+
+  /** Loads the signed-in member's previously accepted answers for editing the Style Quiz. */
+  loadQuiz(): Observable<Partial<StyleQuizAnswers> | null> {
+    return defer(() => {
+      if (!this.auth.session()) return of(this.readSnapshot());
+      return this.api.get<QuizResponse>('/api/user/style-quiz').pipe(map((response) => {
+        if (response.success !== true) throw new Error('Chưa tải được Style Profile. Hãy thử lại.');
+        return response.quiz ? this.normalizeQuiz(response.quiz) : null;
+      }));
+    });
+  }
+
+  /** Stores an incomplete guest quiz only in the current tab until registration claims it. */
+  saveGuestDraft(draft: StyleQuizDraft): void {
+    if (this.auth.session()) return;
+    sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ sessionId: guestSessionId(), draft }));
+  }
+
+  /** Restores an incomplete draft only for the current guest tab. */
+  guestDraft(): StyleQuizDraft | null {
+    if (this.auth.session()) return null;
+    try {
+      const value = JSON.parse(sessionStorage.getItem(DRAFT_KEY) || 'null') as { sessionId?: string; draft?: StyleQuizDraft } | null;
+      return value?.sessionId === guestSessionId() && value.draft ? value.draft : null;
+    } catch { return null; }
+  }
+
+  /** Claims the same-tab guest draft after signup without marking the quiz complete. */
+  claimGuestDraft(): Observable<void> {
+    return defer(() => {
+      const session = this.auth.session();
+      const raw = sessionStorage.getItem(DRAFT_KEY);
+      if (!session || !raw) return of(undefined);
+      let stored: { sessionId?: string; draft?: StyleQuizDraft } | null = null;
+      try { stored = JSON.parse(raw) as { sessionId?: string; draft?: StyleQuizDraft }; } catch { return of(undefined); }
+      if (stored?.sessionId !== guestSessionId() || !stored.draft) return of(undefined);
+      return this.api.post<QuizResponse>('/api/user/style-quiz/draft', stored.draft.answers).pipe(map((response) => {
+        if (response.success !== true) throw new Error('Chưa lưu được Style Quiz dang dở vào tài khoản.');
+        sessionStorage.removeItem(DRAFT_KEY);
+      }));
+    });
   }
 
   /** Preserve an existing member profile; migrate a same-tab guest quiz only when the member has none. */
@@ -117,6 +160,31 @@ export class StyleProfileService {
 
   private assertScope(session: ReturnType<AuthService['session']>, id: string): void {
     if (session !== this.auth.session() || id !== guestSessionId()) throw new Error('Phiên người dùng đã thay đổi. Vui lòng tải lại.');
+  }
+
+  private normalizeQuiz(quiz: StyleQuizRecord): Partial<StyleQuizAnswers> {
+    const values = (value: string[] | string | null | undefined): string[] => {
+      if (Array.isArray(value)) return value.map((item) => String(item).trim()).filter(Boolean);
+      if (!value) return [];
+      try {
+        const parsed = JSON.parse(value) as unknown;
+        if (Array.isArray(parsed)) return parsed.map((item) => String(item).trim()).filter(Boolean);
+      } catch {
+        // Legacy profiles may store comma-separated values rather than JSON arrays.
+      }
+      return value.split(',').map((item) => item.trim()).filter(Boolean);
+    };
+    const number = (value: number | null | undefined): number | undefined =>
+      typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+    const text = (value: string | null | undefined): string | undefined => value || undefined;
+    return {
+      height_cm: number(quiz.height_cm), weight_kg: number(quiz.weight_kg),
+      chest_cm: number(quiz.chest_cm), waist_cm: number(quiz.waist_cm), hip_cm: number(quiz.hip_cm),
+      body_shape: text(quiz.body_shape), skin_tone: text(quiz.skin_tone),
+      style_tags: values(quiz.style_tags), preferred_occasions: values(quiz.preferred_occasions),
+      favorite_brands: values(quiz.favorite_brands), budget_range: text(quiz.budget_range),
+      age_group: text(quiz.age_group), favorite_colors: values(quiz.favorite_colors),
+    };
   }
 
   private validateAnswers(answers: StyleQuizAnswers): void {

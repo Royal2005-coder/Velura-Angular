@@ -1,0 +1,6 @@
+scope: docs/nope.md
+active: []
+superseded: []
+orphaned: []
+open_incidents: []
+error: "git blame --line-porcelain --ignore-revs-file /home/anhhoangdev/ai-lab/sample/.git-blame-ignore-revs HEAD -- docs/nope.md: fatal: no such path docs/nope.md in HEAD"

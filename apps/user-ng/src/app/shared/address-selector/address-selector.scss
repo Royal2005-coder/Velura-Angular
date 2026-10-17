@@ -1,0 +1,14 @@
+:host { display: block; grid-column: 1 / -1; min-width: 0; }
+.geography { display: grid; gap: 12px; }
+.geography label { display: grid; gap: 7px; min-width: 0; font-size: .875rem; }
+.geography__scheme { max-width: 320px; }
+.geography__fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.geography__fields--legacy { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.geography select { width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px; color: var(--text-dark); background: var(--bg-card, var(--bg)); font: inherit; }
+.geography select:focus-visible { outline: 2px solid var(--primary, var(--accent)); outline-offset: 2px; }
+.geography select:disabled { opacity: .65; }
+.geography__notice, .geography__error { margin: 0; font-size: .8125rem; line-height: 1.5; }
+.geography__notice { color: var(--soft); }
+.geography__error { color: var(--danger, var(--text-dark)); }
+.geography__error button { color: inherit; font: inherit; cursor: pointer; border: 0; background: transparent; text-decoration: underline; }
+@media (max-width: 640px) { .geography__fields, .geography__fields--legacy { grid-template-columns: 1fr; } }

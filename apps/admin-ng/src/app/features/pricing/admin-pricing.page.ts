@@ -1,4 +1,7 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { AdminDialogDirective } from '../../shared/admin-dialog.directive';
+import { Subscription } from 'rxjs';
+import { AdminRefreshService } from '../../core/admin-refresh.service';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { AdminApiService, AdminPriceHistoryRow, AdminProductRow } from '../../core/admin-api.service';
 import { adminDateTime, adminMoney } from '../../core/admin-format';
@@ -12,10 +15,11 @@ type PriceStatus = '' | 'discount' | 'invalid' | 'missing';
 
 @Component({
   selector: 'app-admin-pricing-page',
-  imports: [AdminEmptyState, AdminIcon, AdminPagination],
+  imports: [AdminDialogDirective, AdminEmptyState, AdminIcon, AdminPagination],
   templateUrl: './admin-pricing.page.html',
 })
 export class AdminPricingPage {
+  private listRequest = new Subscription();
   private readonly api = inject(AdminApiService);
   private readonly session = inject(AdminSessionService);
   private readonly route = inject(ActivatedRoute);
@@ -28,6 +32,7 @@ export class AdminPricingPage {
   readonly showHistory = signal(false);
   readonly loadError = signal<string | null>(null);
   readonly loading = signal(true);
+  readonly hasLoadedOnce = signal(false);
   readonly page = signal(1);
   readonly pageSize = 10;
   readonly total = signal(0);
@@ -97,6 +102,10 @@ export class AdminPricingPage {
   });
 
   constructor() {
+    inject(DestroyRef).onDestroy(() => this.listRequest.unsubscribe());
+    inject(AdminRefreshService).register(() => {
+      if (!this.loading() && !this.actionOpen()) this.reload();
+    }, inject(DestroyRef));
     const seeded = this.route.snapshot.queryParamMap.get('q') || this.route.snapshot.queryParamMap.get('productId') || '';
     if (seeded) {
       this.query.set(seeded);
@@ -108,10 +117,11 @@ export class AdminPricingPage {
    * Reloads catalog prices and price history.
    */
   reload(): void {
+    this.listRequest.unsubscribe();
     this.loading.set(true);
     this.loadError.set(null);
-    this.api
-      .listProducts({
+    this.listRequest = this.api
+      .listPricingProducts({
         q: this.query(),
         limit: String(this.pageSize),
         offset: adminOffset(this.page(), this.pageSize),
@@ -121,10 +131,12 @@ export class AdminPricingPage {
           this.products.set(adminListRows(payload));
           this.total.set(adminListCount(payload));
           this.loading.set(false);
+      this.hasLoadedOnce.set(true);
         },
         error: (error: unknown) => {
           this.loadError.set(adminErrorMessage(error));
           this.loading.set(false);
+      this.hasLoadedOnce.set(true);
         },
       });
     this.api.listPriceHistory({ limit: '100' }).subscribe({

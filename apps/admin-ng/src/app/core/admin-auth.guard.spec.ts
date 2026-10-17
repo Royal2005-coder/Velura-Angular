@@ -23,7 +23,7 @@ const productMe = {
 };
 
 describe('admin operator shell routing', () => {
-  async function boot(): Promise<Router> {
+  async function boot(context = productMe): Promise<Router> {
     TestBed.resetTestingModule();
     sessionStorage.clear();
     localStorage.clear();
@@ -38,13 +38,13 @@ describe('admin operator shell routing', () => {
             children: [
               { path: '', pathMatch: 'full', canActivate: [adminHomeRedirectGuard], component: AdminHomeRedirectPage },
               { path: 'forbidden', component: GuardDummyPage },
-              { path: 'products', canActivate: [adminAuthGuard], data: { page: 'products' }, component: GuardDummyPage },
+              { path: 'products', canActivate: [adminAuthGuard], data: { page: 'products', alternativePages: ['pricing'] }, component: GuardDummyPage },
               { path: 'dashboard', canActivate: [adminAuthGuard], data: { page: 'dashboard' }, component: GuardDummyPage },
               { path: 'accounts', canActivate: [adminAuthGuard], data: { page: 'accounts' }, component: GuardDummyPage },
             ],
           },
         ]),
-        { provide: AdminApiService, useValue: { me: () => of(productMe) } },
+        { provide: AdminApiService, useValue: { me: () => of(context) } },
       ],
     }).compileComponents();
     TestBed.inject(AdminSessionService).setToken('operator-token');
@@ -55,6 +55,16 @@ describe('admin operator shell routing', () => {
     const router = await boot();
     await router.navigateByUrl('/products');
     expect(router.url).toBe('/products');
+  });
+
+  it('lands a price operator on integrated product prices without granting account access', async () => {
+    const router = await boot({ ...productMe, role: 'admin_operator_gia_km', allowedPages: ['pricing'] });
+    await router.navigateByUrl('/products');
+    expect(router.url).toBe('/products');
+    expect(TestBed.inject(AdminSessionService).canMutate('products')).toBe(false);
+    expect(TestBed.inject(AdminSessionService).canMutate('pricing')).toBe(true);
+    await router.navigateByUrl('/accounts');
+    expect(router.url).toContain('/forbidden');
   });
 
   it('sends a product operator from /dashboard to /products', async () => {

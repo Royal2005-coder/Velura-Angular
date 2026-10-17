@@ -1,0 +1,325 @@
+<section class="pc-container" aria-labelledby="personal-color-title">
+  <div class="pc-header">
+    <div class="pc-badge">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10" />
+        <path d="M12 2a7 7 0 0 0-7 7c0 3.86 3.14 7 7 7s7-3.14 7-7a7 7 0 0 0-7-7z" />
+      </svg>
+      <span>AI PERSONAL COLOR ANALYSIS</span>
+    </div>
+    <h2 id="personal-color-title" class="pc-title">Phân tích sắc tố da & Bảng màu 4 mùa</h2>
+    <p class="pc-subtitle">
+      AI nhận diện tone da (warm/cool), độ tương phản và phân loại theo hệ 4 mùa:
+      <strong>Spring (Xuân) · Summer (Hè) · Autumn (Thu) · Winter (Đông)</strong>
+      để gợi ý trang phục tôn vinh làn da của bạn.
+    </p>
+  </div>
+
+  @if (profile()?.personal_color?.status === 'CONFIRMED') {
+    @let confirmed = profile()!.personal_color!;
+    <div class="pc-result-card pc-result-card--confirmed" aria-label="Màu đã xác nhận">
+      <div class="pc-result-badge pc-result-badge--confirmed">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+        {{ isManualConfirmed() ? 'ĐÃ XÁC NHẬN (CHỌN THỦ CÔNG)' : 'ĐÃ XÁC NHẬN (AI PHÂN TÍCH)' }}
+      </div>
+      <div class="pc-result-head">
+        <h3 class="pc-season-title">Mùa của bạn: {{ seasonTitle(confirmed.season) }}</h3>
+        <span class="pc-undertone-tag">{{ seasonUndertone(confirmed.season) }}</span>
+      </div>
+      <p class="pc-result-desc">
+        Hệ thống đang ưu tiên các sản phẩm mang bảng màu này khi hiển thị gợi ý phối đồ và tư vấn AI Stylist.
+      </p>
+
+      <div class="pc-palette-section">
+        <span class="pc-palette-label">Bảng màu tôn da phù hợp nhất:</span>
+        <div class="pc-swatches">
+          @for (color of confirmed.palette; track color) {
+            <div class="pc-swatch" [title]="colorLabel(color)">
+              <span class="pc-swatch-circle" [style.background-color]="capabilities()?.palette?.[color] || '#DDD'"></span>
+              <span class="pc-swatch-name">{{ colorLabel(color) }}</span>
+            </div>
+          }
+        </div>
+      </div>
+
+      @if (confirmed.avoided.length) {
+        <div class="pc-avoided-section">
+          <span class="pc-avoided-label">Màu sắc nên hạn chế:</span>
+          <div class="pc-avoided-chips">
+            @for (color of confirmed.avoided; track color) {
+              <span class="pc-avoided-chip">
+                <span class="pc-avoided-dot" [style.background-color]="capabilities()?.palette?.[color] || '#888'"></span>
+                {{ colorLabel(color) }}
+              </span>
+            }
+          </div>
+        </div>
+      }
+      <div class="pc-confirmed-actions" style="margin-top: 18px; display: flex; gap: 10px; flex-wrap: wrap;">
+        <button type="button" class="btn btn--outline btn--sm" (click)="editManually(confirmed.season)">
+          🎨 Đổi mùa sắc tố khác (Thủ công)
+        </button>
+        <button type="button" class="btn btn--outline btn--sm" (click)="activeTab.set('ai')">
+          📸 Chụp ảnh phân tích lại (AI)
+        </button>
+      </div>
+    </div>
+  }
+
+  <!-- Mode Switcher Tabs -->
+  <div class="pc-tabs" role="tablist" aria-label="Phương thức xác định màu sắc cá nhân">
+    <button
+      type="button"
+      class="pc-tab-btn"
+      role="tab"
+      [attr.aria-selected]="activeTab() === 'ai'"
+      [class.is-active]="activeTab() === 'ai'"
+      (click)="activeTab.set('ai')"
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+        <circle cx="12" cy="13" r="4"/>
+      </svg>
+      <span>AI Phân tích qua ảnh chân dung</span>
+    </button>
+    <button
+      type="button"
+      class="pc-tab-btn"
+      role="tab"
+      [attr.aria-selected]="activeTab() === 'manual'"
+      [class.is-active]="activeTab() === 'manual'"
+      (click)="activeTab.set('manual')"
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M12 2a7 7 0 0 0-7 7c0 3.86 3.14 7 7 7s7-3.14 7-7a7 7 0 0 0-7-7z"/>
+      </svg>
+      <span>Chọn thủ công chuẩn 4 mùa (Manual)</span>
+    </button>
+  </div>
+
+  @if (activeTab() === 'manual') {
+    <div class="pc-manual-section">
+      <div class="pc-manual-intro">
+        <h4 class="pc-manual-title">Bảng phân loại 4 mùa sắc tố cá nhân chuẩn quốc tế</h4>
+        <p class="pc-manual-desc">
+          Nếu bạn đã biết rõ mùa sắc tố của mình hoặc muốn tự chọn phong cách phù hợp nhất, hãy chọn 1 trong 4 mùa bên dưới:
+        </p>
+      </div>
+
+      <div class="pc-seasons-grid">
+        @for (s of seasons; track s.id) {
+          <div
+            class="pc-season-card"
+            [class.is-selected]="selectedManualSeason() === s.id"
+            (click)="selectManualSeason(s.id)"
+          >
+            <div class="pc-season-card__header">
+              <div class="pc-season-card__radio">
+                <span class="pc-radio-dot" [class.is-checked]="selectedManualSeason() === s.id"></span>
+              </div>
+              <div class="pc-season-card__names">
+                <strong class="pc-season-card__title">{{ s.name }}</strong>
+                <span class="pc-season-card__eng">({{ s.english }})</span>
+              </div>
+              <span class="pc-season-card__badge">{{ s.undertoneBadge }}</span>
+            </div>
+
+            <p class="pc-season-card__desc">{{ s.description }}</p>
+
+            <div class="pc-season-card__swatches-wrap">
+              <span class="pc-season-card__label">Bảng màu tôn da:</span>
+              <div class="pc-season-card__swatches">
+                @for (c of s.palette; track c) {
+                  <span class="pc-card-swatch" [style.background-color]="capabilities()?.palette?.[c] || '#DDD'" [title]="colorLabel(c)"></span>
+                }
+              </div>
+            </div>
+
+            <div class="pc-season-card__avoided-wrap">
+              <span class="pc-season-card__label">Hạn chế:</span>
+              <div class="pc-season-card__avoided-chips">
+                @for (c of s.avoided; track c) {
+                  <span class="pc-card-avoid-chip">{{ colorLabel(c) }}</span>
+                }
+              </div>
+            </div>
+          </div>
+        }
+      </div>
+
+      <div class="pc-manual-confirm-bar">
+        <div class="pc-manual-confirm-info">
+          <span>Đang chọn: <strong>{{ selectedSeasonData().name }} ({{ selectedSeasonData().english }})</strong> — {{ selectedSeasonData().undertone }}</span>
+        </div>
+        <button
+          type="button"
+          class="btn btn--primary pc-btn-confirm"
+          [disabled]="!canConfirmManual()"
+          (click)="confirmManual()"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+          Xác nhận & lưu mùa này vào Style Profile
+        </button>
+      </div>
+    </div>
+  } @else {
+    @if (!capabilities()?.enabled) {
+      <div class="pc-notice pc-notice--disabled" role="status">
+        <p>Hệ thống AI Personal Color đang chuẩn hóa mô hình và chính sách kiểm duyệt. Bạn có thể sử dụng tab <strong>Chọn thủ công chuẩn 4 mùa</strong> ở trên để xác nhận màu sắc ngay.</p>
+        @if (capabilities()?.reason) { <p class="pc-notice-reason">{{ capabilities()?.reason }}</p> }
+      </div>
+    } @else {
+    <!-- Photo Guidelines Box -->
+    <div class="pc-guide-box">
+      <h4 class="pc-guide-title">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        Hướng dẫn chọn ảnh để AI phân tích chuẩn xác nhất
+      </h4>
+      <div class="pc-guide-grid">
+        <div class="pc-guide-item">
+          <span class="pc-guide-dot">✓</span>
+          <span>Chụp cận khuôn mặt, da mộc tự nhiên, không che trán và gò má.</span>
+        </div>
+        <div class="pc-guide-item">
+          <span class="pc-guide-dot">✓</span>
+          <span>Ánh sáng ban ngày tự nhiên, trung tính, tránh đèn vàng hoặc quá tối.</span>
+        </div>
+        <div class="pc-guide-item">
+          <span class="pc-guide-dot">✓</span>
+          <span>Không sử dụng filter làm đẹp hoặc chỉnh màu làm sai lệch sắc tố thực.</span>
+        </div>
+      </div>
+      <div class="pc-guide-meta">
+        Định dạng JPEG/PNG, tối đa {{ (capabilities()?.max_upload_bytes || 5242880) / 1048576 | number:'1.0-0' }} MB. Ảnh được mã hóa bảo mật và tự động xóa sau khi phân tích.
+      </div>
+    </div>
+
+    <!-- Upload and Preview Zone -->
+    <div class="pc-upload-section">
+      <input #photoInput type="file" accept="image/jpeg,image/png" [disabled]="busy()" (change)="selectFile($event)" style="display: none;" />
+
+      @if (!previewUrl()) {
+        <button type="button" class="btn btn--outline pc-upload-btn" [disabled]="busy()" (click)="photoInput.click()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          {{ profile()?.personal_color ? 'Chọn ảnh phân tích lại' : 'Tải ảnh khuôn mặt / chân dung' }}
+        </button>
+      }
+
+      @if (previewUrl()) {
+        <div class="pc-preview-wrap">
+          <figure class="pc-portrait-figure">
+            <img class="pc-portrait-img" [src]="previewUrl()" alt="Ảnh xem trước phân tích cá nhân" />
+            <div class="pc-viewfinder">
+              <span class="pc-vf-c pc-vf-tl"></span>
+              <span class="pc-vf-c pc-vf-tr"></span>
+              <span class="pc-vf-c pc-vf-bl"></span>
+              <span class="pc-vf-c pc-vf-br"></span>
+            </div>
+            @if (busy()) {
+              <div class="pc-scanner-bar"></div>
+            }
+          </figure>
+
+          @if (!busy() && !analysis()?.result) {
+            <label class="pc-consent-check">
+              <input type="checkbox" [checked]="consent()" [disabled]="busy()" (change)="setConsent($event)" />
+              <span>Tôi xác nhận ảnh chụp đúng khuôn mặt và đồng ý để AI phân tích màu sắc cá nhân theo chính sách bảo mật của Velura.</span>
+            </label>
+
+            <div class="pc-action-buttons">
+              <button type="button" class="btn btn--primary pc-btn-analyze" [disabled]="!canAnalyze()" (click)="analyze()">
+                Bắt đầu phân tích Personal Color
+              </button>
+              <button type="button" class="btn btn--outline" (click)="photoInput.click()">
+                Đổi ảnh khác
+              </button>
+            </div>
+          }
+        </div>
+      }
+    </div>
+
+    <!-- Busy & Status Indicator -->
+    @if (busy()) {
+      <div class="pc-status-panel" role="status">
+        <span class="pc-spinner"></span>
+        <span>{{ statusLabel() }}</span>
+      </div>
+    }
+
+    <!-- Analysis Result Preview -->
+    @if (analysis(); as currentAnalysis) {
+      @if (currentAnalysis.status !== 'RUNNING' && currentAnalysis.status !== 'CONFIRMED') {
+        <p class="pc-status-text" role="status">{{ statusLabel() }}</p>
+      }
+
+      @if (currentAnalysis.result; as result) {
+        <div class="pc-result-card pc-result-card--preview" aria-label="Bản xem trước kết quả AI">
+          <div class="pc-result-top-row">
+            <span class="pc-result-badge pc-result-badge--preview">BẢN XEM TRƯỚC AI (CHƯA LƯU)</span>
+            <span class="pc-confidence-chip">Độ tin cậy: {{ (result.confidence * 100).toFixed(0) }}%</span>
+          </div>
+          <div class="pc-result-head">
+            <h3 class="pc-season-title">Mùa nhận diện: {{ seasonTitle(result.season) }}</h3>
+            <span class="pc-undertone-tag">{{ seasonUndertone(result.season) }}</span>
+          </div>
+          <p class="pc-result-desc">
+            Xác nhận để lưu kết quả này vào Style Profile của bạn và nhận gợi ý trang phục theo đúng bảng màu tự nhiên.
+          </p>
+
+          <div class="pc-palette-section">
+            <span class="pc-palette-label">Bảng màu tôn da phù hợp nhất:</span>
+            <div class="pc-swatches">
+              @for (color of result.palette; track color) {
+                <div class="pc-swatch" [title]="colorLabel(color)">
+                  <span class="pc-swatch-circle" [style.background-color]="capabilities()?.palette?.[color] || '#DDD'"></span>
+                  <span class="pc-swatch-name">{{ colorLabel(color) }}</span>
+                </div>
+              }
+            </div>
+          </div>
+
+          @if (result.avoided.length) {
+            <div class="pc-avoided-section">
+              <span class="pc-avoided-label">Màu sắc nên hạn chế:</span>
+              <div class="pc-avoided-chips">
+                @for (color of result.avoided; track color) {
+                  <span class="pc-avoided-chip">
+                    <span class="pc-avoided-dot" [style.background-color]="capabilities()?.palette?.[color] || '#888'"></span>
+                    {{ colorLabel(color) }}
+                  </span>
+                }
+              </div>
+            </div>
+          }
+
+          <div class="pc-confirm-actions">
+            @if (currentAnalysis.status === 'SUCCESS') {
+              <button type="button" class="btn btn--primary pc-btn-confirm" [disabled]="!canConfirm()" (click)="confirm()">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                Xác nhận & lưu màu vào Style Profile
+              </button>
+            }
+            @if (currentAnalysis.status === 'RUNNING' || currentAnalysis.status === 'SUCCESS' || currentAnalysis.status === 'LOW_CONFIDENCE') {
+              <button type="button" class="btn btn--outline pc-btn-cancel" (click)="cancel()">
+                Huỷ phân tích — giữ nguyên hồ sơ
+              </button>
+            }
+              <button type="button" class="btn btn--outline" (click)="editManually(result.season)">
+                🎨 Tùy chỉnh / Chọn thủ công mùa này
+              </button>
+          </div>
+        </div>
+      }
+    }
+  }
+  }
+
+  @if (error()) {
+    <div class="pc-error-box" role="alert">
+      <p>{{ error() }}</p>
+      <button type="button" class="btn btn--outline btn--sm" [disabled]="busy()" (click)="reload()">Tải lại dữ liệu</button>
+    </div>
+  }
+</section>

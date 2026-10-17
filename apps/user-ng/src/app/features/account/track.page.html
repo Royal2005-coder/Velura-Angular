@@ -160,7 +160,7 @@
                     <div style="font-weight: 600; font-size: 0.875rem; color: var(--dark, #2a2522);">{{ item.product_name }}</div>
                     @if (item.color || item.size) {
                       <div style="font-size: 0.75rem; color: var(--muted, #8c857e); margin-top: 2px;">
-                        {{ item.color }}{{ item.color && item.size ? ' / ' : '' }}{{ item.size }}
+                        {{ item.color }}{{ item.color && item.size ? ' / ' : '' }}{{ displaySize(item.size) }}
                       </div>
                     }
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px;">
@@ -168,6 +168,22 @@
                       <span style="font-weight: 600; font-size: 0.875rem; color: var(--terracotta, #c97b63);">{{ money((item.unit_price || 0) * (item.quantity || 1)) }}</span>
                     </div>
                   </div>
+                    @if (ord.status === 'delivered') {
+                      <div style="margin-top: 8px;">
+                        <a
+                          [routerLink]="isLoggedIn() ? ['/account/reviews'] : ['/guest/reviews']"
+                          [queryParams]="{
+                            order_id: ord.order_id,
+                            product_id: item.product_id,
+                            name: item.product_name,
+                            price: item.unit_price,
+                            image: item.product_image
+                          }"
+                          class="btn btn--outline btn--sm"
+                          style="display: inline-block; font-size: 0.78rem; padding: 5px 12px; border-radius: 6px; text-decoration: none;"
+                        >★ Đánh giá sản phẩm</a>
+                      </div>
+                    }
                 </div>
               }
             </div>
@@ -204,6 +220,22 @@
                 >
                   🔄 Yêu cầu Đổi / Trả hàng (30 ngày)
                 </button>
+              }
+              @if (ord.status === 'delivered') {
+                <a
+                  [routerLink]="isLoggedIn() ? ['/account/reviews'] : ['/guest/reviews']"
+                  [queryParams]="{
+                    order_id: ord.order_id,
+                    product_id: items()[0]?.product_id,
+                    name: items()[0]?.product_name,
+                    price: items()[0]?.unit_price,
+                    image: items()[0]?.product_image
+                  }"
+                  class="btn btn--outline"
+                  style="text-decoration: none;"
+                >
+                  ★ Đánh giá sản phẩm
+                </a>
               }
             </div>
           </div>

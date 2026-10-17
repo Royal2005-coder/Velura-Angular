@@ -136,6 +136,19 @@
 }
 
 /* Search bar styling - Giới hạn kích thước tối đa để tránh ép Hotline */
+.site-header__search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  max-width: 280px;
+  width: 100%;
+  flex-shrink: 1;
+}
+
+.site-header__search-wrap.is-open {
+  z-index: 1001;
+}
+
 .site-header__search {
   display: flex;
   align-items: center;
@@ -143,11 +156,28 @@
   padding: 6px 12px;
   background: #FAF2EF;
   border-radius: 20px;
-  border: none;
+  border: 1px solid transparent;
   width: 100%;
-  max-width: 260px;
-  /* Giới hạn chiều dài tối đa của thanh tìm kiếm */
-  flex-shrink: 1;
+  transition: all 0.2s ease;
+}
+.site-header__search-icon-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: inherit;
+}
+
+
+.site-header__search.is-focused {
+  position: relative;
+  z-index: 1001;
+  background: #ffffff !important;
+  border-color: var(--terracotta, #C97B63);
+  box-shadow: 0 0 0 3px rgba(201, 123, 99, 0.25), 0 8px 24px rgba(0, 0, 0, 0.15);
 }
 
 .site-header__search input {
@@ -160,6 +190,517 @@
   font-family: "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif !important;
 }
 
+.site-header__search-ai-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  padding: 4px;
+  margin: 0;
+  cursor: pointer;
+  color: var(--muted, #6B635D);
+  border-radius: 4px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
+  line-height: 1;
+  width: 26px;
+  height: 26px;
+}
+
+.site-header__search-ai-btn:hover {
+  background: rgba(201, 123, 99, 0.12);
+  color: var(--terracotta, #C97B63);
+  transform: scale(1.12);
+}
+
+.site-header__search-ai-btn:focus-visible {
+  outline: 2px solid var(--terracotta, #C97B63);
+  outline-offset: 1px;
+}
+
+.site-header__search-close-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  padding: 4px;
+  margin: 0;
+  cursor: pointer;
+  color: var(--muted, #6B635D);
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  line-height: 1;
+}
+
+.site-header__search-close-btn:hover {
+  color: var(--ink, #2A2522);
+  transform: scale(1.15);
+}
+
+/* Top White Search Header Bar (Coolmate standard) */
+.cm-search-topbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 76px;
+  background: #ffffff;
+  z-index: 1005;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  border-bottom: 1px solid #e5e7eb;
+  padding: 0 20px;
+}
+
+.cm-search-topbar__pill {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 460px;
+  height: 44px;
+  border: 1.5px solid #9ca3af;
+  border-radius: 999px;
+  padding: 0 18px;
+  background: #ffffff;
+  transition: border-color 0.2s ease;
+}
+
+.cm-search-topbar__pill:focus-within {
+  border-color: #111827;
+}
+
+.cm-search-topbar__input {
+  border: none !important;
+  background: transparent !important;
+  outline: none !important;
+  font-size: 0.9375rem !important;
+  width: 100% !important;
+  color: #111827 !important;
+  font-family: "DM Sans", system-ui, -apple-system, sans-serif !important;
+}
+
+.cm-search-topbar__input::placeholder {
+  color: #6b7280;
+}
+
+.cm-search-topbar__close {
+  background: none;
+  border: none;
+  padding: 8px;
+  cursor: pointer;
+  color: #4b5563;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s ease, transform 0.15s ease;
+}
+
+.cm-search-topbar__close:hover {
+  color: #111827;
+  transform: scale(1.1);
+}
+
+/* Dark Dimmed Page Backdrop below Top Bar */
+.search-backdrop {
+  position: fixed;
+  top: 76px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1004;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: none;
+}
+
+/* Centered White Popover Card below Top Bar */
+.site-header__search-dropdown {
+  position: fixed;
+  top: 96px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 720px;
+  max-width: 92vw;
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+  z-index: 1006;
+  padding: 28px 36px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+}
+
+.search-dd__empty-box {
+  text-align: center;
+  padding: 16px 12px;
+  background: #f9fafb;
+  border: 1px dashed #e5e7eb;
+  border-radius: 10px;
+}
+
+.search-dd__empty-box p {
+  font-size: 0.875rem;
+  color: #4b5563;
+  margin: 0 0 10px 0;
+}
+
+@media (max-width: 768px) {
+  .site-header__search-dropdown {
+    width: 94vw;
+    padding: 20px;
+    border-radius: 14px;
+  }
+}
+
+/* Google Lens Card */
+.search-dd__lens-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 0.85rem;
+  background: linear-gradient(135deg, #FAF7F2 0%, #F5EFEB 100%);
+  border: 1px solid var(--line, #E8DFD6);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.search-dd__lens-card:hover {
+  background: linear-gradient(135deg, #FFF6F2 0%, #FBECE5 100%);
+  border-color: var(--terracotta, #C97B63);
+  transform: translateY(-1px);
+}
+
+.search-dd__lens-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--terracotta, #C97B63);
+  box-shadow: 0 2px 6px rgba(201, 123, 99, 0.15);
+  flex-shrink: 0;
+}
+
+.search-dd__lens-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  flex: 1;
+}
+
+.search-dd__lens-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--ink, #2A2522);
+}
+
+.search-dd__lens-desc {
+  font-size: 0.72rem;
+  color: var(--muted, #6B635D);
+  line-height: 1.3;
+}
+
+.search-dd__lens-arrow {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #ffffff;
+  color: var(--terracotta, #C97B63);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(42, 37, 34, 0.08);
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.search-dd__lens-card:hover .search-dd__lens-arrow {
+  transform: translateX(3px);
+  background: var(--terracotta, #C97B63);
+  color: #ffffff;
+}
+
+/* Sections */
+.search-dd__section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.search-dd__section-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #111827;
+  text-transform: none;
+  letter-spacing: 0;
+  margin-bottom: 4px;
+}
+
+.search-dd__count {
+  font-size: 0.7rem;
+  color: var(--soft, #8C857E);
+  text-transform: none;
+  font-weight: 500;
+}
+
+/* Categories Grid */
+/* Categories Grid — 4 Columns on desktop, 2 on mobile */
+.search-dd__categories-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.5rem;
+}
+
+.search-dd__cat-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.55rem 0.8rem;
+  border-radius: 10px;
+  border: 1px solid var(--line, #E8DFD6);
+  background: #ffffff;
+  color: var(--ink, #2A2522);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: left;
+}
+
+.search-dd__cat-btn:hover {
+  background: var(--field-bg, #FAF7F2);
+  border-color: var(--terracotta, #C97B63);
+  color: var(--terracotta, #C97B63);
+  transform: translateY(-1px);
+}
+
+.search-dd__cat-thumb {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.search-dd__cat-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  flex: 1;
+}
+
+.search-dd__cat-arrow {
+  color: var(--muted, #6B635D);
+  opacity: 0.5;
+  transition: all 0.15s ease;
+}
+
+.search-dd__cat-btn:hover .search-dd__cat-arrow {
+  opacity: 1;
+  color: var(--terracotta, #C97B63);
+  transform: translateX(2px);
+}
+
+/* Trending Keywords — Pills like Coolmate */
+.search-dd__trending-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.search-dd__trending-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 16px;
+  border-radius: 99px;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  color: #1f2937;
+  font-size: 0.84rem;
+  font-weight: 400;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.search-dd__trending-pill:hover {
+  background: #111827;
+  border-color: #111827;
+  color: #ffffff;
+}
+
+/* Recently Viewed Products Section */
+.search-dd__recent-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.6rem;
+}
+
+.search-dd__recent-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--line, #E8DFD6);
+  border-radius: 8px;
+  cursor: pointer;
+  background: #ffffff;
+  transition: all 0.15s ease;
+}
+
+.search-dd__recent-item:hover {
+  border-color: var(--terracotta, #C97B63);
+  background: var(--field-bg, #FAF7F2);
+}
+
+.search-dd__recent-img {
+  width: 44px;
+  height: 52px;
+  object-fit: cover;
+  border-radius: 4px;
+  background: #f1f5f9;
+  flex-shrink: 0;
+}
+
+.search-dd__recent-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.search-dd__recent-name {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--ink, #2A2522);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.search-dd__recent-price {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--terracotta, #C97B63);
+}
+
+.search-dd__empty-recent {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #111827;
+  margin: 4px 0 0;
+  font-style: normal;
+}
+
+.search-dd__trending-pill svg {
+  color: var(--muted, #6B635D);
+}
+
+.search-dd__trending-pill:hover svg {
+  color: var(--terracotta, #C97B63);
+}
+
+/* Products Live Suggestions */
+.search-dd__products {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.search-dd__product-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.search-dd__product-item:hover {
+  background: var(--field-bg, #FAF7F2);
+}
+
+.search-dd__product-img {
+  width: 40px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 4px;
+  background: #f1f5f9;
+  flex-shrink: 0;
+}
+
+.search-dd__product-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.search-dd__product-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ink, #2A2522);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.search-dd__product-price {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--terracotta, #C97B63);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.search-dd__combo-tag {
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 0.1rem 0.35rem;
+  border-radius: 3px;
+  background: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+.search-dd__view-all-btn {
+  padding: 0.5rem;
+  border: none;
+  background: transparent;
+  color: var(--terracotta, #C97B63);
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: center;
+  border-top: 1px solid var(--line, #E8DFD6);
+  margin-top: 0.25rem;
+}
+
+.search-dd__view-all-btn:hover {
+  text-decoration: underline;
+}
+
+.search-dd__empty {
+  font-size: 0.78rem;
+  color: var(--muted, #6B635D);
+  padding: 0.75rem 0.5rem;
+  text-align: center;
+}
 /* Center Bottom Row Menu items */
 .nav-link {
   font-size: 0.8125rem;
@@ -412,8 +953,8 @@
 .account-dropdown-menu {
   position: absolute;
   top: 100%;
-  right: 50%;
-  transform: translateX(50%) translateY(10px);
+  right: 0;
+  transform: translateY(10px);
   background-color: #ffffff;
   min-width: 160px;
   border-radius: 8px;
@@ -430,19 +971,20 @@
 }
 
 /* Hover to show dropdown */
-.header-account-dropdown:hover .account-dropdown-menu {
+.header-account-dropdown:hover .account-dropdown-menu,
+.header-account-dropdown:focus-within .account-dropdown-menu {
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
-  transform: translateX(50%) translateY(4px);
+  transform: translateY(4px);
 }
 
 /* Dropdown upward arrow */
 .account-dropdown-arrow {
   position: absolute;
   top: -6px;
-  right: 50%;
-  transform: translateX(50%) rotate(45deg);
+  right: 14px;
+  transform: rotate(45deg);
   width: 10px;
   height: 10px;
   background-color: #ffffff;

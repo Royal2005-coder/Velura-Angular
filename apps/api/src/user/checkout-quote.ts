@@ -5,6 +5,7 @@ import { buildWallet } from "./vouchers.js";
 import type { EvaluatedVoucher } from "./voucher-engine.js";
 import { chooseOrderVoucher, readVoucherRequest, type VoucherChange } from "./voucher-choice.js";
 import type { AuthContext, HeaderMap, HttpRequest, HttpResponse, JsonObject } from "../types.js";
+import { loyaltyService } from "../loyalty/loyalty-router.js";
 
 /**
  * Báo giá phía máy chủ cho màn Tóm tắt đơn — `order_summary` của U1-13.
@@ -86,7 +87,12 @@ export async function handleCheckoutRoute(
     categoryNameById: cart.categoryNameById
   });
   const { applied, change } = chooseOrderVoucher(wallet, readVoucherRequest(body));
-  sendJson(res, 200, { success: true, quote: toWireQuote(summarizeQuote(cart.orderValue, shippingFee, applied, change)) }, corsHeaders);
+  const summary = summarizeQuote(cart.orderValue, shippingFee, applied, change);
+  const loyalty = await loyaltyService.quote(context, summary.subtotal, summary.shippingFee, applied?.discountType === "free_shipping" ? 0 : summary.discountAmount, body.points_spent);
+  const quote = toWireQuote(summary);
+  quote.loyalty = loyalty;
+  quote.total_amount = summary.totalAmount - loyalty.points_discount_amount;
+  sendJson(res, 200, { success: true, quote }, corsHeaders);
 }
 
 /** Định dạng dây snake_case, cùng lối với các endpoint ví mã. */

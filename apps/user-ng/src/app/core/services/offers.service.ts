@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { Observable, catchError, map, of, shareReplay } from 'rxjs';
 import { ApiService } from './api.service';
+import { AuthService } from './auth.service';
 import type { OfferCampaign, OffersResponse } from '../models/offer.interface';
 
 /** Thanh tin và khối banner đọc lại sau chừng này, đủ để admin tạm dừng là khách thấy sớm. */
@@ -29,20 +30,27 @@ const EMPTY: OffersResponse = {
 @Injectable({ providedIn: 'root' })
 export class OffersService {
   private readonly api = inject(ApiService);
+  private readonly auth = inject(AuthService);
   private cached$: Observable<OffersResponse> | null = null;
   private cachedAt = 0;
+  private cachedSession: ReturnType<AuthService['session']> | undefined;
 
+  /** Reuse public placements within one identity scope; never reuse another customer's personalized wallet. */
   load(): Observable<OffersResponse> {
-    if (!this.cached$ || Date.now() - this.cachedAt > CACHE_MS) {
+    const session = this.auth.session();
+    if (!this.cached$ || session !== this.cachedSession || Date.now() - this.cachedAt > CACHE_MS) {
       this.cachedAt = Date.now();
-      this.cached$ = this.api.get<OffersResponse>('/api/user/offers').pipe(
+      this.cachedSession = session;
+      const request = this.api.get<OffersResponse>('/api/user/offers').pipe(
+        map((response) => session === this.auth.session() ? response : EMPTY),
         catchError(() => {
           // Lần sau thử lại, không giữ kết quả lỗi suốt năm phút.
-          this.cached$ = null;
+          if (this.cached$ === request) this.cached$ = null;
           return of(EMPTY);
         }),
         shareReplay({ bufferSize: 1, refCount: false }),
       );
+      this.cached$ = request;
     }
     return this.cached$;
   }

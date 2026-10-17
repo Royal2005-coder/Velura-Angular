@@ -174,7 +174,7 @@ export function actionGuard(code: string, facts: OrderFacts): string | null {
       if (facts.paymentMethod !== "COD") return "COD_ONLY";
       // Quy trình 3.1.11 (AD_ORDER_04, AD_ORDER_05): Khách vãng lai thanh toán COD từ 1.000.000đ trở lên
       // bắt buộc phải gọi và lưu kết quả xác nhận với khách trước khi xác nhận đơn.
-      if (facts.isGuest && facts.totalAmount >= 1_000_000 && !facts.hasSuccessfulCallConfirm) {
+      if (facts.totalAmount >= 1_000_000 && !facts.hasSuccessfulCallConfirm) {
         return "CALL_CONFIRMATION_REQUIRED";
       }
       return null;
@@ -247,11 +247,12 @@ export function orderFacts(order: Record<string, unknown>): OrderFacts {
   );
 
   const user = (order.user && typeof order.user === "object") ? (order.user as Record<string, unknown>) : null;
-  const isGuest = order.is_guest === true ||
+  const inferredGuest =
     !order.user_id ||
     user?.is_active === false ||
     user?.role === "guest" ||
     (typeof user?.email === "string" && user.email.includes("@guest."));
+  const isGuest = typeof order.is_guest === "boolean" ? order.is_guest : inferredGuest;
 
   return {
     status: String(order.status || ""),

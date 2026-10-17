@@ -123,6 +123,7 @@
             <option value="all_users" [selected]="(voucher()?.applicable_user_group || 'all_users') === 'all_users'">Mọi khách</option>
             <option value="guest" [selected]="voucher()?.applicable_user_group === 'guest'">Khách vãng lai</option>
             <option value="member" [selected]="voucher()?.applicable_user_group === 'member'">Thành viên</option>
+            <option value="birthday" [selected]="voucher()?.applicable_user_group === 'birthday'">Quà tặng sinh nhật thành viên</option>
           </select>
         </label>
 

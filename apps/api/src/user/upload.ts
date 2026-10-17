@@ -1,6 +1,7 @@
 import { config } from "../config.js";
 import { HttpError, sendJson } from "../http.js";
 import { requireUserAuth } from "./auth.js";
+import { guestSessionPhone } from "./order-access.js";
 import {
   asJsonObject,
   asString,
@@ -142,6 +143,11 @@ export async function readMultipartImage(req: HttpRequest): Promise<UploadedImag
  * không giới hạn số lần và không truy được ai đã tải. Kho này chứa ảnh bằng chứng đổi
  * trả của khách, nên nó phải đứng sau đăng nhập như mọi tuyến `/api/user/*` khác.
  */
+/**
+ * POST /api/user/upload/evidence
+ * Accepts multipart/form-data with a single "file" field.
+ * Returns { success: true, url: "https://..." }
+ */
 export async function handleUploadRoute(
   req: HttpRequest,
   res: HttpResponse,
@@ -152,14 +158,24 @@ export async function handleUploadRoute(
     throw new HttpError(405, "METHOD_NOT_ALLOWED", "Only POST is accepted");
   }
 
-  const profile = requireUserAuth(context);
+  let folderId = context.profile?.user_id;
+  if (!folderId) {
+    const url = new URL(req.url || "/", "http://localhost");
+    const guestHeader = asString(req.headers["x-guest-access-token"] || "");
+    const token = (url.searchParams.get("guest_access_token") || guestHeader).trim();
+    const phone = guestSessionPhone(token);
+    if (!phone) {
+      throw new HttpError(401, "UNAUTHORIZED", "Vui lòng đăng nhập hoặc xác thực số điện thoại để tải ảnh lên");
+    }
+    folderId = `guest_${phone}`;
+  }
 
   const { fileBuffer, fileName, mimeType } = await readMultipartImage(req);
 
   // Thư mục con theo người tải, để một tệp bất thường còn truy được về chủ của nó.
   const publicUrl = await uploadToSupabaseStorage(fileBuffer, fileName, mimeType, {
     bucket: EVIDENCE_TARGET.bucket,
-    prefix: `${EVIDENCE_TARGET.prefix}/${profile.user_id}`
+    prefix: `${EVIDENCE_TARGET.prefix}/${folderId}`
   });
   return sendJson(res, 200, { success: true, url: publicUrl }, corsHeaders);
 }

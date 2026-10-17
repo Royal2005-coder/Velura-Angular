@@ -1,9 +1,11 @@
+﻿import { AdminAiEngineService } from '../app/core/admin-ai-engine.service';
 import { Type } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { of } from 'rxjs';
 import { AdminApiService, AdminDashboardSummary, AdminInsightsPayload } from '../app/core/admin-api.service';
 import { emptyInsightBoard } from '../app/core/admin-insight-state';
+import { AdminChatReviewService } from '../app/core/admin-chat-review.service';
 
 const emptyDashboard = (): AdminDashboardSummary => ({
   operations: {
@@ -101,8 +103,9 @@ let lastFixture: ComponentFixture<unknown> | undefined;
 /**
  * Boots an admin page ViewModel with a stub AdminApiService (no HttpClient).
  * `apiOverrides` thay từng hàm của API giả cho ca test cần dữ liệu riêng.
+ * `queryParams` exercises report links that select a case outside the current sidebar page.
  */
-export async function createAdminPage<T>(page: Type<T>, apiOverrides: Record<string, unknown> = {}): Promise<T> {
+export async function createAdminPage<T>(page: Type<T>, apiOverrides: Record<string, unknown> = {}, queryParams: Record<string, string> = {}): Promise<T> {
   lastFixture?.destroy();
   lastFixture = undefined;
   sessionStorage.clear();
@@ -111,14 +114,16 @@ export async function createAdminPage<T>(page: Type<T>, apiOverrides: Record<str
   await TestBed.configureTestingModule({
     imports: [page],
     providers: [
+      { provide: AdminAiEngineService, useValue: { capabilities: () => of({enabled:false, local_only:true, tasks:[], max_upload_bytes:5242880, private_ttl_seconds:900}) } },
+      { provide: AdminChatReviewService, useValue: { review: () => of({}), original: () => of({}) } },
       provideRouter([]),
       { provide: AdminApiService, useValue: stubAdminApi(apiOverrides) },
       {
         provide: ActivatedRoute,
         useValue: {
-          snapshot: { paramMap: convertToParamMap({}), queryParamMap: convertToParamMap({}), data: { title: 'Admin', subtitle: 'test' } },
+          snapshot: { paramMap: convertToParamMap({}), queryParamMap: convertToParamMap(queryParams), data: { title: 'Admin', subtitle: 'test' } },
           paramMap: of(convertToParamMap({})),
-          queryParamMap: of(convertToParamMap({})),
+          queryParamMap: of(convertToParamMap(queryParams)),
           data: of({ title: 'Admin', subtitle: 'test' }),
         },
       },

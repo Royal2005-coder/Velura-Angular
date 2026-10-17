@@ -89,11 +89,34 @@ describe('OffersPage', () => {
     const page = await createPage('p1');
     expect(page.focusedCampaign()?.title).toBe('Sale 10.10');
     expect(page.focusedVouchers().map((item) => item.code)).toEqual(['SALE10']);
+    expect(page.voucherGroups().flatMap((group) => group.items.map((item) => item.code))).not.toContain('SALE10');
+  });
+
+  it('preserves the campaign title entered by the administrator', async () => {
+    const page = await createPage(null);
+    expect(page.cleanTitle('Summer test collection')).toBe('Summer test collection');
   });
 
   it('?offer= mang mã banner cũ (A1) thì bỏ qua, không vỡ trang', async () => {
     const page = await createPage('A1');
     expect(page.focusedCampaign()).toBeNull();
     expect(page.voucherGroups().length).toBe(3);
+  });
+
+  it('navigates to products page with voucher and category params when using a voucher', async () => {
+    const page = await createPage(null);
+    const testVoucher: OfferVoucher = voucher({
+      code: 'FALL10',
+      voucher_id: 'v-fall10',
+      category_names: ['Áo'],
+    });
+
+    const params = page.useVoucherParams(testVoucher);
+    expect(params['voucher']).toBe('FALL10');
+    expect(params['category']).toBe('ao');
+
+    page.onUseVoucher(testVoucher);
+    expect(localStorage.getItem('checkout_voucher_code')).toBe('FALL10');
+    expect(localStorage.getItem('checkout_voucher_id')).toBe('v-fall10');
   });
 });

@@ -83,8 +83,20 @@
                           <span class="collection-product-card__price">{{ priceLabel(product) }}</span>
                         </div>
                         <div class="collection-product-card__actions">
-                          <a [routerLink]="['/products', product.product_id]" class="btn-buy"><span>Mua ngay</span></a>
-                          <button class="collection-product-card__btn-cart" type="button" title="Thêm vào giỏ hàng" (click)="addToCart(product)">+</button>
+                          <button
+                            type="button"
+                            class="btn-buy"
+                            [disabled]="isOutOfStock(product)"
+                            (click)="buyNow(product, $event)"
+                            [title]="isOutOfStock(product) ? 'Sản phẩm đã hết hàng' : 'Mua ngay'"
+                          ><span>Mua ngay</span></button>
+                          <button
+                            class="collection-product-card__btn-cart"
+                            type="button"
+                            [disabled]="isOutOfStock(product)"
+                            [title]="isOutOfStock(product) ? 'Sản phẩm đã hết hàng' : 'Thêm vào giỏ hàng'"
+                            (click)="addToCart(product, $event)"
+                          >+</button>
                         </div>
                       </article>
                     }

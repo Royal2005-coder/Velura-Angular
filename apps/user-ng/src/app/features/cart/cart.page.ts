@@ -1,10 +1,11 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { CartLine, CartStore, GroupedCartItem } from '../../core/services/cart.store';
+import { CartLine, CartStore, GroupedCartItem, CartComboSubItem } from '../../core/services/cart.store';
 import { CheckoutStore } from '../../core/services/checkout.store';
 import { ApiService } from '../../core/services/api.service';
 import { formatVnd, toPublicAsset } from '../../core/utils/money';
 import { showToast } from '../../core/utils/toast';
+import { formatSizeDisplay, sortSizes } from '../../core/utils/size';
 import { useBodyClass } from '../../core/utils/body-class';
 import { VoucherWallet } from '../../shared/voucher-wallet/voucher-wallet';
 import type { AppliedVoucher, CartItemRef } from '../../core/models/voucher.interface';
@@ -32,7 +33,9 @@ export class CartPage {
   private readonly cart = inject(CartStore);
   private readonly checkoutStore = inject(CheckoutStore);
   private readonly api = inject(ApiService);
+  readonly displaySize = formatSizeDisplay;
   readonly editingVariantId = signal<string | null>(null);
+  readonly pendingDeleteItem = signal<GroupedCartItem | null>(null);
   readonly variantChoices = signal<Array<{ variant_id: string; size?: string; color?: string; stock_quantity?: number }>>([]);
   readonly activeDropdown = signal<{ variantId: string; type: 'color' | 'size' } | null>(null);
   private readonly variantsCache = new Map<string, Array<{ variant_id: string; size?: string; color?: string; stock_quantity?: number }>>();
@@ -41,13 +44,11 @@ export class CartPage {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
 
-  /** Mã mang theo từ nút "Dùng mã" ở trang Ưu đãi (`/cart?voucher=CODE`). */
-  readonly preferredVoucher = this.route.snapshot.queryParamMap.get('voucher');
+  /** Mã mang theo từ nút "Dùng mã" ở trang Ưu đãi hoặc lưu trong phiên. */
+  readonly preferredVoucher = this.route.snapshot.queryParamMap.get('voucher') || localStorage.getItem('checkout_voucher_code') || localStorage.getItem('checkout_voucher_id');
   readonly appliedVoucher = signal<AppliedVoucher | null>(null);
   readonly voucherDeclined = signal(false);
 
-  readonly referralCode = signal(this.checkoutStore.shipping().referral_code || '');
-  readonly referralApplied = signal(Boolean(this.checkoutStore.shipping().referral_code));
 
   readonly currentPage = signal(1);
   readonly selectedIds = signal<string[]>(this.readSelectedIds());
@@ -112,6 +113,55 @@ export class CartPage {
   constructor() {
     useBodyClass('page-cart');
     this.syncSelection(this.groupedItems());
+
+    // Tự động nạp sẵn biến thể cho mọi sản phẩm và sub-items trong giỏ hàng
+    effect(() => {
+      const items = this.groupedItems();
+      untracked(() => {
+        for (const item of items) {
+          if (item.product_id && !this.variantsCache.has(item.product_id)) {
+            this.fetchVariantsForProduct(item.product_id);
+          }
+          if (item.sub_items) {
+            for (const sub of item.sub_items) {
+              if (sub.product_id) {
+                if (sub.available_variants && sub.available_variants.length > 0 && !this.variantsCache.has(sub.product_id)) {
+                  this.variantsCache.set(sub.product_id, sub.available_variants);
+                } else if (!this.variantsCache.has(sub.product_id)) {
+                  this.fetchVariantsForProduct(sub.product_id);
+                }
+              }
+            }
+          }
+          if (item.items) {
+            for (const sub of item.items) {
+              if (sub.product_id && !this.variantsCache.has(sub.product_id)) {
+                this.fetchVariantsForProduct(sub.product_id);
+              }
+            }
+          }
+        }
+      });
+    });
+  }
+
+  private fetchVariantsForProduct(productId: string): void {
+    if (!productId || this.variantsCache.has(productId)) return;
+    this.api
+      .get<{ variants?: Array<{ variant_id: string; size?: string; color?: string; stock_quantity?: number }> }>(
+        `/api/user/products/${productId}`,
+      )
+      .subscribe({
+        next: (product) => {
+          const list = product.variants || [];
+          this.variantsCache.set(productId, list);
+          this.variantsVersion.update((v) => v + 1);
+        },
+        error: () => {
+          this.variantsCache.set(productId, []);
+          this.variantsVersion.update((v) => v + 1);
+        },
+      });
   }
 
   /**
@@ -148,7 +198,7 @@ export class CartPage {
   /**
    * Resolves a cart thumbnail for Angular public assets.
    */
-  imageUrl(item: GroupedCartItem | CartLine): string {
+  imageUrl(item: GroupedCartItem | CartLine | CartComboSubItem): string {
     return toPublicAsset(item.product_image, '/assets/images/placeholder.jpg');
   }
 
@@ -163,10 +213,28 @@ export class CartPage {
    * Removes a variant line or combo set using the original cart payload key.
    */
   remove(item: GroupedCartItem): void {
+    this.confirmDelete(item);
+  }
+
+  confirmDelete(item: GroupedCartItem): void {
+    this.pendingDeleteItem.set(item);
+  }
+
+  cancelDelete(): void {
+    this.pendingDeleteItem.set(null);
+  }
+
+  executeDelete(): void {
+    const item = this.pendingDeleteItem();
+    if (!item) {
+      return;
+    }
     this.cart.removeItem(item.variant_id);
     this.selectedIds.update((ids) => ids.filter((id) => id !== item.variant_id));
     this.persistSelected();
     this.clampPage();
+    this.pendingDeleteItem.set(null);
+    showToast(`Đã xóa ${item.product_name} khỏi giỏ hàng.`);
   }
 
   /**
@@ -196,6 +264,7 @@ export class CartPage {
       event.stopPropagation();
     }
     if (item.is_combo) return;
+    this.activeComboSubDropdown.set(null);
     const cur = this.activeDropdown();
     if (cur && cur.variantId === item.variant_id && cur.type === type) {
       this.activeDropdown.set(null);
@@ -247,14 +316,18 @@ export class CartPage {
     for (const v of list) {
       if (v.size) set.add(v.size);
     }
-    return Array.from(set);
+    return sortSizes(Array.from(set));
   }
 
   pickColor(item: GroupedCartItem, color: string): void {
     this.activeDropdown.set(null);
     if (item.color === color) return;
     const list = this.variantsCache.get(item.product_id) || [];
-    const match = list.find((v) => v.color === color && v.size === item.size) || list.find((v) => v.color === color);
+    const availableMatch = list.find((v) => v.color === color && v.size === item.size && (v.stock_quantity ?? 1) > 0)
+      || list.find((v) => v.color === color && (v.stock_quantity ?? 1) > 0);
+    const match = availableMatch
+      || list.find((v) => v.color === color && v.size === item.size)
+      || list.find((v) => v.color === color);
     if (match) {
       this.cart.replaceVariant(item.variant_id, {
         variant_id: match.variant_id,
@@ -275,7 +348,11 @@ export class CartPage {
     this.activeDropdown.set(null);
     if (item.size === size) return;
     const list = this.variantsCache.get(item.product_id) || [];
-    const match = list.find((v) => v.size === size && v.color === item.color) || list.find((v) => v.size === size);
+    const availableMatch = list.find((v) => v.size === size && v.color === item.color && (v.stock_quantity ?? 1) > 0)
+      || list.find((v) => v.size === size && (v.stock_quantity ?? 1) > 0);
+    const match = availableMatch
+      || list.find((v) => v.size === size && v.color === item.color)
+      || list.find((v) => v.size === size);
     if (match) {
       this.cart.replaceVariant(item.variant_id, {
         variant_id: match.variant_id,
@@ -292,8 +369,111 @@ export class CartPage {
     }
   }
 
+  readonly activeComboSubDropdown = signal<{ comboVariantId: string; subProductId: string; type: 'color' | 'size' } | null>(null);
+
+  isComboSubDropdownOpen(item: GroupedCartItem, sub: CartComboSubItem, type: 'color' | 'size'): boolean {
+    const cur = this.activeComboSubDropdown();
+    return cur !== null && cur.comboVariantId === item.variant_id && cur.subProductId === sub.product_id && cur.type === type;
+  }
+
+  toggleComboSubDropdown(item: GroupedCartItem, sub: CartComboSubItem, type: 'color' | 'size', event?: Event): void {
+    if (event) {
+      event.stopPropagation();
+    }
+    this.activeDropdown.set(null);
+    const cur = this.activeComboSubDropdown();
+    if (cur && cur.comboVariantId === item.variant_id && cur.subProductId === sub.product_id && cur.type === type) {
+      this.activeComboSubDropdown.set(null);
+      return;
+    }
+    this.activeComboSubDropdown.set({ comboVariantId: item.variant_id, subProductId: sub.product_id, type });
+    if (!this.variantsCache.has(sub.product_id)) {
+      if (sub.available_variants && sub.available_variants.length > 0) {
+        this.variantsCache.set(sub.product_id, sub.available_variants);
+      } else {
+        this.loadingVariants.set(true);
+        this.api
+          .get<{ variants?: Array<{ variant_id: string; size?: string; color?: string; stock_quantity?: number }> }>(
+            `/api/user/products/${sub.product_id}`,
+          )
+          .subscribe({
+            next: (product) => {
+              const list = product.variants || [];
+              this.variantsCache.set(sub.product_id, list);
+              this.variantsVersion.update((v) => v + 1);
+              this.loadingVariants.set(false);
+            },
+            error: () => {
+              this.variantsCache.set(sub.product_id, []);
+              this.variantsVersion.update((v) => v + 1);
+              this.loadingVariants.set(false);
+            },
+          });
+      }
+    }
+  }
+
+  getColorsForSub(sub: CartComboSubItem): string[] {
+    this.variantsVersion();
+    const list = this.variantsCache.get(sub.product_id) || sub.available_variants || [];
+    const set = new Set<string>();
+    if (sub.color) set.add(sub.color);
+    for (const v of list) {
+      if (v.color) set.add(v.color);
+    }
+    return Array.from(set);
+  }
+
+  getSizesForSub(sub: CartComboSubItem): string[] {
+    this.variantsVersion();
+    const list = this.variantsCache.get(sub.product_id) || sub.available_variants || [];
+    const set = new Set<string>();
+    if (sub.size) set.add(sub.size);
+    for (const v of list) {
+      if (v.size) set.add(v.size);
+    }
+    return sortSizes(Array.from(set));
+  }
+
+  pickComboSubColor(item: GroupedCartItem, sub: CartComboSubItem, color: string): void {
+    this.activeComboSubDropdown.set(null);
+    if (sub.color === color) return;
+    const list = this.variantsCache.get(sub.product_id) || sub.available_variants || [];
+    const availableMatch = list.find((v) => v.color === color && v.size === sub.size && (v.stock_quantity ?? 1) > 0)
+      || list.find((v) => v.color === color && (v.stock_quantity ?? 1) > 0);
+    const match = availableMatch
+      || list.find((v) => v.color === color && v.size === sub.size)
+      || list.find((v) => v.color === color);
+    if (match) {
+      this.cart.updateComboSubVariant(item.variant_id, sub.product_id, {
+        variant_id: match.variant_id,
+        color: match.color || color,
+        size: match.size ?? sub.size,
+      });
+    }
+  }
+
+  pickComboSubSize(item: GroupedCartItem, sub: CartComboSubItem, size: string): void {
+    this.activeComboSubDropdown.set(null);
+    if (sub.size === size) return;
+    const list = this.variantsCache.get(sub.product_id) || sub.available_variants || [];
+    const availableMatch = list.find((v) => v.size === size && v.color === sub.color && (v.stock_quantity ?? 1) > 0)
+      || list.find((v) => v.size === size && (v.stock_quantity ?? 1) > 0);
+    const match = availableMatch
+      || list.find((v) => v.size === size && v.color === sub.color)
+      || list.find((v) => v.size === size);
+    if (match) {
+      this.cart.updateComboSubVariant(item.variant_id, sub.product_id, {
+        variant_id: match.variant_id,
+        color: match.color ?? sub.color,
+        size: match.size || size,
+      });
+    }
+  }
+
   closeAllDropdowns(): void {
     this.activeDropdown.set(null);
+    this.activeComboSubDropdown.set(null);
   }
 
   /**
@@ -323,6 +503,10 @@ export class CartPage {
    * Steps the original cart quantity control for a line or combo set.
    */
   changeQty(item: GroupedCartItem, delta: number): void {
+    if (delta < 0 && item.quantity <= 1) {
+      this.confirmDelete(item);
+      return;
+    }
     this.cart.updateQty(item.variant_id, item.quantity + delta);
     this.clampPage();
   }
@@ -357,22 +541,6 @@ export class CartPage {
     document.querySelector('.cart-header')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
-  onReferralInput(event: Event): void {
-    this.referralCode.set((event.target as HTMLInputElement).value);
-  }
-
-  applyReferralCode(): void {
-    const code = this.referralCode().trim();
-    if (!code) {
-      this.referralApplied.set(false);
-      this.checkoutStore.saveShipping({ ...this.checkoutStore.shipping(), referral_code: '' });
-      showToast('Đã xóa mã giới thiệu');
-      return;
-    }
-    this.referralApplied.set(true);
-    this.checkoutStore.saveShipping({ ...this.checkoutStore.shipping(), referral_code: code });
-    showToast(`Đã ghi nhận mã giới thiệu: ${code}`);
-  }
 
   /**
    * Starts checkout with the originally selected cart rows.
@@ -384,10 +552,7 @@ export class CartPage {
       return;
     }
     const expanded = this.cart.expandGroupedItems(selected);
-    this.checkoutStore.setCheckoutItems(expanded);
-    if (this.referralCode().trim()) {
-      this.checkoutStore.saveShipping({ ...this.checkoutStore.shipping(), referral_code: this.referralCode().trim() });
-    }
+    this.checkoutStore.setCheckoutItems(expanded, 'cart');
     sessionStorage.setItem(CHECKOUT_ITEMS_KEY, JSON.stringify(expanded));
     localStorage.removeItem('checkout_discount');
     localStorage.removeItem('checkout_voucher_code');
@@ -400,7 +565,7 @@ export class CartPage {
       localStorage.removeItem(VOUCHER_ID_KEY);
     }
     if (this.voucherDeclined()) {
-      localStorage.setItem(VOUCHER_DECLINED_KEY, '1');
+      localStorage.setItem(VOUCHER_DECLINED_KEY, 'true');
     } else {
       localStorage.removeItem(VOUCHER_DECLINED_KEY);
     }

@@ -172,9 +172,14 @@ export interface AdminReturnPayment {
   gateway_response_code?: string;
 }
 
+/** Persisted KAN-31/KAN-32 states, shared with the return API and migration. */
+export type AdminReturnStatus = 'REQUESTED' | 'CONTACTING' | 'WAITING_RETURN' | 'RETURN_IN_TRANSIT' | 'RECEIVED' | 'REFUND_PROCESSING' | 'REFUNDED' | 'EXCHANGE_PREPARING' | 'EXCHANGE_SHIPPING' | 'COMPLETED' | 'CANCELLED' | 'NEEDS_SUPPORT';
+
+/** Customer return request; QA and gateway facts constrain available operations. */
 export interface AdminReturnRow {
   return_id: string;
   order_id?: string;
+  order_code?: string;
   user_id?: string;
   status?: string;
   request_type?: string;
@@ -184,6 +189,10 @@ export interface AdminReturnRow {
   created_at?: string;
   resolved_at?: string;
   customer_name?: string;
+  customer_phone?: string;
+  customer_address?: string;
+  order_total?: number;
+  payment_method?: string;
   version?: number;
   refundable_amount?: number;
   refund_amount?: number;
@@ -191,13 +200,20 @@ export interface AdminReturnRow {
   rejection_reason?: string;
   evidence_images?: string[];
   tracking_return_code?: string;
+  /** Outbound replacement leg must never reuse the customer's return tracking. */
+  exchange_tracking_code?: string;
+  exchange_order_id?: string;
+  exchange_order_code?: string;
+  exchange_order_status?: string;
   condition_check_result?: string;
   lines?: Array<{ order_item_id?: string; quantity?: number }>;
   payment?: AdminReturnPayment | null;
 }
 
+/** Linked chat tickets are read-only here; moderation and lifecycle actions use their canonical chat session. */
 export interface AdminTicketRow {
   ticket_id: string;
+  chat_session_id?: string | null;
   user_id?: string;
   status?: string;
   subject?: string;
@@ -213,6 +229,20 @@ export interface AdminTicketRow {
   version?: number;
 }
 
+/** Filtered, continuously refreshed context; pending/outage is not a safe classification. */
+export interface AdminChatContext {
+  guest_email?: string;
+  supervisor_required?: boolean;
+  handoff_summary?: { summary?: string; problem?: string; wanted?: string; failed_approaches?: string[]; verified_status?: string; risk?: string; sentiment?: string };
+  intelligence?: { confidence?: number; reasons?: string[]; trend?: string; updated_at?: string; source_seq?: number; filter_status?: 'ready' | 'pending' | 'outage'; corrected?: boolean; customer_sentiment?: string; staff_sentiment?: string };
+  warnings?: Array<{ id: string; text: string; action?: string; resolved?: boolean }>;
+  report_status?: { report_id?: string; state?: string; last_error?: string; updated_at?: string; attempts?: number; next_attempt_at?: string };
+  eligible_offers?: Array<{ offer_id: string; title: string; description?: string }>;
+  summary_confirmation?: { confirmed: boolean; by?: string; at?: string };
+  outcome?: { resolution?: string; finalSentiment?: string; rating?: number };
+}
+
+/** Staff-owned case; all previews and metadata are filtered by the server. */
 export interface AdminChatSessionRow {
   session_id: string;
   is_active?: boolean;
@@ -224,13 +254,17 @@ export interface AdminChatSessionRow {
   created_at?: string;
   guest_id?: string;
   handoff_status?: string;
-  metadata?: { guest_email?: string };
+  risk_level?: 'green' | 'yellow' | 'orange' | 'red';
+  assigned_to?: string | null;
+  metadata?: AdminChatContext;
 }
 
+/** Public transcript excludes originals and quarantines pending turns. */
 export interface AdminChatMessageRow {
   message_id?: string;
   sender?: string;
   text?: string;
+  moderation_status?: 'pending' | 'visible' | 'restricted';
   created_at?: string;
   product_ids?: string[];
   metadata?: { product_ids?: string[] };
@@ -261,6 +295,9 @@ export interface AdminProductRow {
   name: string;
   slug?: string;
   description?: string | null;
+  /** Published SEO fields returned unchanged from the product repository. */
+  seo_title?: string | null;
+  seo_description?: string | null;
   category_id?: string;
   category_name?: string | null;
   category?: { category_id?: string; name?: string };
@@ -270,11 +307,72 @@ export interface AdminProductRow {
   status?: string;
   images?: string[];
   collection?: string | null;
+  style_tags?: string[];
+  color_tone?: string | null;
+  occasions?: string[];
+  suitable_body_shapes?: string[];
   updated_at?: string | null;
   is_combo?: boolean;
   is_featured?: boolean;
   version?: number;
   variants?: AdminProductVariant[];
+}
+
+export interface AdminImageCriterion {
+  key: 'lighting' | 'background' | 'sharpness' | 'resolution';
+  label: string;
+  score: number;
+  status: 'good' | 'warning' | 'poor';
+  detail: string;
+}
+
+export interface AdminImageQualityAnalysis {
+  overallScore: number;
+  passed: boolean;
+  needsEnhancement: boolean;
+  grade: 'A' | 'B' | 'C' | 'D';
+  statusLabel: string;
+  summary: string;
+  metrics: {
+    width: number;
+    height: number;
+    brightness: number;
+    contrast: number;
+    sharpnessScore: number;
+    backgroundScore: number;
+  };
+  criteria: AdminImageCriterion[];
+  recommendations: string[];
+  uploadedUrl?: string;
+}
+
+export interface AdminImageEnhanceResult {
+  enhancedUrl: string;
+  previewDataUrl: string;
+  modelUsed: string;
+  improvements: string[];
+  beforeAnalysis: AdminImageQualityAnalysis;
+  afterAnalysis: AdminImageQualityAnalysis;
+}
+
+export interface AdminProductFashionSeoResult {
+  description: string;
+  seoTitle: string;
+  seoDescription: string;
+  titleSuggestions?: string[];
+  metaSuggestions?: string[];
+  slug: string;
+  collection: string;
+  material: string;
+  colorTone: 'Warm' | 'Cool' | 'Neutral';
+  styleTags: string[];
+  occasions: string[];
+  suitableBodyShapes: string[];
+  highlights: string[];
+  careInstructions: string[];
+  seoKeywords: string[];
+  seoScore: number;
+  modelUsed: string;
 }
 
 export interface AdminComboItemRow {
@@ -341,6 +439,13 @@ export interface AdminPromotionRow {
   highlight_label?: string | null;
   display_order?: number | null;
   is_featured?: boolean | null;
+  /** Approval is separate from activation; AI only proposes programs with approved bounded terms. */
+  recovery_approved?: boolean;
+  recovery_conditions?: string | null;
+  recovery_max_offers?: number;
+  recovery_revision?: number;
+  recovery_approved_by?: string | null;
+  recovery_approved_at?: string | null;
 }
 
 /**
@@ -444,6 +549,13 @@ export interface AdminVoucherRow {
   promo_id?: string | null;
   applicable_user_group?: string;
   version?: number;
+  /** Recovery codes require explicit staff confirmation for the eligible customer before checkout. */
+  recovery_approved?: boolean;
+  recovery_conditions?: string | null;
+  recovery_max_offers?: number;
+  recovery_revision?: number;
+  recovery_approved_by?: string | null;
+  recovery_approved_at?: string | null;
 }
 
 export interface AdminAuditRow {
@@ -481,6 +593,8 @@ export interface AdminPriceHistoryRow {
 }
 
 export interface AdminDashboardSummary {
+  /** Evidence-based nine-group report; absent source data is never a measured zero. */
+  management?: AdminManagementReport;
   operations: {
     pendingOrders: number;
     paymentErrors: number;
@@ -545,6 +659,37 @@ export interface AdminDashboardSummary {
 
 export type AdminInsightRange = 'day' | 'week' | 'month';
 export type AdminInsightSeverity = 'critical' | 'high' | 'watch' | 'ok';
+
+/** Fixed business rule IDs in system design table 3.15. */
+export type AdminManagementGroupId = 'AD_DB_01' | 'AD_DB_02' | 'AD_DB_03' | 'AD_DB_04' | 'AD_DB_05' | 'AD_DB_06' | 'AD_DB_07' | 'AD_DB_08' | 'AD_DB_09';
+
+/** Permitted drill target; target module permissions remain canonical at the API. */
+export interface AdminManagementAction {
+  label: string;
+  route: string;
+  query?: Record<string, string>;
+  module: 'orders' | 'returns' | 'products' | 'reviews' | 'promotions' | 'pricing' | 'accounts';
+}
+
+/** Four required facts for a management insight, with explicit source availability. */
+export interface AdminManagementGroup {
+  id: AdminManagementGroupId;
+  title: string;
+  availability: 'ready' | 'insufficient_data' | 'oltp_fallback';
+  dataNote?: string;
+  severity: AdminInsightSeverity;
+  phenomenon?: string;
+  scope?: string;
+  magnitude?: string;
+  consequence?: string;
+  action?: AdminManagementAction;
+}
+
+/** Nine metric groups and the server's actual analysis synchronization time. */
+export interface AdminManagementReport {
+  groups: AdminManagementGroup[];
+  lastSyncedAt?: string;
+}
 
 export interface AdminInsightQuestion {
   id: string;
@@ -693,12 +838,6 @@ export class AdminApiService {
     );
   }
 
-  adviseProductImage(body: { dataUrl: string; mimeType: string }): Observable<{ source?: string; notes?: string[]; imageBase64?: string; imageMime?: string; imageError?: string }> {
-    return this.http.post<{ source?: string; notes?: string[]; imageBase64?: string; imageMime?: string; imageError?: string }>(
-      `${this.baseUrl}/api/v1/admin/products/image-advice`,
-      body,
-    );
-  }
 
   insights(params: Record<string, string> = {}): Observable<AdminInsightsPayload> {
     return this.http.get<AdminInsightsPayload>(`${this.baseUrl}/api/v1/admin/insights`, { params: this.params(params) });
@@ -861,6 +1000,26 @@ export class AdminApiService {
   }
 
   /**
+   * Evaluates product image studio quality (resolution, lighting, background, sharpness) + Gemini Vision recommendation.
+   */
+  analyzeProductImage(body: Record<string, unknown>): Observable<AdminImageQualityAnalysis> {
+    return this.http.post<AdminImageQualityAnalysis>(`${this.baseUrl}/api/v1/admin/products/ai-image-analyze`, body);
+  }
+
+  /**
+   * Enhances a new or existing product image using K3s U2Net + Studio lighting/sharpness/backdrop pipeline.
+   */
+  enhanceProductImage(body: Record<string, unknown>): Observable<AdminImageEnhanceResult> {
+    return this.http.post<AdminImageEnhanceResult>(`${this.baseUrl}/api/v1/admin/products/ai-image-enhance`, body);
+  }
+
+  /**
+   * Generates Fashion SEO metadata, rich description, and User PDP attributes using Gemini.
+   */
+  optimizeProductSeo(body: Record<string, unknown>): Observable<AdminProductFashionSeoResult> {
+    return this.http.post<AdminProductFashionSeoResult>(`${this.baseUrl}/api/v1/admin/products/ai-seo-optimize`, body);
+  }
+  /**
    * Lists variants for one product.
    */
   listVariants(productId: string): Observable<AdminListPayload<AdminProductVariant>> {
@@ -906,16 +1065,6 @@ export class AdminApiService {
   /**
    * Previews a product CSV import.
    */
-  /**
-   * Stores one catalog photo and returns its public URL.
-   * The product form keeps that URL on the image list.
-   */
-  uploadProductImage(file: File): Observable<{ url?: string }> {
-    const body = new FormData();
-    body.append("file", file);
-    return this.http.post<{ url?: string }>(`${this.baseUrl}/api/v1/admin/products/image`, body);
-  }
-
   previewCsv(csv: string): Observable<unknown> {
     return this.http.post(`${this.baseUrl}/api/v1/admin/products/import-csv`, { csv });
   }
@@ -1073,12 +1222,12 @@ export class AdminApiService {
   }
 
   /**
-   * Assigns or closes a CSKH chat session.
+   * Exclusively claims a CSKH case for the current staff member; resolution uses confirmed review.
    */
-  assignChatSession(sessionId: string, status: string): Observable<AdminChatMessagesPayload> {
+  assignChatSession(sessionId: string): Observable<AdminChatMessagesPayload> {
     return this.http.post<AdminChatMessagesPayload>(
       `${this.baseUrl}/api/v1/admin/chat-sessions/${encodeURIComponent(sessionId)}/assign`,
-      { status },
+      { status: 'assigned' },
     );
   }
 
@@ -1111,6 +1260,11 @@ export class AdminApiService {
    */
   triggerStripeRefund(returnId: string, body: Record<string, unknown> = {}): Observable<unknown> {
     return this.http.post(`${this.baseUrl}/api/v1/admin/returns/${encodeURIComponent(returnId)}/trigger-stripe-refund`, body);
+  }
+
+  /** Records transfer reference and evidence for a captured non-Stripe refund. */
+  recordManualRefund(returnId: string, body: Record<string, unknown>): Observable<unknown> {
+    return this.http.post(`${this.baseUrl}/api/v1/admin/returns/${encodeURIComponent(returnId)}/manual-refund`, body);
   }
 
   /**
@@ -1163,6 +1317,11 @@ export class AdminApiService {
   /**
    * Lists price-change history.
    */
+  /** Reads price rows with pricing permission instead of catalog access. */
+  listPricingProducts(params: Record<string, string> = {}): Observable<AdminListPayload<AdminProductRow>> {
+    return this.http.get<AdminListPayload<AdminProductRow>>(this.baseUrl + '/api/v1/admin/pricing/products', { params: this.params(params) });
+  }
+
   listPriceHistory(params: Record<string, string> = {}): Observable<AdminListPayload<AdminPriceHistoryRow>> {
     return this.http.get<AdminListPayload<AdminPriceHistoryRow>>(`${this.baseUrl}/api/v1/admin/pricing/history`, {
       params: this.params(params),
@@ -1172,8 +1331,8 @@ export class AdminApiService {
   /**
    * Updates catalog prices through the original pricing API.
    */
-  changePrice(productId: string, body: Record<string, unknown>): Observable<unknown> {
-    return this.http.post(`${this.baseUrl}/api/v1/admin/products/${encodeURIComponent(productId)}/change-price`, body);
+  changePrice(productId: string, body: Record<string, unknown>): Observable<AdminProductRow> {
+    return this.http.post<AdminProductRow>(`${this.baseUrl}/api/v1/admin/products/${encodeURIComponent(productId)}/change-price`, body);
   }
 
   /**

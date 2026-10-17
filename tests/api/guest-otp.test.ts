@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { maskEmail, requireGuestOtpEmail } from "../../apps/api/src/user/orders.js";
+import { maskEmail, requireGuestOtpEmail } from "../../apps/api/src/user/order-router.js";
 
 test("guest OTP requires an email because there is no SMS provider", () => {
   assert.equal(requireGuestOtpEmail("han@velura.vn"), "han@velura.vn");

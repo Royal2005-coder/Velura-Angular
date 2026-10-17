@@ -1,0 +1,32 @@
+<section class="review-composer" aria-label="Viết đánh giá sản phẩm">
+  <header><h3>Chia sẻ trải nghiệm của bạn</h3><p>Bạn có thể đánh giá dù chưa mua hàng. Nhãn “Đã mua hàng” chỉ được thêm khi hệ thống xác nhận sản phẩm đã giao.</p></header>
+  @if (error()) { <p class="review-composer__error" role="alert">{{ error() }}</p> }
+  @if (success()) { <p class="review-composer__success" role="status">{{ success() }}</p> }
+  @if (!member()) {
+    <div class="review-composer__verification">
+      <h4>Xác thực số điện thoại</h4>
+      <div class="review-composer__fields">
+        <label>Họ tên (tùy chọn)<input type="text" class="form-input" name="reviewName" autocomplete="name" [(ngModel)]="fullName" [disabled]="busy()" maxlength="120" /></label>
+        <label>Số điện thoại<input type="tel" class="form-input" name="reviewPhone" autocomplete="tel" [(ngModel)]="phone" (ngModelChange)="contactChanged()" [disabled]="busy()" /></label>
+        <label>Email nhận mã trong chế độ SMS demo<input type="email" class="form-input" name="reviewEmail" autocomplete="email" [(ngModel)]="email" (ngModelChange)="contactChanged()" [disabled]="busy()" /></label>
+      </div>
+      @if (model.guestVerified()) {
+        <p class="review-composer__success" role="status">Số điện thoại đã được xác thực để gửi đánh giá trong phiên này.</p>
+      } @else {
+        <button type="button" class="btn btn--outline" [disabled]="busy() || cooldown() > 0" (click)="sendOtp()">{{ cooldown() > 0 ? 'Gửi lại sau ' + cooldown() + ' giây' : 'Gửi mã xác thực' }}</button>
+      }
+      @if (challenge(); as current) {
+        <p class="review-composer__delivery" role="status">@if (current.demo || current.channel === 'sms_demo') { <strong>SMS demo</strong> · Mã được gửi qua email{{ current.masked_email ? ' ' + current.masked_email : '' }}. } @else { Mã được gửi qua SMS. } Mã còn hiệu lực {{ remaining() }} giây.</p>
+        <div class="review-composer__otp"><label>Mã OTP 6 chữ số<input class="form-input" type="text" name="reviewOtp" autocomplete="one-time-code" inputmode="numeric" maxlength="6" [(ngModel)]="otp" [disabled]="busy()" /></label><button type="button" class="btn btn--primary" [disabled]="busy() || remaining() <= 0 || otp.length !== 6" (click)="verifyOtp()">Xác thực mã</button></div>
+      }
+    </div>
+  }
+  <form (submit)="$event.preventDefault()">
+    <fieldset class="review-composer__rating"><legend>Mức độ hài lòng</legend><div>@for (star of stars; track star) { <button type="button" [class.is-selected]="score() >= star" [attr.aria-label]="star + ' sao'" [attr.aria-pressed]="score() === star" (click)="score.set(star)" [disabled]="busy()"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg></button> }</div></fieldset>
+    @if (product().variants?.length) {
+      <label>Phân loại sản phẩm (tùy chọn)<select class="form-input" name="reviewVariant" [(ngModel)]="variantId" [disabled]="busy()"><option value="">Không chọn phân loại</option>@for (variant of product().variants; track variant.variant_id) { <option [value]="variant.variant_id">{{ variant.color || 'Màu mặc định' }} / {{ variant.size || 'Kích cỡ mặc định' }}</option> }</select></label>
+    }
+    <label>Nhận xét (tùy chọn)<textarea class="form-input" name="reviewComment" rows="4" maxlength="5000" [(ngModel)]="comment" [disabled]="busy()" placeholder="Chia sẻ về chất liệu, phom dáng hoặc trải nghiệm của bạn"></textarea></label>
+    <button type="button" class="btn btn--primary" [disabled]="busy() || (!member() && !model.guestVerified())" (click)="submitReview()">{{ busy() ? 'Đang xử lý…' : 'Gửi đánh giá' }}</button>
+  </form>
+</section>

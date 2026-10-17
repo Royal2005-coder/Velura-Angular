@@ -24,13 +24,17 @@
     "test:ng": "npm run test:user && npm run test:admin",
     "test": "npm run test:api && npm run test:ng",
     "db:check": "node scripts/run-migrations.mjs --check",
-    "db:migrate": "node scripts/run-migrations.mjs"
+    "db:migrate": "node scripts/run-migrations.mjs",
+    "ops": "node tools/ops/velura-ops.mjs",
+    "test:ops": "node --test tools/ops/velura-ops.test.mjs"
   },
   "engines": {
     "node": ">=22 <25"
   },
   "devDependencies": {
+    "@types/pg": "^8.23.1",
     "@vercel/routing-utils": "^6.6.0",
+    "pg": "^8.23.1",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2"
   },

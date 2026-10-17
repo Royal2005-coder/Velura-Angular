@@ -1,5 +1,6 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { CartLine, CartStore } from './cart.store';
+import type { DemoOrder } from './purchase-demo.store';
 
 /**
  * Thông tin giao hàng và các tùy chọn bổ sung chuẩn Coolmate (quà tặng, người nhận thay thế, xuất hóa đơn VAT, mã giới thiệu).
@@ -14,7 +15,6 @@ export interface CheckoutShipping {
   district?: string;
   ward?: string;
   detail?: string;
-  referral_code?: string;
   is_gift?: boolean;
   gift_gender?: 'nam' | 'nu';
   gift_name?: string;
@@ -35,6 +35,7 @@ export interface CheckoutMethods {
   paymentMethod: string;
 }
 
+/** Thông tin tối thiểu chuyển từ API checkout sang trang xác nhận đơn hàng. */
 export interface CreatedOrder {
   order_id?: string;
   /** Mã đơn cho khách (`VLR…`). Không phải mã vận đơn. */
@@ -42,11 +43,23 @@ export interface CreatedOrder {
   payment_method?: string;
   shipping_address?: string;
   shipping_method?: string;
+  /** Guest phải kích hoạt tài khoản trước khi đăng nhập và xem đơn trong khu vực Member. */
+  activation_required?: boolean;
+  /** Authorization stays in this browser tab's session, never in a persistent account session. */
+  order_access_token?: string;
+  /** Snapshot cho phép màn thanh toán online phục hồi sau reload dù giỏ đã được xoá. */
+  checkout_snapshot?: DemoOrder;
+  /** Hạn của phiên QR; frontend tính lại thời gian còn lại thay vì reset khi reload. */
+  payment_expires_at?: string;
 }
 
 const SHIPPING_KEY = 'checkout_shipping';
 const METHODS_KEY = 'checkout_methods';
 const ITEMS_KEY = 'checkout_items';
+const SOURCE_KEY = 'checkout_source';
+
+/** Buy-now lines are independent of the saved cart, even when variants match. */
+export type CheckoutSource = 'cart' | 'buy_now';
 const GUEST_PAYLOAD_KEY = 'guest_checkout_payload';
 const CREATED_ORDER_KEY = 'created_order';
 
@@ -61,6 +74,7 @@ export class CheckoutStore {
   readonly methods = signal<CheckoutMethods>(this.readMethods());
 
   readonly items = signal<CartLine[]>(this.readCheckoutItems());
+  readonly source = signal<CheckoutSource>(sessionStorage.getItem(SOURCE_KEY) === 'buy_now' ? 'buy_now' : 'cart');
   readonly checkoutItems = computed(() => this.items());
   readonly subtotal = computed(() =>
     this.items().reduce((sum, line) => sum + line.unit_price * line.quantity, 0),
@@ -70,7 +84,9 @@ export class CheckoutStore {
    * Sets the checkout items directly, updating both reactive signal and sessionStorage.
    * Prevents stale cart lines when navigating between cart and checkout.
    */
-  setCheckoutItems(items: CartLine[]): void {
+  setCheckoutItems(items: CartLine[], source: CheckoutSource = this.source()): void {
+    this.source.set(source);
+    sessionStorage.setItem(SOURCE_KEY, source);
     this.items.set(items);
     sessionStorage.setItem(ITEMS_KEY, JSON.stringify(items));
   }
@@ -99,7 +115,7 @@ export class CheckoutStore {
     });
     this.items.set(next);
     sessionStorage.setItem(ITEMS_KEY, JSON.stringify(next));
-    this.cart.updateQty(variantId, quantity);
+    if (this.source() === 'cart') this.cart.updateQty(variantId, quantity);
   }
 
   /**
@@ -113,7 +129,7 @@ export class CheckoutStore {
     const merged = [...filtered, { ...next, quantity }];
     this.items.set(merged);
     sessionStorage.setItem(ITEMS_KEY, JSON.stringify(merged));
-    this.cart.replaceVariant(fromVariantId, next);
+    if (this.source() === 'cart') this.cart.replaceVariant(fromVariantId, next);
   }
 
   /**
@@ -123,7 +139,7 @@ export class CheckoutStore {
     const next = this.items().filter((line) => line.variant_id !== variantId);
     this.items.set(next);
     sessionStorage.setItem(ITEMS_KEY, JSON.stringify(next));
-    this.cart.removeItem(variantId);
+    if (this.source() === 'cart') this.cart.removeItem(variantId);
   }
 
   /**
@@ -150,7 +166,7 @@ export class CheckoutStore {
       const raw = sessionStorage.getItem(ITEMS_KEY);
       if (raw) {
         const items = JSON.parse(raw) as CartLine[];
-        if (Array.isArray(items) && items.length) {
+        if (Array.isArray(items)) {
           return items;
         }
       }
@@ -183,7 +199,9 @@ export class CheckoutStore {
    * Stores the created order shown on the success page.
    */
   saveCreatedOrder(order: CreatedOrder): void {
-    localStorage.setItem(CREATED_ORDER_KEY, JSON.stringify(order));
+    const { order_access_token, ...snapshot } = order;
+    localStorage.setItem(CREATED_ORDER_KEY, JSON.stringify(snapshot));
+    if (order_access_token) sessionStorage.setItem('guest_order_access', JSON.stringify({ order_id: order.order_id, token: order_access_token }));
   }
 
   /**
@@ -192,7 +210,10 @@ export class CheckoutStore {
   readCreatedOrder(): CreatedOrder | null {
     try {
       const raw = localStorage.getItem(CREATED_ORDER_KEY);
-      return raw ? (JSON.parse(raw) as CreatedOrder) : null;
+      if (!raw) return null;
+      const order = JSON.parse(raw) as CreatedOrder;
+      const access = JSON.parse(sessionStorage.getItem('guest_order_access') || 'null') as { order_id?: string; token?: string } | null;
+      return { ...order, order_access_token: access?.order_id === order.order_id ? access?.token : undefined };
     } catch {
       return null;
     }
@@ -201,18 +222,58 @@ export class CheckoutStore {
   /**
    * Removes checked-out lines from the cart and clears checkout session keys.
    */
-  completeCheckout(orderedItems: CartLine[]): void {
-    const ordered = new Set(orderedItems.map((line) => line.variant_id));
-    this.cart.replaceItems(this.cart.items().filter((line) => !ordered.has(line.variant_id)));
+  completeCheckout(orderedItems?: CartLine[]): void {
+    const items = [...(orderedItems?.length ? orderedItems : this.readCheckoutItems())];
+    const remainingToConsume = items.map((it) => ({ ...it }));
+
+    const nextCart = this.cart.items().flatMap((cartLine) => {
+      let remainingQty = cartLine.quantity;
+      for (const ordered of remainingToConsume) {
+        if (remainingQty <= 0) break;
+        if (ordered.quantity <= 0) continue;
+        if (this.isLineMatch(cartLine, ordered)) {
+          const consume = Math.min(remainingQty, ordered.quantity);
+          remainingQty -= consume;
+          ordered.quantity -= consume;
+        }
+      }
+      return remainingQty > 0 ? [{ ...cartLine, quantity: remainingQty }] : [];
+    });
+
+    this.cart.replaceItems(nextCart);
+
     this.items.set([]);
     sessionStorage.removeItem(ITEMS_KEY);
+    sessionStorage.removeItem(SOURCE_KEY);
+    this.source.set('cart');
     sessionStorage.removeItem(GUEST_PAYLOAD_KEY);
+    sessionStorage.removeItem('selected_cart_items');
+    localStorage.removeItem('selected_cart_items');
     localStorage.removeItem(SHIPPING_KEY);
     localStorage.removeItem(METHODS_KEY);
     localStorage.removeItem('checkout_discount');
     localStorage.removeItem('checkout_voucher_id');
     localStorage.removeItem('checkout_voucher_code');
     localStorage.removeItem('checkout_voucher_declined');
+  }
+
+  private isLineMatch(a: CartLine, b: CartLine): boolean {
+    if ((a.is_combo || a.combo_id) && (b.is_combo || b.combo_id)) {
+      const aKey = a.combo_id || a.variant_id;
+      const bKey = b.combo_id || b.variant_id;
+      return aKey === bKey;
+    }
+    if (a.variant_id && b.variant_id && a.variant_id === b.variant_id) {
+      return true;
+    }
+    if (a.product_id && b.product_id && a.product_id === b.product_id) {
+      const colorA = (a.color || '').trim().toLowerCase();
+      const colorB = (b.color || '').trim().toLowerCase();
+      const sizeA = (a.size || '').trim().toLowerCase();
+      const sizeB = (b.size || '').trim().toLowerCase();
+      return colorA === colorB && sizeA === sizeB;
+    }
+    return false;
   }
 
   private readShipping(): CheckoutShipping {
@@ -228,7 +289,6 @@ export class CheckoutStore {
         district: raw.district || '',
         ward: raw.ward || '',
         detail: raw.detail || '',
-        referral_code: raw.referral_code || '',
         is_gift: Boolean(raw.is_gift),
         gift_gender: raw.gift_gender || 'nam',
         gift_name: raw.gift_name || '',

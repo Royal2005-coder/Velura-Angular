@@ -1,6 +1,5 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
-import { AuthService } from '../../core/services/auth.service';
 import { CartLine } from '../../core/services/cart.store';
 import { CheckoutStore } from '../../core/services/checkout.store';
 import { ApiService } from '../../core/services/api.service';
@@ -13,9 +12,7 @@ import type { VoucherChangedDetails } from '../../core/models/voucher.interface'
 interface OtpVerifyResponse {
   success?: boolean;
   message?: string;
-  token?: string;
-  user?: Record<string, unknown>;
-  claim_url?: string;
+  activation_required?: boolean;
   stripe?: { url?: string };
   order?: {
     order_id?: string;
@@ -34,10 +31,10 @@ interface OtpVerifyResponse {
 export class CheckoutOtpPage {
   private readonly checkout = inject(CheckoutStore);
   private readonly api = inject(ApiService);
-  private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
+  private readonly destroyRef = inject(DestroyRef);
 
-  readonly digits = signal(['', '', '', '']);
+  readonly digits = signal(['', '', '', '', '', '']);
   readonly seconds = signal(60);
   readonly errorMessage = signal<string | null>(null);
   readonly submitting = signal(false);
@@ -45,7 +42,6 @@ export class CheckoutOtpPage {
   readonly maskedEmail = signal(this.readMaskedEmail());
   readonly maskedPhone = signal(this.readMaskedPhone());
   readonly channel = signal<'sms' | 'email' | 'both'>('sms');
-  readonly devBypass = signal(false);
   readonly deliveryMessage = signal(this.readDeliveryMessage());
   readonly items = computed(() => this.checkout.readCheckoutItems());
   readonly totalLabel = computed(() => {
@@ -65,7 +61,7 @@ export class CheckoutOtpPage {
     const tick = window.setInterval(() => {
       this.seconds.update((value) => (value > 0 ? value - 1 : 0));
     }, 1000);
-    window.setTimeout(() => window.clearInterval(tick), 301000);
+    this.destroyRef.onDestroy(() => window.clearInterval(tick));
   }
 
   /**
@@ -103,7 +99,6 @@ export class CheckoutOtpPage {
         channel?: 'sms' | 'email' | 'both';
         masked_phone?: string;
         masked_email?: string;
-        dev_bypass?: boolean;
       }>('/api/user/orders/otp-send', {
         phone: payload['phone'],
         email: payload['email'] || '',
@@ -123,7 +118,6 @@ export class CheckoutOtpPage {
             if (res.channel) {
               this.channel.set(res.channel);
             }
-            this.devBypass.set(res.dev_bypass === true);
             if (res.message) {
               sessionStorage.setItem('velura_otp_message', res.message);
               this.deliveryMessage.set(res.message);
@@ -186,19 +180,20 @@ export class CheckoutOtpPage {
   }
 
   /**
-   * Confirms the original 4-digit checkout OTP and places the guest order.
+   * Confirms the original 6-digit checkout OTP and places the guest order.
    */
   confirm(): void {
+    if (this.submitting()) return;
     const inputs = document.querySelectorAll<HTMLInputElement>('.otp-input');
-    if (inputs.length === 4) {
+    if (inputs.length === 6) {
       const fromDom = Array.from(inputs).map((input) => input.value.replace(/\D/g, '').slice(-1));
-      if (fromDom.join('').length === 4) {
+      if (fromDom.join('').length === 6) {
         this.digits.set(fromDom);
       }
     }
     const code = this.digits().join('');
-    if (code.length < 4) {
-      this.errorMessage.set('Vui lòng nhập đầy đủ mã OTP 4 chữ số!');
+    if (code.length < 6) {
+      this.errorMessage.set('Vui lòng nhập đầy đủ mã OTP 6 chữ số!');
       return;
     }
     const guestPayload = this.checkout.readGuestPayload();
@@ -215,6 +210,7 @@ export class CheckoutOtpPage {
           shipping_name: guestPayload['shipping_name'],
           shipping_phone: guestPayload['phone'],
           shipping_address: guestPayload['shipping_address'],
+          shipping_method: guestPayload['shipping_method'],
           shipping_fee: guestPayload['shipping_fee'],
           voucher_id: guestPayload['voucher_id'],
           decline_voucher: guestPayload['decline_voucher'] === true,
@@ -225,7 +221,6 @@ export class CheckoutOtpPage {
           shipping_email: guestPayload['email'] || '',
           items: guestPayload['items'],
           note: guestPayload['note'],
-          referral_code: undefined,
           is_gift: guestPayload['is_gift'],
           gift_gender: guestPayload['gift_gender'],
           gift_name: guestPayload['gift_name'],
@@ -247,26 +242,20 @@ export class CheckoutOtpPage {
             this.errorMessage.set(res.message || 'Xác thực OTP không thành công');
             return;
           }
-          this.auth.applySession(res.token, res.user);
-          if (res.claim_url) {
-            sessionStorage.setItem('velura_claim_url', res.claim_url);
-          } else {
-            sessionStorage.removeItem('velura_claim_url');
-          }
-          localStorage.removeItem('guest_temp_password');
           this.checkout.saveCreatedOrder({
             order_id: res.order.order_id,
             order_code: res.order.order_code,
             payment_method: res.order.payment_method,
             shipping_address: res.order.shipping_address,
             shipping_method: this.checkout.methods().shippingMethod,
+            activation_required: res.activation_required === true,
           });
           this.checkout.completeCheckout((guestPayload['items'] as CartLine[]) || []);
           if (res.stripe?.url) {
             window.location.assign(res.stripe.url);
             return;
           }
-          showToast('Thanh toán & Đăng ký thành công!');
+          showToast('Đơn hàng đã được ghi nhận.');
           void this.router.navigateByUrl('/checkout/confirm');
         },
         error: (error: Error) => {

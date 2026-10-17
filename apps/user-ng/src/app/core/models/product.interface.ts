@@ -24,6 +24,8 @@ export interface ProductSummary {
   created_at?: string | null;
   updated_at?: string | null;
   description?: string;
+  seo_title?: string | null;
+  seo_description?: string | null;
   variants?: ProductVariant[];
   combo_components?: ComboComponent[];
   reviews?: ProductReview[];
@@ -48,8 +50,15 @@ export interface ProductReview {
   user_full_name?: string;
   created_at?: string;
   review_tags?: string[];
+  submitted_at?: string;
+  helpful_count?: number;
   images?: string[];
   admin_reply?: string;
+  /** Server-confirmed delivered purchase of this product; omitted/false never receives a buyer badge. */
+  verified_purchase?: boolean;
+  variant_id?: string | null;
+  variant_size?: string | null;
+  variant_color?: string | null;
 }
 
 export interface ProductColorOption {

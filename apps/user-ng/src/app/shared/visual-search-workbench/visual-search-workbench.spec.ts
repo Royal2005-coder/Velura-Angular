@@ -23,6 +23,15 @@ describe('VisualSearchWorkbench', () => {
     page.select({ target: { files: [new File(['image'], 'dress.png', { type: 'image/png' })], value: '' } } as unknown as Event);
     await Promise.resolve(); await Promise.resolve();
   }
+  it('offers one local image picker and keeps live camera as the distinct alternative', () => {
+    const fixture = TestBed.createComponent(VisualSearchWorkbench);
+    fixture.detectChanges();
+    const root: HTMLElement = fixture.nativeElement;
+    expect(root.querySelectorAll('input[type="file"]')).toHaveLength(1);
+    expect(root.textContent).toContain('Chọn ảnh từ máy');
+    expect(root.textContent).not.toContain('Chụp bằng thiết bị');
+    expect(root.textContent).toContain('Mở máy ảnh');
+  });
   it('requires consent and never treats featured products as similarity IDs', async () => {
     const fixture = TestBed.createComponent(VisualSearchWorkbench);
     fixture.detectChanges();

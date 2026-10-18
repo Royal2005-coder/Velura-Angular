@@ -20,7 +20,7 @@ function requireDeliveredWithinWindow(order: JsonObject): void {
     ? new Date(String(order.delivered_at))
     : new Date(String(order.updated_at || order.created_at));
   if (!returnWindowOpen(deliveryDate, new Date())) {
-    throw new HttpError(400, "RETURN_WINDOW_CLOSED", "Quá thời hạn đổi/trả (30 ngày kể từ khi giao hàng)");
+    throw new HttpError(400, "RETURN_WINDOW_CLOSED", "Quá thời hạn đổi/trả (7 ngày kể từ khi giao hàng)");
   }
 }
 

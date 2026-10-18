@@ -218,7 +218,7 @@
                   style="background: #2a2522;"
                   (click)="openReturnModal()"
                 >
-                  🔄 Yêu cầu Đổi / Trả hàng (30 ngày)
+                  🔄 Yêu cầu Đổi / Trả hàng (7 ngày)
                 </button>
               }
               @if (ord.status === 'delivered') {
@@ -345,7 +345,7 @@
       <div class="address-book-modal-backdrop" (click)="closeReturnModal()">
         <div class="address-book-modal" (click)="$event.stopPropagation()">
           <div class="address-book-modal__header">
-            <h3 style="margin: 0; font-size: 1.125rem; font-weight: 600; color: var(--dark, #2a2522);">Yêu cầu Đổi / Trả hàng (30 ngày)</h3>
+            <h3 style="margin: 0; font-size: 1.125rem; font-weight: 600; color: var(--dark, #2a2522);">Yêu cầu Đổi / Trả hàng (7 ngày)</h3>
             <button type="button" class="address-book-modal__close" (click)="closeReturnModal()">&times;</button>
           </div>
           <div class="address-book-modal__body">
@@ -404,7 +404,7 @@
               </div>
 
               <div style="background: #fdf8f5; border: 1px solid #f2e3da; border-radius: 8px; padding: 10px 14px; font-size: 0.75rem; color: #6b5c54; line-height: 1.4;">
-                🛡️ <strong>Chính sách đổi trả Velura:</strong> Hỗ trợ đổi trả miễn phí trong 30 ngày kể từ ngày nhận hàng với sản phẩm còn nguyên tem mác. Hoàn tiền chuyển khoản trong 4 - 5 ngày làm việc sau khi nhận lại hàng.
+                🛡️ <strong>Chính sách đổi trả Velura:</strong> Hỗ trợ đổi trả miễn phí trong 7 ngày kể từ ngày nhận hàng với sản phẩm còn nguyên tem mác. Hoàn tiền chuyển khoản trong 4 - 5 ngày làm việc sau khi nhận lại hàng.
               </div>
 
               @if (returnError()) {

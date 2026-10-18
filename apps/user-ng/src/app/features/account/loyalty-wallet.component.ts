@@ -6,7 +6,13 @@ import { LoyaltyService, type LoyaltyWallet } from '../../core/services/loyalty.
 import { formatVnd } from '../../core/utils/money';
 
 /** Read-only wallet and referral history, reachable from existing account offers. */
-@Component({ selector: 'app-loyalty-wallet', standalone: true, imports: [RouterLink], templateUrl: './loyalty-wallet.component.html' })
+@Component({
+  selector: 'app-loyalty-wallet',
+  standalone: true,
+  imports: [RouterLink],
+  templateUrl: './loyalty-wallet.component.html',
+  styleUrl: './loyalty-wallet.component.css',
+})
 export class LoyaltyWalletComponent {
   private readonly model = inject(LoyaltyService);
   private readonly auth = inject(AuthService);
@@ -27,9 +33,12 @@ export class LoyaltyWalletComponent {
   older(): void { const history = this.wallet()?.history; if (history?.length && this.hasOlder()) this.load(history[history.length - 1].entry_id); }
   /** Copy only the public referral link; clipboard failure remains visible. */
   async copyReferral(): Promise<void> {
-    if (!this.wallet()?.referral_code) return;
-    try { await navigator.clipboard.writeText(this.referralLink()); this.notice.set('Đã sao chép liên kết giới thiệu.'); }
-    catch { this.error.set('Không sao chép được. Chọn và sao chép liên kết bên dưới.'); }
+    await this.copy(this.referralLink(), 'Đã sao chép liên kết giới thiệu.');
+  }
+  /** Copy the short referral code for channels where a full link is unsuitable. */
+  async copyReferralCode(): Promise<void> {
+    const code = this.wallet()?.referral_code;
+    if (code) await this.copy(code, 'Đã sao chép mã giới thiệu.');
   }
   /** Format server monetary values, not a frontend reward calculation. */
   money(value: number): string { return formatVnd(value); }
@@ -37,6 +46,8 @@ export class LoyaltyWalletComponent {
   date(value: string): string { return new Date(value).toLocaleString('vi-VN'); }
   /** Translate authoritative referral and voucher states without inferring qualification. */
   state(value: string): string { return ({ pending: 'Chờ đủ điều kiện', qualified: 'Đã đủ điều kiện', reversed: 'Đã đảo thưởng', issued: 'Đã cấp', used: 'Đã sử dụng', revoked: 'Đã thu hồi' } as Record<string, string>)[value] || value; }
+  /** Translate ledger tokens into compact customer-facing labels. */
+  entryLabel(value: string): string { return ({ earn: 'Tích điểm', earned: 'Tích điểm', spend: 'Dùng điểm', consumed: 'Dùng điểm', restore: 'Hoàn điểm', reversed: 'Điều chỉnh', clawback: 'Thu hồi', expiry: 'Hết hạn', expired: 'Hết hạn', debt_repayment: 'Bù điểm' } as Record<string, string>)[value] || value; }
   private load(before?: string): void {
     if (this.busy()) return;
     const generation = ++this.generation;
@@ -52,5 +63,10 @@ export class LoyaltyWalletComponent {
       },
       error: (error: Error) => { if (generation === this.generation) { this.busy.set(false); this.error.set(error.message || 'Chưa tải được ví điểm.'); } },
     });
+  }
+  private async copy(value: string, success: string): Promise<void> {
+    this.error.set('');
+    try { await navigator.clipboard.writeText(value); this.notice.set(success); }
+    catch { this.notice.set(''); this.error.set('Không sao chép được. Hãy chọn nội dung và sao chép thủ công.'); }
   }
 }

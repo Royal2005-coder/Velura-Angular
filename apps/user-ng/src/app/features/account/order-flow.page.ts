@@ -81,8 +81,14 @@ export class OrderFlowPage {
   readonly maskedPhone = signal('');
   readonly maskedEmail = computed(() => this.model.maskedEmail ? this.model.maskedEmail() : '');
   readonly developmentOtp = computed(() => this.model.developmentOtp ? this.model.developmentOtp() : '');
+  readonly countdown = computed(() => {
+    const minutes = Math.floor(this.seconds() / 60).toString().padStart(2, '0');
+    const seconds = (this.seconds() % 60).toString().padStart(2, '0');
+    return `${minutes}:${seconds}`;
+  });
   readonly verified = signal(false);
-  readonly seconds = signal(300);
+  readonly seconds = signal(60);
+  readonly failedOtpAttempts = signal(0);
   readonly cooldown = signal(0);
   readonly busy = signal(false);
   readonly evidence = signal<Array<{ name: string; url: string; file: File }>>([]);
@@ -173,10 +179,10 @@ export class OrderFlowPage {
       this.verified.set(true);
       this.view.set(this.returnsEntry ? 'requests' : 'list');
       if (id) this.open(id);
-    } else if (this.model.verifiedPhone()) {
+    } else if (this.model.verifiedPhone() && id) {
       this.verified.set(true);
       this.view.set(this.returnsEntry ? 'requests' : 'list');
-      if (id) this.open(id);
+      this.open(id);
     } else if (id) {
       this.mode = 'code';
       this.query = id;
@@ -208,7 +214,8 @@ export class OrderFlowPage {
         this.challengeMode = this.mode;
         this.challengeOrderId = this.mode === 'code' ? value : '';
         this.maskedPhone.set(this.model.maskedPhone?.() || (this.mode === 'phone' ? maskPhone(value) : 'số điện thoại đặt hàng'));
-        this.seconds.set(300);
+        this.seconds.set(this.model.otpExpiresIn?.() || 60);
+        this.failedOtpAttempts.set(0);
         this.cooldown.set(60);
         this.otp = '';
         this.view.set('otp');
@@ -255,7 +262,8 @@ export class OrderFlowPage {
         this.challengePhone = normalizePhone(phone);
         this.challengeOrderId = order?.id || '';
         this.maskedPhone.set(maskPhone(phone));
-        this.seconds.set(300);
+        this.seconds.set(this.model.otpExpiresIn?.() || 60);
+        this.failedOtpAttempts.set(0);
         this.cooldown.set(30);
         this.otp = '';
         this.view.set('otp');
@@ -269,7 +277,8 @@ export class OrderFlowPage {
     this.model
       .sendOtp(this.challengePhone, this.challengeMode)
       .then(() => {
-        this.seconds.set(300);
+        this.seconds.set(this.model.otpExpiresIn?.() || 60);
+        this.failedOtpAttempts.set(0);
         this.cooldown.set(60);
         this.otp = '';
         this.error.set('');
@@ -279,7 +288,7 @@ export class OrderFlowPage {
   }
   /** A valid guest challenge exposes only orders belonging to that phone. */
   verify(): void {
-    if (this.busy() || this.seconds() === 0 || !/^\d{6}$/.test(this.otp)) return;
+    if (this.busy() || this.seconds() === 0 || this.failedOtpAttempts() >= 5 || !/^\d{6}$/.test(this.otp)) return;
     this.busy.set(true);
     this.model
       .verifyOtp(this.otp)
@@ -289,7 +298,15 @@ export class OrderFlowPage {
         this.view.set(this.returnsEntry ? 'requests' : 'list');
         if (this.challengeOrderId) this.open(this.challengeOrderId);
       })
-      .catch((error) => this.error.set(orderAccountErrorMessage(error)))
+      .catch((error: unknown) => {
+        const code = error && typeof error === 'object' && 'code' in error ? String(error.code) : '';
+        if (code === 'SESSION_LOCKED') this.failedOtpAttempts.set(5);
+        else if (code === 'INVALID_OTP') this.failedOtpAttempts.update((attempts) => Math.min(5, attempts + 1));
+        else if (code === 'EXPIRED_OTP') this.seconds.set(0);
+        this.error.set(code === 'SESSION_LOCKED'
+          ? 'Bạn đã nhập sai OTP 5 lần. Vui lòng gửi mã mới.'
+          : orderAccountErrorMessage(error));
+      })
       .finally(() => this.busy.set(false));
   }
   /** Open an authorized order on its canonical detail URL, unless an internal after-sales view owns the URL. */

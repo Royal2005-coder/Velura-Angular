@@ -54,6 +54,7 @@ test("local tracking uses the shared 123456 shortcut and reveals only the final 
     const response = await sendGuestTrackingOtp({ order_code: ORDER }, "127.0.0.1");
     assert.equal(response.success, true);
     assert.equal(response.development_otp, "123456");
+    assert.equal(response.expires_in, 60);
     assert.equal(response.masked_phone, "*******678");
     assert.equal("phone" in response, false);
     assert.equal(maskTrackingPhone("+84912345678"), "*******678");

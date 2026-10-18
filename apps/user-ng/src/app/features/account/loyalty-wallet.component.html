@@ -1,27 +1,86 @@
-<section class="sp-section" aria-labelledby="loyalty-title">
-  <h3 id="loyalty-title">Ví điểm & giới thiệu bạn bè</h3>
-  @if (busy()) { <p role="status">Đang tải ví điểm…</p> }
-  @if (error()) { <p role="alert">{{ error() }}</p> }
-  <button type="button" class="btn btn--outline" [disabled]="busy()" (click)="reload()">Tải lại ví</button>
+<section class="loyalty" aria-labelledby="loyalty-title">
+  <div class="loyalty__heading">
+    <div>
+      <p class="loyalty__eyebrow">VELURA REWARDS</p>
+      <h3 id="loyalty-title">Ví điểm của bạn</h3>
+      <p>Theo dõi điểm thưởng và chia sẻ ưu đãi cùng bạn bè.</p>
+    </div>
+    <button type="button" class="loyalty__refresh" [disabled]="busy()" (click)="reload()">
+      {{ busy() ? 'Đang tải…' : 'Làm mới' }}
+    </button>
+  </div>
+
+  @if (error()) { <p class="loyalty__message loyalty__message--error" role="alert">{{ error() }}</p> }
+  @if (notice()) { <p class="loyalty__message loyalty__message--success" role="status">{{ notice() }}</p> }
+
   @if (wallet(); as wallet) {
-    <p>Số dư: <strong>{{ wallet.balance_points }} điểm</strong> · Giá trị quy đổi theo máy chủ: {{ money(wallet.amount_vnd) }}.</p>
-    <p>Có thể sử dụng: {{ wallet.available_points }} điểm. Đơn hàng được báo giá lại tại thanh toán; điểm chỉ giảm tối đa 50% tiền hàng sau voucher, không giảm phí giao hàng.</p>
-    @if (!wallet.policy.spending_enabled || !wallet.policy.policy_approved_at) { <p role="status">Sử dụng điểm đang chờ phê duyệt chính sách làm tròn và hết hạn. Không thể đổi điểm lúc này.</p> }
-    @if (wallet.balance_points < 0) { <p role="status">Số dư âm sau điều chỉnh đơn hàng; không thể sử dụng điểm cho đến khi số dư được bù.</p> }
-    <h4>Điểm sắp hết hạn</h4>
-    <ul>@for (lot of wallet.expiries; track $index) { <li>{{ lot.points }} điểm · hết hạn {{ date(lot.expires_at) }}</li> } @empty { <li>Không có điểm còn hạn.</li> }</ul>
-    <h4>Lịch sử điểm</h4>
-    <ul>@for (entry of wallet.history; track entry.entry_id) { <li>{{ date(entry.created_at) }} · {{ entry.kind }}: {{ entry.points }} điểm @if (entry.expires_at) { · hạn {{ date(entry.expires_at) }} } @if (entry.order_id) { <a [routerLink]="['/account/orders', entry.order_id]">Xem đơn hàng</a> }</li> } @empty { <li>Chưa có giao dịch điểm.</li> }</ul>
-    @if (hasOlder()) { <button type="button" class="btn btn--outline" [disabled]="busy()" (click)="older()">Lịch sử cũ hơn</button> }
-    <h4>Mã giới thiệu: {{ wallet.referral_code }}</h4>
-    <p>Mã chỉ được gắn khi bạn bè đăng ký. Voucher giảm 20%, đơn từ 1.000.000đ, tối đa 500.000đ, dùng một lần trong 60 ngày. Người giới thiệu nhận ưu đãi sau đơn giao thành công đầu tiên đủ điều kiện.</p>
-    <label>Liên kết giới thiệu<input type="text" readonly [value]="referralLink()" aria-label="Liên kết giới thiệu để sao chép" /></label>
-    <button type="button" class="btn btn--outline" (click)="copyReferral()">Sao chép liên kết</button>
-    @if (notice()) { <p role="status">{{ notice() }}</p> }
-    <ul>@for (referral of wallet.referrals; track referral.attribution_id) { <li>{{ date(referral.created_at) }} · {{ state(referral.state) }}</li> } @empty { <li>Chưa có lượt giới thiệu.</li> }</ul>
-    <h4>Lịch sử voucher giới thiệu</h4>
-    <p>Nếu đơn không còn đủ điều kiện, voucher chưa dùng được thu hồi. Voucher đã dùng được chuyển sang CSKH xem xét thủ công, không tự động thu tiền.</p>
-    <ul>@for (reward of wallet.reward_vouchers; track reward.voucher_id) { <li><strong>{{ reward.code }}</strong> · {{ state(reward.state) }} · hạn {{ date(reward.expires_at) }}<ul>@for (event of reward.history; track event.history_id) { <li>{{ date(event.created_at) }} · {{ event.action }}</li> }</ul></li> } @empty { <li>Chưa có voucher giới thiệu.</li> }</ul>
-    <a routerLink="/account/vouchers">Xem ví voucher</a> · <a routerLink="/cart">Đến giỏ hàng</a>
+    <div class="loyalty__summary">
+      <article class="loyalty__balance">
+        <span>Số dư hiện tại</span>
+        <strong>{{ wallet.balance_points }}</strong>
+        <small>điểm · tương đương {{ money(wallet.amount_vnd) }}</small>
+        <div class="loyalty__available">Khả dụng <b>{{ wallet.available_points }} điểm</b></div>
+      </article>
+
+      <article class="loyalty__referral-card">
+        <span>Mã giới thiệu</span>
+        <div class="loyalty__code-row">
+          <strong>{{ wallet.referral_code }}</strong>
+          <button type="button" (click)="copyReferralCode()">Sao chép mã</button>
+        </div>
+        <p>Bạn bè nhận ưu đãi khi đăng ký bằng mã của bạn.</p>
+        <div class="loyalty__link-row">
+          <input type="text" readonly [value]="referralLink()" aria-label="Liên kết giới thiệu" />
+          <button type="button" (click)="copyReferral()">Sao chép link</button>
+        </div>
+      </article>
+    </div>
+
+    @if (!wallet.policy.spending_enabled || !wallet.policy.policy_approved_at) {
+      <p class="loyalty__policy" role="status">Tính năng dùng điểm khi thanh toán đang tạm khóa.</p>
+    }
+
+    <div class="loyalty__grid">
+      <article class="loyalty__panel">
+        <div class="loyalty__panel-title"><div><h4>Lịch sử điểm</h4><p>Các giao dịch tăng, dùng và hoàn điểm.</p></div><span>{{ wallet.history.length }}</span></div>
+        <div class="loyalty__list">
+          @for (entry of wallet.history; track entry.entry_id) {
+            <div class="loyalty__row">
+              <div><strong>{{ entryLabel(entry.kind) }}</strong><small>{{ date(entry.created_at) }}</small></div>
+              <div class="loyalty__row-value" [class.loyalty__row-value--positive]="entry.points > 0">{{ entry.points > 0 ? '+' : '' }}{{ entry.points }} điểm</div>
+              @if (entry.order_id) { <a [routerLink]="['/account/orders', entry.order_id]">Xem đơn</a> }
+            </div>
+          } @empty {
+            <div class="loyalty__empty"><strong>Chưa có giao dịch</strong><span>Điểm sẽ xuất hiện sau khi đơn đủ điều kiện.</span></div>
+          }
+        </div>
+        @if (hasOlder()) { <button type="button" class="loyalty__more" [disabled]="busy()" (click)="older()">Xem lịch sử cũ hơn</button> }
+      </article>
+
+      <article class="loyalty__panel">
+        <div class="loyalty__panel-title"><div><h4>Lượt giới thiệu</h4><p>Trạng thái bạn bè đã tham gia.</p></div><span>{{ wallet.referrals.length }}</span></div>
+        <div class="loyalty__list">
+          @for (referral of wallet.referrals; track referral.attribution_id) {
+            <div class="loyalty__row"><div><strong>{{ state(referral.state) }}</strong><small>{{ date(referral.created_at) }}</small></div><span class="loyalty__badge">{{ state(referral.state) }}</span></div>
+          } @empty {
+            <div class="loyalty__empty"><strong>Chưa có lượt giới thiệu</strong><span>Sao chép mã hoặc liên kết ở phía trên để chia sẻ.</span></div>
+          }
+        </div>
+      </article>
+    </div>
+
+    <article class="loyalty__panel loyalty__panel--wide">
+      <div class="loyalty__panel-title"><div><h4>Voucher giới thiệu</h4><p>Các voucher đã nhận từ chương trình giới thiệu.</p></div><span>{{ wallet.reward_vouchers.length }}</span></div>
+      <div class="loyalty__voucher-grid">
+        @for (reward of wallet.reward_vouchers; track reward.voucher_id) {
+          <div class="loyalty__voucher"><div><span>{{ state(reward.state) }}</span><strong>{{ reward.code }}</strong><small>Hết hạn {{ date(reward.expires_at) }}</small></div><a routerLink="/account/vouchers">Xem voucher</a></div>
+        } @empty {
+          <div class="loyalty__empty"><strong>Chưa có voucher giới thiệu</strong><span>Voucher đủ điều kiện sẽ được hiển thị tại đây.</span></div>
+        }
+      </div>
+      <div class="loyalty__footer-links"><a routerLink="/account/vouchers">Mở ví voucher</a><a routerLink="/products">Tiếp tục mua sắm</a></div>
+    </article>
+  } @else if (!busy() && !error()) {
+    <div class="loyalty__empty loyalty__empty--page"><strong>Chưa có dữ liệu ví</strong><span>Nhấn Làm mới để tải lại.</span></div>
   }
 </section>

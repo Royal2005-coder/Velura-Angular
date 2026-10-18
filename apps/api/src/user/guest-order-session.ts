@@ -140,7 +140,7 @@ export async function sendGuestTrackingOtp(body: JsonObject, ip: string): Promis
   if (targetEmails.length > 0) {
     const greeting = customerName || "Quý khách";
     const emailSubject = `[SMS OTP Demo - ${phone}] Mã xác thực đơn hàng Velura: ${code}`;
-    const emailBody = `Chào ${greeting},\n\n[SMS OTP Demo cho SĐT ${phone}]\nMã xác thực OTP tra cứu đơn hàng Velura của bạn là: ${code}.\n\nMã có hiệu lực trong 5 phút. Vui lòng không chia sẻ mã này cho bất kỳ ai.`;
+    const emailBody = `Chào ${greeting},\n\n[SMS OTP Demo cho SĐT ${phone}]\nMã xác thực OTP tra cứu đơn hàng Velura của bạn là: ${code}.\n\nMã có hiệu lực trong 1 phút. Vui lòng không chia sẻ mã này cho bất kỳ ai.`;
     const emailHtml = `
       <div style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eaeaea; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05); background-color: #fff;">
         <div style="background-color: #b89b88; padding: 24px; text-align: center;">
@@ -155,7 +155,7 @@ export async function sendGuestTrackingOtp(body: JsonObject, ip: string): Promis
             <span style="font-size: 36px; font-weight: bold; color: #8e6d53; letter-spacing: 12px; display: inline-block; margin-left: 12px;">${code}</span>
           </div>
 
-          <p style="color: #777; font-size: 14px; text-align: center; margin-bottom: 0;">Mã có hiệu lực trong <strong>5 phút</strong>. Vui lòng không chia sẻ mã này cho bất kỳ ai.</p>
+          <p style="color: #777; font-size: 14px; text-align: center; margin-bottom: 0;">Mã có hiệu lực trong <strong>1 phút</strong>. Vui lòng không chia sẻ mã này cho bất kỳ ai.</p>
         </div>
         <div style="background-color: #f9f9f9; padding: 16px; text-align: center; border-top: 1px solid #eaeaea;">
           <p style="color: #999; font-size: 12px; margin: 0;">&copy; ${new Date().getFullYear()} Velura. Mọi quyền được bảo lưu.</p>
@@ -179,7 +179,7 @@ export async function sendGuestTrackingOtp(body: JsonObject, ip: string): Promis
     success: true,
     masked_phone: maskTrackingPhone(phone),
     masked_email: targetEmails.length ? targetEmails.map(maskEmail).join(", ") : null,
-    expires_in: 300,
+    expires_in: 60,
     channel,
     message: developmentOtp
       ? "Nhập mã OTP mặc định 123456 để xác thực tra cứu đơn hàng."

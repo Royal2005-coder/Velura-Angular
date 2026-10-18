@@ -334,6 +334,12 @@ export class AccountProfilePage {
     }
     this.tab.set(tab);
     this.syncTab();
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { tab },
+      queryParamsHandling: 'merge',
+      replaceUrl: true,
+    });
   }
 
   /**

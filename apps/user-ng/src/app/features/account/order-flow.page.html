@@ -168,7 +168,8 @@
                 </span>
               }
             </p>
-            <p class="muted">Hiệu lực {{ seconds() }} giây.</p>
+            <p class="muted">Hiệu lực {{ countdown() }}.</p>
+            <p class="muted">Còn {{ 5 - failedOtpAttempts() }} lần nhập.</p>
             <form (ngSubmit)="verify()">
               <label class="field"
                 >Mã OTP 6 chữ số<input
@@ -180,11 +181,13 @@
                   [(ngModel)]="otp"
                   required
               /></label>
-              @if (seconds() === 0) {
+              @if (failedOtpAttempts() >= 5) {
+                <p class="error">Bạn đã nhập sai OTP 5 lần. Vui lòng gửi mã mới.</p>
+              } @else if (seconds() === 0) {
                 <p class="error">Mã đã hết hạn.</p>
               }
               <div class="actions">
-                <button type="submit" [disabled]="busy() || otp.length !== 6 || seconds() === 0">
+                <button type="submit" [disabled]="busy() || otp.length !== 6 || seconds() === 0 || failedOtpAttempts() >= 5">
                   Xác thực</button
                 ><button
                   type="button"

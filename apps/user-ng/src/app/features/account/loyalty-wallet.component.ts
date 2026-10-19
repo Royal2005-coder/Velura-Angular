@@ -29,7 +29,14 @@ export class LoyaltyWalletComponent {
     effect(() => { this.auth.session(); untracked(() => { this.generation++; this.hasOlder.set(false); this.busy.set(false); this.error.set(''); this.notice.set(''); if (this.auth.isLoggedIn()) this.syncProfileAndReload(); }); });
   }
   private syncProfileAndReload(): void {
-    this.model.profile().pipe(takeUntilDestroyed(this.destroy)).subscribe({
+    const profileRequest = this.model.profile?.();
+    if (!profileRequest) {
+      // Older model adapters do not expose profile(); wallet authorization remains server-owned.
+      this.wallet.set(this.emptyWallet());
+      this.reload();
+      return;
+    }
+    profileRequest.pipe(takeUntilDestroyed(this.destroy)).subscribe({
       next: profile => { this.auth.syncRole(profile.role); if (profile.role === 'member') { this.wallet.set(this.emptyWallet()); this.reload(); } else this.error.set('Ví Point chỉ dành cho tài khoản member. Tài khoản hiện tại không có quyền truy cập ví Point.'); },
       error: () => { if (this.auth.session()?.role === 'member') { this.wallet.set(this.emptyWallet()); this.reload(); } else this.error.set('Không xác minh được quyền truy cập ví Point. Vui lòng tải lại trang.'); },
     });

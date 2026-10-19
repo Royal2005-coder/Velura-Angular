@@ -2,6 +2,7 @@ import crypto from "crypto";
 import { callRpc, selectOne, selectRows, updateRows, insertRow } from "../supabase.js";
 import { HttpError } from "../http.js";
 import { asJsonObject, asNumber, asString, type JsonObject } from "../types.js";
+import { createNotification } from "../user/notifications.js";
 import { RETURN_SELECT, TICKET_SELECT } from "./return-constants.js";
 import { classifyReturnPayment, refundFlowFor, refundReceiverStatus, type ReturnPaymentKind } from "./return-refund-receiver.js";
 
@@ -620,6 +621,16 @@ export function createReturnRepository() {
       }
 
       const updated = asJsonObject(rows[0]);
+      if (current.user_id) {
+        const order = await selectOne("orders", { order_id: `eq.${current.order_id}`, select: "order_id,order_code" }).catch(() => null);
+        await createNotification(
+          asString(current.user_id),
+          "return_approved",
+          "Yêu cầu hoàn tiền đã được duyệt",
+          `Yêu cầu hoàn tiền cho đơn #${asString(order?.order_code || current.order_id || returnId)} đã được duyệt.`,
+          `/account/orders/${asString(current.order_id)}`
+        );
+      }
       await insertRow("audit_log", {
         actor_id: actorId,
         actor_role: actorRole,

@@ -269,6 +269,27 @@
           <span class="cart-badge">{{ cartCount() }}</span>
         </span>
       </a>
+      @if (isLoggedIn()) {
+        <div class="header-notification">
+          <button type="button" class="header-action-btn" aria-label="Thông báo" [attr.aria-expanded]="notificationOpen()" (click)="toggleNotifications()">
+            <span class="btn-icon-wrapper">
+              <svg class="icon" aria-hidden="true" style="width: 24px; height: 24px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg>
+              @if (notificationCount() > 0) { <span class="notification-badge">{{ notificationCount() > 99 ? '99+' : notificationCount() }}</span> }
+            </span>
+          </button>
+          @if (notificationOpen()) {
+            <div class="notification-popover" role="dialog" aria-label="Thông báo của bạn">
+              <div class="notification-popover__head"><strong>Thông báo</strong><button type="button" (click)="notifications.markAllRead()">Đánh dấu đã đọc</button></div>
+              @if (!notifications.notifications().length) { <p class="notification-empty">Bạn chưa có thông báo mới.</p> }
+              @for (item of notifications.notifications().slice(0, 8); track item.id) {
+                <button type="button" class="notification-item" [class.is-unread]="!item.is_read" (click)="openNotification(item)">
+                  <span class="notification-item__dot"></span><span><strong>{{ item.title }}</strong><small>{{ item.content }}</small><time>{{ item.created_at | date:'dd/MM/yyyy HH:mm' }}</time></span>
+                </button>
+              }
+            </div>
+          }
+        </div>
+      }
       <div class="header-action-btn header-account-dropdown">
         <span class="btn-icon-wrapper" style="cursor: pointer;">
           @if (isLoggedIn() && avatarUrl()) {

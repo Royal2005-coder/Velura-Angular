@@ -119,6 +119,20 @@ test("checkout OTP service owns issue, attempt limits and one-time consumption",
   );
 });
 
+test("checkout OTP uses the simulated SMS code when email is omitted", () => {
+  const service = new CheckoutOtpService();
+  const session = service.issue({
+    fullName: "Nguyễn Văn An",
+    phone: "0912345678",
+    email: "",
+    ip: "203.0.113.11"
+  });
+
+  assert.equal(session.otpCode, "123456");
+  assert.equal(session.contact.email, null);
+  assert.equal(service.verify("0912345678", "123456"), session);
+});
+
 test("checkout client IP prefers the first proxy address", () => {
   assert.equal(checkoutClientIp({ "x-forwarded-for": "203.0.113.3, 10.0.0.1" }, "127.0.0.1"), "203.0.113.3");
 });
@@ -283,3 +297,29 @@ test("resolveGuest does not hijack an existing account when phone numbers differ
   assert.equal(createdPayload?.email, null);
 });
 
+test("resolveGuest links a guest checkout to the existing member found by phone", async () => {
+  let created = false;
+  const member = {
+    user_id: "member-by-phone",
+    email: "member@example.com",
+    phone: "0912345678",
+    is_active: true
+  };
+  const service = new CheckoutService(checkoutRepositoryStub({
+    findUserByPhone: async (phone) => phone === member.phone ? member : null,
+    createGuestUser: async () => {
+      created = true;
+      return { user_id: "unexpected" };
+    }
+  }));
+
+  const result = await service.resolveGuest(
+    { fullName: "Nguyễn Văn An", phone: "0912345678", email: null },
+    "123 Nguyễn Huệ"
+  );
+
+  assert.equal(result.user.user_id, "member-by-phone");
+  assert.equal(result.existingMember, true);
+  assert.equal(result.activation, null);
+  assert.equal(created, false);
+});

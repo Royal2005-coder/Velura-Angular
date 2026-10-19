@@ -3,6 +3,8 @@ import { config } from "../config.js";
 import { HttpError } from "../http.js";
 import { callRpc, insertRow, selectOne, selectRows, updateRows } from "../supabase.js";
 import { asJsonObject, asString, errorMessage, type JsonObject } from "../types.js";
+import { createNotification } from "../user/notifications.js";
+import { sendRefundSuccessEmail } from "../returns/return-email.js";
 
 /**
  * Hạn của một phiên Stripe Checkout.
@@ -437,7 +439,11 @@ export async function refundStripeOrder(
       return { status: "failed", message: body.error?.message || "Stripe từ chối hoàn tiền" };
     }
     if (body.status === "succeeded") {
-      if (options.returnId) await callRpc("velura_complete_return_refund",{p_return_id:options.returnId,p_provider_ref:body.id});
+      if (options.returnId) {
+        await callRpc("velura_complete_return_refund",{p_return_id:options.returnId,p_provider_ref:body.id});
+        // Email is best-effort: a missing customer email must not fail the refund itself.
+        void sendRefundSuccessEmail(options.returnId, { method: "stripe" });
+      }
       else await completeRefund(asString(payment.payment_id), orderId, refundAmount ?? Number(payment.amount), body.id);
       return { status: "refunded" };
     }
@@ -466,7 +472,11 @@ export async function markStripeRefunded(paymentIntentId: string, amount?: numbe
   for (const refund of refunds) {
     if (refund.status !== "succeeded") continue;
     const operation = await selectOne("payment_refund",{provider_ref:"eq."+asString(refund.id),payment_id:"eq."+payment.payment_id});
-    if (operation && Number(operation.amount) === Number(refund.amount)) await callRpc("velura_complete_return_refund",{p_return_id:operation.return_id,p_provider_ref:refund.id});
+    if (operation && Number(operation.amount) === Number(refund.amount)) {
+      await callRpc("velura_complete_return_refund",{p_return_id:operation.return_id,p_provider_ref:refund.id});
+      // This covers the asynchronous Stripe webhook completion path.
+      void sendRefundSuccessEmail(asString(operation.return_id), { method: "stripe" });
+    }
   }
   payment = await selectOne("payment",{payment_id:"eq."+payment.payment_id});
   if (!payment || Number(amount) <= Number(payment.refunded_amount || 0)) return "ignored";
@@ -496,14 +506,13 @@ async function completeRefund(paymentId: string, orderId?: string, amount?: numb
     try {
       const order = await selectOne("orders", { order_id: `eq.${orderId}`, select: "order_id,user_id,order_code" });
       if (order?.user_id) {
-        await insertRow("notification", {
-          user_id: order.user_id,
-          type: "order_status",
-          title: `Đơn hàng #${order.order_code || orderId} đã được hoàn tiền`,
-          content: `Số tiền ${Number(amount || 0).toLocaleString("vi-VN")} đ đã được hoàn thành công về phương thức thanh toán ban đầu qua Stripe.`,
-          link: `/account/orders/${orderId}`,
-          is_read: false
-        });
+        await createNotification(
+          String(order.user_id),
+          "refund_completed",
+          `Đơn hàng #${order.order_code || orderId} đã được hoàn tiền`,
+          `Số tiền ${Number(amount || 0).toLocaleString("vi-VN")} đ đã được hoàn thành công về phương thức thanh toán ban đầu qua Stripe.`,
+          `/account/orders/${orderId}`
+        );
       }
     } catch (err: unknown) {
       console.warn("[STRIPE NOTIFICATION] Could not create refund notification:", errorMessage(err));

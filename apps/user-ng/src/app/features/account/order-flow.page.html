@@ -874,6 +874,9 @@
                   Yêu cầu bị từ chối lúc {{ date(request.rejectedAt) }}@if (request.rejectionReason) {: {{ request.rejectionReason }}}
                 </p>
               }
+              @if (requestEnded(request)) {
+                <p class="muted">Lượt đổi/trả của sản phẩm đã được hoàn lại, bạn có thể gửi yêu cầu mới.</p>
+              }
               <ol class="timeline">
                 @for (stage of model.timeline(request.kind); track $index) {
                   <li
@@ -939,8 +942,10 @@
                         : 'Kênh thanh toán ban đầu'
                     }}
                   </p>
-                  @if (order()?.payment === 'COD' && request.stage >= 1 && !request.bank && model.supportsBankInfo) {
+                  @if (needsReceiverInfo(request) || (receiverFormOpen() && canEditReceiver(request))) {
                     <div class="muted">Vui lòng bổ sung thông tin nhận hoàn tiền.</div>
+                    @if (request.refundReceiver?.supplementRequest) { <div class="muted">CSKH yêu cầu bổ sung thông tin nhận hoàn tiền: {{ request.refundReceiver?.supplementRequest }}</div> }
+                    @if (request.refundReceiver?.status === 'invalid') { <div class="muted">Thông tin nhận hoàn tiền chưa hợp lệ.</div> }
                     <form (ngSubmit)="saveBank()">
                       <label class="field"
                         >Ngân hàng<input name="bank" [(ngModel)]="bankName" required /></label
@@ -958,7 +963,13 @@
                       ><button type="submit">Lưu thông tin nhận tiền</button>
                     </form>
                   }
-                  @if (request.bank) {
+                  @if (receiverSummary(request); as receiver) {
+                    <p>
+                      {{ request.completedAt ? 'Tiền đã được chuyển tới' : 'Tài khoản nhận tiền' }}:
+                      {{ receiver.name }} · ••••{{ receiver.last4 }}@if (receiver.holder) { ({{ receiver.holder }}) }
+                    </p>
+                    @if (canEditReceiver(request)) { <button type="button" class="secondary" (click)="editReceiver(request)">Cập nhật</button> }
+                  } @else if (request.bank) {
                     <p>
                       {{ request.completedAt ? 'Tiền đã được chuyển tới' : 'Tài khoản nhận tiền' }}:
                       {{ request.bank.name }} · ••••{{ request.bank.last4 }}

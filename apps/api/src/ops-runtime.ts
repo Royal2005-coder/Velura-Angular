@@ -10,17 +10,36 @@ const bounds = [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 15, 60];
 interface Measurement { count: number; seconds: number; buckets: number[]; }
 const http = new Map<string, Measurement>();
 
-/** Read image-baked identity once; local source runs without a release file cannot prove a deployed release. */
-function readBuildRevision(): string | null {
+/** Immutable image identity; the build ID distinguishes rebuilds of the same source revision. */
+interface ReleaseMetadata { revision: string; buildId: string; }
+
+/** Read image-baked identity once; absent or invalid metadata cannot prove a deployed release. */
+function readBuildMetadata(): ReleaseMetadata | null {
+  let content: string;
   try {
-    const revision = readFileSync(new URL("./release-revision", import.meta.url), "utf8").trim();
-    return /^[a-f0-9]{40}$/.test(revision) ? revision : null;
+    content = readFileSync(new URL("./release.json", import.meta.url), "utf8");
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw error;
   }
+  let metadata: unknown;
+  try { metadata = JSON.parse(content); } catch (error) {
+    if (error instanceof SyntaxError) return null;
+    throw error;
+  }
+  if (!metadata || typeof metadata !== "object" || !("revision" in metadata) || !("buildId" in metadata) ||
+      typeof metadata.revision !== "string" || !/^[a-f0-9]{40}$/.test(metadata.revision) ||
+      typeof metadata.buildId !== "string" || !/^[a-f0-9]{40}-[0-9]+-[0-9]+$/.test(metadata.buildId) ||
+      !metadata.buildId.startsWith(`${metadata.revision}-`)) return null;
+  return { revision: metadata.revision, buildId: metadata.buildId };
 }
-const buildRevision = readBuildRevision();
+const buildMetadata = readBuildMetadata();
+
+/** Expose only the hosted project identity from the database URL actually used by readiness. */
+function databaseProjectRef(): string | null {
+  try { return /^([a-z0-9]+)\.supabase\.co$/.exec(new URL(config.supabaseUrl).hostname)?.[1] ?? null; }
+  catch { return null; }
+}
 
 /** Observe bounded route families and status classes, never request bodies, query strings or identities. */
 export function observeHttpRequest(req: IncomingMessage, res: ServerResponse): void {
@@ -120,7 +139,12 @@ export async function handleRuntimeRoute(req: IncomingMessage, res: ServerRespon
   if (!expected || actual.length !== wanted.length || !timingSafeEqual(actual, wanted)) throw new HttpError(403, "OPS_ACCESS_DENIED", "Owner verification credential is required");
   const revision = process.env.RELEASE_REVISION || "";
   const state = await runtimeReadiness();
-  const releaseReady = state.ready && /^[a-f0-9]{40}$/.test(revision) && revision === buildRevision;
-  sendJson(res, releaseReady ? 200 : 503, { revision: revision || null, buildRevision, ready: releaseReady, checks: state.checks, flux: { ready: null, reason: "VERIFY_WITH_OWNER_OPS_CLI" } }, { ...headers, "cache-control": "no-store" });
+  const releaseReady = state.ready && buildMetadata !== null &&
+    revision === buildMetadata.revision && process.env.RELEASE_BUILD_ID === buildMetadata.buildId;
+  sendJson(res, releaseReady ? 200 : 503, {
+    revision: revision || null, buildRevision: buildMetadata?.revision ?? null, buildId: buildMetadata?.buildId ?? null,
+    databaseProjectRef: databaseProjectRef(), ready: releaseReady, checks: state.checks,
+    flux: { ready: null, reason: "VERIFY_WITH_OWNER_OPS_CLI" },
+  }, { ...headers, "cache-control": "no-store" });
   return true;
 }

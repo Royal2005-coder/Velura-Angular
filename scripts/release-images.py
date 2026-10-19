@@ -16,6 +16,36 @@ REPOSITORY = 'Royal2005-coder/Velura-Angular'
 IMAGE_PREFIX = 'ghcr.io/royal2005-coder/velura-'
 
 
+def require_build_id(revision, build_id):
+    """Bind an immutable image build to its source revision and exact Actions run attempt."""
+    if not isinstance(revision, str) or not re.fullmatch(r'[a-f0-9]{40}', revision):
+        raise ValueError('Expected full immutable release revision')
+    if not isinstance(build_id, str) or not re.fullmatch(re.escape(revision) + r'-[0-9]+-[0-9]+', build_id):
+        raise ValueError('Expected revision-bound immutable release build ID')
+    return build_id
+
+
+def require_release(release):
+    """Reject legacy snapshots as promotion or runtime-verification evidence."""
+    require_build_id(release['revision'], release.get('buildId'))
+    return release
+
+
+def artifact_release(directory, revision, build_id):
+    """Read all three signed build artifacts and reject mixed runs or rerun attempts."""
+    require_build_id(revision, build_id)
+    images = {}
+    for app in APPS:
+        image = (Path(directory) / f'image-{app}.txt').read_text(encoding='utf-8').strip()
+        identity = (Path(directory) / f'build-id-{app}.txt').read_text(encoding='utf-8').strip()
+        if not re.fullmatch(re.escape(IMAGE_PREFIX + app) + r'@sha256:[a-f0-9]{64}', image):
+            raise ValueError(f'Invalid {app} release artifact')
+        if identity != build_id:
+            raise ValueError(f'Mismatched {app} release build artifact')
+        images[app] = image
+    return {'revision': revision, 'buildId': build_id, 'images': images}
+
+
 def snapshot(environment, reader=lambda path: path.read_text(encoding='utf-8')):
     """Read the complete app release; reject mutable, missing, duplicate or foreign image pins."""
     import yaml
@@ -31,15 +61,20 @@ def snapshot(environment, reader=lambda path: path.read_text(encoding='utf-8')):
         if item.get('newName', name) != name or item.get('newTag') or not re.fullmatch(r'sha256:[a-f0-9]{64}', item.get('digest', '')):
             raise ValueError(f'Expected immutable canonical {app} image in {environment}')
         images[app] = name + '@' + item['digest']
-    revision = yaml.safe_load(reader(overlay / 'release-revision.yaml'))['data']['RELEASE_REVISION']
+    data = yaml.safe_load(reader(overlay / 'release-revision.yaml'))['data']
+    revision = data['RELEASE_REVISION']
     if not isinstance(revision, str) or not re.fullmatch(r'[a-f0-9]{40}', revision):
         raise ValueError('Expected full immutable release revision')
-    return {'revision': revision, 'images': images}
+    build_id = data.get('RELEASE_BUILD_ID')
+    if 'RELEASE_BUILD_ID' in data:
+        require_build_id(revision, build_id)
+    return {'revision': revision, 'buildId': build_id, 'images': images}
 
 
 def update(environment, release):
     """Change only one environment's image transformer and release ConfigMap patch."""
     import yaml
+    require_release(release)
     overlay = ROOT / environment
     path = overlay / 'kustomization.yaml'
     text = path.read_text(encoding='utf-8')
@@ -55,7 +90,13 @@ def update(environment, release):
         raise ValueError('Expected one overlay images block')
     path.write_text(text, encoding='utf-8')
     path = overlay / 'release-revision.yaml'
-    text, count = re.subn(r'(?m)^(\s+RELEASE_REVISION:)\s+\S+', lambda match: match[1] + ' ' + release['revision'], path.read_text(encoding='utf-8'))
+    text = path.read_text(encoding='utf-8')
+    build_lines = re.findall(r'(?m)^\s+RELEASE_BUILD_ID:.*$', text)
+    if len(build_lines) > 1:
+        raise ValueError('Expected at most one overlay release build ID')
+    if build_lines:
+        text = re.sub(r'(?m)^(\s+RELEASE_BUILD_ID:)[^\n]*', lambda match: match[1] + ' ' + release['buildId'], text)
+    text, count = re.subn(r'(?m)^([ \t]+)RELEASE_REVISION:[^\n]*', lambda match: match[1] + 'RELEASE_REVISION: ' + release['revision'] + ('' if build_lines else '\n' + match[1] + 'RELEASE_BUILD_ID: ' + release['buildId']), text)
     if count != 1:
         raise ValueError('Expected one overlay release revision')
     path.write_text(text, encoding='utf-8')
@@ -100,7 +141,7 @@ def validate_bootstrap(base_sha):
                     if len(matches) != 1 or not re.fullmatch(re.escape(IMAGE_PREFIX + app) + r'(?::[^@\s]+)?@sha256:[a-f0-9]{64}', matches[0]):
                         raise ValueError('Legacy bootstrap base must already have immutable app pins')
                     images[app] = IMAGE_PREFIX + app + '@' + matches[0].split('@')[1]
-        baseline = {'revision': revision, 'images': images}
+        baseline = {'revision': revision, 'buildId': None, 'images': images}
     if snapshot('production') != baseline:
         raise ValueError('Production pin changes require successful staging provenance, even while suspended')
     resources = list(yaml.safe_load_all(Path('deploy/k8s/base/flux/git-sync.yaml').read_text(encoding='utf-8')))
@@ -116,6 +157,7 @@ def validate_production(bootstrap_base=None):
         validate_bootstrap(bootstrap_base)
         return
     evidence = json.loads(EVIDENCE.read_text(encoding='utf-8'))
+    require_release(evidence['release'])
     run = gh_json(f'repos/{REPOSITORY}/actions/runs/{int(evidence["run_id"])}')
     if run['repository']['full_name'] != REPOSITORY or run['path'] != '.github/workflows/ci.yml' or run['event'] != 'push' or run['head_branch'] != 'develop' or run['head_sha'] != evidence['source_sha']:
         raise ValueError('Production evidence is not a canonical develop verification run')
@@ -123,7 +165,7 @@ def validate_production(bootstrap_base=None):
     verified = [job for job in jobs if job['name'] == 'verify-staging' and job['conclusion'] == 'success']
     if len(verified) != 1:
         raise ValueError('Staging verification has not succeeded for this run')
-    staged = remote_snapshot('staging', run['head_sha'])
+    staged = require_release(remote_snapshot('staging', run['head_sha']))
     if staged != evidence['release'] or staged != snapshot('production'):
         raise ValueError('Production image bundle differs from the verified staging bundle')
 
@@ -165,17 +207,11 @@ def main():
     command, *args = sys.argv[1:]
     if command == 'snapshot':
         print(json.dumps(snapshot(args[0]), sort_keys=True))
+    elif command == 'verified-snapshot':
+        print(json.dumps(require_release(snapshot(args[0])), sort_keys=True))
     elif command == 'stage':
-        directory, revision = args
-        if not re.fullmatch(r'[a-f0-9]{40}', revision):
-            raise ValueError('Expected full release SHA')
-        images = {}
-        for app in APPS:
-            image = (Path(directory) / f'image-{app}.txt').read_text(encoding='utf-8').strip()
-            if not re.fullmatch(re.escape(IMAGE_PREFIX + app) + r'@sha256:[a-f0-9]{64}', image):
-                raise ValueError(f'Invalid {app} release artifact')
-            images[app] = image
-        update('staging', {'revision': revision, 'images': images})
+        directory, revision, build_id = args
+        update('staging', artifact_release(directory, revision, build_id))
     elif command == 'worker':
         image = (Path(args[0]) / 'image-ai-worker.txt').read_text(encoding='utf-8').strip()
         if not re.fullmatch(re.escape(IMAGE_PREFIX + 'ai-worker') + r'@sha256:[a-f0-9]{64}', image):
@@ -188,7 +224,7 @@ def main():
             path.write_text(text, encoding='utf-8')
     elif command == 'production':
         source_sha, run_id = args
-        release = remote_snapshot('staging', source_sha)
+        release = require_release(remote_snapshot('staging', source_sha))
         if snapshot('staging') != release:
             raise ValueError('Staging changed while verification ran; verify the new release before promotion')
         update('production', release)

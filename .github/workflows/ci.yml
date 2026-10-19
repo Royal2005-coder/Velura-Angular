@@ -59,7 +59,7 @@ jobs:
             echo 'production=false' >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          if [ -z "$BEFORE" ] || [ "$BEFORE" = 0000000000000000000000000000000000000000 ]; then
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = 0000000000000000000000000000000000000000 ] || ! git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
             echo 'publish=true' >> "$GITHUB_OUTPUT"
             echo 'staging=true' >> "$GITHUB_OUTPUT"
             echo 'production=true' >> "$GITHUB_OUTPUT"

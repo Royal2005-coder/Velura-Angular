@@ -112,6 +112,24 @@ export const RETURN_WORKFLOW_LABELS: Record<ReturnWorkflowStatus, string> = {
   COMPLETED: 'Hoàn tất', CANCELLED: 'Đã hủy yêu cầu', NEEDS_SUPPORT: 'Cần CSKH hỗ trợ',
 };
 
+/** Receiving-account state for a COD refund, as reported by CSKH-facing workflow (API contract tokens). */
+export type RefundReceiverStatus = 'not_required' | 'missing' | 'invalid' | 'supplement_requested' | 'valid';
+
+/** Who ended a CANCELLED return request; `null`/unset when the source did not report it. */
+export type ReturnCancelledBy = 'customer' | 'admin' | 'system';
+
+/** Customer-facing view of the account that receives a COD refund; the full number is never exposed. */
+export interface DemoRefundReceiver {
+  status: RefundReceiverStatus;
+  bankName?: string;
+  accountLast4?: string;
+  holder?: string;
+  submittedAt?: string;
+  /** CSKH's "yêu cầu bổ sung" message while the refund stage is blocked on the customer. */
+  supplementRequest?: string;
+  supplementRequestedAt?: string;
+}
+
 /** A return request keeps its persisted workflow state separately from presentation progress. */
 export interface DemoReturn {
   id: string;
@@ -131,10 +149,21 @@ export interface DemoReturn {
   refundAmount?: number;
   createdAt: string;
   completedAt?: string;
+  /** Set only when the customer ended the request themself. */
   cancelledAt?: string;
-  /** CSKH refusing the request — distinct from the customer's own `cancelledAt`; unset in the demo. */
+  /** The customer's own reason for cancelling, when the API reports one. */
+  cancellationReason?: string;
+  /** CSKH/system refusing the request — distinct from the customer's own `cancelledAt`; unset in the demo. */
   rejectedAt?: string;
   rejectionReason?: string;
+  /** Who ended a CANCELLED request; unset in the demo. */
+  cancelledBy?: ReturnCancelledBy;
+  /** Order payment method the refund is paid back through; unset in the demo. */
+  paymentMethod?: 'COD' | 'ONLINE_PAYMENT';
+  /** Server-side refund route (`cod_manual`, `stripe_auto`, …); unset in the demo. */
+  refundFlow?: 'cod_manual' | 'stripe_auto' | 'manual_transfer' | 'none';
+  /** Receiving account of a COD refund; unset in the demo, which keeps the legacy `bank` field. */
+  refundReceiver?: DemoRefundReceiver;
   bank?: { name: string; last4: string; holder: string };
   replacementUnavailable?: boolean;
 }

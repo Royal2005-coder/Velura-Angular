@@ -7,9 +7,12 @@ import {
   DemoOrder,
   DemoOrderLine,
   DemoOrderStatus,
+  DemoRefundReceiver,
   DemoReturn,
   DemoReturnLine,
   RETURN_WORKFLOW_LABELS,
+  RefundReceiverStatus,
+  ReturnCancelledBy,
   ReturnWorkflowStatus,
 } from './purchase-demo.store';
 import type { ComboComponentItem, OrderAccountModel, ReplacementChoice, ReturnReasonCode } from './order-account.model';
@@ -89,6 +92,16 @@ interface ApiReturnItem {
   quantity?: number;
 }
 
+interface ApiRefundReceiver {
+  status?: string;
+  bank_name?: string | null;
+  account_last4?: string | null;
+  account_holder?: string | null;
+  submitted_at?: string | null;
+  supplement_request?: string | null;
+  supplement_requested_at?: string | null;
+}
+
 interface ApiReturn {
   refund_amount?: number;
   return_id?: string;
@@ -100,10 +113,41 @@ interface ApiReturn {
   evidence_images?: string[] | null;
   status?: string;
   rejection_reason?: string | null;
+  cancelled_by?: ReturnCancelledBy | null;
+  payment_method?: 'COD' | 'ONLINE_PAYMENT';
+  refund_flow?: DemoReturn['refundFlow'];
+  refund_receiver?: ApiRefundReceiver | null;
   created_at?: string;
   resolved_at?: string | null;
   version?: number;
   items?: ApiReturnItem[];
+}
+
+const RECEIVER_STATUSES: RefundReceiverStatus[] = ['not_required', 'missing', 'invalid', 'supplement_requested', 'valid'];
+
+function mapRefundReceiver(receiver: ApiRefundReceiver | null | undefined): DemoRefundReceiver | undefined {
+  if (!receiver) return undefined;
+  const status = RECEIVER_STATUSES.find((value) => value === receiver.status) ?? 'missing';
+  return {
+    status,
+    bankName: receiver.bank_name || undefined,
+    accountLast4: receiver.account_last4 || undefined,
+    holder: receiver.account_holder || undefined,
+    submittedAt: receiver.submitted_at || undefined,
+    supplementRequest: receiver.supplement_request || undefined,
+    supplementRequestedAt: receiver.supplement_requested_at || undefined,
+  };
+}
+
+/** Client-side mirror of the server rules, for friendly messages; the server stays authoritative. */
+function validateRefundReceiver(name: string, account: string, holder: string): { bankName: string; accountNumber: string; accountHolder: string } {
+  const bankName = name.trim();
+  const accountNumber = account.replace(/[\s-]/g, '');
+  const accountHolder = holder.trim();
+  if (bankName.length < 2 || bankName.length > 80) throw new Error('Tên ngân hàng/ví cần từ 2 đến 80 ký tự.');
+  if (!/^\d{6,20}$/.test(accountNumber)) throw new Error('Số tài khoản chỉ gồm chữ số và dài từ 6 đến 20 số.');
+  if (accountHolder.length < 2 || accountHolder.length > 100 || /\d/.test(accountHolder)) throw new Error('Tên chủ tài khoản cần từ 2 đến 100 ký tự và không chứa chữ số.');
+  return { bankName, accountNumber, accountHolder };
 }
 
 function mapAddress(order: ApiOrder) {
@@ -190,6 +234,12 @@ function mapReturnItem(item: ApiReturnItem): DemoReturnLine {
 function mapReturn(row: ApiReturn): DemoReturn {
   const status = row.status && row.status in RETURN_WORKFLOW_LABELS ? row.status as ReturnWorkflowStatus : 'NEEDS_SUPPORT';
   const kind = row.return_type || 'refund';
+  const cancelledBy = row.cancelled_by || undefined;
+  // A CANCELLED row the customer did not end themself was refused (or stopped) by CSKH/system. Legacy rows
+  // without `cancelled_by` count as customer-cancelled unless they carry a refusal reason.
+  const customerCancelled = status === 'CANCELLED' && (cancelledBy === 'customer' || (!cancelledBy && !row.rejection_reason));
+  const rejected = status === 'CANCELLED' && !customerCancelled;
+  const endedAt = row.resolved_at || row.created_at || new Date().toISOString();
   return {
     id: formatReturnCode(row.tracking_return_code || row.return_id),
     returnId: row.return_id,
@@ -204,8 +254,14 @@ function mapReturn(row: ApiReturn): DemoReturn {
     refundAmount: typeof row.refund_amount === 'number' && Number.isFinite(row.refund_amount) ? row.refund_amount : undefined,
     createdAt: row.created_at || new Date().toISOString(),
     completedAt: ['REFUNDED', 'COMPLETED'].includes(status) ? row.resolved_at || undefined : undefined,
-    cancelledAt: status === 'CANCELLED' ? row.resolved_at || row.created_at || undefined : undefined,
-    rejectionReason: status === 'NEEDS_SUPPORT' ? row.rejection_reason || undefined : undefined,
+    cancelledAt: customerCancelled ? endedAt : undefined,
+    cancellationReason: customerCancelled ? row.rejection_reason || undefined : undefined,
+    rejectedAt: rejected ? endedAt : undefined,
+    rejectionReason: rejected || status === 'NEEDS_SUPPORT' ? row.rejection_reason || undefined : undefined,
+    cancelledBy,
+    paymentMethod: row.payment_method,
+    refundFlow: row.refund_flow,
+    refundReceiver: mapRefundReceiver(row.refund_receiver),
   };
 }
 
@@ -242,7 +298,7 @@ export class OrderAccountApiStore implements OrderAccountModel {
   private readonly comboComponentsByProduct = signal<Record<string, ComboComponentItem[]>>({});
   private replacementVersion = 0;
   readonly cancellableBeforeStage = 3;
-  readonly supportsBankInfo = false;
+  readonly supportsBankInfo = true;
   private generation = 0;
   private refreshVersion = 0;
   private lookupVersion = 0;
@@ -497,9 +553,32 @@ export class OrderAccountApiStore implements OrderAccountModel {
     await this.refresh();
   }
 
-  /** Rejects unsupported COD bank capture rather than pretending sensitive data was persisted. */
-  async saveBank(): Promise<void> {
-    throw new Error('Chưa hỗ trợ lưu thông tin nhận hoàn tiền trực tuyến — CSKH sẽ liên hệ để thu thập.');
+  /**
+   * Saves the COD refund receiving account through the member or verified-guest endpoint, then reloads
+   * the requests so the server-computed `refundReceiver` state replaces the local one.
+   */
+  async saveBank(id: string, name: string, account: string, holder: string): Promise<void> {
+    const request = this.requests().find((row) => row.id === id);
+    if (!request?.returnId) throw new Error('Không tìm thấy yêu cầu đổi/trả.');
+    const order = this.orders().find((row) => row.id === request.orderId);
+    if (!order || !this.canAccess(order)) throw new Error('Vui lòng xác thực chủ đơn trước.');
+    const receiver = validateRefundReceiver(name, account, holder);
+    const context = this.context();
+    const response = await firstValueFrom(
+      this.api.post<{ success?: boolean; message?: string }>(
+        context.userId ? '/api/user/returns/refund-receiver' : '/api/user/returns/guest-refund-receiver',
+        {
+          return_id: request.returnId,
+          ...(context.userId ? {} : { guest_access_token: context.guestToken }),
+          bank_name: receiver.bankName,
+          account_number: receiver.accountNumber,
+          account_holder: receiver.accountHolder,
+        },
+      ),
+    );
+    this.assertCurrent(context);
+    if (!response.success) throw new Error(response.message || 'Chưa lưu được thông tin nhận hoàn tiền. Vui lòng thử lại.');
+    await this.refresh();
   }
 
   /** Directs unavailable replacement choices to CSKH because no real mutation exists yet. */

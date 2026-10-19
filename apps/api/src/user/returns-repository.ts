@@ -1,4 +1,6 @@
 import { callRpc, selectOne, selectRows, insertRow, updateRows } from "../supabase.js";
+import { mapReturnDatabaseError } from "../returns/return-repository.js";
+import type { RefundReceiverInput } from "../returns/return-refund-receiver.js";
 import { asJsonObject, type JsonObject } from "../types.js";
 
 /**
@@ -23,6 +25,10 @@ export interface UserReturnsRepository {
   findReturnById(returnId: unknown): Promise<JsonObject | null>;
   updateReturn(returnId: unknown, payload: JsonObject, expectedVersion?: number): Promise<JsonObject[]>;
   listReturnsForUser(userId: string, orderId?: string): Promise<JsonObject[]>;
+  /** Stored COD receiving account of a return (full number; callers mask it), or null when never submitted. */
+  getRefundReceiver(returnId: unknown): Promise<JsonObject | null>;
+  /** Saves the receiving account in one transaction and returns its masked customer view. `ownerUserId` null = verified guest. */
+  setRefundReceiver(returnId: string, ownerUserId: string | null, input: RefundReceiverInput): Promise<JsonObject>;
 }
 
 export function createUserReturnsRepository(): UserReturnsRepository {
@@ -68,6 +74,22 @@ export function createUserReturnsRepository(): UserReturnsRepository {
       if (expectedVersion !== undefined) filters.version = `eq.${expectedVersion}`;
       const rows = await updateRows("return_exchange", filters, payload);
       return rows.map(asJsonObject);
+    },
+
+    getRefundReceiver: (returnId) => selectOne("return_refund_receiver", { return_id: `eq.${returnId}` }).catch(() => null),
+
+    async setRefundReceiver(returnId, ownerUserId, input) {
+      try {
+        return asJsonObject(await callRpc("velura_set_return_refund_receiver", {
+          p_return_id: returnId,
+          p_owner_user_id: ownerUserId,
+          p_bank_name: input.bankName,
+          p_account_number: input.accountNumber,
+          p_account_holder: input.accountHolder
+        }));
+      } catch (error: unknown) {
+        throw mapReturnDatabaseError(error);
+      }
     },
 
     async listReturnsForUser(userId, orderId) {

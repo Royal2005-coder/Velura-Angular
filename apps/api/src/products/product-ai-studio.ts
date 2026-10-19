@@ -173,7 +173,7 @@ export async function uploadToProductImagesBucket(bytes: Buffer, mime: string, p
 /**
  * Measures technical studio quality (resolution, lighting/exposure, sharpness, border background cleanliness).
  */
-async function measureTechnicalQuality(bytes: Buffer): Promise<ProductImageQualityAnalysis> {
+export async function measureTechnicalQuality(bytes: Buffer): Promise<ProductImageQualityAnalysis> {
   const image = sharp(bytes);
   const [metadata, stats, rawSmall] = await Promise.all([
     image.metadata(),
@@ -616,12 +616,8 @@ export async function enhanceProductImageStudio(body: JsonObject): Promise<Produ
   const enhancedBytes = await pipeline.png({ compressionLevel: 8 }).toBuffer();
   const afterAnalysis = await measureTechnicalQuality(enhancedBytes);
 
-  afterAnalysis.overallScore = Math.max(afterAnalysis.overallScore, Math.min(98, beforeAnalysis.overallScore + 18, 94));
-  afterAnalysis.passed = true;
-  afterAnalysis.needsEnhancement = false;
-  afterAnalysis.grade = afterAnalysis.overallScore >= 90 ? "A" : "B";
-  afterAnalysis.statusLabel = "Đạt chuẩn hình ảnh Velura Studio (Bảo toàn 100% màu gốc)";
-  afterAnalysis.summary = `Ảnh sau khi xử lý AI Studio đạt ${afterAnalysis.overallScore}/100 điểm (Hạng ${afterAnalysis.grade}) — giữ nguyên 100% màu sắc gốc của sản phẩm, nâng độ sắc nét thớ vải và làm sạch phông nền chuẩn Studio.`;
+  // The saved PNG must receive the same score and gate when analyzed again.
+  // An enhancement attempt is not evidence that the resulting image passed.
 
   const enhancedUrl = await uploadToProductImagesBucket(enhancedBytes, "image/png", "ai-studio");
   const previewDataUrl = `data:image/png;base64,${enhancedBytes.toString("base64")}`;

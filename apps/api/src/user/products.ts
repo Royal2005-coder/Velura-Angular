@@ -1,5 +1,6 @@
 import { HttpError, sendJson } from "../http.js";
 import { selectOne, selectRows } from "../supabase.js";
+import { filterCatalogProducts, parseCatalogFilters } from "./catalog-search.js";
 import {
   type HeaderMap,
   type HttpRequest,
@@ -18,13 +19,36 @@ let categoriesCache: CacheEntry<JsonObject[]> | null = null;
 let productsCache: CacheEntry<JsonObject[]> | null = null;
 let liteProductsCache: CacheEntry<JsonObject[]> | null = null;
 
-const CATEGORIES_CACHE_TTL_MS = 60 * 1000; // 60s
-const PRODUCTS_CACHE_TTL_MS = 30 * 1000;   // 30s
+/**
+ * Cache lifetime is only the upper bound of staleness for a second API replica, whose cache
+ * `invalidateCatalogCache` cannot reach (production runs one replica today; `server.ts` also
+ * invalidates after every admin product mutation, so a single process is fresh immediately).
+ * Keep it short: the storefront must reflect an admin rename within seconds, not minutes.
+ */
+const CATEGORIES_CACHE_TTL_MS = 10 * 1000;
+const PRODUCTS_CACHE_TTL_MS = 10 * 1000;
+
+/**
+ * Catalog responses must never be served from a browser, Vercel edge or CDN cache: an admin
+ * rename, status change or stock change has to show on the next storefront request.
+ * The in-process cache above already protects the database from repeated reads.
+ */
+const CATALOG_CACHE_CONTROL = "no-store";
+
+/** Statuses a shopper may list (`out_of_stock` renders as "Hết hàng"). `hidden` is never public. */
+const LISTED_STATUSES = "in.(on_sale,out_of_stock)";
+/** A direct product link still opens a discontinued product ("Ngừng kinh doanh", purchase disabled). */
+const DETAIL_STATUSES = "in.(on_sale,out_of_stock,discontinued)";
+
+/** Bumped by every invalidation so a read that started before a mutation never re-fills the cache with old rows. */
+let cacheGeneration = 0;
 
 /**
  * Invalidate product catalog in-memory cache when changes occur.
+ * Called by admin product mutations, order stock changes and review moderation.
  */
 export function invalidateCatalogCache(): void {
+  cacheGeneration += 1;
   categoriesCache = null;
   productsCache = null;
   liteProductsCache = null;
@@ -32,6 +56,7 @@ export function invalidateCatalogCache(): void {
 
 /**
  * Public catalog: product list/detail and category list with counts.
+ * Product HTTP responses must not outlive the origin cache invalidation after an admin edit.
  */
 export async function handleProductsRoute(
   req: HttpRequest,
@@ -45,17 +70,19 @@ export async function handleProductsRoute(
       if (action) {
         const isActionUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(action);
         const filter = isActionUuid ? { product_id: `eq.${action}` } : { slug: `eq.${action}` };
+        // Service-role read with an explicit status filter: the anon RLS policy only exposes `on_sale`,
+        // which would hide `out_of_stock` ("Hết hàng") and `discontinued` ("Ngừng kinh doanh") products.
         let product = await selectOne("product", {
           select: "*,category:category_id(*)",
-          status: "in.(on_sale,out_of_stock)",
+          status: DETAIL_STATUSES,
           ...filter
-        }, { count: "none", useAnonKey: true });
+        }, { count: "none" });
         if (!product && action === "ao-so-mi-lua-velura-01") {
           product = await selectOne("product", {
             select: "*,category:category_id(*)",
-            status: "in.(on_sale,out_of_stock)",
+            status: DETAIL_STATUSES,
             slug: "eq.ao-so-mi-lua-tay-dai-ivory-thanh-lich"
-          }, { count: "none", useAnonKey: true });
+          }, { count: "none" });
         }
         if (!product) {
           throw new HttpError(404, "NOT_FOUND", "Không tìm thấy sản phẩm");
@@ -63,7 +90,7 @@ export async function handleProductsRoute(
         const { rows: dbVariants } = await selectRows("variant", {
           product_id: `eq.${product.product_id}`,
           order: "color.asc,size.asc"
-        }, { count: "none", useAnonKey: true });
+        }, { count: "none" });
         let variants: JsonObject[] = dbVariants;
 
         if (product.is_combo) {
@@ -76,7 +103,7 @@ export async function handleProductsRoute(
             if (variantIds.length > 0) {
               const { rows: compVariants } = await selectRows("variant", {
                 variant_id: `in.(${variantIds.join(",")})`
-              }, { count: "none", useAnonKey: true });
+              }, { count: "none" });
               variants = compVariants.map((v) => ({ ...v, product_id: product.product_id }));
             }
           }
@@ -87,13 +114,14 @@ export async function handleProductsRoute(
           if (componentProductIds.length > 0) {
             const [prodResult, catResult, varResult] = await Promise.all([
               selectRows("product", {
-                product_id: `in.(${componentProductIds.join(",")})`
-              }, { count: "none", useAnonKey: true }),
+                product_id: `in.(${componentProductIds.join(",")})`,
+                status: DETAIL_STATUSES
+              }, { count: "none" }),
               selectRows("category", {}, { count: "none", useAnonKey: true }),
               selectRows("variant", {
                 product_id: `in.(${componentProductIds.join(",")})`,
                 order: "color.asc,size.asc"
-              }, { count: "none", useAnonKey: true })
+              }, { count: "none" })
             ]);
 
             const compProducts = prodResult.rows;
@@ -273,54 +301,31 @@ export async function handleProductsRoute(
           sold_count
         }, {
           ...corsHeaders,
-          "cache-control": "public, max-age=30, s-maxage=60, stale-while-revalidate=180"
+          "cache-control": CATALOG_CACHE_CONTROL
         });
       }
 
       const requestUrl = new URL(req.url || "/api/user/products", "http://localhost");
       const lite = requestUrl.searchParams.get("lite") === "1";
-      const searchQuery = (requestUrl.searchParams.get("q") || requestUrl.searchParams.get("search") || "").trim();
+      const filters = parseCatalogFilters(requestUrl.searchParams);
       const now = Date.now();
+      const generation = cacheGeneration;
 
-      const filterBySearch = <T extends JsonObject>(items: T[]): T[] => {
-        if (!searchQuery) return items;
-        const normQ = searchQuery.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[đĐ]/g, "d");
-        const tokens = normQ.split(/\s+/).filter(Boolean);
-        return items.filter((p) => {
-          const tags = Array.isArray(p.style_tags) ? p.style_tags.join(" ") : "";
-          const occasions = Array.isArray(p.occasions) ? p.occasions.join(" ") : "";
-          const combined = [
-            p.name,
-            p.sku,
-            p.category_name,
-            p.brand,
-            p.collection,
-            p.seo_title,
-            p.seo_description,
-            tags,
-            occasions
-          ]
-            .filter(Boolean)
-            .join(" ")
-            .toLowerCase();
-          const normCombined = combined.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[đĐ]/g, "d");
-          if (combined.includes(searchQuery.toLowerCase()) || normCombined.includes(normQ)) return true;
-          return tokens.some((t) => normCombined.includes(t));
-        });
-      };
+      /** Search, category and material run per request on the cached rows, so they never go stale on their own. */
+      const applyFilters = <T extends JsonObject>(items: T[]): T[] => filterCatalogProducts(items, filters);
 
       if (lite) {
         if (liteProductsCache && (now - liteProductsCache.cachedAt < liteProductsCache.ttlMs)) {
-          return sendJson(res, 200, filterBySearch(liteProductsCache.data), {
+          return sendJson(res, 200, applyFilters(liteProductsCache.data), {
             ...corsHeaders,
-            "cache-control": "public, max-age=15, s-maxage=30, stale-while-revalidate=120"
+            "cache-control": CATALOG_CACHE_CONTROL
           });
         }
       } else {
         if (productsCache && (now - productsCache.cachedAt < productsCache.ttlMs)) {
-          return sendJson(res, 200, filterBySearch(productsCache.data), {
+          return sendJson(res, 200, applyFilters(productsCache.data), {
             ...corsHeaders,
-            "cache-control": "public, max-age=15, s-maxage=30, stale-while-revalidate=120"
+            "cache-control": CATALOG_CACHE_CONTROL
           });
         }
       }
@@ -330,8 +335,8 @@ export async function handleProductsRoute(
       const [productResult, comboResult, reviewResult] = await Promise.all([
         selectRows("product", {
           select: "product_id,sku,is_combo,name,slug,description,brand,base_price,sale_price,images,image_colors,style_tags,color_tone,occasions,suitable_body_shapes,status,is_featured,collection,seo_title,seo_description,created_at,updated_at,version,category:category_id(category_id,name,slug),variants:variant(variant_id,color,color_hex,size,stock_quantity,reserved_quantity)",
-          status: "in.(on_sale,out_of_stock)"
-        }, { count: "none", useAnonKey: true }),
+          status: LISTED_STATUSES
+        }, { count: "none" }),
         selectRows("combo_item", {}, { count: "none", useAnonKey: true }).catch(() => ({ rows: [] as JsonObject[] })),
         selectRows("review", { select: "product_id,rating", status: "eq.approved" }, { count: "none", useAnonKey: true }).catch(() => ({ rows: [] as JsonObject[] }))
       ]);
@@ -377,15 +382,18 @@ export async function handleProductsRoute(
             suitable_body_shapes: p.suitable_body_shapes || [],
             seo_title: p.seo_title || null,
             seo_description: p.seo_description || null,
+            description: p.description || null,
             updated_at: p.updated_at || null,
             category_slug: cat ? cat.slug : null,
             category_name: cat ? cat.name : null
           };
         });
-        liteProductsCache = { data: liteRows, cachedAt: now, ttlMs: PRODUCTS_CACHE_TTL_MS };
-        return sendJson(res, 200, filterBySearch(liteRows), {
+        if (generation === cacheGeneration) {
+          liteProductsCache = { data: liteRows, cachedAt: now, ttlMs: PRODUCTS_CACHE_TTL_MS };
+        }
+        return sendJson(res, 200, applyFilters(liteRows), {
           ...corsHeaders,
-          "cache-control": "public, max-age=15, s-maxage=30, stale-while-revalidate=120"
+          "cache-control": CATALOG_CACHE_CONTROL
         });
       }
 
@@ -420,10 +428,12 @@ export async function handleProductsRoute(
         };
       });
 
-      productsCache = { data: productsWithVariants, cachedAt: now, ttlMs: PRODUCTS_CACHE_TTL_MS };
-      return sendJson(res, 200, filterBySearch(productsWithVariants), {
+      if (generation === cacheGeneration) {
+        productsCache = { data: productsWithVariants, cachedAt: now, ttlMs: PRODUCTS_CACHE_TTL_MS };
+      }
+      return sendJson(res, 200, applyFilters(productsWithVariants), {
         ...corsHeaders,
-        "cache-control": "public, max-age=15, s-maxage=30, stale-while-revalidate=120"
+        "cache-control": CATALOG_CACHE_CONTROL
       });
     }
   }
@@ -431,10 +441,11 @@ export async function handleProductsRoute(
   if (subRoute === "categories") {
     if (req.method === "GET") {
       const now = Date.now();
+      const generation = cacheGeneration;
       if (categoriesCache && (now - categoriesCache.cachedAt < categoriesCache.ttlMs)) {
         return sendJson(res, 200, categoriesCache.data, {
           ...corsHeaders,
-          "cache-control": "public, max-age=30, s-maxage=60, stale-while-revalidate=300"
+          "cache-control": CATALOG_CACHE_CONTROL
         });
       }
 
@@ -462,15 +473,17 @@ export async function handleProductsRoute(
         product_count: counts.get(String(c.category_id)) || 0
       }));
 
-      categoriesCache = {
-        data: categoriesWithCount,
-        cachedAt: now,
-        ttlMs: CATEGORIES_CACHE_TTL_MS
-      };
+      if (generation === cacheGeneration) {
+        categoriesCache = {
+          data: categoriesWithCount,
+          cachedAt: now,
+          ttlMs: CATEGORIES_CACHE_TTL_MS
+        };
+      }
 
       return sendJson(res, 200, categoriesWithCount, {
         ...corsHeaders,
-        "cache-control": "public, max-age=30, s-maxage=60, stale-while-revalidate=300"
+        "cache-control": CATALOG_CACHE_CONTROL
       });
     }
   }

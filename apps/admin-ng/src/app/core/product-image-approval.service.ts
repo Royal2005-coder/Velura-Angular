@@ -9,6 +9,8 @@ export interface ProductImageApproval {
   url: string;
   sourceRevision: string;
   processingVersion: string;
+  /** Measured studio quality (0-100) of exactly this approved URL; absent when the approval was not scored. */
+  qualityScore?: number;
   expiresAt: string;
 }
 /** Server verifies the selected job/bytes belong to this administrator and match the expected product version. */

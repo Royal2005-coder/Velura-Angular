@@ -43,7 +43,8 @@ async function withCatalogFixture(run: (fixture: {
       const status = url.searchParams.get("status");
       const ids = url.searchParams.get("product_id");
       const matchesId = !ids || ids.includes(PRODUCT_ID);
-      const matchesStatus = !status || (status === "eq.on_sale" ? product.status === "on_sale" : ["on_sale", "out_of_stock"].includes(String(product.status)));
+      const allowed = status?.startsWith("in.(") ? status.slice(4, -1).split(",") : status?.startsWith("eq.") ? [status.slice(3)] : null;
+      const matchesStatus = !allowed || allowed.includes(String(product.status));
       result = matchesId && matchesStatus ? [product] : [];
     } else if (url.pathname.endsWith("/variant")) {
       result = variants.map((variant) => ({ ...variant, product }));
@@ -75,7 +76,12 @@ test("status cycle removes hidden and discontinued products from storefront, the
         assert.equal((await storefront(true) as JsonObject).product_id, PRODUCT_ID);
       } else {
         assert.deepEqual(await storefront(false), []);
-        await assert.rejects(() => storefront(true), (error: unknown) => error instanceof HttpError && error.status === 404);
+        if (status === "discontinued") {
+          // Not listed, but a direct link still opens the page so it can say "Ngừng kinh doanh" with purchase disabled.
+          assert.equal(((await storefront(true)) as JsonObject).status, "discontinued");
+        } else {
+          await assert.rejects(() => storefront(true), (error: unknown) => error instanceof HttpError && error.status === 404);
+        }
       }
     }
   });

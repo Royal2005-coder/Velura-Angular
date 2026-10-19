@@ -301,30 +301,45 @@ test("CSV rejects repeated headers and malformed row widths before any write", a
   }
 });
 
-test("CSV active price reduction is a preview error and cannot commit through a hidden status", async () => {
+test("CSV never overwrites an existing price: preview warns, skips the price and commit sends the stored price (AD_PRODUCT_16)", async () => {
   const current = { product_id: PRODUCT_ID, sku: "VL-AO002", status: "on_sale", base_price: 250000, sale_price: 250000, version: 1 };
+  let received;
   const service = createProductService({ repository: {
     findBySku: async () => current, findVariantBySku: async () => null,
-    importCsv: async () => assert.fail("price reduction must not write")
+    importCsv: async (rows) => { received = rows; return { created: 0, updated: 1, failed: 0, total: rows.length }; }
   } });
   for (const status of ["hidden", "on_sale", ""]) {
     const csv = `sku,name,base_price,sale_price,category_id,status\nVL-AO002,Ao lua,100000,100000,${CATEGORY_ID},${status}`;
     const preview = await service.parseCsv(superAdminContext(), csv);
-    assert.deepEqual(preview.errors.map((error) => error.field), ["base_price", "sale_price"]);
-    await assert.rejects(() => service.commitCsv(superAdminContext(), csv, {}), (error) => error.code === "CSV_VALIDATION_FAILED");
+    assert.deepEqual(preview.errors, [], "a differing price is a warning, not a blocking error");
+    assert.deepEqual(preview.warnings.map((warning) => warning.field), ["base_price", "sale_price"]);
+    assert.match(preview.warnings[0].message, /giữ nguyên 250\.000đ/);
+    assert.equal(preview.validRows, 1);
+    assert.equal(preview.rows[0].base_price, 250000, "row carries the stored price, never the CSV price");
+    assert.equal(preview.rows[0].sale_price, 250000);
+    assert.deepEqual(preview.rows[0].skipped_prices, ["base_price", "sale_price"]);
+    const result = await service.commitCsv(superAdminContext(), csv, {});
+    assert.equal(received[0].base_price, 250000);
+    assert.equal(received[0].sale_price, 250000);
+    assert.equal(result.skippedPrices, 2);
+    assert.equal(result.warnings.length, 2);
   }
+  assert.equal(current.base_price, 250000);
 });
 
-test("CSV commit rechecks stored prices after successful preview", async () => {
+test("CSV commit re-reads stored prices after preview and still never sends the CSV price", async () => {
   const current = { product_id: PRODUCT_ID, sku: "VL-AO002", status: "on_sale", base_price: 250000, sale_price: 250000, version: 1 };
+  let received;
   const service = createProductService({ repository: {
     findBySku: async () => current, findVariantBySku: async () => null,
-    importCsv: async () => assert.fail("changed price must block commit")
+    importCsv: async (rows) => { received = rows; return { created: 0, updated: 1, failed: 0, total: 1 }; }
   } });
   const csv = `sku,name,base_price,category_id\nVL-AO002,Ao lua,250000,${CATEGORY_ID}`;
-  assert.equal((await service.parseCsv(superAdminContext(), csv)).errors.length, 0);
+  assert.equal((await service.parseCsv(superAdminContext(), csv)).warnings.length, 0);
   current.base_price = 300000;
-  await assert.rejects(() => service.commitCsv(superAdminContext(), csv, {}), (error) => error.details.errors[0].field === "base_price");
+  const result = await service.commitCsv(superAdminContext(), csv, {});
+  assert.equal(received[0].base_price, 300000, "stored price wins over the stale CSV value");
+  assert.equal(result.warnings[0].field, "base_price");
 });
 
 test("CSV distinguishes existing and new variant identity without deleting or resetting omitted stock or sale price", async () => {
@@ -578,48 +593,33 @@ test("combo items service operations work with correct RBAC", async () => {
   );
 });
 
-test("listAuditLogs supports date, query, and action filtering", async () => {
+test("listAuditLogs maps legacy date/q/action onto server-side filters and enriches the returned page", async () => {
   let capturedFilters: Record<string, unknown> | null = null;
-  const mockLogs = [
-    {
-      audit_id: "log-1",
-      action: "update_stock",
-      timestamp: "2026-10-18T08:30:00.000Z",
-      target_id: PRODUCT_ID,
-      new_value: { name: "UAT-Khai Áo Thun Premium", reason: "Kiểm kê định kỳ" },
-      old_value: {}
-    },
-    {
-      audit_id: "log-2",
-      action: "create",
-      timestamp: "2026-10-17T08:30:00.000Z",
-      target_id: "30000000-0000-4000-8000-000000000002",
-      new_value: { name: "Áo sơ mi khác" },
-      old_value: {}
-    }
-  ];
-
   const service = createProductService({
     repository: {
       listAuditLogs: async (filters: Record<string, unknown>) => {
         capturedFilters = filters;
-        return { rows: mockLogs, count: mockLogs.length };
+        return { rows: [{
+          audit_id: "log-1", action: "update", action_type: "UPDATE_STOCK", timestamp: "2026-10-18T08:30:00.000Z", target_id: PRODUCT_ID,
+          actor_name: "Khải", actor_email: "khai@velura.vn", actor_role: "admin_operator_sanpham",
+          product_sku: "VL-AO001", product_name: "UAT-Khai Áo Thun Premium",
+          old_value: { stock_quantity: 50 }, new_value: { stock_quantity: 3, reason: "Kiểm kê định kỳ cuối tháng" }
+        }], count: 1 };
       }
     } as unknown as ProductRepository
   });
-
-  const params = new URLSearchParams({
-    q: "UAT-Khai",
-    date: "2026-10-18",
-    action: "update_stock"
-  });
-
-  const result = await service.listAuditLogs(viewerContext(), params);
-  const rows = result && typeof result === "object" && "rows" in result && Array.isArray(result.rows) ? result.rows : [];
-  assert.equal(rows.length, 1);
-  const firstRow = rows[0] && typeof rows[0] === "object" ? rows[0] : {};
-  assert.equal("audit_id" in firstRow ? firstRow.audit_id : null, "log-1");
-  assert.equal(capturedFilters?.action, "update_stock");
+  const result = await service.listAuditLogs(viewerContext(), new URLSearchParams({
+    q: "UAT-Khai", date: "2026-10-18", action: "update_stock"
+  })) as { rows: Array<Record<string, unknown>>; count: number };
+  assert.equal(capturedFilters?.product, "UAT-Khai");
+  assert.equal(capturedFilters?.actionType, "UPDATE_STOCK");
+  assert.equal(capturedFilters?.fromDate, "2026-10-18T00:00:00+07:00");
+  assert.equal(capturedFilters?.toDate, "2026-10-18T23:59:59.999+07:00");
+  assert.equal(result.count, 1);
+  assert.equal(result.rows[0].action_label, "Điều chỉnh tồn kho");
+  assert.equal(result.rows[0].actor_label, "Khải (khai@velura.vn)");
+  assert.equal(result.rows[0].reason, "Kiểm kê định kỳ cuối tháng");
+  assert.equal(result.rows[0].change_summary, "Tồn 50 → 3");
 });
 
 test("explicit image colors validate against creation variants without filename inference", () => {

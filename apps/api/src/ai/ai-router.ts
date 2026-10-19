@@ -4,6 +4,7 @@ import { requirePermission } from "../rbac.js";
 import { readMultipartImage } from "../user/upload.js";
 import type {
   AuthContext,
+  JsonObject,
   HeaderMap,
   HttpRequest,
   HttpResponse,
@@ -49,6 +50,11 @@ export function aiOwner(req: HttpRequest, context: AuthContext): string {
       "Hãy mở lại phiên trình duyệt.",
     );
   return `guest:${guest}`;
+}
+
+/** Virtual try-on and its personal-photo quality check store a person's image per account, so they need a member. */
+export function requiresMember(body: JsonObject): boolean {
+  return body.task === "virtual_try_on" || (body.task === "image_quality" && body.person_check === true);
 }
 
 /** Route HTTP to the local AI service; no Colab credentials or public image URLs reach the browser. */
@@ -150,14 +156,10 @@ export async function handleAiRoute(
     parts.length === offset + 1 &&
     req.method === "POST"
   ) {
-    sendJson(
-      res,
-      202,
-      {
-        job: await service.create(owner, await readJson(req, 32 * 1024), admin),
-      },
-      headers,
-    );
+    const body = await readJson(req, 32 * 1024);
+    if (user && requiresMember(body) && !context.profile?.user_id)
+      throw new HttpError(401, "MEMBER_REQUIRED", "Thử đồ AI chỉ dành cho thành viên. Vui lòng đăng nhập hoặc đăng ký.");
+    sendJson(res, 202, { job: await service.create(owner, body, admin) }, headers);
     return true;
   }
   if (

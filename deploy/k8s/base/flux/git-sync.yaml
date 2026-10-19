@@ -31,6 +31,10 @@ spec:
     kind: GitRepository
     name: velura-repo
   path: ./deploy/k8s/overlays/infrastructure
+  decryption:
+    provider: sops
+    secretRef:
+      name: sops-age
   # Platform adoption is complete; subsequent main changes reconcile continuously.
   suspend: false
   prune: true
@@ -49,6 +53,10 @@ spec:
     kind: GitRepository
     name: velura-repo
   path: ./deploy/k8s/overlays/production
+  decryption:
+    provider: sops
+    secretRef:
+      name: sops-age
   dependsOn:
     - name: velura-infra
   suspend: true
@@ -68,6 +76,10 @@ spec:
     kind: GitRepository
     name: velura-staging-repo
   path: ./deploy/k8s/overlays/staging
+  decryption:
+    provider: sops
+    secretRef:
+      name: sops-age
   dependsOn:
     - name: velura-infra
   suspend: true

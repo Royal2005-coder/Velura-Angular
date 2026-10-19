@@ -5,7 +5,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { matchesAllSearchWords, normalizeSearchText } from '../../core/utils/search';
 import { productMaterial, productMaterialText } from '../../core/utils/material';
-import { catchError, finalize, of } from 'rxjs';
+import { catchError, finalize, of, switchMap, tap } from 'rxjs';
 import { ProductSummary } from '../../core/models/product.interface';
 import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
@@ -407,7 +407,7 @@ export class ProductListPage {
   });
 
   constructor() {
-    this.route.queryParamMap.pipe(takeUntilDestroyed()).subscribe((params) => {
+    this.route.queryParamMap.pipe(tap((params) => {
       const category = params.get('category') || '';
       const slug = CATEGORY_QUERY_MAP[category] || category;
       this.selectedSlugs.set(slug ? [slug] : []);
@@ -429,12 +429,20 @@ export class ProductListPage {
           this.activeVoucherCode.set(stored.trim());
         }
       }
-    });
-    this.catalog
-      .getProducts()
-      .pipe(finalize(() => this.loading.set(false)))
+    }), switchMap(() => {
+      this.loading.set(true);
+      this.loadError.set('');
+      return this.catalog.getProducts().pipe(
+        catchError((error: Error) => {
+          this.loadError.set(error.message);
+          return of(null);
+        }),
+        finalize(() => this.loading.set(false)),
+      );
+    }), takeUntilDestroyed())
       .subscribe({
         next: (rows) => {
+          if (rows === null) return;
           const catalog = rows.filter((item) => {
             const name = (item.name || '').toLowerCase();
             return !name.includes('test') && !name.includes('validation') && !name.includes('commit');

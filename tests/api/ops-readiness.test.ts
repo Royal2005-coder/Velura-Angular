@@ -39,7 +39,10 @@ for (const scenario of [
         assert.equal(new Headers(init?.headers).get("apikey"), "service-test");
         return Response.json(scenario.payload, { status: scenario.status });
       }
-      if (url.pathname === "/rest/v1/product") assert.equal(url.searchParams.get("limit"), "0");
+      if (url.pathname === "/rest/v1/product") {
+        assert.equal(url.searchParams.get("limit"), "0");
+        assert.equal(url.searchParams.get("select"), "product_id,image_colors,variants:variant(sku)");
+      }
       return new Response(null, { status: 200 });
     };
     try {
@@ -57,6 +60,32 @@ for (const scenario of [
     }
   });
 }
+
+test("missing catalog migrations fail readiness even when chatbot and gateway are healthy", async () => {
+  const originalFetch = globalThis.fetch;
+  const savedConfig = { ...config };
+  const endpoint = process.env.LITELLM_ENDPOINT;
+  const key = process.env.LITELLM_API_KEY;
+  Object.assign(config, { supabaseUrl: "https://db.example.test", supabaseServiceRoleKey: "fixture" });
+  process.env.LITELLM_ENDPOINT = "https://gateway.example.test";
+  process.env.LITELLM_API_KEY = "fixture";
+  globalThis.fetch = async input => {
+    const url = new URL(String(input));
+    if (url.pathname.endsWith("/product")) return Response.json({ code: "42703" }, { status: 400 });
+    if (url.pathname.endsWith("/chat_schema_readiness")) return Response.json(installed);
+    return new Response(null, { status: 200 });
+  };
+  try {
+    const state = await runtimeReadiness();
+    assert.deepEqual(state.checks, { database: false, gateway: true, chatbotSchema: true });
+    assert.equal(state.ready, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+    Object.assign(config, savedConfig);
+    if (endpoint === undefined) delete process.env.LITELLM_ENDPOINT; else process.env.LITELLM_ENDPOINT = endpoint;
+    if (key === undefined) delete process.env.LITELLM_API_KEY; else process.env.LITELLM_API_KEY = key;
+  }
+});
 
 test("readiness cannot use anonymous credentials to certify chatbot governance", async () => {
   const originalFetch = globalThis.fetch;

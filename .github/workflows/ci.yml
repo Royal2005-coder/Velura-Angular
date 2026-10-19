@@ -611,7 +611,10 @@ jobs:
               && jq -e --arg expected "$expected" --arg build "$expected_build" --arg project "$expected_project" '.ready == true and .checks.chatbotSchema == true and .revision == $expected and .buildRevision == $expected and .buildId == $build and .databaseProjectRef == $project' revision.json \
               && curl --fail --silent --show-error --max-time 15 "${access_headers[@]}" https://admin.royalai.dev/release.json | jq -e --arg expected "$expected" --arg build "$expected_build" '.revision == $expected and .buildId == $build' \
               && curl --fail --silent --show-error --max-time 15 https://velura.royalai.dev/release.json | jq -e --arg expected "$expected" --arg build "$expected_build" '.revision == $expected and .buildId == $build' \
-              && curl --fail --silent --show-error --max-time 15 https://velura.royalai.dev/api/health; then
+              && curl --fail --silent --show-error --max-time 15 https://velura.royalai.dev/api/health \
+              && curl --fail --silent --show-error --max-time 30 https://velura.royalai.dev/api/user/products > catalog.json \
+              && jq -e 'type == "array" and length > 0 and all(.[]; (.product_id | type == "string") and (.name | type == "string"))' catalog.json > /dev/null \
+              && curl --fail --silent --show-error --max-time 30 "https://velura.royalai.dev/api/user/products/$(jq -r '.[0].product_id' catalog.json)" | jq -e '.product_id != null and (.variants | type == "array")' > /dev/null; then
               exit 0
             fi
             sleep 10

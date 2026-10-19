@@ -84,7 +84,6 @@ export class SiteHeader {
         const occMatch = p.occasions?.some((o) => matchesSearchText(o, q));
         const colorMatch = matchesSearchText(p.color_tone, q);
         const catMatch = matchesSearchText(p.category_name, q);
-        const descMatch = matchesSearchText(p.description, q);
         return (
           nameMatch ||
           skuMatch ||
@@ -95,19 +94,18 @@ export class SiteHeader {
           tagMatch ||
           occMatch ||
           colorMatch ||
-          catMatch ||
-          descMatch
+          catMatch
         );
       })
       .slice(0, 6);
   });
 
   constructor() {
-    this.refreshCatalog();
+    this.loadCatalog();
   }
 
-  /** Reloads the product list the suggestions search, so a renamed product is found without a page reload. */
-  private refreshCatalog(): void {
+  /** Refreshes suggestions when search opens so an admin rename does not remain cached in the header. */
+  private loadCatalog(): void {
     this.catalog
       .getProducts()
       .pipe(takeUntilDestroyed(this.destroy))
@@ -171,9 +169,10 @@ export class SiteHeader {
     }
   }
 
+  /** Opens search with the current catalog instead of the header's initial product snapshot. */
   onSearchFocus(): void {
+    if (!this.searchOpen()) this.loadCatalog();
     this.searchOpen.set(true);
-    this.refreshCatalog();
     this.loadRecentlyViewed();
     setTimeout(() => {
       this.overlayInput()?.nativeElement.focus();
@@ -193,8 +192,10 @@ export class SiteHeader {
     }
   }
 
+  /** Filters locally while typing, refreshing only when a closed search is reopened. */
   onSearchInput(event: Event): void {
     const input = event.target as HTMLInputElement;
+    if (!this.searchOpen()) this.loadCatalog();
     this.searchQuery.set(input.value);
     this.searchOpen.set(true);
   }

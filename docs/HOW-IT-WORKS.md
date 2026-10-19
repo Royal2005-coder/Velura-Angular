@@ -148,11 +148,10 @@ provider credentials, namespace isolation and management authentication only
 through their separately approved platform bootstrap. Staging rendering does
 not create these shared services.
 
-As of the 2026-10-08 inventory, the live cluster has no `velura-staging`
-namespace or Secrets. Local key-name inventory has no `STAGING_*`,
-`LITELLM_*` or `AI_WORKER_KEY`; it has `SUPABASE_DB_URL` but no database CA
-configuration. These are real missing prerequisites, not values to copy from
-production. Provision a distinct Supabase staging project and trusted
+An existing staging namespace, Secret or scaled-to-zero Deployment does not
+prove database isolation. Verify the actual staging project identity and its
+trusted CA rather than copying credentials from production. Provision a
+distinct Supabase staging project and trusted
 `STAGING_SUPABASE_DB_URL` / `STAGING_SUPABASE_DB_CA_CERT` outside Git before
 running migrations 049–055. Production writes are frozen:
 
@@ -176,6 +175,32 @@ Bootstrap `deploy/k8s/base/flux/git-sync.yaml` only after the reviewed manifests
 exist on canonical branches. Public Git read needs no token; private sources
 need a real `secretRef`. Configure SOPS decryption only when encrypted Secret
 resources and the independently held recovery key are actually provisioned.
+
+#### Encrypted Secret ownership
+
+`.sops.yaml` defines separate cluster and recovery age recipients. Platform
+Secret ciphertext lives in `deploy/k8s/base/secrets`; the infrastructure overlay
+is its only reconciliation owner. All Secret payload values must be SOPS
+ciphertext, not base64-only data. CI checks ciphertext structure and recipient
+policy without receiving any decryption identity. It does not certify the MAC;
+verify round-trips with both identities before the initial ownership transfer.
+
+Bootstrap the cluster identity as `flux-system/sops-age` with key `age.agekey`;
+each Flux Kustomization references this Secret through `spec.decryption`.
+Private age identities and workstation recovery exports never belong in Git.
+Retain the recovery identity independently from the VM. A Windows DPAPI export
+requires that Windows user's profile to recover; move the encrypted export from
+temporary storage into the owner's durable backup custody before relying on it
+for disaster recovery. The cluster key alone is not an independent backup.
+
+`deploy/k8s/secrets/production` contains an encrypted production Secret snapshot
+but is deliberately not referenced by the production overlay during its legacy
+bootstrap. Add that resource only in the reviewed staging-verified production
+release. No staging credentials are exported from production. Referenced Secrets
+are annotated `prune: disabled`; retiring credentials requires explicit owner
+rotation/deletion rather than incidental pruning. Changing environment-backed
+credentials also requires a reviewed pod-template rollout, not merely a Secret
+update. Keep plaintext out of command output and GitHub Actions logs.
 
 The bootstrap file is not included in either reconciliation tree. Infrastructure
 reconciliation defaults to enabled; the application `suspend: true` values are

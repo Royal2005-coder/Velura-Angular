@@ -41,6 +41,10 @@ jobs:
           if printf '%s\n' "$MESSAGE" "$TITLE" | grep -qiE '\[skip ci\]|\[ci skip\]'; then exit 1; fi
           if grep -R --exclude-dir=.git --exclude-dir=node_modules --include='*.pem' --include='*.key' -n 'BEGIN .*PRIVATE KEY' .; then exit 1; fi
           if grep -R --include='*.ts' -n '@ts-nocheck' apps/api; then exit 1; fi
+          if git grep -qE 'AGE-SECRET-KEY-1[0-9A-Z]{50,}' -- .; then
+            echo 'Private age identity found; content withheld' >&2
+            exit 1
+          fi
       - name: Detect application release changes
         id: changes
         env:
@@ -164,12 +168,16 @@ jobs:
         run: python -m unittest discover -s scripts -p test_release_images.py
       - name: Verify platform admission regression checks
         run: python -m unittest discover -s scripts -p test_platform_contract.py
+      - name: Verify ciphertext-only Secret regression checks
+        run: python -m unittest discover -s scripts -p test_secret_contract.py
       - name: Reject duplicate YAML keys and render each isolated overlay
         run: |
           python - <<'PY'
           from pathlib import Path
           import re, subprocess, yaml
           from scripts.platform_contract import validate_platform
+          from scripts.secret_contract import validate_secret_files
+          validate_secret_files()
           class UniqueLoader(yaml.SafeLoader):
               pass
           def mapping(loader, node, deep=False):
@@ -178,7 +186,7 @@ jobs:
                   raise ValueError('Duplicate YAML mapping key')
               return yaml.SafeLoader.construct_mapping(loader, node, deep=deep)
           UniqueLoader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, mapping)
-          paths = [Path('.github/workflows/ci.yml'), *Path('deploy/k8s').rglob('*.yaml')]
+          paths = [Path('.github/workflows/ci.yml'), Path('.sops.yaml'), *Path('deploy/k8s').rglob('*.yaml')]
           for path in paths:
               list(yaml.load_all(path.read_text(), Loader=UniqueLoader))
           owners = {}

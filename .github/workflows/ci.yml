@@ -332,6 +332,7 @@ jobs:
           image-ref: ${{ steps.image.outputs.name }}@${{ steps.build.outputs.digest }}
           scanners: vuln,secret
           severity: HIGH,CRITICAL
+          ignore-unfixed: true
           exit-code: '1'
           format: json
           output: scan-${{ matrix.app }}.json

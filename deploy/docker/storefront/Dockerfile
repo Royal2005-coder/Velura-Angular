@@ -1,4 +1,5 @@
 FROM node:22.16.0-alpine3.22 AS builder
+RUN apk upgrade --no-cache
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY apps/admin-ng/package.json ./apps/admin-ng/
@@ -9,6 +10,9 @@ COPY apps/user-ng ./apps/user-ng
 RUN npm run build -w @velura/user-ng
 
 FROM nginxinc/nginx-unprivileged:1.28.0-alpine
+USER root
+RUN apk upgrade --no-cache
+USER 101:101
 ARG RELEASE_REVISION
 ARG RELEASE_BUILD_ID
 COPY --from=builder /app/apps/user-ng/dist/user-ng/browser /usr/share/nginx/html

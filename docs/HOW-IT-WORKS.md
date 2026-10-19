@@ -44,13 +44,13 @@ GitHub: PR (`## Why`) + Files changed + job `note-pr` (comment + artifact `pr-tr
 | Khi | Jobs | Deploy |
 |---|---|---|
 | PR → `develop` | validate, tests, build, **note-pr** | Không |
-| Push `develop` | validate, tests, build | Không |
-| PR `develop` → `main` | cùng cổng PR | Không |
-| Push `main` | tests + build + manifests + image publication | Reviewed digest PR; no CI cluster mutation |
+| Push `develop` | validate, tests, build; verify approved staging pins | Flux staging follows reviewed manifest changes, not unbuilt source |
+| PR `develop` → `main` | cùng cổng PR; production pins require staging evidence | Không |
+| Push `main` | tests + build + manifests; publish when app changes | Flux production follows reviewed production pins; no CI cluster mutation |
 
 `note-pr` bắt buộc xanh. Trace = job log + artifact `pr-trace.md` + comment trên PR.
 
-Staging GitOps dùng namespace `velura-staging`, credentials độc lập và `AI_ENABLE=false`. Cả staging lẫn production Flux khởi tạo suspended; chỉ owner mở staging sau khi image digest và secrets thật đã sẵn sàng. CI không giữ kubeconfig.
+Staging GitOps dùng namespace `velura-staging`, credentials độc lập và `AI_ENABLE=false`. Bootstrap Flux suspended một lần; sau kiểm chứng, để reconcile chạy liên tục. Phê duyệt release bằng PR, không bằng restart/resume mỗi lần. CI không giữ kubeconfig.
 
 ## Admin TMĐT — cơ sở đúng
 
@@ -68,22 +68,35 @@ by YAML. Do not upgrade/reboot or migrate a production database in this procedur
 
 ### Artifacts and deployment ownership
 
-- CI `deploy-production` publishes API, storefront, admin and worker images; it
-  scans the actual digest, emits SPDX SBOM/provenance, signs/attests it and opens
-  an image-update PR into `develop`. SHA tags are publishing labels, not proof
-  that an image exists. Deploy only the reviewed `@sha256` promotion.
+- CI `deploy-production` publishes API, storefront, admin and worker images,
+  scans exact digests, emits SPDX SBOM/provenance and signs/attests releases.
+  The staging-pins PR targets `develop`; successful staging verification opens
+  a production-pins PR for the same app digests. Owner promotion of `develop`
+  to `main` releases those pins without rebuilding them. SHA tags alone are
+  not deployment evidence.
 - The worker Dockerfile requires an immutable Python 3.11 base supplied by CI
   from the real registry. `requirements-production.txt` pins CUDA 12.1 Torch and
   CPU-only ONNX dependencies; the image retains installed dependency versions
   and the blob-verified FASHN source LICENSE/NOTICE.
-- `deploy/k8s/overlays/production` preserves `database/postgres-pvc`.
-  CNPG operator/plugin/cluster/restore manifests under `database/cutover` are
-  opt-in only. A maintenance-approved logical export, restore drill, Keycloak
-  integrity check and service switch are required before any CNPG cutover.
-  Never reuse the old data directory for a different PostgreSQL major.
-- Both Flux Kustomizations and both backup CronJobs start suspended.
-  Production remains suspended while staging is exercised. A Kubernetes
-  resource render does not prove credentials, image availability or readiness.
+- Flux `velura-infra` owns `deploy/k8s/overlays/infrastructure` from `main`:
+  namespaces, isolation, database, auth, storage, networking and observability.
+  Flux `velura-production` owns only the three production apps and their
+  ConfigMap/PVC/Services; `velura-staging` owns the isolated staging overlay
+  from `develop`. App releases cannot implicitly upgrade platform services.
+- The infrastructure overlay preserves `database/postgres-pvc`. CNPG
+  `database/cutover` stays opt-in: require a maintenance-approved export,
+  restore drill, Keycloak integrity check and service switch. Never reuse
+  a PostgreSQL data directory for a different major version.
+- All three Flux Kustomizations and both backup CronJobs start suspended.
+  Resume each Flux owner only after reviewing its live drift and prerequisites;
+  keep normal reconciliation enabled afterward. Do not resume backup schedules
+  until external credentials and restore evidence are ready.
+- App ConfigMaps are generated with content hashes; references in Deployments
+  change with configuration, so Flux does not need a manual restart.
+- Terraform owns external Cloudflare DNS, not Kubernetes or tunnel credentials.
+  Atlantis plans existing-record imports against locked remote state; apply
+  requires approval, mergeability and an undiverged PR. See
+  [external ownership](./CLOUDFLARE-SUPABASE.md).
 
 ### Local checks for the integration owner
 
@@ -98,8 +111,10 @@ python -m pip install -r apps/ai-worker/requirements-test.txt
 python -m unittest discover -s apps/ai-worker -p 'test_*.py'
 node tools/ops/velura-ops.mjs render --path deploy/k8s/overlays/staging
 node tools/ops/velura-ops.mjs render --path deploy/k8s/overlays/production
+node tools/ops/velura-ops.mjs render --path deploy/k8s/overlays/infrastructure
 node tools/ops/velura-ops.mjs validate --path deploy/k8s/overlays/staging
 node tools/ops/velura-ops.mjs validate --path deploy/k8s/overlays/production
+node tools/ops/velura-ops.mjs validate --path deploy/k8s/overlays/infrastructure
 ```
 
 Strict policy validation intentionally rejects mutable upstream/app images.
@@ -155,25 +170,41 @@ separately. The VTO catalog must also have reviewed `verified:true`,
 No primary-image/variant fallback or auto-generated studio selection supplies
 missing catalog approval. `AI_ENABLE=false` disables uploads and inference.
 
-Bootstrap the existing Flux source with real Git read credentials
-`flux-system/velura-git-credentials` and an age key Secret `flux-system/sops-age`.
-Apply `deploy/k8s/base/flux/git-sync.yaml` only after those prerequisites exist.
-Pin its source to the approved commit before asking the operational CLI to
-reconcile; opening staging must not open production:
+Bootstrap `deploy/k8s/base/flux/git-sync.yaml` only after the reviewed manifests
+exist on canonical branches. Public Git read needs no token; private sources
+need a real `secretRef`. Configure SOPS decryption only when encrypted Secret
+resources and the independently held recovery key are actually provisioned.
+
+The bootstrap file is not included in either reconciliation tree. Its
+`suspend: true` values are one-time safety gates, not per-release controls.
+Before transferring ownership, inspect the existing Flux inventory: orphan
+resources moving between owners before removing them from the old owner's
+inventory; never let `prune` delete a transferred app/PVC. Dry-run the platform
+changes and provision its referenced Secrets first. A Keycloak major upgrade
+or hostPath-to-PVC data move needs separate maintenance/restore approval.
+
+`velura-repo` tracks `main`; `velura-staging-repo` tracks `develop`. Do not pin
+these continuously reconciled sources to a fixed commit or feature branch.
+After safe infrastructure adoption, open staging without opening production:
 
 ```bash
-kubectl --context "$APPROVED_CONTEXT" -n flux-system patch gitrepository velura-repo --type merge -p "{\"spec\":{\"ref\":{\"branch\":null,\"commit\":\"$APPROVED_SHA\"}}}"
+flux resume kustomization velura-infra --namespace flux-system --context "$APPROVED_CONTEXT"
 flux resume kustomization velura-staging --namespace flux-system --context "$APPROVED_CONTEXT"
 node tools/ops/velura-ops.mjs reconcile --context "$APPROVED_CONTEXT" --expected-cluster "$CLUSTER_UID" --environment staging --revision "$APPROVED_SHA"
 node tools/ops/velura-ops.mjs health --context "$APPROVED_CONTEXT" --expected-cluster "$CLUSTER_UID" --namespace velura-staging
 ```
 
-`reconcile` without `--execute` is read-only. Execution additionally requires
-`--approval` matching environment, command, cluster UID, revision and expiry;
-it only annotates the selected Flux Kustomization and cannot unsuspend it.
-`health` leaves application smoke unknown even when Pods/Flux are Ready.
-`/api/ops/revision` checks actual database/gateway readiness and the configured
-revision, not Flux convergence. Use the CLI for Flux evidence.
+`reconcile` without `--execute` is read-only. It requires the environment branch
+to have fetched exactly `APPROVED_SHA`; execution additionally requires an
+unexpired matching `--approval`. It annotates only the selected app
+Kustomization and cannot unsuspend anything. Normal release convergence needs
+no annotation: Flux polls its approved branch.
+
+The protected `/api/ops/revision` checks database/gateway/schema readiness and
+requires configured revision to match the image-baked `buildRevision`.
+Frontend `/release.json` comes from the image and is served without caching.
+These HTTP checks do not prove Flux convergence or pod image digests; use the
+owner CLI for that evidence.
 
 `cloudflared-ingress-contract` is a route contract, not the running config.
 The active tunnel reads the protected `networking/cloudflare-tunnel-config`
@@ -189,9 +220,11 @@ owner sets `VELURA_VERIFY_PRODUCTION=true`; this does not resume Flux.
 The real worker is excluded from both default overlays. Its optional
 `deploy/k8s/optional/ai-worker` overlay uses namespace `ai-staging`, ClusterIP,
 API-only ingress, no egress, non-root/read-only containers, two private PVCs,
-one NVIDIA GPU request and `Recreate`. CI replaces the required image input
-with the real signed digest; replicas remain zero. Do not apply an unresolved
-image input. Provision `ai-staging/ai-worker-auth` with the same independent
+one NVIDIA GPU request and `Recreate`. A separate release PR replaces image
+references with the signed digest without changing the replica count or
+including the worker in app reconciliation. Registry pulls use `IfNotPresent`,
+not the legacy local-image-only `Never`. Do not apply unresolved image inputs.
+Provision `ai-staging/ai-worker-auth` with the same independent
 staging `AI_WORKER_KEY`, verify the NVIDIA device plugin and `nvidia`
 RuntimeClass. The optional weights Job mounts only the staging weights PVC and
 downloads the accepted manifest through its own DNS/HTTPS policy; it is not in
@@ -205,8 +238,9 @@ docker build --build-arg PYTHON_IMAGE="$PINNED_PYTHON_IMAGE" --build-arg RELEASE
 node tools/ops/velura-ops.mjs validate --path deploy/k8s/optional/ai-worker
 ```
 
-After the real digest promotion, owner-only provisioning may run with replicas
-still zero. Protected auth/registry files must be mode 600:
+Before provisioning weights, approve a Git change setting worker replicas to
+zero and confirm the old worker has stopped. The checked-in replica count is
+not a safety lock. Protected auth/registry files must be mode 600:
 
 ```bash
 kubectl --context "$APPROVED_CONTEXT" apply -k deploy/k8s/optional/ai-worker

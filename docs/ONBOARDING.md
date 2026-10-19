@@ -60,7 +60,7 @@ Chi tiết đầy đủ: [GIT-AND-CI.md §3–§4](./GIT-AND-CI.md#3-versioning-
 3. Commit + **title PR** bắt đầu `KAN-<n>`; body có `## Why` (template `.github/pull_request_template.md`).
 4. PR **chỉ vào `develop`**. CI: `validate` + `validate-pr-contract` + `test-api` + `test-angular` + `build` + `note-pr`.
 5. Không merge CI đỏ. Không feature → `main`. Không `[skip ci]`.
-6. Production chỉ sau PR `develop` → `main` (Lead). `develop` **không** deploy.
+6. Production chỉ sau PR `develop` → `main` (Lead); source trên `develop` không publish image. Staging chỉ reconcile reviewed image pins, rồi promote cùng digest sang production.
 
 Luồng: [HOW-IT-WORKS.md](./HOW-IT-WORKS.md). UI: [ANGULAR-STANDARDS.md](./ANGULAR-STANDARDS.md).  
 Kiến trúc / folder / role: [ARCHITECTURE.md](./ARCHITECTURE.md). Kiến trúc không phá: [COMPLIANCE.md](./COMPLIANCE.md).

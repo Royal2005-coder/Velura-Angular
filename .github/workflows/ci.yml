@@ -4,6 +4,12 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
+  workflow_dispatch:
+    inputs:
+      recovery:
+        description: 'Type release-main to rebuild, scan and sign the current main revision after all checks'
+        required: true
+        type: string
 permissions:
   contents: read
 concurrency:
@@ -16,6 +22,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       publish: ${{ steps.changes.outputs.publish }}
+      staging: ${{ steps.changes.outputs.staging }}
+      production: ${{ steps.changes.outputs.production }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -36,17 +44,40 @@ jobs:
       - name: Detect application release changes
         id: changes
         env:
-          BEFORE: ${{ github.event.before }}
+          BEFORE: ${{ github.event.pull_request.base.sha || github.event.before }}
           EVENT: ${{ github.event_name }}
+          RECOVERY: ${{ inputs.recovery }}
         run: |
           set -euo pipefail
-          if [ "$EVENT" != push ] || [ "$BEFORE" = 0000000000000000000000000000000000000000 ]; then
+          if [ "$EVENT" = workflow_dispatch ]; then
+            test "$GITHUB_REF" = refs/heads/main
+            test "$RECOVERY" = release-main
+            git fetch origin main
+            test "$(git rev-parse origin/main)" = "$GITHUB_SHA"
             echo 'publish=true' >> "$GITHUB_OUTPUT"
-          elif git diff --name-only "$BEFORE" HEAD | grep -qE '^(apps/|packages/|database/migrations/|scripts/run-migrations\.mjs$|package(-lock)?\.json$|deploy/docker/)'; then
+            echo 'staging=false' >> "$GITHUB_OUTPUT"
+            echo 'production=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = 0000000000000000000000000000000000000000 ]; then
+            echo 'publish=true' >> "$GITHUB_OUTPUT"
+            echo 'staging=true' >> "$GITHUB_OUTPUT"
+            echo 'production=true' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git diff --name-only "$BEFORE" HEAD > changed-paths.txt
+          if grep -qE '^(apps/|packages/|database/migrations/|scripts/run-migrations\.mjs$|package(-lock)?\.json$|deploy/docker/)' changed-paths.txt; then
             echo 'publish=true' >> "$GITHUB_OUTPUT"
           else
             echo 'publish=false' >> "$GITHUB_OUTPUT"
           fi
+          for environment in staging production; do
+            if grep -qE "^deploy/k8s/overlays/$environment/" changed-paths.txt || { [ "$environment" = production ] && grep -qx 'deploy/releases/production.json' changed-paths.txt; }; then
+              echo "$environment=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "$environment=false" >> "$GITHUB_OUTPUT"
+            fi
+          done
   validate-pr-contract:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
@@ -113,9 +144,12 @@ jobs:
   manifests:
     runs-on: ubuntu-latest
     needs: validate
+    permissions:
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-        with: {persist-credentials: false}
+        with: {persist-credentials: false, fetch-depth: 0}
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with: {python-version: '3.11'}
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
@@ -125,11 +159,13 @@ jobs:
           python -m pip install PyYAML==6.0.2
           go install sigs.k8s.io/kustomize/kustomize/v5@v5.6.0
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Verify release tooling behavior
+        run: python -m unittest discover -s scripts -p test_release_images.py
       - name: Reject duplicate YAML keys and render each isolated overlay
         run: |
           python - <<'PY'
           from pathlib import Path
-          import subprocess, yaml
+          import re, subprocess, yaml
           class UniqueLoader(yaml.SafeLoader):
               pass
           def mapping(loader, node, deep=False):
@@ -141,15 +177,35 @@ jobs:
           paths = [Path('.github/workflows/ci.yml'), *Path('deploy/k8s').rglob('*.yaml')]
           for path in paths:
               list(yaml.load_all(path.read_text(), Loader=UniqueLoader))
-          for path in ('deploy/k8s/overlays/staging', 'deploy/k8s/overlays/production', 'deploy/k8s/optional/ai-worker'):
+          owners = {}
+          app_deployments = {'velura-api', 'velura-storefront', 'velura-admin'}
+          for path in ('deploy/k8s/overlays/staging', 'deploy/k8s/overlays/production', 'deploy/k8s/overlays/infrastructure', 'deploy/k8s/optional/ai-worker'):
               rendered = subprocess.run(['kustomize', 'build', path], check=True, capture_output=True, text=True).stdout
               objects = list(yaml.load_all(rendered, Loader=UniqueLoader))
               if not objects: raise ValueError('No rendered resources')
               for item in objects:
+                  metadata = item.get('metadata', {})
+                  if path.startswith('deploy/k8s/overlays/'):
+                      identity = (item['apiVersion'], item['kind'], metadata.get('namespace', ''), metadata['name'])
+                      if identity in owners:
+                          raise ValueError(f'Resource ownership overlaps: {identity} in {owners[identity]} and {path}')
+                      owners[identity] = path
+                  if item.get('kind') == 'Deployment' and metadata.get('name') in app_deployments:
+                      name = metadata['name']
+                      containers = item['spec']['template']['spec']['containers']
+                      application = [container for container in containers if container.get('name') == name]
+                      if len(application) != 1 or not re.fullmatch(r'ghcr\.io/royal2005-coder/' + re.escape(name) + r'(?::[^@\s]+)?@sha256:[a-f0-9]{64}', application[0].get('image', '')):
+                          raise ValueError(f'Application deployment must pin its canonical image digest: {name} in {path}')
                   if item.get('kind') == 'ConfigMap':
                       for name, value in item.get('data', {}).items():
                           if name.endswith('.yaml'): list(yaml.load_all(value, Loader=UniqueLoader))
           PY
+      - name: Require staging provenance or unchanged suspended legacy bootstrap
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: python scripts/release-images.py validate-production "$BASE_SHA"
   migrations:
     runs-on: ubuntu-latest
     steps:
@@ -205,8 +261,8 @@ jobs:
             if (existing) await github.rest.issues.updateComment({...context.repo, comment_id: existing.id, body});
             else await github.rest.issues.createComment({...args, body});
   deploy-production:
-    # Publishes artifacts only. Cluster changes occur only after a reviewed develop -> main promotion.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.validate.outputs.publish == 'true'
+    # Build artifacts only; never write cluster state. Recovery repeats every gate on current main.
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && needs.validate.outputs.publish == 'true'
     needs: [validate, test-api, test-angular, test-ai-worker, build, migrations, manifests]
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -222,6 +278,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with: {persist-credentials: false}
+      - run: python -m pip install PyYAML==6.0.2
       - name: Resolve canonical image repository
         id: image
         env:
@@ -248,25 +305,40 @@ jobs:
           context: .
           file: deploy/docker/${{ matrix.app }}/Dockerfile
           push: true
-          tags: ${{ steps.image.outputs.name }}:sha-${{ github.sha }}
+          tags: ${{ steps.image.outputs.name }}:sha-${{ github.sha }}-run-${{ github.run_id }}-${{ github.run_attempt }}
           labels: org.opencontainers.image.revision=${{ github.sha }}
           build-args: |
             PYTHON_IMAGE=${{ steps.python.outputs.image }}
             RELEASE_REVISION=${{ github.sha }}
           provenance: mode=max
           sbom: true
+      - name: Install checksum-verified scanner release
+        id: scanner
+        # Install a checksum-pinned scanner, not a mutable upstream-main install script.
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --max-time 120 https://github.com/aquasecurity/trivy/releases/download/v0.76.0/trivy_0.76.0_Linux-64bit.tar.gz -o "$RUNNER_TEMP/trivy.tar.gz"
+          echo "e24b1c51293c1b15e4ba8d45bbc7891ba053f90278ec2698f3562c993e145fe7  $RUNNER_TEMP/trivy.tar.gz" | sha256sum --check
+          mkdir -p "$RUNNER_TEMP/trivy-bin"
+          tar -xzf "$RUNNER_TEMP/trivy.tar.gz" -C "$RUNNER_TEMP/trivy-bin" trivy
+          echo "$RUNNER_TEMP/trivy-bin" >> "$GITHUB_PATH"
       - name: Scan exact published digest
+        id: scan
         uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # v0.33.1
         with:
+          skip-setup-trivy: true
           image-ref: ${{ steps.image.outputs.name }}@${{ steps.build.outputs.digest }}
           scanners: vuln,secret
           severity: HIGH,CRITICAL
           exit-code: '1'
           format: json
           output: scan-${{ matrix.app }}.json
-      - name: Generate SPDX SBOM for digest
+      - name: Generate SPDX SBOM even when the security gate fails
+        id: sbom
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.scanner.outcome == 'success' }}
         uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8
         with:
+          skip-setup-trivy: true
           image-ref: ${{ steps.image.outputs.name }}@${{ steps.build.outputs.digest }}
           format: spdx-json
           output: sbom-${{ matrix.app }}.json
@@ -276,82 +348,124 @@ jobs:
         env:
           IMAGE: ${{ steps.image.outputs.name }}@${{ steps.build.outputs.digest }}
           APP: ${{ matrix.app }}
+          RELEASE_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          cosign sign --yes "$IMAGE"
+          cosign sign --yes --annotations "release-revision=$RELEASE_SHA" "$IMAGE"
           cosign attest --yes --type spdxjson --predicate "sbom-$APP.json" "$IMAGE"
           printf '%s\n' "$IMAGE" > "image-$APP.txt"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: release-${{ matrix.app }}
-          path: |
-            image-${{ matrix.app }}.txt
-            scan-${{ matrix.app }}.json
-            sbom-${{ matrix.app }}.json
+          path: image-${{ matrix.app }}.txt
+          if-no-files-found: error
+          retention-days: 90
+      - name: Sanitize scan and SBOM diagnostics without leaking secret matches
+        if: always()
+        env:
+          SCANNER_OUTCOME: ${{ steps.scanner.outcome }}
+          SCAN_OUTCOME: ${{ steps.scan.outcome }}
+          SBOM_OUTCOME: ${{ steps.sbom.outcome }}
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: python scripts/release-images.py sanitize '${{ matrix.app }}'
+      - name: Always retain sanitized release diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: diagnostics-${{ matrix.app }}
+          path: diagnostics/
+          if-no-files-found: error
           retention-days: 90
   promote-images:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.validate.outputs.publish == 'true'
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && needs.validate.outputs.publish == 'true'
     needs: [validate, deploy-production]
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           ref: develop
           persist-credentials: false
+      - run: python -m pip install PyYAML==6.0.2
+      - name: Authenticate repository-scoped PR automation
+        id: app
+        env:
+          RELEASE_APP_ID: ${{ vars.RELEASE_APP_ID }}
+          RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+        run: node scripts/release-app-token.mjs
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: release-*
           merge-multiple: true
           path: release
-      - name: Open authenticated image update PR in this repository
+      - name: Open staging-only image update PR with PR checks enabled
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app.outputs.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          python - <<'PY'
-          import os, re
-          from pathlib import Path
-          for app in ('api', 'storefront', 'admin', 'ai-worker'):
-              image = Path(f'release/image-{app}.txt').read_text().strip()
-              if not re.fullmatch(r'ghcr\.io/[a-z0-9_.-]+/velura-(?:api|storefront|admin|ai-worker)@sha256:[a-f0-9]{64}', image):
-                  raise SystemExit('Invalid immutable image reference')
-              paths = [Path('deploy/k8s/optional/ai-worker/worker.yaml'), Path('deploy/k8s/optional/ai-worker/provision-weights.yaml')] if app == 'ai-worker' else [Path(f'deploy/k8s/base/velura/velura-{app}.yaml')]
-              for p in paths:
-                  text, count = re.subn(r'(?m)^(\s*image:)\s+\S+', lambda m: m[1] + ' ' + image, p.read_text())
-                  if count != 1: raise SystemExit('Expected exactly one application image')
-                  if app == 'api':
-                      text, count = re.subn(r'(?m)^  RELEASE_REVISION:.*$', '  RELEASE_REVISION: ' + os.environ['RELEASE_SHA'], text)
-                      if count != 1: raise SystemExit('Missing release revision contract')
-                  p.write_text(text)
-          PY
-          branch="feature/KAN-32-images-${RELEASE_SHA:0:12}"
+          python scripts/release-images.py stage release "$RELEASE_SHA"
+          branch="feature/KAN-32-staging-${RELEASE_SHA:0:12}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           git switch -c "$branch"
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add deploy/k8s/base/velura deploy/k8s/optional/ai-worker/worker.yaml deploy/k8s/optional/ai-worker/provision-weights.yaml
-          git diff --cached --quiet && exit 0
-          git commit -m 'KAN-32 why: promote scanned signed immutable application images'
+          git config user.name 'velura-release[bot]'
+          git config user.email 'velura-release[bot]@users.noreply.github.com'
+          git add deploy/k8s/overlays/staging/kustomization.yaml deploy/k8s/overlays/staging/release-revision.yaml
           gh auth setup-git
-          git push origin "$branch"
-          gh pr create --repo "$GH_REPO" --base develop --head "$branch" --title 'KAN-32: promote signed application image digests' --body "$(printf '## Why\nPromote immutable images built from approved main revision %s after Trivy, SPDX SBOM, and Cosign signing. Review then promote develop to main; no CI cluster credentials.' "$RELEASE_SHA")"
+          if ! git diff --cached --quiet; then
+            git commit -m 'KAN-32 why: verify scanned signed application digests in staging'
+            git push origin "$branch"
+            gh pr create --repo "$GH_REPO" --base develop --head "$branch" --title 'KAN-32: verify signed application digests in staging' --body "$(printf '## Why\nStage signed images built from approved main revision %s. Only staging overlay pins change. After merge, read-only staging verification opens a separate production-pins PR. Optional worker remains disabled and its signed artifact is retained separately. Release run: %s/%s/actions/runs/%s' "$RELEASE_SHA" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+          fi
+          git switch develop
+          python scripts/release-images.py worker release
+          worker_branch="feature/KAN-32-worker-${RELEASE_SHA:0:12}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          git switch -c "$worker_branch"
+          git add deploy/k8s/optional/ai-worker/worker.yaml deploy/k8s/optional/ai-worker/provision-weights.yaml
+          if ! git diff --cached --quiet; then
+            git commit -m 'KAN-32 why: review optional worker digest without enabling or scaling it'
+            git push origin "$worker_branch"
+            gh pr create --repo "$GH_REPO" --base develop --head "$worker_branch" --title 'KAN-32: pin optional signed worker release' --body "$(printf '## Why\nUpdate only the optional worker and weights-provision image references from scanned signed main release %s. This does not add the worker to app overlays, enable AI, change replicas, or certify GPU/model readiness. Owner reviews the separate optional rollout prerequisites. Release run: %s/%s/actions/runs/%s' "$RELEASE_SHA" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+          fi
+      - name: Revoke short-lived App installation token
+        if: ${{ always() && steps.app.outputs.token != '' }}
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+        run: gh api --method DELETE installation/token
   verify-staging:
-    # Independent staging remains default; an owner may explicitly choose current-database MVP rollout.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.validate.outputs.publish == 'false' && vars.VELURA_OWNER_DIRECT_ROLLOUT != 'true'
+    # Only reviewed staging manifests on develop reconcile; application source on develop never publishes.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop' && needs.validate.outputs.staging == 'true' && needs.validate.outputs.publish == 'false'
     needs: [validate, test-api, test-angular, test-ai-worker, build, migrations, manifests]
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     environment: staging
+    permissions:
+      contents: read
+      packages: read
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with: {persist-credentials: false}
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with: {node-version: '22', cache: npm}
       - run: npm ci
+      - run: python -m pip install PyYAML==6.0.2
+      - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: sigstore/cosign-installer@d58896d6a1865668819e1d91763c7751a165e159
+      - name: Verify complete signed staging bundle
+        run: |
+          set -euo pipefail
+          python scripts/release-images.py snapshot staging > staging-release.json
+          revision=$(jq -r .revision staging-release.json)
+          for app in api storefront admin; do
+            image=$(jq -r --arg app "$app" '.images[$app]' staging-release.json)
+            cosign verify --certificate-identity "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/.github/workflows/ci.yml@refs/heads/main" --certificate-oidc-issuer https://token.actions.githubusercontent.com --annotations "release-revision=$revision" "$image"
+          done
       - name: Require independently provisioned staging chatbot schema
         env:
           STAGING_SUPABASE_DB_URL: ${{ secrets.STAGING_SUPABASE_DB_URL }}
@@ -365,7 +479,7 @@ jobs:
           chmod 600 "$ca"
           printf '%s\n' "$STAGING_DB_CA_PEM" > "$ca"
           STAGING_SUPABASE_DB_CA_CERT="$ca" node scripts/run-migrations.mjs --check --environment=staging --require-chatbot-schema
-      - name: Verify independently provisioned staging application
+      - name: Verify independently provisioned staging build identities and health
         env:
           VERIFY_TOKEN: ${{ secrets.PRODUCTION_VERIFY_TOKEN }}
           CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
@@ -375,37 +489,89 @@ jobs:
           test -n "$VERIFY_TOKEN"
           test -n "$CF_ACCESS_CLIENT_ID"
           test -n "$CF_ACCESS_CLIENT_SECRET"
-          expected=$(python -c "import re,pathlib; print(re.search(r'^  RELEASE_REVISION: (.+)$', pathlib.Path('deploy/k8s/base/velura/velura-api.yaml').read_text(), re.M)[1].strip())")
+          expected=$(jq -r .revision staging-release.json)
           for attempt in $(seq 1 60); do
-            if curl --fail --silent --show-error --max-time 15 -H "Authorization: Bearer $VERIFY_TOKEN" -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" https://staging-admin.royalai.dev/api/ops/revision > staging-revision.json && jq -e --arg expected "$expected" '.ready == true and .checks.chatbotSchema == true and .revision == $expected' staging-revision.json; then
-              curl --fail --silent --show-error --max-time 15 -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" https://staging.royalai.dev/ > /dev/null
+            if curl --fail --silent --show-error --max-time 15 -H "Authorization: Bearer $VERIFY_TOKEN" -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" https://staging-admin.royalai.dev/api/ops/revision > staging-revision.json \
+              && jq -e --arg expected "$expected" '.ready == true and .checks.chatbotSchema == true and .revision == $expected and .buildRevision == $expected' staging-revision.json \
+              && curl --fail --silent --show-error --max-time 15 -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" https://staging-admin.royalai.dev/release.json | jq -e --arg expected "$expected" '.revision == $expected' \
+              && curl --fail --silent --show-error --max-time 15 -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" https://staging.royalai.dev/release.json | jq -e --arg expected "$expected" '.revision == $expected'; then
               exit 0
             fi
             sleep 10
           done
-          echo 'Staging revision did not converge' >&2
+          echo 'Staging build identities did not converge' >&2
           exit 1
-  verify-production:
-    # Runs after the image update PR has been approved and promoted to main, not before it is deployed.
-    if: >-
-      ${{ !cancelled() && needs.validate.result == 'success'
-      && needs['test-api'].result == 'success' && needs['test-angular'].result == 'success'
-      && needs['test-ai-worker'].result == 'success' && needs.build.result == 'success'
-      && needs.migrations.result == 'success' && needs.manifests.result == 'success'
-      && github.event_name == 'push' && github.ref == 'refs/heads/main'
-      && needs.validate.outputs.publish == 'false' && vars.VELURA_VERIFY_PRODUCTION == 'true'
-      && (needs.verify-staging.result == 'success'
-      || (vars.VELURA_OWNER_DIRECT_ROLLOUT == 'true' && needs.verify-staging.result == 'skipped')) }}
-    needs: [validate, test-api, test-angular, test-ai-worker, build, migrations, manifests, verify-staging]
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: verified-staging-bundle
+          path: staging-release.json
+          retention-days: 90
+  promote-production:
+    # Separate job so the provenance API can observe verify-staging's completed success.
+    needs: verify-staging
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: develop
+          persist-credentials: false
+      - run: python -m pip install PyYAML==6.0.2
+      - name: Prepare same-digest production pins and successful staging provenance
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: python scripts/release-images.py production "$SOURCE_SHA" "$GITHUB_RUN_ID"
+      - name: Authenticate repository-scoped PR automation
+        id: app
+        env:
+          RELEASE_APP_ID: ${{ vars.RELEASE_APP_ID }}
+          RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+        run: node scripts/release-app-token.mjs
+      - name: Open production pins PR into develop for owner promotion to main
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          branch="feature/KAN-32-production-${GITHUB_SHA:0:12}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          git switch -c "$branch"
+          git config user.name 'velura-release[bot]'
+          git config user.email 'velura-release[bot]@users.noreply.github.com'
+          git add deploy/k8s/overlays/production/kustomization.yaml deploy/k8s/overlays/production/release-revision.yaml deploy/releases/production.json
+          git diff --cached --quiet && exit 0
+          git commit -m 'KAN-32 why: promote exactly the signed staging-verified application digests'
+          gh auth setup-git
+          git push origin "$branch"
+          gh pr create --repo "$GH_REPO" --base develop --head "$branch" --title 'KAN-32: promote staging-verified application digests' --body "$(printf '## Why\nPromote the exact three signed image pins in deploy/releases/production.json after staging build-identity, schema and health verification. Evidence: %s/%s/actions/runs/%s . Merge this PR into develop, then an owner promotes develop to main. No rebuild, production apply, or Kubernetes credentials in Actions.' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+      - name: Revoke short-lived App installation token
+        if: ${{ always() && steps.app.outputs.token != '' }}
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+        run: gh api --method DELETE installation/token
+  verify-production:
+    # Production reconciliation remains owner-bootstrapped; no direct-rollout bypass.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.validate.outputs.production == 'true' && needs.validate.outputs.publish == 'false' && vars.VELURA_VERIFY_PRODUCTION == 'true'
+    needs: [validate, test-api, test-angular, test-ai-worker, build, migrations, manifests]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     environment: production
+    permissions:
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with: {persist-credentials: false}
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with: {node-version: '22', cache: npm}
       - run: npm ci
+      - run: python -m pip install PyYAML==6.0.2
+      - name: Require exact production bundle's successful staging provenance
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python scripts/release-images.py validate-production
       - name: Require owner-provisioned production chatbot schema without writes
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
@@ -419,7 +585,7 @@ jobs:
           chmod 600 "$ca"
           printf '%s\n' "$DB_CA_PEM" > "$ca"
           SUPABASE_DB_CA_CERT="$ca" node scripts/run-migrations.mjs --check --require-chatbot-schema
-      - name: Verify actual read-only health and deployed application revision
+      - name: Verify production build identities and read-only health
         env:
           VERIFY_TOKEN: ${{ secrets.PRODUCTION_VERIFY_TOKEN }}
           CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
@@ -429,14 +595,16 @@ jobs:
           test -n "$VERIFY_TOKEN"
           test -n "$CF_ACCESS_CLIENT_ID"
           test -n "$CF_ACCESS_CLIENT_SECRET"
-          expected=$(python -c "import re,pathlib; print(re.search(r'^  RELEASE_REVISION: (.+)$', pathlib.Path('deploy/k8s/base/velura/velura-api.yaml').read_text(), re.M)[1].strip())")
+          expected=$(python scripts/release-images.py snapshot production | jq -r .revision)
           for attempt in $(seq 1 60); do
-            if curl --fail --silent --show-error --max-time 15 -H "Authorization: Bearer $VERIFY_TOKEN" -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" https://admin.royalai.dev/api/ops/revision > revision.json && jq -e --arg expected "$expected" '.ready == true and .checks.chatbotSchema == true and .revision == $expected' revision.json; then
-              curl --fail --silent --show-error --max-time 15 https://velura.royalai.dev/api/health
-              curl --fail --silent --show-error --max-time 15 https://velura.royalai.dev/ > /dev/null
+            if curl --fail --silent --show-error --max-time 15 -H "Authorization: Bearer $VERIFY_TOKEN" -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" https://admin.royalai.dev/api/ops/revision > revision.json \
+              && jq -e --arg expected "$expected" '.ready == true and .checks.chatbotSchema == true and .revision == $expected and .buildRevision == $expected' revision.json \
+              && curl --fail --silent --show-error --max-time 15 -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" https://admin.royalai.dev/release.json | jq -e --arg expected "$expected" '.revision == $expected' \
+              && curl --fail --silent --show-error --max-time 15 https://velura.royalai.dev/release.json | jq -e --arg expected "$expected" '.revision == $expected' \
+              && curl --fail --silent --show-error --max-time 15 https://velura.royalai.dev/api/health; then
               exit 0
             fi
             sleep 10
           done
-          echo 'Production revision did not converge' >&2
+          echo 'Production build identities did not converge' >&2
           exit 1

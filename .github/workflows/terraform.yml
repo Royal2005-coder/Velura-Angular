@@ -1,0 +1,41 @@
+name: Terraform validation
+on:
+  pull_request:
+    branches: [develop, main]
+    paths:
+      - 'infra/terraform/**'
+      - 'atlantis.yaml'
+      - '.github/workflows/terraform.yml'
+  push:
+    branches: [develop, main]
+    paths:
+      - 'infra/terraform/**'
+      - 'atlantis.yaml'
+      - '.github/workflows/terraform.yml'
+permissions:
+  contents: read
+concurrency:
+  group: terraform-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  terraform-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: 1.13.4
+          terraform_wrapper: false
+      - name: Check Terraform formatting
+        run: terraform fmt -check -recursive infra/terraform
+      - name: Initialize provider without remote state or credentials
+        working-directory: infra/terraform/cloudflare
+        run: terraform init -backend=false -input=false -lockfile=readonly
+      - name: Validate provider schema
+        working-directory: infra/terraform/cloudflare
+        run: terraform validate -no-color
+# Real refresh/import plans and explicitly approved applies belong to Atlantis;
+# GitHub Actions never receives backend, Cloudflare or Kubernetes credentials.

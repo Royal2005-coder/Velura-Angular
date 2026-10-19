@@ -114,14 +114,14 @@ describe('Admin workflow regressions', () => {
   });
 
   it('uses the version returned by price mutation for the following details save', async () => {
-    const product = { product_id: 'p', name: 'Áo Linen', sku: 'VL-AO001', category_id: 'c', base_price: 500000, sale_price: 400000, version: 3 };
+    const product = { product_id: 'p', name: 'Áo Linen', sku: 'VL-AO001', category_id: 'c', base_price: 500000, sale_price: 400000, version: 3, images: ['/assets/linen.jpg'] };
     const updated = { ...product, sale_price: 350000, version: 4 };
     const changePrice = vi.fn(() => of(updated)), updateProduct = vi.fn(() => of({ ...updated, version: 5 }));
     const page = await createAdminPage(AdminProductsPage, { changePrice, updateProduct });
     TestBed.inject(AdminSessionService).applyAuthContext({ role: 'super_admin', isAdmin: true });
     page.selected.set(product); page.overlay.set('edit'); page.editBasePrice.set(500000); page.editSalePrice.set(350000);
     const form = document.createElement('form');
-    for (const [name, value] of Object.entries({ name: 'Áo Linen', sku: 'VL-AO001', slug: 'ao', categoryId: 'c', collection: '', description: '', images: '' })) { const input = document.createElement('input'); input.name = name; input.value = value; form.append(input); }
+    for (const [name, value] of Object.entries({ name: 'Áo Linen', sku: 'VL-AO001', slug: 'ao', categoryId: 'c', collection: '', description: '', images: '/assets/linen.jpg' })) { const input = document.createElement('input'); input.name = name; input.value = value; form.append(input); }
     page.submitEditor({ preventDefault: () => {}, target: form } as unknown as Event);
     expect(updateProduct).toHaveBeenCalledWith('p', expect.objectContaining({ expectedVersion: 4 }));
   });

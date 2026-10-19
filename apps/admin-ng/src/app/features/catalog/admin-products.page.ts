@@ -1,6 +1,7 @@
 import { AdminDialogDirective } from '../../shared/admin-dialog.directive';
 import { AdminRefreshService } from '../../core/admin-refresh.service';
 import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
 import { forkJoin, of , Subscription } from 'rxjs';
 import { catchError, finalize } from 'rxjs/operators';
 import {
@@ -10,6 +11,8 @@ import {
   AdminComboItemRow,
   AdminImageEnhanceResult,
   AdminImageQualityAnalysis,
+  AdminLowStockAlert,
+  AdminLowStockRow,
   AdminPriceHistoryRow,
   AdminProductFashionSeoResult,
   AdminProductRow,
@@ -23,6 +26,7 @@ import { AdminIcon } from '../../shared/admin-icon';
 import { AdminPagination } from '../../shared/admin-pagination';
 import { AdminTableSkeleton } from '../../shared/admin-table-skeleton';
 import type { ProductImageApproval } from '../../core/product-image-approval.service';
+import { SKU_DUPLICATE_MESSAGE, SKU_FORMAT_MESSAGE, SKU_PATTERN, duplicateSkus } from './product-sku';
 
 
 type ProductTab = 'catalog' | 'csv' | 'logs';
@@ -44,9 +48,9 @@ const STATUS_TONE: Record<string, string> = {
 
 const STATUS_TRANSITIONS: Record<string, string[]> = {
   on_sale: ['hidden', 'out_of_stock', 'discontinued'],
-  hidden: ['on_sale', 'discontinued'],
+  hidden: ['on_sale', 'out_of_stock', 'discontinued'],
   out_of_stock: ['on_sale', 'hidden', 'discontinued'],
-  discontinued: ['hidden'],
+  discontinued: ['on_sale', 'hidden', 'out_of_stock'],
 };
 
 interface CsvPreviewError {
@@ -55,9 +59,18 @@ interface CsvPreviewError {
   message?: string;
 }
 
+interface CsvPreviewWarning {
+  row?: number;
+  field?: string;
+  message?: string;
+  csv_value?: number | null;
+  current_value?: number | null;
+}
+
 interface CsvPreviewResult {
   rows?: Array<Record<string, unknown>>;
   errors?: CsvPreviewError[];
+  warnings?: CsvPreviewWarning[];
   totalRows?: number;
   validRows?: number;
 }
@@ -110,9 +123,18 @@ function normalizeColorCode(color: string): string {
 })
 export class AdminProductsPage {
   private listRequest = new Subscription();
+  private csvPreviewRequest = new Subscription();
+  private csvFileRevision = 0;
+  private editorRequest = new Subscription();
+  private imageApprovalRequest = new Subscription();
   private readonly adminApi = inject(AdminApiService);
   private readonly session = inject(AdminSessionService);
 
+  /** When true the catalog lists only products having a variant at or below its low-stock threshold. */
+  readonly lowStockOnly = signal(false);
+  readonly lowStockRows = signal<AdminLowStockRow[]>([]);
+  /** Low-stock alert from the last stock adjustment, kept on screen even when its email is waiting for retry. */
+  readonly stockAlert = signal<AdminLowStockAlert | null>(null);
   readonly tab = signal<ProductTab>('catalog');
   readonly products = signal<AdminProductRow[]>([]);
   readonly categories = signal<AdminCategoryRow[]>([]);
@@ -141,13 +163,27 @@ export class AdminProductsPage {
   readonly csvPreview = signal('');
   readonly csvRows = signal<Array<Record<string, unknown>>>([]);
   readonly csvErrors = signal<CsvPreviewError[]>([]);
+  readonly csvWarnings = signal<CsvPreviewWarning[]>([]);
   readonly csvValidRows = signal(0);
   readonly csvTotalRows = signal(0);
+  readonly csvChecking = signal(false);
+  readonly csvCommitting = signal(false);
+  readonly csvApproved = signal(false);
+  readonly canCommitCsv = computed(() => this.canMutate() && this.csvApproved()
+    && !this.csvChecking() && !this.csvCommitting() && !this.csvHasErrors()
+    && this.csvValidRows() > 0 && !!this.csvPreview());
   readonly logs = signal<AdminAuditRow[]>([]);
   readonly logsLoading = signal(false);
   readonly logsTotal = signal(0);
   readonly logsPage = signal(1);
   readonly logsPageSize = 10;
+  readonly logsFrom = signal('');
+  readonly logsTo = signal('');
+  readonly logsProduct = signal('');
+  readonly logsActionType = signal('');
+  readonly logsUser = signal('');
+  readonly logsError = signal<string | null>(null);
+  readonly selectedLog = signal<AdminAuditRow | null>(null);
   readonly selected = signal<AdminProductRow | null>(null);
   readonly overlay = signal<ProductOverlay>(null);
   readonly actionError = signal<string | null>(null);
@@ -231,9 +267,21 @@ export class AdminProductsPage {
   readonly createMatrixSizes = signal<string>('S, M, L');
   readonly createVariants = signal<CreateMatrixVariantRow[]>([]);
   readonly createBaseSku = signal<string>('');
+  /** Inline SKU message for the product SKU (format or duplicate); null when the SKU is free. */
+  readonly skuMessage = signal<string | null>(null);
+  /** Variant SKUs that clash inside the form or with other products. */
+  readonly variantSkuConflicts = signal<string[]>([]);
+  private skuCheckRevision = 0;
+  private skuCheckTimer: number | null = null;
 
   readonly totalMatrixStock = computed(() => {
     return this.createVariants().reduce((sum, v) => sum + (Number(v.stockQuantity) || 0), 0);
+  });
+
+  /** Variant SKUs duplicated inside the form or already used elsewhere; null when every variant SKU is free. */
+  readonly variantSkuMessage = computed(() => {
+    const clashes = [...new Set([...duplicateSkus(this.createVariants().map((row) => row.sku)), ...this.variantSkuConflicts()])];
+    return clashes.length ? `${SKU_DUPLICATE_MESSAGE} (${clashes.join(', ')})` : null;
   });
 
   // Signals cho thêm biến thể trong drawer Chi tiết sản phẩm
@@ -259,6 +307,12 @@ export class AdminProductsPage {
   readonly editorSeoTitle = signal<string>('');
   readonly editorSeoDescription = signal<string>('');
   readonly editorImages = signal<string[]>([]);
+  readonly editorImageColors = signal<Record<string, string>>({});
+  readonly maxProductImages = 20;
+  readonly imageColorOptions = computed(() => [...new Set(
+    (this.overlay() === 'create' ? this.createVariants() : this.variants())
+      .map((variant) => variant.color?.trim() || '').filter(Boolean),
+  )]);
 
   readonly toneOptions: ReadonlyArray<{ value: string; label: string }> = [
     { value: 'Neutral', label: 'Tông da Trung tính (Neutral)' },
@@ -303,6 +357,16 @@ export class AdminProductsPage {
   readonly aiStudioUpscale = signal<boolean>(true);
   readonly uploadedImageDataUrl = signal<string>('');
   readonly uploadedImageMime = signal<string>('image/jpeg');
+  /** Quality report of each applied image, keyed by its final URL, so the score follows the image the admin actually saved. */
+  readonly imageScores = signal<Record<string, AdminImageQualityAnalysis>>({});
+  /** True while a chosen file is being read for upload/analysis. */
+  readonly imageReading = signal<boolean>(false);
+  /** Any image step (reading, analyzing, enhancing) is still running, so saving the product must wait. */
+  readonly imageProcessing = computed(() => this.imageReading() || this.aiImageBusy() || this.aiEnhanceBusy());
+  readonly imageProcessingMessage = 'Vui lòng chờ hoàn tất xử lý hình ảnh trước khi lưu sản phẩm';
+  private analysisSeq = 0;
+  private analysisInFlight = 0;
+  readonly uploadedOriginalUrl = signal('');
 
   // Signals cho AI Tối ưu Nội dung & SEO Thời trang (Gemini Fashion SEO Skill)
   readonly aiSeoBusy = signal<boolean>(false);
@@ -349,6 +413,20 @@ export class AdminProductsPage {
     return qty;
   });
 
+  /** Operator reason length required by the API/database for stock and status changes. */
+  readonly minStockReasonLength = 10;
+
+  /** Low-stock threshold of the variant being adjusted. */
+  readonly stockThreshold = computed(() => Number(this.selectedVariant()?.low_stock_threshold ?? 5));
+
+  /** True when the adjustment lands at or below the threshold: allowed, but the operator is warned before confirming. */
+  readonly projectedBelowThreshold = computed(() => this.projectedStock() <= this.stockThreshold());
+
+  /** True when an outbound adjustment asks for more units than are on hand (rejected before any request). */
+  readonly stockOutExceedsOnHand = computed(
+    () => this.stockAdjustmentType() === 'out' && this.stockAdjustmentQuantity() > this.currentStock(),
+  );
+
   readonly allowedStatuses = computed(() => {
     const current = this.selected()?.status || 'on_sale';
     const next = STATUS_TRANSITIONS[current] || ['hidden'];
@@ -366,6 +444,8 @@ export class AdminProductsPage {
     }));
   });
   readonly csvHasErrors = computed(() => this.csvErrors().length > 0);
+  /** First low-stock variants listed on the catalog page; the filter shows the rest. */
+  readonly lowStockPreview = computed(() => this.lowStockRows().slice(0, 10));
 
   readonly pageCount = computed(() => Math.max(1, Math.ceil(this.total() / this.pageSize)));
   readonly rangeLabel = computed(() => adminRangeLabel(this.total(), this.page(), this.pageSize, 'sản phẩm'));
@@ -375,7 +455,13 @@ export class AdminProductsPage {
   );
 
   constructor() {
-    inject(DestroyRef).onDestroy(() => this.listRequest.unsubscribe());
+    inject(DestroyRef).onDestroy(() => {
+      this.listRequest.unsubscribe();
+      this.editorRequest.unsubscribe();
+      this.csvPreviewRequest.unsubscribe();
+      this.imageApprovalRequest.unsubscribe();
+      this.csvFileRevision++;
+    });
     inject(AdminRefreshService).register(() => {
       if (!this.loading() && !this.overlay() && !this.priceTarget()) this.reloadCatalog();
     }, inject(DestroyRef));
@@ -413,6 +499,7 @@ export class AdminProductsPage {
     this.query.set((form.elements.namedItem('q') as HTMLInputElement | null)?.value.trim() || '');
     this.categoryId.set((form.elements.namedItem('categoryId') as HTMLSelectElement | null)?.value || '');
     this.status.set((form.elements.namedItem('status') as HTMLSelectElement | null)?.value || '');
+    this.lowStockOnly.set((form.elements.namedItem('lowStock') as HTMLInputElement | null)?.checked ?? false);
     this.page.set(1);
     this.reloadCatalog();
   }
@@ -425,6 +512,7 @@ export class AdminProductsPage {
     this.query.set('');
     this.categoryId.set('');
     this.status.set('');
+    this.lowStockOnly.set(false);
     this.page.set(1);
     this.reloadCatalog();
   }
@@ -547,6 +635,32 @@ export class AdminProductsPage {
   }
 
   /**
+   * Variants of the row at or below their own low-stock threshold (the "Sắp hết" badge in the list).
+   */
+  lowStockVariantsOf(product: AdminProductRow): AdminProductVariant[] {
+    return (product.variants || []).filter(
+      (variant) => Number(variant.stock_quantity ?? 0) <= Number(variant.low_stock_threshold ?? 5),
+    );
+  }
+
+  /**
+   * Toggles the low-stock catalog filter from the KPI card and reloads page 1.
+   */
+  toggleLowStockFilter(): void {
+    this.lowStockOnly.update((value) => !value);
+    this.page.set(1);
+    this.reloadCatalog();
+  }
+
+  /**
+   * True when the CSV row carried a price different from the stored one; the stored price is kept.
+   */
+  csvPriceSkipped(row: Record<string, unknown>): boolean {
+    const skipped = row['skipped_prices'];
+    return Array.isArray(skipped) && skipped.length > 0;
+  }
+
+  /**
    * Formats an ISO timestamp with the original admin locale.
    */
   updatedAt(value: string | null | undefined): string {
@@ -606,6 +720,7 @@ export class AdminProductsPage {
    * Opens create overlay with an empty form.
    */
   openCreate(): void {
+    this.editorRequest.unsubscribe();
     this.resetImageEditor();
     this.selected.set(null);
     this.variants.set([]);
@@ -636,6 +751,9 @@ export class AdminProductsPage {
     this.editorImages.set([]);
     this.resetAiSeoState();
     this.generateSkuMatrix('VL-DAM001');
+    this.skuMessage.set(null);
+    this.variantSkuConflicts.set([]);
+    this.scheduleSkuCheck();
   }
 
   onNameInput(event: Event): void {
@@ -664,7 +782,47 @@ export class AdminProductsPage {
           })
         );
       }
+      this.scheduleSkuCheck();
     }
+  }
+
+  /**
+   * Re-checks the product SKU and generated variant SKUs after a short pause: format first, then the API
+   * uniqueness check across all products and variants. Duplicates inside the form are flagged without a request.
+   */
+  scheduleSkuCheck(): void {
+    if (this.skuCheckTimer !== null) window.clearTimeout(this.skuCheckTimer);
+    this.skuCheckTimer = window.setTimeout(() => {
+      this.skuCheckTimer = null;
+      this.runSkuCheck();
+    }, 300);
+  }
+
+  private runSkuCheck(): void {
+    const revision = ++this.skuCheckRevision;
+    const sku = this.createBaseSku().trim().toUpperCase();
+    if (!sku) {
+      this.skuMessage.set(null);
+      this.variantSkuConflicts.set([]);
+      return;
+    }
+    if (!SKU_PATTERN.test(sku)) {
+      this.skuMessage.set(SKU_FORMAT_MESSAGE);
+    }
+    const variantSkus = this.createVariants()
+      .map((row) => row.sku.trim().toUpperCase())
+      .filter((value) => value && SKU_PATTERN.test(value));
+    const candidates = [...new Set([...(SKU_PATTERN.test(sku) ? [sku] : []), ...variantSkus])];
+    if (!candidates.length) {
+      this.variantSkuConflicts.set([]);
+      return;
+    }
+    forkJoin(candidates.map((candidate) => this.adminApi.checkProductSku(candidate).pipe(catchError(() => of(null))))).subscribe((results) => {
+      if (revision !== this.skuCheckRevision) return;
+      const taken = new Set(candidates.filter((_, index) => results[index] && !results[index]!.available));
+      if (SKU_PATTERN.test(sku)) this.skuMessage.set(taken.has(sku) ? SKU_DUPLICATE_MESSAGE : null);
+      this.variantSkuConflicts.set(variantSkus.filter((value) => taken.has(value) && value !== sku));
+    });
   }
 
   generateSkuMatrix(baseSkuInput?: string): void {
@@ -702,6 +860,7 @@ export class AdminProductsPage {
 
     this.createVariants.set(rows);
     this.actionError.set(null);
+    this.scheduleSkuCheck();
   }
 
   updateMatrixVariantStock(index: number, stock: number): void {
@@ -736,6 +895,7 @@ export class AdminProductsPage {
 
   removeMatrixVariant(index: number): void {
     this.createVariants.update((list) => list.filter((_, i) => i !== index));
+    this.scheduleSkuCheck();
   }
 
   clearMatrixVariants(): void {
@@ -746,6 +906,8 @@ export class AdminProductsPage {
    * Loads product detail + variants into the editor drawer.
    */
   openEdit(product: AdminProductRow): void {
+    this.editorRequest.unsubscribe();
+    this.variants.set([]);
     this.resetImageEditor();
     this.resetAiSeoState();
     this.selected.set(null);
@@ -767,10 +929,14 @@ export class AdminProductsPage {
     this.variantError.set(null);
     this.syncEditorSignalsFromProduct(product);
 
-    this.adminApi.getProduct(product.product_id).subscribe({
-      next: (row) => {
-        this.selected.set(row);
-        this.variants.set(row.variants || []);
+    this.editorRequest = forkJoin({
+      product: this.adminApi.getProduct(product.product_id),
+      variants: this.adminApi.listVariants(product.product_id),
+    }).subscribe({
+      next: ({ product: row, variants: payload }) => {
+        const variants = adminListRows<AdminProductVariant>(payload);
+        this.selected.set({ ...row, variants });
+        this.variants.set(variants);
         this.editBasePrice.set(Number(row.base_price || 0));
         this.editSalePrice.set(row.sale_price != null ? Number(row.sale_price) : null);
         this.syncEditorSignalsFromProduct(row);
@@ -782,9 +948,6 @@ export class AdminProductsPage {
         }
       },
       error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
-    });
-    this.adminApi.listVariants(product.product_id).subscribe({
-      next: (payload) => this.variants.set(adminListRows(payload)),
     });
     this.adminApi.listPriceHistory({ productId: product.product_id, limit: '10' }).subscribe({
       next: (payload) => this.priceHistory.set(adminListRows(payload)),
@@ -812,6 +975,7 @@ export class AdminProductsPage {
     this.editorSeoTitle.set(row.seo_title || '');
     this.editorSeoDescription.set(row.seo_description || '');
     this.editorImages.set([...(row.images || [])]);
+    this.editorImageColors.set({ ...(row.image_colors || {}) });
   }
 
   loadComboItems(productId: string): void {
@@ -876,7 +1040,13 @@ export class AdminProductsPage {
   openStatus(product: AdminProductRow): void {
     this.selected.set(product);
     const allowed = STATUS_TRANSITIONS[product.status || ''] || ['hidden'];
-    this.nextStatus.set(allowed.includes('hidden') ? 'hidden' : allowed[0] || 'hidden');
+    this.nextStatus.set(
+      product.status === 'discontinued' && allowed.includes('on_sale')
+        ? 'on_sale'
+        : allowed.includes('hidden')
+          ? 'hidden'
+          : allowed[0] || 'hidden'
+    );
     this.overlay.set('status');
     this.actionError.set(null);
   }
@@ -919,6 +1089,7 @@ export class AdminProductsPage {
    * Closes the product overlays.
    */
   closeOverlays(): void {
+    this.editorRequest.unsubscribe();
     this.resetImageEditor();
     this.selected.set(null);
     this.overlay.set(null);
@@ -930,8 +1101,16 @@ export class AdminProductsPage {
    */
   submitEditor(event: Event): void {
     event.preventDefault();
+    if (this.aiImageBusy() || this.aiEnhanceBusy()) {
+      this.actionError.set('Vui lòng chờ hoàn tất xử lý hình ảnh trước khi lưu sản phẩm');
+      return;
+    }
     if (!this.canMutate()) {
       this.actionError.set('Role hiện tại không được ghi catalog.');
+      return;
+    }
+    if (this.imageProcessing()) {
+      this.actionError.set(this.imageProcessingMessage);
       return;
     }
     const form = event.target as HTMLFormElement;
@@ -965,6 +1144,16 @@ export class AdminProductsPage {
           .map((item) => item.trim())
           .filter(Boolean)
       : [];
+    if (!images.length || images.length > this.maxProductImages) {
+      this.actionError.set(`Sản phẩm cần từ 1 đến ${this.maxProductImages} ảnh, với đúng một Ảnh chính.`);
+      return;
+    }
+    const imageColors = Object.fromEntries(Object.entries(this.editorImageColors())
+      .filter(([url]) => images.includes(url)));
+    if (Object.values(imageColors).some((color) => !this.imageColorOptions().includes(color))) {
+      this.actionError.set('Màu đã gán cho ảnh không còn trong biến thể. Chọn lại màu hoặc chuyển thành ảnh chung.');
+      return;
+    }
     const previousImages = this.selected()?.images || [];
     const approvals = this.imageApprovals();
     if (this.sourceFile() && !this.sourceApproved()) {
@@ -991,8 +1180,17 @@ export class AdminProductsPage {
     }
     const overlay = this.overlay();
     if (overlay === 'create') {
-      if (!/^[A-Z]{2,6}-[A-Z0-9]{2,20}(-[A-Z0-9]{1,10})*$/.test(sku)) {
-        this.actionError.set('SKU phải dạng VL-AO001 hoặc VLR-DV006.');
+      if (!SKU_PATTERN.test(sku)) {
+        this.skuMessage.set(SKU_FORMAT_MESSAGE);
+        this.actionError.set(SKU_FORMAT_MESSAGE);
+        return;
+      }
+      if (this.skuMessage()) {
+        this.actionError.set(this.skuMessage());
+        return;
+      }
+      if (this.variantSkuMessage()) {
+        this.actionError.set(this.variantSkuMessage());
         return;
       }
       const basePrice = Number((form.elements.namedItem('basePrice') as HTMLInputElement | null)?.value || 0);
@@ -1032,6 +1230,7 @@ export class AdminProductsPage {
           suitableBodyShapes: this.editorBodyShapes(),
           isFeatured: this.editorIsFeatured(),
           images,
+          imageColors,
           material: material || undefined,
           variants: matrixVariants.length > 0 ? matrixVariants : undefined,
           initialStock,
@@ -1043,7 +1242,11 @@ export class AdminProductsPage {
             this.closeOverlays();
             this.reloadCatalog();
           },
-          error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
+          error: (error: unknown) => {
+            const message = adminErrorMessage(error);
+            if (message === SKU_DUPLICATE_MESSAGE) this.skuMessage.set(message);
+            this.actionError.set(message);
+          },
         });
       return;
     }
@@ -1090,6 +1293,7 @@ export class AdminProductsPage {
           suitableBodyShapes: this.editorBodyShapes(),
           isFeatured: this.editorIsFeatured(),
           images,
+          imageColors,
           expectedVersion,
         })
         .subscribe({
@@ -1243,13 +1447,18 @@ export class AdminProductsPage {
       this.actionError.set('Số lượng điều chỉnh không làm thay đổi tồn kho.');
       return;
     }
-
-    const reason = this.stockReason().trim();
-    if (!reason || reason.length < 5) {
-      this.actionError.set('Vui lòng nhập lý do điều chỉnh từ 5 ký tự.');
+    if (current + delta < 0) {
+      this.actionError.set(`Không thể xuất quá tồn hiện có (${current} sản phẩm).`);
       return;
     }
 
+    const reason = this.stockReason().trim();
+    if (reason.length < this.minStockReasonLength) {
+      this.actionError.set(`Vui lòng nhập lý do điều chỉnh tối thiểu ${this.minStockReasonLength} ký tự.`);
+      return;
+    }
+
+    // Reducing stock below the low-stock threshold is a normal adjustment: it succeeds and raises an on-screen alert.
     this.adminApi
       .updateStock(product.product_id, {
         variantId: variant.variant_id,
@@ -1258,7 +1467,8 @@ export class AdminProductsPage {
         expectedVersion: variant.version ?? 1,
       })
       .subscribe({
-        next: () => {
+        next: (result) => {
+          this.stockAlert.set(result?.lowStockAlert ?? null);
           this.closeOverlays();
           this.reloadCatalog();
         },
@@ -1280,7 +1490,7 @@ export class AdminProductsPage {
     const status = (form.elements.namedItem('status') as HTMLSelectElement | HTMLInputElement).value;
     const reason = (form.elements.namedItem('reason') as HTMLTextAreaElement).value.trim();
     if (!status) {
-      this.actionError.set('Chọn trạng thái mới, gồm Tạm ẩn hoặc Ngừng kinh doanh.');
+      this.actionError.set('Chọn trạng thái mới.');
       return;
     }
     if (reason.length < 10) {
@@ -1309,9 +1519,8 @@ export class AdminProductsPage {
   downloadCsvTemplate(): void {
     const categoryId = this.categories()[0]?.category_id || '00000000-0000-4000-8000-000000000001';
     const csv = [
-      'sku,name,base_price,category_id,sale_price,status,description,image_url',
-      `VLR-UAT001,Ao linen mau kem,450000,${categoryId},420000,on_sale,Mau CSV hop le,`,
-      `bad-sku,Ten thieu gia,not-a-price,${categoryId},,on_sale,Dong loi de test preview,`,
+      'sku,name,base_price,category_id,sale_price,status,description,image_url,product_sku,color,color_hex,size,stock_quantity,low_stock_threshold',
+      `VLR-UAT001,Áo linen mẫu,450000,${categoryId},420000,hidden,Bản nháp chờ duyệt ảnh,,,Đen,#1A1A1A,S,50,5`,
     ].join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -1327,7 +1536,10 @@ export class AdminProductsPage {
     if (!this.canMutate() || Date.parse(approval.expiresAt) <= Date.now()) return;
     if (!this.sourceFile() && !this.uploadedImageDataUrl() && !this.aiEnhanceResult()) return;
     const current = images.value.split(/\n|,/).map((value) => value.trim()).filter(Boolean);
+    if (!this.canApplyImage(current, approval.url)) return;
     const index = Math.min(this.imageIndex(), current.length);
+    this.moveImageColor(current[index], approval.url);
+    this.moveImageScore(current[index], approval.url, null);
     current.splice(index, index < current.length ? 1 : 0, approval.url);
     images.value = current.join('\n');
     this.editorImages.set([...current]);
@@ -1342,22 +1554,33 @@ export class AdminProductsPage {
     const file = input.files?.[0];
     input.value = '';
     if (!file || !this.canMutate()) return;
+    if (this.imageIndex() >= this.editorImages().length && this.editorImages().length >= this.maxProductImages) {
+      this.aiImageError.set(`Tối đa ${this.maxProductImages} ảnh cho mỗi sản phẩm.`);
+      return;
+    }
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 8 * 1024 * 1024) {
       this.aiImageError.set('Vui lòng chọn ảnh định dạng JPG, PNG hoặc WebP dưới 8 MB.');
       return;
     }
     this.sourceFile.set(file);
+    this.uploadedOriginalUrl.set('');
     this.sourceApproved.set(false);
     this.uploadedImageMime.set(file.type || 'image/jpeg');
     this.aiImageError.set(null);
     this.aiEnhanceResult.set(null);
     this.imageNote.set('AI đang phân tích chất lượng hình ảnh vừa tải lên...');
 
+    this.imageReading.set(true);
     const reader = new FileReader();
     reader.onload = () => {
+      this.imageReading.set(false);
       const dataUrl = String(reader.result || '');
       this.uploadedImageDataUrl.set(dataUrl);
       this.analyzeActiveImage(dataUrl, file.type);
+    };
+    reader.onerror = () => {
+      this.imageReading.set(false);
+      this.aiImageError.set('Chưa đọc được ảnh vừa chọn. Vui lòng chọn lại ảnh.');
     };
     reader.readAsDataURL(file);
   }
@@ -1368,7 +1591,11 @@ export class AdminProductsPage {
     this.selectGalleryImageSlot(idx);
   }
 
+  /** Selects a saved image or an append slot and discards an unpublished replacement preview. */
   selectGalleryImageSlot(index: number): void {
+    this.analysisSeq++;
+    this.imageApprovalRequest.unsubscribe();
+    this.uploadedOriginalUrl.set('');
     this.imageIndex.set(index);
     this.sourceFile.set(null);
     this.sourceApproved.set(false);
@@ -1383,18 +1610,76 @@ export class AdminProductsPage {
     }
   }
 
+  /** Makes the selected URL the single primary image without losing its color assignment. */
+  setPrimaryImage(index: number, imagesBox?: HTMLTextAreaElement): void {
+    if (!this.canMutate() || this.sourceFile()) return;
+    const current = [...this.editorImages()];
+    if (index <= 0 || index >= current.length) return;
+    const [primary] = current.splice(index, 1);
+    current.unshift(primary);
+    this.editorImages.set(current);
+    this.imageIndex.set(0);
+    if (imagesBox) imagesBox.value = current.join('\n');
+  }
+
+  /** Assigns a gallery image to an existing variant color, or leaves it common. */
+  setImageColor(url: string, event: Event): void {
+    if (!this.canMutate() || !this.editorImages().includes(url)) return;
+    const color = (event.target as HTMLSelectElement).value;
+    if (color && !this.imageColorOptions().includes(color)) return;
+    const next = { ...this.editorImageColors() };
+    if (color) next[url] = color;
+    else delete next[url];
+    this.editorImageColors.set(next);
+  }
+
+  private moveImageColor(previous: string | undefined, nextUrl: string): void {
+    const colors = { ...this.editorImageColors() };
+    const color = previous ? colors[previous] : undefined;
+    if (previous) delete colors[previous];
+    if (color) colors[nextUrl] = color;
+    this.editorImageColors.set(colors);
+  }
+
+  private moveImageScore(previous: string | undefined, nextUrl: string | null, report: AdminImageQualityAnalysis | null): void {
+    const scores = { ...this.imageScores() };
+    if (previous) delete scores[previous];
+    if (nextUrl && report) scores[nextUrl] = report;
+    this.imageScores.set(scores);
+  }
+
+  private canApplyImage(images: string[], url: string): boolean {
+    if (images.includes(url) && images[this.imageIndex()] !== url) {
+      this.aiImageError.set('Ảnh này đã có trong sản phẩm.');
+      return false;
+    }
+    if (this.imageIndex() >= images.length && images.length >= this.maxProductImages) {
+      this.aiImageError.set(`Tối đa ${this.maxProductImages} ảnh cho mỗi sản phẩm.`);
+      return false;
+    }
+    return true;
+  }
+
+  /** Deletes an image and its color link while retaining a single primary image. */
   removeGalleryImageSlot(index: number, imagesBox?: HTMLTextAreaElement): void {
     if (!this.canMutate()) return;
     const current = [...this.editorImages()];
     if (index < 0 || index >= current.length) return;
+    if (current.length === 1) {
+      this.aiImageError.set('Phải giữ ít nhất một ảnh chính.');
+      return;
+    }
+    const colors = { ...this.editorImageColors() };
+    delete colors[current[index]];
+    this.editorImageColors.set(colors);
+    this.moveImageScore(current[index], null, null);
     current.splice(index, 1);
     this.editorImages.set(current);
     if (imagesBox) {
       imagesBox.value = current.join('\n');
     }
-    if (this.imageIndex() >= current.length) {
-      this.imageIndex.set(Math.max(0, current.length - 1));
-    }
+    const nextIndex = this.imageIndex() > index ? this.imageIndex() - 1 : this.imageIndex();
+    this.selectGalleryImageSlot(Math.min(nextIndex, current.length - 1));
   }
 
   /** Runs AI Studio quality assessment on either the uploaded image or the active product gallery image. */
@@ -1406,6 +1691,15 @@ export class AdminProductsPage {
       this.aiImageError.set('Chưa có hình ảnh để phân tích. Vui lòng tải ảnh sản phẩm lên.');
       return;
     }
+    const applied = existingUrl ? this.imageScores()[existingUrl] : undefined;
+    if (applied) {
+      // An applied AI image keeps the score it was approved with instead of being re-measured as the original.
+      this.analysisSeq++;
+      this.aiImageAnalysis.set(applied);
+      return;
+    }
+    const seq = ++this.analysisSeq;
+    this.analysisInFlight++;
     this.aiImageBusy.set(true);
     this.aiImageError.set(null);
     const prodName = this.overlay() === 'create' ? this.createName() : this.selected()?.name || '';
@@ -1414,10 +1708,17 @@ export class AdminProductsPage {
         ...(dataUrl ? { imageBase64: dataUrl, mimeType: mime } : { imageUrl: existingUrl }),
         productName: prodName,
       })
-      .pipe(finalize(() => this.aiImageBusy.set(false)))
+      .pipe(
+        finalize(() => {
+          this.analysisInFlight = Math.max(0, this.analysisInFlight - 1);
+          this.aiImageBusy.set(this.analysisInFlight > 0);
+        }),
+      )
       .subscribe({
         next: (res) => {
+          if (seq !== this.analysisSeq) return;
           if (res && typeof res.overallScore === 'number') {
+            if (dataUrl && res.uploadedUrl) this.uploadedOriginalUrl.set(res.uploadedUrl);
             this.aiImageAnalysis.set(res);
             if (dataUrl && res.uploadedUrl && res.passed) {
               this.imageNote.set('Ảnh đạt chuẩn Studio! Bạn có thể dùng ngay ảnh gốc hoặc bấm Cải thiện bằng AI.');
@@ -1427,6 +1728,7 @@ export class AdminProductsPage {
           }
         },
         error: (err: unknown) => {
+          if (seq !== this.analysisSeq) return;
           this.aiImageError.set(adminErrorMessage(err, 'Không phân tích được chất lượng ảnh lúc này.'));
         },
       });
@@ -1458,6 +1760,7 @@ export class AdminProductsPage {
       .subscribe({
         next: (result) => {
           if (result && result.enhancedUrl) {
+            this.analysisSeq++;
             this.aiEnhanceResult.set(result);
             this.aiImageAnalysis.set(result.afterAnalysis);
             this.imageNote.set('AI đã tạo phiên bản ảnh Studio chất lượng cao! Bấm "Áp dụng ảnh AI Studio" để đưa vào sản phẩm.');
@@ -1473,38 +1776,55 @@ export class AdminProductsPage {
   applyAiEnhancedImage(imagesBox?: HTMLTextAreaElement): void {
     const enhanced = this.aiEnhanceResult();
     if (!enhanced?.enhancedUrl || !this.canMutate()) return;
-    this.applyApprovedImageUrl(enhanced.enhancedUrl, enhanced.modelUsed || 'velura-studio-v2', imagesBox);
-    this.imageNote.set('✓ Đã áp dụng ảnh AI Studio vào danh sách ảnh sản phẩm. Bấm Lưu để xuất bản.');
+    this.applyApprovedImageUrl(enhanced.enhancedUrl, enhanced.modelUsed || 'velura-studio-v2', imagesBox, enhanced.afterAnalysis);
   }
 
   /** Applies the newly uploaded original image directly into the active gallery slot. */
   applyOriginalUploadedImage(imagesBox?: HTMLTextAreaElement): void {
-    const uploadedUrl = this.aiImageAnalysis()?.uploadedUrl || this.uploadedImageDataUrl();
+    const uploadedUrl = this.uploadedOriginalUrl() || this.aiImageAnalysis()?.uploadedUrl;
     if (!uploadedUrl || !this.canMutate()) return;
-    this.applyApprovedImageUrl(uploadedUrl, 'original-verified-v1', imagesBox);
-    this.imageNote.set('✓ Đã áp dụng ảnh tải lên vào danh sách ảnh sản phẩm. Bấm Lưu để xuất bản.');
+    // After an enhancement the shown report describes the improved copy; the original keeps its own measurement.
+    const report = this.aiEnhanceResult()?.beforeAnalysis ?? this.aiImageAnalysis();
+    this.applyApprovedImageUrl(uploadedUrl, 'original-verified-v1', imagesBox, report);
   }
 
-  private applyApprovedImageUrl(url: string, processingVersion: string, imagesBox?: HTMLTextAreaElement): void {
+  private applyApprovedImageUrl(url: string, processingVersion: string, imagesBox?: HTMLTextAreaElement, report: AdminImageQualityAnalysis | null = null): void {
+    if (this.aiImageBusy() || this.aiEnhanceBusy()) {
+      this.aiImageError.set('Vui lòng chờ hoàn tất xử lý hình ảnh trước khi áp dụng.');
+      return;
+    }
     const current = [...this.editorImages()];
     const index = Math.min(this.imageIndex(), current.length);
-    current.splice(index, index < current.length ? 1 : 0, url);
-    this.editorImages.set(current);
-    if (imagesBox) {
-      imagesBox.value = current.join('\n');
-    }
-    const approval: ProductImageApproval = {
-      approvalId: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `appr-${Date.now()}`,
-      url,
-      sourceRevision: 'ai-studio-verified',
-      processingVersion,
-      expiresAt: new Date(Date.now() + 24 * 3600_000).toISOString(),
-    };
-    this.imageApprovals.update((rows) => [...rows.filter((r) => current.includes(r.url)), approval]);
-    this.sourceFile.set(null);
-    this.sourceApproved.set(true);
-    this.uploadedImageDataUrl.set('');
-    this.aiEnhanceResult.set(null);
+    if (!this.canApplyImage(current, url)) return;
+    const product = this.selected();
+    this.aiImageBusy.set(true);
+    this.imageNote.set('Đang lưu phê duyệt ảnh đã chọn...');
+    this.imageApprovalRequest.unsubscribe();
+    this.imageApprovalRequest = this.adminApi.approveStudioImage({
+      imageUrl: url, productId: product?.product_id || null, expectedVersion: product?.version || 0,
+      selection: processingVersion === 'original-verified-v1' ? 'original' : 'enhanced', reviewConfirmed: true,
+    }).pipe(finalize(() => this.aiImageBusy.set(false))).subscribe({
+      next: (approval) => {
+        if (!approval?.approvalId || !approval.url) {
+          this.aiImageError.set('Chưa lưu được phê duyệt ảnh. Ảnh sản phẩm hiện tại được giữ nguyên.');
+          return;
+        }
+        this.moveImageColor(current[index], approval.url);
+        this.moveImageScore(current[index], approval.url, report);
+        current.splice(index, index < current.length ? 1 : 0, approval.url);
+        this.editorImages.set(current);
+        if (imagesBox) imagesBox.value = current.join('\n');
+        this.imageApprovals.update((rows) => [...rows.filter((r) => current.includes(r.url)), approval]);
+        this.sourceFile.set(null);
+        this.sourceApproved.set(true);
+        this.uploadedImageDataUrl.set('');
+        this.analysisSeq++;
+        this.aiImageAnalysis.set(report ? { ...report, overallScore: approval.qualityScore ?? report.overallScore } : null);
+        this.aiEnhanceResult.set(null);
+        this.imageNote.set('✓ Đã áp dụng ảnh đã được máy chủ phê duyệt. Bấm Lưu để xuất bản.');
+      },
+      error: (error: unknown) => this.aiImageError.set(adminErrorMessage(error, 'Chưa áp dụng được ảnh. Ảnh hiện tại được giữ nguyên.')),
+    });
   }
 
   toggleStyleTag(tag: string): void {
@@ -1647,7 +1967,10 @@ export class AdminProductsPage {
   }
 
   private resetImageEditor(): void {
+    this.imageApprovalRequest.unsubscribe();
+    this.uploadedOriginalUrl.set('');
     this.sourceFile.set(null);
+    this.editorImageColors.set({});
     this.imageApprovals.set([]);
     this.imageIndex.set(0);
     this.imageNote.set(null);
@@ -1656,6 +1979,10 @@ export class AdminProductsPage {
     this.aiEnhanceBusy.set(false);
     this.aiImageError.set(null);
     this.aiImageAnalysis.set(null);
+    this.imageScores.set({});
+    this.imageReading.set(false);
+    this.analysisSeq++;
+    this.analysisInFlight = 0;
     this.aiEnhanceResult.set(null);
     this.uploadedImageDataUrl.set('');
   }
@@ -1686,35 +2013,69 @@ export class AdminProductsPage {
     });
   }
 
+  /** Reviews the selected file; only its completed, error-free preview can authorize import. */
   onCsvFile(event: Event): void {
+    if (this.csvCommitting()) return;
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
-    if (!file) {
+    input.value = '';
+    if (!file) return;
+    const revision = ++this.csvFileRevision;
+    this.csvPreviewRequest.unsubscribe();
+    this.csvApproved.set(false);
+    this.csvChecking.set(true);
+    this.csvPreview.set('');
+    this.csvRows.set([]);
+    this.csvErrors.set([]);
+    this.csvWarnings.set([]);
+    this.csvValidRows.set(0);
+    this.csvTotalRows.set(0);
+    this.csvMessage.set('Đang kiểm tra CSV, chưa thể ghi catalog.');
+    if (file.size > 60 * 1024) {
+      this.csvChecking.set(false);
+      this.csvMessage.set('File CSV không được vượt quá 60 KB.');
       return;
     }
     const reader = new FileReader();
+    reader.onerror = () => {
+      if (revision !== this.csvFileRevision) return;
+      this.csvChecking.set(false);
+      this.csvMessage.set('Không đọc được file CSV. Vui lòng chọn lại file.');
+    };
     reader.onload = () => {
+      if (revision !== this.csvFileRevision) return;
       const csv = String(reader.result || '');
       this.csvPreview.set(csv);
-      this.csvRows.set([]);
-      this.csvErrors.set([]);
-      this.adminApi.previewCsv(csv).subscribe({
+      this.csvPreviewRequest = this.adminApi.previewCsv(csv).subscribe({
         next: (result) => {
+          if (revision !== this.csvFileRevision) return;
           const preview = (result || {}) as CsvPreviewResult;
-          this.csvRows.set(preview.rows || []);
-          this.csvErrors.set(preview.errors || []);
-          this.csvValidRows.set(preview.validRows || 0);
-          this.csvTotalRows.set(preview.totalRows || 0);
-          const errorCount = (preview.errors || []).length;
-          this.csvMessage.set(
-            errorCount
-              ? `Kiểm tra xong: ${preview.validRows || 0}/${preview.totalRows || 0} dòng hợp lệ, ${errorCount} dòng lỗi.`
-              : `Kiểm tra xong: ${preview.validRows || 0} dòng hợp lệ, có thể ghi catalog.`,
-          );
+          const valid = Array.isArray(preview.rows) && Array.isArray(preview.errors)
+            && Number.isSafeInteger(preview.validRows) && Number.isSafeInteger(preview.totalRows)
+            && preview.validRows! >= 0 && preview.totalRows! >= preview.validRows!
+            && preview.validRows === preview.rows.length;
+          this.csvChecking.set(false);
+          if (!valid) {
+            this.csvMessage.set('Kết quả kiểm tra CSV không hợp lệ. Chưa cho phép ghi catalog.');
+            return;
+          }
+          this.csvRows.set(preview.rows!);
+          this.csvErrors.set(preview.errors!);
+          this.csvWarnings.set(Array.isArray(preview.warnings) ? preview.warnings : []);
+          this.csvValidRows.set(preview.validRows!);
+          this.csvTotalRows.set(preview.totalRows!);
+          const errorCount = preview.errors!.length;
+          const warningCount = this.csvWarnings().length;
+          const warningNote = warningCount ? ` ${warningCount} giá trong CSV khác giá hiện tại sẽ bị bỏ qua, giá hiện có được giữ nguyên.` : '';
+          this.csvApproved.set(errorCount === 0 && preview.validRows! > 0);
+          this.csvMessage.set(errorCount
+            ? `Kiểm tra xong: ${preview.validRows}/${preview.totalRows} dòng hợp lệ, ${errorCount} lỗi. Chưa thể ghi catalog.${warningNote}`
+            : `Kiểm tra xong: ${preview.validRows} dòng hợp lệ.${warningNote}`);
         },
         error: (error: unknown) => {
-          this.csvRows.set([]);
-          this.csvErrors.set([]);
+          if (revision !== this.csvFileRevision) return;
+          this.csvChecking.set(false);
+          this.csvApproved.set(false);
           this.csvMessage.set(adminErrorMessage(error, 'Không kiểm tra được CSV.'));
         },
       });
@@ -1726,32 +2087,45 @@ export class AdminProductsPage {
    * Commits the last previewed CSV through the original import API.
    */
   commitCsv(): void {
+    if (!this.canCommitCsv()) {
+      this.csvMessage.set('CSV phải được kiểm tra thành công và không còn lỗi trước khi ghi catalog.');
+      return;
+    }
     const csv = this.csvPreview();
-    if (!csv) {
-      this.csvMessage.set('Chưa chọn file CSV.');
-      return;
-    }
-    if (this.csvHasErrors()) {
-      this.csvMessage.set('Sửa các dòng lỗi trước khi ghi catalog.');
-      return;
-    }
-    this.adminApi.commitCsv(csv).subscribe({
+    this.csvApproved.set(false);
+    this.csvCommitting.set(true);
+    this.adminApi.commitCsv(csv).pipe(finalize(() => this.csvCommitting.set(false))).subscribe({
       next: (result) => {
         if (!result || typeof result !== 'object' || !('failed' in result) || typeof result.failed !== 'number' || !Number.isSafeInteger(result.failed) || result.failed < 0) {
           this.csvMessage.set('Chưa xác minh được kết quả nhập. Giữ CSV để đối chiếu trước khi gửi lại.');
           return;
         }
         if (result.failed > 0) {
-          this.csvMessage.set(`Có ${result.failed} dòng ghi thất bại. Các dòng đã ghi vẫn được giữ; đối chiếu kết quả trước khi gửi lại.`);
+          this.csvMessage.set('Kết quả nhập báo lỗi. Giữ file CSV để đối chiếu và kiểm tra lại trước khi gửi lại.');
           this.reloadCatalog();
           return;
         }
-        this.csvMessage.set('Đã ghi CSV vào catalog.');
+        const written = 'warnings' in result && Array.isArray(result.warnings) ? result.warnings as CsvPreviewWarning[] : [];
+        this.csvWarnings.set(written);
+        this.csvMessage.set(written.length
+          ? `Đã ghi CSV vào catalog. ${written.length} giá khác giá hiện tại đã được bỏ qua, giá hiện có được giữ nguyên.`
+          : 'Đã ghi CSV vào catalog.');
         this.csvRows.set([]);
         this.csvPreview.set('');
         this.reloadCatalog();
       },
-      error: (error: unknown) => this.csvMessage.set(adminErrorMessage(error, 'Cần đăng nhập quản trị rồi mới ghi CSV.')),
+      error: (error: unknown) => {
+        const payload = error instanceof HttpErrorResponse ? error.error as {
+          error?: { details?: { errors?: CsvPreviewError[] } };
+        } | null : null;
+        const errors = payload?.error?.details?.errors;
+        if (Array.isArray(errors)) {
+          this.csvErrors.set(errors);
+          this.csvMessage.set('CSV không còn hợp lệ. Xem lỗi từng dòng và kiểm tra lại file trước khi nhập.');
+        } else {
+          this.csvMessage.set(adminErrorMessage(error, 'Không thể ghi CSV vào catalog.'));
+        }
+      },
     });
   }
 
@@ -1780,6 +2154,7 @@ export class AdminProductsPage {
       q: this.query(),
       categoryId: this.categoryId(),
       status: this.status(),
+      lowStock: this.lowStockOnly() ? 'true' : '',
       limit: String(this.pageSize),
       offset: adminOffset(this.page(), this.pageSize),
     };
@@ -1794,26 +2169,114 @@ export class AdminProductsPage {
       onSale: listProducts({ status: 'on_sale', limit: '1' }).pipe(catchError(() => of({ rows: [] as AdminProductRow[], count: 0 }))),
       hidden: listProducts({ status: 'hidden', limit: '1' }).pipe(catchError(() => of({ rows: [] as AdminProductRow[], count: 0 }))),
       out: listProducts({ status: 'out_of_stock', limit: '1' }).pipe(catchError(() => of({ rows: [] as AdminProductRow[], count: 0 }))),
-      low: this.canReadCatalog() ? this.adminApi.listLowStock().pipe(catchError(() => of({ rows: [] as AdminProductRow[], count: 0 }))) : of({ rows: [] as AdminProductRow[], count: 0 }),
+      low: this.canReadCatalog() ? this.adminApi.listLowStock().pipe(catchError(() => of({ rows: [] as AdminLowStockRow[], count: 0 }))) : of({ rows: [] as AdminLowStockRow[], count: 0 }),
     }).subscribe((payload) => {
       this.products.set(adminListRows(payload.list));
       this.total.set(adminListCount(payload.list));
       this.onSale.set(adminListCount(payload.onSale));
       this.hidden.set(adminListCount(payload.hidden));
       this.outOfStock.set(adminListCount(payload.out));
-      this.lowStockCount.set(adminListRows(payload.low).length);
+      const lowRows = adminListRows(payload.low);
+      this.lowStockRows.set(lowRows);
+      this.lowStockCount.set(new Set(lowRows.map((row) => row.product_id)).size);
       this.loading.set(false);
         this.hasLoadedOnce.set(true);
     });
   }
 
+  /**
+   * Applies the audit filters (date range, product, action type, user) from the filter form and reloads page 1.
+   * The range is validated here so the operator sees the message before any request is sent.
+   */
+  applyLogsFilters(event?: Event): void {
+    if (event) event.preventDefault();
+    if (event?.target && event.target instanceof HTMLFormElement) {
+      const form = event.target;
+      const read = (name: string): string => {
+        const input = form.elements.namedItem(name);
+        return (input && 'value' in input ? String(input.value) : '').trim();
+      };
+      this.logsFrom.set(read('from'));
+      this.logsTo.set(read('to'));
+      this.logsProduct.set(read('product'));
+      this.logsActionType.set(read('actionType'));
+      this.logsUser.set(read('user'));
+    }
+    if (this.logsFrom() && this.logsTo() && this.logsFrom() > this.logsTo()) {
+      this.logsError.set('Ngày kết thúc phải sau hoặc bằng ngày bắt đầu.');
+      return;
+    }
+    this.logsPage.set(1);
+    this.loadLogs();
+  }
+
+  /**
+   * Resets all product audit log filters back to default.
+   */
+  resetLogsFilters(): void {
+    this.logsFrom.set('');
+    this.logsTo.set('');
+    this.logsProduct.set('');
+    this.logsActionType.set('');
+    this.logsUser.set('');
+    this.logsPage.set(1);
+    this.loadLogs();
+  }
+
+  /**
+   * Opens the audit log modal detail view.
+   */
+  openLogDetail(row: AdminAuditRow): void {
+    this.selectedLog.set(row);
+  }
+
+  /**
+   * Closes the audit log modal detail view.
+   */
+  closeLogDetail(): void {
+    this.selectedLog.set(null);
+  }
+
+  /**
+   * Extracts human-readable reason from product audit row payload.
+   */
+  logReason(row: AdminAuditRow): string {
+    if (row.reason) return row.reason;
+    const newVal = this.auditPayload(row.new_value);
+    const oldVal = this.auditPayload(row.old_value);
+    const reason = newVal?.['reason'] || oldVal?.['reason'] || '';
+    return typeof reason === 'string' ? reason : '';
+  }
+
+  /**
+   * Pretty prints an audit payload object.
+   */
+  formatJson(value: unknown): string {
+    if (!value || (typeof value === 'object' && Object.keys(value as object).length === 0)) {
+      return '(Trống / Không có)';
+    }
+    return JSON.stringify(value, null, 2);
+  }
+
   private loadLogs(): void {
     this.logsLoading.set(true);
+    this.logsError.set(null);
+    const params: Record<string, string> = {
+      limit: String(this.logsPageSize),
+      offset: adminOffset(this.logsPage(), this.logsPageSize),
+    };
+    const filters: Record<string, string> = {
+      from: this.logsFrom(),
+      to: this.logsTo(),
+      product: this.logsProduct().trim(),
+      actionType: this.logsActionType(),
+      user: this.logsUser().trim(),
+    };
+    for (const [key, value] of Object.entries(filters)) {
+      if (value) params[key] = value;
+    }
     this.adminApi
-      .listProductAuditLogs({
-        limit: String(this.logsPageSize),
-        offset: adminOffset(this.logsPage(), this.logsPageSize),
-      })
+      .listProductAuditLogs(params)
       .subscribe({
         next: (payload) => {
           this.logs.set(adminListRows(payload));
@@ -1821,7 +2284,9 @@ export class AdminProductsPage {
           this.logsLoading.set(false);
         },
         error: (error: unknown) => {
-          this.csvMessage.set(adminErrorMessage(error));
+          this.logs.set([]);
+          this.logsTotal.set(0);
+          this.logsError.set(adminErrorMessage(error, 'Không tải được nhật ký sản phẩm.'));
           this.logsLoading.set(false);
         },
       });

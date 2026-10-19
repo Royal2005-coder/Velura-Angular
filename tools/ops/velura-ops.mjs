@@ -15,6 +15,7 @@ const SERVICES = {
   'ai-worker': 'ai-staging', 'litellm': 'observability', 'grafana': 'observability',
   'loki': 'observability', 'victoriametrics': 'observability', 'cloudflared': 'networking',
   'alloy': 'observability', 'vmalert': 'observability', 'alertmanager': 'observability',
+  'dcgm-exporter': 'observability',
   'oauth2-proxy': 'networking', 'keycloak': 'auth', 'source-controller': 'flux-system',
   'kustomize-controller': 'flux-system',
 };
@@ -27,7 +28,7 @@ const COMMANDS = {
   status: { description: 'Read workload readiness, Flux revisions, image digests, Services and NetworkPolicies.', options: [...CLUSTER_OPTIONS, 'namespace'], prerequisites: ['Read access to pods/workloads/services/networkpolicies/Flux resources'] },
   health: { description: 'Check workload readiness, Flux readiness and default-deny presence; not application smoke proof.', options: [...CLUSTER_OPTIONS, 'namespace'], prerequisites: ['Same as status'] },
   logs: { description: 'Read bounded logs from an allowlisted deployment; return only timestamps/severity and counts, never message bodies.', options: [...CLUSTER_OPTIONS, 'service', 'tail'], prerequisites: ['Allowlisted deployment and pods/log read permission'] },
-  reconcile: { description: 'Plan Flux reconciliation; execute only an approved, SHA-pinned Git source already fetched by Flux.', options: [...CLUSTER_OPTIONS, 'environment', 'revision', 'execute', 'approval'], prerequisites: ['Owner approval file for execution', 'GitRepository flux-system/velura-repo pinned spec.ref.commit', 'Kustomization flux-system/velura-staging or velura-infra matching environment', 'Matching artifact revision'], mutation: 'Only explicit --execute annotates the environment-specific Flux Kustomization; never applies YAML or unsuspends production' },
+  reconcile: { description: 'Plan Flux reconciliation of an approved SHA already fetched from the environment release branch.', options: [...CLUSTER_OPTIONS, 'environment', 'revision', 'execute', 'approval'], prerequisites: ['Owner approval file for execution', 'Environment GitRepository tracking main/production or develop/staging', 'Environment Kustomization referencing the expected source and path', 'Exact fetched artifact revision'], mutation: 'Only explicit --execute annotates the environment-specific Flux Kustomization; never applies YAML or unsuspends production' },
   'backup-check': { description: 'Verify external Restic snapshot identity/freshness and separately declared restore evidence.', options: ['backup-provider', 'evidence', 'environment', 'expected-cluster', 'timeout'], prerequisites: ['restic', 'RESTIC_REPOSITORY external provider and noninteractive credentials', 'Fresh external restore evidence file'] },
   'k3s-backup': { description: 'Inspect the active default-layout SQLite datastore and recovery inputs; create a protected local online backup only with explicit approval. Never claims offsite or restore proof.', options: ['ssh', 'expected-cluster', 'timeout', 'environment', 'revision', 'execute', 'approval'], prerequisites: ['Explicit SSH alias and kube-system UID', 'Root noninteractive python3 with sqlite3 and running default-layout K3s SQLite service', 'Owner approval for creation; independent encrypted offsite provider and isolated recovery host remain separate'], mutation: 'Only --execute creates a root-only local SQLite backup/recovery bundle; no restart, etcd command, Kubernetes mutation or Secret export' },
   acceptance: { description: 'Enumerate every requirement. External attestations remain unknown pending independent verification, never automatic pass.', options: [...CLUSTER_OPTIONS, 'namespace', 'requirements', 'evidence'], prerequisites: ['Requirement catalog; optional external evidence and explicit cluster identity for runtime checks'] },
@@ -266,8 +267,18 @@ export async function runCli(argv, dependencies = {}) {
     const batch = scoped(await get('jobs,cronjobs', namespace));
     const services = scoped(await get('services', namespace));
     const policies = scoped(await get('networkpolicies', namespace));
-    const targetName = !allProduction && ['velura-staging', 'ai-staging'].includes(namespace) ? 'velura-staging' : 'velura-infra';
-    const flux = (await fluxObjects()).filter(item => item.kind === 'GitRepository' && item.metadata?.name === 'velura-repo' || item.kind === 'Kustomization' && item.metadata?.name === targetName);
+    const staging = !allProduction && ['velura-staging', 'ai-staging'].includes(namespace);
+    const sourceName = staging ? 'velura-staging-repo' : 'velura-repo';
+    const targetNames = staging ? ['velura-staging'] : allProduction ? ['velura-infra', 'velura-production'] : [namespace === 'velura' ? 'velura-production' : 'velura-infra'];
+    const flux = (await fluxObjects()).filter(item => item.kind === 'GitRepository' && item.metadata?.name === sourceName || item.kind === 'Kustomization' && targetNames.includes(item.metadata?.name));
+    const source = flux.find(item => item.kind === 'GitRepository');
+    const branch = staging ? 'develop' : 'main';
+    const revision = source?.status?.artifact?.revision;
+    const converged = source?.spec?.url === 'https://github.com/Royal2005-coder/Velura-Angular.git'
+      && source.spec?.ref?.branch === branch && !source.spec.ref.commit && !source.spec.ref.tag && !source.spec.ref.semver && !source.spec.ref.name
+      && new RegExp(`^${branch}@sha1:[a-f0-9]{40}$`).test(revision ?? '')
+      && targetNames.every(name => flux.some(item => item.kind === 'Kustomization' && item.metadata?.name === name && item.status?.lastAppliedRevision === revision))
+      && flux.every(item => ready(item) && item.spec?.suspend !== true);
     data.workloads = workloads.map(item => {
       const desired = item.kind === 'DaemonSet' ? item.status?.desiredNumberScheduled ?? 0 : item.spec?.replicas ?? 1;
       const available = item.kind === 'DaemonSet' ? item.status?.numberReady ?? 0 : item.status?.readyReplicas ?? 0;
@@ -289,7 +300,7 @@ export async function runCli(argv, dependencies = {}) {
       return p.metadata?.namespace === ns && allPods && p.spec?.policyTypes?.includes(type) && (p.spec?.[type.toLowerCase()] ?? []).length === 0;
     })));
     const proof = {
-      'flux-ready': check('flux-ready', flux.some(item => item.kind === 'GitRepository') && flux.some(item => item.kind === 'Kustomization') && flux.every(item => ready(item) && item.spec?.suspend !== true) ? 'pass' : 'fail', 'Flux sources and kustomizations must exist, be Ready and not suspended'),
+      'flux-ready': check('flux-ready', converged ? 'pass' : 'fail', 'Expected environment Flux owners must be current-generation Ready, active and applied to the fetched canonical branch revision'),
       defaultdeny: check('defaultdeny', requiredDefaultDeny ? 'pass' : 'fail', `Namespaces ${scope} need all-pod empty-rule ingress and egress policies`),
       'resource-limits': check('resource-limits', containers.length && containers.every(c => c.resources?.requests?.cpu && c.resources?.requests?.memory && c.resources?.limits?.cpu && c.resources?.limits?.memory) ? 'pass' : 'fail', `All ${scope} workload containers require CPU/memory requests and limits`),
       'immutable-images': check('immutable-images', containers.length && containers.every(c => /^[^\s@]+@sha256:[a-f0-9]{64}$/.test(c.image ?? '')) ? 'pass' : 'fail', `All ${scope} workload container images must be digest-pinned`),
@@ -380,11 +391,14 @@ export async function runCli(argv, dependencies = {}) {
       ensure(opts.environment && opts.revision, EXIT.usage, 'Reconcile requires --environment and --revision');
       if (opts.execute) await approval();
       await identity();
-      const source = parseJson(await kube(['get', 'gitrepositories.source.toolkit.fluxcd.io', 'velura-repo', '-n', 'flux-system', '-o', 'json']), 'Flux GitRepository');
-      ensure(source.spec?.ref?.commit === opts.revision && source.status?.artifact?.revision?.endsWith(opts.revision) && ready(source) && source.spec?.suspend !== true, EXIT.checksFailed, 'Flux source must be pinned to the exact approved SHA, fetched and Ready before reconciliation');
-      const targetName = opts.environment === 'staging' ? 'velura-staging' : 'velura-infra';
+      const staging = opts.environment === 'staging';
+      const sourceName = staging ? 'velura-staging-repo' : 'velura-repo';
+      const branch = staging ? 'develop' : 'main';
+      const source = parseJson(await kube(['get', 'gitrepositories.source.toolkit.fluxcd.io', sourceName, '-n', 'flux-system', '-o', 'json']), 'Flux GitRepository');
+      ensure(source.spec?.url === 'https://github.com/Royal2005-coder/Velura-Angular.git' && source.spec?.ref?.branch === branch && !source.spec?.ref?.commit && !source.spec?.ref?.tag && !source.spec?.ref?.semver && !source.spec?.ref?.name && source.status?.artifact?.revision === `${branch}@sha1:${opts.revision}` && ready(source) && source.spec?.suspend !== true, EXIT.checksFailed, 'Environment Flux source must track the canonical release branch with the exact approved artifact SHA already fetched and Ready');
+      const targetName = staging ? 'velura-staging' : 'velura-production';
       const target = parseJson(await kube(['get', 'kustomizations.kustomize.toolkit.fluxcd.io', targetName, '-n', 'flux-system', '-o', 'json']), 'Flux Kustomization');
-      ensure(target.spec?.sourceRef?.kind === 'GitRepository' && target.spec?.sourceRef?.name === 'velura-repo' && (target.spec.sourceRef.namespace ?? 'flux-system') === 'flux-system' && target.spec?.suspend !== true && target.spec?.path === `./deploy/k8s/overlays/${opts.environment}`, EXIT.checksFailed, 'Flux Kustomization must match the selected environment/path, reference the approved source and not be suspended');
+      ensure(target.spec?.sourceRef?.kind === 'GitRepository' && target.spec?.sourceRef?.name === sourceName && (target.spec.sourceRef.namespace ?? 'flux-system') === 'flux-system' && target.spec?.suspend !== true && target.spec?.path === `./deploy/k8s/overlays/${opts.environment}`, EXIT.checksFailed, 'Flux Kustomization must match the selected environment/path, reference the approved source and not be suspended');
       data.plan = { environment: opts.environment, revision: opts.revision, operation: 'Request Flux Kustomization reconciliation of already fetched Git revision', executed: false };
       if (opts.execute) {
         data.plan.executionAttempted = true;

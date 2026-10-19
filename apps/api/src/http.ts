@@ -111,7 +111,7 @@ function extractBusinessError(err: ErrorLike): { code: string; message: string; 
     CHECKOUT_PROOF_REQUIRED: "Phiên xác thực thanh toán đã hết hạn. Vui lòng xác thực lại SĐT.",
     PAYMENT_SESSION_OPEN: "Đang có phiên thanh toán trực tuyến chưa hoàn tất. Vui lòng chờ vài phút hoặc thanh toán lại.",
     PRICE_MISMATCH: "Giá sản phẩm trong giỏ hàng đã thay đổi. Vui lòng làm mới đơn hàng.",
-    UNKNOWN_VARIANT: "Không tìm thấy thông tin sản phẩm trong giỏ hàng.",
+    UNKNOWN_VARIANT: "Sản phẩm trong giỏ hàng không còn được bán (đã ngừng kinh doanh, tạm ẩn hoặc không tồn tại). Vui lòng xóa sản phẩm khỏi giỏ hàng.",
     DUPLICATE_TRANSFER_REFERENCE: "Mã giao dịch chuyển tiền này đã được ghi nhận cho một giao dịch hoàn tiền trước đó. Vui lòng kiểm tra và nhập mã giao dịch khác.",
     REFUND_BALANCE_EXHAUSTED: "Số tiền hoàn đã vượt quá số dư có thể hoàn lại cho đơn hàng này.",
     CAPTURED_PAYMENT_REQUIRED: "Đơn hàng phải được ghi nhận thanh toán thành công trước khi hoàn tiền.",

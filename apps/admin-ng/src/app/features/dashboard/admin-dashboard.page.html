@@ -41,6 +41,14 @@
             </article>
           }
         </div>
+        @if (lowStockRows().length) {
+          <section class="dashboard-section" data-testid="dashboard-low-stock">
+            <header class="dashboard-section__header"><h3>Sản phẩm dưới ngưỡng tồn</h3></header>
+            @for (row of lowStockRows(); track row.variant_id) {
+              <p>{{ row.product_name || row.product_sku || row.product_id }} · {{ row.color }} / {{ row.size }} · còn {{ row.stock_quantity }}, ngưỡng {{ row.low_stock_threshold }}</p>
+            }
+          </section>
+        }
         <section class="dashboard-section"><header class="dashboard-section__header"><h3>Hoạt động gần đây</h3></header>
           @for (log of snapshot.recentLogs || []; track log.audit_id || $index) {
             <p>{{ log.timestamp }} · {{ log.actor_name || log.actor_id || 'Hệ thống' }} · {{ log.module }} · {{ log.action }}</p>

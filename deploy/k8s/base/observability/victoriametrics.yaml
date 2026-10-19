@@ -84,10 +84,13 @@ data:
         static_configs:
           - targets: [velura-api.velura.svc:3000]
       - job_name: litellm
+        # Scrape the mounted ASGI route directly instead of relying on its slash redirect.
+        metrics_path: /metrics/
         bearer_token_file: /etc/metrics-key/master-key
         static_configs:
           - targets: [litellm:4000]
       - job_name: keycloak
+        # Keycloak 26 exposes metrics on its management interface; 24 needs a live-only 8080 adoption patch.
         static_configs:
           - targets: [keycloak.auth.svc:9000]
       - job_name: victoriametrics
@@ -105,6 +108,9 @@ data:
       - job_name: alloy
         static_configs:
           - targets: [alloy:12345]
+      - job_name: dcgm-exporter
+        static_configs:
+          - targets: [dcgm-exporter:9400]
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -177,7 +183,7 @@ spec:
         - -httpListenAddr=:8428
         - -promscrape.config=/etc/victoriametrics/scrape.yaml
         - -retentionPeriod=14d
-        - -memory.allowedBytes=384Mi
+        - -memory.allowedBytes=402653184
         volumeMounts:
         - name: data
           mountPath: /vmetrics-data

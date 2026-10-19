@@ -1,0 +1,13 @@
+# Install a reviewed copy outside Atlantis checkouts and pass --repo-config.
+# Editing this repository copy does not reconfigure a running Atlantis server.
+repos:
+  - id: github.com/Royal2005-coder/Velura-Angular
+    apply_requirements: [approved, mergeable, undiverged]
+    import_requirements: [approved, mergeable, undiverged]
+    allowed_overrides: []
+    allowed_workflows: []
+    allow_custom_workflows: false
+    repo_locks:
+      mode: on_plan
+    autodiscover:
+      mode: disabled

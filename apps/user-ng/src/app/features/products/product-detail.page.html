@@ -105,7 +105,7 @@
               } @else if (badge.kind === 'combo') {
                 <span class="product-badge product-badge--combo">{{ badge.label }}</span>
               } @else {
-                <span class="product-badge product-badge--stock" [class.product-badge--out-of-stock]="isOutOfStock()">{{ badge.label }}</span>
+                <span class="product-badge product-badge--stock" [class.product-badge--out-of-stock]="isOutOfStock() || isDiscontinued()">{{ badge.label }}</span>
               }
             }
           </div>
@@ -238,35 +238,52 @@
               </div>
             </div>
 
-            <div class="product-quantity combo-quantity" [class.is-disabled]="isOutOfStock()">
+            <div class="product-quantity combo-quantity" [class.is-disabled]="isBuyDisabled()">
               <span class="product-option__title">Số lượng set combo</span>
-              <div class="quantity-selector" [class.is-disabled]="isOutOfStock()">
+              <div class="quantity-selector" [class.is-disabled]="isBuyDisabled()">
                 <button
                   type="button"
                   class="quantity-btn"
-                  [disabled]="isOutOfStock() || quantity() <= 1"
+                  [disabled]="isBuyDisabled() || quantity() <= 1"
                   (click)="decrement()"
                   aria-label="Giảm số lượng set combo"
                 >-</button>
                 <input
                   type="number"
                   class="quantity-input"
-                  [value]="isOutOfStock() ? 0 : quantity()"
-                  [disabled]="isOutOfStock()"
+                  [value]="isBuyDisabled() ? 0 : quantity()"
+                  [disabled]="isBuyDisabled()"
                   readonly
                   aria-label="Số lượng set combo"
                 />
                 <button
                   type="button"
                   class="quantity-btn"
-                  [disabled]="isOutOfStock() || quantity() >= maxAvailableStock()"
+                  [disabled]="isBuyDisabled() || quantity() >= maxAvailableStock()"
                   (click)="increment()"
                   aria-label="Tăng số lượng set combo"
                 >+</button>
               </div>
             </div>
 
-            @if (isOutOfStock()) {
+            @if (isDiscontinued()) {
+              <div class="stock-alert-banner stock-alert-banner--discontinued">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line>
+                </svg>
+                <span>Set combo này đã ngừng kinh doanh. Quý khách vui lòng tham khảo các sản phẩm khác.</span>
+              </div>
+            } @else if (isHidden()) {
+              <div class="stock-alert-banner stock-alert-banner--hidden">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="12" y1="8" x2="12" y2="12"></line>
+                  <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                </svg>
+                <span>Set combo hiện đang tạm ẩn và không khả dụng để đặt mua.</span>
+              </div>
+            } @else if (isOutOfStock()) {
               <div class="stock-alert-banner">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <circle cx="12" cy="12" r="10"></circle>
@@ -282,8 +299,8 @@
                 <button
                   type="button"
                   class="btn btn--outline combo-add-cart"
-                  [disabled]="isOutOfStock()"
-                  [class.btn--disabled]="isOutOfStock()"
+                  [disabled]="isBuyDisabled()"
+                  [class.btn--disabled]="isBuyDisabled()"
                   (click)="addComboToCart()"
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -291,15 +308,15 @@
                     <circle cx="20" cy="21" r="1"></circle>
                     <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
                   </svg>
-                  {{ isOutOfStock() ? 'Set combo tạm hết hàng' : 'Thêm set vào giỏ' }}
+                  {{ isDiscontinued() ? 'Ngừng kinh doanh' : isHidden() ? 'Sản phẩm tạm ẩn' : isOutOfStock() ? 'Set combo tạm hết hàng' : 'Thêm set vào giỏ' }}
                 </button>
                 <button
                   type="button"
                   class="btn btn--primary combo-buy-now"
-                  [disabled]="isOutOfStock()"
-                  [class.btn--disabled]="isOutOfStock()"
+                  [disabled]="isBuyDisabled()"
+                  [class.btn--disabled]="isBuyDisabled()"
                   (click)="buyComboNow()"
-                >{{ isOutOfStock() ? 'Hết hàng' : 'Mua ngay set này' }}</button>
+                >{{ isDiscontinued() ? 'Ngừng kinh doanh' : isHidden() ? 'Sản phẩm tạm ẩn' : isOutOfStock() ? 'Hết hàng' : 'Mua ngay set này' }}</button>
               </div>
               <button type="button" class="btn btn--secondary combo-wishlist" [class.is-wishlist-active]="wishlisted()" (click)="toggleWishlist()">
                 <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.67">
@@ -361,28 +378,28 @@
         }
 
         @if (!isCombo()) {
-        <div class="product-quantity" [class.is-disabled]="isOutOfStock()">
+        <div class="product-quantity" [class.is-disabled]="isBuyDisabled()">
           <span class="product-option__title">Số lượng</span>
-          <div class="quantity-selector" [class.is-disabled]="isOutOfStock()">
+          <div class="quantity-selector" [class.is-disabled]="isBuyDisabled()">
             <button
               type="button"
               class="quantity-btn"
-              [disabled]="isOutOfStock() || quantity() <= 1"
+              [disabled]="isBuyDisabled() || quantity() <= 1"
               (click)="decrement()"
               aria-label="Giảm số lượng"
             >-</button>
             <input
               type="number"
               class="quantity-input"
-              [value]="isOutOfStock() ? 0 : quantity()"
-              [disabled]="isOutOfStock()"
+              [value]="isBuyDisabled() ? 0 : quantity()"
+              [disabled]="isBuyDisabled()"
               readonly
               aria-label="Số lượng"
             />
             <button
               type="button"
               class="quantity-btn"
-              [disabled]="isOutOfStock() || quantity() >= maxAvailableStock()"
+              [disabled]="isBuyDisabled() || quantity() >= maxAvailableStock()"
               (click)="increment()"
               aria-label="Tăng số lượng"
             >+</button>
@@ -391,35 +408,54 @@
 
         }
 
-        @if (!isCombo() && isOutOfStock()) {
-          <div class="stock-alert-banner">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10"></circle>
-              <line x1="12" y1="8" x2="12" y2="12"></line>
-              <line x1="12" y1="16" x2="12.01" y2="16"></line>
-            </svg>
-            <span>Phiên bản sản phẩm đã chọn hiện đã hết hàng. Vui lòng chọn màu hoặc kích thước khác.</span>
-          </div>
+        @if (!isCombo()) {
+          @if (isDiscontinued()) {
+            <div class="stock-alert-banner stock-alert-banner--discontinued">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line>
+              </svg>
+              <span>Sản phẩm này đã ngừng kinh doanh. Quý khách vui lòng tham khảo các sản phẩm khác.</span>
+            </div>
+          } @else if (isHidden()) {
+            <div class="stock-alert-banner stock-alert-banner--hidden">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+              </svg>
+              <span>Sản phẩm hiện đang tạm ẩn và không khả dụng để đặt mua.</span>
+            </div>
+          } @else if (isOutOfStock()) {
+            <div class="stock-alert-banner">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+              </svg>
+              <span>Phiên bản sản phẩm đã chọn hiện đã hết hàng. Vui lòng chọn màu hoặc kích thước khác.</span>
+            </div>
+          }
         }
 
         @if (!isCombo()) {
         <div class="product-actions-grid">
           <div class="product-actions-main">
-            <button type="button" class="btn btn--outline add-to-cart-btn" [disabled]="isOutOfStock()" [class.btn--disabled]="isOutOfStock()" (click)="addToCart()">
+            <button type="button" class="btn btn--outline add-to-cart-btn" [disabled]="isBuyDisabled()" [class.btn--disabled]="isBuyDisabled()" (click)="addToCart()">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px;">
                 <circle cx="9" cy="21" r="1"></circle>
                 <circle cx="20" cy="21" r="1"></circle>
                 <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
               </svg>
-              {{ isOutOfStock() ? 'Sản phẩm hết hàng' : 'Thêm vào giỏ' }}
+              {{ isDiscontinued() ? 'Ngừng kinh doanh' : isHidden() ? 'Sản phẩm tạm ẩn' : isOutOfStock() ? 'Sản phẩm hết hàng' : 'Thêm vào giỏ' }}
             </button>
             <button
               type="button"
               class="btn btn--primary buy-now-btn"
-              [disabled]="isOutOfStock()"
-              [class.btn--disabled]="isOutOfStock()"
+              [disabled]="isBuyDisabled()"
+              [class.btn--disabled]="isBuyDisabled()"
               (click)="buyNow()"
-            >{{ isOutOfStock() ? 'Hết hàng' : 'Mua ngay' }}</button>
+            >{{ isDiscontinued() ? 'Ngừng kinh doanh' : isHidden() ? 'Sản phẩm tạm ẩn' : isOutOfStock() ? 'Hết hàng' : 'Mua ngay' }}</button>
           </div>
           <button type="button" class="btn btn--secondary wishlist-btn" [class.active]="wishlisted()" aria-label="Thêm vào danh sách yêu thích" (click)="toggleWishlist()">
             <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.67" style="margin-right: 8px;">

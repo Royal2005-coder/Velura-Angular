@@ -18,6 +18,7 @@ export const PRODUCT_SELECT = [
   "base_price",
   "sale_price",
   "images",
+  "image_colors",
   "style_tags",
   "color_tone",
   "occasions",
@@ -51,9 +52,9 @@ export const PRODUCT_STATUSES = ["on_sale", "hidden", "out_of_stock", "discontin
 /** Allowed status transitions to enforce business rules. */
 export const STATUS_TRANSITIONS: Record<string, string[]> = {
   on_sale: ["hidden", "out_of_stock", "discontinued"],
-  hidden: ["on_sale", "discontinued"],
+  hidden: ["on_sale", "out_of_stock", "discontinued"],
   out_of_stock: ["on_sale", "hidden", "discontinued"],
-  discontinued: ["hidden"]
+  discontinued: ["on_sale", "hidden", "out_of_stock"]
 };
 
 /**
@@ -91,7 +92,7 @@ export const CSV_REQUIRED_COLUMNS = [
   "category_id"
 ];
 
-/** Optional CSV columns accepted during bulk import. */
+/** Optional product metadata and variant identity/stock columns; blank existing values are preserved. */
 export const CSV_OPTIONAL_COLUMNS = [
   "description",
   "sale_price",
@@ -99,6 +100,12 @@ export const CSV_OPTIONAL_COLUMNS = [
   "tags",
   "images",
   "image_url",
+  "product_sku",
+  "color",
+  "color_hex",
+  "size",
+  "stock_quantity",
+  "low_stock_threshold",
   "is_featured"
 ];
 
@@ -121,3 +128,18 @@ export const PRODUCT_ORDER_OPTIONS = [
 
 /** Valid color_tone values. */
 export const COLOR_TONES = ["Warm", "Cool", "Neutral"];
+
+/** Vietnamese message shown inline and on submit whenever a product or variant SKU is already used anywhere in the catalog. */
+export const SKU_DUPLICATE_MESSAGE = "Mã SKU đã tồn tại, SKU phải là duy nhất trên toàn hệ thống";
+
+/**
+ * Audit "action type" filter values for the product audit log.
+ * The audit_action enum only stores create/update; status and stock edits are derived from old/new values.
+ */
+export const PRODUCT_AUDIT_ACTION_TYPES = ["CREATE", "UPDATE", "UPDATE_STATUS", "UPDATE_STOCK"] as const;
+
+/** Product audit action type accepted by the audit-log endpoint. */
+export type ProductAuditActionType = (typeof PRODUCT_AUDIT_ACTION_TYPES)[number];
+
+/** Minimum characters of the operator reason for status and stock changes; mirrors the database RPC checks. */
+export const MIN_CHANGE_REASON_LENGTH = 10;

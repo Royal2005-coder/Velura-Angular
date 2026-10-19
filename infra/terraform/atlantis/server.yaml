@@ -1,0 +1,10 @@
+# Install a reviewed copy at /etc/atlantis/server.yaml, not in a PR checkout.
+# Bot/webhook/backend credentials and the real HTTPS URL come from environment.
+repo-allowlist: github.com/Royal2005-coder/Velura-Angular
+repo-config: /etc/atlantis/repos.yaml
+default-tf-version: 1.13.4
+# undiverged only enforces freshness with merge checkout strategy.
+checkout-strategy: merge
+allow-fork-prs: false
+allow-draft-prs: false
+automerge: false

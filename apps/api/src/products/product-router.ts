@@ -40,6 +40,12 @@ export async function handleProductRoute({
     return true;
   }
 
+  // GET /api/v1/admin/products/sku-check?sku=VL-AO001&excludeProductId=... - inline SKU uniqueness check
+  if (req.method === "GET" && parts[4] === "sku-check" && parts.length === 5) {
+    sendJson(res, 200, await service.checkSku(context, url.searchParams), headers);
+    return true;
+  }
+
   // GET /api/v1/admin/products/low-stock
   if (req.method === "GET" && parts[4] === "low-stock" && parts.length === 5) {
     sendJson(res, 200, { data: await service.lowStock(context) }, headers);
@@ -79,6 +85,12 @@ export async function handleProductRoute({
   if (req.method === "POST" && parts[4] === "ai-image-enhance" && parts.length === 5) {
     const body = await readJson(req, Math.max(config.maxBodyBytes, 15 * 1024 * 1024));
     sendJson(res, 200, await service.enhanceProductImage(context, body), headers);
+    return true;
+  }
+
+  // The explicit Apply button stages server-measured bytes; the later product save publishes them.
+  if (req.method === "POST" && parts[4] === "ai-image-approve" && parts.length === 5) {
+    sendJson(res, 200, await service.approveStudioImage(context, await readJson(req, config.maxBodyBytes), requestMeta), headers);
     return true;
   }
 

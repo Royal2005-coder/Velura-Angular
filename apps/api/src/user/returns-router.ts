@@ -33,6 +33,10 @@ export async function handleReturnsRoute(
     const updated = await returnsService.cancelForGuest(await readJson(req));
     return sendJson(res,200,{success:true,return:updated},corsHeaders);
   }
+  // POST /api/user/returns/guest-refund-receiver — same for a verified guest session
+  if (action === "guest-refund-receiver" && req.method === "POST") {
+    return sendJson(res, 200, await returnsService.saveRefundReceiverForGuest(await readJson(req)), corsHeaders);
+  }
   const profile = requireUserAuth(context);
 
   // POST /api/user/returns/cancel
@@ -40,6 +44,11 @@ export async function handleReturnsRoute(
     const body = await readJson(req);
     const updated = await returnsService.cancelForMember(profile, body.return_id, body.expectedVersion);
     return sendJson(res, 200, { success: true, return: updated }, corsHeaders);
+  }
+
+  // POST /api/user/returns/refund-receiver — COD receiving account for the member's own refund request
+  if (req.method === "POST" && action === "refund-receiver") {
+    return sendJson(res, 200, await returnsService.saveRefundReceiverForMember(profile, await readJson(req)), corsHeaders);
   }
 
   // POST /api/user/returns

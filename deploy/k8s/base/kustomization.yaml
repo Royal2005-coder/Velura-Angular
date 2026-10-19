@@ -3,6 +3,7 @@ kind: Kustomization
 
 resources:
   - namespaces.yaml
+  - secrets
   - security/quotas.yaml
   - security/network-policies.yaml
   - database/postgres.yaml
@@ -17,8 +18,13 @@ resources:
   - observability/loki.yaml
   - observability/alloy.yaml
   - observability/alerts.yaml
-  - velura/velura-api.yaml
-  - velura/velura-storefront.yaml
-  - velura/velura-admin.yaml
+  - observability/dcgm-exporter.yaml
   - networking/cloudflared.yaml
   - networking/oauth2-proxy.yaml
+
+# A config change must change the pod template so Flux rolls the gateway automatically.
+configMapGenerator:
+  - name: litellm-config
+    namespace: observability
+    files:
+      - config.yaml=observability/litellm-config.yaml

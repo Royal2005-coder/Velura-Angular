@@ -12,6 +12,9 @@ import {
   AdminChatMessageRow,
   AdminChatSessionRow,
   AdminOrderRow,
+  AdminPaymentFilter,
+  AdminRefundFlow,
+  AdminRefundReceiverStatus,
   AdminReturnRow,
   AdminReturnStatus,
   AdminTicketRow,
@@ -19,6 +22,7 @@ import {
 import { adminDateTime, adminMoney } from '../../core/admin-format';
 import {
   ORDER_STATUS_LABELS,
+  REFUND_RECEIVER_STATUS_LABELS,
   RETURN_REASON_LABELS,
   RETURN_STATUS_LABELS,
   statusLabelFrom,
@@ -58,6 +62,9 @@ const TICKET_ACTION_TARGET: Record<TicketAction, string> = {
   resolve: 'resolved',
   close: 'closed',
 };
+
+/** Trạng thái phiếu mà CSKH còn được từ chối; NEEDS_SUPPORT được phép để phiếu kẹt trả lại hạn mức đổi trả. */
+const REJECTABLE_RETURN_STATUSES: readonly string[] = ['REQUESTED', 'CONTACTING', 'WAITING_RETURN', 'NEEDS_SUPPORT'];
 
 /**
  * Nén ảnh bằng HTML5 Canvas để tránh vượt ngưỡng payload của API và Vercel Serverless.
@@ -236,10 +243,17 @@ export class AdminReturnsPage {
   readonly shipmentError = signal<string | null>(null);
   readonly manualRefundTarget = signal<AdminReturnRow | null>(null);
   readonly manualRefundProof = signal('');
+  readonly manualRefundReference = signal('');
+  readonly manualRefundTransferredAt = signal('');
+  readonly manualRefundNote = signal('');
+  readonly refundInfoTarget = signal<AdminReturnRow | null>(null);
+  readonly refundInfoMessage = signal('');
+  readonly refundInfoError = signal<string | null>(null);
 
   readonly searchQuery = signal('');
   readonly statusFilter = signal('');
   readonly typeFilter = signal('');
+  readonly paymentFilter = signal<'' | AdminPaymentFilter>('');
   readonly returnTab = signal<'all' | 'attention' | 'warehouse' | 'refund' | 'completed'>('all');
   readonly menuId = signal<string | null>(null);
 
@@ -264,6 +278,10 @@ export class AdminReturnsPage {
       list = list.filter((r) => r.status === status);
     }
     const type = this.typeFilter();
+    const payment = this.paymentFilter();
+    if (payment) {
+      list = list.filter((r) => (payment === 'cod' ? r.payment_kind === 'cod' : r.payment_kind === 'stripe' || r.payment_kind === 'other_online'));
+    }
     if (type) {
       list = list.filter((r) => (r.return_type || r.request_type) === type);
     }
@@ -319,7 +337,7 @@ export class AdminReturnsPage {
     inject(DestroyRef).onDestroy(() => { this.messageRequest.unsubscribe(); this.receiveRequest.unsubscribe(); this.returnDetailRequest.unsubscribe(); this.clearChatReview(); });
     inject(DestroyRef).onDestroy(() => this.listRequest.unsubscribe());
     inject(AdminRefreshService).register(() => {
-      if (!this.loading() && !this.submitting() && !this.actionType() && !this.receiveTarget() && !this.shipmentTarget() && !this.manualRefundTarget() && !this.contactTarget()) this.reload();
+      if (!this.loading() && !this.submitting() && !this.actionType() && !this.receiveTarget() && !this.shipmentTarget() && !this.manualRefundTarget() && !this.refundInfoTarget() && !this.contactTarget()) this.reload();
     }, inject(DestroyRef));
     this.reportSessionId = this.route.snapshot.queryParamMap.get('sessionId') || this.route.snapshot.queryParamMap.get('session') || '';
     this.reload();
@@ -349,7 +367,7 @@ export class AdminReturnsPage {
     this.listRequest = forkJoin({
       returns:
         zone === 'returns'
-          ? this.api.listReturns(pageParams).pipe(
+          ? this.api.listReturns(pageParams, this.paymentFilter()).pipe(
               catchError((error: unknown) => {
                 this.loadError.set(adminErrorMessage(error));
                 return of({ rows: [] as AdminReturnRow[], count: 0 });
@@ -821,7 +839,7 @@ export class AdminReturnsPage {
    */
   openReturnAction(type: 'refund' | 'exchange' | 'reject', returnId: string): void {
     const row = this.returns().find((item) => item.return_id === returnId) || (this.selectedReturn()?.return_id === returnId ? this.selectedReturn() : null);
-    if (!row || !this.canMutate() || (type !== 'reject' && row.status !== 'CONTACTING') || (type === 'reject' && !['REQUESTED', 'CONTACTING', 'WAITING_RETURN'].includes(row.status || ''))) return;
+    if (!row || !this.canMutate() || (type !== 'reject' && row.status !== 'CONTACTING') || (type === 'reject' && !this.canRejectReturn(row))) return;
     this.selectedReturn.set(row);
     this.selectedTicket.set(null);
     this.actionType.set(type);
@@ -1025,7 +1043,7 @@ export class AdminReturnsPage {
       return;
     }
     if (ret && ret.version != null && ['refund', 'exchange', 'reject'].includes(type)) {
-      if ((type !== 'reject' && ret.status !== 'CONTACTING') || (type === 'reject' && !['REQUESTED', 'CONTACTING', 'WAITING_RETURN'].includes(ret.status || ''))) {
+      if ((type !== 'reject' && ret.status !== 'CONTACTING') || (type === 'reject' && !this.canRejectReturn(ret))) {
         this.actionError.set('Liên hệ khách hàng trước khi duyệt; trạng thái phiếu phải còn cho phép xử lý.'); return;
       }
       this.submitting.set(true);
@@ -1221,6 +1239,11 @@ export class AdminReturnsPage {
     };
     if (row.status === 'RECEIVED' && row.condition_check_result === 'qa_pass' && (row.return_type === 'exchange' || row.request_type === 'exchange')) return { status: 'EXCHANGE_PREPARING', label: 'Soạn hàng đổi' };
     return steps[row.status || ''] || null;
+  }
+
+  /** CSKH được từ chối phiếu ở mọi giai đoạn chưa nhận hàng, kể cả NEEDS_SUPPORT để giải phóng hạn mức đổi trả. */
+  canRejectReturn(row: AdminReturnRow): boolean {
+    return this.canMutate() && REJECTABLE_RETURN_STATUSES.includes(row.status || '');
   }
 
   /**
@@ -1487,15 +1510,42 @@ export class AdminReturnsPage {
     });
   }
 
-  /** Allows recorded transfer evidence only for captured payments outside Stripe. */
-  canRecordManualRefund(row: AdminReturnRow): boolean {
-    const isRefund = row.return_type === 'refund' || row.request_type === 'refund';
+  /**
+   * Phiếu đang ở giai đoạn hoàn tiền thủ công (COD hoặc MoMo/VNPay) sau khi kho kiểm đạt.
+   * Stripe không bao giờ đi theo luồng này.
+   */
+  isManualRefundStage(row: AdminReturnRow): boolean {
+    const flow = this.refundFlow(row);
     const isReceivedPass = ['RECEIVED', 'REFUND_PROCESSING'].includes(row.status || '') && row.condition_check_result === 'qa_pass';
-    if (!this.canMutate() || !isRefund || !isReceivedPass) return false;
-    if (row.payment) {
-      return row.payment.payment_provider !== 'stripe';
-    }
-    return row.payment_method !== 'stripe' && row.payment_method !== 'STRIPE';
+    return this.canMutate() && (flow === 'cod_manual' || flow === 'manual_transfer') && this.isRefundRequest(row) && isReceivedPass;
+  }
+
+  /** COD chưa có thông tin nhận tiền hợp lệ thì giai đoạn hoàn tiền bị chặn. */
+  refundReceiverBlocked(row: AdminReturnRow): boolean {
+    return this.refundFlow(row) === 'cod_manual' && this.receiverStatus(row) !== 'valid';
+  }
+
+  /** Hiện cảnh báo chặn hoàn tiền khi phiếu COD còn dang dở mà thông tin nhận tiền chưa dùng được. */
+  showReceiverWarning(row: AdminReturnRow): boolean {
+    return this.refundReceiverBlocked(row) && !row.manual_refund && !['COMPLETED', 'CANCELLED', 'REFUNDED'].includes(row.status || '');
+  }
+
+  /** Cho phép ghi nhận chuyển tiền thủ công: đúng giai đoạn và (với COD) nhận tiền hợp lệ. */
+  canRecordManualRefund(row: AdminReturnRow): boolean {
+    return this.isManualRefundStage(row) && !this.refundReceiverBlocked(row);
+  }
+
+  /** Số tiền hoàn mà API đối chiếu khi ghi nhận chuyển tiền; luôn lấy theo món khách gửi trả. */
+  manualRefundAmount(row: AdminReturnRow): number {
+    const amount = Number(row.refundable_amount || row.refund_amount || row.order_total || 0);
+    return Number.isFinite(amount) && amount > 0 ? amount : 0;
+  }
+
+  /** Giá trị tối đa của ô thời điểm chuyển tiền: hiện tại, theo giờ địa phương (datetime-local). */
+  manualRefundMaxTime(): string {
+    const now = new Date();
+    const pad = (value: number): string => String(value).padStart(2, '0');
+    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
   }
 
   /** Starts transfer evidence recording after warehouse QA. */
@@ -1504,7 +1554,29 @@ export class AdminReturnsPage {
       this.openReturnDetail(row.return_id);
       return;
     }
-    this.manualRefundTarget.set(row); this.manualRefundProof.set(''); this.actionError.set(null);
+    this.manualRefundTarget.set(row);
+    this.manualRefundProof.set('');
+    this.manualRefundReference.set('');
+    this.manualRefundTransferredAt.set('');
+    this.manualRefundNote.set('');
+    this.actionError.set(null);
+    if (row.refundable_amount == null) {
+      // Hàng trong danh sách có thể chưa có số tiền hoàn; lấy chi tiết để ô số tiền khớp đúng giá trị API đối chiếu.
+      this.api.getReturn(row.return_id).subscribe({
+        next: (detail) => {
+          if (this.manualRefundTarget()?.return_id === row.return_id && detail.return_id === row.return_id) this.manualRefundTarget.set(detail);
+        },
+        error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
+      });
+    }
+  }
+
+  /** Cập nhật một ô của form ghi nhận hoàn tiền thủ công. */
+  setManualRefundField(field: 'reference' | 'transferredAt' | 'note', event: Event): void {
+    const value = (event.target as HTMLInputElement | HTMLTextAreaElement).value;
+    if (field === 'reference') this.manualRefundReference.set(value);
+    else if (field === 'transferredAt') this.manualRefundTransferredAt.set(value);
+    else this.manualRefundNote.set(value);
   }
 
   /** Reads image evidence without assuming the transaction succeeded. */
@@ -1521,19 +1593,37 @@ export class AdminReturnsPage {
     });
   }
 
-  /** Records transfer evidence once; the server calculates the net refund amount. */
+  /**
+   * Ghi nhận chuyển tiền thủ công một lần: mã giao dịch, số tiền (đúng số tiền hoàn), thời điểm chuyển và ảnh chứng từ.
+   * Thành công thì phiếu chuyển thẳng sang "Hoàn tất", không có bước duyệt thứ hai.
+   */
   submitManualRefund(event: Event): void {
     event.preventDefault();
-    const row = this.manualRefundTarget(), form = event.target as HTMLFormElement;
-    if (!row || !this.canRecordManualRefund(row) || this.submitting() || row.version == null) return;
-    const transferReference = (form.elements.namedItem('reference') as HTMLInputElement | null)?.value.trim() || '';
-    const adminNote = (form.elements.namedItem('note') as HTMLTextAreaElement | null)?.value.trim() || '';
+    const row = this.manualRefundTarget();
+    if (!row || this.submitting() || row.version == null) return;
+    if (this.refundReceiverBlocked(row)) {
+      this.actionError.set('Chưa có thông tin nhận tiền hợp lệ — không thể tiếp tục hoàn tiền.');
+      return;
+    }
+    if (!this.canRecordManualRefund(row)) return;
+    const transferReference = this.manualRefundReference().trim();
+    const adminNote = this.manualRefundNote().trim();
+    const amount = this.manualRefundAmount(row);
+    const transferredAt = new Date(this.manualRefundTransferredAt());
     if (transferReference.length < 6) {
       this.actionError.set('Mã giao dịch chuyển tiền phải có ít nhất 6 ký tự (ví dụ: FT2409012345).');
       return;
     }
-    if (adminNote.length < 10) {
-      this.actionError.set('Nội dung / Ghi chú kế toán phải có ít nhất 10 ký tự.');
+    if (amount <= 0) {
+      this.actionError.set('Không xác định được số tiền hoàn hợp lệ (> 0đ) cho phiếu này.');
+      return;
+    }
+    if (!this.manualRefundTransferredAt() || Number.isNaN(transferredAt.getTime())) {
+      this.actionError.set('Chọn thời điểm đã chuyển tiền.');
+      return;
+    }
+    if (transferredAt.getTime() > Date.now()) {
+      this.actionError.set('Thời điểm chuyển tiền không được ở tương lai.');
       return;
     }
     if (!this.manualRefundProof() || (!this.manualRefundProof().startsWith('data:image/') && !this.manualRefundProof().startsWith('https://'))) {
@@ -1545,8 +1635,10 @@ export class AdminReturnsPage {
     this.api.recordManualRefund(row.return_id, {
       expectedVersion: row.version,
       transferReference,
-      adminNote,
+      amount,
+      transferredAt: transferredAt.toISOString(),
       imageProof: this.manualRefundProof(),
+      ...(adminNote ? { adminNote } : {}),
     }).pipe(finalize(() => this.submitting.set(false))).subscribe({
       next: () => {
         this.manualRefundTarget.set(null);
@@ -1562,6 +1654,56 @@ export class AdminReturnsPage {
           this.openReturnDetail(row.return_id);
         }
       },
+    });
+  }
+
+  /** CSKH chỉ gửi "yêu cầu bổ sung" khi phiếu COD còn dang dở và thông tin nhận tiền chưa hợp lệ. */
+  canRequestRefundInfo(row: AdminReturnRow): boolean {
+    return this.canMutate() && this.refundFlow(row) === 'cod_manual' && this.isRefundRequest(row) && row.version != null
+      && this.receiverStatus(row) !== 'valid' && !['COMPLETED', 'CANCELLED', 'REFUNDED'].includes(row.status || '');
+  }
+
+  /** Mở hộp thoại gửi yêu cầu bổ sung thông tin nhận tiền cho khách. */
+  openRefundInfoRequest(row: AdminReturnRow): void {
+    if (!this.canRequestRefundInfo(row)) return;
+    this.refundInfoTarget.set(row);
+    this.refundInfoMessage.set('');
+    this.refundInfoError.set(null);
+  }
+
+  /** Đóng hộp thoại yêu cầu bổ sung khi không đang gửi. */
+  closeRefundInfoRequest(): void {
+    if (this.submitting()) return;
+    this.refundInfoTarget.set(null);
+  }
+
+  /** Ghi nội dung yêu cầu bổ sung đang soạn. */
+  setRefundInfoMessage(event: Event): void {
+    this.refundInfoMessage.set((event.target as HTMLTextAreaElement).value);
+  }
+
+  /** Gửi yêu cầu bổ sung; phiếu giữ nguyên giai đoạn và chờ khách cập nhật thông tin trên cửa hàng. */
+  submitRefundInfoRequest(event: Event): void {
+    event.preventDefault();
+    const row = this.refundInfoTarget();
+    if (!row || this.submitting() || row.version == null || !this.canRequestRefundInfo(row)) return;
+    const message = this.refundInfoMessage().trim();
+    if (message.length < 10) {
+      this.refundInfoError.set('Nội dung yêu cầu bổ sung phải có ít nhất 10 ký tự.');
+      return;
+    }
+    this.refundInfoError.set(null);
+    this.submitting.set(true);
+    this.api.requestRefundInfo(row.return_id, { message, expectedVersion: row.version }).pipe(finalize(() => this.submitting.set(false))).subscribe({
+      next: () => {
+        this.refundInfoTarget.set(null);
+        this.refundInfoMessage.set('');
+        this.reload();
+        if (this.returnDetailOpen() && this.selectedReturn()?.return_id === row.return_id) {
+          this.openReturnDetail(row.return_id);
+        }
+      },
+      error: (error: unknown) => this.refundInfoError.set(adminErrorMessage(error)),
     });
   }
 
@@ -1613,6 +1755,7 @@ export class AdminReturnsPage {
     this.searchQuery.set('');
     this.statusFilter.set('');
     this.typeFilter.set('');
+    this.paymentFilter.set('');
     this.returnTab.set('all');
     this.page.set(1);
     this.reload();
@@ -1632,18 +1775,74 @@ export class AdminReturnsPage {
     this.page.set(1);
   }
 
+  /** Lọc COD / Online: tải lại từ máy chủ với `payment_kind`. */
+  onPaymentFilter(event: Event): void {
+    const value = (event.target as HTMLSelectElement).value;
+    this.paymentFilter.set(value === 'cod' || value === 'online' ? value : '');
+    this.page.set(1);
+    this.reload();
+  }
+
   /**
-   * Phương thức thanh toán của đơn gắn với phiếu đổi trả.
+   * Nhãn kênh thanh toán của phiếu: COD, Online – Stripe hoặc Online – MoMo/VNPay.
    */
-  returnPaymentMethod(row: AdminReturnRow): string {
-    const method = row.payment_method || row.payment?.payment_method;
-    const provider = row.payment?.payment_provider;
-    if (provider === 'stripe' || method === 'STRIPE') return 'Stripe';
-    if (method === 'COD') return 'COD';
-    if (method === 'ONLINE_PAYMENT') return 'Online';
-    if (method === 'VNPAY') return 'VNPay';
-    if (method === 'MOMO') return 'MoMo';
-    return method || '—';
+  paymentKindLabel(row: AdminReturnRow): string {
+    if (row.payment_kind === 'cod') return 'COD';
+    if (row.payment_kind === 'stripe') return 'Online – Stripe';
+    if (row.payment_kind === 'other_online') {
+      const provider = (row.payment?.payment_provider || '').toLowerCase();
+      if (provider === 'momo') return 'Online – MoMo';
+      if (provider === 'vnpay') return 'Online – VNPay';
+      return 'Online – MoMo/VNPay';
+    }
+    return '—';
+  }
+
+  /** Lớp màu của huy hiệu kênh thanh toán. */
+  paymentKindClass(row: AdminReturnRow): string {
+    return `admin-payment-badge admin-payment-badge--${row.payment_kind || 'unknown'}`;
+  }
+
+  /**
+   * Luồng hoàn tiền do API quyết định (`refund_flow`). Chỉ phiếu cũ chưa có trường này mới suy ra từ thanh toán:
+   * Stripe -> tự động, thanh toán khác -> chuyển khoản thủ công; không bao giờ suy ra COD để không tự ý chặn/mở thao tác.
+   */
+  refundFlow(row: AdminReturnRow): AdminRefundFlow {
+    if (row.refund_flow) return row.refund_flow;
+    if (!this.isRefundRequest(row) || !row.payment) return 'none';
+    return row.payment.payment_provider === 'stripe' ? 'stripe_auto' : 'manual_transfer';
+  }
+
+  /** Tình trạng thông tin nhận tiền COD; phiếu COD chưa có dữ liệu được coi là còn thiếu. */
+  receiverStatus(row: AdminReturnRow): AdminRefundReceiverStatus {
+    return row.refund_receiver?.status ?? row.refund_receiver_status ?? (this.refundFlow(row) === 'cod_manual' ? 'missing' : 'not_required');
+  }
+
+  /** Nhãn tình trạng thông tin nhận tiền. */
+  receiverStatusLabel(row: AdminReturnRow): string {
+    return statusLabelFrom(REFUND_RECEIVER_STATUS_LABELS, this.receiverStatus(row));
+  }
+
+  /** Chip nhắc CSKH ở hàng đợi khi thông tin nhận tiền COD chưa dùng được; null khi không cần nhắc. */
+  receiverChip(row: AdminReturnRow): string | null {
+    if (['CANCELLED', 'COMPLETED', 'REFUNDED'].includes(row.status || '')) return null;
+    const status = this.receiverStatus(row);
+    if (status === 'missing' || status === 'invalid') return 'Thiếu thông tin nhận tiền';
+    if (status === 'supplement_requested') return 'Đã yêu cầu bổ sung';
+    return null;
+  }
+
+  /** Phân biệt phiếu bị CSKH từ chối với phiếu khách tự hủy. */
+  cancellationLabel(row: AdminReturnRow): string {
+    if (row.cancelled_by === 'admin') return 'Bị từ chối bởi CSKH';
+    if (row.cancelled_by === 'customer') return 'Khách tự hủy';
+    if (row.cancelled_by === 'system') return 'Hệ thống tự hủy';
+    return 'Yêu cầu đã hủy';
+  }
+
+  /** Phiếu yêu cầu hoàn tiền (không phải đổi hàng). */
+  isRefundRequest(row: AdminReturnRow): boolean {
+    return row.return_type === 'refund' || row.request_type === 'refund';
   }
 
   /**
@@ -1652,9 +1851,7 @@ export class AdminReturnsPage {
   returnPaymentStatus(row: AdminReturnRow): string {
     const isRefunded = row.status === 'REFUNDED' || row.payment?.payment_status === 'refunded';
     if (isRefunded) {
-      return (row.payment?.payment_provider === 'stripe' || row.payment_method === 'stripe')
-        ? 'Đã hoàn tiền (Stripe)'
-        : 'Đã hoàn tiền (Chuyển khoản)';
+      return this.refundFlow(row) === 'stripe_auto' ? 'Đã hoàn tiền (Stripe)' : 'Đã hoàn tiền (Chuyển khoản)';
     }
     const status = row.payment?.payment_status;
     if (status === 'refund_pending') return 'Đang xử lý hoàn tiền';
@@ -1669,13 +1866,9 @@ export class AdminReturnsPage {
   }
 
   canTriggerStripeRefund(row: AdminReturnRow): boolean {
-    const isRefund = row.return_type === 'refund' || row.request_type === 'refund';
     const isReceivedPass = ['RECEIVED', 'REFUND_PROCESSING'].includes(row.status || '') && row.condition_check_result === 'qa_pass' && row.version != null;
-    if (!this.canMutate() || !isRefund || !isReceivedPass) return false;
-    if (row.payment) {
-      return row.payment.payment_provider === 'stripe' && row.payment.payment_status !== 'refunded';
-    }
-    return row.payment_method === 'stripe';
+    if (!this.canMutate() || this.refundFlow(row) !== 'stripe_auto' || !this.isRefundRequest(row) || !isReceivedPass) return false;
+    return row.payment?.payment_status !== 'refunded';
   }
 
   triggerStripeRefund(row: AdminReturnRow): void {

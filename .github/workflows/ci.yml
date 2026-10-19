@@ -22,7 +22,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       publish: ${{ steps.changes.outputs.publish }}
-      staging: ${{ steps.changes.outputs.staging }}
       production: ${{ steps.changes.outputs.production }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -59,13 +58,11 @@ jobs:
             git fetch origin main
             test "$(git rev-parse origin/main)" = "$GITHUB_SHA"
             echo 'publish=true' >> "$GITHUB_OUTPUT"
-            echo 'staging=false' >> "$GITHUB_OUTPUT"
             echo 'production=false' >> "$GITHUB_OUTPUT"
             exit 0
           fi
           if [ -z "$BEFORE" ] || [ "$BEFORE" = 0000000000000000000000000000000000000000 ] || ! git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
             echo 'publish=true' >> "$GITHUB_OUTPUT"
-            echo 'staging=true' >> "$GITHUB_OUTPUT"
             echo 'production=true' >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -75,13 +72,11 @@ jobs:
           else
             echo 'publish=false' >> "$GITHUB_OUTPUT"
           fi
-          for environment in staging production; do
-            if grep -qE "^deploy/k8s/overlays/$environment/" changed-paths.txt || { [ "$environment" = production ] && grep -qx 'deploy/releases/production.json' changed-paths.txt; }; then
-              echo "$environment=true" >> "$GITHUB_OUTPUT"
-            else
-              echo "$environment=false" >> "$GITHUB_OUTPUT"
-            fi
-          done
+          if grep -qE '^deploy/k8s/overlays/production/' changed-paths.txt || grep -qx 'deploy/releases/production.json' changed-paths.txt; then
+            echo 'production=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'production=false' >> "$GITHUB_OUTPUT"
+          fi
   validate-pr-contract:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
@@ -170,6 +165,8 @@ jobs:
         run: python -m unittest discover -s scripts -p test_platform_contract.py
       - name: Verify ciphertext-only Secret regression checks
         run: python -m unittest discover -s scripts -p test_secret_contract.py
+      - name: Verify production-only workflow ownership and release gates
+        run: python -m unittest discover -s scripts -p test_mvp_pipeline.py
       - name: Reject duplicate YAML keys and render each isolated overlay
         run: |
           python - <<'PY'
@@ -192,7 +189,7 @@ jobs:
           owners = {}
           platform_objects = []
           app_deployments = {'velura-api', 'velura-storefront', 'velura-admin'}
-          for path in ('deploy/k8s/overlays/staging', 'deploy/k8s/overlays/production', 'deploy/k8s/overlays/infrastructure', 'deploy/k8s/optional/ai-worker'):
+          for path in ('deploy/k8s/clusters/production', 'deploy/k8s/overlays/production', 'deploy/k8s/overlays/infrastructure', 'deploy/k8s/optional/ai-worker'):
               rendered = subprocess.run(['kustomize', 'build', path], check=True, capture_output=True, text=True).stdout
               objects = list(yaml.load_all(rendered, Loader=UniqueLoader))
               if path.startswith('deploy/k8s/overlays/'):
@@ -200,7 +197,7 @@ jobs:
               if not objects: raise ValueError('No rendered resources')
               for item in objects:
                   metadata = item.get('metadata', {})
-                  if path.startswith('deploy/k8s/overlays/'):
+                  if path.startswith(('deploy/k8s/overlays/', 'deploy/k8s/clusters/')):
                       identity = (item['apiVersion'], item['kind'], metadata.get('namespace', ''), metadata['name'])
                       if identity in owners:
                           raise ValueError(f'Resource ownership overlaps: {identity} in {owners[identity]} and {path}')
@@ -216,12 +213,25 @@ jobs:
                           if name.endswith('.yaml'): list(yaml.load_all(value, Loader=UniqueLoader))
           validate_platform(platform_objects)
           PY
-      - name: Require staging provenance or unchanged suspended legacy bootstrap
-        if: github.event_name == 'pull_request'
+      - name: Require signed-main provenance or unchanged suspended legacy bootstrap
+        if: github.event_name == 'pull_request' || hashFiles('deploy/releases/production.json') != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: python scripts/release-images.py validate-production "$BASE_SHA"
+      - uses: sigstore/cosign-installer@d58896d6a1865668819e1d91763c7751a165e159
+        if: hashFiles('deploy/releases/production.json') != ''
+      - name: Verify exact production image signatures before reviewed pins can merge
+        if: hashFiles('deploy/releases/production.json') != ''
+        run: |
+          set -euo pipefail
+          python scripts/release-images.py verified-snapshot production > signed-production.json
+          revision=$(jq -r .revision signed-production.json)
+          build_id=$(jq -r .buildId signed-production.json)
+          for app in api storefront admin; do
+            image=$(jq -r --arg app "$app" '.images[$app]' signed-production.json)
+            cosign verify --certificate-identity "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/.github/workflows/ci.yml@refs/heads/main" --certificate-oidc-issuer https://token.actions.githubusercontent.com --annotations "release-revision=$revision" --annotations "release-build-id=$build_id" "$image"
+          done
   migrations:
     runs-on: ubuntu-latest
     steps:
@@ -276,6 +286,71 @@ jobs:
             const existing = comments.find(c => c.user.type === 'Bot' && c.body.startsWith(marker));
             if (existing) await github.rest.issues.updateComment({...context.repo, comment_id: existing.id, body});
             else await github.rest.issues.createComment({...args, body});
+  promote-main:
+    # MVP: green integration opens CI-gated sync/promotion PRs, never direct branch writes.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop' && vars.VELURA_AUTO_PROMOTE_MAIN == 'true'
+    needs: [validate, test-api, test-angular, test-ai-worker, build, migrations, manifests]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with: {persist-credentials: false, fetch-depth: 0}
+      - name: Decide whether integration needs a main sync or promotion
+        id: target
+        run: |
+          set -euo pipefail
+          git fetch origin main develop
+          if [ "$(git rev-parse origin/develop)" != "$GITHUB_SHA" ] || git diff --quiet origin/main HEAD; then
+            echo 'action=none' >> "$GITHUB_OUTPUT"
+          elif git merge-base --is-ancestor origin/main HEAD; then
+            echo 'action=promote' >> "$GITHUB_OUTPUT"
+          else
+            echo 'action=sync' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Authenticate repository-scoped PR automation
+        if: steps.target.outputs.action != 'none'
+        id: app
+        env:
+          RELEASE_APP_ID: ${{ vars.RELEASE_APP_ID }}
+          RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+        run: node scripts/release-app-token.mjs
+      - name: Open or queue the green integration PR
+        if: steps.target.outputs.action != 'none'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          ACTION: ${{ steps.target.outputs.action }}
+        run: |
+          set -euo pipefail
+          gh auth setup-git
+          if [ "$ACTION" = sync ]; then
+            main_sha=$(git rev-parse origin/main)
+            branch="feature/KAN-32-sync-main-${main_sha:0:12}-${GITHUB_SHA:0:12}"
+            existing=$(gh pr list --base develop --head "$branch" --state open --json number --jq '.[0].number // empty')
+            if [ -n "$existing" ]; then gh pr merge "$existing" --auto --merge; exit 0; fi
+            git switch -c "$branch"
+            git config user.name 'velura-release[bot]'
+            git config user.email 'velura-release[bot]@users.noreply.github.com'
+            git merge --no-ff origin/main -m 'KAN-32 why: synchronize approved main ancestry before integration promotion'
+            git push origin "$branch"
+            pr=$(gh pr create --base develop --head "$branch" --title 'KAN-32: sync main ancestry for green integration promotion' --body '## Why
+          Keep develop current with approved main before MVP promotion. Required PR checks still gate this merge. Resolve conflicts through Git, never through cluster edits.
+          cc @Royal2005-coder @trandiemquynhqw-maker @uyenntd23406-svg')
+          else
+            pr=$(gh pr list --base main --head develop --state open --json number --jq '.[0].number // empty')
+            if [ -z "$pr" ]; then
+              pr=$(gh pr create --base main --head develop --title 'KAN-32: promote green integration to MVP main' --body '## Why
+          Promote tested integration through the protected main PR. Main publishes signed application images when source changes; reviewed production pins are reconciled by Flux.
+          cc @Royal2005-coder @trandiemquynhqw-maker @uyenntd23406-svg')
+            fi
+          fi
+          gh pr merge "$pr" --auto --merge
+      - name: Revoke short-lived App installation token
+        if: ${{ always() && steps.app.outputs.token != '' }}
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+        run: gh api --method DELETE installation/token
   deploy-production:
     # Build artifacts only; never write cluster state. Recovery repeats every gate on current main.
     if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && needs.validate.outputs.publish == 'true'
@@ -422,24 +497,28 @@ jobs:
           pattern: release-*
           merge-multiple: true
           path: release
-      - name: Open staging-only image update PR with PR checks enabled
+      - name: Open signed production pins PR with PR checks enabled
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_READ_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           RELEASE_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          python scripts/release-images.py stage release "$RELEASE_SHA" "$RELEASE_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
-          branch="feature/KAN-32-staging-${RELEASE_SHA:0:12}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          branch="feature/KAN-32-production-${RELEASE_SHA:0:12}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           git switch -c "$branch"
           git config user.name 'velura-release[bot]'
           git config user.email 'velura-release[bot]@users.noreply.github.com'
-          git add deploy/k8s/overlays/staging/kustomization.yaml deploy/k8s/overlays/staging/release-revision.yaml
+          git fetch origin main
+          git merge --no-ff origin/main -m 'KAN-32 why: keep production promotion ancestry current with approved main'
+          python scripts/release-images.py direct release "$RELEASE_SHA" "$RELEASE_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT"
+          git add deploy/k8s/overlays/production/kustomization.yaml deploy/k8s/overlays/production/release-revision.yaml deploy/releases/production.json deploy/k8s/base/flux/git-sync.yaml
           gh auth setup-git
           if ! git diff --cached --quiet; then
-            git commit -m 'KAN-32 why: verify scanned signed application digests in staging'
+            git commit -m 'KAN-32 why: promote scanned signed main application digests to MVP production'
             git push origin "$branch"
-            gh pr create --repo "$GH_REPO" --base develop --head "$branch" --title 'KAN-32: verify signed application digests in staging' --body "$(printf '## Why\nStage signed images built from approved main revision %s. Only staging overlay pins change. After merge, read-only staging verification opens a separate production-pins PR. Optional worker remains disabled and its signed artifact is retained separately. Release run: %s/%s/actions/runs/%s' "$RELEASE_SHA" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+            pr=$(gh pr create --repo "$GH_REPO" --base develop --head "$branch" --title 'KAN-32: promote signed main digests to MVP production' --body "$(printf '## Why\nPromote the exact scanned/signed images built from approved main revision %s. CI validates publisher evidence and Cosign identities; Flux applies only reviewed production pins after develop is promoted to main. Staging is not part of the MVP release path. Optional worker remains a separate owner-reviewed rollout. Publisher run: %s/%s/actions/runs/%s\ncc @Royal2005-coder @trandiemquynhqw-maker @uyenntd23406-svg' "$RELEASE_SHA" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID"))
+            gh pr merge "$pr" --auto --merge
           fi
           git switch develop
           python scripts/release-images.py worker release
@@ -456,135 +535,8 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
         run: gh api --method DELETE installation/token
-  verify-staging:
-    # Only reviewed staging manifests on develop reconcile; application source on develop never publishes.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/develop' && needs.validate.outputs.staging == 'true' && needs.validate.outputs.publish == 'false'
-    needs: [validate, test-api, test-angular, test-ai-worker, build, migrations, manifests]
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    environment: staging
-    permissions:
-      contents: read
-      packages: read
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-        with: {persist-credentials: false}
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with: {node-version: '22', cache: npm}
-      - run: npm ci
-      - run: python -m pip install PyYAML==6.0.2
-      - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: sigstore/cosign-installer@d58896d6a1865668819e1d91763c7751a165e159
-      - name: Verify complete signed staging bundle
-        run: |
-          set -euo pipefail
-          python scripts/release-images.py verified-snapshot staging > staging-release.json
-          revision=$(jq -r .revision staging-release.json)
-          build_id=$(jq -r .buildId staging-release.json)
-          for app in api storefront admin; do
-            image=$(jq -r --arg app "$app" '.images[$app]' staging-release.json)
-            cosign verify --certificate-identity "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/.github/workflows/ci.yml@refs/heads/main" --certificate-oidc-issuer https://token.actions.githubusercontent.com --annotations "release-revision=$revision" --annotations "release-build-id=$build_id" "$image"
-          done
-      - name: Require independently provisioned staging chatbot schema
-        env:
-          STAGING_SUPABASE_DB_URL: ${{ secrets.STAGING_SUPABASE_DB_URL }}
-          STAGING_DB_CA_PEM: ${{ secrets.STAGING_SUPABASE_DB_CA_CERT }}
-          PRODUCTION_SUPABASE_PROJECT_REF: ${{ vars.PRODUCTION_SUPABASE_PROJECT_REF }}
-        run: |
-          set -euo pipefail
-          test -n "$STAGING_SUPABASE_DB_URL"
-          test -n "$STAGING_DB_CA_PEM"
-          ca=$(mktemp)
-          trap 'rm -f "$ca"' EXIT
-          chmod 600 "$ca"
-          printf '%s\n' "$STAGING_DB_CA_PEM" > "$ca"
-          STAGING_SUPABASE_DB_CA_CERT="$ca" node scripts/run-migrations.mjs --check --environment=staging --require-chatbot-schema
-      - name: Verify independently provisioned staging build identities and health
-        env:
-          VERIFY_TOKEN: ${{ secrets.PRODUCTION_VERIFY_TOKEN }}
-          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
-          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
-          STAGING_SUPABASE_DB_URL: ${{ secrets.STAGING_SUPABASE_DB_URL }}
-          PRODUCTION_SUPABASE_PROJECT_REF: ${{ vars.PRODUCTION_SUPABASE_PROJECT_REF }}
-        run: |
-          set -euo pipefail
-          test -n "$VERIFY_TOKEN"
-          test -n "$CF_ACCESS_CLIENT_ID"
-          test -n "$CF_ACCESS_CLIENT_SECRET"
-          expected=$(jq -r .revision staging-release.json)
-          expected_build=$(jq -r .buildId staging-release.json)
-          expected_project=$(node --input-type=module - <<'JS'
-          import { requireStagingProjectRef } from './scripts/supabase-project.mjs';
-          console.log(requireStagingProjectRef(process.env.STAGING_SUPABASE_DB_URL, process.env.PRODUCTION_SUPABASE_PROJECT_REF));
-          JS
-          )
-          for attempt in $(seq 1 60); do
-            if curl --fail --silent --show-error --max-time 15 -H "Authorization: Bearer $VERIFY_TOKEN" -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" https://staging-admin.royalai.dev/api/ops/revision > staging-revision.json \
-              && jq -e --arg expected "$expected" --arg build "$expected_build" --arg project "$expected_project" '.ready == true and .checks.chatbotSchema == true and .revision == $expected and .buildRevision == $expected and .buildId == $build and .databaseProjectRef == $project' staging-revision.json \
-              && curl --fail --silent --show-error --max-time 15 -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" https://staging-admin.royalai.dev/release.json | jq -e --arg expected "$expected" --arg build "$expected_build" '.revision == $expected and .buildId == $build' \
-              && curl --fail --silent --show-error --max-time 15 -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" https://staging.royalai.dev/release.json | jq -e --arg expected "$expected" --arg build "$expected_build" '.revision == $expected and .buildId == $build'; then
-              exit 0
-            fi
-            sleep 10
-          done
-          echo 'Staging build identities did not converge' >&2
-          exit 1
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: verified-staging-bundle
-          path: staging-release.json
-          retention-days: 90
-  promote-production:
-    # Separate job so the provenance API can observe verify-staging's completed success.
-    needs: verify-staging
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      actions: read
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-        with:
-          ref: develop
-          persist-credentials: false
-      - run: python -m pip install PyYAML==6.0.2
-      - name: Prepare same-digest production pins and successful staging provenance
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SOURCE_SHA: ${{ github.sha }}
-        run: python scripts/release-images.py production "$SOURCE_SHA" "$GITHUB_RUN_ID"
-      - name: Authenticate repository-scoped PR automation
-        id: app
-        env:
-          RELEASE_APP_ID: ${{ vars.RELEASE_APP_ID }}
-          RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
-        run: node scripts/release-app-token.mjs
-      - name: Open production pins PR into develop for owner promotion to main
-        env:
-          GH_TOKEN: ${{ steps.app.outputs.token }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          branch="feature/KAN-32-production-${GITHUB_SHA:0:12}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          git switch -c "$branch"
-          git config user.name 'velura-release[bot]'
-          git config user.email 'velura-release[bot]@users.noreply.github.com'
-          git add deploy/k8s/overlays/production/kustomization.yaml deploy/k8s/overlays/production/release-revision.yaml deploy/releases/production.json
-          git diff --cached --quiet && exit 0
-          git commit -m 'KAN-32 why: promote exactly the signed staging-verified application digests'
-          gh auth setup-git
-          git push origin "$branch"
-          gh pr create --repo "$GH_REPO" --base develop --head "$branch" --title 'KAN-32: promote staging-verified application digests' --body "$(printf '## Why\nPromote the exact three signed image pins in deploy/releases/production.json after staging build-identity, schema and health verification. Evidence: %s/%s/actions/runs/%s . Merge this PR into develop, then an owner promotes develop to main. No rebuild, production apply, or Kubernetes credentials in Actions.' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
-      - name: Revoke short-lived App installation token
-        if: ${{ always() && steps.app.outputs.token != '' }}
-        env:
-          GH_TOKEN: ${{ steps.app.outputs.token }}
-        run: gh api --method DELETE installation/token
   verify-production:
-    # Production reconciliation remains owner-bootstrapped; no direct-rollout bypass.
+    # Root Flux applies reviewed pins; this job only verifies signed artifacts and runtime.
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.validate.outputs.production == 'true' && needs.validate.outputs.publish == 'false' && vars.VELURA_VERIFY_PRODUCTION == 'true'
     needs: [validate, test-api, test-angular, test-ai-worker, build, migrations, manifests]
     runs-on: ubuntu-latest
@@ -600,10 +552,21 @@ jobs:
         with: {node-version: '22', cache: npm}
       - run: npm ci
       - run: python -m pip install PyYAML==6.0.2
-      - name: Require exact production bundle's successful staging provenance
+      - name: Require the exact production bundle's successful main publisher provenance
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python scripts/release-images.py validate-production
+      - uses: sigstore/cosign-installer@d58896d6a1865668819e1d91763c7751a165e159
+      - name: Verify the exact signed production digests
+        run: |
+          set -euo pipefail
+          python scripts/release-images.py verified-snapshot production > production-release.json
+          revision=$(jq -r .revision production-release.json)
+          build_id=$(jq -r .buildId production-release.json)
+          for app in api storefront admin; do
+            image=$(jq -r --arg app "$app" '.images[$app]' production-release.json)
+            cosign verify --certificate-identity "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/.github/workflows/ci.yml@refs/heads/main" --certificate-oidc-issuer https://token.actions.githubusercontent.com --annotations "release-revision=$revision" --annotations "release-build-id=$build_id" "$image"
+          done
       - name: Require owner-provisioned production chatbot schema without writes
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
@@ -622,12 +585,19 @@ jobs:
           VERIFY_TOKEN: ${{ secrets.PRODUCTION_VERIFY_TOKEN }}
           CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
           CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+          ACCESS_ENABLED: ${{ vars.VELURA_CF_ACCESS_ENABLED }}
           PRODUCTION_SUPABASE_PROJECT_REF: ${{ vars.PRODUCTION_SUPABASE_PROJECT_REF }}
         run: |
           set -euo pipefail
           test -n "$VERIFY_TOKEN"
-          test -n "$CF_ACCESS_CLIENT_ID"
-          test -n "$CF_ACCESS_CLIENT_SECRET"
+          access_headers=()
+          if [ "$ACCESS_ENABLED" = true ]; then
+            test -n "$CF_ACCESS_CLIENT_ID"
+            test -n "$CF_ACCESS_CLIENT_SECRET"
+            test "$CF_ACCESS_CLIENT_ID" != not-enforced
+            test "$CF_ACCESS_CLIENT_SECRET" != not-enforced
+            access_headers=(-H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET")
+          fi
           python scripts/release-images.py verified-snapshot production > production-release.json
           expected=$(jq -r .revision production-release.json)
           expected_build=$(jq -r .buildId production-release.json)
@@ -637,9 +607,9 @@ jobs:
           JS
           )
           for attempt in $(seq 1 60); do
-            if curl --fail --silent --show-error --max-time 15 -H "Authorization: Bearer $VERIFY_TOKEN" -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" https://admin.royalai.dev/api/ops/revision > revision.json \
+            if curl --fail --silent --show-error --max-time 15 -H "Authorization: Bearer $VERIFY_TOKEN" "${access_headers[@]}" https://admin.royalai.dev/api/ops/revision > revision.json \
               && jq -e --arg expected "$expected" --arg build "$expected_build" --arg project "$expected_project" '.ready == true and .checks.chatbotSchema == true and .revision == $expected and .buildRevision == $expected and .buildId == $build and .databaseProjectRef == $project' revision.json \
-              && curl --fail --silent --show-error --max-time 15 -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" https://admin.royalai.dev/release.json | jq -e --arg expected "$expected" --arg build "$expected_build" '.revision == $expected and .buildId == $build' \
+              && curl --fail --silent --show-error --max-time 15 "${access_headers[@]}" https://admin.royalai.dev/release.json | jq -e --arg expected "$expected" --arg build "$expected_build" '.revision == $expected and .buildId == $build' \
               && curl --fail --silent --show-error --max-time 15 https://velura.royalai.dev/release.json | jq -e --arg expected "$expected" --arg build "$expected_build" '.revision == $expected and .buildId == $build' \
               && curl --fail --silent --show-error --max-time 15 https://velura.royalai.dev/api/health; then
               exit 0

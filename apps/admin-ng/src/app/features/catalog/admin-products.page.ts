@@ -114,6 +114,7 @@ export class AdminProductsPage {
   private csvPreviewRequest = new Subscription();
   private csvFileRevision = 0;
   private editorRequest = new Subscription();
+  private imageApprovalRequest = new Subscription();
   private readonly adminApi = inject(AdminApiService);
   private readonly session = inject(AdminSessionService);
 
@@ -323,6 +324,7 @@ export class AdminProductsPage {
   readonly aiStudioUpscale = signal<boolean>(true);
   readonly uploadedImageDataUrl = signal<string>('');
   readonly uploadedImageMime = signal<string>('image/jpeg');
+  readonly uploadedOriginalUrl = signal('');
 
   // Signals cho AI Tối ưu Nội dung & SEO Thời trang (Gemini Fashion SEO Skill)
   readonly aiSeoBusy = signal<boolean>(false);
@@ -399,6 +401,7 @@ export class AdminProductsPage {
       this.listRequest.unsubscribe();
       this.editorRequest.unsubscribe();
       this.csvPreviewRequest.unsubscribe();
+      this.imageApprovalRequest.unsubscribe();
       this.csvFileRevision++;
     });
     inject(AdminRefreshService).register(() => {
@@ -967,6 +970,10 @@ export class AdminProductsPage {
    */
   submitEditor(event: Event): void {
     event.preventDefault();
+    if (this.aiImageBusy() || this.aiEnhanceBusy()) {
+      this.actionError.set('Vui lòng chờ hoàn tất xử lý hình ảnh trước khi lưu sản phẩm');
+      return;
+    }
     if (!this.canMutate()) {
       this.actionError.set('Role hiện tại không được ghi catalog.');
       return;
@@ -1401,6 +1408,7 @@ export class AdminProductsPage {
       return;
     }
     this.sourceFile.set(file);
+    this.uploadedOriginalUrl.set('');
     this.sourceApproved.set(false);
     this.uploadedImageMime.set(file.type || 'image/jpeg');
     this.aiImageError.set(null);
@@ -1424,6 +1432,8 @@ export class AdminProductsPage {
 
   /** Selects a saved image or an append slot and discards an unpublished replacement preview. */
   selectGalleryImageSlot(index: number): void {
+    this.imageApprovalRequest.unsubscribe();
+    this.uploadedOriginalUrl.set('');
     this.imageIndex.set(index);
     this.sourceFile.set(null);
     this.sourceApproved.set(false);
@@ -1523,6 +1533,7 @@ export class AdminProductsPage {
       .subscribe({
         next: (res) => {
           if (res && typeof res.overallScore === 'number') {
+            if (dataUrl && res.uploadedUrl) this.uploadedOriginalUrl.set(res.uploadedUrl);
             this.aiImageAnalysis.set(res);
             if (dataUrl && res.uploadedUrl && res.passed) {
               this.imageNote.set('Ảnh đạt chuẩn Studio! Bạn có thể dùng ngay ảnh gốc hoặc bấm Cải thiện bằng AI.');
@@ -1578,40 +1589,51 @@ export class AdminProductsPage {
   applyAiEnhancedImage(imagesBox?: HTMLTextAreaElement): void {
     const enhanced = this.aiEnhanceResult();
     if (!enhanced?.enhancedUrl || !this.canMutate()) return;
-    this.applyApprovedImageUrl(enhanced.enhancedUrl, enhanced.modelUsed || 'velura-studio-v2', imagesBox);
-    this.imageNote.set('✓ Đã áp dụng ảnh AI Studio vào danh sách ảnh sản phẩm. Bấm Lưu để xuất bản.');
+    this.applyApprovedImageUrl(enhanced.enhancedUrl, enhanced.modelUsed || 'velura-studio-v2', imagesBox, enhanced.afterAnalysis);
   }
 
   /** Applies the newly uploaded original image directly into the active gallery slot. */
   applyOriginalUploadedImage(imagesBox?: HTMLTextAreaElement): void {
-    const uploadedUrl = this.aiImageAnalysis()?.uploadedUrl || this.uploadedImageDataUrl();
+    const uploadedUrl = this.uploadedOriginalUrl() || this.aiImageAnalysis()?.uploadedUrl;
     if (!uploadedUrl || !this.canMutate()) return;
-    this.applyApprovedImageUrl(uploadedUrl, 'original-verified-v1', imagesBox);
-    this.imageNote.set('✓ Đã áp dụng ảnh tải lên vào danh sách ảnh sản phẩm. Bấm Lưu để xuất bản.');
+    this.applyApprovedImageUrl(uploadedUrl, 'original-verified-v1', imagesBox, this.aiEnhanceResult()?.beforeAnalysis || this.aiImageAnalysis());
   }
 
-  private applyApprovedImageUrl(url: string, processingVersion: string, imagesBox?: HTMLTextAreaElement): void {
+  private applyApprovedImageUrl(url: string, processingVersion: string, imagesBox?: HTMLTextAreaElement, report: AdminImageQualityAnalysis | null = null): void {
+    if (this.aiImageBusy() || this.aiEnhanceBusy()) {
+      this.aiImageError.set('Vui lòng chờ hoàn tất xử lý hình ảnh trước khi áp dụng.');
+      return;
+    }
     const current = [...this.editorImages()];
     const index = Math.min(this.imageIndex(), current.length);
     if (!this.canApplyImage(current, url)) return;
-    this.moveImageColor(current[index], url);
-    current.splice(index, index < current.length ? 1 : 0, url);
-    this.editorImages.set(current);
-    if (imagesBox) {
-      imagesBox.value = current.join('\n');
-    }
-    const approval: ProductImageApproval = {
-      approvalId: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `appr-${Date.now()}`,
-      url,
-      sourceRevision: 'ai-studio-verified',
-      processingVersion,
-      expiresAt: new Date(Date.now() + 24 * 3600_000).toISOString(),
-    };
-    this.imageApprovals.update((rows) => [...rows.filter((r) => current.includes(r.url)), approval]);
-    this.sourceFile.set(null);
-    this.sourceApproved.set(true);
-    this.uploadedImageDataUrl.set('');
-    this.aiEnhanceResult.set(null);
+    const product = this.selected();
+    this.aiImageBusy.set(true);
+    this.imageNote.set('Đang lưu phê duyệt ảnh đã chọn...');
+    this.imageApprovalRequest.unsubscribe();
+    this.imageApprovalRequest = this.adminApi.approveStudioImage({
+      imageUrl: url, productId: product?.product_id || null, expectedVersion: product?.version || 0,
+      selection: processingVersion === 'original-verified-v1' ? 'original' : 'enhanced', reviewConfirmed: true,
+    }).pipe(finalize(() => this.aiImageBusy.set(false))).subscribe({
+      next: (approval) => {
+        if (!approval?.approvalId || !approval.url) {
+          this.aiImageError.set('Chưa lưu được phê duyệt ảnh. Ảnh sản phẩm hiện tại được giữ nguyên.');
+          return;
+        }
+        this.moveImageColor(current[index], approval.url);
+        current.splice(index, index < current.length ? 1 : 0, approval.url);
+        this.editorImages.set(current);
+        if (imagesBox) imagesBox.value = current.join('\n');
+        this.imageApprovals.update((rows) => [...rows.filter((r) => current.includes(r.url)), approval]);
+        this.sourceFile.set(null);
+        this.sourceApproved.set(true);
+        this.uploadedImageDataUrl.set('');
+        this.aiImageAnalysis.set(report ? { ...report, overallScore: approval.qualityScore ?? report.overallScore } : null);
+        this.aiEnhanceResult.set(null);
+        this.imageNote.set('✓ Đã áp dụng ảnh đã được máy chủ phê duyệt. Bấm Lưu để xuất bản.');
+      },
+      error: (error: unknown) => this.aiImageError.set(adminErrorMessage(error, 'Chưa áp dụng được ảnh. Ảnh hiện tại được giữ nguyên.')),
+    });
   }
 
   toggleStyleTag(tag: string): void {
@@ -1754,6 +1776,8 @@ export class AdminProductsPage {
   }
 
   private resetImageEditor(): void {
+    this.imageApprovalRequest.unsubscribe();
+    this.uploadedOriginalUrl.set('');
     this.sourceFile.set(null);
     this.editorImageColors.set({});
     this.imageApprovals.set([]);

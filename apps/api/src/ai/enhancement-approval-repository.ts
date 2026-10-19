@@ -74,7 +74,7 @@ export class SupabaseEnhancementApprovalRepository implements EnhancementApprova
     } catch (error: unknown) {
       const blob = error instanceof HttpError ? `${error.code} ${error.message} ${JSON.stringify(error.details || {})}` : String(error);
       if (/velura_stage_image_approval|PGRST202|Could not find the function|42883|404/i.test(blob)) {
-        return;
+        throw new HttpError(503, "IMAGE_APPROVAL_SCHEMA_REQUIRED", "Chưa có schema phê duyệt ảnh; ảnh chưa được áp dụng. Liên hệ quản trị triển khai migration 051.");
       }
       throw error;
     }

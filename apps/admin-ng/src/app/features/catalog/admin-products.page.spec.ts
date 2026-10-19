@@ -424,6 +424,7 @@ describe('AdminProductsPage', () => {
   });
 
   describe('AI image score and save guard', () => {
+    const approveAs = (score: number) => (input: { imageUrl: string }) => of({ approvalId: 'persisted', url: input.imageUrl, sourceRevision: 'hash', processingVersion: 'studio-measured-v1', qualityScore: score, expiresAt: new Date(Date.now() + 60000).toISOString() });
     const enhancedUrl = 'https://storage/product-images/ai-studio/improved.png';
     const analysis = (overallScore: number): AdminImageQualityAnalysis => ({
       overallScore, passed: overallScore >= 78, needsEnhancement: overallScore < 78, grade: overallScore >= 88 ? 'A' : 'C',
@@ -438,7 +439,7 @@ describe('AdminProductsPage', () => {
 
     it('keeps the improved score 91 on the applied image instead of the original 73', async () => {
       const analyzeProductImage = vi.fn(() => of(analysis(73)));
-      const page = await createAdminPage(AdminProductsPage, { enhanceProductImage: () => of(enhanceResult()), analyzeProductImage });
+      const page = await createAdminPage(AdminProductsPage, { approveStudioImage: approveAs(91), enhanceProductImage: () => of(enhanceResult()), analyzeProductImage });
       grantProductAccess();
       page.editorImages.set(['/old.jpg']);
       page.imageIndex.set(0);
@@ -462,7 +463,7 @@ describe('AdminProductsPage', () => {
 
     it('ignores a slow analysis of the original that finishes after the improved image was applied', async () => {
       const slow = new Subject<AdminImageQualityAnalysis>();
-      const page = await createAdminPage(AdminProductsPage, { enhanceProductImage: () => of(enhanceResult()), analyzeProductImage: () => slow });
+      const page = await createAdminPage(AdminProductsPage, { approveStudioImage: approveAs(91), enhanceProductImage: () => of(enhanceResult()), analyzeProductImage: () => slow });
       grantProductAccess();
       page.editorImages.set(['/old.jpg']);
       page.analyzeActiveImage();

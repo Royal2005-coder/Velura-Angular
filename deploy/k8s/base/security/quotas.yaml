@@ -96,8 +96,9 @@ metadata:
   namespace: auth
 spec:
   hard:
-    requests.memory: 512Mi
-    limits.memory: 1Gi
+    # Admit the serving pod plus its RollingUpdate replacement.
+    requests.memory: 1Gi
+    limits.memory: 2Gi
     requests.cpu: '3'
     limits.cpu: '6'
     pods: '4'
@@ -128,8 +129,8 @@ metadata:
   namespace: networking
 spec:
   hard:
-    requests.memory: 256Mi
-    limits.memory: 512Mi
+    requests.memory: 512Mi
+    limits.memory: 1Gi
     requests.cpu: '3'
     limits.cpu: '6'
     pods: '6'
@@ -160,8 +161,9 @@ metadata:
   namespace: observability
 spec:
   hard:
-    requests.memory: 1Gi
-    limits.memory: 3Gi
+    # Includes collector overhead and simultaneous platform rollout surge.
+    requests.memory: 2Gi
+    limits.memory: 6Gi
     requests.cpu: '3'
     limits.cpu: '6'
     pods: '12'
@@ -192,8 +194,8 @@ metadata:
   namespace: velura
 spec:
   hard:
-    requests.memory: 512Mi
-    limits.memory: 1Gi
+    requests.memory: 1Gi
+    limits.memory: 2Gi
     requests.cpu: '3'
     limits.cpu: '6'
     pods: '8'

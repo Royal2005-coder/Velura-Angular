@@ -87,7 +87,9 @@ by YAML. Do not upgrade/reboot or migrate a production database in this procedur
   `database/cutover` stays opt-in: require a maintenance-approved export,
   restore drill, Keycloak integrity check and service switch. Never reuse
   a PostgreSQL data directory for a different major version.
-- All three Flux Kustomizations and both backup CronJobs start suspended.
+- Platform Flux reconciliation is enabled. App Kustomizations retain their
+  one-time bootstrap gates until independent staging and verified production
+  pins are provisioned; both backup CronJobs remain suspended until restore drills.
   Resume each Flux owner only after reviewing its live drift and prerequisites;
   keep normal reconciliation enabled afterward. Do not resume backup schedules
   until external credentials and restore evidence are ready.
@@ -175,13 +177,25 @@ exist on canonical branches. Public Git read needs no token; private sources
 need a real `secretRef`. Configure SOPS decryption only when encrypted Secret
 resources and the independently held recovery key are actually provisioned.
 
-The bootstrap file is not included in either reconciliation tree. Its
-`suspend: true` values are one-time safety gates, not per-release controls.
+The bootstrap file is not included in either reconciliation tree. Infrastructure
+reconciliation defaults to enabled; the application `suspend: true` values are
+one-time safety gates, not per-release controls. Once each application gate is
+cleared, persist its `suspend: false` through a reviewed PR and leave it enabled.
 Before transferring ownership, inspect the existing Flux inventory: orphan
 resources moving between owners before removing them from the old owner's
 inventory; never let `prune` delete a transferred app/PVC. Dry-run the platform
 changes and provision its referenced Secrets first. A Keycloak major upgrade
 or hostPath-to-PVC data move needs separate maintenance/restore approval.
+
+The manifest CI gate checks conflicting env/probe fields and namespace budgets
+against concurrent Deployment rollout surge, including LimitRange defaults.
+Resource quotas must admit replacements while old serving pods remain. A
+single-node stateful `Recreate` workload reserves only its serving replicas;
+its restore evidence and brief maintenance downtime remain separate concerns.
+When adopting client-side-applied bootstrap resources, a successful client-side
+dry-run does not prove Flux SSA can remove fields owned by another manager.
+Inspect live managed fields and complete the reviewed ownership transfer before
+enabling continuous reconciliation. Do not repeat this transfer for releases.
 
 `velura-repo` tracks `main`; `velura-staging-repo` tracks `develop`. Do not pin
 these continuously reconciled sources to a fixed commit or feature branch.

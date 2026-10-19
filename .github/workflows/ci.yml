@@ -162,11 +162,14 @@ jobs:
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - name: Verify release tooling behavior
         run: python -m unittest discover -s scripts -p test_release_images.py
+      - name: Verify platform admission regression checks
+        run: python -m unittest discover -s scripts -p test_platform_contract.py
       - name: Reject duplicate YAML keys and render each isolated overlay
         run: |
           python - <<'PY'
           from pathlib import Path
           import re, subprocess, yaml
+          from scripts.platform_contract import validate_platform
           class UniqueLoader(yaml.SafeLoader):
               pass
           def mapping(loader, node, deep=False):
@@ -179,10 +182,13 @@ jobs:
           for path in paths:
               list(yaml.load_all(path.read_text(), Loader=UniqueLoader))
           owners = {}
+          platform_objects = []
           app_deployments = {'velura-api', 'velura-storefront', 'velura-admin'}
           for path in ('deploy/k8s/overlays/staging', 'deploy/k8s/overlays/production', 'deploy/k8s/overlays/infrastructure', 'deploy/k8s/optional/ai-worker'):
               rendered = subprocess.run(['kustomize', 'build', path], check=True, capture_output=True, text=True).stdout
               objects = list(yaml.load_all(rendered, Loader=UniqueLoader))
+              if path.startswith('deploy/k8s/overlays/'):
+                  platform_objects.extend(objects)
               if not objects: raise ValueError('No rendered resources')
               for item in objects:
                   metadata = item.get('metadata', {})
@@ -200,6 +206,7 @@ jobs:
                   if item.get('kind') == 'ConfigMap':
                       for name, value in item.get('data', {}).items():
                           if name.endswith('.yaml'): list(yaml.load_all(value, Loader=UniqueLoader))
+          validate_platform(platform_objects)
           PY
       - name: Require staging provenance or unchanged suspended legacy bootstrap
         if: github.event_name == 'pull_request'

@@ -15,6 +15,13 @@ import {
   sendExchangeShippingEmail,
   sendExchangeCompletedEmail
 } from "./return-email.js";
+import {
+  adminRefundReceiver,
+  classifyReturnPayment,
+  REFUND_RECEIVER_CLOSED_STATUSES,
+  refundFlowFor,
+  refundReceiverStatus
+} from "./return-refund-receiver.js";
 import type { ReturnRepository } from "./return-repository.js";
 
 /**
@@ -39,6 +46,8 @@ export interface ReturnService {
   approveRefund(context: ReturnContext | undefined, returnId: string, body: JsonObject): Promise<JsonObject>;
   /** Records non-Stripe refund only with transfer proof after warehouse QA. */
   recordManualRefund(context: ReturnContext | undefined, returnId:string, body:JsonObject):Promise<JsonObject>;
+  /** CSKH asks the customer to supplement the COD receiving account; the refund stays blocked and the stage unchanged. */
+  requestRefundInfo(context: ReturnContext | undefined, returnId: string, body: JsonObject): Promise<JsonObject>;
   triggerStripeRefund(context: ReturnContext | undefined, returnId: string, body?: JsonObject): Promise<JsonObject>;
   approveExchange(context: ReturnContext | undefined, returnId: string, body: JsonObject): Promise<JsonObject>;
   reject(context: ReturnContext | undefined, returnId: string, body: JsonObject): Promise<JsonObject>;
@@ -115,10 +124,16 @@ export function createReturnService({
   return {
     async listReturns(context, searchParams) {
       requireReturnReader(context);
+      const paymentKindParam = searchParams.get("payment_kind");
+      if (paymentKindParam && paymentKindParam !== "cod" && paymentKindParam !== "online") {
+        throw new HttpError(422, "VALIDATION_ERROR", "Bộ lọc thanh toán chỉ nhận cod hoặc online.");
+      }
+      const paymentKind = paymentKindParam === "cod" || paymentKindParam === "online" ? paymentKindParam : undefined;
       return repository.listReturns({
         status: searchParams.get("status") || undefined,
         search: searchParams.get("q") || undefined,
         orderId: searchParams.get("order_id") || undefined,
+        paymentKind,
         limit: Math.min(parseInt(searchParams.get("limit") || "50"), 1000),
         offset: parseInt(searchParams.get("offset") || "0")
       }, context.accessToken);
@@ -134,7 +149,23 @@ export function createReturnService({
         ? await repository.getPaymentByOrderId(asString(ret.order_id), context.accessToken)
         : null;
       const lines = await repository.listReturnLines(returnId, context.accessToken);
-      return { ...ret, refundable_amount: refundableAmount, payment, lines: lines.rows };
+      // COD vs Stripe decides the whole refund screen: receiving account + manual transfer, or the automatic gateway refund.
+      const kind = classifyReturnPayment(ret.payment_method ?? payment?.payment_method, payment?.payment_provider);
+      const flow = refundFlowFor(ret.return_type, kind);
+      const receiverRequired = flow === "cod_manual";
+      const receiver = receiverRequired ? await repository.getRefundReceiver(returnId) : null;
+      const manualRefund = flow === "cod_manual" || flow === "manual_transfer" ? await repository.getManualRefund(returnId) : null;
+      return {
+        ...ret,
+        refundable_amount: refundableAmount,
+        payment,
+        lines: lines.rows,
+        payment_kind: kind,
+        refund_flow: flow,
+        refund_receiver_status: refundReceiverStatus(receiverRequired, receiver),
+        refund_receiver: adminRefundReceiver(receiverRequired, receiver),
+        manual_refund: manualRefund
+      };
     },
 
     async recordContact(context, returnId, body) {
@@ -236,22 +267,52 @@ export function createReturnService({
       }
 
       if (!payment || payment.payment_provider === "stripe" || !["paid","refund_pending"].includes(asString(payment.payment_status))) throw new HttpError(422,"CAPTURED_NON_STRIPE_REQUIRED","Chỉ áp dụng ghi nhận chuyển khoản cho đơn hàng thanh toán ngoài Stripe (COD, MoMo, VNPay) đã thanh toán thành công.");
+
+      // COD: the refund is a manual transfer to the customer's own account, so it cannot continue while that account
+      // is empty, invalid or CSKH is still waiting for a supplement. The same rule is enforced again by the database.
+      if (classifyReturnPayment(current.payment_method ?? payment.payment_method, payment.payment_provider) === "cod") {
+        const receiverStatus = refundReceiverStatus(true, await repository.getRefundReceiver(returnId));
+        if (receiverStatus !== "valid") {
+          throw new HttpError(422, "REFUND_RECEIVER_REQUIRED", "Chưa có thông tin nhận hoàn tiền hợp lệ của khách. Hãy yêu cầu khách bổ sung trước khi tiếp tục hoàn tiền.", { refund_receiver_status: receiverStatus });
+        }
+      }
+
       const reference = asString(body.transferReference).trim();
       const proof = asString(body.imageProof);
       const adminNote = asString(body.adminNote).trim();
+      const amount = asNumber(body.amount);
+      const transferredAt = new Date(asString(body.transferredAt));
       if (reference.length < 6) throw new HttpError(422,"TRANSFER_REFERENCE_REQUIRED","Mã giao dịch chuyển tiền phải có ít nhất 6 ký tự.");
       if (!proof.startsWith("https://") && !proof.startsWith("data:image/") && !proof.startsWith("http://")) throw new HttpError(422,"TRANSFER_PROOF_REQUIRED","Vui lòng tải lên ảnh chụp chứng từ chuyển khoản thành công.");
+      if (!Number.isFinite(amount) || amount <= 0) throw new HttpError(422,"REFUND_AMOUNT_MISMATCH","Số tiền đã chuyển phải lớn hơn 0 và khớp số tiền hoàn của hàng đã nhận.");
+      if (Number.isNaN(transferredAt.getTime()) || transferredAt.getTime() > Date.now() + 5 * 60 * 1000) throw new HttpError(422,"TRANSFER_TIME_INVALID","Thời điểm chuyển tiền không hợp lệ: không được để trống hoặc ở tương lai.");
       const updated = await repository.recordManualRefund(
         returnId,
         Number(body.expectedVersion),
-        reference,
-        proof,
-        context.profile?.user_id || context.authUser.id,
-        context.ipAddress,
-        adminNote
+        { reference, amount, transferredAt: transferredAt.toISOString(), proof, note: adminNote || undefined },
+        context.profile?.user_id || context.authUser.id
       );
       void sendRefundSuccessEmail(returnId, { method: "manual", reference });
       return updated;
+    },
+
+    async requestRefundInfo(context, returnId, body) {
+      requireReturnAdmin(context);
+      const message = asString(body.message).trim();
+      if (message.length < 10) throw new HttpError(422, "SUPPLEMENT_MESSAGE_REQUIRED", "Nội dung yêu cầu bổ sung phải có ít nhất 10 ký tự.");
+      const expectedVersion = asNumber(body.expectedVersion);
+      if (!expectedVersion) throw new HttpError(422, "VALIDATION_ERROR", "expectedVersion required");
+      const current = await repository.getReturn(returnId, context.accessToken);
+      if (!current) throw new HttpError(404, "RETURN_NOT_FOUND", "Không tìm thấy yêu cầu đổi/trả tương ứng");
+      if (Number(current.version) !== expectedVersion) throw new HttpError(409, "VERSION_CONFLICT", "Dữ liệu yêu cầu đổi/trả đã bị thay đổi bởi thao tác khác. Vui lòng tải lại trang.");
+      if (REFUND_RECEIVER_CLOSED_STATUSES.includes(asString(current.status))) throw new HttpError(422, "RETURN_CLOSED", "Yêu cầu đổi/trả đã kết thúc, không thể yêu cầu bổ sung thông tin nhận hoàn tiền.");
+      const payment = current.order_id ? await repository.getPaymentByOrderId(asString(current.order_id), context.accessToken) : null;
+      const kind = classifyReturnPayment(current.payment_method ?? payment?.payment_method, payment?.payment_provider);
+      if (refundFlowFor(current.return_type, kind) !== "cod_manual") {
+        throw new HttpError(422, "REFUND_RECEIVER_NOT_APPLICABLE", "Chỉ đơn COD có yêu cầu hoàn tiền mới cần thông tin nhận tiền.");
+      }
+      const saved = await repository.requestRefundReceiverSupplement(returnId, expectedVersion, message, context.profile?.user_id || context.authUser.id);
+      return { return_id: returnId, refund_receiver: adminRefundReceiver(true, { ...(await repository.getRefundReceiver(returnId)), supplement_request: saved.supplement_request, supplement_requested_at: saved.supplement_requested_at }) };
     },
     async approveExchange(context, returnId, body) {
       requireReturnAdmin(context);
@@ -308,6 +369,7 @@ export function createReturnService({
         });
       }
       if (status === "NEEDS_SUPPORT" && (!asString(body.imageProof) || asString(body.reason).trim().length < 10)) throw new HttpError(422,"QA_FAILURE_EVIDENCE_REQUIRED","Evidence image and reason are required for QA failure");
+      if (status === "CANCELLED" && asString(body.reason).trim().length < 10) throw new HttpError(422,"CANCEL_REASON_REQUIRED","Phải ghi rõ lý do (ít nhất 10 ký tự) khi từ chối hoặc hủy yêu cầu để khách hàng được thông báo.");
       if (status === "RECEIVED") {
         const qa = asString(body.conditionCheckResult);
         const proof = asString(body.imageProof);

@@ -97,7 +97,12 @@ export class OrderFlowPage {
   readonly image = (url: string) => toPublicAsset(url, '/assets/images/placeholder.jpg');
   readonly canCancel = (order: DemoOrder) => order.can_cancel ?? canCancel(order);
   readonly withinWindow = (order: DemoOrder) => order.can_request_return ?? withinReturnWindow(order);
-  readonly requestLabel = (request: DemoReturn) => request.status ? RETURN_WORKFLOW_LABELS[request.status] : this.model.timeline(request.kind)[request.stage];
+  /** CSKH/system refusals read "Bị từ chối"; a customer's own cancellation keeps "Đã hủy yêu cầu". */
+  readonly requestLabel = (request: DemoReturn) => request.rejectedAt
+    ? 'Bị từ chối'
+    : request.status ? RETURN_WORKFLOW_LABELS[request.status] : this.model.timeline(request.kind)[request.stage];
+  /** A request that was cancelled by the customer or refused by CSKH has released its return quota. */
+  readonly requestEnded = (request: DemoReturn) => !!(request.cancelledAt || request.rejectedAt || request.status === 'CANCELLED');
   readonly requestCanCancel = (request: DemoReturn) => request.status
     ? ['REQUESTED', 'CONTACTING', 'WAITING_RETURN'].includes(request.status)
     : !request.cancelledAt && !request.completedAt && !request.rejectedAt && request.stage < this.model.cancellableBeforeStage;
@@ -140,6 +145,8 @@ export class OrderFlowPage {
   bankName = '';
   bankAccount = '';
   bankHolder = '';
+  /** Lets the customer replace an already valid receiving account via "Cập nhật". */
+  readonly receiverFormOpen = signal(false);
   private challengePhone = '';
   private challengeOrderId = '';
   private challengeMode: 'phone' | 'code' = 'phone';
@@ -413,7 +420,7 @@ export class OrderFlowPage {
   }
 
   /** Computes a summary return status badge for order cards and detail header. */
-  orderReturnStatusBadge(order: DemoOrder | null | undefined): { kind: 'in_progress' | 'completed' | 'partial'; label: string; code?: string } | null {
+  orderReturnStatusBadge(order: DemoOrder | null | undefined): { kind: 'in_progress' | 'completed' | 'partial' | 'rejected'; label: string; code?: string } | null {
     if (!order || order.status !== 'delivered') return null;
     const items = order.items || [];
     const inProgLine = items.find((l) => l.isInProgress);
@@ -435,6 +442,8 @@ export class OrderFlowPage {
     if (items.length > 0 && items.every((l) => (l.availableQuantity ?? 1) === 0 && (l.returnCount ?? 0) > 0)) {
       return { kind: 'completed', label: 'Đã hoàn tất đổi/trả' };
     }
+    const latest = this.model.requests().find((r) => r.orderId === order.id || r.orderId === order.orderId);
+    if (latest?.rejectedAt) return { kind: 'rejected', label: 'Yêu cầu đổi/trả bị từ chối', code: latest.id };
     if (items.some((l) => (l.returnCount ?? 0) > 0)) {
       const count = items.filter((l) => (l.returnCount ?? 0) > 0).length;
       return { kind: 'partial', label: `Đã đổi/trả ${count}/${items.length} SP` };
@@ -671,6 +680,7 @@ export class OrderFlowPage {
     const order = this.order();
     if (order && this.authorized(order) && request.orderId === order.id) {
       this.requestId.set(request.id);
+      this.receiverFormOpen.set(false);
       this.view.set('tracking');
     }
   }
@@ -688,12 +698,57 @@ export class OrderFlowPage {
       .then(() => this.error.set(''))
       .catch((error) => this.error.set(orderAccountErrorMessage(error)));
   }
+  /** Whether this refund goes back through a COD manual transfer that needs the customer's receiving account. */
+  private isCodRefund(request: DemoReturn): boolean {
+    if (request.kind !== 'refund') return false;
+    return request.paymentMethod ? request.paymentMethod === 'COD' : this.order()?.payment === 'COD';
+  }
+  private receiverEditable(request: DemoReturn): boolean {
+    return this.model.supportsBankInfo && this.isCodRefund(request) && !this.requestEnded(request)
+      && !request.completedAt && request.status !== 'REFUNDED' && request.status !== 'COMPLETED';
+  }
+  /** The receiving account is still missing, invalid or requested again by CSKH, so the refund stage is blocked. */
+  needsReceiverInfo(request: DemoReturn): boolean {
+    if (!this.receiverEditable(request)) return false;
+    const receiver = request.refundReceiver;
+    if (!receiver) return !request.bank && request.stage >= 1;
+    if (receiver.status === 'valid' || receiver.status === 'not_required') return false;
+    return request.stage >= 1 || !!receiver.supplementRequest;
+  }
+  /** The valid receiving account to echo back to the customer (server shape first, legacy demo `bank` second). */
+  receiverSummary(request: DemoReturn): { name: string; last4: string; holder: string } | null {
+    if (!this.isCodRefund(request)) return null;
+    const receiver = request.refundReceiver;
+    if (receiver) {
+      return receiver.status === 'valid' && receiver.bankName && receiver.accountLast4
+        ? { name: receiver.bankName, last4: receiver.accountLast4, holder: receiver.holder || '' }
+        : null;
+    }
+    return request.bank ? { ...request.bank } : null;
+  }
+  /** "Cập nhật" is offered only while the money has not been transferred yet. */
+  canEditReceiver(request: DemoReturn): boolean {
+    return this.receiverEditable(request) && this.receiverSummary(request) !== null;
+  }
+  /** The form is shown when info is required, or when the customer chose to update a valid account. */
+  showReceiverForm(request: DemoReturn): boolean {
+    return this.needsReceiverInfo(request) || (this.receiverFormOpen() && this.canEditReceiver(request));
+  }
+  /** Pre-fills the non-sensitive fields; the full account number is never returned, so it is retyped. */
+  editReceiver(request: DemoReturn): void {
+    const summary = this.receiverSummary(request);
+    this.bankName = summary?.name || '';
+    this.bankHolder = summary?.holder || '';
+    this.bankAccount = '';
+    this.receiverFormOpen.set(true);
+  }
   /** Ask for recipient details only after COD refund contact; retain only a masked account. */
   saveBank(): void {
     this.model
       .saveBank(this.requestId(), this.bankName, this.bankAccount, this.bankHolder)
       .then(() => {
         this.bankAccount = '';
+        this.receiverFormOpen.set(false);
         this.error.set('');
       })
       .catch((error) => this.error.set(orderAccountErrorMessage(error)));

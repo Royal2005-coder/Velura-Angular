@@ -12,4 +12,7 @@ Infrastructure ownership: Terraform/Atlantis owns external control planes;
 Flux alone reconciles Kubernetes, with separate platform and app inventories
 and reviewed immutable image promotion instead of CI cluster credentials.
 
+MVP release policy: develop is integration-only; production promotes CI-tested,
+scanned and signed main digests through reviewed pins, without a staging gate.
+
 Template: [0000-template.md](./0000-template.md). Ticket: [.github/pull_request_template.md](../../.github/pull_request_template.md).

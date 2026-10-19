@@ -32,7 +32,10 @@ Copy vào `%USERPROFILE%\.cursor\mcp.json` nếu Cursor chưa có.
 1. Jira: `searchJiraIssuesUsingJql` / `createJiraIssue` — key `KAN`.
 2. Code trên branch `feature/KAN-n-…`.
 3. Git: commit message có `KAN-n`, push lên GitHub, PR title có `KAN-n`, body có `## Why`.
-4. Đợi GitHub Actions xanh → review → merge vào `develop`.
+4. Đợi GitHub Actions xanh → tag thành viên liên quan → merge vào `develop`; MVP không có approval gate.
 5. Jira: comment link PR, chuyển Waiting for Review / Close theo [HOW-IT-WORKS.md](./HOW-IT-WORKS.md).
 
 Cấm: sửa `main` trực tiếp; tạo GitHub/GitLab Issue thay Jira; bỏ key `KAN-n`; push CI lên GitLab.
+
+Atlas CLI trong workspace này là discovery/OIDC, không phải Atlassian CLI.
+Xem [ATLAS-CLI](ATLAS-CLI.md); không sáng tác lệnh Jira bằng `atlas`.

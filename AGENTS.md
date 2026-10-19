@@ -5,6 +5,8 @@ Không invent process thứ hai. Không tạo `docs/KAN-n.md`. Context **không*
 Clone **`develop`**. `main` = production.  
 **Trước khi code:** [docs/GIT-AND-CI.md](docs/GIT-AND-CI.md) + [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) + [docs/ONBOARDING.md](docs/ONBOARDING.md).  
 Pipeline: [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md).
+Team/AI workflow: [docs/TEAM-WORKFLOW.md](docs/TEAM-WORKFLOW.md).
+Atlas discovery/auth: [ATLAS.md](ATLAS.md) → [docs/ATLAS-CLI.md](docs/ATLAS-CLI.md).
 
 ## Context as Code — đọc theo thứ tự này
 
@@ -36,6 +38,13 @@ Agent khác / teammate: **đừng hỏi lại Tuesday.** Chạy các lệnh trê
 - Feature → PR **`develop`**. Production = `develop` → `main`. Cấm `[skip ci]`.
 - Mỗi public method / interface: JSDoc (ý định nghiệp vụ). Mỗi commit: `KAN-n why`. Mỗi PR: `## Why`.
 - Page specs mock Model.
+- MVP production-only: không có staging release gate. Required CI phải xanh;
+  approval không bắt buộc, CODEOWNERS/mention để thông báo theo policy trong Git.
+- Royal/Quỳnh làm fullstack/backend. Uyên/Khải redesign frontend giữ API/Model,
+  auth/RBAC, state machine và quy tắc tiền/OTP/loyalty; đổi contract phải phối hợp
+  fullstack trong PR. Không thay API thật bằng fake data để làm đẹp UI.
+- Không tự cấp quyền Atlas/Kubernetes từ quyền GitHub; không thao tác cluster
+  `ailab`/`commodities` như thể đó là Velura. Release qua Git/CI/Flux, rollback qua PR.
 
 <Architecture>
   <Frontend_Pattern>View = HTML. ViewModel = standalone + signals. Model = injectable service.</Frontend_Pattern>

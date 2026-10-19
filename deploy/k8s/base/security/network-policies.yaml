@@ -336,6 +336,9 @@ spec:
     - namespaceSelector:
         matchLabels:
           kubernetes.io/metadata.name: ai
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: ai-staging
     - ipBlock:
         cidr: 10.244.0.1/32
     ports:
@@ -729,6 +732,29 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
+  name: dcgm-exporter-internal
+  namespace: observability
+spec:
+  podSelector:
+    matchLabels:
+      app: dcgm-exporter
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: observability
+      podSelector:
+        matchLabels:
+          app: victoriametrics
+    ports:
+    - protocol: TCP
+      port: 9400
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
   name: alertmanager-internal
   namespace: observability
 spec:
@@ -806,6 +832,8 @@ spec:
       port: 9093
     - protocol: TCP
       port: 12345
+    - protocol: TCP
+      port: 9400
   - to:
     - namespaceSelector:
         matchLabels:

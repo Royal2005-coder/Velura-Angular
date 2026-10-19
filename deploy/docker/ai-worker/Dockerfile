@@ -16,6 +16,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \
     HF_HUB_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 \
     OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MPLBACKEND=Agg \
     MPLCONFIGDIR=/tmp/matplotlib HOME=/tmp
+RUN apt-get update \
+    && apt-get upgrade -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=dependencies /wheels /wheels
 COPY apps/ai-worker/requirements-production.txt /opt/requirements-production.txt
 RUN python -m pip install --no-index --find-links=/wheels -r /opt/requirements-production.txt \

@@ -1,11 +1,10 @@
 # CODEOWNERS — GitHub pull request reviews
-# Settings → Branches → Require review from Code Owners = on
-# Add teammate GitHub usernames when the 6 accounts exist.
+# MVP: CODEOWNERS requests/mentions are informational; CI gates are mandatory.
 
-* @Royal2005-coder
+* @Royal2005-coder @trandiemquynhqw-maker
 
-/apps/user-ng/ @Royal2005-coder
-/apps/admin-ng/ @Royal2005-coder
-/apps/api/ @Royal2005-coder
-/.github/workflows/ @Royal2005-coder
-/deploy/ @Royal2005-coder
+/apps/user-ng/ @Royal2005-coder @trandiemquynhqw-maker @uyenntd23406-svg @khai0335814880-create
+/apps/admin-ng/ @Royal2005-coder @trandiemquynhqw-maker @uyenntd23406-svg @khai0335814880-create
+/apps/api/ @Royal2005-coder @trandiemquynhqw-maker
+/.github/ @Royal2005-coder @trandiemquynhqw-maker
+/deploy/ @Royal2005-coder @trandiemquynhqw-maker

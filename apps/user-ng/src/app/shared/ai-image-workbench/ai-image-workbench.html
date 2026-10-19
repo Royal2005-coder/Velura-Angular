@@ -1,4 +1,4 @@
-@if (!hideTrigger()) {
+@if (!hideTrigger() && offered()) {
   <button type="button" class="btn btn--outline ai-workbench-trigger" (click)="open()">
     <span class="ai-trigger-sparkle">✨</span>
     <span>{{ title() }}</span>
@@ -19,6 +19,19 @@
     </header>
 
     <div class="workbench-body">
+      @if (memberRequired()) {
+        <div class="alert alert--info member-gate" role="alert" data-testid="try-on-member-gate">
+          <p><strong>Thử đồ AI chỉ dành cho thành viên Velura.</strong></p>
+          <p>Ảnh của bạn là dữ liệu cá nhân và được lưu theo tài khoản. Hãy đăng nhập hoặc đăng ký thành viên để sử dụng tính năng này.</p>
+          <p class="member-gate__actions">
+            <a class="btn btn--gradient-tryon" routerLink="/auth/signin" (click)="close()">Đăng nhập</a>
+            <a class="btn btn--outline" routerLink="/auth/signup" (click)="close()">Đăng ký thành viên</a>
+          </p>
+        </div>
+      } @else {
+      @if (task() === 'virtual_try_on') {
+        <p class="quiz-hint"><a routerLink="/ai/style-quiz" (click)="close()">Làm Style Quiz</a> để gợi ý trang phục hợp dáng và tông da trước khi thử đồ.</p>
+      }
       @if (!capabilities()) {
         <div class="alert alert--info" role="status">
           <span class="spinner-inline"></span> Đang kết nối dịch vụ AI GPU trên K3s…
@@ -441,6 +454,7 @@
             * Ảnh kết quả được AI mô phỏng theo tỷ lệ trang phục; nếp vải và ánh sáng phản chiếu chân thực theo góc nhìn.
           </p>
         </div>
+      }
       }
     </div>
   </div>

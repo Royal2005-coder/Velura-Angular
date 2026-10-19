@@ -1,4 +1,17 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-- ../../base
+- ../../base/velura
+- ../../secrets/production
+patches:
+  - path: release-revision.yaml
+images:
+- name: ghcr.io/royal2005-coder/velura-api
+  newName: ghcr.io/royal2005-coder/velura-api
+  digest: sha256:7d870b2125696f2716ce87184ee51174040472d431ab45ac20cc9d66f61ca99f
+- name: ghcr.io/royal2005-coder/velura-storefront
+  newName: ghcr.io/royal2005-coder/velura-storefront
+  digest: sha256:49a1cae87f9029df368ebf288f76358dec8ab6e11214d9175403422cc14bfd3d
+- name: ghcr.io/royal2005-coder/velura-admin
+  newName: ghcr.io/royal2005-coder/velura-admin
+  digest: sha256:8bdb6aa3f288cb913e8007ee91f3f2bf74e33485d8a267fbadece2ca464a8b95

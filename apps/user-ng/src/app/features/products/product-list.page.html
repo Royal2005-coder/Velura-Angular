@@ -120,6 +120,17 @@
         </div>
       </div>
 
+      @if (materialOptions().length) {
+        <div class="filter-group">
+          <h3 class="filter-group__title">Chất liệu</h3>
+          <div class="size-selector">
+            @for (material of materialOptions(); track material) {
+              <button type="button" class="size-option" [class.is-active]="selectedMaterial() === material" (click)="selectMaterial(material)">{{ material }}</button>
+            }
+          </div>
+        </div>
+      }
+
       <div class="filter-group">
         <h3 class="filter-group__title">Đặc biệt</h3>
         <div class="filter-group__list">

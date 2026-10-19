@@ -133,6 +133,107 @@ describe('OrderAccountApiStore authorization and response ordering', () => {
     expect(post).not.toHaveBeenCalled();
   });
 
+  it('maps a request refused by CSKH to a rejection with its reason, not to a customer cancellation', async () => {
+    get.mockImplementation((path) => of(path.includes('/returns') ? { returns: [{ ...request, status: 'CANCELLED', cancelled_by: 'admin', rejection_reason: 'Sản phẩm đã qua sử dụng', resolved_at: '2026-10-18T09:00:00Z' }] } : { orders: [order] }));
+    const model = await create();
+    const mapped = model.requests()[0];
+    expect(mapped).toMatchObject({ status: 'CANCELLED', cancelledBy: 'admin', rejectedAt: '2026-10-18T09:00:00Z', rejectionReason: 'Sản phẩm đã qua sử dụng' });
+    expect(mapped.cancelledAt).toBeUndefined();
+    expect(mapped.cancellationReason).toBeUndefined();
+  });
+
+  it('treats a system-cancelled request or an unattributed one with a refusal reason as rejected', async () => {
+    get.mockImplementation((path) => of(path.includes('/returns') ? { returns: [
+      { ...request, return_id: 'r-sys', tracking_return_code: 'RET-SYS', status: 'CANCELLED', cancelled_by: 'system', rejection_reason: 'Hết hạn xử lý', resolved_at: '2026-10-18T09:00:00Z' },
+      { ...request, return_id: 'r-null', tracking_return_code: 'RET-NULL', status: 'CANCELLED', cancelled_by: null, rejection_reason: 'Không đủ điều kiện', resolved_at: '2026-10-18T09:00:00Z' },
+    ] } : { orders: [order] }));
+    const model = await create();
+    expect(model.requests().every((row) => !!row.rejectedAt && !row.cancelledAt)).toBe(true);
+    expect(model.requests().map((row) => row.rejectionReason)).toEqual(['Hết hạn xử lý', 'Không đủ điều kiện']);
+  });
+
+  it('keeps a customer-cancelled request as cancelled with the customer\'s own reason', async () => {
+    get.mockImplementation((path) => of(path.includes('/returns') ? { returns: [{ ...request, status: 'CANCELLED', cancelled_by: 'customer', rejection_reason: 'Tôi đổi ý', resolved_at: '2026-10-18T09:00:00Z' }] } : { orders: [order] }));
+    const model = await create();
+    const mapped = model.requests()[0];
+    expect(mapped).toMatchObject({ cancelledBy: 'customer', cancelledAt: '2026-10-18T09:00:00Z', cancellationReason: 'Tôi đổi ý' });
+    expect(mapped.rejectedAt).toBeUndefined();
+    expect(mapped.rejectionReason).toBeUndefined();
+  });
+
+  it('keeps a legacy cancelled request without attribution or reason as customer-cancelled', async () => {
+    get.mockImplementation((path) => of(path.includes('/returns') ? { returns: [{ ...request, status: 'CANCELLED', resolved_at: '2026-10-18T09:00:00Z' }] } : { orders: [order] }));
+    const model = await create();
+    expect(model.requests()[0]).toMatchObject({ cancelledAt: '2026-10-18T09:00:00Z' });
+    expect(model.requests()[0].rejectedAt).toBeUndefined();
+  });
+
+  it('keeps the rejection reason of a request that needs support without marking it rejected', async () => {
+    get.mockImplementation((path) => of(path.includes('/returns') ? { returns: [{ ...request, status: 'NEEDS_SUPPORT', rejection_reason: 'Cần kiểm tra thêm' }] } : { orders: [order] }));
+    const model = await create();
+    expect(model.requests()[0]).toMatchObject({ status: 'NEEDS_SUPPORT', rejectionReason: 'Cần kiểm tra thêm' });
+    expect(model.requests()[0].rejectedAt).toBeUndefined();
+  });
+
+  it('releases the return quota of an order line when its request was rejected', async () => {
+    const delivered = { ...order, status: 'delivered', items: [{ item_id: 'item-1', variant_id: 'v-1', quantity: 1, return_count: 0, available_quantity: 1 }] };
+    get.mockImplementation((path) => of(path.includes('/returns') ? { returns: [{ ...request, status: 'CANCELLED', cancelled_by: 'admin', rejection_reason: 'Không hợp lệ', items: [{ variant_id: 'v-1', quantity: 1 }] }] } : { orders: [delivered] }));
+    const model = await create();
+    expect(model.orders()[0].items[0]).toMatchObject({ isInProgress: false, returnCount: 0, availableQuantity: 1 });
+  });
+
+  it('maps the customer-safe COD refund receiver, including the CSKH supplement request', async () => {
+    get.mockImplementation((path) => of(path.includes('/returns') ? { returns: [{ ...request, status: 'CONTACTING', payment_method: 'COD', refund_flow: 'cod_manual', refund_receiver: {
+      status: 'supplement_requested', bank_name: 'Vietcombank', account_last4: '7890', account_holder: 'NGUYEN VAN A',
+      submitted_at: '2026-10-17T08:00:00Z', supplement_request: 'Vui lòng gửi lại số tài khoản', supplement_requested_at: '2026-10-18T08:00:00Z',
+    } }] } : { orders: [order] }));
+    const model = await create();
+    expect(model.requests()[0]).toMatchObject({ paymentMethod: 'COD', refundFlow: 'cod_manual', refundReceiver: {
+      status: 'supplement_requested', bankName: 'Vietcombank', accountLast4: '7890', holder: 'NGUYEN VAN A',
+      supplementRequest: 'Vui lòng gửi lại số tài khoản', supplementRequestedAt: '2026-10-18T08:00:00Z',
+    } });
+  });
+
+  it('supports saving COD refund receiving info', async () => {
+    expect((await create()).supportsBankInfo).toBe(true);
+  });
+
+  it('saves the refund receiver for a member through the member endpoint and reloads the requests', async () => {
+    const model = await create();
+    const reloads = get.mock.calls.length;
+    await model.saveBank('RET-1', ' Vietcombank ', '0123 456-7890', ' Nguyen Van A ');
+    expect(post).toHaveBeenCalledWith('/api/user/returns/refund-receiver', {
+      return_id: 'return-1', bank_name: 'Vietcombank', account_number: '01234567890', account_holder: 'Nguyen Van A',
+    });
+    expect(get.mock.calls.length).toBeGreaterThan(reloads);
+  });
+
+  it('saves the refund receiver for a verified guest with the guest proof', async () => {
+    restoreGuest(); const model = await create(null);
+    await vi.waitFor(() => expect(model.requests()).toHaveLength(1));
+    await model.saveBank('RET-1', 'MoMo', '0901234567', 'Tran Thi B');
+    expect(post).toHaveBeenCalledWith('/api/user/returns/guest-refund-receiver', {
+      return_id: 'return-1', guest_access_token: 'guest-proof', bank_name: 'MoMo', account_number: '0901234567', account_holder: 'Tran Thi B',
+    });
+  });
+
+  it('validates the refund receiver on the client before posting anything', async () => {
+    const model = await create();
+    await expect(model.saveBank('RET-1', 'A', '0123456789', 'Nguyen Van A')).rejects.toThrow('Tên ngân hàng');
+    await expect(model.saveBank('RET-1', 'Vietcombank', '12ab34', 'Nguyen Van A')).rejects.toThrow('Số tài khoản');
+    await expect(model.saveBank('RET-1', 'Vietcombank', '12345', 'Nguyen Van A')).rejects.toThrow('Số tài khoản');
+    await expect(model.saveBank('RET-1', 'Vietcombank', '0123456789', 'Nguyen Van A1')).rejects.toThrow('Tên chủ tài khoản');
+    await expect(model.saveBank('RET-1', 'Vietcombank', '0123456789', 'N')).rejects.toThrow('Tên chủ tài khoản');
+    await expect(model.saveBank('RET-404', 'Vietcombank', '0123456789', 'Nguyen Van A')).rejects.toThrow('Không tìm thấy');
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it('surfaces the server\'s Vietnamese message when it refuses the receiving info', async () => {
+    const model = await create();
+    post.mockReturnValueOnce(of({ success: false, message: 'Tài khoản nhận tiền không hợp lệ.' }));
+    await expect(model.saveBank('RET-1', 'Vietcombank', '0123456789', 'Nguyen Van A')).rejects.toThrow('Tài khoản nhận tiền không hợp lệ.');
+  });
+
   it('resumes a scoped guest checkout order without exposing a phone-wide order list', async () => {
     const model = await create(null);
     get.mockReturnValueOnce(of({ order }));

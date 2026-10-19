@@ -87,8 +87,8 @@ Local OK ≠ được merge. Merge chỉ khi **PR CI xanh**.
 |---|---|---|
 | `feature/KAN-<n>-<slug>` | Dev | Code ticket |
 | `hotfix/KAN-<n>-<slug>` | Dev / Lead | Fix prod khẩn → vẫn PR `develop` rồi promote |
-| `develop` | Chỉ merge PR | Integration — **không deploy** |
-| `main` | Chỉ merge PR promote | Production + deploy Actions |
+| `develop` | Chỉ merge PR | Integration; chạy CI, không triển khai môi trường riêng |
+| `main` | Chỉ merge PR promote | MVP production; publish signed images và reconcile reviewed production pins |
 
 Cấm:
 
@@ -116,7 +116,7 @@ Mỗi commit phải gắn được với Jira. Không commit “fix”, “updat
 2. Title: `KAN-n …` (hoặc `Draft: KAN-n …`).  
 3. Body: dùng template [`.github/pull_request_template.md`](../.github/pull_request_template.md) — **bắt buộc** có heading `## Why`.  
 4. Đợi checks: `validate`, `validate-pr-contract`, `test-api`, `test-angular`, `build`, `note-pr`.  
-5. ≥ 1 review (CODEOWNERS). CI đỏ = **không merge**.  
+5. MVP không yêu cầu approval; tag/CODEOWNERS để thông báo, đọc diff trước merge. CI đỏ/pending = **không merge**.
 6. Sau merge: comment URL PR trên Jira → chuyển trạng thái.
 
 Promote production:
@@ -126,7 +126,14 @@ PR source = develop → target = main
 Title gợi ý: KAN-n: promote develop → main (…)
 ```
 
-Chỉ Lead / người được chỉ định mở promote PR. Sau merge `main`, CI publish image digest thật và mở PR cập nhật image; staging kiểm chứng trước, production Flux vẫn suspended đến khi owner phê duyệt.
+Chỉ Lead / người được chỉ định mở promote PR. MVP dùng một môi trường production:
+source trên `main` qua toàn bộ CI rồi build/scan/SBOM/sign; GitHub App mở PR
+production pins vào `develop`. Sau review và CI xanh, promote `develop` → `main`
+để Flux triển khai đúng digest đã ký, không rebuild. Không cần staging project,
+staging verification hay staging credentials. Flux root quản lý cấu hình owner
+và bật production từ PR pins có bằng chứng publisher hợp lệ; không resume tay
+cho từng release. Bot mang ancestry của main vào PR pins để giữ nhánh promote
+up-to-date với branch protection.
 
 ### 3.4 Đọc lại version (trước khi sửa code cũ)
 
@@ -163,17 +170,16 @@ PR feature → develop
   test-angular           (user-ng + admin-ng)
   build                  (api + user + admin artifacts)
   note-pr                (comment Trace + artifact pr-trace.md)
-       ↓ merge (CI xanh + review)
-Push develop             (lặp validate/tests/build — không deploy)
+       ↓ merge (CI xanh; tag thành viên liên quan)
+Push develop             (validate/tests/build; không publish image)
+  production-pins merge  → CI kiểm chứng publisher main + chữ ký cùng digest
        ↓
-PR develop → main        (cùng cổng PR)
+PR develop → main        (cùng cổng PR; kiểm tra signed-main production evidence)
        ↓ merge
 Push main
-  …tests/build…
-  deploy-production      (publish digest + scan/SBOM/sign; không SSH/apply)
-  promote-images         (PR digest vào develop rồi promote main)
-  verify-staging         (revision + DB/gateway thật; secrets Environment staging)
-  verify-production      (owner opt-in VELURA_VERIFY_PRODUCTION=true sau staging)
+  app source changed     → deploy-production (scan/SBOM/sign) → PR production pins
+  production pins changed → Flux root/production → verify-production (owner opt-in)
+  workflow_dispatch      → recovery=release-main, chỉ SHA main hiện tại, đủ gates
 ```
 
 ### 4.2 Job nào fail nghĩa là gì
@@ -186,7 +192,7 @@ Push main
 | `build` | Build không ra `dist` | `npm run build` local |
 | `note-pr` | Không ghi được trace | Thường do job trước; xem log |
 | `deploy-production` / `promote-images` | Registry build/scan/sign hoặc PR promotion thất bại | Lead; không tự sửa cluster image |
-| `verify-staging` / `verify-production` | App revision hoặc DB/gateway chưa ready | Ops; endpoint này không chứng minh Flux |
+| `verify-production` | Chữ ký, app revision hoặc DB/gateway chưa ready | Ops; endpoint này không chứng minh Flux |
 
 ### 4.3 Secrets production (chỉ Lead)
 
@@ -196,14 +202,21 @@ Push main
 | Secret | Vai trò |
 |---|---|
 | `PRODUCTION_VERIFY_TOKEN` | Bearer riêng từng Environment, khớp namespace-local API Secret |
-| `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` | Service token được cấp cho đúng staging/production audience |
-| `GITHUB_TOKEN` | Token Actions để publish/sign và tạo PR; quyền repo phải được owner cho phép |
+| `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` | Chỉ bắt buộc khi `VELURA_CF_ACCESS_ENABLED=true`, phải là service token thật |
+| `GITHUB_TOKEN` | Publish/sign và đọc evidence; không dùng làm tác giả PR vì không kích hoạt PR workflows |
+| `RELEASE_APP_ID` (variable) / `RELEASE_APP_PRIVATE_KEY` (secret) | GitHub App cài trên repo này, Contents + Pull requests write; token ngắn hạn tạo PR rồi được revoke |
 
 Dev thường **không** cần và **không** được yêu cầu secrets này để code.
 
-Environment `staging` phải được tạo riêng, không dùng lại credentials production.
-`VELURA_VERIFY_PRODUCTION=true` là opt-in của owner cho job kiểm chứng, không tự
-resume Flux. Bootstrap, offsite restore và GPU smoke: [HOW-IT-WORKS.md](./HOW-IT-WORKS.md#k3s-staging-first-runbook).
+MVP không dùng Environment/database staging. Production cần `SUPABASE_DB_URL`,
+`SUPABASE_DB_CA_CERT` và verification token độc lập. `VELURA_VERIFY_PRODUCTION=true`
+bật kiểm chứng read-only. Cloudflare Access là lớp tùy chọn: khi chưa bật, ops
+endpoint vẫn yêu cầu Bearer token và admin vẫn chịu authentication/RBAC của app;
+không dùng placeholder để giả chứng minh Access. Digest bundle, main publisher
+run và attempt được ghi ở `deploy/releases/production.json` (`mode=direct-mvp`).
+CI xác minh cả job gates và chữ ký Cosign gắn đúng revision/build ID; không thay
+bằng `Ready` của pod hoặc SHA khai báo trong ConfigMap.
+Bootstrap: [HOW-IT-WORKS.md](./HOW-IT-WORKS.md#k3s-production-mvp-runbook).
 
 ### 4.4 Xem pipeline
 
@@ -285,3 +298,22 @@ In hoặc copy vào comment Jira onboarding:
 3. Secrets chỉ trên Environment `production`.  
 4. Không bảo team đẩy lên GitLab.  
 5. Promote `develop`→`main` có chủ đích; theo dõi Actions deploy/verify.
+
+### Đồng bộ branch protection (Lead, một lần khi đổi policy)
+
+Policy được version trong `.github/branch-protection.json`, áp dụng cho cả hai
+nhánh. Required checks chỉ nhận từ GitHub Actions; branch phải up-to-date,
+approval count bằng 0, giải quyết conversation và không có bypass cho admin.
+CODEOWNERS/mention chỉ dùng để thông báo theo phạm vi trong TEAM-WORKFLOW.
+
+```bash
+for branch in develop main; do
+  gh api --method PUT "repos/Royal2005-coder/Velura-Angular/branches/$branch/protection" \
+    --input .github/branch-protection.json
+done
+```
+
+Auto-merge chỉ hoàn tất khi toàn bộ required checks đạt yêu cầu. Merge source
+không đồng nghĩa đã rollout: release còn phải có image scan/sign, main publisher evidence,
+production pins và Flux/HTTP verification. Khi các bootstrap gates đã được gỡ,
+team không SSH, đổi image trực tiếp hay resume Flux cho từng release.

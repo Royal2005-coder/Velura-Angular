@@ -6,7 +6,7 @@ import { AdminDashboardPage } from './admin-dashboard.page';
 import { AnalyticsModel, type AnalyticsDashboard } from '../../core/analytics-model.service';
 import { AdminSessionService } from '../../core/admin-session.service';
 import { AdminRefreshService } from '../../core/admin-refresh.service';
-import type { AdminManagementGroup } from '../../core/admin-api.service';
+import type { AdminLowStockRow, AdminManagementGroup } from '../../core/admin-api.service';
 
 function snapshot(): AnalyticsDashboard {
   return {
@@ -22,11 +22,12 @@ function modelStub() {
     dashboard: vi.fn((_params: Record<string, string>) => of(snapshot())),
     refresh: vi.fn(() => of({ status: 'succeeded' as const, success: true as const, snapshotAt: '2026-10-04T00:00:00Z' })),
     recommend: vi.fn((_params: Record<string, string>) => of({ source: 'facts', availability: 'ready', lines: ['Observed evidence'], narrative: [] as string[] })),
+    lowStock: vi.fn(() => of({ data: [] as AdminLowStockRow[] })),
   };
 }
 let fixture: ComponentFixture<AdminDashboardPage> | undefined;
 let shellRefresh = () => {};
-async function createPage(model: Pick<AnalyticsModel, 'dashboard' | 'refresh' | 'recommend'>, role = 'super_admin') {
+async function createPage(model: Pick<AnalyticsModel, 'dashboard' | 'refresh' | 'recommend' | 'lowStock'>, role = 'super_admin') {
   sessionStorage.clear(); localStorage.clear();
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
@@ -55,6 +56,18 @@ describe('AdminDashboardPage evidence and refresh behavior', () => {
     page.setTab('business'); fixture?.detectChanges();
     expect(fixture?.nativeElement.textContent).toContain('Không khả dụng');
     expect(page.business()?.revenue).toBeNull();
+  });
+
+  it('lists which products are below their low-stock threshold on the operations tab (TH6)', async () => {
+    const model = modelStub();
+    model.lowStock.mockReturnValue(of({ data: [
+      { variant_id: 'v1', product_id: 'p1', product_name: 'Áo UAT 31', color: 'Đen', size: 'M', stock_quantity: 3, low_stock_threshold: 5 },
+    ] }));
+    const page = await createPage(model);
+    expect(page.lowStockRows().length).toBe(1);
+    const text = (fixture?.nativeElement as HTMLElement).querySelector('[data-testid="dashboard-low-stock"]')?.textContent ?? '';
+    expect(text).toContain('Áo UAT 31');
+    expect(text).toContain('còn 3, ngưỡng 5');
   });
 
   it('does not turn null chart observations into a zero bar', async () => {

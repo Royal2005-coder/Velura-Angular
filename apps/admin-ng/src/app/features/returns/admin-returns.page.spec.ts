@@ -6,7 +6,39 @@ import { of, Subject, throwError } from 'rxjs';
 import { vi } from 'vitest';
 import { AdminSessionService } from '../../core/admin-session.service';
 import { AdminChatReviewService, type AdminChatOriginal, type AdminChatReviewInput, type AdminReviewedChatMessage } from '../../core/admin-chat-review.service';
-import type { AdminChatMessagesPayload } from '../../core/admin-api.service';
+import type { AdminChatMessagesPayload, AdminManualRefundPayload, AdminRefundReceiver, AdminRefundReceiverStatus, AdminReturnRow } from '../../core/admin-api.service';
+
+function receiver(status: AdminRefundReceiverStatus): AdminRefundReceiver {
+  const filled = status === 'valid' || status === 'invalid' || status === 'supplement_requested';
+  return {
+    status,
+    bank_name: filled ? 'Vietcombank' : null,
+    account_number: filled ? '0123456789' : null,
+    account_holder: filled ? 'NGUYEN VAN A' : null,
+    submitted_at: filled ? '2026-10-17T02:00:00.000Z' : null,
+    supplement_request: status === 'supplement_requested' ? 'Vui lòng gửi lại số tài khoản' : null,
+    supplement_requested_at: status === 'supplement_requested' ? '2026-10-17T05:00:00.000Z' : null,
+  };
+}
+
+/** Phiếu hoàn tiền COD đã qua kho, với thông tin nhận tiền ở trạng thái cho trước. */
+function codRow(status: AdminRefundReceiverStatus): AdminReturnRow {
+  return {
+    return_id: 'cod-1', status: 'RECEIVED', return_type: 'refund', condition_check_result: 'qa_pass', version: 3,
+    payment_method: 'COD', payment_kind: 'cod', refund_flow: 'cod_manual', refund_receiver_status: status,
+    refund_receiver: status === 'missing' ? null : receiver(status), refundable_amount: 349000, order_total: 500000, cancelled_by: null,
+  };
+}
+
+/** Phiếu hoàn tiền Stripe đã qua kho. */
+function stripeRow(): AdminReturnRow {
+  return {
+    return_id: 'st-1', status: 'RECEIVED', return_type: 'refund', condition_check_result: 'qa_pass', version: 2,
+    payment_method: 'ONLINE_PAYMENT', payment_kind: 'stripe', refund_flow: 'stripe_auto', refund_receiver_status: 'not_required',
+    refund_receiver: null, refundable_amount: 200000, order_total: 200000, cancelled_by: null,
+    payment: { payment_provider: 'stripe', payment_status: 'paid' },
+  };
+}
 
 describe('AdminReturnsPage', () => {
 
@@ -305,5 +337,231 @@ describe('AdminReturnsPage', () => {
     expect(page.ticketDetailOpen()).toBe(false);
     expect(getChatMessages).toHaveBeenCalledWith('canonical-chat', { limit: '150' });
     expect(page.messages()[0]?.text).toBe('Ngữ cảnh đã lọc');
+  });
+
+  describe('hoàn tiền COD / Online, từ chối và yêu cầu bổ sung', () => {
+    const asStaff = (): void => {
+      TestBed.inject(AdminSessionService).applyAuthContext({ role: 'admin_operator_cskh_dt', isAdmin: true, profile: { is_active: true }, allowedModules: ['returns'] });
+    };
+    const nativeElement = (): HTMLElement => lastAdminFixture().nativeElement as HTMLElement;
+
+    it('hiện huy hiệu COD / Online và lọc theo thanh toán qua máy chủ kèm lớp bảo vệ phía khách', async () => {
+      const listReturns = vi.fn((_params: Record<string, string> = {}, _paymentKind = '') => of({ rows: [codRow('valid'), stripeRow()], count: 2 }));
+      const page = await createAdminPage(AdminReturnsPage, { listReturns });
+      page.zone.set('returns'); page.reload();
+      expect(page.paymentKindLabel(codRow('valid'))).toBe('COD');
+      expect(page.paymentKindLabel(stripeRow())).toBe('Online – Stripe');
+      expect(page.paymentKindLabel({ return_id: 'm', payment_kind: 'other_online' })).toBe('Online – MoMo/VNPay');
+      expect(page.receiverChip(codRow('missing'))).toBe('Thiếu thông tin nhận tiền');
+      expect(page.receiverChip(codRow('invalid'))).toBe('Thiếu thông tin nhận tiền');
+      expect(page.receiverChip(codRow('supplement_requested'))).toBe('Đã yêu cầu bổ sung');
+      expect(page.receiverChip(codRow('valid'))).toBeNull();
+      expect(page.receiverChip(stripeRow())).toBeNull();
+
+      const fixture = lastAdminFixture(); fixture.detectChanges();
+      const badges = Array.from(nativeElement().querySelectorAll('.admin-payment-badge')).map((badge) => badge.textContent?.trim());
+      expect(badges).toEqual(['COD', 'Online – Stripe']);
+      expect(nativeElement().textContent).toContain('Thanh toán: COD');
+
+      page.onPaymentFilter({ target: { value: 'cod' } } as unknown as Event);
+      expect(page.paymentFilter()).toBe('cod');
+      expect(listReturns).toHaveBeenCalledWith(expect.objectContaining({ limit: '10' }), 'cod');
+      expect(page.filteredReturns().map((row) => row.return_id)).toEqual(['cod-1']);
+      page.onPaymentFilter({ target: { value: 'online' } } as unknown as Event);
+      expect(listReturns).toHaveBeenCalledWith(expect.objectContaining({ limit: '10' }), 'online');
+      expect(page.filteredReturns().map((row) => row.return_id)).toEqual(['st-1']);
+      page.resetReturnFilters(new Event('click'));
+      expect(page.paymentFilter()).toBe('');
+      expect(page.filteredReturns()).toHaveLength(2);
+    });
+
+    it('COD chặn hoàn tiền thủ công khi thông tin nhận tiền thiếu hoặc không hợp lệ và mở khi hợp lệ', async () => {
+      const page = await createAdminPage(AdminReturnsPage);
+      asStaff();
+      for (const status of ['missing', 'invalid', 'supplement_requested'] as const) {
+        expect(page.canRecordManualRefund(codRow(status))).toBe(false);
+        expect(page.showReceiverWarning(codRow(status))).toBe(true);
+      }
+      expect(page.canRecordManualRefund(codRow('valid'))).toBe(true);
+      expect(page.showReceiverWarning(codRow('valid'))).toBe(false);
+
+      const fixture = lastAdminFixture();
+      page.selectedReturn.set(codRow('missing')); page.returnDetailOpen.set(true); fixture.detectChanges();
+      expect(nativeElement().textContent).toContain('COD – hoàn tiền thủ công');
+      expect(nativeElement().textContent).toContain('Chưa có thông tin nhận tiền hợp lệ — không thể tiếp tục hoàn tiền');
+      expect(nativeElement().querySelector<HTMLButtonElement>('.admin-refund-panel__manual')?.disabled).toBe(true);
+      expect(nativeElement().querySelector('.admin-refund-panel__request')).not.toBeNull();
+
+      page.selectedReturn.set(codRow('valid')); fixture.detectChanges();
+      expect(nativeElement().textContent).toContain('Vietcombank');
+      expect(nativeElement().textContent).toContain('0123456789');
+      expect(nativeElement().textContent).not.toContain('Chưa có thông tin nhận tiền hợp lệ — không thể tiếp tục hoàn tiền');
+      expect(nativeElement().querySelector<HTMLButtonElement>('.admin-refund-panel__manual')?.disabled).toBe(false);
+      expect(nativeElement().querySelector('.admin-refund-panel__request')).toBeNull();
+    });
+
+    it('gửi yêu cầu bổ sung giữ phiếu ở nguyên giai đoạn rồi tải lại chi tiết', async () => {
+      const requestRefundInfo = vi.fn((_returnId: string, _body: { message: string; expectedVersion: number }) => of({ return_id: 'cod-1', refund_receiver: receiver('supplement_requested') }));
+      const getReturn = vi.fn((_returnId: string) => of(codRow('supplement_requested')));
+      const page = await createAdminPage(AdminReturnsPage, { requestRefundInfo, getReturn });
+      asStaff();
+      page.selectedReturn.set(codRow('missing')); page.returnDetailOpen.set(true);
+      page.openRefundInfoRequest(codRow('missing'));
+      expect(page.refundInfoTarget()?.return_id).toBe('cod-1');
+
+      page.refundInfoMessage.set('Ngắn quá');
+      page.submitRefundInfoRequest(new Event('submit'));
+      expect(requestRefundInfo).not.toHaveBeenCalled();
+      expect(page.refundInfoError()).toContain('10 ký tự');
+
+      page.refundInfoMessage.set('  Vui lòng gửi đúng số tài khoản và tên chủ tài khoản  ');
+      page.submitRefundInfoRequest(new Event('submit'));
+      expect(requestRefundInfo).toHaveBeenCalledWith('cod-1', { message: 'Vui lòng gửi đúng số tài khoản và tên chủ tài khoản', expectedVersion: 3 });
+      expect(getReturn).toHaveBeenCalledWith('cod-1');
+      expect(page.refundInfoTarget()).toBeNull();
+      expect(page.selectedReturn()?.refund_receiver_status).toBe('supplement_requested');
+      expect(page.canRequestRefundInfo(codRow('valid'))).toBe(false);
+      expect(page.canRequestRefundInfo(stripeRow())).toBe(false);
+    });
+
+    it('ghi nhận hoàn tiền thủ công gửi số tiền hoàn và thời điểm chuyển dạng ISO', async () => {
+      const recordManualRefund = vi.fn((_returnId: string, _body: AdminManualRefundPayload) => of({}));
+      const page = await createAdminPage(AdminReturnsPage, { recordManualRefund });
+      asStaff();
+      page.openManualRefund(codRow('valid'));
+      expect(page.manualRefundTarget()?.return_id).toBe('cod-1');
+      expect(page.manualRefundAmount(codRow('valid'))).toBe(349000);
+
+      const past = new Date(Date.now() - 2 * 60 * 60 * 1000);
+      const localInput = new Date(past.getTime() - past.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+      page.manualRefundReference.set('FT24090');
+      page.manualRefundTransferredAt.set(localInput);
+      page.submitManualRefund(new Event('submit'));
+      expect(recordManualRefund).not.toHaveBeenCalled();
+      expect(page.actionError()).toContain('ảnh');
+
+      const future = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      page.manualRefundProof.set('data:image/png;base64,AAAA');
+      page.manualRefundTransferredAt.set(new Date(future.getTime() - future.getTimezoneOffset() * 60000).toISOString().slice(0, 16));
+      page.submitManualRefund(new Event('submit'));
+      expect(recordManualRefund).not.toHaveBeenCalled();
+      expect(page.actionError()).toContain('tương lai');
+
+      page.manualRefundTransferredAt.set(localInput);
+      page.submitManualRefund(new Event('submit'));
+      expect(recordManualRefund).toHaveBeenCalledTimes(1);
+      expect(recordManualRefund).toHaveBeenCalledWith('cod-1', {
+        expectedVersion: 3,
+        transferReference: 'FT24090',
+        amount: 349000,
+        transferredAt: new Date(localInput).toISOString(),
+        imageProof: 'data:image/png;base64,AAAA',
+      });
+      expect(page.manualRefundTarget()).toBeNull();
+    });
+
+    it('không gửi hoàn tiền COD khi thông tin nhận tiền chưa hợp lệ', async () => {
+      const recordManualRefund = vi.fn((_returnId: string, _body: AdminManualRefundPayload) => of({}));
+      const page = await createAdminPage(AdminReturnsPage, { recordManualRefund });
+      asStaff();
+      page.manualRefundTarget.set(codRow('invalid'));
+      page.manualRefundReference.set('FT24090123');
+      page.manualRefundTransferredAt.set('2020-01-01T08:00');
+      page.manualRefundProof.set('data:image/png;base64,AAAA');
+      page.submitManualRefund(new Event('submit'));
+      expect(recordManualRefund).not.toHaveBeenCalled();
+      expect(page.actionError()).toContain('Chưa có thông tin nhận tiền hợp lệ');
+    });
+
+    it('Stripe ẩn hoàn tiền thủ công và chỉ hiện nút hoàn tiền Stripe', async () => {
+      const page = await createAdminPage(AdminReturnsPage);
+      asStaff();
+      expect(page.canTriggerStripeRefund(stripeRow())).toBe(true);
+      expect(page.canRecordManualRefund(stripeRow())).toBe(false);
+      expect(page.isManualRefundStage(stripeRow())).toBe(false);
+      expect(page.canTriggerStripeRefund(codRow('valid'))).toBe(false);
+      expect(page.canTriggerStripeRefund({ ...stripeRow(), refund_flow: 'none' })).toBe(false);
+
+      const fixture = lastAdminFixture();
+      page.selectedReturn.set(stripeRow()); page.returnDetailOpen.set(true); fixture.detectChanges();
+      expect(nativeElement().textContent).toContain('Hoàn tiền qua Stripe');
+      expect(nativeElement().textContent).not.toContain('Ghi nhận chuyển khoản hoàn tiền');
+      expect(nativeElement().textContent).not.toContain('Hoàn tiền thủ công');
+      expect(nativeElement().querySelector('.admin-refund-panel--cod')).toBeNull();
+    });
+
+    it('phiếu MoMo/VNPay giữ hộp thoại thủ công không đòi thông tin nhận tiền và đổi hàng không có điều khiển hoàn tiền', async () => {
+      const page = await createAdminPage(AdminReturnsPage);
+      asStaff();
+      const online: AdminReturnRow = { ...stripeRow(), return_id: 'mm-1', payment_kind: 'other_online', refund_flow: 'manual_transfer' };
+      expect(page.canRecordManualRefund(online)).toBe(true);
+      expect(page.canTriggerStripeRefund(online)).toBe(false);
+      expect(page.canRequestRefundInfo(online)).toBe(false);
+      const exchange: AdminReturnRow = { ...online, return_type: 'exchange', refund_flow: 'none' };
+      expect(page.canRecordManualRefund(exchange)).toBe(false);
+      expect(page.canTriggerStripeRefund(exchange)).toBe(false);
+    });
+
+    it('phiếu NEEDS_SUPPORT được từ chối với lý do tối thiểu 10 ký tự', async () => {
+      const rejectReturn = vi.fn((_returnId: string, _body: Record<string, unknown>) => of({}));
+      const page = await createAdminPage(AdminReturnsPage, { rejectReturn });
+      asStaff();
+      const stuck: AdminReturnRow = { return_id: 'ns-1', status: 'NEEDS_SUPPORT', return_type: 'refund', version: 4 };
+      page.returns.set([stuck]);
+      expect(page.canRejectReturn(stuck)).toBe(true);
+      expect(page.canRejectReturn({ ...stuck, status: 'RECEIVED' })).toBe(false);
+
+      const fixture = lastAdminFixture();
+      page.selectedReturn.set(stuck); page.returnDetailOpen.set(true); fixture.detectChanges();
+      const labels = Array.from(nativeElement().querySelectorAll('button')).map((button) => button.textContent?.trim());
+      expect(labels).toContain('Từ chối yêu cầu');
+
+      page.openReturnAction('reject', 'ns-1');
+      expect(page.actionType()).toBe('reject');
+      const form = document.createElement('form');
+      const note = document.createElement('textarea'); note.name = 'note'; note.value = 'Ngắn'; form.append(note);
+      page.submitAction({ preventDefault: () => undefined, target: form } as unknown as Event);
+      expect(rejectReturn).not.toHaveBeenCalled();
+      note.value = 'Khách không phản hồi sau nhiều lần liên hệ';
+      page.submitAction({ preventDefault: () => undefined, target: form } as unknown as Event);
+      expect(rejectReturn).toHaveBeenCalledWith('ns-1', { reason: 'Khách không phản hồi sau nhiều lần liên hệ', expectedVersion: 4 });
+    });
+
+    it('phân biệt phiếu bị CSKH từ chối với phiếu khách tự hủy và hiện lý do', async () => {
+      const page = await createAdminPage(AdminReturnsPage);
+      const rejected: AdminReturnRow = { return_id: 'rj-1', status: 'CANCELLED', cancelled_by: 'admin', rejection_reason: 'Sản phẩm đã qua sử dụng', return_type: 'refund' };
+      const selfCancelled: AdminReturnRow = { ...rejected, return_id: 'rj-2', cancelled_by: 'customer', rejection_reason: 'Khách đổi ý' };
+      expect(page.cancellationLabel(rejected)).toBe('Bị từ chối bởi CSKH');
+      expect(page.cancellationLabel(selfCancelled)).toBe('Khách tự hủy');
+
+      const fixture = lastAdminFixture();
+      page.selectedReturn.set(rejected); page.returnDetailOpen.set(true); fixture.detectChanges();
+      expect(nativeElement().textContent).toContain('Bị từ chối bởi CSKH');
+      expect(nativeElement().textContent).toContain('Sản phẩm đã qua sử dụng');
+      page.selectedReturn.set(selfCancelled); fixture.detectChanges();
+      expect(nativeElement().textContent).toContain('Khách tự hủy');
+      expect(nativeElement().textContent).toContain('Khách đổi ý');
+    });
+
+    it('hiện khối đối soát hoàn tiền chỉ đọc khi đã ghi nhận chuyển tiền', async () => {
+      const page = await createAdminPage(AdminReturnsPage);
+      const done: AdminReturnRow = {
+        ...codRow('valid'),
+        status: 'COMPLETED',
+        manual_refund: {
+          reference: 'FT24090999', amount: 349000, transferred_at: '2026-10-18T03:00:00.000Z', proof: 'https://cdn.example.com/proof.jpg', note: 'Chuyển qua app', recorded_at: '2026-10-18T03:05:00.000Z',
+          payment_kind: 'cod', receiver_bank_name: 'Vietcombank', receiver_account_number: '0123456789', receiver_account_holder: 'NGUYEN VAN A',
+        },
+      };
+      const fixture = lastAdminFixture();
+      page.selectedReturn.set(done); page.returnDetailOpen.set(true); fixture.detectChanges();
+      expect(nativeElement().textContent).toContain('Đối soát hoàn tiền');
+      expect(nativeElement().textContent).toContain('FT24090999');
+      expect(nativeElement().textContent).toContain('Chuyển qua app');
+      expect(nativeElement().querySelector<HTMLImageElement>('.admin-refund-panel__proof img')?.getAttribute('src')).toBe('https://cdn.example.com/proof.jpg');
+      expect(nativeElement().querySelector('.admin-refund-panel__manual')).toBeNull();
+      nativeElement().querySelector<HTMLButtonElement>('.admin-refund-panel__proof')?.click();
+      expect(page.lightboxImage()).toBe('https://cdn.example.com/proof.jpg');
+    });
   });
 });

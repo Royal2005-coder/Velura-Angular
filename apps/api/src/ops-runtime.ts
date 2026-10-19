@@ -1,4 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
+import { readFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { config } from "./config.js";
 import { HttpError, sendJson } from "./http.js";
@@ -8,6 +9,37 @@ import type { HeaderMap } from "./types.js";
 const bounds = [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 15, 60];
 interface Measurement { count: number; seconds: number; buckets: number[]; }
 const http = new Map<string, Measurement>();
+
+/** Immutable image identity; the build ID distinguishes rebuilds of the same source revision. */
+interface ReleaseMetadata { revision: string; buildId: string; }
+
+/** Read image-baked identity once; absent or invalid metadata cannot prove a deployed release. */
+function readBuildMetadata(): ReleaseMetadata | null {
+  let content: string;
+  try {
+    content = readFileSync(new URL("./release.json", import.meta.url), "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+  let metadata: unknown;
+  try { metadata = JSON.parse(content); } catch (error) {
+    if (error instanceof SyntaxError) return null;
+    throw error;
+  }
+  if (!metadata || typeof metadata !== "object" || !("revision" in metadata) || !("buildId" in metadata) ||
+      typeof metadata.revision !== "string" || !/^[a-f0-9]{40}$/.test(metadata.revision) ||
+      typeof metadata.buildId !== "string" || !/^[a-f0-9]{40}-[0-9]+-[0-9]+$/.test(metadata.buildId) ||
+      !metadata.buildId.startsWith(`${metadata.revision}-`)) return null;
+  return { revision: metadata.revision, buildId: metadata.buildId };
+}
+const buildMetadata = readBuildMetadata();
+
+/** Expose only the hosted project identity from the database URL actually used by readiness. */
+function databaseProjectRef(): string | null {
+  try { return /^([a-z0-9]+)\.supabase\.co$/.exec(new URL(config.supabaseUrl).hostname)?.[1] ?? null; }
+  catch { return null; }
+}
 
 /** Observe bounded route families and status classes, never request bodies, query strings or identities. */
 export function observeHttpRequest(req: IncomingMessage, res: ServerResponse): void {
@@ -68,7 +100,7 @@ async function chatbotSchemaReadiness(url: string, key: string): Promise<boolean
   } catch { return false; }
 }
 
-/** Verify data, chatbot schema and gateway readiness without inference, sensitive rows or credential disclosure. */
+/** Verify the installed catalog contract, chatbot schema and gateway without reading customer rows. */
 export async function runtimeReadiness(): Promise<{ ready: boolean; checks: { database: boolean; gateway: boolean; chatbotSchema: boolean } }> {
   async function check(url: string, headers: Record<string, string>): Promise<boolean> {
     try { const response = await fetch(url, { headers, redirect: "error", signal: AbortSignal.timeout(3000) }); await response.body?.cancel(); return response.ok; } catch { return false; }
@@ -76,7 +108,7 @@ export async function runtimeReadiness(): Promise<{ ready: boolean; checks: { da
   const databaseKey = config.supabaseServiceRoleKey || config.supabaseAnonKey;
   const endpoint = process.env.LITELLM_ENDPOINT?.replace(/\/v1\/?$/, "").replace(/\/$/, "");
   const [database, gateway, chatbotSchema] = await Promise.all([
-    config.supabaseUrl && databaseKey ? check(`${config.supabaseUrl}/rest/v1/product?select=product_id&limit=0`, { apikey: databaseKey, authorization: `Bearer ${databaseKey}` }) : false,
+    config.supabaseUrl && databaseKey ? check(`${config.supabaseUrl}/rest/v1/product?select=product_id,image_colors,variants:variant(sku)&limit=0`, { apikey: databaseKey, authorization: `Bearer ${databaseKey}` }) : false,
     endpoint && process.env.LITELLM_API_KEY ? check(`${endpoint}/health/readiness`, { authorization: `Bearer ${process.env.LITELLM_API_KEY}` }) : false,
     config.supabaseUrl && config.supabaseServiceRoleKey ? chatbotSchemaReadiness(config.supabaseUrl, config.supabaseServiceRoleKey) : false,
   ]);
@@ -107,6 +139,12 @@ export async function handleRuntimeRoute(req: IncomingMessage, res: ServerRespon
   if (!expected || actual.length !== wanted.length || !timingSafeEqual(actual, wanted)) throw new HttpError(403, "OPS_ACCESS_DENIED", "Owner verification credential is required");
   const revision = process.env.RELEASE_REVISION || "";
   const state = await runtimeReadiness();
-  sendJson(res, state.ready && /^[a-f0-9]{40}$/.test(revision) ? 200 : 503, { revision: revision || null, ready: state.ready && /^[a-f0-9]{40}$/.test(revision), checks: state.checks, flux: { ready: null, reason: "VERIFY_WITH_OWNER_OPS_CLI" } }, { ...headers, "cache-control": "no-store" });
+  const releaseReady = state.ready && buildMetadata !== null &&
+    revision === buildMetadata.revision && process.env.RELEASE_BUILD_ID === buildMetadata.buildId;
+  sendJson(res, releaseReady ? 200 : 503, {
+    revision: revision || null, buildRevision: buildMetadata?.revision ?? null, buildId: buildMetadata?.buildId ?? null,
+    databaseProjectRef: databaseProjectRef(), ready: releaseReady, checks: state.checks,
+    flux: { ready: null, reason: "VERIFY_WITH_OWNER_OPS_CLI" },
+  }, { ...headers, "cache-control": "no-store" });
   return true;
 }

@@ -11,6 +11,7 @@ import {
   untracked,
   viewChild,
 } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { AuthService } from '../../core/services/auth.service';
 import { guestSessionId } from '../../core/utils/guest-session';
@@ -26,6 +27,7 @@ import {
 @Component({
   selector: 'app-ai-image-workbench',
   standalone: true,
+  imports: [RouterLink],
   templateUrl: './ai-image-workbench.html',
   styleUrl: './ai-image-workbench.css',
 })
@@ -43,6 +45,14 @@ export class AiImageWorkbench {
   private readonly destroy = inject(DestroyRef);
   private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('dialog');
   readonly capabilities = signal<AiCapabilities | null>(null);
+  /**
+   * Whether the entry point is shown at all. Virtual try-on is offered only for products the server has
+   * verified (flat-lay garment photo, supported category); unsupported items such as accessories get no button.
+   * Other tasks are always offered.
+   */
+  readonly offered = signal(false);
+  /** Try-on uses personal photos stored per account, so only signed-in members may use it. */
+  readonly memberRequired = computed(() => this.task() === 'virtual_try_on' && !this.auth.isLoggedIn());
   readonly error = signal('');
   readonly consent = signal(false);
   readonly mode = signal<'personal' | 'studio'>('personal');
@@ -343,6 +353,25 @@ export class AiImageWorkbench {
       });
     });
     effect(() => {
+      const task = this.task();
+      const productId = this.productId();
+      untracked(() => {
+        if (task !== 'virtual_try_on') {
+          this.offered.set(true);
+          return;
+        }
+        this.offered.set(false);
+        if (!productId) return;
+        void firstValueFrom(this.model.capabilities(productId))
+          .then((caps) => {
+            if (productId === this.productId()) this.offered.set(caps.product_supported === true);
+          })
+          .catch(() => {
+            if (productId === this.productId()) this.offered.set(false);
+          });
+      });
+    });
+    effect(() => {
       this.productId();
       this.variantId();
       untracked(() => {
@@ -372,6 +401,11 @@ export class AiImageWorkbench {
 
   /** Opens a keyboard-accessible modal and reads readiness before uploading anything. */
   async open(): Promise<void> {
+    if (this.memberRequired()) {
+      const gate = this.dialog()?.nativeElement;
+      if (gate && !gate.open) gate.showModal?.();
+      return;
+    }
     const dialog = this.dialog()?.nativeElement;
     if (dialog && !dialog.open) dialog.showModal?.();
     const epoch = this.generation;

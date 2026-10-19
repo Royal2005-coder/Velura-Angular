@@ -1,0 +1,23 @@
+version: 3
+automerge: false
+parallel_plan: false
+parallel_apply: false
+autodiscover:
+  mode: disabled
+projects:
+  - name: cloudflare-dns
+    dir: infra/terraform/cloudflare
+    workspace: default
+    # Feature PRs go to develop; the reviewed develop -> main PR owns external changes.
+    branch: /^main$/
+    terraform_version: v1.13.4
+    autoplan:
+      enabled: true
+      when_modified:
+        - "*.tf"
+        - ".terraform.lock.hcl"
+        - "../atlantis/server.yaml"
+        - "../atlantis/repos.yaml"
+        - "../../../atlantis.yaml"
+# Apply/import requirements are enforced by the trusted server-side policy
+# infra/terraform/atlantis/repos.yaml, never overridable from a pull request.

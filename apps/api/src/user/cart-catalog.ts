@@ -106,7 +106,18 @@ export function parseCartItems(raw: unknown): CartItemInput[] {
 }
 
 /**
- * Tra giá catalog và danh mục của các biến thể, một truy vấn cho cả giỏ.
+ * Lý do một sản phẩm không được cho vào giỏ, hoặc `null` khi đang bán.
+ * `out_of_stock` do kiểm tra tồn kho theo biến thể xử lý nên không bị loại ở đây.
+ */
+export function cartUnavailableReason(status: unknown, productName: string): string | null {
+  const label = productName.trim() || "Sản phẩm";
+  if (status === "discontinued") return `Sản phẩm '${label}' đã ngừng kinh doanh và không thể thêm vào giỏ hàng.`;
+  if (status === "hidden") return `Sản phẩm '${label}' hiện không được bán và không thể thêm vào giỏ hàng.`;
+  return null;
+}
+
+/**
+ * Tra giá và danh mục của các biến thể đang bán; trạng thái ẩn/ngừng bán không được đặt hàng.
  */
 export async function loadCatalog(variantIds: readonly string[]): Promise<Map<string, CatalogEntry>> {
   const unique = [...new Set(variantIds.filter(Boolean))];
@@ -114,13 +125,13 @@ export async function loadCatalog(variantIds: readonly string[]): Promise<Map<st
   if (!unique.length) return catalog;
 
   const { rows } = await selectRows("variant", {
-    select: "variant_id,product:product(name,sale_price,base_price,category_id)",
+    select: "variant_id,product:product(name,sale_price,base_price,category_id,status)",
     variant_id: `in.(${unique.map(quotePostgrestValue).join(",")})`,
     limit: unique.length
   });
   for (const row of rows) {
     const product = row.product as JsonObject | null | undefined;
-    if (!product) continue;
+    if (!product || product.status !== "on_sale") continue;
     const variantId = String(row.variant_id);
     catalog.set(variantId, {
       variantId,
@@ -132,11 +143,13 @@ export async function loadCatalog(variantIds: readonly string[]): Promise<Map<st
   const missingIds = unique.filter((id) => !catalog.has(id));
   if (missingIds.length > 0) {
     const { rows: prodRows } = await selectRows("product", {
-      select: "product_id,name,sale_price,base_price,category_id",
+      select: "product_id,name,sale_price,base_price,category_id,status",
       product_id: `in.(${missingIds.map(quotePostgrestValue).join(",")})`,
+      status: "eq.on_sale",
       limit: missingIds.length
     });
     for (const prod of prodRows) {
+      if (prod.status !== "on_sale") continue;
       const prodId = String(prod.product_id);
       catalog.set(prodId, {
         variantId: prodId,

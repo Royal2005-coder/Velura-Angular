@@ -105,6 +105,11 @@ export class SiteHeader {
   });
 
   constructor() {
+    this.loadCatalog();
+  }
+
+  /** Refreshes suggestions when search opens so an admin rename does not remain cached in the header. */
+  private loadCatalog(): void {
     this.catalog
       .getProducts()
       .pipe(takeUntilDestroyed(this.destroy))
@@ -189,7 +194,9 @@ export class SiteHeader {
     }
   }
 
+  /** Opens search with the current catalog instead of the header's initial product snapshot. */
   onSearchFocus(): void {
+    if (!this.searchOpen()) this.loadCatalog();
     this.searchOpen.set(true);
     this.loadRecentlyViewed();
     setTimeout(() => {
@@ -210,8 +217,10 @@ export class SiteHeader {
     }
   }
 
+  /** Filters locally while typing, refreshing only when a closed search is reopened. */
   onSearchInput(event: Event): void {
     const input = event.target as HTMLInputElement;
+    if (!this.searchOpen()) this.loadCatalog();
     this.searchQuery.set(input.value);
     this.searchOpen.set(true);
   }

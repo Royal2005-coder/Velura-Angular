@@ -53,6 +53,14 @@ export interface CreatedOrder {
   payment_expires_at?: string;
 }
 
+/** Checkout values copied from a cancelled order for a one-click reorder. */
+export interface ReorderDraft {
+  orderId: string;
+  items: CartLine[];
+  address: CheckoutShipping;
+  paymentMethod: CheckoutMethods['paymentMethod'];
+}
+
 const SHIPPING_KEY = 'checkout_shipping';
 const METHODS_KEY = 'checkout_methods';
 const ITEMS_KEY = 'checkout_items';
@@ -62,6 +70,7 @@ const SOURCE_KEY = 'checkout_source';
 export type CheckoutSource = 'cart' | 'buy_now';
 const GUEST_PAYLOAD_KEY = 'guest_checkout_payload';
 const CREATED_ORDER_KEY = 'created_order';
+const REORDER_KEY = 'velura_reorder_draft';
 
 /**
  * Checkout session matching vanilla localStorage / sessionStorage keys.
@@ -89,6 +98,26 @@ export class CheckoutStore {
     sessionStorage.setItem(SOURCE_KEY, source);
     this.items.set(items);
     sessionStorage.setItem(ITEMS_KEY, JSON.stringify(items));
+  }
+
+  /** Prepare checkout with the cancelled order's items and delivery choices. */
+  prepareReorder(draft: ReorderDraft): void {
+    this.setCheckoutItems(draft.items, 'buy_now');
+    this.saveShipping(draft.address);
+    this.saveMethods({ ...this.methods(), paymentMethod: draft.paymentMethod });
+    sessionStorage.setItem(REORDER_KEY, JSON.stringify(draft));
+  }
+
+  /** Read and consume the pending reorder snapshot once checkout has loaded it. */
+  consumeReorder(): ReorderDraft | null {
+    try {
+      const raw = sessionStorage.getItem(REORDER_KEY);
+      sessionStorage.removeItem(REORDER_KEY);
+      return raw ? (JSON.parse(raw) as ReorderDraft) : null;
+    } catch {
+      sessionStorage.removeItem(REORDER_KEY);
+      return null;
+    }
   }
 
   /**

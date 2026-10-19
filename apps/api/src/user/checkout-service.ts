@@ -135,12 +135,12 @@ export class CheckoutOtpService {
 
   constructor(private readonly limiter = new CheckoutOtpRateLimiter()) {}
 
-  /** Chuẩn hóa contact, áp rate limit và tạo OTP hiệu lực 60 giây. */
+  /** Chuẩn hóa contact, áp rate limit và cấp mã SMS thử nghiệm 123456 trong 60 giây. */
   issue(input: { fullName: unknown; phone: unknown; email?: unknown; ip: string }, now = Date.now()): CheckoutOtpSession {
     const contact = validateCheckoutContact(input);
     this.limiter.consume(contact.phone, input.ip, now);
     const session: CheckoutOtpSession = {
-      otpCode: generateCheckoutOtp(),
+      otpCode: "123456",
       expiresAt: now + 60 * 1000,
       contact,
       attempts: 0

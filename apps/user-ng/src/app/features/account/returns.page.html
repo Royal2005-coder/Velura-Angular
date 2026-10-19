@@ -20,6 +20,22 @@
             <p>Vui lòng điền đầy đủ thông tin để chúng tôi xử lý yêu cầu của bạn</p>
           </div>
 
+          @if (visibleReturns().length > 0) {
+            <section class="return-section" aria-labelledby="return-tracking-title">
+              <h2 id="return-tracking-title">Theo dõi đổi/trả</h2>
+              <div class="order-selection-list">
+                @for (request of visibleReturns(); track request.return_id; let index = $index) {
+                  <div class="selection-card is-selected">
+                    <div class="selection-card__content">
+                      <strong>Lần {{ visibleReturns().length - index }} · {{ request.tracking_return_code || request.return_id }}</strong>
+                      <span>{{ request.return_type === 'exchange' ? 'Đổi hàng' : 'Trả hàng' }} · {{ request.status || 'Đang xử lý' }}</span>
+                    </div>
+                  </div>
+                }
+              </div>
+            </section>
+          }
+
           <form id="returnForm" class="return-form" (submit)="$event.preventDefault(); submit()">
             <!-- Hidden order ID -->
             <input type="hidden" id="js-hidden-order-id" name="order_id" value="" />

@@ -32,6 +32,23 @@ export class AuthService {
     this.sessionState.set(this.readSession());
   }
 
+  /** Synchronizes the server-authoritative role without replacing local profile fields. */
+  syncRole(role: string | null | undefined): void {
+    if (!role) return;
+    const raw = localStorage.getItem('velura_user');
+    if (raw) {
+      try {
+        const user = JSON.parse(raw) as Record<string, unknown>;
+        user['role'] = role;
+        localStorage.setItem('velura_user', JSON.stringify(user));
+      } catch {
+        // Keep the in-memory session authoritative when stale storage is malformed.
+      }
+    }
+    const session = this.sessionState();
+    if (session) this.sessionState.set({ ...session, role });
+  }
+
   /**
    * Consumes the one-time welcome flag created by successful member registration.
    * The persisted payload is cleared before the banner opens so refresh/login cannot replay it.

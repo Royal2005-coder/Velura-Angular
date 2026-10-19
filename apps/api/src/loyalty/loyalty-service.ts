@@ -16,8 +16,8 @@ export interface LoyaltyQuote {
 /** Requires the authenticated member, never a phone-matched guest or a caller-supplied owner. */
 export function loyaltyActor(context: AuthContext): string | null {
   const profile = context.profile;
-  return context.authUser && !context.isAdmin && context.roleCode === "member" && profile?.is_active === true && profile.role === "member"
-    ? profile.user_id : null;
+  if (!context.authUser || context.isAdmin || context.roleCode !== "member" || !profile) return null;
+  return profile.is_active !== false && profile.role === "member" ? profile.user_id : null;
 }
 
 /** Points redemption is an integer count; fractional balances remain in the durable ledger. */

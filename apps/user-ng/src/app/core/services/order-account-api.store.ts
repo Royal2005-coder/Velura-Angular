@@ -12,7 +12,7 @@ import {
   RETURN_WORKFLOW_LABELS,
   ReturnWorkflowStatus,
 } from './purchase-demo.store';
-import type { ComboComponentItem, OrderAccountModel, ReplacementChoice, ReturnReasonCode } from './order-account.model';
+import type { ComboComponentItem, OrderAccountModel, RefundBankDetails, ReplacementChoice, ReturnReasonCode } from './order-account.model';
 import type { ProductSummary } from '../models/product.interface';
 
 /** Real order status → the `DemoOrderStatus` token the KAN-31 template already renders. */
@@ -104,6 +104,9 @@ interface ApiReturn {
   resolved_at?: string | null;
   version?: number;
   items?: ApiReturnItem[];
+  refund_bank_name?: string | null;
+  refund_bank_account?: string | null;
+  refund_bank_holder?: string | null;
 }
 
 function mapAddress(order: ApiOrder) {
@@ -197,6 +200,9 @@ function mapReturn(row: ApiReturn): DemoReturn {
     orderId: row.order_code || row.order_id || '',
     kind,
     items: (row.items || []).map(mapReturnItem),
+    ...(row.refund_bank_name && row.refund_bank_account ? {
+      bank: { name: row.refund_bank_name, last4: row.refund_bank_account.slice(-4), holder: row.refund_bank_holder || '' }
+    } : {}),
     reason: row.description || '',
     evidenceNames: row.evidence_images || [],
     stage: returnStates(kind).indexOf(status),
@@ -242,7 +248,7 @@ export class OrderAccountApiStore implements OrderAccountModel {
   private readonly comboComponentsByProduct = signal<Record<string, ComboComponentItem[]>>({});
   private replacementVersion = 0;
   readonly cancellableBeforeStage = 3;
-  readonly supportsBankInfo = false;
+  readonly supportsBankInfo = true;
   private generation = 0;
   private refreshVersion = 0;
   private lookupVersion = 0;
@@ -406,6 +412,7 @@ export class OrderAccountApiStore implements OrderAccountModel {
     reason: string,
     evidence: Array<{ name: string; file?: File }>,
     reasonCode?: ReturnReasonCode,
+    bank?: RefundBankDetails,
   ): Promise<DemoReturn> {
     const order = this.orders().find((row) => row.id === orderId);
     if (!order) throw new Error('Không tìm thấy đơn hàng.');
@@ -444,6 +451,11 @@ export class OrderAccountApiStore implements OrderAccountModel {
     const body = {
       return_type: kind,
       reason_code: reasonCode,
+      ...(bank ? {
+        refund_bank_name: bank.bankName,
+        refund_bank_account: bank.accountNumber,
+        refund_bank_holder: bank.accountHolder,
+      } : {}),
       description,
       evidence_images: evidenceUrls,
       items: items.map((item) => ({

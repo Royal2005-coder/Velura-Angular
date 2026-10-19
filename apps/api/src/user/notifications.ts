@@ -44,6 +44,9 @@ export async function handleNotificationsRoute(
 ): Promise<void> {
   void parts;
   const profile = requireUserAuth(context);
+  if (profile.role !== "member") {
+    throw new HttpError(403, "MEMBER_REQUIRED", "Thông báo storefront chỉ dành cho tài khoản thành viên");
+  }
 
   // GET /api/user/notifications
   if (req.method === "GET" && !action) {

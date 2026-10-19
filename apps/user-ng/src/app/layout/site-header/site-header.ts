@@ -1,5 +1,5 @@
-import { DecimalPipe } from '@angular/common';
-import { Component, DestroyRef, ElementRef, computed, inject, signal, viewChild } from '@angular/core';
+import { DatePipe, DecimalPipe } from '@angular/common';
+import { Component, DestroyRef, ElementRef, HostListener, computed, inject, signal, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 import type { ProductSummary } from '../../core/models/product.interface';
@@ -7,6 +7,7 @@ import { AuthService } from '../../core/services/auth.service';
 import { CartStore } from '../../core/services/cart.store';
 import { CatalogService } from '../../core/services/catalog.service';
 import { WishlistStore } from '../../core/services/wishlist.store';
+import { NotificationsService } from '../../core/services/notifications.service';
 import type { VisualResult } from '../../core/services/visual-search.service';
 import { VisualSearchWorkbench } from '../../shared/visual-search-workbench/visual-search-workbench';
 import { matchesSearchText } from '../../core/utils/search';
@@ -24,13 +25,14 @@ const CATEGORY_QUERY_MAP: Record<string, string> = {
 
 @Component({
   selector: 'app-site-header',
-  imports: [RouterLink, RouterLinkActive, DecimalPipe, VisualSearchWorkbench],
+  imports: [RouterLink, RouterLinkActive, DecimalPipe, DatePipe, VisualSearchWorkbench],
   templateUrl: './site-header.html',
 })
 export class SiteHeader {
   private readonly auth = inject(AuthService);
   private readonly cart = inject(CartStore);
   private readonly wishlist = inject(WishlistStore);
+  readonly notifications = inject(NotificationsService);
   private readonly router = inject(Router);
   private readonly catalog = inject(CatalogService);
   private readonly destroy = inject(DestroyRef);
@@ -40,6 +42,8 @@ export class SiteHeader {
   readonly avatarUrl = computed(() => this.auth.session()?.avatarUrl);
   readonly cartCount = this.cart.itemCount;
   readonly wishlistCount = this.wishlist.itemCount;
+  readonly notificationCount = this.notifications.unreadCount;
+  readonly notificationOpen = signal(false);
   readonly navOpen = signal(false);
 
   // Search dropdown states
@@ -123,6 +127,27 @@ export class SiteHeader {
   logout(): void {
     this.auth.signOut();
     void this.router.navigateByUrl('/');
+  }
+
+  /** Opens the member inbox; guests never see notification data. */
+  toggleNotifications(): void {
+    if (!this.isLoggedIn()) return;
+    this.notificationOpen.update((open) => !open);
+  }
+
+  /** Closes the notification popover when the member clicks anywhere outside it. */
+  @HostListener('document:click', ['$event'])
+  closeNotificationsOnOutsideClick(event: MouseEvent): void {
+    const target = event.target;
+    if (target instanceof Element && target.closest('.header-notification')) return;
+    this.notificationOpen.set(false);
+  }
+
+  /** Navigates to a notification target and records that it was seen. */
+  openNotification(notification: import('../../core/services/notifications.service').MemberNotification): void {
+    void this.notifications.markRead(notification);
+    this.notificationOpen.set(false);
+    if (notification.link) void this.router.navigateByUrl(notification.link);
   }
 
   readonly headerWorkbench = viewChild<VisualSearchWorkbench>('headerWorkbench');

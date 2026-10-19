@@ -569,7 +569,7 @@ describe('AdminProductsPage', () => {
     const fixture = lastAdminFixture();
     fixture.detectChanges();
     const root = fixture.nativeElement as HTMLElement;
-    const names = Array.from(root.querySelectorAll('[data-testid="audit-filters"] [name]')).map((el) => el.getAttribute('name'));
+    const names = Array.from(root.querySelectorAll('[data-testid="audit-filters"] input[name], [data-testid="audit-filters"] select[name]')).map((el) => el.getAttribute('name'));
     expect(names).toEqual(['from', 'to', 'product', 'actionType', 'user']);
     const options = Array.from(root.querySelectorAll('[data-testid="audit-filters"] select[name="actionType"] option')).map((el) => (el as HTMLOptionElement).value);
     expect(options).toEqual(['', 'CREATE', 'UPDATE', 'UPDATE_STATUS', 'UPDATE_STOCK']);
@@ -603,6 +603,14 @@ describe('AdminProductsPage', () => {
 
   describe('UAT 3.1.10 catalog management', () => {
     const skuMessage = 'Mã SKU đã tồn tại, SKU phải là duy nhất trên toàn hệ thống';
+    /** The create form only accepts images carrying a live studio approval; paste-by-URL is rejected before SKU checks. */
+    const approveEditorImage = (page: AdminProductsPage, url: string): void => {
+      page.editorImages.set([url]);
+      page.imageApprovals.set([{
+        approvalId: 'appr-1', url, sourceRevision: 'rev-1', processingVersion: 'v1',
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      }]);
+    };
     const variant = (overrides: Partial<AdminProductVariant> = {}): AdminProductVariant => ({
       variant_id: 'v-den', color: 'Đen', size: 'M', stock_quantity: 50, low_stock_threshold: 5, version: 3, ...overrides,
     });
@@ -635,7 +643,7 @@ describe('AdminProductsPage', () => {
 
       const form = document.createElement('form');
       form.innerHTML = '<input name="name" value="Áo mới"><input name="sku" value="VL-AO001"><select name="categoryId"><option value="c1" selected>Áo</option></select>';
-      page.editorImages.set(['/assets/a.jpg']);
+      approveEditorImage(page, '/assets/a.jpg');
       page.submitEditor({ preventDefault: () => undefined, target: form } as unknown as Event);
       expect(page.actionError()).toBe(skuMessage);
       expect(createProduct).not.toHaveBeenCalled();
@@ -666,7 +674,7 @@ describe('AdminProductsPage', () => {
       page.openCreate();
       const form = document.createElement('form');
       form.innerHTML = '<input name="name" value="Áo mới"><input name="sku" value="VL-RACE01"><select name="categoryId"><option value="c1" selected>Áo</option></select><input name="basePrice" value="1000">';
-      page.editorImages.set(['/assets/a.jpg']);
+      approveEditorImage(page, '/assets/a.jpg');
       page.submitEditor({ preventDefault: () => undefined, target: form } as unknown as Event);
       expect(createProduct).toHaveBeenCalled();
       expect(page.actionError()).toBe(skuMessage);
@@ -737,7 +745,8 @@ describe('AdminProductsPage', () => {
 
       page.toggleLowStockFilter();
       expect(page.lowStockOnly()).toBe(true);
-      expect(listProducts).toHaveBeenLastCalledWith(expect.objectContaining({ lowStock: 'true' }));
+      // The KPI count requests (on_sale, hidden, out_of_stock) are issued after the list, so assert the list call itself.
+      expect(listProducts).toHaveBeenCalledWith(expect.objectContaining({ lowStock: 'true' }));
       page.resetFilters(new Event('reset', { cancelable: true }));
       expect(page.lowStockOnly()).toBe(false);
     });

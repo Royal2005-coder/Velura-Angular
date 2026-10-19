@@ -167,7 +167,7 @@ test("catalog responses are never cached by the browser, Vercel edge or a CDN", 
       // Twice: the first call fills the process cache, the second one is served from it.
       for (let pass = 0; pass < 2; pass += 1) {
         const cacheControl = String((await get(route, action)).headers["cache-control"]);
-        assert.match(cacheControl, /no-cache/, route);
+        assert.match(cacheControl, /no-store/, route);
         assert.doesNotMatch(cacheControl, /s-maxage|stale-while-revalidate|max-age=[1-9]/, route);
       }
     }

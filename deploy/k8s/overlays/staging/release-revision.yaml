@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: velura-api-config
+  namespace: velura
+data:
+  RELEASE_REVISION: b3df517c1daa2c4147ca7c5db0a32213a748c683

@@ -1,4 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
+import { readFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { config } from "./config.js";
 import { HttpError, sendJson } from "./http.js";
@@ -8,6 +9,18 @@ import type { HeaderMap } from "./types.js";
 const bounds = [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 15, 60];
 interface Measurement { count: number; seconds: number; buckets: number[]; }
 const http = new Map<string, Measurement>();
+
+/** Read image-baked identity once; local source runs without a release file cannot prove a deployed release. */
+function readBuildRevision(): string | null {
+  try {
+    const revision = readFileSync(new URL("./release-revision", import.meta.url), "utf8").trim();
+    return /^[a-f0-9]{40}$/.test(revision) ? revision : null;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+}
+const buildRevision = readBuildRevision();
 
 /** Observe bounded route families and status classes, never request bodies, query strings or identities. */
 export function observeHttpRequest(req: IncomingMessage, res: ServerResponse): void {
@@ -107,6 +120,7 @@ export async function handleRuntimeRoute(req: IncomingMessage, res: ServerRespon
   if (!expected || actual.length !== wanted.length || !timingSafeEqual(actual, wanted)) throw new HttpError(403, "OPS_ACCESS_DENIED", "Owner verification credential is required");
   const revision = process.env.RELEASE_REVISION || "";
   const state = await runtimeReadiness();
-  sendJson(res, state.ready && /^[a-f0-9]{40}$/.test(revision) ? 200 : 503, { revision: revision || null, ready: state.ready && /^[a-f0-9]{40}$/.test(revision), checks: state.checks, flux: { ready: null, reason: "VERIFY_WITH_OWNER_OPS_CLI" } }, { ...headers, "cache-control": "no-store" });
+  const releaseReady = state.ready && /^[a-f0-9]{40}$/.test(revision) && revision === buildRevision;
+  sendJson(res, releaseReady ? 200 : 503, { revision: revision || null, buildRevision, ready: releaseReady, checks: state.checks, flux: { ready: null, reason: "VERIFY_WITH_OWNER_OPS_CLI" } }, { ...headers, "cache-control": "no-store" });
   return true;
 }

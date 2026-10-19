@@ -7,7 +7,18 @@ spec:
   interval: 1m
   url: https://github.com/Royal2005-coder/Velura-Angular.git
   ref:
-    branch: feature/KAN-32-integrated-commerce
+    branch: main
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: velura-staging-repo
+  namespace: flux-system
+spec:
+  interval: 1m
+  url: https://github.com/Royal2005-coder/Velura-Angular.git
+  ref:
+    branch: develop
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
@@ -19,7 +30,28 @@ spec:
   sourceRef:
     kind: GitRepository
     name: velura-repo
+  path: ./deploy/k8s/overlays/infrastructure
+  # One-time bootstrap gate; resume only after the stateful drift review.
+  suspend: true
+  prune: true
+  deletionPolicy: Orphan
+  wait: true
+  timeout: 5m
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: velura-production
+  namespace: flux-system
+spec:
+  interval: 2m
+  sourceRef:
+    kind: GitRepository
+    name: velura-repo
   path: ./deploy/k8s/overlays/production
+  dependsOn:
+    - name: velura-infra
+  suspend: true
   prune: true
   deletionPolicy: Orphan
   wait: true
@@ -34,8 +66,11 @@ spec:
   interval: 2m
   sourceRef:
     kind: GitRepository
-    name: velura-repo
+    name: velura-staging-repo
   path: ./deploy/k8s/overlays/staging
+  dependsOn:
+    - name: velura-infra
+  suspend: true
   prune: true
   deletionPolicy: Orphan
   wait: true

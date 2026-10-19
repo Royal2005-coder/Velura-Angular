@@ -9,8 +9,12 @@ COPY apps/user-ng ./apps/user-ng
 RUN npm run build -w @velura/user-ng
 
 FROM nginxinc/nginx-unprivileged:1.28.0-alpine
+ARG RELEASE_REVISION
 COPY --from=builder /app/apps/user-ng/dist/user-ng/browser /usr/share/nginx/html
 COPY deploy/docker/storefront/nginx.conf /etc/nginx/conf.d/default.conf
+RUN test "${#RELEASE_REVISION}" -eq 40 && \
+    case "$RELEASE_REVISION" in *[!a-f0-9]*) exit 1;; esac && \
+    printf '{"revision":"%s"}\n' "$RELEASE_REVISION" > /usr/share/nginx/html/release.json
 USER 101:101
 EXPOSE 8080
 CMD ["nginx", "-g", "daemon off;"]

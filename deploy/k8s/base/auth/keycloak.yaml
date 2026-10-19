@@ -63,13 +63,11 @@ spec:
         - name: KC_DB_URL
           value: jdbc:postgresql://postgres.database.svc:5432/keycloak
         - name: KC_DB_USERNAME
-          value: null
           valueFrom:
             secretKeyRef:
               name: keycloak-database
               key: username
         - name: KC_DB_PASSWORD
-          value: null
           valueFrom:
             secretKeyRef:
               name: keycloak-database

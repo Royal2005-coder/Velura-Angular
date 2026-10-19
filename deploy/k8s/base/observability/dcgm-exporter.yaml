@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dcgm-exporter
+  namespace: observability
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dcgm-exporter
+  template:
+    metadata:
+      labels:
+        app: dcgm-exporter
+    spec:
+      runtimeClassName: nvidia
+      automountServiceAccountToken: false
+      priorityClassName: velura-platform
+      securityContext:
+        runAsNonRoot: false
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: dcgm-exporter
+        image: nvcr.io/nvidia/k8s/dcgm-exporter:3.3.8-3.6.0-ubuntu22.04@sha256:bb219b0b463ca0b7baac8b17e1b3b08fa929dff600c1e98915f74694c9f871f0
+        ports:
+        - name: metrics
+          containerPort: 9400
+        env:
+        - name: NVIDIA_VISIBLE_DEVICES
+          value: "all"
+        - name: NVIDIA_DRIVER_CAPABILITIES
+          value: "all"
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 300m
+            memory: 768Mi
+        readinessProbe:
+          tcpSocket:
+            port: 9400
+          periodSeconds: 10
+        livenessProbe:
+          tcpSocket:
+            port: 9400
+          initialDelaySeconds: 30
+          periodSeconds: 20
+  strategy:
+    type: Recreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dcgm-exporter
+  namespace: observability
+spec:
+  type: ClusterIP
+  selector:
+    app: dcgm-exporter
+  ports:
+  - name: metrics
+    port: 9400
+    targetPort: 9400

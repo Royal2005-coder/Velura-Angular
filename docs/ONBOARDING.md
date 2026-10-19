@@ -16,7 +16,9 @@ Cùng một repo GitHub. Lead ghi tên vào bảng khi chia slot.
 | Admin (2) | `apps/admin-ng` + `apps/api` | [KAN-5](https://webadvance.atlassian.net/browse/KAN-5) |
 | Lead (1) | CI, `docs/`, `packages/`, `database/` | cả hai khi đụng contract |
 
-Review: Storefront PR do Storefront khác; Admin PR do Admin khác. Đụng DTO/API thì cả hai. **CI đỏ = không merge.**
+Vai trò cụ thể: [TEAM-WORKFLOW](TEAM-WORKFLOW.md). Royal/Quỳnh làm fullstack;
+Uyên/Khải redesign frontend giữ contract. MVP không bắt buộc approval; tag người
+liên quan để nắm thông tin, phối hợp khi đổi DTO/API. **CI đỏ/pending = không merge.**
 
 ## Account
 
@@ -60,7 +62,7 @@ Chi tiết đầy đủ: [GIT-AND-CI.md §3–§4](./GIT-AND-CI.md#3-versioning-
 3. Commit + **title PR** bắt đầu `KAN-<n>`; body có `## Why` (template `.github/pull_request_template.md`).
 4. PR **chỉ vào `develop`**. CI: `validate` + `validate-pr-contract` + `test-api` + `test-angular` + `build` + `note-pr`.
 5. Không merge CI đỏ. Không feature → `main`. Không `[skip ci]`.
-6. Production chỉ sau PR `develop` → `main` (Lead); source trên `develop` không publish image. Staging chỉ reconcile reviewed image pins, rồi promote cùng digest sang production.
+6. Production chỉ sau PR `develop` → `main` (Lead); source trên `develop` không publish image. MVP bỏ staging: main build/scan/sign rồi bot mở PR production pins. Review và promote pins lên main để Flux tự rollout đúng digest.
 
 Luồng: [HOW-IT-WORKS.md](./HOW-IT-WORKS.md). UI: [ANGULAR-STANDARDS.md](./ANGULAR-STANDARDS.md).  
 Kiến trúc / folder / role: [ARCHITECTURE.md](./ARCHITECTURE.md). Kiến trúc không phá: [COMPLIANCE.md](./COMPLIANCE.md).

@@ -30,11 +30,12 @@ Pipeline: [HOW-IT-WORKS.md](./HOW-IT-WORKS.md)
   CI/CD             Actions → signed image digests → reviewed pins → Flux → K3s
 ```
 
-Ownership: Terraform/Atlantis = external Cloudflare DNS; Flux `velura-infra`
-= internal platform; Flux `velura-staging` / `velura-production` = app overlays.
-Staging follows reviewed manifests on `develop`, production follows `main`;
-neither deploys unbuilt source. Platform changes and app image promotion have
-separate reconciliation inventories.
+Ownership: Terraform/Atlantis = external Cloudflare DNS; Flux `velura-root`
+= Flux source/owner configuration; `velura-infra` = internal platform;
+`velura-production` = production apps. MVP runs one environment following main.
+Develop is integration-only. Source changes publish tested, scanned, signed
+images; reviewed production pins promote those exact digests. Root, platform
+and application have separate inventories; CI has no Kubernetes credentials.
 
 | Runtime | Port local | Production |
 |---|---|---|
@@ -141,7 +142,7 @@ database/migrations/
 | Test API | `tests/api/*.test.ts` + `npm run test:api` / `typecheck:api` |
 | Test Angular | `*.page.spec.ts` cạnh page + `npm run test:ng` |
 | CI | `.github/workflows/ci.yml` |
-| Deploy artifacts | `deploy/docker` → registry digests; `deploy/k8s` → staging-first GitOps qua PR được duyệt, không CI kubeconfig |
+| Deploy artifacts | `deploy/docker` → signed registry digests; `deploy/k8s` → MVP production GitOps qua PR được duyệt, không CI kubeconfig |
 
 ---
 

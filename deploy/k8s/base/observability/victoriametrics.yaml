@@ -180,7 +180,7 @@ spec:
         - -httpListenAddr=:8428
         - -promscrape.config=/etc/victoriametrics/scrape.yaml
         - -retentionPeriod=14d
-        - -memory.allowedBytes=384Mi
+        - -memory.allowedBytes=402653184
         volumeMounts:
         - name: data
           mountPath: /vmetrics-data

@@ -33,7 +33,7 @@ const PRODUCTS_CACHE_TTL_MS = 10 * 1000;
  * rename, status change or stock change has to show on the next storefront request.
  * The in-process cache above already protects the database from repeated reads.
  */
-const CATALOG_CACHE_CONTROL = "no-cache, max-age=0, must-revalidate";
+const CATALOG_CACHE_CONTROL = "no-store";
 
 /** Statuses a shopper may list (`out_of_stock` renders as "Hết hàng"). `hidden` is never public. */
 const LISTED_STATUSES = "in.(on_sale,out_of_stock)";

@@ -173,3 +173,115 @@
     max-height: 280px;
   }
 }
+
+.admin-payment-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.admin-payment-badge--cod {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.admin-payment-badge--stripe {
+  background: #e0e7ff;
+  color: #4338ca;
+}
+
+.admin-payment-badge--other_online {
+  background: #fce7f3;
+  color: #9d174d;
+}
+
+.admin-payment-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.admin-payment-cell__chip {
+  font-size: 0.7rem;
+  padding: 1px 6px;
+}
+
+.admin-refund-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--line, #e2d9d0);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.admin-refund-panel--cod {
+  border-color: #fcd34d;
+  background: #fffbeb;
+}
+
+.admin-refund-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.admin-refund-panel__header h4 {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #4a4039;
+}
+
+.admin-refund-panel__amount {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.admin-refund-panel__mono {
+  font-family: monospace;
+}
+
+.admin-refund-panel__supplement {
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: #e0f2fe;
+  color: #075985;
+  font-size: 0.8125rem;
+}
+
+.admin-refund-panel__supplement p {
+  margin: 4px 0 0;
+}
+
+.admin-refund-panel__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.admin-refund-panel__proof {
+  padding: 0;
+  border: 1px solid var(--line, #e2d9d0);
+  border-radius: 6px;
+  overflow: hidden;
+  background: none;
+  cursor: pointer;
+}
+
+.admin-refund-panel__proof img {
+  display: block;
+  width: 96px;
+  height: 96px;
+  object-fit: cover;
+}

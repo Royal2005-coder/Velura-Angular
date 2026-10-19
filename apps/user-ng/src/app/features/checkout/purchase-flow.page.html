@@ -65,11 +65,11 @@
                       /><small class="error">{{ fieldErrors()['name'] }}</small></label
                     >
                     <label class="field"
-                      >{{ member() ? 'Email (tùy chọn)' : 'Email nhận mã OTP & ưu đãi thành viên *' }}<input
+                      >Email (tùy chọn)<input
                         name="email"
                         type="email"
                         autocomplete="email"
-                        [placeholder]="member() ? 'example@gmail.com' : 'Nhập email nhận OTP và quà chào mừng'"
+                        placeholder="Nhập email nếu muốn nhận thêm mã OTP qua email"
                         [ngModel]="address.email"
                         (ngModelChange)="editField('email', $event)"
                         (blur)="validateField('email')"
@@ -155,10 +155,7 @@
                     @if (otpError()) {
                       <p class="error" role="alert">{{ otpError() }}</p>
                     }
-                    <small class="muted"
-                      >Xác thực không tự tạo tài khoản.
-                      <a routerLink="/auth/signin">Đăng nhập</a> nếu bạn đã là thành viên.</small
-                    >
+                    <small class="muted">Mã OTP SMS thử nghiệm hiện tại là <strong>123456</strong>.</small>
                   }
                 </section>
                 <section class="form-section">
@@ -560,6 +557,11 @@
           ></label
         >
         <div class="actions">
+          @if (!entry.address.isDefault) {
+            <button class="text-button" type="button" [disabled]="addressBusy()" (click)="makeDefaultAddress(i)">
+              Đặt mặc định
+            </button>
+          }
           <button class="text-button" type="button" (click)="editAddress(i)">
             {{ entry.savedIndex === null ? 'Sửa và lưu' : 'Sửa' }}
           </button>
@@ -588,6 +590,7 @@
         Bạn chưa có địa chỉ đã lưu. Thêm địa chỉ đầu tiên để dùng nhanh cho lần sau.
       </p>
     }
+    @if (dialogErrors()['form']) { <p class="error" role="alert">{{ dialogErrors()['form'] }}</p> }
     <button class="wide secondary" type="button" (click)="editAddress()">+ Thêm địa chỉ mới</button>
     <button
       class="wide"

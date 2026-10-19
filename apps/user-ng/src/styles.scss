@@ -53,6 +53,22 @@ app-auth-otp-modal {
   display: contents;
 }
 
+.header-notification { position: relative; }
+.header-notification .header-action-btn { border: 0; background: transparent; cursor: pointer; }
+.notification-badge { position: absolute; top: -5px; right: -7px; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 10px; background: #b42318; color: #fff; font: 700 10px/17px Arial, sans-serif; text-align: center; }
+.notification-popover { position: absolute; z-index: 1000; top: calc(100% + 12px); right: -80px; width: min(360px, calc(100vw - 32px)); overflow: hidden; border: 1px solid #e7e1d8; border-radius: 12px; background: #fff; box-shadow: 0 14px 36px rgba(36, 28, 20, .16); }
+.notification-popover__head { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid #eee9e2; }
+.notification-popover__head button { border: 0; background: transparent; color: #8b5e3c; cursor: pointer; font-size: 12px; }
+.notification-empty { margin: 0; padding: 24px 16px; color: #766f68; font-size: 13px; text-align: center; }
+.notification-item { display: flex; width: 100%; gap: 10px; padding: 12px 16px; border: 0; border-bottom: 1px solid #f1eee9; background: #fff; color: inherit; cursor: pointer; text-align: left; }
+.notification-item:hover, .notification-item.is-unread { background: #fcf8f2; }
+.notification-item__dot { flex: 0 0 7px; width: 7px; height: 7px; margin-top: 5px; border-radius: 50%; background: transparent; }
+.notification-item.is-unread .notification-item__dot { background: #b46a35; }
+.notification-item strong, .notification-item small, .notification-item time { display: block; }
+.notification-item strong { font-size: 13px; }
+.notification-item small { margin-top: 3px; color: #625b54; font-size: 12px; line-height: 1.4; }
+.notification-item time { margin-top: 5px; color: #9a928a; font-size: 10px; }
+
 .otp-modal-container {
   position: fixed !important;
   inset: 0 !important;

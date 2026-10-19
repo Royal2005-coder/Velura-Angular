@@ -39,11 +39,11 @@ export class AddressSelector {
   constructor() {
     effect(() => {
       const value = this.value();
-      const signature = JSON.stringify([value.province || '', value.district || '', value.ward || '']);
+      const signature = JSON.stringify([value.province || '', value.district || '', value.ward || '', value.detail || '']);
       if (signature === this.signature) return;
       this.signature = signature;
       this.pending = { ...value };
-      const mode = value.district ? 'legacy' : 'current';
+      const mode = value.district || (!value.ward && value.detail) ? 'legacy' : 'current';
       // Only external address changes restore saved values; synchronous cached loads
       // must not subscribe this effect to the user's local selection signals.
       untracked(() => this.load(mode));
@@ -93,7 +93,7 @@ export class AddressSelector {
     this.provinceCode.set('');
     this.districtCode.set('');
     this.wardCode.set('');
-    this.signature = JSON.stringify([this.pending.province || '', this.pending.district || '', this.pending.ward || '']);
+    this.signature = JSON.stringify([this.pending.province || '', this.pending.district || '', this.pending.ward || '', this.pending.detail || '']);
     this.selectionChange.emit({ province: this.pending.province || '', district: this.pending.district || '', ward: this.pending.ward || '', mode, valid: false });
     this.request = this.model.load(mode).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (dataset) => {
@@ -111,8 +111,14 @@ export class AddressSelector {
   }
 
   private restore(): void {
-    const find = (units: GeographyUnit[] | undefined, name: string | undefined) =>
-      (units || []).find((unit) => normalize(unit.name) === normalize(name || ''));
+    const addressText = normalize(this.pending.detail || '');
+    const find = (units: GeographyUnit[] | undefined, name: string | undefined) => {
+      const normalizedName = normalize(name || '');
+      return (units || []).find((unit) => normalize(unit.name) === normalizedName)
+        || (!normalizedName && addressText
+          ? (units || []).find((unit) => addressText.includes(normalize(unit.name)))
+          : undefined);
+    };
 
     const province = find(this.provinces(), this.pending.province);
     this.provinceCode.set(province ? String(province.code) : '');
@@ -147,8 +153,8 @@ export class AddressSelector {
       mode: this.mode(),
       valid: Boolean(province && ward && (this.mode() === 'current' || district)),
     };
-    this.pending = selection;
-    this.signature = JSON.stringify([selection.province, selection.district, selection.ward]);
+    this.pending = { ...selection, detail: this.pending.detail };
+    this.signature = JSON.stringify([selection.province, selection.district, selection.ward, this.pending.detail || '']);
     this.selectionChange.emit(selection);
   }
 }

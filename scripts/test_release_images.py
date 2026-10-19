@@ -108,25 +108,74 @@ class ReleaseImagesTest(unittest.TestCase):
 
     def evidence(self):
         release_images.EVIDENCE.parent.mkdir(parents=True)
-        release_images.EVIDENCE.write_text(json.dumps({'run_id': 123, 'source_sha': 'c' * 40, 'release': self.release}))
-        return {'id': 123, 'repository': {'full_name': release_images.REPOSITORY}, 'path': '.github/workflows/ci.yml', 'event': 'push', 'head_branch': 'develop', 'head_sha': 'c' * 40}
+        release_images.EVIDENCE.write_text(json.dumps({'mode': 'direct-mvp', 'run_id': 123, 'run_attempt': 1, 'source_sha': self.release['revision'], 'release': self.release}))
+        return {'id': 123, 'repository': {'full_name': release_images.REPOSITORY}, 'path': '.github/workflows/ci.yml', 'event': 'push', 'head_branch': 'main', 'head_sha': self.release['revision']}
 
-    def test_exact_staging_bundle_and_completed_job_required(self):
+    def publisher_jobs(self):
+        names = ['validate', 'test-api', 'test-angular', 'test-ai-worker', 'build', 'migrations', 'manifests']
+        names += [f'deploy-production ({app})' for app in (*release_images.APPS, 'ai-worker')]
+        return {'jobs': [{'name': name, 'conclusion': 'success'} for name in names]}
+
+    def test_exact_published_bundle_and_every_completed_gate_are_required(self):
         run = self.evidence()
-        jobs = {'jobs': [{'name': 'verify-staging', 'conclusion': 'success'}]}
-        with patch.object(release_images, 'gh_json', side_effect=[run, jobs]), patch.object(release_images, 'remote_snapshot', return_value=self.release):
+        jobs = self.publisher_jobs()
+        current = {'status': 'ahead', 'files': [{'filename': 'docs/ARCHITECTURE.md'}]}
+        with patch.object(release_images, 'gh_json', side_effect=[run, jobs]):
             release_images.validate_production()
-        jobs['jobs'][0]['conclusion'] = 'failure'
+        for job in jobs['jobs']:
+            job['conclusion'] = 'failure'
+            with self.subTest(gate=job['name']), patch.object(release_images, 'gh_json', side_effect=[run, jobs]), self.assertRaises(ValueError):
+                release_images.validate_production()
+            job['conclusion'] = 'success'
+        other = {**self.release, 'buildId': self.release['revision'] + '-123-2'}
+        release_images.update('production', other)
         with patch.object(release_images, 'gh_json', side_effect=[run, jobs]), self.assertRaises(ValueError):
             release_images.validate_production()
-        jobs['jobs'][0]['conclusion'] = 'success'
-        other = {**self.release, 'buildId': self.release['revision'] + '-123-2'}
-        with patch.object(release_images, 'gh_json', side_effect=[run, jobs]), patch.object(release_images, 'remote_snapshot', return_value=other), self.assertRaises(ValueError):
+
+    def test_stale_main_application_source_cannot_be_promoted(self):
+        run = self.evidence()
+        evidence = json.loads(release_images.EVIDENCE.read_text())
+        for comparison in ({'status': 'ahead', 'files': [{'filename': 'apps/api/src/server.ts'}]}, {'status': 'diverged', 'files': []}):
+            with self.subTest(comparison=comparison), patch.object(release_images, 'gh_json', side_effect=[run, self.publisher_jobs(), comparison]), self.assertRaises(ValueError):
+                release_images.validate_published_evidence(evidence, require_current_source=True)
+
+    def test_existing_deployment_evidence_does_not_block_building_new_source(self):
+        run = self.evidence()
+        with patch.object(release_images, 'gh_json', side_effect=[run, self.publisher_jobs()]) as github:
             release_images.validate_production()
+        self.assertEqual(github.call_count, 2)
+
+    def test_attempt_replay_is_rejected_before_api_calls(self):
+        self.evidence()
+        evidence = json.loads(release_images.EVIDENCE.read_text())
+        evidence['run_attempt'] = 2
+        release_images.EVIDENCE.write_text(json.dumps(evidence))
+        with patch.object(release_images, 'gh_json') as github, self.assertRaises(ValueError):
+            release_images.validate_production()
+        github.assert_not_called()
+
+    def test_direct_release_activates_flux_without_touching_staging(self):
+        directory = self.artifacts()
+        run = self.evidence()
+        release_images.EVIDENCE.unlink()
+        flux = Path('deploy/k8s/base/flux/git-sync.yaml')
+        flux.parent.mkdir(parents=True)
+        flux.write_text(yaml.safe_dump({'kind': 'Kustomization', 'metadata': {'name': 'velura-production'}, 'spec': {'suspend': True}}))
+        responses = [run, self.publisher_jobs(), {'status': 'identical', 'files': []}]*2
+        before = (release_images.ROOT / 'staging/kustomization.yaml').read_text()
+        with patch.object(release_images, 'gh_json', side_effect=responses):
+            release_images.prepare_direct_release(str(directory), self.release['revision'], self.release['buildId'], '123', '1')
+        self.assertFalse(yaml.safe_load(flux.read_text())['spec']['suspend'])
+        self.assertEqual(json.loads(release_images.EVIDENCE.read_text())['mode'], 'direct-mvp')
+        self.assertEqual((release_images.ROOT / 'staging/kustomization.yaml').read_text(), before)
 
     def test_foreign_or_pr_verification_cannot_authorize_production(self):
         run = self.evidence()
         run['event'] = 'pull_request'
+        with patch.object(release_images, 'gh_json', return_value=run), self.assertRaises(ValueError):
+            release_images.validate_production()
+        run['event'] = 'push'
+        run['head_branch'] = 'develop'
         with patch.object(release_images, 'gh_json', return_value=run), self.assertRaises(ValueError):
             release_images.validate_production()
 

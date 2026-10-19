@@ -47,11 +47,13 @@ export async function handleProductsRoute(
         const filter = isActionUuid ? { product_id: `eq.${action}` } : { slug: `eq.${action}` };
         let product = await selectOne("product", {
           select: "*,category:category_id(*)",
+          status: "in.(on_sale,out_of_stock)",
           ...filter
         }, { count: "none", useAnonKey: true });
         if (!product && action === "ao-so-mi-lua-velura-01") {
           product = await selectOne("product", {
             select: "*,category:category_id(*)",
+            status: "in.(on_sale,out_of_stock)",
             slug: "eq.ao-so-mi-lua-tay-dai-ivory-thanh-lich"
           }, { count: "none", useAnonKey: true });
         }
@@ -126,6 +128,7 @@ export async function handleProductsRoute(
                   name: cp.name,
                   slug: cp.slug,
                   images: cp.images || [],
+                  image_colors: cp.image_colors || {},
                   base_price: cp.base_price,
                   sale_price: cp.sale_price,
                   category_name: compCatMap.get(cp.category_id) || "",
@@ -326,7 +329,7 @@ export async function handleProductsRoute(
       // Product + Category + Variants in 1 single join query, plus combo items and review ratings in parallel
       const [productResult, comboResult, reviewResult] = await Promise.all([
         selectRows("product", {
-          select: "product_id,sku,is_combo,name,slug,description,brand,base_price,sale_price,images,style_tags,color_tone,occasions,suitable_body_shapes,status,is_featured,collection,seo_title,seo_description,created_at,updated_at,version,category:category_id(category_id,name,slug),variants:variant(variant_id,color,color_hex,size,stock_quantity,reserved_quantity)",
+          select: "product_id,sku,is_combo,name,slug,description,brand,base_price,sale_price,images,image_colors,style_tags,color_tone,occasions,suitable_body_shapes,status,is_featured,collection,seo_title,seo_description,created_at,updated_at,version,category:category_id(category_id,name,slug),variants:variant(variant_id,color,color_hex,size,stock_quantity,reserved_quantity)",
           status: "in.(on_sale,out_of_stock)"
         }, { count: "none", useAnonKey: true }),
         selectRows("combo_item", {}, { count: "none", useAnonKey: true }).catch(() => ({ rows: [] as JsonObject[] })),
@@ -362,6 +365,7 @@ export async function handleProductsRoute(
             base_price: p.base_price,
             sale_price: p.sale_price,
             images: p.images,
+            image_colors: p.image_colors || {},
             is_featured: p.is_featured,
             is_combo: p.is_combo,
             status: p.status,

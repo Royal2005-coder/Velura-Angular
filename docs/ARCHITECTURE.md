@@ -123,6 +123,22 @@ apps/api/src/
 
 Ví dụ chuẩn: `products/product-router.ts` → `product-service.ts` → `product-repository.ts`.
 
+Ảnh sản phẩm: `images[0]` là Primary duy nhất; tối đa 20 URL không trùng.
+`image_colors` ánh xạ URL → tên màu biến thể; URL không được gán là ảnh chung.
+Admin gửi `imageColors`; Storefront chọn ảnh theo ánh xạ, rồi ảnh chung, rồi Primary,
+không đoán từ tên file hay vị trí. Migration `063` phải chạy trước khi phát hành API này.
+
+Trạng thái catalog: Active = `on_sale`, Hidden = `hidden`, Discontinued =
+`discontinued`; đổi trạng thái không ghi lại SKU, giá hoặc tồn kho biến thể.
+Checkout kiểm tra lại trạng thái khi chốt đơn, không chỉ khi tạo báo giá.
+
+CSV nhận diện biến thể bằng `sku` bền vững; `product_sku` chỉ định sản phẩm cha
+khi thêm biến thể (`color`, `size`). SKU trùng sau chuẩn hóa trong cùng file làm
+toàn bộ import bị từ chối. Giá hiện có chỉ đổi qua Điều chỉnh giá, không qua CSV.
+Preview phải hoàn tất và không có lỗi mới mở nút ghi; commit kiểm tra lại dữ liệu
+và ghi nguyên tử, không xóa sản phẩm/biến thể. Cần migrations `062`–`065` trước
+khi phát hành luồng trạng thái/CSV mới.
+
 Một số module storefront còn nằm dưới `user/` (cart, wishlist, …) — khi sửa vẫn **không** nhét business vào router kiểu “god file”; tách service/repository khi đụng KAN lớn.
 
 ### 2.3 Database

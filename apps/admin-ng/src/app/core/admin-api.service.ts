@@ -279,6 +279,8 @@ export interface AdminChatMessagesPayload {
 
 export interface AdminProductVariant {
   variant_id: string;
+  /** Stable inventory identity, persisted separately from the parent product SKU. */
+  sku?: string;
   color?: string;
   color_hex?: string | null;
   size?: string;
@@ -306,6 +308,8 @@ export interface AdminProductRow {
   sale_price?: number | null;
   status?: string;
   images?: string[];
+  /** Explicit image URL to variant color; unassigned URLs are common images. */
+  image_colors?: Record<string, string>;
   collection?: string | null;
   style_tags?: string[];
   color_tone?: string | null;

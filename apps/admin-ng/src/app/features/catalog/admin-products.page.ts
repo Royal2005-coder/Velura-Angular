@@ -1,6 +1,7 @@
 import { AdminDialogDirective } from '../../shared/admin-dialog.directive';
 import { AdminRefreshService } from '../../core/admin-refresh.service';
 import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
 import { forkJoin, of , Subscription } from 'rxjs';
 import { catchError, finalize } from 'rxjs/operators';
 import {
@@ -44,9 +45,9 @@ const STATUS_TONE: Record<string, string> = {
 
 const STATUS_TRANSITIONS: Record<string, string[]> = {
   on_sale: ['hidden', 'out_of_stock', 'discontinued'],
-  hidden: ['on_sale', 'discontinued'],
+  hidden: ['on_sale', 'out_of_stock', 'discontinued'],
   out_of_stock: ['on_sale', 'hidden', 'discontinued'],
-  discontinued: ['hidden'],
+  discontinued: ['on_sale', 'hidden', 'out_of_stock'],
 };
 
 interface CsvPreviewError {
@@ -110,6 +111,9 @@ function normalizeColorCode(color: string): string {
 })
 export class AdminProductsPage {
   private listRequest = new Subscription();
+  private csvPreviewRequest = new Subscription();
+  private csvFileRevision = 0;
+  private editorRequest = new Subscription();
   private readonly adminApi = inject(AdminApiService);
   private readonly session = inject(AdminSessionService);
 
@@ -143,11 +147,21 @@ export class AdminProductsPage {
   readonly csvErrors = signal<CsvPreviewError[]>([]);
   readonly csvValidRows = signal(0);
   readonly csvTotalRows = signal(0);
+  readonly csvChecking = signal(false);
+  readonly csvCommitting = signal(false);
+  readonly csvApproved = signal(false);
+  readonly canCommitCsv = computed(() => this.canMutate() && this.csvApproved()
+    && !this.csvChecking() && !this.csvCommitting() && !this.csvHasErrors()
+    && this.csvValidRows() > 0 && !!this.csvPreview());
   readonly logs = signal<AdminAuditRow[]>([]);
   readonly logsLoading = signal(false);
   readonly logsTotal = signal(0);
   readonly logsPage = signal(1);
   readonly logsPageSize = 10;
+  readonly logsQuery = signal('');
+  readonly logsDate = signal('');
+  readonly logsAction = signal('');
+  readonly selectedLog = signal<AdminAuditRow | null>(null);
   readonly selected = signal<AdminProductRow | null>(null);
   readonly overlay = signal<ProductOverlay>(null);
   readonly actionError = signal<string | null>(null);
@@ -259,6 +273,12 @@ export class AdminProductsPage {
   readonly editorSeoTitle = signal<string>('');
   readonly editorSeoDescription = signal<string>('');
   readonly editorImages = signal<string[]>([]);
+  readonly editorImageColors = signal<Record<string, string>>({});
+  readonly maxProductImages = 20;
+  readonly imageColorOptions = computed(() => [...new Set(
+    (this.overlay() === 'create' ? this.createVariants() : this.variants())
+      .map((variant) => variant.color?.trim() || '').filter(Boolean),
+  )]);
 
   readonly toneOptions: ReadonlyArray<{ value: string; label: string }> = [
     { value: 'Neutral', label: 'Tông da Trung tính (Neutral)' },
@@ -375,7 +395,12 @@ export class AdminProductsPage {
   );
 
   constructor() {
-    inject(DestroyRef).onDestroy(() => this.listRequest.unsubscribe());
+    inject(DestroyRef).onDestroy(() => {
+      this.listRequest.unsubscribe();
+      this.editorRequest.unsubscribe();
+      this.csvPreviewRequest.unsubscribe();
+      this.csvFileRevision++;
+    });
     inject(AdminRefreshService).register(() => {
       if (!this.loading() && !this.overlay() && !this.priceTarget()) this.reloadCatalog();
     }, inject(DestroyRef));
@@ -606,6 +631,7 @@ export class AdminProductsPage {
    * Opens create overlay with an empty form.
    */
   openCreate(): void {
+    this.editorRequest.unsubscribe();
     this.resetImageEditor();
     this.selected.set(null);
     this.variants.set([]);
@@ -746,6 +772,8 @@ export class AdminProductsPage {
    * Loads product detail + variants into the editor drawer.
    */
   openEdit(product: AdminProductRow): void {
+    this.editorRequest.unsubscribe();
+    this.variants.set([]);
     this.resetImageEditor();
     this.resetAiSeoState();
     this.selected.set(null);
@@ -767,10 +795,14 @@ export class AdminProductsPage {
     this.variantError.set(null);
     this.syncEditorSignalsFromProduct(product);
 
-    this.adminApi.getProduct(product.product_id).subscribe({
-      next: (row) => {
-        this.selected.set(row);
-        this.variants.set(row.variants || []);
+    this.editorRequest = forkJoin({
+      product: this.adminApi.getProduct(product.product_id),
+      variants: this.adminApi.listVariants(product.product_id),
+    }).subscribe({
+      next: ({ product: row, variants: payload }) => {
+        const variants = adminListRows<AdminProductVariant>(payload);
+        this.selected.set({ ...row, variants });
+        this.variants.set(variants);
         this.editBasePrice.set(Number(row.base_price || 0));
         this.editSalePrice.set(row.sale_price != null ? Number(row.sale_price) : null);
         this.syncEditorSignalsFromProduct(row);
@@ -782,9 +814,6 @@ export class AdminProductsPage {
         }
       },
       error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
-    });
-    this.adminApi.listVariants(product.product_id).subscribe({
-      next: (payload) => this.variants.set(adminListRows(payload)),
     });
     this.adminApi.listPriceHistory({ productId: product.product_id, limit: '10' }).subscribe({
       next: (payload) => this.priceHistory.set(adminListRows(payload)),
@@ -812,6 +841,7 @@ export class AdminProductsPage {
     this.editorSeoTitle.set(row.seo_title || '');
     this.editorSeoDescription.set(row.seo_description || '');
     this.editorImages.set([...(row.images || [])]);
+    this.editorImageColors.set({ ...(row.image_colors || {}) });
   }
 
   loadComboItems(productId: string): void {
@@ -876,7 +906,13 @@ export class AdminProductsPage {
   openStatus(product: AdminProductRow): void {
     this.selected.set(product);
     const allowed = STATUS_TRANSITIONS[product.status || ''] || ['hidden'];
-    this.nextStatus.set(allowed.includes('hidden') ? 'hidden' : allowed[0] || 'hidden');
+    this.nextStatus.set(
+      product.status === 'discontinued' && allowed.includes('on_sale')
+        ? 'on_sale'
+        : allowed.includes('hidden')
+          ? 'hidden'
+          : allowed[0] || 'hidden'
+    );
     this.overlay.set('status');
     this.actionError.set(null);
   }
@@ -919,6 +955,7 @@ export class AdminProductsPage {
    * Closes the product overlays.
    */
   closeOverlays(): void {
+    this.editorRequest.unsubscribe();
     this.resetImageEditor();
     this.selected.set(null);
     this.overlay.set(null);
@@ -965,6 +1002,16 @@ export class AdminProductsPage {
           .map((item) => item.trim())
           .filter(Boolean)
       : [];
+    if (!images.length || images.length > this.maxProductImages) {
+      this.actionError.set(`Sản phẩm cần từ 1 đến ${this.maxProductImages} ảnh, với đúng một ảnh Primary.`);
+      return;
+    }
+    const imageColors = Object.fromEntries(Object.entries(this.editorImageColors())
+      .filter(([url]) => images.includes(url)));
+    if (Object.values(imageColors).some((color) => !this.imageColorOptions().includes(color))) {
+      this.actionError.set('Màu đã gán cho ảnh không còn trong biến thể. Chọn lại màu hoặc chuyển thành ảnh chung.');
+      return;
+    }
     const previousImages = this.selected()?.images || [];
     const approvals = this.imageApprovals();
     if (this.sourceFile() && !this.sourceApproved()) {
@@ -1032,6 +1079,7 @@ export class AdminProductsPage {
           suitableBodyShapes: this.editorBodyShapes(),
           isFeatured: this.editorIsFeatured(),
           images,
+          imageColors,
           material: material || undefined,
           variants: matrixVariants.length > 0 ? matrixVariants : undefined,
           initialStock,
@@ -1090,6 +1138,7 @@ export class AdminProductsPage {
           suitableBodyShapes: this.editorBodyShapes(),
           isFeatured: this.editorIsFeatured(),
           images,
+          imageColors,
           expectedVersion,
         })
         .subscribe({
@@ -1280,7 +1329,7 @@ export class AdminProductsPage {
     const status = (form.elements.namedItem('status') as HTMLSelectElement | HTMLInputElement).value;
     const reason = (form.elements.namedItem('reason') as HTMLTextAreaElement).value.trim();
     if (!status) {
-      this.actionError.set('Chọn trạng thái mới, gồm Tạm ẩn hoặc Ngừng kinh doanh.');
+      this.actionError.set('Chọn trạng thái mới.');
       return;
     }
     if (reason.length < 10) {
@@ -1309,9 +1358,8 @@ export class AdminProductsPage {
   downloadCsvTemplate(): void {
     const categoryId = this.categories()[0]?.category_id || '00000000-0000-4000-8000-000000000001';
     const csv = [
-      'sku,name,base_price,category_id,sale_price,status,description,image_url',
-      `VLR-UAT001,Ao linen mau kem,450000,${categoryId},420000,on_sale,Mau CSV hop le,`,
-      `bad-sku,Ten thieu gia,not-a-price,${categoryId},,on_sale,Dong loi de test preview,`,
+      'sku,name,base_price,category_id,sale_price,status,description,image_url,product_sku,color,color_hex,size,stock_quantity,low_stock_threshold',
+      `VLR-UAT001,Áo linen mẫu,450000,${categoryId},420000,hidden,Bản nháp chờ duyệt ảnh,,,Đen,#1A1A1A,S,50,5`,
     ].join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -1327,7 +1375,9 @@ export class AdminProductsPage {
     if (!this.canMutate() || Date.parse(approval.expiresAt) <= Date.now()) return;
     if (!this.sourceFile() && !this.uploadedImageDataUrl() && !this.aiEnhanceResult()) return;
     const current = images.value.split(/\n|,/).map((value) => value.trim()).filter(Boolean);
+    if (!this.canApplyImage(current, approval.url)) return;
     const index = Math.min(this.imageIndex(), current.length);
+    this.moveImageColor(current[index], approval.url);
     current.splice(index, index < current.length ? 1 : 0, approval.url);
     images.value = current.join('\n');
     this.editorImages.set([...current]);
@@ -1342,6 +1392,10 @@ export class AdminProductsPage {
     const file = input.files?.[0];
     input.value = '';
     if (!file || !this.canMutate()) return;
+    if (this.imageIndex() >= this.editorImages().length && this.editorImages().length >= this.maxProductImages) {
+      this.aiImageError.set(`Tối đa ${this.maxProductImages} ảnh cho mỗi sản phẩm.`);
+      return;
+    }
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 8 * 1024 * 1024) {
       this.aiImageError.set('Vui lòng chọn ảnh định dạng JPG, PNG hoặc WebP dưới 8 MB.');
       return;
@@ -1368,6 +1422,7 @@ export class AdminProductsPage {
     this.selectGalleryImageSlot(idx);
   }
 
+  /** Selects a saved image or an append slot and discards an unpublished replacement preview. */
   selectGalleryImageSlot(index: number): void {
     this.imageIndex.set(index);
     this.sourceFile.set(null);
@@ -1383,18 +1438,68 @@ export class AdminProductsPage {
     }
   }
 
+  /** Makes the selected URL the single primary image without losing its color assignment. */
+  setPrimaryImage(index: number, imagesBox?: HTMLTextAreaElement): void {
+    if (!this.canMutate() || this.sourceFile()) return;
+    const current = [...this.editorImages()];
+    if (index <= 0 || index >= current.length) return;
+    const [primary] = current.splice(index, 1);
+    current.unshift(primary);
+    this.editorImages.set(current);
+    this.imageIndex.set(0);
+    if (imagesBox) imagesBox.value = current.join('\n');
+  }
+
+  /** Assigns a gallery image to an existing variant color, or leaves it common. */
+  setImageColor(url: string, event: Event): void {
+    if (!this.canMutate() || !this.editorImages().includes(url)) return;
+    const color = (event.target as HTMLSelectElement).value;
+    if (color && !this.imageColorOptions().includes(color)) return;
+    const next = { ...this.editorImageColors() };
+    if (color) next[url] = color;
+    else delete next[url];
+    this.editorImageColors.set(next);
+  }
+
+  private moveImageColor(previous: string | undefined, nextUrl: string): void {
+    const colors = { ...this.editorImageColors() };
+    const color = previous ? colors[previous] : undefined;
+    if (previous) delete colors[previous];
+    if (color) colors[nextUrl] = color;
+    this.editorImageColors.set(colors);
+  }
+
+  private canApplyImage(images: string[], url: string): boolean {
+    if (images.includes(url) && images[this.imageIndex()] !== url) {
+      this.aiImageError.set('Ảnh này đã có trong sản phẩm.');
+      return false;
+    }
+    if (this.imageIndex() >= images.length && images.length >= this.maxProductImages) {
+      this.aiImageError.set(`Tối đa ${this.maxProductImages} ảnh cho mỗi sản phẩm.`);
+      return false;
+    }
+    return true;
+  }
+
+  /** Deletes an image and its color link while retaining a single primary image. */
   removeGalleryImageSlot(index: number, imagesBox?: HTMLTextAreaElement): void {
     if (!this.canMutate()) return;
     const current = [...this.editorImages()];
     if (index < 0 || index >= current.length) return;
+    if (current.length === 1) {
+      this.aiImageError.set('Phải giữ ít nhất một ảnh đại diện Primary.');
+      return;
+    }
+    const colors = { ...this.editorImageColors() };
+    delete colors[current[index]];
+    this.editorImageColors.set(colors);
     current.splice(index, 1);
     this.editorImages.set(current);
     if (imagesBox) {
       imagesBox.value = current.join('\n');
     }
-    if (this.imageIndex() >= current.length) {
-      this.imageIndex.set(Math.max(0, current.length - 1));
-    }
+    const nextIndex = this.imageIndex() > index ? this.imageIndex() - 1 : this.imageIndex();
+    this.selectGalleryImageSlot(Math.min(nextIndex, current.length - 1));
   }
 
   /** Runs AI Studio quality assessment on either the uploaded image or the active product gallery image. */
@@ -1488,6 +1593,8 @@ export class AdminProductsPage {
   private applyApprovedImageUrl(url: string, processingVersion: string, imagesBox?: HTMLTextAreaElement): void {
     const current = [...this.editorImages()];
     const index = Math.min(this.imageIndex(), current.length);
+    if (!this.canApplyImage(current, url)) return;
+    this.moveImageColor(current[index], url);
     current.splice(index, index < current.length ? 1 : 0, url);
     this.editorImages.set(current);
     if (imagesBox) {
@@ -1648,6 +1755,7 @@ export class AdminProductsPage {
 
   private resetImageEditor(): void {
     this.sourceFile.set(null);
+    this.editorImageColors.set({});
     this.imageApprovals.set([]);
     this.imageIndex.set(0);
     this.imageNote.set(null);
@@ -1686,35 +1794,65 @@ export class AdminProductsPage {
     });
   }
 
+  /** Reviews the selected file; only its completed, error-free preview can authorize import. */
   onCsvFile(event: Event): void {
+    if (this.csvCommitting()) return;
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
-    if (!file) {
+    input.value = '';
+    if (!file) return;
+    const revision = ++this.csvFileRevision;
+    this.csvPreviewRequest.unsubscribe();
+    this.csvApproved.set(false);
+    this.csvChecking.set(true);
+    this.csvPreview.set('');
+    this.csvRows.set([]);
+    this.csvErrors.set([]);
+    this.csvValidRows.set(0);
+    this.csvTotalRows.set(0);
+    this.csvMessage.set('Đang kiểm tra CSV, chưa thể ghi catalog.');
+    if (file.size > 60 * 1024) {
+      this.csvChecking.set(false);
+      this.csvMessage.set('File CSV không được vượt quá 60 KB.');
       return;
     }
     const reader = new FileReader();
+    reader.onerror = () => {
+      if (revision !== this.csvFileRevision) return;
+      this.csvChecking.set(false);
+      this.csvMessage.set('Không đọc được file CSV. Vui lòng chọn lại file.');
+    };
     reader.onload = () => {
+      if (revision !== this.csvFileRevision) return;
       const csv = String(reader.result || '');
       this.csvPreview.set(csv);
-      this.csvRows.set([]);
-      this.csvErrors.set([]);
-      this.adminApi.previewCsv(csv).subscribe({
+      this.csvPreviewRequest = this.adminApi.previewCsv(csv).subscribe({
         next: (result) => {
+          if (revision !== this.csvFileRevision) return;
           const preview = (result || {}) as CsvPreviewResult;
-          this.csvRows.set(preview.rows || []);
-          this.csvErrors.set(preview.errors || []);
-          this.csvValidRows.set(preview.validRows || 0);
-          this.csvTotalRows.set(preview.totalRows || 0);
-          const errorCount = (preview.errors || []).length;
-          this.csvMessage.set(
-            errorCount
-              ? `Kiểm tra xong: ${preview.validRows || 0}/${preview.totalRows || 0} dòng hợp lệ, ${errorCount} dòng lỗi.`
-              : `Kiểm tra xong: ${preview.validRows || 0} dòng hợp lệ, có thể ghi catalog.`,
-          );
+          const valid = Array.isArray(preview.rows) && Array.isArray(preview.errors)
+            && Number.isSafeInteger(preview.validRows) && Number.isSafeInteger(preview.totalRows)
+            && preview.validRows! >= 0 && preview.totalRows! >= preview.validRows!
+            && preview.validRows === preview.rows.length;
+          this.csvChecking.set(false);
+          if (!valid) {
+            this.csvMessage.set('Kết quả kiểm tra CSV không hợp lệ. Chưa cho phép ghi catalog.');
+            return;
+          }
+          this.csvRows.set(preview.rows!);
+          this.csvErrors.set(preview.errors!);
+          this.csvValidRows.set(preview.validRows!);
+          this.csvTotalRows.set(preview.totalRows!);
+          const errorCount = preview.errors!.length;
+          this.csvApproved.set(errorCount === 0 && preview.validRows! > 0);
+          this.csvMessage.set(errorCount
+            ? `Kiểm tra xong: ${preview.validRows}/${preview.totalRows} dòng hợp lệ, ${errorCount} lỗi. Chưa thể ghi catalog.`
+            : `Kiểm tra xong: ${preview.validRows} dòng hợp lệ.`);
         },
         error: (error: unknown) => {
-          this.csvRows.set([]);
-          this.csvErrors.set([]);
+          if (revision !== this.csvFileRevision) return;
+          this.csvChecking.set(false);
+          this.csvApproved.set(false);
           this.csvMessage.set(adminErrorMessage(error, 'Không kiểm tra được CSV.'));
         },
       });
@@ -1726,23 +1864,21 @@ export class AdminProductsPage {
    * Commits the last previewed CSV through the original import API.
    */
   commitCsv(): void {
+    if (!this.canCommitCsv()) {
+      this.csvMessage.set('CSV phải được kiểm tra thành công và không còn lỗi trước khi ghi catalog.');
+      return;
+    }
     const csv = this.csvPreview();
-    if (!csv) {
-      this.csvMessage.set('Chưa chọn file CSV.');
-      return;
-    }
-    if (this.csvHasErrors()) {
-      this.csvMessage.set('Sửa các dòng lỗi trước khi ghi catalog.');
-      return;
-    }
-    this.adminApi.commitCsv(csv).subscribe({
+    this.csvApproved.set(false);
+    this.csvCommitting.set(true);
+    this.adminApi.commitCsv(csv).pipe(finalize(() => this.csvCommitting.set(false))).subscribe({
       next: (result) => {
         if (!result || typeof result !== 'object' || !('failed' in result) || typeof result.failed !== 'number' || !Number.isSafeInteger(result.failed) || result.failed < 0) {
           this.csvMessage.set('Chưa xác minh được kết quả nhập. Giữ CSV để đối chiếu trước khi gửi lại.');
           return;
         }
         if (result.failed > 0) {
-          this.csvMessage.set(`Có ${result.failed} dòng ghi thất bại. Các dòng đã ghi vẫn được giữ; đối chiếu kết quả trước khi gửi lại.`);
+          this.csvMessage.set('Kết quả nhập báo lỗi. Giữ file CSV để đối chiếu và kiểm tra lại trước khi gửi lại.');
           this.reloadCatalog();
           return;
         }
@@ -1751,7 +1887,18 @@ export class AdminProductsPage {
         this.csvPreview.set('');
         this.reloadCatalog();
       },
-      error: (error: unknown) => this.csvMessage.set(adminErrorMessage(error, 'Cần đăng nhập quản trị rồi mới ghi CSV.')),
+      error: (error: unknown) => {
+        const payload = error instanceof HttpErrorResponse ? error.error as {
+          error?: { details?: { errors?: CsvPreviewError[] } };
+        } | null : null;
+        const errors = payload?.error?.details?.errors;
+        if (Array.isArray(errors)) {
+          this.csvErrors.set(errors);
+          this.csvMessage.set('CSV không còn hợp lệ. Xem lỗi từng dòng và kiểm tra lại file trước khi nhập.');
+        } else {
+          this.csvMessage.set(adminErrorMessage(error, 'Không thể ghi CSV vào catalog.'));
+        }
+      },
     });
   }
 
@@ -1807,13 +1954,89 @@ export class AdminProductsPage {
     });
   }
 
+  /**
+   * Applies date, query, and action filters to the product audit log tab.
+   */
+  applyLogsFilters(event?: Event): void {
+    if (event) event.preventDefault();
+    if (event?.target && event.target instanceof HTMLFormElement) {
+      const form = event.target;
+      const qInput = form.elements.namedItem('q');
+      const dateInput = form.elements.namedItem('date');
+      const actionInput = form.elements.namedItem('action');
+      const q = (qInput && 'value' in qInput ? String(qInput.value) : '').trim();
+      const date = (dateInput && 'value' in dateInput ? String(dateInput.value) : '').trim();
+      const action = (actionInput && 'value' in actionInput ? String(actionInput.value) : '').trim();
+      this.logsQuery.set(q);
+      this.logsDate.set(date);
+      this.logsAction.set(action);
+    }
+    this.logsPage.set(1);
+    this.loadLogs();
+  }
+
+  /**
+   * Resets all product audit log filters back to default.
+   */
+  resetLogsFilters(): void {
+    this.logsQuery.set('');
+    this.logsDate.set('');
+    this.logsAction.set('');
+    this.logsPage.set(1);
+    this.loadLogs();
+  }
+
+  /**
+   * Opens the audit log modal detail view.
+   */
+  openLogDetail(row: AdminAuditRow): void {
+    this.selectedLog.set(row);
+  }
+
+  /**
+   * Closes the audit log modal detail view.
+   */
+  closeLogDetail(): void {
+    this.selectedLog.set(null);
+  }
+
+  /**
+   * Extracts human-readable reason from product audit row payload.
+   */
+  logReason(row: AdminAuditRow): string {
+    const newVal = this.auditPayload(row.new_value);
+    const oldVal = this.auditPayload(row.old_value);
+    const reason = newVal?.['reason'] || oldVal?.['reason'] || '';
+    return typeof reason === 'string' ? reason : '';
+  }
+
+  /**
+   * Pretty prints an audit payload object.
+   */
+  formatJson(value: unknown): string {
+    if (!value || (typeof value === 'object' && Object.keys(value as object).length === 0)) {
+      return '(Trống / Không có)';
+    }
+    return JSON.stringify(value, null, 2);
+  }
+
   private loadLogs(): void {
     this.logsLoading.set(true);
+    const params: Record<string, string> = {
+      limit: String(this.logsPageSize),
+      offset: adminOffset(this.logsPage(), this.logsPageSize),
+    };
+    if (this.logsQuery().trim()) {
+      params['q'] = this.logsQuery().trim();
+    }
+    if (this.logsDate()) {
+      params['date'] = this.logsDate();
+    }
+    if (this.logsAction()) {
+      params['action'] = this.logsAction();
+    }
     this.adminApi
-      .listProductAuditLogs({
-        limit: String(this.logsPageSize),
-        offset: adminOffset(this.logsPage(), this.logsPageSize),
-      })
+      .listProductAuditLogs(params)
       .subscribe({
         next: (payload) => {
           this.logs.set(adminListRows(payload));

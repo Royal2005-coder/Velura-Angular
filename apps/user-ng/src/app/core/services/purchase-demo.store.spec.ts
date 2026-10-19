@@ -113,9 +113,9 @@ describe('PurchaseDemoStore BA rules', () => {
     model.cancel(online.id, 'Khác');
     expect(model.activeOrder()?.refund).toBe('pending');
   });
-  it('allows exactly 30 elapsed days and fails closed without delivered_at', () => {
+  it('allows exactly 7 elapsed days and fails closed without delivered_at', () => {
     const order = model.place(DEMO_LINES, address, 'COD');
-    model.scenario(order.id, 'delivered', 30);
+    model.scenario(order.id, 'delivered', 7);
     expect(withinReturnWindow(model.activeOrder()!)).toBe(true);
     vi.advanceTimersByTime(1);
     expect(withinReturnWindow(model.activeOrder()!)).toBe(false);

@@ -6,6 +6,13 @@ import { isSmsConfigured, maskPhone, sendCheckoutOtpSms } from "../sms/twilio.js
 import { callRpc, selectOne, selectRows, updateRows } from "../supabase.js";
 import { asJsonObject, asString, type JsonObject } from "../types.js";
 import { generateCheckoutOtp, normalizeVietnamesePhone } from "./checkout-service.js";
+import { allowDevOtpBypass } from "../config.js";
+
+/** Tracking notices reveal only the final three digits of the order phone. */
+export function maskTrackingPhone(phone: string): string {
+  const normalized = normalizeVietnamesePhone(phone);
+  return normalized ? `${"*".repeat(Math.max(0, normalized.length - 3))}${normalized.slice(-3)}` : "";
+}
 
 /** Resolve a tracking challenge by phone or order code while keeping delivery server-controlled. */
 async function phoneForTracking(body: JsonObject): Promise<string> {
@@ -103,7 +110,8 @@ export async function sendGuestTrackingOtp(body: JsonObject, ip: string): Promis
   }
   addEmail(body.email);
 
-  const code = generateCheckoutOtp();
+  const developmentOtp = allowDevOtpBypass();
+  const code = developmentOtp ? "123456" : generateCheckoutOtp();
   const nonce = randomUUID();
   const basePayload = {
     p_phone: phone,
@@ -132,7 +140,7 @@ export async function sendGuestTrackingOtp(body: JsonObject, ip: string): Promis
   if (targetEmails.length > 0) {
     const greeting = customerName || "Quý khách";
     const emailSubject = `[SMS OTP Demo - ${phone}] Mã xác thực đơn hàng Velura: ${code}`;
-    const emailBody = `Chào ${greeting},\n\n[SMS OTP Demo cho SĐT ${phone}]\nMã xác thực OTP tra cứu đơn hàng Velura của bạn là: ${code}.\n\nMã có hiệu lực trong 5 phút. Vui lòng không chia sẻ mã này cho bất kỳ ai.`;
+    const emailBody = `Chào ${greeting},\n\n[SMS OTP Demo cho SĐT ${phone}]\nMã xác thực OTP tra cứu đơn hàng Velura của bạn là: ${code}.\n\nMã có hiệu lực trong 1 phút. Vui lòng không chia sẻ mã này cho bất kỳ ai.`;
     const emailHtml = `
       <div style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eaeaea; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05); background-color: #fff;">
         <div style="background-color: #b89b88; padding: 24px; text-align: center;">
@@ -147,7 +155,7 @@ export async function sendGuestTrackingOtp(body: JsonObject, ip: string): Promis
             <span style="font-size: 36px; font-weight: bold; color: #8e6d53; letter-spacing: 12px; display: inline-block; margin-left: 12px;">${code}</span>
           </div>
 
-          <p style="color: #777; font-size: 14px; text-align: center; margin-bottom: 0;">Mã có hiệu lực trong <strong>5 phút</strong>. Vui lòng không chia sẻ mã này cho bất kỳ ai.</p>
+          <p style="color: #777; font-size: 14px; text-align: center; margin-bottom: 0;">Mã có hiệu lực trong <strong>1 phút</strong>. Vui lòng không chia sẻ mã này cho bất kỳ ai.</p>
         </div>
         <div style="background-color: #f9f9f9; padding: 16px; text-align: center; border-top: 1px solid #eaeaea;">
           <p style="color: #999; font-size: 12px; margin: 0;">&copy; ${new Date().getFullYear()} Velura. Mọi quyền được bảo lưu.</p>
@@ -160,7 +168,7 @@ export async function sendGuestTrackingOtp(body: JsonObject, ip: string): Promis
     emailSent = results.some(Boolean);
   }
 
-  if (!smsSent && !emailSent) {
+  if (!developmentOtp && !smsSent && !emailSent) {
     await updateRows("guest_tracking_otp", { nonce: `eq.${nonce}`, consumed_at: "is.null" }, { consumed_at: new Date().toISOString() });
     throw new HttpError(502, "OTP_SEND_FAILED", "Chưa thể gửi mã xác thực. Vui lòng thử lại sau.");
   }
@@ -169,11 +177,14 @@ export async function sendGuestTrackingOtp(body: JsonObject, ip: string): Promis
 
   return {
     success: true,
-    phone,
-    masked_phone: maskPhone(phone),
+    masked_phone: maskTrackingPhone(phone),
     masked_email: targetEmails.length ? targetEmails.map(maskEmail).join(", ") : null,
-    expires_in: 300,
-    channel
+    expires_in: 60,
+    channel,
+    message: developmentOtp
+      ? "Nhập mã OTP mặc định 123456 để xác thực tra cứu đơn hàng."
+      : `Mã OTP đã được gửi tới số điện thoại ${maskTrackingPhone(phone)}.`,
+    development_otp: developmentOtp ? "123456" : undefined
   };
 }
 

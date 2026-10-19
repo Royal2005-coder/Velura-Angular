@@ -159,13 +159,17 @@
             <h2>Xác thực chủ đơn</h2>
             <p>
               Mã xác thực <strong>SMS OTP</strong> đã được gửi đến số điện thoại <strong>{{ maskedPhone() }}</strong>.
+              @if (developmentOtp()) {
+                <br /><span class="muted" style="display: inline-block; margin-top: 8px;">Môi trường thử nghiệm: nhập mã OTP mặc định <strong>{{ developmentOtp() }}</strong>.</span>
+              }
               @if (maskedEmail()) {
                 <br /><span class="muted" style="display: inline-block; margin-top: 8px; padding: 8px 12px; background: #FAF2EB; border: 1px solid #E8DFD6; border-radius: 8px; color: var(--terracotta, #c97b63); font-weight: 500;">
                   📩 Đồng bộ nhận SMS OTP Demo: Mã OTP của số điện thoại <strong>{{ maskedPhone() }}</strong> đã được gửi qua email liên kết <strong>{{ maskedEmail() }}</strong>. Vui lòng kiểm tra hộp thư email để lấy mã 6 chữ số.
                 </span>
               }
             </p>
-            <p class="muted">Hiệu lực {{ seconds() }} giây.</p>
+            <p class="muted">Hiệu lực {{ countdown() }}.</p>
+            <p class="muted">Còn {{ 5 - failedOtpAttempts() }} lần nhập.</p>
             <form (ngSubmit)="verify()">
               <label class="field"
                 >Mã OTP 6 chữ số<input
@@ -177,11 +181,13 @@
                   [(ngModel)]="otp"
                   required
               /></label>
-              @if (seconds() === 0) {
+              @if (failedOtpAttempts() >= 5) {
+                <p class="error">Bạn đã nhập sai OTP 5 lần. Vui lòng gửi mã mới.</p>
+              } @else if (seconds() === 0) {
                 <p class="error">Mã đã hết hạn.</p>
               }
               <div class="actions">
-                <button type="submit" [disabled]="busy() || otp.length !== 6 || seconds() === 0">
+                <button type="submit" [disabled]="busy() || otp.length !== 6 || seconds() === 0 || failedOtpAttempts() >= 5">
                   Xác thực</button
                 ><button
                   type="button"
@@ -342,7 +348,7 @@
                     @if (item.status === 'delivered') {
                       <div class="line-return-quota-row">
                         <span class="line-quota-chip">
-                          Lượt đổi/trả (30 ngày): <strong>{{ line.returnCount }}/2</strong> (Còn {{ 2 - line.returnCount > 0 ? 2 - line.returnCount : 0 }} lượt)
+                          Lượt đổi/trả (7 ngày): <strong>{{ line.returnCount }}/2</strong> (Còn {{ 2 - line.returnCount > 0 ? 2 - line.returnCount : 0 }} lượt)
                         </span>
                         <span class="line-quota-chip">
                           SL khả dụng: <strong>{{ line.availableQuantity }}/{{ line.quantity }}</strong>
@@ -536,7 +542,7 @@
               <h2>1. Chọn sản phẩm cần đổi / trả</h2>
               <p class="muted">
                 @if (item.items.length === 1) {
-                  Đơn hàng 1 sản phẩm · Hệ thống đã tự động chọn và khóa cố định theo số lượng mua thực tế (Chính sách 30 ngày · Tối đa 2 lượt/SP).
+                  Đơn hàng 1 sản phẩm · Hệ thống đã tự động chọn và khóa cố định theo số lượng mua thực tế (Chính sách 7 ngày · Tối đa 2 lượt/SP).
                 } @else {
                   Đơn hàng nhiều sản phẩm · Vui lòng tích chọn các sản phẩm còn khả dụng cần đổi/trả (Sản phẩm đang trong tiến trình đổi/trả sẽ tự động khóa).
                 }
@@ -579,7 +585,7 @@
                     <div class="line-return-quota-row">
                       <span class="line-quota-chip">Đã mua: <strong>{{ line.quantity }}</strong></span>
                       <span class="line-quota-chip">Khả dụng đổi/trả: <strong>{{ line.availableQuantity }}</strong></span>
-                      <span class="line-quota-chip">Lượt đổi/trả (30 ngày): <strong>{{ line.returnCount }}/2</strong></span>
+                      <span class="line-quota-chip">Lượt đổi/trả (7 ngày): <strong>{{ line.returnCount }}/2</strong></span>
                     </div>
                     @if (line.isInProgress) {
                       <div class="line-return-banner line-return-banner--progress">
@@ -587,7 +593,7 @@
                       </div>
                     } @else if (line.returnCount >= 2) {
                       <div class="line-return-banner line-return-banner--exhausted">
-                        🔒 Đã sử dụng đủ 2/2 lượt đổi/trả trong 30 ngày cho sản phẩm này.
+                        🔒 Đã sử dụng đủ 2/2 lượt đổi/trả trong 7 ngày cho sản phẩm này.
                       </div>
                     } @else if (line.availableQuantity === 0) {
                       <div class="line-return-banner line-return-banner--done">
@@ -959,7 +965,7 @@
       }
       <p class="muted">Hủy đơn trước khi bắt đầu chuẩn bị hàng.</p>
       <p class="muted">
-        Đổi / trả trong 30 ngày từ khi giao thành công, tối đa 2 lượt mỗi sản phẩm.
+        Đổi / trả trong 7 ngày từ khi giao thành công, tối đa 2 lượt mỗi sản phẩm.
       </p>
       <p class="muted">Guest xác thực OTP để bảo vệ thông tin đơn hàng.</p>
       <a class="link" routerLink="/contact">Liên hệ Velura</a>

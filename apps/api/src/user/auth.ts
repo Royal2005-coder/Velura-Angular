@@ -61,6 +61,33 @@ export function validatePassword(password: unknown): boolean {
 }
 
 /**
+ * Reports duplicate fields for one complete signup identity pair.
+ */
+async function inspectSignupIdentityPair(email: string | null, phone: string): Promise<{
+  emailExists: boolean;
+  phoneExists: boolean;
+  pairExists: boolean;
+}> {
+  const [emailRow, phoneRow] = await Promise.all([
+    email ? selectOne("users", { email: `eq.${email}` }) : Promise.resolve(null),
+    selectOne("users", { phone: `eq.${phone}` })
+  ]);
+  const emailUser = emailRow ? asJsonObject(emailRow) : null;
+  const phoneUser = phoneRow ? asJsonObject(phoneRow) : null;
+  return {
+    emailExists: Boolean(emailUser),
+    phoneExists: Boolean(phoneUser),
+    pairExists: Boolean(
+      email &&
+      emailUser &&
+      phoneUser &&
+      asString(emailUser.user_id) &&
+      asString(emailUser.user_id) === asString(phoneUser.user_id)
+    )
+  };
+}
+
+/**
  * Require a signed-in storefront profile or throw 401.
  */
 export function requireUserAuth(context: AuthContext | null | undefined): UserProfile {
@@ -233,6 +260,17 @@ export async function handleAuthRoute(
   context: AuthContext,
   checkoutService: CheckoutService
 ): Promise<void> {
+  // POST /api/user/auth/signup-availability
+  if (action === "signup-availability" && req.method === "POST") {
+    const body = await readJson(req);
+    const email = asString(body.email).trim().toLowerCase();
+    const phone = asString(body.phone).trim().replace(/[^\d+]/g, "");
+    if (!phone || !validatePhone(phone) || (email && !validateEmail(email))) {
+      throw new HttpError(400, "INVALID_SIGNUP_IDENTITY", "Số điện thoại không hợp lệ hoặc email không đúng định dạng");
+    }
+    return sendJson(res, 200, await inspectSignupIdentityPair(email || null, phone), corsHeaders);
+  }
+
   // GET /api/user/auth/check-exists?email=...&phone=...
   if (action === "check-exists" && req.method === "GET") {
     const url = new URL(req.url || "/", "http://localhost");
@@ -295,18 +333,21 @@ export async function handleAuthRoute(
   // POST /api/user/auth/signup
   if (action === "signup" && req.method === "POST") {
     const body = await readJson(req);
-    const { email, phone, password, full_name } = body;
+    const email = asString(body.email).trim().toLowerCase();
+    const phone = asString(body.phone).trim().replace(/[^\d+]/g, "");
+    const password = body.password;
+    const full_name = asString(body.full_name).trim();
 
     if (!full_name) {
       throw new HttpError(400, "BAD_REQUEST", "Họ và tên là bắt buộc");
     }
-    if (!email && !phone) {
-      throw new HttpError(400, "BAD_REQUEST", "Email hoặc Số điện thoại là bắt buộc");
+    if (!phone) {
+      throw new HttpError(400, "BAD_REQUEST", "Số điện thoại là bắt buộc");
     }
     if (email && !validateEmail(email)) {
       throw new HttpError(400, "BAD_REQUEST", "Email không đúng định dạng");
     }
-    if (phone && !validatePhone(phone)) {
+    if (!validatePhone(phone)) {
       throw new HttpError(400, "BAD_REQUEST", "Số điện thoại không đúng định dạng (10 số, bắt đầu bằng 0)");
     }
     if (!validatePassword(password)) {
@@ -317,29 +358,25 @@ export async function handleAuthRoute(
     if (email) {
       const existingEmail = await selectOne("users", { email: `eq.${email}` });
       if (existingEmail) {
-        throw new HttpError(400, "DUPLICATE_ACCOUNT", "Email đã được sử dụng trên hệ thống");
+        throw new HttpError(409, "EMAIL_ALREADY_EXISTS", "Email đã được sử dụng trên hệ thống");
       }
     }
-    if (phone) {
-      const existingPhone = await selectOne("users", { phone: `eq.${phone}` });
-      if (existingPhone) {
-        throw new HttpError(400, "DUPLICATE_ACCOUNT", "Số điện thoại đã được sử dụng trên hệ thống");
-      }
+    const existingPhone = await selectOne("users", { phone: `eq.${phone}` });
+    if (existingPhone) {
+      throw new HttpError(409, "PHONE_ALREADY_EXISTS", "Số điện thoại đã được sử dụng trên hệ thống");
     }
 
-    // Generate OTP code
-    const otpCode = Math.floor(100000 + Math.random() * 900000).toString(); // 6 digits
+    // Email registrations receive a random code. Phone-only registrations use the
+    // documented local shortcut so developers can exercise the OTP dialog without SMS.
+    const otpCode = !email && allowDevOtpBypass()
+      ? "123456"
+      : Math.floor(100000 + Math.random() * 900000).toString();
     const otpExpiresAt = new Date(Date.now() + 60 * 1000).toISOString(); // 5 minutes (AUTH-05)
 
     console.log(`\n==================================================`);
     console.log(`[OTP VERIFICATION] Mã kích hoạt tài khoản của ${email || phone} là: ${otpCode}`);
     console.log(`==================================================\n`);
 
-    // Gửi trước khi tạo user: SMS hỏng thì không để lại tài khoản nửa vời chờ OTP.
-    if (phone) {
-      authOtpLimiter.consume(asString(phone), checkoutClientIp(req.headers, req.socket?.remoteAddress));
-      await deliverAuthOtp(asString(phone), otpCode, "signup");
-    }
     if (email) {
       const emailBody = `Chào ${full_name || "bạn"},\n\nMã kích hoạt tài khoản Velura của bạn là: ${otpCode}.\n\nMã có hiệu lực trong 5 phút. Vui lòng không chia sẻ mã này cho bất kỳ ai.`;
       const emailHtml = `
@@ -358,12 +395,19 @@ export async function handleAuthRoute(
           </div>
         </div>
       `;
-      void sendDirectEmail(email, "Mã kích hoạt tài khoản Velura", emailBody, emailHtml);
+      const delivered = await sendDirectEmail(email, "Mã kích hoạt tài khoản Velura", emailBody, emailHtml);
+      if (!delivered && config.nodeEnv === "production") {
+        throw new HttpError(503, "OTP_EMAIL_UNAVAILABLE", "Hiện không thể gửi mã OTP qua email. Vui lòng thử lại sau.");
+      }
+    } else if (!allowDevOtpBypass()) {
+      // Production never accepts a shared OTP shortcut. Without email it must use SMS.
+      authOtpLimiter.consume(phone, checkoutClientIp(req.headers, req.socket?.remoteAddress));
+      await deliverAuthOtp(phone, otpCode, "signup");
     }
 
     // Create inactive user first (AUTH-05)
     const hashedPassword = hashPassword(asString(password));
-    const newUser = await loyaltyService.register({
+    const registration = {
       email: email || null,
       phone: phone || null,
       password_hash: hashedPassword,
@@ -372,14 +416,30 @@ export async function handleAuthRoute(
       otp_code: otpCode,
       otp_expires_at: otpExpiresAt,
       role: "member"
-    }, body.referral_code);
+    };
+    let newUser: JsonObject;
+    try {
+      newUser = await loyaltyService.register(registration, body.referral_code);
+    } catch (error: unknown) {
+      if (!(error instanceof HttpError) || error.code !== "SIGNUP_SCHEMA_NOT_READY" || body.referral_code) {
+        throw error;
+      }
+      // Compatibility for local databases that have not applied migration 050 yet.
+      // Referral attribution still fails closed because it requires the atomic RPC.
+      newUser = asJsonObject(await insertRow("users", registration));
+    }
 
     return sendJson(res, 200, {
       success: true,
       otp_required: true,
-      message: "Mã OTP xác minh đã được gửi. Vui lòng xác thực tài khoản.",
+      message: email
+        ? "Mã OTP xác minh đã được gửi qua email. Vui lòng xác thực tài khoản."
+        : allowDevOtpBypass()
+          ? "Nhập mã OTP mặc định 123456 để xác thực tài khoản."
+          : "Mã OTP xác minh đã được gửi qua số điện thoại. Vui lòng xác thực tài khoản.",
       email: newUser.email,
-      phone: newUser.phone
+      phone: newUser.phone,
+      development_otp: !email && allowDevOtpBypass() ? "123456" : undefined
     }, corsHeaders);
   }
 
@@ -458,7 +518,8 @@ export async function handleAuthRoute(
         email: user.email,
         phone: user.phone,
         full_name: user.full_name,
-        role: user.role
+        role: user.role,
+        is_new_user: wasInactive
       }
     }, corsHeaders);
   }
@@ -536,7 +597,8 @@ export async function handleAuthRoute(
         email: user.email,
         phone: user.phone,
         full_name: user.full_name,
-        role: user.role
+        role: user.role,
+        is_new_user: false
       }
     }, corsHeaders);
   }

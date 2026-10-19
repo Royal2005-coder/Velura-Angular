@@ -8,11 +8,11 @@ describe('AccountReturnsPage', () => {
     expect(page).toBeTruthy();
   });
 
-  it('offers a return only for a delivered order inside 30 days', () => {
+  it('offers a return only for a delivered order inside 7 days', () => {
     const now = new Date('2026-09-23T00:00:00.000Z');
-    expect(isReturnableOrder({ status: 'delivered', delivered_at: '2026-09-01T00:00:00.000Z' }, now)).toBe(true);
-    expect(isReturnableOrder({ status: 'pending', delivered_at: '2026-09-01T00:00:00.000Z' }, now)).toBe(false);
-    expect(isReturnableOrder({ status: 'delivered', delivered_at: '2026-08-01T00:00:00.000Z' }, now)).toBe(false);
+    expect(isReturnableOrder({ status: 'delivered', delivered_at: '2026-09-16T00:00:00.000Z' }, now)).toBe(true);
+    expect(isReturnableOrder({ status: 'pending', delivered_at: '2026-09-16T00:00:00.000Z' }, now)).toBe(false);
+    expect(isReturnableOrder({ status: 'delivered', delivered_at: '2026-09-15T23:59:59.000Z' }, now)).toBe(false);
     expect(returnReasonText('size')).toBe('Không vừa kích cỡ');
   });
 });

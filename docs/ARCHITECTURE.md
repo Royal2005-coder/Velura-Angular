@@ -27,8 +27,14 @@ Pipeline: [HOW-IT-WORKS.md](./HOW-IT-WORKS.md)
   (Supabase)        │  RLS · security-definer functions    │
                     └─────────────────────────────────────┘
 
-  CI/CD             .github/workflows/ci.yml  →  deploy/ (nginx, systemd) → VPS
+  CI/CD             Actions → signed image digests → reviewed pins → Flux → K3s
 ```
+
+Ownership: Terraform/Atlantis = external Cloudflare DNS; Flux `velura-infra`
+= internal platform; Flux `velura-staging` / `velura-production` = app overlays.
+Staging follows reviewed manifests on `develop`, production follows `main`;
+neither deploys unbuilt source. Platform changes and app image promotion have
+separate reconciliation inventories.
 
 | Runtime | Port local | Production |
 |---|---|---|

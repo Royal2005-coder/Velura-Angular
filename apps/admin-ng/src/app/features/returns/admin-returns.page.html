@@ -500,6 +500,13 @@
               <option value="exchange">Đổi sản phẩm</option>
             </select>
           </div>
+          <div class="admin-form-group">
+            <select class="admin-form-control" [value]="paymentFilter()" (change)="onPaymentFilter($event)" aria-label="Lọc theo phương thức thanh toán">
+              <option value="">Thanh toán: Tất cả</option>
+              <option value="cod">Thanh toán: COD</option>
+              <option value="online">Thanh toán: Online</option>
+            </select>
+          </div>
           <div class="admin-filter-bar__actions">
             <button class="admin-btn admin-btn--secondary admin-btn--sm" type="submit">Lọc</button>
             <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="resetReturnFilters($event)">Đặt lại</button>
@@ -517,6 +524,7 @@
                   <th>Đơn hàng</th>
                   <th>Khách hàng</th>
                   <th>Loại yêu cầu</th>
+                  <th>Thanh toán</th>
                   <th>Giá trị hoàn</th>
                   <th>Trạng thái</th>
                   <th>Ngày tạo</th>
@@ -533,12 +541,7 @@
                       </button>
                     </td>
                     <td>
-                      <div style="display: flex; flex-direction: column; gap: 4px;">
-                        <span class="admin-order-code">#{{ orderCode(row) }}</span>
-                        <span class="admin-badge admin-badge--neutral" style="align-self: flex-start; font-size: 0.7rem; padding: 1px 6px;">
-                          {{ returnPaymentMethod(row) }}
-                        </span>
-                      </div>
+                      <span class="admin-order-code">#{{ orderCode(row) }}</span>
                     </td>
                     <td>
                       <div style="display: flex; flex-direction: column; gap: 2px;">
@@ -554,6 +557,14 @@
                       </span>
                     </td>
                     <td>
+                      <div class="admin-payment-cell">
+                        <span [class]="paymentKindClass(row)">{{ paymentKindLabel(row) }}</span>
+                        @if (receiverChip(row); as chip) {
+                          <span class="admin-badge admin-badge--warning admin-payment-cell__chip">{{ chip }}</span>
+                        }
+                      </div>
+                    </td>
+                    <td>
                       @if (row.return_type === 'exchange') {
                         <span class="admin-badge admin-badge--secondary" style="font-size: 0.75rem;">Đổi sản phẩm</span>
                       } @else {
@@ -565,6 +576,9 @@
                         <span class="admin-badge admin-badge--return-{{ (row.status || '').toLowerCase() }}">{{ returnStatusLabel(row.status) }}</span>
                         @if (contactOverdue(row)) {
                           <span class="admin-badge admin-badge--warning" style="font-size: 0.7rem; padding: 1px 6px;">Quá 24h chưa liên hệ</span>
+                        }
+                        @if (row.status === 'CANCELLED') {
+                          <span class="admin-badge admin-badge--neutral" style="font-size: 0.7rem; padding: 1px 6px;">{{ cancellationLabel(row) }}</span>
                         }
                       </div>
                     </td>
@@ -681,6 +695,18 @@
                                     <span>Xem trạng thái hoàn</span>
                                   </button>
                                 }
+                              } @else if (row.status === 'NEEDS_SUPPORT') {
+                                <div class="admin-dropdown-divider"></div>
+                                @if (nextReturnStep(row); as step) {
+                                  <button type="button" [disabled]="submitting()" (click)="advanceReturn(row, step.status); closeMenu()">
+                                    <app-admin-icon name="box" />
+                                    <span>{{ step.label }}</span>
+                                  </button>
+                                }
+                                <button class="admin-table-action-menu__danger" type="button" (click)="openReturnAction('reject', row.return_id); closeMenu()">
+                                  <app-admin-icon name="x" />
+                                  <span>Từ chối yêu cầu</span>
+                                </button>
                               } @else if (nextReturnStep(row); as step) {
                                 <div class="admin-dropdown-divider"></div>
                                 @if (step.status === 'RECEIVED') {
@@ -698,7 +724,7 @@
                                 <div class="admin-dropdown-divider"></div>
                                 <div class="admin-dropdown-status" [class.admin-dropdown-status--success]="row.status === 'COMPLETED' || row.status === 'REFUNDED'" [class.admin-dropdown-status--danger]="row.status === 'REJECTED'" [class.admin-dropdown-status--neutral]="row.status === 'CANCELLED'">
                                   <app-admin-icon [name]="row.status === 'COMPLETED' || row.status === 'REFUNDED' ? 'check' : 'x'" cssClass="admin-badge-icon" />
-                                  <span>{{ row.status === 'COMPLETED' ? 'Đã hoàn tất quy trình' : (row.status === 'REFUNDED' ? 'Đã hoàn tiền thành công' : (row.status === 'REJECTED' ? 'Yêu cầu đã bị từ chối' : 'Yêu cầu đã bị hủy')) }}</span>
+                                  <span>{{ row.status === 'COMPLETED' ? 'Đã hoàn tất quy trình' : (row.status === 'REFUNDED' ? 'Đã hoàn tiền thành công' : (row.status === 'REJECTED' ? 'Yêu cầu đã bị từ chối' : cancellationLabel(row))) }}</span>
                                 </div>
                               }
                             }
@@ -941,28 +967,39 @@
   <div class="admin-modal-overlay">
     <section class="admin-modal" appAdminDialog (appAdminDialogClose)="!submitting() && manualRefundTarget.set(null)">
       <form (submit)="submitManualRefund($event)">
-        <header class="admin-modal__header"><h2>Ghi nhận chuyển khoản hoàn tiền</h2><button type="button" class="admin-icon-button" [disabled]="submitting()" (click)="manualRefundTarget.set(null)" aria-label="Đóng">×</button></header>
+        <header class="admin-modal__header"><h2>{{ refundFlow(refund) === 'cod_manual' ? 'COD – hoàn tiền thủ công' : 'Ghi nhận chuyển khoản hoàn tiền' }}</h2><button type="button" class="admin-icon-button" [disabled]="submitting()" (click)="manualRefundTarget.set(null)" aria-label="Đóng">×</button></header>
         <div class="admin-modal__body">
           <div class="admin-refund-summary" style="background: var(--bg-subtle, #f8fafc); border: 1px solid var(--border, #e2e8f0); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
               <span style="font-size: 0.85rem; color: var(--muted, #64748b);">Số tiền cần hoàn trả:</span>
-              <strong style="font-size: 1.15rem; color: var(--primary, #0ea5e9);">{{ money(refund.refund_amount || refund.refundable_amount || refund.order_total || 0) }}</strong>
+              <strong style="font-size: 1.15rem; color: var(--primary, #0ea5e9);">{{ money(manualRefundAmount(refund)) }}</strong>
             </div>
             <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--muted, #64748b);">
               <span>Đơn: <strong>{{ orderCode(refund) }}</strong></span>
               <span>Khách: <strong>{{ refund.customer_name || 'Khách hàng' }}</strong></span>
-              <span>PTTT: <strong>{{ returnPaymentMethod(refund) }}</strong></span>
+              <span>Thanh toán: <strong>{{ paymentKindLabel(refund) }}</strong></span>
             </div>
           </div>
-          <p class="admin-note" style="margin-bottom: 12px;">Chỉ ghi nhận sau khi kế toán đã chuyển tiền thành công cho khách hàng qua ngân hàng.</p>
+          @if (refund.refund_receiver; as receiver) {
+            <dl class="admin-data-list admin-refund-panel__receiver">
+              <div><dt>Ngân hàng / ví nhận tiền</dt><dd>{{ receiver.bank_name || '—' }}</dd></div>
+              <div><dt>Số tài khoản</dt><dd><strong class="admin-refund-panel__mono">{{ receiver.account_number || '—' }}</strong></dd></div>
+              <div><dt>Chủ tài khoản</dt><dd>{{ receiver.account_holder || '—' }}</dd></div>
+            </dl>
+          }
+          <p class="admin-note" style="margin-bottom: 12px;">Chỉ ghi nhận sau khi kế toán đã chuyển tiền thành công cho khách hàng. Sau khi lưu, phiếu hoàn tất ngay, không cần duyệt thêm.</p>
           <label class="admin-form-group">
             <span class="admin-form-label">Mã giao dịch chuyển tiền (tối thiểu 6 ký tự) *</span>
-            <input class="admin-form-control" name="reference" required minlength="6" placeholder="Ví dụ: FT2409012345 hoặc VCB123456" [disabled]="submitting()" />
-            <small class="admin-form-hint" style="font-size: 0.75rem; color: var(--muted); margin-top: 2px;">Nhập mã bút toán hoặc mã giao dịch từ ngân hàng (tối thiểu 6 ký tự).</small>
+            <input class="admin-form-control" name="reference" required minlength="6" placeholder="Ví dụ: FT2409012345 hoặc VCB123456" [value]="manualRefundReference()" (input)="setManualRefundField('reference', $event)" [disabled]="submitting()" />
+            <small class="admin-form-hint" style="font-size: 0.75rem; color: var(--muted); margin-top: 2px;">Nhập mã bút toán hoặc mã giao dịch từ ngân hàng / ví (tối thiểu 6 ký tự).</small>
           </label>
           <label class="admin-form-group">
-            <span class="admin-form-label">Nội dung / Ghi chú kế toán (tối thiểu 10 ký tự) *</span>
-            <textarea class="admin-form-control admin-form-textarea" name="note" required minlength="10" placeholder="Ghi rõ nội dung chuyển khoản, tài khoản thụ hưởng, người duyệt..." [disabled]="submitting()"></textarea>
+            <span class="admin-form-label">Số tiền đã chuyển (khớp số tiền hoàn)</span>
+            <input class="admin-form-control" name="amount" type="text" readonly [value]="money(manualRefundAmount(refund))" />
+          </label>
+          <label class="admin-form-group">
+            <span class="admin-form-label">Thời điểm chuyển tiền *</span>
+            <input class="admin-form-control" name="transferredAt" type="datetime-local" required [max]="manualRefundMaxTime()" [value]="manualRefundTransferredAt()" (input)="setManualRefundField('transferredAt', $event)" [disabled]="submitting()" />
           </label>
           <label class="admin-form-group">
             <span class="admin-form-label">Ảnh chụp biên lai chuyển tiền thành công *</span>
@@ -970,6 +1007,10 @@
             <small class="admin-form-hint" style="font-size: 0.75rem; color: var(--muted); margin-top: 2px;">Tải lên ảnh chụp màn hình chứng từ hoàn tiền (JPG, PNG, WebP).</small>
           </label>
           @if (manualRefundProof()) { <img class="admin-qa-proof" [src]="manualRefundProof()" alt="Minh chứng chuyển khoản hoàn tiền" /> }
+          <label class="admin-form-group">
+            <span class="admin-form-label">Ghi chú kế toán (không bắt buộc)</span>
+            <textarea class="admin-form-control admin-form-textarea" name="note" placeholder="Nội dung chuyển khoản, người thực hiện..." [value]="manualRefundNote()" (input)="setManualRefundField('note', $event)" [disabled]="submitting()"></textarea>
+          </label>
           @if (actionError()) {
             <div class="admin-form-alert--error" role="alert">
               <app-admin-icon name="alert" cssClass="admin-line-icon" />
@@ -978,6 +1019,30 @@
           }
         </div>
         <footer class="admin-modal__footer"><button class="admin-btn admin-btn--ghost" type="button" [disabled]="submitting()" (click)="manualRefundTarget.set(null)">Đóng</button><button class="admin-btn admin-btn--secondary" type="submit" [disabled]="submitting()">{{ submitting() ? 'Đang lưu…' : 'Lưu bằng chứng hoàn tiền' }}</button></footer>
+      </form>
+    </section>
+  </div>
+}
+
+@if (refundInfoTarget(); as info) {
+  <div class="admin-modal-overlay">
+    <section class="admin-modal" appAdminDialog (appAdminDialogClose)="closeRefundInfoRequest()">
+      <form (submit)="submitRefundInfoRequest($event)">
+        <header class="admin-modal__header"><h2>Yêu cầu bổ sung thông tin nhận tiền</h2><button type="button" class="admin-icon-button" [disabled]="submitting()" (click)="closeRefundInfoRequest()" aria-label="Đóng">×</button></header>
+        <div class="admin-modal__body">
+          <p class="admin-note">Phiếu {{ returnCode(info) }} giữ nguyên giai đoạn. Khách sẽ thấy nội dung này trên cửa hàng và cập nhật thông tin nhận tiền; sau đó bạn có thể tiếp tục hoàn tiền.</p>
+          <label class="admin-form-group">
+            <span class="admin-form-label">Nội dung yêu cầu bổ sung (tối thiểu 10 ký tự) *</span>
+            <textarea class="admin-form-control admin-form-textarea" name="message" required minlength="10" placeholder="Ví dụ: Vui lòng cung cấp đúng số tài khoản và tên chủ tài khoản để chúng tôi hoàn tiền." [value]="refundInfoMessage()" (input)="setRefundInfoMessage($event)" [disabled]="submitting()"></textarea>
+          </label>
+          @if (refundInfoError()) {
+            <div class="admin-form-alert--error" role="alert">
+              <app-admin-icon name="alert" cssClass="admin-line-icon" />
+              <span>{{ refundInfoError() }}</span>
+            </div>
+          }
+        </div>
+        <footer class="admin-modal__footer"><button class="admin-btn admin-btn--ghost" type="button" [disabled]="submitting()" (click)="closeRefundInfoRequest()">Đóng</button><button class="admin-btn admin-btn--secondary" type="submit" [disabled]="submitting()">{{ submitting() ? 'Đang gửi…' : 'Gửi yêu cầu bổ sung' }}</button></footer>
       </form>
     </section>
   </div>
@@ -995,6 +1060,7 @@
         <h2 class="admin-section__title" style="margin: 4px 0;">Yêu cầu {{ returnKind(selectedReturn()!) }}</h2>
         <div class="admin-status-group" style="display: flex; gap: 8px; align-items: center; margin-top: 4px;">
           <span class="admin-badge admin-badge--return-{{ (selectedReturn()!.status || '').toLowerCase() }}">{{ returnStatusLabel(selectedReturn()!.status) }}</span>
+          <span [class]="paymentKindClass(selectedReturn()!)">{{ paymentKindLabel(selectedReturn()!) }}</span>
           @if (selectedReturn()!.order_id) {
             <span class="admin-table-note">Đơn hàng: <strong>#{{ orderCode(selectedReturn()!) }}</strong></span>
           }
@@ -1029,7 +1095,7 @@
         </div>
         @if (selectedReturn()!.status === 'CANCELLED') {
           <div style="margin-top: 10px; padding: 8px 12px; background: #ffebee; border-radius: 6px; color: #c62828; font-size: 0.8125rem; display: flex; align-items: center; gap: 6px;">
-            <app-admin-icon name="alert" cssClass="admin-line-icon" style="color: #c62828;" /> <strong>Yêu cầu đã hủy.</strong> Lý do: {{ selectedReturn()!.rejection_reason || selectedReturn()!.admin_note || 'Xem nhật ký xử lý' }}
+            <app-admin-icon name="alert" cssClass="admin-line-icon" style="color: #c62828;" /> <strong>{{ cancellationLabel(selectedReturn()!) }}.</strong> Lý do: {{ selectedReturn()!.rejection_reason || selectedReturn()!.admin_note || 'Xem nhật ký xử lý' }}
           </div>
         }
       </div>
@@ -1078,7 +1144,7 @@
         }
         <div><dt>Loại yêu cầu</dt><dd><strong>{{ returnKind(selectedReturn()!) }}</strong></dd></div>
         <div><dt>Tiền hoàn dự kiến</dt><dd><strong style="color: #2e7d32;">{{ money(selectedReturn()!.refundable_amount || selectedReturn()!.refund_amount) }}</strong></dd></div>
-        <div><dt>Phương thức TT</dt><dd><strong>{{ returnPaymentMethod(selectedReturn()!) }}</strong></dd></div>
+        <div><dt>Thanh toán</dt><dd><span [class]="paymentKindClass(selectedReturn()!)">{{ paymentKindLabel(selectedReturn()!) }}</span></dd></div>
         <div>
           <dt>Trạng thái thanh toán</dt>
           <dd style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
@@ -1129,6 +1195,77 @@
         <div><dt>Thời gian tạo phiếu</dt><dd>{{ date(selectedReturn()!.created_at) }}</dd></div>
       </dl>
 
+      <!-- COD: hoàn tiền thủ công, thông tin nhận tiền do khách cung cấp -->
+      @if (refundFlow(selectedReturn()!) === 'cod_manual') {
+        <section class="admin-refund-panel admin-refund-panel--cod" aria-label="COD – hoàn tiền thủ công">
+          <header class="admin-refund-panel__header">
+            <h4>COD – hoàn tiền thủ công</h4>
+            <span class="admin-badge" [class.admin-badge--success]="receiverStatus(selectedReturn()!) === 'valid'" [class.admin-badge--warning]="receiverStatus(selectedReturn()!) !== 'valid'">{{ receiverStatusLabel(selectedReturn()!) }}</span>
+          </header>
+          @if (selectedReturn()!.refund_receiver; as receiver) {
+            <dl class="admin-data-list">
+              <div><dt>Ngân hàng / ví nhận tiền</dt><dd>{{ receiver.bank_name || '—' }}</dd></div>
+              <div><dt>Số tài khoản</dt><dd><strong class="admin-refund-panel__mono">{{ receiver.account_number || '—' }}</strong></dd></div>
+              <div><dt>Chủ tài khoản</dt><dd>{{ receiver.account_holder || '—' }}</dd></div>
+              <div><dt>Khách gửi lúc</dt><dd>{{ receiver.submitted_at ? date(receiver.submitted_at) : '—' }}</dd></div>
+            </dl>
+          } @else {
+            <p class="admin-note">Khách chưa gửi thông tin nhận tiền.</p>
+          }
+          <p class="admin-refund-panel__amount">Số tiền cần hoàn: <strong>{{ money(manualRefundAmount(selectedReturn()!)) }}</strong></p>
+          @if (selectedReturn()!.refund_receiver?.supplement_request; as request) {
+            <div class="admin-refund-panel__supplement">
+              <strong>Đã gửi yêu cầu bổ sung{{ selectedReturn()!.refund_receiver?.supplement_requested_at ? ' lúc ' + date(selectedReturn()!.refund_receiver?.supplement_requested_at ?? undefined) : '' }}</strong>
+              <p>{{ request }}</p>
+            </div>
+          }
+          @if (showReceiverWarning(selectedReturn()!)) {
+            <div class="admin-form-alert--error" role="alert">
+              <app-admin-icon name="alert" cssClass="admin-line-icon" />
+              <span>Chưa có thông tin nhận tiền hợp lệ — không thể tiếp tục hoàn tiền</span>
+            </div>
+          }
+          @if (canMutate() && !selectedReturn()!.manual_refund) {
+            <div class="admin-refund-panel__actions">
+              @if (canRequestRefundInfo(selectedReturn()!)) {
+                <button class="admin-btn admin-btn--secondary admin-btn--sm admin-refund-panel__request" type="button" [disabled]="submitting()" (click)="openRefundInfoRequest(selectedReturn()!)">Yêu cầu bổ sung thông tin</button>
+              }
+              @if (isManualRefundStage(selectedReturn()!)) {
+                <button class="admin-btn admin-btn--secondary admin-btn--sm admin-refund-panel__manual" type="button" [disabled]="!canRecordManualRefund(selectedReturn()!) || submitting()" (click)="openManualRefund(selectedReturn()!)">Hoàn tiền thủ công</button>
+              }
+            </div>
+          }
+        </section>
+      }
+
+      <!-- Đối soát hoàn tiền thủ công đã ghi nhận (chỉ đọc) -->
+      @if (selectedReturn()!.manual_refund; as manual) {
+        <section class="admin-refund-panel" aria-label="Đối soát hoàn tiền">
+          <header class="admin-refund-panel__header">
+            <h4>Đối soát hoàn tiền</h4>
+            <span class="admin-badge admin-badge--success">{{ manual.payment_kind === 'cod' ? 'COD' : 'Online – MoMo/VNPay' }}</span>
+          </header>
+          <dl class="admin-data-list">
+            <div><dt>Mã giao dịch</dt><dd><strong class="admin-refund-panel__mono">{{ manual.reference }}</strong></dd></div>
+            <div><dt>Số tiền đã chuyển</dt><dd><strong>{{ money(manual.amount) }}</strong></dd></div>
+            <div><dt>Thời điểm chuyển</dt><dd>{{ date(manual.transferred_at) }}</dd></div>
+            <div><dt>Ghi nhận lúc</dt><dd>{{ date(manual.recorded_at) }}</dd></div>
+            @if (manual.receiver_bank_name || manual.receiver_account_number || manual.receiver_account_holder) {
+              <div><dt>Tài khoản nhận tại thời điểm chuyển</dt><dd>{{ manual.receiver_bank_name || '—' }} · {{ manual.receiver_account_number || '—' }} · {{ manual.receiver_account_holder || '—' }}</dd></div>
+            }
+            <div><dt>Ghi chú</dt><dd>{{ manual.note || '—' }}</dd></div>
+            <div>
+              <dt>Ảnh chứng từ</dt>
+              <dd>
+                <button class="admin-refund-panel__proof" type="button" title="Click để phóng to ảnh" (click)="openLightbox(manual.proof)">
+                  <img [src]="manual.proof" alt="Ảnh chứng từ hoàn tiền" />
+                </button>
+              </dd>
+            </div>
+          </dl>
+        </section>
+      }
+
       <!-- Thao tác trực tiếp từ Drawer nếu có quyền -->
       @if (actionError()) {
         <div class="admin-form-alert--error" role="alert" style="margin-top: 8px;">
@@ -1156,12 +1293,19 @@
             <button class="admin-btn admin-btn--danger-soft admin-btn--sm" type="button" (click)="openReturnAction('reject', selectedReturn()!.return_id)">Hủy yêu cầu</button>
           } @else if (selectedReturn()!.status === 'RETURN_IN_TRANSIT') {
             <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openReceive(selectedReturn()!); returnDetailOpen.set(false)">Nhận hàng &amp; QA</button>
-          } @else if (['RECEIVED', 'REFUND_PROCESSING'].includes(selectedReturn()!.status || '') && (selectedReturn()!.return_type === 'refund' || selectedReturn()!.request_type === 'refund')) {
+          } @else if (['RECEIVED', 'REFUND_PROCESSING'].includes(selectedReturn()!.status || '') && isRefundRequest(selectedReturn()!)) {
             @if (canTriggerStripeRefund(selectedReturn()!)) {
               <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" [disabled]="submitting()" (click)="triggerStripeRefund(selectedReturn()!)">{{ selectedReturn()!.status === 'REFUND_PROCESSING' ? 'Đối soát hoàn tiền Stripe' : 'Hoàn tiền qua Stripe' }}</button>
             }
-            @if (canRecordManualRefund(selectedReturn()!)) {
+            @if (refundFlow(selectedReturn()!) === 'manual_transfer' && canRecordManualRefund(selectedReturn()!)) {
               <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="openManualRefund(selectedReturn()!)">Ghi nhận chuyển khoản hoàn tiền</button>
+            }
+          } @else if (selectedReturn()!.status === 'NEEDS_SUPPORT') {
+            @if (nextReturnStep(selectedReturn()!); as step) {
+              <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" [disabled]="submitting()" (click)="advanceReturn(selectedReturn()!, step.status)">{{ step.label }}</button>
+            }
+            @if (canRejectReturn(selectedReturn()!)) {
+              <button class="admin-btn admin-btn--danger-soft admin-btn--sm" type="button" (click)="openReturnAction('reject', selectedReturn()!.return_id)">Từ chối yêu cầu</button>
             }
           } @else if (nextReturnStep(selectedReturn()!); as step) {
             @if (step.status === 'RECEIVED') {

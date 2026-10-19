@@ -56,6 +56,7 @@ export function invalidateCatalogCache(): void {
 
 /**
  * Public catalog: product list/detail and category list with counts.
+ * Product HTTP responses must not outlive the origin cache invalidation after an admin edit.
  */
 export async function handleProductsRoute(
   req: HttpRequest,

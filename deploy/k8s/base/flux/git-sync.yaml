@@ -9,16 +9,23 @@ spec:
   ref:
     branch: main
 ---
-apiVersion: source.toolkit.fluxcd.io/v1
-kind: GitRepository
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
 metadata:
-  name: velura-staging-repo
+  name: velura-root
   namespace: flux-system
 spec:
   interval: 1m
-  url: https://github.com/Royal2005-coder/Velura-Angular.git
-  ref:
-    branch: develop
+  sourceRef:
+    kind: GitRepository
+    name: velura-repo
+  path: ./deploy/k8s/clusters/production
+  # Root owns Flux configuration; infrastructure owns platform resources.
+  # Do not wait on child owners that depend on infrastructure readiness.
+  wait: false
+  prune: true
+  deletionPolicy: Orphan
+  timeout: 2m
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
@@ -59,29 +66,7 @@ spec:
       name: sops-age
   dependsOn:
     - name: velura-infra
-  suspend: true
-  prune: true
-  deletionPolicy: Orphan
-  wait: true
-  timeout: 5m
----
-apiVersion: kustomize.toolkit.fluxcd.io/v1
-kind: Kustomization
-metadata:
-  name: velura-staging
-  namespace: flux-system
-spec:
-  interval: 2m
-  sourceRef:
-    kind: GitRepository
-    name: velura-staging-repo
-  path: ./deploy/k8s/overlays/staging
-  decryption:
-    provider: sops
-    secretRef:
-      name: sops-age
-  dependsOn:
-    - name: velura-infra
+  # The publisher pins PR enables this after signed-main evidence is available.
   suspend: true
   prune: true
   deletionPolicy: Orphan

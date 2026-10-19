@@ -518,7 +518,7 @@ jobs:
           if ! git diff --cached --quiet; then
             git commit -m 'KAN-32 why: promote scanned signed main application digests to MVP production'
             git push origin "$branch"
-            pr=$(gh pr create --repo "$GH_REPO" --base develop --head "$branch" --title 'KAN-32: promote signed main digests to MVP production' --body "$(printf '## Why\nPromote the exact scanned/signed images built from approved main revision %s. CI validates publisher evidence and Cosign identities; Flux applies only reviewed production pins after develop is promoted to main. Staging is not part of the MVP release path. Optional worker remains a separate owner-reviewed rollout. Publisher run: %s/%s/actions/runs/%s\ncc @Royal2005-coder @trandiemquynhqw-maker @uyenntd23406-svg' "$RELEASE_SHA" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID"))
+            pr=$(gh pr create --repo "$GH_REPO" --base develop --head "$branch" --title 'KAN-32: promote signed main digests to MVP production' --body "$(printf '## Why\nPromote the exact scanned/signed images built from approved main revision %s. CI validates publisher evidence and Cosign identities; Flux applies only reviewed production pins after develop is promoted to main. Staging is not part of the MVP release path. Optional worker remains a separate owner-reviewed rollout. Publisher run: %s/%s/actions/runs/%s\ncc @Royal2005-coder @trandiemquynhqw-maker @uyenntd23406-svg' "$RELEASE_SHA" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")")
             gh pr merge "$pr" --auto --merge
           fi
           git switch develop

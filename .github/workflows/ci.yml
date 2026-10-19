@@ -66,7 +66,7 @@ jobs:
             exit 0
           fi
           git diff --name-only "$BEFORE" HEAD > changed-paths.txt
-          if grep -qE '^(apps/|packages/|database/migrations/|scripts/run-migrations\.mjs$|package(-lock)?\.json$|deploy/docker/)' changed-paths.txt; then
+          if grep -qE '^(apps/|packages/|database/migrations/|scripts/(run-migrations|supabase-project)\.mjs$|package(-lock)?\.json$|deploy/docker/)' changed-paths.txt; then
             echo 'publish=true' >> "$GITHUB_OUTPUT"
           else
             echo 'publish=false' >> "$GITHUB_OUTPUT"
@@ -106,6 +106,7 @@ jobs:
       - run: npm run typecheck:api
       - run: npm run test:api
       - run: node --test tools/ops/velura-ops.test.mjs
+      - run: node --test scripts/supabase-project.test.mjs
   test-angular:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -310,6 +311,7 @@ jobs:
           build-args: |
             PYTHON_IMAGE=${{ steps.python.outputs.image }}
             RELEASE_REVISION=${{ github.sha }}
+            RELEASE_BUILD_ID=${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           provenance: mode=max
           sbom: true
       - name: Install checksum-verified scanner release
@@ -349,15 +351,19 @@ jobs:
           IMAGE: ${{ steps.image.outputs.name }}@${{ steps.build.outputs.digest }}
           APP: ${{ matrix.app }}
           RELEASE_SHA: ${{ github.sha }}
+          RELEASE_BUILD_ID: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           set -euo pipefail
-          cosign sign --yes --annotations "release-revision=$RELEASE_SHA" "$IMAGE"
+          cosign sign --yes --annotations "release-revision=$RELEASE_SHA" --annotations "release-build-id=$RELEASE_BUILD_ID" "$IMAGE"
           cosign attest --yes --type spdxjson --predicate "sbom-$APP.json" "$IMAGE"
           printf '%s\n' "$IMAGE" > "image-$APP.txt"
+          printf '%s\n' "$RELEASE_BUILD_ID" > "build-id-$APP.txt"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: release-${{ matrix.app }}
-          path: image-${{ matrix.app }}.txt
+          path: |
+            image-${{ matrix.app }}.txt
+            build-id-${{ matrix.app }}.txt
           if-no-files-found: error
           retention-days: 90
       - name: Sanitize scan and SBOM diagnostics without leaking secret matches
@@ -407,7 +413,7 @@ jobs:
           RELEASE_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          python scripts/release-images.py stage release "$RELEASE_SHA"
+          python scripts/release-images.py stage release "$RELEASE_SHA" "$RELEASE_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           branch="feature/KAN-32-staging-${RELEASE_SHA:0:12}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           git switch -c "$branch"
           git config user.name 'velura-release[bot]'
@@ -460,16 +466,18 @@ jobs:
       - name: Verify complete signed staging bundle
         run: |
           set -euo pipefail
-          python scripts/release-images.py snapshot staging > staging-release.json
+          python scripts/release-images.py verified-snapshot staging > staging-release.json
           revision=$(jq -r .revision staging-release.json)
+          build_id=$(jq -r .buildId staging-release.json)
           for app in api storefront admin; do
             image=$(jq -r --arg app "$app" '.images[$app]' staging-release.json)
-            cosign verify --certificate-identity "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/.github/workflows/ci.yml@refs/heads/main" --certificate-oidc-issuer https://token.actions.githubusercontent.com --annotations "release-revision=$revision" "$image"
+            cosign verify --certificate-identity "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/.github/workflows/ci.yml@refs/heads/main" --certificate-oidc-issuer https://token.actions.githubusercontent.com --annotations "release-revision=$revision" --annotations "release-build-id=$build_id" "$image"
           done
       - name: Require independently provisioned staging chatbot schema
         env:
           STAGING_SUPABASE_DB_URL: ${{ secrets.STAGING_SUPABASE_DB_URL }}
           STAGING_DB_CA_PEM: ${{ secrets.STAGING_SUPABASE_DB_CA_CERT }}
+          PRODUCTION_SUPABASE_PROJECT_REF: ${{ vars.PRODUCTION_SUPABASE_PROJECT_REF }}
         run: |
           set -euo pipefail
           test -n "$STAGING_SUPABASE_DB_URL"
@@ -484,17 +492,25 @@ jobs:
           VERIFY_TOKEN: ${{ secrets.PRODUCTION_VERIFY_TOKEN }}
           CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
           CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+          STAGING_SUPABASE_DB_URL: ${{ secrets.STAGING_SUPABASE_DB_URL }}
+          PRODUCTION_SUPABASE_PROJECT_REF: ${{ vars.PRODUCTION_SUPABASE_PROJECT_REF }}
         run: |
           set -euo pipefail
           test -n "$VERIFY_TOKEN"
           test -n "$CF_ACCESS_CLIENT_ID"
           test -n "$CF_ACCESS_CLIENT_SECRET"
           expected=$(jq -r .revision staging-release.json)
+          expected_build=$(jq -r .buildId staging-release.json)
+          expected_project=$(node --input-type=module - <<'JS'
+          import { requireStagingProjectRef } from './scripts/supabase-project.mjs';
+          console.log(requireStagingProjectRef(process.env.STAGING_SUPABASE_DB_URL, process.env.PRODUCTION_SUPABASE_PROJECT_REF));
+          JS
+          )
           for attempt in $(seq 1 60); do
             if curl --fail --silent --show-error --max-time 15 -H "Authorization: Bearer $VERIFY_TOKEN" -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" https://staging-admin.royalai.dev/api/ops/revision > staging-revision.json \
-              && jq -e --arg expected "$expected" '.ready == true and .checks.chatbotSchema == true and .revision == $expected and .buildRevision == $expected' staging-revision.json \
-              && curl --fail --silent --show-error --max-time 15 -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" https://staging-admin.royalai.dev/release.json | jq -e --arg expected "$expected" '.revision == $expected' \
-              && curl --fail --silent --show-error --max-time 15 -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" https://staging.royalai.dev/release.json | jq -e --arg expected "$expected" '.revision == $expected'; then
+              && jq -e --arg expected "$expected" --arg build "$expected_build" --arg project "$expected_project" '.ready == true and .checks.chatbotSchema == true and .revision == $expected and .buildRevision == $expected and .buildId == $build and .databaseProjectRef == $project' staging-revision.json \
+              && curl --fail --silent --show-error --max-time 15 -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" https://staging-admin.royalai.dev/release.json | jq -e --arg expected "$expected" --arg build "$expected_build" '.revision == $expected and .buildId == $build' \
+              && curl --fail --silent --show-error --max-time 15 -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" https://staging.royalai.dev/release.json | jq -e --arg expected "$expected" --arg build "$expected_build" '.revision == $expected and .buildId == $build'; then
               exit 0
             fi
             sleep 10
@@ -590,17 +606,25 @@ jobs:
           VERIFY_TOKEN: ${{ secrets.PRODUCTION_VERIFY_TOKEN }}
           CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
           CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+          PRODUCTION_SUPABASE_PROJECT_REF: ${{ vars.PRODUCTION_SUPABASE_PROJECT_REF }}
         run: |
           set -euo pipefail
           test -n "$VERIFY_TOKEN"
           test -n "$CF_ACCESS_CLIENT_ID"
           test -n "$CF_ACCESS_CLIENT_SECRET"
-          expected=$(python scripts/release-images.py snapshot production | jq -r .revision)
+          python scripts/release-images.py verified-snapshot production > production-release.json
+          expected=$(jq -r .revision production-release.json)
+          expected_build=$(jq -r .buildId production-release.json)
+          expected_project=$(node --input-type=module - <<'JS'
+          import { requireProductionProjectRef } from './scripts/supabase-project.mjs';
+          console.log(requireProductionProjectRef(process.env.PRODUCTION_SUPABASE_PROJECT_REF));
+          JS
+          )
           for attempt in $(seq 1 60); do
             if curl --fail --silent --show-error --max-time 15 -H "Authorization: Bearer $VERIFY_TOKEN" -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" https://admin.royalai.dev/api/ops/revision > revision.json \
-              && jq -e --arg expected "$expected" '.ready == true and .checks.chatbotSchema == true and .revision == $expected and .buildRevision == $expected' revision.json \
-              && curl --fail --silent --show-error --max-time 15 -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" https://admin.royalai.dev/release.json | jq -e --arg expected "$expected" '.revision == $expected' \
-              && curl --fail --silent --show-error --max-time 15 https://velura.royalai.dev/release.json | jq -e --arg expected "$expected" '.revision == $expected' \
+              && jq -e --arg expected "$expected" --arg build "$expected_build" --arg project "$expected_project" '.ready == true and .checks.chatbotSchema == true and .revision == $expected and .buildRevision == $expected and .buildId == $build and .databaseProjectRef == $project' revision.json \
+              && curl --fail --silent --show-error --max-time 15 -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" https://admin.royalai.dev/release.json | jq -e --arg expected "$expected" --arg build "$expected_build" '.revision == $expected and .buildId == $build' \
+              && curl --fail --silent --show-error --max-time 15 https://velura.royalai.dev/release.json | jq -e --arg expected "$expected" --arg build "$expected_build" '.revision == $expected and .buildId == $build' \
               && curl --fail --silent --show-error --max-time 15 https://velura.royalai.dev/api/health; then
               exit 0
             fi

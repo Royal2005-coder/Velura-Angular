@@ -24,12 +24,13 @@ data:
           rpm: 10
     litellm_settings:
       callbacks: [prometheus]
+      # LiteLLM 1.79 reads this setting from litellm_settings, not general_settings.
+      require_auth_for_metrics_endpoint: true
       telemetry: false
       request_timeout: 30
       num_retries: 0
     general_settings:
       master_key: os.environ/LITELLM_MASTER_KEY
-      require_auth_for_metrics_endpoint: true
 ---
 apiVersion: apps/v1
 kind: Deployment

@@ -305,7 +305,7 @@ export class PurchaseFlowPage {
       };
     }
 
-    const reorder = this.checkout.consumeReorder();
+    const reorder = this.checkout.consumeReorder?.();
     if (reorder) {
       this.address = { ...this.address, ...reorder.address };
       if (reorder.paymentMethod === 'COD' || reorder.paymentMethod === 'STRIPE' || reorder.paymentMethod === 'VNPAY' || reorder.paymentMethod === 'MOMO') {

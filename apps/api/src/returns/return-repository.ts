@@ -2,6 +2,7 @@ import crypto from "crypto";
 import { callRpc, selectOne, selectRows, updateRows, insertRow } from "../supabase.js";
 import { HttpError } from "../http.js";
 import { asJsonObject, asNumber, asString, type JsonObject } from "../types.js";
+import { createNotification } from "../user/notifications.js";
 import { RETURN_SELECT, TICKET_SELECT } from "./return-constants.js";
 
 /**
@@ -150,6 +151,7 @@ export function createReturnRepository() {
       const existingReturnRefund = await selectOne("payment_refund", {
         return_id: `eq.${returnId}`
       }).catch(() => null);
+      const refundWasAlreadyComplete = existingReturnRefund?.status === "succeeded";
 
       let op: JsonObject | null = existingReturnRefund;
       if (!existingReturnRefund || existingReturnRefund.status !== "succeeded") {
@@ -207,6 +209,16 @@ export function createReturnRepository() {
 
       // 7. Lấy lại bản ghi sau khi cập nhật
       const finalReturn = await selectOne("return_exchange", { return_id: `eq.${returnId}` });
+      const order = await selectOne("orders", { order_id: `eq.${orderId}`, select: "order_id,order_code,user_id" }).catch(() => null);
+      if (order?.user_id && !refundWasAlreadyComplete) {
+        await createNotification(
+          asString(order.user_id),
+          "refund_completed",
+          `Đơn hàng #${asString(order.order_code || orderId)} đã được hoàn tiền`,
+          `Khoản hoàn ${Number(finalReturn?.refund_amount || op?.amount || 0).toLocaleString("vi-VN")} đ đã được chuyển thành công.`,
+          `/account/orders/${orderId}`
+        );
+      }
       return asJsonObject(finalReturn || ret);
     },
     async prepareExchange(returnId: string, expectedVersion: number, actorId: string, ipAddress?: string) {
@@ -628,6 +640,16 @@ export function createReturnRepository() {
       }
 
       const updated = asJsonObject(rows[0]);
+      const orderForNotice = await selectOne("orders", { order_id: `eq.${current.order_id}`, select: "order_id,order_code" }).catch(() => null);
+      if (current.user_id) {
+        await createNotification(
+          asString(current.user_id),
+          "return_approved",
+          "Yêu cầu hoàn tiền đã được duyệt",
+          `Yêu cầu hoàn tiền cho đơn #${asString(orderForNotice?.order_code || current.order_id || returnId)} đã được duyệt với số tiền ${Number(updated.refund_amount || input.refundAmount).toLocaleString("vi-VN")} đ. Velura sẽ hoàn tiền sau khi nhận và kiểm tra hàng.`,
+          `/account/orders/${asString(current.order_id)}`
+        );
+      }
       await insertRow("audit_log", {
         actor_id: actorId,
         actor_role: actorRole,

@@ -305,6 +305,14 @@ export class PurchaseFlowPage {
       };
     }
 
+    const reorder = this.checkout.consumeReorder();
+    if (reorder) {
+      this.address = { ...this.address, ...reorder.address };
+      if (reorder.paymentMethod === 'COD' || reorder.paymentMethod === 'STRIPE' || reorder.paymentMethod === 'VNPAY' || reorder.paymentMethod === 'MOMO') {
+        this.payment = reorder.paymentMethod;
+      }
+    }
+
     const requestedOrder = this.route.snapshot.queryParamMap.get('order');
     const savedCheckout = this.checkout.readCreatedOrder();
     const matchingSnapshot = savedCheckout?.checkout_snapshot

@@ -154,6 +154,13 @@ export const routes: Routes = [
         title: 'Theo dõi đơn hàng - Velura Store',
       },
       {
+        path: 'account/cancelled-orders',
+        canActivate: [purchaseFlowGuard],
+        data: { audience: 'user', area: 'orders' },
+        loadComponent: () => import('./features/account/order-flow.page').then((m) => m.OrderFlowPage),
+        title: 'Đơn hàng đã hủy - Velura Store',
+      },
+      {
         path: 'account/orders',
         canActivate: [purchaseFlowGuard],
         data: { audience: 'user', area: 'orders' },

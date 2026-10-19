@@ -82,6 +82,12 @@ export async function handleProductRoute({
     return true;
   }
 
+  // The explicit Apply button stages server-measured bytes; the later product save publishes them.
+  if (req.method === "POST" && parts[4] === "ai-image-approve" && parts.length === 5) {
+    sendJson(res, 200, await service.approveStudioImage(context, await readJson(req, config.maxBodyBytes), requestMeta), headers);
+    return true;
+  }
+
   // POST /api/v1/admin/products/ai-seo-optimize - Gemini Fashion SEO & product attributes generation
   if (req.method === "POST" && parts[4] === "ai-seo-optimize" && parts.length === 5) {
     const body = await readJson(req, config.maxBodyBytes);

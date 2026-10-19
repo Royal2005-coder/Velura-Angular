@@ -1,4 +1,5 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
+import type { ProductImageApproval } from './product-image-approval.service';
 import { Injectable, inject } from '@angular/core';
 import { Observable, map } from 'rxjs';
 import { environment } from '../../environments/environment';
@@ -1077,6 +1078,11 @@ export class AdminApiService {
    */
   enhanceProductImage(body: Record<string, unknown>): Observable<AdminImageEnhanceResult> {
     return this.http.post<AdminImageEnhanceResult>(`${this.baseUrl}/api/v1/admin/products/ai-image-enhance`, body);
+  }
+
+  /** Stage the explicit Studio selection as a database-backed approval before the product can publish it. */
+  approveStudioImage(body: { imageUrl: string; productId: string | null; expectedVersion: number; selection: 'original' | 'enhanced'; reviewConfirmed: true }): Observable<ProductImageApproval> {
+    return this.http.post<ProductImageApproval>(`${this.baseUrl}/api/v1/admin/products/ai-image-approve`, body);
   }
 
   /**

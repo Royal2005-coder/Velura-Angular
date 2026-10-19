@@ -100,7 +100,7 @@ async function chatbotSchemaReadiness(url: string, key: string): Promise<boolean
   } catch { return false; }
 }
 
-/** Verify data, chatbot schema and gateway readiness without inference, sensitive rows or credential disclosure. */
+/** Verify the installed catalog contract, chatbot schema and gateway without reading customer rows. */
 export async function runtimeReadiness(): Promise<{ ready: boolean; checks: { database: boolean; gateway: boolean; chatbotSchema: boolean } }> {
   async function check(url: string, headers: Record<string, string>): Promise<boolean> {
     try { const response = await fetch(url, { headers, redirect: "error", signal: AbortSignal.timeout(3000) }); await response.body?.cancel(); return response.ok; } catch { return false; }
@@ -108,7 +108,7 @@ export async function runtimeReadiness(): Promise<{ ready: boolean; checks: { da
   const databaseKey = config.supabaseServiceRoleKey || config.supabaseAnonKey;
   const endpoint = process.env.LITELLM_ENDPOINT?.replace(/\/v1\/?$/, "").replace(/\/$/, "");
   const [database, gateway, chatbotSchema] = await Promise.all([
-    config.supabaseUrl && databaseKey ? check(`${config.supabaseUrl}/rest/v1/product?select=product_id&limit=0`, { apikey: databaseKey, authorization: `Bearer ${databaseKey}` }) : false,
+    config.supabaseUrl && databaseKey ? check(`${config.supabaseUrl}/rest/v1/product?select=product_id,image_colors,variants:variant(sku)&limit=0`, { apikey: databaseKey, authorization: `Bearer ${databaseKey}` }) : false,
     endpoint && process.env.LITELLM_API_KEY ? check(`${endpoint}/health/readiness`, { authorization: `Bearer ${process.env.LITELLM_API_KEY}` }) : false,
     config.supabaseUrl && config.supabaseServiceRoleKey ? chatbotSchemaReadiness(config.supabaseUrl, config.supabaseServiceRoleKey) : false,
   ]);

@@ -32,6 +32,7 @@ export function invalidateCatalogCache(): void {
 
 /**
  * Public catalog: product list/detail and category list with counts.
+ * Product HTTP responses must not outlive the origin cache invalidation after an admin edit.
  */
 export async function handleProductsRoute(
   req: HttpRequest,
@@ -273,7 +274,7 @@ export async function handleProductsRoute(
           sold_count
         }, {
           ...corsHeaders,
-          "cache-control": "public, max-age=30, s-maxage=60, stale-while-revalidate=180"
+          "cache-control": "no-store"
         });
       }
 
@@ -313,14 +314,14 @@ export async function handleProductsRoute(
         if (liteProductsCache && (now - liteProductsCache.cachedAt < liteProductsCache.ttlMs)) {
           return sendJson(res, 200, filterBySearch(liteProductsCache.data), {
             ...corsHeaders,
-            "cache-control": "public, max-age=15, s-maxage=30, stale-while-revalidate=120"
+            "cache-control": "no-store"
           });
         }
       } else {
         if (productsCache && (now - productsCache.cachedAt < productsCache.ttlMs)) {
           return sendJson(res, 200, filterBySearch(productsCache.data), {
             ...corsHeaders,
-            "cache-control": "public, max-age=15, s-maxage=30, stale-while-revalidate=120"
+            "cache-control": "no-store"
           });
         }
       }
@@ -385,7 +386,7 @@ export async function handleProductsRoute(
         liteProductsCache = { data: liteRows, cachedAt: now, ttlMs: PRODUCTS_CACHE_TTL_MS };
         return sendJson(res, 200, filterBySearch(liteRows), {
           ...corsHeaders,
-          "cache-control": "public, max-age=15, s-maxage=30, stale-while-revalidate=120"
+          "cache-control": "no-store"
         });
       }
 
@@ -423,7 +424,7 @@ export async function handleProductsRoute(
       productsCache = { data: productsWithVariants, cachedAt: now, ttlMs: PRODUCTS_CACHE_TTL_MS };
       return sendJson(res, 200, filterBySearch(productsWithVariants), {
         ...corsHeaders,
-        "cache-control": "public, max-age=15, s-maxage=30, stale-while-revalidate=120"
+        "cache-control": "no-store"
       });
     }
   }

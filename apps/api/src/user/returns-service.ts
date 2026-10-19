@@ -1,9 +1,54 @@
 import { OPEN_RETURN_STATUSES, returnReasonLabel } from "../returns/return-constants.js";
+import { classifyReturnPayment, customerRefundReceiver, refundFlowFor, validateRefundReceiver } from "../returns/return-refund-receiver.js";
 import { hasGuestOrderAccess } from "./order-access.js";
 import { HttpError } from "../http.js";
 import { returnWindowOpen } from "./return-window.js";
 import { asJsonObject, asNumber, asString, type JsonObject, type UserProfile } from "../types.js";
 import type { UserReturnsRepository } from "./returns-repository.js";
+
+/** A customer may withdraw a request only while no parcel has been handed to the carrier. */
+const CUSTOMER_CANCELLABLE_STATUSES: readonly string[] = ["REQUESTED", "CONTACTING", "WAITING_RETURN"];
+
+/** Stored reason that marks a cancellation as the customer's own (shown as "Đã hủy", not "Bị từ chối"). */
+const CUSTOMER_CANCEL_REASON = "Đã hủy bởi khách hàng";
+
+/**
+ * Customer-facing shape of one return request: the persisted row without CSKH-internal fields, plus what the
+ * storefront needs to render it. A request CSKH rejected keeps `cancelled_by = 'admin'` and its `rejection_reason`
+ * so the customer sees "Bị từ chối" with the reason; the COD receiving account is masked to its last four digits.
+ */
+async function customerReturnView(
+  repository: UserReturnsRepository,
+  ret: JsonObject,
+  order: JsonObject | null,
+  items: JsonObject[]
+): Promise<JsonObject> {
+  const { admin_note: _adminNote, warehouse_proof: _warehouseProof, qa_item_receipts: _receipts, ...visible } = ret;
+  const flow = refundFlowFor(ret.return_type, classifyReturnPayment(order?.payment_method, undefined));
+  const receiverRequired = flow === "cod_manual";
+  const receiver = receiverRequired ? await repository.getRefundReceiver(ret.return_id) : null;
+  return {
+    ...visible,
+    order_code: order ? order.order_code : null,
+    payment_method: order ? order.payment_method : null,
+    refund_flow: flow,
+    refund_receiver: customerRefundReceiver(receiverRequired, receiver),
+    items
+  };
+}
+
+/** Validates the receiving account and stores it through the transactional RPC; returns the masked view. */
+async function saveRefundReceiver(
+  repository: UserReturnsRepository,
+  ret: JsonObject,
+  ownerUserId: string | null,
+  body: JsonObject
+): Promise<JsonObject> {
+  const check = validateRefundReceiver(body);
+  if (!check.ok) throw new HttpError(422, "REFUND_RECEIVER_INVALID", Object.values(check.errors)[0]?.[0] || "Thông tin nhận hoàn tiền chưa hợp lệ.", check.errors);
+  const saved = await repository.setRefundReceiver(asString(ret.return_id), ownerUserId, check.value);
+  return { success: true, refund_receiver: saved };
+}
 
 /** Danh mục phụ kiện, túi xách, giày dép... đều được phép đổi trả theo chính sách Velura. */
 const RESTRICTED_CATEGORY_NAMES: readonly string[] = [];
@@ -275,7 +320,7 @@ export function createUserReturnsService(repository: UserReturnsRepository) {
       if (!order || !hasGuestOrderAccess(order, body)) throw new HttpError(404,"NOT_FOUND","Order not found");
       const rows = await repository.listReturnsForOrder(order.order_id);
       const populated: JsonObject[] = [];
-      for (const ret of rows) populated.push({...ret, order_code:order.order_code,items:await repository.listReturnItemsForReturn(ret.return_id)});
+      for (const ret of rows) populated.push(await customerReturnView(repository, ret, order, await repository.listReturnItemsForReturn(ret.return_id)));
       return populated;
     },
     /** Cancels only a request bound to the verified order and its current version. */
@@ -284,10 +329,10 @@ export function createUserReturnsService(repository: UserReturnsRepository) {
       const order = ret ? await repository.findOrderById(asString(ret.order_id)) : null;
       if (!ret || !order || !hasGuestOrderAccess(order, body)) throw new HttpError(404,"NOT_FOUND","Order not found");
       const version = Number(body.expectedVersion);
-      if (!Number.isInteger(version) || version !== Number(ret.version)) throw new HttpError(409,"VERSION_CONFLICT","Return changed");
-      if (!["REQUESTED","CONTACTING","WAITING_RETURN"].includes(asString(ret.status))) throw new HttpError(422,"INVALID_TRANSITION","Return has already been handed off");
-      const changed = await repository.updateReturn(ret.return_id,{status:"CANCELLED",version:version+1,resolved_at:new Date().toISOString(),rejection_reason:"Customer cancelled"},version);
-      if (!changed[0]) throw new HttpError(409,"VERSION_CONFLICT","Return changed");
+      if (!Number.isInteger(version) || version !== Number(ret.version)) throw new HttpError(409,"VERSION_CONFLICT","Yêu cầu đổi/trả đã thay đổi, vui lòng tải lại");
+      if (!CUSTOMER_CANCELLABLE_STATUSES.includes(asString(ret.status))) throw new HttpError(422,"INVALID_TRANSITION","Yêu cầu đã chuyển sang bước xử lý hàng nên không thể tự hủy");
+      const changed = await repository.updateReturn(ret.return_id,{status:"CANCELLED",cancelled_by:"customer",version:version+1,resolved_at:new Date().toISOString(),rejection_reason:CUSTOMER_CANCEL_REASON},version);
+      if (!changed[0]) throw new HttpError(409,"VERSION_CONFLICT","Yêu cầu đổi/trả đã thay đổi, vui lòng tải lại");
       return changed[0];
     },
     async cancelForMember(profile: UserProfile, returnId: unknown, rawExpectedVersion: unknown) {
@@ -299,11 +344,11 @@ export function createUserReturnsService(repository: UserReturnsRepository) {
       const ret = await repository.findReturnById(returnId);
       if (!ret) throw new HttpError(404, "NOT_FOUND", "Không tìm thấy yêu cầu đổi trả");
       if (ret.user_id !== profile.user_id) throw new HttpError(403, "FORBIDDEN", "Không có quyền thực hiện");
-      if (!["REQUESTED", "WAITING_RETURN"].includes(asString(ret.status))) {
+      if (!CUSTOMER_CANCELLABLE_STATUSES.includes(asString(ret.status))) {
         throw new HttpError(
           400,
           "BAD_REQUEST",
-          "Chỉ có thể hủy yêu cầu khi đang ở trạng thái Chờ xác nhận hoặc Đã duyệt hồ sơ (chưa gửi hàng)"
+          "Chỉ có thể hủy yêu cầu khi chưa gửi hàng (đang Chờ xử lý, CSKH đang liên hệ hoặc Chờ gửi hàng)"
         );
       }
       if (asNumber(ret.version) !== expectedVersion) {
@@ -311,7 +356,8 @@ export function createUserReturnsService(repository: UserReturnsRepository) {
       }
       const updated = await repository.updateReturn(returnId, {
         status: "CANCELLED",
-        rejection_reason: "Đã hủy bởi khách hàng",
+        cancelled_by: "customer",
+        rejection_reason: CUSTOMER_CANCEL_REASON,
         resolved_at: new Date().toISOString(),
         version: expectedVersion + 1
       }, expectedVersion);
@@ -319,6 +365,24 @@ export function createUserReturnsService(repository: UserReturnsRepository) {
         throw new HttpError(409, "VERSION_CONFLICT", "Yêu cầu đổi/trả đã thay đổi, vui lòng tải lại");
       }
       return updated[0];
+    },
+
+    /**
+     * Member saves the COD receiving account for their own refund request. The database re-validates and refuses
+     * requests that are closed or not COD refunds.
+     */
+    async saveRefundReceiverForMember(profile: UserProfile, body: JsonObject) {
+      const ret = await repository.findReturnById(body.return_id);
+      if (!ret || ret.user_id !== profile.user_id) throw new HttpError(404, "NOT_FOUND", "Không tìm thấy yêu cầu đổi trả");
+      return saveRefundReceiver(repository, ret, profile.user_id, body);
+    },
+
+    /** Verified guest saves the COD receiving account; the signed session must authorize the request's order. */
+    async saveRefundReceiverForGuest(body: JsonObject) {
+      const ret = await repository.findReturnById(body.return_id);
+      const order = ret ? await repository.findOrderById(asString(ret.order_id)) : null;
+      if (!ret || !order || !hasGuestOrderAccess(order, body)) throw new HttpError(404, "NOT_FOUND", "Không tìm thấy yêu cầu đổi trả");
+      return saveRefundReceiver(repository, ret, null, body);
     },
 
     async listForMember(profile: UserProfile, orderId: string | null) {
@@ -338,7 +402,7 @@ export function createUserReturnsService(repository: UserReturnsRepository) {
             unit_price: orderItem ? orderItem.unit_price : 0
           });
         }
-        populated.push({ ...ret, order_code: order ? order.order_code : null, items: itemsWithDetails });
+        populated.push(await customerReturnView(repository, ret, order, itemsWithDetails));
       }
       populated.sort((a, b) => new Date(String(b.created_at)).getTime() - new Date(String(a.created_at)).getTime());
       return populated;

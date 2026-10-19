@@ -40,6 +40,12 @@ export async function handleProductRoute({
     return true;
   }
 
+  // GET /api/v1/admin/products/sku-check?sku=VL-AO001&excludeProductId=... - inline SKU uniqueness check
+  if (req.method === "GET" && parts[4] === "sku-check" && parts.length === 5) {
+    sendJson(res, 200, await service.checkSku(context, url.searchParams), headers);
+    return true;
+  }
+
   // GET /api/v1/admin/products/low-stock
   if (req.method === "GET" && parts[4] === "low-stock" && parts.length === 5) {
     sendJson(res, 200, { data: await service.lowStock(context) }, headers);

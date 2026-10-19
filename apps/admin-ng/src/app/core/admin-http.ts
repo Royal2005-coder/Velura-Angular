@@ -46,7 +46,8 @@ export function adminErrorMessage(error: unknown, fallback = 'Không thể gọi
       message?: string;
     } | null;
     const details = typeof payload?.error === 'object' ? payload.error?.details : undefined;
-    const detailText = formatErrorDetails(details);
+    // A raw PostgREST envelope ({ code, message, details, hint }) is an internal diagnostic; the API's Vietnamese `message` wins.
+    const detailText = isDatabaseEnvelope(details) ? '' : formatErrorDetails(details);
     if (detailText) {
       return detailText;
     }
@@ -59,6 +60,14 @@ export function adminErrorMessage(error: unknown, fallback = 'Không thể gọi
     return error.message;
   }
   return fallback;
+}
+
+function isDatabaseEnvelope(details: unknown): boolean {
+  if (!details || typeof details !== 'object' || Array.isArray(details)) {
+    return false;
+  }
+  const { code, message } = details as { code?: unknown; message?: unknown };
+  return typeof code === 'string' && typeof message === 'string';
 }
 
 /**

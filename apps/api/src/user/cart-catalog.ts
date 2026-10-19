@@ -106,6 +106,17 @@ export function parseCartItems(raw: unknown): CartItemInput[] {
 }
 
 /**
+ * Lý do một sản phẩm không được cho vào giỏ, hoặc `null` khi đang bán.
+ * `out_of_stock` do kiểm tra tồn kho theo biến thể xử lý nên không bị loại ở đây.
+ */
+export function cartUnavailableReason(status: unknown, productName: string): string | null {
+  const label = productName.trim() || "Sản phẩm";
+  if (status === "discontinued") return `Sản phẩm '${label}' đã ngừng kinh doanh và không thể thêm vào giỏ hàng.`;
+  if (status === "hidden") return `Sản phẩm '${label}' hiện không được bán và không thể thêm vào giỏ hàng.`;
+  return null;
+}
+
+/**
  * Tra giá và danh mục của các biến thể đang bán; trạng thái ẩn/ngừng bán không được đặt hàng.
  */
 export async function loadCatalog(variantIds: readonly string[]): Promise<Map<string, CatalogEntry>> {

@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
-import type { AdminAuditRow, AdminManagementGroup, AdminInsightRange } from './admin-api.service';
+import type { AdminAuditRow, AdminInsightRange, AdminLowStockRow, AdminManagementGroup } from './admin-api.service';
 
 /** Production dashboard DTO: unavailable measurements and empty denominators are nullable. */
 export interface AnalyticsDashboard {
@@ -37,5 +37,9 @@ export class AnalyticsModel {
   /** Narrative is optional; underlying validated KPI cards are always kept visible. */
   recommend(params: Record<string, string>): Observable<{ source: string; availability: string; lines: string[]; narrative: string[] }> {
     return this.http.post<{ source: string; availability: string; lines: string[]; narrative: string[] }>(`${environment.apiUrl}/api/v1/admin/insights/recommend`, {}, { params });
+  }
+  /** Variants at or below their own low-stock threshold with product name/SKU, so the dashboard can say which products are low. */
+  lowStock(): Observable<{ data: AdminLowStockRow[] }> {
+    return this.http.get<{ data: AdminLowStockRow[] }>(`${environment.apiUrl}/api/v1/admin/products/low-stock`);
   }
 }

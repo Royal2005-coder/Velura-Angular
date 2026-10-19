@@ -456,4 +456,50 @@ describe('ProductDetailPage', () => {
     expect(page.isSizeOutOfStock('XL')).toBe(true);
     expect(page.isSizeOutOfStock('S')).toBe(false);
   });
+
+  it('switches the main image to the first image mapped to the chosen color and keeps common images (AD_PRODUCT_08)', async () => {
+    await createStorefrontPage(ProductDetailPage);
+    const images = ['/images/chung.jpg', '/images/den-1.jpg', '/images/den-2.jpg', '/images/trang-1.jpg'];
+    const product: ProductSummary = {
+      product_id: 'color-switch',
+      name: 'Áo thun hai màu',
+      status: 'on_sale',
+      images,
+      image_colors: { [images[1]]: 'Đen', [images[2]]: 'Đen', [images[3]]: 'Trắng' },
+      variants: [
+        { variant_id: 'den-m', color: 'Đen', color_hex: '#111111', size: 'M', stock_quantity: 5 },
+        { variant_id: 'trang-m', color: 'Trắng', color_hex: '#ffffff', size: 'M', stock_quantity: 5 },
+      ],
+    };
+    vi.spyOn(TestBed.inject(CatalogService), 'getProduct').mockReturnValueOnce(of(product));
+    const page = TestBed.runInInjectionContext(() => new ProductDetailPage());
+
+    page.selectColor('Đen');
+    expect(page.gallery()[page.activeImage()]).toBe('/images/den-1.jpg');
+    expect(page.imageUrl()).toContain('den-1.jpg');
+    page.selectColor('Trắng');
+    expect(page.gallery()[page.activeImage()]).toBe('/images/trang-1.jpg');
+    expect(page.imageUrl()).toContain('trang-1.jpg');
+    page.selectColor('Đen');
+    expect(page.imageUrl()).toContain('den-1.jpg');
+    expect(page.gallery()).toContain('/images/chung.jpg');
+    expect(page.gallery()).toContain('/images/den-2.jpg');
+  });
+
+  it('opens a discontinued product from its direct link with purchase disabled and a Vietnamese label', async () => {
+    await createStorefrontPage(ProductDetailPage);
+    vi.spyOn(TestBed.inject(CatalogService), 'getProduct').mockReturnValueOnce(of({
+      product_id: 'ngung-kinh-doanh',
+      name: 'Áo đã ngừng bán',
+      status: 'discontinued',
+      images: ['/images/a.jpg'],
+      variants: [{ variant_id: 'v1', color: 'Đen', size: 'M', stock_quantity: 9 }],
+    }));
+    const page = TestBed.runInInjectionContext(() => new ProductDetailPage());
+
+    expect(page.product()?.product_id).toBe('ngung-kinh-doanh');
+    expect(page.stockLabel()).toBe('Ngừng kinh doanh');
+    expect(page.isBuyDisabled()).toBe(true);
+    expect(page.addToCart()).toBe(false);
+  });
 });

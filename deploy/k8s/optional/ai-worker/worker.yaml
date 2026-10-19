@@ -84,6 +84,8 @@ spec:
     spec:
       runtimeClassName: nvidia
       priorityClassName: velura-inference-staging
+      imagePullSecrets:
+        - name: velura-registry
       automountServiceAccountToken: false
       terminationGracePeriodSeconds: 210
       securityContext:
@@ -96,7 +98,7 @@ spec:
       containers:
         - name: worker
           image: velura-ai-worker:latest
-          imagePullPolicy: Never
+          imagePullPolicy: IfNotPresent
           ports:
             - name: http
               containerPort: 8000

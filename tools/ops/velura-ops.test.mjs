@@ -15,7 +15,8 @@ const now = Date.parse('2026-10-08T12:00:00Z');
 const nodeVersion = '22.14.0';
 const clusterFlags = ['--context', 'staging', '--expected-cluster', uid];
 const ready = { conditions: [{ type: 'Ready', status: 'True' }] };
-const source = { kind: 'GitRepository', metadata: { name: 'velura-repo', namespace: 'flux-system' }, spec: { ref: { commit: sha } }, status: { ...ready, artifact: { revision: `main@sha1:${sha}` } } };
+const source = { kind: 'GitRepository', metadata: { name: 'velura-repo', namespace: 'flux-system' }, spec: { url: 'https://github.com/Royal2005-coder/Velura-Angular.git', ref: { branch: 'main' } }, status: { ...ready, artifact: { revision: `main@sha1:${sha}` } } };
+const stagingSource = { ...source, metadata: { ...source.metadata, name: 'velura-staging-repo' }, spec: { ...source.spec, ref: { branch: 'develop' } }, status: { ...ready, artifact: { revision: `develop@sha1:${sha}` } } };
 const workload = { apiVersion: 'apps/v1', kind: 'Deployment', metadata: { name: 'velura-api', namespace: 'velura', generation: 2 }, spec: { replicas: 1, template: { spec: { containers: [{ name: 'api', image: `registry.test/api@sha256:${imageDigest}`, resources: { requests: { cpu: '100m', memory: '128Mi' }, limits: { cpu: '1', memory: '512Mi' } } }] } } }, status: { observedGeneration: 2, readyReplicas: 1 } };
 const pod = { metadata: { name: 'api-pod', namespace: 'velura' }, status: { ...ready, phase: 'Running', containerStatuses: [{ name: 'api', ready: true, restartCount: 0, imageID: `registry.test/api@sha256:${imageDigest}` }] } };
 function fixture(overrides = {}) {
@@ -30,11 +31,12 @@ function fixture(overrides = {}) {
     if (text.includes('get jobs,cronjobs')) return JSON.stringify({ items: overrides.batch ?? [] });
     if (text.includes('get services')) return JSON.stringify({ items: [] });
     if (text.includes('get networkpolicies')) return JSON.stringify({ items: overrides.policies ?? [{ metadata: { name: 'default-deny', namespace: 'velura' }, spec: { podSelector: {}, policyTypes: ['Ingress', 'Egress'], ingress: [], egress: [] } }] });
+    if (text.includes('get gitrepositories.source.toolkit.fluxcd.io velura-staging-repo')) return JSON.stringify(overrides.source ?? stagingSource);
     if (text.includes('get gitrepositories.source.toolkit.fluxcd.io velura-repo')) return JSON.stringify(overrides.source ?? source);
     if (text.includes('get gitrepositories.source.toolkit.fluxcd.io')) return JSON.stringify({ items: overrides.flux ?? [source] });
-    if (text.includes('get kustomizations.kustomize.toolkit.fluxcd.io velura-staging')) return JSON.stringify(overrides.target ?? { spec: { sourceRef: { kind: 'GitRepository', name: 'velura-repo' }, path: './deploy/k8s/overlays/staging' } });
-    if (text.includes('get kustomizations.kustomize.toolkit.fluxcd.io velura-infra')) return JSON.stringify(overrides.target ?? { spec: { sourceRef: { kind: 'GitRepository', name: 'velura-repo' }, path: './deploy/k8s/overlays/production' } });
-    if (text.includes('get kustomizations.kustomize.toolkit.fluxcd.io')) return JSON.stringify({ items: overrides.kustomizations ?? [{ kind: 'Kustomization', metadata: { name: 'velura-infra' }, status: { ...ready, lastAppliedRevision: `main@sha1:${sha}` } }] });
+    if (text.includes('get kustomizations.kustomize.toolkit.fluxcd.io velura-staging')) return JSON.stringify(overrides.target ?? { spec: { sourceRef: { kind: 'GitRepository', name: 'velura-staging-repo' }, path: './deploy/k8s/overlays/staging' } });
+    if (text.includes('get kustomizations.kustomize.toolkit.fluxcd.io velura-production')) return JSON.stringify(overrides.target ?? { spec: { sourceRef: { kind: 'GitRepository', name: 'velura-repo' }, path: './deploy/k8s/overlays/production' } });
+    if (text.includes('get kustomizations.kustomize.toolkit.fluxcd.io')) return JSON.stringify({ items: overrides.kustomizations ?? [{ kind: 'Kustomization', metadata: { name: 'velura-production' }, status: { ...ready, lastAppliedRevision: `main@sha1:${sha}` } }] });
     if (text.includes('annotate ')) return 'annotated';
     if (text.includes('logs deployment/')) return '2026-10-08T11:59:00Z ERROR token=synthetic-sensitive-value prompt=private image=data:image/png;base64,abc';
     if (binary === 'git' && args[0] === 'rev-list') return `${sha} ${'c'.repeat(40)}\n`;
@@ -216,7 +218,7 @@ test('subprocess nonzero stderr is withheld, timeouts/output limits are bounded'
   await assert.rejects(executeFile(process.execPath, ['-e', 'process.stdout.write("x".repeat(1100000))']), /safe limit/);
 });
 
-test('reconcile defaults to readonly, requires pinned revision and mutation owner gate', async () => {
+test('reconcile defaults to readonly, requires an exact fetched environment revision and mutation owner gate', async () => {
   const base = ['reconcile', ...clusterFlags, '--environment', 'staging', '--revision', sha];
   const f = fixture();
   const plan = await runCli(base, f.dependencies);
@@ -225,10 +227,19 @@ test('reconcile defaults to readonly, requires pinned revision and mutation owne
   assert.ok(!f.calls.some(call => call.args.includes('annotate')));
   const rejected = await runCli([...base, '--execute'], fixture().dependencies);
   assert.equal(rejected.exitCode, 5);
-  const wrongRevision = fixture({ source: { ...source, spec: { ref: { branch: 'main' } } } });
-  const wrong = await runCli(base, wrongRevision.dependencies);
-  assert.equal(wrong.exitCode, 1);
-  assert.ok(!wrongRevision.calls.some(call => call.args.includes('annotate')));
+  for (const invalid of [
+    { ...stagingSource, spec: { ...stagingSource.spec, ref: { branch: 'main' } } },
+    { ...stagingSource, spec: { ...stagingSource.spec, ref: { branch: 'develop', commit: sha } } },
+    { ...stagingSource, spec: { ...stagingSource.spec, ref: { branch: 'develop', tag: 'v1' } } },
+    { ...stagingSource, spec: { ...stagingSource.spec, url: 'https://github.com/untrusted/repo.git' } },
+    { ...stagingSource, status: { ...ready, artifact: { revision: `develop@sha1:${'c'.repeat(40)}` } } },
+    { ...stagingSource, metadata: { ...stagingSource.metadata, generation: 2 }, status: { ...stagingSource.status, observedGeneration: 1 } },
+  ]) {
+    const rejected = fixture({ source: invalid });
+    const result = await runCli(base, rejected.dependencies);
+    assert.equal(result.exitCode, 1);
+    assert.ok(!rejected.calls.some(call => call.args.includes('annotate')));
+  }
   await withFiles({ approval: approval('reconcile') }, async paths => {
     const approved = fixture();
     const executed = await runCli([...base, '--execute', '--approval', paths.approval], approved.dependencies);
@@ -424,9 +435,10 @@ test('staging status isolates suspended production Flux and recognizes empty mat
   const f = fixture({
     workloads: [stagedWorkload], pods: [stagedPod],
     policies: [{ metadata: { namespace: 'velura-staging', name: 'default-deny' }, spec: { podSelector: { matchLabels: {} }, policyTypes: ['Ingress', 'Egress'], ingress: [], egress: [] } }],
+    flux: [source, stagingSource],
     kustomizations: [
       { kind: 'Kustomization', metadata: { name: 'velura-infra' }, spec: { suspend: true }, status: ready },
-      { kind: 'Kustomization', metadata: { name: 'velura-staging' }, status: ready },
+      { kind: 'Kustomization', metadata: { name: 'velura-staging' }, status: { ...ready, lastAppliedRevision: `develop@sha1:${sha}` } },
     ],
   });
   const result = await runCli(['health', ...clusterFlags, '--namespace', 'velura-staging'], f.dependencies);
@@ -436,8 +448,18 @@ test('staging status isolates suspended production Flux and recognizes empty mat
   assert.equal(result.result.ok, false);
 });
 
+test('Ready flags cannot hide a feature source or an unapplied fetched revision', async () => {
+  for (const overrides of [
+    { flux: [{ ...source, spec: { ...source.spec, ref: { branch: 'feature/KAN-32-old' } } }] },
+    { kustomizations: [{ kind: 'Kustomization', metadata: { name: 'velura-production' }, status: { ...ready, lastAppliedRevision: `main@sha1:${'c'.repeat(40)}` } }] },
+  ]) {
+    const result = await runCli(['health', ...clusterFlags, '--namespace', 'velura'], fixture(overrides).dependencies);
+    assert.equal(result.result.checks.find(check => check.id === 'flux-ready').status, 'fail');
+  }
+});
+
 test('environment/path mismatch and unsupported mutation environments never annotate Flux', async () => {
-  const f = fixture({ target: { spec: { sourceRef: { kind: 'GitRepository', name: 'velura-repo' }, path: './deploy/k8s/overlays/production' } } });
+  const f = fixture({ target: { spec: { sourceRef: { kind: 'GitRepository', name: 'velura-staging-repo' }, path: './deploy/k8s/overlays/production' } } });
   const result = await runCli(['reconcile', ...clusterFlags, '--environment', 'staging', '--revision', sha], f.dependencies);
   assert.equal(result.exitCode, 1);
   assert.ok(!f.calls.some(call => call.args.includes('annotate')));

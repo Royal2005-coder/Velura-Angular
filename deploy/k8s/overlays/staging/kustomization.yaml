@@ -5,6 +5,7 @@ resources:
   - namespace.yaml
   - ../../base/velura
 patches:
+  - path: release-revision.yaml
   - target:
       kind: Deployment
       name: velura-api
@@ -14,6 +15,8 @@ patches:
       metadata:
         name: velura-api
       spec:
+        # Quarantined until an independent staging database and credentials are provisioned.
+        replicas: 0
         template:
           spec:
             priorityClassName: velura-staging
@@ -79,11 +82,11 @@ patches:
         AI_CLUSTER_ENDPOINT: http://ai-worker.ai-staging.svc:8000
 images:
   - name: ghcr.io/royal2005-coder/velura-api
-    newName: ghcr.io/boygia757-netizen/velura-api
-    newTag: latest
+    newName: ghcr.io/royal2005-coder/velura-api
+    digest: sha256:02fb777124f7457ea5e13306aa8a40ceda78a334492f45f350697d4adf8c91fe
   - name: ghcr.io/royal2005-coder/velura-admin
-    newName: ghcr.io/boygia757-netizen/velura-admin
-    newTag: latest
+    newName: ghcr.io/royal2005-coder/velura-admin
+    digest: sha256:7ed8ae854e394939dc4e9c3e4e3e4c2a6ba6fd361cd6a680f0c2cd361a6699dc
   - name: ghcr.io/royal2005-coder/velura-storefront
-    newName: ghcr.io/boygia757-netizen/velura-storefront
-    newTag: latest
+    newName: ghcr.io/royal2005-coder/velura-storefront
+    digest: sha256:360e177388aa42e0a8ff2c1a561e08b6d89d84ada9f83ec46407072dc11e0419

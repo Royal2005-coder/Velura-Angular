@@ -17,8 +17,5 @@ resources:
   - observability/loki.yaml
   - observability/alloy.yaml
   - observability/alerts.yaml
-  - velura/velura-api.yaml
-  - velura/velura-storefront.yaml
-  - velura/velura-admin.yaml
   - networking/cloudflared.yaml
   - networking/oauth2-proxy.yaml

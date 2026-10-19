@@ -173,7 +173,7 @@ export async function uploadToProductImagesBucket(bytes: Buffer, mime: string, p
 /**
  * Measures technical studio quality (resolution, lighting/exposure, sharpness, border background cleanliness).
  */
-async function measureTechnicalQuality(bytes: Buffer): Promise<ProductImageQualityAnalysis> {
+export async function measureTechnicalQuality(bytes: Buffer): Promise<ProductImageQualityAnalysis> {
   const image = sharp(bytes);
   const [metadata, stats, rawSmall] = await Promise.all([
     image.metadata(),

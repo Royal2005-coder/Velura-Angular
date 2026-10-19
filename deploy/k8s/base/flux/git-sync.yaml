@@ -67,7 +67,7 @@ spec:
   dependsOn:
     - name: velura-infra
   # The publisher pins PR enables this after signed-main evidence is available.
-  suspend: true
+  suspend: false
   prune: true
   deletionPolicy: Orphan
   wait: true

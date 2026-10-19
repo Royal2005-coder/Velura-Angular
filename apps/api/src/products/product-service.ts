@@ -23,6 +23,8 @@ import {
 } from "./product-constants.js";
 import type { ProductRepository } from "./product-repository.js";
 import { invalidateCatalogCache } from "../user/products.js";
+import { StudioImageApprovalService } from "./product-studio-approval.js";
+import { SupabaseEnhancementApprovalRepository } from "../ai/enhancement-approval-repository.js";
 import {
   analyzeProductImageQuality,
   enhanceProductImageStudio,
@@ -73,6 +75,8 @@ export interface ProductService {
   removeComboItem(context: AuthContext | undefined, productId: string, itemId: string): Promise<unknown>;
   analyzeImageQuality(context: AuthContext | undefined, body: JsonObject): Promise<unknown>;
   enhanceProductImage(context: AuthContext | undefined, body: JsonObject): Promise<unknown>;
+  /** Store an explicit Studio selection as a measured database-backed approval; never publish here. */
+  approveStudioImage(context: AuthContext | undefined, body: JsonObject, requestMeta: RequestMeta): Promise<unknown>;
   optimizeProductSeo(context: AuthContext | undefined, body: JsonObject): Promise<unknown>;
 }
 
@@ -584,6 +588,10 @@ export function createProductService({ repository }: { repository: ProductReposi
     async enhanceProductImage(context, body) {
       requireProductAdmin(context, true);
       return enhanceProductImageStudio(asJsonObject(body));
+    },
+
+    async approveStudioImage(context, body, requestMeta) {
+      return new StudioImageApprovalService(new SupabaseEnhancementApprovalRepository()).approve(context, body, requestMeta);
     },
 
     async optimizeProductSeo(context, body) {

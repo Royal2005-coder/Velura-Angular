@@ -460,6 +460,11 @@
   color: #b91c1c;
   border-color: #fecaca;
 }
+.return-status-pill.is-rejected {
+  background: #fef2f2;
+  color: #b91c1c;
+  border-color: #fecaca;
+}
 .return-track-btn {
   white-space: nowrap;
   min-height: 38px;
@@ -489,6 +494,11 @@
   background: #f0f9ff;
   color: #0369a1;
   border: 1px solid #bae6fd;
+}
+.return-progress-pill[data-kind="rejected"] {
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
 }
 .order-status-pill {
   white-space: nowrap;

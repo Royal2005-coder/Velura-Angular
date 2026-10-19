@@ -6,6 +6,7 @@ import { TestBed } from '@angular/core/testing';
 import { AdminSessionService } from '../../core/admin-session.service';
 import type { AdminImageEnhanceResult, AdminImageQualityAnalysis, AdminProductRow, AdminProductVariant } from '../../core/admin-api.service';
 import { HttpErrorResponse } from '@angular/common/http';
+import type { ProductImageApproval } from '../../core/product-image-approval.service';
 
 
 async function chooseCsv(page: AdminProductsPage, content: string): Promise<void> {
@@ -368,6 +369,8 @@ describe('AdminProductsPage', () => {
 
   it('enhances product image via AI Studio and applies approved URL into gallery', async () => {
     const page = await createAdminPage(AdminProductsPage, {
+      approveStudioImage: () => of({ approvalId: 'persisted', url: 'https://storage/product-images/ai-reviewed/persisted.png',
+        sourceRevision: 'hash', processingVersion: 'studio-measured-v1', expiresAt: new Date(Date.now() + 60000).toISOString() }),
       enhanceProductImage: () =>
         of({
           enhancedUrl: 'https://storage/product-images/ai-studio/enhanced-1.png',
@@ -414,8 +417,8 @@ describe('AdminProductsPage', () => {
     const box = document.createElement('textarea');
     box.value = '/assets/images/old.jpg';
     page.applyAiEnhancedImage(box);
-    expect(page.editorImages()[0]).toBe('https://storage/product-images/ai-studio/enhanced-1.png');
-    expect(box.value).toBe('https://storage/product-images/ai-studio/enhanced-1.png');
+    expect(page.editorImages()[0]).toBe('https://storage/product-images/ai-reviewed/persisted.png');
+    expect(box.value).toBe('https://storage/product-images/ai-reviewed/persisted.png');
     expect(page.sourceApproved()).toBe(true);
     expect(page.imageApprovals().length).toBe(1);
   });
@@ -513,6 +516,24 @@ describe('AdminProductsPage', () => {
       page.aiImageBusy.set(false);
       expect(page.imageProcessing()).toBe(false);
     });
+  });
+
+  it('keeps the gallery unchanged and blocks saving until Studio approval is persisted', async () => {
+    const pending = new Subject<ProductImageApproval>();
+    const page = await createAdminPage(AdminProductsPage, { approveStudioImage: () => pending });
+    TestBed.inject(AdminSessionService).applyAuthContext({ user: { id: 'operator' }, role: 'admin_operator_sanpham',
+      isAdmin: true, allowedModules: ['products'], allowedPages: ['products'] });
+    page.editorImages.set(['published.png']);
+    page.uploadedOriginalUrl.set('https://storage/uploads/original.png');
+    page.applyOriginalUploadedImage();
+    expect(page.aiImageBusy()).toBe(true);
+    expect(page.editorImages()).toEqual(['published.png']);
+    page.submitEditor(new Event('submit'));
+    expect(page.actionError()).toContain('chờ hoàn tất xử lý');
+    pending.error(new Error('Approval database unavailable'));
+    expect(page.editorImages()).toEqual(['published.png']);
+    expect(page.sourceApproved()).toBe(false);
+    expect(page.aiImageBusy()).toBe(false);
   });
 
   it('applies and resets audit log filters: date range, product, action type and user (3.1.10-05)', async () => {

@@ -1,9 +1,9 @@
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { of, Subject, throwError } from 'rxjs';
 import { AiEngineService, AiJob } from '../../core/services/ai-engine.service';
 import { AiImageWorkbench } from './ai-image-workbench';
 import { AuthService } from '../../core/services/auth.service';
-import { guestSessionId } from '../../core/utils/guest-session';
 import type { Mock } from 'vitest';
 
 const quality: AiJob = {
@@ -21,6 +21,7 @@ describe('AiImageWorkbench', () => {
     cancel: Mock;
     studioPreview: Mock;
     job: Mock;
+    capabilities: Mock;
   };
   beforeEach(() => {
     sessionStorage.clear();
@@ -31,10 +32,11 @@ describe('AiImageWorkbench', () => {
       cancel: vi.fn(() => of({})),
       studioPreview: vi.fn(() => of(new Blob(['image'], { type: 'image/png' }))),
       job: vi.fn(() => of({ job: { ...quality, status: 'cancelled' as const } })),
+      capabilities: vi.fn(() => of({ enabled: true, product_supported: true, variant_supported: true, tasks: [{ task: 'virtual_try_on', enabled: true }] })),
     };
     TestBed.configureTestingModule({
       imports: [AiImageWorkbench],
-      providers: [{ provide: AiEngineService, useValue: model }],
+      providers: [provideRouter([]), { provide: AiEngineService, useValue: model }],
     });
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:preview');
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
@@ -196,6 +198,8 @@ describe('AiImageWorkbench', () => {
     expect(p.studioImage()).toBe('');
   });
   it('resumes only a stored job matching the current product and variant on open', async () => {
+    localStorage.setItem('velura_token', 't');
+    localStorage.setItem('velura_user', JSON.stringify({ user_id: 'u1', role: 'member' }));
     const p = page();
     const capabilities = {
       enabled: true,
@@ -212,7 +216,7 @@ describe('AiImageWorkbench', () => {
       result: vi.fn(() => of(new Blob(['image'], { type: 'image/png' }))),
     });
     sessionStorage.setItem(
-      `velura_ai_job_${guestSessionId()}_virtual_try_on_product_variant`,
+      `velura_ai_job_u1_virtual_try_on_product_variant`,
       'resumed-job',
     );
     model.job.mockReturnValueOnce(
@@ -244,5 +248,46 @@ describe('AiImageWorkbench', () => {
     await p.open();
     expect(p.job()?.id).toBe('resumed-job');
     expect(p.result()).toBe('blob:preview');
+  });
+  describe('availability and member gate', () => {
+    function member(): void {
+      localStorage.setItem('velura_token', 't');
+      localStorage.setItem('velura_user', JSON.stringify({ user_id: 'u1', role: 'member' }));
+    }
+    it('offers try-on only for products the server marked supported', async () => {
+      member();
+      model.capabilities.mockReturnValue(of({ enabled: true, product_supported: false, tasks: [] }));
+      const p = page();
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(p.offered()).toBe(false);
+    });
+    it('shows the entry point for a supported product', async () => {
+      member();
+      const p = page();
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(p.offered()).toBe(true);
+    });
+    it('hides the entry point when readiness cannot be read', async () => {
+      member();
+      model.capabilities.mockReturnValue(throwError(() => new Error('offline')));
+      const p = page();
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(p.offered()).toBe(false);
+    });
+    it('asks a guest to sign in or register and never reads capabilities for the dialog', async () => {
+      const p = page();
+      expect(p.memberRequired()).toBe(true);
+      model.capabilities.mockClear();
+      await p.open();
+      expect(model.capabilities).not.toHaveBeenCalled();
+    });
+    it('lets a signed-in member open the dialog', async () => {
+      member();
+      const p = page();
+      expect(p.memberRequired()).toBe(false);
+    });
   });
 });

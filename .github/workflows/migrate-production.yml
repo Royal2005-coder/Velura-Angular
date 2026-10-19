@@ -26,7 +26,7 @@ jobs:
     environment: production
     env:
       SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-      SUPABASE_DB_CA_CERT: ${{ secrets.SUPABASE_DB_CA_CERT }}
+      DB_CA_PEM: ${{ secrets.SUPABASE_DB_CA_CERT }}
       MIGRATIONS: ${{ inputs.migrations }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -34,6 +34,11 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with: {node-version: 22}
       - run: npm ci
+      - name: Write CA bundle for verified TLS
+        run: |
+          umask 077
+          printf '%s\n' "$DB_CA_PEM" > "$RUNNER_TEMP/db-ca.pem"
+          echo "SUPABASE_DB_CA_CERT=$RUNNER_TEMP/db-ca.pem" >> "$GITHUB_ENV"
       - name: Reject non-numeric input
         run: printf '%s' "$MIGRATIONS" | grep -Eq '^[0-9]{3}( [0-9]{3})*$'
       - name: Read-only connectivity check

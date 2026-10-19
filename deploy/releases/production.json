@@ -1,0 +1,15 @@
+{
+  "mode": "direct-mvp",
+  "source_sha": "a411c3a10546625e753e2da08fc44e687afaad29",
+  "run_id": 39253078246,
+  "run_attempt": 1,
+  "release": {
+    "revision": "a411c3a10546625e753e2da08fc44e687afaad29",
+    "buildId": "a411c3a10546625e753e2da08fc44e687afaad29-39253078246-1",
+    "images": {
+      "api": "ghcr.io/royal2005-coder/velura-api@sha256:4c1028ba3239ca8840bd956b74ff7c210b745fc633db715fa121e1760d580460",
+      "storefront": "ghcr.io/royal2005-coder/velura-storefront@sha256:9b6cb94dbb4fde03df16193aaf6d942ebb470c6751ade356bd911a4cee32d72a",
+      "admin": "ghcr.io/royal2005-coder/velura-admin@sha256:aca89f83cbacf56c91ae342060620c6ce308aa6b2064e3407d0b371a8be3bb2e"
+    }
+  }
+}

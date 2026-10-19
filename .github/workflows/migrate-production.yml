@@ -1,0 +1,45 @@
+name: migrate-production
+
+# Owner-triggered production migrations. Never runs on push/PR.
+# Each migration runs in one transaction (scripts/run-migrations.mjs); numbers are explicit.
+on:
+  workflow_dispatch:
+    inputs:
+      migrations:
+        description: Space-separated migration numbers, e.g. "062 063 064 065"
+        required: true
+      apply:
+        description: Apply to production (false = dry-run only)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: migrate-production
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      SUPABASE_DB_CA_CERT: ${{ secrets.SUPABASE_DB_CA_CERT }}
+      MIGRATIONS: ${{ inputs.migrations }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: {node-version: 22}
+      - run: npm ci
+      - name: Reject non-numeric input
+        run: printf '%s' "$MIGRATIONS" | grep -Eq '^[0-9]{3}( [0-9]{3})*$'
+      - name: Read-only connectivity check
+        run: node scripts/run-migrations.mjs --check
+      - name: Dry run
+        run: node scripts/run-migrations.mjs --dry-run $MIGRATIONS
+      - name: Apply
+        if: ${{ inputs.apply }}
+        run: node scripts/run-migrations.mjs --environment=production --owner-approved-production $MIGRATIONS

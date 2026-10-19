@@ -18,7 +18,7 @@ data:
               summary: 'Metrics target unavailable: {{ $labels.job }} / {{ $labels.instance }}'
               description: Check the target endpoints, network policy, TLS and collector credentials. A failed protected scrape is not evidence the business workload is down.
           - alert: RequiredScrapeJobMissing
-            expr: absent(up{job="kubernetes-nodes"}) or absent(up{job="kubernetes-cadvisor"}) or absent(up{job="velura-http"}) or absent(up{job="litellm"}) or absent(up{job="keycloak"}) or absent(up{job="victoriametrics"}) or absent(up{job="vmalert"}) or absent(up{job="alertmanager"}) or absent(up{job="loki"}) or absent(up{job="alloy"})
+            expr: absent(up{job="kubernetes-nodes"}) or absent(up{job="kubernetes-cadvisor"}) or absent(up{job="velura-http"}) or absent(up{job="litellm"}) or absent(up{job="keycloak"}) or absent(up{job="victoriametrics"}) or absent(up{job="vmalert"}) or absent(up{job="alertmanager"}) or absent(up{job="loki"}) or absent(up{job="alloy"}) or absent(up{job="dcgm-exporter"})
             for: 5m
             labels:
               severity: critical
@@ -184,6 +184,22 @@ data:
             annotations:
               summary: External backup evidence missing or older than 25 hours
               description: Verify a real off-host backup job, repository and independent restore evidence. Local files and untested backups do not satisfy recovery; no backup exporter is installed by these monitoring manifests.
+          - alert: GpuTemperatureHigh
+            expr: DCGM_FI_DEV_GPU_TEMP > 82
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: 'NVIDIA GPU core temperature elevated: {{ $value }}C'
+              description: GPU core temperature exceeds 82C. Inspect chassis fans, dust filters, and cooling.
+          - alert: GpuMemoryPressure
+            expr: (DCGM_FI_DEV_FB_USED / (DCGM_FI_DEV_FB_USED + DCGM_FI_DEV_FB_FREE)) > 0.95
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: 'NVIDIA GPU VRAM utilization exceeds 95%'
+              description: VRAM usage exceeds 95%. Check active models in ai-worker to prevent CUDA OOM.
 ---
 apiVersion: apps/v1
 kind: Deployment

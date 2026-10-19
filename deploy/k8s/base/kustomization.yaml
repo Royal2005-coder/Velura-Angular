@@ -18,6 +18,7 @@ resources:
   - observability/loki.yaml
   - observability/alloy.yaml
   - observability/alerts.yaml
+  - observability/dcgm-exporter.yaml
   - networking/cloudflared.yaml
   - networking/oauth2-proxy.yaml
 

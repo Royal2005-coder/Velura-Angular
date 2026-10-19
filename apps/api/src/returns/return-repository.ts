@@ -332,7 +332,7 @@ export function createReturnRepository() {
     },
     async listReturns(filters: ReturnListFilters, accessToken: string) {
       const query: Record<string, unknown> = {
-        select: filters.paymentKind ? `${RETURN_SELECT},pay_order:orders!order_id!inner(payment_method)` : RETURN_SELECT,
+        select: filters.paymentKind ? `${RETURN_SELECT},pay_order:orders!return_exchange_order_id_fkey!inner(payment_method)` : RETURN_SELECT,
         order: "created_at.desc",
         limit: filters.limit,
         offset: filters.offset

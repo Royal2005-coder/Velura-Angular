@@ -87,8 +87,8 @@ Local OK ≠ được merge. Merge chỉ khi **PR CI xanh**.
 |---|---|---|
 | `feature/KAN-<n>-<slug>` | Dev | Code ticket |
 | `hotfix/KAN-<n>-<slug>` | Dev / Lead | Fix prod khẩn → vẫn PR `develop` rồi promote |
-| `develop` | Chỉ merge PR | Integration — **không deploy** |
-| `main` | Chỉ merge PR promote | Production + deploy Actions |
+| `develop` | Chỉ merge PR | Integration; Flux staging chỉ triển khai image pins đã được build/scan/sign |
+| `main` | Chỉ merge PR promote | Production; Flux triển khai production pins đã kiểm chứng staging |
 
 Cấm:
 
@@ -126,7 +126,7 @@ PR source = develop → target = main
 Title gợi ý: KAN-n: promote develop → main (…)
 ```
 
-Chỉ Lead / người được chỉ định mở promote PR. Sau merge `main`, CI publish image digest thật và mở PR cập nhật image; staging kiểm chứng trước, production Flux vẫn suspended đến khi owner phê duyệt.
+Chỉ Lead / người được chỉ định mở promote PR. App source trên `main` tạo signed release rồi PR staging pins vào `develop`; staging xanh mới tạo PR production pins cùng digest. Promote `develop` → `main` phát hành production pins, không rebuild. Flux chỉ suspended trong bootstrap/sự cố, không resume thủ công mỗi release.
 
 ### 3.4 Đọc lại version (trước khi sửa code cũ)
 
@@ -164,16 +164,16 @@ PR feature → develop
   build                  (api + user + admin artifacts)
   note-pr                (comment Trace + artifact pr-trace.md)
        ↓ merge (CI xanh + review)
-Push develop             (lặp validate/tests/build — không deploy)
+Push develop             (validate/tests/build; không publish image)
+  staging-pins merge     → Flux staging → verify-staging
+  promote-production     → PR cùng digest + staging evidence vào develop
        ↓
-PR develop → main        (cùng cổng PR)
+PR develop → main        (cùng cổng PR; kiểm tra provenance production pins)
        ↓ merge
 Push main
-  …tests/build…
-  deploy-production      (publish digest + scan/SBOM/sign; không SSH/apply)
-  promote-images         (PR digest vào develop rồi promote main)
-  verify-staging         (revision + DB/gateway thật; secrets Environment staging)
-  verify-production      (owner opt-in VELURA_VERIFY_PRODUCTION=true sau staging)
+  app source changed     → deploy-production (scan/SBOM/sign) → PR staging pins
+  production pins changed → Flux production → verify-production (owner opt-in)
+  workflow_dispatch      → recovery=release-main, chỉ SHA main hiện tại, đủ gates
 ```
 
 ### 4.2 Job nào fail nghĩa là gì
@@ -197,13 +197,19 @@ Push main
 |---|---|
 | `PRODUCTION_VERIFY_TOKEN` | Bearer riêng từng Environment, khớp namespace-local API Secret |
 | `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` | Service token được cấp cho đúng staging/production audience |
-| `GITHUB_TOKEN` | Token Actions để publish/sign và tạo PR; quyền repo phải được owner cho phép |
+| `GITHUB_TOKEN` | Publish/sign và đọc evidence; không dùng làm tác giả PR vì không kích hoạt PR workflows |
+| `RELEASE_APP_ID` (variable) / `RELEASE_APP_PRIVATE_KEY` (secret) | GitHub App cài trên repo này, Contents + Pull requests write; token ngắn hạn tạo PR rồi được revoke |
 
 Dev thường **không** cần và **không** được yêu cầu secrets này để code.
 
-Environment `staging` phải được tạo riêng, không dùng lại credentials production.
-`VELURA_VERIFY_PRODUCTION=true` là opt-in của owner cho job kiểm chứng, không tự
-resume Flux. Bootstrap, offsite restore và GPU smoke: [HOW-IT-WORKS.md](./HOW-IT-WORKS.md#k3s-staging-first-runbook).
+Environment `staging` phải được tạo riêng, không dùng lại credentials/database production.
+Staging cần `STAGING_SUPABASE_DB_URL`, `STAGING_SUPABASE_DB_CA_CERT` cùng các
+verification/Access secrets ở trên; production cần `SUPABASE_DB_URL` và
+`SUPABASE_DB_CA_CERT`. Không lấy credential workstation nhét vào CI.
+`VELURA_VERIFY_PRODUCTION=true` bật kiểm chứng read-only, không resume Flux.
+Digest bundle và successful staging run được ghi ở `deploy/releases/production.json`;
+không thay bằng `Ready` của pod hoặc SHA khai báo trong ConfigMap.
+Bootstrap và ownership transfer: [HOW-IT-WORKS.md](./HOW-IT-WORKS.md#k3s-staging-first-runbook).
 
 ### 4.4 Xem pipeline
 

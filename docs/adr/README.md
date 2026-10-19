@@ -8,4 +8,8 @@ Quyết định **lâu dài**, một câu. Why của từng version: **git log +
 | [0002](./0002-node-api-javascript.md) | HTTP = Node, không phải Angular |
 | [0003](./0003-node-api-typescript.md) | API TypeScript trên Node |
 
+Infrastructure ownership: Terraform/Atlantis owns external control planes;
+Flux alone reconciles Kubernetes, with separate platform and app inventories
+and reviewed immutable image promotion instead of CI cluster credentials.
+
 Template: [0000-template.md](./0000-template.md). Ticket: [.github/pull_request_template.md](../../.github/pull_request_template.md).

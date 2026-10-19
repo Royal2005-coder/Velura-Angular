@@ -22,6 +22,8 @@ def validate_platform(objects):
     budgets = {}
     defaults = {}
     demand = defaultdict(lambda: defaultdict(Decimal))
+    config_maps = {(obj.get('metadata', {}).get('namespace', 'default'), obj.get('metadata', {}).get('name'))
+                   for obj in objects if obj.get('kind') == 'ConfigMap'}
     for obj in objects:
         namespace = obj.get("metadata", {}).get("namespace", "default")
         if obj.get("kind") == "ResourceQuota":
@@ -37,6 +39,11 @@ def validate_platform(objects):
         namespace = obj["metadata"]["namespace"]
         name = obj["metadata"]["name"]
         spec = obj["spec"]
+        if name == 'litellm':
+            references = [volume['configMap']['name'] for volume in spec['template']['spec'].get('volumes', [])
+                          if volume.get('name') == 'config' and 'configMap' in volume]
+            if len(references) != 1 or not re.fullmatch(r'litellm-config-[a-z0-9]{10}', references[0]) or (namespace, references[0]) not in config_maps:
+                raise ValueError(f'{namespace}/{name}: gateway config must resolve to a generated hash-named ConfigMap')
         replicas = spec.get("replicas", 1)
         strategy = spec.get("strategy", {})
         surge = 0

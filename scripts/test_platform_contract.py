@@ -12,6 +12,17 @@ def workload(strategy="RollingUpdate", memory="768Mi"):
 
 
 class PlatformContractTests(unittest.TestCase):
+    def test_gateway_config_updates_are_wired_into_the_pod_template(self):
+        obj = workload()
+        obj['metadata']['name'] = 'litellm'
+        obj['spec']['template']['spec']['volumes'] = [{'name': 'config', 'configMap': {'name': 'litellm-config'}}]
+        with self.assertRaisesRegex(ValueError, 'generated hash-named'):
+            validate_platform([obj])
+        name = 'litellm-config-1234567890'
+        obj['spec']['template']['spec']['volumes'][0]['configMap']['name'] = name
+        config = {'kind': 'ConfigMap', 'metadata': {'namespace': 'auth', 'name': name}}
+        validate_platform([obj, config])
+
     def test_embedded_s3_requires_a_running_filer(self):
         obj = workload()
         container = obj["spec"]["template"]["spec"]["containers"][0]

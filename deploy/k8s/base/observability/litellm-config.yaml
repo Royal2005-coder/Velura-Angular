@@ -1,0 +1,28 @@
+model_list:
+  - model_name: commerce-text
+    litellm_params:
+      model: os.environ/LITELLM_TEXT_MODEL
+      api_key: os.environ/GEMINI_API_KEY
+      rpm: 60
+      tpm: 60000
+  - model_name: commerce-embedding
+    litellm_params:
+      model: os.environ/LITELLM_EMBEDDING_MODEL
+      api_key: os.environ/GEMINI_API_KEY
+      # Gemini returns floats natively; the API's OpenAI encoding_format is unsupported.
+      drop_params: true
+      rpm: 60
+  - model_name: commerce-image-edit
+    litellm_params:
+      model: os.environ/LITELLM_IMAGE_MODEL
+      api_key: os.environ/GEMINI_API_KEY
+      rpm: 10
+litellm_settings:
+  callbacks: [prometheus]
+  # LiteLLM 1.79 reads this setting here, not under general_settings.
+  require_auth_for_metrics_endpoint: true
+  telemetry: false
+  request_timeout: 30
+  num_retries: 0
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY

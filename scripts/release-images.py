@@ -1,4 +1,4 @@
-"""Prepare reviewed environment image pins and verify their staging provenance; never contact Kubernetes."""
+"""Promote signed main builds to reviewed MVP production pins; never contact Kubernetes."""
 
 import base64
 import json
@@ -28,6 +28,11 @@ def require_build_id(revision, build_id):
 def require_release(release):
     """Reject legacy snapshots as promotion or runtime-verification evidence."""
     require_build_id(release['revision'], release.get('buildId'))
+    if set(release.get('images', {})) != set(APPS):
+        raise ValueError('Expected the complete three-application release bundle')
+    for app in APPS:
+        if not re.fullmatch(re.escape(IMAGE_PREFIX + app) + r'@sha256:[a-f0-9]{64}', release['images'][app]):
+            raise ValueError('Expected canonical immutable release image')
     return release
 
 
@@ -106,7 +111,10 @@ def update(environment, release):
 
 def gh_json(*args):
     """Read canonical GitHub release evidence using the caller's read-only API credentials."""
-    return json.loads(subprocess.check_output(['gh', 'api', *args], text=True))
+    environment = os.environ.copy()
+    if environment.get('GH_READ_TOKEN'):
+        environment['GH_TOKEN'] = environment['GH_READ_TOKEN']
+    return json.loads(subprocess.check_output(['gh', 'api', *args], text=True, env=environment, timeout=60))
 
 
 def remote_snapshot(environment, sha):
@@ -143,7 +151,7 @@ def validate_bootstrap(base_sha):
                     images[app] = IMAGE_PREFIX + app + '@' + matches[0].split('@')[1]
         baseline = {'revision': revision, 'buildId': None, 'images': images}
     if snapshot('production') != baseline:
-        raise ValueError('Production pin changes require successful staging provenance, even while suspended')
+        raise ValueError('Production pin changes require successful signed-main provenance, even while suspended')
     resources = list(yaml.safe_load_all(Path('deploy/k8s/base/flux/git-sync.yaml').read_text(encoding='utf-8')))
     matches = [resource for resource in resources if resource and resource.get('kind') == 'Kustomization' and resource.get('metadata', {}).get('name') == 'velura-production']
     if len(matches) != 1 or matches[0].get('spec', {}).get('suspend') is not True:
@@ -151,23 +159,98 @@ def validate_bootstrap(base_sha):
     print('Unchanged legacy pins only: production Flux remains suspended; no verified release is claimed.')
 
 
+def validate_published_evidence(evidence, require_current_source=False):
+    """Require successful main CI and every scan/sign publisher in the exact build attempt."""
+    release = require_release(evidence['release'])
+    if evidence.get('mode') != 'direct-mvp':
+        raise ValueError('Expected explicit direct-mvp release provenance')
+    run_id, attempt = int(evidence['run_id']), int(evidence['run_attempt'])
+    if run_id <= 0 or attempt <= 0 or release['buildId'] != f'{release["revision"]}-{run_id}-{attempt}':
+        raise ValueError('Release does not belong to the recorded run attempt')
+    run = gh_json(f'repos/{REPOSITORY}/actions/runs/{run_id}')
+    if (run['id'] != run_id or run['repository']['full_name'] != REPOSITORY or
+        run['path'] != '.github/workflows/ci.yml' or run['event'] not in ('push', 'workflow_dispatch') or
+        run['head_branch'] != 'main' or run['head_sha'] != evidence['source_sha'] or
+        run['head_sha'] != release['revision']):
+        raise ValueError('Production evidence is not a canonical main publisher run')
+    jobs = gh_json(f'repos/{REPOSITORY}/actions/runs/{run_id}/attempts/{attempt}/jobs?per_page=100')['jobs']
+    required = ['validate', 'test-api', 'test-angular', 'test-ai-worker', 'build', 'migrations', 'manifests']
+    required += [f'deploy-production ({app})' for app in (*APPS, 'ai-worker')]
+    for name in required:
+        matches = [job for job in jobs if job['name'] == name]
+        if len(matches) != 1 or matches[0].get('conclusion') != 'success':
+            raise ValueError(f'Required main publication gate did not succeed: {name}')
+    if require_current_source:
+        comparison = gh_json(f'repos/{REPOSITORY}/compare/{release["revision"]}...main')
+        if comparison.get('status') not in ('identical', 'ahead') or len(comparison.get('files', [])) >= 300:
+            raise ValueError('Cannot prove that the publisher source is current on main')
+        source = r'^(apps/|packages/|database/migrations/|scripts/(run-migrations|supabase-project)\.mjs$|package(-lock)?\.json$|deploy/docker/)'
+        if any(re.search(source, item['filename']) for item in comparison.get('files', [])):
+            raise ValueError('Application source changed on main after this build; publish the current source')
+    return release
+
+
 def validate_production(bootstrap_base=None):
-    """Require the exact production bundle to have passed this workflow's staging verification."""
+    """Bind production pins to successful main publication; CI also verifies Cosign signatures."""
     if not EVIDENCE.exists() and bootstrap_base:
         validate_bootstrap(bootstrap_base)
         return
     evidence = json.loads(EVIDENCE.read_text(encoding='utf-8'))
-    require_release(evidence['release'])
-    run = gh_json(f'repos/{REPOSITORY}/actions/runs/{int(evidence["run_id"])}')
-    if run['repository']['full_name'] != REPOSITORY or run['path'] != '.github/workflows/ci.yml' or run['event'] != 'push' or run['head_branch'] != 'develop' or run['head_sha'] != evidence['source_sha']:
-        raise ValueError('Production evidence is not a canonical develop verification run')
-    jobs = gh_json(f'repos/{REPOSITORY}/actions/runs/{run["id"]}/jobs?per_page=100')['jobs']
-    verified = [job for job in jobs if job['name'] == 'verify-staging' and job['conclusion'] == 'success']
-    if len(verified) != 1:
-        raise ValueError('Staging verification has not succeeded for this run')
-    staged = require_release(remote_snapshot('staging', run['head_sha']))
-    if staged != evidence['release'] or staged != snapshot('production'):
-        raise ValueError('Production image bundle differs from the verified staging bundle')
+    changed = False
+    if bootstrap_base:
+        previous = subprocess.run(['git', 'show', f'{bootstrap_base}:{EVIDENCE.as_posix()}'], capture_output=True, text=True)
+        changed = previous.returncode != 0 or json.loads(previous.stdout) != evidence
+    release = validate_published_evidence(evidence, require_current_source=changed)
+    if release != snapshot('production'):
+        raise ValueError('Production image bundle differs from the approved publisher evidence')
+
+
+def activate_production_flux():
+    """Flip only the production owner's suspend flag, preserving the reviewed file verbatim."""
+    path = Path('deploy/k8s/base/flux/git-sync.yaml')
+    documents = path.read_text(encoding='utf-8').split('\n---\n')
+    owners = [position for position, document in enumerate(documents)
+              if re.search(r'(?m)^kind: Kustomization$', document) and re.search(r'(?m)^  name: velura-production$', document)]
+    if len(owners) != 1:
+        raise ValueError('Expected one production Flux owner')
+    document = documents[owners[0]]
+    if re.search(r'(?m)^  suspend: false$', document):
+        return
+    document, count = re.subn(r'(?m)^  suspend: true$', '  suspend: false', document)
+    if count != 1:
+        raise ValueError('Expected explicitly suspended production Flux owner')
+    documents[owners[0]] = document
+    path.write_text('\n---\n'.join(documents), encoding='utf-8')
+
+
+def include_production_secrets():
+    """Append the encrypted production Secret snapshot to the overlay resources once."""
+    secret_root = Path('deploy/k8s/secrets/production/kustomization.yaml')
+    if not secret_root.exists():
+        return
+    path = ROOT / 'production/kustomization.yaml'
+    text = path.read_text(encoding='utf-8')
+    if '../../secrets/production' in text:
+        return
+    block = re.compile(r'(?m)^resources:\n(?P<items>(?:[ \t]*-[^\n]*\n)*)')
+    match = block.search(text)
+    if not match:
+        raise ValueError('Expected a resources block in the production overlay')
+    path.write_text(text[:match.end('items')] + '- ../../secrets/production\n' + text[match.end('items'):], encoding='utf-8')
+
+
+def prepare_direct_release(directory, revision, build_id, run_id, run_attempt):
+    """Prepare the first or next production release and its declarative Flux activation."""
+    release = artifact_release(directory, revision, build_id)
+    evidence = {'mode': 'direct-mvp', 'source_sha': revision, 'run_id': int(run_id),
+                'run_attempt': int(run_attempt), 'release': release}
+    validate_published_evidence(evidence, require_current_source=True)
+    update('production', release)
+    EVIDENCE.parent.mkdir(parents=True, exist_ok=True)
+    EVIDENCE.write_text(json.dumps(evidence, indent=2) + '\n', encoding='utf-8')
+    activate_production_flux()
+    include_production_secrets()
+    validate_production()
 
 
 def sanitize(app):
@@ -222,15 +305,8 @@ def main():
             if count != 1:
                 raise ValueError('Expected one optional worker image; replicas and enablement must not change')
             path.write_text(text, encoding='utf-8')
-    elif command == 'production':
-        source_sha, run_id = args
-        release = require_release(remote_snapshot('staging', source_sha))
-        if snapshot('staging') != release:
-            raise ValueError('Staging changed while verification ran; verify the new release before promotion')
-        update('production', release)
-        EVIDENCE.parent.mkdir(parents=True, exist_ok=True)
-        EVIDENCE.write_text(json.dumps({'source_sha': source_sha, 'run_id': int(run_id), 'release': release}, indent=2) + '\n', encoding='utf-8')
-        validate_production()
+    elif command == 'direct':
+        prepare_direct_release(*args)
     elif command == 'validate-production':
         validate_production(bootstrap_base=args[0] if args else None)
     elif command == 'sanitize':

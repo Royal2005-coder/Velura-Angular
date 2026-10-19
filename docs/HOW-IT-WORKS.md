@@ -17,10 +17,11 @@ Jira KAN-n
   → commit "KAN-n why"
   → PR vào develop (title bắt đầu KAN-n)
   → CI: validate + test-api + test-angular + build + note-pr
-  → CODEOWNERS reviewer merge develop
+  → Merge develop khi required CI xanh; CODEOWNERS/tag để thông báo
   → Push develop: cùng cổng test/build — không deploy
   → PR develop → main (source/target đủ; title promote nên `KAN-n: …`)
-  → publish scanned/signed image digests → reviewed image promotion PR → staging GitOps
+  → publish scanned/signed image digests → reviewed production-pins PR
+  → promote develop → main → Flux root/production → runtime verification
   → Jira Close + comment URL PR
 ```
 
@@ -44,13 +45,15 @@ GitHub: PR (`## Why`) + Files changed + job `note-pr` (comment + artifact `pr-tr
 | Khi | Jobs | Deploy |
 |---|---|---|
 | PR → `develop` | validate, tests, build, **note-pr** | Không |
-| Push `develop` | validate, tests, build; verify approved staging pins | Flux staging follows reviewed manifest changes, not unbuilt source |
-| PR `develop` → `main` | cùng cổng PR; production pins require staging evidence | Không |
+| Push `develop` | validate, tests, build | Integration only; không có môi trường staging |
+| PR `develop` → `main` | cùng cổng PR; production pins require signed-main evidence | Không |
 | Push `main` | tests + build + manifests; publish when app changes | Flux production follows reviewed production pins; no CI cluster mutation |
 
 `note-pr` bắt buộc xanh. Trace = job log + artifact `pr-trace.md` + comment trên PR.
 
-Staging GitOps dùng namespace `velura-staging`, credentials độc lập và `AI_ENABLE=false`. Bootstrap Flux suspended một lần; sau kiểm chứng, để reconcile chạy liên tục. Phê duyệt release bằng PR, không bằng restart/resume mỗi lần. CI không giữ kubeconfig.
+MVP chỉ có production cho storefront/admin/API. Staging không nằm trong release
+path; overlay cũ được giữ làm tài liệu thử nghiệm, không có Flux owner hoạt động.
+Phê duyệt release bằng PR, không bằng restart/resume mỗi lần. CI không giữ kubeconfig.
 
 ## Admin TMĐT — cơ sở đúng
 
@@ -58,7 +61,9 @@ Chuẩn phân hệ lấy từ Vendure (catalog, orders, customers, marketing, se
 
 Luồng shop ↔ admin: sửa catalog/giá/KM trên admin → storefront đọc cùng API. Không page-builder. CMS nội dung (`/api/content`) hoãn đến khi catalog/orders đúng hợp đồng.
 
-## K3s staging-first runbook
+<a id="k3s-staging-first-runbook"></a>
+
+## K3s production MVP runbook
 
 The inspected host is one Ubuntu 20.04 / K3s 1.30 node with 15 GiB RAM and an
 RTX 4060 (8188 MiB VRAM). This is not HA. Supported OS/K3s maintenance, secret
@@ -70,26 +75,29 @@ by YAML. Do not upgrade/reboot or migrate a production database in this procedur
 
 - CI `deploy-production` publishes API, storefront, admin and worker images,
   scans exact digests, emits SPDX SBOM/provenance and signs/attests releases.
-  The staging-pins PR targets `develop`; successful staging verification opens
-  a production-pins PR for the same app digests. Owner promotion of `develop`
+  The production-pins PR targets `develop`, records the successful main publisher
+  run/attempt and requires exact Cosign identities. Owner promotion of `develop`
   to `main` releases those pins without rebuilding them. SHA tags alone are
   not deployment evidence.
 - The worker Dockerfile requires an immutable Python 3.11 base supplied by CI
   from the real registry. `requirements-production.txt` pins CUDA 12.1 Torch and
   CPU-only ONNX dependencies; the image retains installed dependency versions
   and the blob-verified FASHN source LICENSE/NOTICE.
-- Flux `velura-infra` owns `deploy/k8s/overlays/infrastructure` from `main`:
+- Flux `velura-root` owns `deploy/k8s/clusters/production` from `main`: the Git
+  source and Flux owner specifications. It does not wait on dependent children.
+  Flux `velura-infra` owns `deploy/k8s/overlays/infrastructure` from `main`:
   namespaces, isolation, database, auth, storage, networking and observability.
   Flux `velura-production` owns only the three production apps and their
-  ConfigMap/PVC/Services; `velura-staging` owns the isolated staging overlay
-  from `develop`. App releases cannot implicitly upgrade platform services.
+  ConfigMap/PVC/Services and namespace-local encrypted credentials. App releases
+  cannot implicitly upgrade platform services. All three inventories are separate.
 - The infrastructure overlay preserves `database/postgres-pvc`. CNPG
   `database/cutover` stays opt-in: require a maintenance-approved export,
   restore drill, Keycloak integrity check and service switch. Never reuse
   a PostgreSQL data directory for a different major version.
-- Platform Flux reconciliation is enabled. App Kustomizations retain their
-  one-time bootstrap gates until independent staging and verified production
-  pins are provisioned; both backup CronJobs remain suspended until restore drills.
+- Platform/root reconciliation is enabled. Production retains its one-time
+  bootstrap gate until signed-main pins are provisioned; the pins PR sets
+  `suspend: false` and root Flux applies it. Both backup CronJobs remain suspended
+  until restore drills.
   Resume each Flux owner only after reviewing its live drift and prerequisites;
   keep normal reconciliation enabled afterward. Do not resume backup schedules
   until external credentials and restore evidence are ready.
@@ -111,10 +119,9 @@ including embedded YAML ConfigMaps. These commands have no cluster mutation:
 node --test tools/ops/velura-ops.test.mjs
 python -m pip install -r apps/ai-worker/requirements-test.txt
 python -m unittest discover -s apps/ai-worker -p 'test_*.py'
-node tools/ops/velura-ops.mjs render --path deploy/k8s/overlays/staging
+node tools/ops/velura-ops.mjs render --path deploy/k8s/clusters/production
 node tools/ops/velura-ops.mjs render --path deploy/k8s/overlays/production
 node tools/ops/velura-ops.mjs render --path deploy/k8s/overlays/infrastructure
-node tools/ops/velura-ops.mjs validate --path deploy/k8s/overlays/staging
 node tools/ops/velura-ops.mjs validate --path deploy/k8s/overlays/production
 node tools/ops/velura-ops.mjs validate --path deploy/k8s/overlays/infrastructure
 ```
@@ -124,46 +131,31 @@ Resolve each upstream image to a real reviewed registry digest and merge the
 CI-generated app digest PR before declaring this check passed. No digest is
 invented in the repository.
 
-### Owner-only staging bootstrap
+### One-time production bootstrap
 
 Use a TLS-verified explicit context for the known cluster; never the workstation
 default context. Obtain its `kube-system` UID from the approved inventory and
 set `CLUSTER_UID`, `APPROVED_CONTEXT` and the full 40-hex `APPROVED_SHA`.
 Provision secrets through SOPS age-encrypted Git resources or protected
 out-of-repository files; retain the age recovery key outside this VM.
-The two commands below provision only staging isolation/application secrets:
+Root bootstrap is performed once after the reviewed configuration reaches main:
 
 ```bash
-kubectl --context "$APPROVED_CONTEXT" apply -f deploy/k8s/overlays/staging/namespace.yaml
-kubectl --context "$APPROVED_CONTEXT" -n velura-staging create secret generic velura-api-secrets --from-env-file="$STAGING_SECRET_FILE"
+kubectl --context "$APPROVED_CONTEXT" apply -k deploy/k8s/clusters/production
 ```
 
-`STAGING_SECRET_FILE` must be mode 600 and contain independent staging Supabase
-project credentials, storage credentials/buckets, payment sandbox credentials,
-OIDC settings, `PRODUCTION_VERIFY_TOKEN`, `LITELLM_API_KEY`, and `AI_WORKER_KEY`.
-The app uses the real Supabase gateway, not the local Keycloak PostgreSQL.
-Never copy production `.env`, service-role credentials or provider keys into
-staging. Create shared platform PriorityClasses, DNS, LiteLLM/storage Services,
-provider credentials, namespace isolation and management authentication only
-through their separately approved platform bootstrap. Staging rendering does
-not create these shared services.
-
-As of the 2026-10-08 inventory, the live cluster has no `velura-staging`
-namespace or Secrets. Local key-name inventory has no `STAGING_*`,
-`LITELLM_*` or `AI_WORKER_KEY`; it has `SUPABASE_DB_URL` but no database CA
-configuration. These are real missing prerequisites, not values to copy from
-production. Provision a distinct Supabase staging project and trusted
-`STAGING_SUPABASE_DB_URL` / `STAGING_SUPABASE_DB_CA_CERT` outside Git before
-running migrations 049–055. Production writes are frozen:
+The app uses the real production Supabase gateway, not local Keycloak PostgreSQL.
+Platform and production namespace Secrets must have real credentials and a
+matching verification token before the first pins release. No staging database
+or staging credentials are prerequisites. Check the existing production schema
+without writes:
 
 ```bash
-node scripts/run-migrations.mjs --check --environment=staging
-node scripts/run-migrations.mjs --environment=staging 049 050 051 052 053 054 055
+node scripts/run-migrations.mjs --check --require-chatbot-schema
 ```
 
-The runner verifies TLS and rejects production database identity, including a
-shared-pooler project suffix. It has no production fallback for staging writes.
-Read-only production `--check` still requires trusted
+Production migrations remain an explicit owner-approved operation; skipping
+staging does not authorize implicit schema writes. Read-only checks require trusted
 `SUPABASE_DB_URL` / `SUPABASE_DB_CA_CERT`; missing CA is not permission to
 disable TLS. Provision real per-application gateway keys and worker auth
 separately. The VTO catalog must also have reviewed `verified:true`,
@@ -172,15 +164,41 @@ separately. The VTO catalog must also have reviewed `verified:true`,
 No primary-image/variant fallback or auto-generated studio selection supplies
 missing catalog approval. `AI_ENABLE=false` disables uploads and inference.
 
-Bootstrap `deploy/k8s/base/flux/git-sync.yaml` only after the reviewed manifests
-exist on canonical branches. Public Git read needs no token; private sources
+Bootstrap the root overlay only after reviewed manifests exist on main.
+Public Git read needs no token; private sources
 need a real `secretRef`. Configure SOPS decryption only when encrypted Secret
 resources and the independently held recovery key are actually provisioned.
 
-The bootstrap file is not included in either reconciliation tree. Infrastructure
-reconciliation defaults to enabled; the application `suspend: true` values are
-one-time safety gates, not per-release controls. Once each application gate is
-cleared, persist its `suspend: false` through a reviewed PR and leave it enabled.
+#### Encrypted Secret ownership
+
+`.sops.yaml` defines separate cluster and recovery age recipients. Platform
+Secret ciphertext lives in `deploy/k8s/base/secrets`; the infrastructure overlay
+is its only reconciliation owner. All Secret payload values must be SOPS
+ciphertext, not base64-only data. CI checks ciphertext structure and recipient
+policy without receiving any decryption identity. It does not certify the MAC;
+verify round-trips with both identities before the initial ownership transfer.
+
+Bootstrap the cluster identity as `flux-system/sops-age` with key `age.agekey`;
+each Flux Kustomization references this Secret through `spec.decryption`.
+Private age identities and workstation recovery exports never belong in Git.
+Retain the recovery identity independently from the VM. A Windows DPAPI export
+requires that Windows user's profile to recover; move the encrypted export from
+temporary storage into the owner's durable backup custody before relying on it
+for disaster recovery. The cluster key alone is not an independent backup.
+
+`deploy/k8s/secrets/production` contains an encrypted production Secret snapshot
+but is deliberately not referenced by the production overlay during its legacy
+bootstrap. The reviewed signed-main pins release activates that resource.
+Referenced Secrets
+are annotated `prune: disabled`; retiring credentials requires explicit owner
+rotation/deletion rather than incidental pruning. Changing environment-backed
+credentials also requires a reviewed pod-template rollout, not merely a Secret
+update. Keep plaintext out of command output and GitHub Actions logs.
+
+Root reconciliation owns the source and owner specifications, including itself.
+Infrastructure reconciliation defaults to enabled; production `suspend: true`
+is only a bootstrap gate. Publisher evidence authorizes the pins PR to set it
+false, then root Flux applies the change automatically. Keep it enabled afterward.
 Before transferring ownership, inspect the existing Flux inventory: orphan
 resources moving between owners before removing them from the old owner's
 inventory; never let `prune` delete a transferred app/PVC. Dry-run the platform
@@ -197,15 +215,12 @@ dry-run does not prove Flux SSA can remove fields owned by another manager.
 Inspect live managed fields and complete the reviewed ownership transfer before
 enabling continuous reconciliation. Do not repeat this transfer for releases.
 
-`velura-repo` tracks `main`; `velura-staging-repo` tracks `develop`. Do not pin
-these continuously reconciled sources to a fixed commit or feature branch.
-After safe infrastructure adoption, open staging without opening production:
+`velura-repo` tracks main. Do not pin the continuously reconciled source to a
+fixed commit or feature branch. Following the first signed-pins promotion:
 
 ```bash
-flux resume kustomization velura-infra --namespace flux-system --context "$APPROVED_CONTEXT"
-flux resume kustomization velura-staging --namespace flux-system --context "$APPROVED_CONTEXT"
-node tools/ops/velura-ops.mjs reconcile --context "$APPROVED_CONTEXT" --expected-cluster "$CLUSTER_UID" --environment staging --revision "$APPROVED_SHA"
-node tools/ops/velura-ops.mjs health --context "$APPROVED_CONTEXT" --expected-cluster "$CLUSTER_UID" --namespace velura-staging
+node tools/ops/velura-ops.mjs status --context "$APPROVED_CONTEXT" --expected-cluster "$CLUSTER_UID"
+node tools/ops/velura-ops.mjs health --context "$APPROVED_CONTEXT" --expected-cluster "$CLUSTER_UID" --namespace velura
 ```
 
 `reconcile` without `--execute` is read-only. It requires the environment branch
@@ -222,12 +237,13 @@ owner CLI for that evidence.
 
 `cloudflared-ingress-contract` is a route contract, not the running config.
 The active tunnel reads the protected `networking/cloudflare-tunnel-config`
-Secret. Its owner must install matching staging DNS/Access routes and render
-real team/audience values into that Secret; cloudflared does not substitute
-the contract's parameter notation. Use a staging-specific Access audience and
-service token. The GitHub `staging` Environment must have independent
-verification/Access secrets. Production verification is disabled unless the
-owner sets `VELURA_VERIFY_PRODUCTION=true`; this does not resume Flux.
+Secret. Cloudflared does not substitute the contract's parameter notation.
+Public MVP storefront stays public; admin is authenticated by the application's
+Supabase/RBAC layer and ops verification additionally requires its Bearer token.
+When the owner enables edge Access, provision real application audiences and
+service tokens, render their values and set `VELURA_CF_ACCESS_ENABLED=true`.
+Placeholders cannot satisfy that enabled gate. Production verification is enabled
+with `VELURA_VERIFY_PRODUCTION=true`; root Flux controls reconciliation state.
 
 ### Licensed worker provisioning and isolated smoke
 

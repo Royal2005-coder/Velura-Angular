@@ -385,6 +385,50 @@ export interface AdminProductRow {
   variants?: AdminProductVariant[];
 }
 
+/** Variant at or below its own low-stock threshold, enriched with the owning product. */
+export interface AdminLowStockRow {
+  variant_id: string;
+  product_id: string;
+  product_name?: string | null;
+  product_sku?: string | null;
+  product_status?: string | null;
+  color?: string;
+  size?: string;
+  stock_quantity: number;
+  low_stock_threshold: number;
+  /** Units missing to reach the threshold (0 when exactly at it). */
+  shortage?: number;
+  out_of_stock?: boolean;
+}
+
+/** On-screen low-stock alert returned by update-stock; `emailQueued` false means the email is waiting for retry. */
+export interface AdminLowStockAlert {
+  productId: string;
+  variantId: string;
+  productName: string;
+  sku: string;
+  color: string;
+  size: string;
+  stock: number;
+  threshold: number;
+  emailQueued: boolean;
+  retryRecorded: boolean;
+  message: string;
+}
+
+/** Result of a stock adjustment: the updated variant plus the optional low-stock alert. */
+export interface AdminStockUpdateResult {
+  lowStockAlert?: AdminLowStockAlert | null;
+}
+
+/** Answer of the inline SKU uniqueness check. */
+export interface AdminSkuCheck {
+  sku: string;
+  available: boolean;
+  code: 'SKU_INVALID' | 'SKU_DUPLICATE' | null;
+  message: string | null;
+}
+
 export interface AdminImageCriterion {
   key: 'lighting' | 'background' | 'sharpness' | 'resolution';
   label: string;
@@ -636,7 +680,11 @@ export interface AdminAuditRow {
   actor_role_label?: string;
   module?: string;
   action?: string;
+  /** Derived action type: CREATE, UPDATE, UPDATE_STATUS or UPDATE_STOCK (product audit only). */
+  action_type?: string;
   action_label?: string;
+  /** Operator reason stored with status and stock changes. */
+  reason?: string | null;
   target_id?: string;
   target_label?: string;
   old_value?: unknown;
@@ -1111,10 +1159,11 @@ export class AdminApiService {
   }
 
   /**
-   * Adjusts variant stock (delta) or low-stock threshold.
+   * Adjusts variant stock (delta) or low-stock threshold. Dropping below the threshold is allowed; the response carries
+   * `lowStockAlert` so the page can show the alert on screen even when the alert email could not be queued.
    */
-  updateStock(productId: string, body: Record<string, unknown>): Observable<unknown> {
-    return this.http.post(`${this.baseUrl}/api/v1/admin/products/${encodeURIComponent(productId)}/update-stock`, body);
+  updateStock(productId: string, body: Record<string, unknown>): Observable<AdminStockUpdateResult> {
+    return this.http.post<AdminStockUpdateResult>(`${this.baseUrl}/api/v1/admin/products/${encodeURIComponent(productId)}/update-stock`, body);
   }
 
   /**
@@ -1128,10 +1177,19 @@ export class AdminApiService {
   }
 
   /**
-   * Lists low-stock products for the original catalog KPI.
+   * Lists variants at or below their own low-stock threshold with product name, SKU and shortage (catalog KPI, dashboard list).
    */
-  listLowStock(): Observable<AdminListPayload<AdminProductRow>> {
-    return this.http.get<AdminListPayload<AdminProductRow>>(`${this.baseUrl}/api/v1/admin/products/low-stock`);
+  listLowStock(): Observable<AdminListPayload<AdminLowStockRow>> {
+    return this.http.get<AdminListPayload<AdminLowStockRow>>(`${this.baseUrl}/api/v1/admin/products/low-stock`);
+  }
+
+  /**
+   * Inline SKU uniqueness check across products and variants; `excludeProductId` ignores the product being edited.
+   */
+  checkProductSku(sku: string, excludeProductId = ''): Observable<AdminSkuCheck> {
+    return this.http.get<AdminSkuCheck>(`${this.baseUrl}/api/v1/admin/products/sku-check`, {
+      params: this.params({ sku, excludeProductId }),
+    });
   }
 
   /**

@@ -9,7 +9,7 @@ export interface ProductImageApproval {
   url: string;
   sourceRevision: string;
   processingVersion: string;
-  /** Technical score of the selected bytes, measured by the server when Studio approves them. */
+  /** Measured studio quality (0-100) of exactly this approved URL; absent when the approval was not scored. */
   qualityScore?: number;
   expiresAt: string;
 }

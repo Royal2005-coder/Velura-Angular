@@ -19,7 +19,10 @@ COPY package.json package-lock.json ./
 COPY apps/api/package.json ./apps/api/
 COPY apps/user-ng/package.json ./apps/user-ng/
 COPY apps/admin-ng/package.json ./apps/admin-ng/
-RUN npm ci --omit=dev --workspace @velura/api --include-workspace-root && npm cache clean --force
+RUN npm ci --omit=dev --workspace @velura/api --include-workspace-root && npm cache clean --force \
+    && rm -rf /root/.npm \
+    && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
+       /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
 COPY --from=builder --chown=node:node /app/apps/api/dist ./apps/api/dist
 COPY --from=builder --chown=node:node /app/apps/api/src ./apps/api/src
 RUN test "${#RELEASE_REVISION}" -eq 40 && \

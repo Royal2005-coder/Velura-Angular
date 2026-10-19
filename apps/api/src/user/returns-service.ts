@@ -57,6 +57,20 @@ const RESTRICTED_CATEGORY_SLUGS: readonly string[] = [];
 /** U2-02: mỗi `order_item` chỉ được xử lý đổi/trả tối đa 2 lần, tính trên cả đơn, không phải trên toàn bộ lịch sử khách. */
 const MAX_RETURN_ATTEMPTS_PER_ITEM = 2;
 
+/** Replacement orders fulfil an exchange and cannot start a new return chain. */
+async function rejectExchangeReplacementOrder(
+  repository: UserReturnsRepository,
+  orderId: unknown
+): Promise<void> {
+  if (repository.findReturnByExchangeOrderId && await repository.findReturnByExchangeOrderId(orderId)) {
+    throw new HttpError(
+      400,
+      "EXCHANGE_REPLACEMENT_NOT_RETURNABLE",
+      "Đơn hàng đổi mới không thể tạo thêm yêu cầu đổi/trả. Vui lòng theo dõi yêu cầu từ đơn hàng gốc."
+    );
+  }
+}
+
 function requireDeliveredWithinWindow(order: JsonObject): void {
   if (asString(order.status) !== "delivered") {
     throw new HttpError(400, "BAD_REQUEST", "Đơn hàng phải hoàn thành (giao thành công) mới được yêu cầu đổi trả");
@@ -67,6 +81,18 @@ function requireDeliveredWithinWindow(order: JsonObject): void {
   if (!returnWindowOpen(deliveryDate, new Date())) {
     throw new HttpError(400, "RETURN_WINDOW_CLOSED", "Quá thời hạn đổi/trả (7 ngày kể từ khi giao hàng)");
   }
+}
+
+/** Validates and returns the bank destination required for COD refund requests. */
+function refundBankPayload(order: JsonObject, returnType: string, body: JsonObject): JsonObject {
+  if (returnType !== "refund" || asString(order.payment_method).toUpperCase() !== "COD") return {};
+  const bankName = asString(body.refund_bank_name).trim();
+  const accountNumber = asString(body.refund_bank_account).trim();
+  const accountHolder = asString(body.refund_bank_holder).trim();
+  if (!bankName || !accountHolder || !/^\d{6,20}$/.test(accountNumber)) {
+    throw new HttpError(422, "REFUND_BANK_REQUIRED", "Vui lòng nhập ngân hàng, số tài khoản từ 6–20 chữ số và tên chủ tài khoản cho đơn COD.");
+  }
+  return { refund_bank_name: bankName, refund_bank_account: accountNumber, refund_bank_holder: accountHolder };
 }
 
 /**
@@ -200,6 +226,7 @@ export function createUserReturnsService(repository: UserReturnsRepository) {
       if (!order || order.user_id !== profile.user_id) {
         throw new HttpError(403, "FORBIDDEN", "Đơn hàng không hợp lệ");
       }
+      await rejectExchangeReplacementOrder(repository, order.order_id);
       requireDeliveredWithinWindow(order);
       const reason = returnReasonLabel(asString(body.reason_code || body.reasonCode));
       const comboNotes = (items as JsonObject[])
@@ -219,13 +246,14 @@ export function createUserReturnsService(repository: UserReturnsRepository) {
       };
       if (!["refund","exchange"].includes(asString(return_type))) throw new HttpError(422,"INVALID_RETURN_TYPE","Choose refund or exchange");
       const validatedItems = await validateItemsAgainstOrder(repository, order, items, asString(return_type));
+      const bank = refundBankPayload(order, asString(return_type), body);
 
       const trackingReturnCode = "RET" + Date.now().toString().slice(-8).toUpperCase();
       const calculatedRefund = return_type === "refund"
         ? await calculateEstimatedRefundAmount(repository, order, validatedItems)
         : 0;
 
-      if (repository.createReturnBundle) return repository.createReturnBundle({order_id:order.order_id,user_id:order.user_id,return_type,refund_amount:calculatedRefund,description:intake.description,evidence_images:intake.images},validatedItems);
+      if (repository.createReturnBundle) return repository.createReturnBundle({order_id:order.order_id,user_id:order.user_id,return_type,refund_amount:calculatedRefund,description:intake.description,evidence_images:intake.images,...bank},validatedItems);
       const newReturn = await repository.insertReturn({
         order_id,
         user_id: profile.user_id,
@@ -235,7 +263,8 @@ export function createUserReturnsService(repository: UserReturnsRepository) {
         evidence_images: intake.images || evidence_images || null,
         status: "REQUESTED",
         tracking_return_code: trackingReturnCode,
-        created_at: new Date().toISOString()
+        created_at: new Date().toISOString(),
+        ...bank
       });
 
       const returnItems: JsonObject[] = [];
@@ -271,9 +300,11 @@ export function createUserReturnsService(repository: UserReturnsRepository) {
 
       if (!hasGuestOrderAccess(order, body)) throw new HttpError(404,"NOT_FOUND","Order not found");
 
+      await rejectExchangeReplacementOrder(repository, order.order_id);
       requireDeliveredWithinWindow(order);
       if (!["refund","exchange"].includes(asString(return_type))) throw new HttpError(422,"INVALID_RETURN_TYPE","Choose refund or exchange");
       const validatedItems = await validateItemsAgainstOrder(repository, order, items, asString(return_type));
+      const bank = refundBankPayload(order, asString(return_type), body);
 
       const trackingReturnCode = "RT" + Date.now().toString().slice(-8).toUpperCase();
       const calculatedRefund = return_type === "refund"
@@ -300,7 +331,8 @@ export function createUserReturnsService(repository: UserReturnsRepository) {
         description: combinedDescription,
         evidence_images: Array.isArray(evidence_images) ? evidence_images : [],
         created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
+        ...bank
       });
 
       for (const item of validatedItems) {

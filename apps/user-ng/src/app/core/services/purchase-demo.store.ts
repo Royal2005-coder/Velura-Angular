@@ -491,6 +491,7 @@ export class PurchaseDemoStore {
     items: DemoReturnLine[],
     reason: string,
     evidenceNames: string[],
+    bank?: { bankName: string; accountNumber: string; accountHolder: string },
   ): DemoReturn {
     const order = this.orders().find((row) => row.id === orderId);
     if (!order || !this.canAccess(order))
@@ -521,6 +522,7 @@ export class PurchaseDemoStore {
       evidenceNames,
       stage: 0,
       createdAt: new Date().toISOString(),
+      ...(bank ? { bank: { name: bank.bankName, last4: bank.accountNumber.slice(-4), holder: bank.accountHolder } } : {}),
     };
     this.update(orderId, (current) => ({
       ...current,

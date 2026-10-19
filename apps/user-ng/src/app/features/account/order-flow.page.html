@@ -30,6 +30,9 @@
           [routerLink]="model.member() ? '/account/returns' : '/guest/returns'"
           >Yêu cầu đổi / trả</a
         >
+        @if (model.member()) {
+          <a class="action secondary" routerLink="/account/cancelled-orders">Đơn đã hủy</a>
+        }
         <a
           class="action secondary"
           [routerLink]="model.member() ? '/account/reviews' : '/guest/reviews'"
@@ -80,8 +83,7 @@
                   <span
                     class="badge return-status-pill"
                     [class.is-completed]="item.status === 'REFUNDED' || item.status === 'COMPLETED'"
-                    [class.is-cancelled]="item.status === 'CANCELLED' && !item.rejectedAt"
-                    [class.is-rejected]="!!item.rejectedAt"
+                    [class.is-cancelled]="item.status === 'CANCELLED'"
                     [class.is-support]="item.status === 'NEEDS_SUPPORT'"
                   >{{ requestLabel(item) }}</span>
                   <button type="button" class="return-track-btn" (click)="openRequest(item)">Theo dõi yêu cầu →</button>
@@ -204,6 +206,19 @@
             </form>
           </section>
         }
+        @case ('cancelled') {
+          <section class="panel order-list">
+            <h2>Đơn hàng đã hủy</h2>
+            <p class="muted">Các đơn đã hủy được lưu lại để mua lại nhanh.</p>
+            @for (item of visibleOrders(); track item.id) {
+              <article class="panel order-card">
+                <div class="row order-card__head"><strong class="order-card__code">#{{ item.id }}</strong><span class="badge order-status-pill">Đã hủy</span></div>
+                <div class="order-card__items-preview">@for (line of item.items.slice(0, 2); track line.variant_id) { <div class="order-card__item-row"><img [src]="image(line.product_image)" [alt]="line.product_name" class="order-card__item-thumb" /><div class="order-card__item-info"><span class="order-card__item-name">{{ line.product_name }}</span><span class="order-card__item-meta">{{ displaySize(line.size) }} / {{ line.color }} · x{{ line.quantity }}</span></div></div> }</div>
+                <div class="row order-card__foot"><strong>{{ money(item.total) }}</strong><div class="order-card__actions"><button type="button" class="secondary btn-compact" (click)="buyAgain(item)">Mua lại</button><button type="button" class="btn-compact" (click)="open(item.id)">Xem chi tiết</button></div></div>
+              </article>
+            } @empty { <div class="empty"><h3>Chưa có đơn đã hủy</h3><p class="muted">Các đơn bạn hủy sẽ xuất hiện ở đây.</p></div> }
+          </section>
+        }
         @case ('list') {
           <section class="panel order-list">
             <h2>{{ model.member() ? 'Đơn hàng của tôi' : 'Đơn hàng thuộc SĐT đã xác thực' }}</h2>
@@ -223,7 +238,7 @@
                   <div class="order-card__badges">
                     @if (orderReturnStatusBadge(item); as retBadge) {
                       <span class="badge return-progress-pill" [attr.data-kind]="retBadge.kind">
-                        @if (retBadge.kind === 'in_progress') {⏳ } @else if (retBadge.kind === 'completed') {✓ } @else if (retBadge.kind === 'rejected') {✕ }{{ retBadge.label }}@if (retBadge.code) { · #{{ retBadge.code }}}
+                        @if (retBadge.kind === 'in_progress') {⏳ } @else if (retBadge.kind === 'completed') {✓ }{{ retBadge.label }}@if (retBadge.code) { · #{{ retBadge.code }}}
                       </span>
                     }
                     <span class="badge order-status-pill" [attr.data-status]="item.status">{{ labels[item.status] }}</span>
@@ -303,7 +318,7 @@
                 }
                 @if (orderReturnStatusBadge(item); as retBadge) {
                   <span class="badge return-progress-pill" [attr.data-kind]="retBadge.kind">
-                    @if (retBadge.kind === 'in_progress') {⏳ } @else if (retBadge.kind === 'completed') {✓ } @else if (retBadge.kind === 'rejected') {✕ }{{ retBadge.label }}@if (retBadge.code) { · #{{ retBadge.code }}}
+                    @if (retBadge.kind === 'in_progress') {⏳ } @else if (retBadge.kind === 'completed') {✓ }{{ retBadge.label }}@if (retBadge.code) { · #{{ retBadge.code }}}
                   </span>
                 }
                 <span class="badge order-status-pill" [attr.data-status]="item.status">{{ labels[item.status] }}</span>
@@ -664,6 +679,15 @@
                     Hệ thống khóa cố định số tiền hoàn dựa trên đơn giá thực tế khách đã thanh toán cho sản phẩm.
                   </small>
                 </div>
+                @if (order()?.payment === 'COD') {
+                  <div class="refund-bank-box">
+                    <strong>Thông tin nhận tiền hoàn (bắt buộc với đơn COD)</strong>
+                    <small>Velura sẽ chuyển khoản hoàn tiền vào tài khoản này sau khi duyệt yêu cầu.</small>
+                    <label class="field">Ngân hàng<input name="refundBankName" [(ngModel)]="bankName" required placeholder="Ví dụ: Vietcombank" /></label>
+                    <label class="field">Số tài khoản<input name="refundBankAccount" [(ngModel)]="bankAccount" required inputmode="numeric" pattern="[0-9]{6,20}" placeholder="Nhập 6–20 chữ số" /></label>
+                    <label class="field">Tên chủ tài khoản<input name="refundBankHolder" [(ngModel)]="bankHolder" required placeholder="Nhập đúng tên trên tài khoản" /></label>
+                  </div>
+                }
               }
               @if (returnKind === 'exchange') {
                 @if (model.replacementsLoading?.()) { <p role="status">Đang tải size / màu còn hàng…</p> }
@@ -770,10 +794,20 @@
                 <p class="muted">
                   {{
                     item.payment === 'COD'
-                      ? 'CSKH sẽ liên hệ xác nhận. Bạn cần cung cấp tài khoản nhận hoàn tiền để tiếp tục.'
+                      ? 'Thông tin ngân hàng COD đã được ghi nhận để Velura chuyển khoản hoàn tiền sau khi duyệt.'
                       : 'Dự kiến hoàn về kênh thanh toán ban đầu. Không cần nhập tài khoản ngân hàng.'
                   }}
                 </p>
+              }
+              @if (pointRefundWarning() && returnKind === 'refund' && model.member()) {
+                <div class="point-refund-warning" role="alert">
+                  <strong>Lưu ý về Point</strong>
+                  <p>Nếu yêu cầu trả hàng được duyệt và hoàn tiền thành công, Velura sẽ thu hồi Point theo giá trị sản phẩm thực tế được hoàn. Ước tính hiện tại: <b>{{ refundPointEstimate() }} điểm</b>. Nếu số dư không đủ, tài khoản có thể phát sinh số dư Point âm.</p>
+                  <div class="actions">
+                    <button type="button" class="secondary" (click)="dismissPointWarning()">Quay lại chỉnh sửa</button>
+                    <button type="button" (click)="continueAfterPointWarning()">Tiếp tục</button>
+                  </div>
+                </div>
               }
               <div class="actions">
                 <button class="secondary" (click)="view.set('detail')">Quay lại</button
@@ -824,27 +858,23 @@
             <section class="panel request-tracking">
               <span class="badge">{{ request.id }}</span>
               <h2>{{ requestLabel(request) }}</h2>
-              @if (!requestEnded(request)) {
-                <p class="muted">
-                  Velura đã ghi nhận yêu cầu của bạn. Nhân viên CSKH sẽ liên hệ để xác nhận phương án
-                  đổi/trả.
-                </p>
-              }
+              <p class="muted">
+                Velura đã ghi nhận yêu cầu của bạn. Nhân viên CSKH sẽ liên hệ để xác nhận phương án
+                đổi/trả.
+              </p>
               <p>Mã đơn: {{ request.orderId }} · {{ date(request.createdAt) }}</p>
               @if (request.completedAt) {
                 <p>Thời gian hoàn tất: {{ date(request.completedAt) }}</p>
               }
               @if (request.cancelledAt) {
-                <p class="error">
-                  Đã hủy yêu cầu lúc {{ date(request.cancelledAt) }}@if (request.cancellationReason) {: {{ request.cancellationReason }}}
-                </p>
+                <p class="error">Đã hủy yêu cầu lúc {{ date(request.cancelledAt) }}</p>
               }
               @if (request.rejectedAt) {
-                <p class="error request-rejected" role="alert">
+                <p class="error">
                   Yêu cầu bị từ chối lúc {{ date(request.rejectedAt) }}@if (request.rejectionReason) {: {{ request.rejectionReason }}}
                 </p>
               }
-              @if (request.cancelledAt || request.rejectedAt) {
+              @if (requestEnded(request)) {
                 <p class="muted">Lượt đổi/trả của sản phẩm đã được hoàn lại, bạn có thể gửi yêu cầu mới.</p>
               }
               <ol class="timeline">
@@ -867,7 +897,7 @@
                   }
                 </p>
               }
-              @if (!requestEnded(request)) {
+              @if (!request.cancelledAt) {
                 @if (request.replacementUnavailable) {
                   <div class="error">
                     <h3>Variant thay thế vừa hết hàng</h3>
@@ -912,28 +942,17 @@
                         : 'Kênh thanh toán ban đầu'
                     }}
                   </p>
-                  @if (request.refundReceiver?.supplementRequest && needsReceiverInfo(request)) {
-                    <div class="error receiver-supplement" role="alert">
-                      <strong>CSKH yêu cầu bổ sung thông tin nhận hoàn tiền:</strong>
-                      {{ request.refundReceiver?.supplementRequest }}
-                    </div>
-                  } @else if (request.refundReceiver?.status === 'invalid' && needsReceiverInfo(request)) {
-                    <div class="error receiver-invalid" role="alert">
-                      Thông tin nhận hoàn tiền chưa hợp lệ, vui lòng cập nhật lại.
-                    </div>
-                  }
-                  @if (showReceiverForm(request)) {
-                    @if (!request.refundReceiver?.supplementRequest && needsReceiverInfo(request)) {
-                      <div class="muted">Vui lòng bổ sung thông tin nhận hoàn tiền.</div>
-                    }
+                  @if (needsReceiverInfo(request) || (receiverFormOpen() && canEditReceiver(request))) {
+                    <div class="muted">Vui lòng bổ sung thông tin nhận hoàn tiền.</div>
+                    @if (request.refundReceiver?.supplementRequest) { <div class="muted">CSKH yêu cầu bổ sung thông tin nhận hoàn tiền: {{ request.refundReceiver?.supplementRequest }}</div> }
+                    @if (request.refundReceiver?.status === 'invalid') { <div class="muted">Thông tin nhận hoàn tiền chưa hợp lệ.</div> }
                     <form (ngSubmit)="saveBank()">
                       <label class="field"
-                        >Ngân hàng / ví nhận tiền<input name="bank" [(ngModel)]="bankName" required /></label
+                        >Ngân hàng<input name="bank" [(ngModel)]="bankName" required /></label
                       ><label class="field"
                         >Số tài khoản<input
                           name="account"
                           inputmode="numeric"
-                          autocomplete="off"
                           [(ngModel)]="bankAccount"
                           required /></label
                       ><label class="field"
@@ -942,18 +961,18 @@
                           [(ngModel)]="bankHolder"
                           required /></label
                       ><button type="submit">Lưu thông tin nhận tiền</button>
-                      @if (!needsReceiverInfo(request)) {
-                        <button type="button" class="secondary" (click)="receiverFormOpen.set(false)">Hủy cập nhật</button>
-                      }
                     </form>
                   }
                   @if (receiverSummary(request); as receiver) {
                     <p>
-                      {{ request.completedAt || request.status === 'REFUNDED' || request.status === 'COMPLETED' ? 'Tiền đã được chuyển tới' : 'Tài khoản nhận tiền' }}:
-                      {{ receiver.name }} · ••••{{ receiver.last4 }}@if (receiver.holder) { ({{ receiver.holder }})}
-                      @if (canEditReceiver(request) && !showReceiverForm(request)) {
-                        <button type="button" class="secondary btn-compact" (click)="editReceiver(request)">Cập nhật</button>
-                      }
+                      {{ request.completedAt ? 'Tiền đã được chuyển tới' : 'Tài khoản nhận tiền' }}:
+                      {{ receiver.name }} · ••••{{ receiver.last4 }}@if (receiver.holder) { ({{ receiver.holder }}) }
+                    </p>
+                    @if (canEditReceiver(request)) { <button type="button" class="secondary" (click)="editReceiver(request)">Cập nhật</button> }
+                  } @else if (request.bank) {
+                    <p>
+                      {{ request.completedAt ? 'Tiền đã được chuyển tới' : 'Tài khoản nhận tiền' }}:
+                      {{ request.bank.name }} · ••••{{ request.bank.last4 }}
                     </p>
                   }
                 }

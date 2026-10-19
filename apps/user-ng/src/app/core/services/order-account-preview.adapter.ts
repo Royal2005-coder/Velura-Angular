@@ -1,6 +1,6 @@
 import { signal } from '@angular/core';
 import { ComboComponentItem, DemoOrder, DemoOrderLine, DemoReturn, DemoReturnLine, PurchaseDemoStore } from './purchase-demo.store';
-import type { OrderAccountModel } from './order-account.model';
+import type { OrderAccountModel, RefundBankDetails, ReturnReasonCode } from './order-account.model';
 
 /**
  * Wraps `PurchaseDemoStore` to satisfy the Promise-based `OrderAccountModel` interface,
@@ -55,9 +55,11 @@ export class OrderAccountPreviewAdapter implements OrderAccountModel {
     items: DemoReturnLine[],
     reason: string,
     evidence: Array<{ name: string; file?: File }>,
+    reasonCode?: ReturnReasonCode,
+    bank?: RefundBankDetails,
   ): Promise<DemoReturn> {
     return this.settle(() =>
-      this.demo.createReturn(orderId, kind, items, reason, evidence.map((item) => item.name)),
+      this.demo.createReturn(orderId, kind, items, reason, evidence.map((item) => item.name), bank),
     );
   }
 

@@ -1,3 +1,6 @@
+import { TestBed } from '@angular/core/testing';
+import { of } from 'rxjs';
+import { CatalogService } from '../../core/services/catalog.service';
 import { ProductSummary } from '../../core/models/product.interface';
 import { createStorefrontPage } from '../../../testing/storefront-testing';
 import { ProductDetailPage } from './product-detail.page';
@@ -26,6 +29,34 @@ describe('ProductDetailPage', () => {
     expect(page.stockLabel()).toBe('Hết hàng');
     expect(page.addToCart()).toBe(false);
     expect(page.averageRating()).toBe(0);
+  });
+
+  it('handles discontinued, hidden, and active status transitions correctly', async () => {
+    const page = await createStorefrontPage(ProductDetailPage);
+    const product = page.product();
+    expect(product).toBeTruthy();
+
+    // When discontinued: buy is disabled, stock label indicates Ngừng kinh doanh
+    page.product.set({ ...product!, status: 'discontinued' });
+    expect(page.isDiscontinued()).toBe(true);
+    expect(page.isBuyDisabled()).toBe(true);
+    expect(page.stockLabel()).toBe('Ngừng kinh doanh');
+    expect(page.addToCart()).toBe(false);
+
+    // When hidden: buy is disabled, stock label indicates Tạm ẩn
+    page.product.set({ ...product!, status: 'hidden' });
+    expect(page.isHidden()).toBe(true);
+    expect(page.isBuyDisabled()).toBe(true);
+    expect(page.stockLabel()).toBe('Tạm ẩn');
+    expect(page.addToCart()).toBe(false);
+
+    // When re-activated to on_sale: buy is enabled and stock label is normal
+    page.product.set({ ...product!, status: 'on_sale' });
+    expect(page.isDiscontinued()).toBe(false);
+    expect(page.isHidden()).toBe(false);
+    expect(page.isBuyDisabled()).toBe(false);
+    expect(page.stockLabel()).toContain('Còn');
+    expect(page.addToCart()).toBe(true);
   });
 
   it('manages combo set quantity stepper and scales line items and summary accordingly', async () => {
@@ -252,7 +283,105 @@ describe('ProductDetailPage', () => {
     expect(page.displaySize('M')).toBe('M');
   });
 
-  it('clicking a thumbnail switches active image without scrambling selected color (TC-CART-02)', async () => {
+  it('uses explicit URL associations for black and white instead of filename or variant order (AD_PRODUCT_08)', async () => {
+    const page = await createStorefrontPage(ProductDetailPage);
+    const images = ['/images/overview.jpg', '/images/upload-9f2.jpg', '/images/upload-1a7.jpg', '/images/upload-6c4.jpg'];
+    page.product.set({
+      product_id: 'mapped-gallery',
+      name: 'Mapped gallery',
+      images,
+      image_colors: {
+        [images[1]]: 'White',
+        [images[2]]: 'Black',
+        [images[3]]: 'Black',
+      },
+      variants: [
+        { variant_id: 'black-m', color: 'Black', size: 'M', stock_quantity: 5 },
+        { variant_id: 'white-s', color: 'White', size: 'S', stock_quantity: 5 },
+      ],
+    });
+
+    page.selectColor('Black');
+    expect(page.activeImage()).toBe(2);
+    expect(page.selectedSize()).toBe('M');
+    page.selectColor('White');
+    expect(page.activeImage()).toBe(1);
+    expect(page.selectedSize()).toBe('S');
+    expect(page.gallery()).toEqual(images);
+
+    page.selectImage(3);
+    expect(page.activeImage()).toBe(3);
+    expect(page.selectedColor()).toBe('Black');
+    expect(page.selectedSize()).toBe('M');
+    page.selectImage(1);
+    expect(page.selectedColor()).toBe('White');
+    expect(page.selectedSize()).toBe('S');
+  });
+
+  it('falls back to the first common image, then the primary when no common image exists (AD_PRODUCT_08)', async () => {
+    const page = await createStorefrontPage(ProductDetailPage);
+    const product: ProductSummary = {
+      product_id: 'gallery-fallback',
+      name: 'Gallery fallback',
+      images: ['/images/primary.jpg', '/images/black.jpg', '/images/common-detail.jpg'],
+      image_colors: { '/images/primary.jpg': 'White' },
+      variants: [
+        { variant_id: 'white-s', color: 'White', size: 'S', stock_quantity: 5 },
+        { variant_id: 'black-m', color: 'Black', size: 'M', stock_quantity: 5 },
+      ],
+    };
+    page.product.set(product);
+    page.selectColor('Black');
+    expect(page.activeImage()).toBe(1);
+
+    page.product.set({
+      ...product,
+      image_colors: {
+        '/images/primary.jpg': 'White',
+        '/images/black.jpg': 'White',
+        '/images/common-detail.jpg': 'White',
+      },
+    });
+    page.selectColor('Black');
+    expect(page.activeImage()).toBe(0);
+
+    page.product.set({ ...product, image_colors: undefined });
+    page.selectColor('Black');
+    expect(page.activeImage()).toBe(0);
+  });
+
+  it('initially displays the primary and selects its explicitly mapped color when present (AD_PRODUCT_08)', async () => {
+    await createStorefrontPage(ProductDetailPage);
+    const product: ProductSummary = {
+      product_id: 'primary-gallery',
+      name: 'Primary gallery',
+      images: ['/images/upload-primary.jpg', '/images/upload-black.jpg'],
+      image_colors: {
+        '/images/upload-primary.jpg': 'White',
+        '/images/upload-black.jpg': 'Black',
+      },
+      variants: [
+        { variant_id: 'black-m', color: 'Black', size: 'M', stock_quantity: 5 },
+        { variant_id: 'white-s', color: 'White', size: 'S', stock_quantity: 5 },
+      ],
+    };
+    vi.spyOn(TestBed.inject(CatalogService), 'getProduct')
+      .mockReturnValueOnce(of(product))
+      .mockReturnValueOnce(of({ ...product, image_colors: { '/images/upload-black.jpg': 'Black' } }));
+
+    const mappedPrimaryPage = TestBed.runInInjectionContext(() => new ProductDetailPage());
+    expect(mappedPrimaryPage.activeImage()).toBe(0);
+    expect(mappedPrimaryPage.selectedColor()).toBe('White');
+    expect(mappedPrimaryPage.selectedSize()).toBe('S');
+
+    const commonPrimaryPage = TestBed.runInInjectionContext(() => new ProductDetailPage());
+    expect(commonPrimaryPage.activeImage()).toBe(0);
+    expect(commonPrimaryPage.selectedColor()).toBe('Black');
+    commonPrimaryPage.selectColor('Black');
+    expect(commonPrimaryPage.activeImage()).toBe(1);
+  });
+
+  it('clicking a common thumbnail never infers a color from its filename (TC-CART-02)', async () => {
     const page = await createStorefrontPage(ProductDetailPage);
     const product = {
       product_id: 'shirt-multi',
@@ -262,7 +391,7 @@ describe('ProductDetailPage', () => {
         { variant_id: 'v2', color: 'Đen', size: 'S', stock_quantity: 10, reserved_quantity: 0 },
         { variant_id: 'v3', color: 'Be', size: 'S', stock_quantity: 10, reserved_quantity: 0 },
       ],
-      images: ['/images/beige-1.jpg', '/images/beige-2.jpg'],
+      images: ['/images/overview.jpg', '/images/white.jpg'],
       reviews: [],
     };
     page.product.set(product as unknown as ProductSummary);

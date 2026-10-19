@@ -1,4 +1,5 @@
 FROM node:22.16.0-alpine3.22 AS builder
+RUN apk upgrade --no-cache
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY apps/api/package.json ./apps/api/
@@ -9,6 +10,7 @@ COPY apps/api ./apps/api
 RUN npm run build:api
 
 FROM node:22.16.0-alpine3.22 AS runner
+RUN apk upgrade --no-cache
 ARG RELEASE_REVISION
 ARG RELEASE_BUILD_ID
 WORKDIR /app

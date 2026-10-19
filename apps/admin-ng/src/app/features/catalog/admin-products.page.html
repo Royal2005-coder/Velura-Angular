@@ -163,19 +163,19 @@
           <header>
             <div>
               <h2 class="admin-section__title">Nhập sản phẩm bằng CSV</h2>
-              <p class="admin-table-note">Tải mẫu, kiểm tra từng dòng, rồi mới ghi catalog. SKU trùng sẽ được cập nhật, không xóa mềm dữ liệu cũ.</p>
+              <p class="admin-table-note">SKU đã có trên hệ thống được cập nhật; SKU mới được thêm. SKU lặp trong cùng file bị từ chối. CSV không xóa sản phẩm hoặc biến thể và không điều chỉnh giá hiện có.</p>
             </div>
             <button class="admin-btn admin-btn--outline admin-btn--sm" type="button" (click)="downloadCsvTemplate()">Tải file mẫu CSV</button>
           </header>
           <div class="admin-csv-checklist">
             <h3>Cột bắt buộc</h3>
-            <p>sku, name, base_price, category_id (UUID danh mục). Ảnh mới qua URL CSV không được hỗ trợ: dùng trình sửa sản phẩm để kiểm tra và phê duyệt ảnh.</p>
+            <p>sku, name, base_price, category_id (UUID danh mục). Với biến thể mới của sản phẩm đã có: thêm product_sku, color, size; tùy chọn color_hex, stock_quantity, low_stock_threshold. Không sửa giá hiện có qua CSV; dùng Điều chỉnh giá. Ảnh mới phải được duyệt trong trình sửa sản phẩm.</p>
           </div>
           <div class="admin-csv-dropzone">
             <app-admin-icon name="box" />
             <strong>Chọn file CSV để kiểm tra</strong>
             <span>Dung lượng tối đa 60 KB, tối đa 500 dòng. Font bảng dùng chữ không chân, không dán JSON thô.</span>
-            <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="csvInput.click()">Chọn file CSV</button>
+            <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" [disabled]="csvCommitting()" (click)="csvInput.click()">Chọn file CSV</button>
             <input #csvInput type="file" accept=".csv,text/csv" hidden (change)="onCsvFile($event)" />
           </div>
           <p class="admin-alert">{{ csvMessage() }}</p>
@@ -198,12 +198,15 @@
           @if (csvRows().length) {
             <div class="admin-csv-preview">
               <table class="admin-table">
-                <thead><tr><th>SKU</th><th>Tên</th><th>Giá gốc</th><th>Danh mục</th><th>Trạng thái</th></tr></thead>
+                <thead><tr><th>SKU</th><th>SKU sản phẩm</th><th>Tên</th><th>Màu / Size</th><th>Tồn kho</th><th>Giá gốc</th><th>Danh mục</th><th>Trạng thái</th></tr></thead>
                 <tbody>
                   @for (row of csvRows(); track $index) {
                     <tr>
                       <td>{{ row['sku'] }}</td>
+                      <td>{{ row['product_sku'] || '—' }}</td>
                       <td>{{ row['name'] }}</td>
+                      <td>{{ row['color'] || '—' }} / {{ row['size'] || '—' }}</td>
+                      <td>{{ row['stock_quantity'] ?? 'Giữ nguyên' }}</td>
                       <td>{{ row['base_price'] }}</td>
                       <td>{{ row['category_id'] }}</td>
                       <td>{{ row['status'] }}</td>
@@ -214,17 +217,35 @@
             </div>
           }
           @if (canMutate()) {
-            <button class="admin-btn admin-btn--primary admin-btn--sm" type="button" [disabled]="csvHasErrors() || !csvPreview()" (click)="commitCsv()">Ghi CSV vào catalog</button>
+            <button class="admin-btn admin-btn--primary admin-btn--sm" type="button" [disabled]="!canCommitCsv()" (click)="commitCsv()">{{ csvCommitting() ? 'Đang ghi CSV…' : 'Ghi CSV vào catalog' }}</button>
           }
         </section>
       </div>
     }
     @if (tab() === 'logs') {
       <div class="admin-tab-content">
+        <form class="admin-filter-bar" (submit)="applyLogsFilters($event)">
+          <label class="admin-search-field">
+            <app-admin-icon name="search" />
+            <input class="admin-form-control" name="q" type="search" [value]="logsQuery()" placeholder="Tìm theo tên, mã sản phẩm hoặc người thao tác..." />
+          </label>
+          <input class="admin-form-control" type="date" name="date" [value]="logsDate()" aria-label="Lọc theo ngày" />
+          <select class="admin-form-control" name="action" [value]="logsAction()" aria-label="Lọc theo hành động">
+            <option value="">Tất cả hành động</option>
+            <option value="create">Thêm mới (CREATE)</option>
+            <option value="update">Cập nhật (UPDATE)</option>
+            <option value="change_status">Đổi trạng thái (UPDATE_STATUS)</option>
+            <option value="update_stock">Điều chỉnh tồn kho (UPDATE_STOCK)</option>
+          </select>
+          <div class="admin-filter-bar__actions">
+            <button class="admin-btn admin-btn--filter admin-btn--sm" type="submit">Lọc</button>
+            <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="resetLogsFilters()">Đặt lại</button>
+          </div>
+        </form>
         @if (logsLoading()) {
           <app-admin-empty-state kind="loading" icon="clock" title="Đang tải nhật ký sản phẩm" />
         } @else if (!logs().length) {
-          <app-admin-empty-state kind="empty" icon="clock" title="Chưa có nhật ký sản phẩm" />
+          <app-admin-empty-state kind="empty" icon="clock" title="Không tìm thấy nhật ký phù hợp" message="Thử thay đổi bộ lọc ngày, tên sản phẩm hoặc hành động." />
         } @else {
           <div class="admin-table-wrap">
             <table class="admin-table">
@@ -236,6 +257,7 @@
                   <th>Hành động</th>
                   <th>Dữ liệu trước → sau</th>
                   <th>Kết quả</th>
+                  <th>Thao tác</th>
                 </tr>
               </thead>
               <tbody>
@@ -252,6 +274,9 @@
                     <td>{{ logAction(row) }}</td>
                     <td>{{ logChange(row) }}</td>
                     <td>{{ logResult(row) }}</td>
+                    <td>
+                      <button class="admin-btn admin-btn--ghost admin-btn--xs" type="button" (click)="openLogDetail(row)">Xem chi tiết</button>
+                    </td>
                   </tr>
                 }
               </tbody>
@@ -819,7 +844,9 @@
                     <small>Đánh giá tiêu chuẩn ánh sáng, độ nét, nền ảnh và tự động cải thiện chất lượng ảnh bằng AI</small>
                   </div>
                   @if (canMutate()) {
-                    <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button" (click)="imageFile.click()">
+                    <button class="admin-btn admin-btn--secondary admin-btn--sm" type="button"
+                      [disabled]="editorImages().length >= maxProductImages"
+                      (click)="selectGalleryImageSlot(editorImages().length); imageFile.click()">
                       + Tải ảnh lên
                     </button>
                   }
@@ -834,7 +861,7 @@
                       (click)="selectGalleryImageSlot($index)"
                     >
                       <img [src]="imgUrl.replace('/src/assets/', '/assets/')" [alt]="'Ảnh ' + ($index + 1)" />
-                      <span class="admin-studio-thumb__badge">#{{ $index + 1 }}</span>
+                      <span class="admin-studio-thumb__badge">{{ $index === 0 ? 'Primary' : '#' + ($index + 1) }}</span>
                       @if (canMutate() && editorImages().length > 1) {
                         <button
                           type="button"
@@ -845,17 +872,38 @@
                       }
                     </div>
                   }
-                  @if (canMutate()) {
+                  @if (canMutate() && editorImages().length < maxProductImages) {
                     <button
                       type="button"
                       class="admin-studio-thumb admin-studio-thumb--add"
                       [class.is-active]="imageIndex() >= editorImages().length || !!uploadedImageDataUrl()"
-                      (click)="imageIndex.set(editorImages().length); imageFile.click()"
+                      (click)="selectGalleryImageSlot(editorImages().length); imageFile.click()"
                     >
                       <span>+ Thêm ảnh</span>
                     </button>
                   }
                 </div>
+                <p class="admin-form-help">{{ editorImages().length }}/{{ maxProductImages }} ảnh. Ảnh Primary là ảnh đại diện duy nhất.</p>
+                @if (editorImages()[imageIndex()]; as activeUrl) {
+                  <div class="admin-form-field">
+                    <label for="product-image-color">Màu của ảnh đang chọn</label>
+                    <select id="product-image-color" class="admin-form-control"
+                      [disabled]="!canMutate() || !!sourceFile()"
+                      [value]="editorImageColors()[activeUrl] || ''"
+                      (change)="setImageColor(activeUrl, $event)">
+                      <option value="">Ảnh chung (mọi màu)</option>
+                      @for (color of imageColorOptions(); track color) {
+                        <option [value]="color">{{ color }}</option>
+                      }
+                    </select>
+                    @if (canMutate() && imageIndex() > 0) {
+                      <button type="button" class="admin-btn admin-btn--secondary admin-btn--sm"
+                        [disabled]="!!sourceFile()" (click)="setPrimaryImage(imageIndex(), imagesBox)">
+                        Đặt làm ảnh đại diện (Primary)
+                      </button>
+                    }
+                  </div>
+                }
 
                 <!-- Khung hiển thị ảnh đang chọn hoặc So sánh Trước / Sau AI Studio -->
                 @if (aiEnhanceResult(); as enhanced) {
@@ -1170,11 +1218,12 @@
                     <div class="admin-table-wrap admin-variant-table-wrap">
                       <table class="admin-table admin-variant-table">
                         <thead>
-                          <tr><th>Màu sắc</th><th>Size</th><th>Tồn kho</th><th>Ngưỡng thấp</th></tr>
+                          <tr><th>SKU biến thể</th><th>Màu sắc</th><th>Size</th><th>Tồn kho</th><th>Ngưỡng thấp</th></tr>
                         </thead>
                         <tbody>
                           @for (variant of variants(); track variant.variant_id) {
                             <tr>
+                              <td>{{ variant.sku || '—' }}</td>
                               <td><strong>{{ variant.color }}</strong></td>
                               <td><span class="admin-badge admin-badge--neutral">{{ variant.size }}</span></td>
                               <td>
@@ -1481,6 +1530,71 @@
           <button class="admin-btn admin-btn--secondary" type="submit">Xác nhận cập nhật tồn</button>
         </footer>
       </form>
+    </section>
+  </div>
+}
+
+@if (selectedLog(); as log) {
+  <div class="admin-modal-overlay">
+    <section class="admin-modal admin-modal--lg" appAdminDialog (appAdminDialogClose)="closeLogDetail()">
+      <header class="admin-modal__header">
+        <div>
+          <p class="admin-product-code">{{ log.audit_id || log.timestamp }}</p>
+          <h2>Chi tiết nhật ký sản phẩm</h2>
+        </div>
+        <button class="admin-icon-button" type="button" (click)="closeLogDetail()" aria-label="Đóng">×</button>
+      </header>
+      <div class="admin-modal__body">
+        <div class="admin-detail-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px;">
+          <div class="admin-detail-item">
+            <span class="admin-detail-label" style="display: block; font-size: 0.8rem; color: #666;">Thời gian thực hiện</span>
+            <strong>{{ updatedAt(log.timestamp) }}</strong>
+          </div>
+          <div class="admin-detail-item">
+            <span class="admin-detail-label" style="display: block; font-size: 0.8rem; color: #666;">Tài khoản thực hiện</span>
+            <strong>{{ logActor(log) }}</strong>
+          </div>
+          <div class="admin-detail-item">
+            <span class="admin-detail-label" style="display: block; font-size: 0.8rem; color: #666;">Vai trò</span>
+            <span>{{ logActorRole(log) || '—' }}</span>
+          </div>
+          <div class="admin-detail-item">
+            <span class="admin-detail-label" style="display: block; font-size: 0.8rem; color: #666;">Loại hành động</span>
+            <span class="admin-badge admin-badge--active">{{ logAction(log) }} ({{ log.action || '—' }})</span>
+          </div>
+          <div class="admin-detail-item">
+            <span class="admin-detail-label" style="display: block; font-size: 0.8rem; color: #666;">Đối tượng</span>
+            <strong>{{ logTarget(log) }}</strong>
+          </div>
+          <div class="admin-detail-item">
+            <span class="admin-detail-label" style="display: block; font-size: 0.8rem; color: #666;">Địa chỉ IP</span>
+            <span>{{ log.ip_address || '—' }}</span>
+          </div>
+        </div>
+
+        @if (logReason(log)) {
+          <div class="admin-note" style="margin-bottom: 16px; padding: 10px 14px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; color: #166534;">
+            <strong>Lý do điều chỉnh tồn kho / thao tác:</strong> {{ logReason(log) }}
+          </div>
+        }
+
+        <div>
+          <h4 style="margin: 0 0 8px; font-size: 0.95rem;">Nội dung chi tiết thay đổi:</h4>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div>
+              <h5 style="margin: 0 0 6px; font-size: 0.85rem; color: #666;">Giá trị trước khi đổi (Old Value)</h5>
+              <pre style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px; font-size: 0.8rem; max-height: 240px; overflow: auto; white-space: pre-wrap; word-break: break-all;">{{ formatJson(log.old_value) }}</pre>
+            </div>
+            <div>
+              <h5 style="margin: 0 0 6px; font-size: 0.85rem; color: var(--terracotta, #b54a32);">Giá trị sau khi đổi (New Value)</h5>
+              <pre style="background: #fdf2f0; border: 1px solid #fecaca; border-radius: 6px; padding: 10px; font-size: 0.8rem; max-height: 240px; overflow: auto; white-space: pre-wrap; word-break: break-all;">{{ formatJson(log.new_value) }}</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+      <footer class="admin-modal__footer">
+        <button class="admin-btn admin-btn--ghost" type="button" (click)="closeLogDetail()">Đóng</button>
+      </footer>
     </section>
   </div>
 }

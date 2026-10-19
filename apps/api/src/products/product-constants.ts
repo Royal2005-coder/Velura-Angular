@@ -18,6 +18,7 @@ export const PRODUCT_SELECT = [
   "base_price",
   "sale_price",
   "images",
+  "image_colors",
   "style_tags",
   "color_tone",
   "occasions",
@@ -51,9 +52,9 @@ export const PRODUCT_STATUSES = ["on_sale", "hidden", "out_of_stock", "discontin
 /** Allowed status transitions to enforce business rules. */
 export const STATUS_TRANSITIONS: Record<string, string[]> = {
   on_sale: ["hidden", "out_of_stock", "discontinued"],
-  hidden: ["on_sale", "discontinued"],
+  hidden: ["on_sale", "out_of_stock", "discontinued"],
   out_of_stock: ["on_sale", "hidden", "discontinued"],
-  discontinued: ["hidden"]
+  discontinued: ["on_sale", "hidden", "out_of_stock"]
 };
 
 /**
@@ -91,7 +92,7 @@ export const CSV_REQUIRED_COLUMNS = [
   "category_id"
 ];
 
-/** Optional CSV columns accepted during bulk import. */
+/** Optional product metadata and variant identity/stock columns; blank existing values are preserved. */
 export const CSV_OPTIONAL_COLUMNS = [
   "description",
   "sale_price",
@@ -99,6 +100,12 @@ export const CSV_OPTIONAL_COLUMNS = [
   "tags",
   "images",
   "image_url",
+  "product_sku",
+  "color",
+  "color_hex",
+  "size",
+  "stock_quantity",
+  "low_stock_threshold",
   "is_featured"
 ];
 

@@ -27,6 +27,8 @@ import {
 
 /**
  * Admin product use-cases used by `handleProductRoute`.
+ * Product images are ordered (index 0 is primary); imageColors explicitly maps URLs to exact variant colors.
+ * New products and their initial variants are persisted atomically by the create RPC.
  */
 export interface ProductService {
   list(context: AuthContext | undefined, searchParams: URLSearchParams): Promise<unknown>;
@@ -39,7 +41,9 @@ export interface ProductService {
   updateStock(context: AuthContext | undefined, productId: string, body: JsonObject, requestMeta: RequestMeta): Promise<unknown>;
   bulkUpdateStock(context: AuthContext | undefined, productId: string, body: JsonObject, requestMeta: RequestMeta): Promise<unknown>;
   createVariant(context: AuthContext | undefined, productId: string, body: JsonObject, requestMeta: RequestMeta): Promise<unknown>;
+  /** Preview product/variant SKU rows; every duplicate and existing-price change is a blocking row error. */
   parseCsv(context: AuthContext | undefined, csvContent: unknown): Promise<unknown>;
+  /** Revalidate raw CSV and atomically persist all rows; existing prices are never updated. */
   commitCsv(context: AuthContext | undefined, csvContent: unknown, requestMeta: RequestMeta): Promise<unknown>;
   lowStock(context: AuthContext | undefined): Promise<unknown>;
   listAuditLogs(context: AuthContext | undefined, searchParams: URLSearchParams): Promise<unknown>;
@@ -144,34 +148,8 @@ export function createProductService({ repository }: { repository: ProductReposi
         }
       }
 
-      // Pre-validate all custom variants if passed
-      let validatedVariants: Array<ReturnType<typeof validateCreateVariant>> | null = null;
-      if (Array.isArray(body?.variants) && body.variants.length > 0) {
-        validatedVariants = body.variants.map((v) => validateCreateVariant(v as JsonObject));
-      }
-
       const product = asJsonObject(await repository.createProduct(input, context.accessToken));
-
-      // Auto-create variants with initial stock
-      if (repository && typeof repository.createVariant === "function") {
-        if (validatedVariants && validatedVariants.length > 0) {
-          for (const vInput of validatedVariants) {
-            vInput.ipAddress = input.ipAddress;
-            await repository.createVariant(product.product_id as string, vInput, context.accessToken);
-          }
-        } else {
-          const initialStock = body.initialStock !== undefined ? Number(body.initialStock) : 0;
-          const lowStockThreshold = body.lowStockThreshold !== undefined ? Number(body.lowStockThreshold) : 5;
-
-          await repository.createVariant(product.product_id as string, {
-            color: "Mặc định",
-            colorHex: "#FFFFFF",
-            size: "F",
-            stockQuantity: Number.isInteger(initialStock) && initialStock >= 0 ? initialStock : 0,
-            lowStockThreshold: Number.isInteger(lowStockThreshold) && lowStockThreshold >= 0 ? lowStockThreshold : 5
-          }, context.accessToken);
-        }
-
+      if (typeof repository.findById === "function" && typeof repository.listVariants === "function") {
         await syncProductStockStatus(repository, context, product.product_id as string, "Khởi tạo tồn kho sản phẩm mới", input.ipAddress);
       }
       invalidateCatalogCache();
@@ -184,6 +162,17 @@ export function createProductService({ repository }: { repository: ProductReposi
       if (!current) throw new HttpError(404, "PRODUCT_NOT_FOUND", "Product was not found");
       requireProductAdmin(context, current.is_combo === true);
       const input = validateUpdateProduct(body);
+      const images = input.images ?? (Array.isArray(current.images) ? current.images as string[] : []);
+      if (input.images !== undefined) requirePrimaryImage(images, current.status);
+      if (input.imageColors !== undefined || input.images !== undefined) {
+        const variants = await repository.listVariants(productId, context.accessToken);
+        const list = Array.isArray(variants) ? variants : variants.rows;
+        const colors = list.map((variant) => asString(variant.color));
+        const mapping = input.imageColors ?? Object.fromEntries(
+          Object.entries(asJsonObject(current.image_colors)).filter(([url]) => images.includes(url))
+        );
+        input.imageColors = validateImageColorLinks(mapping, images, colors);
+      }
       input.ipAddress = requestMeta.ipAddress || "0.0.0.0";
       const result = await repository.updateProduct(productId, input, context.accessToken);
 
@@ -236,6 +225,7 @@ export function createProductService({ repository }: { repository: ProductReposi
       if (current.status === input.status || !STATUS_TRANSITIONS[current.status as string]?.includes(input.status)) {
         throw validationError("status", `Cannot change status from ${current.status} to ${input.status}`);
       }
+      if (input.status === "on_sale") requirePrimaryImage(validateImageUrls(current.images), input.status);
       input.ipAddress = requestMeta.ipAddress || "0.0.0.0";
       const changed = await repository.changeStatus(productId, input, context.accessToken);
       invalidateCatalogCache();
@@ -366,139 +356,111 @@ export function createProductService({ repository }: { repository: ProductReposi
       requireProductAdmin(context);
       const lines = parseCsvLines(csvContent);
       if (lines.length === 0) throw validationError("csv", "CSV file is empty");
-      if (lines.length > CSV_MAX_ROWS) {
-        throw validationError("csv", `CSV cannot exceed ${CSV_MAX_ROWS} rows`);
-      }
-
-      const headers = lines[0].map((h) => h.trim().toLowerCase());
-      const missing = CSV_REQUIRED_COLUMNS.filter((col) => !headers.includes(col));
-      if (missing.length) {
-        throw validationError("csv", `Missing required columns: ${missing.join(", ")}`);
-      }
-
+      if (lines.length - 1 > CSV_MAX_ROWS) throw validationError("csv", `CSV cannot exceed ${CSV_MAX_ROWS} rows`);
+      const headers = lines[0].map((header) => header.trim().toLowerCase());
+      const missing = CSV_REQUIRED_COLUMNS.filter((column) => !headers.includes(column));
+      if (missing.length) throw validationError("csv", `Missing required columns: ${missing.join(", ")}`);
       const errors: JsonObject[] = [];
       const rows: JsonObject[] = [];
-      for (let i = 1; i < lines.length; i++) {
-        const row = parseCsvRow(headers, lines[i]);
-        const rowNum = i + 1;
-
-        if (!row.sku || !SKU_PATTERN.test(row.sku)) {
-          errors.push({ row: rowNum, field: "sku", message: "SKU không đúng dạng VL-AO001" });
-          continue;
-        }
-        if (!row.name || row.name.length < 2) {
-          errors.push({ row: rowNum, field: "name", message: "Tên bắt buộc, tối thiểu 2 ký tự" });
-          continue;
-        }
+      const repeatedHeaders = headers.filter((header, index) => headers.indexOf(header) !== index);
+      for (const field of new Set(repeatedHeaders)) {
+        errors.push({ row: 1, field, message: "Tên cột CSV bị lặp" });
+      }
+      if (headers.some((header) => !header)) errors.push({ row: 1, field: "csv", message: "Tên cột CSV không được trống" });
+      const skuRows = new Map<string, number[]>();
+      for (let index = 1; index < lines.length; index++) {
+        const sku = (lines[index][headers.indexOf("sku")] || "").trim().toUpperCase();
+        if (sku) skuRows.set(sku, [...(skuRows.get(sku) || []), index + 1]);
+      }
+      for (let index = 1; index < lines.length; index++) {
+        const row = parseCsvRow(headers, lines[index]);
+        const rowNum = index + 1;
+        const startErrors = errors.length;
+        const reject = (field: string, message: string) => { errors.push({ row: rowNum, field, message }); };
+        const sku = row.sku.toUpperCase();
+        const parentSku = (row.product_sku || "").toUpperCase();
+        if ((skuRows.get(sku)?.length || 0) > 1) reject("sku", "SKU bị lặp trong file (không phân biệt hoa/thường và khoảng trắng)");
+        if (lines[index].length !== headers.length) reject("csv", "Số ô không khớp số cột CSV");
+        if (!SKU_PATTERN.test(sku)) reject("sku", "SKU không đúng dạng VL-AO001");
+        if (parentSku && !SKU_PATTERN.test(parentSku)) reject("product_sku", "SKU sản phẩm cha không hợp lệ");
+        if (!row.name || row.name.length < 2 || row.name.length > 200) reject("name", "Tên bắt buộc, từ 2 đến 200 ký tự");
         const basePrice = Number(row.base_price);
-        if (!Number.isFinite(basePrice) || basePrice < 0) {
-          errors.push({ row: rowNum, field: "base_price", message: "Giá gốc phải là số không âm" });
-          continue;
-        }
+        if (!row.base_price || !Number.isFinite(basePrice) || basePrice < 0) reject("base_price", "Giá gốc phải là số không âm");
         if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(row.category_id || "")) {
-          errors.push({ row: rowNum, field: "category_id", message: "category_id phải là UUID danh mục" });
-          continue;
+          reject("category_id", "category_id phải là UUID danh mục");
         }
-        const salePrice = row.sale_price === "" || row.sale_price === undefined ? basePrice : Number(row.sale_price);
-        if (!Number.isFinite(salePrice) || salePrice < 0) {
-          errors.push({ row: rowNum, field: "sale_price", message: "Giá bán phải là số không âm" });
-          continue;
+        const salePrice = row.sale_price ? Number(row.sale_price) : null;
+        if (salePrice !== null && (!Number.isFinite(salePrice) || salePrice < 0)) reject("sale_price", "Giá bán phải là số không âm");
+        if (row.status && !PRODUCT_STATUSES.includes(row.status)) reject("status", "Trạng thái phải là on_sale, hidden, out_of_stock hoặc discontinued");
+        const variant = SKU_PATTERN.test(sku) ? await repository.findVariantBySku(sku, context.accessToken) : null;
+        const skuProduct = SKU_PATTERN.test(sku) ? await repository.findBySku(sku, context.accessToken) : null;
+        const product = variant
+          ? await repository.findById(String(variant.product_id), context.accessToken)
+          : parentSku && SKU_PATTERN.test(parentSku) ? await repository.findBySku(parentSku, context.accessToken) : skuProduct;
+        if (variant && skuProduct && variant.product_id !== skuProduct.product_id) {
+          reject("sku", "SKU trùng sản phẩm và biến thể thuộc sản phẩm khác; cần sửa SKU trước khi nhập");
         }
-        const status = row.status || "on_sale";
-        if (!PRODUCT_STATUSES.includes(status)) {
-          errors.push({ row: rowNum, field: "status", message: "Trạng thái phải là on_sale, hidden, out_of_stock hoặc discontinued" });
-          continue;
+        if (!variant && parentSku && skuProduct && product && skuProduct.product_id !== product.product_id) {
+          reject("sku", "SKU đã thuộc sản phẩm khác");
         }
+        if (parentSku && (!product || String(product.sku).trim().toUpperCase() !== parentSku)) {
+          reject("product_sku", "Không tìm thấy sản phẩm cha hoặc SKU đã thuộc sản phẩm khác");
+        }
+        if (product) {
+          if (Number.isFinite(basePrice) && basePrice !== Number(product.base_price)) reject("base_price", "CSV không được đổi giá hiện có; sử dụng quy trình quản lý giá");
+          if (salePrice !== null && Number.isFinite(salePrice) && salePrice !== Number(product.sale_price)) reject("sale_price", "CSV không được đổi giá hiện có; sử dụng quy trình quản lý giá");
+        } else if (row.status && !["on_sale", "hidden"].includes(row.status)) {
+          reject("status", "Sản phẩm mới chỉ được Đang bán hoặc Tạm ẩn");
+        }
+        const newVariant = Boolean(parentSku && product && !variant);
+        if (newVariant && !row.color) reject("color", "Biến thể mới bắt buộc có màu");
+        if (newVariant && !row.size) reject("size", "Biến thể mới bắt buộc có size");
+        if (row.color && row.color.length > 50) reject("color", "Màu tối đa 50 ký tự");
+        if (row.size && row.size.length > 10) reject("size", "Size tối đa 10 ký tự");
+        if (row.color_hex && !/^#[0-9a-f]{6}$/i.test(row.color_hex)) reject("color_hex", "Màu phải có dạng #RRGGBB");
+        for (const field of ["stock_quantity", "low_stock_threshold"]) {
+          if (row[field] && (!Number.isSafeInteger(Number(row[field])) || Number(row[field]) < 0 || Number(row[field]) > 2147483647)) reject(field, "Phải là số nguyên không âm");
+        }
+        if (row.stock_quantity && variant && Number(row.stock_quantity) < Number(variant.reserved_quantity || 0)) reject("stock_quantity", "Tồn kho không được thấp hơn số lượng đã giữ");
+        if (product && !variant && !newVariant && ["color", "size", "color_hex", "stock_quantity", "low_stock_threshold"].some((field) => row[field])) {
+          reject("sku", "Dùng SKU biến thể; thêm product_sku khi tạo biến thể mới");
+        }
+        if (row.image_url) {
+          try { validateImageUrls([row.image_url]); } catch { reject("image_url", "URL ảnh không hợp lệ"); }
+          if (!product || !Array.isArray(product.images) || !product.images.includes(row.image_url)) {
+            reject("image_url", "Ảnh mới phải được phê duyệt trong Product Editor trước khi nhập CSV");
+          }
+        }
+        if (!product && (row.status || "on_sale") === "on_sale") reject("status", "Nhập sản phẩm mới ở trạng thái hidden rồi phê duyệt ảnh trong Product Editor");
+        if (errors.length !== startErrors || repeatedHeaders.length) continue;
         rows.push({
-          sku: row.sku,
-          name: row.name,
-          base_price: basePrice,
-          category_id: row.category_id || null,
-          description: row.description || null,
-          sale_price: salePrice,
-          status,
-          images: row.image_url ? validateImageUrls([row.image_url]) : [],
-          is_featured: row.is_featured === "true"
+          row: rowNum, sku, product_sku: parentSku || null, name: row.name,
+          base_price: basePrice, sale_price: salePrice,
+          category_id: row.category_id, description: row.description || null,
+          status: row.status || null, image_url: row.image_url || null,
+          is_featured: row.is_featured ? row.is_featured === "true" : null,
+          color: row.color || null, size: row.size ? row.size.toUpperCase() : null,
+          color_hex: row.color_hex || null,
+          stock_quantity: row.stock_quantity ? Number(row.stock_quantity) : null,
+          low_stock_threshold: row.low_stock_threshold ? Number(row.low_stock_threshold) : null,
+          product_id: product?.product_id ?? null, variant_id: variant?.variant_id ?? null,
+          expected_version: product?.version ?? null, variant_version: variant?.version ?? null,
+          operation: variant || (product && !newVariant) ? "updated" : "created"
         });
       }
-
       return { rows, errors, totalRows: lines.length - 1, validRows: rows.length };
     },
 
     async commitCsv(context, csvContent, requestMeta) {
       requireProductAdmin(context);
       const parsed = asJsonObject(await this.parseCsv(context, csvContent));
-      const csvErrors = Array.isArray(parsed.errors) ? parsed.errors : [];
-      if (csvErrors.length) {
-        throw new HttpError(422, "CSV_VALIDATION_FAILED", "CSV còn dòng lỗi, chưa ghi vào catalog", { errors: csvErrors });
-      }
-      const parsedRows = Array.isArray(parsed.rows) ? parsed.rows as JsonObject[] : [];
-      if (parsedRows.length === 0) throw validationError("csv", "Không có dòng hợp lệ để nhập");
-
-      const staged: Array<{ row: JsonObject; existing: JsonObject | null }> = [];
-      for (const row of parsedRows) {
-        const existing = repository.findBySku ? await repository.findBySku(row.sku as string, context.accessToken) : null;
-        const images = Array.isArray(row.images) ? row.images : [];
-        const published = existing && Array.isArray(existing.images) ? existing.images : [];
-        if (images.some(image => !published.includes(image))) {
-          throw new HttpError(422, "CSV_IMAGE_REVIEW_REQUIRED", "Ảnh mới phải được kiểm tra và phê duyệt trong Product Editor trước khi nhập CSV.", { sku: row.sku });
-        }
-        staged.push({ row, existing });
-      }
-      const results: JsonObject[] = [];
-      for (const { row, existing } of staged) {
-        try {
-          if (existing) {
-            // Update existing product
-            const updateInput = {
-              name: row.name,
-              description: row.description,
-              categoryId: row.category_id,
-              images: Array.isArray(row.images) && row.images.length ? row.images : existing.images,
-              isFeatured: row.is_featured,
-              expectedVersion: existing.version,
-              ipAddress: requestMeta.ipAddress || "0.0.0.0"
-            };
-            await repository.updateProduct(existing.product_id as string, updateInput, context.accessToken);
-
-            if (existing.status !== row.status) {
-              const fresh = await repository.findById(existing.product_id as string, context.accessToken);
-              await repository.changeStatus(existing.product_id as string, {
-                status: row.status,
-                reason: "Cập nhật trạng thái tự động qua import CSV",
-                expectedVersion: (fresh as JsonObject).version,
-                ipAddress: requestMeta.ipAddress || "0.0.0.0"
-              }, context.accessToken);
-            }
-
-            results.push({ sku: row.sku, status: "updated", product_id: existing.product_id });
-          } else {
-            // Create new product
-            const slug = String(row.name).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") + "-" + String(row.sku).toLowerCase();
-            const product = asJsonObject(await this.create(context, {
-              sku: row.sku,
-              name: row.name,
-              slug: slug,
-              basePrice: row.base_price,
-              salePrice: row.sale_price,
-              categoryId: row.category_id,
-              status: row.status,
-              description: row.description,
-              images: row.images || [],
-              isFeatured: row.is_featured,
-              expectedVersion: 0
-            }, requestMeta));
-            results.push({ sku: row.sku, status: "created", product_id: product.product_id });
-          }
-        } catch (error: unknown) {
-          results.push({ sku: row.sku, status: "error", message: errorMessage(error) || "Unknown error" });
-        }
-      }
-
-      const created = results.filter((r) => r.status === "created").length;
-      const updated = results.filter((r) => r.status === "updated").length;
-      const failed = results.filter((r) => r.status === "error").length;
-      return { created, updated, failed, total: parsedRows.length, results };
+      const errors = Array.isArray(parsed.errors) ? parsed.errors : [];
+      if (errors.length) throw new HttpError(422, "CSV_VALIDATION_FAILED", "CSV còn dòng lỗi, chưa ghi vào catalog", { errors });
+      const rows = Array.isArray(parsed.rows) ? parsed.rows as JsonObject[] : [];
+      if (!rows.length) throw validationError("csv", "Không có dòng hợp lệ để nhập");
+      const result = await repository.importCsv(rows, requestMeta.ipAddress || "0.0.0.0", context.accessToken);
+      invalidateCatalogCache();
+      return result;
     },
 
     async lowStock(context) {
@@ -511,12 +473,84 @@ export function createProductService({ repository }: { repository: ProductReposi
       requireProductViewer(context);
       const targetId = searchParams.get("targetId") || "";
       if (targetId) requireUuid(targetId, "targetId");
+      const date = String(searchParams.get("date") || "").trim();
+      const q = String(searchParams.get("q") || "").trim();
+      const action = String(searchParams.get("action") || "").trim();
+
+      let fromDate: string | undefined;
+      let toDate: string | undefined;
+      if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        fromDate = `${date}T00:00:00.000Z`;
+        toDate = `${date}T23:59:59.999Z`;
+      }
+
+      let matchedTargetIds: string[] | undefined;
+      if (q && !targetId) {
+        try {
+          const productHits = await selectRows("product", {
+            select: "product_id",
+            or: `(name.ilike.*${q}*,sku.ilike.*${q}*)`,
+            limit: 50
+          }, { useAnonKey: false, silentError: true });
+          if (productHits.rows?.length) {
+            matchedTargetIds = productHits.rows.map((p) => asString(p.product_id)).filter(Boolean);
+          }
+        } catch {
+          // ignore search error
+        }
+      }
+
       const payload = await repository.listAuditLogs({
         targetId: targetId || undefined,
+        targetIds: matchedTargetIds,
+        fromDate,
+        toDate,
+        action: action || undefined,
         limit: clampInteger(searchParams.get("limit"), 50, 1, 100),
         offset: clampInteger(searchParams.get("offset"), 0, 0, 1000000)
       }, context.accessToken);
-      return enrichProductAuditLogs(payload);
+      const enriched = await enrichProductAuditLogs(payload);
+
+      if (q || date || action) {
+        const lowerQ = q.toLowerCase();
+        const filtered = enriched.rows.filter((row) => {
+          if (date && typeof row.timestamp === "string") {
+            if (row.timestamp.slice(0, 10) !== date) return false;
+          }
+          if (action) {
+            const rowAction = asString(row.action).toLowerCase();
+            const rowActionLabel = asString(row.action_label).toLowerCase();
+            const filterAction = action.toLowerCase();
+            if (
+              rowAction !== filterAction &&
+              !rowAction.includes(filterAction) &&
+              !rowActionLabel.includes(filterAction)
+            ) {
+              return false;
+            }
+          }
+          if (q) {
+            const targetLabel = asString(row.target_label).toLowerCase();
+            const actorLabel = asString(row.actor_label).toLowerCase();
+            const actorEmail = asString(row.actor_email).toLowerCase();
+            const actionLabel = asString(row.action_label).toLowerCase();
+            const changeSummary = asString(row.change_summary).toLowerCase();
+            const rawData = (JSON.stringify(row.old_value) + JSON.stringify(row.new_value)).toLowerCase();
+            const matches =
+              targetLabel.includes(lowerQ) ||
+              actorLabel.includes(lowerQ) ||
+              actorEmail.includes(lowerQ) ||
+              actionLabel.includes(lowerQ) ||
+              changeSummary.includes(lowerQ) ||
+              rawData.includes(lowerQ);
+            if (!matches) return false;
+          }
+          return true;
+        });
+        return { rows: filtered, count: filtered.length };
+      }
+
+      return enriched;
     },
 
     async getComboItems(context, productId) {
@@ -573,6 +607,8 @@ export function createProductService({ repository }: { repository: ProductReposi
  * Validate a create-variant request body.
  */
 export function validateCreateVariant(body: JsonObject = {}) {
+  const sku = String(body.sku || "").trim().toUpperCase();
+  if (sku && !SKU_PATTERN.test(sku)) throw validationError("sku", "SKU biến thể không hợp lệ");
   const color = String(body.color || "").trim();
   const size = String(body.size || "").trim().toUpperCase();
   const stockQuantity = Number(body.stockQuantity);
@@ -583,6 +619,7 @@ export function validateCreateVariant(body: JsonObject = {}) {
   if (!Number.isInteger(lowStockThreshold) || lowStockThreshold < 0) throw validationError("lowStockThreshold", "lowStockThreshold must be a non-negative integer");
   if (body.colorHex && !/^#[0-9a-f]{6}$/i.test(String(body.colorHex))) throw validationError("colorHex", "colorHex must be #RRGGBB");
   return {
+    ...(sku ? { sku } : {}),
     color,
     colorHex: body.colorHex ? String(body.colorHex).toUpperCase() : null,
     size,
@@ -595,6 +632,8 @@ export function validateCreateVariant(body: JsonObject = {}) {
 
 /**
  * Validate a create-product request body.
+ * Validates URL/color associations against initial variants, including the default variant.
+ * Hidden drafts may omit images; on-sale products require index 0 as primary.
  */
 export function validateCreateProduct(body: JsonObject = {}) {
   const sku = String(body.sku || "").trim().toUpperCase();
@@ -625,6 +664,18 @@ export function validateCreateProduct(body: JsonObject = {}) {
   if (!["on_sale", "hidden"].includes(status as string)) {
     throw validationError("status", "Sản phẩm mới chỉ được Đang bán hoặc Tạm ẩn");
   }
+  const images = validateImageUrls(body.images);
+  requirePrimaryImage(images, status);
+  const initialStock = Number(body.initialStock ?? 0);
+  const lowStockThreshold = Number(body.lowStockThreshold ?? 5);
+  const variants = Array.isArray(body.variants) && body.variants.length > 0
+    ? body.variants.map((variant) => validateCreateVariant(asJsonObject(variant)))
+    : [validateCreateVariant({
+      color: "Mặc định", colorHex: "#FFFFFF", size: "F",
+      stockQuantity: Number.isInteger(initialStock) && initialStock >= 0 ? initialStock : 0,
+      lowStockThreshold: Number.isInteger(lowStockThreshold) && lowStockThreshold >= 0 ? lowStockThreshold : 5
+    })];
+  const imageColors = validateImageColorLinks(body.imageColors === undefined ? {} : body.imageColors, images, variants.map((variant) => variant.color));
   return {
     sku,
     name,
@@ -634,7 +685,9 @@ export function validateCreateProduct(body: JsonObject = {}) {
     brand: optionalText(body.brand, 100),
     basePrice,
     salePrice,
-    images: validateImageUrls(body.images),
+    images,
+    imageColors,
+    variants,
     styleTags: validateStringArray(body.styleTags, "styleTags", 30, 100),
     colorTone: body.colorTone || null,
     occasions: validateStringArray(body.occasions, "occasions", 20, 100),
@@ -652,6 +705,8 @@ export function validateCreateProduct(body: JsonObject = {}) {
 
 /**
  * Validate an update-product request body.
+ * Omitting imageColors preserves associations; an explicit empty map marks all images common.
+ * The service validates exact variant colors and prunes removed URLs against the stored product.
  */
 export function validateUpdateProduct(body: JsonObject = {}) {
   if (body.name !== undefined && (typeof body.name !== "string" || body.name.trim().length < 2 || body.name.trim().length > 255)) {
@@ -670,6 +725,7 @@ export function validateUpdateProduct(body: JsonObject = {}) {
     basePrice: undefined,
     salePrice: undefined,
     images: body.images !== undefined ? validateImageUrls(body.images) : undefined,
+    imageColors: body.imageColors !== undefined ? validateImageColorMap(body.imageColors) : undefined,
     styleTags: body.styleTags !== undefined ? validateStringArray(body.styleTags, "styleTags", 30, 100) : undefined,
     colorTone: body.colorTone !== undefined ? body.colorTone : undefined,
     occasions: body.occasions !== undefined ? validateStringArray(body.occasions, "occasions", 20, 100) : undefined,
@@ -866,6 +922,9 @@ function validateImageUrls(value: unknown): string[] {
     return [];
   }
   const images = validateStringArray(value, "images", 20, 2048);
+  if (new Set(images).size !== images.length) {
+    throw validationError("images", "Each image URL must be unique; the first image is primary");
+  }
   for (const image of images) {
     if (image.startsWith("/") && !image.startsWith("//")) {
       continue;
@@ -881,6 +940,33 @@ function validateImageUrls(value: unknown): string[] {
     }
   }
   return images;
+}
+
+function requirePrimaryImage(images: string[], status: unknown): void {
+  if (status === "on_sale" && images.length === 0) {
+    throw validationError("images", "An on-sale product requires a primary image at index 0");
+  }
+}
+
+function validateImageColorMap(value: unknown): Record<string, string> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw validationError("imageColors", "imageColors must map image URLs to variant colors");
+  }
+  const entries = Object.entries(value);
+  if (entries.some(([, color]) => typeof color !== "string" || !color.trim())) {
+    throw validationError("imageColors", "Every image color must be a nonempty variant color");
+  }
+  return Object.fromEntries(entries) as Record<string, string>;
+}
+
+function validateImageColorLinks(value: unknown, images: string[], colors: string[]): Record<string, string> {
+  const mapping = validateImageColorMap(value);
+  for (const [url, color] of Object.entries(mapping)) {
+    if (!images.includes(url) || !colors.includes(color)) {
+      throw validationError("imageColors", "Each association must reference a product image and an exact variant color");
+    }
+  }
+  return mapping;
 }
 
 async function syncProductStockStatus(

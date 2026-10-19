@@ -5,7 +5,7 @@ import { AnalyticsModel, type AnalyticsDashboard } from '../../core/analytics-mo
 import { AdminSessionService } from '../../core/admin-session.service';
 import { AdminRefreshService } from '../../core/admin-refresh.service';
 import { adminErrorMessage } from '../../core/admin-http';
-import type { AdminInsightRange, AdminManagementAction, AdminManagementGroup } from '../../core/admin-api.service';
+import type { AdminInsightRange, AdminLowStockRow, AdminManagementAction, AdminManagementGroup } from '../../core/admin-api.service';
 import { AdminIcon } from '../../shared/admin-icon';
 
 const TITLES = ['Hiệu quả bán hàng và doanh thu','Điểm nghẽn đơn hàng và SLA','Sản phẩm bán chạy và than phiền',
@@ -19,6 +19,9 @@ export class AdminDashboardPage {
   private readonly session = inject(AdminSessionService);
   private request = new Subscription();
   private narrativeRequest = new Subscription();
+  private lowStockRequest = new Subscription();
+  /** Variants at or below their own threshold, listed on the operations tab with product name. */
+  readonly lowStockRows = signal<AdminLowStockRow[]>([]);
   private cooldownTimer: number | null = null;
   readonly data = signal<AnalyticsDashboard | null>(null);
   readonly tab = signal<'operations' | 'business'>('operations');
@@ -97,6 +100,7 @@ export class AdminDashboardPage {
   }
   /** Read the selected persisted snapshot, retaining the last good snapshot on failure. */
   reload(): void {
+    this.loadLowStock();
     this.request.unsubscribe(); this.loading.set(true); this.loadError.set(null);
     this.request = this.model.dashboard(this.params()).subscribe({
       next: result => {
@@ -104,6 +108,15 @@ export class AdminDashboardPage {
         this.refreshMessage.set(result.meta.validated ? 'Đã đọc bản dữ liệu đã đối chiếu.' : 'KPI kinh doanh chưa khả dụng; hàng đợi vận hành vẫn đọc trực tiếp.');
       },
       error: (error: unknown) => { this.loading.set(false); this.loadError.set(adminErrorMessage(error,'Không thể đọc báo cáo.')); this.refreshMessage.set('Giữ nguyên bản đã xác minh gần nhất, không báo đồng bộ thành công.'); },
+    });
+  }
+  /** Which products are below their threshold; a failure leaves the KPI count visible and only hides this list. */
+  private loadLowStock(): void {
+    if (!this.canOpenModule('products')) { this.lowStockRows.set([]); return; }
+    this.lowStockRequest.unsubscribe();
+    this.lowStockRequest = this.model.lowStock().subscribe({
+      next: result => this.lowStockRows.set(result.data ?? []),
+      error: () => this.lowStockRows.set([]),
     });
   }
   /** Explicit mutation only; the server independently persists cooldown and checks permission. */

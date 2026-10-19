@@ -12,10 +12,14 @@ import {
   PRODUCT_ADMIN_ROLES,
   PRODUCT_VIEWER_ROLES,
   PRODUCT_STATUSES,
+  PRODUCT_AUDIT_ACTION_TYPES,
   STATUS_TRANSITIONS,
   SKU_PATTERN,
+  SKU_DUPLICATE_MESSAGE,
+  MIN_CHANGE_REASON_LENGTH,
   CSV_MAX_ROWS,
-  CSV_REQUIRED_COLUMNS
+  CSV_REQUIRED_COLUMNS,
+  type ProductAuditActionType
 } from "./product-constants.js";
 import type { ProductRepository } from "./product-repository.js";
 import { invalidateCatalogCache } from "../user/products.js";
@@ -41,12 +45,22 @@ export interface ProductService {
   updateStock(context: AuthContext | undefined, productId: string, body: JsonObject, requestMeta: RequestMeta): Promise<unknown>;
   bulkUpdateStock(context: AuthContext | undefined, productId: string, body: JsonObject, requestMeta: RequestMeta): Promise<unknown>;
   createVariant(context: AuthContext | undefined, productId: string, body: JsonObject, requestMeta: RequestMeta): Promise<unknown>;
-  /** Preview product/variant SKU rows; every duplicate and existing-price change is a blocking row error. */
+  /**
+   * Preview product/variant SKU rows. Duplicate SKUs inside the file and every other row error are blocking;
+   * a price that differs from the stored price is a non-blocking warning (the stored price is kept, never overwritten).
+   */
   parseCsv(context: AuthContext | undefined, csvContent: unknown): Promise<unknown>;
-  /** Revalidate raw CSV and atomically persist all rows; existing prices are never updated. */
+  /** Revalidate raw CSV and atomically persist all rows; existing prices are never updated and skipped prices are reported in `warnings`. */
   commitCsv(context: AuthContext | undefined, csvContent: unknown, requestMeta: RequestMeta): Promise<unknown>;
+  /** Variants at or below their own low-stock threshold, enriched with product name/SKU for the dashboard and catalog filter. */
   lowStock(context: AuthContext | undefined): Promise<unknown>;
+  /**
+   * Server-side filtered product audit log: from/to (YYYY-MM-DD, Asia/Ho_Chi_Minh), product name/SKU, actionType
+   * (CREATE | UPDATE | UPDATE_STATUS | UPDATE_STOCK) and user (name, email or id); legacy `q`, `date`, `action` still work.
+   */
   listAuditLogs(context: AuthContext | undefined, searchParams: URLSearchParams): Promise<unknown>;
+  /** Inline SKU availability check: product and variant SKUs share one case-insensitive namespace. */
+  checkSku(context: AuthContext | undefined, searchParams: URLSearchParams): Promise<unknown>;
   getComboItems(context: AuthContext | undefined, productId: string): Promise<unknown>;
   addComboItem(context: AuthContext | undefined, productId: string, body: JsonObject, requestMeta: RequestMeta): Promise<unknown>;
   updateComboItem(
@@ -113,14 +127,20 @@ export function createProductService({ repository }: { repository: ProductReposi
   return {
     async list(context, searchParams) {
       requireProductViewer(context);
-      return repository.list(parseListFilters(searchParams), context.accessToken);
+      const filters = parseListFilters(searchParams);
+      if (filters.lowStock === true) {
+        const productIds = [...new Set((await listLowStockVariants(repository, context.accessToken)).map((row) => asString(row.product_id)).filter(Boolean))];
+        if (!productIds.length) return { rows: [], count: 0 };
+        filters.productIds = productIds;
+      }
+      return repository.list(filters, context.accessToken);
     },
 
     async get(context, productId) {
       requireProductViewer(context);
       requireUuid(productId, "productId");
       const product = await repository.findById(productId, context.accessToken);
-      if (!product) throw new HttpError(404, "PRODUCT_NOT_FOUND", "Product was not found");
+      if (!product) throw new HttpError(404, "PRODUCT_NOT_FOUND", "Không tìm thấy sản phẩm");
       return product;
     },
 
@@ -148,6 +168,7 @@ export function createProductService({ repository }: { repository: ProductReposi
         }
       }
 
+      await assertSkusAvailable(repository, context, [input.sku, ...input.variants.map((variant) => variant.sku ?? "")]);
       const product = asJsonObject(await repository.createProduct(input, context.accessToken));
       if (typeof repository.findById === "function" && typeof repository.listVariants === "function") {
         await syncProductStockStatus(repository, context, product.product_id as string, "Khởi tạo tồn kho sản phẩm mới", input.ipAddress);
@@ -219,11 +240,14 @@ export function createProductService({ repository }: { repository: ProductReposi
     async changeStatus(context, productId, body, requestMeta) {
       requireUuid(productId, "productId");
       const current = await repository.findById(productId, context?.accessToken ?? null);
-      if (!current) throw new HttpError(404, "PRODUCT_NOT_FOUND", "Product was not found");
+      if (!current) throw new HttpError(404, "PRODUCT_NOT_FOUND", "Không tìm thấy sản phẩm");
       requireProductAdmin(context, current.is_combo === true);
       const input = validateStatusChange(body);
-      if (current.status === input.status || !STATUS_TRANSITIONS[current.status as string]?.includes(input.status)) {
-        throw validationError("status", `Cannot change status from ${current.status} to ${input.status}`);
+      if (current.status === input.status) {
+        throw validationError("status", `Sản phẩm đã ở trạng thái ${statusVi(input.status)}`);
+      }
+      if (!STATUS_TRANSITIONS[current.status as string]?.includes(input.status)) {
+        throw validationError("status", `Không thể chuyển trạng thái từ ${statusVi(asString(current.status))} sang ${statusVi(input.status)}`);
       }
       if (input.status === "on_sale") requirePrimaryImage(validateImageUrls(current.images), input.status);
       input.ipAddress = requestMeta.ipAddress || "0.0.0.0";
@@ -235,7 +259,7 @@ export function createProductService({ repository }: { repository: ProductReposi
     async updateStock(context, productId, body, requestMeta) {
       requireUuid(productId, "productId");
       const current = await repository.findById(productId, context?.accessToken ?? null);
-      if (!current) throw new HttpError(404, "PRODUCT_NOT_FOUND", "Product was not found");
+      if (!current) throw new HttpError(404, "PRODUCT_NOT_FOUND", "Không tìm thấy sản phẩm");
       requireProductAdmin(context, current.is_combo === true);
       requireUuid(body?.variantId, "variantId");
 
@@ -244,11 +268,14 @@ export function createProductService({ repository }: { repository: ProductReposi
       const reason = String(body?.reason || "").trim();
       const ipAddress = requestMeta.ipAddress || "0.0.0.0";
 
-      if (delta === 0 && lowStockThreshold === undefined) {
-        throw validationError("delta", "Either delta must be non-zero or lowStockThreshold must be provided");
+      if (!Number.isInteger(delta)) {
+        throw validationError("delta", "Số lượng điều chỉnh phải là số nguyên");
       }
-      if (reason.length < 10) {
-        throw validationError("reason", "Reason must be at least 10 characters");
+      if (delta === 0 && lowStockThreshold === undefined) {
+        throw validationError("delta", "Số lượng điều chỉnh phải khác 0 hoặc phải nhập ngưỡng cảnh báo mới");
+      }
+      if (reason.length < MIN_CHANGE_REASON_LENGTH) {
+        throw validationError("reason", `Lý do điều chỉnh tồn kho tối thiểu ${MIN_CHANGE_REASON_LENGTH} ký tự`);
       }
 
       let result: unknown = { success: true };
@@ -260,7 +287,7 @@ export function createProductService({ repository }: { repository: ProductReposi
 
       if (lowStockThreshold !== undefined) {
         if (!Number.isInteger(lowStockThreshold) || lowStockThreshold < 0) {
-          throw validationError("lowStockThreshold", "Threshold must be a non-negative integer");
+          throw validationError("lowStockThreshold", "Ngưỡng cảnh báo tồn phải là số nguyên không âm");
         }
         const freshVariant = await selectOne("variant", { variant_id: `eq.${body.variantId}` });
         if (freshVariant) {
@@ -273,22 +300,22 @@ export function createProductService({ repository }: { repository: ProductReposi
       }
 
       await syncProductStockStatus(repository, context, productId, reason, ipAddress);
-      await checkAndAlertLowStock(repository, context, productId, body.variantId as string);
-      return result;
+      const lowStockAlert = await checkAndAlertLowStock(repository, context, productId, body.variantId as string);
+      return { ...asJsonObject(result), lowStockAlert };
     },
 
     async bulkUpdateStock(context, productId, body, requestMeta) {
       requireUuid(productId, "productId");
       const current = await repository.findById(productId, context?.accessToken ?? null);
-      if (!current) throw new HttpError(404, "PRODUCT_NOT_FOUND", "Product was not found");
+      if (!current) throw new HttpError(404, "PRODUCT_NOT_FOUND", "Không tìm thấy sản phẩm");
       requireProductAdmin(context, current.is_combo === true);
 
       if (!body || !Array.isArray(body.updates)) {
-        throw validationError("updates", "updates must be an array");
+        throw validationError("updates", "Danh sách điều chỉnh tồn kho phải là một mảng");
       }
       const reason = String(body.reason || "").trim();
-      if (reason.length < 10) {
-        throw validationError("reason", "Reason must be at least 10 characters");
+      if (reason.length < MIN_CHANGE_REASON_LENGTH) {
+        throw validationError("reason", `Lý do điều chỉnh tồn kho tối thiểu ${MIN_CHANGE_REASON_LENGTH} ký tự`);
       }
 
       const ipAddress = requestMeta.ipAddress || "0.0.0.0";
@@ -301,10 +328,10 @@ export function createProductService({ repository }: { repository: ProductReposi
         const lowStockThreshold = update.lowStockThreshold !== undefined ? Number(update.lowStockThreshold) : undefined;
         
         if (!Number.isInteger(delta)) {
-          throw validationError("delta", "Delta must be an integer");
+          throw validationError("delta", "Số lượng điều chỉnh phải là số nguyên");
         }
         if (lowStockThreshold !== undefined && (!Number.isInteger(lowStockThreshold) || lowStockThreshold < 0)) {
-          throw validationError("lowStockThreshold", "Threshold must be a non-negative integer");
+          throw validationError("lowStockThreshold", "Ngưỡng cảnh báo tồn phải là số nguyên không âm");
         }
 
         // Apply updates
@@ -332,17 +359,19 @@ export function createProductService({ repository }: { repository: ProductReposi
 
       await syncProductStockStatus(repository, context, productId, reason, ipAddress);
 
+      const lowStockAlerts: LowStockAlert[] = [];
       for (const update of updates) {
-        await checkAndAlertLowStock(repository, context, productId, update.variantId as string);
+        const alert = await checkAndAlertLowStock(repository, context, productId, update.variantId as string);
+        if (alert) lowStockAlerts.push(alert);
       }
 
-      return { success: true, results };
+      return { success: true, results, lowStockAlerts };
     },
 
     async createVariant(context, productId, body, requestMeta) {
       requireUuid(productId, "productId");
       const current = await repository.findById(productId, context?.accessToken ?? null);
-      if (!current) throw new HttpError(404, "PRODUCT_NOT_FOUND", "Product was not found");
+      if (!current) throw new HttpError(404, "PRODUCT_NOT_FOUND", "Không tìm thấy sản phẩm");
       requireProductAdmin(context, current.is_combo === true);
       const input = validateCreateVariant(body);
       input.ipAddress = requestMeta.ipAddress || "0.0.0.0";
@@ -355,12 +384,13 @@ export function createProductService({ repository }: { repository: ProductReposi
     async parseCsv(context, csvContent) {
       requireProductAdmin(context);
       const lines = parseCsvLines(csvContent);
-      if (lines.length === 0) throw validationError("csv", "CSV file is empty");
-      if (lines.length - 1 > CSV_MAX_ROWS) throw validationError("csv", `CSV cannot exceed ${CSV_MAX_ROWS} rows`);
+      if (lines.length === 0) throw validationError("csv", "File CSV trống");
+      if (lines.length - 1 > CSV_MAX_ROWS) throw validationError("csv", `File CSV tối đa ${CSV_MAX_ROWS} dòng dữ liệu`);
       const headers = lines[0].map((header) => header.trim().toLowerCase());
       const missing = CSV_REQUIRED_COLUMNS.filter((column) => !headers.includes(column));
-      if (missing.length) throw validationError("csv", `Missing required columns: ${missing.join(", ")}`);
+      if (missing.length) throw validationError("csv", `Thiếu cột bắt buộc: ${missing.join(", ")}`);
       const errors: JsonObject[] = [];
+      const warnings: JsonObject[] = [];
       const rows: JsonObject[] = [];
       const repeatedHeaders = headers.filter((header, index) => headers.indexOf(header) !== index);
       for (const field of new Set(repeatedHeaders)) {
@@ -379,7 +409,10 @@ export function createProductService({ repository }: { repository: ProductReposi
         const reject = (field: string, message: string) => { errors.push({ row: rowNum, field, message }); };
         const sku = row.sku.toUpperCase();
         const parentSku = (row.product_sku || "").toUpperCase();
-        if ((skuRows.get(sku)?.length || 0) > 1) reject("sku", "SKU bị lặp trong file (không phân biệt hoa/thường và khoảng trắng)");
+        if ((skuRows.get(sku)?.length || 0) > 1) {
+          const others = (skuRows.get(sku) || []).filter((other) => other !== rowNum);
+          reject("sku", `SKU ${sku} bị lặp trong file (cùng dòng ${others.join(", ")}); mỗi SKU chỉ được xuất hiện một lần, không phân biệt hoa/thường và khoảng trắng`);
+        }
         if (lines[index].length !== headers.length) reject("csv", "Số ô không khớp số cột CSV");
         if (!SKU_PATTERN.test(sku)) reject("sku", "SKU không đúng dạng VL-AO001");
         if (parentSku && !SKU_PATTERN.test(parentSku)) reject("product_sku", "SKU sản phẩm cha không hợp lệ");
@@ -406,9 +439,21 @@ export function createProductService({ repository }: { repository: ProductReposi
         if (parentSku && (!product || String(product.sku).trim().toUpperCase() !== parentSku)) {
           reject("product_sku", "Không tìm thấy sản phẩm cha hoặc SKU đã thuộc sản phẩm khác");
         }
+        // CSV never changes an existing product's price: a differing value is skipped with a warning and the stored price is kept.
+        const skippedPrices: string[] = [];
         if (product) {
-          if (Number.isFinite(basePrice) && basePrice !== Number(product.base_price)) reject("base_price", "CSV không được đổi giá hiện có; sử dụng quy trình quản lý giá");
-          if (salePrice !== null && Number.isFinite(salePrice) && salePrice !== Number(product.sale_price)) reject("sale_price", "CSV không được đổi giá hiện có; sử dụng quy trình quản lý giá");
+          const storedBase = Number(product.base_price);
+          const storedSale = Number(product.sale_price);
+          if (Number.isFinite(basePrice) && basePrice !== storedBase) {
+            skippedPrices.push("base_price");
+            warnings.push({ row: rowNum, field: "base_price", severity: "warning", csv_value: basePrice, current_value: storedBase,
+              message: `Giá gốc trong CSV (${formatVnd(basePrice)}) khác giá hiện tại (${formatVnd(storedBase)}); CSV không đổi giá nên giữ nguyên ${formatVnd(storedBase)}` });
+          }
+          if (salePrice !== null && Number.isFinite(salePrice) && salePrice !== storedSale) {
+            skippedPrices.push("sale_price");
+            warnings.push({ row: rowNum, field: "sale_price", severity: "warning", csv_value: salePrice, current_value: storedSale,
+              message: `Giá bán trong CSV (${formatVnd(salePrice)}) khác giá hiện tại (${formatVnd(storedSale)}); CSV không đổi giá nên giữ nguyên ${formatVnd(storedSale)}` });
+          }
         } else if (row.status && !["on_sale", "hidden"].includes(row.status)) {
           reject("status", "Sản phẩm mới chỉ được Đang bán hoặc Tạm ẩn");
         }
@@ -435,7 +480,9 @@ export function createProductService({ repository }: { repository: ProductReposi
         if (errors.length !== startErrors || repeatedHeaders.length) continue;
         rows.push({
           row: rowNum, sku, product_sku: parentSku || null, name: row.name,
-          base_price: basePrice, sale_price: salePrice,
+          base_price: product ? Number(product.base_price) : basePrice,
+          sale_price: product && skippedPrices.includes("sale_price") ? Number(product.sale_price) : salePrice,
+          csv_base_price: basePrice, csv_sale_price: salePrice, skipped_prices: skippedPrices,
           category_id: row.category_id, description: row.description || null,
           status: row.status || null, image_url: row.image_url || null,
           is_featured: row.is_featured ? row.is_featured === "true" : null,
@@ -448,7 +495,7 @@ export function createProductService({ repository }: { repository: ProductReposi
           operation: variant || (product && !newVariant) ? "updated" : "created"
         });
       }
-      return { rows, errors, totalRows: lines.length - 1, validRows: rows.length };
+      return { rows, errors, warnings, totalRows: lines.length - 1, validRows: rows.length };
     },
 
     async commitCsv(context, csvContent, requestMeta) {
@@ -458,99 +505,42 @@ export function createProductService({ repository }: { repository: ProductReposi
       if (errors.length) throw new HttpError(422, "CSV_VALIDATION_FAILED", "CSV còn dòng lỗi, chưa ghi vào catalog", { errors });
       const rows = Array.isArray(parsed.rows) ? parsed.rows as JsonObject[] : [];
       if (!rows.length) throw validationError("csv", "Không có dòng hợp lệ để nhập");
-      const result = await repository.importCsv(rows, requestMeta.ipAddress || "0.0.0.0", context.accessToken);
+      const warnings = Array.isArray(parsed.warnings) ? parsed.warnings : [];
+      const result = asJsonObject(await repository.importCsv(rows, requestMeta.ipAddress || "0.0.0.0", context.accessToken));
       invalidateCatalogCache();
-      return result;
+      return { ...result, warnings, skippedPrices: warnings.length };
     },
 
     async lowStock(context) {
       requireProductViewer(context);
-      const items = await repository.lowStockCount(context.accessToken);
-      return items;
+      await retryDueLowStockAlerts(repository);
+      return listLowStockVariants(repository, context.accessToken);
     },
 
     async listAuditLogs(context, searchParams) {
       requireProductViewer(context);
-      const targetId = searchParams.get("targetId") || "";
-      if (targetId) requireUuid(targetId, "targetId");
-      const date = String(searchParams.get("date") || "").trim();
-      const q = String(searchParams.get("q") || "").trim();
-      const action = String(searchParams.get("action") || "").trim();
-
-      let fromDate: string | undefined;
-      let toDate: string | undefined;
-      if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
-        fromDate = `${date}T00:00:00.000Z`;
-        toDate = `${date}T23:59:59.999Z`;
-      }
-
-      let matchedTargetIds: string[] | undefined;
-      if (q && !targetId) {
-        try {
-          const productHits = await selectRows("product", {
-            select: "product_id",
-            or: `(name.ilike.*${q}*,sku.ilike.*${q}*)`,
-            limit: 50
-          }, { useAnonKey: false, silentError: true });
-          if (productHits.rows?.length) {
-            matchedTargetIds = productHits.rows.map((p) => asString(p.product_id)).filter(Boolean);
-          }
-        } catch {
-          // ignore search error
-        }
-      }
-
+      const filters = parseAuditFilters(searchParams);
       const payload = await repository.listAuditLogs({
-        targetId: targetId || undefined,
-        targetIds: matchedTargetIds,
-        fromDate,
-        toDate,
-        action: action || undefined,
+        ...filters,
         limit: clampInteger(searchParams.get("limit"), 50, 1, 100),
         offset: clampInteger(searchParams.get("offset"), 0, 0, 1000000)
       }, context.accessToken);
-      const enriched = await enrichProductAuditLogs(payload);
+      return enrichProductAuditLogs(payload);
+    },
 
-      if (q || date || action) {
-        const lowerQ = q.toLowerCase();
-        const filtered = enriched.rows.filter((row) => {
-          if (date && typeof row.timestamp === "string") {
-            if (row.timestamp.slice(0, 10) !== date) return false;
-          }
-          if (action) {
-            const rowAction = asString(row.action).toLowerCase();
-            const rowActionLabel = asString(row.action_label).toLowerCase();
-            const filterAction = action.toLowerCase();
-            if (
-              rowAction !== filterAction &&
-              !rowAction.includes(filterAction) &&
-              !rowActionLabel.includes(filterAction)
-            ) {
-              return false;
-            }
-          }
-          if (q) {
-            const targetLabel = asString(row.target_label).toLowerCase();
-            const actorLabel = asString(row.actor_label).toLowerCase();
-            const actorEmail = asString(row.actor_email).toLowerCase();
-            const actionLabel = asString(row.action_label).toLowerCase();
-            const changeSummary = asString(row.change_summary).toLowerCase();
-            const rawData = (JSON.stringify(row.old_value) + JSON.stringify(row.new_value)).toLowerCase();
-            const matches =
-              targetLabel.includes(lowerQ) ||
-              actorLabel.includes(lowerQ) ||
-              actorEmail.includes(lowerQ) ||
-              actionLabel.includes(lowerQ) ||
-              changeSummary.includes(lowerQ) ||
-              rawData.includes(lowerQ);
-            if (!matches) return false;
-          }
-          return true;
-        });
-        return { rows: filtered, count: filtered.length };
+    async checkSku(context, searchParams) {
+      requireProductViewer(context);
+      const sku = String(searchParams.get("sku") || "").trim().toUpperCase();
+      const excludeProductId = String(searchParams.get("excludeProductId") || "").trim();
+      if (excludeProductId) requireUuid(excludeProductId, "excludeProductId");
+      if (!SKU_PATTERN.test(sku)) {
+        return { sku, available: false, code: "SKU_INVALID", message: SKU_FORMAT_MESSAGE };
       }
-
-      return enriched;
+      const owner = await repository.findSkuOwner(sku, context.accessToken);
+      if (owner && owner.productId !== excludeProductId) {
+        return { sku, available: false, code: "SKU_DUPLICATE", message: SKU_DUPLICATE_MESSAGE };
+      }
+      return { sku, available: true, code: null, message: null };
     },
 
     async getComboItems(context, productId) {
@@ -613,11 +603,11 @@ export function validateCreateVariant(body: JsonObject = {}) {
   const size = String(body.size || "").trim().toUpperCase();
   const stockQuantity = Number(body.stockQuantity);
   const lowStockThreshold = Number(body.lowStockThreshold ?? 5);
-  if (color.length < 1 || color.length > 80) throw validationError("color", "color is required");
-  if (size.length < 1 || size.length > 30) throw validationError("size", "size is required");
-  if (!Number.isInteger(stockQuantity) || stockQuantity < 0) throw validationError("stockQuantity", "stockQuantity must be a non-negative integer");
-  if (!Number.isInteger(lowStockThreshold) || lowStockThreshold < 0) throw validationError("lowStockThreshold", "lowStockThreshold must be a non-negative integer");
-  if (body.colorHex && !/^#[0-9a-f]{6}$/i.test(String(body.colorHex))) throw validationError("colorHex", "colorHex must be #RRGGBB");
+  if (color.length < 1 || color.length > 80) throw validationError("color", "Màu biến thể bắt buộc, tối đa 80 ký tự");
+  if (size.length < 1 || size.length > 30) throw validationError("size", "Size biến thể bắt buộc, tối đa 30 ký tự");
+  if (!Number.isInteger(stockQuantity) || stockQuantity < 0) throw validationError("stockQuantity", "Tồn kho phải là số nguyên không âm");
+  if (!Number.isInteger(lowStockThreshold) || lowStockThreshold < 0) throw validationError("lowStockThreshold", "Ngưỡng cảnh báo tồn phải là số nguyên không âm");
+  if (body.colorHex && !/^#[0-9a-f]{6}$/i.test(String(body.colorHex))) throw validationError("colorHex", "Mã màu phải có dạng #RRGGBB");
   return {
     ...(sku ? { sku } : {}),
     color,
@@ -675,6 +665,10 @@ export function validateCreateProduct(body: JsonObject = {}) {
       stockQuantity: Number.isInteger(initialStock) && initialStock >= 0 ? initialStock : 0,
       lowStockThreshold: Number.isInteger(lowStockThreshold) && lowStockThreshold >= 0 ? lowStockThreshold : 5
     })];
+  const variantSkus = variants.map((variant) => variant.sku).filter((value): value is string => Boolean(value));
+  if (new Set(variantSkus).size !== variantSkus.length) throw validationError("sku", SKU_DUPLICATE_MESSAGE);
+  const variantKeys = variants.map((variant) => `${variant.color.toLowerCase()}|${variant.size}`);
+  if (new Set(variantKeys).size !== variantKeys.length) throw validationError("variants", "Mỗi tổ hợp màu và size chỉ được khai báo một lần");
   const imageColors = validateImageColorLinks(body.imageColors === undefined ? {} : body.imageColors, images, variants.map((variant) => variant.color));
   return {
     sku,
@@ -710,12 +704,12 @@ export function validateCreateProduct(body: JsonObject = {}) {
  */
 export function validateUpdateProduct(body: JsonObject = {}) {
   if (body.name !== undefined && (typeof body.name !== "string" || body.name.trim().length < 2 || body.name.trim().length > 255)) {
-    throw validationError("name", "Name must contain 2 to 255 characters");
+    throw validationError("name", "Tên sản phẩm bắt buộc, từ 2 đến 255 ký tự");
   }
   if (body.categoryId !== undefined) requireUuid(body.categoryId, "categoryId");
-  if (body.status !== undefined) throw validationError("status", "Use the change-status endpoint");
+  if (body.status !== undefined) throw validationError("status", "Hãy dùng chức năng đổi trạng thái để thay đổi trạng thái sản phẩm");
   if (body.basePrice !== undefined || body.salePrice !== undefined) {
-    throw validationError("price", "Use the pricing endpoint to change product prices");
+    throw validationError("price", "Hãy dùng chức năng điều chỉnh giá để thay đổi giá sản phẩm");
   }
   const input = {
     name: body.name !== undefined ? (body.name as string).trim() : undefined,
@@ -739,7 +733,7 @@ export function validateUpdateProduct(body: JsonObject = {}) {
     ipAddress: "0.0.0.0"
   };
   const changedFields = Object.entries(input).filter(([key, value]) => !["expectedVersion", "ipAddress"].includes(key) && value !== undefined);
-  if (!changedFields.length) throw validationError("body", "At least one product field must be provided");
+  if (!changedFields.length) throw validationError("body", "Cần ít nhất một thông tin sản phẩm để cập nhật");
   return input;
 }
 
@@ -748,7 +742,7 @@ export function validateUpdateProduct(body: JsonObject = {}) {
  */
 export function validateStatusChange(body: JsonObject = {}) {
   if (!PRODUCT_STATUSES.includes(body.status as string)) {
-    throw validationError("status", `Invalid status. Must be one of: ${PRODUCT_STATUSES.join(", ")}`);
+    throw validationError("status", "Trạng thái không hợp lệ; chọn Đang bán, Tạm ẩn, Hết hàng hoặc Ngừng kinh doanh");
   }
   return {
     status: body.status as string,
@@ -764,7 +758,7 @@ export function validateStatusChange(body: JsonObject = {}) {
 export function validateStockUpdate(body: JsonObject = {}) {
   const delta = Number(body.delta);
   if (!Number.isInteger(delta) || delta === 0) {
-    throw validationError("delta", "delta must be a non-zero integer");
+    throw validationError("delta", "Số lượng điều chỉnh phải là số nguyên khác 0");
   }
   return {
     delta,
@@ -775,12 +769,12 @@ export function validateStockUpdate(body: JsonObject = {}) {
 }
 
 function requireProductViewer(context: AuthContext | undefined): asserts context is AuthContext {
-  if (!context?.authUser?.id) throw new HttpError(401, "AUTH_REQUIRED", "Authentication is required");
+  if (!context?.authUser?.id) throw new HttpError(401, "AUTH_REQUIRED", "Cần đăng nhập để tiếp tục");
   if (!context.isAdmin || !context.profile?.is_active) {
-    throw new HttpError(403, "ADMIN_REQUIRED", "Admin access is required");
+    throw new HttpError(403, "ADMIN_REQUIRED", "Cần tài khoản quản trị đang hoạt động");
   }
   if (!PRODUCT_VIEWER_ROLES.includes(context.roleCode)) {
-    throw new HttpError(403, "RBAC_DENIED", "This admin role cannot access products");
+    throw new HttpError(403, "RBAC_DENIED", "Vai trò quản trị này không được xem sản phẩm");
   }
 }
 
@@ -788,14 +782,14 @@ function requireProductAdmin(context: AuthContext | undefined, isComboOperation 
   requireProductViewer(context);
   const allowedRoles = isComboOperation ? [...PRODUCT_ADMIN_ROLES, "admin_operator_gia_km"] : PRODUCT_ADMIN_ROLES;
   if (!allowedRoles.includes(context.roleCode)) {
-    throw new HttpError(403, "RBAC_DENIED", "This admin role cannot modify products");
+    throw new HttpError(403, "RBAC_DENIED", "Vai trò quản trị này không được chỉnh sửa sản phẩm");
   }
 }
 
 function parseListFilters(searchParams: URLSearchParams): JsonObject {
   const status = searchParams.get("status") || "";
   if (status && !PRODUCT_STATUSES.includes(status)) {
-    throw validationError("status", "Invalid status filter");
+    throw validationError("status", "Bộ lọc trạng thái không hợp lệ");
   }
   const orderInput = searchParams.get("order") || "updated_at.desc";
   const allowedOrders = [
@@ -807,7 +801,7 @@ function parseListFilters(searchParams: URLSearchParams): JsonObject {
   const minPrice = parseOptionalPrice(searchParams.get("minPrice"), "minPrice");
   const maxPrice = parseOptionalPrice(searchParams.get("maxPrice"), "maxPrice");
   if (minPrice !== undefined && maxPrice !== undefined && minPrice > maxPrice) {
-    throw validationError("price", "minPrice cannot exceed maxPrice");
+    throw validationError("price", "Giá tối thiểu không được lớn hơn giá tối đa");
   }
   return {
     q: String(searchParams.get("q") || "").trim().slice(0, 100),
@@ -815,11 +809,87 @@ function parseListFilters(searchParams: URLSearchParams): JsonObject {
     categoryId: categoryId || undefined,
     isCombo: searchParams.get("isCombo") === "true" ? true : searchParams.get("isCombo") === "false" ? false : undefined,
     isFeatured: searchParams.get("isFeatured") === "true" ? true : searchParams.get("isFeatured") === "false" ? false : undefined,
+    lowStock: searchParams.get("lowStock") === "true" || searchParams.get("lowStock") === "1" ? true : undefined,
     minPrice,
     maxPrice,
     limit: clampInteger(searchParams.get("limit"), 20, 1, 1000),
     offset: clampInteger(searchParams.get("offset"), 0, 0, 1000000),
     order: allowedOrders.includes(orderInput) ? orderInput : "updated_at.desc"
+  };
+}
+
+/** SKU pattern hint shown when the typed SKU is malformed. */
+const SKU_FORMAT_MESSAGE = "SKU phải dạng VL-AO001 hoặc VLR-DV006 (chữ in hoa, có gạch ngang)";
+
+/** Format an amount as Vietnamese dong for CSV warnings, e.g. `250.000đ`. */
+function formatVnd(value: number): string {
+  return `${Math.round(value).toLocaleString("vi-VN")}đ`;
+}
+
+/**
+ * Reject a new product when any of its product/variant SKUs already exists anywhere in the catalog.
+ * Throws HTTP 409 SKU_DUPLICATE with the Vietnamese uniqueness message; the database constraint remains the last guard.
+ */
+async function assertSkusAvailable(
+  repository: ProductRepository,
+  context: AuthContext,
+  skus: string[]
+): Promise<void> {
+  if (typeof repository.findSkuOwner !== "function") return;
+  for (const sku of new Set(skus.map((value) => value.trim().toUpperCase()).filter(Boolean))) {
+    if (await repository.findSkuOwner(sku, context.accessToken)) {
+      throw new HttpError(409, "SKU_DUPLICATE", SKU_DUPLICATE_MESSAGE);
+    }
+  }
+}
+
+interface AuditFilters {
+  targetId?: string;
+  fromDate?: string;
+  toDate?: string;
+  product?: string;
+  actionType?: ProductAuditActionType;
+  user?: string;
+}
+
+const AUDIT_ACTION_ALIASES: Record<string, ProductAuditActionType> = {
+  CHANGE_STATUS: "UPDATE_STATUS",
+  UPDATE_STATUS: "UPDATE_STATUS",
+  STATUS: "UPDATE_STATUS",
+  UPDATE_STOCK: "UPDATE_STOCK",
+  STOCK: "UPDATE_STOCK",
+  CREATE: "CREATE",
+  UPDATE: "UPDATE"
+};
+
+/**
+ * Parse product audit-log filters. `from`/`to` are inclusive calendar days in Asia/Ho_Chi_Minh;
+ * legacy `date` (single day), `q` (product) and `action` are mapped onto the same filters.
+ */
+function parseAuditFilters(searchParams: URLSearchParams): AuditFilters {
+  const targetId = String(searchParams.get("targetId") || "").trim();
+  if (targetId) requireUuid(targetId, "targetId");
+  const legacyDate = String(searchParams.get("date") || "").trim();
+  const from = String(searchParams.get("from") || legacyDate).trim();
+  const to = String(searchParams.get("to") || legacyDate).trim();
+  for (const [field, value] of [["from", from], ["to", to]] as const) {
+    if (value && (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(`${value}T00:00:00+07:00`)))) {
+      throw validationError(field, "Ngày không hợp lệ, dùng định dạng YYYY-MM-DD");
+    }
+  }
+  if (from && to && from > to) throw validationError("to", "Ngày kết thúc phải sau hoặc bằng ngày bắt đầu");
+  const rawAction = String(searchParams.get("actionType") || searchParams.get("action") || "").trim();
+  const actionType = rawAction ? AUDIT_ACTION_ALIASES[rawAction.toUpperCase().replace(/[\s-]+/g, "_")] : undefined;
+  if (rawAction && !actionType) {
+    throw validationError("actionType", `Loại hành động không hợp lệ; chọn ${PRODUCT_AUDIT_ACTION_TYPES.join(", ")}`);
+  }
+  return {
+    targetId: targetId || undefined,
+    fromDate: from ? `${from}T00:00:00+07:00` : undefined,
+    toDate: to ? `${to}T23:59:59.999+07:00` : undefined,
+    product: String(searchParams.get("product") || searchParams.get("q") || "").trim().slice(0, 100) || undefined,
+    actionType,
+    user: String(searchParams.get("user") || "").trim().slice(0, 100) || undefined
   };
 }
 
@@ -865,14 +935,14 @@ function parseCsvRow(headers: string[], values: string[]): Record<string, string
 
 function requireUuid(value: unknown, field: string): void {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ""))) {
-    throw validationError(field, field === "categoryId" ? "Chọn danh mục hợp lệ" : `${field} phải là UUID`);
+    throw validationError(field, field === "categoryId" ? "Chọn danh mục hợp lệ" : field === "variantId" ? "Chọn biến thể hợp lệ" : `${field} phải là UUID`);
   }
 }
 
 function requireVersion(value: unknown): number {
   const version = Number(value);
   if (!Number.isInteger(version) || version < 0) {
-    throw validationError("expectedVersion", "expectedVersion must be a non-negative integer");
+    throw validationError("expectedVersion", "Phiên bản dữ liệu không hợp lệ; tải lại trang rồi thử lại");
   }
   return version;
 }
@@ -880,14 +950,14 @@ function requireVersion(value: unknown): number {
 function optionalText(value: unknown, maxLength: number): string | null | undefined {
   if (value === undefined || value === null) return undefined;
   const text = String(value).trim();
-  if (text.length > maxLength) throw validationError("field", `Text must be at most ${maxLength} characters`);
+  if (text.length > maxLength) throw validationError("field", `Nội dung tối đa ${maxLength} ký tự`);
   return text || null;
 }
 
 function requireReason(value: unknown, field: string): string {
   const text = String(value || "").trim().replace(/\s+/g, " ");
   if (text.length < 10 || text.length > 500) {
-    throw validationError(field, `${field} must contain 10 to 500 characters`);
+    throw validationError(field, "Lý do phải từ 10 đến 500 ký tự");
   }
   return text;
 }
@@ -895,12 +965,12 @@ function requireReason(value: unknown, field: string): string {
 function validateStringArray(value: unknown, field: string, maxItems: number, maxItemLength: number): string[] {
   if (value === undefined || value === null) return [];
   if (!Array.isArray(value) || value.length > maxItems) {
-    throw validationError(field, `${field} must be an array with at most ${maxItems} items`);
+    throw validationError(field, field === "images" ? `Sản phẩm chỉ được có tối đa ${maxItems} ảnh` : `${field} chỉ được tối đa ${maxItems} mục`);
   }
   return value.map((item) => {
     const text = String(item || "").trim();
     if (!text || text.length > maxItemLength) {
-      throw validationError(field, `${field} contains an invalid item`);
+      throw validationError(field, `${field} có mục không hợp lệ`);
     }
     return text;
   });
@@ -923,7 +993,7 @@ function validateImageUrls(value: unknown): string[] {
   }
   const images = validateStringArray(value, "images", 20, 2048);
   if (new Set(images).size !== images.length) {
-    throw validationError("images", "Each image URL must be unique; the first image is primary");
+    throw validationError("images", "Mỗi ảnh chỉ được dùng một lần; ảnh đầu tiên là ảnh chính");
   }
   for (const image of images) {
     if (image.startsWith("/") && !image.startsWith("//")) {
@@ -944,17 +1014,17 @@ function validateImageUrls(value: unknown): string[] {
 
 function requirePrimaryImage(images: string[], status: unknown): void {
   if (status === "on_sale" && images.length === 0) {
-    throw validationError("images", "An on-sale product requires a primary image at index 0");
+    throw validationError("images", "Sản phẩm đang bán cần ít nhất một ảnh chính (ảnh đầu tiên); hãy thêm ảnh trước khi chuyển sang Đang bán");
   }
 }
 
 function validateImageColorMap(value: unknown): Record<string, string> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw validationError("imageColors", "imageColors must map image URLs to variant colors");
+    throw validationError("imageColors", "Liên kết ảnh và màu phải là bản đồ từ URL ảnh sang màu biến thể");
   }
   const entries = Object.entries(value);
   if (entries.some(([, color]) => typeof color !== "string" || !color.trim())) {
-    throw validationError("imageColors", "Every image color must be a nonempty variant color");
+    throw validationError("imageColors", "Mỗi ảnh liên kết phải gắn với một màu biến thể không trống");
   }
   return Object.fromEntries(entries) as Record<string, string>;
 }
@@ -963,7 +1033,7 @@ function validateImageColorLinks(value: unknown, images: string[], colors: strin
   const mapping = validateImageColorMap(value);
   for (const [url, color] of Object.entries(mapping)) {
     if (!images.includes(url) || !colors.includes(color)) {
-      throw validationError("imageColors", "Each association must reference a product image and an exact variant color");
+      throw validationError("imageColors", "Mỗi liên kết phải trỏ tới một ảnh của sản phẩm và đúng tên màu của một biến thể");
     }
   }
   return mapping;
@@ -990,70 +1060,172 @@ async function syncProductStockStatus(
   }
 }
 
+/** Outcome of the low-stock check after a stock write; surfaced on screen regardless of email delivery. */
+export interface LowStockAlert {
+  productId: string;
+  variantId: string;
+  productName: string;
+  sku: string;
+  color: string;
+  size: string;
+  stock: number;
+  threshold: number;
+  /** True when the alert email reached the outbox for every admin recipient. */
+  emailQueued: boolean;
+  /** True when a failed email was persisted in `low_stock_alert_retry` for a later retry. */
+  retryRecorded: boolean;
+  message: string;
+}
+
+interface LowStockTarget {
+  productId: string;
+  variantId: string;
+  productName: string;
+  sku: string;
+  color: string;
+  size: string;
+  stock: number;
+  threshold: number;
+}
+
+/** Queue one low-stock email per active admin; throws on the first outbox failure so the caller can record a retry. */
+async function queueLowStockEmails(target: LowStockTarget): Promise<void> {
+  const adminUsers = await selectRows("users", { select: "user_id,email", role: "eq.admin", is_active: "eq.true" }, { useAnonKey: false });
+  for (const admin of adminUsers.rows || []) {
+    if (!admin.email) continue;
+    await insertRow("email_outbox", {
+      recipient: admin.email,
+      template_code: "low_stock_alert",
+      subject: `[Velura Alert] Sản phẩm ${target.productName} sắp hết hàng!`,
+      body: `Cảnh báo: Sản phẩm "${target.productName}" (SKU: ${target.sku}), biến thể "${target.color} / ${target.size}" hiện chỉ còn ${target.stock} sản phẩm trong kho (dưới ngưỡng tối thiểu là ${target.threshold}).\nVui lòng bổ sung tồn kho kịp thời.`,
+      related_user_id: admin.user_id,
+      metadata: { productId: target.productId, variantId: target.variantId, stock: target.stock, threshold: target.threshold }
+    });
+  }
+}
+
+/**
+ * After a stock write: when a variant is at or below its own threshold, return the on-screen alert and queue the
+ * admin email. A failed email never hides the alert: it is persisted as a retry record and `emailQueued` is false.
+ * Dropping below the threshold is a normal adjustment and is never rejected.
+ */
 async function checkAndAlertLowStock(
   repository: ProductRepository,
   context: AuthContext,
   productId: string,
   variantId: string
-): Promise<void> {
+): Promise<LowStockAlert | null> {
+  let target: LowStockTarget;
   try {
     const [product, variants] = await Promise.all([
       repository.findById(productId, context.accessToken),
       repository.listVariants(productId, context.accessToken)
     ]);
-    if (!product) return;
-    const targetVariant = (variants.rows || variants || []).find((v: JsonObject) => v.variant_id === variantId);
-    if (!targetVariant) return;
+    if (!product) return null;
+    const variant = (variants.rows || variants || []).find((v: JsonObject) => v.variant_id === variantId);
+    if (!variant) return null;
+    target = {
+      productId, variantId,
+      productName: asString(product.name), sku: asString(product.sku),
+      color: asString(variant.color), size: asString(variant.size),
+      stock: Number(variant.stock_quantity || 0), threshold: Number(variant.low_stock_threshold ?? 5)
+    };
+  } catch (err: unknown) {
+    console.error("[Low Stock Alert] Could not read stock for the alert:", errorMessage(err) || err);
+    return null;
+  }
+  if (target.stock > target.threshold) return null;
 
-    const stock = Number(targetVariant.stock_quantity || 0);
-    const threshold = Number(targetVariant.low_stock_threshold ?? 5);
+  console.log(`[Low Stock Alert] Product "${target.productName}" (${target.sku}), variant "${target.color}/${target.size}" is below threshold. Stock: ${target.stock}, Threshold: ${target.threshold}`);
+  const label = `${target.productName} (${target.color} / ${target.size})`;
+  try {
+    await queueLowStockEmails(target);
+    return { ...target, emailQueued: true, retryRecorded: false,
+      message: `Cảnh báo tồn kho thấp: ${label} còn ${target.stock}, ngưỡng tối thiểu ${target.threshold}.` };
+  } catch (err: unknown) {
+    const reason = errorMessage(err) || "Không gửi được email cảnh báo";
+    console.error("[Low Stock Alert] Failed to queue warning emails:", reason);
+    const retryRecorded = typeof repository.recordLowStockAlertFailure === "function"
+      && await repository.recordLowStockAlertFailure({ productId, variantId, stock: target.stock, threshold: target.threshold, error: reason });
+    return { ...target, emailQueued: false, retryRecorded,
+      message: `Cảnh báo tồn kho thấp: ${label} còn ${target.stock}, ngưỡng tối thiểu ${target.threshold}. Email cảnh báo chưa gửi được${retryRecorded ? " và đã lưu để thử lại" : ""}.` };
+  }
+}
 
-    if (stock <= threshold) {
-      console.log(`[Low Stock Alert] Product "${product.name}" (${product.sku}), variant "${targetVariant.color}/${targetVariant.size}" is below threshold. Stock: ${stock}, Threshold: ${threshold}`);
-
-      const adminUsers = await selectRows("users", {
-        role: "eq.admin",
-        is_active: "eq.true"
-      }, { accessToken: context.accessToken });
-
-      for (const admin of adminUsers.rows || []) {
-        if (admin.email) {
-          await insertRow("email_outbox", {
-            recipient: admin.email,
-            template_code: "low_stock_alert",
-            subject: `[Velura Alert] Sản phẩm ${product.name} sắp hết hàng!`,
-            body: `Cảnh báo: Sản phẩm "${product.name}" (SKU: ${product.sku}), biến thể "${targetVariant.color} / ${targetVariant.size}" hiện chỉ còn ${stock} sản phẩm trong kho (dưới ngưỡng tối thiểu là ${threshold}).\nVui lòng bổ sung tồn kho kịp thời.`,
-            related_user_id: admin.user_id,
-            metadata: {
-              productId,
-              variantId,
-              stock,
-              threshold
-            }
-          });
-        }
+/** Re-queue due low-stock alert retries; failures stay recorded with their error and attempt count. */
+async function retryDueLowStockAlerts(repository: ProductRepository): Promise<void> {
+  if (typeof repository.listDueLowStockAlertRetries !== "function") return;
+  try {
+    for (const retry of await repository.listDueLowStockAlertRetries(5)) {
+      const productId = asString(retry.product_id);
+      const variantId = asString(retry.variant_id);
+      const stock = Number(retry.stock_quantity);
+      const threshold = Number(retry.low_stock_threshold);
+      try {
+        const [product, variant] = await Promise.all([
+          selectOne("product", { select: "name,sku", product_id: `eq.${productId}` }, { useAnonKey: false }),
+          selectOne("variant", { select: "color,size", variant_id: `eq.${variantId}` }, { useAnonKey: false })
+        ]);
+        await queueLowStockEmails({
+          productId, variantId, stock, threshold,
+          productName: asString(product?.name), sku: asString(product?.sku),
+          color: asString(variant?.color), size: asString(variant?.size)
+        });
+        await repository.completeLowStockAlertRetry(asString(retry.retry_id));
+      } catch (err: unknown) {
+        await repository.recordLowStockAlertFailure({ productId, variantId, stock, threshold, error: errorMessage(err) || "Không gửi được email cảnh báo" });
       }
     }
   } catch (err: unknown) {
-    console.error("[Low Stock Alert] Failed to queue warning emails:", errorMessage(err) || err);
+    console.error("[Low Stock Alert] Retry pass failed:", errorMessage(err) || err);
   }
+}
+
+/** Variants at/below threshold joined with product name/SKU/status, lowest stock first. */
+async function listLowStockVariants(repository: ProductRepository, accessToken: string | null): Promise<JsonObject[]> {
+  const payload = await repository.lowStockCount(accessToken);
+  const variants = (Array.isArray(payload) ? payload : asRows(payload)).map((row) => asJsonObject(row));
+  const productIds = uniqueIds(variants.map((row) => asString(row.product_id)));
+  const products = typeof repository.findProductsByIds === "function" && productIds.length
+    ? await repository.findProductsByIds(productIds, accessToken)
+    : { rows: [] as JsonObject[] };
+  const byId = new Map(products.rows.map((product) => [asString(product.product_id), product] as const));
+  return variants.map((row) => {
+    const product = byId.get(asString(row.product_id));
+    const stock = Number(row.stock_quantity || 0);
+    const threshold = Number(row.low_stock_threshold || 0);
+    return {
+      ...row,
+      product_name: asString(product?.name) || null,
+      product_sku: asString(product?.sku) || null,
+      product_status: asString(product?.status) || null,
+      shortage: Math.max(0, threshold - stock),
+      out_of_stock: stock <= 0
+    };
+  });
+}
+
+function asRows(payload: unknown): unknown[] {
+  const rows = (payload as { rows?: unknown } | null)?.rows;
+  return Array.isArray(rows) ? rows : [];
 }
 
 function parseOptionalPrice(value: string | null, field: string): number | undefined {
   if (value === null || value === "") return undefined;
   const number = Number(value);
   if (!Number.isFinite(number) || number < 0) {
-    throw validationError(field, `${field} must be a non-negative number`);
+    throw validationError(field, `${field} phải là số không âm`);
   }
   return number;
 }
 
 /**
- * Resolves actor/product UUIDs into readable labels for the catalog audit table.
+ * Adds display labels to RPC audit rows: actor (name + email), product, Vietnamese action type, before/after summary
+ * and the operator reason stored with status/stock changes. Filtering already happened in SQL.
  */
-async function enrichProductAuditLogs(
+function enrichProductAuditLogs(
   payload: { rows: JsonObject[]; count: number | undefined } | JsonObject[] | unknown
-): Promise<{ rows: JsonObject[]; count: number | undefined }> {
+): { rows: JsonObject[]; count: number | undefined } {
   const rows = Array.isArray(payload)
     ? payload
     : Array.isArray((payload as { rows?: JsonObject[] })?.rows)
@@ -1063,82 +1235,43 @@ async function enrichProductAuditLogs(
     ? payload.length
     : (payload as { count?: number | undefined })?.count;
 
-  if (!rows.length) {
-    return { rows: [], count: count ?? 0 };
-  }
-
-  const actorIds = uniqueIds(rows.map((row) => asString(row.actor_id)));
-  const targetIds = uniqueIds(rows.map((row) => asString(row.target_id)));
-  const productIdsFromPayload = uniqueIds(
-    rows.flatMap((row) => [
-      asString(asJsonObject(row.new_value)?.product_id),
-      asString(asJsonObject(row.old_value)?.product_id)
-    ])
-  );
-
-  const [actors, products] = await Promise.all([
-    actorIds.length
-      ? selectRows(
-          "users",
-          {
-            select: "user_id,full_name,email,admin_role",
-            user_id: `in.(${actorIds.join(",")})`
-          },
-          { useAnonKey: false, silentError: true }
-        ).catch(() => ({ rows: [] as JsonObject[], count: 0 }))
-      : Promise.resolve({ rows: [] as JsonObject[], count: 0 }),
-    uniqueIds([...targetIds, ...productIdsFromPayload]).length
-      ? selectRows(
-          "product",
-          {
-            select: "product_id,sku,name",
-            product_id: `in.(${uniqueIds([...targetIds, ...productIdsFromPayload]).join(",")})`
-          },
-          { useAnonKey: false, silentError: true }
-        ).catch(() => ({ rows: [] as JsonObject[], count: 0 }))
-      : Promise.resolve({ rows: [] as JsonObject[], count: 0 })
-  ]);
-
-  const actorMap = new Map(
-    (actors.rows || []).map((row) => [asString(row.user_id), row] as const)
-  );
-  const productMap = new Map(
-    (products.rows || []).map((row) => [asString(row.product_id), row] as const)
-  );
-
   const enriched = rows.map((row) => {
-    const actor = actorMap.get(asString(row.actor_id) || "");
     const oldValue = asJsonObject(row.old_value) || {};
     const newValue = asJsonObject(row.new_value) || {};
-    const productId =
-      asString(row.target_id) ||
-      asString(newValue.product_id) ||
-      asString(oldValue.product_id) ||
-      "";
-    const product = productMap.get(productId) || productMap.get(asString(newValue.product_id) || "");
-    const actionLabel = productAuditActionLabel(asString(row.action), oldValue, newValue);
-    const targetLabel = productAuditTargetLabel(product, oldValue, newValue, asString(row.target_id));
-    const changeSummary = productAuditChangeSummary(oldValue, newValue, asString(row.action));
-    const actorName = asString(actor?.full_name) || asString(row.actor_name) || "";
-    const actorEmail = asString(actor?.email) || "";
-    const actorRole = asString(row.actor_role) || asString(actor?.admin_role) || "";
+    const actionType = asString(row.action_type) || derivedAuditActionType(asString(row.action), oldValue, newValue);
+    const product = { sku: row.product_sku, name: row.product_name } as JsonObject;
+    const actorName = asString(row.actor_name) || "";
+    const actorEmail = asString(row.actor_email) || "";
+    const actorRole = asString(row.actor_role) || "";
+    const actorFallback = asString(row.actor_id) || "Hệ thống";
+    const reason = asString(newValue.reason) || asString(oldValue.reason) || "";
 
     return {
       ...row,
-      actor_name: actorName || actorEmail || asString(row.actor_id) || "Hệ thống",
+      action_type: actionType,
+      actor_name: actorName || actorEmail || actorFallback,
       actor_email: actorEmail || null,
-      actor_label: actorName && actorEmail
-        ? `${actorName} (${actorEmail})`
-        : actorName || actorEmail || asString(row.actor_id) || "Hệ thống",
+      actor_label: actorName && actorEmail ? `${actorName} (${actorEmail})` : actorName || actorEmail || actorFallback,
       actor_role_label: productAuditRoleLabel(actorRole),
-      target_label: targetLabel,
-      action_label: actionLabel,
-      change_summary: changeSummary,
+      target_label: productAuditTargetLabel(product, oldValue, newValue, asString(row.target_id)),
+      action_label: productAuditActionLabel(actionType, newValue),
+      change_summary: productAuditChangeSummary(oldValue, newValue, asString(row.action)),
+      reason: reason || null,
       result: asString(row.result) || "Thành công"
     };
   });
 
-  return { rows: enriched, count };
+  return { rows: enriched, count: count ?? enriched.length };
+}
+
+/** Classify a stored audit row the same way as `admin_list_product_audit_logs` when the RPC did not supply `action_type`. */
+function derivedAuditActionType(action: string, oldValue: JsonObject, newValue: JsonObject): ProductAuditActionType {
+  if (action.toLowerCase() === "create") return "CREATE";
+  if (oldValue.status !== undefined && newValue.status !== undefined && oldValue.status !== newValue.status) return "UPDATE_STATUS";
+  if (oldValue.stock_quantity !== undefined && newValue.stock_quantity !== undefined && oldValue.stock_quantity !== newValue.stock_quantity) {
+    return "UPDATE_STOCK";
+  }
+  return "UPDATE";
 }
 
 function uniqueIds(values: Array<string | null | undefined>): string[] {
@@ -1158,29 +1291,12 @@ function productAuditRoleLabel(role: string): string {
   return map[role] || role || "—";
 }
 
-function productAuditActionLabel(
-  action: string | null,
-  oldValue: JsonObject,
-  newValue: JsonObject
-): string {
-  const raw = String(action || "").toLowerCase();
-  if (raw === "create") {
-    if (newValue.color || newValue.size) return "Thêm biến thể";
-    return "Thêm sản phẩm";
-  }
-  if (oldValue.status !== undefined && newValue.status !== undefined && oldValue.status !== newValue.status) {
-    return "Đổi trạng thái";
-  }
-  if (
-    oldValue.stock_quantity !== undefined &&
-    newValue.stock_quantity !== undefined &&
-    oldValue.stock_quantity !== newValue.stock_quantity
-  ) {
-    return "Điều chỉnh tồn kho";
-  }
-  if (raw === "update") return "Cập nhật sản phẩm";
-  if (raw === "import" || raw.includes("csv")) return "Nhập CSV";
-  return action || "—";
+function productAuditActionLabel(actionType: string, newValue: JsonObject): string {
+  if (actionType === "CREATE") return newValue.color || newValue.size ? "Thêm biến thể" : "Thêm sản phẩm";
+  if (actionType === "UPDATE_STATUS") return "Đổi trạng thái";
+  if (actionType === "UPDATE_STOCK") return "Điều chỉnh tồn kho";
+  if (actionType === "UPDATE") return "Cập nhật sản phẩm";
+  return actionType || "—";
 }
 
 function productAuditTargetLabel(

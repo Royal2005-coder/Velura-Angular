@@ -1,6 +1,7 @@
 import { HttpError, readJson, sendJson } from "../http.js";
 import { selectOne, insertRow, updateRows } from "../supabase.js";
 import { requireUserAuth } from "./auth.js";
+import { cartUnavailableReason } from "./cart-catalog.js";
 import {
   asJsonObject,
   asNumber,
@@ -52,6 +53,12 @@ export async function handleCartRoute(
       const variant = await selectOne("variant", { variant_id: `eq.${normalizedVariantId}` });
       if (!variant) {
         throw new HttpError(400, "NOT_FOUND", `Không tìm thấy biến thể sản phẩm`);
+      }
+      const product = await selectOne("product", { product_id: `eq.${asString(variant.product_id)}`, select: "product_id,name,status" });
+      const unavailableReason = cartUnavailableReason(product?.status, asString(item.product_name) || asString(product?.name));
+      if (unavailableReason) {
+        warnings.push(unavailableReason);
+        continue;
       }
       const availableStock = Math.max(0, asNumber(variant.stock_quantity) - asNumber(variant.reserved_quantity));
       if (availableStock <= 0) {

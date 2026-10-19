@@ -16,6 +16,8 @@ data:
         litellm_params:
           model: os.environ/LITELLM_EMBEDDING_MODEL
           api_key: os.environ/GEMINI_API_KEY
+          # Gemini returns floats natively; the API's OpenAI encoding_format is unsupported.
+          drop_params: true
           rpm: 60
       - model_name: commerce-image-edit
         litellm_params:

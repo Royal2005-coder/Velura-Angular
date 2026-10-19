@@ -68,6 +68,7 @@ spec:
         - weed
         args:
         - server
+        - -filer
         - -s3
         - -dir=/data
         - -s3.port=9000

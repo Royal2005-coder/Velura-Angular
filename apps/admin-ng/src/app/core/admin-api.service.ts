@@ -1,4 +1,5 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
+import type { ProductImageApproval } from './product-image-approval.service';
 import { Injectable, inject } from '@angular/core';
 import { Observable, map } from 'rxjs';
 import { environment } from '../../environments/environment';
@@ -175,6 +176,58 @@ export interface AdminReturnPayment {
 /** Persisted KAN-31/KAN-32 states, shared with the return API and migration. */
 export type AdminReturnStatus = 'REQUESTED' | 'CONTACTING' | 'WAITING_RETURN' | 'RETURN_IN_TRANSIT' | 'RECEIVED' | 'REFUND_PROCESSING' | 'REFUNDED' | 'EXCHANGE_PREPARING' | 'EXCHANGE_SHIPPING' | 'COMPLETED' | 'CANCELLED' | 'NEEDS_SUPPORT';
 
+/** Kênh thanh toán của phiếu: COD, Stripe, hoặc cổng online khác (MoMo/VNPay). */
+export type AdminPaymentKind = 'cod' | 'stripe' | 'other_online';
+
+/** Bộ lọc thanh toán phía máy chủ: `online` gồm Stripe và cổng online khác. */
+export type AdminPaymentFilter = 'cod' | 'online';
+
+/** Luồng hoàn tiền: tự động Stripe, COD thủ công, chuyển khoản thủ công (MoMo/VNPay) hoặc không hoàn tiền (đổi hàng). */
+export type AdminRefundFlow = 'cod_manual' | 'stripe_auto' | 'manual_transfer' | 'none';
+
+/** Tình trạng thông tin nhận tiền của khách cho phiếu hoàn tiền COD. */
+export type AdminRefundReceiverStatus = 'not_required' | 'missing' | 'invalid' | 'supplement_requested' | 'valid';
+
+/** Người đã hủy phiếu đổi/trả. */
+export type AdminReturnCancelledBy = 'customer' | 'admin' | 'system';
+
+/** Thông tin nhận tiền khách đã gửi cho phiếu COD, cùng yêu cầu bổ sung gần nhất của CSKH. */
+export interface AdminRefundReceiver {
+  status: AdminRefundReceiverStatus;
+  bank_name: string | null;
+  account_number: string | null;
+  account_holder: string | null;
+  submitted_at: string | null;
+  supplement_request: string | null;
+  supplement_requested_at: string | null;
+}
+
+/** Đối soát hoàn tiền thủ công đã ghi nhận (chỉ đọc). */
+export interface AdminManualRefund {
+  reference: string;
+  amount: number;
+  transferred_at: string;
+  proof: string;
+  note: string | null;
+  recorded_at: string;
+  payment_kind: 'cod' | 'other_online';
+  receiver_bank_name: string | null;
+  receiver_account_number: string | null;
+  receiver_account_holder: string | null;
+}
+
+/** Nội dung ghi nhận hoàn tiền thủ công gửi tới API. */
+export interface AdminManualRefundPayload {
+  expectedVersion: number;
+  transferReference: string;
+  /** Phải bằng đúng số tiền hoàn hiện hành của phiếu. */
+  amount: number;
+  /** Thời điểm chuyển tiền, ISO 8601, không ở tương lai. */
+  transferredAt: string;
+  imageProof: string;
+  adminNote?: string;
+}
+
 /** Customer return request; QA and gateway facts constrain available operations. */
 export interface AdminReturnRow {
   return_id: string;
@@ -198,6 +251,16 @@ export interface AdminReturnRow {
   refund_amount?: number;
   admin_note?: string;
   rejection_reason?: string;
+  /** Kênh thanh toán thực của đơn; quyết định luồng hoàn tiền. */
+  payment_kind?: AdminPaymentKind;
+  refund_flow?: AdminRefundFlow;
+  refund_receiver_status?: AdminRefundReceiverStatus;
+  /** Ai đã hủy phiếu khi status === 'CANCELLED'. */
+  cancelled_by?: AdminReturnCancelledBy | null;
+  /** Thông tin nhận tiền COD khách đã gửi (chỉ có ở chi tiết; null khi không cần). */
+  refund_receiver?: AdminRefundReceiver | null;
+  /** Kết quả đối soát hoàn tiền thủ công đã ghi nhận. */
+  manual_refund?: AdminManualRefund | null;
   evidence_images?: string[];
   tracking_return_code?: string;
   /** Outbound replacement leg must never reuse the customer's return tracking. */
@@ -320,6 +383,50 @@ export interface AdminProductRow {
   is_featured?: boolean;
   version?: number;
   variants?: AdminProductVariant[];
+}
+
+/** Variant at or below its own low-stock threshold, enriched with the owning product. */
+export interface AdminLowStockRow {
+  variant_id: string;
+  product_id: string;
+  product_name?: string | null;
+  product_sku?: string | null;
+  product_status?: string | null;
+  color?: string;
+  size?: string;
+  stock_quantity: number;
+  low_stock_threshold: number;
+  /** Units missing to reach the threshold (0 when exactly at it). */
+  shortage?: number;
+  out_of_stock?: boolean;
+}
+
+/** On-screen low-stock alert returned by update-stock; `emailQueued` false means the email is waiting for retry. */
+export interface AdminLowStockAlert {
+  productId: string;
+  variantId: string;
+  productName: string;
+  sku: string;
+  color: string;
+  size: string;
+  stock: number;
+  threshold: number;
+  emailQueued: boolean;
+  retryRecorded: boolean;
+  message: string;
+}
+
+/** Result of a stock adjustment: the updated variant plus the optional low-stock alert. */
+export interface AdminStockUpdateResult {
+  lowStockAlert?: AdminLowStockAlert | null;
+}
+
+/** Answer of the inline SKU uniqueness check. */
+export interface AdminSkuCheck {
+  sku: string;
+  available: boolean;
+  code: 'SKU_INVALID' | 'SKU_DUPLICATE' | null;
+  message: string | null;
 }
 
 export interface AdminImageCriterion {
@@ -573,7 +680,11 @@ export interface AdminAuditRow {
   actor_role_label?: string;
   module?: string;
   action?: string;
+  /** Derived action type: CREATE, UPDATE, UPDATE_STATUS or UPDATE_STOCK (product audit only). */
+  action_type?: string;
   action_label?: string;
+  /** Operator reason stored with status and stock changes. */
+  reason?: string | null;
   target_id?: string;
   target_label?: string;
   old_value?: unknown;
@@ -1017,6 +1128,11 @@ export class AdminApiService {
     return this.http.post<AdminImageEnhanceResult>(`${this.baseUrl}/api/v1/admin/products/ai-image-enhance`, body);
   }
 
+  /** Stage the explicit Studio selection as a database-backed approval before the product can publish it. */
+  approveStudioImage(body: { imageUrl: string; productId: string | null; expectedVersion: number; selection: 'original' | 'enhanced'; reviewConfirmed: true }): Observable<ProductImageApproval> {
+    return this.http.post<ProductImageApproval>(`${this.baseUrl}/api/v1/admin/products/ai-image-approve`, body);
+  }
+
   /**
    * Generates Fashion SEO metadata, rich description, and User PDP attributes using Gemini.
    */
@@ -1043,10 +1159,11 @@ export class AdminApiService {
   }
 
   /**
-   * Adjusts variant stock (delta) or low-stock threshold.
+   * Adjusts variant stock (delta) or low-stock threshold. Dropping below the threshold is allowed; the response carries
+   * `lowStockAlert` so the page can show the alert on screen even when the alert email could not be queued.
    */
-  updateStock(productId: string, body: Record<string, unknown>): Observable<unknown> {
-    return this.http.post(`${this.baseUrl}/api/v1/admin/products/${encodeURIComponent(productId)}/update-stock`, body);
+  updateStock(productId: string, body: Record<string, unknown>): Observable<AdminStockUpdateResult> {
+    return this.http.post<AdminStockUpdateResult>(`${this.baseUrl}/api/v1/admin/products/${encodeURIComponent(productId)}/update-stock`, body);
   }
 
   /**
@@ -1060,10 +1177,19 @@ export class AdminApiService {
   }
 
   /**
-   * Lists low-stock products for the original catalog KPI.
+   * Lists variants at or below their own low-stock threshold with product name, SKU and shortage (catalog KPI, dashboard list).
    */
-  listLowStock(): Observable<AdminListPayload<AdminProductRow>> {
-    return this.http.get<AdminListPayload<AdminProductRow>>(`${this.baseUrl}/api/v1/admin/products/low-stock`);
+  listLowStock(): Observable<AdminListPayload<AdminLowStockRow>> {
+    return this.http.get<AdminListPayload<AdminLowStockRow>>(`${this.baseUrl}/api/v1/admin/products/low-stock`);
+  }
+
+  /**
+   * Inline SKU uniqueness check across products and variants; `excludeProductId` ignores the product being edited.
+   */
+  checkProductSku(sku: string, excludeProductId = ''): Observable<AdminSkuCheck> {
+    return this.http.get<AdminSkuCheck>(`${this.baseUrl}/api/v1/admin/products/sku-check`, {
+      params: this.params({ sku, excludeProductId }),
+    });
   }
 
   /**
@@ -1181,10 +1307,12 @@ export class AdminApiService {
   }
 
   /**
-   * Lists return requests.
+   * Lists return requests; `paymentKind` lọc COD hoặc Online (Stripe + MoMo/VNPay) ở phía máy chủ.
    */
-  listReturns(params: Record<string, string> = {}): Observable<AdminListPayload<AdminReturnRow>> {
-    return this.http.get<AdminListPayload<AdminReturnRow>>(`${this.baseUrl}/api/v1/admin/returns`, { params: this.params(params) });
+  listReturns(params: Record<string, string> = {}, paymentKind: AdminPaymentFilter | '' = ''): Observable<AdminListPayload<AdminReturnRow>> {
+    return this.http.get<AdminListPayload<AdminReturnRow>>(`${this.baseUrl}/api/v1/admin/returns`, {
+      params: this.params(paymentKind ? { ...params, payment_kind: paymentKind } : params),
+    });
   }
 
   /**
@@ -1266,9 +1394,22 @@ export class AdminApiService {
     return this.http.post(`${this.baseUrl}/api/v1/admin/returns/${encodeURIComponent(returnId)}/trigger-stripe-refund`, body);
   }
 
-  /** Records transfer reference and evidence for a captured non-Stripe refund. */
-  recordManualRefund(returnId: string, body: Record<string, unknown>): Observable<unknown> {
+  /**
+   * Ghi nhận kết quả chuyển tiền thủ công (COD hoặc cổng không phải Stripe). Số tiền phải khớp
+   * số tiền hoàn hiện tại; API từ chối COD khi khách chưa có thông tin nhận tiền hợp lệ.
+   */
+  recordManualRefund(returnId: string, body: AdminManualRefundPayload): Observable<unknown> {
     return this.http.post(`${this.baseUrl}/api/v1/admin/returns/${encodeURIComponent(returnId)}/manual-refund`, body);
+  }
+
+  /**
+   * CSKH gửi "yêu cầu bổ sung" thông tin nhận tiền COD cho khách; phiếu giữ nguyên trạng thái và phiên bản.
+   */
+  requestRefundInfo(returnId: string, body: { message: string; expectedVersion: number }): Observable<{ return_id: string; refund_receiver: AdminRefundReceiver }> {
+    return this.http.post<{ return_id: string; refund_receiver: AdminRefundReceiver }>(
+      `${this.baseUrl}/api/v1/admin/returns/${encodeURIComponent(returnId)}/request-refund-info`,
+      body,
+    );
   }
 
   /**

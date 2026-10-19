@@ -6,6 +6,8 @@ export interface AddressGeographyValue {
   province?: string;
   district?: string;
   ward?: string;
+  /** Historical address text used only to recover missing structured geography names. */
+  detail?: string;
 }
 
 /** A verified selection, including whether every unit belongs to its selected parent. */

@@ -19,6 +19,10 @@ export interface LoyaltyWallet {
 @Injectable({ providedIn: 'root' })
 export class LoyaltyService {
   private readonly api = inject(ApiService);
+  /** Load the server profile before member-only screens trust a cached role. */
+  profile(): Observable<{ role?: string | null; user_id?: string }> {
+    return this.api.get<{ role?: string | null; user_id?: string }>('/api/user/profile');
+  }
   /** Load the current actor's snapshot and optionally older entries by the last ledger UUID. */
   wallet(before?: string): Observable<{ success: boolean; wallet: LoyaltyWallet }> {
     return this.api.get<{ success: boolean; wallet: LoyaltyWallet }>(`/api/user/loyalty${before ? `?before=${encodeURIComponent(before)}` : ''}`);

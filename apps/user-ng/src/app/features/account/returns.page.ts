@@ -1,5 +1,5 @@
 import { Component, computed, inject, signal } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { catchError, of } from 'rxjs';
 import { ApiService } from '../../core/services/api.service';
 import { useBodyClass } from '../../core/utils/body-class';
@@ -20,6 +20,17 @@ interface MemberOrder {
   updated_at?: string;
   created_at?: string;
   items?: ReturnLine[];
+  is_exchange_replacement?: boolean;
+}
+
+interface MemberReturn {
+  return_id: string;
+  order_id?: string;
+  order_code?: string;
+  tracking_return_code?: string;
+  return_type?: string;
+  status?: string;
+  created_at?: string;
 }
 
 @Component({
@@ -30,10 +41,17 @@ interface MemberOrder {
 })
 export class AccountReturnsPage {
   private readonly api = inject(ApiService);
+  private readonly route = inject(ActivatedRoute);
 
   readonly loading = signal(true);
   readonly loadError = signal<string | null>(null);
   readonly orders = signal<MemberOrder[]>([]);
+  readonly returns = signal<MemberReturn[]>([]);
+  readonly focusedOrderId = signal(this.route.snapshot.queryParamMap.get('order_id'));
+  readonly visibleReturns = computed(() => {
+    const orderId = this.focusedOrderId();
+    return this.returns().filter((request) => !orderId || request.order_id === orderId);
+  });
   readonly selectedOrderId = signal<string | null>(null);
   readonly selectedItemIds = signal<string[]>([]);
   readonly returnType = signal<'refund' | 'exchange'>('refund');
@@ -52,6 +70,11 @@ export class AccountReturnsPage {
 
   constructor() {
     useBodyClass('page-return');
+    const orderId = this.focusedOrderId();
+    this.api
+      .get<{ returns?: MemberReturn[] }>(`/api/user/returns${orderId ? `?order_id=${encodeURIComponent(orderId)}` : ''}`)
+      .pipe(catchError(() => of({ returns: [] as MemberReturn[] })))
+      .subscribe((data) => this.returns.set(data.returns || []));
     this.api
       .get<{ orders?: MemberOrder[] }>('/api/user/orders')
       .pipe(catchError(() => of(null)))

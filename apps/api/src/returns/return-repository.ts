@@ -3,6 +3,7 @@ import { callRpc, selectOne, selectRows, updateRows, insertRow } from "../supaba
 import { HttpError } from "../http.js";
 import { asJsonObject, asNumber, asString, type JsonObject } from "../types.js";
 import { RETURN_SELECT, TICKET_SELECT } from "./return-constants.js";
+import { classifyReturnPayment, refundFlowFor, refundReceiverStatus, type ReturnPaymentKind } from "./return-refund-receiver.js";
 
 /**
  * Filters for listing return / exchange records.
@@ -11,6 +12,8 @@ export interface ReturnListFilters {
   status?: string;
   search?: string;
   orderId?: string;
+  /** `cod` = đơn COD, `online` = đơn thanh toán online (Stripe/MoMo/VNPay). */
+  paymentKind?: "cod" | "online";
   limit: number;
   offset: number;
 }
@@ -100,114 +103,79 @@ export interface CloseTicketInput {
 }
 
 /**
+ * Kết quả chuyển khoản hoàn tiền thủ công mà CSKH ghi nhận (dữ liệu đối soát).
+ */
+export interface ManualRefundInput {
+  /** Mã giao dịch ngân hàng/ví, duy nhất toàn hệ thống. */
+  reference: string;
+  /** Số tiền đã chuyển; phải khớp số tiền hoàn tính từ hàng trả. */
+  amount: number;
+  /** Thời điểm chuyển tiền (ISO 8601). */
+  transferredAt: string;
+  /** Ảnh chứng từ chuyển khoản (URL https hoặc data:image). */
+  proof: string;
+  note?: string;
+}
+
+/**
  * PostgREST accessors for admin returns, exchanges, and support tickets.
  */
 export function createReturnRepository() {
   return {
     /**
-     * Ghi nhận bằng chứng chuyển khoản hoàn tiền (áp dụng cho đơn thanh toán ngoài Stripe: COD, MoMo, VNPay).
+     * Ghi nhận kết quả chuyển khoản hoàn tiền thủ công (COD, MoMo, VNPay) trong MỘT giao dịch DB:
+     * kiểm tra thông tin nhận tiền COD, đối soát số tiền, lưu mã/số tiền/thời điểm/chứng từ và đóng phiếu.
      */
     async recordManualRefund(
       returnId: string,
       expectedVersion: number,
-      reference: string,
-      proof: string,
-      actorId: string,
-      ipAddress?: string,
-      adminNote?: string
-    ) {
-      const cleanRef = reference.trim();
-      const providerRef = `manual:${cleanRef}`;
-
-      // 1. Kiểm tra trùng mã giao dịch trước khi gọi hàm DB (tránh Postgres 23505)
-      const existingRefund = await selectOne("payment_refund", {
-        provider_ref: `eq.${providerRef}`
-      }).catch(() => null);
-      if (existingRefund) {
-        throw new HttpError(
-          409,
-          "DUPLICATE_TRANSFER_REFERENCE",
-          `Mã giao dịch "${cleanRef}" đã được sử dụng cho một giao dịch hoàn tiền trước đó. Vui lòng kiểm tra và nhập mã giao dịch khác.`
-        );
-      }
-
-      // 2. Kiểm tra bản ghi return_exchange
-      const ret = await selectOne("return_exchange", { return_id: `eq.${returnId}` });
-      if (!ret) {
-        throw new HttpError(404, "RETURN_NOT_FOUND", "Không tìm thấy yêu cầu đổi/trả tương ứng");
-      }
-      if (Number(ret.version) !== expectedVersion) {
-        throw new HttpError(409, "VERSION_CONFLICT", "Dữ liệu yêu cầu đổi/trả đã bị thay đổi bởi thao tác khác. Vui lòng tải lại trang.");
-      }
-      const status = asString(ret.status);
-      if (!["RECEIVED", "REFUND_PROCESSING"].includes(status) || ret.condition_check_result !== "qa_pass") {
-        throw new HttpError(422, "WAREHOUSE_QA_REQUIRED", "Hàng hoàn trả phải được kho tiếp nhận và kiểm tra đạt yêu cầu (QA Pass) trước khi ghi nhận hoàn tiền.");
-      }
-
-      const orderId = asString(ret.order_id);
-
-      // 3. Chuẩn bị bản ghi payment_refund nếu chưa có
-      const existingReturnRefund = await selectOne("payment_refund", {
-        return_id: `eq.${returnId}`
-      }).catch(() => null);
-
-      let op: JsonObject | null = existingReturnRefund;
-      if (!existingReturnRefund || existingReturnRefund.status !== "succeeded") {
-        if (!existingReturnRefund) {
-          op = asJsonObject(await callRpc("velura_prepare_return_refund", {
-            p_return_id: returnId,
-            p_order_id: orderId,
-            p_expected_version: expectedVersion
-          }));
-        }
-
-        // 4. Hoàn tất hoàn tiền với provider_ref = manual:<reference>
-        await callRpc("velura_complete_return_refund", {
+      input: ManualRefundInput,
+      actorId: string
+    ): Promise<JsonObject> {
+      try {
+        return asJsonObject(await callRpc("velura_record_manual_return_refund", {
           p_return_id: returnId,
-          p_provider_ref: providerRef
-        });
+          p_expected_version: expectedVersion,
+          p_reference: input.reference,
+          p_amount: input.amount,
+          p_transferred_at: input.transferredAt,
+          p_proof: input.proof,
+          p_note: input.note || null,
+          p_actor_id: actorId
+        }));
+      } catch (error: unknown) {
+        throw mapReturnDatabaseError(error);
       }
+    },
 
-      // 5. Cập nhật bằng chứng ảnh và ghi chú kế toán nếu có
-      const patch: JsonObject = {
-        updated_at: new Date().toISOString()
-      };
-      if (proof) {
-        const existingImages = Array.isArray(ret.evidence_images) ? ret.evidence_images.map(String) : [];
-        if (!existingImages.includes(proof)) {
-          patch.evidence_images = [...existingImages, proof];
-        }
+    /**
+     * Thông tin nhận hoàn tiền khách đã gửi cho phiếu (đầy đủ số tài khoản, chỉ dành cho admin).
+     */
+    async getRefundReceiver(returnId: string): Promise<JsonObject | null> {
+      return selectOne("return_refund_receiver", { return_id: `eq.${returnId}` }).catch(() => null);
+    },
+
+    /**
+     * Dữ liệu đối soát của lần hoàn tiền thủ công đã ghi nhận, hoặc null nếu chưa có.
+     */
+    async getManualRefund(returnId: string): Promise<JsonObject | null> {
+      return selectOne("return_manual_refund", { return_id: `eq.${returnId}` }).catch(() => null);
+    },
+
+    /**
+     * CSKH yêu cầu khách bổ sung thông tin nhận hoàn tiền. Phiếu giữ nguyên trạng thái và phiên bản.
+     */
+    async requestRefundReceiverSupplement(returnId: string, expectedVersion: number, message: string, actorId: string): Promise<JsonObject> {
+      try {
+        return asJsonObject(await callRpc("velura_request_refund_receiver_supplement", {
+          p_return_id: returnId,
+          p_expected_version: expectedVersion,
+          p_message: message,
+          p_actor_id: actorId
+        }));
+      } catch (error: unknown) {
+        throw mapReturnDatabaseError(error);
       }
-      if (adminNote) {
-        const currentNote = asString(ret.admin_note);
-        const stamp = new Date().toISOString();
-        const noteLine = `[Kế toán ${stamp}] Hoàn tiền thủ công (${cleanRef}): ${adminNote.trim()}`;
-        patch.admin_note = currentNote ? `${currentNote}\n${noteLine}` : noteLine;
-      }
-      await updateRows("return_exchange", { return_id: `eq.${returnId}` }, patch).catch(() => null);
-
-      // 6. Ghi audit log với ip_address an toàn
-      await insertRow("audit_log", {
-        actor_id: actorId,
-        actor_role: "admin_operator_cskh_dt",
-        action: "update",
-        module: "returns",
-        target_id: returnId,
-        new_value: {
-          transfer_reference: cleanRef,
-          transfer_proof: proof,
-          accounting_note: adminNote || undefined,
-          refund: op
-        },
-        ip_address: ipAddress || "127.0.0.1",
-        timestamp: new Date().toISOString()
-      }).catch((e: unknown) => {
-        console.warn("[AuditLog] Failed to insert audit log for manual refund:", e);
-      });
-
-      // 7. Lấy lại bản ghi sau khi cập nhật
-      const finalReturn = await selectOne("return_exchange", { return_id: `eq.${returnId}` });
-      return asJsonObject(finalReturn || ret);
     },
     async prepareExchange(returnId: string, expectedVersion: number, actorId: string, ipAddress?: string) {
       try {
@@ -364,20 +332,23 @@ export function createReturnRepository() {
     },
     async listReturns(filters: ReturnListFilters, accessToken: string) {
       const query: Record<string, unknown> = {
-        select: RETURN_SELECT,
+        select: filters.paymentKind ? `${RETURN_SELECT},pay_order:orders!order_id!inner(payment_method)` : RETURN_SELECT,
         order: "created_at.desc",
         limit: filters.limit,
         offset: filters.offset
       };
       if (filters.status) query.status = `eq.${filters.status}`;
       if (filters.orderId) query.order_id = `eq.${filters.orderId}`;
+      if (filters.paymentKind) query["pay_order.payment_method"] = filters.paymentKind === "cod" ? "eq.COD" : "eq.ONLINE_PAYMENT";
       if (filters.search) {
         query.or = `(description.ilike.*${filters.search}*,tracking_return_code.ilike.*${filters.search}*)`;
       }
-      let res = await selectRows("return_exchange", query, authOptions(accessToken)).catch(() => null);
-      if (!res) {
-        res = await selectRows("return_exchange", query);
+      let found = await selectRows("return_exchange", query, authOptions(accessToken)).catch(() => null);
+      if (!found) {
+        found = await selectRows("return_exchange", query);
       }
+      // The embedded order only exists to filter by payment method; it is not part of the response contract.
+      const res = { rows: found.rows.map(({ pay_order: _payOrder, ...row }) => row), count: found.count };
       if (!res.rows?.length) return res;
 
       const orderIds = Array.from(new Set([
@@ -417,10 +388,28 @@ export function createReturnRepository() {
           }
         }
 
+        const kindOf = (row: JsonObject): ReturnPaymentKind => {
+          const ord = orderMap.get(asString(row.order_id));
+          return classifyReturnPayment(ord?.payment_method ?? row.payment_method, paymentMap.get(asString(row.order_id))?.payment_provider);
+        };
+        const receiverRequiredIds = res.rows
+          .filter((row) => refundFlowFor(row.return_type, kindOf(row)) === "cod_manual")
+          .map((row) => asString(row.return_id));
+        const receiverRows = receiverRequiredIds.length
+          ? await selectRows("return_refund_receiver", {
+              select: "return_id,bank_name,account_number,account_holder,supplement_request",
+              return_id: `in.(${receiverRequiredIds.join(",")})`,
+              limit: receiverRequiredIds.length
+            }, { count: "none" }).catch(() => ({ rows: [] as JsonObject[] }))
+          : { rows: [] as JsonObject[] };
+        const receiverMap = new Map<string, JsonObject>(receiverRows.rows.map((row) => [asString(row.return_id), row]));
+
         const enriched = res.rows.map((row: JsonObject) => {
           const ord = orderMap.get(asString(row.order_id));
           const excOrd = row.exchange_order_id ? orderMap.get(asString(row.exchange_order_id)) : undefined;
           const pay = paymentMap.get(asString(row.order_id));
+          const kind = kindOf(row);
+          const flow = refundFlowFor(row.return_type, kind);
           return {
             ...row,
             order_code: ord ? asString(ord.order_code) : undefined,
@@ -432,6 +421,9 @@ export function createReturnRepository() {
             exchange_order_code: excOrd ? asString(excOrd.order_code) : undefined,
             exchange_order_status: excOrd ? asString(excOrd.status) : undefined,
             payment: pay || undefined,
+            payment_kind: kind,
+            refund_flow: flow,
+            refund_receiver_status: refundReceiverStatus(flow === "cod_manual", receiverMap.get(asString(row.return_id)))
           };
         });
         return { rows: enriched, count: res.count };
@@ -705,7 +697,8 @@ export function createReturnRepository() {
       if (current.version !== input.expectedVersion) {
         throw new HttpError(409, "VERSION_CONFLICT", "Return record has been modified by another user");
       }
-      if (!["REQUESTED", "CONTACTING", "WAITING_RETURN", "pending"].includes(asString(current.status))) {
+      // NEEDS_SUPPORT is closable: CSKH stops forwarding a request the warehouse could not accept, which releases its hold.
+      if (!["REQUESTED", "CONTACTING", "WAITING_RETURN", "NEEDS_SUPPORT", "pending"].includes(asString(current.status))) {
         throw new HttpError(422, "RETURN_NOT_PENDING", "Yêu cầu đổi/trả không ở trạng thái có thể từ chối/hủy");
       }
       if (!input.reason || input.reason.trim().length < 10) {
@@ -715,6 +708,7 @@ export function createReturnRepository() {
       const payload: JsonObject = {
         status: "CANCELLED",
         rejection_reason: input.reason.trim(),
+        cancelled_by: "admin",
         resolved_at: new Date().toISOString(),
         version: asNumber(current.version) + 1,
         updated_at: new Date().toISOString()
@@ -791,6 +785,8 @@ export function createReturnRepository() {
       if (["COMPLETED", "CANCELLED"].includes(input.status)) {
         payload.resolved_at = new Date().toISOString();
       }
+      // Only the admin API reaches this method; a customer cancels through the storefront service instead.
+      if (input.status === "CANCELLED") payload.cancelled_by = "admin";
 
       if (input.status === "COMPLETED" && current.return_type === "exchange") {
         const excId = asString(current.exchange_order_id);
@@ -948,4 +944,37 @@ export type ReturnRepository = ReturnType<typeof createReturnRepository>;
 function authOptions(accessToken: string | null | undefined): { useAnonKey?: boolean; accessToken?: string } {
   if (!accessToken) return {};
   return { useAnonKey: true, accessToken };
+}
+
+/** Vietnamese messages for the stable error codes raised by migrations 068/069 (`raise sqlstate ... using message`). */
+const RETURN_DATABASE_ERRORS: Readonly<Record<string, { status: number; message: string }>> = {
+  REFUND_RECEIVER_REQUIRED: { status: 422, message: "Chưa có thông tin nhận hoàn tiền hợp lệ của khách. Hãy yêu cầu khách bổ sung trước khi tiếp tục hoàn tiền." },
+  REFUND_RECEIVER_NOT_APPLICABLE: { status: 422, message: "Chỉ đơn COD có yêu cầu hoàn tiền mới cần thông tin nhận tiền." },
+  REFUND_RECEIVER_INVALID: { status: 422, message: "Thông tin nhận hoàn tiền chưa hợp lệ. Kiểm tra ngân hàng, số tài khoản (6–20 chữ số) và tên chủ tài khoản." },
+  SUPPLEMENT_MESSAGE_REQUIRED: { status: 422, message: "Nội dung yêu cầu bổ sung phải có ít nhất 10 ký tự." },
+  RETURN_CLOSED: { status: 422, message: "Yêu cầu đổi/trả đã kết thúc, không thể thay đổi thông tin nhận hoàn tiền." },
+  REFUND_AMOUNT_MISMATCH: { status: 422, message: "Số tiền ghi nhận không khớp số tiền hoàn của hàng đã nhận. Kiểm tra lại số tiền đã chuyển." },
+  TRANSFER_TIME_INVALID: { status: 422, message: "Thời điểm chuyển tiền không hợp lệ: không được ở tương lai và không được trước thời điểm tạo yêu cầu." },
+  TRANSFER_REFERENCE_REQUIRED: { status: 422, message: "Mã giao dịch chuyển tiền phải có ít nhất 6 ký tự." },
+  TRANSFER_PROOF_REQUIRED: { status: 422, message: "Vui lòng tải lên ảnh chụp chứng từ chuyển khoản thành công." },
+  DUPLICATE_TRANSFER_REFERENCE: { status: 409, message: "Mã giao dịch này đã được dùng cho một lần hoàn tiền khác. Vui lòng kiểm tra lại mã giao dịch." },
+  CAPTURED_NON_STRIPE_REQUIRED: { status: 422, message: "Chỉ áp dụng ghi nhận chuyển khoản cho đơn thanh toán ngoài Stripe (COD, MoMo, VNPay) đã thanh toán thành công." },
+  WAREHOUSE_QA_REQUIRED: { status: 422, message: "Hàng hoàn trả phải được kho tiếp nhận và kiểm tra đạt yêu cầu (QA Pass) trước khi hoàn tiền." },
+  VERSION_CONFLICT: { status: 409, message: "Dữ liệu yêu cầu đổi/trả đã bị thay đổi bởi thao tác khác. Vui lòng tải lại trang." },
+  RETURN_NOT_FOUND: { status: 404, message: "Không tìm thấy yêu cầu đổi/trả tương ứng." },
+  REFUND_BALANCE_EXHAUSTED: { status: 422, message: "Đơn hàng không còn số dư hợp lệ để hoàn tiền." },
+  CANCEL_REASON_REQUIRED: { status: 422, message: "Phải ghi rõ lý do khi từ chối hoặc hủy yêu cầu." },
+  INVALID_RETURN_TRANSITION: { status: 422, message: "Không thể chuyển yêu cầu sang trạng thái này từ trạng thái hiện tại." }
+};
+
+/**
+ * Turns a PostgREST error raised by one of the return RPCs into the stable, localized `HttpError` the admin UI shows.
+ * Unknown errors pass through untouched.
+ */
+export function mapReturnDatabaseError(error: unknown): unknown {
+  if (!(error instanceof HttpError)) return error;
+  const details = asJsonObject(error.details);
+  const code = asString(details.message).trim() || error.message.replace(/\s*\[status:\d+\]$/, "").trim();
+  const known = RETURN_DATABASE_ERRORS[code];
+  return known ? new HttpError(known.status, code, known.message, error.details) : error;
 }

@@ -1,6 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createReturnService } from "../../apps/api/src/returns/return-service.js";
+import type { ManualRefundInput, ReturnListFilters } from "../../apps/api/src/returns/return-repository.js";
+import { HttpError } from "../../apps/api/src/http.js";
+import { asJsonObject, type JsonObject } from "../../apps/api/src/types.js";
+
+/** Predicate for `assert.rejects`: an HttpError with the given stable code (and optional status). */
+const hasCode = (code: string, status?: number) => (error: unknown): boolean =>
+  error instanceof HttpError && error.code === code && (status === undefined || error.status === status);
+const hasStatus = (status: number) => (error: unknown): boolean => error instanceof HttpError && error.status === status;
 
 const RETURN_ID = "50000000-0000-4000-8000-000000000001";
 const TICKET_ID = "50000000-0000-4000-8000-000000000002";
@@ -320,16 +328,17 @@ test("triggerStripeRefund throws STRIPE_REFUND_FAILED when gateway refund fails"
 
 test("recordManualRefund supports COD, MoMo, VNPay and auto-syncs pending COD payment to paid", async () => {
   let paidPaymentId: string | null = null;
-  let recordedRefund: any = null;
+  let recordedRefund: { reference: string; adminNote?: string } | null = null;
 
   const service = createReturnService({
     repository: {
       getReturn: async () => ({ return_id: RETURN_ID, order_id: "order-cod", status: "RECEIVED", condition_check_result: "qa_pass", return_type: "refund", version: 3 }),
       getPaymentByOrderId: async () => ({ payment_id: "pay-cod-1", payment_method: "COD", payment_provider: "cod", payment_status: "pending" }),
       markPaymentPaid: async (paymentId: string) => { paidPaymentId = paymentId; return []; },
-      recordManualRefund: async (returnId: string, version: number, reference: string, proof: string, actorId: string, ipAddress?: string, adminNote?: string) => {
-        recordedRefund = { returnId, version, reference, proof, actorId, ipAddress, adminNote };
-        return { return_id: returnId, status: "REFUNDED" };
+      getRefundReceiver: async () => ({ bank_name: "Vietcombank", account_number: "0123456789", account_holder: "Nguyen Van A", supplement_request: null }),
+      recordManualRefund: async (returnId: string, version: number, input: ManualRefundInput, actorId: string) => {
+        recordedRefund = { returnId, version, reference: input.reference, proof: input.proof, actorId, adminNote: input.note };
+        return { return_id: returnId, status: "COMPLETED" };
       }
     }
   });
@@ -337,14 +346,16 @@ test("recordManualRefund supports COD, MoMo, VNPay and auto-syncs pending COD pa
   const res = await service.recordManualRefund(context("admin_operator_cskh_dt"), RETURN_ID, {
     expectedVersion: 3,
     transferReference: "VCB2026100501",
+    amount: 200000,
+    transferredAt: new Date(Date.now() - 60_000).toISOString(),
     imageProof: "https://example.com/receipt.png",
     adminNote: "Da hoan tien vao tai khoan Vietcombank cua khach"
   });
 
   assert.equal(paidPaymentId, "pay-cod-1");
-  assert.equal(recordedRefund.reference, "VCB2026100501");
-  assert.equal(recordedRefund.adminNote, "Da hoan tien vao tai khoan Vietcombank cua khach");
-  assert.equal(res.status, "REFUNDED");
+  assert.equal(recordedRefund?.reference, "VCB2026100501");
+  assert.equal(recordedRefund?.adminNote, "Da hoan tien vao tai khoan Vietcombank cua khach");
+  assert.equal(res.status, "COMPLETED");
 });
 
 test("recordManualRefund rejects invalid reference, proof, or stripe payment", async () => {
@@ -364,6 +375,164 @@ test("recordManualRefund rejects invalid reference, proof, or stripe payment", a
     }),
     (error: any) => error.status === 422 && error.code === "CAPTURED_NON_STRIPE_REQUIRED"
   );
+});
+
+const COD_RETURN = { return_id: RETURN_ID, order_id: "order-cod", status: "RECEIVED", condition_check_result: "qa_pass", return_type: "refund", payment_method: "COD", version: 3 };
+const COD_PAYMENT = { payment_id: "pay-cod-1", payment_method: "COD", payment_provider: "cod", payment_status: "paid" };
+const MANUAL_BODY = { expectedVersion: 3, transferReference: "VCB2026100501", amount: 200000, transferredAt: new Date(Date.now() - 60_000).toISOString(), imageProof: "https://example.com/receipt.png" };
+const VALID_RECEIVER = { bank_name: "Vietcombank", account_number: "0123456789", account_holder: "Nguyen Van A", supplement_request: null };
+
+test("COD manual refund is blocked while the receiving account is empty, invalid or awaiting a CSKH supplement", async () => {
+  for (const [label, receiver] of [
+    ["empty", null],
+    ["invalid account number", { ...VALID_RECEIVER, account_number: "12ab" }],
+    ["holder name with digits", { ...VALID_RECEIVER, account_holder: "Nguyen Van 9" }],
+    ["pending supplement request", { ...VALID_RECEIVER, supplement_request: "Vui long gui lai so tai khoan" }]
+  ] as const) {
+    let wrote = false;
+    const service = createReturnService({
+      repository: {
+        getReturn: async () => COD_RETURN,
+        getPaymentByOrderId: async () => COD_PAYMENT,
+        getRefundReceiver: async () => receiver,
+        recordManualRefund: async () => { wrote = true; return {}; }
+      }
+    });
+    await assert.rejects(
+      () => service.recordManualRefund(context("admin_operator_cskh_dt"), RETURN_ID, MANUAL_BODY),
+      hasCode("REFUND_RECEIVER_REQUIRED", 422),
+      label
+    );
+    assert.equal(wrote, false, `${label}: nothing may be written while blocked`);
+  }
+});
+
+test("COD manual refund records reference, amount, time and proof once the receiving account is valid", async () => {
+  let recorded: { returnId: string; version: number; input: ManualRefundInput; actorId: string } | null = null;
+  const service = createReturnService({
+    repository: {
+      getReturn: async () => COD_RETURN,
+      getPaymentByOrderId: async () => COD_PAYMENT,
+      getRefundReceiver: async () => VALID_RECEIVER,
+      recordManualRefund: async (returnId: string, version: number, input: ManualRefundInput, actorId: string) => {
+        recorded = { returnId, version, input, actorId };
+        return { return_id: returnId, status: "COMPLETED" };
+      }
+    }
+  });
+  const res = await service.recordManualRefund(context("admin_operator_cskh_dt"), RETURN_ID, { ...MANUAL_BODY, adminNote: "Chuyen khoan VCB" });
+  assert.equal(res.status, "COMPLETED");
+  assert.equal(recorded?.input.reference, "VCB2026100501");
+  assert.equal(recorded?.input.amount, 200000);
+  assert.equal(recorded?.input.note, "Chuyen khoan VCB");
+  assert.equal(recorded?.input.transferredAt, MANUAL_BODY.transferredAt);
+});
+
+test("manual refund rejects a missing amount, a future transfer time and a missing proof before any write", async () => {
+  const service = createReturnService({
+    repository: {
+      getReturn: async () => COD_RETURN,
+      getPaymentByOrderId: async () => COD_PAYMENT,
+      getRefundReceiver: async () => VALID_RECEIVER,
+      recordManualRefund: async () => { throw new Error("must not be reached"); }
+    }
+  });
+  const admin = context("admin_operator_cskh_dt");
+  await assert.rejects(() => service.recordManualRefund(admin, RETURN_ID, { ...MANUAL_BODY, amount: 0 }), hasCode("REFUND_AMOUNT_MISMATCH"));
+  await assert.rejects(() => service.recordManualRefund(admin, RETURN_ID, { ...MANUAL_BODY, transferredAt: new Date(Date.now() + 3_600_000).toISOString() }), hasCode("TRANSFER_TIME_INVALID"));
+  await assert.rejects(() => service.recordManualRefund(admin, RETURN_ID, { ...MANUAL_BODY, transferredAt: "" }), hasCode("TRANSFER_TIME_INVALID"));
+  await assert.rejects(() => service.recordManualRefund(admin, RETURN_ID, { ...MANUAL_BODY, imageProof: "" }), hasCode("TRANSFER_PROOF_REQUIRED"));
+});
+
+test("requestRefundInfo stores the CSKH supplement request without moving the return", async () => {
+  let saved: { returnId: string; version: number; message: string; actorId: string } | null = null;
+  const service = createReturnService({
+    repository: {
+      getReturn: async () => COD_RETURN,
+      getPaymentByOrderId: async () => COD_PAYMENT,
+      requestRefundReceiverSupplement: async (returnId: string, version: number, message: string, actorId: string) => {
+        saved = { returnId, version, message, actorId };
+        return { supplement_request: message, supplement_requested_at: "2026-10-19T01:00:00.000Z" };
+      },
+      getRefundReceiver: async () => ({ bank_name: "", account_number: "", account_holder: "", supplement_request: "Vui long gui so tai khoan nhan hoan tien" })
+    }
+  });
+  const res = await service.requestRefundInfo(context("admin_operator_cskh_dt"), RETURN_ID, { message: "  Vui long gui so tai khoan nhan hoan tien  ", expectedVersion: 3 });
+  const receiver = asJsonObject(res.refund_receiver);
+  assert.equal(saved?.message, "Vui long gui so tai khoan nhan hoan tien");
+  assert.equal(saved?.version, 3);
+  assert.equal(receiver.status, "supplement_requested");
+  assert.equal(receiver.supplement_request, "Vui long gui so tai khoan nhan hoan tien");
+
+  const admin = context("admin_operator_cskh_dt");
+  await assert.rejects(() => service.requestRefundInfo(admin, RETURN_ID, { message: "ngan", expectedVersion: 3 }), hasCode("SUPPLEMENT_MESSAGE_REQUIRED"));
+  await assert.rejects(() => service.requestRefundInfo(admin, RETURN_ID, { message: "Vui long gui so tai khoan", expectedVersion: 2 }), hasStatus(409));
+  await assert.rejects(() => service.requestRefundInfo(context("admin_operator_donhang"), RETURN_ID, { message: "Vui long gui so tai khoan", expectedVersion: 3 }), hasStatus(403));
+});
+
+test("requestRefundInfo is refused for Stripe returns, exchanges and finished returns", async () => {
+  const admin = context("admin_operator_cskh_dt");
+  const make = (ret: JsonObject, payment: JsonObject) => createReturnService({
+    repository: { getReturn: async () => ret, getPaymentByOrderId: async () => payment, requestRefundReceiverSupplement: async () => { throw new Error("must not be reached"); } }
+  });
+  const body = { message: "Vui long gui so tai khoan", expectedVersion: 3 };
+  await assert.rejects(() => make({ ...COD_RETURN, payment_method: "ONLINE_PAYMENT" }, { payment_provider: "stripe", payment_method: "ONLINE_PAYMENT" }).requestRefundInfo(admin, RETURN_ID, body), hasCode("REFUND_RECEIVER_NOT_APPLICABLE"));
+  await assert.rejects(() => make({ ...COD_RETURN, return_type: "exchange" }, COD_PAYMENT).requestRefundInfo(admin, RETURN_ID, body), hasCode("REFUND_RECEIVER_NOT_APPLICABLE"));
+  await assert.rejects(() => make({ ...COD_RETURN, status: "COMPLETED" }, COD_PAYMENT).requestRefundInfo(admin, RETURN_ID, body), hasCode("RETURN_CLOSED"));
+});
+
+test("return detail tells COD (manual transfer + receiving account) apart from Stripe (automatic refund)", async () => {
+  const detail = (ret: JsonObject, payment: JsonObject) => createReturnService({
+    repository: {
+      getReturn: async () => ret,
+      getRefundableAmount: async () => 200000,
+      getPaymentByOrderId: async () => payment,
+      listReturnLines: async () => ({ rows: [] }),
+      getRefundReceiver: async () => VALID_RECEIVER,
+      getManualRefund: async () => ({ reference: "VCB2026100501", amount: 200000 })
+    }
+  }).getReturn(context("admin_operator_cskh_dt"), RETURN_ID);
+  const cod = await detail(COD_RETURN, COD_PAYMENT);
+  assert.equal(cod.payment_kind, "cod");
+  assert.equal(cod.refund_flow, "cod_manual");
+  assert.equal(cod.refund_receiver_status, "valid");
+  assert.equal(asJsonObject(cod.refund_receiver).account_number, "0123456789");
+  assert.equal(asJsonObject(cod.manual_refund).reference, "VCB2026100501");
+  const stripe = await detail({ ...COD_RETURN, payment_method: "ONLINE_PAYMENT" }, { payment_method: "ONLINE_PAYMENT", payment_provider: "stripe" });
+  assert.equal(stripe.payment_kind, "stripe");
+  assert.equal(stripe.refund_flow, "stripe_auto");
+  assert.equal(stripe.refund_receiver, null);
+  assert.equal(stripe.refund_receiver_status, "not_required");
+  const exchange = await detail({ ...COD_RETURN, return_type: "exchange" }, COD_PAYMENT);
+  assert.equal(exchange.refund_flow, "none");
+});
+
+test("the return queue filters by payment kind and refuses unknown kinds", async () => {
+  let filters: ReturnListFilters | null = null;
+  const service = createReturnService({ repository: { listReturns: async (received: ReturnListFilters) => { filters = received; return { rows: [] }; } } });
+  await service.listReturns(context("admin_operator_cskh_dt"), new URLSearchParams("payment_kind=cod"));
+  assert.equal(filters?.paymentKind, "cod");
+  await service.listReturns(context("admin_operator_cskh_dt"), new URLSearchParams("payment_kind=online"));
+  assert.equal(filters?.paymentKind, "online");
+  await service.listReturns(context("admin_operator_cskh_dt"), new URLSearchParams(""));
+  assert.equal(filters?.paymentKind, undefined);
+  await assert.rejects(() => service.listReturns(context("admin_operator_cskh_dt"), new URLSearchParams("payment_kind=momo")), hasStatus(422));
+});
+
+test("a request the warehouse could not accept can be closed with a reason, releasing its item hold", async () => {
+  let written: { status: string; reason?: unknown } | null = null;
+  const service = createReturnService({
+    repository: {
+      getReturn: async () => ({ return_id: RETURN_ID, status: "NEEDS_SUPPORT", return_type: "refund", version: 4 }),
+      updateReturnStatus: async (_id: string, input: { status: string; reason?: unknown }) => { written = input; return { status: input.status }; }
+    }
+  });
+  const admin = context("admin_operator_cskh_dt");
+  await assert.rejects(() => service.updateReturnStatus(admin, RETURN_ID, { status: "CANCELLED", expectedVersion: 4 }), hasCode("CANCEL_REASON_REQUIRED"));
+  assert.equal(written, null);
+  await service.updateReturnStatus(admin, RETURN_ID, { status: "CANCELLED", reason: "Hang tra ve khong dung mau, tu choi yeu cau", expectedVersion: 4 });
+  assert.equal(written?.status, "CANCELLED");
+  assert.equal(written?.reason, "Hang tra ve khong dung mau, tu choi yeu cau");
 });
 
 function context(roleCode) { return { authUser: { id: "auth-1" }, roleCode, accessToken: "jwt-token" }; }

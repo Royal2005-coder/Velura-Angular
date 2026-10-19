@@ -1,0 +1,28 @@
+{
+  "required_status_checks": {
+    "strict": true,
+    "checks": [
+      {"context": "validate", "app_id": 15368},
+      {"context": "validate-pr-contract", "app_id": 15368},
+      {"context": "test-api", "app_id": 15368},
+      {"context": "test-angular", "app_id": 15368},
+      {"context": "test-ai-worker", "app_id": 15368},
+      {"context": "build", "app_id": 15368},
+      {"context": "manifests", "app_id": 15368},
+      {"context": "migrations", "app_id": 15368},
+      {"context": "note-pr", "app_id": 15368}
+    ]
+  },
+  "enforce_admins": true,
+  "required_pull_request_reviews": {
+    "dismiss_stale_reviews": true,
+    "require_code_owner_reviews": true,
+    "required_approving_review_count": 1,
+    "require_last_push_approval": true
+  },
+  "restrictions": null,
+  "required_linear_history": false,
+  "allow_force_pushes": false,
+  "allow_deletions": false,
+  "required_conversation_resolution": true
+}

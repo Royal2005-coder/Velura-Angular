@@ -55,6 +55,15 @@ export const RETURN_STATUS_LABELS: Readonly<Record<string, string>> = {
   NEEDS_SUPPORT: 'Cần CSKH xử lý',
 };
 
+/** Thông tin nhận tiền COD của khách — `refund_receiver_status`. */
+export const REFUND_RECEIVER_STATUS_LABELS: Readonly<Record<string, string>> = {
+  not_required: 'Không cần thông tin nhận tiền',
+  missing: 'Chưa có thông tin nhận tiền',
+  invalid: 'Thông tin nhận tiền không hợp lệ',
+  supplement_requested: 'Đã yêu cầu khách bổ sung',
+  valid: 'Thông tin nhận tiền hợp lệ',
+};
+
 /** Trạng thái phiếu hỗ trợ — `SUPPORT_TICKET_STATUSES`. */
 export const TICKET_STATUS_LABELS: Readonly<Record<string, string>> = {
   open: 'Mới',

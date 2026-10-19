@@ -70,6 +70,7 @@ describe('OrderFlowPage with mocked Model', () => {
       'Đã hoàn tiền',
     ],
     cancelRequest: vi.fn(),
+    saveBank: vi.fn(),
   };
   beforeEach(async () => {
     routeOrderId = order.id;
@@ -80,6 +81,9 @@ describe('OrderFlowPage with mocked Model', () => {
     model.error.set(null);
     model.cancelRequest.mockReset();
     model.cancelRequest.mockResolvedValue(undefined);
+    model.saveBank.mockReset();
+    model.saveBank.mockResolvedValue(undefined);
+    model.orders.set([order]);
     model.sendOtp.mockReset();
     model.sendOtp.mockResolvedValue(undefined);
     model.verifyOtp.mockReset();
@@ -313,5 +317,164 @@ describe('OrderFlowPage with mocked Model', () => {
     expect(page.selections()['v-eligible']?.quantity).toBe(2);
     page.stepQuantity(deliveredMulti.items[1], 5);
     expect(page.selections()['v-eligible']?.quantity).toBe(2);
+  });
+
+  function openTracking(request: DemoReturn, target: DemoOrder = order) {
+    model.orders.set([target]);
+    model.requests.set([request]);
+    const fixture = TestBed.createComponent(OrderFlowPage);
+    const page = fixture.componentInstance;
+    page.verified.set(true);
+    page.open(target.id);
+    page.track(request);
+    fixture.detectChanges();
+    const text = () => (fixture.nativeElement.textContent as string).replace(/\s+/g, ' ');
+    return { fixture, page, text };
+  }
+  const rejectedRequest: DemoReturn = {
+    ...pendingRequest,
+    status: 'CANCELLED',
+    stage: -1,
+    cancelledBy: 'admin',
+    rejectedAt: '2026-10-18T09:00:00Z',
+    rejectionReason: 'Sản phẩm đã qua sử dụng',
+  };
+  const customerCancelledRequest: DemoReturn = {
+    ...pendingRequest,
+    status: 'CANCELLED',
+    stage: -1,
+    cancelledBy: 'customer',
+    cancelledAt: '2026-10-18T09:00:00Z',
+  };
+  const codRefundRequest: DemoReturn = { ...pendingRequest, status: 'CONTACTING', stage: 1, paymentMethod: 'COD', refundFlow: 'cod_manual' };
+  const deliveredWithRelease = (): DemoOrder => ({
+    ...order,
+    id: 'VLR-REJ-1',
+    status: 'delivered',
+    can_request_return: true,
+    items: [{ ...DEMO_LINES[0], quantity: 1, returnCount: 0, availableQuantity: 1, isInProgress: false }],
+  });
+
+  it('shows "Bị từ chối" with the reason when CSKH refused the request, instead of "Đã hủy yêu cầu"', () => {
+    const { page, text } = openTracking(rejectedRequest);
+    expect(page.requestLabel(rejectedRequest)).toBe('Bị từ chối');
+    expect(text()).toContain('Bị từ chối');
+    expect(text()).toContain('Yêu cầu bị từ chối lúc');
+    expect(text()).toContain('Sản phẩm đã qua sử dụng');
+    expect(text()).toContain('Lượt đổi/trả của sản phẩm đã được hoàn lại, bạn có thể gửi yêu cầu mới.');
+    expect(text()).not.toContain('Đã hủy yêu cầu');
+  });
+
+  it('keeps "Đã hủy yêu cầu" for a request the customer cancelled themself', () => {
+    const { page, text } = openTracking(customerCancelledRequest);
+    expect(page.requestLabel(customerCancelledRequest)).toBe('Đã hủy yêu cầu');
+    expect(text()).toContain('Đã hủy yêu cầu lúc');
+    expect(text()).toContain('Lượt đổi/trả của sản phẩm đã được hoàn lại, bạn có thể gửi yêu cầu mới.');
+    expect(text()).not.toContain('Bị từ chối');
+    expect(text()).not.toContain('Yêu cầu bị từ chối');
+  });
+
+  it('hides refund and bank blocks for a rejected COD refund request', () => {
+    const request: DemoReturn = { ...rejectedRequest, paymentMethod: 'COD', refundReceiver: { status: 'supplement_requested', supplementRequest: 'Gửi lại số tài khoản' } };
+    const { fixture, text } = openTracking(request);
+    expect(text()).not.toContain('Gửi lại số tài khoản');
+    expect(text()).not.toContain('Lưu thông tin nhận tiền');
+    expect(fixture.nativeElement.querySelector('input[name="account"]')).toBeNull();
+  });
+
+  it('lists a refused request as "Bị từ chối" and a self-cancelled one as "Đã hủy yêu cầu"', () => {
+    model.orders.set([order]);
+    model.requests.set([rejectedRequest, { ...customerCancelledRequest, id: 'RET-SELF' }]);
+    const fixture = TestBed.createComponent(OrderFlowPage);
+    const page = fixture.componentInstance;
+    page.verified.set(true);
+    page.view.set('requests');
+    fixture.detectChanges();
+    const pills = Array.from(fixture.nativeElement.querySelectorAll('.return-status-pill') as NodeListOf<HTMLElement>).map((pill) => pill.textContent?.trim());
+    expect(pills).toEqual(['Bị từ chối', 'Đã hủy yêu cầu']);
+  });
+
+  it('treats a rejected request as released: it neither blocks a new request nor counts as success', () => {
+    const delivered = deliveredWithRelease();
+    model.orders.set([delivered]);
+    model.requests.set([{ ...rejectedRequest, id: 'RET-REJ', orderId: delivered.id }]);
+    const page = TestBed.createComponent(OrderFlowPage).componentInstance;
+    expect(page.orderActiveReturn(delivered)).toBeNull();
+    expect(page.canStartReturn(delivered)).toBe(true);
+    expect(page.returnBlockedReason(delivered)).toBeNull();
+    expect(page.orderReturnStatusBadge(delivered)).toEqual({ kind: 'rejected', label: 'Yêu cầu đổi/trả bị từ chối', code: 'RET-REJ' });
+  });
+
+  it('shows no return badge for a self-cancelled request and still allows a new one', () => {
+    const delivered = deliveredWithRelease();
+    model.orders.set([delivered]);
+    model.requests.set([{ ...customerCancelledRequest, orderId: delivered.id }]);
+    const page = TestBed.createComponent(OrderFlowPage).componentInstance;
+    expect(page.canStartReturn(delivered)).toBe(true);
+    expect(page.orderReturnStatusBadge(delivered)).toBeNull();
+  });
+
+  it('displays the CSKH supplement request and the bank form for a COD refund waiting on receiving info', () => {
+    const request: DemoReturn = { ...codRefundRequest, refundReceiver: { status: 'supplement_requested', supplementRequest: 'Vui lòng gửi lại số tài khoản đúng định dạng' } };
+    const { fixture, text } = openTracking(request);
+    expect(text()).toContain('CSKH yêu cầu bổ sung thông tin nhận hoàn tiền: Vui lòng gửi lại số tài khoản đúng định dạng');
+    expect(fixture.nativeElement.querySelector('input[name="account"]')).not.toBeNull();
+    expect(text()).toContain('Lưu thông tin nhận tiền');
+  });
+
+  it('shows the bank form for a COD refund whose receiving info is missing or invalid', () => {
+    for (const status of ['missing', 'invalid'] as const) {
+      const { fixture, text } = openTracking({ ...codRefundRequest, refundReceiver: { status } });
+      expect(fixture.nativeElement.querySelector('input[name="account"]')).not.toBeNull();
+      if (status === 'invalid') expect(text()).toContain('chưa hợp lệ');
+      fixture.destroy();
+    }
+  });
+
+  it('does not ask for receiving info before CSKH has made contact', () => {
+    const { fixture } = openTracking({ ...codRefundRequest, status: 'REQUESTED', stage: 0, refundReceiver: { status: 'missing' } });
+    expect(fixture.nativeElement.querySelector('input[name="account"]')).toBeNull();
+  });
+
+  it('submits the receiving info through the Model and closes the update form', async () => {
+    const { page } = openTracking({ ...codRefundRequest, refundReceiver: { status: 'missing' } });
+    page.bankName = 'Vietcombank';
+    page.bankAccount = '0123456789';
+    page.bankHolder = 'Nguyen Van A';
+    page.saveBank();
+    await vi.waitFor(() => expect(page.bankAccount).toBe(''));
+    expect(model.saveBank).toHaveBeenCalledWith(pendingRequest.id, 'Vietcombank', '0123456789', 'Nguyen Van A');
+    expect(page.error()).toBe('');
+  });
+
+  it('echoes a valid receiving account with a "Cập nhật" action until the refund is paid', () => {
+    const request: DemoReturn = { ...codRefundRequest, refundReceiver: { status: 'valid', bankName: 'Vietcombank', accountLast4: '7890', holder: 'NGUYEN VAN A' } };
+    const { fixture, page, text } = openTracking(request);
+    expect(text()).toContain('Tài khoản nhận tiền: Vietcombank · ••••7890 (NGUYEN VAN A)');
+    expect(fixture.nativeElement.querySelector('input[name="account"]')).toBeNull();
+    const update = (Array.from(fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>)).find((button) => button.textContent?.trim() === 'Cập nhật');
+    expect(update).toBeTruthy();
+    update?.click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('input[name="account"]')).not.toBeNull();
+    expect(page.bankName).toBe('Vietcombank');
+    expect(page.bankAccount).toBe('');
+  });
+
+  it('offers no "Cập nhật" once the refund has been transferred', () => {
+    const request: DemoReturn = { ...codRefundRequest, status: 'REFUNDED', stage: 6, completedAt: '2026-10-19T09:00:00Z', refundReceiver: { status: 'valid', bankName: 'Vietcombank', accountLast4: '7890', holder: 'NGUYEN VAN A' } };
+    const { fixture, text } = openTracking(request);
+    expect(text()).toContain('Tiền đã được chuyển tới: Vietcombank · ••••7890');
+    const buttons = Array.from(fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>);
+    expect(buttons.some((button) => button.textContent?.trim() === 'Cập nhật')).toBe(false);
+  });
+
+  it('never shows the bank form or supplement notice for an online (Stripe) refund', () => {
+    const stripeOrder: DemoOrder = { ...order, id: 'DEMO-STRIPE', payment: 'STRIPE' };
+    const request: DemoReturn = { ...pendingRequest, orderId: stripeOrder.id, status: 'CONTACTING', stage: 1, paymentMethod: 'ONLINE_PAYMENT', refundFlow: 'stripe_auto', refundReceiver: undefined };
+    const { fixture, text } = openTracking(request, stripeOrder);
+    expect(fixture.nativeElement.querySelector('input[name="account"]')).toBeNull();
+    expect(text()).not.toContain('CSKH yêu cầu bổ sung');
+    expect(text()).not.toContain('Lưu thông tin nhận tiền');
   });
 });

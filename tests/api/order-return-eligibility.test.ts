@@ -22,6 +22,8 @@ function fakeRepository(overrides: Partial<UserReturnsRepository> = {}): UserRet
     findReturnById: async () => null,
     updateReturn: async () => [],
     listReturnsForUser: async () => [],
+    getRefundReceiver: async () => null,
+    setRefundReceiver: async () => ({}),
     ...overrides
   };
 }
@@ -78,5 +80,31 @@ test("two returns reach the U2-02 cap and leave the item unavailable", async () 
   });
   const [item] = await attachReturnEligibility(repository, ORDER_ID, [{ item_id: ITEM_ID, quantity: 2 }]);
   assert.equal(item.return_count, 2);
+  assert.equal(item.available_quantity, 0);
+});
+
+test("a request CSKH rejected releases its hold and leaves the succeeded request's quantity and turn untouched", async () => {
+  const quantities: Record<string, number> = { done: 1, rejected: 2 };
+  const repository = fakeRepository({
+    listReturnsForOrder: async () => [
+      { return_id: "done", status: "COMPLETED" },
+      { return_id: "rejected", status: "CANCELLED", cancelled_by: "admin", rejection_reason: "Hang tra ve khong dat QA" }
+    ],
+    listReturnItemsForOrderItem: async (returnId) => [{ order_item_id: ITEM_ID, quantity: quantities[String(returnId)] }]
+  });
+  const [item] = await attachReturnEligibility(repository, ORDER_ID, [{ item_id: ITEM_ID, quantity: 3 }]);
+  assert.equal(item.is_in_progress, false);
+  assert.equal(item.return_count, 1, "only the succeeded request consumes a turn");
+  assert.equal(item.available_quantity, 2, "the rejected 2 units are available again, the succeeded 1 stays used");
+});
+
+test("a request stopped in NEEDS_SUPPORT keeps the line locked until CSKH closes it", async () => {
+  const repository = fakeRepository({
+    listReturnsForOrder: async () => [{ return_id: "stuck", status: "NEEDS_SUPPORT", tracking_return_code: "RET1" }],
+    listReturnItemsForOrderItem: async () => [{ order_item_id: ITEM_ID, quantity: 1 }]
+  });
+  const [item] = await attachReturnEligibility(repository, ORDER_ID, [{ item_id: ITEM_ID, quantity: 3 }]);
+  assert.equal(item.is_in_progress, true);
+  assert.equal(item.in_progress_status, "NEEDS_SUPPORT");
   assert.equal(item.available_quantity, 0);
 });

@@ -59,18 +59,6 @@ const SHAPE_MAP: Record<string, string> = {
   'Inverted Triangle': 'Dáng tam giác ngược',
 };
 
-const COLOR_SYNONYMS: Record<string, string[]> = {
-  ivory: ['ivory', 'pearl', 'white', 'cream', 'kem', 'trang'],
-  white: ['white', 'pearl', 'ivory', 'cream', 'trang'],
-  beige: ['beige', 'champagne', 'chapagne', 'sand', 'oat', 'kem'],
-  champagne: ['champagne', 'chapagne', 'beige'],
-  slate: ['slate', 'slat', 'blue'],
-  burgundy: ['burgundy', 'wine', 'maroon', 'bordeaux', 'do'],
-  black: ['black', 'onyx', 'jet', 'charcoal', 'den'],
-  pink: ['pink', 'blush', 'rose', 'sakura', 'hong'],
-  green: ['green', 'sage', 'mint', 'pistachio', 'olive', 'xanh'],
-  blue: ['blue', 'sky', 'navy', 'ice', 'baby', 'dusty', 'pastel', 'denim', 'sapphire', 'xanh'],
-};
 @Component({
   selector: 'app-product-detail-page',
   imports: [ProductCard, RouterLink, AiImageWorkbench],
@@ -219,6 +207,12 @@ export class ProductDetailPage {
   });
 
   readonly stockLabel = computed(() => {
+    if (this.isDiscontinued()) {
+      return 'Ngừng kinh doanh';
+    }
+    if (this.isHidden()) {
+      return 'Tạm ẩn';
+    }
     if (this.isCombo()) {
       const stock = this.comboMaxStock();
       if (stock <= 0) {
@@ -254,6 +248,9 @@ export class ProductDetailPage {
     const id = this.product()?.product_id;
     return id ? this.wishlist.has(id) : false;
   });
+  readonly isDiscontinued = computed(() => this.product()?.status === 'discontinued');
+  readonly isHidden = computed(() => this.product()?.status === 'hidden');
+  readonly isBuyDisabled = computed(() => this.isOutOfStock() || this.isDiscontinued() || this.isHidden());
   readonly isOutOfStock = computed(() => {
     if (this.product()?.status === 'out_of_stock') return true;
     if (this.isCombo()) {
@@ -465,10 +462,12 @@ export class ProductDetailPage {
           this.quantity.set(1);
           this.comboExpanded.set(null);
           this.comboPicks.set(this.buildComboPicks(row));
-          const initialColor = this.colors()[0]?.name || row.variants?.[0]?.color || null;
+          const primaryColor = row.image_colors?.[this.gallery()[0]];
+          const initialColor = this.colors().find((option) => option.name === primaryColor)?.name
+            || this.colors()[0]?.name || row.variants?.[0]?.color || null;
           this.selectedColor.set(initialColor);
-          this.selectedSize.set(this.sizes()[0] || row.variants?.[0]?.size || null);
-          this.activeImage.set(initialColor ? this.imageIndexForColor(initialColor) : 0);
+          this.selectedSize.set(this.sizes()[0] || null);
+          this.activeImage.set(0);
           this.loading.set(false);
           this.catalog.getProducts().subscribe({
             next: (rows) => {
@@ -513,6 +512,14 @@ export class ProductDetailPage {
    * Adds the current variant to the original localStorage cart.
    */
   addToCart(): boolean {
+    if (this.isDiscontinued()) {
+      showToast('Sản phẩm đã ngừng kinh doanh.');
+      return false;
+    }
+    if (this.isHidden()) {
+      showToast('Sản phẩm hiện đang tạm ẩn.');
+      return false;
+    }
     if (this.isOutOfStock()) {
       showToast('Sản phẩm hiện đã hết hàng.');
       return false;
@@ -529,6 +536,14 @@ export class ProductDetailPage {
    * Starts instant checkout for the selected variant without polluting the persistent cart.
    */
   buyNow(): void {
+    if (this.isDiscontinued()) {
+      showToast('Sản phẩm đã ngừng kinh doanh.');
+      return;
+    }
+    if (this.isHidden()) {
+      showToast('Sản phẩm hiện đang tạm ẩn.');
+      return;
+    }
     if (this.isOutOfStock()) {
       showToast('Sản phẩm hiện đã hết hàng.');
       return;
@@ -548,6 +563,14 @@ export class ProductDetailPage {
    * Adds every selected combo variant using the original set payload.
    */
   addComboToCart(): void {
+    if (this.isDiscontinued()) {
+      showToast('Set combo đã ngừng kinh doanh.');
+      return;
+    }
+    if (this.isHidden()) {
+      showToast('Set combo hiện đang tạm ẩn.');
+      return;
+    }
     if (this.isOutOfStock()) {
       showToast('Set combo hiện đã hết hàng do có sản phẩm thành phần không khả dụng.');
       return;
@@ -563,6 +586,14 @@ export class ProductDetailPage {
    * Starts checkout with the selected combo set directly, matching instant checkout.
    */
   buyComboNow(): void {
+    if (this.isDiscontinued()) {
+      showToast('Set combo đã ngừng kinh doanh.');
+      return;
+    }
+    if (this.isHidden()) {
+      showToast('Set combo hiện đang tạm ẩn.');
+      return;
+    }
     if (this.isOutOfStock()) {
       showToast('Set combo hiện đã hết hàng do có sản phẩm thành phần không khả dụng.');
       return;
@@ -680,23 +711,19 @@ export class ProductDetailPage {
   }
 
   /**
-   * Selects a gallery image by index and syncs matching color.
+   * Selects a gallery image; only an explicit color association changes the selected variant.
    */
   selectImage(index: number): void {
     this.activeImage.set(index);
-    const gallery = this.gallery();
-    const url = gallery[index];
-    if (url) {
-      const colors = this.colors();
-      const matched = colors.find((c) => this.imageMatchesColor(url, c.name));
-      if (matched && matched.name !== this.selectedColor()) {
-        this.selectedColor.set(matched.name);
-        const sizes = this.sizes();
-        if (sizes.length && !sizes.includes(this.selectedSize() || '')) {
-          this.selectedSize.set(sizes[0]);
-        }
-        this.clampQuantity();
+    const url = this.gallery()[index];
+    const color = url ? this.product()?.image_colors?.[url] : undefined;
+    if (color && color !== this.selectedColor() && this.colors().some((option) => option.name === color)) {
+      this.selectedColor.set(color);
+      const sizes = this.sizes();
+      if (!sizes.includes(this.selectedSize() || '')) {
+        this.selectedSize.set(sizes[0] || null);
       }
+      this.clampQuantity();
     }
   }
   /**
@@ -721,14 +748,14 @@ export class ProductDetailPage {
   }
 
   /**
-   * Selects a color swatch and switches the gallery image to match.
+   * Selects a color and shows its first associated image, then a common image, then the primary.
    */
   selectColor(color: string): void {
     this.selectedColor.set(color);
     this.activeImage.set(this.imageIndexForColor(color));
     const sizes = this.sizes();
-    if (sizes.length && !sizes.includes(this.selectedSize() || '')) {
-      this.selectedSize.set(sizes[0]);
+    if (!sizes.includes(this.selectedSize() || '')) {
+      this.selectedSize.set(sizes[0] || null);
     }
     this.clampQuantity();
   }
@@ -1092,27 +1119,13 @@ export class ProductDetailPage {
 
   private imageIndexForColor(color: string): number {
     const gallery = this.gallery();
-    if (gallery.length <= 1) {
-      return 0;
+    const imageColors = this.product()?.image_colors;
+    const matchingIndex = gallery.findIndex((url) => imageColors?.[url] === color);
+    if (matchingIndex >= 0) {
+      return matchingIndex;
     }
-    let bestIdx = -1;
-    let bestScore = 0;
-    gallery.forEach((url, idx) => {
-      const token = decodeURIComponent(url.split('/').pop() || '')
-        .toLowerCase()
-        .replace(/\.[a-z0-9]+$/, '')
-        .replace(/_+0*\d+(?:\s*\(\d+\))?$/, '');
-      const score = this.scoreColorMatch(color, token);
-      if (score > bestScore) {
-        bestScore = score;
-        bestIdx = idx;
-      }
-    });
-    if (bestIdx >= 0 && bestScore > 0) {
-      return bestIdx;
-    }
-    const colorIndex = this.colors().findIndex((c) => c.name === color);
-    return colorIndex >= 0 && colorIndex < gallery.length ? colorIndex : 0;
+    const commonIndex = gallery.findIndex((url) => imageColors?.[url] === undefined);
+    return commonIndex >= 0 ? commonIndex : 0;
   }
 
   private colorOptions(variants: ProductVariant[]): ProductColorOption[] {
@@ -1123,63 +1136,6 @@ export class ProductDetailPage {
       }
     }
     return [...map.entries()].map(([name, hex]) => ({ name, hex }));
-  }
-
-  private imageMatchesColor(url: string, color: string): boolean {
-    if (!url || !color) return false;
-    const token = decodeURIComponent(url.split('/').pop() || '')
-      .toLowerCase()
-      .replace(/\.[a-z0-9]+$/, '')
-      .replace(/_+0*\d+(?:\s*\(\d+\))?$/, '');
-    return this.scoreColorMatch(color, token) > 0;
-  }
-
-  private scoreColorMatch(colorName: string, imgToken: string): number {
-    if (!imgToken) {
-      return 0;
-    }
-    const cNorm = colorName
-      .toLowerCase()
-      .normalize('NFKD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[đĐ]/g, 'd')
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '');
-    const iNorm = imgToken
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '');
-    if (!cNorm || !iNorm) {
-      return 0;
-    }
-    if (cNorm === iNorm) {
-      return 100;
-    }
-    if (iNorm.includes(cNorm) || cNorm.includes(iNorm)) {
-      return 80;
-    }
-    const cWords = cNorm.split('-').filter(Boolean);
-    const iWords = iNorm.split('-').filter(Boolean);
-    let score = 0;
-    for (const cw of cWords) {
-      for (const iw of iWords) {
-        if (cw === iw) {
-          score += 30;
-        } else if (
-          cw.length >= 4 &&
-          iw.length >= 4 &&
-          (cw.startsWith(iw.slice(0, 4)) || iw.startsWith(cw.slice(0, 4)))
-        ) {
-          score += 25;
-        } else if (
-          (COLOR_SYNONYMS[cw] || []).includes(iw) ||
-          (COLOR_SYNONYMS[iw] || []).includes(cw)
-        ) {
-          score += 15;
-        }
-      }
-    }
-    return score;
   }
 
 

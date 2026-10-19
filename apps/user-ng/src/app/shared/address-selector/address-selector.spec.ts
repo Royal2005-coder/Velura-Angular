@@ -57,6 +57,22 @@ describe('AddressSelector with mocked geography Model', () => {
     expect(fixture.componentInstance.districtCode()).toBe('');
   });
 
+  it('recovers missing structured fields from a saved legacy address string', () => {
+    const fixture = TestBed.createComponent(AddressSelector);
+    const receive = vi.fn();
+    fixture.componentInstance.selectionChange.subscribe(receive);
+    fixture.componentRef.setInput('value', {
+      province: '', district: '', ward: '',
+      detail: '33, Phường Phúc Xá, Quận Ba Đình, Thành phố Hà Nội',
+    });
+    fixture.detectChanges();
+
+    expect(receive).toHaveBeenLastCalledWith({
+      province: 'Thành phố Hà Nội', district: 'Quận Ba Đình', ward: 'Phường Phúc Xá', mode: 'legacy', valid: true,
+    });
+    expect(fixture.componentInstance.restoreNotice()).toBe('');
+  });
+
   it('ignores a late old dataset after switching schemes', () => {
     const delayed = new Subject<GeographyDataset>();
     load.mockImplementationOnce(() => delayed);

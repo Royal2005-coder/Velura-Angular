@@ -505,7 +505,25 @@ export async function handleOrdersRoute(
             } catch {}
           }
           const payments = paymentsByOrder.get(oid) || [];
-          return presentOrderForCustomer(order, items, [], payments);
+          const [returnRequests, replacementSource] = await Promise.all([
+            userReturnsRepository.listReturnsForOrder(order.order_id).catch(() => []),
+            userReturnsRepository.findReturnByExchangeOrderId?.(order.order_id).catch(() => null) ?? Promise.resolve(null)
+          ]);
+          return {
+            ...presentOrderForCustomer(order, items, [], payments),
+            return_requests: returnRequests
+              .filter(ret => !["CANCELLED", "REJECTED", "rejected"].includes(asString(ret.status)))
+              .sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")))
+              .map(ret => ({
+                return_id: ret.return_id,
+                tracking_return_code: ret.tracking_return_code,
+                return_type: ret.return_type,
+                status: ret.status,
+                created_at: ret.created_at
+              })),
+            is_exchange_replacement: Boolean(replacementSource),
+            source_return_id: replacementSource?.return_id || null
+          };
         }));
         return sendJson(res, 200, { success: true, orders: ordersWithItems }, corsHeaders);
       }
@@ -607,19 +625,9 @@ export async function handleOrdersRoute(
       });
       const contact = session.contact;
       const phone = contact.phone;
-      const twilioReady = isSmsConfigured();
-      const existingPhoneUser = await checkoutService.findUserByPhone(phone);
       let otpEmail: string | null = null;
       if (email && asString(email).trim()) {
         otpEmail = requireGuestOtpEmail(email);
-      } else if (existingPhoneUser?.email && asString(existingPhoneUser.email).includes("@")) {
-        otpEmail = asString(existingPhoneUser.email).trim();
-      } else {
-        otpEmail = config.supportAlertTo || config.smtpUser || "gianth23406@st.uel.edu.vn";
-      }
-
-      if (existingPhoneUser?.is_active && existingPhoneUser?.email && otpEmail && asString(existingPhoneUser.email).toLowerCase() !== otpEmail.toLowerCase()) {
-        throw new HttpError(422, "OTP_CHANNEL_MISMATCH", "Số điện thoại này đã gắn với email tài khoản khác. Vui lòng nhập đúng email tài khoản hoặc đăng nhập để tiếp tục.");
       }
       const otpCode = session.otpCode;
 
@@ -680,7 +688,8 @@ export async function handleOrdersRoute(
         }
       }
 
-      const smsSent = smsResult.success;
+      // Until a live provider is configured, the checkout contract treats 123456 as a simulated SMS.
+      const smsSent = smsResult.success || !isSmsConfigured();
       if (!smsSent && !emailSent) {
         throw new HttpError(502, "OTP_SEND_FAILED", "Chưa thể gửi mã OTP. Vui lòng thử lại sau.");
       }

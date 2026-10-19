@@ -30,4 +30,20 @@ describe('AccountOrdersPage', () => {
     expect(root.textContent).toContain('VLR-REAL-1');
     expect(root.textContent).toContain('Đã xác nhận');
   });
+
+  it('shows one tracking action with the number of return requests', async () => {
+    await createStorefrontPage(AccountOrdersPage, {
+      get: () => of({
+        orders: [{
+          order_id: 'o1',
+          order_code: 'VLR-RETURNED',
+          status: 'delivered',
+          return_requests: [{ return_id: 'r1' }, { return_id: 'r2' }],
+        }],
+      }),
+    });
+    const fixture = lastStorefrontFixture();
+    fixture.detectChanges();
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Theo dõi đổi/trả (2)');
+  });
 });

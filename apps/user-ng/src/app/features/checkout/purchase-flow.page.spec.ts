@@ -50,6 +50,8 @@ describe('PurchaseFlowPage with mocked Model', () => {
     sendOtp: vi.fn(),
     verifyOtp: vi.fn(),
     saveAddress: vi.fn(() => 0),
+    loadAddresses: vi.fn(async () => undefined),
+    setDefaultAddress: vi.fn(async () => undefined),
     place,
   };
   beforeEach(async () => {
@@ -70,6 +72,8 @@ describe('PurchaseFlowPage with mocked Model', () => {
     model.userId.set(null);
     model.addresses.set([]);
     model.saveAddress.mockClear();
+    model.loadAddresses.mockClear();
+    model.setDefaultAddress.mockClear();
     await TestBed.configureTestingModule({
       imports: [PurchaseFlowPage],
       providers: [
@@ -143,6 +147,23 @@ describe('PurchaseFlowPage with mocked Model', () => {
     expect(fixture.nativeElement.textContent).toContain('Họ tên người nhận');
     expect(fixture.nativeElement.textContent).toContain('Gửi mã OTP');
     expect(fixture.nativeElement.querySelector('[aria-label="Mở sổ địa chỉ"]')).toBeNull();
+  });
+  it('sends the simulated SMS OTP without requiring an email', () => {
+    const fixture = createCheckoutFixture();
+    const page = fixture.componentInstance;
+    page.address.name = 'Nguyễn Văn An';
+    page.address.phone = '0912345678';
+    page.address.email = '';
+
+    page.sendOtp();
+
+    expect(sendOtp).toHaveBeenCalledWith({
+      full_name: 'Nguyễn Văn An',
+      phone: '0912345678',
+      email: '',
+    });
+    expect(page.fieldErrors()['email']).toBeUndefined();
+    expect(page.otpPhone()).toBe('0912345678');
   });
   it('never displays success on a failed create and ignores duplicate clicks', () => {
     const request = new Subject<never>();
@@ -233,6 +254,21 @@ describe('PurchaseFlowPage with mocked Model', () => {
     expect(fixture.nativeElement.textContent).not.toContain('Gửi mã OTP');
     expect(fixture.nativeElement.querySelector('[aria-label="Mở sổ địa chỉ"]')).not.toBeNull();
     expect(fixture.componentInstance.address.detail).toBe('Địa chỉ A');
+  });
+  it('loads the member address book and persists a newly selected default', async () => {
+    const first = { name: 'A', phone: '0901234567', email: '', province: 'HCM', district: 'Q1', ward: 'P1', detail: 'Địa chỉ A', isDefault: true };
+    const second = { ...first, name: 'B', detail: 'Địa chỉ B', isDefault: false };
+    model.member.set(true);
+    model.userId.set('member-a');
+    model.addresses.set([first, second]);
+    const page = createCheckoutFixture().componentInstance;
+
+    expect(model.loadAddresses).toHaveBeenCalled();
+    expect(page.address.detail).toBe('Địa chỉ A');
+    await page.makeDefaultAddress(1);
+
+    expect(model.setDefaultAddress).toHaveBeenCalledWith(1);
+    expect(page.address.detail).toBe('Địa chỉ B');
   });
 
   it('switches seamlessly between 2 saved addresses in the address book (TC-CHECKOUT-06)', () => {

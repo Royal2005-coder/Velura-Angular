@@ -327,6 +327,7 @@ export class PurchaseFlowPage {
       clearTimeout(this.otpTimeout);
     });
     if (!requestedOrder) this.prefillDefault();
+    if (!requestedOrder && this.member()) void this.loadMemberAddresses();
     effect(() => {
       this.model.addresses();
       const userId = this.model.userId();
@@ -438,9 +439,9 @@ export class PurchaseFlowPage {
         this.otpError.set('Vui lòng nhập họ tên đầy đủ trước khi nhận mã OTP.');
         return;
       }
-      if (!this.address.email?.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(this.address.email.trim())) {
-        this.fieldErrors.update((f) => ({ ...f, email: 'Vui lòng nhập email hợp lệ để nhận mã xác thực OTP.' }));
-        this.otpError.set('Vui lòng nhập email để nhận mã xác thực OTP.');
+      if (this.address.email?.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(this.address.email.trim())) {
+        this.fieldErrors.update((f) => ({ ...f, email: 'Email chưa đúng định dạng.' }));
+        this.otpError.set('Email đã nhập chưa đúng định dạng. Bạn có thể sửa hoặc để trống.');
         return;
       }
     }
@@ -504,7 +505,7 @@ export class PurchaseFlowPage {
     this.otpError.set('');
   }
   /** Open a native modal with a separate pending selection, keeping checkout unchanged until confirmed. */
-  openAddressBook(): void {
+  async openAddressBook(): Promise<void> {
     if (!this.member()) return;
     this.dialogMode.set('list');
     this.dialogErrors.set({});
@@ -513,6 +514,16 @@ export class PurchaseFlowPage {
       this.bookEntries().findIndex((entry) => this.sameAddress(entry.address, this.address)),
     );
     this.addressDialog.nativeElement.showModal();
+    this.addressBusy.set(true);
+    try {
+      await this.model.loadAddresses();
+      const selected = this.model.addresses().findIndex((entry) => this.sameAddress(entry, this.address));
+      this.pendingAddress.set(selected >= 0 ? selected : this.model.addresses().findIndex((entry) => entry.isDefault));
+    } catch (error) {
+      this.dialogErrors.set({ form: error instanceof Error ? error.message : 'Chưa tải được sổ địa chỉ.' });
+    } finally {
+      this.addressBusy.set(false);
+    }
   }
   /** Closing or pressing Escape discards only the unapplied modal draft. */
   closeAddressBook(): void {
@@ -595,6 +606,21 @@ export class PurchaseFlowPage {
     if (address) {
       this.selectedAddress = index;
       this.applyAddress(address);
+    }
+  }
+  /** Persist a new account default and immediately use it for the current checkout. */
+  async makeDefaultAddress(index: number): Promise<void> {
+    if (this.addressBusy()) return;
+    this.addressBusy.set(true);
+    this.dialogErrors.set({});
+    try {
+      await this.model.setDefaultAddress(index);
+      this.pendingAddress.set(index);
+      this.chooseAddress(index);
+    } catch (error) {
+      this.dialogErrors.set({ form: error instanceof Error ? error.message : 'Chưa đặt được địa chỉ mặc định.' });
+    } finally {
+      this.addressBusy.set(false);
     }
   }
   /** Validate everything at the single final action, including ownership of the current phone. */
@@ -976,5 +1002,13 @@ export class PurchaseFlowPage {
     const defaultIndex = addresses.findIndex((address) => address.isDefault);
     const index = defaultIndex >= 0 ? defaultIndex : 0;
     this.chooseAddress(index);
+  }
+  private async loadMemberAddresses(): Promise<void> {
+    try {
+      await this.model.loadAddresses();
+      if (!this.address.detail.trim() && this.selectedAddress < 0) this.prefillDefault();
+    } catch {
+      // The store exposes the load error; checkout remains editable by hand.
+    }
   }
 }

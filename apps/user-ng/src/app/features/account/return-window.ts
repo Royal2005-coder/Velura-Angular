@@ -24,13 +24,14 @@ export interface ReturnableOrder {
   delivered_at?: string;
   updated_at?: string;
   created_at?: string;
+  is_exchange_replacement?: boolean;
 }
 
 /**
  * Đơn Giao thành công còn trong 7 ngày. Bộ trạng thái KAN-59 không còn `completed`.
  */
 export function isReturnableOrder(order: ReturnableOrder, now = new Date()): boolean {
-  if (order.status !== 'delivered') {
+  if (order.is_exchange_replacement || order.status !== 'delivered') {
     return false;
   }
   const raw = order.delivered_at || order.updated_at || order.created_at;

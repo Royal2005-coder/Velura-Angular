@@ -225,7 +225,7 @@ jobs:
         with: {python-version: '3.11'}
       - name: Parse chatbot release SQL and require its dependency chain
         run: |
-          python -m pip install pglast==7.7
+          python -m pip install pglast==7.21
           python - <<'PY'
           from pathlib import Path
           from pglast import ast, parse_sql

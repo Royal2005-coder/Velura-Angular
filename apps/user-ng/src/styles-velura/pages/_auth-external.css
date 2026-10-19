@@ -375,6 +375,12 @@
   margin-top: 6px;
 }
 
+.velura-auth-page .referral-terms {
+  max-width: 100%;
+  margin-bottom: 0;
+  line-height: 1.45;
+}
+
 /* ---- Trạng thái bắt buộc của logic xác thực hiện có ---- */
 .velura-auth-page .tab-panel {
   display: none;

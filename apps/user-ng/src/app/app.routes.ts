@@ -1,6 +1,7 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './core/guards/auth.guard';
 import { purchaseFlowGuard } from './core/guards/purchase-flow.guard';
+import { styleQuizExitGuard } from './core/guards/style-quiz-exit.guard';
 import { SiteShell } from './layout/site-shell/site-shell';
 
 export const routes: Routes = [
@@ -66,6 +67,7 @@ export const routes: Routes = [
       {
         path: 'ai/style-quiz',
         loadComponent: () => import('./features/ai/style-quiz.page').then((m) => m.StyleQuizPage),
+        canDeactivate: [styleQuizExitGuard],
         title: 'Style Quiz - Khám phá phong cách cá nhân - Velura Store',
       },
       {

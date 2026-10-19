@@ -45,6 +45,7 @@ const pendingRequest: DemoReturn = {
   createdAt: '2026-09-25T00:00:00Z',
 };
 describe('OrderFlowPage with mocked Model', () => {
+  let routeOrderId: string | null = order.id;
   const model = {
     member: signal(false),
     userId: signal<string | null>(null),
@@ -52,10 +53,13 @@ describe('OrderFlowPage with mocked Model', () => {
     orders: signal([order]),
     requests: signal<DemoReturn[]>([]),
     verifiedPhone: signal('0901234567'),
+    otpExpiresIn: signal(60),
     loading: signal(false),
     error: signal<string | null>(null),
     cancellableBeforeStage: 3,
     supportsBankInfo: true,
+    sendOtp: vi.fn(),
+    verifyOtp: vi.fn(),
     timeline: () => [
       'Đã ghi nhận',
       'Velura đang liên hệ',
@@ -68,6 +72,7 @@ describe('OrderFlowPage with mocked Model', () => {
     cancelRequest: vi.fn(),
   };
   beforeEach(async () => {
+    routeOrderId = order.id;
     model.member.set(false);
     model.verifiedPhone.set('');
     model.requests.set([]);
@@ -75,11 +80,24 @@ describe('OrderFlowPage with mocked Model', () => {
     model.error.set(null);
     model.cancelRequest.mockReset();
     model.cancelRequest.mockResolvedValue(undefined);
+    model.sendOtp.mockReset();
+    model.sendOtp.mockResolvedValue(undefined);
+    model.verifyOtp.mockReset();
+    model.verifyOtp.mockResolvedValue(undefined);
     await TestBed.configureTestingModule({
       imports: [OrderFlowPage],
       providers: [
         provideRouter([]),
-        { provide: ActivatedRoute, useValue: stubActivatedRoute({ id: order.id }) },
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            ...stubActivatedRoute(),
+            snapshot: {
+              ...stubActivatedRoute().snapshot,
+              paramMap: { get: (name: string) => name === 'id' ? routeOrderId : null },
+            },
+          },
+        },
         { provide: ORDER_ACCOUNT_MODEL, useValue: model },
       ],
     }).compileComponents();
@@ -127,6 +145,48 @@ describe('OrderFlowPage with mocked Model', () => {
     expect(fixture.componentInstance.verified()).toBe(true);
     expect(fixture.componentInstance.view()).toBe('detail');
     expect(fixture.componentInstance.order()?.id).toBe(order.id);
+  });
+  it('starts the guest orders entry at both lookup choices even with a previous OTP session', () => {
+    routeOrderId = null;
+    model.verifiedPhone.set('0901234567');
+    const fixture = TestBed.createComponent(OrderFlowPage);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.view()).toBe('lookup');
+    expect(fixture.componentInstance.verified()).toBe(false);
+    expect(fixture.nativeElement.textContent).toContain('Bằng SĐT');
+    expect(fixture.nativeElement.textContent).toContain('Bằng mã đơn');
+  });
+  it('shows a one-minute OTP countdown as minutes and seconds', () => {
+    const fixture = TestBed.createComponent(OrderFlowPage);
+    const page = fixture.componentInstance;
+    page.view.set('otp');
+    page.seconds.set(60);
+    fixture.detectChanges();
+
+    expect(page.countdown()).toBe('01:00');
+    expect(fixture.nativeElement.textContent).toContain('Hiệu lực 01:00');
+    page.seconds.set(9);
+    expect(page.countdown()).toBe('00:09');
+  });
+  it('blocks OTP verification after five invalid attempts', async () => {
+    model.verifyOtp.mockRejectedValue(Object.assign(new Error('Mã xác thực không hợp lệ.'), { code: 'INVALID_OTP' }));
+    const fixture = TestBed.createComponent(OrderFlowPage);
+    const page = fixture.componentInstance;
+    page.view.set('otp');
+    page.seconds.set(60);
+    page.otp = '000000';
+
+    for (let attempt = 0; attempt < 5; attempt++) {
+      page.verify();
+      await fixture.whenStable();
+    }
+    fixture.detectChanges();
+
+    expect(page.failedOtpAttempts()).toBe(5);
+    expect(fixture.nativeElement.textContent).toContain('nhập sai OTP 5 lần');
+    page.verify();
+    expect(model.verifyOtp).toHaveBeenCalledTimes(5);
   });
   it('hides cancellation as soon as the authorized order enters preparation', () => {
     const fixture = TestBed.createComponent(OrderFlowPage);

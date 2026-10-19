@@ -69,6 +69,15 @@
                 </svg>
                 Ưu đãi của tôi
               </a>
+              <a href="#" class="account-sidebar__link" data-tab="loyalty">
+                <svg class="account-sidebar__icon" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                  aria-hidden="true">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M8 12h8M12 8v8" />
+                </svg>
+                Point &amp; giới thiệu
+              </a>
               <a href="#" class="account-sidebar__link" data-tab="analytics">
                 <svg class="account-sidebar__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <line x1="18" y1="20" x2="18" y2="10" />
@@ -122,7 +131,7 @@
                 </div>
                 <div class="profile-avatar-info">
                   <h3 class="profile-avatar-name">Tên khách hàng</h3>
-                  <p class="profile-avatar-meta">Đang tải thông tin thành viên...</p>
+                  <p class="profile-avatar-meta">{{ memberMeta() }}</p>
                 </div>
               </div>
 
@@ -720,7 +729,6 @@
                 <h2 class="account-main__title">Ưu đãi của tôi</h2>
                 <p class="account-main__subtitle">Quyền lợi thành viên của bạn tại Velura</p>
               </div>
-              @if (tab() === 'offers') { <app-loyalty-wallet /> }
               <div class="offers-center" data-offers-center style="padding: 0; min-height: auto; background: transparent;">
                 <div class="offers-center__filters" role="group" aria-label="Lọc ưu đãi" style="margin-top: 0; margin-bottom: 24px;">
                   <button type="button" [class.is-active]="offerFilter() === 'ALL'" [attr.aria-pressed]="offerFilter() === 'ALL'" (click)="setOfferFilter('ALL')">Tất cả</button>
@@ -761,6 +769,14 @@
                   }
                 </section>
               </div>
+            </div>
+            <!-- Tab: Point and referrals -->
+            <div class="account-tab-content" id="tab-loyalty">
+              <div class="account-main__header">
+                <h2 class="account-main__title">Point &amp; giới thiệu</h2>
+                <p class="account-main__subtitle">Theo dõi điểm thưởng, lịch sử giao dịch và quyền lợi giới thiệu bạn bè</p>
+              </div>
+              @if (tab() === 'loyalty') { <app-loyalty-wallet /> }
             </div>
             <!-- Tab Analytics: Quản lý chi tiêu & Gợi ý thông minh -->
             <div class="account-tab-content" id="tab-analytics">

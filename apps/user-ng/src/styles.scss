@@ -145,6 +145,36 @@ body.page-chatbot .chatbot-widget {
   display: none;
 }
 
+.quiz-exit-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+
+.quiz-exit-dialog__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgb(20 16 14 / 58%);
+  backdrop-filter: blur(3px);
+}
+
+.quiz-exit-dialog__card {
+  position: relative;
+  width: min(100%, 520px);
+  padding: 28px;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgb(20 16 14 / 28%);
+  text-align: center;
+}
+
+.quiz-exit-dialog__card h2 { margin: 0 0 10px; }
+.quiz-exit-dialog__card p { margin: 0 0 22px; color: var(--soft); line-height: 1.55; }
+.quiz-exit-dialog__actions { display: grid; gap: 10px; }
+
 /* Hero keeps a photographic fallback when autoplay is blocked. */
 .hero {
   background-color: #111;

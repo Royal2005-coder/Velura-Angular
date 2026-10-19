@@ -84,10 +84,13 @@ data:
         static_configs:
           - targets: [velura-api.velura.svc:3000]
       - job_name: litellm
+        # Scrape the mounted ASGI route directly instead of relying on its slash redirect.
+        metrics_path: /metrics/
         bearer_token_file: /etc/metrics-key/master-key
         static_configs:
           - targets: [litellm:4000]
       - job_name: keycloak
+        # Keycloak 26 exposes metrics on its management interface; 24 needs a live-only 8080 adoption patch.
         static_configs:
           - targets: [keycloak.auth.svc:9000]
       - job_name: victoriametrics

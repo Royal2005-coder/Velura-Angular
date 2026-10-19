@@ -10,7 +10,7 @@
  * node scripts/run-migrations.mjs --environment=production --owner-approved-production 054 056 057 058
  * node scripts/run-migrations.mjs --dry-run 049
  *
- * Staging requires STAGING_SUPABASE_DB_URL and STAGING_SUPABASE_DB_CA_CERT.
+ * Staging requires STAGING_SUPABASE_DB_URL, STAGING_SUPABASE_DB_CA_CERT and trusted PRODUCTION_SUPABASE_PROJECT_REF.
  * Current-database checks and owner-approved writes use SUPABASE_DB_URL and SUPABASE_DB_CA_CERT.
  * Each migration runs in one transaction; failures preserve earlier committed files.
  * Credentials are never printed and TLS certificate verification cannot be disabled.
@@ -22,6 +22,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { lookup as dnsLookup, promises as dnsPromises } from "node:dns";
+import { requireStagingProjectRef } from "./supabase-project.mjs";
 
 const require = createRequire(import.meta.url);
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -176,17 +177,7 @@ async function main() {
   const connectionString = readEnv(connectionKey);
   if (!connectionString) throw new Error(`Missing ${connectionKey}.`);
   if (environment === "staging") {
-    const production = readEnv("SUPABASE_DB_URL");
-    const stage = new URL(connectionString);
-    if (production) {
-      const live = new URL(production);
-      const sharedPooler = /\.pooler\.supabase\.com$/i.test(stage.hostname);
-      const stageUser = decodeURIComponent(stage.username), liveUser = decodeURIComponent(live.username);
-      const distinctProject = sharedPooler && /^[a-z_]+\.[a-z0-9]{20}$/i.test(stageUser) &&
-        /^[a-z_]+\.[a-z0-9]{20}$/i.test(liveUser) && stageUser.split(".")[1] !== liveUser.split(".")[1];
-      if (stage.hostname === live.hostname && stage.pathname === live.pathname &&
-          !distinctProject) throw new Error("Staging database identity matches production; refusing migration.");
-    }
+    requireStagingProjectRef(connectionString, process.env.PRODUCTION_SUPABASE_PROJECT_REF);
   }
 
   const caKey = environment === "staging" ? "STAGING_SUPABASE_DB_CA_CERT" : "SUPABASE_DB_CA_CERT";

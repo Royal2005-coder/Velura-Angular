@@ -122,6 +122,7 @@ export class SiteHeader {
    */
   logout(): void {
     this.auth.signOut();
+    void this.router.navigateByUrl('/');
   }
 
   readonly headerWorkbench = viewChild<VisualSearchWorkbench>('headerWorkbench');

@@ -177,7 +177,7 @@ export class AccountReturnsPage {
   }
 
   /**
-   * Sends the request. The API enforces the 30-day window and the delivered state.
+   * Sends the request. The API enforces the seven-day window and the delivered state.
    */
   submit(): void {
     const order = this.selectedOrder();

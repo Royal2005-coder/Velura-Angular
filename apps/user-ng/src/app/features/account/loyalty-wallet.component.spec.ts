@@ -32,4 +32,16 @@ describe('LoyaltyWalletComponent', () => {
     expect(fixture.componentInstance.wallet()?.history.length).toBe(50);
     expect(fixture.componentInstance.hasOlder()).toBe(false);
   });
+  it('copies the referral code independently from the full referral link', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    TestBed.configureTestingModule({ imports: [LoyaltyWalletComponent], providers: [provideRouter([]), { provide: LoyaltyService, useValue: { wallet: () => of({ success: true, wallet }) } }, { provide: AuthService, useValue: { session: signal({ userId: 'member' }), isLoggedIn: () => true } }] });
+    const fixture = TestBed.createComponent(LoyaltyWalletComponent);
+    fixture.detectChanges();
+
+    await fixture.componentInstance.copyReferralCode();
+
+    expect(writeText).toHaveBeenCalledWith(wallet.referral_code);
+    expect(fixture.componentInstance.notice()).toContain('mã giới thiệu');
+  });
 });

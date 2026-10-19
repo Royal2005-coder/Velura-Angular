@@ -26,6 +26,13 @@ export interface ComboComponentItem {
 /** Optional customer reason classification; warehouse inspection remains a separate mandatory proof. */
 export type ReturnReasonCode = 'size' | 'color' | 'error' | 'mismatch' | 'damaged' | 'mind_change' | 'other';
 
+/** Bank destination required only for COD refund requests. */
+export interface RefundBankDetails {
+  bankName: string;
+  accountNumber: string;
+  accountHolder: string;
+}
+
 /**
  * The Model contract `OrderFlowPage` (KAN-31 presentation) programs against. Two
  * implementations satisfy it: `PurchaseDemoStore` (wrapped by `OrderAccountPreviewAdapter`,
@@ -86,6 +93,7 @@ export interface OrderAccountModel {
     reason: string,
     evidence: Array<{ name: string; file?: File }>,
     reasonCode?: ReturnReasonCode,
+    bank?: RefundBankDetails,
   ): Promise<DemoReturn>;
   cancelRequest(id: string): Promise<void>;
   saveBank(id: string, name: string, account: string, holder: string): Promise<void>;

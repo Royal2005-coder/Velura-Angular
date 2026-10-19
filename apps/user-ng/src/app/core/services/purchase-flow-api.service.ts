@@ -56,7 +56,7 @@ export class PurchaseFlowApiService {
     return this.api.get('/api/user/payments/providers');
   }
 
-  /** Yêu cầu OTP cho Guest bằng contact hiện tại. */
+  /** Yêu cầu OTP SMS cho Guest; email chỉ là kênh bổ sung khi khách chủ động nhập. */
   sendOtp(input: { full_name: string; phone: string; email: string }): Observable<PurchaseOtpResponse> {
     return this.api.post<PurchaseOtpResponse>('/api/user/orders/otp-send', input);
   }

@@ -14,12 +14,13 @@ import {
   normalizePhone,
   withinReturnWindow,
 } from '../../core/services/purchase-demo.store';
-import { ORDER_ACCOUNT_MODEL, type ComboComponentItem, type OrderAccountModel, type ReplacementChoice, type ReturnReasonCode } from '../../core/services/order-account.model';
+import { ORDER_ACCOUNT_MODEL, type ComboComponentItem, type OrderAccountModel, type RefundBankDetails, type ReplacementChoice, type ReturnReasonCode } from '../../core/services/order-account.model';
 import { orderAccountErrorMessage } from '../../core/services/order-account-api.store';
 import { formatVnd, toPublicAsset } from '../../core/utils/money';
 import { formatSizeDisplay } from '../../core/utils/size';
 import { isGuestPreview, isPreviewMode } from '../../core/utils/preview-mode';
 import { DeliverySimulation } from '../../shared/delivery-simulation/delivery-simulation';
+import { CheckoutStore } from '../../core/services/checkout.store';
 
 /**
  * Guest access, order actions and after-sales share one `OrderAccountModel` injection point:
@@ -43,11 +44,13 @@ export class OrderFlowPage {
   readonly model: OrderAccountModel = inject(ORDER_ACCOUNT_MODEL);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly checkout = inject(CheckoutStore);
   private readonly destroyRef = inject(DestroyRef);
   readonly view = signal<
     | 'lookup'
     | 'otp'
     | 'list'
+    | 'cancelled'
     | 'requests'
     | 'detail'
     | 'cancel'
@@ -91,6 +94,7 @@ export class OrderFlowPage {
   readonly failedOtpAttempts = signal(0);
   readonly cooldown = signal(0);
   readonly busy = signal(false);
+  readonly pointRefundWarning = signal(false);
   readonly evidence = signal<Array<{ name: string; url: string; file: File }>>([]);
   readonly labels = ORDER_LABELS;
   readonly money = formatVnd;
@@ -114,12 +118,17 @@ export class OrderFlowPage {
   readonly orderStepIndex = computed(() =>
     this.orderSteps().indexOf(this.order()?.status || 'pending'),
   );
+  /** Whether the current form must collect a bank destination for a COD refund. */
+  requiresRefundBank(): boolean {
+    return this.returnKind === 'refund' && this.order()?.payment === 'COD';
+  }
   readonly visibleOrders = computed(() =>
     this.model
       .orders()
       .filter(
         (order) =>
           this.authorized(order) &&
+          (!this.cancelledEntry || order.status === 'cancelled') &&
           (!this.filter() || order.id.toLowerCase().includes(this.filter().toLowerCase())),
       ),
   );
@@ -132,6 +141,7 @@ export class OrderFlowPage {
       ),
   );
   readonly returnsEntry = this.route.snapshot.routeConfig?.path?.endsWith('returns') || false;
+  readonly cancelledEntry = this.route.snapshot.routeConfig?.path === 'account/cancelled-orders';
   /** A phone challenge retrieves all owned orders; a code challenge verifies the same owner. */
   mode: 'phone' | 'code' = 'phone';
   query = '';
@@ -180,6 +190,7 @@ export class OrderFlowPage {
       this.route.snapshot.paramMap.get('id') || this.route.snapshot.queryParamMap.get('order');
     if (this.model.member()) {
       this.view.set(this.returnsEntry ? 'requests' : 'list');
+      if (this.cancelledEntry) this.view.set('cancelled');
       if (id) this.open(id);
     } else if (isGuestPreview()) {
       this.model.verifiedPhone.set('0901234567');
@@ -382,8 +393,20 @@ export class OrderFlowPage {
         .finally(() => {
           this.view.set('detail');
           this.busy.set(false);
+          if (!this.error()) void this.router.navigateByUrl('/account/cancelled-orders');
         });
     }, 350);
+  }
+  /** Rebuild checkout from a cancelled order while retaining its delivery and payment choices. */
+  buyAgain(order: DemoOrder): void {
+    if (order.status !== 'cancelled' || !order.items.length) return;
+    this.checkout.prepareReorder({
+      orderId: order.orderId || order.id,
+      items: order.items.map(({ returnCount: _returnCount, availableQuantity: _availableQuantity, itemId: _itemId, isInProgress: _isInProgress, inProgressCode: _inProgressCode, inProgressStatus: _inProgressStatus, ...line }) => line),
+      address: { ...order.address, address: order.address.detail },
+      paymentMethod: order.payment,
+    });
+    void this.router.navigateByUrl(this.model.member() ? '/checkout/user' : '/checkout/guest');
   }
   /** Reviewer-only control, preview Model only — no real order can be fast-forwarded by its own customer. */
   scenario(status: DemoOrderStatus, days = 0): void {
@@ -652,17 +675,42 @@ export class OrderFlowPage {
         }
       }
     }
+    if (this.requiresRefundBank() && (!this.bankName.trim() || !this.bankHolder.trim() || !/^\d{6,20}$/.test(this.bankAccount.trim()))) {
+      this.error.set('Vui lòng nhập ngân hàng, số tài khoản từ 6–20 chữ số và tên chủ tài khoản cho đơn COD.');
+      return;
+    }
+    if (this.returnKind === 'refund' && this.model.member() && !this.pointRefundWarning()) {
+      this.pointRefundWarning.set(true);
+      return;
+    }
     this.error.set('');
     this.view.set('return-summary');
+  }
+  /** Estimate the points tied to the merchandise selected for refund. */
+  refundPointEstimate(): number {
+    return Math.floor(this.refundEstimate(this.selectedLines()) / 1000);
+  }
+  /** Continue after the member acknowledges the possible point clawback. */
+  continueAfterPointWarning(): void {
+    this.pointRefundWarning.set(false);
+    this.error.set('');
+    this.view.set('return-summary');
+  }
+  /** Dismiss the point warning and keep editing the return request. */
+  dismissPointWarning(): void {
+    this.pointRefundWarning.set(false);
   }
   /** Submit one request and show success only after the Model accepts it. */
   submitReturn(): void {
     const order = this.order();
     if (!order || !this.authorized(order) || this.busy()) return;
     this.busy.set(true);
+    const bank: RefundBankDetails | undefined = this.requiresRefundBank()
+      ? { bankName: this.bankName.trim(), accountNumber: this.bankAccount.trim(), accountHolder: this.bankHolder.trim() }
+      : undefined;
     this.timeout = setTimeout(() => {
       this.model
-        .createReturn(order.id, this.returnKind, this.selectedLines(), this.returnReason, this.evidence(), this.returnReasonCode || undefined)
+        .createReturn(order.id, this.returnKind, this.selectedLines(), this.returnReason, this.evidence(), this.returnReasonCode || undefined, bank)
         .then((request) => {
           this.requestId.set(request.id);
           this.error.set('');

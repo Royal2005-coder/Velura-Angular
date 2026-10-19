@@ -47,9 +47,10 @@ export class PurchaseCustomerStore {
     this.loading.set(true);
     this.error.set('');
     try {
-      const data = await firstValueFrom(this.api.get<{ saved_addresses?: Record<string, unknown>[] }>('/api/user/profile'));
+      const data = await firstValueFrom(this.api.get<{ saved_addresses?: Record<string, unknown>[]; profile?: { saved_addresses?: Record<string, unknown>[] } }>('/api/user/profile'));
       if (!current()) return;
-      this.addresses.set((data.saved_addresses || []).map((row) => ({
+      const savedAddresses = data.saved_addresses || data.profile?.saved_addresses || [];
+      this.addresses.set(savedAddresses.map((row) => ({
         id: String(row['id'] || crypto.randomUUID()), name: String(row['name'] || row['recipient_name'] || ''),
         phone: String(row['phone'] || row['recipient_phone'] || ''), email: String(row['email'] || ''),
         province: String(row['province'] || ''), district: String(row['district'] || ''), ward: String(row['ward'] || ''),
@@ -83,6 +84,14 @@ export class PurchaseCustomerStore {
     const updated = this.addresses().filter((_, position) => position !== index);
     if (updated.length && !updated.some((row) => row.isDefault)) updated[0] = { ...updated[0], isDefault: true };
     await this.persist(updated);
+  }
+
+  /** Make one saved address authoritative for both checkout and the account address book. */
+  async setDefaultAddress(index: number): Promise<void> {
+    const rows = this.addresses();
+    if (index < 0 || index >= rows.length) throw new Error('Không tìm thấy địa chỉ đã chọn.');
+    if (rows[index].isDefault) return;
+    await this.persist(rows.map((row, position) => ({ ...row, isDefault: position === index })));
   }
 
   private async persist(addresses: SavedAddress[]): Promise<void> {

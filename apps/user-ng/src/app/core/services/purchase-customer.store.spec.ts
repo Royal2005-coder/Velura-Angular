@@ -53,4 +53,25 @@ describe('PurchaseCustomerStore persistence and session isolation', () => {
     pending.next({ success: true }); await expect(saving).rejects.toThrow('Tài khoản đã thay đổi');
     expect(model.addresses()).toEqual([]);
   });
+
+  it('loads a wrapped profile address book and persists a changed default', async () => {
+    get.mockReturnValue(of({ profile: { saved_addresses: [
+      { ...address, id: 'first', is_default: true },
+      { ...address, id: 'second', detail: 'Địa chỉ B', is_default: false },
+    ] } }));
+    const model = await create();
+
+    expect(model.addresses()).toHaveLength(2);
+    expect(model.addresses()[0].isDefault).toBe(true);
+    await model.setDefaultAddress(1);
+
+    expect(model.addresses()[0].isDefault).toBe(false);
+    expect(model.addresses()[1].isDefault).toBe(true);
+    expect(patch).toHaveBeenCalledWith('/api/user/addresses', expect.objectContaining({
+      addresses: [
+        expect.objectContaining({ id: 'first', is_default: false }),
+        expect.objectContaining({ id: 'second', is_default: true }),
+      ],
+    }));
+  });
 });

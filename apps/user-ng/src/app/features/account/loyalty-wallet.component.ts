@@ -18,14 +18,31 @@ export class LoyaltyWalletComponent {
   private readonly auth = inject(AuthService);
   private readonly destroy = inject(DestroyRef);
   private generation = 0;
-  readonly wallet = signal<LoyaltyWallet | null>(null);
+  /** Render the stable zero-state immediately; the server snapshot replaces it when available. */
+  readonly wallet = signal<LoyaltyWallet | null>(this.emptyWallet());
   readonly busy = signal(false);
   readonly error = signal('');
   readonly notice = signal('');
   readonly hasOlder = signal(false);
   readonly referralLink = computed(() => `${window.location.origin}/auth/signup?referral=${encodeURIComponent(this.wallet()?.referral_code || '')}`);
   constructor() {
-    effect(() => { this.auth.session(); untracked(() => { this.generation++; this.wallet.set(null); this.hasOlder.set(false); this.busy.set(false); this.error.set(''); this.notice.set(''); if (this.auth.isLoggedIn()) this.reload(); }); });
+    effect(() => { this.auth.session(); untracked(() => { this.generation++; this.hasOlder.set(false); this.busy.set(false); this.error.set(''); this.notice.set(''); if (this.auth.isLoggedIn()) this.syncProfileAndReload(); }); });
+  }
+  private syncProfileAndReload(): void {
+    const profileRequest = this.model.profile?.();
+    if (!profileRequest) {
+      // Older model adapters do not expose profile(); wallet authorization remains server-owned.
+      this.wallet.set(this.emptyWallet());
+      this.reload();
+      return;
+    }
+    profileRequest.pipe(takeUntilDestroyed(this.destroy)).subscribe({
+      next: profile => { this.auth.syncRole(profile.role); if (profile.role === 'member') { this.wallet.set(this.emptyWallet()); this.reload(); } else this.error.set('Ví Point chỉ dành cho tài khoản member. Tài khoản hiện tại không có quyền truy cập ví Point.'); },
+      error: () => { if (this.auth.session()?.role === 'member') { this.wallet.set(this.emptyWallet()); this.reload(); } else this.error.set('Không xác minh được quyền truy cập ví Point. Vui lòng tải lại trang.'); },
+    });
+  }
+  private emptyWallet(): LoyaltyWallet {
+    return { balance_points: 0, available_points: 0, amount_vnd: 0, referral_code: '—', policy: { spending_enabled: false, policy_approved_at: null, used_reward_reversal_policy: 'manual_review', used_reward_reversal_approved: false }, expiries: [], history: [], referrals: [], reward_vouchers: [] };
   }
   /** Refresh balances, expiry lots and rewards from the authenticated server. */
   reload(): void { this.load(); }
@@ -61,7 +78,7 @@ export class LoyaltyWalletComponent {
         this.wallet.set({ ...wallet, history: [...previous, ...wallet.history] });
         this.busy.set(false);
       },
-      error: (error: Error) => { if (generation === this.generation) { this.busy.set(false); this.error.set(error.message || 'Chưa tải được ví điểm.'); } },
+      error: (error: Error & { code?: string }) => { if (generation === this.generation) { this.busy.set(false); this.error.set(error.code === 'LOYALTY_MEMBER_REQUIRED' ? 'Ví Point chỉ dành cho tài khoản member. Tài khoản hiện tại không có quyền truy cập ví Point.' : (error.message || 'Chưa tải được ví điểm.')); } },
     });
   }
   private async copy(value: string, success: string): Promise<void> {

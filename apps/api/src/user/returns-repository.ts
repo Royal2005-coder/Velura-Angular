@@ -23,6 +23,8 @@ export interface UserReturnsRepository {
   insertReturn(payload: JsonObject): Promise<JsonObject>;
   insertReturnItem(payload: JsonObject): Promise<JsonObject>;
   findReturnById(returnId: unknown): Promise<JsonObject | null>;
+  /** Finds the return request that produced a replacement order, if any. */
+  findReturnByExchangeOrderId?(orderId: unknown): Promise<JsonObject | null>;
   updateReturn(returnId: unknown, payload: JsonObject, expectedVersion?: number): Promise<JsonObject[]>;
   listReturnsForUser(userId: string, orderId?: string): Promise<JsonObject[]>;
   /** Stored COD receiving account of a return (full number; callers mask it), or null when never submitted. */
@@ -68,6 +70,7 @@ export function createUserReturnsRepository(): UserReturnsRepository {
     },
 
     findReturnById: (returnId) => selectOne("return_exchange", { return_id: `eq.${returnId}` }),
+    findReturnByExchangeOrderId: (orderId) => selectOne("return_exchange", { exchange_order_id: `eq.${orderId}` }),
 
     async updateReturn(returnId, payload, expectedVersion) {
       const filters: Record<string, string> = { return_id: `eq.${returnId}` };

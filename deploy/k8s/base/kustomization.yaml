@@ -3,6 +3,7 @@ kind: Kustomization
 
 resources:
   - namespaces.yaml
+  - secrets
   - security/quotas.yaml
   - security/network-policies.yaml
   - database/postgres.yaml

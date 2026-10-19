@@ -84,6 +84,7 @@ export class SiteHeader {
         const occMatch = p.occasions?.some((o) => matchesSearchText(o, q));
         const colorMatch = matchesSearchText(p.color_tone, q);
         const catMatch = matchesSearchText(p.category_name, q);
+        const descMatch = matchesSearchText(p.description, q);
         return (
           nameMatch ||
           skuMatch ||
@@ -94,13 +95,19 @@ export class SiteHeader {
           tagMatch ||
           occMatch ||
           colorMatch ||
-          catMatch
+          catMatch ||
+          descMatch
         );
       })
       .slice(0, 6);
   });
 
   constructor() {
+    this.refreshCatalog();
+  }
+
+  /** Reloads the product list the suggestions search, so a renamed product is found without a page reload. */
+  private refreshCatalog(): void {
     this.catalog
       .getProducts()
       .pipe(takeUntilDestroyed(this.destroy))
@@ -166,6 +173,7 @@ export class SiteHeader {
 
   onSearchFocus(): void {
     this.searchOpen.set(true);
+    this.refreshCatalog();
     this.loadRecentlyViewed();
     setTimeout(() => {
       this.overlayInput()?.nativeElement.focus();

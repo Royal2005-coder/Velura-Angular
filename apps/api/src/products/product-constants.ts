@@ -128,3 +128,18 @@ export const PRODUCT_ORDER_OPTIONS = [
 
 /** Valid color_tone values. */
 export const COLOR_TONES = ["Warm", "Cool", "Neutral"];
+
+/** Vietnamese message shown inline and on submit whenever a product or variant SKU is already used anywhere in the catalog. */
+export const SKU_DUPLICATE_MESSAGE = "Mã SKU đã tồn tại, SKU phải là duy nhất trên toàn hệ thống";
+
+/**
+ * Audit "action type" filter values for the product audit log.
+ * The audit_action enum only stores create/update; status and stock edits are derived from old/new values.
+ */
+export const PRODUCT_AUDIT_ACTION_TYPES = ["CREATE", "UPDATE", "UPDATE_STATUS", "UPDATE_STOCK"] as const;
+
+/** Product audit action type accepted by the audit-log endpoint. */
+export type ProductAuditActionType = (typeof PRODUCT_AUDIT_ACTION_TYPES)[number];
+
+/** Minimum characters of the operator reason for status and stock changes; mirrors the database RPC checks. */
+export const MIN_CHANGE_REASON_LENGTH = 10;

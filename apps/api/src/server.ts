@@ -42,6 +42,7 @@ import { createContentService } from "./content/content-service.js";
 import { handleContentRoute } from "./content/content-router.js";
 import { createFixedWindowLimiter } from "./rate-limit.js";
 import { handleUserRoute } from "./user/index.js";
+import { invalidateCatalogCache } from "./user/products.js";
 import { handleWishlistRoute } from "./v1-wishlist-routes.js";
 import { handleRecommendationRoute } from "./recommendation.controller.js";
 import { handleAiRoute, getAiService } from "./ai/ai-router.js";
@@ -339,15 +340,24 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
       });
       if (handled) return;
 
-      const productHandled = await handleProductRoute({
-        req,
-        res,
-        url,
-        parts,
-        context,
-        headers: corsHeaders,
-        service: productService
-      });
+      // Every admin product write (rename, stock, variant, image, status, CSV) must be visible on the
+      // storefront immediately, so the public catalog cache is dropped here instead of in each use-case.
+      const mutatesCatalog = parts[0] === "api" && parts[1] === "v1" && parts[2] === "admin" && parts[3] === "products"
+        && req.method !== "GET" && req.method !== "HEAD";
+      let productHandled: boolean;
+      try {
+        productHandled = await handleProductRoute({
+          req,
+          res,
+          url,
+          parts,
+          context,
+          headers: corsHeaders,
+          service: productService
+        });
+      } finally {
+        if (mutatesCatalog) invalidateCatalogCache();
+      }
       if (productHandled) return;
 
       const orderHandled = await handleOrderRoute({

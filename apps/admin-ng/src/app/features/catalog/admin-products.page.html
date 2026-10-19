@@ -38,12 +38,36 @@
       <strong class="admin-kpi-card__value">{{ outOfStock() }}</strong>
       <span class="admin-kpi-card__trend admin-kpi-card__trend--warning">out_of_stock</span>
     </article>
-    <article class="admin-kpi-card">
+    <article class="admin-kpi-card" data-testid="low-stock-kpi">
       <span class="admin-kpi-card__label">Sắp hết</span>
       <strong class="admin-kpi-card__value">{{ lowStockCount() }}</strong>
-      <span class="admin-kpi-card__trend admin-kpi-card__trend--neutral">Dưới ngưỡng tồn</span>
+      <button class="admin-btn admin-btn--ghost admin-btn--xs" type="button" (click)="toggleLowStockFilter()">
+        {{ lowStockOnly() ? 'Bỏ lọc dưới ngưỡng' : 'Lọc sản phẩm dưới ngưỡng tồn' }}
+      </button>
     </article>
   </section>
+  @if (stockAlert(); as alert) {
+    <p class="admin-alert admin-alert--warning" role="alert" data-testid="stock-alert">
+      {{ alert.message }}
+      <button class="admin-btn admin-btn--ghost admin-btn--xs" type="button" (click)="stockAlert.set(null)">Đã xem</button>
+    </p>
+  }
+  @if (lowStockRows().length) {
+    <section class="admin-card" data-testid="low-stock-list" aria-label="Sản phẩm dưới ngưỡng tồn">
+      <h2 class="admin-section__title">Sản phẩm dưới ngưỡng tồn ({{ lowStockCount() }})</h2>
+      <ul class="admin-table-note">
+        @for (row of lowStockPreview(); track row.variant_id) {
+          <li>
+            <strong>{{ row.product_name || row.product_sku || row.product_id }}</strong>
+            · {{ row.color }} / {{ row.size }} — còn {{ row.stock_quantity }}, ngưỡng {{ row.low_stock_threshold }}
+          </li>
+        }
+      </ul>
+      @if (lowStockRows().length > lowStockPreview().length) {
+        <p class="admin-table-note">… và {{ lowStockRows().length - lowStockPreview().length }} biến thể khác. Dùng bộ lọc "dưới ngưỡng tồn" để xem đầy đủ.</p>
+      }
+    </section>
+  }
   <section class="admin-card admin-card--flush">
     <div class="admin-tabs" role="tablist">
       <button class="admin-tab" [class.admin-tab--active]="tab() === 'catalog'" type="button" (click)="setTab('catalog')">
@@ -74,8 +98,12 @@
             <option value="on_sale">Đang bán</option>
             <option value="hidden">Tạm ẩn</option>
             <option value="out_of_stock">Hết hàng</option>
-            <option value="discontinued">Ngừng bán</option>
+            <option value="discontinued">Ngừng kinh doanh</option>
           </select>
+          <label class="admin-checkbox-field" data-testid="low-stock-filter">
+            <input type="checkbox" name="lowStock" [checked]="lowStockOnly()" />
+            <span>Chỉ sản phẩm dưới ngưỡng tồn</span>
+          </label>
           <div class="admin-filter-bar__actions">
             <button class="admin-btn admin-btn--filter admin-btn--sm" type="submit">Lọc</button>
             <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="resetFilters($event)">Đặt lại</button>
@@ -125,7 +153,12 @@
                     <td>{{ product.sku }}</td>
                     <td><span class="admin-role-badge">{{ categoryName(product) }}</span></td>
                     <td>{{ price(product) }}</td>
-                    <td><span class="admin-stock">{{ stockOf(product) }}</span></td>
+                    <td>
+                      <span class="admin-stock">{{ stockOf(product) }}</span>
+                      @if (lowStockVariantsOf(product).length) {
+                        <span class="admin-badge admin-badge--warning" data-testid="low-stock-badge" title="Có biến thể dưới ngưỡng tồn">Sắp hết</span>
+                      }
+                    </td>
                     <td>
                       <span [class]="'admin-badge admin-badge--' + statusTone(product.status)">
                         {{ statusLabel(product.status) }}
@@ -195,6 +228,22 @@
               </table>
             </div>
           }
+          @if (csvWarnings().length) {
+            <div class="admin-csv-preview" data-testid="csv-warnings">
+              <table class="admin-table">
+                <thead><tr><th>Dòng</th><th>Cột</th><th>Cảnh báo (không chặn ghi CSV)</th></tr></thead>
+                <tbody>
+                  @for (row of csvWarnings(); track $index) {
+                    <tr class="admin-csv-row-warning">
+                      <td>{{ row.row || '—' }}</td>
+                      <td>{{ row.field || '—' }}</td>
+                      <td><span class="admin-csv-cell-warning">{{ row.message }}</span></td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
           @if (csvRows().length) {
             <div class="admin-csv-preview">
               <table class="admin-table">
@@ -207,7 +256,12 @@
                       <td>{{ row['name'] }}</td>
                       <td>{{ row['color'] || '—' }} / {{ row['size'] || '—' }}</td>
                       <td>{{ row['stock_quantity'] ?? 'Giữ nguyên' }}</td>
-                      <td>{{ row['base_price'] }}</td>
+                      <td>
+                        {{ row['base_price'] }}
+                        @if (csvPriceSkipped(row)) {
+                          <span class="admin-badge admin-badge--warning">Giữ nguyên giá hiện tại</span>
+                        }
+                      </td>
                       <td>{{ row['category_id'] }}</td>
                       <td>{{ row['status'] }}</td>
                     </tr>
@@ -224,28 +278,42 @@
     }
     @if (tab() === 'logs') {
       <div class="admin-tab-content">
-        <form class="admin-filter-bar" (submit)="applyLogsFilters($event)">
+        <form class="admin-filter-bar admin-filter-bar--wrap" (submit)="applyLogsFilters($event)" data-testid="audit-filters">
+          <label class="admin-form-group admin-form-group--inline">
+            <span class="admin-form-label">Từ ngày</span>
+            <input class="admin-form-control" type="date" name="from" [value]="logsFrom()" aria-label="Lọc từ ngày" />
+          </label>
+          <label class="admin-form-group admin-form-group--inline">
+            <span class="admin-form-label">Đến ngày</span>
+            <input class="admin-form-control" type="date" name="to" [value]="logsTo()" aria-label="Lọc đến ngày" />
+          </label>
           <label class="admin-search-field">
             <app-admin-icon name="search" />
-            <input class="admin-form-control" name="q" type="search" [value]="logsQuery()" placeholder="Tìm theo tên, mã sản phẩm hoặc người thao tác..." />
+            <input class="admin-form-control" name="product" type="search" [value]="logsProduct()" placeholder="Tên hoặc mã sản phẩm..." aria-label="Lọc theo sản phẩm" />
           </label>
-          <input class="admin-form-control" type="date" name="date" [value]="logsDate()" aria-label="Lọc theo ngày" />
-          <select class="admin-form-control" name="action" [value]="logsAction()" aria-label="Lọc theo hành động">
+          <select class="admin-form-control" name="actionType" [value]="logsActionType()" aria-label="Lọc theo loại hành động">
             <option value="">Tất cả hành động</option>
-            <option value="create">Thêm mới (CREATE)</option>
-            <option value="update">Cập nhật (UPDATE)</option>
-            <option value="change_status">Đổi trạng thái (UPDATE_STATUS)</option>
-            <option value="update_stock">Điều chỉnh tồn kho (UPDATE_STOCK)</option>
+            <option value="CREATE">Thêm mới (CREATE)</option>
+            <option value="UPDATE">Cập nhật (UPDATE)</option>
+            <option value="UPDATE_STATUS">Đổi trạng thái (UPDATE_STATUS)</option>
+            <option value="UPDATE_STOCK">Điều chỉnh tồn kho (UPDATE_STOCK)</option>
           </select>
+          <label class="admin-search-field">
+            <app-admin-icon name="search" />
+            <input class="admin-form-control" name="user" type="search" [value]="logsUser()" placeholder="Người thao tác (tên hoặc email)..." aria-label="Lọc theo người thao tác" />
+          </label>
           <div class="admin-filter-bar__actions">
             <button class="admin-btn admin-btn--filter admin-btn--sm" type="submit">Lọc</button>
             <button class="admin-btn admin-btn--ghost admin-btn--sm" type="button" (click)="resetLogsFilters()">Đặt lại</button>
           </div>
         </form>
+        @if (logsError()) {
+          <p class="field__error" role="alert" data-testid="logs-error" style="color: var(--error);">{{ logsError() }}</p>
+        }
         @if (logsLoading()) {
           <app-admin-empty-state kind="loading" icon="clock" title="Đang tải nhật ký sản phẩm" />
         } @else if (!logs().length) {
-          <app-admin-empty-state kind="empty" icon="clock" title="Không tìm thấy nhật ký phù hợp" message="Thử thay đổi bộ lọc ngày, tên sản phẩm hoặc hành động." />
+          <app-admin-empty-state kind="empty" icon="clock" title="Không tìm thấy nhật ký phù hợp" message="Thử thay đổi khoảng ngày, tên sản phẩm, loại hành động hoặc người thao tác." />
         } @else {
           <div class="admin-table-wrap">
             <table class="admin-table">
@@ -363,6 +431,9 @@
                       placeholder="VLR-AO-001"
                     />
                     <small class="admin-form-helper">Định dạng VLR-AO001 hoặc VL-DAM001</small>
+                    @if (overlay() === 'create' && skuMessage(); as skuError) {
+                      <small class="field__error" role="alert" data-testid="sku-error" style="color: var(--error);">{{ skuError }}</small>
+                    }
                   </label>
 
                   <label class="admin-form-group">
@@ -861,7 +932,7 @@
                       (click)="selectGalleryImageSlot($index)"
                     >
                       <img [src]="imgUrl.replace('/src/assets/', '/assets/')" [alt]="'Ảnh ' + ($index + 1)" />
-                      <span class="admin-studio-thumb__badge">{{ $index === 0 ? 'Primary' : '#' + ($index + 1) }}</span>
+                      <span class="admin-studio-thumb__badge">{{ $index === 0 ? 'Ảnh chính' : '#' + ($index + 1) }}</span>
                       @if (canMutate() && editorImages().length > 1) {
                         <button
                           type="button"
@@ -883,7 +954,10 @@
                     </button>
                   }
                 </div>
-                <p class="admin-form-help">{{ editorImages().length }}/{{ maxProductImages }} ảnh. Ảnh Primary là ảnh đại diện duy nhất.</p>
+                <p class="admin-form-help">{{ editorImages().length }}/{{ maxProductImages }} ảnh. Chỉ có một Ảnh chính (vị trí đầu tiên) là ảnh đại diện.</p>
+                @if (editorImages().length >= maxProductImages) {
+                  <p class="admin-form-help" role="status">Đã đạt tối đa {{ maxProductImages }} ảnh cho mỗi sản phẩm. Hãy xóa bớt ảnh trước khi thêm ảnh mới.</p>
+                }
                 @if (editorImages()[imageIndex()]; as activeUrl) {
                   <div class="admin-form-field">
                     <label for="product-image-color">Màu của ảnh đang chọn</label>
@@ -899,7 +973,7 @@
                     @if (canMutate() && imageIndex() > 0) {
                       <button type="button" class="admin-btn admin-btn--secondary admin-btn--sm"
                         [disabled]="!!sourceFile()" (click)="setPrimaryImage(imageIndex(), imagesBox)">
-                        Đặt làm ảnh đại diện (Primary)
+                        Đặt làm ảnh chính
                       </button>
                     }
                   </div>
@@ -1143,6 +1217,9 @@
                   </div>
 
                   @if (createVariants().length > 0) {
+                    @if (variantSkuMessage(); as variantSkuError) {
+                      <p class="field__error" role="alert" data-testid="variant-sku-error" style="color: var(--error); margin: 0 0 8px;">{{ variantSkuError }}</p>
+                    }
                     <div class="admin-table-wrap" style="max-height: 280px; overflow-y: auto; border: 1px solid var(--line); border-radius: 6px;">
                       <table class="admin-table" style="font-size: 0.8rem;">
                         <thead>
@@ -1361,7 +1438,10 @@
         </div>
         <button class="admin-btn admin-btn--ghost" type="button" (click)="closeOverlays()">Đóng</button>
         @if (canMutate()) {
-          <button class="admin-btn admin-btn--primary" type="submit" form="productEditorForm">
+          @if (imageProcessing()) {
+            <span class="admin-form-help" role="status" data-testid="image-processing-message">{{ imageProcessingMessage }}</span>
+          }
+          <button class="admin-btn admin-btn--primary" type="submit" form="productEditorForm" [disabled]="imageProcessing()">
             {{ overlay() === 'create' ? '✓ Tạo sản phẩm mới' : '✓ Lưu thay đổi & Xuất bản' }}
           </button>
         }
@@ -1489,15 +1569,22 @@
               <div style="font-size: 1.125rem; font-weight: 700; margin-top: 4px; display: flex; align-items: center; justify-content: center; gap: 8px;">
                 <span style="color: #666;">{{ currentStock() }}</span>
                 <span>→</span>
-                <span [style.color]="projectedStock() < 5 ? '#c62828' : '#2e7d32'">{{ projectedStock() }}</span>
+                <span [style.color]="projectedBelowThreshold() ? '#c62828' : '#2e7d32'">{{ projectedStock() }}</span>
                 <small style="font-size: 0.8125rem; font-weight: 500; color: #888;">cái</small>
               </div>
             </div>
           </div>
+          @if (stockOutExceedsOnHand()) {
+            <p class="field__error" role="alert" data-testid="stock-exceeds" style="margin: 0; color: var(--error);">Số lượng xuất vượt tồn hiện có ({{ currentStock() }} sản phẩm).</p>
+          } @else if (projectedBelowThreshold()) {
+            <p class="admin-alert admin-alert--warning" role="status" data-testid="stock-below-threshold" style="margin: 0;">
+              Tồn sau điều chỉnh ({{ projectedStock() }}) thấp hơn hoặc bằng ngưỡng cảnh báo ({{ stockThreshold() }}). Vẫn được phép lưu; hệ thống sẽ hiển thị cảnh báo tồn thấp.
+            </p>
+          }
 
           <!-- 4. Gợi ý lý do chuẩn ERP & Ô nhập lý do -->
           <div class="admin-form-group">
-            <span class="admin-form-label">Lý do điều chỉnh (Tối thiểu 5 ký tự) *</span>
+            <span class="admin-form-label">Lý do điều chỉnh (tối thiểu {{ minStockReasonLength }} ký tự) *</span>
             <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px;">
               @for (reason of commonStockReasons; track reason) {
                 <button
@@ -1516,7 +1603,7 @@
               rows="2"
               [value]="stockReason()"
               (input)="onStockReasonChange($event)"
-              minlength="5"
+              [attr.minlength]="minStockReasonLength"
               required
             ></textarea>
           </div>
@@ -1551,8 +1638,8 @@
             <strong>{{ updatedAt(log.timestamp) }}</strong>
           </div>
           <div class="admin-detail-item">
-            <span class="admin-detail-label" style="display: block; font-size: 0.8rem; color: #666;">Tài khoản thực hiện</span>
-            <strong>{{ logActor(log) }}</strong>
+            <span class="admin-detail-label" style="display: block; font-size: 0.8rem; color: #666;">Tài khoản thực hiện (email)</span>
+            <strong data-testid="log-actor-email">{{ log.actor_email || logActor(log) }}</strong>
           </div>
           <div class="admin-detail-item">
             <span class="admin-detail-label" style="display: block; font-size: 0.8rem; color: #666;">Vai trò</span>
@@ -1560,7 +1647,7 @@
           </div>
           <div class="admin-detail-item">
             <span class="admin-detail-label" style="display: block; font-size: 0.8rem; color: #666;">Loại hành động</span>
-            <span class="admin-badge admin-badge--active">{{ logAction(log) }} ({{ log.action || '—' }})</span>
+            <span class="admin-badge admin-badge--active" data-testid="log-action-type">{{ logAction(log) }} ({{ log.action_type || log.action || '—' }})</span>
           </div>
           <div class="admin-detail-item">
             <span class="admin-detail-label" style="display: block; font-size: 0.8rem; color: #666;">Đối tượng</span>
@@ -1572,11 +1659,12 @@
           </div>
         </div>
 
-        @if (logReason(log)) {
-          <div class="admin-note" style="margin-bottom: 16px; padding: 10px 14px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; color: #166534;">
-            <strong>Lý do điều chỉnh tồn kho / thao tác:</strong> {{ logReason(log) }}
-          </div>
-        }
+        <div class="admin-note" data-testid="log-reason" style="margin-bottom: 16px; padding: 10px 14px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; color: #166534;">
+          <strong>Lý do:</strong> {{ logReason(log) || 'Không ghi lý do cho thao tác này' }}
+        </div>
+        <div class="admin-note" data-testid="log-change" style="margin-bottom: 16px;">
+          <strong>Trước → sau:</strong> {{ logChange(log) }}
+        </div>
 
         <div>
           <h4 style="margin: 0 0 8px; font-size: 0.95rem;">Nội dung chi tiết thay đổi:</h4>

@@ -3,7 +3,8 @@ import type { VisualResult, VisualFilters } from '../../core/services/visual-sea
 import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { normalizeSearchText } from '../../core/utils/search';
+import { matchesAllSearchWords, normalizeSearchText } from '../../core/utils/search';
+import { productMaterial, productMaterialText } from '../../core/utils/material';
 import { catchError, finalize, of } from 'rxjs';
 import { ProductSummary } from '../../core/models/product.interface';
 import { ApiService } from '../../core/services/api.service';
@@ -134,6 +135,18 @@ export class ProductListPage {
   readonly selectedSize = signal('');
   readonly specials = signal<string[]>([]);
   readonly selectedShapes = signal<string[]>([]);
+  readonly selectedMaterial = signal('');
+  /** Distinct fabrics admins declared as `Chất liệu: X`; empty until at least one product states one. */
+  readonly materialOptions = computed(() => {
+    const names = new Map<string, string>();
+    for (const product of this.allProducts()) {
+      const name = productMaterial(product);
+      if (name && !names.has(normalizeSearchText(name))) {
+        names.set(normalizeSearchText(name), name);
+      }
+    }
+    return [...names.values()].sort((a, b) => a.localeCompare(b, 'vi'));
+  });
   readonly currentPage = signal(1);
   readonly viewMode = signal<CatalogView>('grid');
   readonly quiz = signal<StyleQuiz | null>(null);
@@ -176,6 +189,7 @@ export class ProductListPage {
     const normQuery = normalizeSearchText(query);
     const minPrice = this.minPrice();
     const maxPrice = this.maxPrice();
+    const material = this.selectedMaterial().trim();
     const color = this.selectedColor().toLowerCase();
     const size = this.selectedSize().toLowerCase();
     const specials = this.specials();
@@ -263,12 +277,23 @@ export class ProductListPage {
             score += 3;
           }
         }
+        // Every typed word must appear somewhere on the product, so a renamed product is not
+        // found through a word (or category) that only its previous name shared with the query.
+        const everyField = [
+          prodName, prodSku, prodCat, prodSlug, prodBrand, prodCollection, seoTitle, seoDesc, styleTags, occasions, prodDesc,
+        ].join(' ');
+        if (!matchesAllSearchWords(everyField, query)) {
+          score = 0;
+        }
       }
       return { product, score };
     });
 
     let rows = scored.filter(({ product, score }) => {
       if (query && score <= 0) {
+        return false;
+      }
+      if (material && !matchesAllSearchWords(productMaterialText(product), material)) {
         return false;
       }
       if (slugs.length && !this.matchesCategory(product, slugs)) {
@@ -387,6 +412,7 @@ export class ProductListPage {
       const slug = CATEGORY_QUERY_MAP[category] || category;
       this.selectedSlugs.set(slug ? [slug] : []);
       this.searchQuery.set((params.get('q') || '').trim());
+      this.selectedMaterial.set((params.get('material') || '').trim());
       const matchIds = params.get('match_ids');
       const parsedIds = matchIds === null ? null : matchIds.split(',').filter(Boolean);
       this.imageMatches.set(parsedIds?.length ? parsedIds : matchIds === null ? null : null);
@@ -458,6 +484,7 @@ export class ProductListPage {
     this.minPrice.set(0);
     this.maxPrice.set(this.catalogMaxPrice());
     this.selectedColor.set('');
+    this.selectedMaterial.set('');
     this.selectedSize.set('');
     this.specials.set([]);
     this.selectedShapes.set([]);
@@ -517,6 +544,14 @@ export class ProductListPage {
    */
   selectSize(size: string): void {
     this.selectedSize.update((current) => (current === size ? '' : size));
+    this.currentPage.set(1);
+  }
+
+  /**
+   * Toggles a fabric filter taken from the `Chất liệu:` line of real product descriptions.
+   */
+  selectMaterial(material: string): void {
+    this.selectedMaterial.update((current) => (current === material ? '' : material));
     this.currentPage.set(1);
   }
 

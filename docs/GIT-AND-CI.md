@@ -291,3 +291,22 @@ In hoặc copy vào comment Jira onboarding:
 3. Secrets chỉ trên Environment `production`.  
 4. Không bảo team đẩy lên GitLab.  
 5. Promote `develop`→`main` có chủ đích; theo dõi Actions deploy/verify.
+
+### Đồng bộ branch protection (Lead, một lần khi đổi policy)
+
+Policy được version trong `.github/branch-protection.json`, áp dụng cho cả hai
+nhánh. Required checks chỉ nhận từ GitHub Actions; branch phải up-to-date,
+có một CODEOWNER khác tác giả duyệt lần push mới nhất, giải quyết conversation,
+và không có bypass cho admin. Royal và Quỳnh là đồng CODEOWNER để review chéo.
+
+```bash
+for branch in develop main; do
+  gh api --method PUT "repos/Royal2005-coder/Velura-Angular/branches/$branch/protection" \
+    --input .github/branch-protection.json
+done
+```
+
+Auto-merge chỉ hoàn tất khi review và toàn bộ checks đạt yêu cầu. Merge source
+không đồng nghĩa đã rollout: release còn phải có image scan/sign, staging evidence,
+production pins và Flux/HTTP verification. Khi các bootstrap gates đã được gỡ,
+team không SSH, đổi image trực tiếp hay resume Flux cho từng release.

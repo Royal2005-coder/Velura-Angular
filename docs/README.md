@@ -1,6 +1,7 @@
 # Tài liệu (gọn)
 
 Thứ tự onboard: [AGENTS.md](../AGENTS.md) → **[GIT-AND-CI.md](./GIT-AND-CI.md)** → **[ARCHITECTURE.md](./ARCHITECTURE.md)** → [ONBOARDING.md](./ONBOARDING.md) → git log → code.
+Quy trình chung cho người/AI và phân vai: **[TEAM-WORKFLOW.md](TEAM-WORKFLOW.md)**.
 
 | File | Việc |
 |---|---|
@@ -15,6 +16,8 @@ Thứ tự onboard: [AGENTS.md](../AGENTS.md) → **[GIT-AND-CI.md](./GIT-AND-CI
 | [ANGULAR-STANDARDS.md](./ANGULAR-STANDARDS.md) | Code UI + unit test page |
 | [COMPLIANCE.md](./COMPLIANCE.md) | Đúng / cố ý không / gap |
 | [MCP-SETUP.md](./MCP-SETUP.md) | Cursor Jira (+ GitHub) |
+| [TEAM-WORKFLOW.md](./TEAM-WORKFLOW.md) | Royal/Quỳnh fullstack, Uyên/Khải UI redesign, integration/release/rollback |
+| [ATLAS-CLI.md](./ATLAS-CLI.md) | Atlas discovery/OIDC; không nhầm cluster hay nhầm với Jira |
 | [CLOUDFLARE-SUPABASE.md](./CLOUDFLARE-SUPABASE.md) | DNS, SSL, CORS, Auth URLs |
 
 Backlog = Jira **KAN**. Version = `git log --show-notes` + PR `## Why`, không phải `docs/KAN-n.md`.  

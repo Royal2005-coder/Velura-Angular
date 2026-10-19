@@ -49,6 +49,24 @@ test("a member can request a return within the 7-day window", async () => {
   assert.equal((result.items as JsonObject[]).length, 1);
 });
 
+test("an exchange replacement order cannot start another return chain", async () => {
+  const repository = fakeRepository({
+    findReturnByExchangeOrderId: async () => ({ return_id: "ret-source", exchange_order_id: ORDER_ID })
+  });
+
+  await assert.rejects(
+    () => createUserReturnsService(repository).createForMember(profile, {
+      order_id: ORDER_ID,
+      return_type: "exchange",
+      reason_code: "size",
+      evidence_images: ["https://example.com/evidence.png"],
+      items: [{ order_item_id: ITEM_ID, quantity: 1 }]
+    }),
+    (error: unknown) =>
+      error instanceof HttpError && error.status === 400 && error.code === "EXCHANGE_REPLACEMENT_NOT_RETURNABLE"
+  );
+});
+
 test("a return request past the 7-day window is rejected (U2-01)", async () => {
   const repository = fakeRepository({
     findOrderById: async () => ({ order_id: ORDER_ID, user_id: USER_ID, status: "delivered", delivered_at: daysAgo(8) })

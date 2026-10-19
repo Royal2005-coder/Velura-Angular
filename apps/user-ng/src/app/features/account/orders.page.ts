@@ -15,6 +15,8 @@ interface MemberOrder {
   total_amount?: number;
   item_count?: number;
   items?: Array<{ product_name?: string; product_image?: string }>;
+  return_requests?: Array<{ return_id: string; tracking_return_code?: string; status?: string }>;
+  is_exchange_replacement?: boolean;
 }
 
 /** Nhóm trạng thái của từng tab, theo bộ tám trạng thái KAN-59. */

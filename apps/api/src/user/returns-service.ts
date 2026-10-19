@@ -12,6 +12,20 @@ const RESTRICTED_CATEGORY_SLUGS: readonly string[] = [];
 /** U2-02: mỗi `order_item` chỉ được xử lý đổi/trả tối đa 2 lần, tính trên cả đơn, không phải trên toàn bộ lịch sử khách. */
 const MAX_RETURN_ATTEMPTS_PER_ITEM = 2;
 
+/** Replacement orders fulfil an exchange and cannot start a new return chain. */
+async function rejectExchangeReplacementOrder(
+  repository: UserReturnsRepository,
+  orderId: unknown
+): Promise<void> {
+  if (repository.findReturnByExchangeOrderId && await repository.findReturnByExchangeOrderId(orderId)) {
+    throw new HttpError(
+      400,
+      "EXCHANGE_REPLACEMENT_NOT_RETURNABLE",
+      "Đơn hàng đổi mới không thể tạo thêm yêu cầu đổi/trả. Vui lòng theo dõi yêu cầu từ đơn hàng gốc."
+    );
+  }
+}
+
 function requireDeliveredWithinWindow(order: JsonObject): void {
   if (asString(order.status) !== "delivered") {
     throw new HttpError(400, "BAD_REQUEST", "Đơn hàng phải hoàn thành (giao thành công) mới được yêu cầu đổi trả");
@@ -155,6 +169,7 @@ export function createUserReturnsService(repository: UserReturnsRepository) {
       if (!order || order.user_id !== profile.user_id) {
         throw new HttpError(403, "FORBIDDEN", "Đơn hàng không hợp lệ");
       }
+      await rejectExchangeReplacementOrder(repository, order.order_id);
       requireDeliveredWithinWindow(order);
       const reason = returnReasonLabel(asString(body.reason_code || body.reasonCode));
       const comboNotes = (items as JsonObject[])
@@ -226,6 +241,7 @@ export function createUserReturnsService(repository: UserReturnsRepository) {
 
       if (!hasGuestOrderAccess(order, body)) throw new HttpError(404,"NOT_FOUND","Order not found");
 
+      await rejectExchangeReplacementOrder(repository, order.order_id);
       requireDeliveredWithinWindow(order);
       if (!["refund","exchange"].includes(asString(return_type))) throw new HttpError(422,"INVALID_RETURN_TYPE","Choose refund or exchange");
       const validatedItems = await validateItemsAgainstOrder(repository, order, items, asString(return_type));

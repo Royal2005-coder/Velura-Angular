@@ -2,15 +2,16 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
 - ../../base/velura
+- ../../secrets/production
 patches:
   - path: release-revision.yaml
 images:
-  - name: ghcr.io/royal2005-coder/velura-api
-    newName: ghcr.io/royal2005-coder/velura-api
-    digest: sha256:02fb777124f7457ea5e13306aa8a40ceda78a334492f45f350697d4adf8c91fe
-  - name: ghcr.io/royal2005-coder/velura-admin
-    newName: ghcr.io/royal2005-coder/velura-admin
-    digest: sha256:7ed8ae854e394939dc4e9c3e4e3e4c2a6ba6fd361cd6a680f0c2cd361a6699dc
-  - name: ghcr.io/royal2005-coder/velura-storefront
-    newName: ghcr.io/royal2005-coder/velura-storefront
-    digest: sha256:360e177388aa42e0a8ff2c1a561e08b6d89d84ada9f83ec46407072dc11e0419
+- name: ghcr.io/royal2005-coder/velura-api
+  newName: ghcr.io/royal2005-coder/velura-api
+  digest: sha256:4c1028ba3239ca8840bd956b74ff7c210b745fc633db715fa121e1760d580460
+- name: ghcr.io/royal2005-coder/velura-storefront
+  newName: ghcr.io/royal2005-coder/velura-storefront
+  digest: sha256:9b6cb94dbb4fde03df16193aaf6d942ebb470c6751ade356bd911a4cee32d72a
+- name: ghcr.io/royal2005-coder/velura-admin
+  newName: ghcr.io/royal2005-coder/velura-admin
+  digest: sha256:aca89f83cbacf56c91ae342060620c6ce308aa6b2064e3407d0b371a8be3bb2e

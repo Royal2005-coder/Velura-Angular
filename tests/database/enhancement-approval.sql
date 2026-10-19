@@ -53,7 +53,7 @@ begin
 
   perform public.velura_stage_image_approval(v_enhanced, v_actor, v_id, 1, v_job, 'enhanced', v_output,
     repeat('a',64), repeat('b',64), 'rembg-photometric-v2', v_quality, now()+interval '1 hour', '127.0.0.1');
-  if (select images from public.product where product_id=v_id) is distinct from array[v_url] then raise exception 'Enhancement approval changed published original'; end if;
+  if (select images::text[] from public.product where product_id=v_id) is distinct from array[v_url] then raise exception 'Enhancement approval changed published original'; end if;
 
   -- Force a real table constraint failure AFTER the production BEFORE trigger attempted consumption.
   begin
@@ -61,7 +61,7 @@ begin
     raise exception 'Expected constraint failure';
   exception when check_violation then null;
   end;
-  if (select images from public.product where product_id=v_id) is distinct from array[v_url] then raise exception 'Failed save replaced published original'; end if;
+  if (select images::text[] from public.product where product_id=v_id) is distinct from array[v_url] then raise exception 'Failed save replaced published original'; end if;
   if (select consumed_at from public.product_image_approval where approval_id=v_enhanced) is not null then raise exception 'Failed save consumed approval'; end if;
 
   -- Another allowed reviewer cannot publish an image approved by the first reviewer.
@@ -89,14 +89,14 @@ begin
     raise exception 'Expected stale approval rejection';
   exception when sqlstate 'PT409' then null;
   end;
-  if (select images from public.product where product_id=v_id) is distinct from array[v_url] then raise exception 'Stale approval replaced original'; end if;
+  if (select images::text[] from public.product where product_id=v_id) is distinct from array[v_url] then raise exception 'Stale approval replaced original'; end if;
 
   -- Review the same source against the new version, then publish precisely that selection.
   delete from public.product_image_approval where approval_id=v_enhanced;
   perform public.velura_stage_image_approval(v_enhanced, v_actor, v_id, 2, v_job, 'enhanced', v_output,
     repeat('a',64), repeat('b',64), 'rembg-photometric-v2', v_quality, now()+interval '1 hour', '127.0.0.1');
   perform pg_temp.save_images(v_id,2,array[v_output]);
-  if (select images from public.product where product_id=v_id) is distinct from array[v_output] then raise exception 'Save did not publish selected validated asset'; end if;
+  if (select images::text[] from public.product where product_id=v_id) is distinct from array[v_output] then raise exception 'Save did not publish selected validated asset'; end if;
   if not exists(select 1 from public.product_image_approval where approval_id=v_enhanced and consumed_product_version=3
     and consumed_image_revision=2 and reviewer_id=v_actor) then raise exception 'Published revision/reviewer missing'; end if;
   if not exists(select 1 from public.audit_log where target_id=v_id and new_value->>'image_approval'=v_enhanced::text) then raise exception 'Image publication audit missing'; end if;

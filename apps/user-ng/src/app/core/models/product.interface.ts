@@ -11,6 +11,8 @@ export interface ProductSummary {
   status?: string;
   thumbnail_url?: string | null;
   images?: string[];
+  /** Maps image URLs to exact variant colors; missing entries are common images. Images[0] is the unique primary. */
+  image_colors?: Record<string, string>;
   rating_value?: number;
   rating_count?: number;
   category_slug?: string | null;

@@ -546,6 +546,26 @@
   stroke: #b54a32;
 }
 
+.stock-alert-banner--discontinued {
+  background: #f3f4f6;
+  border-color: #d1d5db;
+  color: #4b5563;
+}
+
+.stock-alert-banner--discontinued svg {
+  stroke: #4b5563;
+}
+
+.stock-alert-banner--hidden {
+  background: #fffbeb;
+  border-color: #fde68a;
+  color: #92400e;
+}
+
+.stock-alert-banner--hidden svg {
+  stroke: #92400e;
+}
+
 .size-btn.is-out-of-stock,
 .combo-size-btn.is-out-of-stock {
   opacity: 0.5;

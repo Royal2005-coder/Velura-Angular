@@ -15,6 +15,7 @@ const SERVICES = {
   'ai-worker': 'ai-staging', 'litellm': 'observability', 'grafana': 'observability',
   'loki': 'observability', 'victoriametrics': 'observability', 'cloudflared': 'networking',
   'alloy': 'observability', 'vmalert': 'observability', 'alertmanager': 'observability',
+  'dcgm-exporter': 'observability',
   'oauth2-proxy': 'networking', 'keycloak': 'auth', 'source-controller': 'flux-system',
   'kustomize-controller': 'flux-system',
 };

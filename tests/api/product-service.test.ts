@@ -15,12 +15,13 @@ const CATEGORY_ID = "40000000-0000-4000-8000-000000000001";
 
 // --- validateCreateProduct ---
 
-test("validateCreateProduct auto-builds slug and allows empty images", () => {
+test("validateCreateProduct auto-builds slug and allows empty images for hidden drafts", () => {
   const result = validateCreateProduct({
     sku: "VLR-AO099",
     name: "Áo linen kem",
     categoryId: CATEGORY_ID,
     basePrice: 250000,
+    status: "hidden",
     expectedVersion: 0
   });
   assert.equal(result.slug, "ao-linen-kem");
@@ -35,6 +36,7 @@ test("validateCreateProduct accepts valid input", () => {
     categoryId: CATEGORY_ID,
     basePrice: 250000,
     salePrice: 200000,
+    images: ["/assets/product-primary.jpg"],
     expectedVersion: 0
   });
   assert.equal(result.sku, "VL-AO001");
@@ -171,19 +173,36 @@ test("stock delta must be a non-zero integer with a reason", () => {
   );
 });
 
-test("changeStatus validates the transition before mutation", async () => {
-  let mutated = false;
+test("changeStatus allows discontinued to transition back to on_sale", async () => {
+  let mutatedWith: { status?: string } | null = null;
   const service = createProductService({ repository: {
-    findById: async () => ({ product_id: PRODUCT_ID, status: "discontinued" }),
-    changeStatus: async () => { mutated = true; }
+    findById: async () => ({ product_id: PRODUCT_ID, status: "discontinued", images: ["/assets/product-primary.jpg"], version: 2 }),
+    changeStatus: async (_id, input) => {
+      if (input && typeof input === "object" && "status" in input) {
+        mutatedWith = { status: String(input.status) };
+      }
+      return { product_id: PRODUCT_ID, status: "on_sale" };
+    }
+  } });
+  const result = await service.changeStatus(superAdminContext(), PRODUCT_ID, {
+    status: "on_sale", reason: "Mo ban lai san pham sau khi kiem tra", expectedVersion: 2
+  }, { ipAddress: "127.0.0.1" });
+  const status = result && typeof result === "object" && "status" in result ? result.status : null;
+  assert.equal(mutatedWith?.status, "on_sale");
+  assert.equal(status, "on_sale");
+});
+
+test("changeStatus rejects unchanged status or invalid transition", async () => {
+  const service = createProductService({ repository: {
+    findById: async () => ({ product_id: PRODUCT_ID, status: "on_sale", version: 1 }),
+    changeStatus: async () => {}
   } });
   await assert.rejects(
     () => service.changeStatus(superAdminContext(), PRODUCT_ID, {
-      status: "on_sale", reason: "Mo ban lai san pham sau khi kiem tra", expectedVersion: 2
+      status: "on_sale", reason: "Khong thay doi trang thai", expectedVersion: 1
     }, { ipAddress: "127.0.0.1" }),
     (error) => error.status === 422 && error.details.status.length === 1
   );
-  assert.equal(mutated, false);
 });
 
 test("product list validates category and price filters", async () => {
@@ -198,59 +217,159 @@ test("product list validates category and price filters", async () => {
   );
 });
 
-test("CSV preview returns per-row errors without throwing", async () => {
-  const service = createProductService({ repository: {} });
+test("CSV preview returns every applicable per-row error without throwing", async () => {
+  const service = createProductService({ repository: {
+    findBySku: async () => null, findVariantBySku: async () => null
+  } });
   const result = await service.parseCsv(superAdminContext(), [
-    "sku,name,base_price,category_id",
-    `VL-AO001,Ao linen,100000,${CATEGORY_ID}`,
-    "bad-sku,Ten loi,not-a-price,not-a-uuid"
+    "sku,name,base_price,category_id,status",
+    `VL-AO001,Ao linen,100000,${CATEGORY_ID},hidden`,
+    "badsku,Ten loi,not-a-price,not-a-uuid,hidden"
   ].join("\n"));
   assert.equal(result.validRows, 1);
   assert.equal(result.totalRows, 2);
-  assert.equal(result.errors.length, 1);
-  assert.equal(result.errors[0].row, 3);
-  assert.equal(result.errors[0].field, "sku");
+  assert.deepEqual(result.errors.map((error) => [error.row, error.field]), [[3, "sku"], [3, "base_price"], [3, "category_id"]]);
 });
 
 test("CSV commit refuses to write when preview still has row errors", async () => {
-  const service = createProductService({
-    repository: { createProduct: async () => assert.fail("should not create") }
-  });
+  const service = createProductService({ repository: {
+    findBySku: async () => null, findVariantBySku: async () => null,
+    importCsv: async () => assert.fail("should not import")
+  } });
   await assert.rejects(
     () => service.commitCsv(superAdminContext(), [
-      "sku,name,base_price,category_id",
-      "bad-sku,Ten loi,100000," + CATEGORY_ID
+      "sku,name,base_price,category_id,status", `badsku,Ten loi,100000,${CATEGORY_ID},hidden`
     ].join("\n"), { ipAddress: "127.0.0.1" }),
     (error) => error.status === 422 && error.code === "CSV_VALIDATION_FAILED"
   );
 });
 
-test("CSV preview parses quoted commas", async () => {
-  const service = createProductService({ repository: {} });
+test("CSV preview parses BOM and quoted commas", async () => {
+  const service = createProductService({ repository: {
+    findBySku: async () => null, findVariantBySku: async () => null
+  } });
   const result = await service.parseCsv(superAdminContext(), [
-    "sku,name,base_price,category_id",
-    `VL-AO001,\"Ao, linen\",100000,${CATEGORY_ID}`
+    "\uFEFFsku,name,base_price,category_id,status", `VL-AO001,"Ao, linen",100000,${CATEGORY_ID},hidden`
   ].join("\n"));
   assert.equal(result.rows[0].name, "Ao, linen");
   assert.equal(result.rows[0].category_id, CATEGORY_ID);
 });
 
-test("CSV commit creates production products through the repository with create version zero", async () => {
-  const received = [];
-  const service = createProductService({
-    repository: {
-      createProduct: async (payload) => {
-        received.push(payload);
-        return { product_id: PRODUCT_ID, sku: payload.sku };
-      }
-    }
-  });
+test("CSV commit passes new hidden product and explicit initial variant to the atomic repository import", async () => {
+  let received;
+  const service = createProductService({ repository: {
+    findBySku: async () => null, findVariantBySku: async () => null,
+    importCsv: async (rows) => { received = rows; return { created: 1, updated: 0, failed: 0, total: 1 }; }
+  } });
   const result = await service.commitCsv(superAdminContext(), [
-    "sku,name,base_price,category_id,status",
-    `VL-AO002,Ao lua trang,150000,${CATEGORY_ID},on_sale`
+    "sku,name,base_price,category_id,status,color,size,stock_quantity",
+    `VL-AO002,Ao lua trang,150000,${CATEGORY_ID},hidden,Đen,S,50`
   ].join("\n"), { ipAddress: "127.0.0.1" });
   assert.equal(result.created, 1);
-  assert.equal(received[0].expectedVersion, 0);
+  assert.equal(received[0].product_id, null);
+  assert.equal(received[0].color, "Đen");
+  assert.equal(received[0].size, "S");
+  assert.equal(received[0].stock_quantity, 50);
+});
+
+test("CSV duplicate normalized SKU blocks both rows and commit even when the first row has other errors", async () => {
+  const service = createProductService({ repository: {
+    findBySku: async () => null, findVariantBySku: async () => null,
+    importCsv: async () => assert.fail("duplicate file must not write")
+  } });
+  const csv = ["sku,name,base_price,category_id,status",
+    `VL-AO002,,150000,${CATEGORY_ID},hidden`, ` vl-ao002 ,Ao lua,150000,${CATEGORY_ID},hidden`].join("\n");
+  const result = await service.parseCsv(superAdminContext(), csv);
+  assert.deepEqual(result.errors.filter((error) => error.field === "sku").map((error) => error.row), [2, 3]);
+  assert.ok(result.errors.some((error) => error.row === 2 && error.field === "name"));
+  assert.equal(result.validRows, 0);
+  await assert.rejects(() => service.commitCsv(superAdminContext(), csv, {}), (error) => error.code === "CSV_VALIDATION_FAILED");
+});
+
+test("CSV rejects repeated headers and malformed row widths before any write", async () => {
+  const service = createProductService({ repository: {
+    findBySku: async () => null, findVariantBySku: async () => null,
+    importCsv: async () => assert.fail("invalid CSV must not write")
+  } });
+  for (const csv of [
+    `sku,name,base_price,category_id,status,SKU\nVL-AO002,Ao lua,150000,${CATEGORY_ID},hidden,VL-AO002`,
+    `sku,name,base_price,category_id,status\nVL-AO002,Ao lua,150000,${CATEGORY_ID},hidden,extra`
+  ]) {
+    const preview = await service.parseCsv(superAdminContext(), csv);
+    assert.ok(preview.errors.length);
+    await assert.rejects(() => service.commitCsv(superAdminContext(), csv, {}), (error) => error.code === "CSV_VALIDATION_FAILED");
+  }
+});
+
+test("CSV active price reduction is a preview error and cannot commit through a hidden status", async () => {
+  const current = { product_id: PRODUCT_ID, sku: "VL-AO002", status: "on_sale", base_price: 250000, sale_price: 250000, version: 1 };
+  const service = createProductService({ repository: {
+    findBySku: async () => current, findVariantBySku: async () => null,
+    importCsv: async () => assert.fail("price reduction must not write")
+  } });
+  for (const status of ["hidden", "on_sale", ""]) {
+    const csv = `sku,name,base_price,sale_price,category_id,status\nVL-AO002,Ao lua,100000,100000,${CATEGORY_ID},${status}`;
+    const preview = await service.parseCsv(superAdminContext(), csv);
+    assert.deepEqual(preview.errors.map((error) => error.field), ["base_price", "sale_price"]);
+    await assert.rejects(() => service.commitCsv(superAdminContext(), csv, {}), (error) => error.code === "CSV_VALIDATION_FAILED");
+  }
+});
+
+test("CSV commit rechecks stored prices after successful preview", async () => {
+  const current = { product_id: PRODUCT_ID, sku: "VL-AO002", status: "on_sale", base_price: 250000, sale_price: 250000, version: 1 };
+  const service = createProductService({ repository: {
+    findBySku: async () => current, findVariantBySku: async () => null,
+    importCsv: async () => assert.fail("changed price must block commit")
+  } });
+  const csv = `sku,name,base_price,category_id\nVL-AO002,Ao lua,250000,${CATEGORY_ID}`;
+  assert.equal((await service.parseCsv(superAdminContext(), csv)).errors.length, 0);
+  current.base_price = 300000;
+  await assert.rejects(() => service.commitCsv(superAdminContext(), csv, {}), (error) => error.details.errors[0].field === "base_price");
+});
+
+test("CSV distinguishes existing and new variant identity without deleting or resetting omitted stock or sale price", async () => {
+  const parent = { product_id: PRODUCT_ID, sku: "VL-AO002", base_price: 250000, sale_price: 200000, version: 3 };
+  const variant = { variant_id: "50000000-0000-4000-8000-000000000001", product_id: PRODUCT_ID, sku: "VL-AO002-BL-S", stock_quantity: 12, reserved_quantity: 4, version: 2 };
+  let received;
+  const service = createProductService({ repository: {
+    findBySku: async (sku) => sku === parent.sku ? parent : null,
+    findById: async () => parent,
+    findVariantBySku: async (sku) => sku === variant.sku ? variant : null,
+    importCsv: async (rows) => { received = rows; return { created: 1, updated: 1, failed: 0, total: rows.length }; }
+  } });
+  const csv = ["sku,product_sku,name,base_price,category_id,color,size,stock_quantity",
+    `VL-AO002-BL-S,,Ao lua,250000,${CATEGORY_ID},,,`,
+    `VL-AO002-BL-M,VL-AO002,Ao lua,250000,${CATEGORY_ID},Đen,M,8`].join("\n");
+  const result = await service.commitCsv(superAdminContext(), csv, {});
+  assert.equal(result.updated, 1);
+  assert.equal(result.created, 1);
+  assert.equal(received[0].variant_id, variant.variant_id);
+  assert.equal(received[0].stock_quantity, null);
+  assert.equal(received[0].sale_price, null);
+  assert.equal(received[0].status, null);
+  assert.equal(received[1].variant_id, null);
+  assert.equal(received[1].product_id, PRODUCT_ID);
+  const badStock = `sku,name,base_price,category_id,stock_quantity\nVL-AO002-BL-S,Ao lua,250000,${CATEGORY_ID},3`;
+  assert.equal((await service.parseCsv(superAdminContext(), badStock)).errors[0].field, "stock_quantity");
+});
+
+test("initial product variants retain their explicit normalized SKU", () => {
+  const input = validateCreateProduct({
+    sku: "VL-AO002", name: "Ao lua", categoryId: CATEGORY_ID, basePrice: 250000, status: "hidden", expectedVersion: 0,
+    variants: [{ sku: " vl-ao002-bl-s ", color: "Đen", size: "S", stockQuantity: 8 }]
+  });
+  assert.equal(input.variants[0].sku, "VL-AO002-BL-S");
+});
+
+test("CSV preview rejects SKU ambiguity between a product and a different parent's variant", async () => {
+  const service = createProductService({ repository: {
+    findBySku: async () => ({ product_id: PRODUCT_ID, sku: "VL-AO002" }),
+    findById: async () => ({ product_id: "30000000-0000-4000-8000-000000000002", sku: "VL-AO003", base_price: 250000, sale_price: 250000 }),
+    findVariantBySku: async () => ({ variant_id: "50000000-0000-4000-8000-000000000001", product_id: "30000000-0000-4000-8000-000000000002" })
+  } });
+  const result = await service.parseCsv(superAdminContext(), `sku,name,base_price,category_id\nVL-AO002,Ao lua,250000,${CATEGORY_ID}`);
+  assert.equal(result.validRows, 0);
+  assert.equal(result.errors[0].field, "sku");
 });
 
 // --- Service RBAC ---
@@ -282,6 +401,7 @@ test("product service allows super_admin to create products", async () => {
     categoryId: CATEGORY_ID,
     basePrice: 250000,
     salePrice: 200000,
+    images: ["/assets/product-primary.jpg"],
     expectedVersion: 0
   }, { ipAddress: "127.0.0.1" });
   assert.equal(result.product_id, PRODUCT_ID);
@@ -289,14 +409,13 @@ test("product service allows super_admin to create products", async () => {
   assert.equal(received[1], "valid-token");
 });
 
-test("product create seeds a default variant with the caller token", async () => {
+test("product create sends its default variant atomically with the caller token", async () => {
   let variantArgs;
   const service = createProductService({
     repository: {
-      createProduct: async () => ({ product_id: PRODUCT_ID, sku: "VL-AO001", status: "on_sale", version: 1 }),
-      createVariant: async (...args) => {
+      createProduct: async (...args) => {
         variantArgs = args;
-        return { variant_id: "v1" };
+        return { product_id: PRODUCT_ID, sku: "VL-AO001", status: "on_sale", version: 1 };
       },
       findById: async () => ({ product_id: PRODUCT_ID, status: "on_sale", version: 1 }),
       listVariants: async () => [{ stock_quantity: 4 }],
@@ -310,21 +429,21 @@ test("product create seeds a default variant with the caller token", async () =>
     name: "Ao Thun",
     categoryId: CATEGORY_ID,
     basePrice: 100000,
+    images: ["/assets/product-primary.jpg"],
     initialStock: 4,
     expectedVersion: 0
   }, { ipAddress: "127.0.0.1" });
-  assert.equal(variantArgs[2], "sanpham-token");
-  assert.equal(variantArgs[1].stockQuantity, 4);
+  assert.equal(variantArgs[1], "sanpham-token");
+  assert.equal(variantArgs[0].variants[0].stockQuantity, 4);
 });
 
-test("product create creates all SKU matrix variants when variants array is provided", async () => {
+test("product create sends all SKU matrix variants in its atomic creation request", async () => {
   const createdVariants: Array<Record<string, unknown>> = [];
   const service = createProductService({
     repository: {
-      createProduct: async () => ({ product_id: PRODUCT_ID }),
-      createVariant: async (_pid, input) => {
-        createdVariants.push(input as Record<string, unknown>);
-        return { variant_id: "var-" + createdVariants.length, ...input };
+      createProduct: async (input) => {
+        createdVariants.push(...input.variants as Array<Record<string, unknown>>);
+        return { product_id: PRODUCT_ID };
       },
       findById: async () => ({ product_id: PRODUCT_ID, status: "on_sale", version: 1 }),
       listVariants: async () => createdVariants,
@@ -336,6 +455,7 @@ test("product create creates all SKU matrix variants when variants array is prov
     name: "Đầm Dạ Hội Lụa Hoàng Gia Velura",
     categoryId: CATEGORY_ID,
     basePrice: 1200000,
+    images: ["/assets/product-primary.jpg"],
     material: "Lụa Tơ Tằm",
     variants: [
       { color: "Đen", size: "S", stockQuantity: 10, lowStockThreshold: 5 },
@@ -368,6 +488,7 @@ test("product service allows product operator to create products", async () => {
     slug: "ao-thun",
     categoryId: CATEGORY_ID,
     basePrice: 100000,
+    images: ["/assets/product-primary.jpg"],
     expectedVersion: 0
   }, { ipAddress: "127.0.0.1" });
   assert.equal(called, true);
@@ -455,6 +576,129 @@ test("combo items service operations work with correct RBAC", async () => {
     () => service.addComboItem(viewerContext(), PRODUCT_ID, { componentProductId: "comp-1", quantity: 3 }),
     (error) => error.status === 403
   );
+});
+
+test("listAuditLogs supports date, query, and action filtering", async () => {
+  let capturedFilters: Record<string, unknown> | null = null;
+  const mockLogs = [
+    {
+      audit_id: "log-1",
+      action: "update_stock",
+      timestamp: "2026-10-18T08:30:00.000Z",
+      target_id: PRODUCT_ID,
+      new_value: { name: "UAT-Khai Áo Thun Premium", reason: "Kiểm kê định kỳ" },
+      old_value: {}
+    },
+    {
+      audit_id: "log-2",
+      action: "create",
+      timestamp: "2026-10-17T08:30:00.000Z",
+      target_id: "30000000-0000-4000-8000-000000000002",
+      new_value: { name: "Áo sơ mi khác" },
+      old_value: {}
+    }
+  ];
+
+  const service = createProductService({
+    repository: {
+      listAuditLogs: async (filters: Record<string, unknown>) => {
+        capturedFilters = filters;
+        return { rows: mockLogs, count: mockLogs.length };
+      }
+    } as unknown as ProductRepository
+  });
+
+  const params = new URLSearchParams({
+    q: "UAT-Khai",
+    date: "2026-10-18",
+    action: "update_stock"
+  });
+
+  const result = await service.listAuditLogs(viewerContext(), params);
+  const rows = result && typeof result === "object" && "rows" in result && Array.isArray(result.rows) ? result.rows : [];
+  assert.equal(rows.length, 1);
+  const firstRow = rows[0] && typeof rows[0] === "object" ? rows[0] : {};
+  assert.equal("audit_id" in firstRow ? firstRow.audit_id : null, "log-1");
+  assert.equal(capturedFilters?.action, "update_stock");
+});
+
+test("explicit image colors validate against creation variants without filename inference", () => {
+  const result = validateCreateProduct({
+    sku: "VL-IMG01", name: "Color garment", categoryId: CATEGORY_ID, basePrice: 100,
+    images: ["/assets/red-name.jpg", "/assets/common.jpg"],
+    imageColors: { "/assets/red-name.jpg": "Đen" },
+    variants: [{ color: "Đen", size: "M", stockQuantity: 1 }], expectedVersion: 0
+  });
+  assert.deepEqual(result.imageColors, { "/assets/red-name.jpg": "Đen" });
+  assert.deepEqual(result.images, ["/assets/red-name.jpg", "/assets/common.jpg"]);
+  assert.equal(result.variants[0].color, "Đen");
+});
+
+test("create rejects orphan image links, unknown or empty colors and malformed maps", () => {
+  const body = {
+    sku: "VL-IMG01", name: "Color garment", categoryId: CATEGORY_ID, basePrice: 100,
+    images: ["/assets/one.jpg"], variants: [{ color: "Đen", size: "M", stockQuantity: 0 }], expectedVersion: 0
+  };
+  for (const imageColors of [
+    { "/assets/missing.jpg": "Đen" }, { "/assets/one.jpg": "Trắng" },
+    { "/assets/one.jpg": "" }, { "/assets/one.jpg": " đen " }, [], null
+  ]) {
+    assert.throws(() => validateCreateProduct({ ...body, imageColors }),
+      (error) => error.status === 422 && Boolean(error.details.imageColors));
+  }
+});
+
+test("server image validation enforces twenty unique URLs and on-sale primary", () => {
+  const body = { sku: "VL-IMG01", name: "Color garment", categoryId: CATEGORY_ID, basePrice: 100, expectedVersion: 0 };
+  const images = Array.from({ length: 20 }, (_, index) => `/assets/image-${index}.jpg`);
+  assert.equal(validateCreateProduct({ ...body, images }).images.length, 20);
+  assert.throws(() => validateCreateProduct(body), (error) => error.status === 422 && Boolean(error.details.images));
+  for (const invalid of [[...images, "/assets/extra.jpg"], [images[0], images[0]]]) {
+    assert.throws(() => validateCreateProduct({ ...body, images: invalid }),
+      (error) => error.status === 422 && Boolean(error.details.images));
+    assert.throws(() => validateUpdateProduct({ images: invalid, expectedVersion: 1 }),
+      (error) => error.status === 422 && Boolean(error.details.images));
+  }
+});
+
+test("image removal prunes associations, reordering preserves them, metadata patches leave them untouched", async () => {
+  const current = {
+    product_id: PRODUCT_ID, status: "on_sale", version: 1,
+    images: ["/assets/one.jpg", "/assets/two.jpg"],
+    image_colors: { "/assets/one.jpg": "Đen", "/assets/two.jpg": "Trắng" }
+  };
+  const calls: Array<Record<string, unknown>> = [];
+  const service = createProductService({ repository: {
+    findById: async () => current,
+    listVariants: async () => ({ rows: [{ color: "Đen" }, { color: "Trắng" }] }),
+    updateProduct: async (_id, input) => { calls.push(input); return { ...current, image_colors: input.imageColors ?? current.image_colors }; }
+  } as unknown as ProductRepository });
+  await service.update(superAdminContext(), PRODUCT_ID, { images: ["/assets/two.jpg"], expectedVersion: 1 }, {});
+  assert.deepEqual(calls[0].imageColors, { "/assets/two.jpg": "Trắng" });
+  await service.update(superAdminContext(), PRODUCT_ID, { images: ["/assets/two.jpg", "/assets/one.jpg"], expectedVersion: 1 }, {});
+  assert.deepEqual(calls[1].imageColors, current.image_colors);
+  await service.update(superAdminContext(), PRODUCT_ID, { name: "Metadata only", expectedVersion: 1 }, {});
+  assert.equal(calls[2].imageColors, undefined);
+  const updated = await service.update(superAdminContext(), PRODUCT_ID, { imageColors: {}, expectedVersion: 1 }, {});
+  assert.deepEqual((updated as Record<string, unknown>).image_colors, {});
+  for (const imageColors of [{ "/assets/gone.jpg": "Đen" }, { "/assets/one.jpg": "Not a variant" }]) {
+    await assert.rejects(() => service.update(superAdminContext(), PRODUCT_ID, { imageColors, expectedVersion: 1 }, {}),
+      (error) => error.status === 422 && Boolean(error.details.imageColors));
+  }
+  await assert.rejects(() => service.update(superAdminContext(), PRODUCT_ID, { images: [], expectedVersion: 1 }, {}),
+    (error) => error.status === 422 && Boolean(error.details.images));
+});
+
+test("hidden drafts may remove all images but cannot publish without a primary", async () => {
+  const service = createProductService({ repository: {
+    findById: async () => ({ product_id: PRODUCT_ID, status: "hidden", images: [], image_colors: {}, version: 1 }),
+    listVariants: async () => ({ rows: [] }),
+    updateProduct: async (_id, input) => input
+  } as unknown as ProductRepository });
+  await service.update(superAdminContext(), PRODUCT_ID, { images: [], expectedVersion: 1 }, {});
+  await assert.rejects(() => service.changeStatus(superAdminContext(), PRODUCT_ID,
+    { status: "on_sale", reason: "Publish after product review", expectedVersion: 1 }, {}),
+    (error) => error.status === 422 && Boolean(error.details.images));
 });
 
 // --- Helpers ---

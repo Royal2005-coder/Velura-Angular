@@ -1,10 +1,107 @@
-import { of } from 'rxjs';
+import { of, Subject } from 'rxjs';
+import { vi } from 'vitest';
 import { createAdminPage } from '../../../testing/admin-testing';
 import { AdminProductsPage } from './admin-products.page';
 import { TestBed } from '@angular/core/testing';
 import { AdminSessionService } from '../../core/admin-session.service';
+import type { AdminProductRow, AdminProductVariant } from '../../core/admin-api.service';
+import { HttpErrorResponse } from '@angular/common/http';
 
+
+async function chooseCsv(page: AdminProductsPage, content: string): Promise<void> {
+  const input = document.createElement('input');
+  input.type = 'file';
+  Object.defineProperty(input, 'files', { value: [new File([content], 'products.csv', { type: 'text/csv' })] });
+  page.onCsvFile({ target: input } as unknown as Event);
+  await vi.waitFor(() => expect(page.csvPreview()).toBe(content));
+}
+
+function grantProductAccess(): void {
+  TestBed.inject(AdminSessionService).applyAuthContext({
+    user: { id: 'operator' }, role: 'admin_operator_sanpham', isAdmin: true,
+    allowedModules: ['products'], allowedPages: ['products'],
+  });
+}
 describe('AdminProductsPage', () => {
+  it('retains authoritative variants when detail arrives after the variant list', async () => {
+    const detail = new Subject<AdminProductRow>();
+    const variants = new Subject<{ rows: AdminProductVariant[] }>();
+    const page = await createAdminPage(AdminProductsPage, {
+      getProduct: () => detail, listVariants: () => variants,
+    });
+    const rows = [
+      { variant_id: 'black', color: 'Đen', size: 'S', stock_quantity: 50 },
+      { variant_id: 'white', color: 'Trắng', size: 'S', stock_quantity: 30 },
+    ];
+    page.openEdit({ product_id: 'p', name: 'Áo', status: 'hidden' });
+    variants.next({ rows }); variants.complete();
+    detail.next({ product_id: 'p', name: 'Áo', status: 'hidden' }); detail.complete();
+    expect(page.variants()).toEqual(rows);
+  });
+
+  it('blocks import while preview is pending, failed, or contains duplicate SKU errors', async () => {
+    const previews = [new Subject<unknown>(), new Subject<unknown>()];
+    const commitCsv = vi.fn(() => of({ failed: 0 }));
+    const page = await createAdminPage(AdminProductsPage, { previewCsv: vi.fn()
+      .mockReturnValueOnce(previews[0]).mockReturnValueOnce(previews[1]), commitCsv });
+    grantProductAccess();
+    await chooseCsv(page, 'sku,name\nVL-AO001,Áo');
+    page.commitCsv();
+    expect(commitCsv).not.toHaveBeenCalled();
+    previews[0].error(new Error('Preview unavailable'));
+    page.commitCsv();
+    expect(commitCsv).not.toHaveBeenCalled();
+    await chooseCsv(page, 'sku,name\nVL-AO001,Áo\nVL-AO001,Áo khác');
+    previews[1].next({ rows: [], errors: [{ row: 3, field: 'sku', message: 'SKU trùng dòng 2' }], validRows: 0, totalRows: 2 });
+    page.commitCsv();
+    expect(commitCsv).not.toHaveBeenCalled();
+    expect(page.csvErrors()[0].field).toBe('sku');
+  });
+
+  it('consumes preview approval and prevents double submission', async () => {
+    const preview = new Subject<unknown>(), committed = new Subject<unknown>();
+    const commitCsv = vi.fn(() => committed);
+    const page = await createAdminPage(AdminProductsPage, { previewCsv: () => preview, commitCsv });
+    grantProductAccess();
+    await chooseCsv(page, 'sku,name\nVL-AO001,Áo');
+    preview.next({ rows: [{ sku: 'VL-AO001' }], errors: [], validRows: 1, totalRows: 1 });
+    expect(page.canCommitCsv()).toBe(true);
+    page.commitCsv(); page.commitCsv();
+    expect(commitCsv).toHaveBeenCalledTimes(1);
+    committed.next({ failed: 0 }); committed.complete();
+    expect(page.canCommitCsv()).toBe(false);
+  });
+
+  it('does not apply an old file preview to a replacement file', async () => {
+    const first = new Subject<unknown>(), second = new Subject<unknown>();
+    const page = await createAdminPage(AdminProductsPage, { previewCsv: vi.fn()
+      .mockReturnValueOnce(first).mockReturnValueOnce(second) });
+    grantProductAccess();
+    await chooseCsv(page, 'sku,name\nVL-AO001,Áo');
+    await chooseCsv(page, 'sku,name\nVL-AO002,Áo khác');
+    first.next({ rows: [{ sku: 'VL-AO001' }], errors: [], validRows: 1, totalRows: 1 });
+    expect(page.canCommitCsv()).toBe(false);
+    second.next({ rows: [], errors: [{ row: 2, field: 'sale_price', message: 'Dùng Điều chỉnh giá' }], validRows: 0, totalRows: 1 });
+    expect(page.csvErrors()[0].field).toBe('sale_price');
+    expect(page.csvRows()).toEqual([]);
+    expect(page.canCommitCsv()).toBe(false);
+  });
+
+  it('shows commit-time row errors and requires a new preview', async () => {
+    const committed = new Subject<unknown>();
+    const page = await createAdminPage(AdminProductsPage, {
+      previewCsv: () => of({ rows: [{ sku: 'VL-AO001' }], errors: [], validRows: 1, totalRows: 1 }),
+      commitCsv: () => committed,
+    });
+    grantProductAccess();
+    await chooseCsv(page, 'sku,name\nVL-AO001,Áo');
+    page.commitCsv();
+    committed.error(new HttpErrorResponse({ status: 422, error: { error: { details: {
+      errors: [{ row: 2, field: 'sale_price', message: 'Giá đã đổi, dùng Điều chỉnh giá' }],
+    } } } }));
+    expect(page.csvErrors()).toEqual([{ row: 2, field: 'sale_price', message: 'Giá đã đổi, dùng Điều chỉnh giá' }]);
+    expect(page.canCommitCsv()).toBe(false);
+  });
   it('creates the ViewModel with a stub AdminApiService', async () => {
     const page = await createAdminPage(AdminProductsPage);
     expect(page).toBeTruthy();
@@ -33,6 +130,14 @@ describe('AdminProductsPage', () => {
     expect(page.nextStatus()).toBe('hidden');
     expect(page.allowedStatuses().map((row) => row.value)).toContain('hidden');
     expect(page.allowedStatuses().map((row) => row.value)).toContain('discontinued');
+  });
+
+  it('allows discontinued products to transition back to on_sale and hidden', async () => {
+    const page = await createAdminPage(AdminProductsPage);
+    page.openStatus({ product_id: '1', name: 'Áo', sku: 'VL-AO001', version: 3, status: 'discontinued' });
+    expect(page.nextStatus()).toBe('on_sale');
+    expect(page.allowedStatuses().map((row) => row.value)).toContain('on_sale');
+    expect(page.allowedStatuses().map((row) => row.value)).toContain('hidden');
   });
 
   it('calculates ERP stock adjustments in real time', async () => {
@@ -112,6 +217,63 @@ describe('AdminProductsPage', () => {
     // Combo sale price: 399k -> Savings: 550k - 399k = 151k
     expect(page.comboSavings()).toBe(151_000);
     expect(page.comboSavingsPct()).toBe(27);
+  });
+  it('keeps explicit colors when promoting and replacing a primary image', async () => {
+    const page = await createAdminPage(AdminProductsPage);
+    TestBed.inject(AdminSessionService).applyAuthContext({
+      user: { id: 'operator' }, role: 'admin_operator_sanpham', isAdmin: true,
+      allowedModules: ['products'], allowedPages: ['products'],
+    });
+    page.editorImages.set(['/a.jpg', '/b.jpg', '/c.jpg']);
+    page.editorImageColors.set({ '/a.jpg': 'Đen', '/b.jpg': 'Trắng' });
+    page.setPrimaryImage(1);
+    expect(page.editorImages()).toEqual(['/b.jpg', '/a.jpg', '/c.jpg']);
+    expect(page.imageIndex()).toBe(0);
+    expect(page.editorImageColors()['/b.jpg']).toBe('Trắng');
+    page.sourceFile.set(new File(['source'], 'source.png', { type: 'image/png' }));
+    const box = document.createElement('textarea');
+    box.value = page.editorImages().join('\n');
+    page.acceptAiImage({ approvalId: 'review', url: '/replacement.jpg', sourceRevision: 'hash',
+      processingVersion: 'quality-v1', expiresAt: new Date(Date.now() + 60_000).toISOString() }, box);
+    expect(page.editorImages()[0]).toBe('/replacement.jpg');
+    expect(page.editorImageColors()).toEqual({ '/a.jpg': 'Đen', '/replacement.jpg': 'Trắng' });
+  });
+
+  it('rejects a twenty-first image and protects the last primary image', async () => {
+    const page = await createAdminPage(AdminProductsPage);
+    TestBed.inject(AdminSessionService).applyAuthContext({
+      user: { id: 'operator' }, role: 'admin_operator_sanpham', isAdmin: true,
+      allowedModules: ['products'], allowedPages: ['products'],
+    });
+    const images = Array.from({ length: 20 }, (_, index) => `/image-${index}.jpg`);
+    page.editorImages.set(images);
+    page.imageIndex.set(20);
+    page.sourceFile.set(new File(['source'], 'source.png', { type: 'image/png' }));
+    const box = document.createElement('textarea');
+    box.value = images.join('\n');
+    page.acceptAiImage({ approvalId: 'review', url: '/extra.jpg', sourceRevision: 'hash',
+      processingVersion: 'quality-v1', expiresAt: new Date(Date.now() + 60_000).toISOString() }, box);
+    expect(page.editorImages()).toEqual(images);
+    expect(page.aiImageError()).toContain('20');
+    page.editorImages.set(['/primary.jpg']);
+    page.removeGalleryImageSlot(0);
+    expect(page.editorImages()).toEqual(['/primary.jpg']);
+  });
+
+  it('assigns only actual variant colors and removes deleted image associations', async () => {
+    const page = await createAdminPage(AdminProductsPage);
+    TestBed.inject(AdminSessionService).applyAuthContext({
+      user: { id: 'operator' }, role: 'admin_operator_sanpham', isAdmin: true,
+      allowedModules: ['products'], allowedPages: ['products'],
+    });
+    page.editorImages.set(['/a.jpg', '/b.jpg']);
+    page.variants.set([{ variant_id: 'black', color: 'Đen' }]);
+    const select = document.createElement('select');
+    select.add(new Option('Đen', 'Đen'));
+    page.setImageColor('/b.jpg', { target: select } as unknown as Event);
+    expect(page.editorImageColors()).toEqual({ '/b.jpg': 'Đen' });
+    page.removeGalleryImageSlot(1);
+    expect(page.editorImageColors()).toEqual({});
   });
 
   it('replaces only the deliberately selected image with the approved URL without publishing', async () => {
@@ -256,5 +418,51 @@ describe('AdminProductsPage', () => {
     expect(box.value).toBe('https://storage/product-images/ai-studio/enhanced-1.png');
     expect(page.sourceApproved()).toBe(true);
     expect(page.imageApprovals().length).toBe(1);
+  });
+
+  it('applies and resets audit log filters with date, query, and action', async () => {
+    let requestedParams: Record<string, string> | undefined;
+    const page = await createAdminPage(AdminProductsPage, {
+      listProductAuditLogs: (params: Record<string, string>) => {
+        requestedParams = params;
+        return of({ rows: [], count: 0 });
+      },
+    });
+
+    page.logsQuery.set('UAT-Khai');
+    page.logsDate.set('2026-10-18');
+    page.logsAction.set('update_stock');
+    page.applyLogsFilters();
+
+    expect(requestedParams).toEqual({
+      limit: '10',
+      offset: '0',
+      q: 'UAT-Khai',
+      date: '2026-10-18',
+      action: 'update_stock',
+    });
+
+    page.resetLogsFilters();
+    expect(page.logsQuery()).toBe('');
+    expect(page.logsDate()).toBe('');
+    expect(page.logsAction()).toBe('');
+  });
+
+  it('opens and closes log detail modal and extracts reason correctly', async () => {
+    const page = await createAdminPage(AdminProductsPage);
+    const mockLog = {
+      audit_id: 'log-1',
+      action: 'update_stock',
+      timestamp: '2026-10-18T10:00:00Z',
+      new_value: { reason: 'Nhập hàng đợt 2 từ kho' },
+      old_value: {},
+    };
+
+    page.openLogDetail(mockLog);
+    expect(page.selectedLog()).toEqual(mockLog);
+    expect(page.logReason(mockLog)).toBe('Nhập hàng đợt 2 từ kho');
+
+    page.closeLogDetail();
+    expect(page.selectedLog()).toBeNull();
   });
 });

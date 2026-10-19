@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { Observable, shareReplay } from 'rxjs';
+import { Observable } from 'rxjs';
 import { CategorySummary, ProductSummary } from '../models/product.interface';
 import { ApiService } from './api.service';
 
@@ -9,25 +9,19 @@ import { ApiService } from './api.service';
 @Injectable({ providedIn: 'root' })
 export class CatalogService {
   private readonly api = inject(ApiService);
-  private readonly products$ = this.api
-    .get<ProductSummary[]>('/api/user/products')
-    .pipe(shareReplay({ bufferSize: 1, refCount: false }));
-  private readonly categories$ = this.api
-    .get<CategorySummary[]>('/api/user/categories')
-    .pipe(shareReplay({ bufferSize: 1, refCount: false }));
 
   /**
    * Loads storefront categories.
    */
   getCategories(): Observable<CategorySummary[]> {
-    return this.categories$;
+    return this.api.get<CategorySummary[]>('/api/user/categories');
   }
 
   /**
-   * Loads the storefront catalog, including variants used by add-to-cart.
+   * Loads current catalog data so admin edits are visible on the next storefront interaction.
    */
   getProducts(): Observable<ProductSummary[]> {
-    return this.products$;
+    return this.api.get<ProductSummary[]>('/api/user/products');
   }
 
   /**

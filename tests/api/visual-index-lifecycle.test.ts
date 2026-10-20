@@ -95,7 +95,7 @@ test("Runtime backfills actual catalog-only queue jobs, reconciles revisions, sk
   const gate = Promise.withResolvers<void>(), entered = Promise.withResolvers<void>();
   let block = false, lists = 0;
   const source = { async published(after: string, limit: number) {
-    assert.equal(limit, 16); lists++;
+    assert.equal(limit, 4); lists++;
     if (block) { entered.resolve(); await gate.promise; }
     return [{ ...metadata, image_revision: revision }, { product_id: other, image_revision: "bad1" }].filter(row => row.product_id > after);
   } };
@@ -133,5 +133,42 @@ test("Runtime backfills actual catalog-only queue jobs, reconciles revisions, sk
     await lifecycle.close();
     clock += 60_001; await lifecycle.tick();
     assert.equal(runs, 2);
+  } finally { await lifecycle.close(); await service.close(); await rm(root, { recursive: true, force: true }); }
+});
+
+test("Byte-safe discovery advances its cursor through four-product pages and completes coverage", async () => {
+  process.env.NODE_ENV = "test";
+  process.env.AI_VERIFIED_TASKS = "image_embedding";
+  const root = await mkdtemp(join(tmpdir(), "visual-index-pages-"));
+  const vectors = new LocalImageVectorRepository(root);
+  const rows = Array.from({ length: 9 }, (_, i) => ({ ...metadata, product_id: `12345678-1234-4234-8234-${String(i).padStart(12, "0")}`, embedding: vector }));
+  const service = new AiService(new LocalAiRepository(root), {
+    ready: () => true,
+    async run() { throw new Error("fresh rows must not enqueue inference"); },
+  }, {
+    async garment() { throw new Error("not a garment job"); },
+    async studio() { throw new Error("not a studio job"); },
+    async searchable() { return true; },
+    async image() { throw new Error("fresh catalog revisions must not download images"); },
+  }, vectors);
+  const cursors: string[] = [], sizes: number[] = [];
+  const lifecycle = new CatalogIndexLifecycle(service, {
+    async published(after, limit) {
+      assert.equal(limit, 4);
+      cursors.push(after);
+      const page = rows.filter(row => row.product_id > after).slice(0, limit);
+      sizes.push(page.length);
+      return page;
+    },
+  }, vectors);
+  try {
+    await vectors.upsertBatch(rows);
+    for (let i = 0; i < 4; i++) await lifecycle.tick();
+    assert.deepEqual(cursors, ["", rows[3].product_id, rows[7].product_id, rows[8].product_id]);
+    assert.deepEqual(sizes, [4, 4, 1, 0]);
+    assert.equal(lifecycle.status().coverage?.published, 9);
+    assert.equal(lifecycle.status().coverage?.indexed, 9);
+    assert.equal(lifecycle.status().coverage?.skipped, 0);
+    assert.equal(lifecycle.status().error, null);
   } finally { await lifecycle.close(); await service.close(); await rm(root, { recursive: true, force: true }); }
 });

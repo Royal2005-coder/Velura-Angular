@@ -179,8 +179,14 @@ export class ShopAiCatalog implements AiCatalog {
       const decoder = sharp(bytes, { failOn: "warning", limitInputPixels: 20_000_000, animated: false });
       const meta = await decoder.metadata();
       if (!["jpeg", "png", "webp"].includes(meta.format || "") || (meta.pages || 1) !== 1) throw new Error("IMAGE_FORMAT");
-      return await decoder.rotate().png().toBuffer();
-    } catch { throw new HttpError(422, "INVALID_GARMENT_IMAGE", "Ảnh sản phẩm không đọc được hoặc sai định dạng."); }
+      const normalized = await decoder.rotate().png().toBuffer();
+      if (normalized.length > 8 * 1024 * 1024)
+        throw new HttpError(413, "IMAGE_TOO_LARGE", "Ảnh sản phẩm sau chuẩn hóa vượt quá 8 MB.");
+      return normalized;
+    } catch (error) {
+      if (error instanceof HttpError && error.code === "IMAGE_TOO_LARGE") throw error;
+      throw new HttpError(422, "INVALID_GARMENT_IMAGE", "Ảnh sản phẩm không đọc được hoặc sai định dạng.");
+    }
   }
   private allowedUrl(imageUrl: string): URL {
     let url: URL;

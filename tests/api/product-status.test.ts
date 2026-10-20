@@ -35,6 +35,9 @@ async function withCatalogFixture(run: (fixture: {
     const url = new URL(String(input));
     let result: unknown = [];
     if (url.pathname.endsWith("/rpc/admin_change_product_status")) {
+      const headers = new Headers(init?.headers);
+      assert.equal(headers.get("authorization"), `Bearer ${context.accessToken}`);
+      assert.equal(headers.get("apikey"), "anon-test");
       const payload = JSON.parse(String(init?.body)) as JsonObject;
       product.status = payload.p_new_status;
       product.version = Number(product.version) + 1;
@@ -63,11 +66,31 @@ async function storefront(detail: boolean): Promise<unknown> {
   return JSON.parse(body) as unknown;
 }
 
+test("product service startup never scans or changes catalog stock status", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const calls: string[] = [];
+  const repository = {
+    list: async () => {
+      calls.push("list");
+      return { rows: [{ product_id: PRODUCT_ID, status: "on_sale", version: 1 }] };
+    },
+    listVariants: async () => {
+      calls.push("listVariants");
+      return { rows: [{ stock_quantity: 0 }] };
+    },
+    changeStatus: async () => { calls.push("changeStatus"); }
+  } as unknown as ProductRepository;
+
+  createProductService({ repository });
+  t.mock.timers.runAll();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+
+  assert.deepEqual(calls, [], "startup has no operator token and must not access the catalog");
+});
+
 test("status cycle removes hidden and discontinued products from storefront, then restores active visibility", async () => {
   await withCatalogFixture(async ({ product }) => {
-    // Omit startup batch listing: this consumer exercises explicit status transitions only.
-    const repository = createProductRepository();
-    const service = createProductService({ repository: { findById: repository.findById, changeStatus: repository.changeStatus } as ProductRepository });
+    const service = createProductService({ repository: createProductRepository() });
     for (const status of ["hidden", "discontinued", "on_sale"]) {
       await service.changeStatus(context, PRODUCT_ID, { status, reason: "Operator visibility change",
         expectedVersion: Number(product.version) }, { ipAddress: "127.0.0.1" });
@@ -136,4 +159,75 @@ test("inventory synchronization does not republish hidden or discontinued produc
       assert.equal(stock, 30);
     }
   });
+});
+
+test("authorized inventory changes align both stock statuses with the operator token and audit metadata", async () => {
+  await withCatalogFixture(async () => {
+    const reason = "Warehouse stock reconciliation";
+    const ipAddress = "192.0.2.10";
+    const product = { product_id: PRODUCT_ID, status: "on_sale", version: 7 };
+    const variants = VARIANT_IDS.map((variant_id) => ({
+      variant_id, stock_quantity: 5, version: 3, low_stock_threshold: 0
+    }));
+    const statusWrites: JsonObject[] = [];
+    const repository = {
+      findById: async (_id: string, token: string | null) => {
+        assert.equal(token, context.accessToken);
+        return { ...product };
+      },
+      listVariants: async (_id: string, token: string | null) => {
+        assert.equal(token, context.accessToken);
+        return { rows: variants };
+      },
+      updateStock: async (_id: string, variantId: string, input: JsonObject, token: string | null) => {
+        assert.equal(token, context.accessToken);
+        const variant = variants.find((row) => row.variant_id === variantId)!;
+        variant.stock_quantity += Number(input.delta);
+        return { ...variant };
+      },
+      changeStatus: async (id: string, input: JsonObject, token: string | null) => {
+        assert.equal(id, PRODUCT_ID);
+        assert.equal(token, context.accessToken);
+        statusWrites.push(input);
+        product.status = String(input.status);
+        product.version += 1;
+        return { ...product };
+      }
+    } as unknown as ProductRepository;
+    const service = createProductService({ repository });
+    const adjust = (variantId: string, delta: number) => service.updateStock(context, PRODUCT_ID,
+      { variantId, delta, reason, expectedVersion: 3 }, { ipAddress });
+
+    await adjust(VARIANT_IDS[0], -5);
+    assert.deepEqual(statusWrites, [], "another variant still has stock");
+    await adjust(VARIANT_IDS[1], -5);
+    assert.equal(product.status, "out_of_stock");
+    await adjust(VARIANT_IDS[0], 10);
+    assert.equal(product.status, "on_sale");
+    assert.deepEqual(statusWrites, [
+      { status: "out_of_stock", reason, expectedVersion: 7, ipAddress },
+      { status: "on_sale", reason, expectedVersion: 8, ipAddress }
+    ]);
+  });
+});
+
+test("authorized inventory synchronization propagates a rejected status change without retry or fallback", async () => {
+  const failure = new HttpError(403, "RBAC_DENIED", "Status mutation denied");
+  const calls: string[] = [];
+  const repository = {
+    findById: async () => ({ product_id: PRODUCT_ID, status: "on_sale", version: 7 }),
+    listVariants: async () => ({ rows: [{ variant_id: VARIANT_IDS[0], stock_quantity: 0 }] }),
+    updateStock: async () => { calls.push("stock"); return {}; },
+    changeStatus: async (_id: string, _input: JsonObject, token: string | null) => {
+      assert.equal(token, context.accessToken);
+      calls.push("status");
+      throw failure;
+    }
+  } as unknown as ProductRepository;
+  const service = createProductService({ repository });
+
+  await assert.rejects(() => service.updateStock(context, PRODUCT_ID,
+    { variantId: VARIANT_IDS[0], delta: -1, reason: "Warehouse stock reconciliation", expectedVersion: 3 }, {}),
+    (error: unknown) => error === failure);
+  assert.deepEqual(calls, ["stock", "status"]);
 });

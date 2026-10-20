@@ -52,6 +52,13 @@ Vector `ViT-B-32/laion2b_s34b_b79k` giữ namespace 512 chiều, tách khỏi te
 pin/checksum/license và inference thật phải được chứng minh trước khi bật AI.
 Colab là adapter development, không phải production. Runbook: [HOW-IT-WORKS.md](./HOW-IT-WORKS.md#k3s-staging-first-runbook).
 
+Visual Search hiện đọc chỉ mục CLIP riêng `catalog-image-vectors.json`, không dùng
+RPC/vector 1536 chiều của migration `052`; không chạy `052` để sửa chỉ mục ảnh.
+Virtual Try-On cần `AI_VTO_PRODUCTS` đã duyệt, ảnh flat-lay đúng từng variant và
+host HTTPS được phép; task capability bật không có nghĩa catalog đã hỗ trợ.
+Registry rỗng chặn thử đồ sản phẩm; ảnh người mẫu tổng hợp không thay thế ảnh garment
+đã duyệt. Draft nội dung catalog cần `055` rồi `074` trước khi chạy worker/source RPC.
+
 ---
 
 ## 2. Cây dự án (ổn định)
@@ -131,6 +138,10 @@ không đoán từ tên file hay vị trí. Migration `063` phải chạy trư�
 Trạng thái catalog: Active = `on_sale`, Hidden = `hidden`, Discontinued =
 `discontinued`; đổi trạng thái không ghi lại SKU, giá hoặc tồn kho biến thể.
 Checkout kiểm tra lại trạng thái khi chốt đơn, không chỉ khi tạo báo giá.
+Đồng bộ `on_sale` ↔ `out_of_stock` chỉ chạy trong thao tác sản phẩm/tồn kho đã
+xác thực, dùng token, lý do và phiên bản của người thao tác; không đổi `hidden`
+hoặc `discontinued`. Khởi tạo service không quét catalog hay gọi RPC admin khi
+chưa có người thao tác; không cấp thêm quyền RPC cho `anon`/`service_role`.
 
 CSV nhận diện biến thể bằng `sku` bền vững; `product_sku` chỉ định sản phẩm cha
 khi thêm biến thể (`color`, `size`). SKU trùng sau chuẩn hóa trong cùng file làm

@@ -65,6 +65,7 @@ export interface AiCatalog {
 export class AiService {
   private pumping = false;
   private storageBlocked = false;
+  private closed = false;
   private work?: Promise<void>;
   private maintenance?: ReturnType<typeof setInterval>;
   private readonly controllers = new Map<string, AbortController>();
@@ -301,6 +302,7 @@ export class AiService {
     body: JsonObject,
     admin: boolean,
   ): Promise<AiJobView> {
+    if (this.closed) throw new HttpError(503, "AI_ENGINE_UNAVAILABLE", "Bộ xử lý AI đang dừng.");
     await this.refreshReadiness();
     this.enabled();
     await this.repo.purge();
@@ -596,6 +598,7 @@ export class AiService {
       await writeFile(join(directory, "job.json"), JSON.stringify(worker), {
         mode: 0o600,
       });
+      if (this.closed) throw new HttpError(503, "AI_ENGINE_UNAVAILABLE", "Bộ xử lý AI đang dừng.");
       await this.repo.saveJob(job);
       this.startPump();
       return this.view(job);
@@ -696,11 +699,13 @@ export class AiService {
   /** Stop maintenance when a local test/server closes; does not claim remote inference stopped. */
   async close(): Promise<void> {
     clearInterval(this.maintenance);
+    this.closed = true;
+    await this.creating;
     for (const controller of this.controllers.values()) controller.abort();
     await this.work;
   }
   private startPump(): void {
-    if (this.pumping) return;
+    if (this.closed || this.pumping) return;
     this.work = this.pump().catch(() => {
       this.storageBlocked = true;
       console.error("AI_QUEUE_STORAGE_FAILED");
@@ -711,7 +716,7 @@ export class AiService {
     this.pumping = true;
     try {
       await this.refreshReadiness();
-      for (;;) {
+      while (!this.closed) {
         await this.refreshReadiness();
         const job = (await this.repo.jobs())
           .filter(
@@ -840,10 +845,10 @@ export class AiService {
             }
           }
           if (result.status === "failed") job.error = "AI_INFERENCE_FAILED";
-        } catch {
+        } catch (error) {
           if ((await this.repo.job(job.id))?.status === "cancelled") continue;
           job.status = "failed";
-          job.error = controller.signal.aborted
+          job.error = error instanceof HttpError ? error.code : controller.signal.aborted
             ? "AI_JOB_TIMEOUT"
             : "AI_INFERENCE_FAILED";
         } finally {

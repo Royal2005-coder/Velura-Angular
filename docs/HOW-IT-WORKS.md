@@ -350,6 +350,44 @@ Record measured peak VRAM, latency and output review. GPU metrics exporter and
 alert delivery need independent configuration/evidence; this worker does not
 advertise a nonexistent Prometheus scrape endpoint.
 
+### Visual image index readiness and recovery
+
+The API owns one catalog synchronizer and the existing `AiService` queue. After
+queue recovery it pages at most 16 published (`on_sale`, `out_of_stock`) products
+per batch, using the actual authenticated-ready CLIP worker and catalog photos.
+It polls the sole job before starting another batch; a complete scan waits 60
+seconds before checking image-set/`updated_at` revisions again. No customer
+search starts a backfill, no user query vector enters the index, and shutdown
+stops discovery/cancels its job before closing the queue.
+
+`GET /api/ai/capabilities` with the existing product-read authorization reports
+`visual_index.ready`, persisted `indexed` row count, synchronization errors and
+the last completed scan's `coverage` (`published`, current-revision `indexed`,
+`skipped`, `completed_at`). Coverage is a scan snapshot, not a live total;
+`published - indexed - skipped` are pending infrastructure failures. Broken
+catalog images are skipped for that revision for the process lifetime, not
+retried by searches. Correcting catalog images changes their revision and
+re-enables indexing; an authorized normal runtime catalog-index job can also
+retry a repaired image. Partial coverage does not claim every SKU is searchable.
+
+Missing storage bootstraps through normal catalog-only queue jobs into
+`AI_PRIVATE_ROOT/catalog-image-vectors.json` on the persistent `ai-private-data`
+PVC. Confirm the API mount, authenticated worker health, enabled/verified
+`image_embedding`, then inspect capabilities until real indexed rows appear.
+Do not run the local/Colab `index-catalog.ts` against production or start
+another `AiService` over the mounted ledger. Do not run migration `052` (text
+1536 dimensions), invent vectors, lower thresholds, or edit the JSON by hand.
+
+Missing, empty, unreadable, corrupt or incompatible storage returns Vietnamese
+`503 VISUAL_INDEX_UNAVAILABLE`, not featured products disguised as a no-match.
+A valid nonempty index with no candidates after filters remains a normal
+no-match. Corrupt existing storage is never silently overwritten: preserve it
+for incident evidence, diagnose PVC/read permissions and restore a verified
+compatible backup through an owner-reviewed recovery procedure before runtime
+synchronization resumes. There is no online corrupt-index rebuild endpoint;
+without a valid backup, escalate for a reviewed recovery change rather than
+claiming ordinary catalog-index upserts will repair corruption.
+
 ### Monitoring operations
 
 Grafana provisions four read-only dashboards under the **Velura** folder:

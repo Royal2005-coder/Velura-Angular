@@ -81,52 +81,11 @@ export interface ProductService {
 }
 
 /**
- * Create the admin product application service.
+ * Create the admin product application service without startup timers or repository I/O.
+ * Stock/status alignment runs only within authorized product mutations, using the operator's token and audit reason.
  */
 export function createProductService({ repository }: { repository: ProductRepository }): ProductService {
   if (!repository) throw new TypeError("repository is required");
-
-  // Run an asynchronous alignment of stock status on startup with a brief delay
-  setTimeout(async () => {
-    try {
-      if (
-        !repository
-        || typeof repository.list !== "function"
-        || typeof repository.listVariants !== "function"
-        || typeof repository.changeStatus !== "function"
-      ) {
-        return;
-      }
-      const products = await repository.list({ limit: 1000 }, null);
-      const rows = products?.rows || (Array.isArray(products) ? products : []);
-      for (const product of rows) {
-        if (product.status === "on_sale" || product.status === "out_of_stock") {
-          const variants = await repository.listVariants(product.product_id as string, null);
-          const list = variants?.rows || (Array.isArray(variants) ? variants : []);
-          const totalStock = list.reduce((sum: number, v: JsonObject) => sum + Number(v.stock_quantity || 0), 0);
-          if (totalStock <= 0 && product.status === "on_sale") {
-            await repository.changeStatus(product.product_id as string, {
-              status: "out_of_stock",
-              reason: "Đồng bộ tồn kho hệ thống (hết hàng)",
-              expectedVersion: product.version,
-              ipAddress: "127.0.0.1"
-            }, null);
-            console.log(`[Startup Sync] Product ${product.sku} status aligned to out_of_stock (stock: 0)`);
-          } else if (totalStock > 0 && product.status === "out_of_stock") {
-            await repository.changeStatus(product.product_id as string, {
-              status: "on_sale",
-              reason: "Đồng bộ tồn kho hệ thống (còn hàng)",
-              expectedVersion: product.version,
-              ipAddress: "127.0.0.1"
-            }, null);
-            console.log(`[Startup Sync] Product ${product.sku} status aligned to on_sale (stock: ${totalStock})`);
-          }
-        }
-      }
-    } catch (err: unknown) {
-      console.error("[Startup Sync Error] Failed to align stock status:", errorMessage(err));
-    }
-  }, 1000);
 
   return {
     async list(context, searchParams) {

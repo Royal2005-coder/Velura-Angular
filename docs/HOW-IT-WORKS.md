@@ -353,8 +353,11 @@ advertise a nonexistent Prometheus scrape endpoint.
 ### Visual image index readiness and recovery
 
 The API owns one catalog synchronizer and the existing `AiService` queue. After
-queue recovery it pages at most 16 published (`on_sale`, `out_of_stock`) products
+queue recovery it pages at most 4 published (`on_sale`, `out_of_stock`) products
 per batch, using the actual authenticated-ready CLIP worker and catalog photos.
+The normalized PNG, not only its downloaded source, must remain at most 8 MiB;
+four images therefore fit the existing 32 MiB aggregate queue bound. Oversize
+normalized images are skipped with `IMAGE_TOO_LARGE`, without relaxing limits.
 It polls the sole job before starting another batch; a complete scan waits 60
 seconds before checking image-set/`updated_at` revisions again. No customer
 search starts a backfill, no user query vector enters the index, and shutdown
@@ -387,6 +390,15 @@ compatible backup through an owner-reviewed recovery procedure before runtime
 synchronization resumes. There is no online corrupt-index rebuild endpoint;
 without a valid backup, escalate for a reviewed recovery change rather than
 claiming ordinary catalog-index upserts will repair corruption.
+
+Exactly uniform query images return Vietnamese `422 VISUAL_IMAGE_NO_DETAIL`
+before embedding. The decoder compares each color channel's exact pixel
+minimum/maximum, ignoring alpha; no heuristic detail threshold or garment
+classification was added. Ordinary detailed photos retain the existing
+similarity thresholds. A healthy no-match can still show catalog suggestions,
+but the rail does not claim its category/color vote classifies the uploaded
+photo. Existing invalid catalog assets require separate normal catalog-data
+remediation; this guard does not rebuild or delete their indexed rows.
 
 ### Monitoring operations
 

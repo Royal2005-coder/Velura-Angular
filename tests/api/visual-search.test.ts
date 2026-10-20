@@ -31,16 +31,32 @@ function fixture(overrides: Partial<VisualProviders> = {}, profile: Record<strin
 }
 
 test("Decode rejects unreadable, wrong MIME, over-5MB and non-raster sources", async () => {
-  const png = await sharp({ create: { width: 8, height: 8, channels: 3, background: "white" } }).png().toBuffer();
+  const pixels = Buffer.from(Array.from({ length: 8 * 8 * 3 }, (_, i) => i % 256));
+  const png = await sharp(pixels, { raw: { width: 8, height: 8, channels: 3 } }).png().toBuffer();
   const decoded = await decodeSearchImage(png, "image/png");
   assert.ok(decoded.bytes.length > 0);
   assert.equal(decoded.mime, "image/png");
-  const jpeg = await sharp({ create: { width: 8, height: 8, channels: 3, background: "white" } }).jpeg().toBuffer();
+  const jpeg = await sharp(pixels, { raw: { width: 8, height: 8, channels: 3 } }).jpeg().toBuffer();
   assert.equal((await decodeSearchImage(jpeg, "image/jpeg")).mime, "image/jpeg");
   await assert.rejects(decodeSearchImage(png, "image/jpeg"), { code: "VISUAL_IMAGE_UNREADABLE" });
   await assert.rejects(decodeSearchImage(Buffer.alloc(5 * 1024 * 1024 + 1), "image/png"), { code: "VISUAL_IMAGE_SIZE" });
   await assert.rejects(decodeSearchImage(Buffer.from("not an image"), "image/png"), { code: "VISUAL_IMAGE_UNREADABLE" });
   await assert.rejects(decodeSearchImage(png, "image/gif"), { code: "VISUAL_IMAGE_TYPE" });
+});
+
+test("Uniform navy PNG is rejected before embedding, while even one-pixel RGB detail is retained", async () => {
+  const uniform = await sharp({ create: { width: 1080, height: 1350, channels: 3, background: "#172334" } }).png().toBuffer();
+  const direct = uniform.subarray();
+  await assert.rejects(decodeSearchImage(direct, "image/png"), { status: 422, code: "VISUAL_IMAGE_NO_DETAIL" });
+  const search = fixture({ decode: decodeSearchImage });
+  await assert.rejects(search.service.search("guest", randomUUID(), uniform, "image/png", {}), { status: 422, code: "VISUAL_IMAGE_NO_DETAIL" });
+  assert.equal(search.counters().embedCalls, 0);
+  assert.equal(search.counters().searchCalls, 0);
+  assert.ok(uniform.every(byte => byte === 0));
+  const pixels = Buffer.alloc(8 * 8 * 3, 100);
+  pixels[0] = 101;
+  const detailed = await sharp(pixels, { raw: { width: 8, height: 8, channels: 3 } }).png().toBuffer();
+  assert.equal((await decodeSearchImage(detailed, "image/png")).mime, "image/png");
 });
 
 test("Filters validation rejects unknown keys, foreign IDs and inverted prices", () => {

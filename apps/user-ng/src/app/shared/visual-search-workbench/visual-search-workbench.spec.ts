@@ -1,6 +1,9 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { of, Subject } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
+import { HttpErrorResponse } from '@angular/common/http';
+import { provideRouter } from '@angular/router';
+import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { VisualSearchModel, type VisualResult } from '../../core/services/visual-search.service';
 import { sampleProduct } from '../../../testing/storefront-testing';
@@ -14,7 +17,11 @@ describe('VisualSearchWorkbench', () => {
     model.search.mockReturnValue(of(result));
     model.cancel.mockReturnValue(of({}));
     model.search.mockClear();
-    TestBed.configureTestingModule({ imports: [VisualSearchWorkbench], providers: [{ provide: VisualSearchModel, useValue: model }, { provide: AuthService, useValue: { session: signal(null) } }] });
+    TestBed.configureTestingModule({ imports: [VisualSearchWorkbench], providers: [
+      provideRouter([]),
+      { provide: ApiService, useValue: { get: () => of({ items: [] }), post: () => of({}), delete: () => of({}) } },
+      { provide: VisualSearchModel, useValue: model }, { provide: AuthService, useValue: { session: signal(null) } },
+    ] });
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:garment');
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
   });
@@ -58,5 +65,24 @@ describe('VisualSearchWorkbench', () => {
     expect(page.result()).toBeNull();
     expect(page.preview()).toBe('');
     expect(page.busy()).toBe(false);
+  });
+  it.each([
+    { status: 503, code: 'VISUAL_INDEX_UNAVAILABLE', message: 'Chỉ mục tìm kiếm hình ảnh chưa sẵn sàng. Vui lòng thử lại sau.' },
+    { status: 422, code: 'VISUAL_IMAGE_NO_DETAIL', message: 'Ảnh chỉ có một màu, chưa có chi tiết để tìm kiếm.' },
+  ])('shows $code as an error without recommendations, but healthy no-match retains a suggestion rail', async ({ status, code, message }) => {
+    const fixture = TestBed.createComponent(VisualSearchWorkbench);
+    fixture.detectChanges();
+    const page = fixture.componentInstance;
+    model.search.mockReturnValue(throwError(() => new HttpErrorResponse({ status, error: { error: { code, message } } })));
+    await select(page); page.consent.set(true); page.search(); fixture.detectChanges();
+    const root: HTMLElement = fixture.nativeElement;
+    expect(root.querySelector('[role="alert"]')?.textContent).toContain(message);
+    expect(root.querySelector('.vs-category-fallback')).toBeNull();
+    expect(root.querySelectorAll('app-product-card')).toHaveLength(0);
+    model.search.mockReturnValue(of(result));
+    await select(page); page.consent.set(true); page.search(); fixture.detectChanges();
+    expect(root.querySelector('[role="alert"]')).toBeNull();
+    expect(root.querySelector('.vs-category-fallback')).not.toBeNull();
+    expect(root.querySelectorAll('app-product-card')).toHaveLength(1);
   });
 });

@@ -202,16 +202,16 @@ export class VisualSearchWorkbench {
   protected matchesTitle(result: VisualResult): string {
     return result.matches.some((row) => row.tier === 'strong') ? 'Tìm thấy sản phẩm' : 'Sản phẩm tương tự';
   }
-  /** One-line explanation of why the suggestion rail is showing. */
+  /** Label catalog suggestions without claiming the uploaded photo was classified. */
   protected fallbackSentence(result: VisualResult): string {
     const fallback = result.fallback;
     if (fallback?.category_name) {
-      return `Không tìm thấy sản phẩm khớp chính xác. Ảnh của bạn thuộc danh mục "${fallback.category_name}"${fallback.color_name ? ` · tông màu ${fallback.color_name}` : ''}:`;
+      return `Không tìm thấy sản phẩm khớp chính xác. Gợi ý tham khảo từ catalog "${fallback.category_name}"${fallback.color_name ? ` · tông màu ${fallback.color_name}` : ''}:`;
     }
     if (result.attributes.category) {
-      return `Không tìm thấy sản phẩm khớp chính xác. Gợi ý theo danh mục "${this.categoryLabel(result.attributes.category)}":`;
+      return `Không tìm thấy sản phẩm khớp chính xác. Gợi ý tham khảo từ catalog "${this.categoryLabel(result.attributes.category)}":`;
     }
-    return 'Không có sản phẩm nào của shop trùng với ảnh này. Tham khảo gợi ý dưới đây:';
+    return 'Không tìm thấy sản phẩm khớp chính xác. Gợi ý tham khảo từ catalog:';
   }
   /** Voucher codes the current visitor can actually use, capped for the modal. */
   protected usableVouchers(offers: OffersResponse): OffersResponse['vouchers'] {

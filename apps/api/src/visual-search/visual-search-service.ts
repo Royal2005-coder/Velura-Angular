@@ -32,8 +32,8 @@ export interface VisualProviders {
   embedImage(bytes: Buffer, mime: string, signal: AbortSignal, timeoutMs: number): Promise<number[]>;
 }
 /**
- * Decode all pixels, reject malformed/mismatched images and strip metadata before
- * external inference. The raster format is preserved: PNG is re-encoded losslessly
+ * Decode all pixels, reject malformed/mismatched or exactly uniform RGB images and strip metadata before
+ * external inference. This is a technical no-detail check, not garment classification. PNG is re-encoded losslessly
  * and JPEG keeps 4:4:4 chroma, because the default 4:2:0 subsampling alone drops
  * CLIP similarity by several points on real customer photos.
  */
@@ -45,13 +45,21 @@ export async function decodeSearchImage(bytes: Buffer, mime: string): Promise<De
     const meta = await decoder.metadata();
     const expected = { "image/jpeg": "jpeg", "image/png": "png", "image/webp": "webp" }[mime];
     if (meta.format !== expected || !meta.width || !meta.height || (meta.pages || 1) !== 1) throw new Error("INVALID_IMAGE");
+    const stats = await decoder.stats();
+    const colorChannels = meta.space === "cmyk" ? 4 : stats.channels.length <= 2 ? 1 : 3;
+    if (stats.channels.slice(0, colorChannels).every(channel => channel.min === channel.max)) {
+      throw new HttpError(422, "VISUAL_IMAGE_NO_DETAIL", "Ảnh chỉ có một màu, chưa có chi tiết để tìm kiếm. Hãy chọn ảnh có trang phục rõ ràng.");
+    }
     const image = mime === "image/png"
       ? await decoder.rotate().png().toBuffer()
       : mime === "image/webp"
         ? await decoder.rotate().webp({ quality: 95 }).toBuffer()
         : await decoder.rotate().jpeg({ quality: 95, chromaSubsampling: "4:4:4" }).toBuffer();
     return { bytes: image, mime };
-  } catch { throw new HttpError(422, "VISUAL_IMAGE_UNREADABLE", "Không đọc được ảnh. Hãy chọn ảnh rõ nét khác."); }
+  } catch (error) {
+    if (error instanceof HttpError && error.code === "VISUAL_IMAGE_NO_DETAIL") throw error;
+    throw new HttpError(422, "VISUAL_IMAGE_UNREADABLE", "Không đọc được ảnh. Hãy chọn ảnh rõ nét khác.");
+  }
 }
 /** The worker binds response bytes to this exact request, so a stale or foreign payload is never indexed. */
 function workerBinding(requestId: string): { body: string; requestId: string } {

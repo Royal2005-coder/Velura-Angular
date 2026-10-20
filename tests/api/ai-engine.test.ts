@@ -374,7 +374,7 @@ test("Shop garment enforces variant mapping and refuses arbitrary hosts and redi
   process.env.AI_CATALOG_IMAGE_HOSTS = "images.shop.test";
   const shop = new ShopAiCatalog({
     async product() {
-      return { status: "on_sale" };
+      return { status: "on_sale", category: { slug: "ao" } };
     },
     async variant() {
       return { variant_id: variant, product_id: product };
@@ -424,15 +424,17 @@ test("Shop garment enforces variant mapping and refuses arbitrary hosts and redi
 });
 test("A catalog primary photo never enables an unverified or wrong-variant try-on", async () => {
   const variant = "22222222-2222-4222-8222-222222222222";
+  const mappedVariant = "33333333-3333-4333-8333-333333333333";
   const shop = new ShopAiCatalog({
-    async product() { return { status: "on_sale", images: ["https://images.shop.test/primary.png"] }; },
-    async variant() { return { variant_id: variant, product_id: product }; },
+    async product() { return { status: "on_sale", category: { slug: "ao" }, images: ["https://images.shop.test/primary.png"] }; },
+    async variant(_pid, vid) { return { variant_id: vid, product_id: product }; },
     async fetchImage() { throw new Error("Must reject before download"); },
   });
   process.env.AI_CATALOG_IMAGE_HOSTS = "images.shop.test";
   process.env.AI_VTO_PRODUCTS = JSON.stringify({ [product]: { category: "upper_body" } });
   assert.equal((await shop.support(product, variant)).product_supported, false);
-  process.env.AI_VTO_PRODUCTS = JSON.stringify({ [product]: { category: "upper_body", verified: true, photo_type: "flat-lay", variant_images: {} } });
+  process.env.AI_VTO_PRODUCTS = JSON.stringify({ [product]: { category: "upper_body", verified: true, photo_type: "flat-lay", variant_images: { [mappedVariant]: "https://images.shop.test/mapped.png" } } });
+  assert.equal((await shop.support(product, variant)).product_supported, true);
   assert.equal((await shop.support(product, variant)).variant_supported, false);
   await assert.rejects(shop.garment(product, variant), { code: "VTO_VARIANT_UNAVAILABLE" });
 });

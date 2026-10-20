@@ -70,8 +70,27 @@ export function aiOwner(req: HttpRequest, context: AuthContext): string {
 }
 
 /** Virtual try-on and its personal-photo quality check store a person's image per account, so they need a member. */
-export function requiresMember(body: JsonObject): boolean {
+export function requiresMember(body: { task?: unknown; person_check?: unknown }): boolean {
   return body.task === "virtual_try_on" || (body.task === "image_quality" && body.person_check === true);
+}
+
+/** Personal AI storage and operations require an active member profile bound to the verified request identity. */
+export function requireAiMember(context: AuthContext): void {
+  if (
+    !context?.authUser?.id ||
+    !context?.profile?.user_id ||
+    context.authUser.id !== context.profile.user_id ||
+    context.profile.is_active !== true ||
+    (context.profile.role ? context.profile.role !== "member" : false) ||
+    context.roleCode !== "member" ||
+    context.isAdmin
+  ) {
+    throw new HttpError(
+      401,
+      "MEMBER_REQUIRED",
+      "Thử đồ AI chỉ dành cho thành viên. Vui lòng đăng nhập hoặc đăng ký.",
+    );
+  }
 }
 
 /** Route HTTP to the local AI service; no Colab credentials or public image URLs reach the browser. */
@@ -160,6 +179,7 @@ export async function handleAiRoute(
         if (value.expires <= now) rates.delete(key);
   }
   if (action === "uploads" && req.method === "POST") {
+    if (user) requireAiMember(context);
     const image = await readMultipartImage(req);
     sendJson(
       res,
@@ -175,8 +195,7 @@ export async function handleAiRoute(
     req.method === "POST"
   ) {
     const body = await readJson(req, 32 * 1024);
-    if (user && requiresMember(body) && !context.profile?.user_id)
-      throw new HttpError(401, "MEMBER_REQUIRED", "Thử đồ AI chỉ dành cho thành viên. Vui lòng đăng nhập hoặc đăng ký.");
+    if (user && requiresMember(body)) requireAiMember(context);
     sendJson(res, 202, { job: await service.create(owner, body, admin) }, headers);
     return true;
   }
@@ -186,15 +205,15 @@ export async function handleAiRoute(
     req.method === "GET"
   ) {
     const url = new URL(req.url || "/", "http://localhost");
+    const job = await service.getByKey(
+      owner,
+      url.searchParams.get("idempotency_key") || "",
+    );
+    if (user && job && requiresMember(job)) requireAiMember(context);
     sendJson(
       res,
       200,
-      {
-        job: await service.getByKey(
-          owner,
-          url.searchParams.get("idempotency_key") || "",
-        ),
-      },
+      { job },
       { ...headers, "cache-control": "no-store" },
     );
     return true;
@@ -202,6 +221,8 @@ export async function handleAiRoute(
   if (action === "jobs" && parts[offset + 1]) {
     const id = parts[offset + 1];
     if (parts[offset + 2] === "result" && req.method === "GET") {
+      const job = await service.get(owner, id);
+      if (user && requiresMember(job)) requireAiMember(context);
       const image = await service.result(owner, id);
       res.writeHead(200, {
         ...headers,
@@ -214,15 +235,19 @@ export async function handleAiRoute(
       return true;
     }
     if (parts.length === offset + 2 && req.method === "GET") {
+      const job = await service.get(owner, id);
+      if (user && requiresMember(job)) requireAiMember(context);
       sendJson(
         res,
         200,
-        { job: await service.get(owner, id) },
+        { job },
         { ...headers, "cache-control": "no-store" },
       );
       return true;
     }
     if (parts.length === offset + 2 && req.method === "DELETE") {
+      const job = await service.get(owner, id);
+      if (user && requiresMember(job)) requireAiMember(context);
       sendJson(res, 200, { job: await service.cancel(owner, id) }, headers);
       return true;
     }

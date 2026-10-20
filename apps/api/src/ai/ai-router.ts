@@ -70,7 +70,7 @@ export function aiOwner(req: HttpRequest, context: AuthContext): string {
 }
 
 /** Virtual try-on and its personal-photo quality check store a person's image per account, so they need a member. */
-export function requiresMember(body: JsonObject): boolean {
+export function requiresMember(body: { task?: unknown; person_check?: unknown }): boolean {
   return body.task === "virtual_try_on" || (body.task === "image_quality" && body.person_check === true);
 }
 

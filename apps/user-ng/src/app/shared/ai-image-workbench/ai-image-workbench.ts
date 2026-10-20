@@ -14,6 +14,7 @@ import {
 import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { AuthService } from '../../core/services/auth.service';
+import { ApiService, UserIdentity } from '../../core/services/api.service';
 import { guestSessionId } from '../../core/utils/guest-session';
 import {
   AiCapabilities,
@@ -22,7 +23,6 @@ import {
   AiTask,
   StudioAsset,
 } from '../../core/services/ai-engine.service';
-
 /** Consent-first image workflow with interactive 3D perspective, rich studio scenes, and responsive styling. */
 @Component({
   selector: 'app-ai-image-workbench',
@@ -42,17 +42,22 @@ export class AiImageWorkbench {
   readonly matches = output<string[]>();
   private readonly model = inject(AiEngineService);
   private readonly auth = inject(AuthService);
+  private readonly api = inject(ApiService);
   private readonly destroy = inject(DestroyRef);
   private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('dialog');
   readonly capabilities = signal<AiCapabilities | null>(null);
+  readonly verifiedMember = signal(false);
+  private capabilitiesEpoch = 0;
   /**
    * Whether the entry point is shown at all. Virtual try-on is offered only for products the server has
    * verified (flat-lay garment photo, supported category); unsupported items such as accessories get no button.
    * Other tasks are always offered.
    */
   readonly offered = signal(false);
-  /** Try-on uses personal photos stored per account, so only signed-in members may use it. */
-  readonly memberRequired = computed(() => this.task() === 'virtual_try_on' && !this.auth.isLoggedIn());
+  /** Try-on uses personal photos stored per account, so only verified active members may use it. */
+  readonly memberRequired = computed(
+    () => this.task() === 'virtual_try_on' && (!this.auth.isLoggedIn() || !this.verifiedMember()),
+  );
   readonly error = signal('');
   readonly consent = signal(false);
   readonly mode = signal<'personal' | 'studio'>('personal');
@@ -213,12 +218,14 @@ export class AiImageWorkbench {
   async validate(): Promise<void> {
     await this.start('image_quality');
   }
-  readonly available = computed(
-    () =>
-      this.capabilities()?.tasks.some((t) => t.task === this.task() && t.enabled) === true &&
-      (this.task() !== 'virtual_try_on' ||
-        this.capabilities()?.product_supported === true),
-  );
+  /** Availability requires enabled task and, for virtual try-on, supported product and exact variant. */
+   readonly available = computed(
+     () =>
+      this.capabilities()?.enabled === true &&
+      this.capabilities()?.tasks.some((t) => t.task === this.task() && t.enabled === true) === true &&
+       (this.task() !== 'virtual_try_on' ||
+        (this.capabilities()?.product_supported === true && this.capabilities()?.variant_supported === true)),
+   );
 
   readonly title = computed(() =>
     this.task() === 'image_embedding' ? 'Tìm sản phẩm bằng ảnh' : 'Phòng thử đồ thông minh AI 3D',
@@ -229,11 +236,9 @@ export class AiImageWorkbench {
     if (this.mode() === 'studio' && (!this.studioImage() || this.studioLoading())) return;
     this.consent.set((event.target as HTMLInputElement).checked);
   }
-
   /** Studio selection must be an explicit choice from server assets. */
   async selectStudio(idOrEvent: string | Event): Promise<void> {
     const id = typeof idOrEvent === 'string' ? idOrEvent : (((idOrEvent as Event).target as HTMLSelectElement | null)?.value || '');
-    if (this.busy()) return;
     const epoch = ++this.studioGeneration;
     this.release(this.studioImage());
     this.studioImage.set('');
@@ -262,7 +267,6 @@ export class AiImageWorkbench {
   chooseMode(mode: 'personal' | 'studio'): void {
     if (this.busy()) return;
     this.mode.set(mode);
-    this.consent.set(false);
     this.release(this.result());
     this.result.set('');
     this.job.set(null);
@@ -330,65 +334,72 @@ export class AiImageWorkbench {
   private pendingFingerprint = '';
   private timer: number | undefined;
 
-  constructor() {
-    effect(() => {
-      this.auth.session()?.userId;
-      untracked(() => {
-        this.generation++;
-        this.clearTimer();
-        this.stopLoadingTimer();
-        this.release(this.preview());
-        this.release(this.result());
-        this.preview.set('');
-        this.result.set('');
-        this.job.set(null);
-        this.busy.set(false);
-        this.consent.set(false);
-        this.qualityPassed.set(false);
-        this.qualityWarning.set(null);
-        this.file = null;
-        this.asset = '';
-        this.pendingKey = '';
-        this.clearStudio();
-      });
-    });
-    effect(() => {
-      const task = this.task();
-      const productId = this.productId();
-      untracked(() => {
-        if (task !== 'virtual_try_on') {
-          this.offered.set(true);
-          return;
+   constructor() {
+     effect(() => {
+      const session = this.auth.session();
+       untracked(() => {
+         this.generation++;
+        this.verifiedMember.set(false);
+        if (session?.userId && session?.role === 'member') {
+          void this.verifyMemberIdentity();
         }
-        this.offered.set(false);
-        if (!productId) return;
-        void firstValueFrom(this.model.capabilities(productId))
-          .then((caps) => {
-            if (productId === this.productId()) this.offered.set(caps.product_supported === true);
-          })
-          .catch(() => {
-            if (productId === this.productId()) this.offered.set(false);
-          });
-      });
-    });
-    effect(() => {
-      this.productId();
-      this.variantId();
-      untracked(() => {
-        this.generation++;
-        this.capabilities.set(null);
-        this.clearTimer();
-        this.stopLoadingTimer();
-        this.release(this.result());
-        this.result.set('');
-        this.job.set(null);
-        this.busy.set(false);
-        this.clearStudio();
-        this.pendingKey = '';
-        this.pendingFingerprint = '';
-        if (this.dialog()?.nativeElement.open) void this.open();
-      });
-    });
+         this.clearTimer();
+         this.stopLoadingTimer();
+         this.release(this.preview());
+         this.release(this.result());
+         this.preview.set('');
+         this.result.set('');
+         this.job.set(null);
+         this.busy.set(false);
+         this.consent.set(false);
+         this.qualityPassed.set(false);
+         this.qualityWarning.set(null);
+         this.file = null;
+         this.asset = '';
+         this.pendingKey = '';
+         this.clearStudio();
+       });
+     });
+     effect(() => {
+       const task = this.task();
+       const productId = this.productId();
+      const variantId = this.variantId();
+       untracked(() => {
+         if (task !== 'virtual_try_on') {
+           this.offered.set(true);
+           return;
+         }
+         this.offered.set(false);
+        if (!productId || !variantId) return;
+        const epoch = ++this.capabilitiesEpoch;
+        void firstValueFrom(this.model.capabilities(productId, variantId))
+           .then((caps) => {
+            if (epoch === this.capabilitiesEpoch && productId === this.productId() && variantId === this.variantId()) {
+              this.offered.set(caps.product_supported === true && caps.variant_supported === true);
+            }
+           })
+           .catch(() => {
+            if (epoch === this.capabilitiesEpoch) this.offered.set(false);
+           });
+       });
+     });
+     effect(() => {
+       this.productId();
+       this.variantId();
+       untracked(() => {
+         this.capabilities.set(null);
+         this.clearTimer();
+         this.stopLoadingTimer();
+         this.release(this.result());
+         this.result.set('');
+         this.job.set(null);
+         this.busy.set(false);
+         this.clearStudio();
+         this.pendingKey = '';
+         this.pendingFingerprint = '';
+         if (this.dialog()?.nativeElement.open) void this.open();
+       });
+     });
     this.destroy.onDestroy(() => {
       this.generation++;
       this.clearTimer();
@@ -401,29 +412,34 @@ export class AiImageWorkbench {
 
   /** Opens a keyboard-accessible modal and reads readiness before uploading anything. */
   async open(): Promise<void> {
-    if (this.memberRequired()) {
-      const gate = this.dialog()?.nativeElement;
-      if (gate && !gate.open) gate.showModal?.();
-      return;
+    if (this.task() === 'virtual_try_on') {
+      const isMember = await this.verifyMemberIdentity();
+      if (!isMember) {
+        this.openGateModal();
+        return;
+      }
     }
-    const dialog = this.dialog()?.nativeElement;
-    if (dialog && !dialog.open) dialog.showModal?.();
-    const epoch = this.generation;
-    this.capabilities.set(null);
-    this.error.set('');
-    try {
-      const capabilities = await firstValueFrom(
-        this.model.capabilities(
-          this.task() === 'virtual_try_on' ? this.productId() : undefined,
-          this.task() === 'virtual_try_on' ? this.variantId() : undefined,
-        ),
-      );
-      if (epoch === this.generation) {
-        this.capabilities.set(capabilities);
-        if (this.mode() === 'studio' && !this.studio() && capabilities.studio_assets?.length) {
-          void this.selectStudio(capabilities.studio_assets[0].id);
-        }
-        if (capabilities.enabled && !this.job()) {
+     if (this.memberRequired()) {
+      this.openGateModal();
+       return;
+     }
+     const dialog = this.dialog()?.nativeElement;
+     if (dialog && !dialog.open) dialog.showModal?.();
+     const epoch = this.generation;
+     this.capabilities.set(null);
+     this.error.set('');
+     try {
+       const capabilities = await firstValueFrom(
+         this.model.capabilities(
+           this.task() === 'virtual_try_on' ? this.productId() : undefined,
+           this.task() === 'virtual_try_on' ? this.variantId() : undefined,
+         ),
+       );
+       if (epoch === this.generation) {
+         this.capabilities.set(capabilities);
+         if (this.mode() === 'studio' && !this.studio() && capabilities.studio_assets?.length) {
+           void this.selectStudio(capabilities.studio_assets[0].id);
+         }
           const savedId = sessionStorage.getItem(this.storageKey());
           const savedPending = sessionStorage.getItem(`${this.storageKey()}_pending`);
           if (savedId || savedPending) {
@@ -447,8 +463,7 @@ export class AiImageWorkbench {
             }
           }
         }
-      }
-    } catch {
+      } catch {
       if (epoch === this.generation)
         this.error.set('Chưa kết nối được dịch vụ AI. Vui lòng thử lại sau.');
     }
@@ -461,17 +476,23 @@ export class AiImageWorkbench {
   }
 
   /** Validates local file envelope; smart validation accepts personal photos without blocking. */
-  select(event: Event): void {
+  async select(event: Event): Promise<void> {
     const el = event.target as HTMLInputElement;
-    const file = el.files?.[0];
-    el.value = '';
-    if (!file || this.busy()) return;
-    const max = this.capabilities()?.max_upload_bytes || 8 * 1024 * 1024;
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > max) {
-      this.error.set('Chọn ảnh JPG, PNG hoặc WebP dưới 8MB.');
-      return;
+     const file = el.files?.[0];
+     el.value = '';
+     if (!file || this.busy()) return;
+    if (this.task() === 'virtual_try_on') {
+      const isMember = await this.verifyMemberIdentity();
+      if (!isMember) {
+        this.openGateModal();
+        return;
+      }
     }
-    this.generation++;
+     const max = this.capabilities()?.max_upload_bytes || 8 * 1024 * 1024;
+     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > max) {
+       this.error.set('Chọn ảnh JPG, PNG hoặc WebP dưới 8MB.');
+       return;
+     }
     this.release(this.preview());
     this.release(this.result());
     this.preview.set(URL.createObjectURL(file));
@@ -488,14 +509,21 @@ export class AiImageWorkbench {
   }
 
   /** Requires explicit confirmation to generate try-on. */
-  async generate(): Promise<void> {
-    if (
-      this.task() === 'virtual_try_on' &&
-      (!this.productId() || !this.variantId() || this.capabilities()?.variant_supported === false)
-    ) {
-      this.error.set('Chọn màu và cỡ sản phẩm trước khi thử đồ.');
-      return;
+   async generate(): Promise<void> {
+    if (this.task() === 'virtual_try_on') {
+      const isMember = await this.verifyMemberIdentity();
+      if (!isMember) {
+        this.openGateModal();
+        return;
+      }
     }
+     if (
+       this.task() === 'virtual_try_on' &&
+      (!this.productId() || !this.variantId() || !this.available())
+     ) {
+       this.error.set('Chọn màu và cỡ sản phẩm trước khi thử đồ.');
+       return;
+     }
     if (this.task() === 'virtual_try_on' && this.mode() === 'personal' && !this.qualityPassed())
       return;
     if (this.mode() === 'studio' && (!this.studio() || !this.studioImage() || this.studioLoading()))
@@ -542,10 +570,16 @@ export class AiImageWorkbench {
     window.clearInterval(this.loadingTimer);
     this.loadingTimer = undefined;
   }
-
   private async start(task: AiTask): Promise<void> {
     if (this.busy() || !this.consent() || !this.available()) return;
     if (this.mode() === 'personal' && !this.file) return;
+    if (this.task() === 'virtual_try_on') {
+      const isMember = await this.verifyMemberIdentity();
+      if (!isMember) {
+        this.openGateModal();
+        return;
+      }
+    }
     const epoch = ++this.generation;
     this.busy.set(true);
     this.error.set('');
@@ -679,7 +713,38 @@ export class AiImageWorkbench {
     this.timer = undefined;
   }
 
-  private release(url: string): void {
-    if (url.startsWith('blob:')) URL.revokeObjectURL(url);
+   private release(url: string): void {
+     if (url.startsWith('blob:')) URL.revokeObjectURL(url);
+   }
+
+  /** Opens the guest signin/signup modal without mounting any file input or photo workbench. */
+  private openGateModal(): void {
+    const gate = this.dialog()?.nativeElement;
+    if (gate && !gate.open) gate.showModal?.();
+  }
+
+  /** Verifies active member identity against the authoritative server endpoint before personal data entry. */
+  async verifyMemberIdentity(): Promise<boolean> {
+    if (!this.auth.isLoggedIn()) {
+      this.verifiedMember.set(false);
+      return false;
+    }
+    try {
+      const identity = await firstValueFrom(this.api.me());
+      const valid = Boolean(
+        identity?.user?.id &&
+        identity?.profile?.user_id &&
+        identity.user.id === identity.profile.user_id &&
+        identity.profile.is_active === true &&
+        identity.profile.role === 'member' &&
+        identity.role === 'member' &&
+        identity.isAdmin === false,
+      );
+      this.verifiedMember.set(valid);
+      return valid;
+    } catch {
+      this.verifiedMember.set(false);
+      return false;
+    }
   }
 }

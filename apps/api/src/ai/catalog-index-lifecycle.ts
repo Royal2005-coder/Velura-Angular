@@ -90,7 +90,8 @@ export class CatalogIndexLifecycle {
       return;
     }
     const revisions = await this.vectors.revisions();
-    const page = await this.source.published(this.cursor, 16);
+    // Four normalized images at <=8 MiB each fit the queue's existing 32 MiB aggregate limit.
+    const page = await this.source.published(this.cursor, 4);
     if (this.stopped) return;
     if (!page.length) {
       this.coverage = { ...this.scan, completed_at: new Date().toISOString() };

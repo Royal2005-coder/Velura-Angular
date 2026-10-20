@@ -8,6 +8,8 @@ import { dominantCategory, dominantTone, type SearchFilters, type VisualCandidat
 /** Retrieval/profile boundary keeps provider orchestration independent of the database. */
 export interface VisualSearchRepository {
   profile(owner: string, memberUserId?: string): Promise<JsonObject | null>;
+  /** Check persisted index independently from filters and before sending a query image for inference. */
+  assertReady?(): Promise<void>;
   /** Nearest catalog photos for one CLIP vector, hydrated with live rows, ready to rank. */
   imageSearch(vector: number[], filters: SearchFilters): Promise<{ neighbors: VisualCandidate[]; featured: VisualCandidate[]; catalog_version: string }>;
 }
@@ -25,6 +27,10 @@ function matchesFilters(row: VisualCandidate, filters: SearchFilters): boolean {
 /** Embeddings live in the private AI index; product facts always come from the live catalog. */
 export class ShopVisualSearchRepository implements VisualSearchRepository {
   private readonly vectors = new LocalImageVectorRepository(resolve(process.env.AI_PRIVATE_ROOT || "scratch/ai-private"));
+  /** Missing, empty or invalid CLIP storage is an outage, never an ordinary empty result. */
+  async assertReady(): Promise<void> {
+    await this.vectors.assertReady();
+  }
   /** Only completed member quizzes or explicitly accepted same-session guest quizzes personalize retrieval. */
   async profile(owner: string, memberUserId?: string): Promise<JsonObject | null> {
     if (memberUserId) {

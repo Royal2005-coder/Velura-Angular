@@ -78,10 +78,18 @@ export class ProductDetailPage {
   readonly loadError = signal<string | null>(null);
   readonly product = signal<ProductSummary | null>(null);
   readonly related = signal<ProductSummary[]>([]);
-  readonly aiVariantId = computed(() =>
-    this.product()?.variants?.find(v => v.color === this.selectedColor() && v.size === this.selectedSize())?.variant_id ||
-    this.product()?.variants?.[0]?.variant_id || ''
-  );
+  readonly aiVariantId = computed(() => {
+    const color = this.selectedColor();
+    const size = this.selectedSize();
+    const variants = this.product()?.variants || [];
+    if (color && size) {
+      return variants.find((v) => v.color === color && v.size === size)?.variant_id || '';
+    }
+    if (color && !this.sizes().length) {
+      return variants.find((v) => v.color === color)?.variant_id || '';
+    }
+    return '';
+  });
   readonly quantity = signal(1);
   readonly activeImage = signal(0);
   readonly selectedColor = signal<string | null>(null);

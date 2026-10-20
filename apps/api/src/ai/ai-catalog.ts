@@ -21,13 +21,20 @@ export function catalogImageRevision(product: JsonObject): string {
   return createHash("sha256").update(JSON.stringify([product.images, product.updated_at])).digest("hex");
 }
 const dependencies: AiCatalogDependencies = {
-  product: (id) => selectOne("product", { product_id: `eq.${id}` }),
+  product: (id) => selectOne("product", { product_id: `eq.${id}`, select: "*,category:category_id(slug)" }),
   variant: (productId, variantId) =>
     selectOne("variant", {
       variant_id: `eq.${variantId}`,
       product_id: `eq.${productId}`,
     }),
   fetchImage: fetchPublicCatalogImage,
+};
+
+const VTO_CATEGORIES: Readonly<Record<string, readonly string[]>> = {
+  ao: ["upper_body"],
+  "ao-khoac": ["upper_body"],
+  quan: ["lower_body"],
+  "dam-vay": ["lower_body", "dresses"],
 };
 
 /** Resolve only explicitly configured shop garment references and licensed studio assets. */
@@ -56,7 +63,7 @@ export class ShopAiCatalog implements AiCatalog {
       (!imageRevision || imageRevision === catalogImageRevision(product))
     );
   }
-  /** Validate published SKU and configured variant garment references without downloading photos. */
+  /** Require actual clothing and at least one exact, owned garment mapping; preview never changes stock. */
   async support(
     productId: string,
     variantId?: string,
@@ -65,23 +72,31 @@ export class ShopAiCatalog implements AiCatalog {
     const registry = asJsonObject(JSON.parse(process.env.AI_VTO_PRODUCTS || "{}") as unknown);
     const garment = asJsonObject(registry[productId]);
     const category = asString(garment.category);
-    if (!product || product.status !== "on_sale" || garment.verified !== true ||
-        garment.photo_type !== "flat-lay" ||
-        !["upper_body", "lower_body", "dresses"].includes(category)) {
+    const catalogCategory = asString(asJsonObject(product?.category).slug);
+    if (!product || product.status !== "on_sale" || product.is_combo === true ||
+        !VTO_CATEGORIES[catalogCategory]?.includes(category) ||
+        garment.verified !== true || garment.photo_type !== "flat-lay") {
       return { product_supported: false, variant_supported: false };
     }
-    const supported = { product_supported: true, garment_category: category };
-    if (!variantId) return { ...supported, variant_supported: false };
-    const variant = await this.deps.variant(productId, variantId);
-    if (!variant || variant.product_id !== productId || variant.variant_id !== variantId) {
-      return { ...supported, variant_supported: false };
+    let productSupported = false;
+    let variantSupported = false;
+    for (const [id, image] of Object.entries(asJsonObject(garment.variant_images))) {
+      try {
+        this.allowedUrl(asString(image));
+      } catch {
+        continue;
+      }
+      const variant = await this.deps.variant(productId, id);
+      if (!variant || variant.product_id !== productId || variant.variant_id !== id) continue;
+      productSupported = true;
+      if (id === variantId) variantSupported = true;
+      if (!variantId || variantSupported) break;
     }
-    try {
-      this.allowedUrl(asString(asJsonObject(garment.variant_images)[variantId]));
-      return { ...supported, variant_supported: true };
-    } catch {
-      return { ...supported, variant_supported: false };
-    }
+    return {
+      product_supported: productSupported,
+      variant_supported: variantSupported,
+      ...(productSupported ? { garment_category: category } : {}),
+    };
   }
   /** Embed only the published shop's own catalog image and bounded style metadata. */
   async image(productId: string): Promise<{

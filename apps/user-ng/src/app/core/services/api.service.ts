@@ -5,6 +5,14 @@ import { environment } from '../../../environments/environment';
 import { ApiErrorBody } from '../models/api-error.interface';
 import { ApiRequestError } from '../models/api-request-error';
 
+/** Server identity from the existing auth endpoint; local session fields do not grant member access. */
+export interface UserIdentity {
+  user: { id: string } | null;
+  profile: { user_id: string; role: string; is_active: boolean } | null;
+  role: string;
+  isAdmin: boolean;
+}
+
 /**
  * HTTP model for the storefront SPA. Pages must not inject HttpClient.
  * JSON contracts live on the Node API (`apps/api`); this class only maps HTTP.
@@ -14,6 +22,11 @@ import { ApiRequestError } from '../models/api-request-error';
 export class ApiService {
   private readonly http = inject(HttpClient);
   private readonly baseUrl = environment.apiUrl || window.location.origin;
+
+  /** Reads the authenticated user, active profile and effective role before private member workflows. */
+  me(): Observable<UserIdentity> {
+    return this.get<UserIdentity>('/api/auth/me');
+  }
 
   /**
    * Performs a JSON GET against the Velura API.

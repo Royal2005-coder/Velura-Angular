@@ -506,6 +506,23 @@ test("Catalog indexing can use a secondary approved shop photo when the primary 
   assert.deepEqual(image.bytes, PNG);
   assert.deepEqual(requests, ["/broken.png", "/valid.png"]);
 });
+test("Catalog image normalization retains the per-image 8 MiB bound before four-image queue batches", async () => {
+  const pixels = Buffer.alloc(2048 * 1536 * 3);
+  let state = 1;
+  for (let i = 0; i < pixels.length; i++) {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    pixels[i] = state >>> 24;
+  }
+  const jpeg = await sharp(pixels, { raw: { width: 2048, height: 1536, channels: 3 } }).jpeg({ quality: 70 }).toBuffer();
+  assert.ok(jpeg.length < 8 * 1024 * 1024);
+  assert.ok((await sharp(jpeg).png().toBuffer()).length > 8 * 1024 * 1024);
+  const shop = new ShopAiCatalog({
+    async product() { return { status: "on_sale", images: ["https://images.shop.test/expanded.jpg"] }; },
+    async variant() { return null; },
+    async fetchImage() { return new Response(jpeg); },
+  });
+  await assert.rejects(() => shop.image(product), { status: 413, code: "IMAGE_TOO_LARGE" });
+});
 test("Catalog search rejects hidden or stale product image revisions", async () => {
   let status = "on_sale",
     updated = "revision1";

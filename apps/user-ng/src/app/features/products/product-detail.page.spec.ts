@@ -502,4 +502,27 @@ describe('ProductDetailPage', () => {
     expect(page.isBuyDisabled()).toBe(true);
     expect(page.addToCart()).toBe(false);
   });
+
+  it('binds exact selected variant to VTO without first-variant fallback', async () => {
+    const page = await createStorefrontPage(ProductDetailPage);
+    page.product.set({
+      product_id: 'p-multi',
+      name: 'Váy Hoa',
+      variants: [
+        { variant_id: 'var-first', color: 'Đỏ', size: 'S', stock_quantity: 5 },
+        { variant_id: 'var-target', color: 'Xanh', size: 'L', stock_quantity: 5 },
+      ],
+    } as unknown as ProductSummary);
+
+    page.selectedColor.set(null);
+    page.selectedSize.set(null);
+    expect(page.aiVariantId()).toBe('');
+
+    page.selectedColor.set('Xanh');
+    page.selectedSize.set('L');
+    expect(page.aiVariantId()).toBe('var-target');
+
+    page.selectedSize.set('XL');
+    expect(page.aiVariantId()).toBe('');
+  });
 });

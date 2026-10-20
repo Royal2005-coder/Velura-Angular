@@ -1,10 +1,10 @@
 import { resolve } from "node:path";
-import { randomUUID, createHash } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { selectRows } from "../supabase.js";
 import { asString } from "../types.js";
 import { AiService } from "./ai-service.js";
 import { LocalAiRepository } from "./ai-repository.js";
-import { ShopAiCatalog } from "./ai-catalog.js";
+import { ShopAiCatalog, catalogImageRevision } from "./ai-catalog.js";
 import { ColabAiWorker } from "./colab-worker.js";
 import { HttpError } from "../http.js";
 import { LocalImageVectorRepository } from "./image-vector-repository.js";
@@ -36,6 +36,7 @@ async function main(): Promise<void> {
     new ColabAiWorker(),
     new ShopAiCatalog(),
   );
+  await service.refreshReadiness();
   if (
     !service
       .capabilities()
@@ -60,9 +61,7 @@ async function main(): Promise<void> {
   const rows = published.filter(
     (row) =>
       existing.get(asString(row.product_id)) !==
-      createHash("sha256")
-        .update(JSON.stringify([row.images, row.updated_at]))
-        .digest("hex"),
+      catalogImageRevision(row),
   );
   const owner = "operator:local-catalog-index",
     run = randomUUID();

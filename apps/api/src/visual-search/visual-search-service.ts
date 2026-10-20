@@ -155,6 +155,7 @@ export class VisualSearchService {
     try {
       return await this.operation(owner, requestId, async (signal, retry) => {
         const filters = validateFilters(rawFilters);
+        await this.repo.assertReady?.();
         decoded = await this.provider.decode(bytes, mime);
         const vector = await retry(remaining => this.provider.embedImage(decoded!.bytes, decoded!.mime, signal, remaining)) as number[];
         if (vector.length !== CLIP_DIMENSIONS || vector.some(value => !Number.isFinite(value)) || !vector.some(value => value !== 0)) throw new HttpError(502, "VISUAL_VECTOR_INVALID", "Vector tìm kiếm không hợp lệ.");

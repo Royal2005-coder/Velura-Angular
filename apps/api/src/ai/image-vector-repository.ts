@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir, rename } from "node:fs/promises";
+import { readFile, writeFile, mkdir, rename, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { HttpError } from "../http.js";
@@ -48,20 +48,54 @@ export function normalizedImageVector(vector: unknown): number[] {
 /** Isolated local catalog index; never persist user search vectors or return random suggestions. */
 export class LocalImageVectorRepository {
   private mutation: Promise<unknown> = Promise.resolve();
+  private snapshot?: { key: string; rows: CatalogImageVector[] };
   constructor(private readonly root: string) {}
-  private async rows(): Promise<CatalogImageVector[]> {
+  private unavailable(): HttpError {
+    return new HttpError(503, "VISUAL_INDEX_UNAVAILABLE", "Chỉ mục tìm kiếm hình ảnh chưa sẵn sàng. Vui lòng thử lại sau.");
+  }
+  private async rows(bootstrap = false): Promise<CatalogImageVector[]> {
+    let value: unknown;
+    let key = "";
     try {
-      return JSON.parse(
-        await readFile(join(this.root, "catalog-image-vectors.json"), "utf8"),
-      ) as CatalogImageVector[];
-    } catch {
-      return [];
+      const info = await stat(join(this.root, "catalog-image-vectors.json"), { bigint: true });
+      key = `${info.ino}:${info.mtimeNs}:${info.ctimeNs}:${info.size}`;
+      if (this.snapshot?.key === key) {
+        if (!bootstrap && !this.snapshot.rows.length) throw this.unavailable();
+        return this.snapshot.rows;
+      }
+      value = JSON.parse(await readFile(join(this.root, "catalog-image-vectors.json"), "utf8")) as unknown;
+    } catch (error) {
+      if (bootstrap && error && typeof error === "object" && "code" in error && error.code === "ENOENT") return [];
+      throw this.unavailable();
     }
+    if (!Array.isArray(value) || (!bootstrap && !value.length)) throw this.unavailable();
+    const ids = new Set<string>();
+    for (const row of value) {
+      if (!row || typeof row !== "object" || typeof row.product_id !== "string" ||
+          !row.product_id || ids.has(row.product_id) || row.model !== "openclip-vit-b32-laion2b" ||
+          typeof row.image_revision !== "string" || !row.image_revision ||
+          (["category_id", "color_tone"] as const).some(key => row[key] !== undefined && typeof row[key] !== "string") ||
+          (["style_tags", "occasions", "suitable_body_shapes"] as const).some(key =>
+            row[key] !== undefined && (!Array.isArray(row[key]) || row[key].some((item: unknown) => typeof item !== "string")))) throw this.unavailable();
+      try { row.embedding = normalizedImageVector(row.embedding); } catch { throw this.unavailable(); }
+      ids.add(row.product_id);
+    }
+    this.snapshot = { key, rows: value as CatalogImageVector[] };
+    return value as CatalogImageVector[];
+  }
+  /** Fail closed before query inference when the persisted CLIP index cannot serve a search. */
+  async assertReady(): Promise<void> {
+    await this.rows();
+  }
+  /** Observed persisted readiness, not worker readiness or a configured feature flag. */
+  async readiness(): Promise<{ ready: boolean; indexed: number; error?: string }> {
+    try { return { ready: true, indexed: (await this.rows()).length }; }
+    catch { return { ready: false, indexed: 0, error: "VISUAL_INDEX_UNAVAILABLE" }; }
   }
   /** Read only SKU/image revisions so operator backfill can resume without recomputing fresh vectors. */
   async revisions(): Promise<Map<string, string>> {
     return new Map(
-      (await this.rows()).map((row) => [row.product_id, row.image_revision]),
+      (await this.rows(true)).map((row) => [row.product_id, row.image_revision]),
     );
   }
   /** Stable digest of every indexed SKU revision, so clients can tell a refreshed index from a stale cache. */
@@ -93,7 +127,7 @@ export class LocalImageVectorRepository {
       );
     const pending = this.mutation.then(async () => {
       const ids = new Set(normalized.map((row) => row.product_id));
-      const rows = (await this.rows()).filter(
+      const rows = (await this.rows(true)).filter(
         (row) => !ids.has(row.product_id),
       );
       rows.push(...normalized);
@@ -148,7 +182,7 @@ export class LocalImageVectorRepository {
       .map((row) => ({
         product_id: row.product_id,
         image_revision: row.image_revision,
-        score: normalizedImageVector(row.embedding).reduce(
+        score: row.embedding.reduce(
           (sum, value, i) => sum + value * query[i],
           0,
         ),

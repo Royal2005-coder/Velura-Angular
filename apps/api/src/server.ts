@@ -45,7 +45,7 @@ import { handleUserRoute } from "./user/index.js";
 import { invalidateCatalogCache } from "./user/products.js";
 import { handleWishlistRoute } from "./v1-wishlist-routes.js";
 import { handleRecommendationRoute } from "./recommendation.controller.js";
-import { handleAiRoute, getAiService } from "./ai/ai-router.js";
+import { handleAiRoute, getAiService, startAiRuntime, closeAiRuntime } from "./ai/ai-router.js";
 import { handleRuntimeRoute, observeHttpRequest } from "./ops-runtime.js";
 import { handleVisualSearchRoute } from "./visual-search/visual-search-router.js";
 import { handlePersonalColorRoute } from "./personal-color/personal-color-router.js";
@@ -450,11 +450,13 @@ export const server = createServer(handleApiRequest);
 if (process.env.VERCEL !== "1") {
   const timers = [startAccountMaintenance(), startEmailOutboxWorker(), startPromotionScheduler(), startOrderAutomation(), startChatReportWorker()];
   catalogContentService.start();
+  void startAiRuntime().catch(() => console.error("AI_RUNTIME_RECOVERY_FAILED"));
   const shutdown = () => {
     for (const timer of timers) clearInterval(timer || undefined);
     catalogContentService.stop();
     personalColorService.close();
-    server.close(() => { void getAiService().close(); });
+    void closeAiRuntime().catch(() => console.error("AI_RUNTIME_SHUTDOWN_FAILED"));
+    server.close();
   };
   process.once("SIGTERM", shutdown);
   process.once("SIGINT", shutdown);

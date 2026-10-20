@@ -14,22 +14,38 @@ import { LocalAiRepository } from "./ai-repository.js";
 import { ColabAiWorker } from "./colab-worker.js";
 import { ClusterAiWorker } from "./cluster-worker.js";
 import { ShopAiCatalog } from "./ai-catalog.js";
+import { LocalImageVectorRepository } from "./image-vector-repository.js";
+import { CatalogIndexLifecycle } from "./catalog-index-lifecycle.js";
 
 const aiWorker =
   process.env.AI_ENGINE_MODE === "colab-local"
     ? new ColabAiWorker()
     : new ClusterAiWorker();
 
+const catalog = new ShopAiCatalog();
+const vectors = new LocalImageVectorRepository(resolve(process.env.AI_PRIVATE_ROOT || "scratch/ai-private"));
 const service = new AiService(
   new LocalAiRepository(
     resolve(process.env.AI_PRIVATE_ROOT || "scratch/ai-private"),
   ),
   aiWorker,
-  new ShopAiCatalog(),
+  catalog,
+  vectors,
 );
 /** Shared engine enforces one private ledger and queue for image approvals and Personal Color assets. */
 export function getAiService(): AiService { return service; }
 let recovery: Promise<void> | undefined;
+const catalogIndex = new CatalogIndexLifecycle(service, catalog, vectors);
+/** Recover the existing shared queue once, then backfill/reconcile published catalog revisions in-process. */
+export async function startAiRuntime(): Promise<void> {
+  await (recovery ||= service.recover());
+  catalogIndex.start();
+}
+/** Stop discovery and its queued work before closing the single private AI queue. */
+export async function closeAiRuntime(): Promise<void> {
+  await catalogIndex.close();
+  await service.close();
+}
 const rates = new Map<string, { count: number; expires: number }>();
 
 /** Private AI ownership uses authenticated identity or a high-entropy browser-scoped guest principal. */
@@ -86,6 +102,7 @@ export async function handleAiRoute(
       200,
       {
         ...service.capabilities(),
+        visual_index: { ...await vectors.readiness(), ...catalogIndex.status() },
         ...(productId
           ? await service.productCapabilities(productId, variantId)
           : {}),

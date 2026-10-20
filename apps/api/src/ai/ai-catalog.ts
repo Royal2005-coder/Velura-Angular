@@ -2,7 +2,7 @@ import { readFile, stat, realpath } from "node:fs/promises";
 import { resolve, sep } from "node:path";
 import { createHash } from "node:crypto";
 import { isIP } from "node:net";
-import { selectOne } from "../supabase.js";
+import { selectOne, selectRows } from "../supabase.js";
 import { HttpError } from "../http.js";
 import { asString, asJsonObject, type JsonObject } from "../types.js";
 import type { AiCatalog } from "./ai-service.js";
@@ -15,6 +15,10 @@ export interface AiCatalogDependencies {
   product(id: string): Promise<JsonObject | null>;
   variant(productId: string, variantId: string): Promise<JsonObject | null>;
   fetchImage(url: URL, options: RequestInit): Promise<Response>;
+}
+/** Same revision binds discovery, fetched catalog bytes and stale-image exclusion. */
+export function catalogImageRevision(product: JsonObject): string {
+  return createHash("sha256").update(JSON.stringify([product.images, product.updated_at])).digest("hex");
 }
 const dependencies: AiCatalogDependencies = {
   product: (id) => selectOne("product", { product_id: `eq.${id}` }),
@@ -29,6 +33,17 @@ const dependencies: AiCatalogDependencies = {
 /** Resolve only explicitly configured shop garment references and licensed studio assets. */
 export class ShopAiCatalog implements AiCatalog {
   constructor(private readonly deps: AiCatalogDependencies = dependencies) {}
+  /** Page only published catalog identifiers/revisions; no customer assets or admin writes. */
+  async published(after: string, limit: number): Promise<Array<{ product_id: string; image_revision: string }>> {
+    const { rows } = await selectRows("product", {
+      select: "product_id,images,updated_at",
+      status: "in.(on_sale,out_of_stock)",
+      order: "product_id.asc",
+      limit,
+      ...(after ? { product_id: `gt.${after}` } : {}),
+    }, { count: "none" });
+    return rows.map(row => ({ product_id: asString(row.product_id), image_revision: catalogImageRevision(row) }));
+  }
   /** Retain only published catalog products in visual recommendations. */
   async searchable(
     productId: string,
@@ -38,13 +53,8 @@ export class ShopAiCatalog implements AiCatalog {
     return (
       !!product &&
       ["on_sale", "out_of_stock"].includes(asString(product.status)) &&
-      (!imageRevision || imageRevision === this.revision(product))
+      (!imageRevision || imageRevision === catalogImageRevision(product))
     );
-  }
-  private revision(product: JsonObject): string {
-    return createHash("sha256")
-      .update(JSON.stringify([product.images, product.updated_at]))
-      .digest("hex");
   }
   /** Validate published SKU and configured variant garment references without downloading photos. */
   async support(
@@ -116,7 +126,7 @@ export class ShopAiCatalog implements AiCatalog {
       metadata: {
         product_id: productId,
         model: "openclip-vit-b32-laion2b",
-        image_revision: this.revision(product),
+        image_revision: catalogImageRevision(product),
         category_id: asString(product.category_id),
         color_tone: asString(product.color_tone),
         style_tags: strings(product.style_tags),

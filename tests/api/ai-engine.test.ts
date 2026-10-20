@@ -615,9 +615,9 @@ test("An invalid vector anywhere in a batch prevents partial catalog index publi
       (await terminal(fixture.service, "operator", job.id)).status,
       "failed",
     );
-    assert.deepEqual(
-      await new LocalImageVectorRepository(fixture.root).search(vector),
-      [],
+    await assert.rejects(
+      () => new LocalImageVectorRepository(fixture.root).search(vector),
+      { status: 503, code: "VISUAL_INDEX_UNAVAILABLE" },
     );
   } finally {
     await fixture.close();

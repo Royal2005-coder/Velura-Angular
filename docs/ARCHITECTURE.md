@@ -55,11 +55,14 @@ Colab là adapter development, không phải production. Runbook: [HOW-IT-WORKS.
 Visual Search hiện đọc chỉ mục CLIP riêng `catalog-image-vectors.json`, không dùng
 RPC/vector 1536 chiều của migration `052`; không chạy `052` để sửa chỉ mục ảnh.
 API khởi động một bộ đồng bộ catalog trong cùng process/hàng đợi `AiService`:
-đọc tối đa 16 sản phẩm đã xuất bản mỗi lượt, chỉ lập vector bằng worker CLIP đã
+đọc tối đa 4 sản phẩm đã xuất bản mỗi lượt, chỉ lập vector bằng worker CLIP đã
 quan sát sẵn sàng, rồi quét lại revision sau mỗi vòng. Chỉ mục nằm trên
 `AI_PRIVATE_ROOT`/PVC `ai-private-data`, không chứa ảnh/vector khách hàng.
 Chỉ mục thiếu, rỗng, lỗi đọc/JSON hoặc sai namespace trả `503 VISUAL_INDEX_UNAVAILABLE`;
 chỉ mục hợp lệ nhưng bộ lọc không còn ứng viên vẫn là kết quả không khớp bình thường.
+Ảnh truy vấn đồng màu chính xác bị chặn trước inference (`422 VISUAL_IMAGE_NO_DETAIL`);
+đây là kiểm tra không có chi tiết, không phải bộ phân loại trang phục. Khi không
+có sản phẩm khớp, rail chỉ ghi gợi ý tham khảo từ catalog, không khẳng định nội dung ảnh.
 Virtual Try-On cần `AI_VTO_PRODUCTS` đã duyệt, ảnh flat-lay đúng từng variant và
 host HTTPS được phép; task capability bật không có nghĩa catalog đã hỗ trợ.
 Registry rỗng chặn thử đồ sản phẩm; ảnh người mẫu tổng hợp không thay thế ảnh garment

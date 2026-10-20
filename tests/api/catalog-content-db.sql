@@ -1,4 +1,4 @@
--- Run only against a disposable migrated local/staging database with canonical seed data.
+-- Run only against a disposable local/staging database after 055 and 074 with canonical seed data.
 -- Every mutation is rolled back; use psql -v ON_ERROR_STOP=1 -f tests/api/catalog-content-db.sql.
 begin;
 select set_config('request.jwt.claim.role','service_role',true);
@@ -8,6 +8,9 @@ declare admin_id uuid; fixture public.product%rowtype; original public.product%r
  pid uuid:=gen_random_uuid(); batch jsonb; same_batch jsonb; work jsonb; draft_id uuid; d jsonb; c jsonb; src jsonb; quoted jsonb;
  metadata jsonb; result jsonb; failed boolean; regenerate jsonb; source_revision text;
 begin
+ if exists(select 1 from public.catalog_content_item where status in ('queued','running')) then raise exception 'Requires an empty disposable content queue'; end if;
+ work:=public.catalog_content_operation(null,'claim');
+ if work is not null then raise exception 'Empty queue returned work'; end if;
  select user_id into admin_id from public.users where role::text='admin' and admin_role::text='super_admin' and is_active limit 1;
  select * into fixture from public.product limit 1;
  if admin_id is null or fixture.product_id is null then raise exception 'Requires seeded active super_admin and product in disposable database'; end if;
@@ -16,8 +19,11 @@ begin
  fixture.description:='Original live description'; fixture.seo_title:='Original live SEO '||pid::text; fixture.seo_description:='Original live meta'; fixture.version:=1;
  fixture.images:='{}'::text[];
  insert into public.product select fixture.*;
+ insert into public.catalog_verified_facts(product_id,fields,verified_by) values(pid,'{"material":["Verified cotton"]}',admin_id);
  select * into original from public.product where product_id=pid;
  src:=public.catalog_content_source(pid);
+ if src#>>'{fields,material.1}' is distinct from 'Verified cotton' then raise exception 'Source omitted verified facts'; end if;
+ if src#>>'{fields,name}' is distinct from fixture.name then raise exception 'Source replaced catalog fields with verified facts'; end if;
  quoted:=jsonb_build_object('text',fixture.name,'sources',jsonb_build_array(jsonb_build_object('field','name','quote',fixture.name)));
  c:=jsonb_build_object('title',quoted,'short',quoted,'long',quoted,'highlights','[]'::jsonb,'styling','[]'::jsonb,'care','[]'::jsonb,
    'seoTitle',quoted,'metaDescription',quoted,'proposedSlug',fixture.slug,'primaryKeywords',jsonb_build_array(quoted),'secondaryKeywords','[]'::jsonb,'alt','[]'::jsonb,'tags','[]'::jsonb);

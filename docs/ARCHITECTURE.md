@@ -131,6 +131,10 @@ không đoán từ tên file hay vị trí. Migration `063` phải chạy trư�
 Trạng thái catalog: Active = `on_sale`, Hidden = `hidden`, Discontinued =
 `discontinued`; đổi trạng thái không ghi lại SKU, giá hoặc tồn kho biến thể.
 Checkout kiểm tra lại trạng thái khi chốt đơn, không chỉ khi tạo báo giá.
+Đồng bộ `on_sale` ↔ `out_of_stock` chỉ chạy trong thao tác sản phẩm/tồn kho đã
+xác thực, dùng token, lý do và phiên bản của người thao tác; không đổi `hidden`
+hoặc `discontinued`. Khởi tạo service không quét catalog hay gọi RPC admin khi
+chưa có người thao tác; không cấp thêm quyền RPC cho `anon`/`service_role`.
 
 CSV nhận diện biến thể bằng `sku` bền vững; `product_sku` chỉ định sản phẩm cha
 khi thêm biến thể (`color`, `size`). SKU trùng sau chuẩn hóa trong cùng file làm

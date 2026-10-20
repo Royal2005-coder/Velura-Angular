@@ -43,6 +43,7 @@ export async function startAiRuntime(): Promise<void> {
 }
 /** Stop discovery and its queued work before closing the single private AI queue. */
 export async function closeAiRuntime(): Promise<void> {
+  await recovery?.catch(() => undefined);
   await catalogIndex.close();
   await service.close();
 }

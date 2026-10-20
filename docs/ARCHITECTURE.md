@@ -52,6 +52,13 @@ Vector `ViT-B-32/laion2b_s34b_b79k` giữ namespace 512 chiều, tách khỏi te
 pin/checksum/license và inference thật phải được chứng minh trước khi bật AI.
 Colab là adapter development, không phải production. Runbook: [HOW-IT-WORKS.md](./HOW-IT-WORKS.md#k3s-staging-first-runbook).
 
+Visual Search hiện đọc chỉ mục CLIP riêng `catalog-image-vectors.json`, không dùng
+RPC/vector 1536 chiều của migration `052`; không chạy `052` để sửa chỉ mục ảnh.
+Virtual Try-On cần `AI_VTO_PRODUCTS` đã duyệt, ảnh flat-lay đúng từng variant và
+host HTTPS được phép; task capability bật không có nghĩa catalog đã hỗ trợ.
+Registry rỗng chặn thử đồ sản phẩm; ảnh người mẫu tổng hợp không thay thế ảnh garment
+đã duyệt. Draft nội dung catalog cần `055` rồi `074` trước khi chạy worker/source RPC.
+
 ---
 
 ## 2. Cây dự án (ổn định)

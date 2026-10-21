@@ -1,20 +1,36 @@
 import { config } from "./config.js";
 import { isEmailUnconfirmed } from "./auth-profile.js";
 import { getRequestIp, HttpError } from "./http.js";
-import { insertRow } from "./supabase.js";
-import { asString, type AuthContext, type HttpRequest, type JsonObject } from "./types.js";
+import { writeAuditLog, type AuditLogRow } from "./audit.js";
+import { asString, errorMessage, type AuthContext, type HttpRequest, type JsonObject } from "./types.js";
 import {
   assertNotLocked,
   clearLoginFailures,
   findUserByEmail,
   recordFailedLogin,
-  resetStaleLoginFailures
+  resetStaleLoginFailures,
+  type LoginLockUser
 } from "./auth-lockout.js";
+
+/**
+ * Best-effort auth audit: authentication still completes when audit_log is unavailable.
+ */
+async function writeAuthAudit(row: AuditLogRow): Promise<void> {
+  try {
+    await writeAuditLog(row);
+  } catch (error) {
+    console.error("[audit] auth write failed", errorMessage(error));
+  }
+}
+
+function authRole(user: LoginLockUser | null): string {
+  return asString(user?.admin_role) || asString(user?.role) || (user ? "member" : "anonymous");
+}
 
 /**
  * Admin password grant: lockout on public.users, then Supabase Auth.
  */
-export async function completeAdminPasswordSignIn(body: JsonObject): Promise<{ token: string }> {
+export async function completeAdminPasswordSignIn(body: JsonObject, ipAddress?: string): Promise<{ token: string }> {
   const email = asString(body.email).trim();
   const password = asString(body.password);
   if (!email || !password) {
@@ -24,7 +40,20 @@ export async function completeAdminPasswordSignIn(body: JsonObject): Promise<{ t
   const found = await findUserByEmail(email);
   const user = found ? await resetStaleLoginFailures(found) : null;
   if (user) {
-    assertNotLocked(user);
+    try {
+      assertNotLocked(user);
+    } catch (error) {
+      await writeAuthAudit({
+        actor_id: asString(user.user_id) || null,
+        actor_role: authRole(user),
+        action: "signin_blocked",
+        module: "auth",
+        target_id: asString(user.user_id) || null,
+        new_value: { email, reason: "account_locked" },
+        ip_address: ipAddress || null
+      });
+      throw error;
+    }
   }
 
   const response = await fetch(`${config.supabaseUrl}/auth/v1/token?grant_type=password`, {
@@ -41,7 +70,17 @@ export async function completeAdminPasswordSignIn(body: JsonObject): Promise<{ t
     if (user) {
       await recordFailedLogin(user);
     }
-    if (isEmailUnconfirmed(payload)) {
+    const blocked = isEmailUnconfirmed(payload);
+    await writeAuthAudit({
+      actor_id: user ? asString(user.user_id) || null : null,
+      actor_role: authRole(user),
+      action: blocked ? "signin_blocked" : "signin_failed",
+      module: "auth",
+      target_id: user ? asString(user.user_id) || null : null,
+      new_value: { email, reason: blocked ? "email_not_confirmed" : "invalid_credentials" },
+      ip_address: ipAddress || null
+    });
+    if (blocked) {
       throw new HttpError(
         401,
         "EMAIL_NOT_CONFIRMED",
@@ -58,26 +97,31 @@ export async function completeAdminPasswordSignIn(body: JsonObject): Promise<{ t
   if (user) {
     await clearLoginFailures(user.user_id);
   }
+  await writeAuthAudit({
+    actor_id: user ? asString(user.user_id) || null : null,
+    actor_role: authRole(user),
+    action: "signin",
+    module: "auth",
+    target_id: user ? asString(user.user_id) || null : null,
+    new_value: { email },
+    ip_address: ipAddress || null
+  });
   return { token: asString(payload.access_token) };
 }
 
 /**
- * Best-effort AUTH-08 audit row. Client still clears the session if this insert fails.
+ * Best-effort sign-out audit; the client still clears its session if the insert fails.
  */
 export async function recordAdminSignOut(req: HttpRequest, context: AuthContext): Promise<void> {
-  try {
-    await insertRow("audit_log", {
-      actor_id: context.profile?.user_id || context.authUser?.id || null,
-      actor_role: context.roleCode,
-      action: "signout",
-      module: "auth",
-      target_id: context.profile?.user_id || context.authUser?.id || null,
-      old_value: { session: "active" },
-      new_value: { session: "cleared" },
-      ip_address: getRequestIp(req),
-      timestamp: new Date().toISOString()
-    }, { silentError: true, accessToken: context.accessToken, useAnonKey: true });
-  } catch {
-    // AUTH-08 still succeeds for the client if audit insert is denied.
-  }
+  const userId = context.profile?.user_id || context.authUser?.id || null;
+  await writeAuthAudit({
+    actor_id: userId,
+    actor_role: context.roleCode || "system",
+    action: "signout",
+    module: "auth",
+    target_id: userId,
+    old_value: { session: "active" },
+    new_value: { session: "cleared" },
+    ip_address: getRequestIp(req)
+  });
 }

@@ -4,6 +4,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { config } from "./config.js";
 import { HttpError, sendJson } from "./http.js";
 import { readAiGatewayMetrics } from "./gemini-client.js";
+import { renderAuditMetrics } from "./audit-metrics.js";
 import type { HeaderMap } from "./types.js";
 
 const bounds = [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 15, 60];
@@ -77,6 +78,7 @@ export function runtimeMetrics(): string {
     lines.push(`velura_ai_duration_seconds_sum{${labels}} ${value.latencyMs / 1000}`);
     if (value.costMeasurements) lines.push(`velura_ai_cost_usd_total{${labels}} ${value.costUsd}`);
   }
+  lines.push(...renderAuditMetrics());
   return lines.join("\n") + "\n";
 }
 

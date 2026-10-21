@@ -33,12 +33,10 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
         !isAuthApi &&
         (req.method === 'GET' ||
           req.url.includes('/api/v1/chat') ||
-          req.url.includes('/api/user/visual-search') ||
-          req.url.includes('/api/user/ai'));
+          req.url.includes('/api/user/visual-search'));
       if (!canRetryAsGuest) {
         return throwError(() => error);
       }
-      auth.signOut();
       return next(
         req.clone({
           headers: req.headers.delete('Authorization').set('X-Guest-Session-ID', currentGuestSessionId()),

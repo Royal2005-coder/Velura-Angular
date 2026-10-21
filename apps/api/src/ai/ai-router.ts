@@ -69,26 +69,23 @@ export function aiOwner(req: HttpRequest, context: AuthContext): string {
   return `guest:${guest}`;
 }
 
-/** Virtual try-on and its personal-photo quality check store a person's image per account, so they need a member. */
+/** Virtual try-on and its personal-photo quality check store a person's image per account, so they need an authenticated account. */
 export function requiresMember(body: { task?: unknown; person_check?: unknown }): boolean {
   return body.task === "virtual_try_on" || (body.task === "image_quality" && body.person_check === true);
 }
 
-/** Personal AI storage and operations require an active member profile bound to the verified request identity. */
+/** Personal AI storage and operations require an active authenticated user profile bound to the verified request identity. */
 export function requireAiMember(context: AuthContext): void {
   if (
     !context?.authUser?.id ||
     !context?.profile?.user_id ||
     context.authUser.id !== context.profile.user_id ||
-    context.profile.is_active !== true ||
-    (context.profile.role ? context.profile.role !== "member" : false) ||
-    context.roleCode !== "member" ||
-    context.isAdmin
+    context.profile.is_active !== true
   ) {
     throw new HttpError(
       401,
       "MEMBER_REQUIRED",
-      "Thử đồ AI chỉ dành cho thành viên. Vui lòng đăng nhập hoặc đăng ký.",
+      "Thử đồ AI chỉ dành cho tài khoản đã đăng nhập và đang hoạt động. Vui lòng đăng nhập lại.",
     );
   }
 }

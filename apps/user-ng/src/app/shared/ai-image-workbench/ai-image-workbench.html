@@ -21,11 +21,11 @@
     <div class="workbench-body">
       @if (memberRequired()) {
         <div class="alert alert--info member-gate" role="alert" data-testid="try-on-member-gate">
-          <p><strong>Thử đồ AI chỉ dành cho thành viên Velura.</strong></p>
-          <p>Ảnh của bạn là dữ liệu cá nhân và được lưu theo tài khoản. Hãy đăng nhập hoặc đăng ký thành viên để sử dụng tính năng này.</p>
+          <p><strong>Thử đồ AI chỉ dành cho tài khoản đã đăng nhập.</strong></p>
+          <p>Ảnh của bạn là dữ liệu cá nhân và được lưu theo tài khoản. Hãy đăng nhập hoặc tạo tài khoản để sử dụng tính năng này.</p>
           <p class="member-gate__actions">
             <a class="btn btn--gradient-tryon" routerLink="/auth/signin" (click)="close()">Đăng nhập</a>
-            <a class="btn btn--outline" routerLink="/auth/signup" (click)="close()">Đăng ký thành viên</a>
+            <a class="btn btn--outline" routerLink="/auth/signup" (click)="close()">Đăng ký</a>
           </p>
         </div>
       } @else {

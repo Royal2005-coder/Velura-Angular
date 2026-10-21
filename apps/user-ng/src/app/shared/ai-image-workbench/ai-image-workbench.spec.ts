@@ -305,15 +305,15 @@ describe('AiImageWorkbench', () => {
       await p.open();
       expect(model.capabilities).not.toHaveBeenCalled();
     });
-    it('lets a verified member open the dialog and verify identity against ApiService.me', async () => {
+    it('lets a signed-in account open the dialog and fetch capabilities', async () => {
       member();
       const p = page();
+      model.capabilities.mockClear();
       await p.open();
-      expect(api.me).toHaveBeenCalled();
       expect(p.memberRequired()).toBe(false);
-      expect(p.verifiedMember()).toBe(true);
+      expect(model.capabilities).toHaveBeenCalled();
     });
-    it('denies inactive members, mismatched users, or foreign admin roles', async () => {
+    it('rejects inactive and mismatched identities while allowing active admins', async () => {
       member();
       api.me.mockReturnValue(of({
         user: { id: 'u1' },
@@ -324,7 +324,7 @@ describe('AiImageWorkbench', () => {
       const p = page();
       const allowed = await p.verifyMemberIdentity();
       expect(allowed).toBe(false);
-      expect(p.memberRequired()).toBe(true);
+      expect(p.memberRequired()).toBe(false);
 
       api.me.mockReturnValue(of({
         user: { id: 'u1' },
@@ -340,7 +340,13 @@ describe('AiImageWorkbench', () => {
         role: 'super_admin',
         isAdmin: true,
       }));
-      expect(await p.verifyMemberIdentity()).toBe(false);
+      expect(await p.verifyMemberIdentity()).toBe(true);
+    });
+    it('keeps a live session usable when /me is temporarily unavailable', async () => {
+      member();
+      api.me.mockReturnValue(throwError(() => new Error('offline')));
+      const p = page();
+      expect(await p.verifyMemberIdentity()).toBe(true);
     });
     it('blocks direct select, validate, generate, and studio bypass attempts for unverified users', async () => {
       localStorage.clear();

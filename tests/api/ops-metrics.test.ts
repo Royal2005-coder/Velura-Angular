@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { handleRuntimeRoute } from '../../apps/api/src/ops-runtime.js';
+import { recordAuditWrite, resetAuditMetricsForTest } from '../../apps/api/src/audit-metrics.js';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 function mockReq(method: string, url: string, authHeader?: string): IncomingMessage {
@@ -80,6 +81,30 @@ test('metrics endpoint succeeds with valid bearer token and returns Prometheus t
     assert.match(out.headers['content-type'] || '', /text\/plain/);
     assert.match(out.body, /velura_http_requests_total/);
   } finally {
+    if (orig !== undefined) process.env.METRICS_SCRAPE_BEARER_TOKEN = orig;
+    else delete process.env.METRICS_SCRAPE_BEARER_TOKEN;
+  }
+});
+
+test('metrics endpoint exposes API audit write counters', async () => {
+  const orig = process.env.METRICS_SCRAPE_BEARER_TOKEN;
+  process.env.METRICS_SCRAPE_BEARER_TOKEN = 'secret-metrics-collector-token-12345';
+  resetAuditMetricsForTest();
+  recordAuditWrite('auth', 'success');
+  try {
+    const { res, getOutput } = mockRes();
+    await handleRuntimeRoute(
+      mockReq('GET', '/metrics', 'Bearer secret-metrics-collector-token-12345'),
+      res,
+      new URL('http://localhost/metrics'),
+      {}
+    );
+    const out = getOutput();
+    assert.equal(out.statusCode, 200);
+    assert.match(out.body, /# TYPE velura_audit_writes_total counter/);
+    assert.ok(out.body.includes('velura_audit_writes_total{module="auth",result="success"} 1'));
+  } finally {
+    resetAuditMetricsForTest();
     if (orig !== undefined) process.env.METRICS_SCRAPE_BEARER_TOKEN = orig;
     else delete process.env.METRICS_SCRAPE_BEARER_TOKEN;
   }

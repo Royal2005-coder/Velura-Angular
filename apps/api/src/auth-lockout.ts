@@ -12,6 +12,8 @@ const LOCKED_MESSAGE = "Tài khoản của bạn đã bị tạm khóa trong 15 
  */
 export interface LoginLockUser {
   user_id: string;
+  role?: unknown;
+  admin_role?: unknown;
   login_fail_count?: unknown;
   locked_until?: unknown;
   updated_at?: unknown;
@@ -32,7 +34,7 @@ export interface LoginLockDetails {
  */
 export async function findUserByEmail(email: string): Promise<LoginLockUser | null> {
   const row = await selectOne("users", {
-    select: "user_id,email,login_fail_count,locked_until,updated_at,created_at",
+    select: "user_id,email,role,admin_role,login_fail_count,locked_until,updated_at,created_at",
     email: `eq.${email}`
   });
   if (!row || typeof row.user_id !== "string") {

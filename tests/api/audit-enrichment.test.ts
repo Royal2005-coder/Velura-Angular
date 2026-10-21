@@ -60,6 +60,14 @@ test("action codes become Vietnamese verbs, and a status change wins over the ve
   );
 });
 
+test("auth and AI actions have readable labels", () => {
+  assert.equal(auditRoleLabel("anonymous"), "Ẩn danh");
+  assert.equal(auditActionLabel("signin", {}, {}), "Đăng nhập");
+  assert.equal(auditActionLabel("signin_failed", {}, {}), "Đăng nhập thất bại");
+  assert.equal(auditActionLabel("signin_blocked", {}, {}), "Đăng nhập bị chặn");
+  assert.equal(auditActionLabel("view_moderated_original", {}, {}), "Xem nội dung gốc");
+});
+
 test("scalars render readably and UUIDs are shortened rather than dumped", () => {
   assert.equal(formatAuditScalar(null), "—");
   assert.equal(formatAuditScalar(""), "—");

@@ -328,7 +328,11 @@ jobs:
             main_sha=$(git rev-parse origin/main)
             branch="feature/KAN-32-sync-main-${main_sha:0:12}-${GITHUB_SHA:0:12}"
             existing=$(gh pr list --base develop --head "$branch" --state open --json number --jq '.[0].number // empty')
-            if [ -n "$existing" ]; then gh pr merge "$existing" --auto --merge; exit 0; fi
+            if [ -n "$existing" ]; then
+              gh pr checks "$existing" --required --watch --interval 30
+              gh pr merge "$existing" --merge
+              exit 0
+            fi
             git switch -c "$branch"
             git config user.name 'velura-release[bot]'
             git config user.email 'velura-release[bot]@users.noreply.github.com'
@@ -345,7 +349,9 @@ jobs:
           cc @Royal2005-coder @trandiemquynhqw-maker @uyenntd23406-svg')
             fi
           fi
-          gh pr merge "$pr" --auto --merge
+          # The promotion job is not a required check; wait for required checks before merging.
+          gh pr checks "$pr" --required --watch --interval 30
+          gh pr merge "$pr" --merge
       - name: Revoke short-lived App installation token
         if: ${{ always() && steps.app.outputs.token != '' }}
         env:

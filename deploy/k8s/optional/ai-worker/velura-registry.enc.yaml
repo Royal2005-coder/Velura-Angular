@@ -1,0 +1,32 @@
+apiVersion: v1
+data:
+    .dockerconfigjson: ENC[AES256_GCM,data:MEYwOsywXkC8VCbccjffdBdYtXb2zfL6zlmMJEueOnpqsSQ0h2zpk5LSL7FxZwU0aX9aYiIKt2lAyYeKQ5U/E2StqQA2BatcXKyOe88tZNxST4ICh6Pwxd9UMFgg87wNhv+BD6qC8b19geDhjvBQBaeF/19tnVjbbYKrcTnluqUwuxAb2cheDteordw5O/IGUwCzE0iUj8sbe6yY8JDGwWWLorwlhiE9LeSRglcfWglBd60jhOJREfcVfa1W7d/wLkVq4s1mJigZrUND2CcNhFv6aIutflaWl+vRGG5BqmOZ9qcjpjvMM8MQAzEznBE2qYdasQ4836Nb2kiyHJxr6g==,iv:l7WbU0vU2UOILXjz3rMx81qvcc7GXueQQDu5JFbIbdM=,tag:NdLm6tB7mhnhBQU+GjvAzg==,type:str]
+kind: Secret
+metadata:
+    name: velura-registry
+    namespace: ai-staging
+type: kubernetes.io/dockerconfigjson
+sops:
+    age:
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBQUWJiMmdMbjZxeSt1NlVY
+            RldSTERUcUJ4SklkZlRpbSttK1IzeEwxQ1ZzCktJZ21iajdPVzRqQkwxeHo0em5m
+            Q0xQV296UjV2OHJ5SHVPRXhtZjdNT0kKLS0tIEluQmtEWnlxOTVmUmR1RFRkcVVz
+            YWVubTNwR2VlWDJ4QjNSZm9GeVNYNWsKKfchQpB8rOsgdL5YBuXmCAcemoY2e0vj
+            7EaylLofTYqYb+H3y+LndOSp3xUv5P9IYQOnE6H4Icv5MQun8/4xEg==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age18np7gjjry04gvgfn6k8a54mza5j2fygqst6g0msd75cdj7zp03qss2k4rz
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBYbGExaWFwZWNvRDRYdnZ6
+            dEI0NGRCb2pqT0FFZnpOOE0zRUVaQ0h4dVRnCkZldkt1cFFEMEpxK2JlSmJ3Y0dw
+            T0QrU0J0SGZaN2cvUkZWdyt3QWJ5SDQKLS0tIHBoeGNHOEY3QXhVdU5HajdvWHBs
+            ekMvQnliVkFRaGpBRjNhQ0x0R3dhQ28K00IuLBsAo2cT6VwSTwiTh9PVMcgIVEyd
+            1Rznw2E3DrXJLSIR27NkLbycmFYgRmq1yG05puKyJzD16mBeTf/wDw==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age10f5mcc39fgf7ht6p7x3z5u85y943mlpg7d0zcvrch7xpfuycxs0s0q48jg
+    encrypted_regex: ^(data|stringData)$
+    lastmodified: "2026-10-21T09:17:51Z"
+    mac: ENC[AES256_GCM,data:7/h6+W95rwpnJTk82g6z15uRWQ4kvn/m46pIFWs6UYsz8wpnFO9X3VyuaNOcYIGogQKOv1xj8sCP/BCAZ+EXm6pa1pIUc8t+TsF4ipHKiYdI/Ro7aF6J20V9ZWHwrZYs6plYSgq5ES3rs5tGH3bJRzMEzomnoX8//ZpkbEggHd0=,iv:kzf4YBL4Inu92Yb8YETlhzi21aPPUO/Hzd6vxVBM6LY=,tag:lWpp/wR5AV0BhVcn7AsOTg==,type:str]
+    version: 3.13.3

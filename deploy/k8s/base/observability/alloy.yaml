@@ -37,6 +37,22 @@ subjects:
   name: alloy
   namespace: observability
 ---
+# Persist read positions so an Alloy restart does not replay historical pod logs into Loki.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: alloy-data
+  namespace: observability
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 1Gi
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -109,7 +125,8 @@ spec:
         configMap:
           name: alloy-config
       - name: data
-        emptyDir: {}
+        persistentVolumeClaim:
+          claimName: alloy-data
 ---
 apiVersion: v1
 kind: Service

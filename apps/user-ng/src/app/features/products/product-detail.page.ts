@@ -471,7 +471,9 @@ export class ProductDetailPage {
           this.comboExpanded.set(null);
           this.comboPicks.set(this.buildComboPicks(row));
           const primaryColor = row.image_colors?.[this.gallery()[0]];
-          const initialColor = this.colors().find((option) => option.name === primaryColor)?.name
+          const initialColor = (primaryColor
+            ? this.colors().find((option) => option.name.trim().toLowerCase() === primaryColor.trim().toLowerCase())?.name
+            : null)
             || this.colors()[0]?.name || row.variants?.[0]?.color || null;
           this.selectedColor.set(initialColor);
           this.selectedSize.set(this.sizes()[0] || null);
@@ -717,7 +719,6 @@ export class ProductDetailPage {
   comboRetailLabel(component: ComboComponent): string {
     return formatVnd(component.base_price);
   }
-
   /**
    * Selects a gallery image; only an explicit color association changes the selected variant.
    */
@@ -725,13 +726,16 @@ export class ProductDetailPage {
     this.activeImage.set(index);
     const url = this.gallery()[index];
     const color = url ? this.product()?.image_colors?.[url] : undefined;
-    if (color && color !== this.selectedColor() && this.colors().some((option) => option.name === color)) {
-      this.selectedColor.set(color);
-      const sizes = this.sizes();
-      if (!sizes.includes(this.selectedSize() || '')) {
-        this.selectedSize.set(sizes[0] || null);
+    if (color && (!this.selectedColor() || color.trim().toLowerCase() !== this.selectedColor()!.trim().toLowerCase())) {
+      const matched = this.colors().find((option) => option.name.trim().toLowerCase() === color.trim().toLowerCase());
+      if (matched) {
+        this.selectedColor.set(matched.name);
+        const sizes = this.sizes();
+        if (!sizes.includes(this.selectedSize() || '')) {
+          this.selectedSize.set(sizes[0] || null);
+        }
+        this.clampQuantity();
       }
-      this.clampQuantity();
     }
   }
   /**
@@ -1128,14 +1132,17 @@ export class ProductDetailPage {
   private imageIndexForColor(color: string): number {
     const gallery = this.gallery();
     const imageColors = this.product()?.image_colors;
-    const matchingIndex = gallery.findIndex((url) => imageColors?.[url] === color);
+    const norm = color.trim().toLowerCase();
+    const matchingIndex = gallery.findIndex((url) => {
+      const mapped = imageColors?.[url];
+      return mapped ? mapped.trim().toLowerCase() === norm : false;
+    });
     if (matchingIndex >= 0) {
       return matchingIndex;
     }
     const commonIndex = gallery.findIndex((url) => imageColors?.[url] === undefined);
     return commonIndex >= 0 ? commonIndex : 0;
   }
-
   private colorOptions(variants: ProductVariant[]): ProductColorOption[] {
     const map = new Map<string, string>();
     for (const row of variants) {

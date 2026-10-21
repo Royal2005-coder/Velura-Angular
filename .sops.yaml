@@ -1,5 +1,5 @@
 creation_rules:
-  - path_regex: deploy/k8s/(base/secrets|secrets/production|secrets/staging)/.*\.enc\.yaml$
+  - path_regex: deploy/k8s/(base/secrets|secrets/production|secrets/staging|optional/ai-worker)/.*\.enc\.yaml$
     encrypted_regex: ^(data|stringData)$
     age: >-
       age18np7gjjry04gvgfn6k8a54mza5j2fygqst6g0msd75cdj7zp03qss2k4rz,

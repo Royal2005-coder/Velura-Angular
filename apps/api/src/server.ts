@@ -156,7 +156,7 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
 
     if (req.method === "POST" && parts[1] === "auth" && parts[2] === "signin") {
       const body = await readJson(req);
-      return sendJson(res, 200, await completeAdminPasswordSignIn(body), corsHeaders);
+      return sendJson(res, 200, await completeAdminPasswordSignIn(body, getRequestIp(req)), corsHeaders);
     }
 
     if (req.method === "POST" && parts[1] === "auth" && parts[2] === "signout") {

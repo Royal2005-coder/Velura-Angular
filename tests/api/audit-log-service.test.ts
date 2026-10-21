@@ -20,6 +20,18 @@ test("parseAuditLogFilters maps admin scope onto the canonical module list", () 
   assert.equal(filters.offset, 20);
 });
 
+test("parseAuditLogFilters maps system scope onto system and auth modules", () => {
+  const filters = parseAuditLogFilters(new URLSearchParams("scope=system"));
+  assert.equal(filters.module, undefined);
+  assert.deepEqual(filters.modules, ["system", "auth"]);
+});
+
+test("parseAuditLogFilters maps ai scope onto the ai module", () => {
+  const filters = parseAuditLogFilters(new URLSearchParams("scope=ai"));
+  assert.equal(filters.module, "ai");
+  assert.equal(filters.modules, undefined);
+});
+
 test("parseAuditLogFilters prefers an explicit module over scope", () => {
   const filters = parseAuditLogFilters(new URLSearchParams("module=orders&scope=admin&q=lock"));
   assert.equal(filters.module, "orders");

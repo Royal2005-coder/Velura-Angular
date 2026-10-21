@@ -46,4 +46,17 @@ describe('AuthService', () => {
     expect(auth.session()).toBeNull();
     expect(guestSessionId()).not.toBe(previousGuestId);
   });
+
+  it('restores a session from sessionStorage and the JWT subject', () => {
+    const payload = btoa(JSON.stringify({ sub: 'member-session', email: 'session@example.com' }))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+    sessionStorage.setItem('velura_token', `header.${payload}.signature`);
+    const auth = TestBed.inject(AuthService);
+
+    expect(auth.session()?.userId).toBe('member-session');
+    expect(auth.session()?.email).toBe('session@example.com');
+    expect(auth.isLoggedIn()).toBe(true);
+  });
 });

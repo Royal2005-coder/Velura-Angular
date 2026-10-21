@@ -1,0 +1,72 @@
+global:
+  scrape_interval: 30s
+scrape_configs:
+  # Use the API proxy so kubelet certificates need no insecure TLS bypass.
+  - job_name: kubernetes-nodes
+    scheme: https
+    tls_config:
+      ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+    bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+    kubernetes_sd_configs:
+      - role: node
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_node_name]
+        target_label: node
+      - target_label: __address__
+        replacement: kubernetes.default.svc:443
+      - source_labels: [__meta_kubernetes_node_name]
+        target_label: __metrics_path__
+        replacement: /api/v1/nodes/${1}/proxy/metrics
+  - job_name: kubernetes-cadvisor
+    scheme: https
+    tls_config:
+      ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+    bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+    kubernetes_sd_configs:
+      - role: node
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_node_name]
+        target_label: node
+      - target_label: __address__
+        replacement: kubernetes.default.svc:443
+      - source_labels: [__meta_kubernetes_node_name]
+        target_label: __metrics_path__
+        replacement: /api/v1/nodes/${1}/proxy/metrics/cadvisor
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        action: keep
+        regex: 'machine_(cpu_cores|memory_bytes)|container_(cpu_usage_seconds_total|cpu_cfs_periods_total|cpu_cfs_throttled_periods_total|memory_working_set_bytes|oom_events_total|start_time_seconds|spec_memory_limit_bytes|fs_usage_bytes|fs_limit_bytes|network_receive_bytes_total|network_transmit_bytes_total)'
+      - action: labeldrop
+        regex: 'container_label_.*'
+  - job_name: velura-http
+    bearer_token_file: /etc/velura-metrics-key/metrics-token
+    static_configs:
+      - targets: [velura-api.velura.svc:3000]
+  - job_name: litellm
+    # Scrape the mounted ASGI route directly instead of relying on its slash redirect.
+    metrics_path: /metrics/
+    bearer_token_file: /etc/metrics-key/master-key
+    static_configs:
+      - targets: [litellm:4000]
+  - job_name: keycloak
+    # Keycloak 26 exposes metrics on its management interface; 24 needs a live-only 8080 adoption patch.
+    static_configs:
+      - targets: [keycloak.auth.svc:9000]
+  - job_name: victoriametrics
+    static_configs:
+      - targets: [localhost:8428]
+  - job_name: vmalert
+    static_configs:
+      - targets: [vmalert:8880]
+  - job_name: alertmanager
+    static_configs:
+      - targets: [alertmanager:9093]
+  - job_name: loki
+    static_configs:
+      - targets: [loki:3100]
+  - job_name: alloy
+    static_configs:
+      - targets: [alloy:12345]
+  - job_name: dcgm-exporter
+    static_configs:
+      - targets: [dcgm-exporter:9400]

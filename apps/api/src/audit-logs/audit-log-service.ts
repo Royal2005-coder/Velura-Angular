@@ -62,7 +62,8 @@ function parseListFilters(searchParams: URLSearchParams): AuditLogListFilters {
   if (!resolvedModule && scope === "admin") {
     modules = ADMIN_MODULES;
   } else if (!resolvedModule && scope === "system") {
-    resolvedModule = "system";
+    // Sign-in/out events are system events for the admin audit page.
+    modules = ["system", "auth"];
   } else if (!resolvedModule && scope === "ai") {
     resolvedModule = "ai";
   }

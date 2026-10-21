@@ -5,6 +5,7 @@ import { asJsonObject, asNumber, asString, type JsonObject } from "../types.js";
 import { createNotification } from "../user/notifications.js";
 import { RETURN_SELECT, TICKET_SELECT } from "./return-constants.js";
 import { classifyReturnPayment, refundFlowFor, refundReceiverStatus, type ReturnPaymentKind } from "./return-refund-receiver.js";
+import { writeAuditLog } from "../audit.js";
 
 /**
  * Filters for listing return / exchange records.
@@ -317,7 +318,7 @@ export function createReturnRepository() {
 
         const updatedReturn = asJsonObject(updatedRows[0]);
 
-        await insertRow("audit_log", {
+        await writeAuditLog({
           actor_id: actorId,
           actor_role: "admin_operator_cskh_dt",
           action: "update",
@@ -631,7 +632,7 @@ export function createReturnRepository() {
           `/account/orders/${asString(current.order_id)}`
         );
       }
-      await insertRow("audit_log", {
+      await writeAuditLog({
         actor_id: actorId,
         actor_role: actorRole,
         action: "approve",
@@ -682,7 +683,7 @@ export function createReturnRepository() {
       }
 
       const updated = asJsonObject(rows[0]);
-      await insertRow("audit_log", {
+      await writeAuditLog({
         actor_id: actorId,
         actor_role: actorRole,
         action: "approve",
@@ -738,7 +739,7 @@ export function createReturnRepository() {
       }
 
       const updated = asJsonObject(rows[0]);
-      await insertRow("audit_log", {
+      await writeAuditLog({
         actor_id: actorId,
         actor_role: actorRole,
         action: "reject",
@@ -828,7 +829,7 @@ export function createReturnRepository() {
         : "update";
 
       const updated = asJsonObject(rows[0]);
-      await insertRow("audit_log", {
+      await writeAuditLog({
         actor_id: actorId,
         actor_role: actorRole,
         action: auditAction,
@@ -919,7 +920,7 @@ export function createReturnRepository() {
         updated_at: stamp
       });
       if (!rows.length) throw new HttpError(409, "VERSION_CONFLICT", "Return record has been modified by another user");
-      await insertRow("audit_log", {
+      await writeAuditLog({
         actor_id: actorId,
         actor_role: actorRole,
         action: "update",

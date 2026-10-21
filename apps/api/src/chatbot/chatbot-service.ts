@@ -1,7 +1,8 @@
 import { verifyJwt } from "../auth-helper.js";
 import { analyzeImageWithGemini } from "../gemini-client.js";
 import { HttpError } from "../http.js";
-import { asJsonObject, asNumber, asString, isJsonObject, type AuthContext, type JsonObject } from "../types.js";
+import { writeAuditLog } from "../audit.js";
+import { asJsonObject, asNumber, asString, errorMessage, isJsonObject, type AuthContext, type JsonObject } from "../types.js";
 import { CHAT_SUPPORT_ROLES, DEFAULT_ASSISTANT_GREETING } from "./chatbot-constants.js";
 import type { ChatbotRepository } from "./chatbot-repository.js";
 import type { ChatActor, ChatAnalysis, ChatModel, ChatSource } from "./chatbot-types.js";
@@ -363,7 +364,17 @@ export function createChatbotService({ repository, model = createLLMService(), i
     async moderatedOriginal(context, sessionId, messageId) {
       requireSupportAdmin(context); requireUuid(sessionId, "sessionId"); requireUuid(messageId, "messageId");
       if (context.roleCode !== "super_admin") throw new HttpError(403, "SUPERVISOR_REQUIRED", "Supervisor access required");
-      return repository.getModeratedOriginal(sessionId, messageId, context.profile!.user_id);
+      const original = await repository.getModeratedOriginal(sessionId, messageId, context.profile!.user_id);
+      // The SQL RPC already writes the durable staff-review row; mirror the access into the general audit page.
+      await writeAuditLog({
+        actor_id: context.profile!.user_id,
+        actor_role: context.roleCode,
+        action: "view_moderated_original",
+        module: "ai",
+        target_id: messageId,
+        new_value: { session_id: sessionId }
+      }).catch((error) => console.error("[audit] ai write failed", errorMessage(error)));
+      return original;
     },
     async approvePolicy(context, policyId, body) {
       requireSupportAdmin(context); requireUuid(policyId, "policyId");

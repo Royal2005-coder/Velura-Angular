@@ -22,9 +22,21 @@ resources:
   - networking/cloudflared.yaml
   - networking/oauth2-proxy.yaml
 
-# A config change must change the pod template so Flux rolls the gateway automatically.
+# Runtime config must be generated so a content change changes the referenced ConfigMap name and rolls the consumer.
 configMapGenerator:
   - name: litellm-config
     namespace: observability
     files:
       - config.yaml=observability/litellm-config.yaml
+  - name: victoriametrics-scrape-config
+    namespace: observability
+    files:
+      - scrape.yaml=observability/config/victoriametrics-scrape.yaml
+  - name: velura-alert-rules
+    namespace: observability
+    files:
+      - rules.yaml=observability/config/alert-rules.yaml
+  - name: alloy-config
+    namespace: observability
+    files:
+      - config.alloy=observability/config/alloy-config.alloy

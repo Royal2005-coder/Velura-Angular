@@ -324,11 +324,26 @@ jobs:
         run: |
           set -euo pipefail
           gh auth setup-git
+          merge_when_required_green() {
+            local target="$1"
+            local attempt
+            for attempt in $(seq 1 20); do
+              gh pr checks "$target" --required --watch --interval 30 || true
+              if gh pr merge "$target" --merge; then
+                return 0
+              fi
+              sleep 30
+            done
+            return 1
+          }
           if [ "$ACTION" = sync ]; then
             main_sha=$(git rev-parse origin/main)
             branch="feature/KAN-32-sync-main-${main_sha:0:12}-${GITHUB_SHA:0:12}"
             existing=$(gh pr list --base develop --head "$branch" --state open --json number --jq '.[0].number // empty')
-            if [ -n "$existing" ]; then gh pr merge "$existing" --auto --merge; exit 0; fi
+            if [ -n "$existing" ]; then
+              merge_when_required_green "$existing"
+              exit 0
+            fi
             git switch -c "$branch"
             git config user.name 'velura-release[bot]'
             git config user.email 'velura-release[bot]@users.noreply.github.com'
@@ -345,7 +360,8 @@ jobs:
           cc @Royal2005-coder @trandiemquynhqw-maker @uyenntd23406-svg')
             fi
           fi
-          gh pr merge "$pr" --auto --merge
+          # The job's own check is not required; retry because a new PR may not have registered checks yet.
+          merge_when_required_green "$pr"
       - name: Revoke short-lived App installation token
         if: ${{ always() && steps.app.outputs.token != '' }}
         env:

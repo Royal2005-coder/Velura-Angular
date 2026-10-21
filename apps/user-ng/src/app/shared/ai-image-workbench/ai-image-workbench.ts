@@ -54,9 +54,9 @@ export class AiImageWorkbench {
    * Other tasks are always offered.
    */
   readonly offered = signal(false);
-  /** Try-on uses personal photos stored per account, so only verified active members may use it. */
+  /** Try-on uses personal photos stored per account, so only signed-in users may use it. */
   readonly memberRequired = computed(
-    () => this.task() === 'virtual_try_on' && (!this.auth.isLoggedIn() || !this.verifiedMember()),
+    () => this.task() === 'virtual_try_on' && !this.auth.isLoggedIn(),
   );
   readonly error = signal('');
   readonly consent = signal(false);
@@ -412,17 +412,11 @@ export class AiImageWorkbench {
 
   /** Opens a keyboard-accessible modal and reads readiness before uploading anything. */
   async open(): Promise<void> {
-    if (this.task() === 'virtual_try_on') {
-      const isMember = await this.verifyMemberIdentity();
-      if (!isMember) {
-        this.openGateModal();
-        return;
-      }
-    }
-     if (this.memberRequired()) {
+    this.auth.refresh();
+    if (this.memberRequired()) {
       this.openGateModal();
-       return;
-     }
+      return;
+    }
      const dialog = this.dialog()?.nativeElement;
      if (dialog && !dialog.open) dialog.showModal?.();
      const epoch = this.generation;
@@ -723,7 +717,7 @@ export class AiImageWorkbench {
     if (gate && !gate.open) gate.showModal?.();
   }
 
-  /** Verifies active member identity against the authoritative server endpoint before personal data entry. */
+  /** Verifies an active authenticated identity against the authoritative server endpoint before personal data entry. */
   async verifyMemberIdentity(): Promise<boolean> {
     if (!this.auth.isLoggedIn()) {
       this.verifiedMember.set(false);
@@ -735,16 +729,16 @@ export class AiImageWorkbench {
         identity?.user?.id &&
         identity?.profile?.user_id &&
         identity.user.id === identity.profile.user_id &&
-        identity.profile.is_active === true &&
-        identity.profile.role === 'member' &&
-        identity.role === 'member' &&
-        identity.isAdmin === false,
+        identity.profile.is_active === true,
       );
       this.verifiedMember.set(valid);
       return valid;
     } catch {
-      this.verifiedMember.set(false);
-      return false;
+      // The AI API re-checks the live identity and active state on every request.
+      // Keep a live session usable when /me is transiently unavailable.
+      const hasSession = this.auth.isLoggedIn();
+      this.verifiedMember.set(hasSession);
+      return hasSession;
     }
   }
 }

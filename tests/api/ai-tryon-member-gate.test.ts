@@ -39,8 +39,21 @@ test("virtual try-on and personal-photo checks require a member; visual search a
   assert.equal(requiresMember({ task: "product_image_enhance" }), false);
 });
 
-test("requireAiMember accepts verified active member and rejects guest, foreign role, inactive, and mismatched identity", () => {
+test("requireAiMember accepts active authenticated identities and rejects guest, inactive, and mismatched identity", () => {
   assert.doesNotThrow(() => requireAiMember(VALID_MEMBER_CONTEXT));
+  assert.doesNotThrow(() =>
+    requireAiMember({
+      ...VALID_MEMBER_CONTEXT,
+      isAdmin: true,
+      roleCode: "super_admin",
+    }),
+  );
+  assert.doesNotThrow(() =>
+    requireAiMember({
+      ...VALID_MEMBER_CONTEXT,
+      profile: { ...VALID_MEMBER_CONTEXT.profile!, role: "admin" },
+    }),
+  );
 
   assert.throws(
     () => requireAiMember(GUEST_CONTEXT),
@@ -69,17 +82,7 @@ test("requireAiMember accepts verified active member and rejects guest, foreign 
     () =>
       requireAiMember({
         ...VALID_MEMBER_CONTEXT,
-        isAdmin: true,
-        roleCode: "super_admin",
-      }),
-    (err: unknown) => err instanceof HttpError && err.status === 401 && err.code === "MEMBER_REQUIRED",
-  );
-
-  assert.throws(
-    () =>
-      requireAiMember({
-        ...VALID_MEMBER_CONTEXT,
-        profile: { ...VALID_MEMBER_CONTEXT.profile!, role: "admin" },
+        profile: null,
       }),
     (err: unknown) => err instanceof HttpError && err.status === 401 && err.code === "MEMBER_REQUIRED",
   );

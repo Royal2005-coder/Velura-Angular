@@ -2,7 +2,8 @@
 --extra-index-url https://download.pytorch.org/whl/cu124
 torch==2.6.0+cu124
 torchvision==0.21.0+cu124
-Pillow==12.3.0
+# Pillow 13.0.0 and certifi 2026.10.19 are the first releases fixing the 2026 HIGH/CRITICAL publisher-scan advisories.
+Pillow==13.0.0
 numpy==1.26.4
 opencv-python-headless==4.11.0.86
 onnxruntime==1.20.1
@@ -57,7 +58,7 @@ PyYAML==6.0.2
 packaging==24.2
 requests==2.32.3
 urllib3==2.8.0
-certifi==2025.4.26
+certifi==2026.10.19
 charset-normalizer==3.4.2
 coloredlogs==15.0.1
 humanfriendly==10.0

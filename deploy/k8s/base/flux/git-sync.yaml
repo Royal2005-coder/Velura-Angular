@@ -72,3 +72,27 @@ spec:
   deletionPolicy: Orphan
   wait: true
   timeout: 5m
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: velura-ai-worker
+  namespace: flux-system
+spec:
+  interval: 2m
+  sourceRef:
+    kind: GitRepository
+    name: velura-repo
+  path: ./deploy/k8s/optional/ai-worker
+  decryption:
+    provider: sops
+    secretRef:
+      name: sops-age
+  dependsOn:
+    - name: velura-infra
+  # Optional GPU worker remains a separate owner-approved rollout, now GitOps-managed.
+  suspend: false
+  prune: true
+  deletionPolicy: Orphan
+  wait: true
+  timeout: 10m

@@ -3,6 +3,7 @@ import { HttpError } from "../http.js";
 import { callRpc, insertRow, selectOne, selectRows } from "../supabase.js";
 import { asJsonObject, asString, isJsonObject, type JsonObject } from "../types.js";
 import { ACCOUNT_SELECT } from "./account-constants.js";
+import { writeAuditLog } from "../audit.js";
 
 /**
  * List filters for `users` account search.
@@ -200,15 +201,15 @@ export function createAccountRepository(): AccountRepository {
           is_active: true,
           is_verified: true
         }));
-        await insertRow("audit_log", {
+        await writeAuditLog({
           actor_id: actorId,
           actor_role: actorRole,
           action: "create",
           module: "accounts",
-          target_id: created.user_id,
+          target_id: asString(created.user_id) || null,
           old_value: null,
           new_value: { email: created.email, phone: created.phone, role: created.role, admin_role: created.admin_role },
-          ip_address: input.ipAddress || "127.0.0.1",
+          ip_address: asString(input.ipAddress) || "127.0.0.1",
           timestamp: new Date().toISOString()
         });
         const { password_hash: _passwordHash, otp_code: _otpCode, otp_expires_at: _otpExpiresAt, ...safeAccount } = created;

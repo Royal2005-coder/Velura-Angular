@@ -1,52 +1,44 @@
 import { insertRow } from "./supabase.js";
-import { errorMessage, type AuthContext, type JsonObject } from "./types.js";
+import { recordAuditWrite } from "./audit-metrics.js";
 
 /**
- * Fields written to `audit_logs` by admin actions.
+ * Canonical columns accepted by public.audit_log.
+ *
+ * The API writes audits with the service role; callers decide whether a failure
+ * is best-effort (sign-out) or part of the business operation (admin mutations).
  */
-export interface AuditLogWriteEntry {
-  module: unknown;
-  action: unknown;
-  targetTable?: unknown;
-  targetId?: unknown;
-  targetCode?: unknown;
-  result?: unknown;
-  severity?: unknown;
-  summary?: unknown;
-  beforeData?: unknown;
-  afterData?: unknown;
-  metadata?: unknown;
-  ipAddress?: unknown;
+export interface AuditLogRow {
+  actor_id?: string | null;
+  actor_role?: string | null;
+  action: string;
+  module: string;
+  target_id?: string | null;
+  old_value?: unknown;
+  new_value?: unknown;
+  ip_address?: string | null;
+  timestamp?: string;
 }
 
 /**
- * Best-effort insert of one audit row. Failures are swallowed outside production.
+ * Inserts one canonical audit row and records its result in the metrics registry.
+ * Throws on failure so each caller can preserve its own transaction semantics.
  */
-export async function writeAuditLog(context: AuthContext, entry: AuditLogWriteEntry): Promise<void> {
-  const actor: JsonObject = context.profile || {};
-  const payload = {
-    actor_profile_id: actor.id ? actor.id : null,
-    actor_name: (typeof actor.full_name === "string" && actor.full_name) || context.authUser?.email || "system",
-    actor_role: context.roleCode || "system",
-    module: entry.module,
-    action: entry.action,
-    target_table: entry.targetTable ? entry.targetTable : null,
-    target_id: entry.targetId ? entry.targetId : null,
-    target_code: entry.targetCode ? entry.targetCode : null,
-    result: entry.result ? entry.result : "success",
-    severity: entry.severity ? entry.severity : "normal",
-    summary: entry.summary ? entry.summary : "",
-    before_data: entry.beforeData ? entry.beforeData : null,
-    after_data: entry.afterData ? entry.afterData : null,
-    metadata: entry.metadata ? entry.metadata : null,
-    ip_address: entry.ipAddress ? entry.ipAddress : null
-  };
-
+export async function writeAuditLog(row: AuditLogRow): Promise<void> {
   try {
-    await insertRow("audit_logs", payload);
+    await insertRow("audit_log", {
+      actor_id: row.actor_id ?? null,
+      actor_role: row.actor_role ?? "system",
+      action: row.action,
+      module: row.module,
+      target_id: row.target_id ?? null,
+      old_value: row.old_value ?? null,
+      new_value: row.new_value ?? null,
+      ip_address: row.ip_address ?? null,
+      timestamp: row.timestamp ?? new Date().toISOString()
+    });
+    recordAuditWrite(row.module, "success");
   } catch (error) {
-    if (process.env.NODE_ENV !== "production") {
-      console.warn("[audit] failed to write audit log", errorMessage(error));
-    }
+    recordAuditWrite(row.module, "failure");
+    throw error;
   }
 }

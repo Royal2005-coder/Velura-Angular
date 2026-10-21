@@ -56,6 +56,7 @@ const ROLE_LABELS: Readonly<Record<string, string>> = {
   admin_operator_cskh_dt: "CSKH / Đổi trả",
   admin_viewer: "Chỉ xem",
   member: "Khách hàng",
+  anonymous: "Ẩn danh",
   system: "Hệ thống"
 };
 
@@ -74,6 +75,11 @@ const ACTION_LABELS: Readonly<Record<string, string>> = {
   role: "Đổi vai trò",
   login: "Đăng nhập",
   logout: "Đăng xuất",
+  signin: "Đăng nhập",
+  signout: "Đăng xuất",
+  signin_failed: "Đăng nhập thất bại",
+  signin_blocked: "Đăng nhập bị chặn",
+  view_moderated_original: "Xem nội dung gốc",
   refund: "Hoàn tiền",
   exchange: "Đổi hàng"
 };
@@ -162,7 +168,9 @@ const PRICING_TARGETS: Readonly<Record<string, AuditTargetLookup>> = {
 /** Bộ tra đầy đủ cho trang nhật ký tổng hợp. */
 export const ALL_AUDIT_TARGETS: Readonly<Record<string, AuditTargetLookup>> = {
   ...AUDIT_TARGETS,
-  ...PRICING_TARGETS
+  ...PRICING_TARGETS,
+  // Auth rows target a user, so reuse the account lookup.
+  auth: AUDIT_TARGETS.accounts
 };
 
 /**

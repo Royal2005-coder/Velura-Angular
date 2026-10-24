@@ -36,6 +36,7 @@ jobs:
           set -euo pipefail
           test -f apps/api/src/server.ts
           test -f apps/admin-ng/package.json
+          test -f apps/admin-erp-ng/package.json
           test -f apps/user-ng/package.json
           if printf '%s\n' "$MESSAGE" "$TITLE" | grep -qiE '\[skip ci\]|\[ci skip\]'; then exit 1; fi
           if grep -R --exclude-dir=.git --exclude-dir=node_modules --include='*.pem' --include='*.key' -n 'BEGIN .*PRIVATE KEY' .; then exit 1; fi
@@ -140,7 +141,7 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with: {node-version: '22', cache: npm}
       - run: npm ci
-      - run: npm run build:api && npm run build:user && npm run build:admin
+      - run: npm run build:api && npm run build:user && npm run build:admin && npm run build:admin-erp
   manifests:
     runs-on: ubuntu-latest
     needs: validate
@@ -381,7 +382,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [api, storefront, admin, ai-worker]
+        app: [api, storefront, admin, admin-erp, ai-worker]
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with: {persist-credentials: false}

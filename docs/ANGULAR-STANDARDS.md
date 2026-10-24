@@ -47,14 +47,15 @@ shared/               presentational inputs/outputs
 theme/                tokens
 ```
 
-## Two apps
+## Apps
 
 | App | Theme folder | Model service |
 |---|---|---|
 | `apps/user-ng` | `src/app/theme` | `core/services/api.service.ts` |
 | `apps/admin-ng` | `src/app/theme` | `core/admin-api.service.ts` |
+| `apps/admin-erp-ng` | `src/app/theme` | `core/admin-erp-api.service.ts` |
 
-Local ports stay **4002** (user), **4001** (admin, host `localhost` for Google SSO), **8787** (API).
+Local ports stay **4002** (user), **4001** (admin, host `localhost` for Google SSO), **4003** (admin ERP), **8787** (API).
 
 ## Unit tests (ViewModel)
 

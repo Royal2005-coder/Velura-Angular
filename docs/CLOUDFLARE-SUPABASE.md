@@ -42,6 +42,32 @@ credential must stay in the deployment secret store, never Git or Terraform inpu
 TLS, Access policies, Supabase and Google OAuth are not silently adopted by this
 DNS change.
 
+## Publishing a hostname on the existing tunnel
+
+DNS and ingress are separate owners. A record such as the `admin-erp.royalai.dev`
+preview CNAME makes the name resolve; it does not route traffic. cloudflared reads
+`networking/cloudflare-tunnel-config`, the SOPS-encrypted
+`deploy/k8s/base/secrets/networking-cloudflare-tunnel-config.enc.yaml`, and it reads
+that file only at process start. `cloudflared-ingress-contract` in the same namespace is a
+reviewed contract, not the running config, and cloudflared never substitutes its notation.
+
+A hostname that resolves but is absent from that Secret answers **404 from the Cloudflare
+edge** while every existing hostname keeps working. That is the expected state of the ERP
+preview until the owner completes these two steps, which need the age key and cluster
+context that CI deliberately does not hold:
+
+```bash
+sops deploy/k8s/base/secrets/networking-cloudflare-tunnel-config.enc.yaml
+# add the ingress entries already reviewed in cloudflared-ingress-contract
+kubectl --context velura-k3s -n networking rollout restart deployment/cloudflared
+kubectl --context velura-k3s -n networking rollout status deployment/cloudflared
+```
+
+Never rewrite the Secret with `kubectl` alone: the next Flux apply of the encrypted file
+reverts it, leaving a hostname that works today and 404s after an unrelated release. Until
+the route exists, `verify-production` must not gate on the preview URL, because a green
+release would otherwise depend on an edge route that no pipeline owns.
+
 ## Terraform adoption: import before apply
 
 Toolchain: Terraform **1.13.4** for CI/Atlantis; the root supports Terraform

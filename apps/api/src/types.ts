@@ -71,6 +71,8 @@ export interface AuthContext {
   isAdmin: boolean;
   allowedPages: string[];
   allowedModules: string[];
+  /** Action-level permissions derived from the canonical role matrix. */
+  capabilities?: Record<string, string[]>;
   accessToken: string;
 }
 

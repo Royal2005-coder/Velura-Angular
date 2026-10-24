@@ -28,13 +28,96 @@ export const roleModules: Record<string, string[]> = {
   guest: []
 };
 
+export type AdminAction = "read" | "create" | "update" | "delete" | "approve";
+export type AdminCapabilities = Record<string, AdminAction[]>;
+
+const ALL_ACTIONS: AdminAction[] = ["read", "create", "update", "delete", "approve"];
+
 /**
- * Canonical page list + module list for one role code.
+ * Write actions granted per module. Read is implied by `roleModules`.
+ * Keep this beside the role matrix; the frontend must not re-declare it.
  */
-export function accessForRole(roleCode: string): { allowedPages: string[]; allowedModules: string[] } {
+const MODULE_WRITE_ACTIONS: Record<string, AdminAction[]> = {
+  products: ["create", "update"],
+  categories: ["create", "update"],
+  inventory: ["create", "update"],
+  orders: ["update"],
+  payments: ["update"],
+  shipments: ["update"],
+  pricing: ["create", "update"],
+  promotions: ["create", "update"],
+  vouchers: ["create", "update"],
+  bundles: ["create", "update"],
+  budgets: ["create", "update"],
+  reviews: ["update"],
+  support_tickets: ["update"],
+  returns: ["update"],
+  accounts: ["create", "update", "delete", "approve"],
+  audit_logs: []
+};
+
+const MODULE_WRITE_ROLES: Record<string, string[]> = {
+  products: ["super_admin", "admin_operator_sanpham"],
+  categories: ["super_admin", "admin_operator_sanpham"],
+  inventory: ["super_admin", "admin_operator_sanpham"],
+  orders: ["super_admin", "admin_operator_donhang"],
+  payments: ["super_admin", "admin_operator_donhang"],
+  shipments: ["super_admin", "admin_operator_donhang"],
+  pricing: ["super_admin", "admin_operator_gia_km"],
+  promotions: ["super_admin", "admin_operator_gia_km"],
+  vouchers: ["super_admin", "admin_operator_gia_km"],
+  bundles: ["super_admin", "admin_operator_gia_km"],
+  budgets: ["super_admin", "admin_operator_gia_km"],
+  reviews: ["super_admin", "admin_operator_danhgia_review"],
+  support_tickets: ["super_admin", "admin_operator_danhgia_review", "admin_operator_cskh_dt"],
+  returns: ["super_admin", "admin_operator_cskh_dt"],
+  accounts: ["super_admin"],
+  audit_logs: []
+};
+
+/**
+ * Derives action-level capabilities from the canonical role matrix.
+ * Super admins receive the wildcard; every other role can read its modules.
+ */
+export function capabilitiesForRole(roleCode: string): AdminCapabilities {
+  if (roleCode === "super_admin") {
+    return { "*": [...ALL_ACTIONS] };
+  }
+  const modules = roleModules[roleCode] || roleModules.member;
+  const capabilities: AdminCapabilities = {};
+  for (const moduleName of modules) {
+    const actions: AdminAction[] = ["read"];
+    if ((MODULE_WRITE_ROLES[moduleName] || []).includes(roleCode)) {
+      for (const action of MODULE_WRITE_ACTIONS[moduleName] || ["update" as AdminAction]) {
+        if (!actions.includes(action)) actions.push(action);
+      }
+    }
+    capabilities[moduleName] = actions;
+  }
+  return capabilities;
+}
+
+/**
+ * Whether a context may perform one action on one module.
+ */
+export function hasCapability(context: AuthContext, moduleName: string, action: AdminAction): boolean {
+  const capabilities = context.capabilities || capabilitiesForRole(context.roleCode);
+  const granted = capabilities["*"] || capabilities[moduleName] || [];
+  return granted.includes(action);
+}
+
+/**
+ * Canonical page list + module list + action capabilities for one role code.
+ */
+export function accessForRole(roleCode: string): {
+  allowedPages: string[];
+  allowedModules: string[];
+  capabilities: AdminCapabilities;
+} {
   return {
     allowedPages: rolePages[roleCode] || rolePages.member,
-    allowedModules: roleModules[roleCode] || roleModules.member
+    allowedModules: roleModules[roleCode] || roleModules.member,
+    capabilities: capabilitiesForRole(roleCode)
   };
 }
 
@@ -77,6 +160,7 @@ export async function buildAuthContext(req: HttpRequest): Promise<AuthContext> {
       isAdmin: profile.role === "admin",
       allowedPages: access.allowedPages,
       allowedModules: access.allowedModules,
+      capabilities: access.capabilities,
       accessToken: token
     };
   }
@@ -99,6 +183,7 @@ export async function buildAuthContext(req: HttpRequest): Promise<AuthContext> {
       isAdmin: false,
       allowedPages: rolePages.member,
       allowedModules: roleModules.member,
+      capabilities: capabilitiesForRole("member"),
       accessToken: token
     };
   }
@@ -113,6 +198,7 @@ export async function buildAuthContext(req: HttpRequest): Promise<AuthContext> {
     isAdmin: profile.role === "admin",
     allowedPages: access.allowedPages,
     allowedModules: access.allowedModules,
+    capabilities: access.capabilities,
     accessToken: token
   };
 }
@@ -141,15 +227,17 @@ export function requireAdmin(context: AuthContext): void {
  */
 export function requirePermission(context: AuthContext, moduleName: string, action = "read"): void {
   requireAdmin(context);
+  const normalized = action === "write" ? "update" : action;
   const modules = roleModules[context.roleCode] || [];
   const canAccessModule = modules.includes("*") || modules.includes(moduleName);
-  const readOnlyBlocked = context.roleCode === "admin_viewer" && action !== "read";
+  const allowedAction = (ALL_ACTIONS as string[]).includes(normalized) && hasCapability(context, moduleName, normalized as AdminAction);
+  const readOnlyBlocked = context.roleCode === "admin_viewer" && normalized !== "read";
 
-  if (!canAccessModule || readOnlyBlocked) {
+  if (!canAccessModule || !allowedAction || readOnlyBlocked) {
     throw new HttpError(403, "RBAC_DENIED", "This admin role cannot perform the requested action", {
       role: context.roleCode,
       module: moduleName,
-      action
+      action: normalized
     });
   }
 }
@@ -163,6 +251,7 @@ function buildGuestContext(): AuthContext {
     isAdmin: false,
     allowedPages: rolePages.guest,
     allowedModules: roleModules.guest,
+    capabilities: capabilitiesForRole("guest"),
     accessToken: ""
   };
 }

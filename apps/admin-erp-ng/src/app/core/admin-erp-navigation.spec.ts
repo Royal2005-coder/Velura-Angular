@@ -31,12 +31,9 @@ describe('ERP admin navigation registry', () => {
   });
 
   it('marks shipped workspaces ready and the remaining workspaces planned', () => {
-    expect(ADMIN_ERP_NAV_ITEMS.dashboard.status).toBe('ready');
-    expect(ADMIN_ERP_NAV_ITEMS.logs.status).toBe('ready');
+    const ready = new Set(['dashboard', 'logs', 'accounts', 'reviews']);
     for (const item of Object.values(ADMIN_ERP_NAV_ITEMS)) {
-      if (item.key !== 'dashboard' && item.key !== 'logs') {
-        expect(item.status).toBe('planned');
-      }
+      expect(item.status).toBe(ready.has(item.key) ? 'ready' : 'planned');
     }
   });
 });

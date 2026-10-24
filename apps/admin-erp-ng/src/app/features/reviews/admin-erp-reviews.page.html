@@ -1,0 +1,238 @@
+<app-erp-page-header
+  eyebrow="Marketing"
+  title="Đánh giá khách hàng"
+  subtitle="Duyệt, ẩn và phản hồi đánh giá trên API hiện tại. AI chỉ gợi ý; người vận hành quyết định nội dung cuối."
+>
+  <div actions>
+    <button class="erp-btn erp-btn--sm" type="button" (click)="reload()" [disabled]="loading()">
+      <app-erp-icon name="refresh" [size]="'15'" />
+      {{ loading() ? 'Đang tải…' : 'Làm mới' }}
+    </button>
+  </div>
+</app-erp-page-header>
+
+<section class="reviews-kpis" aria-label="Tóm tắt đánh giá">
+  <app-erp-kpi-card label="Tổng phiếu" [value]="kpi(total())" hint="Theo bộ lọc đang áp" tone="accent" icon="star" [loading]="loading() && !hasLoadedOnce()" />
+  <app-erp-kpi-card label="Cần xử lý gấp" [value]="kpi(urgentCount())" hint="≤2 sao hoặc gắn cờ" tone="danger" icon="alert" [loading]="loading() && !hasLoadedOnce()" />
+  <app-erp-kpi-card label="Đã xử lý" [value]="kpi(processedCount())" hint="Đã duyệt hoặc đã ẩn" tone="success" icon="check" [loading]="loading() && !hasLoadedOnce()" />
+  <app-erp-kpi-card label="Đã ẩn" [value]="kpi(hiddenCount())" hint="Không hiển thị storefront" tone="warning" icon="lock" [loading]="loading() && !hasLoadedOnce()" />
+</section>
+
+<section class="erp-card reviews-panel" aria-labelledby="reviews-title">
+  <div class="reviews-tabs">
+    <div>
+      <span class="reviews-eyebrow">Moderation</span>
+      <h2 id="reviews-title">Hàng đợi đánh giá</h2>
+    </div>
+    <app-erp-tabs [tabs]="tabs()" [active]="tab()" (changed)="setTab($event)" />
+  </div>
+
+  @if (tab() !== 'logs') {
+    <app-erp-filter-bar [busy]="loading()" (apply)="applyFilters()" (reset)="resetFilters()">
+      <label class="erp-field reviews-search">
+        <span>Tìm kiếm</span>
+        <input class="erp-input" type="search" [value]="query()" (input)="onQueryInput($event)" placeholder="Nội dung, sản phẩm hoặc khách hàng..." />
+      </label>
+      <label class="erp-field">
+        <span>Số sao</span>
+        <select class="erp-select" [value]="ratingFilter()" (change)="onRatingFilter($event)">
+          <option value="">Tất cả</option>
+          <option value="5">5 sao</option>
+          <option value="4">4 sao</option>
+          <option value="3">3 sao</option>
+          <option value="2">2 sao</option>
+          <option value="1">1 sao</option>
+        </select>
+      </label>
+      <label class="erp-field">
+        <span>Trạng thái</span>
+        <select class="erp-select" [value]="statusFilter()" (change)="onStatusFilter($event)">
+          <option value="">Tất cả</option>
+          <option value="pending">Chờ duyệt</option>
+          <option value="approved">Đã duyệt</option>
+          <option value="rejected">Đã ẩn</option>
+        </select>
+      </label>
+    </app-erp-filter-bar>
+
+    <app-erp-data-table
+      caption="Danh sách đánh giá"
+      [columns]="reviewColumns"
+      [rows]="rows()"
+      [loading]="loading()"
+      [error]="loadError() || ''"
+      errorTitle="Không tải được đánh giá"
+      emptyTitle="Không có đánh giá phù hợp"
+      emptyMessage="Điều chỉnh bộ lọc hoặc chọn tab khác."
+      [clickable]="true"
+      (retry)="reload()"
+      (rowSelected)="openDetail($event)"
+    />
+    <app-erp-pagination [page]="page()" [pageCount]="pageCount()" [label]="rangeLabel()" (changed)="goPage($event)" />
+  } @else {
+    <app-erp-data-table
+      caption="Nhật ký đánh giá"
+      [columns]="logColumns"
+      [rows]="logs()"
+      [loading]="loading()"
+      emptyTitle="Chưa có nhật ký đánh giá"
+      emptyMessage="Audit xuất hiện sau thao tác duyệt, ẩn hoặc phản hồi."
+      [clickable]="true"
+      (rowSelected)="openLog($event)"
+    />
+    <app-erp-pagination [page]="logsPage()" [pageCount]="logPageCount()" [label]="logRangeLabel()" (changed)="goLogsPage($event)" />
+  }
+</section>
+
+<app-erp-drawer [open]="selected() !== null" title="Chi tiết đánh giá" size="lg" (closed)="closeOverlays()">
+  @if (selected(); as review) {
+    <div class="review-detail">
+      <div class="review-detail__head">
+        <div>
+          <span class="review-detail__product">{{ productName(review) }}</span>
+          <h3>{{ stars(review) }}</h3>
+          <p>{{ productSku(review) }} · {{ date(review.submitted_at) }}</p>
+        </div>
+        <app-erp-status-badge [label]="statusLabel(review.status)" [tone]="statusTone(review.status)" [dot]="true" />
+      </div>
+
+      <section class="review-detail__section">
+        <h4>Nội dung</h4>
+        <p>{{ commentOf(review) }}</p>
+        @if (selectedRestrictedWords().length) {
+          <p class="review-detail__warning">Từ nhạy cảm: {{ selectedRestrictedWords().join(', ') }}</p>
+        }
+      </section>
+
+      @if (review.images?.length) {
+        <section class="review-detail__section">
+          <h4>Ảnh khách gửi</h4>
+          <div class="review-images">
+            @for (image of review.images; track image) {
+              <button type="button" class="review-image" (click)="openLightbox(image)">
+                <img [src]="image" alt="Ảnh đánh giá" loading="lazy" />
+              </button>
+            }
+          </div>
+        </section>
+      }
+
+      @if (review.admin_reply) {
+        <section class="review-detail__section">
+          <h4>Phản hồi hiện tại</h4>
+          <p>{{ review.admin_reply }}</p>
+        </section>
+      }
+
+      <dl class="detail-grid">
+        <div><dt>Khách hàng</dt><dd>{{ review.user_id || '—' }}</dd></div>
+        <div><dt>Đơn hàng</dt><dd>{{ review.order_id || '—' }}</dd></div>
+        <div><dt>Mã đánh giá</dt><dd class="is-mono">{{ review.review_id }}</dd></div>
+        <div><dt>Phiên bản</dt><dd class="is-mono">{{ review.version ?? '—' }}</dd></div>
+      </dl>
+    </div>
+  }
+  <div footer>
+    @if (canMutate() && selected(); as review) {
+      @if (review.status !== 'approved') {
+        <button class="erp-btn erp-btn--sm" type="button" (click)="openAction('approve')">Duyệt</button>
+      }
+      @if (review.status !== 'rejected') {
+        <button class="erp-btn erp-btn--danger erp-btn--sm" type="button" (click)="openAction('hide')">Ẩn</button>
+      } @else {
+        <button class="erp-btn erp-btn--sm" type="button" (click)="openAction('unhide')">Mở ẩn</button>
+      }
+      <button class="erp-btn erp-btn--sm" type="button" (click)="openAction('reply')">Phản hồi</button>
+      <button class="erp-btn erp-btn--sm" type="button" (click)="openAction('escalate')">Tạo ticket</button>
+    }
+    <button class="erp-btn erp-btn--sm" type="button" (click)="closeOverlays()">Đóng</button>
+  </div>
+</app-erp-drawer>
+
+<app-erp-drawer [open]="selectedLog() !== null" title="Chi tiết nhật ký đánh giá" size="md" (closed)="closeOverlays()">
+  @if (selectedLog(); as log) {
+    <dl class="detail-grid">
+      <div><dt>Thời gian</dt><dd>{{ date(log.timestamp) }}</dd></div>
+      <div><dt>Người thao tác</dt><dd>{{ actor(log) }}</dd></div>
+      <div><dt>Hành động</dt><dd>{{ actionLabel(log) }}</dd></div>
+      <div><dt>Đối tượng</dt><dd>{{ target(log) }}</dd></div>
+    </dl>
+  }
+  <div footer><button class="erp-btn erp-btn--sm" type="button" (click)="closeOverlays()">Đóng</button></div>
+</app-erp-drawer>
+
+<app-erp-modal [open]="actionType() !== null" [title]="actionTitle()" size="md" (closed)="closeOverlays()">
+  @if (selected(); as review) {
+    <form class="review-form" (submit)="submitAction($event)">
+      <div class="review-form__summary">
+        <strong>{{ productName(review) }}</strong>
+        <span>{{ stars(review) }}</span>
+        <p>{{ commentOf(review) }}</p>
+      </div>
+
+      @if (detectedRestrictedWords().length) {
+        <p class="review-form__warning">Từ nhạy cảm / spam: {{ detectedRestrictedWords().join(', ') }}</p>
+      }
+      @if (sentiment(); as mood) {
+        <p class="review-form__mood">Cảm xúc ước lượng: {{ mood.label }}</p>
+      }
+
+      @if (actionType() === 'reply') {
+        <section class="review-form__ai">
+          <div class="review-form__ai-head">
+            <strong>Gợi ý phản hồi</strong>
+            @if (aiSource()) {
+              <span>{{ aiSource() }}</span>
+            }
+          </div>
+          @if (aiLoading()) {
+            <p class="erp-hint">Đang xin gợi ý…</p>
+          } @else if (aiError()) {
+            <p class="erp-error">{{ aiError() }}</p>
+          } @else if (aiSuggestions().length) {
+            <div class="review-form__suggestions">
+              @for (suggestion of aiSuggestions(); track $index) {
+                <button class="erp-btn erp-btn--sm" type="button" (click)="applyAiSuggestion(suggestion)">{{ suggestion }}</button>
+              }
+            </div>
+          } @else {
+            <p class="erp-hint">Chưa có gợi ý. Viết tay bên dưới.</p>
+          }
+        </section>
+
+        <label class="erp-field">
+          <span>Nội dung phản hồi</span>
+          <textarea class="erp-input" name="reply" rows="4" [value]="replyDraft()" (input)="onReplyInput($event)" required></textarea>
+        </label>
+      }
+
+      @if (actionType() === 'hide' || actionType() === 'escalate') {
+        <label class="erp-field">
+          <span>{{ actionType() === 'hide' ? 'Lý do ẩn đánh giá' : 'Lý do tạo ticket CSKH' }}</span>
+          <textarea class="erp-input" name="value" rows="4" required></textarea>
+        </label>
+      }
+
+      <label class="erp-field">
+        <span>Ghi chú nội bộ</span>
+        <textarea class="erp-input" name="actionNote" rows="2"></textarea>
+      </label>
+
+      @if (actionError()) {
+        <p class="erp-error" role="alert">{{ actionError() }}</p>
+      }
+
+      <div class="review-form__actions">
+        <button class="erp-btn" type="button" (click)="closeOverlays()">Hủy</button>
+        <button class="erp-btn erp-btn--primary" type="submit">Xác nhận</button>
+      </div>
+    </form>
+  }
+</app-erp-modal>
+
+<app-erp-modal [open]="lightboxImage() !== null" title="Ảnh đánh giá" size="lg" (closed)="closeLightbox()">
+  @if (lightboxImage(); as image) {
+    <img class="review-lightbox" [src]="image" alt="Ảnh đánh giá phóng to" />
+  }
+  <div footer><button class="erp-btn erp-btn--sm" type="button" (click)="closeLightbox()">Đóng</button></div>
+</app-erp-modal>

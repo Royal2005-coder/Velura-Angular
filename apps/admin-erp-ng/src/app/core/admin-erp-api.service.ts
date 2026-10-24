@@ -103,6 +103,104 @@ export interface AdminPriceHistoryRow {
   product?: { name?: string; sku?: string } | null;
 }
 
+export interface AdminOrderPayment {
+  payment_id?: string;
+  payment_status?: string;
+  payment_method?: string;
+  payment_provider?: string;
+  gateway_response_code?: string | null;
+  amount?: number;
+  refund_amount?: number | null;
+  refund_reason?: string | null;
+  refund_at?: string | null;
+  paid_at?: string | null;
+  has_discrepancy?: boolean;
+  created_at?: string;
+  version?: number;
+}
+
+export type AdminOrderActionField = 'call_result' | 'shortage' | 'shipment' | 'cancel_reason' | 'tracking';
+
+export interface AdminOrderAction {
+  code: string;
+  label: string;
+  to_status: string | null;
+  requires_note: boolean;
+  fields: AdminOrderActionField[];
+  destructive: boolean;
+}
+
+export interface AdminOrderEvent {
+  event_id?: string;
+  action?: string;
+  actor_type?: string;
+  actor_id?: string | null;
+  actor_role?: string | null;
+  from_status?: string | null;
+  to_status?: string | null;
+  result?: string | null;
+  note?: string | null;
+  payload?: Record<string, unknown> | null;
+  created_at?: string;
+}
+
+export interface AdminOrderRow {
+  order_id: string;
+  order_code?: string;
+  order_date?: string;
+  created_at?: string;
+  status?: string;
+  status_label?: string;
+  payment_method?: string;
+  payment_status?: string | null;
+  payment_status_label?: string | null;
+  shipping_name?: string;
+  shipping_phone?: string;
+  shipping_address?: string;
+  shipping_fee?: number;
+  subtotal?: number;
+  discount_amount?: number;
+  tracking_code?: string | null;
+  carrier?: string | null;
+  tracking_url?: string | null;
+  handed_over_at?: string | null;
+  shipment_voided_at?: string | null;
+  returned_to_stock_at?: string | null;
+  cancelled_reason?: string | null;
+  internal_note?: string | null;
+  total_amount?: number;
+  version?: number;
+  tags?: Array<{ code: string; label: string }>;
+  allowed_actions?: AdminOrderAction[];
+  can_simulate_carrier?: boolean;
+  payments?: AdminOrderPayment[];
+  items?: Array<{ product_name?: string; quantity?: number; unit_price?: number }>;
+  history?: Array<{ old_status?: string | null; new_status?: string; changed_at?: string; note?: string; trigger_type?: string }>;
+  events?: AdminOrderEvent[];
+  user_id?: string;
+  user?: {
+    user_id?: string;
+    email?: string | null;
+    phone?: string | null;
+    full_name?: string | null;
+    is_active?: boolean | null;
+    role?: string | null;
+  } | null;
+  is_guest?: boolean;
+  has_successful_call_confirm?: boolean;
+  requires_call_confirmation?: boolean;
+}
+
+export interface AdminOrderSummary {
+  by_status: Array<{ status: string; label: string; count: number }>;
+  attention: number;
+}
+
+export interface AdminOrderActionResult {
+  order: AdminOrderRow;
+  refund: { status: 'refunded' | 'requested' | 'failed' | 'skipped'; message?: string } | null;
+}
+
 export type AdminInsightRange = 'day' | 'week' | 'month';
 
 export interface AdminDashboardSummary {
@@ -389,6 +487,69 @@ export class AdminErpApiService {
     return this.http.get<AdminListPayload<AdminAuditRow>>(`${this.baseUrl}/api/v1/admin/pricing/audit-logs`, {
       params: this.params(params),
     });
+  }
+
+  /**
+   * Lists orders with server filters and paging.
+   */
+  listOrders(params: Record<string, string> = {}): Observable<AdminListPayload<AdminOrderRow>> {
+    return this.http.get<AdminListPayload<AdminOrderRow>>(`${this.baseUrl}/api/v1/admin/orders`, {
+      params: this.params(params),
+    });
+  }
+
+  /**
+   * Loads one order drawer payload with fresh allowed actions.
+   */
+  getOrder(orderId: string): Observable<AdminOrderRow> {
+    return this.http.get<AdminOrderRow>(`${this.baseUrl}/api/v1/admin/orders/${encodeURIComponent(orderId)}`);
+  }
+
+  /**
+   * Loads order counts by status and the attention count.
+   */
+  orderSummary(): Observable<AdminOrderSummary> {
+    return this.http.get<AdminOrderSummary>(`${this.baseUrl}/api/v1/admin/orders/summary`);
+  }
+
+  /**
+   * Performs a state-machine action on an order.
+   */
+  performOrderAction(orderId: string, action: string, body: Record<string, unknown>): Observable<AdminOrderActionResult> {
+    return this.http.post<AdminOrderActionResult>(
+      `${this.baseUrl}/api/v1/admin/orders/${encodeURIComponent(orderId)}/actions/${encodeURIComponent(action)}`,
+      body,
+    );
+  }
+
+  /**
+   * Resolves a payment manually with both optimistic versions.
+   */
+  resolvePayment(orderId: string, paymentId: string, body: Record<string, unknown>): Observable<unknown> {
+    return this.http.post(
+      `${this.baseUrl}/api/v1/admin/orders/${encodeURIComponent(orderId)}/payments/${encodeURIComponent(paymentId)}/resolve`,
+      body,
+    );
+  }
+
+  /**
+   * Simulates a carrier outcome for super-admin verification.
+   */
+  simulateCarrier(orderId: string, body: { outcome: string; note?: string }): Observable<AdminOrderRow> {
+    return this.http.post<AdminOrderRow>(
+      `${this.baseUrl}/api/v1/admin/orders/${encodeURIComponent(orderId)}/simulate-carrier`,
+      body,
+    );
+  }
+
+  /**
+   * Lists order audit rows.
+   */
+  orderAuditLogs(orderId: string, params: Record<string, string> = {}): Observable<AdminListPayload<AdminAuditRow>> {
+    return this.http.get<AdminListPayload<AdminAuditRow>>(
+      `${this.baseUrl}/api/v1/admin/orders/${encodeURIComponent(orderId)}/audit-logs`,
+      { params: this.params(params) },
+    );
   }
 
   private params(values: Record<string, string>): HttpParams {

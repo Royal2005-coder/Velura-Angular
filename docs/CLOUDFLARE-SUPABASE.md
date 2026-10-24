@@ -64,9 +64,10 @@ kubectl --context velura-k3s -n networking rollout status deployment/cloudflared
 ```
 
 Never rewrite the Secret with `kubectl` alone: the next Flux apply of the encrypted file
-reverts it, leaving a hostname that works today and 404s after an unrelated release. Until
-the route exists, `verify-production` must not gate on the preview URL, because a green
-release would otherwise depend on an edge route that no pipeline owns.
+reverts it, leaving a hostname that works today and 404s after an unrelated release. Once a
+hostname is routed and pinned to the same release as the other apps, `verify-production`
+gates on it, so a preview that silently stops serving fails the verification job instead of
+being mistaken for a healthy rollout.
 
 ## Terraform adoption: import before apply
 

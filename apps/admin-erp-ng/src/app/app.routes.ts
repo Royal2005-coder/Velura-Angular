@@ -95,7 +95,7 @@ export const routes: Routes = [
       },
       {
         path: 'logs',
-        loadComponent: () => import('./features/shared/coming-soon.page').then((m) => m.ComingSoonPage),
+        loadComponent: () => import('./features/logs/admin-erp-logs.page').then((m) => m.AdminErpLogsPage),
         canActivate: [adminErpAuthGuard],
         data: { page: 'logs', navKey: 'logs' },
       },

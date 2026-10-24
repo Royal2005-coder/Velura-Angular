@@ -1,0 +1,172 @@
+.logs-kpis {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.logs-panel {
+  overflow: hidden;
+}
+
+.logs-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--erp-line);
+}
+
+.logs-eyebrow {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--erp-accent-strong);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.logs-tabs h2 {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--erp-ink);
+}
+
+.logs-search {
+  flex: 1 1 300px;
+  min-width: 240px;
+}
+
+.logs-module {
+  flex: 0 1 200px;
+  min-width: 170px;
+}
+
+.logs-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--erp-danger-soft);
+  background: var(--erp-danger-soft);
+  color: var(--erp-danger);
+  font-size: 12px;
+}
+
+.logs-banner .erp-btn {
+  margin-left: auto;
+}
+
+.audit-detail {
+  display: grid;
+  gap: 18px;
+}
+
+.audit-detail__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--erp-line);
+}
+
+.audit-detail__module {
+  font-family: var(--erp-display);
+  font-size: 22px;
+  color: var(--erp-ink);
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 18px;
+  margin: 0;
+}
+
+.detail-grid div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.detail-grid dt {
+  color: var(--erp-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.detail-grid dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--erp-text);
+  font-size: 12.5px;
+}
+
+.detail-grid dd.is-mono {
+  font-variant-numeric: tabular-nums;
+}
+
+.audit-detail__section {
+  display: grid;
+  gap: 6px;
+  padding-top: 14px;
+  border-top: 1px solid var(--erp-line);
+}
+
+.audit-detail__section h3 {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--erp-text);
+}
+
+.audit-detail__section p {
+  color: var(--erp-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.audit-detail__section pre {
+  max-height: 260px;
+  margin: 0;
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid var(--erp-line);
+  border-radius: var(--erp-radius-sm);
+  background: var(--erp-surface-muted);
+  color: var(--erp-text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1240px) {
+  .logs-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .logs-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .logs-tabs {
+    align-items: flex-start;
+  }
+  .detail-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .logs-kpis {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

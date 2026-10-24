@@ -19,7 +19,10 @@ export interface AdminAuditRow {
   action_label?: string;
   target_id?: string;
   target_label?: string;
+  old_value?: unknown;
+  new_value?: unknown;
   change_summary?: string;
+  ip_address?: string;
   result?: string;
 }
 

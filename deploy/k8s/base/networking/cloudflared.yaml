@@ -40,6 +40,14 @@ data:
         service: http://velura-api.velura.svc:3000
       - hostname: admin.royalai.dev
         service: http://velura-admin.velura.svc:80
+      - hostname: admin-erp.royalai.dev
+        path: ^/(metrics|api/metrics)(/.*)?$
+        service: http_status:403
+      - hostname: admin-erp.royalai.dev
+        path: ^/api(/.*)?$
+        service: http://velura-api.velura.svc:3000
+      - hostname: admin-erp.royalai.dev
+        service: http://velura-admin-erp.velura.svc:80
       - hostname: staging.royalai.dev
         path: ^/(metrics|api/metrics)(/.*)?$
         service: http_status:403

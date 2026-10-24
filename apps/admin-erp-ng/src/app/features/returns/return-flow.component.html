@@ -1,0 +1,163 @@
+<app-erp-modal [open]="flow() !== null" [title]="title()" size="md" (closed)="dismiss()">
+  @if (record(); as row) {
+    <div class="flow-head">
+      <div>
+        <h3>{{ row.order_code || row.return_id }}</h3>
+        <p>
+          {{ row.customer_name || 'Khách ẩn danh' }} · {{ paymentLabel(row.payment_kind) }} ·
+          hoàn tối đa {{ money(refundable()) }}
+        </p>
+      </div>
+      <app-erp-status-badge [label]="row.status || '—'" [tone]="'neutral'" [dot]="true" />
+    </div>
+
+    @if (flow() === 'contact') {
+      <label class="erp-field">
+        <span>Kết quả liên hệ</span>
+        <select class="erp-select" [value]="contactResult()" (change)="setContactResult($event)">
+          @for (option of contactResults; track option.code) {
+            <option [value]="option.code">{{ option.label }}</option>
+          }
+        </select>
+      </label>
+    }
+
+    @if (flow() === 'refund') {
+      <p class="flow-hint">
+        Số tiền điền sẵn đúng giá trị hàng khách đã gửi trả. CSKH không tự gõ số vượt giá trị này.
+      </p>
+      <label class="erp-field">
+        <span>Số tiền hoàn</span>
+        <input class="erp-input" type="number" min="0" step="1000" [value]="amount()" (input)="setAmount($event)" />
+      </label>
+      @if (amountMismatch()) {
+        <p class="erp-error" role="alert">Vượt quá giá trị hàng trả (tối đa {{ money(refundable()) }}).</p>
+      }
+    }
+
+    @if (flow() === 'manual') {
+      @if (blockedByReceiver()) {
+        <p class="flow-warning" role="status">
+          Khách chưa có thông tin nhận tiền hợp lệ. Hãy gửi yêu cầu bổ sung trước khi ghi nhận chuyển khoản.
+        </p>
+      }
+      <label class="erp-field">
+        <span>Mã giao dịch chuyển tiền (tối thiểu 6 ký tự)</span>
+        <input class="erp-input" type="text" [value]="transferReference()" (input)="setText('transferReference', $event)" />
+      </label>
+      <label class="erp-field">
+        <span>Số tiền đã chuyển</span>
+        <input class="erp-input" type="number" min="0" step="1000" [value]="amount()" (input)="setAmount($event)" />
+      </label>
+      <label class="erp-field">
+        <span>Thời điểm chuyển tiền</span>
+        <input class="erp-input" type="datetime-local" [value]="transferredAt()" (input)="setText('transferredAt', $event)" />
+      </label>
+    }
+
+    @if (flow() === 'status') {
+      <label class="erp-field">
+        <span>Trạng thái tiếp theo</span>
+        <select class="erp-select" [value]="targetStatus()" (change)="setTargetStatus($event)">
+          <option value="">Chọn bước</option>
+          @for (option of statusChoices(); track option.value) {
+            <option [value]="option.value">{{ option.label }}</option>
+          }
+        </select>
+      </label>
+      @if (needsTracking()) {
+        <label class="erp-field">
+          <span>Mã vận đơn</span>
+          <input class="erp-input" type="text" [value]="tracking()" (input)="setText('tracking', $event)" />
+        </label>
+      }
+      @if (needsReason()) {
+        <p class="flow-hint">Trạng thái này cần ghi rõ lý do để khách hàng được thông báo.</p>
+      }
+      @if (needsProofForSupport()) {
+        <p class="flow-hint">Cần ảnh minh chứng khi chuyển phiếu cho CSKH xử lý.</p>
+      }
+    }
+
+    @if (flow() === 'receipt') {
+      <p class="flow-hint">
+        Kho xác nhận từng dòng đúng số lượng đã đăng ký. Sai khác phải chuyển sang “Cần hỗ trợ” kèm ảnh và lý do.
+      </p>
+      <ul class="flow-receipts">
+        @for (line of receiptSummary(); track line.id) {
+          <li>
+            <div>
+              <strong>Dòng {{ line.id.slice(0, 8) }}</strong>
+              <span>Đăng ký {{ line.expected }}</span>
+            </div>
+            <label class="erp-field">
+              <span>Nhận</span>
+              <input
+                class="erp-input erp-input--sm"
+                type="number"
+                min="0"
+                [value]="line.received"
+                (input)="setReceipt(line.id, 'received', $event)"
+              />
+            </label>
+            <label class="flow-check">
+              <input type="checkbox" [checked]="line.matches" (change)="setReceipt(line.id, 'matches', $event)" />
+              Đúng sản phẩm của shop
+            </label>
+            @if (line.short || !line.matches) {
+              <span class="erp-error">Không khớp</span>
+            }
+          </li>
+        }
+        @if (!lines().length) {
+          <li>Phiếu không có dòng hàng nào để kiểm.</li>
+        }
+      </ul>
+    }
+
+    @if (flow() === 'receipt' || flow() === 'manual' || flow() === 'status') {
+      <div class="flow-proof">
+        <div>
+          <strong>Ảnh minh chứng</strong>
+          <p>{{ proofBusy() ? 'Đang nén ảnh…' : 'JPG/PNG/WebP, tự nén còn cạnh dài nhất 1280px.' }}</p>
+        </div>
+        <input class="erp-input" type="file" accept="image/jpeg,image/png,image/webp" (change)="onProofPicked($event)" />
+        @if (proof()) {
+          <img class="flow-proof__thumb" [src]="proof()" alt="Ảnh minh chứng đã chọn" />
+        }
+      </div>
+    }
+
+    @if (flow() !== 'status') {
+      <label class="erp-field">
+        <span>
+          {{
+            flow() === 'reject'
+              ? 'Lý do từ chối (tối thiểu ' + minNote + ' ký tự)'
+              : flow() === 'refund-info'
+                ? 'Nội dung yêu cầu khách bổ sung'
+                : 'Ghi chú xử lý (tối thiểu ' + minNote + ' ký tự)'
+          }}
+        </span>
+        <textarea class="erp-input" rows="3" [value]="note()" (input)="setNote($event)"></textarea>
+      </label>
+    } @else if (needsReason()) {
+      <label class="erp-field">
+        <span>Lý do (tối thiểu {{ minNote }} ký tự)</span>
+        <textarea class="erp-input" rows="3" [value]="note()" (input)="setNote($event)"></textarea>
+      </label>
+    }
+
+    @if (error()) {
+      <p class="erp-error" role="alert">{{ error() }}</p>
+    }
+  }
+  <div footer>
+    @if (record()) {
+      <button class="erp-btn erp-btn--sm" type="button" (click)="dismiss()">Hủy</button>
+      <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" [disabled]="!canSubmit()" (click)="submit()">
+        {{ saving() ? 'Đang ghi…' : 'Ghi nhận' }}
+      </button>
+    }
+  </div>
+</app-erp-modal>

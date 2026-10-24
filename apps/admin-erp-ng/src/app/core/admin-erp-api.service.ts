@@ -678,6 +678,387 @@ export interface AdminPricingStatistics {
   topVouchers: Array<{ voucherId: string; code: string; orders: number; discount: number; revenue: number }>;
 }
 
+/** Payment channel of a return; it decides which refund flow the operator may run. */
+export type AdminPaymentKind = 'cod' | 'stripe' | 'other_online';
+
+/** Server-side refund-channel filter: `online` covers Stripe and other gateways. */
+export type AdminPaymentFilter = 'cod' | 'online';
+
+/** Refund route recorded on the return. */
+export type AdminRefundFlow = 'cod_manual' | 'stripe_auto' | 'manual_transfer' | 'none';
+
+/** State of the customer's payout details for a refundable return. */
+export type AdminRefundReceiverStatus = 'not_required' | 'missing' | 'invalid' | 'supplement_requested' | 'valid';
+
+/** Who cancelled a return. */
+export type AdminReturnCancelledBy = 'customer' | 'admin' | 'system';
+
+/** Persisted return states, shared with the API and its migration. */
+export type AdminReturnStatus =
+  | 'REQUESTED'
+  | 'CONTACTING'
+  | 'WAITING_RETURN'
+  | 'RETURN_IN_TRANSIT'
+  | 'RECEIVED'
+  | 'REFUND_PROCESSING'
+  | 'REFUNDED'
+  | 'EXCHANGE_PREPARING'
+  | 'EXCHANGE_SHIPPING'
+  | 'COMPLETED'
+  | 'CANCELLED'
+  | 'NEEDS_SUPPORT';
+
+/** Payout details the customer supplied for a COD return. */
+export interface AdminRefundReceiver {
+  status: AdminRefundReceiverStatus;
+  bank_name: string | null;
+  account_number: string | null;
+  account_holder: string | null;
+  submitted_at: string | null;
+  supplement_request: string | null;
+  supplement_requested_at: string | null;
+}
+
+/** Reconciliation of a manual refund, read-only on the return detail. */
+export interface AdminManualRefund {
+  reference: string;
+  amount: number;
+  transferred_at: string;
+  proof: string;
+  note: string | null;
+  recorded_at: string;
+  payment_kind: 'cod' | 'other_online';
+  receiver_bank_name: string | null;
+  receiver_account_number: string | null;
+  receiver_account_holder: string | null;
+}
+
+/** Payment facts that constrain what a refund may be issued for. */
+export interface AdminReturnPayment {
+  payment_id?: string;
+  payment_method?: string;
+  payment_provider?: string;
+  payment_status?: string;
+  amount?: number;
+  gateway_transaction_ref?: string;
+  refund_at?: string;
+  refund_amount?: number;
+  gateway_response_code?: string;
+  order_id?: string;
+  refunded_amount?: number;
+  created_at?: string;
+}
+
+/** One registered line of the original order, used for the warehouse receipt check. */
+export interface AdminReturnLine {
+  return_item_id?: string;
+  order_item_id?: string;
+  quantity?: number;
+}
+
+/** Customer return request; QA and gateway facts constrain the operations offered. */
+export interface AdminReturnRow {
+  return_id: string;
+  order_id?: string;
+  order_code?: string;
+  user_id?: string;
+  status?: AdminReturnStatus | string;
+  request_type?: string;
+  return_type?: string;
+  description?: string;
+  reason?: string;
+  created_at?: string;
+  resolved_at?: string;
+  customer_name?: string;
+  customer_phone?: string;
+  customer_address?: string;
+  order_total?: number;
+  payment_method?: string;
+  version?: number;
+  refundable_amount?: number;
+  refund_amount?: number;
+  admin_note?: string;
+  rejection_reason?: string;
+  payment_kind?: AdminPaymentKind;
+  refund_flow?: AdminRefundFlow;
+  refund_receiver_status?: AdminRefundReceiverStatus;
+  cancelled_by?: AdminReturnCancelledBy | null;
+  refund_receiver?: AdminRefundReceiver | null;
+  manual_refund?: AdminManualRefund | null;
+  evidence_images?: string[];
+  tracking_return_code?: string;
+  /** The outbound replacement leg must never reuse the customer's return tracking. */
+  exchange_tracking_code?: string;
+  exchange_order_id?: string;
+  exchange_order_code?: string;
+  exchange_order_status?: string;
+  condition_check_result?: string;
+  /** Warehouse photo of the QA check; proof of the receipt step. */
+  warehouse_proof?: string | null;
+  /** Receipt lines are stored verbatim in camelCase, so readers must not snake_case them. */
+  qa_item_receipts?: AdminReturnReceiptLine[];
+  contact_due_at?: string | null;
+  refund_bank_name?: string | null;
+  refund_bank_account?: string | null;
+  refund_bank_holder?: string | null;
+  lines?: AdminReturnLine[];
+  payment?: AdminReturnPayment | null;
+}
+
+/** Approval of a refund; the amount must equal the refundable amount the API computed. */
+export interface AdminRefundApprovalInput {
+  refundAmount: number;
+  adminNote: string;
+  expectedVersion: number;
+}
+
+/** Approval of an exchange; no money moves, the replacement leg is prepared separately. */
+export interface AdminExchangeApprovalInput {
+  adminNote: string;
+  expectedVersion: number;
+}
+
+/** Rejection of a return; the note is the reason the customer sees. */
+export interface AdminReturnRejectInput {
+  reason: string;
+  expectedVersion: number;
+}
+
+/** Result of one outreach attempt on a return in `CONTACTING`. */
+export interface AdminReturnContactInput {
+  result: string;
+  note: string;
+  expectedVersion: number;
+}
+
+/** Warehouse receipt of returned goods, line by line, with photographic proof. */
+export interface AdminReturnReceiptLine {
+  orderItemId: string;
+  receivedQuantity: number;
+  matchesProduct: boolean;
+}
+
+export interface AdminReturnStatusInput {
+  status: AdminReturnStatus | string;
+  expectedVersion: number;
+  conditionCheckResult?: string;
+  imageProof?: string;
+  reason?: string;
+  trackingReturnCode?: string;
+  items?: AdminReturnReceiptLine[];
+}
+
+/** Reconciliation record of a refund paid outside the gateway. */
+export interface AdminManualRefundInput {
+  expectedVersion: number;
+  transferReference: string;
+  amount: number;
+  /** Transfer instant in ISO 8601; the API rejects a future timestamp. */
+  transferredAt: string;
+  imageProof: string;
+  adminNote?: string;
+}
+
+/** CSKH asks the customer to complete their payout details; the return keeps its state. */
+export interface AdminRefundInfoRequestInput {
+  message: string;
+  expectedVersion: number;
+}
+
+/** Support ticket; chat-linked tickets stay read-only and are worked in their chat session. */
+export interface AdminTicketRow {
+  ticket_id: string;
+  chat_session_id?: string | null;
+  user_id?: string;
+  status?: string;
+  subject?: string;
+  title?: string;
+  description?: string;
+  priority?: string;
+  guest_phone?: string;
+  guest_email?: string;
+  admin_reply?: string;
+  csat_score?: number;
+  created_at?: string;
+  resolved_at?: string;
+  version?: number;
+}
+
+export interface AdminTicketReplyInput {
+  response: string;
+  expectedVersion: number;
+}
+
+export interface AdminTicketNoteInput {
+  adminNote: string;
+  expectedVersion: number;
+}
+
+export interface AdminTicketCloseInput {
+  /** The RPC records only the closure; a note is kept out of the contract on purpose. */
+  reason?: string;
+  expectedVersion: number;
+}
+
+/** Model labels an agent may correct; never used for automatic training. */
+export interface AdminChatClassification {
+  intent: 'facts' | 'catalog' | 'policy_problem' | 'order' | 'human';
+  level: 'L0' | 'L1' | 'L2' | 'L3';
+  issue: 'general' | 'catalog' | 'sizing' | 'delivery' | 'return' | 'payment' | 'cancellation';
+  sentiment: 'positive' | 'neutral' | 'negative';
+  risk: 'green' | 'yellow' | 'orange' | 'red';
+  moderation: 'none' | 'abuse' | 'threat' | 'illegal' | 'sensitive';
+}
+
+/** Provider measurements shown beside, never merged into, the staff-correctable labels. */
+export interface AdminChatObservedClassification extends AdminChatClassification {
+  emotion?: { state: 'calm' | 'frustrated' | 'angry' | 'distressed'; confidence: number; reasons: string[] };
+  riskAssessment?: { confidence: number; reasons: string[] };
+  context?: { escalationTrend?: 'stable' | 'rising' | 'falling' };
+}
+
+/** Filtered case context; a pending or outage classification is not a safe label to show. */
+export interface AdminChatContext {
+  guest_email?: string;
+  supervisor_required?: boolean;
+  handoff_summary?: {
+    summary?: string;
+    problem?: string;
+    wanted?: string;
+    failed_approaches?: string[];
+    verified_status?: string;
+    risk?: string;
+    sentiment?: string;
+    confirmed_facts?: string[];
+    unconfirmed_claims?: string[];
+    unresolved_need?: string;
+    recommendations?: string[];
+  };
+  intelligence?: {
+    confidence?: number;
+    reasons?: string[];
+    trend?: string;
+    updated_at?: string;
+    source_seq?: number;
+    filter_status?: 'ready' | 'pending' | 'outage';
+    corrected?: boolean;
+    customer_sentiment?: string;
+    staff_sentiment?: string;
+    classification?: AdminChatObservedClassification;
+  };
+  warnings?: Array<{ id: string; text: string; action?: string; resolved?: boolean }>;
+  report_status?: {
+    report_id?: string;
+    state?: string;
+    last_error?: string;
+    updated_at?: string;
+    attempts?: number;
+    next_attempt_at?: string;
+  };
+  eligible_offers?: Array<{ offer_id: string; title: string; description?: string }>;
+  summary_confirmation?: { confirmed: boolean; by?: string; at?: string };
+  outcome?: { resolution?: string; finalSentiment?: string; rating?: number };
+}
+
+/** Staff-owned case; previews and metadata are filtered by the server. */
+export interface AdminChatSessionRow {
+  session_id: string;
+  is_active?: boolean;
+  updated_at?: string;
+  title?: string;
+  support_ticket_id?: string | null;
+  context_revision?: number;
+  profile_user_id?: string;
+  assigned_admin_id?: string | null;
+  previous_session_id?: string | null;
+  last_message_preview?: string;
+  last_message_at?: string;
+  created_at?: string;
+  guest_id?: string;
+  handoff_status?: string;
+  risk_level?: 'green' | 'yellow' | 'orange' | 'red';
+  assigned_to?: string | null;
+  assigned_agent_name?: string;
+  metadata?: AdminChatContext;
+}
+
+/** Public transcript only; originals need an audited supervisor request. */
+export interface AdminChatMessageRow {
+  message_id?: string;
+  sender?: string;
+  text?: string;
+  moderation_status?: 'pending' | 'visible' | 'restricted';
+  created_at?: string;
+  session_id?: string;
+  sequence?: number;
+  product_ids?: string[];
+  metadata?: {
+    product_ids?: string[];
+    risk?: string;
+    moderated?: boolean;
+    system?: boolean;
+    speaker?: string;
+    agent_name?: string;
+    agent_joined?: boolean;
+    filter_verified?: boolean;
+    classification?: AdminChatObservedClassification;
+  };
+}
+
+export interface AdminChatProductCard {
+  product_id: string;
+  name?: string;
+  image_url?: string;
+  base_price?: number;
+  sale_price?: number;
+  price?: number;
+  detail_url?: string;
+  variant?: string;
+}
+
+/** Transcript of a case: the last 150 public turns, the case row and its product cards. */
+export interface AdminChatMessagesPayload {
+  messages?: AdminChatMessageRow[];
+  products?: AdminChatProductCard[];
+  session?: AdminChatSessionRow;
+  blogs?: unknown[];
+  handoff?: { ticketId?: string; status?: string } | null;
+}
+
+/** Confirmed human decision on a case; it never grants a financial benefit by itself. */
+export interface AdminChatReviewInput {
+  action:
+    | 'correction'
+    | 'outcome'
+    | 'supervisor'
+    | 'moderate'
+    | 'refilter'
+    | 'summary'
+    | 'resolve'
+    | 'reopen'
+    | 'offer'
+    | 'report_retry';
+  text: string;
+  messageId?: string;
+  classification?: AdminChatClassification;
+  risk?: 'yellow' | 'orange' | 'red';
+  confirmed: true;
+  summary?: { problem: string; wanted: string; failed_approaches: string[] };
+  outcome?: { resolution: string; finalSentiment: 'positive' | 'neutral' | 'negative' };
+  offerId?: string;
+  reportId?: string;
+  filteredText?: string;
+}
+
+/** The server audits every supervisor access to quarantined original content. */
+export interface AdminChatOriginal {
+  message_id: string;
+  original_text: string;
+  risk: string;
+  reason: string;
+  original_metadata?: { attachment?: { data?: string; filename?: string; mimeType?: string } };
+}
+
 export type AdminInsightRange = 'day' | 'week' | 'month';
 
 export interface AdminDashboardSummary {
@@ -1173,6 +1554,214 @@ export class AdminErpApiService {
     return this.http.delete(
       `${this.baseUrl}/api/v1/admin/products/${encodeURIComponent(productId)}/combo-items/${encodeURIComponent(itemId)}`,
     );
+  }
+
+  /**
+   * Lists return requests; `paymentKind` is resolved server-side into COD vs online channels.
+   */
+  listReturns(params: Record<string, string> = {}, paymentKind: AdminPaymentFilter | '' = ''): Observable<AdminListPayload<AdminReturnRow>> {
+    return this.http.get<AdminListPayload<AdminReturnRow>>(`${this.baseUrl}/api/v1/admin/returns`, {
+      params: this.params(paymentKind ? { ...params, payment_kind: paymentKind } : params),
+    });
+  }
+
+  /**
+   * Reads one return including the refundable amount computed from its lines.
+   */
+  getReturn(returnId: string): Observable<AdminReturnRow> {
+    return this.http.get<AdminReturnRow>(`${this.baseUrl}/api/v1/admin/returns/${encodeURIComponent(returnId)}`);
+  }
+
+  /**
+   * Approves a return as a refund and queues the flow its payment channel requires.
+   */
+  approveRefund(returnId: string, body: AdminRefundApprovalInput): Observable<AdminReturnRow & { refund: null }> {
+    return this.http.post<AdminReturnRow & { refund: null }>(
+      `${this.baseUrl}/api/v1/admin/returns/${encodeURIComponent(returnId)}/approve-refund`,
+      body,
+    );
+  }
+
+  /**
+   * Approves a return as an exchange; no money moves and the replacement leg is prepared later.
+   */
+  approveExchange(returnId: string, body: AdminExchangeApprovalInput): Observable<AdminReturnRow> {
+    return this.http.post<AdminReturnRow>(
+      `${this.baseUrl}/api/v1/admin/returns/${encodeURIComponent(returnId)}/approve-exchange`,
+      body,
+    );
+  }
+
+  /**
+   * Rejects a return with the reason the customer is shown.
+   */
+  rejectReturn(returnId: string, body: AdminReturnRejectInput): Observable<AdminReturnRow> {
+    return this.http.post<AdminReturnRow>(`${this.baseUrl}/api/v1/admin/returns/${encodeURIComponent(returnId)}/reject`, body);
+  }
+
+  /**
+   * Records one outreach attempt on a return waiting for contact.
+   */
+  recordReturnContact(returnId: string, body: AdminReturnContactInput): Observable<AdminReturnRow> {
+    return this.http.post<AdminReturnRow>(`${this.baseUrl}/api/v1/admin/returns/${encodeURIComponent(returnId)}/contact`, body);
+  }
+
+  /**
+   * Moves a return along its workflow: statuses, shipment codes and the warehouse receipt check.
+   */
+  updateReturnStatus(returnId: string, body: AdminReturnStatusInput): Observable<AdminReturnRow> {
+    return this.http.post<AdminReturnRow>(
+      `${this.baseUrl}/api/v1/admin/returns/${encodeURIComponent(returnId)}/update-status`,
+      body,
+    );
+  }
+
+  /**
+   * Runs (or retries) the gateway refund for a Stripe return.
+   */
+  triggerStripeRefund(
+    returnId: string,
+    body: { expectedVersion: number },
+  ): Observable<{ success: boolean; refund: { status: 'refunded' | 'requested' | 'failed' | 'skipped'; message?: string } | null }> {
+    return this.http.post<{
+      success: boolean;
+      refund: { status: 'refunded' | 'requested' | 'failed' | 'skipped'; message?: string } | null;
+    }>(
+      `${this.baseUrl}/api/v1/admin/returns/${encodeURIComponent(returnId)}/trigger-stripe-refund`,
+      body,
+    );
+  }
+
+  /**
+   * Reconciles a refund paid outside the gateway; the amount must equal the current refundable amount.
+   */
+  recordManualRefund(returnId: string, body: AdminManualRefundInput): Observable<AdminReturnRow> {
+    return this.http.post<AdminReturnRow>(
+      `${this.baseUrl}/api/v1/admin/returns/${encodeURIComponent(returnId)}/manual-refund`,
+      body,
+    );
+  }
+
+  /**
+   * Asks the customer for missing payout details without changing the return state.
+   */
+  requestRefundInfo(returnId: string, body: AdminRefundInfoRequestInput): Observable<{ return_id: string; refund_receiver: AdminRefundReceiver }> {
+    return this.http.post<{ return_id: string; refund_receiver: AdminRefundReceiver }>(
+      `${this.baseUrl}/api/v1/admin/returns/${encodeURIComponent(returnId)}/request-refund-info`,
+      body,
+    );
+  }
+
+  /**
+   * Lists support tickets with the original filter query.
+   */
+  listTickets(params: Record<string, string> = {}): Observable<AdminListPayload<AdminTicketRow>> {
+    return this.http.get<AdminListPayload<AdminTicketRow>>(`${this.baseUrl}/api/v1/admin/support-tickets`, {
+      params: this.params(params),
+    });
+  }
+
+  /**
+   * Reads one support ticket.
+   */
+  getTicket(ticketId: string): Observable<AdminTicketRow> {
+    return this.http.get<AdminTicketRow>(`${this.baseUrl}/api/v1/admin/support-tickets/${encodeURIComponent(ticketId)}`);
+  }
+
+  /**
+   * Answers a ticket and moves it to `processing`.
+   */
+  respondTicket(ticketId: string, body: AdminTicketReplyInput): Observable<AdminTicketRow> {
+    return this.http.post<AdminTicketRow>(
+      `${this.baseUrl}/api/v1/admin/support-tickets/${encodeURIComponent(ticketId)}/respond`,
+      body,
+    );
+  }
+
+  /**
+   * Marks a ticket resolved; the customer can still come back before it is closed.
+   */
+  resolveTicket(ticketId: string, body: AdminTicketNoteInput): Observable<AdminTicketRow> {
+    return this.http.post<AdminTicketRow>(
+      `${this.baseUrl}/api/v1/admin/support-tickets/${encodeURIComponent(ticketId)}/resolve`,
+      body,
+    );
+  }
+
+  /**
+   * Closes a ticket with the reason recorded on the audit row.
+   */
+  closeTicket(ticketId: string, body: AdminTicketCloseInput): Observable<AdminTicketRow> {
+    return this.http.post<AdminTicketRow>(
+      `${this.baseUrl}/api/v1/admin/support-tickets/${encodeURIComponent(ticketId)}/close`,
+      body,
+    );
+  }
+
+  /**
+   * Lists live-chat cases for the CSKH queue.
+   */
+  listChatSessions(params: Record<string, string> = {}): Observable<AdminListPayload<AdminChatSessionRow>> {
+    return this.http.get<AdminListPayload<AdminChatSessionRow>>(`${this.baseUrl}/api/v1/admin/chat-sessions`, {
+      params: this.params(params),
+    });
+  }
+
+  /**
+   * Reads the public transcript of one case.
+   */
+  getChatMessages(sessionId: string): Observable<AdminChatMessagesPayload> {
+    return this.http.get<AdminChatMessagesPayload>(
+      `${this.baseUrl}/api/v1/admin/chat-sessions/${encodeURIComponent(sessionId)}/messages`,
+    );
+  }
+
+  /**
+   * Claims a case exclusively for the signed-in staff member.
+   */
+  assignChatSession(sessionId: string): Observable<AdminChatMessagesPayload> {
+    return this.http.post<AdminChatMessagesPayload>(
+      `${this.baseUrl}/api/v1/admin/chat-sessions/${encodeURIComponent(sessionId)}/assign`,
+      { status: 'assigned' },
+    );
+  }
+
+  /**
+   * Sends an agent reply on a case.
+   */
+  sendChatReply(sessionId: string, message: string): Observable<AdminChatMessagesPayload> {
+    return this.http.post<AdminChatMessagesPayload>(
+      `${this.baseUrl}/api/v1/admin/chat-sessions/${encodeURIComponent(sessionId)}/reply`,
+      { message },
+    );
+  }
+
+  /**
+   * Persists a confirmed review decision; an HTTP failure never means the correction was saved.
+   */
+  reviewChatSession(sessionId: string, body: AdminChatReviewInput): Observable<AdminChatMessagesPayload> {
+    return this.http.post<AdminChatMessagesPayload>(
+      `${this.baseUrl}/api/v1/admin/chat-sessions/${encodeURIComponent(sessionId)}/review`,
+      body,
+    );
+  }
+
+  /**
+   * Reads a quarantined original after the operator accepts an audited privileged access.
+   */
+  getChatOriginal(sessionId: string, messageId: string): Observable<AdminChatOriginal> {
+    return this.http.get<AdminChatOriginal>(
+      `${this.baseUrl}/api/v1/admin/chat-sessions/${encodeURIComponent(sessionId)}/moderated/${encodeURIComponent(messageId)}`,
+    );
+  }
+
+  /**
+   * Lists the service audit trail used by the CSKH log tab.
+   */
+  listServiceLogs(params: Record<string, string> = {}): Observable<AdminListPayload<AdminAuditRow>> {
+    return this.http.get<AdminListPayload<AdminAuditRow>>(`${this.baseUrl}/api/v1/admin/service-audit-logs`, {
+      params: this.params(params),
+    });
   }
 
   /**

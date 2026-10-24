@@ -1,0 +1,435 @@
+<app-erp-modal [open]="open()" [title]="title()" size="lg" (closed)="dismiss()">
+  <div class="editor-bar">
+    <app-erp-tabs [tabs]="sections()" [active]="section()" (changed)="chooseSection($event)" />
+    @if (current(); as product) {
+      <span class="editor-bar__meta">
+        {{ product.sku || '—' }} · v{{ product.version ?? '—' }} · {{ statusLabel(product.status) }}
+      </span>
+    } @else {
+      <span class="editor-bar__meta">Sản phẩm mới · giá và trạng thái khai báo ngay tại đây</span>
+    }
+  </div>
+
+  @if (section() === 'info') {
+    <div class="editor-grid">
+      <label class="erp-field editor-span">
+        <span>Tên sản phẩm</span>
+        <input class="erp-input" type="text" [value]="name()" (input)="setText('name', $event)" maxlength="255" required />
+      </label>
+
+      <label class="erp-field">
+        <span>SKU sản phẩm</span>
+        <input
+          class="erp-input"
+          type="text"
+          [value]="sku()"
+          (input)="setText('sku', $event)"
+          [disabled]="!isCreate()"
+          [attr.aria-describedby]="isCreate() ? 'sku-hint' : null"
+        />
+      </label>
+      <label class="erp-field">
+        <span>Slug</span>
+        <input class="erp-input" type="text" [value]="slug()" (input)="setText('slug', $event)" [disabled]="!isCreate()" />
+      </label>
+
+      @if (isCreate()) {
+        <p id="sku-hint" class="editor-hint">
+          @if (skuMessage()) {
+            <span class="erp-error">{{ skuMessage() }}</span>
+          } @else {
+            Dạng chuẩn VL-AO001. Máy chủ kiểm tra tính duy nhất trên toàn catalog.
+          }
+        </p>
+      }
+
+      <label class="erp-field">
+        <span>Danh mục</span>
+        <select class="erp-select" [value]="categoryId()" (change)="setCategory($event)" required>
+          @for (option of categoryOptions(); track option.value) {
+            <option [value]="option.value">{{ option.label }}</option>
+          }
+        </select>
+      </label>
+      <label class="erp-field">
+        <span>Nhãn hiệu</span>
+        <input class="erp-input" type="text" [value]="brand()" (input)="setText('brand', $event)" maxlength="100" />
+      </label>
+      <label class="erp-field">
+        <span>Bộ sưu tập</span>
+        <input class="erp-input" type="text" [value]="collection()" (input)="setText('collection', $event)" maxlength="100" />
+      </label>
+
+      @if (isCreate()) {
+        <label class="erp-field">
+          <span>Giá gốc</span>
+          <input class="erp-input" type="number" min="0" step="1000" [value]="basePrice()" (input)="setNumber('basePrice', $event)" />
+        </label>
+        <label class="erp-field">
+          <span>Giá bán</span>
+          <input class="erp-input" type="number" min="0" step="1000" [value]="salePrice()" (input)="setNumber('salePrice', $event)" />
+        </label>
+        <label class="erp-field">
+          <span>Trạng thái khởi tạo</span>
+          <select class="erp-select" [value]="status()" (change)="setCreateStatus($event)">
+            @for (option of statusOptions; track option.value) {
+              <option [value]="option.value">{{ option.label }}</option>
+            }
+          </select>
+        </label>
+      } @else {
+        <div class="editor-readonly">
+          <span>Giá gốc: {{ basePrice() }}</span>
+          <span>Giá bán: {{ salePrice() }}</span>
+          @if (!canChangePrice()) {
+            <span class="editor-hint">Giá do bộ phận giá điều chỉnh để giữ đúng luồng phê duyệt.</span>
+          }
+        </div>
+      }
+
+      @if (priceInvalid()) {
+        <p class="erp-error" role="alert">Giá bán không được lớn hơn giá gốc.</p>
+      }
+      @if (priceChanged()) {
+        <p class="editor-note">Lưu sẽ tạo hai bản ghi: điều chỉnh giá (kèm lý do) rồi cập nhật thông tin.</p>
+      }
+
+      <label class="erp-check">
+        <input type="checkbox" [checked]="isFeatured()" (change)="setFlag('isFeatured', $event)" />
+        Hiển thị ở mục Nổi bật
+      </label>
+      @if (isCreate()) {
+        <label class="erp-check">
+          <input type="checkbox" [checked]="isCombo()" (change)="setFlag('isCombo', $event)" />
+          Sản phẩm combo (gồm nhiều sản phẩm thành phần)
+        </label>
+      }
+    </div>
+  }
+
+  @if (section() === 'variants') {
+    @if (isCreate()) {
+      <div class="editor-section">
+        <div class="editor-matrix">
+          <label class="erp-field">
+            <span>Danh sách màu</span>
+            <input class="erp-input" type="text" [value]="colorsInput()" (input)="setText('colorsInput', $event)" placeholder="Đen, Đỏ Ruby" />
+          </label>
+          <label class="erp-field">
+            <span>Danh sách kích thước</span>
+            <input class="erp-input" type="text" [value]="sizesInput()" (input)="setText('sizesInput', $event)" placeholder="S, M, L" />
+          </label>
+          <button class="erp-btn erp-btn--sm" type="button" (click)="regenerateMatrix()">Tạo ma trận</button>
+          @if (matrix().length) {
+            <button class="erp-btn erp-btn--sm" type="button" (click)="clearMatrix()">Xóa ma trận</button>
+          }
+        </div>
+
+        @if (variantSkuMessage()) {
+          <p class="erp-error" role="alert">{{ variantSkuMessage() }}</p>
+        }
+
+        @if (matrix().length) {
+          <div class="editor-table">
+            <table>
+              <caption class="erp-sr-only">Ma trận biến thể khi tạo sản phẩm</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Màu</th>
+                  <th scope="col">Size</th>
+                  <th scope="col">SKU biến thể</th>
+                  <th scope="col">Tồn mở</th>
+                  <th scope="col">Ngưỡng</th>
+                  <th scope="col"></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of matrix(); track $index) {
+                  <tr>
+                    <td>{{ row.color }}</td>
+                    <td>{{ row.size }}</td>
+                    <td>
+                      <input
+                        class="erp-input erp-input--sm"
+                        type="text"
+                        [value]="matrixRowSku($index)"
+                        (input)="setMatrixSku($index, $event)"
+                        [attr.aria-label]="'SKU biến thể ' + ($index + 1)"
+                      />
+                      <button class="erp-btn erp-btn--ghost erp-btn--xs" type="button" (click)="autoFillMatrixSku($index)">Tự động</button>
+                    </td>
+                    <td>
+                      <input
+                        class="erp-input erp-input--sm"
+                        type="number"
+                        min="0"
+                        [value]="row.stockQuantity"
+                        (input)="setMatrixStock($index, $event)"
+                        [attr.aria-label]="'Tồn mở biến thể ' + ($index + 1)"
+                      />
+                    </td>
+                    <td>
+                      <input
+                        class="erp-input erp-input--sm"
+                        type="number"
+                        min="0"
+                        [value]="row.lowStockThreshold"
+                        (input)="setMatrixThreshold($index, $event)"
+                        [attr.aria-label]="'Ngưỡng biến thể ' + ($index + 1)"
+                      />
+                    </td>
+                    <td>
+                      <button class="erp-btn erp-btn--danger erp-btn--xs" type="button" (click)="removeMatrixRow($index)">Bỏ</button>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+            <p class="editor-note">Tổng tồn mở: {{ matrixStock() }} · Mỗi tổ hợp màu và size chỉ được khai báo một lần.</p>
+          </div>
+        } @else {
+          <div class="editor-default">
+            <p class="editor-note">Không có ma trận: API sẽ tạo một biến thể mặc định (Màu “Mặc định”, size “F”).</p>
+            <label class="erp-field">
+              <span>Tồn mở</span>
+              <input class="erp-input" type="number" min="0" [value]="initialStock()" (input)="setNumber('initialStock', $event)" />
+            </label>
+            <label class="erp-field">
+              <span>Ngưỡng cảnh báo</span>
+              <input class="erp-input" type="number" min="0" [value]="initialThreshold()" (input)="setNumber('initialThreshold', $event)" />
+            </label>
+          </div>
+        }
+      </div>
+    } @else {
+      <div class="editor-section">
+        <app-erp-data-table
+          caption="Biến thể đã lưu"
+          [columns]="variantColumns"
+          [rows]="variants()"
+          [loading]="false"
+          emptyTitle="Sản phẩm chưa có biến thể"
+          emptyMessage="Thêm biến thể đầu tiên để ghi nhận tồn kho."
+        />
+        @if (lowStockVariants().length) {
+          <p class="editor-warning">{{ lowStockVariants().length }} biến thể đang ở hoặc dưới ngưỡng cảnh báo.</p>
+        }
+
+        <div class="editor-variant-add">
+          <label class="erp-field">
+            <span>Màu</span>
+            <input class="erp-input" type="text" [value]="newColor()" (input)="setText('newColor', $event)" maxlength="80" />
+          </label>
+          <label class="erp-field">
+            <span>Size</span>
+            <input class="erp-input" type="text" [value]="newSize()" (input)="setText('newSize', $event)" maxlength="30" />
+          </label>
+          <label class="erp-field">
+            <span>Tồn đầu</span>
+            <input class="erp-input" type="number" min="0" [value]="newStock()" (input)="setNumber('newStock', $event)" />
+          </label>
+          <label class="erp-field">
+            <span>Ngưỡng</span>
+            <input class="erp-input" type="number" min="0" [value]="newThreshold()" (input)="setNumber('newThreshold', $event)" />
+          </label>
+          <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" [disabled]="variantSaving()" (click)="addVariant()">
+            {{ variantSaving() ? 'Đang thêm…' : 'Thêm biến thể' }}
+          </button>
+        </div>
+        @if (variantMessage()) {
+          <p class="editor-note">{{ variantMessage() }}</p>
+        }
+        <p class="editor-hint">Tồn kho của biến thể đã tạo chỉ đổi qua phiểu điều chỉnh kho, có lý do và nhật ký.</p>
+      </div>
+    }
+  }
+
+  @if (section() === 'content') {
+    <div class="editor-grid">
+      <label class="erp-field editor-span">
+        <span>Mô tả</span>
+        <textarea class="erp-input" rows="5" [value]="description()" (input)="setText('description', $event)" maxlength="5000"></textarea>
+      </label>
+      <label class="erp-field">
+        <span>Chất liệu</span>
+        <input class="erp-input" type="text" [value]="material()" (input)="setText('material', $event)" />
+      </label>
+      <label class="erp-field">
+        <span>Tông da phù hợp</span>
+        <select class="erp-select" [value]="colorTone()" (change)="setColorTone($event)">
+          @for (option of toneOptions; track option.value) {
+            <option [value]="option.value">{{ option.label }}</option>
+          }
+        </select>
+      </label>
+
+      <div class="editor-chips editor-span">
+        <span class="editor-chips__label">Từ khóa phong cách</span>
+        @for (tag of styleTags(); track tag) {
+          <button class="erp-chip is-active" type="button" (click)="toggleStyleTag(tag)">{{ tag }}</button>
+        }
+        @for (preset of stylePresets; track preset) {
+          @if (!styleTags().includes(preset)) {
+            <button class="erp-chip" type="button" (click)="toggleStyleTag(preset)">{{ preset }}</button>
+          }
+        }
+        <input class="erp-input erp-input--sm" type="text" [value]="customTag()" (input)="setText('customTag', $event)" placeholder="Thêm từ khóa tùy chỉnh" />
+        <button class="erp-btn erp-btn--sm" type="button" (click)="addCustomTags()">Thêm</button>
+      </div>
+
+      <div class="editor-chips">
+        <span class="editor-chips__label">Dịp sử dụng</span>
+        @for (option of occasionOptions; track option.value) {
+          <button
+            class="erp-chip"
+            [class.is-active]="occasions().includes(option.value)"
+            type="button"
+            (click)="toggleIn('occasions', option.value)"
+          >
+            {{ option.label }}
+          </button>
+        }
+      </div>
+      <div class="editor-chips">
+        <span class="editor-chips__label">Dáng người phù hợp</span>
+        @for (option of bodyShapeOptions; track option.value) {
+          <button
+            class="erp-chip"
+            [class.is-active]="bodyShapes().includes(option.value)"
+            type="button"
+            (click)="toggleIn('bodyShapes', option.value)"
+          >
+            {{ option.label }}
+          </button>
+        }
+      </div>
+
+      <label class="erp-field">
+        <span>SEO title</span>
+        <input class="erp-input" type="text" [value]="seoTitle()" (input)="setText('seoTitle', $event)" maxlength="255" />
+      </label>
+      <label class="erp-field editor-span">
+        <span>Mô tả SEO</span>
+        <textarea class="erp-input" rows="2" [value]="seoDescription()" (input)="setText('seoDescription', $event)" maxlength="500"></textarea>
+      </label>
+
+      <div class="editor-ai editor-span">
+        <button class="erp-btn erp-btn--sm" type="button" [disabled]="aiSeoBusy()" (click)="optimizeSeo()">
+          {{ aiSeoBusy() ? 'AI đang viết…' : 'Tối ưu nội dung & SEO bằng AI' }}
+        </button>
+        @if (aiSeoNote()) {
+          <span class="editor-note">{{ aiSeoNote() }}</span>
+        }
+        @if (aiSeoError()) {
+          <span class="erp-error">{{ aiSeoError() }}</span>
+        }
+      </div>
+
+      @if (aiSeo(); as result) {
+        <div class="editor-suggestions editor-span">
+          <div>
+            <span class="editor-chips__label">Tiêu đề gợi ý</span>
+            @for (suggestion of result.titleSuggestions || []; track suggestion) {
+              <button class="erp-btn erp-btn--ghost erp-btn--xs" type="button" (click)="useSeoTitle(suggestion)">{{ suggestion }}</button>
+            }
+          </div>
+          <div>
+            <span class="editor-chips__label">Điểm nổi bật</span>
+            @for (highlight of result.highlights; track highlight) {
+              <button class="erp-btn erp-btn--ghost erp-btn--xs" type="button" (click)="appendHighlight(highlight)">{{ highlight }}</button>
+            }
+          </div>
+          <button class="erp-btn erp-btn--sm" type="button" (click)="applySeoKeywords()">Nạp từ khóa SEO ({{ (result.seoKeywords || []).length }})</button>
+        </div>
+      }
+    </div>
+  }
+
+  @if (section() === 'gallery') {
+    <app-erp-product-gallery
+      [(images)]="images"
+      [(imageColors)]="imageColors"
+      [(approvals)]="approvals"
+      [(busy)]="galleryBusy"
+      [variantColors]="variantColors()"
+      [productId]="current()?.product_id ?? null"
+      [expectedVersion]="current()?.version ?? 0"
+      [editable]="true"
+      [productName]="name()"
+    />
+    @if (missingApproval()) {
+      <p class="erp-error" role="alert">Ảnh mới chưa được máy chủ phê duyệt. Bấm “Áp dụng ảnh” trong thư viện trước khi lưu.</p>
+    }
+  }
+
+  @if (section() === 'combo' && current()?.is_combo) {
+    <div class="editor-section">
+      <div class="editor-table">
+        <table>
+          <caption class="erp-sr-only">Thành phần combo</caption>
+          <thead>
+            <tr>
+              <th scope="col">Sản phẩm</th>
+              <th scope="col">SKU</th>
+              <th scope="col">Đơn giá</th>
+              <th scope="col">Số lượng</th>
+              <th scope="col">Tạm tính</th>
+              <th scope="col"></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (item of comboItems(); track item.combo_item_id) {
+              <tr>
+                <td>{{ item.product?.name || item.component_product_id }}</td>
+                <td class="is-mono">{{ item.product?.sku || '—' }}</td>
+                <td class="is-mono">{{ money(item.product?.sale_price ?? item.product?.base_price) }}</td>
+                <td>
+                  <button class="erp-btn erp-btn--xs" type="button" (click)="adjustCombo(item, -1)">−</button>
+                  <span class="editor-qty">{{ item.quantity }}</span>
+                  <button class="erp-btn erp-btn--xs" type="button" (click)="adjustCombo(item, 1)">+</button>
+                </td>
+                <td class="is-mono">{{ money(itemTotal(item)) }}</td>
+                <td><button class="erp-btn erp-btn--danger erp-btn--xs" type="button" (click)="removeCombo(item)">Xóa</button></td>
+              </tr>
+            }
+            @if (!comboItems().length) {
+              <tr>
+                <td colspan="6">Combo chưa có thành phần nào.</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      <p class="editor-note">Tổng thành phần: {{ money(comboTotal()) }} · Khách tiết kiệm: {{ money(comboSavings()) }}</p>
+      <div class="editor-combo-add">
+        <label class="erp-field">
+          <span>Sản phẩm thành phần</span>
+          <select class="erp-select" [value]="comboComponentId()" (change)="setComboComponent($event)">
+            <option value="">Chọn sản phẩm</option>
+            @for (option of selectableComponents(); track option.product_id) {
+              <option [value]="option.product_id">{{ option.name }} ({{ option.sku }})</option>
+            }
+          </select>
+        </label>
+        <label class="erp-field">
+          <span>Số lượng</span>
+          <input class="erp-input" type="number" min="1" [value]="comboQuantity()" (input)="setNumber('comboQuantity', $event)" />
+        </label>
+        <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" [disabled]="!comboComponentId()" (click)="addComboComponent()">
+          Thêm vào combo
+        </button>
+      </div>
+    </div>
+  }
+
+  @if (error()) {
+    <p class="erp-error" role="alert">{{ error() }}</p>
+  }
+
+  <div footer>
+    <button class="erp-btn erp-btn--sm" type="button" (click)="dismiss()">Hủy</button>
+    <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" [disabled]="!canSave()" (click)="submit()">
+      {{ saving() ? 'Đang lưu…' : isCreate() ? 'Tạo sản phẩm' : 'Lưu thay đổi' }}
+    </button>
+  </div>
+</app-erp-modal>

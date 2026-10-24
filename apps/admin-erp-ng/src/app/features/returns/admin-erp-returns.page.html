@@ -1,0 +1,387 @@
+<app-erp-page-header
+  eyebrow="Bán hàng"
+  title="Đổi trả & CSKH"
+  subtitle="Hàng đợi hoàn tiền theo kênh thanh toán, kiểm hàng tại kho, phiếu hỗ trợ và hội thoại khách hàng trong một workspace."
+>
+  <div actions>
+    <button class="erp-btn erp-btn--sm" type="button" (click)="reload()" [disabled]="loading() && tab() !== 'chat'">
+      <app-erp-icon name="refresh" [size]="'15'" />
+      Làm mới
+    </button>
+  </div>
+</app-erp-page-header>
+
+@if (tab() === 'returns') {
+  <section class="desk-kpis" aria-label="Tóm tắt hàng đợi đổi trả">
+    <app-erp-kpi-card label="Phiếu đang mở" [value]="openReturns().toLocaleString('vi-VN')" hint="Giữ hạn mức trả hàng, trong trang này" tone="accent" icon="return" [loading]="loading()" />
+    <app-erp-kpi-card label="Chờ duyệt" [value]="pendingReturns().toLocaleString('vi-VN')" hint="Trạng thái Mới yêu cầu" tone="warning" icon="clock" [loading]="loading()" />
+    <app-erp-kpi-card label="Hàng đang gửi về" [value]="awaitingReceipt().toLocaleString('vi-VN')" hint="Chờ kho nhận & kiểm" tone="info" icon="cart" [loading]="loading()" />
+    <app-erp-kpi-card label="Phiếu CSKH mới" [value]="openTickets().toLocaleString('vi-VN')" hint="Ngoài hàng đợi hỗ trợ" tone="neutral" icon="support" [loading]="loading()" />
+    <app-erp-kpi-card label="Đang xử lý" [value]="processingTickets().toLocaleString('vi-VN')" hint="Phiếu hỗ trợ có nhân viên" tone="success" icon="log" [loading]="loading()" />
+  </section>
+}
+
+<section class="erp-card desk-panel" aria-labelledby="desk-title">
+  <div class="desk-tabs">
+    <div>
+      <span class="desk-eyebrow">CSKH</span>
+      <h2 id="desk-title">
+        {{ tab() === 'returns' ? 'Hàng đợi đổi trả' : tab() === 'tickets' ? 'Phiếu hỗ trợ' : tab() === 'chat' ? 'Hội thoại trực tiếp' : 'Nhật ký đổi trả' }}
+      </h2>
+    </div>
+    <app-erp-tabs [tabs]="tabs()" [active]="tab()" (changed)="setTab($event)" />
+  </div>
+
+  @if (loadError() && tab() !== 'chat') {
+    <div class="desk-banner" role="alert">
+      <app-erp-icon name="alert" [size]="'16'" />
+      {{ loadError() }}
+      <button class="erp-btn erp-btn--sm" type="button" (click)="reload()">Thử lại</button>
+    </div>
+  }
+
+  @if (tab() === 'returns') {
+    <app-erp-filter-bar [busy]="loading()" (apply)="applyFilters()" (reset)="resetFilters()">
+      <label class="erp-field desk-search">
+        <span>Tìm mô tả hoặc mã vận đơn trả</span>
+        <input class="erp-input" type="search" name="q" [value]="search()" (input)="onSearchInput($event)" />
+      </label>
+      <label class="erp-field">
+        <span>Trạng thái</span>
+        <select class="erp-select" name="status" [value]="statusFilter()" (change)="onStatusChange($event)">
+          @for (option of statusOptions; track option.value) {
+            <option [value]="option.value">{{ option.label }}</option>
+          }
+        </select>
+      </label>
+      <label class="erp-field">
+        <span>Kênh tiền</span>
+        <select class="erp-select" name="payment" [value]="paymentFilter()" (change)="onPaymentChange($event)">
+          @for (option of paymentOptions; track option.value) {
+            <option [value]="option.value">{{ option.label }}</option>
+          }
+        </select>
+      </label>
+    </app-erp-filter-bar>
+
+    <app-erp-data-table
+      caption="Hàng đợi đổi trả"
+      [columns]="columns()"
+      [rows]="returns()"
+      [loading]="loading()"
+      emptyTitle="Không có phiếu đổi trả"
+      emptyMessage="Đổi bộ lọc để xem thêm phiếu."
+      [clickable]="true"
+      (rowSelected)="openReturn($event)"
+      (retry)="loadReturns()"
+    />
+    <app-erp-pagination [page]="page()" [pageCount]="pageCount()" [label]="rangeLabel()" (changed)="goPage($event)" />
+    <p class="desk-note">Bộ lọc áp dụng phía máy chủ; API chỉ tìm theo mô tả và mã vận đơn trả.</p>
+  } @else if (tab() === 'tickets') {
+    <app-erp-filter-bar [busy]="loading()" (apply)="applyTicketFilters()" (reset)="resetTicketFilters()">
+      <label class="erp-field">
+        <span>Trạng thái phiếu</span>
+        <select class="erp-select" name="status" [value]="ticketStatus()" (change)="onTicketStatusChange($event)">
+          @for (option of ticketStatusOptions; track option.value) {
+            <option [value]="option.value">{{ option.label }}</option>
+          }
+        </select>
+      </label>
+    </app-erp-filter-bar>
+
+    <app-erp-data-table
+      caption="Phiếu hỗ trợ"
+      [columns]="ticketColumns()"
+      [rows]="tickets()"
+      [loading]="loading()"
+      emptyTitle="Không có phiếu hỗ trợ"
+      emptyMessage="Chọn trạng thái khác để xem phiếu đã xử lý."
+      [clickable]="true"
+      (rowSelected)="openTicket($event)"
+      (retry)="loadTickets()"
+    />
+    <app-erp-pagination [page]="ticketsPage()" [pageCount]="ticketsPageCount()" [label]="ticketRangeLabel()" (changed)="goTicketsPage($event)" />
+    <p class="desk-note">Phiếu gắn với hội thoại được xử lý trong tab Hội thoại, tại đây chỉ đọc.</p>
+  } @else if (tab() === 'chat') {
+    <app-erp-chat-desk [canMutate]="canWrite()" />
+  } @else {
+    <app-erp-filter-bar [busy]="loading()" (apply)="applyLogFilters()" (reset)="resetLogFilters()">
+      <label class="erp-field">
+        <span>Theo mã phiếu đổi trả</span>
+        <input class="erp-input" type="search" name="targetId" [value]="logTarget()" (input)="onLogTargetInput($event)" />
+      </label>
+    </app-erp-filter-bar>
+
+    <app-erp-data-table
+      caption="Nhật ký đổi trả"
+      [columns]="logColumns()"
+      [rows]="logs()"
+      [loading]="loading()"
+      emptyTitle="Chưa có nhật ký"
+      emptyMessage="Nhật ký xuất hiện sau thao tác của CSKH hoặc kho."
+      [clickable]="true"
+      (rowSelected)="openLog($event)"
+      (retry)="loadLogs()"
+    />
+    <app-erp-pagination [page]="logsPage()" [pageCount]="logsPageCount()" [label]="logRangeLabel()" (changed)="goLogsPage($event)" />
+    <p class="desk-note">Luồng này ghi theo module đổi trả; thao tác phiếu hỗ trợ có nhật ký riêng trong hội thoại.</p>
+  }
+</section>
+
+<app-erp-drawer [open]="selected() !== null" title="Chi tiết phiếu đổi trả" size="lg" (closed)="closeOverlays()">
+  @if (selected(); as record) {
+    <div class="record">
+      <div class="record__head">
+        <div>
+          <span class="record__code">{{ record.return_id }}</span>
+          <h3>{{ record.order_code || 'Đơn ' + (record.order_id || '').slice(0, 8) }}</h3>
+          <p>{{ record.customer_name || 'Khách ẩn danh' }} · {{ record.customer_phone || 'không có SĐT' }}</p>
+        </div>
+        <app-erp-status-badge [label]="statusLabel(record.status)" [tone]="statusTone(record.status)" [dot]="true" />
+      </div>
+
+      @if (detailLoading()) {
+        <p class="desk-note">Đang tải chi tiết phiếu…</p>
+      }
+      @if (detailError()) {
+        <div class="desk-banner" role="alert">
+          <app-erp-icon name="alert" [size]="'16'" />
+          {{ detailError() }}
+          <button class="erp-btn erp-btn--sm" type="button" (click)="openReturn(record)">Thử lại</button>
+        </div>
+      }
+      @if (gatewayNote(); as note) {
+        <p class="record__gateway" role="status">{{ note }}</p>
+      }
+
+      <dl class="record__grid">
+        <div><dt>Loại yêu cầu</dt><dd>{{ record.return_type === 'exchange' ? 'Đổi hàng' : 'Hoàn tiền' }}</dd></div>
+        <div><dt>Kênh tiền</dt><dd>{{ record.payment_kind ? paymentLabel(record.payment_kind) : '—' }}</dd></div>
+        <div><dt>Luồng hoàn</dt><dd>{{ flowLabel(record.refund_flow) }}</dd></div>
+        <div><dt>Thông tin nhận tiền</dt><dd>{{ receiverLabel(record.refund_receiver_status) }}</dd></div>
+        <div><dt>Giá trị hoàn</dt><dd>{{ money(record.refundable_amount) }}</dd></div>
+        <div><dt>Đã ghi nhận hoàn</dt><dd>{{ money(record.refund_amount) }}</dd></div>
+        <div><dt>Phiên bản</dt><dd class="is-mono">{{ record.version ?? '—' }}</dd></div>
+        <div><dt>Tạo lúc</dt><dd>{{ date(record.created_at) }}</dd></div>
+        <div><dt>Kết thúc</dt><dd>{{ date(record.resolved_at) }}</dd></div>
+        <div><dt>Đơn đổi</dt><dd>{{ record.exchange_order_code || '—' }}</dd></div>
+        <div><dt>Vận đơn trả</dt><dd class="is-mono">{{ record.tracking_return_code || '—' }}</dd></div>
+        <div><dt>Vận đơn đổi</dt><dd class="is-mono">{{ record.exchange_tracking_code || '—' }}</dd></div>
+      </dl>
+
+      @if (record.description) {
+        <p class="record__text">{{ record.description }}</p>
+      }
+      @if (record.admin_note) {
+        <div class="record__notes">
+          <span>Ghi chú xử lý</span>
+          <p>{{ record.admin_note }}</p>
+        </div>
+      }
+      @if (record.rejection_reason) {
+        <p class="record__reject">Lý do từ chối: {{ record.rejection_reason }}</p>
+      }
+
+      @if (record.evidence_images?.length) {
+        <div class="record__evidence">
+          <span>Ảnh khách gửi</span>
+          @for (image of record.evidence_images; track image) {
+            <a [href]="image" target="_blank" rel="noopener"><img [src]="image" alt="Minh chứng khách gửi" /></a>
+          }
+        </div>
+      }
+
+      @if (record.lines?.length) {
+        <div class="record__lines">
+          <span>Hàng đăng ký trả</span>
+          @for (line of record.lines; track line.order_item_id) {
+            <p class="record__line">
+              {{ (line.order_item_id || '').slice(0, 8) }} · số lượng {{ line.quantity ?? '—' }}
+              @if (record.qa_item_receipts?.length) {
+                · đã kiểm {{ receivedQuantity(line.order_item_id) }}
+              }
+            </p>
+          }
+        </div>
+      }
+
+      @if (record.refund_receiver; as receiver) {
+        <div class="record__receiver">
+          <span>Thông tin nhận tiền của khách</span>
+          <p>{{ receiver.bank_name || '—' }} · {{ receiver.account_number || '—' }} · {{ receiver.account_holder || '—' }}</p>
+          @if (receiver.supplement_request) {
+            <p class="record__supplement">Đã yêu cầu bổ sung: {{ receiver.supplement_request }}</p>
+          }
+        </div>
+      }
+
+      @if (record.manual_refund; as manual) {
+        <div class="record__manual">
+          <span>Đối soát chuyển khoản</span>
+          <p>{{ manual.reference }} · {{ money(manual.amount) }} lúc {{ date(manual.transferred_at) }}</p>
+        </div>
+      }
+
+      @if (canWrite()) {
+        <div class="record__actions">
+          <span>Thao tác CSKH</span>
+          <div class="record__action-row">
+            @if (gates.contact(record)) {
+              <button class="erp-btn erp-btn--sm" type="button" (click)="openFlow('contact')">Ghi liên hệ</button>
+            }
+            @if (gates.refund(record)) {
+              <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" (click)="openFlow('refund')">Duyệt hoàn tiền</button>
+            }
+            @if (gates.exchange(record)) {
+              <button class="erp-btn erp-btn--sm" type="button" (click)="openFlow('exchange')">Duyệt đổi hàng</button>
+            }
+            @if (gates.reject(record)) {
+              <button class="erp-btn erp-btn--danger erp-btn--sm" type="button" (click)="openFlow('reject')">Từ chối</button>
+            }
+            @if (gates.receipt(record)) {
+              <button class="erp-btn erp-btn--sm" type="button" (click)="openFlow('receipt')">Kho nhận hàng</button>
+            }
+            @if (gates.stripe(record)) {
+              <button class="erp-btn erp-btn--sm" type="button" [disabled]="detailLoading()" (click)="runStripeRefund()">Hoàn qua Stripe</button>
+            }
+            @if (gates.manual(record)) {
+              <button class="erp-btn erp-btn--sm" type="button" (click)="openFlow('manual')">Ghi chuyển khoản</button>
+            }
+            @if (gates.info(record)) {
+              <button class="erp-btn erp-btn--sm" type="button" (click)="openFlow('refund-info')">Xin thông tin nhận tiền</button>
+            }
+          </div>
+          @if (nextSteps().length) {
+            <div class="record__steps">
+              <span>Bước tiếp theo</span>
+              @for (step of nextSteps(); track step.value) {
+                <button class="erp-chip" type="button" (click)="moveStep(step.value)">{{ step.label }}</button>
+              }
+            </div>
+          }
+          @if (flowNeedsReason()) {
+            <p class="desk-note">Chưa ghi nhận liên hệ CSKH, nên duyệt phải kèm lý do tối thiểu {{ minNote }} ký tự.</p>
+          }
+        </div>
+      }
+    </div>
+  }
+  <div footer>
+    @if (selected()) {
+      <button class="erp-btn erp-btn--sm" type="button" (click)="closeOverlays()">Đóng</button>
+    }
+  </div>
+</app-erp-drawer>
+
+<app-erp-drawer [open]="selectedTicket() !== null" title="Chi tiết phiếu hỗ trợ" size="md" (closed)="closeOverlays()">
+  @if (selectedTicket(); as ticket) {
+    <div class="record">
+      <div class="record__head">
+        <div>
+          <span class="record__code">{{ ticket.ticket_id.slice(0, 8) }}</span>
+          <h3>{{ ticket.title || 'Phiếu hỗ trợ' }}</h3>
+          <p>{{ ticketContact(ticket) }}</p>
+        </div>
+        <app-erp-status-badge [label]="ticketStatusLabel(ticket.status)" [tone]="ticketTone(ticket.status)" [dot]="true" />
+      </div>
+      <dl class="record__grid">
+        <div><dt>Ưu tiên</dt><dd>{{ ticketPriority(ticket.priority) }}</dd></div>
+        <div><dt>Phiên bản</dt><dd class="is-mono">{{ ticket.version ?? '—' }}</dd></div>
+        <div><dt>Tạo lúc</dt><dd>{{ date(ticket.created_at) }}</dd></div>
+        <div><dt>Điểm CSAT</dt><dd>{{ ticket.csat_score ?? '—' }}</dd></div>
+      </dl>
+      @if (ticket.description) {
+        <p class="record__text">{{ ticket.description }}</p>
+      }
+      @if (ticket.admin_reply) {
+        <div class="record__notes">
+          <span>Phản hồi gần nhất</span>
+          <p>{{ ticket.admin_reply }}</p>
+        </div>
+      }
+      @if (ticket.chat_session_id) {
+        <p class="desk-note">Phiếu này thuộc hội thoại {{ ticket.chat_session_id.slice(0, 8) }}; mở tab Hội thoại để trả lời.</p>
+      }
+      @if (canWrite() && !ticket.chat_session_id) {
+        <div class="record__actions">
+          <span>Thao tác</span>
+          <div class="record__action-row">
+            @if (canReply(ticket)) {
+              <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" (click)="openTicketAction('reply')">Phản hồi</button>
+            }
+            @if (canResolve(ticket)) {
+              <button class="erp-btn erp-btn--sm" type="button" (click)="openTicketAction('resolve')">Đánh dấu đã giải quyết</button>
+            }
+            @if (canClose(ticket)) {
+              <button class="erp-btn erp-btn--sm" type="button" (click)="openTicketAction('close')">Đóng phiếu</button>
+            }
+          </div>
+        </div>
+      }
+    </div>
+  }
+  <div footer>
+    @if (selectedTicket()) {
+      <button class="erp-btn erp-btn--sm" type="button" (click)="closeOverlays()">Đóng</button>
+    }
+  </div>
+</app-erp-drawer>
+
+<app-erp-modal [open]="ticketAction() !== null" [title]="ticketActionTitle()" size="sm" (closed)="closeTicketAction()">
+  @if (selectedTicket(); as ticket) {
+    <form class="desk-form" (submit)="submitTicketAction($event)">
+      <p class="desk-form__head">
+        {{ ticket.title || ticket.ticket_id }} · đang ở <strong>{{ ticketStatusLabel(ticket.status) }}</strong>
+      </p>
+      @if (ticketAction() !== 'close') {
+        <label class="erp-field">
+          <span>
+            {{
+              ticketAction() === 'reply'
+                ? 'Nội dung phản hồi khách hàng'
+                : 'Tóm tắt hướng giải quyết (tối thiểu ' + minNote + ' ký tự)'
+            }}
+          </span>
+          <textarea class="erp-input" name="note" rows="4" required></textarea>
+        </label>
+      } @else {
+        <p class="desk-note">Đóng phiếu chỉ ghi nhận trạng thái đã kết thúc; nội dung phản hồi cuối cùng vẫn giữ nguyên.</p>
+      }
+      @if (ticketError()) {
+        <p class="erp-error" role="alert">{{ ticketError() }}</p>
+      }
+      <div class="desk-form__actions">
+        <button class="erp-btn erp-btn--sm" type="button" (click)="closeTicketAction()">Hủy</button>
+        <button class="erp-btn erp-btn--primary erp-btn--sm" type="submit" [disabled]="ticketBusy()">
+          {{ ticketBusy() ? 'Đang lưu…' : 'Lưu' }}
+        </button>
+      </div>
+    </form>
+  }
+</app-erp-modal>
+
+<app-erp-drawer [open]="selectedLog() !== null" title="Chi tiết nhật ký" size="md" (closed)="closeLog()">
+  @if (selectedLog(); as row) {
+    <dl class="record__grid">
+      <div><dt>Thời gian</dt><dd>{{ date(row.timestamp) }}</dd></div>
+      <div><dt>Người thao tác</dt><dd>{{ row.actor_label || row.actor_name || '—' }}</dd></div>
+      <div><dt>Vai trò</dt><dd>{{ row.actor_role_label || row.actor_role || '—' }}</dd></div>
+      <div><dt>Hành động</dt><dd>{{ row.action_label || row.action || '—' }}</dd></div>
+    </dl>
+    @if (row.change_summary) {
+      <p class="record__text">{{ row.change_summary }}</p>
+    }
+    <div class="record__payload">
+      <div>
+        <span>Trước</span>
+        <pre>{{ json(row.old_value) }}</pre>
+      </div>
+      <div>
+        <span>Sau</span>
+        <pre>{{ json(row.new_value) }}</pre>
+      </div>
+    </div>
+  }
+</app-erp-drawer>
+
+<app-erp-return-flow [flow]="flow()" [record]="selected()" (done)="onFlowDone()" (dismissed)="closeFlow()" />

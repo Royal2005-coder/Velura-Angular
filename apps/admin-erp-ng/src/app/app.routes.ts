@@ -83,13 +83,13 @@ export const routes: Routes = [
       },
       {
         path: 'reviews',
-        loadComponent: () => import('./features/shared/coming-soon.page').then((m) => m.ComingSoonPage),
+        loadComponent: () => import('./features/reviews/admin-erp-reviews.page').then((m) => m.AdminErpReviewsPage),
         canActivate: [adminErpAuthGuard],
         data: { page: 'reviews', navKey: 'reviews' },
       },
       {
         path: 'accounts',
-        loadComponent: () => import('./features/shared/coming-soon.page').then((m) => m.ComingSoonPage),
+        loadComponent: () => import('./features/accounts/admin-erp-accounts.page').then((m) => m.AdminErpAccountsPage),
         canActivate: [adminErpAuthGuard],
         data: { page: 'accounts', navKey: 'accounts' },
       },

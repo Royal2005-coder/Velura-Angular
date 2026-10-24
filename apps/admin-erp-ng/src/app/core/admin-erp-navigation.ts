@@ -94,7 +94,7 @@ export const ADMIN_ERP_NAV_ITEMS: Readonly<Record<AdminErpNavKey, AdminErpNavIte
     path: '/products',
     pageKeys: ['products'],
     capability: 'products.read',
-    status: 'planned',
+    status: 'ready',
   },
   pricing: {
     key: 'pricing',

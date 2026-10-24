@@ -1,0 +1,371 @@
+<app-erp-page-header
+  eyebrow="Danh mục"
+  title="Sản phẩm & tồn kho"
+  subtitle="Catalog theo biến thể, tồn kho có lý do, nhập CSV kiểm duyệt và nhật ký sản phẩm trong cùng workspace."
+>
+  <div actions>
+    <button class="erp-btn erp-btn--sm" type="button" (click)="reload()" [disabled]="loading()">
+      <app-erp-icon name="refresh" [size]="'15'" />
+      {{ isRefreshing() ? 'Đang làm mới…' : 'Làm mới' }}
+    </button>
+    @if (canCreate()) {
+      <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" (click)="openCreate()">
+        <app-erp-icon name="plus" [size]="'15'" />
+        Thêm sản phẩm
+      </button>
+    }
+  </div>
+</app-erp-page-header>
+
+@if (tab() === 'catalog') {
+  <section class="products-kpis" aria-label="Tóm tắt catalog">
+    <app-erp-kpi-card label="Sản phẩm" [value]="total().toLocaleString('vi-VN')" hint="Theo bộ lọc hiện tại" tone="accent" icon="box" [loading]="showSkeleton()" />
+    <app-erp-kpi-card label="Đang bán" [value]="onSale().toLocaleString('vi-VN')" hint="Toàn catalog" tone="success" icon="check" [loading]="loading()" />
+    <app-erp-kpi-card label="Tạm ẩn" [value]="hidden().toLocaleString('vi-VN')" hint="Bản nháp hoặc ngừng bán tạm thời" tone="warning" icon="eye" [loading]="loading()" />
+    <app-erp-kpi-card label="Hết hàng" [value]="outOfStock().toLocaleString('vi-VN')" hint="Cần nhập kho" tone="danger" icon="alert" [loading]="loading()" />
+    <button class="products-kpi-link" type="button" [class.is-active]="lowStockOnly()" (click)="toggleLowStockFilter()">
+      <app-erp-kpi-card label="Biến thể sắp hết" [value]="lowStockCount().toLocaleString('vi-VN')" hint="Lọc theo ngưỡng từng biến thể" tone="info" icon="log" [loading]="loading()" />
+    </button>
+    <app-erp-kpi-card label="Tồn trang này" [value]="pageStock().toLocaleString('vi-VN')" hint="Tổng theo biến thể đang hiển thị" tone="neutral" icon="cart" [loading]="loading()" />
+  </section>
+}
+
+<section class="erp-card products-panel" aria-labelledby="products-title">
+  <div class="products-tabs">
+    <div>
+      <span class="products-eyebrow">Catalog</span>
+      <h2 id="products-title">{{ tab() === 'stock' ? 'Hàng đợi tồn kho' : tab() === 'import' ? 'Nhập CSV' : tab() === 'logs' ? 'Nhật ký sản phẩm' : 'Danh mục sản phẩm' }}</h2>
+    </div>
+    <app-erp-tabs [tabs]="tabs()" [active]="tab()" (changed)="setTab($event)" />
+  </div>
+
+  @if (tab() === 'catalog') {
+    <app-erp-filter-bar [busy]="loading()" (apply)="applyFilters()" (reset)="resetFilters()">
+      <label class="erp-field products-search">
+        <span>Tìm kiếm</span>
+        <input class="erp-input" type="search" name="q" [value]="query()" (input)="onQueryInput($event)" placeholder="Tên hoặc SKU..." />
+      </label>
+      <label class="erp-field">
+        <span>Danh mục</span>
+        <select class="erp-select" name="categoryId" [value]="categoryId()" (change)="onCategoryChange($event)">
+          @for (option of categoryOptions(); track option.value) {
+            <option [value]="option.value">{{ option.label }}</option>
+          }
+        </select>
+      </label>
+      <label class="erp-field">
+        <span>Trạng thái</span>
+        <select class="erp-select" name="status" [value]="status()" (change)="onStatusChange($event)">
+          @for (option of statusOptions; track option.value) {
+            <option [value]="option.value">{{ option.label }}</option>
+          }
+        </select>
+      </label>
+      <label class="erp-field">
+        <span>Sắp xếp</span>
+        <select class="erp-select" name="order" [value]="order()" (change)="onOrderChange($event)">
+          @for (option of orderOptions; track option.value) {
+            <option [value]="option.value">{{ option.label }}</option>
+          }
+        </select>
+      </label>
+      <label class="products-check">
+        <input type="checkbox" name="lowStock" [checked]="lowStockOnly()" (change)="onLowStockToggle($event)" />
+        Chỉ biến thể sắp hết
+      </label>
+    </app-erp-filter-bar>
+
+    @if (loadError()) {
+      <div class="products-banner" role="alert">
+        <app-erp-icon name="alert" [size]="'16'" />
+        {{ loadError() }}
+        <button class="erp-btn erp-btn--sm" type="button" (click)="loadCatalog()">Thử lại</button>
+      </div>
+    }
+
+    <app-erp-data-table
+      caption="Danh mục sản phẩm"
+      [columns]="columns()"
+      [rows]="products()"
+      [loading]="loading()"
+      [error]="loadError() || ''"
+      emptyTitle="Không có sản phẩm phù hợp"
+      emptyMessage="Thử đổi bộ lọc hoặc bỏ tick 'Chỉ biến thể sắp hết'."
+      [clickable]="true"
+      (rowSelected)="openDetail($event)"
+      (retry)="loadCatalog()"
+    />
+    <app-erp-pagination [page]="page()" [pageCount]="pageCount()" [label]="rangeLabel()" (changed)="goPage($event)" />
+  } @else if (tab() === 'stock') {
+    @if (loadError()) {
+      <div class="products-banner" role="alert">
+        <app-erp-icon name="alert" [size]="'16'" />
+        {{ loadError() }}
+        <button class="erp-btn erp-btn--sm" type="button" (click)="loadLowStock()">Thử lại</button>
+      </div>
+    }
+    <app-erp-data-table
+      caption="Biến thể dưới ngưỡng cảnh báo"
+      [columns]="lowStockColumns()"
+      [rows]="lowStockRows()"
+      [loading]="loading()"
+      emptyTitle="Không có biến thể nào dưới ngưỡng"
+      emptyMessage="Tất cả biến thể đều trên ngưỡng cảnh báo đang lưu."
+      [clickable]="true"
+      (rowSelected)="openLowStockDetail($event)"
+      (retry)="loadLowStock()"
+    />
+    <p class="products-note">
+      Danh sách do API giới hạn 500 biến thể, sắp theo tồn tăng dần. Mỗi dòng mở drawer sản phẩm để ghi phiếu điều chỉnh kho.
+    </p>
+  } @else if (tab() === 'import') {
+    <div class="products-import">
+      <app-erp-product-csv-import [canWrite]="canWrite()" [categories]="categories()" (imported)="reload()" />
+    </div>
+  } @else {
+    <app-erp-filter-bar [busy]="logsLoading()" (apply)="applyLogFilters()" (reset)="resetLogFilters()">
+      <label class="erp-field">
+        <span>Từ ngày</span>
+        <input class="erp-input" type="date" name="from" [value]="logsFrom()" (change)="setLogDate('from', $event)" />
+      </label>
+      <label class="erp-field">
+        <span>Đến ngày</span>
+        <input class="erp-input" type="date" name="to" [value]="logsTo()" (change)="setLogDate('to', $event)" />
+      </label>
+      <label class="erp-field">
+        <span>Sản phẩm / SKU</span>
+        <input class="erp-input" type="search" name="product" [value]="logsProduct()" (input)="setLogFilter('product', $event)" />
+      </label>
+      <label class="erp-field">
+        <span>Loại thao tác</span>
+        <select class="erp-select" name="actionType" [value]="logsAction()" (change)="setLogFilter('action', $event)">
+          @for (option of actionOptions; track option.value) {
+            <option [value]="option.value">{{ option.label }}</option>
+          }
+        </select>
+      </label>
+      <label class="erp-field">
+        <span>Người thao tác</span>
+        <input class="erp-input" type="search" name="user" [value]="logsUser()" (input)="setLogFilter('user', $event)" />
+      </label>
+    </app-erp-filter-bar>
+
+    @if (logsError()) {
+      <div class="products-banner" role="alert">
+        <app-erp-icon name="alert" [size]="'16'" />
+        {{ logsError() }}
+      </div>
+    }
+
+    <app-erp-data-table
+      caption="Nhật ký sản phẩm"
+      [columns]="logColumns()"
+      [rows]="logs()"
+      [loading]="logsLoading()"
+      emptyTitle="Chưa có nhật ký sản phẩm"
+      emptyMessage="Nhật ký xuất hiện sau thao tác tạo, sửa, đổi trạng thái hoặc điều chỉnh kho."
+      [clickable]="true"
+      (rowSelected)="openLog($event)"
+      (retry)="loadLogs()"
+    />
+    <app-erp-pagination [page]="logsPage()" [pageCount]="logsPageCount()" [label]="logsRangeLabel()" (changed)="goLogsPage($event)" />
+  }
+</section>
+
+<app-erp-drawer [open]="selected() !== null" title="Chi tiết sản phẩm" size="lg" (closed)="closeOverlays()">
+  @if (selected(); as product) {
+    <div class="detail">
+      <div class="detail__head">
+        <img class="detail__thumb" [src]="thumbnail(product)" [alt]="product.name" />
+        <div>
+          <span class="detail__sku">{{ product.sku || '—' }}</span>
+          <h3>{{ product.name }}</h3>
+          <p>{{ categoryName(product) }} · v{{ product.version ?? '—' }} · cập nhật {{ date(product.updated_at) }}</p>
+        </div>
+        <app-erp-status-badge [label]="statusLabel(product.status)" [tone]="statusTone(product.status)" [dot]="true" />
+      </div>
+
+      @if (stockAlert(); as alert) {
+        <div class="detail__alert" role="status">
+          <app-erp-icon name="alert" [size]="'16'" />
+          <div>
+            <strong>{{ alert.message }}</strong>
+            <span>
+              {{ alert.emailQueued ? 'Email cảnh báo đã vào hàng đợi.' : 'Email chưa gửi được; hệ thống sẽ thử lại.' }}
+            </span>
+          </div>
+        </div>
+      }
+
+      @if (detailLoading()) {
+        <p class="products-note">Đang tải biến thể…</p>
+      } @else if (detailError()) {
+        <div class="products-banner" role="alert">
+          <app-erp-icon name="alert" [size]="'16'" />
+          {{ detailError() }}
+          <button class="erp-btn erp-btn--sm" type="button" (click)="openDetailById(product.product_id)">Thử lại</button>
+        </div>
+      }
+
+      <dl class="detail__grid">
+        <div><dt>Giá gốc</dt><dd>{{ money(product.base_price) }}</dd></div>
+        <div><dt>Giá bán</dt><dd>{{ money(product.sale_price) }}</dd></div>
+        <div><dt>Tổng tồn</dt><dd>{{ stockOf(product) }}</dd></div>
+        <div><dt>Biến thể sắp hết</dt><dd>{{ selectedVariants().length }}</dd></div>
+        <div><dt>Bộ sưu tập</dt><dd>{{ product.collection || '—' }}</dd></div>
+        <div><dt>Nhãn hiệu</dt><dd>{{ product.brand || '—' }}</dd></div>
+        <div><dt>Slug</dt><dd class="is-mono">{{ product.slug || '—' }}</dd></div>
+        <div><dt>Loại</dt><dd>{{ product.is_combo ? 'Combo' : 'Đơn' }}{{ product.is_featured ? ' · Nổi bật' : '' }}</dd></div>
+      </dl>
+
+      @if (product.description) {
+        <p class="detail__desc">{{ product.description }}</p>
+      }
+
+      <app-erp-data-table
+        caption="Biến thể của sản phẩm"
+        [columns]="variantColumns"
+        [rows]="variants()"
+        emptyTitle="Chưa có biến thể"
+        emptyMessage="Thêm biến thể trong biểu mẫu sản phẩm để ghi nhận tồn kho."
+      />
+
+      <div class="detail__tags">
+        @for (tag of product.style_tags || []; track tag) {
+          <span class="erp-chip">{{ tag }}</span>
+        }
+        @for (occasion of product.occasions || []; track occasion) {
+          <span class="erp-chip">{{ occasion }}</span>
+        }
+      </div>
+    </div>
+  }
+  <div footer>
+    @if (selected(); as product) {
+      @if (canWrite()) {
+        <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" (click)="openEdit()">Sửa</button>
+        <button class="erp-btn erp-btn--sm" type="button" (click)="openStatus()">Đổi trạng thái</button>
+        <button class="erp-btn erp-btn--sm" type="button" (click)="openStock()">Điều chỉnh kho</button>
+      }
+      @if (canChangePrice()) {
+        <button class="erp-btn erp-btn--sm" type="button" (click)="openPrice()">Đổi giá</button>
+      }
+      @if (!canWrite() && !canChangePrice()) {
+        <span class="products-note">Role hiện tại chỉ đọc catalog.</span>
+      }
+      <button class="erp-btn erp-btn--sm" type="button" (click)="closeOverlays()">Đóng</button>
+    }
+  </div>
+</app-erp-drawer>
+
+<app-erp-modal [open]="statusOpen()" title="Đổi trạng thái sản phẩm" size="sm" (closed)="closeStatus()">
+  @if (selected(); as product) {
+    <form class="status-form" (submit)="submitStatus($event)">
+      <p class="status-form__from">
+        {{ product.name }} đang ở <strong>{{ statusLabel(product.status) }}</strong>.
+      </p>
+      <div class="status-form__options">
+        @for (option of allowedStatuses(); track option.value) {
+          <button
+            class="status-option"
+            [class.is-active]="nextStatus() === option.value"
+            type="button"
+            (click)="chooseStatus(option.value)"
+          >
+            <strong>{{ option.label }}</strong>
+            <span>{{ option.hint }}</span>
+          </button>
+        }
+      </div>
+      <label class="erp-field">
+        <span>Lý do (tối thiểu {{ minReasonLength }} ký tự, được ghi vào nhật ký)</span>
+        <textarea class="erp-input" name="reason" rows="3" required></textarea>
+      </label>
+      @if (statusError()) {
+        <p class="erp-error" role="alert">{{ statusError() }}</p>
+      }
+      <div class="status-form__actions">
+        <button class="erp-btn erp-btn--sm" type="button" (click)="closeStatus()">Hủy</button>
+        <button class="erp-btn erp-btn--primary erp-btn--sm" type="submit">Áp dụng</button>
+      </div>
+    </form>
+  }
+</app-erp-modal>
+
+<app-erp-modal [open]="priceOpen()" title="Đổi giá sản phẩm" size="sm" (closed)="closePrice()">
+  @if (selected(); as product) {
+    <form class="price-form" (submit)="submitPrice($event)">
+      <div class="price-form__head">
+        <strong>{{ product.name }}</strong>
+        <span>{{ product.sku || '—' }} · v{{ product.version ?? '—' }}</span>
+      </div>
+      <label class="erp-field">
+        <span>Giá gốc</span>
+        <input class="erp-input" name="basePrice" type="number" min="0" step="1000" [value]="product.base_price ?? 0" required />
+      </label>
+      <label class="erp-field">
+        <span>Giá bán (bỏ trống nếu muốn ẩn giá khuyến mãi)</span>
+        <input class="erp-input" name="salePrice" type="number" min="0" step="1000" [value]="product.sale_price ?? ''" />
+      </label>
+      <label class="erp-field">
+        <span>Lý do (tối thiểu {{ minReasonLength }} ký tự)</span>
+        <textarea class="erp-input" name="reason" rows="2" required></textarea>
+      </label>
+      @if (priceError()) {
+        <p class="erp-error" role="alert">{{ priceError() }}</p>
+      }
+      <div class="price-form__actions">
+        <button class="erp-btn erp-btn--sm" type="button" (click)="closePrice()">Hủy</button>
+        <button class="erp-btn erp-btn--primary erp-btn--sm" type="submit" [disabled]="priceSaving()">
+          {{ priceSaving() ? 'Đang lưu…' : 'Lưu giá' }}
+        </button>
+      </div>
+    </form>
+  }
+</app-erp-modal>
+
+<app-erp-drawer [open]="selectedLog() !== null" title="Chi tiết nhật ký" size="md" (closed)="closeLog()">
+  @if (selectedLog(); as row) {
+    <dl class="detail__grid">
+      <div><dt>Thời gian</dt><dd>{{ date(row.timestamp) }}</dd></div>
+      <div><dt>Người thao tác</dt><dd>{{ actor(row) }}</dd></div>
+      <div><dt>Vai trò</dt><dd>{{ row.actor_role_label || row.actor_role || '—' }}</dd></div>
+      <div><dt>Module</dt><dd>{{ row.module || 'products' }}</dd></div>
+      <div><dt>Hành động</dt><dd>{{ logAction(row) }}</dd></div>
+      <div><dt>Đối tượng</dt><dd>{{ logTarget(row) }}</dd></div>
+      <div><dt>Kết quả</dt><dd>{{ logResult(row) }}</dd></div>
+      <div><dt>IP</dt><dd class="is-mono">{{ row.ip_address || '—' }}</dd></div>
+    </dl>
+    @if (logReason(row)) {
+      <p class="detail__reason">{{ logReason(row) }}</p>
+    }
+    <div class="detail__payload">
+      <div>
+        <span>Trước</span>
+        <pre>{{ json(row.old_value) }}</pre>
+      </div>
+      <div>
+        <span>Sau</span>
+        <pre>{{ json(row.new_value) }}</pre>
+      </div>
+    </div>
+  }
+</app-erp-drawer>
+
+<app-erp-product-editor
+  [product]="editorProduct()"
+  [categories]="categories()"
+  [componentOptions]="products()"
+  [canChangePrice]="canChangePrice()"
+  (saved)="onEditorSaved($event)"
+  (cancelled)="closeEditor()"
+  (conflict)="onEditorConflict()"
+/>
+
+<app-erp-product-stock-sheet
+  [open]="stockOpen()"
+  [product]="selected()"
+  [variants]="variants()"
+  (adjusted)="onStockAdjusted($event)"
+  (closed)="closeStock()"
+/>

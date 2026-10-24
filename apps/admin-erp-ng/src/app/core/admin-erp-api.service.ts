@@ -201,6 +201,123 @@ export interface AdminOrderActionResult {
   refund: { status: 'refunded' | 'requested' | 'failed' | 'skipped'; message?: string } | null;
 }
 
+export interface AdminPromotionRow {
+  promo_id?: string;
+  promotion_id?: string;
+  promo_name?: string;
+  name?: string;
+  promo_type?: string;
+  type?: string;
+  status?: string;
+  is_active?: boolean;
+  start_date?: string;
+  end_date?: string;
+  budget?: number;
+  budget_limit?: number;
+  max_vouchers_allowed?: number;
+  total_discount_issued?: number;
+  version?: number;
+  paused_at?: string | null;
+  lifecycle_status?: 'scheduled' | 'running' | 'paused' | 'ended' | 'budget_exhausted';
+  lifecycle_label?: string;
+  can_activate?: boolean;
+  can_pause?: boolean;
+  budget_unlimited?: boolean;
+  budget_tracked?: boolean;
+  voucher_count?: number;
+  active_voucher_count?: number;
+  warnings?: Array<{ code: string; level: 'info' | 'warning' | 'danger'; message: string }>;
+  description?: string | null;
+  banner_image_url?: string | null;
+  highlight_label?: string | null;
+  display_order?: number | null;
+  is_featured?: boolean | null;
+}
+
+export interface AdminPromotionSummary {
+  total: number;
+  running: number;
+  scheduled: number;
+  paused: number;
+  ended: number;
+  budgetExhausted: number;
+  totalBudget: number;
+  issuedDiscount: number;
+  budgetedCampaigns: number;
+  activeVouchers: number;
+}
+
+export interface AdminPromotionListPayload extends AdminListPayload<AdminPromotionRow> {
+  summary?: AdminPromotionSummary;
+}
+
+export interface AdminVoucherRow {
+  voucher_id: string;
+  code?: string;
+  name?: string;
+  discount_type?: string;
+  type?: string;
+  discount_value?: number;
+  value?: number;
+  min_order?: number;
+  min_order_value?: number;
+  used_count?: number;
+  usage_limit_total?: number | null;
+  usage_limit_per_user?: number;
+  max_discount_amount?: number | null;
+  applicable_categories?: string[] | string | null;
+  start_date?: string;
+  end_date?: string;
+  expires_at?: string;
+  is_active?: boolean;
+  promo_id?: string | null;
+  applicable_user_group?: string;
+  version?: number;
+}
+
+export interface AdminCampaignStatistic {
+  promoId: string | null;
+  name: string;
+  lifecycle: AdminPromotionRow['lifecycle_status'] | null;
+  lifecycleLabel: string | null;
+  vouchers: number;
+  orders: number;
+  revenue: number;
+  discount: number;
+  revenuePerDiscount: number | null;
+  budgetLimit: number;
+  budgetUsed: number;
+}
+
+export interface AdminPricingStatistics {
+  range: { from: string | null; to: string | null };
+  orders: {
+    total: number;
+    withVoucher: number;
+    voucherRate: number;
+    revenueWithVoucher: number;
+    revenueWithoutVoucher: number;
+    revenueShareWithVoucher: number;
+    discountTotal: number;
+    aovWithVoucher: number;
+    aovWithoutVoucher: number;
+  };
+  promotions: AdminPromotionSummary & { budgetRemaining: number; budgetUsagePercent: number };
+  vouchers: {
+    total: number;
+    active: number;
+    scheduled: number;
+    expired: number;
+    disabled: number;
+    unlimited: number;
+    totalUsed: number;
+    totalLimit: number;
+    usagePercent: number;
+  };
+  campaigns: AdminCampaignStatistic[];
+  topVouchers: Array<{ voucherId: string; code: string; orders: number; discount: number; revenue: number }>;
+}
+
 export type AdminInsightRange = 'day' | 'week' | 'month';
 
 export interface AdminDashboardSummary {
@@ -550,6 +667,82 @@ export class AdminErpApiService {
       `${this.baseUrl}/api/v1/admin/orders/${encodeURIComponent(orderId)}/audit-logs`,
       { params: this.params(params) },
     );
+  }
+
+  /**
+   * Lists campaign rows with the API-computed summary.
+   */
+  listPromotions(params: Record<string, string> = {}): Observable<AdminPromotionListPayload> {
+    return this.http.get<AdminPromotionListPayload>(`${this.baseUrl}/api/v1/admin/promotions`, {
+      params: this.params(params),
+    });
+  }
+
+  /**
+   * Creates a promotion campaign.
+   */
+  createPromotion(body: Record<string, unknown>): Observable<AdminPromotionRow> {
+    return this.http.post<AdminPromotionRow>(`${this.baseUrl}/api/v1/admin/promotions`, body);
+  }
+
+  /**
+   * Updates a promotion campaign.
+   */
+  updatePromotion(promoId: string, body: Record<string, unknown>): Observable<AdminPromotionRow> {
+    return this.http.patch<AdminPromotionRow>(`${this.baseUrl}/api/v1/admin/promotions/${encodeURIComponent(promoId)}`, body);
+  }
+
+  /**
+   * Activates a scheduled/paused campaign.
+   */
+  activatePromotion(promoId: string, body: Record<string, unknown>): Observable<unknown> {
+    return this.http.post(`${this.baseUrl}/api/v1/admin/promotions/${encodeURIComponent(promoId)}/activate`, body);
+  }
+
+  /**
+   * Pauses a running campaign.
+   */
+  pausePromotion(promoId: string, body: Record<string, unknown>): Observable<unknown> {
+    return this.http.post(`${this.baseUrl}/api/v1/admin/promotions/${encodeURIComponent(promoId)}/pause`, body);
+  }
+
+  /**
+   * Lists voucher rows.
+   */
+  listVouchers(params: Record<string, string> = {}): Observable<AdminListPayload<AdminVoucherRow>> {
+    return this.http.get<AdminListPayload<AdminVoucherRow>>(`${this.baseUrl}/api/v1/admin/vouchers`, {
+      params: this.params(params),
+    });
+  }
+
+  /**
+   * Creates a voucher.
+   */
+  createVoucher(body: Record<string, unknown>): Observable<unknown> {
+    return this.http.post(`${this.baseUrl}/api/v1/admin/vouchers`, body);
+  }
+
+  /**
+   * Updates a voucher.
+   */
+  updateVoucher(voucherId: string, body: Record<string, unknown>): Observable<AdminVoucherRow> {
+    return this.http.patch<AdminVoucherRow>(`${this.baseUrl}/api/v1/admin/vouchers/${encodeURIComponent(voucherId)}`, body);
+  }
+
+  /**
+   * Toggles a voucher active/inactive.
+   */
+  toggleVoucher(voucherId: string): Observable<unknown> {
+    return this.http.post(`${this.baseUrl}/api/v1/admin/vouchers/${encodeURIComponent(voucherId)}/toggle`, {});
+  }
+
+  /**
+   * Loads pricing/promotion statistics for the selected range.
+   */
+  pricingStatistics(params: Record<string, string> = {}): Observable<AdminPricingStatistics> {
+    return this.http.get<AdminPricingStatistics>(`${this.baseUrl}/api/v1/admin/pricing/statistics`, {
+      params: this.params(params),
+    });
   }
 
   private params(values: Record<string, string>): HttpParams {

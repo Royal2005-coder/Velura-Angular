@@ -118,7 +118,7 @@ export const ADMIN_ERP_NAV_ITEMS: Readonly<Record<AdminErpNavKey, AdminErpNavIte
     path: '/promotions',
     pageKeys: ['promotions'],
     capability: 'promotions.read',
-    status: 'planned',
+    status: 'ready',
   },
   reviews: {
     key: 'reviews',

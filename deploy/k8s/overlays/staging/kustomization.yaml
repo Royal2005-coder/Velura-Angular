@@ -48,6 +48,17 @@ patches:
                   limits: {cpu: 250m, memory: 96Mi}
   - target:
       kind: Deployment
+      name: velura-admin-erp
+    patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: velura-admin-erp
+      spec:
+        # Staging remains quarantined; the ERP admin preview runs only in production.
+        replicas: 0
+  - target:
+      kind: Deployment
       name: velura-storefront
     patch: |-
       apiVersion: apps/v1
@@ -87,6 +98,9 @@ images:
   - name: ghcr.io/royal2005-coder/velura-admin
     newName: ghcr.io/royal2005-coder/velura-admin
     digest: sha256:7ed8ae854e394939dc4e9c3e4e3e4c2a6ba6fd361cd6a680f0c2cd361a6699dc
+  - name: ghcr.io/royal2005-coder/velura-admin-erp
+    newName: ghcr.io/royal2005-coder/velura-admin-erp
+    digest: sha256:7833fe24d5249c40d17be982dd6e8ca27e738d767524528d60cc40a160634b4e
   - name: ghcr.io/royal2005-coder/velura-storefront
     newName: ghcr.io/royal2005-coder/velura-storefront
     digest: sha256:360e177388aa42e0a8ff2c1a561e08b6d89d84ada9f83ec46407072dc11e0419

@@ -103,11 +103,10 @@ export const ADMIN_ERP_NAV_ITEMS: Readonly<Record<AdminErpNavKey, AdminErpNavIte
     description: 'Giá niêm yết, giá khuyến mãi và lịch sử thay đổi tách khỏi catalog.',
     icon: 'tag',
     group: 'catalog',
-    path: '/products',
+    path: '/pricing',
     pageKeys: ['pricing'],
-    queryParams: { tab: 'price' },
     capability: 'pricing.read',
-    status: 'planned',
+    status: 'ready',
   },
   promotions: {
     key: 'promotions',

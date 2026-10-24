@@ -53,7 +53,7 @@ export const routes: Routes = [
       },
       {
         path: 'orders',
-        loadComponent: () => import('./features/shared/coming-soon.page').then((m) => m.ComingSoonPage),
+        loadComponent: () => import('./features/orders/admin-erp-orders.page').then((m) => m.AdminErpOrdersPage),
         canActivate: [adminErpAuthGuard],
         data: { page: 'orders', navKey: 'orders' },
       },
@@ -77,7 +77,7 @@ export const routes: Routes = [
       },
       {
         path: 'promotions',
-        loadComponent: () => import('./features/shared/coming-soon.page').then((m) => m.ComingSoonPage),
+        loadComponent: () => import('./features/promotions/admin-erp-promotions.page').then((m) => m.AdminErpPromotionsPage),
         canActivate: [adminErpAuthGuard],
         data: { page: 'promotions', navKey: 'promotions' },
       },

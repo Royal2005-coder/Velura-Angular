@@ -1,0 +1,360 @@
+<app-erp-page-header
+  eyebrow="Bán hàng"
+  title="Đơn hàng"
+  subtitle="Hàng đợi xác nhận, thanh toán, đóng gói và giao vận. Trạng thái và action do API state machine quyết định."
+>
+  <div actions>
+    <button class="erp-btn erp-btn--sm" type="button" (click)="exportCsv()" [disabled]="!rows().length">
+      <app-erp-icon name="download" [size]="'15'" />
+      CSV
+    </button>
+    <button class="erp-btn erp-btn--sm" type="button" (click)="reload()" [disabled]="loading()">
+      <app-erp-icon name="refresh" [size]="'15'" />
+      {{ loading() ? 'Đang tải…' : 'Làm mới' }}
+    </button>
+  </div>
+</app-erp-page-header>
+
+<section class="orders-kpis" aria-label="Tóm tắt đơn hàng">
+  <app-erp-kpi-card label="Tổng đơn" [value]="count().toLocaleString('vi-VN')" hint="Theo bộ lọc" tone="accent" icon="cart" [loading]="loading() && !hasLoadedOnce()" />
+  <app-erp-kpi-card label="Cần xử lý" [value]="attentionCount().toLocaleString('vi-VN')" hint="Hàng đợi vận hành" tone="warning" icon="alert" [loading]="loading() && !hasLoadedOnce()" />
+  <app-erp-kpi-card label="Đã hủy" [value]="cancelledCount().toLocaleString('vi-VN')" hint="Toàn bộ đơn" tone="danger" icon="log" [loading]="loading() && !hasLoadedOnce()" />
+  <app-erp-kpi-card label="Trang này" [value]="rows().length.toLocaleString('vi-VN')" hint="Số dòng đang hiển thị" icon="eye" [loading]="loading()" />
+</section>
+
+<section class="erp-card orders-panel" aria-labelledby="orders-title">
+  <div class="orders-tabs">
+    <div>
+      <span class="orders-eyebrow">Sales</span>
+      <h2 id="orders-title">Hàng đợi đơn hàng</h2>
+    </div>
+    <app-erp-tabs [tabs]="tabs()" [active]="tab()" (changed)="setTab($event)" />
+  </div>
+
+  @if (tab() !== 'logs') {
+    <app-erp-filter-bar [busy]="loading()" (apply)="applyFilters()" (reset)="resetFilters()">
+      <label class="erp-field orders-search">
+        <span>Tìm kiếm</span>
+        <input class="erp-input" type="search" [value]="query()" (input)="onQueryInput($event)" placeholder="Mã đơn, tên, số điện thoại..." />
+      </label>
+      <label class="erp-field">
+        <span>Trạng thái</span>
+        <select class="erp-select" [value]="status()" (change)="onStatusChange($event)">
+          <option value="">Tất cả</option>
+          @for (option of statusOptions(); track option.status) {
+            <option [value]="option.status">{{ option.label }}</option>
+          }
+        </select>
+      </label>
+      <label class="erp-field">
+        <span>Thanh toán</span>
+        <select class="erp-select" [value]="paymentMethod()" (change)="onPaymentMethodChange($event)">
+          <option value="">Tất cả</option>
+          <option value="COD">COD</option>
+          <option value="ONLINE_PAYMENT">Online Payment</option>
+        </select>
+      </label>
+      <label class="erp-field">
+        <span>Từ ngày</span>
+        <input class="erp-input" type="date" [value]="from()" (change)="onFromChange($event)" />
+      </label>
+    </app-erp-filter-bar>
+
+    @if (loadError()) {
+      <div class="orders-banner" role="alert">
+        <app-erp-icon name="alert" [size]="'16'" />
+        {{ loadError() }}
+        <button class="erp-btn erp-btn--sm" type="button" (click)="reload()">Thử lại</button>
+      </div>
+    }
+
+    <app-erp-data-table
+      caption="Danh sách đơn hàng"
+      [columns]="orderColumns"
+      [rows]="rows()"
+      [loading]="loading()"
+      emptyTitle="Không có đơn hàng phù hợp"
+      emptyMessage="Điều chỉnh bộ lọc hoặc chọn tab khác."
+      [clickable]="true"
+      (rowSelected)="openRow($event)"
+    />
+    <app-erp-pagination [page]="page()" [pageCount]="totalPages()" [label]="rangeLabel()" (changed)="goPage($event)" />
+  } @else {
+    <app-erp-data-table
+      caption="Nhật ký đơn hàng"
+      [columns]="logColumns"
+      [rows]="logs()"
+      [loading]="loading()"
+      emptyTitle="Chưa có nhật ký đơn hàng"
+      emptyMessage="Audit xuất hiện sau thao tác vận hành."
+    />
+    <app-erp-pagination [page]="logsPage()" [pageCount]="logPageCount()" [label]="logRangeLabel()" (changed)="goLogsPage($event)" />
+  }
+</section>
+
+<app-erp-drawer [open]="selected() !== null" title="Chi tiết đơn hàng" size="lg" (closed)="closeDetail()">
+  @if (selected(); as order) {
+    <div class="order-detail">
+      @if (notice()) {
+        <div class="orders-banner orders-banner--info" role="status">{{ notice() }}</div>
+      }
+      <div class="order-detail__head">
+        <div>
+          <span class="order-detail__code">{{ order.order_code || order.order_id }}</span>
+          <h3>{{ order.shipping_name || order.user?.full_name || 'Khách hàng' }}</h3>
+          <p>{{ order.shipping_phone || '—' }} · {{ dateTime(order.order_date || order.created_at) }}</p>
+        </div>
+        <div class="order-detail__badges">
+          <app-erp-status-badge [label]="orderLabel(order)" [tone]="orderTone(order.status)" [dot]="true" />
+          <app-erp-status-badge [label]="paymentMethodLabel(order.payment_method, order)" tone="neutral" />
+        </div>
+      </div>
+
+      <section class="order-section">
+        <h4>Giao hàng &amp; thanh toán</h4>
+        <dl class="detail-grid">
+          <div><dt>Người nhận</dt><dd>{{ order.shipping_name || '—' }}</dd></div>
+          <div><dt>Số điện thoại</dt><dd>{{ order.shipping_phone || '—' }}</dd></div>
+          <div class="detail-grid__wide"><dt>Địa chỉ</dt><dd>{{ order.shipping_address || '—' }}</dd></div>
+          <div><dt>Tạm tính</dt><dd>{{ money(order.subtotal) }}</dd></div>
+          <div><dt>Giảm giá</dt><dd>{{ money(order.discount_amount) }}</dd></div>
+          <div><dt>Phí giao</dt><dd>{{ money(order.shipping_fee) }}</dd></div>
+          <div><dt>Tổng tiền</dt><dd><strong>{{ money(order.total_amount) }}</strong></dd></div>
+          <div><dt>Trạng thái TT</dt><dd>{{ order.payment_status_label || order.payment_status || '—' }}</dd></div>
+        </dl>
+        @if (selectedPayment(); as payment) {
+          <p class="order-note">Payment gần nhất: {{ payment.payment_status || '—' }} · {{ money(payment.amount) }} · phiên bản {{ payment.version ?? '—' }}</p>
+        }
+        @if (order.tracking_code) {
+          <p class="order-note">Vận đơn {{ order.carrier || '' }} · {{ order.tracking_code }}</p>
+        }
+        @if (order.cancelled_reason) {
+          <p class="order-note order-note--danger">Lý do hủy: {{ order.cancelled_reason }}</p>
+        }
+      </section>
+
+      <section class="order-section">
+        <h4>Sản phẩm</h4>
+        <div class="order-items">
+          @for (item of selectedItems(); track $index) {
+            <div class="order-item">
+              <span>{{ item.product_name || 'Sản phẩm' }}</span>
+              <span>{{ item.quantity || 0 }} × {{ money(item.unit_price) }}</span>
+              <strong>{{ lineTotal(item.unit_price, item.quantity) }}</strong>
+            </div>
+          } @empty {
+            <p class="erp-hint">Đơn chưa có dòng hàng.</p>
+          }
+        </div>
+      </section>
+
+      <section class="order-section">
+        <h4>Tiến trình</h4>
+        <ol class="pipeline">
+          @for (step of pipelineSteps(); track step.id) {
+            <li [class]="'pipeline__step pipeline__step--' + step.state">{{ step.label }}</li>
+          }
+        </ol>
+      </section>
+
+      <section class="order-section">
+        <h4>Lịch sử xử lý</h4>
+        <div class="order-events">
+          @for (event of events(); track event.event_id || event.created_at) {
+            <article>
+              <time>{{ dateTime(event.created_at) }}</time>
+              <div>
+                <strong>{{ eventLabel(event) }}</strong>
+                <span>{{ eventActor(event) }}{{ event.note ? ' · ' + event.note : '' }}</span>
+              </div>
+              <span class="erp-chip">{{ event.result || event.to_status || '—' }}</span>
+            </article>
+          } @empty {
+            <p class="erp-hint">Chưa có sự kiện xử lý.</p>
+          }
+        </div>
+      </section>
+
+      <section class="order-section">
+        <h4>Audit gần nhất</h4>
+        <div class="order-events">
+          @for (row of audit(); track row.audit_id || row.timestamp) {
+            <article>
+              <time>{{ dateTime(row.timestamp) }}</time>
+              <div>
+                <strong>{{ row.action_label || row.action || '—' }}</strong>
+                <span>{{ auditActor(row) }} · {{ row.target_label || row.target_id || '—' }}</span>
+              </div>
+            </article>
+          } @empty {
+            <p class="erp-hint">Chưa tải được audit hoặc chưa có bản ghi.</p>
+          }
+        </div>
+      </section>
+
+      @if (canSimulateCarrier()) {
+        <section class="order-section">
+          <h4>Mô phỏng ĐVVC (super admin)</h4>
+          <div class="order-actions">
+            @for (outcome of carrierOutcomes; track outcome.code) {
+              <button class="erp-btn erp-btn--sm" type="button" (click)="simulateCarrier(outcome.code)" [disabled]="submitting()">
+                {{ outcome.label }}
+              </button>
+            }
+          </div>
+        </section>
+      }
+    </div>
+  }
+  <div footer class="order-footer">
+    @if (canMutate() && selected()) {
+      @if (requiresCallConfirmation()) {
+        <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" (click)="openCodCall(selected()!)">Gọi xác nhận</button>
+      }
+      @for (action of primaryActions(); track action.code) {
+        <button class="erp-btn erp-btn--sm" type="button" (click)="openAction(action)">{{ action.label }}</button>
+      }
+      @for (action of destructiveActions(); track action.code) {
+        <button class="erp-btn erp-btn--danger erp-btn--sm" type="button" (click)="openAction(action)">{{ action.label }}</button>
+      }
+      @if (selected() && isPaymentError(selected()!)) {
+        <button class="erp-btn erp-btn--sm" type="button" (click)="openPaymentResolve()">Đối soát TT</button>
+      }
+    }
+    <button class="erp-btn erp-btn--sm" type="button" (click)="closeDetail()">Đóng</button>
+  </div>
+</app-erp-drawer>
+
+<app-erp-modal [open]="activeAction() !== null" [title]="activeAction()?.label || 'Thao tác đơn'" size="md" (closed)="closeModal()">
+  @if (activeAction(); as action) {
+    <form class="order-form" (submit)="submitAction($event)">
+      <p class="erp-hint">{{ selected()?.order_code || selected()?.order_id }} · {{ action.to_status || 'không đổi trạng thái' }}</p>
+
+      @if (hasField(action, 'call_result')) {
+        <label class="erp-field">
+          <span>Kết quả gọi</span>
+          <select class="erp-select" name="callResult">
+            @for (result of callResults; track result.code) {
+              <option [value]="result.code">{{ result.label }}</option>
+            }
+          </select>
+        </label>
+      }
+      @if (hasField(action, 'shortage')) {
+        <label class="erp-field"><span>Số lượng thiếu</span><input class="erp-input" name="shortage" type="number" min="1" /></label>
+      }
+      @if (hasField(action, 'shipment') || hasField(action, 'tracking')) {
+        <label class="erp-field"><span>Đơn vị vận chuyển</span><input class="erp-input" name="carrier" type="text" /></label>
+        <label class="erp-field"><span>Mã vận đơn</span><input class="erp-input" name="trackingCode" type="text" /></label>
+        <label class="erp-field"><span>Tracking URL</span><input class="erp-input" name="trackingUrl" type="url" /></label>
+      }
+      @if (hasField(action, 'cancel_reason')) {
+        <label class="erp-field">
+          <span>Lý do hủy</span>
+          <select class="erp-select" name="cancelReason">
+            @for (reason of cancelReasons; track reason.code) {
+              <option [value]="reason.code">{{ reason.label }}</option>
+            }
+          </select>
+        </label>
+      }
+
+      <label class="erp-field">
+        <span>Ghi chú{{ action.requires_note ? ' (tối thiểu 5 ký tự)' : '' }}</span>
+        <textarea class="erp-input" name="note" rows="3" [required]="action.requires_note"></textarea>
+      </label>
+
+      @if (actionError()) {
+        <p class="erp-error" role="alert">{{ actionError() }}</p>
+      }
+      <div class="order-form__actions">
+        <button class="erp-btn" type="button" (click)="closeModal()">Hủy</button>
+        <button class="erp-btn erp-btn--primary" type="submit" [disabled]="submitting()">Xác nhận</button>
+      </div>
+    </form>
+  }
+</app-erp-modal>
+
+<app-erp-modal [open]="modal()?.kind === 'cod_call'" title="Gọi xác nhận đơn COD" size="md" (closed)="closeModal()">
+  @if (selected(); as order) {
+    <div class="order-form">
+      <div class="cod-call">
+        <div>
+          <span class="cod-call__label">Người nhận</span>
+          <strong>{{ order.shipping_name || '—' }}</strong>
+          <span>{{ order.shipping_address || '—' }}</span>
+        </div>
+        <div class="cod-call__phone">
+          <strong>{{ order.shipping_phone || '—' }}</strong>
+          <button class="erp-btn erp-btn--sm" type="button" (click)="copyPhone(order.shipping_phone)">{{ copiedPhone() ? 'Đã copy' : 'Copy SĐT' }}</button>
+        </div>
+        <a class="erp-btn erp-btn--primary erp-btn--sm" [href]="'tel:' + (order.shipping_phone || '')" (click)="startCodCall()">Gọi</a>
+      </div>
+
+      <label class="erp-field">
+        <span>Kết quả liên hệ</span>
+        <select class="erp-select" [value]="codDecision()" (change)="onCodDecision($event)">
+          <option value="">Chọn kết quả</option>
+          <option value="confirm">Liên hệ được — xác nhận đơn</option>
+          <option value="no_answer">Không nghe máy</option>
+          <option value="cancel">Khách yêu cầu hủy</option>
+          <option value="invalid">Nghi ngờ đơn ảo</option>
+        </select>
+      </label>
+
+      @if (codDecision() === 'cancel') {
+        <label class="erp-field">
+          <span>Lý do hủy</span>
+          <select class="erp-select" [value]="codCancelReason()" (change)="onCodCancelReason($event)">
+            @for (reason of cancelReasons; track reason.code) {
+              <option [value]="reason.code">{{ reason.label }}</option>
+            }
+          </select>
+        </label>
+      }
+
+      <label class="erp-field">
+        <span>Ghi chú cuộc gọi (tối thiểu 5 ký tự)</span>
+        <textarea class="erp-input" rows="3" [value]="codNote()" (input)="onCodNote($event)"></textarea>
+      </label>
+      <div class="cod-quick">
+        @for (note of ['Khách xác nhận đơn', 'Khách không nghe máy', 'Khách đổi ý', 'Sai số điện thoại']; track note) {
+          <button class="erp-chip" type="button" (click)="setCodQuickNote(note)">{{ note }}</button>
+        }
+      </div>
+
+      @if (actionError()) {
+        <p class="erp-error" role="alert">{{ actionError() }}</p>
+      }
+      <div class="order-form__actions">
+        <button class="erp-btn" type="button" (click)="closeModal()">Hủy</button>
+        <button class="erp-btn erp-btn--primary" type="button" (click)="submitCodCall($event)" [disabled]="submitting() || detailLoading()">
+          Lưu kết quả
+        </button>
+      </div>
+    </div>
+  }
+</app-erp-modal>
+
+<app-erp-modal [open]="modal()?.kind === 'payment'" title="Đối soát thanh toán" size="sm" (closed)="closeModal()">
+  @if (selected(); as order) {
+    <form class="order-form" (submit)="submitPaymentResolve($event)">
+      <p class="erp-hint">{{ order.order_code || order.order_id }} · {{ paymentMethodLabel(order.payment_method, order) }}</p>
+      <label class="erp-field">
+        <span>Quyết định</span>
+        <select class="erp-select" name="decision">
+          <option value="paid">Đã thanh toán</option>
+          <option value="failed">Thanh toán thất bại</option>
+        </select>
+      </label>
+      <label class="erp-field"><span>Lý do</span><textarea class="erp-input" name="reason" rows="3" required></textarea></label>
+      @if (actionError()) {
+        <p class="erp-error" role="alert">{{ actionError() }}</p>
+      }
+      <div class="order-form__actions">
+        <button class="erp-btn" type="button" (click)="closeModal()">Hủy</button>
+        <button class="erp-btn erp-btn--primary" type="submit" [disabled]="submitting()">Xác nhận</button>
+      </div>
+    </form>
+  }
+</app-erp-modal>

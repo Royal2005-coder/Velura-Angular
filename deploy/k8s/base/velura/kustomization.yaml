@@ -3,6 +3,7 @@ kind: Kustomization
 resources:
 - velura-api.yaml
 - velura-admin.yaml
+- velura-admin-erp.yaml
 - velura-storefront.yaml
 configMapGenerator:
   - name: velura-api-config
@@ -11,7 +12,7 @@ configMapGenerator:
       - NODE_ENV=production
       - RELEASE_REVISION=b3df517c1daa2c4147ca7c5db0a32213a748c683
       - PORT=3000
-      - CORS_ORIGIN=https://velura.royalai.dev,https://admin.royalai.dev,https://shop.royalai.dev
+      - CORS_ORIGIN=https://velura.royalai.dev,https://admin.royalai.dev,https://shop.royalai.dev,https://admin-erp.royalai.dev
       - STOREFRONT_ORIGIN=https://velura.royalai.dev
       - S3_ENDPOINT=http://s3-service.storage.svc:9000
       - LITELLM_ENDPOINT=http://litellm.observability.svc:4000

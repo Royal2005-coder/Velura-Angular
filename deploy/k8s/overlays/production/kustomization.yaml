@@ -15,3 +15,6 @@ images:
 - name: ghcr.io/royal2005-coder/velura-admin
   newName: ghcr.io/royal2005-coder/velura-admin
   digest: sha256:eafd698ef67300bf872c53432dfeb98da4333dea396d39c3b66dc7a23b551b71
+- name: ghcr.io/royal2005-coder/velura-admin-erp
+  newName: ghcr.io/royal2005-coder/velura-admin-erp
+  digest: sha256:7833fe24d5249c40d17be982dd6e8ca27e738d767524528d60cc40a160634b4e

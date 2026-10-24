@@ -1,0 +1,316 @@
+<app-erp-page-header
+  eyebrow="Khách hàng & nhân sự"
+  title="Tài khoản & phân quyền"
+  subtitle="Danh bạ khách hàng, nhân sự vận hành và yêu cầu nâng quyền. Mọi thao tác ghi đều dùng expectedVersion và audit của API hiện tại."
+>
+  <div actions>
+    @if (canMutate()) {
+      <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" (click)="openCreate()">
+        <app-erp-icon name="plus" [size]="'15'" />
+        Tạo tài khoản
+      </button>
+    }
+    <button class="erp-btn erp-btn--sm" type="button" (click)="reload()" [disabled]="loading()">
+      <app-erp-icon name="refresh" [size]="'15'" />
+      {{ loading() ? 'Đang tải…' : 'Làm mới' }}
+    </button>
+  </div>
+</app-erp-page-header>
+
+<section class="accounts-kpis" aria-label="Tóm tắt tài khoản">
+  <app-erp-kpi-card label="Tổng tài khoản" [value]="kpi(allCount())" hint="Toàn bộ danh bạ" tone="accent" icon="users" [loading]="loading() && !hasLoadedOnce()" />
+  <app-erp-kpi-card label="Thành viên" [value]="kpi(memberCount())" hint="Khách hàng" icon="users" [loading]="loading() && !hasLoadedOnce()" />
+  <app-erp-kpi-card label="Quản trị" [value]="kpi(adminCount())" hint="Nhân sự vận hành" tone="info" icon="lock" [loading]="loading() && !hasLoadedOnce()" />
+  <app-erp-kpi-card label="Bị khóa" [value]="kpi(lockedCount())" hint="Có lock_type" tone="danger" icon="lock" [loading]="loading() && !hasLoadedOnce()" />
+  <app-erp-kpi-card label="Chưa xác thực" [value]="kpi(unverifiedCount())" hint="Chưa hoàn tất OTP" tone="warning" icon="alert" [loading]="loading() && !hasLoadedOnce()" />
+  <app-erp-kpi-card label="Chờ nâng quyền" [value]="kpi(pendingCount())" hint="Yêu cầu đang mở" tone="warning" icon="clock" [loading]="loading() && !hasLoadedOnce()" />
+</section>
+
+<section class="erp-card accounts-panel" aria-labelledby="accounts-title">
+  <div class="accounts-tabs">
+    <div>
+      <span class="accounts-eyebrow">Directory</span>
+      <h2 id="accounts-title">Danh sách tài khoản</h2>
+    </div>
+    <app-erp-tabs [tabs]="tabs()" [active]="tab()" (changed)="setTab($event)" />
+  </div>
+
+  @if (tab() !== 'promotions' && tab() !== 'logs') {
+    <app-erp-filter-bar [busy]="loading()" (apply)="applyFilters()" (reset)="resetFilters()">
+      <label class="erp-field accounts-search">
+        <span>Tìm kiếm</span>
+        <input
+          class="erp-input"
+          type="search"
+          [value]="query()"
+          (input)="onQueryInput($event)"
+          placeholder="Tên, email hoặc số điện thoại..."
+        />
+      </label>
+      <label class="erp-field">
+        <span>Loại tài khoản</span>
+        <select class="erp-select" [value]="roleFilter()" (change)="onRoleFilter($event)">
+          @for (option of moduleOptions; track option.value) {
+            <option [value]="option.value">{{ option.label }}</option>
+          }
+        </select>
+      </label>
+      <label class="erp-field">
+        <span>Trạng thái</span>
+        <select class="erp-select" [value]="statusFilter()" (change)="onStatusFilter($event)">
+          @for (option of statusOptions; track option.value) {
+            <option [value]="option.value">{{ option.label }}</option>
+          }
+        </select>
+      </label>
+    </app-erp-filter-bar>
+
+    @if (loadError() && !rows().length) {
+      <app-erp-data-table
+        caption="Danh sách tài khoản"
+        [columns]="accountColumns"
+        [rows]="rows()"
+        [loading]="loading()"
+        [error]="loadError() || ''"
+        errorTitle="Không tải được tài khoản"
+        emptyTitle="Không có tài khoản phù hợp"
+        emptyMessage="Điều chỉnh bộ lọc hoặc tải lại."
+        [clickable]="true"
+        (retry)="reload()"
+        (rowSelected)="openDetail($event)"
+      />
+    } @else {
+      <app-erp-data-table
+        caption="Danh sách tài khoản"
+        [columns]="accountColumns"
+        [rows]="rows()"
+        [loading]="loading()"
+        emptyTitle="Không có tài khoản phù hợp"
+        emptyMessage="Điều chỉnh bộ lọc hoặc tải lại."
+        [clickable]="true"
+        (rowSelected)="openDetail($event)"
+      />
+    }
+    <app-erp-pagination [page]="page()" [pageCount]="pageCount()" [label]="rangeLabel()" (changed)="goPage($event)" />
+  } @else if (tab() === 'promotions') {
+    <app-erp-data-table
+      caption="Yêu cầu nâng quyền đang chờ"
+      [columns]="requestColumns"
+      [rows]="requests()"
+      [loading]="loading()"
+      emptyTitle="Không có yêu cầu nâng quyền"
+      emptyMessage="Yêu cầu mới sẽ xuất hiện ở đây để super admin duyệt."
+      [clickable]="true"
+      (rowSelected)="openRequest($event)"
+    />
+    <app-erp-pagination
+      [page]="requestPage()"
+      [pageCount]="requestPageCount()"
+      [label]="requestRangeLabel()"
+      (changed)="goRequestPage($event)"
+    />
+  } @else {
+    <app-erp-data-table
+      caption="Nhật ký tài khoản"
+      [columns]="logColumns"
+      [rows]="logs()"
+      [loading]="loading()"
+      emptyTitle="Chưa có nhật ký tài khoản"
+      emptyMessage="Audit tài khoản xuất hiện sau thao tác khóa, mở khóa hoặc đổi vai trò."
+      [clickable]="true"
+      (rowSelected)="openLog($event)"
+    />
+    <app-erp-pagination [page]="logsPage()" [pageCount]="logPageCount()" [label]="logRangeLabel()" (changed)="goLogsPage($event)" />
+  }
+</section>
+
+<app-erp-drawer [open]="selected() !== null" title="Chi tiết tài khoản" size="md" (closed)="closeOverlays()">
+  @if (selected(); as row) {
+    <div class="account-detail">
+      <div class="account-detail__head">
+        <span class="account-detail__avatar">{{ initials(row) }}</span>
+        <div>
+          <h3>{{ row.full_name || row.email || row.phone || 'Tài khoản' }}</h3>
+          <p>{{ row.user_id }}</p>
+          <div class="account-detail__badges">
+            <app-erp-status-badge [label]="roleText(row)" [tone]="row.role === 'admin' ? 'info' : 'neutral'" />
+            <app-erp-status-badge [label]="statusLabel(row)" [tone]="statusTone(row)" [dot]="true" />
+            <app-erp-status-badge [label]="row.is_verified ? 'Đã xác thực' : 'Chưa xác thực'" [tone]="row.is_verified ? 'success' : 'warning'" />
+          </div>
+        </div>
+      </div>
+
+      <dl class="detail-grid">
+        <div><dt>Email</dt><dd>{{ row.email || '—' }}</dd></div>
+        <div><dt>Số điện thoại</dt><dd>{{ row.phone || '—' }}</dd></div>
+        <div><dt>Vai trò quản trị</dt><dd>{{ row.role === 'admin' ? adminRoleLabel(row.admin_role || '') : 'Member' }}</dd></div>
+        <div><dt>Ngày tạo</dt><dd>{{ date(row.created_at) }}</dd></div>
+        <div><dt>Đăng nhập gần nhất</dt><dd>{{ date(row.last_login_at) }}</dd></div>
+        <div><dt>Phiên bản</dt><dd class="is-mono">{{ row.version ?? '—' }}</dd></div>
+        @if (row.lock_type) {
+          <div><dt>Loại khóa</dt><dd>{{ row.lock_type === 'permanent' ? 'Vĩnh viễn' : 'Tạm thời' }}</dd></div>
+          <div><dt>Khóa đến</dt><dd>{{ date(row.locked_until || undefined) }}</dd></div>
+          <div class="detail-grid__wide"><dt>Lý do khóa</dt><dd>{{ row.lock_reason || '—' }}</dd></div>
+          <div class="detail-grid__wide"><dt>Lý do mở khóa</dt><dd>{{ row.unlock_reason || '—' }}</dd></div>
+        }
+      </dl>
+    </div>
+  }
+  <div footer>
+    @if (canMutate() && selected(); as row) {
+      @if (row.is_active) {
+        <button class="erp-btn erp-btn--danger erp-btn--sm" type="button" (click)="openAction('lock')">Khóa</button>
+      } @else {
+        <button class="erp-btn erp-btn--sm" type="button" (click)="openAction('unlock')">Mở khóa</button>
+      }
+      <button class="erp-btn erp-btn--sm" type="button" (click)="openAction('role')">Đổi vai trò</button>
+    }
+    <button class="erp-btn erp-btn--sm" type="button" (click)="closeOverlays()">Đóng</button>
+  </div>
+</app-erp-drawer>
+
+<app-erp-drawer [open]="selectedLog() !== null" title="Chi tiết nhật ký tài khoản" size="md" (closed)="closeOverlays()">
+  @if (selectedLog(); as log) {
+    <div class="account-detail">
+      <dl class="detail-grid">
+        <div><dt>Thời gian</dt><dd>{{ date(log.timestamp) }}</dd></div>
+        <div><dt>Người thao tác</dt><dd>{{ actor(log) }}</dd></div>
+        <div><dt>Hành động</dt><dd>{{ action(log) }}</dd></div>
+        <div><dt>Đối tượng</dt><dd>{{ target(log) }}</dd></div>
+      </dl>
+      <section class="account-detail__section">
+        <h3>Payload mới</h3>
+        <pre>{{ jsonValue(log.new_value) }}</pre>
+      </section>
+    </div>
+  }
+  <div footer><button class="erp-btn erp-btn--sm" type="button" (click)="closeOverlays()">Đóng</button></div>
+</app-erp-drawer>
+
+<app-erp-modal [open]="actionType() !== null" [title]="actionTitle()" size="sm" (closed)="closeOverlays()">
+  <form class="account-form" (submit)="submitAction($event)">
+    @if (actionType() === 'role') {
+      <label class="erp-field">
+        <span>Loại tài khoản</span>
+        <select class="erp-select" name="targetRole" [value]="targetRole()" (change)="onTargetRole($event)">
+          <option value="member">Thành viên</option>
+          <option value="admin">Quản trị viên</option>
+        </select>
+      </label>
+      @if (targetRole() === 'admin') {
+        <label class="erp-field">
+          <span>Vai trò quản trị</span>
+          <select class="erp-select" name="adminRole">
+            @for (role of adminRoles; track role) {
+              <option [value]="role">{{ adminRoleLabel(role) }}</option>
+            }
+          </select>
+        </label>
+      }
+    }
+    @if (actionType() === 'lock') {
+      <label class="erp-field">
+        <span>Loại khóa</span>
+        <select class="erp-select" name="lockType" (change)="onLockType($event)">
+          <option value="temporary">Tạm thời</option>
+          <option value="permanent">Vĩnh viễn</option>
+        </select>
+      </label>
+      @if (lockType() === 'temporary') {
+        <label class="erp-field">
+          <span>Khóa đến</span>
+          <input class="erp-input" name="lockedUntil" type="datetime-local" required />
+        </label>
+      }
+    }
+    @if (actionType() !== 'role') {
+      <label class="erp-field">
+        <span>Lý do, tối thiểu 11 từ</span>
+        <textarea class="erp-input" name="reason" rows="4" required (input)="onReasonInput($event)"></textarea>
+        <small class="erp-hint">{{ wordHint() }}</small>
+      </label>
+    }
+    @if (actionError()) {
+      <p class="erp-error" role="alert">{{ actionError() }}</p>
+    }
+    <div class="account-form__actions">
+      <button class="erp-btn" type="button" (click)="closeOverlays()">Hủy</button>
+      <button class="erp-btn erp-btn--primary" type="submit">Xác nhận</button>
+    </div>
+  </form>
+</app-erp-modal>
+
+<app-erp-modal [open]="createOpen()" title="Tạo tài khoản mới" size="md" (closed)="closeCreate()">
+  @if (createdAccount(); as created) {
+    <div class="create-success">
+      <p>Tài khoản {{ created.email || created.phone }} đã được tạo và kích hoạt.</p>
+      @if (created.temporary_password) {
+        <div class="create-success__password">
+          <span>Mật khẩu tạm thời</span>
+          <strong>{{ created.temporary_password }}</strong>
+          <small>Chỉ hiển thị một lần. Hãy gửi cho người dùng và yêu cầu đổi sau lần đăng nhập đầu tiên.</small>
+        </div>
+      }
+    </div>
+    <div class="account-form__actions"><button class="erp-btn erp-btn--primary" type="button" (click)="closeCreate()">Xong</button></div>
+  } @else {
+    <form class="account-form" (submit)="submitCreate($event)">
+      <label class="erp-field"><span>Họ tên</span><input class="erp-input" name="fullName" type="text" placeholder="VD: Nguyễn Văn A" required /></label>
+      <label class="erp-field"><span>Email</span><input class="erp-input" name="email" type="email" placeholder="VD: admin@velura.vn" /></label>
+      <label class="erp-field"><span>Số điện thoại</span><input class="erp-input" name="phone" type="tel" placeholder="VD: 0901234567" /></label>
+      <label class="erp-field"><span>Mật khẩu</span><input class="erp-input" name="password" type="password" placeholder="Bỏ trống để hệ thống tự tạo" minlength="8" /></label>
+      <label class="erp-field">
+        <span>Loại tài khoản</span>
+        <select class="erp-select" name="role" [value]="createRole()" (change)="onCreateRole($event)">
+          <option value="member">Thành viên</option>
+          <option value="admin">Quản trị viên</option>
+        </select>
+      </label>
+      @if (createRole() === 'admin') {
+        <label class="erp-field">
+          <span>Vai trò quản trị</span>
+          <select class="erp-select" name="adminRole">
+            @for (role of adminRoles; track role) {
+              <option [value]="role">{{ adminRoleLabel(role) }}</option>
+            }
+          </select>
+        </label>
+      }
+      @if (createError()) {
+        <p class="erp-error" role="alert">{{ createError() }}</p>
+      }
+      <div class="account-form__actions">
+        <button class="erp-btn" type="button" (click)="closeCreate()">Hủy</button>
+        <button class="erp-btn erp-btn--primary" type="submit">Tạo tài khoản</button>
+      </div>
+    </form>
+  }
+</app-erp-modal>
+
+<app-erp-modal [open]="selectedRequest() !== null" title="Xử lý yêu cầu nâng quyền" size="sm" (closed)="closeOverlays()">
+  @if (selectedRequest(); as request) {
+    <div class="request-detail">
+      <dl class="detail-grid">
+        <div><dt>Yêu cầu</dt><dd class="is-mono">{{ request.request_id }}</dd></div>
+        <div><dt>Tài khoản đích</dt><dd>{{ request.target_user_id || '—' }}</dd></div>
+        <div><dt>Vai trò yêu cầu</dt><dd>{{ adminRoleLabel(request.requested_role || '') }}</dd></div>
+        <div><dt>Hết hạn</dt><dd>{{ date(request.expires_at) }}</dd></div>
+      </dl>
+      <form #requestForm class="account-form">
+        <label class="erp-field">
+          <span>Ghi chú phê duyệt / lý do từ chối</span>
+          <textarea class="erp-input" name="note" rows="4" (input)="onReasonInput($event)"></textarea>
+          <small class="erp-hint">{{ wordHint() }}</small>
+        </label>
+        @if (actionError()) {
+          <p class="erp-error" role="alert">{{ actionError() }}</p>
+        }
+        <div class="account-form__actions account-form__actions--split">
+          <button class="erp-btn" type="button" (click)="closeOverlays()">Hủy</button>
+          <button class="erp-btn erp-btn--danger" type="button" (click)="submitRequest('reject', requestForm)">Từ chối</button>
+          <button class="erp-btn erp-btn--primary" type="button" (click)="submitRequest('approve', requestForm)">Duyệt</button>
+        </div>
+      </form>
+    </div>
+  }
+</app-erp-modal>

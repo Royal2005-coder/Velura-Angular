@@ -131,7 +131,7 @@ export const ADMIN_ERP_NAV_ITEMS: Readonly<Record<AdminErpNavKey, AdminErpNavIte
     path: '/reviews',
     pageKeys: ['reviews'],
     capability: 'reviews.read',
-    status: 'planned',
+    status: 'ready',
   },
   accounts: {
     key: 'accounts',
@@ -143,7 +143,7 @@ export const ADMIN_ERP_NAV_ITEMS: Readonly<Record<AdminErpNavKey, AdminErpNavIte
     path: '/accounts',
     pageKeys: ['accounts'],
     capability: 'accounts.read',
-    status: 'planned',
+    status: 'ready',
   },
   logs: {
     key: 'logs',

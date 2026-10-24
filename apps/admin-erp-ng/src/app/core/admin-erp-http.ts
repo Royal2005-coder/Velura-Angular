@@ -65,6 +65,22 @@ export function adminErrorMessage(error: unknown, fallback = 'Không thể gọi
 }
 
 /**
+ * Reads the validation details map (`{ field: [message] }`) out of the API error envelope.
+ */
+export function adminErrorDetails(error: unknown): Record<string, unknown> | undefined {
+  if (error instanceof HttpErrorResponse) {
+    const body = error.error as { error?: { details?: unknown } } | null;
+    const details = body?.error?.details;
+    if (details && typeof details === 'object' && !Array.isArray(details)) {
+      return details as Record<string, unknown>;
+    }
+    return undefined;
+  }
+  const flat = (error as { details?: unknown })?.details;
+  return flat && typeof flat === 'object' ? (flat as Record<string, unknown>) : undefined;
+}
+
+/**
  * Flattens `{ field: [message] }` validation details from the API.
  */
 export function formatErrorDetails(details: unknown): string {

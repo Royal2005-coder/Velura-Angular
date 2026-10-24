@@ -26,6 +26,58 @@ export interface AdminAuditRow {
   result?: string;
 }
 
+export interface AdminAccountRow {
+  user_id: string;
+  full_name?: string;
+  email?: string;
+  phone?: string;
+  role?: string;
+  admin_role?: string;
+  is_active?: boolean;
+  is_verified?: boolean;
+  locked_until?: string | null;
+  lock_type?: string | null;
+  lock_reason?: string | null;
+  unlock_reason?: string | null;
+  version?: number;
+  created_at?: string;
+  last_login_at?: string;
+  date_of_birth?: string;
+  gender?: string;
+}
+
+export interface AdminRoleRequestRow {
+  request_id: string;
+  target_user_id?: string;
+  requested_role?: string;
+  expires_at?: string;
+  status?: string;
+  version?: number;
+}
+
+export interface AdminReviewProduct {
+  name?: string;
+  sku?: string;
+}
+
+export interface AdminReviewRow {
+  review_id: string;
+  status?: string;
+  rating?: number;
+  comment?: string;
+  content?: string;
+  product?: AdminReviewProduct;
+  product_id?: string;
+  product_name?: string;
+  user_id?: string;
+  order_id?: string;
+  submitted_at?: string;
+  is_flagged_urgent?: boolean;
+  admin_reply?: string | null;
+  version?: number;
+  images?: string[];
+}
+
 export type AdminInsightRange = 'day' | 'week' | 'month';
 
 export interface AdminDashboardSummary {
@@ -142,6 +194,137 @@ export class AdminErpApiService {
    */
   listAuditLogs(params: Record<string, string> = {}): Observable<AdminListPayload<AdminAuditRow>> {
     return this.http.get<AdminListPayload<AdminAuditRow>>(`${this.baseUrl}/api/v1/admin/audit-logs`, {
+      params: this.params(params),
+    });
+  }
+
+  /**
+   * Lists member/admin accounts after an admin session exists.
+   */
+  listAccounts(params: Record<string, string> = {}): Observable<AdminListPayload<AdminAccountRow>> {
+    return this.http.get<AdminListPayload<AdminAccountRow>>(`${this.baseUrl}/api/v1/admin/accounts`, {
+      params: this.params(params),
+    });
+  }
+
+  /**
+   * Creates a member or admin account through the admin API.
+   */
+  createAccount(body: Record<string, unknown>): Observable<AdminAccountRow & { temporary_password?: string }> {
+    return this.http.post<AdminAccountRow & { temporary_password?: string }>(
+      `${this.baseUrl}/api/v1/admin/accounts`,
+      body,
+    );
+  }
+
+  /**
+   * Lists role-upgrade requests.
+   */
+  listRoleRequests(params: Record<string, string> = {}): Observable<AdminListPayload<AdminRoleRequestRow>> {
+    return this.http.get<AdminListPayload<AdminRoleRequestRow>>(`${this.baseUrl}/api/v1/admin/account-role-requests`, {
+      params: this.params(params),
+    });
+  }
+
+  /**
+   * Lists account-module audit rows.
+   */
+  listAccountAuditLogs(params: Record<string, string> = {}): Observable<AdminListPayload<AdminAuditRow>> {
+    return this.http.get<AdminListPayload<AdminAuditRow>>(`${this.baseUrl}/api/v1/admin/account-audit-logs`, {
+      params: this.params(params),
+    });
+  }
+
+  /**
+   * Locks an account with a reason and optimistic version.
+   */
+  lockAccount(userId: string, body: Record<string, unknown>): Observable<unknown> {
+    return this.http.post(`${this.baseUrl}/api/v1/admin/accounts/${encodeURIComponent(userId)}/lock`, body);
+  }
+
+  /**
+   * Unlocks an account with a reason and optimistic version.
+   */
+  unlockAccount(userId: string, body: Record<string, unknown>): Observable<unknown> {
+    return this.http.post(`${this.baseUrl}/api/v1/admin/accounts/${encodeURIComponent(userId)}/unlock`, body);
+  }
+
+  /**
+   * Changes a member/admin role with optimistic locking.
+   */
+  changeAccountRole(userId: string, body: Record<string, unknown>): Observable<unknown> {
+    return this.http.post(`${this.baseUrl}/api/v1/admin/accounts/${encodeURIComponent(userId)}/role`, body);
+  }
+
+  /**
+   * Approves or rejects a role-upgrade request.
+   */
+  reviewRoleRequest(requestId: string, decision: 'approve' | 'reject', body: Record<string, unknown>): Observable<unknown> {
+    return this.http.post(
+      `${this.baseUrl}/api/v1/admin/account-role-requests/${encodeURIComponent(requestId)}/${decision}`,
+      body,
+    );
+  }
+
+  /**
+   * Lists reviews for the admin moderation queue.
+   */
+  listReviews(params: Record<string, string> = {}): Observable<AdminListPayload<AdminReviewRow>> {
+    return this.http.get<AdminListPayload<AdminReviewRow>>(`${this.baseUrl}/api/v1/admin/reviews`, {
+      params: this.params(params),
+    });
+  }
+
+  /**
+   * Loads one review for the detail drawer.
+   */
+  getReview(reviewId: string): Observable<AdminReviewRow> {
+    return this.http.get<AdminReviewRow>(`${this.baseUrl}/api/v1/admin/reviews/${encodeURIComponent(reviewId)}`);
+  }
+
+  /**
+   * Approves a pending review.
+   */
+  approveReview(reviewId: string, body: Record<string, unknown>): Observable<unknown> {
+    return this.http.post(`${this.baseUrl}/api/v1/admin/reviews/${encodeURIComponent(reviewId)}/approve`, body);
+  }
+
+  /**
+   * Hides a review from the storefront.
+   */
+  hideReview(reviewId: string, body: Record<string, unknown>): Observable<unknown> {
+    return this.http.post(`${this.baseUrl}/api/v1/admin/reviews/${encodeURIComponent(reviewId)}/hide`, body);
+  }
+
+  /**
+   * Replies to a review.
+   */
+  replyReview(reviewId: string, body: Record<string, unknown>): Observable<unknown> {
+    return this.http.post(`${this.baseUrl}/api/v1/admin/reviews/${encodeURIComponent(reviewId)}/reply`, body);
+  }
+
+  /**
+   * Escalates a review into a CSKH ticket.
+   */
+  escalateReview(reviewId: string, body: Record<string, unknown>): Observable<unknown> {
+    return this.http.post(`${this.baseUrl}/api/v1/admin/reviews/${encodeURIComponent(reviewId)}/escalate`, body);
+  }
+
+  /**
+   * Requests AI reply suggestions for one review.
+   */
+  suggestReviewReply(reviewId: string): Observable<{ replies?: string[]; source?: string }> {
+    return this.http.post<{ replies?: string[]; source?: string }>(
+      `${this.baseUrl}/api/v1/admin/reviews/${encodeURIComponent(reviewId)}/suggest-reply`,
+      {},
+    );
+  }
+
+  /**
+   * Lists review-module audit rows.
+   */
+  listReviewAuditLogs(params: Record<string, string> = {}): Observable<AdminListPayload<AdminAuditRow>> {
+    return this.http.get<AdminListPayload<AdminAuditRow>>(`${this.baseUrl}/api/v1/admin/reviews/audit-logs`, {
       params: this.params(params),
     });
   }

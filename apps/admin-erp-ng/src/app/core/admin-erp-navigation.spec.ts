@@ -30,10 +30,11 @@ describe('ERP admin navigation registry', () => {
     expect(adminErpNavItemForPage('unknown-page')).toBeNull();
   });
 
-  it('marks dashboard ready and the remaining workspaces planned for PR 0', () => {
+  it('marks shipped workspaces ready and the remaining workspaces planned', () => {
     expect(ADMIN_ERP_NAV_ITEMS.dashboard.status).toBe('ready');
+    expect(ADMIN_ERP_NAV_ITEMS.logs.status).toBe('ready');
     for (const item of Object.values(ADMIN_ERP_NAV_ITEMS)) {
-      if (item.key !== 'dashboard') {
+      if (item.key !== 'dashboard' && item.key !== 'logs') {
         expect(item.status).toBe('planned');
       }
     }

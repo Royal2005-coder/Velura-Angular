@@ -1,0 +1,71 @@
+<div class="csv-intro">
+  <div>
+    <h3>Nhập hàng loạt sản phẩm</h3>
+    <p>
+      Cột bắt buộc: <code>{{ requiredColumns }}</code>. Tối đa {{ maxRows }} dòng dữ liệu, 60 KB mỗi file.
+      CSV không thay đổi giá đã lưu; ảnh mới phải được phê duyệt trong biểu mẫu sản phẩm.
+    </p>
+  </div>
+  <button class="erp-btn erp-btn--sm" type="button" (click)="downloadTemplate()">
+    <app-erp-icon name="download" [size]="'15'" />
+    Tải file mẫu
+  </button>
+</div>
+
+<div class="csv-pick">
+  <label class="erp-field csv-pick__file">
+    <span>Chọn file CSV</span>
+    <input class="erp-input" type="file" accept=".csv,text/csv" [disabled]="committing()" (change)="onFilePicked($event)" />
+  </label>
+  @if (fileName()) {
+    <span class="csv-pick__name">{{ fileName() }}</span>
+  }
+</div>
+
+<div class="csv-status" [class.is-error]="hasErrors()">
+  <app-erp-icon name="log" [size]="'15'" />
+  <span>{{ message() }}</span>
+  @if (checking()) {
+    <span class="csv-spinner" role="status">Đang kiểm tra…</span>
+  }
+</div>
+
+<div class="csv-counts">
+  <span>Tổng dòng: <strong>{{ totalRows() }}</strong></span>
+  <span>Hợp lệ: <strong>{{ validRows() }}</strong></span>
+  <span>Lỗi: <strong>{{ errors().length }}</strong></span>
+  <span>Cảnh báo giá: <strong>{{ warnings().length }}</strong></span>
+</div>
+
+@if (errors().length) {
+  <section class="csv-block">
+    <h4>Dòng cần sửa</h4>
+    <app-erp-data-table caption="Lỗi kiểm tra CSV" [columns]="issueColumns" [rows]="errors()" emptyTitle="Không có lỗi" />
+  </section>
+}
+
+@if (warnings().length) {
+  <section class="csv-block">
+    <h4>Giá trong CSV bị bỏ qua</h4>
+    <app-erp-data-table caption="Cảnh báo nhập CSV" [columns]="issueColumns" [rows]="warnings()" emptyTitle="Không có cảnh báo" />
+  </section>
+}
+
+@if (rows().length) {
+  <section class="csv-block">
+    <h4>{{ rows().length }} dòng sẽ ghi</h4>
+    <app-erp-data-table caption="Xem trước nội dung CSV" [columns]="previewColumns()" [rows]="rows()" emptyTitle="Không có dòng hợp lệ" />
+  </section>
+}
+
+@if (canWrite() && rows().length && !hasErrors()) {
+  <label class="csv-confirm">
+    <input type="checkbox" [checked]="reviewed()" (change)="toggleReviewed($event)" />
+    Tôi đã đối chiếu {{ validRows() }} dòng hợp lệ và xác nhận ghi vào catalog.
+  </label>
+  <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" [disabled]="!canCommit()" (click)="commit()">
+    {{ committing() ? 'Đang ghi…' : 'Ghi vào catalog' }}
+  </button>
+} @else if (!canWrite()) {
+  <p class="csv-permission">Role hiện tại chỉ xem được kết quả kiểm tra, không ghi catalog.</p>
+}

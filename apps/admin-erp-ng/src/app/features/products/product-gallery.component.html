@@ -1,0 +1,162 @@
+<div class="gallery-head">
+  <h4>Thư viện ảnh</h4>
+  <span class="gallery-count">{{ images().length }}/{{ maxImages }} · Ảnh đầu tiên là ảnh chính</span>
+</div>
+
+<div class="gallery-grid">
+  <ul class="gallery-slots">
+    @for (url of images(); track url) {
+      <li>
+        <button
+          class="gallery-slot"
+          [class.is-active]="slot() === $index"
+          type="button"
+          (click)="selectSlot($index)"
+        >
+          <img [src]="resolve(url)" [alt]="'Ảnh ' + ($index + 1)" loading="lazy" />
+          @if ($index === 0) {
+            <span class="gallery-slot__flag">Chính</span>
+          }
+          @if (scoreOf(url) !== null) {
+            <span class="gallery-slot__score">{{ scoreOf(url) }}</span>
+          }
+        </button>
+      </li>
+    }
+    @if (images().length < maxImages) {
+      <li>
+        <button
+          class="gallery-slot gallery-slot--add"
+          [class.is-active]="slot() >= images().length"
+          type="button"
+          (click)="selectSlot(images().length)"
+          aria-label="Thêm ảnh mới"
+        >
+          <app-erp-icon name="plus" [size]="'18'" />
+        </button>
+      </li>
+    }
+  </ul>
+
+  <div class="gallery-stage">
+    <div class="gallery-preview">
+      @if (enhanced(); as result) {
+        <img [src]="result.url" alt="Ảnh sau khi AI cải thiện" />
+        <span class="gallery-preview__tag">Bản AI · {{ result.model }}</span>
+      } @else if (originalUrl()) {
+        <img [src]="originalUrl()" alt="Ảnh vừa tải lên" />
+        <span class="gallery-preview__tag">Ảnh gốc đã kiểm tra</span>
+      } @else if (images()[slot()]; as url) {
+        <img [src]="resolve(url)" alt="Ảnh đang chọn" />
+      } @else {
+        <p class="gallery-preview__empty">Chọn ô ảnh rồi tải ảnh lên để bắt đầu.</p>
+      }
+    </div>
+
+    <div class="gallery-actions">
+      <label class="erp-field gallery-file">
+        <span>Chọn ảnh (JPG, PNG, WebP · tối đa 8 MB)</span>
+        <input class="erp-input" type="file" accept="image/jpeg,image/png,image/webp" [disabled]="!editable()" (change)="onFilePicked($event)" />
+      </label>
+      <div class="gallery-actions__buttons">
+        <button class="erp-btn erp-btn--sm" type="button" [disabled]="busy() || (!hasPending() && !images()[slot()])" (click)="analyze()">
+          {{ busy() ? 'Đang xử lý…' : 'Kiểm tra chất lượng' }}
+        </button>
+        <button class="erp-btn erp-btn--sm" type="button" [disabled]="!editable() || busy() || (!hasPending() && !images()[slot()])" (click)="enhance()">
+          Cải thiện bằng AI
+        </button>
+        <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" [disabled]="!canApply()" (click)="apply()">
+          Áp dụng ảnh
+        </button>
+      </div>
+    </div>
+
+    @if (editable()) {
+      <div class="gallery-studio">
+        <label class="erp-field">
+          <span>Nền ảnh</span>
+          <select class="erp-select" [value]="background()" (change)="setBackground($event)">
+            <option value="studio_white">Trắng studio</option>
+            <option value="velura_cream">Kem Velura</option>
+            <option value="transparent">Trong suốt</option>
+            <option value="keep">Giữ nền gốc</option>
+          </select>
+        </label>
+        <label class="gallery-check">
+          <input type="checkbox" [checked]="lighting()" (change)="setStudioFlag('lighting', $event)" />
+          Tán sáng
+        </label>
+        <label class="gallery-check">
+          <input type="checkbox" [checked]="sharpness()" (change)="setStudioFlag('sharpness', $event)" />
+          Tăng độ nét
+        </label>
+        <label class="gallery-check">
+          <input type="checkbox" [checked]="upscale()" (change)="setStudioFlag('upscale', $event)" />
+          Phóng nét 2×
+        </label>
+      </div>
+    }
+  </div>
+</div>
+
+@if (analysis(); as report) {
+  <div class="gallery-score">
+    <div class="gallery-score__head">
+      <div>
+        <strong>{{ report.overallScore }}/100</strong>
+        <span>{{ report.summary }}</span>
+      </div>
+      <app-erp-status-badge [label]="report.statusLabel || ('Hạng ' + report.grade)" [tone]="scoreTone()" [dot]="true" />
+    </div>
+    <ul class="gallery-criteria">
+      @for (criterion of report.criteria; track criterion.key) {
+        <li>
+          <span>{{ criterion.label }}</span>
+          <span class="gallery-bar"><span [style.width.%]="criterion.score"></span></span>
+          <span>{{ criterion.score }}</span>
+        </li>
+      }
+    </ul>
+    @if (report.recommendations.length) {
+      <ul class="gallery-tips">
+        @for (tip of report.recommendations; track tip) {
+          <li>{{ tip }}</li>
+        }
+      </ul>
+    }
+  </div>
+}
+
+@if (images().length) {
+  <div class="gallery-links">
+    @for (url of images(); track url) {
+      <div class="gallery-link">
+        <img [src]="resolve(url)" alt="" loading="lazy" />
+        <span class="gallery-link__url">{{ url }}</span>
+        <select
+          class="erp-select erp-select--sm"
+          [value]="colorOf(url)"
+          [disabled]="!editable()"
+          aria-label="Gán màu cho ảnh"
+          (change)="assignColor(url, $event)"
+        >
+          <option value="">Ảnh chung</option>
+          @for (color of variantColors(); track color) {
+            <option [value]="color">{{ color }}</option>
+          }
+        </select>
+        <button class="erp-btn erp-btn--sm" type="button" [disabled]="!editable() || $index === 0" (click)="makePrimary($index)">
+          Đặt làm chính
+        </button>
+        <button class="erp-btn erp-btn--danger erp-btn--sm" type="button" [disabled]="!editable()" (click)="removeAt($index)">Xóa</button>
+      </div>
+    }
+  </div>
+}
+
+@if (note()) {
+  <p class="gallery-note">{{ note() }}</p>
+}
+@if (error()) {
+  <p class="erp-error" role="alert">{{ error() }}</p>
+}

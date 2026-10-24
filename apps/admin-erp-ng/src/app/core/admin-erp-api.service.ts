@@ -17,11 +17,17 @@ export interface AdminAuditRow {
   module?: string;
   action?: string;
   action_label?: string;
+  action_type?: string;
   target_id?: string;
   target_label?: string;
   old_value?: unknown;
   new_value?: unknown;
   change_summary?: string;
+  /** Operator reason carried by status and stock audits; the API reads it out of the payload. */
+  reason?: string | null;
+  product_id?: string;
+  product_sku?: string;
+  product_name?: string;
   ip_address?: string;
   result?: string;
 }
@@ -78,17 +84,371 @@ export interface AdminReviewRow {
   images?: string[];
 }
 
+/**
+ * Catalog product row as returned by the admin product projection. The same shape
+ * serves the price workspace, so pricing fields stay optional-tolerant.
+ */
 export interface AdminProductRow {
   product_id: string;
-  name: string;
   sku?: string;
+  name: string;
+  slug?: string;
+  description?: string | null;
+  seo_title?: string | null;
+  seo_description?: string | null;
+  category_id?: string;
+  category_name?: string | null;
+  category?: { category_id?: string; name?: string } | null;
+  brand?: string | null;
   base_price?: number;
   sale_price?: number | null;
-  version?: number;
   status?: string;
-  updated_at?: string;
-  category?: { name?: string } | null;
-  category_name?: string;
+  images?: string[];
+  /** Image URL to variant color; an URL without an entry is a common gallery image. */
+  image_colors?: Record<string, string>;
+  collection?: string | null;
+  style_tags?: string[];
+  color_tone?: string | null;
+  occasions?: string[];
+  suitable_body_shapes?: string[];
+  updated_at?: string | null;
+  created_at?: string | null;
+  is_combo?: boolean;
+  is_featured?: boolean;
+  version?: number;
+  variants?: AdminProductVariant[];
+}
+
+/** One sellable color/size combination; its stock is the only inventory the API writes today. */
+export interface AdminProductVariant {
+  variant_id: string;
+  product_id?: string;
+  /** Stable inventory identity, stored apart from the parent product SKU. */
+  sku?: string;
+  color?: string;
+  color_hex?: string | null;
+  size?: string;
+  /** Garment measurements shown on the storefront size chart. */
+  size_measurements?: Record<string, unknown> | null;
+  stock_quantity?: number;
+  reserved_quantity?: number;
+  low_stock_threshold?: number;
+  version?: number;
+  updated_at?: string | null;
+}
+
+/** Category option for product forms and the category filter. */
+export interface AdminCategoryRow {
+  category_id: string;
+  name: string;
+  slug?: string;
+  parent_id?: string | null;
+  display_order?: number;
+}
+
+/** Variant at or below its own low-stock threshold, enriched with the owning product. */
+export interface AdminLowStockRow {
+  variant_id: string;
+  product_id: string;
+  product_name?: string | null;
+  product_sku?: string | null;
+  product_status?: string | null;
+  color?: string;
+  size?: string;
+  stock_quantity: number;
+  low_stock_threshold: number;
+  /** Units missing to clear the threshold (0 when exactly at it). */
+  shortage?: number;
+  out_of_stock?: boolean;
+}
+
+/** On-screen alert from a stock adjustment; `emailQueued` false means the mail is waiting for retry. */
+export interface AdminLowStockAlert {
+  productId: string;
+  variantId: string;
+  productName: string;
+  sku: string;
+  color: string;
+  size: string;
+  stock: number;
+  threshold: number;
+  emailQueued: boolean;
+  retryRecorded: boolean;
+  message: string;
+}
+
+/**
+ * Result of a stock adjustment. The API answers with the updated variant columns
+ * (`delta` path) or `{ success: true }` (threshold-only path), plus the alert it raised.
+ */
+export interface AdminStockUpdateResult {
+  success?: boolean;
+  variant_id?: string;
+  stock_quantity?: number;
+  low_stock_threshold?: number;
+  version?: number;
+  lowStockAlert?: AdminLowStockAlert | null;
+}
+
+/** Bulk stock answer: one line per variant plus every alert the same write raised. */
+export interface AdminBulkStockResult {
+  success: boolean;
+  results: Array<{ variantId: string; success: boolean }>;
+  lowStockAlerts?: AdminLowStockAlert[];
+}
+
+/** Answer of the inline SKU uniqueness check. */
+export interface AdminSkuCheck {
+  sku: string;
+  available: boolean;
+  code: 'SKU_INVALID' | 'SKU_DUPLICATE' | null;
+  message: string | null;
+}
+
+/** Combo component and the projected price of its product. */
+export interface AdminComboItemRow {
+  combo_item_id: string;
+  combo_product_id: string;
+  component_product_id: string;
+  component_variant_id?: string | null;
+  quantity: number;
+  product?: {
+    product_id: string;
+    name: string;
+    sku?: string;
+    base_price?: number;
+    sale_price?: number | null;
+    images?: string[];
+  } | null;
+}
+
+export interface AdminImageCriterion {
+  key: 'lighting' | 'background' | 'sharpness' | 'resolution';
+  label: string;
+  score: number;
+  status: 'good' | 'warning' | 'poor';
+  detail: string;
+}
+
+/** Studio quality measurement of exactly one image URL or upload. */
+export interface AdminImageQualityAnalysis {
+  overallScore: number;
+  passed: boolean;
+  needsEnhancement: boolean;
+  grade: 'A' | 'B' | 'C' | 'D';
+  statusLabel: string;
+  summary: string;
+  metrics: {
+    width: number;
+    height: number;
+    brightness: number;
+    contrast: number;
+    sharpnessScore: number;
+    backgroundScore: number;
+  };
+  criteria: AdminImageCriterion[];
+  recommendations: string[];
+  uploadedUrl?: string;
+}
+
+export interface AdminImageEnhanceResult {
+  enhancedUrl: string;
+  previewDataUrl: string;
+  modelUsed: string;
+  improvements: string[];
+  beforeAnalysis: AdminImageQualityAnalysis;
+  afterAnalysis: AdminImageQualityAnalysis;
+}
+
+/** Server-attested image URL, not yet published; the product save consumes its version-bound approval. */
+export interface AdminImageApproval {
+  approvalId: string;
+  url: string;
+  sourceRevision: string;
+  processingVersion: string;
+  /** Measured studio score (0-100) of exactly this approved URL. */
+  qualityScore?: number;
+  expiresAt: string;
+}
+
+/** Gemini fashion-content suggestion set applied field by field by the operator. */
+export interface AdminProductFashionSeoResult {
+  description: string;
+  seoTitle: string;
+  seoDescription: string;
+  titleSuggestions?: string[];
+  metaSuggestions?: string[];
+  slug: string;
+  collection: string;
+  material: string;
+  colorTone: 'Warm' | 'Cool' | 'Neutral';
+  styleTags: string[];
+  occasions: string[];
+  suitableBodyShapes: string[];
+  highlights: string[];
+  careInstructions: string[];
+  seoKeywords: string[];
+  seoScore: number;
+  modelUsed: string;
+}
+
+/** Per-row CSV import finding; `row` is the 1-based spreadsheet line. */
+export interface AdminCsvIssue {
+  row?: number;
+  field?: string;
+  message?: string;
+  csv_value?: number | null;
+  current_value?: number | null;
+}
+
+/** Preview line of a CSV import, resolved against the catalog by the API. */
+export interface AdminCsvPreviewRow {
+  row: number;
+  sku: string;
+  product_sku?: string | null;
+  name?: string;
+  base_price?: number;
+  sale_price?: number | null;
+  csv_base_price?: number;
+  csv_sale_price?: number | null;
+  /** Price columns the import deliberately ignores because a stored price already exists. */
+  skipped_prices?: string[];
+  category_id?: string;
+  description?: string | null;
+  status?: string | null;
+  image_url?: string | null;
+  is_featured?: boolean | null;
+  color?: string | null;
+  size?: string | null;
+  color_hex?: string | null;
+  stock_quantity?: number | null;
+  low_stock_threshold?: number | null;
+  product_id?: string | null;
+  variant_id?: string | null;
+  expected_version?: number | null;
+  variant_version?: number | null;
+  operation?: 'created' | 'updated';
+}
+
+/** Result of the CSV pre-flight: only an error-free preview can authorize a commit. */
+export interface AdminCsvPreview {
+  rows?: AdminCsvPreviewRow[];
+  errors?: AdminCsvIssue[];
+  warnings?: AdminCsvIssue[];
+  totalRows?: number;
+  validRows?: number;
+}
+
+/** Result of a CSV commit; `failed` must be verified before the file is discarded. */
+export interface AdminCsvCommitResult {
+  created?: number;
+  updated?: number;
+  failed?: number;
+  total?: number;
+  results?: Array<{ sku: string; status: 'created' | 'updated'; product_id?: string; variant_id?: string | null }>;
+  warnings?: AdminCsvIssue[];
+  skippedPrices?: number;
+}
+
+/** Variant line of a create-product matrix; `sku` must stay unique across the whole catalog. */
+export interface AdminProductVariantInput {
+  sku?: string;
+  color: string;
+  colorHex?: string | null;
+  size: string;
+  stockQuantity: number;
+  lowStockThreshold: number;
+}
+
+/**
+ * Create-product payload. The API rejects `out_of_stock`/`discontinued` on create and
+ * requires `expectedVersion: 0`, one primary image for `on_sale`, and unique color|size.
+ */
+export interface AdminProductCreateInput {
+  sku: string;
+  name: string;
+  slug: string;
+  categoryId: string;
+  brand?: string | null;
+  basePrice: number;
+  salePrice: number;
+  status: 'on_sale' | 'hidden';
+  collection?: string | null;
+  description?: string | null;
+  seoTitle?: string | null;
+  seoDescription?: string | null;
+  colorTone?: string | null;
+  styleTags?: string[];
+  occasions?: string[];
+  suitableBodyShapes?: string[];
+  isFeatured?: boolean;
+  isCombo?: boolean;
+  images: string[];
+  imageColors?: Record<string, string>;
+  variants?: AdminProductVariantInput[];
+  initialStock?: number;
+  lowStockThreshold?: number;
+  material?: string | null;
+  expectedVersion: 0;
+}
+
+/**
+ * Update-product payload. `status`, `basePrice` and `salePrice` are forbidden here;
+ * they travel through change-status and change-price so each write keeps its own audit reason.
+ */
+export interface AdminProductUpdateInput {
+  name?: string;
+  categoryId?: string;
+  brand?: string | null;
+  collection?: string | null;
+  description?: string | null;
+  seoTitle?: string | null;
+  seoDescription?: string | null;
+  colorTone?: string | null;
+  styleTags?: string[];
+  occasions?: string[];
+  suitableBodyShapes?: string[];
+  isFeatured?: boolean;
+  images?: string[];
+  imageColors?: Record<string, string>;
+  expectedVersion: number;
+}
+
+/** Stock write for one variant: a signed delta, an optional new threshold, and the operator reason. */
+export interface AdminStockAdjustInput {
+  variantId: string;
+  delta: number;
+  reason: string;
+  expectedVersion: number;
+  lowStockThreshold?: number;
+}
+
+/** Single line of a bulk stock adjustment across the variants of one product. */
+export interface AdminBulkStockLine {
+  variantId: string;
+  delta: number;
+  lowStockThreshold?: number;
+  expectedVersion?: number;
+}
+
+export interface AdminBulkStockInput {
+  updates: AdminBulkStockLine[];
+  reason: string;
+}
+
+/** Status write through change-status; the reason is audited and must be 10-500 characters. */
+export interface AdminStatusChangeInput {
+  status: string;
+  reason: string;
+  expectedVersion: number;
+}
+
+/** Price write through change-price, bound to the product version read by the operator. */
+export interface AdminPriceChangeInput {
+  newBasePrice: number;
+  newSalePrice: number | null;
+  reason: string;
+  expectedVersion: number;
 }
 
 export interface AdminPriceHistoryRow {
@@ -590,7 +950,7 @@ export class AdminErpApiService {
   /**
    * Changes catalog prices with a reason and optimistic version.
    */
-  changePrice(productId: string, body: Record<string, unknown>): Observable<AdminProductRow> {
+  changePrice(productId: string, body: AdminPriceChangeInput): Observable<AdminProductRow> {
     return this.http.post<AdminProductRow>(
       `${this.baseUrl}/api/v1/admin/products/${encodeURIComponent(productId)}/change-price`,
       body,
@@ -604,6 +964,215 @@ export class AdminErpApiService {
     return this.http.get<AdminListPayload<AdminAuditRow>>(`${this.baseUrl}/api/v1/admin/pricing/audit-logs`, {
       params: this.params(params),
     });
+  }
+
+  /**
+   * Lists catalog products with the server filters the workspace exposes
+   * (`q`, `categoryId`, `status`, `lowStock`, `isCombo`, `isFeatured`, `minPrice`, `maxPrice`, `order`).
+   */
+  listProducts(params: Record<string, string> = {}): Observable<AdminListPayload<AdminProductRow>> {
+    return this.http.get<AdminListPayload<AdminProductRow>>(`${this.baseUrl}/api/v1/admin/products`, {
+      params: this.params(params),
+    });
+  }
+
+  /**
+   * Lists categories for the category filter and product forms.
+   */
+  listCategories(): Observable<AdminListPayload<AdminCategoryRow>> {
+    return this.http.get<AdminListPayload<AdminCategoryRow>>(`${this.baseUrl}/api/v1/admin/products/categories`);
+  }
+
+  /**
+   * Loads one product with its full projection, including nested variants.
+   */
+  getProduct(productId: string): Observable<AdminProductRow> {
+    return this.http.get<AdminProductRow>(`${this.baseUrl}/api/v1/admin/products/${encodeURIComponent(productId)}`);
+  }
+
+  /**
+   * Creates a product with its variant matrix; `expectedVersion` must be 0.
+   */
+  createProduct(body: AdminProductCreateInput): Observable<AdminProductRow> {
+    return this.http.post<AdminProductRow>(`${this.baseUrl}/api/v1/admin/products`, body);
+  }
+
+  /**
+   * Patches catalog details only. Price and status travel through their own audited endpoints.
+   */
+  updateProduct(productId: string, body: AdminProductUpdateInput): Observable<AdminProductRow> {
+    return this.http.patch<AdminProductRow>(
+      `${this.baseUrl}/api/v1/admin/products/${encodeURIComponent(productId)}`,
+      body,
+    );
+  }
+
+  /**
+   * Lists the variants of one product.
+   */
+  listVariants(productId: string): Observable<AdminListPayload<AdminProductVariant>> {
+    return this.http.get<AdminListPayload<AdminProductVariant>>(
+      `${this.baseUrl}/api/v1/admin/products/${encodeURIComponent(productId)}/variants`,
+    );
+  }
+
+  /**
+   * Adds a color/size variant with its opening stock.
+   */
+  createVariant(productId: string, body: AdminProductVariantInput): Observable<AdminProductVariant> {
+    return this.http.post<AdminProductVariant>(
+      `${this.baseUrl}/api/v1/admin/products/${encodeURIComponent(productId)}/variants`,
+      body,
+    );
+  }
+
+  /**
+   * Adjusts one variant and returns the low-stock alert raised by the same write, if any.
+   */
+  updateStock(productId: string, body: AdminStockAdjustInput): Observable<AdminStockUpdateResult> {
+    return this.http.post<AdminStockUpdateResult>(
+      `${this.baseUrl}/api/v1/admin/products/${encodeURIComponent(productId)}/update-stock`,
+      body,
+    );
+  }
+
+  /**
+   * Applies one reason across several variant adjustments of the same product.
+   */
+  bulkUpdateStock(productId: string, body: AdminBulkStockInput): Observable<AdminBulkStockResult> {
+    return this.http.post<AdminBulkStockResult>(
+      `${this.baseUrl}/api/v1/admin/products/${encodeURIComponent(productId)}/bulk-stock`,
+      body,
+    );
+  }
+
+  /**
+   * Moves a product along the catalog state machine with an audited reason.
+   */
+  changeProductStatus(productId: string, body: AdminStatusChangeInput): Observable<AdminProductRow> {
+    return this.http.post<AdminProductRow>(
+      `${this.baseUrl}/api/v1/admin/products/${encodeURIComponent(productId)}/change-status`,
+      body,
+    );
+  }
+
+  /**
+   * Lists every variant at or below its own low-stock threshold.
+   */
+  listLowStock(): Observable<AdminListPayload<AdminLowStockRow>> {
+    return this.http.get<AdminListPayload<AdminLowStockRow>>(`${this.baseUrl}/api/v1/admin/products/low-stock`);
+  }
+
+  /**
+   * Lists product-domain audit rows (`from`, `to`, `product`, `actionType`, `user`, `targetId`).
+   */
+  listProductAuditLogs(params: Record<string, string> = {}): Observable<AdminListPayload<AdminAuditRow>> {
+    return this.http.get<AdminListPayload<AdminAuditRow>>(`${this.baseUrl}/api/v1/admin/products/audit-logs`, {
+      params: this.params(params),
+    });
+  }
+
+  /**
+   * Checks one SKU against the whole catalog; `excludeProductId` ignores the product being edited.
+   */
+  checkProductSku(sku: string, excludeProductId = ''): Observable<AdminSkuCheck> {
+    return this.http.get<AdminSkuCheck>(`${this.baseUrl}/api/v1/admin/products/sku-check`, {
+      params: this.params({ sku, excludeProductId }),
+    });
+  }
+
+  /**
+   * Validates a CSV file without writing; only an error-free answer unlocks the commit.
+   */
+  previewCsv(csv: string): Observable<AdminCsvPreview> {
+    return this.http.post<AdminCsvPreview>(`${this.baseUrl}/api/v1/admin/products/import-csv`, { csv });
+  }
+
+  /**
+   * Commits the exact CSV text that was previewed.
+   */
+  commitCsv(csv: string): Observable<AdminCsvCommitResult> {
+    return this.http.post<AdminCsvCommitResult>(`${this.baseUrl}/api/v1/admin/products/import-csv/commit`, { csv });
+  }
+
+  /**
+   * Measures studio quality of an uploaded or saved product image.
+   */
+  analyzeProductImage(body: { imageBase64?: string; imageUrl?: string; mimeType?: string; productName?: string }): Observable<AdminImageQualityAnalysis> {
+    return this.http.post<AdminImageQualityAnalysis>(`${this.baseUrl}/api/v1/admin/products/ai-image-analyze`, body);
+  }
+
+  /**
+   * Runs the studio enhancement pipeline (background, lighting, sharpness, upscale) on one image.
+   */
+  enhanceProductImage(body: {
+    imageBase64?: string;
+    imageUrl?: string;
+    mimeType?: string;
+    options: { background: string; lighting: boolean; sharpness: boolean; upscale: boolean };
+  }): Observable<AdminImageEnhanceResult> {
+    return this.http.post<AdminImageEnhanceResult>(`${this.baseUrl}/api/v1/admin/products/ai-image-enhance`, body);
+  }
+
+  /**
+   * Stages the operator's explicit image choice as a server-side approval; the later product save publishes it.
+   */
+  approveStudioImage(body: {
+    imageUrl: string;
+    productId: string | null;
+    expectedVersion: number;
+    selection: 'original' | 'enhanced';
+    reviewConfirmed: true;
+  }): Observable<AdminImageApproval> {
+    return this.http.post<AdminImageApproval>(`${this.baseUrl}/api/v1/admin/products/ai-image-approve`, body);
+  }
+
+  /**
+   * Generates fashion SEO copy and PDP attributes for a product draft.
+   */
+  optimizeProductSeo(body: Record<string, unknown>): Observable<AdminProductFashionSeoResult> {
+    return this.http.post<AdminProductFashionSeoResult>(`${this.baseUrl}/api/v1/admin/products/ai-seo-optimize`, body);
+  }
+
+  /**
+   * Lists the components of a combo product.
+   */
+  listComboItems(productId: string): Observable<AdminListPayload<AdminComboItemRow>> {
+    return this.http.get<AdminListPayload<AdminComboItemRow>>(
+      `${this.baseUrl}/api/v1/admin/products/${encodeURIComponent(productId)}/combo-items`,
+    );
+  }
+
+  /**
+   * Adds a component product to a combo.
+   */
+  addComboItem(
+    productId: string,
+    body: { componentProductId: string; componentVariantId?: string | null; quantity: number },
+  ): Observable<AdminComboItemRow> {
+    return this.http.post<AdminComboItemRow>(
+      `${this.baseUrl}/api/v1/admin/products/${encodeURIComponent(productId)}/combo-items`,
+      body,
+    );
+  }
+
+  /**
+   * Changes the quantity of one combo component.
+   */
+  updateComboItem(productId: string, itemId: string, body: { quantity: number }): Observable<AdminComboItemRow> {
+    return this.http.patch<AdminComboItemRow>(
+      `${this.baseUrl}/api/v1/admin/products/${encodeURIComponent(productId)}/combo-items/${encodeURIComponent(itemId)}`,
+      body,
+    );
+  }
+
+  /**
+   * Removes one combo component.
+   */
+  removeComboItem(productId: string, itemId: string): Observable<unknown> {
+    return this.http.delete(
+      `${this.baseUrl}/api/v1/admin/products/${encodeURIComponent(productId)}/combo-items/${encodeURIComponent(itemId)}`,
+    );
   }
 
   /**

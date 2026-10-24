@@ -9,7 +9,7 @@ import subprocess
 import sys
 
 
-APPS = ('api', 'storefront', 'admin')
+APPS = ('api', 'storefront', 'admin', 'admin-erp')
 ROOT = Path('deploy/k8s/overlays')
 EVIDENCE = Path('deploy/releases/production.json')
 REPOSITORY = 'Royal2005-coder/Velura-Angular'
@@ -29,7 +29,7 @@ def require_release(release):
     """Reject legacy snapshots as promotion or runtime-verification evidence."""
     require_build_id(release['revision'], release.get('buildId'))
     if set(release.get('images', {})) != set(APPS):
-        raise ValueError('Expected the complete three-application release bundle')
+        raise ValueError('Expected the complete application release bundle')
     for app in APPS:
         if not re.fullmatch(re.escape(IMAGE_PREFIX + app) + r'@sha256:[a-f0-9]{64}', release['images'][app]):
             raise ValueError('Expected canonical immutable release image')
@@ -37,7 +37,7 @@ def require_release(release):
 
 
 def artifact_release(directory, revision, build_id):
-    """Read all three signed build artifacts and reject mixed runs or rerun attempts."""
+    """Read every signed build artifact and reject mixed runs or rerun attempts."""
     require_build_id(revision, build_id)
     images = {}
     for app in APPS:

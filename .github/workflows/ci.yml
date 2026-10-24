@@ -189,7 +189,7 @@ jobs:
               list(yaml.load_all(path.read_text(), Loader=UniqueLoader))
           owners = {}
           platform_objects = []
-          app_deployments = {'velura-api', 'velura-storefront', 'velura-admin'}
+          app_deployments = {'velura-api', 'velura-storefront', 'velura-admin', 'velura-admin-erp'}
           for path in ('deploy/k8s/clusters/production', 'deploy/k8s/overlays/production', 'deploy/k8s/overlays/infrastructure', 'deploy/k8s/optional/ai-worker'):
               rendered = subprocess.run(['kustomize', 'build', path], check=True, capture_output=True, text=True).stdout
               objects = list(yaml.load_all(rendered, Loader=UniqueLoader))
@@ -229,7 +229,7 @@ jobs:
           python scripts/release-images.py verified-snapshot production > signed-production.json
           revision=$(jq -r .revision signed-production.json)
           build_id=$(jq -r .buildId signed-production.json)
-          for app in api storefront admin; do
+          for app in api storefront admin admin-erp; do
             image=$(jq -r --arg app "$app" '.images[$app]' signed-production.json)
             cosign verify --certificate-identity "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/.github/workflows/ci.yml@refs/heads/main" --certificate-oidc-issuer https://token.actions.githubusercontent.com --annotations "release-revision=$revision" --annotations "release-build-id=$build_id" "$image"
           done
@@ -581,7 +581,7 @@ jobs:
           python scripts/release-images.py verified-snapshot production > production-release.json
           revision=$(jq -r .revision production-release.json)
           build_id=$(jq -r .buildId production-release.json)
-          for app in api storefront admin; do
+          for app in api storefront admin admin-erp; do
             image=$(jq -r --arg app "$app" '.images[$app]' production-release.json)
             cosign verify --certificate-identity "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/.github/workflows/ci.yml@refs/heads/main" --certificate-oidc-issuer https://token.actions.githubusercontent.com --annotations "release-revision=$revision" --annotations "release-build-id=$build_id" "$image"
           done
@@ -628,6 +628,7 @@ jobs:
             if curl --fail --silent --show-error --max-time 15 -H "Authorization: Bearer $VERIFY_TOKEN" "${access_headers[@]}" https://admin.royalai.dev/api/ops/revision > revision.json \
               && jq -e --arg expected "$expected" --arg build "$expected_build" --arg project "$expected_project" '.ready == true and .checks.chatbotSchema == true and .revision == $expected and .buildRevision == $expected and .buildId == $build and .databaseProjectRef == $project' revision.json \
               && curl --fail --silent --show-error --max-time 15 "${access_headers[@]}" https://admin.royalai.dev/release.json | jq -e --arg expected "$expected" --arg build "$expected_build" '.revision == $expected and .buildId == $build' \
+              && curl --fail --silent --show-error --max-time 15 "${access_headers[@]}" https://admin-erp.royalai.dev/release.json | jq -e --arg expected "$expected" --arg build "$expected_build" '.revision == $expected and .buildId == $build' \
               && curl --fail --silent --show-error --max-time 15 https://velura.royalai.dev/release.json | jq -e --arg expected "$expected" --arg build "$expected_build" '.revision == $expected and .buildId == $build' \
               && curl --fail --silent --show-error --max-time 15 https://velura.royalai.dev/api/health \
               && curl --fail --silent --show-error --max-time 30 https://velura.royalai.dev/api/user/products > catalog.json \

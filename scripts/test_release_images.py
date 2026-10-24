@@ -74,7 +74,7 @@ class ReleaseImagesTest(unittest.TestCase):
             (directory / f'build-id-{app}.txt').write_text(self.release['buildId'])
         return directory
 
-    def test_stage_requires_all_three_coherent_build_artifacts(self):
+    def test_stage_requires_all_coherent_build_artifacts(self):
         directory = self.artifacts()
         with patch.object(release_images.sys, 'argv', ['release-images.py', 'stage', str(directory), self.release['revision'], self.release['buildId']]):
             release_images.main()

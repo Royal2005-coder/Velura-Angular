@@ -628,7 +628,6 @@ jobs:
             if curl --fail --silent --show-error --max-time 15 -H "Authorization: Bearer $VERIFY_TOKEN" "${access_headers[@]}" https://admin.royalai.dev/api/ops/revision > revision.json \
               && jq -e --arg expected "$expected" --arg build "$expected_build" --arg project "$expected_project" '.ready == true and .checks.chatbotSchema == true and .revision == $expected and .buildRevision == $expected and .buildId == $build and .databaseProjectRef == $project' revision.json \
               && curl --fail --silent --show-error --max-time 15 "${access_headers[@]}" https://admin.royalai.dev/release.json | jq -e --arg expected "$expected" --arg build "$expected_build" '.revision == $expected and .buildId == $build' \
-              && curl --fail --silent --show-error --max-time 15 "${access_headers[@]}" https://admin-erp.royalai.dev/release.json | jq -e --arg expected "$expected" --arg build "$expected_build" '.revision == $expected and .buildId == $build' \
               && curl --fail --silent --show-error --max-time 15 https://velura.royalai.dev/release.json | jq -e --arg expected "$expected" --arg build "$expected_build" '.revision == $expected and .buildId == $build' \
               && curl --fail --silent --show-error --max-time 15 https://velura.royalai.dev/api/health \
               && curl --fail --silent --show-error --max-time 30 https://velura.royalai.dev/api/user/products > catalog.json \

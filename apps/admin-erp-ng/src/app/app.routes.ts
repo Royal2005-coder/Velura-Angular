@@ -59,9 +59,9 @@ export const routes: Routes = [
       },
       {
         path: 'returns',
-        loadComponent: () => import('./features/shared/coming-soon.page').then((m) => m.ComingSoonPage),
+        loadComponent: () => import('./features/returns/admin-erp-returns.page').then((m) => m.AdminErpReturnsPage),
         canActivate: [adminErpAuthGuard],
-        data: { page: 'returns-cskh', navKey: 'returns' },
+        data: { page: 'returns-cskh', alternativePages: ['orders'], navKey: 'returns' },
       },
       {
         path: 'products',

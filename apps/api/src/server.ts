@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { config, assertRuntimeConfig } from "./config.js";
 import { applyCors, applySecurityHeaders, getRequestIp, HttpError, parsePathname, readJson, sendError, sendJson, sendNoContent } from "./http.js";
 import { completeAdminPasswordSignIn, recordAdminSignOut } from "./auth-signin.js";
-import { buildAuthContext, requireAdmin, requireAuthenticated, requirePermission } from "./rbac.js";
+import { buildAuthContext, capabilitiesForRole, requireAdmin, requireAuthenticated, requirePermission } from "./rbac.js";
 import { buildDashboardSummary } from "./dashboard.js";
 import { handleDashboardRoute } from "./dashboard-router.js";
 import { handleInsightsRoute } from "./insights-router.js";
@@ -262,7 +262,8 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
         roleName: context.roleName,
         isAdmin: context.isAdmin,
         allowedPages: context.allowedPages,
-        allowedModules: context.allowedModules
+        allowedModules: context.allowedModules,
+        capabilities: context.capabilities || capabilitiesForRole(context.roleCode)
       }, corsHeaders);
     }
 

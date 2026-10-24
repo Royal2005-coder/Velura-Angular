@@ -1,0 +1,267 @@
+/* Velura ERP — design tokens + shared primitives.
+   App-level tokens only; feature styling stays in component styles. */
+
+:root {
+  --erp-bg: #f5f2ee;
+  --erp-surface: #ffffff;
+  --erp-surface-muted: #faf8f5;
+  --erp-line: #e5ded7;
+  --erp-line-strong: #d4c9bf;
+  --erp-ink: #241f1c;
+  --erp-text: #2f2a26;
+  --erp-muted: #6f6660;
+  --erp-soft: #9a9088;
+  --erp-accent: #c97b63;
+  --erp-accent-strong: #a85d46;
+  --erp-accent-soft: #f6e7e1;
+  --erp-sidebar: #211d1a;
+  --erp-sidebar-raised: #2b2521;
+  --erp-sidebar-text: #e9e1d9;
+  --erp-sidebar-muted: #a89c92;
+  --erp-success: #2f7d5a;
+  --erp-success-soft: #e4f2ea;
+  --erp-warning: #a86b16;
+  --erp-warning-soft: #fbf0dc;
+  --erp-danger: #b43b31;
+  --erp-danger-soft: #f9e5e2;
+  --erp-info: #2b6cb0;
+  --erp-info-soft: #e4eef9;
+  --erp-radius-sm: 6px;
+  --erp-radius-md: 10px;
+  --erp-radius-lg: 16px;
+  --erp-shadow-sm: 0 1px 2px rgba(36, 31, 28, 0.06);
+  --erp-shadow-md: 0 10px 30px -18px rgba(36, 31, 28, 0.45);
+  --erp-sidebar-w: 264px;
+  --erp-topbar-h: 64px;
+  --erp-font: 'DM Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --erp-display: 'Playfair Display', Georgia, serif;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--erp-bg);
+  color: var(--erp-text);
+  font-family: var(--erp-font);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+h1,
+h2,
+h3,
+h4,
+p {
+  margin: 0;
+}
+
+:focus-visible {
+  outline: 2px solid var(--erp-accent);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: var(--erp-accent-soft);
+}
+
+.erp-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.erp-card {
+  background: var(--erp-surface);
+  border: 1px solid var(--erp-line);
+  border-radius: var(--erp-radius-md);
+  box-shadow: var(--erp-shadow-sm);
+}
+
+.erp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--erp-line-strong);
+  border-radius: var(--erp-radius-sm);
+  background: var(--erp-surface);
+  color: var(--erp-text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.erp-btn:hover:not(:disabled) {
+  background: var(--erp-surface-muted);
+}
+
+.erp-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.erp-btn--primary {
+  border-color: var(--erp-accent-strong);
+  background: var(--erp-accent);
+  color: #fff;
+}
+
+.erp-btn--primary:hover:not(:disabled) {
+  background: var(--erp-accent-strong);
+}
+
+.erp-btn--ghost {
+  border-color: transparent;
+  background: transparent;
+}
+
+.erp-btn--ghost:hover:not(:disabled) {
+  background: var(--erp-accent-soft);
+}
+
+.erp-btn--danger {
+  border-color: var(--erp-danger);
+  background: var(--erp-danger);
+  color: #fff;
+}
+
+.erp-btn--sm {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.erp-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--erp-line);
+  border-radius: var(--erp-radius-sm);
+  background: var(--erp-surface);
+  cursor: pointer;
+}
+
+.erp-icon-btn:hover {
+  background: var(--erp-surface-muted);
+}
+
+.erp-field {
+  display: grid;
+  gap: 6px;
+}
+
+.erp-field > label,
+.erp-field > span {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--erp-muted);
+}
+
+.erp-input,
+.erp-select,
+.erp-textarea {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 11px;
+  border: 1px solid var(--erp-line-strong);
+  border-radius: var(--erp-radius-sm);
+  background: var(--erp-surface);
+  color: var(--erp-text);
+  font-size: 13px;
+}
+
+.erp-input:focus,
+.erp-select:focus,
+.erp-textarea:focus {
+  border-color: var(--erp-accent);
+  outline: 2px solid var(--erp-accent-soft);
+  outline-offset: 0;
+}
+
+.erp-hint {
+  color: var(--erp-muted);
+  font-size: 12px;
+}
+
+.erp-error {
+  color: var(--erp-danger);
+  font-size: 12px;
+}
+
+.erp-divider {
+  height: 1px;
+  background: var(--erp-line);
+}
+
+.erp-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: var(--erp-surface-muted);
+  color: var(--erp-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.erp-skeleton {
+  border-radius: var(--erp-radius-sm);
+  background: linear-gradient(90deg, #efe9e3 25%, #f8f5f2 37%, #efe9e3 63%);
+  background-size: 400% 100%;
+  animation: erp-shimmer 1.4s ease infinite;
+}
+
+@keyframes erp-shimmer {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0 50%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+}

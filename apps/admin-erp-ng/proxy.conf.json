@@ -1,0 +1,10 @@
+{
+  "/supabase": {
+    "target": "https://gtyuajboeffmfskofoyh.supabase.co",
+    "secure": true,
+    "changeOrigin": true,
+    "pathRewrite": {
+      "^/supabase": ""
+    }
+  }
+}

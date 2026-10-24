@@ -1,0 +1,105 @@
+import { Routes } from '@angular/router';
+import {
+  adminErpAuthGuard,
+  adminErpGuestGuard,
+  adminErpHomeRedirectGuard,
+  adminErpSessionGuard,
+  adminErpShellGuard,
+  adminErpWelcomeGuard,
+} from './core/admin-erp-auth.guard';
+import { AdminErpHomeRedirectPage } from './core/admin-erp-home-redirect';
+import { AdminErpShell } from './layout/admin-erp-shell';
+
+export const routes: Routes = [
+  {
+    path: 'login',
+    loadComponent: () => import('./features/auth/auth-login.page').then((m) => m.AuthLoginPage),
+    canActivate: [adminErpGuestGuard],
+  },
+  {
+    path: 'auth/callback',
+    loadComponent: () => import('./features/auth/auth-callback.page').then((m) => m.AuthCallbackPage),
+  },
+  {
+    path: 'register',
+    loadComponent: () => import('./features/auth/auth-register.page').then((m) => m.AuthRegisterPage),
+  },
+  {
+    path: 'welcome',
+    loadComponent: () => import('./features/auth/auth-welcome.page').then((m) => m.AuthWelcomePage),
+    canActivate: [adminErpWelcomeGuard],
+  },
+  {
+    path: 'change-password',
+    loadComponent: () => import('./features/auth/auth-change-password.page').then((m) => m.AuthChangePasswordPage),
+    canActivate: [adminErpSessionGuard],
+  },
+  {
+    path: '',
+    component: AdminErpShell,
+    canActivate: [adminErpShellGuard],
+    children: [
+      { path: '', pathMatch: 'full', canActivate: [adminErpHomeRedirectGuard], component: AdminErpHomeRedirectPage },
+      {
+        path: 'forbidden',
+        loadComponent: () => import('./features/auth/auth-forbidden.page').then((m) => m.AuthForbiddenPage),
+        canActivate: [adminErpSessionGuard],
+      },
+      {
+        path: 'dashboard',
+        loadComponent: () => import('./features/dashboard/admin-erp-dashboard.page').then((m) => m.AdminErpDashboardPage),
+        canActivate: [adminErpAuthGuard],
+        data: { page: 'dashboard', navKey: 'dashboard' },
+      },
+      {
+        path: 'orders',
+        loadComponent: () => import('./features/shared/coming-soon.page').then((m) => m.ComingSoonPage),
+        canActivate: [adminErpAuthGuard],
+        data: { page: 'orders', navKey: 'orders' },
+      },
+      {
+        path: 'returns',
+        loadComponent: () => import('./features/shared/coming-soon.page').then((m) => m.ComingSoonPage),
+        canActivate: [adminErpAuthGuard],
+        data: { page: 'returns-cskh', navKey: 'returns' },
+      },
+      {
+        path: 'products',
+        loadComponent: () => import('./features/shared/coming-soon.page').then((m) => m.ComingSoonPage),
+        canActivate: [adminErpAuthGuard],
+        data: { page: 'products', alternativePages: ['pricing'], navKey: 'products' },
+      },
+      {
+        path: 'pricing',
+        loadComponent: () => import('./features/shared/coming-soon.page').then((m) => m.ComingSoonPage),
+        canActivate: [adminErpAuthGuard],
+        data: { page: 'pricing', navKey: 'pricing' },
+      },
+      {
+        path: 'promotions',
+        loadComponent: () => import('./features/shared/coming-soon.page').then((m) => m.ComingSoonPage),
+        canActivate: [adminErpAuthGuard],
+        data: { page: 'promotions', navKey: 'promotions' },
+      },
+      {
+        path: 'reviews',
+        loadComponent: () => import('./features/shared/coming-soon.page').then((m) => m.ComingSoonPage),
+        canActivate: [adminErpAuthGuard],
+        data: { page: 'reviews', navKey: 'reviews' },
+      },
+      {
+        path: 'accounts',
+        loadComponent: () => import('./features/shared/coming-soon.page').then((m) => m.ComingSoonPage),
+        canActivate: [adminErpAuthGuard],
+        data: { page: 'accounts', navKey: 'accounts' },
+      },
+      {
+        path: 'logs',
+        loadComponent: () => import('./features/shared/coming-soon.page').then((m) => m.ComingSoonPage),
+        canActivate: [adminErpAuthGuard],
+        data: { page: 'logs', navKey: 'logs' },
+      },
+    ],
+  },
+  { path: '**', redirectTo: 'login' },
+];

@@ -1,0 +1,102 @@
+<div class="shell" [class.is-collapsed]="sidebarCollapsed()">
+  <aside class="sidebar" id="erp-sidebar" [class.is-open]="mobileNavOpen()" aria-label="Điều hướng Velura ERP">
+    <div class="sidebar__brand">
+      <a class="brand" routerLink="/dashboard" aria-label="Velura ERP — Tổng quan">
+        <img src="/admin-assets/images/logo.png" alt="" />
+        <span class="brand__copy">
+          <strong>Velura</strong>
+          <small>ERP Workspace</small>
+        </span>
+      </a>
+      <button class="rail-toggle" type="button" [attr.aria-label]="menuLabel()" (click)="toggleSidebar()">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+
+    <nav class="sidebar__nav">
+      @for (group of groups(); track group.key) {
+        <section class="nav-group">
+          <h2>{{ group.label }}</h2>
+          @for (item of group.items; track item.key) {
+            <a
+              class="nav-link"
+              [routerLink]="navLink(item)"
+              [class.is-active]="isActive(item)"
+              [class.is-planned]="item.status === 'planned'"
+              [attr.aria-current]="isActive(item) ? 'page' : null"
+            >
+              <app-erp-icon [name]="item.icon" [size]="'17'" />
+              <span class="nav-link__label">{{ item.label }}</span>
+              @if (item.status === 'planned') {
+                <span class="nav-link__badge">Sắp mở</span>
+              }
+            </a>
+          }
+        </section>
+      }
+    </nav>
+
+    <div class="sidebar__foot">
+      <div class="sidebar-user">
+        <span class="sidebar-user__avatar">{{ session.initials() }}</span>
+        <span class="sidebar-user__copy">
+          <strong>{{ session.displayName() }}</strong>
+          <small>{{ session.roleLabel() }}</small>
+        </span>
+      </div>
+      <a class="nav-link nav-link--quiet" routerLink="/change-password">
+        <app-erp-icon name="lock" [size]="'16'" />
+        <span class="nav-link__label">Đổi mật khẩu</span>
+      </a>
+      <button class="nav-link nav-link--quiet nav-link--button" type="button" (click)="askLogout()">
+        <app-erp-icon name="log" [size]="'16'" />
+        <span class="nav-link__label">Đăng xuất</span>
+      </button>
+    </div>
+  </aside>
+
+  @if (mobileNavOpen()) {
+    <button class="nav-backdrop" type="button" aria-label="Đóng menu" (click)="closeMobileNav()"></button>
+  }
+
+  <div class="main">
+    <header class="topbar">
+      <button class="topbar__menu" type="button" [attr.aria-label]="menuLabel()" (click)="toggleSidebar()">
+        <app-erp-icon name="settings" [size]="'18'" />
+      </button>
+      <div class="topbar__title">
+        @if (workspaceLabel()) {
+          <span>{{ workspaceLabel() }}</span>
+        }
+        <strong>{{ pageTitle() }}</strong>
+      </div>
+      <div class="topbar__actions">
+        <button class="erp-btn erp-btn--sm" type="button" (click)="refresh()">
+          <app-erp-icon name="refresh" [size]="'15'" />
+          Làm mới
+        </button>
+        <a class="topbar__avatar" routerLink="/change-password" [attr.aria-label]="'Tài khoản ' + session.displayName()">
+          @if (session.avatarUrl()) {
+            <img [src]="session.avatarUrl()" alt="" />
+          } @else {
+            {{ session.initials() }}
+          }
+        </a>
+      </div>
+    </header>
+
+    <main class="content">
+      <router-outlet />
+    </main>
+  </div>
+</div>
+
+<app-erp-modal [open]="logoutConfirmOpen()" title="Đăng xuất khỏi Velura ERP?" size="sm" (closed)="cancelLogout()">
+  <p class="logout-copy">Phiên làm việc hiện tại sẽ kết thúc. Bạn cần đăng nhập lại để tiếp tục quản trị.</p>
+  <div footer class="logout-actions">
+    <button class="erp-btn" type="button" (click)="cancelLogout()" [disabled]="signingOut()">Ở lại</button>
+    <button class="erp-btn erp-btn--danger" type="button" (click)="confirmLogout()" [disabled]="signingOut()">
+      {{ signingOut() ? 'Đang đăng xuất…' : 'Đăng xuất' }}
+    </button>
+  </div>
+</app-erp-modal>

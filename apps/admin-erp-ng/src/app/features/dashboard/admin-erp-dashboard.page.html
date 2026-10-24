@@ -1,0 +1,251 @@
+<app-erp-page-header
+  eyebrow="Tổng quan"
+  title="Nhịp vận hành cửa hàng"
+  [subtitle]="'Dữ liệu thật từ API Velura · ' + periodLabel() + '. Ưu tiên việc cần xử lý trước khi xem xu hướng kinh doanh.'"
+>
+  <div actions class="header-actions">
+    <app-erp-tabs [tabs]="tabs()" [active]="tab()" (changed)="setTab($event)" />
+    <div class="range-switch" role="group" aria-label="Khoảng thời gian">
+      <button type="button" [class.is-active]="range() === 'day'" (click)="setRange('day')">Ngày</button>
+      <button type="button" [class.is-active]="range() === 'week'" (click)="setRange('week')">Tuần</button>
+      <button type="button" [class.is-active]="range() === 'month'" (click)="setRange('month')">Tháng</button>
+    </div>
+    <button class="erp-btn erp-btn--sm" type="button" (click)="reload()" [disabled]="loading()">
+      <app-erp-icon name="refresh" [size]="'15'" />
+      {{ loading() ? 'Đang tải…' : 'Làm mới' }}
+    </button>
+  </div>
+</app-erp-page-header>
+
+<div class="status-line" aria-live="polite">
+  <app-erp-status-badge
+    [label]="loadError() ? 'Mất kết nối' : loading() ? 'Đang tải' : 'Dữ liệu thật'"
+    [tone]="loadError() ? 'danger' : loading() ? 'warning' : 'success'"
+    [dot]="true"
+  />
+  <span>
+    Nguồn {{ sourceLabel() }} · {{ periodLabel() }}
+    @if (generatedAt()) {
+      · cập nhật {{ generatedAt() }}
+    }
+  </span>
+</div>
+
+@if (loadError()) {
+  <section class="erp-card">
+    <app-erp-empty-state title="Không tải được dashboard" [message]="loadError() || ''" icon="alert" tone="error">
+      <button class="erp-btn erp-btn--primary" type="button" (click)="reload()">Thử lại</button>
+    </app-erp-empty-state>
+  </section>
+} @else if (tab() === 'operations') {
+  <section class="kpi-grid" aria-label="KPI vận hành">
+    @for (kpi of operationKpis(); track kpi.label) {
+      <app-erp-kpi-card
+        [label]="kpi.label"
+        [value]="kpi.value"
+        [hint]="kpi.hint"
+        [tone]="kpi.tone"
+        [icon]="kpi.icon"
+        [loading]="loading()"
+      />
+    }
+  </section>
+
+  <div class="dash-grid">
+    <section class="erp-card panel" aria-labelledby="alerts-title">
+      <header class="panel__head">
+        <div>
+          <span class="panel__eyebrow">Hàng đợi vận hành</span>
+          <h2 id="alerts-title">Việc cần xử lý</h2>
+        </div>
+        <span class="panel__meta">{{ alertTotal() }} tín hiệu</span>
+      </header>
+      <div class="alert-list">
+        @for (alert of alerts(); track alert.key) {
+          <article class="alert-row">
+            <app-erp-status-badge [label]="alert.action" [tone]="alert.tone" />
+            <div class="alert-row__copy">
+              <strong>{{ alert.title }}</strong>
+              <span>{{ alert.detail }}</span>
+            </div>
+            @if (routeFor(alert.page); as route) {
+              <a class="erp-btn erp-btn--sm" [routerLink]="route">{{ alert.action }}</a>
+            } @else {
+              <span class="muted">Sắp mở</span>
+            }
+          </article>
+        }
+      </div>
+    </section>
+
+    <section class="erp-card panel" aria-labelledby="workspaces-title">
+      <header class="panel__head">
+        <div>
+          <span class="panel__eyebrow">Phân hệ</span>
+          <h2 id="workspaces-title">Lối vào nhanh</h2>
+        </div>
+      </header>
+      <div class="health-grid">
+        @for (link of healthLinks(); track link.key) {
+          @if (routeFor(link.page); as route) {
+            <a class="health" [routerLink]="route">
+              <span class="health__icon"><app-erp-icon [name]="link.icon" [size]="'16'" /></span>
+              <span>
+                <strong>{{ link.label }}</strong>
+                <small>{{ link.value }}</small>
+              </span>
+            </a>
+          } @else {
+            <div class="health is-static">
+              <span class="health__icon"><app-erp-icon [name]="link.icon" [size]="'16'" /></span>
+              <span>
+                <strong>{{ link.label }}</strong>
+                <small>Sắp mở</small>
+              </span>
+            </div>
+          }
+        }
+      </div>
+    </section>
+  </div>
+
+  <section class="erp-card panel" aria-labelledby="activity-title">
+    <header class="panel__head">
+      <div>
+        <span class="panel__eyebrow">Audit</span>
+        <h2 id="activity-title">Hoạt động gần đây</h2>
+      </div>
+      @if (routeFor('logs'); as logsRoute) {
+        <a class="panel__link" [routerLink]="logsRoute">Mở nhật ký</a>
+      }
+    </header>
+    @if (loading()) {
+      <app-erp-table-skeleton [rows]="5" [columns]="4" />
+    } @else if (!recentActivity().length) {
+      <app-erp-empty-state title="Chưa có hoạt động" message="Audit sẽ xuất hiện khi người vận hành thao tác trên hệ thống." icon="log" />
+    } @else {
+      <div class="activity-list">
+        @for (item of recentActivity(); track item.log.audit_id || item.log.timestamp) {
+          <article class="activity-row">
+            <time>{{ item.copy.time }}</time>
+            <span class="activity-row__dot"></span>
+            <div>
+              <strong>{{ item.copy.actor }}</strong>
+              <span>{{ item.copy.desc }}</span>
+            </div>
+            <span class="erp-chip">{{ item.copy.module }}</span>
+          </article>
+        }
+      </div>
+    }
+  </section>
+} @else {
+  <section class="kpi-grid kpi-grid--five" aria-label="KPI kinh doanh">
+    @for (kpi of businessKpis(); track kpi.label) {
+      <app-erp-kpi-card
+        [label]="kpi.label"
+        [value]="kpi.value"
+        [hint]="kpi.hint"
+        [tone]="kpi.tone"
+        [icon]="kpi.icon"
+        [loading]="loading()"
+      />
+    }
+  </section>
+
+  <div class="dash-grid dash-grid--business">
+    <section class="erp-card panel" aria-labelledby="revenue-title">
+      <header class="panel__head">
+        <div>
+          <span class="panel__eyebrow">Xu hướng</span>
+          <h2 id="revenue-title">Doanh thu theo ngày</h2>
+        </div>
+        <span class="panel__meta">{{ money(business().revenue) }}</span>
+      </header>
+      @if (loading()) {
+        <div class="chart chart--loading">
+          @for (item of operationKpis(); track item.label) {
+            <span class="erp-skeleton"></span>
+          }
+        </div>
+      } @else if (!hasBusinessData()) {
+        <app-erp-empty-state title="Chưa có doanh thu trong kỳ" message="Chọn kỳ khác hoặc kiểm tra lại trạng thái đơn hàng." icon="dashboard" />
+      } @else {
+        <div class="chart" [style.grid-template-columns]="chartColumns()" aria-label="Biểu đồ doanh thu theo ngày">
+          @for (bar of chartBars(); track bar.date) {
+            <div class="chart__col" [attr.title]="bar.amount">
+              <div class="chart__bars">
+                <span class="chart__revenue" [style.height]="bar.revenuePct"></span>
+                <span class="chart__orders" [style.height]="bar.orderPct"></span>
+              </div>
+              <small>{{ bar.label }}</small>
+            </div>
+          }
+        </div>
+        <div class="chart__legend">
+          <span><i class="legend-dot legend-dot--revenue"></i>Doanh thu</span>
+          <span><i class="legend-dot legend-dot--orders"></i>Số đơn</span>
+        </div>
+      }
+    </section>
+
+    <section class="erp-card panel" aria-labelledby="best-sellers-title">
+      <header class="panel__head">
+        <div>
+          <span class="panel__eyebrow">Catalog</span>
+          <h2 id="best-sellers-title">Sản phẩm bán chạy</h2>
+        </div>
+      </header>
+      @if (loading()) {
+        <app-erp-table-skeleton [rows]="5" [columns]="3" />
+      } @else if (!bestSellers().length) {
+        <app-erp-empty-state title="Chưa có dữ liệu bán hàng" message="Danh sách sẽ xuất hiện khi kỳ này có đơn hoàn tất." icon="box" />
+      } @else {
+        <table class="mini-table">
+          <thead>
+            <tr><th>Sản phẩm</th><th>Đã bán</th><th>Doanh thu</th></tr>
+          </thead>
+          <tbody>
+            @for (item of bestSellers(); track item.product_id || item.sku || item.name) {
+              <tr>
+                <td>
+                  <strong>{{ item.name }}</strong>
+                  <small>{{ item.sku || '—' }}</small>
+                </td>
+                <td>{{ num(item.sold) }}</td>
+                <td>{{ money(item.revenue) }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      }
+    </section>
+  </div>
+
+  <section class="erp-card panel" aria-labelledby="category-title">
+    <header class="panel__head">
+      <div>
+        <span class="panel__eyebrow">Mix doanh thu</span>
+        <h2 id="category-title">Đóng góp danh mục</h2>
+      </div>
+    </header>
+    @if (loading()) {
+      <app-erp-table-skeleton [rows]="4" [columns]="3" />
+    } @else if (!categories().length) {
+      <app-erp-empty-state title="Chưa có đóng góp danh mục" message="Dữ liệu mix sẽ xuất hiện khi có doanh thu được ghi nhận." icon="tag" />
+    } @else {
+      <div class="category-list">
+        @for (category of categories(); track category.category_id || category.name) {
+          <article class="category-row">
+            <div>
+              <strong>{{ category.name }}</strong>
+              <small>{{ money(category.revenue) }}</small>
+            </div>
+            <div class="category-bar"><span [style.width.%]="category.pct"></span></div>
+            <span class="category-pct">{{ category.pct }}%</span>
+          </article>
+        }
+      </div>
+    }
+  </section>
+}

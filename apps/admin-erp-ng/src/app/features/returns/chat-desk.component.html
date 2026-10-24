@@ -1,0 +1,281 @@
+<div class="desk-layout">
+  <section class="desk-queue" aria-label="Hàng đợi hội thoại">
+    <div class="desk-queue__head">
+      <app-erp-filter-bar class="desk-queue__filters" [busy]="loadingList()" (apply)="load()" (reset)="load()">
+        <label class="erp-field">
+          <span>Trạng thái bàn giao</span>
+          <select class="erp-select" name="handoffStatus" [value]="handoffStatus()" (change)="setHandoffFilter('status', $event)">
+            <option value="">Mọi trạng thái</option>
+            @for (option of handoffOptions; track option.code) {
+              <option [value]="option.code">{{ option.label }}</option>
+            }
+          </select>
+        </label>
+        <label class="desk-check">
+          <input type="checkbox" name="handoffOnly" [checked]="handoffOnly()" (change)="setHandoffFilter('only', $event)" />
+          Chỉ ca của nhân viên
+        </label>
+      </app-erp-filter-bar>
+      <button class="erp-btn erp-btn--sm" type="button" (click)="load()">
+        <app-erp-icon name="refresh" [size]="'15'" />
+        Làm mới
+      </button>
+    </div>
+
+    @if (listError()) {
+      <p class="erp-error" role="alert">{{ listError() }}</p>
+    }
+
+    @if (loadingList()) {
+      <p class="desk-muted">Đang tải hàng đợi…</p>
+    } @else if (!sessions().length) {
+      <app-erp-empty-state title="Không có hội thoại" message="Hàng đợi trống với bộ lọc hiện tại." icon="support" />
+    } @else {
+      <ul class="desk-sessions">
+        @for (row of sessions(); track row.session_id) {
+          <li>
+            <button class="desk-session" [class.is-active]="selected()?.session_id === row.session_id" type="button" (click)="open(row)">
+              <span class="desk-session__top">
+                <strong>{{ row.title || 'Cuộc trò chuyện hỗ trợ' }}</strong>
+                <app-erp-status-badge [label]="handoffLabel(row.handoff_status)" [tone]="riskTone(row.risk_level)" [dot]="true" />
+              </span>
+              <span class="desk-session__preview">{{ row.last_message_preview || 'Chưa có nội dung' }}</span>
+              <span class="desk-session__meta">
+                {{ row.assigned_agent_name ? 'Nhân viên: ' + row.assigned_agent_name : 'Chưa phân công' }} ·
+                {{ date(row.last_message_at || row.updated_at) }}
+              </span>
+            </button>
+          </li>
+        }
+      </ul>
+    }
+  </section>
+
+  <section class="desk-case" aria-label="Ca đang mở">
+    @if (!selected()) {
+      <app-erp-empty-state title="Chọn một hội thoại" message="Bên trái là hàng đợi CSKH; chọn ca để đọc nội dung đã lọc." icon="support" />
+    } @else {
+      <div class="desk-case__head">
+        <div>
+          <h3>{{ selected()?.title || 'Cuộc trò chuyện hỗ trợ' }}</h3>
+          <p>
+            {{ handoffLabel(selected()?.handoff_status) }} ·
+            {{ selected()?.assigned_agent_name ? 'đang thuộc ' + selected()?.assigned_agent_name : 'chưa nhận' }} ·
+            {{ date(selected()?.updated_at) }}
+          </p>
+        </div>
+        @if (canMutate() && !assignedToMe()) {
+          <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" [disabled]="busy()" (click)="claim()">Nhận ca</button>
+        }
+        <button class="erp-btn erp-btn--sm" type="button" (click)="refresh()">Đọc lại</button>
+      </div>
+
+      @if (intelligence(); as intel) {
+        <div class="desk-intel">
+          <span>Phân loại đang áp dụng</span>
+          <p>
+            {{ intel.classification?.issue || '—' }} · rủi ro {{ intel.classification?.risk || '—' }} ·
+            lọc {{ intel.filter_status || 'chưa rõ' }}{{ intel.corrected ? ' · đã được sửa' : '' }}
+          </p>
+          @if (intel.filter_status !== 'ready') {
+            <p class="desk-warning">
+              Ngữ cảnh chưa sẵn sàng hoặc đang gián đoạn. Không dùng phân loại này để kết luận ca.
+            </p>
+          }
+        </div>
+      }
+
+      @for (warning of warnings(); track warning.id) {
+        <p class="desk-warning" role="status">{{ warning.text }} {{ warning.action ? '· ' + warning.action : '' }}</p>
+      }
+
+      @if (handoff(); as summary) {
+        <div class="desk-summary">
+          <span>Tóm tắt bàn giao</span>
+          <p>{{ summary.problem || '—' }} → {{ summary.wanted || '—' }}</p>
+          @if (summary.failed_approaches?.length) {
+            <ul>
+              @for (approach of summary.failed_approaches; track approach) {
+                <li>{{ approach }}</li>
+              }
+            </ul>
+          }
+          @if (summary.confirmed_facts?.length) {
+            <p class="desk-muted">Sự kiện đã xác minh: {{ summary.confirmed_facts?.join(', ') }}</p>
+          }
+          @if (summary.unconfirmed_claims?.length) {
+            <p class="desk-muted">Khách nói nhưng chưa kiểm chứng: {{ summary.unconfirmed_claims?.join(', ') }}</p>
+          }
+        </div>
+      }
+
+      <div class="desk-transcript">
+        @if (loadingMessages()) {
+          <p class="desk-muted">Đang tải hội thoại…</p>
+        } @else {
+          @for (message of messages(); track message.message_id) {
+            <button
+              class="desk-message"
+              [class.is-customer]="label(message) === 'Khách'"
+              [class.is-target]="targetMessage()?.message_id === message.message_id"
+              type="button"
+              (click)="pickTarget(message)"
+            >
+              <span class="desk-message__head">
+                <strong>{{ label(message) }}</strong>
+                <app-erp-status-badge
+                  [label]="message.moderation_status === 'pending' ? 'Đang lọc' : message.moderation_status === 'restricted' ? 'Đã kiểm duyệt' : 'Công khai'"
+                  [tone]="transcriptTone[message.moderation_status || 'visible']"
+                />
+                <em>{{ date(message.created_at) }}</em>
+              </span>
+              <span class="desk-message__text">{{ message.text }}</span>
+            </button>
+          }
+          @if (!messages().length) {
+            <p class="desk-muted">Chưa có tin nhắn nào.</p>
+          }
+        }
+      </div>
+
+      <form class="desk-reply" (submit)="onSubmitReply($event)">
+        <label class="erp-field">
+          <span>Phản hồi khách hàng (tối đa {{ maxText }} ký tự)</span>
+          <textarea class="erp-input" rows="3" [value]="draft()" (input)="setDraft($event)" [disabled]="!canMutate()"></textarea>
+        </label>
+        <button class="erp-btn erp-btn--primary erp-btn--sm" type="submit" [disabled]="!canMutate() || busy() || !replyReady()">
+          Gửi phản hồi
+        </button>
+      </form>
+
+      <div class="desk-review">
+        <span>Quyết định kiểm soát</span>
+        <div class="desk-review__actions">
+          @for (action of visibleActions(); track action.code) {
+            <button class="erp-chip" [class.is-active]="reviewAction() === action.code" type="button" (click)="chooseAction(action.code)">
+              {{ action.label }}
+            </button>
+          }
+        </div>
+        @if (activeAction(); as action) {
+          <p class="desk-muted">{{ action.hint }}</p>
+        }
+
+        @if (needsTarget()) {
+          <p class="desk-muted">
+            {{ targetMessage() ? 'Đang chọn tin ' + targetMessage()?.message_id : 'Bấm một tin nhắn để chọn làm đối tượng.' }}
+          </p>
+        }
+
+        @if (reviewAction() === 'resolve') {
+          <label class="erp-field">
+            <span>Giải pháp cuối cùng</span>
+            <input class="erp-input" type="text" [value]="resolution()" (input)="setReviewField('resolution', $event)" />
+          </label>
+          <label class="erp-field">
+            <span>Cảm nhận khách hàng</span>
+            <select class="erp-select" [value]="sentiment()" (change)="setSentiment($event)">
+              <option value="positive">Tích cực</option>
+              <option value="neutral">Trung lập</option>
+              <option value="negative">Tiêu cực</option>
+            </select>
+          </label>
+        }
+
+        @if (reviewAction() === 'offer') {
+          <label class="erp-field">
+            <span>Ưu đãi đã duyệt cho ca này</span>
+            <select class="erp-select" [value]="offerId()" (change)="setReviewField('offerId', $event)">
+              <option value="">Chọn ưu đãi</option>
+              @for (offer of offers(); track offer.offer_id) {
+                <option [value]="offer.offer_id">{{ offer.title }}</option>
+              }
+            </select>
+          </label>
+          @if (!offers().length) {
+            <p class="desk-muted">Ca này chưa có ưu đãi nào được duyệt.</p>
+          }
+        }
+
+        @if (reviewAction() === 'report_retry') {
+          <label class="erp-field">
+            <span>Mã báo cáo cần thử lại</span>
+            <input class="erp-input" type="text" [value]="reportId()" (input)="setReviewField('reportId', $event)" />
+          </label>
+          @if (report(); as status) {
+            <p class="desk-muted">Trạng thái gần nhất: {{ status.state || '—' }} · {{ status.attempts ?? 0 }} lần thử.</p>
+          }
+        }
+
+        @if (reviewAction() === 'moderate') {
+          <label class="erp-field">
+            <span>Mức rủi ro</span>
+            <select class="erp-select" [value]="reviewRisk()" (change)="setReviewRisk($event)">
+              <option value="yellow">Vàng</option>
+            <option value="orange">Cam</option>
+            <option value="red">Đỏ</option>
+            </select>
+          </label>
+        }
+
+        @if (reviewAction() === 'correction') {
+          <div class="desk-classify">
+            @for (field of classificationFields(); track field.key) {
+              <label class="erp-field">
+                <span>{{ field.label }}</span>
+                <select class="erp-select erp-select--sm" [value]="classification()[field.key]" (change)="setClassification(field.key, $event)">
+                  @for (value of field.values; track value) {
+                    <option [value]="value">{{ value }}</option>
+                  }
+                </select>
+              </label>
+            }
+          </div>
+        }
+
+        @if (reviewAction() === 'refilter') {
+          <label class="erp-field">
+            <span>Đề xuất nội dung thay thế (tùy chọn)</span>
+            <input class="erp-input" type="text" [value]="filteredText()" (input)="setReviewField('filteredText', $event)" />
+          </label>
+        }
+
+        <label class="desk-check">
+          <input type="checkbox" [checked]="confirmed()" (change)="setConfirmed($event)" />
+          Tôi đã đọc lại nội dung và xác nhận quyết định này (bắt buộc).
+        </label>
+
+        <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" [disabled]="!canMutate() || !reviewReady()" (click)="submitReview()">
+          {{ busy() ? 'Đang lưu…' : 'Lưu quyết định' }}
+        </button>
+
+        @if (isSupervisor() && targetMessage()) {
+          <button class="erp-btn erp-btn--sm" type="button" [disabled]="originalBusy()" (click)="readOriginal()">
+            {{ originalBusy() ? 'Đang mở…' : 'Xem nội dung gốc (có audit)' }}
+          </button>
+        }
+      </div>
+
+      @if (original(); as payload) {
+        <div class="desk-original">
+          <span>Nội dung gốc · rủi ro {{ payload.risk }}</span>
+          <p>{{ payload.original_text }}</p>
+          @if (payload.reason) {
+            <p class="desk-muted">Lý do kiểm duyệt: {{ payload.reason }}</p>
+          }
+        </div>
+      }
+
+      @if (outcome(); as result) {
+        <p class="desk-muted">Kết quả đã ghi: {{ result.resolution || '—' }} · cảm nhận {{ result.finalSentiment || '—' }}</p>
+      }
+
+      @if (actionNote()) {
+        <p class="desk-note-ok">{{ actionNote() }}</p>
+      }
+      @if (actionError()) {
+        <p class="erp-error" role="alert">{{ actionError() }}</p>
+      }
+    }
+  </section>
+</div>

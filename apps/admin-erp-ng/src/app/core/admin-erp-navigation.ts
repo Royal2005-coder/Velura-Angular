@@ -82,7 +82,7 @@ export const ADMIN_ERP_NAV_ITEMS: Readonly<Record<AdminErpNavKey, AdminErpNavIte
     path: '/returns',
     pageKeys: ['returns-cskh'],
     capability: 'returns.read',
-    status: 'planned',
+    status: 'ready',
   },
   products: {
     key: 'products',

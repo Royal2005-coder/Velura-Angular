@@ -1,0 +1,143 @@
+<app-erp-modal [open]="open()" title="Điều chỉnh tồn kho" size="md" (closed)="dismiss()">
+  @if (product(); as item) {
+    <div class="stock-head">
+      <div>
+        <h3>{{ item.name }}</h3>
+        <p>{{ item.sku || '—' }} · v{{ item.version ?? '—' }}</p>
+      </div>
+      <app-erp-status-badge
+        [label]="variants().length + ' biến thể'"
+        [tone]="variants().length ? 'neutral' : 'warning'"
+      />
+    </div>
+
+    <div class="stock-modes">
+      <button class="erp-btn erp-btn--sm" type="button" [class.is-active]="mode() === 'single'" (click)="setMode('single')">
+        Một biến thể
+      </button>
+      <button class="erp-btn erp-btn--sm" type="button" [class.is-active]="mode() === 'batch'" (click)="setMode('batch')">
+        Cả sản phẩm
+      </button>
+    </div>
+
+    @if (mode() === 'single') {
+      <div class="stock-single">
+        @if (chosen(); as variant) {
+        <label class="erp-field stock-span">
+          <span>Biến thể</span>
+          <select class="erp-select" [value]="variant.variant_id" (change)="selectVariant($event)">
+            @for (option of variants(); track option.variant_id) {
+              <option [value]="option.variant_id">
+                {{ variantLabel(option) }} · còn {{ option.stock_quantity ?? 0 }}
+              </option>
+            }
+          </select>
+        </label>
+
+        <div class="stock-types">
+          <button class="erp-btn erp-btn--sm" type="button" [class.is-active]="type() === 'in'" (click)="setType('in')">Nhập kho</button>
+          <button class="erp-btn erp-btn--sm" type="button" [class.is-active]="type() === 'out'" (click)="setType('out')">Xuất kho</button>
+          <button class="erp-btn erp-btn--sm" type="button" [class.is-active]="type() === 'set'" (click)="setType('set')">Thiết lập tồn</button>
+        </div>
+
+        <label class="erp-field">
+          <span>{{ type() === 'set' ? 'Tồn sau điều chỉnh' : 'Số lượng' }}</span>
+          <input class="erp-input" type="number" min="0" [value]="quantity()" (input)="setQuantity($event)" />
+        </label>
+        <label class="erp-field">
+          <span>Ngưỡng cảnh báo</span>
+          <input class="erp-input" type="number" min="0" [value]="threshold()" (input)="setThreshold($event)" />
+        </label>
+
+        <dl class="stock-summary stock-span">
+          <div><dt>Hiện có</dt><dd>{{ current() }}</dd></div>
+          <div><dt>Đang giữ cho đơn</dt><dd>{{ reserved() }}</dd></div>
+          <div><dt>Điều chỉnh</dt><dd>{{ delta() > 0 ? '+' + delta() : delta() }}</dd></div>
+          <div><dt>Sau điều chỉnh</dt><dd>{{ projected() }}</dd></div>
+        </dl>
+
+        @if (exceedsOnHand()) {
+          <p class="erp-error stock-span" role="alert">
+            Không thể xuất {{ quantity() }} khi chỉ còn {{ current() }}.
+          </p>
+        } @else if (belowThreshold()) {
+          <p class="stock-warn stock-span" role="status">
+            Tồn sau điều chỉnh vẫn ở hoặc dưới ngưỡng. Hệ thống ghi nhận hợp lệ và sẽ phát cảnh báo tồn kho thấp.
+          </p>
+        }
+        } @else {
+          <p class="stock-warn stock-span" role="status">
+            Sản phẩm chưa có biến thể. Thêm biến thể trong biểu mẫu sản phẩm trước khi ghi tồn kho.
+          </p>
+        }
+      </div>
+    } @else {
+      <div class="stock-batch">
+        <app-erp-data-table
+          caption="Biến thể của sản phẩm"
+          [columns]="batchColumns"
+          [rows]="variants()"
+          emptyTitle="Sản phẩm chưa có biến thể"
+          emptyMessage="Thêm biến thể trong biểu mẫu sản phẩm trước khi ghi tồn."
+        />
+        @if (variants().length) {
+          <div class="stock-lines">
+            @for (variant of variants(); track variant.variant_id) {
+              <div class="stock-line">
+                <span class="stock-line__name">
+                  {{ variantLabel(variant) }}
+                  <em>(hiện có {{ variant.stock_quantity ?? 0 }})</em>
+                </span>
+                <label class="erp-field">
+                  <span>Tồn</span>
+                  <input
+                    class="erp-input erp-input--sm"
+                    type="number"
+                    min="0"
+                    [value]="lineQuantity(variant)"
+                    (input)="setLineQuantity(variant.variant_id, $event)"
+                  />
+                </label>
+                <label class="erp-field">
+                  <span>Ngưỡng</span>
+                  <input
+                    class="erp-input erp-input--sm"
+                    type="number"
+                    min="0"
+                    [value]="lineThreshold(variant)"
+                    (input)="setLineThreshold(variant.variant_id, $event)"
+                  />
+                </label>
+              </div>
+            }
+          </div>
+          <p class="stock-note">
+            {{ batchLines().length }} dòng sẽ được ghi. Mỗi dòng giữ đúng phiên bản biến thể đang hiển thị.
+          </p>
+        }
+      </div>
+    }
+
+    <div class="stock-reasons">
+      @for (option of reasons; track option) {
+        <button class="erp-chip" type="button" (click)="setReason(option)">{{ option }}</button>
+      }
+    </div>
+    <label class="erp-field">
+      <span>Lý do điều chỉnh (tối thiểu {{ minReasonLength }} ký tự)</span>
+      <textarea class="erp-input" rows="2" [value]="reason()" (input)="setReasonInput($event)"></textarea>
+    </label>
+
+    @if (error()) {
+      <p class="erp-error" role="alert">{{ error() }}</p>
+    }
+  }
+  <div footer>
+    @if (product()) {
+      <button class="erp-btn erp-btn--sm" type="button" (click)="dismiss()">Hủy</button>
+      <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" [disabled]="!canSubmit()" (click)="submit()">
+        {{ saving() ? 'Đang ghi…' : 'Ghi điều chỉnh' }}
+      </button>
+    }
+  </div>
+</app-erp-modal>

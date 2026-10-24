@@ -65,7 +65,7 @@ export const routes: Routes = [
       },
       {
         path: 'products',
-        loadComponent: () => import('./features/shared/coming-soon.page').then((m) => m.ComingSoonPage),
+        loadComponent: () => import('./features/products/admin-erp-products.page').then((m) => m.AdminErpProductsPage),
         canActivate: [adminErpAuthGuard],
         data: { page: 'products', alternativePages: ['pricing'], navKey: 'products' },
       },

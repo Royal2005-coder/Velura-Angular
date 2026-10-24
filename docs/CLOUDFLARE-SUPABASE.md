@@ -14,6 +14,7 @@ Zone: **royalai.dev**. Existing locally managed tunnel:
 | Existing hostname | Intended DNS target | Proxy |
 |---|---|---|
 | `admin.royalai.dev` | `96cb38bf-7ca6-417a-aebb-075f365c5773.cfargotunnel.com` | Proxied |
+| `admin-erp.royalai.dev` (preview) | Same tunnel CNAME | Proxied |
 | `api.royalai.dev` | Same tunnel CNAME | Proxied |
 | `velura.royalai.dev` | Same tunnel CNAME | Proxied |
 | `shop.royalai.dev` | Same tunnel CNAME | Proxied |
@@ -177,7 +178,8 @@ silently switch settings through dashboard instructions.
 
 The expected storefront Site URL remains `https://velura.royalai.dev`.
 Known application callback URLs include `https://admin.royalai.dev/auth/callback`,
-`http://localhost:4001/auth/callback`, and
+`https://admin-erp.royalai.dev/auth/callback`, `http://localhost:4001/auth/callback`,
+`http://localhost:4003/auth/callback`, and
 `https://gtyuajboeffmfskofoyh.supabase.co/auth/v1/callback` for Google OAuth.
 Retain only routes actually required by the active authentication integration;
 the historical VM and `admin.velura.royalai.dev` are not new infrastructure

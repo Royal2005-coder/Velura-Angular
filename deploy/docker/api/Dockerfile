@@ -5,6 +5,7 @@ COPY package.json package-lock.json ./
 COPY apps/api/package.json ./apps/api/
 COPY apps/user-ng/package.json ./apps/user-ng/
 COPY apps/admin-ng/package.json ./apps/admin-ng/
+COPY apps/admin-erp-ng/package.json ./apps/admin-erp-ng/
 RUN npm ci
 COPY apps/api ./apps/api
 RUN npm run build:api
@@ -19,6 +20,7 @@ COPY package.json package-lock.json ./
 COPY apps/api/package.json ./apps/api/
 COPY apps/user-ng/package.json ./apps/user-ng/
 COPY apps/admin-ng/package.json ./apps/admin-ng/
+COPY apps/admin-erp-ng/package.json ./apps/admin-erp-ng/
 RUN npm ci --omit=dev --workspace @velura/api --include-workspace-root && npm cache clean --force \
     && rm -rf /root/.npm \
     && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \

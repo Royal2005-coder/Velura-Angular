@@ -41,6 +41,7 @@ and application have separate inventories; CI has no Kubernetes credentials.
 |---|---|---|
 | Storefront `user-ng` | `:4002` | https://velura.royalai.dev/ |
 | Admin `admin-ng` | `:4001` | https://admin.royalai.dev/ |
+| Admin ERP `admin-erp-ng` | `:4003` | https://admin-erp.royalai.dev/ (preview, separate pod) |
 | API `apps/api` | `:8787` | https://velura.royalai.dev/api/ |
 
 **Không** viết HTTP API bằng Angular. **Không** gọi Supabase service-role từ browser.
@@ -76,7 +77,7 @@ Registry rỗng chặn thử đồ sản phẩm; ảnh người mẫu tổng h�
 Velura-Angular/
 ├── AGENTS.md                 # Hợp đồng agent / Context as Code
 ├── README.md
-├── package.json              # Workspaces: admin-ng, user-ng, api
+├── package.json              # Workspaces: admin-ng, admin-erp-ng, user-ng, api
 ├── .env.example              # Mẫu env — không commit .env
 ├── .github/
 │   ├── workflows/ci.yml      # GitHub Actions (canonical)
@@ -86,6 +87,7 @@ Velura-Angular/
 ├── apps/
 │   ├── user-ng/              # Storefront Angular (KAN-4)
 │   ├── admin-ng/             # Admin Angular (KAN-5)
+│   ├── admin-erp-ng/         # Admin ERP workspace, parallel pod (KAN-106)
 │   └── api/                  # Node TypeScript API
 ├── database/
 │   ├── migrations/           # SQL tuần tự 001…024… (schema + RPC)
@@ -102,7 +104,7 @@ Velura-Angular/
 └── scripts/                  # Tooling repo
 ```
 
-### 2.1 Frontend app (cùng hình cho `user-ng` và `admin-ng`)
+### 2.1 Frontend app (cùng hình cho `user-ng`, `admin-ng` và `admin-erp-ng`)
 
 ```
 apps/<app>/src/app/

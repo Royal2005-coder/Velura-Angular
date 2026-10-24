@@ -3,6 +3,7 @@ RUN apk upgrade --no-cache
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY apps/admin-ng/package.json ./apps/admin-ng/
+COPY apps/admin-erp-ng/package.json ./apps/admin-erp-ng/
 COPY apps/user-ng/package.json ./apps/user-ng/
 COPY apps/api/package.json ./apps/api/
 RUN npm ci

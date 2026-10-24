@@ -1,0 +1,169 @@
+<app-erp-page-header
+  eyebrow="Danh mục"
+  title="Giá bán & lịch sử giá"
+  subtitle="Giá gốc, giá bán và lý do thay đổi tách khỏi catalog. Mọi lần đổi giá dùng expectedVersion và ghi audit."
+>
+  <div actions>
+    <button class="erp-btn erp-btn--sm" type="button" (click)="reload()" [disabled]="loading()">
+      <app-erp-icon name="refresh" [size]="'15'" />
+      {{ loading() ? 'Đang tải…' : 'Làm mới' }}
+    </button>
+  </div>
+</app-erp-page-header>
+
+<section class="pricing-kpis" aria-label="Tóm tắt giá">
+  <app-erp-kpi-card label="Sản phẩm" [value]="total().toLocaleString('vi-VN')" hint="Theo bộ lọc" tone="accent" icon="tag" [loading]="loading() && !products().length" />
+  <app-erp-kpi-card label="Chưa có giá bán" [value]="missingSale().toLocaleString('vi-VN')" hint="Trong trang hiện tại" tone="warning" icon="alert" [loading]="loading()" />
+  <app-erp-kpi-card label="Đang giảm giá" [value]="discounted().toLocaleString('vi-VN')" hint="Trong trang hiện tại" tone="success" icon="tag" [loading]="loading()" />
+  <app-erp-kpi-card label="Giá bất thường" [value]="invalid().toLocaleString('vi-VN')" hint="Giá bán > giá gốc" tone="danger" icon="alert" [loading]="loading()" />
+  <app-erp-kpi-card label="Đổi giá hôm nay" [value]="historyToday().toLocaleString('vi-VN')" hint="50 lần gần nhất" tone="info" icon="log" [loading]="loading()" />
+</section>
+
+<section class="erp-card pricing-panel" aria-labelledby="pricing-title">
+  <div class="pricing-tabs">
+    <div>
+      <span class="pricing-eyebrow">Pricing</span>
+      <h2 id="pricing-title">Bảng giá cửa hàng</h2>
+    </div>
+    <app-erp-tabs [tabs]="tabs()" [active]="tab()" (changed)="setTab($event)" />
+  </div>
+
+  @if (tab() === 'prices') {
+    <app-erp-filter-bar [busy]="loading()" (apply)="applyFilters()" (reset)="resetFilters()">
+      <label class="erp-field pricing-search">
+        <span>Tìm kiếm</span>
+        <input class="erp-input" type="search" [value]="query()" (input)="onQueryInput($event)" placeholder="Tên hoặc SKU sản phẩm..." />
+      </label>
+      <label class="erp-field">
+        <span>Trạng thái sản phẩm</span>
+        <select class="erp-select" [value]="status()" (change)="onStatusChange($event)">
+          @for (option of statusOptions; track option.value) {
+            <option [value]="option.value">{{ option.label }}</option>
+          }
+        </select>
+      </label>
+      <label class="erp-field">
+        <span>Trạng thái giá (trang này)</span>
+        <select class="erp-select" [value]="priceState()" (change)="onPriceStateChange($event)">
+          @for (option of priceStateOptions; track option.value) {
+            <option [value]="option.value">{{ option.label }}</option>
+          }
+        </select>
+      </label>
+    </app-erp-filter-bar>
+
+    @if (loadError()) {
+      <div class="pricing-banner" role="alert">
+        <app-erp-icon name="alert" [size]="'16'" />
+        {{ loadError() }}
+        <button class="erp-btn erp-btn--sm" type="button" (click)="reload()">Thử lại</button>
+      </div>
+    }
+
+    <app-erp-data-table
+      caption="Bảng giá sản phẩm"
+      [columns]="priceColumns"
+      [rows]="filtered()"
+      [loading]="loading()"
+      emptyTitle="Không có sản phẩm phù hợp"
+      emptyMessage="Điều chỉnh bộ lọc hoặc tải lại."
+      [clickable]="true"
+      (rowSelected)="openDetail($event)"
+    />
+    <app-erp-pagination [page]="page()" [pageCount]="pageCount()" [label]="rangeLabel()" (changed)="goPage($event)" />
+  } @else if (tab() === 'history') {
+    <app-erp-data-table
+      caption="Lịch sử thay đổi giá"
+      [columns]="historyColumns"
+      [rows]="history()"
+      [loading]="loading()"
+      emptyTitle="Chưa có lịch sử giá"
+      emptyMessage="Lịch sử xuất hiện sau lần đổi giá đầu tiên."
+    />
+    <p class="pricing-note">50 lần thay đổi gần nhất, mới nhất trước.</p>
+  } @else {
+    <app-erp-data-table
+      caption="Nhật ký phân hệ giá"
+      [columns]="logColumns"
+      [rows]="logs()"
+      [loading]="loading()"
+      emptyTitle="Chưa có nhật ký giá"
+      emptyMessage="Audit giá xuất hiện sau thao tác của người vận hành."
+    />
+    <app-erp-pagination [page]="logsPage()" [pageCount]="logPageCount()" [label]="logRangeLabel()" (changed)="goLogsPage($event)" />
+  }
+</section>
+
+<app-erp-drawer [open]="selected() !== null" title="Chi tiết giá sản phẩm" size="md" (closed)="closeOverlays()">
+  @if (selected(); as product) {
+    <div class="price-detail">
+      <div class="price-detail__head">
+        <div>
+          <span class="price-detail__sku">{{ product.sku || '—' }}</span>
+          <h3>{{ product.name }}</h3>
+          <p>{{ categoryName(product) }}</p>
+        </div>
+        <app-erp-status-badge [label]="statusLabel(product.status)" [tone]="statusTone(product.status)" [dot]="true" />
+      </div>
+
+      <dl class="detail-grid">
+        <div><dt>Giá gốc</dt><dd>{{ money(product.base_price) }}</dd></div>
+        <div><dt>Giá bán</dt><dd>{{ money(product.sale_price) }}</dd></div>
+        <div><dt>Giảm giá</dt><dd>{{ discount(product) }}</dd></div>
+        <div><dt>Cập nhật</dt><dd>{{ date(product.updated_at) }}</dd></div>
+        <div><dt>Phiên bản</dt><dd class="is-mono">{{ product.version ?? '—' }}</dd></div>
+      </dl>
+
+      @if (isInvalid(product)) {
+        <p class="price-detail__warning">Giá bán đang cao hơn giá gốc. Cần sửa trước khi tiếp tục khuyến mãi.</p>
+      }
+    </div>
+  }
+  <div footer>
+    @if (canMutate() && selected()) {
+      <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" (click)="openChange()">Đổi giá</button>
+    }
+    <button class="erp-btn erp-btn--sm" type="button" (click)="closeOverlays()">Đóng</button>
+  </div>
+</app-erp-drawer>
+
+<app-erp-modal [open]="actionOpen()" title="Đổi giá sản phẩm" size="sm" (closed)="closeOverlays()">
+  @if (selected(); as product) {
+    <form class="price-form" (submit)="submitPrice($event)">
+      <div class="price-form__product">
+        <strong>{{ product.name }}</strong>
+        <span>{{ product.sku || '—' }}</span>
+      </div>
+
+      <label class="erp-field">
+        <span>Giá gốc</span>
+        <input class="erp-input" name="basePrice" type="number" min="0" [value]="previewBase()" (input)="onPreviewInput($event, 'base')" required />
+      </label>
+      <label class="erp-field">
+        <span>Giá bán</span>
+        <input class="erp-input" name="salePrice" type="number" min="0" [value]="previewSale()" (input)="onPreviewInput($event, 'sale')" required />
+      </label>
+
+      <div class="price-form__preview">
+        <span>Giảm giá dự kiến: <strong>{{ previewPct() }}%</strong></span>
+        @if (previewInvalid()) {
+          <span class="erp-error">Giá bán cao hơn giá gốc.</span>
+        }
+      </div>
+
+      <label class="erp-field">
+        <span>Lý do (tối thiểu 10 ký tự)</span>
+        <textarea class="erp-input" name="reason" rows="3" required></textarea>
+      </label>
+
+      @if (actionError()) {
+        <p class="erp-error" role="alert">{{ actionError() }}</p>
+      }
+
+      <div class="price-form__actions">
+        <button class="erp-btn" type="button" (click)="closeOverlays()">Hủy</button>
+        <button class="erp-btn erp-btn--primary" type="submit">Lưu giá</button>
+      </div>
+    </form>
+  }
+</app-erp-modal>

@@ -78,6 +78,31 @@ export interface AdminReviewRow {
   images?: string[];
 }
 
+export interface AdminProductRow {
+  product_id: string;
+  name: string;
+  sku?: string;
+  base_price?: number;
+  sale_price?: number | null;
+  version?: number;
+  status?: string;
+  updated_at?: string;
+  category?: { name?: string } | null;
+  category_name?: string;
+}
+
+export interface AdminPriceHistoryRow {
+  changed_at?: string;
+  product_id?: string;
+  old_base_price?: number;
+  new_base_price?: number;
+  old_sale_price?: number;
+  new_sale_price?: number;
+  reason?: string;
+  changed_by?: string;
+  product?: { name?: string; sku?: string } | null;
+}
+
 export type AdminInsightRange = 'day' | 'week' | 'month';
 
 export interface AdminDashboardSummary {
@@ -325,6 +350,43 @@ export class AdminErpApiService {
    */
   listReviewAuditLogs(params: Record<string, string> = {}): Observable<AdminListPayload<AdminAuditRow>> {
     return this.http.get<AdminListPayload<AdminAuditRow>>(`${this.baseUrl}/api/v1/admin/reviews/audit-logs`, {
+      params: this.params(params),
+    });
+  }
+
+  /**
+   * Lists price-editable products for pricing readers.
+   */
+  listPricingProducts(params: Record<string, string> = {}): Observable<AdminListPayload<AdminProductRow>> {
+    return this.http.get<AdminListPayload<AdminProductRow>>(`${this.baseUrl}/api/v1/admin/pricing/products`, {
+      params: this.params(params),
+    });
+  }
+
+  /**
+   * Lists price history, newest first.
+   */
+  listPriceHistory(params: Record<string, string> = {}): Observable<AdminListPayload<AdminPriceHistoryRow>> {
+    return this.http.get<AdminListPayload<AdminPriceHistoryRow>>(`${this.baseUrl}/api/v1/admin/pricing/history`, {
+      params: this.params(params),
+    });
+  }
+
+  /**
+   * Changes catalog prices with a reason and optimistic version.
+   */
+  changePrice(productId: string, body: Record<string, unknown>): Observable<AdminProductRow> {
+    return this.http.post<AdminProductRow>(
+      `${this.baseUrl}/api/v1/admin/products/${encodeURIComponent(productId)}/change-price`,
+      body,
+    );
+  }
+
+  /**
+   * Lists pricing/promotion audit rows.
+   */
+  listPricingAuditLogs(params: Record<string, string> = {}): Observable<AdminListPayload<AdminAuditRow>> {
+    return this.http.get<AdminListPayload<AdminAuditRow>>(`${this.baseUrl}/api/v1/admin/pricing/audit-logs`, {
       params: this.params(params),
     });
   }

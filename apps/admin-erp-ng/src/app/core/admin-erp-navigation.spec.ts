@@ -20,8 +20,8 @@ describe('ERP admin navigation registry', () => {
     }
   });
 
-  it('maps pricing to the catalog deep link instead of the dead route', () => {
-    expect(adminErpNavLink(ADMIN_ERP_NAV_ITEMS.pricing)).toBe('/products?tab=price');
+  it('maps pricing to its dedicated workspace', () => {
+    expect(adminErpNavLink(ADMIN_ERP_NAV_ITEMS.pricing)).toBe('/pricing');
   });
 
   it('resolves page keys back to their workspace', () => {
@@ -31,7 +31,7 @@ describe('ERP admin navigation registry', () => {
   });
 
   it('marks shipped workspaces ready and the remaining workspaces planned', () => {
-    const ready = new Set(['dashboard', 'logs', 'accounts', 'reviews']);
+    const ready = new Set(['dashboard', 'logs', 'accounts', 'reviews', 'pricing']);
     for (const item of Object.values(ADMIN_ERP_NAV_ITEMS)) {
       expect(item.status).toBe(ready.has(item.key) ? 'ready' : 'planned');
     }

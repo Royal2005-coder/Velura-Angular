@@ -66,6 +66,22 @@ export function adminIsHttpUrl(value: string | null | undefined): boolean {
   return /^https?:\/\//i.test(String(value || ''));
 }
 
+/**
+ * Counts words for the account/action reason policy.
+ */
+export function adminWordCount(value: string | null | undefined): number {
+  const text = String(value || '').trim();
+  return text ? text.split(/\s+/u).filter(Boolean).length : 0;
+}
+
+/**
+ * Star label used by the review moderation queue.
+ */
+export function adminStars(value: number | null | undefined): string {
+  const rating = Math.max(0, Math.min(5, Number(value || 0)));
+  return `${'★'.repeat(rating)}${'☆'.repeat(5 - rating)} ${rating}/5`;
+}
+
 function asUtcIso(value: string): string {
   const text = String(value).trim();
   if (!text.includes('T') && !text.includes(' ')) return text;

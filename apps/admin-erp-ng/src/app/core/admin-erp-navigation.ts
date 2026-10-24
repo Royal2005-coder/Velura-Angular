@@ -155,7 +155,7 @@ export const ADMIN_ERP_NAV_ITEMS: Readonly<Record<AdminErpNavKey, AdminErpNavIte
     path: '/logs',
     pageKeys: ['logs'],
     capability: 'audit_logs.read',
-    status: 'planned',
+    status: 'ready',
   },
 };
 

@@ -1,0 +1,128 @@
+<app-erp-page-header
+  eyebrow="Hệ thống"
+  title="Nhật ký hệ thống"
+  subtitle="Tra cứu audit theo phân hệ, người thao tác và kết quả. Dữ liệu lấy trực tiếp từ API, phân trang phía server."
+>
+  <div actions>
+    <app-erp-status-badge label="Audit thật" tone="success" [dot]="true" />
+    <button class="erp-btn erp-btn--sm" type="button" (click)="reload()" [disabled]="loading()">
+      <app-erp-icon name="refresh" [size]="'15'" />
+      {{ loading() ? 'Đang tải…' : 'Làm mới' }}
+    </button>
+  </div>
+</app-erp-page-header>
+
+<section class="logs-kpis" aria-label="Tóm tắt nhật ký">
+  <app-erp-kpi-card label="Bản ghi khớp" [value]="num(total())" hint="Theo bộ lọc hiện tại" tone="accent" icon="log" [loading]="loading() && !hasLoadedOnce()" />
+  <app-erp-kpi-card label="Trang này" [value]="num(rows().length)" hint="Số dòng đang hiển thị" icon="eye" [loading]="loading() && !hasLoadedOnce()" />
+  <app-erp-kpi-card label="Thất bại" [value]="num(failureCount())" hint="Trong trang hiện tại" tone="danger" icon="alert" [loading]="loading() && !hasLoadedOnce()" />
+  <app-erp-kpi-card label="Bị chặn" [value]="num(blockedCount())" hint="Trong trang hiện tại" tone="warning" icon="lock" [loading]="loading() && !hasLoadedOnce()" />
+  <app-erp-kpi-card label="Bảo mật" [value]="num(securityCount())" hint="Auth / role / permission" tone="info" icon="users" [loading]="loading() && !hasLoadedOnce()" />
+</section>
+
+<section class="erp-card logs-panel" aria-labelledby="logs-title">
+  <div class="logs-tabs">
+    <div>
+      <span class="logs-eyebrow">Audit trail</span>
+      <h2 id="logs-title">Sự kiện hệ thống</h2>
+    </div>
+    <app-erp-tabs [tabs]="tabs()" [active]="tab()" (changed)="setTab($event)" />
+  </div>
+
+  <app-erp-filter-bar [busy]="loading()" (apply)="applyFilters()" (reset)="resetFilters()">
+    <label class="erp-field logs-search">
+      <span>Tìm kiếm</span>
+      <input
+        class="erp-input"
+        type="search"
+        [value]="query()"
+        (input)="onQueryInput($event)"
+        placeholder="Hành động, đối tượng hoặc người thao tác..."
+      />
+    </label>
+    <label class="erp-field logs-module">
+      <span>Phân hệ</span>
+      <select class="erp-select" [value]="module()" (change)="onModuleChange($event)">
+        @for (option of moduleOptions; track option.value) {
+          <option [value]="option.value">{{ option.label }}</option>
+        }
+      </select>
+    </label>
+  </app-erp-filter-bar>
+
+  @if (loadError() && rows().length) {
+    <div class="logs-banner" role="alert">
+      <app-erp-icon name="alert" [size]="'16'" />
+      {{ loadError() }}
+      <button class="erp-btn erp-btn--sm" type="button" (click)="reload()">Thử lại</button>
+    </div>
+  }
+
+  <app-erp-data-table
+    caption="Danh sách nhật ký hệ thống"
+    [columns]="columns"
+    [rows]="rows()"
+    [loading]="loading()"
+    [error]="rows().length ? '' : loadError() || ''"
+    errorTitle="Không tải được nhật ký"
+    emptyTitle="Chưa có nhật ký hệ thống"
+    emptyMessage="Nhật ký xuất hiện khi phiên quản trị thao tác trên hệ thống."
+    [clickable]="true"
+    (retry)="reload()"
+    (rowSelected)="openRow($event)"
+  />
+
+  <app-erp-pagination
+    [page]="page()"
+    [pageCount]="pageCount()"
+    [label]="rangeLabel()"
+    (changed)="goPage($event)"
+  />
+</section>
+
+<app-erp-drawer [open]="selected() !== null" title="Chi tiết nhật ký" size="md" (closed)="closeDrawer()">
+  @if (selected(); as row) {
+    <div class="audit-detail">
+      <div class="audit-detail__head">
+        <span class="audit-detail__module">{{ moduleLabel(row) }}</span>
+        <app-erp-status-badge [label]="resultLabel(row)" [tone]="resultTone(row)" [dot]="true" />
+      </div>
+
+      <dl class="detail-grid">
+        <div><dt>Thời gian</dt><dd>{{ date(row.timestamp) }}</dd></div>
+        <div><dt>Người thực hiện</dt><dd>{{ actor(row) }}</dd></div>
+        <div><dt>Email</dt><dd>{{ row.actor_email || '—' }}</dd></div>
+        <div><dt>Vai trò</dt><dd>{{ role(row) }}</dd></div>
+        <div><dt>Hành động</dt><dd>{{ action(row) }}</dd></div>
+        <div><dt>Đối tượng</dt><dd>{{ target(row) }}</dd></div>
+        <div><dt>IP</dt><dd class="is-mono">{{ row.ip_address || '—' }}</dd></div>
+        <div><dt>Mã audit</dt><dd class="is-mono">{{ row.audit_id || '—' }}</dd></div>
+      </dl>
+
+      @if (row.change_summary) {
+        <section class="audit-detail__section">
+          <h3>Tóm tắt thay đổi</h3>
+          <p>{{ row.change_summary }}</p>
+        </section>
+      }
+
+      @if (row.old_value !== null && row.old_value !== undefined) {
+        <section class="audit-detail__section">
+          <h3>Giá trị trước</h3>
+          <pre>{{ json(row.old_value) }}</pre>
+        </section>
+      }
+
+      @if (row.new_value !== null && row.new_value !== undefined) {
+        <section class="audit-detail__section">
+          <h3>Giá trị sau</h3>
+          <pre>{{ json(row.new_value) }}</pre>
+        </section>
+      }
+    </div>
+  }
+
+  <div footer>
+    <button class="erp-btn" type="button" (click)="closeDrawer()">Đóng</button>
+  </div>
+</app-erp-drawer>

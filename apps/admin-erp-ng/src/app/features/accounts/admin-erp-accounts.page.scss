@@ -1,0 +1,230 @@
+.accounts-kpis {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.accounts-panel {
+  overflow: hidden;
+}
+
+.accounts-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--erp-line);
+}
+
+.accounts-eyebrow {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--erp-accent-strong);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.accounts-tabs h2 {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--erp-ink);
+}
+
+.accounts-search {
+  flex: 1 1 300px;
+  min-width: 240px;
+}
+
+.account-detail {
+  display: grid;
+  gap: 18px;
+}
+
+.account-detail__head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--erp-line);
+}
+
+.account-detail__avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--erp-accent);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.account-detail__head h3 {
+  font-family: var(--erp-display);
+  font-size: 22px;
+  color: var(--erp-ink);
+}
+
+.account-detail__head p {
+  margin: 2px 0 8px;
+  color: var(--erp-muted);
+  font-size: 11px;
+  word-break: break-all;
+}
+
+.account-detail__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 18px;
+  margin: 0;
+}
+
+.detail-grid div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.detail-grid__wide {
+  grid-column: 1 / -1;
+}
+
+.detail-grid dt {
+  color: var(--erp-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.detail-grid dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--erp-text);
+  font-size: 12.5px;
+}
+
+.detail-grid dd.is-mono {
+  font-variant-numeric: tabular-nums;
+}
+
+.account-detail__section {
+  display: grid;
+  gap: 6px;
+  padding-top: 14px;
+  border-top: 1px solid var(--erp-line);
+}
+
+.account-detail__section h3 {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.account-detail__section pre {
+  max-height: 240px;
+  margin: 0;
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid var(--erp-line);
+  border-radius: var(--erp-radius-sm);
+  background: var(--erp-surface-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.account-form {
+  display: grid;
+  gap: 14px;
+}
+
+.account-form__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.account-form__actions--split {
+  justify-content: space-between;
+}
+
+.create-success {
+  display: grid;
+  gap: 12px;
+  color: var(--erp-text);
+  font-size: 13px;
+}
+
+.create-success__password {
+  display: grid;
+  gap: 4px;
+  padding: 14px;
+  border: 1px solid var(--erp-line);
+  border-radius: var(--erp-radius-sm);
+  background: var(--erp-surface-muted);
+}
+
+.create-success__password span {
+  color: var(--erp-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.create-success__password strong {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 16px;
+  word-break: break-all;
+}
+
+.create-success__password small {
+  color: var(--erp-muted);
+  font-size: 11px;
+}
+
+.request-detail {
+  display: grid;
+  gap: 16px;
+}
+
+@media (max-width: 1280px) {
+  .accounts-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .accounts-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .detail-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .account-form__actions--split {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 460px) {
+  .accounts-kpis {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -14,6 +14,8 @@ export interface AdminTableColumn {
   label: string;
   value: (row: unknown) => string;
   badge?: (row: unknown) => AdminTableCellBadge | null;
+  /** Resolves a thumbnail URL for the cell; the column then renders image plus text. */
+  image?: (row: unknown) => string;
   mono?: boolean;
   align?: 'left' | 'right' | 'center';
   width?: string;
@@ -65,6 +67,11 @@ export interface AdminTableColumn {
                   >
                     @if (badgeFor(column, row); as badge) {
                       <app-erp-status-badge [label]="badge.label" [tone]="badge.tone" [dot]="true" />
+                    } @else if (imageFor(column, row); as thumb) {
+                      <span class="cell-media">
+                        <img [src]="thumb" alt="" loading="lazy" />
+                        <span>{{ column.value(row) }}</span>
+                      </span>
                     } @else {
                       {{ column.value(row) }}
                     }
@@ -128,6 +135,21 @@ export interface AdminTableColumn {
       .is-mono {
         font-variant-numeric: tabular-nums;
       }
+      .cell-media {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+      }
+      .cell-media img {
+        width: 34px;
+        height: 34px;
+        flex: 0 0 34px;
+        object-fit: cover;
+        border: 1px solid var(--erp-line);
+        border-radius: var(--erp-radius-sm);
+        background: var(--erp-surface-muted);
+      }
     `,
   ],
 })
@@ -150,6 +172,14 @@ export class AdminErpDataTable {
    */
   badgeFor(column: AdminTableColumn, row: unknown): AdminTableCellBadge | null {
     return column.badge ? column.badge(row) : null;
+  }
+
+  /**
+   * Resolves a thumbnail for one cell, or null when the column carries no image.
+   */
+  imageFor(column: AdminTableColumn, row: unknown): string | null {
+    const url = column.image ? column.image(row) : '';
+    return url ? url : null;
   }
 
   /**

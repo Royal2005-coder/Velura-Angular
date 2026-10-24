@@ -103,6 +103,221 @@ export interface AdminPriceHistoryRow {
   product?: { name?: string; sku?: string } | null;
 }
 
+export interface AdminOrderPayment {
+  payment_id?: string;
+  payment_status?: string;
+  payment_method?: string;
+  payment_provider?: string;
+  gateway_response_code?: string | null;
+  amount?: number;
+  refund_amount?: number | null;
+  refund_reason?: string | null;
+  refund_at?: string | null;
+  paid_at?: string | null;
+  has_discrepancy?: boolean;
+  created_at?: string;
+  version?: number;
+}
+
+export type AdminOrderActionField = 'call_result' | 'shortage' | 'shipment' | 'cancel_reason' | 'tracking';
+
+export interface AdminOrderAction {
+  code: string;
+  label: string;
+  to_status: string | null;
+  requires_note: boolean;
+  fields: AdminOrderActionField[];
+  destructive: boolean;
+}
+
+export interface AdminOrderEvent {
+  event_id?: string;
+  action?: string;
+  actor_type?: string;
+  actor_id?: string | null;
+  actor_role?: string | null;
+  from_status?: string | null;
+  to_status?: string | null;
+  result?: string | null;
+  note?: string | null;
+  payload?: Record<string, unknown> | null;
+  created_at?: string;
+}
+
+export interface AdminOrderRow {
+  order_id: string;
+  order_code?: string;
+  order_date?: string;
+  created_at?: string;
+  status?: string;
+  status_label?: string;
+  payment_method?: string;
+  payment_status?: string | null;
+  payment_status_label?: string | null;
+  shipping_name?: string;
+  shipping_phone?: string;
+  shipping_address?: string;
+  shipping_fee?: number;
+  subtotal?: number;
+  discount_amount?: number;
+  tracking_code?: string | null;
+  carrier?: string | null;
+  tracking_url?: string | null;
+  handed_over_at?: string | null;
+  shipment_voided_at?: string | null;
+  returned_to_stock_at?: string | null;
+  cancelled_reason?: string | null;
+  internal_note?: string | null;
+  total_amount?: number;
+  version?: number;
+  tags?: Array<{ code: string; label: string }>;
+  allowed_actions?: AdminOrderAction[];
+  can_simulate_carrier?: boolean;
+  payments?: AdminOrderPayment[];
+  items?: Array<{ product_name?: string; quantity?: number; unit_price?: number }>;
+  history?: Array<{ old_status?: string | null; new_status?: string; changed_at?: string; note?: string; trigger_type?: string }>;
+  events?: AdminOrderEvent[];
+  user_id?: string;
+  user?: {
+    user_id?: string;
+    email?: string | null;
+    phone?: string | null;
+    full_name?: string | null;
+    is_active?: boolean | null;
+    role?: string | null;
+  } | null;
+  is_guest?: boolean;
+  has_successful_call_confirm?: boolean;
+  requires_call_confirmation?: boolean;
+}
+
+export interface AdminOrderSummary {
+  by_status: Array<{ status: string; label: string; count: number }>;
+  attention: number;
+}
+
+export interface AdminOrderActionResult {
+  order: AdminOrderRow;
+  refund: { status: 'refunded' | 'requested' | 'failed' | 'skipped'; message?: string } | null;
+}
+
+export interface AdminPromotionRow {
+  promo_id?: string;
+  promotion_id?: string;
+  promo_name?: string;
+  name?: string;
+  promo_type?: string;
+  type?: string;
+  status?: string;
+  is_active?: boolean;
+  start_date?: string;
+  end_date?: string;
+  budget?: number;
+  budget_limit?: number;
+  max_vouchers_allowed?: number;
+  total_discount_issued?: number;
+  version?: number;
+  paused_at?: string | null;
+  lifecycle_status?: 'scheduled' | 'running' | 'paused' | 'ended' | 'budget_exhausted';
+  lifecycle_label?: string;
+  can_activate?: boolean;
+  can_pause?: boolean;
+  budget_unlimited?: boolean;
+  budget_tracked?: boolean;
+  voucher_count?: number;
+  active_voucher_count?: number;
+  warnings?: Array<{ code: string; level: 'info' | 'warning' | 'danger'; message: string }>;
+  description?: string | null;
+  banner_image_url?: string | null;
+  highlight_label?: string | null;
+  display_order?: number | null;
+  is_featured?: boolean | null;
+}
+
+export interface AdminPromotionSummary {
+  total: number;
+  running: number;
+  scheduled: number;
+  paused: number;
+  ended: number;
+  budgetExhausted: number;
+  totalBudget: number;
+  issuedDiscount: number;
+  budgetedCampaigns: number;
+  activeVouchers: number;
+}
+
+export interface AdminPromotionListPayload extends AdminListPayload<AdminPromotionRow> {
+  summary?: AdminPromotionSummary;
+}
+
+export interface AdminVoucherRow {
+  voucher_id: string;
+  code?: string;
+  name?: string;
+  discount_type?: string;
+  type?: string;
+  discount_value?: number;
+  value?: number;
+  min_order?: number;
+  min_order_value?: number;
+  used_count?: number;
+  usage_limit_total?: number | null;
+  usage_limit_per_user?: number;
+  max_discount_amount?: number | null;
+  applicable_categories?: string[] | string | null;
+  start_date?: string;
+  end_date?: string;
+  expires_at?: string;
+  is_active?: boolean;
+  promo_id?: string | null;
+  applicable_user_group?: string;
+  version?: number;
+}
+
+export interface AdminCampaignStatistic {
+  promoId: string | null;
+  name: string;
+  lifecycle: AdminPromotionRow['lifecycle_status'] | null;
+  lifecycleLabel: string | null;
+  vouchers: number;
+  orders: number;
+  revenue: number;
+  discount: number;
+  revenuePerDiscount: number | null;
+  budgetLimit: number;
+  budgetUsed: number;
+}
+
+export interface AdminPricingStatistics {
+  range: { from: string | null; to: string | null };
+  orders: {
+    total: number;
+    withVoucher: number;
+    voucherRate: number;
+    revenueWithVoucher: number;
+    revenueWithoutVoucher: number;
+    revenueShareWithVoucher: number;
+    discountTotal: number;
+    aovWithVoucher: number;
+    aovWithoutVoucher: number;
+  };
+  promotions: AdminPromotionSummary & { budgetRemaining: number; budgetUsagePercent: number };
+  vouchers: {
+    total: number;
+    active: number;
+    scheduled: number;
+    expired: number;
+    disabled: number;
+    unlimited: number;
+    totalUsed: number;
+    totalLimit: number;
+    usagePercent: number;
+  };
+  campaigns: AdminCampaignStatistic[];
+  topVouchers: Array<{ voucherId: string; code: string; orders: number; discount: number; revenue: number }>;
+}
+
 export type AdminInsightRange = 'day' | 'week' | 'month';
 
 export interface AdminDashboardSummary {
@@ -387,6 +602,145 @@ export class AdminErpApiService {
    */
   listPricingAuditLogs(params: Record<string, string> = {}): Observable<AdminListPayload<AdminAuditRow>> {
     return this.http.get<AdminListPayload<AdminAuditRow>>(`${this.baseUrl}/api/v1/admin/pricing/audit-logs`, {
+      params: this.params(params),
+    });
+  }
+
+  /**
+   * Lists orders with server filters and paging.
+   */
+  listOrders(params: Record<string, string> = {}): Observable<AdminListPayload<AdminOrderRow>> {
+    return this.http.get<AdminListPayload<AdminOrderRow>>(`${this.baseUrl}/api/v1/admin/orders`, {
+      params: this.params(params),
+    });
+  }
+
+  /**
+   * Loads one order drawer payload with fresh allowed actions.
+   */
+  getOrder(orderId: string): Observable<AdminOrderRow> {
+    return this.http.get<AdminOrderRow>(`${this.baseUrl}/api/v1/admin/orders/${encodeURIComponent(orderId)}`);
+  }
+
+  /**
+   * Loads order counts by status and the attention count.
+   */
+  orderSummary(): Observable<AdminOrderSummary> {
+    return this.http.get<AdminOrderSummary>(`${this.baseUrl}/api/v1/admin/orders/summary`);
+  }
+
+  /**
+   * Performs a state-machine action on an order.
+   */
+  performOrderAction(orderId: string, action: string, body: Record<string, unknown>): Observable<AdminOrderActionResult> {
+    return this.http.post<AdminOrderActionResult>(
+      `${this.baseUrl}/api/v1/admin/orders/${encodeURIComponent(orderId)}/actions/${encodeURIComponent(action)}`,
+      body,
+    );
+  }
+
+  /**
+   * Resolves a payment manually with both optimistic versions.
+   */
+  resolvePayment(orderId: string, paymentId: string, body: Record<string, unknown>): Observable<unknown> {
+    return this.http.post(
+      `${this.baseUrl}/api/v1/admin/orders/${encodeURIComponent(orderId)}/payments/${encodeURIComponent(paymentId)}/resolve`,
+      body,
+    );
+  }
+
+  /**
+   * Simulates a carrier outcome for super-admin verification.
+   */
+  simulateCarrier(orderId: string, body: { outcome: string; note?: string }): Observable<AdminOrderRow> {
+    return this.http.post<AdminOrderRow>(
+      `${this.baseUrl}/api/v1/admin/orders/${encodeURIComponent(orderId)}/simulate-carrier`,
+      body,
+    );
+  }
+
+  /**
+   * Lists order audit rows.
+   */
+  orderAuditLogs(orderId: string, params: Record<string, string> = {}): Observable<AdminListPayload<AdminAuditRow>> {
+    return this.http.get<AdminListPayload<AdminAuditRow>>(
+      `${this.baseUrl}/api/v1/admin/orders/${encodeURIComponent(orderId)}/audit-logs`,
+      { params: this.params(params) },
+    );
+  }
+
+  /**
+   * Lists campaign rows with the API-computed summary.
+   */
+  listPromotions(params: Record<string, string> = {}): Observable<AdminPromotionListPayload> {
+    return this.http.get<AdminPromotionListPayload>(`${this.baseUrl}/api/v1/admin/promotions`, {
+      params: this.params(params),
+    });
+  }
+
+  /**
+   * Creates a promotion campaign.
+   */
+  createPromotion(body: Record<string, unknown>): Observable<AdminPromotionRow> {
+    return this.http.post<AdminPromotionRow>(`${this.baseUrl}/api/v1/admin/promotions`, body);
+  }
+
+  /**
+   * Updates a promotion campaign.
+   */
+  updatePromotion(promoId: string, body: Record<string, unknown>): Observable<AdminPromotionRow> {
+    return this.http.patch<AdminPromotionRow>(`${this.baseUrl}/api/v1/admin/promotions/${encodeURIComponent(promoId)}`, body);
+  }
+
+  /**
+   * Activates a scheduled/paused campaign.
+   */
+  activatePromotion(promoId: string, body: Record<string, unknown>): Observable<unknown> {
+    return this.http.post(`${this.baseUrl}/api/v1/admin/promotions/${encodeURIComponent(promoId)}/activate`, body);
+  }
+
+  /**
+   * Pauses a running campaign.
+   */
+  pausePromotion(promoId: string, body: Record<string, unknown>): Observable<unknown> {
+    return this.http.post(`${this.baseUrl}/api/v1/admin/promotions/${encodeURIComponent(promoId)}/pause`, body);
+  }
+
+  /**
+   * Lists voucher rows.
+   */
+  listVouchers(params: Record<string, string> = {}): Observable<AdminListPayload<AdminVoucherRow>> {
+    return this.http.get<AdminListPayload<AdminVoucherRow>>(`${this.baseUrl}/api/v1/admin/vouchers`, {
+      params: this.params(params),
+    });
+  }
+
+  /**
+   * Creates a voucher.
+   */
+  createVoucher(body: Record<string, unknown>): Observable<unknown> {
+    return this.http.post(`${this.baseUrl}/api/v1/admin/vouchers`, body);
+  }
+
+  /**
+   * Updates a voucher.
+   */
+  updateVoucher(voucherId: string, body: Record<string, unknown>): Observable<AdminVoucherRow> {
+    return this.http.patch<AdminVoucherRow>(`${this.baseUrl}/api/v1/admin/vouchers/${encodeURIComponent(voucherId)}`, body);
+  }
+
+  /**
+   * Toggles a voucher active/inactive.
+   */
+  toggleVoucher(voucherId: string): Observable<unknown> {
+    return this.http.post(`${this.baseUrl}/api/v1/admin/vouchers/${encodeURIComponent(voucherId)}/toggle`, {});
+  }
+
+  /**
+   * Loads pricing/promotion statistics for the selected range.
+   */
+  pricingStatistics(params: Record<string, string> = {}): Observable<AdminPricingStatistics> {
+    return this.http.get<AdminPricingStatistics>(`${this.baseUrl}/api/v1/admin/pricing/statistics`, {
       params: this.params(params),
     });
   }

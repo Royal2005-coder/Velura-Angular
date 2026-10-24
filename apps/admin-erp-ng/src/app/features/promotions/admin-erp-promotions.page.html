@@ -1,0 +1,278 @@
+<app-erp-page-header
+  eyebrow="Marketing"
+  title="Khuyến mãi & voucher"
+  subtitle="Chiến dịch, mã giảm giá, ngân sách và thống kê trên API hiện tại. Mọi thao tác ghi dùng expectedVersion."
+>
+  <div actions>
+    @if (canMutate()) {
+      @if (view() === 'campaigns') {
+        <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" (click)="openCampaignForm()">Tạo chiến dịch</button>
+      }
+      @if (view() === 'vouchers') {
+        <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" (click)="openVoucherForm()">Tạo voucher</button>
+      }
+    }
+    <button class="erp-btn erp-btn--sm" type="button" (click)="reload()" [disabled]="loading()">
+      <app-erp-icon name="refresh" [size]="'15'" />
+      {{ loading() ? 'Đang tải…' : 'Làm mới' }}
+    </button>
+  </div>
+</app-erp-page-header>
+
+<section class="promotions-kpis" aria-label="Tóm tắt khuyến mãi">
+  <app-erp-kpi-card label="Chiến dịch đang chạy" [value]="activeCampaigns().toLocaleString('vi-VN')" hint="API lifecycle" tone="success" icon="tag" [loading]="loading() && !campaigns().length" />
+  <app-erp-kpi-card label="Voucher đang bật" [value]="activeVouchers().toLocaleString('vi-VN')" hint="Toàn bộ voucher" tone="accent" icon="tag" [loading]="loading() && !campaigns().length" />
+  <app-erp-kpi-card label="Tổng ngân sách" [value]="money(totalBudget())" hint="Chiến dịch có trần" tone="info" icon="credit-card" [loading]="loading() && !campaigns().length" />
+  <app-erp-kpi-card label="Đã giảm" [value]="money(issuedDiscount())" hint="Tổng phát ra" tone="warning" icon="alert" [loading]="loading() && !campaigns().length" />
+</section>
+
+<section class="erp-card promotions-panel" aria-labelledby="promotions-title">
+  <div class="promotions-tabs">
+    <div>
+      <span class="promotions-eyebrow">Campaigns</span>
+      <h2 id="promotions-title">Trung tâm khuyến mãi</h2>
+    </div>
+    <app-erp-tabs [tabs]="tabs()" [active]="view()" (changed)="setView($event)" />
+  </div>
+
+  @if (loadError()) {
+    <div class="promotions-banner" role="alert">
+      <app-erp-icon name="alert" [size]="'16'" />
+      {{ loadError() }}
+      <button class="erp-btn erp-btn--sm" type="button" (click)="reload()">Thử lại</button>
+    </div>
+  }
+
+  @if (view() === 'campaigns') {
+    <app-erp-data-table
+      caption="Danh sách chiến dịch"
+      [columns]="campaignColumns"
+      [rows]="campaigns()"
+      [loading]="loading()"
+      emptyTitle="Chưa có chiến dịch"
+      emptyMessage="Tạo chiến dịch mới hoặc điều chỉnh bộ lọc."
+      [clickable]="true"
+      (rowSelected)="openCampaign($event)"
+    />
+    <app-erp-pagination [page]="page()" [pageCount]="pageCount()" [label]="rangeLabel()" (changed)="goPage($event)" />
+  } @else if (view() === 'vouchers') {
+    <app-erp-data-table
+      caption="Danh sách voucher"
+      [columns]="voucherColumns"
+      [rows]="vouchers()"
+      [loading]="loading()"
+      emptyTitle="Chưa có voucher"
+      emptyMessage="Tạo voucher mới hoặc chọn chiến dịch khác."
+      [clickable]="true"
+      (rowSelected)="openVoucher($event)"
+    />
+    <app-erp-pagination [page]="page()" [pageCount]="voucherPageCount()" [label]="voucherRangeLabel()" (changed)="goPage($event)" />
+  } @else if (view() === 'logs') {
+    <app-erp-data-table
+      caption="Nhật ký khuyến mãi"
+      [columns]="logColumns"
+      [rows]="logs()"
+      [loading]="loading()"
+      emptyTitle="Chưa có nhật ký khuyến mãi"
+      emptyMessage="Audit xuất hiện sau thao tác chiến dịch hoặc voucher."
+    />
+    <app-erp-pagination [page]="page()" [pageCount]="logPageCount()" [label]="logRangeLabel()" (changed)="goPage($event)" />
+  } @else {
+    <div class="promotions-stats-head">
+      <label class="erp-field">
+        <span>Khoảng thống kê</span>
+        <select class="erp-select" [value]="statsRange()" (change)="setStatsRange($event)">
+          @for (range of statsRanges; track range.value) {
+            <option [value]="range.value">{{ range.label }}</option>
+          }
+        </select>
+      </label>
+    </div>
+
+    @if (stats(); as data) {
+      <section class="promotions-stats">
+        <app-erp-kpi-card label="Đơn trong kỳ" [value]="data.orders.total.toLocaleString('vi-VN')" [hint]="data.orders.withVoucher + ' đơn có voucher'" icon="cart" />
+        <app-erp-kpi-card label="Tỷ lệ dùng voucher" [value]="data.orders.voucherRate + '%'" hint="Đơn có voucher / tổng" tone="accent" icon="tag" />
+        <app-erp-kpi-card label="Tổng giảm giá" [value]="money(data.orders.discountTotal)" hint="Trong kỳ đã chọn" tone="warning" icon="credit-card" />
+        <app-erp-kpi-card label="Voucher đã dùng" [value]="data.vouchers.totalUsed.toLocaleString('vi-VN')" [hint]="data.vouchers.active + ' voucher đang bật'" tone="success" icon="check" />
+      </section>
+
+      <div class="promotions-stats-grid">
+        <section>
+          <h3>So sánh chiến dịch</h3>
+          <app-erp-data-table caption="Thống kê chiến dịch" [columns]="statsCampaignColumns" [rows]="data.campaigns" [loading]="loading()" emptyTitle="Chưa có dữ liệu chiến dịch" />
+        </section>
+        <section>
+          <h3>Top voucher</h3>
+          <app-erp-data-table caption="Top voucher" [columns]="topVoucherColumns" [rows]="data.topVouchers" [loading]="loading()" emptyTitle="Chưa có dữ liệu voucher" />
+        </section>
+      </div>
+    } @else {
+      <p class="erp-hint">Chọn khoảng thời gian để tải thống kê.</p>
+    }
+  }
+</section>
+
+<app-erp-drawer [open]="selectedCampaign() !== null" title="Chi tiết chiến dịch" size="md" (closed)="closeOverlays()">
+  @if (selectedCampaign(); as campaign) {
+    <div class="promo-detail">
+      <div class="promo-detail__head">
+        <div>
+          <span class="promo-detail__eyebrow">{{ campaignType(campaign) }}</span>
+          <h3>{{ campaignName(campaign) }}</h3>
+          <p>{{ date(campaign.start_date) }} → {{ date(campaign.end_date) }}</p>
+        </div>
+        <app-erp-status-badge [label]="lifecycleLabel(campaign)" [tone]="lifecycleTone(campaign)" [dot]="true" />
+      </div>
+      <dl class="detail-grid">
+        <div><dt>Ngân sách</dt><dd>{{ budgetLabel(campaign) }}</dd></div>
+        <div><dt>Voucher</dt><dd>{{ campaign.voucher_count ?? 0 }} · {{ campaign.active_voucher_count ?? 0 }} đang bật</dd></div>
+        <div><dt>Phiên bản</dt><dd class="is-mono">{{ campaign.version ?? '—' }}</dd></div>
+        <div><dt>Đã giảm</dt><dd>{{ money(campaign.total_discount_issued) }}</dd></div>
+      </dl>
+      @if (campaign.description) {
+        <p class="promo-detail__description">{{ campaign.description }}</p>
+      }
+      @if (campaign.warnings?.length) {
+        <div class="promo-detail__warnings">
+          @for (warning of campaign.warnings; track warning.code) {
+            <span>{{ warning.message }}</span>
+          }
+        </div>
+      }
+      @if (actionError()) {
+        <p class="erp-error" role="alert">{{ actionError() }}</p>
+      }
+    </div>
+  }
+  <div footer>
+    @if (canMutate() && selectedCampaign(); as campaign) {
+      @if (campaign.can_activate) {
+        <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" (click)="setCampaignActive(true)">Chạy</button>
+      }
+      @if (campaign.can_pause) {
+        <button class="erp-btn erp-btn--danger erp-btn--sm" type="button" (click)="setCampaignActive(false)">Tạm dừng</button>
+      }
+      <button class="erp-btn erp-btn--sm" type="button" (click)="openCampaignForm()">Sửa</button>
+    }
+    <button class="erp-btn erp-btn--sm" type="button" (click)="closeOverlays()">Đóng</button>
+  </div>
+</app-erp-drawer>
+
+<app-erp-drawer [open]="selectedVoucher() !== null" title="Chi tiết voucher" size="md" (closed)="closeOverlays()">
+  @if (selectedVoucher(); as voucher) {
+    <div class="promo-detail">
+      <div class="promo-detail__head">
+        <div>
+          <span class="promo-detail__eyebrow">{{ voucherType(voucher) }}</span>
+          <h3>{{ voucher.code || '—' }} · {{ voucher.name || 'Voucher' }}</h3>
+          <p>{{ date(voucher.start_date) }} → {{ date(voucher.end_date) }}</p>
+        </div>
+        <app-erp-status-badge [label]="voucher.is_active ? 'Đang bật' : 'Đang tắt'" [tone]="voucher.is_active ? 'success' : 'neutral'" [dot]="true" />
+      </div>
+      <dl class="detail-grid">
+        <div><dt>Giá trị</dt><dd>{{ voucherValue(voucher) }}</dd></div>
+        <div><dt>Đơn tối thiểu</dt><dd>{{ money(voucher.min_order_value ?? voucher.min_order) }}</dd></div>
+        <div><dt>Đã dùng</dt><dd>{{ usedLabel(voucher) }}</dd></div>
+        <div><dt>Mỗi khách</dt><dd>{{ voucher.usage_limit_per_user ?? 1 }} lượt</dd></div>
+        <div><dt>Trần giảm</dt><dd>{{ money(voucher.max_discount_amount) }}</dd></div>
+        <div><dt>Nhóm khách</dt><dd>{{ voucher.applicable_user_group || '—' }}</dd></div>
+        <div><dt>Phiên bản</dt><dd class="is-mono">{{ voucher.version ?? '—' }}</dd></div>
+      </dl>
+      @if (actionError()) {
+        <p class="erp-error" role="alert">{{ actionError() }}</p>
+      }
+    </div>
+  }
+  <div footer>
+    @if (canMutate()) {
+      <button class="erp-btn erp-btn--sm" type="button" (click)="toggleVoucher()">{{ selectedVoucher()?.is_active ? 'Tắt' : 'Bật' }}</button>
+      <button class="erp-btn erp-btn--sm" type="button" (click)="openVoucherForm()">Sửa</button>
+    }
+    <button class="erp-btn erp-btn--sm" type="button" (click)="closeOverlays()">Đóng</button>
+  </div>
+</app-erp-drawer>
+
+<app-erp-modal [open]="campaignFormOpen()" [title]="editingCampaign() ? 'Sửa chiến dịch' : 'Tạo chiến dịch'" size="md" (closed)="closeOverlays()">
+  <form class="promo-form" (submit)="submitCampaign($event)">
+    <label class="erp-field"><span>Tên chiến dịch</span><input class="erp-input" name="name" type="text" [value]="campaignName(editingCampaign() || {})" required /></label>
+    <label class="erp-field">
+      <span>Loại chiến dịch</span>
+      <select class="erp-select" name="type" [disabled]="editingCampaign() !== null">
+        <option value="product_discount">Giảm giá sản phẩm</option>
+        <option value="flash_sale">Flash Sale</option>
+        <option value="combo_discount">Giảm giá Combo</option>
+        <option value="seasonal_sale">Giảm giá theo mùa</option>
+      </select>
+    </label>
+    <div class="promo-form__row">
+      <label class="erp-field"><span>Bắt đầu</span><input class="erp-input" name="startDate" type="datetime-local" [value]="toLocalInput(editingCampaign()?.start_date)" required /></label>
+      <label class="erp-field"><span>Kết thúc</span><input class="erp-input" name="endDate" type="datetime-local" [value]="toLocalInput(editingCampaign()?.end_date)" required /></label>
+    </div>
+    <label class="erp-field"><span>Ngân sách (0 = không trần)</span><input class="erp-input" name="budgetLimit" type="number" min="0" [value]="editingCampaign()?.budget_limit ?? editingCampaign()?.budget ?? 0" /></label>
+    <label class="erp-field"><span>Mô tả</span><textarea class="erp-input" name="description" rows="3">{{ editingCampaign()?.description || '' }}</textarea></label>
+    @if (formError()) {
+      <p class="erp-error" role="alert">{{ formError() }}</p>
+    }
+    <div class="promo-form__actions">
+      <button class="erp-btn" type="button" (click)="closeOverlays()">Hủy</button>
+      <button class="erp-btn erp-btn--primary" type="submit" [disabled]="saving()">Lưu</button>
+    </div>
+  </form>
+</app-erp-modal>
+
+<app-erp-modal [open]="voucherFormOpen()" [title]="editingVoucher() ? 'Sửa voucher' : 'Tạo voucher'" size="md" (closed)="closeOverlays()">
+  <form class="promo-form" (submit)="submitVoucher($event)">
+    <div class="promo-form__row">
+      <label class="erp-field"><span>Mã</span><input class="erp-input" name="code" type="text" [value]="editingVoucher()?.code || ''" [disabled]="editingVoucher() !== null" required /></label>
+      <label class="erp-field"><span>Tên</span><input class="erp-input" name="name" type="text" [value]="editingVoucher()?.name || ''" /></label>
+    </div>
+    <div class="promo-form__row">
+      <label class="erp-field">
+        <span>Loại</span>
+        <select class="erp-select" name="type" [value]="editingVoucher()?.discount_type || editingVoucher()?.type || 'fixed_amount'">
+          <option value="fixed_amount">Số tiền</option>
+          <option value="percentage">Phần trăm</option>
+          <option value="free_shipping">Miễn phí giao</option>
+        </select>
+      </label>
+      <label class="erp-field"><span>Giá trị</span><input class="erp-input" name="value" type="number" min="0" [value]="editingVoucher()?.discount_value ?? editingVoucher()?.value ?? 0" /></label>
+    </div>
+    <div class="promo-form__row">
+      <label class="erp-field"><span>Trần giảm</span><input class="erp-input" name="maxDiscount" type="number" min="0" [value]="editingVoucher()?.max_discount_amount ?? ''" /></label>
+      <label class="erp-field"><span>Đơn tối thiểu</span><input class="erp-input" name="minOrderValue" type="number" min="0" [value]="editingVoucher()?.min_order_value ?? editingVoucher()?.min_order ?? 0" /></label>
+    </div>
+    <div class="promo-form__row">
+      <label class="erp-field"><span>Tổng lượt</span><input class="erp-input" name="maxUses" type="number" min="1" [value]="editingVoucher()?.usage_limit_total ?? ''" /></label>
+      <label class="erp-field"><span>Lượt / khách</span><input class="erp-input" name="maxPerUser" type="number" min="1" [value]="editingVoucher()?.usage_limit_per_user ?? 1" /></label>
+    </div>
+    <div class="promo-form__row">
+      <label class="erp-field"><span>Bắt đầu</span><input class="erp-input" name="startDate" type="datetime-local" [value]="toLocalInput(editingVoucher()?.start_date)" required /></label>
+      <label class="erp-field"><span>Kết thúc</span><input class="erp-input" name="endDate" type="datetime-local" [value]="toLocalInput(editingVoucher()?.end_date)" required /></label>
+    </div>
+    <label class="erp-field">
+      <span>Chiến dịch cha</span>
+      <select class="erp-select" name="promoId" [value]="editingVoucher()?.promo_id || ''">
+        <option value="">Không thuộc chiến dịch</option>
+        @for (campaign of campaigns(); track campaign.promo_id || campaign.promotion_id) {
+          <option [value]="campaign.promo_id || campaign.promotion_id">{{ campaignName(campaign) }}</option>
+        }
+      </select>
+    </label>
+    <label class="erp-field">
+      <span>Nhóm khách</span>
+      <select class="erp-select" name="applicableUserGroup" [value]="editingVoucher()?.applicable_user_group || 'all_users'">
+        <option value="all_users">Tất cả</option>
+        <option value="new_users">Khách mới</option>
+        <option value="members">Thành viên</option>
+      </select>
+    </label>
+    @if (formError()) {
+      <p class="erp-error" role="alert">{{ formError() }}</p>
+    }
+    <div class="promo-form__actions">
+      <button class="erp-btn" type="button" (click)="closeOverlays()">Hủy</button>
+      <button class="erp-btn erp-btn--primary" type="submit" [disabled]="saving()">Lưu</button>
+    </div>
+  </form>
+</app-erp-modal>

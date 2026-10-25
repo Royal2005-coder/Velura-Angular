@@ -1,5 +1,7 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { ActivatedRoute, type ParamMap } from '@angular/router';
 import { catchError, forkJoin, of } from 'rxjs';
+import { choiceParam, textParam, watchQueryParams } from '../../core/admin-erp-deep-link';
 import { AdminAuditRow, AdminErpApiService } from '../../core/admin-erp-api.service';
 import { adminDateTime } from '../../core/admin-erp-format';
 import {
@@ -67,10 +69,13 @@ const MODULE_OPTIONS = [
 })
 export class AdminErpLogsPage {
   private readonly api = inject(AdminErpApiService);
+  private readonly route = inject(ActivatedRoute);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly tab = signal<LogTab>('all');
   readonly query = signal('');
   readonly module = signal('');
+  readonly targetScope = signal('');
   readonly rows = signal<AdminAuditRow[]>([]);
   readonly total = signal(0);
   readonly allCount = signal(0);
@@ -151,6 +156,27 @@ export class AdminErpLogsPage {
   ];
 
   constructor() {
+    watchQueryParams(this.route, this.destroyRef, (params) => this.applyDeepLink(params));
+  }
+
+  /**
+   * Scopes the trail to one record when another workspace links here, so an operator lands on
+   * the audit of the order or return they were reading instead of the whole log.
+   */
+  private applyDeepLink(params: ParamMap): void {
+    this.module.set(choiceParam(params, 'module', MODULE_OPTIONS.map((option) => String(option.value)), this.module()));
+    this.targetScope.set(textParam(params, 'target'));
+    this.query.set(textParam(params, 'q'));
+    this.page.set(1);
+    this.reload();
+  }
+
+  /**
+   * Drops the record scope coming from a deep link.
+   */
+  clearTarget(): void {
+    this.targetScope.set('');
+    this.page.set(1);
     this.reload();
   }
 
@@ -209,6 +235,7 @@ export class AdminErpLogsPage {
   resetFilters(): void {
     this.query.set('');
     this.module.set('');
+    this.targetScope.set('');
     this.page.set(1);
     this.reload();
   }
@@ -330,6 +357,7 @@ export class AdminErpLogsPage {
     return {
       q: this.query(),
       module: this.module(),
+      targetId: this.targetScope(),
       scope: this.module() || this.tab() === 'all' ? '' : this.tab(),
       limit: String(this.pageSize),
       offset: adminOffset(this.page(), this.pageSize),

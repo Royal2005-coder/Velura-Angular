@@ -24,6 +24,14 @@ import { AdminErpTab, AdminErpTabs } from '../../shared/ui/admin-tabs';
 
 type DashboardTab = 'operations' | 'business';
 
+/** Queue each alert is counting, so opening the alert shows exactly those rows. */
+const QUEUE_FILTERS: Readonly<Record<string, Record<string, string>>> = {
+  orders: { tab: 'attention' },
+  'returns-cskh': { tab: 'returns', status: 'REQUESTED' },
+  products: { tab: 'stock' },
+  reviews: { tab: 'urgent' },
+};
+
 const emptyDashboard = (): AdminDashboardSummary => ({
   operations: {
     pendingOrders: 0,
@@ -341,6 +349,18 @@ export class AdminErpDashboardPage {
       return null;
     }
     return adminErpNavLink(item);
+  }
+
+  /**
+   * Where an alert sends the operator: the workspace they may open, already filtered to the queue
+   * the alert counts, so one click lands on the work instead of the top of a list.
+   */
+  alertLink(page: string): { commands: readonly string[]; query: Record<string, string> } | null {
+    const item = adminErpNavItemForPage(page);
+    if (!item || !this.session.canOpenAny(item.pageKeys)) {
+      return null;
+    }
+    return { commands: [item.path], query: { ...(item.queryParams || {}), ...(QUEUE_FILTERS[page] || {}) } };
   }
 
   /**

@@ -264,6 +264,66 @@
   white-space: pre-wrap;
 }
 
+.desk-scope {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--erp-info-soft);
+  background: var(--erp-info-soft);
+  color: var(--erp-info);
+  font-size: 11.5px;
+}
+
+.desk-scope .erp-btn {
+  margin-left: auto;
+}
+
+.record__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0;
+}
+
+.record__order,
+.record__trail {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid var(--erp-line);
+  border-radius: var(--erp-radius-sm);
+  background: var(--erp-surface-muted);
+}
+
+.record__order h4,
+.record__trail h4 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--erp-ink);
+}
+
+.record__order .record__grid {
+  margin: 0;
+}
+
+.record__line {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  padding-top: 6px;
+  border-top: 1px solid var(--erp-line);
+  font-size: 11.5px;
+  color: var(--erp-muted);
+}
+
+.record__line span:last-child {
+  font-variant-numeric: tabular-nums;
+}
+
 @media (max-width: 1240px) {
   .desk-kpis {
     grid-template-columns: repeat(3, minmax(0, 1fr));

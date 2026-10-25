@@ -52,6 +52,11 @@ const PLANNED_SCOPES: Record<AdminErpNavKey, string[]> = {
     'Yêu cầu nâng quyền và phê duyệt',
     'Khóa/mở tài khoản có lý do và audit',
   ],
+  members: [
+    'Ví điểm theo thành viên và dấu vết bút toán',
+    'Giới thiệu, ưu đãi và trạng thái đủ điều kiện',
+    'Khoá/mở tích luỹ có lý do và audit',
+  ],
   logs: [
     'Tra cứu audit theo module và người thao tác',
     'Lọc theo thời gian, hành động và kết quả',

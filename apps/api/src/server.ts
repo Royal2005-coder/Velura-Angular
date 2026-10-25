@@ -46,6 +46,9 @@ import { handleContentRoute } from "./content/content-router.js";
 import { createContentAdminRepository } from "./content/content-admin-repository.js";
 import { createContentAdminService } from "./content/content-admin-service.js";
 import { handleContentAdminRoute } from "./content/content-admin-router.js";
+import { createMemberService } from "./members/member-service.js";
+import { handleMemberRoute } from "./members/member-router.js";
+import { createMemberRepository } from "./members/member-repository.js";
 import { createFixedWindowLimiter } from "./rate-limit.js";
 import { handleUserRoute } from "./user/index.js";
 import { invalidateCatalogCache } from "./user/products.js";
@@ -90,6 +93,7 @@ const auditLogService = createAuditLogService({ repository: createAuditLogReposi
 const chatbotService: ChatbotService = createChatbotService({ repository: createChatbotRepository() });
 const contentService = createContentService({ repository: createContentRepository() });
 const contentAdminService = createContentAdminService({ repository: createContentAdminRepository() });
+const memberService = createMemberService({ repository: createMemberRepository() });
 const personalColorService = createPersonalColorService(getAiService());
 const enhancementApprovalService = new EnhancementApprovalService(getAiService(), new SupabaseEnhancementApprovalRepository());
 const catalogContentService = new CatalogContentService(createCatalogContentRepository());
@@ -329,6 +333,7 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
       if (await handleEnhancementApprovalRoute({ req, res, url, parts, context, headers: corsHeaders, service: enhancementApprovalService })) return;
       if (await handleCatalogContentRoute({ req, res, url, parts, context, headers: corsHeaders, service: catalogContentService })) return;
       if (await handleContentAdminRoute({ req, res, url, parts, context, headers: corsHeaders, service: contentAdminService })) return;
+      if (await handleMemberRoute({ req, res, url, parts, context, headers: corsHeaders, service: memberService })) return;
       const dashboardHandled = await handleDashboardRoute({
         req,
         res,

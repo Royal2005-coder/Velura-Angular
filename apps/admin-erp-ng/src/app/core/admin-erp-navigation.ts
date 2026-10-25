@@ -15,6 +15,7 @@ export type AdminErpNavKey =
   | 'reviews'
   | 'content'
   | 'accounts'
+  | 'members'
   | 'logs';
 
 export type AdminErpNavGroupKey = 'overview' | 'selling' | 'catalog' | 'marketing' | 'people' | 'system';
@@ -44,7 +45,7 @@ export const ADMIN_ERP_NAV_GROUPS: readonly AdminErpNavGroup[] = [
   { key: 'selling', label: 'Bán hàng', items: ['orders', 'returns'] },
   { key: 'catalog', label: 'Danh mục', items: ['products', 'pricing'] },
   { key: 'marketing', label: 'Marketing', items: ['promotions', 'reviews', 'content'] },
-  { key: 'people', label: 'Khách hàng & nhân sự', items: ['accounts'] },
+  { key: 'people', label: 'Khách hàng & nhân sự', items: ['accounts', 'members'] },
   { key: 'system', label: 'Hệ thống', items: ['logs'] },
 ];
 
@@ -155,6 +156,18 @@ export const ADMIN_ERP_NAV_ITEMS: Readonly<Record<AdminErpNavKey, AdminErpNavIte
     path: '/accounts',
     pageKeys: ['accounts'],
     capability: 'accounts.read',
+    status: 'ready',
+  },
+  members: {
+    key: 'members',
+    label: 'Thành viên & điểm',
+    title: 'Thành viên & điểm',
+    description: 'Ví điểm, dấu vết bút toán, giới thiệu và ưu đãi; khoá/mở tích luỹ có lý do và audit.',
+    icon: 'star',
+    group: 'people',
+    path: '/members',
+    pageKeys: ['members'],
+    capability: 'members.read',
     status: 'ready',
   },
   logs: {

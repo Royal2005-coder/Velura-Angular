@@ -391,3 +391,21 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.order-qr,
+.order-shipment-url {
+  margin: 8px 0;
+  font-size: 0.86rem;
+}
+
+.order-qr summary,
+.order-shipment-url summary {
+  cursor: pointer;
+  color: var(--erp-text-muted);
+}
+
+.order-qr app-erp-qr-code {
+  display: block;
+  margin-top: 8px;
+  max-width: 220px;
+}

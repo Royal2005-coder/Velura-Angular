@@ -206,9 +206,17 @@ export function allowedReturnTransitions(status: string | null | undefined): rea
 
 /**
  * Steps an operator may set by hand; gateway states are excluded because the RPC rejects them.
+ * `EXCHANGE_PREPARING` only applies to exchange slips, so a refund slip never sees that choice.
  */
-export function manualReturnTransitions(status: string | null | undefined): readonly string[] {
-  return allowedReturnTransitions(status).filter((value) => !GATEWAY_ONLY_STATUSES.includes(value));
+export function manualReturnTransitions(
+  status: string | null | undefined,
+  returnType?: string | null,
+): readonly string[] {
+  return allowedReturnTransitions(status).filter(
+    (value) =>
+      !GATEWAY_ONLY_STATUSES.includes(value) &&
+      !(value === 'EXCHANGE_PREPARING' && returnType != null && String(returnType) !== 'exchange'),
+  );
 }
 
 /**
@@ -226,9 +234,6 @@ export function isChatGovernedTicket(ticket: AdminTicketRow | null): boolean {
   return Boolean(ticket?.chat_session_id);
 }
 
-/** States the approve-refund and approve-exchange endpoints still accept. */
-export const RETURN_PENDING_STATUSES: readonly string[] = ['REQUESTED', 'CONTACTING', 'pending'];
-
 /** States a return can still be rejected or cancelled from. */
 export const RETURN_REJECTABLE_STATUSES: readonly string[] = [
   'REQUESTED',
@@ -245,21 +250,88 @@ export const RETURN_CLOSED_STATUSES: readonly string[] = ['REFUNDED', 'COMPLETED
 export const CONTACT_NOTE_PATTERN = /\[CSKH(?:\s|\])/;
 
 /**
- * A refund can still be approved: the return waits for a decision and is not an exchange.
+ * Kho đã nhận hàng và QA đạt. Đây là điều kiện duy nhất để duyệt hoàn tiền hoặc duyệt đổi:
+ * trạng thái RECEIVED mà thiếu kết quả QA thì API vẫn chặn, nên UI cũng không được mời bấm.
  */
-export function refundApprovalAllowed(row: AdminReturnRow | null): boolean {
-  return Boolean(
-    row &&
-      RETURN_PENDING_STATUSES.includes(String(row.status)) &&
-      String(row.return_type || '') !== 'exchange',
-  );
+export function warehouseQaPassed(row: AdminReturnRow | null): boolean {
+  return String(row?.status || '') === 'RECEIVED' && row?.condition_check_result === 'qa_pass';
 }
 
 /**
- * An exchange can still be approved from the pending states.
+ * A refund can be approved only after warehouse QA passed and it is not an exchange.
+ */
+export function refundApprovalAllowed(row: AdminReturnRow | null): boolean {
+  return Boolean(row && row.return_type !== 'exchange' && warehouseQaPassed(row));
+}
+
+/**
+ * An exchange can be approved only after warehouse QA passed and it is an exchange.
  */
 export function exchangeApprovalAllowed(row: AdminReturnRow | null): boolean {
-  return Boolean(row && RETURN_PENDING_STATUSES.includes(String(row.status)));
+  return Boolean(row && row.return_type === 'exchange' && warehouseQaPassed(row));
+}
+
+/** Bước kế tiếp của một phiếu, để drawer chỉ mời đúng một hành động thay vì mời bấm sớm. */
+export interface ReturnNextStep {
+  readonly flow: 'contact' | 'receipt' | 'refund' | 'exchange' | 'status' | 'gateway';
+  readonly label: string;
+  readonly hint: string;
+  readonly target?: string;
+}
+
+/**
+ * Bước tiếp theo theo đúng thứ tự nghiệp vụ: liên hệ → chờ hàng → kho nhận & QA →
+ * duyệt hoàn/đổi → cổng tiền → hoàn tất. Trả null khi phiếu đã đóng.
+ */
+export function nextReturnStep(row: AdminReturnRow | null): ReturnNextStep | null {
+  const status = String(row?.status || '');
+  const isExchange = row?.return_type === 'exchange';
+  switch (status) {
+    case 'REQUESTED':
+      return { flow: 'contact', label: 'Ghi nhận liên hệ', hint: 'Gọi khách và lưu kết quả liên hệ trước khi chuyển bước.' };
+    case 'CONTACTING':
+      return {
+        flow: 'status',
+        target: 'WAITING_RETURN',
+        label: 'Chờ khách gửi hàng',
+        hint: 'Đã thống nhất phương án; chuyển sang chờ hàng về kho.',
+      };
+    case 'WAITING_RETURN':
+      return {
+        flow: 'status',
+        target: 'RETURN_IN_TRANSIT',
+        label: 'Ghi mã vận đơn hoàn',
+        hint: 'Quét label chiều hoàn để ghi mã vận đơn khách gửi về.',
+      };
+    case 'RETURN_IN_TRANSIT':
+      return {
+        flow: 'receipt',
+        label: 'Kho nhận hàng & QA',
+        hint: 'Nhận hàng, chụp ảnh minh chứng và xác nhận QA đạt. Hoàn tiền chỉ mở sau bước này.',
+      };
+    case 'RECEIVED':
+      if (row?.condition_check_result !== 'qa_pass') {
+        return { flow: 'receipt', label: 'Hoàn tất QA', hint: 'Phiếu đã nhận nhưng chưa có kết quả QA đạt.' };
+      }
+      return isExchange
+        ? { flow: 'exchange', label: 'Duyệt đổi hàng', hint: 'QA đạt; tạo đơn đổi và chuẩn bị hàng.' }
+        : { flow: 'refund', label: 'Duyệt hoàn tiền', hint: 'QA đạt; duyệt số tiền hoàn cho khách.' };
+    case 'REFUND_PROCESSING':
+      return { flow: 'gateway', label: 'Chạy hoàn tiền qua cổng', hint: 'Cổng thanh toán xác nhận là bước cuối của hoàn tiền.' };
+    case 'REFUNDED':
+      return { flow: 'status', target: 'COMPLETED', label: 'Hoàn tất phiếu', hint: 'Tiền đã hoàn; đóng phiếu.' };
+    case 'EXCHANGE_PREPARING':
+      return {
+        flow: 'status',
+        target: 'EXCHANGE_SHIPPING',
+        label: 'Giao hàng đổi',
+        hint: 'Nhập hoặc quét mã vận đơn của đơn đổi.',
+      };
+    case 'EXCHANGE_SHIPPING':
+      return { flow: 'status', target: 'COMPLETED', label: 'Hoàn tất đổi hàng', hint: 'Khách đã nhận hàng đổi; đóng phiếu.' };
+    default:
+      return null;
+  }
 }
 
 /**

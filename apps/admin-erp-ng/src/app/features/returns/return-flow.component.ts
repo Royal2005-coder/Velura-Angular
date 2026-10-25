@@ -1,5 +1,5 @@
 import { Observable } from 'rxjs';
-import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from '@angular/core';
 import {
   AdminErpApiService,
   AdminReturnLine,
@@ -7,6 +7,7 @@ import {
   AdminReturnRow,
   AdminReturnStatus,
 } from '../../core/admin-erp-api.service';
+import { parseScan } from '../../core/admin-erp-qr';
 import {
   CONTACT_RESULTS,
   MIN_NOTE_LENGTH,
@@ -23,6 +24,7 @@ import {
 import { adminErrorMessage } from '../../core/admin-erp-http';
 import { adminDateTime, adminMoney } from '../../core/admin-erp-format';
 import { AdminErpModal } from '../../shared/ui/admin-modal';
+import { AdminErpQrScan } from '../../shared/ui/admin-qr-scan';
 import { AdminErpStatusBadge } from '../../shared/ui/admin-status-badge';
 
 /** Write flows a CSKH operator can run on one return. */
@@ -47,7 +49,7 @@ const PROOF_QUALITY = 0.82;
  */
 @Component({
   selector: 'app-erp-return-flow',
-  imports: [AdminErpModal, AdminErpStatusBadge],
+  imports: [AdminErpModal, AdminErpQrScan, AdminErpStatusBadge],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './return-flow.component.html',
   styleUrl: './return-flow.component.scss',
@@ -57,6 +59,8 @@ export class ReturnFlowComponent {
 
   readonly flow = input<ReturnFlowKind>(null);
   readonly record = input<AdminReturnRow | null>(null);
+  /** Trạng thái đích đã chọn sẵn khi mở từ nút "bước tiếp theo" của drawer. */
+  readonly presetStatus = input('');
   /** Message the parent shows after the flow closes; empty means nothing extra happened. */
   readonly done = output<string>();
   readonly dismissed = output<void>();
@@ -74,6 +78,7 @@ export class ReturnFlowComponent {
   readonly proof = signal('');
   readonly proofBusy = signal(false);
   readonly receipts = signal<Record<string, { received: number; matches: boolean }>>({});
+  readonly scanOpen = signal(false);
 
   readonly saving = signal(false);
   readonly error = signal<string | null>(null);
@@ -83,7 +88,10 @@ export class ReturnFlowComponent {
   readonly title = computed(() => flowTitle(this.flow()));
   readonly refundable = computed(() => Number(this.record()?.refundable_amount ?? 0));
   readonly statusChoices = computed(() =>
-    manualReturnTransitions(this.record()?.status).map((value) => ({ value, label: returnStatusLabel(value) })),
+    manualReturnTransitions(this.record()?.status, this.record()?.return_type).map((value) => ({
+      value,
+      label: returnStatusLabel(value),
+    })),
   );
   readonly lines = computed<AdminReturnLine[]>(() => this.record()?.lines || []);
   readonly needsTracking = computed(() => this.targetStatus() === 'RETURN_IN_TRANSIT' || this.targetStatus() === 'EXCHANGE_SHIPPING');
@@ -93,6 +101,14 @@ export class ReturnFlowComponent {
   /** The API waives the approval reason once a contact log exists; the form mirrors that. */
   readonly requiresReason = computed(() => approvalNeedsReason(this.record()));
   readonly amountMismatch = computed(() => this.refundable() > 0 && this.amount() > this.refundable());
+
+  constructor() {
+    effect(() => {
+      if (this.flow() === 'status') {
+        this.targetStatus.set(this.presetStatus());
+      }
+    });
+  }
 
   readonly canSubmit = computed(() => {
     if (this.saving() || !this.record() || this.flow() === null) {
@@ -319,6 +335,21 @@ export class ReturnFlowComponent {
    */
   onAutoGateway(event: Event): void {
     this.autoGateway.set((event.target as HTMLInputElement).checked);
+  }
+
+  /**
+   * Fills the return tracking code from a carrier label. Any code that is not a shipment
+   * payload is rejected instead of being written into a money-adjacent field.
+   */
+  applyTrackingScan(text: string): void {
+    this.scanOpen.set(false);
+    const result = parseScan(text);
+    if ((result.kind === 'tracking' || result.kind === 'shipment') && result.trackingCode) {
+      this.tracking.set(result.trackingCode);
+      this.error.set(null);
+      return;
+    }
+    this.error.set('Mã QR không có mã vận đơn. Quét label của ĐVVC hoặc nhập tay.');
   }
 
   private fail(error: unknown): void {

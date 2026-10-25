@@ -114,13 +114,6 @@ export const CALL_RESULTS: Readonly<Record<string, string>> = {
   customer_requests_cancel: "Khách yêu cầu hủy"
 };
 
-/** Kết quả mô phỏng ĐVVC, mỗi kết quả ứng với một action của System. */
-export const CARRIER_OUTCOMES: Readonly<Record<string, string>> = {
-  delivered: "carrier_delivered",
-  failed_returned: "carrier_failed_returned",
-  failed_retrying: "carrier_failed_retrying"
-};
-
 /** Dữ liệu của đơn mà guard cần đọc. */
 export interface OrderFacts {
   status: string;

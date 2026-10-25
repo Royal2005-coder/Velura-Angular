@@ -3,6 +3,8 @@ import {
   buildReturnQrLink,
   buildShipmentQr,
   carrierLabel,
+  demoShipmentFacts,
+  demoTrackingCode,
   deriveTrackingUrl,
   findCarrier,
   parseScan,
@@ -85,5 +87,22 @@ describe('QR contracts for orders, shipments and returns', () => {
     expect(findCarrier('')).toBeUndefined();
     expect(carrierLabel('jtx')).toBe('J&T Express');
     expect(carrierLabel('Nhà xe riêng')).toBe('Nhà xe riêng');
+  });
+});
+
+describe('demo shipment payload', () => {
+  it('derives a stable demo tracking code from the order code', () => {
+    expect(demoTrackingCode('VLR7F20D76F6')).toBe('GHN7F20D76F6');
+    expect(demoTrackingCode('vl-1001')).toBe('GHNVL1001');
+    expect(demoTrackingCode('')).toBe('GHNDEMO00001');
+  });
+
+  it('prefers facts already stored on the order', () => {
+    expect(demoShipmentFacts({ order_code: 'VLR7F20D76F6' })).toEqual({
+      carrier: 'GHN',
+      trackingCode: 'GHN7F20D76F6',
+      trackingUrl: 'https://donhang.ghn.vn/?order_code=GHN7F20D76F6',
+    });
+    expect(demoShipmentFacts({ order_code: 'X', carrier: 'GHN', tracking_code: 'VN9-1' }).trackingCode).toBe('VN9-1');
   });
 });

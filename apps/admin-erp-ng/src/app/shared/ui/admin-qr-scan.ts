@@ -42,7 +42,7 @@ import { AdminErpQrCode } from './admin-qr-code';
         </div>
 
         @if (sampleOpen() && sample()) {
-          <app-erp-qr-code [value]="sample()" caption="Mã mẫu — quét thử bằng camera hoặc tải ảnh này" />
+          <app-erp-qr-code [value]="sample()" [caption]="sampleCaption() || 'Mã mẫu — quét thử bằng camera hoặc tải ảnh này'" />
         }
 
         <label class="erp-field">
@@ -52,6 +52,9 @@ import { AdminErpQrCode } from './admin-qr-code';
       </div>
       <div footer>
         <button class="erp-btn" type="button" (click)="dismiss()">Đóng</button>
+        @if (sample()) {
+          <button class="erp-btn" type="button" (click)="useSample()">Dùng mã mẫu (demo)</button>
+        }
         <button class="erp-btn erp-btn--primary" type="button" (click)="submitManual()">Dùng nội dung này</button>
       </div>
     </app-erp-modal>
@@ -110,6 +113,7 @@ export class AdminErpQrScan {
   readonly title = input('Quét mã QR');
   readonly hint = input('Đưa mã vào khung hình, hoặc tải ảnh QR / dán nội dung mã.');
   readonly sample = input('');
+  readonly sampleCaption = input('');
   readonly scanned = output<string>();
   readonly closed = output<void>();
 
@@ -149,6 +153,15 @@ export class AdminErpQrScan {
       return;
     }
     this.accept(text);
+  }
+
+  /**
+   * Applies the sample payload directly, so a demo on a machine without a camera still walks
+   * the same fill path the camera uses.
+   */
+  useSample(): void {
+    const sample = this.sample();
+    if (sample) this.accept(sample);
   }
 
   /**

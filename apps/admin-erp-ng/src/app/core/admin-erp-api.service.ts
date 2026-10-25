@@ -561,6 +561,50 @@ export interface AdminOrderActionResult {
   refund: { status: 'refunded' | 'requested' | 'failed' | 'skipped'; message?: string } | null;
 }
 
+/** Một bài viết CMS. `status` là nháp/đã công bố/đã lưu trữ; bản nháp chỉ admin thấy. */
+export interface AdminBlogRow {
+  blog_id: string;
+  slug: string;
+  title: string;
+  category_slug?: string;
+  excerpt?: string;
+  content?: string;
+  image_url?: string | null;
+  author?: string;
+  read_minutes?: number;
+  is_featured?: boolean;
+  status?: string;
+  published_at?: string;
+  created_at?: string;
+  updated_at?: string;
+  version?: number;
+  updated_by?: string | null;
+}
+
+/** Danh mục nội dung mà RPC CMS bắt buộc bài viết phải trỏ tới (`content_type = 'blog'`). */
+export interface AdminContentCategory {
+  content_category_id: string;
+  content_type: string;
+  slug: string;
+  name: string;
+  display_order?: number;
+}
+
+/** Body tạo/cập nhật bài viết. Khi sửa phải gửi `expectedVersion` của bản đang mở. */
+export interface AdminBlogInput {
+  slug: string;
+  title: string;
+  categorySlug: string;
+  status: string;
+  content: string;
+  excerpt?: string;
+  imageUrl?: string | null;
+  author?: string;
+  readMinutes?: number;
+  isFeatured?: boolean;
+  expectedVersion?: number;
+}
+
 export interface AdminPromotionRow {
   promo_id?: string;
   promotion_id?: string;
@@ -1900,6 +1944,38 @@ export class AdminErpApiService {
   pricingStatistics(params: Record<string, string> = {}): Observable<AdminPricingStatistics> {
     return this.http.get<AdminPricingStatistics>(`${this.baseUrl}/api/v1/admin/pricing/statistics`, {
       params: this.params(params),
+    });
+  }
+
+  /**
+   * Lists CMS blog rows, drafts included. The API gates this on the `content` module.
+   */
+  listBlogs(params: Record<string, string> = {}): Observable<AdminListPayload<AdminBlogRow>> {
+    return this.http.get<AdminListPayload<AdminBlogRow>>(`${this.baseUrl}/api/v1/admin/content/blogs`, {
+      params: this.params(params),
+    });
+  }
+
+  /**
+   * Creates a blog post as a draft or publishes it in the same audited write.
+   */
+  createBlog(body: AdminBlogInput): Observable<AdminBlogRow> {
+    return this.http.post<AdminBlogRow>(`${this.baseUrl}/api/v1/admin/content/blogs`, body);
+  }
+
+  /**
+   * Saves one blog post against the version the editor loaded; a stale copy is rejected.
+   */
+  updateBlog(blogId: string, body: AdminBlogInput): Observable<AdminBlogRow> {
+    return this.http.patch<AdminBlogRow>(`${this.baseUrl}/api/v1/admin/content/blogs/${encodeURIComponent(blogId)}`, body);
+  }
+
+  /**
+   * Reads content categories. Public endpoint, used here only to offer valid targets.
+   */
+  listContentCategories(type = 'blog'): Observable<{ rows?: AdminContentCategory[] }> {
+    return this.http.get<{ rows?: AdminContentCategory[] }>(`${this.baseUrl}/api/content/categories`, {
+      params: this.params({ type }),
     });
   }
 

@@ -1,0 +1,183 @@
+<app-erp-page-header
+  eyebrow="Marketing"
+  title="Nội dung"
+  subtitle="Bài viết cho website: bản nháp chỉ admin thấy, công bố là lộ ra /api/content. Mỗi lần lưu đều ghi audit và tăng phiên bản."
+>
+  <div actions>
+    @if (canCreate()) {
+      <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" (click)="openCreate()">
+        <app-erp-icon name="box" [size]="'15'" />
+        Bài viết mới
+      </button>
+    }
+    <button class="erp-btn erp-btn--sm" type="button" (click)="reload()" [disabled]="loading()">
+      <app-erp-icon name="refresh" [size]="'15'" />
+      {{ loading() ? 'Đang tải…' : 'Làm mới' }}
+    </button>
+  </div>
+</app-erp-page-header>
+
+<section class="content-kpis" aria-label="Tóm tắt nội dung">
+  <app-erp-kpi-card label="Đã công bố" [value]="counts().published" hint="Khách thấy trên website" tone="success" icon="eye" [loading]="loading() && !hasLoadedOnce()" />
+  <app-erp-kpi-card label="Bản nháp" [value]="counts().draft" hint="Chưa phát hành" tone="neutral" icon="box" [loading]="loading() && !hasLoadedOnce()" />
+  <app-erp-kpi-card label="Đã lưu trữ" [value]="counts().archived" hint="Gỡ xuống, chỉ về nháp" tone="warning" icon="log" [loading]="loading() && !hasLoadedOnce()" />
+  <app-erp-kpi-card label="Danh mục blog" [value]="counts().categories" hint="Nguồn từ content_category" tone="accent" icon="tag" [loading]="loading() && !hasLoadedOnce()" />
+</section>
+
+@if (!canRead()) {
+  <section class="erp-card">
+    <p class="content-notice">Vai trò của bạn không có quyền đọc nội dung. Phân hệ này chỉ dành cho quản trị chung.</p>
+  </section>
+} @else {
+  <section class="erp-card content-panel" aria-labelledby="content-title">
+    <div class="content-panel__head">
+      <div>
+        <span class="content-eyebrow">CMS</span>
+        <h2 id="content-title">Bài viết</h2>
+      </div>
+      <app-erp-tabs [tabs]="tabs()" [active]="tab()" (changed)="setTab($event)" />
+    </div>
+
+    <app-erp-filter-bar [busy]="loading()" (apply)="applyFilters()" (reset)="resetFilters()">
+      <label class="erp-field content-search">
+        <span>Tiêu đề hoặc slug</span>
+        <input class="erp-input" type="search" [value]="search()" (input)="onSearchInput($event)" placeholder="ví dụ: áo lụa" />
+      </label>
+    </app-erp-filter-bar>
+
+    @if (loadError()) {
+      <div class="content-banner" role="alert">
+        <app-erp-icon name="alert" [size]="'16'" />
+        {{ loadError() }}
+        <button class="erp-btn erp-btn--sm" type="button" (click)="reload()">Thử lại</button>
+      </div>
+    }
+    @if (notice()) {
+      <div class="content-banner content-banner--info" role="status">{{ notice() }}</div>
+    }
+
+    <app-erp-data-table
+      caption="Danh sách bài viết"
+      [columns]="columns()"
+      [rows]="rows()"
+      [loading]="loading()"
+      emptyTitle="Chưa có bài viết nào"
+      emptyMessage="Bấm “Bài viết mới” để tạo bản nháp đầu tiên, hoặc đổi bộ lọc."
+      [clickable]="canUpdate()"
+      (rowSelected)="openEdit($event)"
+      (retry)="reload()"
+    />
+    <app-erp-pagination [page]="page()" [pageCount]="totalPages()" [label]="rangeLabel()" (changed)="goPage($event)" />
+    <p class="content-hint">Bản nháp không xuất hiện ở <code>/api/content/blogs</code>: RLS của bảng chỉ mở dòng <code>status = published</code>.</p>
+  </section>
+}
+
+<app-erp-modal
+  [open]="draft() !== null"
+  [title]="editing() ? 'Sửa bài viết' : 'Bài viết mới'"
+  size="lg"
+  (closed)="closeEditor()"
+>
+  @if (draft(); as form) {
+    <form class="content-form" (submit)="$event.preventDefault(); save()">
+      <p class="erp-hint">
+        {{ editing() ? editing()!.slug + ' · bản ' + (editing()!.version ?? 0) : 'Bài mới lưu ở nháp hoặc công bố ngay.' }}
+      </p>
+
+      <label class="erp-field">
+        <span>Tiêu đề</span>
+        <input class="erp-input" type="text" [value]="form.title" (input)="onField('title', $event)" />
+      </label>
+      @if (errors()['title']) {
+        <p class="erp-error" role="alert">{{ errors()['title'] }}</p>
+      }
+
+      <div class="content-form__row">
+        <label class="erp-field">
+          <span>Slug</span>
+          <input class="erp-input" type="text" [value]="form.slug" (input)="onField('slug', $event)" />
+        </label>
+        <button class="erp-btn erp-btn--sm content-form__slug" type="button" (click)="suggestSlug()">Lấy từ tiêu đề</button>
+      </div>
+      @if (errors()['slug']) {
+        <p class="erp-error" role="alert">{{ errors()['slug'] }}</p>
+      }
+
+      <div class="content-form__grid">
+        <label class="erp-field">
+          <span>Danh mục</span>
+          <select class="erp-select" [value]="form.categorySlug" (change)="onField('categorySlug', $event)">
+            <option value="">— Chọn danh mục —</option>
+            @for (category of categoryOptions(); track category.content_category_id) {
+              <option [value]="category.slug">{{ category.name }}</option>
+            }
+          </select>
+        </label>
+        <label class="erp-field">
+          <span>Trạng thái</span>
+          <select class="erp-select" [value]="form.status" (change)="onField('status', $event)">
+            @for (option of statusChoices(); track option) {
+              <option [value]="option">{{ statusLabel(option) }}</option>
+            }
+          </select>
+        </label>
+        <label class="erp-field">
+          <span>Thời gian đọc (phút)</span>
+          <input class="erp-input" type="number" min="1" max="60" [value]="form.readMinutes" (input)="onNumberField($event)" />
+        </label>
+        <label class="erp-field">
+          <span>Tác giả</span>
+          <input class="erp-input" type="text" [value]="form.author" (input)="onField('author', $event)" />
+        </label>
+      </div>
+      @if (errors()['categorySlug'] || errors()['status'] || errors()['readMinutes']) {
+        <p class="erp-error" role="alert">{{ errors()['categorySlug'] || errors()['status'] || errors()['readMinutes'] }}</p>
+      }
+
+      <label class="erp-field">
+        <span>Mô tả ngắn (tối đa 500 ký tự)</span>
+        <textarea class="erp-input" rows="2" [value]="form.excerpt" (input)="onField('excerpt', $event)"></textarea>
+      </label>
+      @if (errors()['excerpt']) {
+        <p class="erp-error" role="alert">{{ errors()['excerpt'] }}</p>
+      }
+
+      <label class="erp-field">
+        <span>Nội dung (tối thiểu 40 ký tự)</span>
+        <textarea class="erp-input content-form__body" rows="10" [value]="form.content" (input)="onField('content', $event)"></textarea>
+      </label>
+      @if (errors()['content']) {
+        <p class="erp-error" role="alert">{{ errors()['content'] }}</p>
+      }
+
+      <label class="erp-field">
+        <span>Ảnh đại diện (https:// hoặc /assets/…)</span>
+        <input class="erp-input" type="text" [value]="form.imageUrl" (input)="onField('imageUrl', $event)" />
+      </label>
+      @if (errors()['imageUrl']) {
+        <p class="erp-error" role="alert">{{ errors()['imageUrl'] }}</p>
+      }
+
+      <label class="content-check">
+        <input type="checkbox" [checked]="form.isFeatured" (change)="onFeaturedChange($event)" />
+        <span>Bài nổi bật (hiện trước trên trang khách theo <code>is_featured</code>)</span>
+      </label>
+
+      @if (conflict()) {
+        <div class="content-banner content-banner--warn" role="alert">
+          Bản này vừa được người khác sửa nên hệ thống không ghi đè. Nội dung của bạn vẫn nằm nguyên trong khung.
+          <button class="erp-btn erp-btn--sm" type="button" (click)="reloadConflict()">Tải bản mới nhất vào trình soạn</button>
+        </div>
+      }
+      @if (notice() && draft()) {
+        <p class="erp-error" role="alert">{{ notice() }}</p>
+      }
+    </form>
+  }
+  <div footer>
+      <button class="erp-btn" type="button" (click)="closeEditor()">Đóng</button>
+      <button class="erp-btn erp-btn--primary" type="button" [disabled]="saving()" (click)="save()">
+        {{ saving() ? 'Đang lưu…' : 'Lưu bài viết' }}
+      </button>
+    </div>
+  </app-erp-modal>

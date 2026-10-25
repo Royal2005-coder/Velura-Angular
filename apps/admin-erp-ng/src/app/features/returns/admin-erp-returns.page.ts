@@ -1,6 +1,5 @@
-import { Subscription, catchError, forkJoin, of, skip } from 'rxjs';
+import { Subscription, catchError, forkJoin, of } from 'rxjs';
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, input, signal } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink, type ParamMap } from '@angular/router';
 import {
   AdminAuditRow,
@@ -11,6 +10,7 @@ import {
   AdminTicketRow,
 } from '../../core/admin-erp-api.service';
 import { orderFocusLink, returnFocusLink, type OrderTraceLink } from '../../core/admin-erp-order-trace';
+import { choiceParam, textParam, watchQueryParams } from '../../core/admin-erp-deep-link';
 import {
   CONTACT_RESULTS,
   MIN_NOTE_LENGTH,
@@ -61,6 +61,9 @@ import { ReturnFlowComponent, ReturnFlowKind } from './return-flow.component';
 
 type DeskTab = 'returns' | 'tickets' | 'chat' | 'logs';
 type TicketAction = 'reply' | 'resolve' | 'close';
+
+const DESK_TABS: readonly string[] = ['returns', 'tickets', 'chat', 'logs'];
+const RETURN_STATUS_VALUES: readonly string[] = Object.keys(RETURN_STATUS_LABELS);
 
 const EMPTY_RETURNS = { rows: [] as AdminReturnRow[], count: 0 };
 const EMPTY_TICKETS = { rows: [] as AdminTicketRow[], count: 0 };
@@ -137,6 +140,25 @@ export class AdminErpReturnsPage {
   readonly ticketAction = signal<TicketAction | null>(null);
   readonly ticketError = signal<string | null>(null);
   readonly ticketBusy = signal(false);
+  /** Chat case a deep link asked to open; the desk reads it and loads that transcript. */
+  readonly chatFocus = signal('');
+  /** Who did what on the open return, read from the service audit trail. */
+  readonly recordTrail = signal<AdminAuditRow[]>([]);
+  readonly ticketLinks = computed(() => {
+    const ticket = this.selectedTicket();
+    const links: OrderTraceLink[] = [];
+    if (!ticket) {
+      return links;
+    }
+    const phone = String(ticket.guest_phone || '');
+    if (phone) {
+      links.push({ label: 'Đơn của số điện thoại này', commands: ['/orders'], query: { q: phone } });
+    }
+    if (ticket.chat_session_id) {
+      links.push({ label: 'Hội thoại của phiếu', commands: ['/returns'], query: { tab: 'chat', focus: ticket.chat_session_id } });
+    }
+    return links;
+  });
 
   readonly selectedLog = signal<AdminAuditRow | null>(null);
 
@@ -299,8 +321,7 @@ export class AdminErpReturnsPage {
 
   constructor() {
     this.destroyRef.onDestroy(() => this.listRequest.unsubscribe());
-    this.applyDeepLink(this.route.snapshot.queryParamMap);
-    this.route.queryParamMap.pipe(skip(1), takeUntilDestroyed(this.destroyRef)).subscribe((params) => this.applyDeepLink(params));
+    watchQueryParams(this.route, this.destroyRef, (params) => this.applyDeepLink(params));
   }
 
   /**
@@ -309,16 +330,22 @@ export class AdminErpReturnsPage {
    * param change is re-applied instead of only the first load.
    */
   private applyDeepLink(params: ParamMap): void {
-    const tab = params.get('tab');
-    if (tab === 'returns' || tab === 'tickets' || tab === 'chat' || tab === 'logs') {
-      this.tab.set(tab);
-    }
-    this.orderFilter.set(params.get('order_id') || '');
-    this.search.set(params.get('q') || '');
+    this.tab.set(choiceParam(params, 'tab', DESK_TABS, this.tab()) as DeskTab);
+    this.orderFilter.set(textParam(params, 'order_id'));
+    this.statusFilter.set(choiceParam(params, 'status', RETURN_STATUS_VALUES, this.statusFilter()));
+    this.paymentFilter.set(choiceParam(params, 'payment', ['cod', 'online'], this.paymentFilter()) as '' | 'cod' | 'online');
+    this.search.set(textParam(params, 'q'));
     this.page.set(1);
     this.reload();
-    const focus = params.get('focus');
-    if (focus) {
+    const focus = textParam(params, 'focus');
+    if (!focus) {
+      return;
+    }
+    if (this.tab() === 'tickets') {
+      this.openTicket({ ticket_id: focus } as AdminTicketRow);
+    } else if (this.tab() === 'chat') {
+      this.chatFocus.set(focus);
+    } else {
       this.openReturn({ return_id: focus } as AdminReturnRow);
     }
   }
@@ -346,7 +373,7 @@ export class AdminErpReturnsPage {
    * Switches between the four queues.
    */
   setTab(tab: string): void {
-    if (tab !== 'returns' && tab !== 'tickets' && tab !== 'chat' && tab !== 'logs') {
+    if (!DESK_TABS.includes(tab)) {
       return;
     }
     this.tab.set(tab as DeskTab);
@@ -445,14 +472,27 @@ export class AdminErpReturnsPage {
         this.selected.set(record);
         this.detailLoading.set(false);
         this.loadOrderContext(record.order_id);
+        this.loadRecordTrail(record.return_id);
       },
       error: (error: unknown) => {
         this.detailLoading.set(false);
         this.selected.set(row as AdminReturnRow);
         this.detailError.set(adminErrorMessage(error, 'Không tải được chi tiết phiếu.'));
         this.loadOrderContext((row as AdminReturnRow).order_id);
+        this.loadRecordTrail(id);
       },
     });
+  }
+
+  /**
+   * Reads the trail of one return: who contacted, approved, rejected or refunded it, with the
+   * reason each step stored. Without it the operator hunts the same row in the log queue.
+   */
+  private loadRecordTrail(returnId: string): void {
+    this.api
+      .listServiceLogs({ targetId: returnId, limit: '12' })
+      .pipe(catchError(() => of(null)))
+      .subscribe((payload) => this.recordTrail.set(payload ? adminListRows(payload) : []));
   }
 
   /**
@@ -656,6 +696,7 @@ export class AdminErpReturnsPage {
     this.selectedTicket.set(null);
     this.selectedLog.set(null);
     this.orderContext.set(null);
+    this.recordTrail.set([]);
     this.flow.set(null);
     this.ticketAction.set(null);
     this.detailError.set(null);

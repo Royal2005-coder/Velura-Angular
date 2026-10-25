@@ -286,7 +286,8 @@
   margin: 10px 0;
 }
 
-.record__order {
+.record__order,
+.record__trail {
   display: grid;
   gap: 8px;
   margin: 12px 0;
@@ -296,7 +297,8 @@
   background: var(--erp-surface-muted);
 }
 
-.record__order h4 {
+.record__order h4,
+.record__trail h4 {
   margin: 0;
   font-size: 12px;
   font-weight: 700;

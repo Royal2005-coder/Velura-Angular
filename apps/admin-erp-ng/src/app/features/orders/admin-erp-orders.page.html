@@ -256,10 +256,13 @@
             <app-erp-icon name="box" [size]="'15'" />
             Quét QR vận đơn
           </button>
-          <span class="erp-hint">Quét label ĐVVC để điền mã vận đơn, ĐVVC và tracking URL.</span>
+          <span class="erp-hint">Quét label ĐVVC để điền mã vận đơn, ĐVVC và tracking URL. Mã mẫu trong hộp quét đã mang sẵn vận đơn demo của đơn này.</span>
         </div>
         @if (scanError()) {
           <p class="erp-error" role="alert">{{ scanError() }}</p>
+        }
+        @if (scanNotice()) {
+          <p class="erp-hint" role="status">{{ scanNotice() }}</p>
         }
         <label class="erp-field">
           <span>Đơn vị vận chuyển</span>
@@ -405,6 +408,7 @@
   title="Quét QR vận đơn"
   hint="Quét label của ĐVVC. Label chỉ có số vận đơn vẫn dùng được; mã của đơn khác sẽ bị từ chối."
   [sample]="scanSample()"
+  [sampleCaption]="scanSampleCaption()"
   (scanned)="applyShipmentScan($event)"
   (closed)="scanOpen.set(false)"
 />

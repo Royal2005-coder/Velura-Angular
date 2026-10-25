@@ -43,6 +43,9 @@ import { startChatReportWorker } from "./chatbot/chatbot-reports.js";
 import { createContentRepository } from "./content/content-repository.js";
 import { createContentService } from "./content/content-service.js";
 import { handleContentRoute } from "./content/content-router.js";
+import { createContentAdminRepository } from "./content/content-admin-repository.js";
+import { createContentAdminService } from "./content/content-admin-service.js";
+import { handleContentAdminRoute } from "./content/content-admin-router.js";
 import { createFixedWindowLimiter } from "./rate-limit.js";
 import { handleUserRoute } from "./user/index.js";
 import { invalidateCatalogCache } from "./user/products.js";
@@ -86,6 +89,7 @@ const pricingService = createPricingService({ repository: createPricingRepositor
 const auditLogService = createAuditLogService({ repository: createAuditLogRepository() });
 const chatbotService: ChatbotService = createChatbotService({ repository: createChatbotRepository() });
 const contentService = createContentService({ repository: createContentRepository() });
+const contentAdminService = createContentAdminService({ repository: createContentAdminRepository() });
 const personalColorService = createPersonalColorService(getAiService());
 const enhancementApprovalService = new EnhancementApprovalService(getAiService(), new SupabaseEnhancementApprovalRepository());
 const catalogContentService = new CatalogContentService(createCatalogContentRepository());
@@ -324,6 +328,7 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
       }
       if (await handleEnhancementApprovalRoute({ req, res, url, parts, context, headers: corsHeaders, service: enhancementApprovalService })) return;
       if (await handleCatalogContentRoute({ req, res, url, parts, context, headers: corsHeaders, service: catalogContentService })) return;
+      if (await handleContentAdminRoute({ req, res, url, parts, context, headers: corsHeaders, service: contentAdminService })) return;
       const dashboardHandled = await handleDashboardRoute({
         req,
         res,

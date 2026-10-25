@@ -4,6 +4,7 @@ import fs from 'node:fs';
 // Values stay in request bodies and are never included in output or CLI arguments.
 const keys = [
   'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'STOREFRONT_ORIGIN', 'API_PUBLIC_ORIGIN',
+  'CARRIER_WEBHOOK_SECRET',
   'VNPAY_TMN_CODE', 'VNPAY_HASH_SECRET', 'VNPAY_PAYMENT_URL',
   'MOMO_PARTNER_CODE', 'MOMO_ACCESS_KEY', 'MOMO_SECRET_KEY', 'MOMO_API_ORIGIN',
   'TWILIO_API_KEY_SID', 'TWILIO_API_KEY_SECRET', 'TWILIO_ACCOUNT_SID',

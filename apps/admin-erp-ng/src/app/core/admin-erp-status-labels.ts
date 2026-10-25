@@ -60,6 +60,7 @@ export const AUDIT_MODULE_LABELS: Readonly<Record<string, string>> = {
   promotions: 'Khuyến mãi',
   vouchers: 'Voucher',
   reviews: 'Đánh giá',
+  content: 'Nội dung',
   ai: 'AI',
   system: 'Hệ thống',
   inventory: 'Tồn kho',

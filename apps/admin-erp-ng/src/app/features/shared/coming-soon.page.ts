@@ -37,6 +37,11 @@ const PLANNED_SCOPES: Record<AdminErpNavKey, string[]> = {
     'Lịch chạy, tạm dừng và thống kê',
     'Audit thay đổi khuyến mãi',
   ],
+  content: [
+    'Bài viết: bản nháp, công bố và lưu trữ theo quyền',
+    'Danh mục nội dung và slug chuẩn hoá',
+    'Phiên bản bài viết và audit cho mỗi lần sửa',
+  ],
   reviews: [
     'Duyệt, ẩn và phản hồi đánh giá',
     'Đánh dấu nội dung cần xử lý gấp',

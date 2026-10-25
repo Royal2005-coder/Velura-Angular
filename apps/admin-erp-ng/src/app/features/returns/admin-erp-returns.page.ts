@@ -23,6 +23,7 @@ import {
   contactAllowed,
   exchangeApprovalAllowed,
   gatewayRefundAllowed,
+  gatewayNote,
   isChatGovernedTicket,
   isReturnOpen,
   manualReturnTransitions,
@@ -530,9 +531,12 @@ export class AdminErpReturnsPage {
   /**
    * Rereads the return after a write and keeps the drawer on the fresh version.
    */
-  onFlowDone(): void {
+  onFlowDone(message = ''): void {
     const id = this.selected()?.return_id;
     this.flow.set(null);
+    if (message) {
+      this.gatewayNote.set(message);
+    }
     if (id) {
       this.openReturn({ return_id: id } as AdminReturnRow);
     }
@@ -1013,23 +1017,6 @@ function ticketStatusTone(status: string | null | undefined): AdminTone {
 /** Audit actor label. */
 function actor(row: AdminAuditRow): string {
   return row.actor_label || row.actor_name || row.actor_id || 'Hệ thống';
-}
-
-/** Gateway answer in operator language. */
-function gatewayNote(refund: { status: string; message?: string } | null): string {
-  if (!refund) {
-    return 'Cổng không trả về trạng thái. Kiểm lại giao dịch trước khi thử lại.';
-  }
-  if (refund.status === 'refunded') {
-    return 'Stripe đã hoàn tiền. Phiếu sẽ được đánh dấu hoàn tất theo luồng.';
-  }
-  if (refund.status === 'requested') {
-    return 'Đã gửi yêu cầu hoàn tiền tới Stripe; chờ cổng xác nhận.';
-  }
-  if (refund.status === 'skipped') {
-    return 'Cổng bỏ qua giao dịch này; kiểm tra lại số tiền hoàn.';
-  }
-  return refund.message || 'Hoàn tiền qua Stripe thất bại. Kiểm lại giao dịch rồi thử lại.';
 }
 
 /** Reads a named control from the ticket action form. */

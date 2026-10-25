@@ -49,6 +49,8 @@ export interface CarrierDeliveryEvent {
   readonly status: CarrierEventStatus;
   readonly occurredAt: string;
   readonly detail: string;
+  /** Người vận hành đứng sau một push được mô phỏng; đi vào dấu vết để không mất ai-là-ai. */
+  readonly operatorId?: string;
   readonly raw: JsonObject;
 }
 
@@ -196,5 +198,6 @@ export function carrierEventPayload(event: CarrierDeliveryEvent): JsonObject {
     provider_status: event.status,
     tracking_code: event.trackingCode,
     occurred_at: event.occurredAt,
+    ...(event.operatorId ? { operator_id: event.operatorId } : {}),
   };
 }

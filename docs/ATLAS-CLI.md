@@ -30,7 +30,7 @@ cluster tên Velura. Vì vậy không giả định hai context đó là cluster
 của dự án này và không chạy lệnh mutate vào chúng để deploy Velura.
 
 Cluster Velura hiện được owner vận hành qua SSH alias `ai1-k3s` và kube-system
-UID `a9517754-4868-46b9-8c2370e53cff`. Việc đăng ký nó vào Atlas là thao tác riêng
+UID `a9517754-4868-46b9-8e8f-8c2370e53cff`. Việc đăng ký nó vào Atlas là thao tác riêng
 của quản trị discovery/OIDC/RBAC; CLI không có lệnh `grant`, `deploy` hay `reconcile`
 để agent tự sáng tác. Chỉ ghi nhận Atlas access là hoàn tất khi discovery thật
 và group/RBAC đúng đã được xác minh.

@@ -170,7 +170,9 @@ export const ALL_AUDIT_TARGETS: Readonly<Record<string, AuditTargetLookup>> = {
   ...AUDIT_TARGETS,
   ...PRICING_TARGETS,
   // Auth rows target a user, so reuse the account lookup.
-  auth: AUDIT_TARGETS.accounts
+  auth: AUDIT_TARGETS.accounts,
+  // Khoá/mở tích luỹ cũng trỏ tới một thành viên (bảng users).
+  members: AUDIT_TARGETS.accounts
 };
 
 /**

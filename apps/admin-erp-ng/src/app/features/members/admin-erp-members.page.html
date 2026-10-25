@@ -1,0 +1,306 @@
+<app-erp-page-header
+  eyebrow="Khách hàng"
+  title="Thành viên & điểm"
+  subtitle="Ví điểm đọc trực tiếp từ loyalty_account và loyalty_ledger. Tại đây chỉ khoá/mở tích luỹ kèm lý do; điều chỉnh số dư là quyết định tiền, không nằm trong màn hình vận hành."
+>
+  <div actions>
+    <button class="erp-btn erp-btn--sm" type="button" (click)="reload()" [disabled]="loading()">
+      <app-erp-icon name="refresh" [size]="'15'" />
+      {{ loading() ? 'Đang tải…' : 'Làm mới' }}
+    </button>
+  </div>
+</app-erp-page-header>
+
+<section class="member-kpis" aria-label="Tóm tắt ví điểm">
+  <app-erp-kpi-card
+    label="Thành viên"
+    [value]="overview().members ?? 0"
+    hint="Tài khoản vai trò member"
+    tone="neutral"
+    icon="users"
+    [loading]="loading() && !hasLoadedOnce()"
+  />
+  <app-erp-kpi-card
+    label="Điểm đang giữ"
+    [value]="overview().total_points_milli === undefined ? null : pointsLabelOf(overview().total_points_milli)"
+    hint="Tổng số dư trừ nợ điểm"
+    tone="success"
+    icon="star"
+    [loading]="loading() && !hasLoadedOnce()"
+  />
+  <app-erp-kpi-card
+    label="Ví nợ điểm"
+    [value]="overview().negative_accounts ?? 0"
+    hint="Số dư âm sau thu hồi"
+    tone="warning"
+    icon="alert"
+    [loading]="loading() && !hasLoadedOnce()"
+  />
+  <app-erp-kpi-card
+    label="Khoá tích luỹ"
+    [value]="overview().locked_accounts ?? 0"
+    hint="Đang dừng cộng điểm"
+    tone="danger"
+    icon="log"
+    [loading]="loading() && !hasLoadedOnce()"
+  />
+  <app-erp-kpi-card
+    label="Giới thiệu chờ"
+    [value]="overview().referrals_pending ?? 0"
+    hint="Chưa có đơn giao thành công"
+    tone="accent"
+    icon="tag"
+    [loading]="loading() && !hasLoadedOnce()"
+  />
+</section>
+
+@if (!canRead()) {
+  <section class="erp-card">
+    <p class="member-notice">Vai trò của bạn không có quyền xem điểm thành viên.</p>
+  </section>
+} @else {
+  <section class="erp-card member-panel" aria-labelledby="members-title">
+    <div class="member-panel__head">
+      <div>
+        <span class="member-eyebrow">Loyalty</span>
+        <h2 id="members-title">Sổ thành viên</h2>
+      </div>
+      <app-erp-tabs [tabs]="tabs()" [active]="wallet()" (changed)="setWallet($event)" />
+    </div>
+
+    <app-erp-filter-bar [busy]="loading()" (apply)="applyFilters()" (reset)="resetFilters()">
+      <label class="erp-field member-search">
+        <span>Tên, email, điện thoại, mã giới thiệu</span>
+        <input class="erp-input" type="search" [value]="search()" (input)="onSearchInput($event)" placeholder="ví dụ: 0900 hoặc VLR" />
+      </label>
+      <label class="erp-field">
+        <span>Sắp xếp</span>
+        <select class="erp-select" [value]="sort()" (change)="onSortChange($event)">
+          <option value="balance">Số dư cao trước</option>
+          <option value="name">Tên A → Z</option>
+          <option value="recent">Bút toán mới nhất</option>
+        </select>
+      </label>
+    </app-erp-filter-bar>
+
+    @if (loadError()) {
+      <div class="member-banner" role="alert">
+        <app-erp-icon name="alert" [size]="'16'" />
+        {{ loadError() }}
+        <button class="erp-btn erp-btn--sm" type="button" (click)="reload()">Thử lại</button>
+      </div>
+    }
+    @if (notice()) {
+      <div class="member-banner member-banner--info" role="status">{{ notice() }}</div>
+    }
+
+    <app-erp-data-table
+      caption="Danh sách thành viên và ví điểm"
+      [columns]="columns()"
+      [rows]="rows()"
+      [loading]="loading()"
+      emptyTitle="Không có thành viên khớp bộ lọc"
+      emptyMessage="Đổi tab hoặc xoá từ khoá tìm kiếm để xem lại toàn bộ sổ."
+      [clickable]="true"
+      (rowSelected)="openDetailFromRow($event)"
+      (retry)="reload()"
+    />
+    <app-erp-pagination [page]="page()" [pageCount]="totalPages()" [label]="rangeLabel()" (changed)="goPage($event)" />
+    <p class="member-hint">
+      Số dư lấy từ <code>loyalty_account</code> (milli-point); mỗi bút toán là một dòng
+      <code>loyalty_ledger</code>. Cột <code>users.loyalty_points</code> của production không được dùng vì luôn bằng 0.
+    </p>
+  </section>
+}
+
+<app-erp-drawer
+  [open]="detailUserId() !== null"
+  [title]="detail()?.user?.full_name || 'Hồ sơ thành viên'"
+  size="lg"
+  (closed)="closeDetail()"
+>
+  @if (detailLoading()) {
+    <p class="member-notice">Đang tải hồ sơ…</p>
+  }
+  @if (detailError()) {
+    <div class="member-banner" role="alert">
+      <app-erp-icon name="alert" [size]="'16'" />
+      {{ detailError() }}
+      @if (detailUserId()) {
+        <button class="erp-btn erp-btn--sm" type="button" (click)="retryDetail()">Thử lại</button>
+      }
+    </div>
+  }
+
+  @if (detail(); as member) {
+    <div class="member-profile">
+      <div>
+        <p class="member-profile__contact">{{ member.user.email || member.user.phone || '—' }}</p>
+        <p class="member-profile__meta">
+          Thành viên từ {{ dateTime(member.user.created_at) }}
+          @if (member.account) {
+            · mã giới thiệu <code>{{ member.account.referral_code }}</code>
+          }
+        </p>
+      </div>
+      <div class="member-profile__badges">
+        <app-erp-status-badge [label]="member.user.is_active ? 'Đang hoạt động' : 'Bị khoá'" [tone]="member.user.is_active ? 'success' : 'danger'" [dot]="true" />
+        <app-erp-status-badge [label]="detailState().label" [tone]="detailState().tone" [dot]="true" />
+      </div>
+    </div>
+
+    @if (member.account) {
+      <div class="member-wallet">
+        <div>
+          <span>Số dư</span>
+          <strong>{{ pointsLabelOf(member.account.balance_milli_points - member.account.debt_milli_points) }}</strong>
+        </div>
+        <div>
+          <span>Giá trị quy đổi</span>
+          <strong>{{ walletValue(member.account.balance_milli_points, member.account.debt_milli_points) }}</strong>
+        </div>
+        <div>
+          <span>Đã cộng</span>
+          <strong>{{ pointsLabelOf(member.totals.earned_milli) }}</strong>
+        </div>
+        <div>
+          <span>Đã thu hồi</span>
+          <strong>{{ pointsLabelOf(member.totals.reversed_milli) }}</strong>
+        </div>
+        <div>
+          <span>Đơn đã giao</span>
+          <strong>{{ member.totals.delivered_orders }}</strong>
+        </div>
+        <div>
+          <span>Đổi trả hoàn tất</span>
+          <strong>{{ member.totals.refunded_returns }}</strong>
+        </div>
+      </div>
+
+      @if (detailWarningText(); as warning) {
+        <div class="member-banner member-banner--warn" role="status">{{ warning }}</div>
+      }
+    } @else {
+      <div class="member-banner member-banner--info" role="status">
+        Thành viên chưa có ví điểm: các đơn đã giao chưa phát sinh tích luỹ, hoặc chưa từng đủ điều kiện.
+      </div>
+    }
+
+    @if (member.totals.zero_entries > 0) {
+      <div class="member-banner member-banner--warn" role="status">
+        Có {{ member.totals.zero_entries }} bút toán 0 điểm trong lịch sử. Đây là dấu hiệu dữ liệu cũ cần rà soát, không phải giao dịch hợp lệ.
+      </div>
+    }
+
+    @if (canUpdate()) {
+      <section class="member-lock" aria-labelledby="member-lock-title">
+        <h3 id="member-lock-title">Khoá / mở tích luỹ</h3>
+        <p class="member-lock__hint">Lý do được ghi vào nhật ký cùng người thao tác. Số dư và bút toán không thay đổi.</p>
+        <label class="erp-field">
+          <span>Lý do (tối thiểu {{ lockReasonMin }} ký tự)</span>
+          <textarea class="erp-input" rows="2" [value]="lockReason()" (input)="onLockReason($event)" placeholder="ví dụ: xác minh với khách qua hotline 25/10"></textarea>
+        </label>
+        @if (lockError()) {
+          <p class="erp-error" role="alert">{{ lockError() }}</p>
+        }
+        <div class="member-lock__actions">
+          @if (member.account?.accrual_locked) {
+            <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" [disabled]="lockBusy()" (click)="saveLock(false)">
+              {{ lockBusy() ? 'Đang lưu…' : 'Mở khoá tích luỹ' }}
+            </button>
+          } @else {
+            <button class="erp-btn erp-btn--danger erp-btn--sm" type="button" [disabled]="lockBusy()" (click)="saveLock(true)">
+              {{ lockBusy() ? 'Đang lưu…' : 'Khoá tích luỹ' }}
+            </button>
+          }
+        </div>
+      </section>
+    }
+
+    <section class="member-section" aria-labelledby="member-trail-title">
+      <div class="member-section__head">
+        <h3 id="member-trail-title">Dấu vết điểm</h3>
+        <span>{{ member.totals.ledger_entries }} bút toán</span>
+      </div>
+      @if (!member.trail.length) {
+        <p class="member-notice">Chưa có bút toán nào.</p>
+      } @else {
+        <ol class="member-trail">
+          @for (entry of member.trail; track entry.ledger_id) {
+            <li class="member-trail__row">
+              <div class="member-trail__head">
+                <app-erp-status-badge [label]="kindMeta(entry.kind).label" [tone]="kindMeta(entry.kind).tone" [dot]="true" />
+                <strong [class.member-trail__amount--negative]="entry.amount_milli_points < 0">{{ signedPoints(entry.amount_milli_points) }}</strong>
+                <span class="member-trail__balance">còn {{ pointsLabelOf(entry.balance_after_milli_points) }}</span>
+                <time>{{ dateTime(entry.created_at) }}</time>
+              </div>
+              <p class="member-trail__note">{{ entry.note || '—' }}</p>
+              @if (isZeroEntry(entry.amount_milli_points)) {
+                <p class="member-trail__zero">Bút toán 0 điểm — cần rà soát nguồn ghi.</p>
+              }
+              <div class="member-trail__links">
+                @if (orderLink(entry.order_id); as link) {
+                  <a class="member-link" [routerLink]="link.commands" [queryParams]="link.query">{{ entry.order_code || 'Đơn hàng' }}</a>
+                }
+                @if (returnLink(entry.return_id); as link) {
+                  <a class="member-link" [routerLink]="link.commands" [queryParams]="link.query">Hồ sơ đổi trả</a>
+                }
+                @if (entry.expires_at) {
+                  <span class="member-trail__expiry">Hết hạn {{ dateTime(entry.expires_at) }}</span>
+                }
+              </div>
+            </li>
+          }
+        </ol>
+      }
+    </section>
+
+    <section class="member-section" aria-labelledby="member-referrals-title">
+      <div class="member-section__head">
+        <h3 id="member-referrals-title">Giới thiệu</h3>
+        <span>{{ member.referrals.length }}</span>
+      </div>
+      @if (!member.referrals.length) {
+        <p class="member-notice">Không có quan hệ giới thiệu.</p>
+      } @else {
+        <ul class="member-list">
+          @for (row of member.referrals; track row.referral_id) {
+            <li>
+              <app-erp-status-badge [label]="referralStatus(row.status).label" [tone]="referralStatus(row.status).tone" [dot]="true" />
+              <span>{{ referralRole(row.role) }} · {{ row.counterpart_name || '—' }}</span>
+              <span class="member-list__meta">{{ dateTime(row.created_at) }}</span>
+              @if (orderLink(row.qualifying_order_id); as link) {
+                <a class="member-link" [routerLink]="link.commands" [queryParams]="link.query">{{ row.qualifying_order_code || 'Đơn đủ điều kiện' }}</a>
+              }
+            </li>
+          }
+        </ul>
+      }
+    </section>
+
+    <section class="member-section" aria-labelledby="member-vouchers-title">
+      <div class="member-section__head">
+        <h3 id="member-vouchers-title">Ưu đãi thành viên</h3>
+        <span>{{ member.vouchers.length }}</span>
+      </div>
+      @if (!member.vouchers.length) {
+        <p class="member-notice">Chưa phát hành ưu đãi nào.</p>
+      } @else {
+        <ul class="member-list">
+          @for (row of member.vouchers; track row.member_voucher_id) {
+            <li>
+              <app-erp-status-badge [label]="voucherStatus(row.status).label" [tone]="voucherStatus(row.status).tone" [dot]="true" />
+              <span>{{ voucherBenefit(row.benefit) }} · <code>{{ row.code || row.voucher_id }}</code></span>
+              <span class="member-list__meta">{{ dateTime(row.expires_at) }}</span>
+            </li>
+          }
+        </ul>
+      }
+    </section>
+  }
+
+  <div footer>
+    <a class="erp-btn erp-btn--sm" [routerLink]="['/logs']" [queryParams]="{ module: 'members', target: detailUserId() }">Nhật ký thành viên</a>
+    <button class="erp-btn" type="button" (click)="closeDetail()">Đóng</button>
+  </div>
+</app-erp-drawer>

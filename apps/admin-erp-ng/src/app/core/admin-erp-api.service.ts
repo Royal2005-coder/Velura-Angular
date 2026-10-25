@@ -605,6 +605,127 @@ export interface AdminBlogInput {
   expectedVersion?: number;
 }
 
+/**
+ * Một thành viên cùng ví điểm của họ. Điểm đọc từ `loyalty_account`, không phải `users.loyalty_points`
+ * (cột cũ đang bằng 0 ở production dù ví có điểm). Số dư âm = còn nợ điểm sau khi hoàn hàng.
+ */
+export interface AdminMemberRow {
+  user_id: string;
+  full_name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  is_active?: boolean;
+  created_at?: string;
+  wallet_exists?: boolean;
+  balance_milli_points?: number;
+  debt_milli_points?: number;
+  accrual_locked?: boolean;
+  warning_flags?: number;
+  referral_code?: string | null;
+  account_updated_at?: string | null;
+  ledger_entries?: number;
+  last_ledger_at?: string | null;
+  referrals?: number;
+  vouchers_available?: number;
+}
+
+/** Tổng quan ví điểm của toàn bộ thành viên (`admin_member_overview`). */
+export interface AdminMemberOverview {
+  members?: number;
+  with_wallet?: number;
+  total_points_milli?: number;
+  negative_accounts?: number;
+  locked_accounts?: number;
+  flagged_accounts?: number;
+  referrals_pending?: number;
+  referrals_successful?: number;
+  vouchers_available?: number;
+  ledger_entries?: number;
+  zero_entries?: number;
+  earliest_expiry?: string | null;
+  last_ledger_at?: string | null;
+}
+
+/** Một bút toán điểm, kèm đơn/phiếu đổi trả để mở thẳng hồ sơ nguồn. */
+export interface AdminMemberLedgerRow {
+  ledger_id: string;
+  kind: string;
+  amount_milli_points: number;
+  balance_after_milli_points: number;
+  expires_at?: string | null;
+  note?: string | null;
+  created_at: string;
+  order_id?: string | null;
+  order_code?: string | null;
+  order_status?: string | null;
+  return_id?: string | null;
+  return_status?: string | null;
+}
+
+export interface AdminMemberReferralRow {
+  referral_id: string;
+  role: 'referrer' | 'referred';
+  counterpart_name?: string | null;
+  status: string;
+  created_at: string;
+  completed_at?: string | null;
+  reversed_at?: string | null;
+  qualifying_order_id?: string | null;
+  qualifying_order_code?: string | null;
+}
+
+export interface AdminMemberVoucherRow {
+  member_voucher_id: string;
+  voucher_id: string;
+  code?: string | null;
+  name?: string | null;
+  benefit: string;
+  status: string;
+  issued_at: string;
+  expires_at?: string | null;
+  used_order_id?: string | null;
+  revoked_at?: string | null;
+}
+
+/** Hồ sơ một thành viên: ví, tổng hợp, dấu vết bút toán, giới thiệu và voucher. */
+export interface AdminMemberDetail {
+  user: {
+    user_id: string;
+    full_name?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    is_active?: boolean;
+    created_at?: string;
+  };
+  account: {
+    balance_milli_points: number;
+    debt_milli_points: number;
+    points_balance: number;
+    warning_flags: number;
+    accrual_locked: boolean;
+    referral_code?: string | null;
+    updated_at?: string;
+  } | null;
+  totals: {
+    earned_milli: number;
+    reversed_milli: number;
+    ledger_entries: number;
+    zero_entries: number;
+    delivered_orders: number;
+    refunded_returns: number;
+  };
+  trail: AdminMemberLedgerRow[];
+  referrals: AdminMemberReferralRow[];
+  vouchers: AdminMemberVoucherRow[];
+}
+
+/** Kết quả khoá/mở tích luỹ. `changed=false` nghĩa là ví đã ở đúng trạng thái đó từ trước. */
+export interface AdminMemberLockResult {
+  user_id: string;
+  accrual_locked: boolean;
+  changed: boolean;
+}
+
 export interface AdminPromotionRow {
   promo_id?: string;
   promotion_id?: string;
@@ -1977,6 +2098,39 @@ export class AdminErpApiService {
     return this.http.get<{ rows?: AdminContentCategory[] }>(`${this.baseUrl}/api/content/categories`, {
       params: this.params({ type }),
     });
+  }
+
+  /**
+   * Counter strip for the members workspace. Counts the wallet tables, never `users.loyalty_points`.
+   */
+  memberOverview(): Observable<AdminMemberOverview> {
+    return this.http.get<AdminMemberOverview>(`${this.baseUrl}/api/v1/admin/members/overview`);
+  }
+
+  /**
+   * Lists members with their wallet state. `wallet` accepts all | has | none | negative | locked.
+   */
+  listMembers(params: Record<string, string> = {}): Observable<AdminListPayload<AdminMemberRow>> {
+    return this.http.get<AdminListPayload<AdminMemberRow>>(`${this.baseUrl}/api/v1/admin/members`, {
+      params: this.params(params),
+    });
+  }
+
+  /**
+   * Loads one member profile with the ledger trail, referrals and vouchers in a single read.
+   */
+  memberDetail(userId: string): Observable<AdminMemberDetail> {
+    return this.http.get<AdminMemberDetail>(`${this.baseUrl}/api/v1/admin/members/${encodeURIComponent(userId)}`);
+  }
+
+  /**
+   * Locks or unlocks accrual with an operator reason; the RPC writes the audit row.
+   */
+  setMemberAccrualLock(userId: string, body: { locked: boolean; reason: string }): Observable<AdminMemberLockResult> {
+    return this.http.post<AdminMemberLockResult>(
+      `${this.baseUrl}/api/v1/admin/members/${encodeURIComponent(userId)}/accrual-lock`,
+      body,
+    );
   }
 
   private params(values: Record<string, string>): HttpParams {

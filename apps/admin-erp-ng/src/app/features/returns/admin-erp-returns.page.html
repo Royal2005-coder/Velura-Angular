@@ -4,12 +4,20 @@
   subtitle="Hàng đợi hoàn tiền theo kênh thanh toán, kiểm hàng tại kho, phiếu hỗ trợ và hội thoại khách hàng trong một workspace."
 >
   <div actions>
+    <button class="erp-btn erp-btn--sm" type="button" (click)="scanOpen.set(true)">
+      <app-erp-icon name="box" [size]="'15'" />
+      Quét QR phiếu trả
+    </button>
     <button class="erp-btn erp-btn--sm" type="button" (click)="reload()" [disabled]="loading() && tab() !== 'chat'">
       <app-erp-icon name="refresh" [size]="'15'" />
       Làm mới
     </button>
   </div>
 </app-erp-page-header>
+
+@if (scanError()) {
+  <div class="desk-note desk-note--danger" role="alert">{{ scanError() }}</div>
+}
 
 @if (tab() === 'returns') {
   <section class="desk-kpis" aria-label="Tóm tắt hàng đợi đổi trả">
@@ -150,6 +158,25 @@
         </div>
         <app-erp-status-badge [label]="statusLabel(record.status)" [tone]="statusTone(record.status)" [dot]="true" />
       </div>
+
+      @if (nextStep(); as step) {
+        <div class="record__next">
+          <div>
+            <strong>Bước tiếp theo: {{ step.label }}</strong>
+            <span>{{ step.hint }}</span>
+          </div>
+          @if (canWrite()) {
+            <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" (click)="runNextStep()">{{ step.label }}</button>
+          }
+        </div>
+      }
+
+      @if (record.return_id) {
+        <details class="record__qr">
+          <summary>Mã QR của phiếu</summary>
+          <app-erp-qr-code [value]="returnQr(record)" caption="Quét để mở phiếu này" />
+        </details>
+      }
 
       @if (returnLinks().length) {
         <div class="record__links">
@@ -450,4 +477,12 @@
   }
 </app-erp-drawer>
 
-<app-erp-return-flow [flow]="flow()" [record]="selected()" (done)="onFlowDone($event)" (dismissed)="closeFlow()" />
+<app-erp-return-flow [flow]="flow()" [record]="selected()" [presetStatus]="flowStatus()" (done)="onFlowDone($event)" (dismissed)="closeFlow()" />
+
+<app-erp-qr-scan
+  [open]="scanOpen()"
+  title="Quét QR phiếu đổi trả"
+  hint="Quét mã trên phiếu trả (in từ ERP) để mở đúng hồ sơ kho cần nhận."
+  (scanned)="applyReturnScan($event)"
+  (closed)="scanOpen.set(false)"
+/>

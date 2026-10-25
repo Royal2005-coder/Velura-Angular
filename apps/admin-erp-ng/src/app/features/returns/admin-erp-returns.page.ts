@@ -11,6 +11,7 @@ import {
 } from '../../core/admin-erp-api.service';
 import { orderFocusLink, returnFocusLink, type OrderTraceLink } from '../../core/admin-erp-order-trace';
 import { choiceParam, textParam, watchQueryParams } from '../../core/admin-erp-deep-link';
+import { buildReturnQrLink, parseScan } from '../../core/admin-erp-qr';
 import {
   CONTACT_RESULTS,
   MIN_NOTE_LENGTH,
@@ -27,6 +28,7 @@ import {
   isChatGovernedTicket,
   isReturnOpen,
   manualReturnTransitions,
+  nextReturnStep,
   paymentKindLabel,
   receiptAllowed,
   refundApprovalAllowed,
@@ -54,6 +56,8 @@ import { AdminErpKpiCard } from '../../shared/ui/admin-kpi-card';
 import { AdminErpModal } from '../../shared/ui/admin-modal';
 import { AdminErpPageHeader } from '../../shared/ui/admin-page-header';
 import { AdminErpPagination } from '../../shared/ui/admin-pagination';
+import { AdminErpQrCode } from '../../shared/ui/admin-qr-code';
+import { AdminErpQrScan } from '../../shared/ui/admin-qr-scan';
 import { AdminErpStatusBadge } from '../../shared/ui/admin-status-badge';
 import { AdminErpTab, AdminErpTabs } from '../../shared/ui/admin-tabs';
 import { AdminTone, TICKET_STATUS_LABELS } from '../../core/admin-erp-status-labels';
@@ -89,6 +93,8 @@ const EMPTY_LOGS = { rows: [] as AdminAuditRow[], count: 0 };
     AdminErpModal,
     AdminErpStatusBadge,
     AdminErpIcon,
+    AdminErpQrCode,
+    AdminErpQrScan,
     ReturnFlowComponent,
     ChatDeskComponent,
     RouterLink,
@@ -137,6 +143,10 @@ export class AdminErpReturnsPage {
   readonly detailError = signal<string | null>(null);
   readonly flow = signal<ReturnFlowKind>(null);
   readonly gatewayNote = signal<string | null>(null);
+  /** Trạng thái đích của bước "tiếp theo" để hộp thoại mở đúng lựa chọn. */
+  readonly flowStatus = signal('');
+  readonly scanOpen = signal(false);
+  readonly scanError = signal<string | null>(null);
 
   readonly selectedTicket = signal<AdminTicketRow | null>(null);
   readonly ticketAction = signal<TicketAction | null>(null);
@@ -214,8 +224,12 @@ export class AdminErpReturnsPage {
   readonly logRangeLabel = computed(() => adminRangeLabel(this.logsTotal(), this.logsPage(), this.pageSize, 'nhật ký'));
 
   readonly nextSteps = computed(() =>
-    manualReturnTransitions(this.selected()?.status).map((value) => ({ value, label: returnStatusLabel(value) })),
+    manualReturnTransitions(this.selected()?.status, this.selected()?.return_type).map((value) => ({
+      value,
+      label: returnStatusLabel(value),
+    })),
   );
+  readonly nextStep = computed(() => nextReturnStep(this.selected()));
 
   readonly columns = computed<readonly AdminTableColumn[]>(() => [
     {
@@ -522,11 +536,51 @@ export class AdminErpReturnsPage {
   /**
    * Opens one return write flow.
    */
-  openFlow(flow: ReturnFlowKind): void {
+  openFlow(flow: ReturnFlowKind, target = ''): void {
     if (!this.canWrite() || !flow) {
       return;
     }
+    this.flowStatus.set(flow === 'status' ? target : '');
     this.flow.set(flow);
+  }
+
+  /**
+   * Runs the one action the current state actually needs. Money never opens before warehouse
+   * QA passed, because the API refuses it — the drawer used to offer it anyway.
+   */
+  runNextStep(): void {
+    const step = nextReturnStep(this.selected());
+    const record = this.selected();
+    if (!step || !record) return;
+    if (step.flow === 'gateway') {
+      if (manualRefundAllowed(record)) {
+        this.openFlow('manual');
+      } else {
+        this.runStripeRefund();
+      }
+      return;
+    }
+    this.openFlow(step.flow, step.target);
+  }
+
+  /** Link in trên phiếu trả; quét bằng điện thoại sẽ mở thẳng phiếu này. */
+  returnQr(record: AdminReturnRow): string {
+    return buildReturnQrLink(typeof window !== 'undefined' ? window.location.origin : '', record.return_id);
+  }
+
+  /**
+   * Opens the return whose QR was scanned at the warehouse door. A code for an order is not
+   * enough to receive goods; only a return slip code opens a slip.
+   */
+  applyReturnScan(text: string): void {
+    this.scanOpen.set(false);
+    const result = parseScan(text);
+    if (result.kind === 'return' && result.returnId) {
+      this.scanError.set(null);
+      this.openReturn({ return_id: result.returnId } as AdminReturnRow);
+      return;
+    }
+    this.scanError.set('Mã này không phải phiếu đổi trả của Velura. Quét mã trên phiếu hoặc mở danh sách.');
   }
 
   /**

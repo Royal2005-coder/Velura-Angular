@@ -128,6 +128,12 @@
         @if (order.tracking_code) {
           <p class="order-note">Vận đơn {{ order.carrier || '' }} · {{ order.tracking_code }}</p>
         }
+        @if (order.order_code) {
+          <details class="order-qr">
+            <summary>Mã QR của đơn {{ order.order_code }}</summary>
+            <app-erp-qr-code [value]="orderQr(order)" [caption]="'Quét để mở đơn ' + order.order_code" />
+          </details>
+        }
         @if (order.cancelled_reason) {
           <p class="order-note order-note--danger">Lý do hủy: {{ order.cancelled_reason }}</p>
         }
@@ -245,15 +251,31 @@
         <label class="erp-field"><span>Số lượng thiếu</span><input class="erp-input" name="shortage" type="number" min="1" /></label>
       }
       @if (hasField(action, 'shipment') || hasField(action, 'tracking')) {
-        <label class="erp-field"><span>Đơn vị vận chuyển</span><input class="erp-input" name="carrier" type="text" [value]="prefill().carrier" /></label>
-        <label class="erp-field"><span>Mã vận đơn</span><input class="erp-input" name="trackingCode" type="text" [value]="prefill().trackingCode" /></label>
-        <label class="erp-field"><span>Tracking URL</span><input class="erp-input" name="trackingUrl" type="url" [value]="prefill().trackingUrl" placeholder="https://..." /></label>
-      }
-      @if (action.code === 'upsert_shipment') {
-        <label class="order-check">
-          <input type="checkbox" [checked]="autoHandover()" (change)="onAutoHandover($event)" />
-          <span>Bàn giao đơn vị vận chuyển ngay sau khi lưu vận đơn (API tính bàn giao là bước riêng; hệ thống dùng lại mã vận đơn vừa nhập)</span>
+        <div class="order-actions">
+          <button class="erp-btn erp-btn--sm" type="button" (click)="scanOpen.set(true)">
+            <app-erp-icon name="box" [size]="'15'" />
+            Quét QR vận đơn
+          </button>
+          <span class="erp-hint">Quét label ĐVVC để điền mã vận đơn, ĐVVC và tracking URL.</span>
+        </div>
+        @if (scanError()) {
+          <p class="erp-error" role="alert">{{ scanError() }}</p>
+        }
+        <label class="erp-field">
+          <span>Đơn vị vận chuyển</span>
+          <input class="erp-input" name="carrier" list="order-carriers" [value]="shipment().carrier" (input)="onShipmentField('carrier', $event)" placeholder="Chọn hoặc nhập, ví dụ GHN" />
+          <datalist id="order-carriers">
+            @for (carrier of carriers; track carrier.code) {
+              <option [value]="carrier.label"></option>
+            }
+          </datalist>
         </label>
+        <label class="erp-field"><span>Mã vận đơn</span><input class="erp-input" name="trackingCode" [value]="shipment().trackingCode" (input)="onShipmentField('trackingCode', $event)" /></label>
+        <details class="order-shipment-url">
+          <summary>Tracking URL (tự điền theo ĐVVC, sửa được)</summary>
+          <label class="erp-field"><input class="erp-input" name="trackingUrl" type="url" [value]="shipment().trackingUrl" (input)="onShipmentField('trackingUrl', $event)" placeholder="https://..." /></label>
+        </details>
+        <p class="erp-hint">Lưu vận đơn là bàn giao hàng cho ĐVVC luôn trong cùng một bước; hệ thống dùng lại mã vận đơn vừa nhập.</p>
       }
       @if (hasField(action, 'cancel_reason')) {
         <label class="erp-field">
@@ -338,9 +360,18 @@
       }
       <div class="order-form__actions">
         <button class="erp-btn" type="button" (click)="closeModal()">Hủy</button>
-        <button class="erp-btn erp-btn--primary" type="button" (click)="submitCodCall($event)" [disabled]="submitting() || detailLoading()">
-          Lưu kết quả
-        </button>
+        @if (codDecision() === 'confirm' && selected()?.payment_method === 'COD') {
+          <button class="erp-btn" type="button" (click)="submitCodCall($event, false)" [disabled]="submitting() || detailLoading()">
+            Chỉ lưu kết quả
+          </button>
+          <button class="erp-btn erp-btn--primary" type="button" (click)="submitCodCall($event, true)" [disabled]="submitting() || detailLoading()">
+            Lưu &amp; xác nhận đơn
+          </button>
+        } @else {
+          <button class="erp-btn erp-btn--primary" type="button" (click)="submitCodCall($event)" [disabled]="submitting() || detailLoading()">
+            Lưu kết quả
+          </button>
+        }
       </div>
     </div>
   }
@@ -368,3 +399,12 @@
     </form>
   }
 </app-erp-modal>
+
+<app-erp-qr-scan
+  [open]="scanOpen()"
+  title="Quét QR vận đơn"
+  hint="Quét label của ĐVVC. Label chỉ có số vận đơn vẫn dùng được; mã của đơn khác sẽ bị từ chối."
+  [sample]="scanSample()"
+  (scanned)="applyShipmentScan($event)"
+  (closed)="scanOpen.set(false)"
+/>

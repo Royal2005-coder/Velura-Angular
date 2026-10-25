@@ -206,37 +206,75 @@ describe('AdminErpOrdersPage', () => {
     const page = fixture.componentInstance;
 
     page.selected.set(shippedOrder);
+    page.shipment.set({ carrier: 'GHN', trackingCode: 'VN9-1', trackingUrl: '' });
     page.modal.set({ kind: 'action', action: shipmentAction });
-    page.submitAction(formEvent({ note: 'Tạo vận đơn GHN VN9-1', carrier: 'GHN', trackingCode: 'VN9-1', trackingUrl: '' }));
+    page.submitAction(formEvent({ note: 'Tạo vận đơn GHN VN9-1' }));
 
     expect(actions.map((entry) => entry.action)).toEqual(['upsert_shipment', 'confirm_handover']);
     expect(actions[0].body['expectedVersion']).toBe(3);
     expect(actions[1].body['expectedVersion']).toBe(3);
+    expect(actions[0].body['trackingCode']).toBe('VN9-1');
     expect(String(actions[1].body['note'])).toContain('VN9-1');
     expect(page.selected()?.status).toBe('shipping');
     expect(page.notice()).toContain('bàn giao');
   });
 
-  it('stops the chain when the operator turns the same-step handover off', async () => {
-    const actions: string[] = [];
+  it('fills the shipment from a scanned carrier label and derives its tracking URL', async () => {
+    const fixture = await boot(() => of({ rows: [shippedOrder], count: 1 }));
+    const page = fixture.componentInstance;
+    page.selected.set(shippedOrder);
+
+    page.applyShipmentScan('GHN123456789');
+    expect(page.shipment().trackingCode).toBe('GHN123456789');
+    expect(page.scanError()).toBeNull();
+
+    page.onShipmentField('carrier', { target: { value: 'GHN' } } as unknown as Event);
+    page.onShipmentField('trackingCode', { target: { value: 'GHN42' } } as unknown as Event);
+    expect(page.shipment().trackingUrl).toBe('https://donhang.ghn.vn/?order_code=GHN42');
+  });
+
+  it('refuses a label that belongs to another order or carries no tracking code', async () => {
+    const fixture = await boot(() => of({ rows: [shippedOrder], count: 1 }));
+    const page = fixture.componentInstance;
+    page.selected.set(shippedOrder);
+
+    page.applyShipmentScan('velura:shipment:1?order=VLR-OTHER&carrier=GHN&tracking=GHN-OTHER');
+    expect(page.scanError()).toContain('đơn khác');
+    expect(page.shipment().trackingCode).toBe('');
+
+    page.applyShipmentScan('http://localhost/orders?focus=o1&code=VL-1001');
+    expect(page.scanError()).toContain('mã đơn hàng');
+  });
+
+  it('confirms the COD order in the same step after a successful call', async () => {
+    const actions: Array<{ action: string; body: Record<string, unknown> }> = [];
     const fixture = await boot(
-      () => of({ rows: [shippedOrder], count: 1 }),
+      () => of({ rows: [codOrder], count: 1 }),
       [],
       {
-        performOrderAction: (orderId: string, action: string) => {
-          actions.push(action);
-          return of({ order: shippedOrder, refund: null });
+        performOrderAction: (orderId: string, action: string, body: Record<string, unknown>) => {
+          actions.push({ action, body });
+          if (action === 'confirm_cod') {
+            return of({ order: { ...codOrder, status: 'confirmed', version: 5, allowed_actions: [] }, refund: null });
+          }
+          return of({ order: { ...codOrder, version: 4 }, refund: null });
         },
       },
     );
     const page = fixture.componentInstance;
+    page.selected.set(codOrder);
+    page.modal.set({ kind: 'cod_call', order: codOrder });
+    page.codCallStarted.set(true);
+    page.codDecision.set('confirm');
+    page.codNote.set('Khách xác nhận đơn qua điện thoại');
 
-    page.autoHandover.set(false);
-    page.selected.set(shippedOrder);
-    page.modal.set({ kind: 'action', action: shipmentAction });
-    page.submitAction(formEvent({ note: 'Tạo vận đơn GHN VN9-1', carrier: 'GHN', trackingCode: 'VN9-1' }));
+    page.submitCodCall(formEvent({}), true);
 
-    expect(actions).toEqual(['upsert_shipment']);
+    expect(actions.map((entry) => entry.action)).toEqual(['call_confirm', 'confirm_cod']);
+    expect(actions[1].body['expectedVersion']).toBe(4);
+    expect(String(actions[1].body['note'])).toContain('Khách xác nhận');
+    expect(page.selected()?.status).toBe('confirmed');
+    expect(page.notice()).toContain('xác nhận đơn');
   });
 
   it('says so when the shipment stored but the handover did not', async () => {
@@ -253,8 +291,9 @@ describe('AdminErpOrdersPage', () => {
     const page = fixture.componentInstance;
 
     page.selected.set(shippedOrder);
+    page.shipment.set({ carrier: 'GHN', trackingCode: 'VN9-1', trackingUrl: '' });
     page.modal.set({ kind: 'action', action: shipmentAction });
-    page.submitAction(formEvent({ note: 'Tạo vận đơn GHN VN9-1', carrier: 'GHN', trackingCode: 'VN9-1' }));
+    page.submitAction(formEvent({ note: 'Tạo vận đơn GHN VN9-1' }));
 
     expect(page.notice()).toContain('Vận đơn đã lưu');
     expect(page.notice()).toContain('bàn giao chưa thành công');

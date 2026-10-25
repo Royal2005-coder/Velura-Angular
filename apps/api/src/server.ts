@@ -71,8 +71,12 @@ type ChatbotService = ReturnType<typeof createChatbotService>;
 const accountService: AccountService = createAccountService({ repository: createAccountRepository() });
 const productService: ProductService = createProductService({ repository: createProductRepository() });
 const orderRepository = createOrderRepository();
-const orderService = createOrderService({ repository: orderRepository, refunds: { refund: refundStripeOrder } });
 const carrierService = createCarrierService({ repository: createCarrierRepository(), orders: orderRepository });
+const orderService = createOrderService({
+  repository: orderRepository,
+  refunds: { refund: refundStripeOrder },
+  carrierEvents: carrierService
+});
 const reviewService = createReviewService({ repository: createReviewRepository() });
 const returnService = createReturnService({
   repository: createReturnRepository(),

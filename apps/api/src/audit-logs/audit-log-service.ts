@@ -13,7 +13,8 @@ const ADMIN_MODULES = [
   "vouchers",
   "returns",
   "reviews",
-  "support"
+  "support",
+  "content"
 ];
 
 /**

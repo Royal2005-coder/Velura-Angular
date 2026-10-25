@@ -30,6 +30,7 @@ export const config = {
   smtpFrom: process.env.SMTP_FROM || "",
   stripeSecretKey: process.env.STRIPE_SECRET_KEY || "",
   stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET || "",
+  carrierWebhookSecret: process.env.CARRIER_WEBHOOK_SECRET || "",
   apiPublicOrigin: (process.env.API_PUBLIC_ORIGIN || "").replace(/\/+$/, ""),
   vnpayTmnCode: process.env.VNPAY_TMN_CODE || "",
   vnpayHashSecret: process.env.VNPAY_HASH_SECRET || "",

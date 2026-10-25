@@ -125,9 +125,10 @@ function eventDetail(event: AdminOrderEvent): string {
   const parts: string[] = [];
   const callResult = CALL_RESULT_LABELS[String(event.result || '')] || '';
   if (callResult) parts.push(callResult);
+  const provider = String(payload['provider'] || '');
   const carrier = String(payload['carrier'] || '');
   const tracking = String(payload['tracking_code'] || payload['trackingCode'] || '');
-  if (carrier || tracking) parts.push(['Vận đơn', carrier, tracking].filter(Boolean).join(' · '));
+  if (carrier || tracking || provider) parts.push(['Vận đơn', provider, carrier, tracking].filter(Boolean).join(' · '));
   const shortage = String(payload['shortage'] || payload['quantity_short'] || '');
   if (shortage) parts.push(`Thiếu ${shortage}`);
   const reason = String(payload['cancel_reason'] || payload['failure_reason'] || payload['reason'] || '');

@@ -86,6 +86,10 @@
     <p class="desk-note">Bộ lọc áp dụng phía máy chủ; API chỉ tìm theo mô tả và mã vận đơn trả.</p>
   } @else if (tab() === 'tickets') {
     <app-erp-filter-bar [busy]="loading()" (apply)="applyTicketFilters()" (reset)="resetTicketFilters()">
+      <label class="erp-field desk-search">
+        <span>Tiêu đề, mô tả, SĐT hoặc email</span>
+        <input class="erp-input" type="search" name="ticketQ" [value]="ticketSearch()" (input)="onTicketSearchInput($event)" />
+      </label>
       <label class="erp-field">
         <span>Trạng thái phiếu</span>
         <select class="erp-select" name="status" [value]="ticketStatus()" (change)="onTicketStatusChange($event)">

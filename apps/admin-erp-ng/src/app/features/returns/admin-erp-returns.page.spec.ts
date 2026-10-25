@@ -52,6 +52,7 @@ describe('AdminErpReturnsPage', () => {
       status: [] as Record<string, unknown>[],
       respond: [] as Record<string, unknown>[],
       close: [] as Record<string, unknown>[],
+      serviceLogs: [] as Record<string, string>[],
     };
     const api = {
       listReturns: (params?: Record<string, string>, paymentKind?: string) => {
@@ -95,7 +96,34 @@ describe('AdminErpReturnsPage', () => {
         calls.close.push(body);
         return of({ ...tickets[1], status: 'closed' });
       },
-      listServiceLogs: () => of({ rows: [] as AdminAuditRow[], count: 0 }),
+      listServiceLogs: (params?: Record<string, string>) => {
+        calls.serviceLogs.push(params ?? {});
+        return of({
+          rows: [
+            {
+              audit_id: 'l1',
+              timestamp: '2026-10-24T00:00:00Z',
+              action: 'update',
+              action_label: 'Duyệt hoàn tiền',
+              actor_label: 'Nguyễn CSKH',
+              reason: 'Khách cung cấp đủ chứng từ',
+            },
+          ] as AdminAuditRow[],
+          count: 1,
+        });
+      },
+      getOrder: () =>
+        of({
+          order_id: 'o-1',
+          order_code: 'VLR-001',
+          status: 'delivered',
+          shipping_name: 'Trần Bình',
+          shipping_phone: '0900000001',
+          shipping_address: '68 Nguyễn Huệ, Quận 1',
+          tracking_code: 'GHN-7788',
+          total_amount: 890000,
+          items: [{ product_name: 'Áo lụa tay lỡ', quantity: 2, unit_price: 445000 }],
+        }),
       triggerStripeRefund: () => of({ success: true, refund: { status: 'requested' } }),
     };
     TestBed.configureTestingModule({
@@ -259,5 +287,43 @@ describe('AdminErpReturnsPage', () => {
 
     expect(fixture.componentInstance.loadError()).toBe('returns down');
     expect(fixture.componentInstance.loading()).toBe(false);
+  });
+
+  it('shows the source order and the trail of the open return', () => {
+    const { page, calls } = boot({ returns: ['read', 'update'], orders: ['read'] });
+    page.openReturn(rows[0]);
+
+    expect(page.orderContext()?.shipping_name).toBe('Trần Bình');
+    expect(page.orderContext()?.items?.length).toBe(1);
+    expect(page.recordTrail().length).toBe(1);
+    expect(calls.serviceLogs.at(-1)?.['targetId']).toBe('r-1');
+    expect(page.returnLinks().map((link) => link.label)).toContain('Đơn hàng gốc');
+  });
+
+  it('keeps the order code but reads nothing when the operator cannot read orders', () => {
+    const { page } = boot();
+    page.openReturn(rows[0]);
+
+    expect(page.canReadOrders()).toBe(false);
+    expect(page.orderContext()).toBeNull();
+    expect(page.selected()?.order_code).toBe('VLR-001');
+  });
+
+  it('links a ticket to the chat case that raised it', () => {
+    const { page } = boot();
+    page.openTicket({ ticket_id: 't-3' });
+
+    expect(page.ticketLinks().map((link) => link.label)).toContain('Hội thoại của phiếu');
+    expect(page.ticketLinks()[0].query).toEqual({ tab: 'chat', focus: 'c-1' });
+  });
+
+  it('scopes the return queue to the order a deep link named', () => {
+    const { page, calls } = boot();
+    page.orderFilter.set('o-1');
+    page.applyFilters();
+
+    const scoped = calls.returns.filter((params) => params['order_id'] === 'o-1');
+    expect(scoped.length).toBe(1);
+    expect(page.orderFilter()).toBe('o-1');
   });
 });

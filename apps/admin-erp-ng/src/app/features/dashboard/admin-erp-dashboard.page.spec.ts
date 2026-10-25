@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { of, throwError } from 'rxjs';
 import { AdminDashboardSummary, AdminErpApiService } from '../../core/admin-erp-api.service';
+import { AdminErpSessionService, type AdminAuthMe } from '../../core/admin-erp-session.service';
 import { AdminErpDashboardPage } from './admin-erp-dashboard.page';
 
 const summary: AdminDashboardSummary = {
@@ -102,5 +103,41 @@ describe('AdminErpDashboardPage', () => {
     expect(page.loadError()).toBe('API down');
     expect(page.operationKpis()[0].value).toBe('0');
     expect(page.recentActivity()).toEqual([]);
+  });
+
+  it('sends each alert to the exact queue it counts', async () => {
+    const fixture = await boot({ dashboard: () => of(summary) });
+    TestBed.inject(AdminErpSessionService).applyAuthContext({
+      role: 'super_admin',
+      roleName: 'Quản trị',
+      isAdmin: true,
+      allowedPages: ['dashboard', 'orders', 'returns-cskh', 'products', 'reviews'],
+      allowedModules: ['orders', 'returns', 'products', 'reviews'],
+      capabilities: {},
+      user: { id: 'u0', email: 'root@velura.test' },
+      profile: { user_id: 'u0', email: 'root@velura.test', full_name: 'Root', is_active: true },
+    } as AdminAuthMe);
+    const page = fixture.componentInstance;
+
+    expect(page.alertLink('orders')).toEqual({ commands: ['/orders'], query: { tab: 'attention' } });
+    expect(page.alertLink('returns-cskh')?.query).toEqual({ tab: 'returns', status: 'REQUESTED' });
+    expect(page.alertLink('products')?.query).toEqual({ tab: 'stock' });
+    expect(page.alertLink('reviews')?.query).toEqual({ tab: 'urgent' });
+  });
+
+  it('offers no alert route for a page the session cannot open', async () => {
+    const fixture = await boot({ dashboard: () => of(summary) });
+    TestBed.inject(AdminErpSessionService).applyAuthContext({
+      role: 'admin_viewer',
+      roleName: 'Xem',
+      isAdmin: true,
+      allowedPages: ['dashboard'],
+      allowedModules: [],
+      capabilities: {},
+      user: { id: 'u9', email: 'v@velura.test' },
+      profile: { user_id: 'u9', email: 'v@velura.test', full_name: 'Viewer', is_active: true },
+    } as AdminAuthMe);
+
+    expect(fixture.componentInstance.alertLink('orders')).toBeNull();
   });
 });

@@ -38,6 +38,23 @@
   color: var(--erp-warning);
 }
 
+.flow-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 9px 11px;
+  border: 1px solid var(--erp-line);
+  border-radius: var(--erp-radius-sm);
+  background: var(--erp-surface-muted);
+  font-size: 11.5px;
+  color: var(--erp-muted);
+}
+
+.flow-check input {
+  margin-top: 2px;
+}
+
 .flow-receipts {
   display: grid;
   gap: 8px;

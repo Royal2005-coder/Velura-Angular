@@ -50,6 +50,13 @@
     </label>
   </app-erp-filter-bar>
 
+  @if (targetScope()) {
+    <div class="logs-scope" role="status">
+      <span>Đang giới hạn theo bản ghi {{ targetScope() }}.</span>
+      <button class="erp-btn erp-btn--sm" type="button" (click)="clearTarget()">Xem toàn bộ</button>
+    </div>
+  }
+
   @if (loadError() && rows().length) {
     <div class="logs-banner" role="alert">
       <app-erp-icon name="alert" [size]="'16'" />

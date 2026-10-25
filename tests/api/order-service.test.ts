@@ -142,15 +142,58 @@ test("cancelling a paid order asks the refund gateway once", async () => {
   assert.deepEqual(result.refund, { status: "requested" });
 });
 
-test("carrier simulation is super_admin only and maps outcomes to system actions", async () => {
-  const shipping = { ...pendingCod, status: "shipping", tracking_code: "GHN1", handed_over_at: "2026-09-25" };
+test("carrier simulation is super_admin only and runs through the carrier event gate", async () => {
+  const shipping = { ...pendingCod, order_code: "VLR-7001", status: "shipping", tracking_code: "GHN123456", handed_over_at: "2026-09-25" };
   const { repo, calls } = repository(shipping);
-  const service = createOrderService({ repository: repo });
+  const events = [];
+  const service = createOrderService({
+    repository: repo,
+    carrierEvents: {
+      handleEvent: async (event) => {
+        events.push(event);
+        return { received: true, duplicate: false, orderCode: event.orderCode, action: `carrier_${event.status}` };
+      }
+    }
+  });
   await assert.rejects(() => service.simulateCarrier(context("admin_operator_donhang"), ORDER_ID, { outcome: "delivered" }),
     (error) => error.code === "CARRIER_SIMULATION_DENIED");
   await assert.rejects(() => service.simulateCarrier(context("super_admin"), ORDER_ID, { outcome: "lost" }), (error) => error.status === 422);
   await service.simulateCarrier(context("super_admin"), ORDER_ID, { outcome: "failed_retrying" });
-  assert.equal(calls.service[0].action, "carrier_failed_retrying");
+
+  assert.equal(events.length, 1);
+  assert.equal(events[0].provider, "simulator");
+  assert.equal(events[0].status, "failed_retrying");
+  assert.equal(events[0].orderCode, "VLR-7001");
+  assert.equal(events[0].trackingCode, "GHN123456");
+  assert.match(events[0].providerEventId, /^SIM-[0-9a-f-]{36}$/);
+  assert.deepEqual(calls.service, [], "mô phỏng không còn tự gọi state machine ở tầng đơn hàng");
+});
+
+test("simulation without a carrier gate fails closed instead of moving the order", async () => {
+  const shipping = { ...pendingCod, order_code: "VLR-7001", status: "shipping", tracking_code: "GHN123456" };
+  const { repo, calls } = repository(shipping);
+  const service = createOrderService({ repository: repo });
+  await assert.rejects(() => service.simulateCarrier(context("super_admin"), ORDER_ID, { outcome: "delivered" }),
+    (error) => error.code === "CARRIER_EVENTS_UNAVAILABLE");
+  assert.deepEqual(calls.service, []);
+});
+
+test("a shipping order whose tracking code is unusable cannot be simulated", async () => {
+  const messy = { ...pendingCod, order_code: "VLR-7002", status: "shipping", tracking_code: "GHN1" };
+  const events = [];
+  const { repo } = repository(messy);
+  const service = createOrderService({
+    repository: repo,
+    carrierEvents: {
+      handleEvent: async (event) => {
+        events.push(event);
+        return { received: true, duplicate: false, orderCode: event.orderCode, action: `carrier_${event.status}` };
+      }
+    }
+  });
+  await assert.rejects(() => service.simulateCarrier(context("super_admin"), ORDER_ID, { outcome: "delivered" }),
+    (error) => error.status === 422 && error.code === "CARRIER_TRACKING_REQUIRED");
+  assert.deepEqual(events, []);
 });
 
 test("summary counts come from the database for all eight states", async () => {

@@ -1,12 +1,16 @@
-import { Subscription, catchError, forkJoin, of } from 'rxjs';
+import { Subscription, catchError, forkJoin, of, skip } from 'rxjs';
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, input, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { ActivatedRoute, RouterLink, type ParamMap } from '@angular/router';
 import {
   AdminAuditRow,
   AdminErpApiService,
+  AdminOrderRow,
   AdminReturnRow,
   AdminReturnStatus,
   AdminTicketRow,
 } from '../../core/admin-erp-api.service';
+import { orderFocusLink, returnFocusLink, type OrderTraceLink } from '../../core/admin-erp-order-trace';
 import {
   CONTACT_RESULTS,
   MIN_NOTE_LENGTH,
@@ -83,6 +87,7 @@ const EMPTY_LOGS = { rows: [] as AdminAuditRow[], count: 0 };
     AdminErpIcon,
     ReturnFlowComponent,
     ChatDeskComponent,
+    RouterLink,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './admin-erp-returns.page.html',
@@ -92,6 +97,7 @@ export class AdminErpReturnsPage {
   private readonly api = inject(AdminErpApiService);
   private readonly session = inject(AdminErpSessionService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly route = inject(ActivatedRoute);
   private listRequest = new Subscription();
 
   readonly tab = signal<DeskTab>('returns');
@@ -111,6 +117,7 @@ export class AdminErpReturnsPage {
   readonly statusFilter = signal('');
   readonly paymentFilter = signal<'' | 'cod' | 'online'>('');
   readonly search = signal('');
+  readonly orderFilter = signal('');
   readonly ticketStatus = signal('');
   readonly logTarget = signal('');
 
@@ -135,6 +142,19 @@ export class AdminErpReturnsPage {
 
   readonly canRead = computed(() => this.session.can('read', 'returns'));
   readonly canWrite = computed(() => this.session.can('update', 'returns'));
+  readonly canReadOrders = computed(() => this.session.can('read', 'orders'));
+  /**
+   * The source order of the open return, so CSKH reads address, items and tracking once instead
+   * of switching workspaces and re-typing them into a flow.
+   */
+  readonly orderContext = signal<AdminOrderRow | null>(null);
+  readonly returnLinks = computed(() => {
+    const record = this.selected();
+    const links: { label: string; commands: readonly string[]; query: Readonly<Record<string, string>> }[] = [];
+    if (record?.order_id) links.push(orderFocusLink(record.order_id, 'Đơn hàng gốc'));
+    if (record?.exchange_order_id) links.push(orderFocusLink(record.exchange_order_id, 'Đơn đổi'));
+    return links;
+  });
   readonly minNote = MIN_NOTE_LENGTH;
   readonly flowNeedsReason = computed(() => approvalNeedsReason(this.selected()));
 
@@ -279,7 +299,28 @@ export class AdminErpReturnsPage {
 
   constructor() {
     this.destroyRef.onDestroy(() => this.listRequest.unsubscribe());
+    this.applyDeepLink(this.route.snapshot.queryParamMap);
+    this.route.queryParamMap.pipe(skip(1), takeUntilDestroyed(this.destroyRef)).subscribe((params) => this.applyDeepLink(params));
+  }
+
+  /**
+   * Applies an inbound deep link: the queue to show, the order the return list is scoped to and
+   * the return to open. Links can arrive while this workspace is already on screen, so every
+   * param change is re-applied instead of only the first load.
+   */
+  private applyDeepLink(params: ParamMap): void {
+    const tab = params.get('tab');
+    if (tab === 'returns' || tab === 'tickets' || tab === 'chat' || tab === 'logs') {
+      this.tab.set(tab);
+    }
+    this.orderFilter.set(params.get('order_id') || '');
+    this.search.set(params.get('q') || '');
+    this.page.set(1);
     this.reload();
+    const focus = params.get('focus');
+    if (focus) {
+      this.openReturn({ return_id: focus } as AdminReturnRow);
+    }
   }
 
   /**
@@ -328,6 +369,7 @@ export class AdminErpReturnsPage {
     this.statusFilter.set('');
     this.paymentFilter.set('');
     this.search.set('');
+    this.orderFilter.set('');
     this.page.set(1);
     this.loadReturns();
   }
@@ -402,13 +444,30 @@ export class AdminErpReturnsPage {
       next: (record) => {
         this.selected.set(record);
         this.detailLoading.set(false);
+        this.loadOrderContext(record.order_id);
       },
       error: (error: unknown) => {
         this.detailLoading.set(false);
         this.selected.set(row as AdminReturnRow);
         this.detailError.set(adminErrorMessage(error, 'Không tải được chi tiết phiếu.'));
+        this.loadOrderContext((row as AdminReturnRow).order_id);
       },
     });
+  }
+
+  /**
+   * Reads the source order of a return. Without the `orders` read capability the drawer keeps
+   * the order code only, because the API answers 403 and the operator must not see a fake row.
+   */
+  private loadOrderContext(orderId: string | undefined): void {
+    this.orderContext.set(null);
+    if (!orderId || !this.canReadOrders()) {
+      return;
+    }
+    this.api
+      .getOrder(orderId)
+      .pipe(catchError(() => of(null)))
+      .subscribe((order) => this.orderContext.set(order));
   }
 
   /**
@@ -571,6 +630,18 @@ export class AdminErpReturnsPage {
   }
 
   /**
+   * An audit row scoped to a return can open that return, so the operator follows the trail
+   * instead of searching the queue by hand.
+   */
+  logReturnLink(row: AdminAuditRow): OrderTraceLink | null {
+    const id = String(row.target_id || '');
+    if (row.module !== 'returns' || !id) {
+      return null;
+    }
+    return returnFocusLink(id, 'Mở hồ sơ đổi trả');
+  }
+
+  /**
    * Closes the audit payload.
    */
   closeLog(): void {
@@ -584,10 +655,20 @@ export class AdminErpReturnsPage {
     this.selected.set(null);
     this.selectedTicket.set(null);
     this.selectedLog.set(null);
+    this.orderContext.set(null);
     this.flow.set(null);
     this.ticketAction.set(null);
     this.detailError.set(null);
     this.gatewayNote.set(null);
+  }
+
+  /**
+   * Drops the order scope a deep link put on the queue.
+   */
+  clearOrderFilter(): void {
+    this.orderFilter.set('');
+    this.page.set(1);
+    this.loadReturns();
   }
 
   /**
@@ -788,6 +869,7 @@ export class AdminErpReturnsPage {
     const params = {
       status: this.statusFilter(),
       q: this.search(),
+      order_id: this.orderFilter(),
       limit: String(this.pageSize),
       offset: adminOffset(this.page(), this.pageSize),
     };

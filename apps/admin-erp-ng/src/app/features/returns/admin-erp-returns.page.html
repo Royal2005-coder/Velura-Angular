@@ -64,6 +64,13 @@
       </label>
     </app-erp-filter-bar>
 
+    @if (orderFilter()) {
+      <div class="desk-scope" role="status">
+        <span>Đang lọc theo đơn hàng {{ orderFilter() }} — mở từ màn Đơn hàng.</span>
+        <button class="erp-btn erp-btn--sm" type="button" (click)="clearOrderFilter()">Bỏ lọc theo đơn</button>
+      </div>
+    }
+
     <app-erp-data-table
       caption="Hàng đợi đổi trả"
       [columns]="columns()"
@@ -139,6 +146,37 @@
         </div>
         <app-erp-status-badge [label]="statusLabel(record.status)" [tone]="statusTone(record.status)" [dot]="true" />
       </div>
+
+      @if (returnLinks().length) {
+        <div class="record__links">
+          @for (link of returnLinks(); track link.label) {
+            <a class="erp-chip" [routerLink]="link.commands" [queryParams]="link.query">{{ link.label }}</a>
+          }
+        </div>
+      }
+
+      @if (orderContext(); as order) {
+        <section class="record__order">
+          <h4>Đơn hàng gốc</h4>
+          <dl class="record__grid">
+            <div><dt>Người nhận</dt><dd>{{ order.shipping_name || '—' }}</dd></div>
+            <div><dt>Điện thoại</dt><dd>{{ order.shipping_phone || '—' }}</dd></div>
+            <div><dt>Trạng thái đơn</dt><dd>{{ order.status_label || order.status || '—' }}</dd></div>
+            <div><dt>Vận đơn</dt><dd class="is-mono">{{ order.tracking_code || '—' }}</dd></div>
+            <div><dt>Phí giao</dt><dd>{{ money(order.shipping_fee) }}</dd></div>
+            <div><dt>Tổng tiền</dt><dd>{{ money(order.total_amount) }}</dd></div>
+          </dl>
+          <p class="desk-note">{{ order.shipping_address || 'Không có địa chỉ lưu trên đơn' }}</p>
+          @for (item of order.items || []; track $index) {
+            <p class="record__line">
+              <span>{{ item.product_name || 'Sản phẩm' }}</span>
+              <span>{{ item.quantity || 0 }} × {{ money(item.unit_price) }}</span>
+            </p>
+          }
+        </section>
+      } @else if (record.order_id && !canReadOrders()) {
+        <p class="desk-note">Quyền hiện tại không đọc được đơn hàng, nên hồ sơ chỉ hiển thị mã đơn.</p>
+      }
 
       @if (detailLoading()) {
         <p class="desk-note">Đang tải chi tiết phiếu…</p>
@@ -368,6 +406,11 @@
       <div><dt>Vai trò</dt><dd>{{ row.actor_role_label || row.actor_role || '—' }}</dd></div>
       <div><dt>Hành động</dt><dd>{{ row.action_label || row.action || '—' }}</dd></div>
     </dl>
+    @if (logReturnLink(row); as link) {
+      <div class="record__links">
+        <a class="erp-chip" [routerLink]="link.commands" [queryParams]="link.query">{{ link.label }}</a>
+      </div>
+    }
     @if (row.change_summary) {
       <p class="record__text">{{ row.change_summary }}</p>
     }

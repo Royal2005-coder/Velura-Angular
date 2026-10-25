@@ -1,16 +1,30 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { catchError, of } from 'rxjs';
+import { ChangeDetectionStrategy, DestroyRef, Component, computed, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { ActivatedRoute, RouterLink, type ParamMap } from '@angular/router';
+import { catchError, of, skip } from 'rxjs';
 import {
   AdminAuditRow,
   AdminErpApiService,
   AdminOrderAction,
   AdminOrderActionResult,
-  AdminOrderEvent,
   AdminOrderPayment,
   AdminOrderRow,
   AdminOrderSummary,
+  AdminReturnRow,
 } from '../../core/admin-erp-api.service';
+import {
+  actionPrefill,
+  auditTrace,
+  eventTrace,
+  handoverFollowUp,
+  handoverNote,
+  logsForOrderLink,
+  mergeOrderTrace,
+  returnsForOrderLink,
+  returnTrace,
+  type OrderTraceOrigin,
+} from '../../core/admin-erp-order-trace';
 import { adminDateTime, adminMoney } from '../../core/admin-erp-format';
 import {
   adminErrorMessage,
@@ -41,29 +55,6 @@ type OrderModal =
 
 const STALE_ORDER_CODES = new Set(['VERSION_CONFLICT', 'INVALID_ORDER_ACTION', 'ORDER_ALREADY_HANDED_OVER', 'PAYMENT_VERSION_CONFLICT']);
 
-const EVENT_LABELS: Readonly<Record<string, string>> = {
-  order_created: 'Tạo đơn',
-  call_confirm: 'Gọi xác nhận',
-  confirm_cod: 'Xác nhận đơn',
-  auto_confirm_cod: 'Tự xác nhận COD',
-  start_processing: 'Bắt đầu chuẩn bị hàng',
-  record_shortage: 'Ghi nhận thiếu hàng',
-  upsert_shipment: 'Tạo/cập nhật vận đơn',
-  confirm_handover: 'Bàn giao ĐVVC',
-  carrier_note: 'Ghi chú liên hệ ĐVVC',
-  update_tracking: 'Cập nhật tracking',
-  carrier_delivered: 'ĐVVC báo giao thành công',
-  carrier_failed_returned: 'ĐVVC báo giao thất bại, hoàn hàng',
-  carrier_failed_retrying: 'ĐVVC báo giao thất bại, giao lại',
-  record_failure_reason: 'Ghi lý do giao thất bại',
-  confirm_return_to_stock: 'Xác nhận hàng hoàn kho',
-  cancel: 'Hủy đơn',
-  customer_cancel: 'Khách hủy đơn',
-  to_waiting_payment: 'Chờ thanh toán',
-  payment_succeeded: 'Thanh toán thành công',
-  payment_expired: 'Hết hạn thanh toán',
-};
-
 const CALL_RESULTS = [
   { code: 'reached', label: 'Liên hệ được' },
   { code: 'no_answer', label: 'Không nghe máy' },
@@ -84,7 +75,9 @@ const CARRIER_OUTCOMES = [
 
 /**
  * Order operations workspace. Preserves the API state machine, COD call guard,
- * expectedVersion, payment reconciliation and audit.
+ * expectedVersion, payment reconciliation and audit. Shipment entry chains the handover the
+ * API keeps as a second action, action forms open pre-filled with facts the order already
+ * holds, and the drawer shows one linked trail (order events, audit, returns) with deep links.
  */
 @Component({
   selector: 'app-admin-erp-orders-page',
@@ -99,6 +92,7 @@ const CARRIER_OUTCOMES = [
     AdminErpModal,
     AdminErpStatusBadge,
     AdminErpIcon,
+    RouterLink,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './admin-erp-orders.page.html',
@@ -107,6 +101,8 @@ const CARRIER_OUTCOMES = [
 export class AdminErpOrdersPage {
   private readonly api = inject(AdminErpApiService);
   private readonly session = inject(AdminErpSessionService);
+  private readonly route = inject(ActivatedRoute);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly tab = signal<OrderTab>('all');
   readonly query = signal('');
@@ -131,12 +127,15 @@ export class AdminErpOrdersPage {
   readonly notice = signal<string | null>(null);
   readonly submitting = signal(false);
   readonly audit = signal<AdminAuditRow[]>([]);
+  readonly linkedReturns = signal<AdminReturnRow[]>([]);
+  readonly autoHandover = signal(true);
   readonly copiedPhone = signal(false);
   readonly codDecision = signal<'' | 'confirm' | 'cancel' | 'no_answer' | 'invalid'>('');
   readonly codCancelReason = signal('customer_request');
   readonly codNote = signal('');
   readonly codCallStarted = signal(false);
   readonly canMutate = computed(() => this.session.can('update', 'orders'));
+  readonly canReadReturns = computed(() => this.session.can('read', 'returns'));
 
   readonly tabs = computed<readonly AdminErpTab[]>(() => [
     { key: 'all', label: 'Tất cả', count: this.count() },
@@ -164,9 +163,26 @@ export class AdminErpOrdersPage {
     return order ? this.paymentOf(order) : null;
   });
   readonly selectedItems = computed(() => this.selected()?.items || []);
-  readonly events = computed(() =>
-    [...(this.selected()?.events || [])].sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))),
+  /** One trail per order: state-machine events, the audit rows that name the actor, return records. */
+  readonly trace = computed(() =>
+    mergeOrderTrace(
+      eventTrace(this.selected()?.events || []),
+      returnTrace(this.linkedReturns()),
+      auditTrace(this.audit()),
+    ),
   );
+  /** Values the action form can already know from the order, so nothing is typed twice. */
+  readonly prefill = computed(() => actionPrefill(this.activeAction(), this.selected()));
+  /** Related records reachable without leaving the drawer. */
+  readonly orderLinks = computed(() => {
+    const order = this.selected();
+    if (!order) return [];
+    const links = [logsForOrderLink(order.order_id)];
+    if (this.canReadReturns()) links.push(returnsForOrderLink(order.order_id));
+    const phone = String(order.shipping_phone || '');
+    if (phone) links.push({ label: 'Đơn khác của khách này', commands: ['/orders'], query: { q: phone } });
+    return links;
+  });
   readonly primaryActions = computed(() => (this.selected()?.allowed_actions || []).filter((action) => !action.destructive));
   readonly destructiveActions = computed(() => (this.selected()?.allowed_actions || []).filter((action) => action.destructive));
   readonly hasCallConfirmed = computed(() => {
@@ -243,7 +259,25 @@ export class AdminErpOrdersPage {
   ];
 
   constructor() {
+    this.applyDeepLink(this.route.snapshot.queryParamMap);
+    this.route.queryParamMap.pipe(skip(1), takeUntilDestroyed(this.destroyRef)).subscribe((params) => this.applyDeepLink(params));
+  }
+
+  /**
+   * Applies an inbound deep link: filters from another workspace and the order to open.
+   *
+   * Router params can change while this component stays alive (order to exchange order, or the
+   * customer's other orders), so links are handled on every emission instead of once at load.
+   */
+  private applyDeepLink(params: ParamMap): void {
+    this.query.set(params.get('q') || '');
+    this.status.set(params.get('status') || '');
+    this.page.set(1);
     this.reload();
+    const focus = params.get('focus');
+    if (focus) {
+      this.openDetail(focus);
+    }
   }
 
   /**
@@ -367,11 +401,13 @@ export class AdminErpOrdersPage {
   openDetail(orderId: string): void {
     this.notice.set(null);
     this.detailLoading.set(true);
+    this.linkedReturns.set([]);
     this.api.getOrder(orderId).subscribe({
       next: (order) => {
         this.selected.set(order);
         this.detailLoading.set(false);
         this.loadOrderAudit(orderId);
+        this.loadLinkedReturns(orderId);
       },
       error: (error: unknown) => {
         this.detailLoading.set(false);
@@ -385,6 +421,7 @@ export class AdminErpOrdersPage {
    */
   closeDetail(): void {
     this.selected.set(null);
+    this.linkedReturns.set([]);
     this.detailLoading.set(false);
     this.closeModal();
     this.notice.set(null);
@@ -514,7 +551,7 @@ export class AdminErpOrdersPage {
     }
     this.submitting.set(true);
     this.api.performOrderAction(order.order_id, actionCode, { ...body, expectedVersion: order.version }).subscribe({
-      next: (result) => this.afterAction(result),
+      next: (result) => this.applyResult(result),
       error: (error: unknown) => this.handleActionError(order.order_id, error),
     });
   }
@@ -537,10 +574,63 @@ export class AdminErpOrdersPage {
       return;
     }
     this.submitting.set(true);
+    this.runAction(action, order, body);
+  }
+
+  /**
+   * Stores one action result in the drawer and refreshes the list.
+   */
+  private applyResult(result: AdminOrderActionResult): void {
+    this.submitting.set(false);
+    this.closeModal();
+    this.selected.set(result.order);
+    this.notice.set(this.refundNotice(result.refund));
+    this.loadOrderAudit(result.order.order_id);
+    this.loadLinkedReturns(result.order.order_id);
+    this.reload();
+  }
+
+  /**
+   * Runs one state-machine action, then chains the handover the API keeps as a separate step.
+   *
+   * `upsert_shipment` is status-neutral by design (migration 038), so shipping is only reached
+   * by a second `confirm_handover` call. The chain feeds that call the tracking facts and the
+   * version the first response just returned; the operator never re-enters anything.
+   */
+  private runAction(action: AdminOrderAction, order: AdminOrderRow, body: Record<string, string>, chained = false): void {
     this.api.performOrderAction(order.order_id, action.code, { ...body, expectedVersion: order.version }).subscribe({
-      next: (result) => this.afterAction(result),
-      error: (error: unknown) => this.handleActionError(order.order_id, error),
+      next: (result) => {
+        this.applyResult(result);
+        const facts = { carrier: String(body['carrier'] || ''), trackingCode: String(body['trackingCode'] || '') };
+        const code = result.order.order_code || result.order.order_id.slice(0, 8);
+        if (chained) {
+          this.notice.set(`Vận đơn ${facts.trackingCode} đã lưu và hàng đã bàn giao cho ${result.order.carrier || facts.carrier || 'đơn vị vận chuyển'} (đơn ${code}).`);
+          return;
+        }
+        if (action.code !== 'upsert_shipment' || !this.autoHandover()) return;
+        const followUp = handoverFollowUp(result.order, facts);
+        if (!followUp) return;
+        this.submitting.set(true);
+        this.runAction(followUp, result.order, { note: handoverNote(facts.carrier, facts.trackingCode, code) }, true);
+      },
+      error: (error: unknown) => {
+        if (!chained) {
+          this.handleActionError(order.order_id, error);
+          return;
+        }
+        this.submitting.set(false);
+        this.notice.set(
+          `Vận đơn đã lưu, nhưng bàn giao chưa thành công: ${adminErrorMessage(error)} Mã vận đơn đã được điền sẵn — bấm "Xác nhận bàn giao ĐVVC" để đi tiếp.`,
+        );
+      },
     });
+  }
+
+  /**
+   * Turns the same-step handover on or off.
+   */
+  onAutoHandover(event: Event): void {
+    this.autoHandover.set((event.target as HTMLInputElement).checked);
   }
 
   /**
@@ -675,22 +765,6 @@ export class AdminErpOrdersPage {
   }
 
   /**
-   * Event label.
-   */
-  eventLabel(event: AdminOrderEvent): string {
-    return EVENT_LABELS[event.action || ''] || event.action || '—';
-  }
-
-  /**
-   * Event actor label.
-   */
-  eventActor(event: AdminOrderEvent): string {
-    if (event.actor_type === 'system') return 'Hệ thống';
-    if (event.actor_type === 'customer') return 'Khách hàng';
-    return event.actor_role || 'Admin';
-  }
-
-  /**
    * Whether an action exposes a form field.
    */
   hasField(action: AdminOrderAction | null, field: string): boolean {
@@ -723,6 +797,15 @@ export class AdminErpOrdersPage {
    */
   auditActor(row: AdminAuditRow): string {
     return row.actor_label || row.actor_name || row.actor_id || 'Hệ thống';
+  }
+
+  /**
+   * Which record wrote a trail row.
+   */
+  originLabel(origin: OrderTraceOrigin): string {
+    if (origin === 'return') return 'Đổi trả';
+    if (origin === 'audit') return 'Kiểm tra';
+    return 'Đơn';
   }
 
   /**
@@ -781,12 +864,18 @@ export class AdminErpOrdersPage {
     });
   }
 
-  private afterAction(result: AdminOrderActionResult): void {
-    this.submitting.set(false);
-    this.closeModal();
-    this.selected.set(result.order);
-    this.notice.set(this.refundNotice(result.refund));
-    this.reload();
+  /**
+   * Loads the return records hanging off this order so refunds and exchanges join the trail.
+   */
+  private loadLinkedReturns(orderId: string): void {
+    if (!this.canReadReturns()) {
+      this.linkedReturns.set([]);
+      return;
+    }
+    this.api
+      .listReturns({ order_id: orderId, limit: '10' })
+      .pipe(catchError(() => of(null)))
+      .subscribe((payload) => this.linkedReturns.set(payload ? adminListRows(payload) : []));
   }
 
   private handleActionError(orderId: string, error: unknown): void {

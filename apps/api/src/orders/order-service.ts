@@ -1,4 +1,5 @@
 import { HttpError } from "../http.js";
+import { randomUUID } from "node:crypto";
 import { asString, type AuthContext, type JsonObject, type RequestMeta } from "../types.js";
 import {
   ORDER_OPERATOR_ROLES,
@@ -12,8 +13,13 @@ import { orderErrorMessage } from "./order-repository.js";
 import { orderAutomationMode, runOrderAutomation } from "./order-automation.js";
 import { verifyStripeOrder } from "../payments/stripe-verify.js";
 import {
+  CARRIER_EVENT_STATUSES,
+  normalizeCarrierEvent,
+  type CarrierDeliveryEvent,
+} from "../carrier/carrier-contract.js";
+import type { CarrierEventOutcome } from "../carrier/carrier-service.js";
+import {
   CALL_RESULTS,
-  CARRIER_OUTCOMES,
   ORDER_STATUS_LABELS,
   ORDER_TAG_LABELS,
   PAYMENT_STATUS_LABELS,
@@ -28,6 +34,16 @@ import {
 /** Hoàn tiền qua cổng thanh toán; tách ra để kiểm thử không gọi Stripe thật. */
 export interface OrderRefundGateway {
   refund(orderId: string): Promise<{ status: "refunded" | "requested" | "failed" | "skipped"; message?: string }>;
+}
+
+/**
+ * Cổng sự kiện vận tải (`carrier/carrier-service.ts`).
+ *
+ * Mô phỏng của super admin và push thật của nhà vận chuyển phải đi qua cùng một nghiệp vụ: ghi
+ * bằng chứng, chặn trùng, đối chiếu vận đơn, rồi mới chạy action của state machine.
+ */
+export interface CarrierEventPusher {
+  handleEvent(event: CarrierDeliveryEvent): Promise<CarrierEventOutcome>;
 }
 
 /** Thời điểm gần nhất chạy tác vụ tự động 24 giờ. */
@@ -82,10 +98,13 @@ export const CANCEL_REASONS: Readonly<Record<string, string>> = {
  */
 export function createOrderService({
   repository,
-  refunds = null
+  refunds = null,
+  carrierEvents = null
 }: {
   repository: OrderRepository;
   refunds?: OrderRefundGateway | null;
+  /** Người nhận sự kiện vận tải: một đường duy nhất cho push thật và cho mô phỏng. */
+  carrierEvents?: CarrierEventPusher | null;
 }): OrderService {
   if (!repository) throw new TypeError("repository is required");
 
@@ -213,19 +232,40 @@ export function createOrderService({
       return { order: fresh, refund };
     },
 
+    /**
+     * Mô phỏng kết quả của đơn vị vận chuyển.
+     *
+     * Sự kiện đi qua đúng cổng webhook (`carrierService.handleEvent`) với provider `simulator`,
+     * nên simulation và push thật dùng chung một đường: ledger chặn trùng, đối chiếu mã vận đơn,
+     * rồi `velura_order_service_action`. Không còn nhánh thứ hai tự gọi state machine.
+     */
     async simulateCarrier(context, orderId, body) {
       requireOrderReader(context);
       if (context.roleCode !== "super_admin") {
         throw new HttpError(403, "CARRIER_SIMULATION_DENIED", orderErrorMessage("CARRIER_SIMULATION_DENIED"));
       }
       requireUuid(orderId, "orderId");
-      const outcome = String(body?.outcome || "");
-      const action = CARRIER_OUTCOMES[outcome];
-      if (!action) {
-        throw validationError("outcome", `Must be one of: ${Object.keys(CARRIER_OUTCOMES).join(", ")}`);
+      if (!carrierEvents) {
+        throw new HttpError(503, "CARRIER_EVENTS_UNAVAILABLE", "Cổng sự kiện vận tải chưa được cấu hình.");
       }
-      const note = optionalText(body?.note, 500, "note") || `Mô phỏng ĐVVC: ${outcome}`;
-      await repository.serviceAction(orderId, { action, note, payload: { simulated_by: context.profile?.user_id ?? null } });
+      const outcome = String(body?.outcome || "");
+      if (!(CARRIER_EVENT_STATUSES as readonly string[]).includes(outcome)) {
+        throw validationError("outcome", `Must be one of: ${CARRIER_EVENT_STATUSES.join(", ")}`);
+      }
+      const order = (await this.get(context, orderId)) as JsonObject;
+      const detail = optionalText(body?.note, 500, "note") || `Mô phỏng ĐVVC: ${outcome}`;
+      // Cùng một bộ kiểm hình dạng mà push thật của nhà vận chuyển phải qua: không có đường tắt
+      // riêng cho mô phỏng, nên đơn có mã vận đơn không hợp lệ sẽ bị chặn ở đây thay vì ở ledger.
+      const normalized = normalizeCarrierEvent("simulator", {
+        providerEventId: `SIM-${randomUUID()}`,
+        orderCode: asString(order.order_code),
+        trackingCode: asString(order.tracking_code),
+        status: outcome,
+        occurredAt: new Date().toISOString(),
+        detail,
+      });
+      if (!normalized.ok) throw new HttpError(422, normalized.code, normalized.message);
+      await carrierEvents.handleEvent({ ...normalized.event, operatorId: asString(context.profile?.user_id) || undefined });
       return this.get(context, orderId);
     },
 

@@ -233,7 +233,7 @@ describe('AdminErpOrdersPage', () => {
     expect(page.shipment().trackingUrl).toBe('https://donhang.ghn.vn/?order_code=GHN42');
   });
 
-  it('refuses a label that belongs to another order or carries no tracking code', async () => {
+  it('refuses a label that belongs to another order', async () => {
     const fixture = await boot(() => of({ rows: [shippedOrder], count: 1 }));
     const page = fixture.componentInstance;
     page.selected.set(shippedOrder);
@@ -241,9 +241,23 @@ describe('AdminErpOrdersPage', () => {
     page.applyShipmentScan('velura:shipment:1?order=VLR-OTHER&carrier=GHN&tracking=GHN-OTHER');
     expect(page.scanError()).toContain('đơn khác');
     expect(page.shipment().trackingCode).toBe('');
+  });
 
+  it('loads the demo shipment of this order from the sample QR or the order QR', async () => {
+    const fixture = await boot(() => of({ rows: [paidOrder], count: 1 }));
+    const page = fixture.componentInstance;
+    page.selected.set(paidOrder);
+
+    page.applyShipmentScan(page.scanSample());
+    expect(page.shipment().carrier).toBe('GHN');
+    expect(page.shipment().trackingCode).toBe('GHNVL1001');
+    expect(page.shipment().trackingUrl).toContain('donhang.ghn.vn');
+    expect(page.scanNotice()).toContain('Đã điền');
+
+    page.shipment.set({ carrier: '', trackingCode: '', trackingUrl: '' });
     page.applyShipmentScan('http://localhost/orders?focus=o1&code=VL-1001');
-    expect(page.scanError()).toContain('mã đơn hàng');
+    expect(page.shipment().trackingCode).toBe('GHNVL1001');
+    expect(page.scanNotice()).toContain('demo');
   });
 
   it('confirms the COD order in the same step after a successful call', async () => {

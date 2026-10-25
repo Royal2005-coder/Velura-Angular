@@ -13,6 +13,7 @@ export type AdminErpNavKey =
   | 'pricing'
   | 'promotions'
   | 'reviews'
+  | 'content'
   | 'accounts'
   | 'logs';
 
@@ -42,7 +43,7 @@ export const ADMIN_ERP_NAV_GROUPS: readonly AdminErpNavGroup[] = [
   { key: 'overview', label: 'Tổng quan', items: ['dashboard'] },
   { key: 'selling', label: 'Bán hàng', items: ['orders', 'returns'] },
   { key: 'catalog', label: 'Danh mục', items: ['products', 'pricing'] },
-  { key: 'marketing', label: 'Marketing', items: ['promotions', 'reviews'] },
+  { key: 'marketing', label: 'Marketing', items: ['promotions', 'reviews', 'content'] },
   { key: 'people', label: 'Khách hàng & nhân sự', items: ['accounts'] },
   { key: 'system', label: 'Hệ thống', items: ['logs'] },
 ];
@@ -130,6 +131,18 @@ export const ADMIN_ERP_NAV_ITEMS: Readonly<Record<AdminErpNavKey, AdminErpNavIte
     path: '/reviews',
     pageKeys: ['reviews'],
     capability: 'reviews.read',
+    status: 'ready',
+  },
+  content: {
+    key: 'content',
+    label: 'Nội dung',
+    title: 'CMS nội dung',
+    description: 'Bài viết cho website: bản nháp, công bố, lưu trữ; mỗi lần sửa đều có phiên bản và audit.',
+    icon: 'log',
+    group: 'marketing',
+    path: '/content',
+    pageKeys: ['content'],
+    capability: 'content.read',
     status: 'ready',
   },
   accounts: {

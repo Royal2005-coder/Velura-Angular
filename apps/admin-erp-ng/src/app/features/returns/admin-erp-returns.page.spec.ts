@@ -186,8 +186,20 @@ describe('AdminErpReturnsPage', () => {
 
     expect(page.selected()?.refundable_amount).toBe(500_000);
     expect(page.nextSteps().map((step) => step.value)).toEqual(['CONTACTING', 'CANCELLED']);
-    expect(page.gates.refund(page.selected())).toBe(true);
+    expect(page.gates.refund(page.selected())).toBe(false);
     expect(page.gates.receipt(page.selected())).toBe(false);
+    expect(page.nextStep()?.flow).toBe('contact');
+  });
+
+  it('opens the refund only after the warehouse accepted the goods and QA passed', () => {
+    const { page } = boot();
+    page.selected.set({ ...detail, status: 'RETURN_IN_TRANSIT' });
+    expect(page.gates.refund(page.selected())).toBe(false);
+    expect(page.nextStep()?.flow).toBe('receipt');
+
+    page.selected.set({ ...detail, status: 'RECEIVED', condition_check_result: 'qa_pass' });
+    expect(page.gates.refund(page.selected())).toBe(true);
+    expect(page.nextStep()?.flow).toBe('refund');
   });
 
   it('opens a write flow instead of writing bare when the step needs evidence', () => {

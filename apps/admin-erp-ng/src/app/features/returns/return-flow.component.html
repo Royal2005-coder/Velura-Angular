@@ -76,6 +76,9 @@
           <span>Mã vận đơn</span>
           <input class="erp-input" type="text" [value]="tracking()" (input)="setText('tracking', $event)" />
         </label>
+        <div class="flow-actions">
+          <button class="erp-btn erp-btn--sm" type="button" (click)="scanOpen.set(true)">Quét QR vận đơn</button>
+        </div>
       }
       @if (needsReason()) {
         <p class="flow-hint">Trạng thái này cần ghi rõ lý do để khách hàng được thông báo.</p>
@@ -167,3 +170,11 @@
     }
   </div>
 </app-erp-modal>
+
+<app-erp-qr-scan
+  [open]="scanOpen()"
+  title="Quét QR vận đơn"
+  hint="Quét label chiều hoàn của ĐVVC để điền mã vận đơn."
+  (scanned)="applyTrackingScan($event)"
+  (closed)="scanOpen.set(false)"
+/>

@@ -27,6 +27,14 @@ import {
 import { choiceParam, textParam, watchQueryParams } from '../../core/admin-erp-deep-link';
 import { adminDateTime, adminMoney } from '../../core/admin-erp-format';
 import {
+  CARRIER_PROFILES,
+  buildOrderQrLink,
+  buildShipmentQr,
+  carrierLabel,
+  deriveTrackingUrl,
+  parseScan,
+} from '../../core/admin-erp-qr';
+import {
   adminErrorMessage,
   adminListCount,
   adminListRows,
@@ -43,6 +51,8 @@ import { AdminErpKpiCard } from '../../shared/ui/admin-kpi-card';
 import { AdminErpModal } from '../../shared/ui/admin-modal';
 import { AdminErpPageHeader } from '../../shared/ui/admin-page-header';
 import { AdminErpPagination } from '../../shared/ui/admin-pagination';
+import { AdminErpQrCode } from '../../shared/ui/admin-qr-code';
+import { AdminErpQrScan } from '../../shared/ui/admin-qr-scan';
 import { AdminErpStatusBadge } from '../../shared/ui/admin-status-badge';
 import { AdminErpTab, AdminErpTabs } from '../../shared/ui/admin-tabs';
 
@@ -94,6 +104,8 @@ const CARRIER_OUTCOMES = [
     AdminErpModal,
     AdminErpStatusBadge,
     AdminErpIcon,
+    AdminErpQrCode,
+    AdminErpQrScan,
     RouterLink,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -130,7 +142,12 @@ export class AdminErpOrdersPage {
   readonly submitting = signal(false);
   readonly audit = signal<AdminAuditRow[]>([]);
   readonly linkedReturns = signal<AdminReturnRow[]>([]);
-  readonly autoHandover = signal(true);
+  /** Ba trường của vận đơn; quét QR hoặc chọn ĐVVC ghi thẳng vào đây. */
+  readonly shipment = signal({ carrier: '', trackingCode: '', trackingUrl: '' });
+  readonly shipmentUrlEdited = signal(false);
+  readonly scanOpen = signal(false);
+  readonly scanError = signal<string | null>(null);
+  readonly carriers = CARRIER_PROFILES;
   readonly copiedPhone = signal(false);
   readonly codDecision = signal<'' | 'confirm' | 'cancel' | 'no_answer' | 'invalid'>('');
   readonly codCancelReason = signal('customer_request');
@@ -204,6 +221,16 @@ export class AdminErpOrdersPage {
   });
   readonly pipelineSteps = computed(() => this.buildPipeline(this.selected()));
   readonly canSimulateCarrier = computed(() => this.session.session()?.roleCode === 'super_admin' && !!this.selected()?.can_simulate_carrier);
+  /** Mã mẫu cho hộp quét: đơn đang mở + các trường vận đơn đã nhập, để thử camera ngay. */
+  readonly scanSample = computed(() => {
+    const shipment = this.shipment();
+    return buildShipmentQr({
+      orderCode: this.selected()?.order_code || undefined,
+      carrier: shipment.carrier || undefined,
+      trackingCode: shipment.trackingCode || undefined,
+      trackingUrl: shipment.trackingUrl || undefined,
+    });
+  });
 
   readonly orderColumns: readonly AdminTableColumn[] = [
     {
@@ -445,6 +472,15 @@ export class AdminErpOrdersPage {
     }
     this.modal.set({ kind: 'action', action });
     this.actionError.set(null);
+    this.scanOpen.set(false);
+    this.scanError.set(null);
+    // `prefill` đọc từ modal vừa mở, nên phải khởi tạo sau khi modal được set.
+    this.shipment.set({
+      carrier: this.prefill().carrier,
+      trackingCode: this.prefill().trackingCode,
+      trackingUrl: this.prefill().trackingUrl,
+    });
+    this.shipmentUrlEdited.set(false);
   }
 
   /**
@@ -490,6 +526,8 @@ export class AdminErpOrdersPage {
     this.actionError.set(null);
     this.submitting.set(false);
     this.copiedPhone.set(false);
+    this.scanOpen.set(false);
+    this.scanError.set(null);
   }
 
   /**
@@ -521,7 +559,15 @@ export class AdminErpOrdersPage {
   /**
    * Submits the COD call outcome.
    */
-  submitCodCall(event: Event): void {
+  /**
+   * Saves the call result, and — with `confirmOrder` — confirms the same COD order in one step.
+   *
+   * `call_confirm` is status-neutral by design; `confirm_cod` is the guarded transition. When
+   * the customer already agreed on the phone the operator should not have to click a second
+   * button and re-enter the same note, so the second action reuses the note and the version the
+   * first response returned. Online-paid orders never take this path (COD only).
+   */
+  submitCodCall(event: Event, confirmOrder = false): void {
     event.preventDefault();
     const order = this.selected();
     if (!order || this.submitting() || this.detailLoading()) return;
@@ -558,7 +604,34 @@ export class AdminErpOrdersPage {
     }
     this.submitting.set(true);
     this.api.performOrderAction(order.order_id, actionCode, { ...body, expectedVersion: order.version }).subscribe({
-      next: (result) => this.applyResult(result),
+      next: (result) => {
+        const canConfirm =
+          confirmOrder &&
+          decision === 'confirm' &&
+          result.order.payment_method === 'COD' &&
+          !!result.order.allowed_actions?.some((action) => action.code === 'confirm_cod');
+        if (!canConfirm) {
+          this.applyResult(result);
+          if (confirmOrder && decision === 'confirm') {
+            this.notice.set('Đã lưu kết quả cuộc gọi. Đơn không còn ở trạng thái cần xác nhận nên hệ thống không xác nhận lại.');
+          }
+          return;
+        }
+        this.api
+          .performOrderAction(result.order.order_id, 'confirm_cod', { note, expectedVersion: result.order.version })
+          .subscribe({
+            next: (confirmed) => {
+              this.applyResult(confirmed);
+              this.notice.set('Đã lưu cuộc gọi và xác nhận đơn trong cùng một bước.');
+            },
+            error: (error: unknown) => {
+              this.applyResult(result);
+              this.notice.set(
+                `Đã lưu kết quả cuộc gọi, nhưng xác nhận đơn chưa thành công: ${adminErrorMessage(error)} Bấm "Xác nhận đơn" để đi tiếp.`,
+              );
+            },
+          });
+      },
       error: (error: unknown) => this.handleActionError(order.order_id, error),
     });
   }
@@ -601,8 +674,8 @@ export class AdminErpOrdersPage {
    * Runs one state-machine action, then chains the handover the API keeps as a separate step.
    *
    * `upsert_shipment` is status-neutral by design (migration 038), so shipping is only reached
-   * by a second `confirm_handover` call. The chain feeds that call the tracking facts and the
-   * version the first response just returned; the operator never re-enters anything.
+   * by a second `confirm_handover` call. Saving a tracking code means the parcel is with the
+   * carrier, so the handover always follows in the same flow; only its failure is reported.
    */
   private runAction(action: AdminOrderAction, order: AdminOrderRow, body: Record<string, string>, chained = false): void {
     this.api.performOrderAction(order.order_id, action.code, { ...body, expectedVersion: order.version }).subscribe({
@@ -614,7 +687,7 @@ export class AdminErpOrdersPage {
           this.notice.set(`Vận đơn ${facts.trackingCode} đã lưu và hàng đã bàn giao cho ${result.order.carrier || facts.carrier || 'đơn vị vận chuyển'} (đơn ${code}).`);
           return;
         }
-        if (action.code !== 'upsert_shipment' || !this.autoHandover()) return;
+        if (action.code !== 'upsert_shipment') return;
         const followUp = handoverFollowUp(result.order, facts);
         if (!followUp) return;
         this.submitting.set(true);
@@ -634,10 +707,59 @@ export class AdminErpOrdersPage {
   }
 
   /**
-   * Turns the same-step handover on or off.
+   * Edits one shipment field. Changing the carrier or tracking code re-derives the tracking URL
+   * unless the operator already typed one by hand.
    */
-  onAutoHandover(event: Event): void {
-    this.autoHandover.set((event.target as HTMLInputElement).checked);
+  onShipmentField(field: 'carrier' | 'trackingCode' | 'trackingUrl', event: Event): void {
+    const value = (event.target as HTMLInputElement).value;
+    this.shipment.update((current) => ({ ...current, [field]: value }));
+    if (field === 'trackingUrl') {
+      this.shipmentUrlEdited.set(true);
+      return;
+    }
+    if (this.shipmentUrlEdited()) return;
+    const next = this.shipment();
+    const derived = deriveTrackingUrl(next.carrier, next.trackingCode);
+    if (derived) this.shipment.update((current) => ({ ...current, trackingUrl: derived }));
+  }
+
+  /**
+   * Fills the shipment from a scanned code. A carrier label that only carries the tracking
+   * number fills that field; a label for another order is refused instead of silently applied.
+   */
+  applyShipmentScan(text: string): void {
+    this.scanOpen.set(false);
+    const order = this.selected();
+    const result = parseScan(text, { orderId: order?.order_id, orderCode: order?.order_code });
+    if (result.mismatch) {
+      this.scanError.set('Mã QR này thuộc một đơn khác. Kiểm lại label trước khi lưu vận đơn.');
+      return;
+    }
+    if (result.kind === 'order') {
+      this.scanError.set('Mã này là mã đơn hàng, không có mã vận đơn. Quét label của ĐVVC hoặc nhập mã vận đơn.');
+      return;
+    }
+    if (result.kind !== 'tracking' && result.kind !== 'shipment') {
+      this.scanError.set('Không đọc được thông tin vận đơn trong mã này.');
+      return;
+    }
+    this.shipment.update((current) => ({
+      carrier: result.carrier ? carrierLabel(result.carrier) : current.carrier,
+      trackingCode: result.trackingCode || current.trackingCode,
+      trackingUrl: result.trackingUrl || current.trackingUrl,
+    }));
+    if (result.trackingUrl) this.shipmentUrlEdited.set(true);
+    if (!this.shipmentUrlEdited()) {
+      const next = this.shipment();
+      const derived = deriveTrackingUrl(next.carrier, next.trackingCode);
+      if (derived) this.shipment.update((current) => ({ ...current, trackingUrl: derived }));
+    }
+    this.scanError.set(null);
+  }
+
+  /** Link in trên label của đơn; quét bằng điện thoại sẽ mở thẳng đơn này. */
+  orderQr(order: AdminOrderRow): string {
+    return buildOrderQrLink(typeof window !== 'undefined' ? window.location.origin : '', order.order_id, order.order_code);
   }
 
   /**
@@ -918,9 +1040,10 @@ export class AdminErpOrdersPage {
     if (action.fields.includes('call_result')) body['callResult'] = value('callResult');
     if (action.fields.includes('shortage')) body['shortage'] = value('shortage');
     if (action.fields.includes('shipment') || action.fields.includes('tracking')) {
-      body['trackingCode'] = value('trackingCode');
-      body['trackingUrl'] = value('trackingUrl');
-      body['carrier'] = value('carrier');
+      const shipment = this.shipment();
+      body['trackingCode'] = shipment.trackingCode.trim();
+      body['trackingUrl'] = shipment.trackingUrl.trim();
+      body['carrier'] = shipment.carrier.trim();
     }
     if (action.fields.includes('cancel_reason')) body['cancelReason'] = value('cancelReason');
     return body;

@@ -132,3 +132,9 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.flow-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -4px;
+}

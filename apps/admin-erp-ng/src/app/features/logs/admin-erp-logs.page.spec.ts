@@ -126,4 +126,19 @@ describe('AdminErpLogsPage', () => {
     expect(page.rows()).toEqual([]);
     expect(page.loading()).toBe(false);
   });
+
+  it('scopes the trail to one record and can drop that scope again', async () => {
+    const calls: Array<Record<string, string> | undefined> = [];
+    const fixture = await boot(listWithCounts, calls);
+    const page = fixture.componentInstance;
+
+    page.targetScope.set('order-1');
+    page.reload();
+    const scoped = calls.filter((params) => params?.['limit'] !== '1');
+    expect(scoped.at(-1)?.['targetId']).toBe('order-1');
+
+    page.clearTarget();
+    const cleared = calls.filter((params) => params?.['limit'] !== '1');
+    expect(cleared.at(-1)?.['targetId']).toBe('');
+  });
 });

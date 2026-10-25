@@ -1,5 +1,6 @@
 import { Subscription, catchError, forkJoin, of } from 'rxjs';
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { ActivatedRoute, type ParamMap } from '@angular/router';
 import {
   AdminAuditRow,
   AdminCategoryRow,
@@ -18,8 +19,10 @@ import {
   MIN_CHANGE_REASON_LENGTH,
   PRODUCT_AUDIT_ACTION_TYPES,
   PRODUCT_ORDER_OPTIONS,
+  PRODUCT_STATUSES,
   PRODUCT_STATUS_HINTS,
 } from '../../core/admin-erp-catalog';
+import { choiceParam, textParam, watchQueryParams } from '../../core/admin-erp-deep-link';
 import { adminDateTime, adminMoney } from '../../core/admin-erp-format';
 import {
   adminErrorMessage,
@@ -46,6 +49,8 @@ import { ProductEditorComponent } from './product-editor.component';
 import { ProductStockSheetComponent } from './product-stock-sheet.component';
 
 type ProductsTab = 'catalog' | 'stock' | 'import' | 'logs';
+
+const PRODUCTS_TABS: readonly string[] = ['catalog', 'stock', 'import', 'logs'];
 
 const EMPTY_LIST = { rows: [] as AdminProductRow[], count: 0 };
 const EMPTY_LOW_STOCK = { rows: [] as AdminLowStockRow[], count: 0 };
@@ -81,6 +86,7 @@ export class AdminErpProductsPage {
   private readonly api = inject(AdminErpApiService);
   private readonly session = inject(AdminErpSessionService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly route = inject(ActivatedRoute);
   private listRequest = new Subscription();
   private detailRequest = new Subscription();
   private skuCheckRequest = new Subscription();
@@ -357,11 +363,22 @@ export class AdminErpProductsPage {
       this.detailRequest.unsubscribe();
       this.skuCheckRequest.unsubscribe();
     });
-    this.reload();
+    watchQueryParams(this.route, this.destroyRef, (params) => this.applyDeepLink(params));
     this.api.listCategories().subscribe({
       next: (payload) => this.categories.set(adminListRows(payload)),
       error: () => this.categories.set([]),
     });
+  }
+
+  /**
+   * Applies an inbound deep link: the queue tab and the catalog filters another workspace names.
+   */
+  private applyDeepLink(params: ParamMap): void {
+    this.tab.set(choiceParam(params, 'tab', PRODUCTS_TABS, this.tab()) as ProductsTab);
+    this.query.set(textParam(params, 'q'));
+    this.status.set(choiceParam(params, 'status', PRODUCT_STATUSES, this.status()));
+    this.page.set(1);
+    this.reload();
   }
 
   /**
@@ -383,7 +400,7 @@ export class AdminErpProductsPage {
    * Switches catalog / stock / import / audit tabs.
    */
   setTab(tab: string): void {
-    if (tab !== 'catalog' && tab !== 'stock' && tab !== 'import' && tab !== 'logs') {
+    if (!PRODUCTS_TABS.includes(tab)) {
       return;
     }
     this.tab.set(tab as ProductsTab);

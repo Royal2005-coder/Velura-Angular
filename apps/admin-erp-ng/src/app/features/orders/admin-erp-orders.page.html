@@ -134,8 +134,19 @@
       </section>
 
       <section class="order-section">
-        <h4>Sản phẩm</h4>
-        <div class="order-items">
+        <h4>Liên kết nghiệp vụ</h4>
+        <div class="order-actions">
+          @for (link of orderLinks(); track link.label) {
+            <a class="erp-btn erp-btn--sm" [routerLink]="link.commands" [queryParams]="link.query">{{ link.label }}</a>
+          }
+        </div>
+        @if (!canReadReturns()) {
+          <p class="erp-hint">Không có quyền đọc đổi trả nên dấu vết chỉ gồm luồng đơn và audit.</p>
+        }
+      </section>
+
+      <section class="order-section">
+        <h4>Sản phẩm</h4>        <div class="order-items">
           @for (item of selectedItems(); track $index) {
             <div class="order-item">
               <span>{{ item.product_name || 'Sản phẩm' }}</span>
@@ -158,38 +169,28 @@
       </section>
 
       <section class="order-section">
-        <h4>Lịch sử xử lý</h4>
-        <div class="order-events">
-          @for (event of events(); track event.event_id || event.created_at) {
-            <article>
-              <time>{{ dateTime(event.created_at) }}</time>
-              <div>
-                <strong>{{ eventLabel(event) }}</strong>
-                <span>{{ eventActor(event) }}{{ event.note ? ' · ' + event.note : '' }}</span>
+        <h4>Dấu vết xử lý</h4>
+        <ol class="trace">
+          @for (entry of trace(); track entry.id) {
+            <li [class]="'trace__row trace__row--' + entry.tone">
+              <time class="trace__time">{{ dateTime(entry.at) }}</time>
+              <div class="trace__main">
+                <strong>{{ entry.title }}</strong>
+                <span>{{ entry.actor }}{{ entry.detail ? ' · ' + entry.detail : '' }}</span>
+                @if (entry.links.length) {
+                  <div class="trace__links">
+                    @for (link of entry.links; track link.label) {
+                      <a class="erp-chip" [routerLink]="link.commands" [queryParams]="link.query">{{ link.label }}</a>
+                    }
+                  </div>
+                }
               </div>
-              <span class="erp-chip">{{ event.result || event.to_status || '—' }}</span>
-            </article>
+              <span class="trace__origin">{{ originLabel(entry.origin) }}</span>
+            </li>
           } @empty {
-            <p class="erp-hint">Chưa có sự kiện xử lý.</p>
+            <p class="erp-hint">Chưa có dấu vết xử lý cho đơn này.</p>
           }
-        </div>
-      </section>
-
-      <section class="order-section">
-        <h4>Audit gần nhất</h4>
-        <div class="order-events">
-          @for (row of audit(); track row.audit_id || row.timestamp) {
-            <article>
-              <time>{{ dateTime(row.timestamp) }}</time>
-              <div>
-                <strong>{{ row.action_label || row.action || '—' }}</strong>
-                <span>{{ auditActor(row) }} · {{ row.target_label || row.target_id || '—' }}</span>
-              </div>
-            </article>
-          } @empty {
-            <p class="erp-hint">Chưa tải được audit hoặc chưa có bản ghi.</p>
-          }
-        </div>
+        </ol>
       </section>
 
       @if (canSimulateCarrier()) {
@@ -244,9 +245,15 @@
         <label class="erp-field"><span>Số lượng thiếu</span><input class="erp-input" name="shortage" type="number" min="1" /></label>
       }
       @if (hasField(action, 'shipment') || hasField(action, 'tracking')) {
-        <label class="erp-field"><span>Đơn vị vận chuyển</span><input class="erp-input" name="carrier" type="text" /></label>
-        <label class="erp-field"><span>Mã vận đơn</span><input class="erp-input" name="trackingCode" type="text" /></label>
-        <label class="erp-field"><span>Tracking URL</span><input class="erp-input" name="trackingUrl" type="url" /></label>
+        <label class="erp-field"><span>Đơn vị vận chuyển</span><input class="erp-input" name="carrier" type="text" [value]="prefill().carrier" /></label>
+        <label class="erp-field"><span>Mã vận đơn</span><input class="erp-input" name="trackingCode" type="text" [value]="prefill().trackingCode" /></label>
+        <label class="erp-field"><span>Tracking URL</span><input class="erp-input" name="trackingUrl" type="url" [value]="prefill().trackingUrl" placeholder="https://..." /></label>
+      }
+      @if (action.code === 'upsert_shipment') {
+        <label class="order-check">
+          <input type="checkbox" [checked]="autoHandover()" (change)="onAutoHandover($event)" />
+          <span>Bàn giao đơn vị vận chuyển ngay sau khi lưu vận đơn (API tính bàn giao là bước riêng; hệ thống dùng lại mã vận đơn vừa nhập)</span>
+        </label>
       }
       @if (hasField(action, 'cancel_reason')) {
         <label class="erp-field">
@@ -261,7 +268,10 @@
 
       <label class="erp-field">
         <span>Ghi chú{{ action.requires_note ? ' (tối thiểu 5 ký tự)' : '' }}</span>
-        <textarea class="erp-input" name="note" rows="3" [required]="action.requires_note"></textarea>
+        <textarea class="erp-input" name="note" rows="3" [value]="prefill().note" [required]="action.requires_note"></textarea>
+        @if (prefill().note) {
+          <span class="erp-hint">Đã điền sẵn theo dữ liệu đơn; sửa lại nếu thực tế khác.</span>
+        }
       </label>
 
       @if (actionError()) {

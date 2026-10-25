@@ -1,5 +1,7 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { ActivatedRoute, type ParamMap } from '@angular/router';
 import { catchError, forkJoin, of } from 'rxjs';
+import { choiceParam, textParam, watchQueryParams } from '../../core/admin-erp-deep-link';
 import { AdminAuditRow, AdminErpApiService, AdminReviewRow } from '../../core/admin-erp-api.service';
 import { adminDateTime, adminStars } from '../../core/admin-erp-format';
 import {
@@ -23,6 +25,8 @@ import { AdminErpStatusBadge } from '../../shared/ui/admin-status-badge';
 import { AdminErpTab, AdminErpTabs } from '../../shared/ui/admin-tabs';
 
 type ReviewTab = 'all' | 'urgent' | 'processed' | 'logs';
+
+const REVIEW_TABS: readonly string[] = ['all', 'urgent', 'processed', 'logs'];
 type ReviewAction = 'approve' | 'hide' | 'unhide' | 'reply' | 'escalate' | null;
 
 const EMPTY_REVIEWS = { rows: [] as AdminReviewRow[], count: 0 };
@@ -66,6 +70,8 @@ const RESTRICTED_PATTERNS: readonly string[] = [
 export class AdminErpReviewsPage {
   private readonly api = inject(AdminErpApiService);
   private readonly session = inject(AdminErpSessionService);
+  private readonly route = inject(ActivatedRoute);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly tab = signal<ReviewTab>('all');
   readonly query = signal('');
@@ -153,8 +159,19 @@ export class AdminErpReviewsPage {
   ];
 
   constructor() {
-    this.reload();
+    watchQueryParams(this.route, this.destroyRef, (params) => this.applyDeepLink(params));
     this.loadCounts();
+  }
+
+  /**
+   * Applies an inbound deep link: the moderation queue and the search another workspace names.
+   */
+  private applyDeepLink(params: ParamMap): void {
+    this.tab.set(choiceParam(params, 'tab', REVIEW_TABS, this.tab()) as ReviewTab);
+    this.query.set(textParam(params, 'q'));
+    this.page.set(1);
+    this.logsPage.set(1);
+    this.reload();
   }
 
   /**
@@ -236,7 +253,7 @@ export class AdminErpReviewsPage {
    * Switches review tabs.
    */
   setTab(tab: string): void {
-    if (!['all', 'urgent', 'processed', 'logs'].includes(tab)) {
+    if (!REVIEW_TABS.includes(tab)) {
       return;
     }
     this.tab.set(tab as ReviewTab);

@@ -368,3 +368,23 @@ export function noteIsReady(value: string, minimum = MIN_NOTE_LENGTH): boolean {
 export function proofIsUsable(value: string): boolean {
   return /^(https?:\/\/|data:image\/)/.test(value.trim());
 }
+
+/**
+ * Gateway answer in operator language. Approval and execution are separate API calls, so the same
+ * wording is used by the manual "refund through Stripe" button and by the chained step.
+ */
+export function gatewayNote(refund: { status: string; message?: string } | null): string {
+  if (!refund) {
+    return 'Cổng không trả về trạng thái. Kiểm lại giao dịch trước khi thử lại.';
+  }
+  if (refund.status === 'refunded') {
+    return 'Stripe đã hoàn tiền. Phiếu sẽ được đánh dấu hoàn tất theo luồng.';
+  }
+  if (refund.status === 'requested') {
+    return 'Đã gửi yêu cầu hoàn tiền tới Stripe; chờ cổng xác nhận.';
+  }
+  if (refund.status === 'skipped') {
+    return 'Cổng bỏ qua giao dịch này; kiểm tra lại số tiền hoàn.';
+  }
+  return refund.message || 'Hoàn tiền qua Stripe thất bại. Kiểm lại giao dịch rồi thử lại.';
+}

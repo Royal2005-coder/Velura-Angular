@@ -630,6 +630,9 @@ jobs:
               && curl --fail --silent --show-error --max-time 15 "${access_headers[@]}" https://admin.royalai.dev/release.json | jq -e --arg expected "$expected" --arg build "$expected_build" '.revision == $expected and .buildId == $build' \
               && curl --fail --silent --show-error --max-time 15 https://velura.royalai.dev/release.json | jq -e --arg expected "$expected" --arg build "$expected_build" '.revision == $expected and .buildId == $build' \
               && curl --fail --silent --show-error --max-time 15 https://velura.royalai.dev/api/health \
+              && curl --fail --silent --show-error --max-time 15 https://velura.royalai.dev/api/v1/webhooks/carrier | jq -e '.surface == "carrier-webhook" and ((.statuses | index("delivered")) != null)' \
+              && carrier_code=$(curl --silent --show-error --max-time 15 -o /dev/null -w '%{http_code}' -X POST https://velura.royalai.dev/api/v1/webhooks/carrier/ghn) \
+              && { [ "$carrier_code" = 401 ] || [ "$carrier_code" = 503 ]; } \
               && curl --fail --silent --show-error --max-time 15 "${access_headers[@]}" https://admin-erp.royalai.dev/release.json | jq -e --arg expected "$expected" --arg build "$expected_build" '.revision == $expected and .buildId == $build' \
               && curl --fail --silent --show-error --max-time 15 https://admin-erp.royalai.dev/api/health \
               && curl --fail --silent --show-error --max-time 30 https://velura.royalai.dev/api/user/products > catalog.json \

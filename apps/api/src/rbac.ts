@@ -5,7 +5,7 @@ import { getAuthUser, selectOne } from "./supabase.js";
 import type { AuthContext, AuthUser, HttpRequest, UserProfile } from "./types.js";
 
 export const rolePages: Record<string, string[]> = {
-  super_admin: ["dashboard", "accounts", "products", "orders", "reviews", "returns-cskh", "pricing", "promotions", "content", "logs"],
+  super_admin: ["dashboard", "accounts", "products", "orders", "reviews", "returns-cskh", "pricing", "promotions", "content", "members", "logs"],
   admin_operator_sanpham: ["products"],
   admin_operator_donhang: ["orders"],
   admin_operator_gia_km: ["pricing", "promotions"],
@@ -54,6 +54,7 @@ const MODULE_WRITE_ACTIONS: Record<string, AdminAction[]> = {
   returns: ["update"],
   accounts: ["create", "update", "delete", "approve"],
   content: ["create", "update"],
+  members: ["update"],
   audit_logs: []
 };
 
@@ -74,6 +75,7 @@ const MODULE_WRITE_ROLES: Record<string, string[]> = {
   returns: ["super_admin", "admin_operator_cskh_dt"],
   accounts: ["super_admin"],
   content: ["super_admin"],
+  members: ["super_admin"],
   audit_logs: []
 };
 

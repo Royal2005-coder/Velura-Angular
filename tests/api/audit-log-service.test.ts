@@ -15,7 +15,8 @@ test("parseAuditLogFilters maps admin scope onto the canonical module list", () 
     "returns",
     "reviews",
     "support",
-    "content"
+    "content",
+    "members"
   ]);
   assert.equal(filters.limit, 10);
   assert.equal(filters.offset, 20);

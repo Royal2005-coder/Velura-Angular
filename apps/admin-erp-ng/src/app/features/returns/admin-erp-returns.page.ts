@@ -123,6 +123,7 @@ export class AdminErpReturnsPage {
   readonly search = signal('');
   readonly orderFilter = signal('');
   readonly ticketStatus = signal('');
+  readonly ticketSearch = signal('');
   readonly logTarget = signal('');
 
   readonly openReturns = signal(0);
@@ -154,6 +155,7 @@ export class AdminErpReturnsPage {
     const phone = String(ticket.guest_phone || '');
     if (phone) {
       links.push({ label: 'Đơn của số điện thoại này', commands: ['/orders'], query: { q: phone } });
+      links.push({ label: 'Khiếu nại khác cùng số', commands: ['/returns'], query: { tab: 'tickets', q: phone } });
     }
     if (ticket.chat_session_id) {
       links.push({ label: 'Hội thoại của phiếu', commands: ['/returns'], query: { tab: 'chat', focus: ticket.chat_session_id } });
@@ -335,7 +337,12 @@ export class AdminErpReturnsPage {
     this.orderFilter.set(textParam(params, 'order_id'));
     this.statusFilter.set(choiceParam(params, 'status', RETURN_STATUS_VALUES, this.statusFilter()));
     this.paymentFilter.set(choiceParam(params, 'payment', ['cod', 'online'], this.paymentFilter()) as '' | 'cod' | 'online');
-    this.search.set(textParam(params, 'q'));
+    const search = textParam(params, 'q');
+    if (this.tab() === 'tickets') {
+      this.ticketSearch.set(search);
+    } else {
+      this.search.set(search);
+    }
     this.page.set(1);
     this.reload();
     const focus = textParam(params, 'focus');
@@ -415,6 +422,7 @@ export class AdminErpReturnsPage {
    */
   resetTicketFilters(): void {
     this.ticketStatus.set('');
+    this.ticketSearch.set('');
     this.ticketsPage.set(1);
     this.loadTickets();
   }
@@ -857,6 +865,13 @@ export class AdminErpReturnsPage {
   }
 
   /**
+   * Updates the ticket search (title, note, phone, email — matched server-side).
+   */
+  onTicketSearchInput(event: Event): void {
+    this.ticketSearch.set((event.target as HTMLInputElement).value);
+  }
+
+  /**
    * Updates the audit target filter.
    */
   onLogTargetInput(event: Event): void {
@@ -948,7 +963,7 @@ export class AdminErpReturnsPage {
     this.loading.set(true);
     this.loadError.set(null);
     this.listRequest = this.api
-      .listTickets({ status: this.ticketStatus(), limit: String(this.pageSize), offset: adminOffset(this.ticketsPage(), this.pageSize) })
+      .listTickets({ status: this.ticketStatus(), q: this.ticketSearch(), limit: String(this.pageSize), offset: adminOffset(this.ticketsPage(), this.pageSize) })
       .pipe(
         catchError((error: unknown) => {
           this.loadError.set(adminErrorMessage(error, 'Không tải được phiếu hỗ trợ.'));

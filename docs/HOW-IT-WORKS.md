@@ -131,6 +131,43 @@ Resolve each upstream image to a real reviewed registry digest and merge the
 CI-generated app digest PR before declaring this check passed. No digest is
 invented in the repository.
 
+### Carrier webhook (vận tải)
+
+`POST /api/v1/webhooks/carrier/:provider` là đường vào duy nhất cho trạng thái giao hàng từ bên
+ngoài. Nhà vận chuyển không có phiên người dùng, nên quyền của nó là chữ ký HMAC, không phải token.
+
+- Header `x-carrier-signature: t=<epoch>,v1=<hex>`; HMAC-SHA256 trên **raw body** với
+  `CARRIER_WEBHOOK_SECRET`, tem quá 5 phút bị từ chối, so sánh `timingSafeEqual`. Route nối trước
+  `buildAuthContext` nên không đọc `Authorization`.
+- Body theo hợp đồng Velura (`providerEventId`, `orderCode`, `trackingCode`, `status`, `occurredAt`,
+  `detail?`). API không giả định schema riêng của GHN/GHTK/VTP: lớp trung gian nào cũng phải đổi
+  sang hình này rồi ký. `status` chỉ nhận `delivered`, `failed_retrying`, `failed_returned` — ba mã
+  `actor: "system"` mà `ORDER_ACTIONS` cho phép; trạng thái lạ trả 422 chứ không đoán.
+- Một sự kiện đi qua đúng state machine: `velura_order_service_action` → timestamps, stock,
+  `order_event`, `order_status_history`, email đều do migration 038/041 sinh ra. Không có bảng
+  trạng thái vận tải thứ hai, không có đường ghi thẳng.
+- Chống phát lại: `carrier_delivery_event` (migration 075) chặn trùng `(provider, provider_event_id)`;
+  retry trả `duplicate: true` và không đổi đơn. Sự kiện mang `trackingCode` khác vận đơn đã bàn giao
+  của đơn bị từ chối 422.
+
+Thứ tự provision bắt buộc. Webhook cố ý fail-closed, nên code đã merge mà chưa đủ hai bước dưới đây
+chỉ trả lời 401/503 và không ghi dữ liệu:
+
+1. Chủ dự án chạy `migrate-production.yml` để áp migration 075 — CI không có quyền ghi CSDL.
+2. Thêm `CARRIER_WEBHOOK_SECRET` vào `velura-api-secrets` (SOPS; age key ở `flux-system/sops-age`),
+   rồi rollout `deployment/velura-api`: secret đổi nội dung nhưng không đổi tên nên pod không tự lại.
+
+Đọc trạng thái surface, không cần bí mật và không đổi dữ liệu:
+
+```bash
+curl -s https://velura.royalai.dev/api/v1/webhooks/carrier | jq .
+curl -s -o /dev/null -w '%{http_code}\n' -X POST https://velura.royalai.dev/api/v1/webhooks/carrier/ghn
+```
+
+`POST /api/v1/admin/orders/:id/simulate-carrier` vẫn là đường mô phỏng cho super admin. Sau khi 075
+đã áp, bước kế tiếp là cho mô phỏng chạy qua cùng `carrierService.handleEvent` với provider
+`simulator`, để simulation và webhook thành một nghiệp vụ duy nhất.
+
 ### One-time production bootstrap
 
 Use a TLS-verified explicit context for the known cluster; never the workstation

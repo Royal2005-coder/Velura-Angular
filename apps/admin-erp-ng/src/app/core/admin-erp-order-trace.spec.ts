@@ -67,6 +67,20 @@ describe('admin order trace', () => {
     expect(eventTrace([event({ actor_type: 'customer' })])[0].actor).toBe('Khách hàng');
   });
 
+  it('names the carrier that pushed a delivery event', () => {
+    const [entry] = eventTrace([
+      event({
+        event_id: 'e-hook',
+        action: 'carrier_delivered',
+        actor_type: 'system',
+        payload: { provider: 'ghn', provider_event_id: 'GHN-88001', tracking_code: 'VN2200111' },
+      }),
+    ]);
+    expect(entry.title).toBe('Đơn vị vận chuyển báo giao thành công');
+    expect(entry.detail).toContain('Vận đơn · ghn · VN2200111');
+    expect(entry.tone).toBe('success');
+  });
+
   it('folds the audit twin of a manual action into the event and keeps the actor name', () => {
     const merged = mergeOrderTrace(
       eventTrace([event()]),

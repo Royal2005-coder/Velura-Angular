@@ -309,8 +309,7 @@ describe('AdminErpReturnsPage', () => {
     expect(page.selected()?.order_code).toBe('VLR-001');
   });
 
-  it('links a ticket to the chat case that raised it', () => {
-    const { page } = boot();
+  it('links a ticket to the chat case that raised it', () => {    const { page } = boot();
     page.openTicket({ ticket_id: 't-3' });
 
     expect(page.ticketLinks().map((link) => link.label)).toContain('Hội thoại của phiếu');
@@ -325,5 +324,19 @@ describe('AdminErpReturnsPage', () => {
     const scoped = calls.returns.filter((params) => params['order_id'] === 'o-1');
     expect(scoped.length).toBe(1);
     expect(page.orderFilter()).toBe('o-1');
+  });
+
+  it('searches tickets by the phone number an order carries', () => {
+    const { page, calls } = boot();
+    page.setTab('tickets');
+    page.ticketSearch.set('0900000001');
+    page.applyTicketFilters();
+
+    const searched = calls.tickets.filter((params) => params['q'] === '0900000001');
+    expect(searched.length).toBe(1);
+    expect(searched[0]['status']).toBe('');
+
+    page.resetTicketFilters();
+    expect(page.ticketSearch()).toBe('');
   });
 });

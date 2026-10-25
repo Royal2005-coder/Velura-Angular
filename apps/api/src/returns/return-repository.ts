@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { callRpc, selectOne, selectRows, updateRows, insertRow } from "../supabase.js";
+import { callRpc, quotePostgrestValue, selectOne, selectRows, updateRows, insertRow } from "../supabase.js";
 import { HttpError } from "../http.js";
 import { asJsonObject, asNumber, asString, type JsonObject } from "../types.js";
 import { createNotification } from "../user/notifications.js";
@@ -25,6 +25,9 @@ export interface ReturnListFilters {
  */
 export interface TicketListFilters {
   status?: string;
+  /** Ilike trên tiêu đề, mô tả, SĐT và email khách: đủ để CSKH tìm lại một ca từ số điện thoại đơn. */
+  search?: string;
+  userId?: string;
   limit: number;
   offset: number;
 }
@@ -852,6 +855,13 @@ export function createReturnRepository() {
         offset: filters.offset
       };
       if (filters.status) query.status = `eq.${filters.status}`;
+      if (filters.userId) query.user_id = `eq.${filters.userId}`;
+      // Chuỗi tìm được bọc nháy kép qua `quotePostgrestValue`, nên một dấu `,` hay `)` do người
+      // dùng gõ không thể mở điều kiện lọc mới.
+      if (filters.search) {
+        const pattern = `ilike.*${quotePostgrestValue(filters.search)}*`;
+        query.or = `(title.${pattern},description.${pattern},guest_phone.${pattern},guest_email.${pattern})`;
+      }
       return selectRows("support_ticket", query, authOptions(accessToken));
     },
 

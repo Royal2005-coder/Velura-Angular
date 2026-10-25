@@ -31,7 +31,7 @@ describe('ERP admin navigation registry', () => {
   });
 
   it('marks shipped workspaces ready and the remaining workspaces planned', () => {
-    const ready = new Set(['dashboard', 'logs', 'accounts', 'reviews', 'pricing', 'orders', 'promotions', 'products', 'returns', 'content']);
+    const ready = new Set(['dashboard', 'logs', 'accounts', 'members', 'reviews', 'pricing', 'orders', 'promotions', 'products', 'returns', 'content']);
     for (const item of Object.values(ADMIN_ERP_NAV_ITEMS)) {
       expect(item.status).toBe(ready.has(item.key) ? 'ready' : 'planned');
     }

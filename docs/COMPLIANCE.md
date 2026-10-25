@@ -84,7 +84,7 @@ runtime tương ứng; không suy ra thành công từ bảng trạng thái cũ 
 
 | Gate | Bằng chứng cần có |
 |---|---|
-| Cluster identity | UID `a9517754-4868-46b9-8c2370e53cff`, explicit context, owner Ops CLI |
+| Cluster identity | UID `a9517754-4868-46b9-8e8f-8c2370e53cff`, explicit context, owner Ops CLI |
 | Manifest ownership/admission | CI render root/platform/production, không trùng inventory, quota đủ cho rollout |
 | Workload checks | Required API/Angular/worker/build/migrations/manifests checks xanh trên PR |
 | Immutable release | Main publisher run/attempt thành công, Trivy/SBOM/sign và Cosign đúng ba digest |

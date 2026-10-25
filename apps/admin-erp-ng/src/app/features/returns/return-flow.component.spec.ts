@@ -81,8 +81,75 @@ describe('ReturnFlowComponent', () => {
     expect(calls[0]).toEqual({ refundAmount: 500_000, adminNote: '', expectedVersion: 3 });
   });
 
-  it('requires a ten-character reason for rejection and outreach', () => {
-    const rejected = boot({}, pending, 'reject');
+  it('executes the Stripe refund the approval just authorized, in one step', () => {
+    const gateway: Array<Record<string, unknown>> = [];
+    const row: AdminReturnRow = {
+      ...pending,
+      status: 'RECEIVED',
+      payment_kind: 'stripe',
+      refund_flow: 'stripe_auto',
+      refund_receiver_status: 'valid',
+      condition_check_result: 'qa_pass',
+    };
+    const flow$ = boot(
+      {
+        approveRefund: () => of({ ...row, status: 'REFUND_PROCESSING', version: 4, condition_check_result: 'qa_pass', refund: null }),
+        triggerStripeRefund: (_id, body) => {
+          gateway.push(body);
+          return of({ success: true, refund: { status: 'refunded' } });
+        },
+      },
+      row,
+      'refund',
+    );
+    const notes: string[] = [];
+    flow$.done.subscribe((message) => notes.push(message));
+    flow$.setNote(input('Khách đã gửi đủ ảnh minh chứng lỗi sản phẩm.'));
+    flow$.submit();
+
+    expect(gateway).toEqual([{ expectedVersion: 4 }]);
+    expect(notes).toEqual(['Stripe đã hoàn tiền. Phiếu sẽ được đánh dấu hoàn tất theo luồng.']);
+  });
+
+  it('keeps the approval and says so when the gateway refuses', () => {
+    const row: AdminReturnRow = { ...pending, status: 'RECEIVED', payment_kind: 'stripe', refund_flow: 'stripe_auto', condition_check_result: 'qa_pass' };
+    const flow$ = boot(
+      {
+        approveRefund: () => of({ ...row, status: 'REFUND_PROCESSING', version: 4, condition_check_result: 'qa_pass', refund: null }),
+        triggerStripeRefund: () => throwError(() => new Error('gateways down')),
+      },
+      row,
+      'refund',
+    );
+    const notes: string[] = [];
+    flow$.done.subscribe((message) => notes.push(message));
+    flow$.setNote(input('Kho đã nhận hàng và kiểm đạt, hoàn tiền theo giá trị hàng trả.'));
+    flow$.submit();
+
+    expect(notes[0]).toContain('Đã duyệt hoàn tiền, nhưng cổng chưa chạy');
+    expect(flow$.saving()).toBe(false);
+  });
+
+  it('leaves COD approvals to the transfer flow instead of calling a card gateway', () => {
+    const triggered: string[] = [];
+    const flow$ = boot(
+      {
+        approveRefund: () => of({ ...pending, status: 'REFUND_PROCESSING', version: 4, refund: null }),
+        triggerStripeRefund: (id) => {
+          triggered.push(id);
+          return of({ success: true, refund: { status: 'refunded' } });
+        },
+      },
+      pending,
+      'refund',
+    );
+    flow$.setNote(input('COD: kế toán sẽ chuyển khoản theo biên bản kho.'));
+    flow$.submit();
+
+    expect(triggered).toEqual([]);
+  });
+
+  it('requires a ten-character reason for rejection and outreach', () => {    const rejected = boot({}, pending, 'reject');
     rejected.setNote(input('ngắn'));
     expect(rejected.canSubmit()).toBe(false);
     rejected.setNote(input('Sản phẩm còn hạn bảo hành, khách đổi ý nên từ chối.'));

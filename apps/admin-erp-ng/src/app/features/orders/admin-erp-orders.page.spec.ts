@@ -1,9 +1,9 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { Observable, of, throwError } from 'rxjs';
-import { AdminErpApiService, AdminOrderRow, AdminOrderSummary } from '../../core/admin-erp-api.service';
+import { AdminErpApiService, AdminOrderAction, AdminOrderRow, AdminOrderSummary } from '../../core/admin-erp-api.service';
 import { AdminListPayload } from '../../core/admin-erp-http';
-import { AdminErpSessionService } from '../../core/admin-erp-session.service';
+import { AdminErpSessionService, type AdminAuthMe } from '../../core/admin-erp-session.service';
 import { AdminErpOrdersPage } from './admin-erp-orders.page';
 
 const paidOrder: AdminOrderRow = {
@@ -42,10 +42,61 @@ const codOrder: AdminOrderRow = {
   ],
 };
 
-type ListOrdersFn = (params?: Record<string, string>) => Observable<AdminListPayload<AdminOrderRow>>;
+type ListOrdersFn = (param?: Record<string, string>) => Observable<AdminListPayload<AdminOrderRow>>;
+
+const shipmentAction: AdminOrderAction = {
+  code: 'upsert_shipment',
+  label: 'Tạo/cập nhật vận đơn',
+  to_status: null,
+  requires_note: true,
+  fields: ['shipment'],
+  destructive: false,
+};
+
+const handoverAction: AdminOrderAction = {
+  code: 'confirm_handover',
+  label: 'Xác nhận bàn giao ĐVVC',
+  to_status: 'shipping',
+  requires_note: true,
+  fields: [],
+  destructive: false,
+};
+
+const shippedOrder: AdminOrderRow = {
+  ...paidOrder,
+  version: 3,
+  carrier: 'GHN',
+  tracking_code: 'VN9-1',
+  allowed_actions: [shipmentAction, handoverAction],
+};
+
+const handedOrder: AdminOrderRow = { ...shippedOrder, status: 'shipping', version: 4, allowed_actions: [] };
+
+function formEvent(values: Record<string, string>): Event {
+  const elements = { namedItem: (name: string) => ({ value: values[name] ?? '' }) };
+  return { preventDefault: () => undefined, target: { elements } } as unknown as Event;
+}
+
+function context(capabilities: Record<string, string[]>): AdminAuthMe {
+  return {
+    role: 'admin_operator_donhang',
+    roleName: 'Admin đơn hàng',
+    isAdmin: true,
+    allowedPages: ['orders'],
+    allowedModules: ['orders'],
+    capabilities,
+    user: { id: 'order', email: 'order@velura.test' },
+    profile: { user_id: 'order', email: 'order@velura.test', full_name: 'Order', role: 'admin', is_active: true },
+  } as AdminAuthMe;
+}
 
 describe('AdminErpOrdersPage', () => {
-  async function boot(listOrders: ListOrdersFn, calls: Array<Record<string, string> | undefined> = []) {
+  async function boot(
+    listOrders: ListOrdersFn,
+    calls: Array<Record<string, string> | undefined> = [],
+    overrides: Record<string, unknown> = {},
+    capabilities: Record<string, string[]> = { orders: ['read', 'update'] },
+  ) {
     TestBed.resetTestingModule();
     const summary: AdminOrderSummary = {
       attention: 3,
@@ -64,25 +115,18 @@ describe('AdminErpOrdersPage', () => {
       getOrder: (orderId: string) => of(orderId === 'o2' ? codOrder : paidOrder),
       orderAuditLogs: () => of({ rows: [], count: 0 }),
       listAuditLogs: () => of({ rows: [], count: 0 }),
+      listReturns: () => of({ rows: [], count: 0 }),
       performOrderAction: () => of({ order: paidOrder, refund: null }),
       resolvePayment: () => of({}),
       simulateCarrier: () => of(paidOrder),
+      ...overrides,
     };
     await TestBed.configureTestingModule({
       imports: [AdminErpOrdersPage],
       providers: [provideRouter([]), { provide: AdminErpApiService, useValue: api }],
     }).compileComponents();
     const session = TestBed.inject(AdminErpSessionService);
-    session.applyAuthContext({
-      role: 'admin_operator_donhang',
-      roleName: 'Admin đơn hàng',
-      isAdmin: true,
-      allowedPages: ['orders'],
-      allowedModules: ['orders'],
-      capabilities: { orders: ['read', 'update'] },
-      user: { id: 'order', email: 'order@velura.test' },
-      profile: { user_id: 'order', email: 'order@velura.test', full_name: 'Order', role: 'admin', is_active: true },
-    });
+    session.applyAuthContext(context(capabilities));
     const fixture = TestBed.createComponent(AdminErpOrdersPage);
     fixture.detectChanges();
     return fixture;
@@ -145,5 +189,116 @@ describe('AdminErpOrdersPage', () => {
 
     expect(page.loadError()).toBe('orders down');
     expect(page.rows()).toEqual([]);
+  });
+
+  it('runs the handover the API keeps as a second action right after the shipment is stored', async () => {
+    const actions: Array<{ action: string; body: Record<string, unknown> }> = [];
+    const fixture = await boot(
+      () => of({ rows: [shippedOrder], count: 1 }),
+      [],
+      {
+        performOrderAction: (orderId: string, action: string, body: Record<string, unknown>) => {
+          actions.push({ action, body });
+          return of({ order: action === 'upsert_shipment' ? shippedOrder : handedOrder, refund: null });
+        },
+      },
+    );
+    const page = fixture.componentInstance;
+
+    page.selected.set(shippedOrder);
+    page.modal.set({ kind: 'action', action: shipmentAction });
+    page.submitAction(formEvent({ note: 'Tạo vận đơn GHN VN9-1', carrier: 'GHN', trackingCode: 'VN9-1', trackingUrl: '' }));
+
+    expect(actions.map((entry) => entry.action)).toEqual(['upsert_shipment', 'confirm_handover']);
+    expect(actions[0].body['expectedVersion']).toBe(3);
+    expect(actions[1].body['expectedVersion']).toBe(3);
+    expect(String(actions[1].body['note'])).toContain('VN9-1');
+    expect(page.selected()?.status).toBe('shipping');
+    expect(page.notice()).toContain('bàn giao');
+  });
+
+  it('stops the chain when the operator turns the same-step handover off', async () => {
+    const actions: string[] = [];
+    const fixture = await boot(
+      () => of({ rows: [shippedOrder], count: 1 }),
+      [],
+      {
+        performOrderAction: (orderId: string, action: string) => {
+          actions.push(action);
+          return of({ order: shippedOrder, refund: null });
+        },
+      },
+    );
+    const page = fixture.componentInstance;
+
+    page.autoHandover.set(false);
+    page.selected.set(shippedOrder);
+    page.modal.set({ kind: 'action', action: shipmentAction });
+    page.submitAction(formEvent({ note: 'Tạo vận đơn GHN VN9-1', carrier: 'GHN', trackingCode: 'VN9-1' }));
+
+    expect(actions).toEqual(['upsert_shipment']);
+  });
+
+  it('says so when the shipment stored but the handover did not', async () => {
+    const fixture = await boot(
+      () => of({ rows: [shippedOrder], count: 1 }),
+      [],
+      {
+        performOrderAction: (orderId: string, action: string) => {
+          if (action === 'upsert_shipment') return of({ order: shippedOrder, refund: null });
+          return throwError(() => new Error('Đơn đã bị vô hiệu vận đơn.'));
+        },
+      },
+    );
+    const page = fixture.componentInstance;
+
+    page.selected.set(shippedOrder);
+    page.modal.set({ kind: 'action', action: shipmentAction });
+    page.submitAction(formEvent({ note: 'Tạo vận đơn GHN VN9-1', carrier: 'GHN', trackingCode: 'VN9-1' }));
+
+    expect(page.notice()).toContain('Vận đơn đã lưu');
+    expect(page.notice()).toContain('bàn giao chưa thành công');
+    expect(page.submitting()).toBe(false);
+  });
+
+  it('folds the return records of the open order into the same trail', async () => {
+    const fixture = await boot(
+      () => of({ rows: [paidOrder], count: 1 }),
+      [],
+      {
+        getOrder: () =>
+          of({
+            ...paidOrder,
+            events: [{ event_id: 'e1', action: 'confirm_handover', created_at: '2026-10-21T02:00:00Z', actor_type: 'manual' }],
+          }),
+        listReturns: () =>
+          of({ rows: [{ return_id: 'r-1', order_id: 'o1', status: 'RECEIVED', created_at: '2026-10-23T02:00:00Z' }], count: 1 }),
+      },
+      { orders: ['read', 'update'], returns: ['read'] },
+    );
+    const page = fixture.componentInstance;
+    page.openDetail('o1');
+
+    const titles = page.trace().map((entry) => entry.title);
+    expect(titles[0]).toContain('Đổi trả r-1');
+    expect(titles).toContain('Bàn giao đơn vị vận chuyển');
+    expect(page.trace()[0].links.length).toBe(1);
+    expect(page.orderLinks().map((link) => link.label)).toContain('Đổi trả của đơn này');
+  });
+
+  it('never asks for returns the operator has no right to read', async () => {
+    let called = 0;
+    const fixture = await boot(() => of({ rows: [paidOrder], count: 1 }), [], {
+      listReturns: () => {
+        called += 1;
+        return of({ rows: [], count: 0 });
+      },
+    });
+    const page = fixture.componentInstance;
+    page.openDetail('o1');
+
+    expect(page.canReadReturns()).toBe(false);
+    expect(called).toBe(0);
+    expect(page.trace().length).toBe(0);
   });
 });

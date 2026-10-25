@@ -253,6 +253,13 @@
   font-size: 11px;
 }
 
+.desk-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+}
+
 @media (max-width: 1080px) {
   .desk-layout {
     grid-template-columns: minmax(0, 1fr);

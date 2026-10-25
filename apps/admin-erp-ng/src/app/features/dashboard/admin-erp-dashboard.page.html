@@ -68,8 +68,8 @@
               <strong>{{ alert.title }}</strong>
               <span>{{ alert.detail }}</span>
             </div>
-            @if (routeFor(alert.page); as route) {
-              <a class="erp-btn erp-btn--sm" [routerLink]="route">{{ alert.action }}</a>
+            @if (alertLink(alert.page); as link) {
+              <a class="erp-btn erp-btn--sm" [routerLink]="link.commands" [queryParams]="link.query">{{ alert.action }}</a>
             } @else {
               <span class="muted">Sắp mở</span>
             }

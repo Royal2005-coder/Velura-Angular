@@ -239,3 +239,30 @@ export function carrierLabel(input: string | null | undefined): string {
   const profile = findCarrier(input);
   return profile ? profile.label : String(input || "").trim();
 }
+
+/**
+ * Mã vận đơn demo ổn định cho một đơn: cùng đơn luôn ra cùng mã, nên in label nhiều lần
+ * vẫn khớp. Chỉ dùng cho mã mẫu, không tự ghi vào đơn.
+ */
+export function demoTrackingCode(orderCode: string | null | undefined): string {
+  const tail = String(orderCode || '')
+    .replace(/[^A-Za-z0-9]/g, '')
+    .toUpperCase()
+    .slice(-9);
+  return `GHN${tail || 'DEMO00001'}`;
+}
+
+/**
+ * Dữ liệu vận đơn demo cho một đơn: ưu tiên dữ liệu thật đã có trên đơn, còn trống thì suy
+ * ra từ mã đơn để mã mẫu luôn quét ra đủ ĐVVC + mã + URL. Đây là dữ liệu của mã mẫu, không
+ * phải giá trị hệ thống tự ghi vào đơn khi chưa quét.
+ */
+export function demoShipmentFacts(order: {
+  order_code?: string | null;
+  carrier?: string | null;
+  tracking_code?: string | null;
+}): { carrier: string; trackingCode: string; trackingUrl: string } {
+  const carrier = String(order.carrier || '').trim() || 'GHN';
+  const trackingCode = String(order.tracking_code || '').trim() || demoTrackingCode(order.order_code);
+  return { carrier, trackingCode, trackingUrl: deriveTrackingUrl(carrier, trackingCode) };
+}

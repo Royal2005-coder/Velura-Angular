@@ -31,6 +31,7 @@ import {
   buildOrderQrLink,
   buildShipmentQr,
   carrierLabel,
+  demoShipmentFacts,
   deriveTrackingUrl,
   parseScan,
 } from '../../core/admin-erp-qr';
@@ -147,6 +148,7 @@ export class AdminErpOrdersPage {
   readonly shipmentUrlEdited = signal(false);
   readonly scanOpen = signal(false);
   readonly scanError = signal<string | null>(null);
+  readonly scanNotice = signal<string | null>(null);
   readonly carriers = CARRIER_PROFILES;
   readonly copiedPhone = signal(false);
   readonly codDecision = signal<'' | 'confirm' | 'cancel' | 'no_answer' | 'invalid'>('');
@@ -221,15 +223,21 @@ export class AdminErpOrdersPage {
   });
   readonly pipelineSteps = computed(() => this.buildPipeline(this.selected()));
   readonly canSimulateCarrier = computed(() => this.session.session()?.roleCode === 'super_admin' && !!this.selected()?.can_simulate_carrier);
-  /** Mã mẫu cho hộp quét: đơn đang mở + các trường vận đơn đã nhập, để thử camera ngay. */
+  /** Mã mẫu cho hộp quét: mang sẵn dữ liệu vận đơn demo của đơn đang mở để quét là điền đủ. */
   readonly scanSample = computed(() => {
-    const shipment = this.shipment();
+    const order = this.selected();
+    if (!order) return '';
+    const demo = demoShipmentFacts(order);
     return buildShipmentQr({
-      orderCode: this.selected()?.order_code || undefined,
-      carrier: shipment.carrier || undefined,
-      trackingCode: shipment.trackingCode || undefined,
-      trackingUrl: shipment.trackingUrl || undefined,
+      orderCode: order.order_code || undefined,
+      carrier: demo.carrier,
+      trackingCode: demo.trackingCode,
+      trackingUrl: demo.trackingUrl,
     });
+  });
+  readonly scanSampleCaption = computed(() => {
+    const order = this.selected();
+    return order ? `Mã mẫu demo cho đơn ${order.order_code || order.order_id.slice(0, 8)} — quét để điền ĐVVC, mã vận đơn và URL.` : '';
   });
 
   readonly orderColumns: readonly AdminTableColumn[] = [
@@ -474,6 +482,7 @@ export class AdminErpOrdersPage {
     this.actionError.set(null);
     this.scanOpen.set(false);
     this.scanError.set(null);
+    this.scanNotice.set(null);
     // `prefill` đọc từ modal vừa mở, nên phải khởi tạo sau khi modal được set.
     this.shipment.set({
       carrier: this.prefill().carrier,
@@ -528,6 +537,7 @@ export class AdminErpOrdersPage {
     this.copiedPhone.set(false);
     this.scanOpen.set(false);
     this.scanError.set(null);
+    this.scanNotice.set(null);
   }
 
   /**
@@ -725,18 +735,24 @@ export class AdminErpOrdersPage {
 
   /**
    * Fills the shipment from a scanned code. A carrier label that only carries the tracking
-   * number fills that field; a label for another order is refused instead of silently applied.
+   * number fills that field; the order's own QR fills the demo shipment for that order; a label
+   * for another order is refused instead of silently applied.
    */
   applyShipmentScan(text: string): void {
     this.scanOpen.set(false);
+    this.scanNotice.set(null);
     const order = this.selected();
     const result = parseScan(text, { orderId: order?.order_id, orderCode: order?.order_code });
     if (result.mismatch) {
       this.scanError.set('Mã QR này thuộc một đơn khác. Kiểm lại label trước khi lưu vận đơn.');
       return;
     }
-    if (result.kind === 'order') {
-      this.scanError.set('Mã này là mã đơn hàng, không có mã vận đơn. Quét label của ĐVVC hoặc nhập mã vận đơn.');
+    if (result.kind === 'order' && order) {
+      const demo = demoShipmentFacts(order);
+      this.shipment.set(demo);
+      this.shipmentUrlEdited.set(true);
+      this.scanError.set(null);
+      this.scanNotice.set(`Mã QR khớp đơn ${order.order_code || ''}: đã điền vận đơn demo ${demo.carrier} · ${demo.trackingCode}.`);
       return;
     }
     if (result.kind !== 'tracking' && result.kind !== 'shipment') {
@@ -755,6 +771,8 @@ export class AdminErpOrdersPage {
       if (derived) this.shipment.update((current) => ({ ...current, trackingUrl: derived }));
     }
     this.scanError.set(null);
+    const filled = this.shipment();
+    this.scanNotice.set(`Đã điền từ mã QR: ${filled.carrier || 'ĐVVC'} · ${filled.trackingCode}.`);
   }
 
   /** Link in trên label của đơn; quét bằng điện thoại sẽ mở thẳng đơn này. */

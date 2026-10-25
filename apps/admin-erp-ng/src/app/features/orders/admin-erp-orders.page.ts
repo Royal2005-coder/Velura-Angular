@@ -1,8 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, DestroyRef, Component, computed, inject, signal } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink, type ParamMap } from '@angular/router';
-import { catchError, of, skip } from 'rxjs';
+import { catchError, of } from 'rxjs';
 import {
   AdminAuditRow,
   AdminErpApiService,
@@ -25,6 +24,7 @@ import {
   returnTrace,
   type OrderTraceOrigin,
 } from '../../core/admin-erp-order-trace';
+import { choiceParam, textParam, watchQueryParams } from '../../core/admin-erp-deep-link';
 import { adminDateTime, adminMoney } from '../../core/admin-erp-format';
 import {
   adminErrorMessage,
@@ -54,6 +54,8 @@ type OrderModal =
   | null;
 
 const STALE_ORDER_CODES = new Set(['VERSION_CONFLICT', 'INVALID_ORDER_ACTION', 'ORDER_ALREADY_HANDED_OVER', 'PAYMENT_VERSION_CONFLICT']);
+
+const ORDER_TABS = ['all', 'attention', 'payment', 'cancelled', 'logs'] as const;
 
 const CALL_RESULTS = [
   { code: 'reached', label: 'Liên hệ được' },
@@ -259,22 +261,27 @@ export class AdminErpOrdersPage {
   ];
 
   constructor() {
-    this.applyDeepLink(this.route.snapshot.queryParamMap);
-    this.route.queryParamMap.pipe(skip(1), takeUntilDestroyed(this.destroyRef)).subscribe((params) => this.applyDeepLink(params));
+    watchQueryParams(this.route, this.destroyRef, (params) => this.applyDeepLink(params));
   }
 
   /**
-   * Applies an inbound deep link: filters from another workspace and the order to open.
-   *
-   * Router params can change while this component stays alive (order to exchange order, or the
-   * customer's other orders), so links are handled on every emission instead of once at load.
+   * Applies an inbound deep link: the queue tab, the filters another workspace knows about this
+   * order, and the order to open.
    */
   private applyDeepLink(params: ParamMap): void {
-    this.query.set(params.get('q') || '');
-    this.status.set(params.get('status') || '');
+    const tab = choiceParam(params, 'tab', ORDER_TABS, this.tab()) as OrderTab;
+    this.tab.set(tab);
+    this.query.set(textParam(params, 'q'));
+    this.status.set(textParam(params, 'status'));
+    this.paymentMethod.set(textParam(params, 'payment'));
     this.page.set(1);
-    this.reload();
-    const focus = params.get('focus');
+    this.logsPage.set(1);
+    if (tab === 'logs') {
+      this.loadLogs();
+    } else {
+      this.reload();
+    }
+    const focus = textParam(params, 'focus');
     if (focus) {
       this.openDetail(focus);
     }
@@ -336,7 +343,7 @@ export class AdminErpOrdersPage {
    * Switches order tabs.
    */
   setTab(tab: string): void {
-    if (!['all', 'attention', 'payment', 'cancelled', 'logs'].includes(tab)) return;
+    if (!ORDER_TABS.includes(tab as (typeof ORDER_TABS)[number])) return;
     this.tab.set(tab as OrderTab);
     this.page.set(1);
     this.closeDetail();

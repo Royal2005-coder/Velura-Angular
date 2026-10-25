@@ -110,7 +110,7 @@
     <app-erp-pagination [page]="ticketsPage()" [pageCount]="ticketsPageCount()" [label]="ticketRangeLabel()" (changed)="goTicketsPage($event)" />
     <p class="desk-note">Phiếu gắn với hội thoại được xử lý trong tab Hội thoại, tại đây chỉ đọc.</p>
   } @else if (tab() === 'chat') {
-    <app-erp-chat-desk [canMutate]="canWrite()" />
+    <app-erp-chat-desk [canMutate]="canWrite()" [focusSession]="chatFocus()" />
   } @else {
     <app-erp-filter-bar [busy]="loading()" (apply)="applyLogFilters()" (reset)="resetLogFilters()">
       <label class="erp-field">
@@ -206,6 +206,18 @@
         <div><dt>Vận đơn trả</dt><dd class="is-mono">{{ record.tracking_return_code || '—' }}</dd></div>
         <div><dt>Vận đơn đổi</dt><dd class="is-mono">{{ record.exchange_tracking_code || '—' }}</dd></div>
       </dl>
+
+      @if (recordTrail().length) {
+        <section class="record__trail">
+          <h4>Dấu vết xử lý</h4>
+          @for (row of recordTrail(); track row.audit_id || row.timestamp) {
+            <p class="record__line">
+              <span>{{ date(row.timestamp) }} · {{ row.action_label || row.action || '—' }}</span>
+              <span>{{ row.actor_label || row.actor_name || 'Hệ thống' }}{{ row.reason ? ' · ' + row.reason : '' }}</span>
+            </p>
+          }
+        </section>
+      }
 
       @if (record.description) {
         <p class="record__text">{{ record.description }}</p>
@@ -322,6 +334,13 @@
         </div>
         <app-erp-status-badge [label]="ticketStatusLabel(ticket.status)" [tone]="ticketTone(ticket.status)" [dot]="true" />
       </div>
+      @if (ticketLinks().length) {
+        <div class="record__links">
+          @for (link of ticketLinks(); track link.label) {
+            <a class="erp-chip" [routerLink]="link.commands" [queryParams]="link.query">{{ link.label }}</a>
+          }
+        </div>
+      }
       <dl class="record__grid">
         <div><dt>Ưu tiên</dt><dd>{{ ticketPriority(ticket.priority) }}</dd></div>
         <div><dt>Phiên bản</dt><dd class="is-mono">{{ ticket.version ?? '—' }}</dd></div>

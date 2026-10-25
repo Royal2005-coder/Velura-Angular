@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, type ParamMap } from '@angular/router';
-import { catchError, forkJoin, of, skip } from 'rxjs';
+import { catchError, forkJoin, of } from 'rxjs';
+import { choiceParam, textParam, watchQueryParams } from '../../core/admin-erp-deep-link';
 import { AdminAuditRow, AdminErpApiService } from '../../core/admin-erp-api.service';
 import { adminDateTime } from '../../core/admin-erp-format';
 import {
@@ -156,8 +156,7 @@ export class AdminErpLogsPage {
   ];
 
   constructor() {
-    this.applyDeepLink(this.route.snapshot.queryParamMap);
-    this.route.queryParamMap.pipe(skip(1), takeUntilDestroyed(this.destroyRef)).subscribe((params) => this.applyDeepLink(params));
+    watchQueryParams(this.route, this.destroyRef, (params) => this.applyDeepLink(params));
   }
 
   /**
@@ -165,9 +164,9 @@ export class AdminErpLogsPage {
    * the audit of the order or return they were reading instead of the whole log.
    */
   private applyDeepLink(params: ParamMap): void {
-    this.module.set(params.get('module') || '');
-    this.targetScope.set(params.get('target') || '');
-    this.query.set(params.get('q') || '');
+    this.module.set(choiceParam(params, 'module', MODULE_OPTIONS.map((option) => String(option.value)), this.module()));
+    this.targetScope.set(textParam(params, 'target'));
+    this.query.set(textParam(params, 'q'));
     this.page.set(1);
     this.reload();
   }

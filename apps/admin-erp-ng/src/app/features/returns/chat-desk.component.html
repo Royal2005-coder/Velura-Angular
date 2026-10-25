@@ -70,6 +70,14 @@
         <button class="erp-btn erp-btn--sm" type="button" (click)="refresh()">Đọc lại</button>
       </div>
 
+      @if (sessionLinks().length) {
+        <div class="desk-links">
+          @for (link of sessionLinks(); track link.label) {
+            <a class="erp-chip" [routerLink]="link.commands" [queryParams]="link.query">{{ link.label }}</a>
+          }
+        </div>
+      }
+
       @if (intelligence(); as intel) {
         <div class="desk-intel">
           <span>Phân loại đang áp dụng</span>

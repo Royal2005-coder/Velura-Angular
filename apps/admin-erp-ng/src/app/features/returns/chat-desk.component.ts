@@ -1,5 +1,6 @@
 import { Subscription, catchError, of } from 'rxjs';
-import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, input, signal } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import {
   AdminChatClassification,
   AdminChatMessageRow,
@@ -39,7 +40,7 @@ const ACTIONS: ReadonlyArray<{ code: ReviewAction; label: string; hint: string; 
  */
 @Component({
   selector: 'app-erp-chat-desk',
-  imports: [AdminErpEmptyState, AdminErpFilterBar, AdminErpIcon, AdminErpStatusBadge],
+  imports: [AdminErpEmptyState, AdminErpFilterBar, AdminErpIcon, AdminErpStatusBadge, RouterLink],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './chat-desk.component.html',
   styleUrl: './chat-desk.component.scss',
@@ -50,6 +51,18 @@ export class ChatDeskComponent {
   private messagesRequest = new Subscription();
 
   readonly canMutate = input(false);
+  /** Case a deep link asked to open; the desk loads its transcript as soon as the link lands. */
+  readonly focusSession = input('');
+
+  /** Records the case already raised, so the operator never re-types an id to find them. */
+  readonly sessionLinks = computed(() => {
+    const row = this.selected();
+    const links: { label: string; commands: readonly string[]; query: Readonly<Record<string, string>> }[] = [];
+    if (row?.support_ticket_id) {
+      links.push({ label: 'Phiếu hỗ trợ của hội thoại', commands: ['/returns'], query: { tab: 'tickets', focus: row.support_ticket_id } });
+    }
+    return links;
+  });
 
   readonly sessions = signal<AdminChatSessionRow[]>([]);
   readonly selected = signal<AdminChatSessionRow | null>(null);
@@ -154,6 +167,12 @@ export class ChatDeskComponent {
   constructor() {
     this.destroyRef.onDestroy(() => this.messagesRequest.unsubscribe());
     this.load();
+    effect(() => {
+      const id = this.focusSession();
+      if (id && this.selected()?.session_id !== id) {
+        this.open({ session_id: id } as AdminChatSessionRow);
+      }
+    });
   }
 
   /**

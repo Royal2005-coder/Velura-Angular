@@ -88,6 +88,12 @@ export const routes: Routes = [
         data: { page: 'reviews', navKey: 'reviews' },
       },
       {
+        path: 'content',
+        loadComponent: () => import('./features/content/admin-erp-content.page').then((m) => m.AdminErpContentPage),
+        canActivate: [adminErpAuthGuard],
+        data: { page: 'content', alternativePages: ['promotions'], navKey: 'content' },
+      },
+      {
         path: 'accounts',
         loadComponent: () => import('./features/accounts/admin-erp-accounts.page').then((m) => m.AdminErpAccountsPage),
         canActivate: [adminErpAuthGuard],

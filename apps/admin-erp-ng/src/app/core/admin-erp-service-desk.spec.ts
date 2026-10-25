@@ -18,6 +18,8 @@ import {
   returnStatusTone,
   stripeRefundAllowed,
   manualRefundAllowed,
+  nextReturnStep,
+  warehouseQaPassed,
 } from './admin-erp-service-desk';
 
 const base: AdminReturnRow = { return_id: 'r1', order_id: 'o1', return_type: 'refund', status: 'REQUESTED', version: 1 };
@@ -44,12 +46,33 @@ describe('service desk rules mirrored from the API', () => {
     expect(manualReturnTransitions('REFUNDED')).toEqual(['COMPLETED']);
   });
 
-  it('only allows refund or exchange approval while the return still waits', () => {
-    expect(refundApprovalAllowed(base)).toBe(true);
-    expect(refundApprovalAllowed({ ...base, return_type: 'exchange' })).toBe(false);
-    expect(exchangeApprovalAllowed({ ...base, return_type: 'exchange' })).toBe(true);
-    expect(refundApprovalAllowed({ ...base, status: 'WAITING_RETURN' })).toBe(false);
+  it('only allows refund or exchange approval after the warehouse QA passed', () => {
+    const received: AdminReturnRow = { ...base, status: 'RECEIVED', condition_check_result: 'qa_pass' };
+    expect(warehouseQaPassed(received)).toBe(true);
+    expect(refundApprovalAllowed(received)).toBe(true);
+    expect(refundApprovalAllowed({ ...received, return_type: 'exchange' })).toBe(false);
+    expect(exchangeApprovalAllowed({ ...received, return_type: 'exchange' })).toBe(true);
+    expect(exchangeApprovalAllowed(received)).toBe(false);
+    expect(refundApprovalAllowed(base)).toBe(false);
+    expect(refundApprovalAllowed({ ...received, condition_check_result: undefined })).toBe(false);
     expect(refundApprovalAllowed(null)).toBe(false);
+  });
+
+  it('points at the next legal step and never at money before QA', () => {
+    expect(nextReturnStep({ ...base, status: 'REQUESTED' })?.flow).toBe('contact');
+    expect(nextReturnStep({ ...base, status: 'WAITING_RETURN' })?.target).toBe('RETURN_IN_TRANSIT');
+    expect(nextReturnStep({ ...base, status: 'RETURN_IN_TRANSIT' })?.flow).toBe('receipt');
+    expect(nextReturnStep({ ...base, status: 'RECEIVED', condition_check_result: 'qa_pass' })?.flow).toBe('refund');
+    expect(
+      nextReturnStep({ ...base, status: 'RECEIVED', condition_check_result: 'qa_pass', return_type: 'exchange' })?.flow,
+    ).toBe('exchange');
+    expect(nextReturnStep({ ...base, status: 'REFUNDED' })?.target).toBe('COMPLETED');
+    expect(nextReturnStep({ ...base, status: 'CANCELLED' })).toBeNull();
+  });
+
+  it('hides the exchange preparation step on a refund slip', () => {
+    expect(manualReturnTransitions('RECEIVED', 'refund')).toEqual(['NEEDS_SUPPORT']);
+    expect(manualReturnTransitions('RECEIVED', 'exchange')).toEqual(['EXCHANGE_PREPARING', 'NEEDS_SUPPORT']);
   });
 
   it('requires an approval reason until a contact log exists', () => {

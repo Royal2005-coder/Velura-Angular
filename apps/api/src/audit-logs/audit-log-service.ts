@@ -14,7 +14,8 @@ const ADMIN_MODULES = [
   "returns",
   "reviews",
   "support",
-  "content"
+  "content",
+  "members"
 ];
 
 /**

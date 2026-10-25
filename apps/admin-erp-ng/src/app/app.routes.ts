@@ -100,6 +100,12 @@ export const routes: Routes = [
         data: { page: 'accounts', navKey: 'accounts' },
       },
       {
+        path: 'members',
+        loadComponent: () => import('./features/members/admin-erp-members.page').then((m) => m.AdminErpMembersPage),
+        canActivate: [adminErpAuthGuard],
+        data: { page: 'members', navKey: 'members' },
+      },
+      {
         path: 'logs',
         loadComponent: () => import('./features/logs/admin-erp-logs.page').then((m) => m.AdminErpLogsPage),
         canActivate: [adminErpAuthGuard],

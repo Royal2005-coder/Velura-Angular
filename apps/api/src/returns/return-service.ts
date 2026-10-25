@@ -436,8 +436,12 @@ export function createReturnService({
 
     async listTickets(context, searchParams) {
       requireReturnReader(context);
+      const userId = searchParams.get("user_id") || "";
       return repository.listTickets({
         status: searchParams.get("status") || undefined,
+        search: searchParams.get("q")?.trim() || undefined,
+        // Chỉ nhận uuid: giá trị tự do sẽ lọt vào bộ lọc PostgREST dưới dạng chuỗi so khớp.
+        userId: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId) ? userId : undefined,
         limit: Math.min(parseInt(searchParams.get("limit") || "50"), 1000),
         offset: parseInt(searchParams.get("offset") || "0")
       }, context.accessToken);

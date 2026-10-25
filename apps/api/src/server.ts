@@ -18,6 +18,9 @@ import { createProductService } from "./products/product-service.js";
 import { handleProductRoute } from "./products/product-router.js";
 import { createOrderRepository } from "./orders/order-repository.js";
 import { createOrderService } from "./orders/order-service.js";
+import { createCarrierRepository } from "./carrier/carrier-repository.js";
+import { createCarrierService } from "./carrier/carrier-service.js";
+import { handleCarrierWebhookRoute } from "./carrier/carrier-router.js";
 import { startOrderAutomation } from "./orders/order-automation.js";
 import { refundStripeOrder } from "./payments/stripe.js";
 import { handleOrderRoute } from "./orders/order-router.js";
@@ -67,7 +70,9 @@ type ChatbotService = ReturnType<typeof createChatbotService>;
 
 const accountService: AccountService = createAccountService({ repository: createAccountRepository() });
 const productService: ProductService = createProductService({ repository: createProductRepository() });
-const orderService = createOrderService({ repository: createOrderRepository(), refunds: { refund: refundStripeOrder } });
+const orderRepository = createOrderRepository();
+const orderService = createOrderService({ repository: orderRepository, refunds: { refund: refundStripeOrder } });
+const carrierService = createCarrierService({ repository: createCarrierRepository(), orders: orderRepository });
 const reviewService = createReviewService({ repository: createReviewRepository() });
 const returnService = createReturnService({
   repository: createReturnRepository(),
@@ -86,6 +91,10 @@ const mutationLimiter = createFixedWindowLimiter({
 });
 const chatLimiter = createFixedWindowLimiter({
   limit: 30,
+  windowMs: 60_000
+});
+const carrierLimiter = createFixedWindowLimiter({
+  limit: 60,
   windowMs: 60_000
 });
 export async function handleApiRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -115,6 +124,9 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
       }, corsHeaders);
     }
     if (await handleRuntimeRoute(req, res, url, corsHeaders)) return;
+    // Webhook vận tải đi trước buildAuthContext: nhà vận chuyển không có token người dùng,
+    // nên quyền của nó là chữ ký HMAC trên raw body, không phải phiên đăng nhập.
+    if (await handleCarrierWebhookRoute({ req, res, url, parts, headers: corsHeaders, service: carrierService, limiter: carrierLimiter })) return;
 
     if (parts[0] !== "api") {
       throw new HttpError(404, "NOT_FOUND", "Route not found");

@@ -12,11 +12,13 @@ import {
   MIN_NOTE_LENGTH,
   MIN_TRANSFER_REFERENCE_LENGTH,
   approvalNeedsReason,
+  gatewayNote,
   manualReturnTransitions,
   paymentKindLabel,
   proofIsUsable,
   refundReceiverBlocked,
   returnStatusLabel,
+  stripeRefundAllowed,
 } from '../../core/admin-erp-service-desk';
 import { adminErrorMessage } from '../../core/admin-erp-http';
 import { adminDateTime, adminMoney } from '../../core/admin-erp-format';
@@ -55,8 +57,12 @@ export class ReturnFlowComponent {
 
   readonly flow = input<ReturnFlowKind>(null);
   readonly record = input<AdminReturnRow | null>(null);
-  readonly done = output<void>();
+  /** Message the parent shows after the flow closes; empty means nothing extra happened. */
+  readonly done = output<string>();
   readonly dismissed = output<void>();
+
+  /** Approving a Stripe refund and executing it are two API calls; operators mean both. */
+  readonly autoGateway = signal(true);
 
   readonly contactResult = signal('reached');
   readonly note = signal('');
@@ -264,16 +270,60 @@ export class ReturnFlowComponent {
       this.saving.set(false);
       return;
     }
+    if (this.flow() === 'refund' && this.autoGateway()) {
+      request.subscribe({
+        next: (result) => this.runGateway(result as AdminReturnRow),
+        error: (error: unknown) => this.fail(error),
+      });
+      return;
+    }
     request.subscribe({
       next: () => {
         this.saving.set(false);
-        this.done.emit();
+        this.done.emit('');
+      },
+      error: (error: unknown) => this.fail(error),
+    });
+  }
+
+  /**
+   * Executes the gateway refund the approval just authorized.
+   *
+   * The API splits approval (a decision, audited) from execution (a money movement), so without
+   * this step CSKH opens a second modal to confirm a decision already made. The call only runs
+   * when the freshly stored row still allows it, and a failed gateway leaves the approval intact.
+   */
+  private runGateway(approved: AdminReturnRow): void {
+    const version = Number(approved?.version);
+    if (!stripeRefundAllowed(approved) || !Number.isInteger(version)) {
+      this.saving.set(false);
+      this.done.emit('');
+      return;
+    }
+    this.api.triggerStripeRefund(approved.return_id, { expectedVersion: version }).subscribe({
+      next: (result) => {
+        this.saving.set(false);
+        this.done.emit(gatewayNote(result.refund));
       },
       error: (error: unknown) => {
         this.saving.set(false);
-        this.error.set(adminErrorMessage(error, 'Không ghi nhận được thao tác.'));
+        this.done.emit(
+          `Đã duyệt hoàn tiền, nhưng cổng chưa chạy: ${adminErrorMessage(error, 'Cổng hoàn tiền chưa phản hồi.')} Bấm "Hoàn tiền qua Stripe" để thực hiện khi cổng sẵn sàng.`,
+        );
       },
     });
+  }
+
+  /**
+   * Turns the same-step gateway execution on or off.
+   */
+  onAutoGateway(event: Event): void {
+    this.autoGateway.set((event.target as HTMLInputElement).checked);
+  }
+
+  private fail(error: unknown): void {
+    this.saving.set(false);
+    this.error.set(adminErrorMessage(error, 'Không ghi nhận được thao tác.'));
   }
 
   /**

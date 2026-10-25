@@ -33,6 +33,12 @@
       @if (amountMismatch()) {
         <p class="erp-error" role="alert">Vượt quá giá trị hàng trả (tối đa {{ money(refundable()) }}).</p>
       }
+      @if (record()?.payment_kind === 'stripe') {
+        <label class="flow-check">
+          <input type="checkbox" [checked]="autoGateway()" (change)="onAutoGateway($event)" />
+          <span>Duyệt xong là gọi hoàn tiền qua Stripe ngay (API tách duyệt và giải ngân thành hai bước).</span>
+        </label>
+      }
     }
 
     @if (flow() === 'manual') {

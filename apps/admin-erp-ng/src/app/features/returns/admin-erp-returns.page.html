@@ -446,4 +446,4 @@
   }
 </app-erp-drawer>
 
-<app-erp-return-flow [flow]="flow()" [record]="selected()" (done)="onFlowDone()" (dismissed)="closeFlow()" />
+<app-erp-return-flow [flow]="flow()" [record]="selected()" (done)="onFlowDone($event)" (dismissed)="closeFlow()" />

@@ -25,7 +25,7 @@ main:has(.success-hero) {
 }
 
 .success-hero__title {
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: "Cormorant Garamond", Georgia, serif;
   font-size: clamp(1.75rem, 5vw, 2.25rem);
   font-weight: 600;
   margin-top: 20px;
@@ -76,3 +76,15 @@ main:has(.success-hero) {
   max-width: var(--max-w);
   margin: 0 auto;
 }
+
+main.checkout-page .success-hero__icon { background: var(--velura-blush); box-shadow: 0 0 24px rgba(122,40,60,.12); }
+main.checkout-page .success-hero__icon svg path { fill: var(--velura-maroon); }
+main.checkout-page .success-hero__title { color: var(--velura-maroon); }
+main.checkout-page .success-hero__desc { color: var(--text-body); }
+main.checkout-page .details-grid { border-color: rgba(242,194,207,.68); border-radius: var(--radius-lg); }
+main.checkout-page .details-grid__row { border-color: rgba(242,194,207,.6); }
+main.checkout-page .details-grid__value--accent { color: var(--velura-maroon); }
+main.checkout-page--payment-error .success-hero__icon { background: #FCE9ED; box-shadow: 0 0 24px rgba(165,45,73,.12); }
+main.checkout-page--payment-error .success-hero__title { color: #A52D49; }
+main.checkout-page--payment-pending .success-hero__icon { background: #FFF4E8; box-shadow: 0 0 24px rgba(138,91,38,.10); }
+main.checkout-page--payment-pending .success-hero__title { color: var(--velura-maroon-deep, #631F30); }

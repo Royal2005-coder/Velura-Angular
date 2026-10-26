@@ -23,19 +23,23 @@
         <a
           class="action secondary"
           [routerLink]="model.member() ? '/account/orders' : '/guest/orders'"
+          routerLinkActive="is-active"
+          [routerLinkActiveOptions]="{ exact: true }"
           >Danh sách đơn</a
         >
         <a
           class="action secondary"
           [routerLink]="model.member() ? '/account/returns' : '/guest/returns'"
+          routerLinkActive="is-active"
           >Yêu cầu đổi / trả</a
         >
         @if (model.member()) {
-          <a class="action secondary" routerLink="/account/cancelled-orders">Đơn đã hủy</a>
+          <a class="action secondary" routerLink="/account/cancelled-orders" routerLinkActive="is-active">Đơn đã hủy</a>
         }
         <a
           class="action secondary"
           [routerLink]="model.member() ? '/account/reviews' : '/guest/reviews'"
+          routerLinkActive="is-active"
           >Đánh giá sản phẩm</a
         >
       }
@@ -97,7 +101,7 @@
                 </div>
               }
             }
-            <div class="actions" style="justify-content: flex-start; margin-top: 20px;">
+            <div class="actions u-inline-2e4224676f">
               <a
                 class="action secondary"
                 [routerLink]="model.member() ? '/account/orders' : '/guest/orders'"
@@ -163,10 +167,10 @@
             <p>
               Mã xác thực <strong>SMS OTP</strong> đã được gửi đến số điện thoại <strong>{{ maskedPhone() }}</strong>.
               @if (developmentOtp()) {
-                <br /><span class="muted" style="display: inline-block; margin-top: 8px;">Môi trường thử nghiệm: nhập mã OTP mặc định <strong>{{ developmentOtp() }}</strong>.</span>
+                <br /><span class="muted u-inline-66ce7aff06">Môi trường thử nghiệm: nhập mã OTP mặc định <strong>{{ developmentOtp() }}</strong>.</span>
               }
               @if (maskedEmail()) {
-                <br /><span class="muted" style="display: inline-block; margin-top: 8px; padding: 8px 12px; background: #FAF2EB; border: 1px solid #E8DFD6; border-radius: 8px; color: var(--terracotta, #c97b63); font-weight: 500;">
+                <br /><span class="muted u-inline-75dd594478">
                   📩 Đồng bộ nhận SMS OTP Demo: Mã OTP của số điện thoại <strong>{{ maskedPhone() }}</strong> đã được gửi qua email liên kết <strong>{{ maskedEmail() }}</strong>. Vui lòng kiểm tra hộp thư email để lấy mã 6 chữ số.
                 </span>
               }
@@ -208,26 +212,144 @@
         }
         @case ('cancelled') {
           <section class="panel order-list">
-            <h2>Đơn hàng đã hủy</h2>
-            <p class="muted">Các đơn đã hủy được lưu lại để mua lại nhanh.</p>
+            <div class="order-list__header">
+              <div class="order-list__title-area">
+                <h2>Đơn hàng đã hủy</h2>
+                <p class="muted">Các đơn đã hủy được lưu lại để mua lại nhanh chóng.</p>
+              </div>
+            </div>
             @for (item of visibleOrders(); track item.id) {
               <article class="panel order-card">
-                <div class="row order-card__head"><strong class="order-card__code">#{{ item.id }}</strong><span class="badge order-status-pill">Đã hủy</span></div>
-                <div class="order-card__items-preview">@for (line of item.items.slice(0, 2); track line.variant_id) { <div class="order-card__item-row"><img [src]="image(line.product_image)" [alt]="line.product_name" class="order-card__item-thumb" /><div class="order-card__item-info"><span class="order-card__item-name">{{ line.product_name }}</span><span class="order-card__item-meta">{{ displaySize(line.size) }} / {{ line.color }} · x{{ line.quantity }}</span></div></div> }</div>
-                <div class="row order-card__foot"><strong>{{ money(item.total) }}</strong><div class="order-card__actions"><button type="button" class="secondary btn-compact" (click)="buyAgain(item)">Mua lại</button><button type="button" class="btn-compact" (click)="open(item.id)">Xem chi tiết</button></div></div>
+                <div class="row order-card__head">
+                  <div class="order-card__title-group">
+                    <strong class="order-card__code">#{{ item.id }}</strong>
+                    <span class="muted">{{ date(item.createdAt) }} · {{ item.items.length }} sản phẩm</span>
+                  </div>
+                  <div class="order-card__badges">
+                    <span class="badge order-status-pill" data-status="cancelled">Đã hủy</span>
+                  </div>
+                </div>
+                <div class="order-card__items-preview">
+                  @for (line of item.items.slice(0, 2); track line.variant_id) {
+                    <div class="order-card__item-row">
+                      <img [src]="image(line.product_image)" [alt]="line.product_name" class="order-card__item-thumb" />
+                      <div class="order-card__item-info">
+                        <span class="order-card__item-name">{{ line.product_name }}</span>
+                        <span class="order-card__item-meta">{{ displaySize(line.size) }} / {{ line.color }} · x{{ line.quantity }}</span>
+                      </div>
+                    </div>
+                  }
+                </div>
+                <div class="row order-card__foot">
+                  <div class="order-card__total">
+                    <span class="muted">Tổng thanh toán:</span>
+                    <strong>{{ money(item.total) }}</strong>
+                  </div>
+                  <div class="order-card__actions">
+                    <button type="button" class="secondary btn-compact" (click)="buyAgain(item)">Mua lại</button>
+                    <button type="button" class="btn-compact" (click)="open(item.id)">Xem chi tiết</button>
+                  </div>
+                </div>
               </article>
-            } @empty { <div class="empty"><h3>Chưa có đơn đã hủy</h3><p class="muted">Các đơn bạn hủy sẽ xuất hiện ở đây.</p></div> }
+            } @empty {
+              <div class="empty">
+                <h3>Chưa có đơn đã hủy</h3>
+                <p class="muted">Các đơn bạn hủy sẽ xuất hiện ở đây.</p>
+              </div>
+            }
           </section>
         }
         @case ('list') {
           <section class="panel order-list">
-            <h2>{{ model.member() ? 'Đơn hàng của tôi' : 'Đơn hàng thuộc SĐT đã xác thực' }}</h2>
-            <label class="field"
-              >Tìm mã đơn<input
-                [ngModel]="filter()"
-                (ngModelChange)="filter.set($event)"
-                placeholder="Nhập mã đơn hàng"
-            /></label>
+            <div class="order-list__header">
+              <div class="order-list__title-area">
+                <h2>{{ model.member() ? 'Đơn hàng của tôi' : 'Đơn hàng thuộc SĐT đã xác thực' }}</h2>
+                <p class="muted">
+                  {{ model.member() ? 'Quản lý lịch sử mua sắm, theo dõi tiến trình giao hàng và đổi / trả trực tuyến.' : 'Danh sách đơn hàng gắn liền với số điện thoại đã xác thực thành công.' }}
+                </p>
+              </div>
+            </div>
+
+            <div class="order-filter-toolbar">
+              <label class="order-search-box">
+                <span class="sr-only">Tìm mã đơn hoặc sản phẩm</span>
+                <svg class="order-search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="11" cy="11" r="8"></circle>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+                <input
+                  class="order-search-input"
+                  [ngModel]="filter()"
+                  (ngModelChange)="filter.set($event)"
+                  placeholder="Nhập mã đơn hàng hoặc tên sản phẩm..."
+                />
+                @if (filter()) {
+                  <button type="button" class="order-search-clear" (click)="filter.set('')" aria-label="Xóa tìm kiếm">✕</button>
+                }
+              </label>
+
+              <div class="order-status-tabs" role="tablist" aria-label="Lọc theo trạng thái đơn">
+                <button
+                  type="button"
+                  class="order-status-tab"
+                  [class.is-active]="statusFilter() === 'all'"
+                  (click)="statusFilter.set('all')"
+                >
+                  Tất cả <span class="tab-count">{{ orderCounts().all }}</span>
+                </button>
+                @if (orderCounts().pending > 0) {
+                  <button
+                    type="button"
+                    class="order-status-tab"
+                    [class.is-active]="statusFilter() === 'pending'"
+                    (click)="statusFilter.set('pending')"
+                  >
+                    Chờ xác nhận <span class="tab-count">{{ orderCounts().pending }}</span>
+                  </button>
+                }
+                @if (orderCounts().preparing > 0) {
+                  <button
+                    type="button"
+                    class="order-status-tab"
+                    [class.is-active]="statusFilter() === 'preparing'"
+                    (click)="statusFilter.set('preparing')"
+                  >
+                    Chuẩn bị hàng <span class="tab-count">{{ orderCounts().preparing }}</span>
+                  </button>
+                }
+                @if (orderCounts().shipping > 0) {
+                  <button
+                    type="button"
+                    class="order-status-tab"
+                    [class.is-active]="statusFilter() === 'shipping'"
+                    (click)="statusFilter.set('shipping')"
+                  >
+                    Đang giao <span class="tab-count">{{ orderCounts().shipping }}</span>
+                  </button>
+                }
+                @if (orderCounts().delivered > 0) {
+                  <button
+                    type="button"
+                    class="order-status-tab"
+                    [class.is-active]="statusFilter() === 'delivered'"
+                    (click)="statusFilter.set('delivered')"
+                  >
+                    Hoàn tất <span class="tab-count">{{ orderCounts().delivered }}</span>
+                  </button>
+                }
+                @if (orderCounts().cancelled > 0) {
+                  <button
+                    type="button"
+                    class="order-status-tab"
+                    [class.is-active]="statusFilter() === 'cancelled'"
+                    (click)="statusFilter.set('cancelled')"
+                  >
+                    Đã hủy <span class="tab-count">{{ orderCounts().cancelled }}</span>
+                  </button>
+                }
+              </div>
+            </div>
+
             @for (item of visibleOrders(); track item.id) {
               <article class="panel order-card">
                 <div class="row order-card__head">
@@ -261,7 +383,7 @@
                       </div>
                     }
                     @if (item.items.length > 2) {
-                      <p class="muted" style="font-size: 12px; margin: 4px 0 0;">+ {{ item.items.length - 2 }} sản phẩm khác trong đơn</p>
+                      <p class="muted u-inline-65f18d9d59">+ {{ item.items.length - 2 }} sản phẩm khác trong đơn</p>
                     }
                   </div>
                 }
@@ -301,6 +423,45 @@
               </div>
               }
             }
+
+            <div class="velura-guarantee-strip">
+              <div class="guarantee-item">
+                <div class="guarantee-icon" aria-hidden="true">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path>
+                    <path d="M21 3v5h-5"></path>
+                    <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path>
+                    <path d="M3 21v-5h5"></path>
+                  </svg>
+                </div>
+                <div class="guarantee-text">
+                  <h4>Đổi / trả 7 ngày linh hoạt</h4>
+                  <p>Hỗ trợ đổi size hoặc hoàn tiền tận nơi trong 7 ngày từ khi nhận kiện hàng.</p>
+                </div>
+              </div>
+              <div class="guarantee-item">
+                <div class="guarantee-icon" aria-hidden="true">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                  </svg>
+                </div>
+                <div class="guarantee-text">
+                  <h4>Bảo vệ quyền lợi khách hàng</h4>
+                  <p>Tra cứu lộ trình đơn hàng minh bạch, xác thực an toàn qua mã SMS OTP bảo mật.</p>
+                </div>
+              </div>
+              <div class="guarantee-item">
+                <div class="guarantee-icon" aria-hidden="true">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
+                  </svg>
+                </div>
+                <div class="guarantee-text">
+                  <h4>CSKH hỗ trợ tận tâm</h4>
+                  <p>Hotline: 0901234567 (8h00 - 21h00) hoặc <a routerLink="/contact" class="link">liên hệ trực tuyến</a>.</p>
+                </div>
+              </div>
+            </div>
           </section>
         }
         @case ('detail') {
@@ -311,10 +472,10 @@
                 [routerLink]="model.member() ? '/account/orders' : '/guest/orders'"
                 >← Danh sách đơn</a
               >
-              <div class="row" style="align-items: center; gap: 10px; flex-wrap: wrap;">
-                <h2 style="margin: 0;">#{{ item.id }}</h2>
+              <div class="row u-inline-3aecd3de73">
+                <h2 class="u-inline-ff227d0632">#{{ item.id }}</h2>
                 @if (item.id.startsWith('EXC')) {
-                  <span class="badge" style="background: #e0f2fe; color: #0369a1; font-weight: 600;">Đơn đổi hàng</span>
+                  <span class="badge u-inline-7a68692bfc">Đơn đổi hàng</span>
                 }
                 @if (orderReturnStatusBadge(item); as retBadge) {
                   <span class="badge return-progress-pill" [attr.data-kind]="retBadge.kind">
@@ -356,7 +517,7 @@
                     <h3>
                       {{ line.product_name }}
                       @if (line.is_combo) {
-                        <span class="badge" style="background: #ede9fe; color: #6d28d9; font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; margin-left: 6px;">Combo Set</span>
+                        <span class="badge u-inline-bacbf0a05e">Combo Set</span>
                       }
                     </h3>
                     <p class="muted">{{ displaySize(line.size) }} / {{ line.color }} · SL {{ line.quantity }}</p>
@@ -383,9 +544,9 @@
                           ✓ Sản phẩm đã hoàn tất đổi/trả toàn bộ số lượng mua.
                         </div>
                       }
-                      <div style="margin-top: 8px;">
+                      <div class="u-inline-36ca0aff10">
                         <a
-                          class="action secondary"
+                          class="action secondary u-inline-e8fa2edd39"
                           [routerLink]="model.member() ? '/account/reviews' : '/guest/reviews'"
                           [queryParams]="{
                             order_id: item.orderId || item.id,
@@ -394,7 +555,7 @@
                             price: line.unit_price,
                             image: line.product_image
                           }"
-                          style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; font-size: 0.8125rem;"
+                         
                           >★ Đánh giá sản phẩm</a
                         >
                       </div>
@@ -572,7 +733,7 @@
                   <img [src]="image(line.product_image)" [alt]="line.product_name" />
                   <div>
                     <div class="return-line-card__head">
-                      <label class="check" style="margin: 0;">
+                      <label class="check u-inline-ff227d0632">
                         <input
                           type="checkbox"
                           [checked]="!!selections()[line.variant_id]"
@@ -584,7 +745,7 @@
                         />
                         <strong>{{ line.product_name }}</strong>
                         @if (line.is_combo) {
-                          <span class="badge" style="background: #ede9fe; color: #6d28d9; font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; margin-left: 6px;">Combo Set</span>
+                          <span class="badge u-inline-bacbf0a05e">Combo Set</span>
                         }
                       </label>
                       @if (line.isInProgress) {
@@ -617,7 +778,7 @@
                       </div>
                     }
                     @if (line.is_combo) {
-                      <p class="muted" style="color: #6d28d9; font-size: 0.8rem; margin-top: 6px;">
+                      <p class="muted u-inline-7cc59e37db">
                         * Quy tắc Combo: Hoàn trả nguyên bộ cả combo, hoặc chọn size/màu mới cho từng món khi đổi hàng.
                       </p>
                     }
@@ -697,27 +858,27 @@
                 @for (selected of selectedLines(); track selected.variantId) {
                   @if (lineFor(selected.variantId); as line) {
                     @if (line.is_combo) {
-                      <div class="combo-exchange-group" style="margin: 12px 0 20px; padding: 14px 16px; background: #faf5ff; border: 1.5px solid #d8b4fe; border-radius: 8px;">
-                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+                      <div class="combo-exchange-group u-inline-fcb24e983f">
+                        <div class="u-inline-3893aaf829">
                           <div>
-                            <strong style="color: #581c87; font-size: 0.95rem;">{{ line.product_name }}</strong>
-                            <span class="badge" style="background: #ede9fe; color: #6d28d9; font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; margin-left: 6px;">Combo Set</span>
+                            <strong class="u-inline-6c9e79af20">{{ line.product_name }}</strong>
+                            <span class="badge u-inline-bacbf0a05e">Combo Set</span>
                           </div>
-                          <span style="font-size: 0.75rem; color: #7e22ce; font-weight: 500;">Chọn lại từng món</span>
+                          <span class="u-inline-e9e39f5155">Chọn lại từng món</span>
                         </div>
-                        <p class="muted" style="margin: 0 0 12px; font-size: 0.8125rem; color: #6b21a8;">
+                        <p class="muted u-inline-9ec8ef2417">
                           * Chọn size hoặc màu mới cho từng món trong combo bạn muốn đổi:
                         </p>
                         @if (comboComponents(line).length === 0 && !model.replacementsLoading?.()) {
-                          <p class="muted" style="font-size: 0.8125rem;">Đang tải danh sách các món trong combo…</p>
+                          <p class="muted u-inline-b9174c0407">Đang tải danh sách các món trong combo…</p>
                         }
-                        <div style="display: flex; flex-direction: column; gap: 10px;">
+                        <div class="u-inline-464b28cd89">
                           @for (comp of comboComponents(line); track comp.productId) {
-                            <div style="display: flex; flex-direction: column; gap: 4px; padding: 8px 12px; background: #ffffff; border: 1px solid #e9d5ff; border-radius: 6px;">
-                              <span style="font-size: 0.875rem; font-weight: 600; color: #374151;">
+                            <div class="u-inline-b26a062907">
+                              <span class="u-inline-f7a7350436">
                                 {{ comp.name }}
                                 @if (comp.originalSize || comp.originalColor) {
-                                  <small style="color: #6b7280; font-weight: normal;">(Hiện tại: {{ comp.originalSize }} / {{ comp.originalColor }})</small>
+                                  <small class="u-inline-1946763a57">(Hiện tại: {{ comp.originalSize }} / {{ comp.originalColor }})</small>
                                 }
                                 →
                               </span>
@@ -725,8 +886,8 @@
                                 [ngModel]="selectedComboVariant(selected, comp.productId)"
                                 [disabled]="!!model.replacementsLoading?.()"
                                 (ngModelChange)="comboComponentReplacement(line, comp, $event)"
-                                style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.875rem; background: #fff; color: #111827;"
-                              >
+                               
+                               class="u-inline-27830d4dc8">
                                 <option value="">-- Giữ nguyên hoặc chọn size / màu mới --</option>
                                 @for (choice of comp.choices; track choice.id) {
                                   <option [value]="choice.id" [disabled]="choice.stock !== undefined && choice.stock < selected.quantity">
@@ -1001,28 +1162,30 @@
         }
       }
     </div>
-    <aside class="panel summary flow-order-summary">
-      <h2>An tâm cùng Velura</h2>
-      @if (order(); as item) {
-        <div class="row">
-          <span>Tiền hàng</span><span>{{ money(item.subtotal) }}</span>
-        </div>
-        <div class="row">
-          <span>Vận chuyển</span><span>{{ money(item.shipping) }}</span>
-        </div>
-        <div class="row">
-          <span>Giảm giá</span><span>−{{ money(item.discount) }}</span>
-        </div>
-        <div class="row total">
-          <span>Tổng thanh toán</span><span>{{ money(item.total) }}</span>
-        </div>
-      }
-      <p class="muted">Hủy đơn trước khi bắt đầu chuẩn bị hàng.</p>
-      <p class="muted">
-        Đổi / trả trong 7 ngày từ khi giao thành công; tối đa 2 lần thành công cho mỗi đơn vị sản phẩm.
-      </p>
-      <p class="muted">Guest xác thực OTP để bảo vệ thông tin đơn hàng.</p>
-      <a class="link" routerLink="/contact">Liên hệ Velura</a>
-    </aside>
+    @if (view() === 'detail' || view() === 'return' || view() === 'tracking') {
+      <aside class="panel summary flow-order-summary">
+        <h2>An tâm cùng Velura</h2>
+        @if (order(); as item) {
+          <div class="row">
+            <span>Tiền hàng</span><span>{{ money(item.subtotal) }}</span>
+          </div>
+          <div class="row">
+            <span>Vận chuyển</span><span>{{ money(item.shipping) }}</span>
+          </div>
+          <div class="row">
+            <span>Giảm giá</span><span>−{{ money(item.discount) }}</span>
+          </div>
+          <div class="row total">
+            <span>Tổng thanh toán</span><span>{{ money(item.total) }}</span>
+          </div>
+        }
+        <p class="muted">Hủy đơn trước khi bắt đầu chuẩn bị hàng.</p>
+        <p class="muted">
+          Đổi / trả trong 7 ngày từ khi giao thành công; tối đa 2 lần thành công cho mỗi đơn vị sản phẩm.
+        </p>
+        <p class="muted">Guest xác thực OTP để bảo vệ thông tin đơn hàng.</p>
+        <a class="link" routerLink="/contact">Liên hệ Velura</a>
+      </aside>
+    }
   </div>
 </main>

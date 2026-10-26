@@ -7,7 +7,7 @@
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  background: var(--checkout-bg);
+  background: transparent;
 }
 
 .page-shell > main {
@@ -22,6 +22,11 @@
   background: transparent;
 }
 
-/* Header + footer luôn trắng đè lên cream */
-.page-shell > .site-header { background: #fff; }
-.page-shell > .site-footer { background: #fff; }
+/* Shared shell surfaces match the blush and dark footer concept. */
+.page-shell > .site-header { background: var(--velura-header); }
+.page-shell > app-site-footer,
+.page-shell .site-footer {
+  background: var(--velura-footer, #5D423C) !important;
+  position: relative;
+  z-index: 10;
+}

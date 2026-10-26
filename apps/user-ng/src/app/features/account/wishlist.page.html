@@ -21,14 +21,14 @@
 
     <div class="wishlist-grid">
       @if (loading()) {
-        <div style="grid-column: 1 / -1; text-align: center; padding: 48px 0; color: var(--soft);">Đang tải danh sách yêu thích...</div>
+        <div class="u-inline-fbd682dd27">Đang tải danh sách yêu thích...</div>
       } @else if (products().length === 0) {
-        <div style="grid-column: 1 / -1; text-align: center; padding: 64px 0; color: #6B635D;">
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom: 16px; color: #A18265;">
+        <div class="u-inline-d7103544a2">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="u-inline-b13235b52d">
             <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
           </svg>
-          <p style="margin: 0; font-size: 0.9375rem; font-weight: 500;">Danh sách yêu thích của bạn đang trống.</p>
-          <a routerLink="/collections" class="btn btn--primary btn--sm" style="display: inline-block; margin-top: 20px; text-decoration: none;">Khám phá ngay</a>
+          <p class="u-inline-fadf63d5eb">Danh sách yêu thích của bạn đang trống.</p>
+          <a routerLink="/collections" class="btn btn--primary btn--sm u-inline-fd729cc610">Khám phá ngay</a>
         </div>
       } @else {
         @for (product of products(); track product.product_id) {
@@ -45,12 +45,12 @@
             </div>
             <div class="wishlist-card__info">
               <h3 class="wishlist-card__name">
-                <a [routerLink]="['/products', product.product_id]" style="text-decoration:none; color:inherit;">{{ product.name }}</a>
+                <a [routerLink]="['/products', product.product_id]" class="u-inline-af3b97a004">{{ product.name }}</a>
               </h3>
               <div class="wishlist-card__price-block">
                 <span class="wishlist-card__price">{{ priceLabel(product) }}</span>
                 @if (oldPriceLabel(product)) {
-                  <span class="wishlist-card__old-price" style="text-decoration: line-through; color: #8c857e; font-size: 1.0625rem;">{{ oldPriceLabel(product) }}</span>
+                  <span class="wishlist-card__old-price u-inline-320f6a566b">{{ oldPriceLabel(product) }}</span>
                 }
               </div>
               <div class="wishlist-card__actions">
@@ -61,7 +61,7 @@
                   (click)="buyNow(product, $event)"
                   [title]="isOutOfStock(product) ? 'Sản phẩm đã hết hàng' : 'Mua ngay'"
                 >
-                  <svg class="icon" width="16" height="16" style="fill: none; stroke: currentColor; stroke-width: 2;" viewBox="0 0 24 24">
+                  <svg class="icon u-inline-6ea3f910fa" width="16" height="16" viewBox="0 0 24 24">
                     <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
                     <line x1="3" y1="6" x2="21" y2="6"></line>
                     <path d="M16 10a4 4 0 0 1-8 0"></path>

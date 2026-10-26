@@ -4,12 +4,24 @@
   margin: 1.5rem 0;
 }
 
+:host(:has(.pc-container--embedded)) {
+  margin: 0;
+}
+
 .pc-container {
   background: #ffffff;
   border: 1px solid var(--line, #E8DFD6);
   border-radius: var(--radius-md, 16px);
   padding: 24px;
   box-shadow: 0 4px 16px rgba(42, 37, 34, 0.04);
+}
+
+.pc-container--embedded {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  box-shadow: none;
 }
 
 /* Header */

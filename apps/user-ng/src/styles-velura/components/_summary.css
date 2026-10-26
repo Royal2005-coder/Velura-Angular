@@ -1,4 +1,4 @@
-﻿.order-summary {
+.order-summary {
   background: #fff;
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
@@ -8,7 +8,7 @@
 }
 
 .order-summary__title {
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: "Cormorant Garamond", Georgia, serif;
   font-size: 1.5rem;
   font-weight: 500;
   margin-bottom: 20px;
@@ -60,7 +60,7 @@
 }
 
 .summary-total__value {
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: "Cormorant Garamond", Georgia, serif;
   font-size: 1.75rem;
   color: var(--terracotta);
 }

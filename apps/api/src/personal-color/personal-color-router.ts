@@ -1,4 +1,5 @@
 import { HttpError, readJson, sendJson } from "../http.js";
+import { readMultipartImage } from "../user/upload.js";
 import type { AuthContext, HeaderMap, HttpRequest, HttpResponse } from "../types.js";
 import { PersonalColorService } from "./personal-color-service.js";
 import type { ColorPrincipal } from "./personal-color-types.js";
@@ -24,7 +25,10 @@ export async function handlePersonalColorRoute(req: HttpRequest, res: HttpRespon
     return true;
   }
   const principal = colorPrincipal(req, context);
-  if (parts[3] === "profile" && parts.length === 4 && req.method === "GET") {
+  if (parts[3] === "uploads" && parts.length === 4 && req.method === "POST") {
+    const image = await readMultipartImage(req);
+    sendJson(res, 201, await service.upload(principal, image.fileBuffer, image.mimeType), responseHeaders);
+  } else if (parts[3] === "profile" && parts.length === 4 && req.method === "GET") {
     sendJson(res, 200, await service.profile(principal), responseHeaders);
   } else if (parts[3] === "analyses" && parts.length === 4 && req.method === "POST") {
     sendJson(res, 202, await service.analyze(principal, await readJson(req)), responseHeaders);

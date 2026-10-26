@@ -127,6 +127,34 @@ export function stubActivatedRoute(params: Record<string, string> = { id: 'p1', 
   } as unknown as ActivatedRoute;
 }
 
+function createMemoryStorage(): Storage {
+  let store: Record<string, string> = {};
+  return {
+    getItem: (key: string) => store[key] ?? null,
+    setItem: (key: string, value: string) => { store[key] = String(value); },
+    removeItem: (key: string) => { delete store[key]; },
+    clear: () => { store = {}; },
+    key: (index: number) => Object.keys(store)[index] ?? null,
+    get length() { return Object.keys(store).length; },
+  };
+}
+
+try {
+  if (typeof globalThis.localStorage === 'undefined' || !globalThis.localStorage?.getItem) {
+    Object.defineProperty(globalThis, 'localStorage', { value: createMemoryStorage(), configurable: true, writable: true });
+  }
+} catch {
+  // Ignore in environments where redefine is restricted
+}
+
+try {
+  if (typeof globalThis.sessionStorage === 'undefined' || !globalThis.sessionStorage?.getItem) {
+    Object.defineProperty(globalThis, 'sessionStorage', { value: createMemoryStorage(), configurable: true, writable: true });
+  }
+} catch {
+  // Ignore in environments where redefine is restricted
+}
+
 let lastFixture: ComponentFixture<unknown> | undefined;
 
 /**
@@ -136,8 +164,8 @@ let lastFixture: ComponentFixture<unknown> | undefined;
 export async function createStorefrontPage<T>(page: Type<T>, apiOverrides: Partial<Record<'get' | 'post' | 'patch' | 'delete', unknown>> = {}): Promise<T> {
   lastFixture?.destroy();
   lastFixture = undefined;
-  sessionStorage.clear();
-  localStorage.clear();
+  try { sessionStorage?.clear(); } catch {}
+  try { localStorage?.clear(); } catch {}
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
     imports: [page],

@@ -25,11 +25,11 @@ const CART_DEPENDENT_REASONS = new Set(["MIN_ORDER_NOT_MET", "CATEGORY_MISMATCH"
 
 /** Ảnh mặc định theo loại chiến dịch, dùng khi admin chưa tải ảnh riêng. */
 const DEFAULT_BANNER_BY_TYPE: Record<string, string> = {
-  flash_sale: "/assets/offers/flash-sale.jpg",
-  seasonal_sale: "/assets/offers/seasonal.jpg",
-  combo_discount: "/assets/offers/combo.jpg",
-  bulk_discount: "/assets/offers/bulk.jpg",
-  product_discount: "/assets/offers/product.jpg"
+  flash_sale: "/assets/images/banners/hot-banner-a2-last-days.png",
+  seasonal_sale: "/assets/images/banners/hot-banner-a4-loyal.png",
+  combo_discount: "/assets/images/banners/hot-banner-a3-combo.png",
+  bulk_discount: "/assets/images/banners/hot-banner-a6-freeship.png",
+  product_discount: "/assets/images/banners/hot-banner-a5-friend.png"
 };
 
 /**
@@ -79,6 +79,11 @@ export async function handleOffersRoute(
     let campaigns = (promotions || [])
       .filter((promotion) => {
         try {
+          const name = String(promotion.promo_name || "").toLowerCase();
+          const banner = String(promotion.banner_image_url || "").toLowerCase();
+          if (name.includes("adminhaha") || name.includes("test") || banner.includes("pinterest")) {
+            return false;
+          }
           const lifecycle = promotionLifecycle(toLifecycleInput(promotion), now);
           return lifecycle === "running";
         } catch {

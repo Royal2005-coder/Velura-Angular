@@ -14,7 +14,7 @@
   border: 1.5px solid #E8DFD6;
   border-radius: 8px;
   background: #F9F6F1;
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 14px;
   color: #2A2522;
   outline: none;
@@ -27,7 +27,7 @@
 }
 
 .search-dropdown__input:focus {
-  border-color: #C97B63;
+  border-color: #844A5A;
   box-shadow: 0 0 0 3px rgba(201, 123, 99, 0.12);
 }
 
@@ -102,12 +102,12 @@
 
 .search-dropdown__item:hover,
 .search-dropdown__item.is-focused {
-  background: #F4E4DC;
+  background: #FDF2F4;
   color: #A18265;
 }
 
 .search-dropdown__item.is-selected {
-  background: #F4E4DC;
+  background: #FDF2F4;
   color: #A18265;
   font-weight: 600;
 }

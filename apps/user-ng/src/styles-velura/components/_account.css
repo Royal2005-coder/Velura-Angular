@@ -3,7 +3,7 @@
    ============================================================ */
 
 body.page-profile {
-  background-color: #FAF6F2 !important; /* Soft warm cream page background */
+  background-color: transparent !important;
 }
 
 .account-guest-empty {
@@ -35,7 +35,7 @@ body.page-profile {
 
 .account-login-required-modal__card h2 {
   margin: 0 0 26px;
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 1.05rem;
   letter-spacing: 0.02em;
   text-transform: uppercase;
@@ -59,7 +59,7 @@ body.page-profile {
   padding: 15px 24px;
   color: #201915;
   cursor: pointer;
-  font: 600 1rem "DM Sans", sans-serif;
+  font: 600 1rem "Inter", sans-serif;
   text-decoration: none;
 }
 
@@ -78,7 +78,7 @@ body.page-profile {
 }
 
 .account-title {
-  font-family: "Playfair Display", serif;
+  font-family: "Cormorant Garamond", serif;
   font-size: clamp(1.5rem, 4vw, 1.875rem); /* Đồng bộ với .page-title chung */
   font-weight: 500;
   color: var(--text-dark);
@@ -168,7 +168,7 @@ body.page-profile {
 
 .account-sidebar__badge {
   display: inline-block;
-  background: #F4E4DC;
+  background: #FDF2F4;
   color: var(--terracotta);
   font-size: 0.75rem;
   font-weight: 500;
@@ -207,7 +207,7 @@ body.page-profile {
 }
 
 .account-sidebar__link.is-active {
-  background: #F4E4DC !important; /* Soft peach-beige active state */
+  background: #FDF2F4 !important; /* Soft peach-beige active state */
   color: var(--terracotta) !important;
   font-weight: 600;
 }
@@ -244,7 +244,7 @@ body.page-profile {
 }
 
 .account-main__title {
-  font-family: "Playfair Display", serif;
+  font-family: "Cormorant Garamond", serif;
   font-size: 1.25rem; /* Cỡ chữ 20px tiêu chuẩn */
   font-weight: 500;
   color: var(--text-dark);
@@ -294,7 +294,7 @@ body.page-profile {
   border-radius: 50%;
   text-transform: uppercase;
   user-select: none;
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   letter-spacing: 0.05em;
   box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
 }
@@ -336,7 +336,7 @@ body.page-profile {
 }
 
 .profile-avatar-name {
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 1.0625rem; /* 17px gọn gàng */
   font-weight: 700;
   color: var(--text-dark);
@@ -605,7 +605,7 @@ select.profile-form__input {
 }
 
 .modal__title {
-  font-family: "Playfair Display", serif;
+  font-family: "Cormorant Garamond", serif;
   font-size: 1.5rem;
   font-weight: 600;
   color: var(--text-dark);
@@ -675,7 +675,7 @@ select.profile-form__input {
 }
 
 .address-card--default .address-card__icon-wrapper {
-  background: #F4E4DC;
+  background: #FDF2F4;
 }
 
 .address-card__location-icon {
@@ -901,7 +901,7 @@ select.profile-form__input {
 }
 
 .order-filter__tab.is-active {
-  background: #F4E4DC;
+  background: #FDF2F4;
   color: var(--terracotta);
   font-weight: 600;
 }
@@ -1168,7 +1168,7 @@ select.profile-form__input {
   font-size: 0.9375rem;
   font-weight: 700;
   color: var(--terracotta);
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
 }
 
 .product-card__cart-btn {
@@ -1449,6 +1449,26 @@ select.profile-form__input {
    Style Profile Tab
    ============================================================ */
 
+/* Style Profile display overrides for inline migration */
+.sp-empty[style*="display: block"] {
+  display: block !important;
+}
+
+.sp-filled[style*="display: flex"] {
+  display: flex !important;
+}
+
+.sp-empty[style*="display: none"],
+.sp-filled[style*="display: none"] {
+  display: none !important;
+}
+
+.sp-personal-color-wrapper {
+  margin-top: 36px;
+  padding-top: 32px;
+  border-top: 1px dashed var(--line, #E8DFD6);
+}
+
 /* Empty State */
 .sp-empty {
   text-align: center;
@@ -1463,14 +1483,14 @@ select.profile-form__input {
 }
 
 .sp-empty__title {
-  font-family: "Playfair Display", serif;
+  font-family: "Cormorant Garamond", serif;
   font-size: 1.5rem;
   color: #1C1B1B;
   margin: 0 0 12px;
 }
 
 .sp-empty__desc {
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.9375rem;
   color: #6B635D;
   max-width: 420px;
@@ -1498,7 +1518,7 @@ select.profile-form__input {
 }
 
 .sp-section__title {
-  font-family: "Playfair Display", serif;
+  font-family: "Cormorant Garamond", serif;
   font-size: 1.125rem;
   font-weight: 600;
   color: #1C1B1B;
@@ -1509,7 +1529,7 @@ select.profile-form__input {
 }
 
 .sp-section__title svg {
-  color: #C97B63;
+  color: #844A5A;
   flex-shrink: 0;
 }
 
@@ -1526,12 +1546,12 @@ select.profile-form__input {
   border-radius: 999px;
   font-size: 0.75rem;
   font-weight: 600;
-  color: #C97B63;
+  color: #844A5A;
   margin-bottom: 12px;
 }
 
 .sp-overview__heading {
-  font-family: "Playfair Display", serif;
+  font-family: "Cormorant Garamond", serif;
   font-size: 1.625rem;
   font-weight: 600;
   color: #1C1B1B;
@@ -1558,7 +1578,7 @@ select.profile-form__input {
   align-items: center;
   gap: 5px;
   padding: 6px 14px;
-  background: #F4E4DC;
+  background: #FDF2F4;
   border-radius: 999px;
   font-size: 0.8125rem;
   font-weight: 600;
@@ -1566,7 +1586,7 @@ select.profile-form__input {
 }
 
 .sp-overview__products-title {
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.875rem;
   font-weight: 600;
   color: #1C1B1B;
@@ -1605,7 +1625,7 @@ select.profile-form__input {
 }
 
 .sp-product-card__name {
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.8125rem;
   font-weight: 500;
   color: #1C1B1B;
@@ -1616,10 +1636,10 @@ select.profile-form__input {
 }
 
 .sp-product-card__price {
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.8125rem;
   font-weight: 700;
-  color: #C97B63;
+  color: #844A5A;
   margin: 0;
 }
 
@@ -1646,7 +1666,7 @@ select.profile-form__input {
   top: 10px;
   left: 10px;
   padding: 3px 10px;
-  background: #C97B63;
+  background: #844A5A;
   color: #fff;
   font-size: 0.6875rem;
   font-weight: 700;
@@ -1742,7 +1762,7 @@ select.profile-form__input {
 }
 
 .sp-prefs__card-title {
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.75rem;
   font-weight: 600;
   color: #8C857E;
@@ -1826,16 +1846,16 @@ select.profile-form__input {
   width: 36px;
   height: 36px;
   border-radius: 10px;
-  background: #F4E4DC;
+  background: #FDF2F4;
   display: flex;
   align-items: center;
   justify-content: center;
   margin-bottom: 12px;
-  color: #C97B63;
+  color: #844A5A;
 }
 
 .sp-tips__card-title {
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.875rem;
   font-weight: 600;
   color: #1C1B1B;
@@ -1863,7 +1883,7 @@ select.profile-form__input {
 }
 
 .sp-update__title {
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 1rem;
   font-weight: 600;
   color: #1C1B1B;
@@ -1966,7 +1986,7 @@ select.profile-form__input {
 
 .analytics-kpi-card__icon--primary {
   background: #FAF2EB;
-  color: var(--terracotta, #C97B63);
+  color: var(--terracotta, #844A5A);
 }
 
 .analytics-kpi-card__icon--accent {
@@ -1999,7 +2019,7 @@ select.profile-form__input {
 
 .analytics-tier-badge {
   font-size: 1rem;
-  color: var(--terracotta, #C97B63);
+  color: var(--terracotta, #844A5A);
 }
 
 .analytics-progress-wrap {
@@ -2019,7 +2039,7 @@ select.profile-form__input {
 
 .analytics-progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, var(--terracotta, #C97B63), #E09079);
+  background: linear-gradient(90deg, var(--terracotta, #844A5A), #E09079);
   border-radius: 99px;
   transition: width 0.4s ease;
 }
@@ -2107,7 +2127,7 @@ select.profile-form__input {
 
 .analytics-cat-bar-fill {
   height: 100%;
-  background: var(--terracotta, #C97B63);
+  background: var(--terracotta, #844A5A);
   border-radius: 99px;
   transition: width 0.4s ease;
 }
@@ -2121,7 +2141,7 @@ select.profile-form__input {
 
 .analytics-voucher-card {
   background: linear-gradient(135deg, #FAF7F2 0%, #FFFFFF 100%);
-  border: 1.5px dashed var(--terracotta, #C97B63);
+  border: 1.5px dashed var(--terracotta, #844A5A);
   border-radius: 12px;
   padding: 16px;
   display: flex;
@@ -2134,7 +2154,7 @@ select.profile-form__input {
   font-size: 0.72rem;
   font-weight: 800;
   color: #ffffff;
-  background: var(--terracotta, #C97B63);
+  background: var(--terracotta, #844A5A);
   padding: 2px 8px;
   border-radius: 4px;
   width: fit-content;
@@ -2230,7 +2250,7 @@ select.profile-form__input {
 .analytics-product-price {
   font-size: 0.85rem;
   font-weight: 700;
-  color: var(--terracotta, #C97B63);
+  color: var(--terracotta, #844A5A);
 }
 
 .analytics-product-pricing {
@@ -2242,7 +2262,7 @@ select.profile-form__input {
 .analytics-product-sale {
   font-size: 0.85rem;
   font-weight: 700;
-  color: var(--terracotta, #C97B63);
+  color: var(--terracotta, #844A5A);
 }
 
 .analytics-product-base {
@@ -2301,3 +2321,24 @@ select.profile-form__input {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
+
+/* Account tabs, loyalty and analytics keep their real behaviors and data. */
+body.page-profile { background: var(--velura-canvas, #FAF0F3) !important; }
+body.page-profile .account-title { color: var(--velura-maroon, #7A283C); }
+body.page-profile .account-subtitle { color: var(--text-secondary, #78666A); }
+body.page-profile :is(.account-sidebar__user-card, .account-sidebar__nav, .account-main, .account-tab-content, .analytics-kpi-card, .analytics-voucher-card, .analytics-product-card) {
+  border-color: var(--velura-border, #F2C2CF);
+  border-radius: var(--radius-lg, 20px);
+  box-shadow: 0 8px 26px rgba(122, 40, 60, .06);
+}
+body.page-profile .account-sidebar__badge { color: var(--velura-maroon, #7A283C); background: var(--velura-blush, #FDF2F4); border-radius: 999px; }
+body.page-profile .account-sidebar__link:hover,
+body.page-profile .account-sidebar__link.is-active {
+  color: var(--velura-maroon, #7A283C);
+  background: var(--velura-blush, #FDF2F4);
+}
+body.page-profile .account-main__title { color: var(--velura-maroon, #7A283C); }
+body.page-profile .profile-form__input:focus,
+body.page-profile .profile-form__input-wrapper:focus-within { border-color: var(--velura-rose, #C94F70); box-shadow: 0 0 0 3px rgba(201,79,112,.12); }
+body.page-profile :is(button, a, input, select, textarea):focus-visible { outline: 3px solid var(--velura-rose, #C94F70); outline-offset: 3px; }
+body.page-profile .analytics-loading-card { background: linear-gradient(90deg, #fff6f8 25%, #f7dce4 50%, #fff6f8 75%); border-color: var(--velura-border, #F2C2CF); }

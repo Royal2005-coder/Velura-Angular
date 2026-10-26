@@ -4,7 +4,7 @@
 
 .cart-page {
   padding: 40px 0 80px;
-  background-color: #FAF5F2; /* Đồng bộ nền beige sáng của hệ thống */
+  background-color: transparent;
 }
 
 /* Breadcrumb Navigation */
@@ -15,7 +15,7 @@
   margin-bottom: 24px;
   font-size: 0.8125rem; /* Đồng bộ cỡ chữ 13px */
   color: #8c857e;
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
 }
 
 .breadcrumb a {
@@ -25,7 +25,7 @@
 }
 
 .breadcrumb a:hover {
-  color: #731F21;
+  color: #7A283C;
 }
 
 .breadcrumb__current {
@@ -39,7 +39,7 @@
 }
 
 .cart-title {
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: "Cormorant Garamond", Georgia, serif;
   font-size: clamp(1.5rem, 4vw, 1.875rem); /* Đồng bộ với .page-title hệ thống */
   font-weight: 500;
   color: #2a2522;
@@ -47,7 +47,7 @@
 }
 
 .cart-count {
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.875rem; /* Cỡ chữ 14px chuẩn mô tả */
   color: #8c857e;
   margin: 0;
@@ -120,7 +120,7 @@
 }
 
 .cart-item__name {
-  font-family: "DM Sans", sans-serif; /* Đổi sang font DM Sans */
+  font-family: "Inter", sans-serif; /* Đổi sang font DM Sans */
   font-size: 0.9375rem; /* Cỡ chữ 15px vừa vặn */
   font-weight: 600;
   color: #2a2522;
@@ -140,7 +140,7 @@
 }
 
 .cart-item__delete:hover {
-  color: #731F21;
+  color: #7A283C;
 }
 
 .cart-item__tags {
@@ -151,10 +151,10 @@
 }
 
 .cart-item__tag {
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.75rem; /* Thu nhỏ xuống 12px */
-  color: #c97b63;
-  background-color: #FAF2EF;
+  color: #844A5A;
+  background-color: #FFF6F8;
   padding: 4px 10px;
   border-radius: 12px;
   font-weight: 500;
@@ -197,7 +197,7 @@
 }
 
 .qty-selector__value {
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   width: 28px;
   text-align: center;
   font-size: 0.875rem; /* Cỡ chữ 14px */
@@ -213,16 +213,16 @@
 }
 
 .cart-item__old-price {
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.75rem;
   color: #8c857e;
   text-decoration: line-through;
 }
 
 .cart-item__price {
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.9375rem; /* 15px */
-  color: #c97b63;
+  color: #844A5A;
   font-weight: 700;
 }
 
@@ -231,21 +231,21 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  background-color: #FAF2EF;
+  background-color: #FFF6F8;
   padding: 14px 18px;
   border-radius: 8px;
-  border: 1px dashed #c97b63;
+  border: 1px dashed #844A5A;
 }
 
 .cart-guarantee__icon {
-  color: #c97b63;
+  color: #844A5A;
   flex-shrink: 0;
   width: 18px;
   height: 18px;
 }
 
 .cart-guarantee__text {
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.8125rem; /* 13px gọn gàng */
   color: #2a2522;
   font-weight: 500;
@@ -267,7 +267,7 @@
 }
 
 .summary-card__title {
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: "Cormorant Garamond", Georgia, serif;
   font-size: 1.25rem; /* Đồng nhất tiêu đề cột */
   font-weight: 500;
   color: #2a2522;
@@ -287,7 +287,7 @@
 
 .coupon-label {
   display: block;
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.875rem; /* 14px */
   font-weight: 600;
   color: #2a2522;
@@ -323,7 +323,7 @@
 }
 
 .coupon-input-wrapper input {
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   border: none;
   background: transparent;
   font-size: 0.875rem; /* 14px */
@@ -339,7 +339,7 @@
 .coupon-btn {
   background: transparent;
   border: none;
-  color: #c97b63;
+  color: #844A5A;
   font-size: 0.875rem; /* 14px */
   font-weight: 600;
   cursor: pointer;
@@ -350,7 +350,7 @@
 }
 
 .coupon-btn:hover {
-  color: #731F21;
+  color: #7A283C;
 }
 
 /* Pricing Rows */
@@ -370,7 +370,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.875rem; /* 14px */
   color: #8c857e;
 }
@@ -383,7 +383,7 @@
 }
 
 .summary-line__value {
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.875rem; /* 14px */
   color: #2a2522;
   font-weight: 500;
@@ -403,16 +403,16 @@
 }
 
 .summary-total__label {
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.9375rem; /* 15px */
   color: #2a2522;
   font-weight: 600;
 }
 
 .summary-total__value {
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: "Cormorant Garamond", Georgia, serif;
   font-size: 1.625rem; /* Thu nhỏ cỡ chữ tổng tiền */
-  color: #c97b63;
+  color: #844A5A;
   font-weight: 500;
 }
 
@@ -422,7 +422,7 @@
   justify-content: center;
   align-items: center;
   gap: 8px;
-  background-color: #c97b63;
+  background-color: #844A5A;
   color: #ffffff;
   width: 100%;
   padding: 12px 20px; /* thu nhỏ nút thanh toán */
@@ -435,7 +435,7 @@
 }
 
 .summary-card__btn-checkout:hover {
-  background-color: #b36a53;
+  background-color: #631F30;
   transform: translateY(-1px);
 }
 
@@ -450,7 +450,7 @@
 /* Security Text */
 .summary-card__security {
   text-align: center;
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.75rem; /* 12px */
   color: #8c857e;
   margin-top: 14px;
@@ -470,7 +470,7 @@
 /* Tổng ở giỏ là ước tính; nói rõ con số chốt nằm ở bước thanh toán. */
 .summary-card__note {
   margin: 8px 0 0;
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.75rem;
   line-height: 1.5;
   color: #8c857e;
@@ -530,6 +530,58 @@
   .cart-item__old-price {
     font-size: 0.75rem;
   }
+}
+
+/* Real cart flow follows the shared Velura concept; totals and actions stay unchanged. */
+.cart-page {
+  color: var(--ink);
+  background:
+    radial-gradient(ellipse at 8% 12%, rgba(248, 211, 222, .25), transparent 30rem),
+    transparent;
+}
+.cart-page .cart-title,
+.cart-page .cart-empty-title,
+.cart-page .summary-card__title { color: var(--velura-maroon); }
+.cart-page .cart-count,
+.cart-page .cart-empty-desc,
+.cart-page .cart-empty-feature-item { color: var(--text-secondary); }
+.cart-page .cart-item,
+.cart-page .summary-card,
+.cart-page .cart-empty-screen {
+  border: 1px solid rgba(242, 194, 207, .65);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 25px rgba(122, 40, 60, .07);
+}
+.cart-page .cart-item { background: rgba(255,255,255,.94); }
+.cart-page .cart-item__image { border-radius: 14px; background: var(--velura-blush); }
+.cart-page .cart-item__name { color: var(--ink); }
+.cart-page .cart-item__delete { color: var(--text-secondary); }
+.cart-page .cart-item__delete:hover { color: var(--danger); }
+.cart-page .cart-item__tag { color: var(--velura-maroon); background: var(--velura-blush); }
+.cart-page .qty-selector,
+.cart-page .coolmate-qty-stepper { border-color: rgba(122,40,60,.2); border-radius: 12px; }
+.cart-page .qty-selector__btn:hover,
+.cart-page .coolmate-qty-btn:hover { color: var(--velura-maroon); background: var(--velura-blush); }
+.cart-page .cart-item__price,
+.cart-page .summary-total__value { color: var(--velura-maroon); }
+.cart-page .summary-card { border-color: rgba(242, 194, 207, .72); background: #fff; }
+.cart-page .coupon-input-wrapper { border-color: rgba(122,40,60,.2); border-radius: 999px; }
+.cart-page .coupon-input-wrapper:focus-within { border-color: var(--velura-rose); box-shadow: 0 0 0 3px rgba(201,79,112,.14); }
+.cart-page .coupon-btn,
+.cart-page .summary-card__btn-checkout { border-radius: 999px; background: var(--velura-rose-fill); }
+.cart-page .coupon-btn:hover,
+.cart-page .summary-card__btn-checkout:hover { background: var(--velura-maroon-deep); }
+.cart-page .summary-card__divider,
+.cart-page .summary-line { border-color: rgba(242, 194, 207, .62); }
+.cart-page .cart-empty-icon-wrap { color: var(--velura-maroon); background: var(--velura-blush); }
+.cart-page .cart-empty-screen { background: rgba(255,255,255,.82); }
+.cart-page .cart-delete-modal-card { border: 1px solid var(--velura-border); border-radius: var(--radius-lg); }
+.cart-page :is(button, a):focus-visible { outline: 3px solid var(--velura-rose); outline-offset: 3px; }
+
+@media (max-width: 640px) {
+  .cart-page { padding-block: 28px 56px; }
+  .cart-page .cart-item { gap: 12px; padding: 12px; }
+  .cart-page .summary-card { border-radius: 20px; }
 }
 
 @media (max-width: 480px) {
@@ -760,7 +812,7 @@
   padding: 64px 20px 80px;
   max-width: 680px;
   margin: 0 auto;
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Inter', sans-serif;
   animation: fadeIn 0.3s ease-out;
 }
 
@@ -777,7 +829,7 @@
 }
 
 .cart-empty-title {
-  font-family: 'Playfair Display', Georgia, serif;
+  font-family: 'Cormorant Garamond', Georgia, serif;
   font-size: clamp(1.6rem, 3.5vw, 2.125rem);
   font-weight: 600;
   color: #2a2522;
@@ -865,7 +917,7 @@
   overflow: hidden;
   box-shadow: 0 20px 48px rgba(0, 0, 0, 0.25);
   animation: modalScaleUp 0.2s ease-out;
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Inter', sans-serif;
 }
 
 @keyframes modalScaleUp {

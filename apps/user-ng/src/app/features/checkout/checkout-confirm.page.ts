@@ -8,7 +8,6 @@ import { useBodyClass } from '../../core/utils/body-class';
 @Component({
   selector: 'app-checkout-confirm-page',
   imports: [RouterLink],
-  host: { style: 'display:block' },
   templateUrl: './checkout-confirm.page.html',
 })
 export class CheckoutConfirmPage {

@@ -6,10 +6,10 @@ import { showToast } from '../../core/utils/toast';
 
 @Component({
   selector: 'app-claim-account-page',
-  host: { style: 'display:block' },
+  host: { class: 'claim-account-page' },
   template: `
     <main class="checkout-page">
-      <div class="container" style="max-width:480px;padding:48px 16px">
+      <div class="container claim-account__container">
         <h1 class="page-title">Tạo tài khoản thành viên</h1>
         <p>Số điện thoại đã được xác thực qua SMS. Đặt mật khẩu để nhận ưu đãi và xem đơn hàng trong tài khoản.</p>
         <form (submit)="$event.preventDefault(); submit()">

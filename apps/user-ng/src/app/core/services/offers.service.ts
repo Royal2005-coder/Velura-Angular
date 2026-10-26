@@ -60,7 +60,16 @@ export class OffersService {
    * dịch đang chạy.
    */
   highlights(): Observable<OfferCampaign[]> {
-    return this.load().pipe(map((response) => (response.featured?.length ? response.featured : response.campaigns ?? [])));
+    return this.load().pipe(
+      map((response) => {
+        const raw = response.featured?.length ? response.featured : response.campaigns ?? [];
+        return raw.filter((c) => {
+          const t = (c.title || '').toLowerCase();
+          const img = (c.banner_image_url || '').toLowerCase();
+          return !t.includes('adminhaha') && !t.includes('test') && !img.includes('pinterest');
+        });
+      }),
+    );
   }
 
   /** Bỏ bộ nhớ đệm, ví dụ sau khi khách đăng nhập để thấy mã dành riêng. */

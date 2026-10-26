@@ -289,7 +289,7 @@
 }
 
 .product-info__title {
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: "Cormorant Garamond", Georgia, serif;
   font-size: clamp(1.75rem, 3vw, 2.5rem);
   font-weight: 500;
   color: var(--text-dark);
@@ -1066,7 +1066,7 @@
 }
 
 .combo-components__title {
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.8125rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -1136,7 +1136,7 @@
 }
 
 .combo-component-item__name {
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.875rem;
   font-weight: 500;
   color: var(--text-dark);
@@ -1335,7 +1335,7 @@
 }
 
 .combo-stock--unavailable {
-  color: #c97b63;
+  color: #844A5A;
 }
 
 /* Combo Actions */
@@ -1480,7 +1480,7 @@
 
 .combo-stock-tag--out {
   background: #fdf3f0;
-  color: #c97b63;
+  color: #844A5A;
   border: 1px solid rgba(201, 123, 99, 0.3);
 }
 
@@ -1619,7 +1619,7 @@
 }
 
 .reviews-header__title {
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: "Cormorant Garamond", Georgia, serif;
   font-size: 1.5rem;
   font-weight: 500;
   color: var(--text-dark);
@@ -1773,7 +1773,7 @@
 }
 
 .related-products__title {
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: "Cormorant Garamond", Georgia, serif;
   font-size: 1.75rem;
   font-weight: 500;
   color: var(--text-dark);
@@ -1826,6 +1826,59 @@
     width: 76px;
     height: 95px;
   }
+}
+
+/* Product detail concept layer; selection, stock and purchase states remain data driven. */
+body.page-product-detail .product-detail-page { padding-block: clamp(28px, 4vw, 48px) clamp(48px, 7vw, 88px); }
+body.page-product-detail .product-detail-breadcrumb { color: var(--text-secondary); }
+body.page-product-detail .product-detail-breadcrumb a:hover,
+body.page-product-detail .size-guide-link { color: var(--velura-maroon); }
+body.page-product-detail .gallery-main {
+  border: 1px solid rgba(242, 194, 207, .55);
+  border-radius: var(--radius-lg);
+  background: #fff6f8;
+  box-shadow: 0 8px 25px rgba(122, 40, 60, .08);
+}
+body.page-product-detail .gallery-thumbs__btn { border-color: rgba(242, 194, 207, .7); border-radius: 12px; }
+body.page-product-detail .gallery-thumbs__btn.active { border-color: var(--velura-maroon); box-shadow: 0 0 0 2px rgba(122,40,60,.12); }
+body.page-product-detail .gallery-expand-btn,
+body.page-product-detail .gallery-nav-btn { color: var(--velura-maroon); border-color: var(--velura-border); }
+body.page-product-detail .product-info__title { color: var(--velura-maroon); }
+body.page-product-detail .rating-stars svg { fill: var(--velura-rose); stroke: var(--velura-rose); }
+body.page-product-detail .product-info__price { border-color: rgba(242, 194, 207, .65); }
+body.page-product-detail .price-current { color: var(--velura-maroon); }
+body.page-product-detail .product-option__title,
+body.page-product-detail .combo-components__title { color: var(--velura-maroon); }
+body.page-product-detail .size-btn { border-color: rgba(122, 40, 60, .2); border-radius: 12px; }
+body.page-product-detail .size-btn:hover,
+body.page-product-detail .size-btn.is-selected { color: #fff; background: var(--velura-maroon); border-color: var(--velura-maroon); }
+body.page-product-detail .size-btn.is-out-of-stock { color: var(--soft); background: #f7f3f4; }
+body.page-product-detail .add-to-cart-btn,
+body.page-product-detail .buy-now-btn,
+body.page-product-detail .product-actions-grid .wishlist-btn { border-radius: 999px; }
+body.page-product-detail .add-to-cart-btn { color: var(--velura-maroon); border-color: var(--velura-maroon); }
+body.page-product-detail .add-to-cart-btn:hover { color: var(--velura-maroon-deep); background: var(--velura-blush); }
+body.page-product-detail .buy-now-btn { background: var(--velura-rose-fill); }
+body.page-product-detail .buy-now-btn:hover { background: var(--velura-maroon-deep); }
+body.page-product-detail .product-fit-helper,
+body.page-product-detail .combo-components,
+body.page-product-detail .product-info__notice { border-color: rgba(242, 194, 207, .65); border-radius: 16px; background: #fff6f8; }
+body.page-product-detail .product-detail__description { border-color: rgba(242, 194, 207, .65); }
+body.page-product-detail .tabs-header { border-color: rgba(242, 194, 207, .7); }
+body.page-product-detail .tab-title.active { color: var(--velura-maroon); }
+body.page-product-detail .tab-title::after { background: var(--velura-maroon); }
+body.page-product-detail .velura-filter-pill.is-active { color: var(--velura-maroon); border-color: var(--velura-border); background: var(--velura-blush); }
+body.page-product-detail .gallery-zoom-modal__dialog { border: 1px solid var(--velura-border); border-radius: var(--radius-lg); }
+body.page-product-detail :is(button, a):focus-visible { outline: 3px solid var(--velura-rose); outline-offset: 3px; }
+
+@media (max-width: 640px) {
+  body.page-product-detail .product-detail-layout { gap: 28px; }
+  body.page-product-detail .product-detail__description { margin-top: 48px; padding-top: 28px; }
+  body.page-product-detail .tabs-header { gap: 20px; overflow-x: auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.page-product-detail *, body.page-product-detail *::before, body.page-product-detail *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; }
 }
 
 @media (max-width: 600px) {
@@ -1917,7 +1970,7 @@
 }
 
 .velura-reviews-dashboard__big-num {
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: "Cormorant Garamond", Georgia, serif;
   font-size: 2.75rem;
   font-weight: 700;
   line-height: 1;

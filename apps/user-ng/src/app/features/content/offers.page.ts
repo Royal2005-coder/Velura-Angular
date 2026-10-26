@@ -36,7 +36,6 @@ const VOUCHER_GROUPS: ReadonlyArray<{ key: OfferVoucherGroup; title: string }> =
 @Component({
   selector: 'app-offers-page',
   imports: [RouterLink],
-  host: { style: 'display:block' },
   templateUrl: './offers.page.html'
 })
 export class OffersPage {

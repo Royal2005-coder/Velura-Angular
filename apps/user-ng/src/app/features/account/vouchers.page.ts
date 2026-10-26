@@ -18,7 +18,6 @@ import type { WalletVoucher } from '../../core/models/voucher.interface';
 @Component({
   selector: 'app-account-vouchers-page',
   imports: [RouterLink],
-  host: { style: 'display:block' },
   templateUrl: './vouchers.page.html'
 })
 export class AccountVouchersPage {

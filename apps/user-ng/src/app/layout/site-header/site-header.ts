@@ -1,5 +1,5 @@
 import { DatePipe, DecimalPipe } from '@angular/common';
-import { Component, DestroyRef, ElementRef, HostListener, computed, inject, signal, viewChild } from '@angular/core';
+import { Component, DestroyRef, ElementRef, HostListener, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 import type { ProductSummary } from '../../core/models/product.interface';
@@ -39,7 +39,17 @@ export class SiteHeader {
 
   readonly isLoggedIn = this.auth.isLoggedIn;
   readonly displayName = computed(() => this.auth.session()?.fullName || this.auth.session()?.email || 'Tài khoản');
+  readonly userEmail = computed(() => this.auth.session()?.email || '');
   readonly avatarUrl = computed(() => this.auth.session()?.avatarUrl);
+  readonly avatarImgError = signal(false);
+
+  readonly userInitials = computed(() => {
+    const name = (this.auth.session()?.fullName || this.displayName() || '').trim();
+    if (!name || name === 'Tài khoản') return 'V';
+    const words = name.split(/\s+/).filter(Boolean);
+    if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+    return (words[0][0] + words[words.length - 1][0]).toUpperCase();
+  });
   readonly cartCount = this.cart.itemCount;
   readonly wishlistCount = this.wishlist.itemCount;
   readonly notificationCount = this.notifications.unreadCount;
@@ -105,7 +115,10 @@ export class SiteHeader {
   });
 
   constructor() {
-    this.loadCatalog();
+    effect(() => {
+      this.auth.session();
+      this.avatarImgError.set(false);
+    });
   }
 
   /** Refreshes suggestions when search opens so an admin rename does not remain cached in the header. */

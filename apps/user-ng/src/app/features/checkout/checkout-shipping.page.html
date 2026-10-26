@@ -21,62 +21,62 @@
     <div class="checkout-grid">
       <div class="checkout-main">
         <section class="card">
-          <div class="card__header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid #ebd9c8; padding-bottom: 12px;">
-            <div style="display: flex; align-items: center; gap: 10px;">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7C5454" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
+          <div class="card__header u-inline-5bb5b91ce8">
+            <div class="u-inline-fb9057b616">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7C5454" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="u-inline-c2bafe49ca">
                 <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
                 <circle cx="12" cy="10" r="3"></circle>
               </svg>
-              <h2 class="section-title" style="margin: 0; font-size: 1.125rem;">Địa chỉ nhận hàng</h2>
+              <h2 class="section-title u-inline-12537788af">Địa chỉ nhận hàng</h2>
             </div>
             @if (savedAddresses().length > 0) {
               <button
                 type="button"
-                style="background: transparent; border: none; color: #7C5454; font-size: 0.875rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 4px;"
+               
                 (click)="openAddressModal()"
                 title="Chọn địa chỉ từ sổ địa chỉ"
-              >
+               class="u-inline-e65415faf9">
                 <span>Thay đổi</span>
-                <span style="font-size: 0.85rem;">›</span>
+                <span class="u-inline-933a8ef29e">›</span>
               </button>
             }
           </div>
 
           @if (savedAddresses().length > 0 && addressMode() !== 'new') {
-            <div class="shopee-address-card" style="background: #faf7f2; border: 1px solid #e2d2c1; border-radius: 10px; padding: 14px 18px; margin-bottom: 18px; position: relative;">
-              <div style="display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 6px;">
-                <span style="font-weight: 700; color: #222; font-size: 1rem;">{{ name() }}</span>
-                <span style="color: #666; font-size: 0.9375rem;">{{ phone() }}</span>
+            <div class="shopee-address-card u-inline-d4fed23cdf">
+              <div class="u-inline-ccab0e0ae7">
+                <span class="u-inline-cb38e3a040">{{ name() }}</span>
+                <span class="u-inline-1358d7d126">{{ phone() }}</span>
                 @if (selectedAddressIsDefault()) {
-                  <span style="background: #7C5454; color: #fff; font-size: 0.6875rem; font-weight: 600; padding: 2px 8px; border-radius: 4px; text-transform: uppercase;">Mặc định</span>
+                  <span class="u-inline-4d32c0f215">Mặc định</span>
                 }
               </div>
-              <p style="margin: 0 0 10px 0; color: #4a4039; font-size: 0.9375rem; line-height: 1.5;">
+              <p class="u-inline-9f247b34dc">
                 {{ composeAddress() }}
               </p>
               @if (email()) {
-                <div style="font-size: 0.8125rem; color: #7a7068; margin-bottom: 8px;">
+                <div class="u-inline-1e32c37917">
                   <span>Email xác nhận: <strong>{{ email() }}</strong></span>
                 </div>
               }
-              <div style="display: flex; gap: 14px; align-items: center; margin-top: 10px; border-top: 1px dashed #d5c4b5; padding-top: 10px;">
+              <div class="u-inline-c42b922854">
                 <button
                   type="button"
-                  style="background: transparent; border: none; color: #7C5454; font-size: 0.8125rem; font-weight: 600; cursor: pointer; padding: 0; display: flex; align-items: center; gap: 6px;"
+                 
                   (click)="openAddressModal()"
-                >
+                 class="u-inline-b594ab1b46">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
                     <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
                   </svg>
                   <span>Chọn địa chỉ khác ({{ savedAddresses().length }})</span>
                 </button>
-                <span style="color: #c0b0a0;">|</span>
+                <span class="u-inline-dab2df0120">|</span>
                 <button
                   type="button"
-                  style="background: transparent; border: none; color: #7C5454; font-size: 0.8125rem; font-weight: 600; cursor: pointer; padding: 0; display: flex; align-items: center; gap: 6px;"
+                 
                   (click)="setAddressMode('new')"
-                >
+                 class="u-inline-b594ab1b46">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <line x1="12" y1="5" x2="12" y2="19"></line>
                     <line x1="5" y1="12" x2="19" y2="12"></line>
@@ -87,19 +87,19 @@
             </div>
           } @else {
             @if (savedAddresses().length > 0 && addressMode() === 'new') {
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; background: #faf7f2; padding: 10px 14px; border-radius: 8px; border: 1px solid #ebd9c8;">
-                <div style="display: flex; align-items: center; gap: 6px;">
+              <div class="u-inline-217f32e3ef">
+                <div class="u-inline-c779fa16be">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7C5454" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <line x1="12" y1="5" x2="12" y2="19"></line>
                     <line x1="5" y1="12" x2="19" y2="12"></line>
                   </svg>
-                  <span style="font-size: 0.875rem; font-weight: 600; color: #4a4039;">Nhập địa chỉ giao hàng mới</span>
+                  <span class="u-inline-f0a9705e34">Nhập địa chỉ giao hàng mới</span>
                 </div>
                 <button
                   type="button"
-                  style="background: transparent; border: none; color: #7C5454; font-size: 0.8125rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 4px;"
+                 
                   (click)="setAddressMode('default')"
-                >
+                 class="u-inline-2ad304205f">
                   <span>← Quay lại địa chỉ đã lưu</span>
                 </button>
               </div>
@@ -162,14 +162,12 @@
             </div>
 
             @if (auth.isLoggedIn()) {
-              <div style="margin: 4px 0 16px 0; padding: 10px 14px; background: #faf8f5; border-radius: 8px; border: 1px dashed #d5c4b5;">
-                <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 0.875rem; color: #4a4039; font-weight: 500;">
+              <div class="u-inline-756a8c10ff">
+                <label class="u-inline-47193afa38">
                   <input
                     type="checkbox"
                     [checked]="saveNewAddress()"
-                    (change)="toggleSaveNewAddress($event)"
-                    style="width: 17px; height: 17px; accent-color: #7C5454; cursor: pointer;"
-                  />
+                    (change)="toggleSaveNewAddress($event)" class="u-inline-a01c5821f3" />
                   <span>Lưu địa chỉ này vào sổ địa chỉ (không ghi đè dữ liệu cũ)</span>
                 </label>
               </div>
@@ -457,7 +455,7 @@
 
       <aside class="order-summary">
         <h2 class="order-summary__title">Tóm tắt đơn hàng</h2>
-        <div class="checkout-product-list" style="max-height: 440px; overflow-y: auto; padding-right: 4px; margin-bottom: 24px;">
+        <div class="checkout-product-list u-inline-2e1ac28918">
           @for (line of items(); track line.variant_id) {
             <article class="checkout-item" [class.checkout-item--warning]="outOfStockVariantIds().has(line.variant_id)">
               <div class="checkout-item__thumb-wrap">
@@ -659,8 +657,8 @@
           </div>
 
           @if (qrTimedOut()) {
-            <div class="qr-modal__timeout-alert" style="background: #fff3cd; color: #856404; padding: 14px 16px; border-radius: 8px; margin: 12px 0 16px 0; border: 1px solid #ffeeba; display: flex; flex-direction: column; gap: 8px;">
-              <div style="display: flex; align-items: center; gap: 8px; font-weight: 600;">
+            <div class="qr-modal__timeout-alert u-inline-a81faf84fe">
+              <div class="u-inline-fd62f0bf81">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
                   <line x1="12" y1="9" x2="12" y2="13"></line>
@@ -668,10 +666,10 @@
                 </svg>
                 <span>Hết thời gian chờ thanh toán (15 phút)</span>
               </div>
-              <p style="margin: 0; font-size: 0.875rem; line-height: 1.5;">
+              <p class="u-inline-98ef8cf57b">
                 Phiên quét mã QR đã hết thời gian. Bạn có thể <strong>Quét mã thanh toán lại</strong> hoặc <strong>Đổi sang hình thức COD (Thanh toán khi nhận hàng)</strong> để đơn hàng được giao nhanh chóng.
               </p>
-              <div style="display: flex; gap: 8px; margin-top: 4px;">
+              <div class="u-inline-ec2cfa5221">
                 <button type="button" class="btn btn--secondary btn--sm" (click)="retryQrPayment()">
                   Quét mã thanh toán lại
                 </button>
@@ -715,7 +713,7 @@
           </div>
 
           @if (qrTimedOut()) {
-            <div style="background: #fdf2f2; border: 1px solid #f5c2c7; border-radius: 8px; padding: 12px; margin-top: 14px; color: #842029; font-size: 0.875rem;">
+            <div class="u-inline-1939ffcd21">
               Đã hết thời gian thanh toán (15 phút). Vui lòng bấm <strong>Gia hạn 15 phút</strong> hoặc <strong>Đổi sang COD</strong> để tiếp tục.
             </div>
           }
@@ -732,8 +730,8 @@
           </div>
         </div>
 
-        <div class="qr-modal__footer" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-          <div style="display: flex; gap: 8px;">
+        <div class="qr-modal__footer u-inline-041eae07c6">
+          <div class="u-inline-693434c7de">
             <button type="button" class="btn btn--outline" (click)="closeQrModal()">Thanh toán sau</button>
             <button type="button" class="btn btn--secondary" (click)="switchToCod()" [disabled]="switchingToCod()" title="Chuyển ngay sang thanh toán khi nhận hàng">
               {{ switchingToCod() ? 'Đang chuyển đổi…' : 'Đổi sang COD' }}
@@ -756,18 +754,18 @@
     <div class="address-book-modal-backdrop" (click)="closeAddressModal()">
       <div class="address-book-modal" (click)="$event.stopPropagation()">
         <div class="address-book-modal__header">
-          <div style="display: flex; align-items: center; gap: 8px;">
+          <div class="u-inline-3088da1131">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7C5454" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
               <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
             </svg>
-            <h3 style="margin: 0; font-family: 'Playfair Display', serif; font-size: 1.25rem;">Sổ địa chỉ đã lưu</h3>
+            <h3 class="u-inline-922a3a653a">Sổ địa chỉ đã lưu</h3>
           </div>
           <button type="button" class="address-book-modal__close" (click)="closeAddressModal()" aria-label="Đóng">&times;</button>
         </div>
         <div class="address-book-modal__body">
           @if (savedAddresses().length === 0) {
-            <p style="text-align: center; color: var(--muted, #8c857e); padding: 24px 0;">Bạn chưa có địa chỉ nào được lưu trong sổ địa chỉ.</p>
+            <p class="u-inline-71d93bea40">Bạn chưa có địa chỉ nào được lưu trong sổ địa chỉ.</p>
           } @else {
             <div class="address-book-list">
               @for (addr of savedAddresses(); track addr.address || addr.detail) {
@@ -795,8 +793,8 @@
             </div>
           }
         </div>
-        <div class="address-book-modal__footer" style="display: flex; justify-content: space-between; align-items: center;">
-          <button type="button" class="btn btn--secondary" style="display: inline-flex; align-items: center; gap: 6px;" (click)="setAddressMode('new'); closeAddressModal()">
+        <div class="address-book-modal__footer u-inline-c2bcea0858">
+          <button type="button" class="btn btn--secondary u-inline-23b34f3d0f" (click)="setAddressMode('new'); closeAddressModal()">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <line x1="12" y1="5" x2="12" y2="19"></line>
               <line x1="5" y1="12" x2="19" y2="12"></line>

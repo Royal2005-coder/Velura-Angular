@@ -13,38 +13,38 @@
           </div>
         </div>
         <div class="skeleton-info">
-          <div class="skeleton-line skeleton-line--sm skeleton-shimmer" style="width: 25%;"></div>
-          <div class="skeleton-line skeleton-line--title skeleton-shimmer" style="width: 85%;"></div>
-          <div class="skeleton-line skeleton-line--title skeleton-shimmer" style="width: 60%;"></div>
-          <div class="skeleton-line skeleton-line--price skeleton-shimmer" style="width: 40%; margin-top: 20px;"></div>
-          <div style="margin-top: 28px;">
-            <div class="skeleton-line skeleton-line--sm skeleton-shimmer" style="width: 20%;"></div>
-            <div style="display: flex; gap: 10px; margin-top: 8px;">
+          <div class="skeleton-line skeleton-line--sm skeleton-shimmer u-inline-38382c5f6f"></div>
+          <div class="skeleton-line skeleton-line--title skeleton-shimmer u-inline-5af86368df"></div>
+          <div class="skeleton-line skeleton-line--title skeleton-shimmer u-inline-fa9644bb1f"></div>
+          <div class="skeleton-line skeleton-line--price skeleton-shimmer u-inline-e76f4861a1"></div>
+          <div class="u-inline-59caaa8fdd">
+            <div class="skeleton-line skeleton-line--sm skeleton-shimmer u-inline-85b7a6bea8"></div>
+            <div class="u-inline-0d3da305ed">
               <div class="skeleton-chip skeleton-shimmer"></div>
               <div class="skeleton-chip skeleton-shimmer"></div>
               <div class="skeleton-chip skeleton-shimmer"></div>
             </div>
           </div>
-          <div style="margin-top: 24px;">
-            <div class="skeleton-line skeleton-line--sm skeleton-shimmer" style="width: 20%;"></div>
-            <div style="display: flex; gap: 10px; margin-top: 8px;">
+          <div class="u-inline-ef7a9dfbd9">
+            <div class="skeleton-line skeleton-line--sm skeleton-shimmer u-inline-85b7a6bea8"></div>
+            <div class="u-inline-0d3da305ed">
               <div class="skeleton-chip skeleton-shimmer"></div>
               <div class="skeleton-chip skeleton-shimmer"></div>
               <div class="skeleton-chip skeleton-shimmer"></div>
               <div class="skeleton-chip skeleton-shimmer"></div>
             </div>
           </div>
-          <div style="margin-top: 36px; display: flex; gap: 16px;">
-            <div class="skeleton-btn skeleton-shimmer" style="flex: 1;"></div>
-            <div class="skeleton-btn skeleton-shimmer" style="flex: 1;"></div>
+          <div class="u-inline-39b93886f4">
+            <div class="skeleton-btn skeleton-shimmer u-inline-ee3d55bf99"></div>
+            <div class="skeleton-btn skeleton-shimmer u-inline-ee3d55bf99"></div>
           </div>
         </div>
       </div>
     </div>
   } @else if (loadError() || !product()) {
-    <div style="text-align: center; padding: 80px 0;">
+    <div class="u-inline-5fdf7e8fa0">
       <h1 class="product-info__title">{{ loadError() || 'Không tìm thấy sản phẩm' }}</h1>
-      <a routerLink="/products" class="btn btn--primary" style="margin-top: 20px; display: inline-block;">Quay lại danh mục sản phẩm</a>
+      <a routerLink="/products" class="btn btn--primary u-inline-7d37b01f95">Quay lại danh mục sản phẩm</a>
     </div>
   } @else {
     <nav class="product-detail-breadcrumb" aria-label="Breadcrumb">
@@ -442,7 +442,7 @@
         <div class="product-actions-grid">
           <div class="product-actions-main">
             <button type="button" class="btn btn--outline add-to-cart-btn" [disabled]="isBuyDisabled()" [class.btn--disabled]="isBuyDisabled()" (click)="addToCart()">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="u-inline-d1cc5713a9">
                 <circle cx="9" cy="21" r="1"></circle>
                 <circle cx="20" cy="21" r="1"></circle>
                 <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
@@ -458,7 +458,7 @@
             >{{ isDiscontinued() ? 'Ngừng kinh doanh' : isHidden() ? 'Sản phẩm tạm ẩn' : isOutOfStock() ? 'Hết hàng' : 'Mua ngay' }}</button>
           </div>
           <button type="button" class="btn btn--secondary wishlist-btn" [class.active]="wishlisted()" aria-label="Thêm vào danh sách yêu thích" (click)="toggleWishlist()">
-            <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.67" style="margin-right: 8px;">
+            <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.67" class="u-inline-d1cc5713a9">
               <path d="M10 17.5l-5.83-5.83a4.17 4.17 0 115.83-5.83 4.17 4.17 0 115.83 5.83L10 17.5z" />
             </svg>
             Thêm vào yêu thích
@@ -480,7 +480,7 @@
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
             </svg>
-            <span>Gửi yêu cầu đổi trả trong 30 ngày sau khi giao thành công</span>
+            <span>Gửi yêu cầu đổi trả trong 7 ngày sau khi giao thành công</span>
           </div>
           <div class="benefit-item">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -503,17 +503,17 @@
       <div class="tabs-content">
         @if (infoTab() === 'desc') {
           <div class="tab-panel active">
-            <p style="white-space: pre-line; line-height: 1.75; margin-bottom: 18px;">{{ product()?.description || 'Đang cập nhật thông tin mô tả chi tiết...' }}</p>
+            <p class="u-inline-92f123de6a">{{ product()?.description || 'Đang cập nhật thông tin mô tả chi tiết...' }}</p>
             <ul class="product-spec-grid">
               @for (row of specRows(); track row.label) {
                 <li><strong>{{ row.label }}:</strong> {{ row.value }}</li>
               }
             </ul>
             @if (product()?.style_tags?.length) {
-              <div style="margin-top: 18px; padding-top: 14px; border-top: 1px dashed #e6ddd3; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-                <span style="font-size: 0.8125rem; font-weight: 600; color: #7a6e65;">Từ khóa &amp; Phong cách:</span>
+              <div class="u-inline-bf4026263d">
+                <span class="u-inline-41a36ce33d">Từ khóa &amp; Phong cách:</span>
                 @for (tag of product()!.style_tags!; track tag) {
-                  <a [routerLink]="['/products']" [queryParams]="{ q: tag }" style="font-size: 0.78rem; padding: 4px 10px; border-radius: 999px; background: #f8f4ef; border: 1px solid #e5d9cc; color: #4a3f39; text-decoration: none;">#{{ tag }}</a>
+                  <a [routerLink]="['/products']" [queryParams]="{ q: tag }" class="u-inline-3e4ecb21cb">#{{ tag }}</a>
                 }
               </div>
             }

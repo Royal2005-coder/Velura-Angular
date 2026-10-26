@@ -4,7 +4,7 @@
    ============================================================ */
 
 .page-about {
-  background: #fbf7f2;
+  background: transparent;
 }
 
 .about-page {
@@ -22,19 +22,19 @@
 .about-badge {
   display: inline-block;
   margin-bottom: 12px;
-  color: var(--terracotta, #c97b63);
-  font-family: "Outfit", sans-serif;
+  color: var(--velura-maroon, #7A283C);
+  font-family: var(--velura-font-ui, "Inter", sans-serif);
   font-size: 0.75rem;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
 /* Titles and Descs */
 .about-title {
   margin: 0 0 20px;
-  color: var(--ink, #2a2522);
-  font-family: "Playfair Display", Georgia, serif;
+  color: var(--velura-maroon, #7A283C);
+  font-family: var(--velura-font-display, "Cormorant Garamond", Georgia, serif);
   font-size: clamp(1.8rem, 4vw, 2.5rem);
   font-weight: 500;
   line-height: 1.25;
@@ -44,7 +44,7 @@
   max-width: 68ch;
   margin: 0 0 18px;
   color: #6f6861;
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.98rem;
   line-height: 1.72;
 }
@@ -80,7 +80,7 @@
   justify-content: center;
   align-items: center;
   padding: 40px 24px;
-  background: linear-gradient(rgba(42, 37, 34, 0.25), rgba(42, 37, 34, 0.55));
+  background: transparent;
   color: #ffffff;
   text-align: center;
   z-index: 2;
@@ -93,7 +93,7 @@
 .about-hero__content h1 {
   margin: 12px 0 16px;
   color: #ffffff;
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: "Cormorant Garamond", Georgia, serif;
   font-size: clamp(2.2rem, 5vw, 3.8rem);
   font-weight: 500;
   line-height: 1.15;
@@ -104,7 +104,7 @@
   max-width: 640px;
   margin: 0 0 32px;
   color: rgba(255, 255, 255, 0.95);
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: clamp(1rem, 1.2vw, 1.15rem);
   line-height: 1.6;
   text-shadow: 0 1px 6px rgba(0, 0, 0, 0.2);
@@ -119,7 +119,7 @@
   border-radius: 8px;
   background: #ffffff;
   color: var(--ink, #2a2522);
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.9rem;
   font-weight: 700;
   text-decoration: none;
@@ -128,7 +128,7 @@
 }
 
 .about-hero__content a:hover {
-  background: var(--terracotta, #c97b63);
+  background: var(--terracotta, #844A5A);
   color: #ffffff;
   transform: translateY(-2px);
   box-shadow: 0 8px 20px rgba(201, 123, 99, 0.35);
@@ -230,7 +230,7 @@
   margin-bottom: 20px;
   border-radius: 999px;
   background: rgba(201, 123, 99, 0.1);
-  color: var(--terracotta, #c97b63);
+  color: var(--terracotta, #844A5A);
 }
 
 .value-card__icon-wrapper svg {
@@ -245,7 +245,7 @@
 .value-card__title {
   margin: 0 0 12px;
   color: var(--ink, #2a2522);
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: "Cormorant Garamond", Georgia, serif;
   font-size: 1.35rem;
   font-weight: 500;
   line-height: 1.25;
@@ -254,7 +254,7 @@
 .value-card__desc {
   margin: 0;
   color: #6f6861;
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.92rem;
   line-height: 1.65;
 }
@@ -290,11 +290,11 @@
 }
 
 .value-card--bg .value-card__title {
-  color: #ffffff !important;
+  color: var(--velura-maroon, #7A283C);
 }
 
 .value-card--bg .value-card__desc {
-  color: rgba(255, 255, 255, 0.88) !important;
+  color: #5A484D;
 }
 
 .value-card--bg:hover {
@@ -308,10 +308,10 @@
    Section 5: Đội ngũ sáng tạo (Creative Team)
    ============================================================ */
 .about-team {
-  padding: 88px 0;
-  margin-bottom: 88px;
-  border-top: 1px solid rgba(42, 37, 34, 0.08);
-  background: #ffffff;
+  padding: clamp(40px, 5vw, 64px) 0;
+  margin-bottom: 0;
+  border-top: none;
+  background: transparent;
 }
 
 .about-team__header {
@@ -323,7 +323,7 @@
   max-width: 52ch;
   margin: 0 auto;
   color: #6f6861;
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.95rem;
   line-height: 1.7;
 }
@@ -390,7 +390,7 @@
 .team-card__name {
   margin: 0 0 4px;
   color: var(--ink, #2a2522);
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: "Cormorant Garamond", Georgia, serif;
   font-size: 1.15rem;
   font-weight: 500;
 }
@@ -398,7 +398,7 @@
 .team-card__role {
   display: inline-block;
   margin-bottom: 0;
-  color: var(--terracotta, #c97b63);
+  color: var(--terracotta, #844A5A);
   font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -409,9 +409,9 @@
    Section 6: Số liệu nổi bật (Stats)
    ============================================================ */
 .about-stats {
-  padding: 88px 0;
-  margin-bottom: 88px;
-  background: #f4e2da;
+  padding: clamp(40px, 5vw, 64px) 0;
+  margin-bottom: 0;
+  background: transparent;
 }
 
 .about-stats__header {
@@ -422,7 +422,7 @@
 .about-stats__subtitle {
   margin: 8px 0 0;
   color: #6f6861;
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 1rem;
 }
 
@@ -451,7 +451,7 @@
   display: flex;
   justify-content: center;
   margin-bottom: 16px;
-  color: var(--terracotta, #c97b63);
+  color: var(--terracotta, #844A5A);
 }
 
 .stat-card__number {
@@ -467,7 +467,7 @@
 
 .stat-card__label {
   color: #6f6861;
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.85rem;
   font-weight: 500;
 }
@@ -476,11 +476,11 @@
    Section 7: Truyền thông & Giải thưởng (Press)
    ============================================================ */
 .about-press {
-  padding: 88px 0;
-  margin-bottom: 88px;
-  border-top: 1px solid rgba(42, 37, 34, 0.08);
-  border-bottom: 1px solid rgba(42, 37, 34, 0.08);
-  background: #fbfaf7;
+  padding: clamp(40px, 5vw, 64px) 0;
+  margin-bottom: 0;
+  border-top: none;
+  border-bottom: none;
+  background: transparent;
 }
 
 .about-press__header {
@@ -513,7 +513,7 @@
 .press-logo:hover {
   border-color: rgba(201, 123, 99, 0.3);
   background: #fdf6f2;
-  color: var(--terracotta, #c97b63);
+  color: var(--terracotta, #844A5A);
   transform: scale(1.02);
 }
 
@@ -540,7 +540,7 @@
 .about-cta::before {
   z-index: -2;
   inset: -4%;
-  background: url("/src/assets/images/velura-journal-banner.png") center / cover no-repeat;
+  background: url("/assets/images/velura-journal-banner.png") center / cover no-repeat;
   opacity: 0.46;
   animation: about-cta-drift 18s cubic-bezier(0.45, 0, 0.55, 1) infinite alternate;
 }
@@ -568,7 +568,7 @@
   display: block;
   margin-bottom: 18px;
   color: #7b1e2b;
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.17em;
@@ -602,7 +602,7 @@
 .about-cta__desc {
   margin: 0 0 32px;
   color: #6f6861;
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 1.02rem;
   line-height: 1.7;
 }
@@ -614,9 +614,9 @@
   justify-content: center;
   padding: 0 32px;
   border-radius: 8px;
-  background: var(--terracotta, #c97b63);
+  background: var(--terracotta, #844A5A);
   color: #ffffff;
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.9rem;
   font-weight: 700;
   text-decoration: none;
@@ -625,7 +625,7 @@
 }
 
 .about-cta__btn:hover {
-  background: var(--terracotta-h, #b36a53);
+  background: var(--terracotta-h, #631F30);
   transform: translateY(-2px);
   box-shadow: 0 8px 20px rgba(201, 123, 99, 0.3);
 }
@@ -767,7 +767,7 @@
   border-radius: 0;
   background: #7b1e2b;
   color: #fff;
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.82rem;
   font-weight: 700;
   letter-spacing: 0.03em;
@@ -789,12 +789,21 @@
 
 @media (max-width: 768px) {
   .page-about .about-hero {
-    aspect-ratio: 4 / 5;
-    margin-bottom: 48px;
+    /* The campaign artwork includes its own headline; preserve its full frame on mobile. */
+    aspect-ratio: 2.03 / 1;
+    margin-bottom: 104px;
+    overflow: visible;
   }
 
   .page-about .about-hero__img {
-    object-position: 57% center;
+    object-fit: contain;
+    object-position: center;
+  }
+
+  .page-about .about-hero__content {
+    top: auto;
+    bottom: -56px;
+    transform: translateX(-50%);
   }
 }
 
@@ -935,48 +944,71 @@
 }
 
 .page-about .value-card {
-  min-height: 328px;
+  min-height: 270px;
+  display: flex;
+  flex-direction: column;
   align-items: flex-start;
-  justify-content: flex-end;
-  padding: 32px;
-  border: 1px solid #e8dfda;
-  border-radius: 0;
-  background: #faf7f5;
+  justify-content: flex-start;
+  padding: 36px 30px;
+  border: 1.5px solid rgba(242, 194, 207, 0.72);
+  border-radius: 16px;
+  background: linear-gradient(180deg, #FFFFFF 0%, #FFF9FA 100%);
   text-align: left;
-  box-shadow: none;
+  box-shadow: 0 4px 20px rgba(122, 40, 60, 0.03);
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.35s ease, box-shadow 0.35s ease;
 }
 
 .page-about .value-card:hover {
-  transform: translateY(-3px);
-  border-color: #c88872;
-  box-shadow: 0 18px 38px rgba(82, 47, 43, 0.09);
+  transform: translateY(-5px);
+  border-color: rgba(201, 79, 112, 0.55);
+  box-shadow: 0 18px 38px rgba(122, 40, 60, 0.09);
 }
 
 .page-about .value-card__icon-wrapper {
-  width: 46px;
-  height: 46px;
-  margin: 0 0 auto;
-  border: 1px solid rgba(123, 30, 43, 0.14);
+  width: 52px;
+  height: 52px;
+  margin: 0 0 24px 0;
+  border: 1.5px solid rgba(242, 194, 207, 0.85);
   border-radius: 50%;
-  background: transparent;
-  color: #7b1e2b;
+  background: #FFF0F3;
+  color: var(--velura-maroon, #7A283C);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform 0.3s ease, background-color 0.3s ease, border-color 0.3s ease;
+}
+
+.page-about .value-card:hover .value-card__icon-wrapper {
+  transform: scale(1.08);
+  background: #FFE4EA;
+  border-color: var(--velura-rose, #C94F70);
 }
 
 .page-about .value-card__icon,
-.page-about .value-card__icon svg {
-  width: 22px;
-  height: 22px;
+.page-about .value-card__icon svg,
+.page-about .value-card__icon-wrapper svg {
+  width: 24px;
+  height: 24px;
+  stroke: currentColor;
 }
 
 .page-about .value-card__title {
-  margin-bottom: 10px;
-  font-size: clamp(1.35rem, 1.7vw, 1.65rem);
+  margin: 0 0 12px 0;
+  font-family: var(--velura-font-serif, "Cormorant Garamond", Georgia, serif);
+  font-size: clamp(1.4rem, 1.8vw, 1.7rem);
+  font-weight: 600;
+  color: var(--velura-maroon, #7A283C) !important;
+  line-height: 1.25;
 }
 
 .page-about .value-card__desc {
-  max-width: 31ch;
-  font-size: 0.96rem;
-  line-height: 1.7;
+  max-width: 34ch;
+  margin: 0;
+  font-family: var(--velura-font-ui, "Inter", sans-serif);
+  font-size: 0.95rem;
+  line-height: 1.68;
+  color: #5A484D !important;
 }
 
 
@@ -1216,4 +1248,88 @@
 .page-about .about-press__header.is-story-visible {
   opacity: 1;
   transform: none;
+}
+
+/* Brand story styling follows the blush, rose and maroon storefront concept. */
+.page-about {
+  background:
+    radial-gradient(ellipse at 92% 8%, rgba(230, 236, 213, .18), transparent 34rem),
+    linear-gradient(180deg, #fff6f8 0%, #faf0f3 62%, #fff8f9 100%);
+}
+
+.page-about .about-badge,
+.page-about .about-cta__kicker { color: var(--velura-maroon); }
+.page-about .about-title,
+.page-about .about-cta__title,
+.page-about .team-card__name { color: var(--velura-maroon); }
+.page-about .about-desc,
+.page-about .about-team__desc,
+.page-about .about-stats__subtitle,
+.page-about .about-cta__desc { color: var(--text-secondary); }
+
+.page-about .about-hero__content {
+  background: transparent !important;
+}
+
+.page-about .about-hero__cta,
+.page-about .about-cta__btn {
+  border-radius: 999px;
+  background: var(--velura-maroon);
+  color: #fff;
+  box-shadow: 0 8px 24px rgba(60, 20, 30, .16);
+}
+
+.page-about .about-hero__cta:hover,
+.page-about .about-cta__btn:hover { background: var(--velura-maroon-deep); }
+.page-about .about-hero__cta:focus-visible,
+.page-about .about-cta__btn:focus-visible { outline-color: var(--velura-rose); box-shadow: 0 0 0 5px rgba(201, 79, 112, .25); }
+
+.page-about .about-story__image img,
+.page-about .about-atelier__video { box-shadow: 0 20px 54px rgba(122, 40, 60, .12); }
+.page-about .about-values,
+.page-about .about-atelier,
+.page-about .about-team,
+.page-about .about-stats,
+.page-about .about-press,
+.page-about .about-cta {
+  padding: clamp(40px, 5vw, 64px) 0 !important;
+  margin-bottom: 0 !important;
+  background: transparent !important;
+  border-top: none !important;
+  border-bottom: none !important;
+}
+
+.page-about .about-stats__header,
+.page-about .about-press__header,
+.page-about .about-team__header {
+  margin-bottom: clamp(28px, 3.5vw, 42px);
+}
+
+.page-about .value-card,
+.page-about .team-card,
+.page-about .stat-card,
+.page-about .press-logo {
+  border-color: rgba(242, 194, 207, .72);
+}
+
+.page-about .value-card { background-color: #fff9fa; }
+.page-about .value-card:hover,
+.page-about .team-card:hover,
+.page-about .stat-card:hover,
+.page-about .press-logo:hover { border-color: rgba(201, 79, 112, .48); }
+.page-about .value-card__icon-wrapper { color: var(--velura-maroon); }
+.page-about .value-card__title { color: var(--velura-maroon); }
+.page-about .value-card__desc,
+.page-about .stat-card__label { color: var(--text-secondary); }
+.page-about .team-card__role,
+.page-about .stat-card__icon,
+.page-about .stat-card__number,
+.page-about .press-logo:hover { color: var(--velura-rose); }
+
+.page-about .about-cta {
+  background: var(--velura-blush);
+}
+
+.page-about .about-cta::after {
+  background: linear-gradient(90deg, rgba(255, 246, 248, .94), rgba(253, 242, 244, .78) 50%, rgba(255, 246, 248, .94));
 }

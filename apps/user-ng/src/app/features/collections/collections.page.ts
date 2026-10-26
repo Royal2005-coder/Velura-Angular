@@ -24,23 +24,46 @@ export class CollectionsPage {
   readonly loading = signal(true);
   readonly products = signal<ProductSummary[]>([]);
   readonly filter = signal('all');
-  readonly lookbooks = COLLECTION_LOOKBOOKS;
+  readonly lookbooks = computed(() => COLLECTION_LOOKBOOKS);
 
   readonly groups = computed(() => {
     const filter = this.filter();
-    const lookbooks = filter === 'all' ? this.lookbooks : this.lookbooks.filter((item) => item.id === filter);
-    return lookbooks.map((lookbook, index) => ({
-      lookbook,
-      reverse: index % 2 === 1,
-      products: this.products().filter((row) => row.collection === lookbook.name),
-    }));
+    const availableLookbooks = this.lookbooks();
+    const lookbooks = filter === 'all' ? availableLookbooks : availableLookbooks.filter((item) => item.id === filter);
+    const allProducts = this.products();
+
+    return lookbooks.map((lookbook, index) => {
+      let items = allProducts.filter((row) => row.collection === lookbook.name);
+      if (!items.length && allProducts.length) {
+        items = allProducts.filter((row) =>
+          lookbook.categoryLink.includes(row.category_slug || '') ||
+          (lookbook.id === 'soft-ceremony' && row.category_slug === 'dam-vay') ||
+          (lookbook.id === 'the-urban-rhythm' && (row.category_slug === 'set-do' || row.category_slug === 'quan')) ||
+          (lookbook.id === 'weekend-escape' && (row.category_slug === 'set-do' || row.category_slug === 'ao')) ||
+          (lookbook.id === 'midnight-mirage' && (row.category_slug === 'dam-vay' || row.category_slug === 'ao')) ||
+          (lookbook.id === 'the-afterglow' && row.category_slug === 'dam-vay')
+        );
+      }
+      if (!items.length && allProducts.length) {
+        items = allProducts.slice(index * 3, index * 3 + 5);
+      }
+      if (!items.length && allProducts.length) {
+        items = allProducts.slice(0, 5);
+      }
+
+      return {
+        lookbook,
+        reverse: index % 2 === 1,
+        products: items.slice(0, 5),
+      };
+    });
   });
 
   constructor() {
     useBodyClass('page-collections');
     this.catalog.getProducts().subscribe({
       next: (rows) => {
-        this.products.set(rows.filter((row) => row.is_combo && row.collection));
+        this.products.set(rows);
         this.loading.set(false);
       },
       error: () => this.loading.set(false),

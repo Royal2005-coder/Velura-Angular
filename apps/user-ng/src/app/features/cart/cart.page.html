@@ -30,7 +30,7 @@
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
             </svg>
-            <span>30 ngày đổi trả miễn phí</span>
+            <span>7 ngày đổi trả miễn phí</span>
           </div>
           <div class="cart-empty-feature-item">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -48,25 +48,25 @@
       </div>
       <div class="cart-grid">
         <div class="cart-main">
-          <div class="cart-select-all-wrapper" style="display: flex; align-items: center; gap: 10px; padding: 14px 18px; background: #FFF; border-radius: 8px; margin-bottom: 16px; border: 1px solid rgba(0,0,0,0.06);">
+          <div class="cart-select-all-wrapper u-inline-70b602835d">
             <input
               type="checkbox"
               id="selectAllItems"
-              class="cart-select-all-checkbox"
-              style="width: 18px; height: 18px; cursor: pointer; accent-color: var(--terracotta);"
+              class="cart-select-all-checkbox u-inline-410a0a28e4"
+             
               [checked]="allSelected()"
               (change)="toggleAll($event)"
             />
-            <label for="selectAllItems" style="font-family: 'DM Sans', sans-serif; font-size: 0.9rem; font-weight: 600; color: var(--dark); cursor: pointer; user-select: none;">Chọn tất cả</label>
+            <label for="selectAllItems" class="u-inline-a34b872cbd">Chọn tất cả</label>
           </div>
           <div class="cart-items">
             @for (item of pagedItems(); track item.variant_id) {
-              <div class="cart-item" [attr.data-id]="item.variant_id" style="display: flex; align-items: center;">
-                <div class="cart-item__select" style="display: flex; align-items: center; justify-content: center; padding: 0 8px 0 16px;">
+              <div class="cart-item u-inline-b4edaa7885" [attr.data-id]="item.variant_id">
+                <div class="cart-item__select u-inline-36ef55c698">
                   <input
                     type="checkbox"
-                    class="js-cart-item-checkbox"
-                    style="width: 18px; height: 18px; cursor: pointer; accent-color: var(--terracotta);"
+                    class="js-cart-item-checkbox u-inline-410a0a28e4"
+                   
                     [checked]="isSelected(item)"
                     (change)="toggleItem(item, $event)"
                   />
@@ -74,7 +74,7 @@
                 <div class="cart-item__image">
                   <img [src]="imageUrl(item)" [alt]="item.product_name" />
                 </div>
-                <div class="cart-item__details" style="flex: 1;">
+                <div class="cart-item__details u-inline-ee3d55bf99">
                   <div class="cart-item__header-row">
                     <h3 class="cart-item__name">{{ item.product_name }}</h3>
                     @if (item.is_combo) {
@@ -91,37 +91,37 @@
 
                   @if (item.is_combo) {
                     <div class="cart-item__tags">
-                      <span class="cart-item__tag" style="background: #f4e4dc; color: var(--terracotta); font-weight: 500;">Set phối đồ gợi ý</span>
-                      <span class="cart-item__tag" style="white-space: normal; line-height: 1.4;">Gồm: {{ comboIncludes(item) }}</span>
+                      <span class="cart-item__tag u-inline-4430a1ed71">Set phối đồ gợi ý</span>
+                      <span class="cart-item__tag u-inline-9aa08422d9">Gồm: {{ comboIncludes(item) }}</span>
                     </div>
                     @if ((item.sub_items && item.sub_items.length) || (item.items && item.items.length)) {
-                      <div class="cart-combo-components" style="margin: 10px 0; display: flex; flex-direction: column; gap: 8px;">
-                        <div style="font-size: 0.78125rem; font-weight: 600; color: #785a44; text-transform: uppercase; letter-spacing: 0.5px;">
+                      <div class="cart-combo-components u-inline-2b630d70ba">
+                        <div class="u-inline-66b76ae95e">
                           Tùy chỉnh size & màu cho từng món trong set:
                         </div>
                         @for (sub of (item.sub_items || item.items || []); track sub.product_id || sub.variant_id) {
-                          <div style="display: flex; align-items: center; justify-content: space-between; font-size: 0.8125rem; background: #fffcf9; padding: 8px 12px; border-radius: 8px; border: 1px solid #ebd9c8; gap: 8px;">
-                            <div style="display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1;">
-                              <a [routerLink]="['/products', sub.product_id]" target="_blank" style="display: block; line-height: 0; flex-shrink: 0;" title="Xem sản phẩm riêng lẻ">
-                                <img [src]="imageUrl(sub)" [alt]="sub.product_name" style="width: 32px; height: 42px; object-fit: cover; border-radius: 4px;" />
+                          <div class="u-inline-8bc13d6c95">
+                            <div class="u-inline-0714eafcca">
+                              <a [routerLink]="['/products', sub.product_id]" target="_blank" title="Xem sản phẩm riêng lẻ" class="u-inline-1987c411c4">
+                                <img [src]="imageUrl(sub)" [alt]="sub.product_name" class="u-inline-453fc34f92" />
                               </a>
-                              <div style="min-width: 0; flex: 1;">
-                                <a [routerLink]="['/products', sub.product_id]" target="_blank" style="color: var(--text-dark); text-decoration: none; font-weight: 500; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="Xem sản phẩm riêng lẻ">
+                              <div class="u-inline-62b2fca2a4">
+                                <a [routerLink]="['/products', sub.product_id]" target="_blank" title="Xem sản phẩm riêng lẻ" class="u-inline-7fc62ca3ae">
                                   {{ sub.product_name }}
                                 </a>
-                                <div style="font-size: 0.75rem; color: #8c857e; margin-top: 1px;">
+                                <div class="u-inline-c85c83ecce">
                                   {{ sub.color || 'Mặc định' }} / {{ displaySize(sub.size) || 'Free' }}
                                 </div>
                               </div>
                             </div>
 
                             <!-- Interactive variant pills for this sub-item -->
-                            <div class="coolmate-variant-row" style="margin-top: 0; flex-shrink: 0; gap: 6px;">
+                            <div class="coolmate-variant-row u-inline-7bd487c845">
                               <div class="coolmate-pill-wrap">
                                 <button
                                   type="button"
-                                  class="coolmate-pill-btn"
-                                  style="padding: 2px 7px; font-size: 0.75rem; height: 26px;"
+                                  class="coolmate-pill-btn u-inline-39a1e0a096"
+                                 
                                   [class.is-active]="isComboSubDropdownOpen(item, sub, 'color')"
                                   (click)="toggleComboSubDropdown(item, sub, 'color', $event)"
                                 >
@@ -157,8 +157,8 @@
                               <div class="coolmate-pill-wrap">
                                 <button
                                   type="button"
-                                  class="coolmate-pill-btn"
-                                  style="padding: 2px 7px; font-size: 0.75rem; height: 26px;"
+                                  class="coolmate-pill-btn u-inline-39a1e0a096"
+                                 
                                   [class.is-active]="isComboSubDropdownOpen(item, sub, 'size')"
                                   (click)="toggleComboSubDropdown(item, sub, 'size', $event)"
                                 >
@@ -190,7 +190,7 @@
                                 }
                               </div>
 
-                              <a [routerLink]="['/products', sub.product_id]" target="_blank" style="font-size: 0.75rem; color: var(--terracotta); text-decoration: none; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: rgba(161, 130, 101, 0.08); display: flex; align-items: center; gap: 2px;" title="Xem sản phẩm riêng lẻ">
+                              <a [routerLink]="['/products', sub.product_id]" target="_blank" title="Xem sản phẩm riêng lẻ" class="u-inline-dfea1b0b4f">
                                 <span>Xem lẻ</span>
                                 <span aria-hidden="true">&rarr;</span>
                               </a>
@@ -299,11 +299,11 @@
               </div>
             }
             @if (showPagination()) {
-              <div class="cart-pagination" style="display: flex; justify-content: center; gap: 8px; margin-top: 24px; padding-bottom: 8px;">
+              <div class="cart-pagination u-inline-0f6b4fff28">
                 <button
-                  class="cart-page-btn cart-page-prev"
+                  class="cart-page-btn cart-page-prev u-inline-c47efaedbf"
                   type="button"
-                  style="width: 32px; height: 32px; border-radius: 4px; border: 1px solid var(--line, #E8DFD6); background: white; color: var(--dark); cursor: pointer; display: flex; align-items: center; justify-content: center;"
+                 
                   [disabled]="currentPage() === 1"
                   [style.opacity]="currentPage() === 1 ? '0.5' : '1'"
                   (click)="goToPage(currentPage() - 1)"
@@ -312,12 +312,12 @@
                 </button>
                 @for (page of pageItems(); track page.kind + '-' + page.value) {
                   @if (page.kind === 'dots') {
-                    <span style="display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; color: #6B635D;">...</span>
+                    <span class="u-inline-e3300f4389">...</span>
                   } @else {
                     <button
-                      class="cart-page-btn"
+                      class="cart-page-btn u-inline-871ecc10e4"
                       type="button"
-                      style="width: 32px; height: 32px; border-radius: 4px; border: 1px solid var(--line, #E8DFD6); cursor: pointer; display: flex; align-items: center; justify-content: center; font-family: 'DM Sans', sans-serif; font-weight: 500;"
+                     
                       [style.background]="currentPage() === page.value ? 'var(--terracotta, #C97B63)' : 'white'"
                       [style.color]="currentPage() === page.value ? 'white' : '#6B635D'"
                       (click)="goToPage(page.value)"
@@ -325,9 +325,9 @@
                   }
                 }
                 <button
-                  class="cart-page-btn cart-page-next"
+                  class="cart-page-btn cart-page-next u-inline-c47efaedbf"
                   type="button"
-                  style="width: 32px; height: 32px; border-radius: 4px; border: 1px solid var(--line, #E8DFD6); background: white; color: var(--dark); cursor: pointer; display: flex; align-items: center; justify-content: center;"
+                 
                   [disabled]="currentPage() === totalPages()"
                   [style.opacity]="currentPage() === totalPages() ? '0.5' : '1'"
                   (click)="goToPage(currentPage() + 1)"
@@ -342,31 +342,31 @@
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
             <path d="M9 11l2 2 4-4" />
           </svg>
-          <p class="cart-guarantee__text">Yêu cầu đổi trả trong 30 ngày sau khi đơn được giao thành công; hoàn tiền trong 4 - 5 ngày làm việc sau khi hàng đạt kiểm tra.</p>
+          <p class="cart-guarantee__text">Yêu cầu đổi trả trong 7 ngày sau khi đơn được giao thành công; hoàn tiền trong 4 - 5 ngày làm việc sau khi hàng đạt kiểm tra.</p>
         </div>
       </div>
       <div class="cart-sidebar">
         <div class="summary-card">
           <h2 class="summary-card__title">Tóm tắt đơn hàng</h2>
-          <div class="cart-summary-products" style="margin-top: 16px; margin-bottom: 16px; max-height: 300px; overflow-y: auto; padding-right: 4px; display: flex; flex-direction: column; gap: 12px;">
+          <div class="cart-summary-products u-inline-ea769fea41">
             @if (selectedItems().length === 0) {
-              <p style="color: #6B635D; font-size: 0.875rem; text-align: center;">Chưa chọn sản phẩm nào</p>
+              <p class="u-inline-4ecc135036">Chưa chọn sản phẩm nào</p>
             } @else {
               @for (item of selectedItems(); track item.variant_id) {
-                <div style="display: flex; gap: 12px; align-items: flex-start;">
-                  <div style="position: relative; width: 48px; height: 60px; flex-shrink: 0; border-radius: 4px; border: 1px solid var(--card-border);">
-                    <img [src]="imageUrl(item)" [alt]="item.product_name" style="width: 100%; height: 100%; object-fit: cover; border-radius: 4px;" />
+                <div class="u-inline-730b6a79e4">
+                  <div class="u-inline-9cff2bd9af">
+                    <img [src]="imageUrl(item)" [alt]="item.product_name" class="u-inline-0b8e13feb2" />
                   </div>
-                  <div style="flex: 1; display: flex; flex-direction: column; gap: 2px;">
-                    <span style="font-weight: 600; color: var(--text-dark); font-size: 0.8125rem; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">{{ item.product_name }}</span>
+                  <div class="u-inline-69fcbc5468">
+                    <span class="u-inline-8c32d50b1d">{{ item.product_name }}</span>
                     @if (item.is_combo) {
-                      <span style="color: #6B635D; font-size: 0.75rem;">Set phối đồ</span>
+                      <span class="u-inline-91667014c4">Set phối đồ</span>
                     } @else if (item.size || item.color) {
-                      <span style="color: #6B635D; font-size: 0.75rem;">{{ item.color }}{{ item.color && item.size ? ' / ' : '' }}{{ displaySize(item.size) }}</span>
+                      <span class="u-inline-91667014c4">{{ item.color }}{{ item.color && item.size ? ' / ' : '' }}{{ displaySize(item.size) }}</span>
                     }
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 2px;">
-                      <span style="color: var(--terracotta); font-weight: 600; font-size: 0.8125rem;">{{ lineTotal(item) }}</span>
-                      <span style="color: #6B635D; font-size: 0.8125rem; font-weight: 500;">x{{ item.quantity }}</span>
+                    <div class="u-inline-e0341883f0">
+                      <span class="u-inline-0a8f05a1e2">{{ lineTotal(item) }}</span>
+                      <span class="u-inline-d44a2fd0f9">x{{ item.quantity }}</span>
                     </div>
                   </div>
                 </div>
@@ -406,21 +406,21 @@
           </div>
           <p class="summary-card__note">Phí vận chuyển và tổng cuối cùng được tính ở bước thanh toán.</p>
           <button
-            class="summary-card__btn-checkout js-btn-checkout"
+            class="summary-card__btn-checkout js-btn-checkout u-inline-be061b2d9b"
             type="button"
-            style="display: flex; align-items: center; justify-content: center; width: 100%; border: none; margin-top: 16px; padding: 14px; cursor: pointer;"
+           
             [disabled]="selectedItems().length === 0"
             [style.opacity]="selectedItems().length === 0 ? '0.5' : '1'"
             (click)="checkout()"
           >
             Tiến hành thanh toán
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-left: 8px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="u-inline-c937f3b834">
               <line x1="5" y1="12" x2="19" y2="12" />
               <polyline points="12 5 19 12 12 19" />
             </svg>
           </button>
           <p class="summary-card__security">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 4px;">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="u-inline-e26357617b">
               <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
               <path d="M7 11V7a5 5 0 0 1 10 0v4" />
             </svg>

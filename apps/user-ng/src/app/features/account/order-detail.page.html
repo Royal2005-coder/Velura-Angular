@@ -99,7 +99,7 @@
           <h2 class="detail-section-title">Sản phẩm ({{ items().length }})</h2>
           <div class="detail-products-list">
             @for (item of items(); track item.item_id || $index) {
-              <div class="detail-product-item" style="display: flex; justify-content: space-between; align-items: center; gap: 16px;">
+              <div class="detail-product-item u-inline-1ecf016dc4">
                 <div class="detail-product-info">
                   <h3 class="detail-product-name">{{ item.product_name }}</h3>
                   <div class="detail-product-meta">{{ item.category_name ? item.category_name + ' • ' : '' }}x{{ item.quantity }}</div>
@@ -109,8 +109,8 @@
                   <a
                     [routerLink]="['/account/reviews']"
                     [queryParams]="{ order_id: order()?.order_id, product_id: item.product_id, name: item.product_name, price: item.unit_price, image: item.product_image }"
-                    class="btn btn--secondary btn--sm"
-                    style="font-size: 0.8125rem; padding: 6px 14px; white-space: nowrap; flex-shrink: 0;"
+                    class="btn btn--secondary btn--sm u-inline-2b0ad7a60f"
+                   
                   >
                     Đánh giá
                   </a>
@@ -193,8 +193,8 @@
         <!-- Cancel Order Modal -->
         <div class="review-popup" [class.is-visible]="cancelOpen()">
           <div class="review-popup__overlay" (click)="closeCancel()"></div>
-          <div class="review-popup__content" style="max-width: 480px; width: 90%; text-align: left; background: var(--bg-card, #fff); border: 1px solid var(--border); padding: 24px; border-radius: 8px;">
-            <button class="review-popup__close" type="button" aria-label="Đóng" (click)="closeCancel()" style="position: absolute; top: 16px; right: 16px; background: transparent; border: none; cursor: pointer;">
+          <div class="review-popup__content u-inline-1a63f6b2d1">
+            <button class="review-popup__close u-inline-91522d10fd" type="button" aria-label="Đóng" (click)="closeCancel()">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                 stroke-linecap="round" stroke-linejoin="round">
                 <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -202,12 +202,12 @@
               </svg>
             </button>
 
-            <h3 class="review-popup__title" style="margin-bottom: 12px; font-size: 1.25rem; font-family: var(--font-display, serif); color: var(--text-dark);">Hủy đơn hàng</h3>
-            <p style="color: var(--soft); font-size: 0.875rem; margin-bottom: 20px; line-height: 1.5;">Vui lòng chọn lý do hủy đơn hàng của bạn. Hành động này không thể hoàn tác.</p>
+            <h3 class="review-popup__title u-inline-a5ddceff4e">Hủy đơn hàng</h3>
+            <p class="u-inline-478fadd8b9">Vui lòng chọn lý do hủy đơn hàng của bạn. Hành động này không thể hoàn tác.</p>
 
-            <div style="margin-bottom: 16px;">
-              <label for="js-cancel-reason-select" style="display: block; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; color: var(--soft); margin-bottom: 8px;">Lý do hủy *</label>
-              <select id="js-cancel-reason-select" [value]="cancelReason()" (change)="setCancelReason($event)" style="width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 4px; font-size: 0.9375rem; background-color: var(--bg-input, transparent); color: var(--text-dark);">
+            <div class="u-inline-045aac899d">
+              <label for="js-cancel-reason-select" class="u-inline-e5455eb7a3">Lý do hủy *</label>
+              <select id="js-cancel-reason-select" [value]="cancelReason()" (change)="setCancelReason($event)" class="u-inline-8479b53716">
                 <option value="Thay đổi ý định">Thay đổi ý định</option>
                 <option value="Nhập sai thông tin giao hàng">Nhập sai thông tin giao hàng</option>
                 <option value="Tìm thấy sản phẩm rẻ hơn">Tìm thấy sản phẩm rẻ hơn</option>
@@ -218,18 +218,18 @@
             </div>
 
             @if (cancelReason() === 'Khác') {
-              <div style="margin-bottom: 16px;">
-                <label for="js-cancel-reason-other" style="display: block; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; color: var(--soft); margin-bottom: 8px;">Chi tiết lý do *</label>
-                <textarea id="js-cancel-reason-other" [value]="cancelOther()" (input)="setCancelOther($event)" placeholder="Vui lòng nhập lý do khác..." style="width: 100%; height: 80px; padding: 10px; border: 1px solid var(--border); border-radius: 4px; font-size: 0.9375rem; resize: vertical; background-color: var(--bg-input, transparent); color: var(--text-dark);"></textarea>
+              <div class="u-inline-045aac899d">
+                <label for="js-cancel-reason-other" class="u-inline-e5455eb7a3">Chi tiết lý do *</label>
+                <textarea id="js-cancel-reason-other" [value]="cancelOther()" (input)="setCancelOther($event)" placeholder="Vui lòng nhập lý do khác..." class="u-inline-60246b531b"></textarea>
               </div>
             }
             @if (cancelError()) {
-              <p style="color: #9b2c2c; font-size: 0.875rem;">{{ cancelError() }}</p>
+              <p class="u-inline-5af46bfc42">{{ cancelError() }}</p>
             }
 
-            <div class="review-popup__actions" style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px;">
-              <button class="btn btn--secondary" type="button" (click)="closeCancel()" style="min-width: 100px;">Bỏ qua</button>
-              <button class="btn btn--primary" type="button" [disabled]="cancelling()" (click)="submitCancel()" style="min-width: 120px;">Xác nhận hủy</button>
+            <div class="review-popup__actions u-inline-afd6a06ab4">
+              <button class="btn btn--secondary u-inline-9292dfa7a4" type="button" (click)="closeCancel()">Bỏ qua</button>
+              <button class="btn btn--primary u-inline-cec9e9eaed" type="button" [disabled]="cancelling()" (click)="submitCancel()">Xác nhận hủy</button>
             </div>
           </div>
         </div>
@@ -237,8 +237,8 @@
         <!-- Return & Exchange Modal (U2 KAN-29) -->
         <div class="review-popup" [class.is-visible]="returnModalOpen()">
           <div class="review-popup__overlay" (click)="closeReturnModal()"></div>
-          <div class="review-popup__content" style="max-width: 520px; width: 90%; text-align: left; background: var(--bg-card, #fff); border: 1px solid var(--border); padding: 24px; border-radius: 8px;">
-            <button class="review-popup__close" type="button" aria-label="Đóng" (click)="closeReturnModal()" style="position: absolute; top: 16px; right: 16px; background: transparent; border: none; cursor: pointer;">
+          <div class="review-popup__content u-inline-f795f4944c">
+            <button class="review-popup__close u-inline-91522d10fd" type="button" aria-label="Đóng" (click)="closeReturnModal()">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="18" y1="6" x2="6" y2="18"></line>
                 <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -246,73 +246,73 @@
             </button>
 
             @if (returnSuccess()) {
-              <div style="text-align: center; padding: 20px 0;">
-                <div style="font-size: 2.5rem; margin-bottom: 12px;">🎉</div>
-                <h3 style="font-size: 1.125rem; font-weight: 600; color: #2e7d32; margin-bottom: 8px;">Yêu cầu đã được tiếp nhận!</h3>
-                <p style="font-size: 0.875rem; color: var(--soft); line-height: 1.5;">
+              <div class="u-inline-a205c22ec7">
+                <div class="u-inline-9cfae5c1ad">🎉</div>
+                <h3 class="u-inline-429ded385f">Yêu cầu đã được tiếp nhận!</h3>
+                <p class="u-inline-f3b2c9ac31">
                   CSKH Velura sẽ liên hệ với bạn trong 24 giờ để hướng dẫn thu hồi và giải quyết đổi trả/hoàn tiền.
                 </p>
-                <button type="button" class="btn btn--primary" style="margin-top: 16px;" (click)="closeReturnModal()">Đóng</button>
+                <button type="button" class="btn btn--primary u-inline-d265a6b9b9" (click)="closeReturnModal()">Đóng</button>
               </div>
             } @else {
-              <h3 class="review-popup__title" style="margin-bottom: 12px; font-size: 1.25rem; font-family: var(--font-display, serif); color: var(--text-dark);">Yêu cầu Đổi / Trả hàng (7 ngày)</h3>
-              <p style="color: var(--soft); font-size: 0.875rem; margin-bottom: 20px; line-height: 1.5;">
+              <h3 class="review-popup__title u-inline-a5ddceff4e">Yêu cầu Đổi / Trả hàng (7 ngày)</h3>
+              <p class="u-inline-478fadd8b9">
                 Chính sách Velura: Hỗ trợ đổi trả miễn phí trong 7 ngày kể từ ngày giao hàng thành công.
               </p>
 
-              <div style="margin-bottom: 16px;">
-                <label style="display: block; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; color: var(--soft); margin-bottom: 8px;">Hình thức *</label>
-                <div style="display: flex; gap: 10px;">
+              <div class="u-inline-045aac899d">
+                <label class="u-inline-e5455eb7a3">Hình thức *</label>
+                <div class="u-inline-d5f7d6ccce">
                   <button
                     type="button"
-                    class="btn"
+                    class="btn u-inline-ee3d55bf99"
                     [class.btn--primary]="returnType() === 'refund'"
                     [class.btn--secondary]="returnType() !== 'refund'"
                     (click)="setReturnType('refund')"
-                    style="flex: 1;"
+                   
                   >
                     💰 Trả hàng &amp; Hoàn tiền
                   </button>
                   <button
                     type="button"
-                    class="btn"
+                    class="btn u-inline-ee3d55bf99"
                     [class.btn--primary]="returnType() === 'exchange'"
                     [class.btn--secondary]="returnType() !== 'exchange'"
                     (click)="setReturnType('exchange')"
-                    style="flex: 1;"
+                   
                   >
                     🔄 Đổi size / Đổi mẫu
                   </button>
                 </div>
               </div>
 
-              <div style="margin-bottom: 16px;">
-                <label for="js-return-reason-select" style="display: block; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; color: var(--soft); margin-bottom: 8px;">Lý do đổi trả *</label>
-                <select id="js-return-reason-select" [value]="returnReason()" (change)="setReturnReason($event)" style="width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 4px; font-size: 0.9375rem; background-color: var(--bg-input, transparent); color: var(--text-dark);">
+              <div class="u-inline-045aac899d">
+                <label for="js-return-reason-select" class="u-inline-e5455eb7a3">Lý do đổi trả *</label>
+                <select id="js-return-reason-select" [value]="returnReason()" (change)="setReturnReason($event)" class="u-inline-8479b53716">
                   <option value="" disabled>Chọn lý do đổi trả...</option>
                   @for (item of returnReasons; track item[0]) {
                     <option [value]="item[0]">{{ item[1] }}</option>
                   }
                 </select>
               </div>
-              <div style="margin-bottom: 16px;">
-                <label style="display: block; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; color: var(--soft); margin-bottom: 8px;">Hình ảnh minh chứng *</label>
+              <div class="u-inline-045aac899d">
+                <label class="u-inline-e5455eb7a3">Hình ảnh minh chứng *</label>
                 <input type="file" accept="image/*" multiple (change)="onReturnFiles($event)" />
-                <p style="margin: 8px 0 0; font-size: 0.8125rem; color: var(--soft);">{{ returnImages().length }}/5 ảnh. Bắt buộc ít nhất 1 ảnh.</p>
+                <p class="u-inline-ad812c1120">{{ returnImages().length }}/5 ảnh. Bắt buộc ít nhất 1 ảnh.</p>
               </div>
 
-              <div style="margin-bottom: 16px;">
-                <label for="js-return-notes" style="display: block; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; color: var(--soft); margin-bottom: 8px;">Ghi chú chi tiết</label>
-                <textarea id="js-return-notes" placeholder="Mô tả cụ thể về sản phẩm hoặc mong muốn đổi sang size/màu nào..." (input)="setReturnNote($event)" style="width: 100%; height: 80px; padding: 10px; border: 1px solid var(--border); border-radius: 4px; font-size: 0.9375rem; resize: vertical; background-color: var(--bg-input, transparent); color: var(--text-dark);"></textarea>
+              <div class="u-inline-045aac899d">
+                <label for="js-return-notes" class="u-inline-e5455eb7a3">Ghi chú chi tiết</label>
+                <textarea id="js-return-notes" placeholder="Mô tả cụ thể về sản phẩm hoặc mong muốn đổi sang size/màu nào..." (input)="setReturnNote($event)" class="u-inline-60246b531b"></textarea>
               </div>
 
               @if (returnError()) {
-                <p style="color: #9b2c2c; font-size: 0.875rem;">{{ returnError() }}</p>
+                <p class="u-inline-5af46bfc42">{{ returnError() }}</p>
               }
 
-              <div class="review-popup__actions" style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px;">
-                <button class="btn btn--secondary" type="button" (click)="closeReturnModal()" style="min-width: 100px;">Bỏ qua</button>
-                <button class="btn btn--primary" type="button" [disabled]="submittingReturn()" (click)="submitReturn()" style="min-width: 140px;">
+              <div class="review-popup__actions u-inline-afd6a06ab4">
+                <button class="btn btn--secondary u-inline-9292dfa7a4" type="button" (click)="closeReturnModal()">Bỏ qua</button>
+                <button class="btn btn--primary u-inline-7f382da7d0" type="button" [disabled]="submittingReturn()" (click)="submitReturn()">
                   {{ submittingReturn() ? 'Đang gửi...' : 'Gửi yêu cầu đổi trả' }}
                 </button>
               </div>

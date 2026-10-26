@@ -6,40 +6,40 @@
     </div>
 
     <!-- Search Form -->
-    <div class="track-search-card" style="background: #fff; padding: 20px; border-radius: 12px; border: 1px solid var(--line, #e8dfd6); margin-bottom: 24px; box-shadow: 0 4px 16px rgba(0,0,0,0.03);">
-      <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 14px; align-items: flex-end;">
-        <div class="form-group" style="margin: 0;">
-          <label style="display: block; font-size: 0.8125rem; font-weight: 600; color: var(--dark, #2a2522); margin-bottom: 6px;">Mã đơn hàng *</label>
+    <div class="track-search-card u-inline-585930fa3b">
+      <div class="u-inline-7b26ed2013">
+        <div class="form-group u-inline-ff227d0632">
+          <label class="u-inline-6a00364557">Mã đơn hàng *</label>
           <input
             type="text"
-            class="form-input"
+            class="form-input u-inline-f2dd7ed9f3"
             placeholder="VD: VLR-2026-XXXX hoặc #..."
             [value]="codeQuery()"
             (input)="onCodeInput($event)"
             (keydown.enter)="search()"
-            style="width: 100%; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--line, #e8dfd6);"
+           
           />
         </div>
 
-        <div class="form-group" style="margin: 0;">
-          <label style="display: block; font-size: 0.8125rem; font-weight: 600; color: var(--dark, #2a2522); margin-bottom: 6px;">
+        <div class="form-group u-inline-ff227d0632">
+          <label class="u-inline-6a00364557">
             Số điện thoại / Email đặt hàng {{ isLoggedIn() ? '(Tùy chọn)' : '*' }}
           </label>
           <input
             type="text"
-            class="form-input"
+            class="form-input u-inline-f2dd7ed9f3"
             placeholder="09xx xxx xxx hoặc email..."
             [value]="contactQuery()"
             (input)="onContactInput($event)"
             (keydown.enter)="search()"
-            style="width: 100%; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--line, #e8dfd6);"
+           
           />
         </div>
 
         <button
           type="button"
-          class="btn btn--primary"
-          style="padding: 11px 28px; border-radius: 8px; font-weight: 600; height: 44px; display: flex; align-items: center; justify-content: center; gap: 6px;"
+          class="btn btn--primary u-inline-61086fcc98"
+         
           [disabled]="searching()"
           (click)="search()"
         >
@@ -56,22 +56,22 @@
       </div>
 
       @if (searchError()) {
-        <div style="margin-top: 14px; padding: 10px 14px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; color: #b91c1c; font-size: 0.875rem;">
+        <div class="u-inline-6fda96284c">
           {{ searchError() }}
         </div>
       }
 
       @if (isLoggedIn()) {
-        <div style="margin-top: 14px; font-size: 0.8125rem; color: var(--muted, #8c857e);">
-          Đang đăng nhập? <a routerLink="/account/orders" style="color: var(--terracotta, #c97b63); text-decoration: underline; font-weight: 500;">Xem danh sách đơn hàng đã mua trong tài khoản &rarr;</a>
+        <div class="u-inline-d7555c3e96">
+          Đang đăng nhập? <a routerLink="/account/orders" class="u-inline-f31d37083f">Xem danh sách đơn hàng đã mua trong tài khoản &rarr;</a>
         </div>
       }
     </div>
 
     <!-- Empty State -->
     @if (!order() && !searching() && !searchError()) {
-      <div class="track-empty-state" style="text-align: center; padding: 48px 24px; background: #fff; border-radius: 12px; border: 1px solid var(--line, #e8dfd6); margin-bottom: 32px;">
-        <div class="track-empty-icon-wrapper" style="margin-bottom: 16px;">
+      <div class="track-empty-state u-inline-2ac03595f2">
+        <div class="track-empty-icon-wrapper u-inline-045aac899d">
           <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#A18265" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
             <rect x="1" y="3" width="15" height="13"></rect>
             <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon>
@@ -79,12 +79,12 @@
             <circle cx="18.5" cy="18.5" r="2.5"></circle>
           </svg>
         </div>
-        <h2 style="font-family: 'Playfair Display', serif; font-size: 1.35rem; color: var(--dark, #2a2522); margin-bottom: 8px;">Tra cứu hành trình đơn hàng</h2>
-        <p style="color: var(--muted, #8c857e); font-size: 0.9375rem; max-width: 500px; margin: 0 auto;">
+        <h2 class="u-inline-9babd6be0c">Tra cứu hành trình đơn hàng</h2>
+        <p class="u-inline-fd5bf5022d">
           Nhập mã đơn hàng và số điện thoại/email đã dùng lúc đặt hàng để kiểm tra tiến độ giao nhận, lịch sử vận chuyển và yêu cầu hỗ trợ.
         </p>
-        <div style="margin-top: 20px;">
-          <a routerLink="/shop" class="btn btn--outline" style="display: inline-block; padding: 8px 20px; border-radius: 6px; font-size: 0.875rem; text-decoration: none;">
+        <div class="u-inline-5fa693f3d4">
+          <a routerLink="/shop" class="btn btn--outline u-inline-b080faa446">
             Khám phá bộ sưu tập &rarr;
           </a>
         </div>
@@ -93,35 +93,35 @@
 
     <!-- Order Detail & Tracker Grid -->
     @if (order(); as ord) {
-      <div class="track-grid" style="display: grid; grid-template-columns: 1fr 360px; gap: 24px; align-items: start; margin-bottom: 40px;">
+      <div class="track-grid u-inline-cc4ff3e69d">
         <!-- Left Column: Timeline & Items -->
-        <div class="track-main-column" style="display: flex; flex-direction: column; gap: 20px;">
+        <div class="track-main-column u-inline-efd85b92cb">
           <!-- Header Card -->
-          <div class="track-card" style="background: #fff; padding: 20px; border-radius: 12px; border: 1px solid var(--line, #e8dfd6); display: flex; justify-content: space-between; align-items: center;">
+          <div class="track-card u-inline-759826799c">
             <div>
-              <span style="font-size: 0.75rem; color: var(--muted, #8c857e); text-transform: uppercase; letter-spacing: 0.5px;">Mã đơn hàng</span>
-              <div style="font-size: 1.25rem; font-weight: 700; color: var(--dark, #2a2522); font-family: monospace;">#{{ ord.order_code || ord.order_id }}</div>
-              <div style="font-size: 0.8125rem; color: var(--muted, #8c857e); margin-top: 4px;">Đặt lúc: {{ timeLabel(ord.created_at) }}</div>
+              <span class="u-inline-00d5047a8e">Mã đơn hàng</span>
+              <div class="u-inline-51a4bf064c">#{{ ord.order_code || ord.order_id }}</div>
+              <div class="u-inline-226ba028f3">Đặt lúc: {{ timeLabel(ord.created_at) }}</div>
             </div>
-            <div style="text-align: right;">
-              <span class="track-status-badge" style="display: inline-block; padding: 6px 14px; border-radius: 20px; font-size: 0.875rem; font-weight: 600; background: #f0e4de; color: var(--terracotta, #c97b63);">
+            <div class="u-inline-13cbe03b9a">
+              <span class="track-status-badge u-inline-94f218ad0a">
                 {{ ord.status_label || ord.status }}
               </span>
             </div>
           </div>
 
           <!-- Dynamic State Machine Timeline -->
-          <div class="track-card" style="background: #fff; padding: 24px; border-radius: 12px; border: 1px solid var(--line, #e8dfd6);">
-            <h2 style="font-size: 1.125rem; font-weight: 600; color: var(--dark, #2a2522); margin-top: 0; margin-bottom: 20px;">Hành trình đơn hàng</h2>
-            <div class="track-timeline" style="display: flex; flex-direction: column; gap: 16px; position: relative;">
+          <div class="track-card u-inline-27ee14f2f1">
+            <h2 class="u-inline-a12a5ff4ad">Hành trình đơn hàng</h2>
+            <div class="track-timeline u-inline-19c76879c5">
               @for (step of steps(); track step.status) {
-                <div class="track-step" style="display: flex; gap: 16px; position: relative;">
-                  <div class="track-step__marker" style="display: flex; flex-direction: column; align-items: center; width: 24px;">
+                <div class="track-step u-inline-4bb9cc7440">
+                  <div class="track-step__marker u-inline-d51178d8ad">
                     <span
-                      style="width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700;"
+                     
                       [style.background]="step.state === 'done' ? 'var(--terracotta, #c97b63)' : step.state === 'current' ? '#2e7d32' : '#e8dfd6'"
                       [style.color]="step.state === 'done' || step.state === 'current' ? '#fff' : '#8c857e'"
-                    >
+                     class="u-inline-987ba00709">
                       @if (step.state === 'done') {
                         ✓
                       } @else if (step.state === 'current') {
@@ -130,15 +130,15 @@
                         ○
                       }
                     </span>
-                    <span style="width: 2px; flex: 1; background: #e8dfd6; min-height: 24px; margin-top: 4px;"></span>
+                    <span class="u-inline-a8672c7b1e"></span>
                   </div>
-                  <div class="track-step__content" style="flex: 1; padding-bottom: 12px;">
-                    <div style="display: flex; justify-content: space-between; align-items: baseline;">
-                      <h4 style="margin: 0; font-size: 0.9375rem; font-weight: 600; color: var(--dark, #2a2522);" [style.color]="step.state === 'current' ? '#2e7d32' : 'inherit'">
+                  <div class="track-step__content u-inline-f5e1c81008">
+                    <div class="u-inline-bcda9efe7a">
+                      <h4 [style.color]="step.state === 'current' ? '#2e7d32' : 'inherit'" class="u-inline-96caea400b">
                         {{ step.label }}
                       </h4>
                       @if (step.at) {
-                        <time style="font-size: 0.75rem; color: var(--muted, #8c857e);">{{ timeLabel(step.at) }}</time>
+                        <time class="u-inline-142c2a0a86">{{ timeLabel(step.at) }}</time>
                       }
                     </div>
                   </div>
@@ -148,28 +148,28 @@
           </div>
 
           <!-- Items list -->
-          <div class="track-card" style="background: #fff; padding: 24px; border-radius: 12px; border: 1px solid var(--line, #e8dfd6);">
-            <h2 style="font-size: 1.125rem; font-weight: 600; color: var(--dark, #2a2522); margin-top: 0; margin-bottom: 16px;">Sản phẩm trong đơn</h2>
-            <div style="display: flex; flex-direction: column; gap: 14px;">
+          <div class="track-card u-inline-27ee14f2f1">
+            <h2 class="u-inline-a3f624a50d">Sản phẩm trong đơn</h2>
+            <div class="u-inline-b0831f2732">
               @for (item of items(); track item.item_id || item.variant_id) {
-                <div style="display: flex; gap: 14px; align-items: center; padding-bottom: 14px; border-bottom: 1px solid var(--line, #e8dfd6);">
-                  <div style="width: 60px; height: 75px; border-radius: 6px; overflow: hidden; background: #f4e4dc; flex-shrink: 0;">
-                    <img [src]="itemImage(item)" [alt]="item.product_name" style="width: 100%; height: 100%; object-fit: cover;" />
+                <div class="u-inline-3b4d91096d">
+                  <div class="u-inline-dd94b8ba8c">
+                    <img [src]="itemImage(item)" [alt]="item.product_name" class="u-inline-4a466668db" />
                   </div>
-                  <div style="flex: 1;">
-                    <div style="font-weight: 600; font-size: 0.875rem; color: var(--dark, #2a2522);">{{ item.product_name }}</div>
+                  <div class="u-inline-ee3d55bf99">
+                    <div class="u-inline-0824fbfcf9">{{ item.product_name }}</div>
                     @if (item.color || item.size) {
-                      <div style="font-size: 0.75rem; color: var(--muted, #8c857e); margin-top: 2px;">
+                      <div class="u-inline-8f0d4314d9">
                         {{ item.color }}{{ item.color && item.size ? ' / ' : '' }}{{ displaySize(item.size) }}
                       </div>
                     }
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px;">
-                      <span style="font-size: 0.8125rem; color: var(--muted, #8c857e);">Số lượng: x{{ item.quantity }}</span>
-                      <span style="font-weight: 600; font-size: 0.875rem; color: var(--terracotta, #c97b63);">{{ money((item.unit_price || 0) * (item.quantity || 1)) }}</span>
+                    <div class="u-inline-bf8db0ea85">
+                      <span class="u-inline-8830439b18">Số lượng: x{{ item.quantity }}</span>
+                      <span class="u-inline-d7f73cbebf">{{ money((item.unit_price || 0) * (item.quantity || 1)) }}</span>
                     </div>
                   </div>
                     @if (ord.status === 'delivered') {
-                      <div style="margin-top: 8px;">
+                      <div class="u-inline-36ca0aff10">
                         <a
                           [routerLink]="isLoggedIn() ? ['/account/reviews'] : ['/guest/reviews']"
                           [queryParams]="{
@@ -179,8 +179,8 @@
                             price: item.unit_price,
                             image: item.product_image
                           }"
-                          class="btn btn--outline btn--sm"
-                          style="display: inline-block; font-size: 0.78rem; padding: 5px 12px; border-radius: 6px; text-decoration: none;"
+                          class="btn btn--outline btn--sm u-inline-695e1594cc"
+                         
                         >★ Đánh giá sản phẩm</a>
                       </div>
                     }
@@ -189,12 +189,12 @@
             </div>
 
             <!-- Customer Actions for this order -->
-            <div style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line, #e8dfd6);">
+            <div class="u-inline-e5f11a0c29">
               @if (canCancel()) {
                 <button
                   type="button"
-                  class="btn btn--outline"
-                  style="color: #b91c1c; border-color: #fca5a5;"
+                  class="btn btn--outline u-inline-358928704b"
+                 
                   (click)="openCancelModal()"
                 >
                   ✕ Hủy đơn hàng
@@ -214,8 +214,8 @@
               @if (canRequestReturn()) {
                 <button
                   type="button"
-                  class="btn btn--primary"
-                  style="background: #2a2522;"
+                  class="btn btn--primary u-inline-2a162601ae"
+                 
                   (click)="openReturnModal()"
                 >
                   🔄 Yêu cầu Đổi / Trả hàng (7 ngày)
@@ -231,8 +231,8 @@
                     price: items()[0]?.unit_price,
                     image: items()[0]?.product_image
                   }"
-                  class="btn btn--outline"
-                  style="text-decoration: none;"
+                  class="btn btn--outline u-inline-bc605c49f5"
+                 
                 >
                   ★ Đánh giá sản phẩm
                 </a>
@@ -242,54 +242,54 @@
         </div>
 
         <!-- Right Column: Shipping & Payment Summary -->
-        <div class="track-side-column" style="display: flex; flex-direction: column; gap: 20px;">
+        <div class="track-side-column u-inline-efd85b92cb">
           <!-- Delivery Details Card -->
-          <div class="track-card" style="background: #fff; padding: 20px; border-radius: 12px; border: 1px solid var(--line, #e8dfd6);">
-            <h3 style="font-size: 0.9375rem; font-weight: 600; color: var(--dark, #2a2522); margin-top: 0; margin-bottom: 14px; display: flex; align-items: center; gap: 6px;">
+          <div class="track-card u-inline-c0d5142bc3">
+            <h3 class="u-inline-afc0f452d7">
               <span>📍</span> Địa chỉ nhận hàng
             </h3>
-            <div style="font-weight: 600; font-size: 0.875rem; color: var(--dark, #2a2522);">{{ ord.shipping_name }}</div>
-            <div style="font-size: 0.8125rem; color: var(--muted, #8c857e); margin-top: 2px;">{{ ord.shipping_phone }}</div>
-            <div style="font-size: 0.8125rem; color: #4a423e; margin-top: 6px; line-height: 1.4;">{{ ord.shipping_address }}</div>
+            <div class="u-inline-0824fbfcf9">{{ ord.shipping_name }}</div>
+            <div class="u-inline-c45ce06efc">{{ ord.shipping_phone }}</div>
+            <div class="u-inline-26b0d543b4">{{ ord.shipping_address }}</div>
 
             @if (ord.carrier || ord.tracking_code) {
-              <div style="margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--line, #e8dfd6);">
-                <span style="font-size: 0.75rem; color: var(--muted, #8c857e);">Đơn vị vận chuyển:</span>
-                <div style="font-weight: 600; font-size: 0.8125rem; color: var(--dark, #2a2522);">
-                  {{ ord.carrier || 'Giao hàng nhanh' }} - Mã vận đơn: <strong style="color: var(--terracotta, #c97b63);">{{ ord.tracking_code || 'Chưa cập nhật' }}</strong>
+              <div class="u-inline-c53aae5e44">
+                <span class="u-inline-142c2a0a86">Đơn vị vận chuyển:</span>
+                <div class="u-inline-c3ce810d37">
+                  {{ ord.carrier || 'Giao hàng nhanh' }} - Mã vận đơn: <strong class="u-inline-e7af3121af">{{ ord.tracking_code || 'Chưa cập nhật' }}</strong>
                 </div>
               </div>
             }
           </div>
 
           <!-- Order Summary Breakdown -->
-          <div class="track-card" style="background: #fff; padding: 20px; border-radius: 12px; border: 1px solid var(--line, #e8dfd6);">
-            <h3 style="font-size: 0.9375rem; font-weight: 600; color: var(--dark, #2a2522); margin-top: 0; margin-bottom: 14px;">Thanh toán</h3>
-            <div style="display: flex; flex-direction: column; gap: 8px; font-size: 0.8125rem;">
-              <div style="display: flex; justify-content: space-between;">
-                <span style="color: var(--muted, #8c857e);">Tạm tính:</span>
+          <div class="track-card u-inline-c0d5142bc3">
+            <h3 class="u-inline-081766ceb3">Thanh toán</h3>
+            <div class="u-inline-9029a7f884">
+              <div class="u-inline-6d94a70f67">
+                <span class="u-inline-e4876e79f8">Tạm tính:</span>
                 <span>{{ money(ord.subtotal) }}</span>
               </div>
-              <div style="display: flex; justify-content: space-between;">
-                <span style="color: var(--muted, #8c857e);">Phí vận chuyển:</span>
+              <div class="u-inline-6d94a70f67">
+                <span class="u-inline-e4876e79f8">Phí vận chuyển:</span>
                 <span>{{ ord.shipping_fee ? money(ord.shipping_fee) : 'Miễn phí' }}</span>
               </div>
               @if ((ord.discount_amount || 0) > 0) {
-                <div style="display: flex; justify-content: space-between; color: #2e7d32;">
+                <div class="u-inline-9d17d6700b">
                   <span>Giảm giá:</span>
                   <span>-{{ money(ord.discount_amount) }}</span>
                 </div>
               }
-              <hr style="border: none; border-top: 1px solid var(--line, #e8dfd6); margin: 6px 0;" />
-              <div style="display: flex; justify-content: space-between; font-size: 1rem; font-weight: 700; color: var(--dark, #2a2522);">
+              <hr class="u-inline-81b39ecf42" />
+              <div class="u-inline-a48ba77ac8">
                 <span>Tổng tiền:</span>
-                <span style="color: var(--terracotta, #c97b63);">{{ money(ord.total_amount) }}</span>
+                <span class="u-inline-e7af3121af">{{ money(ord.total_amount) }}</span>
               </div>
             </div>
 
-            <div style="margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--line, #e8dfd6); font-size: 0.8125rem;">
-              <span style="color: var(--muted, #8c857e);">Phương thức:</span>
-              <div style="font-weight: 500; color: var(--dark, #2a2522); margin-top: 2px;">{{ paymentMethodLabel(ord.payment_method) }}</div>
+            <div class="u-inline-f16fa0c6d0">
+              <span class="u-inline-e4876e79f8">Phương thức:</span>
+              <div class="u-inline-9dfee29076">{{ paymentMethodLabel(ord.payment_method) }}</div>
             </div>
           </div>
         </div>
@@ -301,15 +301,15 @@
       <div class="address-book-modal-backdrop" (click)="closeCancelModal()">
         <div class="address-book-modal" (click)="$event.stopPropagation()">
           <div class="address-book-modal__header">
-            <h3 style="margin: 0; font-size: 1.125rem; font-weight: 600; color: var(--dark, #2a2522);">Hủy đơn hàng</h3>
+            <h3 class="u-inline-71c36f5b03">Hủy đơn hàng</h3>
             <button type="button" class="address-book-modal__close" (click)="closeCancelModal()">&times;</button>
           </div>
           <div class="address-book-modal__body">
-            <p style="font-size: 0.875rem; color: #4a423e; margin-top: 0;">
+            <p class="u-inline-9f71281ccb">
               Lưu ý: Chỉ có thể hủy đơn khi đơn hàng đang ở trạng thái <strong>Chờ xử lý</strong> hoặc <strong>Chờ thanh toán</strong>.
             </p>
             <div class="form-group">
-              <label style="display: block; font-size: 0.8125rem; font-weight: 600; margin-bottom: 6px;">Lý do hủy đơn *</label>
+              <label class="u-inline-8ced7fc683">Lý do hủy đơn *</label>
               <select class="form-input" (change)="setCancelReason($event)">
                 <option value="Thay đổi ý định">Thay đổi ý định</option>
                 <option value="Muốn đổi kích cỡ / màu sắc">Muốn đổi kích cỡ / màu sắc</option>
@@ -321,18 +321,18 @@
 
             @if (cancelReason() === 'Khác') {
               <div class="form-group">
-                <label style="display: block; font-size: 0.8125rem; font-weight: 600; margin-bottom: 6px;">Chi tiết lý do *</label>
+                <label class="u-inline-8ced7fc683">Chi tiết lý do *</label>
                 <textarea class="form-textarea" placeholder="Nhập lý do cụ thể..." (input)="setCancelOther($event)"></textarea>
               </div>
             }
 
             @if (cancelError()) {
-              <div style="margin-top: 10px; color: #b91c1c; font-size: 0.8125rem;">{{ cancelError() }}</div>
+              <div class="u-inline-51fc021479">{{ cancelError() }}</div>
             }
           </div>
-          <div class="address-book-modal__footer" style="gap: 10px;">
+          <div class="address-book-modal__footer u-inline-a6798b94ab">
             <button type="button" class="btn btn--outline" (click)="closeCancelModal()">Không hủy</button>
-            <button type="button" class="btn btn--primary" style="background: #b91c1c;" [disabled]="cancelling()" (click)="submitCancel()">
+            <button type="button" class="btn btn--primary u-inline-3aec59f27c" [disabled]="cancelling()" (click)="submitCancel()">
               {{ cancelling() ? 'Đang xử lý...' : 'Xác nhận hủy đơn' }}
             </button>
           </div>
@@ -345,38 +345,38 @@
       <div class="address-book-modal-backdrop" (click)="closeReturnModal()">
         <div class="address-book-modal" (click)="$event.stopPropagation()">
           <div class="address-book-modal__header">
-            <h3 style="margin: 0; font-size: 1.125rem; font-weight: 600; color: var(--dark, #2a2522);">Yêu cầu Đổi / Trả hàng (7 ngày)</h3>
+            <h3 class="u-inline-71c36f5b03">Yêu cầu Đổi / Trả hàng (7 ngày)</h3>
             <button type="button" class="address-book-modal__close" (click)="closeReturnModal()">&times;</button>
           </div>
           <div class="address-book-modal__body">
             @if (returnSuccess()) {
-              <div style="text-align: center; padding: 24px 0;">
-                <div style="font-size: 2.5rem; margin-bottom: 12px;">🎉</div>
-                <h4 style="font-size: 1.125rem; font-weight: 600; color: #2e7d32; margin-bottom: 8px;">Đã tiếp nhận yêu cầu thành công!</h4>
-                <p style="font-size: 0.875rem; color: var(--muted, #8c857e); line-height: 1.5;">
+              <div class="u-inline-b7e8f7ca98">
+                <div class="u-inline-9cfae5c1ad">🎉</div>
+                <h4 class="u-inline-429ded385f">Đã tiếp nhận yêu cầu thành công!</h4>
+                <p class="u-inline-ae518c7a97">
                   Bộ phận CSKH Velura sẽ kiểm tra và liên hệ với bạn trong vòng 24 giờ qua điện thoại hoặc email.
                 </p>
-                <button type="button" class="btn btn--primary" style="margin-top: 16px;" (click)="closeReturnModal()">Đóng</button>
+                <button type="button" class="btn btn--primary u-inline-d265a6b9b9" (click)="closeReturnModal()">Đóng</button>
               </div>
             } @else {
               <div class="form-group">
-                <label style="display: block; font-size: 0.8125rem; font-weight: 600; margin-bottom: 8px;">Bạn muốn *</label>
-                <div style="display: flex; gap: 12px;">
+                <label class="u-inline-1c8a1d7692">Bạn muốn *</label>
+                <div class="u-inline-d6316a7e0b">
                   <button
                     type="button"
-                    class="coolmate-gender-pill"
+                    class="coolmate-gender-pill u-inline-ef050f986e"
                     [class.is-active]="returnType() === 'refund'"
                     (click)="setReturnType('refund')"
-                    style="flex: 1; padding: 10px; text-align: center;"
+                   
                   >
                     💰 Trả hàng &amp; Hoàn tiền
                   </button>
                   <button
                     type="button"
-                    class="coolmate-gender-pill"
+                    class="coolmate-gender-pill u-inline-ef050f986e"
                     [class.is-active]="returnType() === 'exchange'"
                     (click)="setReturnType('exchange')"
-                    style="flex: 1; padding: 10px; text-align: center;"
+                   
                   >
                     🔄 Đổi size / Đổi mẫu
                   </button>
@@ -384,7 +384,7 @@
               </div>
 
               <div class="form-group">
-                <label style="display: block; font-size: 0.8125rem; font-weight: 600; margin-bottom: 6px;">Lý do đổi trả *</label>
+                <label class="u-inline-8ced7fc683">Lý do đổi trả *</label>
                 <select class="form-input" (change)="setReturnReason($event)">
                   <option value="Sản phẩm bị lỗi / hỏng khi nhận">Sản phẩm bị lỗi / hỏng khi nhận</option>
                   <option value="Không vừa kích cỡ / muốn đổi size">Không vừa kích cỡ / muốn đổi size</option>
@@ -395,7 +395,7 @@
               </div>
 
               <div class="form-group">
-                <label style="display: block; font-size: 0.8125rem; font-weight: 600; margin-bottom: 6px;">Mô tả chi tiết / Ghi chú</label>
+                <label class="u-inline-8ced7fc683">Mô tả chi tiết / Ghi chú</label>
                 <textarea
                   class="form-textarea"
                   placeholder="Mô tả cụ thể về tình trạng sản phẩm hoặc mong muốn đổi sang size/mẫu nào..."
@@ -403,17 +403,17 @@
                 ></textarea>
               </div>
 
-              <div style="background: #fdf8f5; border: 1px solid #f2e3da; border-radius: 8px; padding: 10px 14px; font-size: 0.75rem; color: #6b5c54; line-height: 1.4;">
+              <div class="u-inline-8d20013418">
                 🛡️ <strong>Chính sách đổi trả Velura:</strong> Hỗ trợ đổi trả miễn phí trong 7 ngày kể từ ngày nhận hàng với sản phẩm còn nguyên tem mác. Hoàn tiền chuyển khoản trong 4 - 5 ngày làm việc sau khi nhận lại hàng.
               </div>
 
               @if (returnError()) {
-                <div style="margin-top: 10px; color: #b91c1c; font-size: 0.8125rem;">{{ returnError() }}</div>
+                <div class="u-inline-51fc021479">{{ returnError() }}</div>
               }
             }
           </div>
           @if (!returnSuccess()) {
-            <div class="address-book-modal__footer" style="gap: 10px;">
+            <div class="address-book-modal__footer u-inline-a6798b94ab">
               <button type="button" class="btn btn--outline" (click)="closeReturnModal()">Đóng</button>
               <button type="button" class="btn btn--primary" [disabled]="submittingReturn()" (click)="submitReturn()">
                 {{ submittingReturn() ? 'Đang gửi...' : 'Gửi yêu cầu đổi trả' }}

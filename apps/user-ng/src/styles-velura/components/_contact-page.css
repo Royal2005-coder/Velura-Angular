@@ -19,13 +19,13 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.15em;
-  color: var(--terracotta);
+  color: var(--velura-maroon, #7A283C);
   display: block;
   margin-bottom: 12px;
 }
 
 .contact-header__title {
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: "Cormorant Garamond", Georgia, serif;
   font-size: clamp(2rem, 5vw, 2.75rem);
   font-weight: 500;
   color: var(--text-dark);
@@ -108,7 +108,7 @@
 }
 
 .contact-card__text a:hover {
-  color: var(--terracotta);
+  color: var(--velura-maroon, #7A283C);
   text-decoration: underline;
 }
 
@@ -173,7 +173,7 @@
 }
 
 .contact-form__title {
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: "Cormorant Garamond", Georgia, serif;
   font-size: 1.75rem;
   font-weight: 500;
   color: var(--text-dark);
@@ -317,14 +317,14 @@ textarea.contact-form__control {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.15em;
-  color: var(--terracotta);
+  color: var(--velura-maroon, #7A283C);
   display: block;
   margin-bottom: 12px;
 }
 
 .contact-faq__title {
   text-align: center;
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: "Cormorant Garamond", Georgia, serif;
   font-size: clamp(1.75rem, 4vw, 2.25rem);
   font-weight: 500;
   color: var(--text-dark);
@@ -374,7 +374,7 @@ textarea.contact-form__control {
 }
 
 .accordion-header:hover {
-  color: var(--terracotta);
+  color: var(--velura-maroon, #7A283C);
 }
 
 .accordion-icon {
@@ -441,7 +441,7 @@ textarea.contact-form__control {
 .toast__icon {
   width: 20px;
   height: 20px;
-  color: var(--terracotta);
+  color: var(--velura-maroon, #7A283C);
   flex-shrink: 0;
 }
 
@@ -475,4 +475,49 @@ textarea.contact-form__control {
   .accordion-item.is-open .accordion-content {
     padding-bottom: 16px;
   }
+}
+
+/* Shared Velura customer concept for the real contact experience. */
+body.page-contact .contact-container { padding-bottom: clamp(48px, 7vw, 88px); }
+body.page-contact .contact-header { margin-top: clamp(32px, 5vw, 64px); }
+body.page-contact .contact-header__subtitle,
+body.page-contact .contact-header__title,
+body.page-contact .contact-form__title,
+body.page-contact .contact-faq__title { color: var(--velura-maroon); }
+body.page-contact .contact-header__desc,
+body.page-contact .contact-form__desc { color: var(--text-secondary); }
+body.page-contact .contact-card,
+body.page-contact .contact-map,
+body.page-contact .contact-form-container,
+body.page-contact .accordion-item {
+  border-color: rgba(242, 194, 207, .68);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 25px rgba(122, 40, 60, .07);
+}
+body.page-contact .contact-card:hover,
+body.page-contact .accordion-item:hover { border-color: var(--velura-rose); }
+body.page-contact .contact-card__icon-wrapper { color: var(--velura-maroon); background: var(--velura-blush); }
+body.page-contact .contact-card__icon { stroke: var(--velura-maroon); }
+body.page-contact .contact-card__title,
+body.page-contact .contact-form__label,
+body.page-contact .accordion-header { color: var(--ink); }
+body.page-contact .contact-card__text,
+body.page-contact .accordion-content { color: var(--text-body); }
+body.page-contact .contact-form__control {
+  border-color: rgba(122, 40, 60, .2);
+  border-radius: 12px;
+  background: #fff9fa;
+}
+body.page-contact .contact-form__control:focus {
+  border-color: var(--velura-rose);
+  box-shadow: 0 0 0 3px rgba(201, 79, 112, .14);
+}
+body.page-contact .contact-form__submit { background: var(--velura-rose-fill); border-radius: 999px; }
+body.page-contact .contact-form__submit:hover { background: var(--velura-maroon-deep); }
+body.page-contact .accordion-item.is-open { border-color: var(--velura-border); box-shadow: 0 8px 24px rgba(122,40,60,.08); }
+body.page-contact .accordion-item.is-open .accordion-icon { stroke: var(--velura-maroon); }
+
+@media (max-width: 640px) {
+  body.page-contact .contact-form-container { padding: 26px 20px; }
+  body.page-contact .contact-layout { gap: 24px; }
 }

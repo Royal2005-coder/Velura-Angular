@@ -7,6 +7,7 @@ interface ContentBlogRow {
   slug?: string;
   title?: string;
   excerpt?: string;
+  content?: string;
   image_url?: string;
   author?: string;
   read_minutes?: number;
@@ -64,6 +65,7 @@ export class BlogCatalogService {
       badge: CATEGORY_BADGE[category],
       title: String(row.title || ''),
       excerpt: String(row.excerpt || ''),
+      content: String(row.content || ''),
       image: String(row.image_url || '/assets/images/placeholder.jpg'),
       author: String(row.author || 'Velura Editorial'),
       date: this.formatDate(row.published_at),

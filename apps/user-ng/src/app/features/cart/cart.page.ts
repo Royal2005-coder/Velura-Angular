@@ -24,7 +24,6 @@ type PageItem = { kind: 'page'; value: number } | { kind: 'dots'; value: number 
   imports: [RouterLink, VoucherWallet],
   host: {
     class: 'page-cart',
-    style: 'display:block',
     '(document:click)': 'closeAllDropdowns()',
   },
   templateUrl: './cart.page.html',

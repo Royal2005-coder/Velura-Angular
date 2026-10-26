@@ -1,5 +1,5 @@
 import { DecimalPipe } from '@angular/common';
-import { Component, DestroyRef, computed, effect, inject, signal, untracked } from '@angular/core';
+import { Component, DestroyRef, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Subscription, exhaustMap, takeWhile, timer } from 'rxjs';
 import { AuthService } from '../../core/services/auth.service';
@@ -20,6 +20,11 @@ export class PersonalColorComponent {
   private polling?: Subscription;
   private generation = 0;
   private file: File | null = null;
+  readonly hideHeader = input(false);
+  readonly hideTabs = input(false);
+  readonly initialTab = input<'ai' | 'manual'>('ai');
+  readonly tabChange = output<'ai' | 'manual'>();
+  readonly seasonConfirmed = output<{ season: string; undertone: string }>();
   readonly capabilities = signal<ColorCapabilities | null>(null);
   readonly profile = signal<PersonalColorProfile | null>(null);
   readonly analysis = signal<PersonalColorAnalysis | null>(null);
@@ -139,6 +144,12 @@ export class PersonalColorComponent {
 
   constructor() {
     effect(() => {
+      const tab = this.initialTab();
+      if (tab) {
+        untracked(() => this.activeTab.set(tab));
+      }
+    });
+    effect(() => {
       this.auth.session();
       untracked(() => {
         this.generation++;
@@ -220,7 +231,18 @@ export class PersonalColorComponent {
     const generation = this.generation;
     this.busy.set(true); this.error.set('');
     this.model.confirm(analysis).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: (profile) => { if (generation === this.generation) { this.profile.set(profile); this.analysis.set({ ...analysis, status: 'CONFIRMED' }); this.busy.set(false); this.clearFile(); this.consent.set(false); } },
+      next: (profile) => {
+        if (generation === this.generation) {
+          this.profile.set(profile);
+          this.analysis.set({ ...analysis, status: 'CONFIRMED' });
+          this.busy.set(false);
+          this.clearFile();
+          this.consent.set(false);
+          const season = profile.personal_color?.season || analysis.result?.season || 'Spring';
+          const undertone = ['Spring', 'Autumn'].includes(season) ? 'Warm' : 'Cool';
+          this.seasonConfirmed.emit({ season, undertone });
+        }
+      },
       error: (error: Error) => { if (generation === this.generation) { this.busy.set(false); this.error.set(error.message); this.reload(); } },
     });
   }
@@ -229,12 +251,19 @@ export class PersonalColorComponent {
     this.selectedManualSeason.set(season);
   }
 
+  /** Switches tab with change notification. */
+  switchTab(tab: 'ai' | 'manual'): void {
+    this.activeTab.set(tab);
+    this.tabChange.emit(tab);
+  }
+
   /** Switches to the manual configuration mode with optional initial season choice. */
   editManually(season?: string): void {
     if (season && ['Spring', 'Summer', 'Autumn', 'Winter'].includes(season)) {
       this.selectedManualSeason.set(season as 'Spring' | 'Summer' | 'Autumn' | 'Winter');
     }
     this.activeTab.set('manual');
+    this.tabChange.emit('manual');
   }
 
   /** Confirms the selected standard season directly into the user Style Profile. */
@@ -252,6 +281,9 @@ export class PersonalColorComponent {
           if (generation === this.generation) {
             this.profile.set(updated);
             this.busy.set(false);
+            const season = updated.personal_color?.season || this.selectedManualSeason();
+            const undertone = ['Spring', 'Autumn'].includes(season) ? 'Warm' : 'Cool';
+            this.seasonConfirmed.emit({ season, undertone });
           }
         },
         error: (err: Error) => {

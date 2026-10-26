@@ -2,9 +2,9 @@ import { Component, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { Router, RouterLink, RouterOutlet } from '@angular/router';
 import { OffersService } from '../../core/services/offers.service';
+import { ChatbotService } from '../../core/services/chatbot.service';
 import { SiteFooter } from '../site-footer/site-footer';
 import { SiteHeader } from '../site-header/site-header';
-import { ChatbotService } from '../../core/services/chatbot.service';
 
 @Component({
   selector: 'app-site-shell',
@@ -24,7 +24,7 @@ export class SiteShell {
   readonly quickSuggestions = [
     'Tư vấn outfit đi tiệc sang trọng',
     'Gợi ý chọn size đầm chuẩn dáng',
-    'Chính sách đổi trả trong 30 ngày',
+    'Chính sách đổi trả trong 7 ngày',
   ];
 
   /**

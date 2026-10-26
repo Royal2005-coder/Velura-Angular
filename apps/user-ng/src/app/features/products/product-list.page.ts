@@ -1,6 +1,7 @@
 import { VisualSearchWorkbench } from '../../shared/visual-search-workbench/visual-search-workbench';
+import { useBodyClass } from '../../core/utils/body-class';
 import type { VisualResult, VisualFilters } from '../../core/services/visual-search.service';
-import { Component, computed, inject, signal } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, ViewChild, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { matchesAllSearchWords, normalizeSearchText } from '../../core/utils/search';
@@ -10,7 +11,7 @@ import { ProductSummary } from '../../core/models/product.interface';
 import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { CatalogService } from '../../core/services/catalog.service';
-import { formatVnd } from '../../core/utils/money';
+import { formatVnd, toPublicAsset } from '../../core/utils/money';
 import { showToast } from '../../core/utils/toast';
 import { ProductCard } from '../../shared/product-card/product-card';
 
@@ -95,15 +96,41 @@ type CatalogView = 'grid' | 'large' | 'list';
 @Component({
   selector: 'app-product-list-page',
   imports: [ProductCard, RouterLink, VisualSearchWorkbench],
-  host: { style: 'display:block' },
   templateUrl: './product-list.page.html',
 })
-export class ProductListPage {
+export class ProductListPage implements AfterViewInit {
   private readonly catalog = inject(CatalogService);
   private readonly route = inject(ActivatedRoute);
   private readonly api = inject(ApiService);
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
+
+  @ViewChild('heroVideo') private heroVideo?: ElementRef<HTMLVideoElement>;
+  readonly videoSoundOn = signal(false);
+
+  ngAfterViewInit(): void {
+    const video = this.heroVideo?.nativeElement;
+    if (video) {
+      video.muted = true;
+      video.playsInline = true;
+      if (typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        video.pause();
+      } else {
+        void Promise.resolve(video.play()).catch(() => undefined);
+      }
+    }
+  }
+
+  toggleVideoSound(): void {
+    const video = this.heroVideo?.nativeElement;
+    if (!video) return;
+    const next = !this.videoSoundOn();
+    video.muted = !next;
+    this.videoSoundOn.set(next);
+    if (next) {
+      void Promise.resolve(video.play()).catch(() => undefined);
+    }
+  }
 
   readonly imageMatches = signal<string[] | null>(null);
   /** Intersects AI results with the existing category, price, color and size filters. */
@@ -123,6 +150,13 @@ export class ProductListPage {
   readonly loading = signal(true);
   readonly loadError = signal<string | null>(null);
   readonly allProducts = signal<ProductSummary[]>([]);
+  /** Uses a real catalog image for the editorial banner when live catalog data is available. */
+  readonly editorialProductImage = computed(() => {
+    const product = this.allProducts().find((item) => item.images?.[0] || item.thumbnail_url);
+    return product
+      ? toPublicAsset(product.images?.[0] || product.thumbnail_url, '/assets/images/placeholder.jpg')
+      : null;
+  });
   readonly categories = CATALOG_CATEGORIES;
   readonly selectedSlugs = signal<string[]>([]);
   readonly searchQuery = signal('');
@@ -407,6 +441,7 @@ export class ProductListPage {
   });
 
   constructor() {
+    useBodyClass('page-product-list');
     this.route.queryParamMap.pipe(tap((params) => {
       const category = params.get('category') || '';
       const slug = CATEGORY_QUERY_MAP[category] || category;
@@ -445,7 +480,7 @@ export class ProductListPage {
           if (rows === null) return;
           const catalog = rows.filter((item) => {
             const name = (item.name || '').toLowerCase();
-            return !name.includes('test') && !name.includes('validation') && !name.includes('commit');
+            return !name.includes('test') && !name.includes('validation') && !name.includes('commit') && !/\buat\b/i.test(name);
           });
           this.allProducts.set(catalog);
           const ceiling = Math.max(

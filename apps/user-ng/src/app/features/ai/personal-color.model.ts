@@ -1,7 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { Observable, defer, map, switchMap } from 'rxjs';
 import { ApiService } from '../../core/services/api.service';
-import { AiEngineService } from '../../core/services/ai-engine.service';
 import { AuthService } from '../../core/services/auth.service';
 import { StyleProfileService } from '../../core/services/style-profile.service';
 import { guestSessionId } from '../../core/utils/guest-session';
@@ -21,7 +20,6 @@ export interface PersonalColorProfile { version: number; personal_color: Confirm
 @Injectable({ providedIn: 'root' })
 export class PersonalColorModel {
   private readonly api = inject(ApiService);
-  private readonly ai = inject(AiEngineService);
   private readonly auth = inject(AuthService);
   private readonly profileModel = inject(StyleProfileService);
 
@@ -29,12 +27,20 @@ export class PersonalColorModel {
   capabilities(): Observable<ColorCapabilities> { return this.api.get<ColorCapabilities>('/api/user/personal-color/capabilities'); }
   /** Read the same member/session profile used by the Style Quiz. */
   profile(): Observable<PersonalColorProfile> { return this.scoped(() => this.api.get<PersonalColorProfile>('/api/user/personal-color/profile')); }
+  /** Upload portrait image directly to personal color uploads endpoint (supports guest sessions and members). */
+  upload(file: File): Observable<{ asset_id: string; expires_at: string }> {
+    return this.scoped(() => {
+      const body = new FormData();
+      body.append('file', file);
+      return this.api.post<{ asset_id: string; expires_at: string }>('/api/user/personal-color/uploads', body);
+    });
+  }
   /** Upload only after consent, then create analysis against the current Style Profile version. */
   analyze(file: File, capabilities: ColorCapabilities, version: number, consent: boolean): Observable<PersonalColorAnalysis> {
     return this.scoped(() => {
       if (!consent || !capabilities.enabled || !capabilities.policy_version || !capabilities.max_upload_bytes || file.size > capabilities.max_upload_bytes || !['image/png', 'image/jpeg'].includes(file.type)) throw new Error('Xác nhận đồng ý và chọn JPEG/PNG trong giới hạn cho phép.');
       const session = this.auth.session(), guest = guestSessionId();
-      return this.ai.upload(file).pipe(switchMap((asset) => {
+      return this.upload(file).pipe(switchMap((asset) => {
         if (session !== this.auth.session() || guest !== guestSessionId()) throw new Error('Phiên người dùng đã thay đổi.');
         return this.api.post<PersonalColorAnalysis>('/api/user/personal-color/analyses', { asset_id: asset.asset_id, policy_version: capabilities.policy_version, expected_version: version, consent: true });
       }));

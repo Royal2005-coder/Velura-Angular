@@ -109,9 +109,9 @@
                         @if (otpVerified()) {
                           <button
                             type="button"
-                            class="text-button"
+                            class="text-button u-inline-6e86a8afc4"
                             (click)="reverifyPhone()"
-                            style="font-size: 13px; color: var(--terracotta); background: none; border: none; cursor: pointer; text-decoration: underline;"
+                           
                           >
                             Đổi lại
                           </button>
@@ -340,15 +340,6 @@
                 ><a class="action secondary" routerLink="/products">Tiếp tục mua sắm</a>
               </div>
             </section>
-            @if (!member()) {
-              <section class="panel">
-                <h2>Lưu hành trình cùng Velura</h2>
-                <p>Kiểm tra email hoặc SMS và dùng liên kết kích hoạt trong 24 giờ để tự đặt mật khẩu.</p>
-                <div class="actions">
-                  <a class="action" routerLink="/products">Tiếp tục mua sắm</a>
-                </div>
-              </section>
-            }
           }
           @case ('invite') {
             <section class="panel">
@@ -384,7 +375,7 @@
                 <h3>{{ line.product_name }}</h3>
                 @if (line.is_combo) {
                   <p class="muted">
-                    <span style="background: #ede9fe; color: #6d28d9; font-size: 0.75rem; font-weight: 600; padding: 2px 6px; border-radius: 4px; margin-right: 6px;">Combo Set</span>
+                    <span class="u-inline-95833119b1">Combo Set</span>
                     SL {{ line.quantity }}
                   </p>
                   <strong>{{ money(line.unit_price * line.quantity) }}</strong>
@@ -395,30 +386,30 @@
                     <button class="text-button" type="button" (click)="removeLine(line)" [disabled]="busy() || resumeLocked() || !!order()">Xóa cả bộ</button>
                   </div>
                   @if (line.sub_items && line.sub_items.length) {
-                    <div class="checkout-combo-subitems" style="margin-top: 10px; border-top: 1px dashed #e5d8cb; padding-top: 8px; display: flex; flex-direction: column; gap: 8px;">
-                      <div style="font-size: 0.75rem; font-weight: 600; color: #785a44; text-transform: uppercase;">Chi tiết các món trong set (chọn size / màu):</div>
+                    <div class="checkout-combo-subitems u-inline-1c3941b143">
+                      <div class="u-inline-f3bc27328f">Chi tiết các món trong set (chọn size / màu):</div>
                       @for (sub of line.sub_items; track sub.product_id) {
-                        <div style="display: flex; align-items: center; justify-content: space-between; font-size: 0.8125rem; background: #fffcf9; padding: 6px 8px; border-radius: 6px; border: 1px solid #ebd9c8; gap: 6px;">
-                          <div style="display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1;">
-                            <img [src]="image(sub.product_image)" [alt]="sub.product_name" style="width: 26px; height: 34px; object-fit: cover; border-radius: 4px; flex-shrink: 0;" />
-                            <div style="min-width: 0; flex: 1;">
-                              <span style="font-weight: 500; color: var(--text-dark); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                        <div class="u-inline-67b90801e6">
+                          <div class="u-inline-191adae1ee">
+                            <img [src]="image(sub.product_image)" [alt]="sub.product_name" class="u-inline-04ff83840c" />
+                            <div class="u-inline-62b2fca2a4">
+                              <span class="u-inline-9af43b0a0f">
                                 {{ sub.product_name }}
                               </span>
-                              <span style="font-size: 0.725rem; color: #8c857e;">
+                              <span class="u-inline-11b940a99f">
                                 {{ sub.color || 'Mặc định' }} / {{ displaySize(sub.size) || 'Free' }}
                               </span>
                             </div>
                           </div>
                           @if (getSubVariantChoices(sub).length > 1) {
-                            <label style="margin: 0; font-size: 0.75rem; display: flex; align-items: center; gap: 4px; flex-shrink: 0;">
+                            <label class="u-inline-631a27b934">
                               <select
                                 [ngModel]="sub.variant_id"
                                 (ngModelChange)="editComboSubVariant(line, sub, $event)"
                                 [disabled]="busy() || resumeLocked() || !!order()"
-                                style="padding: 2px 4px; font-size: 0.75rem; border-radius: 4px; border: 1px solid #d5c8be; background: #fff; max-width: 140px;"
+                               
                                 [attr.aria-label]="'Đổi biến thể ' + sub.product_name"
-                              >
+                               class="u-inline-716bc3e785">
                                 @for (v of getSubVariantChoices(sub); track v.variant_id) {
                                   <option [value]="v.variant_id" [disabled]="v.available < line.quantity">
                                     {{ v.color || 'Mặc định' }} / {{ displaySize(v.size) || 'Free' }}{{ v.available < line.quantity ? ' · Hết' : '' }}
@@ -487,7 +478,7 @@
             <span>Tổng thanh toán</span><span>{{ serverQuote() ? money(quote().total) : '—' }}</span>
           </div>
           <p class="muted">
-            Đổi / trả trong 30 ngày từ khi giao thành công. Tối đa 2 lượt mỗi sản phẩm.
+            Đổi / trả trong 7 ngày từ khi giao thành công. Tối đa 2 lượt mỗi sản phẩm.
           </p>
           @if (voucherNotice()) {
             <p class="muted" role="status">{{ voucherNotice() }}</p>

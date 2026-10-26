@@ -2,7 +2,7 @@
   <div class="container">
     <a routerLink="/blog" class="btn-read-more">← Tạp chí phong cách</a>
     @if (post(); as article) {
-      <article class="featured-post" style="margin-top: 24px;">
+      <article class="featured-post u-inline-ef7a9dfbd9">
         <div class="featured-post__image">
           <img [src]="article.image" [alt]="article.title" />
         </div>
@@ -18,6 +18,42 @@
             <span class="post-meta__read-time">{{ article.readMinutes }} phút đọc</span>
           </div>
         </div>
+        @if (articleBody(); as body) {
+          <div class="blog-article__body">
+            @if (body.html) {
+              <div [innerHTML]="body.html"></div>
+            } @else {
+              @if (body.intro) { <p class="article-intro">{{ body.intro }}</p> }
+              @if (body.takeaways.length) {
+                <aside class="article-takeaways">
+                  <h2 class="takeaways__title">Điểm chính</h2>
+                  <ul class="takeaways__list">
+                    @for (takeaway of body.takeaways; track takeaway) { <li class="takeaway-item">{{ takeaway }}</li> }
+                  </ul>
+                </aside>
+              }
+              @for (section of body.sections; track section.heading) {
+                <section class="article-section">
+                  @if (section.heading) { <h2 class="article-section__heading">{{ section.heading }}</h2> }
+                  @for (paragraph of section.paragraphs; track $index) { <p class="article-section__body">{{ paragraph }}</p> }
+                </section>
+              }
+              @if (relatedProducts().length) {
+                <section class="blog-related-products">
+                  <h2 class="blog-related-products__title">Sản phẩm trong bài viết</h2>
+                  <div class="blog-related-products__grid">
+                    @for (item of relatedProducts(); track item.product.product_id) {
+                      <div class="blog-related-products__item">
+                        <app-product-card [product]="item.product" appearance="catalog" />
+                        @if (item.note) { <p class="blog-related-products__note">{{ item.note }}</p> }
+                      </div>
+                    }
+                  </div>
+                </section>
+              }
+            }
+          </div>
+        }
       </article>
     } @else {
       <h1 class="blog-intro__title">Không tìm thấy bài viết</h1>

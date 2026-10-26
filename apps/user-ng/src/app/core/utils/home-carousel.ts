@@ -38,6 +38,15 @@ export function bindHomeCarousel(track: HTMLElement | undefined, options: HomeCa
   progress.setAttribute('aria-hidden', 'true');
   progress.innerHTML = '<span class="home-carousel__progress-bar"></span>';
   section.append(prevBtn, nextBtn, progress);
+  const motionPreference: Pick<MediaQueryList, 'matches' | 'addEventListener' | 'removeEventListener'> =
+    typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      ? window.matchMedia('(prefers-reduced-motion: reduce)')
+      : {
+          matches: false,
+          addEventListener: () => undefined,
+          removeEventListener: () => undefined,
+        };
+  const scrollBehavior = () => motionPreference.matches ? 'auto' as const : 'smooth' as const;
 
   const scrollStep = () => Math.max(track.clientWidth * (options.scrollRatio || 0.85), 240);
 
@@ -58,8 +67,8 @@ export function bindHomeCarousel(track: HTMLElement | undefined, options: HomeCa
     }
   };
 
-  const onPrev = () => track.scrollBy({ left: -scrollStep(), behavior: 'smooth' });
-  const onNext = () => track.scrollBy({ left: scrollStep(), behavior: 'smooth' });
+  const onPrev = () => track.scrollBy({ left: -scrollStep(), behavior: scrollBehavior() });
+  const onNext = () => track.scrollBy({ left: scrollStep(), behavior: scrollBehavior() });
   prevBtn.addEventListener('click', onPrev);
   nextBtn.addEventListener('click', onNext);
   track.addEventListener('scroll', updateState, { passive: true });
@@ -70,7 +79,7 @@ export function bindHomeCarousel(track: HTMLElement | undefined, options: HomeCa
   let autoplay: number | null = null;
   let hovering = false;
   const startAutoplay = () => {
-    if (!options.autoplay) {
+    if (!options.autoplay || motionPreference.matches) {
       return;
     }
     stopAutoplay();
@@ -85,14 +94,14 @@ export function bindHomeCarousel(track: HTMLElement | undefined, options: HomeCa
       const step = scrollStep();
       if (options.autoplay === 'forward') {
         if (track.scrollLeft >= maxScroll - 16) {
-          track.scrollTo({ left: 0, behavior: 'smooth' });
+          track.scrollTo({ left: 0, behavior: scrollBehavior() });
         } else {
-          track.scrollBy({ left: step, behavior: 'smooth' });
+          track.scrollBy({ left: step, behavior: scrollBehavior() });
         }
       } else if (track.scrollLeft <= 16) {
-        track.scrollTo({ left: maxScroll, behavior: 'smooth' });
+        track.scrollTo({ left: maxScroll, behavior: scrollBehavior() });
       } else {
-        track.scrollBy({ left: -step, behavior: 'smooth' });
+        track.scrollBy({ left: -step, behavior: scrollBehavior() });
       }
     }, 2500);
   };
@@ -108,8 +117,16 @@ export function bindHomeCarousel(track: HTMLElement | undefined, options: HomeCa
   const onLeave = () => {
     hovering = false;
   };
+  const onMotionPreferenceChange = () => {
+    if (motionPreference.matches) {
+      stopAutoplay();
+    } else {
+      startAutoplay();
+    }
+  };
   section.addEventListener('mouseenter', onEnter);
   section.addEventListener('mouseleave', onLeave);
+  motionPreference.addEventListener('change', onMotionPreferenceChange);
   startAutoplay();
 
   return () => {
@@ -120,6 +137,7 @@ export function bindHomeCarousel(track: HTMLElement | undefined, options: HomeCa
     window.removeEventListener('resize', updateState);
     section.removeEventListener('mouseenter', onEnter);
     section.removeEventListener('mouseleave', onLeave);
+    motionPreference.removeEventListener('change', onMotionPreferenceChange);
     prevBtn.remove();
     nextBtn.remove();
     progress.remove();

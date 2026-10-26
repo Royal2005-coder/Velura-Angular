@@ -5,7 +5,7 @@
 
 .page-blog,
 .page-blog-detail {
-  background: #fbf7f2;
+  background: transparent;
 }
 
 .blog-page {
@@ -42,10 +42,10 @@
 .blog-intro__journal {
   display: inline-block;
   margin-bottom: 12px;
-  color: var(--terracotta, #c97b63);
-  font-family: "DM Sans", sans-serif;
+  color: var(--velura-maroon, #7A283C);
+  font-family: var(--velura-font-ui, "Inter", sans-serif);
   font-size: 13px;
-  font-weight: 400;
+  font-weight: 700;
   line-height: 19.5px;
   letter-spacing: 1.95px;
   text-transform: uppercase;
@@ -53,8 +53,8 @@
 
 .blog-intro__title {
   margin: 0 0 16px;
-  color: #171717;
-  font-family: "Playfair Display", Georgia, serif;
+  color: var(--velura-maroon, #7A283C);
+  font-family: var(--velura-font-display, "Cormorant Garamond", Georgia, serif);
   font-size: clamp(2.75rem, 5vw, 4.5rem);
   font-weight: 500;
   line-height: 1.05;
@@ -65,7 +65,7 @@
   max-width: 672px;
   margin: 0 auto;
   color: #6d6a67;
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 16px;
   font-weight: 400;
   line-height: 28.8px;
@@ -149,8 +149,8 @@
   border: 1px solid rgba(201, 123, 99, 0.28);
   border-radius: 999px;
   background: rgba(201, 123, 99, 0.08);
-  color: var(--terracotta, #c97b63);
-  font-family: "DM Sans", sans-serif;
+  color: var(--terracotta, #844A5A);
+  font-family: "Inter", sans-serif;
   font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -160,7 +160,7 @@
 .featured-post__title {
   margin: 0 0 18px;
   color: var(--ink, #2a2522);
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: "Cormorant Garamond", Georgia, serif;
   font-size: clamp(1.8rem, 3.5vw, 2.5rem);
   font-weight: 500;
   line-height: 1.15;
@@ -170,7 +170,7 @@
 .featured-post__excerpt {
   margin: 0 0 28px;
   color: var(--muted, #6b635d);
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 1rem;
   line-height: 1.75;
 }
@@ -183,7 +183,7 @@
   gap: 8px;
   margin-bottom: 30px;
   color: var(--muted, #6b635d);
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.78rem;
 }
 
@@ -211,8 +211,8 @@
   width: max-content;
   align-items: center;
   gap: 8px;
-  color: var(--terracotta, #c97b63);
-  font-family: "DM Sans", sans-serif;
+  color: var(--terracotta, #844A5A);
+  font-family: "Inter", sans-serif;
   font-size: 0.95rem;
   font-weight: 700;
   text-decoration: none;
@@ -220,7 +220,7 @@
 }
 
 .btn-read-more:hover {
-  color: var(--terracotta-h, #b36a53);
+  color: var(--terracotta-h, #631F30);
 }
 
 .btn-read-more svg {
@@ -259,7 +259,7 @@
   background: #fff;
   color: var(--ink, #2a2522);
   cursor: pointer;
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.82rem;
   font-weight: 700;
   white-space: nowrap;
@@ -268,7 +268,7 @@
 
 .category-tab:hover {
   border-color: rgba(201, 123, 99, 0.5);
-  color: var(--terracotta, #c97b63);
+  color: var(--terracotta, #844A5A);
   transform: translateY(-1px);
 }
 
@@ -277,8 +277,8 @@
 }
 
 .category-tab.is-active {
-  border-color: var(--terracotta, #c97b63);
-  background: var(--terracotta, #c97b63);
+  border-color: var(--terracotta, #844A5A);
+  background: var(--terracotta, #844A5A);
   color: #fff;
 }
 
@@ -342,7 +342,7 @@
 }
 
 .articles-grid.is-bento .article-card:nth-child(5n + 3) .article-card__title a:hover {
-  color: var(--terracotta, #c97b63);
+  color: var(--terracotta, #844A5A);
 }
 
 .articles-grid.is-bento .article-card:nth-child(5n + 3) .article-card__excerpt,
@@ -405,7 +405,7 @@
 .article-card__title {
   margin: 0 0 12px;
   color: var(--ink, #2a2522);
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: "Cormorant Garamond", Georgia, serif;
   font-size: clamp(1rem, 1.4vw, 1.25rem);
   font-weight: 500;
   line-height: 1.3;
@@ -419,7 +419,7 @@
 }
 
 .article-card__title a:hover {
-  color: var(--terracotta, #c97b63);
+  color: var(--terracotta, #844A5A);
 }
 
 .article-card__excerpt {
@@ -428,7 +428,7 @@
   margin: 0 0 22px;
   overflow: hidden;
   color: var(--muted, #6b635d);
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.92rem;
   line-height: 1.65;
   -webkit-box-orient: vertical;
@@ -463,7 +463,7 @@
   background: #fff;
   color: var(--muted, #6b635d);
   cursor: pointer;
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.82rem;
   font-weight: 700;
   transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
@@ -471,8 +471,8 @@
 
 .pagination__btn:hover,
 .pagination__btn.is-active {
-  border-color: var(--terracotta, #c97b63);
-  background: var(--terracotta, #c97b63);
+  border-color: var(--terracotta, #844A5A);
+  background: var(--terracotta, #844A5A);
   color: #fff;
 }
 
@@ -499,7 +499,7 @@
   border-radius: var(--radius-md, 8px);
   background:
     linear-gradient(90deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.78)),
-    url("/src/assets/images/velura-journal-banner.png") center / cover;
+    url("/assets/images/velura-journal-banner.png") center / cover;
   box-shadow: 0 24px 70px rgba(42, 37, 34, 0.05);
   text-align: left;
 }
@@ -512,14 +512,14 @@
   place-items: center;
   border-radius: 999px;
   background: #fff;
-  color: var(--terracotta, #c97b63);
+  color: var(--terracotta, #844A5A);
   box-shadow: 0 10px 28px rgba(42, 37, 34, 0.08);
 }
 
 .newsletter-box__title {
   margin: 0 0 12px;
   color: var(--ink, #2a2522);
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: "Cormorant Garamond", Georgia, serif;
   font-size: clamp(1.5rem, 3vw, 2rem);
   font-weight: 500;
   letter-spacing: 0;
@@ -529,7 +529,7 @@
   max-width: 520px;
   margin: 0;
   color: var(--muted, #6b635d);
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.96rem;
   line-height: 1.65;
 }
@@ -550,14 +550,14 @@
   border-radius: var(--radius-md, 8px);
   background: rgba(255, 255, 255, 0.94);
   color: var(--ink, #2a2522);
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.92rem;
   outline: none;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .newsletter-box__form input:focus {
-  border-color: var(--terracotta, #c97b63);
+  border-color: var(--terracotta, #844A5A);
   box-shadow: 0 0 0 3px rgba(201, 123, 99, 0.12);
 }
 
@@ -576,7 +576,7 @@
   align-items: center;
   gap: 8px;
   margin-bottom: 24px;
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.85rem;
 }
 
@@ -587,7 +587,7 @@
 }
 
 .breadcrumb__link:hover {
-  color: var(--terracotta, #c97b63);
+  color: var(--terracotta, #844A5A);
 }
 
 .breadcrumb__sep {
@@ -608,7 +608,7 @@
 .article-header__title {
   margin: 0 0 16px;
   color: var(--ink, #2a2522);
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: "Cormorant Garamond", Georgia, serif;
   font-size: clamp(2rem, 4vw, 3rem);
   font-weight: 500;
   line-height: 1.15;
@@ -647,7 +647,7 @@
 .article-intro {
   margin: 0 0 32px;
   color: var(--ink, #2a2522);
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 1.15rem;
   line-height: 1.8;
   font-weight: 500;
@@ -659,13 +659,13 @@
   padding: 24px;
   background: var(--tab-bg, #f4e4dc);
   border-radius: var(--radius-md, 8px);
-  border-left: 4px solid var(--terracotta, #c97b63);
+  border-left: 4px solid var(--terracotta, #844A5A);
 }
 
 .takeaways__title {
   margin: 0 0 16px;
   color: var(--ink, #2a2522);
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.875rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -683,7 +683,7 @@
   padding-left: 20px;
   margin-bottom: 12px;
   color: var(--muted, #6b635d);
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.95rem;
   line-height: 1.65;
 }
@@ -696,7 +696,7 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--terracotta, #c97b63);
+  background: var(--terracotta, #844A5A);
 }
 
 .takeaway-item:last-child {
@@ -711,7 +711,7 @@
 .article-section__heading {
   margin: 0 0 16px;
   color: var(--ink, #2a2522);
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: "Cormorant Garamond", Georgia, serif;
   font-size: 1.5rem;
   font-weight: 500;
   line-height: 1.3;
@@ -720,7 +720,7 @@
 .article-section__body {
   margin: 0 0 16px;
   color: var(--muted, #6b635d);
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 1rem;
   line-height: 1.8;
 }
@@ -795,7 +795,7 @@
   display: inline-block;
   margin-bottom: 4px;
   color: var(--text-secondary, #827473);
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.6875rem;
   font-weight: 500;
   text-transform: uppercase;
@@ -805,7 +805,7 @@
 .product-card-inline__name {
   margin: 0 0 6px;
   color: var(--ink, #2a2522);
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: "Cormorant Garamond", Georgia, serif;
   font-size: 0.9rem;
   font-weight: 500;
   line-height: 1.35;
@@ -816,8 +816,8 @@
 }
 
 .product-card-inline__price {
-  color: var(--terracotta, #c97b63);
-  font-family: "DM Sans", sans-serif;
+  color: var(--terracotta, #844A5A);
+  font-family: "Inter", sans-serif;
   font-size: 0.92rem;
   font-weight: 700;
 }
@@ -831,10 +831,10 @@
   padding: 8px 10px;
   border: none;
   border-top: 1px solid var(--line, #e8dfd6);
-  background: var(--terracotta, #c97b63);
+  background: var(--terracotta, #844A5A);
   color: #fff;
   cursor: pointer;
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.62rem;
   font-weight: 600;
   text-transform: uppercase;
@@ -844,7 +844,7 @@
 }
 
 .product-card-inline__cart:hover {
-  background: var(--terracotta-h, #b36a53);
+  background: var(--terracotta-h, #631F30);
 }
 
 .product-card-inline__cart.is-added {
@@ -872,12 +872,12 @@
   justify-content: center;
   flex: 0 0 auto;
   padding: 8px 12px;
-  border: 1px solid var(--terracotta, #c97b63);
+  border: 1px solid var(--terracotta, #844A5A);
   border-radius: var(--radius-md, 8px);
-  background: var(--terracotta, #c97b63);
+  background: var(--terracotta, #844A5A);
   color: #fff;
   cursor: pointer;
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.62rem;
   font-weight: 600;
   text-transform: uppercase;
@@ -887,7 +887,7 @@
 }
 
 .product-card-inline__buy:hover {
-  background: var(--terracotta-h, #b36a53);
+  background: var(--terracotta-h, #631F30);
 }
 
 .product-card-inline__buy:disabled {
@@ -914,7 +914,7 @@
 .sidebar-products__title {
   margin: 0 0 20px;
   color: var(--ink, #2a2522);
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.875rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -978,7 +978,7 @@
 .sidebar-product__name {
   margin: 0 0 4px;
   color: var(--ink, #2a2522);
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: "Cormorant Garamond", Georgia, serif;
   font-size: 0.85rem;
   font-weight: 500;
   line-height: 1.35;
@@ -991,7 +991,7 @@
 .sidebar-product__note {
   margin: 0 0 6px;
   color: var(--muted, #6b635d);
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.75rem;
   line-height: 1.5;
   display: -webkit-box;
@@ -1001,8 +1001,8 @@
 }
 
 .sidebar-product__price {
-  color: var(--terracotta, #c97b63);
-  font-family: "DM Sans", sans-serif;
+  color: var(--terracotta, #844A5A);
+  font-family: "Inter", sans-serif;
   font-size: 0.85rem;
   font-weight: 700;
 }
@@ -1013,9 +1013,9 @@
   border: none;
   border-top: 1px solid var(--line, #e8dfd6);
   background: transparent;
-  color: var(--terracotta, #c97b63);
+  color: var(--terracotta, #844A5A);
   cursor: pointer;
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.65rem;
   font-weight: 600;
   text-transform: uppercase;
@@ -1025,7 +1025,7 @@
 }
 
 .sidebar-product__cart:hover {
-  background: var(--terracotta, #c97b63);
+  background: var(--terracotta, #844A5A);
   color: #fff;
 }
 
@@ -1043,7 +1043,7 @@
 .page-blog-detail .section-title {
   margin: 0 0 32px;
   color: var(--ink, #2a2522);
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: "Cormorant Garamond", Georgia, serif;
   font-size: 1.5rem;
   font-weight: 500;
 }
@@ -1114,7 +1114,7 @@
 .product-card__color {
   display: inline-block;
   color: var(--text-secondary, #827473);
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.6875rem;
   font-weight: 500;
   text-transform: uppercase;
@@ -1124,7 +1124,7 @@
 .product-card__name {
   margin: 0;
   color: var(--ink, #2a2522);
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: "Cormorant Garamond", Georgia, serif;
   font-size: 1rem;
   font-weight: 500;
   line-height: 1.35;
@@ -1136,8 +1136,8 @@
 }
 
 .page-blog-detail .product-card__price {
-  color: var(--terracotta, #c97b63);
-  font-family: "DM Sans", sans-serif;
+  color: var(--terracotta, #844A5A);
+  font-family: "Inter", sans-serif;
   font-size: 0.95rem;
   font-weight: 700;
   margin-top: auto;
@@ -1151,10 +1151,10 @@
   padding: 10px 12px;
   border: none;
   border-top: 1px solid var(--line, #e8dfd6);
-  background: var(--terracotta, #c97b63);
+  background: var(--terracotta, #844A5A);
   color: #fff;
   cursor: pointer;
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.68rem;
   font-weight: 600;
   text-transform: uppercase;
@@ -1164,7 +1164,7 @@
 }
 
 .product-card__cart:hover {
-  background: var(--terracotta-h, #b36a53);
+  background: var(--terracotta-h, #631F30);
 }
 
 .product-card__cart.is-added {
@@ -1199,12 +1199,12 @@
   justify-content: center;
   flex: 0 0 auto;
   padding: 8px 12px;
-  border: 1px solid var(--terracotta, #c97b63);
+  border: 1px solid var(--terracotta, #844A5A);
   border-radius: var(--radius-md, 8px);
-  background: var(--terracotta, #c97b63);
+  background: var(--terracotta, #844A5A);
   color: #fff;
   cursor: pointer;
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.62rem;
   font-weight: 600;
   text-transform: uppercase;
@@ -1214,7 +1214,7 @@
 }
 
 .page-blog-detail .product-card__buy:hover {
-  background: var(--terracotta-h, #b36a53);
+  background: var(--terracotta-h, #631F30);
 }
 
 .page-blog-detail .product-card__buy:disabled {
@@ -1246,7 +1246,7 @@
 .product-card-inline__cart:focus-visible,
 .product-card-inline__buy:focus-visible,
 .sidebar-product__cart:focus-visible {
-  outline: 2px solid var(--terracotta, #c97b63);
+  outline: 2px solid var(--terracotta, #844A5A);
   outline-offset: 2px;
 }
 
@@ -1287,12 +1287,12 @@
   gap: 8px;
   min-height: 48px;
   padding: 0 28px;
-  border: 1px solid var(--terracotta, #c97b63);
+  border: 1px solid var(--terracotta, #844A5A);
   border-radius: 999px;
   background: transparent;
-  color: var(--terracotta, #c97b63);
+  color: var(--terracotta, #844A5A);
   cursor: pointer;
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.9rem;
   font-weight: 700;
   white-space: nowrap;
@@ -1300,7 +1300,7 @@
 }
 
 .load-more__btn:hover {
-  background: var(--terracotta, #c97b63);
+  background: var(--terracotta, #844A5A);
   color: #fff;
   transform: translateY(-1px);
 }
@@ -1327,7 +1327,7 @@
 .blog-empty__title {
   margin: 0 0 10px;
   color: var(--ink, #2a2522);
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: "Cormorant Garamond", Georgia, serif;
   font-size: 1.4rem;
   font-weight: 500;
 }
@@ -1335,26 +1335,26 @@
 .blog-empty__desc {
   margin: 0 0 22px;
   color: var(--muted, #6b635d);
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.95rem;
   line-height: 1.65;
 }
 
 .blog-empty__reset {
   padding: 10px 22px;
-  border: 1px solid var(--terracotta, #c97b63);
+  border: 1px solid var(--terracotta, #844A5A);
   border-radius: 999px;
-  background: var(--terracotta, #c97b63);
+  background: var(--terracotta, #844A5A);
   color: #fff;
   cursor: pointer;
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.85rem;
   font-weight: 700;
   transition: background 0.2s ease;
 }
 
 .blog-empty__reset:hover {
-  background: var(--terracotta-h, #b36a53);
+  background: var(--terracotta-h, #631F30);
 }
 
 /* ============================================================
@@ -1381,7 +1381,7 @@
   grid-column: 1 / -1;
   margin: 0;
   color: var(--terracotta, #7b1e2b);
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.85rem;
   font-weight: 600;
 }
@@ -1393,7 +1393,7 @@
   border-radius: var(--radius-md, 8px);
   background: rgba(45, 125, 70, 0.16);
   color: var(--ink, #2a2522);
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.9rem;
   line-height: 1.6;
 }
@@ -1725,7 +1725,7 @@
   max-width: 760px;
   margin: 0 auto 24px;
   color: var(--muted);
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: clamp(1rem, 1.5vw, 1.2rem);
   line-height: 1.75;
 }
@@ -1760,7 +1760,7 @@
 }
 
 .article-intro {
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: "Cormorant Garamond", Georgia, serif;
   font-size: clamp(1.25rem, 2vw, 1.55rem);
   line-height: 1.65;
 }
@@ -2031,4 +2031,143 @@
     object-position: center;
     transform: none;
   }
+}
+
+/* Journal demo treatment: sharp editorial frames with the shared Velura palette. */
+.page-blog,
+.page-blog-detail {
+  background: transparent !important;
+}
+
+.page-blog .blog-intro__journal,
+.page-blog .blog-badge { color: var(--velura-maroon); }
+.page-blog .blog-intro__title,
+.page-blog .featured-post__title,
+.page-blog .article-card__title,
+.page-blog .newsletter-box__title { color: var(--velura-maroon); }
+.page-blog .blog-intro__desc,
+.page-blog .featured-post__excerpt,
+.page-blog .article-card__excerpt,
+.page-blog .post-meta,
+.page-blog .newsletter-box__desc { color: var(--text-secondary); }
+
+.page-blog .blog-intro__media {
+  border-color: rgba(122, 40, 60, .22);
+  border-radius: 0;
+  box-shadow: 0 20px 46px rgba(60, 20, 30, .12);
+}
+
+.page-blog .featured-post,
+.page-blog .article-card {
+  border-color: rgba(242, 194, 207, .72);
+  border-radius: 0;
+  box-shadow: 0 8px 25px rgba(122, 40, 60, .07);
+}
+
+.page-blog .featured-post__image,
+.page-blog .article-card__image { background: var(--velura-blush); }
+.page-blog .blog-badge { border-color: rgba(122, 40, 60, .2); background: var(--velura-blush); }
+.page-blog .featured-post__title:hover,
+.page-blog .article-card__title a:hover { color: var(--velura-rose); }
+.page-blog .btn-read-more { color: var(--velura-maroon); }
+.page-blog .category-tabs { border-color: rgba(122, 40, 60, .18); }
+
+.page-blog .category-tab {
+  border-color: rgba(122, 40, 60, .18);
+  color: var(--velura-maroon);
+  background: #fff;
+}
+
+.page-blog .category-tab:hover,
+.page-blog .category-tab.is-active {
+  border-color: var(--velura-maroon);
+  color: #fff;
+  background: var(--velura-maroon);
+}
+
+.page-blog .newsletter-box {
+  border-color: rgba(242, 194, 207, .75);
+  border-radius: 20px;
+  background:
+    linear-gradient(100deg, rgba(255, 246, 248, .96), rgba(255, 255, 255, .90)),
+    url("/assets/images/velura-journal-banner.png") center / cover;
+  box-shadow: 0 18px 46px rgba(122, 40, 60, .08);
+}
+
+.page-blog .newsletter-box__icon { color: var(--velura-maroon); background: #fff; }
+.page-blog .newsletter-box__form input { border-color: rgba(122, 40, 60, .2); }
+.page-blog .newsletter-box__form input:focus { border-color: var(--velura-rose); box-shadow: 0 0 0 3px rgba(201, 79, 112, .15); }
+
+/* The live detail route currently has API-backed summary fields only. */
+.page-blog-detail .blog-page {
+  min-height: 58vh;
+  padding: clamp(28px, 5vw, 56px) 0 88px;
+}
+
+.page-blog-detail .blog-page .container {
+  max-width: min(var(--max-w), 1180px);
+}
+
+.page-blog-detail .blog-page > .container > .btn-read-more {
+  margin-bottom: 24px;
+  border-bottom: 1px solid transparent;
+}
+
+.page-blog-detail .featured-post {
+  grid-template-columns: minmax(0, .92fr) minmax(0, 1.08fr);
+  min-height: 0;
+  border-color: rgba(242, 194, 207, .72);
+  border-radius: 0;
+  box-shadow: 0 16px 42px rgba(122, 40, 60, .09);
+}
+
+.page-blog-detail .featured-post__image {
+  min-height: 420px;
+  background: var(--velura-blush);
+}
+
+.page-blog-detail .featured-post__content {
+  padding: clamp(28px, 5vw, 62px);
+}
+
+.page-blog-detail .blog-badge {
+  border-color: rgba(122, 40, 60, .2);
+  color: var(--velura-maroon);
+  background: var(--velura-blush);
+}
+
+.page-blog-detail .featured-post__title,
+.page-blog-detail .blog-intro__title { color: var(--velura-maroon); }
+
+.page-blog-detail .featured-post__excerpt,
+.page-blog-detail .post-meta { color: var(--text-secondary); }
+
+.page-blog-detail .post-meta__author { color: var(--ink); }
+.page-blog-detail .post-meta__dot { color: rgba(122, 40, 60, .38); }
+.page-blog-detail .blog-page > .container > .btn-read-more:focus-visible { outline: 3px solid var(--velura-rose); outline-offset: 3px; }
+.page-blog-detail .blog-article__body {
+  grid-column: 1 / -1;
+  padding: clamp(28px, 6vw, 72px);
+  border-top: 1px solid rgba(242, 194, 207, .72);
+  color: var(--text-body);
+  font-family: var(--velura-font-ui);
+  font-size: 1rem;
+  line-height: 1.85;
+  overflow-wrap: anywhere;
+}
+.page-blog-detail .blog-article__body :is(h2, h3, h4) { margin: 1.8em 0 .65em; color: var(--velura-maroon); font-family: var(--velura-font-display); line-height: 1.2; }
+.page-blog-detail .blog-article__body p { margin: 0 0 1.25em; }
+.page-blog-detail .blog-article__body :is(ul, ol) { margin: 0 0 1.25em; padding-inline-start: 1.4em; }
+.page-blog-detail .blog-article__body img { max-width: 100%; height: auto; border-radius: 16px; }
+.page-blog-detail .blog-article__body a { color: var(--velura-maroon); text-decoration: underline; text-underline-offset: .18em; }
+.page-blog-detail .blog-related-products { margin-top: clamp(32px, 5vw, 60px); padding-top: 28px; border-top: 1px solid var(--velura-border); }
+.page-blog-detail .blog-related-products__title { margin: 0 0 20px; color: var(--velura-maroon); font-family: var(--velura-font-display); font-size: clamp(1.5rem, 2.6vw, 2rem); }
+.page-blog-detail .blog-related-products__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); align-items: start; gap: 18px; }
+.page-blog-detail .blog-related-products__note { margin: 10px 4px 0; color: var(--text-secondary); font-size: .82rem; line-height: 1.55; }
+
+@media (max-width: 768px) {
+  .page-blog-detail .blog-page { padding-top: 24px; }
+  .page-blog-detail .featured-post { grid-template-columns: 1fr; }
+  .page-blog-detail .featured-post__image { min-height: 0; aspect-ratio: 4 / 3; }
+  .page-blog-detail .featured-post__content { padding: 26px 22px 32px; }
 }

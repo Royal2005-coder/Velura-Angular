@@ -45,7 +45,7 @@
               <h2>1. Chọn đơn hàng</h2>
 
               <!-- Area shown when orderId is from URL (locked) -->
-              <div id="js-order-locked-area" class="order-locked-area" style="display:none;">
+              <div id="js-order-locked-area" class="order-locked-area u-inline-c8be1ccba6">
                 <!-- Populated dynamically by JS -->
               </div>
 
@@ -105,7 +105,7 @@
                   <div class="radio-indicator">
                     <div class="radio-indicator__inner"></div>
                   </div>
-                  <input type="radio" name="method_select" value="refund" checked style="display:none;" />
+                  <input type="radio" name="method_select" value="refund" checked class="u-inline-c8be1ccba6" />
                 </div>
 
                 <!-- Method 2 -->
@@ -116,48 +116,48 @@
                   <div class="radio-indicator">
                     <div class="radio-indicator__inner"></div>
                   </div>
-                  <input type="radio" name="method_select" value="exchange" style="display:none;" />
+                  <input type="radio" name="method_select" value="exchange" class="u-inline-c8be1ccba6" />
                 </div>
 
                 <!-- Exchange Options (Hiển thị khi chọn đổi hàng mới) -->
-                <div id="exchange-options-container" class="exchange-options" style="display: none; padding: 20px; background: #fafafa; border-radius: 8px; margin-top: 12px; border: 1px solid #eaeaea;">
-                  <p style="margin-bottom: 16px; font-weight: 500; font-size: 0.9375rem; color: var(--dark);">Vui lòng chọn nhu cầu đổi của bạn:</p>
+                <div id="exchange-options-container" class="exchange-options u-inline-4c879c3ce9">
+                  <p class="u-inline-bca1eca853">Vui lòng chọn nhu cầu đổi của bạn:</p>
                   
-                  <div class="exchange-checkbox-group" style="display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 16px;">
-                    <label class="custom-checkbox" style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--dark); font-size: 0.9375rem;">
-                      <input type="checkbox" name="exchange_needs" value="size" style="width: 18px; height: 18px; accent-color: var(--primary);">
+                  <div class="exchange-checkbox-group u-inline-91b6430ba5">
+                    <label class="custom-checkbox u-inline-9b34f51c25">
+                      <input type="checkbox" name="exchange_needs" value="size" class="u-inline-828b3604d3">
                       <span>Đổi size</span>
                     </label>
-                    <label class="custom-checkbox" style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--dark); font-size: 0.9375rem;">
-                      <input type="checkbox" name="exchange_needs" value="color" style="width: 18px; height: 18px; accent-color: var(--primary);">
+                    <label class="custom-checkbox u-inline-9b34f51c25">
+                      <input type="checkbox" name="exchange_needs" value="color" class="u-inline-828b3604d3">
                       <span>Đổi màu</span>
                     </label>
-                    <label class="custom-checkbox" style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--dark); font-size: 0.9375rem;">
-                      <input type="checkbox" name="exchange_needs" value="model" style="width: 18px; height: 18px; accent-color: var(--primary);">
+                    <label class="custom-checkbox u-inline-9b34f51c25">
+                      <input type="checkbox" name="exchange_needs" value="model" class="u-inline-828b3604d3">
                       <span>Đổi mẫu khác</span>
                     </label>
-                    <label class="custom-checkbox" style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--dark); font-size: 0.9375rem;">
-                      <input type="checkbox" name="exchange_needs" value="defective" style="width: 18px; height: 18px; accent-color: var(--primary);">
+                    <label class="custom-checkbox u-inline-9b34f51c25">
+                      <input type="checkbox" name="exchange_needs" value="defective" class="u-inline-828b3604d3">
                       <span>Đổi sản phẩm cùng loại (do lỗi)</span>
                     </label>
                   </div>
 
-                  <div class="exchange-details" style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                  <div class="exchange-details u-inline-f780608dbf">
                     <!-- Nhu cầu đổi size -->
-                    <div class="form-group" id="exchange-size-group" style="display: none; margin-bottom: 0;">
-                      <label class="form-label" style="font-size: 0.875rem;">Size mong muốn</label>
+                    <div class="form-group u-inline-e5387d8bda" id="exchange-size-group">
+                      <label class="form-label u-inline-3f71fd63b0">Size mong muốn</label>
                       <input type="text" class="form-input" id="exchange-size-input" placeholder="Ví dụ: L, XL, 42...">
                     </div>
                     
                     <!-- Nhu cầu đổi màu -->
-                    <div class="form-group" id="exchange-color-group" style="display: none; margin-bottom: 0;">
-                      <label class="form-label" style="font-size: 0.875rem;">Màu sắc mong muốn</label>
+                    <div class="form-group u-inline-e5387d8bda" id="exchange-color-group">
+                      <label class="form-label u-inline-3f71fd63b0">Màu sắc mong muốn</label>
                       <input type="text" class="form-input" id="exchange-color-input" placeholder="Ví dụ: Đen, Trắng...">
                     </div>
                   </div>
                   
-                  <div class="form-group" id="exchange-model-group" style="display: none; margin-top: 16px; margin-bottom: 0;">
-                    <label class="form-label" style="font-size: 0.875rem;">Tên mẫu mã hoặc Link sản phẩm muốn đổi</label>
+                  <div class="form-group u-inline-3b5055ccf9" id="exchange-model-group">
+                    <label class="form-label u-inline-3f71fd63b0">Tên mẫu mã hoặc Link sản phẩm muốn đổi</label>
                     <input type="text" class="form-input" id="exchange-model-input" placeholder="Nhập tên sản phẩm hoặc link bạn muốn đổi sang...">
                   </div>
                 </div>
@@ -209,18 +209,18 @@
                     </button>
                     <span class="upload-counter" id="js-upload-counter">{{ evidenceImages().length }}/5 ảnh đã tải lên</span>
                   </div>
-                  <input #fileInput type="file" multiple accept="image/*" style="display:none;" (change)="onFilesSelected($event)" />
+                  <input #fileInput type="file" multiple accept="image/*" (change)="onFilesSelected($event)" class="u-inline-c8be1ccba6" />
                   @if (evidenceImages().length > 0) {
-                    <div id="filePreviewList" class="file-preview-list" style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px;">
+                    <div id="filePreviewList" class="file-preview-list u-inline-e8706519df">
                       @for (img of evidenceImages(); track $index) {
-                        <div style="position: relative; width: 72px; height: 72px; border-radius: 6px; overflow: hidden; border: 1px solid var(--border-color, #d5c4b5); box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-                          <img [src]="img" alt="Minh chứng" style="width: 100%; height: 100%; object-fit: cover;" />
+                        <div class="u-inline-8ced61860a">
+                          <img [src]="img" alt="Minh chứng" class="u-inline-4a466668db" />
                           <button
                             type="button"
                             (click)="removeImage($index)"
                             aria-label="Xóa ảnh"
-                            style="position: absolute; top: 2px; right: 2px; background: rgba(0,0,0,0.65); color: #fff; border: none; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-size: 12px; cursor: pointer;"
-                          >&times;</button>
+                           
+                           class="u-inline-56ba1c32a4">&times;</button>
                         </div>
                       }
                     </div>

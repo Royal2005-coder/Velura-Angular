@@ -38,7 +38,11 @@ async function fixture(vision?: ColorVision, overrides: Partial<PersonalColorPol
   const bytes = await sharp({ create: { width: 20, height: 20, channels: 3, background: "white" } }).png().toBuffer();
   let deleted = 0;
   const deletion = Promise.withResolvers<void>();
-  const assets: ColorAssets = { readOwnedAsset: async (owner) => { assert.equal(owner, principal.owner); return { bytes, mime: "image/png", expires_at: new Date(Date.now() + 60000).toISOString() }; }, deleteOwnedAsset: async (owner) => { assert.equal(owner, principal.owner); deleted++; deletion.resolve(); } };
+  const assets: ColorAssets = {
+    readOwnedAsset: async (owner) => { assert.equal(owner, principal.owner); return { bytes, mime: "image/png", expires_at: new Date(Date.now() + 60000).toISOString() }; },
+    deleteOwnedAsset: async (owner) => { assert.equal(owner, principal.owner); deleted++; deletion.resolve(); },
+    upload: async (owner, _buffer, _mime) => { assert.equal(owner, principal.owner); return { asset_id: randomUUID(), expires_at: new Date(Date.now() + 60000).toISOString() }; },
+  };
   let calls = 0;
   const defaultVision: ColorVision = { ready: () => true, generate: async () => ++calls === 1 ? quality : output };
   const service = new PersonalColorService(repo, assets, vision || defaultVision, configured);
@@ -140,4 +144,14 @@ test("ownership, explicit consent, stale profile versions and disabled runtime n
   const disabled = new PersonalColorService(f.repo, f.assets, { ready: () => true, generate: async () => output }, null);
   assert.equal(disabled.capabilities().enabled, false); await assert.rejects(disabled.analyze(f.principal, {}));
   assert.throws(() => colorPrincipal({ headers: { authorization: "Bearer invalid", "x-guest-session-id": f.principal.guestId } }, { authUser: null } as AuthContext));
+});
+
+test("guest session can upload a portrait for personal color analysis", async () => {
+  const f = await fixture();
+  const res = await f.service.upload(f.principal, f.bytes, "image/png");
+  assert.ok(res.asset_id);
+  assert.ok(res.expires_at);
+
+  await assert.rejects(() => f.service.upload(f.principal, f.bytes, "image/gif"));
+  await assert.rejects(() => f.service.upload(f.principal, Buffer.alloc(policy.maxBytes + 1), "image/png"));
 });

@@ -4,6 +4,8 @@ export interface BlogPost {
   badge: string;
   title: string;
   excerpt: string;
+  /** Sanitized article body returned by the content API when available. */
+  content?: string;
   image: string;
   author: string;
   date: string;

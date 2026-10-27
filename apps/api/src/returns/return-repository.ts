@@ -1,8 +1,6 @@
-import crypto from "crypto";
 import { callRpc, quotePostgrestValue, selectOne, selectRows, updateRows, insertRow } from "../supabase.js";
 import { HttpError } from "../http.js";
 import { asJsonObject, asNumber, asString, type JsonObject } from "../types.js";
-import { createNotification } from "../user/notifications.js";
 import { RETURN_SELECT, TICKET_SELECT } from "./return-constants.js";
 import { classifyReturnPayment, refundFlowFor, refundReceiverStatus, type ReturnPaymentKind } from "./return-refund-receiver.js";
 import { writeAuditLog } from "../audit.js";
@@ -41,21 +39,28 @@ export interface ReturnAuditFilters {
   offset: number;
 }
 
-/**
- * Input for approving a refund.
- */
-export interface ApproveRefundInput {
-  refundAmount: number;
-  adminNote?: unknown;
-  expectedVersion: number;
+/** Inbound return label / carrier handover facts. */
+export interface ReturnShipmentInput {
+  carrier: string;
+  trackingCode: string;
+  trackingUrl?: string;
+  labelUrl?: string;
 }
 
-/**
- * Input for approving an exchange.
- */
-export interface ApproveExchangeInput {
-  adminNote?: unknown;
-  expectedVersion: number;
+/** Carrier pickup proof for the inbound parcel. */
+export interface ReturnPickupInput {
+  photoUrls: string[];
+  videoUrl?: string;
+  note?: string;
+}
+
+/** Per-line warehouse receipt with disposition; only `restock` changes sellable stock. */
+export interface ReturnReceiptInput {
+  receipts: unknown;
+  packageMatch: boolean;
+  sealIntact: boolean;
+  warehouseProof: string;
+  qaNote?: string;
 }
 
 /**
@@ -79,6 +84,9 @@ export interface UpdateReturnStatusInput {
   refundAmount?: number;
   trackingReturnCode?: unknown;
   conditionCheckResult?: unknown;
+  packageMatch?: boolean;
+  sealIntact?: boolean;
+  qaNote?: unknown;
   imageProof?: unknown;
   expectedVersion: number;
 }
@@ -182,158 +190,142 @@ export function createReturnRepository() {
         throw mapReturnDatabaseError(error);
       }
     },
-    async prepareExchange(returnId: string, expectedVersion: number, actorId: string, ipAddress?: string) {
+    async prepareExchange(returnId: string, expectedVersion: number, actorId: string) {
       try {
         return asJsonObject(await callRpc("velura_prepare_exchange", {
           p_return_id: returnId,
           p_expected_version: expectedVersion,
           p_actor_id: actorId
         }));
-      } catch (err: unknown) {
-        // Fallback thực hiện tạo đơn đổi hàng và cập nhật phiếu đổi trả
-        const ret = await selectOne("return_exchange", {
-          select: RETURN_SELECT,
-          return_id: `eq.${returnId}`
-        });
-        if (!ret) throw err;
-        if (Number(ret.version) !== expectedVersion) {
-          throw new HttpError(409, "VERSION_CONFLICT", "Return record has been modified by another user");
-        }
-        if (ret.status !== "RECEIVED" || ret.return_type !== "exchange" || ret.condition_check_result !== "qa_pass") {
-          throw new HttpError(422, "WAREHOUSE_QA_REQUIRED", "Exchange requires warehouse QA pass");
-        }
-
-        const original = await selectOne("orders", {
-          select: "order_id,user_id,order_code,status,shipping_name,shipping_phone,shipping_email,shipping_address,total_amount,is_guest",
-          order_id: `eq.${ret.order_id}`
-        });
-        if (!original) throw err;
-
-        const returnItemsRes = await selectRows("return_item", {
-          select: "order_item_id,replacement_variant_id,quantity",
-          return_id: `eq.${returnId}`,
-          order: "order_item_id.asc"
-        });
-        const returnItems = returnItemsRes.rows || [];
-
-        let subtotal = 0;
-        const exchangeLines: Array<{
-          targetVariantId: string;
-          productName: string;
-          productImage: string;
-          quantity: number;
-          unitPrice: number;
-        }> = [];
-
-        if (returnItems.length > 0) {
-          const orderItemIds = returnItems.map((ri) => asString(ri.order_item_id)).filter(Boolean);
-          const orderItemsRes = await selectRows("order_item", {
-            select: "item_id,variant_id,product_name,product_image,quantity,unit_price",
-            item_id: `in.(${orderItemIds.join(",")})`
-          }).catch(() => ({ rows: [] as JsonObject[] }));
-          const orderItems = orderItemsRes.rows || [];
-
-          for (const ri of returnItems) {
-            const oi = orderItems.find((item) => asString(item.item_id) === asString(ri.order_item_id));
-            const targetVariantId = asString(ri.replacement_variant_id) || asString(oi?.variant_id);
-            const qty = asNumber(ri.quantity) || 1;
-            const unitPrice = asNumber(oi?.unit_price) || 0;
-            subtotal += unitPrice * qty;
-            exchangeLines.push({
-              targetVariantId,
-              productName: asString(oi?.product_name) || "Sản phẩm đổi",
-              productImage: asString(oi?.product_image) || "",
-              quantity: qty,
-              unitPrice
-            });
-          }
-        }
-
-        if (subtotal <= 0) {
-          subtotal = asNumber(ret.refundable_amount) || asNumber(original.total_amount) || 100000;
-        }
-
-        const code = "EXC" + Math.random().toString(36).substring(2, 8).toUpperCase() + Date.now().toString().slice(-4);
-        const newOrder = asJsonObject(await insertRow("orders", {
-          user_id: original.user_id || null,
-          order_code: code,
-          status: "confirmed",
-          shipping_name: original.shipping_name,
-          shipping_phone: original.shipping_phone,
-          shipping_email: original.shipping_email || null,
-          shipping_address: original.shipping_address,
-          subtotal,
-          discount_amount: subtotal,
-          total_amount: 0,
-          shipping_fee: 0,
-          payment_method: "COD",
-          is_guest: Boolean(original.is_guest),
-          stock_committed_at: new Date().toISOString(),
-          internal_note: `Replacement funded by original returned merchandise: ${returnId}`,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        }));
-
-        const newOrderId = asString(newOrder.order_id);
-
-        for (const line of exchangeLines) {
-          if (line.targetVariantId) {
-            await insertRow("order_item", {
-              order_id: newOrderId,
-              variant_id: line.targetVariantId,
-              product_name: line.productName,
-              product_image: line.productImage || null,
-              quantity: line.quantity,
-              unit_price: line.unitPrice,
-              subtotal_item: line.quantity * line.unitPrice
-            }).catch(() => null);
-
-            const variant = await selectOne("variant", {
-              select: "variant_id,stock_quantity,version",
-              variant_id: `eq.${line.targetVariantId}`
-            }).catch(() => null);
-            if (variant) {
-              const currentStock = asNumber(variant.stock_quantity);
-              await updateRows("variant", {
-                variant_id: `eq.${line.targetVariantId}`
-              }, {
-                stock_quantity: Math.max(0, currentStock - line.quantity),
-                version: asNumber(variant.version) + 1,
-                updated_at: new Date().toISOString()
-              }).catch(() => null);
-            }
-          }
-        }
-
-        const updatedRows = await updateRows("return_exchange", {
-          return_id: `eq.${returnId}`,
-          version: `eq.${expectedVersion}`
-        }, {
-          status: "EXCHANGE_PREPARING",
-          exchange_order_id: newOrderId,
-          version: expectedVersion + 1,
-          updated_at: new Date().toISOString()
-        });
-
-        if (!updatedRows.length) {
-          throw new HttpError(409, "VERSION_CONFLICT", "Return record has been modified by another user");
-        }
-
-        const updatedReturn = asJsonObject(updatedRows[0]);
-
-        await writeAuditLog({
-          actor_id: actorId,
-          actor_role: "admin_operator_cskh_dt",
-          action: "update",
-          module: "returns",
-          target_id: returnId,
-          new_value: updatedReturn,
-          ip_address: ipAddress || "127.0.0.1",
-          timestamp: new Date().toISOString()
-        }).catch(() => null);
-
-        return updatedReturn;
+      } catch (error: unknown) {
+        // The RPC owns stock reservation, replacement-order creation and the status transition in
+        // one transaction. A fallback would repeat those rules outside a transaction and could
+        // create an exchange after the RPC rejected it (insufficient stock, stale version).
+        throw mapReturnDatabaseError(error);
       }
+    },
+
+    /** Creates or replaces the inbound return label without moving the return to transit yet. */
+    async createReturnShipment(returnId: string, expectedVersion: number, input: ReturnShipmentInput, actorId: string) {
+      try {
+        return asJsonObject(await callRpc("velura_create_return_shipment", {
+          p_return_id: returnId,
+          p_expected_version: expectedVersion,
+          p_carrier: input.carrier,
+          p_tracking_code: input.trackingCode,
+          p_tracking_url: input.trackingUrl || null,
+          p_label_url: input.labelUrl || null,
+          p_actor_id: actorId
+        }));
+      } catch (error: unknown) {
+        throw mapReturnDatabaseError(error);
+      }
+    },
+
+    /** Receives the parcel, restocks eligible lines and records dispositions in one transaction. */
+    async receiveReturn(returnId: string, expectedVersion: number, input: ReturnReceiptInput, actorId: string) {
+      try {
+        return asJsonObject(await callRpc("velura_receive_return", {
+          p_return_id: returnId,
+          p_expected_version: expectedVersion,
+          p_receipts: input.receipts,
+          p_package_match: input.packageMatch,
+          p_seal_intact: input.sealIntact,
+          p_warehouse_proof: input.warehouseProof,
+          p_qa_note: input.qaNote || null,
+          p_actor_id: actorId
+        }));
+      } catch (error: unknown) {
+        throw mapReturnDatabaseError(error);
+      }
+    },
+
+    /** Confirms the carrier took the sealed parcel; the return enters RETURN_IN_TRANSIT. */
+    async confirmReturnPickup(returnId: string, expectedVersion: number, input: ReturnPickupInput, actorId: string) {
+      try {
+        return asJsonObject(await callRpc("velura_confirm_return_pickup", {
+          p_return_id: returnId,
+          p_expected_version: expectedVersion,
+          p_photo_urls: input.photoUrls,
+          p_video_url: input.videoUrl || null,
+          p_note: input.note || null,
+          p_actor_id: actorId
+        }));
+      } catch (error: unknown) {
+        throw mapReturnDatabaseError(error);
+      }
+    },
+
+    /** Records a carrier tracking update without changing the warehouse receipt state. */
+    async updateReturnShipmentStatus(returnId: string, status: string, note: string | undefined, actorId: string) {
+      try {
+        return asJsonObject(await callRpc("velura_update_return_shipment_status", {
+          p_return_id: returnId,
+          p_status: status,
+          p_note: note || null,
+          p_actor_id: actorId
+        }));
+      } catch (error: unknown) {
+        throw mapReturnDatabaseError(error);
+      }
+    },
+
+    /** Ships the linked replacement order and moves the return to EXCHANGE_SHIPPING atomically. */
+    async shipExchange(returnId: string, expectedVersion: number, input: ReturnShipmentInput, actorId: string) {
+      try {
+        return asJsonObject(await callRpc("velura_ship_exchange", {
+          p_return_id: returnId,
+          p_expected_version: expectedVersion,
+          p_carrier: input.carrier,
+          p_tracking_code: input.trackingCode,
+          p_tracking_url: input.trackingUrl || null,
+          p_label_url: input.labelUrl || null,
+          p_actor_id: actorId
+        }));
+      } catch (error: unknown) {
+        throw mapReturnDatabaseError(error);
+      }
+    },
+
+    /** Closes an exchange and marks its linked replacement order delivered in one transaction. */
+    async completeExchange(returnId: string, expectedVersion: number, actorId: string) {
+      try {
+        return asJsonObject(await callRpc("velura_complete_exchange", {
+          p_return_id: returnId,
+          p_expected_version: expectedVersion,
+          p_actor_id: actorId
+        }));
+      } catch (error: unknown) {
+        throw mapReturnDatabaseError(error);
+      }
+    },
+
+    /** Inbound/outbound shipments attached to one return. */
+    async listReturnShipments(returnId: string): Promise<JsonObject[]> {
+      const { rows } = await selectRows("return_shipment", {
+        return_id: `eq.${returnId}`,
+        order: "direction.asc",
+        limit: 10
+      });
+      return rows;
+    },
+
+    /** Full return timeline, including shipment/pickup/custody events. */
+    async listReturnEvents(returnId: string): Promise<JsonObject[]> {
+      const { rows } = await selectRows("return_event", {
+        return_id: `eq.${returnId}`,
+        order: "created_at.asc",
+        limit: 200
+      });
+      return rows;
+    },
+
+    /** Linked replacement order facts shown next to the return. */
+    async getExchangeOrder(orderId: string): Promise<JsonObject | null> {
+      return selectOne("orders", {
+        select: "order_id,order_code,status,payment_method,total_amount,carrier,tracking_code,tracking_url,parent_order_id,source_return_id,order_kind,created_at",
+        order_id: `eq.${orderId}`
+      }).catch(() => null);
     },
     async listReturns(filters: ReturnListFilters, accessToken: string) {
       const query: Record<string, unknown> = {
@@ -438,13 +430,13 @@ export function createReturnRepository() {
 
     async listReturnLines(returnId: string, accessToken: string) {
       let res = await selectRows("return_item", {
-        select: "return_item_id,order_item_id,quantity",
+        select: "return_item_id,order_item_id,quantity,disposition,disposition_note,restocked_at,stock_restored_quantity",
         return_id: `eq.${returnId}`,
         limit: 50
       }, authOptions(accessToken)).catch(() => null);
       if (!res) {
         res = await selectRows("return_item", {
-          select: "return_item_id,order_item_id,quantity",
+          select: "return_item_id,order_item_id,quantity,disposition,disposition_note,restocked_at,stock_restored_quantity",
           return_id: `eq.${returnId}`,
           limit: 50
         });
@@ -581,126 +573,6 @@ export function createReturnRepository() {
       return asNumber(await callRpc("velura_return_refundable_amount", {p_return_id:returnId}));
     },
 
-    async approveRefund(returnId: string, input: ApproveRefundInput, actorId: string, actorRole: string, ipAddress: string | undefined) {
-      const current = await selectOne("return_exchange", {
-        select: RETURN_SELECT,
-        return_id: `eq.${returnId}`
-      });
-      if (!current) {
-        throw new HttpError(404, "RETURN_NOT_FOUND", "Return record not found");
-      }
-      if (current.version !== input.expectedVersion) {
-        throw new HttpError(409, "VERSION_CONFLICT", "Return record has been modified by another user");
-      }
-      if (!["REQUESTED", "CONTACTING", "pending"].includes(asString(current.status))) {
-        throw new HttpError(422, "RETURN_NOT_PENDING", "Yêu cầu đổi/trả không ở trạng thái chờ duyệt");
-      }
-      if (!input.refundAmount || input.refundAmount <= 0) {
-        throw new HttpError(422, "REFUND_AMOUNT_REQUIRED", "Refund amount must be positive");
-      }
-
-      const note = typeof input.adminNote === "string" ? input.adminNote.trim() : "";
-      const currentNote = asString(current.admin_note);
-      const contacted = /\[CSKH(?:\s|\])/.test(currentNote);
-      if (!contacted && note.length < 10) {
-        throw new HttpError(422, "CONTACT_OR_REASON_REQUIRED", "Chưa ghi nhận liên hệ CSKH. Duyệt khi chưa liên hệ phải có lý do ít nhất 10 ký tự.");
-      }
-      const combinedRefundNote = note ? (currentNote ? `${currentNote}\n[Duyệt hoàn] ${note}` : note) : currentNote;
-      const payload: JsonObject = {
-        status: "WAITING_RETURN",
-        refund_amount: input.refundAmount,
-        admin_note: combinedRefundNote,
-        resolved_at: new Date().toISOString(),
-        version: asNumber(current.version) + 1,
-        updated_at: new Date().toISOString()
-      };
-
-      const rows = await updateRows("return_exchange", {
-        return_id: `eq.${returnId}`,
-        version: `eq.${input.expectedVersion}`
-      }, payload);
-
-      if (!rows.length) {
-        throw new HttpError(409, "VERSION_CONFLICT", "Return record has been modified by another user or does not exist");
-      }
-
-      const updated = asJsonObject(rows[0]);
-      if (current.user_id) {
-        const order = await selectOne("orders", { order_id: `eq.${current.order_id}`, select: "order_id,order_code" }).catch(() => null);
-        await createNotification(
-          asString(current.user_id),
-          "return_approved",
-          "Yêu cầu hoàn tiền đã được duyệt",
-          `Yêu cầu hoàn tiền cho đơn #${asString(order?.order_code || current.order_id || returnId)} đã được duyệt.`,
-          `/account/orders/${asString(current.order_id)}`
-        );
-      }
-      await writeAuditLog({
-        actor_id: actorId,
-        actor_role: actorRole,
-        action: "approve",
-        module: "returns",
-        target_id: returnId,
-        old_value: { status: current.status, version: current.version },
-        new_value: { status: updated.status, version: updated.version, refund_amount: updated.refund_amount },
-        ip_address: ipAddress || "127.0.0.1",
-        timestamp: new Date().toISOString()
-      });
-
-      return updated;
-    },
-
-    async approveExchange(returnId: string, input: ApproveExchangeInput, actorId: string, actorRole: string, ipAddress: string | undefined) {
-      const current = await selectOne("return_exchange", {
-        select: RETURN_SELECT,
-        return_id: `eq.${returnId}`
-      });
-      if (!current) {
-        throw new HttpError(404, "RETURN_NOT_FOUND", "Return record not found");
-      }
-      if (current.version !== input.expectedVersion) {
-        throw new HttpError(409, "VERSION_CONFLICT", "Return record has been modified by another user");
-      }
-      if (!["REQUESTED", "CONTACTING", "pending"].includes(asString(current.status))) {
-        throw new HttpError(422, "RETURN_NOT_PENDING", "Yêu cầu đổi/trả không ở trạng thái chờ duyệt");
-      }
-
-      const note = typeof input.adminNote === "string" ? input.adminNote.trim() : "";
-      const currentNote = asString(current.admin_note);
-      const combinedExchangeNote = note ? (currentNote ? `${currentNote}\n[Duyệt đổi] ${note}` : note) : currentNote;
-      const payload: JsonObject = {
-        status: "WAITING_RETURN",
-        admin_note: combinedExchangeNote,
-        resolved_at: new Date().toISOString(),
-        version: asNumber(current.version) + 1,
-        updated_at: new Date().toISOString()
-      };
-
-      const rows = await updateRows("return_exchange", {
-        return_id: `eq.${returnId}`,
-        version: `eq.${input.expectedVersion}`
-      }, payload);
-
-      if (!rows.length) {
-        throw new HttpError(409, "VERSION_CONFLICT", "Return record has been modified by another user or does not exist");
-      }
-
-      const updated = asJsonObject(rows[0]);
-      await writeAuditLog({
-        actor_id: actorId,
-        actor_role: actorRole,
-        action: "approve",
-        module: "returns",
-        target_id: returnId,
-        old_value: { status: current.status, version: current.version },
-        new_value: { status: updated.status, version: updated.version },
-        ip_address: ipAddress || "127.0.0.1",
-        timestamp: new Date().toISOString()
-      });
-
-      return updated;
-    },
-
     async reject(returnId: string, input: RejectReturnInput, actorId: string, actorRole: string, ipAddress: string | undefined) {
       const current = await selectOne("return_exchange", {
         select: RETURN_SELECT,
@@ -792,6 +664,9 @@ export function createReturnRepository() {
         }
       }
       if (input.conditionCheckResult !== undefined) payload.condition_check_result = input.conditionCheckResult;
+      if (input.packageMatch !== undefined) payload.package_match = input.packageMatch;
+      if (input.sealIntact !== undefined) payload.seal_intact = input.sealIntact;
+      if (input.qaNote !== undefined) payload.qa_note = input.qaNote;
       if (input.imageProof !== undefined && input.imageProof !== null) {
         const existing = Array.isArray(current.evidence_images) ? current.evidence_images.map(String) : [];
         payload.evidence_images = [...existing, String(input.imageProof)];

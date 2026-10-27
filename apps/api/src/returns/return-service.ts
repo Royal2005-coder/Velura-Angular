@@ -1,6 +1,6 @@
 import { enrichAuditLogs, RETURN_AUDIT } from "../audit-enrichment.js";
 import { HttpError } from "../http.js";
-import type { AuthContext, AuthUser, JsonObject, RequestMeta } from "../types.js";
+import type { AuthContext, AuthUser, HttpRequest, JsonObject, RequestMeta } from "../types.js";
 import { asJsonObject, asNumber, asString, errorMessage } from "../types.js";
 import {
   RETURN_OPERATOR_ROLES,
@@ -22,6 +22,7 @@ import {
   refundFlowFor,
   refundReceiverStatus
 } from "./return-refund-receiver.js";
+import { listReturnEvidence, resolveEvidenceRef, storeReturnEvidence, type ReturnEvidenceKind } from "./return-evidence.js";
 import type { ReturnRepository } from "./return-repository.js";
 
 /**
@@ -43,15 +44,23 @@ export interface ReturnService {
   listReturns(context: ReturnContext | undefined, searchParams: URLSearchParams): Promise<{ rows: JsonObject[]; count: number | undefined }>;
   getReturn(context: ReturnContext | undefined, returnId: string): Promise<JsonObject>;
   recordContact(context: ReturnContext | undefined, returnId: string, body: JsonObject): Promise<unknown>;
-  approveRefund(context: ReturnContext | undefined, returnId: string, body: JsonObject): Promise<JsonObject>;
   /** Records non-Stripe refund only with transfer proof after warehouse QA. */
   recordManualRefund(context: ReturnContext | undefined, returnId:string, body:JsonObject):Promise<JsonObject>;
   /** CSKH asks the customer to supplement the COD receiving account; the refund stays blocked and the stage unchanged. */
   requestRefundInfo(context: ReturnContext | undefined, returnId: string, body: JsonObject): Promise<JsonObject>;
   triggerStripeRefund(context: ReturnContext | undefined, returnId: string, body?: JsonObject): Promise<JsonObject>;
-  approveExchange(context: ReturnContext | undefined, returnId: string, body: JsonObject): Promise<JsonObject>;
   reject(context: ReturnContext | undefined, returnId: string, body: JsonObject): Promise<JsonObject>;
   updateReturnStatus(context: ReturnContext | undefined, returnId: string, body: JsonObject): Promise<JsonObject>;
+  /** Creates the inbound carrier label the customer will attach to the parcel. */
+  createReturnShipment(context: ReturnContext | undefined, returnId: string, body: JsonObject): Promise<JsonObject>;
+  /** Records carrier pickup photos/video and moves the return to RETURN_IN_TRANSIT. */
+  confirmReturnPickup(context: ReturnContext | undefined, returnId: string, body: JsonObject): Promise<JsonObject>;
+  /** Records an inbound carrier status update without receiving goods. */
+  updateReturnShipmentStatus(context: ReturnContext | undefined, returnId: string, body: JsonObject): Promise<JsonObject>;
+  /** Ships the linked replacement order and moves the return to EXCHANGE_SHIPPING. */
+  shipExchange(context: ReturnContext | undefined, returnId: string, body: JsonObject): Promise<JsonObject>;
+  /** Stores one admin evidence file (pickup/QA/refund proof) in the private bucket. */
+  addReturnEvidence(context: ReturnContext | undefined, returnId: string, kind: string, note: string, req: HttpRequest): Promise<JsonObject>;
   listTickets(context: ReturnContext | undefined, searchParams: URLSearchParams): Promise<{ rows: JsonObject[]; count: number | undefined }>;
   getTicket(context: ReturnContext | undefined, ticketId: string): Promise<JsonObject>;
   assignTicket(context: ReturnContext | undefined, ticketId: string, body: JsonObject): Promise<unknown>;
@@ -144,17 +153,37 @@ export function createReturnService({
       const ret = await repository.getReturn(returnId, context.accessToken);
       if (!ret) throw new HttpError(404, "RETURN_NOT_FOUND", "Return not found");
       // Kèm giá trị hoàn được để form duyệt hoàn tiền điền sẵn đúng số, không bắt gõ tay.
-      const refundableAmount = await repository.getRefundableAmount(returnId, context.accessToken);
-      const payment = ret.order_id && repository.getPaymentByOrderId
-        ? await repository.getPaymentByOrderId(asString(ret.order_id), context.accessToken)
-        : null;
-      const lines = await repository.listReturnLines(returnId, context.accessToken);
+      // Các phép đọc độc lập chạy song song; mỗi phép là một PostgREST round-trip.
+      const [refundableAmount, payment, lines, shipments, events, evidence] = await Promise.all([
+        repository.getRefundableAmount(returnId, context.accessToken),
+        ret.order_id && repository.getPaymentByOrderId
+          ? repository.getPaymentByOrderId(asString(ret.order_id), context.accessToken)
+          : Promise.resolve(null),
+        repository.listReturnLines(returnId, context.accessToken),
+        repository.listReturnShipments ? repository.listReturnShipments(returnId).catch(() => []) : Promise.resolve([]),
+        repository.listReturnEvents ? repository.listReturnEvents(returnId).catch(() => []) : Promise.resolve([]),
+        listReturnEvidence(returnId).catch(() => [])
+      ]);
       // COD vs Stripe decides the whole refund screen: receiving account + manual transfer, or the automatic gateway refund.
       const kind = classifyReturnPayment(ret.payment_method ?? payment?.payment_method, payment?.payment_provider);
       const flow = refundFlowFor(ret.return_type, kind);
       const receiverRequired = flow === "cod_manual";
-      const receiver = receiverRequired ? await repository.getRefundReceiver(returnId) : null;
-      const manualRefund = flow === "cod_manual" || flow === "manual_transfer" ? await repository.getManualRefund(returnId) : null;
+      const [receiver, manualRefund, exchangeOrder] = await Promise.all([
+        receiverRequired ? repository.getRefundReceiver(returnId) : Promise.resolve(null),
+        flow === "cod_manual" || flow === "manual_transfer" ? repository.getManualRefund(returnId) : Promise.resolve(null),
+        ret.exchange_order_id && repository.getExchangeOrder
+          ? repository.getExchangeOrder(asString(ret.exchange_order_id))
+          : Promise.resolve(null)
+      ]);
+      const resolvedShipments: JsonObject[] = await Promise.all(shipments.map(async (row): Promise<JsonObject> => ({
+        ...row,
+        pickup_photo_urls: (await Promise.all(
+          (Array.isArray(row.pickup_photo_urls) ? row.pickup_photo_urls : []).map((ref) => resolveEvidenceRef(ref))
+        )).filter(Boolean),
+        package_video_url: row.package_video_url ? await resolveEvidenceRef(row.package_video_url) : null
+      })));
+      const inbound = resolvedShipments.find((row) => row.direction === "inbound") || null;
+      const outbound = resolvedShipments.find((row) => row.direction === "outbound") || null;
       return {
         ...ret,
         refundable_amount: refundableAmount,
@@ -164,7 +193,13 @@ export function createReturnService({
         refund_flow: flow,
         refund_receiver_status: refundReceiverStatus(receiverRequired, receiver),
         refund_receiver: adminRefundReceiver(receiverRequired, receiver),
-        manual_refund: manualRefund
+        manual_refund: manualRefund,
+        shipments: resolvedShipments,
+        shipment: inbound,
+        exchange_shipment: outbound,
+        events,
+        evidence,
+        exchange_order: exchangeOrder
       };
     },
 
@@ -191,39 +226,6 @@ export function createReturnService({
         note,
         expectedVersion
       }, context.profile?.user_id || context.authUser.id, context.roleCode, context.ipAddress);
-    },
-
-    async approveRefund(context, returnId, body) {
-      requireReturnAdmin(context);
-      const expectedVersion = asNumber(body.expectedVersion);
-      if (!expectedVersion) throw new HttpError(422, "VALIDATION_ERROR", "expectedVersion required");
-
-      // Giá trị hoàn lấy từ chính các món khách gửi trả. CSKH không phải gõ tay, và
-      // nếu có gõ thì cũng không vượt quá giá trị hàng đã bán (UAT ADM-RET-01).
-      const refundable = await repository.getRefundableAmount(returnId, context.accessToken);
-      const requested = body.refundAmount === undefined || body.refundAmount === null || body.refundAmount === ""
-        ? refundable
-        : asNumber(body.refundAmount);
-
-      if (requested <= 0) {
-        throw new HttpError(422, "VALIDATION_ERROR", "Refund amount must be positive");
-      }
-      if (refundable > 0 && requested > refundable) {
-        throw new HttpError(422, "REFUND_EXCEEDS_ITEM_VALUE", `Số tiền hoàn vượt quá giá trị hàng trả (tối đa ${refundable})`, {
-          refundAmount: [`Tối đa ${refundable}`]
-        });
-      }
-
-      const updated = await repository.approveRefund(
-        returnId,
-        { refundAmount: requested, adminNote: body.adminNote, expectedVersion },
-        context.profile?.user_id || context.authUser.id,
-        context.roleCode,
-        context.ipAddress
-      );
-
-      // Kích hoạt hoàn tiền Stripe nếu đơn hàng thanh toán qua Stripe
-      return {...updated,refund:null};
     },
 
     async triggerStripeRefund(context, returnId, body = {}) {
@@ -314,19 +316,6 @@ export function createReturnService({
       const saved = await repository.requestRefundReceiverSupplement(returnId, expectedVersion, message, context.profile?.user_id || context.authUser.id);
       return { return_id: returnId, refund_receiver: adminRefundReceiver(true, { ...(await repository.getRefundReceiver(returnId)), supplement_request: saved.supplement_request, supplement_requested_at: saved.supplement_requested_at }) };
     },
-    async approveExchange(context, returnId, body) {
-      requireReturnAdmin(context);
-      const expectedVersion = asNumber(body.expectedVersion);
-      if (!expectedVersion) throw new HttpError(422, "VALIDATION_ERROR", "expectedVersion required");
-      return repository.approveExchange(
-        returnId,
-        { adminNote: body.adminNote, expectedVersion },
-        context.profile?.user_id || context.authUser.id,
-        context.roleCode,
-        context.ipAddress
-      );
-    },
-
     async reject(context, returnId, body) {
       requireReturnAdmin(context);
       const reason = asString(body.reason);
@@ -373,24 +362,36 @@ export function createReturnService({
       if (status === "RECEIVED") {
         const qa = asString(body.conditionCheckResult);
         const proof = asString(body.imageProof);
-        const confirmedItemId = asString(body.confirmedItemId);
-        const receivedQuantity = asNumber(body.receivedQuantity);
         if (qa !== RETURN_QA_PASS) {
           throw new HttpError(422, "QA_REQUIRED", "Nhận hàng hoàn trả thành công chỉ khi xác nhận đúng hàng của shop.");
+        }
+        if (body.packageMatch !== true || body.sealIntact !== true) {
+          throw new HttpError(422, "PACKAGE_CHAIN_REQUIRED", "Phải xác nhận niêm phong nguyên vẹn và kiện hàng khớp với bằng chứng khách/ĐVVC gửi.");
         }
         if (!proof.startsWith("data:image/") && !proof.startsWith("http://") && !proof.startsWith("https://")) {
           throw new HttpError(422, "PROOF_REQUIRED", "Phải tải ảnh minh chứng đã kiểm hàng.");
         }
         const lines = await repository.listReturnLines(returnId, context.accessToken);
-        const receipts = Array.isArray(body.items) ? body.items.map(asJsonObject) : lines.rows.length === 1 ? [{orderItemId:confirmedItemId,receivedQuantity,matchesProduct:true}] : [];
+        // Every returned line must arrive with its own disposition. A single-line shortcut would
+        // reach the loop without `disposition` and always fail, so the request must carry `items`.
+        const receipts = Array.isArray(body.items) ? body.items.map(asJsonObject) : [];
         if (!lines.rows.length || receipts.length !== lines.rows.length || new Set(receipts.map(row => asString(row.orderItemId))).size !== lines.rows.length) throw new HttpError(422,"ITEM_ID_MISMATCH","Confirm every returned line exactly once");
-        body.items = receipts;
         for (const line of lines.rows) {
           const receipt = receipts.find(row => row.orderItemId === line.order_item_id);
           if (!receipt || receipt.matchesProduct !== true) throw new HttpError(422,"ITEM_ID_MISMATCH","Returned product does not match");
           const qty = Number(receipt.receivedQuantity);
           if (!Number.isInteger(qty) || qty < 1 || qty !== Number(line.quantity)) throw new HttpError(422,"QTY_MISMATCH","Received quantity does not match the registered line");
+          if (!["restock","repair","scrap","return_supplier"].includes(asString(receipt.disposition))) {
+            throw new HttpError(422, "RETURN_DISPOSITION_REQUIRED", "Mỗi dòng hàng phải chọn hướng xử lý (nhập lại kho, sửa chữa, hủy hoặc trả NCC).");
+          }
         }
+        return repository.receiveReturn(returnId, expectedVersion, {
+          receipts,
+          packageMatch: true,
+          sealIntact: true,
+          warehouseProof: proof,
+          qaNote: asString(body.qaNote) || undefined
+        }, context.profile?.user_id || context.authUser.id);
       }
       if (["REFUND_PROCESSING","REFUNDED"].includes(status)) throw new HttpError(422,"GATEWAY_STATE_REQUIRED","Refund states are advanced by payment gateway evidence");
       let refundAmount = body.refundAmount ? asNumber(body.refundAmount) : undefined;
@@ -398,7 +399,17 @@ export function createReturnService({
       if (["RETURN_IN_TRANSIT","EXCHANGE_SHIPPING"].includes(status) && !asString(body.trackingReturnCode)) throw new HttpError(422,"TRACKING_REQUIRED","Shipment tracking is required");
       if (status === "EXCHANGE_PREPARING") {
         if (currentReturn.return_type !== "exchange" || currentReturn.condition_check_result !== RETURN_QA_PASS) throw new HttpError(422,"WAREHOUSE_QA_REQUIRED","Exchange requires warehouse QA");
-        return repository.prepareExchange(returnId,expectedVersion,context.profile?.user_id || context.authUser.id, context.ipAddress);
+        return repository.prepareExchange(returnId,expectedVersion,context.profile?.user_id || context.authUser.id);
+      }
+      if (status === "COMPLETED" && currentReturn.return_type === "exchange") {
+        if (from !== "EXCHANGE_SHIPPING") throw new HttpError(422, "INVALID_TRANSITION", "Chỉ hoàn tất đổi hàng sau khi hàng đổi đã giao.");
+        const completed = await repository.completeExchange(
+          returnId,
+          expectedVersion,
+          context.profile?.user_id || context.authUser.id
+        );
+        void sendExchangeCompletedEmail(returnId);
+        return completed;
       }
 
       const adminNote = body.adminNote;
@@ -414,6 +425,9 @@ export function createReturnService({
         refundAmount,
         trackingReturnCode,
         conditionCheckResult,
+        packageMatch: status === "RECEIVED" ? body.packageMatch === true : undefined,
+        sealIntact: status === "RECEIVED" ? body.sealIntact === true : undefined,
+        qaNote: status === "RECEIVED" ? body.qaNote : undefined,
         imageProof,
         receipts: status === "RECEIVED" ? body.items : undefined,
         expectedVersion
@@ -432,6 +446,84 @@ export function createReturnService({
       }
 
       return updated;
+    },
+
+    async createReturnShipment(context, returnId, body) {
+      requireReturnAdmin(context);
+      const expectedVersion = asNumber(body.expectedVersion);
+      if (!expectedVersion) throw new HttpError(422, "VALIDATION_ERROR", "expectedVersion required");
+      const carrier = asString(body.carrier).trim();
+      const trackingCode = asString(body.trackingCode).trim();
+      if (carrier.length < 2) throw new HttpError(422, "CARRIER_REQUIRED", "Chọn đơn vị vận chuyển cho chiều hoàn.");
+      if (trackingCode.length < 6) throw new HttpError(422, "TRACKING_REQUIRED", "Mã vận đơn hoàn phải có ít nhất 6 ký tự.");
+      return repository.createReturnShipment(returnId, expectedVersion, {
+        carrier,
+        trackingCode,
+        trackingUrl: asString(body.trackingUrl).trim() || undefined,
+        labelUrl: asString(body.labelUrl).trim() || undefined
+      }, context.profile?.user_id || context.authUser.id);
+    },
+
+    async confirmReturnPickup(context, returnId, body) {
+      requireReturnAdmin(context);
+      const expectedVersion = asNumber(body.expectedVersion);
+      if (!expectedVersion) throw new HttpError(422, "VALIDATION_ERROR", "expectedVersion required");
+      const photoUrls = (Array.isArray(body.photoUrls) ? body.photoUrls : [])
+        .map((value) => asString(value).trim())
+        .filter((value) => value.startsWith("https://") || value.startsWith("http://") || value.startsWith("storage://"));
+      if (!photoUrls.length) throw new HttpError(422, "PICKUP_PHOTO_REQUIRED", "Cần ít nhất một ảnh ĐVVC lấy hàng/niêm phong.");
+      const videoUrl = asString(body.videoUrl).trim();
+      return repository.confirmReturnPickup(returnId, expectedVersion, {
+        photoUrls,
+        videoUrl: videoUrl || undefined,
+        note: asString(body.note).trim() || undefined
+      }, context.profile?.user_id || context.authUser.id);
+    },
+
+    async updateReturnShipmentStatus(context, returnId, body) {
+      requireReturnAdmin(context);
+      const status = asString(body.status).trim();
+      if (!["in_transit", "delivered", "failed"].includes(status)) {
+        throw new HttpError(422, "VALIDATION_ERROR", "Trạng thái vận đơn không hợp lệ.");
+      }
+      return repository.updateReturnShipmentStatus(
+        returnId,
+        status,
+        asString(body.note).trim() || undefined,
+        context.profile?.user_id || context.authUser.id
+      );
+    },
+
+    async shipExchange(context, returnId, body) {
+      requireReturnAdmin(context);
+      const expectedVersion = asNumber(body.expectedVersion);
+      if (!expectedVersion) throw new HttpError(422, "VALIDATION_ERROR", "expectedVersion required");
+      const carrier = asString(body.carrier).trim();
+      const trackingCode = asString(body.trackingCode).trim();
+      if (carrier.length < 2) throw new HttpError(422, "CARRIER_REQUIRED", "Chọn đơn vị vận chuyển cho hàng đổi.");
+      if (trackingCode.length < 6) throw new HttpError(422, "TRACKING_REQUIRED", "Mã vận đơn hàng đổi phải có ít nhất 6 ký tự.");
+      const result = await repository.shipExchange(returnId, expectedVersion, {
+        carrier,
+        trackingCode,
+        trackingUrl: asString(body.trackingUrl).trim() || undefined,
+        labelUrl: asString(body.labelUrl).trim() || undefined
+      }, context.profile?.user_id || context.authUser.id);
+      void sendExchangeShippingEmail(returnId, trackingCode);
+      return result;
+    },
+
+    async addReturnEvidence(context, returnId, kind, note, req) {
+      requireReturnAdmin(context);
+      const current = await repository.getReturn(returnId, context.accessToken);
+      if (!current) throw new HttpError(404, "RETURN_NOT_FOUND", "Không tìm thấy phiếu đổi trả.");
+      return storeReturnEvidence({
+        returnId,
+        kind: kind as ReturnEvidenceKind,
+        role: "admin",
+        actorId: context.profile?.user_id || context.authUser.id,
+        note: note || null,
+        req
+      });
     },
 
     async listTickets(context, searchParams) {

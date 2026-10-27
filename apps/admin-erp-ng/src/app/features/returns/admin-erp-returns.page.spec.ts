@@ -48,7 +48,6 @@ describe('AdminErpReturnsPage', () => {
     const calls = {
       returns: [] as Record<string, string>[],
       tickets: [] as Record<string, string>[],
-      approve: [] as Record<string, unknown>[],
       status: [] as Record<string, unknown>[],
       respond: [] as Record<string, unknown>[],
       close: [] as Record<string, unknown>[],
@@ -79,10 +78,6 @@ describe('AdminErpReturnsPage', () => {
         return of({ rows: tickets, count: 3 });
       },
       getTicket: (id: string) => of(tickets.find((row) => row.ticket_id === id) || tickets[0]),
-      approveRefund: (_id: string, body: Record<string, unknown>) => {
-        calls.approve.push(body);
-        return of({ ...detail, ...body });
-      },
       updateReturnStatus: (_id: string, body: Record<string, unknown>) => {
         calls.status.push(body);
         return of(detail);
@@ -186,20 +181,41 @@ describe('AdminErpReturnsPage', () => {
 
     expect(page.selected()?.refundable_amount).toBe(500_000);
     expect(page.nextSteps().map((step) => step.value)).toEqual(['CONTACTING', 'CANCELLED']);
-    expect(page.gates.refund(page.selected())).toBe(false);
+    expect(page.gates.stripe(page.selected())).toBe(false);
+    expect(page.gates.manual(page.selected())).toBe(false);
     expect(page.gates.receipt(page.selected())).toBe(false);
     expect(page.nextStep()?.flow).toBe('contact');
   });
 
-  it('opens the refund only after the warehouse accepted the goods and QA passed', () => {
+  it('only routes money after the warehouse accepted the goods and QA passed', () => {
     const { page } = boot();
     page.selected.set({ ...detail, status: 'RETURN_IN_TRANSIT' });
-    expect(page.gates.refund(page.selected())).toBe(false);
+    expect(page.gates.stripe(page.selected())).toBe(false);
     expect(page.nextStep()?.flow).toBe('receipt');
 
-    page.selected.set({ ...detail, status: 'RECEIVED', condition_check_result: 'qa_pass' });
-    expect(page.gates.refund(page.selected())).toBe(true);
-    expect(page.nextStep()?.flow).toBe('refund');
+    page.selected.set({
+      ...detail,
+      status: 'RECEIVED',
+      condition_check_result: 'qa_pass',
+      refund_receiver_status: 'valid',
+      payment: { payment_status: 'paid' },
+    });
+    expect(page.gates.manual(page.selected())).toBe(true);
+    expect(page.nextStep()?.flow).toBe('gateway');
+  });
+
+  it('routes a QA-passed exchange into EXCHANGE_PREPARING with the target already selected', () => {
+    const { page } = boot();
+    page.selected.set({ ...detail, status: 'RECEIVED', condition_check_result: 'qa_pass', return_type: 'exchange' });
+
+    expect(page.nextStep()?.flow).toBe('exchange');
+    page.runNextStep();
+    expect(page.flow()).toBe('exchange');
+
+    page.closeFlow();
+    page.selected.set({ ...detail, status: 'EXCHANGE_PREPARING', condition_check_result: 'qa_pass', return_type: 'exchange' });
+    page.moveStep('EXCHANGE_SHIPPING');
+    expect(page.flow()).toBe('exchange-shipment');
   });
 
   it('opens a write flow instead of writing bare when the step needs evidence', () => {
@@ -214,15 +230,6 @@ describe('AdminErpReturnsPage', () => {
     expect(calls.status.length).toBe(1);
     expect(calls.status[0]['status']).toBe('CONTACTING');
     expect(page.flow()).toBeNull();
-  });
-
-  it('shows the approval reason rule that the API enforces', () => {
-    const { page } = boot();
-    page.openReturn(rows[0]);
-    expect(page.flowNeedsReason()).toBe(true);
-
-    page.selected.set({ ...detail, admin_note: '[CSKH 2026-10-20] đã gọi khách' });
-    expect(page.flowNeedsReason()).toBe(false);
   });
 
   it('filters tickets server-side and keeps chat-linked tickets read-only', () => {
@@ -266,7 +273,7 @@ describe('AdminErpReturnsPage', () => {
 
     expect(page.canWrite()).toBe(false);
     page.openReturn(rows[0]);
-    page.openFlow('refund');
+    page.openFlow('manual');
     expect(page.flow()).toBeNull();
     page.openTicket(tickets[0]);
     expect(page.canReply(page.selectedTicket())).toBe(false);

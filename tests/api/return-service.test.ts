@@ -13,55 +13,14 @@ const hasStatus = (status: number) => (error: unknown): boolean => error instanc
 const RETURN_ID = "50000000-0000-4000-8000-000000000001";
 const TICKET_ID = "50000000-0000-4000-8000-000000000002";
 
-test("CSKH reads returns and approves a positive refund", async () => {
+test("CSKH reads the return queue with paging and the caller's token", async () => {
   let received;
   const service = createReturnService({ repository: {
-    listReturns: async (filters, token) => { received = { filters, token }; return { rows: [] }; },
-    getRefundableAmount: async () => 250000,
-    approveRefund: async (_id, input) => input
+    listReturns: async (filters, token) => { received = { filters, token }; return { rows: [] }; }
   } });
   await service.listReturns(context("admin_operator_cskh_dt"), new URLSearchParams("limit=15"));
   assert.equal(received.filters.limit, 15);
   assert.equal(received.token, "jwt-token");
-  const result = await service.approveRefund(context("admin_operator_cskh_dt"), RETURN_ID, { refundAmount: 100000, adminNote: "Da doi soat", expectedVersion: 3 });
-  assert.equal(result.refundAmount, 100000);
-});
-
-test("order operator is read-only and invalid refunds are rejected", async () => {
-  const service = createReturnService({ repository: { approveRefund: async () => ({}), getRefundableAmount: async () => 250000 } });
-  await assert.rejects(() => service.approveRefund(context("admin_operator_donhang"), RETURN_ID, { refundAmount: 1, expectedVersion: 1 }), (error) => error.status === 403);
-  await assert.rejects(() => service.approveRefund(context("admin_operator_cskh_dt"), RETURN_ID, { refundAmount: 0, expectedVersion: 1 }), (error) => error.status === 422);
-});
-
-test("refund defaults to the value of the returned items, not to a number typed by hand", async () => {
-  let received;
-  const service = createReturnService({
-    repository: {
-      getRefundableAmount: async () => 250000,
-      approveRefund: async (_id, input) => {
-        received = input;
-        return input;
-      }
-    }
-  });
-
-  // Không gửi refundAmount: API tự điền theo giá trị hàng trả (UAT ADM-RET-01).
-  await service.approveRefund(context("admin_operator_cskh_dt"), RETURN_ID, { expectedVersion: 1 });
-  assert.equal(received.refundAmount, 250000);
-});
-
-test("a refund larger than the returned goods is refused", async () => {
-  const service = createReturnService({
-    repository: { getRefundableAmount: async () => 250000, approveRefund: async () => ({}) }
-  });
-
-  await assert.rejects(
-    () => service.approveRefund(context("admin_operator_cskh_dt"), RETURN_ID, { refundAmount: 400000, expectedVersion: 1 }),
-    (error) => error.status === 422 && error.code === "REFUND_EXCEEDS_ITEM_VALUE"
-  );
-
-  // Hoàn một phần vẫn hợp lệ: hàng hỏng một phần thì CSKH giảm số tiền xuống.
-  await service.approveRefund(context("admin_operator_cskh_dt"), RETURN_ID, { refundAmount: 100000, expectedVersion: 1 });
 });
 
 test("a return cannot skip the physical steps between approval and completion", async () => {
@@ -242,27 +201,6 @@ test("linked chatbot tickets cannot bypass filtered replies, ownership or case l
     await assert.rejects(mutate, (error) => error.status === 409 && error.code === "CHAT_TICKET_GOVERNED");
   }
   assert.deepEqual(writes, []);
-});
-
-test("approving a refund records approval and never transfers money before warehouse QA", async () => {
-  let refundCall: { orderId: string; amount?: number } | null = null;
-  const service = createReturnService({
-    repository: {
-      getRefundableAmount: async () => 350000,
-      approveRefund: async (_id, input) => ({ order_id: "order-123", refund_amount: input.refundAmount }),
-      getReturn: async () => ({ return_id: RETURN_ID, order_id: "order-123", status: "REQUESTED", version: 1 })
-    },
-    refunds: {
-      refund: async (orderId, amount) => {
-        refundCall = { orderId, amount };
-        return { status: "refunded" };
-      }
-    }
-  });
-
-  const res = await service.approveRefund(context("admin_operator_cskh_dt"), RETURN_ID, { refundAmount: 300000, expectedVersion: 1 });
-  assert.equal(refundCall, null);
-  assert.equal(res.refund, null);
 });
 
 test("a return cannot complete before gateway-confirmed refund", async () => {

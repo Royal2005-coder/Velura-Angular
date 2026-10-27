@@ -33,6 +33,72 @@ export interface RefundBankDetails {
   accountHolder: string;
 }
 
+/** One customer-visible return timeline entry. */
+export interface ReturnTrackingEvent {
+  eventType: string;
+  label: string;
+  at?: string;
+  direction?: string | null;
+  carrier?: string | null;
+  trackingCode?: string | null;
+  trackingUrl?: string | null;
+}
+
+/** Inbound (customer -> warehouse) or outbound (warehouse -> customer) shipment. */
+export interface ReturnTrackingShipment {
+  carrier?: string | null;
+  trackingCode?: string | null;
+  trackingUrl?: string | null;
+  labelUrl?: string | null;
+  handoverCode?: string | null;
+  status?: string | null;
+  pickedUpAt?: string | null;
+  deliveredAt?: string | null;
+  pickupPhotoUrls: string[];
+  packageVideoUrl?: string | null;
+}
+
+/** Customer-visible evidence object with a short-lived signed URL. */
+export interface ReturnTrackingEvidence {
+  evidenceId?: string;
+  kind?: string;
+  url?: string | null;
+  mimeType?: string | null;
+  note?: string | null;
+  createdAt?: string;
+}
+
+/** Linked replacement order summary. */
+export interface ReturnTrackingExchangeOrder {
+  orderId?: string;
+  orderCode?: string;
+  status?: string;
+  carrier?: string | null;
+  trackingCode?: string | null;
+  trackingUrl?: string | null;
+}
+
+/** End-to-end customer tracking payload for one return. */
+export interface ReturnTrackingDetail {
+  returnId: string;
+  returnCode: string;
+  orderCode?: string | null;
+  status: string;
+  statusLabel: string;
+  typeLabel: string;
+  canCancel: boolean;
+  canUploadPacking: boolean;
+  customerName?: string | null;
+  customerPhone?: string | null;
+  customerAddress?: string | null;
+  timeline: ReturnTrackingEvent[];
+  shipment: ReturnTrackingShipment | null;
+  exchangeShipment: ReturnTrackingShipment | null;
+  exchangeOrder: ReturnTrackingExchangeOrder | null;
+  evidence: ReturnTrackingEvidence[];
+  instructions: string[];
+}
+
 /**
  * The Model contract `OrderFlowPage` (KAN-31 presentation) programs against. Two
  * implementations satisfy it: `PurchaseDemoStore` (wrapped by `OrderAccountPreviewAdapter`,
@@ -106,6 +172,15 @@ export interface OrderAccountModel {
   /** Present components with choices for combo lines. */
   comboComponents?(line: DemoOrderLine): ComboComponentItem[];
   timeline(kind: DemoReturn['kind']): string[];
+  /** Loads carrier, evidence and timeline for one return; absent in the isolated preview fixtures. */
+  getReturnTracking?(returnId: string): Promise<ReturnTrackingDetail>;
+  /** Uploads packing photos/video for a return the customer owns or proved access to. */
+  uploadReturnEvidence?(
+    returnId: string,
+    file: File,
+    kind: 'packing_photo' | 'packing_video',
+    note?: string,
+  ): Promise<ReturnTrackingEvidence>;
   /** Upserts one order into `orders()` by id/code — real Model only, for cold direct links. */
   ensureOrderLoaded?(id: string): Promise<void>;
 

@@ -1,6 +1,7 @@
 import { Subscription, catchError, forkJoin, of } from 'rxjs';
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, input, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink, type ParamMap } from '@angular/router';
+import { toDataURL } from 'qrcode';
 import {
   AdminAuditRow,
   AdminErpApiService,
@@ -11,7 +12,7 @@ import {
 } from '../../core/admin-erp-api.service';
 import { orderFocusLink, returnFocusLink, type OrderTraceLink } from '../../core/admin-erp-order-trace';
 import { choiceParam, textParam, watchQueryParams } from '../../core/admin-erp-deep-link';
-import { buildReturnQrLink, parseScan } from '../../core/admin-erp-qr';
+import { buildReturnQrLink, buildReturnQrPayload, parseScan } from '../../core/admin-erp-qr';
 import {
   CONTACT_RESULTS,
   MIN_NOTE_LENGTH,
@@ -19,7 +20,6 @@ import {
   REFUND_RECEIVER_STATUS_LABELS,
   RETURN_STATUS_LABELS,
   TICKET_PRIORITY_LABELS,
-  approvalNeedsReason,
   canTicketAction,
   contactAllowed,
   exchangeApprovalAllowed,
@@ -31,7 +31,6 @@ import {
   nextReturnStep,
   paymentKindLabel,
   receiptAllowed,
-  refundApprovalAllowed,
   refundInfoAllowed,
   rejectAllowed,
   returnStatusLabel,
@@ -191,7 +190,6 @@ export class AdminErpReturnsPage {
     return links;
   });
   readonly minNote = MIN_NOTE_LENGTH;
-  readonly flowNeedsReason = computed(() => approvalNeedsReason(this.selected()));
 
   readonly tabs = computed<readonly AdminErpTab[]>(() => [
     { key: 'returns', label: 'Đổi trả', count: this.total() },
@@ -485,15 +483,21 @@ export class AdminErpReturnsPage {
   /**
    * Opens the return drawer and rereads the row, because list rows omit the refund facts.
    */
-  openReturn(row: unknown): void {
+  openReturn(row: unknown, expectedCode = ''): void {
     const id = (row as AdminReturnRow).return_id;
     this.detailLoading.set(true);
     this.detailError.set(null);
     this.gatewayNote.set(null);
+    this.recordTrail.set([]);
     this.api.getReturn(id).subscribe({
       next: (record) => {
-        this.selected.set(record);
         this.detailLoading.set(false);
+        if (expectedCode && record.return_code && record.return_code !== expectedCode) {
+          this.selected.set(null);
+          this.scanError.set('Mã QR không khớp với mã phiếu trên hệ thống. Kiểm lại nhãn trước khi nhận hàng.');
+          return;
+        }
+        this.selected.set(record);
         this.loadOrderContext(record.order_id);
         this.loadRecordTrail(record.return_id);
       },
@@ -555,8 +559,10 @@ export class AdminErpReturnsPage {
     if (step.flow === 'gateway') {
       if (manualRefundAllowed(record)) {
         this.openFlow('manual');
-      } else {
+      } else if (stripeRefundAllowed(record)) {
         this.runStripeRefund();
+      } else {
+        this.detailError.set('Đơn hàng chưa có giao dịch đã thu tiền để hoàn. Kiểm tra thanh toán trước khi tiếp tục.');
       }
       return;
     }
@@ -569,6 +575,81 @@ export class AdminErpReturnsPage {
   }
 
   /**
+   * Prints the return slip the customer attaches to the parcel. The QR carries both the return
+   * id and the immutable slip code so the carrier/warehouse can cross-check the parcel later.
+   */
+  async printReturnLabel(record: AdminReturnRow): Promise<void> {
+    const shipment = record.shipment || null;
+    const qr = await toDataURL(buildReturnQrPayload(record.return_id, record.return_code), {
+      width: 640,
+      margin: 2,
+      errorCorrectionLevel: 'M',
+    }).catch(() => '');
+    if (!qr) {
+      this.detailError.set('Không tạo được mã QR để in phiếu hoàn.');
+      return;
+    }
+    const windowRef = window.open('', '_blank', 'width=560,height=780');
+    if (!windowRef) {
+      this.detailError.set('Trình duyệt đang chặn cửa sổ in. Cho phép popup rồi thử lại.');
+      return;
+    }
+    const doc = windowRef.document;
+    doc.title = `Phiếu gửi hoàn ${record.return_code || record.return_id}`;
+    const style = doc.createElement('style');
+    style.textContent = `
+      body{font-family:Arial,Helvetica,sans-serif;margin:24px;color:#111}
+      .slip{border:2px solid #111;border-radius:12px;padding:20px;max-width:440px}
+      h1{font-size:18px;margin:0 0 4px} .muted{color:#555;font-size:12px}
+      .code{font-family:monospace;font-size:15px;font-weight:700;margin:12px 0 4px}
+      .qr{display:block;margin:14px auto;width:240px;height:240px}
+      table{width:100%;border-collapse:collapse;font-size:13px;margin-top:10px}
+      td{padding:5px 0;vertical-align:top} td:first-child{color:#555;width:38%}
+      .note{margin-top:14px;font-size:12px;line-height:1.5}`;
+    doc.head.appendChild(style);
+
+    const slip = doc.createElement('section');
+    slip.className = 'slip';
+    const title = doc.createElement('h1');
+    title.textContent = 'PHIẾU GỬI HÀNG HOÀN — VELURA';
+    const intro = doc.createElement('div');
+    intro.className = 'muted';
+    intro.textContent = 'Dán phiếu này lên ngoài kiện hàng trước khi ĐVVC lấy hàng.';
+    const code = doc.createElement('div');
+    code.className = 'code';
+    code.textContent = String(record.return_code || record.return_id);
+    const image = doc.createElement('img');
+    image.className = 'qr';
+    image.src = qr;
+    image.alt = 'QR phiếu hoàn';
+
+    const table = doc.createElement('table');
+    const addRow = (label: string, value: unknown): void => {
+      const row = doc.createElement('tr');
+      const key = doc.createElement('td');
+      key.textContent = label;
+      const cell = doc.createElement('td');
+      cell.textContent = String(value ?? '');
+      row.append(key, cell);
+      table.appendChild(row);
+    };
+    addRow('Đơn gốc', record.order_code || record.order_id || '—');
+    addRow('Khách hàng', [record.customer_name, record.customer_phone].filter(Boolean).join(' · ') || '—');
+    addRow('ĐVVC', shipment?.carrier || '—');
+    addRow('Mã vận đơn', shipment?.tracking_code || record.tracking_return_code || '—');
+    addRow('Người gửi', [record.customer_name, record.customer_phone, record.customer_address].filter(Boolean).join(' · ') || '—');
+    addRow('Người nhận', 'Kho Velura — địa chỉ theo hợp đồng ĐVVC');
+
+    const note = doc.createElement('div');
+    note.className = 'note';
+    note.textContent = 'Kho Velura chỉ nhận hàng khi mã QR và mã phiếu khớp. Khách nên quay video đóng gói; ĐVVC chụp ảnh kiện hàng niêm phong khi lấy hàng.';
+    slip.append(title, intro, code, image, table, note);
+    doc.body.appendChild(slip);
+    windowRef.focus();
+    windowRef.setTimeout(() => windowRef.print(), 100);
+  }
+
+  /**
    * Opens the return whose QR was scanned at the warehouse door. A code for an order is not
    * enough to receive goods; only a return slip code opens a slip.
    */
@@ -577,7 +658,7 @@ export class AdminErpReturnsPage {
     const result = parseScan(text);
     if (result.kind === 'return' && result.returnId) {
       this.scanError.set(null);
-      this.openReturn({ return_id: result.returnId } as AdminReturnRow);
+      this.openReturn({ return_id: result.returnId } as AdminReturnRow, result.returnCode || '');
       return;
     }
     this.scanError.set('Mã này không phải phiếu đổi trả của Velura. Quét mã trên phiếu hoặc mở danh sách.');
@@ -603,6 +684,31 @@ export class AdminErpReturnsPage {
       this.openReturn({ return_id: id } as AdminReturnRow);
     }
     this.loadReturns();
+  }
+
+  /**
+   * Records an inbound carrier status when the carrier has no webhook integration for returns.
+   * `failed` moves the return to NEEDS_SUPPORT so CSKH can open a dispute with evidence.
+   */
+  markShipment(status: 'in_transit' | 'delivered' | 'failed'): void {
+    const record = this.selected();
+    if (!record || !this.canWrite() || this.detailLoading()) return;
+    this.detailLoading.set(true);
+    this.detailError.set(null);
+    this.api.updateReturnShipmentStatus(record.return_id, {
+      status,
+      note: `Admin cập nhật trạng thái vận đơn hoàn: ${status}`,
+    }).subscribe({
+      next: () => {
+        this.detailLoading.set(false);
+        this.openReturn({ return_id: record.return_id });
+        this.loadReturns();
+      },
+      error: (error: unknown) => {
+        this.detailLoading.set(false);
+        this.detailError.set(adminErrorMessage(error, 'Không cập nhật được trạng thái vận đơn.'));
+      },
+    });
   }
 
   /**
@@ -637,11 +743,19 @@ export class AdminErpReturnsPage {
       return;
     }
     if (status === 'RECEIVED') {
-      this.flow.set('receipt');
+      this.openFlow('receipt');
+      return;
+    }
+    if (status === 'RETURN_IN_TRANSIT') {
+      this.openFlow('shipment');
+      return;
+    }
+    if (status === 'EXCHANGE_SHIPPING') {
+      this.openFlow('exchange-shipment');
       return;
     }
     if (!plainSteps(status)) {
-      this.flow.set('status');
+      this.openFlow('status', status);
       return;
     }
     this.api
@@ -939,6 +1053,46 @@ export class AdminErpReturnsPage {
     return returnStatusTone(status);
   }
 
+  /** Vietnamese label for an inbound/outbound shipment state. */
+  shipmentStatusLabel(status: string | null | undefined): string {
+    const labels: Record<string, string> = {
+      pending: 'Chờ tạo vận đơn',
+      label_ready: 'Đã tạo vận đơn, chờ ĐVVC lấy hàng',
+      picked_up: 'ĐVVC đã lấy hàng',
+      in_transit: 'Đang vận chuyển',
+      delivered: 'Đã tới kho',
+      failed: 'Vận chuyển thất bại',
+      cancelled: 'Đã hủy vận đơn',
+    };
+    return labels[String(status || '')] || status || '—';
+  }
+
+  /** Vietnamese label for the warehouse disposition of one returned line. */
+  dispositionLabel(disposition: string | null | undefined): string {
+    const labels: Record<string, string> = {
+      restock: 'Nhập lại kho',
+      repair: 'Sửa chữa',
+      scrap: 'Hủy',
+      return_supplier: 'Trả nhà cung cấp',
+    };
+    return labels[String(disposition || '')] || disposition || '—';
+  }
+
+  /** Vietnamese label for one evidence kind. */
+  evidenceLabel(kind: string | null | undefined): string {
+    const labels: Record<string, string> = {
+      request_photo: 'Ảnh khách gửi ban đầu',
+      packing_photo: 'Ảnh đóng gói',
+      packing_video: 'Video đóng gói',
+      pickup_photo: 'Ảnh ĐVVC lấy hàng',
+      pickup_video: 'Video pickup',
+      qa_photo: 'Ảnh kho kiểm hàng',
+      qa_video: 'Video kho kiểm hàng',
+      refund_proof: 'Chứng từ hoàn tiền',
+    };
+    return labels[String(kind || '')] || kind || 'Bằng chứng';
+  }
+
   /**
    * Refund flow label.
    */
@@ -965,7 +1119,6 @@ export class AdminErpReturnsPage {
    */
   readonly gates = {
     contact: contactAllowed,
-    refund: refundApprovalAllowed,
     exchange: exchangeApprovalAllowed,
     reject: rejectAllowed,
     receipt: receiptAllowed,

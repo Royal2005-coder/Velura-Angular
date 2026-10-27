@@ -27,6 +27,14 @@ export interface UserReturnsRepository {
   findReturnByExchangeOrderId?(orderId: unknown): Promise<JsonObject | null>;
   updateReturn(returnId: unknown, payload: JsonObject, expectedVersion?: number): Promise<JsonObject[]>;
   listReturnsForUser(userId: string, orderId?: string): Promise<JsonObject[]>;
+  /** Inbound/outbound shipments for the return tracking screen. */
+  listReturnShipments?(returnId: unknown): Promise<JsonObject[]>;
+  /** Full return timeline including shipment and custody events. */
+  listReturnEvents?(returnId: unknown): Promise<JsonObject[]>;
+  /** Customer-safe summary of the linked replacement order. */
+  getExchangeOrder?(orderId: unknown): Promise<JsonObject | null>;
+  /** Appends a customer-visible custody event (evidence uploaded, packed confirmation). */
+  insertReturnEvent?(payload: JsonObject): Promise<JsonObject>;
   /** Stored COD receiving account of a return (full number; callers mask it), or null when never submitted. */
   getRefundReceiver(returnId: unknown): Promise<JsonObject | null>;
   /** Saves the receiving account in one transaction and returns its masked customer view. `ownerUserId` null = verified guest. */
@@ -100,6 +108,33 @@ export function createUserReturnsRepository(): UserReturnsRepository {
       if (orderId) queryParams.order_id = `eq.${orderId}`;
       const { rows } = await selectRows("return_exchange", queryParams);
       return rows;
+    },
+
+    async listReturnShipments(returnId) {
+      const { rows } = await selectRows("return_shipment", {
+        return_id: `eq.${returnId}`,
+        order: "direction.asc",
+        limit: 10
+      });
+      return rows;
+    },
+
+    async listReturnEvents(returnId) {
+      const { rows } = await selectRows("return_event", {
+        return_id: `eq.${returnId}`,
+        order: "created_at.asc",
+        limit: 200
+      });
+      return rows;
+    },
+
+    getExchangeOrder: (orderId) => selectOne("orders", {
+      select: "order_id,order_code,status,payment_method,total_amount,carrier,tracking_code,tracking_url,parent_order_id,source_return_id,order_kind,created_at",
+      order_id: `eq.${orderId}`
+    }).catch(() => null),
+
+    async insertReturnEvent(payload) {
+      return asJsonObject(await insertRow("return_event", payload));
     }
   };
 }

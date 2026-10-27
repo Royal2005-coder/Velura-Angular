@@ -246,11 +246,8 @@ export const RETURN_REJECTABLE_STATUSES: readonly string[] = [
 /** Terminal states: no outreach, no approval, no supplement request. */
 export const RETURN_CLOSED_STATUSES: readonly string[] = ['REFUNDED', 'COMPLETED', 'CANCELLED'];
 
-/** Note the API requires when approving a return nobody has contacted yet. */
-export const CONTACT_NOTE_PATTERN = /\[CSKH(?:\s|\])/;
-
 /**
- * Kho đã nhận hàng và QA đạt. Đây là điều kiện duy nhất để duyệt hoàn tiền hoặc duyệt đổi:
+ * Kho đã nhận hàng và QA đạt. Đây là điều kiện duy nhất để tạo đơn đổi hoặc hoàn tiền:
  * trạng thái RECEIVED mà thiếu kết quả QA thì API vẫn chặn, nên UI cũng không được mời bấm.
  */
 export function warehouseQaPassed(row: AdminReturnRow | null): boolean {
@@ -258,14 +255,7 @@ export function warehouseQaPassed(row: AdminReturnRow | null): boolean {
 }
 
 /**
- * A refund can be approved only after warehouse QA passed and it is not an exchange.
- */
-export function refundApprovalAllowed(row: AdminReturnRow | null): boolean {
-  return Boolean(row && row.return_type !== 'exchange' && warehouseQaPassed(row));
-}
-
-/**
- * An exchange can be approved only after warehouse QA passed and it is an exchange.
+ * An exchange can be prepared only after warehouse QA passed and it is an exchange.
  */
 export function exchangeApprovalAllowed(row: AdminReturnRow | null): boolean {
   return Boolean(row && row.return_type === 'exchange' && warehouseQaPassed(row));
@@ -273,19 +263,30 @@ export function exchangeApprovalAllowed(row: AdminReturnRow | null): boolean {
 
 /** Bước kế tiếp của một phiếu, để drawer chỉ mời đúng một hành động thay vì mời bấm sớm. */
 export interface ReturnNextStep {
-  readonly flow: 'contact' | 'receipt' | 'refund' | 'exchange' | 'status' | 'gateway';
+  readonly flow:
+    | 'contact'
+    | 'receipt'
+    | 'exchange'
+    | 'status'
+    | 'gateway'
+    | 'refund-info'
+    | 'shipment'
+    | 'pickup'
+    | 'exchange-shipment';
   readonly label: string;
   readonly hint: string;
   readonly target?: string;
 }
 
 /**
- * Bước tiếp theo theo đúng thứ tự nghiệp vụ: liên hệ → chờ hàng → kho nhận & QA →
- * duyệt hoàn/đổi → cổng tiền → hoàn tất. Trả null khi phiếu đã đóng.
+ * Bước tiếp theo theo đúng thứ tự nghiệp vụ hiện hành: liên hệ → chờ hàng → kho nhận & QA →
+ * hoàn tiền/đổi hàng → hoàn tất. Không còn bước "duyệt trước khi nhận hàng": DB chỉ cho
+ * RECEIVED + QA đạt đi tiếp, và tiền chỉ rời cổng/tài khoản sau bước đó.
  */
 export function nextReturnStep(row: AdminReturnRow | null): ReturnNextStep | null {
   const status = String(row?.status || '');
   const isExchange = row?.return_type === 'exchange';
+  const isStripe = row?.refund_flow === 'stripe_auto';
   switch (status) {
     case 'REQUESTED':
       return { flow: 'contact', label: 'Ghi nhận liên hệ', hint: 'Gọi khách và lưu kết quả liên hệ trước khi chuyển bước.' };
@@ -297,11 +298,17 @@ export function nextReturnStep(row: AdminReturnRow | null): ReturnNextStep | nul
         hint: 'Đã thống nhất phương án; chuyển sang chờ hàng về kho.',
       };
     case 'WAITING_RETURN':
+      if (row?.shipment?.status === 'label_ready') {
+        return {
+          flow: 'pickup',
+          label: 'Xác nhận ĐVVC lấy hàng',
+          hint: 'Quét mã phiếu hoàn, chụp ảnh kiện hàng niêm phong và xác nhận ĐVVC đã lấy hàng.',
+        };
+      }
       return {
-        flow: 'status',
-        target: 'RETURN_IN_TRANSIT',
-        label: 'Ghi mã vận đơn hoàn',
-        hint: 'Quét label chiều hoàn để ghi mã vận đơn khách gửi về.',
+        flow: 'shipment',
+        label: 'Tạo vận đơn hoàn',
+        hint: 'Chọn ĐVVC, nhập mã vận đơn và in phiếu gửi hoàn để khách dán lên kiện hàng.',
       };
     case 'RETURN_IN_TRANSIT':
       return {
@@ -313,32 +320,46 @@ export function nextReturnStep(row: AdminReturnRow | null): ReturnNextStep | nul
       if (row?.condition_check_result !== 'qa_pass') {
         return { flow: 'receipt', label: 'Hoàn tất QA', hint: 'Phiếu đã nhận nhưng chưa có kết quả QA đạt.' };
       }
-      return isExchange
-        ? { flow: 'exchange', label: 'Duyệt đổi hàng', hint: 'QA đạt; tạo đơn đổi và chuẩn bị hàng.' }
-        : { flow: 'refund', label: 'Duyệt hoàn tiền', hint: 'QA đạt; duyệt số tiền hoàn cho khách.' };
+      if (isExchange) {
+        return {
+          flow: 'exchange',
+          label: 'Duyệt đổi hàng',
+          hint: 'QA đạt; tạo đơn đổi và giữ tồn kho cho hàng thay thế trong một giao dịch.',
+        };
+      }
+      if (row?.refund_flow === 'cod_manual' && row?.refund_receiver_status !== 'valid') {
+        return {
+          flow: 'refund-info',
+          label: 'Xin thông tin nhận tiền',
+          hint: 'Khách chưa có tài khoản nhận hoàn tiền; gửi yêu cầu bổ sung trước khi chuyển khoản.',
+        };
+      }
+      return {
+        flow: 'gateway',
+        label: isStripe ? 'Hoàn tiền qua Stripe' : 'Ghi nhận chuyển khoản hoàn tiền',
+        hint: isStripe
+          ? 'Cổng Stripe hoàn tiền và xác nhận kết quả; không cần bước duyệt trung gian.'
+          : 'Kế toán chuyển khoản cho khách, sau đó ghi nhận mã giao dịch và chứng từ.',
+      };
     case 'REFUND_PROCESSING':
-      return { flow: 'gateway', label: 'Chạy hoàn tiền qua cổng', hint: 'Cổng thanh toán xác nhận là bước cuối của hoàn tiền.' };
+      return {
+        flow: 'gateway',
+        label: isStripe ? 'Chạy lại hoàn tiền qua cổng' : 'Ghi nhận chuyển khoản hoàn tiền',
+        hint: 'Khoản hoàn đang chờ xác nhận tiền ra; hoàn tất bằng chứng từ của cổng hoặc chuyển khoản.',
+      };
     case 'REFUNDED':
       return { flow: 'status', target: 'COMPLETED', label: 'Hoàn tất phiếu', hint: 'Tiền đã hoàn; đóng phiếu.' };
     case 'EXCHANGE_PREPARING':
       return {
-        flow: 'status',
-        target: 'EXCHANGE_SHIPPING',
+        flow: 'exchange-shipment',
         label: 'Giao hàng đổi',
-        hint: 'Nhập hoặc quét mã vận đơn của đơn đổi.',
+        hint: 'Tạo vận đơn cho đơn đổi; mã vận đơn được ghi đồng thời lên đơn đổi và phiếu hoàn.',
       };
     case 'EXCHANGE_SHIPPING':
       return { flow: 'status', target: 'COMPLETED', label: 'Hoàn tất đổi hàng', hint: 'Khách đã nhận hàng đổi; đóng phiếu.' };
     default:
       return null;
   }
-}
-
-/**
- * Approval after a logged contact is exempt from the extra reason; the API checks the same marker.
- */
-export function approvalNeedsReason(row: AdminReturnRow | null): boolean {
-  return !CONTACT_NOTE_PATTERN.test(String(row?.admin_note || ''));
 }
 
 /**

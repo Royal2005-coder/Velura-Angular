@@ -30,6 +30,7 @@ export interface ScanResult {
   readonly orderCode?: string;
   readonly orderId?: string;
   readonly returnId?: string;
+  readonly returnCode?: string;
   readonly carrier?: string;
   readonly trackingCode?: string;
   readonly trackingUrl?: string;
@@ -91,6 +92,15 @@ export function buildReturnQrLink(origin: string, returnId: string): string {
 }
 
 /**
+ * Payload in trên phiếu gửi hoàn: id để mở hồ sơ + mã phiếu để đối chiếu khi ĐVVC/kho quét.
+ */
+export function buildReturnQrPayload(returnId: string, returnCode?: string | null): string {
+  const params = new URLSearchParams({ id: returnId });
+  if (returnCode) params.set("code", returnCode);
+  return `${RETURN_QR_SCHEME}?${params.toString()}`;
+}
+
+/**
  * Phân tích một chuỗi QR theo thứ tự: scheme nội bộ → JSON → link ERP → mã vận đơn thuần.
  * `options.orderId/orderCode` là đơn đang mở; nếu mã thuộc đơn khác thì trả `mismatch`.
  */
@@ -134,7 +144,12 @@ function schemeResult(raw: string): ScanResult | null {
   }
   if (raw.startsWith(`${RETURN_QR_SCHEME}?`)) {
     const params = new URLSearchParams(raw.slice(RETURN_QR_SCHEME.length + 1));
-    return { kind: "return", raw, returnId: params.get("id") || undefined };
+    return {
+      kind: "return",
+      raw,
+      returnId: params.get("id") || undefined,
+      returnCode: params.get("code") || undefined,
+    };
   }
   return null;
 }

@@ -82,7 +82,7 @@ export async function handleUserRoute(
       return await handleCheckoutRoute(req, res, action, corsHeaders, context);
       
     case "returns":
-      return await handleReturnsRoute(req, res, action, corsHeaders, context);
+      return await handleReturnsRoute(req, res, action, parts, corsHeaders, context);
       
     case "reviews":
       return await handleReviewsRoute(req, res, action, parts, corsHeaders, context);

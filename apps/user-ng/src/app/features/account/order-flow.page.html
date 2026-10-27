@@ -364,7 +364,7 @@
                     @if (item.status === 'delivered') {
                       <div class="line-return-quota-row">
                         <span class="line-quota-chip">
-                          Lượt đổi/trả (7 ngày): <strong>{{ line.returnCount }}/2</strong> (Còn {{ 2 - line.returnCount > 0 ? 2 - line.returnCount : 0 }} lượt)
+                          Lượt đổi/trả (30 ngày): <strong>{{ line.returnCount }}/2</strong> (Còn {{ 2 - line.returnCount > 0 ? 2 - line.returnCount : 0 }} lượt)
                         </span>
                         <span class="line-quota-chip">
                           SL khả dụng: <strong>{{ line.availableQuantity }}/{{ line.quantity }}</strong>
@@ -558,7 +558,7 @@
               <h2>1. Chọn sản phẩm cần đổi / trả</h2>
               <p class="muted">
                 @if (item.items.length === 1) {
-                  Đơn hàng 1 sản phẩm · Hệ thống đã tự động chọn và khóa cố định theo số lượng mua thực tế (Chính sách 7 ngày · Tối đa 2 lượt/SP).
+                  Đơn hàng 1 sản phẩm · Hệ thống đã tự động chọn và khóa cố định theo số lượng mua thực tế (Chính sách 30 ngày · Tối đa 2 lượt/SP).
                 } @else {
                   Đơn hàng nhiều sản phẩm · Vui lòng tích chọn các sản phẩm còn khả dụng cần đổi/trả (Sản phẩm đang trong tiến trình đổi/trả sẽ tự động khóa).
                 }
@@ -601,7 +601,7 @@
                     <div class="line-return-quota-row">
                       <span class="line-quota-chip">Đã mua: <strong>{{ line.quantity }}</strong></span>
                       <span class="line-quota-chip">Khả dụng đổi/trả: <strong>{{ line.availableQuantity }}</strong></span>
-                      <span class="line-quota-chip">Lượt đổi/trả (7 ngày): <strong>{{ line.returnCount }}/2</strong></span>
+                      <span class="line-quota-chip">Lượt đổi/trả (30 ngày): <strong>{{ line.returnCount }}/2</strong></span>
                     </div>
                     @if (line.isInProgress) {
                       <div class="line-return-banner line-return-banner--progress">
@@ -609,7 +609,7 @@
                       </div>
                     } @else if (line.returnCount >= 2) {
                       <div class="line-return-banner line-return-banner--exhausted">
-                        🔒 Đã sử dụng đủ 2/2 lượt đổi/trả trong 7 ngày cho sản phẩm này.
+                        🔒 Đã sử dụng đủ 2/2 lượt đổi/trả trong 30 ngày cho sản phẩm này.
                       </div>
                     } @else if (line.availableQuantity === 0) {
                       <div class="line-return-banner line-return-banner--done">
@@ -877,16 +877,20 @@
               @if (requestEnded(request)) {
                 <p class="muted">Lượt đổi/trả của sản phẩm đã được hoàn lại, bạn có thể gửi yêu cầu mới.</p>
               }
-              <ol class="timeline">
-                @for (stage of model.timeline(request.kind); track $index) {
-                  <li
-                    [class.done]="$index <= request.stage"
-                    [attr.aria-current]="$index === request.stage ? 'step' : null"
-                  >
-                    {{ stage }}
-                  </li>
-                }
-              </ol>
+              @if (request.returnId) {
+                <app-return-tracking [returnId]="request.returnId" />
+              } @else {
+                <ol class="timeline">
+                  @for (stage of model.timeline(request.kind); track $index) {
+                    <li
+                      [class.done]="$index <= request.stage"
+                      [attr.aria-current]="$index === request.stage ? 'step' : null"
+                    >
+                      {{ stage }}
+                    </li>
+                  }
+                </ol>
+              }
               @for (item of request.items; track item.variantId) {
                 <p>
                   <strong>{{ lineFor(item.variantId)?.product_name }}</strong> · SL
@@ -976,7 +980,7 @@
                     </p>
                   }
                 }
-                @if (request.kind === 'exchange' && request.stage >= 5) {
+                @if (!request.returnId && request.kind === 'exchange' && request.stage >= 5) {
                   <p class="muted">
                     Đơn đổi hàng đã được tạo. Mã giao hàng đổi: EX-{{ request.id }}.
                   </p>
@@ -1011,7 +1015,7 @@
       }
       <p class="muted">Hủy đơn trước khi bắt đầu chuẩn bị hàng.</p>
       <p class="muted">
-        Đổi / trả trong 7 ngày từ khi giao thành công, tối đa 2 lượt mỗi sản phẩm.
+        Đổi / trả trong 30 ngày từ khi giao thành công, tối đa 2 lượt mỗi sản phẩm.
       </p>
       <p class="muted">Guest xác thực OTP để bảo vệ thông tin đơn hàng.</p>
       <a class="link" routerLink="/contact">Liên hệ Velura</a>

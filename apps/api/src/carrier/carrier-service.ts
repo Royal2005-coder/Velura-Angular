@@ -22,6 +22,8 @@ export interface CarrierEventOutcome {
   duplicate: boolean;
   orderCode: string;
   action: string;
+  /** Set when the event matched an inbound/outbound return shipment instead of an order. */
+  returnId?: string;
 }
 
 /**
@@ -38,10 +40,32 @@ export function createCarrierService({ repository, orders }: { repository: Carri
     async handleEvent(event: CarrierDeliveryEvent): Promise<CarrierEventOutcome> {
       const fresh = await repository.record(event);
       if (!fresh) {
-        return { received: true, duplicate: true, orderCode: event.orderCode, action: "" };
+        return { received: true, duplicate: true, orderCode: event.orderCode || event.returnCode || "", action: "" };
       }
 
-      const order = await repository.findOrder(event.orderCode);
+      // Return shipments are resolved first: the carrier knows the AWB, not Velura's return id.
+      const returnShipment = await repository.findReturnShipment(event.trackingCode, event.returnCode);
+      if (returnShipment) {
+        if (returnShipment.tracking_code && returnShipment.tracking_code !== event.trackingCode) {
+          throw new HttpError(422, "CARRIER_RETURN_TRACKING_MISMATCH", carrierErrorMessage("CARRIER_RETURN_TRACKING_MISMATCH"));
+        }
+        if (event.returnCode && returnShipment.return_code && event.returnCode !== returnShipment.return_code) {
+          throw new HttpError(422, "CARRIER_RETURN_CODE_MISMATCH", carrierErrorMessage("CARRIER_RETURN_CODE_MISMATCH"));
+        }
+        const action = `return_${event.status}`;
+        await repository.applyReturnEvent(returnShipment, event);
+        await repository.markReturnApplied(event, returnShipment, action);
+        return {
+          received: true,
+          duplicate: false,
+          orderCode: "",
+          action,
+          returnId: returnShipment.return_id,
+        };
+      }
+
+      const order = await repository.findOrder(event.orderCode)
+        || await repository.findOrderByTracking(event.trackingCode);
       if (!order || !order.order_id) {
         throw new HttpError(404, "CARRIER_ORDER_NOT_FOUND", carrierErrorMessage("CARRIER_ORDER_NOT_FOUND"));
       }

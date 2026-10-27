@@ -214,7 +214,7 @@ export class AccountProfilePage {
       name: 'Thành viên Mới',
       badge: 'MEMBER',
       rate: 'Tích 1% điểm thưởng',
-      privilege: 'Voucher chào mừng 10% · Đổi trả miễn phí 7 ngày',
+      privilege: 'Voucher chào mừng 10% · Đổi trả miễn phí 30 ngày',
       progress,
       nextTier: 'Hạng Bạc (Silver)',
       remaining: 1000000 - spent,

@@ -119,8 +119,9 @@ export const SUPPORT_TICKET_TRANSITIONS: Record<string, readonly string[]> = {
  * PostgREST select list for `return_exchange` rows.
  */
 export const RETURN_SELECT = [
-  "return_id", "order_id", "user_id", "return_type", "description",
-  "status", "condition_check_result", "admin_note", "rejection_reason",
+  "return_id", "return_code", "order_id", "user_id", "return_type", "description",
+  "status", "condition_check_result", "package_match", "seal_intact", "qa_note",
+  "admin_note", "rejection_reason",
   "exchange_order_id", "refund_amount", "tracking_return_code",
   "created_at", "resolved_at", "version", "evidence_images", "contact_due_at", "exchange_tracking_code", "warehouse_proof", "qa_item_receipts",
   "refund_bank_name", "refund_bank_account", "refund_bank_holder", "cancelled_by"

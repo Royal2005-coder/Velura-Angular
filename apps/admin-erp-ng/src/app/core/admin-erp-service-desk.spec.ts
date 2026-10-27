@@ -1,7 +1,6 @@
 import { AdminReturnRow, AdminTicketRow } from './admin-erp-api.service';
 import {
   allowedReturnTransitions,
-  approvalNeedsReason,
   canTicketAction,
   contactAllowed,
   exchangeApprovalAllowed,
@@ -10,7 +9,6 @@ import {
   isReturnOpen,
   manualReturnTransitions,
   receiptAllowed,
-  refundApprovalAllowed,
   refundInfoAllowed,
   refundReceiverBlocked,
   rejectAllowed,
@@ -46,26 +44,48 @@ describe('service desk rules mirrored from the API', () => {
     expect(manualReturnTransitions('REFUNDED')).toEqual(['COMPLETED']);
   });
 
-  it('only allows refund or exchange approval after the warehouse QA passed', () => {
+  it('only allows exchange preparation after the warehouse QA passed', () => {
     const received: AdminReturnRow = { ...base, status: 'RECEIVED', condition_check_result: 'qa_pass' };
     expect(warehouseQaPassed(received)).toBe(true);
-    expect(refundApprovalAllowed(received)).toBe(true);
-    expect(refundApprovalAllowed({ ...received, return_type: 'exchange' })).toBe(false);
     expect(exchangeApprovalAllowed({ ...received, return_type: 'exchange' })).toBe(true);
     expect(exchangeApprovalAllowed(received)).toBe(false);
-    expect(refundApprovalAllowed(base)).toBe(false);
-    expect(refundApprovalAllowed({ ...received, condition_check_result: undefined })).toBe(false);
-    expect(refundApprovalAllowed(null)).toBe(false);
+    expect(exchangeApprovalAllowed(base)).toBe(false);
+    expect(exchangeApprovalAllowed({ ...received, condition_check_result: undefined })).toBe(false);
+    expect(exchangeApprovalAllowed(null)).toBe(false);
   });
 
   it('points at the next legal step and never at money before QA', () => {
     expect(nextReturnStep({ ...base, status: 'REQUESTED' })?.flow).toBe('contact');
-    expect(nextReturnStep({ ...base, status: 'WAITING_RETURN' })?.target).toBe('RETURN_IN_TRANSIT');
+    expect(nextReturnStep({ ...base, status: 'WAITING_RETURN' })?.flow).toBe('shipment');
+    expect(nextReturnStep({
+      ...base,
+      status: 'WAITING_RETURN',
+      shipment: { status: 'label_ready', carrier: 'GHN', tracking_code: 'GHN123456' },
+    })?.flow).toBe('pickup');
     expect(nextReturnStep({ ...base, status: 'RETURN_IN_TRANSIT' })?.flow).toBe('receipt');
-    expect(nextReturnStep({ ...base, status: 'RECEIVED', condition_check_result: 'qa_pass' })?.flow).toBe('refund');
+    expect(nextReturnStep({ ...base, status: 'EXCHANGE_PREPARING', return_type: 'exchange' })?.flow).toBe('exchange-shipment');
+    expect(nextReturnStep({ ...base, status: 'RECEIVED', condition_check_result: 'qa_pass' })?.flow).toBe('gateway');
     expect(
       nextReturnStep({ ...base, status: 'RECEIVED', condition_check_result: 'qa_pass', return_type: 'exchange' })?.flow,
     ).toBe('exchange');
+    expect(
+      nextReturnStep({
+        ...base,
+        status: 'RECEIVED',
+        condition_check_result: 'qa_pass',
+        refund_flow: 'cod_manual',
+        refund_receiver_status: 'missing',
+      })?.flow,
+    ).toBe('refund-info');
+    expect(
+      nextReturnStep({
+        ...base,
+        status: 'RECEIVED',
+        condition_check_result: 'qa_pass',
+        refund_flow: 'cod_manual',
+        refund_receiver_status: 'valid',
+      })?.flow,
+    ).toBe('gateway');
     expect(nextReturnStep({ ...base, status: 'REFUNDED' })?.target).toBe('COMPLETED');
     expect(nextReturnStep({ ...base, status: 'CANCELLED' })).toBeNull();
   });
@@ -73,11 +93,6 @@ describe('service desk rules mirrored from the API', () => {
   it('hides the exchange preparation step on a refund slip', () => {
     expect(manualReturnTransitions('RECEIVED', 'refund')).toEqual(['NEEDS_SUPPORT']);
     expect(manualReturnTransitions('RECEIVED', 'exchange')).toEqual(['EXCHANGE_PREPARING', 'NEEDS_SUPPORT']);
-  });
-
-  it('requires an approval reason until a contact log exists', () => {
-    expect(approvalNeedsReason(base)).toBe(true);
-    expect(approvalNeedsReason({ ...base, admin_note: '[CSKH 2026-10-20] gọi khách' })).toBe(false);
   });
 
   it('gates refunds on the warehouse receipt and the payment channel', () => {

@@ -65,7 +65,7 @@ export interface TrackOrderResult {
 
 /**
  * Trang tra cứu đơn hàng (KAN-38, KAN-29), hỗ trợ theo dõi tiến độ thời gian thực,
- * huỷ đơn khi đang chờ và yêu cầu đổi/trả 7 ngày cho cả khách vãng lai và thành viên.
+ * huỷ đơn khi đang chờ và yêu cầu đổi/trả 30 ngày cho cả khách vãng lai và thành viên.
  */
 @Component({
   selector: 'app-account-track-page',

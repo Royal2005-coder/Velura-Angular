@@ -380,3 +380,54 @@
 .desk-note--danger {
   color: var(--erp-danger-text, #b3261e);
 }
+
+.record__label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 8px 0;
+  padding: 10px 12px;
+  border: 1px dashed var(--erp-line);
+  border-radius: var(--erp-radius-sm);
+  background: var(--erp-surface-muted);
+}
+
+.record__label div {
+  display: grid;
+  gap: 2px;
+}
+
+.record__label span {
+  color: var(--erp-text-muted);
+  font-size: 0.76rem;
+}
+
+.record__shipment {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--erp-line);
+  border-radius: var(--erp-radius-sm);
+}
+
+.record__shipment h4 {
+  margin: 0;
+  font-size: 0.86rem;
+}
+
+.record__evidence-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  font-size: 11.5px;
+  color: var(--erp-muted);
+}
+
+.record__evidence-row img {
+  max-height: 90px;
+  border-radius: var(--erp-radius-sm);
+}

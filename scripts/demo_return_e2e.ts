@@ -100,16 +100,17 @@ async function runDemo() {
   console.log(`✓ Cập nhật trạng thái: ${updated.status} (version ${updated.version})`);
   console.log(`  Ghi chú CSKH: ${updated.admin_note}\n`);
 
-  // 4. Admin duyệt hoàn tiền (CONTACTING -> WAITING_RETURN)
-  console.log("[BƯỚC 4] Admin duyệt hoàn tiền (CONTACTING -> WAITING_RETURN)...");
+  // 4. Admin duyệt yêu cầu (CONTACTING -> WAITING_RETURN); tiền chỉ được hoàn sau QA tại kho.
+  console.log("[BƯỚC 4] Admin duyệt yêu cầu trả hàng (CONTACTING -> WAITING_RETURN)...");
   current = await repo.getReturn(returnId, "");
-  updated = await repo.approveRefund(returnId, {
+  updated = await repo.updateReturnStatus(returnId, {
+    status: "WAITING_RETURN",
     expectedVersion: Number(current?.version),
     refundAmount: 500000,
-    adminNote: "[CSKH] Đồng ý hoàn tiền 100% (500.000đ) sau khi kiểm tra nhận hàng tại kho."
+    adminNote: "[CSKH] Đồng ý nhận hàng trả; hoàn tiền 100% (500.000đ) sau khi kho kiểm tra đạt."
   }, adminContext.profile.user_id, adminContext.roleCode, adminContext.ipAddress);
   console.log(`✓ Cập nhật trạng thái: ${updated.status} (version ${updated.version})`);
-  console.log(`  Số tiền hoàn duyệt: 500.000đ\n`);
+  console.log(`  Số tiền dự kiến hoàn: 500.000đ\n`);
 
   // 5. Khách gửi hàng trả về (WAITING_RETURN -> RETURN_IN_TRANSIT)
   console.log("[BƯỚC 5] Khách hàng mang hàng ra bưu điện gửi về kho (WAITING_RETURN -> RETURN_IN_TRANSIT)...");

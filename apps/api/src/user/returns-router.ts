@@ -14,19 +14,41 @@ export async function handleReturnsRoute(
   req: HttpRequest,
   res: HttpResponse,
   action: string | undefined,
+  parts: string[],
   corsHeaders: HeaderMap,
   context: AuthContext
 ): Promise<void> {
+  const url = new URL(req.url || "/", "http://localhost");
+  const guestToken = (url.searchParams.get("guest_access_token") || url.searchParams.get("order_access_token")
+    || String(req.headers["x-guest-access-token"] || "")).trim();
+
   // POST /api/user/returns/guest — khách vãng lai, không cần đăng nhập
-  if (req.method === "POST" && action === "guest") {
+  if (req.method === "POST" && action === "guest" && !parts[4]) {
     const body = await readJson(req);
     const created = await returnsService.createForGuest(body);
     return sendJson(res, 201, { success: true, return: created }, corsHeaders);
   }
 
+  // GET /api/user/returns/guest/:id — one request with shipment, evidence and timeline
+  if (action === "guest" && req.method === "GET" && parts[4]) {
+    const detail = await returnsService.detailForGuest(parts[4], guestToken);
+    return sendJson(res, 200, { success: true, return: detail }, corsHeaders);
+  }
+
+  // POST /api/user/returns/guest/:id/evidence — packing video/photo for a verified guest
+  if (action === "guest" && req.method === "POST" && parts[4] && parts[5] === "evidence") {
+    const evidence = await returnsService.addPackingEvidenceForGuest(
+      parts[4],
+      url.searchParams.get("kind") || "",
+      url.searchParams.get("note") || "",
+      guestToken,
+      req
+    );
+    return sendJson(res, 200, evidence, corsHeaders);
+  }
+
   if (action === "guest" && req.method === "GET") {
-    const url = new URL(req.url || "/", "http://localhost");
-    const returns = await returnsService.listForGuest({order_id:url.searchParams.get("order_id"),guest_access_token:url.searchParams.get("guest_access_token") || url.searchParams.get("order_access_token")});
+    const returns = await returnsService.listForGuest({order_id:url.searchParams.get("order_id"),guest_access_token: url.searchParams.get("guest_access_token") || url.searchParams.get("order_access_token")});
     return sendJson(res,200,{success:true,returns},corsHeaders);
   }
   if (action === "guest-cancel" && req.method === "POST") {
@@ -38,6 +60,24 @@ export async function handleReturnsRoute(
     return sendJson(res, 200, await returnsService.saveRefundReceiverForGuest(await readJson(req)), corsHeaders);
   }
   const profile = requireUserAuth(context);
+
+  // GET /api/user/returns/:id — full customer tracking detail
+  if (req.method === "GET" && action && !parts[4]) {
+    const detail = await returnsService.detailForMember(profile, action);
+    return sendJson(res, 200, { success: true, return: detail }, corsHeaders);
+  }
+
+  // POST /api/user/returns/:id/evidence?kind=packing_video
+  if (req.method === "POST" && action && parts[4] === "evidence") {
+    const evidence = await returnsService.addPackingEvidenceForMember(
+      profile,
+      action,
+      url.searchParams.get("kind") || "",
+      url.searchParams.get("note") || "",
+      req
+    );
+    return sendJson(res, 200, evidence, corsHeaders);
+  }
 
   // POST /api/user/returns/cancel
   if (req.method === "POST" && action === "cancel") {

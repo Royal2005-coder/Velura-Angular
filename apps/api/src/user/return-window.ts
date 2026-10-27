@@ -1,8 +1,8 @@
-/** Days after delivery during which the buyer can open a return. */
-export const RETURN_WINDOW_DAYS = 7;
+/** Days after delivery during which the buyer can open a return (matches the DB RPC and BA policy). */
+export const RETURN_WINDOW_DAYS = 30;
 
 /**
- * True while `now` is still inside the seven-day window that starts at delivery.
+ * True while `now` is still inside the thirty-day window that starts at delivery.
  */
 export function returnWindowOpen(deliveredAt: Date, now: Date): boolean {
   const elapsed = now.getTime() - deliveredAt.getTime();

@@ -919,6 +919,63 @@ export interface AdminReturnLine {
   return_item_id?: string;
   order_item_id?: string;
   quantity?: number;
+  disposition?: AdminReturnDisposition | string | null;
+  disposition_note?: string | null;
+  restocked_at?: string | null;
+  stock_restored_quantity?: number;
+}
+
+export type AdminReturnDisposition = 'restock' | 'repair' | 'scrap' | 'return_supplier';
+
+/** Inbound (customer -> warehouse) or outbound (warehouse -> customer) return shipment. */
+export interface AdminReturnShipment {
+  shipment_id?: string;
+  direction?: 'inbound' | 'outbound';
+  order_id?: string | null;
+  carrier?: string | null;
+  tracking_code?: string | null;
+  tracking_url?: string | null;
+  label_url?: string | null;
+  handover_code?: string | null;
+  status?: 'pending' | 'label_ready' | 'picked_up' | 'in_transit' | 'delivered' | 'failed' | 'cancelled' | string;
+  picked_up_at?: string | null;
+  delivered_at?: string | null;
+  pickup_photo_urls?: string[];
+  package_video_url?: string | null;
+}
+
+/** One return timeline event, including shipment/custody facts. */
+export interface AdminReturnEvent {
+  event_id?: string;
+  event_type?: 'status' | 'shipment' | 'pickup' | 'customer_evidence' | string;
+  old_status?: string | null;
+  new_status?: string | null;
+  payload?: Record<string, unknown>;
+  note?: string | null;
+  created_at?: string;
+}
+
+/** One stored evidence object; `url` is a short-lived signed URL. */
+export interface AdminReturnEvidence {
+  evidence_id?: string;
+  kind?: string;
+  url?: string | null;
+  storage_ref?: string | null;
+  mime_type?: string | null;
+  uploaded_by_role?: string;
+  note?: string | null;
+  created_at?: string;
+}
+
+/** Linked replacement order created from an exchange return. */
+export interface AdminReturnExchangeOrder {
+  order_id?: string;
+  order_code?: string;
+  status?: string;
+  carrier?: string | null;
+  tracking_code?: string | null;
+  tracking_url?: string | null;
+  order_kind?: string;
 }
 
 /** Customer return request; QA and gateway facts constrain the operations offered. */
@@ -958,6 +1015,10 @@ export interface AdminReturnRow {
   exchange_order_code?: string;
   exchange_order_status?: string;
   condition_check_result?: string;
+  /** Package-level QA facts required by the DB guard before RECEIVED. */
+  package_match?: boolean | null;
+  seal_intact?: boolean | null;
+  qa_note?: string | null;
   /** Warehouse photo of the QA check; proof of the receipt step. */
   warehouse_proof?: string | null;
   /** Receipt lines are stored verbatim in camelCase, so readers must not snake_case them. */
@@ -968,19 +1029,14 @@ export interface AdminReturnRow {
   refund_bank_holder?: string | null;
   lines?: AdminReturnLine[];
   payment?: AdminReturnPayment | null;
-}
-
-/** Approval of a refund; the amount must equal the refundable amount the API computed. */
-export interface AdminRefundApprovalInput {
-  refundAmount: number;
-  adminNote: string;
-  expectedVersion: number;
-}
-
-/** Approval of an exchange; no money moves, the replacement leg is prepared separately. */
-export interface AdminExchangeApprovalInput {
-  adminNote: string;
-  expectedVersion: number;
+  /** Immutable return slip code (separate from the carrier AWB). */
+  return_code?: string;
+  shipments?: AdminReturnShipment[];
+  shipment?: AdminReturnShipment | null;
+  exchange_shipment?: AdminReturnShipment | null;
+  events?: AdminReturnEvent[];
+  evidence?: AdminReturnEvidence[];
+  exchange_order?: AdminReturnExchangeOrder | null;
 }
 
 /** Rejection of a return; the note is the reason the customer sees. */
@@ -1001,6 +1057,9 @@ export interface AdminReturnReceiptLine {
   orderItemId: string;
   receivedQuantity: number;
   matchesProduct: boolean;
+  /** Per-line warehouse disposition; only `restock` adds sellable stock. */
+  disposition: AdminReturnDisposition;
+  dispositionNote?: string;
 }
 
 export interface AdminReturnStatusInput {
@@ -1011,6 +1070,32 @@ export interface AdminReturnStatusInput {
   reason?: string;
   trackingReturnCode?: string;
   items?: AdminReturnReceiptLine[];
+  packageMatch?: boolean;
+  sealIntact?: boolean;
+  qaNote?: string;
+}
+
+/** Creates the inbound return label the customer attaches to the parcel. */
+export interface AdminReturnShipmentInput {
+  expectedVersion: number;
+  carrier: string;
+  trackingCode: string;
+  trackingUrl?: string;
+  labelUrl?: string;
+}
+
+/** Carrier pickup proof; photos/videos are already stored and passed as storage refs. */
+export interface AdminReturnPickupInput {
+  expectedVersion: number;
+  photoUrls: string[];
+  videoUrl?: string;
+  note?: string;
+}
+
+/** The RPC returns the updated return and its shipment together. */
+export interface AdminReturnShipmentResult {
+  return?: AdminReturnRow;
+  shipment?: AdminReturnShipment;
 }
 
 /** Reconciliation record of a refund paid outside the gateway. */
@@ -1738,26 +1823,6 @@ export class AdminErpApiService {
   }
 
   /**
-   * Approves a return as a refund and queues the flow its payment channel requires.
-   */
-  approveRefund(returnId: string, body: AdminRefundApprovalInput): Observable<AdminReturnRow & { refund: null }> {
-    return this.http.post<AdminReturnRow & { refund: null }>(
-      `${this.baseUrl}/api/v1/admin/returns/${encodeURIComponent(returnId)}/approve-refund`,
-      body,
-    );
-  }
-
-  /**
-   * Approves a return as an exchange; no money moves and the replacement leg is prepared later.
-   */
-  approveExchange(returnId: string, body: AdminExchangeApprovalInput): Observable<AdminReturnRow> {
-    return this.http.post<AdminReturnRow>(
-      `${this.baseUrl}/api/v1/admin/returns/${encodeURIComponent(returnId)}/approve-exchange`,
-      body,
-    );
-  }
-
-  /**
    * Rejects a return with the reason the customer is shown.
    */
   rejectReturn(returnId: string, body: AdminReturnRejectInput): Observable<AdminReturnRow> {
@@ -1778,6 +1843,60 @@ export class AdminErpApiService {
     return this.http.post<AdminReturnRow>(
       `${this.baseUrl}/api/v1/admin/returns/${encodeURIComponent(returnId)}/update-status`,
       body,
+    );
+  }
+
+  /**
+   * Creates the inbound return label with the carrier AWB the customer will attach.
+   */
+  createReturnShipment(returnId: string, body: AdminReturnShipmentInput): Observable<AdminReturnShipmentResult> {
+    return this.http.post<AdminReturnShipmentResult>(
+      `${this.baseUrl}/api/v1/admin/returns/${encodeURIComponent(returnId)}/shipment`,
+      body,
+    );
+  }
+
+  /**
+   * Confirms the carrier took the sealed parcel and stores pickup evidence.
+   */
+  confirmReturnPickup(returnId: string, body: AdminReturnPickupInput): Observable<AdminReturnShipmentResult> {
+    return this.http.post<AdminReturnShipmentResult>(
+      `${this.baseUrl}/api/v1/admin/returns/${encodeURIComponent(returnId)}/pickup`,
+      body,
+    );
+  }
+
+  /**
+   * Records an inbound carrier status update (`in_transit`, `delivered`, `failed`).
+   */
+  updateReturnShipmentStatus(returnId: string, body: { status: string; note?: string }): Observable<AdminReturnShipmentResult> {
+    return this.http.post<AdminReturnShipmentResult>(
+      `${this.baseUrl}/api/v1/admin/returns/${encodeURIComponent(returnId)}/shipment-status`,
+      body,
+    );
+  }
+
+  /**
+   * Ships the linked replacement order and moves the return to EXCHANGE_SHIPPING.
+   */
+  shipExchange(returnId: string, body: AdminReturnShipmentInput): Observable<AdminReturnShipmentResult> {
+    return this.http.post<AdminReturnShipmentResult>(
+      `${this.baseUrl}/api/v1/admin/returns/${encodeURIComponent(returnId)}/exchange-shipment`,
+      body,
+    );
+  }
+
+  /**
+   * Uploads one private evidence file (pickup/QA/refund proof) and returns its signed URL + storage ref.
+   */
+  uploadReturnEvidence(returnId: string, file: File, kind: string, note = ''): Observable<AdminReturnEvidence> {
+    const params = new HttpParams().set('kind', kind).set('note', note);
+    const form = new FormData();
+    form.append('file', file, file.name);
+    return this.http.post<AdminReturnEvidence>(
+      `${this.baseUrl}/api/v1/admin/returns/${encodeURIComponent(returnId)}/evidence`,
+      form,
+      { params },
     );
   }
 

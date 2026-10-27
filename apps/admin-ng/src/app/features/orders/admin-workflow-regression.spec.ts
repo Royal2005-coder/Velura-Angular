@@ -2,10 +2,9 @@ import { TestBed } from '@angular/core/testing';
 import { of, Subject, throwError } from 'rxjs';
 import { vi } from 'vitest';
 import { createAdminPage } from '../../../testing/admin-testing';
-import { AdminChatMessagesPayload, AdminOrderRow, AdminReturnRow } from '../../core/admin-api.service';
+import { AdminOrderRow } from '../../core/admin-api.service';
 import { AdminSessionService } from '../../core/admin-session.service';
 import { AdminOrdersPage } from './admin-orders.page';
-import { AdminReturnsPage } from '../returns/admin-returns.page';
 import { AdminProductsPage } from '../catalog/admin-products.page';
 import { AdminPricingPage } from '../pricing/admin-pricing.page';
 
@@ -79,40 +78,6 @@ describe('Admin workflow regressions', () => {
     expect(performOrderAction).not.toHaveBeenCalled();
   });
 
-  it('reports chat outages as errors, not an empty customer queue', async () => {
-    const page = await createAdminPage(AdminReturnsPage, { listChatSessions: () => throwError(() => new Error('Chat offline')) });
-    expect(page.loadError()).toBeTruthy();
-  });
-
-  it('cannot show previous customer messages after selecting another session', async () => {
-    const first = new Subject<AdminChatMessagesPayload>(), second = new Subject<AdminChatMessagesPayload>();
-    const page = await createAdminPage(AdminReturnsPage, { getChatMessages: vi.fn().mockReturnValueOnce(first).mockReturnValueOnce(second) });
-    page.selectChat({ session_id: 'first' }); page.selectChat({ session_id: 'second' });
-    second.next({ messages: [{ text: 'Second customer' }] }); first.next({ messages: [{ text: 'First customer' }] });
-    expect(page.messages()[0].text).toBe('Second customer');
-  });
-
-  it('blocks receipt when registered return lines are absent', async () => {
-    const page = await createAdminPage(AdminReturnsPage, { getReturn: () => of({ return_id: 'r', lines: [] }) });
-    TestBed.inject(AdminSessionService).applyAuthContext({ role: 'super_admin', isAdmin: true });
-    page.openReceive({ return_id: 'r', version: 1, status: 'RETURN_IN_TRANSIT' });
-    expect(page.qaReady()).toBe(false);
-    expect(page.qaError()).toContain('dòng hàng');
-  });
-
-  it('reconciles every warehouse line and suppresses duplicate receipt', async () => {
-    const response = new Subject<unknown>(), updateReturnStatus = vi.fn(() => response);
-    const row: AdminReturnRow = { return_id: 'r', version: 4, status: 'RETURN_IN_TRANSIT', lines: [{ order_item_id: 'a', quantity: 2 }, { order_item_id: 'b', quantity: 1 }] };
-    const page = await createAdminPage(AdminReturnsPage, { getReturn: () => of(row), updateReturnStatus });
-    TestBed.inject(AdminSessionService).applyAuthContext({ role: 'super_admin', isAdmin: true });
-    page.openReceive(row); page.qaResult.set('qa_pass'); page.qaProof.set('data:image/png;base64,proof');
-    page.qaLines.update((lines) => lines.map((line) => ({ ...line, receivedQuantity: String(line.expectedQuantity), confirmedItemId: line.orderItemId, matchesProduct: true })));
-    page.confirmReceive(); page.confirmReceive();
-    expect(updateReturnStatus).toHaveBeenCalledTimes(1);
-    expect(updateReturnStatus).toHaveBeenCalledWith('r', expect.objectContaining({ expectedVersion: 4, items: [{ orderItemId: 'a', receivedQuantity: 2, matchesProduct: true }, { orderItemId: 'b', receivedQuantity: 1, matchesProduct: true }] }));
-    response.complete();
-  });
-
   it('uses the version returned by price mutation for the following details save', async () => {
     const product = { product_id: 'p', name: 'Áo Linen', sku: 'VL-AO001', category_id: 'c', base_price: 500000, sale_price: 400000, version: 3, images: ['/assets/linen.jpg'] };
     const updated = { ...product, sale_price: 350000, version: 4 };
@@ -130,71 +95,6 @@ describe('Admin workflow regressions', () => {
     const listPricingProducts = vi.fn(() => of({ rows: [], count: 0 })), listProducts = vi.fn();
     await createAdminPage(AdminPricingPage, { listPricingProducts, listProducts });
     expect(listPricingProducts).toHaveBeenCalled(); expect(listProducts).not.toHaveBeenCalled();
-  });
-
-  it('requires contact before approval and exposes both actual return branches', async () => {
-    const page = await createAdminPage(AdminReturnsPage);
-    TestBed.inject(AdminSessionService).applyAuthContext({ role: 'super_admin', isAdmin: true });
-    page.returns.set([{ return_id: 'r', status: 'REQUESTED', version: 1 }]);
-    page.openReturnAction('refund', 'r');
-    expect(page.actionType()).toBeNull();
-    page.selectedReturn.set({ return_id: 'r', status: 'RECEIVED', return_type: 'refund' });
-    expect(page.returnPipeline().map((step) => step.status)).toContain('REFUND_PROCESSING');
-    expect(page.nextReturnStep(page.selectedReturn()!)).toBeNull();
-    page.selectedReturn.set({ return_id: 'r', status: 'RECEIVED', return_type: 'exchange', condition_check_result: 'qa_pass' });
-    expect(page.returnPipeline().map((step) => step.status)).not.toContain('REFUNDED');
-    expect(page.nextReturnStep(page.selectedReturn()!)?.status).toBe('EXCHANGE_PREPARING');
-  });
-
-  it('flags untouched requests after24h without cancelling them', async () => {
-    const updateReturnStatus = vi.fn();
-    const page = await createAdminPage(AdminReturnsPage, { updateReturnStatus });
-    const row = { return_id: 'r', status: 'REQUESTED', created_at: new Date(Date.now() - 25 * 3600000).toISOString() };
-    expect(page.contactOverdue(row)).toBe(true);
-    expect(row.status).toBe('REQUESTED');
-    expect(updateReturnStatus).not.toHaveBeenCalled();
-    expect(page.contactOverdue({ ...row, status: 'CONTACTING' })).toBe(false);
-  });
-
-  it('requires new tracking for replacement shipments instead of reusing the return parcel', async () => {
-    const updateReturnStatus = vi.fn(() => of({}));
-    const page = await createAdminPage(AdminReturnsPage, { updateReturnStatus });
-    TestBed.inject(AdminSessionService).applyAuthContext({ role: 'super_admin', isAdmin: true });
-    page.advanceReturn({ return_id: 'r', status: 'EXCHANGE_PREPARING', version: 4, tracking_return_code: 'OLD' }, 'EXCHANGE_SHIPPING');
-    expect(updateReturnStatus).not.toHaveBeenCalled();
-    const form = document.createElement('form'), input = document.createElement('input'); input.name = 'tracking'; form.append(input);
-    page.submitShipment({ preventDefault: () => {}, target: form } as unknown as Event);
-    expect(updateReturnStatus).not.toHaveBeenCalled();
-    input.value = 'NEW'; page.submitShipment({ preventDefault: () => {}, target: form } as unknown as Event);
-    expect(updateReturnStatus).toHaveBeenCalledWith('r', { status: 'EXCHANGE_SHIPPING', trackingReturnCode: 'NEW', expectedVersion: 4 });
-  });
-
-  it('refuses generic gateway state transitions even with admin permissions', async () => {
-    const updateReturnStatus = vi.fn();
-    const page = await createAdminPage(AdminReturnsPage, { updateReturnStatus });
-    TestBed.inject(AdminSessionService).applyAuthContext({ role: 'super_admin', isAdmin: true });
-    page.advanceReturn({ return_id: 'r', status: 'RECEIVED', version: 1 }, 'REFUNDED');
-    expect(updateReturnStatus).not.toHaveBeenCalled();
-  });
-
-  it('requires QA and captured non-Stripe payment before manual transfer recording', async () => {
-    const page = await createAdminPage(AdminReturnsPage);
-    TestBed.inject(AdminSessionService).applyAuthContext({ role: 'super_admin', isAdmin: true });
-    const row = { return_id: 'r', status: 'RECEIVED', condition_check_result: 'qa_pass', return_type: 'refund', payment: { payment_status: 'paid', payment_provider: 'cod' } };
-    expect(page.canRecordManualRefund(row)).toBe(true);
-    expect(page.canRecordManualRefund({ ...row, condition_check_result: 'qa_fail' })).toBe(false);
-    expect(page.canRecordManualRefund({ ...row, payment: { payment_status: 'paid', payment_provider: 'stripe' } })).toBe(false);
-  });
-
-  it('routes negative QA evidence to support without declaring receipt or issuing a refund', async () => {
-    const updateReturnStatus = vi.fn(() => of({}));
-    const page = await createAdminPage(AdminReturnsPage, { updateReturnStatus });
-    TestBed.inject(AdminSessionService).applyAuthContext({ role: 'super_admin', isAdmin: true });
-    page.receiveTarget.set({ return_id: 'r', status: 'RETURN_IN_TRANSIT', version: 2 });
-    page.qaLines.set([{ orderItemId: 'a', expectedQuantity: 1, receivedQuantity: '1', confirmedItemId: 'a', matchesProduct: false }]);
-    page.qaResult.set('qa_fail'); page.qaProof.set('data:image/png;base64,proof'); page.qaFailureNote.set('Hàng khác với sản phẩm trên đơn');
-    page.reportQaFailure();
-    expect(updateReturnStatus).toHaveBeenCalledWith('r', expect.objectContaining({ status: 'NEEDS_SUPPORT', conditionCheckResult: 'qa_fail', expectedVersion: 2 }));
   });
 
   it('integrates prices while keeping a price operator outside catalog mutations', async () => {

@@ -176,6 +176,92 @@
           <summary>Mã QR của phiếu</summary>
           <app-erp-qr-code [value]="returnQr(record)" caption="Quét để mở phiếu này" />
         </details>
+        <div class="record__label">
+          <div>
+            <span>Mã phiếu hoàn</span>
+            <strong class="is-mono">{{ record.return_code || '—' }}</strong>
+          </div>
+          <button class="erp-btn erp-btn--sm" type="button" (click)="printReturnLabel(record)">In phiếu gửi hoàn</button>
+        </div>
+      }
+
+      @if (record.shipment; as shipment) {
+        <section class="record__shipment">
+          <h4>Vận đơn hoàn (khách → kho)</h4>
+          <dl class="record__grid">
+            <div><dt>ĐVVC</dt><dd>{{ shipment.carrier || '—' }}</dd></div>
+            <div><dt>Mã vận đơn</dt><dd class="is-mono">{{ shipment.tracking_code || '—' }}</dd></div>
+            <div><dt>Trạng thái</dt><dd>{{ shipmentStatusLabel(shipment.status) }}</dd></div>
+            <div><dt>ĐVVC lấy hàng</dt><dd>{{ date(shipment.picked_up_at) }}</dd></div>
+          </dl>
+          @if (shipment.tracking_url) {
+            <a class="erp-chip" [href]="shipment.tracking_url" target="_blank" rel="noopener">Theo dõi trên ĐVVC</a>
+          }
+          @if (canWrite() && shipment.status === 'picked_up') {
+            <div class="record__action-row">
+              <button class="erp-btn erp-btn--sm" type="button" (click)="markShipment('in_transit')">Đang vận chuyển</button>
+              <button class="erp-btn erp-btn--sm" type="button" (click)="markShipment('delivered')">Đã tới kho</button>
+              <button class="erp-btn erp-btn--danger erp-btn--sm" type="button" (click)="markShipment('failed')">Giao thất bại</button>
+            </div>
+          }
+          @if (canWrite() && shipment.status === 'in_transit') {
+            <div class="record__action-row">
+              <button class="erp-btn erp-btn--sm" type="button" (click)="markShipment('delivered')">Đã tới kho</button>
+              <button class="erp-btn erp-btn--danger erp-btn--sm" type="button" (click)="markShipment('failed')">Giao thất bại</button>
+            </div>
+          }
+          @if (shipment.pickup_photo_urls?.length) {
+            <div class="record__evidence">
+              <span>Ảnh ĐVVC lấy hàng</span>
+              @for (image of shipment.pickup_photo_urls; track image) {
+                <a [href]="image" target="_blank" rel="noopener"><img [src]="image" alt="Ảnh ĐVVC lấy hàng" /></a>
+              }
+            </div>
+          }
+        </section>
+      }
+
+      @if (record.exchange_order; as exchange) {
+        <section class="record__shipment">
+          <h4>Đơn đổi liên kết</h4>
+          <dl class="record__grid">
+            <div><dt>Mã đơn đổi</dt><dd class="is-mono">{{ exchange.order_code || exchange.order_id }}</dd></div>
+            <div><dt>Trạng thái</dt><dd>{{ exchange.status || '—' }}</dd></div>
+            <div><dt>ĐVVC</dt><dd>{{ exchange.carrier || '—' }}</dd></div>
+            <div><dt>Mã vận đơn</dt><dd class="is-mono">{{ exchange.tracking_code || '—' }}</dd></div>
+          </dl>
+          @if (exchange.tracking_url) {
+            <a class="erp-chip" [href]="exchange.tracking_url" target="_blank" rel="noopener">Theo dõi hàng đổi</a>
+          }
+        </section>
+      }
+
+      @if (record.evidence?.length) {
+        <section class="record__evidence">
+          <h4>Bằng chứng đóng gói / pickup / QA</h4>
+          @for (item of record.evidence; track item.evidence_id || item.url) {
+            <div class="record__evidence-row">
+              <span>{{ evidenceLabel(item.kind) }} · {{ date(item.created_at) }}</span>
+              @if (item.url && item.mime_type?.startsWith('video/')) {
+                <a [href]="item.url" target="_blank" rel="noopener">Mở video</a>
+              } @else if (item.url) {
+                <a [href]="item.url" target="_blank" rel="noopener"><img [src]="item.url" alt="Bằng chứng đổi trả" /></a>
+              }
+            </div>
+          }
+        </section>
+      }
+
+      @if (record.events?.length) {
+        <section class="record__trail">
+          <h4>Dòng thời gian hoàn trả</h4>
+          @for (event of record.events; track event.event_id || event.created_at) {
+            <p class="record__line">
+              <span>{{ date(event.created_at) }} · {{ event.event_type || 'status' }}</span>
+              <span>{{ event.note || statusLabel(event.new_status) }}</span>
+            </p>
+          }
+        </section>
       }
 
       @if (returnLinks().length) {
@@ -281,6 +367,10 @@
               @if (record.qa_item_receipts?.length) {
                 · đã kiểm {{ receivedQuantity(line.order_item_id) }}
               }
+              @if (line.disposition) {
+                · xử lý: {{ dispositionLabel(line.disposition) }}
+                @if (line.stock_restored_quantity) { (+{{ line.stock_restored_quantity }} tồn) }
+              }
             </p>
           }
         </div>
@@ -310,9 +400,6 @@
             @if (gates.contact(record)) {
               <button class="erp-btn erp-btn--sm" type="button" (click)="openFlow('contact')">Ghi liên hệ</button>
             }
-            @if (gates.refund(record)) {
-              <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" (click)="openFlow('refund')">Duyệt hoàn tiền</button>
-            }
             @if (gates.exchange(record)) {
               <button class="erp-btn erp-btn--sm" type="button" (click)="openFlow('exchange')">Duyệt đổi hàng</button>
             }
@@ -340,8 +427,8 @@
               }
             </div>
           }
-          @if (flowNeedsReason()) {
-            <p class="desk-note">Chưa ghi nhận liên hệ CSKH, nên duyệt phải kèm lý do tối thiểu {{ minNote }} ký tự.</p>
+          @if (record.status === 'RECEIVED' && record.condition_check_result === 'qa_pass' && record.return_type !== 'exchange' && record.refund_flow === 'cod_manual' && record.refund_receiver_status !== 'valid') {
+            <p class="desk-note">Hoàn tiền COD đang chờ thông tin nhận tiền hợp lệ của khách.</p>
           }
         </div>
       }

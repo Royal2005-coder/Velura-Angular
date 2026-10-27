@@ -3,6 +3,11 @@ import jsQR from 'jsqr';
 import { AdminErpModal } from './admin-modal';
 import { AdminErpQrCode } from './admin-qr-code';
 
+/** Longest edge decoded from a camera frame or uploaded photo; jsQR cost grows with pixels. */
+const MAX_SCAN_WIDTH = 800;
+const MAX_PHOTO_WIDTH = 1600;
+const SCAN_INTERVAL_MS = 280;
+
 /**
  * Một hộp quét dùng chung: camera sau (điện thoại), ảnh QR đã chụp, hoặc dán nội dung.
  *
@@ -126,6 +131,9 @@ export class AdminErpQrScan {
   private readonly frame = viewChild<ElementRef<HTMLCanvasElement>>('frame');
   private stream: MediaStream | null = null;
   private timer: number | null = null;
+  private starting = false;
+  /** Invalidates a getUserMedia promise that resolves after the modal was closed. */
+  private session = 0;
 
   constructor() {
     effect(() => {
@@ -134,7 +142,7 @@ export class AdminErpQrScan {
         this.stop();
         return;
       }
-      if (element) void this.start(element);
+      if (element) void this.start(element, ++this.session);
     });
     inject(DestroyRef).onDestroy(() => this.stop());
   }
@@ -175,13 +183,17 @@ export class AdminErpQrScan {
     this.error.set(null);
     try {
       const bitmap = await createImageBitmap(file);
+      const scale = Math.min(1, MAX_PHOTO_WIDTH / Math.max(bitmap.width, 1));
+      const width = Math.max(1, Math.round(bitmap.width * scale));
+      const height = Math.max(1, Math.round(bitmap.height * scale));
       const canvas = document.createElement('canvas');
-      canvas.width = bitmap.width;
-      canvas.height = bitmap.height;
+      canvas.width = width;
+      canvas.height = height;
       const context = canvas.getContext('2d', { willReadFrequently: true });
       if (!context) throw new Error('canvas');
-      context.drawImage(bitmap, 0, 0);
-      const image = context.getImageData(0, 0, bitmap.width, bitmap.height);
+      context.drawImage(bitmap, 0, 0, width, height);
+      bitmap.close();
+      const image = context.getImageData(0, 0, width, height);
       const code = jsQR(image.data, image.width, image.height, { inversionAttempts: 'attemptBoth' });
       if (!code?.data) {
         this.error.set('Không đọc được mã trong ảnh này. Chụp gần hơn hoặc dùng mã mẫu để kiểm tra camera.');
@@ -198,39 +210,58 @@ export class AdminErpQrScan {
     this.closed.emit();
   }
 
-  private async start(video: HTMLVideoElement): Promise<void> {
-    if (this.stream) return;
+  private async start(video: HTMLVideoElement, session: number): Promise<void> {
+    if (this.stream || this.starting) return;
+    this.starting = true;
     this.error.set(null);
     this.cameraReady.set(false);
     if (!navigator.mediaDevices?.getUserMedia) {
+      this.starting = false;
       this.error.set('Thiết bị này không mở được camera trong trình duyệt. Dùng ảnh QR hoặc dán mã.');
       return;
     }
     try {
-      this.stream = await navigator.mediaDevices.getUserMedia({
+      const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: { ideal: 'environment' } },
         audio: false,
       });
-      video.srcObject = this.stream;
+      if (session !== this.session || !this.open()) {
+        for (const track of stream.getTracks()) track.stop();
+        this.starting = false;
+        return;
+      }
+      this.stream = stream;
+      video.srcObject = stream;
       await video.play();
+      if (session !== this.session || !this.open()) {
+        this.stop();
+        return;
+      }
       this.cameraReady.set(true);
-      this.timer = window.setInterval(() => this.tick(video), 260);
+      this.timer = window.setInterval(() => this.tick(video), SCAN_INTERVAL_MS);
     } catch {
-      this.error.set('Không mở được camera (có thể chưa cấp quyền). Dùng ảnh QR hoặc dán mã bên dưới.');
+      if (session === this.session && this.open()) {
+        this.error.set('Không mở được camera (có thể chưa cấp quyền). Dùng ảnh QR hoặc dán mã bên dưới.');
+      }
+    } finally {
+      this.starting = false;
     }
   }
 
   private tick(video: HTMLVideoElement): void {
     const canvas = this.frame()?.nativeElement;
     if (!canvas || video.readyState < 2 || !video.videoWidth) return;
-    if (canvas.width !== video.videoWidth) {
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
+    const scale = Math.min(1, MAX_SCAN_WIDTH / video.videoWidth);
+    const width = Math.max(1, Math.round(video.videoWidth * scale));
+    const height = Math.max(1, Math.round(video.videoHeight * scale));
+    if (canvas.width !== width || canvas.height !== height) {
+      canvas.width = width;
+      canvas.height = height;
     }
     const context = canvas.getContext('2d', { willReadFrequently: true });
     if (!context) return;
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const image = context.getImageData(0, 0, canvas.width, canvas.height);
+    context.drawImage(video, 0, 0, width, height);
+    const image = context.getImageData(0, 0, width, height);
     const code = jsQR(image.data, image.width, image.height, { inversionAttempts: 'dontInvert' });
     if (code?.data) this.accept(code.data);
   }
@@ -241,6 +272,8 @@ export class AdminErpQrScan {
   }
 
   private stop(): void {
+    this.session++;
+    this.starting = false;
     if (this.timer !== null) {
       window.clearInterval(this.timer);
       this.timer = null;

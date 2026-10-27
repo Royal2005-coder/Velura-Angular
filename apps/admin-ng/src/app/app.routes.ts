@@ -89,10 +89,10 @@ export const routes: Routes = [
       },
       {
         path: 'returns',
-        loadComponent: () => import('./features/returns/admin-returns.page').then((m) => m.AdminReturnsPage),
+        loadComponent: () => import('./features/returns/returns-moved.page').then((m) => m.AdminReturnsMovedPage),
         canActivate: [adminAuthGuard],
-        data: { title: 'Đổi trả & CSKH', page: 'returns-cskh' },
-        title: 'Đổi trả & CSKH',
+        data: { title: 'Đổi trả & CSKH đã chuyển', page: 'returns-cskh' },
+        title: 'Đổi trả & CSKH đã chuyển sang Admin ERP',
       },
       {
         path: 'pricing',

@@ -21,6 +21,7 @@ import { formatSizeDisplay } from '../../core/utils/size';
 import { isGuestPreview, isPreviewMode } from '../../core/utils/preview-mode';
 import { DeliverySimulation } from '../../shared/delivery-simulation/delivery-simulation';
 import { CheckoutStore } from '../../core/services/checkout.store';
+import { ReturnTrackingComponent } from './return-tracking.component';
 
 /**
  * Guest access, order actions and after-sales share one `OrderAccountModel` injection point:
@@ -29,7 +30,7 @@ import { CheckoutStore } from '../../core/services/checkout.store';
  */
 @Component({
   selector: 'app-order-flow',
-  imports: [FormsModule, RouterLink, DeliverySimulation],
+  imports: [FormsModule, RouterLink, DeliverySimulation, ReturnTrackingComponent],
   templateUrl: './order-flow.page.html',
   styleUrls: [
     '../shared/purchase-flow.css',
@@ -495,7 +496,7 @@ export class OrderFlowPage {
       return `Tất cả sản phẩm trong đơn đang trong tiến trình đổi/trả (${statusText}).`;
     }
     if (items.every((l) => (l.returnCount ?? 0) >= 2)) {
-      return 'Đã sử dụng tối đa 2/2 lượt đổi/trả trong 7 ngày cho đơn hàng này.';
+      return 'Đã sử dụng tối đa 2/2 lượt đổi/trả trong 30 ngày cho đơn hàng này.';
     }
     return 'Tất cả sản phẩm trong đơn đã được hoàn trả hoặc đổi mới.';
   }

@@ -131,6 +131,24 @@ Resolve each upstream image to a real reviewed registry digest and merge the
 CI-generated app digest PR before declaring this check passed. No digest is
 invented in the repository.
 
+### Return logistics (đổi trả)
+
+- `admin-erp-ng` là nơi duy nhất xử lý đổi trả. `/returns` trên `admin-ng` chỉ còn trang điều
+  hướng sang Admin ERP; không còn màn hình ghi trạng thái cũ.
+- Một phiếu có **mã phiếu bất biến** (`return_code`) tách khỏi AWB. QR trên phiếu mang cả hai;
+  kho/ĐVVC quét AWB hoặc mã phiếu để đối chiếu trước khi nhận.
+- Chuỗi bằng chứng: khách quay video đóng gói (private), ĐVVC chụp ảnh kiện niêm phong khi lấy,
+  kho chụp ảnh QA. Chỉ `RECEIVED` khi `package_match` + `seal_intact` + đủ dòng/quantity + ảnh.
+- Kho chọn disposition từng dòng: `restock`, `repair`, `scrap`, `return_supplier`. Chỉ `restock`
+  cộng `variant.stock_quantity`, một lần duy nhất qua `velura_receive_return` + unique
+  `return_stock_movement(return_id, return_item_id)`. Không cộng tồn ở bước refund/exchange.
+- Hoàn tiền clawback Point theo số tiền thực hoàn trên net paid; đổi hàng không clawback.
+- Đơn đổi là đơn con liên kết `parent_order_id` + `source_return_id`; giao hàng đổi cập nhật đồng
+  thời đơn đổi, return shipment và lịch sử trạng thái trong một transaction.
+- `update-status` là đường duy nhất để CSKH chuyển bước; `approve-refund`/`approve-exchange` cũ đã
+  bỏ. Mỗi lần đổi trạng thái chỉ ghi **một** `return_event`: RPC có dữ liệu giàu hơn tự ghi event rồi
+  tắt trigger `return_transition_event` bằng `app.return_suppress_transition_event`.
+
 ### Carrier webhook (vận tải)
 
 `POST /api/v1/webhooks/carrier/:provider` là đường vào duy nhất cho trạng thái giao hàng từ bên
@@ -139,10 +157,17 @@ ngoài. Nhà vận chuyển không có phiên người dùng, nên quyền của
 - Header `x-carrier-signature: t=<epoch>,v1=<hex>`; HMAC-SHA256 trên **raw body** với
   `CARRIER_WEBHOOK_SECRET`, tem quá 5 phút bị từ chối, so sánh `timingSafeEqual`. Route nối trước
   `buildAuthContext` nên không đọc `Authorization`.
-- Body theo hợp đồng Velura (`providerEventId`, `orderCode`, `trackingCode`, `status`, `occurredAt`,
-  `detail?`). API không giả định schema riêng của GHN/GHTK/VTP: lớp trung gian nào cũng phải đổi
-  sang hình này rồi ký. `status` chỉ nhận `delivered`, `failed_retrying`, `failed_returned` — ba mã
-  `actor: "system"` mà `ORDER_ACTIONS` cho phép; trạng thái lạ trả 422 chứ không đoán.
+- Body theo hợp đồng Velura (`providerEventId`, `trackingCode`, `status`, `occurredAt`, `detail?`,
+  `orderCode?`, `returnCode?`). API không giả định schema riêng của GHN/GHTK/VTP: lớp trung gian nào
+  cũng phải đổi sang hình này rồi ký. `status` chỉ nhận `delivered`, `failed_retrying`,
+  `failed_returned`; trạng thái lạ trả 422 chứ không đoán.
+- Match vận đơn hoàn theo **AWB trước** (`return_shipment.tracking_code`), fallback `returnCode`.
+  AWB-only cũng hợp lệ vì ĐVVC thường không biết mã nội bộ Velura. Đơn hàng thường fallback
+  `orderCode` → `trackingCode`. Trùng AWB giữa nhiều bản ghi bị 409 thay vì áp nhầm.
+- Sự kiện hoàn không đi qua state machine đơn: `velura_apply_return_carrier_event` cập nhật
+  shipment/return trong một transaction; với chiều giao hàng đổi, nó gọi lại
+  `velura_order_service_action` để order đổi vẫn do đúng bảng luật 038/041 quyết định.
+  `failed_returned` đưa phiếu về `NEEDS_SUPPORT` để CSKH mở hồ sơ đối chứng.
 - Một sự kiện đi qua đúng state machine: `velura_order_service_action` → timestamps, stock,
   `order_event`, `order_status_history`, email đều do migration 038/041 sinh ra. Không có bảng
   trạng thái vận tải thứ hai, không có đường ghi thẳng.
@@ -150,12 +175,15 @@ ngoài. Nhà vận chuyển không có phiên người dùng, nên quyền của
   retry trả `duplicate: true` và không đổi đơn. Sự kiện mang `trackingCode` khác vận đơn đã bàn giao
   của đơn bị từ chối 422.
 
-Thứ tự provision bắt buộc. Webhook cố ý fail-closed, nên code đã merge mà chưa đủ hai bước dưới đây
+Thứ tự provision bắt buộc. Webhook cố ý fail-closed, nên code đã merge mà chưa đủ các bước dưới đây
 chỉ trả lời 401/503 và không ghi dữ liệu:
 
-1. Chủ dự án chạy `migrate-production.yml` để áp migration 075 — CI không có quyền ghi CSDL.
+1. Chủ dự án chạy `migrate-production.yml` để áp migration 075 và **080** (return logistics) — CI
+   không có quyền ghi CSDL.
 2. Thêm `CARRIER_WEBHOOK_SECRET` vào `velura-api-secrets` (SOPS; age key ở `flux-system/sops-age`),
    rồi rollout `deployment/velura-api`: secret đổi nội dung nhưng không đổi tên nên pod không tự lại.
+3. Bằng chứng trả hàng dùng bucket private `return-evidence-private`; API cần service-role key để
+   upload và ký URL 15 phút. Không trả public URL của video đóng gói/pickup.
 
 Đọc trạng thái surface, không cần bí mật và không đổi dữ liệu:
 

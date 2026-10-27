@@ -185,7 +185,7 @@
             <p class="detail-meta-text">Đơn đã vào khâu chuẩn bị hoặc giao hàng nên không tự hủy được. Cần hỗ trợ, liên hệ CSKH.</p>
           }
           @if (canRequestReturn()) {
-            <button class="btn btn--primary" type="button" (click)="openReturnModal()">Yêu cầu Đổi / Trả hàng (7 ngày)</button>
+            <button class="btn btn--primary" type="button" (click)="openReturnModal()">Yêu cầu Đổi / Trả hàng (30 ngày)</button>
           }
           <a routerLink="/contact" class="btn btn--secondary">Liên hệ hỗ trợ</a>
         </div>
@@ -255,9 +255,9 @@
                 <button type="button" class="btn btn--primary" style="margin-top: 16px;" (click)="closeReturnModal()">Đóng</button>
               </div>
             } @else {
-              <h3 class="review-popup__title" style="margin-bottom: 12px; font-size: 1.25rem; font-family: var(--font-display, serif); color: var(--text-dark);">Yêu cầu Đổi / Trả hàng (7 ngày)</h3>
+              <h3 class="review-popup__title" style="margin-bottom: 12px; font-size: 1.25rem; font-family: var(--font-display, serif); color: var(--text-dark);">Yêu cầu Đổi / Trả hàng (30 ngày)</h3>
               <p style="color: var(--soft); font-size: 0.875rem; margin-bottom: 20px; line-height: 1.5;">
-                Chính sách Velura: Hỗ trợ đổi trả miễn phí trong 7 ngày kể từ ngày giao hàng thành công.
+                Chính sách Velura: Hỗ trợ đổi trả miễn phí trong 30 ngày kể từ ngày giao hàng thành công.
               </p>
 
               <div style="margin-bottom: 16px;">

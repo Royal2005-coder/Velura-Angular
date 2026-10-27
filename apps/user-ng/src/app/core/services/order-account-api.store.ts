@@ -15,7 +15,18 @@ import {
   ReturnCancelledBy,
   ReturnWorkflowStatus,
 } from './purchase-demo.store';
-import type { ComboComponentItem, OrderAccountModel, RefundBankDetails, ReplacementChoice, ReturnReasonCode } from './order-account.model';
+import type {
+  ComboComponentItem,
+  OrderAccountModel,
+  RefundBankDetails,
+  ReplacementChoice,
+  ReturnReasonCode,
+  ReturnTrackingDetail,
+  ReturnTrackingEvidence,
+  ReturnTrackingEvent,
+  ReturnTrackingExchangeOrder,
+  ReturnTrackingShipment,
+} from './order-account.model';
 import type { ProductSummary } from '../models/product.interface';
 
 /** Real order status → the `DemoOrderStatus` token the KAN-31 template already renders. */
@@ -105,6 +116,7 @@ interface ApiRefundReceiver {
 interface ApiReturn {
   refund_amount?: number;
   return_id?: string;
+  return_code?: string;
   tracking_return_code?: string;
   order_id?: string;
   order_code?: string;
@@ -124,6 +136,63 @@ interface ApiReturn {
   refund_bank_name?: string | null;
   refund_bank_account?: string | null;
   refund_bank_holder?: string | null;
+}
+
+interface ApiReturnEvidence {
+  evidence_id?: string;
+  kind?: string;
+  url?: string | null;
+  mime_type?: string | null;
+  note?: string | null;
+  created_at?: string;
+}
+
+interface ApiReturnShipment {
+  carrier?: string | null;
+  tracking_code?: string | null;
+  tracking_url?: string | null;
+  label_url?: string | null;
+  handover_code?: string | null;
+  status?: string | null;
+  picked_up_at?: string | null;
+  delivered_at?: string | null;
+  pickup_photo_urls?: string[] | null;
+  package_video_url?: string | null;
+}
+
+interface ApiReturnEvent {
+  event_type?: string;
+  label?: string;
+  at?: string;
+  direction?: string | null;
+  carrier?: string | null;
+  tracking_code?: string | null;
+  tracking_url?: string | null;
+}
+
+interface ApiReturnExchangeOrder {
+  order_id?: string;
+  order_code?: string;
+  status?: string;
+  carrier?: string | null;
+  tracking_code?: string | null;
+  tracking_url?: string | null;
+}
+
+interface ApiReturnDetail extends ApiReturn {
+  status_label?: string;
+  type_label?: string;
+  can_cancel?: boolean;
+  can_upload_packing?: boolean;
+  customer_name?: string | null;
+  customer_phone?: string | null;
+  customer_address?: string | null;
+  timeline?: ApiReturnEvent[];
+  shipment?: ApiReturnShipment | null;
+  exchange_shipment?: ApiReturnShipment | null;
+  exchange_order?: ApiReturnExchangeOrder | null;
+  evidence?: ApiReturnEvidence[];
+  instructions?: string[];
 }
 
 const RECEIVER_STATUSES: RefundReceiverStatus[] = ['not_required', 'missing', 'invalid', 'supplement_requested', 'valid'];
@@ -244,7 +313,7 @@ function mapReturn(row: ApiReturn): DemoReturn {
   const rejected = status === 'CANCELLED' && !customerCancelled;
   const endedAt = row.resolved_at || row.created_at || new Date().toISOString();
   return {
-    id: formatReturnCode(row.tracking_return_code || row.return_id),
+    id: formatReturnCode(row.return_code || row.tracking_return_code || row.return_id),
     returnId: row.return_id,
     expectedVersion: row.version,
     orderId: row.order_code || row.order_id || '',
@@ -268,6 +337,72 @@ function mapReturn(row: ApiReturn): DemoReturn {
     paymentMethod: row.payment_method,
     refundFlow: row.refund_flow,
     refundReceiver: mapRefundReceiver(row.refund_receiver),
+  };
+}
+
+function mapTrackingShipment(row: ApiReturnShipment | null | undefined): ReturnTrackingShipment | null {
+  if (!row) return null;
+  return {
+    carrier: row.carrier || null,
+    trackingCode: row.tracking_code || null,
+    trackingUrl: row.tracking_url || null,
+    labelUrl: row.label_url || null,
+    handoverCode: row.handover_code || null,
+    status: row.status || null,
+    pickedUpAt: row.picked_up_at || null,
+    deliveredAt: row.delivered_at || null,
+    pickupPhotoUrls: Array.isArray(row.pickup_photo_urls) ? row.pickup_photo_urls.filter(Boolean) : [],
+    packageVideoUrl: row.package_video_url || null,
+  };
+}
+
+function mapTrackingEvidence(row: ApiReturnEvidence): ReturnTrackingEvidence {
+  return {
+    evidenceId: row.evidence_id,
+    kind: row.kind,
+    url: row.url || null,
+    mimeType: row.mime_type || null,
+    note: row.note || null,
+    createdAt: row.created_at,
+  };
+}
+
+function mapReturnTracking(row: ApiReturnDetail): ReturnTrackingDetail {
+  const timeline: ReturnTrackingEvent[] = (row.timeline || []).map((event) => ({
+    eventType: event.event_type || 'status',
+    label: event.label || '',
+    at: event.at,
+    direction: event.direction || null,
+    carrier: event.carrier || null,
+    trackingCode: event.tracking_code || null,
+    trackingUrl: event.tracking_url || null,
+  }));
+  const exchangeOrder: ReturnTrackingExchangeOrder | null = row.exchange_order ? {
+    orderId: row.exchange_order.order_id,
+    orderCode: row.exchange_order.order_code,
+    status: row.exchange_order.status,
+    carrier: row.exchange_order.carrier || null,
+    trackingCode: row.exchange_order.tracking_code || null,
+    trackingUrl: row.exchange_order.tracking_url || null,
+  } : null;
+  return {
+    returnId: row.return_id || '',
+    returnCode: row.return_code || row.tracking_return_code || '',
+    orderCode: row.order_code || null,
+    status: row.status || 'NEEDS_SUPPORT',
+    statusLabel: row.status_label || RETURN_WORKFLOW_LABELS[(row.status || 'NEEDS_SUPPORT') as ReturnWorkflowStatus] || row.status || '',
+    typeLabel: row.type_label || (row.return_type === 'exchange' ? 'Đổi hàng' : 'Hoàn tiền'),
+    canCancel: row.can_cancel === true,
+    canUploadPacking: row.can_upload_packing === true,
+    customerName: row.customer_name || null,
+    customerPhone: row.customer_phone || null,
+    customerAddress: row.customer_address || null,
+    timeline,
+    shipment: mapTrackingShipment(row.shipment),
+    exchangeShipment: mapTrackingShipment(row.exchange_shipment),
+    exchangeOrder,
+    evidence: (row.evidence || []).map(mapTrackingEvidence),
+    instructions: row.instructions || [],
   };
 }
 
@@ -593,6 +728,46 @@ export class OrderAccountApiStore implements OrderAccountModel {
     await this.refresh();
   }
 
+  /**
+   * Loads the real return detail: carrier shipment, pickup evidence, packing evidence, timeline
+   * and the linked replacement order. Member and verified-guest paths use their own endpoint.
+   */
+  async getReturnTracking(returnId: string): Promise<ReturnTrackingDetail> {
+    const context = this.context();
+    const path = context.userId
+      ? `/api/user/returns/${encodeURIComponent(returnId)}`
+      : `/api/user/returns/guest/${encodeURIComponent(returnId)}?guest_access_token=${encodeURIComponent(context.guestToken)}`;
+    const data = await firstValueFrom(this.api.get<{ return?: ApiReturnDetail }>(path));
+    this.assertCurrent(context);
+    if (!data.return?.return_id) throw new Error('Không tải được thông tin theo dõi hoàn trả.');
+    return mapReturnTracking(data.return);
+  }
+
+  /**
+   * Uploads one packing photo/video to the private evidence bucket; the API returns a signed
+   * URL for immediate display while the stored file keeps its private coordinates.
+   */
+  async uploadReturnEvidence(
+    returnId: string,
+    file: File,
+    kind: 'packing_photo' | 'packing_video',
+    note = '',
+  ): Promise<ReturnTrackingEvidence> {
+    const context = this.context();
+    const params = new URLSearchParams({ kind });
+    if (note) params.set('note', note);
+    if (!context.userId) params.set('guest_access_token', context.guestToken);
+    const path = context.userId
+      ? `/api/user/returns/${encodeURIComponent(returnId)}/evidence`
+      : `/api/user/returns/guest/${encodeURIComponent(returnId)}/evidence`;
+    const form = new FormData();
+    form.append('file', file, file.name);
+    const data = await firstValueFrom(this.api.post<{ evidence?: ApiReturnEvidence }>(`${path}?${params.toString()}`, form));
+    this.assertCurrent(context);
+    if (!data.evidence) throw new Error('Chưa lưu được bằng chứng đóng gói.');
+    return mapTrackingEvidence(data.evidence);
+  }
+
   /** Directs unavailable replacement choices to CSKH because no real mutation exists yet. */
   async replaceUnavailable(): Promise<void> {
     throw new Error('Vui lòng liên hệ CSKH để chọn variant thay thế.');
@@ -814,13 +989,16 @@ export class OrderAccountApiStore implements OrderAccountModel {
 
   private async uploadEvidence(files: File[]): Promise<string[]> {
     const context = this.context();
+    const path = context.userId
+      ? '/api/user/upload/evidence'
+      : `/api/user/upload/evidence?guest_access_token=${encodeURIComponent(context.guestToken)}`;
     const urls: string[] = [];
     for (const file of files) {
       this.assertCurrent(context);
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('file', file, file.name);
       const result = await firstValueFrom(
-        this.api.post<{ success?: boolean; url?: string }>('/api/user/upload/evidence', formData),
+        this.api.post<{ success?: boolean; url?: string }>(path, formData),
       );
       this.assertCurrent(context);
       if (result?.url) urls.push(result.url);

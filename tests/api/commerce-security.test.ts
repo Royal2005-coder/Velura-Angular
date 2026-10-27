@@ -51,12 +51,12 @@ test("warehouse QA confirms every individual line and persists the exact receipt
   const service=createReturnService({repository:{
     getReturn:async()=>({status:"RETURN_IN_TRANSIT",version:3}),
     listReturnLines:async()=>({rows:[{order_item_id:"line-a",quantity:1},{order_item_id:"line-b",quantity:2}]}),
-    updateReturnStatus:async(_id,input)=>{receipt=input.receipts;return {status:input.status};}
+    receiveReturn:async(_id,_version,input)=>{receipt=input.receipts;return {status:"RECEIVED"};}
   } as unknown as ReturnRepository});
-  const base={status:"RECEIVED",expectedVersion:3,conditionCheckResult:"qa_pass",imageProof:"https://proof.example/warehouse.jpg"};
+  const base={status:"RECEIVED",expectedVersion:3,conditionCheckResult:"qa_pass",imageProof:"https://proof.example/warehouse.jpg",packageMatch:true,sealIntact:true};
   await assert.rejects(()=>service.updateReturnStatus(context,"return",{...base,confirmedItemId:"line-a",receivedQuantity:3}),error=>error instanceof HttpError && error.code === "ITEM_ID_MISMATCH");
-  await assert.rejects(()=>service.updateReturnStatus(context,"return",{...base,items:[{orderItemId:"line-a",receivedQuantity:1,matchesProduct:true},{orderItemId:"line-b",receivedQuantity:1,matchesProduct:true}]}),error=>error instanceof HttpError && error.code === "QTY_MISMATCH");
-  const items=[{orderItemId:"line-a",receivedQuantity:1,matchesProduct:true},{orderItemId:"line-b",receivedQuantity:2,matchesProduct:true}];
+  await assert.rejects(()=>service.updateReturnStatus(context,"return",{...base,items:[{orderItemId:"line-a",receivedQuantity:1,matchesProduct:true,disposition:"restock"},{orderItemId:"line-b",receivedQuantity:1,matchesProduct:true,disposition:"restock"}]}),error=>error instanceof HttpError && error.code === "QTY_MISMATCH");
+  const items=[{orderItemId:"line-a",receivedQuantity:1,matchesProduct:true,disposition:"restock"},{orderItemId:"line-b",receivedQuantity:2,matchesProduct:true,disposition:"scrap"}];
   assert.equal((await service.updateReturnStatus(context,"return",{...base,items})).status,"RECEIVED");
   assert.deepEqual(receipt,items);
 });

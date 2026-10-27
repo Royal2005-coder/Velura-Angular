@@ -31,9 +31,30 @@ export async function handleReturnRoute({ req, res, url, parts, context, headers
       return true;
     }
 
-    if (req.method === "POST" && parts[5] === "approve-refund" && parts.length === 6) {
-      const body = await readJson(req, config.maxBodyBytes);
-      sendJson(res, 200, await service.approveRefund(context, returnId, body), headers);
+    if (req.method === "POST" && parts[5] === "shipment" && parts.length === 6) {
+      sendJson(res, 200, await service.createReturnShipment(context, returnId, await readJson(req, config.maxBodyBytes)), headers);
+      return true;
+    }
+
+    if (req.method === "POST" && parts[5] === "pickup" && parts.length === 6) {
+      sendJson(res, 200, await service.confirmReturnPickup(context, returnId, await readJson(req, config.maxBodyBytes)), headers);
+      return true;
+    }
+
+    if (req.method === "POST" && parts[5] === "shipment-status" && parts.length === 6) {
+      sendJson(res, 200, await service.updateReturnShipmentStatus(context, returnId, await readJson(req, config.maxBodyBytes)), headers);
+      return true;
+    }
+
+    if (req.method === "POST" && parts[5] === "exchange-shipment" && parts.length === 6) {
+      sendJson(res, 200, await service.shipExchange(context, returnId, await readJson(req, config.maxBodyBytes)), headers);
+      return true;
+    }
+
+    if (req.method === "POST" && parts[5] === "evidence" && parts.length === 6) {
+      const kind = url.searchParams.get("kind") || "";
+      const note = url.searchParams.get("note") || "";
+      sendJson(res, 200, await service.addReturnEvidence(context, returnId, kind, note, req), headers);
       return true;
     }
 
@@ -51,12 +72,6 @@ export async function handleReturnRoute({ req, res, url, parts, context, headers
       sendJson(res, 200, await service.requestRefundInfo(context, returnId, await readJson(req, config.maxBodyBytes)), headers);
       return true;
     }
-    if (req.method === "POST" && parts[5] === "approve-exchange" && parts.length === 6) {
-      const body = await readJson(req, config.maxBodyBytes);
-      sendJson(res, 200, await service.approveExchange(context, returnId, body), headers);
-      return true;
-    }
-
     if (req.method === "POST" && parts[5] === "reject" && parts.length === 6) {
       const body = await readJson(req, config.maxBodyBytes);
       sendJson(res, 200, await service.reject(context, returnId, body), headers);

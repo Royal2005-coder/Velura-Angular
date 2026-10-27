@@ -29,18 +29,38 @@ function harness(options: {
   order?: Record<string, unknown> | null;
   duplicate?: boolean;
   actionError?: unknown;
+  returnShipment?: Record<string, unknown> | null;
 } = {}) {
-  const calls: { actions: unknown[]; applied: unknown[]; recorded: unknown[] } = { actions: [], applied: [], recorded: [] };
+  const calls: { actions: unknown[]; applied: unknown[]; recorded: unknown[]; returnApplied: unknown[] } = {
+    actions: [],
+    applied: [],
+    recorded: [],
+    returnApplied: [],
+  };
+  const order = options.order === null ? null : { order_id: ORDER_ID, order_code: "VLR-2001", status: "shipping", tracking_code: "VN2200111", carrier: "GHN", ...(options.order || {}) };
   const repository = {
     async record(event: unknown) {
       calls.recorded.push(event);
       return !options.duplicate;
     },
-    async findOrder() {
-      return options.order === null ? null : { order_id: ORDER_ID, order_code: "VLR-2001", status: "shipping", tracking_code: "VN2200111", carrier: "GHN", ...(options.order || {}) };
+    async findOrder(orderCode: string) {
+      return orderCode ? order : null;
+    },
+    async findOrderByTracking() {
+      return order;
     },
     async markApplied(event: unknown, orderId: string, action: string) {
       calls.applied.push({ event, orderId, action });
+    },
+    async findReturnShipment() {
+      return options.returnShipment || null;
+    },
+    async applyReturnEvent(facts: unknown, event: unknown) {
+      calls.returnApplied.push({ facts, event });
+      return { return_id: (facts as Record<string, unknown>).return_id };
+    },
+    async markReturnApplied(event: unknown, facts: unknown, action: string) {
+      calls.returnApplied.push({ event, facts, action });
     },
   };
   const orders = {
@@ -229,7 +249,7 @@ test("statuses outside the three system actions are refused, not guessed", () =>
 test("malformed events are rejected on their own field", () => {
   const cases: Array<[string, Record<string, unknown>]> = [
     ["CARRIER_EVENT_ID_REQUIRED", { ...EVENT, providerEventId: "x" }],
-    ["CARRIER_ORDER_CODE_REQUIRED", { ...EVENT, orderCode: "" }],
+    ["CARRIER_RETURN_CODE_INVALID", { ...EVENT, returnCode: "x" }],
     ["CARRIER_TRACKING_REQUIRED", { ...EVENT, trackingCode: "ab" }],
     ["CARRIER_OCCURRED_AT_REQUIRED", { ...EVENT, occurredAt: "không phải ngày" }],
     ["CARRIER_EVENT_FROM_FUTURE", { ...EVENT, occurredAt: new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString() }],
@@ -242,6 +262,86 @@ test("malformed events are rejected on their own field", () => {
   }
   assert.equal(normalizeCarrierEvent("GHN!", EVENT).ok, false);
   assert.equal(normalizeCarrierEvent("ghn", []).ok, false);
+  // AWB-only events are valid: the carrier does not know Velura's order/return code.
+  const awbOnly = normalizeCarrierEvent("ghn", { ...EVENT, orderCode: "" });
+  assert.equal(awbOnly.ok, true);
+});
+
+test("return AWB updates the return shipment instead of an order", async () => {
+  const RETURN_ID = "50000000-0000-4000-8000-000000000031";
+  const { calls, service } = harness({
+    returnShipment: {
+      shipment_id: "50000000-0000-4000-8000-000000000032",
+      return_id: RETURN_ID,
+      direction: "inbound",
+      carrier: "GHN",
+      tracking_code: "GHN123456789",
+      handover_code: "RETABC123",
+      return_code: "RETABC123",
+      return_status: "RETURN_IN_TRANSIT",
+    },
+  });
+  const normalized = normalizeCarrierEvent("ghn", {
+    providerEventId: "GHN-RET-1",
+    trackingCode: "GHN123456789",
+    returnCode: "RETABC123",
+    status: "failed_returned",
+    occurredAt: new Date().toISOString(),
+  });
+  assert.equal(normalized.ok, true);
+  if (!normalized.ok) return;
+
+  const result = await service.handleEvent(normalized.event);
+  assert.equal(result.returnId, RETURN_ID);
+  assert.equal(result.action, "return_failed_returned");
+  assert.equal(calls.actions.length, 0);
+  assert.equal(calls.returnApplied.length, 2);
+});
+
+test("a mismatched return code is rejected even when the AWB matches", async () => {
+  const { calls, service } = harness({
+    returnShipment: {
+      shipment_id: "50000000-0000-4000-8000-000000000033",
+      return_id: "50000000-0000-4000-8000-000000000034",
+      direction: "inbound",
+      carrier: "GHN",
+      tracking_code: "GHN123456789",
+      handover_code: "RETABC123",
+      return_code: "RETABC123",
+      return_status: "RETURN_IN_TRANSIT",
+    },
+  });
+  const normalized = normalizeCarrierEvent("ghn", {
+    providerEventId: "GHN-RET-2",
+    trackingCode: "GHN123456789",
+    returnCode: "RETOTHER",
+    status: "delivered",
+    occurredAt: new Date().toISOString(),
+  });
+  assert.equal(normalized.ok, true);
+  if (!normalized.ok) return;
+
+  await assert.rejects(
+    () => service.handleEvent(normalized.event),
+    (error) => error instanceof HttpError && error.code === "CARRIER_RETURN_CODE_MISMATCH",
+  );
+  assert.equal(calls.returnApplied.length, 0);
+});
+
+test("an AWB-only order event resolves the order by tracking code", async () => {
+  const { calls, service } = harness();
+  const normalized = normalizeCarrierEvent("ghn", {
+    providerEventId: "GHN-AWB-1",
+    trackingCode: "VN2200111",
+    status: "delivered",
+    occurredAt: new Date().toISOString(),
+  });
+  assert.equal(normalized.ok, true);
+  if (!normalized.ok) return;
+
+  const result = await service.handleEvent(normalized.event);
+  assert.equal(result.action, "carrier_delivered");
+  assert.equal(calls.actions.length, 1);
 });
 
 test("a flooded provider is limited before any signature work", async () => {

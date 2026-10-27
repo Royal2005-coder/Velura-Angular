@@ -30,6 +30,8 @@ export const CARRIER_PROVIDER_PATTERN = /^[a-z0-9][a-z0-9-]{1,23}$/;
 export const CARRIER_EVENT_ID_PATTERN = /^[A-Za-z0-9._:-]{4,120}$/;
 /** Vận đơn chỉ gồm ký tự an toàn cho URL và cho việc đối chiếu thủ công. */
 export const CARRIER_TRACKING_PATTERN = /^[A-Za-z0-9-]{6,60}$/;
+/** Mã phiếu hoàn nội bộ, dùng làm fallback khi nhà vận chuyển có gửi kèm. */
+export const CARRIER_RETURN_CODE_PATTERN = /^[A-Za-z0-9-]{4,40}$/;
 
 /** Body webhook tối đa: một sự kiện vận tải nhỏ, không cần dung lượng như đơn hàng. */
 export const MAX_CARRIER_BODY_BYTES = 64 * 1024;
@@ -44,7 +46,9 @@ export const MAX_CARRIER_DETAIL_LENGTH = 500;
 export interface CarrierDeliveryEvent {
   readonly provider: string;
   readonly providerEventId: string;
+  /** Có thể rỗng khi ĐVVC chỉ gửi AWB; service sẽ match return shipment theo AWB. */
   readonly orderCode: string;
+  readonly returnCode?: string;
   readonly trackingCode: string;
   readonly status: CarrierEventStatus;
   readonly occurredAt: string;
@@ -68,15 +72,20 @@ export const CARRIER_ERROR_MESSAGES: Readonly<Record<string, string>> = {
   CARRIER_WEBHOOK_NOT_CONFIGURED: "Chưa cấu hình CARRIER_WEBHOOK_SECRET.",
   CARRIER_EVENT_REQUIRED: "Body webhook phải là một đối tượng JSON.",
   CARRIER_EVENT_ID_REQUIRED: "Thiếu mã sự kiện vận tải (providerEventId).",
-  CARRIER_ORDER_CODE_REQUIRED: "Thiếu mã đơn hàng (orderCode).",
+  CARRIER_ORDER_CODE_REQUIRED: "Mã đơn hàng không hợp lệ (orderCode).",
+  CARRIER_RETURN_CODE_INVALID: "Mã phiếu hoàn không hợp lệ (returnCode).",
   CARRIER_TRACKING_REQUIRED: "Mã vận đơn không hợp lệ (trackingCode).",
   CARRIER_STATUS_UNSUPPORTED: "Trạng thái vận chuyển không thuộc danh sách Velura cho phép.",
   CARRIER_OCCURRED_AT_REQUIRED: "Thời gian xảy ra sự kiện không hợp lệ (occurredAt).",
   CARRIER_EVENT_TOO_OLD: "Sự kiện vận tải quá cũ, không cập nhật đơn nữa.",
   CARRIER_EVENT_FROM_FUTURE: "Sự kiện vận tải có thời gian ở tương lai.",
   CARRIER_BODY_TOO_LARGE: "Body webhook vượt quá giới hạn cho phép.",
-  CARRIER_ORDER_NOT_FOUND: "Không tìm thấy đơn hàng theo mã nhà vận chuyển gửi tới.",
+  CARRIER_ORDER_NOT_FOUND: "Không tìm thấy đơn hàng/phiếu hoàn theo dữ liệu nhà vận chuyển gửi tới.",
   CARRIER_TRACKING_MISMATCH: "Mã vận đơn trong sự kiện không khớp vận đơn đã bàn giao của đơn này.",
+  CARRIER_RETURN_TRACKING_MISMATCH: "Mã vận đơn không khớp vận đơn hoàn đã tạo cho phiếu này.",
+  CARRIER_RETURN_CODE_MISMATCH: "Mã phiếu hoàn không khớp vận đơn hoàn tìm thấy theo AWB.",
+  CARRIER_RETURN_AMBIGUOUS: "Có nhiều vận đơn hoàn cùng mã; cần gửi kèm returnCode để phân biệt.",
+  CARRIER_TRACKING_AMBIGUOUS: "Có nhiều đơn hàng cùng mã vận đơn; cần gửi kèm orderCode.",
   CARRIER_EVENT_NOT_RECORDED: "Không ghi được sự kiện vận tải."
 };
 
@@ -141,8 +150,12 @@ export function normalizeCarrierEvent(provider: string, body: unknown): CarrierE
     return { ok: false, code: "CARRIER_EVENT_ID_REQUIRED", message: carrierErrorMessage("CARRIER_EVENT_ID_REQUIRED") };
   }
   const orderCode = text(payload.orderCode);
-  if (!orderCode || orderCode.length > 40) {
+  if (orderCode.length > 40) {
     return { ok: false, code: "CARRIER_ORDER_CODE_REQUIRED", message: carrierErrorMessage("CARRIER_ORDER_CODE_REQUIRED") };
+  }
+  const returnCode = text(payload.returnCode);
+  if (returnCode && !CARRIER_RETURN_CODE_PATTERN.test(returnCode)) {
+    return { ok: false, code: "CARRIER_RETURN_CODE_INVALID", message: carrierErrorMessage("CARRIER_RETURN_CODE_INVALID") };
   }
   const trackingCode = text(payload.trackingCode);
   if (!CARRIER_TRACKING_PATTERN.test(trackingCode)) {
@@ -170,6 +183,7 @@ export function normalizeCarrierEvent(provider: string, body: unknown): CarrierE
       provider,
       providerEventId,
       orderCode,
+      returnCode: returnCode || undefined,
       trackingCode,
       status,
       occurredAt: new Date(occurredMs).toISOString(),
@@ -184,7 +198,12 @@ export function normalizeCarrierEvent(provider: string, body: unknown): CarrierE
  */
 export function carrierEventNote(event: CarrierDeliveryEvent): string {
   const when = event.occurredAt.slice(0, 16).replace("T", " ");
-  const head = `${event.provider} báo ${event.status} (vận đơn ${event.trackingCode}, lúc ${when})`;
+  const ref = event.returnCode
+    ? `phiếu hoàn ${event.returnCode}`
+    : event.orderCode
+      ? `đơn ${event.orderCode}`
+      : `vận đơn ${event.trackingCode}`;
+  const head = `${event.provider} báo ${event.status} (${ref}, vận đơn ${event.trackingCode}, lúc ${when})`;
   return event.detail ? `${head}: ${event.detail}` : head;
 }
 
@@ -196,6 +215,8 @@ export function carrierEventPayload(event: CarrierDeliveryEvent): JsonObject {
     provider: event.provider,
     provider_event_id: event.providerEventId,
     provider_status: event.status,
+    order_code: event.orderCode || null,
+    return_code: event.returnCode || null,
     tracking_code: event.trackingCode,
     occurred_at: event.occurredAt,
     ...(event.operatorId ? { operator_id: event.operatorId } : {}),

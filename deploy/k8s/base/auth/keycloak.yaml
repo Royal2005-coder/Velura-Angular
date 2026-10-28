@@ -39,7 +39,10 @@ spec:
             memory: 384Mi
           limits:
             cpu: 1000m
-            memory: 768Mi
+            # `kc.sh build` runs on every config change and needs more than 768Mi;
+            # that limit made Keycloak OOMKill forever, so velura-infra never became
+            # Ready and production never reconciled its pins.
+            memory: 2048Mi
         readinessProbe:
           httpGet:
             path: /health/ready

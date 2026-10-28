@@ -68,6 +68,21 @@
   font-size: 0.86rem;
 }
 
+.member-notice--error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--erp-danger-soft);
+  border-radius: var(--erp-radius-sm);
+  background: var(--erp-danger-soft);
+  color: var(--erp-danger);
+}
+
+.member-notice--error .erp-btn {
+  margin-left: auto;
+}
+
 .member-hint {
   margin: 0;
   padding: 10px 16px 16px;

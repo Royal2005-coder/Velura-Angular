@@ -13,6 +13,8 @@ test("review operator reads and mutates through the caller token", async () => {
   await service.list(context("admin_operator_danhgia_review"), new URLSearchParams("rating=5&limit=20"));
   assert.equal(received.filters.rating, "5");
   assert.equal(received.token, "jwt-token");
+  await service.list(context("admin_operator_danhgia_review"), new URLSearchParams("processed=true"));
+  assert.equal(received.filters.processed, true);
   const result = await service.approve(context("admin_operator_danhgia_review"), REVIEW_ID, { expectedVersion: 2 });
   assert.equal(result.expectedVersion, 2);
 });

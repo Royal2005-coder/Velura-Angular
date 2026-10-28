@@ -1,5 +1,5 @@
 import { createProductRepository } from "../products/product-repository.js";
-import { callRpc, selectOne, selectRows } from "../supabase.js";
+import { callRpc, quotePostgrestValue, selectOne, selectRows } from "../supabase.js";
 import { HttpError } from "../http.js";
 import { asJsonObject, asString, type JsonObject } from "../types.js";
 import { PRICE_HISTORY_SELECT, PROMOTION_BASE_SELECT, PROMOTION_SELECT, VOUCHER_BASE_SELECT, VOUCHER_SELECT } from "./pricing-constants.js";
@@ -57,6 +57,10 @@ export function createPricingRepository() {
       if (filters.isActive !== undefined) query.is_active = `eq.${filters.isActive}`;
       // Lọc theo loại chiến dịch, dùng cho tab Combo trên màn khuyến mãi.
       if (filters.type) query.promo_type = `eq.${filters.type}`;
+      if (filters.q) {
+        const pattern = `ilike.*${quotePostgrestValue(String(filters.q))}*`;
+        query.or = `(promo_name.${pattern},description.${pattern})`;
+      }
       try {
         return await selectRows("promotion", query, authOptions(accessToken));
       } catch {
@@ -221,6 +225,10 @@ export function createPricingRepository() {
         offset: filters.offset
       };
       if (filters.isActive !== undefined) query.is_active = `eq.${filters.isActive}`;
+      if (filters.q) {
+        const pattern = `ilike.*${quotePostgrestValue(String(filters.q))}*`;
+        query.or = `(code.${pattern},name.${pattern})`;
+      }
       // "none" là mã không thuộc chiến dịch nào; còn lại service đã kiểm là UUID.
       if (filters.promoId === "none") query.promo_id = "is.null";
       else if (filters.promoId) query.promo_id = `eq.${filters.promoId}`;

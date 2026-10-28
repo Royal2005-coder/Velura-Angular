@@ -58,7 +58,14 @@ export interface AdminTableColumn {
           </thead>
           <tbody>
             @for (row of rows(); track $index) {
-              <tr [class.is-clickable]="clickable()" (click)="select(row)">
+              <tr
+                [class.is-clickable]="clickable()"
+                [attr.tabindex]="clickable() ? 0 : null"
+                [attr.aria-haspopup]="clickable() ? 'dialog' : null"
+                (click)="select(row)"
+                (keydown.enter)="select(row)"
+                (keydown.space)="selectFromKeyboard($event, row)"
+              >
                 @for (column of columns(); track column.key) {
                   <td
                     [class.is-right]="column.align === 'right'"
@@ -126,6 +133,10 @@ export interface AdminTableColumn {
       tr.is-clickable {
         cursor: pointer;
       }
+      tr.is-clickable:focus-visible {
+        outline: 2px solid var(--erp-accent);
+        outline-offset: -2px;
+      }
       .is-right {
         text-align: right;
       }
@@ -189,5 +200,13 @@ export class AdminErpDataTable {
     if (this.clickable()) {
       this.rowSelected.emit(row);
     }
+  }
+
+  /**
+   * Keyboard activation for a focused row. Space scrolls by default, so it is swallowed.
+   */
+  selectFromKeyboard(event: Event, row: unknown): void {
+    event.preventDefault();
+    this.select(row);
   }
 }

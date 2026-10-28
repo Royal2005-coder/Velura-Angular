@@ -21,6 +21,26 @@ test("pricing operator reads production data with the caller token", async () =>
   await service.listPromotions(context("admin_operator_gia_km"), new URLSearchParams("isActive=true&limit=10"));
   assert.equal(received.filters.isActive, "true");
   assert.equal(received.token, "jwt-token");
+  await service.listPromotions(context("admin_operator_gia_km"), new URLSearchParams("q=thu đông&limit=10"));
+  assert.equal(received.filters.q, "thu đông");
+});
+
+test("promotion and voucher search reach the repository", async () => {
+  let promoFilters;
+  let voucherFilters;
+  const service = createPricingService({ repository: {
+    listPromotions: async (filters) => { promoFilters = filters; return { rows: [] }; },
+    countVouchersByPromotion: async () => ({}),
+    summarizePromotions: async () => ({ rows: [], count: 0 }),
+    countActiveVouchers: async () => ({ rows: [], count: 0 }),
+    listVouchers: async (filters) => { voucherFilters = filters; return { rows: [], count: 0 }; }
+  } });
+  await service.listPromotions(context("admin_operator_gia_km"), new URLSearchParams("q=thu đông&limit=10"));
+  assert.equal(promoFilters.q, "thu đông");
+  await service.listVouchers(context("admin_operator_gia_km"), new URLSearchParams("q=THUDONG&limit=10"));
+  assert.equal(voucherFilters.q, "THUDONG");
+  await service.listVouchers(context("admin_operator_gia_km"), new URLSearchParams("isActive=&limit=10"));
+  assert.equal(voucherFilters.isActive, undefined);
 });
 
 test("recovery approval rejects implicit or unbounded configuration before persistence", async () => {

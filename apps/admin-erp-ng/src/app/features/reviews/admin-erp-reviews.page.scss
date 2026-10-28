@@ -9,6 +9,23 @@
   overflow: hidden;
 }
 
+.review-detail__alert {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--erp-danger-soft);
+  border-radius: var(--erp-radius-sm);
+  background: var(--erp-danger-soft);
+  color: var(--erp-danger);
+  font-size: 12px;
+}
+
+.review-detail__alert .erp-btn {
+  margin-left: auto;
+}
+
 .reviews-tabs {
   display: flex;
   flex-wrap: wrap;

@@ -4,6 +4,7 @@ import { catchError, forkJoin, of } from 'rxjs';
 import { choiceParam, textParam, watchQueryParams } from '../../core/admin-erp-deep-link';
 import { AdminAuditRow, AdminErpApiService } from '../../core/admin-erp-api.service';
 import { adminDateTime } from '../../core/admin-erp-format';
+import { useWorkspaceRefresh } from '../../core/admin-erp-refresh.service';
 import {
   adminErrorMessage,
   adminListCount,
@@ -157,6 +158,7 @@ export class AdminErpLogsPage {
 
   constructor() {
     watchQueryParams(this.route, this.destroyRef, (params) => this.applyDeepLink(params));
+    useWorkspaceRefresh(() => this.reload());
   }
 
   /**

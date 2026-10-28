@@ -8,6 +8,8 @@ export interface ReviewListFilters {
   status?: string;
   rating?: string;
   search?: string;
+  /** Chỉ lấy đánh giá đã xử lý (đã duyệt hoặc đã ẩn). */
+  processed?: boolean;
   /** Chỉ lấy đánh giá cần xử lý gấp: bị gắn cờ, hoặc từ 2 sao trở xuống. */
   urgent?: boolean;
   order: string;
@@ -71,6 +73,7 @@ export function createReviewRepository() {
         offset: filters.offset
       };
       if (filters.status) query.status = `eq.${filters.status}`;
+      else if (filters.processed) query.status = "in.(approved,rejected)";
       if (filters.rating) query.rating = `eq.${filters.rating}`;
 
       // PostgREST chỉ nhận một tham số `or` cho mỗi truy vấn, nên khi vừa tìm kiếm vừa

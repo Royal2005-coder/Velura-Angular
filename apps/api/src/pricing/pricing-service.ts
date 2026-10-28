@@ -92,6 +92,7 @@ export function createPricingService({ repository }: { repository: PricingReposi
       const payload = await repository.listPromotions({
         isActive: searchParams.get("isActive") || undefined,
         type,
+        q: searchParams.get("q")?.trim() || undefined,
         limit: Math.min(parseInt(searchParams.get("limit") || "50"), 100),
         offset: parseInt(searchParams.get("offset") || "0")
       }, context.accessToken);
@@ -178,8 +179,9 @@ export function createPricingService({ repository }: { repository: PricingReposi
         throw new HttpError(422, "VALIDATION_ERROR", "promoId không hợp lệ");
       }
       return repository.listVouchers({
-        isActive: isActive !== null ? isActive === "true" : undefined,
+        isActive: isActive === "true" ? true : isActive === "false" ? false : undefined,
         promoId: promoId || undefined,
+        q: searchParams.get("q")?.trim() || undefined,
         limit: Math.min(parseInt(searchParams.get("limit") || "50"), 100),
         offset: parseInt(searchParams.get("offset") || "0")
       }, context.accessToken);

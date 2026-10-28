@@ -46,6 +46,7 @@ export function createReviewService({ repository }: { repository: ReviewReposito
         status: searchParams.get("status") || undefined,
         rating: searchParams.get("rating") || undefined,
         search: searchParams.get("q") || undefined,
+        processed: searchParams.get("processed") === "true",
         urgent: searchParams.get("urgent") === "true",
         order: "submitted_at.desc",
         limit: Math.min(parseInt(searchParams.get("limit") || "50"), 1000),

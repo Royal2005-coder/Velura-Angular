@@ -79,7 +79,7 @@
   (closed)="closeEditor()"
 >
   @if (draft(); as form) {
-    <form class="content-form" (submit)="$event.preventDefault(); save()">
+    <form class="content-form" (submit)="$event.preventDefault(); save()" (input)="markDirty()" (change)="markDirty()">
       <p class="erp-hint">
         {{ editing() ? editing()!.slug + ' · bản ' + (editing()!.version ?? 0) : 'Bài mới lưu ở nháp hoặc công bố ngay.' }}
       </p>
@@ -112,6 +112,10 @@
               <option [value]="category.slug">{{ category.name }}</option>
             }
           </select>
+          @if (categoryError()) {
+            <small class="erp-error" role="alert">{{ categoryError() }}</small>
+            <button class="erp-btn erp-btn--sm" type="button" (click)="$event.preventDefault(); $event.stopPropagation(); retryCategories()">Tải lại danh mục</button>
+          }
         </label>
         <label class="erp-field">
           <span>Trạng thái</span>
@@ -181,3 +185,11 @@
       </button>
     </div>
   </app-erp-modal>
+
+<app-erp-modal [open]="discardOpen()" title="Bỏ thay đổi chưa lưu?" size="sm" (closed)="cancelDiscard()">
+  <p class="erp-hint">Nội dung bài viết bạn vừa nhập sẽ không được lưu.</p>
+  <div footer>
+    <button class="erp-btn" type="button" (click)="cancelDiscard()">Tiếp tục sửa</button>
+    <button class="erp-btn erp-btn--danger" type="button" (click)="confirmDiscard()">Bỏ thay đổi</button>
+  </div>
+</app-erp-modal>

@@ -56,4 +56,35 @@ describe('AdminErpDataTable', () => {
     (fixture.nativeElement as HTMLElement).querySelector('tbody tr')?.dispatchEvent(new Event('click'));
     expect(selected).toHaveBeenCalledTimes(1);
   });
+
+  it('makes clickable rows reachable and operable from the keyboard', async () => {
+    const fixture = await boot();
+    const selected = vi.fn();
+    fixture.componentInstance.rowSelected.subscribe(selected);
+    fixture.componentRef.setInput('columns', columns);
+    fixture.componentRef.setInput('rows', [{ name: 'A', status: 'OK' }]);
+    fixture.componentRef.setInput('clickable', true);
+    fixture.detectChanges();
+
+    const row = (fixture.nativeElement as HTMLElement).querySelector('tbody tr') as HTMLTableRowElement;
+    expect(row.getAttribute('tabindex')).toBe('0');
+    expect(row.getAttribute('aria-haspopup')).toBe('dialog');
+    row.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    expect(selected).toHaveBeenCalledTimes(1);
+    const space = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
+    row.dispatchEvent(space);
+    expect(selected).toHaveBeenCalledTimes(2);
+    expect(space.defaultPrevented).toBe(true);
+  });
+
+  it('keeps non-clickable rows out of the tab order', async () => {
+    const fixture = await boot();
+    fixture.componentRef.setInput('columns', columns);
+    fixture.componentRef.setInput('rows', [{ name: 'A', status: 'OK' }]);
+    fixture.detectChanges();
+
+    const row = (fixture.nativeElement as HTMLElement).querySelector('tbody tr') as HTMLTableRowElement;
+    expect(row.getAttribute('tabindex')).toBeNull();
+    expect(row.getAttribute('aria-haspopup')).toBeNull();
+  });
 });

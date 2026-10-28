@@ -260,8 +260,30 @@ describe('AdminErpOrdersPage', () => {
     expect(page.scanNotice()).toContain('demo');
   });
 
-  it('confirms the COD order in the same step after a successful call', async () => {
-    const actions: Array<{ action: string; body: Record<string, unknown> }> = [];
+  it('routes call_confirm through the COD call flow instead of the generic form', async () => {
+    const fixture = await boot(() => of({ rows: [codOrder], count: 1 }));
+    const page = fixture.componentInstance;
+    page.selected.set(codOrder);
+
+    const callAction = codOrder.allowed_actions?.find((action) => action.code === 'call_confirm');
+    page.openAction(callAction!);
+
+    expect(page.modal()?.kind).toBe('cod_call');
+    expect(page.primaryActions().map((action) => action.code)).toEqual(['confirm_cod']);
+  });
+
+  it('still opens a pending COD order for a read-only operator', async () => {
+    const fixture = await boot(() => of({ rows: [codOrder], count: 1 }), [], {}, { orders: ['read'] });
+    const page = fixture.componentInstance;
+    const readOnlyCod = { ...codOrder, allowed_actions: [] };
+
+    page.openRow(readOnlyCod);
+
+    expect(page.modal()).toBeNull();
+    expect(page.selected()?.order_id).toBe('o2');
+  });
+
+  it('confirms the COD order in the same step after a successful call', async () => {    const actions: Array<{ action: string; body: Record<string, unknown> }> = [];
     const fixture = await boot(
       () => of({ rows: [codOrder], count: 1 }),
       [],

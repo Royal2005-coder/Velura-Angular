@@ -309,7 +309,9 @@ export async function enrichAuditLogs(
         : shortId(asString(row.target_id)),
       action_label: auditActionLabel(asString(row.action), oldValue, newValue, config),
       change_summary: auditChangeSummary(oldValue, newValue, asString(row.action), config),
-      result: asString(row.result) || "Thành công"
+      // audit_log has no result column; do not fabricate "Thành công" for rows that only
+      // record completed actions.
+      result: asString(row.result) || null
     };
   });
 

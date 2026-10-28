@@ -1,4 +1,5 @@
 import { inject } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
 import { CanActivateFn, Router } from '@angular/router';
 import { catchError, map, of } from 'rxjs';
 import { AdminErpApiService } from './admin-erp-api.service';
@@ -27,9 +28,18 @@ export const adminErpShellGuard: CanActivateFn = () => {
       }
       return true;
     }),
-    catchError(() => {
-      session.clear();
-      return of(router.createUrlTree(['/login']));
+    catchError((error: unknown) => {
+      if (isAuthFailure(error)) {
+        session.clear();
+        return of(router.createUrlTree(['/login']));
+      }
+      // Network/5xx blips must not sign the operator out; keep the tab-local session.
+      session.restoreStoredSession();
+      if (!session.session()) {
+        session.clear();
+        return of(router.createUrlTree(['/login']));
+      }
+      return of(true);
     }),
   );
 };
@@ -81,9 +91,18 @@ export const adminErpAuthGuard: CanActivateFn = (route) => {
       }
       return true;
     }),
-    catchError(() => {
-      session.clear();
-      return of(router.createUrlTree(['/login']));
+    catchError((error: unknown) => {
+      if (isAuthFailure(error)) {
+        session.clear();
+        return of(router.createUrlTree(['/login']));
+      }
+      // Network/5xx blips must not sign the operator out; keep the tab-local session.
+      session.restoreStoredSession();
+      if (!session.session()) {
+        session.clear();
+        return of(router.createUrlTree(['/login']));
+      }
+      return of(true);
     }),
   );
 };
@@ -103,9 +122,18 @@ export const adminErpWelcomeGuard: CanActivateFn = () => {
       const next = session.applyAuthContext(context);
       return next.type === 'admin' ? router.parseUrl(session.firstRoute(next)) : true;
     }),
-    catchError(() => {
-      session.clear();
-      return of(router.createUrlTree(['/login']));
+    catchError((error: unknown) => {
+      if (isAuthFailure(error)) {
+        session.clear();
+        return of(router.createUrlTree(['/login']));
+      }
+      // Network/5xx blips must not sign the operator out; keep the tab-local session.
+      session.restoreStoredSession();
+      if (!session.session()) {
+        session.clear();
+        return of(router.createUrlTree(['/login']));
+      }
+      return of(true);
     }),
   );
 };
@@ -125,9 +153,18 @@ export const adminErpSessionGuard: CanActivateFn = () => {
       session.applyAuthContext(context);
       return true;
     }),
-    catchError(() => {
-      session.clear();
-      return of(router.createUrlTree(['/login']));
+    catchError((error: unknown) => {
+      if (isAuthFailure(error)) {
+        session.clear();
+        return of(router.createUrlTree(['/login']));
+      }
+      // Network/5xx blips must not sign the operator out; keep the tab-local session.
+      session.restoreStoredSession();
+      if (!session.session()) {
+        session.clear();
+        return of(router.createUrlTree(['/login']));
+      }
+      return of(true);
     }),
   );
 };
@@ -136,3 +173,7 @@ export const adminErpSessionGuard: CanActivateFn = () => {
  * Login stays reachable so a leftover session can be replaced by another account.
  */
 export const adminErpGuestGuard: CanActivateFn = () => true;
+
+function isAuthFailure(error: unknown): boolean {
+  return error instanceof HttpErrorResponse && (error.status === 401 || error.status === 403);
+}

@@ -215,7 +215,7 @@
   }
   <div footer class="order-footer">
     @if (canMutate() && selected()) {
-      @if (requiresCallConfirmation()) {
+      @if (selected()?.allowed_actions?.length && hasAction(selected()!, 'call_confirm')) {
         <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" (click)="openCodCall(selected()!)">Gọi xác nhận</button>
       }
       @for (action of primaryActions(); track action.code) {
@@ -387,8 +387,8 @@
       <label class="erp-field">
         <span>Quyết định</span>
         <select class="erp-select" name="decision">
-          <option value="paid">Đã thanh toán</option>
-          <option value="failed">Thanh toán thất bại</option>
+          <option value="mark_paid">Đã thanh toán</option>
+          <option value="mark_failed">Thanh toán thất bại</option>
         </select>
       </label>
       <label class="erp-field"><span>Lý do</span><textarea class="erp-input" name="reason" rows="3" required></textarea></label>

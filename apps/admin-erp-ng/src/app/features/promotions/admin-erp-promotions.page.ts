@@ -248,7 +248,14 @@ export class AdminErpPromotionsPage {
   loadStats(): void {
     this.loading.set(true);
     this.loadError.set(null);
-    this.api.pricingStatistics({ range: this.statsRange() }).subscribe({
+    const params: Record<string, string> = {};
+    if (this.statsRange() !== 'all') {
+      const days = Number(this.statsRange());
+      const now = new Date();
+      params['from'] = new Date(now.getTime() - days * 86_400_000).toISOString();
+      params['to'] = now.toISOString();
+    }
+    this.api.pricingStatistics(params).subscribe({
       next: (stats) => {
         this.stats.set(stats);
         this.loading.set(false);

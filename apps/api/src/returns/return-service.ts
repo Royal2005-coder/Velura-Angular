@@ -260,15 +260,14 @@ export function createReturnService({
       if (Number(body.expectedVersion) !== Number(current.version)) throw new HttpError(409,"VERSION_CONFLICT","Dữ liệu yêu cầu đổi/trả đã bị thay đổi bởi thao tác khác. Vui lòng tải lại trang.");
       if (!["RECEIVED","REFUND_PROCESSING"].includes(asString(current.status)) || current.condition_check_result !== RETURN_QA_PASS) throw new HttpError(422,"WAREHOUSE_QA_REQUIRED","Hàng hoàn trả phải được kho tiếp nhận và kiểm tra đạt yêu cầu (QA Pass) trước khi ghi nhận hoàn tiền.");
       const orderId = asString(current.order_id);
-      let payment = await repository.getPaymentByOrderId(orderId,context.accessToken);
+      const payment = await repository.getPaymentByOrderId(orderId,context.accessToken);
+      const pendingCod = Boolean(
+        payment &&
+        asString(payment.payment_status) === "pending" &&
+        asString(payment.payment_method).toUpperCase() === "COD"
+      );
 
-      // Tự động đồng bộ payment cho đơn COD đã nhận hàng thành công
-      if (payment && asString(payment.payment_status) === "pending" && asString(payment.payment_method).toUpperCase() === "COD") {
-        await repository.markPaymentPaid(asString(payment.payment_id));
-        payment = { ...payment, payment_status: "paid" };
-      }
-
-      if (!payment || payment.payment_provider === "stripe" || !["paid","refund_pending"].includes(asString(payment.payment_status))) throw new HttpError(422,"CAPTURED_NON_STRIPE_REQUIRED","Chỉ áp dụng ghi nhận chuyển khoản cho đơn hàng thanh toán ngoài Stripe (COD, MoMo, VNPay) đã thanh toán thành công.");
+      if (!payment || payment.payment_provider === "stripe" || (!pendingCod && !["paid","refund_pending"].includes(asString(payment.payment_status)))) throw new HttpError(422,"CAPTURED_NON_STRIPE_REQUIRED","Chỉ áp dụng ghi nhận chuyển khoản cho đơn hàng thanh toán ngoài Stripe (COD, MoMo, VNPay) đã thanh toán thành công.");
 
       // COD: the refund is a manual transfer to the customer's own account, so it cannot continue while that account
       // is empty, invalid or CSKH is still waiting for a supplement. The same rule is enforced again by the database.
@@ -288,6 +287,13 @@ export function createReturnService({
       if (!proof.startsWith("https://") && !proof.startsWith("data:image/") && !proof.startsWith("http://")) throw new HttpError(422,"TRANSFER_PROOF_REQUIRED","Vui lòng tải lên ảnh chụp chứng từ chuyển khoản thành công.");
       if (!Number.isFinite(amount) || amount <= 0) throw new HttpError(422,"REFUND_AMOUNT_MISMATCH","Số tiền đã chuyển phải lớn hơn 0 và khớp số tiền hoàn của hàng đã nhận.");
       if (Number.isNaN(transferredAt.getTime()) || transferredAt.getTime() > Date.now() + 5 * 60 * 1000) throw new HttpError(422,"TRANSFER_TIME_INVALID","Thời điểm chuyển tiền không hợp lệ: không được để trống hoặc ở tương lai.");
+
+      // Only now that every refund fact is valid do we sync the stale COD capture; a rejected
+      // refund must not leave the order marked paid as a side effect.
+      if (pendingCod) {
+        await repository.markPaymentPaid(asString(payment.payment_id));
+      }
+
       const updated = await repository.recordManualRefund(
         returnId,
         Number(body.expectedVersion),

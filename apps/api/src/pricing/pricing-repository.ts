@@ -158,7 +158,8 @@ export function createPricingRepository() {
           return asJsonObject(await callRpc("admin_save_recovery_promotion", {
             p_input: input, p_id: null
           }, { accessToken }));
-        } catch {
+        } catch (error: unknown) {
+          if (!isMissingRecoveryRpc(error, "admin_save_recovery_promotion")) throw error;
           return asJsonObject(await callRpc("admin_create_promotion", {
             p_name: input.name,
             p_start_date: input.startDate,
@@ -184,7 +185,8 @@ export function createPricingRepository() {
           return asJsonObject(await callRpc("admin_save_recovery_promotion", {
             p_input: input, p_id: promotionId
           }, { accessToken }));
-        } catch {
+        } catch (error: unknown) {
+          if (!isMissingRecoveryRpc(error, "admin_save_recovery_promotion")) throw error;
           return asJsonObject(await callRpc("admin_update_promotion", {
             p_promo_id: promotionId,
             p_expected_version: input.expectedVersion,
@@ -280,7 +282,8 @@ export function createPricingRepository() {
           return asJsonObject(await callRpc("admin_save_recovery_voucher", {
             p_input: normalizedInput, p_id: null
           }, { accessToken }));
-        } catch {
+        } catch (error: unknown) {
+          if (!isMissingRecoveryRpc(error, "admin_save_recovery_voucher")) throw error;
           return asJsonObject(await callRpc("admin_create_voucher", {
             p_code: normalizedInput.code,
             p_name: normalizedInput.name || normalizedInput.code,
@@ -326,7 +329,8 @@ export function createPricingRepository() {
           return asJsonObject(await callRpc("admin_save_recovery_voucher", {
             p_input: normalizedInput, p_id: voucherId
           }, { accessToken }));
-        } catch {
+        } catch (error: unknown) {
+          if (!isMissingRecoveryRpc(error, "admin_save_recovery_voucher")) throw error;
           return asJsonObject(await callRpc("admin_update_voucher", {
             p_voucher_id: voucherId,
             p_expected_version: normalizedInput.expectedVersion,
@@ -389,6 +393,17 @@ async function withPricingError<T>(operation: () => Promise<T>): Promise<T> {
     }
     throw error;
   }
+}
+
+/**
+ * Only a missing recovery RPC justifies falling back to the legacy write. Swallowing a
+ * validation error here would persist the campaign without its recovery authorization.
+ */
+function isMissingRecoveryRpc(error: unknown, name: string): boolean {
+  const blob = error instanceof HttpError
+    ? `${error.code} ${error.message} ${JSON.stringify(error.details || {})}`
+    : String(error);
+  return new RegExp(`${name}|PGRST202|Could not find the function|42883`).test(blob);
 }
 
 function pricingErrorMessage(code: string): string {

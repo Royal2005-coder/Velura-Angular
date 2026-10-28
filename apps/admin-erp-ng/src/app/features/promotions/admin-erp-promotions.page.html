@@ -43,6 +43,29 @@
     </div>
   }
 
+  @if (view() === 'campaigns' || view() === 'vouchers') {
+    <app-erp-filter-bar [busy]="loading()" (apply)="applyFilters()" (reset)="resetFilters()">
+      <label class="erp-field promotions-search">
+        <span>Tìm kiếm</span>
+        <input
+          class="erp-input"
+          type="search"
+          [value]="query()"
+          (input)="onQueryInput($event)"
+          [placeholder]="view() === 'campaigns' ? 'Tên hoặc mô tả chiến dịch...' : 'Mã hoặc tên voucher...'"
+        />
+      </label>
+      <label class="erp-field">
+        <span>Trạng thái</span>
+        <select class="erp-select" [value]="activeFilter()" (change)="onActiveFilter($event)">
+          <option value="">Tất cả</option>
+          <option value="true">Đang bật</option>
+          <option value="false">Đang tắt</option>
+        </select>
+      </label>
+    </app-erp-filter-bar>
+  }
+
   @if (view() === 'campaigns') {
     <app-erp-data-table
       caption="Danh sách chiến dịch"
@@ -148,10 +171,14 @@
   <div footer>
     @if (canMutate() && selectedCampaign(); as campaign) {
       @if (campaign.can_activate) {
-        <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" (click)="setCampaignActive(true)">Chạy</button>
+        <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" [disabled]="actionSaving()" (click)="setCampaignActive(true)">
+          {{ actionSaving() ? 'Đang lưu…' : 'Chạy' }}
+        </button>
       }
       @if (campaign.can_pause) {
-        <button class="erp-btn erp-btn--danger erp-btn--sm" type="button" (click)="setCampaignActive(false)">Tạm dừng</button>
+        <button class="erp-btn erp-btn--danger erp-btn--sm" type="button" [disabled]="actionSaving()" (click)="setCampaignActive(false)">
+          {{ actionSaving() ? 'Đang lưu…' : 'Tạm dừng' }}
+        </button>
       }
       <button class="erp-btn erp-btn--sm" type="button" (click)="openCampaignForm()">Sửa</button>
     }
@@ -186,7 +213,9 @@
   }
   <div footer>
     @if (canMutate()) {
-      <button class="erp-btn erp-btn--sm" type="button" (click)="toggleVoucher()">{{ selectedVoucher()?.is_active ? 'Tắt' : 'Bật' }}</button>
+      <button class="erp-btn erp-btn--sm" type="button" [disabled]="actionSaving()" (click)="toggleVoucher()">
+        {{ actionSaving() ? 'Đang lưu…' : (selectedVoucher()?.is_active ? 'Tắt' : 'Bật') }}
+      </button>
       <button class="erp-btn erp-btn--sm" type="button" (click)="openVoucherForm()">Sửa</button>
     }
     <button class="erp-btn erp-btn--sm" type="button" (click)="closeOverlays()">Đóng</button>
@@ -194,8 +223,8 @@
 </app-erp-drawer>
 
 <app-erp-modal [open]="campaignFormOpen()" [title]="editingCampaign() ? 'Sửa chiến dịch' : 'Tạo chiến dịch'" size="md" (closed)="closeOverlays()">
-  <form class="promo-form" (submit)="submitCampaign($event)">
-    <label class="erp-field"><span>Tên chiến dịch</span><input class="erp-input" name="name" type="text" [value]="campaignName(editingCampaign() || {})" required /></label>
+  <form class="promo-form" (submit)="submitCampaign($event)" (input)="markDirty()" (change)="markDirty()">
+    <label class="erp-field"><span>Tên chiến dịch</span><input class="erp-input" name="name" type="text" [value]="campaignFormName()" required /></label>
     <label class="erp-field">
       <span>Loại chiến dịch</span>
       <select class="erp-select" name="type" [disabled]="editingCampaign() !== null">
@@ -222,7 +251,7 @@
 </app-erp-modal>
 
 <app-erp-modal [open]="voucherFormOpen()" [title]="editingVoucher() ? 'Sửa voucher' : 'Tạo voucher'" size="md" (closed)="closeOverlays()">
-  <form class="promo-form" (submit)="submitVoucher($event)">
+  <form class="promo-form" (submit)="submitVoucher($event)" (input)="markDirty()" (change)="markDirty()">
     <div class="promo-form__row">
       <label class="erp-field"><span>Mã</span><input class="erp-input" name="code" type="text" [value]="editingVoucher()?.code || ''" [disabled]="editingVoucher() !== null" required /></label>
       <label class="erp-field"><span>Tên</span><input class="erp-input" name="name" type="text" [value]="editingVoucher()?.name || ''" /></label>
@@ -254,10 +283,13 @@
       <span>Chiến dịch cha</span>
       <select class="erp-select" name="promoId" [value]="editingVoucher()?.promo_id || ''">
         <option value="">Không thuộc chiến dịch</option>
-        @for (campaign of campaigns(); track campaign.promo_id || campaign.promotion_id) {
+        @for (campaign of campaignOptions(); track campaign.promo_id || campaign.promotion_id) {
           <option [value]="campaign.promo_id || campaign.promotion_id">{{ campaignName(campaign) }}</option>
         }
       </select>
+      @if (campaignLookupError()) {
+        <small class="erp-error" role="alert">{{ campaignLookupError() }}</small>
+      }
     </label>
     <label class="erp-field">
       <span>Nhóm khách</span>
@@ -275,4 +307,12 @@
       <button class="erp-btn erp-btn--primary" type="submit" [disabled]="saving()">Lưu</button>
     </div>
   </form>
+</app-erp-modal>
+
+<app-erp-modal [open]="discardOpen()" title="Bỏ thay đổi chưa lưu?" size="sm" (closed)="cancelDiscard()">
+  <p class="promo-discard">Nội dung bạn vừa nhập cho chiến dịch hoặc voucher sẽ không được lưu.</p>
+  <div footer class="promo-discard__actions">
+    <button class="erp-btn" type="button" (click)="cancelDiscard()">Tiếp tục sửa</button>
+    <button class="erp-btn erp-btn--danger" type="button" (click)="confirmDiscard()">Bỏ thay đổi</button>
+  </div>
 </app-erp-modal>

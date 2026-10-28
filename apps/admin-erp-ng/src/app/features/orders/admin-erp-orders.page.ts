@@ -43,6 +43,7 @@ import {
   adminRangeLabel,
 } from '../../core/admin-erp-http';
 import { AdminErpSessionService } from '../../core/admin-erp-session.service';
+import { useWorkspaceRefresh } from '../../core/admin-erp-refresh.service';
 import { ORDER_STATUS_LABELS, statusLabelFrom } from '../../core/admin-erp-status-labels';
 import { AdminErpDataTable, AdminTableColumn } from '../../shared/ui/admin-data-table';
 import { AdminErpDrawer } from '../../shared/ui/admin-drawer';
@@ -151,6 +152,7 @@ export class AdminErpOrdersPage {
   readonly scanNotice = signal<string | null>(null);
   readonly carriers = CARRIER_PROFILES;
   readonly copiedPhone = signal(false);
+  private copiedPhoneTimer: ReturnType<typeof setTimeout> | null = null;
   readonly codDecision = signal<'' | 'confirm' | 'cancel' | 'no_answer' | 'invalid'>('');
   readonly codCancelReason = signal('customer_request');
   readonly codNote = signal('');
@@ -297,6 +299,12 @@ export class AdminErpOrdersPage {
 
   constructor() {
     watchQueryParams(this.route, this.destroyRef, (params) => this.applyDeepLink(params));
+    this.destroyRef.onDestroy(() => {
+      if (this.copiedPhoneTimer) {
+        clearTimeout(this.copiedPhoneTimer);
+      }
+    });
+    useWorkspaceRefresh(() => (this.tab() === 'logs' ? this.loadLogs() : this.reload()));
   }
 
   /**
@@ -541,13 +549,28 @@ export class AdminErpOrdersPage {
   }
 
   /**
-   * Copies the recipient phone.
+   * Copies the recipient phone. The confirmation resets after two seconds; failures are reported
+   * instead of silently leaving the button in its old label.
    */
   copyPhone(phone: string | undefined): void {
     if (!phone) return;
-    navigator.clipboard?.writeText(phone);
-    this.copiedPhone.set(true);
-    setTimeout(() => this.copiedPhone.set(false), 2000);
+    if (!navigator.clipboard) {
+      this.actionError.set('Trình duyệt không cho phép sao chép tự động. Chọn số điện thoại và sao chép thủ công.');
+      return;
+    }
+    void navigator.clipboard
+      .writeText(phone)
+      .then(() => {
+        this.actionError.set(null);
+        this.copiedPhone.set(true);
+        if (this.copiedPhoneTimer) {
+          clearTimeout(this.copiedPhoneTimer);
+        }
+        this.copiedPhoneTimer = setTimeout(() => this.copiedPhone.set(false), 2000);
+      })
+      .catch(() => {
+        this.actionError.set('Không sao chép được số điện thoại. Chọn số và sao chép thủ công.');
+      });
   }
 
   /**

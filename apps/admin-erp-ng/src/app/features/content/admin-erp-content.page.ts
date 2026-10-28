@@ -13,6 +13,7 @@ import {
   type BlogDraft,
 } from '../../core/admin-erp-content';
 import { adminDateTime } from '../../core/admin-erp-format';
+import { useWorkspaceRefresh } from '../../core/admin-erp-refresh.service';
 import {
   adminErrorMessage,
   adminErrorDetails,
@@ -77,12 +78,15 @@ export class AdminErpContentPage {
   readonly notice = signal<string | null>(null);
   readonly counts = signal({ draft: 0, published: 0, archived: 0, categories: 0 });
   readonly categories = signal<AdminContentCategory[]>([]);
+  readonly categoryError = signal<string | null>(null);
 
   /** Editor state: `null` đóng form; bản đang sửa giữ `editing` để biết version gửi lại. */
   readonly draft = signal<BlogDraft | null>(null);
   readonly editing = signal<AdminBlogRow | null>(null);
   readonly errors = signal<Record<string, string>>({});
   readonly conflict = signal(false);
+  readonly dirty = signal(false);
+  readonly discardOpen = signal(false);
   readonly saving = signal(false);
 
   readonly canRead = computed(() => this.session.can('read', 'content'));
@@ -118,6 +122,7 @@ export class AdminErpContentPage {
   constructor() {
     this.loadCategories();
     this.reload();
+    useWorkspaceRefresh(() => this.reload());
   }
 
   /**
@@ -161,14 +166,25 @@ export class AdminErpContentPage {
    * Reads blog categories once; the RPC refuses a post whose category does not exist.
    */
   private loadCategories(): void {
-    this.api
-      .listContentCategories('blog')
-      .pipe(catchError(() => of({ rows: [] as AdminContentCategory[] })))
-      .subscribe((payload) => {
+    this.api.listContentCategories('blog').subscribe({
+      next: (payload) => {
         const rows = payload.rows || [];
         this.categories.set(rows);
+        this.categoryError.set(null);
         this.counts.update((current) => ({ ...current, categories: rows.length }));
-      });
+      },
+      error: (error: unknown) => {
+        this.categories.set([]);
+        this.categoryError.set(adminErrorMessage(error, 'Không tải được danh mục blog.'));
+      },
+    });
+  }
+
+  /**
+   * Retries the category lookup after a transient failure.
+   */
+  retryCategories(): void {
+    this.loadCategories();
   }
 
   /**
@@ -214,6 +230,7 @@ export class AdminErpContentPage {
     this.errors.set({});
     this.editing.set(null);
     this.draft.set({ ...emptyBlogDraft });
+    this.dirty.set(false);
   }
 
   /**
@@ -238,14 +255,51 @@ export class AdminErpContentPage {
       readMinutes: Number(blog.read_minutes ?? 5),
       isFeatured: Boolean(blog.is_featured),
     });
+    this.dirty.set(false);
   }
 
+  /**
+   * Closes the editor. A dirty draft asks before discarding typed changes.
+   */
   closeEditor(): void {
+    if (this.dirty()) {
+      this.discardOpen.set(true);
+      return;
+    }
+    this.forceCloseEditor();
+  }
+
+  /**
+   * Marks the open draft as edited.
+   */
+  markDirty(): void {
+    this.dirty.set(true);
+  }
+
+  /**
+   * Confirms discarding the draft and closes the editor.
+   */
+  confirmDiscard(): void {
+    this.discardOpen.set(false);
+    this.dirty.set(false);
+    this.forceCloseEditor();
+  }
+
+  /**
+   * Keeps the editor open after the discard prompt is cancelled.
+   */
+  cancelDiscard(): void {
+    this.discardOpen.set(false);
+  }
+
+  private forceCloseEditor(): void {
     this.draft.set(null);
     this.editing.set(null);
     this.errors.set({});
     this.conflict.set(false);
     this.saving.set(false);
+    this.dirty.set(false);
+    this.discardOpen.set(false);
   }
 
   /**
@@ -304,6 +358,7 @@ export class AdminErpContentPage {
     request.subscribe({
       next: (saved) => {
         this.saving.set(false);
+        this.dirty.set(false);
         this.closeEditor();
         this.notice.set(
           editing
@@ -327,14 +382,29 @@ export class AdminErpContentPage {
   }
 
   /**
-   * Reloads the newer copy of a conflicting post into the editor.
+   * Refetches the newer copy of a conflicting post before reopening the editor, so the
+   * operator edits the version that actually won and the next save does not conflict again.
    */
   reloadConflict(): void {
     const editing = this.editing();
     if (!editing) return;
-    const fresh = this.rows().find((row) => row.blog_id === editing.blog_id) || editing;
-    this.openEdit(fresh);
-    this.notice.set('Đã tải bản mới nhất vào trình soạn. Nội dung cũ của bạn đã bị ghi đè bởi người khác.');
+    this.conflict.set(false);
+    this.api.listBlogs({ q: editing.slug || editing.title || '', status: '', limit: '200' }).subscribe({
+      next: (payload) => {
+        const fresh = (payload.rows || []).find((row) => row.blog_id === editing.blog_id);
+        if (!fresh) {
+          this.notice.set('Không tìm thấy bản mới nhất của bài viết. Tải lại danh sách rồi thử lại.');
+          this.reload();
+          return;
+        }
+        this.openEdit(fresh);
+        this.notice.set('Đã tải bản mới nhất vào trình soạn. Nội dung cũ của bạn đã bị ghi đè bởi người khác.');
+      },
+      error: (error: unknown) => {
+        this.conflict.set(true);
+        this.notice.set(adminErrorMessage(error, 'Không tải được bản mới nhất của bài viết.'));
+      },
+    });
   }
 
   /**

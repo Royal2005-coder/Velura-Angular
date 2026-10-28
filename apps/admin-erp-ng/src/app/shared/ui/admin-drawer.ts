@@ -99,12 +99,25 @@ export class AdminErpDrawer {
   readonly size = input<'sm' | 'md' | 'lg'>('md');
   readonly closed = output<void>();
   private readonly panel = viewChild<ElementRef<HTMLElement>>('panel');
+  private lastFocused: HTMLElement | null = null;
 
   constructor() {
-    effect(() => {
-      if (this.open()) {
-        queueMicrotask(() => this.panel()?.nativeElement.focus());
+    effect((onCleanup) => {
+      if (!this.open()) {
+        return;
       }
+      this.lastFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      const previousOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      queueMicrotask(() => this.panel()?.nativeElement.focus());
+      onCleanup(() => {
+        document.body.style.overflow = previousOverflow;
+        const target = this.lastFocused;
+        this.lastFocused = null;
+        if (target?.isConnected) {
+          target.focus();
+        }
+      });
     });
   }
 

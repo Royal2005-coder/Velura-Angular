@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { catchError, of } from 'rxjs';
+import { catchError, finalize, of } from 'rxjs';
 import {
   AdminAuditRow,
   AdminErpApiService,
@@ -9,6 +9,7 @@ import {
   AdminVoucherRow,
 } from '../../core/admin-erp-api.service';
 import { adminDateTime, adminMoney } from '../../core/admin-erp-format';
+import { useWorkspaceRefresh } from '../../core/admin-erp-refresh.service';
 import {
   adminErrorMessage,
   adminListCount,
@@ -18,6 +19,7 @@ import {
 } from '../../core/admin-erp-http';
 import { AdminErpSessionService } from '../../core/admin-erp-session.service';
 import { AdminErpDataTable, AdminTableColumn } from '../../shared/ui/admin-data-table';
+import { AdminErpFilterBar } from '../../shared/ui/admin-filter-bar';
 import { AdminErpDrawer } from '../../shared/ui/admin-drawer';
 import { AdminErpIcon } from '../../shared/ui/admin-erp-icon';
 import { AdminErpKpiCard } from '../../shared/ui/admin-kpi-card';
@@ -43,6 +45,7 @@ const CODE_PATTERN = /^[A-Z0-9_-]{3,30}$/;
     AdminErpKpiCard,
     AdminErpTabs,
     AdminErpDataTable,
+    AdminErpFilterBar,
     AdminErpPagination,
     AdminErpDrawer,
     AdminErpModal,
@@ -58,7 +61,11 @@ export class AdminErpPromotionsPage {
   private readonly session = inject(AdminErpSessionService);
 
   readonly view = signal<PromoView>('campaigns');
+  readonly query = signal('');
+  readonly activeFilter = signal('');
   readonly campaigns = signal<AdminPromotionRow[]>([]);
+  readonly campaignOptions = signal<AdminPromotionRow[]>([]);
+  readonly campaignLookupError = signal<string | null>(null);
   readonly vouchers = signal<AdminVoucherRow[]>([]);
   readonly logs = signal<AdminAuditRow[]>([]);
   readonly stats = signal<AdminPricingStatistics | null>(null);
@@ -78,7 +85,10 @@ export class AdminErpPromotionsPage {
   readonly editingVoucher = signal<AdminVoucherRow | null>(null);
   readonly formError = signal<string | null>(null);
   readonly actionError = signal<string | null>(null);
+  readonly dirty = signal(false);
+  readonly discardOpen = signal(false);
   readonly saving = signal(false);
+  readonly actionSaving = signal(false);
   readonly statsRange = signal('30');
   readonly canMutate = computed(() => this.session.can('update', 'promotions'));
   readonly statsRanges = [
@@ -160,6 +170,8 @@ export class AdminErpPromotionsPage {
 
   constructor() {
     this.reload();
+    this.loadCampaignOptions();
+    useWorkspaceRefresh(() => this.reload());
   }
 
   /**
@@ -176,8 +188,14 @@ export class AdminErpPromotionsPage {
     }
     this.loading.set(true);
     this.loadError.set(null);
+    const listParams: Record<string, string> = {
+      limit: String(this.pageSize),
+      offset: adminOffset(this.page(), this.pageSize),
+    };
+    if (this.query()) listParams['q'] = this.query();
+    if (this.activeFilter()) listParams['isActive'] = this.activeFilter();
     if (this.view() === 'campaigns') {
-      this.api.listPromotions({ limit: String(this.pageSize), offset: adminOffset(this.page(), this.pageSize) }).subscribe({
+      this.api.listPromotions(listParams).subscribe({
         next: (payload) => {
           this.campaigns.set(adminListRows(payload));
           this.promoCount.set(adminListCount(payload));
@@ -192,7 +210,7 @@ export class AdminErpPromotionsPage {
       });
       return;
     }
-    this.api.listVouchers({ limit: String(this.pageSize), offset: adminOffset(this.page(), this.pageSize) }).subscribe({
+    this.api.listVouchers(listParams).subscribe({
       next: (payload) => {
         this.vouchers.set(adminListRows(payload));
         this.voucherCount.set(adminListCount(payload));
@@ -247,9 +265,70 @@ export class AdminErpPromotionsPage {
    */
   setView(view: string): void {
     if (!['campaigns', 'vouchers', 'logs', 'stats'].includes(view)) return;
+    if (this.view() !== view) {
+      this.query.set('');
+      this.activeFilter.set('');
+    }
     this.view.set(view as PromoView);
     this.page.set(1);
     this.reload();
+  }
+
+  /**
+   * Applies the campaign/voucher search and active-state filters.
+   */
+  applyFilters(): void {
+    this.page.set(1);
+    this.reload();
+  }
+
+  /**
+   * Clears the campaign/voucher filters.
+   */
+  resetFilters(): void {
+    this.query.set('');
+    this.activeFilter.set('');
+    this.page.set(1);
+    this.reload();
+  }
+
+  /**
+   * Tracks the free-text search field.
+   */
+  onQueryInput(event: Event): void {
+    this.query.set((event.target as HTMLInputElement).value);
+  }
+
+  /**
+   * Tracks the active-state filter.
+   */
+  onActiveFilter(event: Event): void {
+    this.activeFilter.set((event.target as HTMLSelectElement).value);
+  }
+
+  /**
+   * Loads every campaign as a lookup for the voucher form. The list endpoint caps a page at
+   * 100 rows; the voucher picker must not be limited to the ten campaigns currently paged.
+   */
+  private loadCampaignOptions(): void {
+    this.api.listPromotions({ limit: '100', offset: '0' }).subscribe({
+      next: (payload) => {
+        this.campaignOptions.set(adminListRows(payload));
+        this.campaignLookupError.set(null);
+      },
+      error: (error: unknown) => {
+        this.campaignOptions.set([]);
+        this.campaignLookupError.set(adminErrorMessage(error, 'Không tải được danh sách chiến dịch để chọn.'));
+      },
+    });
+  }
+
+  /**
+   * Campaign name shown in the create form; empty (not a placeholder dash) for a new campaign.
+   */
+  campaignFormName(): string {
+    const campaign = this.editingCampaign();
+    return campaign ? this.campaignName(campaign) : '';
   }
 
   /**
@@ -285,15 +364,48 @@ export class AdminErpPromotionsPage {
   }
 
   /**
-   * Closes drawers and forms.
+   * Closes drawers and forms. A dirty form asks before discarding typed changes.
    */
   closeOverlays(): void {
+    if (this.dirty()) {
+      this.discardOpen.set(true);
+      return;
+    }
+    this.forceClose();
+  }
+
+  /**
+   * Marks the open campaign/voucher form as edited.
+   */
+  markDirty(): void {
+    this.dirty.set(true);
+  }
+
+  /**
+   * Confirms discarding the typed changes and closes every overlay.
+   */
+  confirmDiscard(): void {
+    this.discardOpen.set(false);
+    this.dirty.set(false);
+    this.forceClose();
+  }
+
+  /**
+   * Keeps the form open after the discard prompt is cancelled.
+   */
+  cancelDiscard(): void {
+    this.discardOpen.set(false);
+  }
+
+  private forceClose(): void {
     this.selectedCampaign.set(null);
     this.selectedVoucher.set(null);
     this.campaignFormOpen.set(false);
     this.voucherFormOpen.set(false);
     this.formError.set(null);
     this.actionError.set(null);
+    this.dirty.set(false);
+    this.discardOpen.set(false);
   }
 
   /**
@@ -304,6 +416,7 @@ export class AdminErpPromotionsPage {
     this.editingCampaign.set(this.selectedCampaign());
     this.campaignFormOpen.set(true);
     this.formError.set(null);
+    this.dirty.set(false);
   }
 
   /**
@@ -314,6 +427,8 @@ export class AdminErpPromotionsPage {
     this.editingVoucher.set(this.selectedVoucher());
     this.voucherFormOpen.set(true);
     this.formError.set(null);
+    this.dirty.set(false);
+    this.loadCampaignOptions();
   }
 
   /**
@@ -322,12 +437,13 @@ export class AdminErpPromotionsPage {
   setCampaignActive(active: boolean): void {
     const campaign = this.selectedCampaign();
     const promoId = campaign?.promo_id || campaign?.promotion_id;
-    if (!campaign || !promoId || !this.canMutate()) return;
+    if (!campaign || !promoId || !this.canMutate() || this.actionSaving()) return;
     this.actionError.set(null);
+    this.actionSaving.set(true);
     const request$ = active
       ? this.api.activatePromotion(promoId, { expectedVersion: campaign.version })
       : this.api.pausePromotion(promoId, { expectedVersion: campaign.version, reason: 'Tạm dừng từ ERP workspace' });
-    request$.subscribe({
+    request$.pipe(finalize(() => this.actionSaving.set(false))).subscribe({
       next: () => {
         this.closeOverlays();
         this.reload();
@@ -341,9 +457,10 @@ export class AdminErpPromotionsPage {
    */
   toggleVoucher(): void {
     const voucher = this.selectedVoucher();
-    if (!voucher || !this.canMutate()) return;
+    if (!voucher || !this.canMutate() || this.actionSaving()) return;
     this.actionError.set(null);
-    this.api.toggleVoucher(voucher.voucher_id).subscribe({
+    this.actionSaving.set(true);
+    this.api.toggleVoucher(voucher.voucher_id).pipe(finalize(() => this.actionSaving.set(false))).subscribe({
       next: () => {
         this.closeOverlays();
         this.reload();
@@ -393,6 +510,7 @@ export class AdminErpPromotionsPage {
     request$.subscribe({
       next: () => {
         this.saving.set(false);
+        this.dirty.set(false);
         this.closeOverlays();
         this.reload();
       },
@@ -454,6 +572,7 @@ export class AdminErpPromotionsPage {
     request$.subscribe({
       next: () => {
         this.saving.set(false);
+        this.dirty.set(false);
         this.closeOverlays();
         this.reload();
       },

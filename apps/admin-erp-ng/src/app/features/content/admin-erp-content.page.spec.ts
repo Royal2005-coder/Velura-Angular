@@ -57,6 +57,7 @@ describe('AdminErpContentPage', () => {
     const api = {
       listBlogs: (params: Record<string, string> = {}) => {
         listCalls.push(params);
+        if (params['q']) return of({ rows: [{ ...POSTS[0], version: 7, title: 'Bản mới nhất' }], count: 1 });
         const status = params['status'];
         if (status === 'draft') return of({ rows: [POSTS[1]], count: 1 });
         if (status === 'published') return of({ rows: [POSTS[0]], count: 4 });
@@ -172,5 +173,41 @@ describe('AdminErpContentPage', () => {
 
     expect(page.errors()['slug']).toBe('Slug đã có bài khác dùng.');
     expect(page.draft()).not.toBeNull();
+  });
+
+  it('refetches the winning copy before reopening a conflicted post', () => {
+    const conflict = new HttpErrorResponse({
+      status: 409,
+      error: { error: { code: 'VERSION_CONFLICT', message: 'Bài viết vừa được người khác sửa.' } },
+    });
+    const { page, listCalls } = boot({ content: ['read', 'create', 'update'] }, conflict);
+    page.openEdit(POSTS[0]);
+    page.save();
+    expect(page.conflict()).toBe(true);
+
+    page.reloadConflict();
+
+    expect(listCalls.some((params) => params['q'] === POSTS[0].slug && params['limit'] === '200')).toBe(true);
+    expect(page.editing()?.version).toBe(7);
+    expect(page.notice()).toContain('Đã tải bản mới nhất');
+    expect(page.conflict()).toBe(false);
+  });
+
+  it('asks before discarding a dirty draft', () => {
+    const { page } = boot();
+    page.openCreate();
+    page.markDirty();
+    page.closeEditor();
+
+    expect(page.discardOpen()).toBe(true);
+    expect(page.draft()).not.toBeNull();
+
+    page.cancelDiscard();
+    expect(page.draft()).not.toBeNull();
+
+    page.closeEditor();
+    page.confirmDiscard();
+    expect(page.draft()).toBeNull();
+    expect(page.discardOpen()).toBe(false);
   });
 });

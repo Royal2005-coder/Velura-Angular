@@ -109,6 +109,7 @@ export class AdminErpReturnsPage {
   private readonly destroyRef = inject(DestroyRef);
   private readonly route = inject(ActivatedRoute);
   private listRequest = new Subscription();
+  private detailRequestId = 0;
 
   readonly tab = signal<DeskTab>('returns');
   readonly returns = signal<AdminReturnRow[]>([]);
@@ -487,12 +488,14 @@ export class AdminErpReturnsPage {
    */
   openReturn(row: unknown, expectedCode = ''): void {
     const id = (row as AdminReturnRow).return_id;
+    const requestId = ++this.detailRequestId;
     this.detailLoading.set(true);
     this.detailError.set(null);
     this.gatewayNote.set(null);
     this.recordTrail.set([]);
     this.api.getReturn(id).subscribe({
       next: (record) => {
+        if (requestId !== this.detailRequestId) return;
         this.detailLoading.set(false);
         if (expectedCode && record.return_code && record.return_code !== expectedCode) {
           this.selected.set(null);
@@ -504,6 +507,7 @@ export class AdminErpReturnsPage {
         this.loadRecordTrail(record.return_id);
       },
       error: (error: unknown) => {
+        if (requestId !== this.detailRequestId) return;
         this.detailLoading.set(false);
         this.selected.set(row as AdminReturnRow);
         this.detailError.set(adminErrorMessage(error, 'Không tải được chi tiết phiếu.'));
@@ -521,7 +525,11 @@ export class AdminErpReturnsPage {
     this.api
       .listServiceLogs({ targetId: returnId, limit: '12' })
       .pipe(catchError(() => of(null)))
-      .subscribe((payload) => this.recordTrail.set(payload ? adminListRows(payload) : []));
+      .subscribe((payload) => {
+        if (this.selected()?.return_id === returnId) {
+          this.recordTrail.set(payload ? adminListRows(payload) : []);
+        }
+      });
   }
 
   /**
@@ -536,7 +544,11 @@ export class AdminErpReturnsPage {
     this.api
       .getOrder(orderId)
       .pipe(catchError(() => of(null)))
-      .subscribe((order) => this.orderContext.set(order));
+      .subscribe((order) => {
+        if (this.selected()?.order_id === orderId) {
+          this.orderContext.set(order);
+        }
+      });
   }
 
   /**
@@ -874,6 +886,7 @@ export class AdminErpReturnsPage {
    * Closes every overlay.
    */
   closeOverlays(): void {
+    this.detailRequestId += 1;
     this.selected.set(null);
     this.selectedTicket.set(null);
     this.selectedLog.set(null);

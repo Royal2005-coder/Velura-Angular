@@ -387,6 +387,7 @@ export function createProductService({ repository }: { repository: ProductReposi
         }
         const salePrice = row.sale_price ? Number(row.sale_price) : null;
         if (salePrice !== null && (!Number.isFinite(salePrice) || salePrice < 0)) reject("sale_price", "Giá bán phải là số không âm");
+        if (salePrice !== null && salePrice > basePrice) reject("sale_price", "Giá bán không được cao hơn giá gốc");
         if (row.status && !PRODUCT_STATUSES.includes(row.status)) reject("status", "Trạng thái phải là on_sale, hidden, out_of_stock hoặc discontinued");
         const variant = SKU_PATTERN.test(sku) ? await repository.findVariantBySku(sku, context.accessToken) : null;
         const skuProduct = SKU_PATTERN.test(sku) ? await repository.findBySku(sku, context.accessToken) : null;
@@ -616,6 +617,9 @@ export function validateCreateProduct(body: JsonObject = {}) {
   const salePrice = Number(body.salePrice ?? basePrice);
   if (!Number.isFinite(salePrice) || salePrice < 0) {
     throw validationError("salePrice", "Giá bán phải là số không âm");
+  }
+  if (salePrice > basePrice) {
+    throw validationError("salePrice", "Giá bán không được cao hơn giá gốc");
   }
   const status = body.status || "on_sale";
   if (!["on_sale", "hidden"].includes(status as string)) {

@@ -28,6 +28,26 @@ function authRole(user: LoginLockUser | null): string {
 }
 
 /**
+ * Best-effort revocation of the Supabase refresh session on sign-out. Access JWTs remain
+ * valid until their short expiry; the browser drops its tab-local token immediately.
+ */
+export async function revokeAdminSession(accessToken: string): Promise<void> {
+  if (!accessToken || !config.supabaseUrl) return;
+  try {
+    await fetch(`${config.supabaseUrl}/auth/v1/logout`, {
+      method: "POST",
+      headers: {
+        apikey: config.supabaseAnonKey,
+        Authorization: `Bearer ${accessToken}`
+      },
+      signal: AbortSignal.timeout(5_000)
+    });
+  } catch {
+    // Local logout is authoritative for this tab; a failed upstream revoke must not block it.
+  }
+}
+
+/**
  * Admin password grant: lockout on public.users, then Supabase Auth.
  */
 export async function completeAdminPasswordSignIn(body: JsonObject, ipAddress?: string): Promise<{ token: string }> {

@@ -72,3 +72,24 @@ test("audit log service denies a non-admin before repository access", async () =
   );
   assert.equal(called, false);
 });
+
+test("audit log service denies an active admin whose role cannot read audit logs", async () => {
+  let called = false;
+  const service = createAuditLogService({
+    repository: {
+      list: async () => {
+        called = true;
+        return { rows: [], count: 0 };
+      }
+    }
+  });
+  await assert.rejects(
+    () =>
+      service.list(
+        { authUser: { id: "u2" }, profile: { is_active: true }, isAdmin: true, roleCode: "admin_viewer", accessToken: "t" },
+        new URLSearchParams()
+      ),
+    (error: { status?: number; code?: string }) => error.status === 403 && error.code === "RBAC_DENIED"
+  );
+  assert.equal(called, false);
+});

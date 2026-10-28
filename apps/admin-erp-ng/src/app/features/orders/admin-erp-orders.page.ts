@@ -153,6 +153,7 @@ export class AdminErpOrdersPage {
   readonly carriers = CARRIER_PROFILES;
   readonly copiedPhone = signal(false);
   private copiedPhoneTimer: ReturnType<typeof setTimeout> | null = null;
+  private detailRequestId = 0;
   readonly codDecision = signal<'' | 'confirm' | 'cancel' | 'no_answer' | 'invalid'>('');
   readonly codCancelReason = signal('customer_request');
   readonly codNote = signal('');
@@ -206,8 +207,8 @@ export class AdminErpOrdersPage {
     if (phone) links.push({ label: 'Đơn khác của khách này', commands: ['/orders'], query: { q: phone } });
     return links;
   });
-  readonly primaryActions = computed(() => (this.selected()?.allowed_actions || []).filter((action) => !action.destructive));
-  readonly destructiveActions = computed(() => (this.selected()?.allowed_actions || []).filter((action) => action.destructive));
+  readonly primaryActions = computed(() => (this.selected()?.allowed_actions || []).filter((action) => !action.destructive && action.code !== 'call_confirm'));
+  readonly destructiveActions = computed(() => (this.selected()?.allowed_actions || []).filter((action) => action.destructive && action.code !== 'call_confirm'));
   readonly hasCallConfirmed = computed(() => {
     const order = this.selected();
     if (!order) return false;
@@ -438,7 +439,7 @@ export class AdminErpOrdersPage {
    */
   openRow(row: unknown): void {
     const order = row as AdminOrderRow;
-    if (this.isPendingCod(order)) {
+    if (this.isPendingCod(order) && this.hasAction(order, 'call_confirm')) {
       this.openCodCall(order);
       return;
     }
@@ -446,20 +447,30 @@ export class AdminErpOrdersPage {
   }
 
   /**
+   * Whether one order currently exposes a state-machine action.
+   */
+  hasAction(order: AdminOrderRow, code: string): boolean {
+    return Boolean(order.allowed_actions?.some((action) => action.code === code));
+  }
+
+  /**
    * Loads a fresh order and its audit rows.
    */
   openDetail(orderId: string): void {
+    const requestId = ++this.detailRequestId;
     this.notice.set(null);
     this.detailLoading.set(true);
     this.linkedReturns.set([]);
     this.api.getOrder(orderId).subscribe({
       next: (order) => {
+        if (requestId !== this.detailRequestId) return;
         this.selected.set(order);
         this.detailLoading.set(false);
         this.loadOrderAudit(orderId);
         this.loadLinkedReturns(orderId);
       },
       error: (error: unknown) => {
+        if (requestId !== this.detailRequestId) return;
         this.detailLoading.set(false);
         this.loadError.set(adminErrorMessage(error));
       },
@@ -470,6 +481,7 @@ export class AdminErpOrdersPage {
    * Closes the detail drawer and modal.
    */
   closeDetail(): void {
+    this.detailRequestId += 1;
     this.selected.set(null);
     this.linkedReturns.set([]);
     this.detailLoading.set(false);
@@ -482,6 +494,13 @@ export class AdminErpOrdersPage {
    */
   openAction(action: AdminOrderAction): void {
     if (!this.canMutate()) return;
+    // Recording a call must always pass the COD call flow (explicit start + result),
+    // never the generic note form with a preselected "reached".
+    if (action.code === 'call_confirm') {
+      const order = this.selected();
+      if (order) this.openCodCall(order);
+      return;
+    }
     if (action.code === 'confirm_cod' && this.requiresCallConfirmation()) {
       this.notice.set('Đơn COD từ 1.000.000đ cần ghi nhận cuộc gọi xác nhận thành công trước khi duyệt.');
       return;
@@ -870,12 +889,21 @@ export class AdminErpOrdersPage {
         String(order.total_amount || 0),
       ]),
     ];
-    const csv = rows.map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+    const csv = rows.map((row) => row.map((value) => this.csvCell(value)).join(',')).join('\r\n');
     const link = document.createElement('a');
     link.href = URL.createObjectURL(new Blob(['\ufeff', csv], { type: 'text/csv;charset=utf-8' }));
     link.download = `velura-orders-${new Date().toISOString().slice(0, 10)}.csv`;
     link.click();
     URL.revokeObjectURL(link.href);
+  }
+
+  /**
+   * Quotes a CSV cell and neutralises spreadsheet formula prefixes from customer data.
+   */
+  private csvCell(value: unknown): string {
+    const text = String(value ?? '');
+    const guarded = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
+    return `"${guarded.replace(/"/g, '""')}"`;
   }
 
   /**
@@ -1029,8 +1057,12 @@ export class AdminErpOrdersPage {
 
   private loadOrderAudit(orderId: string): void {
     this.api.orderAuditLogs(orderId, { limit: '10' }).subscribe({
-      next: (payload) => this.audit.set(adminListRows(payload)),
-      error: () => this.audit.set([]),
+      next: (payload) => {
+        if (this.selected()?.order_id === orderId) this.audit.set(adminListRows(payload));
+      },
+      error: () => {
+        if (this.selected()?.order_id === orderId) this.audit.set([]);
+      },
     });
   }
 
@@ -1045,7 +1077,11 @@ export class AdminErpOrdersPage {
     this.api
       .listReturns({ order_id: orderId, limit: '10' })
       .pipe(catchError(() => of(null)))
-      .subscribe((payload) => this.linkedReturns.set(payload ? adminListRows(payload) : []));
+      .subscribe((payload) => {
+        if (this.selected()?.order_id === orderId) {
+          this.linkedReturns.set(payload ? adminListRows(payload) : []);
+        }
+      });
   }
 
   private handleActionError(orderId: string, error: unknown): void {

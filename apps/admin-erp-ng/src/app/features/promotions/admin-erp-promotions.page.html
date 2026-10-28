@@ -295,8 +295,12 @@
       <span>Nhóm khách</span>
       <select class="erp-select" name="applicableUserGroup" [value]="editingVoucher()?.applicable_user_group || 'all_users'">
         <option value="all_users">Tất cả</option>
-        <option value="new_users">Khách mới</option>
-        <option value="members">Thành viên</option>
+        <option value="new_user">Khách mới</option>
+        <option value="member">Thành viên</option>
+        <option value="guest">Khách vãng lai</option>
+        <option value="loyal_user">Khách thân thiết</option>
+        <option value="churn_risk_user">Khách có nguy cơ rời bỏ</option>
+        <option value="birthday">Quà sinh nhật</option>
       </select>
     </label>
     @if (formError()) {

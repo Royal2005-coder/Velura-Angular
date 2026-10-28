@@ -628,7 +628,8 @@ export class AdminErpProductsPage {
     const form = event.target as HTMLFormElement;
     const basePrice = Number(field(form, 'basePrice'));
     const saleRaw = field(form, 'salePrice');
-    const salePrice = saleRaw ? Number(saleRaw) : null;
+    // Blank sale price means "no promotion": keep the selling price equal to the base price.
+    const salePrice = saleRaw ? Number(saleRaw) : basePrice;
     const reason = field(form, 'reason').trim();
     if (!product || product.version == null) {
       this.priceError.set('Thiếu phiên bản sản phẩm để cập nhật giá.');
@@ -638,7 +639,7 @@ export class AdminErpProductsPage {
       this.priceError.set('Giá gốc phải lớn hơn 0.');
       return;
     }
-    if (salePrice !== null && (!Number.isFinite(salePrice) || salePrice <= 0 || salePrice > basePrice)) {
+    if (!Number.isFinite(salePrice) || salePrice <= 0 || salePrice > basePrice) {
       this.priceError.set('Giá bán phải lớn hơn 0 và không vượt giá gốc.');
       return;
     }

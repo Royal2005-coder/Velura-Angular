@@ -299,6 +299,7 @@ export class AdminErpMembersPage {
    */
   openDetail(userId: string): void {
     this.detailUserId.set(userId);
+    this.detail.set(null);
     this.detailError.set(null);
     this.lockError.set(null);
     this.lockReason.set('');
@@ -328,10 +329,12 @@ export class AdminErpMembersPage {
     this.detailLoading.set(true);
     this.api.memberDetail(userId).subscribe({
       next: (detail) => {
+        if (this.detailUserId() !== userId) return;
         this.detail.set(detail);
         this.detailLoading.set(false);
       },
       error: (error: unknown) => {
+        if (this.detailUserId() !== userId) return;
         this.detail.set(null);
         this.detailError.set(adminErrorMessage(error, 'Không tải được hồ sơ thành viên.'));
         this.detailLoading.set(false);

@@ -15,11 +15,11 @@ alter table public.return_exchange
   add column if not exists qa_note text;
 
 update public.return_exchange
-set return_code = coalesce(nullif(return_code, ''), 'RET' || upper(substr(replace(return_id::text, '-', ''), 1, 12)))
+set return_code = coalesce(nullif(return_code, ''), 'RET' || upper(replace(return_id::text, '-', '')))
 where return_code is null or return_code = '';
 
 alter table public.return_exchange
-  alter column return_code set default ('RET' || upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 12))),
+  alter column return_code set default ('RET' || upper(replace(gen_random_uuid()::text, '-', ''))),
   alter column return_code set not null;
 
 -- Warehouse disposition is per returned line. Only `restock` changes sellable stock.

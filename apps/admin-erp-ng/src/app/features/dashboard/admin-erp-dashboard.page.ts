@@ -14,6 +14,7 @@ import {
   adminErpNavLink,
 } from '../../core/admin-erp-navigation';
 import { AdminErpSessionService } from '../../core/admin-erp-session.service';
+import { useWorkspaceRefresh } from '../../core/admin-erp-refresh.service';
 import { AdminErpIcon } from '../../shared/ui/admin-erp-icon';
 import { AdminErpEmptyState } from '../../shared/ui/admin-empty-state';
 import { AdminErpKpiCard, AdminKpiTone } from '../../shared/ui/admin-kpi-card';
@@ -285,6 +286,7 @@ export class AdminErpDashboardPage {
 
   constructor() {
     this.reload();
+    useWorkspaceRefresh(() => this.reload());
   }
 
   /**

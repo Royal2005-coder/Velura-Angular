@@ -9,6 +9,7 @@ import {
 } from '../../core/admin-erp-api.service';
 import { choiceParam, textParam, watchQueryParams } from '../../core/admin-erp-deep-link';
 import { adminDateTime } from '../../core/admin-erp-format';
+import { useWorkspaceRefresh } from '../../core/admin-erp-refresh.service';
 import {
   adminErrorMessage,
   adminListCount,
@@ -92,6 +93,7 @@ export class AdminErpMembersPage {
   readonly loading = signal(true);
   readonly hasLoadedOnce = signal(false);
   readonly loadError = signal<string | null>(null);
+  readonly overviewError = signal<string | null>(null);
   readonly notice = signal<string | null>(null);
   readonly overview = signal<AdminMemberOverview>(EMPTY_OVERVIEW);
 
@@ -194,6 +196,7 @@ export class AdminErpMembersPage {
 
   constructor() {
     watchQueryParams(this.route, this.destroyRef, (params) => this.applyDeepLink(params));
+    useWorkspaceRefresh(() => this.reload());
   }
 
   /**
@@ -224,6 +227,7 @@ export class AdminErpMembersPage {
     }
     this.loading.set(true);
     this.loadError.set(null);
+    this.overviewError.set(null);
     forkJoin({
       list: this.api
         .listMembers({
@@ -239,7 +243,12 @@ export class AdminErpMembersPage {
             return of({ rows: [], count: 0 });
           }),
         ),
-      overview: this.api.memberOverview().pipe(catchError(() => of(EMPTY_OVERVIEW))),
+      overview: this.api.memberOverview().pipe(
+        catchError((error: unknown) => {
+          this.overviewError.set(adminErrorMessage(error, 'Không tải được tổng quan ví điểm.'));
+          return of(EMPTY_OVERVIEW);
+        }),
+      ),
     }).subscribe((payload) => {
       this.rows.set(adminListRows(payload.list));
       this.total.set(adminListCount(payload.list));

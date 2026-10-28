@@ -75,9 +75,12 @@
       [columns]="logColumns"
       [rows]="logs()"
       [loading]="loading()"
+      [error]="loadError() || ''"
+      errorTitle="Không tải được nhật ký đánh giá"
       emptyTitle="Chưa có nhật ký đánh giá"
       emptyMessage="Audit xuất hiện sau thao tác duyệt, ẩn hoặc phản hồi."
       [clickable]="true"
+      (retry)="reload()"
       (rowSelected)="openLog($event)"
     />
     <app-erp-pagination [page]="logsPage()" [pageCount]="logPageCount()" [label]="logRangeLabel()" (changed)="goLogsPage($event)" />
@@ -87,6 +90,13 @@
 <app-erp-drawer [open]="selected() !== null" title="Chi tiết đánh giá" size="lg" (closed)="closeOverlays()">
   @if (selected(); as review) {
     <div class="review-detail">
+      @if (detailError()) {
+        <div class="review-detail__alert" role="alert">
+          <app-erp-icon name="alert" [size]="'16'" />
+          {{ detailError() }}
+          <button class="erp-btn erp-btn--sm" type="button" (click)="retryDetail()">Thử lại</button>
+        </div>
+      }
       <div class="review-detail__head">
         <div>
           <span class="review-detail__product">{{ productName(review) }}</span>
@@ -163,7 +173,7 @@
 
 <app-erp-modal [open]="actionType() !== null" [title]="actionTitle()" size="md" (closed)="closeOverlays()">
   @if (selected(); as review) {
-    <form class="review-form" (submit)="submitAction($event)">
+    <form class="review-form" (submit)="submitAction($event)" (input)="markDirty()" (change)="markDirty()">
       <div class="review-form__summary">
         <strong>{{ productName(review) }}</strong>
         <span>{{ stars(review) }}</span>
@@ -224,7 +234,9 @@
 
       <div class="review-form__actions">
         <button class="erp-btn" type="button" (click)="closeOverlays()">Hủy</button>
-        <button class="erp-btn erp-btn--primary" type="submit">Xác nhận</button>
+        <button class="erp-btn erp-btn--primary" type="submit" [disabled]="actionSaving()">
+          {{ actionSaving() ? 'Đang lưu…' : 'Xác nhận' }}
+        </button>
       </div>
     </form>
   }
@@ -235,4 +247,12 @@
     <img class="review-lightbox" [src]="image" alt="Ảnh đánh giá phóng to" />
   }
   <div footer><button class="erp-btn erp-btn--sm" type="button" (click)="closeLightbox()">Đóng</button></div>
+</app-erp-modal>
+
+<app-erp-modal [open]="discardOpen()" title="Bỏ nội dung đang nhập?" size="sm" (closed)="cancelDiscard()">
+  <p class="erp-hint">Phản hồi hoặc lý do bạn vừa nhập sẽ không được lưu.</p>
+  <div footer>
+    <button class="erp-btn" type="button" (click)="cancelDiscard()">Tiếp tục sửa</button>
+    <button class="erp-btn erp-btn--danger" type="button" (click)="confirmDiscard()">Bỏ nội dung</button>
+  </div>
 </app-erp-modal>

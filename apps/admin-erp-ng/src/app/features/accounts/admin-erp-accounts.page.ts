@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { catchError, forkJoin, map, of } from 'rxjs';
+import { catchError, finalize, forkJoin, map, of } from 'rxjs';
 import {
   AdminAccountRow,
   AdminAuditRow,
@@ -15,6 +15,7 @@ import {
   adminRangeLabel,
 } from '../../core/admin-erp-http';
 import { AdminErpSessionService } from '../../core/admin-erp-session.service';
+import { useWorkspaceRefresh } from '../../core/admin-erp-refresh.service';
 import { AdminBadgeTone } from '../../shared/ui/admin-status-badge';
 import { AdminErpDataTable, AdminTableColumn } from '../../shared/ui/admin-data-table';
 import { AdminErpDrawer } from '../../shared/ui/admin-drawer';
@@ -78,6 +79,10 @@ export class AdminErpAccountsPage {
   readonly requests = signal<AdminRoleRequestRow[]>([]);
   readonly logs = signal<AdminAuditRow[]>([]);
   readonly loadError = signal<string | null>(null);
+  readonly requestError = signal<string | null>(null);
+  readonly logsError = signal<string | null>(null);
+  readonly actionSaving = signal(false);
+  readonly requestSaving = signal(false);
   readonly loading = signal(true);
   readonly hasLoadedOnce = signal(false);
   readonly page = signal(1);
@@ -99,10 +104,13 @@ export class AdminErpAccountsPage {
   readonly selectedLog = signal<AdminAuditRow | null>(null);
   readonly actionType = signal<AccountAction>(null);
   readonly actionError = signal<string | null>(null);
+  readonly dirty = signal(false);
+  readonly discardOpen = signal(false);
   readonly lockType = signal<'temporary' | 'permanent'>('temporary');
   readonly targetRole = signal<'member' | 'admin'>('member');
   readonly wordHint = signal('Số từ: 0 / tối thiểu 11 từ');
   readonly createOpen = signal(false);
+  readonly createSaving = signal(false);
   readonly createRole = signal<'member' | 'admin'>('member');
   readonly createError = signal<string | null>(null);
   readonly createdAccount = signal<{ email?: string; phone?: string; temporary_password?: string } | null>(null);
@@ -208,6 +216,7 @@ export class AdminErpAccountsPage {
 
   constructor() {
     this.reload();
+    useWorkspaceRefresh(() => this.reload());
   }
 
   /**
@@ -216,6 +225,8 @@ export class AdminErpAccountsPage {
   reload(): void {
     this.loading.set(true);
     this.loadError.set(null);
+    this.requestError.set(null);
+    this.logsError.set(null);
     const tab = this.tab();
     const pageParams = { limit: String(this.pageSize), offset: adminOffset(this.page(), this.pageSize) };
 
@@ -233,13 +244,23 @@ export class AdminErpAccountsPage {
         tab === 'promotions'
           ? this.api
               .listRoleRequests({ status: 'pending', limit: String(this.pageSize), offset: adminOffset(this.requestPage(), this.pageSize) })
-              .pipe(catchError(() => of(EMPTY_REQUESTS)))
+              .pipe(
+                catchError((error: unknown) => {
+                  this.requestError.set(adminErrorMessage(error, 'Không tải được yêu cầu nâng quyền.'));
+                  return of(EMPTY_REQUESTS);
+                }),
+              )
           : this.api.listRoleRequests({ status: 'pending', limit: '1' }).pipe(catchError(() => of(EMPTY_REQUESTS))),
       logs:
         tab === 'logs'
           ? this.api
               .listAccountAuditLogs({ limit: String(this.pageSize), offset: adminOffset(this.logsPage(), this.pageSize) })
-              .pipe(catchError(() => of(EMPTY_LOGS)))
+              .pipe(
+                catchError((error: unknown) => {
+                  this.logsError.set(adminErrorMessage(error, 'Không tải được nhật ký tài khoản.'));
+                  return of(EMPTY_LOGS);
+                }),
+              )
           : of(EMPTY_LOGS),
       all: this.countQuery({}),
       members: this.countQuery({ role: 'member' }),
@@ -353,6 +374,7 @@ export class AdminErpAccountsPage {
     }
     this.actionType.set(type);
     this.actionError.set(null);
+    this.dirty.set(false);
     this.lockType.set('temporary');
     this.targetRole.set(row.role === 'admin' ? 'admin' : 'member');
     this.wordHint.set('Số từ: 0 / tối thiểu 11 từ');
@@ -367,18 +389,64 @@ export class AdminErpAccountsPage {
     }
     this.selectedRequest.set(row as AdminRoleRequestRow);
     this.actionError.set(null);
+    this.dirty.set(false);
     this.wordHint.set('Số từ: 0 / tối thiểu 11 từ');
   }
 
   /**
-   * Closes drawers and action modals.
+   * Closes drawers and action modals. A dirty form asks before discarding typed text.
    */
   closeOverlays(): void {
+    if (this.dirty()) {
+      this.discardOpen.set(true);
+      return;
+    }
+    this.forceClose();
+  }
+
+  /**
+   * Marks the open account form as edited.
+   */
+  markDirty(): void {
+    this.dirty.set(true);
+  }
+
+  /**
+   * Confirms discarding typed text and closes every overlay.
+   */
+  confirmDiscard(): void {
+    this.discardOpen.set(false);
+    this.dirty.set(false);
+    this.forceClose();
+    this.forceCloseCreate();
+  }
+
+  /**
+   * Keeps the form open after the discard prompt is cancelled.
+   */
+  cancelDiscard(): void {
+    this.discardOpen.set(false);
+  }
+
+  private forceClose(): void {
     this.selected.set(null);
     this.selectedLog.set(null);
     this.selectedRequest.set(null);
     this.actionType.set(null);
     this.actionError.set(null);
+    this.discardOpen.set(false);
+  }
+
+  private forceCloseCreate(): void {
+    const created = this.createdAccount();
+    this.createOpen.set(false);
+    this.createError.set(null);
+    this.createdAccount.set(null);
+    this.dirty.set(false);
+    this.discardOpen.set(false);
+    if (created) {
+      this.reload();
+    }
   }
 
   /**
@@ -392,19 +460,18 @@ export class AdminErpAccountsPage {
     this.createRole.set('member');
     this.createError.set(null);
     this.createdAccount.set(null);
+    this.dirty.set(false);
   }
 
   /**
    * Closes the create modal and refreshes counts when an account was created.
    */
   closeCreate(): void {
-    const created = this.createdAccount();
-    this.createOpen.set(false);
-    this.createError.set(null);
-    this.createdAccount.set(null);
-    if (created) {
-      this.reload();
+    if (this.dirty() && !this.createdAccount()) {
+      this.discardOpen.set(true);
+      return;
     }
+    this.forceCloseCreate();
   }
 
   /**
@@ -412,7 +479,7 @@ export class AdminErpAccountsPage {
    */
   submitCreate(event: Event): void {
     event.preventDefault();
-    if (!this.canMutate()) {
+    if (!this.canMutate() || this.createSaving()) {
       return;
     }
     const form = event.target as HTMLFormElement;
@@ -430,6 +497,8 @@ export class AdminErpAccountsPage {
       this.createError.set('Vui lòng nhập email hoặc số điện thoại.');
       return;
     }
+    this.createError.set(null);
+    this.createSaving.set(true);
     this.api
       .createAccount({
         fullName,
@@ -439,9 +508,11 @@ export class AdminErpAccountsPage {
         role,
         adminRole: role === 'admin' ? adminRole : null,
       })
+      .pipe(finalize(() => this.createSaving.set(false)))
       .subscribe({
         next: (created) => {
           this.createError.set(null);
+          this.dirty.set(false);
           this.createdAccount.set({ email: created.email, phone: created.phone, temporary_password: created.temporary_password });
         },
         error: (error: unknown) => this.createError.set(adminErrorMessage(error)),
@@ -453,7 +524,7 @@ export class AdminErpAccountsPage {
    */
   submitAction(event: Event): void {
     event.preventDefault();
-    if (!this.canMutate()) {
+    if (!this.canMutate() || this.actionSaving()) {
       return;
     }
     const row = this.selected();
@@ -486,8 +557,10 @@ export class AdminErpAccountsPage {
               adminRole: this.targetRole() === 'admin' ? this.field(form, 'adminRole').value || null : null,
               expectedVersion: row.version,
             });
-    request$.subscribe({
+    this.actionSaving.set(true);
+    request$.pipe(finalize(() => this.actionSaving.set(false))).subscribe({
       next: () => {
+        this.dirty.set(false);
         this.closeOverlays();
         this.reload();
       },
@@ -499,7 +572,7 @@ export class AdminErpAccountsPage {
    * Submits approve/reject for a role request.
    */
   submitRequest(decision: 'approve' | 'reject', form: HTMLFormElement): void {
-    if (!this.canMutate()) {
+    if (!this.canMutate() || this.requestSaving()) {
       return;
     }
     const row = this.selectedRequest();
@@ -512,13 +585,18 @@ export class AdminErpAccountsPage {
       this.actionError.set(`Ghi chú từ chối quá ngắn, hiện tại ${adminWordCount(note)} từ, yêu cầu tối thiểu 11 từ.`);
       return;
     }
-    this.api.reviewRoleRequest(row.request_id, decision, { expectedVersion: row.version, note }).subscribe({
-      next: () => {
-        this.closeOverlays();
-        this.reload();
-      },
-      error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
-    });
+    this.requestSaving.set(true);
+    this.api
+      .reviewRoleRequest(row.request_id, decision, { expectedVersion: row.version, note })
+      .pipe(finalize(() => this.requestSaving.set(false)))
+      .subscribe({
+        next: () => {
+          this.dirty.set(false);
+          this.closeOverlays();
+          this.reload();
+        },
+        error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
+      });
   }
 
   /**

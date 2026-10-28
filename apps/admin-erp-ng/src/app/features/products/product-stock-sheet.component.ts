@@ -235,6 +235,14 @@ export class ProductStockSheetComponent {
       this.error.set(`Lý do điều chỉnh cần tối thiểu ${MIN_CHANGE_REASON_LENGTH} ký tự.`);
       return;
     }
+    const missingVersion =
+      this.mode() === 'single'
+        ? !(Number(this.chosen()?.version) >= 1)
+        : this.batchLines().some((line) => !(Number(line.expectedVersion) >= 1));
+    if (missingVersion) {
+      this.error.set('Thiếu phiên bản biến thể để khoá lạc quan. Đóng và mở lại sản phẩm trước khi điều chỉnh.');
+      return;
+    }
     this.error.set(null);
     this.saving.set(true);
     if (this.mode() === 'single') {
@@ -249,7 +257,7 @@ export class ProductStockSheetComponent {
           variantId: variant.variant_id,
           delta: this.delta(),
           reason,
-          expectedVersion: Number(variant.version ?? 1),
+          expectedVersion: Number(variant.version ?? 0),
           ...(this.thresholdChanged() ? { lowStockThreshold: this.threshold() } : {}),
         })
         .subscribe({

@@ -166,7 +166,7 @@
     @if (canMutate() && selected(); as row) {
       @if (row.is_active) {
         <button class="erp-btn erp-btn--danger erp-btn--sm" type="button" (click)="openAction('lock')">Khóa</button>
-      } @else {
+      } @else if (row.lock_type) {
         <button class="erp-btn erp-btn--sm" type="button" (click)="openAction('unlock')">Mở khóa</button>
       }
       <button class="erp-btn erp-btn--sm" type="button" (click)="openAction('role')">Đổi vai trò</button>

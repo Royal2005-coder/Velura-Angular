@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { randomUUID } from "node:crypto";
 import { config, assertRuntimeConfig } from "./config.js";
 import { applyCors, applySecurityHeaders, getRequestIp, HttpError, parsePathname, readJson, sendError, sendJson, sendNoContent } from "./http.js";
-import { completeAdminPasswordSignIn, recordAdminSignOut } from "./auth-signin.js";
+import { completeAdminPasswordSignIn, recordAdminSignOut, revokeAdminSession } from "./auth-signin.js";
 import { buildAuthContext, capabilitiesForRole, requireAdmin, requireAuthenticated, requirePermission } from "./rbac.js";
 import { buildDashboardSummary } from "./dashboard.js";
 import { handleDashboardRoute } from "./dashboard-router.js";
@@ -109,6 +109,14 @@ const carrierLimiter = createFixedWindowLimiter({
   limit: 60,
   windowMs: 60_000
 });
+const signInIpLimiter = createFixedWindowLimiter({
+  limit: 30,
+  windowMs: 60_000
+});
+const signInAccountLimiter = createFixedWindowLimiter({
+  limit: 10,
+  windowMs: 60_000
+});
 export async function handleApiRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
   observeHttpRequest(req, res);
   const requestId = String(req.headers["x-request-id"] || randomUUID()).slice(0, 128);
@@ -163,9 +171,9 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
     }
 
     if (req.method === "GET" && parts[1] === "auth" && parts[2] === "google") {
-      const redirectTo = url.searchParams.get("redirect_to") || "";
+      const redirectTo = validatedOAuthRedirect(url.searchParams.get("redirect_to") || "");
       const challenge = url.searchParams.get("code_challenge") || "";
-      if (!redirectTo || !challenge || !config.supabaseUrl) {
+      if (!challenge || !config.supabaseUrl) {
         throw new HttpError(400, "BAD_REQUEST", "Missing OAuth parameters");
       }
       const location =
@@ -180,12 +188,20 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
 
     if (req.method === "POST" && parts[1] === "auth" && parts[2] === "signin") {
       const body = await readJson(req);
-      return sendJson(res, 200, await completeAdminPasswordSignIn(body, getRequestIp(req)), corsHeaders);
+      const ip = getRequestIp(req);
+      const email = String(body?.email || "").trim().toLowerCase();
+      const ipRate = signInIpLimiter.consume(ip);
+      const accountRate = signInAccountLimiter.consume(`${ip}:${email}`);
+      if (!ipRate.allowed || !accountRate.allowed) {
+        throw new HttpError(429, "RATE_LIMITED", "Too many sign-in attempts. Try again shortly.");
+      }
+      return sendJson(res, 200, await completeAdminPasswordSignIn(body, ip), corsHeaders);
     }
 
     if (req.method === "POST" && parts[1] === "auth" && parts[2] === "signout") {
       requireAuthenticated(context);
       await recordAdminSignOut(req, context);
+      await revokeAdminSession(context.accessToken || "");
       return sendJson(res, 200, { success: true }, corsHeaders);
     }
 
@@ -491,6 +507,19 @@ if (process.env.VERCEL !== "1") {
   server.listen(config.port, () => {
     console.log(`Velura API listening on http://localhost:${config.port}`);
   });
+}
+
+function validatedOAuthRedirect(raw: string): string {
+  let target: URL;
+  try {
+    target = new URL(raw);
+  } catch {
+    throw new HttpError(400, "BAD_REQUEST", "OAuth redirect must be an absolute URL");
+  }
+  if (!config.corsOrigins.includes(target.origin) || target.pathname !== "/auth/callback") {
+    throw new HttpError(400, "BAD_REQUEST", "OAuth redirect must point to a known admin origin");
+  }
+  return target.toString();
 }
 
 export default handleApiRequest;

@@ -434,6 +434,9 @@ jobs:
       - name: Scan exact published digest
         id: scan
         uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # v0.33.1
+        env:
+          # ai-worker ships CUDA/ONNX runtimes larger than Trivy's 5m default walk budget.
+          TRIVY_TIMEOUT: '20m'
         with:
           skip-setup-trivy: true
           image-ref: ${{ steps.image.outputs.name }}@${{ steps.build.outputs.digest }}
@@ -447,6 +450,8 @@ jobs:
         id: sbom
         if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.scanner.outcome == 'success' }}
         uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8
+        env:
+          TRIVY_TIMEOUT: '20m'
         with:
           skip-setup-trivy: true
           image-ref: ${{ steps.image.outputs.name }}@${{ steps.build.outputs.digest }}

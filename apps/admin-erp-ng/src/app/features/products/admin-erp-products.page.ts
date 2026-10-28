@@ -32,6 +32,7 @@ import {
   adminRangeLabel,
 } from '../../core/admin-erp-http';
 import { AdminErpSessionService } from '../../core/admin-erp-session.service';
+import { useWorkspaceRefresh } from '../../core/admin-erp-refresh.service';
 import { AdminTone } from '../../core/admin-erp-status-labels';
 import { AdminErpDataTable } from '../../shared/ui/admin-data-table';
 import { AdminErpDrawer } from '../../shared/ui/admin-drawer';
@@ -364,6 +365,7 @@ export class AdminErpProductsPage {
       this.skuCheckRequest.unsubscribe();
     });
     watchQueryParams(this.route, this.destroyRef, (params) => this.applyDeepLink(params));
+    useWorkspaceRefresh(() => this.reload());
     this.api.listCategories().subscribe({
       next: (payload) => this.categories.set(adminListRows(payload)),
       error: () => this.categories.set([]),

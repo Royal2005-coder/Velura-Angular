@@ -34,14 +34,18 @@ const reviews: AdminReviewRow[] = [
 type ListReviewsFn = (params?: Record<string, string>) => Observable<AdminListPayload<AdminReviewRow>>;
 
 describe('AdminErpReviewsPage', () => {
-  async function boot(listReviews: ListReviewsFn, calls: Array<Record<string, string> | undefined> = []) {
+  async function boot(
+    listReviews: ListReviewsFn,
+    calls: Array<Record<string, string> | undefined> = [],
+    overrides: { getReview?: (reviewId: string) => Observable<AdminReviewRow> } = {},
+  ) {
     TestBed.resetTestingModule();
     const api = {
       listReviews: (params?: Record<string, string>) => {
         calls.push(params);
         return listReviews(params);
       },
-      getReview: (reviewId: string) => of(reviews.find((row) => row.review_id === reviewId) || reviews[0]),
+      getReview: overrides.getReview || ((reviewId: string) => of(reviews.find((row) => row.review_id === reviewId) || reviews[0])),
       listReviewAuditLogs: () => of({ rows: [], count: 0 }),
       suggestReviewReply: () => of({ replies: ['Cảm ơn bạn đã góp ý.'], source: 'ai' }),
       approveReview: () => of({}),
@@ -139,5 +143,57 @@ describe('AdminErpReviewsPage', () => {
     expect(page.loadError()).toBe('reviews down');
     expect(page.rows()).toEqual([]);
     expect(page.loading()).toBe(false);
+  });
+
+  it('asks the API for both approved and rejected rows on the processed tab', async () => {
+    const calls: Array<Record<string, string> | undefined> = [];
+    const fixture = await boot(listWithCounts, calls);
+    const page = fixture.componentInstance;
+
+    page.setTab('processed');
+    const listCall = calls.filter((params) => params?.['limit'] !== '1').at(-1);
+    expect(listCall?.['processed']).toBe('true');
+    expect(listCall?.['status']).toBeUndefined();
+
+    page.statusFilter.set('rejected');
+    page.applyFilters();
+    const filtered = calls.filter((params) => params?.['limit'] !== '1').at(-1);
+    expect(filtered?.['status']).toBe('rejected');
+    expect(filtered?.['processed']).toBeUndefined();
+  });
+
+  it('keeps a detail failure visible and retries the read', async () => {
+    let attempt = 0;
+    const fixture = await boot(listWithCounts, [], {
+      getReview: () => {
+        attempt += 1;
+        return attempt === 1 ? throwError(() => new Error('detail down')) : of(reviews[1]);
+      },
+    });
+    const page = fixture.componentInstance;
+
+    page.openDetail(reviews[0]);
+    expect(page.detailError()).toBe('detail down');
+
+    page.retryDetail();
+    expect(page.detailError()).toBeNull();
+    expect(page.selected()?.review_id).toBe('r2');
+  });
+
+  it('asks before discarding typed moderation text', async () => {
+    const fixture = await boot(listWithCounts);
+    const page = fixture.componentInstance;
+
+    page.openDetail(reviews[0]);
+    page.openAction('reply');
+    page.markDirty();
+    page.closeOverlays();
+
+    expect(page.discardOpen()).toBe(true);
+    expect(page.actionType()).toBe('reply');
+
+    page.confirmDiscard();
+    expect(page.discardOpen()).toBe(false);
+    expect(page.actionType()).toBeNull();
   });
 });

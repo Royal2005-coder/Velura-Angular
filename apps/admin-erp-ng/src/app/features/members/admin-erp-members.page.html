@@ -54,6 +54,13 @@
   />
 </section>
 
+@if (overviewError()) {
+  <div class="member-notice member-notice--error" role="alert">
+    {{ overviewError() }}
+    <button class="erp-btn erp-btn--sm" type="button" (click)="reload()">Thử lại</button>
+  </div>
+}
+
 @if (!canRead()) {
   <section class="erp-card">
     <p class="member-notice">Vai trò của bạn không có quyền xem điểm thành viên.</p>

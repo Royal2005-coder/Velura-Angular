@@ -9,7 +9,7 @@ import { AdminErpIcon } from './admin-erp-icon';
   imports: [AdminErpIcon],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="empty" [class.empty--error]="tone() === 'error'">
+    <div class="empty" [class.empty--error]="tone() === 'error'" [attr.role]="tone() === 'error' ? 'alert' : 'status'">
       <span class="empty__icon"><app-erp-icon [name]="icon()" [size]="'22'" /></span>
       <strong>{{ title() }}</strong>
       @if (message()) {

@@ -1,9 +1,10 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, type ParamMap } from '@angular/router';
-import { catchError, forkJoin, of } from 'rxjs';
+import { catchError, finalize, forkJoin, of } from 'rxjs';
 import { choiceParam, textParam, watchQueryParams } from '../../core/admin-erp-deep-link';
 import { AdminAuditRow, AdminErpApiService, AdminReviewRow } from '../../core/admin-erp-api.service';
 import { adminDateTime, adminStars } from '../../core/admin-erp-format';
+import { useWorkspaceRefresh } from '../../core/admin-erp-refresh.service';
 import {
   adminErrorMessage,
   adminListCount,
@@ -92,8 +93,12 @@ export class AdminErpReviewsPage {
   readonly hiddenCount = signal(0);
   readonly selected = signal<AdminReviewRow | null>(null);
   readonly selectedLog = signal<AdminAuditRow | null>(null);
+  readonly detailError = signal<string | null>(null);
+  readonly actionSaving = signal(false);
   readonly actionType = signal<ReviewAction>(null);
   readonly actionError = signal<string | null>(null);
+  readonly dirty = signal(false);
+  readonly discardOpen = signal(false);
   readonly replyDraft = signal('');
   readonly aiSuggestions = signal<string[]>([]);
   readonly aiLoading = signal(false);
@@ -161,6 +166,7 @@ export class AdminErpReviewsPage {
   constructor() {
     watchQueryParams(this.route, this.destroyRef, (params) => this.applyDeepLink(params));
     this.loadCounts();
+    useWorkspaceRefresh(() => this.reload());
   }
 
   /**
@@ -185,14 +191,18 @@ export class AdminErpReviewsPage {
     this.loading.set(true);
     this.loadError.set(null);
     const tab = this.tab();
-    const status = tab === 'processed' ? 'approved' : this.statusFilter();
     const params: Record<string, string> = {
       q: this.query(),
       rating: this.ratingFilter(),
-      status,
       limit: String(this.pageSize),
       offset: adminOffset(this.page(), this.pageSize),
     };
+    if (tab === 'processed') {
+      if (this.statusFilter()) params['status'] = this.statusFilter();
+      else params['processed'] = 'true';
+    } else {
+      params['status'] = this.statusFilter();
+    }
     if (tab === 'urgent') {
       params['urgent'] = 'true';
     }
@@ -234,6 +244,7 @@ export class AdminErpReviewsPage {
    */
   loadLogs(): void {
     this.loading.set(true);
+    this.loadError.set(null);
     this.api
       .listReviewAuditLogs({ limit: String(this.pageSize), offset: adminOffset(this.logsPage(), this.pageSize) })
       .subscribe({
@@ -304,6 +315,7 @@ export class AdminErpReviewsPage {
   openDetail(row: unknown): void {
     const review = row as AdminReviewRow;
     this.selected.set(review);
+    this.detailError.set(null);
     this.sentiment.set(this.analyzeSentiment(review));
     this.actionType.set(null);
     this.api.getReview(review.review_id).subscribe({
@@ -312,8 +324,20 @@ export class AdminErpReviewsPage {
           this.selected.set(full);
         }
       },
-      error: () => undefined,
+      error: (error: unknown) => {
+        if (this.selected()?.review_id === review.review_id) {
+          this.detailError.set(adminErrorMessage(error, 'Không tải được chi tiết đánh giá.'));
+        }
+      },
     });
+  }
+
+  /**
+   * Retries the detail request after a transient failure.
+   */
+  retryDetail(): void {
+    const review = this.selected();
+    if (review) this.openDetail(review);
   }
 
   /**
@@ -333,6 +357,7 @@ export class AdminErpReviewsPage {
     }
     this.actionType.set(type);
     this.actionError.set(null);
+    this.dirty.set(false);
     this.replyDraft.set(row.admin_reply || '');
     this.detectedRestrictedWords.set(this.detectRestrictedWords(this.commentOf(row)));
     this.sentiment.set(this.analyzeSentiment(row));
@@ -342,9 +367,40 @@ export class AdminErpReviewsPage {
   }
 
   /**
-   * Closes drawers and action modals.
+   * Closes drawers and action modals. A dirty action form asks before discarding typed text.
    */
   closeOverlays(): void {
+    if (this.dirty()) {
+      this.discardOpen.set(true);
+      return;
+    }
+    this.forceClose();
+  }
+
+  /**
+   * Marks the open action form as edited.
+   */
+  markDirty(): void {
+    this.dirty.set(true);
+  }
+
+  /**
+   * Confirms discarding typed text and closes every overlay.
+   */
+  confirmDiscard(): void {
+    this.discardOpen.set(false);
+    this.dirty.set(false);
+    this.forceClose();
+  }
+
+  /**
+   * Keeps the action modal open after the discard prompt is cancelled.
+   */
+  cancelDiscard(): void {
+    this.discardOpen.set(false);
+  }
+
+  private forceClose(): void {
     this.selected.set(null);
     this.selectedLog.set(null);
     this.actionType.set(null);
@@ -355,6 +411,9 @@ export class AdminErpReviewsPage {
     this.aiError.set(null);
     this.detectedRestrictedWords.set([]);
     this.sentiment.set(null);
+    this.dirty.set(false);
+    this.discardOpen.set(false);
+    this.detailError.set(null);
   }
 
   /**
@@ -376,7 +435,7 @@ export class AdminErpReviewsPage {
    */
   submitAction(event: Event): void {
     event.preventDefault();
-    if (!this.canMutate()) {
+    if (!this.canMutate() || this.actionSaving()) {
       return;
     }
     const row = this.selected();
@@ -402,8 +461,10 @@ export class AdminErpReviewsPage {
           : type === 'reply'
             ? this.api.replyReview(row.review_id, { ...payload, reply: value.trim() })
             : this.api.escalateReview(row.review_id, { ...payload, reason: value });
-    request$.subscribe({
+    this.actionSaving.set(true);
+    request$.pipe(finalize(() => this.actionSaving.set(false))).subscribe({
       next: () => {
+        this.dirty.set(false);
         this.closeOverlays();
         this.reload();
         this.loadCounts();
@@ -442,6 +503,7 @@ export class AdminErpReviewsPage {
    */
   applyAiSuggestion(text: string): void {
     this.replyDraft.set(text);
+    this.dirty.set(true);
   }
 
   /**

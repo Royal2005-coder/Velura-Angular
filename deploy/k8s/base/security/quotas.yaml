@@ -96,9 +96,11 @@ metadata:
   namespace: auth
 spec:
   hard:
-    # Admit the serving pod plus its RollingUpdate replacement.
+    # Admit the serving pod plus its RollingUpdate replacement. Keycloak builds its
+    # optimized server image on every config change and needs ~2Gi, so the floor
+    # must cover one serving pod plus the surge pod.
     requests.memory: 1Gi
-    limits.memory: 2Gi
+    limits.memory: 4Gi
     requests.cpu: '3'
     limits.cpu: '6'
     pods: '4'

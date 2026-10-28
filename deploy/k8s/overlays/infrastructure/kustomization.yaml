@@ -2,3 +2,18 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - ../../base
+patches:
+  # The observability namespace enforces PodSecurity restricted:v1.30, while the
+  # NVIDIA DCGM exporter needs to start as root. Every replica is rejected at
+  # admission, so the deployment can never become Ready and the whole
+  # velura-infra health check — and therefore velura-production — stays blocked.
+  # Keep the manifest available but scaled to zero until a GPU metrics path that
+  # satisfies restricted PodSecurity is in place.
+  - target:
+      kind: Deployment
+      name: dcgm-exporter
+      namespace: observability
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 0

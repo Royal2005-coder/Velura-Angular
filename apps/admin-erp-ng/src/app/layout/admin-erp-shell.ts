@@ -3,6 +3,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
 import { filter, startWith, catchError, finalize, of } from 'rxjs';
 import { AdminErpApiService } from '../core/admin-erp-api.service';
+import { AdminErpRefreshService } from '../core/admin-erp-refresh.service';
 import { AdminErpSessionService } from '../core/admin-erp-session.service';
 import {
   ADMIN_ERP_NAV_GROUPS,
@@ -34,6 +35,7 @@ type ShellNavGroup = Omit<AdminErpNavGroup, 'items'> & {
 export class AdminErpShell {
   private readonly router = inject(Router);
   private readonly api = inject(AdminErpApiService);
+  private readonly refreshBus = inject(AdminErpRefreshService);
   readonly session = inject(AdminErpSessionService);
 
   readonly sidebarCollapsed = signal(false);
@@ -131,10 +133,10 @@ export class AdminErpShell {
   }
 
   /**
-   * Reloads real data for the active workspace.
+   * Reloads the active workspace data without a full-page reload.
    */
   refresh(): void {
-    window.location.reload();
+    this.refreshBus.request();
   }
 
   /**

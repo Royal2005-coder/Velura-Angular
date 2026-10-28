@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { Observable, of, throwError } from 'rxjs';
+import { Observable, Subject, of, throwError } from 'rxjs';
 import {
   AdminErpApiService,
   AdminPricingStatistics,
@@ -82,9 +82,13 @@ const stats: AdminPricingStatistics = {
 type ListPromotionsFn = (params?: Record<string, string>) => Observable<AdminPromotionListPayload>;
 
 describe('AdminErpPromotionsPage', () => {
-  async function boot(listPromotions: ListPromotionsFn) {
+  async function boot(
+    listPromotions: ListPromotionsFn,
+    overrides: { toggleVoucher?: () => Observable<unknown> } = {},
+  ) {
     TestBed.resetTestingModule();
     let toggled = '';
+    let toggleCalls = 0;
     const api = {
       listPromotions,
       listVouchers: () => of({ rows: vouchers, count: 1 }),
@@ -92,7 +96,8 @@ describe('AdminErpPromotionsPage', () => {
       pricingStatistics: () => of(stats),
       toggleVoucher: (voucherId: string) => {
         toggled = voucherId;
-        return of({});
+        toggleCalls += 1;
+        return overrides.toggleVoucher ? overrides.toggleVoucher() : of({});
       },
       activatePromotion: () => of({}),
       pausePromotion: () => of({}),
@@ -118,7 +123,7 @@ describe('AdminErpPromotionsPage', () => {
     });
     const fixture = TestBed.createComponent(AdminErpPromotionsPage);
     fixture.detectChanges();
-    return { fixture, toggled: () => toggled };
+    return { fixture, toggled: () => toggled, toggleCalls: () => toggleCalls };
   }
 
   it('loads campaigns and the API summary', async () => {
@@ -178,5 +183,60 @@ describe('AdminErpPromotionsPage', () => {
 
     expect(page.loadError()).toBe('promotions down');
     expect(page.campaigns()).toEqual([]);
+  });
+
+  it('sends search and active-state filters to the campaign list', async () => {
+    const calls: Array<Record<string, string> | undefined> = [];
+    const { fixture } = await boot((params) => {
+      calls.push(params);
+      return of({ rows: campaigns, count: 1, summary: stats.promotions });
+    });
+    const page = fixture.componentInstance;
+
+    page.onQueryInput({ target: { value: 'thu đông' } } as unknown as Event);
+    page.onActiveFilter({ target: { value: 'true' } } as unknown as Event);
+    page.applyFilters();
+
+    const call = calls.filter((params) => params?.['limit'] === '10').at(-1);
+    expect(call?.['q']).toBe('thu đông');
+    expect(call?.['isActive']).toBe('true');
+  });
+
+  it('loads an unpaged campaign lookup for the voucher picker', async () => {
+    const calls: Array<Record<string, string> | undefined> = [];
+    const { fixture } = await boot((params) => {
+      calls.push(params);
+      return of({ rows: campaigns, count: 1, summary: stats.promotions });
+    });
+    const page = fixture.componentInstance;
+
+    expect(calls.some((params) => params?.['limit'] === '100' && params?.['offset'] === '0')).toBe(true);
+    expect(page.campaignOptions().map((campaign) => campaign.promo_id)).toEqual(['p1']);
+  });
+
+  it('leaves the new-campaign name empty instead of a placeholder dash', async () => {
+    const { fixture } = await boot(() => of({ rows: campaigns, count: 1, summary: stats.promotions }));
+    const page = fixture.componentInstance;
+
+    expect(page.campaignFormName()).toBe('');
+    page.openCampaign(campaigns[0]);
+    page.openCampaignForm();
+    expect(page.campaignFormName()).toBe('Thu đông 2026');
+  });
+
+  it('ignores a second voucher toggle while the first is pending', async () => {
+    const pending = new Subject<unknown>();
+    const { fixture, toggleCalls } = await boot(() => of({ rows: campaigns, count: 1, summary: stats.promotions }), {
+      toggleVoucher: () => pending,
+    });
+    const page = fixture.componentInstance;
+
+    page.setView('vouchers');
+    page.openVoucher(vouchers[0]);
+    page.toggleVoucher();
+    page.toggleVoucher();
+
+    expect(toggleCalls()).toBe(1);
+    pending.complete();
   });
 });

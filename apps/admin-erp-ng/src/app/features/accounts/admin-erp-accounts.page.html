@@ -98,9 +98,12 @@
       [columns]="requestColumns"
       [rows]="requests()"
       [loading]="loading()"
+      [error]="requestError() || ''"
+      errorTitle="Không tải được yêu cầu nâng quyền"
       emptyTitle="Không có yêu cầu nâng quyền"
       emptyMessage="Yêu cầu mới sẽ xuất hiện ở đây để super admin duyệt."
       [clickable]="true"
+      (retry)="reload()"
       (rowSelected)="openRequest($event)"
     />
     <app-erp-pagination
@@ -115,9 +118,12 @@
       [columns]="logColumns"
       [rows]="logs()"
       [loading]="loading()"
+      [error]="logsError() || ''"
+      errorTitle="Không tải được nhật ký tài khoản"
       emptyTitle="Chưa có nhật ký tài khoản"
       emptyMessage="Audit tài khoản xuất hiện sau thao tác khóa, mở khóa hoặc đổi vai trò."
       [clickable]="true"
+      (retry)="reload()"
       (rowSelected)="openLog($event)"
     />
     <app-erp-pagination [page]="logsPage()" [pageCount]="logPageCount()" [label]="logRangeLabel()" (changed)="goLogsPage($event)" />
@@ -188,7 +194,7 @@
 </app-erp-drawer>
 
 <app-erp-modal [open]="actionType() !== null" [title]="actionTitle()" size="sm" (closed)="closeOverlays()">
-  <form class="account-form" (submit)="submitAction($event)">
+  <form class="account-form" (submit)="submitAction($event)" (input)="markDirty()" (change)="markDirty()">
     @if (actionType() === 'role') {
       <label class="erp-field">
         <span>Loại tài khoản</span>
@@ -235,7 +241,9 @@
     }
     <div class="account-form__actions">
       <button class="erp-btn" type="button" (click)="closeOverlays()">Hủy</button>
-      <button class="erp-btn erp-btn--primary" type="submit">Xác nhận</button>
+      <button class="erp-btn erp-btn--primary" type="submit" [disabled]="actionSaving()">
+        {{ actionSaving() ? 'Đang lưu…' : 'Xác nhận' }}
+      </button>
     </div>
   </form>
 </app-erp-modal>
@@ -254,7 +262,7 @@
     </div>
     <div class="account-form__actions"><button class="erp-btn erp-btn--primary" type="button" (click)="closeCreate()">Xong</button></div>
   } @else {
-    <form class="account-form" (submit)="submitCreate($event)">
+    <form class="account-form" (submit)="submitCreate($event)" (input)="markDirty()" (change)="markDirty()">
       <label class="erp-field"><span>Họ tên</span><input class="erp-input" name="fullName" type="text" placeholder="VD: Nguyễn Văn A" required /></label>
       <label class="erp-field"><span>Email</span><input class="erp-input" name="email" type="email" placeholder="VD: admin@velura.vn" /></label>
       <label class="erp-field"><span>Số điện thoại</span><input class="erp-input" name="phone" type="tel" placeholder="VD: 0901234567" /></label>
@@ -281,7 +289,9 @@
       }
       <div class="account-form__actions">
         <button class="erp-btn" type="button" (click)="closeCreate()">Hủy</button>
-        <button class="erp-btn erp-btn--primary" type="submit">Tạo tài khoản</button>
+        <button class="erp-btn erp-btn--primary" type="submit" [disabled]="createSaving()">
+          {{ createSaving() ? 'Đang tạo…' : 'Tạo tài khoản' }}
+        </button>
       </div>
     </form>
   }
@@ -296,7 +306,7 @@
         <div><dt>Vai trò yêu cầu</dt><dd>{{ adminRoleLabel(request.requested_role || '') }}</dd></div>
         <div><dt>Hết hạn</dt><dd>{{ date(request.expires_at) }}</dd></div>
       </dl>
-      <form #requestForm class="account-form">
+      <form #requestForm class="account-form" (submit)="submitRequest('approve', requestForm); $event.preventDefault()" (input)="markDirty()" (change)="markDirty()">
         <label class="erp-field">
           <span>Ghi chú phê duyệt / lý do từ chối</span>
           <textarea class="erp-input" name="note" rows="4" (input)="onReasonInput($event)"></textarea>
@@ -307,10 +317,22 @@
         }
         <div class="account-form__actions account-form__actions--split">
           <button class="erp-btn" type="button" (click)="closeOverlays()">Hủy</button>
-          <button class="erp-btn erp-btn--danger" type="button" (click)="submitRequest('reject', requestForm)">Từ chối</button>
-          <button class="erp-btn erp-btn--primary" type="button" (click)="submitRequest('approve', requestForm)">Duyệt</button>
+          <button class="erp-btn erp-btn--danger" type="button" [disabled]="requestSaving()" (click)="submitRequest('reject', requestForm)">
+            {{ requestSaving() ? 'Đang lưu…' : 'Từ chối' }}
+          </button>
+          <button class="erp-btn erp-btn--primary" type="submit" [disabled]="requestSaving()">
+            {{ requestSaving() ? 'Đang lưu…' : 'Duyệt' }}
+          </button>
         </div>
       </form>
     </div>
   }
+</app-erp-modal>
+
+<app-erp-modal [open]="discardOpen()" title="Bỏ thay đổi chưa lưu?" size="sm" (closed)="cancelDiscard()">
+  <p class="erp-hint">Thông tin bạn vừa nhập sẽ không được lưu.</p>
+  <div footer>
+    <button class="erp-btn" type="button" (click)="cancelDiscard()">Tiếp tục nhập</button>
+    <button class="erp-btn erp-btn--danger" type="button" (click)="confirmDiscard()">Bỏ thay đổi</button>
+  </div>
 </app-erp-modal>

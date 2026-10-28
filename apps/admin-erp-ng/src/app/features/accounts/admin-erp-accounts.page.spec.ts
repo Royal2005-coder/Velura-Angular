@@ -157,4 +157,21 @@ describe('AdminErpAccountsPage', () => {
     expect(page.rows()).toEqual([]);
     expect(page.loading()).toBe(false);
   });
+
+  it('asks before discarding a half-typed account action', async () => {
+    const fixture = await boot(listWithCounts);
+    const page = fixture.componentInstance;
+
+    page.openDetail(accounts[0]);
+    page.openAction('lock');
+    page.markDirty();
+    page.closeOverlays();
+
+    expect(page.discardOpen()).toBe(true);
+    expect(page.actionType()).toBe('lock');
+
+    page.confirmDiscard();
+    expect(page.discardOpen()).toBe(false);
+    expect(page.actionType()).toBeNull();
+  });
 });

@@ -1,5 +1,6 @@
 import { ALL_AUDIT_TARGETS, enrichAuditLogs } from "../audit-enrichment.js";
 import { HttpError } from "../http.js";
+import { hasCapability } from "../rbac.js";
 import type { AuthContext, JsonObject } from "../types.js";
 import type { AuditLogListFilters, AuditLogRepository } from "./audit-log-repository.js";
 
@@ -36,6 +37,11 @@ export function createAuditLogService({ repository }: { repository: AuditLogRepo
     async list(context, searchParams) {
       if (!context?.authUser?.id || !context.isAdmin || !context.profile?.is_active) {
         throw new HttpError(403, "RBAC_DENIED", "Only active administrators can view audit logs");
+      }
+      // Active admin is necessary but not sufficient: the role matrix decides whether this
+      // operator may read the audit module at all (admin_viewer may not).
+      if (!hasCapability(context, "audit_logs", "read")) {
+        throw new HttpError(403, "RBAC_DENIED", "Insufficient permissions to view audit logs");
       }
       const payload = await repository.list(parseListFilters(searchParams), context.accessToken);
       // Trang nhật ký trộn nhiều phân hệ nên tra đối tượng theo `module` của từng dòng.

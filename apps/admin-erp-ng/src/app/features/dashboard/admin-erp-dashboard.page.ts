@@ -176,22 +176,22 @@ export class AdminErpDashboardPage {
       },
       {
         label: 'Giá trị đơn TB',
-        value: `${adminCompactMoney(business.averageOrderValue)}đ`,
+        value: this.compactMoney(business.averageOrderValue),
         hint: this.trend(business.comparisons?.aovPct),
         tone: 'neutral',
         icon: 'tag',
       },
       {
         label: 'Tỷ lệ hoàn tất',
-        value: `${this.num(business.completionRate)}%`,
+        value: this.pct(business.completionRate),
         hint: this.trend(business.comparisons?.completionRatePoints, ' điểm so với kỳ trước'),
         tone: 'success',
         icon: 'check',
       },
       {
         label: 'Doanh thu có KM',
-        value: `${this.num(business.promotionRevenueShare)}%`,
-        hint: `${adminCompactMoney(business.promotionRevenue)}đ từ khuyến mãi`,
+        value: this.pct(business.promotionRevenueShare),
+        hint: `${this.compactMoney(business.promotionRevenue)} từ khuyến mãi`,
         tone: 'warning',
         icon: 'tag',
       },
@@ -283,6 +283,15 @@ export class AdminErpDashboardPage {
     if (source === 'oltp.rpc') return 'OLTP RPC';
     return 'nguồn API';
   });
+  readonly freshness = computed(() => this.data().meta?.freshness ?? '');
+  readonly sourceWarning = computed(() => this.data().meta?.sourceWarning ?? '');
+  readonly dataStatus = computed<{ label: string; tone: 'success' | 'warning' | 'danger' }>(() => {
+    if (this.loadError()) return { label: 'Mất kết nối', tone: 'danger' };
+    if (this.loading()) return { label: 'Đang tải', tone: 'warning' };
+    if (this.freshness() === 'fresh') return { label: 'Dữ liệu thật', tone: 'success' };
+    if (this.freshness() === 'stale') return { label: 'Dữ liệu cũ', tone: 'warning' };
+    return { label: 'Chưa xác minh', tone: 'danger' };
+  });
 
   constructor() {
     this.reload();
@@ -321,16 +330,18 @@ export class AdminErpDashboardPage {
           business: { ...emptyDashboard().business, ...summary.business },
           meta: summary.meta,
         });
-        const generated = summary.meta?.generatedAt ? new Date(summary.meta.generatedAt) : new Date();
+        const generated = summary.meta?.generatedAt ? new Date(summary.meta.generatedAt) : null;
         this.generatedAt.set(
-          generated.toLocaleString('vi-VN', {
-            timeZone: 'Asia/Ho_Chi_Minh',
-            hour: '2-digit',
-            minute: '2-digit',
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric',
-          }),
+          generated
+            ? generated.toLocaleString('vi-VN', {
+                timeZone: 'Asia/Ho_Chi_Minh',
+                hour: '2-digit',
+                minute: '2-digit',
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+              })
+            : '',
         );
         this.loading.set(false);
       },
@@ -368,15 +379,33 @@ export class AdminErpDashboardPage {
   /**
    * Formats a locale integer.
    */
-  num(value: number | undefined): string {
-    return this.safeNumber(value).toLocaleString('vi-VN');
+  num(value: number | null | undefined): string {
+    if (value === null || value === undefined || !Number.isFinite(Number(value))) return '—';
+    return Number(value).toLocaleString('vi-VN');
   }
 
   /**
-   * Formats full VND.
+   * Formats full VND, leaving unsynced KPIs visibly unavailable instead of zero.
    */
-  money(value: number | undefined): string {
+  money(value: number | null | undefined): string {
+    if (value === null || value === undefined) return '—';
     return adminMoney(value);
+  }
+
+  /**
+   * Compact money for KPI cards, unavailable when the synced facts are missing.
+   */
+  compactMoney(value: number | null | undefined): string {
+    if (value === null || value === undefined) return '—';
+    return `${adminCompactMoney(value)}đ`;
+  }
+
+  /**
+   * Percentage for KPI cards, unavailable instead of a fabricated 0%.
+   */
+  pct(value: number | null | undefined): string {
+    if (value === null || value === undefined) return '—';
+    return `${this.num(value)}%`;
   }
 
   /**

@@ -445,14 +445,18 @@ export class AdminErpReviewsPage {
       return;
     }
     const form = event.target as HTMLFormElement;
-    const note = this.field(form, 'actionNote').value;
+    const note = this.field(form, 'actionNote').value.trim();
     const formValue = this.field(form, 'value').value;
     const value = type === 'reply' ? this.replyDraft() : formValue;
     if ((type === 'reply' || type === 'hide' || type === 'escalate') && !value.trim()) {
       this.actionError.set(type === 'reply' ? 'Vui lòng nhập nội dung phản hồi.' : 'Vui lòng nhập lý do xử lý.');
       return;
     }
-    const payload = { expectedVersion: row.version, actionNote: note };
+    // Approve may add a public reply; every other action never writes into admin_reply.
+    const payload: Record<string, unknown> = { expectedVersion: row.version };
+    if (type === 'approve' && note) {
+      payload['actionNote'] = note;
+    }
     const request$ =
       type === 'approve' || type === 'unhide'
         ? this.api.approveReview(row.review_id, payload)
@@ -481,8 +485,10 @@ export class AdminErpReviewsPage {
     this.aiError.set(null);
     this.aiSuggestions.set([]);
     this.aiSource.set(null);
+    const stillCurrent = () => this.selected()?.review_id === reviewId && this.actionType() === 'reply';
     this.api.suggestReviewReply(reviewId).subscribe({
       next: (result) => {
+        if (!stillCurrent()) return;
         this.aiLoading.set(false);
         this.aiSuggestions.set(result.replies || []);
         this.aiSource.set(result.source || null);
@@ -491,6 +497,7 @@ export class AdminErpReviewsPage {
         }
       },
       error: (error: unknown) => {
+        if (!stillCurrent()) return;
         this.aiLoading.set(false);
         this.aiSuggestions.set([]);
         this.aiError.set(adminErrorMessage(error, 'Không lấy được gợi ý AI. Viết phản hồi tay.'));

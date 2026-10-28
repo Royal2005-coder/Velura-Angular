@@ -223,10 +223,12 @@
         </label>
       }
 
-      <label class="erp-field">
-        <span>Ghi chú nội bộ</span>
-        <textarea class="erp-input" name="actionNote" rows="2"></textarea>
-      </label>
+      @if (actionType() === 'approve') {
+        <label class="erp-field">
+          <span>Phản hồi công khai (tùy chọn)</span>
+          <textarea class="erp-input" name="actionNote" rows="2"></textarea>
+        </label>
+      }
 
       @if (actionError()) {
         <p class="erp-error" role="alert">{{ actionError() }}</p>

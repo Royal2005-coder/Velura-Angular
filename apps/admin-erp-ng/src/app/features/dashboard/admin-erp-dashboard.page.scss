@@ -42,6 +42,14 @@
   font-size: 12px;
 }
 
+.status-line--warning {
+  padding: 10px 12px;
+  border: 1px solid var(--erp-warning-line, #e5d3a7);
+  border-radius: var(--erp-radius-sm);
+  background: var(--erp-warning-soft, #fdf8ea);
+  color: var(--erp-warning-ink, #7a5a00);
+}
+
 .kpi-grid {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));

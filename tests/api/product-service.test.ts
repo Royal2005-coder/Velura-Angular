@@ -45,8 +45,23 @@ test("validateCreateProduct accepts valid input", () => {
   assert.equal(result.status, "on_sale");
 });
 
-test("validateCreateProduct rejects invalid SKU", () => {
-  try {
+test("validateCreateProduct rejects a sale price above the base price", () => {
+  assert.throws(
+    () =>
+      validateCreateProduct({
+        sku: "VL-AO001",
+        name: "Ao Thun Trang",
+        categoryId: CATEGORY_ID,
+        basePrice: 200000,
+        salePrice: 250000,
+        images: ["/assets/product-primary.jpg"],
+        expectedVersion: 0
+      }),
+    (error: { status?: number }) => error.status === 422
+  );
+});
+
+test("validateCreateProduct rejects invalid SKU", () => {  try {
     validateCreateProduct({ sku: "bad", name: "Test", categoryId: CATEGORY_ID, basePrice: 100, expectedVersion: 0 });
     assert.fail("Expected validation error");
   } catch (error) {

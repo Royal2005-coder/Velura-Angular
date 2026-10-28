@@ -1,6 +1,6 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable } from 'rxjs';
+import { Observable, finalize, shareReplay } from 'rxjs';
 import { environment } from '../../environments/environment';
 import { AdminListPayload } from './admin-erp-http';
 import { AdminAuthMe } from './admin-erp-session.service';
@@ -1321,13 +1321,13 @@ export interface AdminDashboardSummary {
     urgentReviews: number;
   };
   business: {
-    revenue: number;
-    orderCount: number;
-    averageOrderValue: number;
-    completionRate: number;
-    promotionRevenue: number;
-    promotionRevenueShare: number;
-    pendingReviews: number;
+    revenue: number | null;
+    orderCount: number | null;
+    averageOrderValue: number | null;
+    completionRate: number | null;
+    promotionRevenue: number | null;
+    promotionRevenueShare: number | null;
+    pendingReviews: number | null;
     comparisons?: {
       revenuePct?: number | null;
       orderCountPct?: number | null;
@@ -1350,7 +1350,13 @@ export interface AdminDashboardSummary {
   recentLogs?: AdminAuditRow[];
   periodDays?: number;
   range?: string;
-  meta?: { generatedAt?: string; source?: string };
+  meta?: {
+    generatedAt?: string | null;
+    source?: string;
+    freshness?: 'fresh' | 'stale' | 'unavailable';
+    sourceWarning?: string | null;
+    validated?: boolean;
+  };
 }
 
 /**
@@ -1361,12 +1367,25 @@ export interface AdminDashboardSummary {
 export class AdminErpApiService {
   private readonly http = inject(HttpClient);
   private readonly baseUrl = environment.apiUrl;
+  private meInFlight$: Observable<AdminAuthMe> | null = null;
 
   /**
    * Verifies the current admin context and returns pages, modules and capabilities.
    */
+  /**
+   * Reads the current admin context. Concurrent calls (shell guard + child guard) share
+   * one request instead of double-hydrating the session.
+   */
   me(): Observable<AdminAuthMe> {
-    return this.http.get<AdminAuthMe>(`${this.baseUrl}/api/auth/me`);
+    if (!this.meInFlight$) {
+      this.meInFlight$ = this.http.get<AdminAuthMe>(`${this.baseUrl}/api/auth/me`).pipe(
+        finalize(() => {
+          this.meInFlight$ = null;
+        }),
+        shareReplay({ bufferSize: 1, refCount: false }),
+      );
+    }
+    return this.meInFlight$;
   }
 
   /**

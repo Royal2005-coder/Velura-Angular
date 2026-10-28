@@ -1,7 +1,7 @@
 <app-erp-page-header
   eyebrow="Tổng quan"
   title="Nhịp vận hành cửa hàng"
-  [subtitle]="'Dữ liệu thật từ API Velura · ' + periodLabel() + '. Ưu tiên việc cần xử lý trước khi xem xu hướng kinh doanh.'"
+  [subtitle]="'Dữ liệu vận hành từ API Velura · ' + periodLabel() + '. Ưu tiên việc cần xử lý trước khi xem xu hướng kinh doanh.'"
 >
   <div actions class="header-actions">
     <app-erp-tabs [tabs]="tabs()" [active]="tab()" (changed)="setTab($event)" />
@@ -19,8 +19,8 @@
 
 <div class="status-line" aria-live="polite">
   <app-erp-status-badge
-    [label]="loadError() ? 'Mất kết nối' : loading() ? 'Đang tải' : 'Dữ liệu thật'"
-    [tone]="loadError() ? 'danger' : loading() ? 'warning' : 'success'"
+    [label]="dataStatus().label"
+    [tone]="dataStatus().tone"
     [dot]="true"
   />
   <span>
@@ -30,6 +30,10 @@
     }
   </span>
 </div>
+
+@if (sourceWarning()) {
+  <div class="status-line status-line--warning" role="alert">{{ sourceWarning() }}</div>
+}
 
 @if (loadError()) {
   <section class="erp-card">

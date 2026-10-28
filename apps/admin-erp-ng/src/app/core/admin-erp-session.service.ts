@@ -81,15 +81,14 @@ export class AdminErpSessionService {
    * Reads the app-specific bearer token.
    */
   token(): string {
-    return sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY) || '';
+    return sessionStorage.getItem(TOKEN_KEY) || '';
   }
 
   /**
-   * Stores the bearer token in ERP-admin-only keys.
+   * Stores the bearer token for this browser tab only.
    */
   setToken(token: string): void {
     sessionStorage.setItem(TOKEN_KEY, token);
-    localStorage.setItem(TOKEN_KEY, token);
   }
 
   /**
@@ -101,7 +100,6 @@ export class AdminErpSessionService {
     }
     const session = this.buildSession(context);
     sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
-    localStorage.setItem(SESSION_KEY, JSON.stringify(session));
     this.sessionState.set(session);
     this.hydrating.set(false);
     return session;
@@ -125,6 +123,14 @@ export class AdminErpSessionService {
     localStorage.removeItem(SESSION_KEY);
     this.sessionState.set(null);
     this.hydrating.set(false);
+  }
+
+  /**
+   * Restores the last tab-local session after a transient hydration failure.
+   */
+  restoreStoredSession(): void {
+    this.hydrating.set(false);
+    this.sessionState.set(this.readStoredSession());
   }
 
   /**
@@ -223,7 +229,7 @@ export class AdminErpSessionService {
   }
 
   private readStoredSession(): AdminErpSession | null {
-    const raw = sessionStorage.getItem(SESSION_KEY) || localStorage.getItem(SESSION_KEY);
+    const raw = sessionStorage.getItem(SESSION_KEY);
     if (!raw) {
       return null;
     }

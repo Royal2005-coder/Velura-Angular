@@ -239,4 +239,19 @@ describe('AdminErpPromotionsPage', () => {
     expect(toggleCalls()).toBe(1);
     pending.complete();
   });
+
+  it('offers exactly the audience values the API accepts', async () => {
+    const { fixture } = await boot(() => of({ rows: campaigns, count: 1, summary: stats.promotions }));
+    const page = fixture.componentInstance;
+
+    page.setView('vouchers');
+    page.openVoucher(vouchers[0]);
+    page.openVoucherForm();
+    fixture.detectChanges();
+
+    const options = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLOptionElement>('select[name="applicableUserGroup"] option'),
+    ).map((option) => option.value);
+    expect(options).toEqual(['all_users', 'new_user', 'member', 'guest', 'loyal_user', 'churn_risk_user', 'birthday']);
+  });
 });

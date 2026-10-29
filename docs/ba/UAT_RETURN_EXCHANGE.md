@@ -10,7 +10,7 @@ Tài liệu này là bộ kiểm thử chấp nhận người dùng (UAT) cho m�
 |---|---|
 | Ngày đối chiếu | 2026-10-29 |
 | Nhánh | `feature/KAN-106-order-stage-evidence` |
-| Revision đọc mã | Working tree sau migrations `084_return_item_workflow.sql`, `085_return_intake_policy.sql`, `086_return_loyalty_debt.sql` (chưa commit tại thời điểm ghi) |
+| Revision đọc mã | Working tree + `develop` sau PR #333/#336/#339; production main `fb854bf`, release pins source `8fcdcc03` |
 | Quyền thao tác lần này | Đọc/sửa mã, chạy migration trên CSDL cô lập, smoke API và chạy test/build cục bộ |
 | Không thực hiện | Không ghi production; không gọi SMS, thanh toán, vận chuyển thật; không chạy UAT trình duyệt với người dùng thật |
 | Kiểm chứng thực thi | PostgreSQL 16 + PostgREST + handler API thật trong môi trường cô lập; SQL regression; `test:api` 729/729; `test:user` 313; `test:admin-erp` 216; `test:admin` 152; build toàn workspace |
@@ -559,8 +559,21 @@ Fixture dùng cho smoke: return `ac68aa66-090f-4d8e-8cde-1d1b636b1bd3`, dòng ho
 
 - Chưa chạy UAT trình duyệt với người dùng/CSKH thật; các ca §7 vẫn **NOT_RUN**.
 - Không gọi Stripe sandbox, SMS, carrier thật; nhánh Stripe chỉ được kiểm bằng unit test với `fetch` giả.
-- Không áp migration 084–086 lên production trong phạm vi tài liệu này; việc phát hành phải qua PR → `develop` → `main`/Flux và migration có owner approval.
-- Bằng chứng trên là môi trường cô lập cục bộ; không suy ra trạng thái production từ working tree.
+- Migration 084–086 **đã áp production** bằng `migrate-production.yml` owner-approved; release production đã qua verify-production. Xem §10.5.
+
+### 10.5 Bằng chứng phát hành production
+
+| Bước | Bằng chứng |
+|---|---|
+| PR feature → `develop` | #333 (workflow), #336 (legacy overflow backfill), #339 (production points column); required checks xanh |
+| Promote `develop` → `main` | #335, #343, #345, #348 tự động qua promote-main; main hiện tại `fb854bf` |
+| Migration production | Run `migrate-production.yml` `40914927888` trên `main`: `084 … xong`, `085 … xong`, `086 … xong` |
+| Backfill legacy | `return_unit=83`, `legacy_overflow=7`, `return_item=109`, `return_exchange=109` — không mất request, 7 phần vượt được park an toàn |
+| Schema/RPC production | `return_unit`, `return_exchange`, `return_item`, `loyalty_account`, `loyalty_ledger`, `return_intake_upload` đủ cột; RPC `velura_return_unit_availability` trả 200 |
+| Release pins | `deploy/releases/production.json` source `8fcdcc03`, digest API/storefront/admin/admin-erp; `verify-production` run `40912480626` pass |
+| Runtime | `GET https://velura.royalai.dev/api/health` 200 `env=production`; carrier surface 200; `orders` select alias `points_discount_amount:points_discount` 200 |
+
+Hai lỗi chỉ lộ khi chạy production đã được sửa trước khi áp thành công: (1) legacy overlap làm backfill fail-closed — nay park trên `legacy_overflow` và không tái sử dụng; (2) production dùng `orders.points_discount` thay vì `points_discount_amount` — nay mọi tính toán và customer select dùng đúng cột.
 
 ## 11. Điều kiện kết thúc và ký nghiệm thu
 

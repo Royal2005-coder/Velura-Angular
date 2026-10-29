@@ -504,6 +504,20 @@ export interface AdminOrderEvent {
   created_at?: string;
 }
 
+/** Ảnh/video bằng chứng gắn với một công đoạn của đơn hàng. */
+export interface AdminOrderEvidence {
+  evidence_id?: string;
+  stage?: string;
+  kind?: 'image' | 'video';
+  mime_type?: string;
+  note?: string;
+  uploaded_by?: string;
+  created_at?: string;
+  /** Signed URL 15 phút; rỗng khi storage không ký được. */
+  url?: string;
+  unavailable?: boolean;
+}
+
 export interface AdminOrderRow {
   order_id: string;
   order_code?: string;
@@ -537,6 +551,7 @@ export interface AdminOrderRow {
   items?: Array<{ product_name?: string; quantity?: number; unit_price?: number }>;
   history?: Array<{ old_status?: string | null; new_status?: string; changed_at?: string; note?: string; trigger_type?: string }>;
   events?: AdminOrderEvent[];
+  evidence?: AdminOrderEvidence[];
   user_id?: string;
   user?: {
     user_id?: string;
@@ -2127,6 +2142,19 @@ export class AdminErpApiService {
     return this.http.get<AdminListPayload<AdminAuditRow>>(
       `${this.baseUrl}/api/v1/admin/orders/${encodeURIComponent(orderId)}/audit-logs`,
       { params: this.params(params) },
+    );
+  }
+
+  /**
+   * Uploads one image/video as evidence for a specific order stage.
+   */
+  uploadOrderEvidence(orderId: string, file: File, stage: string, note: string): Observable<AdminOrderEvidence> {
+    const form = new FormData();
+    form.append('file', file, file.name);
+    return this.http.post<AdminOrderEvidence>(
+      `${this.baseUrl}/api/v1/admin/orders/${encodeURIComponent(orderId)}/evidence`,
+      form,
+      { params: this.params({ stage, note }) },
     );
   }
 

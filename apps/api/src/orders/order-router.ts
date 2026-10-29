@@ -36,6 +36,18 @@ export async function handleOrderRoute({ req, res, url, parts, context, headers,
     return true;
   }
 
+  if (req.method === "GET" && parts[5] === "evidence" && parts.length === 6) {
+    sendJson(res, 200, await service.listEvidence(context, orderId), headers);
+    return true;
+  }
+
+  if (req.method === "POST" && parts[5] === "evidence" && parts.length === 6) {
+    const stage = url.searchParams.get("stage") || "";
+    const note = url.searchParams.get("note") || "";
+    sendJson(res, 201, await service.addEvidence(context, orderId, stage, note, req), headers);
+    return true;
+  }
+
   if (req.method === "POST" && parts[5] === "actions" && parts[6] && parts.length === 7) {
     const body = await readJson(req, config.maxBodyBytes);
     sendJson(res, 200, await service.performAction(context, orderId, parts[6], body, requestMeta), headers);

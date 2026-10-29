@@ -169,15 +169,38 @@
         <h4>Tiến trình</h4>
         <ol class="pipeline">
           @for (step of pipelineSteps(); track step.id) {
-            <li [class]="'pipeline__step pipeline__step--' + step.state">{{ step.label }}</li>
+            <li
+              [class]="'pipeline__step pipeline__step--' + step.state"
+              [class.is-selected]="selectedStage() === step.id"
+            >
+              <button
+                class="pipeline__button"
+                type="button"
+                (click)="selectStage(step.id)"
+                [attr.aria-pressed]="selectedStage() === step.id"
+              >
+                {{ step.label }}
+                @if (stepCount(step.id)) {
+                  <span class="pipeline__count">{{ stepCount(step.id) }}</span>
+                }
+              </button>
+            </li>
           }
+          <li class="pipeline__step pipeline__step--all" [class.is-selected]="selectedStage() === 'all'">
+            <button class="pipeline__button" type="button" (click)="selectStage('all')" [attr.aria-pressed]="selectedStage() === 'all'">
+              Tất cả công đoạn
+            </button>
+          </li>
         </ol>
       </section>
 
       <section class="order-section">
-        <h4>Dấu vết xử lý</h4>
+        <div class="order-section__head">
+          <h4>Dấu vết xử lý</h4>
+          <span class="erp-hint">{{ selectedStage() === 'all' ? 'Tất cả công đoạn' : stageLabel(selectedStage()) }}</span>
+        </div>
         <ol class="trace">
-          @for (entry of trace(); track entry.id) {
+          @for (entry of stageEntries(); track entry.id) {
             <li [class]="'trace__row trace__row--' + entry.tone">
               <time class="trace__time">{{ dateTime(entry.at) }}</time>
               <div class="trace__main">
@@ -194,9 +217,64 @@
               <span class="trace__origin">{{ originLabel(entry.origin) }}</span>
             </li>
           } @empty {
-            <p class="erp-hint">Chưa có dấu vết xử lý cho đơn này.</p>
+            <p class="erp-hint">Chưa có dấu vết xử lý cho công đoạn này.</p>
           }
         </ol>
+
+        <div class="order-evidence">
+          <h5>Ảnh/chứng từ {{ selectedStage() === 'all' ? 'theo công đoạn' : '· ' + stageLabel(selectedStage()) }}</h5>
+          @if (stageEvidence().length) {
+            <div class="evidence-grid">
+              @for (item of stageEvidence(); track item.evidence_id || $index) {
+                <figure class="evidence-card">
+                  @if (item.url) {
+                    @if (item.kind === 'video') {
+                      <video class="evidence-card__media" controls [src]="item.url"></video>
+                    } @else {
+                      <a [href]="item.url" target="_blank" rel="noopener">
+                        <img class="evidence-card__media" [src]="item.url" alt="Bằng chứng đơn hàng" />
+                      </a>
+                    }
+                  } @else {
+                    <div class="evidence-card__media evidence-card__media--missing">Không ký được URL</div>
+                  }
+                  <figcaption>
+                    <strong>{{ stageLabel(item.stage) }}</strong>
+                    <span>{{ dateTime(item.created_at) }}{{ item.note ? ' · ' + item.note : '' }}</span>
+                  </figcaption>
+                </figure>
+              }
+            </div>
+          } @else {
+            <p class="erp-hint">Chưa có ảnh/chứng từ cho công đoạn này.</p>
+          }
+
+          @if (canMutate()) {
+            @if (selectedStage() === 'all') {
+              <p class="erp-hint">Chọn một công đoạn trên tiến trình để tải ảnh/video bằng chứng.</p>
+            } @else {
+              <form class="evidence-form" (submit)="submitEvidence($event)">
+                <label class="erp-field">
+                  <span>Ảnh/video bằng chứng cho “{{ stageLabel(selectedStage()) }}”</span>
+                  <input class="erp-input" type="file" name="evidenceFile" accept="image/*,video/*" (change)="onEvidenceFile($event)" required />
+                </label>
+                <label class="erp-field">
+                  <span>Ghi chú (tuỳ chọn)</span>
+                  <textarea class="erp-input" name="evidenceNote" rows="2" [value]="evidenceNote()" (input)="onEvidenceNote($event)"></textarea>
+                </label>
+                @if (evidenceError()) {
+                  <p class="erp-error" role="alert">{{ evidenceError() }}</p>
+                }
+                @if (evidenceNotice()) {
+                  <p class="erp-hint">{{ evidenceNotice() }}</p>
+                }
+                <button class="erp-btn erp-btn--primary erp-btn--sm" type="submit" [disabled]="evidenceSaving() || !evidenceFile()">
+                  {{ evidenceSaving() ? 'Đang tải lên…' : 'Tải bằng chứng' }}
+                </button>
+              </form>
+            }
+          }
+        </div>
       </section>
 
       @if (canSimulateCarrier()) {

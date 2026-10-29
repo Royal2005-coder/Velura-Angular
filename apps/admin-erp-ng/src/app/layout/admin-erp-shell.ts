@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, inject, signal, viewChild } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
 import { filter, startWith, catchError, finalize, of } from 'rxjs';
@@ -36,10 +36,13 @@ export class AdminErpShell {
   private readonly router = inject(Router);
   private readonly api = inject(AdminErpApiService);
   private readonly refreshBus = inject(AdminErpRefreshService);
+  private readonly destroyRef = inject(DestroyRef);
   readonly session = inject(AdminErpSessionService);
 
   readonly sidebarCollapsed = signal(false);
   readonly mobileNavOpen = signal(false);
+  readonly isMobile = signal(false);
+  private readonly sidebar = viewChild<ElementRef<HTMLElement>>('sidebar');
   readonly logoutConfirmOpen = signal(false);
   readonly signingOut = signal(false);
 
@@ -95,6 +98,11 @@ export class AdminErpShell {
 
   constructor() {
     useBodyClass('erp-admin');
+    const media = window.matchMedia('(max-width: 920px)');
+    this.isMobile.set(media.matches);
+    const onMediaChange = (event: MediaQueryListEvent) => this.isMobile.set(event.matches);
+    media.addEventListener('change', onMediaChange);
+    this.destroyRef.onDestroy(() => media.removeEventListener('change', onMediaChange));
     this.router.events
       .pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd))
       .subscribe(() => this.mobileNavOpen.set(false));
@@ -118,8 +126,12 @@ export class AdminErpShell {
    * Toggles the off-canvas nav on mobile and the rail on desktop.
    */
   toggleSidebar(): void {
-    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 920px)').matches) {
-      this.mobileNavOpen.update((open) => !open);
+    if (this.isMobile()) {
+      const open = !this.mobileNavOpen();
+      this.mobileNavOpen.set(open);
+      if (open) {
+        queueMicrotask(() => this.sidebar()?.nativeElement.querySelector<HTMLElement>('a.nav-link')?.focus());
+      }
       return;
     }
     this.sidebarCollapsed.update((collapsed) => !collapsed);

@@ -94,13 +94,7 @@ export class AdminErpPricingPage {
     const today = new Date().toDateString();
     return this.history().filter((row) => row.changed_at && new Date(row.changed_at).toDateString() === today).length;
   });
-  readonly filtered = computed(() => {
-    const state = this.priceState();
-    if (!state) return this.products();
-    if (state === 'discount') return this.products().filter((row) => this.discountPct(row) > 0);
-    if (state === 'invalid') return this.products().filter((row) => this.isInvalid(row));
-    return this.products().filter((row) => row.sale_price == null);
-  });
+  readonly filtered = computed(() => this.products());
   readonly pageCount = computed(() => Math.max(1, Math.ceil(this.total() / this.pageSize)));
   readonly logPageCount = computed(() => Math.max(1, Math.ceil(this.logsCount() / this.pageSize)));
   readonly rangeLabel = computed(() => adminRangeLabel(this.total(), this.page(), this.pageSize, 'sản phẩm'));
@@ -187,8 +181,18 @@ export class AdminErpPricingPage {
     }
     this.loading.set(true);
     this.loadError.set(null);
+    const params: Record<string, string> = {
+      q: this.query(),
+      status: this.status(),
+      limit: String(this.pageSize),
+      offset: adminOffset(this.page(), this.pageSize),
+    };
+    const state = this.priceState();
+    if (state === 'discount') params['price_state'] = 'discounted';
+    else if (state === 'invalid') params['price_state'] = 'invalid';
+    else if (state === 'missing') params['price_state'] = 'missing_sale';
     this.api
-      .listPricingProducts({ q: this.query(), status: this.status(), limit: String(this.pageSize), offset: adminOffset(this.page(), this.pageSize) })
+      .listPricingProducts(params)
       .subscribe({
         next: (payload) => {
           this.products.set(adminListRows(payload));

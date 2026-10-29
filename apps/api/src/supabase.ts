@@ -206,7 +206,8 @@ export async function callRpc(
     accessToken: options.accessToken,
     silentError: options.silentError,
     headers: {
-      prefer: "return=representation"
+      prefer: "return=representation",
+      ...(options.headers || {})
     }
   });
   const data = result.data;

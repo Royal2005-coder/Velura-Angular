@@ -62,7 +62,11 @@ export function createPricingService({ repository }: { repository: PricingReposi
   return {
     async listPricingProducts(context,searchParams) {
       requirePricingReader(context);
-      return repository.listPricingProducts({limit:Math.min(100,Math.max(1,Number(searchParams.get("limit")) || 50)),offset:Math.max(0,Number(searchParams.get("offset")) || 0),q:searchParams.get("q"),status:searchParams.get("status"),order:"updated_at.desc"},context.accessToken);
+      const priceState = searchParams.get("price_state") || undefined;
+      if (priceState && !["missing_sale", "invalid", "discounted", "standard"].includes(priceState)) {
+        throw new HttpError(422, "VALIDATION_ERROR", "Trạng thái giá không hợp lệ.");
+      }
+      return repository.listPricingProducts({limit:Math.min(100,Math.max(1,Number(searchParams.get("limit")) || 50)),offset:Math.max(0,Number(searchParams.get("offset")) || 0),q:searchParams.get("q"),status:searchParams.get("status"),priceState,order:"updated_at.desc"},context.accessToken);
     },
     async listPriceHistory(context, searchParams) {
       if (!context?.authUser?.id) throw new HttpError(401, "AUTH_REQUIRED", "Authentication is required");

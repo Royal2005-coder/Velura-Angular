@@ -7,6 +7,7 @@ import { useBodyClass } from '../../core/body-class';
 import { AuthFrame } from './auth-frame';
 
 const PKCE_STORAGE_KEY = 'velura-admin-erp-oauth-pkce';
+const STATE_STORAGE_KEY = 'velura-admin-erp-oauth-state';
 
 /**
  * Exchanges the Google PKCE code and hydrates the ERP session.
@@ -84,10 +85,13 @@ export class AuthCallbackPage {
 
   constructor() {
     useBodyClass('erp-auth');
-    const code = new URL(window.location.href).searchParams.get('code');
-    const verifier = localStorage.getItem(PKCE_STORAGE_KEY);
-    if (!code || !verifier) {
-      this.fail('Không tìm thấy mã xác thực trong URL.');
+    const params = new URL(window.location.href).searchParams;
+    const code = params.get('code');
+    const verifier = sessionStorage.getItem(PKCE_STORAGE_KEY);
+    const state = params.get('state');
+    const expectedState = sessionStorage.getItem(STATE_STORAGE_KEY);
+    if (!code || !verifier || !state || !expectedState || state !== expectedState) {
+      this.fail('Không tìm thấy mã xác thực hợp lệ trong URL.');
       return;
     }
     const redirectUri = `${window.location.origin}/auth/callback`;
@@ -97,7 +101,8 @@ export class AuthCallbackPage {
           this.fail('Phản hồi xác thực thiếu access token.');
           return;
         }
-        localStorage.removeItem(PKCE_STORAGE_KEY);
+        sessionStorage.removeItem(PKCE_STORAGE_KEY);
+        sessionStorage.removeItem(STATE_STORAGE_KEY);
         this.session.setToken(payload.token);
         this.api.me().subscribe({
           next: (context) => {

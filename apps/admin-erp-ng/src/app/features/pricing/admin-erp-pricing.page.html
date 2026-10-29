@@ -15,7 +15,7 @@
   <app-erp-kpi-card label="Sản phẩm" [value]="total().toLocaleString('vi-VN')" hint="Theo bộ lọc" tone="accent" icon="tag" [loading]="loading() && !products().length" />
   <app-erp-kpi-card label="Chưa có giá bán" [value]="missingSale().toLocaleString('vi-VN')" hint="Trong trang hiện tại" tone="warning" icon="alert" [loading]="loading()" />
   <app-erp-kpi-card label="Đang giảm giá" [value]="discounted().toLocaleString('vi-VN')" hint="Trong trang hiện tại" tone="success" icon="tag" [loading]="loading()" />
-  <app-erp-kpi-card label="Giá bất thường" [value]="invalid().toLocaleString('vi-VN')" hint="Giá bán > giá gốc" tone="danger" icon="alert" [loading]="loading()" />
+  <app-erp-kpi-card label="Giá bất thường" [value]="invalid().toLocaleString('vi-VN')" hint="Trong trang hiện tại" tone="danger" icon="alert" [loading]="loading()" />
   <app-erp-kpi-card label="Đổi giá hôm nay" [value]="historyToday().toLocaleString('vi-VN')" hint="50 lần gần nhất" tone="info" icon="log" [loading]="loading()" />
 </section>
 

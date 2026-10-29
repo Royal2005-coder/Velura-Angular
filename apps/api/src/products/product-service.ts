@@ -289,34 +289,33 @@ export function createProductService({ repository }: { repository: ProductReposi
         requireUuid(update.variantId, "variantId");
         const delta = Number(update.delta || 0);
         const lowStockThreshold = update.lowStockThreshold !== undefined ? Number(update.lowStockThreshold) : undefined;
-        
+        const expectedVersion = Number(update.expectedVersion);
+
         if (!Number.isInteger(delta)) {
           throw validationError("delta", "Số lượng điều chỉnh phải là số nguyên");
+        }
+        if (!Number.isInteger(expectedVersion) || expectedVersion < 1) {
+          throw validationError("expectedVersion", "Thiếu phiên bản biến thể để điều chỉnh tồn kho");
         }
         if (lowStockThreshold !== undefined && (!Number.isInteger(lowStockThreshold) || lowStockThreshold < 0)) {
           throw validationError("lowStockThreshold", "Ngưỡng cảnh báo tồn phải là số nguyên không âm");
         }
+      }
 
-        // Apply updates
-        if (delta !== 0) {
-          await repository.updateStock(productId, update.variantId as string, {
-            delta,
-            reason,
-            expectedVersion: update.expectedVersion || 1,
-            ipAddress
-          }, context.accessToken);
-        }
-
-        if (lowStockThreshold !== undefined) {
-          const freshVariant = await selectOne("variant", { variant_id: `eq.${update.variantId}` });
-          if (freshVariant) {
-            await updateRows("variant", { variant_id: `eq.${update.variantId}` }, {
-              low_stock_threshold: lowStockThreshold,
-              version: (freshVariant.version as number) + 1,
-              updated_at: new Date().toISOString()
-            });
-          }
-        }
+      // One RPC: every line, its stock movement and its threshold change commit together.
+      const result = await repository.bulkAdjustStock(
+        productId,
+        updates.map((update) => ({
+          variantId: update.variantId,
+          delta: Number(update.delta || 0),
+          ...(update.lowStockThreshold !== undefined ? { lowStockThreshold: Number(update.lowStockThreshold) } : {}),
+          expectedVersion: Number(update.expectedVersion)
+        })),
+        reason,
+        ipAddress,
+        context.accessToken
+      );
+      for (const update of updates) {
         results.push({ variantId: update.variantId, success: true });
       }
 

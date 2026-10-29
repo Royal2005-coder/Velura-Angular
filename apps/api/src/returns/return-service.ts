@@ -298,7 +298,8 @@ export function createReturnService({
         returnId,
         Number(body.expectedVersion),
         { reference, amount, transferredAt: transferredAt.toISOString(), proof, note: adminNote || undefined },
-        context.profile?.user_id || context.authUser.id
+        context.profile?.user_id || context.authUser.id,
+        context.ipAddress
       );
       void sendRefundSuccessEmail(returnId, { method: "manual", reference });
       return updated;
@@ -397,7 +398,7 @@ export function createReturnService({
           sealIntact: true,
           warehouseProof: proof,
           qaNote: asString(body.qaNote) || undefined
-        }, context.profile?.user_id || context.authUser.id);
+        }, context.profile?.user_id || context.authUser.id, context.ipAddress);
       }
       if (["REFUND_PROCESSING","REFUNDED"].includes(status)) throw new HttpError(422,"GATEWAY_STATE_REQUIRED","Refund states are advanced by payment gateway evidence");
       let refundAmount = body.refundAmount ? asNumber(body.refundAmount) : undefined;
@@ -405,14 +406,15 @@ export function createReturnService({
       if (["RETURN_IN_TRANSIT","EXCHANGE_SHIPPING"].includes(status) && !asString(body.trackingReturnCode)) throw new HttpError(422,"TRACKING_REQUIRED","Shipment tracking is required");
       if (status === "EXCHANGE_PREPARING") {
         if (currentReturn.return_type !== "exchange" || currentReturn.condition_check_result !== RETURN_QA_PASS) throw new HttpError(422,"WAREHOUSE_QA_REQUIRED","Exchange requires warehouse QA");
-        return repository.prepareExchange(returnId,expectedVersion,context.profile?.user_id || context.authUser.id);
+        return repository.prepareExchange(returnId,expectedVersion,context.profile?.user_id || context.authUser.id,context.ipAddress);
       }
       if (status === "COMPLETED" && currentReturn.return_type === "exchange") {
         if (from !== "EXCHANGE_SHIPPING") throw new HttpError(422, "INVALID_TRANSITION", "Chỉ hoàn tất đổi hàng sau khi hàng đổi đã giao.");
         const completed = await repository.completeExchange(
           returnId,
           expectedVersion,
-          context.profile?.user_id || context.authUser.id
+          context.profile?.user_id || context.authUser.id,
+          context.ipAddress
         );
         void sendExchangeCompletedEmail(returnId);
         return completed;
@@ -467,7 +469,7 @@ export function createReturnService({
         trackingCode,
         trackingUrl: asString(body.trackingUrl).trim() || undefined,
         labelUrl: asString(body.labelUrl).trim() || undefined
-      }, context.profile?.user_id || context.authUser.id);
+      }, context.profile?.user_id || context.authUser.id, context.ipAddress);
     },
 
     async confirmReturnPickup(context, returnId, body) {
@@ -483,7 +485,7 @@ export function createReturnService({
         photoUrls,
         videoUrl: videoUrl || undefined,
         note: asString(body.note).trim() || undefined
-      }, context.profile?.user_id || context.authUser.id);
+      }, context.profile?.user_id || context.authUser.id, context.ipAddress);
     },
 
     async updateReturnShipmentStatus(context, returnId, body) {
@@ -496,7 +498,8 @@ export function createReturnService({
         returnId,
         status,
         asString(body.note).trim() || undefined,
-        context.profile?.user_id || context.authUser.id
+        context.profile?.user_id || context.authUser.id,
+        context.ipAddress
       );
     },
 
@@ -513,7 +516,7 @@ export function createReturnService({
         trackingCode,
         trackingUrl: asString(body.trackingUrl).trim() || undefined,
         labelUrl: asString(body.labelUrl).trim() || undefined
-      }, context.profile?.user_id || context.authUser.id);
+      }, context.profile?.user_id || context.authUser.id, context.ipAddress);
       void sendExchangeShippingEmail(returnId, trackingCode);
       return result;
     },

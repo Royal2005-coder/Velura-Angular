@@ -1,8 +1,9 @@
-import { Component, computed, inject } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { map } from 'rxjs';
+import { map, of, switchMap } from 'rxjs';
 import { BlogCatalogService } from '../../core/services/blog-catalog.service';
+import { BlogPost } from '../../core/models/blog-post';
 import { useBodyClass } from '../../core/utils/body-class';
 
 @Component({
@@ -22,5 +23,22 @@ export class BlogDetailPage {
   readonly slug = toSignal(this.route.paramMap.pipe(map((params) => params.get('slug') || '')), {
     initialValue: '',
   });
-  readonly post = computed(() => this.catalog.bySlug(this.slug()));
+  readonly post = toSignal(
+    this.route.paramMap.pipe(
+      map((params) => params.get('slug') || ''),
+      switchMap((slug) => {
+        const cached = this.catalog.bySlug(slug);
+        return cached?.content ? of(cached) : this.catalog.fetchBySlug(slug);
+      }),
+    ),
+    { initialValue: null as BlogPost | null },
+  );
+
+  /** CMS body is plain text; split for readable paragraphs and let Angular escape it. */
+  paragraphs(content?: string): string[] {
+    return String(content || '')
+      .split(/\n+/)
+      .map((paragraph) => paragraph.trim())
+      .filter(Boolean);
+  }
 }

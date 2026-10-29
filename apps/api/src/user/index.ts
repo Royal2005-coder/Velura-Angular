@@ -128,7 +128,7 @@ export async function handleUserRoute(
         return await handleStripeWebhook(req, res, corsHeaders);
       }
       if (action === "stripe" && parts[4] === "verify") {
-        return await handleStripeVerify(req, res, corsHeaders);
+        return await handleStripeVerify(req, res, corsHeaders, context);
       }
       throw new HttpError(404, "NOT_FOUND", "Payment route not found");
       

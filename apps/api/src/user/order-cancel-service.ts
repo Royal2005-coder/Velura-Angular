@@ -1,5 +1,5 @@
 import { HttpError } from "../http.js";
-import { callRpc, selectOne, updateRows } from "../supabase.js";
+import { callRpc, selectOne } from "../supabase.js";
 import { orderErrorMessage } from "../orders/order-repository.js";
 import { actionGuard, orderFacts } from "../orders/order-state-machine.js";
 import { asJsonObject, asNumber, asString, type JsonObject } from "../types.js";
@@ -22,10 +22,8 @@ export function createCustomerOrderCancelRepository(): CustomerOrderCancelReposi
   return {
     findOrder: (orderId) => selectOne("orders", { order_id: `eq.${orderId}` }),
     cancel: async (orderId, input) => {
-      const existing = await selectOne("orders", { order_id: `eq.${orderId}` }).catch(() => null);
-      if (existing && !existing.stock_committed_at) {
-        await updateRows("orders", { order_id: `eq.${orderId}` }, { stock_committed_at: existing.created_at || new Date().toISOString() }).catch(() => null);
-      }
+      // The RPC owns reservation release vs. committed-stock restock; pre-marking the order
+      // here made unpaid online cancellations restock stock that had never been deducted.
       const res = await callRpc("velura_order_service_action", {
         p_order_id: orderId,
         p_action: "customer_cancel",

@@ -3,6 +3,7 @@ import { selectOne, insertRow, updateRows, getAuthUser } from "../supabase.js";
 import { hashPassword, verifyPassword, signJwt, verifyJwt } from "../auth-helper.js";
 import { allowDevOtpBypass, config } from "../config.js";
 import {
+  assertAccountNotLocked,
   assertNotLocked,
   clearLoginFailures,
   recordFailedLogin,
@@ -476,6 +477,7 @@ export async function handleAuthRoute(
         tier: "Standard"
       }));
     } else {
+      assertAccountNotLocked(user);
       // Validate OTP for existing user
       const now = new Date().toISOString();
       if (!user.otp_code || user.otp_code !== otp_code || (typeof user.otp_expires_at === "string" && user.otp_expires_at < now)) {
@@ -550,6 +552,7 @@ export async function handleAuthRoute(
     };
     const currentLock = await resetStaleLoginFailures(lockUser);
     assertNotLocked(currentLock);
+    assertAccountNotLocked(user);
 
     const isValidPassword = verifyPassword(asString(password), asString(user.password_hash));
     if (!isValidPassword) {
@@ -683,6 +686,7 @@ export async function handleAuthRoute(
     if (!user) {
       throw new HttpError(404, "USER_NOT_FOUND", "Tài khoản không tồn tại");
     }
+    assertAccountNotLocked(user);
 
     const now = new Date().toISOString();
     if (!user.otp_code || user.otp_code !== otp_code || (typeof user.otp_expires_at === "string" && user.otp_expires_at < now)) {

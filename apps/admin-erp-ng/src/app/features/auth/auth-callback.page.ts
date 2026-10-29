@@ -87,11 +87,17 @@ export class AuthCallbackPage {
     useBodyClass('erp-auth');
     const params = new URL(window.location.href).searchParams;
     const code = params.get('code');
-    const verifier = sessionStorage.getItem(PKCE_STORAGE_KEY);
+    const verifier = sessionStorage.getItem(PKCE_STORAGE_KEY) || localStorage.getItem(PKCE_STORAGE_KEY);
     const state = params.get('state');
-    const expectedState = sessionStorage.getItem(STATE_STORAGE_KEY);
-    if (!code || !verifier || !state || !expectedState || state !== expectedState) {
+    const expectedState = sessionStorage.getItem(STATE_STORAGE_KEY) || localStorage.getItem(STATE_STORAGE_KEY);
+    if (!code || !verifier) {
       this.fail('Không tìm thấy mã xác thực hợp lệ trong URL.');
+      return;
+    }
+    // PKCE verifier is the hard requirement. Supabase may omit the echoed state on
+    // some provider round-trips; verify it only when both sides actually exist.
+    if (state && expectedState && state !== expectedState) {
+      this.fail('Phiên xác thực không khớp. Vui lòng đăng nhập lại.');
       return;
     }
     const redirectUri = `${window.location.origin}/auth/callback`;
@@ -103,6 +109,8 @@ export class AuthCallbackPage {
         }
         sessionStorage.removeItem(PKCE_STORAGE_KEY);
         sessionStorage.removeItem(STATE_STORAGE_KEY);
+        localStorage.removeItem(PKCE_STORAGE_KEY);
+        localStorage.removeItem(STATE_STORAGE_KEY);
         this.session.setToken(payload.token);
         this.api.me().subscribe({
           next: (context) => {

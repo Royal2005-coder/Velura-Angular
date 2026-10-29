@@ -50,6 +50,9 @@ create table if not exists public.return_unit (
   success_count integer not null default 0 check(success_count between 0 and 2),
   refunded boolean not null default false,
   active_return_item_id uuid references public.return_item(return_item_id),
+  -- Legacy overlapping requests keep a synthetic unit so backfill never deletes customer history;
+  -- it is never allocatable, and finishing it retires the unit at success_count=2.
+  legacy_overflow boolean not null default false,
   primary key(order_item_id,unit_number)
 );
 create table if not exists public.return_item_unit (
@@ -117,6 +120,7 @@ begin
  select oi.item_id,generate_series(1,oi.quantity) from public.order_item oi where oi.item_id=i.order_item_id on conflict do nothing;
  with chosen as (select order_item_id,unit_number from public.return_unit
    where order_item_id=i.order_item_id and active_return_item_id is null and not refunded and success_count<2
+     and not legacy_overflow
    order by success_count,unit_number limit i.quantity for update), assigned as (
    update public.return_unit u set active_return_item_id=i.return_item_id from chosen c
    where u.order_item_id=c.order_item_id and u.unit_number=c.unit_number returning u.order_item_id,u.unit_number)
@@ -125,13 +129,45 @@ begin
  if n<>i.quantity then raise sqlstate 'PT422' using message='RETURN_QUANTITY_EXCEEDED'; end if;
 end; $$;
 
--- Rebuild original-unit identity chronologically; legacy overlaps fail closed for owner repair.
+-- Backfill-only allocator: obeys the purchased-unit pool first, then parks unavoidable legacy
+-- excess on non-allocatable overflow units so a production migration never deletes requests.
+create or replace function public.velura_reserve_legacy_units(p_return_item_id uuid)
+returns void language plpgsql security definer set search_path=pg_catalog,public as $$
+declare i public.return_item%rowtype; n integer; missing integer; next_number integer;
+begin
+ select * into i from public.return_item where return_item_id=p_return_item_id for update;
+ if not found then raise sqlstate 'PT404' using message='RETURN_ITEM_NOT_FOUND'; end if;
+ perform 1 from public.order_item where item_id=i.order_item_id for update;
+ if exists(select 1 from public.return_item_unit where return_item_id=p_return_item_id) then return; end if;
+ insert into public.return_unit(order_item_id,unit_number)
+ select oi.item_id,generate_series(1,oi.quantity) from public.order_item oi where oi.item_id=i.order_item_id on conflict do nothing;
+ with chosen as (select order_item_id,unit_number from public.return_unit
+   where order_item_id=i.order_item_id and active_return_item_id is null and not refunded and success_count<2
+     and not legacy_overflow
+   order by success_count,unit_number limit i.quantity for update), assigned as (
+   update public.return_unit u set active_return_item_id=i.return_item_id from chosen c
+   where u.order_item_id=c.order_item_id and u.unit_number=c.unit_number returning u.order_item_id,u.unit_number)
+ insert into public.return_item_unit(return_item_id,order_item_id,unit_number) select i.return_item_id,order_item_id,unit_number from assigned;
+ get diagnostics n=row_count;
+ missing:=i.quantity-n;
+ if missing>0 then
+  select coalesce(max(unit_number),0) into next_number from public.return_unit where order_item_id=i.order_item_id;
+  insert into public.return_unit(order_item_id,unit_number,legacy_overflow,active_return_item_id)
+   select i.order_item_id,next_number+g,true,i.return_item_id from generate_series(1,missing) g;
+  insert into public.return_item_unit(return_item_id,order_item_id,unit_number)
+   select i.return_item_id,i.order_item_id,next_number+g from generate_series(1,missing) g;
+ end if;
+end; $$;
+revoke all on function public.velura_reserve_legacy_units(uuid) from public,anon,authenticated,service_role;
+
+-- Rebuild original-unit identity chronologically without discarding legacy overlapping requests.
 do $$ declare i record; begin
  for i in select ri.* from public.return_item ri join public.return_exchange r using(return_id)
    where ri.item_status not in ('REJECTED','CANCELLED') order by r.created_at,ri.return_item_id loop
-  perform public.velura_reserve_return_units(i.return_item_id);
+  perform public.velura_reserve_legacy_units(i.return_item_id);
   if i.item_status='COMPLETED' then
-   update public.return_unit set success_count=success_count+1,refunded=(i.resolution_type='refund'),active_return_item_id=null
+   update public.return_unit set success_count=(case when legacy_overflow then 2 else success_count+1 end),
+     refunded=(i.resolution_type='refund'),active_return_item_id=null
    where active_return_item_id=i.return_item_id;
   end if;
  end loop;
@@ -225,8 +261,9 @@ returns void language plpgsql security definer set search_path=pg_catalog,public
 declare n integer; q integer;
 begin
  select quantity into q from public.return_item where return_item_id=p_return_item_id;
- update public.return_unit set success_count=success_count+1,refunded=p_refund,active_return_item_id=null
- where active_return_item_id=p_return_item_id and success_count<2 and not refunded;
+ update public.return_unit set success_count=(case when legacy_overflow then 2 else success_count+1 end),
+   refunded=p_refund,active_return_item_id=null
+ where active_return_item_id=p_return_item_id and not refunded and (legacy_overflow or success_count<2);
  get diagnostics n=row_count;
  if n<>q then raise sqlstate 'PT409' using message='RETURN_UNIT_CONFLICT'; end if;
 end; $$;

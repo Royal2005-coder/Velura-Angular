@@ -145,5 +145,27 @@ begin
   select version into version_value from public.return_item where return_item_id=i;
   perform public.velura_return_item_action(second_h,i,'stop','{"reason":"Customer withdraws after conversion"}',version_value,cskh);
  end if;
+ -- Legacy overlap backfill: excess quantity is parked on an overflow unit, never reused by new requests.
+ insert into public.order_item(item_id,order_id,variant_id,product_name,quantity,unit_price,subtotal_item)
+  values('94000000-0000-4000-8000-000000000051',order_id_value,'94000000-0000-4000-8000-000000000031','Legacy overlap line',1,100000,100000);
+ insert into public.return_exchange(order_id,user_id,return_type,status,description)
+  values(order_id_value,actor,'exchange','REQUESTED','Legacy overlapping quantity') returning return_id into second_h;
+ insert into public.return_item(return_id,order_item_id,quantity) values(second_h,'94000000-0000-4000-8000-000000000051',2) returning return_item_id into i;
+ perform public.velura_reserve_legacy_units(i);
+ if (select count(*) from public.return_item_unit where return_item_id=i)<>2
+    or (select count(*) from public.return_unit where order_item_id='94000000-0000-4000-8000-000000000051' and legacy_overflow)<>1 then
+  raise exception 'Legacy overlap was not parked on one overflow unit';
+ end if;
+ perform public.velura_finish_return_unit(i,false);
+ if (select success_count from public.return_unit where order_item_id='94000000-0000-4000-8000-000000000051' and legacy_overflow)<>2
+    or exists(select 1 from public.return_unit where order_item_id='94000000-0000-4000-8000-000000000051' and legacy_overflow and active_return_item_id is not null) then
+  raise exception 'Finished overflow unit stayed allocatable';
+ end if;
+ insert into public.return_exchange(order_id,user_id,return_type,status,description)
+  values(order_id_value,actor,'exchange','REQUESTED','Next request after legacy overlap') returning return_id into second_h;
+ insert into public.return_item(return_id,order_item_id,quantity) values(second_h,'94000000-0000-4000-8000-000000000051',1) returning return_item_id into i;
+ perform public.velura_reserve_return_units(i);
+ if exists(select 1 from public.return_item_unit m join public.return_unit u using(order_item_id,unit_number)
+   where m.return_item_id=i and u.legacy_overflow) then raise exception 'New request reused a legacy overflow unit'; end if;
 end $$;
 rollback;

@@ -32,7 +32,7 @@
       <span class="promotions-eyebrow">Campaigns</span>
       <h2 id="promotions-title">Trung tâm khuyến mãi</h2>
     </div>
-    <app-erp-tabs [tabs]="tabs()" [active]="view()" (changed)="setView($event)" />
+    <app-erp-tabs [tabs]="tabs()" [active]="view()" [busy]="loading()" (changed)="setView($event)" />
   </div>
 
   @if (loadError()) {

@@ -302,6 +302,7 @@ export class AdminErpDashboardPage {
    * Switches between the operations and business views.
    */
   setTab(tab: string): void {
+    if (this.loading()) return;
     if (tab === 'operations' || tab === 'business') {
       this.tab.set(tab);
     }

@@ -403,6 +403,7 @@ export class AdminErpProductsPage {
    * Switches catalog / stock / import / audit tabs.
    */
   setTab(tab: string): void {
+    if (this.loading()) return;
     if (!PRODUCTS_TABS.includes(tab)) {
       return;
     }

@@ -248,6 +248,7 @@ export class AdminErpPricingPage {
    * Switches pricing tabs.
    */
   setTab(tab: string): void {
+    if (this.loading()) return;
     if (!['prices', 'history', 'logs'].includes(tab)) {
       return;
     }

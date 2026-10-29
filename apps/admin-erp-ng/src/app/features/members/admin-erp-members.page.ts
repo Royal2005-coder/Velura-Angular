@@ -259,6 +259,7 @@ export class AdminErpMembersPage {
   }
 
   setWallet(key: string): void {
+    if (this.loading()) return;
     if (!MEMBER_WALLET_KEYS.includes(key as MemberWalletFilter)) return;
     this.wallet.set(key as MemberWalletFilter);
     this.page.set(1);

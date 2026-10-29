@@ -264,6 +264,7 @@ export class AdminErpReviewsPage {
    * Switches review tabs.
    */
   setTab(tab: string): void {
+    if (this.loading()) return;
     if (!REVIEW_TABS.includes(tab)) {
       return;
     }

@@ -396,6 +396,7 @@ export class AdminErpReturnsPage {
    * Switches between the four queues.
    */
   setTab(tab: string): void {
+    if (this.loading()) return;
     if (!DESK_TABS.includes(tab)) {
       return;
     }

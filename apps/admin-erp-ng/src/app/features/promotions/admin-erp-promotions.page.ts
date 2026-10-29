@@ -271,6 +271,7 @@ export class AdminErpPromotionsPage {
    * Switches promotion views.
    */
   setView(view: string): void {
+    if (this.loading()) return;
     if (!['campaigns', 'vouchers', 'logs', 'stats'].includes(view)) return;
     if (this.view() !== view) {
       this.query.set('');

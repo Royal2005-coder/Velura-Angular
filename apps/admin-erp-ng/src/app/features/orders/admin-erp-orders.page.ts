@@ -387,6 +387,7 @@ export class AdminErpOrdersPage {
    * Switches order tabs.
    */
   setTab(tab: string): void {
+    if (this.loading()) return;
     if (!ORDER_TABS.includes(tab as (typeof ORDER_TABS)[number])) return;
     this.tab.set(tab as OrderTab);
     this.page.set(1);

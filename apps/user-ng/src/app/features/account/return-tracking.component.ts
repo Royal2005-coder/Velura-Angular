@@ -35,6 +35,30 @@ const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
           <span class="status-pill">{{ d.status }}</span>
         </header>
 
+        <section class="track-card">
+          <h4>Từng phần của yêu cầu</h4>
+          @for (part of d.items; track part.returnItemId || $index) {
+            <article class="track-card">
+              <strong>{{ part.productName || part.variantId }} · SL {{ part.quantity }}</strong>
+              <span class="muted">Mã phần: {{ part.returnItemId || '—' }} · Dòng đơn: {{ part.orderItemId || '—' }}</span>
+              <p>Quyết định: {{ decisionLabel(part.decisionStatus) }} · Tiến trình: {{ partStatusLabel(part.itemStatus) }}</p>
+              <p>Xử lý: {{ part.resolutionType === 'exchange' ? 'Đổi hàng' : 'Hoàn tiền' }}</p>
+              @if (part.replacementVariantId) { <p>Variant đổi: {{ part.replacementVariantId }}</p> }
+              @if (part.exchangeOrderId) {
+                <p>Đơn đổi riêng: @if (member()) { <a [routerLink]="['/account/orders', part.exchangeOrderId]">{{ part.exchangeOrderId }}</a> } @else { {{ part.exchangeOrderId }} }</p>
+              }
+              @if (part.exchangeOrderCode || part.exchangeOrderStatus) { <p>Đơn {{ part.exchangeOrderCode }} · {{ part.exchangeOrderStatus }}</p> }
+              @if (part.exchangeTrackingCode) { <p>Vận đơn hàng đổi: {{ part.exchangeTrackingCode }}</p> }
+              @if (part.exchangeTrackingUrl) { <a [href]="part.exchangeTrackingUrl" target="_blank" rel="noopener">Theo dõi hàng đổi của phần này</a> }
+              @if (part.refundAmount !== undefined) { <p>Tiền hoàn phần này: {{ part.refundAmount }} ₫</p> }
+              @if (part.reason) { <p>Lý do: {{ part.reason }}</p> }
+              @if (part.attentionStatus && part.attentionStatus !== 'none') { <p>Lưu ý: {{ part.attentionStatus }}</p> }
+              @if (part.updatedAt) { <p class="muted">Cập nhật: {{ date(part.updatedAt) }}</p> }
+              @if (part.completedAt) { <p class="muted">Hoàn tất: {{ date(part.completedAt) }}</p> }
+            </article>
+          }
+        </section>
+
         @if (d.timeline.length) {
           <ol class="track-timeline">
             @for (event of d.timeline; track $index) {
@@ -95,7 +119,7 @@ const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
               <input type="file" accept="image/jpeg,image/png,image/webp" multiple (change)="onPhotos($event)" />
             </label>
             <label class="field">
-              Video đóng gói (MP4/WebM, tối đa 50 MB)
+              Video đóng gói (tùy chọn, MP4/WebM, tối đa 50 MB)
               <input type="file" accept="video/mp4,video/webm" (change)="onVideo($event)" />
             </label>
             @if (uploading()) { <p class="muted">Đang tải bằng chứng…</p> }
@@ -245,6 +269,17 @@ export class ReturnTrackingComponent {
     await this.uploadAll([file], 'packing_video');
   }
 
+  /** Decision and operational stage are separate for every split part. */
+  decisionLabel(value: string | undefined): string {
+    return ({ pending: 'Chờ duyệt', approved: 'Đã duyệt', rejected: 'Bị từ chối' } as Record<string, string>)[value || ''] || value || 'Chờ duyệt';
+  }
+
+  /** Per-part stages never replace the immutable request's original type. */
+  partStatusLabel(value: string | undefined): string {
+    const labels: Record<string, string> = { REQUESTED: 'Đã gửi', APPROVED: 'Đã duyệt', WAITING_RETURN: 'Chờ gửi hàng', RETURN_SHIPPING: 'Đang gửi về', RECEIVED: 'Đã nhận', NEEDS_SUPPORT: 'Cần hỗ trợ', REFUND_PENDING: 'Đang hoàn tiền', EXCHANGE_PREPARING: 'Chuẩn bị đổi', EXCHANGE_SHIPPING: 'Đang giao hàng đổi', COMPLETED: 'Hoàn tất', REJECTED: 'Bị từ chối', CANCELLED: 'Đã dừng' };
+    return labels[value || ''] || value || '—';
+  }
+
   date(value: string | null | undefined): string {
     if (!value) return '—';
     const date = new Date(value);
@@ -265,6 +300,7 @@ export class ReturnTrackingComponent {
   evidenceLabel(kind: string | undefined): string {
     const labels: Record<string, string> = {
       request_photo: 'Ảnh khách gửi ban đầu',
+      request_video: 'Video khách gửi ban đầu',
       packing_photo: 'Ảnh đóng gói',
       packing_video: 'Video đóng gói',
       pickup_photo: 'Ảnh ĐVVC lấy hàng',

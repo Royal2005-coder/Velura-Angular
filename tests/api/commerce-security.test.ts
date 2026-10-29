@@ -46,27 +46,31 @@ test("a failed retry does not erase capture or partial refund facts",()=>{
 });
 
 const context={authUser:{id:"operator"},roleCode:"admin_operator_cskh_dt",accessToken:"jwt"} as AuthContext;
-test("warehouse QA confirms every individual line and persists the exact receipt facts",async()=>{
-  let receipt:unknown;
-  const service=createReturnService({repository:{
-    getReturn:async()=>({status:"RETURN_IN_TRANSIT",version:3}),
-    listReturnLines:async()=>({rows:[{order_item_id:"line-a",quantity:1},{order_item_id:"line-b",quantity:2}]}),
-    receiveReturn:async(_id,_version,input)=>{receipt=input.receipts;return {status:"RECEIVED"};}
-  } as unknown as ReturnRepository});
-  const base={status:"RECEIVED",expectedVersion:3,conditionCheckResult:"qa_pass",imageProof:"https://proof.example/warehouse.jpg",packageMatch:true,sealIntact:true};
-  await assert.rejects(()=>service.updateReturnStatus(context,"return",{...base,confirmedItemId:"line-a",receivedQuantity:3}),error=>error instanceof HttpError && error.code === "ITEM_ID_MISMATCH");
-  await assert.rejects(()=>service.updateReturnStatus(context,"return",{...base,items:[{orderItemId:"line-a",receivedQuantity:1,matchesProduct:true,disposition:"restock"},{orderItemId:"line-b",receivedQuantity:1,matchesProduct:true,disposition:"restock"}]}),error=>error instanceof HttpError && error.code === "QTY_MISMATCH");
-  const items=[{orderItemId:"line-a",receivedQuantity:1,matchesProduct:true,disposition:"restock"},{orderItemId:"line-b",receivedQuantity:2,matchesProduct:true,disposition:"scrap"}];
-  assert.equal((await service.updateReturnStatus(context,"return",{...base,items})).status,"RECEIVED");
-  assert.deepEqual(receipt,items);
+test("warehouse receipt never reopens whole-request status progression", async () => {
+  const service = createReturnService({ repository: {} as ReturnRepository });
+  await assert.rejects(() => service.updateReturnStatus(context, "return", {
+    status: "RECEIVED", expectedVersion: 3, conditionCheckResult: "qa_pass",
+    imageProof: "https://proof.example/warehouse.jpg", packageMatch: true, sealIntact: true,
+    items: [{ orderItemId: "line-a", receivedQuantity: 1, matchesProduct: true, disposition: "restock" }]
+  }), error => error instanceof HttpError && error.code === "ITEM_ACTION_REQUIRED");
 });
 
-test("a stale return version and missing QA never invoke the payment gateway",async()=>{
-  let calls=0;
-  const service=createReturnService({repository:{getReturn:async()=>({order_id:"order",status:"WAITING_RETURN",version:4,return_type:"refund"})} as unknown as ReturnRepository,refunds:{refund:async()=>{calls++;return {status:"refunded"};}}});
-  await assert.rejects(()=>service.triggerStripeRefund(context,"return",{expectedVersion:3}),error=>error instanceof HttpError && error.code === "VERSION_CONFLICT");
-  await assert.rejects(()=>service.triggerStripeRefund(context,"return",{expectedVersion:4}),error=>error instanceof HttpError && error.code === "WAREHOUSE_QA_REQUIRED");
-  assert.equal(calls,0);
+test("a stale line version and missing line QA never invoke the payment gateway", async () => {
+  let calls = 0;
+  const service = createReturnService({
+    repository: {
+      getRefundOperation: async () => null,
+      getReturn: async () => ({ order_id: "order", status: "RECEIVED", version: 30, return_type: "refund" }),
+      listReturnLines: async () => ({ rows: [{
+        return_item_id: "part-a", version: 4, decision_status: "approved", resolution_type: "refund",
+        item_status: "WAITING_RETURN", quantity: 1, received_quantity: 0
+      }] })
+    } as unknown as ReturnRepository,
+    refunds: { refund: async () => { calls++; return { status: "refunded" }; } }
+  });
+  await assert.rejects(() => service.triggerStripeRefund(context, "return", { returnItemId: "part-a", expectedVersion: 3 }), error => error instanceof HttpError && error.code === "VERSION_CONFLICT");
+  await assert.rejects(() => service.triggerStripeRefund(context, "return", { returnItemId: "part-a", expectedVersion: 4 }), error => error instanceof HttpError && error.code === "WAREHOUSE_QA_REQUIRED");
+  assert.equal(calls, 0);
 });
 
 test("HTTP errors never expose raw database query or UUID diagnostics",()=>{

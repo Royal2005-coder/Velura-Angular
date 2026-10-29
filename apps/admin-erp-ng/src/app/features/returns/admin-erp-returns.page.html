@@ -159,16 +159,17 @@
         <app-erp-status-badge [label]="statusLabel(record.status)" [tone]="statusTone(record.status)" [dot]="true" />
       </div>
 
-      @if (nextStep(); as step) {
-        <div class="record__next">
-          <div>
-            <strong>Bước tiếp theo: {{ step.label }}</strong>
-            <span>{{ step.hint }}</span>
-          </div>
-          @if (canWrite()) {
-            <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" (click)="runNextStep()">{{ step.label }}</button>
-          }
+      <div class="record__next">
+        <div>
+          <strong>Quyết định: {{ decisionLabel(record.decision_status) }}</strong>
+          <span>Tiến độ: {{ statusLabel(record.progress_status || record.status) }} · Loại yêu cầu ban đầu không thay đổi.</span>
         </div>
+      </div>
+      @if (record.contact_due_at) {
+        <p class="desk-note" [class.record__reject]="contactOverdue(record)">Hạn liên hệ trong 24 giờ: {{ date(record.contact_due_at) }}{{ contactOverdue(record) ? ' · Đã quá hạn liên hệ' : '' }}</p>
+      }
+      @if (record.attention_status === 'waiting_customer') {
+        <p class="record__gateway">Chờ khách bổ sung — tiến độ xử lý từng phần vẫn được giữ nguyên.</p>
       }
 
       @if (record.return_id) {
@@ -196,19 +197,6 @@
           </dl>
           @if (shipment.tracking_url) {
             <a class="erp-chip" [href]="shipment.tracking_url" target="_blank" rel="noopener">Theo dõi trên ĐVVC</a>
-          }
-          @if (canWrite() && shipment.status === 'picked_up') {
-            <div class="record__action-row">
-              <button class="erp-btn erp-btn--sm" type="button" (click)="markShipment('in_transit')">Đang vận chuyển</button>
-              <button class="erp-btn erp-btn--sm" type="button" (click)="markShipment('delivered')">Đã tới kho</button>
-              <button class="erp-btn erp-btn--danger erp-btn--sm" type="button" (click)="markShipment('failed')">Giao thất bại</button>
-            </div>
-          }
-          @if (canWrite() && shipment.status === 'in_transit') {
-            <div class="record__action-row">
-              <button class="erp-btn erp-btn--sm" type="button" (click)="markShipment('delivered')">Đã tới kho</button>
-              <button class="erp-btn erp-btn--danger erp-btn--sm" type="button" (click)="markShipment('failed')">Giao thất bại</button>
-            </div>
           }
           @if (shipment.pickup_photo_urls?.length) {
             <div class="record__evidence">
@@ -238,12 +226,12 @@
 
       @if (record.evidence?.length) {
         <section class="record__evidence">
-          <h4>Bằng chứng đóng gói / pickup / QA</h4>
+          <h4>Bằng chứng ban đầu / đóng gói (không bắt buộc) / pickup / QA</h4>
           @for (item of record.evidence; track item.evidence_id || item.url) {
             <div class="record__evidence-row">
               <span>{{ evidenceLabel(item.kind) }} · {{ date(item.created_at) }}</span>
-              @if (item.url && item.mime_type?.startsWith('video/')) {
-                <a [href]="item.url" target="_blank" rel="noopener">Mở video</a>
+              @if (item.url && (item.mime_type?.startsWith('video/') || item.kind === 'request_video' || item.kind === 'packing_video' || item.kind === 'pickup_video')) {
+                <video [src]="item.url" controls preload="metadata" style="max-width: 100%; max-height: 240px"></video>
               } @else if (item.url) {
                 <a [href]="item.url" target="_blank" rel="noopener"><img [src]="item.url" alt="Bằng chứng đổi trả" /></a>
               }
@@ -357,29 +345,48 @@
           }
         </div>
       }
-
-      @if (record.lines?.length) {
-        <div class="record__lines">
-          <span>Hàng đăng ký trả</span>
-          @for (line of record.lines; track line.order_item_id) {
-            <p class="record__line">
-              {{ (line.order_item_id || '').slice(0, 8) }} · số lượng {{ line.quantity ?? '—' }}
-              @if (record.qa_item_receipts?.length) {
-                · đã kiểm {{ receivedQuantity(line.order_item_id) }}
-              }
-              @if (line.disposition) {
-                · xử lý: {{ dispositionLabel(line.disposition) }}
-                @if (line.stock_restored_quantity) { (+{{ line.stock_restored_quantity }} tồn) }
-              }
-            </p>
+      @if (record.evidence_videos?.length) {
+        <div class="record__evidence">
+          <span>Video ban đầu khách gửi</span>
+          @for (video of record.evidence_videos; track video) {
+            <video [src]="video" controls preload="metadata" style="max-width: 100%; max-height: 240px"></video>
           }
         </div>
+      }
+
+      @if (record.lines?.length) {
+        <section class="record__lines" aria-label="Xử lý từng phần hàng">
+          <h4>Quyết định & tiến độ từng phần</h4>
+          @for (line of record.lines; track line.return_item_id || $index) {
+            <article class="record__shipment" [attr.data-return-item-id]="line.return_item_id">
+              <h4>{{ (line.order_item_id || '').slice(0, 8) }} · Số lượng {{ line.quantity }}</h4>
+              <p class="desk-note">Phần {{ line.return_item_id }} · phiên bản {{ line.version }}</p>
+              <p class="record__line"><span>Quyết định: {{ decisionLabel(line.decision_status) }}</span><app-erp-status-badge [label]="statusLabel(line.item_status)" [tone]="statusTone(line.item_status)" /></p>
+              <p class="record__line"><span>Phương án phần này: {{ line.resolution_type === 'exchange' ? 'Đổi hàng' : 'Hoàn tiền' }}</span><span>Có thể hoàn {{ money(line.refundable_amount) }} · Đã hoàn {{ money(line.refund_amount) }}</span></p>
+              @if (line.attention_status === 'waiting_customer') { <p class="record__gateway">Chờ khách bổ sung</p> }
+              @if (line.decision_reason || line.reason) { <p class="record__text">Lý do: {{ line.decision_reason || line.reason }}</p> }
+              @if (line.replacement_variant_id) { <p>Biến thể thay thế: <span class="is-mono">{{ line.replacement_variant_id }}</span></p> }
+              @if (line.exchange_order_id) { <a class="erp-chip" [routerLink]="['/orders']" [queryParams]="{ focus: line.exchange_order_id }">Đơn đổi {{ line.exchange_order_id.slice(0, 8) }}</a> }
+              @if (line.exchange_order; as exchange) { <p class="desk-note">Đơn đổi: {{ exchange.order_code || exchange.order_id }} · {{ exchange.status }} · {{ exchange.carrier || '—' }} · {{ exchange.tracking_code || '—' }}</p> }
+              @if (line.receipt_at) {
+                <p class="desk-note">Đã nhận {{ line.received_quantity }} · đúng hàng: {{ line.matches_product ? 'Có' : 'Không' }} · tem: {{ line.tags_intact ? 'Nguyên' : 'Không nguyên' }} · tình trạng: {{ line.condition_acceptable ? 'Đạt' : 'Không đạt' }} · niêm phong: {{ line.seal_intact ? 'Nguyên' : 'Không nguyên' }} · {{ date(line.receipt_at) }}</p>
+              }
+              @if (line.disposition) { <p class="desk-note">{{ dispositionLabel(line.disposition) }} · Đã nhập tồn {{ line.stock_restored_quantity || 0 }}</p> }
+              @if (!canApprove() && line.decision_status === 'pending') { <p class="desk-note">CSKH liên hệ / đề xuất; quyết định duyệt hoặc từ chối thuộc super_admin.</p> }
+              <div class="record__action-row">
+                @for (action of itemActions(line); track action) {
+                  <button class="erp-btn erp-btn--sm" type="button" [disabled]="detailLoading()" (click)="openFlow(action, line)">{{ actionLabel(action) }}</button>
+                }
+              </div>
+            </article>
+          }
+        </section>
       }
 
       @if (record.refund_receiver; as receiver) {
         <div class="record__receiver">
           <span>Thông tin nhận tiền của khách</span>
-          <p>{{ receiver.bank_name || '—' }} · {{ receiver.account_number || '—' }} · {{ receiver.account_holder || '—' }}</p>
+          <p>{{ receiver.bank_name || '—' }} · {{ bankAccount(receiver.account_number) }} · {{ canFinance() ? (receiver.account_holder || '—') : 'Thông tin chủ tài khoản được bảo vệ' }}</p>
           @if (receiver.supplement_request) {
             <p class="record__supplement">Đã yêu cầu bổ sung: {{ receiver.supplement_request }}</p>
           }
@@ -393,43 +400,17 @@
         </div>
       }
 
-      @if (canWrite()) {
+      @if (canOperate()) {
         <div class="record__actions">
           <span>Thao tác CSKH</span>
           <div class="record__action-row">
             @if (gates.contact(record)) {
               <button class="erp-btn erp-btn--sm" type="button" (click)="openFlow('contact')">Ghi liên hệ</button>
             }
-            @if (gates.exchange(record)) {
-              <button class="erp-btn erp-btn--sm" type="button" (click)="openFlow('exchange')">Duyệt đổi hàng</button>
-            }
-            @if (gates.reject(record)) {
-              <button class="erp-btn erp-btn--danger erp-btn--sm" type="button" (click)="openFlow('reject')">Từ chối</button>
-            }
-            @if (gates.receipt(record)) {
-              <button class="erp-btn erp-btn--sm" type="button" (click)="openFlow('receipt')">Kho nhận hàng</button>
-            }
-            @if (gates.stripe(record)) {
-              <button class="erp-btn erp-btn--sm" type="button" [disabled]="detailLoading()" (click)="runStripeRefund()">Hoàn qua Stripe</button>
-            }
-            @if (gates.manual(record)) {
-              <button class="erp-btn erp-btn--sm" type="button" (click)="openFlow('manual')">Ghi chuyển khoản</button>
-            }
             @if (gates.info(record)) {
               <button class="erp-btn erp-btn--sm" type="button" (click)="openFlow('refund-info')">Xin thông tin nhận tiền</button>
             }
           </div>
-          @if (nextSteps().length) {
-            <div class="record__steps">
-              <span>Bước tiếp theo</span>
-              @for (step of nextSteps(); track step.value) {
-                <button class="erp-chip" type="button" (click)="moveStep(step.value)">{{ step.label }}</button>
-              }
-            </div>
-          }
-          @if (record.status === 'RECEIVED' && record.condition_check_result === 'qa_pass' && record.return_type !== 'exchange' && record.refund_flow === 'cod_manual' && record.refund_receiver_status !== 'valid') {
-            <p class="desk-note">Hoàn tiền COD đang chờ thông tin nhận tiền hợp lệ của khách.</p>
-          }
         </div>
       }
     </div>
@@ -564,7 +545,7 @@
   }
 </app-erp-drawer>
 
-<app-erp-return-flow [flow]="flow()" [record]="selected()" [presetStatus]="flowStatus()" (done)="onFlowDone($event)" (dismissed)="closeFlow()" />
+<app-erp-return-flow [flow]="flow()" [record]="selected()" [line]="flowLine()" [order]="orderContext()" [canApprove]="canApprove()" [canOperate]="canOperate()" [canFinance]="canFinance()" (done)="onFlowDone($event)" (dismissed)="closeFlow()" />
 
 <app-erp-qr-scan
   [open]="scanOpen()"

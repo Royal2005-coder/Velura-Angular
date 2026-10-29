@@ -191,6 +191,7 @@ export class AdminErpContentPage {
    * Switches queue tabs.
    */
   setTab(tab: string): void {
+    if (this.loading()) return;
     if (!TABS.includes(tab as ContentTab)) return;
     this.tab.set(tab as ContentTab);
     this.page.set(1);

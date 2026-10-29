@@ -91,6 +91,16 @@ export function assertNotLocked(user: LoginLockUser, now = new Date()): void {
 }
 
 /**
+ * Admin locks use `lock_type`, not only `locked_until`. A locked account must not re-activate
+ * itself through OTP verification or password reset; only an admin unlock clears the lock.
+ */
+export function assertAccountNotLocked(user: { lock_type?: unknown }): void {
+  if (user.lock_type !== null && user.lock_type !== undefined && String(user.lock_type).trim() !== "") {
+    throw new HttpError(423, "ACCOUNT_LOCKED", "Tài khoản đã bị quản trị viên khóa. Vui lòng liên hệ CSKH để được hỗ trợ.");
+  }
+}
+
+/**
  * Clears stale fail counts after 15 minutes or after lock expiry.
  */
 export async function resetStaleLoginFailures(user: LoginLockUser, now = new Date()): Promise<LoginLockUser> {

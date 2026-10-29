@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { config } from "../../apps/api/src/config.js";
 import { HttpError, sendError } from "../../apps/api/src/http.js";
 import { handleStripeVerify } from "../../apps/api/src/payments/stripe-verify.js";
-import type { HttpRequest, HttpResponse } from "../../apps/api/src/types.js";
+import type { AuthContext, HttpRequest, HttpResponse } from "../../apps/api/src/types.js";
 
 function mockResponse(): HttpResponse & { statusCode: number; headers: Record<string, string>; body: string } {
   const res = {
@@ -100,7 +100,7 @@ test("handleStripeVerify throws 404 when order cannot be found", async () => {
     
     await assert.rejects(
       async () => {
-        await handleStripeVerify(req, res, {});
+        await handleStripeVerify(req, res, {}, { profile: { user_id: "member-1" } } as unknown as AuthContext);
       },
       (err: unknown) => {
         return err instanceof HttpError && err.status === 404 && err.code === "ORDER_NOT_FOUND";
@@ -115,7 +115,7 @@ test("handleStripeVerify does not treat confirmed COD as evidence of a Stripe ca
   const ORDER_ID = "ord_test_123";
   const pg = fakePostgrest((call) => {
     if (call.path === "/rest/v1/orders") {
-      return [{ order_id: ORDER_ID, order_code: "VLR123", status: "confirmed" }];
+      return [{ order_id: ORDER_ID, order_code: "VLR123", status: "confirmed", user_id: "member-1" }];
     }
     return [];
   });
@@ -126,7 +126,7 @@ test("handleStripeVerify does not treat confirmed COD as evidence of a Stripe ca
       headers: { host: "localhost" }
     } as unknown as HttpRequest;
     const res = mockResponse();
-    await handleStripeVerify(req, res, {});
+    await handleStripeVerify(req, res, {}, { profile: { user_id: "member-1" } } as unknown as AuthContext);
     assert.equal(res.statusCode, 200);
     const json = JSON.parse(res.body);
     assert.equal(json.success, true);
@@ -143,7 +143,7 @@ test("handleStripeVerify finds order by order_code and verifies payment", async 
   const pg = fakePostgrest((call) => {
     if (call.path === "/rest/v1/orders") {
       assert.equal(call.query.get("order_code"), `eq.${ORDER_CODE}`);
-      return [{ order_id: ORDER_ID, order_code: ORDER_CODE, status: "waiting_payment" }];
+      return [{ order_id: ORDER_ID, order_code: ORDER_CODE, status: "waiting_payment", user_id: "member-1" }];
     }
     if (call.path === "/rest/v1/payment") {
       return [{ payment_id: "pay_1", payment_status: "paid", gateway_transaction_ref: "cs_test_1" }];
@@ -158,12 +158,34 @@ test("handleStripeVerify finds order by order_code and verifies payment", async 
       body: { order_code: ORDER_CODE }
     } as unknown as HttpRequest;
     const res = mockResponse();
-    await handleStripeVerify(req, res, {});
+    await handleStripeVerify(req, res, {}, { profile: { user_id: "member-1" } } as unknown as AuthContext);
     assert.equal(res.statusCode, 200);
     const json = JSON.parse(res.body);
     assert.equal(json.success, true);
     assert.equal(json.paid, true);
     assert.equal(json.order_code, ORDER_CODE);
+  } finally {
+    pg.restore();
+  }
+});
+
+test("handleStripeVerify refuses an order the caller does not own", async () => {
+  const pg = fakePostgrest((call) => {
+    if (call.path === "/rest/v1/orders") return [{ order_id: "ord_test_789", order_code: "VLR789", status: "waiting_payment", user_id: "owner-1" }];
+    return [];
+  });
+  try {
+    const req = {
+      method: "POST",
+      url: "/api/user/payments/stripe/verify",
+      headers: { host: "localhost" },
+      body: { order_id: "ord_test_789" }
+    } as unknown as HttpRequest;
+    const res = mockResponse();
+    await assert.rejects(
+      async () => handleStripeVerify(req, res, {}, { profile: null } as unknown as AuthContext),
+      (err: unknown) => err instanceof HttpError && err.status === 404 && err.code === "NOT_FOUND"
+    );
   } finally {
     pg.restore();
   }

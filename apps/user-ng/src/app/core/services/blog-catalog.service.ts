@@ -1,5 +1,5 @@
 import { Injectable, inject, signal } from '@angular/core';
-import { catchError, of } from 'rxjs';
+import { Observable, catchError, map, of } from 'rxjs';
 import { BlogPost } from '../models/blog-post';
 import { ApiService } from './api.service';
 
@@ -7,6 +7,7 @@ interface ContentBlogRow {
   slug?: string;
   title?: string;
   excerpt?: string;
+  content?: string;
   image_url?: string;
   author?: string;
   read_minutes?: number;
@@ -56,6 +57,16 @@ export class BlogCatalogService {
     return this.postsState().find((post) => post.slug === slug);
   }
 
+  /**
+   * Loads one published article even when it is outside the first list page.
+   */
+  fetchBySlug(slug: string): Observable<BlogPost | null> {
+    return this.api.get<ContentBlogRow>(`/api/content/blogs/${encodeURIComponent(slug)}`).pipe(
+      map((row) => (row && row.slug ? this.toPost(row) : null)),
+      catchError(() => of(null)),
+    );
+  }
+
   private toPost(row: ContentBlogRow): BlogPost {
     const category = this.toCategory(row.category_slug);
     return {
@@ -64,6 +75,7 @@ export class BlogCatalogService {
       badge: CATEGORY_BADGE[category],
       title: String(row.title || ''),
       excerpt: String(row.excerpt || ''),
+      content: String(row.content || ''),
       image: String(row.image_url || '/assets/images/placeholder.jpg'),
       author: String(row.author || 'Velura Editorial'),
       date: this.formatDate(row.published_at),

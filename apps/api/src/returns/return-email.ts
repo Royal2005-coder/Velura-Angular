@@ -5,6 +5,8 @@ import { asNumber, asString, type JsonObject } from "../types.js";
 export interface RefundEmailOptions {
   method?: "stripe" | "manual" | "completed";
   reference?: string;
+  /** Independently completed return part; required for current item-based refunds. */
+  returnItemId?: string;
 }
 
 /**
@@ -22,9 +24,12 @@ export async function sendRefundSuccessEmail(
     });
     if (!returnRecord) return false;
 
-    // Chỉ gửi khi loại yêu cầu là hoàn tiền
-    const returnType = asString(returnRecord.return_type);
-    if (returnType !== "refund") return false;
+    const item = options.returnItemId ? await selectOne("return_item", {
+      return_item_id: `eq.${options.returnItemId}`,
+      return_id: `eq.${returnId}`
+    }) : null;
+    if (options.returnItemId && (!item || item.resolution_type !== "refund" || item.item_status !== "COMPLETED")) return false;
+    if (!options.returnItemId && asString(returnRecord.return_type) !== "refund") return false;
 
     const orderId = asString(returnRecord.order_id);
     if (!orderId) return false;
@@ -34,12 +39,14 @@ export async function sendRefundSuccessEmail(
       select: "email_id,status,created_at,metadata",
       template_code: "eq.return_refund_completed",
       recipient: `neq.`,
+      "metadata->>return_id": `eq.${returnId}`,
       limit: 20
     }).catch(() => ({ rows: [] as JsonObject[] }));
 
     const alreadySent = existingOutbox.rows?.some((row: JsonObject) => {
       const meta = row.metadata as JsonObject | undefined;
-      return meta && asString(meta.return_id) === returnId && row.status === "sent";
+      return meta && asString(meta.return_id) === returnId
+        && asString(meta.return_item_id) === (options.returnItemId || "") && row.status === "sent";
     });
     if (alreadySent) {
       console.log(`[REFUND_EMAIL] Email already sent previously for return ${returnId}, skipping duplicate.`);
@@ -78,7 +85,8 @@ export async function sendRefundSuccessEmail(
     customerName = customerName || "Quý khách";
 
     const trackingCode = asString(returnRecord.tracking_return_code) || returnId.slice(0, 8).toUpperCase();
-    const refundAmount = asNumber(returnRecord.refund_amount) || asNumber(order.total_amount) || 0;
+    const refundAmount = item ? asNumber(item.refund_amount) : asNumber(returnRecord.refund_amount);
+    if (refundAmount <= 0) return false;
     const amountFormatted = refundAmount.toLocaleString("vi-VN") + " đ";
 
     const paymentMethod = asString(order.payment_method).toUpperCase();
@@ -188,7 +196,7 @@ Trân trọng,
       body: text,
       status: sent ? "sent" : "pending",
       related_user_id: userId || null,
-      metadata: { return_id: returnId, order_id: orderId, amount: refundAmount, sent_at: new Date().toISOString() }
+      metadata: { return_id: returnId, return_item_id: options.returnItemId || null, order_id: orderId, amount: refundAmount, sent_at: new Date().toISOString() }
     }).catch((err) => {
       console.warn("[REFUND_EMAIL] Failed to record in email_outbox:", err);
     });

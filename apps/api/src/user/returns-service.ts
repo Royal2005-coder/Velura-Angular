@@ -1,4 +1,4 @@
-import { OPEN_RETURN_STATUSES, RETURN_STATUS_LABELS_VI, returnReasonLabel } from "../returns/return-constants.js";
+import { RETURN_STATUS_LABELS_VI, returnReasonLabel } from "../returns/return-constants.js";
 import { classifyReturnPayment, customerRefundReceiver, refundFlowFor, validateRefundReceiver } from "../returns/return-refund-receiver.js";
 import { listReturnEvidence, resolveEvidenceRef, storeReturnEvidence, type ReturnEvidenceKind } from "../returns/return-evidence.js";
 import { hasGuestOrderAccess } from "./order-access.js";
@@ -10,19 +10,17 @@ import type { UserReturnsRepository } from "./returns-repository.js";
 /** A customer may withdraw a request only while no parcel has been handed to the carrier. */
 const CUSTOMER_CANCELLABLE_STATUSES: readonly string[] = ["REQUESTED", "CONTACTING", "WAITING_RETURN"];
 /** Packing evidence is only meaningful before the carrier picks the parcel up. */
-const CUSTOMER_PACKING_STATUSES: readonly string[] = ["REQUESTED", "CONTACTING", "WAITING_RETURN"];
-const CUSTOMER_VISIBLE_EVIDENCE_KINDS = ["request_photo", "packing_photo", "packing_video", "pickup_photo", "pickup_video", "qa_photo", "qa_video"];
+const CUSTOMER_PACKING_STATUSES: readonly string[] = ["REQUESTED", "CONTACTING", "APPROVED", "WAITING_RETURN"];
+const CUSTOMER_VISIBLE_EVIDENCE_KINDS = ["request_photo", "request_video", "packing_photo", "packing_video", "pickup_photo", "pickup_video", "qa_photo", "qa_video"];
 
 const RETURN_INSTRUCTIONS: readonly string[] = [
-  "Quay video toàn bộ quá trình đóng gói: sản phẩm, tem/niêm phong, mã phiếu và kiện hàng đã dán nhãn.",
+  "Bạn có thể bổ sung video đóng gói (không bắt buộc): sản phẩm, tem/niêm phong, mã phiếu và kiện hàng đã dán nhãn.",
   "Dán nhãn vận đơn hoàn lên kiện hàng; đưa mã QR trên nhãn cho ĐVVC quét khi lấy hàng.",
   "ĐVVC chụp ảnh kiện hàng nguyên vẹn trước khi mang đi; ảnh này là bằng chứng đối chiếu.",
   "Khi hàng về kho, Velura kiểm tra niêm phong, đúng sản phẩm/số lượng và đối chiếu ảnh/video.",
   "Nếu có sai lệch, Velura mở hồ sơ CSKH kèm toàn bộ bằng chứng hai chiều."
 ];
 
-/** Stored reason that marks a cancellation as the customer's own (shown as "Đã hủy", not "Bị từ chối"). */
-const CUSTOMER_CANCEL_REASON = "Đã hủy bởi khách hàng";
 
 /**
  * Customer-facing shape of one return request: the persisted row without CSKH-internal fields, plus what the
@@ -47,7 +45,8 @@ async function customerReturnView(
     refund_bank_holder: _bankHolder,
     ...visible
   } = ret;
-  const flow = refundFlowFor(ret.return_type, classifyReturnPayment(order?.payment_method, undefined));
+  const hasRefundPart = items.some((item) => item.resolution_type === "refund");
+  const flow = refundFlowFor(hasRefundPart ? "refund" : ret.return_type, classifyReturnPayment(order?.payment_method, undefined));
   const receiverRequired = flow === "cod_manual";
   const receiver = receiverRequired ? await repository.getRefundReceiver(ret.return_id) : null;
   const status = asString(ret.status);
@@ -63,7 +62,7 @@ async function customerReturnView(
     refund_flow: flow,
     refund_receiver: customerRefundReceiver(receiverRequired, receiver),
     can_cancel: CUSTOMER_CANCELLABLE_STATUSES.includes(status),
-    can_upload_packing: CUSTOMER_PACKING_STATUSES.includes(status),
+    can_upload_packing: items.length ? items.some((part) => CUSTOMER_PACKING_STATUSES.includes(asString(part.item_status))) : CUSTOMER_PACKING_STATUSES.includes(status),
     items
   };
 }
@@ -103,6 +102,7 @@ function customerTimeline(events: JsonObject[]): JsonObject[] {
       label = "Bạn đã tải bằng chứng đóng gói";
     }
     return {
+      return_item_id: event.return_item_id || payload.return_item_id || null,
       event_type: type,
       status: newStatus,
       label,
@@ -122,6 +122,7 @@ async function customerShipmentView(shipment: JsonObject): Promise<JsonObject> {
   const video = shipment.package_video_url ? await resolveEvidenceRef(shipment.package_video_url) : "";
   return {
     shipment_id: shipment.shipment_id,
+    return_item_id: shipment.return_item_id || null,
     direction: shipment.direction,
     order_id: shipment.order_id || null,
     carrier: shipment.carrier || null,
@@ -183,7 +184,8 @@ async function addPackingEvidence(
   req: HttpRequest
 ): Promise<JsonObject> {
   const status = asString(ret.status);
-  if (!CUSTOMER_PACKING_STATUSES.includes(status)) {
+  const parts = await repository.listReturnItemsForReturn(ret.return_id);
+  if (!(parts.length ? parts.some((part) => CUSTOMER_PACKING_STATUSES.includes(asString(part.item_status))) : CUSTOMER_PACKING_STATUSES.includes(status))) {
     throw new HttpError(422, "PACKING_EVIDENCE_CLOSED", "Chỉ có thể tải bằng chứng đóng gói trước khi ĐVVC lấy hàng.");
   }
   const evidence = await storeReturnEvidence({
@@ -214,8 +216,32 @@ async function hydratedReturnItems(repository: UserReturnsRepository, returnId: 
   const items = await repository.listReturnItemsForReturn(returnId);
   const hydrated: JsonObject[] = [];
   for (const ri of items) {
+    const exchange = ri.exchange_order_id && repository.getExchangeOrder ? await repository.getExchangeOrder(ri.exchange_order_id) : null;
     const orderItem = await repository.findOrderItem(ri.order_item_id);
     hydrated.push({
+      item_status: ri.item_status,
+      decision_status: ri.decision_status,
+      resolution_type: ri.resolution_type,
+      replacement_variant_id: ri.replacement_variant_id,
+      exchange_order_id: ri.exchange_order_id,
+      refund_amount: ri.refund_amount,
+      attention_status: ri.attention_status,
+      reason: ri.reason,
+      created_at: ri.created_at,
+      exchange_order: exchange ? {
+        order_id: exchange.order_id,
+        order_code: exchange.order_code,
+        status: exchange.status,
+        carrier: exchange.carrier || null,
+        tracking_code: exchange.tracking_code || null,
+        tracking_url: exchange.tracking_url || null
+      } : null,
+      updated_at: ri.updated_at,
+      approved_at: ri.approved_at,
+      rejected_at: ri.rejected_at,
+      received_at: ri.received_at,
+      completed_at: ri.completed_at,
+      version: ri.version,
       return_item_id: ri.return_item_id,
       order_item_id: ri.order_item_id,
       quantity: ri.quantity,
@@ -266,24 +292,22 @@ function requireDeliveredWithinWindow(order: JsonObject): void {
   if (asString(order.status) !== "delivered") {
     throw new HttpError(400, "BAD_REQUEST", "Đơn hàng phải hoàn thành (giao thành công) mới được yêu cầu đổi trả");
   }
-  const deliveryDate = order.delivered_at
-    ? new Date(String(order.delivered_at))
-    : new Date(String(order.updated_at || order.created_at));
+  const deliveryDate = new Date(asString(order.delivered_at));
   if (!returnWindowOpen(deliveryDate, new Date())) {
-    throw new HttpError(400, "RETURN_WINDOW_CLOSED", "Quá thời hạn đổi/trả (30 ngày kể từ khi giao hàng)");
+    throw new HttpError(400, "RETURN_WINDOW_CLOSED", "Quá thời hạn đổi/trả (7 ngày kể từ khi giao hàng)");
   }
 }
 
-/** Validates and returns the bank destination required for COD refund requests. */
-function refundBankPayload(order: JsonObject, returnType: string, body: JsonObject): JsonObject {
-  if (returnType !== "refund" || asString(order.payment_method).toUpperCase() !== "COD") return {};
+/** COD receiving details are optional at intake, but any supplied destination must be valid. */
+function refundBankPayload(order: JsonObject, _returnType: string, body: JsonObject): JsonObject {
+  if (asString(order.payment_method).toUpperCase() !== "COD") return {};
   const bankName = asString(body.refund_bank_name).trim();
   const accountNumber = asString(body.refund_bank_account).trim();
   const accountHolder = asString(body.refund_bank_holder).trim();
-  if (!bankName || !accountHolder || !/^\d{6,20}$/.test(accountNumber)) {
-    throw new HttpError(422, "REFUND_BANK_REQUIRED", "Vui lòng nhập ngân hàng, số tài khoản từ 6–20 chữ số và tên chủ tài khoản cho đơn COD.");
-  }
-  return { refund_bank_name: bankName, refund_bank_account: accountNumber, refund_bank_holder: accountHolder };
+  if (!bankName && !accountNumber && !accountHolder) return {};
+  const checked = validateRefundReceiver({ bank_name: bankName, account_number: accountNumber, account_holder: accountHolder });
+  if (!checked.ok) throw new HttpError(422, "REFUND_RECEIVER_INVALID", "Thông tin nhận hoàn tiền chưa hợp lệ.", checked.errors);
+  return { refund_bank_name: checked.value.bankName, refund_bank_account: checked.value.accountNumber, refund_bank_holder: checked.value.accountHolder };
 }
 
 /**
@@ -299,7 +323,6 @@ async function validateItemsAgainstOrder(
 ): Promise<JsonObject[]> {
   const validated: JsonObject[] = [];
   const seen = new Set<string>();
-  const existingReturns = await repository.listReturnsForOrder(order.order_id);
 
   for (const rawItem of rawItems) {
     const item = asJsonObject(rawItem);
@@ -340,35 +363,16 @@ async function validateItemsAgainstOrder(
       );
     }
 
-    let alreadyReturnedQty = 0;
-    let activeAttempts = 0;
-    for (const existing of existingReturns) {
-      const status = asString(existing.status);
-      if (["CANCELLED", "REJECTED", "rejected"].includes(status)) continue;
-      const rItems = await repository.listReturnItemsForOrderItem(existing.return_id, item.order_item_id);
-      if (!rItems.length) continue;
-
-      // Khóa nếu đang có yêu cầu đổi/trả trong tiến trình xử lý
-      if (OPEN_RETURN_STATUSES.includes(status) || status === "pending") {
-        throw new HttpError(
-          400,
-          "ITEM_RETURN_IN_PROGRESS",
-          `Sản phẩm "${asString(orderItem.product_name) || "này"}" đang có yêu cầu đổi/trả (${asString(existing.tracking_return_code) || asString(existing.return_id)}) đang xử lý. Vui lòng chờ hoàn tất.`
-        );
-      }
-
-      activeAttempts += 1;
-      for (const ri of rItems) alreadyReturnedQty += Number(ri.quantity);
-    }
-
-    if (activeAttempts >= MAX_RETURN_ATTEMPTS_PER_ITEM) {
-      throw new HttpError(400, "RETURN_LIMIT_REACHED", "Đã sử dụng hết số lượt đổi/trả cho sản phẩm này");
-    }
-    if (alreadyReturnedQty + Number(item.quantity) > Number(orderItem.quantity)) {
-      throw new HttpError(400, "BAD_REQUEST", "Số lượng đổi trả vượt quá số lượng đã mua");
+    const units = await repository.listReturnUnits(item.order_item_id);
+    const available = units.length
+      ? units.filter((unit) => !unit.refunded && !unit.active_return_item_id && Number(unit.success_count) < MAX_RETURN_ATTEMPTS_PER_ITEM).length
+      : Number(orderItem.quantity);
+    if (Number(item.quantity) > available) {
+      throw new HttpError(422, "RETURN_QUANTITY_EXCEEDED", "Số lượng vượt quá số lượng còn khả dụng đổi/trả.");
     }
 
     const replacementId = asString(item.replacement_variant_id);
+    if (returnType === "exchange" && !replacementId) throw new HttpError(422, "REPLACEMENT_REQUIRED", "Vui lòng chọn variant cùng sản phẩm để đổi.");
     if (replacementId) {
       const replacement = await repository.findVariant(replacementId);
       if (!variant || !replacement || replacement.product_id !== variant.product_id) throw new HttpError(422,"EXCHANGE_SAME_PRODUCT_REQUIRED","Replacement must be a variant of the same product");
@@ -379,27 +383,38 @@ async function validateItemsAgainstOrder(
   return validated;
 }
 
-/**
- * Tính số tiền hoàn dự kiến dựa trên số lượng sản phẩm và giá mua thực tế, trừ tỉ lệ giảm giá nếu có.
- */
-async function calculateEstimatedRefundAmount(
-  repository: UserReturnsRepository,
-  order: JsonObject,
-  validatedItems: JsonObject[]
-): Promise<number> {
-  let subtotal = 0;
-  for (const item of validatedItems) {
-    const orderItem = await repository.findOrderItem(item.order_item_id);
-    if (orderItem) {
-      subtotal += Number(orderItem.unit_price || 0) * Number(item.quantity || 1);
-    }
+/** Rejects public URLs, inline blobs and absent initial proof before the atomic ownership claim. */
+function intakeEvidence(body: JsonObject): { images: string[]; videos: string[]; description: string } {
+  const description = [returnReasonLabel(asString(body.reason_code || body.reasonCode)), asString(body.description || body.reason || body.note).trim()].filter(Boolean).join(". ");
+  if (!description) throw new HttpError(422, "RETURN_REASON_REQUIRED", "Vui lòng nhập lý do đổi/trả.");
+  const refs = (value: unknown): string[] => Array.isArray(value) ? value.filter((ref): ref is string => typeof ref === "string") : [];
+  const images = refs(body.evidence_images);
+  const videos = refs(body.evidence_videos);
+  if (!images.length || !videos.length || images.length > 5 || videos.length > 3) throw new HttpError(422, "INITIAL_EVIDENCE_REQUIRED", "Cần ít nhất một ảnh và một video ban đầu (tối đa 5 ảnh, 3 video).");
+  if ([...images, ...videos].some((ref) => !ref.startsWith("storage://return-evidence-private/return-intake/")) || new Set([...images, ...videos]).size !== images.length + videos.length) {
+    throw new HttpError(422, "INVALID_RETURN_EVIDENCE", "Bằng chứng phải được tải riêng cho đơn hàng này.");
   }
-  const orderSubtotal = Number(order.subtotal || order.total_amount || 0);
-  const orderDiscount = Number(order.discount_amount || 0);
-  if (orderSubtotal > 0 && orderDiscount > 0) {
-    return Math.max(0, Math.round(subtotal * (1 - orderDiscount / orderSubtotal)));
-  }
-  return Math.max(0, Math.round(subtotal));
+  return { images, videos, description };
+}
+
+/** Member and verified guest intake share every policy and the same all-or-nothing database write. */
+async function createForOrder(repository: UserReturnsRepository, order: JsonObject, body: JsonObject): Promise<JsonObject> {
+  if (order.order_kind === "exchange") throw new HttpError(400, "EXCHANGE_REPLACEMENT_NOT_RETURNABLE", "Vui lòng tạo yêu cầu từ đơn hàng gốc.");
+  await rejectExchangeReplacementOrder(repository, order.order_id);
+  requireDeliveredWithinWindow(order);
+  const returnType = asString(body.return_type);
+  if (!["refund", "exchange"].includes(returnType)) throw new HttpError(422, "INVALID_RETURN_TYPE", "Choose refund or exchange");
+  if (!Array.isArray(body.items) || !body.items.length) throw new HttpError(422, "INVALID_RETURN_ITEMS", "Vui lòng chọn sản phẩm.");
+  const evidence = intakeEvidence(body);
+  const items = await validateItemsAgainstOrder(repository, order, body.items, returnType);
+  const bank = refundBankPayload(order, returnType, body);
+  const created = await repository.createReturnBundle({
+    order_id: order.order_id, user_id: order.user_id || null, return_type: returnType,
+    reason: evidence.description, description: evidence.description,
+    evidence_images: evidence.images, evidence_videos: evidence.videos,
+    ...bank
+  }, items);
+  return customerReturnView(repository, created, order, await hydratedReturnItems(repository, created.return_id));
 }
 
 /**
@@ -407,134 +422,20 @@ async function calculateEstimatedRefundAmount(
  */
 export function createUserReturnsService(repository: UserReturnsRepository) {
   return {
+    /** Creates a return only for the authenticated purchaser's delivered order. */
     async createForMember(profile: UserProfile, body: JsonObject) {
-      const { order_id, return_type, description, evidence_images, items } = body;
-      if (!order_id || !return_type || !Array.isArray(items) || !items.length) {
-        throw new HttpError(400, "BAD_REQUEST", "Thiếu thông tin yêu cầu đổi trả");
-      }
-
-      const order = await repository.findOrderById(asString(order_id));
-      if (!order || order.user_id !== profile.user_id) {
-        throw new HttpError(403, "FORBIDDEN", "Đơn hàng không hợp lệ");
-      }
-      await rejectExchangeReplacementOrder(repository, order.order_id);
-      requireDeliveredWithinWindow(order);
-      const reason = returnReasonLabel(asString(body.reason_code || body.reasonCode));
-      const comboNotes = (items as JsonObject[])
-        .filter((it) => it.replacement_text)
-        .map((it) => asString(it.replacement_text))
-        .filter(Boolean);
-      const combinedDescription = [
-        comboNotes.length ? `[Chi tiết đổi hàng]: ${comboNotes.join("; ")}` : "",
-        reason,
-        asString(description)
-      ].filter(Boolean).join(". ");
-      const intake = {
-        description: combinedDescription,
-        images: Array.isArray(evidence_images)
-          ? evidence_images.filter(value => typeof value === "string" && (value.startsWith("https://") || value.startsWith("data:image/"))).slice(0, 5)
-          : []
-      };
-      if (!["refund","exchange"].includes(asString(return_type))) throw new HttpError(422,"INVALID_RETURN_TYPE","Choose refund or exchange");
-      const validatedItems = await validateItemsAgainstOrder(repository, order, items, asString(return_type));
-      const bank = refundBankPayload(order, asString(return_type), body);
-
-      const trackingReturnCode = "RET" + Date.now().toString().slice(-8).toUpperCase();
-      const calculatedRefund = return_type === "refund"
-        ? await calculateEstimatedRefundAmount(repository, order, validatedItems)
-        : 0;
-
-      if (repository.createReturnBundle) return repository.createReturnBundle({order_id:order.order_id,user_id:order.user_id,return_type,refund_amount:calculatedRefund,description:intake.description,evidence_images:intake.images,...bank},validatedItems);
-      const newReturn = await repository.insertReturn({
-        order_id,
-        user_id: profile.user_id,
-        return_type,
-        refund_amount: calculatedRefund,
-        description: intake.description || description || null,
-        evidence_images: intake.images || evidence_images || null,
-        status: "REQUESTED",
-        tracking_return_code: trackingReturnCode,
-        created_at: new Date().toISOString(),
-        ...bank
-      });
-
-      const returnItems: JsonObject[] = [];
-      for (const item of validatedItems) {
-        returnItems.push(
-          await repository.insertReturnItem({
-            return_id: newReturn.return_id,
-            order_item_id: item.order_item_id,
-            quantity: item.quantity
-          })
-        );
-      }
-
-      return { ...newReturn, items: returnItems };
+      const order = await repository.findOrderById(asString(body.order_id));
+      if (!order || order.user_id !== profile.user_id) throw new HttpError(403, "FORBIDDEN", "Đơn hàng không hợp lệ");
+      return createForOrder(repository, order, body);
     },
 
-    /**
-     * Nhánh khách vãng lai: xác thực bằng khớp SĐT/email với đơn, không qua OTP.
-     */
+    /** A signed same-phone guest session authorizes the same atomic intake as members. */
     async createForGuest(body: JsonObject) {
-      const cleanCode = String(body.order_code || "").trim().toUpperCase();
-      const cleanContact = String(body.contact || body.phone || body.email || "").trim();
-      const { return_type, description, evidence_images, items } = body;
-      if (!cleanCode || !return_type || !Array.isArray(items) || !items.length) {
-        throw new HttpError(400, "BAD_REQUEST", "Thiếu thông tin yêu cầu đổi trả (mã đơn, liên hệ, loại đổi trả hoặc sản phẩm)");
-      }
-
-      let order = await repository.findOrderByCode(cleanCode);
-      if (!order && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanCode)) {
-        order = await repository.findOrderById(cleanCode);
-      }
-      if (!order) throw new HttpError(404, "NOT_FOUND", "Không tìm thấy đơn hàng");
-
-      if (!hasGuestOrderAccess(order, body)) throw new HttpError(404,"NOT_FOUND","Order not found");
-
-      await rejectExchangeReplacementOrder(repository, order.order_id);
-      requireDeliveredWithinWindow(order);
-      if (!["refund","exchange"].includes(asString(return_type))) throw new HttpError(422,"INVALID_RETURN_TYPE","Choose refund or exchange");
-      const validatedItems = await validateItemsAgainstOrder(repository, order, items, asString(return_type));
-      const bank = refundBankPayload(order, asString(return_type), body);
-
-      const trackingReturnCode = "RT" + Date.now().toString().slice(-8).toUpperCase();
-      const calculatedRefund = return_type === "refund"
-        ? await calculateEstimatedRefundAmount(repository, order, validatedItems)
-        : 0;
-
-      const comboNotes = (items as JsonObject[])
-        .filter((it) => it.replacement_text)
-        .map((it) => asString(it.replacement_text))
-        .filter(Boolean);
-      const combinedDescription = [
-        comboNotes.length ? `[Chi tiết đổi hàng]: ${comboNotes.join("; ")}` : "",
-        asString(description)
-      ].filter(Boolean).join(". ") || null;
-
-      const newReturn = await repository.insertReturn({
-        order_id: order.order_id,
-        user_id: order.user_id || null,
-        return_type,
-        refund_amount: calculatedRefund,
-        status: "REQUESTED",
-        tracking_return_code: trackingReturnCode,
-        reason: combinedDescription || "Khách hàng yêu cầu đổi trả",
-        description: combinedDescription,
-        evidence_images: Array.isArray(evidence_images) ? evidence_images : [],
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        ...bank
-      });
-
-      for (const item of validatedItems) {
-        await repository.insertReturnItem({
-          return_id: newReturn.return_id,
-          order_item_id: item.order_item_id,
-          quantity: item.quantity
-        });
-      }
-
-      return newReturn;
+      const code = asString(body.order_code).trim().toUpperCase();
+      let order = await repository.findOrderByCode(code);
+      if (!order && /^[0-9a-f-]{36}$/i.test(code)) order = await repository.findOrderById(code);
+      if (!order || !hasGuestOrderAccess(order, body)) throw new HttpError(404, "NOT_FOUND", "Order not found");
+      return createForOrder(repository, order, body);
     },
 
     /** Lists return requests only after a signed same-phone session authorizes the order. */
@@ -543,7 +444,7 @@ export function createUserReturnsService(repository: UserReturnsRepository) {
       if (!order || !hasGuestOrderAccess(order, body)) throw new HttpError(404,"NOT_FOUND","Order not found");
       const rows = await repository.listReturnsForOrder(order.order_id);
       const populated: JsonObject[] = [];
-      for (const ret of rows) populated.push(await customerReturnView(repository, ret, order, await repository.listReturnItemsForReturn(ret.return_id)));
+      for (const ret of rows) populated.push(await customerReturnView(repository, ret, order, await hydratedReturnItems(repository, ret.return_id)));
       return populated;
     },
     /** Cancels only a request bound to the verified order and its current version. */
@@ -554,9 +455,7 @@ export function createUserReturnsService(repository: UserReturnsRepository) {
       const version = Number(body.expectedVersion);
       if (!Number.isInteger(version) || version !== Number(ret.version)) throw new HttpError(409,"VERSION_CONFLICT","Yêu cầu đổi/trả đã thay đổi, vui lòng tải lại");
       if (!CUSTOMER_CANCELLABLE_STATUSES.includes(asString(ret.status))) throw new HttpError(422,"INVALID_TRANSITION","Yêu cầu đã chuyển sang bước xử lý hàng nên không thể tự hủy");
-      const changed = await repository.updateReturn(ret.return_id,{status:"CANCELLED",cancelled_by:"customer",version:version+1,resolved_at:new Date().toISOString(),rejection_reason:CUSTOMER_CANCEL_REASON},version);
-      if (!changed[0]) throw new HttpError(409,"VERSION_CONFLICT","Yêu cầu đổi/trả đã thay đổi, vui lòng tải lại");
-      return changed[0];
+      return repository.cancelReturn(ret.return_id, version, null);
     },
     async cancelForMember(profile: UserProfile, returnId: unknown, rawExpectedVersion: unknown) {
       if (!returnId) throw new HttpError(400, "BAD_REQUEST", "Thiếu return_id");
@@ -577,17 +476,7 @@ export function createUserReturnsService(repository: UserReturnsRepository) {
       if (asNumber(ret.version) !== expectedVersion) {
         throw new HttpError(409, "VERSION_CONFLICT", "Yêu cầu đổi/trả đã thay đổi, vui lòng tải lại");
       }
-      const updated = await repository.updateReturn(returnId, {
-        status: "CANCELLED",
-        cancelled_by: "customer",
-        rejection_reason: CUSTOMER_CANCEL_REASON,
-        resolved_at: new Date().toISOString(),
-        version: expectedVersion + 1
-      }, expectedVersion);
-      if (!updated[0]) {
-        throw new HttpError(409, "VERSION_CONFLICT", "Yêu cầu đổi/trả đã thay đổi, vui lòng tải lại");
-      }
-      return updated[0];
+      return repository.cancelReturn(returnId, expectedVersion, profile.user_id);
     },
 
     /**

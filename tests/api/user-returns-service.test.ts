@@ -4,6 +4,7 @@ import { HttpError } from "../../apps/api/src/http.js";
 import { createUserReturnsService } from "../../apps/api/src/user/returns-service.js";
 import type { UserReturnsRepository } from "../../apps/api/src/user/returns-repository.js";
 import { asJsonObject, type JsonObject, type UserProfile } from "../../apps/api/src/types.js";
+import { issueGuestOrderAccess } from "../../apps/api/src/user/order-access.js";
 
 const ORDER_ID = "70000000-0000-4000-8000-000000000001";
 const ITEM_ID = "70000000-0000-4000-8000-000000000002";
@@ -17,6 +18,8 @@ function daysAgo(days: number): string {
 
 function fakeRepository(overrides: Partial<UserReturnsRepository> = {}): UserReturnsRepository {
   return {
+    createReturnBundle: async (payload, items) => ({ return_id: "ret-1", ...payload, items }),
+    listReturnUnits: async () => [],
     findOrderByCode: async () => null,
     findOrderById: async () => ({ order_id: ORDER_ID, user_id: USER_ID, status: "delivered", delivered_at: daysAgo(5) }),
     findOrderItem: async () => ({ item_id: ITEM_ID, order_id: ORDER_ID, variant_id: "v1", quantity: 2 }),
@@ -24,11 +27,9 @@ function fakeRepository(overrides: Partial<UserReturnsRepository> = {}): UserRet
     findProduct: async () => null,
     findCategory: async () => null,
     listReturnsForOrder: async () => [],
-    listReturnItemsForOrderItem: async () => [],
-    listReturnItemsForReturn: async () => [],
-    insertReturn: async (payload) => ({ return_id: "ret-1", ...payload }) as JsonObject,
-    insertReturnItem: async (payload) => payload as JsonObject,
+    listReturnItemsForReturn: async () => [{ return_item_id: "part-1", order_item_id: ITEM_ID, quantity: 1, item_status: "REQUESTED", decision_status: "pending", resolution_type: "refund" }],
     findReturnById: async () => null,
+    cancelReturn: async (returnId, expectedVersion) => ({ return_id: returnId, status: "CANCELLED", version: expectedVersion + 1 } as JsonObject),
     updateReturn: async () => [],
     listReturnsForUser: async () => [],
     getRefundReceiver: async () => null,
@@ -37,115 +38,96 @@ function fakeRepository(overrides: Partial<UserReturnsRepository> = {}): UserRet
   };
 }
 
-test("a member can request a return within the 30-day window", async () => {
-  const repository = fakeRepository();
-  const service = createUserReturnsService(repository);
+const PROOF = {
+  evidence_images: ["storage://return-evidence-private/return-intake/order/request_photo/photo.jpg"],
+  evidence_videos: ["storage://return-evidence-private/return-intake/order/request_video/video.mp4"]
+};
+const intake = { order_id: ORDER_ID, return_type: "refund", reason_code: "size", ...PROOF, items: [{ order_item_id: ITEM_ID, quantity: 1 }] };
 
-  const result = await service.createForMember(profile, {
-    order_id: ORDER_ID,
-    return_type: "refund",reason_code:"size",evidence_images:["https://example.com/evidence.png"],
-    items: [{ order_item_id: ITEM_ID, quantity: 1 }]
+test("member intake requires reason, image and initial video and uses only the atomic RPC", async () => {
+  let saved: JsonObject | undefined;
+  const repository = fakeRepository({
+    createReturnBundle: async (payload, items) => { saved = { ...payload, items }; return { return_id: "ret-1", ...payload }; }
   });
-
+  const service = createUserReturnsService(repository);
+  const result = await service.createForMember(profile, intake);
   assert.equal(result.return_id, "ret-1");
-  assert.equal((result.items as JsonObject[]).length, 1);
+  assert.equal((result.items as JsonObject[])[0].return_item_id, "part-1");
+  assert.deepEqual(saved?.evidence_videos, PROOF.evidence_videos);
+  for (const changes of [
+    { reason_code: "", description: "" }, { evidence_images: [] }, { evidence_videos: [] },
+    { evidence_images: ["https://attacker.test/image.jpg"] }, { evidence_videos: ["data:video/mp4;base64,aaa"] }
+  ]) {
+    await assert.rejects(() => service.createForMember(profile, { ...intake, ...changes }), (error: unknown) => error instanceof HttpError && error.status === 422);
+  }
 });
 
-test("an exchange replacement order cannot start another return chain", async () => {
+test("missing, invalid, future and older-than-seven-day delivered_at fail closed without updated_at fallback", async () => {
+  for (const delivered of [null, "invalid", daysAgo(-1), daysAgo(8)]) {
+    const repository = fakeRepository({ findOrderById: async () => ({ order_id: ORDER_ID, user_id: USER_ID, status: "delivered", delivered_at: delivered, updated_at: daysAgo(0) }) });
+    await assert.rejects(() => createUserReturnsService(repository).createForMember(profile, intake),
+      (error: unknown) => error instanceof HttpError && error.code === "RETURN_WINDOW_CLOSED");
+  }
+});
+
+test("an exchange replacement order cannot reset original-unit lineage", async () => {
+  const repository = fakeRepository({ findReturnByExchangeOrderId: async () => ({ return_id: "source" }) });
+  await assert.rejects(() => createUserReturnsService(repository).createForMember(profile, intake),
+    (error: unknown) => error instanceof HttpError && error.code === "EXCHANGE_REPLACEMENT_NOT_RETURNABLE");
+});
+
+test("disjoint free quantity remains requestable while one part is active", async () => {
+  const repository = fakeRepository({ listReturnUnits: async () => [
+    { success_count: 0, refunded: false, active_return_item_id: "part-held" },
+    { success_count: 1, refunded: false, active_return_item_id: null }
+  ] });
+  assert.equal((await createUserReturnsService(repository).createForMember(profile, intake)).return_id, "ret-1");
+  await assert.rejects(() => createUserReturnsService(repository).createForMember(profile, { ...intake, items: [{ order_item_id: ITEM_ID, quantity: 2 }] }),
+    (error: unknown) => error instanceof HttpError && error.code === "RETURN_QUANTITY_EXCEEDED");
+});
+
+test("refunded and twice-exchanged units are unavailable, failed parts consume no success", async () => {
+  const repository = fakeRepository({ listReturnUnits: async () => [
+    { success_count: 1, refunded: true, active_return_item_id: null },
+    { success_count: 2, refunded: false, active_return_item_id: null }
+  ] });
+  await assert.rejects(() => createUserReturnsService(repository).createForMember(profile, intake),
+    (error: unknown) => error instanceof HttpError && error.code === "RETURN_QUANTITY_EXCEEDED");
+});
+
+test("replacement identity is preserved and COD account can wait until refund", async () => {
+  let payload: JsonObject | undefined;
+  let parts: JsonObject[] = [];
   const repository = fakeRepository({
-    findReturnByExchangeOrderId: async () => ({ return_id: "ret-source", exchange_order_id: ORDER_ID })
+    findOrderById: async () => ({ order_id: ORDER_ID, user_id: USER_ID, status: "delivered", payment_method: "COD", delivered_at: daysAgo(1) }),
+    findVariant: async () => ({ product_id: "same-product" }),
+    createReturnBundle: async (value, items) => { payload = value; parts = items; return { return_id: "ret-1", ...value }; }
   });
-
-  await assert.rejects(
-    () => createUserReturnsService(repository).createForMember(profile, {
-      order_id: ORDER_ID,
-      return_type: "exchange",
-      reason_code: "size",
-      evidence_images: ["https://example.com/evidence.png"],
-      items: [{ order_item_id: ITEM_ID, quantity: 1 }]
-    }),
-    (error: unknown) =>
-      error instanceof HttpError && error.status === 400 && error.code === "EXCHANGE_REPLACEMENT_NOT_RETURNABLE"
-  );
+  await createUserReturnsService(repository).createForMember(profile, { ...intake, return_type: "exchange", items: [{ order_item_id: ITEM_ID, quantity: 1, replacement_variant_id: "replacement" }] });
+  assert.equal(parts[0].replacement_variant_id, "replacement");
+  assert.equal(payload?.return_type, "exchange");
+  assert.equal(payload?.refund_bank_account, undefined);
+  await createUserReturnsService(repository).createForMember(profile, { ...intake, refund_bank_name: "VCB", refund_bank_account: "0123456789", refund_bank_holder: "Nguyen Van A" });
+  assert.equal(payload?.refund_bank_account, "0123456789");
 });
 
-test("a return request past the 30-day window is rejected (U2-01)", async () => {
+test("verified guests preserve replacement variant and use the exact atomic member intake", async () => {
+  const writes: JsonObject[] = [];
   const repository = fakeRepository({
-    findOrderById: async () => ({ order_id: ORDER_ID, user_id: USER_ID, status: "delivered", delivered_at: daysAgo(31) })
+    findOrderByCode: async () => ({ order_id: ORDER_ID, user_id: null, status: "delivered", delivered_at: daysAgo(1), payment_method: "COD" }),
+    findVariant: async () => ({ product_id: "product" }),
+    createReturnBundle: async (payload, items) => { writes.push({ ...payload, items }); return { return_id: "guest-return", ...payload }; }
   });
   const service = createUserReturnsService(repository);
-
-  await assert.rejects(
-    () =>
-      service.createForMember(profile, {
-        order_id: ORDER_ID,
-        return_type: "refund",reason_code:"size",evidence_images:["https://example.com/evidence.png"],
-        items: [{ order_item_id: ITEM_ID, quantity: 1 }]
-      }),
-    (error: unknown) => error instanceof HttpError && error.status === 400 && error.code === "RETURN_WINDOW_CLOSED"
-  );
-});
-
-test("an in-progress return request on the same order_item is blocked (ITEM_RETURN_IN_PROGRESS)", async () => {
-  const repository = fakeRepository({
-    listReturnsForOrder: async () => [
-      { return_id: "ret-a", status: "REQUESTED", tracking_return_code: "RET12345678" }
-    ],
-    listReturnItemsForOrderItem: async () => [{ order_item_id: ITEM_ID, quantity: 1 }]
-  });
-  const service = createUserReturnsService(repository);
-
-  await assert.rejects(
-    () =>
-      service.createForMember(profile, {
-        order_id: ORDER_ID,
-        return_type: "refund", reason_code: "size", evidence_images: ["https://example.com/evidence.png"],
-        items: [{ order_item_id: ITEM_ID, quantity: 1 }]
-      }),
-    (error: unknown) => error instanceof HttpError && error.status === 400 && error.code === "ITEM_RETURN_IN_PROGRESS"
-  );
-});
-
-test("a third return request on the same order_item is rejected (U2-02)", async () => {
-  // Hai yêu cầu đã hoàn tất (không `rejected`) đã dùng hết 2 lượt của item này.
-  const repository = fakeRepository({
-    listReturnsForOrder: async () => [
-      { return_id: "ret-a", status: "COMPLETED" },
-      { return_id: "ret-b", status: "COMPLETED" }
-    ],
-    listReturnItemsForOrderItem: async (returnId) =>
-      returnId === "ret-a" || returnId === "ret-b" ? [{ order_item_id: ITEM_ID, quantity: 1 }] : []
-  });
-  const service = createUserReturnsService(repository);
-
-  await assert.rejects(
-    () =>
-      service.createForMember(profile, {
-        order_id: ORDER_ID,
-        return_type: "refund",reason_code:"size",evidence_images:["https://example.com/evidence.png"],
-        items: [{ order_item_id: ITEM_ID, quantity: 1 }]
-      }),
-    (error: unknown) => error instanceof HttpError && error.status === 400 && error.code === "RETURN_LIMIT_REACHED"
-  );
-});
-
-test("a rejected prior return does not count against the U2-02 limit", async () => {
-  const repository = fakeRepository({
-    listReturnsForOrder: async () => [
-      { return_id: "ret-a", status: "CANCELLED" },
-      { return_id: "ret-b", status: "COMPLETED" }
-    ],
-    listReturnItemsForOrderItem: async (returnId) => (returnId === "ret-b" ? [{ order_item_id: ITEM_ID, quantity: 1 }] : [])
-  });
-  const service = createUserReturnsService(repository);
-
-  const result = await service.createForMember(profile, {
-    order_id: ORDER_ID,
-    return_type: "refund",reason_code:"size",evidence_images:["https://example.com/evidence.png"],
-    items: [{ order_item_id: ITEM_ID, quantity: 1 }]
-  });
-
-  assert.equal(result.return_id, "ret-1");
+  const body = { ...intake, order_code: "GUEST-1", return_type: "exchange", guest_access_token: issueGuestOrderAccess(ORDER_ID),
+    items: [{ order_item_id: ITEM_ID, quantity: 1, replacement_variant_id: "replacement" }] };
+  const result = await service.createForGuest(body);
+  assert.equal(result.return_id, "guest-return");
+  assert.equal(writes.length, 1);
+  assert.equal((writes[0].items as JsonObject[])[0].replacement_variant_id, "replacement");
+  assert.deepEqual(writes[0].evidence_videos, PROOF.evidence_videos);
+  await assert.rejects(() => service.createForGuest({ ...body, guest_access_token: "forged" }), (error: unknown) => error instanceof HttpError && error.status === 404);
+  assert.equal(writes.length, 1);
 });
 
 test("a member cancels an unshipped return with the current version", async () => {
@@ -157,9 +139,9 @@ test("a member cancels an unshipped return with the current version", async () =
       status: "REQUESTED",
       version: 3
     }),
-    updateReturn: async (_returnId, payload, expectedVersion) => {
+    cancelReturn: async (_returnId, expectedVersion) => {
       mutationVersion = expectedVersion;
-      return [{ return_id: "ret-1", ...payload }];
+      return { return_id: "ret-1", status: "CANCELLED", version: expectedVersion + 1 };
     }
   });
 
@@ -189,9 +171,9 @@ test("a stale return version is rejected before mutation", async () => {
       status: "REQUESTED",
       version: 4
     }),
-    updateReturn: async () => {
+    cancelReturn: async () => {
       mutated = true;
-      return [];
+      return {};
     }
   });
 
@@ -222,15 +204,17 @@ test("the customer sees a CSKH-rejected request as rejected with its reason, nev
 });
 
 test("a customer cancellation is stored as the customer's own, including CSKH-contacting requests", async () => {
-  let payload: JsonObject | null = null;
+  let calledWith: unknown;
   const repository = fakeRepository({
     findReturnById: async () => ({ return_id: "ret-1", user_id: USER_ID, status: "CONTACTING", version: 2 }),
-    updateReturn: async (_returnId, changes) => { payload = changes; return [{ return_id: "ret-1", ...changes }]; }
+    cancelReturn: async (id, version, owner) => {
+      calledWith = { id, version, owner };
+      return { return_id: "ret-1", status: "CANCELLED", cancelled_by: "customer", rejection_reason: "Đã hủy bởi khách hàng" };
+    }
   });
   const result = await createUserReturnsService(repository).cancelForMember(profile, "ret-1", 2);
   assert.equal(result.status, "CANCELLED");
-  assert.equal(payload?.cancelled_by, "customer");
-  assert.equal(payload?.rejection_reason, "Đã hủy bởi khách hàng");
+  assert.deepEqual(calledWith, { id: "ret-1", version: 2, owner: USER_ID });
 });
 
 test("a request that already shipped can no longer be cancelled by the customer", async () => {

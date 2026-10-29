@@ -7,14 +7,13 @@ import {
   AdminErpApiService,
   AdminOrderRow,
   AdminReturnRow,
-  AdminReturnStatus,
+  AdminReturnLine,
   AdminTicketRow,
 } from '../../core/admin-erp-api.service';
 import { orderFocusLink, returnFocusLink, type OrderTraceLink } from '../../core/admin-erp-order-trace';
 import { choiceParam, textParam, watchQueryParams } from '../../core/admin-erp-deep-link';
 import { buildReturnQrLink, buildReturnQrPayload, parseScan } from '../../core/admin-erp-qr';
 import {
-  CONTACT_RESULTS,
   MIN_NOTE_LENGTH,
   REFUND_FLOW_LABELS,
   REFUND_RECEIVER_STATUS_LABELS,
@@ -22,21 +21,16 @@ import {
   TICKET_PRIORITY_LABELS,
   canTicketAction,
   contactAllowed,
-  exchangeApprovalAllowed,
-  gatewayRefundAllowed,
-  gatewayNote,
   isChatGovernedTicket,
   isReturnOpen,
-  manualReturnTransitions,
-  nextReturnStep,
   paymentKindLabel,
-  receiptAllowed,
   refundInfoAllowed,
-  rejectAllowed,
   returnStatusLabel,
   returnStatusTone,
-  stripeRefundAllowed,
-  manualRefundAllowed,
+  returnDecisionLabel,
+  returnItemActions,
+  itemRefundAllowed,
+  returnContactOverdue,
 } from '../../core/admin-erp-service-desk';
 import { adminDateTime, adminMoney } from '../../core/admin-erp-format';
 import {
@@ -63,7 +57,7 @@ import { AdminErpStatusBadge } from '../../shared/ui/admin-status-badge';
 import { AdminErpTab, AdminErpTabs } from '../../shared/ui/admin-tabs';
 import { AdminTone, TICKET_STATUS_LABELS } from '../../core/admin-erp-status-labels';
 import { ChatDeskComponent } from './chat-desk.component';
-import { ReturnFlowComponent, ReturnFlowKind } from './return-flow.component';
+import { ReturnFlowComponent, ReturnFlowKind, RETURN_ITEM_ACTION_LABELS } from './return-flow.component';
 
 type DeskTab = 'returns' | 'tickets' | 'chat' | 'logs';
 type TicketAction = 'reply' | 'resolve' | 'close';
@@ -146,8 +140,7 @@ export class AdminErpReturnsPage {
   readonly detailError = signal<string | null>(null);
   readonly flow = signal<ReturnFlowKind>(null);
   readonly gatewayNote = signal<string | null>(null);
-  /** Trạng thái đích của bước "tiếp theo" để hộp thoại mở đúng lựa chọn. */
-  readonly flowStatus = signal('');
+  readonly flowLine = signal<AdminReturnLine | null>(null);
   readonly scanOpen = signal(false);
   readonly scanError = signal<string | null>(null);
 
@@ -180,6 +173,12 @@ export class AdminErpReturnsPage {
 
   readonly canRead = computed(() => this.session.can('read', 'returns'));
   readonly canWrite = computed(() => this.session.can('update', 'returns'));
+  /** Operational writes are reserved for CSKH and super-admin, not order-reader grants. */
+  readonly canOperate = computed(() => this.canWrite() && ['super_admin', 'admin_operator_cskh_dt'].includes(this.session.session()?.roleCode || ''));
+  /** Final decisions require the explicit super-admin role, not broad update/approve grants. */
+  readonly canApprove = computed(() => this.session.session()?.roleCode === 'super_admin' && this.canOperate());
+  /** Private receiving-bank details use the same financial-role restriction as the API. */
+  readonly canFinance = computed(() => this.canOperate());
   readonly canReadOrders = computed(() => this.session.can('read', 'orders'));
   /**
    * The source order of the open return, so CSKH reads address, items and tracking once instead
@@ -225,13 +224,6 @@ export class AdminErpReturnsPage {
   );
   readonly logRangeLabel = computed(() => adminRangeLabel(this.logsTotal(), this.logsPage(), this.pageSize, 'nhật ký'));
 
-  readonly nextSteps = computed(() =>
-    manualReturnTransitions(this.selected()?.status, this.selected()?.return_type).map((value) => ({
-      value,
-      label: returnStatusLabel(value),
-    })),
-  );
-  readonly nextStep = computed(() => nextReturnStep(this.selected()));
 
   readonly columns = computed<readonly AdminTableColumn[]>(() => [
     {
@@ -554,36 +546,45 @@ export class AdminErpReturnsPage {
       });
   }
 
-  /**
-   * Opens one return write flow.
-   */
-  openFlow(flow: ReturnFlowKind, target = ''): void {
-    if (!this.canWrite() || !flow) {
-      return;
+  /** Opens request contact or one allowed item action; no aggregate progression exists. */
+  openFlow(flow: ReturnFlowKind, line: AdminReturnLine | null = null): void {
+    if (!this.canOperate() || !flow || this.detailLoading()) return;
+    if (flow === 'contact' || flow === 'refund-info') {
+      if (!contactAllowed(this.selected())) return;
+    } else {
+      if (!line?.return_item_id || line.version == null) return;
+      if (flow === 'manual' || flow === 'stripe') {
+        if (!this.canFinance() || !itemRefundAllowed(line)) return;
+      } else if (!returnItemActions(line, this.canApprove()).includes(flow)) return;
     }
-    this.flowStatus.set(flow === 'status' ? target : '');
+    this.flowLine.set(line);
     this.flow.set(flow);
   }
 
-  /**
-   * Runs the one action the current state actually needs. Money never opens before warehouse
-   * QA passed, because the API refuses it — the drawer used to offer it anyway.
-   */
-  runNextStep(): void {
-    const step = nextReturnStep(this.selected());
+  /** Actions shown beside this part never derive their resolution from the request type. */
+  itemActions(line: AdminReturnLine): readonly Exclude<ReturnFlowKind, null>[] {
+    if (!this.canOperate()) return [];
+    const actions: Exclude<ReturnFlowKind, null>[] = [...returnItemActions(line, this.canApprove())];
     const record = this.selected();
-    if (!step || !record) return;
-    if (step.flow === 'gateway') {
-      if (manualRefundAllowed(record)) {
-        this.openFlow('manual');
-      } else if (stripeRefundAllowed(record)) {
-        this.runStripeRefund();
-      } else {
-        this.detailError.set('Đơn hàng chưa có giao dịch đã thu tiền để hoàn. Kiểm tra thanh toán trước khi tiếp tục.');
-      }
-      return;
+    if (this.canFinance() && itemRefundAllowed(line)) {
+      if (record?.payment_kind === 'stripe') actions.push('stripe');
+      if (record?.payment_kind === 'cod' && record.refund_receiver_status === 'valid') actions.push('manual');
     }
-    this.openFlow(step.flow, step.target);
+    return actions;
+  }
+
+  /** Uses the same operator wording in the drawer and confirmation dialog. */
+  actionLabel(action: Exclude<ReturnFlowKind, null>): string { return RETURN_ITEM_ACTION_LABELS[action]; }
+
+  /** Decision and progress remain separate when a request is only partially approved. */
+  decisionLabel(value: string | null | undefined): string { return returnDecisionLabel(value); }
+
+  /** The server's 24-hour outreach deadline remains visible while waiting for a customer. */
+  contactOverdue(record: AdminReturnRow): boolean { return returnContactOverdue(record); }
+
+  /** Reader roles get no unmasked account number even if a stale response includes it. */
+  bankAccount(value: string | null | undefined): string {
+    return this.canFinance() ? value || '—' : value ? `•••• ${value.slice(-4)}` : '—';
   }
 
   /** Link in trên phiếu trả; quét bằng điện thoại sẽ mở thẳng phiếu này. */
@@ -703,88 +704,6 @@ export class AdminErpReturnsPage {
     this.loadReturns();
   }
 
-  /**
-   * Records an inbound carrier status when the carrier has no webhook integration for returns.
-   * `failed` moves the return to NEEDS_SUPPORT so CSKH can open a dispute with evidence.
-   */
-  markShipment(status: 'in_transit' | 'delivered' | 'failed'): void {
-    const record = this.selected();
-    if (!record || !this.canWrite() || this.detailLoading()) return;
-    this.detailLoading.set(true);
-    this.detailError.set(null);
-    this.api.updateReturnShipmentStatus(record.return_id, {
-      status,
-      note: `Admin cập nhật trạng thái vận đơn hoàn: ${status}`,
-    }).subscribe({
-      next: () => {
-        this.detailLoading.set(false);
-        this.openReturn({ return_id: record.return_id });
-        this.loadReturns();
-      },
-      error: (error: unknown) => {
-        this.detailLoading.set(false);
-        this.detailError.set(adminErrorMessage(error, 'Không cập nhật được trạng thái vận đơn.'));
-      },
-    });
-  }
-
-  /**
-   * Runs the gateway refund for a Stripe return; the step needs no extra input.
-   */
-  runStripeRefund(): void {
-    const record = this.selected();
-    if (!record || !this.canWrite() || !stripeRefundAllowed(record) || record.version == null) {
-      return;
-    }
-    this.detailLoading.set(true);
-    this.api.triggerStripeRefund(record.return_id, { expectedVersion: record.version }).subscribe({
-      next: (result) => {
-        this.detailLoading.set(false);
-        this.gatewayNote.set(gatewayNote(result.refund));
-        this.openReturn({ return_id: record.return_id } as AdminReturnRow);
-        this.loadReturns();
-      },
-      error: (error: unknown) => {
-        this.detailLoading.set(false);
-        this.detailError.set(adminErrorMessage(error, 'Cổng hoàn tiền chưa phản hồi.'));
-      },
-    });
-  }
-
-  /**
-   * Advances the workflow one legal step, using the status chosen in the drawer.
-   */
-  moveStep(status: string): void {
-    const record = this.selected();
-    if (!record || record.version == null || !this.canWrite()) {
-      return;
-    }
-    if (status === 'RECEIVED') {
-      this.openFlow('receipt');
-      return;
-    }
-    if (status === 'RETURN_IN_TRANSIT') {
-      this.openFlow('shipment');
-      return;
-    }
-    if (status === 'EXCHANGE_SHIPPING') {
-      this.openFlow('exchange-shipment');
-      return;
-    }
-    if (!plainSteps(status)) {
-      this.openFlow('status', status);
-      return;
-    }
-    this.api
-      .updateReturnStatus(record.return_id, {
-        status: status as AdminReturnStatus,
-        expectedVersion: record.version,
-      })
-      .subscribe({
-        next: () => this.onFlowDone(),
-        error: (error: unknown) => this.detailError.set(adminErrorMessage(error)),
-      });
-  }
 
   /**
    * Opens a ticket drawer with its stored reply.
@@ -948,14 +867,6 @@ export class AdminErpReturnsPage {
     return paymentKindLabel(kind);
   }
 
-  /**
-   * Received quantity recorded for one registered line.
-   */
-  receivedQuantity(orderItemId: string | undefined): number | null {
-    const id = String(orderItemId || '');
-    const receipt = (this.selected()?.qa_item_receipts || []).find((row) => row.orderItemId === id);
-    return receipt ? Number(receipt.receivedQuantity) : null;
-  }
 
   /**
    * Ticket status label.
@@ -1100,6 +1011,7 @@ export class AdminErpReturnsPage {
   evidenceLabel(kind: string | null | undefined): string {
     const labels: Record<string, string> = {
       request_photo: 'Ảnh khách gửi ban đầu',
+      request_video: 'Video khách gửi ban đầu',
       packing_photo: 'Ảnh đóng gói',
       packing_video: 'Video đóng gói',
       pickup_photo: 'Ảnh ĐVVC lấy hàng',
@@ -1125,26 +1037,8 @@ export class AdminErpReturnsPage {
     return REFUND_RECEIVER_STATUS_LABELS[String(status || '')] || '—';
   }
 
-  /**
-   * Steps still legal from the stored state.
-   */
-  canReach(row: AdminReturnRow | null, status: string): boolean {
-    return manualReturnTransitions(row?.status).includes(status);
-  }
-
-  /**
-   * Gate helpers used by the drawer buttons.
-   */
-  readonly gates = {
-    contact: contactAllowed,
-    exchange: exchangeApprovalAllowed,
-    reject: rejectAllowed,
-    receipt: receiptAllowed,
-    gateway: gatewayRefundAllowed,
-    manual: manualRefundAllowed,
-    stripe: stripeRefundAllowed,
-    info: refundInfoAllowed,
-  };
+  /** Request-level outreach and payout-detail collection do not advance logistics or money. */
+  readonly gates = { contact: contactAllowed, info: refundInfoAllowed };
 
   /** Reload entry used by the retry button of this queue. */
   loadReturns(): void {
@@ -1224,13 +1118,6 @@ export class AdminErpReturnsPage {
 
 }
 
-/** Steps the API accepts with no tracking, evidence or reason attached. */
-const PLAIN_STEPS: readonly string[] = ['CONTACTING', 'WAITING_RETURN'];
-
-/** True when a step can be written without extra evidence. */
-function plainSteps(status: string): boolean {
-  return PLAIN_STEPS.includes(status);
-}
 
 /** Vietnamese label of a return type. */
 function typeLabel(type: string | undefined): string {

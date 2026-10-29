@@ -1,4 +1,4 @@
-import { callRpc, quotePostgrestValue, selectOne, selectRows, updateRows, insertRow } from "../supabase.js";
+import { callRpc, quotePostgrestValue, selectOne, selectRows, updateRows } from "../supabase.js";
 import { HttpError } from "../http.js";
 import { asJsonObject, asNumber, asString, type JsonObject } from "../types.js";
 import { RETURN_SELECT, TICKET_SELECT } from "./return-constants.js";
@@ -44,57 +44,6 @@ export interface ReturnAuditFilters {
   offset: number;
 }
 
-/** Inbound return label / carrier handover facts. */
-export interface ReturnShipmentInput {
-  carrier: string;
-  trackingCode: string;
-  trackingUrl?: string;
-  labelUrl?: string;
-}
-
-/** Carrier pickup proof for the inbound parcel. */
-export interface ReturnPickupInput {
-  photoUrls: string[];
-  videoUrl?: string;
-  note?: string;
-}
-
-/** Per-line warehouse receipt with disposition; only `restock` changes sellable stock. */
-export interface ReturnReceiptInput {
-  receipts: unknown;
-  packageMatch: boolean;
-  sealIntact: boolean;
-  warehouseProof: string;
-  qaNote?: string;
-}
-
-/**
- * Input for rejecting a return.
- */
-export interface RejectReturnInput {
-  reason: string;
-  imageProof?: unknown;
-  expectedVersion: number;
-}
-
-/**
- * Input for a generic return status update.
- */
-export interface UpdateReturnStatusInput {
-  /** Per-line warehouse QA facts persisted with the receipt state transition. */
-  receipts?: unknown;
-  status: string;
-  adminNote?: unknown;
-  reason?: unknown;
-  refundAmount?: number;
-  trackingReturnCode?: unknown;
-  conditionCheckResult?: unknown;
-  packageMatch?: boolean;
-  sealIntact?: boolean;
-  qaNote?: unknown;
-  imageProof?: unknown;
-  expectedVersion: number;
-}
 
 /**
  * Input for assigning a support ticket.
@@ -130,7 +79,7 @@ export interface ManualRefundInput {
   amount: number;
   /** Thời điểm chuyển tiền (ISO 8601). */
   transferredAt: string;
-  /** Ảnh chứng từ chuyển khoản (URL https hoặc data:image). */
+  /** Private storage reference uploaded by this operator for this return. */
   proof: string;
   note?: string;
 }
@@ -141,15 +90,15 @@ export interface ManualRefundInput {
 export function createReturnRepository() {
   return {
     /**
-     * Ghi nhận kết quả chuyển khoản hoàn tiền thủ công (COD, MoMo, VNPay) trong MỘT giao dịch DB:
-     * kiểm tra thông tin nhận tiền COD, đối soát số tiền, lưu mã/số tiền/thời điểm/chứng từ và đóng phiếu.
+     * Records one COD line refund atomically, including proof ownership, receiver snapshot and capture validation.
      */
     async recordManualRefund(
       returnId: string,
       expectedVersion: number,
       input: ManualRefundInput,
       actorId: string,
-      ipAddress?: string
+      ipAddress: string | undefined,
+      returnItemId: string
     ): Promise<JsonObject> {
       try {
         return asJsonObject(await callRpc("velura_record_manual_return_refund", {
@@ -160,7 +109,8 @@ export function createReturnRepository() {
           p_transferred_at: input.transferredAt,
           p_proof: input.proof,
           p_note: input.note || null,
-          p_actor_id: actorId
+          p_actor_id: actorId,
+          p_return_item_id: returnItemId
         }, clientIpOptions(ipAddress)));
       } catch (error: unknown) {
         throw mapReturnDatabaseError(error);
@@ -177,8 +127,18 @@ export function createReturnRepository() {
     /**
      * Dữ liệu đối soát của lần hoàn tiền thủ công đã ghi nhận, hoặc null nếu chưa có.
      */
-    async getManualRefund(returnId: string): Promise<JsonObject | null> {
-      return selectOne("return_manual_refund", { return_id: `eq.${returnId}` }).catch(() => null);
+    async getManualRefund(returnId: string, returnItemId?: string): Promise<JsonObject | null> {
+      return selectOne("return_manual_refund", {
+        return_id: `eq.${returnId}`,
+        ...(returnItemId ? { return_item_id: `eq.${returnItemId}` } : {})
+      }).catch(() => null);
+    },
+
+    /**
+     * Financial operation already bound to one return part; retries read it instead of creating a second refund.
+     */
+    async getRefundOperation(returnItemId: string): Promise<JsonObject | null> {
+      return selectOne("payment_refund", { return_item_id: `eq.${returnItemId}` }).catch(() => null);
     },
 
     /**
@@ -196,108 +156,14 @@ export function createReturnRepository() {
         throw mapReturnDatabaseError(error);
       }
     },
-    async prepareExchange(returnId: string, expectedVersion: number, actorId: string, ipAddress?: string) {
+    /** Applies one action to one versioned return part; the RPC owns splitting, stock and aggregate updates. */
+    async actOnItem(returnId: string, returnItemId: string, action: string, payload: JsonObject, expectedVersion: number, actorId: string, ipAddress?: string): Promise<JsonObject> {
       try {
-        return asJsonObject(await callRpc("velura_prepare_exchange", {
+        return asJsonObject(await callRpc("velura_return_item_action", {
           p_return_id: returnId,
-          p_expected_version: expectedVersion,
-          p_actor_id: actorId
-        }, clientIpOptions(ipAddress)));
-      } catch (error: unknown) {
-        // The RPC owns stock reservation, replacement-order creation and the status transition in
-        // one transaction. A fallback would repeat those rules outside a transaction and could
-        // create an exchange after the RPC rejected it (insufficient stock, stale version).
-        throw mapReturnDatabaseError(error);
-      }
-    },
-
-    /** Creates or replaces the inbound return label without moving the return to transit yet. */
-    async createReturnShipment(returnId: string, expectedVersion: number, input: ReturnShipmentInput, actorId: string, ipAddress?: string) {
-      try {
-        return asJsonObject(await callRpc("velura_create_return_shipment", {
-          p_return_id: returnId,
-          p_expected_version: expectedVersion,
-          p_carrier: input.carrier,
-          p_tracking_code: input.trackingCode,
-          p_tracking_url: input.trackingUrl || null,
-          p_label_url: input.labelUrl || null,
-          p_actor_id: actorId
-        }, clientIpOptions(ipAddress)));
-      } catch (error: unknown) {
-        throw mapReturnDatabaseError(error);
-      }
-    },
-
-    /** Receives the parcel, restocks eligible lines and records dispositions in one transaction. */
-    async receiveReturn(returnId: string, expectedVersion: number, input: ReturnReceiptInput, actorId: string, ipAddress?: string) {
-      try {
-        return asJsonObject(await callRpc("velura_receive_return", {
-          p_return_id: returnId,
-          p_expected_version: expectedVersion,
-          p_receipts: input.receipts,
-          p_package_match: input.packageMatch,
-          p_seal_intact: input.sealIntact,
-          p_warehouse_proof: input.warehouseProof,
-          p_qa_note: input.qaNote || null,
-          p_actor_id: actorId
-        }, clientIpOptions(ipAddress)));
-      } catch (error: unknown) {
-        throw mapReturnDatabaseError(error);
-      }
-    },
-
-    /** Confirms the carrier took the sealed parcel; the return enters RETURN_IN_TRANSIT. */
-    async confirmReturnPickup(returnId: string, expectedVersion: number, input: ReturnPickupInput, actorId: string, ipAddress?: string) {
-      try {
-        return asJsonObject(await callRpc("velura_confirm_return_pickup", {
-          p_return_id: returnId,
-          p_expected_version: expectedVersion,
-          p_photo_urls: input.photoUrls,
-          p_video_url: input.videoUrl || null,
-          p_note: input.note || null,
-          p_actor_id: actorId
-        }, clientIpOptions(ipAddress)));
-      } catch (error: unknown) {
-        throw mapReturnDatabaseError(error);
-      }
-    },
-
-    /** Records a carrier tracking update without changing the warehouse receipt state. */
-    async updateReturnShipmentStatus(returnId: string, status: string, note: string | undefined, actorId: string, ipAddress?: string) {
-      try {
-        return asJsonObject(await callRpc("velura_update_return_shipment_status", {
-          p_return_id: returnId,
-          p_status: status,
-          p_note: note || null,
-          p_actor_id: actorId
-        }, clientIpOptions(ipAddress)));
-      } catch (error: unknown) {
-        throw mapReturnDatabaseError(error);
-      }
-    },
-
-    /** Ships the linked replacement order and moves the return to EXCHANGE_SHIPPING atomically. */
-    async shipExchange(returnId: string, expectedVersion: number, input: ReturnShipmentInput, actorId: string, ipAddress?: string) {
-      try {
-        return asJsonObject(await callRpc("velura_ship_exchange", {
-          p_return_id: returnId,
-          p_expected_version: expectedVersion,
-          p_carrier: input.carrier,
-          p_tracking_code: input.trackingCode,
-          p_tracking_url: input.trackingUrl || null,
-          p_label_url: input.labelUrl || null,
-          p_actor_id: actorId
-        }, clientIpOptions(ipAddress)));
-      } catch (error: unknown) {
-        throw mapReturnDatabaseError(error);
-      }
-    },
-
-    /** Closes an exchange and marks its linked replacement order delivered in one transaction. */
-    async completeExchange(returnId: string, expectedVersion: number, actorId: string, ipAddress?: string) {
-      try {
-        return asJsonObject(await callRpc("velura_complete_exchange", {
-          p_return_id: returnId,
+          p_return_item_id: returnItemId,
+          p_action: action,
+          p_payload: payload,
           p_expected_version: expectedVersion,
           p_actor_id: actorId
         }, clientIpOptions(ipAddress)));
@@ -434,21 +300,42 @@ export function createReturnRepository() {
       return res;
     },
 
+    /** Reads every independently versioned part, including decisions, receipt facts and exchange linkage. */
     async listReturnLines(returnId: string, accessToken: string) {
       let res = await selectRows("return_item", {
-        select: "return_item_id,order_item_id,quantity,disposition,disposition_note,restocked_at,stock_restored_quantity",
+        select: "*",
         return_id: `eq.${returnId}`,
-        limit: 50
+        limit: 1000
       }, authOptions(accessToken)).catch(() => null);
       if (!res) {
         res = await selectRows("return_item", {
-          select: "return_item_id,order_item_id,quantity,disposition,disposition_note,restocked_at,stock_restored_quantity",
+          select: "*",
           return_id: `eq.${returnId}`,
-          limit: 50
+          limit: 1000
         });
       }
       return res;
     },
+    async getOrderItemProductMeta(orderItemIds: string[], accessToken?: string): Promise<Record<string, { product_id?: string; variant_id?: string; product_name?: string }>> {
+      if (!orderItemIds.length) return {};
+      const uniqueIds = Array.from(new Set(orderItemIds.filter(Boolean)));
+      const { rows } = await selectRows("order_item", {
+        select: "item_id,variant_id,product_name,variant:variant!order_item_variant_id_fkey(product_id)",
+        item_id: `in.(${uniqueIds.join(",")})`,
+        limit: uniqueIds.length
+      }, authOptions(accessToken)).catch(() => ({ rows: [] as JsonObject[] }));
+      const map: Record<string, { product_id?: string; variant_id?: string; product_name?: string }> = {};
+      for (const row of rows) {
+        const v = asJsonObject(row.variant);
+        map[asString(row.item_id)] = {
+          variant_id: asString(row.variant_id) || undefined,
+          product_name: asString(row.product_name) || undefined,
+          product_id: asString(v.product_id) || undefined
+        };
+      }
+      return map;
+    },
+
 
     async getReturn(returnId: string, accessToken: string) {
       let ret = await selectOne("return_exchange", {
@@ -527,40 +414,9 @@ export function createReturnRepository() {
       }
       if (result?.rows?.[0]) return asJsonObject(result.rows[0]);
 
-      // Nếu đơn COD đã giao thành công mà chưa có dòng payment (thu tiền mặt), tự động tạo dòng ghi nhận tiền đã thu
-      const order = await selectOne("orders", {
-        select: "order_id,status,payment_method,total_amount,delivered_at",
-        order_id: `eq.${orderId}`
-      }).catch(() => null);
-
-      if (order && asString(order.payment_method).toUpperCase() === "COD" && asString(order.status) === "delivered") {
-        try {
-          const inserted = await insertRow("payment", {
-            order_id: orderId,
-            amount: asNumber(order.total_amount),
-            payment_method: "COD",
-            payment_provider: "cod",
-            payment_status: "paid",
-            paid_at: order.delivered_at || new Date().toISOString()
-          });
-          return asJsonObject(inserted);
-        } catch {
-          return null;
-        }
-      }
       return null;
     },
 
-    /**
-     * Cập nhật trạng thái payment thành 'paid' (dùng khi COD đã giao hàng hoặc kế toán xác nhận).
-     */
-    async markPaymentPaid(paymentId: string) {
-      return updateRows("payment", { payment_id: `eq.${paymentId}` }, {
-        payment_status: "paid",
-        paid_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      });
-    },
 
     /**
      * Giá trị hoàn được của một phiếu: tổng tiền đúng những món khách gửi trả.
@@ -579,154 +435,13 @@ export function createReturnRepository() {
       return asNumber(await callRpc("velura_return_refundable_amount", {p_return_id:returnId}));
     },
 
-    async reject(returnId: string, input: RejectReturnInput, actorId: string, actorRole: string, ipAddress: string | undefined) {
-      const current = await selectOne("return_exchange", {
-        select: RETURN_SELECT,
-        return_id: `eq.${returnId}`
-      });
-      if (!current) {
-        throw new HttpError(404, "RETURN_NOT_FOUND", "Return record not found");
-      }
-      if (current.version !== input.expectedVersion) {
-        throw new HttpError(409, "VERSION_CONFLICT", "Return record has been modified by another user");
-      }
-      // NEEDS_SUPPORT is closable: CSKH stops forwarding a request the warehouse could not accept, which releases its hold.
-      if (!["REQUESTED", "CONTACTING", "WAITING_RETURN", "NEEDS_SUPPORT", "pending"].includes(asString(current.status))) {
-        throw new HttpError(422, "RETURN_NOT_PENDING", "Yêu cầu đổi/trả không ở trạng thái có thể từ chối/hủy");
-      }
-      if (!input.reason || input.reason.trim().length < 10) {
-        throw new HttpError(422, "VALIDATION_ERROR", "Reason must be at least 10 characters");
-      }
-
-      const payload: JsonObject = {
-        status: "CANCELLED",
-        rejection_reason: input.reason.trim(),
-        cancelled_by: "admin",
-        resolved_at: new Date().toISOString(),
-        version: asNumber(current.version) + 1,
-        updated_at: new Date().toISOString()
-      };
-      if (input.imageProof) {
-        payload.evidence_images = [input.imageProof];
-      }
-
-      const rows = await updateRows("return_exchange", {
-        return_id: `eq.${returnId}`,
-        version: `eq.${input.expectedVersion}`
-      }, payload);
-
-      if (!rows.length) {
-        throw new HttpError(409, "VERSION_CONFLICT", "Return record has been modified by another user or does not exist");
-      }
-
-      const updated = asJsonObject(rows[0]);
-      await writeAuditLog({
-        actor_id: actorId,
-        actor_role: actorRole,
-        action: "reject",
-        module: "returns",
-        target_id: returnId,
-        old_value: { status: current.status, version: current.version },
-        new_value: { status: updated.status, version: updated.version },
-        ip_address: ipAddress || "127.0.0.1",
-        timestamp: new Date().toISOString()
-      });
-
-      return updated;
+    /** Computes the allocated paid value of this part, not the request total or current catalog price. */
+    async getItemRefundableAmount(returnItemId: string): Promise<number> {
+      return asNumber(await callRpc("velura_return_item_refundable_amount", {
+        p_return_item_id: returnItemId
+      }, { useAnonKey: false }));
     },
 
-    async updateReturnStatus(returnId: string, input: UpdateReturnStatusInput, actorId: string, actorRole: string, ipAddress: string | undefined) {
-      const current = await selectOne("return_exchange", {
-        select: RETURN_SELECT,
-        return_id: `eq.${returnId}`
-      });
-      if (!current) {
-        throw new HttpError(404, "RETURN_NOT_FOUND", "Return record not found");
-      }
-      if (current.version !== input.expectedVersion) {
-        throw new HttpError(409, "VERSION_CONFLICT", "Return record has been modified by another user");
-      }
-
-      const payload: JsonObject = {
-        status: input.status,
-        version: asNumber(current.version) + 1,
-        updated_at: new Date().toISOString()
-      };
-      if (input.adminNote !== undefined) payload.admin_note = input.adminNote;
-      if (input.reason !== undefined) payload.rejection_reason = input.reason;
-      if (input.refundAmount !== undefined && input.refundAmount !== null) payload.refund_amount = input.refundAmount;
-      if (input.trackingReturnCode !== undefined) payload.tracking_return_code = input.trackingReturnCode;
-      if (input.receipts !== undefined) payload.qa_item_receipts = input.receipts;
-      if (input.imageProof !== undefined && input.status === "RECEIVED") payload.warehouse_proof = input.imageProof;
-      if (input.trackingReturnCode !== undefined && input.status === "EXCHANGE_SHIPPING") {
-        payload.exchange_tracking_code = input.trackingReturnCode;
-        if (current.exchange_order_id) {
-          await updateRows("orders", {
-            order_id: `eq.${current.exchange_order_id}`
-          }, {
-            status: "shipping",
-            updated_at: new Date().toISOString()
-          }).catch(() => null);
-        }
-      }
-      if (input.conditionCheckResult !== undefined) payload.condition_check_result = input.conditionCheckResult;
-      if (input.packageMatch !== undefined) payload.package_match = input.packageMatch;
-      if (input.sealIntact !== undefined) payload.seal_intact = input.sealIntact;
-      if (input.qaNote !== undefined) payload.qa_note = input.qaNote;
-      if (input.imageProof !== undefined && input.imageProof !== null) {
-        const existing = Array.isArray(current.evidence_images) ? current.evidence_images.map(String) : [];
-        payload.evidence_images = [...existing, String(input.imageProof)];
-      }
-
-      if (["COMPLETED", "CANCELLED"].includes(input.status)) {
-        payload.resolved_at = new Date().toISOString();
-      }
-      // Only the admin API reaches this method; a customer cancels through the storefront service instead.
-      if (input.status === "CANCELLED") payload.cancelled_by = "admin";
-
-      if (input.status === "COMPLETED" && current.return_type === "exchange") {
-        const excId = asString(current.exchange_order_id);
-        if (excId) {
-          await updateRows("orders", {
-            order_id: `eq.${excId}`
-          }, {
-            status: "delivered",
-            delivered_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          }).catch(() => null);
-        }
-      }
-
-      const rows = await updateRows("return_exchange", {
-        return_id: `eq.${returnId}`,
-        version: `eq.${input.expectedVersion}`
-      }, payload);
-
-      if (!rows.length) {
-        throw new HttpError(409, "VERSION_CONFLICT", "Return record has been modified by another user or does not exist");
-      }
-
-      // Map status to a valid audit_action enum value
-      // Valid values: create, update, delete, approve, reject, lock, unlock
-      const auditAction = input.status === "CANCELLED" ? "reject"
-        : input.status === "WAITING_RETURN" ? "approve"
-        : "update";
-
-      const updated = asJsonObject(rows[0]);
-      await writeAuditLog({
-        actor_id: actorId,
-        actor_role: actorRole,
-        action: auditAction,
-        module: "returns",
-        target_id: returnId,
-        old_value: { status: current.status, version: current.version },
-        new_value: { status: updated.status, version: updated.version, transition: `${current.status} → ${input.status}` },
-        ip_address: ipAddress || "127.0.0.1",
-        timestamp: new Date().toISOString()
-      });
-
-      return updated;
-    },
 
     async listTickets(filters: TicketListFilters, accessToken: string) {
       const query: Record<string, unknown> = {
@@ -792,6 +507,7 @@ export function createReturnRepository() {
       }, { accessToken });
     },
 
+    /** Keeps contact history and attention independent from the business stage of every return part. */
     async recordContact(returnId: string, input: { result: string; note: string; expectedVersion: number }, actorId: string, actorRole: string, ipAddress: string | undefined) {
       const current = await selectOne("return_exchange", { select: RETURN_SELECT, return_id: `eq.${returnId}` });
       if (!current) throw new HttpError(404, "RETURN_NOT_FOUND", "Return record not found");
@@ -805,8 +521,12 @@ export function createReturnRepository() {
         return_id: `eq.${returnId}`,
         version: `eq.${input.expectedVersion}`
       }, {
-        status: ["REQUESTED","NEEDS_SUPPORT"].includes(asString(current.status)) ? "CONTACTING" : current.status,
+        attention_status: input.result === "reached" ? "none" : "waiting_customer",
         admin_note: adminNote,
+        contact_history: [...(Array.isArray(current.contact_history) ? current.contact_history : []), {
+          result: input.result, note: input.note, actor_id: actorId, contacted_at: stamp
+        }],
+        last_contact_at: stamp,
         version: asNumber(current.version) + 1,
         updated_at: stamp
       });
@@ -849,8 +569,39 @@ function authOptions(accessToken: string | null | undefined): { useAnonKey?: boo
   return { useAnonKey: true, accessToken };
 }
 
-/** Vietnamese messages for the stable error codes raised by migrations 068/069 (`raise sqlstate ... using message`). */
+/** Localized codes raised by the return intake, per-item workflow and financial RPCs. */
 const RETURN_DATABASE_ERRORS: Readonly<Record<string, { status: number; message: string }>> = {
+  RBAC_DENIED: { status: 403, message: "Không đủ quyền thực hiện thao tác phần hàng." },
+  RETURN_ITEM_REQUIRED: { status: 422, message: "Chọn phần hàng cần xử lý." },
+  RETURN_ITEM_NOT_FOUND: { status: 404, message: "Phần hàng không thuộc yêu cầu đổi/trả." },
+  ITEM_ACTION_REQUIRED: { status: 409, message: "Xử lý từng phần hàng, không chuyển trạng thái cả phiếu." },
+  INVALID_RETURN_ACTION: { status: 422, message: "Thao tác phần hàng không hợp lệ." },
+  RETURN_REASON_REQUIRED: { status: 422, message: "Ghi rõ lý do xử lý phần hàng." },
+  CUSTOMER_CONSENT_REQUIRED: { status: 422, message: "Cần sự đồng ý của khách hàng." },
+  INVALID_RETURN_QUANTITY: { status: 422, message: "Số lượng xử lý không khớp phần hàng." },
+  WAREHOUSE_PROOF_REQUIRED: { status: 422, message: "Tải lên bằng chứng kiểm hàng riêng tư." },
+  COD_PAYMENT_REQUIRED: { status: 422, message: "Chỉ đơn COD được ghi nhận chuyển khoản hoàn tiền." },
+  REFUND_RESOLUTION_REQUIRED: { status: 422, message: "Phần hàng phải được duyệt hoàn tiền." },
+  RETURN_QUANTITY_EXCEEDED: { status: 422, message: "Số lượng vượt quá phần hàng còn được đổi/trả." },
+  RETURN_UNIT_CONFLICT: { status: 409, message: "Phần hàng đang được xử lý bởi thao tác khác." },
+  RETURN_ITEM_CLOSED: { status: 422, message: "Phần hàng đã kết thúc xử lý." },
+  RETURN_PART_ALREADY_COMMITTED: { status: 422, message: "Phần hàng đã nhận, xuất đổi hoặc đã yêu cầu hoàn tiền; không thể tách hay dừng." },
+  RETURN_DECISION_FINAL: { status: 422, message: "Quyết định phần hàng đã được ghi nhận." },
+  RETURN_APPROVAL_REQUIRED: { status: 422, message: "Phần hàng cần được duyệt trước khi tiếp tục." },
+  TRACKING_REQUIRED: { status: 422, message: "Ghi nhận đơn vị vận chuyển và mã vận đơn." },
+  PICKUP_PROOF_REQUIRED: { status: 422, message: "Tải lên bằng chứng bàn giao riêng tư." },
+  PICKUP_FACTS_REQUIRED: { status: 422, message: "Ghi nhận người bàn giao và thời điểm lấy hàng hợp lệ." },
+  WAREHOUSE_LINE_MISMATCH: { status: 422, message: "Số lượng hàng nhận không khớp phần hàng đăng ký." },
+  RECEIPT_FACTS_REQUIRED: { status: 422, message: "Ghi nhận đầy đủ kết quả kiểm hàng." },
+  DISPOSITION_REQUIRED: { status: 422, message: "Chọn hướng xử lý phần hàng đã nhận." },
+  RESTOCK_QA_REQUIRED: { status: 422, message: "Không nhập lại hàng chưa đạt kiểm tra." },
+  REFUND_ALREADY_REQUESTED: { status: 409, message: "Phần hàng đã có yêu cầu hoàn tiền." },
+  EXCHANGE_ALREADY_SHIPPED: { status: 422, message: "Hàng đổi đã được bàn giao vận chuyển." },
+  EXCHANGE_SAME_PRODUCT_REQUIRED: { status: 422, message: "Chỉ đổi biến thể của cùng sản phẩm." },
+  INSUFFICIENT_STOCK: { status: 409, message: "Biến thể đổi không còn đủ tồn kho." },
+  EXCHANGE_PREPARING_REQUIRED: { status: 422, message: "Chuẩn bị phần hàng đổi trước khi giao vận chuyển." },
+  EXCHANGE_DELIVERY_REQUIRED: { status: 422, message: "Chỉ hoàn tất khi đơn đổi thực sự giao thành công." },
+  CAPTURED_PAYMENT_REQUIRED: { status: 422, message: "Chưa có thanh toán đã thu hợp lệ để hoàn tiền." },
   REFUND_RECEIVER_REQUIRED: { status: 422, message: "Chưa có thông tin nhận hoàn tiền hợp lệ của khách. Hãy yêu cầu khách bổ sung trước khi tiếp tục hoàn tiền." },
   REFUND_RECEIVER_NOT_APPLICABLE: { status: 422, message: "Chỉ đơn COD có yêu cầu hoàn tiền mới cần thông tin nhận tiền." },
   REFUND_RECEIVER_INVALID: { status: 422, message: "Thông tin nhận hoàn tiền chưa hợp lệ. Kiểm tra ngân hàng, số tài khoản (6–20 chữ số) và tên chủ tài khoản." },

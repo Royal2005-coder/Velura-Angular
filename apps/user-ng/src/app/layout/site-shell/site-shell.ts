@@ -24,7 +24,7 @@ export class SiteShell {
   readonly quickSuggestions = [
     'Tư vấn outfit đi tiệc sang trọng',
     'Gợi ý chọn size đầm chuẩn dáng',
-    'Chính sách đổi trả trong 30 ngày',
+    'Chính sách đổi trả trong 7 ngày',
   ];
 
   /**

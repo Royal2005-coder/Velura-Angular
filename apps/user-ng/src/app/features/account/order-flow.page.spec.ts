@@ -319,6 +319,29 @@ describe('OrderFlowPage with mocked Model', () => {
     expect(page.selections()['v-eligible']?.quantity).toBe(2);
   });
 
+  it('keeps disjoint units selectable and requires reason, initial photo and video while COD bank stays optional', () => {
+    const delivered: DemoOrder = {
+      ...order, id: 'PARTIAL-UNIT', status: 'delivered', can_request_return: true,
+      items: [{ ...DEMO_LINES[0], quantity: 3, returnCount: 2, availableQuantity: 1, isInProgress: true }],
+    };
+    model.orders.set([delivered]);
+    const page = TestBed.createComponent(OrderFlowPage).componentInstance;
+    page.verified.set(true); page.open(delivered.id); page.startReturn();
+    expect(page.canStartReturn(delivered)).toBe(true);
+    expect(page.selectedLines()[0].quantity).toBe(1);
+    page.reviewReturn(); expect(page.error()).toContain('lý do');
+    page.returnReason = 'Đường may bị lỗi';
+    page.reviewReturn(); expect(page.error()).toContain('một ảnh và một video');
+    page.evidence.set([
+      { name: 'photo.jpg', url: 'blob:photo', file: new File(['image'], 'photo.jpg', { type: 'image/jpeg' }) },
+      { name: 'video.mp4', url: 'blob:video', file: new File(['video'], 'video.mp4', { type: 'video/mp4' }) },
+    ]);
+    page.reviewReturn();
+    expect(page.error()).toBe('');
+    expect(page.view()).toBe('return-summary');
+    expect(page.bankAccount).toBe('');
+  });
+
   function openTracking(request: DemoReturn, target: DemoOrder = order) {
     model.orders.set([target]);
     model.requests.set([request]);

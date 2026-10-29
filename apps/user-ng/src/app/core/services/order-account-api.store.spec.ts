@@ -7,6 +7,12 @@ import { OrderAccountApiStore } from './order-account-api.store';
 
 const order = { order_id: 'uuid-1', order_code: 'VLR-1', status: 'waiting_payment', payment_method: 'STRIPE', payment_status: 'pending', version: 2, items: [] };
 const request = { return_id: 'return-1', tracking_return_code: 'RET-1', order_id: 'uuid-1', order_code: 'VLR-1', status: 'REQUESTED', version: 3 };
+const initialEvidence = () => [
+  { name: 'photo.jpg', file: new File(['image'], 'photo.jpg', { type: 'image/jpeg' }) },
+  { name: 'video.mp4', file: new File(['video'], 'video.mp4', { type: 'video/mp4' }) },
+];
+const photoRef = 'storage://return-evidence-private/return-intake/order/request_photo/photo.jpg';
+const videoRef = 'storage://return-evidence-private/return-intake/order/request_video/video.mp4';
 
 describe('OrderAccountApiStore authorization and response ordering', () => {
   const session = signal<{ userId: string } | null>(null);
@@ -78,9 +84,12 @@ describe('OrderAccountApiStore authorization and response ordering', () => {
   });
 
   it('forwards the same guest proof through return creation and cancellation', async () => {
+    get.mockImplementation((path) => of(path.includes('/returns') ? { returns: [request] } : { orders: [{ ...order, items: [{ item_id: 'item-1', variant_id: 'v1', quantity: 1, available_quantity: 1 }] }] }));
     restoreGuest(); const model = await create(null);
-    post.mockReturnValueOnce(of({ success: true, return: request }));
-    await model.createReturn('VLR-1', 'refund', [], 'Lỗi', []);
+    post.mockReturnValueOnce(of({ storage_ref: photoRef })).mockReturnValueOnce(of({ storage_ref: videoRef }))
+      .mockReturnValueOnce(of({ success: true, return: request }));
+    await model.createReturn('VLR-1', 'refund', [{ variantId: 'v1', quantity: 1 }], 'Lỗi', initialEvidence());
+    expect(post).toHaveBeenCalledWith(expect.stringContaining('purpose=return&order_id=uuid-1&kind=request_video&guest_access_token=guest-proof'), expect.any(FormData));
     expect(post).toHaveBeenCalledWith('/api/user/returns/guest', expect.objectContaining({ guest_access_token: 'guest-proof', order_code: 'VLR-1' }));
     await model.cancelRequest('RET-1');
     expect(post).toHaveBeenCalledWith('/api/user/returns/guest-cancel', expect.objectContaining({ guest_access_token: 'guest-proof', return_id: 'return-1', expectedVersion: 3 }));
@@ -254,7 +263,7 @@ describe('OrderAccountApiStore authorization and response ordering', () => {
   });
 
   it('offers only actual available variants of the purchased product and sends the selected UUID', async () => {
-    const original = { item_id: 'item-1', variant_id: 'original', product_id: 'product-1', product_name: 'Áo', quantity: 1, unit_price: 100000 };
+    const original = { item_id: 'item-1', variant_id: 'original', product_id: 'product-1', product_name: 'Áo', quantity: 3, available_quantity: 3, unit_price: 100000 };
     get.mockImplementation((path) => of(path.includes('/returns') ? { returns: [] } : path.includes('/products/') ? {
       product_id: 'product-1', variants: [
         { variant_id: 'original', size: 'M', color: 'Đen', stock_quantity: 4 },
@@ -265,10 +274,20 @@ describe('OrderAccountApiStore authorization and response ordering', () => {
     const model = await create(); await model.loadReplacementChoices('VLR-1');
     const line = model.orders()[0].items[0];
     expect(model.replacementChoices(line)).toEqual([{ id: 'replacement', label: 'L / Đen', stock: 2 }]);
-    post.mockReturnValueOnce(of({ success: true, return: { ...request, return_type: 'exchange' } }));
-    await model.createReturn('VLR-1', 'exchange', [{ variantId: 'original', quantity: 1, replacementVariantId: 'replacement', replacement: 'L / Đen' }], '', [], 'size');
-    expect(post).toHaveBeenCalledWith('/api/user/returns', expect.objectContaining({ reason_code: 'size', evidence_images: [], items: [{ order_item_id: 'item-1', quantity: 1, replacement_variant_id: 'replacement' }] }));
+    post.mockReturnValueOnce(of({ storage_ref: photoRef })).mockReturnValueOnce(of({ storage_ref: videoRef }))
+      .mockReturnValueOnce(of({ success: true, return: { ...request, return_type: 'exchange', items: [{ return_item_id: 'part-1', variant_id: 'original', order_item_id: 'item-1', quantity: 1, replacement_variant_id: 'replacement', resolution_type: 'exchange', item_status: 'REQUESTED', decision_status: 'pending' }] } }));
+    const created = await model.createReturn('VLR-1', 'exchange', [{ variantId: 'original', quantity: 1, replacementVariantId: 'replacement', replacement: 'L / Đen' }], '', initialEvidence(), 'size');
+    expect(post).toHaveBeenCalledWith('/api/user/returns', expect.objectContaining({ reason_code: 'size', evidence_images: [photoRef], evidence_videos: [videoRef], items: [{ order_item_id: 'item-1', quantity: 1, replacement_variant_id: 'replacement' }] }));
+    expect(created.items[0]).toMatchObject({ returnItemId: 'part-1', replacementVariantId: 'replacement', itemStatus: 'REQUESTED', resolutionType: 'exchange' });
     await expect(model.createReturn('VLR-1', 'exchange', [{ variantId: 'original', quantity: 3, replacementVariantId: 'replacement' }], '', [])).rejects.toThrow('còn đủ số lượng');
     await expect(model.createReturn('VLR-1', 'exchange', [{ variantId: 'original', quantity: 1, replacementVariantId: 'foreign-product' }], '', [])).rejects.toThrow('cùng sản phẩm');
+  });
+
+  it('requires both initial media before upload and preserves server quantity availability with active parts', async () => {
+    get.mockImplementation((path) => of(path.includes('/returns') ? { returns: [{ ...request, items: [{ variant_id: 'v1', quantity: 1 }] }] } : { orders: [{ ...order, items: [{ item_id: 'item-1', variant_id: 'v1', quantity: 3, available_quantity: 2, return_count: 0, is_in_progress: true }] }] }));
+    const model = await create();
+    expect(model.orders()[0].items[0].availableQuantity).toBe(2);
+    await expect(model.createReturn('VLR-1', 'refund', [{ variantId: 'v1', quantity: 1 }], 'Lỗi', initialEvidence().slice(0, 1))).rejects.toThrow('một video');
+    expect(post).not.toHaveBeenCalled();
   });
 });

@@ -61,6 +61,11 @@ export interface CheckoutQuote {
   loyalty?: {
     available_points: number;
     balance_points?: number;
+    /** Refund debt is informational and never disables checkout or future accrual. */
+    debt_points?: number;
+    warning_flags?: number;
+    accrual_locked?: boolean;
+    accrual_lock_source?: string;
     max_points: number;
     points_spent: number;
     points_discount_amount: number;

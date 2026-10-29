@@ -295,6 +295,7 @@ export class AdminErpAccountsPage {
    * Switches account tabs and resets paging.
    */
   setTab(tab: string): void {
+    if (this.loading()) return;
     if (!['all', 'members', 'admins', 'locked', 'unverified', 'promotions', 'logs'].includes(tab)) {
       return;
     }

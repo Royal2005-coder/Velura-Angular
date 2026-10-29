@@ -22,6 +22,7 @@ export interface AdminErpTab {
           [class.is-active]="tab.key === active()"
           [attr.aria-selected]="tab.key === active()"
           [attr.tabindex]="tab.key === active() ? 0 : -1"
+          [disabled]="busy()"
           (click)="select(tab.key)"
         >
           {{ tab.label }}
@@ -29,6 +30,9 @@ export interface AdminErpTab {
             <span class="tabs__count">{{ tab.count }}</span>
           }
         </button>
+      }
+      @if (busy()) {
+        <span class="tabs__spinner" role="status" aria-label="Đang tải dữ liệu"></span>
       }
     </div>
   `,
@@ -59,6 +63,24 @@ export interface AdminErpTab {
       .tabs__item:hover {
         color: var(--erp-text);
       }
+      .tabs__item:disabled {
+        cursor: progress;
+        opacity: 0.62;
+      }
+      .tabs__spinner {
+        width: 13px;
+        height: 13px;
+        margin: 0 6px;
+        border: 2px solid var(--erp-line);
+        border-top-color: var(--erp-accent);
+        border-radius: 50%;
+        animation: tabs-spin 700ms linear infinite;
+      }
+      @keyframes tabs-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
       .tabs__item.is-active {
         background: var(--erp-surface);
         color: var(--erp-ink);
@@ -79,12 +101,17 @@ export interface AdminErpTab {
 export class AdminErpTabs {
   readonly tabs = input.required<readonly AdminErpTab[]>();
   readonly active = input.required<string>();
+  /** Blocks tab changes and shows a spinner while the current one is loading. */
+  readonly busy = input(false);
   readonly changed = output<string>();
 
   /**
    * Emits the selected tab key.
    */
   select(key: string): void {
+    if (this.busy()) {
+      return;
+    }
     if (key !== this.active()) {
       this.changed.emit(key);
     }
@@ -94,6 +121,9 @@ export class AdminErpTabs {
    * Moves focus and selection with Left/Right/Home/End.
    */
   onKeydown(event: KeyboardEvent): void {
+    if (this.busy()) {
+      return;
+    }
     const tabs = this.tabs();
     const index = tabs.findIndex((tab) => tab.key === this.active());
     if (index < 0) {

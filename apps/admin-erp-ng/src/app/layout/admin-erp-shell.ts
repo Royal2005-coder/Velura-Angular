@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, inject, signal, viewChild } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
-import { NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
+import { NavigationCancel, NavigationEnd, NavigationError, NavigationStart, Router, RouterLink, RouterOutlet } from '@angular/router';
 import { filter, startWith, catchError, finalize, of } from 'rxjs';
 import { AdminErpApiService } from '../core/admin-erp-api.service';
 import { AdminErpRefreshService } from '../core/admin-erp-refresh.service';
@@ -42,6 +42,7 @@ export class AdminErpShell {
   readonly sidebarCollapsed = signal(false);
   readonly mobileNavOpen = signal(false);
   readonly isMobile = signal(false);
+  readonly navigating = signal(false);
   private readonly sidebar = viewChild<ElementRef<HTMLElement>>('sidebar');
   readonly logoutConfirmOpen = signal(false);
   readonly signingOut = signal(false);
@@ -104,7 +105,22 @@ export class AdminErpShell {
     media.addEventListener('change', onMediaChange);
     this.destroyRef.onDestroy(() => media.removeEventListener('change', onMediaChange));
     this.router.events
-      .pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd))
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((event) => {
+        if (event instanceof NavigationStart) {
+          // Block a second click immediately; the overlay fades in instead of flashing.
+          this.navigating.set(true);
+          return;
+        }
+        if (event instanceof NavigationEnd || event instanceof NavigationCancel || event instanceof NavigationError) {
+          this.navigating.set(false);
+        }
+      });
+    this.router.events
+      .pipe(
+        filter((event): event is NavigationEnd => event instanceof NavigationEnd),
+        takeUntilDestroyed(this.destroyRef),
+      )
       .subscribe(() => this.mobileNavOpen.set(false));
   }
 

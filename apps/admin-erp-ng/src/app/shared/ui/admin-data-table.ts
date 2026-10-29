@@ -39,7 +39,14 @@ export interface AdminTableColumn {
     } @else if (!rows().length) {
       <app-erp-empty-state [title]="emptyTitle()" [message]="emptyMessage()" icon="log" />
     } @else {
-      <div class="table-wrap">
+      <div class="table-shell" [attr.aria-busy]="loading()">
+        @if (loading()) {
+          <div class="table-busy" role="status">
+            <span class="table-busy__spinner" aria-hidden="true"></span>
+            Đang tải…
+          </div>
+        }
+        <div class="table-wrap">
         <table>
           <caption class="erp-sr-only">{{ caption() }}</caption>
           <thead>
@@ -89,12 +96,42 @@ export interface AdminTableColumn {
           </tbody>
         </table>
       </div>
+      </div>
     }
   `,
   styles: [
     `
       .table-wrap {
         overflow-x: auto;
+      }
+      .table-shell {
+        position: relative;
+      }
+      .table-busy {
+        position: absolute;
+        inset: 0;
+        z-index: 2;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        background: color-mix(in srgb, var(--erp-surface) 68%, transparent);
+        color: var(--erp-muted);
+        font-size: 12px;
+        cursor: progress;
+      }
+      .table-busy__spinner {
+        width: 16px;
+        height: 16px;
+        border: 2px solid var(--erp-line);
+        border-top-color: var(--erp-accent);
+        border-radius: 50%;
+        animation: table-spin 700ms linear infinite;
+      }
+      @keyframes table-spin {
+        to {
+          transform: rotate(360deg);
+        }
       }
       table {
         width: 100%;

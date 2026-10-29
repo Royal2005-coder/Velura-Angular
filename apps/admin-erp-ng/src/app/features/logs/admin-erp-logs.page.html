@@ -26,7 +26,7 @@
       <span class="logs-eyebrow">Audit trail</span>
       <h2 id="logs-title">Sự kiện hệ thống</h2>
     </div>
-    <app-erp-tabs [tabs]="tabs()" [active]="tab()" (changed)="setTab($event)" />
+    <app-erp-tabs [tabs]="tabs()" [active]="tab()" [busy]="loading()" (changed)="setTab($event)" />
   </div>
 
   <app-erp-filter-bar [busy]="loading()" (apply)="applyFilters()" (reset)="resetFilters()">

@@ -39,6 +39,7 @@ import {
 import { orderFocusLink, returnFocusLink, type OrderTraceLink } from '../../core/admin-erp-order-trace';
 import { AdminErpDataTable, AdminTableColumn } from '../../shared/ui/admin-data-table';
 import { AdminErpDrawer } from '../../shared/ui/admin-drawer';
+import { AdminErpLoadingOverlay } from '../../shared/ui/admin-loading-overlay';
 import { AdminErpFilterBar } from '../../shared/ui/admin-filter-bar';
 import { AdminErpIcon } from '../../shared/ui/admin-erp-icon';
 import { AdminErpKpiCard } from '../../shared/ui/admin-kpi-card';
@@ -70,6 +71,7 @@ const EMPTY_OVERVIEW: AdminMemberOverview = {};
     AdminErpDataTable,
     AdminErpPagination,
     AdminErpDrawer,
+    AdminErpLoadingOverlay,
     AdminErpIcon,
     AdminErpStatusBadge,
   ],

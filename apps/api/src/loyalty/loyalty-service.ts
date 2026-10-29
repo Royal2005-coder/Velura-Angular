@@ -9,6 +9,12 @@ export interface LoyaltyQuote {
   points_spent: number;
   points_discount_amount: number;
   balance_points?: number;
+  /** Warning-only refund debt; never an independent checkout or accrual eligibility condition. */
+  debt_points?: number;
+  warning_flags?: number;
+  /** Only an explicit/manual account lock is distinct from return debt. */
+  accrual_locked?: boolean;
+  accrual_lock_source?: string;
   policy_approved: boolean;
   spending_enabled: boolean;
 }

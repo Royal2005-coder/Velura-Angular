@@ -24,7 +24,6 @@ import { createStripePaymentIntent, refundStripeOrder, STRIPE_CHECKOUT_TTL_SECON
 import { assertLocalGatewayReady, openLocalGateway, type HostedPayment } from "../payments/local-gateways.js";
 import { customerCanCancel, customerOrderSteps, orderFacts, orderStatusLabel } from "../orders/order-state-machine.js";
 import { returnWindowOpen } from "./return-window.js";
-import { OPEN_RETURN_STATUSES } from "../returns/return-constants.js";
 import { cancelOrderForCustomer, createCustomerOrderCancelRepository } from "./order-cancel-service.js";
 import { createUserReturnsRepository, type UserReturnsRepository } from "./returns-repository.js";
 import {
@@ -135,7 +134,7 @@ export function generateOrderCode(): string {
 const CUSTOMER_ORDER_FIELDS = [
   "order_id", "order_code", "order_date", "created_at", "updated_at", "delivered_at", "status",
   "shipping_name", "shipping_phone", "shipping_address", "shipping_fee", "subtotal", "discount_amount",
-  "total_amount", "payment_method", "voucher_id", "cancelled_reason", "tracking_code", "carrier", "tracking_url",
+  "points_discount_amount", "total_amount", "payment_method", "voucher_id", "cancelled_reason", "tracking_code", "carrier", "tracking_url",
   "version"
 ] as const;
 
@@ -159,20 +158,8 @@ export function presentOrderForCustomer(order: JsonObject, items: JsonObject[], 
     visible.tracking_url = null;
   }
   let canRequestReturn = false;
-  if (order.status === "delivered") {
-    let deliveredAt: Date | null = null;
-    if (order.delivered_at) {
-      deliveredAt = parseUtcDate(order.delivered_at);
-    } else {
-      const deliveredStep = timeline.find((t) => t.status === "delivered");
-      if (deliveredStep?.at) {
-        deliveredAt = parseUtcDate(deliveredStep.at);
-      }
-    }
-    if (!deliveredAt) {
-      deliveredAt = parseUtcDate(order.updated_at || order.created_at);
-    }
-    canRequestReturn = returnWindowOpen(deliveredAt, new Date());
+  if (order.status === "delivered" && order.delivered_at && order.order_kind !== "exchange") {
+    canRequestReturn = returnWindowOpen(parseUtcDate(order.delivered_at), new Date());
   }
   return {
     ...visible,
@@ -243,68 +230,30 @@ async function attachProductMeta(items: JsonObject[]): Promise<JsonObject[]> {
 
 const userReturnsRepository = createUserReturnsRepository();
 
-/**
- * Gắn `return_count` (số lần đổi/trả còn hiệu lực, trần U2-02 là 2) và `available_quantity`
- * (số lượng còn có thể chọn ở lần tiếp theo) vào từng dòng hàng của một đơn đã giao.
- *
- * Dùng lại đúng phép đếm "lượt + số lượng đã trả" trong `returns-service.ts` qua
- * `returns-repository.ts`, để trang khách hàng không tự tính một con số khác với con số
- * backend thật sự dùng để chặn ở `POST /api/user/returns`. Nhận repository qua tham số để
- * test được bằng repository giả, không cần DB thật.
- *
- * Nếu sản phẩm đang có yêu cầu đổi/trả nằm trong tiến trình (`OPEN_RETURN_STATUSES`),
- * sản phẩm đó bị khóa (`is_in_progress = true`, `available_quantity = 0`) để tránh tạo trùng lặp.
- */
+/** Projects the authoritative per-original-unit quota without blocking disjoint quantities. */
 export async function attachReturnEligibility(
   repository: UserReturnsRepository,
-  orderId: unknown,
+  _orderId: unknown,
   items: JsonObject[]
 ): Promise<JsonObject[]> {
-  const existingReturns = await repository.listReturnsForOrder(orderId);
   const result: JsonObject[] = [];
   for (const item of items) {
-    let returnCount = 0;
-    let returnedQuantity = 0;
-    let isInProgress = false;
-    let inProgressCode: string | null = null;
-    let inProgressStatus: string | null = null;
-
-    for (const ret of existingReturns) {
-      const status = asString(ret.status);
-      if (["CANCELLED", "REJECTED", "rejected"].includes(status)) continue;
-      let rItems = await repository.listReturnItemsForOrderItem(ret.return_id, item.item_id);
-      if (!rItems.length && items.length === 1) {
-        const allForRet = repository.listReturnItemsForReturn ? await repository.listReturnItemsForReturn(ret.return_id).catch(() => []) : [];
-        if (!allForRet.length) {
-          rItems = [{ quantity: item.quantity || 1 }];
-        }
-      }
-      if (!rItems.length) continue;
-
-      if (OPEN_RETURN_STATUSES.includes(status) || status === "pending") {
-        isInProgress = true;
-        const rawCode = asString(ret.tracking_return_code || ret.return_id);
-        inProgressCode = /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(rawCode)
-          ? `RET${rawCode.replace(/-/g, "").slice(0, 8).toUpperCase()}`
-          : rawCode;
-        inProgressStatus = status;
-      }
-
-      returnCount += 1;
-      for (const ri of rItems) returnedQuantity += Number(ri.quantity);
-    }
-    const quantity = Number(item.quantity) || 0;
-    const availableQuantity = isInProgress
-      ? 0
-      : Math.max(0, quantity - returnedQuantity);
-
+    const units = await repository.listReturnUnits(item.item_id);
+    const held = units.filter((unit) => !!unit.active_return_item_id);
+    const available = units.length
+      ? units.filter((unit) => !unit.refunded && !unit.active_return_item_id && Number(unit.success_count) < 2).length
+      : Math.max(0, Number(item.quantity) || 0);
     result.push({
       ...item,
-      return_count: returnCount,
-      available_quantity: availableQuantity,
-      is_in_progress: isInProgress,
-      in_progress_return_code: inProgressCode,
-      in_progress_status: inProgressStatus
+      return_count: units.length ? Math.max(...units.map((unit) => Number(unit.success_count) || 0)) : 0,
+      available_quantity: available,
+      available_refund_unit_amounts: units.filter((unit) => !unit.refunded && !unit.active_return_item_id && Number(unit.success_count) < 2)
+        .sort((a, b) => Number(a.unit_number) - Number(b.unit_number)).map((unit) => Number(unit.refundable_amount) || 0),
+      held_quantity: held.length,
+      refunded_quantity: units.filter((unit) => unit.refunded).length,
+      is_in_progress: held.length > 0,
+      in_progress_return_code: null,
+      in_progress_status: held.length ? "IN_PROGRESS" : null
     });
   }
   return result;

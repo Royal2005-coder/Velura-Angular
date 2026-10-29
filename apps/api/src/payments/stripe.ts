@@ -62,11 +62,15 @@ export function classifyStripeEvent(event: JsonObject): StripeEventAction {
 
   // Hoàn tiền nhận ra bằng PaymentIntent của charge, không bằng metadata: payment lưu
   // mã PaymentIntent ở `gateway_transaction_ref` từ lúc tiền về.
-  if (type === "charge.refunded") {
+  if (type === "charge.refunded" || type === "refund.created" || type === "refund.updated" || type === "refund.failed") {
     const intent = object?.payment_intent;
     const paymentIntentId = typeof intent === "string" ? intent : (intent as JsonObject | undefined)?.id;
     return typeof paymentIntentId === "string" && paymentIntentId
-      ? { kind: "refunded", paymentIntentId, ...(typeof object?.amount_refunded === "number" ? {amount:object.amount_refunded} : {}), ...(Array.isArray(asJsonObject(object?.refunds).data) ? {refunds:asJsonObject(object?.refunds).data as JsonObject[]} : {}) }
+      ? { kind: "refunded", paymentIntentId,
+        ...(type === "charge.refunded"
+          ? { ...(typeof object?.amount_refunded === "number" ? { amount: object.amount_refunded } : {}),
+            ...(Array.isArray(asJsonObject(object?.refunds).data) ? { refunds: asJsonObject(object?.refunds).data as JsonObject[] } : {}) }
+          : { refunds: [asJsonObject(object)] }) }
       : { kind: "ignore", reason: "missing_payment_intent" };
   }
 
@@ -351,8 +355,10 @@ export interface RefundStripeOptions {
   fetchImpl?: typeof fetch;
   amount?: number;
   reason?: string;
-  /** Return-scoped refund operation reserves a net paid amount after warehouse QA. */
+  /** Reserves one item's net paid amount after warehouse QA; requires returnItemId. */
   returnId?: string;
+  /** Immutable item identity of the financial operation, independent of request version. */
+  returnItemId?: string;
   expectedVersion?: number;
   /** Binds late or duplicate capture refunds to the exact ledger payment. */
   paymentId?:string;
@@ -367,10 +373,9 @@ export interface RefundResult {
 /**
  * Hoàn tiền của payment Stripe cho một đơn hàng (hỗ trợ hoàn toàn bộ hoặc một phần).
  *
- * Idempotency key gắn với payment và phiên bản của nó: gọi lại vì mạng chập chờn thì
- * Stripe trả lại đúng kết quả cũ, còn "Thử hoàn tiền lại" sau khi lỗi (payment đã tăng
- * phiên bản) là một yêu cầu mới. Stripe từ chối thì payment giữ `refund_pending` và mang
- * dấu `REFUND_FAILED` để admin thấy và thử lại (OPEN-02).
+ * Return refunds reuse the durable refund_id for every retry, including ambiguous network
+ * failures. A known provider refund is retrieved, never recreated. Only a matching Stripe
+ * `succeeded` result completes the item; pending/unknown results retain the reservation.
  */
 export async function refundStripeOrder(
   orderId: string,
@@ -387,13 +392,20 @@ export async function refundStripeOrder(
   const options = typeof fetchImplOrOptions === "object" ? fetchImplOrOptions : {};
   let operation: JsonObject | null = null;
   if (options.returnId) {
-    operation = asJsonObject(await callRpc("velura_prepare_return_refund",{p_return_id:options.returnId,p_order_id:orderId,p_expected_version:options.expectedVersion}));
-    if (operation.status === "succeeded") return {status:"refunded"};
+    if (!options.returnItemId) throw new HttpError(422, "RETURN_ITEM_REQUIRED", "A return item is required for a return refund");
+    operation = asJsonObject(await callRpc("velura_prepare_return_refund", {
+      p_return_id: options.returnId, p_order_id: orderId,
+      p_expected_version: options.expectedVersion, p_return_item_id: options.returnItemId
+    }));
+    if (!operation.refund_id || operation.return_item_id !== options.returnItemId || operation.return_id !== options.returnId) {
+      throw new HttpError(409, "REFUND_OPERATION_MISMATCH", "Refund operation does not match the return item");
+    }
+    if (operation.status === "succeeded") return { status: "refunded" };
     refundAmount = Number(operation.amount);
   }
   const payment = await selectOne("payment", {
     order_id: `eq.${orderId}`,
-    ...(options.paymentId ? {payment_id:"eq."+options.paymentId} : {}),
+    ...(operation ? { payment_id: "eq." + asString(operation.payment_id) } : options.paymentId ? { payment_id: "eq." + options.paymentId } : {}),
     payment_provider: "eq.stripe",
     payment_status: "in.(paid,refund_pending)",
     order: "created_at.desc"
@@ -420,71 +432,129 @@ export async function refundStripeOrder(
   }
   try {
     const params = new URLSearchParams({ payment_intent: intent, "metadata[order_id]": orderId });
-    if (refundAmount !== undefined) {
-      params.append("amount", String(Math.round(refundAmount)));
+    if (refundAmount !== undefined) params.append("amount", String(refundAmount));
+    if (operation) {
+      params.append("metadata[return_id]", asString(operation.return_id));
+      params.append("metadata[return_item_id]", asString(operation.return_item_id));
+      params.append("metadata[refund_id]", asString(operation.refund_id));
     }
-    if (options.returnId) params.append("metadata[return_id]", options.returnId);
-    const response = await fetchImpl("https://api.stripe.com/v1/refunds", {
-      method: "POST",
+    const providerRef = asString(operation?.provider_ref);
+    const response = await fetchImpl(providerRef
+      ? `https://api.stripe.com/v1/refunds/${encodeURIComponent(providerRef)}`
+      : "https://api.stripe.com/v1/refunds", {
+      method: providerRef ? "GET" : "POST",
       headers: {
         authorization: `Bearer ${config.stripeSecretKey}`,
         "content-type": "application/x-www-form-urlencoded",
-        "idempotency-key": options.returnId ? `return-refund-${options.returnId}` : `refund-${asString(payment.payment_id)}-${String(payment.version ?? 1)}`
+        "idempotency-key": operation ? `return-refund-${asString(operation.refund_id)}` : `refund-${asString(payment.payment_id)}-${String(payment.version ?? 1)}`
       },
-      body: params
+      ...(providerRef ? {} : { body: params })
     });
-    const body = await response.json() as { id?: string; status?: string; error?: { message?: string } };
-    if (!response.ok || !body.id || body.status === "failed" || body.status === "canceled") {
-      await markRefundFailed(orderId, payment, body.error?.message || `Stripe trả trạng thái ${body.status || response.status}`);
-      return { status: "failed", message: body.error?.message || "Stripe từ chối hoàn tiền" };
+    const body = asJsonObject(await response.json());
+    const refundId = asString(body.id);
+    if (!response.ok) {
+      const message = asString(asJsonObject(body.error).message) || `Stripe trả trạng thái ${response.status}`;
+      // A timeout, rate limit or server failure cannot prove Stripe did not move money.
+      if (operation && (providerRef || response.status >= 500 || response.status === 409 || response.status === 429)) {
+        return { status: "requested", message };
+      }
+      if (operation) await updateReturnRefundOperation(operation, { status: "failed" });
+      await markRefundFailed(orderId, payment, message);
+      return { status: "failed", message };
+    }
+    if (!refundId || (providerRef && providerRef !== refundId) ||
+      !Number.isSafeInteger(body.amount) || Number(body.amount) !== (refundAmount ?? Number(payment.amount))) {
+      return { status: "requested", message: "Chưa xác minh được kết quả hoàn tiền Stripe" };
+    }
+    if (operation) {
+      const changed = await updateReturnRefundOperation(operation, { status: "pending", provider_ref: refundId });
+      if (!changed.length) {
+        const current = await selectOne("payment_refund", { refund_id: "eq." + asString(operation.refund_id), return_item_id: "eq." + asString(operation.return_item_id) });
+        if (current?.status === "succeeded" && current.provider_ref === refundId) return { status: "refunded" };
+        return { status: "requested", message: "Đang đối soát giao dịch hoàn tiền" };
+      }
+    }
+    if (body.status === "failed" || body.status === "canceled") {
+      if (operation) await updateReturnRefundOperation(operation, { status: "failed", provider_ref: refundId });
+      await markRefundFailed(orderId, payment, `Stripe trả trạng thái ${asString(body.status)}`);
+      return { status: "failed", message: "Stripe từ chối hoàn tiền" };
     }
     if (body.status === "succeeded") {
-      if (options.returnId) {
-        await callRpc("velura_complete_return_refund",{p_return_id:options.returnId,p_provider_ref:body.id});
-        // Email is best-effort: a missing customer email must not fail the refund itself.
-        void sendRefundSuccessEmail(options.returnId, { method: "stripe" });
+      if (operation) {
+        await completeReturnRefund(operation, refundId);
+      } else {
+        await completeRefund(asString(payment.payment_id), orderId, refundAmount ?? Number(payment.amount), refundId);
       }
-      else await completeRefund(asString(payment.payment_id), orderId, refundAmount ?? Number(payment.amount), body.id);
       return { status: "refunded" };
     }
-    if (options.returnId) await updateRows("payment_refund",{return_id:"eq."+options.returnId},{status:"pending",provider_ref:body.id});
-    // `pending`: Stripe xử lý bất đồng bộ, webhook `charge.refunded` sẽ chốt.
     await insertRow("order_event", {
-      order_id: orderId,
-      action: "stripe_refund_requested",
-      actor_type: "system",
-      result: "success",
+      order_id: orderId, action: "stripe_refund_requested", actor_type: "system", result: "success",
       note: "Yêu cầu hoàn tiền Stripe đã được gửi, đang chờ xử lý từ cổng thanh toán",
-      payload: { payment_id: payment.payment_id, payment_intent: intent, stripe_refund_id: body.id, amount: refundAmount ?? payment.amount }
+      payload: { payment_id: payment.payment_id, payment_intent: intent, stripe_refund_id: refundId,
+        amount: refundAmount ?? payment.amount, return_item_id: options.returnItemId }
     });
     return { status: "requested" };
   } catch (error: unknown) {
+    // Stripe may have accepted the request before the connection or local completion failed.
+    if (operation) return { status: "requested", message: "Đang chờ đối soát kết quả hoàn tiền Stripe" };
     await markRefundFailed(orderId, payment, errorMessage(error));
     return { status: "failed", message: "Không kết nối được Stripe" };
   }
 }
 
-/** Webhook `charge.refunded`: chốt payment đang chờ hoàn thành Đã hoàn tiền, một lần. */
-export async function markStripeRefunded(paymentIntentId: string, amount?: number, refunds:JsonObject[] = []): Promise<"refunded" | "ignored"> {
-  if (!Number.isInteger(amount) || Number(amount) <= 0) return "ignored";
-  let payment = await selectOne("payment",{gateway_transaction_ref:"eq."+paymentIntentId,payment_provider:"eq.stripe"});
-  if (!payment || Number(amount) > Number(payment.amount)) return "ignored";
+/** Reconciles only exact succeeded item operations; charge totals remain for non-return refunds. */
+export async function markStripeRefunded(paymentIntentId: string, amount?: number, refunds: JsonObject[] = []): Promise<"refunded" | "ignored"> {
+  let payment = await selectOne("payment", { gateway_transaction_ref: "eq." + paymentIntentId, payment_provider: "eq.stripe" });
+  if (!payment) return "ignored";
+  let completed = false;
   for (const refund of refunds) {
-    if (refund.status !== "succeeded") continue;
-    const operation = await selectOne("payment_refund",{provider_ref:"eq."+asString(refund.id),payment_id:"eq."+payment.payment_id});
-    if (operation && Number(operation.amount) === Number(refund.amount)) {
-      await callRpc("velura_complete_return_refund",{p_return_id:operation.return_id,p_provider_ref:refund.id});
-      // This covers the asynchronous Stripe webhook completion path.
-      void sendRefundSuccessEmail(asString(operation.return_id), { method: "stripe" });
+    const providerRef = asString(refund.id);
+    if (refund.status !== "succeeded" || !providerRef || !Number.isSafeInteger(refund.amount) || Number(refund.amount) <= 0) continue;
+    const metadata = asJsonObject(refund.metadata);
+    let operation = await selectOne("payment_refund", { provider_ref: "eq." + providerRef, payment_id: "eq." + asString(payment.payment_id) });
+    // An immediate webhook can precede persistence of the POST response. Stripe's signed
+    // metadata binds this race to the original reserved operation, never a request header.
+    if (!operation && metadata.refund_id && metadata.return_item_id && metadata.return_id) {
+      operation = await selectOne("payment_refund", {
+        refund_id: "eq." + asString(metadata.refund_id), payment_id: "eq." + asString(payment.payment_id),
+        return_item_id: "eq." + asString(metadata.return_item_id), return_id: "eq." + asString(metadata.return_id)
+      });
     }
+    if (!operation?.return_item_id || operation.status === "succeeded" ||
+      (operation.provider_ref && operation.provider_ref !== providerRef) || Number(operation.amount) !== Number(refund.amount)) continue;
+    const changed = await updateReturnRefundOperation(operation, { status: "pending", provider_ref: providerRef });
+    if (!changed.length) continue;
+    await completeReturnRefund(operation, providerRef);
+    completed = true;
   }
-  payment = await selectOne("payment",{payment_id:"eq."+payment.payment_id});
+  // Item RPCs own their cumulative ledger atomically. Applying a charge total before a
+  // delayed item's RPC would count that refund twice.
+  const { rows: operations } = await selectRows("payment_refund", { payment_id: "eq." + asString(payment.payment_id) });
+  if (operations.length) return completed ? "refunded" : "ignored";
+  if (!Number.isSafeInteger(amount) || Number(amount) <= 0 || Number(amount) > Number(payment.amount)) return "ignored";
+  payment = await selectOne("payment", { payment_id: "eq." + asString(payment.payment_id) });
   if (!payment || Number(amount) <= Number(payment.refunded_amount || 0)) return "ignored";
-  const {rows: pending} = await selectRows("payment_refund",{payment_id:"eq."+payment.payment_id,status:"in.(requested,pending,failed)"});
-  const changed = await updateRows("payment",{payment_id:"eq."+payment.payment_id,refunded_amount:"lt."+amount},{
-    refunded_amount:amount,payment_status:Number(amount) >= Number(payment.amount) ? "refunded" : pending.length ? "refund_pending" : "paid",refund_at:new Date().toISOString(),gateway_response_code:"REFUNDED"
+  const changed = await updateRows("payment", { payment_id: "eq." + asString(payment.payment_id), refunded_amount: "lt." + amount }, {
+    refunded_amount: amount, payment_status: Number(amount) >= Number(payment.amount) ? "refunded" : "paid",
+    refund_at: new Date().toISOString(), gateway_response_code: "REFUNDED"
   });
   return changed.length ? "refunded" : "ignored";
+}
+
+async function updateReturnRefundOperation(operation: JsonObject, values: JsonObject): Promise<JsonObject[]> {
+  const rows = await updateRows("payment_refund", {
+    refund_id: "eq." + asString(operation.refund_id), return_item_id: "eq." + asString(operation.return_item_id),
+    status: "in.(requested,pending,failed)",
+    ...(values.provider_ref ? { or: `(provider_ref.is.null,provider_ref.eq.${asString(values.provider_ref)})` } : {})
+  }, values);
+  return rows.map(asJsonObject);
+}
+
+async function completeReturnRefund(operation: JsonObject, providerRef: string): Promise<void> {
+  await callRpc("velura_complete_return_refund", {
+    p_return_id: operation.return_id, p_provider_ref: providerRef, p_return_item_id: operation.return_item_id
+  });
+  void sendRefundSuccessEmail(asString(operation.return_id), { method: "stripe", returnItemId: asString(operation.return_item_id) });
 }
 
 async function completeRefund(paymentId: string, orderId?: string, amount?: number, stripeRefundId?: string): Promise<void> {

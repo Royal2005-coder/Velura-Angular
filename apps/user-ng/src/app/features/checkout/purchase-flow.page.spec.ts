@@ -131,6 +131,23 @@ describe('PurchaseFlowPage with mocked Model', () => {
     expect(page.requestedPoints()).toBe(0);
   });
 
+  it('shows refund debt without disabling valid redemption or purchasing controls', () => {
+    model.member.set(true);
+    quote.mockReturnValue(of({ subtotal: 840000, shipping_fee: 0, discount_amount: 0, total_amount: 840000,
+      voucher: null, voucher_change: null, free_shipping_threshold: 500000, free_shipping_shortfall: 0,
+      loyalty: { balance_points: -30, debt_points: 40, warning_flags: 2, accrual_locked: false,
+        accrual_lock_source: 'none', available_points: 10, max_points: 10, points_spent: 0,
+        points_discount_amount: 0, spending_enabled: true, policy_approved: true } }));
+    const fixture = createCheckoutFixture();
+    fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.textContent).toContain('Bạn đang nợ 40 điểm');
+    expect(root.textContent).toContain('Bạn vẫn có thể mua hàng và tích điểm');
+    expect(root.querySelector<HTMLInputElement>('#member-points')?.disabled).toBe(false);
+    fixture.componentInstance.setPoints({ target: { value: '5' } } as unknown as Event);
+    expect(fixture.componentInstance.requestedPoints()).toBe(5);
+  });
+
   it('disabled point spending and fractional input never create redemption requests', () => {
     const page = createCheckoutFixture().componentInstance;
     model.member.set(true);

@@ -1,269 +1,93 @@
-<app-erp-modal [open]="flow() !== null" [title]="title()" size="md" (closed)="dismiss()">
-  @if (record(); as row) {
+<app-erp-modal [open]="flow() !== null" [title]="title()" size="lg" (closed)="dismiss()">
+  @if (record(); as record) {
     <div class="flow-head">
-      <div>
-        <h3>{{ row.order_code || row.return_id }}</h3>
-        <p>
-          {{ row.customer_name || 'Khách ẩn danh' }} · {{ paymentLabel(row.payment_kind) }} ·
-          hoàn tối đa {{ money(refundable()) }}
-        </p>
-      </div>
-      <app-erp-status-badge [label]="row.status || '—'" [tone]="'neutral'" [dot]="true" />
+      <div><h3>{{ record.return_code || record.return_id }}</h3><p>Yêu cầu ban đầu: {{ record.return_type === 'exchange' ? 'Đổi hàng' : 'Hoàn tiền' }} (không thay đổi)</p></div>
     </div>
-
+    @if (line(); as item) {
+      <p class="flow-hint">Phần {{ item.return_item_id }} · {{ item.quantity }} sản phẩm · phiên bản {{ item.version }}</p>
+      @if (canSplit()) {
+        <label class="erp-field"><span>Số lượng xử lý trong phần này</span><input class="erp-input" type="number" min="1" [max]="item.quantity || 1" step="1" [value]="quantity()" (input)="setQuantity($event)" /></label>
+        <p class="flow-hint">Xử lý ít hơn số lượng đăng ký sẽ tách phần còn lại; những phần khác không bị thay đổi.</p>
+      }
+    }
     @if (flow() === 'contact') {
-      <label class="erp-field">
-        <span>Kết quả liên hệ</span>
-        <select class="erp-select" [value]="contactResult()" (change)="setContactResult($event)">
-          @for (option of contactResults; track option.code) {
-            <option [value]="option.code">{{ option.label }}</option>
-          }
-        </select>
-      </label>
+      <label class="erp-field"><span>Kết quả liên hệ</span><select class="erp-select" [value]="contactResult()" (change)="setText('contactResult', $event)">@for (result of contactResults; track result.code) { <option [value]="result.code">{{ result.label }}</option> }</select></label>
+      <p class="flow-hint">Không liên hệ được / chờ khách bổ sung được lưu riêng, không thay thế tiến độ từng phần.</p>
     }
-
-    @if (flow() === 'exchange') {
-      <p class="flow-hint">
-        Kho đã nhận và QA đạt. Hệ thống tạo đơn đổi, giữ tồn kho cho hàng thay thế và không thu thêm tiền.
-      </p>
+    @if (needsConsent()) {
+      <p class="flow-warning">Chỉ thay đổi phương án của phần đang chọn, không đổi loại yêu cầu ban đầu.</p>
+      <label class="flow-check"><input type="checkbox" [checked]="customerConsent()" (change)="setCheck('customerConsent', $event)" /> Đã nhận đồng ý rõ ràng từ khách; ghi lại nội dung và kênh xác nhận bên dưới.</label>
     }
-
-    @if (isShipmentFlow()) {
-      <p class="flow-hint">
-        @if (flow() === 'shipment') {
-          Nhập đúng ĐVVC và mã vận đơn của chiều khách gửi về. Sau khi lưu, in phiếu gửi hoàn để khách dán lên kiện hàng.
-        } @else {
-          Nhập ĐVVC và mã vận đơn của đơn đổi. Hệ thống ghi đồng thời lên đơn đổi và phiếu hoàn.
-        }
-      </p>
-      <label class="erp-field">
-        <span>Đơn vị vận chuyển</span>
-        <input class="erp-input" list="return-carriers" [value]="carrier()" (input)="setShipmentField('carrier', $event)" placeholder="GHN, GHTK, Viettel Post…" />
-        <datalist id="return-carriers">
-          @for (item of carriers; track item.code) {
-            <option [value]="item.label"></option>
-          }
-        </datalist>
-      </label>
-      <label class="erp-field">
-        <span>Mã vận đơn</span>
-        <input class="erp-input" [value]="tracking()" (input)="setShipmentField('trackingCode', $event)" placeholder="Mã ĐVVC cấp" />
-      </label>
-      <label class="erp-field">
-        <span>Link theo dõi (tự suy nếu trống)</span>
-        <input class="erp-input" type="url" [value]="trackingUrl()" (input)="setShipmentField('trackingUrl', $event)" placeholder="https://..." />
-      </label>
-      <div class="flow-actions">
-        <button class="erp-btn erp-btn--sm" type="button" (click)="scanOpen.set(true)">Quét label ĐVVC</button>
-      </div>
-    }
-
-    @if (flow() === 'pickup') {
-      <p class="flow-hint">
-        Quét mã phiếu/mã vận đơn trên kiện hàng để đối chiếu trước khi chụp ảnh niêm phong. Ảnh này là bằng chứng đối chiếu với video đóng gói của khách.
-      </p>
-      <div class="flow-actions">
-        <button class="erp-btn erp-btn--sm" type="button" (click)="pickupScanOpen.set(true)">Quét mã trên kiện hàng</button>
-      </div>
-      @if (pickupVerified()) {
-        <p class="flow-hint" role="status">Đã đối chiếu mã phiếu/vận đơn trên kiện hàng.</p>
-      } @else {
-        <p class="flow-warning" role="status">Chưa quét mã trên kiện hàng — chưa thể xác nhận pickup.</p>
-      }
-      <label class="erp-field">
-        <span>Ảnh ĐVVC lấy hàng / niêm phong (bắt buộc, tối đa 8 ảnh)</span>
-        <input class="erp-input" type="file" accept="image/jpeg,image/png,image/webp" multiple (change)="onPickupPhotos($event)" />
-      </label>
-      @if (pickupPhotos().length) {
-        <p class="flow-hint">Đã chọn {{ pickupPhotos().length }} ảnh pickup.</p>
-      }
-      <label class="erp-field">
-        <span>Video pickup (không bắt buộc, MP4/WebM ≤ 50 MB)</span>
-        <input class="erp-input" type="file" accept="video/mp4,video/webm" (change)="onPickupVideo($event)" />
-      </label>
-      @if (pickupVideo(); as video) {
-        <p class="flow-hint">Đã chọn video {{ video.name }}.</p>
-      }
-    }
-
-    @if (flow() === 'manual') {
-      <p class="flow-hint">
-        Số tiền phải đúng bằng giá trị hàng trả ({{ money(refundable()) }}); sai số tiền sẽ bị API từ chối.
-      </p>
-      @if (blockedByReceiver()) {
-        <p class="flow-warning" role="status">
-          Khách chưa có thông tin nhận tiền hợp lệ. Hãy gửi yêu cầu bổ sung trước khi ghi nhận chuyển khoản.
-        </p>
-      }
-      <label class="erp-field">
-        <span>Mã giao dịch chuyển tiền (tối thiểu 6 ký tự)</span>
-        <input class="erp-input" type="text" [value]="transferReference()" (input)="setText('transferReference', $event)" />
-      </label>
-      <label class="erp-field">
-        <span>Số tiền đã chuyển</span>
-        <input class="erp-input" type="number" min="0" step="1000" [value]="amount()" (input)="setAmount($event)" />
-      </label>
-      @if (amountMismatch()) {
-        <p class="erp-error" role="alert">Số tiền phải đúng {{ money(refundable()) }} theo giá trị hàng trả.</p>
-      }
-      <label class="erp-field">
-        <span>Thời điểm chuyển tiền</span>
-        <input class="erp-input" type="datetime-local" [value]="transferredAt()" (input)="setText('transferredAt', $event)" />
-      </label>
-    }
-
-    @if (flow() === 'status') {
-      <label class="erp-field">
-        <span>Trạng thái tiếp theo</span>
-        <select class="erp-select" [value]="targetStatus()" (change)="setTargetStatus($event)">
-          <option value="">Chọn bước</option>
-          @for (option of statusChoices(); track option.value) {
-            <option [value]="option.value">{{ option.label }}</option>
-          }
-        </select>
-      </label>
-      @if (needsTracking()) {
+    @if (flow() === 'change_variant') {
+      @if (loadingVariants()) {
+        <p class="flow-hint">Đang tải danh sách biến thể cùng sản phẩm…</p>
+      } @else if (variantChoices().length) {
         <label class="erp-field">
-          <span>Mã vận đơn</span>
-          <input class="erp-input" type="text" [value]="tracking()" (input)="setText('tracking', $event)" />
-        </label>
-        <div class="flow-actions">
-          <button class="erp-btn erp-btn--sm" type="button" (click)="scanOpen.set(true)">Quét QR vận đơn</button>
-        </div>
-      }
-      @if (needsReason()) {
-        <p class="flow-hint">Trạng thái này cần ghi rõ lý do để khách hàng được thông báo.</p>
-      }
-      @if (needsProofForSupport()) {
-        <p class="flow-hint">Cần ảnh minh chứng khi chuyển phiếu cho CSKH xử lý.</p>
-      }
-    }
-
-    @if (flow() === 'receipt') {
-      <p class="flow-hint">
-        Đối chiếu mã phiếu/niêm phong và bằng chứng khách gửi trước khi mở kiện. Chỉ dòng chọn “Nhập lại kho” mới cộng tồn; hàng lỗi/hủy phải chọn đúng hướng xử lý. Sai khác phải chuyển sang “Cần hỗ trợ” kèm ảnh và lý do.
-      </p>
-      <label class="flow-check">
-        <input type="checkbox" [checked]="sealIntact()" (change)="setPackageCheck('sealIntact', $event)" />
-        <span>Niêm phong/kiện hàng còn nguyên vẹn khi kho nhận</span>
-      </label>
-      <label class="flow-check">
-        <input type="checkbox" [checked]="packageMatch()" (change)="setPackageCheck('packageMatch', $event)" />
-        <span>Kiện hàng khớp với video/ảnh đóng gói của khách và ảnh ĐVVC lấy hàng</span>
-      </label>
-      @if (!sealIntact() || !packageMatch()) {
-        <p class="flow-warning" role="alert">
-          Có sai lệch niêm phong/kiện hàng. Không xác nhận RECEIVED; hãy chuyển phiếu sang “Cần hỗ trợ” kèm ảnh và lý do.
-        </p>
-      }
-      <ul class="flow-receipts">
-        @for (line of receiptSummary(); track line.id) {
-          <li>
-            <div>
-              <strong>Dòng {{ line.id.slice(0, 8) }}</strong>
-              <span>Đăng ký {{ line.expected }}</span>
-            </div>
-            <label class="erp-field">
-              <span>Nhận</span>
-              <input
-                class="erp-input erp-input--sm"
-                type="number"
-                min="0"
-                [value]="line.received"
-                (input)="setReceipt(line.id, 'received', $event)"
-              />
-            </label>
-            <label class="flow-check">
-              <input type="checkbox" [checked]="line.matches" (change)="setReceipt(line.id, 'matches', $event)" />
-              Đúng sản phẩm của shop
-            </label>
-            <label class="erp-field">
-              <span>Hướng xử lý</span>
-              <select class="erp-select" [value]="line.disposition" (change)="setReceipt(line.id, 'disposition', $event)">
-                <option value="restock">Nhập lại kho</option>
-                <option value="repair">Sửa chữa</option>
-                <option value="scrap">Hủy</option>
-                <option value="return_supplier">Trả nhà cung cấp</option>
-              </select>
-            </label>
-            @if (line.short || !line.matches) {
-              <span class="erp-error">Không khớp</span>
+          <span>Chọn biến thể thay thế cùng sản phẩm (size / màu / tồn khả dụng)</span>
+          <select class="erp-select" [value]="replacementVariantId()" (change)="setText('replacementVariantId', $event)">
+            <option value="">-- Chọn biến thể đổi --</option>
+            @for (choice of variantChoices(); track choice.variant_id) {
+              <option
+                [value]="choice.variant_id"
+                [disabled]="(choice.available_stock ?? 0) < quantity()"
+              >
+                {{ choice.color || 'Màu mặc định' }} / {{ choice.size || 'F' }}
+                {{ choice.sku ? ' · ' + choice.sku : '' }}
+                (Khả dụng: {{ choice.available_stock ?? 0 }})
+                {{ (choice.available_stock ?? 0) < quantity() ? ' [Hết hàng]' : '' }}
+                {{ choice.is_current ? ' [Hiện tại]' : '' }}
+              </option>
             }
-          </li>
+          </select>
+        </label>
+        @if (selectedVariantChoice(); as choice) {
+          @if ((choice.available_stock ?? 0) < quantity()) {
+            <p class="flow-warning">Biến thể này hiện còn {{ choice.available_stock ?? 0 }} sản phẩm khả dụng, không đủ cho số lượng đổi {{ quantity() }}. Vui lòng chọn biến thể còn tồn.</p>
+          } @else {
+            <p class="flow-hint">Đã chọn: {{ choice.color || 'Màu mặc định' }} / {{ choice.size || 'F' }} (Tồn khả dụng: {{ choice.available_stock }}). Tồn kho sẽ được giữ khi kho chuẩn bị đơn đổi.</p>
+          }
         }
-        @if (!lines().length) {
-          <li>Phiếu không có dòng hàng nào để kiểm.</li>
-        }
-      </ul>
-      <label class="erp-field">
-        <span>Ghi chú kiểm hàng (không bắt buộc)</span>
-        <textarea class="erp-input" rows="2" [value]="note()" (input)="setNote($event)"></textarea>
-      </label>
+      } @else {
+        <label class="erp-field">
+          <span>Mã biến thể thay thế cùng sản phẩm</span>
+          <input class="erp-input" [value]="replacementVariantId()" (input)="setText('replacementVariantId', $event)" placeholder="Nhập mã biến thể thay thế..." />
+        </label>
+      }
+      <p class="flow-hint">Máy chủ kiểm tra cùng sản phẩm và tồn khả dụng khi chuẩn bị đổi.</p>
     }
-
-    @if (flow() === 'receipt' || flow() === 'manual' || flow() === 'status') {
-      <div class="flow-proof">
-        <div>
-          <strong>Ảnh minh chứng</strong>
-          <p>{{ proofBusy() ? 'Đang nén ảnh…' : 'JPG/PNG/WebP, tự nén còn cạnh dài nhất 1280px.' }}</p>
-        </div>
-        <input class="erp-input" type="file" accept="image/jpeg,image/png,image/webp" (change)="onProofPicked($event)" />
-        @if (proof()) {
-          <img class="flow-proof__thumb" [src]="proof()" alt="Ảnh minh chứng đã chọn" />
-        }
-      </div>
+    @if (flow() === 'pickup' || flow() === 'ship_exchange') {
+      <label class="erp-field"><span>Đơn vị vận chuyển</span><input class="erp-input" [value]="carrier()" (input)="setText('carrier', $event)" /></label>
+      <label class="erp-field"><span>Mã vận đơn của phần hàng</span><input class="erp-input" [value]="tracking()" (input)="setText('tracking', $event)" /></label>
     }
-
-    @if (flow() === 'contact' || flow() === 'reject' || flow() === 'refund-info' || flow() === 'manual' || flow() === 'pickup') {
-      <label class="erp-field">
-        <span>
-          {{
-            flow() === 'reject'
-              ? 'Lý do từ chối (tối thiểu ' + minNote + ' ký tự)'
-              : flow() === 'refund-info'
-                ? 'Nội dung yêu cầu khách bổ sung (tối thiểu ' + minNote + ' ký tự)'
-                : flow() === 'manual'
-                  ? 'Ghi chú đối soát (không bắt buộc)'
-                  : flow() === 'pickup'
-                    ? 'Ghi chú bàn giao ĐVVC (không bắt buộc)'
-                    : 'Ghi chú xử lý (tối thiểu ' + minNote + ' ký tự)'
-          }}
-        </span>
-        <textarea class="erp-input" rows="3" [value]="note()" (input)="setNote($event)"></textarea>
-      </label>
-    } @else if (needsReason()) {
-      <label class="erp-field">
-        <span>Lý do (tối thiểu {{ minNote }} ký tự)</span>
-        <textarea class="erp-input" rows="3" [value]="note()" (input)="setNote($event)"></textarea>
-      </label>
+    @if (flow() === 'pickup') {
+      <label class="erp-field"><span>Người nhận bàn giao / nhân viên lấy hàng</span><input class="erp-input" [value]="pickedUpBy()" (input)="setText('pickedUpBy', $event)" /></label>
+      <label class="erp-field"><span>Thời điểm thực tế lấy hàng</span><input class="erp-input" type="datetime-local" [value]="pickedUpAt()" (input)="setText('pickedUpAt', $event)" /></label>
+      <label class="erp-field"><span>Ảnh bàn giao kiện hàng (bắt buộc)</span><input type="file" accept="image/*" multiple (change)="pickFile('photos', $event)" /><small>{{ pickupPhotos().length }} ảnh đã chọn</small></label>
+      <label class="erp-field"><span>Video bàn giao (không bắt buộc)</span><input type="file" accept="video/mp4,video/webm" (change)="pickFile('video', $event)" /><small>{{ pickupVideo()?.name }}</small></label>
     }
-
-    @if (error()) {
-      <p class="erp-error" role="alert">{{ error() }}</p>
+    @if (flow() === 'receive') {
+      <p class="flow-hint">Nhận {{ receivedQuantity() }} sản phẩm. Có thể giảm số lượng xử lý phía trên để nhận riêng phần hợp lệ.</p>
+      <label class="flow-check"><input type="checkbox" [checked]="matchesProduct()" (change)="setCheck('matchesProduct', $event)" /> Đúng sản phẩm</label>
+      <label class="flow-check"><input type="checkbox" [checked]="tagsIntact()" (change)="setCheck('tagsIntact', $event)" /> Tem / nhãn còn nguyên</label>
+      <label class="flow-check"><input type="checkbox" [checked]="conditionAcceptable()" (change)="setCheck('conditionAcceptable', $event)" /> Tình trạng sản phẩm đạt</label>
+      <label class="flow-check"><input type="checkbox" [checked]="packageMatch()" (change)="setCheck('packageMatch', $event)" /> Kiện hàng khớp</label>
+      <label class="flow-check"><input type="checkbox" [checked]="sealIntact()" (change)="setCheck('sealIntact', $event)" /> Niêm phong còn nguyên</label>
+      <p class="flow-hint">Niêm phong không còn nguyên vẫn được ghi nhận. Tình trạng không đạt chỉ ảnh hưởng phần đang kiểm, không chặn các phần khác.</p>
+      <label class="erp-field"><span>Hướng xử lý kho</span><select class="erp-select" [value]="disposition()" (change)="setDisposition($event)"><option value="restock">Nhập tồn bán được</option><option value="repair">Sửa chữa</option><option value="scrap">Loại bỏ</option><option value="return_supplier">Trả nhà cung cấp</option></select></label>
     }
+    @if (flow() === 'receive' || flow() === 'manual') {
+      <label class="erp-field"><span>{{ flow() === 'manual' ? 'Chứng từ chuyển khoản' : 'Ảnh kiểm hàng tại kho' }} (bắt buộc)</span><input type="file" accept="image/*" (change)="pickFile('proof', $event)" /><small>{{ proofFile()?.name || 'Chưa chọn ảnh' }}</small></label>
+    }
+    @if (isMoney()) {
+      <p class="flow-warning">Số tiền cho riêng phần này: <strong>{{ money(refundable()) }}</strong>. Không dùng tổng giá trị phiếu.</p>
+      @if (flow() === 'manual') {
+        <label class="erp-field"><span>Mã giao dịch chuyển khoản duy nhất</span><input class="erp-input" [value]="transferReference()" (input)="setText('transferReference', $event)" /></label>
+        <label class="erp-field"><span>Thời điểm chuyển khoản thực tế</span><input class="erp-input" type="datetime-local" [value]="transferredAt()" (input)="setText('transferredAt', $event)" /></label>
+      }
+    }
+    @if (flow() === 'complete_exchange') { <p class="flow-warning">Chỉ hoàn tất khi đơn đổi liên kết đã được xác nhận giao thực tế. Không thể xác nhận chỉ bằng thao tác này nếu vận chuyển chưa giao thành công.</p> }
+    <label class="erp-field"><span>{{ needsReason() ? 'Lý do / nội dung xác nhận (bắt buộc)' : 'Ghi chú xử lý' }}</span><textarea class="erp-input" rows="3" [value]="note()" (input)="setText('note', $event)"></textarea>@if (needsReason()) { <small>Tối thiểu {{ minNote }} ký tự. Duyệt sau cuộc gọi không nghe máy phải nêu rõ căn cứ.</small> }</label>
+    @if (error()) { <p class="flow-warning" role="alert">{{ error() }}</p> }
   }
-  <div footer>
-    @if (record()) {
-      <button class="erp-btn erp-btn--sm" type="button" (click)="dismiss()">Hủy</button>
-      <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" [disabled]="!canSubmit()" (click)="submit()">
-        {{ saving() ? 'Đang ghi…' : 'Ghi nhận' }}
-      </button>
-    }
-  </div>
+  <div footer><button class="erp-btn" type="button" [disabled]="saving()" (click)="dismiss()">Hủy</button><button class="erp-btn erp-btn--primary" type="button" [disabled]="!canSubmit()" (click)="submit()">{{ saving() ? 'Đang lưu…' : 'Xác nhận' }}</button></div>
 </app-erp-modal>
-
-<app-erp-qr-scan
-  [open]="scanOpen()"
-  title="Quét QR vận đơn"
-  hint="Quét label chiều hoàn của ĐVVC để điền mã vận đơn."
-  (scanned)="applyTrackingScan($event)"
-  (closed)="scanOpen.set(false)"
-/>
-
-<app-erp-qr-scan
-  [open]="pickupScanOpen()"
-  title="Quét mã trên kiện hàng"
-  hint="Quét mã phiếu hoàn hoặc mã vận đơn in trên kiện hàng để đối chiếu."
-  (scanned)="applyPickupScan($event)"
-  (closed)="pickupScanOpen.set(false)"
-/>

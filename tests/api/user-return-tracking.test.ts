@@ -34,7 +34,7 @@ function repository(overrides: Partial<UserReturnsRepository> = {}): UserReturns
   return {
     findReturnById: async () => baseReturn,
     findOrderById: async () => order,
-    listReturnItemsForReturn: async () => [{ order_item_id: "line-1", quantity: 1 }],
+    listReturnItemsForReturn: async () => [{ return_item_id: "part-1", order_item_id: "line-1", quantity: 1, item_status: "WAITING_RETURN", decision_status: "approved", resolution_type: "refund", reason: "Size does not fit", version: 3 }],
     findOrderItem: async () => ({ variant_id: "v1", product_name: "Ao lua", product_image: "x.jpg", unit_price: 100000 }),
     listReturnShipments: async () => [{
       direction: "inbound",
@@ -76,6 +76,9 @@ test("customer detail exposes tracking, timeline and masks the COD bank account"
   assert.equal(detail.shipment?.carrier, "GHN");
   assert.equal(detail.timeline?.[0]?.label, "Đã tạo vận đơn hoàn");
   assert.equal((detail.items as Array<Record<string, unknown>>)[0]?.["product_name"], "Ao lua");
+  assert.equal((detail.items as Array<Record<string, unknown>>)[0]?.["return_item_id"], "part-1");
+  assert.equal((detail.items as Array<Record<string, unknown>>)[0]?.["decision_status"], "approved");
+  assert.equal((detail.items as Array<Record<string, unknown>>)[0]?.["resolution_type"], "refund");
 });
 
 test("a customer cannot read or upload evidence for another customer's return", async () => {
@@ -92,7 +95,8 @@ test("a customer cannot read or upload evidence for another customer's return", 
 
 test("packing evidence is refused after the carrier has taken the parcel", async () => {
   const service = createUserReturnsService(repository({
-    findReturnById: async () => ({ ...baseReturn, status: "RETURN_IN_TRANSIT" })
+    findReturnById: async () => ({ ...baseReturn, status: "RETURN_IN_TRANSIT" }),
+    listReturnItemsForReturn: async () => [{ return_item_id: "part-1", order_item_id: "line-1", quantity: 1, item_status: "RETURN_SHIPPING" }]
   }));
   await assert.rejects(
     () => service.addPackingEvidenceForMember({ user_id: "u1" } as never, RETURN_ID, "packing_video", "", {} as never),

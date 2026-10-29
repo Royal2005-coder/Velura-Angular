@@ -1,5 +1,5 @@
 import { HttpError } from "../http.js";
-import { callRpc } from "../supabase.js";
+import { callRpc, selectRows } from "../supabase.js";
 import { asJsonObject, asString, type JsonObject } from "../types.js";
 import type { LoyaltyQuote } from "./loyalty-service.js";
 
@@ -48,9 +48,21 @@ export function createLoyaltyRepository(): LoyaltyRepository {
   return {
     snapshot: (actorId, before) => rpc("velura_loyalty_snapshot", { p_actor_id: actorId, p_before: before }),
     quote: async (actorId, subtotal, shipping, discount, points) => {
-      const value = await rpc("velura_loyalty_quote", { p_actor_id: actorId, p_subtotal: subtotal, p_shipping: shipping, p_discount: discount, p_points: points });
+      const [value, accountResult] = await Promise.all([
+        rpc("velura_loyalty_quote", { p_actor_id: actorId, p_subtotal: subtotal, p_shipping: shipping, p_discount: discount, p_points: points })
+          .catch((error: unknown): JsonObject => {
+            console.warn("[LOYALTY_QUOTE] velura_loyalty_quote unavailable:", error);
+            return { available_points: 0, max_points: 0, points_spent: 0, points_discount_amount: 0,
+              policy_approved: false, spending_enabled: false };
+          }),
+        selectRows("loyalty_account", { user_id: `eq.${actorId}`, select: "balance_milli_points,debt_milli_points,warning_flags,accrual_locked,accrual_lock_source", limit: 1 }, { count: "none" })
+      ]);
+      const account = accountResult.rows[0];
       return { available_points: Number(value.available_points), max_points: Number(value.max_points), points_spent: Number(value.points_spent),
-        points_discount_amount: Number(value.points_discount_amount), balance_points: Number(value.balance_points),
+        points_discount_amount: Number(value.points_discount_amount),
+        balance_points: account ? (Number(account.balance_milli_points)-Number(account.debt_milli_points))/1000 : Number(value.balance_points),
+        ...(account ? { debt_points: Number(account.debt_milli_points)/1000, warning_flags: Number(account.warning_flags),
+          accrual_locked: account.accrual_locked === true, accrual_lock_source: asString(account.accrual_lock_source) } : {}),
         policy_approved: value.policy_approved === true, spending_enabled: value.spending_enabled === true };
     },
     register: (input, referralCode) => rpc("velura_register_member", { p_input: input, p_referral_code: referralCode })

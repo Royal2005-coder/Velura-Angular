@@ -3,6 +3,8 @@
 > **Dự án:** Nền tảng Thương mại Điện tử Thời trang Cao cấp Velura  
 > **File Excel UAT:** [Velura_UAT_Core_Workflows_6_Testers.xlsx](./Velura_UAT_Core_Workflows_6_Testers.xlsx)
 
+> **Đổi/trả theo BA 3.1.6 và 3.1.13:** dùng [bộ UAT User/Admin hiện hành](./UAT_RETURN_EXCHANGE.md), gồm đối chiếu triển khai, dữ liệu chuẩn bị, 6 hành trình và 114 ca kiểm thử. Hướng dẫn URL/port và TAB 3 bên dưới là tài liệu cũ; không dùng để kết luận đạt luồng Admin ERP hiện tại hoặc dùng OTP demo làm bằng chứng xác thực thực tế.
+
 ---
 
 ## 1. MÔI TRƯỜNG KIỂM THỬ (TEST ENVIRONMENTS)

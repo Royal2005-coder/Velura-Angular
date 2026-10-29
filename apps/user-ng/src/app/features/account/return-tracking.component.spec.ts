@@ -28,6 +28,7 @@ const detail: ReturnTrackingDetail = {
   exchangeOrder: null,
   evidence: [],
   instructions: ['Quay video đóng gói.', 'Dán nhãn vận đơn hoàn.'],
+  items: [],
 };
 
 describe('ReturnTrackingComponent', () => {
@@ -62,6 +63,20 @@ describe('ReturnTrackingComponent', () => {
     expect(text).toContain('GHN123456789');
     expect(text).toContain('RETABC123');
     expect(text).toContain('In phiếu gửi hoàn');
+  });
+
+  it('shows split quantities, independent decisions and resolutions without changing the original request type', async () => {
+    const { fixture, component } = boot({ typeLabel: 'Đổi hàng', status: 'IN_PROGRESS', items: [
+      { variantId: 'v1', returnItemId: 'part-a', orderItemId: 'line-a', productName: 'Áo', quantity: 1, itemStatus: 'COMPLETED', decisionStatus: 'approved', resolutionType: 'refund', refundAmount: 100000, reason: 'Đổi sang hoàn tiền theo đồng ý khách' },
+      { variantId: 'v1', returnItemId: 'part-b', orderItemId: 'line-a', productName: 'Áo', quantity: 2, itemStatus: 'REJECTED', decisionStatus: 'rejected', resolutionType: 'exchange', reason: 'Không đúng sản phẩm' },
+    ] });
+    await component.load('r1'); fixture.detectChanges();
+    const text = (fixture.nativeElement as HTMLElement).textContent || '';
+    expect(text).toContain('Đổi hàng · Đơn');
+    expect(text).toContain('part-a'); expect(text).toContain('part-b');
+    expect(text).toContain('SL 1'); expect(text).toContain('SL 2');
+    expect(text).toContain('Hoàn tiền'); expect(text).toContain('Bị từ chối');
+    expect(text).toContain('100000'); expect(text).toContain('Không đúng sản phẩm');
   });
 
   it('uploads packing photos/video to the model and reloads the detail', async () => {

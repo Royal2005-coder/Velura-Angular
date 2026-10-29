@@ -36,6 +36,15 @@
       </article>
     </div>
 
+    @if ((wallet.debt_points ?? 0) > 0 || wallet.balance_points < 0) {
+      <p class="loyalty__policy" role="status">Ví đang nợ {{ wallet.debt_points ?? -wallet.balance_points }} điểm sau hoàn tiền. Bạn vẫn có thể mua hàng và tích điểm; điểm từ đơn đã thanh toán, giao thành công tiếp theo sẽ bù nợ trước, phần còn lại vào số dư khả dụng.</p>
+    }
+    @if (wallet.accrual_locked && wallet.accrual_lock_source === 'manual') {
+      <p class="loyalty__policy" role="status">Tích điểm đang bị quản trị viên khoá riêng, không phải do nợ điểm. Vui lòng liên hệ CSKH.</p>
+    } @else if (wallet.accrual_locked && wallet.accrual_lock_source === 'legacy_unknown') {
+      <p class="loyalty__policy" role="status">Ví có khoá tích điểm cũ cần quản trị viên kiểm tra. Nợ điểm tự nó không khoá mua hàng hay tích điểm.</p>
+    }
+
     @if (!wallet.policy.spending_enabled || !wallet.policy.policy_approved_at) {
       <p class="loyalty__policy" role="status">Tính năng dùng điểm khi thanh toán đang tạm khóa.</p>
     }

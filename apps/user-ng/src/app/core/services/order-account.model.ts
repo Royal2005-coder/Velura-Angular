@@ -97,6 +97,8 @@ export interface ReturnTrackingDetail {
   exchangeOrder: ReturnTrackingExchangeOrder | null;
   evidence: ReturnTrackingEvidence[];
   instructions: string[];
+  /** All split parts, including rejected and independently completed resolutions. */
+  items: DemoReturnLine[];
 }
 
 /**

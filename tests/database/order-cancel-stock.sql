@@ -28,20 +28,20 @@ declare
  actor uuid := '9a000000-0000-4000-8000-000000000001';
  unpaid uuid := '9a000000-0000-4000-8000-000000000040';
  paid uuid := '9a000000-0000-4000-8000-000000000041';
- variant uuid := '9a000000-0000-4000-8000-000000000031';
+ v_variant uuid := '9a000000-0000-4000-8000-000000000031';
 begin
  -- Unpaid online order: cancel must release the reservation, never restock undeducted stock.
  perform public.velura_order_service_action(unpaid,'customer_cancel',actor,'Khách đổi ý','{}'::jsonb,1);
  if (select status::text from public.orders where order_id=unpaid)<>'cancelled' then raise exception 'Unpaid order not cancelled'; end if;
- if (select reserved_quantity from public.variant where variant_id=variant)<>1 then raise exception 'Reservation not released for unpaid order'; end if;
- if (select stock_quantity from public.variant where variant_id=variant)<>10 then raise exception 'Unpaid cancel restocked stock that was never deducted'; end if;
+ if (select reserved_quantity from public.variant where variant_id=v_variant)<>1 then raise exception 'Reservation not released for unpaid order'; end if;
+ if (select stock_quantity from public.variant where variant_id=v_variant)<>10 then raise exception 'Unpaid cancel restocked stock that was never deducted'; end if;
  if (select stock_reservation_released_at from public.orders where order_id=unpaid) is null then raise exception 'Reservation release timestamp missing'; end if;
 
  -- Paid/committed order: cancel restocks the deducted unit exactly once.
  update public.orders set stock_reserved_at=now(),stock_committed_at=now(),stock_reservation_released_at=now() where order_id=paid;
- update public.variant set stock_quantity=9,reserved_quantity=0 where variant_id=variant;
+ update public.variant set stock_quantity=9,reserved_quantity=0 where variant_id=v_variant;
  perform public.velura_order_service_action(paid,'customer_cancel',actor,'Khách đổi ý','{}'::jsonb,1);
- if (select stock_quantity from public.variant where variant_id=variant)<>10 then raise exception 'Committed order not restocked'; end if;
+ if (select stock_quantity from public.variant where variant_id=v_variant)<>10 then raise exception 'Committed order not restocked'; end if;
  if (select stock_returned_at from public.orders where order_id=paid) is null then raise exception 'Restock timestamp missing'; end if;
 end $$;
 rollback;

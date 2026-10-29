@@ -95,6 +95,9 @@ describe('AdminErpProductsPage', () => {
         if (status === 'out_of_stock') {
           return of({ rows: [], count: 2 });
         }
+        if (params?.['lowStock'] === 'true') {
+          return of({ rows: [], count: 1 });
+        }
         return listProducts(params);
       },
       listCategories: () => of({ rows: [{ category_id: 'c1', name: 'Áo khoác' }] as AdminCategoryRow[], count: 1 }),

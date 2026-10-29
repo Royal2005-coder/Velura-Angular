@@ -26,6 +26,7 @@ export function createProductRepository() {
         if (value) query.or = `(name.ilike.*${value}*,sku.ilike.*${value}*)`;
       }
       if (filters.status) query.status = `eq.${filters.status}`;
+      if (filters.priceState) query.price_state = `eq.${filters.priceState}`;
       if (filters.categoryId) query.category_id = `eq.${filters.categoryId}`;
       if (filters.isCombo !== undefined) query.is_combo = `eq.${filters.isCombo}`;
       if (filters.isFeatured !== undefined) query.is_featured = `eq.${filters.isFeatured}`;
@@ -172,6 +173,19 @@ export function createProductRepository() {
         p_expected_version: input.expectedVersion,
         p_ip_address: input.ipAddress
       }, accessToken);
+    },
+
+    /** One transactional stock+threshold adjustment for every line of a warehouse batch. */
+    bulkAdjustStock(productId: string, updates: JsonObject[], reason: string, ipAddress: string, accessToken: string | null) {
+      return callRpc("velura_bulk_adjust_stock", {
+        p_product_id: productId,
+        p_updates: updates,
+        p_reason: reason,
+        p_ip_address: ipAddress
+      }, {
+        accessToken,
+        headers: { "x-velura-client-ip": ipAddress }
+      });
     },
 
     async createVariant(productId: string, input: JsonObject, accessToken?: string | null) {

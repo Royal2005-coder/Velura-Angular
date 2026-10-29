@@ -10,6 +10,7 @@ import { useBodyClass } from '../../core/body-class';
 import { AuthFrame } from './auth-frame';
 
 const PKCE_STORAGE_KEY = 'velura-admin-erp-oauth-pkce';
+const STATE_STORAGE_KEY = 'velura-admin-erp-oauth-state';
 
 /**
  * Admin sign-in through the existing `/api/auth/signin` lockout flow.
@@ -275,11 +276,14 @@ export class AuthLoginPage {
       const redirectTo = `${window.location.origin}/auth/callback`;
       const verifier = this.randomVerifier();
       const challenge = await this.codeChallenge(verifier);
-      localStorage.setItem(PKCE_STORAGE_KEY, verifier);
+      const state = crypto.randomUUID();
+      sessionStorage.setItem(PKCE_STORAGE_KEY, verifier);
+      sessionStorage.setItem(STATE_STORAGE_KEY, state);
       const url =
         `${environment.apiUrl}/api/auth/google` +
         `?redirect_to=${encodeURIComponent(redirectTo)}` +
-        `&code_challenge=${encodeURIComponent(challenge)}`;
+        `&code_challenge=${encodeURIComponent(challenge)}` +
+        `&state=${encodeURIComponent(state)}`;
       window.location.href = url;
     } catch {
       this.errorMessage.set('Không thể kết nối Google SSO. Vui lòng thử lại hoặc đăng nhập bằng email.');

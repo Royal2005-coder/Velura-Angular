@@ -173,6 +173,10 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
     if (req.method === "GET" && parts[1] === "auth" && parts[2] === "google") {
       const redirectTo = validatedOAuthRedirect(url.searchParams.get("redirect_to") || "");
       const challenge = url.searchParams.get("code_challenge") || "";
+      const state = url.searchParams.get("state") || "";
+      if (state && !/^[A-Za-z0-9._~-]{16,128}$/.test(state)) {
+        throw new HttpError(400, "BAD_REQUEST", "Invalid OAuth state");
+      }
       if (!challenge || !config.supabaseUrl) {
         throw new HttpError(400, "BAD_REQUEST", "Missing OAuth parameters");
       }
@@ -180,7 +184,8 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
         `${config.supabaseUrl}/auth/v1/authorize?provider=google` +
         `&code_challenge=${encodeURIComponent(challenge)}` +
         `&code_challenge_method=s256` +
-        `&redirect_to=${encodeURIComponent(redirectTo)}`;
+        `&redirect_to=${encodeURIComponent(redirectTo)}` +
+        (state ? `&state=${encodeURIComponent(state)}` : "");
       res.writeHead(302, { Location: location, ...corsHeaders });
       res.end();
       return;

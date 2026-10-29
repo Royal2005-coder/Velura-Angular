@@ -1,5 +1,13 @@
 <div class="shell" [class.is-collapsed]="sidebarCollapsed()">
-  <aside class="sidebar" id="erp-sidebar" [class.is-open]="mobileNavOpen()" aria-label="Điều hướng Velura ERP">
+  <aside
+    #sidebar
+    class="sidebar"
+    id="erp-sidebar"
+    [class.is-open]="mobileNavOpen()"
+    [attr.inert]="isMobile() && !mobileNavOpen() ? '' : null"
+    [attr.aria-hidden]="isMobile() && !mobileNavOpen() ? 'true' : null"
+    aria-label="Điều hướng Velura ERP"
+  >
     <div class="sidebar__brand">
       <a class="brand" routerLink="/dashboard" aria-label="Velura ERP — Tổng quan">
         <img src="/admin-assets/images/logo.png" alt="" />

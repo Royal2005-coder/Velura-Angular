@@ -1,6 +1,6 @@
 import { asProfile, AUTH_PROFILE_SELECT, loadProfileForAuthUser } from "./auth-profile.js";
 import { verifyJwt } from "./auth-helper.js";
-import { HttpError } from "./http.js";
+import { HttpError, getRequestIp } from "./http.js";
 import { getAuthUser, selectOne } from "./supabase.js";
 import type { AuthContext, AuthUser, HttpRequest, UserProfile } from "./types.js";
 
@@ -129,8 +129,9 @@ export function accessForRole(roleCode: string): {
  * Build guest, member, or admin context from the Authorization header.
  */
 export async function buildAuthContext(req: HttpRequest): Promise<AuthContext> {
+  const ipAddress = getRequestIp(req);
   const token = getToken(req);
-  if (!token) return buildGuestContext();
+  if (!token) return buildGuestContext(ipAddress);
 
   let authUser: AuthUser | null = null;
   try {
@@ -165,11 +166,12 @@ export async function buildAuthContext(req: HttpRequest): Promise<AuthContext> {
       allowedPages: access.allowedPages,
       allowedModules: access.allowedModules,
       capabilities: access.capabilities,
-      accessToken: token
+      accessToken: token,
+      ipAddress
     };
   }
 
-  if (!authUser?.id) return buildGuestContext();
+  if (!authUser?.id) return buildGuestContext(ipAddress);
 
   let profile: UserProfile | null = null;
   try {
@@ -188,7 +190,8 @@ export async function buildAuthContext(req: HttpRequest): Promise<AuthContext> {
       allowedPages: rolePages.member,
       allowedModules: roleModules.member,
       capabilities: capabilitiesForRole("member"),
-      accessToken: token
+      accessToken: token,
+      ipAddress
     };
   }
 
@@ -203,7 +206,8 @@ export async function buildAuthContext(req: HttpRequest): Promise<AuthContext> {
     allowedPages: access.allowedPages,
     allowedModules: access.allowedModules,
     capabilities: access.capabilities,
-    accessToken: token
+    accessToken: token,
+    ipAddress
   };
 }
 
@@ -246,7 +250,7 @@ export function requirePermission(context: AuthContext, moduleName: string, acti
   }
 }
 
-function buildGuestContext(): AuthContext {
+function buildGuestContext(ipAddress?: string): AuthContext {
   return {
     authUser: null,
     profile: null,
@@ -256,7 +260,8 @@ function buildGuestContext(): AuthContext {
     allowedPages: rolePages.guest,
     allowedModules: roleModules.guest,
     capabilities: capabilitiesForRole("guest"),
-    accessToken: ""
+    accessToken: "",
+    ipAddress
   };
 }
 

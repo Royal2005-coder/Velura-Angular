@@ -227,7 +227,12 @@
     <section class="member-section" aria-labelledby="member-trail-title">
       <div class="member-section__head">
         <h3 id="member-trail-title">Dấu vết điểm</h3>
-        <span>{{ member.totals.ledger_entries }} bút toán</span>
+        <span>
+          {{ member.totals.ledger_entries }} bút toán
+          @if (member.trail.length < member.totals.ledger_entries) {
+            · hiển thị {{ member.trail.length }} gần nhất
+          }
+        </span>
       </div>
       @if (!member.trail.length) {
         <p class="member-notice">Chưa có bút toán nào.</p>

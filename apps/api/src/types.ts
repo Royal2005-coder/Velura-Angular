@@ -74,6 +74,8 @@ export interface AuthContext {
   /** Action-level permissions derived from the canonical role matrix. */
   capabilities?: Record<string, string[]>;
   accessToken: string;
+  /** Client IP resolved by the HTTP layer, forwarded to audited RPCs. */
+  ipAddress?: string;
 }
 
 /**

@@ -5,6 +5,11 @@ import { RETURN_SELECT, TICKET_SELECT } from "./return-constants.js";
 import { classifyReturnPayment, refundFlowFor, refundReceiverStatus, type ReturnPaymentKind } from "./return-refund-receiver.js";
 import { writeAuditLog } from "../audit.js";
 
+/** Forward the resolved client IP so audited RPCs can replace their legacy 127.0.0.1. */
+function clientIpOptions(ipAddress?: string) {
+  return ipAddress ? { headers: { "x-velura-client-ip": ipAddress } } : {};
+}
+
 /**
  * Filters for listing return / exchange records.
  */
@@ -143,7 +148,8 @@ export function createReturnRepository() {
       returnId: string,
       expectedVersion: number,
       input: ManualRefundInput,
-      actorId: string
+      actorId: string,
+      ipAddress?: string
     ): Promise<JsonObject> {
       try {
         return asJsonObject(await callRpc("velura_record_manual_return_refund", {
@@ -155,7 +161,7 @@ export function createReturnRepository() {
           p_proof: input.proof,
           p_note: input.note || null,
           p_actor_id: actorId
-        }));
+        }, clientIpOptions(ipAddress)));
       } catch (error: unknown) {
         throw mapReturnDatabaseError(error);
       }
@@ -190,13 +196,13 @@ export function createReturnRepository() {
         throw mapReturnDatabaseError(error);
       }
     },
-    async prepareExchange(returnId: string, expectedVersion: number, actorId: string) {
+    async prepareExchange(returnId: string, expectedVersion: number, actorId: string, ipAddress?: string) {
       try {
         return asJsonObject(await callRpc("velura_prepare_exchange", {
           p_return_id: returnId,
           p_expected_version: expectedVersion,
           p_actor_id: actorId
-        }));
+        }, clientIpOptions(ipAddress)));
       } catch (error: unknown) {
         // The RPC owns stock reservation, replacement-order creation and the status transition in
         // one transaction. A fallback would repeat those rules outside a transaction and could
@@ -206,7 +212,7 @@ export function createReturnRepository() {
     },
 
     /** Creates or replaces the inbound return label without moving the return to transit yet. */
-    async createReturnShipment(returnId: string, expectedVersion: number, input: ReturnShipmentInput, actorId: string) {
+    async createReturnShipment(returnId: string, expectedVersion: number, input: ReturnShipmentInput, actorId: string, ipAddress?: string) {
       try {
         return asJsonObject(await callRpc("velura_create_return_shipment", {
           p_return_id: returnId,
@@ -216,14 +222,14 @@ export function createReturnRepository() {
           p_tracking_url: input.trackingUrl || null,
           p_label_url: input.labelUrl || null,
           p_actor_id: actorId
-        }));
+        }, clientIpOptions(ipAddress)));
       } catch (error: unknown) {
         throw mapReturnDatabaseError(error);
       }
     },
 
     /** Receives the parcel, restocks eligible lines and records dispositions in one transaction. */
-    async receiveReturn(returnId: string, expectedVersion: number, input: ReturnReceiptInput, actorId: string) {
+    async receiveReturn(returnId: string, expectedVersion: number, input: ReturnReceiptInput, actorId: string, ipAddress?: string) {
       try {
         return asJsonObject(await callRpc("velura_receive_return", {
           p_return_id: returnId,
@@ -234,14 +240,14 @@ export function createReturnRepository() {
           p_warehouse_proof: input.warehouseProof,
           p_qa_note: input.qaNote || null,
           p_actor_id: actorId
-        }));
+        }, clientIpOptions(ipAddress)));
       } catch (error: unknown) {
         throw mapReturnDatabaseError(error);
       }
     },
 
     /** Confirms the carrier took the sealed parcel; the return enters RETURN_IN_TRANSIT. */
-    async confirmReturnPickup(returnId: string, expectedVersion: number, input: ReturnPickupInput, actorId: string) {
+    async confirmReturnPickup(returnId: string, expectedVersion: number, input: ReturnPickupInput, actorId: string, ipAddress?: string) {
       try {
         return asJsonObject(await callRpc("velura_confirm_return_pickup", {
           p_return_id: returnId,
@@ -250,28 +256,28 @@ export function createReturnRepository() {
           p_video_url: input.videoUrl || null,
           p_note: input.note || null,
           p_actor_id: actorId
-        }));
+        }, clientIpOptions(ipAddress)));
       } catch (error: unknown) {
         throw mapReturnDatabaseError(error);
       }
     },
 
     /** Records a carrier tracking update without changing the warehouse receipt state. */
-    async updateReturnShipmentStatus(returnId: string, status: string, note: string | undefined, actorId: string) {
+    async updateReturnShipmentStatus(returnId: string, status: string, note: string | undefined, actorId: string, ipAddress?: string) {
       try {
         return asJsonObject(await callRpc("velura_update_return_shipment_status", {
           p_return_id: returnId,
           p_status: status,
           p_note: note || null,
           p_actor_id: actorId
-        }));
+        }, clientIpOptions(ipAddress)));
       } catch (error: unknown) {
         throw mapReturnDatabaseError(error);
       }
     },
 
     /** Ships the linked replacement order and moves the return to EXCHANGE_SHIPPING atomically. */
-    async shipExchange(returnId: string, expectedVersion: number, input: ReturnShipmentInput, actorId: string) {
+    async shipExchange(returnId: string, expectedVersion: number, input: ReturnShipmentInput, actorId: string, ipAddress?: string) {
       try {
         return asJsonObject(await callRpc("velura_ship_exchange", {
           p_return_id: returnId,
@@ -281,20 +287,20 @@ export function createReturnRepository() {
           p_tracking_url: input.trackingUrl || null,
           p_label_url: input.labelUrl || null,
           p_actor_id: actorId
-        }));
+        }, clientIpOptions(ipAddress)));
       } catch (error: unknown) {
         throw mapReturnDatabaseError(error);
       }
     },
 
     /** Closes an exchange and marks its linked replacement order delivered in one transaction. */
-    async completeExchange(returnId: string, expectedVersion: number, actorId: string) {
+    async completeExchange(returnId: string, expectedVersion: number, actorId: string, ipAddress?: string) {
       try {
         return asJsonObject(await callRpc("velura_complete_exchange", {
           p_return_id: returnId,
           p_expected_version: expectedVersion,
           p_actor_id: actorId
-        }));
+        }, clientIpOptions(ipAddress)));
       } catch (error: unknown) {
         throw mapReturnDatabaseError(error);
       }

@@ -279,6 +279,10 @@ export class AuthLoginPage {
       const state = crypto.randomUUID();
       sessionStorage.setItem(PKCE_STORAGE_KEY, verifier);
       sessionStorage.setItem(STATE_STORAGE_KEY, state);
+      // Keep a same-origin fallback for identity providers that finish the redirect in
+      // another tab; both copies are removed on callback.
+      localStorage.setItem(PKCE_STORAGE_KEY, verifier);
+      localStorage.setItem(STATE_STORAGE_KEY, state);
       const url =
         `${environment.apiUrl}/api/auth/google` +
         `?redirect_to=${encodeURIComponent(redirectTo)}` +

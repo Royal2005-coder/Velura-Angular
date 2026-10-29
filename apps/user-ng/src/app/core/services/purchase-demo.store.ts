@@ -36,6 +36,7 @@ export interface DemoOrderLine extends CartLine {
   isInProgress?: boolean;
   inProgressCode?: string;
   inProgressStatus?: string;
+  availableRefundUnitAmounts?: number[];
 }
 /** Demo orders are isolated from the production cart, account and API. */
 export interface DemoOrder {
@@ -56,6 +57,8 @@ export interface DemoOrder {
   shipping: number;
   discount: number;
   total: number;
+  pointsDiscount?: number;
+  voucherDiscountType?: string;
   voucher: string;
   createdAt: string;
   deliveredAt?: string;
@@ -75,6 +78,24 @@ export interface DemoOrder {
 export interface DemoReturnLine {
   variantId: string;
   quantity: number;
+  /** Persisted part identity survives splitting and keeps same-product quantities distinct. */
+  returnItemId?: string;
+  expectedVersion?: number;
+  orderItemId?: string;
+  productName?: string;
+  itemStatus?: string;
+  decisionStatus?: string;
+  resolutionType?: 'refund' | 'exchange';
+  exchangeOrderId?: string;
+  refundAmount?: number;
+  exchangeOrderCode?: string;
+  exchangeOrderStatus?: string;
+  exchangeTrackingCode?: string;
+  exchangeTrackingUrl?: string;
+  attentionStatus?: string;
+  reason?: string;
+  updatedAt?: string;
+  completedAt?: string;
   replacement?: string;
   /** Actual same-product replacement variant; preview labels never authorize a real exchange. */
   replacementVariantId?: string;
@@ -102,7 +123,8 @@ export interface ComboComponentItem {
 
 /** A return request follows the BA contact, inbound parcel and refund/exchange timeline. */
 export type ReturnWorkflowStatus = 'REQUESTED' | 'CONTACTING' | 'WAITING_RETURN' | 'RETURN_IN_TRANSIT' | 'RECEIVED'
-  | 'REFUND_PROCESSING' | 'REFUNDED' | 'EXCHANGE_PREPARING' | 'EXCHANGE_SHIPPING' | 'COMPLETED' | 'CANCELLED' | 'NEEDS_SUPPORT';
+  | 'REFUND_PROCESSING' | 'REFUNDED' | 'EXCHANGE_PREPARING' | 'EXCHANGE_SHIPPING' | 'COMPLETED' | 'CANCELLED' | 'NEEDS_SUPPORT'
+  | 'IN_PROGRESS' | 'PARTIALLY_APPROVED' | 'REJECTED' | 'APPROVED' | 'RETURN_SHIPPING' | 'REFUND_PENDING';
 
 /** Presentation labels correspond to persisted workflow states, without inventing a stage. */
 export const RETURN_WORKFLOW_LABELS: Record<ReturnWorkflowStatus, string> = {
@@ -110,6 +132,8 @@ export const RETURN_WORKFLOW_LABELS: Record<ReturnWorkflowStatus, string> = {
   RETURN_IN_TRANSIT: 'Hàng đang gửi về', RECEIVED: 'Đã nhận hàng hoàn', REFUND_PROCESSING: 'Đang hoàn tiền',
   REFUNDED: 'Đã hoàn tiền', EXCHANGE_PREPARING: 'Đang chuẩn bị hàng đổi', EXCHANGE_SHIPPING: 'Đang giao hàng đổi',
   COMPLETED: 'Hoàn tất', CANCELLED: 'Đã hủy yêu cầu', NEEDS_SUPPORT: 'Cần CSKH hỗ trợ',
+  IN_PROGRESS: 'Các phần đang được xử lý', PARTIALLY_APPROVED: 'Chấp nhận một phần', REJECTED: 'Bị từ chối',
+  APPROVED: 'Đã duyệt', RETURN_SHIPPING: 'Hàng đang gửi về', REFUND_PENDING: 'Đang hoàn tiền',
 };
 
 /** Receiving-account state for a COD refund, as reported by CSKH-facing workflow (API contract tokens). */

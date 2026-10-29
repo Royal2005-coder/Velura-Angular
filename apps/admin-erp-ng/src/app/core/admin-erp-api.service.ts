@@ -548,7 +548,7 @@ export interface AdminOrderRow {
   allowed_actions?: AdminOrderAction[];
   can_simulate_carrier?: boolean;
   payments?: AdminOrderPayment[];
-  items?: Array<{ product_name?: string; quantity?: number; unit_price?: number }>;
+  items?: Array<{ item_id?: string; order_item_id?: string; variant_id?: string; product_id?: string; product_name?: string; quantity?: number; unit_price?: number }>;
   history?: Array<{ old_status?: string | null; new_status?: string; changed_at?: string; note?: string; trigger_type?: string }>;
   events?: AdminOrderEvent[];
   evidence?: AdminOrderEvidence[];
@@ -877,6 +877,9 @@ export type AdminReturnCancelledBy = 'customer' | 'admin' | 'system';
 export type AdminReturnStatus =
   | 'REQUESTED'
   | 'CONTACTING'
+  | 'IN_PROGRESS'
+  | 'PARTIALLY_APPROVED'
+  | 'REJECTED'
   | 'WAITING_RETURN'
   | 'RETURN_IN_TRANSIT'
   | 'RECEIVED'
@@ -929,9 +932,48 @@ export interface AdminReturnPayment {
   created_at?: string;
 }
 
-/** One registered line of the original order, used for the warehouse receipt check. */
+/** One versioned quantity part of an original order line, with independent decision and progress. */
+/** Available replacement variant of the same product for exchange selection. */
+export interface AdminReturnReplacementChoice {
+  variant_id: string;
+  sku?: string;
+  color?: string;
+  size?: string;
+  stock_quantity?: number;
+  reserved_quantity?: number;
+  available_stock?: number;
+  is_current?: boolean;
+}
+
 export interface AdminReturnLine {
   return_item_id?: string;
+  version?: number;
+  item_status?: string;
+  decision_status?: 'pending' | 'approved' | 'rejected';
+  resolution_type?: 'refund' | 'exchange';
+  replacement_variant_id?: string | null;
+  product_id?: string;
+  product_name?: string;
+  current_variant_id?: string;
+  variant_id?: string;
+  replacement_choices?: AdminReturnReplacementChoice[];
+  exchange_order_id?: string | null;
+  exchange_order?: AdminReturnExchangeOrder | null;
+  refund_amount?: number;
+  refundable_amount?: number;
+  attention_status?: string | null;
+  reason?: string | null;
+  decision_reason?: string | null;
+  received_quantity?: number;
+  matches_product?: boolean | null;
+  tags_intact?: boolean | null;
+  condition_acceptable?: boolean | null;
+  package_match?: boolean | null;
+  seal_intact?: boolean | null;
+  receipt_proof_ref?: string | null;
+  approved_at?: string | null;
+  receipt_at?: string | null;
+  completed_at?: string | null;
   order_item_id?: string;
   quantity?: number;
   disposition?: AdminReturnDisposition | string | null;
@@ -1000,6 +1042,9 @@ export interface AdminReturnRow {
   order_code?: string;
   user_id?: string;
   status?: AdminReturnStatus | string;
+  decision_status?: string;
+  progress_status?: string;
+  attention_status?: string | null;
   request_type?: string;
   return_type?: string;
   description?: string;
@@ -1023,6 +1068,7 @@ export interface AdminReturnRow {
   refund_receiver?: AdminRefundReceiver | null;
   manual_refund?: AdminManualRefund | null;
   evidence_images?: string[];
+  evidence_videos?: string[];
   tracking_return_code?: string;
   /** The outbound replacement leg must never reuse the customer's return tracking. */
   exchange_tracking_code?: string;
@@ -1054,11 +1100,6 @@ export interface AdminReturnRow {
   exchange_order?: AdminReturnExchangeOrder | null;
 }
 
-/** Rejection of a return; the note is the reason the customer sees. */
-export interface AdminReturnRejectInput {
-  reason: string;
-  expectedVersion: number;
-}
 
 /** Result of one outreach attempt on a return in `CONTACTING`. */
 export interface AdminReturnContactInput {
@@ -1077,45 +1118,11 @@ export interface AdminReturnReceiptLine {
   dispositionNote?: string;
 }
 
-export interface AdminReturnStatusInput {
-  status: AdminReturnStatus | string;
-  expectedVersion: number;
-  conditionCheckResult?: string;
-  imageProof?: string;
-  reason?: string;
-  trackingReturnCode?: string;
-  items?: AdminReturnReceiptLine[];
-  packageMatch?: boolean;
-  sealIntact?: boolean;
-  qaNote?: string;
-}
-
-/** Creates the inbound return label the customer attaches to the parcel. */
-export interface AdminReturnShipmentInput {
-  expectedVersion: number;
-  carrier: string;
-  trackingCode: string;
-  trackingUrl?: string;
-  labelUrl?: string;
-}
-
-/** Carrier pickup proof; photos/videos are already stored and passed as storage refs. */
-export interface AdminReturnPickupInput {
-  expectedVersion: number;
-  photoUrls: string[];
-  videoUrl?: string;
-  note?: string;
-}
-
-/** The RPC returns the updated return and its shipment together. */
-export interface AdminReturnShipmentResult {
-  return?: AdminReturnRow;
-  shipment?: AdminReturnShipment;
-}
 
 /** Reconciliation record of a refund paid outside the gateway. */
 export interface AdminManualRefundInput {
   expectedVersion: number;
+  returnItemId: string;
   transferReference: string;
   amount: number;
   /** Transfer instant in ISO 8601; the API rejects a future timestamp. */
@@ -1128,6 +1135,36 @@ export interface AdminManualRefundInput {
 export interface AdminRefundInfoRequestInput {
   message: string;
   expectedVersion: number;
+}
+
+/** Per-part workflow commands; request type is never rewritten by a resolution change. */
+export type AdminReturnItemAction = 'approve' | 'reject' | 'wait_return' | 'pickup' | 'receive'
+  | 'needs_support' | 'resolve' | 'stop' | 'convert_refund' | 'change_variant'
+  | 'prepare_exchange' | 'ship_exchange' | 'complete_exchange';
+
+/** Flat payload consumed by the item action RPC under optimistic concurrency. */
+export interface AdminReturnItemActionInput {
+  action: AdminReturnItemAction;
+  expectedVersion: number;
+  quantity?: number;
+  reason?: string;
+  customerConsent?: boolean;
+  replacementVariantId?: string;
+  receivedQuantity?: number;
+  matchesProduct?: boolean;
+  tagsIntact?: boolean;
+  conditionAcceptable?: boolean;
+  packageMatch?: boolean;
+  sealIntact?: boolean;
+  disposition?: AdminReturnDisposition;
+  dispositionNote?: string;
+  receiptProofRef?: string;
+  trackingNumber?: string;
+  carrier?: string;
+  photoUrls?: string[];
+  videoUrl?: string;
+  pickedUpBy?: string;
+  pickedUpAt?: string;
 }
 
 /** Support ticket; chat-linked tickets stay read-only and are worked in their chat session. */
@@ -1856,11 +1893,12 @@ export class AdminErpApiService {
     return this.http.get<AdminReturnRow>(`${this.baseUrl}/api/v1/admin/returns/${encodeURIComponent(returnId)}`);
   }
 
-  /**
-   * Rejects a return with the reason the customer is shown.
-   */
-  rejectReturn(returnId: string, body: AdminReturnRejectInput): Observable<AdminReturnRow> {
-    return this.http.post<AdminReturnRow>(`${this.baseUrl}/api/v1/admin/returns/${encodeURIComponent(returnId)}/reject`, body);
+  /** Applies one versioned decision or operational fact to one quantity part. */
+  actOnReturnItem(returnId: string, returnItemId: string, body: AdminReturnItemActionInput): Observable<AdminReturnRow> {
+    return this.http.post<AdminReturnRow>(
+      `${this.baseUrl}/api/v1/admin/returns/${encodeURIComponent(returnId)}/items/${encodeURIComponent(returnItemId)}/action`,
+      body,
+    );
   }
 
   /**
@@ -1870,55 +1908,6 @@ export class AdminErpApiService {
     return this.http.post<AdminReturnRow>(`${this.baseUrl}/api/v1/admin/returns/${encodeURIComponent(returnId)}/contact`, body);
   }
 
-  /**
-   * Moves a return along its workflow: statuses, shipment codes and the warehouse receipt check.
-   */
-  updateReturnStatus(returnId: string, body: AdminReturnStatusInput): Observable<AdminReturnRow> {
-    return this.http.post<AdminReturnRow>(
-      `${this.baseUrl}/api/v1/admin/returns/${encodeURIComponent(returnId)}/update-status`,
-      body,
-    );
-  }
-
-  /**
-   * Creates the inbound return label with the carrier AWB the customer will attach.
-   */
-  createReturnShipment(returnId: string, body: AdminReturnShipmentInput): Observable<AdminReturnShipmentResult> {
-    return this.http.post<AdminReturnShipmentResult>(
-      `${this.baseUrl}/api/v1/admin/returns/${encodeURIComponent(returnId)}/shipment`,
-      body,
-    );
-  }
-
-  /**
-   * Confirms the carrier took the sealed parcel and stores pickup evidence.
-   */
-  confirmReturnPickup(returnId: string, body: AdminReturnPickupInput): Observable<AdminReturnShipmentResult> {
-    return this.http.post<AdminReturnShipmentResult>(
-      `${this.baseUrl}/api/v1/admin/returns/${encodeURIComponent(returnId)}/pickup`,
-      body,
-    );
-  }
-
-  /**
-   * Records an inbound carrier status update (`in_transit`, `delivered`, `failed`).
-   */
-  updateReturnShipmentStatus(returnId: string, body: { status: string; note?: string }): Observable<AdminReturnShipmentResult> {
-    return this.http.post<AdminReturnShipmentResult>(
-      `${this.baseUrl}/api/v1/admin/returns/${encodeURIComponent(returnId)}/shipment-status`,
-      body,
-    );
-  }
-
-  /**
-   * Ships the linked replacement order and moves the return to EXCHANGE_SHIPPING.
-   */
-  shipExchange(returnId: string, body: AdminReturnShipmentInput): Observable<AdminReturnShipmentResult> {
-    return this.http.post<AdminReturnShipmentResult>(
-      `${this.baseUrl}/api/v1/admin/returns/${encodeURIComponent(returnId)}/exchange-shipment`,
-      body,
-    );
-  }
 
   /**
    * Uploads one private evidence file (pickup/QA/refund proof) and returns its signed URL + storage ref.
@@ -1939,7 +1928,7 @@ export class AdminErpApiService {
    */
   triggerStripeRefund(
     returnId: string,
-    body: { expectedVersion: number },
+    body: { expectedVersion: number; returnItemId: string },
   ): Observable<{ success: boolean; refund: { status: 'refunded' | 'requested' | 'failed' | 'skipped'; message?: string } | null }> {
     return this.http.post<{
       success: boolean;

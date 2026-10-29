@@ -25,6 +25,12 @@ export async function handleReturnRoute({ req, res, url, parts, context, headers
       return true;
     }
 
+    if (req.method === "POST" && parts[5] === "items" && parts[6] && parts[7] === "action" && parts.length === 8) {
+      const body = await readJson(req, config.maxBodyBytes);
+      sendJson(res, 200, await service.actOnItem(context ? { ...context, ...requestMeta } : undefined, returnId, parts[6], body), headers);
+      return true;
+    }
+
     if (req.method === "POST" && parts[5] === "contact" && parts.length === 6) {
       const body = await readJson(req, config.maxBodyBytes);
       sendJson(res, 200, await service.recordContact(context, returnId, body), headers);

@@ -420,9 +420,7 @@ export class OrderFlowPage {
     if (!order || !this.withinWindow(order)) return false;
     const items = order.items || [];
     if (!items.length) return false;
-    const activeReq = this.orderActiveReturn(order);
-    if (items.length === 1 && activeReq) return false;
-    return items.some((line) => !line.isInProgress && (line.returnCount ?? 0) < 2 && (line.availableQuantity ?? 1) > 0);
+    return items.some((line) => line.availableQuantity > 0);
   }
 
   /** Finds an active (in-progress) return request for the given order. */
@@ -496,7 +494,7 @@ export class OrderFlowPage {
       return `Tất cả sản phẩm trong đơn đang trong tiến trình đổi/trả (${statusText}).`;
     }
     if (items.every((l) => (l.returnCount ?? 0) >= 2)) {
-      return 'Đã sử dụng tối đa 2/2 lượt đổi/trả trong 30 ngày cho đơn hàng này.';
+      return 'Các đơn vị sản phẩm đã sử dụng tối đa 2 lượt đổi/trả trong 7 ngày.';
     }
     return 'Tất cả sản phẩm trong đơn đã được hoàn trả hoặc đổi mới.';
   }
@@ -514,7 +512,7 @@ export class OrderFlowPage {
   startReturn(): void {
     const order = this.order();
     if (!order || !this.authorized(order) || !this.canStartReturn(order)) return;
-    const eligibleLines = order.items.filter((l) => !l.isInProgress && (l.returnCount ?? 0) < 2 && (l.availableQuantity ?? 1) > 0);
+    const eligibleLines = order.items.filter((line) => line.availableQuantity > 0);
     const initialSelections: Record<string, DemoReturnLine> = {};
     if (order.items.length === 1 && eligibleLines.length === 1) {
       const sole = eligibleLines[0];
@@ -534,7 +532,7 @@ export class OrderFlowPage {
 
   /** Per-item selection respects remaining quantities, combo bundle, and the two-request cap. */
   select(line: DemoOrderLine, checked: boolean): void {
-    if (checked && (line.isInProgress || line.returnCount >= 2 || line.availableQuantity < 1)) return;
+    if (checked && line.availableQuantity < 1) return;
     const order = this.order();
     if (!checked && order && order.items.length === 1) return;
     this.selections.update((rows) => {
@@ -610,19 +608,18 @@ export class OrderFlowPage {
       };
     });
   }
-  /** Validate optional image evidence before local preview, without uploading. */
+  /** Initial images and video are required; packing video can be added later optionally. */
   files(event: Event): void {
     const input = event.target as HTMLInputElement;
     const files = Array.from(input.files || []);
+    const all = [...this.evidence().map((item) => item.file), ...files];
     if (
-      files.length + this.evidence().length > 5 ||
-      files.some(
-        (file) =>
-          !['image/jpeg', 'image/png', 'image/webp'].includes(file.type) ||
-          file.size > 5 * 1024 * 1024,
-      )
+      all.filter((file) => file.type.startsWith('image/')).length > 5 ||
+      all.filter((file) => file.type.startsWith('video/')).length > 3 ||
+      files.some((file) => !['image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'video/webm'].includes(file.type) ||
+        file.size > (file.type.startsWith('video/') ? 50 : 5) * 1024 * 1024)
     ) {
-      this.error.set('Chọn tối đa 5 ảnh JPG, PNG hoặc WebP, mỗi ảnh không quá 5 MB.');
+      this.error.set('Chọn tối đa 5 ảnh JPG/PNG/WebP (5 MB) và 3 video MP4/WebM (50 MB).');
       input.value = '';
       return;
     }
@@ -648,8 +645,8 @@ export class OrderFlowPage {
     const order = this.order();
     for (const selected of this.selectedLines()) {
       const line = order?.items.find((item) => item.variant_id === selected.variantId);
-      if (line?.isInProgress) {
-        this.error.set(`Sản phẩm "${line.product_name}" đang có yêu cầu đổi/trả đang xử lý. Vui lòng chờ hoàn tất.`);
+      if (!line || selected.quantity > line.availableQuantity) {
+        this.error.set('Số lượng vượt quá số lượng còn khả dụng đổi/trả.');
         return;
       }
       if (this.returnKind === 'refund' && line?.is_combo && selected.quantity < line.quantity) {
@@ -676,7 +673,16 @@ export class OrderFlowPage {
         }
       }
     }
-    if (this.requiresRefundBank() && (!this.bankName.trim() || !this.bankHolder.trim() || !/^\d{6,20}$/.test(this.bankAccount.trim()))) {
+    if (!this.returnReason.trim() && !this.returnReasonCode) {
+      this.error.set('Vui lòng nhập lý do đổi/trả.');
+      return;
+    }
+    if (!this.evidence().some((item) => item.file.type.startsWith('image/')) ||
+      !this.evidence().some((item) => item.file.type.startsWith('video/'))) {
+      this.error.set('Cần ít nhất một ảnh và một video ban đầu.');
+      return;
+    }
+    if (this.requiresRefundBank() && (this.bankName.trim() || this.bankAccount.trim() || this.bankHolder.trim()) && (!this.bankName.trim() || !this.bankHolder.trim() || !/^\d{6,20}$/.test(this.bankAccount.trim()))) {
       this.error.set('Vui lòng nhập ngân hàng, số tài khoản từ 6–20 chữ số và tên chủ tài khoản cho đơn COD.');
       return;
     }
@@ -706,7 +712,7 @@ export class OrderFlowPage {
     const order = this.order();
     if (!order || !this.authorized(order) || this.busy()) return;
     this.busy.set(true);
-    const bank: RefundBankDetails | undefined = this.requiresRefundBank()
+    const bank: RefundBankDetails | undefined = this.requiresRefundBank() && !!(this.bankName.trim() || this.bankAccount.trim() || this.bankHolder.trim())
       ? { bankName: this.bankName.trim(), accountNumber: this.bankAccount.trim(), accountHolder: this.bankHolder.trim() }
       : undefined;
     this.timeout = setTimeout(() => {
@@ -749,7 +755,7 @@ export class OrderFlowPage {
   }
   /** Whether this refund goes back through a COD manual transfer that needs the customer's receiving account. */
   private isCodRefund(request: DemoReturn): boolean {
-    if (request.kind !== 'refund') return false;
+    if (request.kind !== 'refund' && !request.items.some((part) => part.resolutionType === 'refund')) return false;
     return request.paymentMethod ? request.paymentMethod === 'COD' : this.order()?.payment === 'COD';
   }
   private receiverEditable(request: DemoReturn): boolean {
@@ -760,9 +766,10 @@ export class OrderFlowPage {
   needsReceiverInfo(request: DemoReturn): boolean {
     if (!this.receiverEditable(request)) return false;
     const receiver = request.refundReceiver;
-    if (!receiver) return !request.bank && request.stage >= 1;
+    const processing = request.stage >= 1 || (!!request.status && request.status !== 'REQUESTED');
+    if (!receiver) return !request.bank && processing;
     if (receiver.status === 'valid' || receiver.status === 'not_required') return false;
-    return request.stage >= 1 || !!receiver.supplementRequest;
+    return processing || !!receiver.supplementRequest;
   }
   /** The valid receiving account to echo back to the customer (server shape first, legacy demo `bank` second). */
   receiverSummary(request: DemoReturn): { name: string; last4: string; holder: string } | null {
@@ -821,13 +828,23 @@ export class OrderFlowPage {
   refundEstimate(items: DemoReturnLine[]): number {
     const order = this.order();
     if (!order || !order.subtotal) return 0;
-    return Math.round(
-      items.reduce(
-        (sum, item) => sum + (this.lineFor(item.variantId)?.unit_price || 0) * item.quantity,
-        0,
-      ) *
-        (1 - order.discount / order.subtotal),
-    );
+    return items.reduce((sum, item) => {
+      const line = this.lineFor(item.variantId);
+      if (!line) return sum;
+      if (line.availableRefundUnitAmounts && line.availableRefundUnitAmounts.length > 0) {
+        return sum + line.availableRefundUnitAmounts.slice(0, item.quantity).reduce((s, a) => s + a, 0);
+      }
+      const unitPrice = line.unit_price || 0;
+      const discount = order.voucherDiscountType === 'free_shipping' ? 0 : (order.discount || 0);
+      const points = order.pointsDiscount || 0;
+      const effectiveCash = Math.max(0, order.subtotal - discount - points);
+      const ratio = effectiveCash / order.subtotal;
+      let lineTotal = 0;
+      for (let unit = 1; unit <= item.quantity; unit++) {
+        lineTotal += Math.floor(unitPrice * unit * ratio) - Math.floor(unitPrice * (unit - 1) * ratio);
+      }
+      return sum + lineTotal;
+    }, 0);
   }
   /** Human-readable local dates retain their source timestamp in the Model. */
   date(value?: string): string {

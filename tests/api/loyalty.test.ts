@@ -128,6 +128,25 @@ test("LoyaltyService.quote blocks guests from spending points", async () => {
   assert.equal(quote.points_discount_amount, 100000);
 });
 
+test("LoyaltyService.quote keeps refund debt and warnings informational without disabling redemption", async () => {
+  const repo: LoyaltyRepository = {
+    snapshot: async () => ({}),
+    quote: async (_actor, _subtotal, _shipping, _discount, points) => ({
+      balance_points: -30, debt_points: 40, warning_flags: 2,
+      accrual_locked: false, accrual_lock_source: "none",
+      available_points: 10, max_points: 10, points_spent: points, points_discount_amount: points * 1000,
+      policy_approved: true, spending_enabled: true
+    }),
+    register: async () => ({})
+  };
+  const quote = await new LoyaltyService(repo).quote(memberContext, 100000, 0, 0, 5);
+  assert.equal(quote.debt_points, 40);
+  assert.equal(quote.balance_points, -30);
+  assert.equal(quote.warning_flags, 2);
+  assert.equal(quote.spending_enabled, true);
+  assert.equal(quote.points_spent, 5);
+});
+
 test("LoyaltyService.register validates referral code format", async () => {
   const repo: LoyaltyRepository = {
     snapshot: async () => ({}),

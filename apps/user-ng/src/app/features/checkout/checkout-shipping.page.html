@@ -582,6 +582,9 @@
               [disabled]="!quote()?.loyalty?.spending_enabled || submitting()" />
             <p>Khả dụng: {{ quote()?.loyalty?.available_points ?? 0 }} điểm.
               Đơn này tối đa {{ quote()?.loyalty?.max_points ?? 0 }} điểm, sau voucher và không tính phí giao hàng.</p>
+            @if ((quote()?.loyalty?.debt_points ?? 0) > 0) {
+              <p role="status">Bạn đang nợ {{ quote()?.loyalty?.debt_points }} điểm sau hoàn tiền. Bạn vẫn có thể mua hàng và tích điểm; điểm từ đơn đã thanh toán, giao thành công tiếp theo sẽ bù nợ trước.</p>
+            }
             @if (quote()?.loyalty && !quote()?.loyalty?.spending_enabled) {
               <p role="status">Sử dụng điểm đang chờ phê duyệt chính sách làm tròn và hết hạn. Điểm tích lũy vẫn được giữ trong ví.</p>
             }

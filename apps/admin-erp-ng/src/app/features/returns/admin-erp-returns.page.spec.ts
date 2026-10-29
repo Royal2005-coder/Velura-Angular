@@ -34,7 +34,7 @@ const rows: AdminReturnRow[] = [
   },
 ];
 
-const detail: AdminReturnRow = { ...rows[0], refundable_amount: 500_000, lines: [{ order_item_id: 'i-1', quantity: 2 }] };
+const detail: AdminReturnRow = { ...rows[0], refundable_amount: 500_000, lines: [{ return_item_id: 'ri-1', order_item_id: 'i-1', quantity: 2, version: 4, decision_status: 'pending', item_status: 'REQUESTED', resolution_type: 'refund' }] };
 
 const tickets: AdminTicketRow[] = [
   { ticket_id: 't-1', title: 'Khách cần đổi size', status: 'open', priority: 'high', version: 1 },
@@ -43,12 +43,11 @@ const tickets: AdminTicketRow[] = [
 ];
 
 describe('AdminErpReturnsPage', () => {
-  function boot(capabilities: Record<string, string[]> = { returns: ['read', 'update'] }) {
+  function boot(capabilities: Record<string, string[]> = { returns: ['read', 'update'] }, role = 'admin_operator_cskh_dt') {
     TestBed.resetTestingModule();
     const calls = {
       returns: [] as Record<string, string>[],
       tickets: [] as Record<string, string>[],
-      status: [] as Record<string, unknown>[],
       respond: [] as Record<string, unknown>[],
       close: [] as Record<string, unknown>[],
       serviceLogs: [] as Record<string, string>[],
@@ -78,10 +77,6 @@ describe('AdminErpReturnsPage', () => {
         return of({ rows: tickets, count: 3 });
       },
       getTicket: (id: string) => of(tickets.find((row) => row.ticket_id === id) || tickets[0]),
-      updateReturnStatus: (_id: string, body: Record<string, unknown>) => {
-        calls.status.push(body);
-        return of(detail);
-      },
       respondTicket: (_id: string, body: Record<string, unknown>) => {
         calls.respond.push(body);
         return of({ ...tickets[0], status: 'processing', version: 2 });
@@ -126,7 +121,7 @@ describe('AdminErpReturnsPage', () => {
       providers: [provideRouter([]), { provide: AdminErpApiService, useValue: api }],
     });
     TestBed.inject(AdminErpSessionService).applyAuthContext({
-      role: 'admin_operator_cskh_dt',
+      role,
       roleName: 'CSKH',
       isAdmin: true,
       allowedPages: ['returns-cskh'],
@@ -175,61 +170,59 @@ describe('AdminErpReturnsPage', () => {
     expect(filtered[0]['offset']).toBe('0');
   });
 
-  it('rereads the return before offering a write, because list rows omit refund facts', () => {
-    const { page } = boot();
+  it('rereads detail and leaves final decisions to the explicit super-admin role', () => {
+    const { page } = boot({ returns: ['read', 'update', 'approve'] });
     page.openReturn(rows[0]);
-
     expect(page.selected()?.refundable_amount).toBe(500_000);
-    expect(page.nextSteps().map((step) => step.value)).toEqual(['CONTACTING', 'CANCELLED']);
-    expect(page.gates.stripe(page.selected())).toBe(false);
-    expect(page.gates.manual(page.selected())).toBe(false);
-    expect(page.gates.receipt(page.selected())).toBe(false);
-    expect(page.nextStep()?.flow).toBe('contact');
-  });
-
-  it('only routes money after the warehouse accepted the goods and QA passed', () => {
-    const { page } = boot();
-    page.selected.set({ ...detail, status: 'RETURN_IN_TRANSIT' });
-    expect(page.gates.stripe(page.selected())).toBe(false);
-    expect(page.nextStep()?.flow).toBe('receipt');
-
-    page.selected.set({
-      ...detail,
-      status: 'RECEIVED',
-      condition_check_result: 'qa_pass',
-      refund_receiver_status: 'valid',
-      payment: { payment_status: 'paid' },
-    });
-    expect(page.gates.manual(page.selected())).toBe(true);
-    expect(page.nextStep()?.flow).toBe('gateway');
-  });
-
-  it('routes a QA-passed exchange into EXCHANGE_PREPARING with the target already selected', () => {
-    const { page } = boot();
-    page.selected.set({ ...detail, status: 'RECEIVED', condition_check_result: 'qa_pass', return_type: 'exchange' });
-
-    expect(page.nextStep()?.flow).toBe('exchange');
-    page.runNextStep();
-    expect(page.flow()).toBe('exchange');
-
-    page.closeFlow();
-    page.selected.set({ ...detail, status: 'EXCHANGE_PREPARING', condition_check_result: 'qa_pass', return_type: 'exchange' });
-    page.moveStep('EXCHANGE_SHIPPING');
-    expect(page.flow()).toBe('exchange-shipment');
-  });
-
-  it('opens a write flow instead of writing bare when the step needs evidence', () => {
-    const { page, calls } = boot();
-    page.openReturn({ ...rows[1], status: 'RETURN_IN_TRANSIT' } as AdminReturnRow);
-    page.moveStep('RECEIVED');
-    expect(page.flow()).toBe('receipt');
-    expect(calls.status.length).toBe(0);
-
-    page.closeFlow();
-    page.moveStep('CONTACTING');
-    expect(calls.status.length).toBe(1);
-    expect(calls.status[0]['status']).toBe('CONTACTING');
+    expect(page.canApprove()).toBe(false);
+    expect(page.itemActions(detail.lines![0])).toEqual([]);
+    page.openFlow('approve', detail.lines![0]);
     expect(page.flow()).toBeNull();
+  });
+
+  it('lets super-admin decide each part without deriving decisions from the header', () => {
+    const { page } = boot({ returns: ['read', 'update'] }, 'super_admin');
+    page.openReturn(rows[0]);
+    expect(page.canApprove()).toBe(true);
+    expect(page.itemActions(detail.lines![0])).toEqual(['approve', 'reject']);
+    page.openFlow('approve', detail.lines![0]);
+    expect(page.flowLine()?.return_item_id).toBe('ri-1');
+    expect(page.flow()).toBe('approve');
+  });
+
+  it('offers money per approved refund part even when the original request was exchange', () => {
+    const { page } = boot();
+    page.selected.set({ ...detail, return_type: 'exchange', refund_receiver_status: 'valid' });
+    const part = { ...detail.lines![0], item_status: 'RECEIVED', decision_status: 'approved' as const, refundable_amount: 250_000 };
+    expect(page.itemActions(part)).toContain('manual');
+    expect(page.itemActions({ ...part, item_status: 'RETURN_SHIPPING' })).not.toContain('manual');
+    page.openFlow('manual', part);
+    expect(page.flowLine()).toEqual(part);
+    expect(page.selected()?.return_type).toBe('exchange');
+  });
+
+  it('shows mixed decisions, waiting customer, initial video and independently keyed parts', () => {
+    const { page, fixture } = boot({ returns: ['read'] });
+    page.selected.set({
+      ...detail, status: 'IN_PROGRESS', decision_status: 'PARTIALLY_APPROVED', attention_status: 'waiting_customer',
+      contact_due_at: '2020-01-01T00:00:00Z', evidence_images: ['/proof.jpg'], evidence_videos: ['/initial.webm'],
+      lines: [{ ...detail.lines![0], return_item_id: 'part-a', quantity: 1, decision_status: 'approved', item_status: 'WAITING_RETURN' },
+        { ...detail.lines![0], return_item_id: 'part-b', quantity: 1, decision_status: 'rejected', item_status: 'REJECTED' }],
+    });
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+    expect(element.querySelectorAll('[data-return-item-id]').length).toBe(2);
+    expect(element.querySelector('video')?.getAttribute('src')).toBe('/initial.webm');
+    expect(element.textContent).toContain('Duyệt một phần');
+    expect(element.textContent).toContain('Đã quá hạn liên hệ');
+    expect(element.textContent).toContain('Chờ khách bổ sung');
+  });
+
+  it('masks bank data for a nonfinancial order reader even with broad update grants', () => {
+    const { page } = boot({ returns: ['read', 'update'] }, 'admin_viewer');
+    expect(page.canFinance()).toBe(false);
+    expect(page.bankAccount('1234567890')).toBe('•••• 7890');
+    expect(page.itemActions({ ...detail.lines![0], decision_status: 'approved', item_status: 'RECEIVED' })).not.toContain('manual');
   });
 
   it('filters tickets server-side and keeps chat-linked tickets read-only', () => {

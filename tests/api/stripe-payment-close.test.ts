@@ -282,13 +282,15 @@ test("tiền về khi đơn đã huỷ: không chuyển đơn, không trừ kho,
 
 interface StripeCall {
   url: string;
+  method: string;
   headers: Record<string, string>;
+  body: URLSearchParams;
 }
 
 function stripeReply(status: number, body: unknown): { impl: typeof fetch; calls: StripeCall[] } {
   const calls: StripeCall[] = [];
   const impl = (async (input: URL | string, init?: RequestInit) => {
-    calls.push({ url: String(input), headers: (init?.headers ?? {}) as Record<string, string> });
+    calls.push({ url: String(input), method: init?.method || "GET", headers: (init?.headers ?? {}) as Record<string, string>, body: new URLSearchParams(String(init?.body || "")) });
     return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
   }) as typeof fetch;
   return { impl, calls };
@@ -297,7 +299,7 @@ function stripeReply(status: number, body: unknown): { impl: typeof fetch; calls
 function refundPostgrest() {
   return fakePostgrest((call) => {
     if (call.method === "GET" && call.path === "/rest/v1/payment") {
-      return [{ payment_id: "pay_1", gateway_transaction_ref: "pi_paid", version: 3 }];
+      return [{ payment_id: "pay_1", gateway_transaction_ref: "pi_paid", version: 3, amount: 500000, refunded_amount: 0 }];
     }
     if (call.method === "PATCH") return [{ payment_id: "pay_1" }];
     return [];
@@ -316,7 +318,7 @@ async function withStripeKey(run: () => Promise<void>): Promise<void> {
 
 test("Stripe hoàn xong ngay thì payment sang Đã hoàn tiền; idempotency key theo payment và phiên bản", async () => {
   const pg = refundPostgrest();
-  const stripe = stripeReply(200, { id: "re_1", status: "succeeded" });
+  const stripe = stripeReply(200, { id: "re_1", status: "succeeded", amount: 500000 });
   try {
     await withStripeKey(async () => {
       const result = await refundStripeOrder(ORDER, stripe.impl);
@@ -337,7 +339,7 @@ test("Stripe nhận yêu cầu nhưng xử lý sau thì giữ Chờ hoàn tiền
   const pg = refundPostgrest();
   try {
     await withStripeKey(async () => {
-      const result = await refundStripeOrder(ORDER, stripeReply(200, { id: "re_1", status: "pending" }).impl);
+      const result = await refundStripeOrder(ORDER, stripeReply(200, { id: "re_1", status: "pending", amount: 500000 }).impl);
       assert.deepEqual(result, { status: "requested" });
     });
     assert.equal(pg.calls.filter((c) => c.method === "PATCH").length, 0);
@@ -449,4 +451,183 @@ test("khoản thanh toán thứ hai cho đơn đã có tiền được hoàn l�
     config.stripeSecretKey = originalKey;
     pg.restore();
   }
+});
+
+const RETURN = "22222222-2222-2222-2222-222222222222";
+const ITEM_A = "33333333-3333-3333-3333-333333333333";
+const ITEM_B = "44444444-4444-4444-4444-444444444444";
+
+function returnRefundPostgrest(initial: Record<string, unknown>[]) {
+  const operations = initial.map(operation => ({ ...operation }));
+  const pg = fakePostgrest(call => {
+    if (call.path === "/rest/v1/payment") {
+      return [{ payment_id: "pay_1", gateway_transaction_ref: "pi_paid", version: 99,
+        amount: 500000, refunded_amount: 0, payment_status: "refund_pending" }];
+    }
+    if (call.path === "/rest/v1/rpc/velura_prepare_return_refund") {
+      return operations.find(operation => operation.return_item_id === bodyOf(call).p_return_item_id);
+    }
+    if (call.path === "/rest/v1/rpc/velura_complete_return_refund") {
+      const operation = operations.find(operation => operation.return_item_id === bodyOf(call).p_return_item_id);
+      assert.ok(operation);
+      assert.equal(operation.provider_ref, bodyOf(call).p_provider_ref);
+      operation.status = "succeeded";
+      return { status: "succeeded" };
+    }
+    if (call.path === "/rest/v1/payment_refund") {
+      const matched = operations.filter(operation => ["refund_id", "return_item_id", "return_id", "payment_id", "provider_ref"]
+        .every(key => !call.query.has(key) || call.query.get(key) === `eq.${String(operation[key])}`));
+      if (call.method === "PATCH") {
+        const writable = matched.filter(operation => operation.status !== "succeeded" &&
+          (!bodyOf(call).provider_ref || !operation.provider_ref || operation.provider_ref === bodyOf(call).provider_ref));
+        for (const operation of writable) Object.assign(operation, bodyOf(call));
+        return writable;
+      }
+      return matched;
+    }
+    return [];
+  });
+  return { ...pg, operations };
+}
+
+function itemOperation(itemId: string, refundId: string, amount = 100000) {
+  return { refund_id: refundId, return_id: RETURN, return_item_id: itemId, payment_id: "pay_1",
+    amount, status: "requested", provider_ref: null as string | null };
+}
+
+test("return refunds require item identity before reserving or calling Stripe", async () => {
+  const pg = fakePostgrest(() => []);
+  const stripe = stripeReply(200, {});
+  try {
+    await assert.rejects(refundStripeOrder(ORDER, { returnId: RETURN, fetchImpl: stripe.impl }),
+      { code: "RETURN_ITEM_REQUIRED" });
+    assert.equal(pg.calls.length, 0);
+    assert.equal(stripe.calls.length, 0);
+  } finally { pg.restore(); }
+});
+
+test("each item has a stable financial key across version changes and unknown network outcomes", async () => {
+  const pg = returnRefundPostgrest([itemOperation(ITEM_A, "op_a"), itemOperation(ITEM_B, "op_b", 150000)]);
+  const stripe = stripeReply(200, { id: "re_a", status: "pending", amount: 100000 });
+  const failedCalls: StripeCall[] = [];
+  const unknown = (async (input: URL | RequestInfo, init?: RequestInit) => {
+    failedCalls.push({ url: String(input), method: init?.method || "GET",
+      headers: init?.headers as Record<string, string>, body: new URLSearchParams(String(init?.body)) });
+    throw new Error("connection lost after Stripe accepted");
+  }) as typeof fetch;
+  try {
+    await withStripeKey(async () => {
+      assert.equal((await refundStripeOrder(ORDER, { returnId: RETURN, returnItemId: ITEM_A, expectedVersion: 4, fetchImpl: unknown })).status, "requested");
+      assert.equal(pg.operations[0].status, "requested");
+      assert.equal((await refundStripeOrder(ORDER, { returnId: RETURN, returnItemId: ITEM_A, expectedVersion: 8, fetchImpl: stripe.impl })).status, "requested");
+      const other = stripeReply(200, { id: "re_b", status: "pending", amount: 150000 });
+      await refundStripeOrder(ORDER, { returnId: RETURN, returnItemId: ITEM_B, expectedVersion: 1, fetchImpl: other.impl });
+      assert.equal(failedCalls[0].headers["idempotency-key"], "return-refund-op_a");
+      assert.equal(stripe.calls[0].headers["idempotency-key"], "return-refund-op_a");
+      assert.equal(other.calls[0].headers["idempotency-key"], "return-refund-op_b");
+      assert.equal(stripe.calls[0].body.get("metadata[refund_id]"), "op_a");
+      assert.equal(stripe.calls[0].body.get("metadata[return_item_id]"), ITEM_A);
+    });
+    const patches = pg.calls.filter(call => call.method === "PATCH" && call.path === "/rest/v1/payment_refund");
+    assert.deepEqual(patches.map(call => [call.query.get("refund_id"), call.query.get("return_item_id")]),
+      [["eq.op_a", `eq.${ITEM_A}`], ["eq.op_b", `eq.${ITEM_B}`]]);
+    assert.ok(patches.every(call => call.query.get("status") === "in.(requested,pending,failed)"));
+    assert.equal(pg.calls.filter(call => call.path.endsWith("velura_complete_return_refund")).length, 0);
+  } finally { pg.restore(); }
+});
+
+test("a pending provider refund is retrieved on retry, not created twice", async () => {
+  const pg = returnRefundPostgrest([{ ...itemOperation(ITEM_A, "op_a"), status: "pending", provider_ref: "re_a" }]);
+  const stripe = stripeReply(200, { id: "re_a", status: "succeeded", amount: 100000 });
+  try {
+    await withStripeKey(async () => {
+      assert.equal((await refundStripeOrder(ORDER, { returnId: RETURN, returnItemId: ITEM_A, expectedVersion: 9, fetchImpl: stripe.impl })).status, "refunded");
+    });
+    assert.equal(stripe.calls[0].method, "GET");
+    assert.equal(stripe.calls[0].url, "https://api.stripe.com/v1/refunds/re_a");
+    const completion = pg.calls.find(call => call.path.endsWith("velura_complete_return_refund"));
+    assert.deepEqual(bodyOf(completion), { p_return_id: RETURN, p_provider_ref: "re_a", p_return_item_id: ITEM_A });
+  } finally { pg.restore(); }
+});
+
+test("missing or mismatched Stripe amounts and non-success statuses cannot complete an item", async () => {
+  const pg = returnRefundPostgrest([itemOperation(ITEM_A, "op_a")]);
+  try {
+    await withStripeKey(async () => {
+      for (const body of [{ id: "re_a", status: "succeeded" }, { id: "re_a", status: "succeeded", amount: 99999 },
+        { id: "re_a", status: "requires_action", amount: 100000 }]) {
+        assert.equal((await refundStripeOrder(ORDER, { returnId: RETURN, returnItemId: ITEM_A, fetchImpl: stripeReply(200, body).impl })).status, "requested");
+      }
+    });
+    assert.equal(pg.calls.filter(call => call.path.endsWith("velura_complete_return_refund")).length, 0);
+  } finally { pg.restore(); }
+});
+
+test("webhooks independently complete matching succeeded items, never pending or amount-mismatched siblings", async () => {
+  const pg = returnRefundPostgrest([
+    { ...itemOperation(ITEM_A, "op_a"), status: "pending", provider_ref: "re_a" },
+    { ...itemOperation(ITEM_B, "op_b", 150000), status: "pending", provider_ref: "re_b" }
+  ]);
+  try {
+    assert.equal(await markStripeRefunded("pi_paid", 250000, [
+      { id: "re_a", status: "succeeded", amount: 100000 },
+      { id: "re_b", status: "pending", amount: 150000 }
+    ]), "refunded");
+    assert.equal(pg.operations[0].status, "succeeded");
+    assert.equal(pg.operations[1].status, "pending");
+    assert.equal(await markStripeRefunded("pi_paid", 250000, [{ id: "re_b", status: "succeeded", amount: 149999 }]), "ignored");
+    assert.equal(await markStripeRefunded("pi_paid", undefined, [{ id: "re_b", status: "succeeded", amount: 150000 }]), "refunded");
+    assert.equal(await markStripeRefunded("pi_paid", 250000, [{ id: "re_b", status: "succeeded", amount: 150000 }]), "ignored");
+    const completions = pg.calls.filter(call => call.path.endsWith("velura_complete_return_refund"));
+    assert.deepEqual(completions.map(call => bodyOf(call).p_return_item_id), [ITEM_A, ITEM_B]);
+    assert.equal(pg.calls.filter(call => call.method === "PATCH" && call.path === "/rest/v1/payment").length, 0);
+  } finally { pg.restore(); }
+});
+
+test("signed webhook metadata resolves the provider-response persistence race without downgrading success", async () => {
+  const pg = returnRefundPostgrest([itemOperation(ITEM_A, "op_a"), itemOperation(ITEM_B, "op_b")]);
+  const metadata = { refund_id: "op_a", return_item_id: ITEM_A, return_id: RETURN };
+  const stripe = (async () => {
+    assert.equal(await markStripeRefunded("pi_paid", undefined, [{ id: "re_a", status: "succeeded", amount: 100000, metadata }]), "refunded");
+    return new Response(JSON.stringify({ id: "re_a", status: "pending", amount: 100000 }), { status: 200 });
+  }) as typeof fetch;
+  try {
+    await withStripeKey(async () => {
+      assert.equal((await refundStripeOrder(ORDER, { returnId: RETURN, returnItemId: ITEM_A, fetchImpl: stripe })).status, "refunded");
+    });
+    assert.equal(pg.operations[0].status, "succeeded");
+    assert.equal(pg.operations[1].status, "requested");
+    assert.equal(pg.calls.filter(call => call.path.endsWith("velura_complete_return_refund")).length, 1);
+  } finally { pg.restore(); }
+});
+
+test("Stripe refund.updated supplies its exact refund object even without a charge aggregate", () => {
+  const refund = { id: "re_a", payment_intent: "pi_paid", status: "succeeded", amount: 100000 };
+  assert.deepEqual(classifyStripeEvent(event("refund.updated", refund)),
+    { kind: "refunded", paymentIntentId: "pi_paid", refunds: [refund] });
+});
+
+test("a replay of an already succeeded operation returns without another provider call", async () => {
+  const pg = returnRefundPostgrest([{ ...itemOperation(ITEM_A, "op_a"), status: "succeeded", provider_ref: "re_a" }]);
+  const stripe = stripeReply(200, { id: "re_other", status: "succeeded", amount: 100000 });
+  try {
+    assert.equal((await refundStripeOrder(ORDER, { returnId: RETURN, returnItemId: ITEM_A, fetchImpl: stripe.impl })).status, "refunded");
+    assert.equal(stripe.calls.length, 0);
+    assert.equal(pg.calls.filter(call => call.method === "PATCH").length, 0);
+  } finally { pg.restore(); }
+});
+
+test("an unknown provider server error retains the reserved operation and stable retry key", async () => {
+  const pg = returnRefundPostgrest([itemOperation(ITEM_A, "op_a")]);
+  const unavailable = stripeReply(500, { error: { message: "unknown processing result" } });
+  const recovered = stripeReply(200, { id: "re_a", status: "succeeded", amount: 100000 });
+  try {
+    await withStripeKey(async () => {
+      assert.equal((await refundStripeOrder(ORDER, { returnId: RETURN, returnItemId: ITEM_A, fetchImpl: unavailable.impl })).status, "requested");
+      assert.equal(pg.operations[0].status, "requested");
+      assert.equal((await refundStripeOrder(ORDER, { returnId: RETURN, returnItemId: ITEM_A, fetchImpl: recovered.impl })).status, "refunded");
+    });
+    assert.equal(unavailable.calls[0].headers["idempotency-key"], recovered.calls[0].headers["idempotency-key"]);
+    assert.equal(pg.calls.filter(call => call.path.endsWith("velura_complete_return_refund")).length, 1);
+  } finally { pg.restore(); }
 });

@@ -44,4 +44,26 @@ describe('LoyaltyWalletComponent', () => {
     expect(writeText).toHaveBeenCalledWith(wallet.referral_code);
     expect(fixture.componentInstance.notice()).toContain('mã giới thiệu');
   });
+  it('renders negative debt as a warning while keeping shopping available', () => {
+    const indebted: LoyaltyWallet = { ...wallet, balance_points: -30, amount_vnd: -30000, available_points: 0,
+      debt_points: 30, warning_flags: 2, accrual_locked: false, accrual_lock_source: 'none' };
+    TestBed.configureTestingModule({ imports: [LoyaltyWalletComponent], providers: [provideRouter([]),
+      { provide: LoyaltyService, useValue: { wallet: () => of({ success: true, wallet: indebted }) } },
+      { provide: AuthService, useValue: { session: signal({ userId: 'member' }), isLoggedIn: () => true } }] });
+    const fixture = TestBed.createComponent(LoyaltyWalletComponent);
+    fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.textContent).toContain('Ví đang nợ 30 điểm');
+    expect(root.textContent).toContain('Bạn vẫn có thể mua hàng và tích điểm');
+    expect(root.querySelector('a[href="/products"]')).not.toBeNull();
+  });
+  it('distinguishes an explicit account lock from warning-only refund debt', () => {
+    TestBed.configureTestingModule({ imports: [LoyaltyWalletComponent], providers: [provideRouter([]),
+      { provide: LoyaltyService, useValue: { wallet: () => of({ success: true,
+        wallet: { ...wallet, debt_points: 30, accrual_locked: true, accrual_lock_source: 'manual' } }) } },
+      { provide: AuthService, useValue: { session: signal({ userId: 'member' }), isLoggedIn: () => true } }] });
+    const fixture = TestBed.createComponent(LoyaltyWalletComponent);
+    fixture.detectChanges();
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('không phải do nợ điểm');
+  });
 });

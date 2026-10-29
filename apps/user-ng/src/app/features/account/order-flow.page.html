@@ -364,7 +364,7 @@
                     @if (item.status === 'delivered') {
                       <div class="line-return-quota-row">
                         <span class="line-quota-chip">
-                          Lượt đổi/trả (30 ngày): <strong>{{ line.returnCount }}/2</strong> (Còn {{ 2 - line.returnCount > 0 ? 2 - line.returnCount : 0 }} lượt)
+                          Chính sách 7 ngày · Tối đa 2 lần thành công cho mỗi đơn vị sản phẩm
                         </span>
                         <span class="line-quota-chip">
                           SL khả dụng: <strong>{{ line.availableQuantity }}/{{ line.quantity }}</strong>
@@ -372,9 +372,9 @@
                       </div>
                       @if (line.isInProgress) {
                         <div class="line-return-banner line-return-banner--progress">
-                          ⏳ Đang trong tiến trình đổi/trả ({{ line.inProgressCode ? 'Mã #' + line.inProgressCode + ' · ' : '' }}{{ lineInProgressLabel(line) }}) — Đã khóa tạo yêu cầu mới cho sản phẩm này.
+                          Đang xử lý một phần ({{ lineInProgressLabel(line) }}). Số lượng còn khả dụng vẫn có thể yêu cầu riêng.
                         </div>
-                      } @else if (line.returnCount >= 2) {
+                      } @else if (line.availableQuantity < 1 && line.returnCount >= 2) {
                         <div class="line-return-banner line-return-banner--exhausted">
                           🔒 Sản phẩm đã sử dụng hết tối đa 2/2 lượt đổi/trả theo chính sách.
                         </div>
@@ -558,16 +558,16 @@
               <h2>1. Chọn sản phẩm cần đổi / trả</h2>
               <p class="muted">
                 @if (item.items.length === 1) {
-                  Đơn hàng 1 sản phẩm · Hệ thống đã tự động chọn và khóa cố định theo số lượng mua thực tế (Chính sách 30 ngày · Tối đa 2 lượt/SP).
+                  Đơn hàng 1 sản phẩm · Chọn số lượng còn khả dụng (7 ngày · Tối đa 2 lần thành công cho mỗi đơn vị).
                 } @else {
-                  Đơn hàng nhiều sản phẩm · Vui lòng tích chọn các sản phẩm còn khả dụng cần đổi/trả (Sản phẩm đang trong tiến trình đổi/trả sẽ tự động khóa).
+                  Chọn sản phẩm và số lượng còn khả dụng. Các phần đang xử lý chỉ giữ đúng số lượng của phần đó.
                 }
               </p>
               @for (line of item.items; track line.variant_id) {
                 <article
                   class="line return-line-card"
                   [class.is-selected]="!!selections()[line.variant_id]"
-                  [class.is-locked]="line.isInProgress || line.returnCount >= 2 || line.availableQuantity < 1"
+                  [class.is-locked]="line.availableQuantity < 1"
                 >
                   <img [src]="image(line.product_image)" [alt]="line.product_name" />
                   <div>
@@ -577,7 +577,7 @@
                           type="checkbox"
                           [checked]="!!selections()[line.variant_id]"
                           [disabled]="
-                            line.isInProgress || line.returnCount >= 2 || line.availableQuantity < 1 || !withinWindow(item) || item.items.length === 1
+                            line.availableQuantity < 1 || !withinWindow(item) || item.items.length === 1
                           "
                           [ngModel]="!!selections()[line.variant_id]"
                           (ngModelChange)="select(line, $event)"
@@ -589,7 +589,7 @@
                       </label>
                       @if (line.isInProgress) {
                         <span class="badge return-progress-pill" data-kind="in_progress">⏳ Đang trong tiến trình</span>
-                      } @else if (line.returnCount >= 2 || line.availableQuantity < 1) {
+                      } @else if (line.availableQuantity < 1) {
                         <span class="badge return-progress-pill" data-kind="completed">🔒 Đã khóa</span>
                       } @else if (item.items.length === 1) {
                         <span class="badge return-progress-pill" data-kind="partial">✓ Đã chọn mặc định</span>
@@ -601,15 +601,15 @@
                     <div class="line-return-quota-row">
                       <span class="line-quota-chip">Đã mua: <strong>{{ line.quantity }}</strong></span>
                       <span class="line-quota-chip">Khả dụng đổi/trả: <strong>{{ line.availableQuantity }}</strong></span>
-                      <span class="line-quota-chip">Lượt đổi/trả (30 ngày): <strong>{{ line.returnCount }}/2</strong></span>
+                      <span class="line-quota-chip">Chính sách 7 ngày · Tối đa 2 lần thành công/đơn vị</span>
                     </div>
                     @if (line.isInProgress) {
                       <div class="line-return-banner line-return-banner--progress">
-                        ⏳ Đang xử lý đổi/trả ({{ line.inProgressCode ? 'Phiếu #' + line.inProgressCode + ' · ' : '' }}{{ lineInProgressLabel(line) }}) — Đã khóa không cho chọn lại.
+                        Đang xử lý một phần ({{ lineInProgressLabel(line) }}). Còn {{ line.availableQuantity }} đơn vị có thể chọn riêng.
                       </div>
-                    } @else if (line.returnCount >= 2) {
+                    } @else if (line.availableQuantity < 1 && line.returnCount >= 2) {
                       <div class="line-return-banner line-return-banner--exhausted">
-                        🔒 Đã sử dụng đủ 2/2 lượt đổi/trả trong 30 ngày cho sản phẩm này.
+                        Đã sử dụng đủ 2 lần thành công cho các đơn vị sản phẩm trong 7 ngày.
                       </div>
                     } @else if (line.availableQuantity === 0) {
                       <div class="line-return-banner line-return-banner--done">
@@ -681,11 +681,11 @@
                 </div>
                 @if (order()?.payment === 'COD') {
                   <div class="refund-bank-box">
-                    <strong>Thông tin nhận tiền hoàn (bắt buộc với đơn COD)</strong>
-                    <small>Velura sẽ chuyển khoản hoàn tiền vào tài khoản này sau khi duyệt yêu cầu.</small>
-                    <label class="field">Ngân hàng<input name="refundBankName" [(ngModel)]="bankName" required placeholder="Ví dụ: Vietcombank" /></label>
-                    <label class="field">Số tài khoản<input name="refundBankAccount" [(ngModel)]="bankAccount" required inputmode="numeric" pattern="[0-9]{6,20}" placeholder="Nhập 6–20 chữ số" /></label>
-                    <label class="field">Tên chủ tài khoản<input name="refundBankHolder" [(ngModel)]="bankHolder" required placeholder="Nhập đúng tên trên tài khoản" /></label>
+                    <strong>Thông tin nhận tiền hoàn COD (có thể bổ sung sau)</strong>
+                    <small>Chưa bắt buộc khi gửi yêu cầu; cần tài khoản hợp lệ trước khi Velura hoàn tiền.</small>
+                    <label class="field">Ngân hàng<input name="refundBankName" [(ngModel)]="bankName" placeholder="Ví dụ: Vietcombank" /></label>
+                    <label class="field">Số tài khoản<input name="refundBankAccount" [(ngModel)]="bankAccount" inputmode="numeric" pattern="[0-9]{6,20}" placeholder="Nhập 6–20 chữ số" /></label>
+                    <label class="field">Tên chủ tài khoản<input name="refundBankHolder" [(ngModel)]="bankHolder" placeholder="Nhập đúng tên trên tài khoản" /></label>
                   </div>
                 }
               }
@@ -762,25 +762,29 @@
                 <option value="mind_change">Thay đổi nhu cầu</option><option value="other">Khác</option>
               </select></label>
               <label class="field"
-                >Lý do (tùy chọn)<textarea
+                >Lý do (bắt buộc nếu chưa chọn nhóm lý do)<textarea
                   [(ngModel)]="returnReason"
                   maxlength="1000"
                   placeholder="Chia sẻ thêm để Velura hỗ trợ tốt hơn"
                 ></textarea></label
               ><label class="field"
-                >Hình ảnh (tùy chọn)<input
+                >Ảnh và video ban đầu (bắt buộc cả hai)<input
                   type="file"
-                  accept="image/jpeg,image/png,image/webp"
+                  accept="image/jpeg,image/png,image/webp,video/mp4,video/webm"
                   multiple
                   (change)="files($event)"
                 /><small
-                  >Tối đa 5 ảnh, mỗi ảnh 5 MB. Ảnh được gửi cùng yêu cầu khi bạn xác nhận.</small
+                  >Tối đa 5 ảnh (5 MB/ảnh) và 3 video MP4/WebM (50 MB/video). Video đóng gói bổ sung sau là tùy chọn.</small
                 ></label
               >
               <div class="preview-images">
                 @for (file of evidence(); track file.url) {
                   <div>
-                    <img [src]="file.url" [alt]="file.name" /><button
+                    @if (file.file.type.startsWith('video/')) {
+                      <video [src]="file.url" controls [attr.aria-label]="file.name"></video>
+                    } @else {
+                      <img [src]="file.url" [alt]="file.name" />
+                    }<button
                       class="secondary"
                       (click)="removeImage($index)"
                       [attr.aria-label]="'Xóa ảnh ' + file.name"
@@ -929,7 +933,7 @@
                     </button>
                   </div>
                 }
-                @if (request.kind === 'refund') {
+                @if (request.kind === 'refund' || request.refundFlow === 'cod_manual' || request.refundFlow === 'stripe_auto') {
                   <p>
                     @if (request.refundAmount !== undefined) {
                       Số tiền {{ request.status === 'REFUNDED' || request.status === 'COMPLETED' ? 'đã hoàn' : 'được duyệt' }}:
@@ -1015,7 +1019,7 @@
       }
       <p class="muted">Hủy đơn trước khi bắt đầu chuẩn bị hàng.</p>
       <p class="muted">
-        Đổi / trả trong 30 ngày từ khi giao thành công, tối đa 2 lượt mỗi sản phẩm.
+        Đổi / trả trong 7 ngày từ khi giao thành công; tối đa 2 lần thành công cho mỗi đơn vị sản phẩm.
       </p>
       <p class="muted">Guest xác thực OTP để bảo vệ thông tin đơn hàng.</p>
       <a class="link" routerLink="/contact">Liên hệ Velura</a>

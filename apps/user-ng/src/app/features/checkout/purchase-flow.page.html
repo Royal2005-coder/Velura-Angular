@@ -465,6 +465,9 @@
                 [disabled]="busy() || quoteLoading() || !serverQuote()?.loyalty?.spending_enabled"
                 (input)="setPoints($event)" />
               <p class="muted">Khả dụng {{ serverQuote()?.loyalty?.available_points ?? 0 }} điểm · đơn này tối đa {{ serverQuote()?.loyalty?.max_points ?? 0 }} điểm. Giảm tối đa 50% tiền hàng sau voucher, không gồm phí giao hàng.</p>
+              @if ((serverQuote()?.loyalty?.debt_points ?? 0) > 0) {
+                <p role="status">Bạn đang nợ {{ serverQuote()?.loyalty?.debt_points }} điểm sau hoàn tiền. Bạn vẫn có thể mua hàng và tích điểm; điểm từ đơn đã thanh toán, giao thành công tiếp theo sẽ bù nợ trước.</p>
+              }
               @if (serverQuote()?.loyalty && !serverQuote()?.loyalty?.spending_enabled) { <p role="status">Sử dụng điểm đang chờ phê duyệt chính sách làm tròn và hết hạn.</p> }
               <a routerLink="/account/profile" [queryParams]="{tab: 'offers'}">Ví điểm, hạn sử dụng & mã giới thiệu</a>
             </section>
@@ -487,7 +490,7 @@
             <span>Tổng thanh toán</span><span>{{ serverQuote() ? money(quote().total) : '—' }}</span>
           </div>
           <p class="muted">
-            Đổi / trả trong 30 ngày từ khi giao thành công. Tối đa 2 lượt mỗi sản phẩm.
+            Đổi / trả trong 7 ngày từ khi giao thành công. Tối đa 2 lượt thành công cho mỗi đơn vị sản phẩm.
           </p>
           @if (voucherNotice()) {
             <p class="muted" role="status">{{ voucherNotice() }}</p>

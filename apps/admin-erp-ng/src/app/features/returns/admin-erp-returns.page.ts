@@ -50,6 +50,7 @@ import { AdminErpSessionService } from '../../core/admin-erp-session.service';
 import { useWorkspaceRefresh } from '../../core/admin-erp-refresh.service';
 import { AdminErpDataTable, AdminTableColumn } from '../../shared/ui/admin-data-table';
 import { AdminErpDrawer } from '../../shared/ui/admin-drawer';
+import { AdminErpLoadingOverlay } from '../../shared/ui/admin-loading-overlay';
 import { AdminErpFilterBar } from '../../shared/ui/admin-filter-bar';
 import { AdminErpIcon } from '../../shared/ui/admin-erp-icon';
 import { AdminErpKpiCard } from '../../shared/ui/admin-kpi-card';
@@ -90,6 +91,7 @@ const EMPTY_LOGS = { rows: [] as AdminAuditRow[], count: 0 };
     AdminErpDataTable,
     AdminErpPagination,
     AdminErpDrawer,
+    AdminErpLoadingOverlay,
     AdminErpModal,
     AdminErpStatusBadge,
     AdminErpIcon,

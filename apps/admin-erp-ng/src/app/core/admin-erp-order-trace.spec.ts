@@ -1,4 +1,4 @@
-import { AdminOrderAction, AdminOrderEvent, AdminOrderRow } from './admin-erp-api.service';
+import { AdminAuditRow, AdminOrderAction, AdminOrderEvent, AdminOrderRow } from './admin-erp-api.service';
 import {
   actionPrefill,
   auditTrace,
@@ -165,5 +165,18 @@ describe('admin order trace', () => {
     expect(entry.origin).toBe('return');
     expect(entry.title).toContain('Kho đã nhận');
     expect(entry.links.map((link) => link.query)).toEqual([{ focus: 'r-1' }, { focus: 'o-9' }]);
+  });
+
+  it('attributes events and audits to pipeline stages', () => {
+    const entries = eventTrace([
+      event({ event_id: 'e-prep', action: 'upsert_shipment', from_status: 'confirmed', to_status: 'processing' }),
+      event({ event_id: 'e-delivered', action: 'carrier_delivered', from_status: 'shipping', to_status: 'delivered' }),
+    ]);
+    expect(entries.map((entry) => entry.stage)).toEqual(['processing', 'delivered']);
+
+    const audit: AdminAuditRow[] = [
+      { audit_id: 'a-1', timestamp: '2026-10-23T02:00:00Z', action: 'update', new_value: { status: 'shipping' } },
+    ];
+    expect(auditTrace(audit)[0].stage).toBe('shipping');
   });
 });

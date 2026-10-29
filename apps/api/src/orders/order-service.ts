@@ -1,6 +1,8 @@
 import { HttpError } from "../http.js";
 import { randomUUID } from "node:crypto";
-import { asString, type AuthContext, type JsonObject, type RequestMeta } from "../types.js";
+import { asString, type AuthContext, type HttpRequest, type JsonObject, type RequestMeta } from "../types.js";
+import { writeAuditLog } from "../audit.js";
+import { listOrderEvidence, storeOrderEvidence } from "./order-evidence.js";
 import {
   ORDER_OPERATOR_ROLES,
   ORDER_READER_ROLES,
@@ -73,6 +75,8 @@ export interface OrderService {
   summary(context: AuthContext | undefined): Promise<unknown>;
   get(context: AuthContext | undefined, orderId: string): Promise<unknown>;
   listAuditLogs(context: AuthContext | undefined, orderId: string, searchParams: URLSearchParams): Promise<unknown>;
+  listEvidence(context: AuthContext | undefined, orderId: string): Promise<JsonObject[]>;
+  addEvidence(context: AuthContext | undefined, orderId: string, stage: string, note: string, req: HttpRequest): Promise<JsonObject>;
   performAction(context: AuthContext | undefined, orderId: string, action: string, body: JsonObject, requestMeta: RequestMeta): Promise<unknown>;
   simulateCarrier(context: AuthContext | undefined, orderId: string, body: JsonObject): Promise<unknown>;
   resolvePayment(
@@ -175,7 +179,47 @@ export function createOrderService({
         }
       }
       const tags = await repository.tagsFor([orderId], context.accessToken);
-      return decorate(order, tags[orderId] ?? [], context.roleCode);
+      const decorated = decorate(order, tags[orderId] ?? [], context.roleCode) as JsonObject;
+      let evidence: JsonObject[] = [];
+      try {
+        evidence = await listOrderEvidence(orderId);
+      } catch {
+        // Evidence is supplementary; a storage/schema hiccup must not hide the order itself.
+        evidence = [];
+      }
+      return { ...decorated, evidence };
+    },
+
+    async listEvidence(context, orderId) {
+      requireOrderReader(context);
+      requireUuid(orderId, "orderId");
+      const order = await repository.findById(orderId, context.accessToken);
+      if (!order) throw new HttpError(404, "ORDER_NOT_FOUND", orderErrorMessage("ORDER_NOT_FOUND"));
+      return listOrderEvidence(orderId);
+    },
+
+    async addEvidence(context, orderId, stage, note, req) {
+      requireOrderOperator(context);
+      requireUuid(orderId, "orderId");
+      const order = await repository.findById(orderId, context.accessToken);
+      if (!order) throw new HttpError(404, "ORDER_NOT_FOUND", orderErrorMessage("ORDER_NOT_FOUND"));
+      const actorId = context.profile?.user_id || context.authUser?.id;
+      if (!actorId) throw new HttpError(401, "AUTH_REQUIRED", "Authentication is required");
+      const evidence = await storeOrderEvidence({ orderId, stage, note, actorId, req });
+      await writeAuditLog({
+        actor_id: actorId,
+        actor_role: context.roleCode,
+        action: "update",
+        module: "orders",
+        target_id: orderId,
+        new_value: {
+          evidence_id: evidence["evidence_id"],
+          stage: evidence["stage"],
+          kind: evidence["kind"]
+        },
+        ip_address: context.ipAddress || null
+      });
+      return evidence;
     },
 
     async listAuditLogs(context, orderId, searchParams) {

@@ -108,7 +108,6 @@ export async function sendGuestTrackingOtp(body: JsonObject, ip: string): Promis
       customerName = String(u.full_name).trim();
     }
   }
-  addEmail(body.email);
 
   const developmentOtp = allowDevOtpBypass();
   const code = developmentOtp ? "123456" : generateCheckoutOtp();
@@ -134,9 +133,8 @@ export async function sendGuestTrackingOtp(body: JsonObject, ip: string): Promis
     // Email delivers the demo SMS OTP when real SMS carrier is not active.
   }
 
-  // Đồng bộ gửi mã SMS OTP qua các Email liên kết với số điện thoại để nhận OTP demo
-  let emailSent = false;
-  const targetEmails = recipientEmails.slice(0, 4);
+  // Email is a development aid only. Production tracking proves control of the stored phone.
+  const targetEmails = developmentOtp ? recipientEmails.slice(0, 4) : [];
   if (targetEmails.length > 0) {
     const greeting = customerName || "Quý khách";
     const emailSubject = `[SMS OTP Demo - ${phone}] Mã xác thực đơn hàng Velura: ${code}`;
@@ -162,13 +160,12 @@ export async function sendGuestTrackingOtp(body: JsonObject, ip: string): Promis
         </div>
       </div>
     `;
-    const results = await Promise.all(
+    await Promise.all(
       targetEmails.map((target) => sendDirectEmail(target, emailSubject, emailBody, emailHtml).catch(() => false))
     );
-    emailSent = results.some(Boolean);
   }
 
-  if (!developmentOtp && !smsSent && !emailSent) {
+  if (!developmentOtp && !smsSent) {
     await updateRows("guest_tracking_otp", { nonce: `eq.${nonce}`, consumed_at: "is.null" }, { consumed_at: new Date().toISOString() });
     throw new HttpError(502, "OTP_SEND_FAILED", "Chưa thể gửi mã xác thực. Vui lòng thử lại sau.");
   }

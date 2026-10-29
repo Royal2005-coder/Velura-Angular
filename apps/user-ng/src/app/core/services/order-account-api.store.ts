@@ -70,6 +70,7 @@ interface ApiOrderItem {
   is_in_progress?: boolean;
   in_progress_return_code?: string | null;
   in_progress_status?: string | null;
+  available_refund_unit_amounts?: number[];
 }
 
 interface ApiOrder {
@@ -92,12 +93,28 @@ interface ApiOrder {
   shipping_fee?: number;
   discount_amount?: number;
   total_amount?: number;
+  points_discount_amount?: number;
+  voucher_discount_type?: string;
   version?: number;
   cancelled_reason?: string | null;
   items?: ApiOrderItem[];
 }
 
 interface ApiReturnItem {
+  return_item_id?: string;
+  version?: number;
+  product_name?: string;
+  item_status?: string;
+  decision_status?: string;
+  resolution_type?: 'refund' | 'exchange';
+  replacement_variant_id?: string;
+  exchange_order_id?: string;
+  refund_amount?: number;
+  exchange_order?: ApiReturnExchangeOrder | null;
+  attention_status?: string;
+  reason?: string;
+  updated_at?: string;
+  completed_at?: string;
   order_item_id?: string;
   variant_id?: string | null;
   quantity?: number;
@@ -262,6 +279,7 @@ function mapOrderItem(item: ApiOrderItem): DemoOrderLine {
     isInProgress: Boolean(item.is_in_progress),
     inProgressCode: code || undefined,
     inProgressStatus: item.in_progress_status || undefined,
+    availableRefundUnitAmounts: item.available_refund_unit_amounts,
   };
 }
 
@@ -286,6 +304,8 @@ function mapOrder(order: ApiOrder, member: boolean, userId: string | null): Demo
     shipping: order.shipping_fee || 0,
     discount: order.discount_amount || 0,
     total: order.total_amount || 0,
+    pointsDiscount: typeof order.points_discount_amount === 'number' && Number.isFinite(order.points_discount_amount) ? order.points_discount_amount : 0,
+    voucherDiscountType: order.voucher_discount_type,
     voucher: '',
     createdAt: order.created_at || new Date().toISOString(),
     deliveredAt: order.delivered_at || undefined,
@@ -300,7 +320,16 @@ function mapOrder(order: ApiOrder, member: boolean, userId: string | null): Demo
 }
 
 function mapReturnItem(item: ApiReturnItem): DemoReturnLine {
-  return { variantId: item.variant_id || '', quantity: item.quantity || 0 };
+  return {
+    variantId: item.variant_id || '', quantity: item.quantity || 0,
+    returnItemId: item.return_item_id, expectedVersion: item.version, orderItemId: item.order_item_id, productName: item.product_name,
+    itemStatus: item.item_status, decisionStatus: item.decision_status, resolutionType: item.resolution_type,
+    replacementVariantId: item.replacement_variant_id, exchangeOrderId: item.exchange_order_id,
+    exchangeOrderCode: item.exchange_order?.order_code, exchangeOrderStatus: item.exchange_order?.status,
+    exchangeTrackingCode: item.exchange_order?.tracking_code || undefined, exchangeTrackingUrl: item.exchange_order?.tracking_url || undefined,
+    refundAmount: item.refund_amount, attentionStatus: item.attention_status, reason: item.reason,
+    updatedAt: item.updated_at, completedAt: item.completed_at,
+  };
 }
 
 function mapReturn(row: ApiReturn): DemoReturn {
@@ -310,7 +339,7 @@ function mapReturn(row: ApiReturn): DemoReturn {
   // A CANCELLED row the customer did not end themself was refused (or stopped) by CSKH/system. Legacy rows
   // without `cancelled_by` count as customer-cancelled unless they carry a refusal reason.
   const customerCancelled = status === 'CANCELLED' && (cancelledBy === 'customer' || (!cancelledBy && !row.rejection_reason));
-  const rejected = status === 'CANCELLED' && !customerCancelled;
+  const rejected = status === 'REJECTED' || (status === 'CANCELLED' && !customerCancelled);
   const endedAt = row.resolved_at || row.created_at || new Date().toISOString();
   return {
     id: formatReturnCode(row.return_code || row.tracking_return_code || row.return_id),
@@ -403,6 +432,7 @@ function mapReturnTracking(row: ApiReturnDetail): ReturnTrackingDetail {
     exchangeOrder,
     evidence: (row.evidence || []).map(mapTrackingEvidence),
     instructions: row.instructions || [],
+    items: (row.items || []).map(mapReturnItem),
   };
 }
 
@@ -478,7 +508,6 @@ export class OrderAccountApiStore implements OrderAccountModel {
     try {
       if (context.userId) await Promise.all([this.loadOrders(context, version), this.loadReturns(context, version)]);
       else { await this.loadOrders(context, version); if (this.current(context) && version === this.refreshVersion) await this.loadReturns(context, version); }
-      if (this.current(context) && version === this.refreshVersion) this.reconcileOrderReturnState(this.requests());
     }
     catch (error) { if (this.current(context) && version === this.refreshVersion) this.error.set(orderAccountErrorMessage(error)); }
     finally { if (this.current(context) && version === this.refreshVersion) this.loading.set(false); }
@@ -595,7 +624,7 @@ export class OrderAccountApiStore implements OrderAccountModel {
     await this.refreshOrder(orderId, context);
   }
 
-  /** Uploads optional evidence and creates a real return request for selected order lines. */
+  /** Uploads mandatory private initial images/video and submits the selected original-unit quantity. */
   async createReturn(
     orderId: string,
     kind: DemoReturn['kind'],
@@ -611,10 +640,8 @@ export class OrderAccountApiStore implements OrderAccountModel {
     const context = this.context();
     if (items.some((item) => {
       const line = order.items.find((row) => row.variant_id === item.variantId);
-      return line?.isInProgress;
-    })) {
-      throw new Error('Sản phẩm đã chọn đang có yêu cầu đổi/trả đang xử lý. Vui lòng chờ hoàn tất.');
-    }
+      return !line || !Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > line.availableQuantity;
+    })) throw new Error('Số lượng vượt quá số lượng còn khả dụng đổi/trả.');
     if (kind === 'refund' && items.some((item) => {
       const line = order.items.find((row) => row.variant_id === item.variantId);
       return line?.is_combo && item.quantity < line.quantity;
@@ -630,7 +657,11 @@ export class OrderAccountApiStore implements OrderAccountModel {
       return !choice || (choice.stock ?? 0) < item.quantity;
     })) throw new Error('Vui lòng chọn variant cùng sản phẩm còn đủ số lượng để đổi.');
     const evidenceFiles = evidence.map((item) => item.file).filter((file): file is File => !!file);
-    const evidenceUrls = await this.uploadEvidence(evidenceFiles);
+    if (!reason.trim() && !reasonCode) throw new Error('Vui lòng nhập lý do đổi/trả.');
+    if (!evidenceFiles.some((file) => file.type.startsWith('image/')) || !evidenceFiles.some((file) => file.type.startsWith('video/'))) {
+      throw new Error('Cần ít nhất một ảnh và một video ban đầu.');
+    }
+    const uploaded = await this.uploadEvidence(evidenceFiles, order.orderId || '');
     this.assertCurrent(context);
     const exchangeNote = kind === 'exchange'
       ? items
@@ -648,7 +679,8 @@ export class OrderAccountApiStore implements OrderAccountModel {
         refund_bank_holder: bank.accountHolder,
       } : {}),
       description,
-      evidence_images: evidenceUrls,
+      evidence_images: uploaded.images,
+      evidence_videos: uploaded.videos,
       items: items.map((item) => ({
         order_item_id: this.orderItemIdFor(order, item.variantId),
         quantity: item.quantity,
@@ -672,7 +704,7 @@ export class OrderAccountApiStore implements OrderAccountModel {
         );
     this.assertCurrent(context);
     if (!data.success || !data.return?.return_id) throw new Error('Chưa ghi nhận được yêu cầu đổi trả. Vui lòng thử lại.');
-    const created = { ...mapReturn(data.return || {}), orderId: order.id, items: items.map((item) => ({ ...item })) };
+    const created = { ...mapReturn(data.return), orderId: order.id };
     this.requests.update((rows) => [created, ...rows]);
     void this.refresh();
     return created;
@@ -882,42 +914,6 @@ export class OrderAccountApiStore implements OrderAccountModel {
     }
   }
 
-  private reconcileOrderReturnState(requests: DemoReturn[]): void {
-    if (!requests.length || !this.orders().length) return;
-    const activeStatuses = new Set(['REQUESTED', 'CONTACTING', 'WAITING_RETURN', 'RETURN_IN_TRANSIT', 'RECEIVED', 'REFUND_PROCESSING', 'EXCHANGE_PREPARING', 'EXCHANGE_SHIPPING', 'NEEDS_SUPPORT']);
-    this.orders.update((orders) =>
-      orders.map((order) => {
-        const orderReturns = requests.filter((r) => (r.orderId === order.id || r.orderId === order.orderId) && r.status !== 'CANCELLED' && !r.cancelledAt && !r.rejectedAt);
-        if (!orderReturns.length) return order;
-        const isSingleItemOrder = order.items.length === 1;
-        const updatedItems = order.items.map((line) => {
-          const lineReturns = orderReturns.filter((r) =>
-            r.items.some((ri) => ri.variantId === line.variant_id) || (isSingleItemOrder && r.items.length === 0),
-          );
-          if (!lineReturns.length) return line;
-          const inProg = lineReturns.find((r) => r.status && activeStatuses.has(r.status));
-          const isInProgress = Boolean(line.isInProgress || inProg);
-          const inProgressCode = line.inProgressCode || inProg?.id;
-          const inProgressStatus = line.inProgressStatus || inProg?.status;
-          const returnCount = Math.max(line.returnCount, lineReturns.length);
-          const returnedQty = lineReturns.reduce((sum, r) => {
-            const match = r.items.find((ri) => ri.variantId === line.variant_id);
-            return sum + (match?.quantity || (isSingleItemOrder ? 1 : 0));
-          }, 0);
-          const availableQuantity = isInProgress ? 0 : Math.min(line.availableQuantity, Math.max(0, line.quantity - returnedQty));
-          return {
-            ...line,
-            isInProgress,
-            inProgressCode,
-            inProgressStatus,
-            returnCount,
-            availableQuantity,
-          };
-        });
-        return { ...order, items: updatedItems };
-      }),
-    );
-  }
   private async refreshOrder(id: string, context: OrderContext): Promise<void> {
     const data = context.userId
       ? await firstValueFrom(this.api.get<ApiOrder>(`/api/user/orders/${encodeURIComponent(id)}`))
@@ -987,23 +983,22 @@ export class OrderAccountApiStore implements OrderAccountModel {
     return line ? `${line.product_name} (${line.size}/${line.color})` : variantId;
   }
 
-  private async uploadEvidence(files: File[]): Promise<string[]> {
+  private async uploadEvidence(files: File[], orderId: string): Promise<{ images: string[]; videos: string[] }> {
     const context = this.context();
-    const path = context.userId
-      ? '/api/user/upload/evidence'
-      : `/api/user/upload/evidence?guest_access_token=${encodeURIComponent(context.guestToken)}`;
-    const urls: string[] = [];
+    const uploaded: { images: string[]; videos: string[] } = { images: [], videos: [] };
     for (const file of files) {
       this.assertCurrent(context);
+      const video = file.type.startsWith('video/');
+      const params = new URLSearchParams({ purpose: 'return', order_id: orderId, kind: video ? 'request_video' : 'request_photo' });
+      if (!context.userId) params.set('guest_access_token', context.guestToken);
       const formData = new FormData();
       formData.append('file', file, file.name);
-      const result = await firstValueFrom(
-        this.api.post<{ success?: boolean; url?: string }>(path, formData),
-      );
+      const result = await firstValueFrom(this.api.post<{ storage_ref?: string }>(`/api/user/upload/evidence?${params}`, formData));
       this.assertCurrent(context);
-      if (result?.url) urls.push(result.url);
+      if (!result.storage_ref) throw new Error('Chưa tải được bằng chứng riêng tư.');
+      (video ? uploaded.videos : uploaded.images).push(result.storage_ref);
     }
-    return urls;
+    return uploaded;
   }
 }
 

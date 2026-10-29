@@ -3,13 +3,19 @@
  * before a request is sent. Values copy `apps/api/src/returns/return-constants.ts` and the
  * chatbot service; the server stays the authority and its error remains the fallback.
  */
-import { AdminReturnRow, AdminReturnStatus, AdminTicketRow } from './admin-erp-api.service';
+import { AdminReturnItemAction, AdminReturnLine, AdminReturnRow, AdminReturnStatus, AdminTicketRow } from './admin-erp-api.service';
 import { AdminTone } from './admin-erp-status-labels';
 
 /** Canonical Vietnamese labels for stored return workflow codes. */
 export const RETURN_STATUS_LABELS: Readonly<Record<string, string>> = {
   REQUESTED: 'Chờ xử lý',
   CONTACTING: 'Đang liên hệ',
+  APPROVED: 'Đã duyệt',
+  IN_PROGRESS: 'Đang xử lý từng phần',
+  PARTIALLY_APPROVED: 'Duyệt một phần',
+  REJECTED: 'Đã từ chối',
+  RETURN_SHIPPING: 'Hàng đang gửi về',
+  REFUND_PENDING: 'Đang chờ hoàn tiền',
   WAITING_RETURN: 'Chờ khách gửi hàng',
   RETURN_IN_TRANSIT: 'Hàng đang gửi về',
   RECEIVED: 'Kho đã nhận & kiểm hàng',
@@ -25,6 +31,12 @@ export const RETURN_STATUS_LABELS: Readonly<Record<string, string>> = {
 const RETURN_STATUS_TONES: Readonly<Record<string, AdminTone>> = {
   REQUESTED: 'warning',
   CONTACTING: 'warning',
+  APPROVED: 'info',
+  IN_PROGRESS: 'info',
+  PARTIALLY_APPROVED: 'warning',
+  REJECTED: 'danger',
+  RETURN_SHIPPING: 'info',
+  REFUND_PENDING: 'warning',
   WAITING_RETURN: 'info',
   RETURN_IN_TRANSIT: 'info',
   RECEIVED: 'info',
@@ -41,6 +53,8 @@ const RETURN_STATUS_TONES: Readonly<Record<string, AdminTone>> = {
 export const OPEN_RETURN_STATUSES: readonly AdminReturnStatus[] = [
   'REQUESTED',
   'CONTACTING',
+  'IN_PROGRESS',
+  'PARTIALLY_APPROVED',
   'WAITING_RETURN',
   'RETURN_IN_TRANSIT',
   'RECEIVED',
@@ -49,28 +63,6 @@ export const OPEN_RETURN_STATUSES: readonly AdminReturnStatus[] = [
   'EXCHANGE_SHIPPING',
   'NEEDS_SUPPORT',
 ];
-
-/** `RETURN_TRANSITIONS` from the API, quoted so the UI cannot offer a step the RPC rejects. */
-export const RETURN_TRANSITIONS: Readonly<Record<string, readonly string[]>> = {
-  REQUESTED: ['CONTACTING', 'CANCELLED'],
-  CONTACTING: ['WAITING_RETURN', 'CANCELLED', 'NEEDS_SUPPORT'],
-  WAITING_RETURN: ['RETURN_IN_TRANSIT', 'CANCELLED'],
-  RETURN_IN_TRANSIT: ['RECEIVED', 'NEEDS_SUPPORT'],
-  RECEIVED: ['REFUND_PROCESSING', 'EXCHANGE_PREPARING', 'NEEDS_SUPPORT'],
-  REFUND_PROCESSING: ['REFUNDED', 'NEEDS_SUPPORT'],
-  REFUNDED: ['COMPLETED'],
-  EXCHANGE_PREPARING: ['EXCHANGE_SHIPPING', 'NEEDS_SUPPORT'],
-  EXCHANGE_SHIPPING: ['COMPLETED', 'NEEDS_SUPPORT'],
-  COMPLETED: [],
-  CANCELLED: [],
-  NEEDS_SUPPORT: ['CONTACTING', 'CANCELLED'],
-};
-
-/** Refund states are advanced by gateway evidence, never by an operator pressing a button. */
-export const GATEWAY_ONLY_STATUSES: readonly string[] = ['REFUND_PROCESSING', 'REFUNDED'];
-
-/** Steps that require a tracking code: the return leg and the replacement leg. */
-export const TRACKING_REQUIRED_STATUSES: readonly string[] = ['RETURN_IN_TRANSIT', 'EXCHANGE_SHIPPING'];
 
 /** Reasons a customer can pick; the API stores the code and shows the label. */
 export const RETURN_REASONS: ReadonlyArray<{ code: string; label: string }> = [
@@ -197,27 +189,6 @@ export function returnStatusTone(status: string | null | undefined): AdminTone {
   return RETURN_STATUS_TONES[String(status || '')] || 'neutral';
 }
 
-/**
- * Steps the return can take from its stored state.
- */
-export function allowedReturnTransitions(status: string | null | undefined): readonly string[] {
-  return RETURN_TRANSITIONS[String(status || '')] || [];
-}
-
-/**
- * Steps an operator may set by hand; gateway states are excluded because the RPC rejects them.
- * `EXCHANGE_PREPARING` only applies to exchange slips, so a refund slip never sees that choice.
- */
-export function manualReturnTransitions(
-  status: string | null | undefined,
-  returnType?: string | null,
-): readonly string[] {
-  return allowedReturnTransitions(status).filter(
-    (value) =>
-      !GATEWAY_ONLY_STATUSES.includes(value) &&
-      !(value === 'EXCHANGE_PREPARING' && returnType != null && String(returnType) !== 'exchange'),
-  );
-}
 
 /**
  * Whether the ticket action is legal from its stored state.
@@ -234,204 +205,30 @@ export function isChatGovernedTicket(ticket: AdminTicketRow | null): boolean {
   return Boolean(ticket?.chat_session_id);
 }
 
-/** States a return can still be rejected or cancelled from. */
-export const RETURN_REJECTABLE_STATUSES: readonly string[] = [
-  'REQUESTED',
-  'CONTACTING',
-  'WAITING_RETURN',
-  'NEEDS_SUPPORT',
-  'pending',
-];
 
-/** Terminal states: no outreach, no approval, no supplement request. */
-export const RETURN_CLOSED_STATUSES: readonly string[] = ['REFUNDED', 'COMPLETED', 'CANCELLED'];
-
-/**
- * Kho đã nhận hàng và QA đạt. Đây là điều kiện duy nhất để tạo đơn đổi hoặc hoàn tiền:
- * trạng thái RECEIVED mà thiếu kết quả QA thì API vẫn chặn, nên UI cũng không được mời bấm.
- */
-export function warehouseQaPassed(row: AdminReturnRow | null): boolean {
-  return String(row?.status || '') === 'RECEIVED' && row?.condition_check_result === 'qa_pass';
-}
-
-/**
- * An exchange can be prepared only after warehouse QA passed and it is an exchange.
- */
-export function exchangeApprovalAllowed(row: AdminReturnRow | null): boolean {
-  return Boolean(row && row.return_type === 'exchange' && warehouseQaPassed(row));
-}
-
-/** Bước kế tiếp của một phiếu, để drawer chỉ mời đúng một hành động thay vì mời bấm sớm. */
-export interface ReturnNextStep {
-  readonly flow:
-    | 'contact'
-    | 'receipt'
-    | 'exchange'
-    | 'status'
-    | 'gateway'
-    | 'refund-info'
-    | 'shipment'
-    | 'pickup'
-    | 'exchange-shipment';
-  readonly label: string;
-  readonly hint: string;
-  readonly target?: string;
-}
-
-/**
- * Bước tiếp theo theo đúng thứ tự nghiệp vụ hiện hành: liên hệ → chờ hàng → kho nhận & QA →
- * hoàn tiền/đổi hàng → hoàn tất. Không còn bước "duyệt trước khi nhận hàng": DB chỉ cho
- * RECEIVED + QA đạt đi tiếp, và tiền chỉ rời cổng/tài khoản sau bước đó.
- */
-export function nextReturnStep(row: AdminReturnRow | null): ReturnNextStep | null {
-  const status = String(row?.status || '');
-  const isExchange = row?.return_type === 'exchange';
-  const isStripe = row?.refund_flow === 'stripe_auto';
-  switch (status) {
-    case 'REQUESTED':
-      return { flow: 'contact', label: 'Ghi nhận liên hệ', hint: 'Gọi khách và lưu kết quả liên hệ trước khi chuyển bước.' };
-    case 'CONTACTING':
-      return {
-        flow: 'status',
-        target: 'WAITING_RETURN',
-        label: 'Chờ khách gửi hàng',
-        hint: 'Đã thống nhất phương án; chuyển sang chờ hàng về kho.',
-      };
-    case 'WAITING_RETURN':
-      if (row?.shipment?.status === 'label_ready') {
-        return {
-          flow: 'pickup',
-          label: 'Xác nhận ĐVVC lấy hàng',
-          hint: 'Quét mã phiếu hoàn, chụp ảnh kiện hàng niêm phong và xác nhận ĐVVC đã lấy hàng.',
-        };
-      }
-      return {
-        flow: 'shipment',
-        label: 'Tạo vận đơn hoàn',
-        hint: 'Chọn ĐVVC, nhập mã vận đơn và in phiếu gửi hoàn để khách dán lên kiện hàng.',
-      };
-    case 'RETURN_IN_TRANSIT':
-      return {
-        flow: 'receipt',
-        label: 'Kho nhận hàng & QA',
-        hint: 'Nhận hàng, chụp ảnh minh chứng và xác nhận QA đạt. Hoàn tiền chỉ mở sau bước này.',
-      };
-    case 'RECEIVED':
-      if (row?.condition_check_result !== 'qa_pass') {
-        return { flow: 'receipt', label: 'Hoàn tất QA', hint: 'Phiếu đã nhận nhưng chưa có kết quả QA đạt.' };
-      }
-      if (isExchange) {
-        return {
-          flow: 'exchange',
-          label: 'Duyệt đổi hàng',
-          hint: 'QA đạt; tạo đơn đổi và giữ tồn kho cho hàng thay thế trong một giao dịch.',
-        };
-      }
-      if (row?.refund_flow === 'cod_manual' && row?.refund_receiver_status !== 'valid') {
-        return {
-          flow: 'refund-info',
-          label: 'Xin thông tin nhận tiền',
-          hint: 'Khách chưa có tài khoản nhận hoàn tiền; gửi yêu cầu bổ sung trước khi chuyển khoản.',
-        };
-      }
-      return {
-        flow: 'gateway',
-        label: isStripe ? 'Hoàn tiền qua Stripe' : 'Ghi nhận chuyển khoản hoàn tiền',
-        hint: isStripe
-          ? 'Cổng Stripe hoàn tiền và xác nhận kết quả; không cần bước duyệt trung gian.'
-          : 'Kế toán chuyển khoản cho khách, sau đó ghi nhận mã giao dịch và chứng từ.',
-      };
-    case 'REFUND_PROCESSING':
-      return {
-        flow: 'gateway',
-        label: isStripe ? 'Chạy lại hoàn tiền qua cổng' : 'Ghi nhận chuyển khoản hoàn tiền',
-        hint: 'Khoản hoàn đang chờ xác nhận tiền ra; hoàn tất bằng chứng từ của cổng hoặc chuyển khoản.',
-      };
-    case 'REFUNDED':
-      return { flow: 'status', target: 'COMPLETED', label: 'Hoàn tất phiếu', hint: 'Tiền đã hoàn; đóng phiếu.' };
-    case 'EXCHANGE_PREPARING':
-      return {
-        flow: 'exchange-shipment',
-        label: 'Giao hàng đổi',
-        hint: 'Tạo vận đơn cho đơn đổi; mã vận đơn được ghi đồng thời lên đơn đổi và phiếu hoàn.',
-      };
-    case 'EXCHANGE_SHIPPING':
-      return { flow: 'status', target: 'COMPLETED', label: 'Hoàn tất đổi hàng', hint: 'Khách đã nhận hàng đổi; đóng phiếu.' };
-    default:
-      return null;
-  }
-}
-
-/**
- * Rejection is only offered while the return is still in a rejectable state.
- */
-export function rejectAllowed(row: AdminReturnRow | null): boolean {
-  return Boolean(row && RETURN_REJECTABLE_STATUSES.includes(String(row.status)));
-}
 
 /**
  * Outreach may be logged on any live return; terminal ones are history.
  */
 export function contactAllowed(row: AdminReturnRow | null): boolean {
-  return Boolean(row && !RETURN_CLOSED_STATUSES.includes(String(row.status)));
+  return Boolean(row && !['REFUNDED', 'COMPLETED', 'CANCELLED', 'REJECTED'].includes(String(row.status)));
 }
 
-/**
- * Refund money moves only after the warehouse accepted the goods.
- */
-export function gatewayRefundAllowed(row: AdminReturnRow | null): boolean {
-  if (!row) {
-    return false;
-  }
-  const status = String(row.status || '');
-  return (status === 'RECEIVED' || status === 'REFUND_PROCESSING') && row.condition_check_result === 'qa_pass';
-}
-
-/**
- * The Stripe button only exists for a Stripe-captured order; other channels use the manual record.
- */
-export function stripeRefundAllowed(row: AdminReturnRow | null): boolean {
-  return Boolean(row && row.return_type !== 'exchange' && row.payment_kind === 'stripe' && gatewayRefundAllowed(row));
-}
-
-/**
- * Manual transfer reconciliation applies to captured payments outside Stripe (COD, MoMo, VNPay).
- */
-export function manualRefundAllowed(row: AdminReturnRow | null): boolean {
-  if (!row || !gatewayRefundAllowed(row)) {
-    return false;
-  }
-  if (row.payment_kind === 'stripe') {
-    return false;
-  }
-  const status = String(row.payment?.payment_status || '');
-  return (row.refund_flow === 'cod_manual' || row.refund_flow === 'manual_transfer') && ['paid', 'refund_pending'].includes(status);
-}
 
 /**
  * COD refunds stay blocked until the customer supplies valid payout details.
  */
 export function refundReceiverBlocked(row: AdminReturnRow | null): boolean {
-  return row?.refund_flow === 'cod_manual' && row.refund_receiver_status !== 'valid';
+  return row?.payment_kind === 'cod' && row.refund_receiver_status !== 'valid';
 }
 
 /**
  * Payout-detail supplement is only meaningful for a live COD refund.
  */
 export function refundInfoAllowed(row: AdminReturnRow | null): boolean {
-  return Boolean(
-    row &&
-      row.refund_flow === 'cod_manual' &&
-      !RETURN_CLOSED_STATUSES.includes(String(row.status)),
-  );
+  return Boolean(row && row.payment_kind === 'cod' && contactAllowed(row));
 }
 
-/**
- * The warehouse receipt step is the only way into `RECEIVED`, and only from transit.
- */
-export function receiptAllowed(row: AdminReturnRow | null): boolean {
-  return String(row?.status || '') === 'RETURN_IN_TRANSIT';
-}
 
 /**
  * Whether a return status still reserves line quota, for the queue KPI.
@@ -455,23 +252,14 @@ export function noteIsReady(value: string, minimum = MIN_NOTE_LENGTH): boolean {
   return value.trim().length >= minimum;
 }
 
-/**
- * Proof must be a data URL or an http(s) URL the API can store.
- */
-export function proofIsUsable(value: string): boolean {
-  return /^(https?:\/\/|data:image\/)/.test(value.trim());
-}
 
-/**
- * Gateway answer in operator language. Approval and execution are separate API calls, so the same
- * wording is used by the manual "refund through Stripe" button and by the chained step.
- */
+/** Gateway execution status describes only the selected item operation. */
 export function gatewayNote(refund: { status: string; message?: string } | null): string {
   if (!refund) {
     return 'Cổng không trả về trạng thái. Kiểm lại giao dịch trước khi thử lại.';
   }
   if (refund.status === 'refunded') {
-    return 'Stripe đã hoàn tiền. Phiếu sẽ được đánh dấu hoàn tất theo luồng.';
+    return 'Stripe đã hoàn tiền cho phần hàng này. Các phần khác giữ nguyên tiến độ.';
   }
   if (refund.status === 'requested') {
     return 'Đã gửi yêu cầu hoàn tiền tới Stripe; chờ cổng xác nhận.';
@@ -480,4 +268,53 @@ export function gatewayNote(refund: { status: string; message?: string } | null)
     return 'Cổng bỏ qua giao dịch này; kiểm tra lại số tiền hoàn.';
   }
   return refund.message || 'Hoàn tiền qua Stripe thất bại. Kiểm lại giao dịch rồi thử lại.';
+}
+
+/** Decision labels stay separate from logistics progress on mixed requests. */
+export function returnDecisionLabel(value: string | null | undefined): string {
+  const labels: Readonly<Record<string, string>> = {
+    pending: 'Chờ duyệt', approved: 'Đã duyệt', rejected: 'Từ chối',
+    PENDING: 'Chờ duyệt', APPROVED: 'Đã duyệt', REJECTED: 'Từ chối',
+    PARTIALLY_APPROVED: 'Duyệt một phần',
+  };
+  return labels[String(value || '')] || value || 'Chờ duyệt';
+}
+
+/** Item actions never infer eligibility from the immutable request type or aggregate stage. */
+export function returnItemActions(line: AdminReturnLine, canApprove: boolean): readonly AdminReturnItemAction[] {
+  const status = line.item_status;
+  if (['COMPLETED', 'REJECTED', 'CANCELLED'].includes(String(status))) return [];
+  if (line.decision_status === 'pending') return canApprove ? ['approve', 'reject'] : [];
+  if (line.decision_status !== 'approved') return [];
+  const actions: AdminReturnItemAction[] = [];
+  if (status === 'APPROVED') actions.push('wait_return');
+  if (status === 'WAITING_RETURN') actions.push('pickup');
+  if (status === 'RETURN_SHIPPING') actions.push('receive');
+  if (status === 'NEEDS_SUPPORT') actions.push('resolve');
+  if (line.resolution_type === 'exchange') {
+    if (!line.exchange_order_id) {
+      actions.push('change_variant');
+      if (status === 'RECEIVED') actions.push('prepare_exchange');
+    }
+    const cancellableExchange = !line.exchange_order_id
+      || ['confirmed', 'pending', 'cancelled', 'delivery_failed'].includes(String(line.exchange_order?.status));
+    if (cancellableExchange && (!line.exchange_order_id || status === 'EXCHANGE_PREPARING' || status === 'NEEDS_SUPPORT')) actions.push('convert_refund');
+  }
+  if (status === 'EXCHANGE_PREPARING') actions.push('ship_exchange');
+  if (status === 'EXCHANGE_SHIPPING' && line.exchange_order?.status === 'delivered') actions.push('complete_exchange');
+  if (status !== 'NEEDS_SUPPORT') actions.push('needs_support');
+  if (['REQUESTED', 'APPROVED', 'WAITING_RETURN'].includes(String(status))) actions.push('stop');
+  return actions;
+}
+
+/** Money is scoped to a QA-accepted refund part, never the parent request. */
+export function itemRefundAllowed(line: AdminReturnLine): boolean {
+  return line.decision_status === 'approved' && line.resolution_type === 'refund'
+    && ['RECEIVED', 'REFUND_PENDING'].includes(String(line.item_status));
+}
+
+/** Contact SLA uses the server deadline; waiting for the customer does not erase business progress. */
+export function returnContactOverdue(row: AdminReturnRow, now = Date.now()): boolean {
+  const deadline = Date.parse(row.contact_due_at || '');
+  return contactAllowed(row) && Number.isFinite(deadline) && deadline < now;
 }

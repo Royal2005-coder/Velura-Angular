@@ -14,6 +14,7 @@ import { asJsonObject, asString, type HttpRequest, type JsonObject } from "../ty
 
 export type ReturnEvidenceKind =
   | "request_photo"
+  | "request_video"
   | "packing_photo"
   | "packing_video"
   | "pickup_photo"
@@ -28,6 +29,7 @@ export type ReturnEvidenceRole = "customer" | "carrier" | "admin" | "system";
 const CUSTOMER_KINDS: readonly ReturnEvidenceKind[] = ["packing_photo", "packing_video"];
 const ADMIN_KINDS: readonly ReturnEvidenceKind[] = [
   "request_photo",
+  "request_video",
   "packing_photo",
   "packing_video",
   "pickup_photo",

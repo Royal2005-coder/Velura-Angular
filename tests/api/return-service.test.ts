@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createReturnService } from "../../apps/api/src/returns/return-service.js";
-import type { ManualRefundInput, ReturnListFilters } from "../../apps/api/src/returns/return-repository.js";
+import type { ReturnListFilters, ReturnRepository } from "../../apps/api/src/returns/return-repository.js";
 import { HttpError } from "../../apps/api/src/http.js";
 import { asJsonObject, type JsonObject } from "../../apps/api/src/types.js";
 
@@ -23,29 +23,15 @@ test("CSKH reads the return queue with paging and the caller's token", async () 
   assert.equal(received.token, "jwt-token");
 });
 
-test("a return cannot skip the physical steps between approval and completion", async () => {
-  let wrote = false;
-  const service = createReturnService({
-    repository: {
-      getReturn: async () => ({ return_id: RETURN_ID, status: "WAITING_RETURN", version: 5 }),
-      updateReturnStatus: async (returnId, input) => {
-        wrote = true;
-        return { return_id: returnId, status: input.status };
-      }
-    }
-  });
-  const ctx = { authUser: { id: "admin-user-id" }, roleCode: "admin_operator_cskh_dt", ipAddress: "127.0.0.1", accessToken: "jwt-token" };
-
-  // `approved` chỉ được đi tiếp sang `shipping_back`; nhảy thẳng sang hoàn tất là bỏ
-  // qua cả bước nhận hàng lẫn bước kiểm tra tình trạng.
-  await assert.rejects(
-    () => service.updateReturnStatus(ctx, RETURN_ID, { status: "COMPLETED", expectedVersion: 5 }),
-    (error) => error.status === 422 && error.code === "INVALID_TRANSITION"
-  );
-  assert.equal(wrote, false);
-
-  await service.updateReturnStatus(ctx, RETURN_ID, { status: "RETURN_IN_TRANSIT", trackingReturnCode:"RETURN-SHIP-001", expectedVersion: 5 });
-  assert.equal(wrote, true);
+test("whole-request progression cannot bypass line actions", async () => {
+  const service = createReturnService({ repository: {} as ReturnRepository });
+  const admin = context("super_admin");
+  for (const mutation of [
+    service.reject, service.updateReturnStatus, service.createReturnShipment,
+    service.confirmReturnPickup, service.updateReturnShipmentStatus, service.shipExchange
+  ]) {
+    await assert.rejects(() => mutation(admin, RETURN_ID, { expectedVersion: 1, status: "COMPLETED" }), hasCode("ITEM_ACTION_REQUIRED", 409));
+  }
 });
 
 test("service audit logs are protected by the A05 reader matrix", async () => {
@@ -66,33 +52,60 @@ test("service audit logs are protected by the A05 reader matrix", async () => {
   assert.equal(received.token, "jwt-token");
 });
 
-test("updateReturnStatus validates status and enforces permissions", async () => {
-  let receivedInput;
+test("only super_admin can decide a line, while CSKH can operate approved lines", async () => {
+  const calls: unknown[][] = [];
   const service = createReturnService({ repository: {
-    getReturn: async () => ({ return_id: RETURN_ID, status: "WAITING_RETURN", version: 5 }),
-    updateReturnStatus: async (returnId, input, actorId, roleCode, ipAddress) => {
-      receivedInput = { returnId, input, actorId, roleCode, ipAddress };
-      return { return_id: returnId, status: input.status };
-    }
-  } });
+    actOnItem: async (...args) => { calls.push(args); return { return_item_id: ITEM_ID }; }
+  } as unknown as ReturnRepository });
+  for (const action of ["approve", "reject"]) {
+    await assert.rejects(() => service.actOnItem(context("admin_operator_cskh_dt"), RETURN_ID, ITEM_ID, {
+      action, expectedVersion: 2, reason: "Da xac minh thong tin"
+    }), hasCode("RBAC_DENIED", 403));
+    await service.actOnItem(context("super_admin"), RETURN_ID, ITEM_ID, {
+      action, expectedVersion: 2, reason: "Da xac minh thong tin"
+    });
+  }
+  await service.actOnItem(context("admin_operator_cskh_dt"), RETURN_ID, ITEM_ID, { action: "wait_return", expectedVersion: 3 });
+  assert.equal(calls.length, 3);
+  await assert.rejects(() => service.actOnItem(context("admin_operator_donhang"), RETURN_ID, ITEM_ID, {
+    action: "wait_return", expectedVersion: 3
+  }), hasCode("RBAC_DENIED", 403));
+});
 
-  // 1. Authorized CSKH operator can transition status
-  const ctx = { authUser: { id: "admin-user-id" }, roleCode: "admin_operator_cskh_dt", ipAddress: "127.0.0.1", accessToken: "jwt-token" };
-  const res = await service.updateReturnStatus(ctx, RETURN_ID, { status: "RETURN_IN_TRANSIT", trackingReturnCode:"RETURN-SHIP-001", expectedVersion: 5, adminNote: "Updating status" });
-  assert.equal(res.status, "RETURN_IN_TRANSIT");
-  assert.equal(receivedInput.input.status, "RETURN_IN_TRANSIT");
-  assert.equal(receivedInput.input.expectedVersion, 5);
-  assert.equal(receivedInput.actorId, "admin-user-id");
+test("partial line facts stay flat and false seal facts survive the service boundary", async () => {
+  let received: unknown[] = [];
+  const service = createReturnService({ repository: {
+    actOnItem: async (...args) => { received = args; return { return_item_id: ITEM_ID }; }
+  } as unknown as ReturnRepository });
+  const facts = {
+    quantity: 1, receivedQuantity: 1, matchesProduct: true, tagsIntact: true,
+    conditionAcceptable: true, packageMatch: true, sealIntact: false,
+    disposition: "restock", receiptProofRef: `storage://order-evidence/returns/${RETURN_ID}/qa_photo/proof.jpg`
+  };
+  await service.actOnItem(context("admin_operator_cskh_dt"), RETURN_ID, ITEM_ID, { action: "receive", expectedVersion: 7, ...facts });
+  assert.deepEqual(received.slice(0, 6), [RETURN_ID, ITEM_ID, "receive", facts, 7, "auth-1"]);
+  for (const quantity of [0, -1, 1.5, "1"]) {
+    await assert.rejects(() => service.actOnItem(context("super_admin"), RETURN_ID, ITEM_ID, {
+      action: "receive", expectedVersion: 7, ...facts, quantity
+    }), hasCode("QTY_MISMATCH"));
+  }
+  await assert.rejects(() => service.actOnItem(context("super_admin"), RETURN_ID, ITEM_ID, {
+    action: "receive", expectedVersion: 7, payload: facts
+  }), hasCode("FLAT_ITEM_FACTS_REQUIRED"));
+});
 
-  // 2. Reject invalid status
-  await assert.rejects(() => service.updateReturnStatus(ctx, RETURN_ID, { status: "invalid_status", expectedVersion: 5 }), (error) => error.status === 422);
-
-  // 3. Reject missing expectedVersion
-  await assert.rejects(() => service.updateReturnStatus(ctx, RETURN_ID, { status: "RETURN_IN_TRANSIT" }), (error) => error.status === 422);
-
-  // 4. Unauthorized role is blocked
-  const badCtx = { authUser: { id: "other-user" }, roleCode: "admin_operator_donhang", ipAddress: "127.0.0.1", accessToken: "jwt-token" };
-  await assert.rejects(() => service.updateReturnStatus(badCtx, RETURN_ID, { status: "RETURN_IN_TRANSIT", trackingReturnCode:"RETURN-SHIP-001", expectedVersion: 5 }), (error) => error.status === 403);
+test("conversion requires a reason and explicit customer consent", async () => {
+  const service = createReturnService({ repository: {
+    actOnItem: async () => ({ resolution_type: "refund" })
+  } as unknown as ReturnRepository });
+  const admin = context("admin_operator_cskh_dt");
+  await assert.rejects(() => service.actOnItem(admin, RETURN_ID, ITEM_ID, { action: "convert_refund", expectedVersion: 2 }), hasCode("REASON_REQUIRED"));
+  await assert.rejects(() => service.actOnItem(admin, RETURN_ID, ITEM_ID, {
+    action: "convert_refund", expectedVersion: 2, reason: "Khach dong y nhan hoan"
+  }), hasCode("CUSTOMER_CONSENT_REQUIRED"));
+  assert.equal((await service.actOnItem(admin, RETURN_ID, ITEM_ID, {
+    action: "convert_refund", expectedVersion: 2, reason: "Khach dong y nhan hoan", customerConsent: true
+  })).resolution_type, "refund");
 });
 
 test("a support ticket cannot jump straight from open to resolved", async () => {
@@ -203,183 +216,158 @@ test("linked chatbot tickets cannot bypass filtered replies, ownership or case l
   assert.deepEqual(writes, []);
 });
 
-test("a return cannot complete before gateway-confirmed refund", async () => {
-  let refundCall: { orderId: string; amount?: number } | null = null;
+const ITEM_ID = "50000000-0000-4000-8000-000000000003";
+const REFUND_LINE = {
+  return_item_id: ITEM_ID, order_item_id: "order-line", quantity: 1, version: 3,
+  item_status: "RECEIVED", decision_status: "approved", resolution_type: "refund",
+  received_quantity: 1, matches_product: true, tags_intact: true, condition_acceptable: true,
+  package_match: true, seal_intact: false
+};
+const COD_RETURN = { return_id: RETURN_ID, order_id: "order-cod", status: "IN_PROGRESS", return_type: "refund", payment_method: "COD", version: 3 };
+const COD_PAYMENT = { payment_id: "pay-cod-1", payment_method: "COD", payment_provider: "cod", payment_status: "paid" };
+const MANUAL_BODY = {
+  returnItemId: ITEM_ID, expectedVersion: 3, transferReference: "VCB2026100501", amount: 200000,
+  transferredAt: new Date(Date.now() - 60_000).toISOString(),
+  imageProof: `storage://order-evidence/returns/${RETURN_ID}/refund_proof/receipt.png`
+};
+const VALID_RECEIVER = { bank_name: "Vietcombank", account_number: "0123456789", account_holder: "Nguyen Van A", supplement_request: null };
+
+test("Stripe refund targets the converted line using its version and amount, independent of the header", async () => {
+  let refundCall: unknown[] = [];
   const service = createReturnService({
     repository: {
-      getReturn: async () => ({ return_id: RETURN_ID, order_id: "order-456", status: "RECEIVED", refund_amount: 500000, version: 3 }),
-      getRefundableAmount: async () => 500000,
-      getPaymentByOrderId: async () => ({ payment_provider: "stripe" }),
-      updateReturnStatus: async (_id, input) => ({ status: input.status, order_id: "order-456" })
-    },
-    refunds: {
-      refund: async (orderId, amount) => {
-        refundCall = { orderId, amount };
-        return { status: "refunded" };
-      }
-    }
+      getRefundOperation: async () => null,
+      getReturn: async () => ({ ...COD_RETURN, return_type: "exchange", version: 19 }),
+      listReturnLines: async () => ({ rows: [REFUND_LINE, { return_item_id: "other-part", item_status: "REQUESTED", version: 1 }] }),
+      getItemRefundableAmount: async id => { assert.equal(id, ITEM_ID); return 200000; },
+      getPaymentByOrderId: async () => ({ payment_provider: "stripe" })
+    } as unknown as ReturnRepository,
+    refunds: { refund: async (...args) => { refundCall = args; return { status: "requested" }; } }
   });
-
-  await assert.rejects(() => service.updateReturnStatus(context("admin_operator_cskh_dt"), RETURN_ID, {status:"COMPLETED",expectedVersion:3}), error => error.code === "INVALID_TRANSITION");
-  assert.equal(refundCall,null);
-});
-
-test("triggerStripeRefund manually executes payment refund gateway", async () => {
-  let refundCall: { orderId: string; amount?: number } | null = null;
-  const service = createReturnService({
-    repository: {
-      getReturn: async () => ({ return_id: RETURN_ID, order_id: "order-789", status: "RECEIVED",condition_check_result:"qa_pass", return_type:"refund", refund_amount: 200000, version: 4 }),
-      getRefundableAmount:async()=>200000,
-      getPaymentByOrderId:async()=>({payment_provider:"stripe"})
-    },
-    refunds: {
-      refund: async (orderId, amount) => {
-        refundCall = { orderId, amount };
-        return { status: "refunded" };
-      }
-    }
-  });
-
-  const res = await service.triggerStripeRefund(context("admin_operator_cskh_dt"), RETURN_ID, { refundAmount: 200000, expectedVersion:4 });
-  assert.equal(refundCall?.orderId, "order-789");
-  assert.equal(refundCall?.amount, 200000);
+  const res = await service.triggerStripeRefund(context("admin_operator_cskh_dt"), RETURN_ID, { returnItemId: ITEM_ID, expectedVersion: 3 });
+  assert.deepEqual(refundCall, ["order-cod", 200000, RETURN_ID, 3, ITEM_ID]);
   assert.equal(res.success, true);
 });
 
-test("triggerStripeRefund throws STRIPE_REFUND_FAILED when gateway refund fails", async () => {
+test("a successful Stripe refund is replayed on retry instead of failing the completed line version", async () => {
+  let gatewayCalls = 0;
   const service = createReturnService({
     repository: {
-      getReturn: async () => ({ return_id: RETURN_ID, order_id: "order-fail", status: "RECEIVED", condition_check_result: "qa_pass", return_type: "refund", refund_amount: 200000, version: 2 }),
-      getRefundableAmount: async () => 200000,
-      getPaymentByOrderId: async () => ({ payment_provider: "stripe" })
-    },
-    refunds: {
-      refund: async () => ({ status: "failed", message: "Stripe card expired" })
-    }
+      getRefundOperation: async () => ({ return_item_id: ITEM_ID, status: "succeeded", provider_ref: "re_123" })
+    } as unknown as ReturnRepository,
+    refunds: { refund: async () => { gatewayCalls++; return { status: "refunded" }; } }
   });
+  const res = await service.triggerStripeRefund(context("admin_operator_cskh_dt"), RETURN_ID, { returnItemId: ITEM_ID, expectedVersion: 3 });
+  assert.equal(asJsonObject(res.refund).status, "refunded");
+  assert.equal(res.idempotent, true);
+  assert.equal(gatewayCalls, 0);
+});
 
+test("refund endpoints require a real line id, line version, approved refund resolution and receipt facts", async () => {
+  let gatewayCalls = 0;
+  const make = (line: JsonObject = REFUND_LINE) => createReturnService({
+    repository: {
+      getRefundOperation: async () => null,
+      getManualRefund: async () => null,
+      getReturn: async () => ({ ...COD_RETURN, status: "RECEIVED", version: 3 }),
+      listReturnLines: async () => ({ rows: [line] })
+    } as unknown as ReturnRepository,
+    refunds: { refund: async () => { gatewayCalls++; return { status: "refunded" }; } }
+  });
+  const admin = context("admin_operator_cskh_dt");
+  for (const operation of ["triggerStripeRefund", "recordManualRefund"] as const) {
+    await assert.rejects(() => make()[operation](admin, RETURN_ID, { expectedVersion: 3 }), hasCode("RETURN_ITEM_REQUIRED"));
+    await assert.rejects(() => make()[operation](admin, RETURN_ID, { returnItemId: ITEM_ID }), hasCode("VALIDATION_ERROR"));
+    await assert.rejects(() => make()[operation](admin, RETURN_ID, { returnItemId: "not-this-return", expectedVersion: 3 }), hasCode("RETURN_ITEM_NOT_FOUND"));
+    await assert.rejects(() => make()[operation](admin, RETURN_ID, { returnItemId: ITEM_ID, expectedVersion: 2 }), hasCode("VERSION_CONFLICT"));
+    for (const patch of [{ decision_status: "pending" }, { resolution_type: "exchange" }]) {
+      await assert.rejects(() => make({ ...REFUND_LINE, ...patch })[operation](admin, RETURN_ID, MANUAL_BODY), hasCode("REFUND_RESOLUTION_REQUIRED"));
+    }
+    for (const patch of [{ item_status: "WAITING_RETURN" }, { received_quantity: 0 }, { tags_intact: false }, { condition_acceptable: false }, { package_match: false }, { matches_product: false }]) {
+      await assert.rejects(() => make({ ...REFUND_LINE, ...patch })[operation](admin, RETURN_ID, MANUAL_BODY), hasCode("WAREHOUSE_QA_REQUIRED"));
+    }
+  }
+  assert.equal(gatewayCalls, 0);
+});
+
+test("Stripe failure is not reported as successful completion", async () => {
+  const service = createReturnService({
+    repository: {
+      getRefundOperation: async () => null,
+      getReturn: async () => COD_RETURN, listReturnLines: async () => ({ rows: [REFUND_LINE] }),
+      getItemRefundableAmount: async () => 200000, getPaymentByOrderId: async () => ({ payment_provider: "stripe" })
+    } as unknown as ReturnRepository,
+    refunds: { refund: async () => ({ status: "failed", message: "Provider rejected refund" }) }
+  });
+  await assert.rejects(() => service.triggerStripeRefund(context("admin_operator_cskh_dt"), RETURN_ID, MANUAL_BODY), hasCode("STRIPE_REFUND_FAILED"));
+});
+
+test("manual refund records only the target COD line atomically, without pre-RPC payment writes", async () => {
+  let recorded: unknown[] = [];
+  const service = createReturnService({ repository: {
+    getManualRefund: async () => null,
+    getReturn: async () => COD_RETURN,
+    listReturnLines: async () => ({ rows: [REFUND_LINE] }),
+    getPaymentByOrderId: async () => ({ ...COD_PAYMENT, payment_status: "pending" }),
+    getRefundReceiver: async () => VALID_RECEIVER,
+    recordManualRefund: async (...args) => { recorded = args; return { return_item_id: ITEM_ID, item_status: "COMPLETED" }; }
+  } as unknown as ReturnRepository });
+  const res = await service.recordManualRefund(context("admin_operator_cskh_dt"), RETURN_ID, { ...MANUAL_BODY, adminNote: "Chuyen khoan VCB" });
+  assert.equal(res.return_item_id, ITEM_ID);
+  assert.deepEqual(recorded, [RETURN_ID, 3, {
+    reference: MANUAL_BODY.transferReference, amount: 200000, transferredAt: MANUAL_BODY.transferredAt,
+    proof: MANUAL_BODY.imageProof, note: "Chuyen khoan VCB"
+  }, "auth-1", undefined, ITEM_ID]);
+});
+
+test("manual refund retries replay the recorded transfer and never pay the same part twice", async () => {
+  let writes = 0;
+  const service = createReturnService({ repository: {
+    getManualRefund: async () => ({ return_item_id: ITEM_ID, reference: "FT-SMOKE-20261029", amount: 200000 }),
+    recordManualRefund: async () => { writes++; return {}; }
+  } as unknown as ReturnRepository });
+  const admin = context("admin_operator_cskh_dt");
+  const replay = await service.recordManualRefund(admin, RETURN_ID, { ...MANUAL_BODY, transferReference: "ft-smoke-20261029" });
+  assert.equal(replay.idempotent, true);
+  assert.equal(replay.reference, "FT-SMOKE-20261029");
   await assert.rejects(
-    () => service.triggerStripeRefund(context("admin_operator_cskh_dt"), RETURN_ID, { expectedVersion: 2 }),
-    (error: any) => error.status === 422 && error.code === "STRIPE_REFUND_FAILED" && error.message.includes("Stripe card expired")
+    () => service.recordManualRefund(admin, RETURN_ID, { ...MANUAL_BODY, transferReference: "FT-OTHER-20261029" }),
+    hasCode("REFUND_ALREADY_REQUESTED")
   );
+  assert.equal(writes, 0);
 });
 
-test("recordManualRefund supports COD, MoMo, VNPay and auto-syncs pending COD payment to paid", async () => {
-  let paidPaymentId: string | null = null;
-  let recordedRefund: { reference: string; adminNote?: string } | null = null;
-
-  const service = createReturnService({
-    repository: {
-      getReturn: async () => ({ return_id: RETURN_ID, order_id: "order-cod", status: "RECEIVED", condition_check_result: "qa_pass", return_type: "refund", version: 3 }),
-      getPaymentByOrderId: async () => ({ payment_id: "pay-cod-1", payment_method: "COD", payment_provider: "cod", payment_status: "pending" }),
-      markPaymentPaid: async (paymentId: string) => { paidPaymentId = paymentId; return []; },
-      getRefundReceiver: async () => ({ bank_name: "Vietcombank", account_number: "0123456789", account_holder: "Nguyen Van A", supplement_request: null }),
-      recordManualRefund: async (returnId: string, version: number, input: ManualRefundInput, actorId: string) => {
-        recordedRefund = { returnId, version, reference: input.reference, proof: input.proof, actorId, adminNote: input.note };
-        return { return_id: returnId, status: "COMPLETED" };
-      }
-    }
-  });
-
-  const res = await service.recordManualRefund(context("admin_operator_cskh_dt"), RETURN_ID, {
-    expectedVersion: 3,
-    transferReference: "VCB2026100501",
-    amount: 200000,
-    transferredAt: new Date(Date.now() - 60_000).toISOString(),
-    imageProof: "https://example.com/receipt.png",
-    adminNote: "Da hoan tien vao tai khoan Vietcombank cua khach"
-  });
-
-  assert.equal(paidPaymentId, "pay-cod-1");
-  assert.equal(recordedRefund?.reference, "VCB2026100501");
-  assert.equal(recordedRefund?.adminNote, "Da hoan tien vao tai khoan Vietcombank cua khach");
-  assert.equal(res.status, "COMPLETED");
-});
-
-test("recordManualRefund rejects invalid reference, proof, or stripe payment", async () => {
-  const service = createReturnService({
-    repository: {
-      getReturn: async () => ({ return_id: RETURN_ID, order_id: "order-stripe", status: "RECEIVED", condition_check_result: "qa_pass", return_type: "refund", version: 1 }),
-      getPaymentByOrderId: async () => ({ payment_id: "pay-str-1", payment_method: "ONLINE_PAYMENT", payment_provider: "stripe", payment_status: "paid" })
-    }
-  });
-
-  // Stripe order must not use manual refund
-  await assert.rejects(
-    () => service.recordManualRefund(context("admin_operator_cskh_dt"), RETURN_ID, {
-      expectedVersion: 1,
-      transferReference: "VCB2026100501",
-      imageProof: "https://example.com/receipt.png"
-    }),
-    (error: any) => error.status === 422 && error.code === "CAPTURED_NON_STRIPE_REQUIRED"
-  );
-});
-
-const COD_RETURN = { return_id: RETURN_ID, order_id: "order-cod", status: "RECEIVED", condition_check_result: "qa_pass", return_type: "refund", payment_method: "COD", version: 3 };
-const COD_PAYMENT = { payment_id: "pay-cod-1", payment_method: "COD", payment_provider: "cod", payment_status: "paid" };
-const MANUAL_BODY = { expectedVersion: 3, transferReference: "VCB2026100501", amount: 200000, transferredAt: new Date(Date.now() - 60_000).toISOString(), imageProof: "https://example.com/receipt.png" };
-const VALID_RECEIVER = { bank_name: "Vietcombank", account_number: "0123456789", account_holder: "Nguyen Van A", supplement_request: null };
-
-test("COD manual refund is blocked while the receiving account is empty, invalid or awaiting a CSKH supplement", async () => {
-  for (const [label, receiver] of [
-    ["empty", null],
-    ["invalid account number", { ...VALID_RECEIVER, account_number: "12ab" }],
-    ["holder name with digits", { ...VALID_RECEIVER, account_holder: "Nguyen Van 9" }],
-    ["pending supplement request", { ...VALID_RECEIVER, supplement_request: "Vui long gui lai so tai khoan" }]
-  ] as const) {
-    let wrote = false;
-    const service = createReturnService({
-      repository: {
-        getReturn: async () => COD_RETURN,
-        getPaymentByOrderId: async () => COD_PAYMENT,
-        getRefundReceiver: async () => receiver,
-        recordManualRefund: async () => { wrote = true; return {}; }
-      }
-    });
-    await assert.rejects(
-      () => service.recordManualRefund(context("admin_operator_cskh_dt"), RETURN_ID, MANUAL_BODY),
-      hasCode("REFUND_RECEIVER_REQUIRED", 422),
-      label
-    );
-    assert.equal(wrote, false, `${label}: nothing may be written while blocked`);
+test("manual refunds reject every online payment provider", async () => {
+  for (const provider of ["stripe", "momo", "vnpay"]) {
+    const service = createReturnService({ repository: {
+      getManualRefund: async () => null,
+      getReturn: async () => ({ ...COD_RETURN, payment_method: "ONLINE_PAYMENT" }),
+      listReturnLines: async () => ({ rows: [REFUND_LINE] }),
+      getPaymentByOrderId: async () => ({ payment_provider: provider, payment_method: "ONLINE_PAYMENT", payment_status: "paid" })
+    } as unknown as ReturnRepository });
+    await assert.rejects(() => service.recordManualRefund(context("admin_operator_cskh_dt"), RETURN_ID, MANUAL_BODY), hasCode("COD_PAYMENT_REQUIRED"));
   }
 });
 
-test("COD manual refund records reference, amount, time and proof once the receiving account is valid", async () => {
-  let recorded: { returnId: string; version: number; input: ManualRefundInput; actorId: string } | null = null;
-  const service = createReturnService({
-    repository: {
-      getReturn: async () => COD_RETURN,
-      getPaymentByOrderId: async () => COD_PAYMENT,
-      getRefundReceiver: async () => VALID_RECEIVER,
-      recordManualRefund: async (returnId: string, version: number, input: ManualRefundInput, actorId: string) => {
-        recorded = { returnId, version, input, actorId };
-        return { return_id: returnId, status: "COMPLETED" };
-      }
-    }
-  });
-  const res = await service.recordManualRefund(context("admin_operator_cskh_dt"), RETURN_ID, { ...MANUAL_BODY, adminNote: "Chuyen khoan VCB" });
-  assert.equal(res.status, "COMPLETED");
-  assert.equal(recorded?.input.reference, "VCB2026100501");
-  assert.equal(recorded?.input.amount, 200000);
-  assert.equal(recorded?.input.note, "Chuyen khoan VCB");
-  assert.equal(recorded?.input.transferredAt, MANUAL_BODY.transferredAt);
-});
-
-test("manual refund rejects a missing amount, a future transfer time and a missing proof before any write", async () => {
-  const service = createReturnService({
-    repository: {
-      getReturn: async () => COD_RETURN,
-      getPaymentByOrderId: async () => COD_PAYMENT,
-      getRefundReceiver: async () => VALID_RECEIVER,
-      recordManualRefund: async () => { throw new Error("must not be reached"); }
-    }
-  });
+test("COD refund is blocked by invalid receivers and by public, inline or missing proof before the RPC", async () => {
+  let writes = 0;
+  const make = (receiver: JsonObject | null = VALID_RECEIVER) => createReturnService({ repository: {
+    getManualRefund: async () => null,
+    getReturn: async () => COD_RETURN, listReturnLines: async () => ({ rows: [REFUND_LINE] }),
+    getPaymentByOrderId: async () => COD_PAYMENT, getRefundReceiver: async () => receiver,
+    recordManualRefund: async () => { writes++; return {}; }
+  } as unknown as ReturnRepository });
   const admin = context("admin_operator_cskh_dt");
-  await assert.rejects(() => service.recordManualRefund(admin, RETURN_ID, { ...MANUAL_BODY, amount: 0 }), hasCode("REFUND_AMOUNT_MISMATCH"));
-  await assert.rejects(() => service.recordManualRefund(admin, RETURN_ID, { ...MANUAL_BODY, transferredAt: new Date(Date.now() + 3_600_000).toISOString() }), hasCode("TRANSFER_TIME_INVALID"));
-  await assert.rejects(() => service.recordManualRefund(admin, RETURN_ID, { ...MANUAL_BODY, transferredAt: "" }), hasCode("TRANSFER_TIME_INVALID"));
-  await assert.rejects(() => service.recordManualRefund(admin, RETURN_ID, { ...MANUAL_BODY, imageProof: "" }), hasCode("TRANSFER_PROOF_REQUIRED"));
+  for (const receiver of [null, { ...VALID_RECEIVER, account_number: "12ab" }, { ...VALID_RECEIVER, supplement_request: "Gui lai tai khoan" }]) {
+    await assert.rejects(() => make(receiver).recordManualRefund(admin, RETURN_ID, MANUAL_BODY), hasCode("REFUND_RECEIVER_REQUIRED"));
+  }
+  for (const imageProof of ["", "https://cdn.test/proof.png", "data:image/png;base64,YQ==", "http://cdn.test/proof.png"]) {
+    await assert.rejects(() => make().recordManualRefund(admin, RETURN_ID, { ...MANUAL_BODY, imageProof }), hasCode("TRANSFER_PROOF_REQUIRED"));
+  }
+  await assert.rejects(() => make().recordManualRefund(admin, RETURN_ID, { ...MANUAL_BODY, amount: 0 }), hasCode("REFUND_AMOUNT_MISMATCH"));
+  await assert.rejects(() => make().recordManualRefund(admin, RETURN_ID, { ...MANUAL_BODY, transferredAt: "" }), hasCode("TRANSFER_TIME_INVALID"));
+  await assert.rejects(() => make().recordManualRefund(admin, RETURN_ID, { ...MANUAL_BODY, transferredAt: new Date(Date.now() + 3_600_000).toISOString() }), hasCode("TRANSFER_TIME_INVALID"));
+  assert.equal(writes, 0);
 });
 
 test("requestRefundInfo stores the CSKH supplement request without moving the return", async () => {
@@ -408,10 +396,24 @@ test("requestRefundInfo stores the CSKH supplement request without moving the re
   await assert.rejects(() => service.requestRefundInfo(context("admin_operator_donhang"), RETURN_ID, { message: "Vui long gui so tai khoan", expectedVersion: 3 }), hasStatus(403));
 });
 
+test("receiving-account supplementation supports a converted refund without rewriting the original exchange type", async () => {
+  const service = createReturnService({ repository: {
+    getReturn: async () => ({ ...COD_RETURN, return_type: "exchange" }),
+    listReturnLines: async () => ({ rows: [REFUND_LINE] }),
+    getPaymentByOrderId: async () => COD_PAYMENT,
+    getRefundReceiver: async () => VALID_RECEIVER,
+    requestRefundReceiverSupplement: async (_id, _version, message) => ({ supplement_request: message })
+  } as unknown as ReturnRepository });
+  const detail = await service.requestRefundInfo(context("admin_operator_cskh_dt"), RETURN_ID, {
+    expectedVersion: 3, message: "Vui long xac nhan lai tai khoan"
+  });
+  assert.equal(asJsonObject(detail.refund_receiver).status, "supplement_requested");
+});
+
 test("requestRefundInfo is refused for Stripe returns, exchanges and finished returns", async () => {
   const admin = context("admin_operator_cskh_dt");
   const make = (ret: JsonObject, payment: JsonObject) => createReturnService({
-    repository: { getReturn: async () => ret, getPaymentByOrderId: async () => payment, requestRefundReceiverSupplement: async () => { throw new Error("must not be reached"); } }
+    repository: { getReturn: async () => ret, getPaymentByOrderId: async () => payment, listReturnLines: async () => ({ rows: [] }), requestRefundReceiverSupplement: async () => { throw new Error("must not be reached"); } }
   });
   const body = { message: "Vui long gui so tai khoan", expectedVersion: 3 };
   await assert.rejects(() => make({ ...COD_RETURN, payment_method: "ONLINE_PAYMENT" }, { payment_provider: "stripe", payment_method: "ONLINE_PAYMENT" }).requestRefundInfo(admin, RETURN_ID, body), hasCode("REFUND_RECEIVER_NOT_APPLICABLE"));
@@ -457,20 +459,29 @@ test("the return queue filters by payment kind and refuses unknown kinds", async
   await assert.rejects(() => service.listReturns(context("admin_operator_cskh_dt"), new URLSearchParams("payment_kind=momo")), hasStatus(422));
 });
 
-test("a request the warehouse could not accept can be closed with a reason, releasing its item hold", async () => {
-  let written: { status: string; reason?: unknown } | null = null;
-  const service = createReturnService({
-    repository: {
-      getReturn: async () => ({ return_id: RETURN_ID, status: "NEEDS_SUPPORT", return_type: "refund", version: 4 }),
-      updateReturnStatus: async (_id: string, input: { status: string; reason?: unknown }) => { written = input; return { status: input.status }; }
-    }
-  });
-  const admin = context("admin_operator_cskh_dt");
-  await assert.rejects(() => service.updateReturnStatus(admin, RETURN_ID, { status: "CANCELLED", expectedVersion: 4 }), hasCode("CANCEL_REASON_REQUIRED"));
-  assert.equal(written, null);
-  await service.updateReturnStatus(admin, RETURN_ID, { status: "CANCELLED", reason: "Hang tra ve khong dung mau, tu choi yeu cau", expectedVersion: 4 });
-  assert.equal(written?.status, "CANCELLED");
-  assert.equal(written?.reason, "Hang tra ve khong dung mau, tu choi yeu cau");
+test("order readers never receive full bank fields in legacy headers, manual snapshots or events", async () => {
+  const service = createReturnService({ repository: {
+    getReturn: async () => ({ ...COD_RETURN, return_type: "refund", refund_bank_name: "Vietcombank", refund_bank_account: "0123456789", refund_bank_holder: "Nguyen Van A" }),
+    getRefundableAmount: async () => 200000,
+    getPaymentByOrderId: async () => COD_PAYMENT,
+    listReturnLines: async () => ({ rows: [REFUND_LINE] }),
+    getItemRefundableAmount: async () => 200000,
+    getRefundReceiver: async () => VALID_RECEIVER,
+    getManualRefund: async () => ({ reference: "transfer-reference", receiver_snapshot: VALID_RECEIVER, proof: MANUAL_BODY.imageProof }),
+    listReturnEvents: async () => [{ payload: { receiver_snapshot: VALID_RECEIVER } }],
+    listReturns: async () => ({ rows: [{ ...COD_RETURN, refund_bank_account: "0123456789" }], count: 1 })
+  } as unknown as ReturnRepository });
+  const reader = await service.getReturn(context("admin_operator_donhang"), RETURN_ID);
+  assert.doesNotMatch(JSON.stringify(reader), /0123456789|Nguyen Van A|Vietcombank/);
+  assert.equal(asJsonObject(reader.manual_refund).reference, "transfer-reference");
+  const maskedLine = (reader.lines as JsonObject[])[0];
+  assert.equal(asJsonObject(asJsonObject(maskedLine.manual_refund).receiver_snapshot).account_number, null);
+  assert.equal(asJsonObject(maskedLine.manual_refund).proof, null);
+  const queue = await service.listReturns(context("admin_operator_donhang"), new URLSearchParams());
+  assert.equal(queue.rows[0].refund_bank_account, null);
+  const operator = await service.getReturn(context("admin_operator_cskh_dt"), RETURN_ID);
+  assert.equal(asJsonObject(operator.refund_receiver).account_number, "0123456789");
+  assert.equal(operator.refund_bank_account, "0123456789");
 });
 
 function context(roleCode) { return { authUser: { id: "auth-1" }, roleCode, accessToken: "jwt-token" }; }

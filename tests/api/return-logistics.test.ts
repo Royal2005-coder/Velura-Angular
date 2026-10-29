@@ -27,7 +27,15 @@ test("return detail carries the inbound shipment, evidence and linked exchange o
       }),
       getRefundableAmount: async () => 0,
       getPaymentByOrderId: async () => null,
-      listReturnLines: async () => ({ rows: [] }),
+      listReturnLines: async () => ({ rows: [{
+        return_item_id: "part-exchange", order_item_id: "line-1", quantity: 1,
+        item_status: "EXCHANGE_SHIPPING", decision_status: "approved", resolution_type: "exchange",
+        version: 7, exchange_order_id: "exchange-1", replacement_variant_id: "variant-2"
+      }, {
+        return_item_id: "part-pending", order_item_id: "line-2", quantity: 2,
+        item_status: "REQUESTED", decision_status: "pending", resolution_type: "exchange", version: 1
+      }] }),
+      getItemRefundableAmount: async itemId => itemId === "part-exchange" ? 125000 : 250000,
       listReturnShipments: async () => [{
         shipment_id: "shipment-1",
         direction: "inbound",
@@ -58,91 +66,49 @@ test("return detail carries the inbound shipment, evidence and linked exchange o
   assert.equal(detail.events?.length, 1);
   assert.deepEqual(detail.evidence, []);
   assert.equal(detail.exchange_order?.order_code, "EXC123");
+  const lines = detail.lines as Record<string, unknown>[];
+  assert.equal(lines[0].version, 7);
+  assert.equal(lines[0].replacement_variant_id, "variant-2");
+  assert.equal(lines[0].refundable_amount, 125000);
+  assert.equal((lines[0].exchange_order as Record<string, unknown>).order_code, "EXC123");
+  assert.equal(lines[1].exchange_order, null);
+  assert.equal(lines[1].item_status, "REQUESTED");
 });
 
-test("creating a return label requires carrier and AWB and forwards the expected version", async () => {
-  let received: Record<string, unknown> | null = null;
-  const service = createReturnService({
-    repository: {
-      createReturnShipment: async (returnId, version, input, actorId) => {
-        received = { returnId, version, input, actorId };
-        return { return: { return_id: RETURN_ID }, shipment: { shipment_id: "s1" } };
-      }
-    } as unknown as ReturnRepository
-  });
-
-  await assert.rejects(
-    () => service.createReturnShipment(context(), RETURN_ID, { expectedVersion: 3, carrier: "", trackingCode: "GHN123456" }),
-    hasCode("CARRIER_REQUIRED")
-  );
-  await assert.rejects(
-    () => service.createReturnShipment(context(), RETURN_ID, { expectedVersion: 3, carrier: "GHN", trackingCode: "123" }),
-    hasCode("TRACKING_REQUIRED")
-  );
-
-  await service.createReturnShipment(context(), RETURN_ID, {
-    expectedVersion: 3,
-    carrier: "GHN",
-    trackingCode: "GHN123456789",
-    trackingUrl: "https://donhang.ghn.vn/?order_code=GHN123456789"
-  });
-  assert.equal((received as Record<string, unknown> | null)?.["version"], 3);
-  assert.equal((received as Record<string, unknown> | null)?.["actorId"], "auth-1");
-});
-
-test("pickup requires at least one stored photo reference", async () => {
-  const service = createReturnService({
-    repository: {
-      confirmReturnPickup: async (_id, _version, input) => input
-    } as unknown as ReturnRepository
-  });
-
-  await assert.rejects(
-    () => service.confirmReturnPickup(context(), RETURN_ID, { expectedVersion: 3, photoUrls: [] }),
-    hasCode("PICKUP_PHOTO_REQUIRED")
-  );
-});
-
-test("receipt requires package match, an intact seal and a per-line disposition", async () => {
-  let writes = 0;
-  let receivedReceipts: unknown = null;
-  const service = createReturnService({
-    repository: {
-      getReturn: async () => ({ return_id: RETURN_ID, status: "RETURN_IN_TRANSIT", return_type: "refund", version: 2 }),
-      listReturnLines: async () => ({ rows: [{ order_item_id: "line-1", quantity: 1 }] }),
-      receiveReturn: async (_id, _version, input) => {
-        writes += 1;
-        receivedReceipts = input.receipts;
-        return { return_id: RETURN_ID, status: "RECEIVED" };
-      }
-    } as unknown as ReturnRepository
-  });
-
-  const body = {
-    expectedVersion: 2,
-    status: "RECEIVED",
-    conditionCheckResult: "qa_pass",
-    imageProof: "https://cdn.test/qa.jpg",
-    items: [{ orderItemId: "line-1", receivedQuantity: 1, matchesProduct: true }]
+test("pickup facts belong to the chosen part and retain private photos and optional video", async () => {
+  let received: unknown[] = [];
+  const service = createReturnService({ repository: {
+    actOnItem: async (...args) => { received = args; return { item_status: "RETURN_SHIPPING" }; }
+  } as unknown as ReturnRepository });
+  const facts = {
+    carrier: "GHN", trackingNumber: "GHN123456789", pickedUpBy: "Nhan vien GHN",
+    pickedUpAt: new Date(Date.now() - 60000).toISOString(),
+    photoUrls: [`storage://order-evidence/returns/${RETURN_ID}/pickup_photo/photo.jpg`],
+    videoUrl: `storage://order-evidence/returns/${RETURN_ID}/pickup_video/video.mp4`
   };
-  await assert.rejects(
-    () => service.updateReturnStatus(context(), RETURN_ID, body),
-    hasCode("PACKAGE_CHAIN_REQUIRED")
-  );
-  await assert.rejects(
-    () => service.updateReturnStatus(context(), RETURN_ID, { ...body, packageMatch: true, sealIntact: true }),
-    hasCode("RETURN_DISPOSITION_REQUIRED")
-  );
-  assert.equal(writes, 0);
+  await assert.rejects(() => service.actOnItem(context(), RETURN_ID, "part-1", { action: "pickup", expectedVersion: 3, ...facts, pickedUpBy: "" }), hasCode("PICKUP_FACTS_REQUIRED"));
+  await assert.rejects(() => service.actOnItem(context(), RETURN_ID, "part-1", { action: "pickup", expectedVersion: 3, ...facts, pickedUpAt: new Date(Date.now() + 60000).toISOString() }), hasCode("PICKUP_FACTS_REQUIRED"));
+  await service.actOnItem(context(), RETURN_ID, "part-1", { action: "pickup", expectedVersion: 3, ...facts });
+  assert.deepEqual(received.slice(0, 6), [RETURN_ID, "part-1", "pickup", facts, 3, "auth-1"]);
+});
 
-  await service.updateReturnStatus(context(), RETURN_ID, {
-    ...body,
-    packageMatch: true,
-    sealIntact: true,
-    items: [{ orderItemId: "line-1", receivedQuantity: 1, matchesProduct: true, disposition: "restock" }]
-  });
-  assert.equal(writes, 1);
-  assert.deepEqual(receivedReceipts, [{ orderItemId: "line-1", receivedQuantity: 1, matchesProduct: true, disposition: "restock" }]);
+test("receipt requires explicit booleans, private proof and a disposition without rejecting a broken seal", async () => {
+  const writes: unknown[][] = [];
+  const service = createReturnService({ repository: {
+    actOnItem: async (...args) => { writes.push(args); return { item_status: "RECEIVED" }; }
+  } as unknown as ReturnRepository });
+  const facts = {
+    action: "receive", expectedVersion: 2, receivedQuantity: 1,
+    matchesProduct: true, tagsIntact: true, conditionAcceptable: true, packageMatch: true, sealIntact: false,
+    disposition: "restock", receiptProofRef: `storage://order-evidence/returns/${RETURN_ID}/qa_photo/proof.jpg`
+  };
+  await assert.rejects(() => service.actOnItem(context(), RETURN_ID, "part-1", { ...facts, tagsIntact: undefined }), hasCode("RECEIPT_FACTS_REQUIRED"));
+  await assert.rejects(() => service.actOnItem(context(), RETURN_ID, "part-1", { ...facts, disposition: "" }), hasCode("RETURN_DISPOSITION_REQUIRED"));
+  await assert.rejects(() => service.actOnItem(context(), RETURN_ID, "part-1", { ...facts, receiptProofRef: "https://cdn.test/qa.jpg" }), hasCode("PROOF_REQUIRED"));
+  assert.equal(writes.length, 0);
+  const result = await service.actOnItem(context(), RETURN_ID, "part-1", facts);
+  assert.equal(result.item_status, "RECEIVED");
+  assert.equal((writes[0][3] as Record<string, unknown>).sealIntact, false);
 });
 
 test("order operators cannot create labels or confirm pickup", async () => {

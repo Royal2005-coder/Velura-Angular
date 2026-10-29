@@ -203,7 +203,8 @@ export function createOrderService({
       requireUuid(orderId, "orderId");
       const order = await repository.findById(orderId, context.accessToken);
       if (!order) throw new HttpError(404, "ORDER_NOT_FOUND", orderErrorMessage("ORDER_NOT_FOUND"));
-      const actorId = context.profile?.user_id || context.authUser.id;
+      const actorId = context.profile?.user_id || context.authUser?.id;
+      if (!actorId) throw new HttpError(401, "AUTH_REQUIRED", "Authentication is required");
       const evidence = await storeOrderEvidence({ orderId, stage, note, actorId, req });
       await writeAuditLog({
         actor_id: actorId,

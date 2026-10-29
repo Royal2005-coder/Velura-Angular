@@ -17,6 +17,15 @@
             <span class="post-meta__dot">&middot;</span>
             <span class="post-meta__read-time">{{ article.readMinutes }} phút đọc</span>
           </div>
+          @if (paragraphs(article.content).length) {
+            <div class="featured-post__body">
+              @for (paragraph of paragraphs(article.content); track $index) {
+                <p>{{ paragraph }}</p>
+              }
+            </div>
+          } @else {
+            <p class="featured-post__excerpt">Nội dung bài viết đang được cập nhật.</p>
+          }
         </div>
       </article>
     } @else {

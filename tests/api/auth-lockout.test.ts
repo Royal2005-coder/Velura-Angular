@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { HttpError } from "../../apps/api/src/http.js";
 import { accessForRole, rolePages } from "../../apps/api/src/rbac.js";
-import { assertNotLocked, loginLockStatus, nextFailedLoginState } from "../../apps/api/src/auth-lockout.js";
+import { assertAccountNotLocked, assertNotLocked, loginLockStatus, nextFailedLoginState } from "../../apps/api/src/auth-lockout.js";
 
 const ROOT = process.cwd();
 
@@ -68,4 +68,16 @@ test("admin password grant and sign-out stay on the custom API", async () => {
   assert.doesNotMatch(login, /signInWithPassword/);
   assert.match(shell, /askLogout/);
   assert.match(shell, /signOut\(/);
+});
+
+test("admin lock_type blocks OTP/reset self-reactivation until an admin unlocks", async () => {
+  assert.doesNotThrow(() => assertAccountNotLocked({ lock_type: null }));
+  assert.throws(
+    () => assertAccountNotLocked({ lock_type: "permanent" }),
+    (error: unknown) => error instanceof HttpError && error.status === 423 && error.code === "ACCOUNT_LOCKED"
+  );
+  assert.throws(
+    () => assertAccountNotLocked({ lock_type: "temporary" }),
+    (error: unknown) => error instanceof HttpError && error.status === 423
+  );
 });

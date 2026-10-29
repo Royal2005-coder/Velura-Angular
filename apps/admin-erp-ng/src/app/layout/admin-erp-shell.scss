@@ -415,3 +415,44 @@
     display: none;
   }
 }
+
+.route-busy {
+  position: fixed;
+  inset: 0;
+  z-index: 95;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: color-mix(in srgb, var(--erp-ink) 18%, transparent);
+  color: var(--erp-ink);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: progress;
+  backdrop-filter: blur(1px);
+}
+
+.route-busy__spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid color-mix(in srgb, var(--erp-ink) 18%, transparent);
+  border-top-color: var(--erp-accent);
+  border-radius: 50%;
+  animation: route-busy-spin 650ms linear infinite;
+}
+
+@keyframes route-busy-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.route-busy {
+  animation: route-busy-in 140ms ease-out both;
+}
+
+@keyframes route-busy-in {
+  from {
+    opacity: 0;
+  }
+}

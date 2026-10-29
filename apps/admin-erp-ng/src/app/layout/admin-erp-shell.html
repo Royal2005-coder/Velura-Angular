@@ -108,3 +108,10 @@
     </button>
   </div>
 </app-erp-modal>
+
+@if (navigating()) {
+  <div class="route-busy" role="status" aria-live="polite">
+    <span class="route-busy__spinner" aria-hidden="true"></span>
+    <span>Đang chuyển trang…</span>
+  </div>
+}

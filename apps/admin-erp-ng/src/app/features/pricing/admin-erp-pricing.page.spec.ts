@@ -103,14 +103,23 @@ describe('AdminErpPricingPage', () => {
     expect(last?.['status']).toBe('on_sale');
   });
 
-  it('filters the current page by derived price state', async () => {
-    const { fixture } = await boot(() => of({ rows: products, count: 3 }));
+  it('sends the derived price state to the server instead of filtering one page', async () => {
+    const calls: Array<Record<string, string> | undefined> = [];
+    const { fixture } = await boot((params) => {
+      const state = params?.['price_state'];
+      const rows = state === 'invalid' ? [products[1]] : state === 'missing_sale' ? [products[2]] : products;
+      return of({ rows, count: rows.length });
+    }, calls);
     const page = fixture.componentInstance;
 
-    page.priceState.set('invalid');
+    page.onPriceStateChange({ target: { value: 'invalid' } } as unknown as Event);
+    page.applyFilters();
+    expect(calls.at(-1)?.['price_state']).toBe('invalid');
     expect(page.filtered().map((row) => row.product_id)).toEqual(['p2']);
 
-    page.priceState.set('missing');
+    page.onPriceStateChange({ target: { value: 'missing' } } as unknown as Event);
+    page.applyFilters();
+    expect(calls.at(-1)?.['price_state']).toBe('missing_sale');
     expect(page.filtered().map((row) => row.product_id)).toEqual(['p3']);
   });
 

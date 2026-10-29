@@ -96,6 +96,7 @@ export class AdminErpProductsPage {
   readonly products = signal<AdminProductRow[]>([]);
   readonly categories = signal<AdminCategoryRow[]>([]);
   readonly lowStockRows = signal<AdminLowStockRow[]>([]);
+  readonly lowStockTotal = signal(0);
   readonly total = signal(0);
   readonly onSale = signal(0);
   readonly hidden = signal(0);
@@ -153,7 +154,7 @@ export class AdminErpProductsPage {
     { key: 'logs', label: 'Nhật ký', count: this.logsTotal() },
   ]);
 
-  readonly lowStockCount = computed(() => new Set(this.lowStockRows().map((row) => row.product_id)).size);
+  readonly lowStockCount = computed(() => this.lowStockTotal());
   readonly featuredCount = computed(() => this.products().filter((row) => row.is_featured).length);
   readonly comboCount = computed(() => this.products().filter((row) => row.is_combo).length);
   readonly pageStock = computed(() =>
@@ -984,14 +985,15 @@ export class AdminErpProductsPage {
       onSale: this.api.listProducts({ status: 'on_sale', limit: '1' }).pipe(catchError(() => of(EMPTY_LIST))),
       hidden: this.api.listProducts({ status: 'hidden', limit: '1' }).pipe(catchError(() => of(EMPTY_LIST))),
       out: this.api.listProducts({ status: 'out_of_stock', limit: '1' }).pipe(catchError(() => of(EMPTY_LIST))),
-      low: this.api.listLowStock().pipe(catchError(() => of(EMPTY_LOW_STOCK))),
+      // Count only: the stock tab owns the capped low-stock row payload.
+      low: this.api.listProducts({ lowStock: 'true', limit: '1' }).pipe(catchError(() => of(EMPTY_LIST))),
     }).subscribe((payload) => {
       this.products.set(adminListRows(payload.list));
       this.total.set(adminListCount(payload.list));
       this.onSale.set(adminListCount(payload.onSale));
       this.hidden.set(adminListCount(payload.hidden));
       this.outOfStock.set(adminListCount(payload.out));
-      this.lowStockRows.set(adminListRows(payload.low));
+      this.lowStockTotal.set(adminListCount(payload.low));
       this.loading.set(false);
       this.hasLoadedOnce.set(true);
     });
@@ -1010,6 +1012,7 @@ export class AdminErpProductsPage {
       }))
       .subscribe((payload) => {
         this.lowStockRows.set(adminListRows(payload));
+        this.lowStockTotal.set(adminListCount(payload));
         this.loading.set(false);
         this.hasLoadedOnce.set(true);
       });

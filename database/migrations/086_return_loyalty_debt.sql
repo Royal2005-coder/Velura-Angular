@@ -92,7 +92,7 @@ begin
   v_merchandise := greatest(0,coalesce(v_order.subtotal,0)
     - case when exists(select 1 from public.voucher where voucher_id=v_order.voucher_id
         and discount_type::text='free_shipping') then 0 else coalesce(v_order.discount_amount,0) end
-    - coalesce(v_order.points_discount_amount,0));
+    - coalesce(v_order.points_discount,0));
   v_earned := floor(v_merchandise/1000)*1000;
   v_debt_paid := least(v_earned,greatest(0,v_account.debt_milli_points));
   v_credit := v_earned-v_debt_paid;
@@ -140,7 +140,7 @@ begin
   v_net_paid := greatest(0,coalesce(v_order.subtotal,0)
     - case when exists(select 1 from public.voucher where voucher_id=v_order.voucher_id
         and discount_type::text='free_shipping') then 0 else coalesce(v_order.discount_amount,0) end
-    - coalesce(v_order.points_discount_amount,0));
+    - coalesce(v_order.points_discount,0));
   -- Legacy earn rows are the lots. Never collect a lot after its expiry, even if the expiry job is late.
   -- Debt repayments are earned value too, but have no spendable lot; use their paired earn's expiry.
   select greatest(0,least(coalesce(v_order.points_earned_milli,0),

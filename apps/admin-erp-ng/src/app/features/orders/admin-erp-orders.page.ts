@@ -1,7 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, DestroyRef, Component, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink, type ParamMap } from '@angular/router';
-import { catchError, of } from 'rxjs';
+import { catchError, finalize, of } from 'rxjs';
 import {
   AdminAuditRow,
   AdminErpApiService,
@@ -87,6 +87,15 @@ const CARRIER_OUTCOMES = [
   { code: 'failed_retrying', label: 'Giao thất bại, giao lại' },
   { code: 'failed_returned', label: 'Giao thất bại, hoàn hàng' },
 ];
+const STAGE_LABELS: Readonly<Record<string, string>> = {
+  pending: 'Chờ xác nhận',
+  confirmed: 'Đã xác nhận',
+  processing: 'Chuẩn bị hàng',
+  shipping: 'Đang giao hàng',
+  delivered: 'Giao thành công',
+  cancelled: 'Đã hủy',
+  delivery_failed: 'Giao thất bại',
+};
 
 /**
  * Order operations workspace. Preserves the API state machine, COD call guard,
@@ -139,6 +148,12 @@ export class AdminErpOrdersPage {
   readonly logsCount = signal(0);
   readonly logsPage = signal(1);
   readonly selected = signal<AdminOrderRow | null>(null);
+  readonly selectedStage = signal<string>('all');
+  readonly evidenceFile = signal<File | null>(null);
+  readonly evidenceNote = signal('');
+  readonly evidenceSaving = signal(false);
+  readonly evidenceError = signal<string | null>(null);
+  readonly evidenceNotice = signal<string | null>(null);
   readonly detailLoading = signal(false);
   readonly modal = signal<OrderModal>(null);
   readonly actionError = signal<string | null>(null);
@@ -197,6 +212,14 @@ export class AdminErpOrdersPage {
       auditTrace(this.audit()),
     ),
   );
+  readonly stageEntries = computed(() => {
+    const stage = this.selectedStage();
+    return this.trace().filter((entry) => stage === 'all' || entry.stage === stage);
+  });
+  readonly stageEvidence = computed(() => {
+    const stage = this.selectedStage();
+    return (this.selected()?.evidence || []).filter((item) => stage === 'all' || item.stage === stage);
+  });
   /** Values the action form can already know from the order, so nothing is typed twice. */
   readonly prefill = computed(() => actionPrefill(this.activeAction(), this.selected()));
   /** Related records reachable without leaving the drawer. */
@@ -486,10 +509,88 @@ export class AdminErpOrdersPage {
   closeDetail(): void {
     this.detailRequestId += 1;
     this.selected.set(null);
+    this.selectedStage.set('all');
+    this.evidenceFile.set(null);
+    this.evidenceNote.set('');
+    this.evidenceError.set(null);
+    this.evidenceNotice.set(null);
     this.linkedReturns.set([]);
     this.detailLoading.set(false);
     this.closeModal();
     this.notice.set(null);
+  }
+
+  /**
+   * Filters the trail and evidence by one pipeline step; clicking the active step shows all.
+   */
+  selectStage(stage: string): void {
+    this.selectedStage.set(this.selectedStage() === stage ? 'all' : stage);
+  }
+
+  /**
+   * Vietnamese label for a pipeline/evidence stage.
+   */
+  stageLabel(stage: string | undefined): string {
+    return stage ? STAGE_LABELS[stage] || stage : 'Tất cả công đoạn';
+  }
+
+  /**
+   * Number of trail facts and evidence files recorded for one stage.
+   */
+  stepCount(stage: string): number {
+    return (
+      this.trace().filter((entry) => entry.stage === stage).length +
+      (this.selected()?.evidence || []).filter((item) => item.stage === stage).length
+    );
+  }
+
+  /**
+   * Tracks the chosen evidence file.
+   */
+  onEvidenceFile(event: Event): void {
+    this.evidenceFile.set((event.target as HTMLInputElement).files?.[0] ?? null);
+    this.evidenceError.set(null);
+    this.evidenceNotice.set(null);
+  }
+
+  /**
+   * Tracks the evidence note.
+   */
+  onEvidenceNote(event: Event): void {
+    this.evidenceNote.set((event.target as HTMLTextAreaElement).value);
+  }
+
+  /**
+   * Uploads one image/video as evidence of the selected stage.
+   */
+  submitEvidence(event: Event): void {
+    event.preventDefault();
+    const order = this.selected();
+    const stage = this.selectedStage();
+    const file = this.evidenceFile();
+    if (!order || !file || this.evidenceSaving()) return;
+    if (stage === 'all') {
+      this.evidenceError.set('Chọn một công đoạn trước khi tải bằng chứng.');
+      return;
+    }
+    this.evidenceSaving.set(true);
+    this.evidenceError.set(null);
+    this.evidenceNotice.set(null);
+    this.api
+      .uploadOrderEvidence(order.order_id, file, stage, this.evidenceNote())
+      .pipe(finalize(() => this.evidenceSaving.set(false)))
+      .subscribe({
+        next: (evidence) => {
+          this.selected.update((current) =>
+            current ? { ...current, evidence: [evidence, ...(current.evidence || [])] } : current,
+          );
+          this.evidenceFile.set(null);
+          this.evidenceNote.set('');
+          (event.target as HTMLFormElement).reset();
+          this.evidenceNotice.set(`Đã tải bằng chứng cho công đoạn ${this.stageLabel(stage)}.`);
+        },
+        error: (error: unknown) => this.evidenceError.set(adminErrorMessage(error, 'Không tải được bằng chứng.')),
+      });
   }
 
   /**
@@ -718,7 +819,7 @@ export class AdminErpOrdersPage {
   private applyResult(result: AdminOrderActionResult): void {
     this.submitting.set(false);
     this.closeModal();
-    this.selected.set(result.order);
+    this.selected.set({ ...result.order, evidence: this.selected()?.evidence ?? [] });
     this.notice.set(this.refundNotice(result.refund));
     this.loadOrderAudit(result.order.order_id);
     this.loadLinkedReturns(result.order.order_id);

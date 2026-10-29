@@ -118,6 +118,8 @@ describe('AdminErpOrdersPage', () => {
       listReturns: () => of({ rows: [], count: 0 }),
       performOrderAction: () => of({ order: paidOrder, refund: null }),
       resolvePayment: () => of({}),
+      uploadOrderEvidence: () =>
+        of({ evidence_id: 'e-default', stage: 'processing', kind: 'image', url: 'https://signed', created_at: '2026-10-23T02:00:00Z' }),
       simulateCarrier: () => of(paidOrder),
       ...overrides,
     };
@@ -375,5 +377,35 @@ describe('AdminErpOrdersPage', () => {
     expect(page.canReadReturns()).toBe(false);
     expect(called).toBe(0);
     expect(page.trace().length).toBe(0);
+  });
+
+  it('filters facts and evidence by stage and uploads evidence for that stage', async () => {
+    const uploads: Array<{ stage: string; note: string }> = [];
+    const fixture = await boot(() => of({ rows: [codOrder], count: 1 }), [], {
+      uploadOrderEvidence: (_id: string, _file: File, stage: string, note: string) => {
+        uploads.push({ stage, note });
+        return of({ evidence_id: 'e-1', stage, kind: 'image', url: 'https://signed', created_at: '2026-10-23T02:00:00Z' });
+      },
+    });
+    const page = fixture.componentInstance;
+    page.selected.set({
+      ...codOrder,
+      events: [
+        { event_id: 'e-prep', action: 'upsert_shipment', from_status: 'confirmed', to_status: 'processing', created_at: '2026-10-23T02:00:00Z' },
+        { event_id: 'e-ship', action: 'confirm_handover', from_status: 'processing', to_status: 'shipping', created_at: '2026-10-23T03:00:00Z' },
+      ],
+      evidence: [{ evidence_id: 'old', stage: 'processing', kind: 'image', url: 'https://old', created_at: '2026-10-23T01:00:00Z' }],
+    });
+
+    page.selectStage('processing');
+    expect(page.stageEntries().every((entry) => entry.stage === 'processing')).toBe(true);
+    expect(page.stageEvidence().map((item) => item.evidence_id)).toEqual(['old']);
+
+    page.evidenceFile.set(new File(['proof'], 'proof.png', { type: 'image/png' }));
+    page.evidenceNote.set('Ảnh đóng gói');
+    page.submitEvidence({ preventDefault: () => undefined, target: document.createElement('form') } as unknown as Event);
+
+    expect(uploads).toEqual([{ stage: 'processing', note: 'Ảnh đóng gói' }]);
+    expect(page.selected()?.evidence?.[0].evidence_id).toBe('e-1');
   });
 });

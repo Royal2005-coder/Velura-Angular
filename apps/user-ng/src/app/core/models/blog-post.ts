@@ -9,6 +9,8 @@ export interface BlogPost {
   date: string;
   readMinutes: number;
   featured?: boolean;
+  /** Plain-text article body from the CMS; rendered as escaped paragraphs, never raw HTML. */
+  content?: string;
 }
 
 export const BLOG_POSTS: BlogPost[] = [

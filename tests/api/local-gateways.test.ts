@@ -58,3 +58,21 @@ test("fulfillment extras require real booleans and complete enabled recipient/in
   assert.throws(()=>validateCheckoutExtras({is_vat_invoice:true,vat_tax_code:"0123456789"}));
   assert.throws(()=>validateCheckoutExtras({gift_message:"x".repeat(501)}));
 });
+
+test("production never enables demo wallets even with sandbox credentials", () => {
+  const before = {
+    nodeEnv: config.nodeEnv, apiPublicOrigin: config.apiPublicOrigin,
+    vnpayTmnCode: config.vnpayTmnCode, vnpayHashSecret: config.vnpayHashSecret,
+    momoPartnerCode: config.momoPartnerCode, momoAccessKey: config.momoAccessKey, momoSecretKey: config.momoSecretKey,
+  };
+  try {
+    config.nodeEnv = "production";
+    config.apiPublicOrigin = "https://api.velura.test";
+    config.vnpayTmnCode = "merchant"; config.vnpayHashSecret = "secret";
+    config.momoPartnerCode = "partner"; config.momoAccessKey = "access"; config.momoSecretKey = "secret";
+    assert.equal(localGatewayConfigured("VNPAY"), false);
+    assert.equal(localGatewayConfigured("MOMO"), false);
+  } finally {
+    Object.assign(config, before);
+  }
+});

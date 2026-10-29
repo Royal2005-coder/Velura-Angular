@@ -18,8 +18,13 @@ function secureHttps(value: string): boolean {
   try { return new URL(value).protocol === "https:"; } catch { return false; }
 }
 
-/** Missing merchant credentials disable the provider before an order is persisted. */
+/**
+ * Missing merchant credentials disable the provider before an order is persisted.
+ * VNPay/MoMo are demo-only for Velura; production must never enable them by merely
+ * shipping sandbox credentials, because a sandbox callback could mark real orders paid.
+ */
 export function localGatewayConfigured(provider: LocalGateway): boolean {
+  if (config.nodeEnv === "production") return false;
   if (!secureHttps(config.apiPublicOrigin)) return false;
   return provider === "VNPAY"
     ? Boolean(config.vnpayTmnCode && config.vnpayHashSecret && secureHttps(config.vnpayPaymentUrl))

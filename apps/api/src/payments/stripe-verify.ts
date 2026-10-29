@@ -1,7 +1,8 @@
 import { config } from "../config.js";
 import { HttpError, readJson, sendJson } from "../http.js";
 import { selectOne, selectRows } from "../supabase.js";
-import { asString, type HeaderMap, type HttpRequest, type HttpResponse, type JsonObject } from "../types.js";
+import { asString, type AuthContext, type HeaderMap, type HttpRequest, type HttpResponse, type JsonObject } from "../types.js";
+import { requireCustomerOrderAccess } from "../user/order-access.js";
 import { closeStripePayment, markStripePaymentPaid } from "./stripe.js";
 
 export interface StripeVerifyResult {
@@ -20,12 +21,15 @@ export interface StripeVerifyResult {
  * Nếu giao dịch đã thanh toán trên Stripe, hàm sẽ tự động cập nhật order sang 'confirmed' và payment sang 'paid'
  * theo đúng quy tắc AD_ORDER_07.
  */
-export async function verifyStripeOrder(params: {
-  orderId?: string;
-  orderCode?: string;
-  sessionId?: string;
-  paymentIntentId?: string;
-}): Promise<StripeVerifyResult> {
+export async function verifyStripeOrder(
+  params: {
+    orderId?: string;
+    orderCode?: string;
+    sessionId?: string;
+    paymentIntentId?: string;
+  },
+  assertAccess?: (order: JsonObject) => void
+): Promise<StripeVerifyResult> {
   const orderId = asString(params.orderId);
   const orderCode = asString(params.orderCode);
   const sessionId = asString(params.sessionId);
@@ -60,6 +64,7 @@ export async function verifyStripeOrder(params: {
   if (!order) {
     throw new HttpError(404, "ORDER_NOT_FOUND", "Không tìm thấy đơn hàng cần xác thực thanh toán.");
   }
+  assertAccess?.(order);
 
   const currentOrderId = asString(order.order_id);
   const currentOrderCode = asString(order.order_code);
@@ -197,22 +202,27 @@ export async function verifyStripeOrder(params: {
 export async function handleStripeVerify(
   req: HttpRequest,
   res: HttpResponse,
-  corsHeaders: HeaderMap
+  corsHeaders: HeaderMap,
+  context: AuthContext
 ): Promise<void> {
   const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
   let orderId = asString(url.searchParams.get("order_id") || url.searchParams.get("orderId"));
   let orderCode = asString(url.searchParams.get("order_code") || url.searchParams.get("code"));
   let sessionId = asString(url.searchParams.get("session_id") || url.searchParams.get("sessionId"));
   let paymentIntentId = asString(url.searchParams.get("payment_intent_id") || url.searchParams.get("payment_intent"));
+  let body: JsonObject = {};
 
   if (req.method === "POST") {
-    const body = await readJson(req);
+    body = await readJson(req);
     orderId = asString(body.order_id || body.orderId) || orderId;
     orderCode = asString(body.order_code || body.code) || orderCode;
     sessionId = asString(body.session_id || body.sessionId) || sessionId;
     paymentIntentId = asString(body.payment_intent_id || body.payment_intent) || paymentIntentId;
   }
 
-  const result = await verifyStripeOrder({ orderId, orderCode, sessionId, paymentIntentId });
+  const result = await verifyStripeOrder(
+    { orderId, orderCode, sessionId, paymentIntentId },
+    (order) => requireCustomerOrderAccess(order, context, body)
+  );
   sendJson(res, 200, result, corsHeaders);
 }

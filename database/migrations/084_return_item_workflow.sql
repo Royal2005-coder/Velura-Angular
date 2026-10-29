@@ -468,7 +468,7 @@ returns numeric language sql stable security definer set search_path=pg_catalog,
  left join public.voucher v on v.voucher_id=o.voucher_id
  cross join lateral (select case when o.subtotal>0 then greatest(0,o.subtotal-
    case when v.discount_type::text='free_shipping' then 0 else coalesce(o.discount_amount,0) end-
-   coalesce(o.points_discount_amount,0))/o.subtotal else 0 end as ratio) f
+   coalesce(o.points_discount,0))/o.subtotal else 0 end as ratio) f
  where oi.item_id=p_order_item_id and p_unit_number between 1 and oi.quantity;
 $$;
 create or replace function public.velura_return_item_refundable_amount(p_return_item_id uuid)

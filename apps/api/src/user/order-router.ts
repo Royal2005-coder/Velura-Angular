@@ -134,7 +134,7 @@ export function generateOrderCode(): string {
 const CUSTOMER_ORDER_FIELDS = [
   "order_id", "order_code", "order_date", "created_at", "updated_at", "delivered_at", "status",
   "shipping_name", "shipping_phone", "shipping_address", "shipping_fee", "subtotal", "discount_amount",
-  "points_discount_amount", "total_amount", "payment_method", "voucher_id", "cancelled_reason", "tracking_code", "carrier", "tracking_url",
+  "points_discount_amount:points_discount", "total_amount", "payment_method", "voucher_id", "cancelled_reason", "tracking_code", "carrier", "tracking_url",
   "version"
 ] as const;
 

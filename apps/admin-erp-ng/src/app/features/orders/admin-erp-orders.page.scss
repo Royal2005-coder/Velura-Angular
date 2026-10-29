@@ -409,3 +409,112 @@
   margin-top: 8px;
   max-width: 220px;
 }
+
+.pipeline__button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+.pipeline__count {
+  min-width: 16px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--erp-surface-muted);
+  color: var(--erp-muted);
+  font-size: 9.5px;
+  text-align: center;
+}
+
+.pipeline__step.is-selected {
+  outline: 2px solid var(--erp-accent);
+  outline-offset: 1px;
+}
+
+.pipeline__step--all {
+  color: var(--erp-muted);
+}
+
+.order-section__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.order-evidence {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--erp-line);
+}
+
+.order-evidence h5 {
+  margin: 0;
+  color: var(--erp-ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.evidence-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.evidence-card {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  padding: 8px;
+  border: 1px solid var(--erp-line);
+  border-radius: var(--erp-radius-sm);
+  background: var(--erp-surface-muted);
+}
+
+.evidence-card__media {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 4px;
+  background: var(--erp-surface);
+}
+
+.evidence-card__media--missing {
+  display: grid;
+  place-items: center;
+  color: var(--erp-muted);
+  font-size: 10px;
+  text-align: center;
+}
+
+.evidence-card figcaption {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  color: var(--erp-muted);
+  font-size: 10.5px;
+}
+
+.evidence-card figcaption strong {
+  color: var(--erp-text);
+  font-size: 11px;
+}
+
+.evidence-form {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--erp-line);
+  border-radius: var(--erp-radius-sm);
+  background: var(--erp-surface-muted);
+}

@@ -60,6 +60,8 @@ export interface OrderTraceEntry {
   readonly origin: OrderTraceOrigin;
   readonly tone: OrderTraceTone;
   readonly links: readonly OrderTraceLink[];
+  /** Pipeline step this fact belongs to; empty when it belongs to no single step. */
+  readonly stage?: string;
 }
 
 /** Known values an action form can be seeded from, so the operator never re-types them. */
@@ -150,7 +152,59 @@ export function eventTrace(events: readonly AdminOrderEvent[]): OrderTraceEntry[
     origin: 'order' as OrderTraceOrigin,
     tone: traceTone(String(event.action || ''), event.to_status),
     links: [],
+    stage: stageForAction(String(event.action || ''), event.to_status, event.from_status),
   }));
+}
+
+const STAGE_BY_STATUS: Readonly<Record<string, string>> = {
+  pending: 'pending',
+  waiting_payment: 'pending',
+  confirmed: 'confirmed',
+  processing: 'processing',
+  shipping: 'shipping',
+  delivered: 'delivered',
+  delivery_failed: 'delivery_failed',
+  cancelled: 'cancelled',
+};
+
+const STAGE_BY_ACTION: Readonly<Record<string, string>> = {
+  call_confirm: 'pending',
+  payment_succeeded: 'pending',
+  payment_failed: 'pending',
+  payment_expired: 'pending',
+  confirm_cod: 'confirmed',
+  start_processing: 'confirmed',
+  upsert_shipment: 'processing',
+  confirm_handover: 'processing',
+  void_shipment: 'processing',
+  update_tracking: 'shipping',
+  carrier_note: 'shipping',
+  carrier_delivered: 'shipping',
+  carrier_failed_retrying: 'shipping',
+  record_failure_reason: 'delivery_failed',
+  confirm_return_to_stock: 'delivery_failed',
+  cancel: 'cancelled',
+  customer_cancel: 'cancelled',
+  retry_refund: 'cancelled',
+};
+
+function stageForAction(action: string, toStatus?: string | null, fromStatus?: string | null): string {
+  return (
+    STAGE_BY_STATUS[String(toStatus || '')] ||
+    (action === 'cancel' || action === 'customer_cancel' ? STAGE_BY_STATUS[String(fromStatus || '')] : '') ||
+    STAGE_BY_ACTION[action] ||
+    ''
+  );
+}
+
+function stageOfAudit(row: AdminAuditRow, action: string): string {
+  for (const value of [row.new_value, row.old_value]) {
+    if (value && typeof value === 'object') {
+      const status = String((value as Record<string, unknown>)['status'] || '');
+      if (STAGE_BY_STATUS[status]) return STAGE_BY_STATUS[status];
+    }
+  }
+  return STAGE_BY_ACTION[action] || '';
 }
 
 /**
@@ -206,6 +260,7 @@ export function auditTrace(rows: readonly AdminAuditRow[]): OrderTraceEntry[] {
         origin: 'audit' as OrderTraceOrigin,
         tone: traceTone(action),
         links: [],
+        stage: stageOfAudit(row, action),
       };
     });
 }

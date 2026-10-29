@@ -16,6 +16,7 @@ import { AdminErpSessionService } from '../../core/admin-erp-session.service';
 import { REVIEW_STATUS_LABELS, statusLabelFrom } from '../../core/admin-erp-status-labels';
 import { AdminErpDataTable, AdminTableColumn } from '../../shared/ui/admin-data-table';
 import { AdminErpDrawer } from '../../shared/ui/admin-drawer';
+import { AdminErpLoadingOverlay } from '../../shared/ui/admin-loading-overlay';
 import { AdminErpFilterBar } from '../../shared/ui/admin-filter-bar';
 import { AdminErpIcon } from '../../shared/ui/admin-erp-icon';
 import { AdminErpKpiCard } from '../../shared/ui/admin-kpi-card';
@@ -60,6 +61,7 @@ const RESTRICTED_PATTERNS: readonly string[] = [
     AdminErpDataTable,
     AdminErpPagination,
     AdminErpDrawer,
+    AdminErpLoadingOverlay,
     AdminErpModal,
     AdminErpStatusBadge,
     AdminErpIcon,
@@ -94,6 +96,7 @@ export class AdminErpReviewsPage {
   readonly selected = signal<AdminReviewRow | null>(null);
   readonly selectedLog = signal<AdminAuditRow | null>(null);
   readonly detailError = signal<string | null>(null);
+  readonly detailLoading = signal(false);
   readonly actionSaving = signal(false);
   readonly actionType = signal<ReviewAction>(null);
   readonly actionError = signal<string | null>(null);
@@ -317,15 +320,18 @@ export class AdminErpReviewsPage {
     const review = row as AdminReviewRow;
     this.selected.set(review);
     this.detailError.set(null);
+    this.detailLoading.set(true);
     this.sentiment.set(this.analyzeSentiment(review));
     this.actionType.set(null);
     this.api.getReview(review.review_id).subscribe({
       next: (full) => {
+        this.detailLoading.set(false);
         if (this.selected()?.review_id === review.review_id) {
           this.selected.set(full);
         }
       },
       error: (error: unknown) => {
+        this.detailLoading.set(false);
         if (this.selected()?.review_id === review.review_id) {
           this.detailError.set(adminErrorMessage(error, 'Không tải được chi tiết đánh giá.'));
         }

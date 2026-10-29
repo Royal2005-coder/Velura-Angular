@@ -412,3 +412,5 @@
   (scanned)="applyShipmentScan($event)"
   (closed)="scanOpen.set(false)"
 />
+
+<app-erp-loading-overlay [active]="detailLoading()" label="Đang tải chi tiết đơn hàng…" />

@@ -26,7 +26,7 @@ export async function reconcilePendingStripePayments(
     payment_status: "eq.pending",
     created_at: `lt.${olderThan}`,
     select: "payment_id,order_id,created_at",
-    order: "created_at.asc",
+    order: "created_at.desc",
     limit
   }, { count: "none" });
   let checked = 0;

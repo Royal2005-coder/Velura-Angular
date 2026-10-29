@@ -631,3 +631,25 @@ test("an unknown provider server error retains the reserved operation and stable
     assert.equal(pg.calls.filter(call => call.path.endsWith("velura_complete_return_refund")).length, 1);
   } finally { pg.restore(); }
 });
+
+test("refund.failed đưa payment thường về paid và ghi lịch sử để retry_refund", async () => {
+  const pg = fakePostgrest((call) => {
+    if (call.path === "/rest/v1/payment" && call.method === "GET") {
+      return [{ payment_id: "pay_fail", order_id: ORDER, amount: 500000, refunded_amount: 0, payment_status: "refund_pending", payment_provider: "stripe" }];
+    }
+    if (call.path === "/rest/v1/payment_refund") return [];
+    if (call.path === "/rest/v1/payment" && call.method === "PATCH") return [{ payment_id: "pay_fail" }];
+    return [];
+  });
+  try {
+    const result = await markStripeRefunded("pi_failed", undefined, [{ id: "re_failed", status: "failed", amount: 200000 }]);
+    assert.equal(result, "ignored");
+    const flagged = pg.calls.find((c) => c.method === "PATCH" && c.path === "/rest/v1/payment");
+    assert.equal(bodyOf(flagged).payment_status, "paid");
+    assert.equal(bodyOf(flagged).gateway_response_code, "REFUND_FAILED");
+    const logged = pg.calls.find((c) => c.method === "POST" && c.path === "/rest/v1/order_event");
+    assert.equal(bodyOf(logged).action, "refund_failed");
+  } finally {
+    pg.restore();
+  }
+});

@@ -509,6 +509,34 @@ export async function markStripeRefunded(paymentIntentId: string, amount?: numbe
   let completed = false;
   for (const refund of refunds) {
     const providerRef = asString(refund.id);
+    if (["failed", "canceled"].includes(asString(refund.status)) && providerRef) {
+      const metadata = asJsonObject(refund.metadata);
+      const operation = await selectOne("payment_refund", { provider_ref: "eq." + providerRef, payment_id: "eq." + asString(payment.payment_id) })
+        || (metadata.refund_id ? await selectOne("payment_refund", {
+          refund_id: "eq." + asString(metadata.refund_id), payment_id: "eq." + asString(payment.payment_id)
+        }) : null);
+      // Item refunds stay REFUND_PENDING for an explicit support retry; request-level refunds
+      // return to paid so the admin retry_refund action can run with a fresh provider attempt.
+      if (operation?.return_item_id) continue;
+      const changed = await updateRows("payment", {
+        payment_id: "eq." + asString(payment.payment_id),
+        payment_status: "eq.refund_pending"
+      }, {
+        payment_status: "paid",
+        gateway_response_code: "REFUND_FAILED"
+      });
+      if (changed.length) {
+        await insertRow("order_event", {
+          order_id: asString(payment.order_id),
+          action: "refund_failed",
+          actor_type: "system",
+          result: "failed",
+          note: "Stripe báo hoàn tiền thất bại; đơn trở lại trạng thái đã thanh toán để xử lý lại",
+          payload: { payment_id: payment.payment_id, stripe_refund_id: providerRef }
+        });
+      }
+      continue;
+    }
     if (refund.status !== "succeeded" || !providerRef || !Number.isSafeInteger(refund.amount) || Number(refund.amount) <= 0) continue;
     const metadata = asJsonObject(refund.metadata);
     let operation = await selectOne("payment_refund", { provider_ref: "eq." + providerRef, payment_id: "eq." + asString(payment.payment_id) });

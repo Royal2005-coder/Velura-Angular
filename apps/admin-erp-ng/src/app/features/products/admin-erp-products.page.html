@@ -36,7 +36,7 @@
       <span class="products-eyebrow">Catalog</span>
       <h2 id="products-title">{{ tab() === 'stock' ? 'Hàng đợi tồn kho' : tab() === 'import' ? 'Nhập CSV' : tab() === 'logs' ? 'Nhật ký sản phẩm' : 'Danh mục sản phẩm' }}</h2>
     </div>
-    <app-erp-tabs [tabs]="tabs()" [active]="tab()" (changed)="setTab($event)" />
+    <app-erp-tabs [tabs]="tabs()" [active]="tab()" [busy]="loading()" (changed)="setTab($event)" />
   </div>
 
   @if (tab() === 'catalog') {

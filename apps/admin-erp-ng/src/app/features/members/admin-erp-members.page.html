@@ -72,7 +72,7 @@
         <span class="member-eyebrow">Loyalty</span>
         <h2 id="members-title">Sổ thành viên</h2>
       </div>
-      <app-erp-tabs [tabs]="tabs()" [active]="wallet()" (changed)="setWallet($event)" />
+      <app-erp-tabs [tabs]="tabs()" [active]="wallet()" [busy]="loading()" (changed)="setWallet($event)" />
     </div>
 
     <app-erp-filter-bar [busy]="loading()" (apply)="applyFilters()" (reset)="resetFilters()">

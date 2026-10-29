@@ -87,4 +87,16 @@ describe('AdminErpDataTable', () => {
     expect(row.getAttribute('tabindex')).toBeNull();
     expect(row.getAttribute('aria-haspopup')).toBeNull();
   });
+
+  it('overlays a busy indicator when refreshing rows already on screen', async () => {
+    const fixture = await boot();
+    fixture.componentRef.setInput('columns', columns);
+    fixture.componentRef.setInput('rows', [{ name: 'A', status: 'OK' }]);
+    fixture.componentRef.setInput('loading', true);
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector('.table-busy')?.textContent).toContain('Đang tải');
+    expect(host.querySelector('.table-shell')?.getAttribute('aria-busy')).toBe('true');
+  });
 });

@@ -216,6 +216,7 @@ export class AdminErpLogsPage {
    * Switches tabs and resets pagination.
    */
   setTab(tab: string): void {
+    if (this.loading()) return;
     if (tab === 'all' || tab === 'admin' || tab === 'system' || tab === 'ai') {
       this.tab.set(tab);
       this.page.set(1);

@@ -15,13 +15,13 @@ select ('96000000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid,'VLRTESTRETURN'|
   case when n=6 then 2 else 0 end,n=6,case when n=6 then 'manual' else 'none' end
 from generate_series(1,6) n;
 insert into public.orders(order_id,user_id,order_code,status,shipping_name,shipping_phone,shipping_address,
-  subtotal,total_amount,payment_method,delivered_at,points_earned_milli,points_discount_amount,points_spent,order_kind)
+  subtotal,total_amount,payment_method,delivered_at,points_earned_milli,points_discount,order_kind)
 select ('97000000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid,
   ('96000000-0000-4000-8000-'||lpad((case n when 2 then 1 when 3 then 2 when 4 then 3 when 5 then 4 when 6 then 5 when 7 then 6 else 1 end)::text,12,'0'))::uuid,
   'LR-TEST-'||n,'delivered','Synthetic buyer','0900000000','Local only',
   case when n=2 then 120000 else 100000 end,100000,'COD',now()-interval '1 day',
   case when n in (1,3,4,5) then 100000 else 0 end,
-  case when n=2 then 20000 else 0 end,case when n=2 then 20 else 0 end,
+  case when n=2 then 20000 else 0 end,
   case when n=9 then 'exchange' else 'sale' end
 from generate_series(1,9) n;
 insert into public.order_item(item_id,order_id,variant_id,product_name,quantity,unit_price,subtotal_item)

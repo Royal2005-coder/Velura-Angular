@@ -1,5 +1,34 @@
+import { HttpError } from "../http.js";
 import { selectOne, selectRows } from "../supabase.js";
 import { asNumber, asString, isJsonObject, type JsonObject } from "../types.js";
+import { sanitizeBlogHtml } from "./blog-html.js";
+
+const BLOG_COLUMNS = "blog_id,category_slug,slug,title,excerpt,content,content_html,meta_title,meta_description,canonical_url,og_image_url,tags,image_url,author,read_minutes,is_featured,status,published_at,updated_at";
+const LEGACY_BLOG_COLUMNS = "blog_id,category_slug,slug,title,excerpt,content,image_url,author,read_minutes,is_featured,status,published_at,updated_at";
+
+/** During a rolling deploy the API can briefly run before migration 093 has added the columns. */
+function isBlogColumnMissing(error: unknown): boolean {
+  return error instanceof HttpError && error.status === 400
+    && /content_html|meta_title|meta_description|canonical_url|og_image_url|tags|does not exist/i.test(error.message);
+}
+
+async function selectBlogRows(query: Record<string, unknown>) {
+  try {
+    return await selectRows("blog", { ...query, select: BLOG_COLUMNS });
+  } catch (error: unknown) {
+    if (!isBlogColumnMissing(error)) throw error;
+    return selectRows("blog", { ...query, select: LEGACY_BLOG_COLUMNS });
+  }
+}
+
+async function selectBlogRow(query: Record<string, unknown>): Promise<JsonObject | null> {
+  try {
+    return await selectOne("blog", { ...query, select: BLOG_COLUMNS });
+  } catch (error: unknown) {
+    if (!isBlogColumnMissing(error)) throw error;
+    return selectOne("blog", { ...query, select: LEGACY_BLOG_COLUMNS });
+  }
+}
 
 /**
  * Filters for listing published blog posts.
@@ -39,7 +68,6 @@ export function createContentRepository() {
 
     async listBlogs(filters: BlogListFilters) {
       const query: Record<string, unknown> = {
-        select: "blog_id,category_slug,slug,title,excerpt,content,image_url,author,read_minutes,is_featured,status,published_at,updated_at",
         status: "eq.published",
         order: filters.featuredFirst
           ? "is_featured.desc,published_at.desc"
@@ -52,7 +80,7 @@ export function createContentRepository() {
         query.category_slug = `eq.${filters.categorySlug}`;
       }
 
-      const result = await selectRows("blog", query);
+      const result = await selectBlogRows(query);
       return {
         rows: (result.rows || []).map(toBlogDto),
         count: result.count
@@ -60,12 +88,31 @@ export function createContentRepository() {
     },
 
     async getBlog(slug: string) {
-      const row = await selectOne("blog", {
-        select: "blog_id,category_slug,slug,title,excerpt,content,image_url,author,read_minutes,is_featured,status,published_at,updated_at",
+      const row = await selectBlogRow({
         status: "eq.published",
         slug: `eq.${slug}`
       });
-      return row ? toBlogDto(row) : null;
+      if (!row) return null;
+      const blog = toBlogDto(row);
+      const links = await selectRows("blog_product", {
+        select: "product_id,position",
+        blog_id: `eq.${asString(row.blog_id)}`,
+        order: "position.asc",
+        limit: 30
+      }).catch(() => ({ rows: [] as JsonObject[] }));
+      const ids = links.rows.map((link) => asString(link.product_id)).filter(Boolean);
+      if (!ids.length) return { ...blog, products: [] };
+      const products = await selectRows("product", {
+        select: "product_id,name,slug,images,base_price,sale_price,status",
+        product_id: `in.(${ids.join(",")})`,
+        status: "in.(on_sale,out_of_stock)",
+        limit: 30
+      }).catch(() => ({ rows: [] as JsonObject[] }));
+      const map = new Map(products.rows.map((product) => [asString(product.product_id), product]));
+      return {
+        ...blog,
+        products: ids.map((id) => map.get(id)).filter(Boolean)
+      };
     },
 
     async listPolicies() {
@@ -123,6 +170,12 @@ function toBlogDto(row: JsonObject): JsonObject {
     title: row.title,
     excerpt: row.excerpt,
     content: row.content,
+    content_html: sanitizeBlogHtml(row.content_html),
+    meta_title: asString(row.meta_title) || null,
+    meta_description: asString(row.meta_description) || null,
+    canonical_url: asString(row.canonical_url) || null,
+    og_image_url: asString(row.og_image_url) || null,
+    tags: normalizeArray(row.tags),
     image_url: asString(row.image_url) || "/src/assets/images/image-8.png",
     author: asString(row.author) || "Velura Editorial",
     read_minutes: asNumber(row.read_minutes) || 5,

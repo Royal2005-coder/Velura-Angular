@@ -24,6 +24,7 @@ import { handleCarrierWebhookRoute } from "./carrier/carrier-router.js";
 import { startOrderAutomation } from "./orders/order-automation.js";
 import { refundStripeOrder } from "./payments/stripe.js";
 import { startStripeReconciliation } from "./payments/stripe-reconcile.js";
+import { startLoyaltyExpiry } from "./loyalty/loyalty-expiry.js";
 import { handleOrderRoute } from "./orders/order-router.js";
 import { createReviewRepository } from "./reviews/review-repository.js";
 import { createReviewService } from "./reviews/review-service.js";
@@ -497,7 +498,7 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
 export const server = createServer(handleApiRequest);
 
 if (process.env.VERCEL !== "1") {
-  const timers = [startAccountMaintenance(), startEmailOutboxWorker(), startPromotionScheduler(), startOrderAutomation(), startStripeReconciliation(), startChatReportWorker()];
+  const timers = [startAccountMaintenance(), startEmailOutboxWorker(), startPromotionScheduler(), startOrderAutomation(), startStripeReconciliation(), startLoyaltyExpiry(), startChatReportWorker()];
   catalogContentService.start();
   void startAiRuntime().catch(() => console.error("AI_RUNTIME_RECOVERY_FAILED"));
   const shutdown = () => {

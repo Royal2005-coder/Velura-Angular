@@ -194,6 +194,10 @@ interface ApiReturnExchangeOrder {
   carrier?: string | null;
   tracking_code?: string | null;
   tracking_url?: string | null;
+  shipping_name?: string | null;
+  shipping_phone?: string | null;
+  shipping_address?: string | null;
+  items?: Array<{ product_name?: string; quantity?: number; color?: string; size?: string }>;
 }
 
 interface ApiReturnDetail extends ApiReturn {

@@ -351,6 +351,16 @@
   background: var(--erp-surface-muted);
 }
 
+.record__next--action {
+  border-color: var(--erp-danger);
+  background: var(--erp-danger-soft);
+}
+
+.record__next--done {
+  border-color: #a7f3d0;
+  background: #ecfdf5;
+}
+
 .record__next div {
   display: grid;
   gap: 2px;

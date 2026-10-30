@@ -7,7 +7,7 @@
       <p class="flow-hint">Phần {{ item.return_item_id }} · {{ item.quantity }} sản phẩm · phiên bản {{ item.version }}</p>
       @if (canSplit()) {
         <label class="erp-field"><span>Số lượng xử lý trong phần này</span><input class="erp-input" type="number" min="1" [max]="item.quantity || 1" step="1" [value]="quantity()" (input)="setQuantity($event)" /></label>
-        <p class="flow-hint">Xử lý ít hơn số lượng đăng ký sẽ tách phần còn lại; những phần khác không bị thay đổi.</p>
+        <p class="flow-hint">Khách yêu cầu ban đầu: {{ item.quantity }} sản phẩm. Xử lý ít hơn sẽ tách phần còn lại; những phần khác không bị thay đổi.</p>
       }
     }
     @if (flow() === 'contact') {

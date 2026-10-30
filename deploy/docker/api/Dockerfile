@@ -32,8 +32,8 @@ RUN test "${#RELEASE_REVISION}" -eq 40 && \
     case "$RELEASE_BUILD_ID" in *[!a-f0-9-]*) exit 1;; esac && \
     printf '%s\n' "$RELEASE_BUILD_ID" | grep -Eq "^${RELEASE_REVISION}-[0-9]+-[0-9]+$" && \
     printf '{"revision":"%s","buildId":"%s"}\n' "$RELEASE_REVISION" "$RELEASE_BUILD_ID" > /app/apps/api/dist/release.json
-RUN mkdir -p /app/scratch/ai-private/studio && chown node:node /app/scratch/ai-private /app/scratch/ai-private/studio
-COPY --chown=node:node apps/ai-worker/assets/studio ./scratch/ai-private/studio
+RUN mkdir -p /app/studio-assets && chown node:node /app/studio-assets
+COPY --chown=node:node apps/ai-worker/assets/studio ./studio-assets
 USER node
 EXPOSE 3000
 CMD ["node", "apps/api/dist/server.js"]

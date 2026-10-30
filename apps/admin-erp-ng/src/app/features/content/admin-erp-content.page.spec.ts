@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { of, throwError } from 'rxjs';
 import { AdminBlogRow, AdminContentCategory, AdminErpApiService } from '../../core/admin-erp-api.service';
+import { emptyBlogDraft } from '../../core/admin-erp-content';
 import { AdminErpSessionService, type AdminAuthMe } from '../../core/admin-erp-session.service';
 import { AdminErpContentPage } from './admin-erp-content.page';
 
@@ -47,6 +48,7 @@ describe('AdminErpContentPage', () => {
     created: Record<string, unknown>[];
     updated: { id: string; body: Record<string, unknown> }[];
     listCalls: Record<string, string>[];
+    seoSuggestions: number;
   }
 
   function boot(capabilities: Record<string, string[]> = { content: ['read', 'create', 'update'] }, failure?: unknown): Harness {
@@ -54,6 +56,7 @@ describe('AdminErpContentPage', () => {
     const created: Record<string, unknown>[] = [];
     const updated: { id: string; body: Record<string, unknown> }[] = [];
     const listCalls: Record<string, string>[] = [];
+    const harness: Harness = { page: null as unknown as AdminErpContentPage, created, updated, listCalls, seoSuggestions: 0 };
     const api = {
       listBlogs: (params: Record<string, string> = {}) => {
         listCalls.push(params);
@@ -65,6 +68,14 @@ describe('AdminErpContentPage', () => {
         return of({ rows: POSTS, count: 6 });
       },
       listContentCategories: () => of({ rows: CATEGORIES }),
+      listProducts: () => of({
+        rows: [{ product_id: 'p-1', name: 'Áo lụa', slug: 'ao-lua', status: 'on_sale', base_price: 500000, images: ['https://cdn.velura.vn/a.jpg'] }],
+        count: 1,
+      }),
+      suggestBlogSeo: () => {
+        harness.seoSuggestions += 1;
+        return of({ metaTitle: 'Áo lụa Hà Nội', metaDescription: 'Chọn áo lụa đúng size.', tags: ['áo lụa', 'hà nội'], summary: 'Tóm tắt SEO.' });
+      },
       createBlog: (body: Record<string, unknown>) => {
         created.push(body);
         return failure ? throwError(() => failure) : of({ ...POSTS[1], ...body, blog_id: 'b-9', version: 1 });
@@ -81,16 +92,19 @@ describe('AdminErpContentPage', () => {
     TestBed.inject(AdminErpSessionService).applyAuthContext(context(capabilities));
     const fixture = TestBed.createComponent(AdminErpContentPage);
     fixture.detectChanges();
-    return { page: fixture.componentInstance, created, updated, listCalls };
+    harness.page = fixture.componentInstance;
+    return harness;
   }
 
   const validDraft = {
+    ...emptyBlogDraft,
     slug: 'ao-dai',
     title: 'Áo dài cách tân cho mùa thu',
     categorySlug: 'cham-soc',
     status: 'published',
     excerpt: 'Gợi ý mặc áo dài',
     content: 'Nội dung bài viết đủ dài để vượt ngưỡng kiểm tra của cả frontend lẫn RPC CMS.',
+    contentHtml: '<p>Nội dung bài viết đủ dài để vượt ngưỡng kiểm tra của cả frontend lẫn RPC CMS.</p>',
     imageUrl: '',
     author: 'Velura Editorial',
     readMinutes: 6,
@@ -122,7 +136,7 @@ describe('AdminErpContentPage', () => {
   it('blocks an invalid draft locally and never calls the RPC', () => {
     const { page, created } = boot();
     page.openCreate();
-    page.draft.set({ ...validDraft, slug: 'Áo Dài', content: 'ngắn', categorySlug: '' });
+    page.draft.set({ ...validDraft, slug: 'Áo Dài', content: 'ngắn', contentHtml: '<p>ngắn</p>', categorySlug: '' });
     page.save();
 
     expect(created.length).toBe(0);
@@ -209,5 +223,71 @@ describe('AdminErpContentPage', () => {
     page.confirmDiscard();
     expect(page.draft()).toBeNull();
     expect(page.discardOpen()).toBe(false);
+  });
+
+  it('saves sanitized rich HTML with SEO, tags and ordered product attachments', () => {
+    const { page, created } = boot();
+    page.openCreate();
+    page.draft.set({
+      ...validDraft,
+      contentHtml: '<h2>Chất liệu</h2><p>Nội dung bài viết đủ dài để vượt ngưỡng kiểm tra của cả frontend lẫn RPC CMS.</p><script>x()</script>',
+      metaTitle: 'Áo dài cách tân mùa thu',
+      metaDescription: 'Gợi ý chọn và phối áo dài cách tân cho mùa thu Hà Nội.',
+      canonicalUrl: 'https://velura.vn/blog/ao-dai',
+      tags: ' lụa, hà nội, lụa ',
+      productIds: ['30000000-0000-4000-8000-000000000001'],
+    });
+    page.save();
+
+    expect(created.length).toBe(1);
+    const body = created[0] as Record<string, unknown>;
+    expect(body['contentHtml']).not.toContain('script');
+    expect(body['content']).toContain('Chất liệu');
+    expect(body['metaTitle']).toBe('Áo dài cách tân mùa thu');
+    expect(body['canonicalUrl']).toBe('https://velura.vn/blog/ao-dai');
+    expect(body['tags']).toEqual(['lụa', 'hà nội']);
+    expect(body['productIds']).toEqual(['30000000-0000-4000-8000-000000000001']);
+  });
+
+  it('AI SEO only fills reviewable fields and never saves on its own', () => {
+    const harness = boot();
+    const { page, created } = harness;
+    page.openCreate();
+    page.draft.set({
+      ...validDraft,
+      title: 'Áo lụa Hà Nội',
+      excerpt: '',
+      metaTitle: '',
+      metaDescription: '',
+      tags: '',
+      contentHtml: '<p>Nội dung bài viết đủ dài để AI đọc và gợi ý SEO cho bài viết mùa hè này.</p>',
+    });
+
+    page.suggestSeo();
+
+    expect(harness.seoSuggestions).toBe(1);
+    expect(page.draft()?.metaTitle).toBe('Áo lụa Hà Nội');
+    expect(page.draft()?.tags).toBe('áo lụa, hà nội');
+    expect(page.draft()?.excerpt).toBe('Tóm tắt SEO.');
+    expect(page.aiNotice()).toContain('AI đã điền');
+    expect(page.dirty()).toBe(true);
+    expect(created.length).toBe(0);
+  });
+
+  it('attaches, reorders and removes shop products with a bounded list', () => {
+    const { page } = boot();
+    page.openCreate();
+    page.attachProduct({ product_id: 'p-1', name: 'Áo lụa', status: 'on_sale' });
+    page.attachProduct({ product_id: 'p-2', name: 'Quần linen', status: 'out_of_stock' });
+    page.attachProduct({ product_id: 'p-1', name: 'Áo lụa', status: 'on_sale' });
+
+    expect(page.draft()?.productIds).toEqual(['p-1', 'p-2']);
+    expect(page.selectedProducts().map((product) => product.name)).toEqual(['Áo lụa', 'Quần linen']);
+
+    page.moveProduct('p-2', -1);
+    expect(page.draft()?.productIds).toEqual(['p-2', 'p-1']);
+
+    page.removeProduct('p-2');
+    expect(page.draft()?.productIds).toEqual(['p-1']);
   });
 });

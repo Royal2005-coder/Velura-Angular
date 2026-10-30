@@ -43,6 +43,12 @@ alter table public.loyalty_lot_use enable row level security;
 revoke all on public.loyalty_point_lot,public.loyalty_lot_use from public,anon,authenticated;
 grant all on public.loyalty_point_lot,public.loyalty_lot_use to service_role;
 
+-- Production carried a narrower check than the legacy functions now require.
+alter table public.loyalty_ledger drop constraint if exists loyalty_ledger_kind_check;
+alter table public.loyalty_ledger add constraint loyalty_ledger_kind_check check (kind in (
+  'earn','clawback','reversed','expired','expiry','debt_repayment','redeem','redeem_refund',
+  'reconcile','refund','adjustment','bonus','reserved','consumed'));
+
 create table if not exists public.loyalty_reconciliation (
   reconciliation_id bigserial primary key,
   user_id uuid not null references public.users(user_id),

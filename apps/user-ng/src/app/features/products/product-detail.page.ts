@@ -90,6 +90,17 @@ export class ProductDetailPage {
     }
     return '';
   });
+  /** Combo sets are tried on through their real component garment, never the bundle id. */
+  readonly aiWorkbenchProductId = computed(() => {
+    if (!this.isCombo()) return this.product()?.product_id || '';
+    const component = this.comboComponents().find((row) => row.product_id && (row.variants?.length || 0) > 0) || this.comboComponents()[0];
+    return component?.product_id || '';
+  });
+  readonly aiWorkbenchVariantId = computed(() => {
+    if (!this.isCombo()) return this.aiVariantId();
+    const component = this.comboComponents().find((row) => row.product_id && (row.variants?.length || 0) > 0);
+    return component?.variants?.[0]?.variant_id || '';
+  });
   readonly quantity = signal(1);
   readonly activeImage = signal(0);
   readonly selectedColor = signal<string | null>(null);

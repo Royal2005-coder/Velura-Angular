@@ -12,6 +12,7 @@ describe('BlogCatalogService', () => {
           get: () => of({ rows: [{
             slug: 'bang-mau-mua-thu',
             title: 'Bảng màu mùa thu',
+            image_url: '/src/assets/images/blog-autumn-palette-2026.png',
             content: JSON.stringify({
               intro: 'Mở bài mùa thu.',
               takeaways: ['Ý một'],
@@ -26,5 +27,6 @@ describe('BlogCatalogService', () => {
     expect(post.contentHtml).toContain('<p>Mở bài mùa thu.</p>');
     expect(post.contentHtml).toContain('<h2>Điểm chính</h2>');
     expect(post.contentHtml).toContain('<h2>Chất liệu</h2>');
+    expect(post.image).toBe('/assets/images/blog-autumn-palette-2026.png');
   });
 });

@@ -75,38 +75,40 @@
 <app-erp-modal
   [open]="draft() !== null"
   [title]="editing() ? 'Sửa bài viết' : 'Bài viết mới'"
-  size="lg"
+  size="xl"
   (closed)="closeEditor()"
 >
   @if (draft(); as form) {
-    <form class="content-form" (submit)="$event.preventDefault(); save()" (input)="markDirty()" (change)="markDirty()">
+    <form class="content-form" (submit)="$event.preventDefault(); save()">
       <p class="erp-hint">
         {{ editing() ? editing()!.slug + ' · bản ' + (editing()!.version ?? 0) : 'Bài mới lưu ở nháp hoặc công bố ngay.' }}
+        · Dán trực tiếp nội dung từ web, Word hoặc Google Docs vào khung soạn.
       </p>
 
-      <label class="erp-field">
-        <span>Tiêu đề</span>
-        <input class="erp-input" type="text" [value]="form.title" (input)="onField('title', $event)" />
-      </label>
-      @if (errors()['title']) {
-        <p class="erp-error" role="alert">{{ errors()['title'] }}</p>
-      }
-
-      <div class="content-form__row">
+      <div class="content-form__hero">
         <label class="erp-field">
-          <span>Slug</span>
-          <input class="erp-input" type="text" [value]="form.slug" (input)="onField('slug', $event)" />
+          <span>Tiêu đề</span>
+          <input class="erp-input erp-input--title" type="text" [value]="form.title" (input)="onField('title', $event); markDirty()" />
         </label>
-        <button class="erp-btn erp-btn--sm content-form__slug" type="button" (click)="suggestSlug()">Lấy từ tiêu đề</button>
+        @if (errors()['title']) {
+          <p class="erp-error" role="alert">{{ errors()['title'] }}</p>
+        }
+        <div class="content-form__row">
+          <label class="erp-field">
+            <span>Slug</span>
+            <input class="erp-input" type="text" [value]="form.slug" (input)="onField('slug', $event); markDirty()" />
+          </label>
+          <button class="erp-btn erp-btn--sm content-form__slug" type="button" (click)="suggestSlug(); markDirty()">Lấy từ tiêu đề</button>
+        </div>
+        @if (errors()['slug']) {
+          <p class="erp-error" role="alert">{{ errors()['slug'] }}</p>
+        }
       </div>
-      @if (errors()['slug']) {
-        <p class="erp-error" role="alert">{{ errors()['slug'] }}</p>
-      }
 
-      <div class="content-form__grid">
+      <div class="content-form__grid content-form__grid--meta">
         <label class="erp-field">
           <span>Danh mục</span>
-          <select class="erp-select" [value]="form.categorySlug" (change)="onField('categorySlug', $event)">
+          <select class="erp-select" [value]="form.categorySlug" (change)="onField('categorySlug', $event); markDirty()">
             <option value="">— Chọn danh mục —</option>
             @for (category of categoryOptions(); track category.content_category_id) {
               <option [value]="category.slug">{{ category.name }}</option>
@@ -119,7 +121,7 @@
         </label>
         <label class="erp-field">
           <span>Trạng thái</span>
-          <select class="erp-select" [value]="form.status" (change)="onField('status', $event)">
+          <select class="erp-select" [value]="form.status" (change)="onField('status', $event); markDirty()">
             @for (option of statusChoices(); track option) {
               <option [value]="option">{{ statusLabel(option) }}</option>
             }
@@ -127,45 +129,280 @@
         </label>
         <label class="erp-field">
           <span>Thời gian đọc (phút)</span>
-          <input class="erp-input" type="number" min="1" max="60" [value]="form.readMinutes" (input)="onNumberField($event)" />
+          <input class="erp-input" type="number" min="1" max="60" [value]="form.readMinutes" (input)="onNumberField($event); markDirty()" />
         </label>
         <label class="erp-field">
           <span>Tác giả</span>
-          <input class="erp-input" type="text" [value]="form.author" (input)="onField('author', $event)" />
+          <input class="erp-input" type="text" [value]="form.author" (input)="onField('author', $event); markDirty()" />
         </label>
       </div>
       @if (errors()['categorySlug'] || errors()['status'] || errors()['readMinutes']) {
         <p class="erp-error" role="alert">{{ errors()['categorySlug'] || errors()['status'] || errors()['readMinutes'] }}</p>
       }
 
-      <label class="erp-field">
-        <span>Mô tả ngắn (tối đa 500 ký tự)</span>
-        <textarea class="erp-input" rows="2" [value]="form.excerpt" (input)="onField('excerpt', $event)"></textarea>
-      </label>
-      @if (errors()['excerpt']) {
-        <p class="erp-error" role="alert">{{ errors()['excerpt'] }}</p>
-      }
+      <div class="content-compose">
+        <nav class="content-compose__tabs" role="tablist" aria-label="Khu vực biên tập">
+          @for (editorTabOption of editorTabs(); track editorTabOption.key) {
+            <button
+              class="content-compose__tab"
+              type="button"
+              role="tab"
+              [class.is-active]="editorTab() === editorTabOption.key"
+              [attr.aria-selected]="editorTab() === editorTabOption.key"
+              (click)="setEditorTab(editorTabOption.key)"
+            >{{ editorTabOption.label }}</button>
+          }
+          <span class="content-compose__spacer"></span>
+          <span class="content-compose__seo-score">{{ seoPassed() }}/{{ seoChecks().length }} tiêu chí SEO</span>
+        </nav>
 
-      <label class="erp-field">
-        <span>Nội dung (tối thiểu 40 ký tự)</span>
-        <textarea class="erp-input content-form__body" rows="10" [value]="form.content" (input)="onField('content', $event)"></textarea>
-      </label>
-      @if (errors()['content']) {
-        <p class="erp-error" role="alert">{{ errors()['content'] }}</p>
-      }
+        <section class="content-compose__panel content-compose__panel--editor" [hidden]="editorTab() !== 'content'">
+          <div class="content-editor">
+            <div class="content-editor__toolbar" role="toolbar" aria-label="Định dạng nội dung">
+              <button type="button" title="Đoạn văn" (click)="formatBlock('p')">Đoạn</button>
+              <button type="button" title="Tiêu đề 2" (click)="formatBlock('h2')">H2</button>
+              <button type="button" title="Tiêu đề 3" (click)="formatBlock('h3')">H3</button>
+              <button type="button" title="Trích dẫn" (click)="formatBlock('blockquote')">“</button>
+              <span class="content-editor__divider"></span>
+              <button type="button" title="Đậm" (click)="format('bold')"><b>B</b></button>
+              <button type="button" title="Nghiêng" (click)="format('italic')"><i>I</i></button>
+              <button type="button" title="Gạch chân" (click)="format('underline')"><u>U</u></button>
+              <button type="button" title="Gạch ngang" (click)="format('strikeThrough')"><s>S</s></button>
+              <span class="content-editor__divider"></span>
+              <button type="button" title="Danh sách chấm" (click)="format('insertUnorderedList')">• Danh sách</button>
+              <button type="button" title="Danh sách số" (click)="format('insertOrderedList')">1. Danh sách</button>
+              <button type="button" title="Chèn liên kết" (click)="openLink()">Liên kết</button>
+              <button type="button" title="Chèn ảnh" (click)="openImage()">Ảnh</button>
+              <button type="button" title="Xóa định dạng" (click)="clearFormat()">Xóa định dạng</button>
+              <span class="content-editor__divider"></span>
+              <button type="button" title="Hoàn tác" (click)="format('undo')">↶</button>
+              <button type="button" title="Làm lại" (click)="format('redo')">↷</button>
+              <span class="content-editor__spacer"></span>
+              <button type="button" class="content-editor__preview-toggle" [class.is-active]="previewOpen()" (click)="togglePreview()">
+                {{ previewOpen() ? 'Ẩn xem trước' : 'Xem trước' }}
+              </button>
+            </div>
 
-      <label class="erp-field">
-        <span>Ảnh đại diện (https:// hoặc /assets/…)</span>
-        <input class="erp-input" type="text" [value]="form.imageUrl" (input)="onField('imageUrl', $event)" />
-      </label>
-      @if (errors()['imageUrl']) {
-        <p class="erp-error" role="alert">{{ errors()['imageUrl'] }}</p>
-      }
+            @if (linkPanel()) {
+              <div class="content-editor__insert">
+                <label class="erp-field">
+                  <span>Liên kết cho đoạn đang chọn</span>
+                  <input class="erp-input" type="url" [value]="linkUrl()" (input)="onLinkInput($event)" placeholder="https://velura.vn/…" />
+                </label>
+                <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" (click)="applyLink()">Chèn liên kết</button>
+                <button class="erp-btn erp-btn--sm" type="button" (click)="cancelLink()">Hủy</button>
+              </div>
+              @if (hasError('linkUrl')) {
+                <p class="erp-error" role="alert">{{ hasError('linkUrl') }}</p>
+              }
+            }
+            @if (imagePanel()) {
+              <div class="content-editor__insert">
+                <label class="erp-field">
+                  <span>URL ảnh (https)</span>
+                  <input class="erp-input" type="url" [value]="imageUrlInput()" (input)="onImageInput($event)" placeholder="https://cdn.velura.vn/…" />
+                </label>
+                <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" (click)="applyImage()">Chèn ảnh</button>
+                <button class="erp-btn erp-btn--sm" type="button" (click)="cancelImage()">Hủy</button>
+              </div>
+              @if (hasError('imageUrlInput')) {
+                <p class="erp-error" role="alert">{{ hasError('imageUrlInput') }}</p>
+              }
+            }
 
-      <label class="content-check">
-        <input type="checkbox" [checked]="form.isFeatured" (change)="onFeaturedChange($event)" />
-        <span>Bài nổi bật (hiện trước trên trang khách theo <code>is_featured</code>)</span>
-      </label>
+            <div
+              #editor
+              class="content-editor__surface"
+              contenteditable="true"
+              role="textbox"
+              aria-multiline="true"
+              aria-label="Nội dung bài viết"
+              data-placeholder="Dán hoặc gõ nội dung bài viết. Ảnh, tiêu đề, danh sách và liên kết được giữ lại; script và mã nhúng bị loại bỏ."
+              (input)="onEditorInput()"
+              (paste)="onPaste($event)"
+              (drop)="onDrop($event)"
+            ></div>
+            <div class="content-editor__status">
+              <span>{{ contentWords() }} từ · {{ contentCharacters() }} ký tự</span>
+              <span>Tối thiểu 40 ký tự · lưu tự động khi bấm “Lưu bài viết”</span>
+            </div>
+          </div>
+          @if (errors()['content']) {
+            <p class="erp-error" role="alert">{{ errors()['content'] }}</p>
+          }
+
+          @if (previewOpen()) {
+            <div class="content-preview">
+              <span class="content-eyebrow">Xem trước trên website</span>
+              <h2 class="content-preview__title">{{ form.title || 'Tiêu đề bài viết' }}</h2>
+              @if (form.excerpt) {
+                <p class="content-preview__excerpt">{{ form.excerpt }}</p>
+              }
+              <div class="content-preview__body" [innerHTML]="previewHtml()"></div>
+              @if (!contentCharacters()) {
+                <p class="erp-hint">Chưa có nội dung để xem trước.</p>
+              }
+            </div>
+          }
+
+          <div class="content-editor__side">
+            <label class="erp-field">
+              <span>Mô tả ngắn (tối đa 500 ký tự)</span>
+              <textarea class="erp-input" rows="3" [value]="form.excerpt" (input)="onField('excerpt', $event); markDirty()"></textarea>
+            </label>
+            @if (errors()['excerpt']) {
+              <p class="erp-error" role="alert">{{ errors()['excerpt'] }}</p>
+            }
+            <label class="erp-field">
+              <span>Ảnh đại diện (https:// hoặc /assets/…)</span>
+              <input class="erp-input" type="text" [value]="form.imageUrl" (input)="onField('imageUrl', $event); markDirty()" />
+            </label>
+            @if (errors()['imageUrl']) {
+              <p class="erp-error" role="alert">{{ errors()['imageUrl'] }}</p>
+            }
+            <label class="content-check">
+              <input type="checkbox" [checked]="form.isFeatured" (change)="onFeaturedChange($event); markDirty()" />
+              <span>Bài nổi bật (hiện trước trên trang khách theo <code>is_featured</code>)</span>
+            </label>
+          </div>
+        </section>
+
+        <section class="content-compose__panel" [hidden]="editorTab() !== 'seo'">
+          <div class="content-seo__head">
+            <div>
+              <span class="content-eyebrow">Tối ưu tìm kiếm &amp; chia sẻ</span>
+              <h3>SEO, canonical và thẻ mạng xã hội</h3>
+              <p class="erp-hint">Để trống để website dùng tiêu đề, mô tả và ảnh đại diện. Canonical chỉ dùng khi bài được syndication từ nguồn khác.</p>
+            </div>
+            <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" [disabled]="aiLoading()" (click)="suggestSeo()">
+              {{ aiLoading() ? 'AI đang soạn…' : 'AI gợi ý SEO' }}
+            </button>
+          </div>
+          @if (aiError()) {
+            <p class="erp-error" role="alert">{{ aiError() }}</p>
+          }
+          @if (aiNotice()) {
+            <p class="content-banner content-banner--info" role="status">{{ aiNotice() }}</p>
+          }
+
+          <div class="content-form__grid">
+            <label class="erp-field content-counter-field">
+              <span>Meta title <small>{{ metaTitleLength() }}/{{ metaTitleMax }}</small></span>
+              <input class="erp-input" type="text" [value]="form.metaTitle" (input)="onField('metaTitle', $event); markDirty()" placeholder="Để trống dùng tiêu đề bài viết" />
+            </label>
+            <label class="erp-field content-counter-field">
+              <span>Canonical URL <small>https://</small></span>
+              <input class="erp-input" type="url" [value]="form.canonicalUrl" (input)="onField('canonicalUrl', $event); markDirty()" placeholder="https://velura.vn/blog/slug" />
+            </label>
+          </div>
+          @if (errors()['metaTitle'] || errors()['canonicalUrl']) {
+            <p class="erp-error" role="alert">{{ errors()['metaTitle'] || errors()['canonicalUrl'] }}</p>
+          }
+          <label class="erp-field content-counter-field">
+            <span>Meta description <small>{{ metaDescriptionLength() }}/{{ metaDescriptionMax }}</small></span>
+            <textarea class="erp-input" rows="3" [value]="form.metaDescription" (input)="onField('metaDescription', $event); markDirty()" placeholder="Để trống dùng mô tả ngắn"></textarea>
+          </label>
+          @if (errors()['metaDescription']) {
+            <p class="erp-error" role="alert">{{ errors()['metaDescription'] }}</p>
+          }
+          <div class="content-form__grid">
+            <label class="erp-field">
+              <span>Ảnh OG <small>mặc định lấy ảnh đại diện</small></span>
+              <input class="erp-input" type="text" [value]="form.ogImageUrl" (input)="onField('ogImageUrl', $event); markDirty()" placeholder="https://cdn.velura.vn/og.jpg" />
+            </label>
+            <label class="erp-field">
+              <span>Tags <small>{{ tagCount() }}/20 · cách nhau bằng dấu phẩy</small></span>
+              <input class="erp-input" type="text" [value]="form.tags" (input)="onField('tags', $event); markDirty()" placeholder="xu hướng, linen, mùa hè" />
+            </label>
+          </div>
+          @if (errors()['ogImageUrl'] || errors()['tags']) {
+            <p class="erp-error" role="alert">{{ errors()['ogImageUrl'] || errors()['tags'] }}</p>
+          }
+
+          <div class="content-seo__layout">
+            <div class="content-serp" aria-label="Xem trước kết quả tìm kiếm">
+              <span class="content-eyebrow">Google preview</span>
+              <a class="content-serp__url" [href]="'https://' + serpUrl()" target="_blank" rel="noopener noreferrer">{{ serpUrl() }}</a>
+              <div class="content-serp__title">{{ serpTitle() }}</div>
+              <p class="content-serp__description">{{ serpDescription() }}</p>
+            </div>
+            <ul class="content-seo__checks">
+              @for (check of seoChecks(); track check.key) {
+                <li [class.is-pass]="check.ok">
+                  <span class="content-seo__dot" aria-hidden="true">{{ check.ok ? '✓' : '•' }}</span>
+                  <span>{{ check.label }}</span>
+                  <small>{{ check.hint }}</small>
+                </li>
+              }
+            </ul>
+          </div>
+        </section>
+
+        <section class="content-compose__panel" [hidden]="editorTab() !== 'products'">
+          <div class="content-products__search">
+            <label class="erp-field">
+              <span>Tìm sản phẩm trong shop để đính kèm</span>
+              <input class="erp-input" type="search" [value]="productQuery()" (input)="onProductQueryInput($event)" (keyup.enter)="searchProducts()" placeholder="Tên hoặc SKU sản phẩm…" />
+            </label>
+            <button class="erp-btn erp-btn--sm" type="button" (click)="searchProducts()" [disabled]="productSearching()">
+              {{ productSearching() ? 'Đang tìm…' : 'Tìm' }}
+            </button>
+          </div>
+          <p class="erp-hint">Chỉ sản phẩm đang bán hoặc hết hàng được đính kèm. Thứ tự bên dưới là thứ tự thẻ sản phẩm trên bài viết.</p>
+          @if (productError()) {
+            <p class="erp-error" role="alert">{{ productError() }}</p>
+          }
+          <div class="content-products__results">
+            @for (product of productResults(); track product.product_id) {
+              <article class="content-product">
+                @if (productImage(product)) {
+                  <img class="content-product__thumb" [src]="productImage(product)" [alt]="product.name || 'Sản phẩm'" loading="lazy" />
+                } @else {
+                  <span class="content-product__thumb content-product__thumb--empty" aria-hidden="true">{{ (product.name || 'V').slice(0, 1) }}</span>
+                }
+                <div class="content-product__info">
+                  <strong>{{ product.name || 'Sản phẩm' }}</strong>
+                  <small>{{ productStatus(product) }} · {{ productPrice(product) }}</small>
+                </div>
+                <button class="erp-btn erp-btn--sm" type="button" [disabled]="isAttached(product.product_id)" (click)="attachProduct(product)">
+                  {{ isAttached(product.product_id) ? 'Đã đính kèm' : 'Đính kèm' }}
+                </button>
+              </article>
+            } @empty {
+              @if (!productSearching()) {
+                <p class="erp-hint">Không có sản phẩm phù hợp. Thử từ khóa khác.</p>
+              }
+            }
+          </div>
+
+          <div class="content-products__selected">
+            <h3>Đã đính kèm ({{ selectedProducts().length }}/{{ productMax }})</h3>
+            @for (product of selectedProducts(); track product.product_id; let index = $index) {
+              <div class="content-product content-product--selected">
+                @if (productImage(product)) {
+                  <img class="content-product__thumb" [src]="productImage(product)" [alt]="product.name || 'Sản phẩm'" loading="lazy" />
+                } @else {
+                  <span class="content-product__thumb content-product__thumb--empty" aria-hidden="true">{{ (product.name || 'V').slice(0, 1) }}</span>
+                }
+                <div class="content-product__info">
+                  <strong>{{ product.name || 'Sản phẩm' }}</strong>
+                  <small>{{ productStatus(product) }} · {{ productPrice(product) }}</small>
+                </div>
+                <div class="content-product__actions">
+                  <button class="erp-icon-btn" type="button" title="Lên" [disabled]="index === 0" (click)="moveProduct(product.product_id, -1)">↑</button>
+                  <button class="erp-icon-btn" type="button" title="Xuống" [disabled]="index === selectedProducts().length - 1" (click)="moveProduct(product.product_id, 1)">↓</button>
+                  <button class="erp-icon-btn" type="button" title="Gỡ" (click)="removeProduct(product.product_id)">×</button>
+                </div>
+              </div>
+            } @empty {
+              <p class="erp-hint">Chưa đính kèm sản phẩm nào. Bài viết vẫn lưu được, nhưng thẻ “Mua sản phẩm trong bài” sẽ trống.</p>
+            }
+          </div>
+          @if (errors()['productIds']) {
+            <p class="erp-error" role="alert">{{ errors()['productIds'] }}</p>
+          }
+        </section>
+      </div>
 
       @if (conflict()) {
         <div class="content-banner content-banner--warn" role="alert">

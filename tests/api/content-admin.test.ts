@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { HttpError } from "../../apps/api/src/http.js";
 import { accessForRole } from "../../apps/api/src/rbac.js";
+import { blogPlainText, sanitizeBlogHtml } from "../../apps/api/src/content/blog-html.js";
 import { createContentAdminService, mapContentDatabaseError } from "../../apps/api/src/content/content-admin-service.js";
 import { handleContentAdminRoute } from "../../apps/api/src/content/content-admin-router.js";
 import type { AuthContext, JsonObject } from "../../apps/api/src/types.js";
@@ -116,6 +117,100 @@ test("an edit must carry the version the operator loaded", async () => {
   assert.equal((calls.upsert[0] as Record<string, unknown>).expectedVersion, 3);
 });
 
+test("pasted web HTML keeps editorial markup but drops scripts, handlers and unsafe URLs", () => {
+  const html = sanitizeBlogHtml(
+    '<h2 class="lead">Xu hướng</h2><p onclick="steal()">Mùa <strong>hè</strong></p>' +
+    '<script>alert(1)</script><img src="javascript:alert(1)" onerror="steal()">' +
+    '<a href="https://velura.vn/shop" target="_blank">Mua</a><a href="javascript:alert(1)">x</a>' +
+    '<iframe src="https://evil.invalid"></iframe>'
+  );
+  assert.match(html, /<h2 class="lead">Xu hướng<\/h2>/);
+  assert.match(html, /<strong>hè<\/strong>/);
+  assert.match(html, /rel="noopener noreferrer"/);
+  assert.doesNotMatch(html, /script|onclick|onerror|javascript:|iframe|evil\.invalid/i);
+  assert.equal(blogPlainText(html), "Xu hướng Mùa hè Muax");
+  assert.equal(sanitizeBlogHtml(undefined), "");
+});
+
+test("a draft stores sanitized rich HTML, SEO and attached products", async () => {
+  const { calls, repo } = repository();
+  const service = createContentAdminService({ repository: repo });
+  const productId = "30000000-0000-4000-8000-000000000001";
+  await service.createBlog(context("super_admin"), {
+    ...validDraft,
+    content: "",
+    contentHtml: "<p>Bài viết dài đủ điều kiện biên tập của Velura, có hướng dẫn cụ thể cho khách khi chọn size.</p><script>x()</script>",
+    metaTitle: "Áo lụa Hà Nội",
+    metaDescription: "Chọn áo lụa đúng size.",
+    canonicalUrl: "https://velura.vn/blog/ao-lua-ha-noi",
+    ogImageUrl: "https://cdn.velura.vn/ao-lua.jpg",
+    tags: [" áo lụa ", "hà nội", ""],
+    productIds: [productId],
+  } as JsonObject, { ipAddress: "10.0.0.1" });
+  const sent = calls.upsert[0] as Record<string, unknown>;
+  assert.equal(sent.content, "Bài viết dài đủ điều kiện biên tập của Velura, có hướng dẫn cụ thể cho khách khi chọn size.");
+  assert.equal(sent.contentHtml, "<p>Bài viết dài đủ điều kiện biên tập của Velura, có hướng dẫn cụ thể cho khách khi chọn size.</p>");
+  assert.deepEqual(sent.tags, ["áo lụa", "hà nội"]);
+  assert.deepEqual(sent.productIds, [productId]);
+});
+
+test("a legacy caller without rich fields keeps SEO/product management untouched", async () => {
+  const { calls, repo } = repository();
+  const service = createContentAdminService({ repository: repo });
+  await service.createBlog(context("super_admin"), validDraft as JsonObject, { ipAddress: "10.0.0.1" });
+
+  const sent = calls.upsert[0] as Record<string, unknown>;
+  assert.equal(sent.contentHtml, null);
+  assert.equal(sent.metaTitle, "");
+  assert.deepEqual(sent.productIds, []);
+});
+
+test("SEO and product attachment limits are rejected before the RPC", async () => {
+  const cases: Array<[string, Record<string, unknown>]> = [
+    ["metaTitle", { ...validDraft, metaTitle: "A".repeat(71) }],
+    ["metaDescription", { ...validDraft, metaDescription: "A".repeat(321) }],
+    ["tags", { ...validDraft, tags: Array.from({ length: 21 }, (_, i) => `tag-${i}`) }],
+    ["productIds", { ...validDraft, productIds: ["not-a-uuid"] }],
+  ];
+  for (const [field, body] of cases) {
+    const { calls, repo } = repository();
+    const service = createContentAdminService({ repository: repo });
+    const error = await thrown(() => service.createBlog(context("super_admin"), body as JsonObject, { ipAddress: "10.0.0.1" }));
+    assert.equal(error.code, "CONTENT_VALIDATION", field);
+    assert.ok((error.details as Record<string, string>)[field]);
+    assert.deepEqual(calls.upsert, []);
+  }
+});
+
+test("AI SEO suggestions are permissioned, bounded, and never persist on their own", async () => {
+  const { calls, repo } = repository();
+  let prompt = "";
+  const service = createContentAdminService({
+    repository: repo,
+    generateJson: async (input) => {
+      prompt = String(input);
+      return { metaTitle: "A".repeat(90), metaDescription: "Mô tả ".repeat(80), tags: ["xu hướng", "", "hè", "lụa", "resort", "màu sắc", "phụ"], summary: "Tóm tắt" };
+    },
+  });
+  const denied = await thrown(() => service.suggestSeo(context("admin_operator_donhang"), { title: "Áo lụa Hà Nội", contentHtml: "<p>Nội dung đủ dài cho bài viết mùa hè của Velura.</p>" }));
+  assert.equal(denied.code, "RBAC_DENIED");
+  assert.deepEqual(calls.upsert, []);
+
+  const short = await thrown(() => service.suggestSeo(context("super_admin"), { title: "Áo", contentHtml: "" }));
+  assert.equal(short.status, 422);
+
+  const result = await service.suggestSeo(context("super_admin"), {
+    title: "Áo lụa Hà Nội",
+    contentHtml: "<h2>Chất liệu</h2><p>Nội dung đủ dài cho bài viết mùa hè của Velura.</p><script>x()</script>",
+  });
+  assert.equal(String(result.metaTitle).length, 70);
+  assert.equal(String(result.metaDescription).length, 320);
+  assert.deepEqual(result.tags, ["xu hướng", "hè", "lụa", "resort", "màu sắc", "phụ"]);
+  assert.match(prompt, /Áo lụa Hà Nội/);
+  assert.doesNotMatch(prompt, /<script>|<h2>/);
+  assert.deepEqual(calls.upsert, []);
+});
+
 test("a slug collision surfaces as a stable 409 with an actionable message", async () => {
   const taken = new HttpError(400, "SUPABASE_ERROR", "BLOG_SLUG_TAKEN [status:400]", { message: "BLOG_SLUG_TAKEN" });
   const { repo } = repository({}, taken);
@@ -146,6 +241,10 @@ test("router claims only /api/v1/admin/content/blogs and maps verbs to services"
     async updateBlog(_context: AuthContext | undefined, id: string) {
       seen.push(`update:${id}`);
       return { blog_id: id };
+    },
+    async suggestSeo() {
+      seen.push("ai-suggest");
+      return { metaTitle: "Gợi ý" };
     },
   } as never;
 
@@ -178,7 +277,8 @@ test("router claims only /api/v1/admin/content/blogs and maps verbs to services"
   assert.equal((await call("GET", ["api", "v1", "admin", "content", "policies"])).handled, false);
   assert.equal((await call("GET", ["api", "v1", "admin", "content", "blogs"])).handled, true);
   assert.equal((await call("POST", ["api", "v1", "admin", "content", "blogs"], validDraft)).handled, true);
+  assert.equal((await call("POST", ["api", "v1", "admin", "content", "blogs", "ai-suggest"], { title: "x" })).handled, true);
   assert.equal((await call("PATCH", ["api", "v1", "admin", "content", "blogs", BLOG_ID], validDraft)).handled, true);
   assert.equal((await call("DELETE", ["api", "v1", "admin", "content", "blogs", BLOG_ID])).handled, false, "không có xoá vật lý");
-  assert.deepEqual(seen, ["list", "create", `update:${BLOG_ID}`]);
+  assert.deepEqual(seen, ["list", "create", "ai-suggest", `update:${BLOG_ID}`]);
 });

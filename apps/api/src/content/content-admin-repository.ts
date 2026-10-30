@@ -35,7 +35,7 @@ export function createContentAdminRepository(): ContentAdminRepository {
 
     async upsertBlog(input, accessToken) {
       return (await callRpc(
-        "admin_upsert_blog",
+        "admin_upsert_blog_v2",
         {
           p_blog_id: input.blogId ?? null,
           p_category_slug: input.categorySlug ?? null,
@@ -43,11 +43,18 @@ export function createContentAdminRepository(): ContentAdminRepository {
           p_title: input.title ?? null,
           p_excerpt: input.excerpt ?? null,
           p_content: input.content ?? null,
+          p_content_html: input.contentHtml ?? null,
           p_image_url: input.imageUrl ?? null,
           p_author: input.author ?? null,
           p_read_minutes: input.readMinutes ?? null,
           p_is_featured: input.isFeatured ?? null,
           p_status: input.status ?? null,
+          p_meta_title: input.metaTitle ?? null,
+          p_meta_description: input.metaDescription ?? null,
+          p_canonical_url: input.canonicalUrl ?? null,
+          p_og_image_url: input.ogImageUrl ?? null,
+          p_tags: input.tags ?? [],
+          p_product_ids: input.productIds ?? [],
           p_expected_version: input.expectedVersion ?? null,
           p_ip_address: input.ipAddress ?? null,
         },

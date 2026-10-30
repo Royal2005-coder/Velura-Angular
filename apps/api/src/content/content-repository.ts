@@ -162,6 +162,12 @@ export function createContentRepository() {
  */
 export type ContentRepository = ReturnType<typeof createContentRepository>;
 
+/** The CMS once stored Vite dev paths; production serves the same file under /assets. */
+function publicAssetUrl(value: unknown): string {
+  const url = asString(value);
+  return url.startsWith("/src/assets/") ? url.slice(4) : url;
+}
+
 function toBlogDto(row: JsonObject): JsonObject {
   return {
     blog_id: row.blog_id,
@@ -174,9 +180,9 @@ function toBlogDto(row: JsonObject): JsonObject {
     meta_title: asString(row.meta_title) || null,
     meta_description: asString(row.meta_description) || null,
     canonical_url: asString(row.canonical_url) || null,
-    og_image_url: asString(row.og_image_url) || null,
+    og_image_url: publicAssetUrl(row.og_image_url) || null,
     tags: normalizeArray(row.tags),
-    image_url: asString(row.image_url) || "/src/assets/images/image-8.png",
+    image_url: publicAssetUrl(row.image_url) || "/assets/images/image-8.png",
     author: asString(row.author) || "Velura Editorial",
     read_minutes: asNumber(row.read_minutes) || 5,
     is_featured: Boolean(row.is_featured),

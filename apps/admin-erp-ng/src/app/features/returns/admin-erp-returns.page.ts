@@ -143,6 +143,14 @@ export class AdminErpReturnsPage {
   readonly flowLine = signal<AdminReturnLine | null>(null);
   readonly scanOpen = signal(false);
   readonly scanError = signal<string | null>(null);
+  /** Demo carrier mode: scan a waiting return and jump straight into pickup proof capture. */
+  readonly carrierDemo = signal(false);
+  readonly carrierTracking = signal('');
+  /** Ready-to-scan QR for the first waiting return in the carrier demo. */
+  readonly carrierSample = computed(() => {
+    const row = this.returns().find((item) => String(item.status) === 'WAITING_RETURN' || String(item.progress_status) === 'WAITING_RETURN');
+    return row?.return_code ? buildReturnQrPayload(row.return_id || '', row.return_code) : '';
+  });
 
   readonly selectedTicket = signal<AdminTicketRow | null>(null);
   readonly ticketAction = signal<TicketAction | null>(null);
@@ -500,6 +508,12 @@ export class AdminErpReturnsPage {
         this.selected.set(record);
         this.loadOrderContext(record.order_id);
         this.loadRecordTrail(record.return_id);
+        if (this.carrierDemo()) {
+          this.carrierDemo.set(false);
+          const line = (record.lines || []).find((part) => String(part.item_status) === 'WAITING_RETURN');
+          if (line) this.openFlow('pickup', line);
+          else this.scanError.set('Phiếu này không còn phần hàng đang chờ ĐVVC lấy.');
+        }
       },
       error: (error: unknown) => {
         if (requestId !== this.detailRequestId) return;
@@ -690,6 +704,15 @@ export class AdminErpReturnsPage {
    * Opens the return whose QR was scanned at the warehouse door. A code for an order is not
    * enough to receive goods; only a return slip code opens a slip.
    */
+  /** Opens the QR scanner in shipper-demo mode; a waiting return goes straight to pickup proof. */
+  startCarrierDemo(): void {
+    if (!this.canOperate()) return;
+    this.carrierDemo.set(true);
+    this.scanError.set(null);
+    this.carrierTracking.set('');
+    this.scanOpen.set(true);
+  }
+
   applyReturnScan(text: string): void {
     this.scanOpen.set(false);
     const result = parseScan(text);
@@ -699,6 +722,7 @@ export class AdminErpReturnsPage {
       return;
     }
     this.scanError.set('Mã này không phải phiếu đổi trả của Velura. Quét mã trên phiếu hoặc mở danh sách.');
+    this.carrierDemo.set(false);
   }
 
   /**

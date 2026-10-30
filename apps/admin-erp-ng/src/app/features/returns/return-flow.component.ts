@@ -35,6 +35,8 @@ export class ReturnFlowComponent {
   readonly canApprove = input(false);
   readonly canOperate = input(false);
   readonly canFinance = input(false);
+  /** Tracking supplied by the carrier-demo scan; the operator can still correct it. */
+  readonly presetTracking = input('');
   readonly done = output<string>();
   readonly dismissed = output<void>();
   readonly quantity = signal(1);
@@ -122,7 +124,7 @@ export class ReturnFlowComponent {
       this.matchesProduct.set(true); this.tagsIntact.set(true); this.conditionAcceptable.set(true);
       this.packageMatch.set(true); this.sealIntact.set(true); this.disposition.set('restock');
       this.proofFile.set(null); this.pickupPhotos.set([]); this.pickupVideo.set(null);
-      this.transferReference.set(''); this.tracking.set(flow === 'ship_exchange' ? this.newExchangeTracking() : ''); this.carrier.set('GHN'); this.contactResult.set('reached');
+      this.transferReference.set(''); this.tracking.set(flow === 'ship_exchange' ? this.newExchangeTracking() : flow === 'pickup' ? this.presetTracking() : ''); this.carrier.set('GHN'); this.contactResult.set('reached');
       const date = new Date(); date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
       this.transferredAt.set(date.toISOString().slice(0, 16));
       this.pickedUpBy.set(''); this.pickedUpAt.set(date.toISOString().slice(0, 16));

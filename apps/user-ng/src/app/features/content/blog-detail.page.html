@@ -2,14 +2,13 @@
   <div class="container">
     <a routerLink="/blog" class="btn-read-more">← Tạp chí phong cách</a>
     @if (post(); as article) {
-      <article class="featured-post" style="margin-top: 24px;">
-        <div class="featured-post__image">
-          <img [src]="article.image" [alt]="article.title" />
-        </div>
-        <div class="featured-post__content">
+      <article>
+        <header class="article-header" style="margin-top: 24px;">
           <span class="blog-badge">{{ article.badge }}</span>
-          <h1 class="featured-post__title">{{ article.title }}</h1>
-          <p class="featured-post__excerpt">{{ article.excerpt }}</p>
+          <h1 class="article-header__title">{{ article.title }}</h1>
+          @if (article.excerpt) {
+            <p class="article-header__dek">{{ article.excerpt }}</p>
+          }
           <div class="post-meta">
             <span class="post-meta__author">{{ article.author }}</span>
             <span class="post-meta__dot">&middot;</span>
@@ -17,14 +16,58 @@
             <span class="post-meta__dot">&middot;</span>
             <span class="post-meta__read-time">{{ article.readMinutes }} phút đọc</span>
           </div>
-          @if (paragraphs(article.content).length) {
-            <div class="featured-post__body">
-              @for (paragraph of paragraphs(article.content); track $index) {
-                <p>{{ paragraph }}</p>
+          @if (article.tags?.length) {
+            <div class="article-tags" aria-label="Chủ đề bài viết">
+              @for (tag of article.tags; track tag) {
+                <span class="article-tag">{{ tag }}</span>
               }
             </div>
-          } @else {
-            <p class="featured-post__excerpt">Nội dung bài viết đang được cập nhật.</p>
+          }
+        </header>
+
+        <figure class="article-hero">
+          <img [src]="article.image" [alt]="article.title" />
+        </figure>
+
+        <div class="article-layout" [class.article-layout--single]="!article.products?.length">
+          <div class="article-content">
+            @if (article.contentHtml) {
+              <div class="article-rich" [innerHTML]="article.contentHtml"></div>
+            } @else if (paragraphs(article.content).length) {
+              <div class="article-rich">
+                @for (paragraph of paragraphs(article.content); track $index) {
+                  <p>{{ paragraph }}</p>
+                }
+              </div>
+            } @else {
+              <p class="article-empty">Nội dung bài viết đang được cập nhật.</p>
+            }
+          </div>
+
+          @if (article.products?.length) {
+            <aside class="article-sidebar" aria-label="Sản phẩm trong bài">
+              <section class="sidebar-products">
+                <h2 class="sidebar-products__title">Sản phẩm trong bài</h2>
+                <div class="sidebar-products__list">
+                  @for (product of article.products; track product.product_id) {
+                    <div class="sidebar-product">
+                      <a class="sidebar-product__link" [routerLink]="['/products', product.slug || product.product_id]">
+                        <div class="sidebar-product__image">
+                          <img [src]="product.image" [alt]="product.name" loading="lazy" />
+                        </div>
+                        <div class="sidebar-product__info">
+                          <h3 class="sidebar-product__name">{{ product.name }}</h3>
+                          <span class="sidebar-product__price">{{ money(product.price) }}</span>
+                          @if (product.compareAtPrice) {
+                            <span class="sidebar-product__compare">{{ money(product.compareAtPrice) }}</span>
+                          }
+                        </div>
+                      </a>
+                    </div>
+                  }
+                </div>
+              </section>
+            </aside>
           }
         </div>
       </article>

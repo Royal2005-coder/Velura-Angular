@@ -122,11 +122,19 @@ export class ReturnFlowComponent {
       this.matchesProduct.set(true); this.tagsIntact.set(true); this.conditionAcceptable.set(true);
       this.packageMatch.set(true); this.sealIntact.set(true); this.disposition.set('restock');
       this.proofFile.set(null); this.pickupPhotos.set([]); this.pickupVideo.set(null);
-      this.transferReference.set(''); this.tracking.set(''); this.carrier.set('GHN'); this.contactResult.set('reached');
+      this.transferReference.set(''); this.tracking.set(flow === 'ship_exchange' ? this.newExchangeTracking() : ''); this.carrier.set('GHN'); this.contactResult.set('reached');
       const date = new Date(); date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
       this.transferredAt.set(date.toISOString().slice(0, 16));
       this.pickedUpBy.set(''); this.pickedUpAt.set(date.toISOString().slice(0, 16));
     });
+  }
+
+  /** A fresh outbound AWB; the database still rewrites collisions and persists this on the sub-order. */
+  private newExchangeTracking(): string {
+    const random = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID().replace(/-/g, '').slice(0, 16)
+      : Math.random().toString(36).slice(2, 18);
+    return 'EXC' + random.toUpperCase();
   }
 
   /** Stores ordinary text without silently coercing malformed quantities into valid ones. */

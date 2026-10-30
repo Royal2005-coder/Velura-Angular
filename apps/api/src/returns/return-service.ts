@@ -354,8 +354,10 @@ export function createReturnService({
       }
       const { current, returnItemId, version } = await requireRefundItem(context, returnId, body);
       const payment = await repository.getPaymentByOrderId(asString(current.order_id), context.accessToken);
-      if (asString(current.payment_method ?? payment?.payment_method).toUpperCase() !== "COD" ||
-          classifyReturnPayment(current.payment_method ?? payment?.payment_method, payment?.payment_provider) !== "cod") {
+      const orderPaymentMethod = await repository.getOrderPaymentMethod(asString(current.order_id));
+      const paymentMethod = current.payment_method ?? payment?.payment_method ?? orderPaymentMethod;
+      if (asString(paymentMethod).toUpperCase() !== "COD" ||
+          classifyReturnPayment(paymentMethod, payment?.payment_provider) !== "cod") {
         throw new HttpError(422, "COD_PAYMENT_REQUIRED", "Chỉ đơn COD được ghi nhận chuyển khoản hoàn tiền.");
       }
       const receiverStatus = refundReceiverStatus(true, await repository.getRefundReceiver(returnId));

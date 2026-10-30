@@ -159,10 +159,10 @@
         <app-erp-status-badge [label]="statusLabel(record.status)" [tone]="statusTone(record.status)" [dot]="true" />
       </div>
 
-      <div class="record__next">
+      <div class="record__next" [class.record__next--action]="nextStepTone(record) === 'action'" [class.record__next--done]="nextStepTone(record) === 'done'">
         <div>
-          <strong>Quyết định: {{ decisionLabel(record.decision_status) }}</strong>
-          <span>Tiến độ: {{ statusLabel(record.progress_status || record.status) }} · Loại yêu cầu ban đầu không thay đổi.</span>
+          <strong>Việc tiếp theo: {{ nextStep(record) }}</strong>
+          <span>Quyết định: {{ decisionLabel(record.decision_status) }} · Tiến độ: {{ statusLabel(record.progress_status || record.status) }} · Loại yêu cầu ban đầu không thay đổi.</span>
         </div>
       </div>
       @if (record.contact_due_at) {

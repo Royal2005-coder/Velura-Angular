@@ -846,6 +846,28 @@ export class AdminErpReturnsPage {
   /**
    * Vietnamese return status label.
    */
+  /** Next operational action across parts; red = needs a human decision/exception, green = done. */
+  nextStep(record: AdminReturnRow): string {
+    const statuses = (record.lines || []).map((line) => String(line.item_status || ''));
+    if (statuses.some((status) => status === 'NEEDS_SUPPORT')) return 'Cần hỗ trợ / xử lý ngoại lệ';
+    if (statuses.some((status) => status === 'RETURN_SHIPPING')) return 'Kho nhận và kiểm hàng';
+    if (statuses.some((status) => status === 'RECEIVED')) return 'Hoàn tiền hoặc chuẩn bị đơn đổi';
+    if (statuses.some((status) => status === 'EXCHANGE_PREPARING')) return 'Giao phần hàng đổi';
+    if (statuses.some((status) => status === 'EXCHANGE_SHIPPING')) return 'Theo dõi giao hàng đổi';
+    if (statuses.some((status) => status === 'REFUND_PENDING')) return 'Theo dõi hoàn tiền';
+    if (statuses.some((status) => status === 'WAITING_RETURN')) return 'Chờ ĐVVC lấy hàng';
+    if (statuses.some((status) => status === 'REQUESTED')) return 'Admin duyệt phần hàng';
+    return 'Đã kết thúc';
+  }
+
+  /** Action tone drives the next-step banner color without inventing a second workflow. */
+  nextStepTone(record: AdminReturnRow): 'action' | 'waiting' | 'done' {
+    const statuses = (record.lines || []).map((line) => String(line.item_status || ''));
+    if (statuses.some((status) => ['REQUESTED', 'NEEDS_SUPPORT', 'RECEIVED', 'EXCHANGE_PREPARING'].includes(status))) return 'action';
+    if (statuses.length && statuses.every((status) => ['COMPLETED', 'REJECTED', 'CANCELLED'].includes(status))) return 'done';
+    return 'waiting';
+  }
+
   statusLabel(status: string | null | undefined): string {
     return returnStatusLabel(status);
   }

@@ -96,9 +96,9 @@ export class BlogCatalogService {
       metaTitle: String(row.meta_title || ''),
       metaDescription: String(row.meta_description || ''),
       canonicalUrl: String(row.canonical_url || ''),
-      ogImage: String(row.og_image_url || ''),
+      ogImage: this.assetUrl(row.og_image_url),
       tags: Array.isArray(row.tags) ? row.tags.map((tag) => String(tag || '').trim()).filter(Boolean) : [],
-      image: String(row.image_url || '/assets/images/placeholder.jpg'),
+      image: this.assetUrl(row.image_url) || '/assets/images/placeholder.jpg',
       author: String(row.author || 'Velura Editorial'),
       date: this.formatDate(row.published_at),
       publishedAt: row.published_at,
@@ -106,6 +106,12 @@ export class BlogCatalogService {
       featured: Boolean(row.is_featured),
       products: this.toProducts(row.products),
     };
+  }
+
+  /** The CMS once stored Vite dev paths; production serves the same file under /assets. */
+  private assetUrl(value: string | null | undefined): string {
+    const url = String(value || '').trim();
+    return url.startsWith('/src/assets/') ? url.slice(4) : url;
   }
 
   private toProducts(rows: ContentBlogProductRow[] | undefined): BlogProductSummary[] {

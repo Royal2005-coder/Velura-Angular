@@ -168,7 +168,11 @@ async function customerReturnDetail(
       carrier: exchangeOrder.carrier || null,
       tracking_code: exchangeOrder.tracking_code || null,
       tracking_url: exchangeOrder.tracking_url || null,
-      order_kind: exchangeOrder.order_kind || "exchange"
+      order_kind: exchangeOrder.order_kind || "exchange",
+      shipping_name: exchangeOrder.shipping_name || null,
+      shipping_phone: exchangeOrder.shipping_phone || null,
+      shipping_address: exchangeOrder.shipping_address || null,
+      items: Array.isArray(exchangeOrder.items) ? exchangeOrder.items : []
     } : null,
     instructions: RETURN_INSTRUCTIONS
   };

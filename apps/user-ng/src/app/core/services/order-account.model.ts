@@ -76,6 +76,10 @@ export interface ReturnTrackingExchangeOrder {
   carrier?: string | null;
   trackingCode?: string | null;
   trackingUrl?: string | null;
+  shippingName?: string | null;
+  shippingPhone?: string | null;
+  shippingAddress?: string | null;
+  items?: Array<{ productName?: string; quantity?: number; color?: string; size?: string }>;
 }
 
 /** End-to-end customer tracking payload for one return. */

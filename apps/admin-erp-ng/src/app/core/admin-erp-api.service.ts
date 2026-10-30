@@ -1033,6 +1033,18 @@ export interface AdminReturnExchangeOrder {
   tracking_code?: string | null;
   tracking_url?: string | null;
   order_kind?: string;
+  shipping_name?: string | null;
+  shipping_phone?: string | null;
+  shipping_address?: string | null;
+  items?: Array<{
+    item_id?: string;
+    product_name?: string;
+    quantity?: number;
+    unit_price?: number;
+    color?: string;
+    size?: string;
+    sku?: string;
+  }>;
 }
 
 /** Customer return request; QA and gateway facts constrain the operations offered. */

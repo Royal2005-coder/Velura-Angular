@@ -166,6 +166,11 @@ const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
             <p class="muted">
               {{ exchange.carrier || 'ĐVVC' }} · <span class="mono">{{ exchange.trackingCode || '—' }}</span>
             </p>
+            <p class="muted">Người nhận: {{ exchange.shippingName || '—' }} · {{ exchange.shippingPhone || '—' }}</p>
+            <p class="muted">Địa chỉ: {{ exchange.shippingAddress || '—' }}</p>
+            @for (item of exchange.items || []; track $index) {
+              <p>• {{ item.productName }} · {{ item.color || '—' }}/{{ item.size || '—' }} · SL {{ item.quantity }}</p>
+            }
             @if (exchange.trackingUrl) {
               <a [href]="exchange.trackingUrl" target="_blank" rel="noopener">Theo dõi hàng đổi</a>
             }

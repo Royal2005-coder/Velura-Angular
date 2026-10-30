@@ -576,6 +576,17 @@ export interface AdminOrderActionResult {
   refund: { status: 'refunded' | 'requested' | 'failed' | 'skipped'; message?: string } | null;
 }
 
+/** Một sản phẩm đính kèm bài viết; chỉ tóm tắt đủ để hiện thẻ và mở trang sản phẩm. */
+export interface AdminBlogProduct {
+  product_id: string;
+  name?: string;
+  slug?: string;
+  images?: string[];
+  base_price?: number;
+  sale_price?: number | null;
+  status?: string;
+}
+
 /** Một bài viết CMS. `status` là nháp/đã công bố/đã lưu trữ; bản nháp chỉ admin thấy. */
 export interface AdminBlogRow {
   blog_id: string;
@@ -584,6 +595,14 @@ export interface AdminBlogRow {
   category_slug?: string;
   excerpt?: string;
   content?: string;
+  content_html?: string;
+  meta_title?: string | null;
+  meta_description?: string | null;
+  canonical_url?: string | null;
+  og_image_url?: string | null;
+  tags?: string[];
+  product_ids?: string[];
+  products?: AdminBlogProduct[];
   image_url?: string | null;
   author?: string;
   read_minutes?: number;
@@ -612,12 +631,27 @@ export interface AdminBlogInput {
   categorySlug: string;
   status: string;
   content: string;
+  contentHtml?: string;
   excerpt?: string;
   imageUrl?: string | null;
+  metaTitle?: string;
+  metaDescription?: string;
+  canonicalUrl?: string;
+  ogImageUrl?: string;
+  tags?: string[];
+  productIds?: string[];
   author?: string;
   readMinutes?: number;
   isFeatured?: boolean;
   expectedVersion?: number;
+}
+
+/** Gợi ý SEO do AI soạn từ tiêu đề và nội dung; người biên tập quyết định có dùng hay không. */
+export interface AdminBlogSeoSuggestion {
+  metaTitle: string;
+  metaDescription: string;
+  tags: string[];
+  summary: string;
 }
 
 /**
@@ -2256,6 +2290,13 @@ export class AdminErpApiService {
    */
   updateBlog(blogId: string, body: AdminBlogInput): Observable<AdminBlogRow> {
     return this.http.patch<AdminBlogRow>(`${this.baseUrl}/api/v1/admin/content/blogs/${encodeURIComponent(blogId)}`, body);
+  }
+
+  /**
+   * Draft-only editorial assistant. It returns suggestions and persists nothing.
+   */
+  suggestBlogSeo(body: { title: string; contentHtml: string }): Observable<AdminBlogSeoSuggestion> {
+    return this.http.post<AdminBlogSeoSuggestion>(`${this.baseUrl}/api/v1/admin/content/blogs/ai-suggest`, body);
   }
 
   /**

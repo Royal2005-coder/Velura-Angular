@@ -56,6 +56,10 @@ import { ChangeDetectionStrategy, Component, ElementRef, HostListener, effect, i
       .modal-panel--lg {
         width: min(100%, 820px);
       }
+      .modal-panel--xl {
+        width: min(100%, 1180px);
+        max-height: min(92vh, 980px);
+      }
       .modal-head {
         display: flex;
         align-items: center;
@@ -89,7 +93,7 @@ import { ChangeDetectionStrategy, Component, ElementRef, HostListener, effect, i
 export class AdminErpModal {
   readonly open = input(false);
   readonly title = input.required<string>();
-  readonly size = input<'sm' | 'md' | 'lg'>('md');
+  readonly size = input<'sm' | 'md' | 'lg' | 'xl'>('md');
   readonly closed = output<void>();
   private readonly panel = viewChild<ElementRef<HTMLElement>>('panel');
   private lastFocused: HTMLElement | null = null;

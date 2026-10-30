@@ -33,6 +33,12 @@ export async function handleContentAdminRoute({
     return true;
   }
 
+  if (req.method === "POST" && parts.length === 6 && parts[5] === "ai-suggest") {
+    const body = await readJson(req, config.maxBodyBytes);
+    sendJson(res, 200, await service.suggestSeo(context, body), headers);
+    return true;
+  }
+
   const blogId = parts[5];
   if (req.method === "PATCH" && blogId && parts.length === 6) {
     const body = await readJson(req, config.maxBodyBytes);

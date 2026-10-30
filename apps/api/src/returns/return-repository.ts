@@ -209,10 +209,28 @@ export function createReturnRepository() {
 
     /** Linked replacement order facts shown next to the return. */
     async getExchangeOrder(orderId: string): Promise<JsonObject | null> {
-      return selectOne("orders", {
-        select: "order_id,order_code,status,payment_method,total_amount,carrier,tracking_code,tracking_url,parent_order_id,source_return_id,order_kind,created_at",
+      const order = await selectOne("orders", {
+        select: "order_id,order_code,status,payment_method,total_amount,subtotal,shipping_fee,carrier,tracking_code,tracking_url,parent_order_id,source_return_id,order_kind,shipping_name,shipping_phone,shipping_address,created_at",
         order_id: `eq.${orderId}`
       }).catch(() => null);
+      if (!order) return null;
+      const { rows: items } = await selectRows("order_item", {
+        select: "item_id,product_name,quantity,unit_price,subtotal_item,variant_id",
+        order_id: `eq.${orderId}`,
+        limit: 50
+      }).catch(() => ({ rows: [] as JsonObject[] }));
+      const variantIds = items.map((item) => asString(item.variant_id)).filter(Boolean);
+      const { rows: variants } = variantIds.length
+        ? await selectRows("variant", { select: "variant_id,sku,color,size", variant_id: `in.(${variantIds.join(",")})`, limit: 50 }).catch(() => ({ rows: [] as JsonObject[] }))
+        : { rows: [] as JsonObject[] };
+      const variantMap = new Map(variants.map((variant) => [asString(variant.variant_id), variant]));
+      return {
+        ...order,
+        items: items.map((item) => ({
+          ...item,
+          ...(variantMap.get(asString(item.variant_id)) || {})
+        }))
+      };
     },
     async listReturns(filters: ReturnListFilters, accessToken: string) {
       const query: Record<string, unknown> = {

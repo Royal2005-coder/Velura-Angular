@@ -413,6 +413,12 @@ function mapReturnTracking(row: ApiReturnDetail): ReturnTrackingDetail {
     carrier: row.exchange_order.carrier || null,
     trackingCode: row.exchange_order.tracking_code || null,
     trackingUrl: row.exchange_order.tracking_url || null,
+    shippingName: row.exchange_order.shipping_name || null,
+    shippingPhone: row.exchange_order.shipping_phone || null,
+    shippingAddress: row.exchange_order.shipping_address || null,
+    items: (row.exchange_order.items || []).map((item) => ({
+      productName: item.product_name, quantity: item.quantity, color: item.color, size: item.size
+    }))
   } : null;
   return {
     returnId: row.return_id || '',

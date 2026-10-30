@@ -107,6 +107,13 @@ describe('ReturnFlowComponent per-item operations', () => {
     expect(actions[0].itemId).toBe('part-1');
   });
 
+  it('prefills a unique outbound AWB for the exchange shipment instead of reusing the return code', () => {
+    const { component } = boot('ship_exchange', { ...line, item_status: 'EXCHANGE_PREPARING', resolution_type: 'exchange' });
+    expect(component.tracking()).toMatch(/^EXC[A-Z0-9]{8,}$/);
+    component.tracking.set('RET1F28AB9201F745388B608B7485FAAA88');
+    expect(component.canSubmit()).toBe(true);
+  });
+
   it('records COD payment against the item allocation and version, never the header total/version', () => {
     const { component, manual } = boot('manual', { ...line, resolution_type: 'refund', item_status: 'RECEIVED' });
     component.transferReference.set('BANK-REF-001'); component.transferredAt.set('2020-01-01T10:00'); component.proofFile.set(image);

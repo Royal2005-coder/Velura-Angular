@@ -135,6 +135,15 @@ export function createReturnRepository() {
     },
 
     /**
+     * COD eligibility for legacy orders that predate a payment row: the order itself still records
+     * the purchase method, while `payment` may be absent.
+     */
+    async getOrderPaymentMethod(orderId: string): Promise<string | null> {
+      const row = await selectOne("orders", { order_id: `eq.${orderId}`, select: "payment_method" }).catch(() => null);
+      return row ? asString(row.payment_method) || null : null;
+    },
+
+    /**
      * Financial operation already bound to one return part; retries read it instead of creating a second refund.
      */
     async getRefundOperation(returnItemId: string): Promise<JsonObject | null> {

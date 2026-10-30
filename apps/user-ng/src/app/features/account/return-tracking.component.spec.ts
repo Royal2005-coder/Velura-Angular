@@ -7,7 +7,7 @@ const detail: ReturnTrackingDetail = {
   returnCode: 'RETABC123',
   orderCode: 'VLR-001',
   status: 'WAITING_RETURN',
-  statusLabel: 'Chờ khách gửi hàng',
+  statusLabel: 'Đã duyệt · chờ ĐVVC lấy hàng',
   typeLabel: 'Hoàn tiền',
   canCancel: true,
   canUploadPacking: true,
@@ -58,7 +58,7 @@ describe('ReturnTrackingComponent', () => {
     fixture.detectChanges();
     const text = (fixture.nativeElement as HTMLElement).textContent || '';
 
-    expect(text).toContain('Chờ khách gửi hàng');
+    expect(text).toContain('Đã duyệt · chờ ĐVVC lấy hàng');
     expect(text).toContain('Đã tạo vận đơn hoàn');
     expect(text).toContain('GHN123456789');
     expect(text).toContain('RETABC123');

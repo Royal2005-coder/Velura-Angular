@@ -367,7 +367,16 @@
               @if (line.decision_reason || line.reason) { <p class="record__text">Lý do: {{ line.decision_reason || line.reason }}</p> }
               @if (line.replacement_variant_id) { <p>Biến thể thay thế: <span class="is-mono">{{ line.replacement_variant_id }}</span></p> }
               @if (line.exchange_order_id) { <a class="erp-chip" [routerLink]="['/orders']" [queryParams]="{ focus: line.exchange_order_id }">Đơn đổi {{ line.exchange_order_id.slice(0, 8) }}</a> }
-              @if (line.exchange_order; as exchange) { <p class="desk-note">Đơn đổi: {{ exchange.order_code || exchange.order_id }} · {{ exchange.status }} · {{ exchange.carrier || '—' }} · {{ exchange.tracking_code || '—' }}</p> }
+              @if (line.exchange_order; as exchange) {
+                <div class="desk-note">
+                  <p>Đơn đổi: <strong>{{ exchange.order_code || exchange.order_id }}</strong> · {{ exchange.status }} · {{ exchange.carrier || '—' }} · {{ exchange.tracking_code || '—' }}</p>
+                  <p>Người nhận: {{ exchange.shipping_name || '—' }} · {{ exchange.shipping_phone || '—' }}</p>
+                  <p>Địa chỉ: {{ exchange.shipping_address || '—' }}</p>
+                  @for (item of exchange.items || []; track item.item_id) {
+                    <p>• {{ item.product_name }} · {{ item.color || '—' }}/{{ item.size || '—' }} · SL {{ item.quantity }} · {{ money(item.unit_price || 0) }}</p>
+                  }
+                </div>
+              }
               @if (line.receipt_at) {
                 <p class="desk-note">Đã nhận {{ line.received_quantity }} · đúng hàng: {{ line.matches_product ? 'Có' : 'Không' }} · tem: {{ line.tags_intact ? 'Nguyên' : 'Không nguyên' }} · tình trạng: {{ line.condition_acceptable ? 'Đạt' : 'Không đạt' }} · niêm phong: {{ line.seal_intact ? 'Nguyên' : 'Không nguyên' }} · {{ date(line.receipt_at) }}</p>
               }

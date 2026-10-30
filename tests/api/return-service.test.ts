@@ -55,6 +55,10 @@ test("service audit logs are protected by the A05 reader matrix", async () => {
 test("only super_admin can decide a line, while CSKH can operate approved lines", async () => {
   const calls: unknown[][] = [];
   const service = createReturnService({ repository: {
+    listEvidence: async () => [
+      { kind: 'packing_photo', uploaded_by_role: 'customer' },
+      { kind: 'packing_video', uploaded_by_role: 'customer' }
+    ],
     actOnItem: async (...args) => { calls.push(args); return { return_item_id: ITEM_ID }; }
   } as unknown as ReturnRepository });
   for (const action of ["approve", "reject"]) {
@@ -504,3 +508,16 @@ test("order readers never receive full bank fields in legacy headers, manual sna
 });
 
 function context(roleCode) { return { authUser: { id: "auth-1" }, roleCode, accessToken: "jwt-token" }; }
+
+test("super-admin approval is blocked until the customer uploaded both packing photo and video", async () => {
+  let called = 0;
+  const service = createReturnService({ repository: {
+    listEvidence: async () => [{ kind: "packing_photo", uploaded_by_role: "customer" }],
+    actOnItem: async () => { called += 1; return {}; }
+  } as unknown as ReturnRepository });
+  await assert.rejects(
+    () => service.actOnItem(context("super_admin"), RETURN_ID, ITEM_ID, { action: "approve", expectedVersion: 3, reason: "Da xac minh du bang chung" }),
+    hasCode("PACKING_EVIDENCE_REQUIRED")
+  );
+  assert.equal(called, 0);
+});

@@ -68,7 +68,7 @@ test("customer detail exposes tracking, timeline and masks the COD bank account"
   const detail = await service.detailForMember({ user_id: "u1" } as never, RETURN_ID);
 
   assert.equal(detail.return_code, "RETABC123");
-  assert.equal(detail.status_label, "Chờ gửi hàng");
+  assert.equal(detail.status_label, "Đã duyệt · chờ ĐVVC lấy hàng");
   assert.equal(detail.customer_name, "Nguyen A");
   assert.equal(detail.can_upload_packing, true);
   assert.equal(detail.refund_bank_account, undefined);

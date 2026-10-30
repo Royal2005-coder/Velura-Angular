@@ -100,6 +100,49 @@ export function blogEditorText(value: string | null | undefined): string {
   return (doc.body.textContent || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
+/** Escapes a value for generated markup; never call with already-rendered HTML. */
+function escapeHtml(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/**
+ * Older posts stored a JSON editorial structure (intro / takeaways / sections) in `content`.
+ * Opening one in the rich editor converts it to the same HTML the storefront fallback renders,
+ * so the operator edits readable sections instead of a JSON blob.
+ */
+export function legacyBlogContentHtml(value: string | null | undefined): string {
+  const source = String(value ?? '').trim();
+  if (!source.startsWith('{')) return '';
+  let parsed: unknown;
+  try { parsed = JSON.parse(source); } catch { return ''; }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return '';
+  const record = parsed as Record<string, unknown>;
+  const intro = typeof record['intro'] === 'string' ? record['intro'].trim() : '';
+  const takeaways = Array.isArray(record['takeaways'])
+    ? record['takeaways'].map((item) => typeof item === 'string' ? item.trim() : '').filter(Boolean)
+    : [];
+  const sections = Array.isArray(record['sections'])
+    ? record['sections'].flatMap((raw) => {
+        if (!raw || typeof raw !== 'object') return [];
+        const section = raw as Record<string, unknown>;
+        const heading = typeof section['heading'] === 'string' ? section['heading'].trim() : '';
+        const body = Array.isArray(section['body'])
+          ? section['body'].map((item) => typeof item === 'string' ? item.trim() : '').filter(Boolean)
+          : [];
+        return heading || body.length ? [{ heading, body }] : [];
+      })
+    : [];
+  if (!intro && !takeaways.length && !sections.length) return '';
+  const parts: string[] = [];
+  if (intro) parts.push(`<p>${escapeHtml(intro)}</p>`);
+  if (takeaways.length) parts.push(`<h2>Điểm chính</h2><ul>${takeaways.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>`);
+  for (const section of sections) {
+    if (section.heading) parts.push(`<h2>${escapeHtml(section.heading)}</h2>`);
+    for (const paragraph of section.body) parts.push(`<p>${escapeHtml(paragraph)}</p>`);
+  }
+  return parts.join('');
+}
+
 /** Escapes legacy plain-text content into paragraphs the rich editor can open and edit. */
 export function htmlFromPlainText(value: string | null | undefined): string {
   const text = String(value ?? '').trim();
@@ -114,7 +157,7 @@ export function htmlFromPlainText(value: string | null | undefined): string {
 
 /** Rich HTML for an existing row, converting posts written before the editor existed. */
 export function blogRowHtml(row: Pick<AdminBlogRow, 'content_html' | 'content'>): string {
-  return sanitizeEditorHtml(row.content_html) || htmlFromPlainText(row.content);
+  return sanitizeEditorHtml(row.content_html) || legacyBlogContentHtml(row.content) || htmlFromPlainText(row.content);
 }
 
 /** Inserts clipboard text into the contenteditable selection, escaping when no HTML was copied. */

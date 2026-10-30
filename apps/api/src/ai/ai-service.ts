@@ -6,6 +6,7 @@ import { resolve, sep } from "node:path";
 import { HttpError } from "../http.js";
 import { asString, asJsonObject, type JsonObject } from "../types.js";
 import { LocalAiRepository } from "./ai-repository.js";
+import { loadStudioAssets } from "./studio-assets.js";
 import sharp from "sharp";
 import type { EnhancementEvidence, EnhancementSelection } from "./enhancement-approval-service.js";
 import {
@@ -94,12 +95,7 @@ export class AiService {
     const allowed = !this.storageBlocked && process.env.AI_DISABLE !== "true" && process.env.AI_ENABLE !== "false" &&
       (process.env.AI_ENABLE === "true" || process.env.NODE_ENV !== "production");
     const enabled = allowed && TASKS.some(task => verified.includes(task) && this.worker.ready(task));
-    const registry = asJsonObject(
-      JSON.parse(process.env.AI_STUDIO_ASSETS || "{}") as unknown,
-    );
-    const root = resolve(
-      process.env.AI_STUDIO_ASSET_ROOT || "scratch/ai-studio",
-    );
+    const { root, registry } = loadStudioAssets();
     const studio_assets = Object.entries(registry).flatMap(([id, raw]) => {
       const asset = asJsonObject(raw),
         file = asString(asset.file),

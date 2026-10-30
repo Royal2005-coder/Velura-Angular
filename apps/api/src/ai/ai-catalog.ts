@@ -9,6 +9,7 @@ import type { AiCatalog } from "./ai-service.js";
 import type { CatalogImageVector } from "./image-vector-repository.js";
 import sharp from "sharp";
 import { fetchPublicCatalogImage } from "./public-image-fetch.js";
+import { loadStudioAssets } from "./studio-assets.js";
 
 /** Repository/network seams let QA verify SKU binding and SSRF guards without touching live products. */
 export interface AiCatalogDependencies {
@@ -245,13 +246,8 @@ export class ShopAiCatalog implements AiCatalog {
   async studio(id: string): Promise<Buffer> {
     if (!/^[a-zA-Z0-9_-]{1,64}$/.test(id))
       throw new HttpError(422, "STUDIO_UNAVAILABLE", "Chọn mẫu studio hợp lệ.");
-    const assets = asJsonObject(
-      JSON.parse(process.env.AI_STUDIO_ASSETS || "{}") as unknown,
-    );
+    const { root, registry: assets } = loadStudioAssets();
     const config = asJsonObject(assets[id]);
-    const root = resolve(
-      process.env.AI_STUDIO_ASSET_ROOT || "scratch/ai-studio",
-    );
     const filename = asString(config.file);
     const path = resolve(root, filename);
     if (config.licensed !== true || !filename || !path.startsWith(root + sep))

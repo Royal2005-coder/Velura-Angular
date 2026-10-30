@@ -308,6 +308,7 @@ test("manual refund records only the target COD line atomically, without pre-RPC
     getManualRefund: async () => null,
     getReturn: async () => COD_RETURN,
     listReturnLines: async () => ({ rows: [REFUND_LINE] }),
+    getOrderPaymentMethod: async () => null,
     getPaymentByOrderId: async () => ({ ...COD_PAYMENT, payment_status: "pending" }),
     getRefundReceiver: async () => VALID_RECEIVER,
     recordManualRefund: async (...args) => { recorded = args; return { return_item_id: ITEM_ID, item_status: "COMPLETED" }; }
@@ -318,6 +319,22 @@ test("manual refund records only the target COD line atomically, without pre-RPC
     reference: MANUAL_BODY.transferReference, amount: 200000, transferredAt: MANUAL_BODY.transferredAt,
     proof: MANUAL_BODY.imageProof, note: "Chuyen khoan VCB"
   }, "auth-1", undefined, ITEM_ID]);
+});
+
+test("manual COD refund accepts a legacy order with no payment row but a COD order method", async () => {
+  let recorded: unknown[] = [];
+  const service = createReturnService({ repository: {
+    getManualRefund: async () => null,
+    getReturn: async () => COD_RETURN,
+    listReturnLines: async () => ({ rows: [REFUND_LINE] }),
+    getPaymentByOrderId: async () => null,
+    getOrderPaymentMethod: async () => "COD",
+    getRefundReceiver: async () => VALID_RECEIVER,
+    recordManualRefund: async (...args) => { recorded = args; return { return_item_id: ITEM_ID, item_status: "COMPLETED" }; }
+  } as unknown as ReturnRepository });
+  const res = await service.recordManualRefund(context("admin_operator_cskh_dt"), RETURN_ID, MANUAL_BODY);
+  assert.equal(res.return_item_id, ITEM_ID);
+  assert.equal(recorded.length > 0, true, "legacy COD order reached the refund RPC");
 });
 
 test("manual refund retries replay the recorded transfer and never pay the same part twice", async () => {
@@ -343,6 +360,7 @@ test("manual refunds reject every online payment provider", async () => {
       getManualRefund: async () => null,
       getReturn: async () => ({ ...COD_RETURN, payment_method: "ONLINE_PAYMENT" }),
       listReturnLines: async () => ({ rows: [REFUND_LINE] }),
+      getOrderPaymentMethod: async () => null,
       getPaymentByOrderId: async () => ({ payment_provider: provider, payment_method: "ONLINE_PAYMENT", payment_status: "paid" })
     } as unknown as ReturnRepository });
     await assert.rejects(() => service.recordManualRefund(context("admin_operator_cskh_dt"), RETURN_ID, MANUAL_BODY), hasCode("COD_PAYMENT_REQUIRED"));
@@ -354,6 +372,7 @@ test("COD refund is blocked by invalid receivers and by public, inline or missin
   const make = (receiver: JsonObject | null = VALID_RECEIVER) => createReturnService({ repository: {
     getManualRefund: async () => null,
     getReturn: async () => COD_RETURN, listReturnLines: async () => ({ rows: [REFUND_LINE] }),
+    getOrderPaymentMethod: async () => null,
     getPaymentByOrderId: async () => COD_PAYMENT, getRefundReceiver: async () => receiver,
     recordManualRefund: async () => { writes++; return {}; }
   } as unknown as ReturnRepository });

@@ -164,8 +164,15 @@
           <strong>Việc tiếp theo: {{ nextStep(record) }}</strong>
           <span>Quyết định: {{ decisionLabel(record.decision_status) }} · Tiến độ: {{ statusLabel(record.progress_status || record.status) }} · Loại yêu cầu ban đầu không thay đổi.</span>
         </div>
+        @if (quickLine(record); as quick) {
+          <div class="record__quick">
+            @for (action of itemActions(quick); track action) {
+              <button class="erp-btn erp-btn--sm" type="button" [disabled]="detailLoading()" (click)="openFlow(action, quick)">{{ actionLabel(action) }}</button>
+            }
+          </div>
+        }
       </div>
-      @if (record.contact_due_at) {
+      @if (record.contact_due_at && !isTerminal(record)) {
         <p class="desk-note" [class.record__reject]="contactOverdue(record)">Hạn liên hệ trong 24 giờ: {{ date(record.contact_due_at) }}{{ contactOverdue(record) ? ' · Đã quá hạn liên hệ' : '' }}</p>
       }
       @if (record.attention_status === 'waiting_customer') {

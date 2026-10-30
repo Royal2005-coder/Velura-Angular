@@ -561,6 +561,25 @@ export class AdminErpReturnsPage {
     this.flow.set(flow);
   }
 
+  /** The first non-terminal part drives the quick-action strip; line cards keep their full menus. */
+  quickLine(record: AdminReturnRow): AdminReturnLine | null {
+    const rank: Record<string, number> = {
+      REQUESTED: 0, NEEDS_SUPPORT: 1, RETURN_SHIPPING: 2, WAITING_RETURN: 3,
+      RECEIVED: 4, EXCHANGE_PREPARING: 5, EXCHANGE_SHIPPING: 6, REFUND_PENDING: 7,
+    };
+    return [...(record.lines || [])]
+      .filter((line) => !['COMPLETED', 'REJECTED', 'CANCELLED'].includes(String(line.item_status || '')))
+      .sort((a, b) => (rank[String(a.item_status)] ?? 90) - (rank[String(b.item_status)] ?? 90))[0] || null;
+  }
+
+  /** Terminal requests no longer show the 24h outreach SLA. */
+  isTerminal(record: AdminReturnRow): boolean {
+    const statuses = (record.lines || []).map((line) => String(line.item_status || ''));
+    return statuses.length > 0
+      ? statuses.every((status) => ['COMPLETED', 'REJECTED', 'CANCELLED'].includes(status))
+      : ['COMPLETED', 'REJECTED', 'CANCELLED', 'REFUNDED'].includes(String(record.status || ''));
+  }
+
   /** Actions shown beside this part never derive their resolution from the request type. */
   itemActions(line: AdminReturnLine): readonly Exclude<ReturnFlowKind, null>[] {
     if (!this.canOperate()) return [];

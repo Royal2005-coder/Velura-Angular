@@ -45,5 +45,8 @@
   "dependencies": {
     "@supabase/server": "^1.2.0",
     "nodemailer": "^10.1.7"
+  },
+  "overrides": {
+    "source-map-js": "^1.2.2"
   }
 }

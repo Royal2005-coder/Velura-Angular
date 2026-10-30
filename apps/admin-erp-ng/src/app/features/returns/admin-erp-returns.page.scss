@@ -351,6 +351,12 @@
   background: var(--erp-surface-muted);
 }
 
+.record__quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .record__next--action {
   border-color: var(--erp-danger);
   background: var(--erp-danger-soft);

@@ -4,6 +4,9 @@
   subtitle="Hàng đợi hoàn tiền theo kênh thanh toán, kiểm hàng tại kho, phiếu hỗ trợ và hội thoại khách hàng trong một workspace."
 >
   <div actions>
+    <button class="erp-btn erp-btn--sm" type="button" (click)="startCarrierDemo()" [disabled]="!canOperate()">
+      Demo ĐVVC lấy hàng
+    </button>
     <button class="erp-btn erp-btn--sm" type="button" (click)="scanOpen.set(true)">
       <app-erp-icon name="box" [size]="'15'" />
       Quét QR phiếu trả
@@ -561,12 +564,14 @@
   }
 </app-erp-drawer>
 
-<app-erp-return-flow [flow]="flow()" [record]="selected()" [line]="flowLine()" [order]="orderContext()" [canApprove]="canApprove()" [canOperate]="canOperate()" [canFinance]="canFinance()" (done)="onFlowDone($event)" (dismissed)="closeFlow()" />
+<app-erp-return-flow [flow]="flow()" [record]="selected()" [line]="flowLine()" [order]="orderContext()" [canApprove]="canApprove()" [canOperate]="canOperate()" [canFinance]="canFinance()" [presetTracking]="carrierTracking()" (done)="onFlowDone($event)" (dismissed)="closeFlow()" />
 
 <app-erp-qr-scan
   [open]="scanOpen()"
   title="Quét QR phiếu đổi trả"
-  hint="Quét mã trên phiếu trả (in từ ERP) để mở đúng hồ sơ kho cần nhận."
+  hint="Quét mã trên phiếu trả (in từ ERP) để mở đúng hồ sơ kho cần nhận. Demo ĐVVC sẽ mở thẳng bước lấy hàng."
+  [sample]="carrierSample()"
+  sampleCaption="QR phiếu đang chờ ĐVVC lấy (demo)"
   (scanned)="applyReturnScan($event)"
   (closed)="scanOpen.set(false)"
 />

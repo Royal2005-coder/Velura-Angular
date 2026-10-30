@@ -92,7 +92,7 @@
       </div>
 
       <div class="product-detail__info">
-        <app-ai-image-workbench [productId]="product()?.product_id || ''" [variantId]="aiVariantId()" />
+        <app-ai-image-workbench [productId]="aiWorkbenchProductId()" [variantId]="aiWorkbenchVariantId()" />
         <div class="product-info__head">
           <div class="product-info__badge-group">
             @for (badge of badges(); track badge.kind + badge.label) {

@@ -362,13 +362,29 @@ export function createProductRepository() {
       quantity: number,
       accessToken: string | null
     ) {
-      return withProductError(() => insertRow("combo_item", {
-        combo_item_id: randomUUID(),
-        combo_product_id: productId,
-        component_product_id: componentProductId,
-        component_variant_id: componentVariantId,
-        quantity
-      }, authOptions(accessToken)));
+      return withProductError(async () => {
+        // The unique key is the authority; re-adding the same component updates it instead of
+        // creating duplicate rows that double the stock/display list.
+        const existing = await selectOne("combo_item", {
+          combo_product_id: `eq.${productId}`,
+          component_product_id: `eq.${componentProductId}`,
+          component_variant_id: componentVariantId ? `eq.${componentVariantId}` : "is.null"
+        }, authOptions(accessToken));
+        if (existing) {
+          const rows = await updateRows("combo_item", {
+            combo_item_id: `eq.${asString(existing.combo_item_id)}`,
+            combo_product_id: `eq.${productId}`
+          }, { quantity }, authOptions(accessToken));
+          return rows[0] || existing;
+        }
+        return insertRow("combo_item", {
+          combo_item_id: randomUUID(),
+          combo_product_id: productId,
+          component_product_id: componentProductId,
+          component_variant_id: componentVariantId,
+          quantity
+        }, authOptions(accessToken));
+      });
     },
 
     async updateComboItem(productId: string, itemId: string, quantity: number, accessToken: string | null) {

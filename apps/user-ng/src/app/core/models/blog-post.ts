@@ -1,3 +1,13 @@
+/** One shop product attached to an article; enough for a sidebar card, never a stale price. */
+export interface BlogProductSummary {
+  product_id: string;
+  name: string;
+  slug: string;
+  image: string;
+  price: number;
+  compareAtPrice: number | null;
+}
+
 export interface BlogPost {
   slug: string;
   category: 'trend' | 'style' | 'interview' | 'sustainable' | 'event';
@@ -9,8 +19,17 @@ export interface BlogPost {
   date: string;
   readMinutes: number;
   featured?: boolean;
-  /** Plain-text article body from the CMS; rendered as escaped paragraphs, never raw HTML. */
+  /** Plain-text article body for legacy posts; rendered as escaped paragraphs. */
   content?: string;
+  /** Server-sanitized article HTML from the CMS; Angular sanitizes it again before render. */
+  contentHtml?: string;
+  metaTitle?: string;
+  metaDescription?: string;
+  canonicalUrl?: string;
+  ogImage?: string;
+  tags?: string[];
+  publishedAt?: string;
+  products?: BlogProductSummary[];
 }
 
 export const BLOG_POSTS: BlogPost[] = [

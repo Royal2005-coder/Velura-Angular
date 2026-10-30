@@ -1,4 +1,4 @@
-import { blogEditorText, blogRowHtml, htmlFromPlainText, pasteHtmlFromClipboard, sanitizeEditorHtml } from './admin-erp-blog-html';
+import { blogEditorText, blogRowHtml, htmlFromPlainText, legacyBlogContentHtml, pasteHtmlFromClipboard, sanitizeEditorHtml } from './admin-erp-blog-html';
 
 describe('admin blog HTML boundary', () => {
   it('keeps article structure but removes scripts, event handlers and unsafe URLs', () => {
@@ -24,6 +24,22 @@ describe('admin blog HTML boundary', () => {
     expect(htmlFromPlainText('Dòng 1 <b>x</b>\n\nDòng 2')).toBe('<p>Dòng 1 &lt;b&gt;x&lt;/b&gt;</p><p>Dòng 2</p>');
     expect(blogRowHtml({ content: 'Đoạn cũ đủ dài', content_html: '' })).toBe('<p>Đoạn cũ đủ dài</p>');
     expect(blogRowHtml({ content: 'cũ', content_html: '<p>mới</p>' })).toBe('<p>mới</p>');
+  });
+
+  it('converts legacy JSON editorial content into editable sections', () => {
+    const legacy = JSON.stringify({
+      intro: 'Mở bài',
+      takeaways: ['Ý một', 'Ý hai'],
+      sections: [{ heading: 'Chất liệu', body: ['Đoạn một', 'Đoạn hai'] }],
+    });
+    const html = legacyBlogContentHtml(legacy);
+    expect(html).toContain('<p>Mở bài</p>');
+    expect(html).toContain('<h2>Điểm chính</h2>');
+    expect(html).toContain('<li>Ý một</li>');
+    expect(html).toContain('<h2>Chất liệu</h2>');
+    expect(html).toContain('<p>Đoạn hai</p>');
+    expect(blogRowHtml({ content_html: '', content: legacy })).toBe(html);
+    expect(legacyBlogContentHtml('plain text')).toBe('');
   });
 
   it('falls back to escaped clipboard text when the browser sends no HTML', () => {

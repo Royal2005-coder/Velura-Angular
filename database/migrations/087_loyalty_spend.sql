@@ -154,7 +154,7 @@ begin
 end; $$;
 revoke all on function public.velura_consume_loyalty_lots(uuid,bigint,uuid) from public,anon,authenticated,service_role;
 
-create or replace function public.velura_expire_loyalty_points(p_user_id uuid)
+create or replace function public.velura_expire_loyalty_lots(p_user_id uuid)
 returns jsonb language plpgsql security definer set search_path=pg_catalog,public as $$
 declare total bigint; a public.loyalty_account%rowtype;
 begin
@@ -173,21 +173,21 @@ begin
     values(p_user_id,'expired',-total,a.balance_milli_points,'Point hết hạn 6 tháng');
   return jsonb_build_object('user_id',p_user_id,'expired_milli',total,'balance_milli',a.balance_milli_points);
 end; $$;
-revoke all on function public.velura_expire_loyalty_points(uuid) from public,anon,authenticated;
-grant execute on function public.velura_expire_loyalty_points(uuid) to service_role;
+revoke all on function public.velura_expire_loyalty_lots(uuid) from public,anon,authenticated;
+grant execute on function public.velura_expire_loyalty_lots(uuid) to service_role;
 
-create or replace function public.velura_expire_all_loyalty_points()
+create or replace function public.velura_expire_all_loyalty_lots()
 returns jsonb language plpgsql security definer set search_path=pg_catalog,public as $$
 declare u record; result jsonb; total bigint:=0; users integer:=0;
 begin
   for u in select distinct user_id from public.loyalty_point_lot where remaining_milli>0 and expires_at<=now() loop
-    result:=public.velura_expire_loyalty_points(u.user_id);
+    result:=public.velura_expire_loyalty_lots(u.user_id);
     total:=total+coalesce((result->>'expired_milli')::bigint,0); users:=users+1;
   end loop;
   return jsonb_build_object('users',users,'expired_milli',total);
 end; $$;
-revoke all on function public.velura_expire_all_loyalty_points() from public,anon,authenticated;
-grant execute on function public.velura_expire_all_loyalty_points() to service_role;
+revoke all on function public.velura_expire_all_loyalty_lots() from public,anon,authenticated;
+grant execute on function public.velura_expire_all_loyalty_lots() to service_role;
 
 create or replace function public.velura_loyalty_quote(
   p_actor_id uuid,p_subtotal numeric,p_shipping numeric,p_discount numeric,p_points integer
@@ -325,7 +325,7 @@ begin
   if v_points<=0 then return public.velura_create_checkout_order_commerce(p_input); end if;
   if v_actor is null or v_actor<>v_user or coalesce((p_input->>'isGuest')::boolean,false) then
     raise sqlstate 'PT403' using message='LOYALTY_MEMBER_REQUIRED'; end if;
-  perform public.velura_expire_loyalty_points(v_actor);
+  perform public.velura_expire_loyalty_lots(v_actor);
   v_quote:=public.velura_loyalty_quote(v_actor,(p_input->>'subtotal')::numeric,
     (p_input->>'shippingFee')::numeric,(p_input->>'discountAmount')::numeric,v_points);
   if (v_quote->>'points_spent')::integer<>v_points then raise sqlstate 'PT409' using message='POINTS_CHANGED'; end if;

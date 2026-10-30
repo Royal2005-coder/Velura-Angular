@@ -91,7 +91,7 @@ begin
   insert into public.loyalty_point_lot(user_id,earned_milli,remaining_milli,expires_at,source)
     values('9f000000-0000-4000-8000-000000000001',2000,2000,now()-interval '1 day','reconcile');
   update public.loyalty_account set balance_milli_points=12000 where user_id='9f000000-0000-4000-8000-000000000001';
-  perform public.velura_expire_loyalty_points('9f000000-0000-4000-8000-000000000001');
+  perform public.velura_expire_loyalty_lots('9f000000-0000-4000-8000-000000000001');
   select * into a from public.loyalty_account where user_id='9f000000-0000-4000-8000-000000000001';
   if a.balance_milli_points<>10000 then raise exception 'Expiry did not reduce balance'; end if;
   if not exists(select 1 from public.loyalty_ledger where kind='expired' and amount_milli_points=-2000) then

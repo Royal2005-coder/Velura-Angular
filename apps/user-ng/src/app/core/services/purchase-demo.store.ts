@@ -128,7 +128,7 @@ export type ReturnWorkflowStatus = 'REQUESTED' | 'CONTACTING' | 'WAITING_RETURN'
 
 /** Presentation labels correspond to persisted workflow states, without inventing a stage. */
 export const RETURN_WORKFLOW_LABELS: Record<ReturnWorkflowStatus, string> = {
-  REQUESTED: 'Đã ghi nhận yêu cầu', CONTACTING: 'CSKH đang liên hệ', WAITING_RETURN: 'Chờ khách gửi hàng',
+  REQUESTED: 'Đã ghi nhận yêu cầu', CONTACTING: 'CSKH đang liên hệ', WAITING_RETURN: 'Đã duyệt · chờ ĐVVC lấy hàng',
   RETURN_IN_TRANSIT: 'Hàng đang gửi về', RECEIVED: 'Đã nhận hàng hoàn', REFUND_PROCESSING: 'Đang hoàn tiền',
   REFUNDED: 'Đã hoàn tiền', EXCHANGE_PREPARING: 'Đang chuẩn bị hàng đổi', EXCHANGE_SHIPPING: 'Đang giao hàng đổi',
   COMPLETED: 'Hoàn tất', CANCELLED: 'Đã hủy yêu cầu', NEEDS_SUPPORT: 'Cần CSKH hỗ trợ',

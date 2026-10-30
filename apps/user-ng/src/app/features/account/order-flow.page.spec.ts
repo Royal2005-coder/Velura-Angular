@@ -63,7 +63,7 @@ describe('OrderFlowPage with mocked Model', () => {
     timeline: () => [
       'Đã ghi nhận',
       'Velura đang liên hệ',
-      'Chờ gửi hàng',
+      'Đã duyệt · chờ ĐVVC lấy hàng',
       'Hàng đang về Velura',
       'Velura đã nhận hàng',
       'Đang hoàn tiền',

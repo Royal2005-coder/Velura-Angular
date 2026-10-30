@@ -7,7 +7,7 @@ export const OPEN_RETURN_STATUSES: readonly string[] = ["REQUESTED","APPROVED","
 /** Customer and administrator consume the same canonical stored workflow codes. */
 export const RETURN_STATUS_LABELS_VI: Readonly<Record<string,string>> = {
   APPROVED:"Đã duyệt", IN_PROGRESS:"Đang xử lý từng phần", REJECTED:"Bị từ chối",
-  REQUESTED:"Chờ xử lý", CONTACTING:"Đang liên hệ", WAITING_RETURN:"Chờ gửi hàng", RETURN_IN_TRANSIT:"Hàng đang gửi về", RECEIVED:"Nhận hàng hoàn trả thành công", REFUND_PROCESSING:"Đang hoàn tiền", REFUNDED:"Đã hoàn tiền", EXCHANGE_PREPARING:"Đang chuẩn bị hàng đổi", EXCHANGE_SHIPPING:"Đang giao hàng đổi", COMPLETED:"Hoàn tất", CANCELLED:"Đã hủy", NEEDS_SUPPORT:"Cần hỗ trợ"
+  REQUESTED:"Chờ xử lý", CONTACTING:"Đang liên hệ", WAITING_RETURN:"Đã duyệt · chờ ĐVVC lấy hàng", RETURN_IN_TRANSIT:"Hàng đang gửi về", RECEIVED:"Nhận hàng hoàn trả thành công", REFUND_PROCESSING:"Đang hoàn tiền", REFUNDED:"Đã hoàn tiền", EXCHANGE_PREPARING:"Đang chuẩn bị hàng đổi", EXCHANGE_SHIPPING:"Đang giao hàng đổi", COMPLETED:"Hoàn tất", CANCELLED:"Đã hủy", NEEDS_SUPPORT:"Cần hỗ trợ"
 };
 
 /** Lý do đổi trả bắt buộc, dạng mã cố định để gom top lý do trên dashboard. */

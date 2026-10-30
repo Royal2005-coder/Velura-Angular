@@ -56,6 +56,7 @@ begin
  if (select count(*) from public.return_item_unit where return_item_id=i)<>1 or (select count(*) from public.return_item_unit where return_item_id=remainder)<>1 then raise exception 'Split lost original-unit mappings'; end if;
  perform public.velura_return_item_action(h,remainder,'reject','{"reason":"Only affected unit qualifies"}',1,actor);
  if (select decision_status from public.return_exchange where return_id=h)<>'PARTIALLY_APPROVED' then raise exception 'Mixed decisions lost'; end if;
+ if (select item_status from public.return_item where return_item_id=i)<>'WAITING_RETURN' then raise exception 'Approval did not auto-advance to waiting carrier'; end if;
  -- Another active request can hold a disjoint original unit, not block the entire purchased line.
  insert into public.return_exchange(order_id,user_id,return_type,status,description) values(order_id_value,actor,'refund','REQUESTED','Disjoint request') returning return_id into second_h;
  insert into public.return_item(return_id,order_item_id,quantity) values(second_h,original_item,1) returning return_item_id into remainder;
@@ -67,7 +68,6 @@ begin
  begin update public.return_exchange set return_type='refund' where return_id=h; raise exception 'Type mutated'; exception when sqlstate 'PT422' then null; end;
  begin update public.return_exchange set status='COMPLETED' where return_id=h; raise exception 'Header progressed'; exception when sqlstate 'PT422' then null; end;
  select version into version_value from public.return_item where return_item_id=i;
- perform public.velura_return_item_action(h,i,'wait_return','{}',version_value,cskh);
  select version into version_value from public.return_item where return_item_id=i;
  begin perform public.velura_return_item_action(h,i,'receive',receipt,version_value,cskh); raise exception 'Received without pickup handover';
  exception when sqlstate 'PT422' then null; end;
@@ -107,7 +107,6 @@ begin
  (second_h,'pickup_photo','return-evidence-private','fixture/pickup.png','image/png','carrier',cskh);
  perform public.velura_return_item_action(second_h,i,'approve','{"reason":"Second exchange decision"}',1,actor);
  select version into version_value from public.return_item where return_item_id=i;
- perform public.velura_return_item_action(second_h,i,'wait_return','{}',version_value,cskh);
  select version into version_value from public.return_item where return_item_id=i;
  select version into version_value from public.return_item where return_item_id=i;
  perform public.velura_return_item_action(second_h,i,'pickup',jsonb_build_object('carrier','Fixture carrier','trackingNumber','FIXTURE-INBOUND-2','photoUrls',jsonb_build_array('storage://return-evidence-private/fixture/pickup.png'),'pickedUpBy','Shipper Tran','pickedUpAt',now()),version_value,cskh);

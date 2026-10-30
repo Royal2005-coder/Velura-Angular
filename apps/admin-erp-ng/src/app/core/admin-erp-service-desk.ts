@@ -16,7 +16,7 @@ export const RETURN_STATUS_LABELS: Readonly<Record<string, string>> = {
   REJECTED: 'Đã từ chối',
   RETURN_SHIPPING: 'Hàng đang gửi về',
   REFUND_PENDING: 'Đang chờ hoàn tiền',
-  WAITING_RETURN: 'Chờ khách gửi hàng',
+  WAITING_RETURN: 'Đã duyệt · chờ ĐVVC lấy hàng',
   RETURN_IN_TRANSIT: 'Hàng đang gửi về',
   RECEIVED: 'Kho đã nhận & kiểm hàng',
   REFUND_PROCESSING: 'Đang hoàn tiền',
@@ -287,7 +287,6 @@ export function returnItemActions(line: AdminReturnLine, canApprove: boolean): r
   if (line.decision_status === 'pending') return canApprove ? ['approve', 'reject'] : [];
   if (line.decision_status !== 'approved') return [];
   const actions: AdminReturnItemAction[] = [];
-  if (status === 'APPROVED') actions.push('wait_return');
   if (status === 'WAITING_RETURN') actions.push('pickup');
   if (status === 'RETURN_SHIPPING') actions.push('receive');
   if (status === 'NEEDS_SUPPORT') actions.push('resolve');

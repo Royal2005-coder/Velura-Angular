@@ -99,9 +99,9 @@ begin
   perform public.velura_award_order_loyalty('97000000-0000-4000-8000-000000000002');
   perform public.velura_award_order_loyalty('97000000-0000-4000-8000-000000000002');
   select * into a from public.loyalty_account where user_id='96000000-0000-4000-8000-000000000001';
-  if a.balance_milli_points<>20000 or a.debt_milli_points<>0 or a.warning_flags<>0 then
-    raise exception '100 earned must repay80 debt then credit20 exactly once: %',to_jsonb(a); end if;
-  if (select count(*) from public.loyalty_ledger where order_id='97000000-0000-4000-8000-000000000002' and kind='debt_repayment' and debt_delta_milli_points=-80000)<>1 then
+  if a.balance_milli_points<>0 or a.debt_milli_points<>75000 or a.warning_flags<>2 then
+    raise exception '5%% earned must repay5000 debt exactly once: %',to_jsonb(a); end if;
+  if (select count(*) from public.loyalty_ledger where order_id='97000000-0000-4000-8000-000000000002' and kind='debt_repayment' and debt_delta_milli_points=-5000)<>1 then
     raise exception 'Debt repayment audit missing or duplicated'; end if;
   update public.payment_refund set status='succeeded' where refund_id='9c000000-0000-4000-8000-000000000002';
   perform public.velura_adjust_loyalty_for_return('9a000000-0000-4000-8000-000000000002');

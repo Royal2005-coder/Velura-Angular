@@ -1,6 +1,7 @@
+import QRCode from "qrcode";
 import { sendDirectEmail } from "../email/mailer.js";
 import { insertRow, selectOne, selectRows } from "../supabase.js";
-import { asNumber, asString, type JsonObject } from "../types.js";
+import { asJsonObject, asNumber, asString, type JsonObject } from "../types.js";
 
 export interface RefundEmailOptions {
   method?: "stripe" | "manual" | "completed";
@@ -204,6 +205,95 @@ Trân trọng,
     return sent;
   } catch (error) {
     console.error(`[REFUND_EMAIL] Error sending refund email for return ${returnId}:`, error);
+    return false;
+  }
+}
+
+
+/**
+ * Gửi email duyệt phần hàng kèm QR phiếu hoàn và hướng dẫn ĐVVC lấy hàng vào ngày mai.
+ * Mỗi phần hàng chỉ gửi một lần; outbox giữ metadata để CSKH đối soát.
+ */
+export async function sendReturnApprovedEmail(returnId: string, returnItemId: string): Promise<boolean> {
+  try {
+    const ret = await selectOne("return_exchange", {
+      select: "return_id,order_id,user_id,return_type,tracking_return_code,return_code",
+      return_id: `eq.${returnId}`
+    });
+    if (!ret) return false;
+    const item = await selectOne("return_item", {
+      select: "return_item_id,order_item_id,quantity,resolution_type",
+      return_item_id: `eq.${returnItemId}`,
+      return_id: `eq.${returnId}`
+    });
+    if (!item) return false;
+    const itemInfo = await selectOne("order_item", {
+      select: "product_name", item_id: `eq.${asString(item.order_item_id)}`
+    });
+    const order = await selectOne("orders", {
+      select: "order_id,user_id,order_code,shipping_name,shipping_email,shipping_phone",
+      order_id: `eq.${asString(ret.order_id)}`
+    });
+    if (!order) return false;
+
+    let email = asString(order.shipping_email).trim();
+    let name = asString(order.shipping_name).trim();
+    const userId = asString(ret.user_id) || asString(order.user_id);
+    if ((!email || !name) && userId) {
+      const user = await selectOne("users", { select: "email,full_name", user_id: `eq.${userId}` }).catch(() => null);
+      if (user) {
+        email = email || asString(user.email).trim();
+        name = name || asString(user.full_name).trim();
+      }
+    }
+    if (!email.includes("@")) return false;
+    name = name || "Quý khách";
+
+    const outbox = await selectRows("email_outbox", {
+      select: "email_id,status,metadata", template_code: "eq.return_approved",
+      "metadata->>return_item_id": `eq.${returnItemId}`, recipient: "neq.", limit: 5
+    }).catch(() => ({ rows: [] as JsonObject[] }));
+    if (outbox.rows?.some((row: JsonObject) => asString(asJsonObject(row.metadata).return_item_id) === returnItemId && row.status === "sent")) {
+      return true;
+    }
+
+    const returnCode = asString(ret.return_code) || asString(ret.tracking_return_code);
+    const qr = await QRCode.toDataURL(returnCode, { margin: 1, width: 240 });
+    const trackingLink = `https://velura.royalai.dev/account/orders/${asString(ret.order_id)}`;
+    const product = asString(itemInfo?.product_name) || "Sản phẩm đổi/trả";
+    const subject = `[Velura] Yêu cầu đổi/trả ${returnCode} đã được duyệt`;
+    const text = `Kính chào ${name},
+
+Yêu cầu đổi/trả của bạn đã được duyệt.
+- Mã phiếu: ${returnCode}
+- Sản phẩm: ${product} × ${asNumber(item.quantity)}
+- ĐVVC sẽ đến lấy hàng vào 09:00 ngày mai (demo).
+- Dán QR trong email lên kiện hàng và đưa mã cho shipper quét.
+Theo dõi tại: ${trackingLink}`;
+    const html = `
+      <div style="font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:600px;margin:0 auto;border:1px solid #eaeaea;border-radius:8px;overflow:hidden;background:#fff;">
+        <div style="background:#222;padding:24px;text-align:center;"><h1 style="color:#d1b8a8;margin:0;font-size:28px;letter-spacing:4px;">VELURA</h1></div>
+        <div style="padding:32px;">
+          <h2 style="color:#111827;margin:0 0 8px;">Yêu cầu đổi/trả đã được duyệt</h2>
+          <p style="color:#374151;line-height:1.6;">Kính chào <strong>${name}</strong>, yêu cầu <strong>${returnCode}</strong> cho sản phẩm <strong>${product}</strong> × ${asNumber(item.quantity)} đã được duyệt.</p>
+          <div style="text-align:center;margin:24px 0;">
+            <img src="${qr}" alt="QR phiếu hoàn" width="240" height="240" style="display:block;margin:0 auto;" />
+            <p style="font-family:monospace;color:#374151;">${returnCode}</p>
+            <p style="color:#6b7280;font-size:14px;">Dán QR lên kiện hàng. ĐVVC dự kiến đến lấy lúc <strong>09:00 ngày mai</strong>.</p>
+            <a href="${trackingLink}" style="display:inline-block;background:#7C5454;color:#fff;text-decoration:none;padding:12px 32px;border-radius:6px;font-weight:600;">Theo dõi đổi/trả</a>
+          </div>
+          <p style="color:#6b7280;font-size:13px;">Nếu chưa nhận được liên hệ của ĐVVC, vui lòng phản hồi email này để CSKH hỗ trợ.</p>
+        </div>
+      </div>`;
+    const sent = await sendDirectEmail(email, subject, text, html);
+    await insertRow("email_outbox", {
+      recipient: email, template_code: "return_approved", subject, body: text,
+      status: sent ? "sent" : "pending", related_user_id: userId || null,
+      metadata: { return_id: returnId, return_item_id: returnItemId, order_id: asString(ret.order_id), return_code: returnCode, sent_at: new Date().toISOString() }
+    }).catch((error) => console.warn("[RETURN_APPROVED_EMAIL] outbox failed", error));
+    return sent;
+  } catch (error) {
+    console.error(`[RETURN_APPROVED_EMAIL] failed for ${returnId}/${returnItemId}:`, error);
     return false;
   }
 }

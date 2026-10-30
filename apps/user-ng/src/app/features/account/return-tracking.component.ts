@@ -90,12 +90,16 @@ const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
 
         <section class="track-card track-label">
           <h4>Phiếu gửi hàng hoàn</h4>
-          <p class="muted">Dán phiếu này lên ngoài kiện hàng. Đưa mã QR cho ĐVVC quét khi lấy hàng.</p>
-          @if (labelQr()) {
-            <img class="label-qr" [src]="labelQr()" alt="Mã QR phiếu gửi hoàn" />
+          @if (labelReady()) {
+            <p class="muted">Dán phiếu này lên ngoài kiện hàng. Đưa mã QR cho ĐVVC quét khi lấy hàng.</p>
+            @if (labelQr()) {
+              <img class="label-qr" [src]="labelQr()" alt="Mã QR phiếu gửi hoàn" />
+            }
+            <p class="mono">{{ d.returnCode }}</p>
+            <button type="button" class="secondary" (click)="printLabel()">In phiếu gửi hoàn</button>
+          } @else {
+            <p class="muted">Phiếu gửi hàng và QR sẽ xuất hiện sau khi CSKH duyệt yêu cầu. Hãy tải đủ ảnh và video đóng gói để được duyệt nhanh.</p>
           }
-          <p class="mono">{{ d.returnCode }}</p>
-          <button type="button" class="secondary" (click)="printLabel()">In phiếu gửi hoàn</button>
         </section>
 
         @if (d.instructions.length) {
@@ -119,7 +123,7 @@ const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
               <input type="file" accept="image/jpeg,image/png,image/webp" multiple (change)="onPhotos($event)" />
             </label>
             <label class="field">
-              Video đóng gói (tùy chọn, MP4/WebM, tối đa 50 MB)
+              Video đóng gói (bắt buộc để duyệt, MP4/WebM, tối đa 50 MB)
               <input type="file" accept="video/mp4,video/webm" (change)="onVideo($event)" />
             </label>
             @if (uploading()) { <p class="muted">Đang tải bằng chứng…</p> }
@@ -162,6 +166,11 @@ const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
             <p class="muted">
               {{ exchange.carrier || 'ĐVVC' }} · <span class="mono">{{ exchange.trackingCode || '—' }}</span>
             </p>
+            <p class="muted">Người nhận: {{ exchange.shippingName || '—' }} · {{ exchange.shippingPhone || '—' }}</p>
+            <p class="muted">Địa chỉ: {{ exchange.shippingAddress || '—' }}</p>
+            @for (item of exchange.items || []; track $index) {
+              <p>• {{ item.productName }} · {{ item.color || '—' }}/{{ item.size || '—' }} · SL {{ item.quantity }}</p>
+            }
             @if (exchange.trackingUrl) {
               <a [href]="exchange.trackingUrl" target="_blank" rel="noopener">Theo dõi hàng đổi</a>
             }
@@ -215,6 +224,13 @@ export class ReturnTrackingComponent {
   readonly uploadError = signal('');
   readonly uploadNote = signal('');
   readonly maxPhotos = MAX_PHOTOS;
+  readonly labelReady = computed(() => {
+    const d = this.detail();
+    if (!d) return false;
+    const statuses = ['APPROVED','WAITING_RETURN','RETURN_SHIPPING','RECEIVED','REFUND_PENDING','EXCHANGE_PREPARING','EXCHANGE_SHIPPING','COMPLETED'];
+    return d.items.some((item) => statuses.includes(String(item.itemStatus || '')))
+      || statuses.includes(String(d.status || ''));
+  });
   readonly member = this.model.member;
   readonly supportsUpload = computed(() => typeof this.model.uploadReturnEvidence === 'function');
 
@@ -276,7 +292,7 @@ export class ReturnTrackingComponent {
 
   /** Per-part stages never replace the immutable request's original type. */
   partStatusLabel(value: string | undefined): string {
-    const labels: Record<string, string> = { REQUESTED: 'Đã gửi', APPROVED: 'Đã duyệt', WAITING_RETURN: 'Chờ gửi hàng', RETURN_SHIPPING: 'Đang gửi về', RECEIVED: 'Đã nhận', NEEDS_SUPPORT: 'Cần hỗ trợ', REFUND_PENDING: 'Đang hoàn tiền', EXCHANGE_PREPARING: 'Chuẩn bị đổi', EXCHANGE_SHIPPING: 'Đang giao hàng đổi', COMPLETED: 'Hoàn tất', REJECTED: 'Bị từ chối', CANCELLED: 'Đã dừng' };
+    const labels: Record<string, string> = { REQUESTED: 'Đã gửi', APPROVED: 'Đã duyệt', WAITING_RETURN: 'Đã duyệt · chờ ĐVVC lấy hàng', RETURN_SHIPPING: 'Đang gửi về', RECEIVED: 'Đã nhận', NEEDS_SUPPORT: 'Cần hỗ trợ', REFUND_PENDING: 'Đang hoàn tiền', EXCHANGE_PREPARING: 'Chuẩn bị đổi', EXCHANGE_SHIPPING: 'Đang giao hàng đổi', COMPLETED: 'Hoàn tất', REJECTED: 'Bị từ chối', CANCELLED: 'Đã dừng' };
     return labels[value || ''] || value || '—';
   }
 

@@ -194,6 +194,10 @@ interface ApiReturnExchangeOrder {
   carrier?: string | null;
   tracking_code?: string | null;
   tracking_url?: string | null;
+  shipping_name?: string | null;
+  shipping_phone?: string | null;
+  shipping_address?: string | null;
+  items?: Array<{ product_name?: string; quantity?: number; color?: string; size?: string }>;
 }
 
 interface ApiReturnDetail extends ApiReturn {
@@ -413,6 +417,12 @@ function mapReturnTracking(row: ApiReturnDetail): ReturnTrackingDetail {
     carrier: row.exchange_order.carrier || null,
     trackingCode: row.exchange_order.tracking_code || null,
     trackingUrl: row.exchange_order.tracking_url || null,
+    shippingName: row.exchange_order.shipping_name || null,
+    shippingPhone: row.exchange_order.shipping_phone || null,
+    shippingAddress: row.exchange_order.shipping_address || null,
+    items: (row.exchange_order.items || []).map((item) => ({
+      productName: item.product_name, quantity: item.quantity, color: item.color, size: item.size
+    }))
   } : null;
   return {
     returnId: row.return_id || '',

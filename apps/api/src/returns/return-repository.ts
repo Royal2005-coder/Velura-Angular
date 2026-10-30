@@ -4,6 +4,7 @@ import { asJsonObject, asNumber, asString, type JsonObject } from "../types.js";
 import { RETURN_SELECT, TICKET_SELECT } from "./return-constants.js";
 import { classifyReturnPayment, refundFlowFor, refundReceiverStatus, type ReturnPaymentKind } from "./return-refund-receiver.js";
 import { writeAuditLog } from "../audit.js";
+import { listReturnEvidence } from "./return-evidence.js";
 
 /** Forward the resolved client IP so audited RPCs can replace their legacy 127.0.0.1. */
 function clientIpOptions(ipAddress?: string) {
@@ -122,6 +123,11 @@ export function createReturnRepository() {
      */
     async getRefundReceiver(returnId: string): Promise<JsonObject | null> {
       return selectOne("return_refund_receiver", { return_id: `eq.${returnId}` }).catch(() => null);
+    },
+
+    /** Evidence ledger used by approval gates; tests inject a deterministic customer upload list. */
+    async listEvidence(returnId: string): Promise<JsonObject[]> {
+      return listReturnEvidence(returnId);
     },
 
     /**

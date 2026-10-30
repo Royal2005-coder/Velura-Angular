@@ -7,7 +7,7 @@ import {
   RETURN_READER_ROLES,
   SUPPORT_TICKET_TRANSITIONS
 } from "./return-constants.js";
-import { sendRefundSuccessEmail } from "./return-email.js";
+import { sendExchangeCompletedEmail, sendExchangeShippingEmail, sendRefundSuccessEmail, sendReturnApprovedEmail } from "./return-email.js";
 import {
   adminRefundReceiver,
   classifyReturnPayment,
@@ -288,9 +288,31 @@ export function createReturnService({
         }
         if (!isPrivateEvidenceRef(body.receiptProofRef)) throw new HttpError(422, "PROOF_REQUIRED", "Tải lên bằng chứng kiểm hàng riêng tư.");
       }
+      if (action === "approve") {
+        const evidence = await repository.listEvidence(returnId).catch(() => []);
+        const customerKinds = new Set(evidence
+          .filter((row) => asString(row.uploaded_by_role) === "customer")
+          .map((row) => asString(row.kind)));
+        if (!customerKinds.has("packing_photo") || !customerKinds.has("packing_video")) {
+          throw new HttpError(422, "PACKING_EVIDENCE_REQUIRED",
+            "Khách cần tải ít nhất một ảnh và một video đóng gói trước khi duyệt phần hàng.");
+        }
+      }
       const { action: _action, expectedVersion: _version, ...facts } = body;
-      return repository.actOnItem(returnId, returnItemId, action, facts, expectedVersion,
+      const result = await repository.actOnItem(returnId, returnItemId, action, facts, expectedVersion,
         context.profile?.user_id || context.authUser.id, context.ipAddress);
+      if (action === "approve") {
+        void sendReturnApprovedEmail(returnId, returnItemId);
+      }
+      if (action === "ship_exchange") {
+        const shipments = await repository.listReturnShipments(returnId).catch(() => []);
+        const outbound = shipments.find((row) => asString(row.direction) === "outbound");
+        void sendExchangeShippingEmail(returnId, asString(outbound?.tracking_code) || undefined);
+      }
+      if (action === "complete_exchange") {
+        void sendExchangeCompletedEmail(returnId);
+      }
+      return result;
     },
     async recordContact(context, returnId, body) {
       requireReturnAdmin(context);

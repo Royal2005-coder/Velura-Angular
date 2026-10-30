@@ -6,7 +6,7 @@ import { callRpc } from "../supabase.js";
  * lots are retired and an `expired` ledger row is written once.
  */
 export async function expireLoyaltyPoints(): Promise<{ users: number; expired_milli: number }> {
-  const value = await callRpc("velura_expire_all_loyalty_points", {});
+  const value = await callRpc("velura_expire_all_loyalty_lots", {});
   const result = value && typeof value === "object" ? value as Record<string, unknown> : {};
   return {
     users: Number(result.users) || 0,

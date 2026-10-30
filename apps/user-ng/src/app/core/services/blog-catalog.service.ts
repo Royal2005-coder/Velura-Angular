@@ -92,7 +92,7 @@ export class BlogCatalogService {
       title: String(row.title || ''),
       excerpt: String(row.excerpt || ''),
       content: String(row.content || ''),
-      contentHtml: String(row.content_html || ''),
+      contentHtml: String(row.content_html || '') || this.legacyContentHtml(row.content),
       metaTitle: String(row.meta_title || ''),
       metaDescription: String(row.meta_description || ''),
       canonicalUrl: String(row.canonical_url || ''),
@@ -124,6 +124,44 @@ export class BlogCatalogService {
           compareAtPrice: Number.isFinite(base) && base > price ? base : null,
         };
       });
+  }
+
+  /**
+   * Old posts stored `{intro,takeaways,sections}` JSON in the content column. Render it as
+   * readable article HTML until an editor saves the post in the rich composer.
+   */
+  private legacyContentHtml(value: string | undefined): string {
+    const source = String(value || '').trim();
+    if (!source.startsWith('{')) return '';
+    let parsed: unknown;
+    try { parsed = JSON.parse(source); } catch { return ''; }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return '';
+    const record = parsed as Record<string, unknown>;
+    const escape = (part: string): string => part.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const intro = typeof record['intro'] === 'string' ? record['intro'].trim() : '';
+    const takeaways = Array.isArray(record['takeaways'])
+      ? record['takeaways'].map((item) => typeof item === 'string' ? item.trim() : '').filter(Boolean)
+      : [];
+    const sections = Array.isArray(record['sections'])
+      ? record['sections'].flatMap((raw) => {
+          if (!raw || typeof raw !== 'object') return [];
+          const section = raw as Record<string, unknown>;
+          const heading = typeof section['heading'] === 'string' ? section['heading'].trim() : '';
+          const body = Array.isArray(section['body'])
+            ? section['body'].map((item) => typeof item === 'string' ? item.trim() : '').filter(Boolean)
+            : [];
+          return heading || body.length ? [{ heading, body }] : [];
+        })
+      : [];
+    if (!intro && !takeaways.length && !sections.length) return '';
+    const parts: string[] = [];
+    if (intro) parts.push(`<p>${escape(intro)}</p>`);
+    if (takeaways.length) parts.push(`<h2>Điểm chính</h2><ul>${takeaways.map((item) => `<li>${escape(item)}</li>`).join('')}</ul>`);
+    for (const section of sections) {
+      if (section.heading) parts.push(`<h2>${escape(section.heading)}</h2>`);
+      for (const paragraph of section.body) parts.push(`<p>${escape(paragraph)}</p>`);
+    }
+    return parts.join('');
   }
 
   private toCategory(value: string | undefined): BlogPost['category'] {

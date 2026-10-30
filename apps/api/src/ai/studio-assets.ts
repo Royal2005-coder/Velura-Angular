@@ -50,7 +50,9 @@ export function loadStudioAssets(): StudioAssetSource {
   if (Object.keys(configured).length) return { root: envRoot, registry: configured };
   const candidates = [
     envRoot,
+    resolve("studio-assets"),
     resolve(process.env.AI_PRIVATE_ROOT || "scratch/ai-private", "studio"),
+    resolve("apps/ai-worker/assets/studio"),
     resolve("scratch/ai-studio"),
   ].filter((root, index, all) => all.indexOf(root) === index);
   for (const root of candidates) {

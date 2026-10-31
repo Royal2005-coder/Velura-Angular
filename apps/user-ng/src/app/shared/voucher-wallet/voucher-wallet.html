@@ -1,7 +1,10 @@
 <section class="voucher-wallet">
   <header class="voucher-wallet__head">
     <h3 class="voucher-wallet__title">Ưu đãi dành riêng cho bạn</h3>
-    <button type="button" class="voucher-wallet__link" (click)="openModal()">Ví Voucher</button>
+    <button type="button" class="voucher-wallet__link" (click)="openModal()">
+      <span>Ví Voucher</span>
+      <span aria-hidden="true">›</span>
+    </button>
   </header>
 
   @if (loading()) {
@@ -42,11 +45,10 @@
   @if (preferredNotice()) {
     <p class="voucher-wallet__state voucher-wallet__state--error" role="status">{{ preferredNotice() }}</p>
   }
-  <div class="voucher-wallet__inline-input" style="display: flex; gap: 8px; margin-top: 12px;">
+  <div class="voucher-wallet__inline-input">
     <input
       type="text"
       class="form-input"
-      style="flex: 1; padding: 8px 12px; font-size: 0.875rem; border-radius: 8px; border: 1px solid var(--line, #E8DFD6);"
       placeholder="Nhập mã voucher (VD: VELURA20, HPBD2026...)"
       [value]="manualCode()"
       (input)="setManualCode($event)"
@@ -55,7 +57,6 @@
     <button
       type="button"
       class="btn-primary"
-      style="padding: 8px 16px; font-size: 0.875rem; border-radius: 8px; white-space: nowrap;"
       [disabled]="applying() || loading() || !manualCode().trim()"
       (click)="submitManualCode()"
     >
@@ -63,7 +64,7 @@
     </button>
   </div>
   @if (manualError()) {
-    <p class="field__error" style="color: #b91c1c; font-size: 0.8125rem; margin-top: 6px;">{{ manualError() }}</p>
+    <p class="field__error u-inline-0732c207b2">{{ manualError() }}</p>
   }
 
 

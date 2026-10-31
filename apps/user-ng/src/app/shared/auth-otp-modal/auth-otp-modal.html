@@ -5,7 +5,7 @@
       <h3 id="otp-title" class="otp-card__title">Xác minh tài khoản</h3>
       <p class="otp-card__desc">Nhập mã OTP 6 chữ số được gửi tới<br /><strong>{{ identity() }}</strong></p>
       @if (developmentCode()) {
-        <p class="otp-card__notice" style="color:#b64638;font-size:0.8rem;margin-bottom:8px;">
+        <p class="otp-card__notice u-inline-ddbfa500d6">
           Môi trường thử nghiệm: nhập mã <strong>{{ developmentCode() }}</strong>
         </p>
       }
@@ -30,10 +30,10 @@
       @if (errorMessage()) {
         <div class="field__error" aria-live="polite">{{ errorMessage() }}</div>
       }
-      <button class="btn btn--login" type="button" style="margin-top:16px;" [disabled]="verifying() || expired()" (click)="verify()">
+      <button class="btn btn--login u-inline-8a359a76eb" type="button" [disabled]="verifying() || expired()" (click)="verify()">
         {{ verifying() ? 'Đang xác minh...' : 'Xác nhận' }}
       </button>
-      <div style="margin-top:12px;text-align:center;">
+      <div class="u-inline-3081a199c6">
         <button class="otp-resend-btn" type="button" [disabled]="resendCooldown() > 0" (click)="resend()">
           @if (resendCooldown() > 0) {
             Gửi lại OTP ({{ resendCooldown() }}s)

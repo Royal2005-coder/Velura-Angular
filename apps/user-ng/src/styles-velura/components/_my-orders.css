@@ -12,7 +12,7 @@ body.page-my-orders {
 }
 
 .my-orders-title {
-  font-family: "Playfair Display", serif;
+  font-family: "Cormorant Garamond", serif;
   font-size: 2.25rem;
   font-weight: 500;
   color: var(--text-dark, #1a1a1a);
@@ -139,7 +139,7 @@ body.page-my-orders {
 }
 
 .page-my-orders .order-card__id {
-  font-family: "Playfair Display", serif;
+  font-family: "Cormorant Garamond", serif;
   font-size: 1.125rem;
   font-weight: 600;
   color: var(--terracotta);
@@ -210,7 +210,7 @@ body.page-my-orders {
 }
 
 .page-my-orders .order-product-item__name {
-  font-family: 'Playfair Display', serif !important;
+  font-family: 'Cormorant Garamond', serif !important;
   font-size: 1rem !important;
   font-weight: 700 !important;
   color: var(--text-dark);
@@ -224,7 +224,7 @@ body.page-my-orders {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #F4E4DC;
+  background: #FDF2F4;
   border: none;
   color: var(--terracotta);
   font-weight: 600;
@@ -260,7 +260,7 @@ body.page-my-orders {
 }
 
 .page-my-orders .order-card__total {
-  font-family: 'DM Sans', sans-serif !important;
+  font-family: 'Inter', sans-serif !important;
   font-size: 1.5rem;
   font-weight: 700 !important;
   color: var(--terracotta);
@@ -396,7 +396,7 @@ body.page-my-orders {
 }
 
 .review-popup__title {
-  font-family: "Playfair Display", serif;
+  font-family: "Cormorant Garamond", serif;
   font-size: 1.5rem;
   font-weight: 600;
   color: #1a1a1a;
@@ -529,4 +529,35 @@ body.page-my-orders {
     text-align: center;
     justify-content: center;
   }
+}
+
+/* Align the real order history UI with Velura's blush and maroon system. */
+body.page-my-orders { background: var(--velura-canvas, #FAF0F3) !important; }
+body.page-my-orders .my-orders-title { color: var(--velura-maroon, #7A283C); }
+body.page-my-orders .my-orders-subtitle,
+body.page-my-orders .order-card__date,
+body.page-my-orders .order-card__count { color: var(--text-secondary, #78666A); }
+body.page-my-orders .search-orders-wrapper,
+body.page-my-orders .order-card,
+body.page-my-orders .review-popup__content {
+  border-color: var(--velura-border, #F2C2CF);
+  border-radius: var(--radius-lg, 20px);
+  box-shadow: 0 10px 30px rgba(83, 32, 47, .07);
+}
+body.page-my-orders .order-tab:hover,
+body.page-my-orders .order-tab.is-active {
+  border-color: var(--velura-maroon, #7A283C);
+  color: #fff;
+  background: var(--velura-maroon, #7A283C);
+}
+body.page-my-orders .order-tab.is-active { box-shadow: 0 7px 18px rgba(122, 40, 60, .18); }
+body.page-my-orders .order-card__id,
+body.page-my-orders .order-card__total { color: var(--velura-maroon, #7A283C); }
+body.page-my-orders .order-card__status-badge--delivered { background: #E8F4EC; color: #28744C; }
+body.page-my-orders .order-card__status-badge--cancelled { background: #FCE9ED; color: #A52D49; }
+body.page-my-orders .order-card__actions .js-btn-return { background: var(--velura-rose-fill, #C94F70); }
+body.page-my-orders .order-card__actions .js-btn-return:hover { background: var(--velura-maroon-deep, #631F30); }
+body.page-my-orders :is(button, a, input, textarea):focus-visible { outline: 3px solid var(--velura-rose, #C94F70); outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) {
+  body.page-my-orders *, body.page-my-orders *::before, body.page-my-orders *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }

@@ -1,108 +1,123 @@
 <main class="collections-page">
   <div class="container">
-    <div class="collections-header">
-      <span class="collections-badge">SEASON LOOKBOOKS</span>
-      <h1 class="collections-title">BỘ SƯU TẬP VELURA</h1>
+    <header class="collections-header">
+      <span class="collections-badge">CHUYỆN KỂ QUA TỪNG THIẾT KẾ</span>
+      <h1 class="collections-title">Bộ sưu tập <span class="collections-title-italic">Velura</span></h1>
       <p class="collections-subtitle">
-        Nơi lưu trữ những thiết kế may mặc cao cấp mang tinh thần tối giản, phóng khoáng và sang trọng của quý cô hiện đại.
+        Khám phá những thế giới phong cách được tuyển chọn — để mỗi ngày, bạn tìm thấy một phiên bản thật riêng của mình.
       </p>
-    </div>
+    </header>
 
-    <div class="collections-tabs">
-      <button class="collections-tab" [class.active]="filter() === 'all'" type="button" (click)="setFilter('all')">Tất cả</button>
-      @for (lookbook of lookbooks; track lookbook.id) {
+    <!-- Navigation Tabs / Index -->
+    <nav class="collections-tabs" aria-label="Danh sách bộ sưu tập">
+      <button class="collections-tab" [class.active]="filter() === 'all'" type="button" (click)="setFilter('all')">
+        Tất cả
+      </button>
+      @for (lookbook of lookbooks(); track lookbook.id) {
         <button class="collections-tab" [class.active]="filter() === lookbook.id" type="button" (click)="setFilter(lookbook.id)">
           {{ lookbook.name }}
         </button>
       }
-    </div>
+    </nav>
 
+    <!-- Collections List -->
     <div class="collections-list">
       @if (loading()) {
         @for (n of [1, 2]; track n) {
-          <section class="collection-detail" style="pointer-events: none; opacity: 0.85;">
-            <div class="collection-detail__cover skeleton-shimmer" style="min-height: 280px;"></div>
-            <div class="collection-detail__body">
-              <aside class="collection-detail__info">
-                <div class="skeleton-shimmer" style="height: 16px; width: 120px; margin-bottom: 12px; border-radius: 4px;"></div>
-                <div class="skeleton-shimmer" style="height: 32px; width: 240px; margin-bottom: 20px; border-radius: 4px;"></div>
-                <div class="skeleton-shimmer" style="height: 14px; width: 100%; margin-bottom: 8px; border-radius: 4px;"></div>
-                <div class="skeleton-shimmer" style="height: 14px; width: 85%; margin-bottom: 8px; border-radius: 4px;"></div>
-                <div class="skeleton-shimmer" style="height: 14px; width: 70%; border-radius: 4px;"></div>
-              </aside>
-            </div>
-          </section>
+          <div class="collection-section-card skeleton-shimmer" style="height: 480px; border-radius: 26px;"></div>
         }
       } @else {
-        @for (group of groups(); track group.lookbook.id) {
-          <section class="collection-detail" [attr.data-category]="group.lookbook.id" [attr.aria-labelledby]="'collection-' + group.lookbook.id">
-            <div class="collection-detail__cover">
-              <img [src]="group.lookbook.banner" [alt]="'Ảnh đại diện bộ sưu tập ' + group.lookbook.name" class="collection-detail__cover-img" />
-              <div class="collection-detail__cover-overlay">
-                <strong>{{ group.lookbook.name }}</strong>
+        @if (!groups().length) {
+          <div class="collections-state" role="status">Chưa có bộ sưu tập nào đang có sản phẩm.</div>
+        }
+        @for (group of groups(); track group.lookbook.id; let gIdx = $index) {
+          <section
+            class="collection-section-card"
+            [id]="group.lookbook.id"
+            [attr.data-category]="group.lookbook.id"
+            [attr.aria-labelledby]="'collection-title-' + group.lookbook.id"
+          >
+            <!-- 1. Hero Panoramic Banner with 5 Models & Cursive Script -->
+            <div class="collection-hero" [style.background]="group.lookbook.heroGradient">
+              <div class="collection-hero__glow" aria-hidden="true"></div>
+              <span class="collection-hero__script" aria-hidden="true">{{ group.lookbook.script }}</span>
+              <img [src]="group.lookbook.models[0]" alt="" class="collection-model model-1" loading="lazy" />
+              <img [src]="group.lookbook.models[1]" alt="" class="collection-model model-2" loading="lazy" />
+              <img [src]="group.lookbook.models[2]" alt="" class="collection-model model-3" loading="lazy" />
+              <img [src]="group.lookbook.models[3]" alt="" class="collection-model model-4" loading="lazy" />
+              <img [src]="group.lookbook.models[4]" alt="" class="collection-model model-5" loading="lazy" />
+              <div class="collection-hero__shade" aria-hidden="true"></div>
+              <div class="collection-hero__title-wrap">
+                <span class="collection-hero__tag">{{ group.lookbook.colNumber }}</span>
+                <h2 class="collection-hero__name" [id]="'collection-title-' + group.lookbook.id">{{ group.lookbook.name }}</h2>
               </div>
             </div>
-            <div class="collection-detail__body" [class.collection-detail__body--reverse]="group.reverse">
-              <aside class="collection-detail__info">
-                <div class="collection-detail__copy">
-                  <span class="collection-detail__story-tag">{{ group.lookbook.label }}</span>
-                  <h2 class="collection-detail__story-title" [id]="'collection-' + group.lookbook.id">{{ group.lookbook.name }}</h2>
-                  <div class="collection-detail__divider" aria-hidden="true"><span></span></div>
-                  <div class="collection-detail__story-desc">
-                    @for (paragraph of group.lookbook.story; track paragraph) {
-                      <p>{{ paragraph }}</p>
-                    }
-                  </div>
-                </div>
-                <figure class="collection-detail__decor" aria-hidden="true">
-                  <img [src]="group.lookbook.decor" alt="" class="collection-detail__decor-img" />
-                </figure>
+
+            <!-- 2. Two-Column Layout: Story Side & Products Side -->
+            <div class="collection-section-body" [class.collection-section-body--reverse]="group.reverse">
+              <!-- Story Column -->
+              <aside class="collection-story-col">
+                <span class="collection-story__kicker">{{ group.lookbook.kicker }}</span>
+                <h3 class="collection-story__title">{{ group.lookbook.storyHeadline }}</h3>
+                <p class="collection-story__desc">{{ group.lookbook.storyDesc }}</p>
+                <a [routerLink]="group.lookbook.categoryLink" class="collection-story__cta">
+                  <span>{{ group.lookbook.exploreCta }}</span>
+                  <span aria-hidden="true">→</span>
+                </a>
               </aside>
-              <div class="collection-detail__products">
-                <div class="collection-detail__products-header">
-                  <h3 class="collection-detail__products-title">Thiết kế tiêu biểu</h3>
-                  <span class="collection-detail__header-line"></span>
-                  <span class="collection-detail__mark">V</span>
+
+              <!-- Products Column -->
+              <div class="collection-products-col">
+                <div class="collection-products-head">
+                  <div>
+                    <span class="collection-products-head__sub">{{ group.lookbook.productsSub }}</span>
+                    <h3 class="collection-products-head__title">{{ group.lookbook.productsTitle }}</h3>
+                  </div>
+                  <span class="collection-products-head__count">01 — {{ cardIndex(group.products.length) }}</span>
                 </div>
-                <div class="collection-detail__products-grid">
+
+                <div class="collection-products-grid">
                   @if (!group.products.length) {
-                    <div class="collections-state">Bộ sưu tập này chưa có set đồ đang bán.</div>
+                    <div class="collections-empty-notice">
+                      <p>Đang cập nhật các thiết kế tiêu biểu cho bộ sưu tập này.</p>
+                      <a [routerLink]="group.lookbook.categoryLink" class="btn btn--outline btn--sm">Xem sản phẩm cùng danh mục</a>
+                    </div>
                   } @else {
                     @for (product of group.products; track product.product_id; let i = $index) {
-                      <article class="collection-product-card">
-                        <div class="collection-product-card__media">
-                          <span class="collection-product-card__badge">{{ cardIndex(i) }}</span>
-                          <a [routerLink]="['/products', product.product_id]" class="collection-product-card__img-link">
-                            <img [src]="imageUrl(product)" [alt]="product.name" class="collection-product-card__img" />
+                      <article class="collection-item-card">
+                        <div class="collection-item-card__media">
+                          <span class="collection-item-card__badge">{{ cardIndex(i) }}</span>
+                          <a [routerLink]="['/products', product.product_id]" class="collection-item-card__img-link">
+                            <img [src]="imageUrl(product)" [alt]="product.name" loading="lazy" class="collection-item-card__img" />
                           </a>
                         </div>
-                        <div class="collection-product-card__info">
-                          <a [routerLink]="['/products', product.product_id]" class="collection-product-card__name-link">
-                            <h4 class="collection-product-card__name">{{ product.name }}</h4>
-                          </a>
-                          <span class="collection-product-card__price">{{ priceLabel(product) }}</span>
+                        <div class="collection-item-card__info">
+                          <p class="collection-item-card__tag">{{ product.category_name || 'THIẾT KẾ' }} · {{ group.lookbook.badge }}</p>
+                          <h4 class="collection-item-card__title">
+                            <a [routerLink]="['/products', product.product_id]">{{ product.name }}</a>
+                          </h4>
+                          <p class="collection-item-card__price">{{ priceLabel(product) }}</p>
                         </div>
-                        <div class="collection-product-card__actions">
+                        <div class="collection-item-card__actions">
+                          <a [routerLink]="['/products', product.product_id]" class="collection-item-card__btn-view">
+                            Xem sản phẩm
+                          </a>
                           <button
                             type="button"
-                            class="btn-buy"
+                            class="collection-item-card__btn-buy"
                             [disabled]="isOutOfStock(product)"
                             (click)="buyNow(product, $event)"
                             [title]="isOutOfStock(product) ? 'Sản phẩm đã hết hàng' : 'Mua ngay'"
-                          ><span>Mua ngay</span></button>
-                          <button
-                            class="collection-product-card__btn-cart"
-                            type="button"
-                            [disabled]="isOutOfStock(product)"
-                            [title]="isOutOfStock(product) ? 'Sản phẩm đã hết hàng' : 'Thêm vào giỏ hàng'"
-                            (click)="addToCart(product, $event)"
-                          >+</button>
+                          >
+                            Mua ngay
+                          </button>
                         </div>
                       </article>
                     }
                   }
                 </div>
-                <p class="collection-detail__quote">“{{ group.lookbook.quote }}”</p>
+
+                <p class="collection-closing-quote">{{ group.lookbook.closingQuote }}</p>
               </div>
             </div>
           </section>

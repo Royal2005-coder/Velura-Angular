@@ -1,4 +1,4 @@
-<div class="container" style="padding-top: 16px;"></div>
+<div class="container u-inline-36493dca7c"></div>
 <main>
   <div class="chatbot-page">
     <aside class="chatbot-page__sidebar" [class.is-open]="sidebarOpen()">
@@ -59,8 +59,8 @@
               <span class="chatbot-header__desc">{{ handoffStatus() === 'assigned' ? 'Nhân viên CSKH đang hỗ trợ trực tiếp' : handoffStatus() === 'requested' ? 'Đang kết nối chuyên viên CSKH' : handoffStatus() === 'closed' ? 'Phiên CSKH đã đóng' : 'Trợ lý AI trực tuyến' }}</span>
             </div>
           </div>
-          <div class="chatbot-state-switcher" style="display:flex;align-items:center;gap:12px;">
-            <button type="button" aria-label="Lịch sử trò chuyện" (click)="toggleSidebar()" style="background:transparent;border:none;cursor:pointer;color:#1a1a1a;padding:0;display:flex;">
+          <div class="chatbot-state-switcher u-inline-16f2d51288">
+            <button type="button" aria-label="Lịch sử trò chuyện" (click)="toggleSidebar()" class="u-inline-95f092c71a">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="3" y1="12" x2="21" y2="12"></line>
                 <line x1="3" y1="6" x2="21" y2="6"></line>
@@ -70,62 +70,62 @@
           </div>
         </div>
         @if (handoffStatus() === 'requested' || handoffStatus() === 'assigned' || handoffStatus() === 'closed') {
-          <div class="chatbot-handoff-banner" style="display:flex;align-items:center;justify-content:space-between;gap:12px;background:#FAF2EB;border:1px solid #E8DFD6;border-radius:10px;padding:10px 16px;margin:8px 16px;">
-            <div style="display:flex;align-items:center;gap:10px;">
-              <span style="font-size:1.3rem;">🧑‍💼</span>
-              <div style="font-size:0.8rem;line-height:1.4;color:#2A2522;">
+          <div class="chatbot-handoff-banner u-inline-83f8c4054d">
+            <div class="u-inline-7e30d285d2">
+              <span class="u-inline-844db78fdb">🧑‍💼</span>
+              <div class="u-inline-cae1da51b3">
                 <strong>{{ handoffStatus() === 'closed' ? 'Phiên hỗ trợ đã kết thúc' : handoffStatus() === 'assigned' ? 'Nhân viên CSKH đang hỗ trợ' : 'Đang chờ nhân viên CSKH tiếp nhận' }}</strong>
-                <p style="margin:2px 0 0 0;color:#6B635D;">{{ handoffStatus() === 'closed' ? 'Cảm ơn bạn đã liên hệ Velura. Chúc bạn một ngày tốt lành!' : handoffStatus() === 'assigned' ? 'Nhân viên CSKH đã tham gia hội thoại và đang trực tiếp hỗ trợ bạn.' : 'Yêu cầu của bạn đã vào hàng đợi CSKH. Bạn vẫn có thể nhắn thêm thông tin bên dưới trong lúc chờ.' }}</p>
+                <p class="u-inline-7e772f4cb5">{{ handoffStatus() === 'closed' ? 'Cảm ơn bạn đã liên hệ Velura. Chúc bạn một ngày tốt lành!' : handoffStatus() === 'assigned' ? 'Nhân viên CSKH đã tham gia hội thoại và đang trực tiếp hỗ trợ bạn.' : 'Yêu cầu của bạn đã vào hàng đợi CSKH. Bạn vẫn có thể nhắn thêm thông tin bên dưới trong lúc chờ.' }}</p>
               </div>
             </div>
-            <button type="button" class="btn btn--outline btn--sm" (click)="refreshMessages()" [disabled]="loading()" style="font-size:0.75rem;padding:6px 12px;white-space:nowrap;">Tải lại tin nhắn</button>
+            <button type="button" class="btn btn--outline btn--sm u-inline-659b2cf600" (click)="refreshMessages()" [disabled]="loading()">Tải lại tin nhắn</button>
           </div>
         } @else if (handoffStatus() === 'ai') {
-          <div style="padding:6px 16px;display:flex;justify-content:flex-end;">
-            <button type="button" class="chatbot-human-btn" (click)="requestHuman()" [disabled]="loading()" style="background:transparent;border:1px solid #E8DFD6;color:#6B635D;border-radius:99px;font-size:0.75rem;padding:4px 12px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;">
+          <div class="u-inline-9ceb3e13fd">
+            <button type="button" class="chatbot-human-btn u-inline-2283f0b058" (click)="requestHuman()" [disabled]="loading()">
               <span>💬</span> Gặp nhân viên CSKH
             </button>
           </div>
         }
         @if ((handoffStatus() === 'requested' || handoffStatus() === 'assigned') && summaryProblem()) {
-          <div class="chatbot-summary-card" style="margin:0 16px 8px;padding:10px 14px;background:#FFFDFB;border:1px solid #E8DFD6;border-radius:10px;font-size:0.8rem;color:#2A2522;">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+          <div class="chatbot-summary-card u-inline-fc7fbf4153">
+            <div class="u-inline-ae7439a782">
               <div>
                 <strong>Tóm tắt bàn giao CSKH:</strong> {{ summaryProblem() }}
                 @if (summaryWanted()) { <span> · Mong muốn: {{ summaryWanted() }}</span> }
               </div>
               @if (summaryConfirmed()) {
-                <span style="font-size:0.75rem;color:#2e6f40;font-weight:600;white-space:nowrap;">✓ Đã xác nhận</span>
+                <span class="u-inline-8a0b5318a6">✓ Đã xác nhận</span>
               } @else if (summarySequence()) {
-                <button type="button" class="btn btn--outline btn--sm" (click)="confirmSummary()" [disabled]="loading()" style="font-size:0.75rem;padding:4px 10px;white-space:nowrap;">Xác nhận đúng</button>
+                <button type="button" class="btn btn--outline btn--sm u-inline-532ac0de57" (click)="confirmSummary()" [disabled]="loading()">Xác nhận đúng</button>
               }
             </div>
-            <small style="display:block;margin-top:4px;color:#6B635D;">Nếu cần bổ sung hoặc đính chính, bạn có thể nhắn trực tiếp ở khung chat bên dưới mà không làm gián đoạn thứ tự hỗ trợ.</small>
+            <small class="u-inline-968172cfb0">Nếu cần bổ sung hoặc đính chính, bạn có thể nhắn trực tiếp ở khung chat bên dưới mà không làm gián đoạn thứ tự hỗ trợ.</small>
           </div>
         }
         @if (chatError()) { <p role="alert">{{ chatError() }}</p> }
         @if (handoffStatus() === 'closed') {
-          <div class="chatbot-closed-notice" style="margin: 8px 16px; padding: 12px 16px; background: #FAF7F5; border: 1px solid #EAE3DE; border-radius: 10px; display: flex; flex-direction: column; gap: 8px;">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
-              <div style="font-size: 0.825rem; color: #5C544E;">
-                <strong style="color: #2A2522;">Cuộc trò chuyện đã kết thúc.</strong>
+          <div class="chatbot-closed-notice u-inline-a807098533">
+            <div class="u-inline-a3e76ce44f">
+              <div class="u-inline-50016bdd87">
+                <strong class="u-inline-3086b84f10">Cuộc trò chuyện đã kết thúc.</strong>
                 @if (caseOutcome()) { <span> Kết quả: {{ caseOutcome() }}</span> }
                 @else { <span> Cảm ơn bạn đã liên hệ Velura!</span> }
               </div>
-              <div style="display:flex;align-items:center;gap:8px;">
-                <select aria-label="Đánh giá hỗ trợ" [value]="ratingDraft()" (change)="setRating($event)" [disabled]="loading()" style="font-size:0.75rem;padding:4px 8px;border:1px solid #E8DFD6;border-radius:6px;">
+              <div class="u-inline-e3f61041ef">
+                <select aria-label="Đánh giá hỗ trợ" [value]="ratingDraft()" (change)="setRating($event)" [disabled]="loading()" class="u-inline-b725db339b">
                   <option value="5">5 ★ Rất hài lòng</option>
                   <option value="4">4 ★ Hài lòng</option>
                   <option value="3">3 ★ Bình thường</option>
                   <option value="2">2 ★ Chưa hài lòng</option>
                   <option value="1">1 ★ Kém</option>
                 </select>
-                <button type="button" class="btn btn--outline btn--sm" (click)="updateLifecycle('rating')" [disabled]="loading()" style="font-size:0.75rem;padding:5px 10px;white-space:nowrap;">Gửi đánh giá</button>
+                <button type="button" class="btn btn--outline btn--sm u-inline-b5e7196a81" (click)="updateLifecycle('rating')" [disabled]="loading()">Gửi đánh giá</button>
               </div>
             </div>
-            <div style="display:flex;align-items:center;gap:8px;">
-              <input type="text" class="chatbot-input" placeholder="Nhập lý do cần mở lại hoặc phản hồi..." aria-label="Ghi chú mở lại phiên" [value]="lifecycleNote()" (input)="setCaseInput('lifecycleNote', $event)" [disabled]="loading()" style="font-size:0.75rem;padding:6px 10px;flex:1;" />
-              <button type="button" class="btn btn--outline btn--sm" (click)="updateLifecycle('reopen')" [disabled]="loading() || !lifecycleNote().trim()" style="font-size: 0.75rem; padding: 5px 12px; white-space: nowrap;">💬 Tiếp tục trò chuyện</button>
+            <div class="u-inline-e3f61041ef">
+              <input type="text" class="chatbot-input u-inline-263d354e80" placeholder="Nhập lý do cần mở lại hoặc phản hồi..." aria-label="Ghi chú mở lại phiên" [value]="lifecycleNote()" (input)="setCaseInput('lifecycleNote', $event)" [disabled]="loading()" />
+              <button type="button" class="btn btn--outline btn--sm u-inline-3a9da03ebd" (click)="updateLifecycle('reopen')" [disabled]="loading() || !lifecycleNote().trim()">💬 Tiếp tục trò chuyện</button>
             </div>
           </div>
         }
@@ -172,8 +172,8 @@
                   <div class="chatbot-message__text" [innerHTML]="formatBotText(message.moderation_status === 'pending' ? 'Tin nhắn đang được xử lý...' : message.text)"></div>
                 }
                 @if (message.moderation_status === 'visible' && message.metadata?.attachment?.data) {
-                  <div class="chatbot-message__attachment" style="margin-top: 8px;">
-                    <img [src]="message.metadata?.attachment?.data" style="max-width: 150px; max-height: 150px; border-radius: 8px; border: 1px solid rgba(115,71,36,0.15); object-fit: cover;" alt="" />
+                  <div class="chatbot-message__attachment u-inline-36ca0aff10">
+                    <img [src]="message.metadata?.attachment?.data" alt="" class="u-inline-766073a166" />
                   </div>
                 }
                 @if (productsFor(message).length) {
@@ -202,17 +202,17 @@
                   </div>
                 }
                 @if (blogsFor(message).length) {
-                  <div class="chat-blog-list-container" style="margin-top: 12px; border-top: 1px dashed rgba(115,71,36,0.15); padding-top: 10px;">
-                    <div style="font-size: 11px; font-weight: 600; color: #b56727; margin-bottom: 6px;">📖 Bài viết gợi ý phong cách</div>
-                    <div class="chat-blog-list" style="display: flex; gap: 10px; overflow-x: auto; padding-bottom: 6px;">
+                  <div class="chat-blog-list-container u-inline-bee794e0f8">
+                    <div class="u-inline-b178054b0d">📖 Bài viết gợi ý phong cách</div>
+                    <div class="chat-blog-list u-inline-9d931c6f0e">
                       @for (blog of blogsFor(message); track blog.blog_id) {
-                        <article class="chat-blog-card" style="flex: 0 0 200px; background: #ffffff; border: 1px solid #ebdacf; border-radius: var(--radius-md); overflow: hidden;">
-                          <a [routerLink]="['/blog', blog.slug]" style="display: block; height: 100px; overflow: hidden;">
-                            <img [src]="blogImage(blog)" [alt]="blog.title" style="width: 100%; height: 100%; object-fit: cover;" />
+                        <article class="chat-blog-card u-inline-80dffa6b58">
+                          <a [routerLink]="['/blog', blog.slug]" class="u-inline-d01a704622">
+                            <img [src]="blogImage(blog)" [alt]="blog.title" class="u-inline-4a466668db" />
                           </a>
-                          <div style="padding: 10px;">
-                            <h4 style="margin: 0 0 4px 0; font-size: 12px; color: #734724;">{{ blog.title }}</h4>
-                            <p style="margin: 0; color: #8e7d73; font-size: 11px;">{{ blog.excerpt }}</p>
+                          <div class="u-inline-801160c3ea">
+                            <h4 class="u-inline-e1a6bb2945">{{ blog.title }}</h4>
+                            <p class="u-inline-9cbdf80ff3">{{ blog.excerpt }}</p>
                           </div>
                         </article>
                       }
@@ -227,8 +227,8 @@
 
         <div class="chatbot-footer-sticky-wrap">
           @if (previewUrl()) {
-            <div class="chatbot-image-preview" style="display: flex; align-items: center; gap: 8px; padding: 8px 16px;">
-              <img class="chatbot-image-preview-img" [src]="previewUrl()" alt="" style="width: 48px; height: 48px; object-fit: cover; border-radius: 8px;" />
+            <div class="chatbot-image-preview u-inline-4d4f5c30e3">
+              <img class="chatbot-image-preview-img u-inline-fb4a57a3f9" [src]="previewUrl()" alt="" />
               <span class="chatbot-image-preview-filename">{{ previewName() }}</span>
               <button type="button" class="chatbot-image-preview-remove" (click)="clearPreview()">✕</button>
             </div>
@@ -270,7 +270,7 @@
               </button>
             </div>
           </form>
-          <div style="text-align: center; padding: 8px 16px 16px; font-size: 0.6875rem; color: var(--text-secondary); background: #fff;">
+          <div class="u-inline-58400060b1">
             AI chỉ mang tính chất tham khảo nên nếu thắc mắc hãy liên hệ trực tiếp cho chúng mình nhé
           </div>
         </div>

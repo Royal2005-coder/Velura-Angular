@@ -88,7 +88,7 @@
   font-size: 1rem;
   font-weight: 500;
   color: var(--text-dark);
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   width: 100%;
 }
 
@@ -144,7 +144,7 @@
   font-weight: 600;
   color: var(--text-dark);
   margin: 0 0 16px 0;
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
 }
 
 /* Recent Search Pills */
@@ -165,7 +165,7 @@
   font-weight: 500;
   border-radius: 20px;
   border: 1px solid var(--line, #e8dfd6);
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Inter', sans-serif;
   transition: all 0.2s ease;
 }
 
@@ -211,14 +211,14 @@
   font-size: 0.875rem;
   font-weight: 700;
   color: var(--text-secondary);
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Inter', sans-serif;
 }
 
 /* Rank highlights */
 .trending-item:nth-child(1) .trending-item__rank,
 .trending-item:nth-child(2) .trending-item__rank,
 .trending-item:nth-child(3) .trending-item__rank {
-  color: var(--terracotta, #c97b63);
+  color: var(--terracotta, #844A5A);
 }
 
 .trending-item__link {
@@ -226,7 +226,7 @@
   font-weight: 500;
   color: var(--text-dark);
   text-decoration: none;
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Inter', sans-serif;
 }
 
 /* Popular Categories Grid */
@@ -293,7 +293,7 @@
 }
 
 .popular-card__name {
-  font-family: 'Playfair Display', serif !important;
+  font-family: 'Cormorant Garamond', serif !important;
   font-size: 1.125rem !important;
   font-weight: 700 !important;
   color: #fff !important;
@@ -301,7 +301,7 @@
 }
 
 .popular-card__count {
-  font-family: 'DM Sans', sans-serif !important;
+  font-family: 'Inter', sans-serif !important;
   font-size: 0.75rem !important;
   color: rgba(255, 255, 255, 0.8) !important;
 }
@@ -366,7 +366,7 @@
 }
 
 .search-suggestion-item__name {
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.9375rem;
   font-weight: 500;
   color: var(--text-dark, #1c1b1b);
@@ -382,14 +382,14 @@
 }
 
 .search-suggestion-item__price {
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.875rem;
   font-weight: 700;
-  color: var(--terracotta, #c97b63);
+  color: var(--terracotta, #844A5A);
 }
 
 .search-suggestion-item__price-old {
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.75rem;
   font-weight: 400;
   color: var(--text-secondary, #8c857e);
@@ -397,7 +397,7 @@
 }
 
 .search-suggestion-item__cat {
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.75rem;
   color: var(--text-secondary, #8c857e);
   margin-top: 1px;
@@ -414,7 +414,7 @@
 }
 
 .search-suggestions__empty p {
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 1rem;
   font-weight: 600;
   color: var(--text-dark, #1c1b1b);
@@ -422,7 +422,7 @@
 }
 
 .search-suggestions__empty-hint {
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.8125rem;
   color: var(--text-secondary, #8c857e);
 }

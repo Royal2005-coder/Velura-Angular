@@ -12,8 +12,8 @@ import { showToast } from '../../core/utils/toast';
 @Component({
   selector: 'app-product-card',
   imports: [RouterLink],
-  host: { style: 'display:block;height:100%' },
   templateUrl: './product-card.html',
+  styleUrls: ['./product-card.css'],
 })
 export class ProductCard {
   private readonly wishlist = inject(WishlistStore);
@@ -108,9 +108,11 @@ export class ProductCard {
       return;
     }
     this.checkout.setCheckoutItems([line], 'buy_now');
-    localStorage.removeItem('checkout_discount');
-    localStorage.removeItem('checkout_voucher_id');
-    localStorage.removeItem('checkout_voucher_code');
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem('checkout_discount');
+      localStorage.removeItem('checkout_voucher_id');
+      localStorage.removeItem('checkout_voucher_code');
+    }
     void this.router.navigateByUrl('/checkout/shipping');
   }
 

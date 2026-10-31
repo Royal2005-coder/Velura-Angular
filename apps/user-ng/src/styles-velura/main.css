@@ -76,3 +76,9 @@
 
 /* Final responsive sync overrides */
 @import "./overrides/_responsive-sync.css";
+
+/* Legacy template presentation moved to CSS classes without changing bindings. */
+@import "./base/_inline-migration.css";
+
+/* Customer facing concept layer is intentionally last so every route inherits it. */
+@import "./base/_concept.css";

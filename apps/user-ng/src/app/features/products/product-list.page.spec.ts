@@ -11,9 +11,9 @@ import { ProductListPage } from './product-list.page';
 describe('ProductListPage', () => {
   it('reloads a reused search route after an admin rename and can recover after a failed read', () => {
     const params = new BehaviorSubject(convertToParamMap({}));
-    const renamed = { ...sampleProduct, name: 'UAT-Khai Áo Thun Premium Cotton 100%' };
+    const renamed = { ...sampleProduct, name: 'Velura Áo Thun Premium Cotton 100%' };
     const getProducts = vi.fn()
-      .mockReturnValueOnce(of([{ ...sampleProduct, name: 'UAT-Khai Áo Thun Basic' }]))
+      .mockReturnValueOnce(of([{ ...sampleProduct, name: 'Velura Áo Thun Basic' }]))
       .mockReturnValueOnce(throwError(() => new Error('Temporary catalog failure')))
       .mockReturnValueOnce(of([renamed]));
     TestBed.configureTestingModule({ providers: [
@@ -33,6 +33,22 @@ describe('ProductListPage', () => {
     expect(page.allProducts()[0].name).toBe(renamed.name);
     expect(page.productCount()).toBe(1);
   });
+  it('filters UAT catalog rows while retaining real product rows', () => {
+    const getProducts = vi.fn().mockReturnValue(of([
+      { ...sampleProduct, product_id: 'uat-product', name: 'UAT sample product' },
+      { ...sampleProduct, product_id: 'live-product', name: 'Velura Linen Set' },
+    ]));
+    TestBed.configureTestingModule({ providers: [
+      provideRouter([]),
+      { provide: ApiService, useValue: stubApiService() },
+      { provide: AuthService, useValue: { isLoggedIn: signal(false) } },
+      { provide: CatalogService, useValue: { getProducts } },
+      { provide: ActivatedRoute, useValue: { queryParamMap: new BehaviorSubject(convertToParamMap({})) } },
+    ] });
+    const page = TestBed.runInInjectionContext(() => new ProductListPage());
+    expect(page.allProducts().map((product) => product.product_id)).toEqual(['live-product']);
+  });
+
   it('keeps visual candidates based on catalog filters independently of previous image matches', async () => {
     const page = await createStorefrontPage(ProductListPage);
     const originalIds = page.imageSearchCandidates();

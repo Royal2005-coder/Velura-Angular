@@ -12,7 +12,7 @@ import { useBodyClass } from '../../core/utils/body-class';
 @Component({
   selector: 'app-wishlist-page',
   imports: [RouterLink],
-  host: { class: 'page-wishlist', style: 'display:block' },
+  host: { class: 'page-wishlist' },
   templateUrl: './wishlist.page.html',
 })
 export class WishlistPage {

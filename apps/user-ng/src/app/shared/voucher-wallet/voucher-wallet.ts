@@ -4,6 +4,14 @@ import type { Subscription } from 'rxjs';
 import { VoucherService } from '../../core/services/voucher.service';
 import type { AppliedVoucher, CartItemRef, WalletVoucher } from '../../core/models/voucher.interface';
 
+function safeStorage(): Storage | null {
+  try {
+    return typeof window !== 'undefined' && window.localStorage ? window.localStorage : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Ví Voucher — bảng mã giảm giá chủ động dùng ở giỏ hàng và trang thanh toán.
  *
@@ -201,7 +209,7 @@ export class VoucherWallet {
       return true;
     }
     const isUuid = /^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$/i.test(wanted);
-    const codeName = isUuid ? (localStorage.getItem('checkout_voucher_code') || '') : upper;
+    const codeName = isUuid ? (safeStorage()?.getItem('checkout_voucher_code') || '') : upper;
     this.preferredNotice.set(
       match
         ? `Mã ${match.code} chưa dùng được cho đơn này: ${match.reason_text || 'chưa đủ điều kiện'}`
@@ -238,8 +246,8 @@ export class VoucherWallet {
     this.declined.emit(false);
     this.selectedId.set(item.voucher_id);
     this.emit(item);
-    localStorage.setItem('checkout_voucher_id', item.voucher_id);
-    localStorage.setItem('checkout_voucher_code', item.code);
+    safeStorage()?.setItem('checkout_voucher_id', item.voucher_id);
+    safeStorage()?.setItem('checkout_voucher_code', item.code);
     this.closeModal();
   }
 
@@ -254,8 +262,8 @@ export class VoucherWallet {
     this.declined.emit(true);
     this.selectedId.set(null);
     this.applied.emit(null);
-    localStorage.removeItem('checkout_voucher_id');
-    localStorage.removeItem('checkout_voucher_code');
+    safeStorage()?.removeItem('checkout_voucher_id');
+    safeStorage()?.removeItem('checkout_voucher_code');
   }
 
   /** Cập nhật ô nhập mã thủ công. */
@@ -294,8 +302,8 @@ export class VoucherWallet {
         this.declined.emit(false);
         this.selectedId.set(response.voucher_id);
         this.manualCode.set('');
-        localStorage.setItem('checkout_voucher_id', response.voucher_id);
-        localStorage.setItem('checkout_voucher_code', response.code ?? code);
+        safeStorage()?.setItem('checkout_voucher_id', response.voucher_id);
+        safeStorage()?.setItem('checkout_voucher_code', response.code ?? code);
         this.applied.emit({
           voucher_id: response.voucher_id,
           code: response.code ?? code,

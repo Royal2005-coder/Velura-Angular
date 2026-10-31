@@ -54,7 +54,6 @@ interface PlaceOrderResponse {
   selector: 'app-checkout-shipping-page',
   imports: [RouterLink, VoucherWallet, AddressSelector],
   host: {
-    style: 'display:block',
     '(document:click)': 'closeAllDropdowns()',
   },
   templateUrl: './checkout-shipping.page.html',

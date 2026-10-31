@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { of } from 'rxjs';
-import { createStorefrontPage, sampleProduct } from '../../../testing/storefront-testing';
+import { createStorefrontPage, lastStorefrontFixture, sampleProduct } from '../../../testing/storefront-testing';
 import { CatalogService } from '../../core/services/catalog.service';
 import { SiteHeader } from './site-header';
 
@@ -34,5 +34,26 @@ describe('SiteHeader', () => {
     expect(localStorage.getItem('velura_token')).toBeNull();
     expect(localStorage.getItem('velura_user')).toBeNull();
     expect(navigate).toHaveBeenCalledWith('/');
+  });
+
+  it('renders a full backdrop overlay on search focus and closes when clicked', async () => {
+    const header = await createStorefrontPage(SiteHeader);
+    const fixture = lastStorefrontFixture();
+
+    expect(header.searchOpen()).toBe(false);
+    expect(fixture.nativeElement.querySelector('.search-backdrop')).toBeNull();
+
+    header.onSearchFocus();
+    fixture.detectChanges();
+
+    expect(header.searchOpen()).toBe(true);
+    const backdrop = fixture.nativeElement.querySelector('.search-backdrop') as HTMLElement | null;
+    expect(backdrop).not.toBeNull();
+
+    backdrop?.click();
+    fixture.detectChanges();
+
+    expect(header.searchOpen()).toBe(false);
+    expect(fixture.nativeElement.querySelector('.search-backdrop')).toBeNull();
   });
 });

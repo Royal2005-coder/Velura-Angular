@@ -1,6 +1,6 @@
 import { Component, DestroyRef, effect, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink, RouterLinkActive } from '@angular/router';
 import {
   DemoOrder,
   DemoOrderLine,
@@ -30,13 +30,14 @@ import { ReturnTrackingComponent } from './return-tracking.component';
  */
 @Component({
   selector: 'app-order-flow',
-  imports: [FormsModule, RouterLink, DeliverySimulation, ReturnTrackingComponent],
+  imports: [FormsModule, RouterLink, RouterLinkActive, DeliverySimulation, ReturnTrackingComponent],
   templateUrl: './order-flow.page.html',
   styleUrls: [
     '../shared/purchase-flow.css',
     '../shared/purchase-flow-forms.css',
     '../shared/purchase-flow-layout.css',
     '../shared/purchase-flow-responsive.css',
+    './order-flow.page.css',
   ],
 })
 export class OrderFlowPage {
@@ -123,17 +124,45 @@ export class OrderFlowPage {
   requiresRefundBank(): boolean {
     return this.returnKind === 'refund' && this.order()?.payment === 'COD';
   }
+  readonly statusFilter = signal<string>('all');
+  readonly filter = signal('');
+  readonly orderCounts = computed(() => {
+    const list = this.model
+      .orders()
+      .filter((o) => this.authorized(o) && (!this.cancelledEntry || o.status === 'cancelled'));
+    return {
+      all: list.length,
+      pending: list.filter((o) => o.status === 'pending' || o.status === 'pending_payment').length,
+      preparing: list.filter((o) => o.status === 'preparing' || o.status === 'confirmed').length,
+      shipping: list.filter((o) => o.status === 'shipping').length,
+      delivered: list.filter((o) => o.status === 'delivered').length,
+      cancelled: list.filter((o) => o.status === 'cancelled').length,
+    };
+  });
   readonly visibleOrders = computed(() =>
     this.model
       .orders()
-      .filter(
-        (order) =>
-          this.authorized(order) &&
-          (!this.cancelledEntry || order.status === 'cancelled') &&
-          (!this.filter() || order.id.toLowerCase().includes(this.filter().toLowerCase())),
-      ),
+      .filter((order) => {
+        if (!this.authorized(order)) return false;
+        if (this.cancelledEntry && order.status !== 'cancelled') return false;
+        if (this.statusFilter() !== 'all') {
+          if (this.statusFilter() === 'pending') {
+            if (order.status !== 'pending' && order.status !== 'pending_payment') return false;
+          } else if (this.statusFilter() === 'preparing') {
+            if (order.status !== 'preparing' && order.status !== 'confirmed') return false;
+          } else if (order.status !== this.statusFilter()) {
+            return false;
+          }
+        }
+        if (this.filter()) {
+          const q = this.filter().toLowerCase().trim();
+          const matchId = order.id.toLowerCase().includes(q) || (order.orderId && order.orderId.toLowerCase().includes(q));
+          const matchItem = order.items?.some((it) => it.product_name?.toLowerCase().includes(q));
+          if (!matchId && !matchItem) return false;
+        }
+        return true;
+      }),
   );
-  readonly filter = signal('');
   readonly visibleRequests = computed(() =>
     this.model
       .requests()

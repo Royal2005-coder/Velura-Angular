@@ -20,6 +20,17 @@ export class PersonalColorService {
   /** Return confirmed profile data and current optimistic-lock version, not previews. */
   async profile(principal: ColorPrincipal) { return this.repo.profile(principal); }
 
+  /** Upload a bounded portrait image for the current principal (guest or member). */
+  async upload(principal: ColorPrincipal, buffer: Buffer, mime: string): Promise<{ asset_id: string; expires_at: string }> {
+    const policy = this.policy;
+    if (!policy?.approved || !this.vision.ready()) throw new HttpError(503, "COLOR_UNAVAILABLE", "Phân tích màu chưa được bật. Bạn vẫn có thể dùng Style Quiz.");
+    if (buffer.length > policy.maxBytes || !["image/jpeg", "image/png"].includes(mime)) {
+      throw new HttpError(400, "COLOR_IMAGE_INVALID", "Ảnh phải là JPEG/PNG hợp lệ trong giới hạn đã công bố.");
+    }
+    if (!this.assets.upload) throw new HttpError(503, "COLOR_UNAVAILABLE", "Kho lưu trữ ảnh chưa sẵn sàng.");
+    return this.assets.upload(principal.owner, buffer, mime);
+  }
+
   /** Begin an owner-bound preview; client-supplied versions cannot overwrite a newer Style Profile. */
   async analyze(principal: ColorPrincipal, body: Record<string, unknown>): Promise<ColorAnalysis> {
     const policy = this.policy;

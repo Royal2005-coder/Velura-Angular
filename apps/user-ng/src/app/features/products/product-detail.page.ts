@@ -62,7 +62,6 @@ const SHAPE_MAP: Record<string, string> = {
 @Component({
   selector: 'app-product-detail-page',
   imports: [ProductCard, RouterLink, AiImageWorkbench],
-  host: { style: 'display:block' },
   templateUrl: './product-detail.page.html',
 })
 export class ProductDetailPage {

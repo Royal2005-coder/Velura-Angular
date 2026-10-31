@@ -1,5 +1,5 @@
-﻿.review-title {
-  font-family: "Playfair Display", Georgia, serif;
+.review-title {
+  font-family: "Cormorant Garamond", Georgia, serif;
   font-size: clamp(1.75rem, 4vw, 2.25rem);
   font-weight: 600;
   color: #1C1B1B;

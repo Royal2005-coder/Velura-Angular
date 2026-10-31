@@ -8,6 +8,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  text-align: center;
+  line-height: 1;
+  vertical-align: middle;
   gap: 8px;
   border: 1px solid transparent;
   background: none;
@@ -52,6 +55,11 @@
 /* Primary Filled Button (Terracotta theme) */
 .btn--primary,
 .btn--accent {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  line-height: 1;
   height: 48px;
   padding: 0 28px;
   background-color: var(--terracotta);
@@ -193,6 +201,11 @@
 }
 
 .btn--sm {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  line-height: 1;
   height: 38px;
   padding: 0 16px;
   font-size: 0.8125rem;

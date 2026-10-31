@@ -11,44 +11,135 @@
       </div>
     </div>
   }
-  <section class="hero">
-    <div class="hero__video-container">
-      <video #heroVideo autoplay loop playsinline muted poster="/assets/images/hero-banner.png">
-        <source src="/assets/videos/hero-bg.mp4" type="video/mp4" />
-      </video>
-    </div>
-    <div class="hero__overlay"></div>
-    <div class="hero__content">
-          <div class="hero__badge">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+  <section class="hero" aria-label="Velura Fashion Runway">
+    <!-- Top Bar inside Hero: Season Tag & Carousel Navigation -->
+    <div class="hero__top-bar">
+      <div class="hero__season-tag">
+        <span class="hero__tagline-icon" aria-hidden="true">✿</span>
+        <span>{{ activeLook().season }}</span>
+      </div>
+      <div class="hero__top-nav">
+        <span class="hero__counter">{{ modelCounterLabel() }}</span>
+        <div class="hero__arrow-buttons">
+          <button
+            type="button"
+            class="hero__nav-btn hero__nav-btn--prev"
+            (click)="prevModel()"
+            aria-label="Xem người mẫu trước"
+            title="Người mẫu trước"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="15 18 9 12 15 6"></polyline>
             </svg>
-            <span>Bộ sưu tập mới 2026</span>
-          </div>
-      <h1 class="hero__title">Vẻ đẹp vượt thời gian</h1>
-      <p class="hero__description">
-        Velura mang đến những sản phẩm thời trang nữ thiết kế cao cấp, giúp bạn tự tin tỏa sáng với phong cách riêng biệt.
-      </p>
-      <div class="hero__buttons">
-        <a routerLink="/products" class="btn btn--accent">Khám phá ngay</a>
-        <a routerLink="/ai/style-quiz" class="btn btn--outline-white hero__btn--quiz">Style Quiz</a>
+          </button>
+          <button
+            type="button"
+            class="hero__nav-btn hero__nav-btn--next"
+            (click)="nextModel()"
+            aria-label="Xem người mẫu kế tiếp"
+            title="Người mẫu kế tiếp"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
-    <button class="hero__audio-toggle" type="button" [attr.aria-label]="soundOn() ? 'Tắt âm thanh video' : 'Bật âm thanh video'" (click)="toggleSound()">
-      @if (soundOn()) {
-        <svg class="hero__audio-icon hero__audio-icon--on" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-          <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
-        </svg>
-      } @else {
-        <svg class="hero__audio-icon hero__audio-icon--off" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-          <line x1="23" y1="9" x2="17" y2="15"></line>
-          <line x1="17" y1="9" x2="23" y2="15"></line>
-        </svg>
-      }
-      <span class="hero__audio-text">{{ soundOn() ? 'Tắt âm thanh' : 'Bật âm thanh' }}</span>
-    </button>
+
+    <!-- Main Grid: Left Column Copy & Right Column Runway Stage -->
+    <div class="hero__main-grid">
+      <!-- Left Editorial Column -->
+      <div class="hero__content">
+        <!-- Delicate branch artwork floating behind/next to title -->
+        <img
+          class="hero__decor-branch"
+          src="/assets/images/models/nhanhhoa1.png"
+          alt=""
+          aria-hidden="true"
+        />
+
+        <div class="hero__brand-label">{{ activeLook().eyebrow }}</div>
+        <h1 class="hero__title">{{ activeLook().title }}</h1>
+        <div class="hero__flourish" aria-hidden="true">
+          <svg viewBox="0 0 260 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M 10 8 Q 70 18 120 8 Q 125 7 130 11 Q 135 7 140 8 Q 190 18 250 8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+            <path d="M 130 2 L 132 9 L 139 11 L 132 13 L 130 20 L 128 13 L 121 11 L 128 9 Z" fill="currentColor"/>
+          </svg>
+        </div>
+        <p class="hero__description">
+          {{ activeLook().description }}
+        </p>
+        <div class="hero__meta-row">
+          <span class="hero__pill-badge">{{ activeLook().badge }}</span>
+          <span class="hero__meta-sub">{{ activeLook().looksCount }}</span>
+        </div>
+        <div class="hero__buttons">
+          <a [routerLink]="activeLook().link" class="btn btn--accent hero__cta-btn">
+            <span>KHÁM PHÁ BỘ SƯU TẬP</span>
+            <span class="hero__btn-arrow">→</span>
+          </a>
+          <a routerLink="/ai/style-quiz" class="btn btn--outline hero__btn--quiz">Style Quiz</a>
+        </div>
+        <!-- Indicators (Dots/Dash) -->
+        <div class="hero__indicators" aria-label="Bộ sưu tập">
+          @for (look of heroLooks; track look.id; let i = $index) {
+            <button
+              type="button"
+              class="hero__indicator"
+              [class.is-active]="activeModelIndex() === i"
+              (click)="onModelClick(i)"
+              [attr.aria-label]="'Chọn ' + look.title"
+            ></button>
+          }
+        </div>
+      </div>
+
+      <!-- Right Column: Interactive 3D Model Runway Stage -->
+      <div class="hero__runway" aria-label="Sàn diễn người mẫu thời trang">
+        <div class="hero__runway-floor" aria-hidden="true"></div>
+        <div class="hero__models-stage">
+          @for (look of heroLooks; track look.id; let i = $index) {
+            @let dist = getModelDistance(i);
+            <div
+              class="runway-model"
+              [class.is-center]="dist === 0"
+              [class.is-left-1]="dist === -1"
+              [class.is-left-2]="dist === -2"
+              [class.is-right-1]="dist === 1"
+              [class.is-right-2]="dist === 2"
+              [attr.data-offset]="dist"
+              (click)="onModelClick(i)"
+              role="button"
+              [tabindex]="0"
+              (keydown.enter)="onModelClick(i)"
+              [attr.aria-label]="look.title + (dist === 0 ? ' (Đang ở trung tâm, nhấn để xem sản phẩm)' : ' (Nhấn để đưa về trung tâm)')"
+            >
+              <div class="runway-model__shadow" aria-hidden="true"></div>
+              <img
+                class="runway-model__image"
+                [src]="look.image"
+                [alt]="look.title"
+                draggable="false"
+              />
+              @if (dist === 0) {
+                <div class="runway-model__badge">
+                  <span>Xem sản phẩm</span>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="7" y1="17" x2="17" y2="7"></line>
+                    <polyline points="7 7 17 7 17 17"></polyline>
+                  </svg>
+                </div>
+              } @else {
+                <div class="runway-model__hint">
+                  <span>{{ look.collectionName }}</span>
+                </div>
+              }
+            </div>
+          }
+        </div>
+      </div>
+    </div>
   </section>
 
   <section class="hot-offer-ticker" aria-label="Tin ưu đãi Velura">
@@ -69,157 +160,268 @@
     </div>
   </section>
 
-  <section class="categories-section container">
-    <div class="categories-section__header">
-      <h2 class="categories-section__title">Danh mục nổi bật</h2>
-      <p class="categories-section__subtitle">Tìm kiếm phong cách riêng biệt của bạn</p>
-    </div>
-    <div class="categories-section__grid" #categoriesTrack>
-      @if (loading()) {
-        @for (n of [1, 2, 3, 4, 5, 6]; track n) {
-          <div class="category-card" aria-hidden="true" style="pointer-events: none;">
-            <div class="skeleton-shimmer" style="width: 82px; height: 82px; border-radius: 50%; margin-bottom: 16px;"></div>
-            <div class="skeleton-shimmer" style="width: 72px; height: 16px; margin-bottom: 6px; border-radius: 4px;"></div>
-            <div class="skeleton-shimmer" style="width: 46px; height: 12px; border-radius: 4px;"></div>
-          </div>
-        }
-      } @else if (categories().length === 0) {
-        <div class="category-card">
-          <span class="category-card__name">{{ loadError() || 'Chưa có danh mục. Hãy chạy db:migrate và db:seed:catalog.' }}</span>
-        </div>
-      } @else {
-        @for (category of categories(); track category.category_id) {
-          <a class="category-card" routerLink="/products" [queryParams]="{ category: category.slug }">
-            <div class="category-card__icon">
-              <img [src]="categoryIcon(category.slug)" [alt]="category.name" class="category-card__icon-img" />
+  <section class="categories-section">
+    <div class="container">
+      <div class="categories-section__header">
+        <span class="section-eyebrow">DANH MỤC SẢN PHẨM</span>
+        <h2 class="categories-section__title">Shop your way.</h2>
+        <p class="categories-section__subtitle">Theo cách riêng bạn chọn, để luôn tự tin.</p>
+      </div>
+      <div class="categories-section__wrap">
+        <!-- Botanical accents matching demo concept -->
+        <img
+          src="/assets/images/nhanhhoa1.png"
+          alt=""
+          aria-hidden="true"
+          class="categories-accent categories-accent--left"
+        />
+        <img
+          src="/assets/images/nhanhhoa1.png"
+          alt=""
+          aria-hidden="true"
+          class="categories-accent categories-accent--right"
+        />
+        <div class="categories-section__grid" #categoriesTrack>
+          @if (loading()) {
+            @for (n of [1, 2, 3, 4, 5, 6]; track n) {
+              <div class="category-card u-inline-8a30312172" aria-hidden="true">
+                <div class="skeleton-shimmer u-inline-697237e9e3"></div>
+                <div class="skeleton-shimmer u-inline-bae9bc7644"></div>
+                <div class="skeleton-shimmer u-inline-3001867654"></div>
+              </div>
+            }
+          } @else if (categories().length === 0) {
+            <div class="category-card">
+              <span class="category-card__name">{{ loadError() || 'Chưa có danh mục. Hãy chạy db:migrate và db:seed:catalog.' }}</span>
             </div>
-            <span class="category-card__name">{{ category.name }}</span>
-            <span class="category-card__count">{{ category.product_count || 0 }} sản phẩm</span>
+          } @else {
+            @for (category of categories(); track category.category_id) {
+              <a class="category-card" routerLink="/products" [queryParams]="{ category: category.slug }">
+                <div class="category-card__icon">
+                  <img [src]="categoryIcon(category.slug)" [alt]="category.name" class="category-card__icon-img" />
+                </div>
+                <span class="category-card__name">{{ category.name }}</span>
+                <span class="category-card__count">{{ category.product_count || 0 }} sản phẩm</span>
+              </a>
+            }
+          }
+        </div>
+      </div>
+    </div>
+  </section>
+
+  @if (featuredJournalPost(); as featuredPost) {
+    <section class="home-journal-section">
+      <div class="container">
+        <header class="home-journal-section__header">
+          <div>
+            <span class="home-journal-section__eyebrow">VELURA JOURNAL</span>
+            <h2 class="home-journal-section__title">Cảm hứng từ Velura.</h2>
+          </div>
+          <a routerLink="/blog" class="home-journal-section__all">Xem tất cả bài viết <span aria-hidden="true">→</span></a>
+        </header>
+        <div class="home-journal-section__grid">
+          <a class="home-journal-feature" [routerLink]="['/blog', featuredPost.slug]">
+            <img class="home-journal-feature__image" [src]="featuredPost.image" [alt]="featuredPost.title" loading="lazy" />
+            <span class="home-journal-feature__veil" aria-hidden="true"></span>
+            <span class="home-journal-feature__copy">
+              <span class="home-journal-feature__meta"><span>{{ featuredPost.badge }}</span><time>{{ featuredPost.date }}</time></span>
+              <span class="home-journal-feature__title">{{ featuredPost.title }}</span>
+              <span class="home-journal-feature__excerpt">{{ featuredPost.excerpt }}</span>
+              <span class="home-journal-feature__read">Đọc bài viết <span aria-hidden="true">→</span></span>
+            </span>
           </a>
-        }
-      }
-    </div>
-  </section>
-
-  <section class="products-section container">
-    <div class="products-section__header">
-      <div class="products-section__title-group">
-        <h2 class="products-section__title">Sản phẩm nổi bật</h2>
-        <p class="products-section__subtitle">Được yêu thích nhất tháng này</p>
-      </div>
-      <a routerLink="/products" [queryParams]="{ special: 'featured', sort: 'popular' }" class="products-section__link">
-        <span>Xem tất cả</span>
-        <svg width="14" height="14" viewBox="0 0 24 24">
-          <path d="M9 5l7 7-7 7" />
-        </svg>
-      </a>
-    </div>
-    <div class="products-section__grid" #productsTrack>
-      @if (loading()) {
-        @for (n of [1, 2, 3, 4]; track n) {
-          <div class="product-card" aria-hidden="true" style="pointer-events: none;">
-            <div class="skeleton-shimmer" style="aspect-ratio: 4 / 5; width: 100%; border-radius: var(--radius-md, 8px);"></div>
-            <div style="padding: 14px 4px 6px;">
-              <div class="skeleton-shimmer" style="height: 12px; width: 35%; margin-bottom: 8px; border-radius: 4px;"></div>
-              <div class="skeleton-shimmer" style="height: 18px; width: 85%; margin-bottom: 8px; border-radius: 4px;"></div>
-              <div class="skeleton-shimmer" style="height: 16px; width: 45%; border-radius: 4px;"></div>
-            </div>
+          <div class="home-journal-list">
+            @for (post of supportingJournalPosts(); track post.slug) {
+              <a class="home-journal-item" [routerLink]="['/blog', post.slug]">
+                <img class="home-journal-item__image" [src]="post.image" [alt]="post.title" loading="lazy" />
+                <span class="home-journal-item__copy">
+                  <span class="home-journal-item__badge">{{ post.badge }}</span>
+                  <span class="home-journal-item__title">{{ post.title }}</span>
+                  <time class="home-journal-item__date">{{ post.date }}</time>
+                </span>
+                <span class="home-journal-item__arrow" aria-hidden="true">→</span>
+              </a>
+            }
           </div>
-        }
-      } @else if (products().length === 0) {
-        <p>Chưa tải được sản phẩm nổi bật. Kiểm tra API và catalog Supabase.</p>
-      } @else {
-        @for (product of products(); track product.product_id) {
-          <app-product-card [product]="product" />
-        }
-      }
-    </div>
-  </section>
-
-  @if (personalized().length > 0) {
-    <section class="personalized-recommendations container" style="margin-top: 48px; margin-bottom: 48px;">
-      <div class="products-section__header">
-        <div class="products-section__title-group">
-          <h2 class="products-section__title">Gợi ý riêng cho bạn</h2>
-          <p class="products-section__subtitle">{{ personalizedSubtitle() }}</p>
         </div>
-        <a routerLink="/products" class="products-section__link">
-          <span>Khám phá thêm</span>
-          <svg width="14" height="14" viewBox="0 0 24 24">
-            <path d="M9 5l7 7-7 7" />
-          </svg>
-        </a>
-      </div>
-      <div class="products-section__grid">
-        @for (product of personalized(); track product.product_id) {
-          <app-product-card [product]="product" />
-        }
       </div>
     </section>
   }
 
-  <section class="collections-section container">
-    <div class="collections-section__header">
-      <h2 class="collections-section__title">Bộ sưu tập đặc biệt</h2>
-      <p class="collections-section__subtitle">Khám phá những bộ sưu tập được tuyển chọn</p>
-    </div>
-    <div class="collections-section__grid" #collectionsTrack>
-      @if (!loading() && collections().length === 0) {
-        <div style="grid-column: 1 / -1; text-align: center; padding: 24px; color: var(--soft);">Hiện chưa có bộ sưu tập nào hoạt động.</div>
-      }
-      @for (collection of collections(); track collection.id) {
-        <a [routerLink]="'/collections'" [queryParams]="{ id: collection.id }" class="collection-card">
-          <img [src]="collection.banner" [alt]="collection.name" class="collection-card__image" />
-          <div class="collection-card__overlay"></div>
-          <div class="collection-card__content">
-            <span class="collection-card__badge">{{ collection.badge }}</span>
-            <h3 class="collection-card__title">{{ collection.name }}</h3>
-            <p class="collection-card__desc">{{ collection.homeStory }}</p>
-            <span class="collection-card__btn">Xem chi tiết →</span>
-          </div>
+  <section class="products-section">
+    <div class="container">
+      <div class="products-section__header">
+        <div class="products-section__title-group">
+          <span class="section-eyebrow">BỘ SƯU TẬP NỔI BẬT</span>
+          <h2 class="products-section__title">The Velura Edit</h2>
+          <p class="products-section__subtitle">Những thiết kế được yêu thích nhất tháng này</p>
+        </div>
+        <a routerLink="/products" [queryParams]="{ special: 'featured', sort: 'popular' }" class="products-section__link">
+          <span>XEM TẤT CẢ SẢN PHẨM</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M9 5l7 7-7 7" />
+          </svg>
         </a>
-      }
+      </div>
+      <div class="products-section__grid" #productsTrack>
+        @if (loading()) {
+          @for (n of [1, 2, 3, 4]; track n) {
+            <div class="product-card u-inline-8a30312172" aria-hidden="true">
+              <div class="skeleton-shimmer u-inline-7e95383276"></div>
+              <div class="u-inline-808f570242">
+                <div class="skeleton-shimmer u-inline-8852094bee"></div>
+                <div class="skeleton-shimmer u-inline-f5f7c7474d"></div>
+                <div class="skeleton-shimmer u-inline-39e345fbea"></div>
+              </div>
+            </div>
+          }
+        } @else if (products().length === 0) {
+          <p>Chưa tải được sản phẩm nổi bật. Kiểm tra API và catalog Supabase.</p>
+        } @else {
+          @for (product of products(); track product.product_id) {
+            <app-product-card [product]="product" />
+          }
+        }
+      </div>
     </div>
   </section>
 
   <section class="policies-section">
+    <div class="container">
+      <h2 class="policies-section__title">Why Velura.</h2>
+    </div>
     <div class="container policies-section__grid">
-      <div class="policy-card">
+      <article class="policy-card">
         <div class="policy-card__icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="7" y1="17" x2="17" y2="7"></line>
-            <polyline points="7 7 17 7 17 17"></polyline>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="M3 7h11v10H3zM14 10h4l3 3v4h-7z" />
+            <circle cx="7.5" cy="18" r="1.5" />
+            <circle cx="18" cy="18" r="1.5" />
           </svg>
         </div>
         <div class="policy-card__info">
-          <h3 class="policy-card__title">Miễn phí vận chuyển</h3>
+          <h3 class="policy-card__title">MIỄN PHÍ VẬN CHUYỂN</h3>
           <p class="policy-card__desc">Cho đơn hàng từ 500.000đ</p>
         </div>
-      </div>
-      <div class="policy-card">
+      </article>
+      <article class="policy-card">
         <div class="policy-card__icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="M20 7v5h-5M4 17v-5h5" />
+            <path d="M5.8 9a7 7 0 0 1 11.6-2L20 12M4 12l2.6 5a7 7 0 0 0 11.6-2" />
           </svg>
         </div>
         <div class="policy-card__info">
-          <h3 class="policy-card__title">Đổi trả minh bạch</h3>
-          <p class="policy-card__desc">Gửi yêu cầu trong 7 ngày</p>
+          <h3 class="policy-card__title">ĐỔI TRẢ TRONG VÒNG 7 NGÀY</h3>
+          <p class="policy-card__desc">Thủ tục linh hoạt &amp; nhanh chóng</p>
         </div>
-      </div>
-      <div class="policy-card">
+      </article>
+      <article class="policy-card">
         <div class="policy-card__icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="m4 7 16 0M4 17h16M7 7v4M11 7v2M15 7v4M7 13v4M11 15v2M15 13v4" />
           </svg>
         </div>
         <div class="policy-card__info">
-          <h3 class="policy-card__title">Bảo mật Style Quiz</h3>
-          <p class="policy-card__desc">Dữ liệu dùng khép kín cho AI Stylist</p>
+          <h3 class="policy-card__title">TƯ VẤN SIZE 24/7</h3>
+          <p class="policy-card__desc">Chuẩn dáng người Việt</p>
         </div>
+      </article>
+      <article class="policy-card">
+        <div class="policy-card__icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+          </svg>
+        </div>
+        <div class="policy-card__info">
+          <h3 class="policy-card__title">THANH TOÁN AN TOÀN</h3>
+          <p class="policy-card__desc">Bảo mật 100% mọi giao dịch</p>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <section class="testimonials-section">
+    <div class="container">
+      <div class="testimonials-section__header">
+        <span class="section-eyebrow">KHÁCH HÀNG NÓI VỀ CHÚNG TÔI</span>
+        <h2 class="testimonials-section__title">
+          Đánh giá nổi bật <span class="testimonials-section__sparkle">🌸</span>
+        </h2>
+        <p class="testimonials-section__subtitle">
+          Cảm nhận thực tế từ những khách hàng đang tin tưởng Velura
+        </p>
+      </div>
+      <div class="testimonials-section__grid">
+        <article class="testimonial-card">
+          <div class="testimonial-card__stars">★★★★★</div>
+          <div class="testimonial-card__author">
+            <div class="testimonial-card__avatar">TH</div>
+            <div>
+              <h3 class="testimonial-card__name">Thanh Huyền</h3>
+              <span class="testimonial-card__tag">Khách hàng thân thiết</span>
+            </div>
+          </div>
+          <p class="testimonial-card__quote">
+            “Chất lượng vải rất tốt, đường may tinh tế, phù hợp với dáng người Việt. Mình rất hài lòng với sản phẩm của Velura!”
+          </p>
+        </article>
+        <article class="testimonial-card">
+          <div class="testimonial-card__stars">★★★★★</div>
+          <div class="testimonial-card__author">
+            <div class="testimonial-card__avatar">NA</div>
+            <div>
+              <h3 class="testimonial-card__name">Ngọc Anh</h3>
+              <span class="testimonial-card__tag">Khách hàng mới</span>
+            </div>
+          </div>
+          <p class="testimonial-card__quote">
+            “Mình đã mua nhiều lần tại Velura và luôn hài lòng. Giao hàng nhanh, đóng gói đẹp, sản phẩm đúng mô tả.”
+          </p>
+        </article>
+        <article class="testimonial-card">
+          <div class="testimonial-card__stars">★★★★★</div>
+          <div class="testimonial-card__author">
+            <div class="testimonial-card__avatar">MT</div>
+            <div>
+              <h3 class="testimonial-card__name">Minh Thư</h3>
+              <span class="testimonial-card__tag">Khách hàng thân thiết</span>
+            </div>
+          </div>
+          <p class="testimonial-card__quote">
+            “Thiết kế hiện đại, dễ mặc, giá hợp lý. Mỗi lần nhận hàng đều là một trải nghiệm thật tuyệt!”
+          </p>
+        </article>
       </div>
     </div>
   </section>
+  @if (personalized().length > 0) {
+    <section class="personalized-recommendations">
+      <div class="container u-inline-ce655c2d12">
+        <div class="products-section__header">
+          <div class="products-section__title-group">
+            <h2 class="products-section__title">Gợi ý riêng cho bạn</h2>
+            <p class="products-section__subtitle">{{ personalizedSubtitle() }}</p>
+          </div>
+          <a routerLink="/products" class="products-section__link">
+            <span>Khám phá thêm</span>
+            <svg width="14" height="14" viewBox="0 0 24 24">
+              <path d="M9 5l7 7-7 7" />
+            </svg>
+          </a>
+        </div>
+        <div class="products-section__grid">
+          @for (product of personalized(); track product.product_id) {
+            <app-product-card [product]="product" />
+          }
+        </div>
+      </div>
+    </section>
+  }
+
+
+
   <!-- Velura Style Quiz & Welcome Intro Popup (Premium Mockup) -->
   <div class="quiz-popup" [class.is-visible]="quizPopupOpen()">
     <div class="quiz-popup__overlay" (click)="closeQuizPopup()"></div>

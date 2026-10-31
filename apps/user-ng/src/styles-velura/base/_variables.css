@@ -4,34 +4,151 @@
    ============================================================ */
 
 :root {
-  --cream: #E8F4FF;
-  --ink: #2A2522;
-  --muted: #6B635D;
-  --soft: #8C857E;
-  --terracotta: #C97B63;
-  --terracotta-h: #b36a53;
-  --brown: #7D562D;
-  --brown-light: #D4A3A3;
-  --tab-bg: #F4E4DC;
-  --field-bg: #F3F3F5;
-  --line: #E8DFD6;
+  --cream: #FAF0F3;
+  --ink: #2A1A1D;
+  --muted: #7A5A62;
+  --soft: #9C858C;
+  --terracotta: #7A283C;
+  --terracotta-h: #631F30;
+  --brown: #7A283C;
+  --brown-light: #E6AEBB;
+  --tab-bg: #FDF2F4;
+  --field-bg: #FFF9FA;
+  --line: #F0C6D2;
   --facebook: #8AACF5;
   --facebook-h: #7296e0;
-  --checkout-bg: #FDFAF8;
+  --checkout-bg: #FFF8FA;
   --chatbot-history-bot-bg: #FAF3EC;
-  --chatbot-history-user-bg: #E8B9AC;
-  --card-border: rgba(130, 116, 115, 0.2);
-  --text-secondary: #827473;
-  --text-dark: #1A1A1A;
-  --text-body: #504444;
-  --success-bg: #F7F3F2;
+  --chatbot-history-user-bg: #F2C2CF;
+  --card-border: rgba(122, 40, 60, 0.14);
+  --text-secondary: #7A5A62;
+  --text-dark: #2A1A1D;
+  --text-body: #351D25;
+  --dark: #2A1A1D;
+  --success-bg: #F1F5E8;
+  --success: #42624D;
+  --warning: #9A612B;
+  --danger: #B4233E;
+  --info: #6F4A62;
   --error: #D4183D;
-  --max-w: 1488px;
+  --max-w: 1320px;
   --header-h: auto;
-  --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 16px;
-  --shadow-card: 0 4px 6px -4px rgba(0, 0, 0, 0.1), 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --shadow-card: 0 8px 25px rgba(122, 40, 60, 0.10);
   --stage-w: 1172px;
   --stage-h: 715px;
+
+  /* Velura blush and maroon concept tokens, shared by every customer route. */
+  --velura-maroon: #7A283C;
+  --velura-maroon-deep: #631F30;
+  --velura-rose: #C94F70;
+  --velura-rose-fill: #7A283C;
+  --velura-blush: #FDF2F4;
+  --velura-header: #FFF6F8;
+  --velura-canvas: #FAF0F3;
+  --velura-footer: #5D423C;
+  --velura-border: #F2C2CF;
+  --velura-sage: #E6ECD5;
+  --velura-font-display: "Cormorant Garamond", Georgia, serif;
+  --velura-font-cursive: "Great Vibes", cursive;
+  --velura-font-ui: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  /* ============================================================
+     Velura Ambient Chromatic System: Sage Green & Petal Pink
+     Hệ hòa sắc nhị sắc tương bổ: Xanh lá dịu mát & Hồng phấn nịnh mắt
+     Sự chuyển điệu vi tế có logic giữa các trang (UX Chromatic Journey)
+     ============================================================ */
+  --aura-sage-dew: rgba(214, 233, 212, 0.44);
+  --aura-sage-matcha: rgba(224, 237, 221, 0.50);
+  --aura-celadon-light: rgba(208, 230, 209, 0.46);
+  --aura-pink-petal: rgba(252, 222, 231, 0.48);
+  --aura-pink-blush: rgba(248, 214, 225, 0.44);
+  --aura-rose-soft: rgba(254, 230, 237, 0.52);
+
+  /* 1. Home: Dawn Garden Balance (50% Xanh Sage / 50% Hồng Phấn) */
+  --bg-aura-home:
+    radial-gradient(ellipse 65% 50% at 85% 10%, rgba(216, 235, 214, 0.48) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 45% at 10% 45%, rgba(252, 220, 231, 0.50) 0%, transparent 58%),
+    radial-gradient(ellipse 70% 55% at 82% 88%, rgba(220, 238, 218, 0.38) 0%, transparent 65%),
+    linear-gradient(135deg, #FCF5F7 0%, #FAF1F4 46%, #F4F8F3 100%);
+
+  /* 2. Catalog & Collections: Crisp Celadon Air (65% Xanh mát / 35% Hồng dịu) */
+  --bg-aura-catalog:
+    radial-gradient(ellipse 75% 55% at 12% 14%, rgba(210, 233, 210, 0.52) 0%, transparent 65%),
+    radial-gradient(ellipse 60% 45% at 88% 52%, rgba(252, 226, 234, 0.38) 0%, transparent 60%),
+    radial-gradient(ellipse 70% 50% at 22% 90%, rgba(216, 236, 216, 0.40) 0%, transparent 60%),
+    linear-gradient(140deg, #F3F8F2 0%, #FAF4F6 52%, #F2F7F2 100%);
+
+  /* 3. Product Detail: Intimate Petal Glow (65% Hồng ấm nịnh mắt / 35% Xanh sương) */
+  --bg-aura-detail:
+    radial-gradient(ellipse 70% 50% at 82% 16%, rgba(252, 218, 228, 0.52) 0%, transparent 62%),
+    radial-gradient(ellipse 60% 45% at 14% 42%, rgba(220, 236, 218, 0.38) 0%, transparent 58%),
+    radial-gradient(ellipse 65% 50% at 76% 85%, rgba(250, 226, 234, 0.44) 0%, transparent 60%),
+    linear-gradient(130deg, #FDF4F7 0%, #FAF0F4 50%, #F5F8F4 100%);
+
+  /* 4. AI & Style Quiz & Chatbot: Chroma Prism Fusion (Phá cách & Thông minh đối xứng) */
+  --bg-aura-ai:
+    radial-gradient(ellipse 65% 55% at 8% 10%, rgba(214, 236, 213, 0.55) 0%, transparent 60%),
+    radial-gradient(ellipse 65% 50% at 92% 22%, rgba(252, 216, 228, 0.52) 0%, transparent 62%),
+    radial-gradient(ellipse 60% 50% at 18% 85%, rgba(248, 224, 232, 0.46) 0%, transparent 60%),
+    radial-gradient(ellipse 70% 55% at 88% 90%, rgba(220, 238, 219, 0.42) 0%, transparent 65%),
+    linear-gradient(125deg, #F4F9F3 0%, #FDF4F6 50%, #F2F8F3 100%);
+
+  /* 5. Cart & Checkout: Serene Sage Linen (60% Xanh an tâm / 40% Kem lụa hồng) */
+  --bg-aura-checkout:
+    radial-gradient(ellipse 70% 50% at 18% 14%, rgba(216, 234, 215, 0.48) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 45% at 85% 46%, rgba(250, 228, 235, 0.36) 0%, transparent 58%),
+    radial-gradient(ellipse 65% 55% at 28% 90%, rgba(220, 236, 219, 0.35) 0%, transparent 62%),
+    linear-gradient(135deg, #F4F8F4 0%, #FAF5F6 50%, #F2F7F2 100%);
+
+  /* 6. Account, Vouchers & Wishlist: Private Rose Garden (55% Hồng ấm / 45% Xanh sương) */
+  --bg-aura-account:
+    radial-gradient(ellipse 65% 48% at 85% 14%, rgba(252, 220, 231, 0.50) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 45% at 14% 45%, rgba(218, 235, 217, 0.42) 0%, transparent 58%),
+    radial-gradient(ellipse 70% 55% at 76% 88%, rgba(246, 224, 233, 0.45) 0%, transparent 65%),
+    linear-gradient(135deg, #FDF4F6 0%, #FAF0F4 45%, #F4F8F4 100%);
+
+  /* 7. Editorial, About, Blog & Policies: Botanical Linen Paper (Hòa sắc thảo mộc trang nhã) */
+  --bg-aura-editorial:
+    radial-gradient(ellipse 70% 50% at 14% 16%, rgba(220, 236, 218, 0.44) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 45% at 86% 48%, rgba(250, 226, 233, 0.40) 0%, transparent 58%),
+    radial-gradient(ellipse 65% 52% at 24% 86%, rgba(224, 238, 222, 0.36) 0%, transparent 62%),
+    linear-gradient(135deg, #F6F9F5 0%, #FCF5F7 50%, #F4F7F3 100%);
+
+  /* Z-index Tokens (Mục 14 Design Intelligence) */
+  --z-base: 1;
+  --z-raised: 2;
+  --z-runway-back: 4;
+  --z-runway-mid: 7;
+  --z-runway-center: 12;
+  --z-dropdown: 20;
+  --z-sticky: 50;
+  --z-overlay: 100;
+  --z-modal: 1000;
+  --z-toast: 2000;
+
+  /* Spacing Scale (Bội số 4px/8px) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --velura-shadow-soft: 0 2px 8px 0 rgba(0, 0, 0, 0.05);
+  --velura-shadow-card: 0 8px 25px rgba(122, 40, 60, 0.10);
+  --velura-shadow-strong: 0 15px 40px rgba(60, 20, 30, 0.18);
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-16: 64px;
 }

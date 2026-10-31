@@ -7,7 +7,7 @@ import { PersonalColorModel, type PersonalColorProfile } from './personal-color.
 
 const confirmed: PersonalColorProfile = { version: 2, personal_color: { status: 'CONFIRMED', season: 'Spring', subtype: 'Spring', palette: ['warm'], avoided: ['cool'], confidence: 0.9, policy_version: 'approved-policy', analysis_id: 'old', confirmed_at: '2026-10-01T00:00:00Z' } };
 describe('PersonalColorComponent', () => {
-  const model = { capabilities: vi.fn(), profile: vi.fn(), analyze: vi.fn(), analysis: vi.fn(), cancel: vi.fn(), confirm: vi.fn(), confirmManual: vi.fn() };
+  const model = { capabilities: vi.fn(), profile: vi.fn(), upload: vi.fn(), analyze: vi.fn(), analysis: vi.fn(), cancel: vi.fn(), confirm: vi.fn(), confirmManual: vi.fn() };
   beforeEach(() => {
     model.capabilities.mockReturnValue(of({ enabled: true, policy_version: 'approved-policy', max_upload_bytes: 100, retention_seconds: 30 }));
     model.profile.mockReturnValue(of(confirmed));

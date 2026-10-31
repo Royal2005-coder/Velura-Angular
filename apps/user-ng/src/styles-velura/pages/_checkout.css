@@ -25,7 +25,7 @@
 .guest-order-confirm-modal__card h2 {
   margin: 0 0 20px;
   color: var(--dark);
-  font-family: "Playfair Display", serif;
+  font-family: "Cormorant Garamond", serif;
   font-size: 1.65rem;
 }
 
@@ -104,7 +104,7 @@
 
 .checkout-item--warning {
   background: rgba(201, 123, 99, 0.06);
-  border: 1px dashed var(--terracotta, #c97b63);
+  border: 1px dashed var(--terracotta, #844A5A);
   border-radius: 8px;
   padding: 12px;
   margin-bottom: 8px;
@@ -142,7 +142,7 @@
 }
 
 .checkout-item__name {
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.875rem;
   font-weight: 600;
   color: var(--dark, #2b2623);
@@ -176,7 +176,7 @@
 .checkout-item__stock-alert {
   font-size: 0.75rem;
   font-weight: 500;
-  color: #c97b63;
+  color: #844A5A;
   margin-top: 4px;
   display: flex;
   align-items: center;
@@ -204,14 +204,14 @@
 .checkout-item__tag--switch {
   cursor: pointer;
   background: #fff;
-  border: 1px solid var(--terracotta, #c97b63);
-  color: var(--terracotta, #c97b63);
+  border: 1px solid var(--terracotta, #844A5A);
+  color: var(--terracotta, #844A5A);
   font-weight: 500;
   transition: all 0.2s ease;
 }
 
 .checkout-item__tag--switch:hover {
-  background: var(--terracotta, #c97b63);
+  background: var(--terracotta, #844A5A);
   color: #fff;
 }
 
@@ -259,13 +259,13 @@
 }
 
 .checkout-item__variant-btn:hover {
-  border-color: var(--terracotta, #c97b63);
-  color: var(--terracotta, #c97b63);
+  border-color: var(--terracotta, #844A5A);
+  color: var(--terracotta, #844A5A);
 }
 
 .checkout-item__variant-btn.is-active {
-  background: var(--terracotta, #c97b63);
-  border-color: var(--terracotta, #c97b63);
+  background: var(--terracotta, #844A5A);
+  border-color: var(--terracotta, #844A5A);
   color: #fff;
 }
 
@@ -698,7 +698,7 @@
 }
 
 .qr-modal__val-amount {
-  color: var(--terracotta, #c97b63);
+  color: var(--terracotta, #844A5A);
   font-size: 0.9375rem;
   font-weight: 700;
 }
@@ -758,8 +758,8 @@
    ============================================================ */
 .coolmate-address-book-btn {
   background: #fffaf7;
-  border: 1px solid var(--terracotta, #c97b63);
-  color: var(--terracotta, #c97b63);
+  border: 1px solid var(--terracotta, #844A5A);
+  color: var(--terracotta, #844A5A);
   padding: 6px 12px;
   border-radius: 6px;
   font-size: 0.8125rem;
@@ -769,7 +769,7 @@
 }
 
 .coolmate-address-book-btn:hover {
-  background: var(--terracotta, #c97b63);
+  background: var(--terracotta, #844A5A);
   color: #fff;
 }
 
@@ -783,7 +783,7 @@
 }
 
 .coolmate-toggle-box:focus-within {
-  border-color: var(--terracotta, #c97b63);
+  border-color: var(--terracotta, #844A5A);
 }
 
 .coolmate-checkbox-label {
@@ -798,7 +798,7 @@
   width: 18px;
   height: 18px;
   cursor: pointer;
-  accent-color: var(--terracotta, #c97b63);
+  accent-color: var(--terracotta, #844A5A);
 }
 
 .coolmate-checkbox-title {
@@ -835,13 +835,13 @@
 }
 
 .coolmate-gender-pill:hover {
-  border-color: var(--terracotta, #c97b63);
+  border-color: var(--terracotta, #844A5A);
 }
 
 .coolmate-gender-pill.is-active {
-  background: var(--terracotta, #c97b63);
+  background: var(--terracotta, #844A5A);
   color: #fff;
-  border-color: var(--terracotta, #c97b63);
+  border-color: var(--terracotta, #844A5A);
   font-weight: 600;
 }
 
@@ -863,13 +863,13 @@
 
 .coolmate-delivery-notice__content svg {
   flex-shrink: 0;
-  color: var(--terracotta, #c97b63);
+  color: var(--terracotta, #844A5A);
 }
 
 .coolmate-link-btn {
   background: none;
   border: none;
-  color: var(--terracotta, #c97b63);
+  color: var(--terracotta, #844A5A);
   font-size: 0.8125rem;
   font-weight: 600;
   cursor: pointer;
@@ -957,12 +957,12 @@
 }
 
 .address-book-card:hover {
-  border-color: var(--terracotta, #c97b63);
+  border-color: var(--terracotta, #844A5A);
   background: #fffaf7;
 }
 
 .address-book-card.is-default {
-  border-color: var(--terracotta, #c97b63);
+  border-color: var(--terracotta, #844A5A);
   background: #fdfaf8;
 }
 
@@ -996,7 +996,7 @@
   font-size: 0.6875rem;
   padding: 2px 6px;
   background: #f0e4de;
-  color: var(--terracotta, #c97b63);
+  color: var(--terracotta, #844A5A);
   border-radius: 4px;
   font-weight: 600;
 }
@@ -1015,6 +1015,116 @@
   justify-content: flex-end;
   background: #faf7f5;
 }
+
+/* Customer checkout confirmations and OTP retain their existing verification flow. */
+main.checkout-page {
+  color: var(--ink);
+  background:
+    radial-gradient(ellipse at 8% 10%, rgba(248,211,222,.24), transparent 30rem),
+    transparent;
+}
+main.checkout-page .details-grid,
+main.checkout-page .order-summary,
+main.checkout-page .product-item {
+  border-color: rgba(242,194,207,.68);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 25px rgba(122,40,60,.07);
+}
+main.checkout-page .details-grid__value { color: var(--ink); }
+main.checkout-page .details-grid__value--accent { color: var(--velura-maroon); }
+main.checkout-page .checkout-step__num--active { background: var(--velura-maroon); border-color: var(--velura-maroon); }
+main.checkout-page .checkout-step__label--active { color: var(--velura-maroon); }
+main.checkout-page .btn--brown-outline { border-color: var(--velura-border); color: var(--velura-maroon); border-radius: 999px; }
+main.checkout-page .btn--brown-outline:hover { color: #fff; border-color: var(--velura-maroon); background: var(--velura-maroon); }
+/* Main checkout form, isolated from the shared guest order and return forms. */
+.flow--checkout {
+  color: var(--ink);
+  font-family: var(--velura-font-ui);
+}
+.flow--checkout h1,
+.flow--checkout h2,
+.flow--checkout h3 { color: var(--velura-maroon); }
+.flow--checkout .checkout-nav { border-color: rgba(242,194,207,.7); }
+.flow--checkout .checkout-nav .brand { color: var(--velura-maroon); font-family: var(--velura-font-display); }
+.flow--checkout .checkout-nav > span,
+.flow--checkout .checkout-nav small { color: var(--text-secondary); }
+.flow--checkout .panel {
+  border-color: rgba(242,194,207,.68);
+  border-radius: var(--radius-lg);
+  background: rgba(255,255,255,.94);
+  box-shadow: 0 8px 25px rgba(122,40,60,.06);
+}
+.flow--checkout .form-section { border-color: rgba(242,194,207,.56); border-radius: 18px; background: #fff9fa; }
+.flow--checkout .section-heading .number { color: #fff; background: var(--velura-maroon); }
+.flow--checkout .section-heading .badge { color: var(--velura-maroon); background: var(--velura-blush); }
+.flow--checkout .muted { color: var(--text-secondary); }
+.flow--checkout .field input,
+.flow--checkout .field select,
+.flow--checkout .field textarea,
+.flow--checkout select { border-color: rgba(122,40,60,.2); border-radius: 12px; background: #fff; }
+.flow--checkout .field :is(input, select, textarea):focus,
+.flow--checkout select:focus { border-color: var(--velura-rose); box-shadow: 0 0 0 3px rgba(201,79,112,.14); }
+.flow--checkout .choice,
+.flow--checkout .address-card { border-color: rgba(122,40,60,.18); border-radius: 14px; }
+.flow--checkout .choice.selected,
+.flow--checkout .address-card.selected { border-color: var(--velura-maroon); background: var(--velura-blush); }
+.flow--checkout .choice input,
+.flow--checkout .check input { accent-color: var(--velura-maroon); }
+.flow--checkout button:not(.text-button):not(app-voucher-wallet *):not(.voucher-wallet *):not(.voucher-modal *),
+.flow--checkout .action { border: 1px solid var(--velura-rose-fill); border-radius: 999px; background: var(--velura-rose-fill); color: #fff; }
+.flow--checkout button:not(.text-button):not(app-voucher-wallet *):not(.voucher-wallet *):not(.voucher-modal *):hover,
+.flow--checkout .action:hover { border-color: var(--velura-maroon-deep); background: var(--velura-maroon-deep); }
+.flow--checkout button.secondary:not(app-voucher-wallet *):not(.voucher-wallet *):not(.voucher-modal *),
+.flow--checkout .action.secondary { border: 1px solid var(--velura-border); background: #fff; color: var(--velura-maroon); }
+.flow--checkout .text-button,
+.flow--checkout .edit-cart { color: var(--velura-maroon); }
+.flow--checkout .selected-address { border-color: var(--velura-border); border-left-color: var(--velura-maroon); border-radius: 14px; background: #fff9fa; }
+.flow--checkout .error { border-left-color: var(--danger); border-radius: 12px; }
+.flow--checkout :is(button, a, input, select, textarea):focus-visible { outline-color: var(--velura-rose); }
+body.page-checkout .otp-overlay { background: rgba(53,29,37,.56); backdrop-filter: blur(5px); }
+body.page-checkout .otp-modal { border-color: var(--velura-border); border-radius: var(--radius-lg); }
+body.page-checkout .otp-modal__bg { background: linear-gradient(135deg, rgba(255,246,248,.92), rgba(248,232,237,.88)); }
+body.page-checkout .otp-modal__title { color: var(--velura-maroon); font-family: var(--velura-font-display); font-size: 1.5rem; text-transform: none; }
+body.page-checkout .otp-input { border: 1px solid rgba(122,40,60,.18); border-radius: 12px; background: #fff9fa; box-shadow: none; }
+body.page-checkout .otp-input:focus { outline-color: var(--velura-rose); }
+body.page-checkout .otp-timer { color: var(--velura-maroon); }
+body.page-checkout .otp-resend .btn--text { color: var(--velura-maroon); }
+
+@media (max-width: 640px) {
+  main.checkout-page .details-grid { padding: 24px 20px; }
+  body.page-checkout .otp-overlay { padding: 16px; }
+  body.page-checkout .otp-inputs { gap: 8px; }
+  body.page-checkout .otp-input { width: min(14vw, 52px); height: min(14vw, 52px); }
+}
+
+/* Claim-account screen is rendered by the real order-flow and keeps its API contract. */
+app-claim-account-page .claim-account__container { width: min(100% - 32px, 480px); padding: 48px 16px; }
+app-claim-account-page .claim-account__container > h1 { color: var(--velura-maroon, #7A283C); }
+app-claim-account-page .claim-account__container > form {
+  display: grid; gap: 16px; margin-top: 24px; padding: clamp(20px, 4vw, 32px);
+  border: 1px solid var(--velura-border, #F2C2CF); border-radius: 22px; background: #fff;
+  box-shadow: 0 12px 32px rgba(122, 40, 60, .07);
+}
+app-claim-account-page .claim-account__container label { display: grid; gap: 8px; color: var(--ink, #30252A); font-weight: 600; }
+app-claim-account-page .claim-account__container input { width: 100%; min-height: 48px; border: 1px solid var(--velura-border, #F2C2CF); border-radius: 12px; padding: 10px 14px; }
+
+/* Guest and member order lookup, OTP, tracking, and returns share the concept. */
+.flow--orders { color: var(--ink, #30252A); }
+.flow--orders .flow-heading h1 { color: var(--velura-maroon, #7A283C); font-family: var(--velura-font-display, "Cormorant Garamond", Georgia, serif); }
+.flow--orders .eyebrow { color: var(--velura-rose, #C94F70); }
+.flow--orders .panel,
+.flow--orders .return-request-card,
+.flow--orders .empty { border-color: var(--velura-border, #F2C2CF); border-radius: var(--radius-lg, 20px); box-shadow: 0 10px 28px rgba(122, 40, 60, .06); }
+.flow--orders .action,
+.flow--orders button[type="submit"],
+.flow--orders .return-track-btn { border-radius: 999px; }
+.flow--orders button[type="submit"] { color: #fff; background: var(--velura-maroon, #7A283C); border-color: var(--velura-maroon, #7A283C); }
+.flow--orders button[type="submit"]:hover:not(:disabled) { background: var(--velura-maroon-deep, #631F30); }
+.flow--orders .field input,
+.flow--orders .field select,
+.flow--orders .field textarea { border-color: var(--velura-border, #F2C2CF); border-radius: 12px; }
+.flow--orders :is(button, a, input, select, textarea):focus-visible { outline: 3px solid var(--velura-rose, #C94F70); outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) { .flow--orders *, .flow--orders *::before, .flow--orders *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
 
 
 

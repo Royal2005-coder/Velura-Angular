@@ -5,6 +5,9 @@ import { styleQuizExitGuard } from './core/guards/style-quiz-exit.guard';
 import { SiteShell } from './layout/site-shell/site-shell';
 
 export const routes: Routes = [
+  { path: 'login', redirectTo: 'auth/signin', pathMatch: 'full' },
+  { path: 'signin', redirectTo: 'auth/signin', pathMatch: 'full' },
+  { path: 'signup', redirectTo: 'auth/signup', pathMatch: 'full' },
   {
     path: 'auth/signin',
     loadComponent: () => import('./features/auth/sign-in.page').then((m) => m.SignInPage),

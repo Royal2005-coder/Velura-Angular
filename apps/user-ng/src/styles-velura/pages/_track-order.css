@@ -18,7 +18,7 @@
 }
 
 .track-order-title {
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: "Cormorant Garamond", Georgia, serif;
   font-size: 3rem;
   font-weight: 500;
   color: #2a2522;
@@ -64,7 +64,7 @@
   width: 100%;
   font-size: 1.125rem;
   color: #2a2522;
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   outline: none;
 }
 /* Main Grid Layout */
@@ -89,7 +89,7 @@
 }
 
 .track-section-title {
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: "Cormorant Garamond", Georgia, serif;
   font-size: 1.75rem;
   color: #2a2522;
   margin: 0 0 28px 0;
@@ -116,13 +116,13 @@
 .track-code-value {
   font-size: 1.625rem;
   font-weight: 700;
-  color: #c97b63;
+  color: #844A5A;
   margin-top: 4px;
 }
 
 .track-status-badge {
   background-color: #e8c9be;
-  color: #c97b63;
+  color: #844A5A;
   font-weight: 600;
   padding: 8px 20px;
   border-radius: 20px;
@@ -183,7 +183,7 @@
 .track-step__time {
   font-size: 1.0625rem;
   font-weight: 600;
-  color: #c97b63;
+  color: #844A5A;
   display: block;
   margin-bottom: 6px;
 }
@@ -196,12 +196,12 @@
 
 /* Timeline State Modifiers */
 .track-step--completed .track-step__dot {
-  background-color: #c97b63;
+  background-color: #844A5A;
   color: #ffffff;
 }
 
 .track-step--completed .track-step__line {
-  background-color: #c97b63;
+  background-color: #844A5A;
 }
 
 .track-step--completed .track-step__title {
@@ -209,7 +209,7 @@
 }
 
 .track-step--active .track-step__dot {
-  background-color: #c97b63;
+  background-color: #844A5A;
   color: #ffffff;
   box-shadow: 0 0 0 6px rgba(201, 123, 99, 0.15);
 }
@@ -279,7 +279,7 @@
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background-color: #c97b63;
+  background-color: #844A5A;
   border: 3px solid #ffffff;
   box-shadow: 0 2px 8px rgba(201, 123, 99, 0.3);
 }
@@ -309,7 +309,7 @@
   top: 0;
   height: 100%;
   width: 70%;
-  background-color: #c97b63;
+  background-color: #844A5A;
 }
 
 .track-map-truck-icon {
@@ -321,11 +321,11 @@
   height: 40px;
   border-radius: 50%;
   background-color: #ffffff;
-  border: 2px solid #c97b63;
+  border: 2px solid #844A5A;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #c97b63;
+  color: #844A5A;
   box-shadow: 0 4px 10px rgba(201, 123, 99, 0.2);
 }
 
@@ -340,12 +340,12 @@
 }
 
 .track-map-details svg {
-  color: #c97b63;
+  color: #844A5A;
 }
 
 /* Right Side Column */
 .track-side-title {
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: "Cormorant Garamond", Georgia, serif;
   font-size: 1.5rem;
   color: #2a2522;
   margin: 0 0 24px 0;
@@ -366,11 +366,11 @@
 .track-eta-icon {
   margin-bottom: 16px;
   background-color: transparent;
-  color: #c97b63;
+  color: #844A5A;
   width: 44px;
   height: 44px;
   border-radius: 50%;
-  border: 2px solid #c97b63;
+  border: 2px solid #844A5A;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -384,7 +384,7 @@
 }
 
 .track-eta-date {
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: "Cormorant Garamond", Georgia, serif;
   font-size: 2.5rem;
   font-weight: 500;
   color: #2a2522;
@@ -394,7 +394,7 @@
 .track-eta-time {
   font-size: 1.1875rem;
   font-weight: 500;
-  color: #c97b63;
+  color: #844A5A;
   background-color: transparent;
   padding: 0;
   border-radius: 0;
@@ -413,7 +413,7 @@
   height: 56px;
   border-radius: 50%;
   background-color: #f4e4dc;
-  color: #c97b63;
+  color: #844A5A;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -476,7 +476,7 @@
 }
 
 .track-address-header svg {
-  color: #c97b63;
+  color: #844A5A;
   flex-shrink: 0;
 }
 
@@ -612,12 +612,12 @@
 
 .track-empty-icon-wrapper {
   margin-bottom: 24px;
-  color: #c97b63;
+  color: #844A5A;
   opacity: 0.85;
 }
 
 .track-empty-title {
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: "Cormorant Garamond", Georgia, serif;
   font-size: 2rem;
   color: #2a2522;
   margin: 0 0 12px 0;
@@ -625,11 +625,21 @@
 }
 
 .track-empty-text {
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 1.125rem;
   color: #8c857e;
   max-width: 520px;
   line-height: 1.6;
   margin: 0;
 }
+
+body.page-track-order { background: var(--velura-canvas, #FAF0F3); }
+body.page-track-order :is(.track-empty-state, .track-card, .track-map-route) {
+  border-color: var(--velura-border, #F2C2CF);
+  border-radius: var(--radius-lg, 20px);
+  box-shadow: 0 10px 30px rgba(83, 32, 47, .07);
+}
+body.page-track-order :is(.track-empty-icon-wrapper, .track-step__title, .track-eta-date) { color: var(--velura-maroon, #7A283C); }
+body.page-track-order :is(.track-empty-title, .track-step__title) { font-family: var(--font-display, "Cormorant Garamond", Georgia, serif); }
+body.page-track-order :is(button, a, input):focus-visible { outline: 3px solid var(--velura-rose, #C94F70); outline-offset: 3px; }
 

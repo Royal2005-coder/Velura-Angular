@@ -15,6 +15,7 @@ import { AddressSelector } from '../../shared/address-selector/address-selector'
 import type { AddressGeographySelection } from '../../core/models/address-geography';
 import { PersonalColorComponent } from '../ai/personal-color.component';
 import { LoyaltyWalletComponent } from './loyalty-wallet.component';
+import { StyleProfileService } from '../../core/services/style-profile.service';
 interface MemberProfile {
   full_name?: string;
   email?: string;
@@ -78,7 +79,7 @@ interface MemberOrder {
 @Component({
   selector: 'app-account-profile-page',
   imports: [RouterLink, DecimalPipe, AddressSelector, PersonalColorComponent, LoyaltyWalletComponent],
-  host: { class: 'page-profile', style: 'display:block' },
+  host: { class: 'page-profile' },
   templateUrl: './profile.page.html',
 })
 export class AccountProfilePage {
@@ -89,6 +90,7 @@ export class AccountProfilePage {
   private readonly cart = inject(CartStore);
   private readonly catalog = inject(CatalogService);
   private readonly offers = inject(OffersService);
+  private readonly styleProfile = inject(StyleProfileService);
   readonly tab = signal('profile');
   readonly displayName = signal(this.auth.session()?.fullName || 'Tên khách hàng');
   readonly memberMeta = signal(this.auth.session()?.email || this.auth.session()?.phone || 'Thành viên Velura');
@@ -131,7 +133,20 @@ export class AccountProfilePage {
     this.api
       .get<{ success?: boolean; quiz?: StyleQuiz }>('/api/user/style-quiz')
       .pipe(catchError(() => of({ quiz: undefined })))
-      .subscribe((res) => this.bindStyleProfile(res.quiz));
+      .subscribe((res) => {
+        let quiz = res?.quiz;
+        if (!quiz) {
+          try {
+            const guest = this.styleProfile.guestAnswers();
+            if (guest && (guest.body_shape || guest.style_tags)) {
+              quiz = guest as unknown as StyleQuiz;
+            }
+          } catch {
+            // ignore
+          }
+        }
+        this.bindStyleProfile(quiz);
+      });
     this.api
       .get<{ orders?: MemberOrder[] }>('/api/user/orders')
       .pipe(catchError(() => of({ orders: [] as MemberOrder[] })))
@@ -373,6 +388,9 @@ export class AccountProfilePage {
     document.querySelectorAll('.account-sidebar__name, .profile-avatar-name').forEach((node) => {
       node.textContent = this.displayName();
     });
+    if (current === 'style-profile') {
+      setTimeout(() => this.bindStyleProfile(this.cachedQuiz), 0);
+    }
   }
 
   private bindProfile(profile: MemberProfile | null): void {
@@ -493,15 +511,20 @@ export class AccountProfilePage {
     });
   }
 
+  private cachedQuiz?: StyleQuiz;
+
   private bindStyleProfile(quiz: StyleQuiz | undefined): void {
+    this.cachedQuiz = quiz;
     const empty = document.getElementById('js-style-profile-empty');
     const filled = document.getElementById('js-style-profile-filled');
     if (!empty || !filled) {
       return;
     }
-    const hasQuiz = Boolean(quiz && (quiz.body_shape || quiz.style_tags));
-    empty.style.display = hasQuiz ? 'none' : '';
-    filled.style.display = hasQuiz ? '' : 'none';
+    const hasQuiz = Boolean(
+      quiz && (quiz.body_shape || (Array.isArray(quiz.style_tags) ? quiz.style_tags.length > 0 : Boolean(quiz.style_tags))),
+    );
+    empty.style.setProperty('display', hasQuiz ? 'none' : 'block');
+    filled.style.setProperty('display', hasQuiz ? 'flex' : 'none');
     if (!hasQuiz || !quiz) {
       return;
     }

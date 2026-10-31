@@ -1,19 +1,21 @@
-<section class="pc-container" aria-labelledby="personal-color-title">
-  <div class="pc-header">
-    <div class="pc-badge">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="10" />
-        <path d="M12 2a7 7 0 0 0-7 7c0 3.86 3.14 7 7 7s7-3.14 7-7a7 7 0 0 0-7-7z" />
-      </svg>
-      <span>AI PERSONAL COLOR ANALYSIS</span>
+<section class="pc-container" [class.pc-container--embedded]="hideHeader()" aria-labelledby="personal-color-title">
+  @if (!hideHeader()) {
+    <div class="pc-header">
+      <div class="pc-badge">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10" />
+          <path d="M12 2a7 7 0 0 0-7 7c0 3.86 3.14 7 7 7s7-3.14 7-7a7 7 0 0 0-7-7z" />
+        </svg>
+        <span>AI PERSONAL COLOR ANALYSIS</span>
+      </div>
+      <h2 id="personal-color-title" class="pc-title">Phân tích sắc tố da & Bảng màu 4 mùa</h2>
+      <p class="pc-subtitle">
+        AI nhận diện tone da (warm/cool), độ tương phản và phân loại theo hệ 4 mùa:
+        <strong>Spring (Xuân) · Summer (Hè) · Autumn (Thu) · Winter (Đông)</strong>
+        để gợi ý trang phục tôn vinh làn da của bạn.
+      </p>
     </div>
-    <h2 id="personal-color-title" class="pc-title">Phân tích sắc tố da & Bảng màu 4 mùa</h2>
-    <p class="pc-subtitle">
-      AI nhận diện tone da (warm/cool), độ tương phản và phân loại theo hệ 4 mùa:
-      <strong>Spring (Xuân) · Summer (Hè) · Autumn (Thu) · Winter (Đông)</strong>
-      để gợi ý trang phục tôn vinh làn da của bạn.
-    </p>
-  </div>
+  }
 
   @if (profile()?.personal_color?.status === 'CONFIRMED') {
     @let confirmed = profile()!.personal_color!;
@@ -55,7 +57,7 @@
           </div>
         </div>
       }
-      <div class="pc-confirmed-actions" style="margin-top: 18px; display: flex; gap: 10px; flex-wrap: wrap;">
+      <div class="pc-confirmed-actions u-inline-256f081e5d">
         <button type="button" class="btn btn--outline btn--sm" (click)="editManually(confirmed.season)">
           🎨 Đổi mùa sắc tố khác (Thủ công)
         </button>
@@ -66,37 +68,39 @@
     </div>
   }
 
-  <!-- Mode Switcher Tabs -->
-  <div class="pc-tabs" role="tablist" aria-label="Phương thức xác định màu sắc cá nhân">
-    <button
-      type="button"
-      class="pc-tab-btn"
-      role="tab"
-      [attr.aria-selected]="activeTab() === 'ai'"
-      [class.is-active]="activeTab() === 'ai'"
-      (click)="activeTab.set('ai')"
-    >
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-        <circle cx="12" cy="13" r="4"/>
-      </svg>
-      <span>AI Phân tích qua ảnh chân dung</span>
-    </button>
-    <button
-      type="button"
-      class="pc-tab-btn"
-      role="tab"
-      [attr.aria-selected]="activeTab() === 'manual'"
-      [class.is-active]="activeTab() === 'manual'"
-      (click)="activeTab.set('manual')"
-    >
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="10"/>
-        <path d="M12 2a7 7 0 0 0-7 7c0 3.86 3.14 7 7 7s7-3.14 7-7a7 7 0 0 0-7-7z"/>
-      </svg>
-      <span>Chọn thủ công chuẩn 4 mùa (Manual)</span>
-    </button>
-  </div>
+  @if (!hideTabs()) {
+    <!-- Mode Switcher Tabs -->
+    <div class="pc-tabs" role="tablist" aria-label="Phương thức xác định màu sắc cá nhân">
+      <button
+        type="button"
+        class="pc-tab-btn"
+        role="tab"
+        [attr.aria-selected]="activeTab() === 'ai'"
+        [class.is-active]="activeTab() === 'ai'"
+        (click)="switchTab('ai')"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+          <circle cx="12" cy="13" r="4"/>
+        </svg>
+        <span>AI Phân tích qua ảnh chân dung</span>
+      </button>
+      <button
+        type="button"
+        class="pc-tab-btn"
+        role="tab"
+        [attr.aria-selected]="activeTab() === 'manual'"
+        [class.is-active]="activeTab() === 'manual'"
+        (click)="switchTab('manual')"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M12 2a7 7 0 0 0-7 7c0 3.86 3.14 7 7 7s7-3.14 7-7a7 7 0 0 0-7-7z"/>
+        </svg>
+        <span>Chọn thủ công chuẩn 4 mùa (Manual)</span>
+      </button>
+    </div>
+  }
 
   @if (activeTab() === 'manual') {
     <div class="pc-manual-section">
@@ -197,7 +201,7 @@
 
     <!-- Upload and Preview Zone -->
     <div class="pc-upload-section">
-      <input #photoInput type="file" accept="image/jpeg,image/png" [disabled]="busy()" (change)="selectFile($event)" style="display: none;" />
+      <input #photoInput type="file" accept="image/jpeg,image/png" [disabled]="busy()" (change)="selectFile($event)" class="u-inline-f2892a2e8a" />
 
       @if (!previewUrl()) {
         <button type="button" class="btn btn--outline pc-upload-btn" [disabled]="busy()" (click)="photoInput.click()">

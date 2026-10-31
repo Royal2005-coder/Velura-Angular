@@ -210,8 +210,9 @@ app-site-shell:has(.chatbot-widget--open) .hot-offer-widget { visibility: hidden
 .offers-page .offer-banner-row__index,
 .offers-page .offer-banner-row__condition { color: var(--text-secondary); }
 .offers-page .offer-banner-row__cta {
-  border-color: var(--velura-maroon);
+  border: 1px solid var(--velura-maroon);
   border-radius: 999px;
+  background: #fff;
   color: var(--velura-maroon);
 }
 .offers-page .offer-banner-row__cta:hover { color: #fff; background: var(--velura-maroon); }

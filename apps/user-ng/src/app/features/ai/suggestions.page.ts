@@ -1,7 +1,7 @@
 import { Component, DestroyRef, ElementRef, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
-import type { Subscription } from 'rxjs';
+import { Subscription, throwError, timeout } from 'rxjs';
 import { ProductSummary } from '../../core/models/product.interface';
 import { AuthService } from '../../core/services/auth.service';
 import { StyleProfileService } from '../../core/services/style-profile.service';
@@ -203,7 +203,10 @@ export class AiSuggestionsPage {
     this.combos.set([]);
     this.categories.set([]);
     this.closeCombo();
-    this.request = this.profile.loadRecommendations().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ next: (response) => {
+    this.request = this.profile.loadRecommendations().pipe(
+      timeout({ each: 15000, with: () => throwError(() => new Error('Máy chủ phản hồi chậm. Vui lòng thử lại.')) }),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe({ next: (response) => {
         if (version !== this.requestVersion || session !== this.auth.session()) return;
         const quiz = this.normalizeQuiz(response.quiz);
         const hasQuiz = Boolean(quiz);

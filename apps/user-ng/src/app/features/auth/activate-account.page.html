@@ -11,12 +11,12 @@
         <p>Tự đặt mật khẩu để hoàn tất tạo tài khoản và nhận ưu đãi thành viên mới.</p>
       </header>
 
-      <div class="activation-banner" style="background: linear-gradient(135deg, #fffaf6 0%, #fdf2ea 100%); border: 1px solid #f0ded3; border-radius: 8px; padding: 14px 16px; margin-bottom: 20px;">
-        <div style="display: flex; align-items: center; gap: 8px; font-weight: 600; color: #7c5454; margin-bottom: 4px;">
-          <span style="font-size: 18px;" aria-hidden="true">🎁</span>
+      <div class="activation-banner u-inline-5ce966d3f1">
+        <div class="u-inline-a082d3db65">
+          <span aria-hidden="true" class="u-inline-35868dad24">🎁</span>
           <span>Ưu đãi Thành Viên Mới từ Kho Ưu Đãi</span>
         </div>
-        <p style="margin: 0; font-size: 13px; color: #666; line-height: 1.4;">
+        <p class="u-inline-343ccf9461">
           Số điện thoại của bạn đủ điều kiện nhận gói ưu đãi chào mừng. Hãy đặt mật khẩu để tạo tài khoản và nhận voucher ngay trong Kho Ưu Đãi!
         </p>
       </div>
@@ -24,9 +24,9 @@
       @if (phone()) {
         <div class="form-group">
           <label for="activation-phone">Số điện thoại</label>
-          <div class="input-wrapper" style="position: relative;">
-            <input id="activation-phone" type="text" [value]="phone()" readonly style="background: #f8f8f8; cursor: not-allowed; padding-right: 110px;" />
-            <span style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-size: 12px; color: #2e7d32; font-weight: 500; display: inline-flex; align-items: center; gap: 4px;">
+          <div class="input-wrapper u-inline-50666a574d">
+            <input id="activation-phone" type="text" [value]="phone()" readonly class="u-inline-6f310fb41d" />
+            <span class="u-inline-3a811fd3a8">
               ✓ Đã xác thực
             </span>
           </div>
@@ -36,9 +36,9 @@
       @if (email()) {
         <div class="form-group">
           <label for="activation-email">Email</label>
-          <div class="input-wrapper" style="position: relative;">
-            <input id="activation-email" type="text" [value]="email()" readonly style="background: #f8f8f8; cursor: not-allowed; padding-right: 110px;" />
-            <span style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-size: 12px; color: #2e7d32; font-weight: 500; display: inline-flex; align-items: center; gap: 4px;">
+          <div class="input-wrapper u-inline-50666a574d">
+            <input id="activation-email" type="text" [value]="email()" readonly class="u-inline-6f310fb41d" />
+            <span class="u-inline-3a811fd3a8">
               ✓ Đã xác thực
             </span>
           </div>
@@ -65,7 +65,7 @@
         <div class="field__error" aria-live="polite">{{ errorMessage() }}</div>
       }
       @if (successMessage()) {
-        <p class="input-hint" aria-live="polite" style="color: #2e7d32; font-weight: 500;">{{ successMessage() }}</p>
+        <p class="input-hint u-inline-abad28abfe" aria-live="polite">{{ successMessage() }}</p>
       }
 
       <button type="submit" class="btn-login" [disabled]="submitting()">

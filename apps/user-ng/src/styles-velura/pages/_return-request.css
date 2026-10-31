@@ -44,7 +44,7 @@
 }
 
 .btn-back:hover {
-  color: var(--terracotta, #c97b63);
+  color: var(--terracotta, #844A5A);
 }
 
 /* Page Header */
@@ -54,7 +54,7 @@
 }
 
 .return-header h1 {
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: "Cormorant Garamond", Georgia, serif;
   font-size: 2rem;
   font-weight: 500;
   color: var(--ink, #2a2522);
@@ -85,7 +85,7 @@
 }
 
 .return-section h2 {
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: "Cormorant Garamond", Georgia, serif;
   font-size: 1.125rem;
   font-weight: 500;
   color: var(--ink, #2a2522);
@@ -121,14 +121,14 @@
 }
 
 .selection-card:hover {
-  border-color: var(--terracotta, #c97b63);
+  border-color: var(--terracotta, #844A5A);
   box-shadow: 0 4px 16px rgba(201, 123, 99, 0.08);
   transform: translateY(-1px);
 }
 
 .selection-card.is-selected {
   background: var(--tab-bg, #f4e4dc);
-  border-color: var(--terracotta, #c97b63);
+  border-color: var(--terracotta, #844A5A);
 }
 
 .selection-card__content {
@@ -155,7 +155,7 @@
 .radio-indicator {
   width: 20px;
   height: 20px;
-  border: 2px solid var(--terracotta, #c97b63);
+  border: 2px solid var(--terracotta, #844A5A);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -167,7 +167,7 @@
 }
 
 .selection-card.is-selected .radio-indicator {
-  background: var(--terracotta, #c97b63);
+  background: var(--terracotta, #844A5A);
 }
 
 .radio-indicator__inner {
@@ -202,8 +202,8 @@
 }
 
 .selection-card.is-selected .checkbox-indicator {
-  background: var(--terracotta, #c97b63);
-  border-color: var(--terracotta, #c97b63);
+  background: var(--terracotta, #844A5A);
+  border-color: var(--terracotta, #844A5A);
   color: #ffffff;
 }
 
@@ -252,7 +252,7 @@
 .product-details .product-price {
   font-size: 0.875rem;
   font-weight: 500;
-  color: var(--terracotta, #c97b63);
+  color: var(--terracotta, #844A5A);
   margin-top: 2px;
 }
 
@@ -266,7 +266,7 @@
   justify-content: space-between;
   padding: 16px 20px;
   background: var(--tab-bg, #f4e4dc);
-  border: 1px solid var(--terracotta, #c97b63);
+  border: 1px solid var(--terracotta, #844A5A);
   border-radius: var(--radius-md, 8px);
 }
 
@@ -327,7 +327,7 @@
   justify-content: center;
   background: rgba(201, 123, 99, 0.15);
   border-radius: 50%;
-  color: var(--terracotta, #c97b63);
+  color: var(--terracotta, #844A5A);
   flex-shrink: 0;
 }
 
@@ -386,12 +386,12 @@
   color: var(--ink, #2a2522);
   outline: none;
   transition: all 0.2s;
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
 }
 
 .return-form .form-select:focus,
 .return-form .form-textarea:focus {
-  border-color: var(--terracotta, #c97b63);
+  border-color: var(--terracotta, #844A5A);
   background: #ffffff;
   box-shadow: 0 0 0 3px rgba(201, 123, 99, 0.08);
 }
@@ -448,7 +448,7 @@
   height: 44px;
   padding: 0 20px;
   background: var(--tab-bg, #f4e4dc);
-  color: var(--terracotta, #c97b63);
+  color: var(--terracotta, #844A5A);
   border: 1px solid #e8c9be;
   border-radius: var(--radius-sm, 4px);
   font-size: 0.875rem;
@@ -545,7 +545,7 @@
 }
 
 .policy-icon {
-  color: var(--terracotta, #c97b63);
+  color: var(--terracotta, #844A5A);
   flex-shrink: 0;
 }
 
@@ -586,7 +586,7 @@
   cursor: pointer;
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   border: none;
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
 }
 
 .return-form .btn-cancel {
@@ -599,14 +599,14 @@
 }
 
 .return-form .btn-submit {
-  background: var(--terracotta, #c97b63);
+  background: var(--terracotta, #844A5A);
   color: #ffffff;
   flex: 1;
   max-width: 420px;
 }
 
 .return-form .btn-submit:hover {
-  background: var(--terracotta-h, #b36a53);
+  background: var(--terracotta-h, #631F30);
   transform: translateY(-1px);
   box-shadow: 0 4px 16px rgba(201, 123, 99, 0.25);
 }
@@ -692,3 +692,20 @@
     gap: 8px;
   }
 }
+
+body.page-return {
+  color: var(--ink, #30252A);
+  background: var(--velura-canvas, #FAF0F3);
+}
+body.page-return :is(.return-section, .selection-card, .return-order-locked) {
+  border-color: var(--velura-border, #F2C2CF);
+  border-radius: var(--radius-lg, 20px);
+  box-shadow: 0 8px 25px rgba(122, 40, 60, .06);
+}
+body.page-return .return-header h1 { color: var(--velura-maroon, #7A283C); }
+body.page-return .return-form :is(.btn-submit, button[type="submit"]) {
+  border-color: var(--velura-maroon, #7A283C);
+  background: var(--velura-maroon, #7A283C);
+  border-radius: 999px;
+}
+body.page-return :is(button, a, input, select, textarea):focus-visible { outline: 3px solid var(--velura-rose, #C94F70); outline-offset: 3px; }

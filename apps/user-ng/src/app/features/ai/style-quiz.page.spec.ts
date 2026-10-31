@@ -1,4 +1,4 @@
-import { createStorefrontPage } from '../../../testing/storefront-testing';
+import { createStorefrontPage, lastStorefrontFixture } from '../../../testing/storefront-testing';
 import { StyleQuizPage } from './style-quiz.page';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
@@ -100,5 +100,49 @@ describe('StyleQuizPage', () => {
     expect(fixture.componentInstance.quizSaved()).toBe(true);
     fixture.destroy();
     localStorage.clear();
+  });
+
+  it('synchronizes height and weight bidirectionally between number input and range slider', async () => {
+    const component = await createStorefrontPage(StyleQuizPage);
+    const fixture = lastStorefrontFixture();
+
+    const heightNumInput = fixture.nativeElement.querySelector('#input-height-num') as HTMLInputElement;
+    const heightSlider = fixture.nativeElement.querySelector('#input-height') as HTMLInputElement;
+    const weightNumInput = fixture.nativeElement.querySelector('#input-weight-num') as HTMLInputElement;
+    const weightSlider = fixture.nativeElement.querySelector('#input-weight') as HTMLInputElement;
+
+    // 1. User types in height number input
+    heightNumInput.value = '168';
+    heightNumInput.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+
+    expect(component.height()).toBe(168);
+    expect(heightSlider.value).toBe('168');
+
+    // 2. User drags height slider
+    heightSlider.value = '172';
+    heightSlider.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+
+    expect(component.height()).toBe(172);
+    expect(heightNumInput.value).toBe('172');
+
+    // 3. User types in weight number input
+    weightNumInput.value = '58';
+    weightNumInput.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+
+    expect(component.weight()).toBe(58);
+    expect(weightSlider.value).toBe('58');
+
+    // 4. User drags weight slider
+    weightSlider.value = '60';
+    weightSlider.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+
+    expect(component.weight()).toBe(60);
+    expect(weightNumInput.value).toBe('60');
+
+    fixture.destroy();
   });
 });

@@ -39,15 +39,35 @@
         <h2 class="about-title">Triết lý thương hiệu</h2>
       </div>
       <div class="about-values__grid">
-        <article class="value-card value-card--bg" data-story-reveal style="background-image: linear-gradient(rgba(30, 25, 22, 0.52), rgba(30, 25, 22, 0.70)), url('/assets/images/about-ben-vung.png'); background-size: cover; background-position: center; border: none;">
+        <article class="value-card" data-story-reveal>
+          <div class="value-card__icon-wrapper" aria-hidden="true">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/>
+              <path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/>
+            </svg>
+          </div>
           <h3 class="value-card__title">Bền vững</h3>
           <p class="value-card__desc">Chúng tôi ưu tiên chất liệu tự nhiên, quy trình sản xuất thân thiện với môi trường và bao bì có thể tái chế hoàn toàn.</p>
         </article>
-        <article class="value-card value-card--bg" data-story-reveal style="background-image: linear-gradient(rgba(30, 25, 22, 0.48), rgba(30, 25, 22, 0.68)), url('/assets/images/about-thanh-lich.png'); background-size: cover; background-position: center; border: none;">
+        <article class="value-card" data-story-reveal>
+          <div class="value-card__icon-wrapper" aria-hidden="true">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3v3m0 12v3M3 12h3m12 0h3"/>
+              <path d="m18.364 5.636-2.121 2.121m-8.486 8.486-2.121 2.121m0-12.728 2.121 2.121m8.486 8.486 2.121 2.121"/>
+              <circle cx="12" cy="12" r="3.5"/>
+            </svg>
+          </div>
           <h3 class="value-card__title">Cá nhân hóa</h3>
           <p class="value-card__desc">Mỗi khách hàng là một câu chuyện riêng. Velura mang đến trải nghiệm tư vấn phong cách phù hợp với cá tính từng người.</p>
         </article>
-        <article class="value-card value-card--bg" data-story-reveal style="background-image: linear-gradient(rgba(30, 25, 22, 0.48), rgba(30, 25, 22, 0.68)), url('/assets/images/about-ca-nhan-hoa.png'); background-size: cover; background-position: center; border: none;">
+        <article class="value-card" data-story-reveal>
+          <div class="value-card__icon-wrapper" aria-hidden="true">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M6 3h12l4 6-10 12L2 9l4-6Z"/>
+              <path d="M11 3 8 9l4 12 4-12-3-6"/>
+              <path d="M2 9h20"/>
+            </svg>
+          </div>
           <h3 class="value-card__title">Thanh lịch</h3>
           <p class="value-card__desc">Vẻ đẹp đích thực nằm ở sự tinh tế. Chúng tôi theo đuổi những thiết kế vượt thời gian, mềm mại và đầy nữ tính.</p>
         </article>
@@ -140,31 +160,33 @@
           </div>
         </div>
       </div>
+    </div>
+  </section>
 
-      <section class="about-stats">
-        <div class="about-stats__header" data-story-reveal>
-          <h2 class="about-title">Số liệu nổi bật</h2>
-          <p class="about-stats__subtitle">Hành trình tám năm cùng phái đẹp Việt</p>
+  <section class="about-stats">
+    <div class="container">
+      <div class="about-stats__header" data-story-reveal>
+        <h2 class="about-title">Số liệu nổi bật</h2>
+        <p class="about-stats__subtitle">Hành trình tám năm cùng phái đẹp Việt</p>
+      </div>
+      <div class="about-stats__grid">
+        <div class="stat-card" data-story-reveal>
+          <span class="stat-card__number">50K+</span>
+          <span class="stat-card__label">Khách hàng thân thiết</span>
         </div>
-        <div class="about-stats__grid">
-          <div class="stat-card" data-story-reveal>
-            <span class="stat-card__number">50K+</span>
-            <span class="stat-card__label">Khách hàng thân thiết</span>
-          </div>
-          <div class="stat-card" data-story-reveal>
-            <span class="stat-card__number">200+</span>
-            <span class="stat-card__label">Mẫu mới mỗi mùa</span>
-          </div>
-          <div class="stat-card" data-story-reveal>
-            <span class="stat-card__number">98%</span>
-            <span class="stat-card__label">Mức độ hài lòng</span>
-          </div>
-          <div class="stat-card" data-story-reveal>
-            <span class="stat-card__number">12</span>
-            <span class="stat-card__label">Cửa hàng toàn quốc</span>
-          </div>
+        <div class="stat-card" data-story-reveal>
+          <span class="stat-card__number">200+</span>
+          <span class="stat-card__label">Mẫu mới mỗi mùa</span>
         </div>
-      </section>
+        <div class="stat-card" data-story-reveal>
+          <span class="stat-card__number">98%</span>
+          <span class="stat-card__label">Mức độ hài lòng</span>
+        </div>
+        <div class="stat-card" data-story-reveal>
+          <span class="stat-card__number">12</span>
+          <span class="stat-card__label">Cửa hàng toàn quốc</span>
+        </div>
+      </div>
     </div>
   </section>
 

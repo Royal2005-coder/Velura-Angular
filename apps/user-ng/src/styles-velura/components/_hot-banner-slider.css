@@ -13,7 +13,7 @@
     radial-gradient(circle at 12% 4%, rgba(201, 123, 99, 0.08), transparent 28%),
     linear-gradient(180deg, var(--checkout-bg, #FDFAF8) 0%, #ffffff 52%, var(--checkout-bg, #FDFAF8) 100%);
   color: var(--text-body);
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
 }
 
 .offers-hero {
@@ -37,7 +37,7 @@
 .offers-hero__title {
   margin: 0;
   color: var(--text-dark);
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: "Cormorant Garamond", Georgia, serif;
   font-size: clamp(2.35rem, 4.6vw, 4.25rem);
   font-weight: 500;
   letter-spacing: -0.04em;
@@ -78,7 +78,7 @@
 
 .offers-page .hot-banner-section__title {
   color: var(--text-dark);
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: "Cormorant Garamond", Georgia, serif;
   font-size: clamp(1.9rem, 3.8vw, 3rem);
   font-weight: 500;
   line-height: 1.08;
@@ -162,7 +162,7 @@
   max-width: 380px;
   margin: 0;
   color: var(--text-dark);
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: "Cormorant Garamond", Georgia, serif;
   font-size: clamp(1.45rem, 2.7vw, 2.25rem);
   font-weight: 500;
   letter-spacing: -0.03em;
@@ -265,7 +265,7 @@
 }
 
 .offer-banner-fallback__eyebrow {
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.6875rem;
   font-weight: 700;
   letter-spacing: 2px;
@@ -275,7 +275,7 @@
 }
 
 .offer-banner-fallback__title {
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: "Cormorant Garamond", Georgia, serif;
   font-size: clamp(1.25rem, 2.5vw, 1.75rem);
   font-weight: 500;
   color: #faf6f2;
@@ -372,7 +372,7 @@
 .monthly-offer-modal__title {
   margin: 0 32px;
   color: var(--text-dark);
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: "Cormorant Garamond", Georgia, serif;
   font-size: clamp(2rem, 5vw, 3rem);
   font-weight: 500;
   letter-spacing: -0.04em;
@@ -556,12 +556,12 @@
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #c97b63, #d9a09a);
+  background: linear-gradient(90deg, #844A5A, #d9a09a);
 }
 
 .monthly-offer-progress strong {
   color: var(--terracotta);
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: "Cormorant Garamond", Georgia, serif;
   font-size: 1.45rem;
   font-weight: 600;
 }
@@ -695,7 +695,7 @@
   border-top: 1px solid rgba(125, 35, 39, 0.08);
   border-bottom: 1px solid rgba(125, 35, 39, 0.1);
   background: linear-gradient(90deg, #fff8f4, #f7e4dc, #fff8f4);
-  font-family: "DM Sans", Arial, sans-serif;
+  font-family: "Inter", Arial, sans-serif;
 }
 
 .hot-offer-ticker__inner {
@@ -714,7 +714,7 @@
   border-radius: 999px;
   background: #7d2327;
   color: #fff;
-  font-family: "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif !important;
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif !important;
   font-size: 0.78rem;
   font-style: normal;
   font-weight: 700;
@@ -777,7 +777,7 @@
   display: flex;
   align-items: flex-end;
   justify-content: flex-end;
-  font-family: "DM Sans", Arial, sans-serif;
+  font-family: "Inter", Arial, sans-serif;
 }
 
 .hot-offer-widget__button {
@@ -793,7 +793,7 @@
   color: #fff;
   box-shadow: 0 16px 34px rgba(125, 35, 39, 0.28);
   cursor: pointer;
-  font-family: "DM Sans", Arial, sans-serif;
+  font-family: "Inter", Arial, sans-serif;
   animation: hotOfferFloat 2.8s ease-in-out infinite;
 }
 
@@ -815,7 +815,7 @@
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.92);
   color: #7d2327;
-  font-family: "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif !important;
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif !important;
   font-size: 0.76rem;
   font-style: normal;
   font-weight: 700;
@@ -866,14 +866,14 @@
   gap: 12px;
   margin-bottom: 12px;
   color: #2f2623;
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: "Cormorant Garamond", Georgia, serif;
   font-size: 1.28rem;
   font-weight: 900;
 }
 
 .hot-offer-widget__header small {
   color: #c97663;
-  font-family: "DM Sans", Arial, sans-serif;
+  font-family: "Inter", Arial, sans-serif;
   font-size: 0.75rem;
 }
 
@@ -905,7 +905,7 @@
 
 .hot-offer-widget__item strong {
   color: #2f2623;
-  font-family: "DM Sans", Arial, sans-serif;
+  font-family: "Inter", Arial, sans-serif;
   font-size: 0.86rem;
   line-height: 1.2;
 }
@@ -915,7 +915,7 @@
   color: #7a6a63;
   font-size: 0.75rem;
   line-height: 1.35;
-  font-family: "DM Sans", Arial, sans-serif;
+  font-family: "Inter", Arial, sans-serif;
 }
 
 .hot-offer-widget__cta {
@@ -926,7 +926,7 @@
   border-radius: 999px;
   background: #7d2327;
   color: #fff;
-  font-family: "DM Sans", Arial, sans-serif;
+  font-family: "Inter", Arial, sans-serif;
   font-size: 0.88rem;
   font-weight: 800;
   text-decoration: none;
@@ -954,7 +954,7 @@
 .hot-banner-section__title {
   margin: 0;
   color: var(--text);
-  font-family: var(--font-heading, "Playfair Display", serif);
+  font-family: var(--font-heading, "Cormorant Garamond", serif);
   font-size: clamp(2rem, 3.8vw, 3.25rem);
   font-weight: 600;
   letter-spacing: -0.035em;

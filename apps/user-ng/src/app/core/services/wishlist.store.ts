@@ -32,7 +32,7 @@ export class WishlistStore {
    * Reloads wishlist count from guest storage or the member API.
    */
   refresh(): void {
-    const token = localStorage.getItem('velura_token');
+    const token = typeof localStorage !== 'undefined' ? localStorage.getItem('velura_token') : null;
     if (!token) {
       const ids = this.readGuestIds();
       this.items.set(ids.map((product_id) => ({ product_id, name: '' })));
@@ -44,7 +44,9 @@ export class WishlistStore {
       .subscribe((data) => {
         const items = data.items || [];
         this.items.set(items);
-        localStorage.setItem(COUNT_KEY, String(items.length));
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem(COUNT_KEY, String(items.length));
+        }
       });
   }
 
@@ -59,11 +61,13 @@ export class WishlistStore {
    * Adds or removes a product using the original wishlist API / guest key.
    */
   toggle(productId: string): void {
-    const token = localStorage.getItem('velura_token');
+    const token = typeof localStorage !== 'undefined' ? localStorage.getItem('velura_token') : null;
     if (!token) {
       const ids = this.readGuestIds();
       const next = ids.includes(productId) ? ids.filter((id) => id !== productId) : [...ids, productId];
-      localStorage.setItem(GUEST_KEY, JSON.stringify(next));
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(GUEST_KEY, JSON.stringify(next));
+      }
       this.items.set(next.map((product_id) => ({ product_id, name: '' })));
       return;
     }
@@ -92,6 +96,7 @@ export class WishlistStore {
 
   private readGuestIds(): string[] {
     try {
+      if (typeof localStorage === 'undefined') return [];
       const raw = JSON.parse(localStorage.getItem(GUEST_KEY) || '[]') as unknown;
       return Array.isArray(raw) ? raw.map((id) => String(id)) : [];
     } catch {

@@ -25,7 +25,6 @@ interface OtpVerifyResponse {
 @Component({
   selector: 'app-checkout-otp-page',
   imports: [RouterLink],
-  host: { style: 'display:block' },
   templateUrl: './otp.page.html',
 })
 export class CheckoutOtpPage {

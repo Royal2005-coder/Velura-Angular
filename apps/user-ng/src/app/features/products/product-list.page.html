@@ -1,20 +1,55 @@
 <main class="product-list-page container">
   <header class="product-list-header">
+    <div class="product-list-editorial-hero" aria-label="Velura Atelier — Timeless Elegance">
+      <div class="product-list-editorial-hero__video-wrap">
+        <video #heroVideo autoplay loop playsinline muted poster="/assets/images/auth/model_main.png" class="product-list-editorial-hero__video">
+          <source src="/assets/videos/hero-bg.mp4" type="video/mp4" />
+        </video>
+        <div class="product-list-editorial-hero__video-overlay"></div>
+      </div>
+      <div class="product-list-editorial-hero__copy">
+        <span class="product-list-editorial-hero__eyebrow">VELURA ATELIER</span>
+        <h2 class="product-list-editorial-hero__title">Timeless Elegance</h2>
+        <p class="product-list-editorial-hero__description">Những lựa chọn tinh tế dành cho nhịp sống và phong cách riêng của bạn.</p>
+        <button
+          class="product-list-editorial-hero__sound-btn"
+          type="button"
+          [attr.aria-label]="videoSoundOn() ? 'Tắt âm thanh video' : 'Bật âm thanh video'"
+          (click)="toggleVideoSound()"
+        >
+          @if (videoSoundOn()) {
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+              <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+            </svg>
+            <span>Âm thanh: Bật</span>
+          } @else {
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+              <line x1="23" y1="9" x2="17" y2="15"></line>
+              <line x1="17" y1="9" x2="23" y2="15"></line>
+            </svg>
+            <span>Bật tiếng</span>
+          }
+        </button>
+      </div>
+    </div>
     <nav class="breadcrumb" aria-label="Breadcrumb">
       <a routerLink="/">Trang chủ</a>
       <span class="breadcrumb__separator">/</span>
       <span class="breadcrumb__current">Tất cả sản phẩm</span>
     </nav>
+    <span class="product-list-header__eyebrow">THE VELURA EDIT</span>
     <h1 class="product-list-header__title">Tất cả sản phẩm</h1>
     <p class="product-list-header__subtitle">
-      Khám phá hơn 1.200 thiết kế thời trang nữ sang trọng và thời thượng
+      Khám phá thiết kế hợp phong cách của bạn.
     </p>
     <app-visual-search-workbench [hideTrigger]="true" [candidateProductIds]="imageSearchCandidates()" [filters]="visualFilters()" (searchResult)="applyVisualResult($event)" />
     @if (imageMatches() !== null) { <button type="button" class="btn btn--outline" (click)="imageMatches.set(null)">Xóa kết quả tìm bằng ảnh</button> }
     @if (searchQuery()) {
-      <div class="product-search-active-bar" style="display: flex; align-items: center; justify-content: center; gap: 10px; margin: 12px 0 6px;">
-        <span style="font-size: 0.9375rem; color: var(--ink, #2A2522);">Kết quả tìm kiếm cho: <strong style="color: var(--terracotta, #C97B63);">"{{ searchQuery() }}"</strong></span>
-        <button type="button" class="btn btn--outline btn--sm" (click)="clearSearch()" style="padding: 4px 12px; font-size: 0.8125rem; border-radius: 16px;">✕ Xóa từ khóa</button>
+      <div class="product-search-active-bar u-inline-4811ea4c0f">
+        <span class="u-inline-137c27134d">Kết quả tìm kiếm cho: <strong class="u-inline-782c8561f4">"{{ searchQuery() }}"</strong></span>
+        <button type="button" class="btn btn--outline btn--sm u-inline-a0a66318d4" (click)="clearSearch()">✕ Xóa từ khóa</button>
       </div>
     }
     @if (activeVoucherCode()) {
@@ -31,7 +66,14 @@
   <div class="product-list-layout">
     <aside class="filter-sidebar" [class.filter-sidebar--open]="sidebarOpen()">
       <div class="filter-sidebar__header">
-        <h2 class="filter-sidebar__title">Bộ lọc</h2>
+        <h2 class="filter-sidebar__title">
+          <svg class="filter-sidebar__icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path stroke-linecap="round" d="M4 6h16M7 12h10m-7 6h4"/>
+            <circle cx="8" cy="6" r="1.5" fill="currentColor"/>
+            <circle cx="15" cy="12" r="1.5" fill="currentColor"/>
+          </svg>
+          Bộ lọc
+        </h2>
         <button class="btn-clear-filters" type="button" (click)="clearFilters()">Xóa bộ lọc</button>
         <button class="filter-sidebar__close" type="button" aria-label="Đóng bộ lọc" (click)="toggleSidebar()">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -140,7 +182,7 @@
         </div>
       </div>
 
-      <div class="filter-group body-shape-filter-group" id="body-shape-filter-group" style="position: relative; margin-top: 8px;">
+      <div class="filter-group body-shape-filter-group u-inline-4e8597f61e" id="body-shape-filter-group">
         <h3 class="filter-group__title">Dáng người (Body Type)</h3>
         <div
           class="filter-group__list js-body-shape-list"
@@ -163,9 +205,9 @@
         </div>
         @if (!bodyShapeUnlocked()) {
           <a
-            class="body-shape-lock-overlay js-body-shape-lock"
+            class="body-shape-lock-overlay js-body-shape-lock u-inline-b91fea966f"
             [routerLink]="isLoggedIn() ? '/ai/style-quiz' : '/auth/signup'"
-            style="position: absolute; top: 24px; left: 0; right: 0; bottom: 0; background: rgba(255, 255, 255, 0.7); backdrop-filter: blur(2px); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 12px; z-index: 5; text-decoration: none; cursor: pointer;"
+           
           >
             @if (isLoggedIn()) {
               <div class="member-lock-badge">
@@ -188,20 +230,20 @@
 
       <div class="fit-helper">
         @if (fitHelperState() === 'active') {
-          <div class="fit-helper__header" style="color: #C97B63; display: flex; align-items: center; justify-content: space-between; width: 100%;">
-            <div style="display: flex; align-items: center; gap: 4px;">
+          <div class="fit-helper__header u-inline-bb66c4ac06">
+            <div class="u-inline-df7e07373d">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
                 <polyline points="22 4 12 14.01 9 11.01"></polyline>
               </svg>
               <span>Gợi ý đã kích hoạt</span>
             </div>
-            <button class="js-toggle-fit-suggestions" type="button" style="font-size: 0.7rem; background: #C97B63; color: white; border: none; padding: 2px 6px; border-radius: 4px; cursor: pointer; font-weight: 600;" (click)="setSuggestions(false)">Tắt</button>
+            <button class="js-toggle-fit-suggestions u-inline-9e934b7490" type="button" (click)="setSuggestions(false)">Tắt</button>
           </div>
           <p class="fit-helper__desc">Hệ thống đã tự động lọc các trang phục phù hợp nhất với dáng người <strong>{{ bodyShapeLabel() }}</strong> của bạn.</p>
         } @else if (fitHelperState() === 'paused') {
-          <div class="fit-helper__header" style="color: #666; display: flex; align-items: center; justify-content: space-between; width: 100%;">
-            <div style="display: flex; align-items: center; gap: 4px;">
+          <div class="fit-helper__header u-inline-c06dac265e">
+            <div class="u-inline-df7e07373d">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="12" r="10"></circle>
                 <line x1="12" y1="16" x2="12" y2="12"></line>
@@ -209,7 +251,7 @@
               </svg>
               <span>Gợi ý đã tạm tắt</span>
             </div>
-            <button class="js-toggle-fit-suggestions" type="button" style="font-size: 0.7rem; background: #888; color: white; border: none; padding: 2px 6px; border-radius: 4px; cursor: pointer; font-weight: 600;" (click)="setSuggestions(true)">Bật</button>
+            <button class="js-toggle-fit-suggestions u-inline-1a32ac1022" type="button" (click)="setSuggestions(true)">Bật</button>
           </div>
           <p class="fit-helper__desc">Nhấp vào nút Bật để tự động điền lại các bộ lọc dựa trên hồ sơ Style Profile của bạn.</p>
         } @else if (fitHelperState() === 'empty') {
@@ -221,7 +263,7 @@
             </svg>
             <span>Style Profile trống</span>
           </div>
-          <p class="fit-helper__desc">Hãy hoàn thành <a routerLink="/ai/style-quiz" style="color: #C97B63; font-weight: 600; text-decoration: underline;">Style Quiz</a> để mở khóa bộ lọc tự động gợi ý kích cỡ theo dáng người của bạn.</p>
+          <p class="fit-helper__desc">Hãy hoàn thành <a routerLink="/ai/style-quiz" class="u-inline-5d20884cda">Style Quiz</a> để mở khóa bộ lọc tự động gợi ý kích cỡ theo dáng người của bạn.</p>
         } @else {
           <div class="fit-helper__header">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -243,7 +285,7 @@
             Đang tải sản phẩm từ cửa hàng...
           } @else {
             Hiển thị <strong>{{ productCount() }}</strong> sản phẩm
-            <span class="js-active-category" style="margin-left:4px; font-weight:600;">{{ activeCategoryLabel() }}</span>
+            <span class="js-active-category u-inline-1430539bfe">{{ activeCategoryLabel() }}</span>
           }
         </span>
         <div class="grid-controls__actions">
@@ -294,26 +336,26 @@
       <div [class]="gridClass()">
         @if (loading()) {
           @for (n of [1, 2, 3, 4, 5, 6]; track n) {
-            <div class="product-card" aria-hidden="true" style="pointer-events: none;">
-              <div class="skeleton-shimmer" style="aspect-ratio: 4 / 5; width: 100%; border-radius: var(--radius-md, 8px);"></div>
-              <div style="padding: 14px 4px 6px;">
-                <div class="skeleton-shimmer" style="height: 12px; width: 35%; margin-bottom: 8px; border-radius: 4px;"></div>
-                <div class="skeleton-shimmer" style="height: 18px; width: 85%; margin-bottom: 8px; border-radius: 4px;"></div>
-                <div class="skeleton-shimmer" style="height: 16px; width: 45%; border-radius: 4px;"></div>
+            <div class="product-card u-inline-8a30312172" aria-hidden="true">
+              <div class="skeleton-shimmer u-inline-7e95383276"></div>
+              <div class="u-inline-808f570242">
+                <div class="skeleton-shimmer u-inline-8852094bee"></div>
+                <div class="skeleton-shimmer u-inline-f5f7c7474d"></div>
+                <div class="skeleton-shimmer u-inline-39e345fbea"></div>
               </div>
             </div>
           }
         } @else if (loadError()) {
-          <div style="grid-column: 1 / -1; text-align: center; padding: 64px 0; color: var(--soft);">
+          <div class="u-inline-19bf875f24">
             {{ loadError() }}
           </div>
         } @else if (filteredProducts().length === 0) {
-          <div style="grid-column: 1 / -1; text-align: center; padding: 48px 0; color: var(--soft);">
-            <p style="margin: 0; font-size: 1.1rem; font-weight: 500; color: var(--text-dark);">Rất tiếc, Velura không tìm thấy sản phẩm nào phù hợp với lựa chọn của bạn.</p>
-            <button class="btn btn--sm btn--primary" type="button" style="margin-top: 16px;" (click)="clearFilters()">Đặt lại bộ lọc</button>
+          <div class="u-inline-fbd682dd27">
+            <p class="u-inline-4da064a46d">Rất tiếc, Velura không tìm thấy sản phẩm nào phù hợp với lựa chọn của bạn.</p>
+            <button class="btn btn--sm btn--primary u-inline-d265a6b9b9" type="button" (click)="clearFilters()">Đặt lại bộ lọc</button>
             @if (featuredFallback().length) {
-              <div style="margin-top: 48px; text-align: left;">
-                <h3 style="font-family: 'Playfair Display', serif; font-size: 1.5rem; margin-bottom: 24px; text-align: center; color: var(--text-dark);">{{ imageMatches() !== null ? 'Sản phẩm nổi bật — không phải kết quả khớp ảnh' : 'Gợi ý sản phẩm nổi bật dành cho bạn' }}</h3>
+              <div class="u-inline-0864f6e585">
+                <h3 class="u-inline-b7ed8eec6e">{{ imageMatches() !== null ? 'Sản phẩm nổi bật — không phải kết quả khớp ảnh' : 'Gợi ý sản phẩm nổi bật dành cho bạn' }}</h3>
                 <div class="product-grid">
                   @for (product of featuredFallback(); track product.product_id) {
                     <app-product-card [product]="product" appearance="catalog" />
@@ -330,7 +372,7 @@
       </div>
 
       @if (showPagination()) {
-        <div class="pagination" style="display: flex;">
+        <div class="pagination u-inline-6b82cf24aa">
           <button class="pagination__btn" type="button" aria-label="Trang trước" [class.pagination__btn--disabled]="currentPage() === 1" [disabled]="currentPage() === 1" (click)="prevPage()">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="15 18 9 12 15 6"></polyline>

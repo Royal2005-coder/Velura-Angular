@@ -230,6 +230,14 @@
 .card__badge--new { background: #89A894; }
 .card__badge--hot { background: #D4183D; }
 .card__badge--best { background: var(--brown); }
+.card__badge--out-of-stock {
+  background: #231B1D !important;
+  color: #FFFFFF !important;
+  border: 1px solid rgba(255, 255, 255, 0.22) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35) !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.06em !important;
+}
 
 .card__info {
   display: flex;
@@ -268,7 +276,7 @@
 .order-item__title,
 .product-section__grid .product-card__title,
 .chatbot-messages .chatbot-message__text .product .title {
-  font-family: 'Playfair Display', serif !important;
+  font-family: 'Cormorant Garamond', serif !important;
   font-size: 1.125rem !important; /* Tăng size chữ rõ rệt */
   font-weight: 700 !important;    /* Làm đậm nét */
   line-height: 1.35;
@@ -311,15 +319,15 @@
 .order-item__price,
 .card__price-group .card__price,
 .chatbot-messages .chatbot-message__text .product .price {
-  font-family: 'DM Sans', sans-serif !important;
+  font-family: 'Inter', sans-serif !important;
   font-weight: 700 !important;
-  color: #C97B63;                 /* Màu var(--terracotta) */
+  color: #844A5A;                 /* Màu var(--terracotta) */
 }
 
 /* 3. KHỐI GIÁ CŨ (NẾU CÓ) */
 .card__price-old, 
 .product-card__price-old {
-  font-family: 'DM Sans', sans-serif !important;
+  font-family: 'Inter', sans-serif !important;
   font-weight: 400 !important;
   color: #8C857E;                 /* Màu var(--text-secondary) */
   text-decoration: line-through;
@@ -565,8 +573,8 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  background: #F4E4DC;
-  color: var(--terracotta, #C97B63);
+  background: #FDF2F4;
+  color: var(--terracotta, #844A5A);
   padding: 11px 16px;
   border-radius: var(--radius-sm);
   font-size: 0.875rem;
@@ -582,7 +590,7 @@
 
 .card--product .card__actions .btn-buy:hover {
   background: #e8c9be;
-  color: var(--terracotta-h, #b36a53);
+  color: var(--terracotta-h, #631F30);
 }
 
 .card--product .card__actions .btn-buy svg {
@@ -593,12 +601,12 @@
 .card--product .card__btn-cart {
   width: 40px;
   height: 40px;
-  border-radius: 50%;
-  background: #F4E4DC;
+  border-radius: var(--radius-sm);
+  background: #FDF2F4;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--terracotta, #C97B63);
+  color: var(--terracotta, #844A5A);
   text-decoration: none;
   border: none;
   cursor: pointer;
@@ -708,7 +716,7 @@
 }
 
 .voucher-card__code {
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Inter', sans-serif;
   font-weight: 700;
   font-size: 1.125rem;
   color: var(--terracotta);

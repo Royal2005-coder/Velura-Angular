@@ -17,7 +17,7 @@ body.page-product-review {
 }
 
 .review-main__title {
-  font-family: "Playfair Display", serif;
+  font-family: "Cormorant Garamond", serif;
   font-size: 2.25rem; /* 36px */
   font-weight: 500;
   color: #1C1B1B;
@@ -26,7 +26,7 @@ body.page-product-review {
 }
 
 .review-main__subtitle {
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.75rem; /* 12px */
   font-weight: 600;
   color: #8C857E;
@@ -72,7 +72,7 @@ body.page-product-review {
 }
 
 .product-summary__name {
-  font-family: "Playfair Display", serif;
+  font-family: "Cormorant Garamond", serif;
   font-size: 1.75rem; /* 28px */
   font-weight: 500;
   color: #1C1B1B;
@@ -96,13 +96,13 @@ body.page-product-review {
 }
 
 .product-summary__variant {
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.875rem;
   color: #6B635D;
 }
 
 .product-summary__price {
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 1rem;
   font-weight: 600;
   color: #7D562D; /* Warm wood brown */
@@ -126,7 +126,7 @@ body.page-product-review {
 }
 
 .review-form__label {
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 1.2px;
@@ -191,7 +191,7 @@ body.page-product-review {
   border: 1px solid #E8DFD6;
   border-radius: 9999px;
   padding: 8px 20px;
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.8125rem;
   font-weight: 500;
   color: #50453B;
@@ -221,7 +221,7 @@ body.page-product-review {
   border: 1px solid #D4C4B7;
   border-radius: 8px;
   background-color: #FDF8F8; /* Premium soft pinkish milk */
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.875rem;
   line-height: 1.6;
   color: #2A2522;
@@ -280,7 +280,7 @@ body.page-product-review {
 }
 
 .media-upload__title {
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.6875rem; /* 11px */
   font-weight: 700;
   letter-spacing: 1.2px;
@@ -288,7 +288,7 @@ body.page-product-review {
 }
 
 .media-upload__desc {
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.6875rem;
   color: #8C857E;
   margin: 0;
@@ -355,7 +355,7 @@ body.page-product-review {
   background-color: #7D562D;
   border: none;
   color: #FFFFFF;
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.875rem;
   font-weight: 700;
   letter-spacing: 1px;
@@ -432,3 +432,19 @@ body.page-product-review {
     height: 50px;
   }
 }
+
+body.page-product-review { background: var(--velura-canvas, #FAF0F3) !important; }
+body.page-product-review .review-main__title { color: var(--velura-maroon, #7A283C); font-family: var(--velura-font-display, "Cormorant Garamond", Georgia, serif); }
+body.page-product-review .review-main__subtitle { color: var(--text-secondary, #78666A); }
+body.page-product-review .review-card {
+  border-color: var(--velura-border, #F2C2CF);
+  border-radius: 24px;
+  box-shadow: 0 14px 38px rgba(122, 40, 60, .08);
+}
+body.page-product-review .product-summary { background: var(--velura-blush, #FDF2F4); border-color: var(--velura-border, #F2C2CF); }
+body.page-product-review .product-summary__name { color: var(--velura-maroon, #7A283C); }
+body.page-product-review .product-summary__price { color: var(--velura-maroon, #7A283C); }
+body.page-product-review .review-rating__star.is-hovered,
+body.page-product-review .review-rating__star.is-selected,
+body.page-product-review .review-rating__star.is-selected svg { color: var(--velura-rose, #C94F70); fill: var(--velura-rose, #C94F70); stroke: var(--velura-rose, #C94F70); }
+body.page-product-review :is(button, a, input, textarea):focus-visible { outline: 3px solid var(--velura-rose, #C94F70); outline-offset: 3px; }

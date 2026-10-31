@@ -43,21 +43,21 @@
                 <span class="order-card__count">Tổng cộng ({{ order.item_count || 0 }} sản phẩm)</span>
                 <span class="order-card__total">{{ totalLabel(order) }}</span>
               </div>
-              <div class="order-card__actions" style="display: flex; gap: 8px; align-items: center;">
+              <div class="order-card__actions u-inline-eba923c40f">
                 @if ((order.return_requests || []).length > 0) {
                   <a
                     [routerLink]="['/account/returns']"
                     [queryParams]="{ order_id: order.order_id }"
-                    class="btn btn--secondary btn--sm"
-                    style="font-size: 0.8125rem; padding: 6px 14px;"
+                    class="btn btn--secondary btn--sm u-inline-381188b9f2"
+                   
                   >Theo dõi đổi/trả ({{ order.return_requests?.length }})</a>
                 }
                 @if (order.status === 'delivered') {
                   <a
                     [routerLink]="['/account/reviews']"
                     [queryParams]="{ order_id: order.order_id }"
-                    class="btn btn--secondary btn--sm"
-                    style="font-size: 0.8125rem; padding: 6px 14px;"
+                    class="btn btn--secondary btn--sm u-inline-381188b9f2"
+                   
                   >★ Đánh giá</a>
                 }
                 <a [routerLink]="['/account/orders', order.order_id]" class="btn btn--primary btn-detail-action">Chi tiết &gt;</a>

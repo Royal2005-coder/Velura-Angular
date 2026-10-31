@@ -1,82 +1,176 @@
 /* ============================================================
    Velura — Dedicated Footer Stylesheet
+   Luxury Dark Brown Theme (#5D423C) matching DESIGN_SYSTEM.md
    ============================================================ */
 
 .site-footer {
-  border-top: 1px solid #f4e4dc;
-  background: #FAF5F2; /* Màu nền beige sáng ấm áp theo thiết kế */
+  position: relative;
+  z-index: 10;
+  border-top: 1px solid rgba(242, 194, 207, 0.2);
+  background: var(--velura-footer, #5D423C) !important;
+  color: #ffffff;
   margin-top: auto;
-  padding: 36px 0 0; /* padding bên trái/phải bằng 0 và bottom bằng 0 để bottom-bar tràn viền tuyệt đối */
-  font-family: "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  padding: 48px 0 0;
+  font-family: var(--velura-font-ui, "Inter", system-ui, sans-serif);
 }
 
 .site-footer__grid {
   display: grid;
-  grid-template-columns: 1.5fr 1fr 1fr 1.2fr;
-  gap: 32px;
-  max-width: var(--max-w, 1200px);
+  grid-template-columns: 1.4fr 1fr 1fr 1.2fr;
+  gap: 36px;
+  max-width: var(--max-w, 1320px);
   margin: 0 auto;
-  padding: 0 24px; /* Giữ lề hai bên cho lưới nội dung */
+  padding: 0 24px;
 }
 
-.site-footer h3 {
-  font-family: "Playfair Display", Georgia, serif;
-  font-size: 32px; /* Tăng kích thước chữ logo footer */
-  font-weight: 500;
-  color: #2a2522;
-  margin: 0 0 12px 0;
+.site-footer__brand .site-footer__logo-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  margin-bottom: 14px;
+}
+
+.site-footer__logo-flower img {
+  width: 28px;
+  height: 28px;
+  filter: brightness(0) invert(1);
+}
+
+.site-footer__logo-name {
+  font-family: var(--velura-font-display, "Cormorant Garamond", Georgia, serif);
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #ffffff;
 }
 
 .site-footer p {
-  font-family: "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
-  margin: 0 0 12px 0;
-  color: #6b635d;
-  font-size: 13.5px;
-  line-height: 1.5;
+  color: #F9DDE4;
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 0 0 16px 0;
+}
+
+.site-footer__newsletter {
+  margin-top: 18px;
+  margin-bottom: 22px;
+}
+
+.site-footer__newsletter-title {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #F9DDE4;
+  margin-bottom: 10px;
+  text-transform: uppercase;
+}
+
+.site-footer__newsletter-form {
+  display: flex;
+  align-items: center;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 1.5px solid rgba(240, 198, 210, 0.6);
+  padding: 3px 3px 3px 14px;
+  max-width: 330px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  transition: all 0.25s ease;
+}
+
+.site-footer__newsletter-form:focus-within {
+  border-color: #F9DDE4;
+  box-shadow: 0 0 0 3px rgba(249, 221, 228, 0.35), 0 6px 20px rgba(0, 0, 0, 0.2);
+}
+
+.site-footer__newsletter-input {
+  flex: 1;
+  min-width: 0;
+  background: transparent !important;
+  background-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+  padding: 8px 6px;
+  font-size: 0.82rem;
+  color: #2A1A1D !important;
+  font-family: var(--velura-font-ui, "Plus Jakarta Sans", "Inter", sans-serif);
+}
+
+.site-footer__newsletter-input::placeholder {
+  color: #8C7A75 !important;
+  opacity: 1 !important;
+  font-size: 0.8rem;
+}
+
+.site-footer__newsletter-btn {
+  background: var(--velura-maroon, #7A283C);
+  color: #ffffff !important;
+  border: none;
+  border-radius: 999px;
+  padding: 8px 20px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(122, 40, 60, 0.3);
+  transition: all 0.2s ease;
+}
+
+.site-footer__newsletter-btn:hover {
+  background: var(--velura-maroon-deep, #631F30);
+  transform: scale(1.03);
+}
+
+.site-footer__newsletter-btn:active {
+  transform: scale(0.98);
 }
 
 .site-footer__social {
   display: flex;
-  gap: 12px;
-  margin-top: 16px;
+  gap: 10px;
+  margin-top: 14px;
 }
 
 .site-footer__social a {
-  width: 36px;
-  height: 36px;
-  background-color: #F2E3DC; /* Vòng tròn màu cam/beige nhạt */
+  width: 34px;
+  height: 34px;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #731F21; /* Burgundy icon color */
-  transition: background-color 0.2s ease, color 0.2s ease;
+  color: #F9DDE4;
+  transition: background 0.2s ease, color 0.2s ease;
 }
 
 .site-footer__social a:hover {
-  background-color: #731F21;
+  background: var(--velura-maroon, #7A283C);
   color: #ffffff;
 }
 
 .site-footer h4 {
-  font-family: "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
-  font-size: 14px;
+  font-family: var(--velura-font-ui, "Inter", sans-serif);
+  font-size: 13px;
   font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #F9DDE4;
   margin: 0 0 16px 0;
-  color: #2a2522;
   position: relative;
   padding-bottom: 8px;
 }
 
-/* Thêm thanh gạch dưới nhỏ cho tiêu đề cột theo ảnh */
 .site-footer h4::after {
   content: "";
   position: absolute;
   bottom: 0;
   left: 0;
-  width: 24px;
+  width: 28px;
   height: 2px;
-  background-color: #c97b63;
+  background-color: #C94F70;
 }
 
 .site-footer ul {
@@ -86,7 +180,7 @@
 }
 
 .site-footer ul li {
-  margin-bottom: 8px; /* Giảm khoảng cách li từ 12px xuống 8px để gọn hơn */
+  margin-bottom: 10px;
 }
 
 .site-footer ul li:last-child {
@@ -94,16 +188,16 @@
 }
 
 .site-footer ul a {
-  font-family: "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
-  font-size: 13.5px;
-  color: #6b635d;
-  font-weight: 500;
+  font-size: 13px;
+  color: #F9DDE4;
   text-decoration: none;
-  transition: color 0.2s ease;
+  transition: color 0.2s ease, transform 0.2s ease;
+  display: inline-block;
 }
 
 .site-footer ul a:hover {
-  color: #731F21;
+  color: #ffffff;
+  transform: translateX(2px);
 }
 
 .site-footer__contact {
@@ -115,11 +209,10 @@
 .site-footer__contact li {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-family: "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
-  font-size: 13.5px;
-  color: #6b635d;
-  margin-bottom: 8px; /* Giảm khoảng cách để thon gọn */
+  gap: 10px;
+  font-size: 13px;
+  color: #F9DDE4;
+  margin-bottom: 10px;
 }
 
 .site-footer__contact li:last-child {
@@ -127,51 +220,225 @@
 }
 
 .site-footer__contact li svg {
-  color: #c97b63;
+  color: #C94F70;
   flex-shrink: 0;
-  width: 15px;
-  height: 15px;
+  width: 16px;
+  height: 16px;
 }
 
-/* Hàng Bản Quyền Bottom với nền màu hồng nhạt */
-.site-footer__bottom-bar {
-  background: #FAF2EF; /* Màu hồng nhạt ấm áp cực đẹp */
-  padding: 20px 24px;
-  border-top: 1px solid #f4e4dc;
+.site-footer__payment-section {
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.site-footer__payment-title {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #FCE7EC;
+  margin-bottom: 10px;
+  text-transform: uppercase;
+}
+
+.site-footer__payment-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
   position: relative;
-  width: 100%;
-  margin-top: 48px; /* Tăng khoảng cách dãn trên để đẩy chữ "Liên hệ", "Câu hỏi thường gặp" cách xa line */
 }
 
-/* Render ngôi sao lấp lánh đè giữa đường line phân cách của Bottom Bar */
-.site-footer__bottom-bar::before {
-  content: "✦";
+.site-footer__payment-badge {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  min-width: 50px;
+  padding: 4px 8px;
+  background: #FFFFFF;
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  border-radius: 6px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18), 0 1px 2px rgba(0, 0, 0, 0.12);
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 0.2s ease;
+  outline: none;
+}
+
+.site-footer__payment-badge:hover,
+.site-footer__payment-badge:focus-visible,
+.site-footer__payment-badge.is-active {
+  transform: translateY(-2px) scale(1.05);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3), 0 0 0 2px #C94F70;
+  border-color: #C94F70;
+  z-index: 10;
+}
+
+.site-footer__payment-icon {
+  display: block;
+  height: 18px;
+  width: auto;
+  max-width: 44px;
+  pointer-events: none;
+}
+
+.site-footer__payment-icon--momo {
+  height: 22px;
+  width: 22px;
+  border-radius: 5px;
+}
+
+/* Tooltip hiển thị tên phương thức thanh toán khi di chuột hoặc chạm nhẹ */
+.site-footer__payment-tooltip {
   position: absolute;
-  top: -9px;
+  bottom: calc(100% + 9px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  background: #1C1210;
+  color: #FFF2F5;
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-sans, system-ui, -apple-system, sans-serif);
+  letter-spacing: 0.02em;
+  line-height: 1.25;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+              visibility 0.2s;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(201, 79, 112, 0.35);
+  z-index: 40;
+}
+
+/* Caret / mũi tên hướng xuống badge */
+.site-footer__payment-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
   left: 50%;
   transform: translateX(-50%);
-  background: #FAF2EF; /* Trùng màu nền hồng nhạt để che đường line */
-  padding: 0 12px;
-  color: #c97b63;
-  font-size: 13px;
-  z-index: 2;
+  border-width: 5px 5px 0 5px;
+  border-style: solid;
+  border-color: #1C1210 transparent transparent transparent;
 }
 
-.site-footer__bottom {
-  text-align: center;
-  color: #6b635d;
-  font-size: 13px;
-  max-width: var(--max-w, 1200px);
+.site-footer__payment-tooltip::before {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 6px 6px 0 6px;
+  border-style: solid;
+  border-color: rgba(201, 79, 112, 0.35) transparent transparent transparent;
+  margin-top: 1px;
+}
+
+/* Căn chỉnh mép cho badge đầu và cuối tránh tràn lề màn hình */
+.site-footer__payment-badge:first-child .site-footer__payment-tooltip {
+  left: 0;
+  transform: translateX(0) translateY(4px);
+}
+.site-footer__payment-badge:first-child .site-footer__payment-tooltip::after,
+.site-footer__payment-badge:first-child .site-footer__payment-tooltip::before {
+  left: 24px;
+  transform: none;
+}
+.site-footer__payment-badge:first-child:hover .site-footer__payment-tooltip,
+.site-footer__payment-badge:first-child:focus-visible .site-footer__payment-tooltip,
+.site-footer__payment-badge:first-child.is-active .site-footer__payment-tooltip {
+  transform: translateX(0) translateY(0);
+}
+
+.site-footer__payment-badge:last-child .site-footer__payment-tooltip {
+  left: auto;
+  right: 0;
+  transform: translateX(0) translateY(4px);
+}
+.site-footer__payment-badge:last-child .site-footer__payment-tooltip::after,
+.site-footer__payment-badge:last-child .site-footer__payment-tooltip::before {
+  left: auto;
+  right: 20px;
+  transform: none;
+}
+.site-footer__payment-badge:last-child:hover .site-footer__payment-tooltip,
+.site-footer__payment-badge:last-child:focus-visible .site-footer__payment-tooltip,
+.site-footer__payment-badge:last-child.is-active .site-footer__payment-tooltip {
+  transform: translateX(0) translateY(0);
+}
+
+/* Kích hoạt hiển thị tooltip */
+.site-footer__payment-badge:hover .site-footer__payment-tooltip,
+.site-footer__payment-badge:focus-visible .site-footer__payment-tooltip,
+.site-footer__payment-badge.is-active .site-footer__payment-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+
+.site-footer__bottom-bar {
+  background: #4A332E;
+  padding: 16px 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  margin-top: 40px;
+}
+
+.site-footer__bottom-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  max-width: var(--max-w, 1320px);
   margin: 0 auto;
 }
 
-@media (max-width: 768px) {
+.site-footer__bottom {
+  margin: 0;
+  font-size: 12px;
+  color: rgba(249, 221, 228, 0.7);
+}
+
+.site-footer__bottom-links {
+  display: flex;
+  gap: 16px;
+}
+
+.site-footer__bottom-links a {
+  font-size: 12px;
+  color: rgba(249, 221, 228, 0.7);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.site-footer__bottom-links a:hover {
+  color: #ffffff;
+}
+
+@media (max-width: 900px) {
+  .site-footer__grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 32px;
+  }
+}
+
+@media (max-width: 640px) {
   .site-footer__grid {
     grid-template-columns: 1fr;
-    gap: 24px;
+    gap: 28px;
   }
-  
-  .site-footer__bottom-bar::before {
-    background: #FAF2EF;
+  .site-footer__bottom-inner {
+    flex-direction: column;
+    gap: 12px;
+    text-align: center;
   }
 }

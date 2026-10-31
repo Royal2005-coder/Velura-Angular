@@ -73,8 +73,10 @@ export class CartStore {
   );
 
   constructor() {
-    localStorage.removeItem(CART_KEY);
-    localStorage.removeItem(COUNT_KEY);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(CART_KEY);
+      localStorage.removeItem(COUNT_KEY);
+    }
     effect(() => {
       const session = this.auth.session();
       const identity = session?.userId ? `member:${session.userId}` : `guest:${guestSessionId()}`;

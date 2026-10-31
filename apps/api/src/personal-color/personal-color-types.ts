@@ -54,6 +54,7 @@ export interface ColorRepository {
 export interface ColorAssets {
   readOwnedAsset(owner: string, id: string): Promise<{ bytes: Buffer; mime: string; expires_at: string }>;
   deleteOwnedAsset(owner: string, id: string): Promise<void>;
+  upload?(owner: string, bytes: Buffer, mime: string): Promise<{ asset_id: string; expires_at: string }>;
 }
 /** Real configured gateway vision, not a heuristic classifier. Backend validates every response. */
 export interface ColorVision {

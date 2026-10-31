@@ -55,6 +55,7 @@ export class SiteHeader {
   readonly notificationCount = this.notifications.unreadCount;
   readonly notificationOpen = signal(false);
   readonly navOpen = signal(false);
+  readonly scrolled = signal(false);
 
   // Search dropdown states
   readonly searchOpen = signal(false);
@@ -154,6 +155,13 @@ export class SiteHeader {
   }
 
   /** Closes the notification popover when the member clicks anywhere outside it. */
+  @HostListener('window:scroll')
+  onWindowScroll(): void {
+    if (typeof window === 'undefined') return;
+    const next = (window.scrollY || document.documentElement.scrollTop || 0) > 8;
+    if (this.scrolled() !== next) this.scrolled.set(next);
+  }
+
   @HostListener('document:click', ['$event'])
   closeNotificationsOnOutsideClick(event: MouseEvent): void {
     const target = event.target;

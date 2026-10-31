@@ -458,11 +458,23 @@ app-product-card .product-card:hover,
 
 /* Shared storefront header: one Angular component for all SiteShell routes. */
 .site-header {
-  background: rgba(255, 246, 248, .97);
-  border-bottom: 1px solid rgba(242, 194, 207, .45);
-  box-shadow: 0 2px 8px rgba(60, 20, 30, .05);
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  background: linear-gradient(180deg, #fffefd 0%, #fff7f9 55%, #fbecef 100%);
+  border-bottom: 1px solid rgba(122, 40, 60, .12);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .8), 0 6px 24px rgba(80, 24, 40, .05);
   font-family: var(--velura-font-ui) !important;
+  transition: box-shadow .25s ease, background .25s ease;
 }
+
+.site-header.header-scrolled {
+  background: linear-gradient(180deg, #fffdfd 0%, #fff3f6 100%);
+  box-shadow: 0 10px 30px rgba(80, 24, 40, .12);
+}
+
+.site-header.header-scrolled .center-row--top { padding-block: 6px 4px; }
+.site-header.header-scrolled .center-row--bottom { padding-block: 6px; }
 .site-header__container-grid { max-width: 1440px; margin-inline: auto; grid-template-columns: 150px minmax(0, 1fr) 190px; }
 .site-header__logo-group { gap: 0; }
 .logo-brand-name { color: var(--velura-maroon); font-family: var(--velura-font-display) !important; font-size: 1.55rem; letter-spacing: .12em; }

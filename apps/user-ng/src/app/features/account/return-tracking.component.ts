@@ -98,7 +98,7 @@ const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
             <p class="mono">{{ d.returnCode }}</p>
             <button type="button" class="secondary" (click)="printLabel()">In phiếu gửi hoàn</button>
           } @else {
-            <p class="muted">Phiếu gửi hàng và QR sẽ xuất hiện sau khi CSKH duyệt yêu cầu. Hãy tải đủ ảnh và video đóng gói để được duyệt nhanh.</p>
+            <p class="muted">Phiếu gửi hàng và QR sẽ xuất hiện sau khi CSKH duyệt yêu cầu. Gửi thêm ảnh/video đóng gói giúp duyệt nhanh hơn, nhưng không bắt buộc.</p>
           }
         </section>
 
@@ -123,7 +123,7 @@ const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
               <input type="file" accept="image/jpeg,image/png,image/webp" multiple (change)="onPhotos($event)" />
             </label>
             <label class="field">
-              Video đóng gói (bắt buộc để duyệt, MP4/WebM, tối đa 50 MB)
+              Video đóng gói (khuyến nghị gửi kèm, MP4/WebM, tối đa 50 MB)
               <input type="file" accept="video/mp4,video/webm" (change)="onVideo($event)" />
             </label>
             @if (uploading()) { <p class="muted">Đang tải bằng chứng…</p> }

@@ -66,6 +66,14 @@
         </select>
       </label>
       <label class="erp-field">
+        <span>Quyết định</span>
+        <select class="erp-select" name="decision" [value]="decisionFilter()" (change)="onDecisionChange($event)">
+          @for (option of decisionOptions; track option.value) {
+            <option [value]="option.value">{{ option.label }}</option>
+          }
+        </select>
+      </label>
+      <label class="erp-field">
         <span>Kênh tiền</span>
         <select class="erp-select" name="payment" [value]="paymentFilter()" (change)="onPaymentChange($event)">
           @for (option of paymentOptions; track option.value) {
@@ -234,20 +242,33 @@
         </section>
       }
 
-      @if (record.evidence?.length) {
-        <section class="record__evidence">
-          <h4>Bằng chứng ban đầu / đóng gói (không bắt buộc) / pickup / QA</h4>
-          @for (item of record.evidence; track item.evidence_id || item.url) {
-            <div class="record__evidence-row">
-              <span>{{ evidenceLabel(item.kind) }} · {{ date(item.created_at) }}</span>
-              @if (item.url && (item.mime_type?.startsWith('video/') || item.kind === 'request_video' || item.kind === 'packing_video' || item.kind === 'pickup_video')) {
-                <video [src]="item.url" controls preload="metadata" style="max-width: 100%; max-height: 240px"></video>
-              } @else if (item.url) {
-                <a [href]="item.url" target="_blank" rel="noopener"><img [src]="item.url" alt="Bằng chứng đổi trả" /></a>
-              }
+      @if (evidenceGroups().length) {
+        <section class="record__evidence-board">
+          <h4>Bằng chứng đổi trả</h4>
+          @for (group of evidenceGroups(); track group.stage) {
+            <div class="evidence-group">
+              <p class="evidence-group__title">{{ group.label }} <span class="evidence-group__count">{{ group.items.length }}</span></p>
+              <div class="evidence-grid">
+                @for (item of group.items; track item.evidence_id || item.url) {
+                  <figure class="evidence-tile" [class.evidence-tile--wide]="item.mime_type?.startsWith('video/') || item.kind?.endsWith('_video')">
+                    @if (item.mime_type?.startsWith('video/') || item.kind?.endsWith('_video')) {
+                      <video [src]="item.url" controls preload="metadata"></video>
+                    } @else {
+                      <a [href]="item.url" target="_blank" rel="noopener"><img [src]="item.url" [alt]="evidenceLabel(item.kind)" loading="lazy" /></a>
+                    }
+                    <figcaption>
+                      <span class="evidence-tile__kind">{{ evidenceLabel(item.kind) }}</span>
+                      <span class="evidence-tile__meta">{{ evidenceRole(item.uploaded_by_role) }} · {{ date(item.created_at) }}</span>
+                      @if (item.note) { <span class="evidence-tile__note">{{ item.note }}</span> }
+                    </figcaption>
+                  </figure>
+                }
+              </div>
             </div>
           }
         </section>
+      } @else if (record.evidence) {
+        <p class="record__evidence-empty">Chưa có bằng chứng nào cho phiếu này. Khách chỉ được yêu cầu gửi thêm ảnh/video đóng gói, không bắt buộc.</p>
       }
 
       @if (record.events?.length) {

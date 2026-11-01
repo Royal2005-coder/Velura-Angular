@@ -1,6 +1,6 @@
 @if (!hideTrigger() && offered()) {
   <button type="button" class="btn btn--outline ai-workbench-trigger" (click)="open()">
-    <span class="ai-trigger-sparkle">✨</span>
+    <span class="ai-trigger-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6.3 6.3l2.4 2.4M15.3 15.3l2.4 2.4M17.7 6.3l-2.4 2.4M8.7 15.3l-2.4 2.4"></path></svg></span>
     <span>{{ title() }}</span>
     <span class="ai-trigger-badge">AI 3D Try-On</span>
   </button>
@@ -10,7 +10,7 @@
   <div class="dialog-content">
     <header class="workbench-header">
       <div class="workbench-header__title-group">
-        <span class="workbench-header__icon">✨</span>
+        <span class="workbench-header__icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6.3 6.3l2.4 2.4M15.3 15.3l2.4 2.4M17.7 6.3l-2.4 2.4M8.7 15.3l-2.4 2.4"></path></svg></span>
         <h2 [id]="titleId" class="workbench-header__title">{{ title() }}</h2>
       </div>
       <button type="button" class="btn-close" (click)="close()" aria-label="Đóng">
@@ -56,7 +56,7 @@
 
       @if (qualityWarning()) {
         <div class="alert alert--tip" role="status">
-          <span class="tip-icon">💡</span>
+          <span class="tip-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 16v-4M12 8h.01"></path></svg></span>
           <span>{{ qualityWarning() }}</span>
         </div>
       }
@@ -72,7 +72,7 @@
             [disabled]="busy()"
             (click)="chooseMode('personal')"
           >
-            <span class="tab-icon">👤</span>
+            <span class="tab-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg></span>
             <span class="tab-text">Ảnh của tôi</span>
           </button>
           <button
@@ -83,7 +83,7 @@
             [disabled]="busy() || !capabilities()?.studio_assets?.length"
             (click)="chooseMode('studio')"
           >
-            <span class="tab-icon">✨</span>
+            <span class="tab-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8.5V7A2.5 2.5 0 1 0 9.5 4.5"></path><path d="M12 8.5 3.6 14.1a1 1 0 0 0 .58 1.82h15.64a1 1 0 0 0 .58-1.82L12 8.5Z"></path></svg></span>
             <span class="tab-text">Người mẫu Studio 3D</span>
             <span class="tab-badge">Mới</span>
           </button>
@@ -103,20 +103,20 @@
                 (change)="select($event)"
               />
               <div class="dropzone__content">
-                <div class="dropzone__icon">📸</div>
+                <div class="dropzone__icon" aria-hidden="true"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2Z"></path><circle cx="12" cy="13" r="4"></circle></svg></div>
                 <div class="dropzone__title">Tải ảnh chụp của bạn lên</div>
                 <div class="dropzone__subtitle">Kéo thả ảnh hoặc bấm để duyệt từ thiết bị (JPG, PNG, WebP)</div>
                 <div class="dropzone__tips">
-                  <span>✓ Áo: Chỉ cần rõ phần thân trên</span>
-                  <span>✓ Quần/Váy: Thấy rõ thân dưới hoặc toàn thân</span>
-                  <span>✓ Nền ảnh bất kỳ: AI tự xử lý</span>
+                  <span><svg class="tip-check" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg> Áo: Chỉ cần rõ phần thân trên</span>
+                  <span><svg class="tip-check" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg> Quần/Váy: Thấy rõ thân dưới hoặc toàn thân</span>
+                  <span><svg class="tip-check" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg> Nền ảnh bất kỳ: AI tự xử lý</span>
                 </div>
               </div>
             </label>
           } @else {
             <div class="preview-card">
               <div class="preview-card__header">
-                <span class="badge badge--success">✓ Đã chọn ảnh của bạn</span>
+                <span class="badge badge--success"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg> Đã chọn ảnh của bạn</span>
                 <label class="btn-change">
                   Đổi ảnh khác
                   <input
@@ -288,7 +288,7 @@
       @if (busy()) {
         <div class="ai-loading-panel" aria-live="polite">
           <div class="ai-loading-panel__header">
-            <div class="pulse-sparkle">✨</div>
+            <div class="pulse-sparkle" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8.5V7A2.5 2.5 0 1 0 9.5 4.5"></path><path d="M12 8.5 3.6 14.1a1 1 0 0 0 .58 1.82h15.64a1 1 0 0 0 .58-1.82L12 8.5Z"></path></svg></div>
             <div class="ai-loading-panel__title">AI Đang Render Thử Đồ</div>
             <div class="ai-loading-panel__timer">{{ loadingSeconds() }}s</div>
           </div>
@@ -348,7 +348,7 @@
             [disabled]="!consent() || !preview() || busy() || !available()"
             (click)="validate()"
           >
-            <span class="btn-sparkle">🔍</span>
+            <span class="btn-sparkle" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg></span>
             <span>Kiểm tra ảnh & Sẵn sàng thử đồ</span>
           </button>
         } @else {
@@ -364,7 +364,7 @@
             "
             (click)="generate()"
           >
-            <span class="btn-sparkle">✨</span>
+            <span class="btn-sparkle" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8.5V7A2.5 2.5 0 1 0 9.5 4.5"></path><path d="M12 8.5 3.6 14.1a1 1 0 0 0 .58 1.82h15.64a1 1 0 0 0 .58-1.82L12 8.5Z"></path></svg></span>
             <span>Xác nhận & Thử đồ AI</span>
           </button>
         }
@@ -391,7 +391,14 @@
                 (click)="toggleView3D()"
                 title="Bật/Tắt hiệu ứng góc nhìn 3D"
               >
-                <span>{{ view3D() ? '🌐 Góc nhìn 3D: Đang bật' : '🖼️ Góc nhìn 2D tĩnh' }}</span>
+                <span class="view-btn__icon" aria-hidden="true">
+                  @if (view3D()) {
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 7.5v9L12 21l8-4.5v-9Z"></path><path d="M12 12 4 7.5M12 12l8-4.5M12 12v9"></path></svg>
+                  } @else {
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="m5 17 4.5-5 3.5 3.5L16 12l3 3"></path><circle cx="9" cy="9" r="1.4"></circle></svg>
+                  }
+                </span>
+                <span>{{ view3D() ? 'Góc nhìn 3D: Đang bật' : 'Góc nhìn 2D tĩnh' }}</span>
               </button>
               <button
                 type="button"
@@ -400,7 +407,14 @@
                 (click)="toggleShowOriginal()"
                 title="So sánh với ảnh gốc"
               >
-                <span>{{ showOriginal() ? '👁️ Đang xem: Ảnh gốc' : '✨ Đang xem: Đã thử đồ' }}</span>
+                <span class="view-btn__icon" aria-hidden="true">
+                  @if (showOriginal()) {
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                  } @else {
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8.5V7A2.5 2.5 0 1 0 9.5 4.5"></path><path d="M12 8.5 3.6 14.1a1 1 0 0 0 .58 1.82h15.64a1 1 0 0 0 .58-1.82L12 8.5Z"></path></svg>
+                  }
+                </span>
+                <span>{{ showOriginal() ? 'Đang xem: Ảnh gốc' : 'Đang xem: Đã thử đồ' }}</span>
               </button>
             </div>
             <div class="result-toolbar__right">
@@ -413,7 +427,8 @@
 
           @if (view3D() && !showOriginal()) {
             <div class="hint-3d">
-              💡 <strong>Chế độ 3D:</strong> Rê chuột trên ảnh (hoặc vuốt cảm ứng) để xoay chuyển góc nhìn tương tác với ánh sáng nổi.
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 16v-4M12 8h.01"></path></svg>
+              <span><strong>Chế độ 3D:</strong> Rê chuột trên ảnh (hoặc vuốt cảm ứng) để xoay chuyển góc nhìn tương tác với ánh sáng nổi.</span>
             </div>
           }
 

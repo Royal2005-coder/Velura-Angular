@@ -482,6 +482,19 @@ test("the return queue filters by payment kind and refuses unknown kinds", async
   await assert.rejects(() => service.listReturns(context("admin_operator_cskh_dt"), new URLSearchParams("payment_kind=momo")), hasStatus(422));
 });
 
+test("the return queue rejects status codes the header enum does not store and filters decisions", async () => {
+  let filters: ReturnListFilters | null = null;
+  const service = createReturnService({ repository: { listReturns: async (received: ReturnListFilters) => { filters = received; return { rows: [] }; } } });
+  await service.listReturns(context("admin_operator_cskh_dt"), new URLSearchParams("status=WAITING_RETURN&decision_status=PARTIALLY_APPROVED"));
+  assert.equal(filters?.status, "WAITING_RETURN");
+  assert.equal(filters?.decisionStatus, "PARTIALLY_APPROVED");
+  // Per-part and legacy codes would otherwise reach Postgres as an invalid enum value.
+  for (const bad of ["RETURN_SHIPPING", "REFUND_PENDING", "PARTIALLY_APPROVED"]) {
+    await assert.rejects(() => service.listReturns(context("admin_operator_cskh_dt"), new URLSearchParams(`status=${bad}`)), hasStatus(422));
+  }
+  await assert.rejects(() => service.listReturns(context("admin_operator_cskh_dt"), new URLSearchParams("decision_status=maybe")), hasStatus(422));
+});
+
 test("order readers never receive full bank fields in legacy headers, manual snapshots or events", async () => {
   const service = createReturnService({ repository: {
     getReturn: async () => ({ ...COD_RETURN, return_type: "refund", refund_bank_name: "Vietcombank", refund_bank_account: "0123456789", refund_bank_holder: "Nguyen Van A" }),

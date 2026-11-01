@@ -34,11 +34,13 @@ function context(roleCode: string): AuthContext {
 
 /** Repository giả: ghi lại payload RPC để kiểm tra service gọi đúng hợp đồng 079. */
 function repository(response: JsonObject = { rows: [], count: 0 }, error?: unknown) {
-  const calls: { overview: number; list: unknown[]; detail: unknown[]; lock: unknown[] } = {
+  const calls: { overview: number; list: unknown[]; detail: unknown[]; lock: unknown[]; adjust: unknown[]; spending: unknown[] } = {
     overview: 0,
     list: [],
     detail: [],
     lock: [],
+    adjust: [],
+    spending: [],
   };
   const repo = {
     async overview() {
@@ -57,6 +59,15 @@ function repository(response: JsonObject = { rows: [], count: 0 }, error?: unkno
       calls.lock.push(input);
       if (error) throw error;
       return { user_id: MEMBER_ID, accrual_locked: false, changed: true };
+    },
+    async adjustMemberPoints(input: unknown) {
+      calls.adjust.push(input);
+      if (error) throw error;
+      return { ledger_id: "ledger-1", user_id: MEMBER_ID, balance_milli: 0, idempotent: false };
+    },
+    async setLoyaltySpending(input: unknown) {
+      calls.spending.push(input);
+      return { spending_enabled: true, max_discount_percent: 50 };
     },
   };
   return { calls, repo: repo as never };
@@ -257,7 +268,36 @@ test("migration 079 and the TypeScript service speak the same contract", async (
   assert.ok(sql.includes("grant execute on function public.admin_list_members(text, text, text, integer, integer) to authenticated"));
 
   const repoSource = await readFile(new URL("../../apps/api/src/members/member-repository.ts", import.meta.url), "utf8");
-  for (const param of ["p_q", "p_wallet", "p_sort", "p_limit", "p_offset", "p_user_id", "p_locked", "p_reason", "p_ip_address"]) {
+  for (const param of ["p_q", "p_wallet", "p_sort", "p_limit", "p_offset", "p_user_id", "p_locked", "p_reason", "p_ip_address", "p_points", "p_idempotency_key", "p_return_id", "p_enabled", "p_max_percent"]) {
     assert.ok(repoSource.includes(`${param}:`), `repository thiếu tham số ${param}`);
   }
+});
+
+test("manual point correction is super-admin only and refuses amounts that cannot be audited", async () => {
+  const { calls, repo } = repository();
+  const service = createMemberService({ repository: repo });
+  const valid = { points: -50, reason: "Bù điểm khách khiếu nại đơn 1234", idempotencyKey: "pts-abc12345" };
+
+  const denied = await thrown(() => service.adjustMemberPoints(context("admin_operator_cskh_dt"), MEMBER_ID, valid as JsonObject, { ipAddress: "10.0.0.1" }));
+  assert.equal(denied.code, "RBAC_DENIED");
+  assert.deepEqual(calls.adjust, [], "không được ghi ví khi không có quyền");
+
+  await service.adjustMemberPoints(context("super_admin"), MEMBER_ID, valid as JsonObject, { ipAddress: "10.0.0.1" });
+  assert.equal(calls.adjust.length, 1);
+  assert.deepEqual(calls.adjust[0], {
+    userId: MEMBER_ID, points: -50, reason: "Bù điểm khách khiếu nại đơn 1234",
+    idempotencyKey: "pts-abc12345", returnId: null, ipAddress: "10.0.0.1",
+  });
+
+  for (const points of [0, 1.5, 1_000_001, -1_000_001]) {
+    const bad = await thrown(() => service.adjustMemberPoints(context("super_admin"), MEMBER_ID, { ...valid, points } as unknown as JsonObject, { ipAddress: "10.0.0.1" }));
+    assert.equal(bad.code, "INVALID_POINTS", String(points));
+  }
+  const shortReason = await thrown(() => service.adjustMemberPoints(context("super_admin"), MEMBER_ID, { ...valid, reason: "sửa" } as JsonObject, { ipAddress: "10.0.0.1" }));
+  assert.equal(shortReason.code, "REASON_REQUIRED");
+  const shortKey = await thrown(() => service.adjustMemberPoints(context("super_admin"), MEMBER_ID, { ...valid, idempotencyKey: "abc" } as JsonObject, { ipAddress: "10.0.0.1" }));
+  assert.equal(shortKey.code, "TRANSFER_REFERENCE_REQUIRED");
+  const badUuid = await thrown(() => service.adjustMemberPoints(context("super_admin"), MEMBER_ID, { ...valid, returnId: "not-a-uuid" } as JsonObject, { ipAddress: "10.0.0.1" }));
+  assert.equal(badUuid.code, "VALIDATION_ERROR");
+  assert.equal(calls.adjust.length, 1, "mọi lệnh sai phải chặn trước khi chạm tầng dữ liệu");
 });

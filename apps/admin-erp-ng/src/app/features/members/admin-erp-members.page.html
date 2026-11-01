@@ -66,6 +66,39 @@
     <p class="member-notice">Vai trò của bạn không có quyền xem điểm thành viên.</p>
   </section>
 } @else {
+  <section class="erp-card member-panel" aria-labelledby="spending-title">
+    <h3 id="spending-title">Dùng điểm khi thanh toán</h3>
+    <p class="member-lock__hint">
+      Hiện {{ spendingLive() ? 'ĐANG BẬT' : 'ĐANG TẮT' }} cho mọi thành viên
+      @if (spendingCap()) { <span> · trần {{ spendingCap() }}% giá trị đơn</span> }.
+      Bật là phê duyệt chính sách — máy chủ ghi người và lý do vào nhật ký. Chỉ super admin áp dụng được.
+    </p>
+    <label class="erp-field">
+      <span>Tỉ lệ tối đa trên một đơn (%)</span>
+      <input class="erp-input" type="number" min="1" max="100" step="1" [value]="spendingPercent()" (input)="onSpendingPercent($event)" />
+    </label>
+    <label class="erp-field">
+      <span>Lý do (tối thiểu 10 ký tự)</span>
+      <textarea class="erp-input" rows="2" [value]="spendingReason()" (input)="onSpendingReason($event)" placeholder="ví dụ: đã duyệt chính sách thưởng 25/10 với vận hành"></textarea>
+    </label>
+    @if (spendingError()) {
+      <p class="erp-error" role="alert">{{ spendingError() }}</p>
+    }
+    <div class="member-lock__actions">
+      @if (spendingLive()) {
+        <button class="erp-btn erp-btn--danger erp-btn--sm" type="button" [disabled]="spendingBusy()" (click)="saveSpending(false)">
+          {{ spendingBusy() ? 'Đang lưu…' : 'Tắt dùng điểm' }}
+        </button>
+      } @else {
+        <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" [disabled]="spendingBusy()" (click)="saveSpending(true)">
+          {{ spendingBusy() ? 'Đang lưu…' : 'Bật dùng điểm' }}
+        </button>
+      }
+    </div>
+  </section>
+}
+
+@if (canRead()) {
   <section class="erp-card member-panel" aria-labelledby="members-title">
     <div class="member-panel__head">
       <div>

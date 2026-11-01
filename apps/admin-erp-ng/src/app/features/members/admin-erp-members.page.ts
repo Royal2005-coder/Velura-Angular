@@ -106,6 +106,14 @@ export class AdminErpMembersPage {
   readonly lockReason = signal('');
   readonly lockBusy = signal(false);
   readonly lockError = signal<string | null>(null);
+  readonly spendingReason = signal('');
+  readonly spendingPercent = signal(50);
+  readonly spendingBusy = signal(false);
+  readonly spendingError = signal<string | null>(null);
+
+  /** Live redemption switch; `effectively_enabled` also requires the stored policy approval. */
+  readonly spendingLive = computed(() => Boolean(this.overview()?.loyalty_spending?.effectively_enabled));
+  readonly spendingCap = computed(() => Number(this.overview()?.loyalty_spending?.max_discount_percent ?? 0));
 
   readonly detailState = computed(() => {
     const account = this.detail()?.account;
@@ -347,6 +355,48 @@ export class AdminErpMembersPage {
 
   onLockReason(event: Event): void {
     this.lockReason.set((event.target as HTMLTextAreaElement).value);
+  }
+
+  onSpendingReason(event: Event): void {
+    this.spendingReason.set((event.target as HTMLTextAreaElement).value);
+  }
+
+  onSpendingPercent(event: Event): void {
+    this.spendingPercent.set(Number((event.target as HTMLInputElement).value));
+  }
+
+  /**
+   * Applies the platform-wide redemption switch. Only super admin may write it, so a rejection from
+   * the RPC is surfaced rather than retried silently; the overview rereads the stored state.
+   */
+  saveSpending(enabled: boolean): void {
+    if (!this.canUpdate() || this.spendingBusy()) return;
+    const reason = this.spendingReason().trim();
+    const percent = this.spendingPercent();
+    this.spendingError.set(
+      reason.length < 10
+        ? 'Cần lý do tối thiểu 10 ký tự để lưu dấu vết vận hành.'
+        : percent < 1 || percent > 100
+          ? 'Tỉ lệ tối đa phải từ 1 đến 100.'
+          : null,
+    );
+    if (this.spendingError()) return;
+
+    this.spendingBusy.set(true);
+    this.api.setLoyaltySpending({ enabled, maxPercent: percent, reason }).subscribe({
+      next: () => {
+        this.spendingBusy.set(false);
+        this.spendingReason.set('');
+        this.notice.set(enabled
+          ? `Đã bật dùng điểm khi thanh toán, tối đa ${percent}% giá trị đơn.`
+          : 'Đã tắt dùng điểm khi thanh toán cho toàn bộ thành viên.');
+        this.reload();
+      },
+      error: (error: unknown) => {
+        this.spendingBusy.set(false);
+        this.spendingError.set(adminErrorMessage(error, 'Không lưu được thiết lập điểm.'));
+      },
+    });
   }
 
   /**

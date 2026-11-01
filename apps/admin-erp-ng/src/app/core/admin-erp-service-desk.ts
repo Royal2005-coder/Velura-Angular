@@ -28,6 +28,25 @@ export const RETURN_STATUS_LABELS: Readonly<Record<string, string>> = {
   NEEDS_SUPPORT: 'Cần hỗ trợ',
 };
 
+/**
+ * Values the `return_exchange.status` enum actually accepts, so a queue filter never asks the
+ * database for a code it would reject. RETURN_SHIPPING / REFUND_PENDING / PARTIALLY_APPROVED are
+ * per-part or decision values — RETURN_STATUS_LABELS still labels them when they arrive on a line.
+ */
+export const RETURN_HEADER_STATUSES: readonly string[] = [
+  'REQUESTED', 'CONTACTING', 'APPROVED', 'IN_PROGRESS', 'WAITING_RETURN', 'RETURN_IN_TRANSIT',
+  'RECEIVED', 'REFUND_PROCESSING', 'REFUNDED', 'EXCHANGE_PREPARING', 'EXCHANGE_SHIPPING',
+  'COMPLETED', 'CANCELLED', 'NEEDS_SUPPORT', 'REJECTED',
+];
+
+/** Header-level decision column values, filtered separately from the workflow status. */
+export const RETURN_DECISION_STATUSES: readonly { value: string; label: string }[] = [
+  { value: 'pending', label: 'Chưa quyết định' },
+  { value: 'approved', label: 'Duyệt toàn bộ' },
+  { value: 'PARTIALLY_APPROVED', label: 'Duyệt một phần' },
+  { value: 'rejected', label: 'Từ chối' },
+];
+
 const RETURN_STATUS_TONES: Readonly<Record<string, AdminTone>> = {
   REQUESTED: 'warning',
   CONTACTING: 'warning',

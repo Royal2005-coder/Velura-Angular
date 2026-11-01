@@ -16,6 +16,7 @@ function clientIpOptions(ipAddress?: string) {
  */
 export interface ReturnListFilters {
   status?: string;
+  decisionStatus?: string;
   search?: string;
   orderId?: string;
   /** `cod` = đơn COD, `online` = đơn thanh toán online (Stripe/MoMo/VNPay). */
@@ -240,6 +241,7 @@ export function createReturnRepository() {
         offset: filters.offset
       };
       if (filters.status) query.status = `eq.${filters.status}`;
+      if (filters.decisionStatus) query.decision_status = `eq.${filters.decisionStatus}`;
       if (filters.orderId) query.order_id = `eq.${filters.orderId}`;
       if (filters.paymentKind) query["pay_order.payment_method"] = filters.paymentKind === "cod" ? "eq.COD" : "eq.ONLINE_PAYMENT";
       if (filters.search) {

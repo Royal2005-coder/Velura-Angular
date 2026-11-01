@@ -2,10 +2,26 @@
   @if (record(); as record) {
     <div class="flow-head">
       <div><h3>{{ record.return_code || record.return_id }}</h3><p>Yêu cầu ban đầu: {{ record.return_type === 'exchange' ? 'Đổi hàng' : 'Hoàn tiền' }} (không thay đổi)</p></div>
+      @if (customerPhone()) {
+        <a class="erp-btn erp-btn--sm erp-btn--call" [href]="'tel:' + customerPhone()">Gọi xác nhận {{ record.customer_phone }}</a>
+      }
     </div>
     @if (line(); as item) {
-      <p class="flow-hint">Phần {{ item.return_item_id }} · {{ item.quantity }} sản phẩm · phiên bản {{ item.version }}</p>
-      @if (canSplit()) {
+      <dl class="flow-summary">
+        <div><dt>Sản phẩm</dt><dd>{{ item.product_name || item.order_item_id || '—' }}</dd></div>
+        <div><dt>Khách yêu cầu</dt><dd>{{ item.quantity }} sản phẩm</dd></div>
+        @if (item.reason) { <div><dt>Lý do khách nêu</dt><dd>{{ item.reason }}</dd></div> }
+        @if (record.description) { <div><dt>Mô tả khách gửi</dt><dd>{{ record.description }}</dd></div> }
+        <div><dt>Khách hàng</dt><dd>{{ record.customer_name || '—' }}{{ record.customer_phone ? ' · ' + record.customer_phone : '' }}</dd></div>
+        @if (record.customer_address) { <div><dt>Địa chỉ nhận hàng</dt><dd>{{ record.customer_address }}</dd></div> }
+      </dl>
+      @if (flow() === 'approve') {
+        <p class="flow-hint">Duyệt toàn bộ {{ item.quantity }} sản phẩm khách yêu cầu. Muốn xử lý ít hơn, dùng “Kho nhận &amp; kiểm hàng” để tách phần còn lại.</p>
+        @if (noCustomerEvidence()) {
+          <p class="flow-hint flow-hint--soft">Chưa có ảnh/video đóng gói khách gửi. Hãy nhắc qua điện thoại sau khi duyệt — vẫn duyệt được bình thường.</p>
+        }
+      }
+      @if (showQuantityEditor()) {
         <label class="erp-field"><span>Số lượng xử lý trong phần này</span><input class="erp-input" type="number" min="1" [max]="item.quantity || 1" step="1" [value]="quantity()" (input)="setQuantity($event)" /></label>
         <p class="flow-hint">Khách yêu cầu ban đầu: {{ item.quantity }} sản phẩm. Xử lý ít hơn sẽ tách phần còn lại; những phần khác không bị thay đổi.</p>
       }
@@ -13,6 +29,14 @@
     @if (flow() === 'contact') {
       <label class="erp-field"><span>Kết quả liên hệ</span><select class="erp-select" [value]="contactResult()" (change)="setText('contactResult', $event)">@for (result of contactResults; track result.code) { <option [value]="result.code">{{ result.label }}</option> }</select></label>
       <p class="flow-hint">Không liên hệ được / chờ khách bổ sung được lưu riêng, không thay thế tiến độ từng phần.</p>
+      <div class="flow-facts">
+        <span class="flow-facts__label">Nội dung đã trao đổi với khách</span>
+        <div class="flow-facts__list">
+          @for (fact of contactFacts; track fact.code) {
+            <button class="flow-fact" type="button" (click)="appendFact(fact.label)">{{ fact.label }}</button>
+          }
+        </div>
+      </div>
     }
     @if (needsConsent()) {
       <p class="flow-warning">Chỉ thay đổi phương án của phần đang chọn, không đổi loại yêu cầu ban đầu.</p>
@@ -56,6 +80,14 @@
       <p class="flow-hint">Máy chủ kiểm tra cùng sản phẩm và tồn khả dụng khi chuẩn bị đổi.</p>
     }
     @if (flow() === 'pickup' || flow() === 'ship_exchange') {
+      <div class="flow-scan">
+        <button class="erp-btn erp-btn--scan" type="button" (click)="openScan()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"></path><path d="M7 12h10"></path></svg>
+          Quét QR {{ flow() === 'pickup' ? 'phiếu hoàn' : 'đơn đổi' }}
+        </button>
+        <span class="flow-hint">Quét nhãn on kiện để tự điền ĐVVC và mã vận đơn.</span>
+      </div>
+      @if (scanError()) { <p class="flow-warning" role="alert">{{ scanError() }}</p> }
       <label class="erp-field"><span>Đơn vị vận chuyển</span><input class="erp-input" [value]="carrier()" (input)="setText('carrier', $event)" /></label>
       <label class="erp-field"><span>Mã vận đơn của phần hàng</span><input class="erp-input" [value]="tracking()" (input)="setText('tracking', $event)" /></label>
     }
@@ -90,4 +122,6 @@
     @if (error()) { <p class="flow-warning" role="alert">{{ error() }}</p> }
   }
   <div footer><button class="erp-btn" type="button" [disabled]="saving()" (click)="dismiss()">Hủy</button><button class="erp-btn erp-btn--primary" type="button" [disabled]="!canSubmit()" (click)="submit()">{{ saving() ? 'Đang lưu…' : 'Xác nhận' }}</button></div>
+  <app-erp-qr-scan [open]="scanOpen()" [sample]="scanSample()" [title]="flow() === 'ship_exchange' ? 'Quét QR đơn đổi' : 'Quét QR phiếu hoàn'"
+    sampleCaption="Mã mẫu — quét bằng camera hoặc bấm “Dùng mã mẫu”" (scanned)="applyScan($event)" (closed)="scanOpen.set(false)" />
 </app-erp-modal>

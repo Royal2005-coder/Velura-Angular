@@ -3,8 +3,10 @@ import { HttpError } from "../http.js";
 import type { AuthContext, AuthUser, HttpRequest, JsonObject, RequestMeta } from "../types.js";
 import { asJsonObject, asNumber, asString, errorMessage } from "../types.js";
 import {
+  RETURN_DECISION_STATUSES,
   RETURN_OPERATOR_ROLES,
   RETURN_READER_ROLES,
+  RETURN_STATUSES,
   SUPPORT_TICKET_TRANSITIONS
 } from "./return-constants.js";
 import { sendExchangeCompletedEmail, sendExchangeShippingEmail, sendRefundSuccessEmail, sendReturnApprovedEmail } from "./return-email.js";
@@ -157,8 +159,19 @@ export function createReturnService({
         throw new HttpError(422, "VALIDATION_ERROR", "Bộ lọc thanh toán chỉ nhận cod hoặc online.");
       }
       const paymentKind = paymentKindParam === "cod" || paymentKindParam === "online" ? paymentKindParam : undefined;
+      // The status column is a Postgres enum: an unknown code would fail deep in the database with
+      // an unreadable error, so the queue only accepts codes the header actually stores.
+      const status = searchParams.get("status") || undefined;
+      if (status && !RETURN_STATUSES.includes(status as (typeof RETURN_STATUSES)[number])) {
+        throw new HttpError(422, "INVALID_RETURN_STATUS", "Trạng thái lọc không tồn tại. Lọc theo trạng thái của phiếu, không phải trạng thái từng phần hàng.");
+      }
+      const decisionStatus = searchParams.get("decision_status") || undefined;
+      if (decisionStatus && !RETURN_DECISION_STATUSES.includes(decisionStatus)) {
+        throw new HttpError(422, "INVALID_DECISION_STATUS", "Quyết định lọc không hợp lệ.");
+      }
       const result = await repository.listReturns({
-        status: searchParams.get("status") || undefined,
+        status,
+        decisionStatus,
         search: searchParams.get("q") || undefined,
         orderId: searchParams.get("order_id") || undefined,
         paymentKind,
@@ -288,15 +301,13 @@ export function createReturnService({
         }
         if (!isPrivateEvidenceRef(body.receiptProofRef)) throw new HttpError(422, "PROOF_REQUIRED", "Tải lên bằng chứng kiểm hàng riêng tư.");
       }
+      let packingEvidenceMissing = false;
       if (action === "approve") {
         const evidence = await repository.listEvidence(returnId).catch(() => []);
         const customerKinds = new Set(evidence
           .filter((row) => asString(row.uploaded_by_role) === "customer")
           .map((row) => asString(row.kind)));
-        if (!customerKinds.has("packing_photo") || !customerKinds.has("packing_video")) {
-          throw new HttpError(422, "PACKING_EVIDENCE_REQUIRED",
-            "Khách cần tải ít nhất một ảnh và một video đóng gói trước khi duyệt phần hàng.");
-        }
+        packingEvidenceMissing = !customerKinds.has("packing_photo") || !customerKinds.has("packing_video");
       }
       const { action: _action, expectedVersion: _version, ...facts } = body;
       const result = await repository.actOnItem(returnId, returnItemId, action, facts, expectedVersion,
@@ -312,7 +323,7 @@ export function createReturnService({
       if (action === "complete_exchange") {
         void sendExchangeCompletedEmail(returnId);
       }
-      return result;
+      return packingEvidenceMissing ? { ...result, packing_evidence_missing: true } : result;
     },
     async recordContact(context, returnId, body) {
       requireReturnAdmin(context);

@@ -156,4 +156,39 @@ describe('ReturnFlowComponent per-item operations', () => {
     expect(contacts[0]).toEqual({ result: 'no_answer', note: 'Đã gọi hai lần, chưa liên hệ được khách', expectedVersion: 42 });
     expect(actions).toEqual([]);
   });
+
+  it('approves the quantity the customer requested without an editable field', () => {
+    const part: AdminReturnLine = { ...line, decision_status: 'pending', item_status: 'REQUESTED' };
+    const { component, actions } = boot('approve', part);
+    expect(component.showQuantityEditor()).toBe(false);
+    component.note.set('Đã gọi xác nhận đổi size với khách');
+    expect(component.canSubmit()).toBe(true); component.submit();
+    expect(actions[0].body.quantity).toBe(3);
+  });
+
+  it('writes confirmed call facts into the stored contact note once each', () => {
+    const { component, contacts } = boot('contact');
+    component.appendFact('Xác nhận yêu cầu đổi trả'); component.appendFact('Xác nhận yêu cầu đổi trả');
+    component.note.set(component.note() + ' Khách đổi sang size M.');
+    component.submit();
+    expect(contacts[0]['note']).toBe('Xác nhận yêu cầu đổi trả. Khách đổi sang size M.');
+  });
+
+  it('fills carrier and AWB from the return QR and refuses a label from another return', () => {
+    const { component, fixture } = boot('pickup', { ...line, item_status: 'WAITING_RETURN' });
+    fixture.componentRef.setInput('record', { ...record, return_code: 'RMA-001', order_code: 'VLR-777' }); fixture.detectChanges();
+    component.applyScan('velura:return:1?id=return-1&code=RMA-001');
+    expect(component.carrier()).toBe('GHN');
+    expect(component.tracking()).toBe('GHNVLR777');
+    component.applyScan('velura:return:1?id=other-return&code=RMA-002');
+    expect(component.scanError()).toContain('phiếu đổi trả khác');
+    expect(component.tracking()).toBe('GHNVLR777');
+  });
+
+  it('accepts a plain AWB scan so a hand-written label still fills the shipment fields', () => {
+    const { component } = boot('pickup', { ...line, item_status: 'WAITING_RETURN' });
+    component.applyScan('GHN-99887766');
+    expect(component.tracking()).toBe('GHN-99887766');
+    expect(component.scanError()).toBeNull();
+  });
 });

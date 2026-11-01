@@ -742,6 +742,7 @@ export class PurchaseFlowPage {
     ].filter(Boolean).join(', ');
     const quote = this.quote();
     const payload: Record<string, unknown> = {
+      idempotency_key: checkoutRequestKey(),
       is_gift: !!this.orderOptions.is_gift,
       gift_gender: this.orderOptions.is_gift ? this.orderOptions.gift_gender || 'nu' : undefined,
       gift_name: this.orderOptions.is_gift ? this.orderOptions.gift_name?.trim() : undefined,
@@ -857,6 +858,7 @@ export class PurchaseFlowPage {
       payment_expires_at: this.payment !== 'COD' ? paymentExpiresAt : undefined,
     });
     this.checkout.completeCheckout(this.lines());
+    clearCheckoutRequestKey();
     this.busy.set(false);
     this.paymentSeconds.set(900);
     const gatewayUrl = response.payment?.url || response.stripe?.url;
@@ -1019,4 +1021,30 @@ export class PurchaseFlowPage {
       // The store exposes the load error; checkout remains editable by hand.
     }
   }
+}
+
+const CHECKOUT_REQUEST_KEY = 'velura.checkout-request-key';
+
+/**
+ * One key per intended purchase, kept across reloads so a browser crash between the order being
+ * saved and the cart being cleared replays the same order instead of creating a second one.
+ * The server dedupes on (user, key) with a unique index, so the retry is safe, not merely polite.
+ */
+function checkoutRequestKey(): string {
+  try {
+    const stored = sessionStorage.getItem(CHECKOUT_REQUEST_KEY);
+    if (stored) return stored;
+    const minted = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `chk-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+    sessionStorage.setItem(CHECKOUT_REQUEST_KEY, minted);
+    return minted;
+  } catch {
+    return '';
+  }
+}
+
+/** Called only once the cart is consumed: the next purchase must be a new request. */
+function clearCheckoutRequestKey(): void {
+  try { sessionStorage.removeItem(CHECKOUT_REQUEST_KEY); } catch { /* storage unavailable: the key simply expires with the tab */ }
 }

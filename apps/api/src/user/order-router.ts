@@ -1105,7 +1105,7 @@ async function openPersistedOrderPayment(order: JsonObject, method: unknown, cli
   } catch (error) {
     // Placement succeeded. Keep its saved snapshot and capability visible so retries never create a second order.
     console.error("[PAYMENT_OPEN_FAILED]", {order_id:order.order_id,code:error instanceof HttpError ? error.code : "PROVIDER_NETWORK_ERROR"});
-    if (Number(order.points_spent || 0) > 0) {
+    if (Number(order.points_used || 0) > 0) {
       await callRpc("velura_close_failed_loyalty_checkout", { p_order_id: order.order_id, p_actor_id: order.user_id });
       return { stripe: null, payment: null, payment_error: { code: "LOYALTY_CHECKOUT_RELEASED", message: "Không mở được thanh toán. Đơn đã đóng và điểm đã được trả về ví; vui lòng đặt lại đơn." } };
     }

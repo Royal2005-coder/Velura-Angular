@@ -6,6 +6,7 @@
     <base href="/" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" type="image/x-icon" href="favicon.ico" />
+    <link rel="canonical" href="https://admin-erp.royalai.dev/" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -14,6 +15,22 @@
     />
   </head>
   <body>
+    <script>
+      // Velura ERP (admin-erp.royalai.dev) is the operational admin. The legacy console stays
+      // reachable only with ?legacy=1, so a bookmarked old URL never lands on a frozen second UI.
+      (function () {
+        var host = location.hostname;
+        var params = new URLSearchParams(location.search);
+        if (params.get('legacy') === '1') return;
+        if (host !== 'admin.royalai.dev' && host !== 'www.admin.royalai.dev') return;
+        var target = new URL(location.pathname + location.search + location.hash, 'https://admin-erp.royalai.dev');
+        if (params.toString()) target.search = params.toString();
+        location.replace(target.toString());
+      })();
+    </script>
+    <noscript>
+      <p>Bảng điều hành Velura đã chuyển sang <a href="https://admin-erp.royalai.dev/">admin-erp.royalai.dev</a>.</p>
+    </noscript>
     <app-root></app-root>
   </body>
 </html>

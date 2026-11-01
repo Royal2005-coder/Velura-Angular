@@ -10,6 +10,9 @@ configMapGenerator:
     namespace: velura
     literals:
       - NODE_ENV=production
+      # Without this the 24h payment-expiry cleaner never runs, so an abandoned checkout holds
+      # reserved_quantity and burns a voucher's used_count indefinitely.
+      - ORDER_AUTOMATION_MODE=on
       - RELEASE_REVISION=b3df517c1daa2c4147ca7c5db0a32213a748c683
       - PORT=3000
       - CORS_ORIGIN=https://velura.royalai.dev,https://admin.royalai.dev,https://shop.royalai.dev,https://admin-erp.royalai.dev

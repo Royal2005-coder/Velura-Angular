@@ -15,6 +15,9 @@ export type MemberSort = (typeof MEMBER_SORTS)[number];
 export const MEMBER_LOCK_REASON_MIN = 8;
 /** Floor enforced by admin_set_loyalty_spending; validating it here keeps the RPC from failing with a masked code. */
 export const LOYALTY_SPENDING_REASON_MIN = 10;
+/** Same ceiling the RPC applies to a single manual wallet correction. */
+export const POINTS_ADJUST_MAX = 1_000_000;
+export const POINTS_ADJUST_KEY_MIN = 8;
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -52,6 +55,8 @@ export interface MemberService {
   setAccrualLock(context: AuthContext | undefined, userId: string, body: JsonObject, requestMeta: RequestMeta): Promise<JsonObject>;
   /** Enables or disables point spending platform-wide. */
   setLoyaltySpending(context: AuthContext | undefined, body: JsonObject, requestMeta: RequestMeta): Promise<JsonObject>;
+  /** Books one signed manual correction to a member wallet. */
+  adjustMemberPoints(context: AuthContext | undefined, userId: string, body: JsonObject, requestMeta: RequestMeta): Promise<JsonObject>;
 }
 
 export function createMemberService({ repository }: { repository: MemberRepository }): MemberService {
@@ -162,6 +167,43 @@ export function createMemberService({ repository }: { repository: MemberReposito
       try {
         return await repository.setLoyaltySpending(
           { enabled, maxPercent, reason, ipAddress: requestMeta.ipAddress },
+          context?.accessToken ?? null,
+        );
+      } catch (error: unknown) {
+        throw mapMemberDatabaseError(error);
+      }
+    },
+    async adjustMemberPoints(context, userId, body, requestMeta) {
+      requirePermission(context as AuthContext, "members", "update");
+      const target = requireUuid(userId, "userId");
+      const points = Number(body.points);
+      const reason = asString(body.reason).trim();
+      const idempotencyKey = asString(body.idempotencyKey).trim();
+      const returnId = asString(body.returnId).trim();
+      if (!Number.isInteger(points) || points === 0 || Math.abs(points) > POINTS_ADJUST_MAX) {
+        throw new HttpError(422, "INVALID_POINTS", `Số điểm điều chỉnh phải là số nguyên khác 0 và không quá ±${POINTS_ADJUST_MAX}.`, {
+          points: ["INVALID_POINTS"],
+        });
+      }
+      if (reason.length < LOYALTY_SPENDING_REASON_MIN) {
+        throw new HttpError(422, "REASON_REQUIRED", `Cần lý do tối thiểu ${LOYALTY_SPENDING_REASON_MIN} ký tự để lưu dấu vết vận hành.`, {
+          reason: [MEMBER_DATABASE_ERRORS.MEMBER_LOCK_REASON_REQUIRED.message],
+        });
+      }
+      if (idempotencyKey.length < POINTS_ADJUST_KEY_MIN) {
+        throw new HttpError(422, "TRANSFER_REFERENCE_REQUIRED", `Mã chống trùng phải có ít nhất ${POINTS_ADJUST_KEY_MIN} ký tự.`, {
+          idempotencyKey: ["TRANSFER_REFERENCE_REQUIRED"],
+        });
+      }
+      if (returnId && !UUID_PATTERN.test(returnId)) {
+        throw new HttpError(422, "VALIDATION_ERROR", "returnId phải là uuid.", { returnId: ["invalid uuid"] });
+      }
+      try {
+        return await repository.adjustMemberPoints(
+          {
+            userId: target, points, reason, idempotencyKey,
+            returnId: returnId || null, ipAddress: requestMeta.ipAddress,
+          },
           context?.accessToken ?? null,
         );
       } catch (error: unknown) {

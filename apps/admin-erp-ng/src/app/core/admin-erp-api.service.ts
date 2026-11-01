@@ -783,6 +783,15 @@ export interface AdminMemberLockResult {
   changed: boolean;
 }
 
+/** Kết quả điều chỉnh điểm thủ công. `idempotent=true` khi khoá chống trùng đã được dùng trước đó. */
+export interface AdminMemberAdjustResult {
+  ledger_id: string;
+  user_id: string;
+  balance_milli: number;
+  debt_milli?: number;
+  idempotent: boolean;
+}
+
 export interface AdminPromotionRow {
   promo_id?: string;
   promotion_id?: string;
@@ -2356,6 +2365,17 @@ export class AdminErpApiService {
   setLoyaltySpending(body: { enabled: boolean; maxPercent: number; reason: string }): Observable<{ spending_enabled: boolean; max_discount_percent: number }> {
     return this.http.post<{ spending_enabled: boolean; max_discount_percent: number }>(
       `${this.baseUrl}/api/v1/admin/members/loyalty-spending`,
+      body,
+    );
+  }
+
+  /**
+   * Books one manual wallet correction for a member. `idempotencyKey` must be stable per intended
+   * operation: replaying the same key returns the original ledger row instead of charging twice.
+   */
+  adjustMemberPoints(userId: string, body: { points: number; reason: string; idempotencyKey: string; returnId?: string | null }): Observable<AdminMemberAdjustResult> {
+    return this.http.post<AdminMemberAdjustResult>(
+      `${this.baseUrl}/api/v1/admin/members/${encodeURIComponent(userId)}/points-adjust`,
       body,
     );
   }

@@ -19,6 +19,11 @@ export interface MemberRepository {
     input: { userId: string; locked: boolean; reason: string; ipAddress: string },
     accessToken: string | null,
   ): Promise<JsonObject>;
+  /** Flips the platform-wide loyalty spending switch. */
+  setLoyaltySpending(
+    input: { enabled: boolean; maxPercent: number; reason: string; ipAddress: string },
+    accessToken: string | null,
+  ): Promise<JsonObject>;
 }
 
 function authOptions(accessToken: string | null | undefined): { useAnonKey?: boolean; accessToken?: string } {
@@ -57,6 +62,19 @@ export function createMemberRepository(): MemberRepository {
         {
           p_user_id: input.userId,
           p_locked: input.locked,
+          p_reason: input.reason,
+          p_ip_address: input.ipAddress,
+        },
+        authOptions(accessToken),
+      )) as JsonObject;
+    },
+    /** One platform-wide switch: whether earned points may be spent and at what cap. */
+    async setLoyaltySpending(input, accessToken) {
+      return (await callRpc(
+        "admin_set_loyalty_spending",
+        {
+          p_enabled: input.enabled,
+          p_max_percent: input.maxPercent,
           p_reason: input.reason,
           p_ip_address: input.ipAddress,
         },

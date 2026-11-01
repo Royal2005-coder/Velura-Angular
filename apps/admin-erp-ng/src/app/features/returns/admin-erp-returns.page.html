@@ -66,6 +66,14 @@
         </select>
       </label>
       <label class="erp-field">
+        <span>Quyết định</span>
+        <select class="erp-select" name="decision" [value]="decisionFilter()" (change)="onDecisionChange($event)">
+          @for (option of decisionOptions; track option.value) {
+            <option [value]="option.value">{{ option.label }}</option>
+          }
+        </select>
+      </label>
+      <label class="erp-field">
         <span>Kênh tiền</span>
         <select class="erp-select" name="payment" [value]="paymentFilter()" (change)="onPaymentChange($event)">
           @for (option of paymentOptions; track option.value) {

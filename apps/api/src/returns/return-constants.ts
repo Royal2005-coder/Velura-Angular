@@ -4,6 +4,8 @@
 export const RETURN_STATUSES = ["REQUESTED","APPROVED","IN_PROGRESS","REJECTED","CONTACTING","WAITING_RETURN","RETURN_IN_TRANSIT","RECEIVED","REFUND_PROCESSING","REFUNDED","EXCHANGE_PREPARING","EXCHANGE_SHIPPING","COMPLETED","CANCELLED","NEEDS_SUPPORT"] as const;
 /** Active business requests reserve item return quota until completed or cancelled. */
 export const OPEN_RETURN_STATUSES: readonly string[] = ["REQUESTED","APPROVED","IN_PROGRESS","CONTACTING","WAITING_RETURN","RETURN_IN_TRANSIT","RECEIVED","REFUND_PROCESSING","EXCHANGE_PREPARING","EXCHANGE_SHIPPING","NEEDS_SUPPORT"];
+/** Header decision column values; PARTIALLY_APPROVED is computed per part, not a workflow state. */
+export const RETURN_DECISION_STATUSES: readonly string[] = ["pending","approved","PARTIALLY_APPROVED","rejected"];
 /** Customer and administrator consume the same canonical stored workflow codes. */
 export const RETURN_STATUS_LABELS_VI: Readonly<Record<string,string>> = {
   APPROVED:"Đã duyệt", IN_PROGRESS:"Đang xử lý từng phần", REJECTED:"Bị từ chối",

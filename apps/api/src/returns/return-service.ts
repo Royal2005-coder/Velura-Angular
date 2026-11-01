@@ -288,15 +288,13 @@ export function createReturnService({
         }
         if (!isPrivateEvidenceRef(body.receiptProofRef)) throw new HttpError(422, "PROOF_REQUIRED", "Tải lên bằng chứng kiểm hàng riêng tư.");
       }
+      let packingEvidenceMissing = false;
       if (action === "approve") {
         const evidence = await repository.listEvidence(returnId).catch(() => []);
         const customerKinds = new Set(evidence
           .filter((row) => asString(row.uploaded_by_role) === "customer")
           .map((row) => asString(row.kind)));
-        if (!customerKinds.has("packing_photo") || !customerKinds.has("packing_video")) {
-          throw new HttpError(422, "PACKING_EVIDENCE_REQUIRED",
-            "Khách cần tải ít nhất một ảnh và một video đóng gói trước khi duyệt phần hàng.");
-        }
+        packingEvidenceMissing = !customerKinds.has("packing_photo") || !customerKinds.has("packing_video");
       }
       const { action: _action, expectedVersion: _version, ...facts } = body;
       const result = await repository.actOnItem(returnId, returnItemId, action, facts, expectedVersion,
@@ -312,7 +310,7 @@ export function createReturnService({
       if (action === "complete_exchange") {
         void sendExchangeCompletedEmail(returnId);
       }
-      return result;
+      return packingEvidenceMissing ? { ...result, packing_evidence_missing: true } : result;
     },
     async recordContact(context, returnId, body) {
       requireReturnAdmin(context);

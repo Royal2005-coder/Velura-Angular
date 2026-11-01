@@ -11,9 +11,11 @@
   --erp-text: #2f2a26;
   --erp-muted: #6f6660;
   --erp-soft: #9a9088;
-  --erp-accent: #c97b63;
-  --erp-accent-strong: #a85d46;
-  --erp-accent-soft: #f6e7e1;
+  /* Brand bridge: the storefront owns #7A283C / #C94F70 (see --velura-maroon, --velura-rose).
+     The console keeps its own token names so no component markup changes; only the palette moves. */
+  --erp-accent: #7a283c;
+  --erp-accent-strong: #5f1e2f;
+  --erp-accent-soft: #fbeff3;
   --erp-sidebar: #211d1a;
   --erp-sidebar-raised: #2b2521;
   --erp-sidebar-text: #e9e1d9;
@@ -34,7 +36,7 @@
   --erp-sidebar-w: 264px;
   --erp-topbar-h: 64px;
   --erp-font: 'DM Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --erp-display: 'Playfair Display', Georgia, serif;
+  --erp-display: 'Cormorant Garamond', 'Playfair Display', Georgia, serif;
 }
 
 *,

@@ -32,6 +32,12 @@ export async function handleMemberRoute({
     return true;
   }
 
+  if (req.method === "POST" && parts.length === 5 && parts[4] === "loyalty-spending") {
+    const body = await readJson(req, config.maxBodyBytes);
+    sendJson(res, 200, await service.setLoyaltySpending(context, body, { ipAddress: getRequestIp(req) }), headers);
+    return true;
+  }
+
   const userId = parts[4];
   if (req.method === "GET" && userId && parts.length === 5) {
     sendJson(res, 200, await service.memberDetail(context, userId), headers);

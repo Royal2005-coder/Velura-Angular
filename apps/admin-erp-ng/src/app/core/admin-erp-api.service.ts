@@ -693,6 +693,14 @@ export interface AdminMemberOverview {
   zero_entries?: number;
   earliest_expiry?: string | null;
   last_ledger_at?: string | null;
+  /** Live state of the platform-wide spending switch (`loyalty_settings`). */
+  loyalty_spending?: {
+    spending_enabled?: boolean;
+    effectively_enabled?: boolean;
+    max_discount_percent?: number;
+    policy_approved_at?: string | null;
+    version?: number;
+  };
 }
 
 /** Một bút toán điểm, kèm đơn/phiếu đổi trả để mở thẳng hồ sơ nguồn. */
@@ -2337,6 +2345,17 @@ export class AdminErpApiService {
   setMemberAccrualLock(userId: string, body: { locked: boolean; reason: string }): Observable<AdminMemberLockResult> {
     return this.http.post<AdminMemberLockResult>(
       `${this.baseUrl}/api/v1/admin/members/${encodeURIComponent(userId)}/accrual-lock`,
+      body,
+    );
+  }
+
+  /**
+   * Turns point redemption on or off for every member, with the cap and an audited reason.
+   * Super admin only; the server refuses to approve the policy without a reason of its own.
+   */
+  setLoyaltySpending(body: { enabled: boolean; maxPercent: number; reason: string }): Observable<{ spending_enabled: boolean; max_discount_percent: number }> {
+    return this.http.post<{ spending_enabled: boolean; max_discount_percent: number }>(
+      `${this.baseUrl}/api/v1/admin/members/loyalty-spending`,
       body,
     );
   }

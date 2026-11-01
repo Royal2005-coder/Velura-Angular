@@ -509,15 +509,25 @@ test("order readers never receive full bank fields in legacy headers, manual sna
 
 function context(roleCode) { return { authUser: { id: "auth-1" }, roleCode, accessToken: "jwt-token" }; }
 
-test("super-admin approval is blocked until the customer uploaded both packing photo and video", async () => {
+test("super-admin approval proceeds without packing media and only flags it as missing", async () => {
   let called = 0;
   const service = createReturnService({ repository: {
     listEvidence: async () => [{ kind: "packing_photo", uploaded_by_role: "customer" }],
     actOnItem: async () => { called += 1; return {}; }
   } as unknown as ReturnRepository });
-  await assert.rejects(
-    () => service.actOnItem(context("super_admin"), RETURN_ID, ITEM_ID, { action: "approve", expectedVersion: 3, reason: "Da xac minh du bang chung" }),
-    hasCode("PACKING_EVIDENCE_REQUIRED")
-  );
-  assert.equal(called, 0);
+  const result = await service.actOnItem(context("super_admin"), RETURN_ID, ITEM_ID, { action: "approve", expectedVersion: 3, reason: "Da xac minh voi khach qua dien thoai" });
+  assert.equal(called, 1);
+  assert.equal(result.packing_evidence_missing, true);
+});
+
+test("approval with both packing photo and video reports nothing missing", async () => {
+  const service = createReturnService({ repository: {
+    listEvidence: async () => [
+      { kind: "packing_photo", uploaded_by_role: "customer" },
+      { kind: "packing_video", uploaded_by_role: "customer" },
+    ],
+    actOnItem: async () => ({})
+  } as unknown as ReturnRepository });
+  const result = await service.actOnItem(context("super_admin"), RETURN_ID, ITEM_ID, { action: "approve", expectedVersion: 3, reason: "Da xac minh voi khach qua dien thoai" });
+  assert.equal(result.packing_evidence_missing, undefined);
 });

@@ -1,5 +1,5 @@
 import { AdminReturnLine, AdminReturnRow, AdminTicketRow } from './admin-erp-api.service';
-import { canTicketAction, contactAllowed, isChatGovernedTicket, isReturnOpen, itemRefundAllowed, refundInfoAllowed, refundReceiverBlocked, returnContactOverdue, returnDecisionLabel, returnItemActions, returnStatusLabel, returnStatusTone } from './admin-erp-service-desk';
+import { canTicketAction, contactAllowed, isChatGovernedTicket, isReturnOpen, itemRefundAllowed, refundInfoAllowed, refundReceiverBlocked, RETURN_DECISION_STATUSES, RETURN_HEADER_STATUSES, returnContactOverdue, returnDecisionLabel, returnItemActions, returnStatusLabel, returnStatusTone } from './admin-erp-service-desk';
 
 const base: AdminReturnRow = { return_id: 'r1', order_id: 'o1', return_type: 'exchange', status: 'IN_PROGRESS', version: 1 };
 const part: AdminReturnLine = { return_item_id: 'part1', quantity: 2, version: 1, decision_status: 'approved', resolution_type: 'exchange', item_status: 'RECEIVED' };
@@ -12,6 +12,15 @@ describe('service desk per-part rules', () => {
     expect(returnStatusLabel('REJECTED')).toBe('Đã từ chối');
     expect(returnStatusTone('REJECTED')).toBe('danger');
     expect(isReturnOpen('IN_PROGRESS')).toBe(true); expect(isReturnOpen('REJECTED')).toBe(false);
+  });
+
+  it('never offers a per-part or decision code as a header status filter', () => {
+    for (const notAHeaderStatus of ['RETURN_SHIPPING', 'REFUND_PENDING', 'PARTIALLY_APPROVED']) {
+      expect(RETURN_HEADER_STATUSES).not.toContain(notAHeaderStatus);
+    }
+    expect(RETURN_HEADER_STATUSES).toContain('RETURN_IN_TRANSIT');
+    expect(RETURN_HEADER_STATUSES).toContain('REFUND_PROCESSING');
+    expect(RETURN_DECISION_STATUSES.map((option) => option.value)).toContain('PARTIALLY_APPROVED');
   });
 
   it('offers final decisions to super-admin only while the item is undecided', () => {

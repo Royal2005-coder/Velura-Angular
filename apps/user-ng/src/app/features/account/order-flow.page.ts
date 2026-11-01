@@ -722,15 +722,19 @@ export class OrderFlowPage {
     this.error.set('');
     this.view.set('return-summary');
   }
-  /** Estimate the points tied to the merchandise selected for refund. */
+  /**
+   * Points the server will claw back if this refund is approved. Accrual stores 5% of merchandise
+   * in milli-points, so one point represents 20 000đ — dividing by 1 000 overstated it twentyfold.
+   * The DB still caps the reversal at the points this order actually earned.
+   */
   refundPointEstimate(): number {
-    return Math.floor(this.refundEstimate(this.selectedLines()) / 1000);
+    return Math.floor(this.refundEstimate(this.selectedLines()) / 20_000);
   }
-  /** Continue after the member acknowledges the possible point clawback. */
+  /** The warning screen already restates the request, so acknowledging it submits directly. */
   continueAfterPointWarning(): void {
     this.pointRefundWarning.set(false);
     this.error.set('');
-    this.view.set('return-summary');
+    this.submitReturn();
   }
   /** Dismiss the point warning and keep editing the return request. */
   dismissPointWarning(): void {

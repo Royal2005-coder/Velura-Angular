@@ -4,7 +4,9 @@ import { AdminErpApiService, AdminOrderRow, AdminReturnDisposition, AdminReturnI
 import { CONTACT_RESULTS, MIN_NOTE_LENGTH, MIN_TRANSFER_REFERENCE_LENGTH, gatewayNote, itemRefundAllowed, refundReceiverBlocked, returnItemActions } from '../../core/admin-erp-service-desk';
 import { adminErrorMessage } from '../../core/admin-erp-http';
 import { adminMoney } from '../../core/admin-erp-format';
+import { buildReturnQrPayload, demoShipmentFacts, parseScan } from '../../core/admin-erp-qr';
 import { AdminErpModal } from '../../shared/ui/admin-modal';
+import { AdminErpQrScan } from '../../shared/ui/admin-qr-scan';
 
 /** Request-level contact is independent; all business and money actions target one item part. */
 export type ReturnFlowKind = AdminReturnItemAction | 'contact' | 'refund-info' | 'manual' | 'stripe' | null;
@@ -22,7 +24,7 @@ export const RETURN_ITEM_ACTION_LABELS: Readonly<Record<Exclude<ReturnFlowKind, 
 
 /** One quantity part is saved at a time; refresh exposes any transactionally split remainder. */
 @Component({
-  selector: 'app-erp-return-flow', imports: [AdminErpModal],
+  selector: 'app-erp-return-flow', imports: [AdminErpModal, AdminErpQrScan],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './return-flow.component.html', styleUrl: './return-flow.component.scss',
 })
@@ -67,9 +69,17 @@ export class ReturnFlowComponent {
   readonly transferredAt = signal('');
   readonly saving = signal(false);
   readonly error = signal<string | null>(null);
+  readonly scanOpen = signal(false);
+  readonly scanError = signal<string | null>(null);
   readonly contactResults = CONTACT_RESULTS;
   readonly minNote = MIN_NOTE_LENGTH;
   readonly title = computed(() => this.flow() ? RETURN_ITEM_ACTION_LABELS[this.flow()!] : '');
+  /** Approval covers the whole part the customer asked for, so quantity is never edited here. */
+  readonly showQuantityEditor = computed(() => this.canSplit() && this.flow() !== 'approve');
+  readonly customerPhone = computed(() => (this.record()?.customer_phone || '').replace(/[^\d+]/g, ''));
+  /** Packing media is encouraged, never a precondition: this only nudges the operator to ask on the call. */
+  readonly noCustomerEvidence = computed(() => this.flow() === 'approve'
+    && !this.record()?.evidence_images?.length && !this.record()?.evidence_videos?.length);
   readonly needsConsent = computed(() => this.flow() === 'convert_refund' || this.flow() === 'change_variant');
   readonly needsReason = computed(() => ['approve', 'reject', 'needs_support', 'resolve', 'stop', 'convert_refund', 'change_variant', 'contact', 'refund-info'].includes(String(this.flow())));
   readonly isMoney = computed(() => this.flow() === 'manual' || this.flow() === 'stripe');
@@ -137,6 +147,22 @@ export class ReturnFlowComponent {
       ? crypto.randomUUID().replace(/-/g, '').slice(0, 16)
       : Math.random().toString(36).slice(2, 18);
     return 'EXC' + random.toUpperCase();
+  }
+
+  /** Facts the operator confirms on the call; each one is written into the stored contact note. */
+  readonly contactFacts: ReadonlyArray<{ code: string; label: string }> = [
+    { code: 'identity', label: 'Đã xác nhận đúng khách' },
+    { code: 'request', label: 'Xác nhận yêu cầu đổi trả' },
+    { code: 'variant', label: 'Sản phẩm/size/màu đổi' },
+    { code: 'pickup', label: 'Thời gian lấy hàng' },
+    { code: 'packing', label: 'Nhắc khách quay ảnh & video đóng gói' },
+    { code: 'points', label: 'Khách hiểu quy tắc hoàn/ghi điểm' },
+  ];
+
+  appendFact(label: string): void {
+    const note = this.note();
+    if (note.includes(label)) return;
+    this.note.set((note.trim() ? note.trim() + ' ' : '') + label + '.');
   }
 
   /** Stores ordinary text without silently coercing malformed quantities into valid ones. */
@@ -276,6 +302,54 @@ export class ReturnFlowComponent {
       }
       return this.api.actOnReturnItem(record.return_id, itemId, body).pipe(switchMap(() => of('')));
     }));
+  }
+
+  /** Sample label for the demo scanner: the return's own QR, so a phone camera reads the real payload. */
+  readonly scanSample = computed(() => {
+    const record = this.record();
+    return record?.return_id ? buildReturnQrPayload(record.return_id, record.return_code) : '';
+  });
+
+  openScan(): void {
+    this.scanError.set(null);
+    this.scanOpen.set(true);
+  }
+
+  /**
+   * Confirms the operator is holding the parcel for THIS return, then fills the carrier and AWB
+   * so only the handover photos stay manual. A code from another return is refused, never applied.
+   */
+  applyScan(text: string): void {
+    const record = this.record();
+    this.scanOpen.set(false);
+    if (!record?.return_id) return;
+    const result = parseScan(text);
+    if (result.kind !== 'return' && result.kind !== 'tracking') {
+      this.scanError.set('Mã này không phải QR phiếu đổi trả. Quét nhãn on phiếu hoặc dán mã vận đơn.');
+      return;
+    }
+    if (result.returnId && result.returnId !== record.return_id) {
+      this.scanError.set('Mã QR thuộc phiếu đổi trả khác. Không ghi nhận chéo phiếu.');
+      return;
+    }
+    if (result.returnCode && record.return_code && result.returnCode !== record.return_code) {
+      this.scanError.set('Mã phiếu trên nhãn không khớp phiếu đang mở. Kiểm lại hàng trước khi lấy.');
+      return;
+    }
+    const known = this.flow() === 'ship_exchange'
+      ? (record.exchange_tracking_code || '')
+      : (record.tracking_return_code || '');
+    if (result.trackingCode) {
+      this.tracking.set(result.trackingCode);
+      if (result.carrier) this.carrier.set(result.carrier);
+    } else if (known) {
+      this.tracking.set(known);
+    } else {
+      const facts = demoShipmentFacts({ order_code: record.order_code || record.return_code });
+      this.carrier.set(facts.carrier);
+      this.tracking.set(this.flow() === 'ship_exchange' ? this.newExchangeTracking() : facts.trackingCode);
+    }
+    this.scanError.set(null);
   }
 
   /** Keeps the modal open while an evidence or money operation is in flight. */

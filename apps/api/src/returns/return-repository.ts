@@ -16,6 +16,7 @@ function clientIpOptions(ipAddress?: string) {
  */
 export interface ReturnListFilters {
   status?: string;
+  decisionStatus?: string;
   search?: string;
   orderId?: string;
   /** `cod` = đơn COD, `online` = đơn thanh toán online (Stripe/MoMo/VNPay). */
@@ -240,6 +241,7 @@ export function createReturnRepository() {
         offset: filters.offset
       };
       if (filters.status) query.status = `eq.${filters.status}`;
+      if (filters.decisionStatus) query.decision_status = `eq.${filters.decisionStatus}`;
       if (filters.orderId) query.order_id = `eq.${filters.orderId}`;
       if (filters.paymentKind) query["pay_order.payment_method"] = filters.paymentKind === "cod" ? "eq.COD" : "eq.ONLINE_PAYMENT";
       if (filters.search) {
@@ -624,6 +626,9 @@ const RETURN_DATABASE_ERRORS: Readonly<Record<string, { status: number; message:
   TRACKING_REQUIRED: { status: 422, message: "Ghi nhận đơn vị vận chuyển và mã vận đơn." },
   PICKUP_PROOF_REQUIRED: { status: 422, message: "Tải lên bằng chứng bàn giao riêng tư." },
   PICKUP_FACTS_REQUIRED: { status: 422, message: "Ghi nhận người bàn giao và thời điểm lấy hàng hợp lệ." },
+  PICKUP_IDENTITY_TIME_REQUIRED: { status: 422, message: "Cần tên người lấy hàng (tối thiểu 2 ký tự) và thời điểm lấy hàng trong khoảng từ lúc khách tạo yêu cầu đến hiện tại." },
+  PICKUP_REQUIRED: { status: 422, message: "Phần hàng chưa được xác nhận lấy hàng kèm bằng chứng, nên kho chưa thể nhận và kiểm." },
+  TRACKING_ALREADY_USED: { status: 409, message: "Mã vận đơn này đã được dùng cho một phiếu khác hoặc chiều ngược lại. Nhập mã vận đơn mới cho phần hàng này." },
   WAREHOUSE_LINE_MISMATCH: { status: 422, message: "Số lượng hàng nhận không khớp phần hàng đăng ký." },
   RECEIPT_FACTS_REQUIRED: { status: 422, message: "Ghi nhận đầy đủ kết quả kiểm hàng." },
   DISPOSITION_REQUIRED: { status: 422, message: "Chọn hướng xử lý phần hàng đã nhận." },
@@ -651,7 +656,19 @@ const RETURN_DATABASE_ERRORS: Readonly<Record<string, { status: number; message:
   RETURN_NOT_FOUND: { status: 404, message: "Không tìm thấy yêu cầu đổi/trả tương ứng." },
   REFUND_BALANCE_EXHAUSTED: { status: 422, message: "Đơn hàng không còn số dư hợp lệ để hoàn tiền." },
   CANCEL_REASON_REQUIRED: { status: 422, message: "Phải ghi rõ lý do khi từ chối hoặc hủy yêu cầu." },
-  INVALID_RETURN_TRANSITION: { status: 422, message: "Không thể chuyển yêu cầu sang trạng thái này từ trạng thái hiện tại." }
+  INVALID_RETURN_TRANSITION: { status: 422, message: "Không thể chuyển yêu cầu sang trạng thái này từ trạng thái hiện tại." },
+  RETURN_ALREADY_HANDED_OVER: { status: 422, message: "Phần hàng đã bàn giao cho vận chuyển, không thể thay đổi quyết định cũ." },
+  RETURN_EVIDENCE_OWNERSHIP_REQUIRED: { status: 422, message: "Bằng chứng tải lên không thuộc phiếu đổi/trả này. Chọn lại ảnh hoặc video." },
+  RETURN_SHIPMENT_NOT_FOUND: { status: 404, message: "Chưa có vận đơn bàn giao cho phần hàng này." },
+  CARRIER_STATUS_UNSUPPORTED: { status: 422, message: "Trạng thái vận chuyển này không hỗ trợ ghi nhận. Chọn trạng thái khác." },
+  DUPLICATE_RETURN_ITEM: { status: 409, message: "Phần hàng này đã tồn tại trong yêu cầu." },
+  INVALID_RETURN_ITEMS: { status: 422, message: "Danh sách phần hàng không hợp lệ với đơn hàng gốc." },
+  ORDER_ITEM_MISMATCH: { status: 422, message: "Phần hàng không khớp với đơn hàng gốc." },
+  EXCHANGE_ALREADY_PREPARED: { status: 409, message: "Phần hàng đổi đã được kho chuẩn bị, không thể đổi phương án." },
+  EXCHANGE_SHIPPING_REQUIRED: { status: 422, message: "Cần ghi nhận bàn giao hàng đổi trước khi hoàn tất." },
+  EXCHANGE_OUT_OF_STOCK: { status: 409, message: "Biến thể đổi không còn đủ tồn khả dụng." },
+  EXCHANGE_REPLACEMENT_NOT_RETURNABLE: { status: 422, message: "Biến thể thay thế không thuộc cùng sản phẩm được đổi." },
+  REPLACEMENT_REQUIRED: { status: 422, message: "Chọn biến thể thay thế trước khi tiếp tục." }
 };
 
 /**

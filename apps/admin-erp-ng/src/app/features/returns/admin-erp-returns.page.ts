@@ -8,6 +8,7 @@ import {
   AdminOrderRow,
   AdminReturnRow,
   AdminReturnLine,
+  AdminReturnEvidence,
   AdminTicketRow,
 } from '../../core/admin-erp-api.service';
 import { orderFocusLink, returnFocusLink, type OrderTraceLink } from '../../core/admin-erp-order-trace';
@@ -18,6 +19,8 @@ import {
   REFUND_FLOW_LABELS,
   REFUND_RECEIVER_STATUS_LABELS,
   RETURN_STATUS_LABELS,
+  RETURN_HEADER_STATUSES,
+  RETURN_DECISION_STATUSES,
   TICKET_PRIORITY_LABELS,
   canTicketAction,
   contactAllowed,
@@ -63,11 +66,39 @@ type DeskTab = 'returns' | 'tickets' | 'chat' | 'logs';
 type TicketAction = 'reply' | 'resolve' | 'close';
 
 const DESK_TABS: readonly string[] = ['returns', 'tickets', 'chat', 'logs'];
-const RETURN_STATUS_VALUES: readonly string[] = Object.keys(RETURN_STATUS_LABELS);
 
 const EMPTY_RETURNS = { rows: [] as AdminReturnRow[], count: 0 };
 const EMPTY_TICKETS = { rows: [] as AdminTicketRow[], count: 0 };
 const EMPTY_LOGS = { rows: [] as AdminAuditRow[], count: 0 };
+
+/** Comparison stages an operator walks through: khách gửi → đóng gói → ĐVVC lấy → kho kiểm. */
+const EVIDENCE_STAGE_LABELS: Readonly<Record<string, string>> = {
+  request: 'Bằng chứng khách gửi ban đầu',
+  packing: 'Ảnh & video đóng gói (khuyến khích)',
+  pickup: 'Bằng chứng ĐVVC lấy hàng',
+  qa: 'Bằng chứng kho kiểm hàng',
+  refund: 'Chứng từ hoàn tiền',
+};
+
+/** Which stage each stored kind belongs to, plus its short caption on the tile. */
+const EVIDENCE_GROUP_LABELS: Readonly<Record<string, { stage: string; label: string }>> = {
+  request_photo: { stage: 'request', label: 'Ảnh ban đầu' },
+  request_video: { stage: 'request', label: 'Video ban đầu' },
+  packing_photo: { stage: 'packing', label: 'Ảnh đóng gói' },
+  packing_video: { stage: 'packing', label: 'Video đóng gói' },
+  pickup_photo: { stage: 'pickup', label: 'Ảnh lấy hàng' },
+  pickup_video: { stage: 'pickup', label: 'Video lấy hàng' },
+  qa_photo: { stage: 'qa', label: 'Ảnh kiểm hàng' },
+  qa_video: { stage: 'qa', label: 'Video kiểm hàng' },
+  refund_proof: { stage: 'refund', label: 'Chứng từ hoàn tiền' },
+};
+
+/** One grouped block of the evidence gallery. */
+export interface AdminEvidenceGroup {
+  readonly stage: string;
+  readonly label: string;
+  readonly items: AdminReturnEvidence[];
+}
 
 /**
  * Returns and CSKH workspace: the refund queue with its warehouse and payment steps, the
@@ -122,6 +153,7 @@ export class AdminErpReturnsPage {
   readonly loadError = signal<string | null>(null);
 
   readonly statusFilter = signal('');
+  readonly decisionFilter = signal('');
   readonly paymentFilter = signal<'' | 'cod' | 'online'>('');
   readonly search = signal('');
   readonly orderFilter = signal('');
@@ -211,7 +243,11 @@ export class AdminErpReturnsPage {
 
   readonly statusOptions = [
     { value: '', label: 'Mọi trạng thái' },
-    ...Object.entries(RETURN_STATUS_LABELS).map(([value, label]) => ({ value, label })),
+    ...RETURN_HEADER_STATUSES.map((value) => ({ value, label: RETURN_STATUS_LABELS[value] || value })),
+  ];
+  readonly decisionOptions = [
+    { value: '', label: 'Mọi quyết định' },
+    ...RETURN_DECISION_STATUSES,
   ];
   readonly ticketStatusOptions = [
     { value: '', label: 'Mọi trạng thái' },
@@ -352,7 +388,8 @@ export class AdminErpReturnsPage {
   private applyDeepLink(params: ParamMap): void {
     this.tab.set(choiceParam(params, 'tab', DESK_TABS, this.tab()) as DeskTab);
     this.orderFilter.set(textParam(params, 'order_id'));
-    this.statusFilter.set(choiceParam(params, 'status', RETURN_STATUS_VALUES, this.statusFilter()));
+    this.statusFilter.set(choiceParam(params, 'status', RETURN_HEADER_STATUSES, this.statusFilter()));
+    this.decisionFilter.set(choiceParam(params, 'decision', RETURN_DECISION_STATUSES.map((option) => option.value), this.decisionFilter()));
     this.paymentFilter.set(choiceParam(params, 'payment', ['cod', 'online'], this.paymentFilter()) as '' | 'cod' | 'online');
     const search = textParam(params, 'q');
     if (this.tab() === 'tickets') {
@@ -420,6 +457,7 @@ export class AdminErpReturnsPage {
    */
   resetFilters(): void {
     this.statusFilter.set('');
+    this.decisionFilter.set('');
     this.paymentFilter.set('');
     this.search.set('');
     this.orderFilter.set('');
@@ -1013,6 +1051,13 @@ export class AdminErpReturnsPage {
   }
 
   /**
+   * Updates the header decision filter (pending / approved / partially / rejected).
+   */
+  onDecisionChange(event: Event): void {
+    this.decisionFilter.set((event.target as HTMLSelectElement).value);
+  }
+
+  /**
    * Updates the payment channel filter.
    */
   onPaymentChange(event: Event): void {
@@ -1074,18 +1119,29 @@ export class AdminErpReturnsPage {
 
   /** Vietnamese label for one evidence kind. */
   evidenceLabel(kind: string | null | undefined): string {
-    const labels: Record<string, string> = {
-      request_photo: 'Ảnh khách gửi ban đầu',
-      request_video: 'Video khách gửi ban đầu',
-      packing_photo: 'Ảnh đóng gói',
-      packing_video: 'Video đóng gói',
-      pickup_photo: 'Ảnh ĐVVC lấy hàng',
-      pickup_video: 'Video pickup',
-      qa_photo: 'Ảnh kho kiểm hàng',
-      qa_video: 'Video kho kiểm hàng',
-      refund_proof: 'Chứng từ hoàn tiền',
-    };
-    return labels[String(kind || '')] || kind || 'Bằng chứng';
+    return EVIDENCE_GROUP_LABELS[String(kind || '')]?.label || kind || 'Bằng chứng';
+  }
+
+  /**
+   * Groups the signed evidence list into the stages the operator compares: what the customer
+   * sent, how it was packed, what the carrier photographed, what the warehouse found.
+   * A group is shown only when it has rows, so an empty packing stage reads as “not sent”.
+   */
+  readonly evidenceGroups = computed<AdminEvidenceGroup[]>(() => {
+    const rows = this.selected()?.evidence || [];
+    const order = ['request', 'packing', 'pickup', 'qa', 'refund'] as const;
+    return order
+      .map((stage) => ({
+        stage,
+        label: EVIDENCE_STAGE_LABELS[stage],
+        items: rows.filter((row) => (EVIDENCE_GROUP_LABELS[String(row.kind || '')]?.stage || 'refund') === stage && Boolean(row.url)),
+      }))
+      .filter((group) => group.items.length > 0);
+  });
+
+  evidenceRole(role: string | null | undefined): string {
+    const labels: Record<string, string> = { customer: 'Khách', staff: 'Nhân viên', super_admin: 'Super admin', system: 'Hệ thống' };
+    return labels[String(role || '')] || role || '—';
   }
 
   /**
@@ -1112,6 +1168,7 @@ export class AdminErpReturnsPage {
     this.loadError.set(null);
     const params = {
       status: this.statusFilter(),
+      decision_status: this.decisionFilter(),
       q: this.search(),
       order_id: this.orderFilter(),
       limit: String(this.pageSize),

@@ -255,6 +255,29 @@
           }
         </div>
       </section>
+      <section class="member-lock" aria-labelledby="member-adjust-title">
+        <h3 id="member-adjust-title">Điều chỉnh điểm thủ công</h3>
+        <p class="member-lock__hint">
+          Chỉ super admin ghi được. Số dương cộng vào ví, số âm trừ trước rồi mới ghi nợ phần thiếu.
+          Mỗi lệnh mang một mã chống trùng: bấm đúp hoặc thử lại sau timeout không cộng/trừ hai lần.
+        </p>
+        <label class="erp-field">
+          <span>Số điểm (±, tối đa 1.000.000)</span>
+          <input class="erp-input" type="number" step="1" [value]="adjustPoints()" (input)="onAdjustPoints($event)" placeholder="ví dụ: -50" />
+        </label>
+        <label class="erp-field">
+          <span>Lý do (tối thiểu 10 ký tự)</span>
+          <textarea class="erp-input" rows="2" [value]="adjustReason()" (input)="onAdjustReason($event)" placeholder="ví dụ: bù điểm khách khiếu nại đơn 1234, đã duyệt 01/11"></textarea>
+        </label>
+        @if (adjustError()) {
+          <p class="erp-error" role="alert">{{ adjustError() }}</p>
+        }
+        <div class="member-lock__actions">
+          <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" [disabled]="adjustBusy() || !adjustPoints()" (click)="saveAdjustment()">
+            {{ adjustBusy() ? 'Đang lưu…' : 'Ghi điều chỉnh' }}
+          </button>
+        </div>
+      </section>
     }
 
     <section class="member-section" aria-labelledby="member-trail-title">

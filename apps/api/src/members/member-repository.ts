@@ -24,6 +24,11 @@ export interface MemberRepository {
     input: { enabled: boolean; maxPercent: number; reason: string; ipAddress: string },
     accessToken: string | null,
   ): Promise<JsonObject>;
+  /** Applies one signed points correction to a member wallet. */
+  adjustMemberPoints(
+    input: { userId: string; points: number; reason: string; idempotencyKey: string; returnId: string | null; ipAddress: string },
+    accessToken: string | null,
+  ): Promise<JsonObject>;
 }
 
 function authOptions(accessToken: string | null | undefined): { useAnonKey?: boolean; accessToken?: string } {
@@ -76,6 +81,21 @@ export function createMemberRepository(): MemberRepository {
           p_enabled: input.enabled,
           p_max_percent: input.maxPercent,
           p_reason: input.reason,
+          p_ip_address: input.ipAddress,
+        },
+        authOptions(accessToken),
+      )) as JsonObject;
+    },
+    /** Books one manual wallet correction; the RPC dedupes on the caller's idempotency key. */
+    async adjustMemberPoints(input, accessToken) {
+      return (await callRpc(
+        "admin_adjust_member_points",
+        {
+          p_user_id: input.userId,
+          p_points: input.points,
+          p_reason: input.reason,
+          p_idempotency_key: input.idempotencyKey,
+          p_return_id: input.returnId ?? null,
           p_ip_address: input.ipAddress,
         },
         authOptions(accessToken),

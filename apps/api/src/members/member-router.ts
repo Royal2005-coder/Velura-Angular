@@ -39,6 +39,11 @@ export async function handleMemberRoute({
   }
 
   const userId = parts[4];
+  if (req.method === "POST" && userId && parts.length === 6 && parts[5] === "points-adjust") {
+    const body = await readJson(req, config.maxBodyBytes);
+    sendJson(res, 200, await service.adjustMemberPoints(context, userId, body, { ipAddress: getRequestIp(req) }), headers);
+    return true;
+  }
   if (req.method === "GET" && userId && parts.length === 5) {
     sendJson(res, 200, await service.memberDetail(context, userId), headers);
     return true;

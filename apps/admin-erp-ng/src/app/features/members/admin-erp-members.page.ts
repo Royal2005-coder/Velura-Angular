@@ -110,6 +110,11 @@ export class AdminErpMembersPage {
   readonly spendingPercent = signal(50);
   readonly spendingBusy = signal(false);
   readonly spendingError = signal<string | null>(null);
+  readonly adjustPoints = signal(0);
+  readonly adjustReason = signal('');
+  readonly adjustBusy = signal(false);
+  readonly adjustError = signal<string | null>(null);
+  private readonly adjustKeySignal = signal('');
 
   /** Live redemption switch; `effectively_enabled` also requires the stored policy approval. */
   readonly spendingLive = computed(() => Boolean(this.overview()?.loyalty_spending?.effectively_enabled));
@@ -359,6 +364,67 @@ export class AdminErpMembersPage {
 
   onSpendingReason(event: Event): void {
     this.spendingReason.set((event.target as HTMLTextAreaElement).value);
+  }
+
+  /** Reused across retries of one intended correction and cleared once it is booked. */
+  private adjustKey(): string {
+    if (!this.adjustKeySignal()) {
+      this.adjustKeySignal.set(typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? `pts-${crypto.randomUUID()}`
+        : `pts-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`);
+    }
+    return this.adjustKeySignal();
+  }
+
+  onAdjustPoints(event: Event): void {
+    this.adjustPoints.set(Number((event.target as HTMLInputElement).value));
+  }
+
+  onAdjustReason(event: Event): void {
+    this.adjustReason.set((event.target as HTMLTextAreaElement).value);
+  }
+
+  /**
+   * Books one manual wallet correction. The idempotency key is minted per intended operation, so a
+   * double click or a retry after a timeout replays the original ledger row instead of charging twice.
+   */
+  saveAdjustment(): void {
+    const detail = this.detail();
+    if (!detail || !this.canUpdate() || this.adjustBusy()) return;
+    const points = this.adjustPoints();
+    const reason = this.adjustReason().trim();
+    this.adjustError.set(
+      !Number.isInteger(points) || points === 0
+        ? 'Số điểm phải là số nguyên khác 0.'
+        : Math.abs(points) > 1_000_000
+          ? 'Một lần điều chỉnh tối đa ±1.000.000 điểm.'
+          : reason.length < 10
+            ? 'Cần lý do tối thiểu 10 ký tự để lưu dấu vết vận hành.'
+            : null,
+    );
+    if (this.adjustError()) return;
+
+    this.adjustBusy.set(true);
+    this.api.adjustMemberPoints(detail.user.user_id, {
+      points, reason, idempotencyKey: this.adjustKey(),
+    }).subscribe({
+      next: (result) => {
+        this.adjustBusy.set(false);
+        this.adjustReason.set('');
+        this.adjustPoints.set(0);
+        this.adjustKeySignal.set('');
+        this.notice.set(result.idempotent
+          ? 'Lệnh này đã được ghi nhận trước đó; ví không đổi thêm lần nữa.'
+          : points > 0
+            ? `Đã cộng ${points} điểm cho thành viên.`
+            : `Đã trừ ${Math.abs(points)} điểm khỏi ví thành viên.`);
+        this.openDetail(detail.user.user_id);
+      },
+      error: (error: unknown) => {
+        this.adjustBusy.set(false);
+        this.adjustError.set(adminErrorMessage(error, 'Không ghi nhận được điều chỉnh điểm.'));
+      },
+    });
   }
 
   onSpendingPercent(event: Event): void {

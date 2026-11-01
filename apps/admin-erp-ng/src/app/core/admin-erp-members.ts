@@ -58,8 +58,9 @@ export function memberState(row: MemberStateInput): { label: string; tone: Membe
 }
 
 /**
- * Nhãn cho từng loại bút toán trong `loyalty_ledger`. Production hiện chỉ có 'earn';
- * 'clawback' và 'debt_repayment' là hai loại mà migration 073 sinh ra.
+ * Nhãn cho từng loại bút toán trong `loyalty_ledger`. Khoá lấy theo CHECK của
+ * `loyalty_ledger_kind_check` (migration 087), không phải theo tên viết tắt trong UI cũ,
+ * để drawer không bao giờ hiện token thô cho nhân viên.
  */
 export function ledgerKindMeta(kind: string | null | undefined): { label: string; tone: MemberTone } {
   switch (kind) {
@@ -69,10 +70,27 @@ export function ledgerKindMeta(kind: string | null | undefined): { label: string
       return { label: 'Thu hồi theo trả hàng', tone: 'danger' };
     case 'debt_repayment':
       return { label: 'Bù nợ điểm', tone: 'warning' };
+    case 'expired':
+    case 'expiry':
     case 'expire':
       return { label: 'Hết hạn điểm', tone: 'neutral' };
+    case 'adjustment':
     case 'adjust':
-      return { label: 'Điều chỉnh có lý do', tone: 'info' };
+      return { label: 'Điều chỉnh thủ công có lý do', tone: 'info' };
+    case 'redeem':
+    case 'consumed':
+      return { label: 'Đã dùng điểm', tone: 'warning' };
+    case 'redeem_refund':
+    case 'refund':
+      return { label: 'Hoàn điểm đã dùng', tone: 'success' };
+    case 'reversed':
+      return { label: 'Bút toán bị đảo', tone: 'neutral' };
+    case 'reconcile':
+      return { label: 'Đối soát ví', tone: 'neutral' };
+    case 'bonus':
+      return { label: 'Điểm thưởng', tone: 'success' };
+    case 'reserved':
+      return { label: 'Điểm đang giữ', tone: 'neutral' };
     default:
       return { label: kind || 'Bút toán', tone: 'neutral' };
   }

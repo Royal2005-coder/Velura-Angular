@@ -726,11 +726,11 @@ export class OrderFlowPage {
   refundPointEstimate(): number {
     return Math.floor(this.refundEstimate(this.selectedLines()) / 1000);
   }
-  /** Continue after the member acknowledges the possible point clawback. */
+  /** The warning screen already restates the request, so acknowledging it submits directly. */
   continueAfterPointWarning(): void {
     this.pointRefundWarning.set(false);
     this.error.set('');
-    this.view.set('return-summary');
+    this.submitReturn();
   }
   /** Dismiss the point warning and keep editing the return request. */
   dismissPointWarning(): void {

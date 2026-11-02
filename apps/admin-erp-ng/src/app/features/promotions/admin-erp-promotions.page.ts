@@ -89,6 +89,24 @@ export class AdminErpPromotionsPage {
   readonly discardOpen = signal(false);
   readonly saving = signal(false);
   readonly actionSaving = signal(false);
+  readonly campaignBannerUrl = signal('');
+  readonly bannerUploading = signal(false);
+  readonly selectedVoucherPromoId = signal('');
+  readonly selectedCampaignBudgetInfo = computed(() => {
+    const promoId = this.selectedVoucherPromoId();
+    if (!promoId) return null;
+    const campaign = this.campaignOptions().find((c) => (c.promo_id || c.promotion_id) === promoId);
+    if (!campaign) return null;
+    const budgetLimit = Number(campaign.budget_limit ?? campaign.budget ?? 0);
+    const totalIssued = Number(campaign.total_discount_issued ?? 0);
+    const remaining = budgetLimit > 0 ? Math.max(0, budgetLimit - totalIssued) : null;
+    return {
+      name: this.campaignName(campaign),
+      budgetLimit,
+      totalIssued,
+      remaining,
+    };
+  });
   readonly statsRange = signal('30');
   readonly canMutate = computed(() => this.session.can('update', 'promotions'));
   readonly statsRanges = [
@@ -421,10 +439,31 @@ export class AdminErpPromotionsPage {
    */
   openCampaignForm(): void {
     if (!this.canMutate()) return;
-    this.editingCampaign.set(this.selectedCampaign());
+    const current = this.selectedCampaign();
+    this.editingCampaign.set(current);
+    this.campaignBannerUrl.set(current?.banner_image_url || '');
     this.campaignFormOpen.set(true);
     this.formError.set(null);
     this.dirty.set(false);
+  }
+
+  onBannerFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    this.bannerUploading.set(true);
+    this.formError.set(null);
+    this.api.uploadPromotionBanner(file).subscribe({
+      next: (res) => {
+        this.bannerUploading.set(false);
+        this.campaignBannerUrl.set(res.url);
+        this.dirty.set(true);
+      },
+      error: (err: unknown) => {
+        this.bannerUploading.set(false);
+        this.formError.set(adminErrorMessage(err, 'Không tải được ảnh banner chiến dịch.'));
+      },
+    });
   }
 
   /**
@@ -432,7 +471,9 @@ export class AdminErpPromotionsPage {
    */
   openVoucherForm(): void {
     if (!this.canMutate()) return;
-    this.editingVoucher.set(this.selectedVoucher());
+    const current = this.selectedVoucher();
+    this.editingVoucher.set(current);
+    this.selectedVoucherPromoId.set(current?.promo_id || '');
     this.voucherFormOpen.set(true);
     this.formError.set(null);
     this.dirty.set(false);
@@ -506,6 +547,7 @@ export class AdminErpPromotionsPage {
       startDate: new Date(start).toISOString(),
       endDate: new Date(end).toISOString(),
       budgetLimit: budget,
+      bannerImageUrl: this.campaignBannerUrl().trim() || null,
       description: this.field(form, 'description'),
     };
     const current = this.editingCampaign();

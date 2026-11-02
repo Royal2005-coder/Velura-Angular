@@ -175,6 +175,64 @@ app-site-shell:has(.chatbot-widget--open) .hot-offer-widget { visibility: hidden
   .offers-page .offer-banner-row--reverse .offer-banner-row__image-link { grid-column: auto; grid-row: auto; text-align: left; align-items: flex-start; }
 }
 
+.campaign-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin: 32px 0 16px;
+  flex-wrap: wrap;
+}
+.campaign-page-btn {
+  padding: 8px 16px;
+  border: 1px solid var(--velura-border, #f2c2cf);
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--velura-maroon, #7a283c);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.campaign-page-btn:hover:not(:disabled) {
+  background: var(--velura-blush, #fbeff3);
+  border-color: var(--velura-maroon, #7a283c);
+  transform: translateY(-1px);
+}
+.campaign-page-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.campaign-page-numbers {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.campaign-page-num {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--velura-border, #f2c2cf);
+  border-radius: 50%;
+  background: #ffffff;
+  color: var(--velura-ink, #2a2522);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.campaign-page-num:hover {
+  border-color: var(--velura-maroon, #7a283c);
+  color: var(--velura-maroon, #7a283c);
+}
+.campaign-page-num.is-active {
+  background: var(--velura-maroon, #7a283c);
+  border-color: var(--velura-maroon, #7a283c);
+  color: #ffffff;
+}
+
 /* Live campaign content uses the storefront palette without changing eligibility or links. */
 .offers-page {
   color: var(--ink);

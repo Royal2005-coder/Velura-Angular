@@ -52,7 +52,7 @@
       </div>
     } @else {
       <div class="offer-banner-list" aria-label="Danh sách ưu đãi Velura">
-        @for (campaign of campaigns(); track campaign.promo_id; let i = $index) {
+        @for (campaign of pagedCampaigns(); track campaign.promo_id; let i = $index) {
           <article class="offer-banner-row" [class.offer-banner-row--reverse]="i % 2 === 1"
                    [class.offer-banner-row--focused]="focusedOffer() === campaign.promo_id">
             <div class="offer-banner-row__copy">
@@ -102,6 +102,38 @@
               </a>
             }
           </article>
+        }
+        @if (campaignTotalPages() > 1) {
+          <nav class="campaign-pagination" aria-label="Phân trang chương trình ưu đãi">
+            <button
+              type="button"
+              class="campaign-page-btn"
+              [disabled]="campaignPage() <= 1"
+              (click)="setCampaignPage(campaignPage() - 1)"
+            >
+              &larr; Trang trước
+            </button>
+            <div class="campaign-page-numbers">
+              @for (p of campaignPageList(); track p) {
+                <button
+                  type="button"
+                  class="campaign-page-num"
+                  [class.is-active]="campaignPage() === p"
+                  (click)="setCampaignPage(p)"
+                >
+                  {{ p }}
+                </button>
+              }
+            </div>
+            <button
+              type="button"
+              class="campaign-page-btn"
+              [disabled]="campaignPage() >= campaignTotalPages()"
+              (click)="setCampaignPage(campaignPage() + 1)"
+            >
+              Trang sau &rarr;
+            </button>
+          </nav>
         }
       </div>
     }

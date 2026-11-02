@@ -21,10 +21,12 @@
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
 }
 
-/* Grid Layout: Left Column (Logo) | Center Column (2 Rows) | Right Column (Actions) */
+/* Grid Layout: Left Column (Logo) | Center Column (Search/Utilities) | Right Column (Actions)
+   Row 2: Full-Width Editorial Navigation spanning all columns */
 .site-header__container-grid {
   display: grid;
-  grid-template-columns: 176px minmax(0, 1fr) 224px;
+  grid-template-columns: 176px minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
   align-items: center;
   min-height: 92px;
   padding: 0;
@@ -32,6 +34,8 @@
 
 /* 1. LEFT COLUMN: Logo box (Flower top, text bottom) */
 .header-col--left {
+  grid-column: 1;
+  grid-row: 1;
   display: flex;
   align-items: center;
   justify-content: flex-start;
@@ -75,31 +79,39 @@
   line-height: 1;
 }
 
-/* 2. CENTER COLUMN: Two rows */
+/* 2. CENTER COLUMN: Top utilities and search */
 .header-col--center {
+  grid-column: 2;
+  grid-row: 1;
   display: flex;
-  flex-direction: column;
-  justify-content: space-between;
+  align-items: center;
   border: none;
 }
 
 .center-row--top {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   padding: 10px 10px 4px;
   gap: 18px;
+  width: 100%;
 }
 
-.center-row--bottom {
+/* Full-Width Editorial Navigation: Row 2 starts aligned with the logo and container left edge */
+.center-row--bottom,
+.site-header__nav {
+  grid-column: 1 / -1;
+  grid-row: 2;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 5px 10px 10px;
-  border-top: 0;
-  border-bottom: none;
+  justify-content: flex-start;
+  gap: clamp(16px, 2.5vw, 36px);
+  padding: 8px 0 10px;
+  border-top: 1px solid rgba(234, 215, 221, 0.45);
+  margin-top: 2px;
+  width: 100%;
+  min-width: 0;
 }
-
 /* Center Top Row Items */
 .header-info-item {
   display: flex;
@@ -839,34 +851,32 @@ input.cm-search-topbar__input:focus,
 .nav-link {
   font-size: 0.8125rem;
   font-weight: 500;
-  /* Để bình thường, không in đậm */
-  color: #000000;
+  color: var(--ink, #2A2522);
   text-decoration: none;
   padding: 8px 0;
   position: relative;
-  transition: color 0.2s ease;
-  letter-spacing: 0.02em;
-  font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif !important;
-  /* Body & UI dùng DM Sans */
+  transition: color 0.18s ease;
+  letter-spacing: 0.04em;
+  font-family: var(--velura-font-ui, "Inter", sans-serif) !important;
   text-transform: uppercase;
-  /* Chuyển tự động thành in hoa */
+  white-space: nowrap;
 }
 
 .nav-link:hover,
 .nav-link.is-active {
-  color: #7A283C;
+  color: var(--velura-maroon, #7A283C);
 }
 
 /* Active indicator red line under tabs */
 .nav-link.is-active::after {
   content: "";
   position: absolute;
-  bottom: -9px;
-  /* Cân chỉnh sát viền dưới */
+  bottom: -10px;
   left: 0;
   width: 100%;
-  height: 3px;
-  background: #7A283C;
+  height: 2.5px;
+  background: var(--velura-maroon, #7A283C);
+  border-radius: 2px;
 }
 
 /* Marketing highlight style for Gợi ý AI */
@@ -877,6 +887,8 @@ input.cm-search-topbar__input:focus,
 
 /* 3. RIGHT COLUMN: 3 action buttons */
 .header-col--right {
+  grid-column: 3;
+  grid-row: 1;
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -1006,13 +1018,12 @@ input.cm-search-topbar__input:focus,
 
 @media (max-width: 1024px) {
   .site-header__container-grid {
-    grid-template-columns: auto auto;
-    /* 2 columns on mobile: logo left, actions/menu-toggle right */
+    grid-template-columns: 1fr auto;
+    grid-template-rows: 72px;
     align-items: center;
     height: 72px;
     padding: 0 16px;
   }
-
   .header-col--left {
     padding: 0;
     justify-content: flex-start;
@@ -1032,20 +1043,9 @@ input.cm-search-topbar__input:focus,
     font-size: 1.25rem;
   }
 
-  /* Center column dropdown drawer on mobile */
   .header-col--center {
-    display: block;
-    position: absolute;
-    top: 72px;
-    left: 0;
-    width: 100%;
-    background: #ffffff;
-    border-bottom: 1px solid var(--line, #E8DFD6);
-    z-index: 999;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-    pointer-events: none;
+    display: none;
   }
-
   .center-row--top {
     display: none;
     /* Hide top row (hotline/shops/search) on mobile */

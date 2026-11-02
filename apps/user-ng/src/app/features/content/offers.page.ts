@@ -51,6 +51,19 @@ export class OffersPage {
   readonly campaigns = signal<OfferCampaign[]>([]);
   readonly featured = signal<OfferCampaign[]>([]);
   readonly vouchers = signal<OfferVoucher[]>([]);
+  readonly campaignPage = signal(1);
+  readonly campaignPageSize = 5;
+  readonly campaignTotalPages = computed(() => Math.max(1, Math.ceil(this.campaigns().length / this.campaignPageSize)));
+  readonly pagedCampaigns = computed(() => {
+    const start = (this.campaignPage() - 1) * this.campaignPageSize;
+    return this.campaigns().slice(start, start + this.campaignPageSize);
+  });
+  readonly campaignPageList = computed(() => Array.from({ length: this.campaignTotalPages() }, (_, i) => i + 1));
+
+  setCampaignPage(page: number): void {
+    if (page < 1 || page > this.campaignTotalPages()) return;
+    this.campaignPage.set(page);
+  }
   readonly isMember = signal(false);
   readonly birthdayPrompt = signal<BirthdayPrompt | null>(null);
   /** Chiến dịch đang mở qua `?offer=`. Giá trị lạ (ví dụ mã banner cũ A1) thì bỏ qua. */
@@ -196,7 +209,8 @@ export class OffersPage {
 
   /** Số thứ tự hiển thị kiểu A1, A2… giữ lại ngôn ngữ thị giác của bản thiết kế cũ. */
   campaignIndex(index: number): string {
-    return `A${index + 1}`;
+    const globalIndex = (this.campaignPage() - 1) * this.campaignPageSize + index;
+    return `A${globalIndex + 1}`;
   }
 
   private scrollToFocused(): void {

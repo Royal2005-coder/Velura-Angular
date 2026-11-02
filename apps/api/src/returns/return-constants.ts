@@ -23,6 +23,9 @@ export const RETURN_REASONS: readonly { code: string; label: string }[] = [
   { code: "other", label: "Lý do khác" }
 ];
 
+/** Header statuses that no longer owe the customer contact or a refund; used by the overdue queue filters. */
+export const RETURN_TERMINAL_STATUSES: readonly string[] = ["REFUNDED", "COMPLETED", "CANCELLED", "REJECTED"];
+
 /** Kết quả QA kho. Chỉ `qa_pass` được chuyển phiếu sang received. */
 export const RETURN_QA_PASS = "qa_pass";
 
@@ -107,7 +110,8 @@ COMPLETED:[], CANCELLED:[], NEEDS_SUPPORT:["CONTACTING","CANCELLED"]
 export const RETURN_READER_ROLES: readonly string[] = [
   "super_admin",
   "admin_operator_donhang",
-  "admin_operator_cskh_dt"
+  "admin_operator_cskh_dt",
+  "admin_viewer"
 ];
 
 /**
@@ -143,7 +147,7 @@ export const RETURN_SELECT = [
   "decision_status", "attention_status", "contact_history", "last_contact_at",
   "exchange_order_id", "refund_amount", "tracking_return_code",
   "created_at", "resolved_at", "version", "evidence_images", "contact_due_at", "exchange_tracking_code", "warehouse_proof", "qa_item_receipts",
-  "refund_bank_name", "refund_bank_account", "refund_bank_holder", "cancelled_by"
+  "refund_bank_name", "refund_bank_account", "refund_bank_holder", "cancelled_by", "refund_due_at"
 ].join(",");
 
 /**

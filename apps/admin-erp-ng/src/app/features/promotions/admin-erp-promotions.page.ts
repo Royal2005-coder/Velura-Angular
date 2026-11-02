@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { catchError, finalize, of } from 'rxjs';
 import {
   AdminAuditRow,
+  AdminBulkVoucherResult,
   AdminErpApiService,
   AdminPricingStatistics,
   AdminPromotionRow,
@@ -28,6 +29,7 @@ import { AdminErpPageHeader } from '../../shared/ui/admin-page-header';
 import { AdminErpPagination } from '../../shared/ui/admin-pagination';
 import { AdminErpStatusBadge } from '../../shared/ui/admin-status-badge';
 import { AdminErpTab, AdminErpTabs } from '../../shared/ui/admin-tabs';
+import { budgetReachedMessage, voucherCapacity, voucherMaxDiscount, VoucherCapacity } from './voucher-budget';
 
 type PromoView = 'campaigns' | 'vouchers' | 'logs' | 'stats';
 const EMPTY_CAMPAIGNS = { rows: [] as AdminPromotionRow[], count: 0, summary: undefined as AdminPromotionSummary | undefined };
@@ -107,6 +109,23 @@ export class AdminErpPromotionsPage {
       remaining,
     };
   });
+  /** Live form values used to derive the remaining voucher capacity (AD_PROMO_03). */
+  readonly voucherFormType = signal('fixed_amount');
+  readonly voucherFormValue = signal(0);
+  readonly voucherFormMaxDiscount = signal<number | null>(null);
+  readonly voucherCapacityHint = computed(() =>
+    this.capacityFor(this.selectedVoucherPromoId(), this.voucherFormType(), this.voucherFormValue(), this.voucherFormMaxDiscount()),
+  );
+  readonly bulkFormOpen = signal(false);
+  readonly bulkSaving = signal(false);
+  readonly bulkResult = signal<AdminBulkVoucherResult | null>(null);
+  readonly bulkPromoId = signal('');
+  readonly bulkType = signal('fixed_amount');
+  readonly bulkValue = signal(0);
+  readonly bulkMaxDiscount = signal<number | null>(null);
+  readonly bulkCapacityHint = computed(() =>
+    this.capacityFor(this.bulkPromoId(), this.bulkType(), this.bulkValue(), this.bulkMaxDiscount()),
+  );
   readonly statsRange = signal('30');
   readonly canMutate = computed(() => this.session.can('update', 'promotions'));
   readonly statsRanges = [
@@ -474,6 +493,9 @@ export class AdminErpPromotionsPage {
     const current = this.selectedVoucher();
     this.editingVoucher.set(current);
     this.selectedVoucherPromoId.set(current?.promo_id || '');
+    this.voucherFormType.set(current?.discount_type || current?.type || 'fixed_amount');
+    this.voucherFormValue.set(Number(current?.discount_value ?? current?.value ?? 0));
+    this.voucherFormMaxDiscount.set(current?.max_discount_amount != null ? Number(current.max_discount_amount) : null);
     this.voucherFormOpen.set(true);
     this.formError.set(null);
     this.dirty.set(false);
@@ -499,6 +521,175 @@ export class AdminErpPromotionsPage {
       },
       error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
     });
+  }
+
+  /**
+   * Keeps the live capacity hint in step with the voucher form while the admin types.
+   */
+  onVoucherFormInput(event: Event): void {
+    const form = event.currentTarget as HTMLFormElement;
+    this.voucherFormType.set(this.field(form, 'type') || 'fixed_amount');
+    this.voucherFormValue.set(Number(this.field(form, 'value') || 0));
+    const max = this.field(form, 'maxDiscount');
+    this.voucherFormMaxDiscount.set(max ? Number(max) : null);
+  }
+
+  /**
+   * Same live hint for the bulk form.
+   */
+  onBulkFormInput(event: Event): void {
+    const form = event.currentTarget as HTMLFormElement;
+    this.bulkPromoId.set(this.field(form, 'promoId'));
+    this.bulkType.set(this.field(form, 'type') || 'fixed_amount');
+    this.bulkValue.set(Number(this.field(form, 'value') || 0));
+    const max = this.field(form, 'maxDiscount');
+    this.bulkMaxDiscount.set(max ? Number(max) : null);
+  }
+
+  /**
+   * Remaining voucher capacity: budget / per-voucher cap (floored) minus codes already issued.
+   */
+  private capacityFor(promoId: string, type: string, value: number, maxDiscount: number | null): VoucherCapacity | null {
+    const info = promoId ? this.campaignOptions().find((c) => (c.promo_id || c.promotion_id) === promoId) : null;
+    if (!info) return null;
+    const budget = Number(info.budget_limit ?? info.budget ?? 0);
+    const cap = voucherMaxDiscount({ type, value, maxDiscount });
+    return voucherCapacity(budget, cap, Number(info.voucher_count ?? 0));
+  }
+
+  /**
+   * Opens the bulk voucher generation form (AD_VOUCHER_03).
+   */
+  openBulkForm(): void {
+    if (!this.canMutate()) return;
+    this.bulkResult.set(null);
+    this.bulkPromoId.set('');
+    this.bulkType.set('fixed_amount');
+    this.bulkValue.set(0);
+    this.bulkMaxDiscount.set(null);
+    this.formError.set(null);
+    this.bulkFormOpen.set(true);
+    this.loadCampaignOptions();
+  }
+
+  /**
+   * Closes the bulk form.
+   */
+  closeBulkForm(): void {
+    this.bulkFormOpen.set(false);
+    this.formError.set(null);
+  }
+
+  /**
+   * Submits a bulk generation: prefix + quantity within the campaign capacity.
+   */
+  submitBulk(event: Event): void {
+    event.preventDefault();
+    if (!this.canMutate() || this.bulkSaving()) return;
+    const form = event.target as HTMLFormElement;
+    const prefix = this.field(form, 'prefix').trim().toUpperCase();
+    const quantity = Number(this.field(form, 'quantity') || 0);
+    const type = this.field(form, 'type') || 'fixed_amount';
+    const value = type === 'free_shipping' ? 0 : Number(this.field(form, 'value') || 0);
+    const start = this.field(form, 'startDate');
+    const end = this.field(form, 'endDate');
+    const promoId = this.field(form, 'promoId');
+    if (!/^[A-Z0-9]{2,12}$/.test(prefix)) {
+      this.formError.set('Tiền tố gồm 2–12 ký tự chữ không dấu hoặc số.');
+      return;
+    }
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 500) {
+      this.formError.set('Số lượng phải từ 1 đến 500.');
+      return;
+    }
+    if (!promoId) {
+      this.formError.set('Chọn chiến dịch để sinh mã hàng loạt.');
+      return;
+    }
+    if (type !== 'free_shipping' && (!Number.isFinite(value) || value <= 0)) {
+      this.formError.set('Giá trị giảm phải lớn hơn 0.');
+      return;
+    }
+    if (!start || !end || new Date(end) <= new Date(start)) {
+      this.formError.set('Ngày kết thúc phải sau ngày bắt đầu.');
+      return;
+    }
+    const capacity = this.bulkCapacityHint();
+    if (capacity?.status === 'cap_required') {
+      this.formError.set('Chiến dịch có ngân sách nên mã phải có trần giảm tối đa để quy đổi ra số mã.');
+      return;
+    }
+    if (capacity?.status === 'limited' && quantity > capacity.remaining) {
+      this.formError.set(`${budgetReachedMessage(capacity.issued, capacity.max)}. Chỉ còn phát được ${capacity.remaining} mã.`);
+      return;
+    }
+    this.bulkSaving.set(true);
+    this.formError.set(null);
+    this.api
+      .createVouchersBulk({
+        prefix,
+        quantity,
+        promoId,
+        name: this.field(form, 'name') || prefix,
+        type,
+        value,
+        maxDiscount: this.field(form, 'maxDiscount') ? Number(this.field(form, 'maxDiscount')) : null,
+        minOrderValue: Number(this.field(form, 'minOrderValue') || 0),
+        maxUses: this.field(form, 'maxUses') ? Number(this.field(form, 'maxUses')) : null,
+        maxPerUser: Number(this.field(form, 'maxPerUser') || 1),
+        applicableUserGroup: this.field(form, 'applicableUserGroup') || 'all_users',
+        startDate: new Date(start).toISOString(),
+        endDate: new Date(end).toISOString(),
+      })
+      .pipe(finalize(() => this.bulkSaving.set(false)))
+      .subscribe({
+        next: (result) => {
+          this.bulkResult.set(result);
+          this.reload();
+          this.loadCampaignOptions();
+        },
+        error: (error: unknown) => this.formError.set(adminErrorMessage(error, 'Không sinh được mã hàng loạt.')),
+      });
+  }
+
+  /**
+   * Exports the loaded promotion statistics as CSV (AD_STATS_01). Read-only, so it is
+   * available to every role that may view the statistics, including the read-only viewer.
+   */
+  exportStatsCsv(): void {
+    const data = this.stats();
+    if (!data) return;
+    const rows: unknown[][] = [
+      ['Chỉ số', 'Giá trị'],
+      ['Đơn trong kỳ', data.orders.total],
+      ['Đơn có voucher', data.orders.withVoucher],
+      ['Tỷ lệ dùng voucher (%)', data.orders.voucherRate],
+      ['Doanh thu có voucher', data.orders.revenueWithVoucher],
+      ['Doanh thu không voucher', data.orders.revenueWithoutVoucher],
+      ['Tổng giảm giá', data.orders.discountTotal],
+      ['Voucher đã dùng', data.vouchers.totalUsed],
+      [],
+      ['Chiến dịch', 'Voucher', 'Đơn', 'Doanh thu', 'Giảm giá', 'Ngân sách', 'Đã dùng ngân sách'],
+      ...data.campaigns.map((c) => [c.name, c.vouchers, c.orders, c.revenue, c.discount, c.budgetLimit, c.budgetUsed]),
+      [],
+      ['Mã voucher', 'Đơn', 'Giảm giá', 'Doanh thu'],
+      ...data.topVouchers.map((v) => [v.code, v.orders, v.discount, v.revenue]),
+    ];
+    const csv = rows.map((row) => row.map((value) => this.csvCell(value)).join(',')).join('\r\n');
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(new Blob(['\ufeff', csv], { type: 'text/csv;charset=utf-8' }));
+    link.download = `velura-promotion-stats-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  }
+
+  /**
+   * Quotes a CSV cell and neutralises spreadsheet formula prefixes.
+   */
+  private csvCell(value: unknown): string {
+    const text = String(value ?? '');
+    const guarded = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
+    return `"${guarded.replace(/"/g, '""')}"`;
   }
 
   /**
@@ -598,6 +789,15 @@ export class AdminErpPromotionsPage {
     }
     if (!start || !end || new Date(end) <= new Date(start)) {
       this.formError.set('Ngày kết thúc phải sau ngày bắt đầu.');
+      return;
+    }
+    const capacity = current ? null : this.voucherCapacityHint();
+    if (capacity?.status === 'cap_required') {
+      this.formError.set('Chiến dịch có ngân sách nên mã phải có trần giảm tối đa để quy đổi ra số mã.');
+      return;
+    }
+    if (capacity?.status === 'limited' && capacity.remaining < 1) {
+      this.formError.set(budgetReachedMessage(capacity.issued, capacity.max));
       return;
     }
     const payload: Record<string, unknown> = {

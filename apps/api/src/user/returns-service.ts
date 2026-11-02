@@ -3,7 +3,8 @@ import { classifyReturnPayment, customerRefundReceiver, refundFlowFor, validateR
 import { listReturnEvidence, resolveEvidenceRef, storeReturnEvidence, type ReturnEvidenceKind } from "../returns/return-evidence.js";
 import { hasGuestOrderAccess } from "./order-access.js";
 import { HttpError } from "../http.js";
-import { returnWindowOpen } from "./return-window.js";
+import { sendReturnMilestoneEmail } from "../returns/return-milestone-email.js";
+import { RETURN_WINDOW_DAYS, returnWindowOpen } from "./return-window.js";
 import { asJsonObject, asNumber, asString, type HttpRequest, type JsonObject, type UserProfile } from "../types.js";
 import type { UserReturnsRepository } from "./returns-repository.js";
 
@@ -300,7 +301,7 @@ function requireDeliveredWithinWindow(order: JsonObject): void {
   }
   const deliveryDate = new Date(asString(order.delivered_at));
   if (!returnWindowOpen(deliveryDate, new Date())) {
-    throw new HttpError(400, "RETURN_WINDOW_CLOSED", "Quá thời hạn đổi/trả (7 ngày kể từ khi giao hàng)");
+    throw new HttpError(400, "RETURN_WINDOW_CLOSED", `Quá thời hạn đổi/trả (${RETURN_WINDOW_DAYS} ngày kể từ khi giao hàng)`);
   }
 }
 
@@ -420,6 +421,8 @@ async function createForOrder(repository: UserReturnsRepository, order: JsonObje
     evidence_images: evidence.images, evidence_videos: evidence.videos,
     ...bank
   }, items);
+  // BA RET-15: acknowledge the request; the milestone key makes a retry harmless.
+  void sendReturnMilestoneEmail(asString(created.return_id), "intake");
   return customerReturnView(repository, created, order, await hydratedReturnItems(repository, created.return_id));
 }
 

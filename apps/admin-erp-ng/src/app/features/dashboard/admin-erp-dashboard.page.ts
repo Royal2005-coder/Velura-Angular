@@ -1,12 +1,14 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import {
   AdminAuditRow,
   AdminDashboardSummary,
   AdminErpApiService,
   AdminInsightRange,
+  AdminManagementInsight,
 } from '../../core/admin-erp-api.service';
-import { adminCompactMoney, adminMoney } from '../../core/admin-erp-format';
+import { adminKpiMoney, adminMoney } from '../../core/admin-erp-format';
 import { adminErrorMessage } from '../../core/admin-erp-http';
 import {
   ADMIN_ERP_NAV_ITEMS,
@@ -23,7 +25,38 @@ import { AdminErpStatusBadge } from '../../shared/ui/admin-status-badge';
 import { AdminErpTableSkeleton } from '../../shared/ui/admin-table-skeleton';
 import { AdminErpTab, AdminErpTabs } from '../../shared/ui/admin-tabs';
 
-type DashboardTab = 'operations' | 'business';
+type DashboardTab = 'operations' | 'business' | 'insights';
+
+/** The API refuses a second warehouse sync inside this window (ANALYTICS_REFRESH_THROTTLED). */
+const REFRESH_COOLDOWN_SECONDS = 10;
+
+const SEVERITY_VIEW: Readonly<Record<AdminManagementInsight['severity'], { label: string; tone: 'danger' | 'warning' | 'success' }>> = {
+  critical: { label: 'Nghiêm trọng', tone: 'danger' },
+  high: { label: 'Mức cao', tone: 'danger' },
+  watch: { label: 'Cần theo dõi', tone: 'warning' },
+  ok: { label: 'Ổn định', tone: 'success' },
+};
+
+/** The four mandatory parts of a Management Insight card, in reading order (BA 3.1.13 bước 5). */
+const INSIGHT_PARTS: ReadonlyArray<{ key: 'phenomenon' | 'scope' | 'magnitude' | 'consequence'; label: string }> = [
+  { key: 'phenomenon', label: 'Hiện tượng' },
+  { key: 'scope', label: 'Phạm vi' },
+  { key: 'magnitude', label: 'Mức độ / tác động' },
+  { key: 'consequence', label: 'Hệ quả' },
+];
+
+/** Prepared view of one insight card; `parts` is empty when the source has too little data. */
+export interface InsightCardView {
+  id: string;
+  title: string;
+  ready: boolean;
+  severity: AdminManagementInsight['severity'];
+  severityLabel: string;
+  tone: 'danger' | 'warning' | 'success' | 'neutral';
+  parts: ReadonlyArray<{ label: string; text: string }>;
+  note: string;
+  action: { label: string; link: { commands: readonly string[]; query: Record<string, string> } | null } | null;
+}
 
 /** Queue each alert is counting, so opening the alert shows exactly those rows. */
 const QUEUE_FILTERS: Readonly<Record<string, Record<string, string>>> = {
@@ -81,6 +114,12 @@ const emptyDashboard = (): AdminDashboardSummary => ({
 export class AdminErpDashboardPage {
   private readonly api = inject(AdminErpApiService);
   private readonly session = inject(AdminErpSessionService);
+  private readonly destroyRef = inject(DestroyRef);
+  private cooldownTimer: ReturnType<typeof setInterval> | null = null;
+
+  /** Why the free date picker is not offered; shown as a tooltip on the fixed range buttons. */
+  readonly rangeHint =
+    'Hệ thống chỉ hỗ trợ Ngày / Tuần / Tháng cố định để các kỳ báo cáo luôn so sánh được với nhau; không chọn khoảng ngày tùy ý.';
 
   readonly tab = signal<DashboardTab>('operations');
   readonly range = signal<AdminInsightRange>('week');
@@ -88,6 +127,19 @@ export class AdminErpDashboardPage {
   readonly loadError = signal<string | null>(null);
   readonly data = signal<AdminDashboardSummary>(emptyDashboard());
   readonly generatedAt = signal('');
+  /** True while the warehouse re-sync request is in flight. */
+  readonly refreshing = signal(false);
+  /** Seconds left before the refresh button re-enables. */
+  readonly cooldown = signal(0);
+  readonly notice = signal<{ tone: 'success' | 'warning' | 'danger'; text: string } | null>(null);
+  /** Only roles allowed to update the dashboard module may trigger the warehouse sync. */
+  readonly canSyncWarehouse = computed(() => this.session.can('update', 'dashboard'));
+  readonly refreshLabel = computed(() => {
+    if (this.refreshing()) return 'Đang đồng bộ kho dữ liệu…';
+    if (this.loading()) return 'Đang tải…';
+    if (this.cooldown() > 0) return `Làm mới (${this.cooldown()}s)`;
+    return 'Làm mới';
+  });
 
   readonly ops = computed(() => this.data().operations);
   readonly business = computed(() => this.data().business);
@@ -95,6 +147,7 @@ export class AdminErpDashboardPage {
   readonly tabs = computed<readonly AdminErpTab[]>(() => [
     { key: 'operations', label: 'Vận hành', count: this.alertTotal() },
     { key: 'business', label: 'Kinh doanh' },
+    { key: 'insights', label: 'Insight quản trị', count: this.readyInsightCount() },
   ]);
 
   readonly alertTotal = computed(() => {
@@ -115,7 +168,7 @@ export class AdminErpDashboardPage {
       {
         label: 'Đơn chờ xử lý',
         value: this.num(ops.pendingOrders),
-        hint: 'Hàng đợi xác nhận / chuẩn bị',
+        hint: 'Chờ xác nhận hoặc có cảnh báo, cùng tab "Cần xử lý"',
         tone: 'accent',
         icon: 'cart',
       },
@@ -127,9 +180,9 @@ export class AdminErpDashboardPage {
         icon: 'credit-card',
       },
       {
-        label: 'Đổi trả đang mở',
+        label: 'Đổi trả chờ duyệt',
         value: this.num(ops.openReturns),
-        hint: 'Yêu cầu chưa đóng',
+        hint: 'Yêu cầu mới ở trạng thái "Yêu cầu"',
         tone: 'warning',
         icon: 'return',
       },
@@ -141,16 +194,16 @@ export class AdminErpDashboardPage {
         icon: 'support',
       },
       {
-        label: 'SKU sắp hết',
+        label: 'Biến thể sắp hết',
         value: this.num(ops.lowStockProducts),
-        hint: 'Dưới ngưỡng tồn kho',
+        hint: 'Mỗi biến thể tồn ≤ ngưỡng là một dòng',
         tone: 'warning',
         icon: 'box',
       },
       {
         label: 'Đánh giá gấp',
         value: this.num(ops.urgentReviews),
-        hint: 'Cần kiểm duyệt ưu tiên',
+        hint: 'Chưa xử lý, gắn cờ gấp hoặc ≤ 2 sao',
         tone: 'danger',
         icon: 'star',
       },
@@ -162,36 +215,39 @@ export class AdminErpDashboardPage {
     return [
       {
         label: 'Doanh thu kỳ',
-        value: `${adminCompactMoney(business.revenue)}đ`,
-        hint: this.trend(business.comparisons?.revenuePct),
+        value: this.compactMoney(business.revenue),
+        hint: this.kpiHint(business.revenue, this.trend(business.comparisons?.revenuePct)),
         tone: 'accent',
         icon: 'dashboard',
       },
       {
         label: 'Số đơn',
         value: this.num(business.orderCount),
-        hint: this.trend(business.comparisons?.orderCountPct),
+        hint: this.kpiHint(business.orderCount, this.trend(business.comparisons?.orderCountPct)),
         tone: 'info',
         icon: 'cart',
       },
       {
         label: 'Giá trị đơn TB',
         value: this.compactMoney(business.averageOrderValue),
-        hint: this.trend(business.comparisons?.aovPct),
+        hint: this.kpiHint(business.averageOrderValue, this.trend(business.comparisons?.aovPct)),
         tone: 'neutral',
         icon: 'tag',
       },
       {
         label: 'Tỷ lệ hoàn tất',
         value: this.pct(business.completionRate),
-        hint: this.trend(business.comparisons?.completionRatePoints, ' điểm so với kỳ trước'),
+        hint: this.kpiHint(
+          business.completionRate,
+          this.trend(business.comparisons?.completionRatePoints, ' điểm so với kỳ trước'),
+        ),
         tone: 'success',
         icon: 'check',
       },
       {
         label: 'Doanh thu có KM',
         value: this.pct(business.promotionRevenueShare),
-        hint: `${this.compactMoney(business.promotionRevenue)} từ khuyến mãi`,
+        hint: this.kpiHint(business.promotionRevenue, `${this.compactMoney(business.promotionRevenue)} từ khuyến mãi`),
         tone: 'warning',
         icon: 'tag',
       },
@@ -203,7 +259,7 @@ export class AdminErpDashboardPage {
     return [
       {
         key: 'orders',
-        title: `${this.num(ops.pendingOrders)} đơn chờ · ${this.num(ops.paymentErrors)} lỗi thanh toán`,
+        title: `${this.num(ops.pendingOrders)} đơn cần xử lý · ${this.num(ops.paymentErrors)} lỗi thanh toán`,
         detail: 'Xác nhận đơn, xử lý thanh toán và bàn giao vận chuyển.',
         page: 'orders',
         tone: 'danger' as const,
@@ -211,7 +267,7 @@ export class AdminErpDashboardPage {
       },
       {
         key: 'returns',
-        title: `${this.num(ops.openReturns)} đổi trả mở · ${this.num(ops.openSupportTickets)} phiếu hỗ trợ`,
+        title: `${this.num(ops.openReturns)} đổi trả chờ duyệt · ${this.num(ops.openSupportTickets)} phiếu hỗ trợ`,
         detail: 'Hàng đợi CSKH đang mở trên hệ thống hiện tại.',
         page: 'returns-cskh',
         tone: 'warning' as const,
@@ -219,7 +275,7 @@ export class AdminErpDashboardPage {
       },
       {
         key: 'products',
-        title: `${this.num(ops.lowStockProducts)} SKU dưới ngưỡng tồn`,
+        title: `${this.num(ops.lowStockProducts)} biến thể dưới ngưỡng tồn`,
         detail: 'Đếm biến thể có tồn kho thấp hơn ngưỡng cảnh báo.',
         page: 'products',
         tone: 'info' as const,
@@ -240,7 +296,7 @@ export class AdminErpDashboardPage {
     const ops = this.ops();
     return [
       { key: 'orders', label: 'Đơn hàng', value: `${this.num(ops.pendingOrders)} chờ`, page: 'orders', icon: 'cart' },
-      { key: 'products', label: 'Sản phẩm', value: `${this.num(ops.lowStockProducts)} SKU thấp`, page: 'products', icon: 'box' },
+      { key: 'products', label: 'Sản phẩm', value: `${this.num(ops.lowStockProducts)} biến thể thấp`, page: 'products', icon: 'box' },
       { key: 'reviews', label: 'Đánh giá', value: `${this.num(this.business().pendingReviews)} chờ`, page: 'reviews', icon: 'star' },
       { key: 'returns', label: 'CSKH', value: `${this.num(ops.openSupportTickets)} phiếu`, page: 'returns-cskh', icon: 'support' },
       { key: 'accounts', label: 'Tài khoản', value: `${this.num(this.business().customers)} khách`, page: 'accounts', icon: 'users' },
@@ -262,7 +318,7 @@ export class AdminErpDashboardPage {
       revenuePct: `${Math.round((this.safeNumber(point.revenue) / maxRevenue) * 100)}%`,
       orderPct: `${Math.round((this.safeNumber(point.orderCount) / maxOrders) * 100)}%`,
       label: point.dateStr || point.date,
-      amount: `${adminCompactMoney(point.revenue)}đ`,
+      amount: adminKpiMoney(point.revenue),
     }));
   });
 
@@ -288,14 +344,32 @@ export class AdminErpDashboardPage {
   readonly dataStatus = computed<{ label: string; tone: 'success' | 'warning' | 'danger' }>(() => {
     if (this.loadError()) return { label: 'Mất kết nối', tone: 'danger' };
     if (this.loading()) return { label: 'Đang tải', tone: 'warning' };
+    // Operational queues are read live from the transactional store, so warehouse staleness is irrelevant here.
+    if (this.tab() === 'operations') return { label: 'Hàng đợi trực tiếp', tone: 'success' };
     if (this.freshness() === 'fresh') return { label: 'Dữ liệu thật', tone: 'success' };
     if (this.freshness() === 'stale') return { label: 'Dữ liệu cũ', tone: 'warning' };
     return { label: 'Chưa xác minh', tone: 'danger' };
   });
 
+  readonly insightCards = computed<readonly InsightCardView[]>(() =>
+    (this.data().management?.groups ?? []).map((group) => this.insightView(group)),
+  );
+  readonly readyInsightCount = computed(() => this.insightCards().filter((card) => card.ready).length);
+  readonly pendingEvents = computed(() => this.data().meta?.pendingEvents ?? null);
+  /** Footer: when the warehouse was last verified and why live queues may be ahead of it. */
+  readonly footerNote = computed(() => {
+    const at = this.generatedAt();
+    const synced = at ? `Kho phân tích đồng bộ lần cuối lúc ${at}.` : 'Kho phân tích chưa có bản đồng bộ đã xác minh.';
+    const pending = this.pendingEvents();
+    const queue = pending !== null && pending > 0 ? ` Còn ${this.num(pending)} sự kiện giao dịch chờ đồng bộ.` : '';
+    const stale = this.freshness() === 'stale' ? ' Dữ liệu kinh doanh đã cũ hơn 5 phút.' : '';
+    return `${synced}${queue}${stale} Đơn phát sinh sau thời điểm này chưa có trong số liệu kinh doanh; hàng đợi vận hành là thời gian thực.`;
+  });
+
   constructor() {
     this.reload();
     useWorkspaceRefresh(() => this.reload());
+    this.destroyRef.onDestroy(() => this.stopCooldown());
   }
 
   /**
@@ -303,7 +377,7 @@ export class AdminErpDashboardPage {
    */
   setTab(tab: string): void {
     if (this.loading()) return;
-    if (tab === 'operations' || tab === 'business') {
+    if (tab === 'operations' || tab === 'business' || tab === 'insights') {
       this.tab.set(tab);
     }
   }
@@ -330,6 +404,7 @@ export class AdminErpDashboardPage {
           operations: { ...emptyDashboard().operations, ...summary.operations },
           business: { ...emptyDashboard().business, ...summary.business },
           meta: summary.meta,
+          management: summary.management,
         });
         const generated = summary.meta?.generatedAt ? new Date(summary.meta.generatedAt) : null;
         this.generatedAt.set(
@@ -350,6 +425,39 @@ export class AdminErpDashboardPage {
         this.data.set(emptyDashboard());
         this.loadError.set(adminErrorMessage(error, 'Không thể tải dữ liệu dashboard.'));
         this.loading.set(false);
+      },
+    });
+  }
+
+  /**
+   * "Làm mới": super admin re-syncs the OLAP warehouse (blocked for 10 s afterwards, 429 handled),
+   * every other role simply re-reads the current snapshot.
+   */
+  refresh(): void {
+    if (this.refreshing() || this.cooldown() > 0 || this.loading()) return;
+    if (!this.canSyncWarehouse()) {
+      this.reload();
+      return;
+    }
+    this.notice.set(null);
+    this.refreshing.set(true);
+    this.startCooldown(REFRESH_COOLDOWN_SECONDS);
+    this.api.refreshDashboard().subscribe({
+      next: () => {
+        this.refreshing.set(false);
+        this.notice.set({ tone: 'success', text: 'Đã đồng bộ kho dữ liệu thành công.' });
+        this.reload();
+      },
+      error: (error: unknown) => {
+        this.refreshing.set(false);
+        if (error instanceof HttpErrorResponse && error.status === 429) {
+          this.notice.set({ tone: 'warning', text: 'Kho dữ liệu vừa được đồng bộ. Vui lòng chờ 10 giây rồi thử lại.' });
+          return;
+        }
+        this.notice.set({
+          tone: 'danger',
+          text: adminErrorMessage(error, 'Đồng bộ thất bại; đang giữ bản đã xác minh gần nhất.'),
+        });
       },
     });
   }
@@ -378,6 +486,52 @@ export class AdminErpDashboardPage {
   }
 
   /**
+   * Turns one Management Insight into a card. Insufficient data keeps the reason, never a fake figure.
+   */
+  insightView(group: AdminManagementInsight): InsightCardView {
+    const ready = group.availability === 'ready';
+    const severity = SEVERITY_VIEW[group.severity] ?? SEVERITY_VIEW.watch;
+    const parts = ready
+      ? INSIGHT_PARTS.flatMap((part) => (group[part.key] ? [{ label: part.label, text: String(group[part.key]) }] : []))
+      : [];
+    return {
+      id: group.id,
+      title: group.title,
+      ready,
+      severity: group.severity,
+      severityLabel: ready ? severity.label : 'Chưa đủ dữ liệu',
+      tone: ready ? severity.tone : 'neutral',
+      parts,
+      note: group.dataNote || (ready ? '' : 'Chưa có đủ dữ liệu đã đối chiếu để kết luận.'),
+      action: ready && group.action ? { label: group.action.label, link: this.insightLink(group.action) } : null,
+    };
+  }
+
+  /**
+   * Deep link of an insight action into the matching ERP workspace, or null when the role may not open it.
+   */
+  insightLink(
+    action: NonNullable<AdminManagementInsight['action']>,
+  ): { commands: readonly string[]; query: Record<string, string> } | null {
+    const item = Object.values(ADMIN_ERP_NAV_ITEMS).find((candidate) => candidate.path === action.route);
+    if (!item || !this.session.canOpenAny(item.pageKeys)) {
+      return null;
+    }
+    const query: Record<string, string> = { ...(item.queryParams || {}) };
+    for (const [key, value] of Object.entries(action.query || {})) {
+      if (value) query[key] = value;
+    }
+    return { commands: [item.path], query };
+  }
+
+  /**
+   * A missing observation is announced instead of a trend line that would imply real data.
+   */
+  kpiHint(value: number | null | undefined, hint: string): string {
+    return value === null || value === undefined ? 'Chưa có dữ liệu' : hint;
+  }
+
+  /**
    * Formats a locale integer.
    */
   num(value: number | null | undefined): string {
@@ -397,8 +551,7 @@ export class AdminErpDashboardPage {
    * Compact money for KPI cards, unavailable when the synced facts are missing.
    */
   compactMoney(value: number | null | undefined): string {
-    if (value === null || value === undefined) return '—';
-    return `${adminCompactMoney(value)}đ`;
+    return adminKpiMoney(value);
   }
 
   /**
@@ -463,6 +616,23 @@ export class AdminErpDashboardPage {
       desc,
       module: modules[log.module || ''] || 'Hệ thống',
     };
+  }
+
+  private startCooldown(seconds: number): void {
+    this.stopCooldown();
+    this.cooldown.set(seconds);
+    this.cooldownTimer = setInterval(() => {
+      const left = this.cooldown() - 1;
+      this.cooldown.set(Math.max(left, 0));
+      if (left <= 0) this.stopCooldown();
+    }, 1000);
+  }
+
+  private stopCooldown(): void {
+    if (this.cooldownTimer !== null) {
+      clearInterval(this.cooldownTimer);
+      this.cooldownTimer = null;
+    }
   }
 
   private safeNumber(value: unknown): number {

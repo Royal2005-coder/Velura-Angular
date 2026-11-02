@@ -3,9 +3,12 @@
  * line price is the catalog price of the product that owns the variant.
  */
 
-export const FREESHIP_THRESHOLD = 500_000;
-export const STANDARD_SHIPPING_FEE = 30_000;
-export const EXPRESS_SHIPPING_FEE = 50_000;
+import { SHIPPING_CONFIG } from "../shipping-config.js";
+
+/** Giá trị lấy từ `shipping-config.ts` (nguồn duy nhất, BA AD_ORDER_03). */
+export const FREESHIP_THRESHOLD = SHIPPING_CONFIG.freeShipThreshold;
+export const STANDARD_SHIPPING_FEE = SHIPPING_CONFIG.standardFee;
+export const EXPRESS_SHIPPING_FEE = SHIPPING_CONFIG.expressFee;
 
 export interface ClaimedOrderLine {
   variantId: string;

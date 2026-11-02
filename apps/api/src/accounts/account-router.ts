@@ -64,6 +64,17 @@ export async function handleAccountRoute({ req, res, url, parts, context, header
     }
   }
 
+  if (parts[3] === "account-email-failures") {
+    if (req.method === "GET" && parts.length === 4) {
+      sendJson(res, 200, await service.listFailedEmails(context, url.searchParams), headers);
+      return true;
+    }
+    if (req.method === "POST" && parts.length === 6 && parts[5] === "resend") {
+      sendJson(res, 200, await service.resendFailedEmail(context, parts[4], requestMeta), headers);
+      return true;
+    }
+  }
+
   if (parts[3] === "account-audit-logs" && req.method === "GET" && parts.length === 4) {
     sendJson(res, 200, await service.listAuditLogs(context, url.searchParams), headers);
     return true;

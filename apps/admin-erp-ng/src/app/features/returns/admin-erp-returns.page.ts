@@ -34,6 +34,10 @@ import {
   returnItemActions,
   itemRefundAllowed,
   returnContactOverdue,
+  canAssignTicket,
+  refundSlaBadge,
+  REFUND_SLA_MIN_WORKING_DAYS,
+  REFUND_SLA_MAX_WORKING_DAYS,
 } from '../../core/admin-erp-service-desk';
 import { adminDateTime, adminMoney } from '../../core/admin-erp-format';
 import {
@@ -155,6 +159,8 @@ export class AdminErpReturnsPage {
   readonly statusFilter = signal('');
   readonly decisionFilter = signal('');
   readonly paymentFilter = signal<'' | 'cod' | 'online'>('');
+  /** SLA view: requests past the 24h contact deadline or the refund deadline. */
+  readonly slaFilter = signal<'' | 'contact_overdue' | 'refund_overdue'>('');
   readonly search = signal('');
   readonly orderFilter = signal('');
   readonly ticketStatus = signal('');
@@ -164,6 +170,9 @@ export class AdminErpReturnsPage {
   readonly openReturns = signal(0);
   readonly pendingReturns = signal(0);
   readonly awaitingReceipt = signal(0);
+  readonly contactOverdueCount = signal(0);
+  readonly refundOverdueCount = signal(0);
+  readonly refundSlaDays = `${REFUND_SLA_MIN_WORKING_DAYS}-${REFUND_SLA_MAX_WORKING_DAYS}`;
   readonly openTickets = signal(0);
   readonly processingTickets = signal(0);
 
@@ -252,6 +261,11 @@ export class AdminErpReturnsPage {
   readonly ticketStatusOptions = [
     { value: '', label: 'Mọi trạng thái' },
     ...Object.entries(TICKET_STATUS_LABELS).map(([value, label]) => ({ value, label })),
+  ];
+  readonly slaOptions = [
+    { value: '', label: 'Mọi hạn xử lý' },
+    { value: 'contact_overdue', label: 'Quá hạn liên hệ' },
+    { value: 'refund_overdue', label: 'Quá hạn hoàn tiền' },
   ];
   readonly paymentOptions = [
     { value: '', label: 'Mọi kênh tiền' },
@@ -459,6 +473,7 @@ export class AdminErpReturnsPage {
     this.statusFilter.set('');
     this.decisionFilter.set('');
     this.paymentFilter.set('');
+    this.slaFilter.set('');
     this.search.set('');
     this.orderFilter.set('');
     this.page.set(1);
@@ -1092,6 +1107,43 @@ export class AdminErpReturnsPage {
   }
 
 
+  /** Updates the SLA (overdue) filter. */
+  onSlaChange(event: Event): void {
+    this.slaFilter.set((event.target as HTMLSelectElement).value as '' | 'contact_overdue' | 'refund_overdue');
+  }
+
+  /** Refund SLA badge for a request or one of its parts; null when no refund is waiting. */
+  refundSla(dueAt: string | null | undefined): { label: string; tone: AdminTone } | null {
+    return refundSlaBadge(dueAt);
+  }
+
+  /** Whether the open ticket can be claimed by the signed-in operator (BA AD_CSKH ticket queue). */
+  canClaim(ticket: AdminTicketRow | null): boolean {
+    return Boolean(ticket) && this.canWrite() && canAssignTicket(ticket);
+  }
+
+  /** Claims the open ticket: the server assigns it to the operator and moves it to processing. */
+  claimTicket(): void {
+    const ticket = this.selectedTicket();
+    const operatorId = this.session.session()?.id;
+    if (!ticket || ticket.version == null || !operatorId || this.ticketBusy() || !this.canClaim(ticket)) {
+      return;
+    }
+    this.ticketBusy.set(true);
+    this.ticketError.set(null);
+    this.api.assignTicket(ticket.ticket_id, { assignedTo: operatorId, expectedVersion: ticket.version }).subscribe({
+      next: (fresh) => {
+        this.ticketBusy.set(false);
+        this.selectedTicket.set({ ...ticket, ...fresh });
+        this.loadTickets();
+      },
+      error: (error: unknown) => {
+        this.ticketBusy.set(false);
+        this.ticketError.set(adminErrorMessage(error, 'Không nhận xử lý được phiếu hỗ trợ.'));
+      },
+    });
+  }
+
   /**
    * Updates the payment channel filter.
    */
@@ -1206,6 +1258,8 @@ export class AdminErpReturnsPage {
       decision_status: this.decisionFilter(),
       q: this.search(),
       order_id: this.orderFilter(),
+      contact_overdue: this.slaFilter() === 'contact_overdue' ? 'true' : '',
+      refund_overdue: this.slaFilter() === 'refund_overdue' ? 'true' : '',
       limit: String(this.pageSize),
       offset: adminOffset(this.page(), this.pageSize),
     };
@@ -1218,6 +1272,8 @@ export class AdminErpReturnsPage {
       ),
       pending: this.api.listReturns({ status: 'REQUESTED', limit: '1' }).pipe(catchError(() => of(EMPTY_RETURNS))),
       transit: this.api.listReturns({ status: 'RETURN_IN_TRANSIT', limit: '1' }).pipe(catchError(() => of(EMPTY_RETURNS))),
+      contactLate: this.api.listReturns({ contact_overdue: 'true', limit: '1' }).pipe(catchError(() => of(EMPTY_RETURNS))),
+      refundLate: this.api.listReturns({ refund_overdue: 'true', limit: '1' }).pipe(catchError(() => of(EMPTY_RETURNS))),
       tickets: this.api.listTickets({ status: 'open', limit: '1' }).pipe(catchError(() => of(EMPTY_TICKETS))),
       processing: this.api.listTickets({ status: 'processing', limit: '1' }).pipe(catchError(() => of(EMPTY_TICKETS))),
     }).subscribe((payload) => {
@@ -1227,6 +1283,8 @@ export class AdminErpReturnsPage {
       this.openReturns.set(rows.filter((row) => isReturnOpen(row.status)).length);
       this.pendingReturns.set(adminListCount(payload.pending));
       this.awaitingReceipt.set(adminListCount(payload.transit));
+      this.contactOverdueCount.set(adminListCount(payload.contactLate));
+      this.refundOverdueCount.set(adminListCount(payload.refundLate));
       this.openTickets.set(adminListCount(payload.tickets));
       this.processingTickets.set(adminListCount(payload.processing));
       this.loading.set(false);

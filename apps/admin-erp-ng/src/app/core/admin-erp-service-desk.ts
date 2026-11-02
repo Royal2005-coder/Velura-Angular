@@ -6,6 +6,15 @@
 import { AdminReturnItemAction, AdminReturnLine, AdminReturnRow, AdminReturnStatus, AdminTicketRow } from './admin-erp-api.service';
 import { AdminTone } from './admin-erp-status-labels';
 
+/** Return window in days after delivery. Single admin-side copy of `RETURN_WINDOW_DAYS` in the API (BA RET-01). */
+export const RETURN_WINDOW_DAYS = 7;
+
+/** Refund promise: 4-5 working days after the warehouse confirms receipt (BA AD_REFUND_03). */
+export const REFUND_SLA_MIN_WORKING_DAYS = 4;
+export const REFUND_SLA_MAX_WORKING_DAYS = 5;
+/** Warn when less than this many hours remain before the refund deadline. */
+export const REFUND_SLA_WARNING_HOURS = 24;
+
 /** Canonical Vietnamese labels for stored return workflow codes. */
 export const RETURN_STATUS_LABELS: Readonly<Record<string, string>> = {
   REQUESTED: 'Chờ xử lý',
@@ -321,7 +330,8 @@ export function returnItemActions(line: AdminReturnLine, canApprove: boolean): r
   if (status === 'EXCHANGE_PREPARING') actions.push('ship_exchange');
   if (status === 'EXCHANGE_SHIPPING' && line.exchange_order?.status === 'delivered') actions.push('complete_exchange');
   if (status !== 'NEEDS_SUPPORT') actions.push('needs_support');
-  if (['REQUESTED', 'APPROVED', 'WAITING_RETURN'].includes(String(status))) actions.push('stop');
+  // RETURN_SHIPPING: CSKH records that the customer will not continue sending (goods not yet at the warehouse).
+  if (['REQUESTED', 'APPROVED', 'WAITING_RETURN', 'RETURN_SHIPPING'].includes(String(status))) actions.push('stop');
   return actions;
 }
 
@@ -335,4 +345,32 @@ export function itemRefundAllowed(line: AdminReturnLine): boolean {
 export function returnContactOverdue(row: AdminReturnRow, now = Date.now()): boolean {
   const deadline = Date.parse(row.contact_due_at || '');
   return contactAllowed(row) && Number.isFinite(deadline) && deadline < now;
+}
+
+/** Position of a refund against its deadline; the server stores the deadline, the UI only compares. */
+export type RefundSlaState = 'none' | 'on_track' | 'due_soon' | 'overdue';
+
+/** Classifies a stored `refund_due_at`; a missing or invalid deadline means no SLA applies. */
+export function refundSlaState(dueAt: string | null | undefined, now = Date.now()): RefundSlaState {
+  const due = Date.parse(dueAt || '');
+  if (!Number.isFinite(due)) return 'none';
+  const remaining = due - now;
+  if (remaining < 0) return 'overdue';
+  return remaining <= REFUND_SLA_WARNING_HOURS * 60 * 60 * 1000 ? 'due_soon' : 'on_track';
+}
+
+/** Badge text and tone for the refund SLA of one part or request; null when no refund is waiting. */
+export function refundSlaBadge(dueAt: string | null | undefined, now = Date.now()): { label: string; tone: AdminTone } | null {
+  const state = refundSlaState(dueAt, now);
+  if (state === 'none') return null;
+  const due = new Date(dueAt as string);
+  const day = due.toLocaleDateString('vi-VN');
+  if (state === 'overdue') return { label: `Quá hạn hoàn tiền · hạn ${day}`, tone: 'danger' };
+  if (state === 'due_soon') return { label: `Sắp đến hạn hoàn tiền · ${day}`, tone: 'warning' };
+  return { label: `Hạn hoàn tiền ${day}`, tone: 'info' };
+}
+
+/** A new support ticket can be claimed by the signed-in operator; chat tickets are claimed in the chat desk. */
+export function canAssignTicket(ticket: AdminTicketRow | null): boolean {
+  return Boolean(ticket && ticket.status === 'open' && !ticket.chat_session_id);
 }

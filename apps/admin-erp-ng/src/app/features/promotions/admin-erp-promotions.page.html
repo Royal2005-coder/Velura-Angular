@@ -10,6 +10,7 @@
       }
       @if (view() === 'vouchers') {
         <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" (click)="openVoucherForm()">Tạo voucher</button>
+        <button class="erp-btn erp-btn--sm" type="button" (click)="openBulkForm()">Tạo hàng loạt</button>
       }
     }
     <button class="erp-btn erp-btn--sm" type="button" (click)="reload()" [disabled]="loading()">
@@ -113,6 +114,9 @@
     </div>
 
     @if (stats(); as data) {
+      <div class="promo-stats-actions">
+        <button class="erp-btn erp-btn--sm" type="button" (click)="exportStatsCsv()">Xuất CSV</button>
+      </div>
       <section class="promotions-stats">
         <app-erp-kpi-card label="Đơn trong kỳ" [value]="data.orders.total.toLocaleString('vi-VN')" [hint]="data.orders.withVoucher + ' đơn có voucher'" icon="cart" />
         <app-erp-kpi-card label="Tỷ lệ dùng voucher" [value]="data.orders.voucherRate + '%'" hint="Đơn có voucher / tổng" tone="accent" icon="tag" />
@@ -270,7 +274,7 @@
 </app-erp-modal>
 
 <app-erp-modal [open]="voucherFormOpen()" [title]="editingVoucher() ? 'Sửa voucher' : 'Tạo voucher'" size="md" (closed)="closeOverlays()">
-  <form class="promo-form" (submit)="submitVoucher($event)" (input)="markDirty()" (change)="markDirty()">
+  <form class="promo-form" (submit)="submitVoucher($event)" (input)="markDirty(); onVoucherFormInput($event)" (change)="markDirty(); onVoucherFormInput($event)">
     <div class="promo-form__row">
       <label class="erp-field"><span>Mã</span><input class="erp-input" name="code" type="text" [value]="editingVoucher()?.code || ''" [disabled]="editingVoucher() !== null" required /></label>
       <label class="erp-field"><span>Tên</span><input class="erp-input" name="name" type="text" [value]="editingVoucher()?.name || ''" /></label>
@@ -316,6 +320,16 @@
           <p class="erp-hint">Voucher này sẽ tự động dừng nếu tổng chiết khấu thực tế của chiến dịch chạm mức trần ngân sách (tránh xung đột ngân sách).</p>
         </div>
       }
+      @if (voucherCapacityHint(); as capacity) {
+        @if (capacity.status === 'limited') {
+          <p class="erp-hint voucher-capacity" [class.is-exhausted]="capacity.remaining < 1" role="status">
+            Số mã tối đa còn được phát hành: <strong>{{ capacity.remaining }}</strong>
+            ({{ capacity.issued }}/{{ capacity.max }} mã, ngân sách ÷ trần giảm mỗi mã)
+          </p>
+        } @else if (capacity.status === 'cap_required') {
+          <p class="erp-error" role="status">Chiến dịch có ngân sách: nhập trần giảm tối đa (hoặc giá trị cố định) để quy đổi ra số mã.</p>
+        }
+      }
       @if (campaignLookupError()) {
         <small class="erp-error" role="alert">{{ campaignLookupError() }}</small>
       }
@@ -338,6 +352,85 @@
     <div class="promo-form__actions">
       <button class="erp-btn" type="button" (click)="closeOverlays()">Hủy</button>
       <button class="erp-btn erp-btn--primary" type="submit" [disabled]="saving()">Lưu</button>
+    </div>
+  </form>
+</app-erp-modal>
+
+<app-erp-modal [open]="bulkFormOpen()" title="Tạo voucher hàng loạt" size="md" (closed)="closeBulkForm()">
+  <form class="promo-form" (submit)="submitBulk($event)" (input)="onBulkFormInput($event)" (change)="onBulkFormInput($event)">
+    <div class="promo-form__row">
+      <label class="erp-field"><span>Tiền tố</span><input class="erp-input" name="prefix" type="text" maxlength="12" placeholder="TET26" required /></label>
+      <label class="erp-field"><span>Số lượng</span><input class="erp-input" name="quantity" type="number" min="1" max="500" required /></label>
+    </div>
+    <label class="erp-field">
+      <span>Chiến dịch</span>
+      <select class="erp-select" name="promoId" required>
+        <option value="">Chọn chiến dịch</option>
+        @for (campaign of campaignOptions(); track campaign.promo_id || campaign.promotion_id) {
+          <option [value]="campaign.promo_id || campaign.promotion_id">{{ campaignName(campaign) }}</option>
+        }
+      </select>
+      @if (bulkCapacityHint(); as capacity) {
+        @if (capacity.status === 'limited') {
+          <p class="erp-hint voucher-capacity" [class.is-exhausted]="capacity.remaining < 1" role="status">
+            Số mã tối đa còn được phát hành: <strong>{{ capacity.remaining }}</strong>
+            ({{ capacity.issued }}/{{ capacity.max }} mã)
+          </p>
+        } @else if (capacity.status === 'cap_required') {
+          <p class="erp-error" role="status">Chiến dịch có ngân sách: nhập trần giảm tối đa (hoặc giá trị cố định) để quy đổi ra số mã.</p>
+        }
+      }
+    </label>
+    <div class="promo-form__row">
+      <label class="erp-field"><span>Tên mã</span><input class="erp-input" name="name" type="text" /></label>
+      <label class="erp-field">
+        <span>Loại</span>
+        <select class="erp-select" name="type">
+          <option value="fixed_amount">Số tiền</option>
+          <option value="percentage">Phần trăm</option>
+          <option value="free_shipping">Miễn phí giao</option>
+        </select>
+      </label>
+    </div>
+    <div class="promo-form__row">
+      <label class="erp-field"><span>Giá trị</span><input class="erp-input" name="value" type="number" min="0" value="0" /></label>
+      <label class="erp-field"><span>Trần giảm</span><input class="erp-input" name="maxDiscount" type="number" min="0" /></label>
+    </div>
+    <div class="promo-form__row">
+      <label class="erp-field"><span>Đơn tối thiểu</span><input class="erp-input" name="minOrderValue" type="number" min="0" value="0" /></label>
+      <label class="erp-field"><span>Lượt / khách</span><input class="erp-input" name="maxPerUser" type="number" min="1" value="1" /></label>
+      <label class="erp-field"><span>Tổng lượt / mã</span><input class="erp-input" name="maxUses" type="number" min="1" /></label>
+    </div>
+    <div class="promo-form__row">
+      <label class="erp-field"><span>Bắt đầu</span><input class="erp-input" name="startDate" type="datetime-local" required /></label>
+      <label class="erp-field"><span>Kết thúc</span><input class="erp-input" name="endDate" type="datetime-local" required /></label>
+    </div>
+    <label class="erp-field">
+      <span>Nhóm khách</span>
+      <select class="erp-select" name="applicableUserGroup">
+        <option value="all_users">Tất cả</option>
+        <option value="new_user">Khách mới</option>
+        <option value="member">Thành viên</option>
+        <option value="guest">Khách vãng lai</option>
+        <option value="loyal_user">Khách thân thiết</option>
+        <option value="churn_risk_user">Khách có nguy cơ rời bỏ</option>
+        <option value="birthday">Quà sinh nhật</option>
+      </select>
+    </label>
+    @if (formError()) {
+      <p class="erp-error" role="alert">{{ formError() }}</p>
+    }
+    @if (bulkResult(); as result) {
+      <div class="promo-bulk-result" role="status">
+        <p>Đã tạo <strong>{{ result.created.length }}/{{ result.requested }}</strong> mã{{ result.complete ? '.' : ', dừng giữa chừng (các mã đã tạo được giữ lại).' }}</p>
+        @if (result.failure) {
+          <p class="erp-error">Lỗi tại mã {{ result.failure.code }}: {{ result.failure.reason }}. Sự cố đã được ghi vào nhật ký.</p>
+        }
+      </div>
+    }
+    <div class="promo-form__actions">
+      <button class="erp-btn" type="button" (click)="closeBulkForm()">Đóng</button>
+      <button class="erp-btn erp-btn--primary" type="submit" [disabled]="bulkSaving()">{{ bulkSaving() ? 'Đang tạo…' : 'Tạo mã' }}</button>
     </div>
   </form>
 </app-erp-modal>

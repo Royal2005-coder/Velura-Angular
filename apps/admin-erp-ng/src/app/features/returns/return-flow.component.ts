@@ -59,7 +59,8 @@ export class ReturnFlowComponent {
   readonly conditionAcceptable = signal(true);
   readonly packageMatch = signal(true);
   readonly sealIntact = signal(true);
-  readonly disposition = signal<AdminReturnDisposition>('restock');
+  /** Optional: only an explicit choice is sent; `restock` is never assumed because it moves sellable stock. */
+  readonly disposition = signal<AdminReturnDisposition | ''>('');
   readonly proofFile = signal<File | null>(null);
   readonly pickupPhotos = signal<File[]>([]);
   readonly pickupVideo = signal<File | null>(null);
@@ -84,7 +85,11 @@ export class ReturnFlowComponent {
   readonly needsReason = computed(() => ['approve', 'reject', 'needs_support', 'resolve', 'stop', 'convert_refund', 'change_variant', 'contact', 'refund-info'].includes(String(this.flow())));
   readonly isMoney = computed(() => this.flow() === 'manual' || this.flow() === 'stripe');
   readonly refundable = computed(() => Number(this.line()?.refundable_amount || 0));
-  readonly canSplit = computed(() => !this.isMoney() && !['contact', 'refund-info', 'ship_exchange', 'complete_exchange'].includes(String(this.flow())) && !this.line()?.exchange_order_id);
+  /** Receive never splits by `quantity`: a smaller `receivedQuantity` releases the missing remainder on the server. */
+  readonly canSplit = computed(() => !this.isMoney() && !['contact', 'refund-info', 'ship_exchange', 'complete_exchange', 'receive'].includes(String(this.flow())) && !this.line()?.exchange_order_id);
+  /** Units the customer registered for this part; the warehouse may confirm any number from 1 up to this. */
+  readonly registeredQuantity = computed(() => Number(this.line()?.quantity || 0));
+  readonly isPartialReceipt = computed(() => this.flow() === 'receive' && this.receivedQuantity() < this.registeredQuantity());
   readonly canSubmit = computed(() => {
     const flow = this.flow();
     const record = this.record();
@@ -109,8 +114,9 @@ export class ReturnFlowComponent {
       const chosen = this.selectedVariantChoice();
       if (chosen && (chosen.available_stock ?? 0) < this.quantity()) return false;
     }
-    if (flow === 'receive') return Boolean(this.proofFile()) && Number.isInteger(this.receivedQuantity())
-      && this.receivedQuantity() > 0 && this.receivedQuantity() === this.quantity();
+    // BA AD_RECEIVE_01: item + actual quantity only; photo, checklist and disposition are optional.
+    if (flow === 'receive') return Number.isInteger(this.receivedQuantity())
+      && this.receivedQuantity() >= 1 && this.receivedQuantity() <= this.registeredQuantity();
     if (flow === 'pickup') return this.pickupPhotos().length > 0 && Boolean(this.tracking().trim()) && Boolean(this.carrier().trim())
       && this.pickedUpBy().trim().length >= 2 && Number.isFinite(Date.parse(this.pickedUpAt())) && Date.parse(this.pickedUpAt()) <= Date.now();
     if (flow === 'ship_exchange') return Boolean(this.tracking().trim()) && Boolean(this.carrier().trim());
@@ -132,7 +138,7 @@ export class ReturnFlowComponent {
         this.variantChoices.set([]);
       }
       this.matchesProduct.set(true); this.tagsIntact.set(true); this.conditionAcceptable.set(true);
-      this.packageMatch.set(true); this.sealIntact.set(true); this.disposition.set('restock');
+      this.packageMatch.set(true); this.sealIntact.set(true); this.disposition.set('');
       this.proofFile.set(null); this.pickupPhotos.set([]); this.pickupVideo.set(null);
       this.transferReference.set(''); this.tracking.set(flow === 'ship_exchange' ? this.newExchangeTracking() : flow === 'pickup' ? this.presetTracking() : ''); this.carrier.set('GHN'); this.contactResult.set('reached');
       const date = new Date(); date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
@@ -224,6 +230,12 @@ export class ReturnFlowComponent {
         'Đã chốt biến thể thay thế theo yêu cầu của khách'
       ];
     }
+    if (f === 'stop' && this.line()?.item_status === 'RETURN_SHIPPING') {
+      return [
+        'Khách báo không gửi tiếp kiện hàng, CSKH đã xác nhận qua điện thoại',
+        'Khách không còn nhu cầu đổi/trả sau khi đã bàn giao cho ĐVVC'
+      ];
+    }
     if (f === 'stop' || f === 'reject') {
       return [
         'Sản phẩm không đủ điều kiện đổi trả theo chính sách',
@@ -269,8 +281,13 @@ export class ReturnFlowComponent {
   /** Processing fewer units creates an independent remainder on the server. */
   setQuantity(event: Event): void {
     const quantity = Number((event.target as HTMLInputElement).value);
-    this.quantity.set(quantity); this.receivedQuantity.set(quantity);
+    this.quantity.set(quantity);
     if (this.flow() === 'change_variant') this.initSelectedVariant();
+  }
+
+  /** Units the warehouse actually counted; fewer than registered releases the missing remainder to CSKH. */
+  setReceivedQuantity(event: Event): void {
+    this.receivedQuantity.set(Number((event.target as HTMLInputElement).value));
   }
 
   private loadVariantChoices(line: AdminReturnLine, order: AdminOrderRow | null): void {
@@ -333,7 +350,7 @@ export class ReturnFlowComponent {
 
   /** Only explicit disposition controls sellable restock; the server enforces QA consistency. */
   setDisposition(event: Event): void {
-    this.disposition.set((event.target as HTMLSelectElement).value as AdminReturnDisposition);
+    this.disposition.set((event.target as HTMLSelectElement).value as AdminReturnDisposition | '');
   }
 
   /** Evidence uses the existing authenticated private-upload boundary, never a typed URL. */
@@ -385,7 +402,9 @@ export class ReturnFlowComponent {
       if (flow === 'receive') Object.assign(body, {
         receivedQuantity: this.receivedQuantity(), matchesProduct: this.matchesProduct(), tagsIntact: this.tagsIntact(),
         conditionAcceptable: this.conditionAcceptable(), packageMatch: this.packageMatch(), sealIntact: this.sealIntact(),
-        disposition: this.disposition(), dispositionNote: note, receiptProofRef: proofRef,
+        ...(this.disposition() ? { disposition: this.disposition() as AdminReturnDisposition } : {}),
+        ...(note ? { dispositionNote: note } : {}),
+        ...(proofRef ? { receiptProofRef: proofRef } : {}),
       });
       if (flow === 'pickup' || flow === 'ship_exchange') Object.assign(body, { trackingNumber: this.tracking().trim(), carrier: this.carrier().trim() });
       if (flow === 'pickup') {

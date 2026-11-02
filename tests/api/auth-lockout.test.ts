@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { HttpError } from "../../apps/api/src/http.js";
 import { accessForRole, rolePages } from "../../apps/api/src/rbac.js";
-import { assertAccountNotLocked, assertNotLocked, loginLockStatus, nextFailedLoginState } from "../../apps/api/src/auth-lockout.js";
+import { assertAccountNotLocked, assertNotLocked, isTemporaryLockExpired, loginLockStatus, nextFailedLoginState, releaseExpiredTemporaryLock, resetStaleLoginFailures } from "../../apps/api/src/auth-lockout.js";
 
 const ROOT = process.cwd();
 
@@ -80,4 +80,35 @@ test("admin lock_type blocks OTP/reset self-reactivation until an admin unlocks"
     () => assertAccountNotLocked({ lock_type: "temporary" }),
     (error: unknown) => error instanceof HttpError && error.status === 423
   );
+});
+
+test("BA 3.1.9 expired temporary admin lock is treated as unlocked", () => {
+  const now = new Date("2026-09-16T12:00:00.000Z");
+  assert.doesNotThrow(() => assertAccountNotLocked({ lock_type: "temporary", locked_until: "2026-09-16T11:59:59.000Z" }, now));
+  assert.equal(isTemporaryLockExpired({ lock_type: "temporary", locked_until: "2026-09-16T11:59:59.000Z" }, now), true);
+});
+
+test("BA 3.1.9 active temporary, permanent and open-ended locks still block", () => {
+  const now = new Date("2026-09-16T12:00:00.000Z");
+  for (const user of [
+    { lock_type: "temporary", locked_until: "2026-09-16T12:00:01.000Z" },
+    { lock_type: "temporary", locked_until: null },
+    { lock_type: "permanent", locked_until: "2020-01-01T00:00:00.000Z" }
+  ]) {
+    assert.throws(() => assertAccountNotLocked(user, now), (error) => error instanceof HttpError && error.code === "ACCOUNT_LOCKED");
+  }
+  assert.doesNotThrow(() => assertAccountNotLocked({ lock_type: null }, now));
+});
+
+test("releaseExpiredTemporaryLock only calls the RPC for expired temporary locks", async () => {
+  const now = new Date("2026-09-16T12:00:00.000Z");
+  const active = { user_id: "u1", lock_type: "temporary", locked_until: "2026-09-17T00:00:00.000Z", is_active: false };
+  assert.equal(await releaseExpiredTemporaryLock(active, now), active);
+  const permanent = { user_id: "u2", lock_type: "permanent", locked_until: null, is_active: false };
+  assert.equal(await releaseExpiredTemporaryLock(permanent, now), permanent);
+});
+
+test("resetStaleLoginFailures never wipes the expiry of an admin lock", async () => {
+  const user = { user_id: "u1", lock_type: "temporary", locked_until: "2026-09-16T11:00:00.000Z", login_fail_count: 0 };
+  assert.equal(await resetStaleLoginFailures(user, new Date("2026-09-16T12:00:00.000Z")), user);
 });

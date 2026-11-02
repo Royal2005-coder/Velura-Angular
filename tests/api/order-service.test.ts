@@ -42,15 +42,25 @@ test("customer service reads orders but gets no write action (KAN-60 §1)", asyn
   assert.deepEqual(result.rows[0].allowed_actions, []);
 });
 
-test("unrelated and viewer roles cannot read orders", async () => {
+test("unrelated roles cannot read orders", async () => {
   const { repo } = repository(pendingCod);
   const service = createOrderService({ repository: repo });
-  for (const role of ["admin_operator_sanpham", "admin_viewer"]) {
-    await assert.rejects(
-      () => service.list(context(role), new URLSearchParams()),
-      (error) => error.status === 403 && error.code === "RBAC_DENIED"
-    );
-  }
+  await assert.rejects(
+    () => service.list(context("admin_operator_sanpham"), new URLSearchParams()),
+    (error) => error.status === 403 && error.code === "RBAC_DENIED"
+  );
+});
+
+test("admin viewer can read orders for dashboard drill-down but receives no write action and cannot mutate", async () => {
+  const { repo, calls } = repository(pendingCod);
+  const service = createOrderService({ repository: repo });
+  const result = await service.list(context("admin_viewer"), new URLSearchParams());
+  assert.deepEqual(result.rows[0].allowed_actions, []);
+  await assert.rejects(
+    () => service.performAction(context("admin_viewer"), ORDER_ID, "cancel", { expectedVersion: 3 }),
+    (error) => error.status === 403 && error.code === "RBAC_DENIED"
+  );
+  assert.equal(calls.actions.length, 0);
 });
 
 test("the old status filter values are rejected", async () => {

@@ -207,7 +207,9 @@ export class AdminErpReviewsPage {
       params['status'] = this.statusFilter();
     }
     if (tab === 'urgent') {
+      // "Cần xử lý gấp" = urgent AND still unprocessed; it must equal the dashboard's urgentReviews KPI.
       params['urgent'] = 'true';
+      params['status'] = params['status'] || 'pending';
     }
     this.api.listReviews(params).subscribe({
       next: (payload) => {
@@ -234,7 +236,7 @@ export class AdminErpReviewsPage {
     forkJoin({
       approved: countOnly({ status: 'approved' }),
       rejected: countOnly({ status: 'rejected' }),
-      urgent: countOnly({ urgent: 'true' }),
+      urgent: countOnly({ urgent: 'true', status: 'pending' }),
     }).subscribe((payload) => {
       this.hiddenCount.set(adminListCount(payload.rejected));
       this.urgentCount.set(adminListCount(payload.urgent));

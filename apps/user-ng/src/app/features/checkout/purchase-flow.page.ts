@@ -777,6 +777,8 @@ export class PurchaseFlowPage {
       discount_amount: quote.discount,
       total_amount: quote.total,
       voucher_id: this.serverQuote()?.voucher?.voucher_id || null,
+      // Mã báo giá khách đã thấy: máy chủ so với mã tốt nhất lúc đặt đơn (PAY-05).
+      quoted_voucher_id: this.serverQuote()?.voucher?.voucher_id || null,
       decline_voucher: this.voucherDeclined(),
       points_spent: this.member() ? this.serverQuote()?.loyalty?.points_spent ?? 0 : 0,
       payment_method: this.payment,

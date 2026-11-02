@@ -82,7 +82,7 @@
           <span>Giá gốc: {{ basePrice() }}</span>
           <span>Giá bán: {{ salePrice() }}</span>
           @if (!canChangePrice()) {
-            <span class="editor-hint">Giá do bộ phận giá điều chỉnh để giữ đúng luồng phê duyệt.</span>
+            <span class="editor-hint">Đổi giá tại Quản lý giá</span>
           }
         </div>
       }
@@ -91,7 +91,7 @@
         <p class="erp-error" role="alert">Giá bán không được lớn hơn giá gốc.</p>
       }
       @if (priceChanged()) {
-        <p class="editor-note">Lưu sẽ tạo hai bản ghi: điều chỉnh giá (kèm lý do) rồi cập nhật thông tin.</p>
+        <p class="editor-note">Lưu theo 2 bước: cập nhật thông tin trước, rồi điều chỉnh giá (kèm lý do, ghi lịch sử giá).</p>
       }
 
       <label class="erp-check">

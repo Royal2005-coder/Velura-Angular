@@ -95,7 +95,7 @@ function extractBusinessError(err: ErrorLike): { code: string; message: string; 
     ORDER_CANNOT_CANCEL: "Đơn hàng đang ở trạng thái không thể hủy.",
     VERSION_CONFLICT: "Dữ liệu đơn hàng vừa được cập nhật bởi thao tác khác. Vui lòng thử lại.",
     QA_REQUIRED: "Hàng hoàn trả phải được kho tiếp nhận và kiểm tra đạt yêu cầu (QA Pass) trước khi tiếp tục.",
-    WAREHOUSE_QA_REQUIRED: "Hàng hoàn trả phải được kho tiếp nhận và kiểm tra đạt yêu cầu (QA Pass) trước khi xử lý.",
+    WAREHOUSE_QA_REQUIRED: "Kho phải xác nhận đã nhận hàng hoàn trả trước khi xử lý.",
     REFUND_ALREADY_REQUESTED: "Yêu cầu hoàn tiền cho đơn hàng này đã được gửi trước đó.",
     RETURN_WINDOW_CLOSED: "Thời hạn đổi/trả hàng cho sản phẩm này đã kết thúc.",
     EXCHANGE_SAME_PRODUCT_REQUIRED: "Chỉ được đổi sang cùng một sản phẩm với phân loại khác.",

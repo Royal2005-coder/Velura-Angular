@@ -1,9 +1,11 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
 import { catchError, finalize, forkJoin, map, of } from 'rxjs';
 import {
   AdminAccountRow,
   AdminAuditRow,
   AdminErpApiService,
+  AdminFailedEmailRow,
   AdminRoleRequestRow,
 } from '../../core/admin-erp-api.service';
 import { adminDateTime, adminInitials, adminWordCount } from '../../core/admin-erp-format';
@@ -13,6 +15,7 @@ import {
   adminListRows,
   adminOffset,
   adminRangeLabel,
+  AdminListPayload,
 } from '../../core/admin-erp-http';
 import { AdminErpSessionService } from '../../core/admin-erp-session.service';
 import { useWorkspaceRefresh } from '../../core/admin-erp-refresh.service';
@@ -99,6 +102,13 @@ export class AdminErpAccountsPage {
   readonly unverifiedCount = signal(0);
   readonly pendingCount = signal(0);
 
+  /** Success/info banner (for example after a role change was sent for approval). */
+  readonly notice = signal<string | null>(null);
+  /** True after VERSION_CONFLICT / TARGET_VERSION_CONFLICT so the modal offers "Tải lại dữ liệu mới nhất". */
+  readonly versionConflict = signal(false);
+  readonly failedEmails = signal<AdminFailedEmailRow[]>([]);
+  readonly failedEmailsError = signal<string | null>(null);
+  readonly resendingEmailId = signal<string | null>(null);
   readonly selected = signal<AdminAccountRow | null>(null);
   readonly selectedRequest = signal<AdminRoleRequestRow | null>(null);
   readonly selectedLog = signal<AdminAuditRow | null>(null);
@@ -137,6 +147,14 @@ export class AdminErpAccountsPage {
     { key: 'promotions', label: 'Nâng quyền', count: this.countOrDash(this.pendingCount()) },
     { key: 'logs', label: 'Nhật ký' },
   ]);
+
+  readonly failedEmailColumns: readonly AdminTableColumn[] = [
+    { key: 'time', label: 'Thất bại lúc', value: (row) => this.date((row as AdminFailedEmailRow).updated_at) },
+    { key: 'recipient', label: 'Người nhận', value: (row) => (row as AdminFailedEmailRow).recipient || '—' },
+    { key: 'template', label: 'Loại email', value: (row) => (row as AdminFailedEmailRow).template_code || '—' },
+    { key: 'attempts', label: 'Số lần thử', value: (row) => String((row as AdminFailedEmailRow).attempts ?? '—') },
+    { key: 'error', label: 'Lỗi gần nhất', value: (row) => (row as AdminFailedEmailRow).last_error || '—' },
+  ];
 
   readonly pageCount = computed(() => Math.max(1, Math.ceil(this.total() / this.pageSize)));
   readonly requestPageCount = computed(() => Math.max(1, Math.ceil(this.requestTotal() / this.pageSize)));
@@ -227,6 +245,7 @@ export class AdminErpAccountsPage {
     this.loadError.set(null);
     this.requestError.set(null);
     this.logsError.set(null);
+    this.failedEmailsError.set(null);
     const tab = this.tab();
     const pageParams = { limit: String(this.pageSize), offset: adminOffset(this.page(), this.pageSize) };
 
@@ -262,6 +281,15 @@ export class AdminErpAccountsPage {
                 }),
               )
           : of(EMPTY_LOGS),
+      failedEmails:
+        tab === 'logs' && this.canMutate()
+          ? this.api.listFailedEmails({ limit: '20' }).pipe(
+              catchError((error: unknown) => {
+                this.failedEmailsError.set(adminErrorMessage(error, 'Không tải được danh sách email lỗi.'));
+                return of(EMPTY_FAILED_EMAILS);
+              }),
+            )
+          : of(EMPTY_FAILED_EMAILS),
       all: this.countQuery({}),
       members: this.countQuery({ role: 'member' }),
       admins: this.countQuery({ role: 'admin' }),
@@ -278,6 +306,7 @@ export class AdminErpAccountsPage {
       if (tab === 'logs') {
         this.logs.set(adminListRows(payload.logs));
         this.logsCount.set(adminListCount(payload.logs));
+        this.failedEmails.set(adminListRows(payload.failedEmails));
       }
       if ([payload.all, payload.members, payload.admins, payload.locked, payload.unverified].every((entry) => entry.ok)) {
         this.allCount.set(adminListCount(payload.all.payload));
@@ -375,6 +404,7 @@ export class AdminErpAccountsPage {
     }
     this.actionType.set(type);
     this.actionError.set(null);
+    this.versionConflict.set(false);
     this.dirty.set(false);
     this.lockType.set('temporary');
     this.targetRole.set(row.role === 'admin' ? 'admin' : 'member');
@@ -559,13 +589,22 @@ export class AdminErpAccountsPage {
               expectedVersion: row.version,
             });
     this.actionSaving.set(true);
+    this.versionConflict.set(false);
     request$.pipe(finalize(() => this.actionSaving.set(false))).subscribe({
-      next: () => {
+      next: (result: unknown) => {
         this.dirty.set(false);
         this.closeOverlays();
+        if (type === 'role' && isApprovalResult(result)) {
+          // HTTP 202 kind=approval: the role did NOT change yet, a second super admin must approve.
+          this.notice.set('Đã gửi yêu cầu nâng quyền, chờ Super Admin khác duyệt');
+          this.tab.set('promotions');
+          this.requestPage.set(1);
+        } else {
+          this.notice.set(null);
+        }
         this.reload();
       },
-      error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
+      error: (error: unknown) => this.handleActionError(error),
     });
   }
 
@@ -596,8 +635,68 @@ export class AdminErpAccountsPage {
           this.closeOverlays();
           this.reload();
         },
+        error: (error: unknown) => this.handleActionError(error),
+      });
+  }
+
+  /**
+   * Reloads the open account (or role request) so the next submit uses the current version. The typed reason
+   * stays in the form: the modal and its textarea are not recreated.
+   */
+  reloadLatest(): void {
+    const account = this.selected();
+    const request = this.selectedRequest();
+    this.versionConflict.set(false);
+    if (account) {
+      this.api.getAccount(account.user_id).subscribe({
+        next: (fresh) => {
+          this.selected.set(fresh);
+          this.actionError.set('Đã tải dữ liệu mới nhất. Vui lòng kiểm tra lại rồi xác nhận.');
+          this.reload();
+        },
         error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
       });
+    } else if (request) {
+      this.api.listRoleRequests({ status: 'pending', limit: '100' }).subscribe({
+        next: (payload) => {
+          const fresh = adminListRows(payload).find((row) => row.request_id === request.request_id);
+          if (fresh) {
+            this.selectedRequest.set(fresh);
+            this.actionError.set('Đã tải dữ liệu mới nhất. Vui lòng kiểm tra lại rồi xác nhận.');
+          } else {
+            this.dirty.set(false);
+            this.closeOverlays();
+            this.notice.set('Yêu cầu nâng quyền không còn ở trạng thái chờ duyệt.');
+          }
+          this.reload();
+        },
+        error: (error: unknown) => this.actionError.set(adminErrorMessage(error)),
+      });
+    }
+  }
+
+  /**
+   * Re-queues a permanently failed email; the list is refreshed either way.
+   */
+  resendEmail(row: AdminFailedEmailRow): void {
+    if (!this.canMutate() || this.resendingEmailId()) return;
+    this.resendingEmailId.set(row.email_id);
+    this.api
+      .resendFailedEmail(row.email_id)
+      .pipe(finalize(() => this.resendingEmailId.set(null)))
+      .subscribe({
+        next: (result) => {
+          this.notice.set(result.requeued ? 'Đã đưa email vào hàng đợi gửi lại.' : 'Email này đã được gửi lại trước đó.');
+          this.reload();
+        },
+        error: (error: unknown) => this.failedEmailsError.set(adminErrorMessage(error)),
+      });
+  }
+
+  private handleActionError(error: unknown): void {
+    const code = adminErrorCode(error);
+    this.versionConflict.set(code === 'VERSION_CONFLICT' || code === 'TARGET_VERSION_CONFLICT');
+    this.actionError.set(adminErrorMessage(error));
   }
 
   /**
@@ -791,4 +890,20 @@ export class AdminErpAccountsPage {
   private field(form: HTMLFormElement, name: string): HTMLInputElement {
     return (form.elements.namedItem(name) as HTMLInputElement | null) ?? document.createElement('input');
   }
+}
+
+const EMPTY_FAILED_EMAILS: AdminListPayload<AdminFailedEmailRow> = { rows: [], count: 0 };
+
+/** True when the role-change endpoint answered 202 `kind: 'approval'` (needs a second super admin). */
+function isApprovalResult(result: unknown): boolean {
+  return typeof result === 'object' && result !== null && (result as { kind?: unknown }).kind === 'approval';
+}
+
+/** Reads `error.code` out of the API error envelope. */
+function adminErrorCode(error: unknown): string {
+  if (error instanceof HttpErrorResponse) {
+    const payload = error.error as { error?: { code?: string } } | null;
+    return typeof payload?.error === 'object' ? payload.error?.code || '' : '';
+  }
+  return '';
 }

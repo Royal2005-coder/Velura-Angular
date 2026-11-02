@@ -40,32 +40,55 @@ describe('ReturnFlowComponent per-item operations', () => {
     return { fixture, component: fixture.componentInstance, actions, manual, stripe, uploads, contacts, api };
   }
 
-  it('receives only the selected quantity with tag/condition/proof facts and seal false allowed', () => {
+  it('receives the confirmed quantity with optional facts, proof and disposition', () => {
     const { component, actions, uploads } = boot('receive');
-    component.quantity.set(1); component.receivedQuantity.set(1); component.sealIntact.set(false); component.proofFile.set(image);
+    component.receivedQuantity.set(3); component.sealIntact.set(false); component.proofFile.set(image); component.disposition.set('restock');
     expect(component.canSubmit()).toBe(true);
     component.submit();
     expect(uploads).toEqual(['qa_photo']);
     expect(actions).toEqual([{ id: 'return-1', itemId: 'part-1', body: {
-      action: 'receive', expectedVersion: 7, quantity: 1, receivedQuantity: 1,
+      action: 'receive', expectedVersion: 7, receivedQuantity: 3,
       matchesProduct: true, tagsIntact: true, conditionAcceptable: true, packageMatch: true, sealIntact: false,
-      disposition: 'restock', dispositionNote: '', receiptProofRef: 'private/qa_photo/proof',
+      disposition: 'restock', receiptProofRef: 'private/qa_photo/proof',
     } }]);
     expect(record.return_type).toBe('exchange');
   });
 
-  it('records mismatches for the affected part rather than blocking all receipt facts', () => {
-    const { component } = boot('receive');
-    component.proofFile.set(image); component.matchesProduct.set(false); component.tagsIntact.set(false);
-    component.conditionAcceptable.set(false); component.disposition.set('repair');
+  it('confirms item and quantity alone: no photo, no disposition, failed checklist does not block', () => {
+    const { component, actions, uploads } = boot('receive');
+    component.receivedQuantity.set(3); component.matchesProduct.set(false); component.tagsIntact.set(false); component.conditionAcceptable.set(false);
     expect(component.canSubmit()).toBe(true);
+    component.submit();
+    expect(uploads).toEqual([]);
+    expect(actions[0].body.disposition).toBeUndefined();
+    expect(actions[0].body.receiptProofRef).toBeUndefined();
+    expect(actions[0].body.quantity).toBeUndefined();
   });
 
-  it('does not accept zero, fractional, excessive quantities or missing warehouse proof', () => {
+  it('allows a partial receipt and tells CSKH the missing remainder is released', () => {
+    const { component, fixture, actions } = boot('receive');
+    component.receivedQuantity.set(2);
+    expect(component.isPartialReceipt()).toBe(true);
+    expect(component.canSubmit()).toBe(true);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Chỉ nhận 2/3 sản phẩm');
+    component.submit();
+    expect(actions[0].body.receivedQuantity).toBe(2);
+  });
+
+  it('does not accept zero, fractional or more than the registered quantity', () => {
     const { component } = boot('receive');
+    for (const quantity of [0, 1.5, 4]) { component.receivedQuantity.set(quantity); expect(component.canSubmit()).toBe(false); }
+  });
+
+  it('stops a part that is already in transit with a required reason', () => {
+    const { component, actions } = boot('stop');
     expect(component.canSubmit()).toBe(false);
-    component.proofFile.set(image);
-    for (const quantity of [0, 1.5, 4]) { component.quantity.set(quantity); component.receivedQuantity.set(quantity); expect(component.canSubmit()).toBe(false); }
+    component.note.set('Khách báo không gửi tiếp kiện hàng');
+    expect(component.canSubmit()).toBe(true);
+    component.submit();
+    expect(actions[0].body.action).toBe('stop');
+    expect(actions[0].body.reason).toBe('Khách báo không gửi tiếp kiện hàng');
   });
 
   it('requires explicit super-admin approval capability and an audited decision reason', () => {

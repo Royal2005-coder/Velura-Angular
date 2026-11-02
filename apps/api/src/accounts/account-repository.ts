@@ -117,6 +117,11 @@ export interface AccountRepository {
     filters: AccountAuditFilters,
     accessToken: string
   ): Promise<{ rows: JsonObject[]; count: number | undefined }>;
+  listFailedEmails(
+    filters: { limit: number; offset: number },
+    accessToken: string
+  ): Promise<{ rows: JsonObject[]; count: number | undefined }>;
+  resendFailedEmail(emailId: string, ipAddress: string, accessToken: string): Promise<unknown>;
   lock(
     userId: string,
     input: AccountLockInput,
@@ -238,6 +243,22 @@ export function createAccountRepository(): AccountRepository {
       };
       if (filters.targetId) query.target_id = `eq.${filters.targetId}`;
       return withAccountError(() => selectRows("audit_log", query, authOptions(accessToken)));
+    },
+
+    /** Emails that stayed failed after the 3rd delivery attempt (BA 3.1.9 TH1). Never exposes the body. */
+    async listFailedEmails(filters, accessToken) {
+      return withAccountError(() => selectRows("email_outbox", {
+        select: "email_id,recipient,template_code,subject,attempts,last_error,related_user_id,created_at,updated_at",
+        status: "eq.failed",
+        attempts: "gte.3",
+        order: "updated_at.desc",
+        limit: filters.limit,
+        offset: filters.offset
+      }, authOptions(accessToken)));
+    },
+
+    resendFailedEmail(emailId, ipAddress, accessToken) {
+      return rpc("admin_resend_failed_email", { p_email_id: emailId, p_ip_address: ipAddress }, accessToken);
     },
 
     lock(userId, input, _actorId, accessToken) {

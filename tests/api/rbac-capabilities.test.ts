@@ -72,3 +72,27 @@ test("viewer is read-only even when a capability is present", () => {
     (error: unknown) => error instanceof HttpError && error.code === "RBAC_DENIED"
   );
 });
+
+test("viewer gets read-only access to every dashboard drill-down module and no write action anywhere", () => {
+  const caps = capabilitiesForRole("admin_viewer");
+  for (const moduleName of Object.keys(caps)) assert.deepEqual(caps[moduleName], ["read"], moduleName);
+  for (const moduleName of ["dashboard", "orders", "returns", "support_tickets", "products", "reviews"]) assert.ok(caps[moduleName], moduleName);
+  assert.equal(caps["*"], undefined);
+  assert.equal(caps.accounts, undefined);
+  const ctx = context("admin_viewer");
+  for (const moduleName of ["orders", "returns", "products", "reviews", "support_tickets"]) {
+    assert.doesNotThrow(() => requirePermission(ctx, moduleName, "read"));
+    for (const action of ["create", "update", "delete", "approve", "write"]) {
+      assert.throws(
+        () => requirePermission(ctx, moduleName, action),
+        (error: unknown) => error instanceof HttpError && error.code === "RBAC_DENIED",
+        `${moduleName}.${action}`
+      );
+    }
+  }
+});
+
+test("viewer page list exposes the drill-down workspaces so dashboard links are not 'Sắp mở'", async () => {
+  const { rolePages } = await import("../../apps/api/src/rbac.js");
+  for (const page of ["dashboard", "orders", "products", "returns-cskh", "reviews"]) assert.ok(rolePages.admin_viewer.includes(page), page);
+});

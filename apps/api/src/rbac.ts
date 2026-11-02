@@ -11,7 +11,8 @@ export const rolePages: Record<string, string[]> = {
   admin_operator_gia_km: ["pricing", "promotions"],
   admin_operator_danhgia_review: ["reviews"],
   admin_operator_cskh_dt: ["returns-cskh"],
-  admin_viewer: ["dashboard"],
+  // Read-only drill-down targets of the dashboard (BA 3.1.13 tình huống 4); never a write module.
+  admin_viewer: ["dashboard", "orders", "returns-cskh", "products", "reviews", "promotions"],
   member: ["welcome"],
   guest: ["welcome"]
 };
@@ -23,7 +24,7 @@ export const roleModules: Record<string, string[]> = {
   admin_operator_gia_km: ["pricing", "promotions", "vouchers", "bundles", "budgets", "audit_logs"],
   admin_operator_danhgia_review: ["reviews", "support_tickets", "audit_logs"],
   admin_operator_cskh_dt: ["returns", "support_tickets", "orders", "audit_logs"],
-  admin_viewer: ["dashboard"],
+  admin_viewer: ["dashboard", "orders", "returns", "support_tickets", "products", "reviews", "promotions", "vouchers"],
   member: [],
   guest: []
 };

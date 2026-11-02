@@ -5,14 +5,20 @@
 >
   <div actions class="header-actions">
     <app-erp-tabs [tabs]="tabs()" [active]="tab()" [busy]="loading()" (changed)="setTab($event)" />
-    <div class="range-switch" role="group" aria-label="Khoảng thời gian">
-      <button type="button" [class.is-active]="range() === 'day'" (click)="setRange('day')">Ngày</button>
-      <button type="button" [class.is-active]="range() === 'week'" (click)="setRange('week')">Tuần</button>
-      <button type="button" [class.is-active]="range() === 'month'" (click)="setRange('month')">Tháng</button>
+    <div class="range-switch" role="group" aria-label="Khoảng thời gian" [attr.title]="rangeHint">
+      <button type="button" [class.is-active]="range() === 'day'" [attr.title]="rangeHint" (click)="setRange('day')">Ngày</button>
+      <button type="button" [class.is-active]="range() === 'week'" [attr.title]="rangeHint" (click)="setRange('week')">Tuần</button>
+      <button type="button" [class.is-active]="range() === 'month'" [attr.title]="rangeHint" (click)="setRange('month')">Tháng</button>
     </div>
-    <button class="erp-btn erp-btn--sm" type="button" (click)="reload()" [disabled]="loading()">
+    <button
+      class="erp-btn erp-btn--sm"
+      type="button"
+      (click)="refresh()"
+      [disabled]="loading() || refreshing() || cooldown() > 0"
+      [attr.title]="canSyncWarehouse() ? 'Đồng bộ lại kho dữ liệu phân tích (tối đa 1 lần / 10 giây)' : 'Tải lại số liệu mới nhất'"
+    >
       <app-erp-icon name="refresh" [size]="'15'" />
-      {{ loading() ? 'Đang tải…' : 'Làm mới' }}
+      {{ refreshLabel() }}
     </button>
   </div>
 </app-erp-page-header>
@@ -30,6 +36,12 @@
     }
   </span>
 </div>
+
+@if (notice(); as note) {
+  <div [class]="'status-line status-line--' + note.tone" [attr.role]="note.tone === 'danger' ? 'alert' : 'status'">
+    {{ note.text }}
+  </div>
+}
 
 @if (sourceWarning()) {
   <div class="status-line status-line--warning" role="alert">{{ sourceWarning() }}</div>
@@ -75,7 +87,7 @@
             @if (alertLink(alert.page); as link) {
               <a class="erp-btn erp-btn--sm" [routerLink]="link.commands" [queryParams]="link.query">{{ alert.action }}</a>
             } @else {
-              <span class="muted">Sắp mở</span>
+              <span class="muted" title="Vai trò hiện tại không có quyền mở màn hình này">Không có quyền mở</span>
             }
           </article>
         }
@@ -104,7 +116,7 @@
               <span class="health__icon"><app-erp-icon [name]="link.icon" [size]="'16'" /></span>
               <span>
                 <strong>{{ link.label }}</strong>
-                <small>Sắp mở</small>
+                <small>Không có quyền mở</small>
               </span>
             </div>
           }
@@ -138,6 +150,82 @@
               <span>{{ item.copy.desc }}</span>
             </div>
             <span class="erp-chip">{{ item.copy.module }}</span>
+          </article>
+        }
+      </div>
+    }
+  </section>
+} @else if (tab() === 'insights') {
+  <section class="insights" aria-labelledby="insights-title">
+    <header class="insights__head">
+      <div>
+        <span class="panel__eyebrow">Management Insight · AD_DB_01 – AD_DB_09</span>
+        <h2 id="insights-title">Insight quản trị</h2>
+        <p>
+          Mỗi thẻ gồm bốn phần: hiện tượng, phạm vi, mức độ và hệ quả. Nhóm chưa đủ dữ liệu được làm mờ kèm lý do,
+          không hiển thị số 0 thay cho dữ liệu chưa phát sinh.
+        </p>
+      </div>
+      <span class="panel__meta">{{ readyInsightCount() }}/{{ insightCards().length }} nhóm đã có dữ liệu</span>
+    </header>
+
+    @if (loading()) {
+      <div class="insight-grid" aria-busy="true">
+        @for (n of [1, 2, 3, 4, 5, 6]; track n) {
+          <article class="insight insight--loading"><span class="erp-skeleton"></span></article>
+        }
+      </div>
+    } @else if (!insightCards().length) {
+      <section class="erp-card">
+        <app-erp-empty-state
+          title="Chưa có Insight quản trị"
+          message="Đồng bộ và đối chiếu kho dữ liệu phân tích để sinh các thẻ Insight."
+          icon="dashboard"
+        />
+      </section>
+    } @else {
+      <div class="insight-grid">
+        @for (card of insightCards(); track card.id) {
+          <article
+            class="insight"
+            [class.insight--muted]="!card.ready"
+            [attr.data-severity]="card.ready ? card.severity : 'none'"
+            [attr.aria-label]="card.title"
+          >
+            <header class="insight__head">
+              <div>
+                <span class="insight__code">{{ card.id }}</span>
+                <h3>{{ card.title }}</h3>
+              </div>
+              <app-erp-status-badge [label]="card.severityLabel" [tone]="card.tone" [dot]="card.ready" />
+            </header>
+
+            @if (card.ready) {
+              <dl class="insight__parts">
+                @for (part of card.parts; track part.label) {
+                  <div>
+                    <dt>{{ part.label }}</dt>
+                    <dd>{{ part.text }}</dd>
+                  </div>
+                }
+              </dl>
+              @if (card.note) {
+                <p class="insight__note">{{ card.note }}</p>
+              }
+              @if (card.action; as action) {
+                <footer class="insight__foot">
+                  @if (action.link; as link) {
+                    <a class="erp-btn erp-btn--sm erp-btn--primary" [routerLink]="link.commands" [queryParams]="link.query">
+                      {{ action.label }}
+                    </a>
+                  } @else {
+                    <span class="muted" title="Vai trò hiện tại không có quyền mở màn hình này">{{ action.label }} · không có quyền mở</span>
+                  }
+                </footer>
+              }
+            } @else {
+              <p class="insight__reason">{{ card.note }}</p>
+            }
           </article>
         }
       </div>
@@ -253,3 +341,5 @@
     }
   </section>
 }
+
+<footer class="dash-footer" aria-label="Thời điểm cập nhật dữ liệu">{{ footerNote() }}</footer>

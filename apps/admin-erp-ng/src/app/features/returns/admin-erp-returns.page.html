@@ -20,6 +20,8 @@
     <app-erp-kpi-card label="Phiếu đang mở" [value]="openReturns().toLocaleString('vi-VN')" hint="Giữ hạn mức trả hàng, trong trang này" tone="accent" icon="return" [loading]="loading()" />
     <app-erp-kpi-card label="Chờ duyệt" [value]="pendingReturns().toLocaleString('vi-VN')" hint="Trạng thái Mới yêu cầu" tone="warning" icon="clock" [loading]="loading()" />
     <app-erp-kpi-card label="Hàng đang gửi về" [value]="awaitingReceipt().toLocaleString('vi-VN')" hint="Chờ kho nhận & kiểm" tone="info" icon="cart" [loading]="loading()" />
+    <app-erp-kpi-card label="Quá hạn liên hệ" [value]="contactOverdueCount().toLocaleString('vi-VN')" hint="Quá 24 giờ chưa liên hệ khách" tone="danger" icon="clock" [loading]="loading()" />
+    <app-erp-kpi-card label="Quá hạn hoàn tiền" [value]="refundOverdueCount().toLocaleString('vi-VN')" [hint]="'Quá ' + refundSlaDays + ' ngày làm việc kể từ khi kho nhận'" tone="danger" icon="clock" [loading]="loading()" />
     <app-erp-kpi-card label="Phiếu CSKH mới" [value]="openTickets().toLocaleString('vi-VN')" hint="Ngoài hàng đợi hỗ trợ" tone="neutral" icon="support" [loading]="loading()" />
     <app-erp-kpi-card label="Đang xử lý" [value]="processingTickets().toLocaleString('vi-VN')" hint="Phiếu hỗ trợ có nhân viên" tone="success" icon="log" [loading]="loading()" />
   </section>
@@ -62,6 +64,14 @@
         <span>Quyết định</span>
         <select class="erp-select" name="decision" [value]="decisionFilter()" (change)="onDecisionChange($event)">
           @for (option of decisionOptions; track option.value) {
+            <option [value]="option.value">{{ option.label }}</option>
+          }
+        </select>
+      </label>
+      <label class="erp-field">
+        <span>Hạn xử lý</span>
+        <select class="erp-select" name="sla" [value]="slaFilter()" (change)="onSlaChange($event)">
+          @for (option of slaOptions; track option.value) {
             <option [value]="option.value">{{ option.label }}</option>
           }
         </select>
@@ -188,6 +198,12 @@
       </section>
       @if (record.contact_due_at && !isTerminal(record)) {
         <p class="desk-note" [class.record__reject]="contactOverdue(record)">Hạn liên hệ trong 24 giờ: {{ date(record.contact_due_at) }}{{ contactOverdue(record) ? ' · Đã quá hạn liên hệ' : '' }}</p>
+      }
+      @if (refundSla(record.refund_due_at); as sla) {
+        <p class="desk-note" [class.record__reject]="sla.tone === 'danger'">
+          Hạn hoàn tiền ({{ refundSlaDays }} ngày làm việc): {{ date(record.refund_due_at) }}
+          <app-erp-status-badge [label]="sla.label" [tone]="sla.tone" />
+        </p>
       }
       @if (record.attention_status === 'waiting_customer') {
         <p class="record__gateway">Chờ khách bổ sung — tiến độ xử lý từng phần vẫn được giữ nguyên.</p>
@@ -398,6 +414,8 @@
               <p class="record__line"><span>Quyết định: {{ decisionLabel(line.decision_status) }}</span><app-erp-status-badge [label]="statusLabel(line.item_status)" [tone]="statusTone(line.item_status)" /></p>
               <p class="record__line"><span>Phương án phần này: {{ line.resolution_type === 'exchange' ? 'Đổi hàng' : 'Hoàn tiền' }}</span><span>Có thể hoàn {{ money(line.refundable_amount) }} · Đã hoàn {{ money(line.refund_amount) }}</span></p>
               @if (line.attention_status === 'waiting_customer') { <p class="record__gateway">Chờ khách bổ sung</p> }
+              @if (line.split_from_id && line.attention_status === 'needs_support') { <p class="record__reject">Phần hàng khách gửi thiếu — đã giải phóng lượt đổi/trả, CSKH cần liên hệ khách.</p> }
+              @if (refundSla(line.refund_due_at); as lineSla) { <p class="record__line"><span>Hạn hoàn tiền: {{ date(line.refund_due_at) }}</span><app-erp-status-badge [label]="lineSla.label" [tone]="lineSla.tone" /></p> }
               @if (line.decision_reason || line.reason) { <p class="record__text">Lý do: {{ line.decision_reason || line.reason }}</p> }
               @if (line.replacement_variant_id) { <p>Biến thể thay thế: <span class="is-mono">{{ line.replacement_variant_id }}</span></p> }
               @if (line.exchange_order_id) { <a class="erp-chip" [routerLink]="['/orders']" [queryParams]="{ focus: line.exchange_order_id }">Đơn đổi {{ line.exchange_order_id.slice(0, 8) }}</a> }
@@ -501,10 +519,14 @@
       @if (ticket.chat_session_id) {
         <p class="desk-note">Phiếu này thuộc hội thoại {{ ticket.chat_session_id.slice(0, 8) }}; mở tab Hội thoại để trả lời.</p>
       }
+      @if (ticketError() && !ticketAction()) { <p class="record__reject" role="alert">{{ ticketError() }}</p> }
       @if (canWrite() && !ticket.chat_session_id) {
         <div class="record__actions">
           <span>Thao tác</span>
           <div class="record__action-row">
+            @if (canClaim(ticket)) {
+              <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" [disabled]="ticketBusy()" (click)="claimTicket()">Nhận xử lý</button>
+            }
             @if (canReply(ticket)) {
               <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" (click)="openTicketAction('reply')">Phản hồi</button>
             }

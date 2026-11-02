@@ -108,6 +108,7 @@ describe('AdminErpReviewsPage', () => {
     page.setTab('urgent');
     listCall = calls.filter((params) => params?.['limit'] !== '1').at(-1);
     expect(listCall?.['urgent']).toBe('true');
+    expect(listCall?.['status']).toBe('pending');
   });
 
   it('opens the review drawer and detects restricted words', async () => {

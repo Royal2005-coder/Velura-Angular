@@ -246,3 +246,26 @@ function operatorContext() {
     accessToken: "operator-token"
   };
 }
+
+test("failed email list and resend are super-admin only and validate the id", async () => {
+  const calls = [];
+  const service = createAccountService({
+    repository: {
+      listFailedEmails: async (filters, token) => { calls.push(["list", filters, token]); return { rows: [], count: 0 }; },
+      resendFailedEmail: async (id, ip, token) => { calls.push(["resend", id, ip, token]); return { email_id: id, requeued: true }; }
+    }
+  });
+  await assert.rejects(
+    () => service.listFailedEmails(operatorContext(), new URLSearchParams()),
+    (error) => error.status === 403 && error.code === "RBAC_DENIED"
+  );
+  await assert.rejects(
+    () => service.resendFailedEmail(superAdminContext(), "not-a-uuid", { ipAddress: "1.1.1.1" }),
+    (error) => error.status === 422
+  );
+  await service.listFailedEmails(superAdminContext(), new URLSearchParams("limit=500"));
+  const result = await service.resendFailedEmail(superAdminContext(), USER_ID, { ipAddress: "1.1.1.1" });
+  assert.equal(result.requeued, true);
+  assert.deepEqual(calls[0], ["list", { limit: 100, offset: 0 }, "valid-access-token"]);
+  assert.deepEqual(calls[1], ["resend", USER_ID, "1.1.1.1", "valid-access-token"]);
+});

@@ -29,6 +29,17 @@ export function adminMoney(value: number | null | undefined): string {
 }
 
 /**
+ * Compact VND for KPI cards that must never show a fabricated zero: a missing observation
+ * (null/undefined/NaN) renders as "—", a real 0 renders as "0đ".
+ */
+export function adminKpiMoney(value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(Number(value))) {
+    return '—';
+  }
+  return `${adminCompactMoney(value)}đ`;
+}
+
+/**
  * Formats large money values compactly for KPI cards.
  */
 export function adminCompactMoney(value: number | null | undefined): string {

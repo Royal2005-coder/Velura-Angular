@@ -1,5 +1,5 @@
 import { HttpError } from "./http.js";
-import { selectOne, updateRows } from "./supabase.js";
+import { callRpc, selectOne, updateRows } from "./supabase.js";
 import type { JsonObject } from "./types.js";
 
 export const LOGIN_ATTEMPT_LIMIT = 5;
@@ -16,6 +16,7 @@ export interface LoginLockUser {
   admin_role?: unknown;
   login_fail_count?: unknown;
   locked_until?: unknown;
+  lock_type?: unknown;
   updated_at?: unknown;
   created_at?: unknown;
 }
@@ -91,13 +92,40 @@ export function assertNotLocked(user: LoginLockUser, now = new Date()): void {
 }
 
 /**
- * Admin locks use `lock_type`, not only `locked_until`. A locked account must not re-activate
- * itself through OTP verification or password reset; only an admin unlock clears the lock.
+ * True when an admin temporary lock has passed its `locked_until`. Such an account must be treated as unlocked.
+ * Permanent locks and temporary locks without an expiry never expire.
  */
-export function assertAccountNotLocked(user: { lock_type?: unknown }): void {
-  if (user.lock_type !== null && user.lock_type !== undefined && String(user.lock_type).trim() !== "") {
-    throw new HttpError(423, "ACCOUNT_LOCKED", "Tài khoản đã bị quản trị viên khóa. Vui lòng liên hệ CSKH để được hỗ trợ.");
-  }
+export function isTemporaryLockExpired(
+  user: { lock_type?: unknown; locked_until?: unknown },
+  now = new Date()
+): boolean {
+  if (user.lock_type !== "temporary") return false;
+  const until = parseDate(user.locked_until);
+  return until !== null && until <= now;
+}
+
+/**
+ * Admin locks use `lock_type`, not only `locked_until`. A locked account must not re-activate
+ * itself through OTP verification or password reset; only an admin unlock (or the expiry of a
+ * temporary lock) clears the lock.
+ */
+export function assertAccountNotLocked(
+  user: { lock_type?: unknown; locked_until?: unknown },
+  now = new Date()
+): void {
+  if (user.lock_type === null || user.lock_type === undefined || String(user.lock_type).trim() === "") return;
+  if (isTemporaryLockExpired(user, now)) return;
+  throw new HttpError(423, "ACCOUNT_LOCKED", "Tài khoản đã bị quản trị viên khóa. Vui lòng liên hệ CSKH để được hỗ trợ.");
+}
+
+/**
+ * Persists the auto-unlock of an expired temporary lock (audit + email are written by the RPC) and returns the
+ * user row as it looks afterwards. Non-expired rows are returned untouched, so callers can apply it blindly.
+ */
+export async function releaseExpiredTemporaryLock<T extends JsonObject>(user: T, now = new Date()): Promise<T> {
+  if (!isTemporaryLockExpired(user, now) || typeof user.user_id !== "string") return user;
+  await callRpc("velura_auto_unlock_expired_locks", { p_user_id: user.user_id });
+  return { ...user, is_active: true, lock_type: null, locked_until: null, login_fail_count: 0 };
 }
 
 /**
@@ -106,6 +134,10 @@ export function assertAccountNotLocked(user: { lock_type?: unknown }): void {
 export async function resetStaleLoginFailures(user: LoginLockUser, now = new Date()): Promise<LoginLockUser> {
   const failCount = Number(user.login_fail_count) || 0;
   if (failCount <= 0 && !user.locked_until) {
+    return user;
+  }
+  // `locked_until` of an admin temporary lock belongs to the account lock, not to brute-force bookkeeping.
+  if (user.lock_type !== null && user.lock_type !== undefined && String(user.lock_type).trim() !== "") {
     return user;
   }
   const lockedUntil = parseDate(user.locked_until);

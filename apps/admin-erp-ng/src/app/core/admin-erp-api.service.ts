@@ -52,6 +52,19 @@ export interface AdminAccountRow {
   gender?: string;
 }
 
+/** Email that stayed `failed` after the 3rd delivery attempt (BA 3.1.9 TH1). Body is never exposed. */
+export interface AdminFailedEmailRow {
+  email_id: string;
+  recipient?: string;
+  template_code?: string;
+  subject?: string;
+  attempts?: number;
+  last_error?: string | null;
+  related_user_id?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface AdminRoleRequestRow {
   request_id: string;
   target_user_id?: string;
@@ -880,6 +893,14 @@ export interface AdminCampaignStatistic {
   budgetUsed: number;
 }
 
+/** Result of a bulk voucher generation. */
+export interface AdminBulkVoucherResult {
+  requested: number;
+  created: string[];
+  complete: boolean;
+  failure: { code: string; reason: string } | null;
+}
+
 export interface AdminPricingStatistics {
   range: { from: string | null; to: string | null };
   orders: {
@@ -1031,6 +1052,10 @@ export interface AdminReturnLine {
   disposition_note?: string | null;
   restocked_at?: string | null;
   stock_restored_quantity?: number;
+  /** Refund SLA deadline: 5 working days after warehouse receipt. */
+  refund_due_at?: string | null;
+  /** Set on a part split off from another one (for example the missing remainder of a partial receipt). */
+  split_from_id?: string | null;
 }
 
 export type AdminReturnDisposition = 'restock' | 'repair' | 'scrap' | 'return_supplier';
@@ -1153,6 +1178,8 @@ export interface AdminReturnRow {
   refund_bank_holder?: string | null;
   lines?: AdminReturnLine[];
   payment?: AdminReturnPayment | null;
+  /** Earliest refund SLA deadline among parts still waiting for a refund. */
+  refund_due_at?: string | null;
   /** Immutable return slip code (separate from the carrier AWB). */
   return_code?: string;
   shipments?: AdminReturnShipment[];
@@ -1426,6 +1453,28 @@ export interface AdminChatOriginal {
 
 export type AdminInsightRange = 'day' | 'week' | 'month';
 
+/** One Management Insight card (AD_DB_01..09): four parts plus a deep-link action, or an honest "not enough data". */
+export interface AdminManagementInsight {
+  id: string;
+  title: string;
+  availability: 'ready' | 'insufficient_data';
+  severity: 'critical' | 'high' | 'watch' | 'ok';
+  dataNote?: string;
+  phenomenon?: string;
+  scope?: string;
+  magnitude?: string;
+  consequence?: string;
+  action?: { label: string; route: string; module: string; query?: Record<string, string> };
+  updated_at?: string;
+}
+
+/** Result of `POST /admin/dashboard/refresh`. */
+export interface AdminDashboardRefreshResult {
+  success?: boolean;
+  status?: string;
+  snapshotAt?: string;
+}
+
 export interface AdminDashboardSummary {
   operations: {
     pendingOrders: number;
@@ -1463,9 +1512,11 @@ export interface AdminDashboardSummary {
     revenueTrend?: Array<{ date: string; dateStr: string; revenue: number; orderCount: number }>;
   };
   recentLogs?: AdminAuditRow[];
+  management?: { groups: AdminManagementInsight[]; ruleVersion?: string; lastSyncedAt?: string };
   periodDays?: number;
   range?: string;
   meta?: {
+    pendingEvents?: number | null;
     generatedAt?: string | null;
     source?: string;
     freshness?: 'fresh' | 'stale' | 'unavailable';
@@ -1555,6 +1606,13 @@ export class AdminErpApiService {
   }
 
   /**
+   * Re-syncs the analytics warehouse (super admin only; the API throttles it to one run per 10 seconds).
+   */
+  refreshDashboard(): Observable<AdminDashboardRefreshResult> {
+    return this.http.post<AdminDashboardRefreshResult>(`${this.baseUrl}/api/v1/admin/dashboard/refresh`, {});
+  }
+
+  /**
    * Lists audit rows for the system log workspace.
    */
   listAuditLogs(params: Record<string, string> = {}): Observable<AdminListPayload<AdminAuditRow>> {
@@ -1570,6 +1628,32 @@ export class AdminErpApiService {
     return this.http.get<AdminListPayload<AdminAccountRow>>(`${this.baseUrl}/api/v1/admin/accounts`, {
       params: this.params(params),
     });
+  }
+
+  /**
+   * Reads one account with its latest optimistic-lock version.
+   */
+  getAccount(userId: string): Observable<AdminAccountRow> {
+    return this.http.get<AdminAccountRow>(`${this.baseUrl}/api/v1/admin/accounts/${encodeURIComponent(userId)}`);
+  }
+
+  /**
+   * Lists emails that failed permanently after 3 attempts (super admin only).
+   */
+  listFailedEmails(params: Record<string, string> = {}): Observable<AdminListPayload<AdminFailedEmailRow>> {
+    return this.http.get<AdminListPayload<AdminFailedEmailRow>>(`${this.baseUrl}/api/v1/admin/account-email-failures`, {
+      params: this.params(params),
+    });
+  }
+
+  /**
+   * Re-queues one permanently failed email. Idempotent: `requeued` is false when it was already re-queued.
+   */
+  resendFailedEmail(emailId: string): Observable<{ email_id: string; requeued: boolean }> {
+    return this.http.post<{ email_id: string; requeued: boolean }>(
+      `${this.baseUrl}/api/v1/admin/account-email-failures/${encodeURIComponent(emailId)}/resend`,
+      {},
+    );
   }
 
   /**
@@ -2039,6 +2123,16 @@ export class AdminErpApiService {
   }
 
   /**
+   * Claims a new ticket for the signed-in operator; the server moves it to `processing`.
+   */
+  assignTicket(ticketId: string, body: { assignedTo: string; expectedVersion: number }): Observable<AdminTicketRow> {
+    return this.http.post<AdminTicketRow>(
+      `${this.baseUrl}/api/v1/admin/support-tickets/${encodeURIComponent(ticketId)}/assign`,
+      body,
+    );
+  }
+
+  /**
    * Answers a ticket and moves it to `processing`.
    */
   respondTicket(ticketId: string, body: AdminTicketReplyInput): Observable<AdminTicketRow> {
@@ -2270,6 +2364,14 @@ export class AdminErpApiService {
    */
   createVoucher(body: Record<string, unknown>): Observable<unknown> {
     return this.http.post(`${this.baseUrl}/api/v1/admin/vouchers`, body);
+  }
+
+  /**
+   * Generates vouchers in bulk from a prefix (AD_VOUCHER_03). Keeps the codes already
+   * created when it stops halfway; the response says whether the batch completed.
+   */
+  createVouchersBulk(body: Record<string, unknown>): Observable<AdminBulkVoucherResult> {
+    return this.http.post<AdminBulkVoucherResult>(`${this.baseUrl}/api/v1/admin/vouchers/bulk`, body);
   }
 
   /**

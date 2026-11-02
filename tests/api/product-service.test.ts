@@ -679,7 +679,7 @@ test("server image validation enforces twenty unique URLs and on-sale primary", 
 test("image removal prunes associations, reordering preserves them, metadata patches leave them untouched", async () => {
   const current = {
     product_id: PRODUCT_ID, status: "on_sale", version: 1,
-    images: ["/assets/one.jpg", "/assets/two.jpg"],
+    images: ["/assets/one.jpg", "/assets/two.jpg", "/assets/common.jpg"],
     image_colors: { "/assets/one.jpg": "Đen", "/assets/two.jpg": "Trắng" }
   };
   const calls: Array<Record<string, unknown>> = [];
@@ -688,9 +688,9 @@ test("image removal prunes associations, reordering preserves them, metadata pat
     listVariants: async () => ({ rows: [{ color: "Đen" }, { color: "Trắng" }] }),
     updateProduct: async (_id, input) => { calls.push(input); return { ...current, image_colors: input.imageColors ?? current.image_colors }; }
   } as unknown as ProductRepository });
-  await service.update(superAdminContext(), PRODUCT_ID, { images: ["/assets/two.jpg"], expectedVersion: 1 }, {});
+  await service.update(superAdminContext(), PRODUCT_ID, { images: ["/assets/two.jpg", "/assets/common.jpg"], expectedVersion: 1 }, {});
   assert.deepEqual(calls[0].imageColors, { "/assets/two.jpg": "Trắng" });
-  await service.update(superAdminContext(), PRODUCT_ID, { images: ["/assets/two.jpg", "/assets/one.jpg"], expectedVersion: 1 }, {});
+  await service.update(superAdminContext(), PRODUCT_ID, { images: ["/assets/two.jpg", "/assets/one.jpg", "/assets/common.jpg"], expectedVersion: 1 }, {});
   assert.deepEqual(calls[1].imageColors, current.image_colors);
   await service.update(superAdminContext(), PRODUCT_ID, { name: "Metadata only", expectedVersion: 1 }, {});
   assert.equal(calls[2].imageColors, undefined);
@@ -714,6 +714,79 @@ test("hidden drafts may remove all images but cannot publish without a primary",
   await assert.rejects(() => service.changeStatus(superAdminContext(), PRODUCT_ID,
     { status: "on_sale", reason: "Publish after product review", expectedVersion: 1 }, {}),
     (error) => error.status === 422 && Boolean(error.details.images));
+});
+
+// --- AD_PRODUCT_08: common images ---
+
+test("on_sale requires a common (non color-linked) image; hidden may have none", async () => {
+  const body = { sku: "VL-AO009", name: "Ao", categoryId: CATEGORY_ID, basePrice: 100, status: "on_sale",
+    images: ["/assets/red.jpg"], imageColors: { "/assets/red.jpg": "Đỏ" },
+    variants: [{ color: "Đỏ", size: "M", stockQuantity: 1 }], expectedVersion: 0 };
+  assert.throws(() => validateCreateProduct(body), (error) => error.status === 422 && /ảnh chung/.test(error.details.images[0]));
+  assert.equal(validateCreateProduct({ ...body, images: ["/assets/red.jpg", "/assets/common.jpg"] }).images.length, 2);
+  assert.equal(validateCreateProduct({ ...body, status: "hidden" }).images.length, 1);
+
+  const service = createProductService({ repository: {
+    findById: async () => ({ product_id: PRODUCT_ID, status: "hidden", images: ["/assets/red.jpg"], image_colors: { "/assets/red.jpg": "Đỏ" }, version: 1 })
+  } as unknown as ProductRepository });
+  await assert.rejects(() => service.changeStatus(superAdminContext(), PRODUCT_ID,
+    { status: "on_sale", reason: "Publish after product review", expectedVersion: 1 }, {}),
+    (error) => error.status === 422 && /ảnh chung/.test(error.details.images[0]));
+});
+
+// --- AD_PRODUCT_06: stock only via the audited path ---
+
+test("product form stock edit requires a reason and goes through the audited bulk RPC", async () => {
+  const variant = { variant_id: "50000000-0000-4000-8000-000000000001", color: "Đen", size: "M", stock_quantity: 10, low_stock_threshold: 5, version: 3 };
+  const bulk: Array<{ updates: Array<Record<string, unknown>>; reason: string }> = [];
+  let productWrites = 0;
+  const service = createProductService({ repository: {
+    findById: async () => ({ product_id: PRODUCT_ID, status: "hidden", images: [], image_colors: {}, version: 1 }),
+    listVariants: async () => ({ rows: [variant] }),
+    updateProduct: async (_id, input) => { productWrites += 1; return input; },
+    bulkAdjustStock: async (_id, updates, reason) => { bulk.push({ updates, reason }); return { success: true }; },
+    changeStatus: async () => ({})
+  } as unknown as ProductRepository });
+  await assert.rejects(() => service.update(superAdminContext(), PRODUCT_ID, { name: "Ao moi", stock: 20, expectedVersion: 1 }, {}),
+    (error) => error.status === 422 && Boolean(error.details.stockReason));
+  assert.equal(productWrites, 0);
+  await service.update(superAdminContext(), PRODUCT_ID,
+    { name: "Ao moi", stock: 4, minStock: 2, stockReason: "Kiểm kê định kỳ cuối tháng", expectedVersion: 1 }, {});
+  assert.equal(bulk.length, 1);
+  assert.equal(bulk[0].reason, "Kiểm kê định kỳ cuối tháng");
+  assert.deepEqual(bulk[0].updates[0], { variantId: variant.variant_id, delta: -6, lowStockThreshold: 2, expectedVersion: 3 });
+});
+
+test("stock endpoint writes the threshold through the audited RPC, not a direct table update", async () => {
+  const variantId = "50000000-0000-4000-8000-000000000001";
+  const bulk: Array<Record<string, unknown>> = [];
+  const service = createProductService({ repository: {
+    findById: async () => ({ product_id: PRODUCT_ID, status: "hidden", version: 1 }),
+    listVariants: async () => ({ rows: [{ variant_id: variantId, stock_quantity: 10, low_stock_threshold: 8, version: 2 }] }),
+    bulkAdjustStock: async (_id, updates, reason) => { bulk.push({ updates, reason }); return { success: true }; },
+    changeStatus: async () => ({})
+  } as unknown as ProductRepository });
+  await service.updateStock(superAdminContext(), PRODUCT_ID,
+    { variantId, delta: 0, lowStockThreshold: 8, reason: "Điều chỉnh ngưỡng theo mùa", expectedVersion: 2 }, {});
+  assert.equal(bulk.length, 1);
+  assert.deepEqual((bulk[0].updates as Array<Record<string, unknown>>)[0], { variantId, delta: 0, lowStockThreshold: 8, expectedVersion: 2 });
+});
+
+test("CSV stock rows carry a system reason; existing prices are never overwritten", async () => {
+  const parent = { product_id: PRODUCT_ID, sku: "VL-AO002", base_price: 250000, sale_price: 200000, version: 3 };
+  const variant = { variant_id: "50000000-0000-4000-8000-000000000001", product_id: PRODUCT_ID, sku: "VL-AO002-BL-S", stock_quantity: 12, reserved_quantity: 4, version: 2 };
+  let received: Array<Record<string, unknown>> = [];
+  const service = createProductService({ repository: {
+    findBySku: async (sku: string) => sku === parent.sku ? parent : null,
+    findById: async () => parent,
+    findVariantBySku: async (sku: string) => sku === variant.sku ? variant : null,
+    importCsv: async (rows: Array<Record<string, unknown>>) => { received = rows; return { created: 0, updated: 1, failed: 0, total: rows.length }; }
+  } } as unknown as { repository: ProductRepository });
+  const csv = ["sku,name,base_price,category_id,stock_quantity", `VL-AO002-BL-S,Ao lua,999999,${CATEGORY_ID},30`].join(String.fromCharCode(10));
+  await service.commitCsv(superAdminContext(), csv, {});
+  assert.match(String(received[0].stock_reason), /^Nhập CSV /);
+  assert.equal(received[0].base_price, 250000);
+  assert.equal(received[0].stock_quantity, 30);
 });
 
 // --- Helpers ---

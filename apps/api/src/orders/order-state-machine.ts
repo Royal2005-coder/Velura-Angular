@@ -61,7 +61,7 @@ export const ORDER_TAG_LABELS: Readonly<Record<string, string>> = {
 
 /** Order Admin trong KAN-59 mục 3. CSKH chỉ đọc. */
 export const ORDER_OPERATOR_ROLES: readonly string[] = ["super_admin", "admin_operator_donhang"];
-export const ORDER_READER_ROLES: readonly string[] = [...ORDER_OPERATOR_ROLES, "admin_operator_cskh_dt"];
+export const ORDER_READER_ROLES: readonly string[] = [...ORDER_OPERATOR_ROLES, "admin_operator_cskh_dt", "admin_viewer"];
 
 export type OrderActor = "order_admin" | "customer" | "system";
 
@@ -165,9 +165,9 @@ export function actionGuard(code: string, facts: OrderFacts): string | null {
     case "confirm_cod":
       // FR-04: đơn online không được xác nhận bằng action COD.
       if (facts.paymentMethod !== "COD") return "COD_ONLY";
-      // Quy trình 3.1.11 (AD_ORDER_04, AD_ORDER_05): Khách vãng lai thanh toán COD từ 1.000.000đ trở lên
-      // bắt buộc phải gọi và lưu kết quả xác nhận với khách trước khi xác nhận đơn.
-      if (facts.totalAmount >= 1_000_000 && !facts.hasSuccessfulCallConfirm) {
+      // Quy trình 3.1.11 (AD_ORDER_04, AD_ORDER_05): chỉ Khách vãng lai thanh toán COD từ 1.000.000đ trở lên
+      // bắt buộc phải gọi và lưu kết quả xác nhận trước khi xác nhận đơn. Thành viên được duyệt thủ công.
+      if (facts.isGuest && facts.totalAmount >= 1_000_000 && !facts.hasSuccessfulCallConfirm) {
         return "CALL_CONFIRMATION_REQUIRED";
       }
       return null;

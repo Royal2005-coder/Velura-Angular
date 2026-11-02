@@ -38,6 +38,15 @@ export interface AccountService {
     context: AuthContext | undefined,
     searchParams: URLSearchParams
   ): Promise<{ rows: JsonObject[]; count: number | undefined }>;
+  listFailedEmails(
+    context: AuthContext | undefined,
+    searchParams: URLSearchParams
+  ): Promise<{ rows: JsonObject[]; count: number | undefined }>;
+  resendFailedEmail(
+    context: AuthContext | undefined,
+    emailId: string,
+    requestMeta: RequestMeta
+  ): Promise<unknown>;
   lock(
     context: AuthContext | undefined,
     userId: string,
@@ -112,6 +121,20 @@ export function createAccountService({ repository }: { repository: AccountReposi
         offset: clampInteger(searchParams.get("offset"), 0, 0, 1000000)
       }, context.accessToken);
       return enrichAuditLogs(payload, ACCOUNT_AUDIT);
+    },
+
+    async listFailedEmails(context, searchParams) {
+      requireAccountAdmin(context);
+      return repository.listFailedEmails({
+        limit: clampInteger(searchParams.get("limit"), 20, 1, 100),
+        offset: clampInteger(searchParams.get("offset"), 0, 0, 1000000)
+      }, context.accessToken);
+    },
+
+    async resendFailedEmail(context, emailId, requestMeta) {
+      requireAccountAdmin(context);
+      requireUuid(emailId, "emailId");
+      return repository.resendFailedEmail(emailId, requestMeta.ipAddress, context.accessToken);
     },
 
     async lock(context, userId, body, requestMeta) {

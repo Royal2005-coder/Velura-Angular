@@ -214,6 +214,8 @@ interface ApiReturnDetail extends ApiReturn {
   exchange_order?: ApiReturnExchangeOrder | null;
   evidence?: ApiReturnEvidence[];
   instructions?: string[];
+  response_options?: Array<{ code: string; label: string; requires_note?: boolean; attention_status?: string }>;
+  contact_history?: Array<{ responder?: string; code?: string; label?: string; note?: string | null; contacted_at?: string; created_at?: string }>;
 }
 
 const RECEIVER_STATUSES: RefundReceiverStatus[] = ['not_required', 'missing', 'invalid', 'supplement_requested', 'valid'];
@@ -443,6 +445,9 @@ function mapReturnTracking(row: ApiReturnDetail): ReturnTrackingDetail {
     evidence: (row.evidence || []).map(mapTrackingEvidence),
     instructions: row.instructions || [],
     items: (row.items || []).map(mapReturnItem),
+    responseOptions: row.response_options || [],
+    contactHistory: row.contact_history || [],
+    version: row.version,
   };
 }
 
@@ -808,6 +813,18 @@ export class OrderAccountApiStore implements OrderAccountModel {
     this.assertCurrent(context);
     if (!data.evidence) throw new Error('Chưa lưu được bằng chứng đóng gói.');
     return mapTrackingEvidence(data.evidence);
+  }
+
+  /** Customer chooses one option to automate resolution without manual back-and-forth. */
+  async respondReturn(returnId: string, code: string, note = ''): Promise<ReturnTrackingDetail> {
+    const context = this.context();
+    const path = context.userId
+      ? `/api/user/returns/${encodeURIComponent(returnId)}/response`
+      : `/api/user/returns/guest/${encodeURIComponent(returnId)}/response?guest_access_token=${encodeURIComponent(context.guestToken)}`;
+    const data = await firstValueFrom(this.api.post<{ return?: ApiReturnDetail }>(path, { code, note }));
+    this.assertCurrent(context);
+    if (!data.return?.return_id) throw new Error('Không ghi nhận được phản hồi. Vui lòng thử lại.');
+    return mapReturnTracking(data.return);
   }
 
   /** Directs unavailable replacement choices to CSKH because no real mutation exists yet. */

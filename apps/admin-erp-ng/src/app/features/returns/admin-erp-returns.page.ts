@@ -1056,6 +1056,41 @@ export class AdminErpReturnsPage {
   onDecisionChange(event: Event): void {
     this.decisionFilter.set((event.target as HTMLSelectElement).value);
   }
+  /**
+   * Pipeline steps for the return lifecycle, formatted identically to the order pipeline
+   * so the admin returns drawer follows the exact same clear structure as orders.
+   */
+  returnPipelineSteps(record: AdminReturnRow | null): Array<{ id: string; label: string; state: 'done' | 'current' | 'pending' | 'danger' }> {
+    if (!record) return [];
+    const status = String(record.progress_status || record.status || 'REQUESTED');
+    if (status === 'CANCELLED') {
+      return [
+        { id: 'requested', label: '1. Tiếp nhận', state: 'done' },
+        { id: 'cancelled', label: 'Đã hủy', state: 'danger' }
+      ];
+    }
+    if (status === 'REJECTED') {
+      return [
+        { id: 'requested', label: '1. Tiếp nhận', state: 'done' },
+        { id: 'rejected', label: 'Từ chối', state: 'danger' }
+      ];
+    }
+
+    const isExchange = record.return_type === 'exchange';
+    const isApproved = ['APPROVED', 'IN_PROGRESS', 'PARTIALLY_APPROVED', 'WAITING_RETURN', 'RETURN_IN_TRANSIT', 'RECEIVED', 'REFUND_PROCESSING', 'REFUNDED', 'EXCHANGE_PREPARING', 'EXCHANGE_SHIPPING', 'COMPLETED'].includes(status);
+    const isPickedUp = ['RETURN_IN_TRANSIT', 'RECEIVED', 'REFUND_PROCESSING', 'REFUNDED', 'EXCHANGE_PREPARING', 'EXCHANGE_SHIPPING', 'COMPLETED'].includes(status);
+    const isReceived = ['RECEIVED', 'REFUND_PROCESSING', 'REFUNDED', 'EXCHANGE_PREPARING', 'EXCHANGE_SHIPPING', 'COMPLETED'].includes(status);
+    const isCompleted = ['REFUNDED', 'COMPLETED'].includes(status);
+
+    return [
+      { id: 'requested', label: '1. Tiếp nhận', state: isApproved ? 'done' : 'current' },
+      { id: 'approved', label: '2. Duyệt & CSKH', state: !isApproved ? 'pending' : (isPickedUp ? 'done' : 'current') },
+      { id: 'pickup', label: '3. ĐVVC lấy hàng', state: !isPickedUp ? (isApproved ? 'current' : 'pending') : (isReceived ? 'done' : 'current') },
+      { id: 'receipt', label: '4. Kho kiểm hàng', state: !isReceived ? 'pending' : (isCompleted ? 'done' : 'current') },
+      { id: 'resolution', label: isExchange ? '5. Giao hàng đổi' : '5. Hoàn tiền', state: isCompleted ? 'done' : (isReceived ? 'current' : 'pending') }
+    ];
+  }
+
 
   /**
    * Updates the payment channel filter.

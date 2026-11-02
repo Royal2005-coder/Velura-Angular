@@ -10,6 +10,8 @@ export class DeliverySimulation {
   readonly orderCode = input.required<string>();
   readonly destination = input('Địa chỉ nhận hàng');
   readonly delivered = input(false);
+  readonly deliveryPhoto = input<string | null>(null);
+  readonly deliveryPhotoUrl = computed(() => this.deliveryPhoto() || 'https://images.unsplash.com/photo-1549465220-1a8b9238cd48?auto=format&fit=crop&w=600&q=80');
   readonly running = signal(false);
   readonly progress = signal(15);
   readonly displayedProgress = computed(() => this.delivered() ? 100 : this.progress());

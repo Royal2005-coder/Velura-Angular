@@ -64,7 +64,7 @@ export async function storeReturnEvidence(input: {
   const isVideo = kind.endsWith("_video");
   const file = await readMultipartFile(input.req, {
     maxBytes: isVideo ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES,
-    allowedTypes: isVideo ? VIDEO_MIME_TYPES : IMAGE_MIME_TYPES
+    allowedTypes: isVideo ? VIDEO_MIME_TYPES : [...IMAGE_MIME_TYPES, "image/svg+xml"]
   });
   const uploaded = await uploadToPrivateStorage(file.fileBuffer, file.fileName, file.mimeType, {
     bucket: PRIVATE_EVIDENCE_BUCKET,

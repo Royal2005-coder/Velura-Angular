@@ -196,20 +196,58 @@ export function createContentAdminService({ repository, generateJson = generateG
       if (title.length < 4 || content.length < 40) {
         throw new HttpError(422, "CONTENT_VALIDATION", "Cần tiêu đề và nội dung bài viết trước khi gợi ý SEO.");
       }
-      const result = asJsonObject(await generateJson(
-        `Bạn là biên tập SEO cho thời trang Velura. Từ tiêu đề và nội dung dưới đây, tạo metaTitle <= 60 ký tự, metaDescription <= 155 ký tự, 3-6 tag tiếng Việt ngắn và summary 1 câu. Không bịa số liệu, không dùng từ tuyệt đối. Tiêu đề: ${title}
+      try {
+        const result = asJsonObject(await generateJson(
+          `Bạn là biên tập SEO cho thời trang Velura. Từ tiêu đề và nội dung dưới đây, tạo metaTitle <= 60 ký tự, metaDescription <= 155 ký tự, 3-6 tag tiếng Việt ngắn và summary 1 câu. Không bịa số liệu, không dùng từ tuyệt đối. Tiêu đề: ${title}
 Nội dung: ${content}`,
-        { type: "object", additionalProperties: false, required: ["metaTitle", "metaDescription", "tags", "summary"],
-          properties: { metaTitle: { type: "string" }, metaDescription: { type: "string" }, tags: { type: "array", items: { type: "string" } }, summary: { type: "string" } } },
-        { model: "gemini-3.5-flash-lite", timeoutMs: 30000, maxRetries: 1 }
-      ));
-      const tags = Array.isArray(result.tags) ? result.tags.map((tag) => asString(tag).trim()).filter(Boolean).slice(0, 6) : [];
-      return {
-        metaTitle: asString(result.metaTitle).trim().slice(0, 70),
-        metaDescription: asString(result.metaDescription).trim().slice(0, 320),
-        tags,
-        summary: asString(result.summary).trim().slice(0, 500)
-      };
+          { type: "object", additionalProperties: false, required: ["metaTitle", "metaDescription", "tags", "summary"],
+            properties: { metaTitle: { type: "string" }, metaDescription: { type: "string" }, tags: { type: "array", items: { type: "string" } }, summary: { type: "string" } } },
+          { timeoutMs: 15000, maxRetries: 1 }
+        ));
+        const tags = Array.isArray(result.tags) ? result.tags.map((tag) => asString(tag).trim()).filter(Boolean).slice(0, 6) : [];
+        const metaTitle = asString(result.metaTitle).trim();
+        if (!metaTitle) {
+          return fallbackBlogSeo(title, content);
+        }
+        return {
+          metaTitle: metaTitle.slice(0, 70),
+          metaDescription: asString(result.metaDescription).trim().slice(0, 320),
+          tags: tags.length ? tags : ["Thời trang", "Velura"],
+          summary: asString(result.summary).trim().slice(0, 500)
+        };
+      } catch {
+        return fallbackBlogSeo(title, content);
+      }
     }
+  };
+}
+
+/**
+ * Heuristic SEO fallback when AI provider is unavailable, rate-limited, or times out.
+ * Guarantees that editorial workflows are never completely blocked by external AI outages.
+ */
+function fallbackBlogSeo(title: string, content: string): { metaTitle: string; metaDescription: string; tags: string[]; summary: string } {
+  const metaTitle = title.length <= 58 ? `${title} | Velura` : `${title.slice(0, 58).replace(/\s+\S*$/, "")} | Velura`;
+  const sentences = content.split(/[.!?]\s+/).map((s) => s.trim()).filter(Boolean);
+  const firstSentence = sentences[0] || title;
+  const metaDescription = firstSentence.length <= 150
+    ? firstSentence
+    : `${firstSentence.slice(0, 145).replace(/\s+\S*$/, "")}...`;
+
+  const FASHION_KEYWORDS = [
+    "thời trang", "xu hướng", "phối đồ", "áo sơ mi", "đầm dạ hội", "váy lụa",
+    "phụ kiện", "outfit", "mùa thu", "mùa đông", "công sở", "dạo phố", "cao cấp",
+    "tối giản", "thanh lịch", "phong cách", "velura", "bộ sưu tập"
+  ];
+  const combined = (title + " " + content).toLowerCase();
+  const matchedTags = FASHION_KEYWORDS.filter((kw) => combined.includes(kw));
+  const defaultTags = ["Thời trang", "Xu hướng", "Velura"];
+  const tags = Array.from(new Set([...matchedTags.map((t) => t.charAt(0).toUpperCase() + t.slice(1)), ...defaultTags])).slice(0, 5);
+
+  return {
+    metaTitle: metaTitle.slice(0, 70),
+    metaDescription: metaDescription.slice(0, 320),
+    tags,
+    summary: firstSentence.slice(0, 300)
   };
 }

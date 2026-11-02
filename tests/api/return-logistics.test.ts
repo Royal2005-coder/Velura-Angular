@@ -1,9 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createReturnService } from "../../apps/api/src/returns/return-service.js";
+import { storeReturnEvidence } from "../../apps/api/src/returns/return-evidence.js";
 import type { ReturnRepository } from "../../apps/api/src/returns/return-repository.js";
+import type { HttpRequest } from "../../apps/api/src/types.js";
 import { HttpError } from "../../apps/api/src/http.js";
-
 const RETURN_ID = "50000000-0000-4000-8000-000000000011";
 const context = (roleCode = "admin_operator_cskh_dt") => ({
   authUser: { id: "auth-1" },
@@ -120,5 +121,45 @@ test("order operators cannot create labels or confirm pickup", async () => {
   await assert.rejects(
     () => service.confirmReturnPickup(context("admin_operator_donhang"), RETURN_ID, { expectedVersion: 1, photoUrls: ["storage://bucket/x.jpg"] }),
     (error) => error instanceof HttpError && error.status === 403
+  );
+});
+
+test("storeReturnEvidence accepts image/svg+xml and rejects non-image formats", async () => {
+  const boundary = "---------------------------boundary123";
+  const makeMockReq = (filename: string, mime: string, content: string): HttpRequest => {
+    const body = Buffer.from(
+      `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${filename}"\r\nContent-Type: ${mime}\r\n\r\n${content}\r\n--${boundary}--\r\n`
+    );
+    return {
+      method: "POST",
+      headers: { "content-type": `multipart/form-data; boundary=${boundary}` },
+      async *[Symbol.asyncIterator]() {
+        yield body;
+      }
+    } as unknown as HttpRequest;
+  };
+
+  const svgReq = makeMockReq("bien-lai.svg", "image/svg+xml", "<svg></svg>");
+  try {
+    await storeReturnEvidence({
+      returnId: RETURN_ID,
+      role: "admin",
+      kind: "refund_proof",
+      req: svgReq
+    });
+  } catch (err: unknown) {
+    const status = err instanceof HttpError ? err.status : undefined;
+    assert.notEqual(status, 415, `Expected SVG not to throw 415, got: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  const pdfReq = makeMockReq("doc.pdf", "application/pdf", "%PDF-1.4");
+  await assert.rejects(
+    () => storeReturnEvidence({
+      returnId: RETURN_ID,
+      role: "admin",
+      kind: "refund_proof",
+      req: pdfReq
+    }),
+    (err: unknown) => err instanceof HttpError && err.status === 415
   );
 });

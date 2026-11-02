@@ -134,6 +134,7 @@ export class AdminErpContentPage {
   readonly aiLoading = signal(false);
   readonly aiError = signal<string | null>(null);
   readonly aiNotice = signal<string | null>(null);
+  readonly coverUploading = signal(false);
   private readonly editor = viewChild<ElementRef<HTMLElement>>('editor');
 
   /** Attached shop products. The cache also feeds the picker so chips survive list refreshes. */
@@ -726,6 +727,28 @@ export class AdminErpContentPage {
       error: (error: unknown) => {
         this.aiLoading.set(false);
         this.aiError.set(adminErrorMessage(error, 'AI chưa soạn được gợi ý SEO. Thử lại sau.'));
+      },
+    });
+  }
+
+  /**
+   * Uploads a cover image for the blog post and updates the draft.
+   */
+  onCoverFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    this.coverUploading.set(true);
+    this.api.uploadBlogImage(file).subscribe({
+      next: (res) => {
+        this.coverUploading.set(false);
+        this.draft.update((current) => (current ? { ...current, imageUrl: res.url } : current));
+        this.clearError('imageUrl');
+        this.markDirty();
+      },
+      error: (error: unknown) => {
+        this.coverUploading.set(false);
+        this.errors.update((errors) => ({ ...errors, imageUrl: adminErrorMessage(error, 'Không tải được ảnh đại diện bài viết.') }));
       },
     });
   }

@@ -88,25 +88,77 @@ export async function uploadToSupabaseStorage(
   mimeType: string,
   target: StorageTarget = { bucket: PUBLIC_EVIDENCE_BUCKET, prefix: "evidence" }
 ): Promise<string> {
-  if (!config.supabaseUrl || !config.supabaseAnonKey) {
+  const authKey = getSupabaseServiceKey() || config.supabaseAnonKey;
+  if (!config.supabaseUrl || !authKey) {
     throw new HttpError(503, "STORAGE_NOT_CONFIGURED", "Supabase Storage is not configured");
   }
   const uniqueName = storageName(target.prefix, filename);
-  const uploadUrl = `${config.supabaseUrl}/storage/v1/object/${target.bucket}/${uniqueName}`;
-  const response = await fetch(uploadUrl, {
+  let bucket = target.bucket;
+  let finalPath = uniqueName;
+  const uploadUrl = `${config.supabaseUrl}/storage/v1/object/${bucket}/${uniqueName}`;
+  let response = await fetch(uploadUrl, {
     method: "POST",
     headers: {
-      apikey: config.supabaseAnonKey,
-      authorization: `Bearer ${config.supabaseAnonKey}`,
+      apikey: authKey,
+      authorization: `Bearer ${authKey}`,
       "content-type": mimeType,
       "x-upsert": "true"
     },
     body: buffer
   });
+
   if (!response.ok) {
-    throw new HttpError(502, "STORAGE_UPLOAD_FAILED", `Supabase Storage: ${await storageError(response)}`);
+    const errorMsg = await storageError(response);
+    const isNotFound = response.status === 404 || errorMsg.toLowerCase().includes("not found");
+
+    if (isNotFound && bucket !== PUBLIC_EVIDENCE_BUCKET) {
+      // Try to create the missing bucket via Supabase Storage API
+      const createRes = await fetch(`${config.supabaseUrl}/storage/v1/bucket`, {
+        method: "POST",
+        headers: {
+          apikey: authKey,
+          authorization: `Bearer ${authKey}`,
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({ id: bucket, name: bucket, public: true })
+      }).catch(() => null);
+
+      if (createRes?.ok) {
+        response = await fetch(uploadUrl, {
+          method: "POST",
+          headers: {
+            apikey: authKey,
+            authorization: `Bearer ${authKey}`,
+            "content-type": mimeType,
+            "x-upsert": "true"
+          },
+          body: buffer
+        });
+      }
+
+      // If bucket creation was not possible or upload still failed, fall back to PUBLIC_EVIDENCE_BUCKET
+      if (!response.ok) {
+        bucket = PUBLIC_EVIDENCE_BUCKET;
+        finalPath = storageName(`${target.bucket}/${target.prefix}`, filename);
+        const fallbackUrl = `${config.supabaseUrl}/storage/v1/object/${bucket}/${finalPath}`;
+        response = await fetch(fallbackUrl, {
+          method: "POST",
+          headers: {
+            apikey: authKey,
+            authorization: `Bearer ${authKey}`,
+            "content-type": mimeType,
+            "x-upsert": "true"
+          },
+          body: buffer
+        });
+      }
+    }
+
+    if (!response.ok) {
+      throw new HttpError(502, "STORAGE_UPLOAD_FAILED", `Supabase Storage: ${await storageError(response)}`);
+    }
   }
-  return `${config.supabaseUrl}/storage/v1/object/public/${target.bucket}/${uniqueName}`;
+  return `${config.supabaseUrl}/storage/v1/object/public/${bucket}/${finalPath}`;
 }
 
 /**

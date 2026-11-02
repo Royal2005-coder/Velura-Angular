@@ -56,7 +56,16 @@ export function adminErrorMessage(error: unknown, fallback = 'Không thể gọi
     if (typeof payload?.error === 'object' && payload.error?.message) {
       return payload.error.message;
     }
-    return payload?.error_description || payload?.msg || payload?.message || error.message || fallback;
+    if (payload?.error_description || payload?.msg || payload?.message) {
+      return payload.error_description || payload.msg || payload.message!;
+    }
+    if (error.status === 502 || error.status === 503 || error.status === 504) {
+      return `Dịch vụ máy chủ đang bận hoặc gián đoạn kết nối (${error.status}). Vui lòng thử lại sau ít phút.`;
+    }
+    if (error.status === 0) {
+      return 'Không thể kết nối đến máy chủ. Vui lòng kiểm tra lại đường truyền mạng.';
+    }
+    return error.message || fallback;
   }
   if (error instanceof Error && error.message) {
     return error.message;

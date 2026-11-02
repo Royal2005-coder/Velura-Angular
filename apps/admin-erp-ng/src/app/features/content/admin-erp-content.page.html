@@ -253,10 +253,25 @@
             @if (errors()['excerpt']) {
               <p class="erp-error" role="alert">{{ errors()['excerpt'] }}</p>
             }
-            <label class="erp-field">
-              <span>Ảnh đại diện (https:// hoặc /assets/…)</span>
-              <input class="erp-input" type="text" [value]="form.imageUrl" (input)="onField('imageUrl', $event); markDirty()" />
-            </label>
+            <div class="erp-field">
+              <span>Ảnh đại diện bài viết</span>
+              <div class="custom-file-row">
+                <label class="erp-btn erp-btn--sm custom-file-trigger">
+                  <input type="file" accept="image/*" class="erp-sr-only" (change)="onCoverFileSelected($event)" [disabled]="coverUploading()" />
+                  <span>{{ coverUploading() ? 'Đang tải ảnh…' : (form.imageUrl ? 'Đổi ảnh đại diện' : 'Tải ảnh đại diện lên') }}</span>
+                </label>
+                <span class="custom-file-status" [class.has-file]="!!form.imageUrl">
+                  {{ form.imageUrl ? 'Đã có ảnh đại diện' : 'Chưa chọn ảnh' }}
+                </span>
+              </div>
+              <span class="erp-hint">hoặc nhập link ảnh trực tiếp (https:// hoặc /assets/…):</span>
+              <input class="erp-input" type="text" [value]="form.imageUrl" (input)="onField('imageUrl', $event); markDirty()" placeholder="https://..." />
+              @if (form.imageUrl) {
+                <div class="blog-cover-preview">
+                  <img [src]="form.imageUrl" alt="Preview ảnh đại diện" loading="lazy" />
+                </div>
+              }
+            </div>
             @if (errors()['imageUrl']) {
               <p class="erp-error" role="alert">{{ errors()['imageUrl'] }}</p>
             }

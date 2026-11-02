@@ -1,43 +1,53 @@
-/* Velura ERP — design tokens + shared primitives.
+/* Velura ERP — Feminine Luxury Design System Tokens + Shared Primitives
+   Aligned strictly with docs/ADMIN-DESIGN-SYSTEM.md (Burgundy 700 / Blush Pink / Warm Canvas).
    App-level tokens only; feature styling stays in component styles. */
 
 :root {
-  --erp-bg: #f8fafc;
-  --erp-surface: #ffffff;
-  --erp-surface-muted: #f1f5f9;
-  --erp-line: #e2e8f0;
-  --erp-line-strong: #cbd5e1;
-  --erp-ink: #0f172a;
-  --erp-text: #1e293b;
-  --erp-muted: #64748b;
-  --erp-soft: #94a3b8;
-  /* Brand identity: Velura Maroon (#7a283c) & Rose (#c94f70) */
-  --erp-accent: #7a283c;
-  --erp-accent-strong: #5c1d2c;
-  --erp-accent-soft: #fdf2f4;
-  --erp-accent-text: #7a283c;
-  --erp-sidebar: #0f172a;
-  --erp-sidebar-raised: #1e293b;
-  --erp-sidebar-text: #f8fafc;
-  --erp-sidebar-muted: #94a3b8;
-  --erp-success: #16a34a;
-  --erp-success-soft: #f0fdf4;
-  --erp-warning: #d97706;
-  --erp-warning-soft: #fffbeb;
-  --erp-danger: #dc2626;
-  --erp-danger-soft: #fef2f2;
-  --erp-info: #0284c7;
-  --erp-info-soft: #f0f9ff;
-  --erp-radius-sm: 6px;
-  --erp-radius-md: 10px;
-  --erp-radius-lg: 14px;
-  --erp-shadow-sm: 0 1px 3px 0 rgba(15, 23, 42, 0.05), 0 1px 2px -1px rgba(15, 23, 42, 0.05);
-  --erp-shadow-md: 0 4px 6px -1px rgba(15, 23, 42, 0.07), 0 2px 4px -2px rgba(15, 23, 42, 0.05);
-  --erp-shadow-lg: 0 10px 15px -3px rgba(15, 23, 42, 0.08), 0 4px 6px -4px rgba(15, 23, 42, 0.04);
+  /* Brand / Burgundy & Pink Luxury Palette */
+  --erp-bg: #FCF8F6;                  /* Canvas / Warm background */
+  --erp-surface: #FFFFFF;             /* Ivory / Surface */
+  --erp-surface-muted: #FFF5F7;       /* Pink 50 / Zebra / Soft panel */
+  --erp-surface-selected: #F9E9EE;    /* Pink 100 / Active container */
+  --erp-line: #EBDDE0;                /* Border / Default */
+  --erp-line-strong: #F2CCD7;         /* Rose 200 / Border accent */
+  --erp-ink: #302326;                 /* Text / Primary */
+  --erp-text: #302326;                /* Text / Primary */
+  --erp-muted: #705D60;               /* Text / Secondary */
+  --erp-soft: #9A8588;                /* Text / Muted */
+  --erp-accent: #7D263D;              /* Brand / Burgundy 700 */
+  --erp-accent-strong: #642033;       /* Brand / Burgundy 800 (Hover/Pressed) */
+  --erp-accent-soft: #F9E9EE;         /* Pink 100 / Accent Soft */
+  --erp-accent-border: #F2CCD7;       /* Rose 200 / Soft Border */
+  --erp-sidebar: #2E1B22;             /* Deep Burgundy-charcoal luxury sidebar */
+  --erp-sidebar-raised: #3B232C;      /* Raised sidebar container */
+  --erp-sidebar-text: #FDF9FA;        /* Sidebar primary text */
+  --erp-sidebar-muted: #BAA5AC;       /* Sidebar muted text */
+  --erp-sidebar-active: #7D263D;      /* Burgundy 700 active item */
+
+  /* Semantic Status Tokens (Section 2.2) */
+  --erp-success: #23856D;             /* Success ink */
+  --erp-success-soft: #E8F5F1;        /* Success badge surface */
+  --erp-warning: #B96A25;             /* Warning ink */
+  --erp-warning-soft: #FEF7ED;        /* Warning badge surface */
+  --erp-danger: #B4233D;              /* Danger / Critical ink */
+  --erp-danger-soft: #FDF2F4;         /* Danger badge surface */
+  --erp-info: #4266A8;                /* Info ink */
+  --erp-info-soft: #F0F4FC;           /* Info badge surface */
+  --erp-processing: #7D263D;          /* Processing ink */
+  --erp-processing-soft: #F9E9EE;     /* Processing badge surface */
+
+  /* Radii & Elevations (Section 4) */
+  --erp-radius-sm: 8px;               /* radius-sm: badge, tag, icon */
+  --erp-radius-md: 12px;              /* radius-md: button, input, dropdown */
+  --erp-radius-lg: 16px;              /* radius-lg: KPI card, container */
+  --erp-radius-xl: 24px;              /* radius-xl: modal, drawer */
+  --erp-shadow-sm: 0 2px 8px rgba(73, 31, 43, 0.05);
+  --erp-shadow-md: 0 8px 24px rgba(73, 31, 43, 0.08);
+  --erp-shadow-modal: 0 20px 60px rgba(73, 31, 43, 0.20);
   --erp-sidebar-w: 260px;
-  --erp-topbar-h: 64px;
-  --erp-font: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, sans-serif;
-  --erp-display: 'Plus Jakarta Sans', system-ui, sans-serif;
+  --erp-topbar-h: 76px;
+  --erp-font: 'DM Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --erp-display: 'Playfair Display', Georgia, serif;
 }
 
 *,
@@ -106,8 +116,14 @@ p {
 .erp-card {
   background: var(--erp-surface);
   border: 1px solid var(--erp-line);
-  border-radius: var(--erp-radius-md);
+  border-radius: var(--erp-radius-lg);
   box-shadow: var(--erp-shadow-sm);
+  transition: box-shadow 160ms ease, border-color 160ms ease;
+}
+
+.erp-card:hover {
+  border-color: var(--erp-line-strong);
+  box-shadow: var(--erp-shadow-md);
 }
 
 .erp-btn {
@@ -115,54 +131,52 @@ p {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-height: 36px;
-  padding: 0 14px;
+  min-height: 38px;
+  padding: 0 16px;
   border: 1px solid var(--erp-line-strong);
-  border-radius: 8px;
+  border-radius: var(--erp-radius-md);
   background: var(--erp-surface);
-  color: var(--erp-text);
+  color: var(--erp-accent);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  transition: all 140ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition: background 140ms ease, border-color 140ms ease, color 140ms ease, transform 100ms ease;
 }
 
 .erp-btn:hover:not(:disabled) {
   background: var(--erp-surface-muted);
-  border-color: #94a3b8;
-}
-
-.erp-btn:active:not(:disabled) {
-  transform: translateY(1px);
+  border-color: var(--erp-accent-border);
+  color: var(--erp-accent-strong);
 }
 
 .erp-btn:disabled {
-  opacity: 0.5;
+  opacity: 0.55;
   cursor: not-allowed;
-  box-shadow: none;
 }
 
 .erp-btn--primary {
-  border-color: #631f30;
-  background: linear-gradient(180deg, #872e43 0%, #7a283c 100%);
+  border-color: var(--erp-accent);
+  background: var(--erp-accent);
   color: #fff;
-  box-shadow: 0 1px 2px rgba(122, 40, 60, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  box-shadow: 0 2px 6px rgba(125, 38, 61, 0.25);
 }
 
 .erp-btn--primary:hover:not(:disabled) {
-  background: #631f30;
-  border-color: #4e1825;
-  box-shadow: 0 2px 6px rgba(122, 40, 60, 0.35);
+  border-color: var(--erp-accent-strong);
+  background: var(--erp-accent-strong);
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(100, 32, 51, 0.35);
 }
 
 .erp-btn--ghost {
   border-color: transparent;
   background: transparent;
+  color: var(--erp-text);
 }
 
 .erp-btn--ghost:hover:not(:disabled) {
   background: var(--erp-accent-soft);
+  color: var(--erp-accent);
 }
 
 .erp-btn--danger {
@@ -171,26 +185,35 @@ p {
   color: #fff;
 }
 
+.erp-btn--danger:hover:not(:disabled) {
+  background: #961b31;
+}
+
 .erp-btn--sm {
-  min-height: 30px;
-  padding: 0 10px;
+  min-height: 32px;
+  padding: 0 12px;
   font-size: 12px;
+  border-radius: var(--erp-radius-sm);
 }
 
 .erp-icon-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 38px;
+  height: 38px;
   border: 1px solid var(--erp-line);
-  border-radius: var(--erp-radius-sm);
+  border-radius: var(--erp-radius-md);
   background: var(--erp-surface);
+  color: var(--erp-text);
   cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
 }
 
 .erp-icon-btn:hover {
   background: var(--erp-surface-muted);
+  border-color: var(--erp-line-strong);
+  color: var(--erp-accent);
 }
 
 .erp-field {
@@ -209,12 +232,12 @@ p {
 .erp-select,
 .erp-textarea {
   width: 100%;
-  min-height: 38px;
+  min-height: 40px;
   padding: 8px 12px;
-  border: 1px solid var(--erp-line-strong);
-  border-radius: 8px;
+  border: 1px solid var(--erp-line);
+  border-radius: var(--erp-radius-md);
   background: var(--erp-surface);
-  color: var(--erp-ink);
+  color: var(--erp-text);
   font-size: 13px;
   transition: border-color 140ms ease, box-shadow 140ms ease;
 }
@@ -223,8 +246,8 @@ p {
 .erp-select:focus,
 .erp-textarea:focus {
   border-color: var(--erp-accent);
-  box-shadow: 0 0 0 3px rgba(122, 40, 60, 0.14);
   outline: none;
+  box-shadow: 0 0 0 3px rgba(125, 38, 61, 0.14);
 }
 
 .erp-hint {
@@ -278,4 +301,32 @@ p {
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
   }
+}
+
+@import './styles-velura/dashboard.css';
+
+/* Global SVG line icon styles */
+app-admin-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+}
+
+app-admin-icon svg,
+svg.admin-line-icon,
+.admin-line-icon {
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  display: block;
+  fill: none !important;
+  stroke: currentColor !important;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }

@@ -1,0 +1,1562 @@
+/* ============================================================
+   07. Velura Admin — Visual BI Analytics Dashboard
+   Design System V1: Feminine Luxury, Warm Canvas (#FCF8F6), Crisp Cards (#FFFFFF)
+   Rich Visual Charts inspired by Atlas Labs (Demographics & Attrition)
+   Zero AI emojis, SVG Line Icons only, Perfect 100% Viewport Fit
+   ============================================================ */
+
+app-admin-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+}
+
+app-admin-icon svg,
+svg.admin-line-icon,
+.admin-line-icon {
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  display: block;
+  fill: none !important;
+  stroke: currentColor !important;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.bi-kpi-icon-wrap app-admin-icon,
+.bi-tab-btn app-admin-icon,
+.bi-range-btn app-admin-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.velura-bi-dashboard {
+  padding: 16px 20px 32px;
+  background: var(--color-canvas, #FCF8F6);
+  min-height: 100vh;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 1600px;
+  margin: 0 auto;
+  font-family: "Be Vietnam Pro", "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: var(--color-text-primary, #302326);
+}
+
+@media (max-width: 768px) {
+  app-admin-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+}
+
+app-admin-icon svg,
+svg.admin-line-icon,
+.admin-line-icon {
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  display: block;
+  fill: none !important;
+  stroke: currentColor !important;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.bi-kpi-icon-wrap app-admin-icon,
+.bi-tab-btn app-admin-icon,
+.bi-range-btn app-admin-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.velura-bi-dashboard {
+    padding-top: 16px;
+  }
+}
+
+/* ------------------------------------------------------------
+   Header Toolbar: Title, Switcher & Date Filter (Compact Height)
+   ------------------------------------------------------------ */
+.bi-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-bottom: 2px;
+}
+
+.bi-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.bi-greeting {
+  margin: 0;
+  font-family: "Be Vietnam Pro", "DM Sans", sans-serif;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--color-text-primary, #302326);
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+.bi-subtext {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary, #705D60);
+  font-weight: 400;
+}
+
+.bi-header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* Switcher: 4 Tabs Pill Bar (Quản trị, Kinh doanh, Nhân khẩu học, Đổi trả) */
+.bi-tab-switcher {
+  display: inline-flex;
+  align-items: center;
+  background: #F1F5F9;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  padding: 3px;
+  gap: 3px;
+}
+
+.bi-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #64748B;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.bi-tab-btn app-admin-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.bi-tab-btn:hover {
+  color: #0F172A;
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.bi-tab-btn.is-active {
+  background: #7D263D;
+  color: #FFFFFF;
+  font-weight: 600;
+  box-shadow: 0 2px 6px rgba(125, 38, 61, 0.22);
+}
+
+/* Dropdown Date Filter */
+.bi-range-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 14px;
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  transition: all 0.15s ease;
+}
+
+.bi-range-btn app-admin-icon {
+  width: 14px;
+  height: 14px;
+  color: #7D263D;
+}
+
+.bi-range-btn:hover {
+  border-color: #CBD5E1;
+  background: #F8FAFC;
+}
+
+/* ------------------------------------------------------------
+   Row 1: 4 Top KPI Cards (Clean, Bold, No Sparklines, No Truncation)
+   ------------------------------------------------------------ */
+.bi-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.bi-kpi-card {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  padding: 12px 14px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 4px;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.2s ease;
+  cursor: pointer;
+  box-sizing: border-box;
+  min-height: 94px;
+}
+
+.bi-kpi-card:hover {
+  transform: translateY(-2px);
+  border-color: #CBD5E1;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
+}
+
+.bi-kpi-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.bi-kpi-icon-wrap {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.bi-kpi-icon-wrap app-admin-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.icon-pink { background: #FFE4E6; color: #BE123C; }
+.icon-green { background: #D1FAE5; color: #047857; }
+.icon-blue { background: #DBEAFE; color: #1D4ED8; }
+.icon-amber { background: #FEF3C7; color: #B45309; }
+.icon-purple { background: #EDE9FE; color: #6D28D9; }
+
+.bi-kpi-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #64748B;
+  line-height: 1.25;
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.bi-kpi-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bi-kpi-value {
+  margin: 2px 0 3px 0;
+  font-size: 1.625rem;
+  font-weight: 700;
+  color: #0F172A;
+  font-family: "Be Vietnam Pro", "DM Sans", -apple-system, sans-serif;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1;
+  letter-spacing: -0.02em;
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.bi-kpi-unit {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #94A3B8;
+}
+
+.bi-kpi-trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.6875rem;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.bi-kpi-sub {
+  color: #94A3B8;
+  font-weight: 500;
+}
+
+.bi-trend-good {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 700;
+  font-size: 0.6875rem;
+  background: #ECFDF5;
+  color: #047857;
+  border: 1px solid #D1FAE5;
+}
+
+.bi-trend-warn {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 700;
+  font-size: 0.6875rem;
+  background: #FFF7ED;
+  color: #C2410C;
+  border: 1px solid #FFEDD5;
+}
+
+.bi-trend-danger {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 700;
+  font-size: 0.6875rem;
+  background: #FEF2F2;
+  color: #B91C1C;
+  border: 1px solid #FEE2E2;
+}
+
+.bi-kpi-sub {
+  color: var(--color-text-muted, #9A8588);
+}
+
+/* ------------------------------------------------------------
+   Standard Chart Cards (Atlas Labs Visual Parity)
+   ------------------------------------------------------------ */
+.bi-card {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 14px;
+  padding: 20px 22px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  height: 100%;
+  min-height: 380px;
+}
+
+.bi-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: nowrap;
+}
+
+.bi-card-title-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.bi-card-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.bi-card-icon {
+  width: 15px;
+  height: 15px;
+  color: #7D263D;
+}
+
+.bi-card-title {
+  margin: 0;
+  font-size: 1.0625rem;
+  font-weight: 700;
+  color: #0F172A;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bi-card-subtitle {
+  margin: 0 0 14px 0;
+  font-size: 0.8125rem;
+  color: #64748B;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bi-card-link-clean {
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #7D263D;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 6px;
+  line-height: 1.3;
+  transition: all 0.15s ease;
+}
+
+.bi-card-link-clean:hover {
+  background: #FFF5F7;
+  color: #61182B;
+}
+
+/* Unified Badge Indicators */
+.bi-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.bi-badge--danger {
+  background: #FFE4E6;
+  color: #E11D48;
+  border: 1px solid #FECDD3;
+}
+
+.bi-badge--warning {
+  background: #FEF3C7;
+  color: #D97706;
+  border: 1px solid #FDE68A;
+}
+
+.bi-badge--success {
+  background: #ECFDF5;
+  color: #059669;
+  border: 1px solid #A7F3D0;
+}
+
+.bi-badge--info {
+  background: #EFF6FF;
+  color: #2563EB;
+  border: 1px solid #BFDBFE;
+}
+
+/* Neutral Palette Badge Variants */
+.bi-badge--neutral-danger {
+  background: #FDF2F4;
+  color: #A84454;
+  border: 1px solid #F5D5DB;
+}
+
+.bi-badge--neutral-warning {
+  background: #FDF8F3;
+  color: #C07D3E;
+  border: 1px solid #F7E5D4;
+}
+
+.bi-badge--neutral-success {
+  background: #F2F8F5;
+  color: #2E7D65;
+  border: 1px solid #D5EBE2;
+}
+
+.bi-badge--neutral-info {
+  background: #F2F5F9;
+  color: #4F6B8A;
+  border: 1px solid #D7E1EC;
+}
+
+/* ------------------------------------------------------------
+   Unified Card Legend in HTML (Standard Across All Widgets)
+   ------------------------------------------------------------ */
+.bi-card-legend {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex-wrap: nowrap;
+  gap: 16px;
+  font-size: 0.75rem;
+  color: #475569;
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px dashed #E2E8F0;
+  white-space: nowrap;
+  min-height: 24px;
+  box-sizing: border-box;
+}
+
+.bi-card-legend .bi-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.bi-card-legend .bi-legend-item:hover {
+  opacity: 0.75;
+}
+
+.bi-card-legend .bi-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-block;
+}
+
+/* ------------------------------------------------------------
+   Unified Card Footer Note in HTML (Standard Across All Widgets)
+   ------------------------------------------------------------ */
+.bi-card-footer-note {
+  margin-top: 10px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  font-size: 0.75rem;
+  color: #475569;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  line-height: 1.4;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.bi-card-footer-note strong {
+  font-weight: 600;
+}
+
+.bi-card-link {
+  font-size: 0.71875rem;
+  font-weight: 600;
+  color: #7D263D;
+  background: #FFF5F7;
+  border: 1px solid #F2CCD7;
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.bi-card-link:hover {
+  background: #7D263D;
+  color: #FFFFFF;
+  border-color: #7D263D;
+  text-decoration: none;
+}
+
+/* Row 2: 60% Area Chart + 40% Donut Chart */
+.bi-row-split {
+  display: grid;
+  grid-template-columns: 1.55fr 1fr;
+  gap: 12px;
+}
+
+/* Row 3: 50% - 50% Twin Advanced BI Charts */
+.bi-row-twin {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: stretch;
+  margin-bottom: 16px;
+}
+
+/* Full Width Single Widget Row */
+.bi-row-full {
+  display: block;
+  width: 100%;
+  margin-bottom: 16px;
+}
+
+/* Chart Filter Tabs (Square-cornered, Subtle, Single-row) */
+.bi-chart-filters {
+  display: inline-flex;
+  align-items: center;
+  background: var(--color-pink-100, #F9E9EE);
+  border: 1px solid var(--color-rose-200, #F2CCD7);
+  border-radius: 0;
+  padding: 1px;
+  gap: 2px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.bi-filter-pill {
+  border: 0;
+  background: transparent;
+  padding: 2px 8px;
+  font-size: 0.625rem;
+  font-weight: 500;
+  color: var(--color-text-secondary, #705D60);
+  border-radius: 0;
+  cursor: pointer;
+  white-space: nowrap;
+  line-height: 1.2;
+  transition: all 0.15s ease;
+}
+
+.bi-filter-pill:hover {
+  color: var(--color-brand-700, #7D263D);
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.bi-filter-pill.is-active {
+  background: #FFFFFF;
+  color: var(--color-brand-700, #7D263D);
+  font-weight: 600;
+  border-radius: 0;
+  box-shadow: 0 1px 2px rgba(125, 38, 61, 0.12);
+}
+
+/* Modern Harmonious Segmented Control for Q2 (Atlas & Mockup Parity) */
+.bi-segmented-control {
+  display: flex;
+  background: #F1F5F9;
+  border: 1px solid #E2E8F0;
+  border-radius: 9px;
+  padding: 3px;
+  gap: 3px;
+  margin-bottom: 14px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.bi-segmented-item {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 5px 8px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #64748B;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  line-height: 1.3;
+  transition: all 0.15s ease;
+  text-align: center;
+}
+
+.bi-segmented-item:hover {
+  color: #0F172A;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.bi-segmented-item.is-active {
+  background: #FFFFFF;
+  color: #7D263D;
+  font-weight: 700;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+/* Donut Chart Layout */
+.bi-donut-layout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 4px 0;
+}
+
+.bi-donut-svg-wrap {
+  position: relative;
+  width: 115px;
+  height: 115px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.bi-donut-center-text {
+  position: absolute;
+  text-align: center;
+  pointer-events: none;
+}
+
+.bi-donut-center-val {
+  font-size: 1.1875rem;
+  font-weight: 700;
+  color: var(--color-text-primary, #302326);
+  font-family: "Be Vietnam Pro", "DM Sans", sans-serif;
+  line-height: 1;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.bi-donut-center-lbl {
+  font-size: 0.65625rem;
+  color: var(--color-text-secondary, #705D60);
+  margin-top: 2px;
+}
+
+.bi-donut-legend {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bi-donut-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: var(--color-text-primary, #302326);
+}
+
+.bi-donut-row-left {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.bi-donut-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.bi-donut-pct {
+  font-weight: 600;
+  color: var(--color-text-secondary, #705D60);
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.bi-donut-cnt {
+  font-weight: 700;
+  color: var(--color-text-primary, #302326);
+  font-variant-numeric: tabular-nums lining-nums;
+  min-width: 36px;
+  text-align: right;
+}
+
+/* ------------------------------------------------------------
+   Advanced Visual Charts (Bar, Combo, 100% Stacked)
+   ------------------------------------------------------------ */
+.bi-bar-chart-wrap {
+  width: 100%;
+  height: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.bi-chart-subtitle {
+  font-size: 0.6875rem;
+  color: var(--color-text-muted, #9A8588);
+  margin: -6px 0 8px 0;
+}
+
+/* Legend in charts */
+.bi-chart-legend-top {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 0.75rem;
+  color: #475569;
+  margin-bottom: 12px;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+.bi-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.bi-legend-item:hover {
+  opacity: 0.75;
+}
+
+.bi-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-block;
+}
+
+.bi-legend-box {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-block;
+}
+
+/* Horizontal Ranking Bars for Best Sellers / Regions */
+.bi-ranking-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.bi-ranking-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.75rem;
+}
+
+.bi-rank-badge {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--color-brand-700, #7D263D);
+  background: var(--color-pink-100, #F9E9EE);
+  padding: 1px 6px;
+  border-radius: 4px;
+  min-width: 20px;
+  text-align: center;
+}
+
+.bi-rank-name {
+  width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.bi-rank-bar-bg {
+  flex: 1;
+  height: 8px;
+  background: #F4ECEE;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.bi-rank-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.bi-rank-val {
+  min-width: 70px;
+  text-align: right;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums lining-nums;
+  color: var(--color-text-primary, #302326);
+}
+
+/* ------------------------------------------------------------
+   Modal Drill-down & Action Dialog System
+   ------------------------------------------------------------ */
+.velura-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(48, 35, 38, 0.45);
+  backdrop-filter: blur(4px);
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.velura-drill-modal {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  box-shadow: 0 20px 48px rgba(15, 23, 42, 0.16);
+  width: min(1040px, 95vw);
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: modalFadeIn 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes modalFadeIn {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.velura-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--color-border, #EBDDE0);
+  background: var(--color-pink-50, #FFF5F7);
+}
+
+.velura-modal-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.velura-modal-title h3 {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--color-text-primary, #302326);
+}
+
+.velura-modal-tag {
+  font-size: 0.65625rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  background: var(--color-brand-700, #7D263D);
+  color: #FFFFFF;
+}
+
+.velura-modal-close {
+  background: transparent;
+  border: 0;
+  font-size: 1.25rem;
+  color: var(--color-text-muted, #9A8588);
+  cursor: pointer;
+  line-height: 1;
+}
+
+.velura-modal-close:hover {
+  color: var(--color-text-primary, #302326);
+}
+
+.velura-modal-nav {
+  display: flex;
+  border-bottom: 1px solid var(--color-border, #EBDDE0);
+  padding: 0 20px;
+  background: #FFFFFF;
+  gap: 8px;
+}
+
+.velura-modal-tab-btn {
+  padding: 10px 14px;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-text-secondary, #705D60);
+  cursor: pointer;
+}
+
+.velura-modal-tab-btn.is-active {
+  color: var(--color-brand-700, #7D263D);
+  border-bottom-color: var(--color-brand-700, #7D263D);
+  font-weight: 600;
+}
+
+.velura-modal-body {
+  padding: 18px 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.velura-insight-box {
+  background: var(--color-pink-50, #FFF5F7);
+  border: 1px solid var(--color-rose-200, #F2CCD7);
+  border-radius: 10px;
+  padding: 12px 16px;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--color-text-primary, #302326);
+}
+
+.velura-insight-box strong {
+  color: var(--color-brand-700, #7D263D);
+  display: block;
+  margin-bottom: 4px;
+}
+
+.velura-insight-box p {
+  margin: 0;
+}
+
+.velura-action-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.velura-action-table th {
+  text-align: left;
+  padding: 8px 10px;
+  background: #F9F5F6;
+  border-bottom: 1px solid var(--color-border, #EBDDE0);
+  color: var(--color-text-secondary, #705D60);
+  font-weight: 600;
+  font-size: 0.75rem;
+}
+
+.velura-action-table td {
+  padding: 10px;
+  border-bottom: 1px solid var(--color-border, #EBDDE0);
+  vertical-align: middle;
+}
+
+.velura-action-btn {
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.15s ease;
+}
+
+.velura-action-btn--primary {
+  background: var(--color-brand-700, #7D263D);
+  color: #FFFFFF;
+}
+
+.velura-action-btn--primary:hover {
+  background: var(--color-brand-800, #642033);
+}
+
+.velura-action-btn--outline {
+  background: #FFFFFF;
+  border-color: var(--color-border, #EBDDE0);
+  color: var(--color-text-primary, #302326);
+}
+
+.velura-action-btn--outline:hover {
+  background: var(--color-pink-50, #FFF5F7);
+}
+
+.velura-confirm-dialog {
+  background: #FFFFFF;
+  border: 1px solid var(--color-border, #EBDDE0);
+  border-radius: var(--radius-lg, 14px);
+  box-shadow: 0 16px 36px rgba(73, 31, 43, 0.2);
+  width: min(440px, 90vw);
+  overflow: hidden;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.velura-confirm-head strong {
+  font-size: 0.9375rem;
+  color: var(--color-text-primary, #302326);
+}
+
+.velura-confirm-body p {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--color-text-secondary, #705D60);
+}
+
+.velura-confirm-body code {
+  background: var(--color-pink-50, #FFF5F7);
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: var(--color-brand-700, #7D263D);
+  font-weight: 600;
+}
+
+.velura-confirm-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.velura-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: var(--color-brand-800, #642033);
+  color: #FFFFFF;
+  padding: 10px 16px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.8125rem;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+  z-index: 600;
+  animation: toastSlideUp 0.2s ease;
+}
+
+@keyframes toastSlideUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.velura-toast-close {
+  background: transparent;
+  border: 0;
+  color: #FFFFFF;
+  font-size: 1.125rem;
+  cursor: pointer;
+  line-height: 1;
+  opacity: 0.8;
+}
+
+.velura-toast-close:hover {
+  opacity: 1;
+}
+
+/* ------------------------------------------------------------
+   Responsive adjustments
+   ------------------------------------------------------------ */
+@media (max-width: 1200px) {
+  .bi-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .bi-row-split,
+  .bi-row-twin {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .bi-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+  .bi-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .bi-tab-switcher {
+    overflow-x: auto;
+  }
+}
+
+/* ------------------------------------------------------------
+   Power BI Corporate Alert Banner (Widget Q1 & Bottom Alignment)
+   ------------------------------------------------------------ */
+.bi-q1-alert-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: #FEF2F2;
+  border: 1px solid #FEE2E2;
+  border-radius: 6px;
+  padding: 6px 12px;
+  margin-top: 10px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.bi-q1-alert-banner:hover {
+  background: #FEE2E2;
+  border-color: #FECACA;
+}
+
+.bi-q1-alert-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #DC2626;
+  flex-shrink: 0;
+}
+
+.bi-q1-alert-text {
+  font-size: 0.6875rem;
+  color: #7F1D1D;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bi-q1-alert-text strong {
+  color: #991B1B;
+}
+
+.bi-q1-alert-danger {
+  color: #DC2626;
+  font-weight: 700;
+}
+
+.bi-q1-alert-link {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: #DC2626;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ------------------------------------------------------------
+   Power BI Corporate Bottom Legend (Horizontal Stacked Bar)
+   ------------------------------------------------------------ */
+.bi-chart-legend-bottom {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  font-size: 0.6875rem; /* 11px nhỏ gọn thanh lịch */
+  color: #6B7280;
+  margin-top: 8px;
+  margin-bottom: 4px;
+  padding-left: 2px;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+.bi-chart-legend-bottom .bi-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 400; /* Regular, không đậm to thô */
+  cursor: pointer;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+
+.bi-chart-legend-bottom .bi-legend-text {
+  font-size: 0.6875rem; /* 11px */
+  color: #6B7280;
+  font-weight: 400;
+}
+
+.bi-chart-legend-bottom .bi-legend-item:hover .bi-legend-text {
+  color: #111827;
+  font-weight: 500;
+}
+
+.bi-chart-legend-bottom .bi-legend-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-block;
+}
+
+/* ------------------------------------------------------------
+   Ant Design Pro Inspired Widget Elements (Q1 Parity)
+   ------------------------------------------------------------ */
+.bi-tag-status {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 4px;
+  background: #FFF1F0;
+  color: #CF1322;
+  border: 1px solid #FFA39E;
+  margin-left: 8px;
+}
+
+.bi-mini-stat-strip {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 8px 12px;
+  background: #F8FAFC;
+  border-radius: 6px;
+  border: 1px solid #EDF2F7;
+}
+
+.bi-mini-stat-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.bi-mini-stat-item:hover {
+  opacity: 0.85;
+}
+
+.bi-mini-stat-label {
+  font-size: 0.6875rem;
+  color: #64748B;
+  font-weight: 500;
+}
+
+.bi-mini-stat-val {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: #0F172A;
+  font-variant-numeric: tabular-nums;
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.bi-mini-stat-val small {
+  font-size: 0.6875rem;
+  font-weight: 400;
+  color: #94A3B8;
+}
+
+.bi-mini-stat-val.is-critical {
+  color: #DC2626;
+}
+
+.bi-mini-stat-val.is-safe {
+  color: #16A34A;
+}
+
+.bi-widget-footer-alert {
+  margin-top: 10px;
+  padding: 8px 12px;
+  background: #FFF5F7;
+  border: 1px solid #FCD4DE;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.bi-widget-footer-alert:hover {
+  background: #FEECEF;
+  border-color: #F8B4C4;
+}
+
+.bi-widget-footer-alert-icon {
+  font-size: 0.8125rem;
+  flex-shrink: 0;
+}
+
+.bi-widget-footer-alert-text {
+  font-size: 0.6875rem;
+  color: #7D263D;
+  line-height: 1.35;
+  flex: 1;
+}
+
+.bi-widget-footer-alert-text strong {
+  color: #B4233D;
+  font-weight: 700;
+}
+
+/* Clean text link for card headers matching exact mockup */
+.bi-card-link-clean {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #7D263D;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  text-decoration: none;
+  transition: opacity 0.15s ease;
+  white-space: nowrap;
+}
+.bi-card-link-clean:hover {
+  opacity: 0.8;
+  text-decoration: underline;
+}
+
+
+/* ==========================================================================
+   SLA VẬN HÀNH THEO VÙNG MIỀN (CSS STACKED BAR CHART & CHỐNG GIẬT UX)
+   ========================================================================== */
+.bi-stacked-bar-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  justify-content: center;
+}
+
+.bi-sla-row,
+.bi-chart-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.bi-sla-label,
+.bi-chart-label {
+  width: 110px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #334155;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+}
+
+.bi-bar-track {
+  flex: 1;
+  display: flex;
+  height: 22px;
+  background-color: #F1F5F9;
+  border-radius: 4px;
+  overflow: hidden;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.bi-bar-seg {
+  height: 100%;
+  transition: width 0.3s ease-in-out;
+  border-right: 1.5px solid #FFFFFF;
+}
+
+.bi-bar-seg:last-child {
+  border-right: none;
+}
+
+.bi-sla-pct,
+.bi-chart-val {
+  width: 55px;
+  text-align: right;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: #64748B;
+  flex-shrink: 0;
+}
+
+.text-danger {
+  color: #DC2626;
+}
+
+.text-success {
+  color: #059669;
+}
+
+/* Màu sắc phân khúc SLA (chuẩn trung tính hài hòa) */
+.bi-bar-seg.bg-green-700 { background-color: #4F6B8A; }
+.bi-bar-seg.bg-emerald-500 { background-color: #2E7D65; }
+.bi-bar-seg.bg-amber-500 { background-color: #C07D3E; }
+.bi-bar-seg.bg-rose-600 { background-color: #A84454; }
+
+/* Legend giải thích 4 phân khúc */
+.bi-sla-legend {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: nowrap;
+  gap: 6px;
+  font-size: 0.75rem;
+  color: #475569;
+  margin-top: 16px;
+  padding-top: 10px;
+  border-top: 1px dashed #E2E8F0;
+  white-space: nowrap;
+}
+
+.bi-sla-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.bi-sla-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.bi-sla-dot.bg-green-700 { background-color: #4F6B8A; }
+.bi-sla-dot.bg-emerald-500 { background-color: #2E7D65; }
+.bi-sla-dot.bg-amber-500 { background-color: #C07D3E; }
+.bi-sla-dot.bg-rose-600 { background-color: #A84454; }
+
+/* Dual-Timestamp Footer */
+.bi-footer-timestamps {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  font-size: 0.6875rem;
+  color: #94A3B8;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed #E2E8F0;
+}
+
+/* Micro Spinner chỉ hiện khi silent background polling */
+.bi-spinner-micro {
+  width: 12px;
+  height: 12px;
+  border: 2px solid #CBD5E1;
+  border-top-color: #7D263D;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Skeleton Loading Shimmer (chỉ kích hoạt ở lần đầu vào trang) */
+.bi-skeleton-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.bi-skeleton-bar {
+  height: 24px;
+  background: linear-gradient(90deg, #F1F5F9 25%, #E2E8F0 50%, #F1F5F9 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 4px;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.bi-empty-state {
+  padding: 28px 16px;
+  text-align: center;
+  color: #94A3B8;
+  font-size: 0.875rem;
+}

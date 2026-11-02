@@ -1427,7 +1427,99 @@ export interface AdminChatOriginal {
 
 export type AdminInsightRange = 'day' | 'week' | 'month';
 
+export interface AdminVoiceInsights {
+  range: string;
+  periodLabel: string;
+  coverage: {
+    deliveredOrders: number;
+    reviewedOrders: number;
+    silentOrders: number;
+    coveragePct: number;
+  };
+  productReaction: {
+    reviewCount: number;
+    avgRating: number | null;
+    loved: Array<{ product_id: string; name: string; sku: string; reviews: number; avgRating: number; lowStarCount: number }>;
+    complained: Array<{ product_id: string; name: string; sku: string; reviews: number; avgRating: number; lowStarCount: number }>;
+  };
+  serviceQuality: {
+    tickets: number;
+    closedTickets: number;
+    csatCount: number;
+    csatAvg: number | null;
+    ticketsWithoutCsat: number;
+    returns: number;
+    returnRatePct: number;
+    returnReasons?: Array<{ reason: string; count: number }>;
+  };
+  regions?: Array<{ name: string; count: number }>;
+  orderFriction: {
+    orderCount: number;
+    completedOrders: number;
+    cancelledOrders: number;
+    failedDelivery: number;
+    cancelReasons: Array<{ reason: string; count: number }>;
+  };
+}
+
+export type AdminInsightSeverity = 'critical' | 'high' | 'watch' | 'ok';
+
+export type AdminManagementGroupId = 'AD_DB_01' | 'AD_DB_02' | 'AD_DB_03' | 'AD_DB_04' | 'AD_DB_05' | 'AD_DB_06' | 'AD_DB_07' | 'AD_DB_08' | 'AD_DB_09';
+
+export interface AdminManagementAction {
+  label: string;
+  route: string;
+  query?: Record<string, string>;
+  module: 'orders' | 'returns' | 'products' | 'reviews' | 'promotions' | 'pricing' | 'accounts';
+}
+
+export interface AdminManagementGroup {
+  id: AdminManagementGroupId;
+  title: string;
+  availability: 'ready' | 'insufficient_data' | 'oltp_fallback';
+  dataNote?: string;
+  severity: AdminInsightSeverity;
+  phenomenon?: string;
+  scope?: string;
+  magnitude?: string;
+  consequence?: string;
+  action?: AdminManagementAction;
+}
+
+export interface AdminManagementReport {
+  groups: AdminManagementGroup[];
+  lastSyncedAt?: string;
+}
+
+export interface AdminInsightQuestion {
+  id: string;
+  question: string;
+  answer: string;
+  severity: AdminInsightSeverity;
+  evidence: Array<{ label: string; value: string }>;
+}
+
+export interface AdminInsightAction {
+  id: string;
+  title: string;
+  reason: string;
+  route: string;
+  routeLabel: string;
+  severity: AdminInsightSeverity;
+  clientSteer: string;
+}
+
+export interface AdminInsightBoardModel {
+  scope: string;
+  range: string;
+  periodLabel: string;
+  headline: string;
+  questions: AdminInsightQuestion[];
+  actions: AdminInsightAction[];
+}
+
 export interface AdminDashboardSummary {
+  management?: AdminManagementReport;
   operations: {
     pendingOrders: number;
     paymentErrors: number;
@@ -1443,7 +1535,7 @@ export interface AdminDashboardSummary {
     completionRate: number | null;
     promotionRevenue: number | null;
     promotionRevenueShare: number | null;
-    pendingReviews: number | null;
+    pendingReviews: number;
     comparisons?: {
       revenuePct?: number | null;
       orderCountPct?: number | null;
@@ -1462,17 +1554,26 @@ export interface AdminDashboardSummary {
       lowStock?: boolean;
     }>;
     revenueTrend?: Array<{ date: string; dateStr: string; revenue: number; orderCount: number }>;
+    insights?: Record<string, unknown>;
   };
   recentLogs?: AdminAuditRow[];
   periodDays?: number;
   range?: string;
+  from?: string;
+  to?: string;
+  filters?: { categoryId?: string | null; productId?: string | null };
   meta?: {
     generatedAt?: string | null;
+    definitions?: Record<string, string>;
     source?: string;
     freshness?: 'fresh' | 'stale' | 'unavailable';
     sourceWarning?: string | null;
     validated?: boolean;
+    samples?: { reviews?: number; csat?: number; deliveredOrders?: number };
+    reliable?: { reviews?: boolean; csat?: boolean; complete?: boolean };
   };
+  voice?: AdminVoiceInsights | null;
+  board?: AdminInsightBoardModel;
 }
 
 /**
@@ -1553,6 +1654,17 @@ export class AdminErpApiService {
     return this.http.get<AdminDashboardSummary>(`${this.baseUrl}/api/v1/admin/dashboard`, {
       params: this.params(params),
     });
+  }
+
+  /**
+   * Recommends operational and business insights for the dashboard.
+   */
+  recommendInsights(params: Record<string, string> = {}): Observable<{ source?: string; lines?: string[]; narrative?: string[] }> {
+    return this.http.post<{ source?: string; lines?: string[]; narrative?: string[] }>(
+      `${this.baseUrl}/api/v1/admin/insights/recommend`,
+      {},
+      { params: this.params(params) },
+    );
   }
 
   /**

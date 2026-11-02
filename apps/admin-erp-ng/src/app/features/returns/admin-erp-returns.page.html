@@ -4,13 +4,6 @@
   subtitle="Hàng đợi hoàn tiền theo kênh thanh toán, kiểm hàng tại kho, phiếu hỗ trợ và hội thoại khách hàng trong một workspace."
 >
   <div actions>
-    <button class="erp-btn erp-btn--sm" type="button" (click)="startCarrierDemo()" [disabled]="!canOperate()">
-      Demo ĐVVC lấy hàng
-    </button>
-    <button class="erp-btn erp-btn--sm" type="button" (click)="scanOpen.set(true)">
-      <app-erp-icon name="box" [size]="'15'" />
-      Quét QR phiếu trả
-    </button>
     <button class="erp-btn erp-btn--sm" type="button" (click)="reload()" [disabled]="loading() && tab() !== 'chat'">
       <app-erp-icon name="refresh" [size]="'15'" />
       Làm mới

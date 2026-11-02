@@ -327,13 +327,18 @@ export interface VoucherCart {
  * định, vì engine không có dòng hàng để xét.
  */
 async function readCart(rawItems: unknown, rawOrderValue: unknown): Promise<{ orderValue: number; cart: VoucherCart | null }> {
-  const items = parseCartItems(rawItems);
-  if (!items.length) return { orderValue: toAmount(rawOrderValue), cart: null };
-  const loaded = await loadVoucherCart(items);
-  return {
-    orderValue: loaded.orderValue,
-    cart: { lines: loaded.lines, categoryNameById: loaded.categoryNameById }
-  };
+  try {
+    const items = parseCartItems(rawItems);
+    if (!items.length) return { orderValue: toAmount(rawOrderValue), cart: null };
+    const loaded = await loadVoucherCart(items);
+    return {
+      orderValue: loaded.orderValue || toAmount(rawOrderValue),
+      cart: { lines: loaded.lines, categoryNameById: loaded.categoryNameById }
+    };
+  } catch (err: unknown) {
+    console.warn("[vouchers] readCart evaluation fallback:", err);
+    return { orderValue: toAmount(rawOrderValue), cart: null };
+  }
 }
 
 function readQueryParam(req: HttpRequest, key: string): string | null {

@@ -1,16 +1,16 @@
 {
   "mode": "direct-mvp",
-  "source_sha": "70a94d3c9b9b466982f98411cd1803782a68e77b",
-  "run_id": 41439662735,
+  "source_sha": "2fd464ddb5c96531da226f225458090f15023595",
+  "run_id": 41448517428,
   "run_attempt": 1,
   "release": {
-    "revision": "70a94d3c9b9b466982f98411cd1803782a68e77b",
-    "buildId": "70a94d3c9b9b466982f98411cd1803782a68e77b-41439662735-1",
+    "revision": "2fd464ddb5c96531da226f225458090f15023595",
+    "buildId": "2fd464ddb5c96531da226f225458090f15023595-41448517428-1",
     "images": {
-      "api": "ghcr.io/royal2005-coder/velura-api@sha256:4b194d20488594b8cdc1ef3594e45ba9eb15462b4192a0655078800f34c13683",
-      "storefront": "ghcr.io/royal2005-coder/velura-storefront@sha256:9b4908b4b667bf50dec8417c34b65e2e64afadd3d3bc07079cd0db33d5fa2a38",
-      "admin": "ghcr.io/royal2005-coder/velura-admin@sha256:fab8fe5aa8f2db986c509fdc610c7fd4f2bc2f51cdcad7fd73431cc660172701",
-      "admin-erp": "ghcr.io/royal2005-coder/velura-admin-erp@sha256:d9aa5d878acec2a7a9245271c4bfa48d79b5a90e9d1cfa2db934f201daea6c03"
+      "api": "ghcr.io/royal2005-coder/velura-api@sha256:7dbfd68918423b1d6ccfa21889537fc54f0dfde19c9191710abd89aa315fcf07",
+      "storefront": "ghcr.io/royal2005-coder/velura-storefront@sha256:1f5a49fe63f568a56ea457741a792064a3b6db1badb8d1d1b6f090ea167988a7",
+      "admin": "ghcr.io/royal2005-coder/velura-admin@sha256:a790e10aeaa3ef9a4bb7dc398f50fa6a9dff3925d0afd776898de444c4602bcc",
+      "admin-erp": "ghcr.io/royal2005-coder/velura-admin-erp@sha256:581cc81ae55b89134b288ef0adb742c3751ed2c034b2828d8f67f9571bc580f6"
     }
   }
 }

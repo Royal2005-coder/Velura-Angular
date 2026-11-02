@@ -844,7 +844,18 @@
                   <div class="refund-bank-box">
                     <strong>Thông tin nhận tiền hoàn COD (có thể bổ sung sau)</strong>
                     <small>Chưa bắt buộc khi gửi yêu cầu; cần tài khoản hợp lệ trước khi Velura hoàn tiền.</small>
-                    <label class="field">Ngân hàng<input name="refundBankName" [(ngModel)]="bankName" placeholder="Ví dụ: Vietcombank" /></label>
+                    <label class="field">
+                      Ngân hàng
+                      <select name="refundBankName" [(ngModel)]="bankName" required>
+                        <option value="">-- Chọn ngân hàng thụ hưởng --</option>
+                        @for (b of banks; track b.code) {
+                          <option [value]="b.shortName">{{ b.shortName }} ({{ b.name }})</option>
+                        }
+                        @if (bankName && !isStandardBank(bankName)) {
+                          <option [value]="bankName">{{ bankName }}</option>
+                        }
+                      </select>
+                    </label>
                     <label class="field">Số tài khoản<input name="refundBankAccount" [(ngModel)]="bankAccount" inputmode="numeric" pattern="[0-9]{6,20}" placeholder="Nhập 6–20 chữ số" /></label>
                     <label class="field">Tên chủ tài khoản<input name="refundBankHolder" [(ngModel)]="bankHolder" placeholder="Nhập đúng tên trên tài khoản" /></label>
                   </div>
@@ -1124,9 +1135,19 @@
                     @if (request.refundReceiver?.supplementRequest) { <div class="muted">CSKH yêu cầu bổ sung thông tin nhận hoàn tiền: {{ request.refundReceiver?.supplementRequest }}</div> }
                     @if (request.refundReceiver?.status === 'invalid') { <div class="muted">Thông tin nhận hoàn tiền chưa hợp lệ.</div> }
                     <form (ngSubmit)="saveBank()">
+                      <label class="field">
+                        Ngân hàng
+                        <select name="bank" [(ngModel)]="bankName" required>
+                          <option value="">-- Chọn ngân hàng thụ hưởng --</option>
+                          @for (b of banks; track b.code) {
+                            <option [value]="b.shortName">{{ b.shortName }} ({{ b.name }})</option>
+                          }
+                          @if (bankName && !isStandardBank(bankName)) {
+                            <option [value]="bankName">{{ bankName }}</option>
+                          }
+                        </select>
+                      </label>
                       <label class="field"
-                        >Ngân hàng<input name="bank" [(ngModel)]="bankName" required /></label
-                      ><label class="field"
                         >Số tài khoản<input
                           name="account"
                           inputmode="numeric"

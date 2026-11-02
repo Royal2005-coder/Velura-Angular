@@ -386,40 +386,40 @@
                     <button class="text-button" type="button" (click)="removeLine(line)" [disabled]="busy() || resumeLocked() || !!order()">Xóa cả bộ</button>
                   </div>
                   @if (line.sub_items && line.sub_items.length) {
-                    <div class="checkout-combo-subitems u-inline-1c3941b143">
-                      <div class="u-inline-f3bc27328f">Chi tiết các món trong set (chọn size / màu):</div>
-                      @for (sub of line.sub_items; track sub.product_id) {
-                        <div class="u-inline-67b90801e6">
-                          <div class="u-inline-191adae1ee">
-                            <img [src]="image(sub.product_image)" [alt]="sub.product_name" class="u-inline-04ff83840c" />
-                            <div class="u-inline-62b2fca2a4">
-                              <span class="u-inline-9af43b0a0f">
+                    <div class="checkout-combo-subitems">
+                      <div class="checkout-combo-title">Chi tiết các món trong set (chọn size / màu):</div>
+                      <div class="checkout-combo-grid">
+                        @for (sub of line.sub_items; track sub.product_id) {
+                          <div class="checkout-combo-card">
+                            <img [src]="image(sub.product_image)" [alt]="sub.product_name" class="checkout-combo-card__img" />
+                            <div class="checkout-combo-card__body">
+                              <span class="checkout-combo-card__name" [title]="sub.product_name">
                                 {{ sub.product_name }}
                               </span>
-                              <span class="u-inline-11b940a99f">
-                                {{ sub.color || 'Mặc định' }} / {{ displaySize(sub.size) || 'Free' }}
-                              </span>
+                              @if (getSubVariantChoices(sub).length > 1) {
+                                <div class="checkout-combo-card__select-wrap">
+                                  <select
+                                    [ngModel]="sub.variant_id"
+                                    (ngModelChange)="editComboSubVariant(line, sub, $event)"
+                                    [disabled]="busy() || resumeLocked() || !!order()"
+                                    [attr.aria-label]="'Đổi biến thể ' + sub.product_name"
+                                    class="checkout-combo-card__select">
+                                    @for (v of getSubVariantChoices(sub); track v.variant_id) {
+                                      <option [value]="v.variant_id" [disabled]="v.available < line.quantity">
+                                        {{ v.color || 'Mặc định' }} / {{ displaySize(v.size) || 'Free' }}{{ v.available < line.quantity ? ' · Hết' : '' }}
+                                      </option>
+                                    }
+                                  </select>
+                                </div>
+                              } @else {
+                                <span class="checkout-combo-card__meta">
+                                  {{ sub.color || 'Mặc định' }} / {{ displaySize(sub.size) || 'Free' }}
+                                </span>
+                              }
                             </div>
                           </div>
-                          @if (getSubVariantChoices(sub).length > 1) {
-                            <label class="u-inline-631a27b934">
-                              <select
-                                [ngModel]="sub.variant_id"
-                                (ngModelChange)="editComboSubVariant(line, sub, $event)"
-                                [disabled]="busy() || resumeLocked() || !!order()"
-                               
-                                [attr.aria-label]="'Đổi biến thể ' + sub.product_name"
-                               class="u-inline-716bc3e785">
-                                @for (v of getSubVariantChoices(sub); track v.variant_id) {
-                                  <option [value]="v.variant_id" [disabled]="v.available < line.quantity">
-                                    {{ v.color || 'Mặc định' }} / {{ displaySize(v.size) || 'Free' }}{{ v.available < line.quantity ? ' · Hết' : '' }}
-                                  </option>
-                                }
-                              </select>
-                            </label>
-                          }
-                        </div>
-                      }
+                        }
+                      </div>
                     </div>
                   }
                 } @else {
@@ -449,18 +449,66 @@
           @if (quoteError()) { <p role="alert" class="error">{{ quoteError() }}</p><button type="button" (click)="refreshQuote()">Thử tải lại</button> }
           <app-voucher-wallet [orderValue]="quote().subtotal" [shippingFee]="quote().shipping" [cartItems]="lines()" [autoApply]="!voucherDeclined()" [preferred]="preferredVoucher" (applied)="selectVoucher($event)" (declined)="declineVoucher($event)" />
           @if (member()) {
-            <section aria-labelledby="member-points-label">
-              <label id="member-points-label" for="member-points">Dùng điểm thành viên (1 điểm = 1.000đ)</label>
-              <input id="member-points" name="memberPoints" type="number" min="0" step="1"
-                [max]="serverQuote()?.loyalty?.max_points ?? 0" [value]="requestedPoints()"
-                [disabled]="busy() || quoteLoading() || !serverQuote()?.loyalty?.spending_enabled"
-                (input)="setPoints($event)" />
-              <p class="muted">Khả dụng {{ serverQuote()?.loyalty?.available_points ?? 0 }} điểm · đơn này tối đa {{ serverQuote()?.loyalty?.max_points ?? 0 }} điểm. Giảm tối đa 50% tiền hàng sau voucher, không gồm phí giao hàng.</p>
+            <section class="checkout-loyalty-card" aria-labelledby="member-points-label">
+              <div class="checkout-loyalty-card__head">
+                <div class="checkout-loyalty-card__title-group">
+                  <span class="checkout-loyalty-badge">Điểm tích lũy</span>
+                  <h4 id="member-points-label">Dùng điểm thành viên (1 điểm = 1.000đ)</h4>
+                </div>
+                <span class="checkout-loyalty-available">
+                  Khả dụng: <strong>{{ serverQuote()?.loyalty?.available_points ?? 0 }}</strong> điểm
+                </span>
+              </div>
+
+              <div class="checkout-loyalty-input-row">
+                <input
+                  id="member-points"
+                  name="memberPoints"
+                  type="number"
+                  min="0"
+                  step="1"
+                  class="checkout-loyalty-input"
+                  placeholder="0"
+                  [max]="serverQuote()?.loyalty?.max_points ?? 0"
+                  [value]="requestedPoints()"
+                  [disabled]="busy() || quoteLoading() || !serverQuote()?.loyalty?.spending_enabled"
+                  (input)="setPoints($event)"
+                />
+                <button
+                  type="button"
+                  class="btn-loyalty-max"
+                  [disabled]="busy() || quoteLoading() || !serverQuote()?.loyalty?.spending_enabled || (serverQuote()?.loyalty?.max_points ?? 0) <= 0"
+                  (click)="useMaxPoints()"
+                >
+                  Dùng tối đa
+                </button>
+              </div>
+
+              <p class="checkout-loyalty-hint">
+                Đơn này dùng tối đa <strong>{{ serverQuote()?.loyalty?.max_points ?? 0 }} điểm</strong> (giảm tối đa 50% tiền hàng sau voucher).
+              </p>
+
               @if ((serverQuote()?.loyalty?.debt_points ?? 0) > 0) {
-                <p role="status">Bạn đang nợ {{ serverQuote()?.loyalty?.debt_points }} điểm sau hoàn tiền. Bạn vẫn có thể mua hàng và tích điểm; điểm từ đơn đã thanh toán, giao thành công tiếp theo sẽ bù nợ trước.</p>
+                <p class="checkout-loyalty-alert" role="status">
+                  Bạn đang nợ {{ serverQuote()?.loyalty?.debt_points }} điểm sau hoàn tiền. Bạn vẫn có thể mua hàng và tích điểm; điểm từ đơn đã thanh toán, giao thành công tiếp theo sẽ bù nợ trước.
+                </p>
               }
-              @if (serverQuote()?.loyalty && !serverQuote()?.loyalty?.spending_enabled) { <p role="status">Sử dụng điểm đang chờ phê duyệt chính sách làm tròn và hết hạn.</p> }
-              <a routerLink="/account/profile" [queryParams]="{tab: 'offers'}">Ví điểm, hạn sử dụng & mã giới thiệu</a>
+              @if (serverQuote()?.loyalty && !serverQuote()?.loyalty?.spending_enabled) {
+                <p class="checkout-loyalty-alert" role="status">Sử dụng điểm đang chờ phê duyệt chính sách làm tròn và hết hạn.</p>
+              }
+              <div class="checkout-loyalty-foot">
+                <a routerLink="/account/profile" [queryParams]="{tab: 'offers'}" class="checkout-loyalty-link">
+                  Ví điểm, lịch sử &amp; mã giới thiệu &rarr;
+                </a>
+              </div>
+            </section>
+          } @else {
+            <section class="checkout-guest-benefit-card">
+              <div class="guest-benefit-content">
+                <strong>Đăng ký thành viên Velura</strong>
+                <p>Nhận ngay voucher chào mừng 20% và tự động tích lũy 5% điểm thưởng (1 điểm = 1.000đ) trên mọi đơn hàng!</p>
+              </div>
+              <a routerLink="/auth/signup" class="guest-benefit-btn">Đăng ký nhận ưu đãi</a>
             </section>
           }
           <div class="row">

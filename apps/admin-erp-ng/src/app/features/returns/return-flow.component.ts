@@ -75,7 +75,7 @@ export class ReturnFlowComponent {
   readonly minNote = MIN_NOTE_LENGTH;
   readonly title = computed(() => this.flow() ? RETURN_ITEM_ACTION_LABELS[this.flow()!] : '');
   /** Approval covers the whole part the customer asked for, so quantity is never edited here. */
-  readonly showQuantityEditor = computed(() => this.canSplit() && this.flow() !== 'approve');
+  readonly showQuantityEditor = computed(() => false);
   readonly customerPhone = computed(() => (this.record()?.customer_phone || '').replace(/[^\d+]/g, ''));
   /** Packing media is encouraged, never a precondition: this only nudges the operator to ask on the call. */
   readonly noCustomerEvidence = computed(() => this.flow() === 'approve'
@@ -185,6 +185,64 @@ export class ReturnFlowComponent {
   applyScenario(scenario: { result: string; note: string }): void {
     this.contactResult.set(scenario.result);
     this.note.set(scenario.note);
+  }
+
+  /** Pre-defined automated notes for all item actions so operator never types boilerplate manually. */
+  readonly quickNotes = computed(() => {
+    const f = this.flow();
+    if (f === 'stripe') {
+      return [
+        'Đã hoàn tiền tự động cho khách qua cổng Stripe',
+        'Kho kiểm hàng đạt chuẩn, hoàn trả đủ số tiền',
+        'Đã đối soát thông tin và xác nhận hoàn tiền qua thẻ'
+      ];
+    }
+    if (f === 'manual') {
+      return [
+        'Đã chuyển khoản ngân hàng thành công kèm ủy nhiệm chi',
+        'Chứng từ hợp lệ, hoàn tất chuyển khoản cho khách',
+        'Đã đối soát khớp thông tin tài khoản nhận tiền'
+      ];
+    }
+    if (f === 'approve') {
+      return [
+        'Đã gọi điện xác nhận và duyệt yêu cầu đổi trả của khách',
+        'Khách đã cung cấp thông tin, đồng ý phương án xử lý',
+        'Duyệt yêu cầu đổi trả theo đúng số lượng đăng ký'
+      ];
+    }
+    if (f === 'receive') {
+      return [
+        'Kho đã nhận kiện hàng, kiểm tra sản phẩm nguyên vẹn',
+        'Sản phẩm còn nguyên tem mác, đủ điều kiện nhập kho',
+        'Kiện hàng niêm phong đầy đủ khi bốc dỡ tại kho'
+      ];
+    }
+    if (f === 'change_variant') {
+      return [
+        'Khách đồng ý đổi sang mẫu/size mới',
+        'Đã chốt biến thể thay thế theo yêu cầu của khách'
+      ];
+    }
+    if (f === 'stop' || f === 'reject') {
+      return [
+        'Sản phẩm không đủ điều kiện đổi trả theo chính sách',
+        'Khách hàng chủ động hủy yêu cầu sau khi được tư vấn'
+      ];
+    }
+    return [
+      'Đã liên hệ xác nhận thông tin với khách hàng',
+      'Đã hoàn tất xử lý theo quy trình vận hành'
+    ];
+  });
+
+  setNoteQuick(text: string): void {
+    this.note.set(text);
+  }
+
+  generateTransferRef(): void {
+    const code = 'FT' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 6).toUpperCase();
+    this.transferReference.set(code);
   }
 
   /** Facts the operator confirms on the call; each one is written into the stored contact note. */

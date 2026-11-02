@@ -135,8 +135,24 @@
       }
 
       <dl class="detail-grid">
-        <div><dt>Khách hàng</dt><dd>{{ review.user_id || '—' }}</dd></div>
-        <div><dt>Đơn hàng</dt><dd>{{ review.order_id || '—' }}</dd></div>
+        <div>
+          <dt>Khách hàng</dt>
+          <dd>
+            <strong>{{ customerLabel(review) }}</strong>
+            @if (review.user_id) {
+              <small class="is-mono is-dim d-block">{{ review.user_id }}</small>
+            }
+          </dd>
+        </div>
+        <div>
+          <dt>Đơn hàng</dt>
+          <dd>
+            <strong>{{ orderLabel(review) }}</strong>
+            @if (review.order_id) {
+              <small class="is-mono is-dim d-block">{{ review.order_id }}</small>
+            }
+          </dd>
+        </div>
         <div><dt>Mã đánh giá</dt><dd class="is-mono">{{ review.review_id }}</dd></div>
         <div><dt>Phiên bản</dt><dd class="is-mono">{{ review.version ?? '—' }}</dd></div>
       </dl>
@@ -212,8 +228,34 @@
 
         <label class="erp-field">
           <span>Nội dung phản hồi</span>
-          <textarea class="erp-input" name="reply" rows="4" [value]="replyDraft()" (input)="onReplyInput($event)" required></textarea>
+          <div class="review-emoji-bar">
+            <span class="emoji-bar-label">Biểu cảm nhanh:</span>
+            <div class="emoji-list">
+              @for (emoji of quickEmojis; track emoji) {
+                <button class="erp-btn erp-btn--sm emoji-btn" type="button" (click)="insertEmoji(emoji)">{{ emoji }}</button>
+              }
+            </div>
+          </div>
+          <textarea class="erp-input" name="reply" rows="4" [value]="replyDraft()" (input)="onReplyInput($event)" placeholder="Nhập lời cảm ơn hoặc giải đáp chu đáo cho khách hàng…" required></textarea>
         </label>
+
+        <div class="review-reply-image-box">
+          <div class="reply-image-actions">
+            <label class="erp-btn erp-btn--sm custom-file-trigger">
+              <input type="file" accept="image/*" class="erp-sr-only" (change)="onReplyImageSelected($event)" [disabled]="replyImageUploading()" />
+              <span>{{ replyImageUploading() ? 'Đang tải ảnh…' : (replyImageUrl() ? 'Đổi ảnh đính kèm' : '📷 Đính kèm ảnh (tùy chọn)') }}</span>
+            </label>
+            @if (replyImageUrl()) {
+              <span class="custom-file-status has-file">Đã đính kèm ảnh</span>
+              <button class="erp-btn erp-btn--sm erp-btn--ghost" type="button" (click)="replyImageUrl.set('')">Xóa ảnh</button>
+            }
+          </div>
+          @if (replyImageUrl()) {
+            <div class="reply-image-preview">
+              <img [src]="replyImageUrl()" alt="Preview ảnh đính kèm" />
+            </div>
+          }
+        </div>
       }
 
       @if (actionType() === 'hide' || actionType() === 'escalate') {

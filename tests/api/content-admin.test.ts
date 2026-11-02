@@ -211,6 +211,25 @@ test("AI SEO suggestions are permissioned, bounded, and never persist on their o
   assert.deepEqual(calls.upsert, []);
 });
 
+test("AI SEO suggestion falls back to heuristic generation when AI provider fails", async () => {
+  const { repo } = repository();
+  const service = createContentAdminService({
+    repository: repo,
+    generateJson: async () => {
+      throw new HttpError(502, "AI_PROVIDER_UNAVAILABLE", "AI provider is unavailable");
+    },
+  });
+  const result = await service.suggestSeo(context("super_admin"), {
+    title: "Bộ sưu tập đầm dạ hội mùa thu cao cấp",
+    contentHtml: "<p>Velura ra mắt bộ sưu tập đầm dạ hội lụa thanh lịch cho phái đẹp trong mùa thu năm nay với phong cách quý phái.</p>",
+  });
+  assert.ok(result.metaTitle);
+  assert.match(String(result.metaTitle), /Bộ sưu tập đầm dạ hội/);
+  assert.ok(result.metaDescription);
+  assert.ok(Array.isArray(result.tags) && result.tags.length > 0);
+  assert.ok(result.tags.every((t) => typeof t === "string" && t.length > 0));
+});
+
 test("a slug collision surfaces as a stable 409 with an actionable message", async () => {
   const taken = new HttpError(400, "SUPABASE_ERROR", "BLOG_SLUG_TAKEN [status:400]", { message: "BLOG_SLUG_TAKEN" });
   const { repo } = repository({}, taken);

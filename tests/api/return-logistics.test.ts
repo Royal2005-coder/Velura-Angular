@@ -92,7 +92,7 @@ test("pickup facts belong to the chosen part and retain private photos and optio
   assert.deepEqual(received.slice(0, 6), [RETURN_ID, "part-1", "pickup", facts, 3, "auth-1"]);
 });
 
-test("receipt requires explicit booleans, private proof and a disposition without rejecting a broken seal", async () => {
+test("receipt confirms only item and quantity; quality facts, proof and disposition are optional", async () => {
   const writes: unknown[][] = [];
   const service = createReturnService({ repository: {
     actOnItem: async (...args) => { writes.push(args); return { item_status: "RECEIVED" }; }
@@ -102,13 +102,41 @@ test("receipt requires explicit booleans, private proof and a disposition withou
     matchesProduct: true, tagsIntact: true, conditionAcceptable: true, packageMatch: true, sealIntact: false,
     disposition: "restock", receiptProofRef: `storage://order-evidence/returns/${RETURN_ID}/qa_photo/proof.jpg`
   };
-  await assert.rejects(() => service.actOnItem(context(), RETURN_ID, "part-1", { ...facts, tagsIntact: undefined }), hasCode("RECEIPT_FACTS_REQUIRED"));
-  await assert.rejects(() => service.actOnItem(context(), RETURN_ID, "part-1", { ...facts, disposition: "" }), hasCode("RETURN_DISPOSITION_REQUIRED"));
+  await assert.rejects(() => service.actOnItem(context(), RETURN_ID, "part-1", { ...facts, receivedQuantity: undefined }), hasCode("QTY_MISMATCH"));
+  await assert.rejects(() => service.actOnItem(context(), RETURN_ID, "part-1", { ...facts, receivedQuantity: 0 }), hasCode("QTY_MISMATCH"));
+  await assert.rejects(() => service.actOnItem(context(), RETURN_ID, "part-1", { ...facts, tagsIntact: "yes" }), hasCode("RECEIPT_FACTS_INVALID"));
+  await assert.rejects(() => service.actOnItem(context(), RETURN_ID, "part-1", { ...facts, disposition: "burn" }), hasCode("RETURN_DISPOSITION_REQUIRED"));
   await assert.rejects(() => service.actOnItem(context(), RETURN_ID, "part-1", { ...facts, receiptProofRef: "https://cdn.test/qa.jpg" }), hasCode("PROOF_REQUIRED"));
   assert.equal(writes.length, 0);
   const result = await service.actOnItem(context(), RETURN_ID, "part-1", facts);
   assert.equal(result.item_status, "RECEIVED");
   assert.equal((writes[0][3] as Record<string, unknown>).sealIntact, false);
+  // Only item + quantity: a bare confirmation (and a failed checklist) is accepted and reaches the database.
+  await service.actOnItem(context(), RETURN_ID, "part-1", { action: "receive", expectedVersion: 2, receivedQuantity: 1 });
+  await service.actOnItem(context(), RETURN_ID, "part-1", { action: "receive", expectedVersion: 2, receivedQuantity: 1, conditionAcceptable: false, matchesProduct: false });
+  assert.equal(writes.length, 3);
+});
+
+test("a partial receipt sends the smaller received quantity so the database splits the missing remainder", async () => {
+  const writes: unknown[][] = [];
+  const service = createReturnService({ repository: {
+    actOnItem: async (...args) => { writes.push(args); return { item_status: "RECEIVED", item: { received_quantity: 2 } }; }
+  } as unknown as ReturnRepository });
+  await service.actOnItem(context(), RETURN_ID, "part-3", { action: "receive", expectedVersion: 5, receivedQuantity: 2 });
+  assert.equal((writes[0][3] as Record<string, unknown>).receivedQuantity, 2);
+  assert.equal((writes[0][3] as Record<string, unknown>).quantity, undefined);
+});
+
+test("stopping a part in transit needs CSKH reason and is passed through to the audited database action", async () => {
+  const writes: unknown[][] = [];
+  const service = createReturnService({ repository: {
+    actOnItem: async (...args) => { writes.push(args); return { item_status: "CANCELLED" }; }
+  } as unknown as ReturnRepository });
+  await assert.rejects(() => service.actOnItem(context(), RETURN_ID, "part-1", { action: "stop", expectedVersion: 4, reason: "ngắn" }), hasCode("REASON_REQUIRED"));
+  await assert.rejects(() => service.actOnItem(context("admin_operator_donhang"), RETURN_ID, "part-1", { action: "stop", expectedVersion: 4, reason: "Khách báo không gửi tiếp" }), (error) => error instanceof HttpError && error.status === 403);
+  const result = await service.actOnItem(context(), RETURN_ID, "part-1", { action: "stop", expectedVersion: 4, reason: "Khách báo không gửi tiếp kiện hàng" });
+  assert.equal(result.item_status, "CANCELLED");
+  assert.equal(writes[0][2], "stop");
 });
 
 test("order operators cannot create labels or confirm pickup", async () => {

@@ -17,6 +17,10 @@
   </div>
 </app-erp-page-header>
 
+@if (notice()) {
+  <p class="erp-notice" role="status">{{ notice() }}</p>
+}
+
 <section class="accounts-kpis" aria-label="Tóm tắt tài khoản">
   <app-erp-kpi-card label="Tổng tài khoản" [value]="kpi(allCount())" hint="Toàn bộ danh bạ" tone="accent" icon="users" [loading]="loading() && !hasLoadedOnce()" />
   <app-erp-kpi-card label="Thành viên" [value]="kpi(memberCount())" hint="Khách hàng" icon="users" [loading]="loading() && !hasLoadedOnce()" />
@@ -127,6 +131,25 @@
       (rowSelected)="openLog($event)"
     />
     <app-erp-pagination [page]="logsPage()" [pageCount]="logPageCount()" [label]="logRangeLabel()" (changed)="goLogsPage($event)" />
+    @if (canMutate()) {
+      <h3 class="accounts-subtitle">Email gửi thất bại sau 3 lần thử</h3>
+      <app-erp-data-table
+        caption="Email gửi thất bại"
+        [columns]="failedEmailColumns"
+        [rows]="failedEmails()"
+        [loading]="loading()"
+        [error]="failedEmailsError() || ''"
+        errorTitle="Không tải được email lỗi"
+        emptyTitle="Không có email lỗi"
+        emptyMessage="Email gửi thất bại sau 3 lần thử sẽ hiện ở đây để gửi lại."
+        (retry)="reload()"
+      />
+      @for (email of failedEmails(); track email.email_id) {
+        <button class="erp-btn erp-btn--sm" type="button" [disabled]="resendingEmailId() !== null" (click)="resendEmail(email)">
+          {{ resendingEmailId() === email.email_id ? 'Đang gửi lại…' : 'Gửi lại: ' + (email.recipient || email.email_id) }}
+        </button>
+      }
+    }
   }
 </section>
 
@@ -239,6 +262,9 @@
     @if (actionError()) {
       <p class="erp-error" role="alert">{{ actionError() }}</p>
     }
+    @if (versionConflict()) {
+      <button class="erp-btn erp-btn--sm" type="button" (click)="reloadLatest()">Tải lại dữ liệu mới nhất</button>
+    }
     <div class="account-form__actions">
       <button class="erp-btn" type="button" (click)="closeOverlays()">Hủy</button>
       <button class="erp-btn erp-btn--primary" type="submit" [disabled]="actionSaving()">
@@ -314,6 +340,9 @@
         </label>
         @if (actionError()) {
           <p class="erp-error" role="alert">{{ actionError() }}</p>
+        }
+        @if (versionConflict()) {
+          <button class="erp-btn erp-btn--sm" type="button" (click)="reloadLatest()">Tải lại dữ liệu mới nhất</button>
         }
         <div class="account-form__actions account-form__actions--split">
           <button class="erp-btn" type="button" (click)="closeOverlays()">Hủy</button>

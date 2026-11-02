@@ -7,6 +7,7 @@ import { config, getSupabaseServiceKey } from "../config.js";
 import { generateGeminiText } from "../gemini-client.js";
 import { HttpError } from "../http.js";
 import { asJsonObject, asString, type JsonObject } from "../types.js";
+import { RETURN_WINDOW_DAYS } from "../user/return-window.js";
 
 export interface ImageCriterionEvaluation {
   key: "lighting" | "background" | "sharpness" | "resolution";
@@ -803,11 +804,11 @@ export async function generateProductFashionSeo(body: JsonObject): Promise<Produ
   const rawSeoDesc = asString(parsed?.seoDescription).trim();
   const seoDescription = (
     rawSeoDesc ||
-    `Khám phá ${name} (${sku}) chất liệu ${outMaterial} cao cấp từ BST ${outCollection} tại Velura Atelier. Thiết kế tôn dáng, thanh lịch, đổi trả 30 ngày.`
+    `Khám phá ${name} (${sku}) chất liệu ${outMaterial} cao cấp từ BST ${outCollection} tại Velura Atelier. Thiết kế tôn dáng, thanh lịch, đổi trả ${RETURN_WINDOW_DAYS} ngày.`
   ).slice(0, 165);
   const metaSuggestions = [
     seoDescription,
-    `Mua ngay ${name} chính hãng ${brand}. Chất liệu ${outMaterial} mềm mịn, phom dáng chuẩn công sở & dạo phố. Miễn phí giao hàng đơn từ 500k, đổi trả 30 ngày.`.slice(
+    `Mua ngay ${name} chính hãng ${brand}. Chất liệu ${outMaterial} mềm mịn, phom dáng chuẩn công sở & dạo phố. Miễn phí giao hàng đơn từ 500k, đổi trả ${RETURN_WINDOW_DAYS} ngày.`.slice(
       0,
       165,
     ),

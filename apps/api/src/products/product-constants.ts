@@ -136,7 +136,18 @@ export const SKU_DUPLICATE_MESSAGE = "Mã SKU đã tồn tại, SKU phải là d
  * Audit "action type" filter values for the product audit log.
  * The audit_action enum only stores create/update; status and stock edits are derived from old/new values.
  */
-export const PRODUCT_AUDIT_ACTION_TYPES = ["CREATE", "UPDATE", "UPDATE_STATUS", "UPDATE_STOCK"] as const;
+export const PRODUCT_AUDIT_ACTION_TYPES = ["CREATE", "UPDATE", "UPDATE_STATUS", "UPDATE_STOCK", "AI_IMAGE_APPLY"] as const;
+
+/**
+ * AD_PRODUCT_08: minimum COMMON images (not linked to a variant color) for an on_sale product.
+ * Color-specific images do not count toward it; hidden / out_of_stock / discontinued may have 0.
+ */
+export const MIN_COMMON_IMAGES_ON_SALE = 1;
+
+/** AD_PRODUCT_06: system reason stamped on stock movements created by a CSV import. */
+export function csvStockReason(at: Date = new Date()): string {
+  return `Nhập CSV ${at.toISOString().slice(0, 16).replace("T", " ")} UTC`;
+}
 
 /** Product audit action type accepted by the audit-log endpoint. */
 export type ProductAuditActionType = (typeof PRODUCT_AUDIT_ACTION_TYPES)[number];

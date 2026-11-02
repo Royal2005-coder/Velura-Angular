@@ -71,6 +71,9 @@ type EditorSection = 'info' | 'variants' | 'content' | 'gallery' | 'combo';
  * status and the variant matrix, while an edit patches catalog fields and routes price
  * through change-price so each write keeps its own audit reason.
  */
+/** AD_PRODUCT_08: minimum common (non-color) images for an on-sale product; mirrors the API constant. */
+const MIN_COMMON_IMAGES_ON_SALE = 1;
+
 @Component({
   selector: 'app-erp-product-editor',
   imports: [AdminErpModal, AdminErpTabs, AdminErpDataTable, ProductGalleryComponent],
@@ -721,6 +724,14 @@ export class ProductEditorComponent {
       this.error.set('Ảnh đang gán với màu không còn trong biến thể. Chọn lại màu hoặc để ảnh chung.');
       return;
     }
+    // AD_PRODUCT_08: an on-sale product needs at least one common image (not tied to a variant color).
+    const liveStatus = this.isCreate() ? this.status() : this.current()?.status;
+    if (liveStatus === 'on_sale' && images.filter((url) => !(url in imageColors)).length < MIN_COMMON_IMAGES_ON_SALE) {
+      this.error.set(
+        `Sản phẩm đang bán cần tối thiểu ${MIN_COMMON_IMAGES_ON_SALE} ảnh chung (không gắn màu biến thể); hãy thêm ảnh chung hoặc bỏ liên kết màu của một ảnh.`,
+      );
+      return;
+    }
     const categoryId = this.categoryId();
     const description = this.descriptionWithMaterial();
 
@@ -787,11 +798,7 @@ export class ProductEditorComponent {
       return;
     }
     if (this.priceChanged() && !this.canChangePrice()) {
-      this.error.set('Bạn không có quyền điều chỉnh giá. Hãy lưu thông tin khác rồi nhờ bộ phận giá cập nhật.');
-      return;
-    }
-    if (this.priceChanged() && this.approvals().length) {
-      this.error.set('Lưu điều chỉnh giá trước, rồi mở lại sản phẩm để phê duyệt ảnh theo phiên bản mới.');
+      this.error.set('Bạn không có quyền điều chỉnh giá. Đổi giá tại Quản lý giá.');
       return;
     }
     const details: AdminProductUpdateInput = {
@@ -812,34 +819,41 @@ export class ProductEditorComponent {
       expectedVersion: product.version,
     };
     this.saving.set(true);
-    if (this.priceChanged()) {
-      this.api
-        .changePrice(product.product_id, {
-          newBasePrice: Number(this.basePrice()),
-          newSalePrice: Number(this.salePrice()) || null,
-          reason: 'Cập nhật giá từ biểu mẫu sản phẩm',
-          expectedVersion: product.version,
-        })
-        .subscribe({
-          next: (priced) => {
-            if (priced.version == null) {
-              this.saving.set(false);
-              this.error.set('Giá đã lưu nhưng phản hồi thiếu phiên bản. Mở lại sản phẩm trước khi lưu thông tin.');
-              this.conflict.emit();
-              return;
-            }
-            this.api.updateProduct(product.product_id, { ...details, expectedVersion: priced.version }).subscribe({
-              next: (updated) => this.finish(updated),
-              error: (error: unknown) => this.fail(error),
-            });
-          },
-          error: (error: unknown) => this.fail(error),
-        });
-      return;
-    }
+    // Two requests cannot be atomic, so the safe order is: product info first, price second.
+    // A failure of step 1 leaves both info and price untouched; a failure of step 2 leaves only the price unchanged
+    // and the message names the step so the user knows what was saved.
     this.api.updateProduct(product.product_id, details).subscribe({
-      next: (updated) => this.finish(updated),
-      error: (error: unknown) => this.fail(error),
+      next: (updated) => {
+        if (!this.priceChanged()) {
+          this.finish(updated);
+          return;
+        }
+        if (updated.version == null) {
+          this.saving.set(false);
+          this.error.set('Bước 1/2 đã lưu thông tin sản phẩm nhưng phản hồi thiếu phiên bản; giá chưa đổi. Mở lại sản phẩm rồi đổi giá.');
+          this.conflict.emit();
+          return;
+        }
+        this.api
+          .changePrice(product.product_id, {
+            newBasePrice: Number(this.basePrice()),
+            newSalePrice: Number(this.salePrice()) || null,
+            reason: 'Cập nhật giá từ biểu mẫu sản phẩm',
+            expectedVersion: updated.version,
+          })
+          .subscribe({
+            next: (priced) => this.finish(priced),
+            error: (error: unknown) => {
+              this.fail(error);
+              this.error.set(`Bước 1/2 đã lưu thông tin sản phẩm; bước 2/2 đổi giá thất bại, giá giữ nguyên: ${this.error() ?? ''}`.trim());
+              this.conflict.emit();
+            },
+          });
+      },
+      error: (error: unknown) => {
+        this.fail(error);
+        this.error.set(`Bước 1/2 lưu thông tin thất bại, giá chưa đổi: ${this.error() ?? ''}`.trim());
+      },
     });
   }
 

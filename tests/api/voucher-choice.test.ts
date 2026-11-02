@@ -120,3 +120,29 @@ test("đọc lựa chọn mã từ body đặt đơn", () => {
     voucherId: null, code: "GIAM20K", decline: true
   });
 });
+
+test("PAY-05: không chọn mã, mã tốt nhất đổi giữa báo giá và đặt đơn thì báo VOUCHER_CHANGED", () => {
+  const result = chooseOrderVoucher(wallet([BIG, SMALL]), { voucherId: null, code: null, decline: false, quoted: { voucherId: null } });
+  assert.equal(result.applied?.code, "GIAM50K");
+  assert.ok(result.change);
+  assert.equal(result.change.requestedVoucherId, null);
+});
+
+test("PAY-05: mã báo giá khác mã tốt nhất hiện tại thì báo đổi", () => {
+  const result = chooseOrderVoucher(wallet([BIG, SMALL]), { voucherId: null, code: null, decline: false, quoted: { voucherId: "v-b" } });
+  assert.ok(result.change);
+  assert.equal(result.change.requestedVoucherId, "v-b");
+});
+
+test("PAY-05: mã tốt nhất trùng mã đã báo giá thì không đổi gì", () => {
+  const result = chooseOrderVoucher(wallet([BIG, SMALL]), { voucherId: null, code: null, decline: false, quoted: { voucherId: "v-a" } });
+  assert.equal(result.change, null);
+  assert.equal(result.applied?.code, "GIAM50K");
+});
+
+test("PAY-05: client cũ không gửi quoted thì giữ hành vi cũ", () => {
+  const result = chooseOrderVoucher(wallet([BIG, SMALL]), { voucherId: null, code: null, decline: false });
+  assert.equal(result.change, null);
+  assert.deepEqual(readVoucherRequest({ quoted_voucher_id: null }).quoted, { voucherId: null });
+  assert.equal(readVoucherRequest({}).quoted, undefined);
+});

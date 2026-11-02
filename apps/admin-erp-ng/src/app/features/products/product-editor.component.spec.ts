@@ -122,14 +122,18 @@ describe('ProductEditorComponent', () => {
     expect(sent['description']).toContain('linen');
   });
 
-  it('writes a price change first and reuses the returned version for the patch', () => {
+  it('saves product info first and reuses the returned version for the price change', () => {
     const patches: AdminProductUpdateInput[] = [];
+    const priceVersions: Array<number | undefined> = [];
     const fixture = boot(
       {
-        changePrice: () => of({ ...saved, version: 5, base_price: 1_500_000 }),
+        changePrice: (_id: string, body: { expectedVersion?: number }) => {
+          priceVersions.push(body.expectedVersion);
+          return of({ ...saved, version: 6, base_price: 1_500_000 });
+        },
         updateProduct: (_id: string, body: AdminProductUpdateInput) => {
           patches.push(body);
-          return of(saved);
+          return of({ ...saved, version: 5 });
         },
         checkProductSku: (sku: string) => of(free(sku)),
       },
@@ -141,7 +145,30 @@ describe('ProductEditorComponent', () => {
     editor.submit();
 
     expect(patches.length).toBe(1);
-    expect(patches[0].expectedVersion).toBe(5);
+    expect(patches[0].expectedVersion).toBe(4);
+    expect(priceVersions).toEqual([5]);
+  });
+
+  it('leaves the price untouched and names the step when saving info fails', () => {
+    let priceCalls = 0;
+    const fixture = boot(
+      {
+        changePrice: () => {
+          priceCalls += 1;
+          return of(saved);
+        },
+        updateProduct: () => throwError(() => new Error('boom')),
+        checkProductSku: (sku: string) => of(free(sku)),
+      },
+      true,
+    );
+    const editor = open(fixture, saved);
+
+    editor.basePrice.set(1_500_000);
+    editor.submit();
+
+    expect(priceCalls).toBe(0);
+    expect(editor.error()).toContain('Bước 1/2');
   });
 
   it('refuses to move the price without the pricing capability', () => {
@@ -155,7 +182,7 @@ describe('ProductEditorComponent', () => {
     expect(editor.priceChanged()).toBe(true);
     editor.submit();
 
-    expect(editor.error()).toContain('không có quyền điều chỉnh giá');
+    expect(editor.error()).toContain('Đổi giá tại Quản lý giá');
   });
 
   it('blocks saving while a remote image has no server approval', () => {

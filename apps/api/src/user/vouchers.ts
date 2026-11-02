@@ -119,11 +119,12 @@ export async function resolveOrderVoucher(
   requestedVoucherId: string | null,
   decline: boolean,
   cart: VoucherCart | null = null,
-  verifiedGuestPhone: string | null = null
+  verifiedGuestPhone: string | null = null,
+  quoted?: { voucherId: string | null }
 ): Promise<{ voucherId: string | null; discountAmount: number; merchandiseDiscount: number }> {
   if (decline) return { voucherId: null, discountAmount: 0, merchandiseDiscount: 0 };
   const wallet = await buildWallet(context, orderValue, shippingFee, cart, verifiedGuestPhone);
-  const { applied, change } = chooseOrderVoucher(wallet, { voucherId: requestedVoucherId, code: null, decline });
+  const { applied, change } = chooseOrderVoucher(wallet, { voucherId: requestedVoucherId, code: null, decline, quoted });
   if (change) {
     throw new HttpError(409, "VOUCHER_CHANGED", change.reasonText, {
       requested_voucher_id: change.requestedVoucherId,

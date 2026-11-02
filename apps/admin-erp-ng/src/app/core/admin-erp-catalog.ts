@@ -51,7 +51,7 @@ export const PRODUCT_STATUS_HINTS: Readonly<Record<string, string>> = {
 export const CREATE_STATUSES = ['on_sale', 'hidden'] as const;
 
 /** Product audit action types accepted by the audit endpoint. */
-export const PRODUCT_AUDIT_ACTION_TYPES = ['CREATE', 'UPDATE', 'UPDATE_STATUS', 'UPDATE_STOCK'] as const;
+export const PRODUCT_AUDIT_ACTION_TYPES = ['CREATE', 'UPDATE', 'UPDATE_STATUS', 'UPDATE_STOCK', 'AI_IMAGE_APPLY'] as const;
 
 /** Operator reason length required by the API for stock and status writes. */
 export const MIN_CHANGE_REASON_LENGTH = 10;

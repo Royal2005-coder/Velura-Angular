@@ -23,6 +23,18 @@ test("CSKH reads the return queue with paging and the caller's token", async () 
   assert.equal(received.token, "jwt-token");
 });
 
+test("admin viewer reads the return queue for drill-down but every mutation is denied", async () => {
+  let wrote = false;
+  const service = createReturnService({ repository: {
+    listReturns: async () => ({ rows: [] }),
+    updateTicket: async () => { wrote = true; return {}; }
+  } as unknown as ReturnRepository });
+  const viewer = context("admin_viewer");
+  await service.listReturns(viewer, new URLSearchParams("status=REQUESTED"));
+  await assert.rejects(() => service.reject(viewer, RETURN_ID, { expectedVersion: 1 }), hasStatus(403));
+  assert.equal(wrote, false);
+});
+
 test("whole-request progression cannot bypass line actions", async () => {
   const service = createReturnService({ repository: {} as ReturnRepository });
   const admin = context("super_admin");
@@ -287,7 +299,7 @@ test("refund endpoints require a real line id, line version, approved refund res
     for (const patch of [{ decision_status: "pending" }, { resolution_type: "exchange" }]) {
       await assert.rejects(() => make({ ...REFUND_LINE, ...patch })[operation](admin, RETURN_ID, MANUAL_BODY), hasCode("REFUND_RESOLUTION_REQUIRED"));
     }
-    for (const patch of [{ item_status: "WAITING_RETURN" }, { received_quantity: 0 }, { tags_intact: false }, { condition_acceptable: false }, { package_match: false }, { matches_product: false }]) {
+    for (const patch of [{ item_status: "WAITING_RETURN" }, { received_quantity: 0 }]) {
       await assert.rejects(() => make({ ...REFUND_LINE, ...patch })[operation](admin, RETURN_ID, MANUAL_BODY), hasCode("WAREHOUSE_QA_REQUIRED"));
     }
   }
@@ -543,4 +555,33 @@ test("approval with both packing photo and video reports nothing missing", async
   } as unknown as ReturnRepository });
   const result = await service.actOnItem(context("super_admin"), RETURN_ID, ITEM_ID, { action: "approve", expectedVersion: 3, reason: "Da xac minh voi khach qua dien thoai" });
   assert.equal(result.packing_evidence_missing, undefined);
+});
+
+test("quality checklist results never block a refund once the warehouse confirmed receipt", async () => {
+  let refundCall: unknown[] = [];
+  const failedQa = { ...REFUND_LINE, matches_product: false, tags_intact: false, condition_acceptable: false, package_match: false, seal_intact: false };
+  const service = createReturnService({
+    repository: {
+      getRefundOperation: async () => null,
+      getReturn: async () => ({ ...COD_RETURN, version: 3 }),
+      listReturnLines: async () => ({ rows: [failedQa] }),
+      getItemRefundableAmount: async () => 100000,
+      getPaymentByOrderId: async () => ({ payment_provider: "stripe" })
+    } as unknown as ReturnRepository,
+    refunds: { refund: async (...args) => { refundCall = args; return { status: "requested" }; } }
+  });
+  const res = await service.triggerStripeRefund(context("admin_operator_cskh_dt"), RETURN_ID, { returnItemId: ITEM_ID, expectedVersion: 3 });
+  assert.equal(res.success, true);
+  assert.equal(refundCall[1], 100000);
+});
+
+test("queue accepts contact_overdue and refund_overdue filters for the SLA views", async () => {
+  let filters: ReturnListFilters | undefined;
+  const service = createReturnService({ repository: { listReturns: async (received: ReturnListFilters) => { filters = received; return { rows: [] }; } } });
+  await service.listReturns(context("admin_operator_cskh_dt"), new URLSearchParams("contact_overdue=true"));
+  assert.equal(filters?.contactOverdue, true);
+  assert.equal(filters?.refundOverdue, false);
+  await service.listReturns(context("admin_operator_cskh_dt"), new URLSearchParams("refund_overdue=true"));
+  assert.equal(filters?.refundOverdue, true);
+  assert.equal(filters?.contactOverdue, false);
 });

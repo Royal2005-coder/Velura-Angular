@@ -17,7 +17,8 @@ export const REVIEW_TRANSITIONS: Record<string, readonly string[]> = {
  */
 export const REVIEW_READER_ROLES: readonly string[] = [
   "super_admin",
-  "admin_operator_danhgia_review"
+  "admin_operator_danhgia_review",
+  "admin_viewer"
 ];
 
 /**

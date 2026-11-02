@@ -1,7 +1,7 @@
 import { enrichAuditLogs, PRICING_AUDIT } from "../audit-enrichment.js";
 import { HttpError } from "../http.js";
 import { asJsonObject, asNumber, asString, type AuthContext, type JsonObject } from "../types.js";
-import { PROMOTION_OPERATOR_ROLES, PROMOTION_READER_ROLES, PROMOTION_TYPES, VOUCHER_TYPES } from "./pricing-constants.js";
+import { PROMOTION_OPERATOR_ROLES, PROMOTION_READER_ROLES, PROMOTION_TYPES, PROMOTION_VIEW_ROLES, VOUCHER_TYPES } from "./pricing-constants.js";
 import type { PricingRepository } from "./pricing-repository.js";
 import {
   canActivatePromotion,
@@ -13,6 +13,8 @@ import {
   toLifecycleInput,
   toOverlapCandidate
 } from "./promotion-lifecycle.js";
+import { budgetReachedMessage, voucherCapacity, voucherMaxDiscount } from "./voucher-budget.js";
+import { BULK_MAX_QUANTITY, generateVouchersBulk, normalizeVoucherPrefix, type Rng } from "./voucher-bulk.js";
 import { normalizePromotionPresentation } from "./promotion-presentation.js";
 
 /** Dạng UUID chung, đủ để chặn chuỗi lạ lọt vào bộ lọc PostgREST. */
@@ -35,6 +37,8 @@ export interface PricingService {
   listVouchers(context: AuthContext | undefined, searchParams: URLSearchParams): Promise<unknown>;
   getVoucher(context: AuthContext | undefined, voucherId: string): Promise<unknown>;
   createVoucher(context: AuthContext | undefined, body: JsonObject): Promise<unknown>;
+  /** Sinh mã hàng loạt theo tiền tố (AD_VOUCHER_03). Giữ mã đã tạo nếu lỗi giữa chừng. */
+  createVouchersBulk(context: AuthContext | undefined, body: JsonObject): Promise<unknown>;
   updateVoucher(context: AuthContext | undefined, voucherId: string, body: JsonObject): Promise<unknown>;
   listAuditLogs(context: AuthContext | undefined, searchParams: URLSearchParams): Promise<unknown>;
   toggleVoucher(context: AuthContext | undefined, voucherId: string): Promise<unknown>;
@@ -44,7 +48,7 @@ export interface PricingService {
 /**
  * Create the admin pricing application service.
  */
-export function createPricingService({ repository }: { repository: PricingRepository }): PricingService {
+export function createPricingService({ repository, rng }: { repository: PricingRepository; rng?: Rng }): PricingService {
   function requirePricingAdmin(context: AuthContext | undefined): asserts context is AuthContext {
     if (!context?.authUser?.id) throw new HttpError(401, "AUTH_REQUIRED", "Authentication is required");
     if (!PROMOTION_OPERATOR_ROLES.includes(context.roleCode)) {
@@ -52,10 +56,71 @@ export function createPricingService({ repository }: { repository: PricingReposi
     }
   }
 
+  /** Đọc chiến dịch / mã / thống kê: cho phép thêm admin_viewer, chỉ đọc. */
+  function requirePromotionViewer(context: AuthContext | undefined): asserts context is AuthContext {
+    if (!context?.authUser?.id) throw new HttpError(401, "AUTH_REQUIRED", "Authentication is required");
+    if (!PROMOTION_VIEW_ROLES.includes(context.roleCode)) {
+      throw new HttpError(403, "RBAC_DENIED", "Insufficient permissions to view promotions");
+    }
+  }
+
   function requirePricingReader(context: AuthContext | undefined): asserts context is AuthContext {
     if (!context?.authUser?.id) throw new HttpError(401, "AUTH_REQUIRED", "Authentication is required");
     if (!PROMOTION_READER_ROLES.includes(context.roleCode)) {
       throw new HttpError(403, "RBAC_DENIED", "Insufficient permissions to view pricing");
+    }
+  }
+
+  /** Đọc chiến dịch + số mã đã phát và tính sức chứa mã mới (AD_PROMO_03). `null` nếu không có chiến dịch. */
+  async function loadCapacity(context: AuthContext, body: JsonObject) {
+    const promoId = asString(body.promoId);
+    if (!promoId) return null;
+    const promotion = await repository.getPromotion(promoId, context.accessToken);
+    if (!promotion) throw new HttpError(404, "PROMOTION_NOT_FOUND", "Không tìm thấy chiến dịch khuyến mãi.");
+    const maxDiscountRaw = body.maxDiscountAmount ?? body.maxDiscount;
+    const cap = voucherMaxDiscount({
+      type: String(body.discountType ?? body.type ?? ""),
+      value: Number(body.discountValue ?? body.value ?? 0),
+      maxDiscount: maxDiscountRaw === undefined || maxDiscountRaw === null || maxDiscountRaw === "" ? null : Number(maxDiscountRaw)
+    });
+    const budget = asNumber(promotion.budget_limit) ?? 0;
+    const maxManual = asNumber(promotion.max_vouchers_allowed) ?? 0;
+    const counts = await repository.countVouchersByPromotion([promoId], context.accessToken);
+    const issued = counts[promoId]?.total ?? 0;
+    return { issued, maxManual, capacity: voucherCapacity(budget, cap, issued) };
+  }
+
+  /** Kiểm trước khi sinh `count` mã. Chỉ dùng cho sinh hàng loạt; tạo lẻ để RPC quyết định. */
+  async function assertVoucherCapacity(context: AuthContext, body: JsonObject, count: number): Promise<void> {
+    const state = await loadCapacity(context, body);
+    if (!state) return;
+    const { issued, maxManual, capacity } = state;
+    if (maxManual > 0 && issued + count > maxManual) {
+      throw new HttpError(422, "VOUCHER_LIMIT_REACHED", budgetReachedMessage(issued, maxManual), { issued, max: maxManual });
+    }
+    if (capacity.status === "cap_required") {
+      throw new HttpError(422, "VOUCHER_CAP_REQUIRED", "Chiến dịch có ngân sách nên mã phải có trần giảm tối đa để quy đổi ra số mã.");
+    }
+    if (capacity.status === "limited" && issued + count > capacity.max) {
+      throw new HttpError(422, "VOUCHER_BUDGET_REACHED", budgetReachedMessage(issued, capacity.max), {
+        issued, max: capacity.max, remaining: capacity.remaining
+      });
+    }
+  }
+
+  /** Khi RPC báo chạm trần, bổ sung "Đã phát X/Y mã" vào thông báo (best-effort). */
+  async function explainCapacityError(context: AuthContext, body: JsonObject, error: unknown): Promise<unknown> {
+    if (!(error instanceof HttpError) || !["VOUCHER_BUDGET_REACHED", "VOUCHER_LIMIT_REACHED"].includes(error.code)) return error;
+    try {
+      const state = await loadCapacity(context, body);
+      if (!state) return error;
+      const max = error.code === "VOUCHER_LIMIT_REACHED"
+        ? state.maxManual
+        : state.capacity.status === "limited" ? state.capacity.max : 0;
+      if (max <= 0) return error;
+      return new HttpError(error.status, error.code, budgetReachedMessage(state.issued, max), { issued: state.issued, max });
+    } catch {
+      return error;
     }
   }
 
@@ -88,7 +153,7 @@ export function createPricingService({ repository }: { repository: PricingReposi
     },
 
     async listPromotions(context, searchParams) {
-      requirePricingReader(context);
+      requirePromotionViewer(context);
       const type = searchParams.get("type") || undefined;
       if (type && !PROMOTION_TYPES.includes(type)) {
         throw new HttpError(422, "VALIDATION_ERROR", `Invalid promo type. Valid: ${PROMOTION_TYPES.join(", ")}`);
@@ -117,7 +182,7 @@ export function createPricingService({ repository }: { repository: PricingReposi
     },
 
     async getPromotion(context, promotionId) {
-      requirePricingReader(context);
+      requirePromotionViewer(context);
       const promo = await repository.getPromotion(promotionId, context.accessToken);
       if (!promo) throw new HttpError(404, "PROMOTION_NOT_FOUND", "Promotion not found");
       return promo;
@@ -176,7 +241,7 @@ export function createPricingService({ repository }: { repository: PricingReposi
     },
 
     async listVouchers(context, searchParams) {
-      requirePricingReader(context);
+      requirePromotionViewer(context);
       const isActive = searchParams.get("isActive");
       const promoId = searchParams.get("promoId") || "";
       if (promoId && promoId !== "none" && !UUID_PATTERN.test(promoId)) {
@@ -192,7 +257,7 @@ export function createPricingService({ repository }: { repository: PricingReposi
     },
 
     async getVoucher(context, voucherId) {
-      requirePricingReader(context);
+      requirePromotionViewer(context);
       const voucher = await repository.getVoucher(voucherId, context.accessToken);
       if (!voucher) throw new HttpError(404, "VOUCHER_NOT_FOUND", "Voucher not found");
       return voucher;
@@ -208,10 +273,62 @@ export function createPricingService({ repository }: { repository: PricingReposi
         throw new HttpError(422, "VALIDATION_ERROR", "Đối tượng mã phải là khách vãng lai, thành viên, quà sinh nhật hoặc mọi khách");
       }
 
-      // Trần `max_vouchers_allowed` của chiến dịch do RPC chốt khi đang khoá dòng chiến
-      // dịch (migration 035). Đếm ở đây rồi mới ghi thì hai admin bấm cùng lúc vẫn lọt
-      // qua cả hai, nên không đếm lại ở tầng này.
-      return repository.createVoucher({ ...body, code: String(body.code).trim().toUpperCase() }, context.accessToken);
+      // Trần số mã (`max_vouchers_allowed` và ngân sách ÷ trần giảm, migration 103) do RPC
+      // chốt khi đang khoá dòng chiến dịch, nên ở đây không đếm trước khi ghi. Chỉ khi RPC từ
+      // chối mới đọc lại để thông báo "Đã phát X/Y mã, chạm trần ngân sách".
+      try {
+        return await repository.createVoucher({ ...body, code: String(body.code).trim().toUpperCase() }, context.accessToken);
+      } catch (error: unknown) {
+        throw await explainCapacityError(context, body, error);
+      }
+    },
+
+    async createVouchersBulk(context, body) {
+      requirePricingAdmin(context);
+      const prefix = normalizeVoucherPrefix(body?.prefix);
+      if (!prefix) throw new HttpError(422, "VALIDATION_ERROR", "Tiền tố gồm 2-12 ký tự chữ hoặc số.");
+      const quantity = Number(body?.quantity);
+      if (!Number.isInteger(quantity) || quantity < 1 || quantity > BULK_MAX_QUANTITY) {
+        throw new HttpError(422, "VALIDATION_ERROR", `Số lượng phải từ 1 đến ${BULK_MAX_QUANTITY}.`);
+      }
+      const promoId = asString(body?.promoId);
+      if (!promoId || !UUID_PATTERN.test(promoId)) {
+        throw new HttpError(422, "VALIDATION_ERROR", "Sinh mã hàng loạt cần chọn chiến dịch.");
+      }
+      if (!VOUCHER_TYPES.includes(body?.type as string)) throw new HttpError(422, "VALIDATION_ERROR", "Invalid voucher type");
+      validateRecoveryConfiguration(body);
+      await assertVoucherCapacity(context, body, quantity);
+
+      const template: JsonObject = { ...body };
+      delete template.prefix;
+      delete template.quantity;
+      const result = await generateVouchersBulk({
+        prefix,
+        quantity,
+        rng,
+        createCode: async (code) => {
+          try {
+            await repository.createVoucher({ ...template, code, name: `${asString(body.name) || prefix} ${code}` }, context.accessToken);
+            return { ok: true };
+          } catch (error: unknown) {
+            const errorCode = error instanceof HttpError ? error.code : "UNKNOWN";
+            const reason = error instanceof Error ? error.message : String(error);
+            return { ok: false, collision: errorCode === "VOUCHER_CODE_EXISTS", reason: `${errorCode}: ${reason}` };
+          }
+        }
+      });
+
+      if (!result.complete && result.failure) {
+        // Ghi nhật ký thất bại; lỗi ghi nhật ký không được che kết quả một phần đã tạo.
+        try {
+          await repository.logVoucherBulkFailure({
+            promoId, prefix, requested: quantity, created: result.created.length,
+            lastCode: result.failure.code, reason: result.failure.reason,
+            ipAddress: context.ipAddress ?? null
+          }, context.accessToken);
+        } catch { /* giữ kết quả một phần */ }
+      }
+      return result;
     },
 
     async updateVoucher(context, voucherId, body) {
@@ -252,7 +369,7 @@ export function createPricingService({ repository }: { repository: PricingReposi
     },
 
     async getStatistics(context, searchParams = new URLSearchParams()) {
-      requirePricingReader(context);
+      requirePromotionViewer(context);
       const from = optionalIsoDate(searchParams.get("from"), "from");
       const to = optionalIsoDate(searchParams.get("to"), "to");
       if (from && to && Date.parse(from) >= Date.parse(to)) {

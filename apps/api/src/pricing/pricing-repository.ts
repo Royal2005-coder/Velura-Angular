@@ -303,6 +303,18 @@ export function createPricingRepository() {
       });
     },
 
+    /** Ghi nhật ký khi sinh mã hàng loạt thất bại giữa chừng (migration 103). */
+    async logVoucherBulkFailure(input: {
+      promoId: string; prefix: string; requested: number; created: number;
+      lastCode: string; reason: string; ipAddress: string | null;
+    }, accessToken: string | null) {
+      return withPricingError(() => callRpc("admin_log_voucher_bulk_failure", {
+        p_promo_id: input.promoId, p_prefix: input.prefix, p_requested: input.requested,
+        p_created: input.created, p_last_code: input.lastCode, p_reason: input.reason,
+        p_ip_address: input.ipAddress
+      }, { accessToken }));
+    },
+
     /** Updates voucher terms and recovery approval atomically under its version guard. */
     async updateVoucher(voucherId: string, input: JsonObject, accessToken: string | null) {
       const discountType = input.discountType !== undefined ? input.discountType : input.type;
@@ -448,7 +460,9 @@ function pricingErrorMessage(code: string): string {
     AMOUNT_NEGATIVE: "Số tiền không được là số âm.",
     USAGE_LIMIT_INVALID: "Số lượt dùng phải từ 1 trở lên.",
     USAGE_LIMIT_BELOW_USED: "Tổng lượt mới thấp hơn số lượt khách đã dùng.",
-    VOUCHER_LIMIT_REACHED: "Chiến dịch đã phát đủ số mã tối đa. Nâng trần số mã của chiến dịch trước."
+    VOUCHER_LIMIT_REACHED: "Chiến dịch đã phát đủ số mã tối đa. Nâng trần số mã của chiến dịch trước.",
+    VOUCHER_BUDGET_REACHED: "Đã chạm trần ngân sách của chiến dịch (ngân sách ÷ trần giảm tối đa mỗi mã).",
+    VOUCHER_CAP_REQUIRED: "Chiến dịch có ngân sách nên mã phải có trần giảm tối đa để quy đổi ra số mã."
   };
   return messages[code] || "Pricing database operation failed";
 }

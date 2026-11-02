@@ -3,6 +3,7 @@ import { HttpError, readJson, sendJson } from "../http.js";
 import { callRpc, quotePostgrestValue, selectOne, selectRows, insertRow, updateRows } from "../supabase.js";
 import { requireUserAuth, validatePhone } from "./auth.js";
 import { createNotification } from "./notifications.js";
+import { readQuotedVoucher } from "./voucher-choice.js";
 import { config } from "../config.js";
 import { verifyStripeOrder } from "../payments/stripe-verify.js";
 import { maybeRunAutomation } from "../orders/order-service.js";
@@ -722,7 +723,8 @@ export async function handleOrdersRoute(
         voucher_id ? String(voucher_id) : null,
         body.decline_voucher === true || order.decline_voucher === true,
         body.points_spent ?? order.points_spent ?? 0,
-        sessionState.contact.phone
+        sessionState.contact.phone,
+        readQuotedVoucher(body) ?? readQuotedVoucher(order)
       );
 
       // OTP is valid
@@ -955,7 +957,9 @@ export async function handleOrdersRoute(
         body.shipping_method,
         voucher_id ? String(voucher_id) : null,
         body.decline_voucher === true,
-        body.points_spent ?? 0
+        body.points_spent ?? 0,
+        null,
+        readQuotedVoucher(body)
       );
       const memberTotal = memberQuote.totalAmount;
 

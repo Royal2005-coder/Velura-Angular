@@ -10,6 +10,12 @@ export const PROMOTION_READER_ROLES = [
   "admin_operator_gia_km"
 ];
 
+/**
+ * Vai trò chỉ được XEM chiến dịch, mã giảm giá và thống kê khuyến mãi (AD_STATS_02).
+ * Gồm cả `admin_viewer` (trưởng kinh doanh). Không dùng cho giá, lịch sử giá, nhật ký.
+ */
+export const PROMOTION_VIEW_ROLES = [...PROMOTION_READER_ROLES, "admin_viewer"];
+
 /** Admin roles allowed to mutate pricing, promotions, and vouchers. */
 export const PROMOTION_OPERATOR_ROLES = ["super_admin", "admin_operator_gia_km"];
 

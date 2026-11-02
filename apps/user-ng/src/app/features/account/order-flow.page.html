@@ -435,8 +435,8 @@
                   </svg>
                 </div>
                 <div class="guarantee-text">
-                  <h4>Đổi / trả 7 ngày linh hoạt</h4>
-                  <p>Hỗ trợ đổi size hoặc hoàn tiền tận nơi trong 7 ngày từ khi nhận kiện hàng.</p>
+                  <h4>Đổi / trả {{ returnWindowDays }} ngày linh hoạt</h4>
+                  <p>Hỗ trợ đổi size hoặc hoàn tiền tận nơi trong {{ returnWindowDays }} ngày từ khi nhận kiện hàng.</p>
                 </div>
               </div>
               <div class="guarantee-item">
@@ -525,7 +525,7 @@
                     @if (item.status === 'delivered') {
                       <div class="line-return-quota-row">
                         <span class="line-quota-chip">
-                          Chính sách 7 ngày · Tối đa 2 lần thành công cho mỗi đơn vị sản phẩm
+                          Chính sách {{ returnWindowDays }} ngày · Tối đa 2 lần thành công cho mỗi đơn vị sản phẩm
                         </span>
                         <span class="line-quota-chip">
                           SL khả dụng: <strong>{{ line.availableQuantity }}/{{ line.quantity }}</strong>
@@ -719,7 +719,7 @@
               <h2>1. Chọn sản phẩm cần đổi / trả</h2>
               <p class="muted">
                 @if (item.items.length === 1) {
-                  Đơn hàng 1 sản phẩm · Chọn số lượng còn khả dụng (7 ngày · Tối đa 2 lần thành công cho mỗi đơn vị).
+                  Đơn hàng 1 sản phẩm · Chọn số lượng còn khả dụng ({{ returnWindowDays }} ngày · Tối đa 2 lần thành công cho mỗi đơn vị).
                 } @else {
                   Chọn sản phẩm và số lượng còn khả dụng. Các phần đang xử lý chỉ giữ đúng số lượng của phần đó.
                 }
@@ -762,7 +762,7 @@
                     <div class="line-return-quota-row">
                       <span class="line-quota-chip">Đã mua: <strong>{{ line.quantity }}</strong></span>
                       <span class="line-quota-chip">Khả dụng đổi/trả: <strong>{{ line.availableQuantity }}</strong></span>
-                      <span class="line-quota-chip">Chính sách 7 ngày · Tối đa 2 lần thành công/đơn vị</span>
+                      <span class="line-quota-chip">Chính sách {{ returnWindowDays }} ngày · Tối đa 2 lần thành công/đơn vị</span>
                     </div>
                     @if (line.isInProgress) {
                       <div class="line-return-banner line-return-banner--progress">
@@ -770,7 +770,7 @@
                       </div>
                     } @else if (line.availableQuantity < 1 && line.returnCount >= 2) {
                       <div class="line-return-banner line-return-banner--exhausted">
-                        Đã sử dụng đủ 2 lần thành công cho các đơn vị sản phẩm trong 7 ngày.
+                        Đã sử dụng đủ 2 lần thành công cho các đơn vị sản phẩm trong {{ returnWindowDays }} ngày.
                       </div>
                     } @else if (line.availableQuantity === 0) {
                       <div class="line-return-banner line-return-banner--done">
@@ -1210,7 +1210,7 @@
         }
         <p class="muted">Hủy đơn trước khi bắt đầu chuẩn bị hàng.</p>
         <p class="muted">
-          Đổi / trả trong 7 ngày từ khi giao thành công; tối đa 2 lần thành công cho mỗi đơn vị sản phẩm.
+          Đổi / trả trong {{ returnWindowDays }} ngày từ khi giao thành công; tối đa 2 lần thành công cho mỗi đơn vị sản phẩm.
         </p>
         <p class="muted">Guest xác thực OTP để bảo vệ thông tin đơn hàng.</p>
         <a class="link" routerLink="/contact">Liên hệ Velura</a>

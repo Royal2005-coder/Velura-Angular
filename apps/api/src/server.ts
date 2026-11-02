@@ -11,6 +11,7 @@ import { createAccountRepository } from "./accounts/account-repository.js";
 import { createAccountService } from "./accounts/account-service.js";
 import { handleAccountRoute } from "./accounts/account-router.js";
 import { startAccountMaintenance } from "./accounts/account-maintenance.js";
+import { startLowStockAlertRetry } from "./products/low-stock-maintenance.js";
 import { startEmailOutboxWorker } from "./email/outbox-worker.js";
 import { startPromotionScheduler } from "./pricing/promotion-scheduler.js";
 import { createProductRepository } from "./products/product-repository.js";
@@ -498,7 +499,7 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
 export const server = createServer(handleApiRequest);
 
 if (process.env.VERCEL !== "1") {
-  const timers = [startAccountMaintenance(), startEmailOutboxWorker(), startPromotionScheduler(), startOrderAutomation(), startStripeReconciliation(), startLoyaltyExpiry(), startChatReportWorker()];
+  const timers = [startAccountMaintenance(), startLowStockAlertRetry(), startEmailOutboxWorker(), startPromotionScheduler(), startOrderAutomation(), startStripeReconciliation(), startLoyaltyExpiry(), startChatReportWorker()];
   catalogContentService.start();
   void startAiRuntime().catch(() => console.error("AI_RUNTIME_RECOVERY_FAILED"));
   const shutdown = () => {

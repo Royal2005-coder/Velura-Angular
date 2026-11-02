@@ -90,6 +90,11 @@ export async function handlePricingRoute({ req, res, url, parts, context, header
       sendJson(res, 201, await service.createVoucher(context, body), headers);
       return true;
     }
+    if (req.method === "POST" && parts[4] === "bulk" && parts.length === 5) {
+      const body = await readJson(req, config.maxBodyBytes);
+      sendJson(res, 201, await service.createVouchersBulk(context, body), headers);
+      return true;
+    }
     const voucherId = parts[4];
     if (voucherId && parts.length === 5 && req.method === "GET") {
       sendJson(res, 200, await service.getVoucher(context, voucherId), headers);

@@ -24,6 +24,9 @@ import { CheckoutStore } from '../../core/services/checkout.store';
 import { ReturnTrackingComponent } from './return-tracking.component';
 import { VIETNAM_BANKS } from '../../core/models/vietnam-banks';
 
+/** Return window in days after delivery; single customer-side copy of the API `RETURN_WINDOW_DAYS` (BA RET-01). */
+export const RETURN_WINDOW_DAYS = 7;
+
 /**
  * Guest access, order actions and after-sales share one `OrderAccountModel` injection point:
  * `PurchaseDemoStore` (via `OrderAccountPreviewAdapter`) under `?preview=1`, the real
@@ -42,6 +45,8 @@ import { VIETNAM_BANKS } from '../../core/models/vietnam-banks';
   ],
 })
 export class OrderFlowPage {
+  /** Exposed so the template never hard-codes the return window. */
+  protected readonly returnWindowDays = RETURN_WINDOW_DAYS;
   readonly displaySize = formatSizeDisplay;
   readonly preview = isPreviewMode();
   readonly model: OrderAccountModel = inject(ORDER_ACCOUNT_MODEL);
@@ -528,7 +533,7 @@ export class OrderFlowPage {
       return `Tất cả sản phẩm trong đơn đang trong tiến trình đổi/trả (${statusText}).`;
     }
     if (items.every((l) => (l.returnCount ?? 0) >= 2)) {
-      return 'Các đơn vị sản phẩm đã sử dụng tối đa 2 lượt đổi/trả trong 7 ngày.';
+      return `Các đơn vị sản phẩm đã sử dụng tối đa 2 lượt đổi/trả trong ${RETURN_WINDOW_DAYS} ngày.`;
     }
     return 'Tất cả sản phẩm trong đơn đã được hoàn trả hoặc đổi mới.';
   }

@@ -14,6 +14,11 @@ export interface VoucherRequest {
   code: string | null;
   /** Khách chủ động bỏ mã. Khi đó không tự áp lại mã nào. */
   decline: boolean;
+  /**
+   * Mã mà báo giá đã cho khách thấy (`null` = báo giá không có mã). `undefined` = client cũ
+   * không gửi, giữ hành vi cũ. Dùng để phát hiện mã tự động tốt nhất đổi giữa báo giá và đặt đơn.
+   */
+  quoted?: { voucherId: string | null };
 }
 
 /** Mã khách chọn không còn dùng được và đã bị thay. */
@@ -37,7 +42,23 @@ export function chooseOrderVoucher(
   if (request.decline) return { applied: null, change: null };
 
   const requested = request.voucherId || request.code;
-  if (!requested) return { applied: wallet.best, change: null };
+  if (!requested) {
+    // PAY-05: khách không chọn mã (tự áp mã tốt nhất). Nếu mã tốt nhất lúc đặt khác mã đã
+    // báo giá thì tổng tiền sẽ đổi âm thầm — báo lại để khách xác nhận (VOUCHER_CHANGED).
+    if (request.quoted !== undefined && (wallet.best?.voucherId ?? null) !== request.quoted.voucherId) {
+      return {
+        applied: wallet.best,
+        change: {
+          requestedVoucherId: request.quoted.voucherId,
+          requestedCode: null,
+          reasonText: wallet.best
+            ? "Mã giảm giá tốt nhất cho đơn của bạn đã thay đổi. Vui lòng kiểm tra lại tổng tiền."
+            : "Mã giảm giá đã báo giá không còn dùng được. Vui lòng kiểm tra lại tổng tiền."
+        }
+      };
+    }
+    return { applied: wallet.best, change: null };
+  }
 
   const code = request.code?.trim().toUpperCase() || null;
   const match = wallet.items.find((item) =>
@@ -60,5 +81,16 @@ export function chooseOrderVoucher(
 export function readVoucherRequest(body: JsonObject): VoucherRequest {
   const voucherId = body.voucher_id ? String(body.voucher_id) : null;
   const code = typeof body.code === "string" && body.code.trim() ? body.code.trim() : null;
-  return { voucherId, code, decline: body.decline_voucher === true };
+  const quoted = readQuotedVoucher(body);
+  return { voucherId, code, decline: body.decline_voucher === true, ...(quoted ? { quoted } : {}) };
+}
+
+/**
+ * Đọc `quoted_voucher_id` (mã báo giá khách đã thấy). Khoá vắng mặt = client cũ → `undefined`;
+ * khoá có giá trị `null` = báo giá không có mã.
+ */
+export function readQuotedVoucher(body: JsonObject): { voucherId: string | null } | undefined {
+  if (!Object.prototype.hasOwnProperty.call(body, "quoted_voucher_id")) return undefined;
+  const raw = body.quoted_voucher_id;
+  return { voucherId: raw ? String(raw) : null };
 }

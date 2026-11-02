@@ -1058,6 +1058,7 @@ function auditActionLabel(action: string): string {
     UPDATE: 'Cập nhật thông tin',
     UPDATE_STATUS: 'Đổi trạng thái',
     UPDATE_STOCK: 'Điều chỉnh tồn kho',
+    AI_IMAGE_APPLY: 'Áp dụng ảnh AI',
   };
   return labels[String(action).toUpperCase()] || action;
 }

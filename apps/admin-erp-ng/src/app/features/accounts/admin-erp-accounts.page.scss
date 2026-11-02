@@ -228,3 +228,14 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.erp-notice {
+  margin: 0 0 var(--space-3, 12px);
+  padding: 10px 14px;
+  border-left: 3px solid var(--erp-info, #2563eb);
+  background: var(--erp-surface-2, #f1f5f9);
+}
+
+.accounts-subtitle {
+  margin: 24px 0 8px;
+}

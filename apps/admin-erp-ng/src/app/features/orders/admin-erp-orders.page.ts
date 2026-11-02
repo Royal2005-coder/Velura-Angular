@@ -247,7 +247,7 @@ export class AdminErpOrdersPage {
   });
   readonly requiresCallConfirmation = computed(() => {
     const order = this.selected();
-    return !!order && order.payment_method === 'COD' && order.status === 'pending' && Number(order.total_amount || 0) >= 1_000_000 && !this.hasCallConfirmed();
+    return !!order && this.isGuestCodAtLimit(order) && !this.hasCallConfirmed();
   });
   readonly pipelineSteps = computed(() => this.buildPipeline(this.selected()));
   readonly canSimulateCarrier = computed(() => this.session.session()?.roleCode === 'super_admin' && !!this.selected()?.can_simulate_carrier);
@@ -465,7 +465,7 @@ export class AdminErpOrdersPage {
    */
   openRow(row: unknown): void {
     const order = row as AdminOrderRow;
-    if (this.isPendingCod(order) && this.hasAction(order, 'call_confirm')) {
+    if (this.isGuestCodAtLimit(order) && this.hasAction(order, 'call_confirm')) {
       this.openCodCall(order);
       return;
     }
@@ -606,7 +606,7 @@ export class AdminErpOrdersPage {
       return;
     }
     if (action.code === 'confirm_cod' && this.requiresCallConfirmation()) {
-      this.notice.set('Đơn COD từ 1.000.000đ cần ghi nhận cuộc gọi xác nhận thành công trước khi duyệt.');
+      this.notice.set('Đơn COD khách vãng lai từ 1.000.000đ cần ghi nhận cuộc gọi xác nhận thành công trước khi duyệt.');
       return;
     }
     this.modal.set({ kind: 'action', action });
@@ -801,7 +801,7 @@ export class AdminErpOrdersPage {
     const action = this.activeAction();
     if (!order || !action || this.submitting()) return;
     if (action.code === 'confirm_cod' && this.requiresCallConfirmation()) {
-      this.actionError.set('Đơn COD từ 1.000.000đ bắt buộc ghi nhận cuộc gọi xác nhận thành công trước khi duyệt.');
+      this.actionError.set('Đơn COD khách vãng lai từ 1.000.000đ bắt buộc ghi nhận cuộc gọi xác nhận thành công trước khi duyệt.');
       return;
     }
     const body = this.actionBody(action, event.target as HTMLFormElement);
@@ -1008,6 +1008,14 @@ export class AdminErpOrdersPage {
     const text = String(value ?? '');
     const guarded = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
     return `"${guarded.replace(/"/g, '""')}"`;
+  }
+
+  /**
+   * AD_ORDER_04/05: the call-before-confirm step is mandatory only for a pending Guest COD
+   * order from 1.000.000đ. Members are confirmed manually, the call stays optional.
+   */
+  isGuestCodAtLimit(order: AdminOrderRow | null | undefined): boolean {
+    return this.isPendingCod(order) && order?.is_guest === true && Number(order.total_amount || 0) >= 1_000_000;
   }
 
   /**

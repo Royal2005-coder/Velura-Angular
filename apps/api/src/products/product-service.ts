@@ -1,5 +1,5 @@
 import { HttpError } from "../http.js";
-import { selectRows, insertRow, selectOne, updateRows } from "../supabase.js";
+import { selectRows, insertRow, selectOne } from "../supabase.js";
 import {
   asJsonObject,
   asString,
@@ -17,6 +17,8 @@ import {
   SKU_PATTERN,
   SKU_DUPLICATE_MESSAGE,
   MIN_CHANGE_REASON_LENGTH,
+  MIN_COMMON_IMAGES_ON_SALE,
+  csvStockReason,
   CSV_MAX_ROWS,
   CSV_REQUIRED_COLUMNS,
   type ProductAuditActionType
@@ -146,55 +148,57 @@ export function createProductService({ repository }: { repository: ProductReposi
       if (!current) throw new HttpError(404, "PRODUCT_NOT_FOUND", "Product was not found");
       requireProductAdmin(context, current.is_combo === true);
       const input = validateUpdateProduct(body);
+      const stockEdit = parseFormStockEdit(body);
       const images = input.images ?? (Array.isArray(current.images) ? current.images as string[] : []);
       if (input.images !== undefined) requirePrimaryImage(images, current.status);
+      let finalImageColors: Record<string, string> = Object.fromEntries(
+        Object.entries(asJsonObject(current.image_colors)).filter(([url]) => images.includes(url))
+      ) as Record<string, string>;
       if (input.imageColors !== undefined || input.images !== undefined) {
         const variants = await repository.listVariants(productId, context.accessToken);
         const list = Array.isArray(variants) ? variants : variants.rows;
         const colors = list.map((variant) => asString(variant.color));
-        const mapping = input.imageColors ?? Object.fromEntries(
-          Object.entries(asJsonObject(current.image_colors)).filter(([url]) => images.includes(url))
-        );
+        const mapping = input.imageColors ?? finalImageColors;
         input.imageColors = validateImageColorLinks(mapping, images, colors);
+        finalImageColors = input.imageColors;
+        requireCommonImages(images, finalImageColors, current.status);
       }
       input.ipAddress = requestMeta.ipAddress || "0.0.0.0";
+
+      // Resolve the stock target BEFORE saving so an invalid stock edit never leaves a half-saved product.
+      let stockLine: JsonObject | null = null;
+      if (stockEdit) {
+        const variants = await repository.listVariants(productId, context.accessToken);
+        const list = Array.isArray(variants) ? variants : variants.rows;
+        if (list.length !== 1) {
+          throw validationError("stock", "Sản phẩm nhiều biến thể: điều chỉnh tồn kho theo từng biến thể trong tab Tồn kho");
+        }
+        const only = list[0];
+        const delta = stockEdit.stock !== undefined ? stockEdit.stock - Number(only.stock_quantity || 0) : 0;
+        const thresholdChanged = stockEdit.minStock !== undefined && stockEdit.minStock !== Number(only.low_stock_threshold ?? 5);
+        if (delta !== 0 || thresholdChanged) {
+          stockLine = {
+            variantId: only.variant_id, delta,
+            ...(thresholdChanged ? { lowStockThreshold: stockEdit.minStock } : {}),
+            expectedVersion: Number(only.version || 1)
+          };
+        }
+      }
+
       const result = await repository.updateProduct(productId, input, context.accessToken);
 
-      // If stock/threshold are passed, update the default/first variant
-      const stock = body.stock !== undefined ? Number(body.stock) : undefined;
-      const minStock = body.minStock !== undefined ? Number(body.minStock) : undefined;
-
-      if (stock !== undefined || minStock !== undefined) {
-        const variants = await repository.listVariants(productId, context.accessToken);
-        const list = variants?.rows || (Array.isArray(variants) ? variants : []);
-        
-        if (list.length === 1) {
-          const firstVariant = list[0];
-          let variantUpdated = false;
-          if (stock !== undefined) {
-            const delta = stock - Number(firstVariant.stock_quantity || 0);
-            if (delta !== 0) {
-              await repository.updateStock(productId, firstVariant.variant_id as string, {
-                delta,
-                reason: "Điều chỉnh tồn kho từ biểu mẫu sản phẩm",
-                expectedVersion: firstVariant.version || 1,
-                ipAddress: input.ipAddress
-              }, context.accessToken);
-              variantUpdated = true;
-            }
-          }
-          if (minStock !== undefined) {
-            await updateRows("variant", { variant_id: `eq.${firstVariant.variant_id}` }, {
-              low_stock_threshold: minStock,
-              version: (firstVariant.version as number || 0) + 1,
-              updated_at: new Date().toISOString()
-            });
-            variantUpdated = true;
-          }
-          if (variantUpdated) {
-            await syncProductStockStatus(repository, context, productId, "Đồng bộ tồn kho từ biểu mẫu sản phẩm", input.ipAddress);
-          }
+      // Stock and threshold go ONLY through the audited, version-locked RPC (reason required, audit UPDATE_STOCK).
+      if (stockLine && stockEdit) {
+        try {
+          await repository.bulkAdjustStock(productId, [stockLine], stockEdit.reason, input.ipAddress, context.accessToken);
+        } catch (error) {
+          invalidateCatalogCache();
+          throw new HttpError(409, "PRODUCT_SAVED_STOCK_FAILED",
+            "Thông tin sản phẩm đã lưu nhưng tồn kho chưa được điều chỉnh. Tải lại rồi điều chỉnh tồn kho riêng.",
+            { cause: errorMessage(error) });
         }
+        await syncProductStockStatus(repository, context, productId, stockEdit.reason, input.ipAddress);
+        await checkAndAlertLowStock(repository, context, productId, stockLine.variantId as string);
       }
       invalidateCatalogCache();
       return result;
@@ -212,7 +216,11 @@ export function createProductService({ repository }: { repository: ProductReposi
       if (!STATUS_TRANSITIONS[current.status as string]?.includes(input.status)) {
         throw validationError("status", `Không thể chuyển trạng thái từ ${statusVi(asString(current.status))} sang ${statusVi(input.status)}`);
       }
-      if (input.status === "on_sale") requirePrimaryImage(validateImageUrls(current.images), input.status);
+      if (input.status === "on_sale") {
+        const statusImages = validateImageUrls(current.images);
+        requirePrimaryImage(statusImages, input.status);
+        requireCommonImages(statusImages, asJsonObject(current.image_colors) as Record<string, string>, input.status);
+      }
       input.ipAddress = requestMeta.ipAddress || "0.0.0.0";
       const changed = await repository.changeStatus(productId, input, context.accessToken);
       invalidateCatalogCache();
@@ -241,25 +249,19 @@ export function createProductService({ repository }: { repository: ProductReposi
         throw validationError("reason", `Lý do điều chỉnh tồn kho tối thiểu ${MIN_CHANGE_REASON_LENGTH} ký tự`);
       }
 
+      if (lowStockThreshold !== undefined && (!Number.isInteger(lowStockThreshold) || lowStockThreshold < 0)) {
+        throw validationError("lowStockThreshold", "Ngưỡng cảnh báo tồn phải là số nguyên không âm");
+      }
       let result: unknown = { success: true };
-      if (delta !== 0) {
+      if (lowStockThreshold !== undefined) {
+        // Threshold change is audited with the reason and optimistic-locked, in the same RPC as the stock delta.
+        result = await repository.bulkAdjustStock(productId, [{
+          variantId: body.variantId, delta, lowStockThreshold, expectedVersion: requireVersion(body.expectedVersion)
+        }], reason, ipAddress, context.accessToken);
+      } else {
         const input = validateStockUpdate(body);
         input.ipAddress = ipAddress;
         result = await repository.updateStock(productId, body.variantId as string, input, context.accessToken);
-      }
-
-      if (lowStockThreshold !== undefined) {
-        if (!Number.isInteger(lowStockThreshold) || lowStockThreshold < 0) {
-          throw validationError("lowStockThreshold", "Ngưỡng cảnh báo tồn phải là số nguyên không âm");
-        }
-        const freshVariant = await selectOne("variant", { variant_id: `eq.${body.variantId}` });
-        if (freshVariant) {
-          await updateRows("variant", { variant_id: `eq.${body.variantId}` }, {
-            low_stock_threshold: lowStockThreshold,
-            version: (freshVariant.version as number) + 1,
-            updated_at: new Date().toISOString()
-          });
-        }
       }
 
       await syncProductStockStatus(repository, context, productId, reason, ipAddress);
@@ -449,6 +451,7 @@ export function createProductService({ repository }: { repository: ProductReposi
           category_id: row.category_id, description: row.description || null,
           status: row.status || null, image_url: row.image_url || null,
           is_featured: row.is_featured ? row.is_featured === "true" : null,
+          stock_reason: row.stock_quantity ? csvStockReason() : null,
           color: row.color || null, size: row.size ? row.size.toUpperCase() : null,
           color_hex: row.color_hex || null,
           stock_quantity: row.stock_quantity ? Number(row.stock_quantity) : null,
@@ -640,6 +643,7 @@ export function validateCreateProduct(body: JsonObject = {}) {
   const variantKeys = variants.map((variant) => `${variant.color.toLowerCase()}|${variant.size}`);
   if (new Set(variantKeys).size !== variantKeys.length) throw validationError("variants", "Mỗi tổ hợp màu và size chỉ được khai báo một lần");
   const imageColors = validateImageColorLinks(body.imageColors === undefined ? {} : body.imageColors, images, variants.map((variant) => variant.color));
+  requireCommonImages(images, imageColors, status);
   return {
     sku,
     name,
@@ -988,6 +992,42 @@ function requirePrimaryImage(images: string[], status: unknown): void {
   }
 }
 
+/**
+ * AD_PRODUCT_08: an on_sale product needs at least MIN_COMMON_IMAGES_ON_SALE COMMON images, i.e. images that are
+ * not linked to a variant color. Color-specific images never count; other statuses may have none.
+ */
+export function requireCommonImages(images: string[], imageColors: Record<string, string>, status: unknown): void {
+  if (status !== "on_sale") return;
+  const common = images.filter((url) => !Object.prototype.hasOwnProperty.call(imageColors || {}, url)).length;
+  if (common < MIN_COMMON_IMAGES_ON_SALE) {
+    throw validationError("images", `Sản phẩm đang bán cần tối thiểu ${MIN_COMMON_IMAGES_ON_SALE} ảnh chung (không gắn màu biến thể); hãy thêm ảnh chung hoặc bỏ liên kết màu của một ảnh`);
+  }
+}
+
+/**
+ * Stock fields on the product form: only accepted together with a user-entered reason (>= MIN_CHANGE_REASON_LENGTH),
+ * because stock must change through the audited adjust path. Returns null when the form sent no stock field.
+ */
+export function parseFormStockEdit(body: JsonObject): { stock?: number; minStock?: number; reason: string } | null {
+  if (body.stock === undefined && body.minStock === undefined) return null;
+  const reason = String(body.stockReason ?? "").trim();
+  if (reason.length < MIN_CHANGE_REASON_LENGTH) {
+    throw validationError("stockReason", `Đổi tồn kho/ngưỡng tồn cần lý do tối thiểu ${MIN_CHANGE_REASON_LENGTH} ký tự`);
+  }
+  const out: { stock?: number; minStock?: number; reason: string } = { reason };
+  if (body.stock !== undefined) {
+    const stock = Number(body.stock);
+    if (!Number.isInteger(stock) || stock < 0) throw validationError("stock", "Tồn kho phải là số nguyên không âm");
+    out.stock = stock;
+  }
+  if (body.minStock !== undefined) {
+    const minStock = Number(body.minStock);
+    if (!Number.isInteger(minStock) || minStock < 0) throw validationError("minStock", "Ngưỡng cảnh báo tồn phải là số nguyên không âm");
+    out.minStock = minStock;
+  }
+  return out;
+}
+
 function validateImageColorMap(value: unknown): Record<string, string> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw validationError("imageColors", "Liên kết ảnh và màu phải là bản đồ từ URL ảnh sang màu biến thể");
@@ -1123,7 +1163,7 @@ async function checkAndAlertLowStock(
 }
 
 /** Re-queue due low-stock alert retries; failures stay recorded with their error and attempt count. */
-async function retryDueLowStockAlerts(repository: ProductRepository): Promise<void> {
+export async function retryDueLowStockAlerts(repository: ProductRepository): Promise<void> {
   if (typeof repository.listDueLowStockAlertRetries !== "function") return;
   try {
     for (const retry of await repository.listDueLowStockAlertRetries(5)) {
@@ -1237,6 +1277,7 @@ function enrichProductAuditLogs(
 /** Classify a stored audit row the same way as `admin_list_product_audit_logs` when the RPC did not supply `action_type`. */
 function derivedAuditActionType(action: string, oldValue: JsonObject, newValue: JsonObject): ProductAuditActionType {
   if (action.toLowerCase() === "create") return "CREATE";
+  if (newValue.image_approval !== undefined && newValue.selection !== undefined) return "AI_IMAGE_APPLY";
   if (oldValue.status !== undefined && newValue.status !== undefined && oldValue.status !== newValue.status) return "UPDATE_STATUS";
   if (oldValue.stock_quantity !== undefined && newValue.stock_quantity !== undefined && oldValue.stock_quantity !== newValue.stock_quantity) {
     return "UPDATE_STOCK";
@@ -1265,6 +1306,7 @@ function productAuditActionLabel(actionType: string, newValue: JsonObject): stri
   if (actionType === "CREATE") return newValue.color || newValue.size ? "Thêm biến thể" : "Thêm sản phẩm";
   if (actionType === "UPDATE_STATUS") return "Đổi trạng thái";
   if (actionType === "UPDATE_STOCK") return "Điều chỉnh tồn kho";
+  if (actionType === "AI_IMAGE_APPLY") return "Áp dụng ảnh AI";
   if (actionType === "UPDATE") return "Cập nhật sản phẩm";
   return actionType || "—";
 }
@@ -1312,6 +1354,12 @@ function productAuditChangeSummary(
       return `— → ${[color, size].filter(Boolean).join("/")} tồn ${stock ?? 0}`;
     }
     return "— → đã tạo";
+  }
+
+  if (newValue.image_approval !== undefined && newValue.selection !== undefined) {
+    const picked = newValue.selection === "enhanced" ? "ảnh AI" : "ảnh gốc";
+    const revision = asString(newValue.image_revision || newValue.product_image_revision);
+    return `Áp dụng ${picked}${revision ? ` (bản ${revision.slice(0, 8)})` : ""}`;
   }
 
   if (oldValue.status !== undefined && newValue.status !== undefined && oldValue.status !== newValue.status) {

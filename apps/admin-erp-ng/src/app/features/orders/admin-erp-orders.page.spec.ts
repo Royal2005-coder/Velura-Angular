@@ -36,6 +36,7 @@ const codOrder: AdminOrderRow = {
   payment_method: 'COD',
   payment_status: 'pending',
   total_amount: 1_500_000,
+  is_guest: true,
   allowed_actions: [
     { code: 'call_confirm', label: 'Gọi xác nhận', to_status: null, requires_note: true, fields: ['call_result'], destructive: false },
     { code: 'confirm_cod', label: 'Xác nhận COD', to_status: 'confirmed', requires_note: false, fields: [], destructive: false },
@@ -180,6 +181,19 @@ describe('AdminErpOrdersPage', () => {
     expect(page.modal()?.kind).toBe('cod_call');
     expect(page.selected()?.order_id).toBe('o2');
     expect(page.requiresCallConfirmation()).toBe(true);
+  });
+
+  it('does not force the call flow for a Member COD order from 1.000.000đ', async () => {
+    const memberOrder: AdminOrderRow = { ...codOrder, order_id: 'o3', is_guest: false };
+    const fixture = await boot(() => of({ rows: [memberOrder], count: 1 }), [], {
+      getOrder: () => of(memberOrder),
+    });
+    const page = fixture.componentInstance;
+
+    page.openRow(memberOrder);
+    expect(page.modal()?.kind).not.toBe('cod_call');
+    expect(page.selected()?.order_id).toBe('o3');
+    expect(page.requiresCallConfirmation()).toBe(false);
   });
 
   it('surfaces order API errors without fabricated rows', async () => {

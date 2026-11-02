@@ -25,4 +25,17 @@ test("unrelated role cannot read reviews and hide requires a reason", async () =
   await assert.rejects(() => service.hide(context("admin_operator_danhgia_review"), REVIEW_ID, { reason: "short", expectedVersion: 1 }), (error) => error.status === 422);
 });
 
+test("admin viewer reads the review queue for drill-down but cannot approve or hide", async () => {
+  let approved = false;
+  const service = createReviewService({ repository: {
+    list: async () => ({ rows: [], count: 0 }),
+    approve: async () => { approved = true; return {}; },
+    hide: async () => { approved = true; return {}; }
+  } });
+  await service.list(context("admin_viewer"), new URLSearchParams("urgent=true"));
+  await assert.rejects(() => service.approve(context("admin_viewer"), REVIEW_ID, { expectedVersion: 1 }), (error) => error.status === 403);
+  await assert.rejects(() => service.hide(context("admin_viewer"), REVIEW_ID, { reason: "reason long enough", expectedVersion: 1 }), (error) => error.status === 403);
+  assert.equal(approved, false);
+});
+
 function context(roleCode) { return { authUser: { id: "auth-1" }, roleCode, accessToken: "jwt-token" }; }

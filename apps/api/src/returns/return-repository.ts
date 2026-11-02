@@ -1,7 +1,7 @@
 import { callRpc, quotePostgrestValue, selectOne, selectRows, updateRows } from "../supabase.js";
 import { HttpError } from "../http.js";
 import { asJsonObject, asNumber, asString, type JsonObject } from "../types.js";
-import { RETURN_SELECT, TICKET_SELECT } from "./return-constants.js";
+import { RETURN_SELECT, RETURN_TERMINAL_STATUSES, TICKET_SELECT } from "./return-constants.js";
 import { classifyReturnPayment, refundFlowFor, refundReceiverStatus, type ReturnPaymentKind } from "./return-refund-receiver.js";
 import { writeAuditLog } from "../audit.js";
 import { listReturnEvidence } from "./return-evidence.js";
@@ -21,6 +21,10 @@ export interface ReturnListFilters {
   orderId?: string;
   /** `cod` = đơn COD, `online` = đơn thanh toán online (Stripe/MoMo/VNPay). */
   paymentKind?: "cod" | "online";
+  /** AD_CSKH_01: live requests whose 24h contact deadline has passed. */
+  contactOverdue?: boolean;
+  /** AD_REFUND_03: live requests whose refund SLA deadline has passed. */
+  refundOverdue?: boolean;
   limit: number;
   offset: number;
 }
@@ -247,6 +251,13 @@ export function createReturnRepository() {
       if (filters.search) {
         query.or = `(description.ilike.*${filters.search}*,tracking_return_code.ilike.*${filters.search}*)`;
       }
+      // Deadlines are compared with the server clock; terminal requests never count as overdue.
+      const overdue: string[] = [];
+      const nowIso = new Date().toISOString();
+      const live = `status.not.in.(${RETURN_TERMINAL_STATUSES.join(",")})`;
+      if (filters.contactOverdue) overdue.push(`contact_due_at.lt.${nowIso}`, live);
+      if (filters.refundOverdue) overdue.push(`refund_due_at.lt.${nowIso}`, live);
+      if (overdue.length) query.and = `(${overdue.join(",")})`;
       let found = await selectRows("return_exchange", query, authOptions(accessToken)).catch(() => null);
       if (!found) {
         found = await selectRows("return_exchange", query);
@@ -629,10 +640,9 @@ const RETURN_DATABASE_ERRORS: Readonly<Record<string, { status: number; message:
   PICKUP_IDENTITY_TIME_REQUIRED: { status: 422, message: "Cần tên người lấy hàng (tối thiểu 2 ký tự) và thời điểm lấy hàng trong khoảng từ lúc khách tạo yêu cầu đến hiện tại." },
   PICKUP_REQUIRED: { status: 422, message: "Phần hàng chưa được xác nhận lấy hàng kèm bằng chứng, nên kho chưa thể nhận và kiểm." },
   TRACKING_ALREADY_USED: { status: 409, message: "Mã vận đơn này đã được dùng cho một phiếu khác hoặc chiều ngược lại. Nhập mã vận đơn mới cho phần hàng này." },
-  WAREHOUSE_LINE_MISMATCH: { status: 422, message: "Số lượng hàng nhận không khớp phần hàng đăng ký." },
-  RECEIPT_FACTS_REQUIRED: { status: 422, message: "Ghi nhận đầy đủ kết quả kiểm hàng." },
-  DISPOSITION_REQUIRED: { status: 422, message: "Chọn hướng xử lý phần hàng đã nhận." },
-  RESTOCK_QA_REQUIRED: { status: 422, message: "Không nhập lại hàng chưa đạt kiểm tra." },
+  INVALID_RECEIVED_QUANTITY: { status: 422, message: "Số lượng kho thực nhận phải từ 1 đến số lượng khách đăng ký gửi trả." },
+  DISPOSITION_REQUIRED: { status: 422, message: "Hướng xử lý kho không hợp lệ." },
+  RESTOCK_QA_REQUIRED: { status: 422, message: "Không nhập lại tồn bán được cho hàng đã ghi nhận không đạt kiểm tra; chọn hướng xử lý khác." },
   REFUND_ALREADY_REQUESTED: { status: 409, message: "Phần hàng đã có yêu cầu hoàn tiền." },
   EXCHANGE_ALREADY_SHIPPED: { status: 422, message: "Hàng đổi đã được bàn giao vận chuyển." },
   EXCHANGE_SAME_PRODUCT_REQUIRED: { status: 422, message: "Chỉ đổi biến thể của cùng sản phẩm." },
@@ -651,7 +661,7 @@ const RETURN_DATABASE_ERRORS: Readonly<Record<string, { status: number; message:
   TRANSFER_PROOF_REQUIRED: { status: 422, message: "Vui lòng tải lên ảnh chụp chứng từ chuyển khoản thành công." },
   DUPLICATE_TRANSFER_REFERENCE: { status: 409, message: "Mã giao dịch này đã được dùng cho một lần hoàn tiền khác. Vui lòng kiểm tra lại mã giao dịch." },
   CAPTURED_NON_STRIPE_REQUIRED: { status: 422, message: "Chỉ áp dụng ghi nhận chuyển khoản cho đơn thanh toán ngoài Stripe (COD, MoMo, VNPay) đã thanh toán thành công." },
-  WAREHOUSE_QA_REQUIRED: { status: 422, message: "Hàng hoàn trả phải được kho tiếp nhận và kiểm tra đạt yêu cầu (QA Pass) trước khi hoàn tiền." },
+  WAREHOUSE_QA_REQUIRED: { status: 422, message: "Kho phải xác nhận đã nhận hàng hoàn trả trước khi hoàn tiền." },
   VERSION_CONFLICT: { status: 409, message: "Dữ liệu yêu cầu đổi/trả đã bị thay đổi bởi thao tác khác. Vui lòng tải lại trang." },
   RETURN_NOT_FOUND: { status: 404, message: "Không tìm thấy yêu cầu đổi/trả tương ứng." },
   REFUND_BALANCE_EXHAUSTED: { status: 422, message: "Đơn hàng không còn số dư hợp lệ để hoàn tiền." },

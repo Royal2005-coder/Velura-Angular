@@ -84,7 +84,7 @@ type ListPromotionsFn = (params?: Record<string, string>) => Observable<AdminPro
 describe('AdminErpPromotionsPage', () => {
   async function boot(
     listPromotions: ListPromotionsFn,
-    overrides: { toggleVoucher?: () => Observable<unknown> } = {},
+    overrides: { toggleVoucher?: () => Observable<unknown>; viewer?: boolean; bulk?: () => Observable<unknown> } = {},
   ) {
     TestBed.resetTestingModule();
     let toggled = '';
@@ -104,6 +104,7 @@ describe('AdminErpPromotionsPage', () => {
       createPromotion: () => of(campaigns[0]),
       updatePromotion: () => of(campaigns[0]),
       createVoucher: () => of({}),
+      createVouchersBulk: () => (overrides.bulk ? overrides.bulk() : of({ requested: 2, created: ['A1', 'A2'], complete: true, failure: null })),
       updateVoucher: () => of(vouchers[0]),
     };
     await TestBed.configureTestingModule({
@@ -112,12 +113,12 @@ describe('AdminErpPromotionsPage', () => {
     }).compileComponents();
     const session = TestBed.inject(AdminErpSessionService);
     session.applyAuthContext({
-      role: 'admin_operator_gia_km',
+      role: overrides.viewer ? 'admin_viewer' : 'admin_operator_gia_km',
       roleName: 'Admin giá & KM',
       isAdmin: true,
       allowedPages: ['promotions'],
       allowedModules: ['promotions'],
-      capabilities: { promotions: ['read', 'update'] },
+      capabilities: { promotions: overrides.viewer ? ['read'] : ['read', 'update'] },
       user: { id: 'promo', email: 'promo@velura.test' },
       profile: { user_id: 'promo', email: 'promo@velura.test', full_name: 'Promo', role: 'admin', is_active: true },
     });
@@ -253,5 +254,60 @@ describe('AdminErpPromotionsPage', () => {
       (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLOptionElement>('select[name="applicableUserGroup"] option'),
     ).map((option) => option.value);
     expect(options).toEqual(['all_users', 'new_user', 'member', 'guest', 'loyal_user', 'churn_risk_user', 'birthday']);
+  });
+
+  it('shows the remaining voucher capacity live from budget and per-voucher cap', async () => {
+    const { fixture } = await boot(() => of({ rows: campaigns, count: 1, summary: stats.promotions }));
+    const page = fixture.componentInstance;
+
+    page.setView('vouchers');
+    page.openVoucherForm();
+    page.selectedVoucherPromoId.set('p1');
+    page.voucherFormType.set('fixed_amount');
+    page.voucherFormValue.set(100_000);
+    // Budget 10.000.000 / 100.000 = 100 codes, 4 already issued.
+    expect(page.voucherCapacityHint()).toEqual({ status: 'limited', max: 100, issued: 4, remaining: 96 });
+    page.voucherFormType.set('percentage');
+    page.voucherFormMaxDiscount.set(null);
+    expect(page.voucherCapacityHint()).toEqual({ status: 'cap_required' });
+  });
+
+  it('hides every write action from the read-only viewer but keeps the stats export', async () => {
+    const { fixture } = await boot(() => of({ rows: campaigns, count: 1, summary: stats.promotions }), { viewer: true });
+    const page = fixture.componentInstance;
+
+    expect(page.canMutate()).toBe(false);
+    page.setView('vouchers');
+    fixture.detectChanges();
+    const buttons = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('button')).map((b) => b.textContent?.trim());
+    expect(buttons).not.toContain('Tạo voucher');
+    expect(buttons).not.toContain('Tạo hàng loạt');
+    page.openBulkForm();
+    expect(page.bulkFormOpen()).toBe(false);
+
+    page.setView('stats');
+    fixture.detectChanges();
+    const statsButtons = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('button')).map((b) => b.textContent?.trim());
+    expect(statsButtons).toContain('Xuất CSV');
+  });
+
+  it('exports the loaded statistics as CSV', async () => {
+    const { fixture } = await boot(() => of({ rows: campaigns, count: 1, summary: stats.promotions }));
+    const page = fixture.componentInstance;
+    page.setView('stats');
+    const blobs: Blob[] = [];
+    vi.spyOn(URL, 'createObjectURL').mockImplementation((blob: Blob | MediaSource) => {
+      blobs.push(blob as Blob);
+      return 'blob:test';
+    });
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+
+    page.exportStatsCsv();
+
+    expect(blobs.length).toBe(1);
+    const text = await blobs[0].text();
+    expect(text).toContain('THUDONG26');
+    expect(text).toContain('Đơn trong kỳ');
   });
 });

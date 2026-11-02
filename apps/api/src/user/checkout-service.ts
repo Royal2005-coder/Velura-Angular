@@ -258,7 +258,8 @@ export class CheckoutService {
     voucherId: string | null,
     declineVoucher: boolean,
     points: unknown = 0,
-    verifiedGuestPhone: string | null = null
+    verifiedGuestPhone: string | null = null,
+    quotedVoucher?: { voucherId: string | null }
   ): Promise<CheckoutQuote> {
     const claims = rawItems.map((item) => ({
       variantId: asString(item.variant_id),
@@ -289,7 +290,8 @@ export class CheckoutService {
       voucherId,
       declineVoucher,
       { lines: cartLines.lines, categoryNameById: tree.nameById },
-      verifiedGuestPhone
+      verifiedGuestPhone,
+      quotedVoucher
     );
     const loyalty = await loyaltyService.quote(context, priced.subtotal, priced.shippingFee, voucher.merchandiseDiscount, points);
     return {

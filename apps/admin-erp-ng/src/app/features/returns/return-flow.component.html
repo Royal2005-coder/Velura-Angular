@@ -102,14 +102,25 @@
       <label class="erp-field"><span>Video bàn giao (không bắt buộc)</span><input type="file" accept="video/mp4,video/webm" (change)="pickFile('video', $event)" /><small>{{ pickupVideo()?.name }}</small></label>
     }
     @if (flow() === 'receive') {
-      <p class="flow-hint">Nhận {{ receivedQuantity() }} sản phẩm. Có thể giảm số lượng xử lý phía trên để nhận riêng phần hợp lệ.</p>
+      <label class="erp-field">
+        <span>Số lượng kho thực nhận (khách đăng ký {{ registeredQuantity() }})</span>
+        <input class="erp-input" type="number" min="1" [max]="registeredQuantity()" step="1" [value]="receivedQuantity()" (input)="setReceivedQuantity($event)" />
+      </label>
+      @if (isPartialReceipt()) {
+        <p class="flow-warning">Chỉ nhận {{ receivedQuantity() }}/{{ registeredQuantity() }} sản phẩm. Phần đã nhận tiếp tục hoàn tiền/đổi theo số lượng nhận; {{ registeredQuantity() - receivedQuantity() }} sản phẩm còn thiếu được tách riêng, giải phóng lượt đổi/trả và báo CSKH liên hệ khách.</p>
+      } @else {
+        <p class="flow-hint">Kho chỉ cần xác nhận đúng sản phẩm và số lượng thực nhận. Kết quả kiểm hàng bên dưới chỉ để ghi nhận, không chặn hoàn tiền.</p>
+      }
+      <span class="flow-facts__label">Ghi nhận tình trạng (tùy chọn)</span>
       <label class="flow-check"><input type="checkbox" [checked]="matchesProduct()" (change)="setCheck('matchesProduct', $event)" /> Đúng sản phẩm</label>
       <label class="flow-check"><input type="checkbox" [checked]="tagsIntact()" (change)="setCheck('tagsIntact', $event)" /> Tem / nhãn còn nguyên</label>
       <label class="flow-check"><input type="checkbox" [checked]="conditionAcceptable()" (change)="setCheck('conditionAcceptable', $event)" /> Tình trạng sản phẩm đạt</label>
       <label class="flow-check"><input type="checkbox" [checked]="packageMatch()" (change)="setCheck('packageMatch', $event)" /> Kiện hàng khớp</label>
       <label class="flow-check"><input type="checkbox" [checked]="sealIntact()" (change)="setCheck('sealIntact', $event)" /> Niêm phong còn nguyên</label>
-      <p class="flow-hint">Niêm phong không còn nguyên vẫn được ghi nhận. Tình trạng không đạt chỉ ảnh hưởng phần đang kiểm, không chặn các phần khác.</p>
-      <label class="erp-field"><span>Hướng xử lý kho</span><select class="erp-select" [value]="disposition()" (change)="setDisposition($event)"><option value="restock">Nhập tồn bán được</option><option value="repair">Sửa chữa</option><option value="scrap">Loại bỏ</option><option value="return_supplier">Trả nhà cung cấp</option></select></label>
+      <label class="erp-field"><span>Hướng xử lý kho (tùy chọn)</span><select class="erp-select" [value]="disposition()" (change)="setDisposition($event)"><option value="">Chưa chọn</option><option value="restock">Nhập tồn bán được (chỉ khi các mục trên đạt)</option><option value="repair">Sửa chữa</option><option value="scrap">Loại bỏ</option><option value="return_supplier">Trả nhà cung cấp</option></select></label>
+    }
+    @if (flow() === 'stop' && line()?.item_status === 'RETURN_SHIPPING') {
+      <p class="flow-warning">Ghi nhận khách không tiếp tục gửi hàng. Chỉ áp dụng khi kho chưa nhận kiện; lượt đổi/trả của sản phẩm được giải phóng và sự kiện được ghi vào nhật ký.</p>
     }
     @if (flow() === 'manual') {
       <div class="flow-payout-card">
@@ -140,7 +151,7 @@
     }
     @if (flow() === 'receive' || flow() === 'manual') {
       <div class="erp-field">
-        <span>{{ flow() === 'manual' ? 'Chứng từ đối soát / chuyển khoản' : 'Ảnh kiểm hàng tại kho (bắt buộc)' }}</span>
+        <span>{{ flow() === 'manual' ? 'Chứng từ đối soát / chuyển khoản' : 'Ảnh kiểm hàng tại kho (không bắt buộc)' }}</span>
         <div class="custom-file-row">
           <label class="erp-btn erp-btn--sm custom-file-trigger">
             <input type="file" accept="image/*" class="erp-sr-only" (change)="pickFile('proof', $event)" />

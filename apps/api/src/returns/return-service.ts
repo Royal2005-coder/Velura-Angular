@@ -10,6 +10,7 @@ import {
   SUPPORT_TICKET_TRANSITIONS
 } from "./return-constants.js";
 import { sendExchangeCompletedEmail, sendExchangeShippingEmail, sendRefundSuccessEmail, sendReturnApprovedEmail } from "./return-email.js";
+import { sendReturnMilestoneEmail } from "./return-milestone-email.js";
 import {
   adminRefundReceiver,
   classifyReturnPayment,
@@ -143,10 +144,10 @@ export function createReturnService({
     if (item.resolution_type !== "refund" || item.decision_status !== "approved") {
       throw new HttpError(422, "REFUND_RESOLUTION_REQUIRED", "Phần hàng phải được duyệt hoàn tiền.");
     }
-    if (!["RECEIVED", "REFUND_PENDING"].includes(asString(item.item_status)) ||
-        Number(item.received_quantity) !== Number(item.quantity) ||
-        !["matches_product", "tags_intact", "condition_acceptable", "package_match"].every(key => item[key] === true)) {
-      throw new HttpError(422, "WAREHOUSE_QA_REQUIRED", "Phần hàng phải được nhận và kiểm tra trước khi hoàn tiền.");
+    // BA RET-09: the warehouse only confirms what arrived; quality facts never gate the refund.
+    // A partially received part was already split, so its remaining quantity equals what was received.
+    if (!["RECEIVED", "REFUND_PENDING"].includes(asString(item.item_status)) || Number(item.received_quantity) < 1) {
+      throw new HttpError(422, "WAREHOUSE_QA_REQUIRED", "Kho phải xác nhận đã nhận hàng hoàn trả trước khi hoàn tiền.");
     }
     return { current, item, returnItemId, version };
   }
@@ -175,6 +176,8 @@ export function createReturnService({
         search: searchParams.get("q") || undefined,
         orderId: searchParams.get("order_id") || undefined,
         paymentKind,
+        contactOverdue: searchParams.get("contact_overdue") === "true",
+        refundOverdue: searchParams.get("refund_overdue") === "true",
         limit: Math.min(parseInt(searchParams.get("limit") || "50"), 1000),
         offset: parseInt(searchParams.get("offset") || "0")
       }, context.accessToken);
@@ -290,16 +293,22 @@ export function createReturnService({
         }
       }
       if (action === "receive") {
-        if (!["matchesProduct", "tagsIntact", "conditionAcceptable", "packageMatch", "sealIntact"].every(key => typeof body[key] === "boolean")) {
-          throw new HttpError(422, "RECEIPT_FACTS_REQUIRED", "Ghi nhận đầy đủ kết quả kiểm hàng, kể cả khi không đạt.");
-        }
+        // AD_RECEIVE_01: only item + quantity are mandatory; the rest is optional recorded information.
         if (typeof body.receivedQuantity !== "number" || !Number.isInteger(body.receivedQuantity) || body.receivedQuantity < 1) {
-          throw new HttpError(422, "QTY_MISMATCH", "Số lượng nhận phải là số nguyên dương.");
+          throw new HttpError(422, "QTY_MISMATCH", "Số lượng thực nhận phải là số nguyên dương.");
         }
-        if (!["restock", "repair", "scrap", "return_supplier"].includes(asString(body.disposition))) {
-          throw new HttpError(422, "RETURN_DISPOSITION_REQUIRED", "Chọn hướng xử lý phần hàng đã nhận.");
+        for (const key of ["matchesProduct", "tagsIntact", "conditionAcceptable", "packageMatch", "sealIntact"]) {
+          if (body[key] !== undefined && typeof body[key] !== "boolean") {
+            throw new HttpError(422, "RECEIPT_FACTS_INVALID", "Kết quả kiểm hàng phải là có/không.");
+          }
         }
-        if (!isPrivateEvidenceRef(body.receiptProofRef)) throw new HttpError(422, "PROOF_REQUIRED", "Tải lên bằng chứng kiểm hàng riêng tư.");
+        const disposition = asString(body.disposition);
+        if (disposition && !["restock", "repair", "scrap", "return_supplier"].includes(disposition)) {
+          throw new HttpError(422, "RETURN_DISPOSITION_REQUIRED", "Hướng xử lý kho không hợp lệ.");
+        }
+        if (body.receiptProofRef !== undefined && body.receiptProofRef !== "" && !isPrivateEvidenceRef(body.receiptProofRef)) {
+          throw new HttpError(422, "PROOF_REQUIRED", "Bằng chứng kiểm hàng phải là tệp tải lên riêng tư.");
+        }
       }
       let packingEvidenceMissing = false;
       if (action === "approve") {
@@ -323,6 +332,7 @@ export function createReturnService({
       if (action === "complete_exchange") {
         void sendExchangeCompletedEmail(returnId);
       }
+      if (action === "receive") notifyGoodsReceived(returnId, returnItemId, result);
       return packingEvidenceMissing ? { ...result, packing_evidence_missing: true } : result;
     },
     async recordContact(context, returnId, body) {
@@ -338,11 +348,14 @@ export function createReturnService({
       }
       const expectedVersion = asNumber(body.expectedVersion);
       if (!expectedVersion) throw new HttpError(422, "VALIDATION_ERROR", "expectedVersion required");
-      return repository.recordContact(returnId, {
+      const recorded = await repository.recordContact(returnId, {
         result,
         note,
         expectedVersion
       }, context.profile?.user_id || context.authUser.id, context.roleCode, context.ipAddress);
+      // Only a successful conversation counts as "đã liên hệ"; the first one notifies, repeats are deduped.
+      if (result === "reached") void sendReturnMilestoneEmail(returnId, "contacted");
+      return recorded;
     },
 
     async triggerStripeRefund(context, returnId, body = {}) {
@@ -365,6 +378,8 @@ export function createReturnService({
       const result = await refunds.refund(orderId, amount, returnId, version, returnItemId);
       if (result.status === "refunded") {
         void sendRefundSuccessEmail(returnId, { method: "stripe", returnItemId });
+      } else if (result.status === "requested") {
+        void sendReturnMilestoneEmail(returnId, "refunding", { returnItemId });
       } else if (result.status === "failed") {
         throw new HttpError(422, "STRIPE_REFUND_FAILED", result.message || "Hoàn tiền qua Stripe thất bại.");
       } else if (result.status === "skipped") {
@@ -552,6 +567,24 @@ export function createReturnService({
       return enrichAuditLogs(payload, RETURN_AUDIT);
     }
   };
+}
+
+/**
+ * Sends the "kho đã nhận" email once per part: refunds announce the refund (with SLA), exchanges announce
+ * the receipt. A partial receipt names the received/registered quantities so the customer expects CSKH.
+ */
+function notifyGoodsReceived(returnId: string, returnItemId: string, result: JsonObject): void {
+  const item = asJsonObject(result.item);
+  const received = asNumber(item.received_quantity);
+  const missing = (Array.isArray(result.lines) ? result.lines : [])
+    .map((line) => asJsonObject(line))
+    .filter((line) => asString(line.split_from_id) === returnItemId && asString(line.attention_status) === "needs_support")
+    .reduce((sum, line) => sum + asNumber(line.quantity), 0);
+  const options = {
+    returnItemId, receivedQuantity: received, registeredQuantity: received + missing,
+    refundDueAt: asString(item.refund_due_at) || undefined
+  };
+  void sendReturnMilestoneEmail(returnId, asString(item.resolution_type) === "refund" ? "refunding" : "received", options);
 }
 
 const ITEM_ACTIONS: readonly string[] = [

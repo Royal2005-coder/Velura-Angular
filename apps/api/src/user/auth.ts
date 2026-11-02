@@ -4,6 +4,7 @@ import { hashPassword, verifyPassword, signJwt, verifyJwt } from "../auth-helper
 import { allowDevOtpBypass, config } from "../config.js";
 import {
   assertAccountNotLocked,
+  releaseExpiredTemporaryLock,
   assertNotLocked,
   clearLoginFailures,
   recordFailedLogin,
@@ -477,6 +478,7 @@ export async function handleAuthRoute(
         tier: "Standard"
       }));
     } else {
+      user = await releaseExpiredTemporaryLock(user);
       assertAccountNotLocked(user);
       // Validate OTP for existing user
       const now = new Date().toISOString();
@@ -538,13 +540,17 @@ export async function handleAuthRoute(
 
     // Query user
     const query = email ? { email: `eq.${email}` } : { phone: `eq.${phone}` };
-    const user = await selectOne("users", query);
-    if (!user || typeof user.user_id !== "string") {
+    const foundUser = await selectOne("users", query);
+    if (!foundUser || typeof foundUser.user_id !== "string") {
       throw new HttpError(401, "UNAUTHORIZED", "Thông tin đăng nhập không chính xác");
     }
+    // Expired temporary admin lock = unlocked (BA 3.1.9); persist it before any further check.
+    const user = await releaseExpiredTemporaryLock(foundUser);
+    assertAccountNotLocked(user);
 
     const lockUser: LoginLockUser = {
-      user_id: user.user_id,
+      user_id: user.user_id as string,
+      lock_type: user.lock_type,
       login_fail_count: user.login_fail_count,
       locked_until: user.locked_until,
       updated_at: user.updated_at,
@@ -552,14 +558,13 @@ export async function handleAuthRoute(
     };
     const currentLock = await resetStaleLoginFailures(lockUser);
     assertNotLocked(currentLock);
-    assertAccountNotLocked(user);
 
     const isValidPassword = verifyPassword(asString(password), asString(user.password_hash));
     if (!isValidPassword) {
       await recordFailedLogin(currentLock);
     }
 
-    await clearLoginFailures(user.user_id);
+    await clearLoginFailures(asString(user.user_id));
 
     // Check if user is active (AUTH-05 verification check)
     if (!user.is_active) {
@@ -682,10 +687,11 @@ export async function handleAuthRoute(
 
     const identityText = asString(identity);
     const query = identityText.includes("@") ? { email: `eq.${identityText}` } : { phone: `eq.${identityText}` };
-    const user = await selectOne("users", query);
-    if (!user) {
+    const foundUser = await selectOne("users", query);
+    if (!foundUser) {
       throw new HttpError(404, "USER_NOT_FOUND", "Tài khoản không tồn tại");
     }
+    const user = await releaseExpiredTemporaryLock(foundUser);
     assertAccountNotLocked(user);
 
     const now = new Date().toISOString();

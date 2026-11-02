@@ -49,6 +49,7 @@ describe('AdminErpReturnsPage', () => {
       returns: [] as Record<string, string>[],
       tickets: [] as Record<string, string>[],
       respond: [] as Record<string, unknown>[],
+      assign: [] as Record<string, unknown>[],
       close: [] as Record<string, unknown>[],
       serviceLogs: [] as Record<string, string>[],
     };
@@ -56,6 +57,12 @@ describe('AdminErpReturnsPage', () => {
       listReturns: (params?: Record<string, string>, paymentKind?: string) => {
         calls.returns.push({ ...(params ?? {}), ...(paymentKind ? { payment_kind: paymentKind } : {}) });
         const status = params?.['status'];
+        if (params?.['contact_overdue'] === 'true') {
+          return of({ rows: [rows[0]], count: 3 });
+        }
+        if (params?.['refund_overdue'] === 'true') {
+          return of({ rows: [rows[0]], count: 2 });
+        }
         if (status === 'REQUESTED') {
           return of({ rows: [rows[0]], count: 4 });
         }
@@ -79,6 +86,10 @@ describe('AdminErpReturnsPage', () => {
       getTicket: (id: string) => of(tickets.find((row) => row.ticket_id === id) || tickets[0]),
       respondTicket: (_id: string, body: Record<string, unknown>) => {
         calls.respond.push(body);
+        return of({ ...tickets[0], status: 'processing', version: 2 });
+      },
+      assignTicket: (_id: string, body: Record<string, unknown>) => {
+        calls.assign.push(body);
         return of({ ...tickets[0], status: 'processing', version: 2 });
       },
       resolveTicket: () => of({ ...tickets[0], status: 'resolved' }),
@@ -350,5 +361,42 @@ describe('AdminErpReturnsPage', () => {
 
     page.resetTicketFilters();
     expect(page.ticketSearch()).toBe('');
+  });
+
+  it('shows overdue contact and refund counts and sends the overdue filter to the server', () => {
+    const { page, calls } = boot();
+    expect(page.contactOverdueCount()).toBe(3);
+    expect(page.refundOverdueCount()).toBe(2);
+
+    page.slaFilter.set('contact_overdue');
+    page.applyFilters();
+    const contact = calls.returns.filter((params) => params['contact_overdue'] === 'true' && params['limit'] === '10');
+    expect(contact.length).toBe(1);
+    expect(contact[0]['refund_overdue']).toBe('');
+
+    page.slaFilter.set('refund_overdue');
+    page.applyFilters();
+    expect(calls.returns.some((params) => params['refund_overdue'] === 'true' && params['limit'] === '10')).toBe(true);
+
+    page.resetFilters();
+    expect(page.slaFilter()).toBe('');
+  });
+
+  it('lets an operator claim an open ticket with the version on screen', () => {
+    const { page, calls } = boot();
+    page.openTicket(tickets[0]);
+    expect(page.canClaim(page.selectedTicket())).toBe(true);
+    page.claimTicket();
+    expect(calls.assign).toEqual([{ assignedTo: 'u1', expectedVersion: 1 }]);
+    expect(page.selectedTicket()?.status).toBe('processing');
+    expect(page.canClaim(page.selectedTicket())).toBe(false);
+  });
+
+  it('does not offer claiming to a read-only reviewer', () => {
+    const { page, calls } = boot({ returns: ['read'] });
+    page.openTicket(tickets[0]);
+    expect(page.canClaim(page.selectedTicket())).toBe(false);
+    page.claimTicket();
+    expect(calls.assign).toEqual([]);
   });
 });

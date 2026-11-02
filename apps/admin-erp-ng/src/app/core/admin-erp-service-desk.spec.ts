@@ -1,5 +1,5 @@
 import { AdminReturnLine, AdminReturnRow, AdminTicketRow } from './admin-erp-api.service';
-import { canTicketAction, contactAllowed, isChatGovernedTicket, isReturnOpen, itemRefundAllowed, refundInfoAllowed, refundReceiverBlocked, RETURN_DECISION_STATUSES, RETURN_HEADER_STATUSES, returnContactOverdue, returnDecisionLabel, returnItemActions, returnStatusLabel, returnStatusTone } from './admin-erp-service-desk';
+import { canAssignTicket, refundSlaBadge, refundSlaState, REFUND_SLA_MAX_WORKING_DAYS, RETURN_WINDOW_DAYS, canTicketAction, contactAllowed, isChatGovernedTicket, isReturnOpen, itemRefundAllowed, refundInfoAllowed, refundReceiverBlocked, RETURN_DECISION_STATUSES, RETURN_HEADER_STATUSES, returnContactOverdue, returnDecisionLabel, returnItemActions, returnStatusLabel, returnStatusTone } from './admin-erp-service-desk';
 
 const base: AdminReturnRow = { return_id: 'r1', order_id: 'o1', return_type: 'exchange', status: 'IN_PROGRESS', version: 1 };
 const part: AdminReturnLine = { return_item_id: 'part1', quantity: 2, version: 1, decision_status: 'approved', resolution_type: 'exchange', item_status: 'RECEIVED' };
@@ -30,11 +30,11 @@ describe('service desk per-part rules', () => {
     expect(returnItemActions(part, true)).not.toContain('reject');
   });
 
-  it('requires recorded handover before warehouse receipt and prevents post-handover stop', () => {
+  it('requires recorded handover before warehouse receipt and lets CSKH stop only before the warehouse has the goods', () => {
     const waiting = returnItemActions({ ...part, item_status: 'WAITING_RETURN' }, false);
     expect(waiting).toContain('pickup'); expect(waiting).not.toContain('receive'); expect(waiting).toContain('stop');
     const shipping = returnItemActions({ ...part, item_status: 'RETURN_SHIPPING' }, false);
-    expect(shipping).toContain('receive'); expect(shipping).not.toContain('stop');
+    expect(shipping).toContain('receive'); expect(shipping).toContain('stop');
     expect(returnItemActions({ ...part, item_status: 'RECEIVED' }, false)).not.toContain('stop');
   });
 
@@ -78,5 +78,36 @@ describe('service desk per-part rules', () => {
     expect(canTicketAction(ticket('resolved'), 'reply')).toBe(false);
     expect(canTicketAction(ticket('closed'), 'close')).toBe(false);
     expect(isChatGovernedTicket(ticket('open', 'c1'))).toBe(true);
+  });
+});
+
+describe('refund SLA and window constants', () => {
+  const now = Date.parse('2026-11-10T00:00:00Z');
+
+  it('keeps the 7-day return window and the 5-working-day refund promise as named constants', () => {
+    expect(RETURN_WINDOW_DAYS).toBe(7);
+    expect(REFUND_SLA_MAX_WORKING_DAYS).toBe(5);
+  });
+
+  it('classifies a stored refund deadline', () => {
+    expect(refundSlaState(null, now)).toBe('none');
+    expect(refundSlaState('bad', now)).toBe('none');
+    expect(refundSlaState('2026-11-14T00:00:00Z', now)).toBe('on_track');
+    expect(refundSlaState('2026-11-10T12:00:00Z', now)).toBe('due_soon');
+    expect(refundSlaState('2026-11-09T00:00:00Z', now)).toBe('overdue');
+  });
+
+  it('shows an overdue badge in the danger tone and nothing when no refund is waiting', () => {
+    expect(refundSlaBadge(null, now)).toBeNull();
+    expect(refundSlaBadge('2026-11-09T00:00:00Z', now)?.tone).toBe('danger');
+    expect(refundSlaBadge('2026-11-10T12:00:00Z', now)?.tone).toBe('warning');
+    expect(refundSlaBadge('2026-11-20T00:00:00Z', now)?.tone).toBe('info');
+  });
+
+  it('lets an operator claim only an open standalone ticket', () => {
+    expect(canAssignTicket({ ticket_id: 't', status: 'open' })).toBe(true);
+    expect(canAssignTicket({ ticket_id: 't', status: 'processing' })).toBe(false);
+    expect(canAssignTicket({ ticket_id: 't', status: 'open', chat_session_id: 'c1' })).toBe(false);
+    expect(canAssignTicket(null)).toBe(false);
   });
 });

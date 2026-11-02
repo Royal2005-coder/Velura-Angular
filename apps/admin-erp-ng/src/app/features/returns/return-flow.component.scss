@@ -72,6 +72,22 @@
 
 .flow-hint--soft { background: var(--erp-warning-soft); color: var(--erp-warning); }
 
+.flow-scenarios { margin: 0 0 12px; }
+.flow-scenarios__list { display: flex; flex-wrap: wrap; gap: 6px; }
+.flow-scenario-btn {
+  padding: 6px 11px;
+  border: 1px solid var(--erp-accent-soft);
+  border-radius: var(--erp-radius-sm);
+  background: var(--erp-accent-soft);
+  color: var(--erp-accent-strong);
+  font: 600 11.5px var(--erp-font-ui, inherit);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.flow-scenario-btn:hover {
+  background: var(--erp-surface);
+  border-color: var(--erp-accent);
+}
 .flow-facts { margin: 0 0 12px; }
 .flow-facts__label { display: block; margin-bottom: 6px; color: var(--erp-muted); font-size: 11px; }
 .flow-facts__list { display: flex; flex-wrap: wrap; gap: 6px; }

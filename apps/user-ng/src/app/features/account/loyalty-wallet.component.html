@@ -45,7 +45,7 @@
       <p class="loyalty__policy" role="status">Ví có khoá tích điểm cũ cần quản trị viên kiểm tra. Nợ điểm tự nó không khoá mua hàng hay tích điểm.</p>
     }
 
-    @if (!wallet.policy.spending_enabled || !wallet.policy.policy_approved_at) {
+    @if (!busy() && (!wallet.policy.spending_enabled || !wallet.policy.policy_approved_at)) {
       <p class="loyalty__policy" role="status">Tính năng dùng điểm khi thanh toán đang tạm khóa.</p>
     }
 
@@ -81,8 +81,8 @@
     <article class="loyalty__panel loyalty__panel--wide">
       <div class="loyalty__panel-title"><div><h4>Voucher giới thiệu</h4><p>Các voucher đã nhận từ chương trình giới thiệu.</p></div><span>{{ wallet.reward_vouchers.length }}</span></div>
       <div class="loyalty__voucher-grid">
-        @for (reward of wallet.reward_vouchers; track reward.voucher_id) {
-          <div class="loyalty__voucher"><div><span>{{ state(reward.state) }}</span><strong>{{ reward.code }}</strong><small>Hết hạn {{ date(reward.expires_at) }}</small></div><a routerLink="/account/vouchers">Xem voucher</a></div>
+        @for (reward of wallet.reward_vouchers; track reward.member_voucher_id || reward.voucher_id || reward.code || $index) {
+          <div class="loyalty__voucher"><div><span>{{ state(reward.status || reward.state) }}</span><strong>{{ reward.code }}</strong><small>Hết hạn {{ date(reward.expires_at) }}</small></div><a routerLink="/account/vouchers">Xem voucher</a></div>
         } @empty {
           <div class="loyalty__empty"><strong>Chưa có voucher giới thiệu</strong><span>Voucher đủ điều kiện sẽ được hiển thị tại đây.</span></div>
         }

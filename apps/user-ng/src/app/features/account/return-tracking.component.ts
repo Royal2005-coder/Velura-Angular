@@ -73,6 +73,32 @@ const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
             }
           </ol>
         }
+        @if (d.responseOptions?.length) {
+          <section class="track-card track-options">
+            <h4>Phản hồi nhanh phương án CSKH</h4>
+            <p class="muted">Chọn phương án bạn mong muốn sau khi trao đổi để hệ thống tự động ghi nhận ngay, không cần xử lý thủ công:</p>
+            <div class="option-button-group">
+              @for (opt of d.responseOptions; track opt.code) {
+                <button type="button" class="opt-btn" [class.is-selected]="selectedOption() === opt.code" (click)="selectOption(opt.code)">
+                  {{ opt.label }}
+                </button>
+              }
+            </div>
+            @if (selectedOptionObj()?.requires_note) {
+              <label class="field">
+                <span>Ghi chú chi tiết (tối thiểu 5 ký tự)</span>
+                <textarea class="opt-input" rows="2" [value]="optionNote()" (input)="onOptionNote($event)" placeholder="Nhập thêm thông tin hoặc yêu cầu của bạn..."></textarea>
+              </label>
+            }
+            @if (optionError()) { <p class="error" role="alert">{{ optionError() }}</p> }
+            @if (optionNotice()) { <p class="success-text" role="status">{{ optionNotice() }}</p> }
+            @if (selectedOption()) {
+              <button type="button" class="primary opt-submit" [disabled]="submittingOption()" (click)="submitOption()">
+                {{ submittingOption() ? 'Đang gửi…' : 'Xác nhận phản hồi' }}
+              </button>
+            }
+          </section>
+        }
 
         @if (d.shipment; as shipment) {
           <section class="track-card">
@@ -209,6 +235,14 @@ const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
       .error { color: #b3261e; font-size: 12px; }
       .error-box { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid #b3261e; border-radius: 10px; }
       .success-text { color: #1b5e20; font-size: 12px; }
+      .track-options { background: #faf5f6; border: 1px solid #f2c2cf; }
+      .option-button-group { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+      .opt-btn { padding: 7px 13px; border: 1px solid #c94f70; border-radius: 999px; background: #fff; color: #7a283c; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .2s; }
+      .opt-btn:hover { background: #fdf2f4; }
+      .opt-btn.is-selected { background: #7a283c; color: #fff; border-color: #7a283c; }
+      .opt-input { width: 100%; padding: 8px 10px; border: 1px solid #d4c5c8; border-radius: 8px; font-size: 13px; font-family: inherit; }
+      .opt-submit { margin-top: 8px; padding: 8px 16px; border-radius: 8px; border: 0; background: #7a283c; color: #fff; font-weight: 600; cursor: pointer; }
+      .opt-submit:hover { opacity: .9; }
     `,
   ],
 })
@@ -223,6 +257,48 @@ export class ReturnTrackingComponent {
   readonly uploading = signal(false);
   readonly uploadError = signal('');
   readonly uploadNote = signal('');
+  readonly selectedOption = signal<string>('');
+  readonly optionNote = signal('');
+  readonly submittingOption = signal(false);
+  readonly optionError = signal('');
+  readonly optionNotice = signal('');
+  readonly selectedOptionObj = computed(() =>
+    this.detail()?.responseOptions?.find((o) => o.code === this.selectedOption())
+  );
+
+  selectOption(code: string): void {
+    this.selectedOption.set(this.selectedOption() === code ? '' : code);
+    this.optionError.set('');
+    this.optionNotice.set('');
+  }
+
+  onOptionNote(event: Event): void {
+    this.optionNote.set((event.target as HTMLTextAreaElement).value);
+  }
+
+  async submitOption(): Promise<void> {
+    const code = this.selectedOption();
+    const opt = this.selectedOptionObj();
+    const d = this.detail();
+    if (!code || !opt || !d || this.submittingOption()) return;
+    if (opt.requires_note && this.optionNote().trim().length < 5) {
+      this.optionError.set('Vui lòng nhập ghi chú ít nhất 5 ký tự.');
+      return;
+    }
+    this.submittingOption.set(true);
+    this.optionError.set('');
+    try {
+      const updated = await this.model.respondReturn?.(d.returnId, code, this.optionNote().trim());
+      if (updated) this.detail.set(updated);
+      this.optionNotice.set('Đã ghi nhận phản hồi của bạn.');
+      this.selectedOption.set('');
+      this.optionNote.set('');
+    } catch (err: unknown) {
+      this.optionError.set(err instanceof Error ? err.message : 'Chưa gửi được phản hồi. Vui lòng thử lại.');
+    } finally {
+      this.submittingOption.set(false);
+    }
+  }
   readonly maxPhotos = MAX_PHOTOS;
   readonly labelReady = computed(() => {
     const d = this.detail();

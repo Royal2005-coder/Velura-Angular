@@ -35,6 +35,62 @@ export function returnReasonLabel(code: string): string {
 
 
 /**
+ * A reply the customer can send after CSKH confirms the plan. The code is stored in the
+ * request's contact trail; it never rewrites the request status or a part's workflow, so a
+ * choice only becomes a business action when CSKH records its own decision.
+ */
+export interface ReturnCustomerResponseOption {
+  code: string;
+  label: string;
+  /** CSKH needs the customer's own words before acting on this choice. */
+  requires_note?: boolean;
+  /** Signals the queue that a human must act; unrelated to the request's business stage. */
+  attention_status?: "none" | "needs_support" | "waiting_customer";
+}
+
+/** Canonical customer replies shared by the storefront and the CSKH workspace. */
+export const RETURN_CUSTOMER_RESPONSE_OPTIONS: readonly ReturnCustomerResponseOption[] = [
+  { code: "accept_plan", label: "Đồng ý với phương án của CSKH", attention_status: "none" },
+  { code: "prefer_refund", label: "Tôi muốn hoàn tiền", attention_status: "needs_support" },
+  { code: "prefer_exchange", label: "Tôi muốn đổi hàng", attention_status: "needs_support" },
+  { code: "schedule_pickup", label: "Hẹn ĐVVC lấy hàng", attention_status: "none" },
+  { code: "request_callback", label: "Nhờ CSKH gọi lại", attention_status: "needs_support" },
+  { code: "need_help", label: "Cần CSKH hỗ trợ thêm", requires_note: true, attention_status: "needs_support" },
+  { code: "delivery_issue", label: "Đơn giao hàng có vấn đề", requires_note: true, attention_status: "needs_support" },
+  { code: "accept_result", label: "Đồng ý với kết quả kiểm hàng", attention_status: "none" },
+  { code: "refund_received", label: "Tôi đã nhận tiền hoàn", attention_status: "none" },
+  { code: "refund_missing", label: "Tôi chưa nhận được tiền hoàn", requires_note: true, attention_status: "needs_support" },
+  { code: "exchange_received", label: "Tôi đã nhận hàng đổi", attention_status: "none" },
+  { code: "exchange_issue", label: "Hàng đổi có vấn đề", requires_note: true, attention_status: "needs_support" }
+];
+
+/**
+ * Options that make sense at the request's current stage. Part statuses are included because a
+ * split request can be in two stages at once (one part refunding, another being delivered).
+ */
+export function returnCustomerResponseOptionsFor(status: string, partStatuses: readonly string[] = []): ReturnCustomerResponseOption[] {
+  const states = new Set([status, ...partStatuses].map((value) => String(value || "").toUpperCase()).filter(Boolean));
+  if (states.has("CANCELLED") || states.has("REJECTED")) return [];
+  const codes = new Set<string>();
+  const include = (...values: string[]) => values.forEach((value) => codes.add(value));
+  const contacting = ["REQUESTED", "CONTACTING", "WAITING_RETURN", "APPROVED", "IN_PROGRESS", "PARTIALLY_APPROVED", "NEEDS_SUPPORT"].some((value) => states.has(value));
+  if (contacting) include("accept_plan", "request_callback", "need_help");
+  if (["REQUESTED", "CONTACTING", "NEEDS_SUPPORT"].some((value) => states.has(value))) include("prefer_refund", "prefer_exchange");
+  if (["WAITING_RETURN", "APPROVED", "IN_PROGRESS", "PARTIALLY_APPROVED"].some((value) => states.has(value))) include("schedule_pickup");
+  if (states.has("RECEIVED")) include("accept_result");
+  if (["REFUND_PROCESSING", "REFUND_PENDING", "REFUNDED", "COMPLETED"].some((value) => states.has(value))) include("refund_received", "refund_missing");
+  if (states.has("EXCHANGE_PREPARING")) include("accept_plan");
+  if (states.has("EXCHANGE_SHIPPING")) include("exchange_received", "exchange_issue", "delivery_issue");
+  if (!codes.size) include("request_callback", "need_help");
+  return RETURN_CUSTOMER_RESPONSE_OPTIONS.filter((option) => codes.has(option.code));
+}
+
+/** Looks up one stored customer reply without trusting a client-supplied label. */
+export function returnCustomerResponseOption(code: string): ReturnCustomerResponseOption | undefined {
+  return RETURN_CUSTOMER_RESPONSE_OPTIONS.find((option) => option.code === code);
+}
+
+/**
  * Legal status transitions for return / exchange records.
  */
 export const RETURN_TRANSITIONS: Record<string,readonly string[]> = {

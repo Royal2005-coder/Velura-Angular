@@ -111,9 +111,36 @@
       <p class="flow-hint">Niêm phong không còn nguyên vẫn được ghi nhận. Tình trạng không đạt chỉ ảnh hưởng phần đang kiểm, không chặn các phần khác.</p>
       <label class="erp-field"><span>Hướng xử lý kho</span><select class="erp-select" [value]="disposition()" (change)="setDisposition($event)"><option value="restock">Nhập tồn bán được</option><option value="repair">Sửa chữa</option><option value="scrap">Loại bỏ</option><option value="return_supplier">Trả nhà cung cấp</option></select></label>
     }
+    @if (flow() === 'manual') {
+      <div class="flow-payout-card">
+        <div class="flow-payout-card__top">
+          <div class="flow-payout-card__meta">
+            <span class="flow-payout-badge">Tài khoản nhận hoàn tiền (COD)</span>
+            <strong class="flow-payout-bank">{{ record.refund_receiver?.bank_name || 'Ngân hàng thụ hưởng đã xác thực' }}</strong>
+          </div>
+          <button type="button" class="erp-btn erp-btn--sm erp-btn--primary auto-payout-trigger" (click)="runAutoPayout()">
+            ⚡ Tự động chi hộ &amp; Đối soát ngân hàng
+          </button>
+        </div>
+        <div class="flow-payout-card__grid">
+          <div class="flow-payout-item">
+            <span>Số tài khoản:</span>
+            <strong>{{ record.refund_receiver?.account_number || (record.refund_receiver?.account_last4 ? ('••••' + record.refund_receiver?.account_last4) : '••••6506') }}</strong>
+          </div>
+          <div class="flow-payout-item">
+            <span>Chủ tài khoản:</span>
+            <strong>{{ record.refund_receiver?.account_holder || record.customer_name || 'Khách hàng' }}</strong>
+          </div>
+          <div class="flow-payout-item">
+            <span>Phương thức:</span>
+            <strong class="text-success">Napas 247 B2C Payout</strong>
+          </div>
+        </div>
+      </div>
+    }
     @if (flow() === 'receive' || flow() === 'manual') {
       <div class="erp-field">
-        <span>{{ flow() === 'manual' ? 'Chứng từ chuyển khoản (bắt buộc)' : 'Ảnh kiểm hàng tại kho (bắt buộc)' }}</span>
+        <span>{{ flow() === 'manual' ? 'Chứng từ đối soát / chuyển khoản' : 'Ảnh kiểm hàng tại kho (bắt buộc)' }}</span>
         <div class="custom-file-row">
           <label class="erp-btn erp-btn--sm custom-file-trigger">
             <input type="file" accept="image/*" class="erp-sr-only" (change)="pickFile('proof', $event)" />

@@ -119,11 +119,12 @@ export function cartUnavailableReason(status: unknown, productName: string): str
 /**
  * Tra giá và danh mục của các biến thể đang bán; trạng thái ẩn/ngừng bán không được đặt hàng.
  */
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function loadCatalog(variantIds: readonly string[]): Promise<Map<string, CatalogEntry>> {
-  const unique = [...new Set(variantIds.filter(Boolean))];
+  const unique = [...new Set(variantIds.filter((id) => id && UUID_PATTERN.test(id)))];
   const catalog = new Map<string, CatalogEntry>();
   if (!unique.length) return catalog;
-
   const { rows } = await selectRows("variant", {
     select: "variant_id,product:product(name,sale_price,base_price,category_id,status)",
     variant_id: `in.(${unique.map(quotePostgrestValue).join(",")})`,
@@ -140,7 +141,7 @@ export async function loadCatalog(variantIds: readonly string[]): Promise<Map<st
       categoryId: product.category_id ? String(product.category_id) : null
     });
   }
-  const missingIds = unique.filter((id) => !catalog.has(id));
+  const missingIds = unique.filter((id) => !catalog.has(id) && UUID_PATTERN.test(id));
   if (missingIds.length > 0) {
     const { rows: prodRows } = await selectRows("product", {
       select: "product_id,name,sale_price,base_price,category_id,status",

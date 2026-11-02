@@ -85,7 +85,9 @@ async function evidenceView(value: unknown): Promise<JsonObject> {
   const bucket = asString(row.storage_bucket);
   const path = asString(row.storage_path);
   let url = "";
-  if (bucket && path) {
+  if (path.startsWith("http://") || path.startsWith("https://")) {
+    url = path;
+  } else if (bucket && path) {
     try {
       url = await createSignedStorageUrl(bucket, path, 900);
     } catch {
@@ -103,4 +105,26 @@ async function evidenceView(value: unknown): Promise<JsonObject> {
     url,
     ...(url ? {} : { unavailable: true })
   };
+}
+
+/**
+ * Records carrier delivery proof when simulating successful handover (e.g. GHN/GHTK photo).
+ */
+export async function recordDeliveredCarrierProof(input: {
+  orderId: string;
+  photoUrl: string;
+  note?: string;
+  actorId?: string | null;
+}): Promise<JsonObject> {
+  const row = await insertRow("order_evidence", {
+    order_id: input.orderId,
+    stage: "delivered",
+    kind: "image",
+    storage_bucket: "",
+    storage_path: input.photoUrl,
+    mime_type: "image/jpeg",
+    note: input.note?.trim() || "Ảnh giao hàng thành công từ đơn vị vận chuyển (GHN/GHTK) chụp lúc giao hàng cho khách",
+    uploaded_by: input.actorId || null
+  });
+  return evidenceView(row);
 }

@@ -67,7 +67,7 @@ export class LoyaltyService {
       throw new HttpError(422, "INVALID_REFERRAL_CODE", "Mã giới thiệu không hợp lệ.");
     }
     const code = typeof referralCode === "string" ? referralCode.trim().toUpperCase() : "";
-    if (code && !/^VLR[A-F0-9]{16}$/.test(code)) throw new HttpError(422, "INVALID_REFERRAL_CODE", "Mã giới thiệu không hợp lệ.");
+    if (code && !/^(?:VLR[A-F0-9]{8,16}|[A-F0-9]{10,16})$/i.test(code)) throw new HttpError(422, "INVALID_REFERRAL_CODE", "Mã giới thiệu không hợp lệ.");
     return this.repository.register(input, code || null);
   }
 }

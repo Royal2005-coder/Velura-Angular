@@ -5,7 +5,23 @@ import { ApiService } from './api.service';
 /** Append-only points movement returned by the authenticated wallet endpoint. */
 export interface LoyaltyEntry { entry_id: string; kind: string; points: number; debt_change_points?: number; order_id: string | null; expires_at: string | null; created_at: string; }
 /** Issuance, consumption and reversal history are server-owned. */
-export interface ReferralReward { voucher_id: string; code: string; state: 'issued' | 'used' | 'revoked'; reward_kind: 'referred_registration' | 'referrer_delivery'; expires_at: string; history: Array<{ history_id: string; action: string; created_at: string }>; }
+export interface ReferralReward {
+  voucher_id?: string;
+  member_voucher_id?: string;
+  code: string;
+  name?: string;
+  benefit?: string;
+  status?: string;
+  state?: string;
+  reward_kind?: string;
+  discount_type?: string;
+  discount_value?: number;
+  min_order_value?: number;
+  expires_at: string;
+  issued_at?: string;
+  source?: string;
+  history?: Array<{ history_id: string; action: string; created_at: string }>;
+}
 /** Snapshot is informational; checkout locks and reprices the wallet independently. */
 export interface LoyaltyWallet {
   balance_points: number; available_points: number; amount_vnd: number; referral_code: string;

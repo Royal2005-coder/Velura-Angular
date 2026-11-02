@@ -183,6 +183,16 @@
           </div>
         }
       </div>
+      <section class="record__pipeline-section">
+        <h4>Tiến trình xử lý đổi trả</h4>
+        <ol class="pipeline">
+          @for (step of returnPipelineSteps(record); track step.id) {
+            <li [class]="'pipeline__step pipeline__step--' + step.state">
+              <span class="pipeline__button">{{ step.label }}</span>
+            </li>
+          }
+        </ol>
+      </section>
       @if (record.contact_due_at && !isTerminal(record)) {
         <p class="desk-note" [class.record__reject]="contactOverdue(record)">Hạn liên hệ trong 24 giờ: {{ date(record.contact_due_at) }}{{ contactOverdue(record) ? ' · Đã quá hạn liên hệ' : '' }}</p>
       }

@@ -31,11 +31,12 @@ export interface MemberStateInput {
  * bằng đúng số milli (balance − debt) và không phải nhân thêm lần nào nữa.
  */
 export function memberPoints(milli: number | null | undefined): number {
-  return Math.round(Number(milli || 0)) / 1000;
+  return Math.round(Number(milli || 0) / 1000);
 }
 
 export function memberPointsLabel(milli: number | null | undefined): string {
-  return `${memberPoints(milli).toLocaleString('vi-VN', { maximumFractionDigits: 3 })} điểm`;
+  const points = Math.round(Number(milli || 0) / 1000);
+  return `${points.toLocaleString('vi-VN')} điểm`;
 }
 
 /** Giá trị quy đổi của ví, cùng đơn vị với số dư milli (1 điểm = 1.000đ). */

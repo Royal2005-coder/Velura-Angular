@@ -521,3 +521,64 @@
   color: var(--erp-muted);
   font-size: 11.5px;
 }
+
+.record__pipeline-section {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0;
+  padding: 12px;
+  border: 1px solid var(--erp-line);
+  border-radius: var(--erp-radius-md);
+  background: var(--erp-surface);
+}
+
+.record__pipeline-section h4 {
+  margin: 0;
+  font-size: 12px;
+  color: var(--erp-ink);
+}
+
+.pipeline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pipeline__step {
+  padding: 5px 10px;
+  border: 1px solid var(--erp-line);
+  border-radius: 999px;
+  background: var(--erp-surface);
+  color: var(--erp-muted);
+  font-size: 11px;
+}
+
+.pipeline__step--done {
+  border-color: var(--erp-success-soft);
+  background: var(--erp-success-soft);
+  color: var(--erp-success);
+  font-weight: 600;
+}
+
+.pipeline__step--current {
+  border-color: var(--erp-accent);
+  background: var(--erp-accent);
+  color: #fff;
+  font-weight: 700;
+}
+
+.pipeline__step--danger {
+  border-color: var(--erp-danger-soft);
+  background: var(--erp-danger-soft);
+  color: var(--erp-danger);
+  font-weight: 600;
+}
+
+.pipeline__button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}

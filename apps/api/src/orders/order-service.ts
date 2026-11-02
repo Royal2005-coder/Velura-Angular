@@ -2,7 +2,7 @@ import { HttpError } from "../http.js";
 import { randomUUID } from "node:crypto";
 import { asString, type AuthContext, type HttpRequest, type JsonObject, type RequestMeta } from "../types.js";
 import { writeAuditLog } from "../audit.js";
-import { listOrderEvidence, storeOrderEvidence } from "./order-evidence.js";
+import { listOrderEvidence, recordDeliveredCarrierProof, storeOrderEvidence } from "./order-evidence.js";
 import {
   ORDER_OPERATOR_ROLES,
   ORDER_READER_ROLES,
@@ -310,6 +310,20 @@ export function createOrderService({
       });
       if (!normalized.ok) throw new HttpError(422, normalized.code, normalized.message);
       await carrierEvents.handleEvent({ ...normalized.event, operatorId: asString(context.profile?.user_id) || undefined });
+      if (outcome === "delivered") {
+        const photoUrl = asString(body?.deliveryPhotoUrl || body?.photoUrl) ||
+          "https://images.unsplash.com/photo-1549465220-1a8b9238cd48?auto=format&fit=crop&w=600&q=80";
+        try {
+          await recordDeliveredCarrierProof({
+            orderId,
+            photoUrl,
+            note: asString(body?.note) || "Ảnh giao hàng thành công từ đơn vị vận chuyển (GHN/GHTK) chụp lúc giao hàng cho khách",
+            actorId: asString(context.profile?.user_id) || null
+          });
+        } catch (e: unknown) {
+          console.warn("[CARRIER_SIMULATOR_PROOF_ERROR]", e);
+        }
+      }
       return this.get(context, orderId);
     },
 

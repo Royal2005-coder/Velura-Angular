@@ -27,6 +27,14 @@
       }
     }
     @if (flow() === 'contact') {
+      <div class="flow-scenarios">
+        <span class="flow-facts__label">Kịch bản tự động sau cuộc gọi (chọn để tự điền kết quả &amp; ghi chú):</span>
+        <div class="flow-scenarios__list">
+          @for (sc of contactScenarios; track sc.code) {
+            <button class="flow-scenario-btn" type="button" (click)="applyScenario(sc)">{{ sc.label }}</button>
+          }
+        </div>
+      </div>
       <label class="erp-field"><span>Kết quả liên hệ</span><select class="erp-select" [value]="contactResult()" (change)="setText('contactResult', $event)">@for (result of contactResults; track result.code) { <option [value]="result.code">{{ result.label }}</option> }</select></label>
       <p class="flow-hint">Không liên hệ được / chờ khách bổ sung được lưu riêng, không thay thế tiến độ từng phần.</p>
       <div class="flow-facts">

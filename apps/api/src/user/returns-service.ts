@@ -1,4 +1,4 @@
-import { RETURN_STATUS_LABELS_VI, returnReasonLabel } from "../returns/return-constants.js";
+import { RETURN_STATUS_LABELS_VI, returnCustomerResponseOption, returnCustomerResponseOptionsFor, returnReasonLabel } from "../returns/return-constants.js";
 import { classifyReturnPayment, customerRefundReceiver, refundFlowFor, validateRefundReceiver } from "../returns/return-refund-receiver.js";
 import { listReturnEvidence, resolveEvidenceRef, storeReturnEvidence, type ReturnEvidenceKind } from "../returns/return-evidence.js";
 import { hasGuestOrderAccess } from "./order-access.js";
@@ -63,7 +63,9 @@ async function customerReturnView(
     refund_receiver: customerRefundReceiver(receiverRequired, receiver),
     can_cancel: CUSTOMER_CANCELLABLE_STATUSES.includes(status),
     can_upload_packing: items.length ? items.some((part) => CUSTOMER_PACKING_STATUSES.includes(asString(part.item_status))) : CUSTOMER_PACKING_STATUSES.includes(status),
-    items
+    items,
+    response_options: returnCustomerResponseOptionsFor(status, items.map((part) => asString(part.item_status))),
+    contact_history: Array.isArray(ret.contact_history) ? ret.contact_history : [],
   };
 }
 
@@ -559,6 +561,57 @@ export function createUserReturnsService(repository: UserReturnsRepository) {
         throw new HttpError(404, "NOT_FOUND", "Không tìm thấy yêu cầu đổi trả");
       }
       return addPackingEvidence(repository, ret, kind, note, null, req);
+    },
+
+    /**
+     * Customer chooses one structured option after CSKH confirms the plan.
+     * Appends to contact history and updates attention status without altering business workflow.
+     */
+    async recordCustomerResponse(profile: UserProfile, returnId: string, body: JsonObject) {
+      const ret = await repository.findReturnById(returnId);
+      if (!ret || ret.user_id !== profile.user_id) throw new HttpError(404, "NOT_FOUND", "Không tìm thấy yêu cầu đổi trả");
+      const code = asString(body.code).trim();
+      const option = returnCustomerResponseOption(code);
+      if (!option) throw new HttpError(422, "INVALID_RESPONSE_OPTION", "Lựa chọn không hợp lệ.");
+      const note = asString(body.note).trim();
+      if (option.requires_note && (!note || note.length < 5)) {
+        throw new HttpError(422, "NOTE_REQUIRED", "Vui lòng nhập mô tả chi tiết (tối thiểu 5 ký tự).");
+      }
+      const expectedVersion = asNumber(body.expectedVersion || ret.version);
+      const entry = {
+        responder: "customer",
+        code: option.code,
+        label: option.label,
+        note: note || null,
+        created_at: new Date().toISOString()
+      };
+      await repository.recordCustomerResponse(returnId, expectedVersion, entry, option.attention_status || "none");
+      return this.detailForMember(profile, returnId);
+    },
+
+    async recordCustomerResponseForGuest(returnId: string, guestAccessToken: string, body: JsonObject) {
+      const ret = await repository.findReturnById(returnId);
+      const order = ret ? await repository.findOrderById(asString(ret.order_id)) : null;
+      if (!ret || !order || !hasGuestOrderAccess(order, { guest_access_token: guestAccessToken })) {
+        throw new HttpError(404, "NOT_FOUND", "Không tìm thấy yêu cầu đổi trả");
+      }
+      const code = asString(body.code).trim();
+      const option = returnCustomerResponseOption(code);
+      if (!option) throw new HttpError(422, "INVALID_RESPONSE_OPTION", "Lựa chọn không hợp lệ.");
+      const note = asString(body.note).trim();
+      if (option.requires_note && (!note || note.length < 5)) {
+        throw new HttpError(422, "NOTE_REQUIRED", "Vui lòng nhập mô tả chi tiết (tối thiểu 5 ký tự).");
+      }
+      const expectedVersion = asNumber(body.expectedVersion || ret.version);
+      const entry = {
+        responder: "customer",
+        code: option.code,
+        label: option.label,
+        note: note || null,
+        created_at: new Date().toISOString()
+      };
+      await repository.recordCustomerResponse(returnId, expectedVersion, entry, option.attention_status || "none");
+      return this.detailForGuest(returnId, guestAccessToken);
     }
   };
 }

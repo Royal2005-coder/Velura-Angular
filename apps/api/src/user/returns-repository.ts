@@ -1,7 +1,8 @@
-import { callRpc, selectOne, selectRows, insertRow } from "../supabase.js";
+import { callRpc, selectOne, selectRows, insertRow, updateRows } from "../supabase.js";
+import { HttpError } from "../http.js";
 import { mapReturnDatabaseError } from "../returns/return-repository.js";
 import type { RefundReceiverInput } from "../returns/return-refund-receiver.js";
-import { asJsonObject, type JsonObject } from "../types.js";
+import { asJsonObject, asNumber, type JsonObject } from "../types.js";
 
 /**
  * Customer return reads and atomic database operations. The service performs friendly preflight
@@ -34,6 +35,11 @@ export interface UserReturnsRepository {
   getExchangeOrder?(orderId: unknown): Promise<JsonObject | null>;
   /** Appends a customer-visible custody event (evidence uploaded, packed confirmation). */
   insertReturnEvent?(payload: JsonObject): Promise<JsonObject>;
+  /**
+   * Appends the customer's chosen option to the shared contact trail under an optimistic
+   * version guard. Business progress stays with CSKH; only the attention flag changes.
+   */
+  recordCustomerResponse(returnId: string, expectedVersion: number, entry: JsonObject, attentionStatus: string): Promise<JsonObject>;
   /** Stored COD receiving account of a return (full number; callers mask it), or null when never submitted. */
   getRefundReceiver(returnId: unknown): Promise<JsonObject | null>;
   /** Saves the receiving account in one transaction and returns its masked customer view. `ownerUserId` null = verified guest. */
@@ -132,6 +138,35 @@ export function createUserReturnsRepository(): UserReturnsRepository {
 
     async insertReturnEvent(payload) {
       return asJsonObject(await insertRow("return_event", payload));
+    },
+
+    async recordCustomerResponse(returnId, expectedVersion, entry, attentionStatus) {
+      const current = await selectOne("return_exchange", {
+        select: "version,contact_history",
+        return_id: `eq.${returnId}`
+      });
+      if (!current) throw new HttpError(404, "RETURN_NOT_FOUND", "Return record not found");
+      if (asNumber(current.version) !== expectedVersion) {
+        throw new HttpError(409, "VERSION_CONFLICT", "Yêu cầu đổi/trả đã thay đổi, vui lòng tải lại");
+      }
+      const stamp = new Date().toISOString();
+      const rows = await updateRows("return_exchange", {
+        return_id: `eq.${returnId}`,
+        version: `eq.${expectedVersion}`
+      }, {
+        contact_history: [...(Array.isArray(current.contact_history) ? current.contact_history : []), {
+          ...entry,
+          contacted_at: stamp
+        }],
+        last_contact_at: stamp,
+        attention_status: attentionStatus,
+        version: expectedVersion + 1,
+        updated_at: stamp
+      });
+      if (!rows.length) {
+        throw new HttpError(409, "VERSION_CONFLICT", "Yêu cầu đổi/trả đã thay đổi, vui lòng tải lại");
+      }
+      return asJsonObject(rows[0]);
     }
   };
 }

@@ -1,10 +1,11 @@
 import { sendJson } from "./http.js";
 import { requirePermission } from "./rbac.js";
 import { buildDashboardSummary, refreshDashboard } from "./dashboard.js";
+import { handleDashboardSlaRoute } from "./features/dashboard/dashboard.routes.js";
 import type { RouteArgs } from "./types.js";
 
 /**
- * Admin dashboard HTTP routes under `/api/v1/admin/dashboard`.
+ * Admin dashboard HTTP routes under `/api/v1/admin/dashboard` and `/api/dashboard/sla-metrics`.
  */
 export async function handleDashboardRoute({
   req,
@@ -14,6 +15,11 @@ export async function handleDashboardRoute({
   context,
   headers
 }: RouteArgs): Promise<boolean> {
+  // Kiểm tra route SLA Metrics
+  if (await handleDashboardSlaRoute({ req, res, parts, context, headers })) {
+    return true;
+  }
+
   if (parts[0] !== "api" || parts[1] !== "v1" || parts[2] !== "admin" || parts[3] !== "dashboard") {
     return false;
   }

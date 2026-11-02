@@ -2429,6 +2429,15 @@ export class AdminErpApiService {
   }
 
   /**
+   * Uploads a blog cover image and returns its public storage URL.
+   */
+  uploadBlogImage(file: File): Observable<{ url: string }> {
+    const form = new FormData();
+    form.append('file', file, file.name);
+    return this.http.post<{ url: string }>(`${this.baseUrl}/api/v1/admin/content/blogs/upload-image`, form);
+  }
+
+  /**
    * Reads content categories. Public endpoint, used here only to offer valid targets.
    */
   listContentCategories(type = 'blog'): Observable<{ rows?: AdminContentCategory[] }> {

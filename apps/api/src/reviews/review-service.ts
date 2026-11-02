@@ -4,7 +4,7 @@ import type { AuthContext, AuthUser, JsonObject } from "../types.js";
 import { asNumber, asString, errorMessage, isJsonObject } from "../types.js";
 import { generateGeminiText, isGeminiConfigured } from "../gemini-client.js";
 import { REVIEW_OPERATOR_ROLES, REVIEW_READER_ROLES } from "./review-constants.js";
-import { groundedReviewReply, readReplySuggestions, reviewReplyPrompt } from "./review-reply-ai.js";
+import { groundedReviewReplies, groundedReviewReply, readReplySuggestions, reviewReplyPrompt } from "./review-reply-ai.js";
 import type { ReviewRepository } from "./review-repository.js";
 
 /**
@@ -88,12 +88,12 @@ export function createReviewService({ repository }: { repository: ReviewReposito
         productName: asString(product.name)
       };
       if (!isGeminiConfigured()) {
-        return { replies: [groundedReviewReply(source)], source: "review" as const };
+        return { replies: groundedReviewReplies(source), source: "review" as const };
       }
       try {
         const text = await generateGeminiText(
           `${reviewReplyPrompt(source)}\nChỉ trả một JSON {"replies":["câu 1"]}.`,
-          { temperature: 0.2, maxOutputTokens: 400, timeoutMs: 20000 }
+          { temperature: 0.2, maxOutputTokens: 400, timeoutMs: 5000 }
         );
         const replies = readReplySuggestions(text);
         if (replies.length) {
@@ -102,7 +102,7 @@ export function createReviewService({ repository }: { repository: ReviewReposito
       } catch (error: unknown) {
         console.error("[REVIEW AI]", errorMessage(error));
       }
-      return { replies: [groundedReviewReply(source)], source: "review" as const };
+      return { replies: groundedReviewReplies(source), source: "review" as const };
     },
 
     async reply(context, reviewId, body) {

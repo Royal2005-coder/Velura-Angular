@@ -267,7 +267,13 @@ export class ReturnFlowComponent {
     this.transferReference.set(this.newTransferRef());
   }
 
-  createDigitalReceiptFile(refCode?: string): File {
+  /**
+   * Renders a branded Velura COD reconciliation receipt as a rasterized PNG image.
+   * The receipt is first built as an inline SVG string, then rendered onto an
+   * off-screen <canvas> via an <img> element and exported as PNG — this avoids
+   * uploading raw SVG (which storage rejects as an unrasterized format).
+   */
+  createDigitalReceiptFile(refCode?: string): Promise<File> {
     const reference = refCode || this.transferReference() || this.newTransferRef();
     const amount = this.refundable();
     const dateStr = new Date().toLocaleString('vi-VN');
@@ -276,16 +282,18 @@ export class ReturnFlowComponent {
     const accountLast4 = receiver?.account_last4 || (receiver?.account_number ? receiver.account_number.slice(-4) : '****');
     const holder = receiver?.account_holder || this.record()?.customer_name || 'Khách hàng';
 
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="380" viewBox="0 0 600 380">
+    const W = 600;
+    const H = 380;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
       <defs>
         <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stop-color="#7A283C" />
           <stop offset="100%" stop-color="#4A1523" />
         </linearGradient>
       </defs>
-      <rect width="600" height="380" rx="16" fill="#FFFFFF" stroke="#EAD7DD" stroke-width="2" />
-      <rect width="600" height="70" rx="16" fill="url(#g)" />
-      <rect y="54" width="600" height="16" fill="url(#g)" />
+      <rect width="${W}" height="${H}" rx="16" fill="#FFFFFF" stroke="#EAD7DD" stroke-width="2" />
+      <rect width="${W}" height="70" rx="16" fill="url(#g)" />
+      <rect y="54" width="${W}" height="16" fill="url(#g)" />
       <text x="32" y="44" font-family="sans-serif" font-size="20" font-weight="bold" fill="#FFFFFF">VELURA — BIÊN LAI ĐỐI SOÁT CHI HỘ COD</text>
       <text x="32" y="110" font-family="sans-serif" font-size="14" fill="#6B635D">MÃ ĐỐI SOÁT:</text>
       <text x="200" y="110" font-family="monospace" font-size="16" font-weight="bold" fill="#18181B">${reference}</text>
@@ -296,14 +304,40 @@ export class ReturnFlowComponent {
       <text x="32" y="230" font-family="sans-serif" font-size="14" fill="#6B635D">SỐ TÀI KHOẢN:</text>
       <text x="200" y="230" font-family="monospace" font-size="14" font-weight="bold" fill="#18181B">••••${accountLast4}</text>
       <text x="32" y="270" font-family="sans-serif" font-size="14" fill="#6B635D">CHỦ TÀI KHOẢN:</text>
-      <text x="200" y="270" font-family="sans-serif" font-size="14" font-weight="bold" fill="#18181B">${holder.toUpperCase()}</text>
+      <text x="200" y="270" font-family="sans-serif" font-size="14" fill="#18181B">${holder.toUpperCase()}</text>
       <text x="32" y="310" font-family="sans-serif" font-size="14" fill="#6B635D">THỜI ĐIỂM:</text>
       <text x="200" y="310" font-family="sans-serif" font-size="14" fill="#18181B">${dateStr}</text>
       <line x1="32" y1="335" x2="568" y2="335" stroke="#EAD7DD" stroke-width="1" />
       <text x="32" y="360" font-family="sans-serif" font-size="12" fill="#047857">✔ ĐÃ ĐỐI SOÁT &amp; XÁC NHẬN CHI HỘ QUA CỔNG NGÂN HÀNG (NAPAS B2C)</text>
     </svg>`;
-    const blob = new Blob([svg], { type: 'image/svg+xml' });
-    return new File([blob], `bien-lai-chi-ho-${reference}.svg`, { type: 'image/svg+xml' });
+
+    return new Promise<File>((resolve) => {
+      const canvas = document.createElement('canvas');
+      canvas.width = W * 2;   // 2× for crisp rendering
+      canvas.height = H * 2;
+      const ctx = canvas.getContext('2d')!;
+      ctx.scale(2, 2);
+      const toFile = (blob: Blob | null) => resolve(new File([blob!], `bien-lai-chi-ho-${reference}.png`, { type: 'image/png' }));
+
+      const img = new Image();
+      img.onload = () => { ctx.drawImage(img, 0, 0, W, H); canvas.toBlob(toFile, 'image/png'); };
+      img.onerror = () => {
+        // Fallback: if SVG-to-canvas fails, render text directly onto the canvas
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = '#7A283C';
+        ctx.font = 'bold 16px sans-serif';
+        ctx.fillText('VELURA — BIÊN LAI ĐỐI SOÁT CHI HỘ COD', 32, 44);
+        ctx.fillStyle = '#18181B';
+        ctx.font = 'bold 14px monospace';
+        ctx.fillText(`Mã: ${reference}`, 32, 80);
+        ctx.fillText(`Số tiền: ${amount.toLocaleString('vi-VN')} đ`, 32, 110);
+        ctx.fillText(`Ngân hàng: ${bankName}`, 32, 140);
+        ctx.fillText(`Thời điểm: ${dateStr}`, 32, 170);
+        canvas.toBlob(toFile, 'image/png');
+      };
+      img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+    });
   }
 
   runAutoPayout(): void {
@@ -315,7 +349,7 @@ export class ReturnFlowComponent {
     const date = new Date();
     date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
     this.transferredAt.set(date.toISOString().slice(0, 16));
-    this.proofFile.set(this.createDigitalReceiptFile(ref));
+    this.createDigitalReceiptFile(ref).then((file) => this.proofFile.set(file));
     this.note.set(`Hệ thống đã tự động chi hộ qua cổng ngân hàng (Napas B2C) tới ${bankName} ${last4}. Mã đối soát: ${ref}. Giao dịch thành công.`);
   }
 

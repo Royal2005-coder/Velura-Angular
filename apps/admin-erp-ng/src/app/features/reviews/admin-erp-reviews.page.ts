@@ -110,6 +110,9 @@ export class AdminErpReviewsPage {
   readonly detectedRestrictedWords = signal<string[]>([]);
   readonly sentiment = signal<{ label: string; tone: string; score: number } | null>(null);
   readonly lightboxImage = signal<string | null>(null);
+  readonly quickEmojis = ['❤️', '✨', '🌸', '👗', '🙏', '😊', '🥰', '🎀', '💐', '⭐', '💌'];
+  readonly replyImageUrl = signal('');
+  readonly replyImageUploading = signal(false);
   readonly selectedRestrictedWords = computed(() => {
     const review = this.selected();
     return review ? this.detectRestrictedWords(this.commentOf(review)) : [];
@@ -141,7 +144,7 @@ export class AdminErpReviewsPage {
     {
       key: 'customer',
       label: 'Khách hàng',
-      value: (row) => String((row as AdminReviewRow).user_id || (row as AdminReviewRow).order_id || '—'),
+      value: (row) => this.customerLabel(row as AdminReviewRow),
     },
     {
       key: 'status',
@@ -423,6 +426,8 @@ export class AdminErpReviewsPage {
     this.dirty.set(false);
     this.discardOpen.set(false);
     this.detailError.set(null);
+    this.replyImageUrl.set('');
+    this.replyImageUploading.set(false);
   }
 
   /**
@@ -456,7 +461,10 @@ export class AdminErpReviewsPage {
     const form = event.target as HTMLFormElement;
     const note = this.field(form, 'actionNote').value.trim();
     const formValue = this.field(form, 'value').value;
-    const value = type === 'reply' ? this.replyDraft() : formValue;
+    const baseValue = type === 'reply' ? this.replyDraft() : formValue;
+    const value = type === 'reply' && this.replyImageUrl()
+      ? `${baseValue.trim()}\n\n[Ảnh đính kèm]: ${this.replyImageUrl()}`
+      : baseValue;
     if ((type === 'reply' || type === 'hide' || type === 'escalate') && !value.trim()) {
       this.actionError.set(type === 'reply' ? 'Vui lòng nhập nội dung phản hồi.' : 'Vui lòng nhập lý do xử lý.');
       return;
@@ -527,6 +535,60 @@ export class AdminErpReviewsPage {
    */
   onReplyInput(event: Event): void {
     this.replyDraft.set((event.target as HTMLTextAreaElement).value);
+  }
+
+  /**
+   * Inserts an emoji into the reply draft.
+   */
+  insertEmoji(emoji: string): void {
+    const current = this.replyDraft().trim();
+    this.replyDraft.set(current ? `${current} ${emoji}` : emoji);
+    this.markDirty();
+  }
+
+  /**
+   * Uploads an image attachment for the admin reply.
+   */
+  onReplyImageSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    this.replyImageUploading.set(true);
+    this.api.uploadBlogImage(file).subscribe({
+      next: (res) => {
+        this.replyImageUploading.set(false);
+        this.replyImageUrl.set(res.url);
+        this.markDirty();
+      },
+      error: (error: unknown) => {
+        this.replyImageUploading.set(false);
+        this.actionError.set(adminErrorMessage(error, 'Không tải được ảnh đính kèm phản hồi.'));
+      },
+    });
+  }
+
+  /**
+   * Returns a friendly readable label for the review customer.
+   */
+  customerLabel(row: AdminReviewRow): string {
+    const raw = String(row.user_id || '').trim();
+    if (!raw) return 'Khách ẩn danh';
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw)) {
+      return `Khách #${raw.slice(0, 8).toUpperCase()}`;
+    }
+    return raw;
+  }
+
+  /**
+   * Returns a clean friendly label for the review order.
+   */
+  orderLabel(row: AdminReviewRow): string {
+    const raw = String(row.order_id || '').trim();
+    if (!raw) return '—';
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw)) {
+      return `Đơn #${raw.slice(0, 8).toUpperCase()}`;
+    }
+    return raw;
   }
 
   /**

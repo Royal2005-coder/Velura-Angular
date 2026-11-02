@@ -1,8 +1,10 @@
 import { config } from "../config.js";
 import { getRequestIp, readJson, sendJson } from "../http.js";
-import type { RouteArgs } from "../types.js";
+import { requirePermission } from "../rbac.js";
+import { uploadToSupabaseStorage } from "../storage.js";
+import type { AuthContext, RouteArgs } from "../types.js";
+import { readMultipartImage } from "../user/upload.js";
 import type { ContentAdminService } from "./content-admin-service.js";
-
 /**
  * Admin CMS HTTP routes under `/api/v1/admin/content/blogs` (KAN-106).
  *
@@ -36,6 +38,17 @@ export async function handleContentAdminRoute({
   if (req.method === "POST" && parts.length === 6 && parts[5] === "ai-suggest") {
     const body = await readJson(req, config.maxBodyBytes);
     sendJson(res, 200, await service.suggestSeo(context, body), headers);
+    return true;
+  }
+
+  if (req.method === "POST" && parts.length === 6 && parts[5] === "upload-image") {
+    requirePermission(context as AuthContext, "content", "update");
+    const image = await readMultipartImage(req);
+    const url = await uploadToSupabaseStorage(image.fileBuffer, image.fileName, image.mimeType, {
+      bucket: "blog-covers",
+      prefix: "blogs",
+    });
+    sendJson(res, 200, { url }, headers);
     return true;
   }
 

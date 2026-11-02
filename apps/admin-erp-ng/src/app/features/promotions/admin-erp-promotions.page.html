@@ -238,7 +238,26 @@
       <label class="erp-field"><span>Bắt đầu</span><input class="erp-input" name="startDate" type="datetime-local" [value]="toLocalInput(editingCampaign()?.start_date)" required /></label>
       <label class="erp-field"><span>Kết thúc</span><input class="erp-input" name="endDate" type="datetime-local" [value]="toLocalInput(editingCampaign()?.end_date)" required /></label>
     </div>
-    <label class="erp-field"><span>Ngân sách (0 = không trần)</span><input class="erp-input" name="budgetLimit" type="number" min="0" [value]="editingCampaign()?.budget_limit ?? editingCampaign()?.budget ?? 0" /></label>
+    <label class="erp-field"><span>Ngân sách (0 = không trần)</span><input class="erp-input" name="budgetLimit" type="number" min="0" [value]="editingCampaign()?.budget_limit ?? editingCampaign()?.budget ?? 0" /><small class="erp-hint">Khi tổng số tiền giảm thực tế của các voucher trực thuộc đạt mức trần này, hệ thống sẽ tự động đóng các voucher để bảo toàn ngân sách.</small></label>
+    <div class="erp-field">
+      <span>Ảnh banner chiến dịch (hiển thị trên trang Ưu đãi của người dùng)</span>
+      <div class="promo-banner-field">
+        @if (campaignBannerUrl()) {
+          <div class="promo-banner-thumb">
+            <img [src]="campaignBannerUrl()" alt="Banner xem trước" />
+            <button type="button" class="btn-remove-thumb" (click)="campaignBannerUrl.set('')">Gỡ ảnh</button>
+          </div>
+        }
+        <div class="promo-banner-inputs">
+          <label class="erp-btn erp-btn--sm promo-upload-btn">
+            <input type="file" accept="image/*" class="erp-sr-only" (change)="onBannerFileSelected($event)" [disabled]="bannerUploading()" />
+            <span>{{ bannerUploading() ? 'Đang tải ảnh…' : (campaignBannerUrl() ? 'Đổi ảnh banner' : 'Tải ảnh banner lên') }}</span>
+          </label>
+          <span class="erp-hint">hoặc nhập link ảnh trực tiếp:</span>
+          <input class="erp-input erp-input--sm" type="url" placeholder="https://..." [value]="campaignBannerUrl()" (input)="campaignBannerUrl.set($any($event.target).value)" />
+        </div>
+      </div>
+    </div>
     <label class="erp-field"><span>Mô tả</span><textarea class="erp-input" name="description" rows="3">{{ editingCampaign()?.description || '' }}</textarea></label>
     @if (formError()) {
       <p class="erp-error" role="alert">{{ formError() }}</p>
@@ -281,12 +300,22 @@
     </div>
     <label class="erp-field">
       <span>Chiến dịch cha</span>
-      <select class="erp-select" name="promoId" [value]="editingVoucher()?.promo_id || ''">
+      <select class="erp-select" name="promoId" [value]="editingVoucher()?.promo_id || selectedVoucherPromoId()" (change)="selectedVoucherPromoId.set($any($event.target).value)">
         <option value="">Không thuộc chiến dịch</option>
         @for (campaign of campaignOptions(); track campaign.promo_id || campaign.promotion_id) {
           <option [value]="campaign.promo_id || campaign.promotion_id">{{ campaignName(campaign) }}</option>
         }
       </select>
+      @if (selectedCampaignBudgetInfo(); as info) {
+        <div class="campaign-budget-box">
+          <span class="budget-stat">Ngân sách chiến dịch: <strong>{{ info.budgetLimit ? money(info.budgetLimit) : 'Không trần' }}</strong></span>
+          <span class="budget-stat"> · Đã phát: <strong>{{ money(info.totalIssued) }}</strong></span>
+          @if (info.remaining !== null) {
+            <span class="budget-stat"> · Còn lại: <strong>{{ money(info.remaining) }}</strong></span>
+          }
+          <p class="erp-hint">Voucher này sẽ tự động dừng nếu tổng chiết khấu thực tế của chiến dịch chạm mức trần ngân sách (tránh xung đột ngân sách).</p>
+        </div>
+      }
       @if (campaignLookupError()) {
         <small class="erp-error" role="alert">{{ campaignLookupError() }}</small>
       }

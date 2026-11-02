@@ -148,6 +148,44 @@ export class ReturnFlowComponent {
       : Math.random().toString(36).slice(2, 18);
     return 'EXC' + random.toUpperCase();
   }
+  /** Pre-defined automated scenarios after calling customer so operator never types boilerplate. */
+  readonly contactScenarios: ReadonlyArray<{ code: string; label: string; result: string; note: string }> = [
+    {
+      code: 'agree_exchange',
+      label: 'Khách đồng ý đổi mẫu/size',
+      result: 'reached',
+      note: 'Đã gọi xác nhận: Khách đồng ý đổi sang sản phẩm/size phù hợp theo phương án CSKH đã tư vấn.'
+    },
+    {
+      code: 'agree_refund',
+      label: 'Khách chuyển sang hoàn tiền',
+      result: 'reached',
+      note: 'Đã gọi xác nhận: Khách yêu cầu chuyển phương án sang hoàn tiền.'
+    },
+    {
+      code: 'pickup_tomorrow',
+      label: 'Hẹn ĐVVC lấy hàng ngày mai',
+      result: 'reached',
+      note: 'Đã gọi xác nhận: Khách hẹn ĐVVC đến lấy kiện hàng đóng gói vào ngày mai.'
+    },
+    {
+      code: 'no_answer_retry',
+      label: 'Khách không nghe máy (hẹn gọi lại)',
+      result: 'no_answer',
+      note: 'Đã gọi nhưng khách không bắt máy. CSKH đã gửi tin nhắn thông báo và sẽ gọi lại trong 24h.'
+    },
+    {
+      code: 'wait_evidence',
+      label: 'Chờ khách bổ sung thêm ảnh/video',
+      result: 'waiting_customer',
+      note: 'Đã trao đổi: Khách cần thời gian kiểm tra và đồng ý bổ sung thêm hình ảnh/video đóng gói.'
+    }
+  ];
+
+  applyScenario(scenario: { result: string; note: string }): void {
+    this.contactResult.set(scenario.result);
+    this.note.set(scenario.note);
+  }
 
   /** Facts the operator confirms on the call; each one is written into the stored contact note. */
   readonly contactFacts: ReadonlyArray<{ code: string; label: string }> = [

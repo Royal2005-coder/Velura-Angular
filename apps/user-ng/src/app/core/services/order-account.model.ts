@@ -103,6 +103,9 @@ export interface ReturnTrackingDetail {
   instructions: string[];
   /** All split parts, including rejected and independently completed resolutions. */
   items: DemoReturnLine[];
+  responseOptions?: Array<{ code: string; label: string; requires_note?: boolean; attention_status?: string }>;
+  contactHistory?: Array<{ responder?: string; code?: string; label?: string; note?: string | null; contacted_at?: string; created_at?: string }>;
+  version?: number;
 }
 
 /**
@@ -187,6 +190,8 @@ export interface OrderAccountModel {
     kind: 'packing_photo' | 'packing_video',
     note?: string,
   ): Promise<ReturnTrackingEvidence>;
+  /** Customer responds with a structured option after CSKH confirms the plan. */
+  respondReturn?(returnId: string, code: string, note?: string): Promise<ReturnTrackingDetail>;
   /** Upserts one order into `orders()` by id/code — real Model only, for cold direct links. */
   ensureOrderLoaded?(id: string): Promise<void>;
 

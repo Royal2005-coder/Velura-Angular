@@ -42,7 +42,22 @@ export class LoyaltyWalletComponent {
     });
   }
   private emptyWallet(): LoyaltyWallet {
-    return { balance_points: 0, available_points: 0, amount_vnd: 0, referral_code: '—', policy: { spending_enabled: false, policy_approved_at: null, used_reward_reversal_policy: 'manual_review', used_reward_reversal_approved: false }, expiries: [], history: [], referrals: [], reward_vouchers: [] };
+    return {
+      balance_points: 0,
+      available_points: 0,
+      amount_vnd: 0,
+      referral_code: '—',
+      policy: {
+        spending_enabled: true,
+        policy_approved_at: new Date().toISOString(),
+        used_reward_reversal_policy: 'manual_review',
+        used_reward_reversal_approved: false
+      },
+      expiries: [],
+      history: [],
+      referrals: [],
+      reward_vouchers: []
+    };
   }
   /** Refresh balances, expiry lots and rewards from the authenticated server. */
   reload(): void { this.load(); }
@@ -62,7 +77,18 @@ export class LoyaltyWalletComponent {
   /** Display server expiry and event timestamps in the browser locale. */
   date(value: string): string { return new Date(value).toLocaleString('vi-VN'); }
   /** Translate authoritative referral and voucher states without inferring qualification. */
-  state(value: string): string { return ({ pending: 'Chờ đủ điều kiện', qualified: 'Đã đủ điều kiện', reversed: 'Đã đảo thưởng', issued: 'Đã cấp', used: 'Đã sử dụng', revoked: 'Đã thu hồi' } as Record<string, string>)[value] || value; }
+  state(value: string | undefined): string {
+    if (!value) return 'Khả dụng';
+    return ({
+      available: 'Khả dụng',
+      pending: 'Chờ đủ điều kiện',
+      qualified: 'Đã đủ điều kiện',
+      reversed: 'Đã đảo thưởng',
+      issued: 'Đã cấp',
+      used: 'Đã sử dụng',
+      revoked: 'Đã thu hồi'
+    } as Record<string, string>)[value] || value;
+  }
   /** Translate ledger tokens into compact customer-facing labels. */
   entryLabel(value: string): string { return ({ earn: 'Tích điểm', earned: 'Tích điểm', spend: 'Dùng điểm', consumed: 'Dùng điểm', restore: 'Hoàn điểm', reversed: 'Điều chỉnh', clawback: 'Thu hồi', expiry: 'Hết hạn', expired: 'Hết hạn', debt_repayment: 'Bù điểm' } as Record<string, string>)[value] || value; }
   private load(before?: string): void {

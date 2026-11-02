@@ -237,8 +237,9 @@
   min-height: var(--erp-topbar-h);
   padding: 0 26px;
   border-bottom: 1px solid var(--erp-line);
-  background: rgba(245, 242, 238, 0.92);
-  backdrop-filter: blur(8px);
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 1px 2px 0 rgba(15, 23, 42, 0.04);
 }
 
 .topbar__menu {

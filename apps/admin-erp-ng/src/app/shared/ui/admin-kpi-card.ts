@@ -34,18 +34,24 @@ export type AdminKpiTone = 'neutral' | 'accent' | 'success' | 'warning' | 'dange
         position: relative;
         display: grid;
         gap: 8px;
-        padding: 16px;
-        overflow: hidden;
+        padding: 16px 18px;
         background: var(--erp-surface);
         border: 1px solid var(--erp-line);
         border-radius: var(--erp-radius-md);
         box-shadow: var(--erp-shadow-sm);
+        transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
+      }
+      .kpi:hover {
+        transform: translateY(-1px);
+        box-shadow: var(--erp-shadow-md);
+        border-color: #cbd5e1;
       }
       .kpi::before {
         content: '';
         position: absolute;
         inset: 0 auto 0 0;
         width: 3px;
+        border-radius: var(--erp-radius-md) 0 0 var(--erp-radius-md);
         background: var(--erp-line-strong);
       }
       .kpi--accent::before {
@@ -83,10 +89,11 @@ export type AdminKpiTone = 'neutral' | 'accent' | 'success' | 'warning' | 'dange
         color: var(--erp-muted);
       }
       strong {
-        font-family: var(--erp-display);
-        font-size: 30px;
-        font-weight: 600;
-        line-height: 1;
+        font-family: var(--erp-font);
+        font-size: 26px;
+        font-weight: 700;
+        line-height: 1.1;
+        font-variant-numeric: tabular-nums;
         color: var(--erp-ink);
       }
       small {

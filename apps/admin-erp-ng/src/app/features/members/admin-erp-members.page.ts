@@ -48,6 +48,7 @@ import { AdminErpPagination } from '../../shared/ui/admin-pagination';
 import { AdminErpStatusBadge } from '../../shared/ui/admin-status-badge';
 import { AdminErpTab, AdminErpTabs } from '../../shared/ui/admin-tabs';
 
+import { AdminErpModal } from '../../shared/ui/admin-modal';
 type MemberSort = 'balance' | 'name' | 'recent';
 
 const MEMBER_SORTS: readonly MemberSort[] = ['balance', 'name', 'recent'];
@@ -74,6 +75,7 @@ const EMPTY_OVERVIEW: AdminMemberOverview = {};
     AdminErpLoadingOverlay,
     AdminErpIcon,
     AdminErpStatusBadge,
+    AdminErpModal,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './admin-erp-members.page.html',
@@ -114,6 +116,15 @@ export class AdminErpMembersPage {
   readonly adjustReason = signal('');
   readonly adjustBusy = signal(false);
   readonly adjustError = signal<string | null>(null);
+  readonly policyModalOpen = signal(false);
+
+  openPolicyModal(): void {
+    this.policyModalOpen.set(true);
+  }
+
+  closePolicyModal(): void {
+    this.policyModalOpen.set(false);
+  }
   private readonly adjustKeySignal = signal('');
 
   /** Live redemption switch; `effectively_enabled` also requires the stored policy approval. */

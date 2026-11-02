@@ -300,10 +300,21 @@ export class ReturnFlowComponent {
     </svg>`;
 
     return new Promise<File>((resolve) => {
+      if (typeof document === 'undefined') {
+        const blob = new Blob([svg], { type: 'image/png' });
+        resolve(new File([blob], `bien-lai-chi-ho-${reference}.png`, { type: 'image/png' }));
+        return;
+      }
       const canvas = document.createElement('canvas');
       canvas.width = W * 2;   // 2× for crisp rendering
       canvas.height = H * 2;
-      const ctx = canvas.getContext('2d')!;
+      const ctx = canvas.getContext?.('2d');
+      if (!ctx || typeof Image === 'undefined') {
+        // Fallback for jsdom / test environments where 2D canvas context is unavailable
+        const blob = new Blob([svg], { type: 'image/png' });
+        resolve(new File([blob], `bien-lai-chi-ho-${reference}.png`, { type: 'image/png' }));
+        return;
+      }
       ctx.scale(2, 2);
       const toFile = (blob: Blob | null) => resolve(new File([blob!], `bien-lai-chi-ho-${reference}.png`, { type: 'image/png' }));
 

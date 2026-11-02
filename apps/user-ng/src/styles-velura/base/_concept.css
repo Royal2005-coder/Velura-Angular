@@ -586,30 +586,34 @@ body.page-product-list {
 /* Editorial header: brand at left, utility/search/actions above navigation. */
 .site-header__container-grid {
   display: grid;
-  grid-template-columns: 176px minmax(0, 1fr) 224px;
+  grid-template-columns: 176px minmax(0, 1fr) auto;
   grid-template-rows: auto auto;
   align-items: center;
   min-height: 92px;
   padding-inline: clamp(12px, 2vw, 28px);
 }
 .header-col--left { grid-column: 1; grid-row: 1; }
-.header-col--center { display: contents; }
+.header-col--center { grid-column: 2; grid-row: 1; display: flex; align-items: center; }
 .center-row--top {
-  grid-column: 2;
-  grid-row: 1;
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 18px;
+  width: 100%;
   padding: 10px 0 4px;
 }
-/* Navigation spans the whole container so its first link shares the page content's left edge;
-   indenting it behind the brand column is what read as a misaligned header. */
-.center-row--bottom {
+/* Navigation spans the whole container so its first link shares the page content's left edge */
+.center-row--bottom,
+.site-header__nav {
   grid-column: 1 / -1;
   grid-row: 2;
   min-width: 0;
-  padding: 5px 0 10px;
-  border-top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: clamp(16px, 2.5vw, 36px);
+  padding: 8px 0 10px;
+  border-top: 1px solid rgba(234, 215, 221, 0.45);
 }
 .header-col--right {
   grid-column: 3;

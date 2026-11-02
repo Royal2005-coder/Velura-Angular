@@ -3,9 +3,13 @@
   title="Thành viên & điểm"
   subtitle="Ví điểm đọc trực tiếp từ loyalty_account và loyalty_ledger. Tại đây chỉ khoá/mở tích luỹ kèm lý do; điều chỉnh số dư là quyết định tiền, không nằm trong màn hình vận hành."
 >
-  <div actions>
+  <div actions class="member-header-actions">
+    <button class="erp-btn erp-btn--sm" type="button" (click)="openPolicyModal()">
+      <app-erp-icon name="tag" [size]="'14'" />
+      Chính sách dùng điểm
+    </button>
     <button class="erp-btn erp-btn--sm" type="button" (click)="reload()" [disabled]="loading()">
-      <app-erp-icon name="refresh" [size]="'15'" />
+      <app-erp-icon name="refresh" [size]="'14'" />
       {{ loading() ? 'Đang tải…' : 'Làm mới' }}
     </button>
   </div>
@@ -66,48 +70,6 @@
     <p class="member-notice">Vai trò của bạn không có quyền xem điểm thành viên.</p>
   </section>
 } @else {
-  <section class="erp-card spending-policy-card" aria-labelledby="spending-title">
-    <div class="spending-policy-head">
-      <div>
-        <div class="spending-badge-row">
-          <h3 id="spending-title">Chính sách dùng điểm khi thanh toán</h3>
-          <span class="spending-status-badge" [class.is-live]="spendingLive()">
-            {{ spendingLive() ? 'ĐANG BẬT CHO THÀNH VIÊN' : 'ĐANG TẠM KHÓA' }}
-          </span>
-        </div>
-        <p class="member-lock__hint">
-          @if (spendingCap()) { <span>Áp dụng giảm tối đa <strong>{{ spendingCap() }}%</strong> giá trị đơn hàng sau voucher. </span> }
-          Bật/tắt chính sách được ghi nhận người thao tác và lưu nhật ký kiểm toán. Chỉ super admin áp dụng được.
-        </p>
-      </div>
-    </div>
-
-    <div class="spending-policy-grid">
-      <label class="erp-field">
-        <span>Tỉ lệ giảm tối đa trên đơn hàng (%)</span>
-        <input class="erp-input" type="number" min="1" max="100" step="1" [value]="spendingPercent()" (input)="onSpendingPercent($event)" />
-      </label>
-      <label class="erp-field">
-        <span>Lý do cập nhật chính sách (tối thiểu 10 ký tự)</span>
-        <textarea class="erp-input" rows="2" [value]="spendingReason()" (input)="onSpendingReason($event)" placeholder="ví dụ: Đã duyệt chính sách thưởng và dùng điểm cho quý này"></textarea>
-      </label>
-    </div>
-    @if (spendingError()) {
-      <p class="erp-error" role="alert">{{ spendingError() }}</p>
-    }
-    <div class="spending-policy-actions">
-      @if (spendingLive()) {
-        <button class="erp-btn erp-btn--danger erp-btn--sm" type="button" [disabled]="spendingBusy()" (click)="saveSpending(false)">
-          {{ spendingBusy() ? 'Đang lưu…' : 'Tạm khóa dùng điểm' }}
-        </button>
-      } @else {
-        <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" [disabled]="spendingBusy()" (click)="saveSpending(true)">
-          {{ spendingBusy() ? 'Đang lưu…' : 'Kích hoạt dùng điểm' }}
-        </button>
-      }
-    </div>
-  </section>
-
   <section class="erp-card member-panel" aria-labelledby="members-title">
     <div class="member-panel__head">
       <div>
@@ -382,4 +344,47 @@
   </div>
 </app-erp-drawer>
 
+
+<app-erp-modal [open]="policyModalOpen()" title="Chính sách dùng điểm khi thanh toán" size="md" (closed)="closePolicyModal()">
+  <div class="spending-modal-content">
+    <div class="spending-badge-row">
+      <strong>Trạng thái:</strong>
+      <span class="spending-status-badge" [class.is-live]="spendingLive()">
+        {{ spendingLive() ? 'ĐANG BẬT CHO THÀNH VIÊN' : 'ĐANG TẠM KHÓA' }}
+      </span>
+      @if (spendingCap()) {
+        <span class="erp-hint">· Giảm tối đa <strong>{{ spendingCap() }}%</strong> giá trị đơn hàng sau voucher</span>
+      }
+    </div>
+    <p class="erp-hint">
+      Bật/tắt chính sách được ghi nhận người thao tác và lưu nhật ký kiểm toán. Chỉ super admin có quyền thay đổi.
+    </p>
+
+    <div class="spending-policy-grid">
+      <label class="erp-field">
+        <span>Tỉ lệ giảm tối đa trên đơn hàng (%)</span>
+        <input class="erp-input" type="number" min="1" max="100" step="1" [value]="spendingPercent()" (input)="onSpendingPercent($event)" />
+      </label>
+      <label class="erp-field">
+        <span>Lý do cập nhật chính sách (tối thiểu 10 ký tự)</span>
+        <textarea class="erp-input" rows="2" [value]="spendingReason()" (input)="onSpendingReason($event)" placeholder="ví dụ: Đã duyệt chính sách thưởng và dùng điểm cho quý này"></textarea>
+      </label>
+    </div>
+    @if (spendingError()) {
+      <p class="erp-error" role="alert">{{ spendingError() }}</p>
+    }
+  </div>
+  <div footer>
+    <button class="erp-btn" type="button" (click)="closePolicyModal()">Đóng</button>
+    @if (spendingLive()) {
+      <button class="erp-btn erp-btn--danger" type="button" [disabled]="spendingBusy()" (click)="saveSpending(false)">
+        {{ spendingBusy() ? 'Đang lưu…' : 'Tạm khóa dùng điểm' }}
+      </button>
+    } @else {
+      <button class="erp-btn erp-btn--primary" type="button" [disabled]="spendingBusy()" (click)="saveSpending(true)">
+        {{ spendingBusy() ? 'Đang lưu…' : 'Kích hoạt dùng điểm' }}
+      </button>
+    }
+  </div>
+</app-erp-modal>
 <app-erp-loading-overlay [active]="detailLoading()" label="Đang tải hồ sơ thành viên…" />

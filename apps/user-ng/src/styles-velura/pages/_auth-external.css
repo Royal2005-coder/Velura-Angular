@@ -468,6 +468,23 @@
 .velura-auth-page .login-container--register .header {
   margin-bottom: 22px;
 }
+.velura-auth-page .member-perks-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.velura-auth-page .member-perks-pills span {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: #fdf0f3;
+  border: 1px solid #f2c2cf;
+  color: #7a283c;
+  font-size: 11px;
+  font-weight: 600;
+}
 
 .velura-auth-page .login-container--register .form-group {
   margin-bottom: 14px;

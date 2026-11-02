@@ -672,6 +672,15 @@ export class PurchaseFlowPage {
     this.requestedPoints.set(points);
   }
 
+  /** Fills the maximum available points allowed for this order under the 50% cap. */
+  useMaxPoints(): void {
+    const loyalty = this.serverQuote()?.loyalty;
+    if (!this.member() || !loyalty?.spending_enabled) return;
+    const maximum = Math.min(loyalty.available_points, loyalty.max_points);
+    this.requestedPoints.set(maximum);
+    this.refreshQuote();
+  }
+
   /** Reads authoritative prices and ignores an obsolete quote after an account or cart change. */
   refreshQuote(): void {
     const version = ++this.quoteVersion;

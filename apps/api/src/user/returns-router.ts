@@ -59,6 +59,13 @@ export async function handleReturnsRoute(
   if (action === "guest-refund-receiver" && req.method === "POST") {
     return sendJson(res, 200, await returnsService.saveRefundReceiverForGuest(await readJson(req)), corsHeaders);
   }
+
+  // POST /api/user/returns/guest/:id/response
+  if (action === "guest" && req.method === "POST" && parts[4] && parts[5] === "response") {
+    const body = await readJson(req);
+    const updated = await returnsService.recordCustomerResponseForGuest(parts[4], guestToken, body);
+    return sendJson(res, 200, { success: true, return: updated }, corsHeaders);
+  }
   const profile = requireUserAuth(context);
 
   // GET /api/user/returns/:id — full customer tracking detail
@@ -77,6 +84,13 @@ export async function handleReturnsRoute(
       req
     );
     return sendJson(res, 200, evidence, corsHeaders);
+  }
+
+  // POST /api/user/returns/:id/response — customer picks a scenario option
+  if (req.method === "POST" && action && parts[4] === "response") {
+    const body = await readJson(req);
+    const updated = await returnsService.recordCustomerResponse(profile, action, body);
+    return sendJson(res, 200, { success: true, return: updated }, corsHeaders);
   }
 
   // POST /api/user/returns/cancel

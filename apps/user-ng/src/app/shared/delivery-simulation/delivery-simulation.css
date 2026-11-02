@@ -12,3 +12,9 @@ text { font: 10px 'DM Sans', sans-serif; fill: #655247; }
 button { border: 1px solid var(--theme-accent, #77533f); border-radius: 8px; padding: .65rem .9rem; background: #fff; color: var(--theme-accent, #77533f); cursor: pointer; font: inherit; font-size: .8rem; }
 button:focus-visible { outline: 2px solid #77533f; outline-offset: 3px; }
 @media (prefers-reduced-motion: reduce) { .driver { transition: none; } }
+.delivered-proof-card { margin-top: 1rem; padding: .85rem; border: 1px solid #d8e2d4; border-radius: 10px; background: #f6faf4; }
+.delivered-proof-head { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin-bottom: .6rem; }
+.proof-badge { display: inline-block; padding: 3px 9px; border-radius: 999px; background: #3b5f33; color: #fff; font-size: .75rem; font-weight: 600; }
+.proof-note { font-size: .75rem; color: #52674e; }
+.delivery-proof-photo { display: block; width: 100%; max-height: 240px; object-fit: cover; border-radius: 8px; border: 1px solid #c9d8c4; }
+.proof-caption { margin: .5rem 0 0; font-size: .75rem; color: #52674e; font-style: italic; }

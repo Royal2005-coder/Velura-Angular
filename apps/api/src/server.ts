@@ -6,6 +6,7 @@ import { completeAdminPasswordSignIn, recordAdminSignOut, revokeAdminSession } f
 import { buildAuthContext, capabilitiesForRole, requireAdmin, requireAuthenticated, requirePermission } from "./rbac.js";
 import { buildDashboardSummary } from "./dashboard.js";
 import { handleDashboardRoute } from "./dashboard-router.js";
+import { startMvRefreshJob } from "./features/dashboard/dashboard.cron.js";
 import { handleInsightsRoute } from "./insights-router.js";
 import { createAccountRepository } from "./accounts/account-repository.js";
 import { createAccountService } from "./accounts/account-service.js";
@@ -498,7 +499,7 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
 export const server = createServer(handleApiRequest);
 
 if (process.env.VERCEL !== "1") {
-  const timers = [startAccountMaintenance(), startEmailOutboxWorker(), startPromotionScheduler(), startOrderAutomation(), startStripeReconciliation(), startLoyaltyExpiry(), startChatReportWorker()];
+  const timers = [startAccountMaintenance(), startEmailOutboxWorker(), startPromotionScheduler(), startOrderAutomation(), startStripeReconciliation(), startLoyaltyExpiry(), startChatReportWorker(), startMvRefreshJob()];
   catalogContentService.start();
   void startAiRuntime().catch(() => console.error("AI_RUNTIME_RECOVERY_FAILED"));
   const shutdown = () => {

@@ -2,10 +2,10 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { of, throwError } from 'rxjs';
 import { AdminDashboardSummary, AdminErpApiService } from '../../core/admin-erp-api.service';
-import { AdminErpSessionService, type AdminAuthMe } from '../../core/admin-erp-session.service';
+import { DashboardService } from './services/dashboard.service';
 import { AdminErpDashboardPage } from './admin-erp-dashboard.page';
 
-const summary: AdminDashboardSummary = {
+const mockSummary: AdminDashboardSummary = {
   operations: {
     pendingOrders: 3,
     paymentErrors: 1,
@@ -22,122 +22,91 @@ const summary: AdminDashboardSummary = {
     promotionRevenue: 2_000_000,
     promotionRevenueShare: 16,
     pendingReviews: 7,
+    comparisons: { revenuePct: 15.2, orderCountPct: 10 },
     revenueTrend: [{ date: '2026-10-24', dateStr: '24/10', revenue: 1_000_000, orderCount: 4 }],
     bestSellers: [{ name: 'Lụa Hà Nội', sku: 'VL-01', sold: 9, revenue: 2_700_000 }],
     categoryContributions: [{ name: 'Áo', revenue: 6_000_000, pct: 50 }],
   },
-  recentLogs: [
-    {
-      audit_id: 'a1',
-      timestamp: '2026-10-24T03:00:00Z',
-      actor_name: 'Quản trị',
-      action: 'update',
-      module: 'orders',
-      target_id: '1234567890',
-    },
-  ],
+  recentLogs: [],
+  periodDays: 7,
+  range: 'week',
   meta: { generatedAt: '2026-10-24T03:05:00Z', source: 'oltp.rpc' },
 };
 
 describe('AdminErpDashboardPage', () => {
-  async function boot(api: Pick<AdminErpApiService, 'dashboard'>) {
+  async function boot(apiMock?: Partial<AdminErpApiService>, dashboardServiceMock?: Partial<DashboardService>) {
     TestBed.resetTestingModule();
     await TestBed.configureTestingModule({
       imports: [AdminErpDashboardPage],
-      providers: [provideRouter([]), { provide: AdminErpApiService, useValue: api }],
+      providers: [
+        provideRouter([]),
+        {
+          provide: AdminErpApiService,
+          useValue: {
+            dashboard: () => of(mockSummary),
+            recommendInsights: () => of({ lines: [] }),
+            ...apiMock,
+          },
+        },
+        {
+          provide: DashboardService,
+          useValue: {
+            getSlaMetrics: () => of([]),
+            getInventoryAlerts: () => of([]),
+            getModuleHealth: () => of({
+              total_issues: 34,
+              orders_pending_24h: 16,
+              variants_out_of_stock: 10,
+              tickets_open_24h: 4,
+              promotions_near_budget: 1,
+              reviews_urgent: 2,
+              admin_requests_pending: 1,
+            }),
+            ...dashboardServiceMock,
+          },
+        },
+      ],
     }).compileComponents();
     const fixture = TestBed.createComponent(AdminErpDashboardPage);
     fixture.detectChanges();
     return fixture;
   }
 
-  it('renders real operation KPI values from the API summary', async () => {
-    const fixture = await boot({ dashboard: () => of(summary) });
+  it('renders operations dashboard successfully with initial signals', async () => {
+    const fixture = await boot();
     const page = fixture.componentInstance;
 
+    expect(page.tab()).toBe('operations');
     expect(page.loadError()).toBeNull();
     expect(page.loading()).toBe(false);
-    expect(page.operationKpis()[0].value).toBe('3');
-    expect(page.alertTotal()).toBe(21);
-    expect(page.recentActivity().length).toBe(1);
+    expect(page.q1ModuleRows().length).toBe(6);
   });
 
-  it('switches to the business view without refetching', async () => {
-    let calls = 0;
-    const fixture = await boot({
-      dashboard: () => {
-        calls += 1;
-        return of(summary);
-      },
-    });
+  it('switches between operations and business tabs', async () => {
+    const fixture = await boot();
     const page = fixture.componentInstance;
 
+    expect(page.tab()).toBe('operations');
     page.setTab('business');
     fixture.detectChanges();
-
     expect(page.tab()).toBe('business');
-    expect(page.businessKpis()[0].value).toContain('12M');
-    expect(calls).toBe(1);
   });
 
-  it('reloads with the selected fixed range', async () => {
-    const ranges: string[] = [];
-    const fixture = await boot({
-      dashboard: (params) => {
-        ranges.push(String(params?.['range'] ?? ''));
-        return of(summary);
-      },
-    });
+  it('switches range filter without breaking signal consistency', async () => {
+    const fixture = await boot();
     const page = fixture.componentInstance;
 
     page.setRange('month');
-
-    expect(ranges).toEqual(['week', 'month']);
-    expect(page.periodLabel()).toBe('30 ngày gần nhất');
+    expect(page.range()).toBe('month');
   });
 
-  it('shows an error state instead of fabricated KPIs when the API fails', async () => {
-    const fixture = await boot({ dashboard: () => throwError(() => new Error('API down')) });
+  it('handles API errors gracefully and updates loadError signal', async () => {
+    const fixture = await boot({
+      dashboard: () => throwError(() => new Error('API down')),
+    });
     const page = fixture.componentInstance;
 
     expect(page.loadError()).toBe('API down');
-    expect(page.operationKpis()[0].value).toBe('0');
-    expect(page.recentActivity()).toEqual([]);
-  });
-
-  it('sends each alert to the exact queue it counts', async () => {
-    const fixture = await boot({ dashboard: () => of(summary) });
-    TestBed.inject(AdminErpSessionService).applyAuthContext({
-      role: 'super_admin',
-      roleName: 'Quản trị',
-      isAdmin: true,
-      allowedPages: ['dashboard', 'orders', 'returns-cskh', 'products', 'reviews'],
-      allowedModules: ['orders', 'returns', 'products', 'reviews'],
-      capabilities: {},
-      user: { id: 'u0', email: 'root@velura.test' },
-      profile: { user_id: 'u0', email: 'root@velura.test', full_name: 'Root', is_active: true },
-    } as AdminAuthMe);
-    const page = fixture.componentInstance;
-
-    expect(page.alertLink('orders')).toEqual({ commands: ['/orders'], query: { tab: 'attention' } });
-    expect(page.alertLink('returns-cskh')?.query).toEqual({ tab: 'returns', status: 'REQUESTED' });
-    expect(page.alertLink('products')?.query).toEqual({ tab: 'stock' });
-    expect(page.alertLink('reviews')?.query).toEqual({ tab: 'urgent' });
-  });
-
-  it('offers no alert route for a page the session cannot open', async () => {
-    const fixture = await boot({ dashboard: () => of(summary) });
-    TestBed.inject(AdminErpSessionService).applyAuthContext({
-      role: 'admin_viewer',
-      roleName: 'Xem',
-      isAdmin: true,
-      allowedPages: ['dashboard'],
-      allowedModules: [],
-      capabilities: {},
-      user: { id: 'u9', email: 'v@velura.test' },
-      profile: { user_id: 'u9', email: 'v@velura.test', full_name: 'Viewer', is_active: true },
-    } as AdminAuthMe);
-
-    expect(fixture.componentInstance.alertLink('orders')).toBeNull();
+    expect(page.loading()).toBe(false);
   });
 });

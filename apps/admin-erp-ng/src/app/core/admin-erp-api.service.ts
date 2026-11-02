@@ -2234,6 +2234,15 @@ export class AdminErpApiService {
   }
 
   /**
+   * Uploads one campaign banner image for promotional display across user storefront.
+   */
+  uploadPromotionBanner(file: File): Observable<{ url: string }> {
+    const form = new FormData();
+    form.append('file', file, file.name);
+    return this.http.post<{ url: string }>(`${this.baseUrl}/api/v1/admin/promotions/banner`, form);
+  }
+
+  /**
    * Activates a scheduled/paused campaign.
    */
   activatePromotion(promoId: string, body: Record<string, unknown>): Observable<unknown> {

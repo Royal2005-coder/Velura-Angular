@@ -21,10 +21,6 @@
           <p class="flow-hint flow-hint--soft">Chưa có ảnh/video đóng gói khách gửi. Hãy nhắc qua điện thoại sau khi duyệt — vẫn duyệt được bình thường.</p>
         }
       }
-      @if (showQuantityEditor()) {
-        <label class="erp-field"><span>Số lượng xử lý trong phần này</span><input class="erp-input" type="number" min="1" [max]="item.quantity || 1" step="1" [value]="quantity()" (input)="setQuantity($event)" /></label>
-        <p class="flow-hint">Khách yêu cầu ban đầu: {{ item.quantity }} sản phẩm. Xử lý ít hơn sẽ tách phần còn lại; những phần khác không bị thay đổi.</p>
-      }
     }
     @if (flow() === 'contact') {
       <div class="flow-scenarios">
@@ -116,17 +112,44 @@
       <label class="erp-field"><span>Hướng xử lý kho</span><select class="erp-select" [value]="disposition()" (change)="setDisposition($event)"><option value="restock">Nhập tồn bán được</option><option value="repair">Sửa chữa</option><option value="scrap">Loại bỏ</option><option value="return_supplier">Trả nhà cung cấp</option></select></label>
     }
     @if (flow() === 'receive' || flow() === 'manual') {
-      <label class="erp-field"><span>{{ flow() === 'manual' ? 'Chứng từ chuyển khoản' : 'Ảnh kiểm hàng tại kho' }} (bắt buộc)</span><input type="file" accept="image/*" (change)="pickFile('proof', $event)" /><small>{{ proofFile()?.name || 'Chưa chọn ảnh' }}</small></label>
+      <div class="erp-field">
+        <span>{{ flow() === 'manual' ? 'Chứng từ chuyển khoản (bắt buộc)' : 'Ảnh kiểm hàng tại kho (bắt buộc)' }}</span>
+        <div class="custom-file-row">
+          <label class="erp-btn erp-btn--sm custom-file-trigger">
+            <input type="file" accept="image/*" class="erp-sr-only" (change)="pickFile('proof', $event)" />
+            <span>{{ proofFile() ? 'Đổi tệp chứng từ khác' : 'Chọn ảnh chứng từ / bill' }}</span>
+          </label>
+          <span class="custom-file-status" [class.has-file]="!!proofFile()">
+            {{ proofFile()?.name || 'Chưa chọn ảnh' }}
+          </span>
+        </div>
+      </div>
     }
     @if (isMoney()) {
       <p class="flow-warning">Số tiền cho riêng phần này: <strong>{{ money(refundable()) }}</strong>. Không dùng tổng giá trị phiếu.</p>
       @if (flow() === 'manual') {
-        <label class="erp-field"><span>Mã giao dịch chuyển khoản duy nhất</span><input class="erp-input" [value]="transferReference()" (input)="setText('transferReference', $event)" /></label>
+        <label class="erp-field">
+          <span>Mã giao dịch chuyển khoản duy nhất</span>
+          <div class="flow-ref-row">
+            <input class="erp-input" [value]="transferReference()" (input)="setText('transferReference', $event)" placeholder="VD: FT2611029876 hoặc mã ủy nhiệm chi" />
+            <button class="erp-btn erp-btn--sm" type="button" (click)="generateTransferRef()">Tạo mã</button>
+          </div>
+        </label>
         <label class="erp-field"><span>Thời điểm chuyển khoản thực tế</span><input class="erp-input" type="datetime-local" [value]="transferredAt()" (input)="setText('transferredAt', $event)" /></label>
       }
     }
     @if (flow() === 'complete_exchange') { <p class="flow-warning">Chỉ hoàn tất khi đơn đổi liên kết đã được xác nhận giao thực tế. Không thể xác nhận chỉ bằng thao tác này nếu vận chuyển chưa giao thành công.</p> }
-    <label class="erp-field"><span>{{ needsReason() ? 'Lý do / nội dung xác nhận (bắt buộc)' : 'Ghi chú xử lý' }}</span><textarea class="erp-input" rows="3" [value]="note()" (input)="setText('note', $event)"></textarea>@if (needsReason()) { <small>Tối thiểu {{ minNote }} ký tự. Duyệt sau cuộc gọi không nghe máy phải nêu rõ căn cứ.</small> }</label>
+    <div class="flow-note-section">
+      <div class="flow-note-shortcuts">
+        <span class="flow-facts__label">Gợi ý nội dung nhanh:</span>
+        <div class="flow-facts__list">
+          @for (quick of quickNotes(); track quick) {
+            <button class="flow-fact" type="button" (click)="setNoteQuick(quick)">{{ quick }}</button>
+          }
+        </div>
+      </div>
+      <label class="erp-field"><span>{{ needsReason() ? 'Lý do / nội dung xác nhận (bắt buộc)' : 'Ghi chú xử lý' }}</span><textarea class="erp-input" rows="3" [value]="note()" (input)="setText('note', $event)"></textarea>@if (needsReason()) { <small>Tối thiểu {{ minNote }} ký tự. Duyệt sau cuộc gọi không nghe máy phải nêu rõ căn cứ.</small> }</label>
+    </div>
     @if (error()) { <p class="flow-warning" role="alert">{{ error() }}</p> }
   }
   <div footer><button class="erp-btn" type="button" [disabled]="saving()" (click)="dismiss()">Hủy</button><button class="erp-btn erp-btn--primary" type="button" [disabled]="!canSubmit()" (click)="submit()">{{ saving() ? 'Đang lưu…' : 'Xác nhận' }}</button></div>

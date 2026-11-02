@@ -36,8 +36,22 @@
       </p>
     }
   } @else if (hasAnyVoucher()) {
-    <p class="voucher-wallet__state">Chưa áp mã nào cho đơn này.</p>
-    <button type="button" class="btn-outline" (click)="openModal()">Chọn mã giảm giá</button>
+    <div class="voucher-wallet__action-row">
+      <button type="button" class="voucher-wallet__browse-btn" (click)="openModal()">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"></path><path d="M13 5v2"></path><path d="M13 17v2"></path><path d="M13 11v2"></path></svg>
+        Chọn mã giảm giá @if (eligible().length) { <span>({{ eligible().length }} mã có thể dùng)</span> }
+      </button>
+    </div>
+    @if (!selected() && eligible().length > 0) {
+      <div class="voucher-wallet__quick-list">
+        @for (item of eligible().slice(0, 2); track item.voucher_id) {
+          <button type="button" class="voucher-quick-chip" (click)="choose(item)" [title]="'Áp dụng ngay ' + item.code">
+            <span class="voucher-quick-chip__code">{{ item.code }}</span>
+            <span class="voucher-quick-chip__saving">−{{ money(item.discount_amount) }}</span>
+          </button>
+        }
+      </div>
+    }
   } @else {
     <p class="voucher-wallet__state">Hiện chưa có ưu đãi nào khả dụng.</p>
   }

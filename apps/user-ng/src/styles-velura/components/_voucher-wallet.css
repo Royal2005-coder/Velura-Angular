@@ -273,6 +273,68 @@
   white-space: nowrap;
   text-decoration: none;
 }
+/* Action row & browse button */
+.voucher-wallet__action-row {
+  display: flex;
+  width: 100%;
+}
+.voucher-wallet__browse-btn {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 16px;
+  border: 1.5px solid var(--velura-rose, #C94F70);
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--velura-maroon, #7A283C);
+  font-family: var(--velura-font-ui, 'Inter', sans-serif);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.voucher-wallet__browse-btn:hover {
+  background: var(--velura-blush, #FDF0F3);
+  border-color: var(--velura-maroon, #7A283C);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(122, 40, 60, 0.12);
+}
+.voucher-wallet__quick-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 6px 0;
+}
+.voucher-quick-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px dashed var(--velura-rose, #C94F70);
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--velura-maroon, #7A283C);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.voucher-quick-chip:hover {
+  background: var(--velura-blush, #FDF0F3);
+  border-style: solid;
+  transform: translateY(-1px);
+}
+.voucher-quick-chip__code {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.voucher-quick-chip__saving {
+  color: var(--velura-rose, #C94F70);
+  font-weight: 600;
+}
+
 
 /* Inline Input Section (Nhập mã voucher + button Áp dụng) */
 .voucher-wallet__inline-input {

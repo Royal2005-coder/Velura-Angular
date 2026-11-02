@@ -947,6 +947,7 @@ export interface AdminRefundReceiver {
   status: AdminRefundReceiverStatus;
   bank_name: string | null;
   account_number: string | null;
+  account_last4?: string | null;
   account_holder: string | null;
   submitted_at: string | null;
   supplement_request: string | null;

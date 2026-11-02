@@ -258,7 +258,7 @@ export async function sendReturnApprovedEmail(returnId: string, returnItemId: st
     }
 
     const returnCode = asString(ret.return_code) || asString(ret.tracking_return_code);
-    const qr = await QRCode.toDataURL(returnCode, { margin: 1, width: 240 });
+    const qr = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(returnCode)}`;
     const trackingLink = `https://velura.royalai.dev/account/orders/${asString(ret.order_id)}`;
     const product = asString(itemInfo?.product_name) || "Sản phẩm đổi/trả";
     const subject = `[Velura] Yêu cầu đổi/trả ${returnCode} đã được duyệt`;
@@ -277,8 +277,8 @@ Theo dõi tại: ${trackingLink}`;
           <h2 style="color:#111827;margin:0 0 8px;">Yêu cầu đổi/trả đã được duyệt</h2>
           <p style="color:#374151;line-height:1.6;">Kính chào <strong>${name}</strong>, yêu cầu <strong>${returnCode}</strong> cho sản phẩm <strong>${product}</strong> × ${asNumber(item.quantity)} đã được duyệt.</p>
           <div style="text-align:center;margin:24px 0;">
-            <img src="${qr}" alt="QR phiếu hoàn" width="240" height="240" style="display:block;margin:0 auto;" />
-            <p style="font-family:monospace;color:#374151;">${returnCode}</p>
+            <img src="${qr}" alt="QR phiếu hoàn" width="240" height="240" style="display:block;margin:0 auto;border:1px solid #E5E7EB;border-radius:12px;padding:8px;background:#fff;" />
+            <p style="font-family:monospace;color:#374151;font-weight:700;font-size:16px;letter-spacing:1px;margin-top:12px;">${returnCode}</p>
             <p style="color:#6b7280;font-size:14px;">Dán QR lên kiện hàng. ĐVVC dự kiến đến lấy lúc <strong>09:00 ngày mai</strong>.</p>
             <a href="${trackingLink}" style="display:inline-block;background:#7C5454;color:#fff;text-decoration:none;padding:12px 32px;border-radius:6px;font-weight:600;">Theo dõi đổi/trả</a>
           </div>

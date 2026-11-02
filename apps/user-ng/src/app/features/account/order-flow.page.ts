@@ -22,6 +22,7 @@ import { isGuestPreview, isPreviewMode } from '../../core/utils/preview-mode';
 import { DeliverySimulation } from '../../shared/delivery-simulation/delivery-simulation';
 import { CheckoutStore } from '../../core/services/checkout.store';
 import { ReturnTrackingComponent } from './return-tracking.component';
+import { VIETNAM_BANKS } from '../../core/models/vietnam-banks';
 
 /**
  * Guest access, order actions and after-sales share one `OrderAccountModel` injection point:
@@ -186,6 +187,10 @@ export class OrderFlowPage {
   bankAccount = '';
   bankHolder = '';
   /** Lets the customer replace an already valid receiving account via "Cập nhật". */
+  readonly banks = VIETNAM_BANKS;
+  isStandardBank(name: string): boolean {
+    return this.banks.some((b) => b.shortName.toLowerCase() === (name || '').trim().toLowerCase());
+  }
   readonly receiverFormOpen = signal(false);
   private challengePhone = '';
   private challengeOrderId = '';

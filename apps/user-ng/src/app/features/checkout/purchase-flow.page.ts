@@ -88,8 +88,15 @@ export class PurchaseFlowPage {
     discount: this.serverQuote()?.discount_amount ?? 0,
     total: this.serverQuote()?.total_amount ?? 0,
     voucher: this.serverQuote()?.voucher?.name || 'Chưa áp dụng mã giảm giá',
+   });
+  readonly expectedPoints = computed(() => {
+    const q = this.quote();
+    const pointsDiscount = this.serverQuote()?.loyalty?.points_discount_amount ?? 0;
+    const merchandise = Math.max(0, (q.subtotal || 0) - (q.discount || 0) - pointsDiscount);
+    return Math.floor(merchandise * 0.05 / 1000);
   });
-  readonly busy = signal(false);
+  readonly expectedPointsVnd = computed(() => this.expectedPoints() * 1000);
+   readonly busy = signal(false);
   readonly paymentProviders = signal<PurchasePaymentProvider[]>([{ code: 'COD', enabled: true }, { code: 'STRIPE', enabled: false }, { code: 'VNPAY', enabled: false }, { code: 'MOMO', enabled: false }]);
   readonly providerLabel: Record<PurchasePaymentProvider['code'], string> = { COD: 'Thanh toán khi nhận hàng (COD)', STRIPE: 'Thanh toán bằng thẻ', VNPAY: 'VNPay', MOMO: 'Ví MoMo' };
   readonly resumeLoading = signal(false);

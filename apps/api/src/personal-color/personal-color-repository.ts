@@ -13,6 +13,9 @@ export class PersonalColorRepository implements ColorRepository {
 
   /** Read only the existing owner profile; no implicit guest-to-member promotion. */
   async profile(principal: ColorPrincipal): Promise<{ version: number; personal_color: ConfirmedColor | null }> {
+    if (principal.userId) {
+      await this.ensureStyleProfile(principal.userId);
+    }
     if (principal.userId && !this.rpcDisabled) {
       try {
         const row = await this.rpc(principal, "profile", {});
@@ -34,6 +37,9 @@ export class PersonalColorRepository implements ColorRepository {
 
   /** Bind immutable snapshot version to a unique analysis; stale begins are rejected atomically. */
   async begin(principal: ColorPrincipal, analysis: ColorAnalysis): Promise<ColorAnalysis> {
+    if (principal.userId) {
+      await this.ensureStyleProfile(principal.userId);
+    }
     if (principal.userId && !this.rpcDisabled) {
       try {
         return await this.rpc(principal, "begin", { analysis }) as unknown as ColorAnalysis;
@@ -83,6 +89,9 @@ export class PersonalColorRepository implements ColorRepository {
 
   /** Synchronous guest compare-and-swap and locked member RPC make one confirmation win. */
   async confirm(principal: ColorPrincipal, id: string, version: number): Promise<{ version: number; personal_color: ConfirmedColor }> {
+    if (principal.userId) {
+      await this.ensureStyleProfile(principal.userId);
+    }
     if (principal.userId && !this.rpcDisabled) {
       try {
         return await this.rpc(principal, "confirm", { id, version }) as unknown as { version: number; personal_color: ConfirmedColor };
@@ -118,6 +127,9 @@ export class PersonalColorRepository implements ColorRepository {
   }
   /** Atomically confirm a manual 4-season choice against the current Style Profile version. */
   async confirmManual(principal: ColorPrincipal, personal_color: ConfirmedColor, version: number): Promise<{ version: number; personal_color: ConfirmedColor }> {
+    if (principal.userId) {
+      await this.ensureStyleProfile(principal.userId);
+    }
     const profile = await this.profile(principal);
     if (!profile || profile.version !== version) {
       throw new HttpError(409, "COLOR_PROFILE_CONFLICT", "Hồ sơ đã thay đổi. Vui lòng tải lại.");
@@ -147,6 +159,12 @@ export class PersonalColorRepository implements ColorRepository {
   private purgeGuests(): void {
     for (const [id, row] of this.guestAnalyses) if (Date.parse(row.value.expires_at) <= Date.now()) this.guestAnalyses.delete(id);
   }
+  private async ensureStyleProfile(userId: string): Promise<void> {
+    const existing = await selectOne("style_profile", { user_id: `eq.${userId}` }).catch(() => null);
+    if (!existing) {
+      await insertRow("style_profile", { user_id: userId, style_profile_version: 0 }).catch(() => undefined);
+    }
+  }
 
   private async rpc(principal: ColorPrincipal, action: string, input: Record<string, unknown>): Promise<Record<string, unknown>> {
     if (this.rpcDisabled) throw new Error("RPC_DISABLED");
@@ -159,7 +177,14 @@ export class PersonalColorRepository implements ColorRepository {
         throw new Error("RPC_DISABLED");
       }
       if (error instanceof Error && /COLOR_PROFILE_CONFLICT|COLOR_NOT_CONFIRMABLE/.test(error.message)) throw new HttpError(409, "COLOR_PROFILE_CONFLICT", "Hồ sơ hoặc kết quả đã thay đổi. Hãy tải lại.");
-      if (error instanceof Error && /STYLE_PROFILE_REQUIRED/.test(error.message)) throw new Error("STYLE_PROFILE_REQUIRED");
+      if (error instanceof Error && /STYLE_PROFILE_REQUIRED/.test(error.message)) {
+        await this.ensureStyleProfile(principal.userId);
+        try {
+          return await callRpc("velura_personal_color", { p_actor: principal.userId, p_auth_actor: principal.context.authUser.id, p_action: action, p_input: input }, { silentError: true }) as Record<string, unknown>;
+        } catch {
+          throw new Error("STYLE_PROFILE_REQUIRED");
+        }
+      }
       if (error instanceof Error && /COLOR_ANALYSIS_NOT_FOUND/.test(error.message)) throw new HttpError(404, "COLOR_ANALYSIS_NOT_FOUND", "Không tìm thấy phân tích.");
       if (error instanceof Error && /COLOR_ANALYSIS_LIMIT/.test(error.message)) throw new HttpError(429, "COLOR_ANALYSIS_LIMIT", "Hãy đợi phân tích đang chạy.");
       throw error;

@@ -993,8 +993,14 @@
                 </div>
               } @else {
                 <div class="actions">
-                  <button class="secondary" (click)="view.set('detail')">Quay lại</button
-                  ><button (click)="reviewReturn()">Tiếp tục</button>
+                  <button class="secondary" (click)="view.set('detail')">Quay lại</button>
+                  @if (returnKind === 'exchange') {
+                    <button type="button" [disabled]="busy()" (click)="submitReturnDirect()">
+                      {{ busy() ? 'Đang gửi…' : 'Gửi yêu cầu đổi hàng' }}
+                    </button>
+                  } @else {
+                    <button (click)="reviewReturn()">Tiếp tục</button>
+                  }
                 </div>
               }
             </section>
@@ -1032,7 +1038,7 @@
               <button class="secondary" [disabled]="busy()" (click)="view.set('return')">
                 Chỉnh sửa</button
               ><button [disabled]="busy()" (click)="submitReturn()">
-                {{ busy() ? 'Đang gửi…' : 'Gửi yêu cầu đổi/trả' }}
+                {{ busy() ? 'Đang gửi…' : (returnKind === 'exchange' ? 'Xác nhận gửi yêu cầu đổi hàng' : 'Gửi yêu cầu đổi/trả') }}
               </button>
             </div>
           </section>

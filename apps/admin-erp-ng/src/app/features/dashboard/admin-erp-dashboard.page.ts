@@ -1472,12 +1472,12 @@ export class AdminErpDashboardPage implements OnInit, OnDestroy {
   readonly q5OverallOosPct = computed(() => 3.2);
   readonly b1Tab = signal<'time_combo' | 'price_bar' | 'payment_stacked'>('time_combo');
   readonly b1SelectedDay = signal<'day12' | 'day25' | 'day5'>('day12');
-  readonly b2Tab = signal<'demographic' | 'price_donut' | 'geo_heatmap'>('demographic');
+  readonly b2Tab = signal<'margin_matrix' | 'demographic' | 'price_donut' | 'geo_heatmap'>('margin_matrix');
   readonly b2Category = signal<'ao' | 'quan' | 'vay' | 'dam' | 'set' | 'phukien'>('ao');
   readonly b2PriceCategory = signal<'ao' | 'quan' | 'vay' | 'dam' | 'set' | 'phukien'>('ao');
   readonly b2DrillCategory = signal<'ao' | 'quan' | 'vay' | 'dam' | 'set' | 'phukien'>('ao');
   readonly b2DrillDemo = signal<'nu_18_24' | 'nu_25_34' | 'nam_25_34' | 'nu_35_44'>('nu_18_24');
-  readonly b3Tab = signal<'age_gender' | 'rfm_bar' | 'geo_donut'>('age_gender');
+  readonly b3Tab = signal<'geo_revenue' | 'age_gender' | 'rfm_bar' | 'geo_donut'>('geo_revenue');
   readonly b3Region = signal<'all' | 'south' | 'north' | 'central'>('all');
   readonly b3DrillCompare = signal<'nu2534_vs_nu1824' | 'vip_vs_atrisk' | 'south_vs_north'>('nu2534_vs_nu1824');
   readonly b4Tab = signal<'scatter' | 'audience_bar' | 'price_stacked'>('scatter');
@@ -1551,12 +1551,135 @@ export class AdminErpDashboardPage implements OnInit, OnDestroy {
       }
       return { val: rev.toLocaleString('vi-VN'), unit: 'VND' };
     }
-    return { val: '1.5', unit: 'tỷ VND' };
+    return { val: '2.68', unit: 'tỷ VND' };
   });
 
   readonly b1GrowthPct = computed(() => {
-    return this.comparisons().revenuePct ?? 15.0;
+    const pct = this.comparisons().revenuePct;
+    if (pct !== undefined && pct !== null && pct > -100 && pct < 500) {
+      return pct;
+    }
+    return 18.4;
   });
+
+  readonly b1GrossProfitFormatted = computed(() => ({
+    val: '1.18',
+    unit: 'tỷ VND',
+    marginPct: '44.0%',
+    growthPct: '+2.1%'
+  }));
+
+  readonly b1ScaleVsEfficiency = computed(() => ({
+    scaleRevenue: '2.68 tỷ VND (+18.4% MoM)',
+    grossProfit: '1.18 tỷ VND (Biên LN 44.0%)',
+    cogs: '1.50 tỷ VND (56.0%)',
+    promoExpense: '150 tr VND (5.6% GMV)',
+    returnLoss: '48 tr VND (1.8% GMV)',
+    netOperatingMargin: '36.6%',
+    verdict: 'Doanh nghiệp tăng trưởng thực chất: Quy mô doanh thu mở rộng +18.4% song song biên lợi nhuận gộp tăng +2.1%. Chi phí khuyến mãi (đòn bẩy 8.2x) và tỷ lệ đổi trả (2.4%) kiểm soát tốt.'
+  }));
+
+  readonly b2CategoryMarginMatrix = computed(() => [
+    {
+      category: 'Áo (Tops & Sơ mi)',
+      code: 'ao',
+      revenue: '1.20 tỷ VND',
+      revenueShare: '45.0%',
+      grossMargin: '29.5%',
+      marginLevel: 'low' as const,
+      aov: '480,000 đ',
+      winningFeatures: ['AI 3D Try-On (VTO)', 'Studio Photos chuẩn phom', 'Đo size tự động'],
+      tradeoff: 'Doanh thu dẫn đầu sàn nhưng Biên LN thấp (29.5%). Cạnh tranh cao, áp lực giá.',
+      transferAction: 'Áp dụng bài học VTO: Đóng gói Combo Set với Váy/Quần để kéo AOV lên 840k và nâng biên LN gộp.'
+    },
+    {
+      category: 'Đầm & Váy (Dresses & Skirts)',
+      code: 'dam',
+      revenue: '480 tr VND',
+      revenueShare: '18.0%',
+      grossMargin: '62.4%',
+      marginLevel: 'high' as const,
+      aov: '920,000 đ',
+      winningFeatures: ['Thiết kế độc quyền', 'Lụa tơ tằm cao cấp', 'Khách hàng VIP'],
+      tradeoff: 'Doanh thu vừa (18%) nhưng Biên LN cao kỷ lục (62.4%). Khách sợ không hợp dáng.',
+      transferAction: 'Chuyển giao AI VTO 3D & Bảng màu Personal Color 4 mùa từ Áo sang Đầm/Váy để kích cầu tăng tỷ lệ chốt đơn.'
+    },
+    {
+      category: 'Set phối sẵn (Combo Sets)',
+      code: 'set',
+      revenue: '360 tr VND',
+      revenueShare: '13.5%',
+      grossMargin: '49.8%',
+      marginLevel: 'medium' as const,
+      aov: '1,150,000 đ',
+      winningFeatures: ['Phối sẵn One-Click', 'Tiết kiệm thời gian', 'AOV cao nhất sàn'],
+      tradeoff: 'Biên LN cân bằng (49.8%), tỷ lệ đổi trả thấp nhất (1.7%).',
+      transferAction: 'Áp dụng Recommender gợi ý tự động Set đồ liên quan khi khách đang xem sản phẩm Áo.'
+    },
+    {
+      category: 'Quần & Jeans',
+      code: 'quan',
+      revenue: '290 tr VND',
+      revenueShare: '11.0%',
+      grossMargin: '38.2%',
+      marginLevel: 'medium' as const,
+      aov: '560,000 đ',
+      winningFeatures: ['Form tôn dáng', 'Co giãn 4 chiều'],
+      tradeoff: 'Biên LN trung bình (38.2%), tỷ lệ đổi trả cao do số đo eo/mông.',
+      transferAction: 'Bổ sung video chọn size tương tác để giảm 35% tỷ lệ hoàn hàng.'
+    },
+    {
+      category: 'Phụ kiện (Bags & Belts)',
+      code: 'phukien',
+      revenue: '180 tr VND',
+      revenueShare: '6.7%',
+      grossMargin: '68.5%',
+      marginLevel: 'high' as const,
+      aov: '320,000 đ',
+      winningFeatures: ['Biên LN gộp 68.5%', 'Không rủi ro size'],
+      tradeoff: 'Doanh thu nhỏ (6.7%) nhưng tỷ suất sinh lời ròng tuyệt đối (đổi trả 0.4%).',
+      transferAction: 'Bật tự động Cross-sell ưu đãi kèm phụ kiện giảm 10% ở giỏ hàng.'
+    }
+  ]);
+
+  readonly b3GeoBreakdown = computed(() => [
+    {
+      region: 'Miền Nam',
+      code: 'south',
+      sharePct: 52.0,
+      revenueAmount: '1.39 Tỷ VND',
+      highTierShare: '63.0%',
+      aov: '890,000 đ',
+      slaRate: '98.2%',
+      status: 'pillar',
+      roleDescription: 'Trụ cột gánh 52% doanh thu toàn sàn, sức mua phân khúc cao cấp dẫn đầu toàn quốc.',
+      recommendation: 'Duy trì kho chính TP.HCM, ưu tiên giao hỏa tốc 2h - 4h để giữ vững thị phần cao cấp.'
+    },
+    {
+      region: 'Miền Bắc',
+      code: 'north',
+      sharePct: 33.0,
+      revenueAmount: '884 Tr VND',
+      highTierShare: '26.0%',
+      aov: '640,000 đ',
+      slaRate: '95.8%',
+      status: 'growth',
+      roleDescription: 'Thị trường quy mô tầm trung (33%), sức mua tập trung phân khúc 300k - 700k, mùa lạnh tăng vọt.',
+      recommendation: 'Tăng lượng lưu kho áo khoác/len dày tại bưu cục Hà Nội trong Quý IV để rút ngắn thời gian giao.'
+    },
+    {
+      region: 'Miền Trung',
+      code: 'central',
+      sharePct: 15.0,
+      revenueAmount: '402 Tr VND',
+      highTierShare: '11.0%',
+      aov: '490,000 đ',
+      slaRate: '93.5%',
+      status: 'optimize',
+      roleDescription: 'Thị trường phân khúc phổ thông (<500k), chi phí logistics chặng xa làm giảm biên lợi nhuận.',
+      recommendation: 'Tối ưu bưu cục trung chuyển Đà Nẵng và gom đơn vận chuyển tiết kiệm để bảo vệ biên lãi ròng.'
+    }
+  ]);
 
   readonly b2TopCategoryData = computed(() => {
     const cats = this.categories();
@@ -1602,7 +1725,7 @@ export class AdminErpDashboardPage implements OnInit, OnDestroy {
     if (orders && orders > 0 && returns !== undefined) {
       return ((returns / orders) * 100).toFixed(1);
     }
-    return '4.2';
+    return '2.4';
   });
   readonly logs = computed(() => this.data().recentLogs || []);
   readonly voice = computed(() => this.data().voice || emptyVoice());
@@ -2058,7 +2181,7 @@ export class AdminErpDashboardPage implements OnInit, OnDestroy {
     }
   }
 
-  setB2Tab(tab: 'demographic' | 'price_donut' | 'geo_heatmap'): void {
+  setB2Tab(tab: 'margin_matrix' | 'demographic' | 'price_donut' | 'geo_heatmap'): void {
     this.b2Tab.set(tab);
   }
 
@@ -2106,7 +2229,7 @@ export class AdminErpDashboardPage implements OnInit, OnDestroy {
     }
   }
 
-  setB3Tab(tab: 'age_gender' | 'rfm_bar' | 'geo_donut'): void {
+  setB3Tab(tab: 'geo_revenue' | 'age_gender' | 'rfm_bar' | 'geo_donut'): void {
     this.b3Tab.set(tab);
   }
 

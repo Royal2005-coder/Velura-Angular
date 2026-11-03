@@ -554,7 +554,27 @@ export async function handleOrdersRoute(
       const liveLocal = payments.some(p => p.payment_status === "pending" && ["vnpay","momo"].includes(asString(p.payment_provider)) && Date.parse(asString(p.gateway_expires_at)) > Date.now());
       if (liveLocal) throw new HttpError(409,"PAYMENT_SESSION_OPEN","Phiên thanh toán trước vẫn còn hiệu lực.");
       const pending = payments.filter(p => p.payment_status === "pending" && p.payment_provider === "stripe");
-      if (hasOpenStripeSession(pending)) throw new HttpError(409,"PAYMENT_SESSION_OPEN","Previous Stripe session remains open");
+      if (hasOpenStripeSession(pending)) {
+        const openSession = pending.find(p => p.gateway_session_id && hasOpenStripeSession([p]));
+        if (openSession && config.stripeSecretKey) {
+          try {
+            const stripeRes = await fetch(`https://api.stripe.com/v1/checkout/sessions/${encodeURIComponent(asString(openSession.gateway_session_id))}`, {
+              headers: { authorization: `Bearer ${config.stripeSecretKey}` }
+            });
+            const sessionData = await stripeRes.json() as { id?: string; url?: string; status?: string };
+            if (sessionData.status === "open" && sessionData.url) {
+              return sendJson(res, 200, {
+                success: true,
+                stripe: { payment_intent_id: sessionData.id, url: sessionData.url },
+                order: presentOrderForCustomer(order, [], [], payments),
+                reused_session: true
+              }, corsHeaders);
+            }
+          } catch {
+            // fallback rotate to new session
+          }
+        }
+      }
       for (const stale of pending) await updateRows("payment",{payment_id:"eq."+stale.payment_id,payment_status:"eq.pending"},{payment_status:"failed",gateway_response_code:"stale_session"});
       const stripe = await openStripePayment(order.order_id,order.total_amount,"STRIPE", order.is_guest ? "/checkout/confirm?code="+encodeURIComponent(asString(order.order_code)) : "/account/orders/"+order.order_id);
       return sendJson(res,200,{success:true,stripe,order:presentOrderForCustomer(order,[],[],payments)},corsHeaders);

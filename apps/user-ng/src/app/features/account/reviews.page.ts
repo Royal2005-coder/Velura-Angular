@@ -686,8 +686,19 @@ export class AccountReviewsPage implements OnInit {
       });
   }
 
-  parseReplies(adminReply: string | null | undefined): Array<{ user_name: string; role: string; reply_text: string }> {
+  parseReplies(adminReply: string | null | undefined): Array<{ user_name: string; role: string; reply_text: string; image_url?: string | null }> {
     if (!adminReply) return [];
+    const extractImage = (text: string) => {
+      const match = text.match(/\[(?:Ảnh đính kèm|Hình ảnh)\]:\s*(https?:\/\/[^\s]+)/i);
+      if (match) {
+        return { clean: text.replace(match[0], '').trim(), img: match[1] };
+      }
+      const urlMatch = text.match(/(https?:\/\/[^\s]+\.(?:png|jpe?g|webp|gif))/i);
+      if (urlMatch && text.includes('[Ảnh đính kèm]')) {
+        return { clean: text.replace(/\[Ảnh đính kèm\]:?/i, '').replace(urlMatch[1], '').trim(), img: urlMatch[1] };
+      }
+      return { clean: text, img: null };
+    };
     try {
       const parsed: unknown = JSON.parse(adminReply);
       if (Array.isArray(parsed)) {
@@ -695,11 +706,16 @@ export class AccountReviewsPage implements OnInit {
           if (!item || typeof item !== 'object') return false;
           const reply = item as Record<string, unknown>;
           return typeof reply['user_name'] === 'string' && typeof reply['role'] === 'string' && typeof reply['reply_text'] === 'string';
+        }).map(r => {
+          const { clean, img } = extractImage(r.reply_text);
+          return { ...r, reply_text: clean, image_url: img };
         });
       }
-      return [{ user_name: 'Velura CSKH', role: 'admin', reply_text: adminReply }];
+      const { clean, img } = extractImage(adminReply);
+      return [{ user_name: 'Velura CSKH', role: 'admin', reply_text: clean, image_url: img }];
     } catch {
-      return [{ user_name: 'Velura CSKH', role: 'admin', reply_text: adminReply }];
+      const { clean, img } = extractImage(adminReply);
+      return [{ user_name: 'Velura CSKH', role: 'admin', reply_text: clean, image_url: img }];
     }
   }
 

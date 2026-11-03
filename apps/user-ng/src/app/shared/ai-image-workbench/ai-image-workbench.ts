@@ -255,9 +255,11 @@ export class AiImageWorkbench {
   switchScene(scene: string): void {
     if (this.busy()) return;
     this.selectedScene.set(scene);
-    const first = this.filteredStudioAssets()[0];
-    if (first && this.mode() === 'studio') {
-      void this.selectStudio(first.id);
+    if (this.mode() === 'studio' && !this.result()) {
+      const first = this.filteredStudioAssets()[0];
+      if (first) {
+        void this.selectStudio(first.id);
+      }
     }
   }
 

@@ -404,6 +404,12 @@
             <span class="summary-total__label">Tạm tính sau giảm</span>
             <span class="summary-total__value">{{ estimatedTotalLabel() }}</span>
           </div>
+          @if (expectedCartPoints() > 0) {
+            <div class="cart-points-reward-hint" style="display: flex; align-items: center; justify-content: space-between; font-size: 0.78125rem; background: #F0FDF4; border: 1px solid #BBF7D0; padding: 6px 10px; border-radius: 6px; margin: 6px 0;">
+              <span style="color: #166534; font-weight: 600;">Điểm thưởng tích lũy (+5%)</span>
+              <span style="color: #15803D; font-weight: 700;">+{{ expectedCartPoints().toLocaleString('vi-VN') }} điểm</span>
+            </div>
+          }
           <p class="summary-card__note">Phí vận chuyển và tổng cuối cùng được tính ở bước thanh toán.</p>
           <button
             class="summary-card__btn-checkout js-btn-checkout u-inline-be061b2d9b"

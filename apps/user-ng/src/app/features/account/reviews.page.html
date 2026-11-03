@@ -613,9 +613,15 @@
                       <small class="u-inline-055437ae8e">{{ rep.role === 'admin' ? 'Bộ phận CSKH' : 'Bạn' }}</small>
                     </div>
                     <p class="u-inline-5795450f08">{{ rep.reply_text }}</p>
+                    @if (rep.image_url) {
+                      <div style="margin-top: 6px;">
+                        <a [href]="rep.image_url" target="_blank" rel="noopener noreferrer">
+                          <img [src]="rep.image_url" alt="Ảnh đính kèm từ CSKH" style="max-width: 140px; max-height: 140px; border-radius: 6px; border: 1px solid #e2d5c7; object-fit: cover; display: block;" />
+                        </a>
+                      </div>
+                    }
                   </div>
                 }
-
                 <!-- Customer reply toggle -->
                 <div class="u-inline-9c9cee2093">
                   @if (replyingReviewId() === rev.review_id) {

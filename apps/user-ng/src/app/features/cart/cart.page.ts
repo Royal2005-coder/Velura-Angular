@@ -100,6 +100,7 @@ export class CartPage {
     return Math.min(voucher.discount_amount, this.selectedSubtotal());
   });
   readonly estimatedTotal = computed(() => Math.max(0, this.selectedSubtotal() - this.estimatedDiscount()));
+  readonly expectedCartPoints = computed(() => Math.floor(this.estimatedTotal() * 0.05 / 1000));
   readonly allSelected = computed(() => {
     const items = this.groupedItems();
     if (!items.length) {

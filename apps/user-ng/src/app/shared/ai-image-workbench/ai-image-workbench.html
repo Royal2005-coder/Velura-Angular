@@ -6,7 +6,7 @@
   </button>
 }
 
-<dialog #dialog [attr.aria-labelledby]="titleId" class="ai-workbench-dialog">
+<dialog #dialog [attr.aria-labelledby]="titleId" class="ai-workbench-dialog" (cancel)="close()" (close)="close()">
   <div class="dialog-content">
     <header class="workbench-header">
       <div class="workbench-header__title-group">
@@ -423,8 +423,7 @@
               @for (sc of availableScenarios; track sc.id) {
                 <button
                   type="button"
-                  class="scene-pill"
-                  [class.scene-pill--active]="selectedScene() === sc.id"
+                  [class.scene-pill--active]="activeScenario().id === sc.id"
                   (click)="switchScene(sc.id)"
                   title="{{ sc.description }}"
                 >
@@ -522,7 +521,7 @@
               <button
                 type="button"
                 class="orbit-btn"
-                [class.orbit-btn--active]="orbitAngle() <= 20 || orbitAngle() >= 340"
+                [class.orbit-btn--active]="normalizedAngle() <= 20 || normalizedAngle() >= 340"
                 (click)="setAnglePreset(0)"
                 title="Góc nhìn mặt trước"
               >
@@ -531,7 +530,7 @@
               <button
                 type="button"
                 class="orbit-btn"
-                [class.orbit-btn--active]="orbitAngle() >= 30 && orbitAngle() <= 60"
+                [class.orbit-btn--active]="normalizedAngle() >= 30 && normalizedAngle() <= 65"
                 (click)="setAnglePreset(45)"
                 title="Góc nghiêng 45 độ"
               >
@@ -540,7 +539,7 @@
               <button
                 type="button"
                 class="orbit-btn"
-                [class.orbit-btn--active]="orbitAngle() >= 160 && orbitAngle() <= 200"
+                [class.orbit-btn--active]="normalizedAngle() >= 160 && normalizedAngle() <= 200"
                 (click)="setAnglePreset(180)"
                 title="Góc nhìn sau lưng"
               >

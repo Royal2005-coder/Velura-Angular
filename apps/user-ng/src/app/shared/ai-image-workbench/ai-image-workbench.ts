@@ -198,7 +198,7 @@ export class AiImageWorkbench {
   readonly filteredStudioAssets = computed(() => {
     const assets: StudioAsset[] = this.capabilities()?.studio_assets || [];
     return assets.filter((asset) => {
-      if (asset.gender === 'male') return false;
+      if (asset.gender !== 'female') return false;
       const scene = this.selectedScene();
       if (scene === 'all') return true;
       if (scene === 'basic') return asset.occasion === 'basic';
@@ -206,10 +206,6 @@ export class AiImageWorkbench {
       return asset.occasion === scene;
     });
   });
-
-  switchGender(gender: 'female' | 'male'): void {
-    this.selectedGender.set('female');
-  }
 
   switchScene(scene: string): void {
     if (this.busy()) return;
@@ -223,7 +219,7 @@ export class AiImageWorkbench {
   modelDisplayTitle(asset: StudioAsset): string {
     return (
       asset.label
-        .replace(/^(Nữ|Nam)\s*[-–]\s*(Bối cảnh\s*)?/i, '')
+        .replace(/^(Người mẫu\s*)?(Nữ|Nam)\s*[-–]?\s*(Bối cảnh\s*)?/i, '')
         .replace(/\s*\/\s*(Đi làm|Đi học|Đi chơi|Party|Sang trọng)/i, '')
         .trim() || asset.label
     );
@@ -261,9 +257,12 @@ export class AiImageWorkbench {
   private dragStartAngle = 0;
   private dragStartTilt = 0;
   private autoSpinFrame: number | undefined;
+  private lastAutoSpinTime = 0;
+
+  readonly normalizedAngle = computed(() => ((this.orbitAngle() % 360) + 360) % 360);
 
   readonly isBackView = computed(() => {
-    const a = ((this.orbitAngle() % 360) + 360) % 360;
+    const a = this.normalizedAngle();
     return a >= 95 && a <= 265;
   });
 
@@ -320,7 +319,7 @@ export class AiImageWorkbench {
     if (!this.isDragging3D || !this.view3D()) return;
     const deltaX = event.clientX - this.dragStartX;
     const deltaY = event.clientY - this.dragStartY;
-    const newAngle = (this.dragStartAngle - deltaX * 0.65 + 3600) % 360;
+    const newAngle = ((this.dragStartAngle - deltaX * 0.65) % 360 + 360) % 360;
     const newTilt = Math.max(-16, Math.min(16, this.dragStartTilt + deltaY * 0.25));
     this.orbitAngle.set(newAngle);
     this.tiltAngle.set(newTilt);
@@ -351,9 +350,13 @@ export class AiImageWorkbench {
   private startAutoSpin(): void {
     this.stopAutoSpin();
     this.autoSpin.set(true);
-    const step = () => {
+    this.lastAutoSpinTime = performance.now();
+    const step = (now: number) => {
       if (!this.autoSpin()) return;
-      this.orbitAngle.update((a) => (a + 0.6) % 360);
+      const dt = Math.min(100, Math.max(1, now - this.lastAutoSpinTime));
+      this.lastAutoSpinTime = now;
+      const deltaDeg = dt * 0.036;
+      this.orbitAngle.update((a) => (a + deltaDeg) % 360);
       this.autoSpinFrame = requestAnimationFrame(step);
     };
     this.autoSpinFrame = requestAnimationFrame(step);
@@ -480,8 +483,8 @@ export class AiImageWorkbench {
     this.result.set('');
     this.job.set(null);
     this.qualityWarning.set(null);
-    if (mode === 'studio' && !this.studio() && this.capabilities()?.studio_assets?.length) {
-      void this.selectStudio(this.capabilities()!.studio_assets![0].id);
+    if (mode === 'studio' && !this.studio() && this.filteredStudioAssets().length) {
+      void this.selectStudio(this.filteredStudioAssets()[0].id);
     }
   }
 
@@ -554,7 +557,7 @@ export class AiImageWorkbench {
         }
          this.clearTimer();
          this.stopLoadingTimer();
-         this.release(this.preview());
+         this.stopAutoSpin();
          this.release(this.result());
          this.preview.set('');
          this.result.set('');
@@ -599,7 +602,7 @@ export class AiImageWorkbench {
          this.capabilities.set(null);
          this.clearTimer();
          this.stopLoadingTimer();
-         this.release(this.result());
+         this.stopAutoSpin();
          this.result.set('');
          this.job.set(null);
          this.busy.set(false);
@@ -641,10 +644,10 @@ export class AiImageWorkbench {
        );
        if (epoch === this.generation) {
          this.capabilities.set(capabilities);
-         if (this.mode() === 'studio' && !this.studio() && capabilities.studio_assets?.length) {
-           void this.selectStudio(capabilities.studio_assets[0].id);
-         }
-          const savedId = sessionStorage.getItem(this.storageKey());
+        if (this.mode() === 'studio' && !this.studio() && this.filteredStudioAssets().length) {
+          void this.selectStudio(this.filteredStudioAssets()[0].id);
+        }
+        const savedId = sessionStorage.getItem(this.storageKey());
           const savedPending = sessionStorage.getItem(`${this.storageKey()}_pending`);
           if (savedId || savedPending) {
             try {

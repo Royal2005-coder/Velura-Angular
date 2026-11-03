@@ -37,23 +37,25 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
         min-width: 0;
       }
       .page-head__eyebrow {
-        color: var(--erp-accent-strong);
+        color: var(--erp-accent);
         font-size: 11px;
         font-weight: 700;
-        letter-spacing: 0.12em;
+        letter-spacing: 0.1em;
         text-transform: uppercase;
       }
       h1 {
-        font-family: var(--erp-display);
-        font-size: clamp(24px, 2.4vw, 32px);
-        font-weight: 600;
-        line-height: 1.15;
+        font-family: var(--erp-font);
+        font-size: clamp(22px, 2.2vw, 28px);
+        font-weight: 700;
+        letter-spacing: -0.025em;
+        line-height: 1.2;
         color: var(--erp-ink);
       }
       p {
-        max-width: 72ch;
+        max-width: 76ch;
         color: var(--erp-muted);
         font-size: 13px;
+        line-height: 1.5;
       }
       .page-head__actions {
         display: flex;

@@ -81,17 +81,18 @@ const STATE_STORAGE_KEY = 'velura-admin-erp-oauth-state';
         margin-bottom: 22px;
       }
       .auth-head span {
-        color: var(--erp-accent-strong);
-        font-size: 10px;
+        color: var(--erp-accent);
+        font-size: 11px;
         font-weight: 700;
-        letter-spacing: 0.14em;
+        letter-spacing: 0.12em;
         text-transform: uppercase;
       }
       .auth-head h2 {
-        font-family: var(--erp-display);
-        font-size: 28px;
-        font-weight: 600;
-        line-height: 1.1;
+        font-family: var(--erp-font);
+        font-size: 26px;
+        font-weight: 700;
+        letter-spacing: -0.025em;
+        line-height: 1.15;
         color: var(--erp-ink);
       }
       .auth-head p,

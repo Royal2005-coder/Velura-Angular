@@ -145,30 +145,14 @@
       <!-- STUDIO MODEL CUSTOMIZATION -->
       @if (mode() === 'studio') {
         <div class="studio-section">
-          <!-- GENDER SEGMENTED TABS -->
-          <div class="studio-gender-tabs">
-            <button
-              type="button"
-              class="gender-tab"
-              [class.gender-tab--active]="selectedGender() === 'female'"
-              [disabled]="busy()"
-              (click)="switchGender('female')"
-            >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="5"></circle><path d="M12 13v8"></path><path d="M9 18h6"></path></svg>
-              <span>Người mẫu Nữ</span>
-            </button>
-            <button
-              type="button"
-              class="gender-tab"
-              [class.gender-tab--active]="selectedGender() === 'male'"
-              [disabled]="busy()"
-              (click)="switchGender('male')"
-            >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10" cy="14" r="5"></circle><path d="M19 5l-5.4 5.4"></path><path d="M19 5h-5"></path><path d="M19 5v5"></path></svg>
-              <span>Người mẫu Nam</span>
-            </button>
+          <!-- FEMALE STUDIO TITLE (EXCLUSIVELY FOR WOMEN'S FASHION) -->
+          <div class="studio-header-meta">
+            <span class="studio-title-badge">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="5"></circle><path d="M12 13v8"></path><path d="M9 18h6"></path></svg>
+              Người mẫu Nữ Studio
+            </span>
+            <span class="studio-subtitle-text">Bộ sưu tập bối cảnh thời trang nữ Velura</span>
           </div>
-
           <!-- SINGLE WRAPPED ROW OF SCENE PILLS -->
           <div class="scene-pills">
             <button
@@ -432,39 +416,177 @@
             </div>
           }
 
-          <!-- 3D PERSPECTIVE CARD -->
-          <div class="perspective-stage">
-            <div
-              #card
-              class="perspective-card"
-              [style.transform]="view3D() ? tiltTransform() : 'none'"
-              (mousemove)="onMouseMove($event, card)"
-              (mouseleave)="onMouseLeave()"
-              (touchmove)="onTouchMove($event, card)"
-            >
-              @if (showOriginal()) {
-                <img
-                  class="perspective-card__img"
-                  [src]="mode() === 'personal' ? preview() : studioImage()"
-                  alt="Ảnh gốc trước khi thử đồ"
-                />
-                <span class="perspective-card__tag">Ảnh gốc</span>
-              } @else {
-                <img
-                  class="perspective-card__img"
-                  [src]="result()"
-                  alt="Kết quả thử đồ AI 3D"
-                />
-                <span class="perspective-card__tag perspective-card__tag--ai">AI Virtual Try-On</span>
-              }
-
-              <!-- SPECULAR 3D GLARE LIGHT EFFECT -->
-              @if (view3D()) {
-                <div class="perspective-card__glare" [style.background]="glareBackground()" aria-hidden="true"></div>
+          <!-- REAL-TIME 3D SCENARIO SELECTOR -->
+          <div class="result-scenario-bar">
+            <span class="scenario-bar-title">Bối cảnh 3D:</span>
+            <div class="scene-pills scene-pills--result">
+              @for (sc of availableScenarios; track sc.id) {
+                <button
+                  type="button"
+                  class="scene-pill"
+                  [class.scene-pill--active]="selectedScene() === sc.id"
+                  (click)="switchScene(sc.id)"
+                  title="{{ sc.description }}"
+                >
+                  {{ sc.label }}
+                </button>
               }
             </div>
           </div>
 
+          <!-- 3D 360 PANORAMIC STAGE WITH ORBIT DRAG -->
+          <div class="stage-360-container" [style.background]="activeScenario().backgroundGradient">
+            <!-- 360 PARALLAX SCENIC BACKDROP LAYER -->
+            <div
+              class="scenic-backdrop-layer"
+              [style.transform]="panoramaParallax()"
+              [style.background]="activeScenario().vignetteStyle"
+              aria-hidden="true"
+            >
+              <div class="scenic-ambient-glow" [style.background]="activeScenario().lightingTone"></div>
+              <div class="scenic-tag-badge">{{ activeScenario().label }} · {{ activeScenario().badge }}</div>
+            </div>
+
+            <!-- INTERACTIVE ROTATING 3D MODEL CANVAS -->
+            <div
+              class="stage-360-interactive"
+              (pointerdown)="onStagePointerDown($event)"
+              (pointermove)="onStagePointerMove($event)"
+              (pointerup)="onStagePointerUp($event)"
+              (pointercancel)="onStagePointerUp($event)"
+            >
+              <div
+                class="stage-360-card"
+                [style.transform]="view3D() ? modelTransform3D() : 'none'"
+              >
+                <!-- FRONT FACE -->
+                <div class="model-face model-face--front" [class.model-face--hidden]="view3D() && isBackView()">
+                  <img
+                    class="perspective-card__img"
+                    [src]="showOriginal() ? (mode() === 'personal' ? preview() : studioImage()) : result()"
+                    alt="Mặt trước thử đồ AI"
+                    draggable="false"
+                  />
+                  <span class="perspective-card__tag" [class.perspective-card__tag--ai]="!showOriginal()">
+                    {{ showOriginal() ? 'Ảnh gốc' : 'Mặt trước (0°)' }}
+                  </span>
+                </div>
+
+                <!-- BACK FACE -->
+                @if (view3D()) {
+                  <div class="model-face model-face--back" [class.model-face--active]="isBackView()">
+                    <div class="model-back-silhouette">
+                      <img
+                        class="perspective-card__img perspective-card__img--back"
+                        [src]="showOriginal() ? (mode() === 'personal' ? preview() : studioImage()) : result()"
+                        alt="Mặt sau trang phục"
+                        draggable="false"
+                      />
+                      <div class="tailored-back-overlay" aria-hidden="true">
+                        <div class="tailored-spine-seam"></div>
+                        <div class="tailored-waist-darts"></div>
+                        <div class="tailored-back-zipper"></div>
+                      </div>
+                    </div>
+                    <span class="perspective-card__tag perspective-card__tag--ai">
+                      Mặt sau (180°) · Phom dáng lưng
+                    </span>
+                  </div>
+                }
+
+                <!-- SPECULAR GLARE HIGHLIGHT -->
+                @if (view3D()) {
+                  <div class="stage-360-glare" [style.background]="glareStyle()" aria-hidden="true"></div>
+                }
+              </div>
+
+              <!-- 3D ROTATING PODIUM -->
+              <div class="stage-360-podium" [style.transform]="podiumTransform3D()" aria-hidden="true">
+                <div class="podium-ring" [style.background]="activeScenario().podiumStyle"></div>
+                <div class="podium-disc"></div>
+              </div>
+            </div>
+
+            <!-- 360 HUD: ANGLE INDICATOR PILL -->
+            <div class="stage-360-hud">
+              <span class="angle-indicator-pill">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+                {{ angleDisplayLabel() }}
+              </span>
+            </div>
+          </div>
+
+          <!-- 3D 360 INTERACTIVE TOOLBAR -->
+          <div class="orbit-controls-bar">
+            <div class="orbit-controls-group">
+              <button
+                type="button"
+                class="orbit-btn"
+                [class.orbit-btn--active]="orbitAngle() <= 20 || orbitAngle() >= 340"
+                (click)="setAnglePreset(0)"
+                title="Góc nhìn mặt trước"
+              >
+                Trước (0°)
+              </button>
+              <button
+                type="button"
+                class="orbit-btn"
+                [class.orbit-btn--active]="orbitAngle() >= 30 && orbitAngle() <= 60"
+                (click)="setAnglePreset(45)"
+                title="Góc nghiêng 45 độ"
+              >
+                Nghiêng (45°)
+              </button>
+              <button
+                type="button"
+                class="orbit-btn"
+                [class.orbit-btn--active]="orbitAngle() >= 160 && orbitAngle() <= 200"
+                (click)="setAnglePreset(180)"
+                title="Góc nhìn sau lưng"
+              >
+                Sau lưng (180°)
+              </button>
+              <button
+                type="button"
+                class="orbit-btn"
+                [class.orbit-btn--active]="autoSpin()"
+                (click)="toggleAutoSpin()"
+                title="Bật/Tắt tự động xoay 360 độ"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+                <span>{{ autoSpin() ? 'Dừng xoay' : 'Tự xoay 360°' }}</span>
+              </button>
+            </div>
+            <div class="orbit-zoom-group">
+              <button
+                type="button"
+                class="zoom-btn"
+                (click)="zoomOut()"
+                [disabled]="zoomLevel() <= 1.0"
+                title="Thu nhỏ"
+              >
+                −
+              </button>
+              <span class="zoom-label">{{ (zoomLevel() * 100).toFixed(0) }}%</span>
+              <button
+                type="button"
+                class="zoom-btn"
+                (click)="zoomIn()"
+                [disabled]="zoomLevel() >= 1.8"
+                title="Phóng to"
+              >
+                +
+              </button>
+              <button
+                type="button"
+                class="zoom-btn zoom-btn--reset"
+                (click)="reset3DView()"
+                title="Đặt lại góc nhìn"
+              >
+                Đặt lại
+              </button>
+            </div>
+          </div>
           <p class="result-disclaimer">
             * Ảnh kết quả được AI mô phỏng theo tỷ lệ trang phục; nếp vải và ánh sáng phản chiếu chân thực theo góc nhìn.
           </p>

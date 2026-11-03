@@ -423,99 +423,149 @@
   font-size: .7rem;
 }
 
-/* --- 3D 360 PANORAMIC STAGE --- */
+/* --- 3D 360 SPATIAL ENVIRONMENT ROOM --- */
 .stage-360-container {
   position: relative;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
   width: 100%;
-  min-height: 480px;
+  height: 480px;
   border: 1px solid var(--vto-border);
   border-radius: 20px;
   overflow: hidden;
-  perspective: 1200px;
+  perspective: 1100px;
   box-shadow: 0 20px 45px rgba(80, 24, 40, .14);
-  transition: background 0.4s ease;
-}
-.scenic-backdrop-layer {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  transition: transform 0.15s ease-out, background 0.4s ease;
-}
-.scenic-ambient-glow {
-  position: absolute;
-  top: -20%;
-  left: 10%;
-  width: 80%;
-  height: 70%;
-  border-radius: 50%;
-  filter: blur(40px);
-  opacity: 0.6;
-  pointer-events: none;
-}
-.scenic-tag-badge {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  padding: .24rem .6rem;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.82);
-  border: 1px solid var(--vto-border);
-  color: var(--vto-maroon);
-  font: 700 .68rem var(--velura-font-ui, "Inter", sans-serif);
-  backdrop-filter: blur(4px);
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.04);
-}
-
-/* --- 3D INTERACTIVE CARD & ORBIT --- */
-.stage-360-interactive {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 440px;
   cursor: grab;
   user-select: none;
   touch-action: none;
+  background: #11080D;
 }
-.stage-360-interactive:active {
-  cursor: grabbing;
-}
-.stage-360-card {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  max-width: 320px;
-  width: 85%;
-  transform-style: preserve-3d;
-  transition: transform 0.06s ease-out;
-  z-index: 2;
-}
-.model-face {
+.stage-360-container:active { cursor: grabbing; }
+
+.room-3d {
   position: relative;
   width: 100%;
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
   transform-style: preserve-3d;
-  transition: opacity 0.2s ease, filter 0.2s ease;
+  transition: transform 0.05s ease-out;
+}
+
+/* 3D Floor Plane */
+.room-3d__floor {
+  position: absolute;
+  width: 800px;
+  height: 800px;
+  transform: rotateX(90deg) translateZ(-210px);
+  border-radius: 12px;
+  box-shadow: inset 0 0 100px rgba(0, 0, 0, 0.25);
+  transform-style: preserve-3d;
+}
+.floor-grid-overlay {
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(rgba(0, 0, 0, 0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 0, 0, 0.05) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+.floor-center-pedestal {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 280px;
+  height: 280px;
+  margin: -140px 0 0 -140px;
+  border-radius: 50%;
+  filter: blur(4px);
+}
+
+/* 3D Spatial Walls */
+.room-3d__wall {
+  position: absolute;
+  width: 760px;
+  height: 520px;
+  backface-visibility: hidden;
+  opacity: 0.95;
+}
+.room-3d__wall--back {
+  transform: translateZ(-360px);
+}
+.room-3d__wall--left {
+  transform: rotateY(90deg) translateZ(-360px);
+}
+.room-3d__wall--right {
+  transform: rotateY(-90deg) translateZ(-360px);
+}
+.wall-ambient-glow {
+  position: absolute;
+  inset: 0;
+  mix-blend-mode: soft-light;
+}
+
+/* 3D Ceiling & Spotlight */
+.room-3d__ceiling {
+  position: absolute;
+  width: 800px;
+  height: 800px;
+  transform: rotateX(-90deg) translateZ(-260px);
+  opacity: 0.85;
+}
+.ceiling-spotlight-fixture {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 80px;
+  height: 80px;
+  margin: -40px 0 0 -40px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff 0%, rgba(255, 255, 255, 0.4) 60%, transparent 100%);
+  box-shadow: 0 0 40px #fff;
+}
+.room-3d__spotlight {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 320px;
+  height: 440px;
+  margin-left: -160px;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  opacity: 0.7;
+}
+
+/* --- 3D VOLUMETRIC MODEL FIGURE IN CENTER --- */
+.model-3d-cluster {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 290px;
+  height: 400px;
+  transform-style: preserve-3d;
+  z-index: 10;
+}
+.model-face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform-style: preserve-3d;
+  transition: opacity 0.15s ease;
+}
+.model-face--front {
+  transform: translateZ(14px);
 }
 .model-face--hidden {
   opacity: 0;
   pointer-events: none;
 }
 .model-face--back {
-  position: absolute;
-  inset: 0;
+  transform: rotateY(180deg) translateZ(14px);
   opacity: 0;
   pointer-events: none;
-  transform: rotateY(180deg);
-  transition: opacity 0.2s ease;
 }
 .model-face--back.model-face--active {
   opacity: 1;
@@ -533,19 +583,95 @@
   transform: scaleX(-1);
   filter: brightness(0.96) contrast(1.02);
 }
-.tailored-back-overlay {
+
+/* Side Thickness Ribs (Prevents paper-thin collapse at 90°/270°) */
+.model-depth-rib {
+  position: absolute;
+  top: 15%;
+  bottom: 20%;
+  width: 28px;
+  background: linear-gradient(to bottom, rgba(122, 40, 60, 0.4), rgba(42, 20, 28, 0.6));
+  box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.3);
+}
+.model-depth-rib--left {
+  left: 20px;
+  transform: rotateY(-90deg) translateZ(14px);
+}
+.model-depth-rib--right {
+  right: 20px;
+  transform: rotateY(90deg) translateZ(14px);
+}
+
+.perspective-card__img {
+  display: block;
+  max-width: 100%;
+  max-height: 400px;
+  object-fit: contain;
+  filter: drop-shadow(0 16px 30px rgba(0, 0, 0, 0.35));
+}
+.perspective-card__tag {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  padding: .2rem .5rem;
+  border-radius: 999px;
+  background: rgba(122, 40, 60, .85);
+  color: #fff;
+  font: 700 .68rem var(--velura-font-ui, "Inter", sans-serif);
+  transform: translateZ(20px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+.perspective-card__tag--ai { background: linear-gradient(135deg, var(--vto-maroon), var(--vto-rose)); }
+.stage-360-glare {
   position: absolute;
   inset: 0;
   pointer-events: none;
+  border-radius: 16px;
+  mix-blend-mode: overlay;
 }
+
+/* 3D Turntable Podium */
+.turntable-podium {
+  position: absolute;
+  bottom: -20px;
+  left: 50%;
+  width: 240px;
+  height: 80px;
+  margin-left: -120px;
+  transform-style: preserve-3d;
+  pointer-events: none;
+}
+.turntable-top {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 50% 50%, rgba(255, 255, 255, 0.6) 0%, rgba(210, 190, 180, 0.4) 60%, rgba(122, 40, 60, 0.3) 100%);
+  border: 1.5px solid rgba(255, 255, 255, 0.7);
+  box-shadow: 0 0 25px rgba(255, 255, 255, 0.35);
+}
+.turntable-rim {
+  position: absolute;
+  inset: 6px;
+  border-radius: 50%;
+  border: 1px dashed rgba(122, 40, 60, 0.25);
+}
+.turntable-shadow {
+  position: absolute;
+  inset: -20px;
+  border-radius: 50%;
+  filter: blur(8px);
+  opacity: 0.8;
+}
+
+/* Tailored Back Seam Overlay */
+.tailored-back-overlay { position: absolute; inset: 0; pointer-events: none; }
 .tailored-spine-seam {
   position: absolute;
   top: 18%;
   bottom: 22%;
   left: 50%;
   width: 1.5px;
-  background: linear-gradient(to bottom, transparent, rgba(42, 20, 28, 0.28) 20%, rgba(42, 20, 28, 0.35) 60%, transparent);
-  box-shadow: 0.5px 0 1px rgba(255, 255, 255, 0.4);
+  background: linear-gradient(to bottom, transparent, rgba(42, 20, 28, 0.3) 20%, rgba(42, 20, 28, 0.4) 60%, transparent);
   transform: translateX(-50%);
 }
 .tailored-waist-darts {
@@ -567,88 +693,40 @@
   transform: translateX(-50%);
 }
 
-.perspective-card__img {
-  display: block;
-  width: 100%;
-  height: auto;
-  max-height: 420px;
-  object-fit: contain;
-  filter: drop-shadow(0 14px 28px rgba(50, 15, 25, 0.18));
-}
-.perspective-card__tag {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  padding: .2rem .48rem;
-  border-radius: 999px;
-  background: rgba(122, 40, 60, .85);
-  color: #fff;
-  font-size: .68rem;
-  font-weight: 700;
-  transform: translateZ(15px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-.perspective-card__tag--ai { background: linear-gradient(135deg, var(--vto-maroon), var(--vto-rose)); }
-.stage-360-glare {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  border-radius: 16px;
-  mix-blend-mode: overlay;
-  transition: background 0.1s ease;
-}
-
-/* --- 3D ROTATING FLOOR PODIUM --- */
-.stage-360-podium {
-  position: absolute;
-  bottom: 15px;
-  left: 50%;
-  width: 240px;
-  height: 80px;
-  margin-left: -120px;
-  transform-style: preserve-3d;
-  pointer-events: none;
-  z-index: 1;
-  transition: transform 0.1s ease-out;
-}
-.podium-ring {
-  position: absolute;
-  inset: -15px;
-  border-radius: 50%;
-  filter: blur(4px);
-}
-.podium-disc {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  border: 1.5px solid rgba(255, 255, 255, 0.6);
-  background: radial-gradient(ellipse at 50% 50%, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.1) 70%, transparent 100%);
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-}
-
-/* --- 360 HUD: ANGLE INDICATOR --- */
+/* 360 HUD */
 .stage-360-hud {
   position: absolute;
-  bottom: 12px;
+  bottom: 14px;
+  left: 14px;
+  right: 14px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  width: 100%;
+  justify-content: space-between;
   pointer-events: none;
-  z-index: 3;
+  z-index: 20;
 }
 .angle-indicator-pill {
   display: inline-flex;
   align-items: center;
   gap: .35rem;
-  padding: .28rem .7rem;
+  padding: .26rem .65rem;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.88);
   border: 1px solid var(--vto-border);
   color: var(--vto-maroon);
   font: 700 .72rem var(--velura-font-ui, "Inter", sans-serif);
   backdrop-filter: blur(6px);
-  box-shadow: 0 6px 16px rgba(80, 24, 40, 0.12);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+.scenic-tag-badge {
+  padding: .26rem .65rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid var(--vto-border);
+  color: var(--vto-maroon);
+  font: 700 .7rem var(--velura-font-ui, "Inter", sans-serif);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 /* --- 3D 360 ORBIT CONTROLS BAR --- */

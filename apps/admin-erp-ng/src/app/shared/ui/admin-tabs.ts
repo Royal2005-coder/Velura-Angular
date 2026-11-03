@@ -40,10 +40,10 @@ export interface AdminErpTab {
     `
       .tabs {
         display: inline-flex;
-        gap: 2px;
+        gap: 3px;
         padding: 3px;
         border: 1px solid var(--erp-line);
-        border-radius: var(--erp-radius-sm);
+        border-radius: var(--erp-radius-md);
         background: var(--erp-surface-muted);
       }
       .tabs__item {
@@ -53,15 +53,16 @@ export interface AdminErpTab {
         min-height: 32px;
         padding: 0 12px;
         border: 0;
-        border-radius: 5px;
+        border-radius: var(--erp-radius-sm);
         background: transparent;
         color: var(--erp-muted);
-        font-size: 12px;
-        font-weight: 600;
+        font-size: 12.5px;
+        font-weight: 500;
         cursor: pointer;
+        transition: color 120ms ease, background 120ms ease;
       }
       .tabs__item:hover {
-        color: var(--erp-text);
+        color: var(--erp-ink);
       }
       .tabs__item:disabled {
         cursor: progress;
@@ -84,15 +85,17 @@ export interface AdminErpTab {
       .tabs__item.is-active {
         background: var(--erp-surface);
         color: var(--erp-ink);
-        box-shadow: var(--erp-shadow-sm);
+        font-weight: 600;
+        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
       }
       .tabs__count {
         min-width: 18px;
-        padding: 1px 5px;
+        padding: 1px 6px;
         border-radius: 999px;
         background: var(--erp-accent-soft);
-        color: var(--erp-accent-strong);
-        font-size: 10px;
+        color: var(--erp-accent);
+        font-size: 10.5px;
+        font-weight: 600;
         text-align: center;
       }
     `,

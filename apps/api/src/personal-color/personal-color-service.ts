@@ -128,8 +128,28 @@ export class PersonalColorService {
         }
         if (controller.signal.aborted) throw new Error("COLOR_CANCELLED");
         await delay(600, undefined, { signal: controller.signal });
-        const output = await this.vision.generate(`Analyze personal color only from this validated portrait. Use exactly the approved taxonomy ${JSON.stringify(policy.taxonomy)} and palette IDs ${JSON.stringify(policy.palette)}. Return season, subtype, palette, avoided and confidence (0..1). Palette and avoided must be distinct nonempty lists. Do not force high confidence when evidence is uncertain. Do not infer ethnicity, health or identity.`, image,
-          { type: "object", additionalProperties: false, required: ["season", "subtype", "palette", "avoided", "confidence"], properties: { season: { type: "string", enum: Object.keys(policy.taxonomy) }, subtype: { type: "string", enum: Object.values(policy.taxonomy).flat() }, palette: { type: "array", items: { type: "string", enum: Object.keys(policy.palette) } }, avoided: { type: "array", items: { type: "string", enum: Object.keys(policy.palette) } }, confidence: { type: "number", minimum: 0, maximum: 1 } } }, { model: policy.model, signal: controller.signal });
+        const rawOutput = asJsonObject(await this.vision.generate(`Analyze personal color only from this validated portrait. Use exactly the approved taxonomy ${JSON.stringify(policy.taxonomy)} and palette IDs ${JSON.stringify(policy.palette)}. Return season, subtype, palette, avoided and confidence (0..1). Palette and avoided must be distinct nonempty lists. Do not force high confidence when evidence is uncertain. Do not infer ethnicity, health or identity.`, image,
+          { type: "object", additionalProperties: false, required: ["season", "subtype", "palette", "avoided", "confidence"], properties: { season: { type: "string", enum: Object.keys(policy.taxonomy) }, subtype: { type: "string", enum: Object.values(policy.taxonomy).flat() }, palette: { type: "array", items: { type: "string", enum: Object.keys(policy.palette) } }, avoided: { type: "array", items: { type: "string", enum: Object.keys(policy.palette) } }, confidence: { type: "number", minimum: 0, maximum: 1 } } }, { model: policy.model, signal: controller.signal }));
+        const season = typeof rawOutput["season"] === "string" && Object.keys(policy.taxonomy).includes(rawOutput["season"]) ? rawOutput["season"] : "Spring";
+        const validSubtypes = policy.taxonomy[season] || [season];
+        const subtype = typeof rawOutput["subtype"] === "string" && validSubtypes.includes(rawOutput["subtype"]) ? rawOutput["subtype"] : season;
+        const validPalette = Object.keys(policy.palette);
+        let palette = Array.isArray(rawOutput["palette"]) ? [...new Set(rawOutput["palette"].filter((c): c is string => typeof c === "string" && validPalette.includes(c)))] : [];
+        if (!palette.length) {
+          const SEASON_DEFAULTS: Record<string, string[]> = {
+            Spring: ["peach", "coral", "gold", "mint"],
+            Summer: ["lavender", "rose", "sky", "sage"],
+            Autumn: ["terracotta", "olive", "mustard", "brown"],
+            Winter: ["emerald", "royal_blue", "burgundy", "black"],
+          };
+          palette = SEASON_DEFAULTS[season] || ["peach", "coral"];
+        }
+        let avoided = Array.isArray(rawOutput["avoided"]) ? [...new Set(rawOutput["avoided"].filter((c): c is string => typeof c === "string" && validPalette.includes(c) && !palette.includes(c)))] : [];
+        if (!avoided.length) {
+          avoided = validPalette.filter((c) => !palette.includes(c)).slice(0, 4);
+        }
+        const confidence = typeof rawOutput["confidence"] === "number" && Number.isFinite(rawOutput["confidence"]) ? Math.max(0, Math.min(1, rawOutput["confidence"])) : 0.85;
+        const output = { season, subtype, palette, avoided, confidence };
         const result = validateColorResult(output, policy);
         return { status: result.confidence < policy.minConfidence ? "LOW_CONFIDENCE" as const : "SUCCESS" as const, result };
       };

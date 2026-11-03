@@ -502,6 +502,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  transform-style: preserve-3d;
   transition: opacity 0.2s ease, filter 0.2s ease;
 }
 .model-face--hidden {

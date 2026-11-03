@@ -525,12 +525,25 @@
             <div class="row"><span>Điểm thành viên ({{ serverQuote()?.loyalty?.points_spent }})</span><span>−{{ money(serverQuote()?.loyalty?.points_discount_amount ?? 0) }}</span></div>
           }
           <p class="muted">{{ quote().voucher }}</p>
-          <div class="row total">
-            <span>Tổng thanh toán</span><span>{{ serverQuote() ? money(quote().total) : '—' }}</span>
+           <div class="row total">
+             <span>Tổng thanh toán</span><span>{{ serverQuote() ? money(quote().total) : '—' }}</span>
+           </div>
+          <div class="row checkout-points-reward-row">
+            <span class="points-reward-label">
+              <span>Điểm thưởng tích lũy</span>
+              <span class="points-tooltip-trigger" tabindex="0" aria-label="Xem chính sách tích điểm">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4M12 8h.01"></path></svg>
+                <span class="points-tooltip-content" role="tooltip">
+                  <strong>Chính sách tích điểm 5%:</strong>
+                  Điểm thưởng được tự động cộng vào Ví điểm thành viên sau khi đơn hàng giao thành công (delivered). Điểm sẽ bị khấu trừ hoặc bù nợ tương ứng nếu phát sinh hoàn hàng/đổi trả.
+                </span>
+              </span>
+            </span>
+            <span class="points-reward-value">+{{ expectedPoints().toLocaleString('vi-VN') }} điểm <small class="points-reward-sub">({{ money(expectedPointsVnd()) }})</small></span>
           </div>
-          <p class="muted">
-            Đổi / trả trong 7 ngày từ khi giao thành công. Tối đa 2 lượt thành công cho mỗi đơn vị sản phẩm.
-          </p>
+           <p class="muted">
+             Đổi / trả trong 7 ngày từ khi giao thành công. Tối đa 2 lượt thành công cho mỗi đơn vị sản phẩm.
+           </p>
           @if (voucherNotice()) {
             <p class="muted" role="status">{{ voucherNotice() }}</p>
           }

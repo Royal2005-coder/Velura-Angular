@@ -2516,6 +2516,44 @@ body.page-product-detail :is(button, a):focus-visible { outline: 3px solid var(-
   line-height: 1.5;
 }
 
+.velura-review-reply__image-wrap {
+  margin-top: 8px;
+}
+
+.velura-review-reply__image-btn {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.velura-review-reply__image {
+  max-width: 140px;
+  max-height: 140px;
+  border-radius: 6px;
+  border: 1px solid #e2d5c7;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.velura-review-reply__image-btn:hover .velura-review-reply__image {
+  transform: scale(1.04);
+  box-shadow: 0 4px 12px rgba(125, 86, 45, 0.2);
+}
+
+.velura-review-reply__zoom-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.6875rem;
+  color: #7d562d;
+  font-weight: 600;
+}
 .velura-review-hcard__footer {
   display: flex;
   justify-content: space-between;

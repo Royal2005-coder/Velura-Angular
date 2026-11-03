@@ -100,6 +100,7 @@ export class AiService {
       const asset = asJsonObject(raw),
         file = asString(asset.file),
         path = resolve(root, file);
+      if (asString(asset.gender) === "male") return [];
       return /^[a-zA-Z0-9_-]{1,64}$/.test(id) &&
         asset.licensed === true &&
         !!file &&

@@ -668,7 +668,10 @@ export class OrderAccountApiStore implements OrderAccountModel {
       if (line?.is_combo) {
         return !item.replacement && !item.comboReplacements;
       }
-      const choice = line && this.replacementChoices(line).find((row) => row.id === item.replacementVariantId);
+      let choice = line && this.replacementChoices(line).find((row) => row.id === item.replacementVariantId);
+      if (!choice && line && item.replacement) {
+        choice = this.replacementChoices(line).find((row) => row.label === item.replacement || row.id === item.replacement);
+      }
       return !choice || (choice.stock ?? 0) < item.quantity;
     })) throw new Error('Vui lòng chọn variant cùng sản phẩm còn đủ số lượng để đổi.');
     const evidenceFiles = evidence.map((item) => item.file).filter((file): file is File => !!file);
@@ -696,12 +699,21 @@ export class OrderAccountApiStore implements OrderAccountModel {
       description,
       evidence_images: uploaded.images,
       evidence_videos: uploaded.videos,
-      items: items.map((item) => ({
-        order_item_id: this.orderItemIdFor(order, item.variantId),
-        quantity: item.quantity,
-        ...(kind === 'exchange' && item.replacementVariantId ? { replacement_variant_id: item.replacementVariantId } : {}),
-        ...(item.comboReplacements && item.replacement ? { replacement_text: item.replacement } : {}),
-      })),
+      items: items.map((item) => {
+        const line = order.items.find((row) => row.variant_id === item.variantId);
+        let replacementId = item.replacementVariantId;
+        if (!replacementId && item.replacement && line) {
+          const choices = this.replacementChoices(line);
+          const found = choices.find((c) => c.id === item.replacement || c.label === item.replacement);
+          if (found && found.id && !found.id.includes('/')) replacementId = found.id;
+        }
+        return {
+          order_item_id: this.orderItemIdFor(order, item.variantId),
+          quantity: item.quantity,
+          ...(kind === 'exchange' && replacementId ? { replacement_variant_id: replacementId } : {}),
+          ...((line?.is_combo || item.comboReplacements) && item.replacement ? { replacement_text: item.replacement } : {}),
+        };
+      }),
     };
     const data = context.userId
       ? await firstValueFrom(
@@ -849,11 +861,14 @@ export class OrderAccountApiStore implements OrderAccountModel {
     this.comboComponentsByProduct.set({});
     try {
       const ids = [...new Set(order.items.map((line) => line.product_id).filter(Boolean))];
-      const products = await Promise.all(ids.map(async (id) => {
-        const product = await firstValueFrom(this.api.get<ProductSummary>(`/api/user/products/${encodeURIComponent(id)}`));
-        if (product.product_id !== id) throw new Error('Dữ liệu sản phẩm đổi hàng không khớp.');
-        return product;
-      }));
+      const products = (await Promise.all(ids.map(async (id) => {
+        try {
+          const product = await firstValueFrom(this.api.get<ProductSummary>(`/api/user/products/${encodeURIComponent(id)}`));
+          return product?.product_id === id ? product : null;
+        } catch {
+          return null;
+        }
+      }))).filter((p): p is ProductSummary => p !== null);
       this.assertCurrent(context);
       if (version !== this.replacementVersion) return;
       this.replacementByProduct.set(Object.fromEntries(products.map((product) => [product.product_id, (product.variants || [])

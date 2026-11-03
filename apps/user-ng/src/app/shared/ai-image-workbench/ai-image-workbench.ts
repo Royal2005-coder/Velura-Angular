@@ -23,7 +23,119 @@ import {
   AiTask,
   StudioAsset,
 } from '../../core/services/ai-engine.service';
-/** Consent-first image workflow with interactive 3D perspective, rich studio scenes, and responsive styling. */
+export interface VtoScenario {
+  id: string;
+  label: string;
+  icon: string;
+  badge: string;
+  description: string;
+  theme: 'light' | 'dark' | 'warm' | 'cool';
+  backgroundGradient: string;
+  lightingTone: string;
+  vignetteStyle: string;
+  podiumStyle: string;
+}
+
+export const VTO_SCENARIOS: VtoScenario[] = [
+  {
+    id: 'basic',
+    label: 'Studio Chuẩn',
+    icon: 'studio',
+    badge: 'Atelier',
+    description: 'Phông nền Trắng ngà Studio Atelier tối giản cao cấp',
+    theme: 'light',
+    backgroundGradient: 'radial-gradient(circle at 50% 30%, #FFFFFF 0%, #FAF6F0 50%, #ECE4DB 100%)',
+    lightingTone: 'rgba(255, 255, 255, 0.4)',
+    vignetteStyle: 'radial-gradient(ellipse at 50% 45%, transparent 55%, rgba(122, 40, 60, 0.06) 100%)',
+    podiumStyle: 'radial-gradient(ellipse at 50% 50%, rgba(200, 185, 175, 0.45) 0%, rgba(200, 185, 175, 0.15) 50%, transparent 70%)',
+  },
+  {
+    id: 'spring',
+    label: 'Mùa Xuân',
+    icon: 'flower',
+    badge: 'Blossom',
+    description: 'Vườn xuân thanh khiết, hoa anh đào & nắng sớm',
+    theme: 'warm',
+    backgroundGradient: 'radial-gradient(ellipse at 50% 25%, #FFF5F7 0%, #FDE4EB 45%, #F3D2DC 75%, #E5BCC8 100%)',
+    lightingTone: 'rgba(255, 215, 225, 0.35)',
+    vignetteStyle: 'radial-gradient(ellipse at 50% 45%, transparent 50%, rgba(201, 79, 112, 0.1) 100%)',
+    podiumStyle: 'radial-gradient(ellipse at 50% 50%, rgba(220, 170, 185, 0.5) 0%, rgba(220, 170, 185, 0.15) 50%, transparent 70%)',
+  },
+  {
+    id: 'summer',
+    label: 'Mùa Hạ',
+    icon: 'sun',
+    badge: 'Azure',
+    description: 'Ban công ven biển Địa Trung Hải, nắng vàng ấm áp',
+    theme: 'warm',
+    backgroundGradient: 'radial-gradient(ellipse at 50% 20%, #FFFDF5 0%, #FEF4D8 40%, #E0F2FE 75%, #BAE6FD 100%)',
+    lightingTone: 'rgba(254, 240, 138, 0.3)',
+    vignetteStyle: 'radial-gradient(ellipse at 50% 45%, transparent 55%, rgba(14, 116, 144, 0.08) 100%)',
+    podiumStyle: 'radial-gradient(ellipse at 50% 50%, rgba(180, 205, 220, 0.5) 0%, rgba(180, 205, 220, 0.15) 50%, transparent 70%)',
+  },
+  {
+    id: 'autumn',
+    label: 'Mùa Thu',
+    icon: 'leaf',
+    badge: 'Parisian',
+    description: 'Đại lộ Paris mùa thu, lá vàng hổ phách & hoàng hôn ấm',
+    theme: 'warm',
+    backgroundGradient: 'radial-gradient(ellipse at 50% 28%, #FFF9F2 0%, #FEEAD2 40%, #E8C1A0 75%, #D4A373 100%)',
+    lightingTone: 'rgba(245, 158, 11, 0.28)',
+    vignetteStyle: 'radial-gradient(ellipse at 50% 45%, transparent 50%, rgba(180, 83, 9, 0.12) 100%)',
+    podiumStyle: 'radial-gradient(ellipse at 50% 50%, rgba(200, 160, 130, 0.55) 0%, rgba(200, 160, 130, 0.18) 50%, transparent 70%)',
+  },
+  {
+    id: 'winter',
+    label: 'Mùa Đông',
+    icon: 'snow',
+    badge: 'Crystal',
+    description: 'Không gian tiệc mùa đông tuyết trắng, ánh bạc pha lê',
+    theme: 'cool',
+    backgroundGradient: 'radial-gradient(ellipse at 50% 25%, #F8FAFC 0%, #E2E8F0 50%, #CBD5E1 80%, #94A3B8 100%)',
+    lightingTone: 'rgba(148, 163, 184, 0.3)',
+    vignetteStyle: 'radial-gradient(ellipse at 50% 45%, transparent 55%, rgba(51, 65, 85, 0.12) 100%)',
+    podiumStyle: 'radial-gradient(ellipse at 50% 50%, rgba(148, 163, 184, 0.5) 0%, rgba(148, 163, 184, 0.15) 50%, transparent 70%)',
+  },
+  {
+    id: 'work',
+    label: 'Công sở',
+    icon: 'briefcase',
+    badge: 'Executive',
+    description: 'Cao ốc kính hiện đại, sảnh lounge sang trọng thanh lịch',
+    theme: 'light',
+    backgroundGradient: 'radial-gradient(ellipse at 50% 30%, #FFFFFF 0%, #F1F5F9 50%, #E2E8F0 80%, #CBD5E1 100%)',
+    lightingTone: 'rgba(255, 255, 255, 0.45)',
+    vignetteStyle: 'radial-gradient(ellipse at 50% 45%, transparent 60%, rgba(71, 85, 105, 0.08) 100%)',
+    podiumStyle: 'radial-gradient(ellipse at 50% 50%, rgba(160, 175, 190, 0.45) 0%, rgba(160, 175, 190, 0.12) 50%, transparent 70%)',
+  },
+  {
+    id: 'street',
+    label: 'Dạo phố',
+    icon: 'compass',
+    badge: 'Boulevard',
+    description: 'Phố thời trang boutique châu Âu, phong cách đương đại',
+    theme: 'light',
+    backgroundGradient: 'radial-gradient(ellipse at 50% 28%, #FDFBF7 0%, #F4EDE4 45%, #E6DACE 80%, #D8C7B8 100%)',
+    lightingTone: 'rgba(240, 230, 220, 0.35)',
+    vignetteStyle: 'radial-gradient(ellipse at 50% 45%, transparent 55%, rgba(100, 80, 70, 0.08) 100%)',
+    podiumStyle: 'radial-gradient(ellipse at 50% 50%, rgba(185, 170, 160, 0.5) 0%, rgba(185, 170, 160, 0.15) 50%, transparent 70%)',
+  },
+  {
+    id: 'party',
+    label: 'Dạ tiệc',
+    icon: 'sparkle',
+    badge: 'Gala Night',
+    description: 'Dạ hội quý phái lộng lẫy, bokeh champagne & ánh đèn chùm',
+    theme: 'dark',
+    backgroundGradient: 'radial-gradient(ellipse at 50% 25%, #421827 0%, #2A0816 45%, #18030D 85%, #0D0107 100%)',
+    lightingTone: 'rgba(251, 191, 36, 0.22)',
+    vignetteStyle: 'radial-gradient(ellipse at 50% 45%, transparent 40%, rgba(0, 0, 0, 0.5) 100%)',
+    podiumStyle: 'radial-gradient(ellipse at 50% 50%, rgba(200, 130, 60, 0.35) 0%, rgba(200, 130, 60, 0.1) 50%, transparent 70%)',
+  },
+];
+
+/** Consent-first image workflow with interactive 3D 360 perspective, rich studio scenes, and female-only models. */
 @Component({
   selector: 'app-ai-image-workbench',
   standalone: true,
@@ -73,15 +185,20 @@ export class AiImageWorkbench {
   readonly qualityWarning = signal<string | null>(null);
   readonly crop = signal({ x: 0, y: 0, width: 100, height: 100 });
 
-  // --- STUDIO PRESETS & FILTERS ---
-  readonly selectedGender = signal<'female' | 'male'>('female');
+  // --- STUDIO PRESETS & FILTERS (LOCKED EXCLUSIVELY TO FEMALE MODELS) ---
+  readonly selectedGender = signal<'female'>('female');
   readonly selectedScene = signal<string>('all');
+  readonly availableScenarios = VTO_SCENARIOS;
+
+  readonly activeScenario = computed<VtoScenario>(() => {
+    const s = this.selectedScene();
+    return VTO_SCENARIOS.find((item) => item.id === s) || VTO_SCENARIOS[0];
+  });
 
   readonly filteredStudioAssets = computed(() => {
     const assets: StudioAsset[] = this.capabilities()?.studio_assets || [];
     return assets.filter((asset) => {
-      if (asset.gender && asset.gender !== this.selectedGender())
-        return false;
+      if (asset.gender === 'male') return false;
       const scene = this.selectedScene();
       if (scene === 'all') return true;
       if (scene === 'basic') return asset.occasion === 'basic';
@@ -91,19 +208,14 @@ export class AiImageWorkbench {
   });
 
   switchGender(gender: 'female' | 'male'): void {
-    if (this.busy()) return;
-    this.selectedGender.set(gender);
-    const first = this.filteredStudioAssets()[0];
-    if (first) {
-      void this.selectStudio(first.id);
-    }
+    this.selectedGender.set('female');
   }
 
   switchScene(scene: string): void {
     if (this.busy()) return;
     this.selectedScene.set(scene);
     const first = this.filteredStudioAssets()[0];
-    if (first) {
+    if (first && this.mode() === 'studio') {
       void this.selectStudio(first.id);
     }
   }
@@ -135,54 +247,151 @@ export class AiImageWorkbench {
   });
   private loadingTimer: number | undefined;
 
-  // --- INTERACTIVE 3D PERSPECTIVE & BEFORE/AFTER ---
+  // --- REAL 3D 360-DEGREE ORBIT & MULTI-PERSPECTIVE VIEWER ---
   readonly view3D = signal<boolean>(true);
   readonly showOriginal = signal<boolean>(false);
-  readonly tiltTransform = signal<string>('perspective(1000px) rotateX(0deg) rotateY(0deg) scale3d(1, 1, 1)');
-  readonly glareBackground = signal<string>('none');
+  readonly orbitAngle = signal<number>(0);
+  readonly tiltAngle = signal<number>(0);
+  readonly zoomLevel = signal<number>(1.0);
+  readonly autoSpin = signal<boolean>(false);
 
-  onMouseMove(event: MouseEvent, target: HTMLElement): void {
+  private isDragging3D = false;
+  private dragStartX = 0;
+  private dragStartY = 0;
+  private dragStartAngle = 0;
+  private dragStartTilt = 0;
+  private autoSpinFrame: number | undefined;
+
+  readonly isBackView = computed(() => {
+    const a = ((this.orbitAngle() % 360) + 360) % 360;
+    return a >= 95 && a <= 265;
+  });
+
+  readonly angleDisplayLabel = computed(() => {
+    const a = Math.round(((this.orbitAngle() % 360) + 360) % 360);
+    if (a <= 25 || a >= 335) return `${a}° · Mặt trước (Chính diện)`;
+    if (a > 25 && a < 70) return `${a}° · Góc nghiêng 45° trái`;
+    if (a >= 70 && a <= 110) return `${a}° · Cạnh trái (90°)`;
+    if (a > 110 && a < 160) return `${a}° · Nghiêng sau trái (135°)`;
+    if (a >= 160 && a <= 200) return `${a}° · Mặt sau (180°)`;
+    if (a > 200 && a < 250) return `${a}° · Nghiêng sau phải (225°)`;
+    if (a >= 250 && a <= 290) return `${a}° · Cạnh phải (270°)`;
+    return `${a}° · Góc nghiêng 45° phải`;
+  });
+
+  readonly modelTransform3D = computed(() => {
+    const a = this.orbitAngle();
+    const t = this.tiltAngle();
+    const z = this.zoomLevel();
+    return `rotateX(${t.toFixed(1)}deg) rotateY(${a.toFixed(1)}deg) scale3d(${z.toFixed(2)}, ${z.toFixed(2)}, ${z.toFixed(2)})`;
+  });
+
+  readonly panoramaParallax = computed(() => {
+    const a = ((this.orbitAngle() % 360) + 360) % 360;
+    const px = (a / 360) * 120 - 60;
+    return `translateX(${px.toFixed(1)}px)`;
+  });
+
+  readonly podiumTransform3D = computed(() => {
+    const t = this.tiltAngle();
+    return `rotateX(${65 + t * 0.4}deg) translateZ(-40px)`;
+  });
+
+  readonly glareStyle = computed(() => {
+    const a = ((this.orbitAngle() % 360) + 360) % 360;
+    const rad = (a * Math.PI) / 180;
+    const x = 50 + Math.sin(rad) * 35;
+    const y = 35 - Math.cos(rad) * 15;
+    return `radial-gradient(circle at ${x.toFixed(1)}% ${y.toFixed(1)}%, rgba(255,255,255,0.3) 0%, transparent 60%)`;
+  });
+
+  onStagePointerDown(event: PointerEvent): void {
     if (!this.view3D() || this.busy()) return;
-    const rect = target.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
-    const centerX = rect.width / 2;
-    const centerY = rect.height / 2;
-    const rotateX = ((centerY - y) / centerY) * 12;
-    const rotateY = ((x - centerX) / centerX) * 12;
-    this.tiltTransform.set(`perspective(1000px) rotateX(${rotateX.toFixed(2)}deg) rotateY(${rotateY.toFixed(2)}deg) scale3d(1.02, 1.02, 1.02)`);
-    this.glareBackground.set(`radial-gradient(circle at ${(x / rect.width * 100).toFixed(1)}% ${(y / rect.height * 100).toFixed(1)}%, rgba(255,255,255,0.25) 0%, transparent 60%)`);
+    this.isDragging3D = true;
+    this.stopAutoSpin();
+    this.dragStartX = event.clientX;
+    this.dragStartY = event.clientY;
+    this.dragStartAngle = this.orbitAngle();
+    this.dragStartTilt = this.tiltAngle();
+    (event.currentTarget as HTMLElement)?.setPointerCapture?.(event.pointerId);
   }
 
-  onMouseLeave(): void {
-    this.tiltTransform.set('perspective(1000px) rotateX(0deg) rotateY(0deg) scale3d(1, 1, 1)');
-    this.glareBackground.set('none');
+  onStagePointerMove(event: PointerEvent): void {
+    if (!this.isDragging3D || !this.view3D()) return;
+    const deltaX = event.clientX - this.dragStartX;
+    const deltaY = event.clientY - this.dragStartY;
+    const newAngle = (this.dragStartAngle - deltaX * 0.65 + 3600) % 360;
+    const newTilt = Math.max(-16, Math.min(16, this.dragStartTilt + deltaY * 0.25));
+    this.orbitAngle.set(newAngle);
+    this.tiltAngle.set(newTilt);
   }
 
-  onTouchMove(event: TouchEvent, target: HTMLElement): void {
-    if (!this.view3D() || this.busy() || !event.touches[0]) return;
-    const touch = event.touches[0];
-    const rect = target.getBoundingClientRect();
-    const x = touch.clientX - rect.left;
-    const y = touch.clientY - rect.top;
-    const centerX = rect.width / 2;
-    const centerY = rect.height / 2;
-    const rotateX = ((centerY - y) / centerY) * 10;
-    const rotateY = ((x - centerX) / centerX) * 10;
-    this.tiltTransform.set(`perspective(1000px) rotateX(${rotateX.toFixed(2)}deg) rotateY(${rotateY.toFixed(2)}deg) scale3d(1.02, 1.02, 1.02)`);
+  onStagePointerUp(event: PointerEvent): void {
+    if (!this.isDragging3D) return;
+    this.isDragging3D = false;
+    try {
+      (event.currentTarget as HTMLElement)?.releasePointerCapture?.(event.pointerId);
+    } catch {}
+  }
+
+  setAnglePreset(angle: number): void {
+    this.stopAutoSpin();
+    this.orbitAngle.set((angle % 360 + 360) % 360);
+    this.tiltAngle.set(0);
+  }
+
+  toggleAutoSpin(): void {
+    if (this.autoSpin()) {
+      this.stopAutoSpin();
+    } else {
+      this.startAutoSpin();
+    }
+  }
+
+  private startAutoSpin(): void {
+    this.stopAutoSpin();
+    this.autoSpin.set(true);
+    const step = () => {
+      if (!this.autoSpin()) return;
+      this.orbitAngle.update((a) => (a + 0.6) % 360);
+      this.autoSpinFrame = requestAnimationFrame(step);
+    };
+    this.autoSpinFrame = requestAnimationFrame(step);
+  }
+
+  stopAutoSpin(): void {
+    this.autoSpin.set(false);
+    if (this.autoSpinFrame) {
+      cancelAnimationFrame(this.autoSpinFrame);
+      this.autoSpinFrame = undefined;
+    }
+  }
+
+  zoomIn(): void {
+    this.zoomLevel.update((z) => Math.min(1.8, +(z + 0.2).toFixed(1)));
+  }
+
+  zoomOut(): void {
+    this.zoomLevel.update((z) => Math.max(1.0, +(z - 0.2).toFixed(1)));
+  }
+
+  reset3DView(): void {
+    this.stopAutoSpin();
+    this.orbitAngle.set(0);
+    this.tiltAngle.set(0);
+    this.zoomLevel.set(1.0);
   }
 
   toggleView3D(): void {
     this.view3D.update((v) => !v);
     if (!this.view3D()) {
-      this.onMouseLeave();
+      this.stopAutoSpin();
     }
   }
 
   toggleShowOriginal(): void {
     this.showOriginal.update((v) => !v);
   }
-
   downloadResult(): void {
     const res = this.result();
     if (!res) return;
@@ -404,6 +613,7 @@ export class AiImageWorkbench {
       this.generation++;
       this.clearTimer();
       this.stopLoadingTimer();
+      this.stopAutoSpin();
       this.release(this.preview());
       this.release(this.result());
       this.clearStudio();
@@ -466,6 +676,7 @@ export class AiImageWorkbench {
   /** Native close restores focus to the opener. Work stays resumable within the owner session. */
   close(): void {
     this.stopLoadingTimer();
+    this.stopAutoSpin();
     this.dialog()?.nativeElement.close?.();
   }
 

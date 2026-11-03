@@ -7,10 +7,10 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
   selector: 'app-erp-filter-bar',
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <form class="filter-bar" (ngSubmit)="apply.emit()" novalidate>
+    <form class="filter-bar" (submit)="$event.preventDefault(); apply.emit()" novalidate>
       <div class="filter-bar__fields"><ng-content /></div>
       <div class="filter-bar__actions">
-        <button class="erp-btn erp-btn--primary erp-btn--sm" type="submit" [disabled]="busy()">Lọc</button>
+        <button class="erp-btn erp-btn--primary erp-btn--sm" type="button" [disabled]="busy()" (click)="apply.emit()">Lọc</button>
         <button class="erp-btn erp-btn--sm" type="button" [disabled]="busy()" (click)="reset.emit()">Đặt lại</button>
         <ng-content select="[actions]" />
       </div>

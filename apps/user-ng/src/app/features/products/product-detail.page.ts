@@ -1002,6 +1002,22 @@ export class ProductDetailPage {
     this.previewReviewImage.set(null);
   }
 
+  parseAdminReply(adminReply: string | null | undefined): { text: string; imageUrl: string | null } {
+    if (!adminReply) return { text: '', imageUrl: null };
+    const raw = String(adminReply).trim();
+    const match = raw.match(/\[(?:Ảnh đính kèm|Hình ảnh)\]:\s*(https?:\/\/[^\s]+)/i);
+    if (match) {
+      const text = raw.replace(match[0], '').trim();
+      return { text, imageUrl: match[1] };
+    }
+    const urlMatch = raw.match(/(https?:\/\/[^\s]+\.(?:png|jpe?g|webp|gif))/i);
+    if (urlMatch && raw.includes('[Ảnh đính kèm]')) {
+      const text = raw.replace(/\[Ảnh đính kèm\]:?/i, '').replace(urlMatch[1], '').trim();
+      return { text, imageUrl: urlMatch[1] };
+    }
+    return { text: raw, imageUrl: null };
+  }
+
   private resetReviewScroll(trackEl?: HTMLElement | null): void {
     this.reviewCarouselIndex.set(0);
     this.canScrollReviewsPrev.set(false);

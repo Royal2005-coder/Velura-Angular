@@ -1,4 +1,5 @@
 import { randomUUID, createHash } from "node:crypto";
+import { setTimeout as sleep } from "node:timers/promises";
 import { copyFile, writeFile, readFile, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
@@ -844,6 +845,11 @@ export class AiService {
           if (result.status === "failed") job.error = "AI_INFERENCE_FAILED";
         } catch (error) {
           if ((await this.repo.job(job.id))?.status === "cancelled") continue;
+          if (error instanceof HttpError && error.status === 429) {
+            await this.repo.transition(job.id, ["running"], { status: "queued" });
+            await sleep(2500);
+            continue;
+          }
           job.status = "failed";
           job.error = error instanceof HttpError ? error.code : controller.signal.aborted
             ? "AI_JOB_TIMEOUT"

@@ -106,15 +106,19 @@ class MasklessVton:
         generator = torch.Generator(device=self.device).manual_seed(42)
         images = torch.randn((1, self.model.channels_in, h, w), generator=generator, device=self.device, dtype=self.dtype)
         times = get_rf_schedule(num_steps=30, mu=1.5)
-        for index, (current, previous) in enumerate(zip(times[:-1], times[1:])):
+        try:
+            for index, (current, previous) in enumerate(zip(times[:-1], times[1:])):
+                if cancel.is_set() or time.monotonic() >= deadline:
+                    raise InferenceCancelled()
+                t = torch.full((1,), current, dtype=self.dtype, device=self.device)
+                prediction = self.model.forward_for_cfg(images, t, **kwargs)
+                conditional, unconditional = prediction["v_c"], prediction["v_u"]
+                velocity = conditional if index >= 29 else unconditional + 1.5 * (conditional - unconditional)
+                images = images + (previous - current) * velocity
+            torch.cuda.synchronize()
             if cancel.is_set() or time.monotonic() >= deadline:
                 raise InferenceCancelled()
-            t = torch.full((1,), current, dtype=self.dtype, device=self.device)
-            prediction = self.model.forward_for_cfg(images, t, **kwargs)
-            conditional, unconditional = prediction["v_c"], prediction["v_u"]
-            velocity = conditional if index >= 29 else unconditional + 1.5 * (conditional - unconditional)
-            images = images + (previous - current) * velocity
-        torch.cuda.synchronize()
-        if cancel.is_set() or time.monotonic() >= deadline:
-            raise InferenceCancelled()
-        return pad.unpad(tensor_to_pil(images[0].float().clamp_(-1, 1), unnormalize=True))
+            return pad.unpad(tensor_to_pil(images[0].float().clamp_(-1, 1), unnormalize=True))
+        finally:
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()

@@ -389,4 +389,105 @@ describe('AiImageWorkbench', () => {
       expect(fixture.componentInstance.offered()).toBe(true);
     });
   });
+
+  describe('3D 360 viewer, scenarios, and female-only models', () => {
+    it('strictly filters for female models and excludes male or unspecified assets', () => {
+      const p = page();
+      p.capabilities.set({
+        enabled: true,
+        local_only: true,
+        max_upload_bytes: 100,
+        private_ttl_seconds: 900,
+        tasks: [{ task: 'virtual_try_on', enabled: true }],
+        studio_assets: [
+          { id: 'f1', label: 'Người mẫu Nữ Studio', gender: 'female', occasion: 'basic', season: 'all' },
+          { id: 'm1', label: 'Người mẫu Nam Studio', gender: 'male', occasion: 'basic', season: 'all' },
+          { id: 'u1', label: 'Người mẫu Khác', gender: 'unspecified' },
+        ],
+      });
+      const filtered = p.filteredStudioAssets();
+      expect(filtered.length).toBe(1);
+      expect(filtered[0].id).toBe('f1');
+      expect(filtered[0].gender).toBe('female');
+    });
+
+    it('updates active scenario and backdrop gradients on switchScene', () => {
+      const p = page();
+      p.switchScene('spring');
+      expect(p.selectedScene()).toBe('spring');
+      expect(p.activeScenario().id).toBe('spring');
+      expect(p.activeScenario().label).toBe('Mùa Xuân');
+      expect(p.activeScenario().backgroundGradient).toContain('#FFF5F7');
+
+      p.switchScene('party');
+      expect(p.selectedScene()).toBe('party');
+      expect(p.activeScenario().id).toBe('party');
+      expect(p.activeScenario().theme).toBe('dark');
+    });
+
+    it('handles 3D angle presets, normalized angle, and isBackView boundary', () => {
+      const p = page();
+      p.setAnglePreset(0);
+      expect(p.normalizedAngle()).toBe(0);
+      expect(p.isBackView()).toBe(false);
+
+      p.setAnglePreset(45);
+      expect(p.normalizedAngle()).toBe(45);
+      expect(p.isBackView()).toBe(false);
+
+      p.setAnglePreset(180);
+      expect(p.normalizedAngle()).toBe(180);
+      expect(p.isBackView()).toBe(true);
+
+      p.orbitAngle.set(-90);
+      expect(p.normalizedAngle()).toBe(270);
+      expect(p.isBackView()).toBe(false);
+
+      p.orbitAngle.set(180);
+      expect(p.isBackView()).toBe(true);
+    });
+
+    it('starts and stops autoSpin lifecycle and cancels on close', () => {
+      const p = page();
+      p.toggleAutoSpin();
+      expect(p.autoSpin()).toBe(true);
+
+      p.toggleAutoSpin();
+      expect(p.autoSpin()).toBe(false);
+
+      p.toggleAutoSpin();
+      expect(p.autoSpin()).toBe(true);
+      p.close();
+      expect(p.autoSpin()).toBe(false);
+    });
+
+    it('clamps zoom levels within bounds and resets view', () => {
+      const p = page();
+      p.zoomIn();
+      expect(p.zoomLevel()).toBe(1.2);
+      p.zoomIn();
+      p.zoomIn();
+      p.zoomIn();
+      p.zoomIn();
+      p.zoomIn();
+      expect(p.zoomLevel()).toBe(1.8);
+
+      p.zoomOut();
+      expect(p.zoomLevel()).toBe(1.6);
+      p.zoomOut();
+      p.zoomOut();
+      p.zoomOut();
+      p.zoomOut();
+      expect(p.zoomLevel()).toBe(1.0);
+
+      p.setAnglePreset(180);
+      p.tiltAngle.set(12);
+      p.zoomIn();
+      p.reset3DView();
+      expect(p.orbitAngle()).toBe(0);
+      expect(p.tiltAngle()).toBe(0);
+      expect(p.zoomLevel()).toBe(1.0);
+      expect(p.autoSpin()).toBe(false);
+    });
+  });
 });

@@ -258,6 +258,14 @@
         <p class="pc-status-text" role="status">{{ statusLabel() }}</p>
       }
 
+      @if (currentAnalysis.status === 'FAILED' || currentAnalysis.status === 'VALIDATION_FAILED' || currentAnalysis.status === 'TIMEOUT') {
+        <div class="pc-fallback-card" role="note">
+          <p class="pc-fallback-msg">Bạn chưa có sẵn ảnh đạt chuẩn hoặc muốn tự chọn ngay?</p>
+          <button type="button" class="btn btn--outline btn--sm pc-btn-switch-manual" (click)="switchTab('manual')">
+            Chuyển sang tự chọn thủ công 4 mùa →
+          </button>
+        </div>
+      }
       @if (currentAnalysis.result; as result) {
         <div class="pc-result-card pc-result-card--preview" aria-label="Bản xem trước kết quả AI">
           <div class="pc-result-top-row">

@@ -433,36 +433,48 @@
             </div>
           </div>
 
-          <!-- 3D 360 PANORAMIC STAGE WITH ORBIT DRAG -->
-          <div class="stage-360-container" [style.background]="activeScenario().backgroundGradient">
-            <!-- 360 PARALLAX SCENIC BACKDROP LAYER -->
-            <div
-              class="scenic-backdrop-layer"
-              [style.transform]="panoramaParallax()"
-              [style.background]="activeScenario().vignetteStyle"
-              aria-hidden="true"
-            >
-              <div class="scenic-ambient-glow" [style.background]="activeScenario().lightingTone"></div>
-              <div class="scenic-tag-badge">{{ activeScenario().label }} · {{ activeScenario().badge }}</div>
-            </div>
+          <!-- REAL 3D 360 SPATIAL ENVIRONMENT ROOM -->
+          <div
+            class="stage-360-container"
+            (pointerdown)="onStagePointerDown($event)"
+            (pointermove)="onStagePointerMove($event)"
+            (pointerup)="onStagePointerUp($event)"
+            (pointercancel)="onStagePointerUp($event)"
+          >
+            <!-- 3D WORLD ROOM (Rotates and tilts in true 3D spatial perspective) -->
+            <div class="room-3d" [style.transform]="view3D() ? roomTransform3D() : 'none'">
+              <!-- 3D SPATIAL FLOOR PLANE -->
+              <div class="room-3d__floor" [style.background]="activeScenario().floorTexture" aria-hidden="true">
+                <div class="floor-grid-overlay"></div>
+                <div class="floor-center-pedestal" [style.background]="activeScenario().podiumStyle"></div>
+              </div>
 
-            <!-- INTERACTIVE ROTATING 3D MODEL CANVAS -->
-            <div
-              class="stage-360-interactive"
-              (pointerdown)="onStagePointerDown($event)"
-              (pointermove)="onStagePointerMove($event)"
-              (pointerup)="onStagePointerUp($event)"
-              (pointercancel)="onStagePointerUp($event)"
-            >
-              <div
-                class="stage-360-card"
-                [style.transform]="view3D() ? modelTransform3D() : 'none'"
-              >
-                <!-- FRONT FACE -->
+              <!-- 3D BACK WALL -->
+              <div class="room-3d__wall room-3d__wall--back" [style.background]="activeScenario().wallBackTexture" aria-hidden="true">
+                <div class="wall-ambient-glow" [style.background]="activeScenario().lightingTone"></div>
+              </div>
+
+              <!-- 3D LEFT WALL -->
+              <div class="room-3d__wall room-3d__wall--left" [style.background]="activeScenario().wallSideTexture" aria-hidden="true"></div>
+
+              <!-- 3D RIGHT WALL -->
+              <div class="room-3d__wall room-3d__wall--right" [style.background]="activeScenario().wallSideTexture" aria-hidden="true"></div>
+
+              <!-- 3D CEILING -->
+              <div class="room-3d__ceiling" [style.background]="activeScenario().ceilingTexture" aria-hidden="true">
+                <div class="ceiling-spotlight-fixture"></div>
+              </div>
+
+              <!-- VOLUMETRIC SPOTLIGHT CONE -->
+              <div class="room-3d__spotlight" [style.background]="activeScenario().spotlightBeam" aria-hidden="true"></div>
+
+              <!-- 3D VOLUMETRIC MODEL FIGURE IN CENTER (0, 0, 0) -->
+              <div class="model-3d-cluster">
+                <!-- FRONT BODICE PANEL (+14px Z) -->
                 <div class="model-face model-face--front" [class.model-face--hidden]="view3D() && isBackView()">
                   <img
                     class="perspective-card__img"
-                    [src]="showOriginal() ? (mode() === 'personal' ? preview() : studioImage()) : result()"
+                    [src]="currentDisplayImage()"
                     alt="Mặt trước thử đồ AI"
                     draggable="false"
                   />
@@ -471,13 +483,13 @@
                   </span>
                 </div>
 
-                <!-- BACK FACE -->
+                <!-- BACK BODICE PANEL (-14px Z, rotateY 180deg) -->
                 @if (view3D()) {
                   <div class="model-face model-face--back" [class.model-face--active]="isBackView()">
                     <div class="model-back-silhouette">
                       <img
                         class="perspective-card__img perspective-card__img--back"
-                        [src]="showOriginal() ? (mode() === 'personal' ? preview() : studioImage()) : result()"
+                        [src]="currentDisplayImage()"
                         alt="Mặt sau trang phục"
                         draggable="false"
                       />
@@ -493,25 +505,33 @@
                   </div>
                 }
 
-                <!-- SPECULAR GLARE HIGHLIGHT -->
+                <!-- 3D DEPTH RIBS (Left & Right side thickness) -->
+                @if (view3D()) {
+                  <div class="model-depth-rib model-depth-rib--left" aria-hidden="true"></div>
+                  <div class="model-depth-rib model-depth-rib--right" aria-hidden="true"></div>
+                }
+
+                <!-- SPECULAR GLARE LIGHT EFFECT -->
                 @if (view3D()) {
                   <div class="stage-360-glare" [style.background]="glareStyle()" aria-hidden="true"></div>
                 }
-              </div>
 
-              <!-- 3D ROTATING PODIUM -->
-              <div class="stage-360-podium" [style.transform]="podiumTransform3D()" aria-hidden="true">
-                <div class="podium-ring" [style.background]="activeScenario().podiumStyle"></div>
-                <div class="podium-disc"></div>
+                <!-- 3D TURNTABLE PODIUM -->
+                <div class="turntable-podium" [style.transform]="podiumTransform3D()" aria-hidden="true">
+                  <div class="turntable-top"></div>
+                  <div class="turntable-rim"></div>
+                  <div class="turntable-shadow" [style.background]="activeScenario().podiumStyle"></div>
+                </div>
               </div>
             </div>
 
-            <!-- 360 HUD: ANGLE INDICATOR PILL -->
+            <!-- 360 HUD: ANGLE INDICATOR & SCENARIO CHIP -->
             <div class="stage-360-hud">
               <span class="angle-indicator-pill">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
                 {{ angleDisplayLabel() }}
               </span>
+              <span class="scenic-tag-badge">{{ activeScenario().label }} · {{ activeScenario().badge }}</span>
             </div>
           </div>
 
@@ -539,11 +559,38 @@
               <button
                 type="button"
                 class="orbit-btn"
+                [class.orbit-btn--active]="normalizedAngle() >= 75 && normalizedAngle() <= 105"
+                (click)="setAnglePreset(90)"
+                title="Cạnh hông trái (90 độ)"
+              >
+                Cạnh (90°)
+              </button>
+              <button
+                type="button"
+                class="orbit-btn"
                 [class.orbit-btn--active]="normalizedAngle() >= 160 && normalizedAngle() <= 200"
                 (click)="setAnglePreset(180)"
                 title="Góc nhìn sau lưng"
               >
                 Sau lưng (180°)
+              </button>
+              <button
+                type="button"
+                class="orbit-btn"
+                [class.orbit-btn--active]="tiltAngle() >= 12"
+                (click)="setTiltPreset(16)"
+                title="Nhìn từ trên xuống"
+              >
+                Nhìn trên
+              </button>
+              <button
+                type="button"
+                class="orbit-btn"
+                [class.orbit-btn--active]="tiltAngle() <= -12"
+                (click)="setTiltPreset(-16)"
+                title="Nhìn từ dưới lên"
+              >
+                Nhìn dưới
               </button>
               <button
                 type="button"

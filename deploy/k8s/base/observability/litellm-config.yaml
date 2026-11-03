@@ -17,6 +17,18 @@ model_list:
       model: os.environ/LITELLM_IMAGE_MODEL
       api_key: os.environ/GEMINI_API_KEY
       rpm: 10
+  - model_name: gemini-3.5-flash-lite
+    litellm_params:
+      model: os.environ/LITELLM_TEXT_MODEL
+      api_key: os.environ/GEMINI_API_KEY
+      rpm: 60
+      tpm: 60000
+  - model_name: gemini-3.5-flash
+    litellm_params:
+      model: os.environ/LITELLM_TEXT_MODEL
+      api_key: os.environ/GEMINI_API_KEY
+      rpm: 60
+      tpm: 60000
 litellm_settings:
   callbacks: [prometheus]
   # LiteLLM 1.79 reads this setting here, not under general_settings.

@@ -34,40 +34,17 @@ export type AdminKpiTone = 'neutral' | 'accent' | 'success' | 'warning' | 'dange
         position: relative;
         display: grid;
         gap: 8px;
-        padding: 16px 18px;
+        padding: 18px 20px;
         background: var(--erp-surface);
         border: 1px solid var(--erp-line);
-        border-radius: var(--erp-radius-md);
+        border-radius: var(--erp-radius-lg);
         box-shadow: var(--erp-shadow-sm);
         transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
       }
       .kpi:hover {
         transform: translateY(-1px);
         box-shadow: var(--erp-shadow-md);
-        border-color: #cbd5e1;
-      }
-      .kpi::before {
-        content: '';
-        position: absolute;
-        inset: 0 auto 0 0;
-        width: 3px;
-        border-radius: var(--erp-radius-md) 0 0 var(--erp-radius-md);
-        background: var(--erp-line-strong);
-      }
-      .kpi--accent::before {
-        background: var(--erp-accent);
-      }
-      .kpi--success::before {
-        background: var(--erp-success);
-      }
-      .kpi--warning::before {
-        background: var(--erp-warning);
-      }
-      .kpi--danger::before {
-        background: var(--erp-danger);
-      }
-      .kpi--info::before {
-        background: var(--erp-info);
+        border-color: var(--erp-line-strong);
       }
       .kpi__head {
         display: flex;
@@ -82,11 +59,39 @@ export type AdminKpiTone = 'neutral' | 'accent' | 'success' | 'warning' | 'dange
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 28px;
-        height: 28px;
-        border-radius: 50%;
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
         background: var(--erp-surface-muted);
         color: var(--erp-muted);
+        transition: transform 120ms ease;
+      }
+      .kpi:hover .kpi__icon {
+        transform: scale(1.05);
+      }
+      .kpi--accent .kpi__icon {
+        background: #FFF1F3;
+        color: #BE185D;
+      }
+      .kpi--success .kpi__icon {
+        background: #ECFDF5;
+        color: #059669;
+      }
+      .kpi--warning .kpi__icon {
+        background: #FFFBEB;
+        color: #D97706;
+      }
+      .kpi--danger .kpi__icon {
+        background: #FFF1F2;
+        color: #E11D48;
+      }
+      .kpi--info .kpi__icon {
+        background: #EFF6FF;
+        color: #2563EB;
+      }
+      .kpi--neutral .kpi__icon {
+        background: #F8FAFC;
+        color: #64748B;
       }
       strong {
         font-family: var(--erp-font);

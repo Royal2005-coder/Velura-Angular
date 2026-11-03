@@ -198,12 +198,14 @@ export async function measureTechnicalQuality(bytes: Buffer): Promise<ProductIma
   const bStd = stats.channels[2]?.stdev ?? 40;
   const contrast = Math.round((rStd + gStd + bStd) / 3);
 
-  // Measure border uniformity and studio brightness on outer 12px border of 160x160 grid
+  // Measure border uniformity and studio brightness on backdrop regions.
+  // Fashion catalog and portrait subjects are horizontally centered, so sample corners (24x24)
+  // and side margins (x < 14 or x >= size - 14) to avoid head/hair touching top-center or hem touching bottom-center.
   const size = 160;
-  const borderMargin = 14;
   const borderLums: number[] = [];
   let laplacianSum = 0;
   let laplacianCount = 0;
+  let activeLaplacianCount = 0;
 
   const gray = new Float32Array(size * size);
   for (let i = 0; i < size * size; i++) {
@@ -214,7 +216,9 @@ export async function measureTechnicalQuality(bytes: Buffer): Promise<ProductIma
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const lum = gray[y * size + x];
-      if (x < borderMargin || x >= size - borderMargin || y < borderMargin || y >= size - borderMargin) {
+      const isCorner = (x < 24 || x >= size - 24) && (y < 24 || y >= size - 24);
+      const isSide = (x < 14 || x >= size - 14);
+      if (isCorner || isSide) {
         borderLums.push(lum);
       }
       if (x > 0 && x < size - 1 && y > 0 && y < size - 1) {
@@ -224,8 +228,10 @@ export async function measureTechnicalQuality(bytes: Buffer): Promise<ProductIma
           gray[(y + 1) * size + x] +
           gray[y * size + (x - 1)] +
           gray[y * size + (x + 1)];
-        laplacianSum += Math.abs(center - neighbors);
+        const diff = Math.abs(center - neighbors);
+        laplacianSum += diff;
         laplacianCount++;
+        if (diff > 0.4) activeLaplacianCount++;
       }
     }
   }
@@ -235,15 +241,20 @@ export async function measureTechnicalQuality(bytes: Buffer): Promise<ProductIma
     borderLums.reduce((acc, v) => acc + Math.pow(v - borderMean, 2), 0) / Math.max(1, borderLums.length);
   const borderStd = Math.sqrt(borderVar);
 
-  // Background score: studio backgrounds have low borderStd (< 22) and bright clean tone (> 185) or uniform studio backdrop
-  const uniformityScore = Math.max(0, Math.min(100, Math.round(100 - borderStd * 1.45)));
+  // Background score: studio backdrops have low borderStd (< 22) and bright clean tone (white/cream > 170).
+  // Dark/black borders are heavily penalized so blank dark images cannot pretend to be studio backdrops.
+  const darkPenalty = borderMean < 140 ? Math.min(60, (140 - borderMean) * 0.5) : 0;
+  const uniformityScore = borderMean < 60 ? 0 : Math.max(0, Math.min(100, Math.round(100 - borderStd * 1.35 - darkPenalty)));
   const studioLightBonus = borderMean >= 205 ? 12 : borderMean >= 170 ? 6 : 0;
   const backgroundScore = Math.max(25, Math.min(99, uniformityScore + studioLightBonus));
 
-  // Sharpness score from Laplacian edge energy + sharp stats
-  const meanLaplacian = laplacianSum / Math.max(1, laplacianCount);
-  const sharpnessScore = Math.max(30, Math.min(99, Math.round(Math.min(100, meanLaplacian * 5.2 + (stats.sharpness || 0) * 8))));
-
+  // Sharpness score from Laplacian edge energy normalized on active subject pixels
+  const activeCount = Math.max(1, activeLaplacianCount);
+  const activeRatio = activeCount / Math.max(1, laplacianCount);
+  const meanLaplacian = activeCount > 25
+    ? (laplacianSum / activeCount) * Math.min(1.0, activeRatio * 4 + 0.35)
+    : (laplacianSum / Math.max(1, laplacianCount));
+  const sharpnessScore = Math.max(30, Math.min(99, Math.round(Math.min(100, meanLaplacian * 4.6 + (stats.sharpness || 0) * 8))));
   // Lighting score: ideal brightness is 125..215, contrast 32..85
   let lightingScore = 88;
   let lightingDetail = "Ánh sáng studio cân bằng, tôn rõ màu sắc và chất liệu vải.";

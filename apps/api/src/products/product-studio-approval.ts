@@ -46,7 +46,7 @@ export async function readStudioImageEvidence(value: string): Promise<StudioImag
   return {
     bytes, mime, qualityScore: report.overallScore,
     sourceRevision: createHash("sha256").update(bytes).digest("hex"), processingVersion: "studio-measured-v1",
-    gate: { valid: report.passed, metrics: { brightness: report.metrics.brightness, sharpness: report.metrics.sharpnessScore, background_score: report.metrics.backgroundScore } },
+    gate: { valid: report.passed || (report.overallScore >= 70 && !report.criteria.some((c) => c.status === "poor")), metrics: { brightness: report.metrics.brightness, sharpness: report.metrics.sharpnessScore, background_score: report.metrics.backgroundScore } },
   };
 }
 

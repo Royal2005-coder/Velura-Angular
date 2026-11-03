@@ -3,28 +3,31 @@
    App-level tokens only; feature styling stays in component styles. */
 
 :root {
-  /* Brand / Luxury Velvet Carmine & Slate Palette (Stageshow & Taste Calibrated) */
-  --erp-bg: #F8FAFC;                  /* Slate 50 Canvas / Crisp modern architectural ground */
+  /* Brand / Luxury Velvet Rose & Modern Bright Palette (Shadcn Dashboard & Stageshow Standard) */
+  --erp-bg: #F8FAFC;                  /* Slate 50: Modern crisp, bright, luminous canvas */
   --erp-surface: #FFFFFF;             /* Pure Surface */
-  --erp-surface-muted: #F1F5F9;       /* Slate 100 / Subtle secondary panel */
-  --erp-surface-selected: #FFE4E6;    /* Rose 100 / Selected container */
-  --erp-line: #E2E8F0;                /* Slate 200 / Crisp 1px structural border */
-  --erp-line-strong: #CBD5E1;         /* Slate 300 / Border hover */
-  --erp-ink: #0F172A;                 /* Slate 900 / Primary authoritative ink */
-  --erp-text: #0F172A;                /* Slate 900 / Primary text */
-  --erp-muted: #475569;               /* Slate 600 / Secondary text */
-  --erp-soft: #94A3B8;                /* Slate 400 / Muted caption */
-  --erp-accent: #881337;              /* Velvet Carmine / Rose 900 Brand Accent */
-  --erp-accent-strong: #701A31;       /* Deep Carmine (Hover/Pressed) */
-  --erp-accent-soft: #FFE4E6;         /* Rose 100 / Accent Soft */
-  --erp-accent-border: #FECDD3;       /* Rose 200 / Soft Border */
-  --erp-sidebar: #1E1016;             /* Deepest Wine-Charcoal luxury sidebar */
-  --erp-sidebar-raised: #2D1822;      /* Raised sidebar container */
-  --erp-sidebar-text: #F8FAFC;        /* Sidebar primary text */
-  --erp-sidebar-muted: #94A3B8;       /* Sidebar muted text */
-  --erp-sidebar-active: #881337;      /* Velvet Carmine active item */
+  --erp-surface-muted: #F1F5F9;       /* Slate 100: Soft container */
+  --erp-surface-selected: #FFE4E6;    /* Rose 100: Selected container */
+  --erp-line: #E2E8F0;                /* Slate 200: Crisp 1px structural border */
+  --erp-line-strong: #CBD5E1;         /* Slate 300: Active / hover border */
+  --erp-line-subtle: #F1F5F9;         /* Slate 100: Subtle inner divider */
+  --erp-ink: #0F172A;                 /* Slate 900: Primary authoritative ink */
+  --erp-text: #0F172A;                /* Slate 900: Primary text */
+  --erp-muted: #64748B;               /* Slate 500: Secondary text */
+  --erp-soft: #94A3B8;                /* Slate 400: Muted caption */
+  --erp-accent: #BE185D;              /* Luxury Rose (Pink 700): Sophisticated feminine brand accent */
+  --erp-accent-strong: #9D174D;       /* Deep Rose (Hover/Pressed) */
+  --erp-accent-soft: #FFF1F3;         /* Rose 50: Soft blush tint */
+  --erp-accent-border: #FECDD3;       /* Rose 200: Soft rose border */
+  --erp-sidebar: #FFFFFF;             /* Modern Crisp Light Sidebar (Shadcn Dashboard Inspired) */
+  --erp-sidebar-raised: #F8FAFC;      /* Raised sidebar container */
+  --erp-sidebar-text: #334155;        /* Slate 700: High-contrast legible nav text */
+  --erp-sidebar-muted: #94A3B8;       /* Slate 400: Group headers & badges */
+  --erp-sidebar-active: #BE185D;      /* Luxury Rose active item text */
+  --erp-sidebar-active-bg: #FFE4E6;   /* Rose 100 active pill background */
+  --erp-sidebar-border: #E2E8F0;      /* Slate 200: Crisp 1px right border */
 
-  /* Semantic Status Tokens */
+  /* Semantic Status Tokens (Clean, legible modern pastels) */
   --erp-success: #059669;             /* Emerald 600 */
   --erp-success-soft: #ECFDF5;        /* Emerald 50 surface */
   --erp-warning: #D97706;             /* Amber 600 */
@@ -33,21 +36,21 @@
   --erp-danger-soft: #FFF1F2;         /* Rose 50 surface */
   --erp-info: #2563EB;                /* Blue 600 */
   --erp-info-soft: #EFF6FF;           /* Blue 50 surface */
-  --erp-processing: #881337;          /* Carmine 700 */
-  --erp-processing-soft: #FFE4E6;     /* Rose 100 surface */
+  --erp-processing: #BE185D;          /* Luxury Rose */
+  --erp-processing-soft: #FFF1F3;     /* Rose 50 surface */
 
-  /* Radii & Elevations (Clean, restrained, diffused shadows) */
+  /* Radii & Elevations (Clean, restrained, diffused shadows per stageshow/craft) */
   --erp-radius-sm: 6px;               /* badge, tag, icon */
   --erp-radius-md: 8px;               /* button, input, dropdown */
   --erp-radius-lg: 12px;              /* card, table panel */
   --erp-radius-xl: 16px;              /* modal, drawer */
-  --erp-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
-  --erp-shadow-md: 0 4px 12px rgba(15, 23, 42, 0.06);
-  --erp-shadow-modal: 0 20px 40px rgba(15, 23, 42, 0.16);
+  --erp-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --erp-shadow-md: 0 4px 12px rgba(15, 23, 42, 0.05);
+  --erp-shadow-modal: 0 20px 40px rgba(15, 23, 42, 0.12);
   --erp-sidebar-w: 250px;
-  --erp-topbar-h: 68px;
-  --erp-font: 'Be Vietnam Pro', 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --erp-display: 'Playfair Display', Georgia, serif;
+  --erp-topbar-h: 60px;
+  --erp-font: 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --erp-display: 'Be Vietnam Pro', sans-serif;
 }
 
 *,
@@ -158,16 +161,21 @@ p {
   border-color: var(--erp-accent);
   background: var(--erp-accent);
   color: #fff;
-  box-shadow: 0 2px 6px rgba(125, 38, 61, 0.25);
+  box-shadow: 0 1px 2px rgba(190, 24, 93, 0.2);
 }
 
 .erp-btn--primary:hover:not(:disabled) {
   border-color: var(--erp-accent-strong);
   background: var(--erp-accent-strong);
   color: #fff;
-  box-shadow: 0 4px 12px rgba(100, 32, 51, 0.35);
+  box-shadow: 0 4px 12px rgba(157, 23, 77, 0.25);
+  transform: translateY(-1px);
 }
 
+.erp-btn--primary:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 1px 2px rgba(190, 24, 93, 0.2);
+}
 .erp-btn--ghost {
   border-color: transparent;
   background: transparent;
@@ -247,7 +255,7 @@ p {
 .erp-textarea:focus {
   border-color: var(--erp-accent);
   outline: none;
-  box-shadow: 0 0 0 3px rgba(125, 38, 61, 0.14);
+  box-shadow: 0 0 0 3px rgba(190, 24, 93, 0.12);
 }
 
 .erp-hint {

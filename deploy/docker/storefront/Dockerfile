@@ -12,7 +12,7 @@ RUN npm run build -w @velura/user-ng
 
 FROM nginxinc/nginx-unprivileged:1.28.2-alpine
 USER root
-RUN apk update && apk upgrade --no-cache && apk add --no-cache "nginx>=1.28.3"
+RUN apk upgrade --no-cache
 ARG RELEASE_REVISION
 ARG RELEASE_BUILD_ID
 COPY --from=builder /app/apps/user-ng/dist/user-ng/browser /usr/share/nginx/html

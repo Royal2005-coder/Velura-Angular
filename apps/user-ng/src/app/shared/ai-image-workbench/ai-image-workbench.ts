@@ -34,6 +34,11 @@ export interface VtoScenario {
   lightingTone: string;
   vignetteStyle: string;
   podiumStyle: string;
+  floorTexture: string;
+  wallBackTexture: string;
+  wallSideTexture: string;
+  ceilingTexture: string;
+  spotlightBeam: string;
 }
 
 export const VTO_SCENARIOS: VtoScenario[] = [
@@ -48,6 +53,11 @@ export const VTO_SCENARIOS: VtoScenario[] = [
     lightingTone: 'rgba(255, 255, 255, 0.4)',
     vignetteStyle: 'radial-gradient(ellipse at 50% 45%, transparent 55%, rgba(122, 40, 60, 0.06) 100%)',
     podiumStyle: 'radial-gradient(ellipse at 50% 50%, rgba(200, 185, 175, 0.45) 0%, rgba(200, 185, 175, 0.15) 50%, transparent 70%)',
+    floorTexture: 'linear-gradient(45deg, #E6DDD4 25%, transparent 25%), linear-gradient(-45deg, #E6DDD4 25%, transparent 25%), #F4EDE6',
+    wallBackTexture: 'radial-gradient(circle at 50% 45%, #FFFFFF 0%, #FAF6F0 55%, #ECE4DB 100%)',
+    wallSideTexture: 'linear-gradient(to right, #ECE4DB, #F5EFE8)',
+    ceilingTexture: 'radial-gradient(circle at 50% 50%, #FFFFFF, #E2D9CE)',
+    spotlightBeam: 'radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, 0.45) 0%, transparent 75%)',
   },
   {
     id: 'spring',
@@ -60,6 +70,11 @@ export const VTO_SCENARIOS: VtoScenario[] = [
     lightingTone: 'rgba(255, 215, 225, 0.35)',
     vignetteStyle: 'radial-gradient(ellipse at 50% 45%, transparent 50%, rgba(201, 79, 112, 0.1) 100%)',
     podiumStyle: 'radial-gradient(ellipse at 50% 50%, rgba(220, 170, 185, 0.5) 0%, rgba(220, 170, 185, 0.15) 50%, transparent 70%)',
+    floorTexture: 'radial-gradient(circle, #FDE6EC 20%, #F5D3DD 80%)',
+    wallBackTexture: 'radial-gradient(ellipse at 50% 40%, #FFF5F7 0%, #FCE2EB 45%, #F0CBD7 80%, #E2B6C5 100%)',
+    wallSideTexture: 'linear-gradient(to bottom, #FFF0F4, #F2CBD7)',
+    ceilingTexture: 'radial-gradient(circle, #FFF5F8, #EAC3CE)',
+    spotlightBeam: 'radial-gradient(ellipse at 50% 0%, rgba(255, 220, 230, 0.4) 0%, transparent 75%)',
   },
   {
     id: 'summer',
@@ -72,6 +87,11 @@ export const VTO_SCENARIOS: VtoScenario[] = [
     lightingTone: 'rgba(254, 240, 138, 0.3)',
     vignetteStyle: 'radial-gradient(ellipse at 50% 45%, transparent 55%, rgba(14, 116, 144, 0.08) 100%)',
     podiumStyle: 'radial-gradient(ellipse at 50% 50%, rgba(180, 205, 220, 0.5) 0%, rgba(180, 205, 220, 0.15) 50%, transparent 70%)',
+    floorTexture: 'radial-gradient(circle, #FDF7E7 30%, #E8DFCE 80%)',
+    wallBackTexture: 'linear-gradient(to bottom, #BAE6FD 0%, #E0F2FE 45%, #FEF3D6 75%, #FFFDF5 100%)',
+    wallSideTexture: 'linear-gradient(to bottom, #93C5FD, #FDE68A)',
+    ceilingTexture: 'radial-gradient(circle, #E0F2FE, #93C5FD)',
+    spotlightBeam: 'radial-gradient(ellipse at 50% 0%, rgba(254, 240, 138, 0.45) 0%, transparent 75%)',
   },
   {
     id: 'autumn',
@@ -84,6 +104,11 @@ export const VTO_SCENARIOS: VtoScenario[] = [
     lightingTone: 'rgba(245, 158, 11, 0.28)',
     vignetteStyle: 'radial-gradient(ellipse at 50% 45%, transparent 50%, rgba(180, 83, 9, 0.12) 100%)',
     podiumStyle: 'radial-gradient(ellipse at 50% 50%, rgba(200, 160, 130, 0.55) 0%, rgba(200, 160, 130, 0.18) 50%, transparent 70%)',
+    floorTexture: 'radial-gradient(circle, #F2E3CE 30%, #D8BE9E 80%)',
+    wallBackTexture: 'radial-gradient(ellipse at 50% 40%, #FFF8F0 0%, #FEEAD2 45%, #E8C1A0 75%, #D4A373 100%)',
+    wallSideTexture: 'linear-gradient(to bottom, #FEEAD2, #C28B58)',
+    ceilingTexture: 'radial-gradient(circle, #FEEBCF, #D29964)',
+    spotlightBeam: 'radial-gradient(ellipse at 50% 0%, rgba(245, 158, 11, 0.35) 0%, transparent 75%)',
   },
   {
     id: 'winter',
@@ -96,6 +121,11 @@ export const VTO_SCENARIOS: VtoScenario[] = [
     lightingTone: 'rgba(148, 163, 184, 0.3)',
     vignetteStyle: 'radial-gradient(ellipse at 50% 45%, transparent 55%, rgba(51, 65, 85, 0.12) 100%)',
     podiumStyle: 'radial-gradient(ellipse at 50% 50%, rgba(148, 163, 184, 0.5) 0%, rgba(148, 163, 184, 0.15) 50%, transparent 70%)',
+    floorTexture: 'radial-gradient(circle, #F1F5F9 30%, #CBD5E1 80%)',
+    wallBackTexture: 'radial-gradient(ellipse at 50% 40%, #F8FAFC 0%, #E2E8F0 50%, #CBD5E1 80%, #94A3B8 100%)',
+    wallSideTexture: 'linear-gradient(to bottom, #F1F5F9, #94A3B8)',
+    ceilingTexture: 'radial-gradient(circle, #F8FAFC, #64748B)',
+    spotlightBeam: 'radial-gradient(ellipse at 50% 0%, rgba(203, 213, 225, 0.45) 0%, transparent 75%)',
   },
   {
     id: 'work',
@@ -108,6 +138,11 @@ export const VTO_SCENARIOS: VtoScenario[] = [
     lightingTone: 'rgba(255, 255, 255, 0.45)',
     vignetteStyle: 'radial-gradient(ellipse at 50% 45%, transparent 60%, rgba(71, 85, 105, 0.08) 100%)',
     podiumStyle: 'radial-gradient(ellipse at 50% 50%, rgba(160, 175, 190, 0.45) 0%, rgba(160, 175, 190, 0.12) 50%, transparent 70%)',
+    floorTexture: 'radial-gradient(circle, #FFFFFF 30%, #E2E8F0 80%)',
+    wallBackTexture: 'radial-gradient(ellipse at 50% 40%, #FFFFFF 0%, #F1F5F9 50%, #E2E8F0 80%, #CBD5E1 100%)',
+    wallSideTexture: 'linear-gradient(to bottom, #FFFFFF, #CBD5E1)',
+    ceilingTexture: 'radial-gradient(circle, #FFFFFF, #94A3B8)',
+    spotlightBeam: 'radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, 0.5) 0%, transparent 75%)',
   },
   {
     id: 'street',
@@ -120,6 +155,11 @@ export const VTO_SCENARIOS: VtoScenario[] = [
     lightingTone: 'rgba(240, 230, 220, 0.35)',
     vignetteStyle: 'radial-gradient(ellipse at 50% 45%, transparent 55%, rgba(100, 80, 70, 0.08) 100%)',
     podiumStyle: 'radial-gradient(ellipse at 50% 50%, rgba(185, 170, 160, 0.5) 0%, rgba(185, 170, 160, 0.15) 50%, transparent 70%)',
+    floorTexture: 'radial-gradient(circle, #FDFBF7 30%, #D8C7B8 80%)',
+    wallBackTexture: 'radial-gradient(ellipse at 50% 40%, #FDFBF7 0%, #F4EDE4 45%, #E6DACE 80%, #D8C7B8 100%)',
+    wallSideTexture: 'linear-gradient(to bottom, #FAF5EE, #C8B3A0)',
+    ceilingTexture: 'radial-gradient(circle, #FAF5EE, #A8927F)',
+    spotlightBeam: 'radial-gradient(ellipse at 50% 0%, rgba(240, 230, 220, 0.4) 0%, transparent 75%)',
   },
   {
     id: 'party',
@@ -132,6 +172,11 @@ export const VTO_SCENARIOS: VtoScenario[] = [
     lightingTone: 'rgba(251, 191, 36, 0.22)',
     vignetteStyle: 'radial-gradient(ellipse at 50% 45%, transparent 40%, rgba(0, 0, 0, 0.5) 100%)',
     podiumStyle: 'radial-gradient(ellipse at 50% 50%, rgba(200, 130, 60, 0.35) 0%, rgba(200, 130, 60, 0.1) 50%, transparent 70%)',
+    floorTexture: 'radial-gradient(circle, #2A0814 30%, #0F0206 80%)',
+    wallBackTexture: 'radial-gradient(ellipse at 50% 35%, #4A1627 0%, #2A0816 45%, #18030D 85%, #0D0107 100%)',
+    wallSideTexture: 'linear-gradient(to bottom, #3A1020, #0A0105)',
+    ceilingTexture: 'radial-gradient(circle, #3A1020, #000000)',
+    spotlightBeam: 'radial-gradient(ellipse at 50% 0%, rgba(251, 191, 36, 0.3) 0%, transparent 75%)',
   },
 ];
 
@@ -210,9 +255,11 @@ export class AiImageWorkbench {
   switchScene(scene: string): void {
     if (this.busy()) return;
     this.selectedScene.set(scene);
-    const first = this.filteredStudioAssets()[0];
-    if (first && this.mode() === 'studio') {
-      void this.selectStudio(first.id);
+    if (this.mode() === 'studio' && !this.result()) {
+      const first = this.filteredStudioAssets()[0];
+      if (first) {
+        void this.selectStudio(first.id);
+      }
     }
   }
 
@@ -278,6 +325,17 @@ export class AiImageWorkbench {
     return `${a}° · Góc nghiêng 45° phải`;
   });
 
+  readonly currentDisplayImage = computed(() =>
+    this.showOriginal() ? (this.mode() === 'personal' ? this.preview() : this.studioImage()) : this.result(),
+  );
+
+  readonly roomTransform3D = computed(() => {
+    const a = this.orbitAngle();
+    const t = this.tiltAngle();
+    const z = this.zoomLevel();
+    return `scale3d(${z.toFixed(2)}, ${z.toFixed(2)}, ${z.toFixed(2)}) rotateX(${t.toFixed(1)}deg) rotateY(${(-a.toFixed(1))}deg)`;
+  });
+
   readonly modelTransform3D = computed(() => {
     const a = this.orbitAngle();
     const t = this.tiltAngle();
@@ -320,7 +378,7 @@ export class AiImageWorkbench {
     const deltaX = event.clientX - this.dragStartX;
     const deltaY = event.clientY - this.dragStartY;
     const newAngle = ((this.dragStartAngle - deltaX * 0.65) % 360 + 360) % 360;
-    const newTilt = Math.max(-16, Math.min(16, this.dragStartTilt + deltaY * 0.25));
+    const newTilt = Math.max(-20, Math.min(20, this.dragStartTilt + deltaY * 0.25));
     this.orbitAngle.set(newAngle);
     this.tiltAngle.set(newTilt);
   }
@@ -337,6 +395,11 @@ export class AiImageWorkbench {
     this.stopAutoSpin();
     this.orbitAngle.set((angle % 360 + 360) % 360);
     this.tiltAngle.set(0);
+  }
+
+  setTiltPreset(tilt: number): void {
+    this.stopAutoSpin();
+    this.tiltAngle.set(Math.max(-20, Math.min(20, tilt)));
   }
 
   toggleAutoSpin(): void {

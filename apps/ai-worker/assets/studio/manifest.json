@@ -5,22 +5,94 @@
   "user_choice": "AI-generated fictional studio models",
   "subjects_are_fictional": true,
   "face_replacement_supported": false,
-  "generation_brief": "Fictional adult male and female models, full body facing the camera, neutral standing pose, visible hands and feet, fitted neutral gray shirt and dark straight trousers, plain light-gray studio background, even soft lighting, no text, logos or resemblance to a real person.",
+  "generation_brief": "Fictional adult female models, full body facing the camera, neutral standing pose, visible hands and feet, fitted neutral gray shirt and dark straight trousers, plain light-gray studio background, even soft lighting, no text, logos or resemblance to a real person.",
   "assets": [
     {
       "id": "female-front-v1",
       "file": "female-front-v1.png",
       "gender": "female",
-      "label": "Người mẫu nữ mô phỏng",
+      "occasion": "basic",
+      "season": "all",
+      "badge": "Studio",
+      "label": "Người mẫu Nữ Studio Chuẩn",
       "pose": "front standing, full body, neutral studio light",
       "licensed": true
     },
     {
-      "id": "male-front-v1",
-      "file": "male-front-v1.png",
-      "gender": "male",
-      "label": "Người mẫu nam mô phỏng",
-      "pose": "front standing, full body, neutral studio light",
+      "id": "female-spring-v1",
+      "file": "female-front-v1.png",
+      "gender": "female",
+      "occasion": "spring",
+      "season": "spring",
+      "badge": "Mùa Xuân",
+      "label": "Người mẫu Nữ Mùa Xuân",
+      "pose": "front standing, full body, soft dawn light",
+      "licensed": true
+    },
+    {
+      "id": "female-summer-v1",
+      "file": "female-front-v1.png",
+      "gender": "female",
+      "occasion": "summer",
+      "season": "summer",
+      "badge": "Mùa Hạ",
+      "label": "Người mẫu Nữ Mùa Hạ",
+      "pose": "front standing, full body, warm golden light",
+      "licensed": true
+    },
+    {
+      "id": "female-autumn-v1",
+      "file": "female-front-v1.png",
+      "gender": "female",
+      "occasion": "autumn",
+      "season": "autumn",
+      "badge": "Mùa Thu",
+      "label": "Người mẫu Nữ Mùa Thu",
+      "pose": "front standing, full body, amber afternoon light",
+      "licensed": true
+    },
+    {
+      "id": "female-winter-v1",
+      "file": "female-front-v1.png",
+      "gender": "female",
+      "occasion": "winter",
+      "season": "winter",
+      "badge": "Mùa Đông",
+      "label": "Người mẫu Nữ Mùa Đông",
+      "pose": "front standing, full body, cool crystalline light",
+      "licensed": true
+    },
+    {
+      "id": "female-work-v1",
+      "file": "female-front-v1.png",
+      "gender": "female",
+      "occasion": "work",
+      "season": "all",
+      "badge": "Công sở",
+      "label": "Người mẫu Nữ Công Sở Thanh Lịch",
+      "pose": "front standing, full body, office ambient light",
+      "licensed": true
+    },
+    {
+      "id": "female-street-v1",
+      "file": "female-front-v1.png",
+      "gender": "female",
+      "occasion": "street",
+      "season": "all",
+      "badge": "Dạo phố",
+      "label": "Người mẫu Nữ Dạo Phố Hiện Đại",
+      "pose": "front standing, full body, daylight street ambient",
+      "licensed": true
+    },
+    {
+      "id": "female-party-v1",
+      "file": "female-front-v1.png",
+      "gender": "female",
+      "occasion": "party",
+      "season": "all",
+      "badge": "Dạ tiệc",
+      "label": "Người mẫu Nữ Dạ Tiệc Quý Phái",
+      "pose": "front standing, full body, luxury evening spotlight",
       "licensed": true
     }
   ]

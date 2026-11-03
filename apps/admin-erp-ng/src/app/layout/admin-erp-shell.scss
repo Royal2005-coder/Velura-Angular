@@ -18,6 +18,7 @@
   overflow: hidden;
   background: var(--erp-sidebar);
   color: var(--erp-sidebar-text);
+  border-right: 1px solid var(--erp-sidebar-border);
 }
 
 .sidebar__brand {
@@ -27,7 +28,7 @@
   gap: 10px;
   min-height: var(--erp-topbar-h);
   padding: 0 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid var(--erp-line);
 }
 
 .brand {
@@ -52,15 +53,18 @@
 }
 
 .brand__copy strong {
-  font-family: var(--erp-display);
-  font-size: 17px;
-  letter-spacing: 0.02em;
+  font-family: var(--erp-font);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--erp-ink);
+  letter-spacing: -0.01em;
 }
 
 .brand__copy small {
-  color: var(--erp-sidebar-muted);
-  font-size: 10px;
-  letter-spacing: 0.14em;
+  color: var(--erp-accent);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
@@ -73,11 +77,19 @@
   gap: 4px;
   width: 32px;
   height: 32px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--erp-sidebar-text);
+  border: 1px solid var(--erp-line);
+  border-radius: var(--erp-radius-sm);
+  background: var(--erp-surface);
+  color: var(--erp-muted);
   cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.rail-toggle:hover,
+.topbar__menu:hover {
+  background: var(--erp-surface-muted);
+  color: var(--erp-ink);
+  border-color: var(--erp-line-strong);
 }
 
 .rail-toggle span {
@@ -86,13 +98,12 @@
   height: 1.5px;
   background: currentColor;
 }
-
 .sidebar__nav {
   flex: 1;
   overflow-y: auto;
   padding: 14px 10px 20px;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+  scrollbar-color: var(--erp-line) transparent;
 }
 
 .nav-group {
@@ -103,7 +114,7 @@
 
 .nav-group h2 {
   padding: 0 10px 6px;
-  color: var(--erp-sidebar-muted);
+  color: var(--erp-soft);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.14em;
@@ -117,27 +128,27 @@
   gap: 10px;
   min-height: 36px;
   padding: 0 10px;
-  border-radius: 6px;
+  border-radius: var(--erp-radius-md);
   color: var(--erp-sidebar-text);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 500;
   white-space: nowrap;
-  transition: background 120ms ease, color 120ms ease;
+  transition: background 120ms ease, color 120ms ease, box-shadow 120ms ease;
 }
 
 .nav-link:hover {
-  background: rgba(255, 255, 255, 0.07);
-  color: #fff;
+  background: var(--erp-accent-soft);
+  color: var(--erp-accent);
 }
 
 .nav-link.is-active {
-  background: var(--erp-accent);
-  color: #fff;
-  font-weight: 700;
+  background: var(--erp-sidebar-active-bg);
+  color: var(--erp-sidebar-active);
+  font-weight: 600;
 }
 
 .nav-link.is-planned:not(.is-active) {
-  color: #c9bdb2;
+  color: var(--erp-soft);
 }
 
 .nav-link__label {
@@ -150,8 +161,9 @@
   margin-left: auto;
   padding: 1px 6px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.1);
-  color: var(--erp-sidebar-muted);
+  background: var(--erp-surface-muted);
+  color: var(--erp-muted);
+  border: 1px solid var(--erp-line);
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -174,7 +186,7 @@
   display: grid;
   gap: 3px;
   padding: 12px 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--erp-line);
 }
 
 .sidebar-user {
@@ -193,9 +205,10 @@
   width: 34px;
   height: 34px;
   border-radius: 50%;
-  background: var(--erp-accent);
-  color: #fff;
-  font-size: 11px;
+  background: var(--erp-accent-soft);
+  color: var(--erp-accent);
+  border: 1px solid var(--erp-accent-border);
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -214,10 +227,12 @@
 
 .sidebar-user__copy strong {
   font-size: 12px;
+  font-weight: 600;
+  color: var(--erp-ink);
 }
 
 .sidebar-user__copy small {
-  color: var(--erp-sidebar-muted);
+  color: var(--erp-muted);
   font-size: 10px;
 }
 

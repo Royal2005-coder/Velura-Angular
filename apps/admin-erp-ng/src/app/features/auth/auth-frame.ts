@@ -52,9 +52,10 @@ import { RouterLink } from '@angular/router';
         gap: 40px;
         padding: clamp(28px, 5vw, 64px);
         background:
-          radial-gradient(circle at 18% 16%, rgba(201, 123, 99, 0.28), transparent 38%),
-          linear-gradient(150deg, #211d1a 0%, #2b2521 62%, #3a2c25 100%);
-        color: var(--erp-sidebar-text);
+          radial-gradient(circle at 18% 16%, rgba(244, 63, 94, 0.22), transparent 42%),
+          radial-gradient(circle at 82% 84%, rgba(190, 24, 93, 0.2), transparent 45%),
+          linear-gradient(150deg, #16070E 0%, #1F0A14 55%, #2B0D1C 100%);
+        color: #FFFFFF;
       }
       .auth-brand {
         display: flex;
@@ -73,20 +74,23 @@ import { RouterLink } from '@angular/router';
         line-height: 1.15;
       }
       .auth-brand strong {
-        font-family: var(--erp-display);
-        font-size: 22px;
+        font-family: var(--erp-font);
+        font-size: 20px;
+        font-weight: 700;
+        color: #FFFFFF;
       }
       .auth-brand small {
-        color: var(--erp-sidebar-muted);
+        color: #FB7185;
         font-size: 10px;
-        letter-spacing: 0.16em;
+        font-weight: 700;
+        letter-spacing: 0.14em;
         text-transform: uppercase;
       }
       .auth-frame__eyebrow {
-        color: var(--erp-accent);
+        color: #FB7185;
         font-size: 11px;
         font-weight: 700;
-        letter-spacing: 0.16em;
+        letter-spacing: 0.14em;
         text-transform: uppercase;
       }
       .auth-frame__pitch {
@@ -95,15 +99,17 @@ import { RouterLink } from '@angular/router';
         max-width: 34ch;
       }
       .auth-frame__pitch h1 {
-        font-family: var(--erp-display);
-        font-size: clamp(32px, 4vw, 48px);
-        font-weight: 600;
-        line-height: 1.08;
+        font-family: var(--erp-font);
+        font-size: clamp(28px, 3.4vw, 40px);
+        font-weight: 700;
+        letter-spacing: -0.03em;
+        line-height: 1.15;
+        color: #FFFFFF;
       }
       .auth-frame__pitch p {
-        color: #c9bdb2;
+        color: #E2E8F0;
         font-size: 14px;
-        line-height: 1.65;
+        line-height: 1.6;
       }
       .auth-frame__points {
         display: grid;
@@ -111,7 +117,7 @@ import { RouterLink } from '@angular/router';
         margin: 0;
         padding: 0;
         list-style: none;
-        color: #c9bdb2;
+        color: #CBD5E1;
         font-size: 12.5px;
       }
       .auth-frame__points li {
@@ -120,7 +126,7 @@ import { RouterLink } from '@angular/router';
         gap: 10px;
       }
       .auth-frame__points span {
-        color: var(--erp-accent);
+        color: #FB7185;
         font-size: 10px;
         font-weight: 700;
         letter-spacing: 0.08em;

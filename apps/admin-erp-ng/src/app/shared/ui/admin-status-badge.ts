@@ -32,6 +32,7 @@ export type AdminBadgeTone = 'success' | 'warning' | 'danger' | 'info' | 'neutra
       .badge i {
         width: 6px;
         height: 6px;
+        flex-shrink: 0;
         border-radius: 50%;
         background: currentColor;
       }
@@ -40,25 +41,40 @@ export type AdminBadgeTone = 'success' | 'warning' | 'danger' | 'info' | 'neutra
         color: #475569;
         border-color: #e2e8f0;
       }
+      .badge--neutral i {
+        background: #64748b;
+      }
       .badge--success {
-        background: #f0fdf4;
-        color: #166534;
-        border-color: #bbf7d0;
+        background: #ecfdf5;
+        color: #065f46;
+        border-color: #a7f3d0;
+      }
+      .badge--success i {
+        background: #10b981;
       }
       .badge--warning {
         background: #fffbeb;
-        color: #b45309;
+        color: #92400e;
         border-color: #fde68a;
       }
+      .badge--warning i {
+        background: #f59e0b;
+      }
       .badge--danger {
-        background: #fef2f2;
-        color: #991b1b;
-        border-color: #fecaca;
+        background: #fff1f2;
+        color: #9f1239;
+        border-color: #fecdd3;
+      }
+      .badge--danger i {
+        background: #f43f5e;
       }
       .badge--info {
-        background: #f0f9ff;
-        color: #0369a1;
-        border-color: #bae6fd;
+        background: #eff6ff;
+        color: #1e40af;
+        border-color: #bfdbfe;
+      }
+      .badge--info i {
+        background: #3b82f6;
       }
     `,
   ],

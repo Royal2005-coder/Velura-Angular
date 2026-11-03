@@ -74,14 +74,20 @@
       </button>
       <div class="topbar__title">
         @if (workspaceLabel()) {
-          <span>{{ workspaceLabel() }}</span>
+          <span class="topbar__workspace">{{ workspaceLabel() }}</span>
+          <span class="topbar__sep" aria-hidden="true">/</span>
         }
-        <strong>{{ pageTitle() }}</strong>
+        <strong class="topbar__page">{{ pageTitle() }}</strong>
       </div>
       <div class="topbar__actions">
-        <button class="erp-btn erp-btn--sm" type="button" (click)="refresh()">
-          <app-erp-icon name="refresh" [size]="'15'" />
-          Làm mới
+        <button class="topbar__search" type="button" (click)="openSearch()" aria-label="Tìm kiếm nhanh phân hệ">
+          <app-erp-icon name="search" [size]="'14'" />
+          <span class="topbar__search-text">Tìm kiếm…</span>
+          <kbd class="topbar__search-kbd">⌘K</kbd>
+        </button>
+        <button class="erp-btn erp-btn--sm topbar__refresh-btn" type="button" (click)="refresh()" aria-label="Làm mới dữ liệu">
+          <app-erp-icon name="refresh" [size]="'14'" />
+          <span>Làm mới</span>
         </button>
         <a class="topbar__avatar" routerLink="/change-password" [attr.aria-label]="'Tài khoản ' + session.displayName()">
           @if (session.avatarUrl()) {
@@ -106,6 +112,42 @@
     <button class="erp-btn erp-btn--danger" type="button" (click)="confirmLogout()" [disabled]="signingOut()">
       {{ signingOut() ? 'Đang đăng xuất…' : 'Đăng xuất' }}
     </button>
+  </div>
+</app-erp-modal>
+<app-erp-modal [open]="searchOpen()" title="Tìm kiếm phân hệ & thao tác" size="md" (closed)="closeSearch()">
+  <div class="cmd-palette">
+    <div class="cmd-palette__input-wrap">
+      <app-erp-icon name="search" [size]="'18'" />
+      <input
+        #searchInput
+        class="cmd-palette__input"
+        type="text"
+        placeholder="Gõ tên phân hệ, tính năng hoặc trang (VD: Đơn hàng, CMS, Đánh giá)…"
+        [value]="searchQuery()"
+        (input)="onSearchInput($event)"
+      />
+    </div>
+    <div class="cmd-palette__list" role="listbox">
+      @for (res of searchResults(); track res.item.key) {
+        <a
+          class="cmd-palette__item"
+          [routerLink]="navLink(res.item)"
+          (click)="closeSearch()"
+          role="option"
+        >
+          <div class="cmd-palette__icon-box">
+            <app-erp-icon [name]="res.item.icon" [size]="'16'" />
+          </div>
+          <div class="cmd-palette__item-copy">
+            <strong>{{ res.item.label }}</strong>
+            <small>{{ res.groupLabel }} · {{ res.item.title }}</small>
+          </div>
+          <span class="cmd-palette__enter">Mở ↵</span>
+        </a>
+      } @empty {
+        <div class="cmd-palette__empty">Không tìm thấy phân hệ nào khớp với "{{ searchQuery() }}"</div>
+      }
+    </div>
   </div>
 </app-erp-modal>
 

@@ -5,6 +5,7 @@ import { hasGuestOrderAccess } from "./order-access.js";
 import { HttpError } from "../http.js";
 import { returnWindowOpen } from "./return-window.js";
 import { asJsonObject, asNumber, asString, type HttpRequest, type JsonObject, type UserProfile } from "../types.js";
+import { selectOne } from "../supabase.js";
 import type { UserReturnsRepository } from "./returns-repository.js";
 
 /** A customer may withdraw a request only while no parcel has been handed to the carrier. */
@@ -377,13 +378,42 @@ async function validateItemsAgainstOrder(
       throw new HttpError(422, "RETURN_QUANTITY_EXCEEDED", "Số lượng vượt quá số lượng còn khả dụng đổi/trả.");
     }
 
-    const replacementId = asString(item.replacement_variant_id);
-    if (returnType === "exchange" && !replacementId) throw new HttpError(422, "REPLACEMENT_REQUIRED", "Vui lòng chọn variant cùng sản phẩm để đổi.");
-    if (replacementId) {
-      const replacement = await repository.findVariant(replacementId);
-      if (!variant || !replacement || replacement.product_id !== variant.product_id) throw new HttpError(422,"EXCHANGE_SAME_PRODUCT_REQUIRED","Replacement must be a variant of the same product");
+    let replacementId = asString(item.replacement_variant_id);
+    const replacementText = asString(item.replacement_text || item.replacement);
+    if (returnType === "exchange") {
+      if (!replacementId && (isCombo || replacementText)) {
+        replacementId = asString(orderItem.variant_id);
+      } else if (!replacementId) {
+        throw new HttpError(422, "REPLACEMENT_REQUIRED", "Vui lòng chọn variant cùng sản phẩm để đổi.");
+      }
     }
-    validated.push({ order_item_id: item.order_item_id, quantity: item.quantity,...(replacementId ? {replacement_variant_id:replacementId} : {}) });
+    if (replacementId) {
+      let replacement = await repository.findVariant(replacementId);
+      if (!replacement && variant && !/^[0-9a-f-]{36}$/i.test(replacementId)) {
+        const labelParts = replacementId.split(/\s*[/,]\s*/);
+        const [sizePart, colorPart] = labelParts;
+        if (sizePart && colorPart) {
+          const match = await selectOne("variant", {
+            product_id: `eq.${variant.product_id}`,
+            size: `eq.${sizePart}`,
+            color: `eq.${colorPart}`
+          }).catch(() => null);
+          if (match) {
+            replacement = match;
+            replacementId = asString(match.variant_id);
+          }
+        }
+      }
+      if (!variant || !replacement || replacement.product_id !== variant.product_id) {
+        throw new HttpError(422, "EXCHANGE_SAME_PRODUCT_REQUIRED", "Replacement must be a variant of the same product");
+      }
+    }
+    validated.push({
+      order_item_id: item.order_item_id,
+      quantity: item.quantity,
+      ...(replacementId ? { replacement_variant_id: replacementId } : {}),
+      ...(replacementText ? { replacement_text: replacementText } : {})
+    });
   }
 
   return validated;

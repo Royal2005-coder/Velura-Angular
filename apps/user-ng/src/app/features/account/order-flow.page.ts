@@ -593,10 +593,17 @@ export class OrderFlowPage {
   }
   /** Store a replacement only for the selected original product. */
   replacement(line: DemoOrderLine, value: string): void {
-    const choice = this.replacementChoices(line).find((row) => row.id === value);
+    const choices = this.replacementChoices(line);
+    const choice = choices.find((row) => row.id === value) || choices.find((row) => row.label === value);
+    const resolvedId = choice?.id && !choice.id.includes('/') ? choice.id : (value && !value.includes('/') ? value : undefined);
     this.selections.update((rows) => ({
       ...rows,
-      [line.variant_id]: { ...rows[line.variant_id], replacement: choice?.label || '', replacementVariantId: this.model.replacementChoices ? choice?.id : undefined },
+      [line.variant_id]: {
+        ...rows[line.variant_id],
+        variantId: line.variant_id,
+        replacement: choice?.label || value || '',
+        replacementVariantId: resolvedId,
+      },
     }));
   }
   /** Real inventory supplies identities and counts; preview fixtures supply isolated labels only. */
@@ -631,13 +638,15 @@ export class OrderFlowPage {
         .map((c) => `${c.productName}: ${c.variantLabel}`)
         .join('; ');
 
+      const primaryVariantId = Object.values(currentCombo)[0]?.variantId || line.variant_id;
       return {
         ...rows,
         [line.variant_id]: {
           ...current,
+          variantId: line.variant_id,
           comboReplacements: currentCombo,
           replacement: summaryText,
-          replacementVariantId: undefined,
+          replacementVariantId: primaryVariantId,
         },
       };
     });
@@ -726,6 +735,13 @@ export class OrderFlowPage {
     }
     this.error.set('');
     this.view.set('return-summary');
+  }
+  /** Submits an exchange request directly from the form without forcing an extra redundant summary step. */
+  submitReturnDirect(): void {
+    this.reviewReturn();
+    if (!this.error()) {
+      this.submitReturn();
+    }
   }
   /**
    * Points the server will claw back if this refund is approved. Accrual stores 5% of merchandise

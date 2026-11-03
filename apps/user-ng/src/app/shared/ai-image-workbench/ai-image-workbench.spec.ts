@@ -425,6 +425,21 @@ describe('AiImageWorkbench', () => {
       expect(p.activeScenario().theme).toBe('dark');
     });
 
+    it('preserves active result and updates scenario backdrop without resetting when switchScene is called', () => {
+      const p = page();
+      p.mode.set('studio');
+      p.result.set('blob:active-tryon-result');
+
+      p.switchScene('work');
+      expect(p.selectedScene()).toBe('work');
+      expect(p.activeScenario().id).toBe('work');
+      expect(p.result()).toBe('blob:active-tryon-result');
+
+      p.switchScene('autumn');
+      expect(p.selectedScene()).toBe('autumn');
+      expect(p.activeScenario().id).toBe('autumn');
+      expect(p.result()).toBe('blob:active-tryon-result');
+    });
     it('handles 3D angle presets, normalized angle, and isBackView boundary', () => {
       const p = page();
       p.setAnglePreset(0);

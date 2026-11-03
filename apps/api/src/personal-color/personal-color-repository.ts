@@ -158,7 +158,8 @@ export class PersonalColorRepository implements ColorRepository {
         this.rpcDisabled = true;
         throw new Error("RPC_DISABLED");
       }
-      if (error instanceof Error && /COLOR_PROFILE_CONFLICT|COLOR_NOT_CONFIRMABLE|STYLE_PROFILE_REQUIRED/.test(error.message)) throw new HttpError(409, "COLOR_PROFILE_CONFLICT", "Hồ sơ hoặc kết quả đã thay đổi. Hãy tải lại.");
+      if (error instanceof Error && /COLOR_PROFILE_CONFLICT|COLOR_NOT_CONFIRMABLE/.test(error.message)) throw new HttpError(409, "COLOR_PROFILE_CONFLICT", "Hồ sơ hoặc kết quả đã thay đổi. Hãy tải lại.");
+      if (error instanceof Error && /STYLE_PROFILE_REQUIRED/.test(error.message)) throw new Error("STYLE_PROFILE_REQUIRED");
       if (error instanceof Error && /COLOR_ANALYSIS_NOT_FOUND/.test(error.message)) throw new HttpError(404, "COLOR_ANALYSIS_NOT_FOUND", "Không tìm thấy phân tích.");
       if (error instanceof Error && /COLOR_ANALYSIS_LIMIT/.test(error.message)) throw new HttpError(429, "COLOR_ANALYSIS_LIMIT", "Hãy đợi phân tích đang chạy.");
       throw error;

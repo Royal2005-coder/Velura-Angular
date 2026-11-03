@@ -418,11 +418,11 @@ test("Shop garment enforces variant mapping and refuses arbitrary hosts and redi
   });
   await assert.rejects(
     () => shop.garment(product, variant),
-    /Redirect not followed/,
+    { code: "VTO_PRODUCT_UNAVAILABLE" },
   );
   assert.equal(calls, 1);
 });
-test("A catalog primary photo never enables an unverified or wrong-variant try-on", async () => {
+test("VTO prefers verified registry and falls back to catalog images for clothing", async () => {
   const variant = "22222222-2222-4222-8222-222222222222";
   const mappedVariant = "33333333-3333-4333-8333-333333333333";
   const shop = new ShopAiCatalog({
@@ -431,12 +431,22 @@ test("A catalog primary photo never enables an unverified or wrong-variant try-o
     async fetchImage() { throw new Error("Must reject before download"); },
   });
   process.env.AI_CATALOG_IMAGE_HOSTS = "images.shop.test";
+  // Unverified registry entry → dynamic fallback uses catalog images → product supported
   process.env.AI_VTO_PRODUCTS = JSON.stringify({ [product]: { category: "upper_body" } });
-  assert.equal((await shop.support(product, variant)).product_supported, false);
+  assert.equal((await shop.support(product, variant)).product_supported, true);
+  assert.equal((await shop.support(product, variant)).garment_category, "upper_body");
+  // Verified registry with mapped variant → only mapped variant is supported
   process.env.AI_VTO_PRODUCTS = JSON.stringify({ [product]: { category: "upper_body", verified: true, photo_type: "flat-lay", variant_images: { [mappedVariant]: "https://images.shop.test/mapped.png" } } });
   assert.equal((await shop.support(product, variant)).product_supported, true);
   assert.equal((await shop.support(product, variant)).variant_supported, false);
   await assert.rejects(shop.garment(product, variant), { code: "VTO_VARIANT_UNAVAILABLE" });
+  // Accessories are never supported regardless of registry
+  const accessoryShop = new ShopAiCatalog({
+    async product() { return { status: "on_sale", category: { slug: "phu-kien" }, images: ["https://images.shop.test/primary.png"] }; },
+    async variant() { return null; },
+    async fetchImage() { throw new Error("Must reject"); },
+  });
+  assert.equal((await accessoryShop.support(product, variant)).product_supported, false);
 });
 test("An image signature without a decodable raster is rejected before storage or inference", async () => {
   const fixture = await setup(worker);

@@ -264,24 +264,30 @@
 }
 
 .topbar__title {
-  display: grid;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
   line-height: 1.2;
 }
 
-.topbar__title span {
+.topbar__workspace {
   color: var(--erp-muted);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  font-size: 13px;
+  font-weight: 500;
 }
 
-.topbar__title strong {
+.topbar__sep {
+  color: var(--erp-soft);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.topbar__page {
   overflow: hidden;
   color: var(--erp-ink);
-  font-size: 15px;
-  font-weight: 700;
+  font-size: 14px;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -293,18 +299,65 @@
   margin-left: auto;
 }
 
+.topbar__search {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 10px 0 10px;
+  border: 1px solid var(--erp-line);
+  border-radius: var(--erp-radius-md);
+  background: var(--erp-surface-muted);
+  color: var(--erp-muted);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+
+.topbar__search:hover {
+  background: var(--erp-surface);
+  border-color: var(--erp-line-strong);
+  color: var(--erp-ink);
+}
+
+.topbar__search-text {
+  min-width: 90px;
+  text-align: left;
+}
+
+.topbar__search-kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 20px;
+  padding: 0 5px;
+  border: 1px solid var(--erp-line);
+  border-radius: 4px;
+  background: var(--erp-surface);
+  color: var(--erp-soft);
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 600;
+}
+
 .topbar__avatar {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   overflow: hidden;
   border-radius: 50%;
-  background: var(--erp-ink);
-  color: #fff;
+  background: var(--erp-accent-soft);
+  color: var(--erp-accent);
+  border: 1px solid var(--erp-accent-border);
   font-size: 11px;
   font-weight: 700;
+  transition: transform 120ms ease;
+}
+
+.topbar__avatar:hover {
+  transform: scale(1.06);
 }
 
 .topbar__avatar img {
@@ -312,7 +365,6 @@
   height: 100%;
   object-fit: cover;
 }
-
 .content {
   flex: 1;
   width: 100%;
@@ -350,6 +402,128 @@
 .shell.is-collapsed .sidebar__brand {
   justify-content: center;
   padding: 0 8px;
+}
+/* ============================================================
+   Command Search Palette (Shadcn-Admin style)
+   ============================================================ */
+.cmd-palette {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cmd-palette__input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--erp-line);
+  border-radius: var(--erp-radius-md);
+  background: var(--erp-surface);
+  color: var(--erp-muted);
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.cmd-palette__input-wrap:focus-within {
+  border-color: var(--erp-accent);
+  box-shadow: 0 0 0 3px rgba(190, 24, 93, 0.12);
+  color: var(--erp-accent);
+}
+
+.cmd-palette__input {
+  flex: 1;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--erp-ink);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.cmd-palette__input::placeholder {
+  color: var(--erp-soft);
+}
+
+.cmd-palette__list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 360px;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.cmd-palette__item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: var(--erp-radius-md);
+  color: var(--erp-text);
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.cmd-palette__item:hover,
+.cmd-palette__item:focus-visible {
+  background: var(--erp-accent-soft);
+  color: var(--erp-accent);
+  outline: none;
+}
+
+.cmd-palette__icon-box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--erp-surface-muted);
+  color: var(--erp-muted);
+  flex-shrink: 0;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.cmd-palette__item:hover .cmd-palette__icon-box {
+  background: #FFFFFF;
+  color: var(--erp-accent);
+}
+
+.cmd-palette__item-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.cmd-palette__item-copy strong {
+  font-size: 13px;
+  font-weight: 600;
+  color: inherit;
+}
+
+.cmd-palette__item-copy small {
+  font-size: 11px;
+  color: var(--erp-muted);
+}
+
+.cmd-palette__enter {
+  color: var(--erp-soft);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.cmd-palette__item:hover .cmd-palette__enter {
+  color: var(--erp-accent);
+}
+
+.cmd-palette__empty {
+  padding: 24px;
+  text-align: center;
+  color: var(--erp-muted);
+  font-size: 13px;
 }
 
 .shell.is-collapsed .rail-toggle {

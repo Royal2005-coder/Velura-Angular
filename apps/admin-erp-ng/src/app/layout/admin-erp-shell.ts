@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, inject, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, HostListener, computed, inject, signal, viewChild } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { NavigationCancel, NavigationEnd, NavigationError, NavigationStart, Router, RouterLink, RouterOutlet } from '@angular/router';
 import { filter, startWith, catchError, finalize, of } from 'rxjs';
@@ -46,7 +46,9 @@ export class AdminErpShell {
   private readonly sidebar = viewChild<ElementRef<HTMLElement>>('sidebar');
   readonly logoutConfirmOpen = signal(false);
   readonly signingOut = signal(false);
-
+  readonly searchOpen = signal(false);
+  readonly searchQuery = signal('');
+  readonly searchInput = viewChild<ElementRef<HTMLInputElement>>('searchInput');
   private readonly navigationTick = toSignal(
     this.router.events.pipe(
       filter((event): event is NavigationEnd => event instanceof NavigationEnd),
@@ -64,6 +66,24 @@ export class AdminErpShell {
     })).filter((group) => group.items.length > 0);
   });
 
+  readonly searchResults = computed(() => {
+    const query = this.searchQuery().trim().toLowerCase();
+    const allItems: { item: AdminErpNavItem; groupLabel: string }[] = [];
+    for (const group of this.groups()) {
+      for (const item of group.items) {
+        allItems.push({ item, groupLabel: group.label });
+      }
+    }
+    if (!query) {
+      return allItems;
+    }
+    return allItems.filter(
+      ({ item, groupLabel }) =>
+        item.label.toLowerCase().includes(query) ||
+        groupLabel.toLowerCase().includes(query) ||
+        item.title.toLowerCase().includes(query),
+    );
+  });
   readonly currentNav = computed(() => {
     this.navigationTick();
     let current = this.router.routerState.snapshot.root;
@@ -124,6 +144,38 @@ export class AdminErpShell {
       .subscribe(() => this.mobileNavOpen.set(false));
   }
 
+  @HostListener('document:keydown', ['$event'])
+  onGlobalKeydown(event: KeyboardEvent): void {
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+      event.preventDefault();
+      if (this.searchOpen()) {
+        this.closeSearch();
+      } else {
+        this.openSearch();
+      }
+    }
+  }
+
+  openSearch(): void {
+    this.searchQuery.set('');
+    this.searchOpen.set(true);
+    queueMicrotask(() => this.searchInput()?.nativeElement.focus());
+  }
+
+  closeSearch(): void {
+    this.searchOpen.set(false);
+    this.searchQuery.set('');
+  }
+
+  onSearchInput(event: Event): void {
+    const target = event.target as HTMLInputElement | null;
+    this.searchQuery.set(target?.value ?? '');
+  }
+
+  navigateFromSearch(item: AdminErpNavItem): void {
+    this.closeSearch();
+    void this.router.navigateByUrl(this.navLink(item));
+  }
   /**
    * Builds the router link for a nav item, including deep-link query params.
    */

@@ -45,8 +45,8 @@ svg.admin-line-icon,
   --color-text-primary: #0F172A;
   --color-text-secondary: #475569;
   --color-text-muted: #94A3B8;
-  --color-brand-700: #881337;
-  --color-brand-800: #701A31;
+  --color-brand-700: #BE185D;
+  --color-brand-800: #9D174D;
   --color-brand-soft: #FFE4E6;
 }
 
@@ -181,12 +181,11 @@ svg.admin-line-icon,
 }
 
 .bi-tab-btn.is-active {
-  background: #7D263D;
+  background: var(--color-brand-700, #BE185D);
   color: #FFFFFF;
   font-weight: 600;
-  box-shadow: 0 2px 6px rgba(125, 38, 61, 0.22);
+  box-shadow: 0 2px 6px rgba(190, 24, 93, 0.22);
 }
-
 /* Dropdown Date Filter */
 .bi-range-btn {
   display: inline-flex;
@@ -207,9 +206,8 @@ svg.admin-line-icon,
 .bi-range-btn app-admin-icon {
   width: 14px;
   height: 14px;
-  color: #7D263D;
+  color: var(--color-brand-700, #BE185D);
 }
-
 .bi-range-btn:hover {
   border-color: #CBD5E1;
   background: #F8FAFC;
@@ -586,9 +584,9 @@ svg.admin-line-icon,
 .bi-card-link {
   font-size: 0.71875rem;
   font-weight: 600;
-  color: #7D263D;
+  color: var(--color-brand-700, #BE185D);
   background: #FFF5F7;
-  border: 1px solid #F2CCD7;
+  border: 1px solid #FECDD3;
   border-radius: 4px;
   padding: 2px 8px;
   cursor: pointer;
@@ -599,9 +597,9 @@ svg.admin-line-icon,
 }
 
 .bi-card-link:hover {
-  background: #7D263D;
+  background: var(--color-brand-700, #BE185D);
   color: #FFFFFF;
-  border-color: #7D263D;
+  border-color: var(--color-brand-700, #BE185D);
   text-decoration: none;
 }
 
@@ -704,7 +702,7 @@ svg.admin-line-icon,
 
 .bi-segmented-item.is-active {
   background: #FFFFFF;
-  color: #7D263D;
+  color: var(--color-brand-700, #BE185D);
   font-weight: 700;
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
 }
@@ -1535,7 +1533,7 @@ svg.admin-line-icon,
   width: 12px;
   height: 12px;
   border: 2px solid #CBD5E1;
-  border-top-color: #7D263D;
+  border-top-color: var(--color-brand-700, #BE185D);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
   display: inline-block;

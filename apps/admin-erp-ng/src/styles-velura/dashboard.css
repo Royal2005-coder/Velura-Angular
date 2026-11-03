@@ -37,9 +37,22 @@ svg.admin-line-icon,
   height: 14px;
 }
 
+/* Taste-calibrated Root Design Tokens for Executive Dashboard */
+:root {
+  --color-canvas: #F8FAFC;
+  --color-surface: #FFFFFF;
+  --color-border: #E2E8F0;
+  --color-text-primary: #0F172A;
+  --color-text-secondary: #475569;
+  --color-text-muted: #94A3B8;
+  --color-brand-700: #881337;
+  --color-brand-800: #701A31;
+  --color-brand-soft: #FFE4E6;
+}
+
 .velura-bi-dashboard {
   padding: 16px 20px 32px;
-  background: var(--color-canvas, #FCF8F6);
+  background: var(--color-canvas, #F8FAFC);
   min-height: 100vh;
   box-sizing: border-box;
   display: flex;
@@ -48,9 +61,8 @@ svg.admin-line-icon,
   max-width: 1600px;
   margin: 0 auto;
   font-family: "Be Vietnam Pro", "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  color: var(--color-text-primary, #302326);
+  color: var(--color-text-primary, #0F172A);
 }
-
 @media (max-width: 768px) {
   app-admin-icon {
   display: inline-flex;
@@ -256,6 +268,7 @@ svg.admin-line-icon,
 }
 
 .icon-pink { background: #FFE4E6; color: #BE123C; }
+.icon-emerald { background: #D1FAE5; color: #059669; }
 .icon-green { background: #D1FAE5; color: #047857; }
 .icon-blue { background: #DBEAFE; color: #1D4ED8; }
 .icon-amber { background: #FEF3C7; color: #B45309; }
@@ -1559,4 +1572,353 @@ svg.admin-line-icon,
   text-align: center;
   color: #94A3B8;
   font-size: 0.875rem;
+}
+
+/* ============================================================
+   Taste Standard: Executive Synthesis Banner & Analysis Matrix
+   ============================================================ */
+.bi-executive-banner {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-left: 4px solid #881337;
+  border-radius: 10px;
+  padding: 12px 16px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  animation: fadeIn 0.25s ease-out;
+}
+
+.bi-executive-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #881337;
+  text-transform: uppercase;
+}
+
+.bi-executive-badge app-admin-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.bi-executive-content {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  font-size: 0.78125rem;
+  line-height: 1.45;
+  color: #334155;
+}
+
+@media (max-width: 900px) {
+  .bi-executive-content {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+}
+
+.bi-executive-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bi-executive-title {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #0F172A;
+}
+
+/* ------------------------------------------------------------
+   Widget B2: Margin Matrix & Feature Transfer Styles
+   ------------------------------------------------------------ */
+.bi-matrix-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.bi-matrix-table-wrap {
+  overflow-x: auto;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+}
+
+.bi-matrix-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.71875rem;
+  background: #FFFFFF;
+}
+
+.bi-matrix-table th {
+  background: #F8FAFC;
+  color: #475569;
+  padding: 8px 10px;
+  font-weight: 700;
+  font-size: 0.65625rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-bottom: 1px solid #E2E8F0;
+  white-space: nowrap;
+}
+
+.bi-matrix-table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid #F1F5F9;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.bi-matrix-table tbody tr:hover {
+  background: #F8FAFC;
+}
+
+.bi-row-highlight {
+  background: #FFF5F7;
+}
+
+.bi-cat-name-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bi-cat-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dot-wine { background: #881337; }
+.dot-emerald { background: #059669; }
+.dot-blue { background: #2563EB; }
+.dot-amber { background: #D97706; }
+.dot-purple { background: #7C3AED; }
+
+.bi-margin-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.pill-high { background: #ECFDF5; color: #047857; border: 1px solid #A7F3D0; }
+.pill-med { background: #EFF6FF; color: #1D4ED8; border: 1px solid #BFDBFE; }
+.pill-low { background: #FFF1F2; color: #BE123C; border: 1px solid #FECDD3; }
+
+.bi-tag-eval {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.65625rem;
+  font-weight: 600;
+}
+
+.eval-warn { background: #FFF1F2; color: #9F1239; border: 1px solid #FECDD3; }
+.eval-good { background: #ECFDF5; color: #065F46; border: 1px solid #A7F3D0; }
+
+/* Feature Transfer Box */
+.bi-feature-transfer-box {
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bi-transfer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.bi-transfer-badge {
+  font-size: 0.65625rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #881337;
+  background: #FFE4E6;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.bi-transfer-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+@media (max-width: 768px) {
+  .bi-transfer-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.bi-transfer-card {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 6px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.bi-transfer-title {
+  display: flex;
+  align-items: center;
+}
+
+.badge-source {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: #0F172A;
+}
+
+.bi-transfer-desc {
+  margin: 0;
+  font-size: 0.6875rem;
+  color: #475569;
+  line-height: 1.4;
+}
+
+/* ------------------------------------------------------------
+   Widget B3: Geographic Contribution Breakdown Styles
+   ------------------------------------------------------------ */
+.bi-geo-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.bi-geo-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bi-geo-card {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.bi-geo-card:hover {
+  border-color: #CBD5E1;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.05);
+}
+
+.bi-geo-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.bi-geo-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78125rem;
+  color: #0F172A;
+}
+
+.bi-geo-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.dot-south { background: #881337; }
+.dot-north { background: #2563EB; }
+.dot-central { background: #D97706; }
+
+.bi-geo-tag {
+  font-size: 0.625rem;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.tag-pillar { background: #FFE4E6; color: #881337; }
+.tag-growth { background: #DBEAFE; color: #1D4ED8; }
+.tag-opt { background: #FEF3C7; color: #B45309; }
+
+.bi-geo-metrics {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.bi-geo-amount {
+  font-size: 0.84375rem;
+  color: #0F172A;
+}
+
+.bi-geo-share {
+  font-size: 0.71875rem;
+  font-weight: 600;
+  color: #64748B;
+}
+
+.bi-geo-bar-track {
+  height: 8px;
+  background: #F1F5F9;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.bi-geo-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.5s ease;
+}
+
+.bar-south { background: linear-gradient(90deg, #BE123C 0%, #881337 100%); }
+.bar-north { background: linear-gradient(90deg, #60A5FA 0%, #2563EB 100%); }
+.bar-central { background: linear-gradient(90deg, #FBBF24 0%, #D97706 100%); }
+
+.bi-geo-stats-row {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 0.6875rem;
+  color: #475569;
+  padding-top: 2px;
+}
+
+.bi-geo-strategy-tip {
+  font-size: 0.65625rem;
+  color: #0F172A;
+  background: #F8FAFC;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border-left: 2px solid #881337;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
 }

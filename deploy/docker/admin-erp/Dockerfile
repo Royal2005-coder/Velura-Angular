@@ -12,7 +12,7 @@ RUN npm run build -w @velura/admin-erp-ng
 
 FROM nginxinc/nginx-unprivileged:1.28.2-alpine
 USER root
-RUN apk upgrade --no-cache
+RUN apk update && apk upgrade --no-cache && apk add --no-cache "nginx>=1.28.3"
 ARG RELEASE_REVISION
 ARG RELEASE_BUILD_ID
 COPY --from=builder /app/apps/admin-erp-ng/dist/admin-erp-ng/browser /usr/share/nginx/html

@@ -1772,13 +1772,13 @@ export class AdminErpDashboardPage implements OnInit, OnDestroy {
           of({
             success: false,
             data: {
-              orders_pending_24h: 16,
-              variants_out_of_stock: 10,
-              tickets_open_24h: 4,
-              promotions_near_budget: 1,
-              reviews_urgent: 2,
-              admin_requests_pending: 1,
-              total_issues: 34,
+              orders_pending_24h: 0,
+              variants_out_of_stock: 0,
+              tickets_open_24h: 0,
+              promotions_near_budget: 0,
+              reviews_urgent: 0,
+              admin_requests_pending: 0,
+              total_issues: 0,
               fetched_at: '',
             },
             fetched_at: '',
@@ -2251,7 +2251,7 @@ export class AdminErpDashboardPage implements OnInit, OnDestroy {
 
       this.dashboardService
         .getModuleHealth()
-        .pipe(catchError(() => of({ success: false, data: { orders_pending_24h: 16, variants_out_of_stock: 10, tickets_open_24h: 4, promotions_near_budget: 1, reviews_urgent: 2, admin_requests_pending: 1, total_issues: 34, fetched_at: '' }, fetched_at: '' })))
+        .pipe(catchError(() => of({ success: false, data: { orders_pending_24h: 0, variants_out_of_stock: 0, tickets_open_24h: 0, promotions_near_budget: 0, reviews_urgent: 0, admin_requests_pending: 0, total_issues: 0, fetched_at: '' }, fetched_at: '' })))
         .subscribe((res) => {
           if (res.success && res.data) {
             this.moduleHealth.set(res.data);

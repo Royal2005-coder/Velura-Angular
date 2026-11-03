@@ -113,7 +113,7 @@ export async function handleQuizRoute(
       "quiz",
       "Style Quiz của bạn đã được cập nhật! ✨",
       "Hệ thống đã cập nhật gợi ý phối đồ cá nhân hóa dựa trên dữ liệu trắc nghiệm mới của bạn.",
-      "/src/pages/ai/suggestions.html"
+      "/ai/suggestions"
     );
 
     return sendJson(res, 200, { success: true, migrated: true, quiz: result }, corsHeaders);
@@ -173,7 +173,7 @@ export async function handleQuizRoute(
         "quiz",
         "Đã hoàn thành Style Quiz! ✨",
         "Chúc mừng bạn đã hoàn thành trắc nghiệm phong cách. Hãy xem ngay các gợi ý phối đồ AI dành riêng cho bạn!",
-        "/src/pages/ai/suggestions.html"
+        "/ai/suggestions"
       );
 
       return sendJson(res, 200, { success: true, quiz: result }, corsHeaders);

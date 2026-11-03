@@ -209,7 +209,7 @@
         <p class="member-lock__hint">Lý do được ghi vào nhật ký cùng người thao tác. Số dư và bút toán không thay đổi.</p>
         <label class="erp-field">
           <span>Lý do (tối thiểu {{ lockReasonMin }} ký tự)</span>
-          <textarea class="erp-input" rows="2" [value]="lockReason()" (input)="onLockReason($event)" placeholder="ví dụ: xác minh với khách qua hotline 25/10"></textarea>
+          <textarea class="erp-input" rows="2" required minlength="8" [value]="lockReason()" (input)="onLockReason($event)" placeholder="ví dụ: xác minh với khách qua hotline 25/10"></textarea>
         </label>
         @if (lockError()) {
           <p class="erp-error" role="alert">{{ lockError() }}</p>
@@ -238,7 +238,7 @@
         </label>
         <label class="erp-field">
           <span>Lý do (tối thiểu 10 ký tự)</span>
-          <textarea class="erp-input" rows="2" [value]="adjustReason()" (input)="onAdjustReason($event)" placeholder="ví dụ: bù điểm khách khiếu nại đơn 1234, đã duyệt 01/11"></textarea>
+          <textarea class="erp-input" rows="2" required minlength="10" [value]="adjustReason()" (input)="onAdjustReason($event)" placeholder="ví dụ: bù điểm khách khiếu nại đơn 1234, đã duyệt 01/11"></textarea>
         </label>
         @if (adjustError()) {
           <p class="erp-error" role="alert">{{ adjustError() }}</p>
@@ -367,7 +367,7 @@
       </label>
       <label class="erp-field">
         <span>Lý do cập nhật chính sách (tối thiểu 10 ký tự)</span>
-        <textarea class="erp-input" rows="2" [value]="spendingReason()" (input)="onSpendingReason($event)" placeholder="ví dụ: Đã duyệt chính sách thưởng và dùng điểm cho quý này"></textarea>
+        <textarea class="erp-input" rows="2" required minlength="10" [value]="spendingReason()" (input)="onSpendingReason($event)" placeholder="ví dụ: Đã duyệt chính sách thưởng và dùng điểm cho quý này"></textarea>
       </label>
     </div>
     @if (spendingError()) {

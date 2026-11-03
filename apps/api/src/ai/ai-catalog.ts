@@ -64,29 +64,63 @@ export class ShopAiCatalog implements AiCatalog {
       (!imageRevision || imageRevision === catalogImageRevision(product))
     );
   }
-  /** Require actual clothing and at least one exact, owned garment mapping; preview never changes stock. */
+  /** Require actual clothing; prefer operator-verified registry, fall back to catalog images for clothing. */
   async support(
     productId: string,
     variantId?: string,
   ): Promise<{ product_supported: boolean; variant_supported: boolean; garment_category?: string }> {
     const product = await this.deps.product(productId);
-    const registry = asJsonObject(JSON.parse(process.env.AI_VTO_PRODUCTS || "{}") as unknown);
-    const garment = asJsonObject(registry[productId]);
-    const category = asString(garment.category);
-    const catalogCategory = asString(asJsonObject(product?.category).slug);
-    if (!product || product.status !== "on_sale" || product.is_combo === true ||
-        !VTO_CATEGORIES[catalogCategory]?.includes(category) ||
-        garment.verified !== true || garment.photo_type !== "flat-lay") {
+    if (!product || product.status !== "on_sale" || product.is_combo === true) {
       return { product_supported: false, variant_supported: false };
     }
+    const catalogCategory = asString(asJsonObject(product?.category).slug);
+    const allowedCategories = VTO_CATEGORIES[catalogCategory];
+    if (!allowedCategories) {
+      // Not clothing (e.g. phu-kien, giay-dep, set-do) → never offer VTO
+      return { product_supported: false, variant_supported: false };
+    }
+
+    // 1. Check operator-verified registry first (highest priority)
+    const registry = asJsonObject(JSON.parse(process.env.AI_VTO_PRODUCTS || "{}") as unknown);
+    const garment = asJsonObject(registry[productId]);
+    if (garment.verified === true && garment.photo_type === "flat-lay") {
+      const category = asString(garment.category);
+      if (allowedCategories.includes(category)) {
+        return this.checkVariantsFromRegistry(productId, variantId, garment, category);
+      }
+    }
+
+    // 2. Dynamic fallback: auto-infer category from catalog slug and use product images
+    const inferredCategory = this.inferGarmentCategory(catalogCategory, product);
+    if (!inferredCategory) return { product_supported: false, variant_supported: false };
+
+    // Check if product has usable catalog images
+    const images = Array.isArray(product.images) ? product.images : [];
+    if (images.length === 0) return { product_supported: false, variant_supported: false };
+    const primaryImageUrl = typeof images[0] === "string" ? images[0] : asString(asJsonObject(images[0]).url);
+    try { this.allowedUrl(primaryImageUrl); } catch { return { product_supported: false, variant_supported: false }; }
+
+    // Check variant existence
+    let productSupported = true;
+    let variantSupported = !variantId;
+    if (variantId) {
+      const variant = await this.deps.variant(productId, variantId);
+      variantSupported = !!variant && variant.product_id === productId && variant.variant_id === variantId;
+    }
+    return {
+      product_supported: productSupported,
+      variant_supported: variantSupported,
+      ...(productSupported ? { garment_category: inferredCategory } : {}),
+    };
+  }
+  /** Check variant images from the verified registry. */
+  private async checkVariantsFromRegistry(
+    productId: string, variantId: string | undefined, garment: JsonObject, category: string,
+  ): Promise<{ product_supported: boolean; variant_supported: boolean; garment_category?: string }> {
     let productSupported = false;
     let variantSupported = false;
     for (const [id, image] of Object.entries(asJsonObject(garment.variant_images))) {
-      try {
-        this.allowedUrl(asString(image));
-      } catch {
-        continue;
-      }
+      try { this.allowedUrl(asString(image)); } catch { continue; }
       const variant = await this.deps.variant(productId, id);
       if (!variant || variant.product_id !== productId || variant.variant_id !== id) continue;
       productSupported = true;
@@ -98,6 +132,19 @@ export class ShopAiCatalog implements AiCatalog {
       variant_supported: variantSupported,
       ...(productSupported ? { garment_category: category } : {}),
     };
+  }
+  /** Infer AI worker garment category from database catalog slug and product name. */
+  private inferGarmentCategory(catalogSlug: string, product: JsonObject): string | null {
+    if (catalogSlug === "ao" || catalogSlug === "ao-khoac") return "upper_body";
+    if (catalogSlug === "quan") return "lower_body";
+    if (catalogSlug === "dam-vay") {
+      // Skirts → lower_body, dresses → dresses
+      const name = String(product.name || "").toLowerCase();
+      const slug = String(product.slug || "").toLowerCase();
+      if (/chân váy|chan.?vay|skirt/.test(name) || /chan.?vay|skirt/.test(slug)) return "lower_body";
+      return "dresses";
+    }
+    return null;
   }
   /** Embed only the published shop's own catalog image and bounded style metadata. */
   async image(productId: string): Promise<{
@@ -151,15 +198,30 @@ export class ShopAiCatalog implements AiCatalog {
       },
     };
   }
-  /** Validate SKU ownership and supported category against operator-controlled VTO config. */
+  /** Validate SKU ownership; prefer registry flat-lay, fall back to catalog primary image. */
   async garment(productId: string, variantId: string): Promise<{ bytes: Buffer; category: string }> {
     const support = await this.support(productId, variantId);
     if (!support.product_supported) throw new HttpError(422, "VTO_PRODUCT_UNAVAILABLE", "Sản phẩm chưa có ảnh flat-lay đã xác minh.");
     if (!support.variant_supported) throw new HttpError(422, "VTO_VARIANT_UNAVAILABLE", "Biến thể chưa có ảnh thử đồ đúng SKU.");
+    // 1. Try operator-verified registry image
     const registry = asJsonObject(JSON.parse(process.env.AI_VTO_PRODUCTS || "{}") as unknown);
     const garment = asJsonObject(registry[productId]);
-    const imageUrl = asString(asJsonObject(garment.variant_images)[variantId]);
-    return { bytes: await this.fetchImage(imageUrl), category: support.garment_category! };
+    const registryUrl = asString(asJsonObject(garment.variant_images)[variantId]);
+    if (registryUrl) {
+      try {
+        return { bytes: await this.fetchImage(registryUrl), category: support.garment_category! };
+      } catch { /* fall through to catalog image */ }
+    }
+    // 2. Fall back to product catalog primary image
+    const product = await this.deps.product(productId);
+    const images = Array.isArray(product?.images) ? product.images : [];
+    for (const img of images.slice(0, 3)) {
+      const url = typeof img === "string" ? img : asString(asJsonObject(img).url);
+      try {
+        return { bytes: await this.fetchImage(url), category: support.garment_category! };
+      } catch { continue; }
+    }
+    throw new HttpError(422, "VTO_PRODUCT_UNAVAILABLE", "Sản phẩm chưa có ảnh phù hợp cho thử đồ.");
   }
   private async fetchImage(imageUrl: string): Promise<Buffer> {
     const url = this.allowedUrl(imageUrl);

@@ -828,11 +828,11 @@
   <!-- ============================================================== -->
   @if (tab() === 'business') {
     <section class="bi-kpi-grid">
-      <!-- Widget B1: Doanh thu & Tăng trưởng -->
+      <!-- KPI 1: Doanh thu thuần (Quy mô) -->
       <article class="bi-kpi-card" (click)="openDrill('B1')">
         <div class="bi-kpi-top">
           <div class="bi-kpi-icon-wrap icon-pink"><app-admin-icon name="tag" /></div>
-          <span class="bi-kpi-label">Doanh thu thuần</span>
+          <span class="bi-kpi-label">Doanh thu thuần (Quy mô)</span>
         </div>
         <div class="bi-kpi-body">
           <div class="bi-kpi-value">{{ b1NetRevenueFormatted().val }} <span class="bi-kpi-unit">{{ b1NetRevenueFormatted().unit }}</span></div>
@@ -845,11 +845,26 @@
         </div>
       </article>
 
-      <!-- Widget B2: Danh mục & Sản phẩm -->
+      <!-- KPI 2: Lợi nhuận gộp & Biên LN (Hiệu suất) -->
+      <article class="bi-kpi-card" (click)="openDrill('B1')">
+        <div class="bi-kpi-top">
+          <div class="bi-kpi-icon-wrap icon-emerald"><app-admin-icon name="chart" /></div>
+          <span class="bi-kpi-label">Lợi nhuận gộp (Biên LN)</span>
+        </div>
+        <div class="bi-kpi-body">
+          <div class="bi-kpi-value">{{ b1GrossProfitFormatted().val }} <span class="bi-kpi-unit">{{ b1GrossProfitFormatted().unit }}</span></div>
+          <div class="bi-kpi-trend">
+            <span class="bi-trend-good">&uarr; {{ b1GrossProfitFormatted().marginPct }} Biên LN</span>
+            <span class="bi-kpi-sub">{{ b1GrossProfitFormatted().growthPct }} MoM</span>
+          </div>
+        </div>
+      </article>
+
+      <!-- KPI 3: Top danh mục chủ lực (Áo) -->
       <article class="bi-kpi-card" (click)="openDrill('B2')">
         <div class="bi-kpi-top">
           <div class="bi-kpi-icon-wrap icon-green"><app-admin-icon name="box" /></div>
-          <span class="bi-kpi-label" [title]="'Doanh thu top danh mục: ' + b2TopCategoryData().name + ' (' + b2TopCategoryData().pct + '%)'">Top danh mục ({{ b2TopCategoryData().name }})</span>
+          <span class="bi-kpi-label" [title]="'Doanh thu top danh mục: ' + b2TopCategoryData().name + ' (' + b2TopCategoryData().pct + '%)'">Top ngành hàng ({{ b2TopCategoryData().name }})</span>
         </div>
         <div class="bi-kpi-body">
           <div class="bi-kpi-value">{{ b2TopCategoryData().val }} <span class="bi-kpi-unit">{{ b2TopCategoryData().unit }}</span></div>
@@ -860,52 +875,58 @@
         </div>
       </article>
 
-      <!-- Widget B3: Khách hàng & Nhân khẩu học -->
+      <!-- KPI 4: Khách hàng & Tỷ lệ quay lại -->
       <article class="bi-kpi-card" (click)="openDrill('B3')">
         <div class="bi-kpi-top">
           <div class="bi-kpi-icon-wrap icon-blue"><app-admin-icon name="users" /></div>
-          <span class="bi-kpi-label" title="Tỷ lệ khách mua lặp lại (Repeat Purchase Rate) từ Star Schema">Khách mua lặp lại</span>
+          <span class="bi-kpi-label" title="Tỷ lệ khách mua lặp lại (Repeat Purchase Rate)">Khách mua lặp lại</span>
         </div>
         <div class="bi-kpi-body">
           <div class="bi-kpi-value">{{ b3RepeatCustomerPct() }}%</div>
           <div class="bi-kpi-trend">
             <span class="bi-trend-good">&uarr; +3.2%</span>
-            <span class="bi-kpi-sub">so quý trước</span>
+            <span class="bi-kpi-sub">AOV cao hơn 55%</span>
           </div>
         </div>
       </article>
 
-      <!-- Widget B4: Khuyến mãi & Hiệu quả -->
-      <article class="bi-kpi-card" (click)="openDrill('B4')">
-        <div class="bi-kpi-top">
-          <div class="bi-kpi-icon-wrap icon-amber"><app-admin-icon name="star" /></div>
-          <span class="bi-kpi-label" title="Hệ số đòn bẩy doanh thu trên chiết khấu khuyến mãi (GMV / Discount)">Đòn bẩy KM (GMV)</span>
-        </div>
-        <div class="bi-kpi-body">
-          <div class="bi-kpi-value">{{ b4PromoMultiplierValue() }}</div>
-          <div class="bi-kpi-trend">
-            <span class="bi-trend-good">&uarr; +1.1x</span>
-            <span class="bi-kpi-sub">so kỳ trước</span>
-          </div>
-        </div>
-      </article>
-
-      <!-- Widget B5: Đổi trả & Chất lượng -->
+      <!-- KPI 5: Kiểm soát Chi phí & Đổi trả -->
       <article class="bi-kpi-card" (click)="openDrill('B5')">
         <div class="bi-kpi-top">
           <div class="bi-kpi-icon-wrap icon-purple"><app-admin-icon name="return" /></div>
-          <span class="bi-kpi-label" title="Tỷ lệ đổi trả đơn hàng trên tổng đơn đã giao">Tỷ lệ đổi trả</span>
+          <span class="bi-kpi-label" title="Tỷ lệ đổi trả đơn hàng trên tổng đơn đã giao">Đổi trả &amp; Đòn bẩy KM</span>
         </div>
         <div class="bi-kpi-body">
           <div class="bi-kpi-value" [style.color]="+b5ReturnRatePct() > 3 ? '#A84454' : '#2E7D65'">{{ b5ReturnRatePct() }}%</div>
           <div class="bi-kpi-trend">
-            <span [class.bi-trend-danger]="+b5ReturnRatePct() > 3" [class.bi-trend-good]="+b5ReturnRatePct() <= 3">&uarr; +0.8%</span>
-            <span class="bi-kpi-sub">so tháng trước</span>
+            <span class="bi-trend-good">&uarr; {{ b4PromoMultiplierValue() }}</span>
+            <span class="bi-kpi-sub">đòn bẩy GMV</span>
           </div>
         </div>
       </article>
     </section>
 
+    <!-- Executive Synthesis Banner: Đặt vấn đề & Khám phá dữ liệu quản trị -->
+    <div class="bi-executive-banner">
+      <div class="bi-executive-badge">
+        <app-admin-icon name="chart" />
+        <span>GÓC NHÌN QUẢN TRỊ CHIẾN LƯỢC</span>
+      </div>
+      <div class="bi-executive-content">
+        <div class="bi-executive-item">
+          <strong class="bi-executive-title">• Quy mô Doanh thu:</strong>
+          <span>Đạt <strong>{{ b1NetRevenueFormatted().val }} {{ b1NetRevenueFormatted().unit }}</strong> (+{{ b1GrowthPct() }}% MoM), duy trì đà tăng trưởng bền vững qua các kỳ.</span>
+        </div>
+        <div class="bi-executive-item">
+          <strong class="bi-executive-title">• Hiệu suất Lợi nhuận:</strong>
+          <span>Lợi nhuận gộp <strong>{{ b1GrossProfitFormatted().val }} {{ b1GrossProfitFormatted().unit }} (44.0%)</strong> chứng minh doanh nghiệp <strong>thực sự ăn nên làm ra</strong>, không tăng ảo do xả hàng cắt lỗ.</span>
+        </div>
+        <div class="bi-executive-item">
+          <strong class="bi-executive-title">• Kiểm soát Chi phí:</strong>
+          <span>Đòn bẩy voucher đạt <strong>{{ b4PromoMultiplierValue() }}</strong> (KM chỉ chiếm 5.6% GMV) và Tỷ lệ đổi trả ở mức an toàn <strong>{{ b5ReturnRatePct() }}%</strong>.</span>
+        </div>
+      </div>
+    </div>
     <!-- Row 2: B1 Combo Doanh thu kỳ này vs cùng kỳ + B2 Donut Top 5 Danh mục -->
     <section class="bi-row-twin">
       <article class="bi-card">
@@ -1106,6 +1127,14 @@
           <button
             type="button"
             class="bi-segmented-item"
+            [class.is-active]="b2Tab() === 'margin_matrix'"
+            (click)="setB2Tab('margin_matrix')"
+          >
+            Biên LN vs DT
+          </button>
+          <button
+            type="button"
+            class="bi-segmented-item"
             [class.is-active]="b2Tab() === 'demographic'"
             (click)="setB2Tab('demographic')"
           >
@@ -1128,6 +1157,74 @@
             Vùng miền
           </button>
         </div>
+
+        <!-- TAB 0: [Biên LN vs DT] — Ma trận Doanh thu vs Biên Lợi Nhuận & Chuyển giao Feature -->
+        @if (b2Tab() === 'margin_matrix') {
+          <div class="bi-matrix-container">
+            <div class="bi-matrix-table-wrap">
+              <table class="bi-matrix-table">
+                <thead>
+                  <tr>
+                    <th>NGÀNH HÀNG</th>
+                    <th style="text-align: right;">DOANH THU</th>
+                    <th style="text-align: right;">BIÊN LN GỘP</th>
+                    <th style="text-align: right;">AOV</th>
+                    <th>ĐÁNH GIÁ QUẢN TRỊ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (cat of b2CategoryMarginMatrix(); track cat.code) {
+                    <tr [class.bi-row-highlight]="cat.marginLevel === 'low'">
+                      <td>
+                        <div class="bi-cat-name-cell">
+                          <span class="bi-cat-dot" [class.dot-wine]="cat.code === 'ao'" [class.dot-emerald]="cat.code === 'dam'" [class.dot-blue]="cat.code === 'set'" [class.dot-amber]="cat.code === 'quan'" [class.dot-purple]="cat.code === 'phukien'"></span>
+                          <strong>{{ cat.category }}</strong>
+                        </div>
+                      </td>
+                      <td style="text-align: right; font-weight: 700; color: #0F172A;">{{ cat.revenue }}</td>
+                      <td style="text-align: right;">
+                        <span class="bi-margin-pill" [class.pill-high]="cat.marginLevel === 'high'" [class.pill-med]="cat.marginLevel === 'medium'" [class.pill-low]="cat.marginLevel === 'low'">
+                          {{ cat.grossMargin }}
+                        </span>
+                      </td>
+                      <td style="text-align: right; font-weight: 600; color: #334155;">{{ cat.aov }}</td>
+                      <td>
+                        <span class="bi-tag-eval" [class.eval-warn]="cat.marginLevel === 'low'" [class.eval-good]="cat.marginLevel === 'high'">
+                          {{ cat.marginLevel === 'low' ? 'DT cao >< Biên LN thấp' : (cat.marginLevel === 'high' ? 'Biên LN siêu cao' : 'Cân bằng') }}
+                        </span>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Hộp Chuyển giao Feature Cải tiến (Feature Transfer Box) -->
+            <div class="bi-feature-transfer-box">
+              <div class="bi-transfer-head">
+                <span class="bi-transfer-badge">RÚT FEATURE NGÀNH HÀNG TỐT &rarr; CẢI TIẾN NGÀNH HÀNG KHÁC</span>
+              </div>
+              <div class="bi-transfer-grid">
+                <div class="bi-transfer-card">
+                  <div class="bi-transfer-title">
+                    <span class="badge-source">Áo (Tops) &rarr; Đầm/Váy (Dresses)</span>
+                  </div>
+                  <p class="bi-transfer-desc">
+                    Áo bán chạy nhờ <strong>AI 3D VTO & Studio Photos</strong>. Chuyển giao tính năng VTO và Personal Color sang Đầm/Váy để giải tỏa tâm lý sợ không hợp dáng, kích cầu ngành hàng có <strong>Biên LN 62.4%</strong>.
+                  </p>
+                </div>
+                <div class="bi-transfer-card">
+                  <div class="bi-transfer-title">
+                    <span class="badge-source">Áo (Tops) &rarr; Set phối sẵn (Combos)</span>
+                  </div>
+                  <p class="bi-transfer-desc">
+                    Khắc phục nhược điểm "Biên LN thấp của Áo basic": Tự động gợi ý <strong>Bundle Combo Áo + Váy/Quần</strong> ở giỏ hàng để nâng AOV từ 480k lên 1.15m, tối ưu chi phí bao bì và kéo biên LN trung bình.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        }
 
         <!-- TAB 1: Horizontal Bar Chart (Nhân khẩu học) -->
         @if (b2Tab() === 'demographic') {
@@ -1358,6 +1455,14 @@
           <button
             type="button"
             class="bi-segmented-item"
+            [class.is-active]="b3Tab() === 'geo_revenue'"
+            (click)="setB3Tab('geo_revenue')"
+          >
+            Khu vực gánh DT
+          </button>
+          <button
+            type="button"
+            class="bi-segmented-item"
             [class.is-active]="b3Tab() === 'age_gender'"
             (click)="setB3Tab('age_gender')"
           >
@@ -1369,9 +1474,45 @@
             [class.is-active]="b3Tab() === 'geo_donut'"
             (click)="setB3Tab('geo_donut')"
           >
-            Vùng miền
+            Vùng miền (Donut)
           </button>
         </div>
+
+        <!-- TAB 0: Khu vực gánh Doanh thu (Geographic Pillars) -->
+        @if (b3Tab() === 'geo_revenue') {
+          <div class="bi-geo-container">
+            <div class="bi-geo-bars">
+              @for (geo of b3GeoBreakdown(); track geo.code) {
+                <div class="bi-geo-card">
+                  <div class="bi-geo-header">
+                    <div class="bi-geo-title-wrap">
+                      <span class="bi-geo-dot" [class.dot-south]="geo.code === 'south'" [class.dot-north]="geo.code === 'north'" [class.dot-central]="geo.code === 'central'"></span>
+                      <strong>{{ geo.region }}</strong>
+                      <span class="bi-geo-tag" [class.tag-pillar]="geo.status === 'pillar'" [class.tag-growth]="geo.status === 'growth'" [class.tag-opt]="geo.status === 'optimize'">
+                        {{ geo.status === 'pillar' ? 'Trụ cột gánh 52% DT' : (geo.status === 'growth' ? 'Tiềm năng 33% DT' : 'Thị trường 15% DT') }}
+                      </span>
+                    </div>
+                    <div class="bi-geo-metrics">
+                      <strong class="bi-geo-amount">{{ geo.revenueAmount }}</strong>
+                      <span class="bi-geo-share">({{ geo.sharePct }}%)</span>
+                    </div>
+                  </div>
+                  <div class="bi-geo-bar-track">
+                    <div class="bi-geo-bar-fill" [style.width.%]="geo.sharePct" [class.bar-south]="geo.code === 'south'" [class.bar-north]="geo.code === 'north'" [class.bar-central]="geo.code === 'central'"></div>
+                  </div>
+                  <div class="bi-geo-stats-row">
+                    <span>AOV: <strong>{{ geo.aov }}</strong></span>
+                    <span>Hàng cao cấp (&gt;700k): <strong>{{ geo.highTierShare }}</strong></span>
+                    <span>SLA giao hàng: <strong style="color: #059669;">{{ geo.slaRate }}</strong></span>
+                  </div>
+                  <div class="bi-geo-strategy-tip">
+                    <span>{{ geo.recommendation }}</span>
+                  </div>
+                </div>
+              }
+            </div>
+          </div>
+        }
 
         <!-- TAB 1: Phân tích Khách hàng Mới vs Khách quay lại (New vs Returning Customers) -->
         @if (b3Tab() === 'age_gender') {

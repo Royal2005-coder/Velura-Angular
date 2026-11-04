@@ -131,7 +131,7 @@ describe('AdminErpContentPage', () => {
 
     expect(page.rows().length).toBe(2);
     expect(page.total()).toBe(6);
-    expect(page.counts()).toEqual({ draft: 1, published: 4, archived: 0, categories: 2 });
+    expect(page.counts()).toEqual({ draft: 1, published: 4, archived: 0, categories: 2, subscribers: 1 });
     expect(page.canEdit()).toBe(true);
     expect(listCalls.some((params) => params['status'] === 'draft')).toBe(true);
     page.openEdit(POSTS[0]);

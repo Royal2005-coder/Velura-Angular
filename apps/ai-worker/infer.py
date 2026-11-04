@@ -98,8 +98,22 @@ def virtual_try_on(root: Path, job: dict) -> dict:
         result = LeffaInference(model=model)(data, ref_acceleration=True,
                     num_inference_steps=30, guidance_scale=2.5, seed=42, repaint=False)
     result["generated_image"][0].convert("RGB").save(root / "result.png")
-    return {"status": "success", "result_file": "result.png", "model": "leffa-dresscode-fp16",
-            "mode": job["mode"], "simulation_only": True, "gate": gate}
+    out = {"status": "success", "result_file": "result.png", "model": "leffa-dresscode-fp16",
+           "mode": job["mode"], "simulation_only": True, "gate": gate}
+    if job.get("render_3d") is True:
+        # 3D is an extra: a reconstruction failure never demotes the finished 2D try-on.
+        try:
+            import reconstruction_3d
+
+            if not reconstruction_3d.available():
+                raise RuntimeError("RENDER_3D_UNAVAILABLE")
+            stage = reconstruction_3d.render_turntable(root / "result.png", root / "render3d")
+            out["frames3d"] = stage["frames"]
+            out["glb_file"] = stage["glb"]
+            out["model"] = f"{out['model']}+tripsr-turntable"
+        except Exception as error:
+            out["render_3d_error"] = str(error) or type(error).__name__
+    return out
 
 
 def catalog_batch_images(batch: list) -> list[str]:

@@ -46,11 +46,11 @@ import { AdminErpPageHeader } from '../../shared/ui/admin-page-header';
 import { AdminErpPagination } from '../../shared/ui/admin-pagination';
 import { AdminErpTab, AdminErpTabs } from '../../shared/ui/admin-tabs';
 
-type ContentTab = 'all' | 'draft' | 'published' | 'archived';
+type ContentTab = 'all' | 'draft' | 'published' | 'archived' | 'subscribers';
 type EditorTab = 'content' | 'seo' | 'products';
 
 const EMPTY_BLOGS: AdminListPayload<AdminBlogRow> = { rows: [], count: 0 };
-const TABS: readonly ContentTab[] = ['all', 'draft', 'published', 'archived'];
+const TABS: readonly ContentTab[] = ['all', 'draft', 'published', 'archived', 'subscribers'];
 const EDITOR_TABS: readonly EditorTab[] = ['content', 'seo', 'products'];
 const PRODUCT_STATUS_LABELS: Readonly<Record<string, string>> = {
   on_sale: 'Đang bán',
@@ -71,6 +71,18 @@ interface SeoCheck {
   ok: boolean;
 }
 
+interface SubscriberRow {
+  readonly subscriber_id: string;
+  readonly email: string;
+  readonly status: 'active' | 'unsubscribed';
+  readonly source: string;
+  readonly subscribed_at: string;
+  readonly unsubscribed_at: string | null;
+}
+
+function isSubscriberRow(row: unknown): row is SubscriberRow {
+  return typeof row === 'object' && row !== null && 'subscriber_id' in row && 'email' in row;
+}
 /**
  * CMS workspace for blog content (KAN-106).
  *
@@ -109,10 +121,10 @@ export class AdminErpContentPage {
   readonly hasLoadedOnce = signal(false);
   readonly loadError = signal<string | null>(null);
   readonly notice = signal<string | null>(null);
-  readonly counts = signal({ draft: 0, published: 0, archived: 0, categories: 0 });
+  readonly counts = signal({ draft: 0, published: 0, archived: 0, categories: 0, subscribers: 0 });
+  readonly subscriberRows = signal<SubscriberRow[]>([]);
   readonly categories = signal<AdminContentCategory[]>([]);
   readonly categoryError = signal<string | null>(null);
-
   /** Editor state: `null` đóng form; bản đang sửa giữ `editing` để biết version gửi lại. */
   readonly draft = signal<BlogDraft | null>(null);
   readonly editing = signal<AdminBlogRow | null>(null);
@@ -161,6 +173,7 @@ export class AdminErpContentPage {
     { key: 'draft', label: 'Bản nháp', count: this.counts().draft },
     { key: 'published', label: 'Đã công bố', count: this.counts().published },
     { key: 'archived', label: 'Đã lưu trữ', count: this.counts().archived },
+    { key: 'subscribers', label: 'Người nhận tin', count: this.counts().subscribers },
   ]);
   readonly editorTabs = computed<readonly { key: EditorTab; label: string }[]>(() => [
     { key: 'content', label: 'Nội dung' },
@@ -168,7 +181,7 @@ export class AdminErpContentPage {
     { key: 'products', label: `Sản phẩm (${this.draft()?.productIds.length ?? 0})` },
   ]);
   readonly totalPages = computed(() => Math.max(1, Math.ceil(this.total() / this.pageSize)));
-  readonly rangeLabel = computed(() => adminRangeLabel(this.total(), this.page(), this.pageSize, 'bài viết'));
+  readonly rangeLabel = computed(() => adminRangeLabel(this.total(), this.page(), this.pageSize, this.tab() === 'subscribers' ? 'người đăng ký' : 'bài viết'));
   readonly statusChoices = computed(() => blogStatusChoices(this.editing()?.status, !this.editing()));
   readonly categoryOptions = computed(() => this.categories());
   readonly contentWords = computed(() => this.editorMetrics().words);
@@ -233,6 +246,37 @@ export class AdminErpContentPage {
     { key: 'featured', label: 'Nổi bật', value: (row) => ((row as AdminBlogRow).is_featured ? 'Có' : '—') },
     { key: 'updated', label: 'Sửa lần cuối', value: (row) => this.dateTime((row as AdminBlogRow).updated_at) },
   ]);
+  readonly subscriberColumns = computed<readonly AdminTableColumn[]>(() => [
+    {
+      key: 'email',
+      label: 'Email khách hàng',
+      value: (row) => (isSubscriberRow(row) ? row.email : ''),
+    },
+    {
+      key: 'source',
+      label: 'Nguồn đăng ký',
+      value: (row) =>
+        isSubscriberRow(row) && row.source === 'storefront_footer'
+          ? 'Chân trang Website'
+          : isSubscriberRow(row)
+          ? row.source || 'Website'
+          : '—',
+    },
+    {
+      key: 'status',
+      label: 'Trạng thái',
+      value: (row) => (isSubscriberRow(row) && row.status === 'active' ? 'Đang nhận tin' : 'Đã hủy'),
+      badge: (row) => ({
+        label: isSubscriberRow(row) && row.status === 'active' ? 'Đang nhận tin' : 'Đã hủy',
+        tone: isSubscriberRow(row) && row.status === 'active' ? 'success' : 'neutral',
+      }),
+    },
+    {
+      key: 'subscribed_at',
+      label: 'Ngày đăng ký',
+      value: (row) => (isSubscriberRow(row) ? this.dateTime(row.subscribed_at) : '—'),
+    },
+  ]);
 
   constructor() {
     this.loadCategories();
@@ -290,27 +334,42 @@ export class AdminErpContentPage {
     }
     this.loading.set(true);
     this.loadError.set(null);
-    const status = this.tab() === 'all' ? '' : this.tab();
+    const status = this.tab() === 'all' || this.tab() === 'subscribers' ? '' : this.tab();
     forkJoin({
-      list: this.api.listBlogs({ status, q: this.search(), limit: String(this.pageSize), offset: adminOffset(this.page(), this.pageSize) }).pipe(
-        catchError((error: unknown) => {
-          this.loadError.set(adminErrorMessage(error, 'Không tải được danh sách bài viết.'));
-          return of(EMPTY_BLOGS);
-        }),
-      ),
+      list: this.tab() === 'subscribers'
+        ? this.api.listSubscribers({ limit: String(this.pageSize), offset: adminOffset(this.page(), this.pageSize) }).pipe(
+            catchError((error: unknown) => {
+              this.loadError.set(adminErrorMessage(error, 'Không tải được danh sách người đăng ký.'));
+              return of({ rows: [], count: 0, activeCount: 0, unsubscribedCount: 0 });
+            })
+          )
+        : this.api.listBlogs({ status, q: this.search(), limit: String(this.pageSize), offset: adminOffset(this.page(), this.pageSize) }).pipe(
+            catchError((error: unknown) => {
+              this.loadError.set(adminErrorMessage(error, 'Không tải được danh sách bài viết.'));
+              return of(EMPTY_BLOGS);
+            }),
+          ),
       draft: this.api.listBlogs({ status: 'draft', limit: '1' }).pipe(catchError(() => of(EMPTY_BLOGS))),
       published: this.api.listBlogs({ status: 'published', limit: '1' }).pipe(catchError(() => of(EMPTY_BLOGS))),
       archived: this.api.listBlogs({ status: 'archived', limit: '1' }).pipe(catchError(() => of(EMPTY_BLOGS))),
+      subs: this.api.listSubscribers({ limit: '1' }).pipe(catchError(() => of({ rows: [], count: 0, activeCount: 0, unsubscribedCount: 0 }))),
     }).subscribe((payload) => {
-      const rows = adminListRows(payload.list);
-      this.rows.set(rows);
-      this.cacheProducts(rows.flatMap((row) => row.products || []));
-      this.total.set(adminListCount(payload.list));
+      if (this.tab() === 'subscribers') {
+        const subData = payload.list as { rows: SubscriberRow[]; count: number; activeCount: number; unsubscribedCount: number };
+        this.subscriberRows.set(subData.rows || []);
+        this.total.set(subData.count || 0);
+      } else {
+        const rows = adminListRows(payload.list as AdminListPayload<AdminBlogRow>);
+        this.rows.set(rows);
+        this.cacheProducts(rows.flatMap((row) => row.products || []));
+        this.total.set(adminListCount(payload.list as AdminListPayload<AdminBlogRow>));
+      }
       this.counts.update((current) => ({
         ...current,
         draft: adminListCount(payload.draft),
         published: adminListCount(payload.published),
         archived: adminListCount(payload.archived),
+        subscribers: (payload.subs as { count: number }).count || 0,
       }));
       this.loading.set(false);
       this.hasLoadedOnce.set(true);

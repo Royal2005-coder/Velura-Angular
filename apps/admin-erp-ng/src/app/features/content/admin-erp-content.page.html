@@ -20,8 +20,8 @@
 <section class="content-kpis" aria-label="Tóm tắt nội dung">
   <app-erp-kpi-card label="Đã công bố" [value]="counts().published" hint="Khách thấy trên website" tone="success" icon="eye" [loading]="loading() && !hasLoadedOnce()" />
   <app-erp-kpi-card label="Bản nháp" [value]="counts().draft" hint="Chưa phát hành" tone="neutral" icon="box" [loading]="loading() && !hasLoadedOnce()" />
-  <app-erp-kpi-card label="Đã lưu trữ" [value]="counts().archived" hint="Gỡ xuống, chỉ về nháp" tone="warning" icon="log" [loading]="loading() && !hasLoadedOnce()" />
-  <app-erp-kpi-card label="Danh mục blog" [value]="counts().categories" hint="Nguồn từ content_category" tone="accent" icon="tag" [loading]="loading() && !hasLoadedOnce()" />
+  <app-erp-kpi-card label="Người đăng ký nhận tin" [value]="counts().subscribers" hint="Đăng ký nhận ưu đãi 10%" tone="accent" icon="user" [loading]="loading() && !hasLoadedOnce()" />
+  <app-erp-kpi-card label="Danh mục blog" [value]="counts().categories" hint="Nguồn từ content_category" tone="neutral" icon="tag" [loading]="loading() && !hasLoadedOnce()" />
 </section>
 
 @if (!canRead()) {
@@ -56,17 +56,30 @@
       <div class="content-banner content-banner--info" role="status">{{ notice() }}</div>
     }
 
-    <app-erp-data-table
-      caption="Danh sách bài viết"
-      [columns]="columns()"
-      [rows]="rows()"
-      [loading]="loading()"
-      emptyTitle="Chưa có bài viết nào"
-      emptyMessage="Bấm “Bài viết mới” để tạo bản nháp đầu tiên, hoặc đổi bộ lọc."
-      [clickable]="canUpdate()"
-      (rowSelected)="openEdit($event)"
-      (retry)="reload()"
-    />
+    @if (tab() === 'subscribers') {
+      <app-erp-data-table
+        caption="Danh sách người đăng ký nhận bản tin"
+        [columns]="subscriberColumns()"
+        [rows]="subscriberRows()"
+        [loading]="loading()"
+        emptyTitle="Chưa có người đăng ký nhận tin nào"
+        emptyMessage="Khách hàng đăng ký nhận ưu đãi 10% tại chân trang web sẽ xuất hiện tại đây."
+        [clickable]="false"
+        (retry)="reload()"
+      />
+    } @else {
+      <app-erp-data-table
+        caption="Danh sách bài viết"
+        [columns]="columns()"
+        [rows]="rows()"
+        [loading]="loading()"
+        emptyTitle="Chưa có bài viết nào"
+        emptyMessage="Bấm “Bài viết mới” để tạo bản nháp đầu tiên, hoặc đổi bộ lọc."
+        [clickable]="canUpdate()"
+        (rowSelected)="openEdit($event)"
+        (retry)="reload()"
+      />
+    }
     <app-erp-pagination [page]="page()" [pageCount]="totalPages()" [label]="rangeLabel()" (changed)="goPage($event)" />
     <p class="content-hint">Bản nháp không xuất hiện ở <code>/api/content/blogs</code>: RLS của bảng chỉ mở dòng <code>status = published</code>.</p>
   </section>

@@ -224,6 +224,16 @@ export class AiImageWorkbench {
   private studioGeneration = 0;
   readonly preview = signal('');
   readonly result = signal('');
+  /** Studio 3D: blob URLs of the turntable frames, indexed by orbit angle. */
+  readonly frames3d = signal<string[]>([]);
+  readonly glbUrl = signal('');
+  readonly has3d = computed(() => this.frames3d().length >= 12);
+  readonly frameSrc = computed(() => {
+    const frames = this.frames3d();
+    if (!frames.length) return this.result();
+    const index = Math.round((((this.orbitAngle() % 360) + 360) % 360) / (360 / frames.length)) % frames.length;
+    return frames[index];
+  });
   readonly busy = signal(false);
   readonly job = signal<AiJob | null>(null);
   readonly qualityPassed = signal(false);
@@ -325,9 +335,11 @@ export class AiImageWorkbench {
     return `${a}° · Góc nghiêng 45° phải`;
   });
 
-  readonly currentDisplayImage = computed(() =>
-    this.showOriginal() ? (this.mode() === 'personal' ? this.preview() : this.studioImage()) : this.result(),
-  );
+  readonly currentDisplayImage = computed(() => {
+    if (this.showOriginal()) return this.mode() === 'personal' ? this.preview() : this.studioImage();
+    // Real turntable frames replace the single render whenever the 3D stage produced them.
+    return this.has3d() ? this.frameSrc() : this.result();
+  });
 
   readonly roomTransform3D = computed(() => {
     const a = this.orbitAngle();
@@ -780,6 +792,33 @@ export class AiImageWorkbench {
   }
 
   /** Requires explicit confirmation to generate try-on. */
+   /** Fetch turntable frames + mesh as blob URLs; a missing 3D stage simply leaves them empty. */
+  private async load3dArtifacts(job: AiJob): Promise<void> {
+    this.frames3d().forEach((url) => URL.revokeObjectURL(url));
+    this.frames3d.set([]);
+    if (this.glbUrl()) URL.revokeObjectURL(this.glbUrl());
+    this.glbUrl.set('');
+    const names = job.frames3d?.length ? job.frames3d : [];
+    if (!names.length) return;
+    const epoch = this.generation;
+    try {
+      const blobs = await Promise.all(
+        names.map((name) => firstValueFrom(this.model.resultFile(job.id, name))),
+      );
+      if (epoch !== this.generation) {
+        blobs.forEach((b) => URL.revokeObjectURL(URL.createObjectURL(b)));
+        return;
+      }
+      this.frames3d.set(blobs.map((b) => URL.createObjectURL(b)));
+      if (job.glb_url) {
+        const glb = await firstValueFrom(this.model.resultFile(job.id, 'model.glb'));
+        if (epoch === this.generation) this.glbUrl.set(URL.createObjectURL(glb));
+      }
+    } catch {
+      // The 2D result stays valid; the viewer falls back to the tilt presentation.
+    }
+  }
+
    async generate(): Promise<void> {
     if (this.task() === 'virtual_try_on') {
       const isMember = await this.verifyMemberIdentity();
@@ -872,6 +911,7 @@ export class AiImageWorkbench {
         variant_id: this.variantId() || undefined,
         mode: this.mode(),
         studio_asset_id: this.mode() === 'studio' ? this.studio() : undefined,
+        render3d: this.mode() === 'studio',
         consent: true as const,
         confirmed: true as const,
         idempotency_key: '',
@@ -963,6 +1003,7 @@ export class AiImageWorkbench {
       this.release(this.result());
       this.result.set(URL.createObjectURL(blob));
       this.showOriginal.set(false);
+      await this.load3dArtifacts(current);
     } catch {
       if (epoch !== this.generation) return;
       this.release(this.result());

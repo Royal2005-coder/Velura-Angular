@@ -20,6 +20,9 @@ export interface AiJob {
   gate?: { valid?: boolean; reasons?: string[]; metrics?: Record<string, number> };
   error?: string;
   matches?: { product_id: string; score: number }[];
+  /** KAN-66 VTO 3D: published turntable frames and mesh for studio try-on. */
+  frames3d?: string[];
+  glb_url?: string;
 }
 export interface StudioAsset {
   id: string;
@@ -58,6 +61,8 @@ export interface AiJobInput {
   variant_id?: string;
   mode?: 'personal' | 'studio';
   studio_asset_id?: string;
+  /** Studio try-on renders the model inside a 3D scene; personal photos stay 2D. */
+  render3d?: boolean;
   consent: true;
   confirmed: true;
   idempotency_key: string;
@@ -157,5 +162,13 @@ export class AiEngineService {
     return this.http.get(`${this.base}/api/user/ai/jobs/${encodeURIComponent(id)}/result`, {
       responseType: 'blob',
     });
+  }
+
+  /** One 3D artifact (frame or .glb) of an owned job; the server enforces the name allowlist. */
+  resultFile(id: string, name: string): Observable<Blob> {
+    return this.http.get(
+      `${this.base}/api/user/ai/jobs/${encodeURIComponent(id)}/render3d/${encodeURIComponent(name)}`,
+      { responseType: 'blob' },
+    );
   }
 }

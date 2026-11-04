@@ -11,11 +11,50 @@
         <p>Thời trang thông minh cho phái đẹp hiện đại. Những thiết kế tinh tế, nữ tính và thanh lịch.</p>
         
         <div class="site-footer__newsletter">
-          <span class="site-footer__newsletter-title">ĐĂNG KÝ NHẬN ƯU ĐÃI 10%</span>
-          <form class="site-footer__newsletter-form" (submit)="$event.preventDefault()">
-            <input type="email" placeholder="Nhập email của bạn..." class="site-footer__newsletter-input" aria-label="Email nhận bản tin" />
-            <button type="submit" class="site-footer__newsletter-btn">Gửi</button>
+          <span id="newsletter-heading" class="site-footer__newsletter-title">ĐĂNG KÝ NHẬN ƯU ĐÃI 10%</span>
+          <form class="site-footer__newsletter-form" (submit)="submitNewsletter($event)" aria-labelledby="newsletter-heading">
+            <input
+              type="text"
+              name="hp_website"
+              tabindex="-1"
+              autocomplete="off"
+              style="position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0;"
+              [value]="honeypot()"
+              (input)="honeypot.set($any($event.target).value)"
+            />
+            <input
+              type="email"
+              placeholder="Nhập email của bạn..."
+              class="site-footer__newsletter-input"
+              aria-label="Email nhận bản tin"
+              [value]="email()"
+              (input)="onEmailInput($event)"
+              [disabled]="submitting()"
+              required
+            />
+            <button
+              type="submit"
+              class="site-footer__newsletter-btn"
+              [disabled]="submitting() || !email().trim()"
+              [attr.aria-busy]="submitting()"
+            >
+              @if (submitting()) {
+                <span class="site-footer__spinner" aria-hidden="true"></span>
+              } @else {
+                Gửi
+              }
+            </button>
           </form>
+          @if (statusMessage()) {
+            <p class="site-footer__newsletter-feedback site-footer__newsletter-feedback--success" role="status" aria-live="polite">
+              {{ statusMessage() }}
+            </p>
+          }
+          @if (errorMessage()) {
+            <p class="site-footer__newsletter-feedback site-footer__newsletter-feedback--error" role="alert" aria-live="polite">
+              {{ errorMessage() }}
+            </p>
+          }
         </div>
 
         <div class="site-footer__social">

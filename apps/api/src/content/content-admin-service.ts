@@ -1,9 +1,10 @@
 import { generateGeminiJson } from "../gemini-client.js";
 import { HttpError } from "../http.js";
 import { requirePermission } from "../rbac.js";
-import { asJsonObject, asString, type AuthContext, type JsonObject, type RequestMeta } from "../types.js";
+import { asJsonObject, asString, errorMessage, type AuthContext, type JsonObject, type RequestMeta } from "../types.js";
 import { blogPlainText, sanitizeBlogHtml } from "./blog-html.js";
 import type { ContentAdminRepository } from "./content-admin-repository.js";
+import { newsletterService } from "../newsletter/newsletter-service.js";
 
 /** Trạng thái nội dung mà migration 078 chấp nhận. */
 export const CONTENT_STATUSES = ["draft", "published", "archived"] as const;
@@ -169,7 +170,20 @@ export function createContentAdminService({ repository, generateJson = generateG
       const input = draft(body);
       validate(input, false);
       try {
-        return await repository.upsertBlog({ ...input, blogId: null, ipAddress: requestMeta.ipAddress }, context?.accessToken ?? null);
+        const saved = await repository.upsertBlog({ ...input, blogId: null, ipAddress: requestMeta.ipAddress }, context?.accessToken ?? null);
+        if (saved.status === "published" && !saved.newsletter_broadcast_at) {
+          void newsletterService.broadcastBlog({
+            blogId: asString(saved.blog_id),
+            slug: asString(saved.slug),
+            title: asString(saved.title),
+            excerpt: asString(saved.excerpt),
+            imageUrl: asString(saved.image_url),
+            author: asString(saved.author)
+          }).catch((err: unknown) => {
+            console.warn("[BLOG_BROADCAST_TRIGGER] Broadcast failed on create:", errorMessage(err));
+          });
+        }
+        return saved;
       } catch (error: unknown) {
         throw mapContentDatabaseError(error);
       }
@@ -183,7 +197,20 @@ export function createContentAdminService({ repository, generateJson = generateG
       const input = draft(body);
       validate(input, true);
       try {
-        return await repository.upsertBlog({ ...input, blogId, ipAddress: requestMeta.ipAddress }, context?.accessToken ?? null);
+        const saved = await repository.upsertBlog({ ...input, blogId, ipAddress: requestMeta.ipAddress }, context?.accessToken ?? null);
+        if (saved.status === "published" && !saved.newsletter_broadcast_at) {
+          void newsletterService.broadcastBlog({
+            blogId: asString(saved.blog_id),
+            slug: asString(saved.slug),
+            title: asString(saved.title),
+            excerpt: asString(saved.excerpt),
+            imageUrl: asString(saved.image_url),
+            author: asString(saved.author)
+          }).catch((err: unknown) => {
+            console.warn("[BLOG_BROADCAST_TRIGGER] Broadcast failed on update:", errorMessage(err));
+          });
+        }
+        return saved;
       } catch (error: unknown) {
         throw mapContentDatabaseError(error);
       }

@@ -34,6 +34,9 @@ export interface AiJobView {
   attempt?: number;
   retry_of?: string;
   result_url?: string;
+  /** KAN-66 VTO 3D: strict-name turntable frames and mesh published from the job directory. */
+  frames3d?: string[];
+  glb_url?: string;
   gate?: Record<string, unknown>;
   error?: string;
   matches?: Array<{ product_id: string; score: number }>;
@@ -68,6 +71,9 @@ export interface AiWorkerResult {
   status: "success" | "validation_failed" | "failed";
   gate?: Record<string, unknown>;
   result_file?: string;
+  /** KAN-66 VTO 3D stage: turntable frame names under render3d/ and the mesh file name. */
+  frames3d?: string[];
+  glb_file?: string;
   embedding?: number[];
   model?: string;
   dimensions?: number;

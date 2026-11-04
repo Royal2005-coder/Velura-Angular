@@ -379,6 +379,7 @@ export class AiService {
       variant_id: "",
       consent: true,
       confirmed: true,
+      render_3d: task === "virtual_try_on" && body.render3d === true,
     };
     let catalog_metadata: Omit<CatalogImageVector, "embedding"> | undefined;
     let catalog_batch_metadata: AiJob["catalog_batch_metadata"];
@@ -676,6 +677,16 @@ export class AiService {
       );
     return this.repo.result(job);
   }
+  /** Serve one validated 3D artifact (turntable frame or .glb) of an owned try-on job. */
+  async resultFile(owner: string, id: string, name: string): Promise<Buffer> {
+    const job = await this.owned(owner, id);
+    if (this.storageBlocked) throw new HttpError(503, "AI_QUEUE_STORAGE_FAILED", "Kho tác vụ tạm thời không khả dụng.");
+    if (job.status !== "success" || !job.glb_url)
+      throw new HttpError(409, "RESULT_UNAVAILABLE", "Kết quả 3D chưa sẵn sàng.");
+    if (!/^(frame-\d{3}\.png|model\.glb)$/.test(name))
+      throw new HttpError(404, "ARTIFACT_NOT_FOUND", "Không tìm thấy tệp 3D của phiên thử đồ.");
+    return this.repo.resultFile(job, name);
+  }
   /** Recover interrupted local work as failed; only queued work can claim the single GPU. */
   async recover(): Promise<void> {
     await this.repo.purge();
@@ -769,6 +780,16 @@ export class AiService {
             if (metadata.format !== "png" || (metadata.pages || 1) !== 1) throw new Error("INVALID_IMAGE_RESULT");
             await output.stats();
             job.result_url = `jobs/${job.id}/result`;
+          }
+          if (result.status === "success" && Array.isArray(result.frames3d) && typeof result.glb_file === "string") {
+            // Only strict artifact names are ever published; a tampered worker cannot widen the path set.
+            const frames = result.frames3d.filter(
+              (name: unknown): name is string => typeof name === "string" && /^frame-\d{3}\.png$/.test(name),
+            );
+            if (frames.length >= 12 && result.glb_file === "model.glb") {
+              job.frames3d = frames.map((name) => `jobs/${job.id}/render3d/${name}`);
+              job.glb_url = `jobs/${job.id}/render3d/model.glb`;
+            }
           }
           if (job.task === "image_embedding" && result.status === "success") {
             if (job.catalog_batch_metadata) {

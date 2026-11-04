@@ -21,10 +21,10 @@ import { handleLocalGatewayIpn, localGatewayConfigured } from "../payments/local
 import { stripeConfigured } from "../payments/stripe.js";
 import { requireCustomerOrderAccess } from "./order-access.js";
 import { customerPaymentFacts } from "./order-payment-presentation.js";
+import { handleNewsletterRoute } from "../newsletter/newsletter-router.js";
 import { readJson } from "../http.js";
 import { selectOne, selectRows } from "../supabase.js";
 import { asString } from "../types.js";
-
 import type { AuthContext, HeaderMap, HttpRequest, HttpResponse } from "../types.js";
 
 const checkoutService = new CheckoutService(createCheckoutRepository());
@@ -43,7 +43,7 @@ export async function handleUserRoute(
   const subRoute = parts[2]; // e.g. "auth", "profile", "addresses", "style-quiz", "wishlist", "orders", "reviews", "returns", "cart", "categories", "vouchers"
   const action = parts[3];   // e.g. "signup", "signin", or order ID, etc.
 
-  if (subRoute !== "auth") {
+  if (subRoute !== "auth" && subRoute !== "newsletter") {
     const authHeader = req.headers.authorization || "";
     if (authHeader && /^Bearer\s+(.+)$/i.test(authHeader) && (!context.authUser || !context.profile)) {
       throw new HttpError(401, "UNAUTHORIZED", "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.");
@@ -77,6 +77,9 @@ export async function handleUserRoute(
 
     case "vouchers":
       return await handleVouchersRoute(req, res, action, corsHeaders, context);
+      
+    case "newsletter":
+      return await handleNewsletterRoute(req, res, action, corsHeaders);
 
     case "checkout":
       return await handleCheckoutRoute(req, res, action, corsHeaders, context);

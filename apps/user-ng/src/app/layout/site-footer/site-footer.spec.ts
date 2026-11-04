@@ -43,28 +43,34 @@ describe('SiteFooter', () => {
     expect(postSpy).not.toHaveBeenCalled();
   });
 
-  it('submits valid email, displays success message, and clears input', async () => {
+  it('submits valid email, displays success modal with registered email, and clears input', async () => {
     const footer = await createStorefrontPage(SiteFooter);
     const api = TestBed.inject(ApiService);
     const postSpy = vi.spyOn(api, 'post').mockReturnValue(
       of({
         success: true,
-        message: 'Đăng ký thành công! Mã ưu đãi 10% đã được gửi tới email của bạn.'
+        message: 'Đã ghi nhận! Vui lòng kiểm tra email của bạn để nhận mã giảm giá 10%.'
       })
     );
 
-    footer.email.set('phuong.thao@example.com');
+    footer.email.set('phuong.thao@gmail.com');
     const event = { preventDefault: vi.fn() } as unknown as Event;
     footer.submitNewsletter(event);
 
     expect(postSpy).toHaveBeenCalledWith('/api/user/newsletter/subscribe', {
-      email: 'phuong.thao@example.com',
+      email: 'phuong.thao@gmail.com',
       source: 'storefront_footer',
       hp_website: ''
     });
     expect(footer.submitting()).toBe(false);
-    expect(footer.statusMessage()).toContain('Đăng ký thành công');
+    expect(footer.successModalOpen()).toBe(true);
+    expect(footer.registeredEmail()).toBe('phuong.thao@gmail.com');
+    expect(footer.isGmail()).toBe(true);
+    expect(footer.statusMessage()).toContain('Đã ghi nhận');
     expect(footer.email()).toBe('');
+
+    footer.closeSuccessModal();
+    expect(footer.successModalOpen()).toBe(false);
   });
 
   it('displays error message when the API request fails', async () => {

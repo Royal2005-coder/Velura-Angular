@@ -93,8 +93,27 @@ export class PersonalColorComponent {
   readonly statusLabel = computed(() => {
     const analysis = this.analysis();
     const status = analysis?.status;
-    if (status === 'FAILED' && analysis?.error === 'COLOR_RATE_LIMITED') {
+    const error = analysis?.error || '';
+    if (status === 'FAILED' && error === 'COLOR_RATE_LIMITED') {
       return 'Hệ thống AI đang xử lý nhiều lượt cùng lúc. Vui lòng bấm phân tích lại sau giây lát.';
+    }
+    if (status === 'FAILED' && error === 'COLOR_MODEL_UNAVAILABLE') {
+      return 'Dịch vụ phân tích AI tạm thời không kết nối được. Màu đã xác nhận vẫn được giữ — hãy thử lại sau ít phút.';
+    }
+    if (status === 'FAILED' && error === 'COLOR_MODEL_OUTPUT') {
+      return 'Kết quả phân tích không hợp lệ nên chưa được lưu. Màu đã xác nhận vẫn được giữ — hãy bấm phân tích lại.';
+    }
+    if (status === 'VALIDATION_FAILED' && error.startsWith('COLOR_PICTURE_GUIDANCE:')) {
+      const criteria: Record<string, string> = {
+        lighting_valid: 'thiếu ánh sáng tự nhiên trung tính',
+        skin_visible: 'không thấy rõ khuôn mặt với da mộc',
+        blur_free: 'ảnh đang mờ',
+        filter_free: 'ảnh có filter/làm đẹp che sắc tố thật',
+      };
+      const misses = error.slice('COLOR_PICTURE_GUIDANCE:'.length).split(',').map((key) => criteria[key]).filter(Boolean);
+      return misses.length
+        ? `Ảnh chưa đạt: ${misses.join(', ')}. Chụp lại theo hướng dẫn rồi phân tích tiếp.`
+        : 'Ảnh chưa đáp ứng hướng dẫn. Hãy chụp lại.';
     }
     const labels: Record<string, string> = { RUNNING: 'Đang kiểm tra ảnh và phân tích…', SUCCESS: 'Bản xem trước — chưa lưu', LOW_CONFIDENCE: 'Độ tin cậy thấp — không thể xác nhận. Hãy chụp ảnh khác.', VALIDATION_FAILED: 'Ảnh chưa đáp ứng hướng dẫn. Hãy chụp lại.', FAILED: 'Phân tích thất bại. Màu đã xác nhận vẫn được giữ.', TIMEOUT: 'Phân tích đã hết thời gian. Màu đã xác nhận vẫn được giữ.', CANCELLED: 'Đã huỷ. Màu đã xác nhận vẫn được giữ.', CONFIRMED: 'Đã xác nhận và lưu vào hồ sơ phong cách.' };
     return status ? labels[status] : '';

@@ -20,10 +20,18 @@ export async function handleContentAdminRoute({
   headers,
   service,
 }: RouteArgs<ContentAdminService>): Promise<boolean> {
-  if (parts[0] !== "api" || parts[1] !== "v1" || parts[2] !== "admin" || parts[3] !== "content" || parts[4] !== "blogs") {
+  if (parts[0] !== "api" || parts[1] !== "v1" || parts[2] !== "admin" || parts[3] !== "content") {
     return false;
   }
 
+  if (parts[4] === "subscribers" && req.method === "GET") {
+    sendJson(res, 200, await service.listSubscribers(context, url.searchParams), headers);
+    return true;
+  }
+
+  if (parts[4] !== "blogs") {
+    return false;
+  }
   if (req.method === "GET" && parts.length === 5) {
     sendJson(res, 200, await service.listBlogs(context, url.searchParams), headers);
     return true;

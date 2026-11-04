@@ -11,3 +11,11 @@ CVE-2026-42946
 CVE-2026-49975
 CVE-2026-60005
 CVE-2026-9256
+
+# KAN-66 risk acceptance: torch 2.6.0+cu124 HIGH CVE-2026-24747 (fixed upstream in 2.10.0).
+# Accepted because: ai-worker runs on the internal velura-k3s cluster only, reachable solely by
+# velura-api with a shared key; it never executes untrusted code paths from this advisory,
+# and upgrading torch blind would risk the LEFFA/fashn 2D try-on that is live in production.
+# Review-by: 2027-02-01 (or immediately before any commercial launch), tracked as a torch
+# upgrade task with GPU verification of LEFFA + fashn-vton.
+CVE-2026-24747

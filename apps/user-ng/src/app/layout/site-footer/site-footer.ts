@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
 import { ApiService } from '../../core/services/api.service';
@@ -24,6 +24,10 @@ export class SiteFooter {
   readonly statusMessage = signal<string | null>(null);
   readonly errorMessage = signal<string | null>(null);
 
+  /** Modal thông báo đã ghi nhận thành công và yêu cầu kiểm tra email */
+  readonly successModalOpen = signal<boolean>(false);
+  readonly registeredEmail = signal<string>('');
+  readonly isGmail = computed(() => this.registeredEmail().toLowerCase().includes('@gmail.com'));
   /**
    * Bật/tắt hiển thị tooltip khi chạm trên màn hình di động / tablet
    */
@@ -40,6 +44,13 @@ export class SiteFooter {
     if (this.errorMessage()) {
       this.errorMessage.set(null);
     }
+  }
+
+  /**
+   * Đóng modal thông báo đăng ký thành công
+   */
+  closeSuccessModal(): void {
+    this.successModalOpen.set(false);
   }
 
   /**
@@ -68,7 +79,9 @@ export class SiteFooter {
       .subscribe({
         next: (res) => {
           this.submitting.set(false);
-          this.statusMessage.set(res.message || 'Đăng ký thành công! Mã ưu đãi 10% đã được gửi tới email của bạn.');
+          this.registeredEmail.set(rawEmail);
+          this.successModalOpen.set(true);
+          this.statusMessage.set(res.message || 'Đã ghi nhận! Vui lòng kiểm tra email của bạn để nhận mã giảm giá 10%.');
           this.email.set('');
         },
         error: (err: unknown) => {

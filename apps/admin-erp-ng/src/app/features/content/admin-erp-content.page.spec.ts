@@ -76,6 +76,21 @@ describe('AdminErpContentPage', () => {
         harness.seoSuggestions += 1;
         return of({ metaTitle: 'Áo lụa Hà Nội', metaDescription: 'Chọn áo lụa đúng size.', tags: ['áo lụa', 'hà nội'], summary: 'Tóm tắt SEO.' });
       },
+      listSubscribers: (params: Record<string, string> = {}) => of({
+        rows: [
+          {
+            subscriber_id: 'sub-1',
+            email: 'customer@velura.test',
+            status: 'active' as const,
+            source: 'storefront_footer',
+            subscribed_at: '2026-11-04T10:00:00Z',
+            unsubscribed_at: null,
+          },
+        ],
+        count: 1,
+        activeCount: 1,
+        unsubscribedCount: 0,
+      }),
       createBlog: (body: Record<string, unknown>) => {
         created.push(body);
         return failure ? throwError(() => failure) : of({ ...POSTS[1], ...body, blog_id: 'b-9', version: 1 });
@@ -116,7 +131,7 @@ describe('AdminErpContentPage', () => {
 
     expect(page.rows().length).toBe(2);
     expect(page.total()).toBe(6);
-    expect(page.counts()).toEqual({ draft: 1, published: 4, archived: 0, categories: 2 });
+    expect(page.counts()).toEqual({ draft: 1, published: 4, archived: 0, categories: 2, subscribers: 1 });
     expect(page.canEdit()).toBe(true);
     expect(listCalls.some((params) => params['status'] === 'draft')).toBe(true);
     page.openEdit(POSTS[0]);

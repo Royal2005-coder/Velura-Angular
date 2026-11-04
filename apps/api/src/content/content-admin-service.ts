@@ -2,10 +2,10 @@ import { generateGeminiJson } from "../gemini-client.js";
 import { HttpError } from "../http.js";
 import { requirePermission } from "../rbac.js";
 import { asJsonObject, asString, errorMessage, type AuthContext, type JsonObject, type RequestMeta } from "../types.js";
+import { selectRows } from "../supabase.js";
 import { blogPlainText, sanitizeBlogHtml } from "./blog-html.js";
 import type { ContentAdminRepository } from "./content-admin-repository.js";
 import { newsletterService } from "../newsletter/newsletter-service.js";
-
 /** Trạng thái nội dung mà migration 078 chấp nhận. */
 export const CONTENT_STATUSES = ["draft", "published", "archived"] as const;
 export type ContentStatus = (typeof CONTENT_STATUSES)[number];
@@ -80,12 +80,12 @@ export interface ContentDraftInput {
 
 export interface ContentAdminService {
   listBlogs(context: AuthContext | undefined, searchParams: URLSearchParams): Promise<JsonObject>;
+  listSubscribers(context: AuthContext | undefined, searchParams: URLSearchParams): Promise<JsonObject>;
   createBlog(context: AuthContext | undefined, body: JsonObject, requestMeta: RequestMeta): Promise<JsonObject>;
   updateBlog(context: AuthContext | undefined, blogId: string, body: JsonObject, requestMeta: RequestMeta): Promise<JsonObject>;
   /** Draft-only AI assistance; never persists or publishes, the editor decides what to accept. */
   suggestSeo(context: AuthContext | undefined, body: JsonObject): Promise<JsonObject>;
 }
-
 export function createContentAdminService({ repository, generateJson = generateGeminiJson }: {
   repository: ContentAdminRepository;
   generateJson?: typeof generateGeminiJson;
@@ -165,6 +165,36 @@ export function createContentAdminService({ repository, generateJson = generateG
       );
     },
 
+    async listSubscribers(context, searchParams) {
+      requirePermission(context as AuthContext, "content", "read");
+      const limit = integer(searchParams.get("limit"), 50, 200);
+      const offset = integer(searchParams.get("offset"), 0, 100000);
+      const status = (searchParams.get("status") || "").trim();
+      const query: Record<string, string> = {
+        select: "subscriber_id,email,status,source,subscribed_at,unsubscribed_at",
+        order: "subscribed_at.desc",
+        limit: String(limit),
+        offset: String(offset)
+      };
+      if (status && (status === "active" || status === "unsubscribed")) {
+        query.status = `eq.${status}`;
+      }
+      try {
+        const result = await selectRows("newsletter_subscribers", query);
+        const allRows = await selectRows("newsletter_subscribers", { select: "status" });
+        const activeCount = (allRows.rows || []).filter(r => r.status === "active").length;
+        const unsubscribedCount = (allRows.rows || []).filter(r => r.status === "unsubscribed").length;
+        return {
+          rows: result.rows || [],
+          count: allRows.rows?.length || (result.rows || []).length,
+          activeCount,
+          unsubscribedCount
+        };
+      } catch (err: unknown) {
+        console.warn("[ADMIN_SUBSCRIBERS] Query failed:", errorMessage(err));
+        return { rows: [], count: 0, activeCount: 0, unsubscribedCount: 0 };
+      }
+    },
     async createBlog(context, body, requestMeta) {
       requirePermission(context as AuthContext, "content", "create");
       const input = draft(body);

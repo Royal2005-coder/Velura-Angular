@@ -124,6 +124,8 @@ spec:
                   key: AI_WORKER_KEY
             - name: AI_WEIGHTS_DIR
               value: /weights
+            - name: U2NET_HOME
+              value: /weights/rembg
             - name: TMPDIR
               value: /private
           startupProbe:

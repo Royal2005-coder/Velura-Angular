@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile, rm, stat } from "node:fs/promises";
+import { mkdir, readFile, writeFile, rm, stat, realpath } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { AiAsset, AiJob } from "./ai-types.js";
@@ -137,6 +137,15 @@ export class LocalAiRepository {
         await rm(join(this.root, "assets", filename), { force: true });
       }
     }
+  }
+  /** Turntable frames and the .glb live in the job's render3d directory; names are exact-matched. */
+  async resultFile(job: AiJob, name: string): Promise<Buffer> {
+    const path = join(job.directory, "render3d", name);
+    const resolved = await realpath(path);
+    if (!resolved.startsWith(join(await realpath(job.directory), "render3d")))
+      throw new Error("RESULT_PATH_ESCAPE");
+    if ((await stat(resolved)).size > 24 * 1024 * 1024) throw new Error("RESULT_TOO_LARGE");
+    return readFile(resolved);
   }
   /** Bound result bytes before reading an image into the HTTP process. */
   async result(job: AiJob): Promise<Buffer> {

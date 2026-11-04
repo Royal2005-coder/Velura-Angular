@@ -29,17 +29,15 @@ def available() -> bool:
         return False
 
 
-def _weights_present() -> bool:
-    root = Path("./ckpts")
-    return (root / "TripoSR" / "ts_huge_df_checkpoints.ckpt").is_file() or bool(
-        (_root_env() / "TripoSR").is_dir()
-    )
-
-
-def _root_env() -> Path:
+def _weights_root() -> Path:
     import os
 
-    return Path(os.environ.get("AI_WORKER_ASSET_ROOT", "./assets"))
+    return Path(os.environ.get("AI_WEIGHTS_DIR", "./ckpts"))
+
+
+def _weights_present() -> bool:
+    root = _weights_root()
+    return (root / "TripoSR" / "model.ckpt").is_file() and (root / "rembg" / "u2net.onnx").is_file()
 
 
 def _cutout(image_path: Path, out_dir: Path) -> Path:
@@ -61,7 +59,7 @@ def _reconstruct(cutout_path: Path, out_dir: Path) -> Path:
     pipeline(
         image_file=str(cutout_path),
         output_path=str(out_dir),
-        weights_path="./ckpts/TripoSR/ts_huge_df_checkpoints.ckpt",
+        weights_path=str(_weights_root() / "TripoSR" / "model.ckpt"),
     )
     produced = sorted(out_dir.glob("*.glb"))
     if not produced:

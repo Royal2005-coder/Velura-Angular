@@ -74,5 +74,5 @@ six==1.17.0
 setuptools==84.0.0
 wheel==0.48.0
 # KAN-66 VTO 3D (T004): background cutout + software turntable raster. TripoSR weights land via weights manifest once an operator machine hashes them (fail-closed checksums are never invented in code review).
-rembg==2.0.59
+rembg==2.0.82
 trimesh==4.5.1

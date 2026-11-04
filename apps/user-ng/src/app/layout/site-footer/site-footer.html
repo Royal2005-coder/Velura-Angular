@@ -190,4 +190,66 @@
       </div>
     </div>
   </div>
+
+  @if (successModalOpen()) {
+    <div class="newsletter-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="newsletter-modal-title">
+      <div class="newsletter-modal-backdrop" (click)="closeSuccessModal()"></div>
+      <div class="newsletter-modal-card">
+        <button type="button" class="newsletter-modal-close" (click)="closeSuccessModal()" aria-label="Đóng thông báo">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+
+        <div class="newsletter-modal-badge" aria-hidden="true">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#7A283C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="4" width="20" height="16" rx="2"></rect>
+            <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path>
+          </svg>
+        </div>
+
+        <h3 id="newsletter-modal-title" class="newsletter-modal-title">Đã Ghi Nhận Đăng Ký Thành Công!</h3>
+        <p class="newsletter-modal-desc">
+          Hệ thống đã gửi thư xác nhận kèm <strong>mã ưu đãi giảm giá 10%</strong> đến hộp thư của bạn.
+        </p>
+
+        <div class="newsletter-modal-info-box">
+          <div class="newsletter-modal-info-row">
+            <span class="newsletter-modal-info-label">Email nhận mã:</span>
+            <strong class="newsletter-modal-info-email">{{ registeredEmail() }}</strong>
+          </div>
+          <div class="newsletter-modal-info-row">
+            <span class="newsletter-modal-info-label">Mã voucher:</span>
+            <span class="newsletter-modal-code-badge">VELURA10 (-10%)</span>
+          </div>
+          <div class="newsletter-modal-tip">
+            <svg class="newsletter-modal-tip-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7A283C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="16" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+            <p>
+              <strong>Lưu ý:</strong> Vui lòng kiểm tra <strong>Hộp thư đến (Inbox)</strong>. Nếu chưa thấy thư, bạn hãy kiểm tra thêm mục <strong>Quảng cáo (Promotions)</strong> hoặc <strong>Hòm thư rác (Spam)</strong> nhé!
+            </p>
+          </div>
+        </div>
+
+        <div class="newsletter-modal-actions">
+          @if (isGmail()) {
+            <a href="https://mail.google.com" target="_blank" rel="noopener noreferrer" class="newsletter-modal-btn newsletter-modal-btn--primary" (click)="closeSuccessModal()">
+              Mở Hộp Thư Gmail &rarr;
+            </a>
+          } @else {
+            <button type="button" class="newsletter-modal-btn newsletter-modal-btn--primary" (click)="closeSuccessModal()">
+              Đã Hiểu &amp; Kiểm Tra Email
+            </button>
+          }
+          <a routerLink="/products" class="newsletter-modal-btn newsletter-modal-btn--secondary" (click)="closeSuccessModal()">
+            Khám Phá Bộ Sưu Tập Ngay
+          </a>
+        </div>
+      </div>
+    </div>
+  }
 </footer>

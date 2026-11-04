@@ -1,3 +1,5 @@
+import nodemailer from "nodemailer";
+import type { Transporter } from "nodemailer";
 import { config } from "../config.js";
 import { callRpc, updateRows } from "../supabase.js";
 import { asJsonObject, asNumber, asString, errorMessage, type JsonObject } from "../types.js";
@@ -87,23 +89,49 @@ function hasEmailProvider(): boolean {
 function hasSmtpProvider(): boolean {
   return Boolean(config.smtpHost && config.smtpUser && config.smtpAppPassword);
 }
+let cachedTransporter: Transporter | null = null;
+
+function getOrCreateTransporter(): Transporter {
+  if (!cachedTransporter) {
+    cachedTransporter = nodemailer.createTransport({
+      host: config.smtpHost,
+      port: config.smtpPort,
+      secure: config.smtpSecure,
+      auth: {
+        user: config.smtpUser,
+        pass: config.smtpAppPassword
+      }
+    });
+  }
+  return cachedTransporter;
+}
 
 async function deliverWithSmtp(message: JsonObject): Promise<void> {
-  const nodemailer = await import("nodemailer");
-  const transporter = nodemailer.default.createTransport({
-    host: config.smtpHost,
-    port: config.smtpPort,
-    secure: config.smtpSecure,
-    auth: {
-      user: config.smtpUser,
-      pass: config.smtpAppPassword
-    }
-  });
+  const transporter = getOrCreateTransporter();
+
+  const metadata = asJsonObject(message.metadata);
+  const htmlContent =
+    typeof message.html_body === "string" && message.html_body.trim()
+      ? message.html_body
+      : typeof metadata.html === "string" && metadata.html.trim()
+      ? metadata.html
+      : typeof message.body === "string" && (message.body.includes("<html") || message.body.includes("<div") || message.body.includes("<!DOCTYPE"))
+      ? message.body
+      : undefined;
+
+  const unsubscribeUrl = asString(metadata.unsubscribe_url);
+  const headers: Record<string, string> = {};
+  if (unsubscribeUrl) {
+    headers["List-Unsubscribe"] = `<${unsubscribeUrl}>`;
+    headers["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click";
+  }
 
   await transporter.sendMail({
-    from: config.smtpFrom || `"Velura CSKH" <${config.smtpUser}>`,
+    from: config.smtpFrom || `"Velura Fashion" <${config.smtpUser}>`,
     to: typeof message.recipient === "string" ? message.recipient : undefined,
     subject: typeof message.subject === "string" ? message.subject : undefined,
-    text: typeof message.body === "string" ? message.body : undefined
+    text: typeof message.body === "string" ? message.body : undefined,
+    ...(htmlContent ? { html: htmlContent } : {}),
+    ...(Object.keys(headers).length ? { headers } : {})
   });
 }

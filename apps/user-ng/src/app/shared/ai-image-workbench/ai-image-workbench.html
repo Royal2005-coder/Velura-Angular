@@ -234,9 +234,6 @@
                 </div>
                 <div class="studio-card__info">
                   <div class="studio-card__title">{{ modelDisplayTitle(asset) }}</div>
-                  @if (asset.badge) {
-                    <span class="studio-card__badge">{{ asset.badge }}</span>
-                  }
                 </div>
                 @if (studio() === asset.id) {
                   <span class="studio-card__check">

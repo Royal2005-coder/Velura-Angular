@@ -231,6 +231,21 @@ export async function handleAiRoute(
       res.end(image);
       return true;
     }
+    if (parts[offset + 2] === "render3d" && parts[offset + 3] && req.method === "GET") {
+      const job = await service.get(owner, id);
+      if (user && requiresMember(job)) requireAiMember(context);
+      const name = parts[offset + 3];
+      const bytes = await service.resultFile(owner, id, name);
+      res.writeHead(200, {
+        ...headers,
+        "content-type": name.endsWith(".glb") ? "model/gltf-binary" : "image/png",
+        "cache-control": "no-store",
+        "content-disposition": `inline; filename="${name}"`,
+        "x-content-type-options": "nosniff",
+      });
+      res.end(bytes);
+      return true;
+    }
     if (parts.length === offset + 2 && req.method === "GET") {
       const job = await service.get(owner, id);
       if (user && requiresMember(job)) requireAiMember(context);

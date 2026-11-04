@@ -123,8 +123,9 @@ export class PersonalColorService {
         const raw = await this.vision.generate("Check if this photo is suitable for personal color analysis. Return booleans: lighting_valid (true unless extreme unnatural disco/neon colored lights completely hide skin tone; normal indoor room or daylight lighting is true), skin_visible (true if a human face with natural skin is present; false if face is missing, covered with a mask, or an animal/object), blur_free (true if the face is recognizable; normal phone focus or portrait bokeh is true), filter_free (true unless heavy cartoon/mask stickers completely obscure natural skin tone; normal phone camera photos are true). Accept genuine user portraits and selfies.", image,
           { type: "object", additionalProperties: false, required: ["lighting_valid", "skin_visible", "blur_free", "filter_free"], properties: { lighting_valid: { type: "boolean" }, skin_visible: { type: "boolean" }, blur_free: { type: "boolean" }, filter_free: { type: "boolean" } } }, { model: policy.model, signal: controller.signal });
         const quality = asJsonObject(raw);
-        if (Object.keys(quality).length !== 4 || ["lighting_valid", "skin_visible", "blur_free", "filter_free"].some((key) => quality[key] !== true)) {
-          return { status: "VALIDATION_FAILED" as const, error: "COLOR_PICTURE_GUIDANCE" };
+        const failedCriteria = ["lighting_valid", "skin_visible", "blur_free", "filter_free"].filter((key) => quality[key] !== true);
+        if (Object.keys(quality).length !== 4 || failedCriteria.length) {
+          return { status: "VALIDATION_FAILED" as const, error: failedCriteria.length ? `COLOR_PICTURE_GUIDANCE:${failedCriteria.join(",")}` : "COLOR_PICTURE_GUIDANCE" };
         }
         if (controller.signal.aborted) throw new Error("COLOR_CANCELLED");
         await delay(600, undefined, { signal: controller.signal });
@@ -160,9 +161,11 @@ export class PersonalColorService {
         console.error("[PERSONAL_COLOR_INFERENCE_ERROR]", err);
       }
       const isRateLimit = err instanceof HttpError && (err.status === 429 || err.code === "AI_PROVIDER_RATE_LIMITED");
+      const isOutputInvalid = err instanceof HttpError && (err.code === "AI_JSON_INVALID" || err.code === "COLOR_OUTPUT_INVALID");
+      const isModelUnavailable = !isRateLimit && !isOutputInvalid && err instanceof HttpError && [500, 502, 503, 504].includes(err.status);
       await this.repo.finish(principal, analysis.id, {
         status: timedOut ? "TIMEOUT" : controller.signal.aborted ? "CANCELLED" : "FAILED",
-        error: timedOut ? "COLOR_TIMEOUT" : isRateLimit ? "COLOR_RATE_LIMITED" : "COLOR_ANALYSIS_FAILED"
+        error: timedOut ? "COLOR_TIMEOUT" : isRateLimit ? "COLOR_RATE_LIMITED" : isOutputInvalid ? "COLOR_MODEL_OUTPUT" : isModelUnavailable ? "COLOR_MODEL_UNAVAILABLE" : "COLOR_ANALYSIS_FAILED"
       }).catch(() => undefined);
     } finally {
       clearTimeout(timer);

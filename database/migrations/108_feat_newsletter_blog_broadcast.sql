@@ -76,7 +76,6 @@ $$;
 
 -- 3. Add newsletter_broadcast_at to public.blog
 alter table public.blog add column if not exists newsletter_broadcast_at timestamptz;
-
 -- 4. Seed VELURA10 welcome voucher into public.voucher if not already existing
 insert into public.voucher (
   code,
@@ -90,7 +89,8 @@ insert into public.voucher (
   max_discount_amount,
   usage_limit_total,
   usage_limit_per_user,
-  applicable_user_group
+  applicable_user_group,
+  created_by
 )
 select
   'VELURA10',
@@ -104,7 +104,8 @@ select
   100000,
   1000000,
   1,
-  'all_users'
+  'all_users',
+  coalesce((select user_id from public.users where role = 'admin' limit 1), '6ed03143-1c74-4654-a14b-ecdd87e551c8'::uuid)
 where not exists (
   select 1 from public.voucher where upper(code) = 'VELURA10'
 );

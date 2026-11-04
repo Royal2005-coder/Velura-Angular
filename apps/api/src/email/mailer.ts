@@ -82,7 +82,7 @@ export async function sendDirectEmail(
         priority: options.priority,
         messageId: options.messageId
       }),
-      10000,
+      25000,
       "SMTP send"
     );
     const accepted = Array.isArray(result.accepted) && result.accepted.some(

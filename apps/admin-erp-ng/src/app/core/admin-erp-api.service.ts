@@ -2407,6 +2407,38 @@ export class AdminErpApiService {
       params: this.params(params),
     });
   }
+  /**
+   * Lists newsletter subscribers who opted in via the storefront or promotions.
+   */
+  listSubscribers(params: Record<string, string> = {}): Observable<{
+    rows: Array<{
+      subscriber_id: string;
+      email: string;
+      status: 'active' | 'unsubscribed';
+      source: string;
+      subscribed_at: string;
+      unsubscribed_at: string | null;
+    }>;
+    count: number;
+    activeCount: number;
+    unsubscribedCount: number;
+  }> {
+    return this.http.get<{
+      rows: Array<{
+        subscriber_id: string;
+        email: string;
+        status: 'active' | 'unsubscribed';
+        source: string;
+        subscribed_at: string;
+        unsubscribed_at: string | null;
+      }>;
+      count: number;
+      activeCount: number;
+      unsubscribedCount: number;
+    }>(`${this.baseUrl}/api/v1/admin/content/subscribers`, {
+      params: this.params(params),
+    });
+  }
 
   /**
    * Lists CMS blog rows, drafts included. The API gates this on the `content` module.

@@ -23,9 +23,20 @@ class Availability(unittest.TestCase):
 
 class TurntableStage(unittest.TestCase):
     def _stub(self, rendered):
-        """Inject fake rembg/trimesh modules so the stage runs hermetically."""
-        rembg = types.ModuleType("rembg")
-        rembg.remove = lambda raw: b"png"
+        """Inject fake onnxruntime/trimesh modules so the stage runs hermetically."""
+        import numpy
+        from PIL import Image
+
+        ort = types.ModuleType("onnxruntime")
+
+        class _Session:
+            def get_inputs(self):
+                return [types.SimpleNamespace(name="image")]
+
+            def run(self, _opts, _feeds):
+                return [numpy.zeros((1, 1, 320, 320), dtype=numpy.float32)]
+
+        ort.InferenceSession = lambda path, providers=None: _Session()
         trimesh = types.ModuleType("trimesh")
         scene = types.SimpleNamespace()
 
@@ -33,8 +44,8 @@ class TurntableStage(unittest.TestCase):
             if len(rendered) == 0:
                 return None
             name = rendered.pop(0)
-            Path(name).write_bytes(b"x")
-            return types.SimpleNamespace(save=lambda p: Path(p).write_bytes(b"x"))
+            Image.new("RGBA", resolution).save(name)
+            return types.SimpleNamespace(save=lambda p: Image.new("RGBA", (8, 8)).save(p))
 
         scene.save_image = save_image
         scene.apply_transform = lambda m: None
@@ -49,22 +60,34 @@ class TurntableStage(unittest.TestCase):
             Path(output_path, "model.glb").write_bytes(b"g")
 
         triposr.pipeline = pipeline
-        np = types.ModuleType("numpy")
-        np.pi = 3.14159
-        return {"rembg": rembg, "trimesh": trimesh, "torch": torch, "triposr": triposr, "numpy": np}
+        return {"onnxruntime": ort, "trimesh": trimesh, "torch": torch, "triposr": triposr}
+
+    def _fake_weights(self, td):
+        """Pretend the operator already provisioned u2net so _cutout finds its model."""
+        model_dir = Path(td, "rembg")
+        model_dir.mkdir(parents=True, exist_ok=True)
+        (model_dir / "u2net.onnx").write_bytes(b"stub")
 
     def test_produces_frames_and_glb(self):
+        import numpy
+        from PIL import Image
+
         with TemporaryDirectory() as td:
+            import os
+
+            os.environ["AI_WEIGHTS_DIR"] = td
+            self._fake_weights(td)
             out = Path(td, "render3d")
             out.mkdir()
-            Path(td, "result.png").write_bytes(b"i")
+            Image.new("RGB", (64, 80), (200, 180, 160)).save(Path(td, "result.png"))
             names = [str(out / f"frame-{i:03d}.png") for i in range(40)]
             saved = sys.modules.copy()
             sys.modules.update(self._stub(names))
             try:
                 result = reconstruction_3d.render_turntable(Path(td, "result.png"), out, frames=24)
             finally:
-                for key in ("rembg", "trimesh", "torch", "triposr", "numpy"):
+                del os.environ["AI_WEIGHTS_DIR"]
+                for key in ("onnxruntime", "trimesh", "torch", "triposr"):
                     if key in saved:
                         sys.modules[key] = saved[key]
                     else:
@@ -74,10 +97,16 @@ class TurntableStage(unittest.TestCase):
             self.assertTrue(all(f.startswith("frame-") for f in result["frames"]))
 
     def test_sparse_render_below_minimum_raises(self):
+        from PIL import Image
+
         with TemporaryDirectory() as td:
+            import os
+
+            os.environ["AI_WEIGHTS_DIR"] = td
+            self._fake_weights(td)
             out = Path(td, "render3d")
             out.mkdir()
-            Path(td, "result.png").write_bytes(b"i")
+            Image.new("RGB", (64, 80), (200, 180, 160)).save(Path(td, "result.png"))
             names = [str(out / f"frame-{i:03d}.png") for i in range(5)]
             saved = sys.modules.copy()
             sys.modules.update(self._stub(names))
@@ -85,7 +114,8 @@ class TurntableStage(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     reconstruction_3d.render_turntable(Path(td, "result.png"), out, frames=24)
             finally:
-                for key in ("rembg", "trimesh", "torch", "triposr", "numpy"):
+                del os.environ["AI_WEIGHTS_DIR"]
+                for key in ("onnxruntime", "trimesh", "torch", "triposr"):
                     if key in saved:
                         sys.modules[key] = saved[key]
                     else:

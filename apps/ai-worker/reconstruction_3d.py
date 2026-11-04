@@ -41,12 +41,32 @@ def _weights_present() -> bool:
 
 
 def _cutout(image_path: Path, out_dir: Path) -> Path:
-    """Remove the studio background so reconstruction sees only the person."""
-    from rembg import remove  # type: ignore
+    """Remove the studio background with u2net via onnxruntime.
 
-    raw = image_path.read_bytes()
+    rembg was dropped deliberately: its fixed version (2.0.82) requires numpy>=2.3 while this
+    image pins numpy 1.26.4 for torch/open-clip, and the older rembg carries CVE-2026-115924.
+    Running the already-provisioned u2net.onnx through the existing onnxruntime keeps the CVE
+    surface smaller and the dependency graph intact.
+    """
+    import numpy as np
+    import onnxruntime as ort
+    from PIL import Image
+
+    model_path = _weights_root() / "rembg" / "u2net.onnx"
+    if not model_path.is_file():
+        raise RuntimeError("RENDER_3D_UNAVAILABLE")
+    img = Image.open(image_path).convert("RGB")
+    width, height = img.size
+    net = np.asarray(img.resize((320, 320)), dtype=np.float32) / 255.0
+    net = (net - np.array([0.485, 0.456, 0.406], dtype=np.float32)) / np.array([0.229, 0.224, 0.225], dtype=np.float32)
+    tensor = net.transpose(2, 0, 1)[None].astype(np.float32)
+    session = ort.InferenceSession(str(model_path), providers=["CPUExecutionProvider"])
+    prediction = session.run(None, {session.get_inputs()[0].name: tensor})[0][0, 0]
+    mask = (prediction > 0.5).astype(np.uint8) * 255
+    cutout = img.copy()
+    cutout.putalpha(Image.fromarray(mask).resize((width, height)))
     out = out_dir / "cutout.png"
-    out.write_bytes(remove(raw))
+    cutout.save(out)
     return out
 
 

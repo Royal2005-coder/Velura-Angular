@@ -59,11 +59,13 @@ PATCHES = {
     "tsr/system.py": [
         ("from omegaconf import OmegaConf", "from tsr_config import OmegaConf"),
         ("import math\nimport os\n", "import gc\nimport math\nimport os\n"),
+        ("from .models.isosurface import MarchingCubeHelper",
+         "from triposr_state_dict import remap\n\nfrom .models.isosurface import MarchingCubeHelper"),
         ("""        ckpt = torch.load(weight_path, map_location="cpu")
         model.load_state_dict(ckpt)
         return model""",
          """        ckpt = torch.load(weight_path, map_location="cpu", weights_only=True)
-        model.load_state_dict(ckpt)
+        model.load_state_dict(remap(ckpt))
         del ckpt
         gc.collect()
         return model"""),
@@ -132,7 +134,8 @@ def assemble(destination: Path) -> None:
         f"VAST-AI-Research/TripoSR {REVISION}, MIT (see LICENSE).\n"
         "Velura changes: march marching cubes on scikit-image, tsr_config replaces omegaconf, "
         "rembg/imageio imports made lazy, DINO-ViT architecture read from the weights volume, "
-        "tsr/bake_texture.py excluded (needs xatlas plus OpenGL; vertex colours are kept).\n",
+        "checkpoint parameters renamed for the transformers 5 ViT layout, checkpoint released after "
+        "load, tsr/bake_texture.py excluded (needs xatlas plus OpenGL; vertex colours are kept).\n",
         encoding="utf-8",
     )
     for forbidden in ("torchmcubes", "omegaconf"):

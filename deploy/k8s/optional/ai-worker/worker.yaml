@@ -131,6 +131,10 @@ spec:
             # The patched tsr reads the DINO-ViT architecture from this directory instead of the hub; the pod has no egress.
             - name: TRIPOSR_IMAGE_TOKENIZER_CONFIG
               value: /weights/TripoSR/image_tokenizer
+            # 2D and 3D alternate on one 8 GiB card; segment reuse stops fragmentation turning a 384 MiB
+            # request into an OOM while gigabytes sat reserved-but-unallocated.
+            - name: PYTORCH_CUDA_ALLOC_CONF
+              value: expandable_segments:True
             - name: TMPDIR
               value: /private
           startupProbe:

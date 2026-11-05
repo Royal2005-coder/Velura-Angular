@@ -27,7 +27,7 @@ Hai mode hiện có (ảnh cá nhân / người mẫu studio) giữ nguyên cons
 **Acceptance:** Job không bật `render3d` cho kết quả 2D y như hôm nay (no regression); job bật 3D trả thêm `frames3d`, hết hạn theo cùng TTL artifact, và **2D vẫn success khi 3D fail**.
 
 ## Functional Requirements
-- **FR-001:** Worker có task riêng `/ai/try-on-3d` (`virtual_try_on_3d`) chạy sau khi 2D đã lưu: u2net cutout → TSR (TripoSR) forward → `render()` 24 view NeRF → **một sheet PNG tiled** (6×4, tile 512px). API cắt sheet thành `render3d/frame-000.png…frame-023.png`. Không PyTorch3D, không `trimesh.save_image`: ảnh runtime không có OpenGL context.
+- **FR-001:** Worker có task riêng `/ai/try-on-3d` (`virtual_try_on_3d`) chạy sau khi 2D đã lưu: u2net cutout → TSR (TripoSR) forward → `render()` 24 view NeRF → **một sheet PNG tiled** (6×4, tile 256px — điểm đo được trên RTX 4060: 39.5s, 2.17 GiB VRAM peak). API cắt sheet thành `render3d/frame-000.png…frame-023.png`. Không PyTorch3D, không `trimesh.save_image`: ảnh runtime không có OpenGL context.
 - **FR-002:** Capability quảng bá qua `/ready` và `/health` bằng `tasks.virtual_try_on_3d`; nó chỉ true khi CUDA + weights + vendor tree hợp lệ. Thiếu một trong ba, API không gửi stage, người dùng vẫn nhận kết quả 2D.
 - **FR-003:** API contract: request VTO chấp nhận `render3d: boolean` (bền hoá trong `job.worker.render_3d`, tính cả idempotency fingerprint); job view trả `frames3d: string[]`. Tên frame chỉ phục vụ khi khớp đúng bản ghi job (`resultFile` so basename, không đoán bằng regex).
 - **FR-004:** Frontend viewer: tuần tự frames theo góc (image-based turntable) thay vì tilt CSS trên ảnh phẳng; giữ tilt làm fallback khi job không có frames.

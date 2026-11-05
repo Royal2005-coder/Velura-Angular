@@ -20,11 +20,14 @@ from pathlib import Path
 FRAME_COUNT = 24
 MIN_FRAMES = 12
 MAX_FRAMES = 36
-TILE = 512
+# Measured on the RTX 4060 with the 2D pipeline resident: 256 peaks at 2.17 GiB allocated / 39s for the
+# whole sweep, while 512 dies in the unchunked ray-sample tensor. Upstream renders at 256 for the same reason.
+TILE = 256
 TILE_COLUMNS = 6
 FOREGROUND_RATIO = 0.85
-# 4096 rays per pass instead of upstream's 8192: the 2D pipeline keeps ~4.6 GiB of the 8 GiB card resident.
-CHUNK_SIZE = 4096
+# Each ray sample interpolates the 32x1024 triplane, so peak VRAM is chunk x samples x channels x 4 bytes:
+# upstream's 8192 asks for ~2.1 GiB per pass and 4096 still OOMs beside the resident 2D model on an 8 GiB card.
+CHUNK_SIZE = 1024
 
 ARTIFACTS = ("TripoSR/model.ckpt", "TripoSR/config.yaml", "TripoSR/image_tokenizer/config.json", "rembg/u2net.onnx")
 

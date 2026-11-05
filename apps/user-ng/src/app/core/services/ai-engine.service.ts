@@ -20,9 +20,8 @@ export interface AiJob {
   gate?: { valid?: boolean; reasons?: string[]; metrics?: Record<string, number> };
   error?: string;
   matches?: { product_id: string; score: number }[];
-  /** KAN-66 VTO 3D: published turntable frames and mesh for studio try-on. */
+  /** KAN-66 VTO 3D: published turntable frames for studio try-on. */
   frames3d?: string[];
-  glb_url?: string;
 }
 export interface StudioAsset {
   id: string;
@@ -164,7 +163,7 @@ export class AiEngineService {
     });
   }
 
-  /** One 3D artifact (frame or .glb) of an owned job; the server enforces the name allowlist. */
+  /** One published turntable frame of an owned job; the server matches the name against the job record. */
   resultFile(id: string, name: string): Observable<Blob> {
     return this.http.get(
       `${this.base}/api/user/ai/jobs/${encodeURIComponent(id)}/render3d/${encodeURIComponent(name)}`,

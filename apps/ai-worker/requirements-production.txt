@@ -73,5 +73,15 @@ python-dateutil==2.9.0.post0
 six==1.17.0
 setuptools==84.0.0
 wheel==0.48.0
-# KAN-66 VTO 3D (T004): background cutout + software turntable raster. TripoSR weights land via weights manifest once an operator machine hashes them (fail-closed checksums are never invented in code review).
+# KAN-66 VTO 3D: the vendored tsr tree reads its encoder through transformers and meshes through scikit-image.
+# omegaconf is replaced by tsr_config.py because its antlr runtime ships no wheel, and torchmcubes by the CPU mesher
+# because this image installs with pip --only-binary. This set resolves against the pins above under
+# pip --dry-run --only-binary=:all: --platform manylinux2014/manylinux_2_28 --python-version 311.
 trimesh==4.5.1
+transformers==4.44.2
+tokenizers==0.19.1
+scikit-image==0.24.0
+scipy==1.13.1
+imageio==2.36.1
+tifffile==2024.8.30
+lazy-loader==0.4

@@ -587,6 +587,15 @@ export interface AdminBlogProduct {
   status?: string;
 }
 
+export interface AdminBlogProductMatch extends AdminBlogProduct {
+  match_reason: string;
+}
+
+export interface AdminBlogProductSuggestionPayload {
+  suggestedProducts: AdminBlogProductMatch[];
+  reasoning: string;
+}
+
 /** Một bài viết CMS. `status` là nháp/đã công bố/đã lưu trữ; bản nháp chỉ admin thấy. */
 export interface AdminBlogRow {
   blog_id: string;
@@ -2468,6 +2477,13 @@ export class AdminErpApiService {
    */
   suggestBlogSeo(body: { title: string; contentHtml: string }): Observable<AdminBlogSeoSuggestion> {
     return this.http.post<AdminBlogSeoSuggestion>(`${this.baseUrl}/api/v1/admin/content/blogs/ai-suggest`, body);
+  }
+
+  /**
+   * AI product suggestions grounded on article text and live catalog.
+   */
+  suggestBlogProducts(body: { title: string; excerpt?: string; contentHtml: string; limit?: number }): Observable<AdminBlogProductSuggestionPayload> {
+    return this.http.post<AdminBlogProductSuggestionPayload>(`${this.baseUrl}/api/v1/admin/content/blogs/ai-suggest-products`, body);
   }
 
   /**

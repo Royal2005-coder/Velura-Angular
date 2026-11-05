@@ -32,7 +32,7 @@
         <div class="article-layout" [class.article-layout--single]="!article.products?.length">
           <div class="article-content">
             @if (article.contentHtml) {
-              <div class="article-rich" [innerHTML]="article.contentHtml"></div>
+              <div class="article-rich" [innerHTML]="article.contentHtml | safeHtml"></div>
             } @else if (paragraphs(article.content).length) {
               <div class="article-rich">
                 @for (paragraph of paragraphs(article.content); track $index) {

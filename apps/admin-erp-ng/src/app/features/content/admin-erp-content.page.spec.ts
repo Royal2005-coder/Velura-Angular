@@ -68,9 +68,19 @@ describe('AdminErpContentPage', () => {
         return of({ rows: POSTS, count: 6 });
       },
       listContentCategories: () => of({ rows: CATEGORIES }),
+      listCategories: () => of({
+        rows: [{ category_id: 'cat-1', name: 'Đầm', slug: 'dam' }],
+        count: 1,
+      }),
       listProducts: () => of({
         rows: [{ product_id: 'p-1', name: 'Áo lụa', slug: 'ao-lua', status: 'on_sale', base_price: 500000, images: ['https://cdn.velura.vn/a.jpg'] }],
         count: 1,
+      }),
+      suggestBlogProducts: () => of({
+        suggestedProducts: [
+          { product_id: 'p-1', name: 'Áo lụa', slug: 'ao-lua', status: 'on_sale', base_price: 500000, images: ['https://cdn.velura.vn/a.jpg'], match_reason: 'Phù hợp với chủ đề bài viết' },
+        ],
+        reasoning: 'Gợi ý từ nội dung bài viết',
       }),
       suggestBlogSeo: () => {
         harness.seoSuggestions += 1;
@@ -304,5 +314,51 @@ describe('AdminErpContentPage', () => {
 
     page.removeProduct('p-2');
     expect(page.draft()?.productIds).toEqual(['p-1']);
+  });
+
+  it('supports HTML Source Mode toggle and synchronizes draft contentHtml', () => {
+    const { page, created } = boot();
+    page.openCreate();
+    page.draft.set({ ...validDraft, contentHtml: '<p>Mở đầu</p>' });
+
+    expect(page.sourceMode()).toBe(false);
+    page.toggleSourceMode();
+    expect(page.sourceMode()).toBe(true);
+
+    // Operator edits HTML source (>= 40 characters for minimum length rule)
+    page.onSourceInput({
+      target: {
+        value: '<article><h1>Quiet Luxury: Nghệ thuật mặc đẹp từ sự tối giản</h1><p>Nội dung bài viết thời trang cao cấp của thương hiệu Velura.</p></article>',
+      },
+    } as unknown as Event);
+    expect(page.draft()?.contentHtml).toContain('Quiet Luxury');
+    expect(page.dirty()).toBe(true);
+    // Saving from Source Mode reads draft.contentHtml
+    page.save();
+    expect(created.length).toBe(1);
+    expect(created[0]['contentHtml']).toContain('Quiet Luxury');
+  });
+
+  it('filters products by category, pages through catalog, and suggests products via AI', () => {
+    const { page } = boot();
+    page.openCreate();
+    page.draft.set({ ...validDraft, title: 'Quiet Luxury thời trang', contentHtml: '<p>Bài viết về lụa và áo sơ mi.</p>' });
+
+    expect(page.productCategories().length).toBe(1);
+    expect(page.productCategories()[0].name).toBe('Đầm');
+
+    page.onProductCategoryChange({ target: { value: 'cat-1' } } as unknown as Event);
+    expect(page.productCategoryId()).toBe('cat-1');
+    expect(page.productPage()).toBe(0);
+
+    // AI Product suggestion
+    page.suggestProductsWithAi();
+    expect(page.aiProductLoading()).toBe(false);
+    expect(page.suggestedProducts().length).toBe(1);
+    expect(page.suggestedProducts()[0].match_reason).toContain('chủ đề bài viết');
+
+    // Attach all suggestions
+    page.attachAllSuggested();
+    expect(page.draft()?.productIds).toContain('p-1');
   });
 });

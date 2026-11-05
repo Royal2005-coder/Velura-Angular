@@ -3,8 +3,9 @@
 Architecture follows the public StyleAI example (rembg -> TripoSR -> multi-angle render) but the
 code is written against our worker contract: it consumes the 2D try-on result already on disk and
 produces numbered frames plus a .glb, so the API can serve them through the existing artifact
-paths. Model weights are non-commercial (CC BY-NC-SA) and acceptable only because this is a
-course MVP; that restriction is recorded here and in specs/vto-3d/spec.md FR-007.
+paths. weights-manifest.json is the licence authority and bootstrap_weights.py refuses any artifact
+outside MIT/Apache-2.0, so nothing here may carry an NC clause: TripoSR ships MIT (HF
+stabilityai/TripoSR, license:mit) and the U-2-Net cutout ships Apache-2.0.
 
 Every heavy import is lazy: a machine without the 3D extras must still import this module, report
 the capability as unavailable, and keep serving 2D try-on.

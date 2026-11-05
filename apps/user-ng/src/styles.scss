@@ -83,6 +83,11 @@ app-auth-otp-modal {
   z-index: 20000 !important;
 }
 
+app-site-footer:has(.newsletter-modal-overlay) {
+  position: relative !important;
+  z-index: 100000 !important;
+}
+
 .combo-component-item {
   flex-direction: column;
   align-items: stretch;

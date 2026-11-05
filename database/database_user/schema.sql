@@ -76,7 +76,16 @@ CREATE TYPE ai_log_type AS ENUM ('chatbot_session', 'recommendation_event', 'qui
 
 CREATE TYPE trigger_type AS ENUM ('system', 'manual');
 
-CREATE TYPE audit_action AS ENUM ('create', 'update', 'delete', 'approve', 'reject', 'lock', 'unlock');
+-- Labels after 'unlock' are appended by migration 109 in this same order, so a fresh database and an
+-- upgraded one compare audit_action identically (enums order by position).
+CREATE TYPE audit_action AS ENUM (
+  'create', 'update', 'delete', 'approve', 'reject', 'lock', 'unlock',
+  'hide', 'unhide', 'reply', 'escalate', 'role',
+  'login', 'logout', 'signin', 'signout', 'signin_failed', 'signin_blocked',
+  'view_moderated_original', 'refund', 'exchange',
+  'confirm_cod', 'customer_cancel', 'payment_succeeded', 'refund_failed',
+  'save_favorite_outfit', 'stripe_refund_requested', 'stripe_refund_succeeded'
+);
 
 
 -- ============================================================

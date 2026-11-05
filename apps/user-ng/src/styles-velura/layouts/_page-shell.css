@@ -27,9 +27,15 @@ app-site-header { display: contents !important; }
 
 /* Shared shell surfaces match the blush and dark footer concept. */
 .page-shell > .site-header { background: var(--velura-header); }
-.page-shell > app-site-footer,
 .page-shell .site-footer {
   background: var(--velura-footer, #5D423C) !important;
   position: relative;
   z-index: 10;
+}
+.page-shell > app-site-footer {
+  display: block;
+}
+.page-shell > app-site-footer:has(.newsletter-modal-overlay) {
+  position: relative;
+  z-index: 100000 !important;
 }

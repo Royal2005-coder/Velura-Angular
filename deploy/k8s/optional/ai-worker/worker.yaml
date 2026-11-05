@@ -26,12 +26,14 @@ metadata:
   namespace: ai-staging
 spec:
   hard:
-    requests.cpu: '2'
-    limits.cpu: '4'
-    requests.memory: 4Gi
-    limits.memory: 6Gi
+    # Headroom = resident worker + the one-shot weights Job (250m/256Mi req, 1/512Mi lim).
+    # At the old pods:'1' the Job pod is rejected by FailedCreate, so 3D weights can never be provisioned.
+    requests.cpu: '2250m'
+    limits.cpu: '5'
+    requests.memory: 4352Mi
+    limits.memory: 6656Mi
     requests.nvidia.com/gpu: '1'
-    pods: '1'
+    pods: '2'
     persistentvolumeclaims: '2'
     requests.storage: 20Gi
     services.nodeports: '0'

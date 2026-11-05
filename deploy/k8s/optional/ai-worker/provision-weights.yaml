@@ -1,4 +1,4 @@
-# Opt-in only: applying this Job explicitly accepts weights-manifest velura-worker-v2.
+# Opt-in only: applying this Job explicitly accepts weights-manifest velura-worker-v3.
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -29,7 +29,7 @@ spec:
         - name: provision
           image: ghcr.io/royal2005-coder/velura-ai-worker@sha256:bc930c81f5092d305fd72934ef3ac68841f36d39cae85146d70579437aab2889
           command: [python, /app/bootstrap_weights.py]
-          args: [--weights-dir, /weights, --accept-license-manifest, velura-worker-v2]
+          args: [--weights-dir, /weights, --accept-license-manifest, velura-worker-v3]
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

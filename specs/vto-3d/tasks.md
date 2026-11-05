@@ -17,8 +17,8 @@
 ## M3 — Frontend (apps/user-ng)
 - [x] T009 `ai-image-workbench`: gửi `render3d: mode === 'studio'`, `load3dArtifacts()` fetch frame theo basename, drag→index, autospin delta-time; tilt-CSS là fallback khi không có frames.
 - [ ] T010 Nút "Tải mô hình 3D (.glb)": **hoãn** — xem T016.
-- [x] T011 Thẻ scene (US-002): badge = occasion tiếng Việt từ `asset.occasion`, bỏ badge trùng title ('Atelier'…).
-- [ ] T012 Loading panel thêm phase "Đang dựng mô hình 3D" khi `render3d` (stepper hiện có).
+- [x] T011 Thẻ scene (US-002): badge trùng title bị bỏ hẳn (`modelDisplayTitle` tách 'Người mẫu Nữ / Bối cảnh / occasion' khỏi label), nên thẻ chỉ còn title = bối cảnh + dấu chọn khi đang hoạt động.
+- [x] T012 Loading panel: stepper có bước 5 "360°" và message "Đang dựng tuần tự 24 góc nhìn…" khi mode studio (không để người dùng đoán vì sao job lâu).
 
 ## M4 — Cluster & tài liệu
 - [x] T013 Dockerfile ai-worker: bước `python vendor_triposr.py --destination=/vendor` trong stage dependencies, `PYTHONPATH=/app:/opt/vendor`, copy `reconstruction_3d.py` + `tsr_config.py`; `worker.yaml` đặt `TRIPOSR_IMAGE_TOKENIZER_CONFIG=/weights/TripoSR/image_tokenizer` (không có flag `VTO_3D_ENABLED` — capability do worker báo).

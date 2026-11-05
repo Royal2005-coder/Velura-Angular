@@ -4,7 +4,7 @@ import { requirePermission } from "../rbac.js";
 import { asJsonObject, asString, errorMessage, type AuthContext, type JsonObject, type RequestMeta } from "../types.js";
 import { selectRows } from "../supabase.js";
 import { blogPlainText, sanitizeBlogHtml } from "./blog-html.js";
-import type { ContentAdminRepository } from "./content-admin-repository.js";
+import type { BlogProductCandidate, ContentAdminRepository } from "./content-admin-repository.js";
 import { newsletterService } from "../newsletter/newsletter-service.js";
 /** Trạng thái nội dung mà migration 078 chấp nhận. */
 export const CONTENT_STATUSES = ["draft", "published", "archived"] as const;
@@ -78,6 +78,15 @@ export interface ContentDraftInput {
   readonly isFeatured?: boolean;
 }
 
+export interface BlogProductCandidateMatch extends BlogProductCandidate {
+  match_reason: string;
+}
+
+export interface BlogProductSuggestionResult {
+  suggestedProducts: BlogProductCandidateMatch[];
+  reasoning: string;
+}
+
 export interface ContentAdminService {
   listBlogs(context: AuthContext | undefined, searchParams: URLSearchParams): Promise<JsonObject>;
   listSubscribers(context: AuthContext | undefined, searchParams: URLSearchParams): Promise<JsonObject>;
@@ -85,6 +94,7 @@ export interface ContentAdminService {
   updateBlog(context: AuthContext | undefined, blogId: string, body: JsonObject, requestMeta: RequestMeta): Promise<JsonObject>;
   /** Draft-only AI assistance; never persists or publishes, the editor decides what to accept. */
   suggestSeo(context: AuthContext | undefined, body: JsonObject): Promise<JsonObject>;
+  suggestBlogProducts(context: AuthContext | undefined, body: JsonObject): Promise<BlogProductSuggestionResult>;
 }
 export function createContentAdminService({ repository, generateJson = generateGeminiJson }: {
   repository: ContentAdminRepository;
@@ -128,24 +138,24 @@ export function createContentAdminService({ repository, generateJson = generateG
   function draft(body: JsonObject): ContentDraftInput {
     const contentHtml = body.contentHtml === undefined || body.contentHtml === null
       ? null
-      : sanitizeBlogHtml(asString(body.contentHtml));
+      : sanitizeBlogHtml(asString(body.contentHtml)).normalize("NFC");
     return {
       slug: asString(body.slug).toLowerCase().trim(),
-      title: asString(body.title),
-      categorySlug: asString(body.categorySlug),
+      title: asString(body.title).normalize("NFC").trim(),
+      categorySlug: asString(body.categorySlug).trim(),
       status: asString(body.status) || "draft",
       expectedVersion: body.expectedVersion == null ? undefined : Number(body.expectedVersion),
-      excerpt: asString(body.excerpt),
-      content: (contentHtml ? blogPlainText(contentHtml) : "") || asString(body.content),
+      excerpt: asString(body.excerpt).normalize("NFC").trim(),
+      content: ((contentHtml ? blogPlainText(contentHtml) : "") || asString(body.content)).normalize("NFC").trim(),
       contentHtml,
       imageUrl: body.imageUrl == null ? null : asString(body.imageUrl),
-      metaTitle: asString(body.metaTitle),
-      metaDescription: asString(body.metaDescription),
-      canonicalUrl: asString(body.canonicalUrl),
-      ogImageUrl: asString(body.ogImageUrl),
-      tags: Array.isArray(body.tags) ? [...new Set(body.tags.map((tag) => asString(tag).trim().slice(0, 60)).filter(Boolean))] : [],
+      metaTitle: asString(body.metaTitle).normalize("NFC").trim(),
+      metaDescription: asString(body.metaDescription).normalize("NFC").trim(),
+      canonicalUrl: asString(body.canonicalUrl).trim(),
+      ogImageUrl: asString(body.ogImageUrl).trim(),
+      tags: Array.isArray(body.tags) ? [...new Set(body.tags.map((tag) => asString(tag).normalize("NFC").trim().slice(0, 60)).filter(Boolean))] : [],
       productIds: Array.isArray(body.productIds) ? [...new Set(body.productIds.map((id) => asString(id).trim()).filter(Boolean))] : [],
-      author: asString(body.author),
+      author: asString(body.author).normalize("NFC").trim(),
       readMinutes: body.readMinutes == null ? undefined : Number(body.readMinutes),
       isFeatured: body.isFeatured == null ? undefined : Boolean(body.isFeatured),
     };
@@ -275,7 +285,101 @@ Nội dung: ${content}`,
       } catch {
         return fallbackBlogSeo(title, content);
       }
+    },
+
+    async suggestBlogProducts(context, body) {
+      requirePermission(context as AuthContext, "content", "update");
+      const title = asString(body.title).trim();
+      const content = blogPlainText(sanitizeBlogHtml(body.contentHtml ?? body.content)).slice(0, 4000);
+      const limit = Math.min(Math.max(Number(body.limit) || 6, 1), 12);
+      if (title.length < 4 && content.length < 20) {
+        throw new HttpError(422, "CONTENT_VALIDATION", "Cần tiêu đề hoặc nội dung bài viết trước khi gợi ý sản phẩm.");
+      }
+
+      const candidates = await repository.listCandidateProducts({ limit: 40 }, context?.accessToken ?? null);
+      if (!candidates.length) {
+        return { suggestedProducts: [], reasoning: "Chưa có sản phẩm nào trong kho để gợi ý." };
+      }
+
+      try {
+        const result = asJsonObject(await generateJson(
+          `Bạn là chuyên gia thời trang cao cấp Velura. Hãy phân tích bài viết sau và tìm các phong cách, từ khóa sản phẩm thời trang phù hợp nhất:
+Tiêu đề: ${title}
+Nội dung: ${content}`,
+          {
+            type: "object",
+            additionalProperties: false,
+            required: ["keywords", "styleVibe", "reasoning"],
+            properties: {
+              keywords: { type: "array", items: { type: "string" } },
+              styleVibe: { type: "string" },
+              reasoning: { type: "string" }
+            }
+          },
+          { timeoutMs: 8000, maxRetries: 0 }
+        ));
+
+        const keywords = Array.isArray(result.keywords)
+          ? result.keywords.map((k) => asString(k).toLowerCase().trim()).filter(Boolean)
+          : [];
+        const styleVibe = asString(result.styleVibe).trim() || "Thanh lịch tối giản";
+        const reasoning = asString(result.reasoning).trim() || `Gợi ý dựa trên phong cách ${styleVibe} của bài viết.`;
+
+        const scored = scoreCandidates(candidates, keywords, styleVibe, title + " " + content);
+        const top = scored.slice(0, limit).map((p) => ({
+          ...p,
+          match_reason: `Thiết kế ${p.name} chuẩn phong cách ${styleVibe}, phù hợp với nội dung bài viết.`
+        }));
+
+        return { suggestedProducts: top, reasoning };
+      } catch {
+        return fallbackBlogProducts(candidates, title, content, limit);
+      }
     }
+  };
+}
+
+function scoreCandidates(candidates: BlogProductCandidate[], keywords: string[], styleVibe: string, articleText: string): BlogProductCandidate[] {
+  const textLower = articleText.toLowerCase();
+  const scored = candidates.map((p) => {
+    let score = 0;
+    const nameLower = p.name.toLowerCase();
+    const descLower = (p.description || "").toLowerCase();
+    for (const kw of keywords) {
+      if (nameLower.includes(kw)) score += 5;
+      if (descLower.includes(kw)) score += 2;
+    }
+    for (const word of nameLower.split(/\s+/)) {
+      if (word.length > 2 && textLower.includes(word)) score += 2;
+    }
+    if (styleVibe && (nameLower.includes(styleVibe.toLowerCase()) || descLower.includes(styleVibe.toLowerCase()))) {
+      score += 4;
+    }
+    return { product: p, score };
+  });
+  scored.sort((a, b) => b.score - a.score);
+  return scored.map((s) => s.product);
+}
+
+function fallbackBlogProducts(candidates: BlogProductCandidate[], title: string, content: string, limit: number): BlogProductSuggestionResult {
+  const combined = (title + " " + content).toLowerCase();
+  const scored = candidates.map((p) => {
+    let score = 0;
+    const nameLower = p.name.toLowerCase();
+    for (const word of nameLower.split(/\s+/)) {
+      if (word.length > 2 && combined.includes(word)) score += 3;
+    }
+    if (combined.includes(nameLower)) score += 10;
+    return { product: p, score };
+  });
+  scored.sort((a, b) => b.score - a.score);
+  const top = scored.slice(0, limit).map(({ product: p }) => ({
+    ...p,
+    match_reason: `Sản phẩm ${p.name} thuộc danh mục thời trang phù hợp với chủ đề bài viết.`
+  }));
+  return {
+    suggestedProducts: top,
+    reasoning: "Gợi ý tự động từ danh mục thời trang tương đồng với từ khóa trong bài viết."
   };
 }
 

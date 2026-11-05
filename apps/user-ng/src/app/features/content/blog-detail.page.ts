@@ -7,10 +7,11 @@ import { map, switchMap } from 'rxjs';
 import { BlogCatalogService } from '../../core/services/blog-catalog.service';
 import { BlogPost } from '../../core/models/blog-post';
 import { useBodyClass } from '../../core/utils/body-class';
+import { SafeHtmlPipe } from '../../shared/pipes/safe-html.pipe';
 
 @Component({
   selector: 'app-blog-detail-page',
-  imports: [RouterLink],
+  imports: [RouterLink, SafeHtmlPipe],
   host: { class: 'page-blog-detail' },
   templateUrl: './blog-detail.page.html',
 })

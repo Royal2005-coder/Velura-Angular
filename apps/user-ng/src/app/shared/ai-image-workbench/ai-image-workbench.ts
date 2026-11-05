@@ -226,7 +226,6 @@ export class AiImageWorkbench {
   readonly result = signal('');
   /** Studio 3D: blob URLs of the turntable frames, indexed by orbit angle. */
   readonly frames3d = signal<string[]>([]);
-  readonly glbUrl = signal('');
   readonly has3d = computed(() => this.frames3d().length >= 12);
   readonly frameSrc = computed(() => {
     const frames = this.frames3d();
@@ -284,11 +283,14 @@ export class AiImageWorkbench {
 
   // --- AI RICH LOADING PROGRESS ---
   readonly loadingSeconds = signal<number>(0);
+  /** Studio try-on runs the 360° stage after the photo, so the stepper has to admit it exists. */
+  readonly expects3d = computed(() => this.task() === 'virtual_try_on' && this.mode() === 'studio');
   readonly loadingStep = computed(() => {
     const s = this.loadingSeconds();
     if (s < 6) return 1;
     if (s < 18) return 2;
     if (s < 34) return 3;
+    if (this.expects3d() && s >= 48) return 5;
     return 4;
   });
   readonly loadingMessage = computed(() => {
@@ -296,6 +298,7 @@ export class AiImageWorkbench {
     if (s < 6) return 'Đang phân tích vóc dáng và đo lường tỷ lệ khung xương...';
     if (s < 18) return 'Khớp mẫu trang phục, đo lường độ rủ và xếp nếp vải...';
     if (s < 34) return 'Mô hình AI Diffusion đang render và hòa phối trang phục lên cơ thể...';
+    if (this.expects3d() && s >= 48) return 'Ảnh 2D đã xong. Đang dựng tuần tự 24 góc nhìn 360° trên GPU...';
     return 'Tinh chỉnh ánh sáng, khử răng cưa và hoàn thiện chi tiết trang phục...';
   });
   private loadingTimer: number | undefined;
@@ -792,13 +795,11 @@ export class AiImageWorkbench {
   }
 
   /** Requires explicit confirmation to generate try-on. */
-   /** Fetch turntable frames + mesh as blob URLs; a missing 3D stage simply leaves them empty. */
+   /** Fetch turntable frames as blob URLs; a missing 3D stage simply leaves them empty. */
   private async load3dArtifacts(job: AiJob): Promise<void> {
     this.frames3d().forEach((url) => URL.revokeObjectURL(url));
     this.frames3d.set([]);
-    if (this.glbUrl()) URL.revokeObjectURL(this.glbUrl());
-    this.glbUrl.set('');
-    const names = job.frames3d?.length ? job.frames3d : [];
+    const names = (job.frames3d ?? []).map((path) => path.split('/').pop() ?? '');
     if (!names.length) return;
     const epoch = this.generation;
     try {
@@ -810,10 +811,6 @@ export class AiImageWorkbench {
         return;
       }
       this.frames3d.set(blobs.map((b) => URL.createObjectURL(b)));
-      if (job.glb_url) {
-        const glb = await firstValueFrom(this.model.resultFile(job.id, 'model.glb'));
-        if (epoch === this.generation) this.glbUrl.set(URL.createObjectURL(glb));
-      }
     } catch {
       // The 2D result stays valid; the viewer falls back to the tilt presentation.
     }

@@ -295,6 +295,13 @@
               <div class="step__num">4</div>
               <div class="step__text">Hoàn thiện</div>
             </div>
+            @if (expects3d()) {
+              <div class="step__line" [class.step__line--active]="loadingStep() >= 5"></div>
+              <div class="step" [class.step--active]="loadingStep() >= 5" [class.step--current]="loadingStep() === 5">
+                <div class="step__num">5</div>
+                <div class="step__text">360°</div>
+              </div>
+            }
           </div>
 
           <div class="ai-loading-panel__message">
@@ -403,12 +410,6 @@
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
                 Tải ảnh
               </button>
-              @if (glbUrl()) {
-                <a class="btn-download" [href]="glbUrl()" download="velura-tryon.glb" title="Tải mô hình 3D">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 4 7.5v9L12 21l8-4.5v-9Z"></path><path d="M12 12 4 7.5M12 12l8-4.5M12 12v9"></path></svg>
-                  Mô hình 3D
-                </a>
-              }
             </div>
           </div>
 

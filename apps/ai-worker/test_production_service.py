@@ -53,7 +53,8 @@ class WorkerServiceTests(unittest.TestCase):
             self.assertTrue(readiness.json()["ready"])
             self.assertFalse(readiness.json()["models_ready"])
             self.assertEqual(readiness.json()["tasks"], {"image_quality": True, "image_embedding": False,
-                                                        "product_image_enhance": False, "virtual_try_on": False})
+                                                        "product_image_enhance": False, "virtual_try_on": False,
+                                                        "virtual_try_on_3d": False})
             health = client.get("/health", headers={"Authorization": "Bearer " + KEY})
             self.assertEqual(health.status_code, 503)
             self.assertFalse(health.json()["ready"])

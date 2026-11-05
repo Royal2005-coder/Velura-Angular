@@ -762,3 +762,67 @@ test("VTO enforces configured retry limits, tracks retry_of lineage, and re-veri
     await fixture.close();
   }
 });
+test("A studio try-on publishes sliced turntable frames that only its own job may serve", async () => {
+  const columns = 4, rows = 3, tile = 64, frames = 12;
+  const raw = Buffer.alloc(columns * tile * rows * tile * 3);
+  for (let index = 0; index < frames; index += 1) {
+    for (let y = 0; y < tile; y += 1)
+      for (let x = 0; x < tile; x += 1) {
+        const offset = ((((index / columns) | 0) * tile + y) * columns * tile + ((index % columns) * tile + x)) * 3;
+        raw[offset] = index * 20 + 5;
+        raw[offset + 1] = 40;
+        raw[offset + 2] = 60;
+      }
+  }
+  const sheet = await sharp(raw, { raw: { width: columns * tile, height: rows * tile, channels: 3 } }).png().toBuffer();
+  const fixture = await setup({
+    ready: () => true,
+    turntableReady: () => true,
+    async turntable() { return { bytes: sheet, frames, columns, rows, tile }; },
+    async run(directory) {
+      const request = JSON.parse(await readFile(join(directory, "job.json"), "utf8")) as { request_id: string };
+      await writeFile(join(directory, "result.png"), PNG);
+      return { status: "success", result_file: "result.png", gate: { valid: true },
+        binding: { request_id: request.request_id, product_id: product, variant_id: "22222222-2222-4222-8222-222222222222" } };
+    },
+  }, { ...catalog, async support() { return { product_supported: true, variant_supported: true, garment_category: "upper_body" }; } });
+  try {
+    const job = await fixture.service.create("a", {
+      task: "virtual_try_on", product_id: product, variant_id: "22222222-2222-4222-8222-222222222222",
+      mode: "studio", studio_asset_id: "female", consent: true, confirmed: true, render3d: true,
+      idempotency_key: "turntable-vto-123",
+    });
+    const done = await terminal(fixture.service, "a", job.id);
+    assert.equal(done.status, "success");
+    assert.equal(done.frames3d?.length, frames);
+    const frame = await fixture.service.resultFile("a", job.id, "frame-007.png");
+    const pixel = (await sharp(frame).raw().toBuffer({ resolveWithObject: true })).data;
+    assert.equal(pixel[0], 7 * 20 + 5);
+    await assert.rejects(fixture.service.resultFile("a", job.id, "frame-099.png"), { code: "RESULT_UNAVAILABLE" });
+  } finally { await fixture.close(); }
+});
+
+test("A reconstruction failure leaves a successful try-on published and without frames", async () => {
+  const fixture = await setup({
+    ready: () => true,
+    turntableReady: () => true,
+    async turntable() { throw new Error("AI_WORKER_HTTP_503"); },
+    async run(directory) {
+      const request = JSON.parse(await readFile(join(directory, "job.json"), "utf8")) as { request_id: string };
+      await writeFile(join(directory, "result.png"), PNG);
+      return { status: "success", result_file: "result.png", gate: { valid: true },
+        binding: { request_id: request.request_id, product_id: product, variant_id: "22222222-2222-4222-8222-222222222222" } };
+    },
+  }, { ...catalog, async support() { return { product_supported: true, variant_supported: true, garment_category: "upper_body" }; } });
+  try {
+    const job = await fixture.service.create("a", {
+      task: "virtual_try_on", product_id: product, variant_id: "22222222-2222-4222-8222-222222222222",
+      mode: "studio", studio_asset_id: "female", consent: true, confirmed: true, render3d: true,
+      idempotency_key: "turntable-failure-vto-123",
+    });
+    const done = await terminal(fixture.service, "a", job.id);
+    assert.equal(done.status, "success");
+    assert.equal(done.frames3d, undefined);
+    assert.ok(await fixture.service.result("a", job.id));
+  } finally { await fixture.close(); }
+});

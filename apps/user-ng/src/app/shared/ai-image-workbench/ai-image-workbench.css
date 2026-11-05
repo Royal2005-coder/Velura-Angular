@@ -266,7 +266,6 @@
 .studio-card--selected .studio-card__icon { color: var(--vto-maroon); }
 .studio-card__info { display: flex; flex-direction: column; gap: .12rem; min-width: 0; overflow: hidden; }
 .studio-card__title { overflow: hidden; color: var(--vto-ink); font: 600 .78rem var(--velura-font-ui, "Inter", sans-serif); text-overflow: ellipsis; white-space: nowrap; }
-.studio-card__badge { width: fit-content; padding: .1rem .32rem; border-radius: 4px; background: var(--vto-blush); color: var(--vto-maroon); font-size: .62rem; font-weight: 700; }
 .studio-card__check {
   position: absolute;
   top: 5px;

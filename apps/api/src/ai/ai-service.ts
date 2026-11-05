@@ -22,6 +22,7 @@ import type {
   AiJobView,
   AiTask,
   AiWorker,
+  TurntableStage,
 } from "./ai-types.js";
 
 const UUID =
@@ -616,6 +617,7 @@ export class AiService {
       ...(job.task === "virtual_try_on" ? { product_id: job.product_id, variant_id: job.variant_id } : {}),
       ...(job.attempt ? { attempt: job.attempt, retry_of: job.retry_of } : {}),
       ...(job.result_url ? { result_url: job.result_url } : {}),
+      ...(job.frames3d?.length ? { frames3d: job.frames3d } : {}),
       ...(job.gate ? { gate: job.gate } : {}),
       ...(job.error ? { error: job.error } : {}),
       ...(job.matches ? { matches: job.matches } : {}),
@@ -677,14 +679,13 @@ export class AiService {
       );
     return this.repo.result(job);
   }
-  /** Serve one validated 3D artifact (turntable frame or .glb) of an owned try-on job. */
+  /** Serve one turntable frame the finished job actually published; the record, not a pattern, decides. */
   async resultFile(owner: string, id: string, name: string): Promise<Buffer> {
     const job = await this.owned(owner, id);
     if (this.storageBlocked) throw new HttpError(503, "AI_QUEUE_STORAGE_FAILED", "Kho tác vụ tạm thời không khả dụng.");
-    if (job.status !== "success" || !job.glb_url)
+    const published = (job.frames3d || []).map((url) => url.split("/").pop());
+    if (job.status !== "success" || !published.includes(name))
       throw new HttpError(409, "RESULT_UNAVAILABLE", "Kết quả 3D chưa sẵn sàng.");
-    if (!/^(frame-\d{3}\.png|model\.glb)$/.test(name))
-      throw new HttpError(404, "ARTIFACT_NOT_FOUND", "Không tìm thấy tệp 3D của phiên thử đồ.");
     return this.repo.resultFile(job, name);
   }
   /** Recover interrupted local work as failed; only queued work can claim the single GPU. */
@@ -748,7 +749,11 @@ export class AiService {
         job.status = "running";
         const controller = new AbortController();
         this.controllers.set(job.id, controller);
-        const timeout = setTimeout(() => controller.abort(), job.task === "virtual_try_on" ? 180_000 : 60_000);
+        // A reconstruction stage runs after the try-on in the same job, so its budget is added up front.
+        const requested3d = job.task === "virtual_try_on" && job.worker.render_3d === true
+          && this.worker.turntableReady?.() === true;
+        const timeout = setTimeout(() => controller.abort(), requested3d ? 630_000
+          : job.task === "virtual_try_on" ? 180_000 : 60_000);
         timeout.unref();
         try {
           const result = await this.worker.run(
@@ -781,14 +786,13 @@ export class AiService {
             await output.stats();
             job.result_url = `jobs/${job.id}/result`;
           }
-          if (result.status === "success" && Array.isArray(result.frames3d) && typeof result.glb_file === "string") {
-            // Only strict artifact names are ever published; a tampered worker cannot widen the path set.
-            const frames = result.frames3d.filter(
-              (name: unknown): name is string => typeof name === "string" && /^frame-\d{3}\.png$/.test(name),
-            );
-            if (frames.length >= 12 && result.glb_file === "model.glb") {
-              job.frames3d = frames.map((name) => `jobs/${job.id}/render3d/${name}`);
-              job.glb_url = `jobs/${job.id}/render3d/model.glb`;
+          if (requested3d && result.status === "success") {
+            // The 360° stage is an extra: a reconstruction failure never demotes the finished try-on.
+            try {
+              const stage = await this.worker.turntable?.(job.directory, controller.signal);
+              if (stage) job.frames3d = await this.publishTurntable(job, stage);
+            } catch (error) {
+              console.error("AI_TURNTABLE_STAGE_FAILED", job.id, (error as Error).message?.slice(0, 120));
             }
           }
           if (job.task === "image_embedding" && result.status === "success") {
@@ -884,6 +888,7 @@ export class AiService {
           gate: job.gate,
           error: job.error,
           result_url: job.result_url,
+          frames3d: job.frames3d,
           matches: job.matches,
           index_summary: job.index_summary,
           processing_version: job.processing_version,
@@ -892,5 +897,33 @@ export class AiService {
     } finally {
       this.pumping = false;
     }
+  }
+
+  /** Slice the worker's turntable sheet into strict-name frames under the job's render3d directory. */
+  private async publishTurntable(job: AiJob, stage: TurntableStage): Promise<string[]> {
+    const directory = join(job.directory, "render3d");
+    await mkdir(directory, { recursive: true, mode: 0o700 });
+    const sheet = await sharp(stage.bytes, { failOn: "warning", limitInputPixels: 40_000_000 })
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    const { width, height, channels } = sheet.info;
+    if (width !== stage.columns * stage.tile || height < stage.rows * stage.tile || channels < 3)
+      throw new Error("INVALID_IMAGE_RESULT");
+    const names: string[] = [];
+    for (let index = 0; index < stage.frames; index += 1) {
+      const left = (index % stage.columns) * stage.tile, top = Math.floor(index / stage.columns) * stage.tile;
+      const tile = Buffer.alloc(stage.tile * stage.tile * channels);
+      for (let row = 0; row < stage.tile; row += 1)
+        sheet.data.copy(
+          tile,
+          row * stage.tile * channels,
+          ((top + row) * width + left) * channels,
+          ((top + row) * width + left + stage.tile) * channels,
+        );
+      const name = `frame-${String(index).padStart(3, "0")}.png`;
+      await sharp(tile, { raw: { width: stage.tile, height: stage.tile, channels } }).png().toFile(join(directory, name));
+      names.push(`jobs/${job.id}/render3d/${name}`);
+    }
+    return names;
   }
 }

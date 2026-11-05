@@ -1,5 +1,5 @@
 {
-  "version": "velura-worker-v2",
+  "version": "velura-worker-v3",
   "source_revision": "7c0f10af3f91ad4048fe9729c470a13ef905d25a",
   "artifacts": [
     {
@@ -70,6 +70,25 @@
       "sha256": "8d10d2f3bb75ae3b6d527c77944fc5e7dcd94b29809d47a739a7a728a912b491",
       "license": "Apache-2.0",
       "license_evidence": "https://github.com/xuebinqin/U-2-Net/blob/master/LICENSE"
+    },
+    {
+      "path": "TripoSR/config.yaml",
+      "repo": "stabilityai/TripoSR",
+      "revision": "5b521936b01fbe1890f6f9baed0254ab6351c04a",
+      "file": "config.yaml",
+      "size": 987,
+      "sha256": "74ca708ce086bf68e97709ea6b3d91f14717921c04691e84043f0eb8fcc68e62",
+      "license": "MIT",
+      "license_evidence": "https://huggingface.co/stabilityai/TripoSR"
+    },
+    {
+      "path": "TripoSR/image_tokenizer/config.json",
+      "url": "https://huggingface.co/facebook/dino-vitb16/raw/f205d5d8e640a89a2b8ef0369670dfc37cc07fc2/config.json",
+      "file": "config.json",
+      "size": 454,
+      "sha256": "b87c0270b97db085fd82cf114a761fd0f62ae7914fbd407c752a2260646b689c",
+      "license": "Apache-2.0",
+      "license_evidence": "https://huggingface.co/facebook/dino-vitb16"
     }
   ]
 }

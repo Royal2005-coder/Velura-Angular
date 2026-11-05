@@ -126,8 +126,9 @@ spec:
                   key: AI_WORKER_KEY
             - name: AI_WEIGHTS_DIR
               value: /weights
-            - name: U2NET_HOME
-              value: /weights/rembg
+            # The patched tsr reads the DINO-ViT architecture from this directory instead of the hub; the pod has no egress.
+            - name: TRIPOSR_IMAGE_TOKENIZER_CONFIG
+              value: /weights/TripoSR/image_tokenizer
             - name: TMPDIR
               value: /private
           startupProbe:

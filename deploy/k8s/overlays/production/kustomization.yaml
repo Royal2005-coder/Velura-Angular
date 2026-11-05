@@ -8,13 +8,13 @@ patches:
 images:
 - name: ghcr.io/royal2005-coder/velura-api
   newName: ghcr.io/royal2005-coder/velura-api
-  digest: sha256:d9d62d6fca15a7f570167c0603c59bbbd0bdbac940adbffe96b3af792fe09f7e
+  digest: sha256:8d3b3dd0002839a01d5ccbfb9cec771f7c1dc310d0d07d2f39bb904ab8678d98
 - name: ghcr.io/royal2005-coder/velura-storefront
   newName: ghcr.io/royal2005-coder/velura-storefront
-  digest: sha256:5428f71d856a9b9de98bd67133362159e9d3c0da7393a956db3cf9436d9b40f5
+  digest: sha256:44c0d8ccfdf652e26562d7f445f8efacc6481d094e5dda47eebe8fa3612a466c
 - name: ghcr.io/royal2005-coder/velura-admin
   newName: ghcr.io/royal2005-coder/velura-admin
-  digest: sha256:f81042baca7cbf170b3648abe178179d608b7aea842dbc9a36a2167c4b9e7aff
+  digest: sha256:b7e55a8504b0d0e7a072473ef18c062d6ec298cceaec784bc6eb06cc32be0440
 - name: ghcr.io/royal2005-coder/velura-admin-erp
   newName: ghcr.io/royal2005-coder/velura-admin-erp
-  digest: sha256:16455ee8b4be42c8c8935cd808973dc811d360edc49670c624271c6f75341ca7
+  digest: sha256:b77b4e8da7f60ffcab0cf079af338fbccaed59912d24cbbb27296864e2b071cf

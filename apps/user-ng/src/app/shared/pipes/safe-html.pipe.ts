@@ -13,6 +13,15 @@ export class SafeHtmlPipe implements PipeTransform {
   private readonly sanitizer = inject(DomSanitizer);
 
   transform(value: string | null | undefined): SafeHtml {
-    return this.sanitizer.bypassSecurityTrustHtml(value || '');
+    const raw = String(value || '');
+    if (!raw.trim()) return '';
+    const clean = raw
+      .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+      .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '')
+      .replace(/\s+on\w+="[^"]*"/gi, '')
+      .replace(/\s+on\w+='[^']*'/gi, '')
+      .replace(/\s+on\w+=\S+/gi, '')
+      .replace(/\s+(?:src|href)=["']\s*javascript:[^"']*["']/gi, '');
+    return this.sanitizer.bypassSecurityTrustHtml(clean);
   }
 }

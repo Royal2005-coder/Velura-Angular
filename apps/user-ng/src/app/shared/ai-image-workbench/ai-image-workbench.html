@@ -295,6 +295,13 @@
               <div class="step__num">4</div>
               <div class="step__text">Hoàn thiện</div>
             </div>
+            @if (expects3d()) {
+              <div class="step__line" [class.step__line--active]="loadingStep() >= 5"></div>
+              <div class="step" [class.step--active]="loadingStep() >= 5" [class.step--current]="loadingStep() === 5">
+                <div class="step__num">5</div>
+                <div class="step__text">360°</div>
+              </div>
+            }
           </div>
 
           <div class="ai-loading-panel__message">

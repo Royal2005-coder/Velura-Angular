@@ -1,6 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { AiTask, AiWorker, AiWorkerResult } from "./ai-types.js";
+import type { AiTask, AiWorker, AiWorkerResult, TurntableStage } from "./ai-types.js";
 
 const VERSION = "velura-worker-v1";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -8,12 +8,16 @@ const PATHS: Record<AiTask, string> = {
   image_quality: "/ai/quality", image_embedding: "/embed/image",
   product_image_enhance: "/ai/enhance", virtual_try_on: "/ai/try-on",
 };
+// Not an AiTask: a member cannot queue this stage on its own, it only follows a finished try-on.
+const TURNTABLE_PATH = "/ai/try-on-3d";
+const TURNTABLE_TASK = "virtual_try_on_3d";
+const PNG_MAGIC = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 
-/** Private request identity echoed in JSON and image response headers. */
+/** Private request identity echoed in JSON and image response headers. `task` is the worker's own path name. */
 export interface ClusterWorkerBinding {
   schema_version: string;
   request_id: string;
-  task: AiTask;
+  task: string;
   product_id: string;
   variant_id: string;
   image_id: string;
@@ -68,6 +72,7 @@ export class ClusterAiWorker implements AiWorker {
   private readonly key: string;
   private readonly http: typeof fetch;
   private tasks: Partial<Record<AiTask, boolean>> = {};
+  private turntableTask = false;
   private observedAt = 0;
   private refreshing?: Promise<void>;
 
@@ -86,6 +91,11 @@ export class ClusterAiWorker implements AiWorker {
     return task ? this.tasks[task] === true : this.tasks.virtual_try_on === true;
   }
 
+  /** The 360° stage is offered only while the worker itself reports the reconstruction task ready. */
+  turntableReady(): boolean {
+    return this.ready() && this.turntableTask;
+  }
+
   /** Refresh task-specific health; unavailable GPU/weights never enables VTO or fake CPU fallback. */
   async refreshReadiness(): Promise<void> {
     if (this.refreshing) return this.refreshing;
@@ -95,6 +105,7 @@ export class ClusterAiWorker implements AiWorker {
 
   private async observe(): Promise<void> {
     const observed: Partial<Record<AiTask, boolean>> = {};
+    let turntable = false;
     let observedAt = 0;
     try {
       if (this.key.length < 32 || process.env.AI_DISABLE === "true") return;
@@ -110,11 +121,13 @@ export class ClusterAiWorker implements AiWorker {
       observed.image_embedding = (tasks.image_embedding === true || feats.includes("image_embedding")) && loaded;
       observed.product_image_enhance = (tasks.product_image_enhance === true || feats.includes("product_image_enhance")) && loaded;
       observed.virtual_try_on = (tasks.virtual_try_on === true || feats.includes("virtual_try_on")) && loaded && (health.gpu === true || typeof health.gpu === "string");
+      turntable = observed.virtual_try_on === true && tasks[TURNTABLE_TASK] === true;
       observedAt = Date.now();
     } catch {
       // Failed observations revoke readiness; an in-flight refresh never erases a fresh good observation.
     } finally {
       this.tasks = observed;
+      this.turntableTask = turntable;
       this.observedAt = observedAt;
     }
   }
@@ -208,5 +221,41 @@ export class ClusterAiWorker implements AiWorker {
       return { status: batch.some(row => row.embedding) ? "success" : "failed", model: "openclip-vit-b32-laion2b", dimensions: 512, batch_embeddings: batch };
     }
     return execute(task === "virtual_try_on" || job.person ? "person.image" : "input.image");
+  }
+
+  /** Reconstruct a finished try-on into one tiled 360° sheet; the job's own 2D result is the only input. */
+  async turntable(directory: string, signal: AbortSignal): Promise<TurntableStage> {
+    if (!this.turntableReady()) throw new Error("AI_WORKER_UNAVAILABLE");
+    const job = object(JSON.parse(await readFile(join(directory, "job.json"), "utf8")) as unknown);
+    const workerConfig = job.worker ? object(job.worker) : {};
+    const requestId = String(job.request_id || job.id || workerConfig.request_id || "");
+    if (!UUID.test(requestId)) throw new Error("AI_WORKER_INVALID_BINDING");
+    const binding: ClusterWorkerBinding = {
+      schema_version: VERSION, request_id: requestId, task: TURNTABLE_TASK,
+      product_id: String(job.product_id || ""), variant_id: String(job.variant_id || ""), image_id: "result.png",
+    };
+    const input = await readFile(join(directory, "result.png"));
+    if (!input.length || input.length > 8 * 1024 * 1024) throw new Error("AI_WORKER_IMAGE_SIZE");
+    const form = new FormData();
+    form.append("binding", JSON.stringify(binding));
+    form.append("file", new Blob([input]), "result.png");
+    const response = await this.http(`${this.endpoint}${TURNTABLE_PATH}`, {
+      method: "POST", headers: { Authorization: `Bearer ${this.key}` }, body: form,
+      signal: AbortSignal.any([signal, AbortSignal.timeout(430_000)]),
+    });
+    if (!response.ok) throw new Error(`AI_WORKER_HTTP_${response.status}`);
+    if (!response.headers.get("x-ai-binding")) throw new Error("AI_WORKER_ATTESTATION_REQUIRED");
+    checkBinding(headerJson(response, "x-ai-binding"), binding);
+    const bytes = await boundedBytes(response, 24 * 1024 * 1024);
+    if (response.headers.get("content-type")?.split(";")[0] !== "image/png" || !bytes.subarray(0, 8).equals(PNG_MAGIC))
+      throw new Error("AI_WORKER_IMAGE_SCHEMA");
+    const data = object(headerJson(response, "x-ai-result"));
+    if (data.status !== "success" || data.model !== "triposr-turntable") throw new Error("AI_WORKER_STAGE");
+    const layout = (["frames", "columns", "rows", "tile"] as const).map((key) => data[key]);
+    if (layout.some((value) => typeof value !== "number" || !Number.isInteger(value) || value <= 0 || value > 64))
+      throw new Error("AI_WORKER_STAGE_LAYOUT");
+    const [frames, columns, rows, tile] = layout as [number, number, number, number];
+    if (frames < 12 || frames > columns * rows || tile < 64) throw new Error("AI_WORKER_STAGE_LAYOUT");
+    return { bytes, frames, columns, rows, tile };
   }
 }

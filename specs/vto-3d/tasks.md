@@ -3,27 +3,28 @@
 **Input:** [spec.md](./spec.md), [plan.md](./plan.md)
 
 ## M1 — Worker (apps/ai-worker)
-- [x] T001 Tạo `apps/ai-worker/reconstruction_3d.py`: remove bg (rembg u2net) → TripoSR mesh → 24 khung turntable (PyTorch3D, fallback trimesh) → `frames3d/000.png…023.png` + `model.glb`; hàm pure `render_turntable(result_path, out_dir, frames=24)` dễ mock.
-- [x] T002 Wiring `apps/ai-worker/infer.py::virtual_try_on`: nếu `job.get("render_3d")` → chạy T001 sau `result.png`, unload model 2D + `torch.cuda.empty_cache()` trước; thêm `frames3d`, `glb_file` vào result dict; lỗi → `RENDER_3D_UNAVAILABLE` không phá result 2D.
-- [ ] T003 Capability: `production_models.py` báo `tryon_3d: true` khi weights tồn tại; `bootstrap_weights.py` tải TripoSR (MIT) + u2net (Apache-2.0) có checksum và ghi receipt `verified-inventory.json` (FR-007).
-- [ ] T004 `requirements-production.txt`: `trimesh==4.5.1` là renderer duy nhất được cài — `rembg` bị loại vì bản pin được yêu cầu numpy>=2.3 xung đột pin numpy 1.26.4 của image, còn `pytorch3d` không dùng; u2net chạy trực tiếp qua `onnxruntime` đã có.
-- [x] T005 Unit tests mock (`apps/ai-worker/test_reconstruction_3d.py`): contract result, flag tắt → không import torch 3D, fail 3D → 2D vẫn success. Chạy `npm run test-ai-worker`.
+- [x] T001 `apps/ai-worker/reconstruction_3d.py`: u2net cutout (onnxruntime) → TSR forward → `render()` 24 view → một sheet PNG tiled (6×4, tile 512). hàm `turntable(image, frames)` trả `{sprite, frames, columns, rows, tile}`.
+- [x] T002 Wiring đúng đường production: `production_service.py` nhận task `/ai/try-on-3d` (`virtual_try_on_3d`) chạy **sau** khi 2D đã lưu, deadline riêng 420s. (`infer.py` không nằm trong image → block 3D ở đó đã bị gỡ.)
+- [x] T003 Capability: `/ready` và `/health` trả `tasks.virtual_try_on_3d` chỉ khi CUDA + weights + vendor tree hợp lệ; `weights-manifest.json` velura-worker-v3 thêm `TripoSR/config.yaml` (MIT) và `TripoSR/image_tokenizer/config.json` (Apache-2.0) với checksum publisher; receipt `verified-inventory.json` do `bootstrap_weights.py` ghi.
+- [x] T004 Vendoring + deps: `vendor_triposr.py` tải `tsr/` theo revision pin, verify blob sha1, vá torchmcubes→scikit-image / omegaconf→`tsr_config.py` / rembg+imageio→lazy import, loại `bake_texture.py`; `requirements-production.txt` thêm `transformers==4.44.2 tokenizers==0.19.1 scikit-image==0.24.0 scipy==1.13.1 imageio==2.36.1 tifffile==2024.8.30 lazy-loader==0.4` (đã verify resolve với `--only-binary`, numpy 1.26.4 giữ nguyên).
+- [x] T005 Unit tests mock (`test_reconstruction_3d.py`): availability fail-closed từng điều kiện, cutout không kéo `rembg` vào, `_condition` centring, sheet slicing, thiếu frame → RuntimeError. `python -m unittest discover -s apps/ai-worker`.
 
 ## M2 — API (apps/api)
-- [ ] T006 `ai-service.ts`: chấp nhận `render3d` boolean trong body try-on, forward vào job; validate chỉ khi task virtual_try_on.
-- [ ] T007 Artifact serving: mở rộng danh sách file result (`frames3d/*.png`, `model.glb`) qua cùng signed-URL + retention; timeout job 3D ≥ 240s; 1 queue slot 3D riêng (FR-006).
-- [ ] T008 Tests API: render3d off → payload như cũ; on → result có frames3d/glb; artifact ngoài allowlist bị chặn.
+- [x] T006 `ai-service.ts`: `render3d` chỉ nhận cho `virtual_try_on`, bền hoá trong `job.worker.render_3d` (nằm trong idempotency fingerprint) → resume/poll vẫn biết khách có yêu cầu 3D.
+- [x] T007 Stage + serving: `cluster-worker.turntable()` gọi `/ai/try-on-3d` (binding + attestation như try-on thường), `publishTurntable()` cắt sheet bằng `sharp` rồi ghi `render3d/frame-0NN.png`; `resultFile()` chỉ phục vụ basename có trong `job.frames3d`; `view()` publish `frames3d`.
+- [x] T008 Tests API (`tests/api/ai-engine.test.ts`): studio + render3d → 12 frames slicing đúng ô, tên lạ → `RESULT_UNAVAILABLE`; stage fail (503) → job 2D vẫn `success` và `frames3d` absent.
 
 ## M3 — Frontend (apps/user-ng)
-- [ ] T009 `ai-image-workbench`: gửi `render3d` theo toggle "Xem 3D"; viewer tuần tự frames theo drag (index = angle), autospin dùng frames thật; fallback tilt-CSS hiện tại khi job không có frames (FR-004).
-- [ ] T010 Nút "Tải mô hình 3D (.glb)" trong result toolbar (icon SVG cùng hệ, không emoji).
-- [ ] T011 Sửa thẻ scene (US-002): badge = occasion tiếng Việt lấy từ `asset.occasion` (Đi học/Đi chơi/Sang trọng/Công sở…), bỏ badge tiếng Anh 'Atelier'…; title không đổi. Test spec: không asset nào có badge === title.
-- [ ] T012 Loading panel thêm phase "Đang dựng mô hình 3D" khi render3d (stepper hiện có).
+- [x] T009 `ai-image-workbench`: gửi `render3d: mode === 'studio'`, `load3dArtifacts()` fetch frame theo basename, drag→index, autospin delta-time; tilt-CSS là fallback khi không có frames.
+- [ ] T010 Nút "Tải mô hình 3D (.glb)": **hoãn** — xem T016.
+- [x] T011 Thẻ scene (US-002): badge = occasion tiếng Việt từ `asset.occasion`, bỏ badge trùng title ('Atelier'…).
+- [ ] T012 Loading panel thêm phase "Đang dựng mô hình 3D" khi `render3d` (stepper hiện có).
 
 ## M4 — Cluster & tài liệu
-- [ ] T013 Dockerfile ai-worker: layer weights TripoSR/u2net vào image hoặc PVC `ai-private` như studio-assets; env `VTO_3D_ENABLED` mặc định false.
-- [ ] T014 Canary: bật `VTO_3D_ENABLED` trên 1 product, đo VRAM đỉnh + p95 latency qua job metrics; ghi số liệu vào `specs/vto-3d/converge.md`.
-- [ ] T015 PR theo pipeline (develop → promote → pin), spec-kit converge: mọi FR có acceptance xanh.
+- [x] T013 Dockerfile ai-worker: bước `python vendor_triposr.py --destination=/vendor` trong stage dependencies, `PYTHONPATH=/app:/opt/vendor`, copy `reconstruction_3d.py` + `tsr_config.py`; `worker.yaml` đặt `TRIPOSR_IMAGE_TOKENIZER_CONFIG=/weights/TripoSR/image_tokenizer` (không có flag `VTO_3D_ENABLED` — capability do worker báo).
+- [ ] T014 Canary + đo: apply Job `provision-weights` (velura-worker-v3) trước, rồi cho Flux roll ảnh worker mới; chạy một try-on studio thật, ghi VRAM đỉnh + latency vào `specs/vto-3d/converge.md`.
+- [ ] T015 PR theo pipeline (develop → sync → promote → release → pin → reconcile), spec-kit converge: mọi FR có acceptance xanh.
+- [ ] T016 `.glb` export (deferred): một response chỉ mang một artifact, nên mesh cần kênh riêng (multipart hoặc request thứ hai trả `model/gltf-binary`). UI đã bỏ nút tải để không hứa thứ chưa có.
 
 ## Dependencies
-- T002→T001; T006/T007→T002; T009→T006/T007; T013→T003; T014→T013. T011 độc lập (làm trước được).
+- T002→T001; T006/T007→T002; T009→T006/T007; T013→T003/T004; T014→T013+T015. T011 độc lập.

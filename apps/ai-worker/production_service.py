@@ -14,6 +14,9 @@ from production_quality import CpuQuality
 
 MAX_BODY = 17 * 1024 * 1024
 DEADLINE_SECONDS = 180
+# A 24-view NeRF sweep on one 4060 is slower than the try-on that feeds it; it gets its own budget
+# instead of inflating the deadline every other task shares.
+THREE_D_DEADLINE_SECONDS = 420
 
 
 class WorkerError(Exception):
@@ -23,6 +26,25 @@ class WorkerError(Exception):
         self.code, self.status = code, status
 
 
+def three_d_ready() -> bool:
+    """Whether the optional reconstruction stage can run here; a broken vendor tree must not hide 2D."""
+    try:
+        import reconstruction_3d
+
+        return reconstruction_3d.available()
+    except Exception:
+        return False
+
+
+def capable(task: str, cpu_ready: bool, models_ready: bool) -> bool:
+    """Per-task readiness, so the API only ever posts a stage this worker can serve."""
+    if task == "image_quality":
+        return cpu_ready
+    if task == "virtual_try_on_3d":
+        return models_ready and three_d_ready()
+    return models_ready
+
+
 class SerialExecutor:
     """Keep the GPU lease until computation really ends, even after HTTP cancellation."""
 
@@ -30,13 +52,13 @@ class SerialExecutor:
         self.slot = asyncio.Semaphore(1)
         self.pending = set()
 
-    async def run(self, request, operation):
+    async def run(self, request, operation, budget: int = DEADLINE_SECONDS):
         try:
             await asyncio.wait_for(self.slot.acquire(), timeout=2)
         except TimeoutError:
             raise WorkerError("WORKER_BUSY", 429)
         cancel = threading.Event()
-        deadline = time.monotonic() + DEADLINE_SECONDS
+        deadline = time.monotonic() + budget
 
         async def execute():
             try:
@@ -115,7 +137,7 @@ def create_app(loader=None, key: str | None = None) -> FastAPI:
     async def ready():
         cpu_ready = len(worker_key) >= 32 and state["quality"] is not None
         models_ready = state["models"] is not None
-        tasks = {task: models_ready or task == "image_quality" and cpu_ready for task in TASKS.values()}
+        tasks = {task: capable(task, cpu_ready, models_ready) for task in TASKS.values()}
         return JSONResponse({"ready": cpu_ready, "models_ready": models_ready,
                              "schema_version": VERSION, "tasks": tasks},
                             status_code=200 if cpu_ready else 503)
@@ -123,12 +145,14 @@ def create_app(loader=None, key: str | None = None) -> FastAPI:
     @api.get("/health")
     async def health(request: Request):
         authorize(request)
+        cpu_ready = state["quality"] is not None
         if state["models"] is None:
-            cpu_ready = state["quality"] is not None
             return JSONResponse({"ready": False, "models_ready": False, "cpu_ready": cpu_ready,
                                  "schema_version": VERSION, "error_code": state["error"],
-                                 "gpu": False, "tasks": {task: task == "image_quality" and cpu_ready for task in TASKS.values()}}, status_code=503)
-        return {**state["models"].health, "models_ready": True, "cpu_ready": True}
+                                 "gpu": False,
+                                 "tasks": {task: capable(task, cpu_ready, False) for task in TASKS.values()}}, status_code=503)
+        return {**state["models"].health, "models_ready": True, "cpu_ready": True,
+                "tasks": {task: capable(task, cpu_ready, True) for task in TASKS.values()}}
 
     def authorize(request):
         supplied = request.headers.get("authorization", "")
@@ -194,6 +218,12 @@ def create_app(loader=None, key: str | None = None) -> FastAPI:
             if task == "image_embedding":
                 return None, {"status": "success", "model": "openclip-vit-b32-laion2b", "dimensions": 512,
                               "embedding": models.embedding(first)}
+            if task == "virtual_try_on_3d":
+                import reconstruction_3d
+
+                stage = reconstruction_3d.turntable(first)
+                sprite = stage.pop("sprite")
+                return sprite, {"status": "success", "model": "triposr-turntable", **stage}
             if task == "virtual_try_on":
                 gate = models.quality(first, True)
                 if not gate["valid"]:
@@ -212,7 +242,8 @@ def create_app(loader=None, key: str | None = None) -> FastAPI:
         headers = {"X-AI-Binding": encoded(envelope), "Cache-Control": "no-store"}
         try:
             runner = quality_executor if task == "image_quality" else executor
-            payload, result = await runner.run(request, operation)
+            budget = THREE_D_DEADLINE_SECONDS if task == "virtual_try_on_3d" else DEADLINE_SECONDS
+            payload, result = await runner.run(request, operation, budget=budget)
             if payload is None:
                 return JSONResponse({**envelope, **result}, headers=headers)
             headers["X-AI-Result"] = encoded(result)

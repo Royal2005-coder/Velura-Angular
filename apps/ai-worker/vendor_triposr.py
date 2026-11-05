@@ -58,6 +58,15 @@ PATCHES = {
     ],
     "tsr/system.py": [
         ("from omegaconf import OmegaConf", "from tsr_config import OmegaConf"),
+        ("import math\nimport os\n", "import gc\nimport math\nimport os\n"),
+        ("""        ckpt = torch.load(weight_path, map_location="cpu")
+        model.load_state_dict(ckpt)
+        return model""",
+         """        ckpt = torch.load(weight_path, map_location="cpu", weights_only=True)
+        model.load_state_dict(ckpt)
+        del ckpt
+        gc.collect()
+        return model"""),
     ],
     "tsr/models/isosurface.py": [
         ("from torchmcubes import marching_cubes", MARCHING_CUBES.strip("\n")),

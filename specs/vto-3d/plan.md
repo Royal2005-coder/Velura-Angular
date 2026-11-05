@@ -1,21 +1,23 @@
 # Implementation Plan: VTO 3D
 
-**Spec:** [spec.md](./spec.md) | **Performance:** 2D path unchanged; 3D adds ~60–150s/job on RTX 4060.
+**Spec:** [spec.md](./spec.md) | **Performance:** 2D path unchanged; the 360° stage is a second worker request with its own 420s budget.
 
 ## Technical Context
-- **Worker:** `apps/ai-worker` (Python, LEFFA VTON hiện hữu, `infer.py::virtual_try_on` trả `result.png`). Stage 3D nối ngay sau `result.png` — không đụng model 2D.
-- **Recon:** TripoSR (stabilityai, **MIT** — HF `license:mit`, ghi nguồn FR-007) + u2net (Apache-2.0) + PyTorch3D render, fallback `trimesh`. Tham khảo pipeline `areebrehmanai/styleai-virtual-tryon` (reconstruction_3d.py) — **không vendor code** của repo tham khảo vào source; chỉ tham khảo kiến trúc, tự implement.
-- **Bootstrap:** `bootstrap_weights.py` thêm URL TripoSR + u2net, checksum như pattern `virtual_tryon_dc.pth`.
-- **API:** `apps/api/src/ai/ai-service.ts` — trường `render3d` trong job body; artifact list mở rộng `frames3d/*` + `model.glb` qua cùng cơ chế signed URL.
-- **Frontend:** `ai-image-workbench` viewer đổi sang tuần tự frames (drag→index, autospin theo delta-time đã có từ KAN-66); fallback tilt-CSS khi không có frames.
+- **Worker:** `apps/ai-worker` chạy production qua `production_service.py` (`/ai/try-on`). `infer.py` là đường Colab/simulation và **không có trong image** (`deploy/docker/ai-worker/Dockerfile` chỉ copy `production_*.py` + `maskless_vton.py` + `image_gate.py` + `bootstrap_weights.py`), nên stage 3D nối vào service thật, không nối vào `infer.py`.
+- **Recon:** `tsr/` của TripoSR được **vendor** — `vendor_triposr.py` tải đúng revision đã pin, verify git blob sha1, rồi vá: `torchmcubes` → scikit-image marching cubes, `omegaconf` → `tsr_config.py`, `rembg`/`imageio` → import lazy, DINO-ViT `config.json` đọc từ PVC (pod không có egress). `tsr/bake_texture.py` loại khỏi tree (cần xatlas + OpenGL). Tham khảo kiến trúc `areebrehmanai/styleai-virtual-tryon`, không vendoring code repo đó.
+- **Renderer:** `TSR.render()` (NeRF gốc) cho 24 view — `trimesh.save_image` cần GL context nên không dùng; `.glb` export bị hoãn (T016).
+- **Transport:** worker trả **một** PNG body + header `X-AI-Result` (base64 JSON) — sheet tiled thoả hợp đồng này mà không phải bịa kênh đa tệp. API cắt sheet bằng `sharp` (đã là dependency).
+- **Bootstrap:** `weights-manifest.json` velura-worker-v3 thêm `TripoSR/config.yaml` và `TripoSR/image_tokenizer/config.json`; checksum lấy từ publisher, không tự đặt.
+- **Frontend:** `ai-image-workbench` dùng frames theo góc (drag→index, autospin delta-time), tilt-CSS là fallback.
 
 ## Milestones
-1. **M1 Worker** — module `reconstruction_3d.py` + wiring `infer.py` + capability `tryon_3d` + unit tests mock (không cần GPU trong CI).
-2. **M2 API** — contract `render3d`, artifacts, timeout/queue slot riêng, tests.
-3. **M3 Frontend** — turntable frames viewer, nút tải .glb, scene card badge fix (US-002 acceptance), spec-kit converge.
-4. **M4 Cluster** — Dockerfile + PVC weights, canary `render3d=true` trên 1 sản phẩm, đo VRAM/latency thực tế; số liệu đưa vào report môn học.
+1. **M1 Worker** — `vendor_triposr.py` + `tsr_config.py` + `reconstruction_3d.turntable()` + task `/ai/try-on-3d` + capability `tasks.virtual_try_on_3d` + unit tests mock (CI không cần GPU).
+2. **M2 API** — `render3d` bền hoá, stage call sau khi 2D success, `sharp` slice sheet, publish `frames3d`, serve theo basename đã ghi trong job, tests.
+3. **M3 Frontend** — viewer turntable; fallback tilt khi thiếu frames; scene card badge fix (US-002).
+4. **M4 Cluster** — ảnh worker mới + PVC weights (Job `provision-weights`), đo VRAM/latency thực tế trên RTX 4060; số liệu đưa vào report môn học.
 
 ## Risk / Decisions
-- VRAM 8GB: 2D và 3D không load đồng thời — unload trước khi recon (torch.cuda.empty_cache giữa phase).
-- TripoSR trên người mặc đồ cho mesh "khối" hơn là người — chấp nhận ở mức demo môn học; ghi rõ trong UI là "mô hình 3D tái tạo".
-- Scene 3D: pha nền theo mùa bằng geometry đơn giản (floor+cyc+bảng màu mùa) trong render rig — không cần asset ngoài.
+- VRAM 8GB: 2D và 3D resident đồng thời (ProductionModels + TSR). Nếu OOM, stage fail `INFERENCE_FAILED`, 2D vẫn thành công — theo dõi log `AI_TURNTABLE_STAGE_FAILED` và giảm `TILE`/`frames` nếu cần.
+- Marching cubes/`extract_mesh` không còn trên đường đi → chi phí GPU chủ yếu là `render()` 24 view.
+- Một GPU slot: stage 3D chiếm slot nên job 2D song tốc nhận 429 + backoff (hành vi có chủ ý, không starvation).
+- TripoSR trên người mặc đồ cho mesh "khối" hơn là người — chấp nhận ở mức demo môn học; UI mô tả là ảnh xoay góc tái tạo, không phải avatar 3D.

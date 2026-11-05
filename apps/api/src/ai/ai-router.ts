@@ -238,7 +238,7 @@ export async function handleAiRoute(
       const bytes = await service.resultFile(owner, id, name);
       res.writeHead(200, {
         ...headers,
-        "content-type": name.endsWith(".glb") ? "model/gltf-binary" : "image/png",
+        "content-type": "image/png",
         "cache-control": "no-store",
         "content-disposition": `inline; filename="${name}"`,
         "x-content-type-options": "nosniff",

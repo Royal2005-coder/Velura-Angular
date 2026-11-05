@@ -138,7 +138,7 @@ export class LocalAiRepository {
       }
     }
   }
-  /** Turntable frames and the .glb live in the job's render3d directory; names are exact-matched. */
+  /** Turntable frames live in the job's render3d directory; the caller publishes only names it recorded. */
   async resultFile(job: AiJob, name: string): Promise<Buffer> {
     const path = join(job.directory, "render3d", name);
     const resolved = await realpath(path);

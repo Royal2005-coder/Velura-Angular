@@ -34,9 +34,8 @@ export interface AiJobView {
   attempt?: number;
   retry_of?: string;
   result_url?: string;
-  /** KAN-66 VTO 3D: strict-name turntable frames and mesh published from the job directory. */
+  /** KAN-66 VTO 3D: strict-name turntable frames published from the job directory. */
   frames3d?: string[];
-  glb_url?: string;
   gate?: Record<string, unknown>;
   error?: string;
   matches?: Array<{ product_id: string; score: number }>;
@@ -71,9 +70,6 @@ export interface AiWorkerResult {
   status: "success" | "validation_failed" | "failed";
   gate?: Record<string, unknown>;
   result_file?: string;
-  /** KAN-66 VTO 3D stage: turntable frame names under render3d/ and the mesh file name. */
-  frames3d?: string[];
-  glb_file?: string;
   embedding?: number[];
   model?: string;
   dimensions?: number;
@@ -85,9 +81,20 @@ export interface AiWorkerResult {
     error_code?: string;
   }>;
 }
+/** The 360° stage answers with one tiled sheet; the API slices it into numbered frames. */
+export interface TurntableStage {
+  bytes: Buffer;
+  frames: number;
+  columns: number;
+  rows: number;
+  tile: number;
+}
 /** Adapter is isolated so tests exercise ownership and queue rules without consuming GPU. */
 export interface AiWorker {
   ready(task?: AiTask): boolean;
+  /** Optional 360° stage: adapters that cannot reconstruct simply omit both members. */
+  turntableReady?(): boolean;
+  turntable?(directory: string, signal: AbortSignal): Promise<TurntableStage>;
   /** Refresh authenticated backend health before advertising or enqueuing a capability. */
   refreshReadiness?(): Promise<void>;
   run(directory: string, signal: AbortSignal): Promise<AiWorkerResult>;

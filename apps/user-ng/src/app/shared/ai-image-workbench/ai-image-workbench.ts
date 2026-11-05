@@ -283,11 +283,14 @@ export class AiImageWorkbench {
 
   // --- AI RICH LOADING PROGRESS ---
   readonly loadingSeconds = signal<number>(0);
+  /** Studio try-on runs the 360° stage after the photo, so the stepper has to admit it exists. */
+  readonly expects3d = computed(() => this.task() === 'virtual_try_on' && this.mode() === 'studio');
   readonly loadingStep = computed(() => {
     const s = this.loadingSeconds();
     if (s < 6) return 1;
     if (s < 18) return 2;
     if (s < 34) return 3;
+    if (this.expects3d() && s >= 48) return 5;
     return 4;
   });
   readonly loadingMessage = computed(() => {
@@ -295,6 +298,7 @@ export class AiImageWorkbench {
     if (s < 6) return 'Đang phân tích vóc dáng và đo lường tỷ lệ khung xương...';
     if (s < 18) return 'Khớp mẫu trang phục, đo lường độ rủ và xếp nếp vải...';
     if (s < 34) return 'Mô hình AI Diffusion đang render và hòa phối trang phục lên cơ thể...';
+    if (this.expects3d() && s >= 48) return 'Ảnh 2D đã xong. Đang dựng tuần tự 24 góc nhìn 360° trên GPU...';
     return 'Tinh chỉnh ánh sáng, khử răng cưa và hoàn thiện chi tiết trang phục...';
   });
   private loadingTimer: number | undefined;

@@ -21,7 +21,7 @@ describe('SafeHtmlPipe', () => {
   });
 
   it('handles empty or null values gracefully', () => {
-    expect(pipe.transform('')).toBeTruthy();
-    expect(pipe.transform(null)).toBeTruthy();
+    expect(pipe.transform('')).toBe('');
+    expect(pipe.transform(null)).toBe('');
   });
 });

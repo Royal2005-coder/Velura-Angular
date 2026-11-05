@@ -23,7 +23,8 @@ MAX_FRAMES = 36
 TILE = 512
 TILE_COLUMNS = 6
 FOREGROUND_RATIO = 0.85
-CHUNK_SIZE = 8192
+# 4096 rays per pass instead of upstream's 8192: the 2D pipeline keeps ~4.6 GiB of the 8 GiB card resident.
+CHUNK_SIZE = 4096
 
 ARTIFACTS = ("TripoSR/model.ckpt", "TripoSR/config.yaml", "TripoSR/image_tokenizer/config.json", "rembg/u2net.onnx")
 

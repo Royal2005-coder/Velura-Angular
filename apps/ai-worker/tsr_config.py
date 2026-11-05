@@ -18,7 +18,15 @@ REQUIRED = object()
 
 
 class Config(dict):
-    """Mapping with attribute access, which is how every vendored module reads its settings."""
+    """Mapping with attribute access, which is how every vendored module reads its settings.
+
+    Nested blocks are wrapped too, so `cfg.renderer.radius` works wherever a Config was built from.
+    """
+
+    def __init__(self, mapping=None, **extra):
+        super().__init__()
+        for key, value in {**(mapping or {}), **extra}.items():
+            self[key] = _wrap(value)
 
     def __getattr__(self, name: str):
         try:
@@ -53,12 +61,13 @@ def resolve(root: Config) -> Config:
             for key, value in node.items():
                 node[key] = walk(value)
             return node
-        found = REFERENCE.match(node) if isinstance(node, str) else None
-        if found is None:
+        reference = REFERENCE.match(node) if isinstance(node, str) else None
+        if reference is None:
             return node
-        for part in found.group(1).split("."):
-            node = root[part]
-        return node
+        target = root
+        for part in reference.group(1).split("."):
+            target = target[part]
+        return target
 
     walk(root)
     return root
@@ -76,12 +85,17 @@ def structured(schema) -> Schema:
             fields[field.name] = field.default_factory()
         else:
             fields[field.name] = REQUIRED
-    return fields
+    return Schema(fields)
 
 
 def merge(base, override) -> Config:
     """Reject keys the module never reads and require every field that has no default."""
-    known = base.fields if isinstance(base, Schema) else dict(base or {})
+    if isinstance(base, Schema):
+        known = base.fields
+    elif dataclasses.is_dataclass(base):
+        known = structured(base).fields
+    else:
+        known = dict(base or {})
     provided = dict(override or {})
     unknown = sorted(set(provided) - set(known))
     if unknown:

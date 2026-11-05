@@ -758,8 +758,13 @@ function requireProductAdmin(context: AuthContext | undefined, isComboOperation 
 
 function parseListFilters(searchParams: URLSearchParams): JsonObject {
   const status = searchParams.get("status") || "";
-  if (status && !PRODUCT_STATUSES.includes(status)) {
-    throw validationError("status", "Bộ lọc trạng thái không hợp lệ");
+  if (status) {
+    const tokens = status.split(",").map((s) => s.trim()).filter(Boolean);
+    for (const token of tokens) {
+      if (!PRODUCT_STATUSES.includes(token)) {
+        throw validationError("status", "Bộ lọc trạng thái không hợp lệ");
+      }
+    }
   }
   const orderInput = searchParams.get("order") || "updated_at.desc";
   const allowedOrders = [

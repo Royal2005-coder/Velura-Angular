@@ -25,7 +25,7 @@ export function createProductRepository() {
         const value = sanitizeSearch(filters.q);
         if (value) query.or = `(name.ilike.*${value}*,sku.ilike.*${value}*)`;
       }
-      if (filters.status) query.status = `eq.${filters.status}`;
+      if (filters.status) query.status = String(filters.status).includes(",") ? `in.(${filters.status})` : `eq.${filters.status}`;
       if (filters.priceState) query.price_state = `eq.${filters.priceState}`;
       if (filters.categoryId) query.category_id = `eq.${filters.categoryId}`;
       if (filters.isCombo !== undefined) query.is_combo = `eq.${filters.isCombo}`;

@@ -172,24 +172,28 @@
         <section class="content-compose__panel content-compose__panel--editor" [hidden]="editorTab() !== 'content'">
           <div class="content-editor">
             <div class="content-editor__toolbar" role="toolbar" aria-label="Định dạng nội dung">
-              <button type="button" title="Đoạn văn" (click)="formatBlock('p')">Đoạn</button>
-              <button type="button" title="Tiêu đề 2" (click)="formatBlock('h2')">H2</button>
-              <button type="button" title="Tiêu đề 3" (click)="formatBlock('h3')">H3</button>
-              <button type="button" title="Trích dẫn" (click)="formatBlock('blockquote')">“</button>
+              <button type="button" class="content-editor__mode-btn" [class.is-active]="sourceMode()" (click)="toggleSourceMode()" title="Chuyển đổi giữa trình soạn trực quan và mã nguồn HTML">
+                {{ sourceMode() ? 'Trực quan' : '&lt;/&gt; Mã HTML' }}
+              </button>
               <span class="content-editor__divider"></span>
-              <button type="button" title="Đậm" (click)="format('bold')"><b>B</b></button>
-              <button type="button" title="Nghiêng" (click)="format('italic')"><i>I</i></button>
-              <button type="button" title="Gạch chân" (click)="format('underline')"><u>U</u></button>
-              <button type="button" title="Gạch ngang" (click)="format('strikeThrough')"><s>S</s></button>
+              <button type="button" [disabled]="sourceMode()" title="Đoạn văn" (click)="formatBlock('p')">Đoạn</button>
+              <button type="button" [disabled]="sourceMode()" title="Tiêu đề 2" (click)="formatBlock('h2')">H2</button>
+              <button type="button" [disabled]="sourceMode()" title="Tiêu đề 3" (click)="formatBlock('h3')">H3</button>
+              <button type="button" [disabled]="sourceMode()" title="Trích dẫn" (click)="formatBlock('blockquote')">“</button>
               <span class="content-editor__divider"></span>
-              <button type="button" title="Danh sách chấm" (click)="format('insertUnorderedList')">• Danh sách</button>
-              <button type="button" title="Danh sách số" (click)="format('insertOrderedList')">1. Danh sách</button>
-              <button type="button" title="Chèn liên kết" (click)="openLink()">Liên kết</button>
-              <button type="button" title="Chèn ảnh" (click)="openImage()">Ảnh</button>
-              <button type="button" title="Xóa định dạng" (click)="clearFormat()">Xóa định dạng</button>
+              <button type="button" [disabled]="sourceMode()" title="Đậm" (click)="format('bold')"><b>B</b></button>
+              <button type="button" [disabled]="sourceMode()" title="Nghiêng" (click)="format('italic')"><i>I</i></button>
+              <button type="button" [disabled]="sourceMode()" title="Gạch chân" (click)="format('underline')"><u>U</u></button>
+              <button type="button" [disabled]="sourceMode()" title="Gạch ngang" (click)="format('strikeThrough')"><s>S</s></button>
               <span class="content-editor__divider"></span>
-              <button type="button" title="Hoàn tác" (click)="format('undo')">↶</button>
-              <button type="button" title="Làm lại" (click)="format('redo')">↷</button>
+              <button type="button" [disabled]="sourceMode()" title="Danh sách chấm" (click)="format('insertUnorderedList')">• Danh sách</button>
+              <button type="button" [disabled]="sourceMode()" title="Danh sách số" (click)="format('insertOrderedList')">1. Danh sách</button>
+              <button type="button" [disabled]="sourceMode()" title="Chèn liên kết" (click)="openLink()">Liên kết</button>
+              <button type="button" [disabled]="sourceMode()" title="Chèn ảnh" (click)="openImage()">Ảnh</button>
+              <button type="button" [disabled]="sourceMode()" title="Xóa định dạng" (click)="clearFormat()">Xóa định dạng</button>
+              <span class="content-editor__divider"></span>
+              <button type="button" [disabled]="sourceMode()" title="Hoàn tác" (click)="format('undo')">↶</button>
+              <button type="button" [disabled]="sourceMode()" title="Làm lại" (click)="format('redo')">↷</button>
               <span class="content-editor__spacer"></span>
               <button type="button" class="content-editor__preview-toggle" [class.is-active]="previewOpen()" (click)="togglePreview()">
                 {{ previewOpen() ? 'Ẩn xem trước' : 'Xem trước' }}
@@ -226,6 +230,7 @@
             <div
               #editor
               class="content-editor__surface"
+              [hidden]="sourceMode()"
               contenteditable="true"
               role="textbox"
               aria-multiline="true"
@@ -235,6 +240,14 @@
               (paste)="onPaste($event)"
               (drop)="onDrop($event)"
             ></div>
+            <textarea
+              class="content-editor__source"
+              [hidden]="!sourceMode()"
+              [value]="draft()?.contentHtml || ''"
+              (input)="onSourceInput($event)"
+              placeholder="Nhập hoặc dán mã nguồn HTML đầy đủ (hỗ trợ <article>, <figure>, <img style=...>, <figcaption>)..."
+              spellcheck="false"
+            ></textarea>
             <div class="content-editor__status">
               <span>{{ contentWords() }} từ · {{ contentCharacters() }} ký tự</span>
               <span>Tối thiểu 40 ký tự · lưu tự động khi bấm “Lưu bài viết”</span>
@@ -367,16 +380,72 @@
         </section>
 
         <section class="content-compose__panel" [hidden]="editorTab() !== 'products'">
-          <div class="content-products__search">
-            <label class="erp-field">
-              <span>Tìm sản phẩm trong shop để đính kèm</span>
-              <input class="erp-input" type="search" [value]="productQuery()" (input)="onProductQueryInput($event)" (keyup.enter)="searchProducts()" placeholder="Tên hoặc SKU sản phẩm…" />
-            </label>
-            <button class="erp-btn erp-btn--sm" type="button" (click)="searchProducts()" [disabled]="productSearching()">
-              {{ productSearching() ? 'Đang tìm…' : 'Tìm' }}
-            </button>
+          <div class="content-products__controls">
+            <div class="content-products__search">
+              <label class="erp-field">
+                <span>Tìm sản phẩm</span>
+                <input class="erp-input" type="search" [value]="productQuery()" (input)="onProductQueryInput($event)" (keyup.enter)="searchProducts()" placeholder="Tên hoặc SKU sản phẩm…" />
+              </label>
+              <label class="erp-field content-products__cat-field">
+                <span>Danh mục sản phẩm</span>
+                <select class="erp-select" [value]="productCategoryId()" (change)="onProductCategoryChange($event)">
+                  <option value="">— Tất cả danh mục —</option>
+                  @for (cat of productCategories(); track cat.category_id) {
+                    <option [value]="cat.category_id">{{ cat.name }}</option>
+                  }
+                </select>
+              </label>
+              <button class="erp-btn erp-btn--sm" type="button" (click)="searchProducts()" [disabled]="productSearching()">
+                {{ productSearching() ? 'Đang tìm…' : 'Tìm' }}
+              </button>
+            </div>
+            <div class="content-products__ai-bar">
+              <button class="erp-btn erp-btn--outline erp-btn--sm content-products__ai-btn" type="button" (click)="suggestProductsWithAi()" [disabled]="aiProductLoading()">
+                <span class="ai-sparkle">✦</span> {{ aiProductLoading() ? 'AI đang phân tích bài viết…' : 'AI gợi ý sản phẩm phù hợp' }}
+              </button>
+            </div>
           </div>
+
           <p class="erp-hint">Chỉ sản phẩm đang bán hoặc hết hàng được đính kèm. Thứ tự bên dưới là thứ tự thẻ sản phẩm trên bài viết.</p>
+
+          @if (aiProductError()) {
+            <p class="erp-error" role="alert">{{ aiProductError() }}</p>
+          }
+          @if (suggestedProducts().length) {
+            <div class="content-products__suggested">
+              <div class="content-products__suggested-header">
+                <div>
+                  <strong>Sản phẩm AI gợi ý phù hợp với bài viết</strong>
+                  @if (aiProductReasoning()) {
+                    <small>{{ aiProductReasoning() }}</small>
+                  }
+                </div>
+                <button class="erp-btn erp-btn--sm erp-btn--primary" type="button" (click)="attachAllSuggested()">
+                  Đính kèm tất cả gợi ý
+                </button>
+              </div>
+              <div class="content-products__suggested-list">
+                @for (product of suggestedProducts(); track product.product_id) {
+                  <article class="content-product content-product--suggested">
+                    @if (productImage(product)) {
+                      <img class="content-product__thumb" [src]="productImage(product)" [alt]="product.name || 'Sản phẩm'" loading="lazy" />
+                    } @else {
+                      <span class="content-product__thumb content-product__thumb--empty" aria-hidden="true">{{ (product.name || 'V').slice(0, 1) }}</span>
+                    }
+                    <div class="content-product__info">
+                      <strong>{{ product.name || 'Sản phẩm' }}</strong>
+                      <span class="content-product__badge">{{ product.match_reason }}</span>
+                      <small>{{ productStatus(product) }} · {{ productPrice(product) }}</small>
+                    </div>
+                    <button class="erp-btn erp-btn--sm" type="button" [disabled]="isAttached(product.product_id)" (click)="attachProduct(product)">
+                      {{ isAttached(product.product_id) ? 'Đã đính kèm' : 'Đính kèm' }}
+                    </button>
+                  </article>
+                }
+              </div>
+            </div>
+          }
+
           @if (productError()) {
             <p class="erp-error" role="alert">{{ productError() }}</p>
           }
@@ -398,10 +467,24 @@
               </article>
             } @empty {
               @if (!productSearching()) {
-                <p class="erp-hint">Không có sản phẩm phù hợp. Thử từ khóa khác.</p>
+                <p class="erp-hint">Không có sản phẩm phù hợp. Thử chọn danh mục khác hoặc đổi từ khóa.</p>
               }
             }
           </div>
+
+          @if (productTotal() > 0) {
+            <div class="content-products__pagination">
+              <button class="erp-btn erp-btn--sm" type="button" [disabled]="productPage() === 0 || productSearching()" (click)="onProductPageChange(-1)">
+                ← Trước
+              </button>
+              <span class="content-products__page-info">
+                Trang {{ productPage() + 1 }} / {{ productTotalPages() }} ({{ productTotal() }} sản phẩm)
+              </span>
+              <button class="erp-btn erp-btn--sm" type="button" [disabled]="productPage() >= productTotalPages() - 1 || productSearching()" (click)="onProductPageChange(1)">
+                Sau →
+              </button>
+            </div>
+          }
 
           <div class="content-products__selected">
             <h3>Đã đính kèm ({{ selectedProducts().length }}/{{ productMax }})</h3>

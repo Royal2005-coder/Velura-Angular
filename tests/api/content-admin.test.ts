@@ -38,7 +38,7 @@ const validDraft = {
 
 /** Repository giả: ghi lại payload RPC để kiểm tra cách service gọi tầng dữ liệu. */
 function repository(response: JsonObject = { blog_id: BLOG_ID, version: 2 }, error?: unknown) {
-  const calls: { list: unknown[]; upsert: unknown[] } = { list: [], upsert: [] };
+  const calls: { list: unknown[]; upsert: unknown[]; candidates: unknown[] } = { list: [], upsert: [], candidates: [] };
   const repo = {
     async listBlogs(input: unknown) {
       calls.list.push(input);
@@ -48,6 +48,21 @@ function repository(response: JsonObject = { blog_id: BLOG_ID, version: 2 }, err
       calls.upsert.push(input);
       if (error) throw error;
       return response;
+    },
+    async listCandidateProducts(options: unknown) {
+      calls.candidates.push(options);
+      return [
+        {
+          product_id: "p-1",
+          name: "Áo lụa cao cấp",
+          slug: "ao-lua-cao-cap",
+          base_price: 500000,
+          sale_price: null,
+          images: ["https://cdn.velura.vn/a.jpg"],
+          status: "on_sale",
+          description: "Áo lụa tối giản thanh lịch"
+        }
+      ];
     },
   };
   return { calls, repo: repo as never };
@@ -265,6 +280,10 @@ test("router claims only /api/v1/admin/content/blogs and maps verbs to services"
       seen.push("ai-suggest");
       return { metaTitle: "Gợi ý" };
     },
+    async suggestBlogProducts() {
+      seen.push("ai-suggest-products");
+      return { suggestedProducts: [], reasoning: "test" };
+    },
   } as never;
 
   async function call(method: string, parts: string[], body?: unknown) {
@@ -297,7 +316,46 @@ test("router claims only /api/v1/admin/content/blogs and maps verbs to services"
   assert.equal((await call("GET", ["api", "v1", "admin", "content", "blogs"])).handled, true);
   assert.equal((await call("POST", ["api", "v1", "admin", "content", "blogs"], validDraft)).handled, true);
   assert.equal((await call("POST", ["api", "v1", "admin", "content", "blogs", "ai-suggest"], { title: "x" })).handled, true);
+  assert.equal((await call("POST", ["api", "v1", "admin", "content", "blogs", "ai-suggest-products"], { title: "x" })).handled, true);
   assert.equal((await call("PATCH", ["api", "v1", "admin", "content", "blogs", BLOG_ID], validDraft)).handled, true);
   assert.equal((await call("DELETE", ["api", "v1", "admin", "content", "blogs", BLOG_ID])).handled, false, "không có xoá vật lý");
-  assert.deepEqual(seen, ["list", "create", "ai-suggest", `update:${BLOG_ID}`]);
+  assert.deepEqual(seen, ["list", "create", "ai-suggest", "ai-suggest-products", `update:${BLOG_ID}`]);
+});
+
+test("suggestBlogProducts returns grounded products and match reason", async () => {
+  const { repo } = repository();
+  const service = createContentAdminService({
+    repository: repo,
+    generateJson: async () => ({
+      keywords: ["áo lụa", "tối giản"],
+      styleVibe: "Quiet Luxury",
+      reasoning: "Chủ đề tối giản cao cấp",
+    }),
+  });
+  const result = await service.suggestBlogProducts(context("super_admin"), {
+    title: "Quiet Luxury: Nghệ thuật mặc đẹp",
+    contentHtml: "<article><h1>Quiet Luxury</h1><p>Nội dung về chất liệu áo lụa và sự thanh lịch.</p></article>",
+  });
+  assert.equal(result.suggestedProducts.length, 1);
+  assert.equal(result.suggestedProducts[0].product_id, "p-1");
+  assert.match(result.suggestedProducts[0].match_reason, /Quiet Luxury/);
+});
+
+test("sanitizeBlogHtml preserves editorial semantic tags and safe styles while stripping unsafe scripts", () => {
+  const sample =
+    '<article>' +
+    '<h1>Quiet Luxury</h1>' +
+    '<figure>' +
+    '<img src="https://images.pexels.com/test.jpg" alt="test" width="100%" style="display:block;width:100%;height:auto;max-height:650px;object-fit:cover;border-radius:12px;" onclick="evil()">' +
+    '<figcaption>Caption</figcaption>' +
+    '</figure>' +
+    '<p style="color:red; background:url(javascript:1); width:200px">Thân bài</p>' +
+    '</article>';
+  const clean = sanitizeBlogHtml(sample);
+  assert.match(clean, /<article>/);
+  assert.match(clean, /<h1>Quiet Luxury<\/h1>/);
+  assert.match(clean, /<figure>/);
+  assert.match(clean, /style="display:block;width:100%;height:auto;max-height:650px;object-fit:cover;border-radius:12px"/);
+  assert.match(clean, /style="width:200px"/);
+  assert.doesNotMatch(clean, /onclick|color:red|javascript/);
 });

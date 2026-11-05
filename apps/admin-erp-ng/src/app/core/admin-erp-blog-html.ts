@@ -7,7 +7,7 @@ import type { AdminBlogRow } from './admin-erp-api.service';
  * cannot execute scripts inside the admin workspace or the live preview before a save.
  */
 const ALLOWED_TAGS = new Set([
-  'p', 'br', 'h2', 'h3', 'h4', 'strong', 'b', 'em', 'i', 'u', 's', 'blockquote',
+  'article', 'section', 'h1', 'h2', 'h3', 'h4', 'p', 'br', 'strong', 'b', 'em', 'i', 'u', 's', 'blockquote',
   'ul', 'ol', 'li', 'a', 'img', 'figure', 'figcaption', 'hr', 'table', 'thead',
   'tbody', 'tr', 'th', 'td', 'span', 'div',
 ]);
@@ -17,7 +17,45 @@ const DROP_WITH_CONTENT = new Set([
   'video', 'audio', 'canvas', 'form', 'input', 'button', 'select', 'textarea', 'link', 'meta',
 ]);
 
-const BLOCK_SELECTOR = 'p,div,h2,h3,h4,li,ul,ol,blockquote,figure,figcaption,table,thead,tbody,tr,th,td,br';
+const BLOCK_SELECTOR = 'article,section,h1,p,div,h2,h3,h4,li,ul,ol,blockquote,figure,figcaption,table,thead,tbody,tr,th,td,br';
+
+const ALLOWED_STYLE_PROPERTIES: Record<string, RegExp> = {
+  'display': /^(block|inline-block|flex|grid|none)$/,
+  'width': /^\d{1,4}(px|%|em|rem|vw|vh)$/,
+  'height': /^(auto|\d{1,4}(px|%|em|rem|vw|vh))$/,
+  'max-width': /^\d{1,4}(px|%|em|rem|vw|vh)$/,
+  'max-height': /^\d{1,4}(px|%|em|rem|vw|vh)$/,
+  'object-fit': /^(cover|contain|fill|none|scale-down)$/,
+  'border-radius': /^\d{1,3}(px|%|em|rem)$/,
+  'margin': /^(\d{1,3}(px|%|em|rem)\s*){1,4}$|^auto$/,
+  'margin-top': /^(\d{1,3}(px|%|em|rem)\s*){1,4}$|^auto$/,
+  'margin-right': /^(\d{1,3}(px|%|em|rem)\s*){1,4}$|^auto$/,
+  'margin-bottom': /^(\d{1,3}(px|%|em|rem)\s*){1,4}$|^auto$/,
+  'margin-left': /^(\d{1,3}(px|%|em|rem)\s*){1,4}$|^auto$/,
+  'padding': /^(\d{1,3}(px|%|em|rem)\s*){1,4}$/,
+  'padding-top': /^(\d{1,3}(px|%|em|rem)\s*){1,4}$/,
+  'padding-right': /^(\d{1,3}(px|%|em|rem)\s*){1,4}$/,
+  'padding-bottom': /^(\d{1,3}(px|%|em|rem)\s*){1,4}$/,
+  'padding-left': /^(\d{1,3}(px|%|em|rem)\s*){1,4}$/,
+  'text-align': /^(left|right|center|justify)$/,
+};
+
+function cleanStyle(raw: string): string {
+  if (!raw || /[\(\)\"\'\/\\@]|var/i.test(raw)) return '';
+  const declarations = raw.split(';');
+  const safe: string[] = [];
+  for (const decl of declarations) {
+    const colon = decl.indexOf(':');
+    if (colon === -1) continue;
+    const prop = decl.slice(0, colon).trim().toLowerCase();
+    const val = decl.slice(colon + 1).trim();
+    const regex = ALLOWED_STYLE_PROPERTIES[prop];
+    if (regex && regex.test(val)) {
+      safe.push(`${prop}:${val}`);
+    }
+  }
+  return safe.join(';');
+}
 
 function safeUrl(value: string, kind: 'link' | 'image'): string | null {
   const url = value.trim();
@@ -41,8 +79,26 @@ function cleanNode(node: Element): void {
     }
     for (const attribute of Array.from(child.attributes)) {
       const name = attribute.name.toLowerCase();
+      if (name === 'class') {
+        const safeClass = attribute.value.trim();
+        if (/^[a-zA-Z0-9_\-\s]+$/.test(safeClass)) {
+          child.setAttribute('class', safeClass);
+        } else {
+          child.removeAttribute(attribute.name);
+        }
+        continue;
+      }
+      if (name === 'style') {
+        const safe = cleanStyle(attribute.value);
+        if (safe) {
+          child.setAttribute('style', safe);
+        } else {
+          child.removeAttribute(attribute.name);
+        }
+        continue;
+      }
       const allowed =
-        (tag === 'a' && ['href', 'title', 'target'].includes(name)) ||
+        (tag === 'a' && ['href', 'title', 'target', 'rel'].includes(name)) ||
         (tag === 'img' && ['src', 'alt', 'title', 'width', 'height', 'loading'].includes(name));
       if (!allowed) {
         child.removeAttribute(attribute.name);
@@ -53,7 +109,7 @@ function cleanNode(node: Element): void {
         if (!safe) child.removeAttribute(attribute.name);
         else child.setAttribute(name, safe);
       }
-      if (tag === 'img' && (name === 'width' || name === 'height') && !/^\d{1,4}$/.test(attribute.value.trim())) {
+      if (tag === 'img' && (name === 'width' || name === 'height') && !/^\d{1,4}%?$/.test(attribute.value.trim())) {
         child.removeAttribute(attribute.name);
       }
     }

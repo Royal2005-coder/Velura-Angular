@@ -2,6 +2,7 @@ import { Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { ApiService } from '../../core/services/api.service';
+import { PASSWORD_POLICY_MESSAGE, PASSWORD_POLICY_PATTERN } from '../../core/utils/password-policy';
 
 @Component({
   selector: 'app-reset-password-page',
@@ -21,7 +22,7 @@ export class ResetPasswordPage {
   readonly submitting = signal(false);
 
   readonly form = this.forms.nonNullable.group({
-    password: ['', [Validators.required, Validators.minLength(8)]],
+    password: ['', [Validators.required, Validators.minLength(8), Validators.pattern(PASSWORD_POLICY_PATTERN)]],
     password_confirm: ['', Validators.required],
   });
 
@@ -35,6 +36,11 @@ export class ResetPasswordPage {
     if (!identity || !otpCode) {
       this.errorMessage.set('Phiên xác minh đã hết hạn. Vui lòng thực hiện lại.');
       window.setTimeout(() => void this.router.navigateByUrl('/auth/forgot-password'), 1200);
+      return;
+    }
+    if (this.form.controls.password.invalid) {
+      this.form.controls.password.markAsTouched();
+      this.errorMessage.set(PASSWORD_POLICY_MESSAGE);
       return;
     }
     if (this.form.controls.password.value !== this.form.controls.password_confirm.value) {

@@ -9,6 +9,7 @@ import { recordVoucherRedemption, resolveOrderVoucher } from "./vouchers.js";
 import { loyaltyService } from "../loyalty/loyalty-router.js";
 import type { LoyaltyQuote } from "../loyalty/loyalty-service.js";
 import { invalidateCatalogCache } from "./products.js";
+import { OTP_TTL_MS } from "./otp-policy.js";
 const VIETNAMESE_PHONE = /^0(?:3|5|7|8|9)\d{8}$/;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -135,13 +136,13 @@ export class CheckoutOtpService {
 
   constructor(private readonly limiter = new CheckoutOtpRateLimiter()) {}
 
-  /** Chuẩn hóa contact, áp rate limit và cấp mã SMS thử nghiệm 123456 trong 60 giây. */
+  /** Chuẩn hóa contact, áp rate limit và cấp mã SMS thử nghiệm 123456 trong 5 phút. */
   issue(input: { fullName: unknown; phone: unknown; email?: unknown; ip: string }, now = Date.now()): CheckoutOtpSession {
     const contact = validateCheckoutContact(input);
     this.limiter.consume(contact.phone, input.ip, now);
     const session: CheckoutOtpSession = {
       otpCode: "123456",
-      expiresAt: now + 60 * 1000,
+      expiresAt: now + OTP_TTL_MS,
       contact,
       attempts: 0
     };

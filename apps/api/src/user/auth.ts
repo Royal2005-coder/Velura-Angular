@@ -11,8 +11,9 @@ import {
   type LoginLockUser
 } from "../auth-lockout.js";
 import { createNotification } from "./notifications.js";
+import { OTP_TTL_MS } from "./otp-policy.js";
 import { isSmsConfigured, requireSmsDelivery, sendAuthOtpSms } from "../sms/twilio.js";
-import { checkoutClientIp, type CheckoutService } from "./checkout-service.js";
+import { checkoutClientIp, normalizeVietnamesePhone, type CheckoutService } from "./checkout-service.js";
 import { sendDirectEmail } from "../email/mailer.js";
 import { loyaltyService } from "../loyalty/loyalty-router.js";
 import {
@@ -48,6 +49,15 @@ export function validateEmail(email: unknown): boolean {
 export function validatePhone(phone: unknown): boolean {
   const clean = String(phone || "").replace(/[^\d+]/g, "");
   return clean.length >= 8 && clean.length <= 20;
+}
+
+/**
+ * Bộ lọc SĐT cho đăng nhập: chấp nhận khoảng trắng, +84 và 84 như cùng một số 0xxxxxxxxx.
+ */
+export function signinPhoneFilter(phone: unknown): string {
+  const local = normalizeVietnamesePhone(phone);
+  const intl = local.startsWith("0") ? `+84${local.slice(1)}` : local;
+  return local === intl ? `eq.${local}` : `in.(${local},${intl})`;
 }
 
 /**
@@ -372,7 +382,7 @@ export async function handleAuthRoute(
     const otpCode = !email && allowDevOtpBypass()
       ? "123456"
       : Math.floor(100000 + Math.random() * 900000).toString();
-    const otpExpiresAt = new Date(Date.now() + 60 * 1000).toISOString(); // 5 minutes (AUTH-05)
+    const otpExpiresAt = new Date(Date.now() + OTP_TTL_MS).toISOString();
 
     console.log(`\n==================================================`);
     console.log(`[OTP VERIFICATION] Mã kích hoạt tài khoản của ${email || phone} là: ${otpCode}`);
@@ -537,7 +547,7 @@ export async function handleAuthRoute(
     }
 
     // Query user
-    const query = email ? { email: `eq.${email}` } : { phone: `eq.${phone}` };
+    const query = email ? { email: `eq.${email}` } : { phone: signinPhoneFilter(phone) };
     const user = await selectOne("users", query);
     if (!user || typeof user.user_id !== "string") {
       throw new HttpError(401, "UNAUTHORIZED", "Thông tin đăng nhập không chính xác");
@@ -564,7 +574,7 @@ export async function handleAuthRoute(
     // Check if user is active (AUTH-05 verification check)
     if (!user.is_active) {
       const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-      const otpExpiresAt = new Date(Date.now() + 60 * 1000).toISOString();
+      const otpExpiresAt = new Date(Date.now() + OTP_TTL_MS).toISOString();
 
       console.log(`\n==================================================`);
       console.log(`[OTP VERIFICATION] Mã kích hoạt tài khoản của ${identity} là: ${otpCode}`);
@@ -623,7 +633,7 @@ export async function handleAuthRoute(
     }
 
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-    const otpExpiresAt = new Date(Date.now() + 60 * 1000).toISOString(); // 5 minutes (AUTH-05)
+    const otpExpiresAt = new Date(Date.now() + OTP_TTL_MS).toISOString();
 
     console.log(`\n==================================================`);
     console.log(`[OTP RESET] Mã khôi phục mật khẩu của ${identity} là: ${otpCode}`);

@@ -4,7 +4,7 @@
 
 ## Technical Context
 - **Worker:** `apps/ai-worker` (Python, LEFFA VTON hiện hữu, `infer.py::virtual_try_on` trả `result.png`). Stage 3D nối ngay sau `result.png` — không đụng model 2D.
-- **Recon:** TripoSR (stabilityai, weights CC BY-NC-SA — OK cho MVP môn học, ghi nguồn FR-007) + `rembg` (u2net) + PyTorch3D render, fallback `trimesh`. Tham khảo pipeline `areebrehmanai/styleai-virtual-tryon` (reconstruction_3d.py) — **không vendor code** của repo NC-SA vào source; chỉ tham khảo kiến trúc, tự implement.
+- **Recon:** TripoSR (stabilityai, **MIT** — HF `license:mit`, ghi nguồn FR-007) + u2net (Apache-2.0) + PyTorch3D render, fallback `trimesh`. Tham khảo pipeline `areebrehmanai/styleai-virtual-tryon` (reconstruction_3d.py) — **không vendor code** của repo tham khảo vào source; chỉ tham khảo kiến trúc, tự implement.
 - **Bootstrap:** `bootstrap_weights.py` thêm URL TripoSR + u2net, checksum như pattern `virtual_tryon_dc.pth`.
 - **API:** `apps/api/src/ai/ai-service.ts` — trường `render3d` trong job body; artifact list mở rộng `frames3d/*` + `model.glb` qua cùng cơ chế signed URL.
 - **Frontend:** `ai-image-workbench` viewer đổi sang tuần tự frames (drag→index, autospin theo delta-time đã có từ KAN-66); fallback tilt-CSS khi không có frames.

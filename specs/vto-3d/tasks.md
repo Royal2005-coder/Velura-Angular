@@ -3,11 +3,11 @@
 **Input:** [spec.md](./spec.md), [plan.md](./plan.md)
 
 ## M1 — Worker (apps/ai-worker)
-- [ ] T001 Tạo `apps/ai-worker/reconstruction_3d.py`: remove bg (rembg u2net) → TripoSR mesh → 24 khung turntable (PyTorch3D, fallback trimesh) → `frames3d/000.png…023.png` + `model.glb`; hàm pure `render_turntable(result_path, out_dir, frames=24)` dễ mock.
-- [ ] T002 Wiring `apps/ai-worker/infer.py::virtual_try_on`: nếu `job.get("render_3d")` → chạy T001 sau `result.png`, unload model 2D + `torch.cuda.empty_cache()` trước; thêm `frames3d`, `glb_file` vào result dict; lỗi → `RENDER_3D_UNAVAILABLE` không phá result 2D.
-- [ ] T003 Capability: `production_models.py` báo `tryon_3d: true` khi weights tồn tại; `bootstrap_weights.py` tải TripoSR + u2net (checksum, ghi license CC BY-NC-SA vào header comment — FR-007).
-- [ ] T004 `requirements-production.txt`: +tripo (pinned), +rembg, +pytorch3d hoặc trimesh fallback; CI test không cài pytorch3d → fallback phải pass.
-- [ ] T005 Unit tests mock (`apps/ai-worker/test_reconstruction_3d.py`): contract result, flag tắt → không import torch 3D, fail 3D → 2D vẫn success. Chạy `npm run test-ai-worker`.
+- [x] T001 Tạo `apps/ai-worker/reconstruction_3d.py`: remove bg (rembg u2net) → TripoSR mesh → 24 khung turntable (PyTorch3D, fallback trimesh) → `frames3d/000.png…023.png` + `model.glb`; hàm pure `render_turntable(result_path, out_dir, frames=24)` dễ mock.
+- [x] T002 Wiring `apps/ai-worker/infer.py::virtual_try_on`: nếu `job.get("render_3d")` → chạy T001 sau `result.png`, unload model 2D + `torch.cuda.empty_cache()` trước; thêm `frames3d`, `glb_file` vào result dict; lỗi → `RENDER_3D_UNAVAILABLE` không phá result 2D.
+- [ ] T003 Capability: `production_models.py` báo `tryon_3d: true` khi weights tồn tại; `bootstrap_weights.py` tải TripoSR (MIT) + u2net (Apache-2.0) có checksum và ghi receipt `verified-inventory.json` (FR-007).
+- [ ] T004 `requirements-production.txt`: `trimesh==4.5.1` là renderer duy nhất được cài — `rembg` bị loại vì bản pin được yêu cầu numpy>=2.3 xung đột pin numpy 1.26.4 của image, còn `pytorch3d` không dùng; u2net chạy trực tiếp qua `onnxruntime` đã có.
+- [x] T005 Unit tests mock (`apps/ai-worker/test_reconstruction_3d.py`): contract result, flag tắt → không import torch 3D, fail 3D → 2D vẫn success. Chạy `npm run test-ai-worker`.
 
 ## M2 — API (apps/api)
 - [ ] T006 `ai-service.ts`: chấp nhận `render3d` boolean trong body try-on, forward vào job; validate chỉ khi task virtual_try_on.

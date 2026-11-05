@@ -1,7 +1,7 @@
 # Feature Specification: VTO 3D — Phòng thử đồ 3D đa khung hình theo bối cảnh
 
 **Created:** 2026-11-04 | **Status:** Draft | **Branch:** KAN-66
-**Input:** User requests a true 3D virtual try-on on the existing RTX 4060 cluster (IDM-VTON-style pipeline, TripoSR reconstruction, 360° turntable), female-only models, and per-season 3D backgrounds. Scope is an educational MVP — non-commercial model licenses (CC BY-NC-SA, research weights) are acceptable.
+**Input:** User requests a true 3D virtual try-on on the existing RTX 4060 cluster (IDM-VTON-style pipeline, TripoSR reconstruction, 360° turntable), female-only models, and per-season 3D backgrounds. Scope is an educational MVP, and `bootstrap_weights.py` still admits only MIT / Apache-2.0 artifacts, so every weight must be verifiably permissive before it is provisioned.
 
 ## User Stories
 

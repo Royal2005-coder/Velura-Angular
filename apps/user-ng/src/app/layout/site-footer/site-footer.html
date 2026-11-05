@@ -190,8 +190,9 @@
       </div>
     </div>
   </div>
+</footer>
 
-  @if (successModalOpen()) {
+@if (successModalOpen()) {
     <div class="newsletter-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="newsletter-modal-title">
       <div class="newsletter-modal-backdrop" (click)="closeSuccessModal()"></div>
       <div class="newsletter-modal-card">
@@ -252,4 +253,3 @@
       </div>
     </div>
   }
-</footer>

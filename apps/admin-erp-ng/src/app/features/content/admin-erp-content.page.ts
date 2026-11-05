@@ -4,8 +4,10 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Subject, catchError, debounceTime, distinctUntilChanged, forkJoin, of, switchMap } from 'rxjs';
 import {
   AdminBlogProduct,
+  AdminBlogProductMatch,
   AdminBlogRow,
   AdminBlogSeoSuggestion,
+  AdminCategoryRow,
   AdminContentCategory,
   AdminErpApiService,
   AdminProductRow,
@@ -136,6 +138,7 @@ export class AdminErpContentPage {
 
   /** Rich composer state. The editor element is written once per open, never on every keystroke. */
   readonly editorTab = signal<EditorTab>('content');
+  readonly sourceMode = signal(false);
   readonly editorSession = signal(0);
   readonly editorMetrics = signal<EditorMetrics>({ words: 0, characters: 0 });
   readonly previewOpen = signal(false);
@@ -149,11 +152,21 @@ export class AdminErpContentPage {
   readonly coverUploading = signal(false);
   private readonly editor = viewChild<ElementRef<HTMLElement>>('editor');
 
-  /** Attached shop products. The cache also feeds the picker so chips survive list refreshes. */
+  /** Attached shop products. Filter, pagination and AI grounding. */
   readonly productQuery = signal('');
+  readonly productCategories = signal<AdminCategoryRow[]>([]);
+  readonly productCategoryId = signal('');
+  readonly productPage = signal(0);
+  readonly productPageSize = 8;
+  readonly productTotal = signal(0);
+  readonly productTotalPages = computed(() => Math.max(1, Math.ceil(this.productTotal() / this.productPageSize)));
   readonly productResults = signal<AdminBlogProduct[]>([]);
   readonly productSearching = signal(false);
   readonly productError = signal<string | null>(null);
+  readonly aiProductLoading = signal(false);
+  readonly aiProductError = signal<string | null>(null);
+  readonly aiProductReasoning = signal<string | null>(null);
+  readonly suggestedProducts = signal<AdminBlogProductMatch[]>([]);
   private readonly productCache = signal<Record<string, AdminBlogProduct>>({});
   private readonly productSearch$ = new Subject<string>();
   readonly selectedProducts = computed<AdminBlogProduct[]>(() => {
@@ -287,26 +300,10 @@ export class AdminErpContentPage {
       .pipe(
         debounceTime(250),
         distinctUntilChanged(),
-        switchMap((query) => {
-          this.productSearching.set(true);
-          this.productError.set(null);
-          return this.api.listProducts({ q: query, limit: '12', order: 'updated_at.desc' }).pipe(
-            catchError((error: unknown) => {
-              this.productError.set(adminErrorMessage(error, 'Không tìm được sản phẩm.'));
-              return of({ rows: [], count: 0 } as AdminListPayload<AdminProductRow>);
-            }),
-          );
-        }),
         takeUntilDestroyed(),
       )
-      .subscribe((payload) => {
-        const products = adminListRows(payload)
-          .map((row) => this.toBlogProduct(row))
-          .filter((product) => product.status === 'on_sale' || product.status === 'out_of_stock')
-          .slice(0, 8);
-        this.cacheProducts(products);
-        this.productResults.set(products);
-        this.productSearching.set(false);
+      .subscribe(() => {
+        this.fetchProducts();
       });
 
     effect(() => {
@@ -489,6 +486,7 @@ export class AdminErpContentPage {
 
   private resetEditorState(): void {
     this.editorTab.set('content');
+    this.sourceMode.set(false);
     this.previewOpen.set(false);
     this.linkPanel.set(false);
     this.linkUrl.set('');
@@ -498,10 +496,19 @@ export class AdminErpContentPage {
     this.aiError.set(null);
     this.aiNotice.set(null);
     this.productQuery.set('');
+    this.productCategoryId.set('');
+    this.productPage.set(0);
+    this.productTotal.set(0);
     this.productResults.set([]);
     this.productError.set(null);
     this.productSearching.set(false);
+    this.aiProductLoading.set(false);
+    this.aiProductError.set(null);
+    this.aiProductReasoning.set(null);
+    this.suggestedProducts.set([]);
     this.editorSession.update((value) => value + 1);
+    this.loadProductCategories();
+    this.fetchProducts();
   }
 
   /**
@@ -548,6 +555,14 @@ export class AdminErpContentPage {
     this.discardOpen.set(false);
     this.previewOpen.set(false);
     this.aiLoading.set(false);
+    this.sourceMode.set(false);
+    this.productPage.set(0);
+    this.productCategoryId.set('');
+    this.productTotal.set(0);
+    this.aiProductLoading.set(false);
+    this.aiProductError.set(null);
+    this.aiProductReasoning.set(null);
+    this.suggestedProducts.set([]);
   }
 
   /**
@@ -816,14 +831,147 @@ export class AdminErpContentPage {
    * Product search is debounced and limited to sellable products, so a published post cannot
    * advertise a product that the storefront will hide.
    */
+  fetchProducts(): void {
+    this.productSearching.set(true);
+    this.productError.set(null);
+    const categoryId = this.productCategoryId() || undefined;
+    const q = this.productQuery().trim() || undefined;
+    this.api
+      .listProducts({
+        q: q || '',
+        categoryId: categoryId || '',
+        status: 'on_sale,out_of_stock',
+        limit: String(this.productPageSize),
+        offset: String(this.productPage() * this.productPageSize),
+        order: 'updated_at.desc',
+      })
+      .pipe(
+        catchError((error: unknown) => {
+          this.productError.set(adminErrorMessage(error, 'Không tìm được sản phẩm.'));
+          return of({ rows: [], count: 0 } as AdminListPayload<AdminProductRow>);
+        }),
+      )
+      .subscribe((payload) => {
+        const products = adminListRows(payload).map((row) => this.toBlogProduct(row));
+        this.cacheProducts(products);
+        this.productResults.set(products);
+        this.productTotal.set(adminListCount(payload));
+        this.productSearching.set(false);
+      });
+  }
+
+  loadProductCategories(): void {
+    this.api.listCategories().subscribe({
+      next: (payload) => {
+        this.productCategories.set(adminListRows(payload));
+      },
+      error: () => {},
+    });
+  }
+
   onProductQueryInput(event: Event): void {
     const value = (event.target as HTMLInputElement).value;
     this.productQuery.set(value);
+    this.productPage.set(0);
     this.productSearch$.next(value);
   }
 
   searchProducts(): void {
-    this.productSearch$.next(this.productQuery());
+    this.productPage.set(0);
+    this.fetchProducts();
+  }
+
+  onProductCategoryChange(event: Event): void {
+    const value = (event.target as HTMLSelectElement).value;
+    this.productCategoryId.set(value);
+    this.productPage.set(0);
+    this.fetchProducts();
+  }
+
+  onProductPageChange(delta: number): void {
+    const target = this.productPage() + delta;
+    if (target < 0 || target >= this.productTotalPages()) return;
+    this.productPage.set(target);
+    this.fetchProducts();
+  }
+
+  suggestProductsWithAi(): void {
+    const draft = this.draft();
+    if (!draft) return;
+    const title = draft.title.trim();
+    const contentHtml = draft.contentHtml || '';
+    if (title.length < 4 && contentHtml.length < 20) {
+      this.aiProductError.set('Cần tiêu đề hoặc nội dung bài viết trước khi gợi ý sản phẩm.');
+      return;
+    }
+    this.aiProductLoading.set(true);
+    this.aiProductError.set(null);
+    this.api
+      .suggestBlogProducts({
+        title,
+        excerpt: draft.excerpt,
+        contentHtml,
+        limit: 6,
+      })
+      .subscribe({
+        next: (res) => {
+          this.aiProductLoading.set(false);
+          this.suggestedProducts.set(res.suggestedProducts || []);
+          this.aiProductReasoning.set(res.reasoning || null);
+          this.cacheProducts(res.suggestedProducts || []);
+        },
+        error: (error: unknown) => {
+          this.aiProductLoading.set(false);
+          this.aiProductError.set(adminErrorMessage(error, 'AI không gợi ý được sản phẩm phù hợp. Thử lại sau.'));
+        },
+      });
+  }
+
+  attachAllSuggested(): void {
+    const draft = this.draft();
+    if (!draft) return;
+    const suggestions = this.suggestedProducts();
+    const currentIds = new Set(draft.productIds);
+    const toAdd: string[] = [];
+    for (const p of suggestions) {
+      if (!currentIds.has(p.product_id) && currentIds.size + toAdd.length < BLOG_PRODUCTS_MAX) {
+        toAdd.push(p.product_id);
+      }
+    }
+    if (toAdd.length) {
+      this.cacheProducts(suggestions);
+      this.draft.set({ ...draft, productIds: [...draft.productIds, ...toAdd] });
+      this.clearError('productIds');
+      this.markDirty();
+    }
+  }
+
+  toggleSourceMode(): void {
+    const current = this.sourceMode();
+    if (current) {
+      const html = this.draft()?.contentHtml || '';
+      const safe = sanitizeEditorHtml(html);
+      const element = this.editor()?.nativeElement;
+      if (element) {
+        element.innerHTML = safe;
+      }
+      this.sourceMode.set(false);
+    } else {
+      const element = this.editor()?.nativeElement;
+      if (element) {
+        const raw = element.innerHTML;
+        this.draft.update((d) => (d ? { ...d, contentHtml: raw } : d));
+      }
+      this.sourceMode.set(true);
+    }
+    this.refreshEditorMetrics();
+  }
+
+  onSourceInput(event: Event): void {
+    const value = (event.target as HTMLTextAreaElement).value;
+    this.draft.update((current) => (current ? { ...current, contentHtml: value } : current));
+    this.markDirty();
+    this.refreshEditorMetrics();
   }
 
   isAttached(productId: string): boolean {
@@ -908,8 +1056,10 @@ export class AdminErpContentPage {
     if (editing && !this.canUpdate()) return;
     if (!editing && !this.canCreate()) return;
 
-    const element = this.editor()?.nativeElement;
-    const current = element ? { ...draft, contentHtml: element.innerHTML } : draft;
+    const contentHtml = this.sourceMode()
+      ? (draft.contentHtml || '')
+      : (this.editor()?.nativeElement?.innerHTML ?? draft.contentHtml);
+    const current = { ...draft, contentHtml };
     const errors = validateBlogDraft(current, !!editing);
     this.errors.set(errors);
     if (Object.keys(errors).length) {

@@ -1,8 +1,20 @@
-import { callRpc } from "../supabase.js";
+import { callRpc, selectRows } from "../supabase.js";
 import type { JsonObject } from "../types.js";
 
+export interface BlogProductCandidate {
+  product_id: string;
+  name: string;
+  slug: string;
+  base_price: number;
+  sale_price: number | null;
+  images: string[];
+  status: string;
+  category_id?: string;
+  description?: string;
+}
+
 /**
- * Truy cập các RPC biên tập nội dung (migration 078).
+ * Truy cập các RPC biên tập nội dung (migration 078) và tra cứu sản phẩm candidate.
  *
  * RPC chạy với token của người gọi (`useAnonKey` + Authorization): quyền admin và audit do
  * chính hàm trong Postgres kiểm tra, nên tầng API không tự ghi `audit_log` một lần nữa.
@@ -10,6 +22,7 @@ import type { JsonObject } from "../types.js";
 export interface ContentAdminRepository {
   listBlogs(input: { status: string; search: string; limit: number; offset: number }, accessToken: string | null): Promise<JsonObject>;
   upsertBlog(input: JsonObject, accessToken: string | null): Promise<JsonObject>;
+  listCandidateProducts(options: { limit?: number }, accessToken: string | null): Promise<BlogProductCandidate[]>;
 }
 
 function authOptions(accessToken: string | null | undefined): { useAnonKey?: boolean; accessToken?: string } {
@@ -60,6 +73,20 @@ export function createContentAdminRepository(): ContentAdminRepository {
         },
         authOptions(accessToken),
       )) as JsonObject;
+    },
+
+    async listCandidateProducts(options, accessToken) {
+      const rows = await selectRows(
+        "product",
+        {
+          select: "product_id,name,slug,base_price,sale_price,images,status,category_id,description",
+          status: "in.(on_sale,out_of_stock)",
+          order: "updated_at.desc",
+          limit: options.limit || 40,
+        },
+        authOptions(accessToken),
+      );
+      return (rows || []) as unknown as BlogProductCandidate[];
     },
   };
 }

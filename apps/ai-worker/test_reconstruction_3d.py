@@ -81,7 +81,8 @@ class Conditioning(unittest.TestCase):
 
 
 class Turntable(unittest.TestCase):
-    views = [Image.new("RGBA", (512, 512), (index * 10 + 5, 40, 60, 255)) for index in range(24)]
+    views = [Image.new("RGBA", (reconstruction_3d.TILE, reconstruction_3d.TILE),
+                 (index * 10 + 5, 40, 60, 255)) for index in range(24)]
 
     def test_sprite_tiles_every_view_in_reading_order(self):
         from io import BytesIO
@@ -90,14 +91,16 @@ class Turntable(unittest.TestCase):
             result = reconstruction_3d.turntable(Image.new("RGB", (512, 512)))
 
         self.assertEqual(result["frames"], 24)
-        self.assertEqual((result["columns"], result["rows"], result["tile"]), (6, 4, 512))
+        self.assertEqual((result["columns"], result["rows"], result["tile"]), (6, 4, reconstruction_3d.TILE))
         with Image.open(BytesIO(result["sprite"])) as sheet:
-            self.assertEqual(sheet.size, (6 * 512, 4 * 512))
+            self.assertEqual(sheet.size, (6 * reconstruction_3d.TILE, 4 * reconstruction_3d.TILE))
             for index in (0, 7, 23):
                 column, row = index % result["columns"], index // result["columns"]
-                tile = sheet.crop((column * 512, row * 512, (column + 1) * 512, (row + 1) * 512))
-                self.assertEqual(sum(tile.getpixel((256, 256))[:2]) > 0, True)
-                self.assertAlmostEqual(tile.getpixel((256, 256))[0], self.views[index].getpixel((256, 256))[0], delta=1)
+                edge = reconstruction_3d.TILE
+                tile = sheet.crop((column * edge, row * edge, (column + 1) * edge, (row + 1) * edge))
+                self.assertGreater(sum(tile.getpixel((edge // 2, edge // 2))[:2]), 0)
+                self.assertAlmostEqual(tile.getpixel((edge // 2, edge // 2))[0],
+                                 self.views[index].getpixel((edge // 2, edge // 2))[0], delta=1)
 
     def test_sparse_render_is_a_failure_not_a_short_sheet(self):
         with self._stage(views=self.views[:6]):

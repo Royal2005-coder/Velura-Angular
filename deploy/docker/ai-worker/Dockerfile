@@ -35,6 +35,7 @@ WORKDIR /app
 COPY apps/ai-worker/production_*.py apps/ai-worker/maskless_vton.py \
      apps/ai-worker/image_gate.py apps/ai-worker/bootstrap_weights.py \
      apps/ai-worker/reconstruction_3d.py apps/ai-worker/tsr_config.py \
+     apps/ai-worker/triposr_state_dict.py \
      apps/ai-worker/weights-manifest.json ./
 USER 1000:1000
 EXPOSE 8000

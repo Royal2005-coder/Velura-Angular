@@ -23,6 +23,7 @@ import { DeliverySimulation } from '../../shared/delivery-simulation/delivery-si
 import { CheckoutStore } from '../../core/services/checkout.store';
 import { ReturnTrackingComponent } from './return-tracking.component';
 import { VIETNAM_BANKS } from '../../core/models/vietnam-banks';
+import { OTP_COUNTDOWN_SECONDS } from '../../core/utils/otp-policy';
 
 /**
  * Guest access, order actions and after-sales share one `OrderAccountModel` injection point:
@@ -267,7 +268,7 @@ export class OrderFlowPage {
         this.challengeMode = this.mode;
         this.challengeOrderId = this.mode === 'code' ? value : '';
         this.maskedPhone.set(this.model.maskedPhone?.() || (this.mode === 'phone' ? maskPhone(value) : 'số điện thoại đặt hàng'));
-        this.seconds.set(this.model.otpExpiresIn?.() || 60);
+        this.seconds.set(this.model.otpExpiresIn?.() || OTP_COUNTDOWN_SECONDS);
         this.failedOtpAttempts.set(0);
         this.cooldown.set(60);
         this.otp = '';
@@ -315,7 +316,7 @@ export class OrderFlowPage {
         this.challengePhone = normalizePhone(phone);
         this.challengeOrderId = order?.id || '';
         this.maskedPhone.set(maskPhone(phone));
-        this.seconds.set(this.model.otpExpiresIn?.() || 60);
+        this.seconds.set(this.model.otpExpiresIn?.() || OTP_COUNTDOWN_SECONDS);
         this.failedOtpAttempts.set(0);
         this.cooldown.set(30);
         this.otp = '';
@@ -330,7 +331,7 @@ export class OrderFlowPage {
     this.model
       .sendOtp(this.challengePhone, this.challengeMode)
       .then(() => {
-        this.seconds.set(this.model.otpExpiresIn?.() || 60);
+        this.seconds.set(this.model.otpExpiresIn?.() || OTP_COUNTDOWN_SECONDS);
         this.failedOtpAttempts.set(0);
         this.cooldown.set(60);
         this.otp = '';

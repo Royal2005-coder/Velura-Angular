@@ -131,6 +131,17 @@ describe('PurchaseFlowPage with mocked Model', () => {
     expect(page.requestedPoints()).toBe(0);
   });
 
+  it('khách vãng lai không được hứa điểm tích luỹ ở bước thanh toán', () => {
+    const page = createCheckoutFixture().componentInstance;
+    model.member.set(false);
+    expect(page.expectedPoints()).toBe(0);
+    expect(page.expectedPointsVnd()).toBe(0);
+
+    model.member.set(true);
+    expect(page.expectedPoints()).toBeGreaterThan(0);
+    expect(page.expectedPointsVnd()).toBe(page.expectedPoints() * 1000);
+  });
+
   it('shows refund debt without disabling valid redemption or purchasing controls', () => {
     model.member.set(true);
     quote.mockReturnValue(of({ subtotal: 840000, shipping_fee: 0, discount_amount: 0, total_amount: 840000,

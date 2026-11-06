@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { createStorefrontPage } from '../../../testing/storefront-testing';
 import { Router } from '@angular/router';
+import { AuthService } from '../../core/services/auth.service';
 import { CartStore } from '../../core/services/cart.store';
 import { CartPage } from './cart.page';
 
@@ -269,4 +270,31 @@ describe('CartPage', () => {
     page.executeDelete();
     expect(page.groupedItems().length).toBe(0);
   });
+  it('khách vãng lai không thấy ước lượng điểm ở giỏ', async () => {
+    const page = await createStorefrontPage(CartPage);
+    TestBed.inject(AuthService).signOut();
+    TestBed.inject(CartStore).addItem(
+      { variant_id: 'v-guest', product_id: 'p1', product_name: 'Áo silk', product_image: '', quantity: 1, unit_price: 500000 },
+      { silent: true },
+    );
+    page.toggleAll({ target: { checked: true } } as unknown as Event);
+
+    expect(page.isMember()).toBe(false);
+    expect(page.selectedSubtotal()).toBe(500000);
+    expect(page.expectedCartPoints()).toBe(0);
+  });
+
+  it('thành viên thấy đúng 5% giá trị hàng quy ra điểm', async () => {
+    const page = await createStorefrontPage(CartPage);
+    TestBed.inject(AuthService).applySession('token', { user_id: 'u1', email: 'm@velura.test', role: 'member' });
+    TestBed.inject(CartStore).addItem(
+      { variant_id: 'v-member', product_id: 'p1', product_name: 'Áo silk', product_image: '', quantity: 1, unit_price: 500000 },
+      { silent: true },
+    );
+    page.toggleAll({ target: { checked: true } } as unknown as Event);
+
+    expect(page.isMember()).toBe(true);
+    expect(page.expectedCartPoints()).toBe(25);
+  });
 });
+

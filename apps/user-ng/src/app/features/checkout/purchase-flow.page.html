@@ -528,6 +528,7 @@
            <div class="row total">
              <span>Tổng thanh toán</span><span>{{ serverQuote() ? money(quote().total) : '—' }}</span>
            </div>
+          @if (member()) {
           <div class="row checkout-points-reward-row">
             <span class="points-reward-label">
               <span>Điểm thưởng tích lũy</span>
@@ -541,6 +542,7 @@
             </span>
             <span class="points-reward-value">+{{ expectedPoints().toLocaleString('vi-VN') }} điểm <small class="points-reward-sub">({{ money(expectedPointsVnd()) }})</small></span>
           </div>
+          }
            <p class="muted">
              Đổi / trả trong 7 ngày từ khi giao thành công. Tối đa 2 lượt thành công cho mỗi đơn vị sản phẩm.
            </p>

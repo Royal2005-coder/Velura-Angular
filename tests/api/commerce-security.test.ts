@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { OTP_TTL_MS } from "../../apps/api/src/user/otp-policy.js";
 import { CheckoutOtpService } from "../../apps/api/src/user/checkout-service.js";
 import { issueGuestPhoneAccess, issueGuestOrderAccess, hasGuestOrderAccess } from "../../apps/api/src/user/order-access.js";
 import { customerPaymentFacts } from "../../apps/api/src/user/order-payment-presentation.js";
@@ -8,12 +9,15 @@ import type { ReturnRepository } from "../../apps/api/src/returns/return-reposit
 import { HttpError, sendError } from "../../apps/api/src/http.js";
 import type { AuthContext, HttpResponse } from "../../apps/api/src/types.js";
 
-test("checkout code expires after 60 seconds while its verified proof permits a 15-minute checkout", () => {
+test("checkout code lives the AUTH-08 five minutes while its verified proof permits a 15-minute checkout", () => {
   let now = Date.now();
   const otp = new CheckoutOtpService();
   const session = otp.issue({fullName:"Nguyen Van An",phone:"0912345678",email:null,ip:"local"},now);
   const token = otp.prove("0912345678",session.otpCode);
-  now += 61_000;
+  assert.equal(session.expiresAt - now, OTP_TTL_MS, "mã OTP phải sống đúng 5 phút như UI đếm 05:00");
+  now += OTP_TTL_MS - 1_000;
+  assert.equal(otp.verify("0912345678",session.otpCode,now).contact.phone,"0912345678");
+  now += 2_000;
   assert.throws(()=>otp.verify("0912345678",session.otpCode,now),error=>error instanceof HttpError && error.code === "EXPIRED_OTP");
   assert.equal(otp.verifyForCheckout("0912345678",null,token).contact.phone,"0912345678");
   assert.throws(()=>otp.verifyForCheckout("0987654321",null,token),error=>error instanceof HttpError && error.status === 401);

@@ -5,6 +5,7 @@ import { config } from "./config.js";
 import { HttpError, sendJson } from "./http.js";
 import { readAiGatewayMetrics } from "./gemini-client.js";
 import { renderAuditMetrics } from "./audit-metrics.js";
+import { refreshLedgerMetrics, renderPaymentMetrics } from "./payments/payment-metrics.js";
 import type { HeaderMap } from "./types.js";
 
 const bounds = [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 15, 60];
@@ -79,6 +80,7 @@ export function runtimeMetrics(): string {
     if (value.costMeasurements) lines.push(`velura_ai_cost_usd_total{${labels}} ${value.costUsd}`);
   }
   lines.push(...renderAuditMetrics());
+  lines.push(...renderPaymentMetrics());
   return lines.join("\n") + "\n";
 }
 
@@ -128,6 +130,9 @@ export async function handleRuntimeRoute(req: IncomingMessage, res: ServerRespon
       throw new HttpError(403, "METRICS_ACCESS_DENIED", "Collector bearer credential is required");
     }
     res.writeHead(200, { ...headers, "content-type": "text/plain; version=0.0.4; charset=utf-8", "cache-control": "no-store" });
+    // Gauge ledger đọc từ DB (đã tổng hợp trong 116), cache 30s bên trong nên scrape dày không thành
+    // nhiều lượt gọi. Hỏng DB thì vẫn phải trả được counter process-local, vì vậy không throw ở đây.
+    await refreshLedgerMetrics(config.supabaseUrl, config.supabaseServiceRoleKey).catch(() => undefined);
     res.end(runtimeMetrics());
     return true;
   }

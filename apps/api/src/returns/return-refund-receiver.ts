@@ -2,12 +2,19 @@ import { asString, type JsonObject } from "../types.js";
 
 /**
  * How a return's refund is paid out. COD cannot be reversed to a gateway, so CSKH transfers the money by hand to the
- * customer's account; Stripe reverses automatically; MoMo/VNPay use the same manual transfer ledger without receiver capture.
+ * customer's account; Stripe, MoMo and VNPay all reverse to the original transaction automatically.
  */
 export type ReturnPaymentKind = "cod" | "stripe" | "other_online";
 
-/** Refund execution path for one return; `none` for exchanges that move no money. */
-export type ReturnRefundFlow = "cod_manual" | "stripe_auto" | "manual_transfer" | "none";
+/**
+ * Refund execution path for one return; `none` for exchanges that move no money.
+ * `gateway_auto` = gọi API refund của VNPay/MoMo; `manual_transfer` = đường lùi khi cổng từ chối
+ * (ngoài thời gian hoàn, giao dịch gốc không đủ điều kiện) và đã có giao dịch refund `failed`.
+ */
+export type ReturnRefundFlow = "cod_manual" | "stripe_auto" | "gateway_auto" | "manual_transfer" | "none";
+
+/** Nhà mạng nào thực sự reverse được tiền qua API của họ. */
+export const GATEWAY_REFUND_PROVIDERS: readonly string[] = ["stripe", "vnpay", "momo"];
 
 /** Usability of the customer's receiving account for a COD refund. */
 export type RefundReceiverStatus = "not_required" | "missing" | "invalid" | "supplement_requested" | "valid";
@@ -25,7 +32,8 @@ export function classifyReturnPayment(orderPaymentMethod: unknown, paymentProvid
   if (provider === "stripe") return "stripe";
   if (method === "COD" || (!method && provider === "cod")) return "cod";
   if (provider === "momo" || provider === "vnpay") return "other_online";
-  // Online-paid order without a recorded non-Stripe gateway: Stripe is the only automatic online gateway Velura ships.
+  // Online-paid order without a recorded gateway: assume a gateway refund rather than guessing COD,
+  // because an ONLINE_PAYMENT order can never be settled by hand at delivery.
   return method === "ONLINE_PAYMENT" ? "stripe" : "cod";
 }
 
@@ -34,7 +42,18 @@ export function classifyReturnPayment(orderPaymentMethod: unknown, paymentProvid
  */
 export function refundFlowFor(returnType: unknown, kind: ReturnPaymentKind): ReturnRefundFlow {
   if (asString(returnType) !== "refund") return "none";
-  return kind === "cod" ? "cod_manual" : kind === "stripe" ? "stripe_auto" : "manual_transfer";
+  if (kind === "cod") return "cod_manual";
+  return kind === "stripe" ? "stripe_auto" : "gateway_auto";
+}
+
+/** Cổng nào cũng có thể bị từ chối hoàn; `manual_transfer` chỉ bật sau khi một lần refund đã `failed`. */
+export function refundFallbackAllowed(flow: ReturnRefundFlow, gatewayRefundFailed: boolean): boolean {
+  return flow === "manual_transfer" || ((flow === "stripe_auto" || flow === "gateway_auto") && gatewayRefundFailed);
+}
+
+/** Có cần khách cung cấp tài khoản nhận tiền không — chỉ COD mới cần, vì tiền đi tay. */
+export function refundReceiverRequired(flow: ReturnRefundFlow): boolean {
+  return flow === "cod_manual";
 }
 
 /** Customer-supplied receiving account, normalised. */

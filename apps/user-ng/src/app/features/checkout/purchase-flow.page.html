@@ -270,7 +270,7 @@
                   @for (provider of paymentProviders(); track provider.code) {
                     <label class="choice" [class.selected]="payment === provider.code" [class.unavailable]="!provider.enabled">
                       <input type="radio" name="payment" [value]="provider.code" [(ngModel)]="payment" [disabled]="!provider.enabled" />
-                      <span><strong>{{ providerLabel[provider.code] }}</strong><small>{{ !provider.enabled ? 'Tạm chưa khả dụng' : provider.code === 'COD' ? 'Thanh toán cho người giao hàng.' : 'Chuyển đến cổng thanh toán an toàn sau khi tạo đơn.' }}</small></span>
+                      <span><strong>{{ providerLabel[provider.code] }}</strong><small>{{ providerHint(provider) }}</small></span>
                     </label>
                   }
                 </section>
@@ -280,12 +280,34 @@
           @case ('gateway') {
             <section class="panel payment-page">
               <span class="badge">Thanh toán trực tuyến</span>
-              <h2>Đơn đang chờ thanh toán</h2>
+              <h2>Quét mã {{ gatewayProviderLabel() }} để thanh toán đơn này</h2>
               <p class="payment-page__order">
-                Mã đơn <strong>{{ order()?.id }}</strong>
+                Mã đơn <strong>{{ order()?.id }}</strong> · {{ money(order()?.total ?? quote().total) }}
               </p>
-              <p role="status">Kết quả thanh toán sẽ được xác minh bởi máy chủ. Mã đơn của bạn được giữ nguyên khi thử lại.</p>
-              <button type="button" [disabled]="busy()" (click)="retry()">Mở cổng thanh toán</button>
+              @if (gatewaySandbox()) {
+                <p class="payment-page__sandbox" role="note">
+                  Cổng {{ gatewayProviderLabel() }} đang chạy ở môi trường sandbox để nghiệm thu: giao dịch được
+                  ký và đối soát đúng quy trình thật nhưng không trừ tiền thật.
+                </p>
+              }
+              @if (qrImage()) {
+                <img class="qr-code" [src]="qrImage()" alt="Mã QR {{ gatewayProviderLabel() }} cho đơn {{ order()?.id }}" width="220" height="220" />
+              } @else if (gateway().qrPayload) {
+                <p role="note">Chưa hiển thị được mã QR trên thiết bị này. Bạn vẫn có thể mở trang thanh toán để trả bằng ví/ngân hàng.</p>
+              }
+              <p role="status">
+                Mã còn hiệu lực <strong>{{ paymentClockLabel() }}</strong>. Mở app {{ gatewayProviderLabel() }} hoặc app ngân hàng
+                rồi chọn Quét mã. Kết quả do máy chủ xác minh với cổng thanh toán, không phụ thuộc màn hình này.
+              </p>
+              @if (verifyNotice()) { <p role="status" class="payment-page__notice">{{ verifyNotice() }}</p> }
+              <div class="actions">
+                <button type="button" (click)="checkPaymentNow()" [disabled]="busy() || verifying()">
+                  {{ verifying() ? 'Đang kiểm tra với cổng…' : 'Tôi đã thanh toán — kiểm tra lại' }}
+                </button>
+                @if (gateway().url) { <button type="button" class="secondary" (click)="openGatewayPage()">Mở trang thanh toán</button> }
+                <button type="button" class="secondary" (click)="useCod()">Đổi sang COD</button>
+              </div>
+              <p><small>Bạn đã thoát ra giữa chừng? Quay lại trang này bằng đơn hàng {{ order()?.id }}; mã QR và thời hạn phiên vẫn giữ nguyên.</small></p>
             </section>
           }
           @case ('result') {
@@ -302,9 +324,14 @@
                 }}
               </h2>
               <p>Mã đơn {{ order()?.id }} được giữ nguyên.</p>
+              @if (verifyNotice()) { <p role="status">{{ verifyNotice() }}</p> }
               @if (!busy()) {
                 <div class="actions">
-                  @if (paymentResult() === 'confirming') { <button type="button" (click)="retryOrderLoad()" [disabled]="resumeLoading()">Kiểm tra thanh toán</button> }
+                  @if (paymentResult() === 'confirming') {
+                    <button type="button" (click)="checkPaymentNow()" [disabled]="verifying() || resumeLoading()">
+                      {{ verifying() ? 'Đang kiểm tra với cổng…' : 'Kiểm tra thanh toán' }}
+                    </button>
+                  }
                   <button (click)="retry()">Thanh toán lại</button
                   ><button class="secondary" (click)="useCod()">Đổi sang COD</button
                   ><a

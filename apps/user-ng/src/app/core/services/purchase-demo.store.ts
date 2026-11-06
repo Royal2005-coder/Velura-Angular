@@ -184,8 +184,8 @@ export interface DemoReturn {
   cancelledBy?: ReturnCancelledBy;
   /** Order payment method the refund is paid back through; unset in the demo. */
   paymentMethod?: 'COD' | 'ONLINE_PAYMENT';
-  /** Server-side refund route (`cod_manual`, `stripe_auto`, …); unset in the demo. */
-  refundFlow?: 'cod_manual' | 'stripe_auto' | 'manual_transfer' | 'none';
+  /** Server-side refund route (`cod_manual`, `stripe_auto`, `gateway_auto`, …); unset in the demo. */
+  refundFlow?: 'cod_manual' | 'stripe_auto' | 'gateway_auto' | 'manual_transfer' | 'none';
   /** Receiving account of a COD refund; unset in the demo, which keeps the legacy `bank` field. */
   refundReceiver?: DemoRefundReceiver;
   bank?: { name: string; last4: string; holder: string };

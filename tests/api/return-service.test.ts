@@ -294,16 +294,52 @@ test("refund endpoints require a real line id, line version, approved refund res
   assert.equal(gatewayCalls, 0);
 });
 
-test("Stripe failure is not reported as successful completion", async () => {
+test("a gateway refund failure is not reported as successful completion", async () => {
+  for (const provider of ["stripe", "vnpay", "momo"]) {
+    const service = createReturnService({
+      repository: {
+        getRefundOperation: async () => null,
+        getReturn: async () => COD_RETURN, listReturnLines: async () => ({ rows: [REFUND_LINE] }),
+        getItemRefundableAmount: async () => 200000, getPaymentByOrderId: async () => ({ payment_provider: provider })
+      } as unknown as ReturnRepository,
+      refunds: { refund: async () => ({ status: "failed", message: "Provider rejected refund" }) }
+    });
+    await assert.rejects(() => service.triggerStripeRefund(context("admin_operator_cskh_dt"), RETURN_ID, MANUAL_BODY), hasCode("GATEWAY_REFUND_FAILED"));
+  }
+});
+
+test("a COD-only order method is refunded through the gateway when the payment says so", async () => {
+  let seen: unknown[] = [];
   const service = createReturnService({
     repository: {
       getRefundOperation: async () => null,
-      getReturn: async () => COD_RETURN, listReturnLines: async () => ({ rows: [REFUND_LINE] }),
-      getItemRefundableAmount: async () => 200000, getPaymentByOrderId: async () => ({ payment_provider: "stripe" })
+      getReturn: async () => ({ ...COD_RETURN, payment_method: "ONLINE_PAYMENT" }), listReturnLines: async () => ({ rows: [REFUND_LINE] }),
+      getItemRefundableAmount: async () => 200000, getPaymentByOrderId: async () => ({ payment_provider: "vnpay", payment_status: "paid" })
     } as unknown as ReturnRepository,
-    refunds: { refund: async () => ({ status: "failed", message: "Provider rejected refund" }) }
+    refunds: { refund: async (...args) => { seen = args; return { status: "requested" }; } }
   });
-  await assert.rejects(() => service.triggerStripeRefund(context("admin_operator_cskh_dt"), RETURN_ID, MANUAL_BODY), hasCode("STRIPE_REFUND_FAILED"));
+  const result = await service.triggerStripeRefund(context("admin_operator_cskh_dt"), RETURN_ID, MANUAL_BODY);
+  assert.equal(result.success, true);
+  assert.equal(result.gateway, "vnpay");
+  assert.equal(result.refund.status, "requested");
+  assert.equal(seen.length > 0, true, "dispatcher received the order refund call");
+});
+
+test("a gateway order the provider refused can fall back to a recorded bank transfer", async () => {
+  let recorded: unknown[] = [];
+  const service = createReturnService({ repository: {
+    getManualRefund: async () => null,
+    getRefundOperation: async () => ({ status: "failed" }),
+    getReturn: async () => ({ ...COD_RETURN, payment_method: "ONLINE_PAYMENT" }),
+    listReturnLines: async () => ({ rows: [REFUND_LINE] }),
+    getOrderPaymentMethod: async () => null,
+    getPaymentByOrderId: async () => ({ payment_provider: "momo", payment_method: "ONLINE_PAYMENT", payment_status: "paid" }),
+    getRefundReceiver: async () => VALID_RECEIVER,
+    recordManualRefund: async (...args) => { recorded = args; return { return_item_id: ITEM_ID, item_status: "COMPLETED" }; }
+  } as unknown as ReturnRepository });
+  const res = await service.recordManualRefund(context("admin_operator_cskh_dt"), RETURN_ID, MANUAL_BODY);
+  assert.equal(res.return_item_id, ITEM_ID);
+  assert.equal(recorded.length > 0, true, "the refused gateway refund reached the manual ledger");
 });
 
 test("manual refund records only the target COD line atomically, without pre-RPC payment writes", async () => {
@@ -358,16 +394,17 @@ test("manual refund retries replay the recorded transfer and never pay the same 
   assert.equal(writes, 0);
 });
 
-test("manual refunds reject every online payment provider", async () => {
+test("online gateways must refund through the provider before any bank transfer is recorded", async () => {
   for (const provider of ["stripe", "momo", "vnpay"]) {
     const service = createReturnService({ repository: {
       getManualRefund: async () => null,
+      getRefundOperation: async () => null,
       getReturn: async () => ({ ...COD_RETURN, payment_method: "ONLINE_PAYMENT" }),
       listReturnLines: async () => ({ rows: [REFUND_LINE] }),
       getOrderPaymentMethod: async () => null,
       getPaymentByOrderId: async () => ({ payment_provider: provider, payment_method: "ONLINE_PAYMENT", payment_status: "paid" })
     } as unknown as ReturnRepository });
-    await assert.rejects(() => service.recordManualRefund(context("admin_operator_cskh_dt"), RETURN_ID, MANUAL_BODY), hasCode("COD_PAYMENT_REQUIRED"));
+    await assert.rejects(() => service.recordManualRefund(context("admin_operator_cskh_dt"), RETURN_ID, MANUAL_BODY), hasCode("GATEWAY_REFUND_REQUIRED"));
   }
 });
 
@@ -436,12 +473,47 @@ test("receiving-account supplementation supports a converted refund without rewr
 test("requestRefundInfo is refused for Stripe returns, exchanges and finished returns", async () => {
   const admin = context("admin_operator_cskh_dt");
   const make = (ret: JsonObject, payment: JsonObject) => createReturnService({
-    repository: { getReturn: async () => ret, getPaymentByOrderId: async () => payment, listReturnLines: async () => ({ rows: [] }), requestRefundReceiverSupplement: async () => { throw new Error("must not be reached"); } }
+    repository: { getReturn: async () => ret, getPaymentByOrderId: async () => payment, listReturnLines: async () => ({ rows: [] }), listRefundOperations: async () => [], requestRefundReceiverSupplement: async () => { throw new Error("must not be reached"); } }
   });
   const body = { message: "Vui long gui so tai khoan", expectedVersion: 3 };
   await assert.rejects(() => make({ ...COD_RETURN, payment_method: "ONLINE_PAYMENT" }, { payment_provider: "stripe", payment_method: "ONLINE_PAYMENT" }).requestRefundInfo(admin, RETURN_ID, body), hasCode("REFUND_RECEIVER_NOT_APPLICABLE"));
   await assert.rejects(() => make({ ...COD_RETURN, return_type: "exchange" }, COD_PAYMENT).requestRefundInfo(admin, RETURN_ID, body), hasCode("REFUND_RECEIVER_NOT_APPLICABLE"));
   await assert.rejects(() => make({ ...COD_RETURN, status: "COMPLETED" }, COD_PAYMENT).requestRefundInfo(admin, RETURN_ID, body), hasCode("RETURN_CLOSED"));
+});
+
+test("a refund the gateway refused is the trigger for asking a receiving account", async () => {
+  const admin = context("admin_operator_cskh_dt");
+  const onlineReturn: JsonObject = { ...COD_RETURN, return_type: "refund", payment_method: "ONLINE_PAYMENT" };
+  const momoPayment: JsonObject = { payment_provider: "vnpay", payment_method: "ONLINE_PAYMENT", payment_status: "paid" };
+  const make = (operations: JsonObject[]) => createReturnService({
+    repository: {
+      getReturn: async () => onlineReturn,
+      getRefundableAmount: async () => 80000,
+      getPaymentByOrderId: async () => momoPayment,
+      listReturnLines: async () => ({ rows: [REFUND_LINE] }),
+      getItemRefundableAmount: async () => 80000,
+      listRefundOperations: async () => operations,
+      getRefundReceiver: async () => VALID_RECEIVER,
+      getManualRefund: async () => null,
+      requestRefundReceiverSupplement: async (_id, _version, message) => ({ supplement_request: message })
+    } as unknown as ReturnRepository
+  });
+
+  // Chưa có lệnh hoàn nào bị từ chối → cổng còn tự trả được → không đòi số tài khoản.
+  const detailBefore = await make([]).getReturn(admin, RETURN_ID);
+  assert.equal(detailBefore.payment_kind, "other_online");
+  assert.equal(detailBefore.refund_flow, "gateway_auto");
+  assert.equal(detailBefore.gateway_refund_failed, false);
+  assert.equal(detailBefore.refund_receiver_status, "not_required");
+  await assert.rejects(() => make([]).requestRefundInfo(admin, RETURN_ID, { message: "Vui long gui tai khoan nhan tien", expectedVersion: 3 }), hasCode("REFUND_RECEIVER_NOT_APPLICABLE"));
+
+  // VNPay/MoMo đã từ chối lệnh hoàn → cùng một phiếu nay cần tài khoản nhận, và ERP phải thấy điều đó.
+  const refused = [{ return_item_id: ITEM_ID, status: "failed", amount: 80000 }];
+  const detailAfter = await make(refused).getReturn(admin, RETURN_ID);
+  assert.equal(detailAfter.gateway_refund_failed, true);
+  assert.equal(detailAfter.refund_receiver_status, "valid");
+  const asked = await make(refused).requestRefundInfo(admin, RETURN_ID, { message: "Vui long gui tai khoan nhan tien", expectedVersion: 3 });
+  assert.equal(asJsonObject(asked.refund_receiver).supplement_request, "Vui long gui tai khoan nhan tien");
 });
 
 test("return detail tells COD (manual transfer + receiving account) apart from Stripe (automatic refund)", async () => {
@@ -452,6 +524,7 @@ test("return detail tells COD (manual transfer + receiving account) apart from S
       getPaymentByOrderId: async () => payment,
       listReturnLines: async () => ({ rows: [] }),
       getRefundReceiver: async () => VALID_RECEIVER,
+      listRefundOperations: async () => [],
       getManualRefund: async () => ({ reference: "VCB2026100501", amount: 200000 })
     }
   }).getReturn(context("admin_operator_cskh_dt"), RETURN_ID);
@@ -503,6 +576,7 @@ test("order readers never receive full bank fields in legacy headers, manual sna
     listReturnLines: async () => ({ rows: [REFUND_LINE] }),
     getItemRefundableAmount: async () => 200000,
     getRefundReceiver: async () => VALID_RECEIVER,
+    listRefundOperations: async () => [],
     getManualRefund: async () => ({ reference: "transfer-reference", receiver_snapshot: VALID_RECEIVER, proof: MANUAL_BODY.imageProof }),
     listReturnEvents: async () => [{ payload: { receiver_snapshot: VALID_RECEIVER } }],
     listReturns: async () => ({ rows: [{ ...COD_RETURN, refund_bank_account: "0123456789" }], count: 1 })

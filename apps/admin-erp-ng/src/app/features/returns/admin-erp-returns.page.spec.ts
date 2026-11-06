@@ -201,6 +201,42 @@ describe('AdminErpReturnsPage', () => {
     expect(page.selected()?.return_type).toBe('exchange');
   });
 
+  it('runs the gateway refund on a VNPay/MoMo part and opens the hand transfer only after a refusal', () => {
+    const { page } = boot();
+    const part = { ...detail.lines![0], item_status: 'RECEIVED', decision_status: 'approved' as const, refundable_amount: 250_000 };
+    const gateway: AdminReturnRow = {
+      ...detail, payment_kind: 'other_online', refund_flow: 'gateway_auto', refund_receiver_status: 'not_required',
+    };
+    page.selected.set(gateway);
+    expect(page.itemActions(part)).toContain('stripe');
+    expect(page.itemActions(part)).not.toContain('manual');
+    page.openFlow('stripe', part);
+    expect(page.flow()).toBe('stripe');
+    expect(page.flowLine()?.return_item_id).toBe('ri-1');
+
+    page.selected.set({ ...gateway, payment: { gateway_response_code: 'REFUND_FAILED' } });
+    expect(page.itemActions(part)).toContain('manual');
+  });
+
+  it('labels the VNPay/MoMo refund route on the open return', () => {
+    const { page, fixture } = boot({ returns: ['read'] });
+    page.selected.set({
+      ...detail, payment_kind: 'other_online', refund_flow: 'gateway_auto', refund_receiver_status: 'not_required',
+    });
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Hoàn tiền tự động qua cổng VNPay/MoMo');
+    expect(page.paymentLabel('other_online')).toBe('Cổng online');
+  });
+
+  it('keeps the gateway result visible through the reload it triggers', () => {
+    const { page } = boot();
+    page.openReturn(rows[0]);
+    page.onFlowDone('Cổng thanh toán đã hoàn tiền cho phần hàng này. Các phần khác giữ nguyên tiến độ.');
+
+    expect(page.gatewayNote()).toContain('Cổng thanh toán đã hoàn tiền');
+  });
+
   it('shows mixed decisions, waiting customer, initial video and independently keyed parts', () => {
     const { page, fixture } = boot({ returns: ['read'] });
     page.selected.set({

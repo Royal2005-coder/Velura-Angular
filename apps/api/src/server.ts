@@ -23,8 +23,9 @@ import { createCarrierRepository } from "./carrier/carrier-repository.js";
 import { createCarrierService } from "./carrier/carrier-service.js";
 import { handleCarrierWebhookRoute } from "./carrier/carrier-router.js";
 import { startOrderAutomation } from "./orders/order-automation.js";
-import { refundStripeOrder } from "./payments/stripe.js";
+import { refundOrderPayment } from "./payments/local-gateway-refund.js";
 import { startStripeReconciliation } from "./payments/stripe-reconcile.js";
+import { startLocalGatewayReconciliation } from "./payments/local-gateway-reconcile.js";
 import { startLoyaltyExpiry } from "./loyalty/loyalty-expiry.js";
 import { handleOrderRoute } from "./orders/order-router.js";
 import { createReviewRepository } from "./reviews/review-repository.js";
@@ -83,13 +84,13 @@ const orderRepository = createOrderRepository();
 const carrierService = createCarrierService({ repository: createCarrierRepository(), orders: orderRepository });
 const orderService = createOrderService({
   repository: orderRepository,
-  refunds: { refund: refundStripeOrder },
+  refunds: { refund: (orderId) => refundOrderPayment(orderId) },
   carrierEvents: carrierService
 });
 const reviewService = createReviewService({ repository: createReviewRepository() });
 const returnService = createReturnService({
   repository: createReturnRepository(),
-  refunds: { refund: (orderId, amount, returnId, expectedVersion, returnItemId) => refundStripeOrder(orderId, { amount, returnId, expectedVersion, returnItemId }) }
+  refunds: { refund: (orderId, amount, returnId, expectedVersion, returnItemId) => refundOrderPayment(orderId, { amount, returnId, expectedVersion, returnItemId }) }
 });
 const pricingService = createPricingService({ repository: createPricingRepository() });
 const auditLogService = createAuditLogService({ repository: createAuditLogRepository() });
@@ -499,7 +500,7 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
 export const server = createServer(handleApiRequest);
 
 if (process.env.VERCEL !== "1") {
-  const timers = [startAccountMaintenance(), startEmailOutboxWorker(), startPromotionScheduler(), startOrderAutomation(), startStripeReconciliation(), startLoyaltyExpiry(), startChatReportWorker(), startMvRefreshJob()];
+  const timers = [startAccountMaintenance(), startEmailOutboxWorker(), startPromotionScheduler(), startOrderAutomation(), startStripeReconciliation(), startLocalGatewayReconciliation(), startLoyaltyExpiry(), startChatReportWorker(), startMvRefreshJob()];
   catalogContentService.start();
   void startAiRuntime().catch(() => console.error("AI_RUNTIME_RECOVERY_FAILED"));
   const shutdown = () => {

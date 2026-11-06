@@ -13,10 +13,20 @@ configMapGenerator:
       # Without this the 24h payment-expiry cleaner never runs, so an abandoned checkout holds
       # reserved_quantity and burns a voucher's used_count indefinitely.
       - ORDER_AUTOMATION_MODE=on
+      # VNPay/MoMo chạy ở sandbox có ký, vì credential merchant thật chưa được cấp. An toàn tiền nằm
+      # ở migration 112 (mỗi phiên thanh toán lưu môi trường của nó; callback/verify/refund sai môi
+      # trường bị DB từ chối trước khi động tới số dư), nên để sandbox chạy được không phải đánh đổi.
+      # Có VNPAY_*/MOMO_* thật thì credential thật thắng, simulator tự tắt.
+      - PAYMENT_GATEWAY_ENVIRONMENT=sandbox
+      - PAYMENT_GATEWAY_SIMULATOR=on
       - RELEASE_REVISION=b3df517c1daa2c4147ca7c5db0a32213a748c683
       - PORT=3000
       - CORS_ORIGIN=https://velura.royalai.dev,https://admin.royalai.dev,https://shop.royalai.dev,https://admin-erp.royalai.dev
       - STOREFRONT_ORIGIN=https://velura.royalai.dev
+      # Origin công khai của chính API, đã đo: https://velura.royalai.dev/api/user/payments/providers
+      # trả 200 (storefront gọi same-origin với apiUrl ''). Không có nó thì mọi cổng hosted bị tắt vì
+      # không dựng được ReturnUrl/IPN URL công khai mà nhà mạng gọi lại, và QR của khách vô dụng.
+      - API_PUBLIC_ORIGIN=https://velura.royalai.dev
       - S3_ENDPOINT=http://s3-service.storage.svc:9000
       - LITELLM_ENDPOINT=http://litellm.observability.svc:4000
       - GEMINI_MODEL=commerce-text

@@ -3,6 +3,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { CartLine, CartStore, GroupedCartItem, CartComboSubItem } from '../../core/services/cart.store';
 import { CheckoutStore } from '../../core/services/checkout.store';
 import { ApiService } from '../../core/services/api.service';
+import { AuthService } from '../../core/services/auth.service';
 import { formatVnd, toPublicAsset } from '../../core/utils/money';
 import { showToast } from '../../core/utils/toast';
 import { formatSizeDisplay, sortSizes } from '../../core/utils/size';
@@ -32,6 +33,7 @@ export class CartPage {
   private readonly cart = inject(CartStore);
   private readonly checkoutStore = inject(CheckoutStore);
   private readonly api = inject(ApiService);
+  private readonly auth = inject(AuthService);
   readonly displaySize = formatSizeDisplay;
   readonly editingVariantId = signal<string | null>(null);
   readonly pendingDeleteItem = signal<GroupedCartItem | null>(null);
@@ -100,7 +102,17 @@ export class CartPage {
     return Math.min(voucher.discount_amount, this.selectedSubtotal());
   });
   readonly estimatedTotal = computed(() => Math.max(0, this.selectedSubtotal() - this.estimatedDiscount()));
-  readonly expectedCartPoints = computed(() => Math.floor(this.estimatedTotal() * 0.05 / 1000));
+  /**
+   * Điểm dự kiến của giỏ, chỉ hiện với thành viên đã đăng nhập.
+   *
+   * Khách vãng lai đặt bằng số điện thoại chưa phải thành viên và từ migration 111 cũng không
+   * được tích điểm, nên báo "sẽ nhận X điểm" cho khách là hứa một khoản hệ thống không ghi.
+   * Con số này vẫn chỉ là ước lượng; số chốt là báo giá ở trang thanh toán.
+   */
+  readonly isMember = computed(() => this.auth.isLoggedIn());
+  readonly expectedCartPoints = computed(() =>
+    this.isMember() ? Math.floor(this.estimatedTotal() * 0.05 / 1000) : 0
+  );
   readonly allSelected = computed(() => {
     const items = this.groupedItems();
     if (!items.length) {

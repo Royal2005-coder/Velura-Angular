@@ -3,7 +3,8 @@ import { HttpError, readJson, sendJson } from "../http.js";
 import { callRpc, quotePostgrestValue, selectOne, selectRows, insertRow, updateRows } from "../supabase.js";
 import { requireUserAuth, validatePhone } from "./auth.js";
 import { createNotification } from "./notifications.js";
-import { config } from "../config.js";
+import { allowDevOtpBypass, config } from "../config.js";
+import { OTP_TTL_MS } from "./otp-policy.js";
 import { verifyStripeOrder } from "../payments/stripe-verify.js";
 import { maybeRunAutomation } from "../orders/order-service.js";
 import { maskEmail, sendDirectEmail } from "../email/mailer.js";
@@ -31,8 +32,7 @@ import {
   sendGuestOrderWelcomeSms,
   sendOrderConfirmationSms,
   sendTwilioSms,
-  maskPhone,
-  isSmsConfigured
+  maskPhone
 } from "../sms/twilio.js";
 import {
   asJsonObject,
@@ -600,9 +600,13 @@ export async function handleOrdersRoute(
       }
       const otpCode = session.otpCode;
 
-      console.log(`\n==================================================`);
-      console.log(`[CHECKOUT GUEST OTP] Mã xác thực đơn hàng cho ${phone} (Email: ${otpEmail}): ${otpCode}`);
-      console.log(`==================================================\n`);
+      // The shortcut is a fixed string, so only dev logs may print it. Production logs would
+      // hand out a live code to anyone reading stdout.
+      if (allowDevOtpBypass()) {
+        console.log(`\n==================================================`);
+        console.log(`[CHECKOUT GUEST OTP] Mã dev mặc định cho ${phone} (Email: ${otpEmail}): ${otpCode}`);
+        console.log(`==================================================\n`);
+      }
 
       // Gửi OTP qua Twilio SMS
       const smsResult = await sendCheckoutOtpSms(phone, otpCode);
@@ -640,7 +644,7 @@ export async function handleOrdersRoute(
           }
         }
         if (!emailSent) {
-          emailSent = true;
+          console.warn(`[CHECKOUT GUEST OTP] Email ${otpEmail} chưa gửi được qua SMTP đang cấu hình.`);
         }
 
         try {
@@ -649,7 +653,7 @@ export async function handleOrdersRoute(
             template_code: "otp_verification",
             subject: "Mã xác thực đơn hàng Velura",
             body: emailBody,
-            status: "sent",
+            status: emailSent ? "sent" : "failed",
             created_at: new Date().toISOString()
           });
         } catch {
@@ -657,22 +661,32 @@ export async function handleOrdersRoute(
         }
       }
 
-      // Until a live provider is configured, the checkout contract treats 123456 as a simulated SMS.
-      const smsSent = smsResult.success || !isSmsConfigured();
-      if (!smsSent && !emailSent) {
-        throw new HttpError(502, "OTP_SEND_FAILED", "Chưa thể gửi mã OTP. Vui lòng thử lại sau.");
+      // A simulated provider proves nothing to the customer, and an unconfigured carrier is not a
+      // delivery. Only a real send counts; dev shortcut codes are the single documented exception.
+      const smsSent = smsResult.success === true && smsResult.simulated !== true;
+      if (!allowDevOtpBypass() && !smsSent && !emailSent) {
+        throw new HttpError(
+          422,
+          "OTP_CHANNEL_UNAVAILABLE",
+          "Chưa gửi được mã xác thực qua tin nhắn hoặc email. Vui lòng nhập email để nhận mã, thử lại sau, hoặc liên hệ hotline Velura."
+        );
       }
-      const channel: "sms" | "email" | "both" = smsSent && emailSent ? "both" : emailSent ? "email" : "sms";
+      const channel: "sms" | "email" | "both" | "dev" = smsSent && emailSent
+        ? "both"
+        : emailSent ? "email" : smsSent ? "sms" : "dev";
       const destinations = [
         smsSent ? `số điện thoại ${maskPhone(phone)}` : null,
         emailSent ? `email ${maskEmail(asString(otpEmail))}` : null
       ].filter((part): part is string => Boolean(part));
-      const message = `Mã OTP đã được gửi tới ${destinations.join(" và ")}.`;
+      const message = destinations.length
+        ? `Mã OTP đã được gửi tới ${destinations.join(" và ")}.`
+        : `Nhập mã ${otpCode} để xác thực (chỉ dùng ở môi trường thử nghiệm).`;
 
       return sendJson(res, 200, {
         success: true,
         message,
         channel,
+        expires_in: Math.floor(OTP_TTL_MS / 1000),
         masked_phone: maskPhone(phone),
         masked_email: otpEmail ? maskEmail(otpEmail) : null
       }, corsHeaders);

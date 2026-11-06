@@ -924,8 +924,11 @@ export type AdminPaymentKind = 'cod' | 'stripe' | 'other_online';
 /** Server-side refund-channel filter: `online` covers Stripe and other gateways. */
 export type AdminPaymentFilter = 'cod' | 'online';
 
-/** Refund route recorded on the return. */
-export type AdminRefundFlow = 'cod_manual' | 'stripe_auto' | 'manual_transfer' | 'none';
+/**
+ * Refund route recorded on the return. `gateway_auto` reverses the money through the VNPay/MoMo
+ * refund API; `manual_transfer` is only the fallback once that gateway has refused the part.
+ */
+export type AdminRefundFlow = 'cod_manual' | 'stripe_auto' | 'gateway_auto' | 'manual_transfer' | 'none';
 
 /** State of the customer's payout details for a refundable return. */
 export type AdminRefundReceiverStatus = 'not_required' | 'missing' | 'invalid' | 'supplement_requested' | 'valid';
@@ -1136,6 +1139,8 @@ export interface AdminReturnRow {
   rejection_reason?: string;
   payment_kind?: AdminPaymentKind;
   refund_flow?: AdminRefundFlow;
+  /** Nhà mạng đã từ chối lệnh hoàn của phiếu này — điều kiện duy nhất để chuyển khoản tay hợp lệ. */
+  gateway_refund_failed?: boolean;
   refund_receiver_status?: AdminRefundReceiverStatus;
   cancelled_by?: AdminReturnCancelledBy | null;
   refund_receiver?: AdminRefundReceiver | null;
@@ -1208,6 +1213,20 @@ export interface AdminManualRefundInput {
 export interface AdminRefundInfoRequestInput {
   message: string;
   expectedVersion: number;
+}
+
+/** The gateway that actually reversed the money, whatever the endpoint is called. */
+export type AdminRefundGateway = 'stripe' | 'vnpay' | 'momo';
+
+/**
+ * Outcome of one gateway refund attempt on a single return part. `gateway` is absent when the API
+ * answered from an already succeeded operation instead of calling the provider again.
+ */
+export interface AdminGatewayRefundResult {
+  success: boolean;
+  return_item_id?: string;
+  refund: { status: 'refunded' | 'requested' | 'failed' | 'skipped'; message?: string } | null;
+  gateway?: AdminRefundGateway;
 }
 
 /** Per-part workflow commands; request type is never rewritten by a resolution change. */
@@ -2109,16 +2128,15 @@ export class AdminErpApiService {
   }
 
   /**
-   * Runs (or retries) the gateway refund for a Stripe return.
+   * Runs (or retries) the gateway refund for one return part. The endpoint name is a published
+   * contract: the API dispatches on the provider of the captured payment, so it reverses Stripe,
+   * VNPay or MoMo money alike.
    */
   triggerStripeRefund(
     returnId: string,
     body: { expectedVersion: number; returnItemId: string },
-  ): Observable<{ success: boolean; refund: { status: 'refunded' | 'requested' | 'failed' | 'skipped'; message?: string } | null }> {
-    return this.http.post<{
-      success: boolean;
-      refund: { status: 'refunded' | 'requested' | 'failed' | 'skipped'; message?: string } | null;
-    }>(
+  ): Observable<AdminGatewayRefundResult> {
+    return this.http.post<AdminGatewayRefundResult>(
       `${this.baseUrl}/api/v1/admin/returns/${encodeURIComponent(returnId)}/trigger-stripe-refund`,
       body,
     );

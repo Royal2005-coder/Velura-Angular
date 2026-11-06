@@ -7,6 +7,10 @@ export interface PurchasePaymentProvider {
   code: 'COD' | 'STRIPE' | 'VNPAY' | 'MOMO';
   enabled: boolean;
   reason?: string;
+  /** Môi trường của cổng: sandbox phải được dán nhãn rõ, khách không được tưởng đang trả tiền thật. */
+  environment?: 'sandbox' | 'production';
+  /** Simulator đang thế chỗ nhà mạng (demo không credential) — chỉ bật ở sandbox. */
+  simulated?: boolean;
 }
 
 /** Phản hồi gửi OTP checkout của API KAN-28. */
@@ -38,7 +42,26 @@ export interface PurchaseCheckoutResponse {
   order_access_token?: string;
   order?: PurchaseCreatedOrder;
   stripe?: { url?: string } | null;
-  payment?: { provider: PurchasePaymentProvider['code']; url?: string; payment_id?: string; expires_at?: string } | null;
+  /**
+   * Phiên hosted của VNPay/MoMo. `qr_url` là DỮ LIỆU để vẽ mã QR (MoMo trả chuỗi NAPAS, VNPay trả
+   * chính đường dẫn đã ký) — không phải ảnh, nên storefront tự render bằng thư viện `qrcode`.
+   */
+  payment?: {
+    provider: PurchasePaymentProvider['code'];
+    url?: string;
+    payment_id?: string;
+    expires_at?: string;
+    environment?: 'sandbox' | 'production';
+    qr_url?: string;
+  } | null;
+}
+
+/** Kết quả server đối soát một giao dịch; browser không tự khai đã trả tiền. */
+export interface PurchasePaymentVerification {
+  paid?: boolean;
+  payment_status?: string;
+  status?: string;
+  message?: string;
 }
 
 /** Result of an authorized payment-method change persisted by the backend. */
@@ -93,8 +116,15 @@ export class PurchaseFlowApiService {
   retryPayment(orderId: string, phone: string, orderAccessToken?: string): Observable<PurchaseCheckoutResponse> {
     return this.api.post<PurchaseCheckoutResponse>('/api/user/orders/retry-payment', { order_id: orderId, phone, order_access_token: orderAccessToken });
   }
-  /** Reads a provider-verified result; browser query parameters and snapshots cannot assert payment. */
-  verifyPayment(orderId: string, orderAccessToken?: string, provider: PurchasePaymentProvider['code'] = 'STRIPE'): Observable<{ paid?: boolean; payment_status?: string }> {
-    return this.api.post(provider === 'STRIPE' ? '/api/user/payments/stripe/verify' : '/api/user/payments/verify', { order_id: orderId, order_access_token: orderAccessToken });
+  /**
+   * Reads a provider-verified result; browser query parameters and snapshots cannot assert payment.
+   * VNPay/MoMo đi qua endpoint riêng của từng nhà mạng vì phải gọi API tra soát của chính họ
+   * (VNPay QueryDR, MoMo /query) — `/payments/verify` chỉ đọc sổ ledger trong nước.
+   */
+  verifyPayment(orderId: string, orderAccessToken?: string, provider: PurchasePaymentProvider['code'] = 'STRIPE'): Observable<PurchasePaymentVerification> {
+    const path = provider === 'STRIPE' ? '/api/user/payments/stripe/verify'
+      : provider === 'VNPAY' || provider === 'MOMO' ? `/api/user/payments/${provider.toLowerCase()}/verify`
+      : '/api/user/payments/verify';
+    return this.api.post<PurchasePaymentVerification>(path, { order_id: orderId, order_access_token: orderAccessToken });
   }
 }

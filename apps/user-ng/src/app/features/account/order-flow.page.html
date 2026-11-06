@@ -1119,7 +1119,7 @@
                     </button>
                   </div>
                 }
-                @if (request.kind === 'refund' || request.refundFlow === 'cod_manual' || request.refundFlow === 'stripe_auto') {
+                @if (request.kind === 'refund' || (request.refundFlow && request.refundFlow !== 'none')) {
                   <p>
                     @if (request.refundAmount !== undefined) {
                       Số tiền {{ request.status === 'REFUNDED' || request.status === 'COMPLETED' ? 'đã hoàn' : 'được duyệt' }}:

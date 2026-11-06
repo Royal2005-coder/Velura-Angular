@@ -131,6 +131,44 @@ describe('ReturnFlowComponent per-item operations', () => {
     expect(component.canSubmit()).toBe(false);
   });
 
+  it('sends the gateway refund for a VNPay/MoMo part and words the result without Stripe', () => {
+    const gateway: AdminReturnRow = {
+      ...record, payment_kind: 'other_online', refund_flow: 'gateway_auto', refund_receiver_status: 'not_required',
+    };
+    const { component, fixture, stripe } = boot('stripe', { ...line, resolution_type: 'refund', item_status: 'RECEIVED' });
+    const messages: string[] = []; component.done.subscribe((message) => messages.push(message));
+    fixture.componentRef.setInput('record', gateway); fixture.detectChanges();
+    expect(component.canSubmit()).toBe(true);
+    component.submit();
+    expect(stripe).toEqual([{ expectedVersion: 7, returnItemId: 'part-1' }]);
+    expect(messages[0]).toContain('cổng thanh toán');
+    expect(messages[0]).not.toContain('Stripe');
+    expect(component.quickNotes().join(' ')).not.toContain('qua thẻ');
+  });
+
+  it('reconciles an online part by hand only once its gateway refund was refused', () => {
+    const gateway: AdminReturnRow = {
+      ...record, payment_kind: 'other_online', refund_flow: 'gateway_auto', refund_receiver_status: 'not_required',
+    };
+    const { component, fixture, manual } = boot('manual', { ...line, resolution_type: 'refund', item_status: 'RECEIVED' });
+    fixture.componentRef.setInput('record', gateway); fixture.detectChanges();
+    component.transferReference.set('VCB-REF-998877'); component.transferredAt.set('2020-01-01T10:00'); component.proofFile.set(image);
+    expect(component.canSubmit()).toBe(false);
+
+    // Cổng đã từ chối nhưng chưa có tài khoản nhận: migration 113 vẫn từ chối ghi tay, nên UI không mở nút.
+    fixture.componentRef.setInput('record', { ...gateway, gateway_refund_failed: true });
+    fixture.detectChanges();
+    expect(component.canSubmit()).toBe(false);
+
+    // Từ chối + tài khoản nhận hợp lệ → đây là lúc duy nhất được trả tiền bằng chuyển khoản.
+    fixture.componentRef.setInput('record', { ...gateway, gateway_refund_failed: true, refund_receiver_status: 'valid' });
+    fixture.detectChanges();
+    expect(component.canSubmit()).toBe(true);
+    component.submit();
+    expect(manual[0].returnItemId).toBe('part-1');
+    expect(manual[0].amount).toBe(120_000);
+  });
+
   it('requires real pickup identity and nonfuture time and submits them with private proof', () => {
     const { component, actions } = boot('pickup', { ...line, item_status: 'WAITING_RETURN' });
     component.pickupPhotos.set([image]); component.tracking.set('GHN-PICKUP-001');

@@ -39,6 +39,7 @@ import type { AddressGeographySelection, GeographyMode } from '../../core/models
 import { PurchaseCustomerStore } from '../../core/services/purchase-customer.store';
 import { CheckoutLineEditorService, type CheckoutVariantChoice } from '../../core/services/checkout-line-editor.service';
 import type { CartLine, CartComboSubItem } from '../../core/services/cart.store';
+import { toDataURL } from 'qrcode';
 
 /** Checkout một trang của KAN-27; mọi mutation đơn hàng đi qua Model API KAN-28. */
 @Component({
@@ -107,12 +108,42 @@ export class PurchaseFlowPage {
    readonly busy = signal(false);
   readonly paymentProviders = signal<PurchasePaymentProvider[]>([{ code: 'COD', enabled: true }, { code: 'STRIPE', enabled: false }, { code: 'VNPAY', enabled: false }, { code: 'MOMO', enabled: false }]);
   readonly providerLabel: Record<PurchasePaymentProvider['code'], string> = { COD: 'Thanh toán khi nhận hàng (COD)', STRIPE: 'Thanh toán bằng thẻ', VNPAY: 'VNPay', MOMO: 'Ví MoMo' };
+
+  /**
+   * Dòng mô tả dưới mỗi phương thức. API cho biết `enabled`, `reason` và `environment`, nên nơi này
+   * không được tự đoán: "Tạm chưa khả dụng" phải đi kèm lý do thật, còn sandbox thì phải nói rõ.
+   */
+  providerHint(provider: PurchasePaymentProvider): string {
+    if (!provider.enabled) {
+      return provider.reason === 'not_configured'
+        ? 'Chưa bật được cổng thanh toán này lúc đặt hàng; bạn vẫn có thể trả bằng COD hoặc thẻ.'
+        : 'Tạm chưa khả dụng';
+    }
+    if (provider.code === 'COD') return 'Thanh toán cho người giao hàng.';
+    const sandbox = provider.environment === 'sandbox' ? ' Chế độ sandbox: giao dịch ký và đối soát như thật nhưng không trừ tiền thật.' : '';
+    return provider.code === 'STRIPE'
+      ? 'Chuyển đến trang Stripe để trả bằng thẻ hoặc ví liên kết.'
+      : `Lấy mã QR riêng của đơn này; quét bằng app ${provider.code === 'MOMO' ? 'MoMo hoặc app ngân hàng' : 'ngân hàng có hỗ trợ VNPAY QR'}.${sandbox}`;
+  }
   readonly resumeLoading = signal(false);
   readonly resumeLocked = signal(false);
   readonly error = signal('');
   /** Đếm ngược theo đúng hạn mã server cấp (AUTH-08 5 phút), không phải 60 giây. */
   readonly seconds = signal(OTP_COUNTDOWN_SECONDS);
   readonly paymentSeconds = signal(900);
+  /**
+   * Phiên hosted đang mở của riêng đơn này. `qrPayload` là dữ liệu nhà mạng cấp (MoMo trả chuỗi
+   * NAPAS, VNPay trả đường dẫn đã ký), không phải ảnh — page chịu trách nhiệm render.
+   */
+  readonly gateway = signal<{ provider: PurchasePaymentProvider['code'] | ''; url: string; qrPayload: string; expiresAt?: string }>({ provider: '', url: '', qrPayload: '' });
+  readonly qrImage = signal('');
+  readonly verifying = signal(false);
+  readonly verifyNotice = signal('');
+  readonly gatewayProviderLabel = computed(() =>
+    this.gateway().provider === 'MOMO' ? 'Ví MoMo' : this.gateway().provider === 'VNPAY' ? 'VNPay' : 'cổng thanh toán');
+  /** Sandbox phải được nói thẳng trên màn hình: khách không nên tưởng mình vừa trả tiền thật. */
+  readonly gatewaySandbox = computed(() =>
+    this.paymentProviders().some(provider => provider.code === this.gateway().provider && provider.environment === 'sandbox'));
   readonly resendSeconds = signal(0);
   readonly digits = signal(['', '', '', '', '', '']);
   readonly order = signal<DemoOrder | null>(null);
@@ -385,6 +416,9 @@ export class PurchaseFlowPage {
         shipping_address: order.address.detail, checkout_snapshot: order,
         order_access_token: this.member() ? undefined : token,
         payment_expires_at: expiresAt,
+        payment_qr_url: sameOrder ? existing?.payment_qr_url : undefined,
+        payment_redirect_url: sameOrder ? existing?.payment_redirect_url : undefined,
+        payment_provider: sameOrder ? existing?.payment_provider ?? order.payment : order.payment,
       });
       if (order.payment === 'COD' || order.paymentState === 'paid') {
         this.step.set('success');
@@ -394,18 +428,41 @@ export class PurchaseFlowPage {
       const expires = Date.parse(expiresAt || '');
       const seconds = Number.isFinite(expires) ? Math.max(0, Math.ceil((expires - Date.now()) / 1000)) : 0;
       this.paymentSeconds.set(seconds);
-      this.paymentResult.set(this.route.snapshot.queryParamMap.get('stripe') === 'cancel' ? 'cancelled'
+      // Khách vừa về từ trang VNPay/MoMo. Hosted page chỉ được dùng để nhận biết HỦY (không có tiền
+      // nào chuyển), còn "đã trả" thì server phải hỏi lại nhà mạng ở lời gọi verify bên dưới.
+      const returnedFrom = (this.route.snapshot.queryParamMap.get('payment_return') || '').toUpperCase();
+      const cancelledInBrowser = this.route.snapshot.queryParamMap.get('stripe') === 'cancel'
+        || (returnedFrom === 'VNPAY' && ['10', '11', '12'].includes(this.route.snapshot.queryParamMap.get('vnp_ResponseCode') || ''))
+        || (returnedFrom === 'MOMO' && Number(this.route.snapshot.queryParamMap.get('resultCode') ?? 0) !== 0);
+      if (returnedFrom === 'VNPAY' || returnedFrom === 'MOMO') {
+        this.verifyNotice.set('Đang đối soát kết quả với cổng thanh toán…');
+      }
+      this.paymentResult.set(cancelledInBrowser ? 'cancelled'
         : order.paymentState === 'failed' ? 'failed'
         : order.paymentState === 'expired' || (Number.isFinite(expires) && seconds === 0) ? 'expired' : 'confirming');
-      this.step.set(Number.isFinite(expires) && seconds > 0 && this.paymentResult() === 'confirming' ? 'gateway' : 'result');
+      const reopenGateway = Number.isFinite(expires) && seconds > 0 && this.paymentResult() === 'confirming';
+      this.step.set(reopenGateway ? 'gateway' : 'result');
+      if (reopenGateway && !this.gateway().qrPayload && sameOrder && existing?.payment_qr_url) {
+        this.gateway.set({
+          provider: order.payment,
+          url: existing.payment_redirect_url || '',
+          qrPayload: existing.payment_qr_url,
+          expiresAt
+        });
+        void this.renderQr(existing.payment_qr_url);
+      }
       {
         this.purchaseApi.verifyPayment(order.orderId || order.id, this.member() ? undefined : token, order.payment)
           .pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
             next: (result) => {
               if (session !== this.auth.session() || this.order()?.orderId !== order.orderId) return;
-              if (result.paid === true || result.payment_status === 'paid') {
+              if (result.paid === true || result.payment_status === 'paid' || result.status === 'paid') {
+                this.verifyNotice.set('');
                 this.order.set({ ...order, paymentState: 'paid' });
                 this.step.set('success');
+              } else if (result.message) {
+                // Nhà mạng chưa xác nhận: giữ kết quả đang hiển thị, chỉ nói thêm lý do bằng lời khách hiểu được.
+                this.verifyNotice.set(result.message);
               }
             },
             error: (error: Error) => { if (session === this.auth.session()) this.error.set(error.message || 'Chưa xác minh được thanh toán.'); },
@@ -881,12 +938,17 @@ export class PurchaseFlowPage {
       order_access_token: response.order_access_token,
       checkout_snapshot: order,
       payment_expires_at: this.payment !== 'COD' ? paymentExpiresAt : undefined,
+      payment_qr_url: response.payment?.qr_url || response.payment?.url,
+      payment_redirect_url: response.payment?.url,
+      payment_provider: this.payment !== 'COD' ? response.payment?.provider : undefined,
     });
     this.checkout.completeCheckout(this.lines());
     clearCheckoutRequestKey();
     this.busy.set(false);
     this.paymentSeconds.set(900);
-    const gatewayUrl = response.payment?.url || response.stripe?.url;
+    // QR của riêng đơn này trước, redirect desktop sau: đơn VNPay/MoMo được thiết kế để quét bằng điện thoại.
+    if (this.applyHostedPayment(response.payment)) return;
+    const gatewayUrl = response.stripe?.url;
     if (gatewayUrl) {
       window.location.assign(gatewayUrl);
       return;
@@ -921,7 +983,14 @@ export class PurchaseFlowPage {
     this.busy.set(true);
     const userId = this.model.userId();
     this.purchaseApi.retryPayment(order.orderId || order.id, normalizePhone(this.address.phone), this.checkout.readCreatedOrder()?.order_access_token).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: (response) => { if (userId !== this.model.userId()) return; this.busy.set(false); const url = response.payment?.url || response.stripe?.url; if (url) window.location.assign(url); else this.error.set(response.message || 'Chưa mở được phiên thanh toán mới.'); },
+      next: (response) => {
+        if (userId !== this.model.userId()) return;
+        this.busy.set(false);
+        if (this.applyHostedPayment(response.payment)) return;
+        const url = response.stripe?.url;
+        if (url) window.location.assign(url);
+        else this.error.set(response.message || 'Chưa mở được phiên thanh toán mới.');
+      },
       error: (error: Error) => { if (userId !== this.model.userId()) return; this.busy.set(false); this.error.set(error.message); },
     });
   }
@@ -968,6 +1037,74 @@ export class PurchaseFlowPage {
       checkout_snapshot: order,
       payment_expires_at: expiresAt ?? saved.payment_expires_at,
     });
+  }
+
+  /**
+   * Mở phiên hosted của VNPay/MoMo: giữ lại payload QR rồi ở lại trang, vì mỗi đơn có mã QR
+   * riêng và khách quét bằng điện thoại. Desktop vẫn có nút mở cổng trong màn hình đó.
+   * Stripe giữ nguyên hành vi cũ (redirect thẳng sang Checkout Session).
+   */
+  private applyHostedPayment(payment: PurchaseCheckoutResponse['payment']): boolean {
+    if (!payment || (payment.provider !== 'VNPAY' && payment.provider !== 'MOMO')) return false;
+    this.gateway.set({ provider: payment.provider, url: payment.url || '', qrPayload: payment.qr_url || payment.url || '', expiresAt: payment.expires_at });
+    void this.renderQr(this.gateway().qrPayload);
+    const seconds = Math.max(0, Math.ceil((Date.parse(payment.expires_at || '') - Date.now()) / 1000));
+    if (Number.isFinite(seconds)) this.paymentSeconds.set(seconds);
+    this.step.set('gateway');
+    void this.router.navigate([], { relativeTo: this.route, queryParams: { order: this.order()?.id }, replaceUrl: true });
+    return true;
+  }
+
+  /** QR được render cục bộ từ dữ liệu nhà mạng cấp; lỗi render không chặn được thanh toán, chỉ mất ảnh. */
+  private async renderQr(payload: string): Promise<void> {
+    this.qrImage.set('');
+    if (!payload) return;
+    this.qrImage.set(await toDataURL(payload, { width: 320, margin: 1, errorCorrectionLevel: 'M' }).catch(() => ''));
+  }
+
+  /**
+   * Khách tự bấm "đã thanh toán" sau khi quét QR. Đây là đường duy nhất để khách thấy kết quả
+   * ngay: server hỏi lại nhà mạng (QueryDR / MoMo query), trình duyệt không tự khai được.
+   */
+  checkPaymentNow(): void {
+    const order = this.order();
+    if (!order || this.busy() || this.verifying()) return;
+    const session = this.auth.session();
+    this.verifying.set(true);
+    this.verifyNotice.set('');
+    this.error.set('');
+    this.purchaseApi.verifyPayment(
+      order.orderId || order.id,
+      this.member() ? undefined : this.checkout.readCreatedOrder()?.order_access_token,
+      this.gateway().provider || order.payment
+    ).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (result) => {
+        if (session !== this.auth.session() || this.order()?.orderId !== order.orderId) return;
+        this.verifying.set(false);
+        if (result.paid === true || result.payment_status === 'paid' || result.status === 'paid') {
+          const paid: DemoOrder = { ...order, paymentState: 'paid', status: 'pending' };
+          this.order.set(paid);
+          this.persistPaymentSnapshot(paid);
+          this.paymentResult.set('paid');
+          this.step.set('success');
+          return;
+        }
+        this.verifyNotice.set(result.message || 'Cổng thanh toán chưa báo đã nhận được tiền. Nếu bạn đã chuyển khoản thành công, vui lòng chờ vài giây rồi kiểm tra lại.');
+        this.paymentResult.set(result.status === 'expired' ? 'expired' : 'confirming');
+        this.step.set('result');
+      },
+      error: (error: Error) => {
+        if (session !== this.auth.session()) return;
+        this.verifying.set(false);
+        this.error.set(error.message || 'Chưa kiểm tra được thanh toán.');
+      },
+    });
+  }
+
+  /** Mở trang cổng thanh toán trên cùng thiết bị (desktop) thay vì quét mã bằng điện thoại. */
+  openGatewayPage(): void {
+    const url = this.gateway().url;
+    if (url) window.location.assign(url);
   }
   private fillDigits(index: number, value: string): void {
     const digits = [...this.digits()];

@@ -39,6 +39,17 @@ export const config = {
   momoAccessKey: process.env.MOMO_ACCESS_KEY || "",
   momoSecretKey: process.env.MOMO_SECRET_KEY || "",
   momoApiOrigin: (process.env.MOMO_API_ORIGIN || "https://test-payment.momo.vn").replace(/\/+$/, ""),
+  /**
+   * Môi trường thanh toán của VNPay/MoMo: 'sandbox' | 'production' | '' (suy ra từ URL).
+   * Ở production, sandbox chỉ được dùng khi khai báo tường minh — URL sandbox một mình không đủ
+   * để bật tiền giả trên đơn thật.
+   */
+  paymentGatewayEnvironment: (process.env.PAYMENT_GATEWAY_ENVIRONMENT || "").trim().toLowerCase(),
+  /** Bộ giả lập có chữ ký cho demo: chỉ bật khi khai báo tường minh và có PAYMENT_SIMULATOR_SECRET. */
+  paymentGatewaySimulator: ["on", "true", "1"].includes((process.env.PAYMENT_GATEWAY_SIMULATOR || "").trim().toLowerCase()),
+  paymentSimulatorSecret: process.env.PAYMENT_SIMULATOR_SECRET || "",
+  /** VNPay cấp URL QueryDR/Refund riêng khi go-live; suy ra từ host payment nếu chưa khai báo. */
+  vnpayApiUrl: (process.env.VNPAY_API_URL || "").replace(/\/+$/, ""),
   storefrontOrigin: (process.env.STOREFRONT_ORIGIN || "https://velura.royalai.dev").replace(/\/+$/, ""),
   supportAlertTo: process.env.SUPPORT_ALERT_TO || process.env.SMTP_USER || "",
   n8nChatWebhookUrl: process.env.N8N_CHAT_WEBHOOK_URL || "",

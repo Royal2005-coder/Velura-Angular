@@ -4,7 +4,7 @@ import { HttpError } from "../http.js";
 import { callRpc, insertRow, selectOne, selectRows, updateRows } from "../supabase.js";
 import { asJsonObject, asString, errorMessage, type JsonObject } from "../types.js";
 import { createNotification } from "../user/notifications.js";
-import { sendRefundSuccessEmail } from "../returns/return-email.js";
+import { refundChannelName, refundChannelText, sendRefundSuccessEmail, type RefundGatewayLabel } from "../returns/return-email.js";
 
 /**
  * Hạn của một phiên Stripe Checkout.
@@ -569,7 +569,7 @@ export async function markStripeRefunded(paymentIntentId: string, amount?: numbe
   return changed.length ? "refunded" : "ignored";
 }
 
-async function updateReturnRefundOperation(operation: JsonObject, values: JsonObject): Promise<JsonObject[]> {
+export async function updateReturnRefundOperation(operation: JsonObject, values: JsonObject): Promise<JsonObject[]> {
   const rows = await updateRows("payment_refund", {
     refund_id: "eq." + asString(operation.refund_id), return_item_id: "eq." + asString(operation.return_item_id),
     status: "in.(requested,pending,failed)",
@@ -578,14 +578,14 @@ async function updateReturnRefundOperation(operation: JsonObject, values: JsonOb
   return rows.map(asJsonObject);
 }
 
-async function completeReturnRefund(operation: JsonObject, providerRef: string): Promise<void> {
+export async function completeReturnRefund(operation: JsonObject, providerRef: string, label: RefundGatewayLabel = "stripe"): Promise<void> {
   await callRpc("velura_complete_return_refund", {
     p_return_id: operation.return_id, p_provider_ref: providerRef, p_return_item_id: operation.return_item_id
   });
-  void sendRefundSuccessEmail(asString(operation.return_id), { method: "stripe", returnItemId: asString(operation.return_item_id) });
+  void sendRefundSuccessEmail(asString(operation.return_id), { method: label, returnItemId: asString(operation.return_item_id) });
 }
 
-async function completeRefund(paymentId: string, orderId?: string, amount?: number, stripeRefundId?: string): Promise<void> {
+export async function completeRefund(paymentId: string, orderId?: string, amount?: number, providerRef?: string, label: RefundGatewayLabel = "stripe"): Promise<void> {
   await updateRows("payment", { payment_id: `eq.${paymentId}`, payment_status: "in.(paid,refund_pending)" }, {
     payment_status: "refunded",
     refunded_amount:amount,
@@ -598,8 +598,8 @@ async function completeRefund(paymentId: string, orderId?: string, amount?: numb
       action: "stripe_refund_succeeded",
       actor_type: "system",
       result: "success",
-      note: `Stripe xác nhận hoàn tiền thành công (${Number(amount || 0).toLocaleString("vi-VN")} đ)`,
-      payload: { payment_id: paymentId, stripe_refund_id: stripeRefundId, amount }
+      note: `${refundChannelName(label)} xác nhận hoàn tiền thành công (${Number(amount || 0).toLocaleString("vi-VN")} đ)`,
+      payload: { payment_id: paymentId, provider_ref: providerRef, amount, gateway: label }
     });
     try {
       const order = await selectOne("orders", { order_id: `eq.${orderId}`, select: "order_id,user_id,order_code" });
@@ -608,17 +608,17 @@ async function completeRefund(paymentId: string, orderId?: string, amount?: numb
           String(order.user_id),
           "refund_completed",
           `Đơn hàng #${order.order_code || orderId} đã được hoàn tiền`,
-          `Số tiền ${Number(amount || 0).toLocaleString("vi-VN")} đ đã được hoàn thành công về phương thức thanh toán ban đầu qua Stripe.`,
+          `Số tiền ${Number(amount || 0).toLocaleString("vi-VN")} đ đã được hoàn thành công ${refundChannelText(label).toLowerCase()}.`,
           `/account/orders/${orderId}`
         );
       }
     } catch (err: unknown) {
-      console.warn("[STRIPE NOTIFICATION] Could not create refund notification:", errorMessage(err));
+      console.warn("[REFUND NOTIFICATION] Could not create refund notification:", errorMessage(err));
     }
   }
 }
 
-async function markRefundFailed(orderId: string, payment: JsonObject, message: string): Promise<void> {
+export async function markRefundFailed(orderId: string, payment: JsonObject, message: string): Promise<void> {
   await updateRows("payment", { payment_id: `eq.${asString(payment.payment_id)}` }, {
     gateway_response_code: "REFUND_FAILED"
   });

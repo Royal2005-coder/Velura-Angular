@@ -74,6 +74,23 @@
   color: #776c65;
   margin: 0;
 }
+.payment-page img.qr-code {
+  margin: 16px auto;
+}
+.payment-page__sandbox {
+  margin: 14px 0;
+  padding: 10px 12px;
+  border: 1px solid #e3c9a6;
+  border-radius: 10px;
+  background: #fdf3e3;
+  color: #7a4b12;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.payment-page__notice {
+  color: #7a4b12;
+  font-size: 14px;
+}
 .qr-payment {
   display: flex;
   align-items: center;

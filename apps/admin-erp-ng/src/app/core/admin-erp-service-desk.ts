@@ -3,7 +3,7 @@
  * before a request is sent. Values copy `apps/api/src/returns/return-constants.ts` and the
  * chatbot service; the server stays the authority and its error remains the fallback.
  */
-import { AdminReturnItemAction, AdminReturnLine, AdminReturnRow, AdminReturnStatus, AdminTicketRow } from './admin-erp-api.service';
+import { AdminPaymentKind, AdminReturnItemAction, AdminReturnLine, AdminReturnRow, AdminReturnStatus, AdminTicketRow } from './admin-erp-api.service';
 import { AdminTone } from './admin-erp-status-labels';
 
 /** Canonical Vietnamese labels for stored return workflow codes. */
@@ -113,6 +113,7 @@ export const REFUND_RECEIVER_STATUS_LABELS: Readonly<Record<string, string>> = {
 export const REFUND_FLOW_LABELS: Readonly<Record<string, string>> = {
   cod_manual: 'Hoàn tiền COD: chuyển khoản thủ công có đối soát',
   stripe_auto: 'Hoàn tiền tự động qua Stripe',
+  gateway_auto: 'Hoàn tiền tự động qua cổng VNPay/MoMo',
   manual_transfer: 'Chuyển khoản thủ công qua cổng thanh toán online',
   none: 'Đổi hàng, không hoàn tiền',
 };
@@ -235,17 +236,26 @@ export function contactAllowed(row: AdminReturnRow | null): boolean {
 
 
 /**
- * COD refunds stay blocked until the customer supplies valid payout details.
+ * Phiếu cần khách cung cấp tài khoản nhận tiền: COD (tiền đi tay) hoặc đơn qua cổng mà nhà mạng
+ * đã từ chối hoàn — hai trường hợp duy nhất Velura trả tiền bằng chuyển khoản.
  */
-export function refundReceiverBlocked(row: AdminReturnRow | null): boolean {
-  return row?.payment_kind === 'cod' && row.refund_receiver_status !== 'valid';
+export function needsReceivingAccount(row: AdminReturnRow | null): boolean {
+  if (!row) return false;
+  return row.payment_kind === 'cod' || (isGatewayRefundChannel(row.payment_kind) && gatewayRefundRefused(row));
 }
 
 /**
- * Payout-detail supplement is only meaningful for a live COD refund.
+ * Payout details are missing for a return that can only be paid by hand.
+ */
+export function refundReceiverBlocked(row: AdminReturnRow | null): boolean {
+  return needsReceivingAccount(row) && row?.refund_receiver_status !== 'valid';
+}
+
+/**
+ * CSKH asks the customer for payout details; meaningful exactly when a hand transfer is the path.
  */
 export function refundInfoAllowed(row: AdminReturnRow | null): boolean {
-  return Boolean(row && row.payment_kind === 'cod' && contactAllowed(row));
+  return Boolean(needsReceivingAccount(row) && contactAllowed(row));
 }
 
 
@@ -278,15 +288,15 @@ export function gatewayNote(refund: { status: string; message?: string } | null)
     return 'Cổng không trả về trạng thái. Kiểm lại giao dịch trước khi thử lại.';
   }
   if (refund.status === 'refunded') {
-    return 'Stripe đã hoàn tiền cho phần hàng này. Các phần khác giữ nguyên tiến độ.';
+    return 'Cổng thanh toán đã hoàn tiền cho phần hàng này. Các phần khác giữ nguyên tiến độ.';
   }
   if (refund.status === 'requested') {
-    return 'Đã gửi yêu cầu hoàn tiền tới Stripe; chờ cổng xác nhận.';
+    return 'Đã gửi yêu cầu hoàn tiền tới cổng thanh toán; chờ cổng xác nhận.';
   }
   if (refund.status === 'skipped') {
     return 'Cổng bỏ qua giao dịch này; kiểm tra lại số tiền hoàn.';
   }
-  return refund.message || 'Hoàn tiền qua Stripe thất bại. Kiểm lại giao dịch rồi thử lại.';
+  return refund.message || 'Hoàn tiền qua cổng thanh toán thất bại. Kiểm lại giao dịch rồi thử lại.';
 }
 
 /** Decision labels stay separate from logistics progress on mixed requests. */
@@ -329,6 +339,36 @@ export function returnItemActions(line: AdminReturnLine, canApprove: boolean): r
 export function itemRefundAllowed(line: AdminReturnLine): boolean {
   return line.decision_status === 'approved' && line.resolution_type === 'refund'
     && ['RECEIVED', 'REFUND_PENDING'].includes(String(line.item_status));
+}
+
+/** Channels whose money a payment gateway can reverse itself; only COD has to be paid by hand. */
+export function isGatewayRefundChannel(kind: AdminPaymentKind | null | undefined): boolean {
+  return kind === 'stripe' || kind === 'other_online';
+}
+
+/**
+ * The gateway has refused this return's refund — the only state in which a hand transfer is legal on
+ * an online-paid order. The API re-checks the refusal per part, so a visible button can still be refused.
+ */
+export function gatewayRefundRefused(row: AdminReturnRow | null): boolean {
+  if (!row) return false;
+  // Cờ do API tính từ chính sổ payment_refund (điều kiện mà migration 113 kiểm tra lại khi ghi).
+  if (row.gateway_refund_failed !== undefined) return row.gateway_refund_failed;
+  // Danh sách phiếu không kèm cờ này thì đọc dấu vết trên payment row của chi tiết đã tải.
+  return row.refund_flow === 'manual_transfer' || String(row.payment?.gateway_response_code || '') === 'REFUND_FAILED';
+}
+
+/**
+ * Money operations allowed on a refundable part: the gateway refund for every online channel, the
+ * COD reconciliation once the customer's receiving account is valid, and a hand transfer for an
+ * online order only after its gateway refund was refused.
+ */
+export function refundChannelActions(row: AdminReturnRow | null): readonly ('stripe' | 'manual')[] {
+  if (!row) return [];
+  if (isGatewayRefundChannel(row.payment_kind)) {
+    return gatewayRefundRefused(row) ? ['stripe', 'manual'] : ['stripe'];
+  }
+  return row.payment_kind === 'cod' && row.refund_receiver_status === 'valid' ? ['manual'] : [];
 }
 
 /** Contact SLA uses the server deadline; waiting for the customer does not erase business progress. */

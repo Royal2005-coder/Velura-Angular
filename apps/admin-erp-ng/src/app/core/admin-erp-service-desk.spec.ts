@@ -1,5 +1,5 @@
 import { AdminReturnLine, AdminReturnRow, AdminTicketRow } from './admin-erp-api.service';
-import { canTicketAction, contactAllowed, isChatGovernedTicket, isReturnOpen, itemRefundAllowed, refundInfoAllowed, refundReceiverBlocked, RETURN_DECISION_STATUSES, RETURN_HEADER_STATUSES, returnContactOverdue, returnDecisionLabel, returnItemActions, returnStatusLabel, returnStatusTone } from './admin-erp-service-desk';
+import { canTicketAction, contactAllowed, gatewayNote, isChatGovernedTicket, isReturnOpen, itemRefundAllowed, refundChannelActions, refundInfoAllowed, refundReceiverBlocked, REFUND_FLOW_LABELS, RETURN_DECISION_STATUSES, RETURN_HEADER_STATUSES, returnContactOverdue, returnDecisionLabel, returnItemActions, returnStatusLabel, returnStatusTone } from './admin-erp-service-desk';
 
 const base: AdminReturnRow = { return_id: 'r1', order_id: 'o1', return_type: 'exchange', status: 'IN_PROGRESS', version: 1 };
 const part: AdminReturnLine = { return_item_id: 'part1', quantity: 2, version: 1, decision_status: 'approved', resolution_type: 'exchange', item_status: 'RECEIVED' };
@@ -69,6 +69,33 @@ describe('service desk per-part rules', () => {
     expect(refundInfoAllowed({ ...base, payment_kind: 'stripe' })).toBe(false);
     expect(refundReceiverBlocked({ ...base, payment_kind: 'cod', refund_flow: 'cod_manual', refund_receiver_status: 'missing' })).toBe(true);
     expect(refundReceiverBlocked({ ...base, payment_kind: 'cod', refund_flow: 'cod_manual', refund_receiver_status: 'valid' })).toBe(false);
+  });
+
+  it('names the VNPay/MoMo route apart from Stripe and never blames Stripe for it', () => {
+    expect(REFUND_FLOW_LABELS['gateway_auto']).toBe('Hoàn tiền tự động qua cổng VNPay/MoMo');
+    expect(REFUND_FLOW_LABELS['gateway_auto']).not.toBe(REFUND_FLOW_LABELS['stripe_auto']);
+    for (const refund of [null, { status: 'refunded' }, { status: 'requested' }, { status: 'skipped' }, { status: 'failed' }]) {
+      expect(gatewayNote(refund)).not.toContain('Stripe');
+    }
+    expect(gatewayNote({ status: 'failed', message: 'VNPay từ chối hoàn tiền vì ngoài thời gian cho phép' }))
+      .toBe('VNPay từ chối hoàn tiền vì ngoài thời gian cho phép');
+  });
+
+  it('offers the gateway refund on every online channel and the hand transfer only after a refusal', () => {
+    const stripe: AdminReturnRow = { ...base, payment_kind: 'stripe', refund_flow: 'stripe_auto' };
+    const gateway: AdminReturnRow = { ...base, payment_kind: 'other_online', refund_flow: 'gateway_auto' };
+    const refused = (row: AdminReturnRow): AdminReturnRow => ({ ...row, payment: { gateway_response_code: 'REFUND_FAILED' } });
+    expect(refundChannelActions(null)).toEqual([]);
+    expect(refundChannelActions(gateway)).toEqual(['stripe']);
+    expect(refundChannelActions({ ...gateway, payment: { gateway_response_code: 'REFUND_REQUESTED' } })).toEqual(['stripe']);
+    expect(refundChannelActions(refused(gateway))).toEqual(['stripe', 'manual']);
+    expect(refundChannelActions(refused(stripe))).toEqual(['stripe', 'manual']);
+    expect(refundChannelActions({ ...base, payment_kind: 'cod', refund_flow: 'cod_manual', refund_receiver_status: 'valid' })).toEqual(['manual']);
+    expect(refundChannelActions({ ...base, payment_kind: 'cod', refund_flow: 'cod_manual', refund_receiver_status: 'missing' })).toEqual([]);
+  });
+
+  it('treats a stored manual_transfer route as an already refused gateway', () => {
+    expect(refundChannelActions({ ...base, payment_kind: 'other_online', refund_flow: 'manual_transfer' })).toEqual(['stripe', 'manual']);
   });
 
   it('retains governed ticket transitions independently of return operations', () => {

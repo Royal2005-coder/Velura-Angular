@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { config } from "../config.js";
 import { HttpError, readJson, sendJson, sendNoContent } from "../http.js";
 import { callRpc, selectOne, updateRows } from "../supabase.js";
@@ -51,6 +51,22 @@ export interface GatewayCredentials {
 /** Merchant ID demo của bộ giả lập: tên sân chơi, không phải credential, nên không phải bí mật. */
 const SIMULATOR_MERCHANT_ID = "VELURASB";
 
+/**
+ * Khoá ký của simulator: dùng PAYMENT_SIMULATOR_SECRET nếu người vận hành đặt, nếu không thì sinh
+ * ngẫu nhiên khi process bật lên.
+ *
+ * Vì sao không cần secret: an toàn của sandbox không nằm ở việc giấu khoá demo — nó nằm ở migration
+ * 112, nơi MỖI phiên lưu môi trường của mình và callback/verify/refund sai môi trường bị DB từ chối
+ * trước khi động tới tiền. Khoá demo công khai cũng không ký nổi một capture trên phiên production.
+ * Đặt PAYMENT_SIMULATOR_SECRET chỉ để liên kết QR sống sót qua restart pod; còn mặc định, simulator
+ * tự ký và tự kiểm trong cùng process nên không có khoá nào lọt vào Git.
+ */
+const BOOT_SIMULATOR_SECRET = randomBytes(32).toString("hex");
+
+function simulatorSigningKey(): string {
+  return config.paymentSimulatorSecret || BOOT_SIMULATOR_SECRET;
+}
+
 function realGatewayCredentials(provider: LocalGateway): GatewayCredentials {
   return provider === "VNPAY"
     ? { merchantId: config.vnpayTmnCode, accessKey: "", secret: config.vnpayHashSecret, simulator: false }
@@ -63,19 +79,17 @@ function realGatewayConfigured(provider: LocalGateway): boolean {
 }
 
 /**
- * Bộ giả lập chỉ thế chỗ khi nhà mạng chưa có credential THẬT, môi trường là sandbox, và người vận hành
- * bật tường minh kèm một khoá ký riêng (>=16 ký tự) — nhờ đó không có khoá demo nào nằm trong repo.
+ * Bộ giả lập chỉ thế chỗ khi nhà mạng chưa có credential THẬT và môi trường là sandbox.
  * Có credential thật thì luôn dùng thật, kể cả khi simulator đang bật.
  */
 export function localGatewaySimulated(provider: LocalGateway): boolean {
-  return !realGatewayConfigured(provider) && config.paymentGatewaySimulator
-    && config.paymentSimulatorSecret.length >= 16 && gatewayEnvironment(provider) === "sandbox";
+  return !realGatewayConfigured(provider) && config.paymentGatewaySimulator && gatewayEnvironment(provider) === "sandbox";
 }
 
 export function gatewayCredentials(provider: LocalGateway): GatewayCredentials {
   if (realGatewayConfigured(provider)) return realGatewayCredentials(provider);
   return localGatewaySimulated(provider)
-    ? { merchantId: SIMULATOR_MERCHANT_ID, accessKey: SIMULATOR_MERCHANT_ID, secret: config.paymentSimulatorSecret, simulator: true }
+    ? { merchantId: SIMULATOR_MERCHANT_ID, accessKey: SIMULATOR_MERCHANT_ID, secret: simulatorSigningKey(), simulator: true }
     : realGatewayCredentials(provider);
 }
 
@@ -197,7 +211,7 @@ export async function openLocalGateway(orderId: string, provider: LocalGateway, 
   const paymentId = asString(attempt.payment_id);
   const reference = asString(attempt.gateway_session_id);
   const expiresAt = asString(attempt.gateway_expires_at);
-  if (attempt.gateway_checkout_url) {
+  if (attempt.gateway_checkout_url && !credentials.simulator) {
     return {
       provider, payment_id: paymentId, expires_at: expiresAt, environment,
       url: asString(attempt.gateway_checkout_url), qr_url: asString(attempt.gateway_qr_url) || asString(attempt.gateway_checkout_url)

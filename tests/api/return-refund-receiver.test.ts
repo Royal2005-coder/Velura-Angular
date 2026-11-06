@@ -6,12 +6,14 @@ import {
   adminRefundReceiver,
   classifyReturnPayment,
   customerRefundReceiver,
+  refundFallbackAllowed,
   refundFlowFor,
+  refundReceiverRequired,
   refundReceiverStatus,
   validateRefundReceiver
 } from "../../apps/api/src/returns/return-refund-receiver.js";
 
-test("payment kind separates COD, Stripe and the manual MoMo/VNPay gateways", () => {
+test("payment kind separates COD, Stripe and the VNPay/MoMo gateway refunds", () => {
   assert.equal(classifyReturnPayment("COD", "cod"), "cod");
   assert.equal(classifyReturnPayment("COD", undefined), "cod");
   assert.equal(classifyReturnPayment("ONLINE_PAYMENT", "stripe"), "stripe");
@@ -20,8 +22,15 @@ test("payment kind separates COD, Stripe and the manual MoMo/VNPay gateways", ()
   assert.equal(classifyReturnPayment("ONLINE_PAYMENT", "vnpay"), "other_online");
   assert.equal(refundFlowFor("refund", "cod"), "cod_manual");
   assert.equal(refundFlowFor("refund", "stripe"), "stripe_auto");
-  assert.equal(refundFlowFor("refund", "other_online"), "manual_transfer");
+  // VNPay/MoMo reverse tiền qua API của họ, giống Stripe; chỉ đường lùi sau khi cổng từ chối mới là transfer tay.
+  assert.equal(refundFlowFor("refund", "other_online"), "gateway_auto");
   assert.equal(refundFlowFor("exchange", "cod"), "none");
+  assert.equal(refundReceiverRequired("cod_manual"), true);
+  assert.equal(refundReceiverRequired("gateway_auto"), false);
+  assert.equal(refundFallbackAllowed("gateway_auto", false), false);
+  assert.equal(refundFallbackAllowed("gateway_auto", true), true);
+  assert.equal(refundFallbackAllowed("stripe_auto", true), true);
+  assert.equal(refundFallbackAllowed("none", true), false);
 });
 
 test("receiving account validation matches the database rule (bank, 6-20 digit account, holder without digits)", () => {

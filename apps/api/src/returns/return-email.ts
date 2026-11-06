@@ -4,10 +4,29 @@ import { insertRow, selectOne, selectRows } from "../supabase.js";
 import { asJsonObject, asNumber, asString, type JsonObject } from "../types.js";
 
 export interface RefundEmailOptions {
-  method?: "stripe" | "manual" | "completed";
+  method?: "manual" | "completed" | RefundGatewayLabel;
   reference?: string;
   /** Independently completed return part; required for current item-based refunds. */
   returnItemId?: string;
+}
+
+/** Nhà mạng thực sự hoàn tiền. Thư và ghi chú vận hành phải nói đúng cái tên này. */
+export type RefundGatewayLabel = "stripe" | "vnpay" | "momo";
+
+export function refundChannelName(label: RefundGatewayLabel): string {
+  return label === "vnpay" ? "VNPay" : label === "momo" ? "MoMo" : "Stripe";
+}
+
+/** Nhà mạng của một payment row, quy về nhãn dùng trong thư và ghi chú. */
+export function refundChannelFor(paymentProvider: unknown): RefundGatewayLabel {
+  const provider = asString(paymentProvider).toLowerCase();
+  return provider === "vnpay" || provider === "momo" ? provider : "stripe";
+}
+
+export function refundChannelText(label: RefundGatewayLabel): string {
+  if (label === "vnpay") return "Cổng thanh toán VNPay (hoàn về tài khoản ngân hàng đã dùng để thanh toán)";
+  if (label === "momo") return "Ví MoMo (hoàn về ví MoMo đã dùng để thanh toán)";
+  return "Cổng thanh toán Stripe (hoàn về thẻ thanh toán ban đầu)";
 }
 
 /**
@@ -90,13 +109,19 @@ export async function sendRefundSuccessEmail(
     if (refundAmount <= 0) return false;
     const amountFormatted = refundAmount.toLocaleString("vi-VN") + " đ";
 
-    const paymentMethod = asString(order.payment_method).toUpperCase();
-    const isStripe = paymentMethod === "STRIPE" || options.method === "stripe";
-    const paymentMethodText = isStripe
-      ? "Cổng thanh toán Stripe (hoàn về thẻ thanh toán ban đầu)"
+    const gateway: RefundGatewayLabel | null = options.method === "vnpay" || options.method === "momo" || options.method === "stripe" ? options.method : null;
+    const paymentMethodText = gateway
+      ? refundChannelText(gateway)
       : (options.reference
           ? `Chuyển khoản ngân hàng trực tiếp (Mã GD: ${options.reference})`
           : "Chuyển khoản ngân hàng trực tiếp");
+    const gatewayTiming = gateway === "vnpay"
+      ? "• Đối với cổng VNPay: VNPay chuyển lệnh về ngân hàng của bạn; thời gian tiền về phụ thuộc ngân hàng nhận, thường trong 3-7 ngày làm việc."
+      : gateway === "momo"
+        ? "• Đối với ví MoMo: tiền hoàn về ví MoMo ngay sau khi giao dịch hoàn tất; rút về tài khoản ngân hàng theo hạn mức của ví."
+        : gateway === "stripe"
+          ? "• Đối với thẻ quốc tế (Stripe): Tiền sẽ hoàn vào hạn mức thẻ trong vòng 3-7 ngày làm việc tùy chính sách ngân hàng phát hành thẻ."
+          : "";
 
     const subject = `[Velura] Xác nhận hoàn tiền thành công cho đơn hàng #${orderCode}`;
     const text = `Kính chào ${customerName},
@@ -113,7 +138,7 @@ THÔNG TIN HOÀN TIỀN:
 
 Thời gian nhận tiền:
 • Đối với chuyển khoản ngân hàng: Tiền sẽ về tài khoản của bạn trong vòng 1-24 giờ làm việc.
-• Đối với thẻ quốc tế (Stripe): Tiền sẽ hoàn vào hạn mức thẻ trong vòng 3-7 ngày làm việc tùy chính sách ngân hàng phát hành thẻ.
+${gatewayTiming}
 
 Tra cứu đơn hàng tại: https://velura.royalai.dev/account/track?code=${orderCode}
 

@@ -28,6 +28,7 @@ test("return detail carries the inbound shipment, evidence and linked exchange o
       }),
       getRefundableAmount: async () => 0,
       getPaymentByOrderId: async () => null,
+      listRefundOperations: async () => [],
       listReturnLines: async () => ({ rows: [{
         return_item_id: "part-exchange", order_item_id: "line-1", quantity: 1,
         item_status: "EXCHANGE_SHIPPING", decision_status: "approved", resolution_type: "exchange",

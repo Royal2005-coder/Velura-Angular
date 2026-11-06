@@ -3,7 +3,8 @@ import { HttpError, sendJson } from "../http.js";
 import { classifyStripeEvent, closeStripePayment, markStripePaymentPaid, markStripeRefunded, verifyStripeSignature } from "./stripe.js";
 import type { HeaderMap, HttpRequest, HttpResponse, JsonObject } from "../types.js";
 import { selectOne } from "../supabase.js";
-import { asJsonObject } from "../types.js";
+import { asJsonObject, asString } from "../types.js";
+import { recordWebhookEvent } from "./payment-metrics.js";
 
 /**
  * Stripe CLI and live webhooks both post here.
@@ -24,6 +25,7 @@ export async function handleStripeWebhook(req: HttpRequest, res: HttpResponse, c
   const event = JSON.parse(rawBody) as JsonObject;
   const action = classifyStripeEvent(event);
   if (action.kind === "ignore") {
+    recordWebhookEvent("stripe", asString(event.type), "ignored");
     sendJson(res, 200, { received: true, ignored: action.reason }, corsHeaders);
     return;
   }
@@ -32,6 +34,7 @@ export async function handleStripeWebhook(req: HttpRequest, res: HttpResponse, c
     const order = await selectOne("orders", {order_id:`eq.${action.orderId}`,select:"total_amount"});
     const amount = event.type === "payment_intent.succeeded" ? object.amount_received : object.amount_total;
     if (!order || object.currency !== "vnd" || !Number.isSafeInteger(Number(amount)) || Number(amount) !== Number(order.total_amount)) {
+      recordWebhookEvent("stripe", asString(event.type), "rejected");
       throw new HttpError(422,"PAYMENT_AMOUNT_MISMATCH","Giao dịch không khớp số tiền hoặc tiền tệ của đơn hàng.");
     }
   }
@@ -40,6 +43,7 @@ export async function handleStripeWebhook(req: HttpRequest, res: HttpResponse, c
     : action.kind === "refunded"
       ? await markStripeRefunded(action.paymentIntentId,action.amount,action.refunds)
       : await closeStripePayment(action.orderId, action.reason, action.sessionId);
+  recordWebhookEvent("stripe", asString(event.type), "processed");
   sendJson(res, 200, { received: true, result }, corsHeaders);
 }
 

@@ -51,6 +51,12 @@ export interface CreatedOrder {
   checkout_snapshot?: DemoOrder;
   /** Hạn của phiên QR; frontend tính lại thời gian còn lại thay vì reset khi reload. */
   payment_expires_at?: string;
+  /** Dữ liệu mã QR của phiên hosted, lưu để khách thoát ra rồi vào lại vẫn quét đúng mã của đơn. */
+  payment_qr_url?: string;
+  /** Đường dẫn trang thanh toán của nhà mạng để mở trên desktop; khác với dữ liệu QR với MoMo. */
+  payment_redirect_url?: string;
+  /** Nhà mạng của phiên đang mở: quyết định endpoint đối soát và nhãn hiển thị. */
+  payment_provider?: string;
 }
 
 /** Checkout values copied from a cancelled order for a one-click reorder. */

@@ -158,6 +158,17 @@ export function createReturnRepository() {
     },
 
     /**
+     * Mọi lệnh hoàn tiền của phiếu, đọc một lần cho cả phiếu.
+     *
+     * Một lệnh `failed` là bằng chứng cổng đã từ chối trả tiền — đó là điều kiện duy nhất để đơn
+     * VNPay/MoMo được hoàn bằng chuyển khoản tay, và cũng là lúc cần khách cung cấp tài khoản nhận.
+     */
+    async listRefundOperations(returnId: string): Promise<JsonObject[]> {
+      const { rows } = await selectRows("payment_refund", { return_id: `eq.${returnId}`, order: "created_at.desc" }, { count: "none" }).catch(() => ({ rows: [] as JsonObject[], count: undefined }));
+      return rows;
+    },
+
+    /**
      * CSKH yêu cầu khách bổ sung thông tin nhận hoàn tiền. Phiếu giữ nguyên trạng thái và phiên bản.
      */
     async requestRefundReceiverSupplement(returnId: string, expectedVersion: number, message: string, actorId: string): Promise<JsonObject> {

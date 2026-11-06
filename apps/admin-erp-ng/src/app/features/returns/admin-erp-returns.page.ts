@@ -27,6 +27,7 @@ import {
   isChatGovernedTicket,
   isReturnOpen,
   paymentKindLabel,
+  refundChannelActions,
   refundInfoAllowed,
   returnStatusLabel,
   returnStatusTone,
@@ -636,11 +637,7 @@ export class AdminErpReturnsPage {
   itemActions(line: AdminReturnLine): readonly Exclude<ReturnFlowKind, null>[] {
     if (!this.canOperate()) return [];
     const actions: Exclude<ReturnFlowKind, null>[] = [...returnItemActions(line, this.canApprove())];
-    const record = this.selected();
-    if (this.canFinance() && itemRefundAllowed(line)) {
-      if (record?.payment_kind === 'stripe') actions.push('stripe');
-      if (record?.payment_kind === 'cod' && record.refund_receiver_status === 'valid') actions.push('manual');
-    }
+    if (this.canFinance() && itemRefundAllowed(line)) actions.push(...refundChannelActions(this.selected()));
     return actions;
   }
 
@@ -776,11 +773,12 @@ export class AdminErpReturnsPage {
   onFlowDone(message = ''): void {
     const id = this.selected()?.return_id;
     this.flow.set(null);
-    if (message) {
-      this.gatewayNote.set(message);
-    }
     if (id) {
       this.openReturn({ return_id: id } as AdminReturnRow);
+    }
+    // openReturn clears the banner for the reload, so the gateway result is written afterwards.
+    if (message) {
+      this.gatewayNote.set(message);
     }
     this.loadReturns();
   }

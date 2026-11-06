@@ -500,4 +500,19 @@ describe('OrderFlowPage with mocked Model', () => {
     expect(text()).not.toContain('CSKH yêu cầu bổ sung');
     expect(text()).not.toContain('Lưu thông tin nhận tiền');
   });
+
+  /**
+   * VNPay/MoMo đi đường `gateway_auto`, không phải `cod_manual`/`stripe_auto`. Trước khi nhà mạng
+   * hỗ trợ hoàn tự động thì luồng này rơi vào `manual_transfer` và khách không thấy dòng tiền nào.
+   */
+  it('reports the refunded amount for a VNPay or MoMo gateway refund without demanding bank details', () => {
+    for (const payment of ['VNPAY', 'MOMO'] as const) {
+      const gatewayOrder: DemoOrder = { ...order, id: `DEMO-${payment}`, payment };
+      const request: DemoReturn = { ...pendingRequest, orderId: gatewayOrder.id, status: 'APPROVED', stage: 1, paymentMethod: 'ONLINE_PAYMENT', refundFlow: 'gateway_auto', refundAmount: 250000, refundReceiver: undefined };
+      const { fixture, text } = openTracking(request, gatewayOrder);
+      expect(text()).toContain('Số tiền được duyệt');
+      expect(text()).toContain('250.000');
+      expect(fixture.nativeElement.querySelector('input[name="account"]')).toBeNull();
+    }
+  });
 });

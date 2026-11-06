@@ -114,20 +114,30 @@ function json(payload: unknown): Response {
 
 test.afterEach(() => { /* config được world() phục hồi trong từng test */ });
 
-test("the simulator only exists when it is opted into, sandboxed, and has a signing secret", () => {
+test("the simulator follows the sandbox declaration, not a hidden secret", () => {
   const saved = { ...config };
-  Object.assign(config, { apiPublicOrigin: "https://api.velura.test", vnpayTmnCode: "", vnpayHashSecret: "", momoPartnerCode: "", momoAccessKey: "", momoSecretKey: "", paymentGatewayEnvironment: "sandbox", paymentGatewaySimulator: true, paymentSimulatorSecret: "short" });
-  assert.equal(localGatewaySimulated("VNPAY"), false, "khoá demo quá ngắn thì không bật simulator");
-  config.paymentSimulatorSecret = SIM_SECRET;
-  assert.equal(localGatewaySimulated("VNPAY"), true);
+  Object.assign(config, { apiPublicOrigin: "https://api.velura.test", vnpayTmnCode: "", vnpayHashSecret: "", momoPartnerCode: "", momoAccessKey: "", momoSecretKey: "", paymentGatewayEnvironment: "sandbox", paymentGatewaySimulator: true, paymentSimulatorSecret: "" });
+  // Không có secret vẫn bật: an toàn đến từ môi trường theo phiên (112), không từ việc giấu khoá demo.
+  assert.equal(localGatewaySimulated("VNPAY"), true, "simulator phải bật mà không đòi secret");
   assert.equal(localGatewayConfigured("VNPAY"), true);
+  assert.ok(gatewayCredentials("VNPAY").secret.length >= 32, "khoá sinh lúc bật phải đủ dài để ký");
+  assert.equal(gatewayCredentials("VNPAY").simulator, true);
 
   // Production không được phục vụ simulator, kể cả khi bật nhầm.
   config.paymentGatewayEnvironment = "production";
   assert.equal(simulatorReady("VNPAY"), false);
+  assert.equal(localGatewayConfigured("VNPAY"), false);
   config.paymentGatewayEnvironment = "sandbox";
   config.paymentGatewaySimulator = false;
   assert.equal(simulatorReady("VNPAY"), false, "không bật tường minh thì route simulator phải vô hình");
+  assert.equal(localGatewayConfigured("VNPAY"), false);
+
+  // Credential thật luôn thắng simulator.
+  config.paymentGatewaySimulator = true;
+  config.vnpayTmnCode = "VELURATM01";
+  config.vnpayHashSecret = "real-merchant-hash-secret";
+  assert.equal(localGatewaySimulated("VNPAY"), false, "có credential merchant thì không giả lập nữa");
+  assert.equal(gatewayCredentials("VNPAY").simulator, false);
   Object.assign(config, saved);
 });
 

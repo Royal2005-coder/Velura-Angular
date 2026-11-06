@@ -2,6 +2,7 @@ import { config } from "../config.js";
 import { selectOne, selectRows } from "../supabase.js";
 import { asString } from "../types.js";
 import { sendRefundSuccessEmail } from "../returns/return-email.js";
+import { recordReconcileEvent, recordRefundEvent } from "./payment-metrics.js";
 import { gatewayEnvironment, localGatewayConfigured, type LocalGateway } from "./local-gateways.js";
 import { queryRefundStatus, verifyLocalGatewayOrder } from "./local-gateway-verify.js";
 import { completeRefund, completeReturnRefund, markRefundFailed, updateReturnRefundOperation } from "./stripe.js";
@@ -49,10 +50,12 @@ export async function reconcilePendingLocalGatewayPayments(
     checked += 1;
     try {
       const result = await verifyLocalGatewayOrder({ orderId, provider });
+      recordReconcileEvent(provider, result.paid ? "paid" : "still_pending");
       if (result.paid) paid += 1;
       else stillPending += 1;
     } catch (error) {
       stillPending += 1;
+      recordReconcileEvent("unknown", "failed");
       console.warn("[GATEWAY RECONCILE] payment check failed", {
         payment_id: paymentId, provider, code: (error as { code?: string })?.code || "UNKNOWN"
       });
@@ -100,6 +103,7 @@ export async function reconcilePendingGatewayRefunds(
     checked += 1;
     try {
       const status = await queryRefundStatus(refund, payment);
+      recordRefundEvent(provider, `reconcile_${status.outcome}`);
       if (status.outcome === "settled") {
         if (refund.return_item_id) await completeReturnRefund(refund, status.provider_ref, provider.toLowerCase() as "vnpay" | "momo");
         else await completeRefund(asString(payment.payment_id), asString(payment.order_id), Number(refund.amount), status.provider_ref, provider.toLowerCase() as "vnpay" | "momo");

@@ -2,7 +2,7 @@ import { createHmac } from "node:crypto";
 import QRCode from "qrcode";
 import { config } from "../config.js";
 import { HttpError, readJson, sendJson } from "../http.js";
-import { selectOne } from "../supabase.js";
+import { selectOne, selectRows } from "../supabase.js";
 import { asJsonObject, asString, type HeaderMap, type HttpRequest, type HttpResponse, type JsonObject } from "../types.js";
 import {
   gatewayCredentials,
@@ -375,6 +375,22 @@ async function simulatedVnpayApi(body: JsonObject, credentials: GatewayCredentia
     }, VNPAY_REFUND_RESPONSE_SIGNED, credentials);
   }
   if (state === "unknown") return { vnp_ResponseCode: "91", vnp_Message: "Không tìm thấy giao dịch", vnp_TxnRef: reference };
+  // QueryDR mô tả MỘT giao dịch — bản mới nhất. Sau lệnh hoàn, đó là giao dịch hoàn trả (02/03),
+  // nên simulator phải trả về hàng hoàn trả chứ không lặp lại giao dịch thu tiền.
+  const refund = await latestRefundOperation(asString(row?.payment_id));
+  if (refund) {
+    const status = asString(refund.status);
+    return signVnpayResponse({
+      vnp_ResponseId: asString(body.vnp_RequestId), vnp_Command: "querydr", vnp_ResponseCode: "00",
+      vnp_Message: "Truy vấn thành công (sandbox)", vnp_TmnCode: credentials.merchantId, vnp_TxnRef: reference,
+      vnp_Amount: String(Math.round(Number(refund.amount || 0) * 100)), vnp_BankCode: "SIMU",
+      vnp_PayDate: vnpayDate(new Date(asString(refund.updated_at) || Date.now())),
+      vnp_TransactionNo: gatewayTransactionNo(`refund:${reference}`),
+      vnp_TransactionType: Number(refund.amount) < Number(row?.amount || 0) ? "03" : "02",
+      vnp_TransactionStatus: status === "succeeded" ? "00" : status === "failed" ? "09" : "05",
+      vnp_OrderInfo: asString(body.vnp_OrderInfo), vnp_PromotionCode: "", vnp_PromotionAmount: ""
+    }, VNPAY_QUERY_RESPONSE_SIGNED, credentials);
+  }
   const status = state === "paid" ? "00" : state === "pending" ? "01" : "02";
   return signVnpayResponse({
     vnp_ResponseId: asString(body.vnp_RequestId), vnp_Command: "querydr", vnp_ResponseCode: "00",
@@ -418,8 +434,9 @@ async function simulatedMomoApi(body: JsonObject, credentials: GatewayCredential
     result.signature = momoSignature({ ...result, accessKey: credentials.accessKey }, MOMO_CREATE_RESPONSE_KEYS, credentials.secret);
     return result;
   }
+  const isRefundQuery = path.endsWith("/refund/query");
   const isRefund = path.endsWith("/refund");
-  const keys = isRefund ? MOMO_REFUND_KEYS : MOMO_QUERY_KEYS;
+  const keys = isRefundQuery ? MOMO_QUERY_KEYS : isRefund ? MOMO_REFUND_KEYS : MOMO_QUERY_KEYS;
   const signed = momoSignature({
     accessKey: credentials.accessKey,
     amount: scalarOf(body.amount),
@@ -431,6 +448,20 @@ async function simulatedMomoApi(body: JsonObject, credentials: GatewayCredential
   }, keys, credentials.secret);
   if (!sameSignature(asString(body.signature), signed)) return { resultCode: 97, message: "Invalid signature", orderId: reference, responseTime: Date.now() };
   if (asString(body.partnerCode) !== credentials.merchantId) return { resultCode: 4, message: "Invalid partnerCode", orderId: reference, responseTime: Date.now() };
+
+  // `/refund/query` hỏi bằng orderId của CHÍNH lệnh hoàn, nên phải tra payment_refund, không tra payment.
+  if (isRefundQuery) {
+    const operation = await refundOperation(reference);
+    if (!operation) return { resultCode: 42, message: "Invalid refund orderId", orderId: reference, responseTime: Date.now() };
+    const status = asString(operation.status);
+    return {
+      partnerCode: credentials.merchantId, orderId: reference, requestId: asString(body.requestId),
+      amount: Number(operation.amount), transId: Number(gatewayTransactionNo(`refund:${reference}`)),
+      resultCode: status === "succeeded" ? 0 : status === "failed" ? 1081 : 7000,
+      message: status === "succeeded" ? "Hoàn tiền sandbox đã tất toán" : status === "failed" ? "Hoàn tiền sandbox bị từ chối" : "Hoàn tiền sandbox đang xử lý",
+      responseTime: Date.now()
+    };
+  }
 
   if (isRefund) {
     const original = asString(body.transId);
@@ -456,7 +487,24 @@ async function simulatedMomoApi(body: JsonObject, credentials: GatewayCredential
   };
 }
 
-/** MoMo tra theo transId, không theo orderId của merchant. */
+/** Lệnh hoàn mới nhất trên một payment — nguồn sự thật để simulator trả lời QueryDR sau khi hoàn. */
+async function latestRefundOperation(paymentId: string): Promise<JsonObject | null> {
+  if (!paymentId) return null;
+  const { rows } = await selectRows("payment_refund", {
+    payment_id: `eq.${paymentId}`, order: "created_at.desc", limit: 1,
+    select: "refund_id,amount,status,provider_ref,updated_at"
+  }, { count: "none" }).catch(() => ({ rows: [] as JsonObject[], count: undefined }));
+  return rows[0] ?? null;
+}
+
+/** MoMo tra lệnh hoàn theo orderId do merchant sinh; hoàn lại dạng uuid để tra đúng sổ ledger. */
+async function refundOperation(reference: string): Promise<JsonObject | null> {
+  if (!/^[0-9a-f]{32}$/i.test(reference)) return null;
+  const uuid = `${reference.slice(0, 8)}-${reference.slice(8, 12)}-${reference.slice(12, 16)}-${reference.slice(16, 20)}-${reference.slice(20)}`;
+  return selectOne("payment_refund", { refund_id: `eq.${uuid}`, select: "refund_id,amount,status,provider_ref" });
+}
+
+/** MoMo tra transId gốc của lệnh thu. */
 async function momoTransaction(transId: string): Promise<JsonObject | null> {
   if (!transId) return null;
   const row = await selectOne("payment", {

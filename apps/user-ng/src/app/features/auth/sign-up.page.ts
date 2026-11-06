@@ -9,6 +9,7 @@ import { WishlistStore } from '../../core/services/wishlist.store';
 import { StyleProfileService } from '../../core/services/style-profile.service';
 import { showToast } from '../../core/utils/toast';
 import { AuthOtpModal, AuthOtpResult } from '../../shared/auth-otp-modal/auth-otp-modal';
+import { PASSWORD_POLICY_MESSAGE, PASSWORD_POLICY_PATTERN } from '../../core/utils/password-policy';
 
 @Component({
   selector: 'app-sign-up-page',
@@ -41,7 +42,7 @@ export class SignUpPage {
     fullname: ['', Validators.required],
     phone: ['', [Validators.required, Validators.pattern(/^\+?[\d\s-]{8,24}$/)]],
     email: ['', Validators.email],
-    password: ['', [Validators.required, Validators.minLength(8)]],
+    password: ['', [Validators.required, Validators.minLength(8), Validators.pattern(PASSWORD_POLICY_PATTERN)]],
     password_confirm: ['', Validators.required],
     referral_code: [this.route.snapshot.queryParamMap.get('referral') || ''],
   });
@@ -82,7 +83,11 @@ export class SignUpPage {
     this.errorMessage.set(null);
     if (this.form.invalid) {
       this.form.markAllAsTouched();
-      this.errorMessage.set('Vui lòng nhập đầy đủ thông tin bắt buộc và kiểm tra định dạng email, số điện thoại.');
+      const onlyPasswordInvalid = this.form.controls.password.invalid
+        && Object.entries(this.form.controls).every(([name, control]) => name === 'password' || control.valid);
+      this.errorMessage.set(onlyPasswordInvalid
+        ? PASSWORD_POLICY_MESSAGE
+        : 'Vui lòng nhập đầy đủ thông tin bắt buộc và kiểm tra định dạng email, số điện thoại.');
       return;
     }
     if (this.checkingIdentity() || this.duplicateEmail() || this.duplicatePhone()) {

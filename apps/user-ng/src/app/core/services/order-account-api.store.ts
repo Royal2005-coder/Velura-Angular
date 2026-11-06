@@ -3,6 +3,7 @@ import { firstValueFrom } from 'rxjs';
 import { ApiService } from './api.service';
 import { AuthService } from './auth.service';
 import { ApiRequestError } from '../models/api-request-error';
+import { OTP_COUNTDOWN_SECONDS } from '../utils/otp-policy';
 import {
   DemoOrder,
   DemoOrderLine,
@@ -472,7 +473,8 @@ export class OrderAccountApiStore implements OrderAccountModel {
   readonly maskedPhone = signal('');
   readonly otpChannel = signal<'sms' | 'email' | 'both'>('email');
   readonly developmentOtp = signal('');
-  readonly otpExpiresIn = signal(60);
+  /** Hạn mã tra cứu theo SĐT; server trả expires_in, đây là mức trần hiển thị (AUTH-08). */
+  readonly otpExpiresIn = signal(OTP_COUNTDOWN_SECONDS);
   readonly orders = signal<DemoOrder[]>([]);
   readonly requests = signal<DemoReturn[]>([]);
   readonly loading = signal(false);
@@ -539,14 +541,14 @@ export class OrderAccountApiStore implements OrderAccountModel {
     if (this.member()) throw new Error('Vui lòng mở đơn hàng của tài khoản đã đăng nhập.');
     const context = this.context();
     const challenge = mode === 'code' ? { order_code: value.trim() } : { phone: value.trim() };
-    const response = await firstValueFrom(this.api.post<{ success?: boolean; message?: string; masked_phone?: string; masked_email?: string; channel?: 'sms' | 'email' | 'both'; development_otp?: string; expires_in?: number }>('/api/user/orders/track-otp-send', challenge));
+    const response = await firstValueFrom(this.api.post<{ success?: boolean; message?: string; masked_phone?: string; masked_email?: string; channel?: 'sms' | 'email' | 'both' | 'dev'; development_otp?: string; expires_in?: number }>('/api/user/orders/track-otp-send', challenge));
     this.assertCurrent(context);
     if (!response.success) throw new Error(response.message || 'Chưa gửi được mã xác thực.');
     this.maskedPhone.set(response.masked_phone || '');
     this.maskedEmail.set(response.masked_email || '');
     this.otpChannel.set('sms');
     this.developmentOtp.set(response.development_otp || '');
-    this.otpExpiresIn.set(response.expires_in || 60);
+    this.otpExpiresIn.set(response.expires_in || OTP_COUNTDOWN_SECONDS);
     this.challenge = challenge;
   }
 

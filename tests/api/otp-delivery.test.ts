@@ -61,8 +61,19 @@ test("no OTP route fires SMS without awaiting the provider", async () => {
   assert.match(auth, /await\s+deliverAuthOtp\(/);
   assert.match(auth, /OTP_SEND_RATE_LIMIT/);
   // Route chỉ trả 200 khi ít nhất một kênh thật sự nhận được tin.
-  assert.match(orders, /if \(!smsSent && !emailSent\)/);
-  assert.doesNotMatch(orders, /const emailSent = Boolean\(otpEmail\)/);
+  assert.match(orders, /if \(!allowDevOtpBypass\(\) && !smsSent && !emailSent\)/);
+  assert.doesNotMatch(orders, /const smsSent = smsResult\.success \|\| !isSmsConfigured\(\)/, "chưa cấu hình SMS không phải đã gửi");
+  assert.doesNotMatch(orders, /if \(!emailSent\) \{\s*emailSent = true;/, "SMTP từ chối không được báo là đã gửi email");
+  assert.doesNotMatch(orders, /OTP_SEND_FAILED/, "502 khiến CDN thay thân đáp, UI chỉ còn lỗi chung");
+  assert.match(orders, /OTP_CHANNEL_UNAVAILABLE/);
+  assert.match(orders, /expires_in: Math\.floor\(OTP_TTL_MS \/ 1000\)/, "UI đếm đúng hạn mã server cấp");
+  assert.doesNotMatch(orders, /if \(!emailSent\) \{\s*emailSent = true;/);
+});
+
+test("checkout OTP is never a fixed 123456 outside a development environment", async () => {
+  const checkout = await source("apps/api/src/user/checkout-service.ts");
+  assert.match(checkout, /otpCode: allowDevOtpBypass\(\) \? "123456" : generateCheckoutOtp\(\)/, "mã cứng ai cũng đoán được");
+  assert.doesNotMatch(checkout, /otpCode: "123456",/);
 });
 
 test("Twilio credentials are documented in the env template", async () => {

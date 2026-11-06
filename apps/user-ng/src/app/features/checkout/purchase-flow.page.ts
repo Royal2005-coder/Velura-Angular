@@ -31,6 +31,7 @@ import {
   normalizePhone,
   validPhone,
 } from '../../core/services/purchase-demo.store';
+import { OTP_COUNTDOWN_SECONDS } from '../../core/utils/otp-policy';
 import { formatVnd, toPublicAsset } from '../../core/utils/money';
 import { formatSizeDisplay } from '../../core/utils/size';
 import { AddressSelector } from '../../shared/address-selector/address-selector';
@@ -89,7 +90,14 @@ export class PurchaseFlowPage {
     total: this.serverQuote()?.total_amount ?? 0,
     voucher: this.serverQuote()?.voucher?.name || 'Chưa áp dụng mã giảm giá',
    });
+  /**
+   * Điểm dự kiến của đơn, chỉ tính cho thành viên đã đăng nhập.
+   *
+   * Khách vãng lai đặt bằng SĐT chưa phải thành viên và migration 111 cũng không tích điểm cho
+   * đơn `is_guest`, nên hiện "+X điểm" ở bước thanh toán là hứa một khoản hệ thống không ghi.
+   */
   readonly expectedPoints = computed(() => {
+    if (!this.member()) return 0;
     const q = this.quote();
     const pointsDiscount = this.serverQuote()?.loyalty?.points_discount_amount ?? 0;
     const merchandise = Math.max(0, (q.subtotal || 0) - (q.discount || 0) - pointsDiscount);
@@ -102,7 +110,8 @@ export class PurchaseFlowPage {
   readonly resumeLoading = signal(false);
   readonly resumeLocked = signal(false);
   readonly error = signal('');
-  readonly seconds = signal(60);
+  /** Đếm ngược theo đúng hạn mã server cấp (AUTH-08 5 phút), không phải 60 giây. */
+  readonly seconds = signal(OTP_COUNTDOWN_SECONDS);
   readonly paymentSeconds = signal(900);
   readonly resendSeconds = signal(0);
   readonly digits = signal(['', '', '', '', '', '']);
@@ -472,7 +481,7 @@ export class PurchaseFlowPage {
         if (phone !== normalizePhone(this.address.phone)) return;
         this.otpError.set(response.success === false ? response.message || 'Không thể gửi OTP.' : '');
         this.otpPhone.set(phone);
-        this.seconds.set(60);
+        this.seconds.set(response.expires_in || OTP_COUNTDOWN_SECONDS);
         this.resendSeconds.set(30);
         this.digits.set(['', '', '', '', '', '']);
         this.sendingOtp.set(false);

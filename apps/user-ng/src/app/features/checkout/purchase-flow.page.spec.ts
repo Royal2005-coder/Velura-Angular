@@ -29,6 +29,9 @@ describe('PurchaseFlowPage with mocked Model', () => {
   const sendOtp = vi.fn();
   const verifyOtp = vi.fn();
   const quote = vi.fn();
+  const providers = vi.fn();
+  const verifyPayment = vi.fn();
+  const retryPayment = vi.fn();
   const loadPaymentOrder = vi.fn();
   const model = {
     member: signal(false),
@@ -65,6 +68,13 @@ describe('PurchaseFlowPage with mocked Model', () => {
     verifyOtp.mockReturnValue(of({ success: true, guest_checkout_token: 'signed-proof' }));
     quote.mockReset();
     loadPaymentOrder.mockReset();
+    providers.mockReset();
+    verifyPayment.mockReset();
+    retryPayment.mockReset();
+    providers.mockReturnValue(of({ providers: [{ code: 'COD', enabled: true }, { code: 'STRIPE', enabled: true }] }));
+    verifyPayment.mockReturnValue(of({ paid: false }));
+    retryPayment.mockReturnValue(of({ success: true }));
+    loadPaymentOrder.mockResolvedValue(null);
     quote.mockReturnValue(of({ subtotal: 840000, shipping_fee: 0, discount_amount: 50000, total_amount: 790000, voucher: { voucher_id: 'admin-voucher', code: 'REAL50', name: 'Ưu đãi', discount_amount: 50000 }, voucher_change: null, free_shipping_threshold: 500000, free_shipping_shortfall: 0 }));
     checkoutGuest.mockReturnValue(of({ success: true, order: { order_id: 'order-1', order_code: 'VLR-1' } }));
     checkoutMember.mockReturnValue(of({ success: true, order: { order_id: 'order-1', order_code: 'VLR-1' } }));
@@ -99,13 +109,15 @@ describe('PurchaseFlowPage with mocked Model', () => {
         {
           provide: PurchaseFlowApiService,
           useValue: {
-            providers: () => of({ providers: [{ code: 'COD', enabled: true }, { code: 'STRIPE', enabled: true }] }),
+            providers,
             sendOtp,
             verifyOtp,
             checkoutGuest,
             checkoutMember,
             confirmPayment: vi.fn(() => of({ success: true })),
             switchToCod: vi.fn(() => of({ success: true })),
+            retryPayment,
+            verifyPayment,
           },
         },
       ],
@@ -398,5 +410,84 @@ describe('PurchaseFlowPage with mocked Model', () => {
     page.orderOptions = { is_vat_invoice: true, vat_company_name: 'Company' };
     expect(page.validateCheckout()).toBe(false);
     expect(page.fieldErrors()['options']).toContain('hóa đơn');
+  });
+
+  /** Phiên hosted: mỗi đơn có mã QR riêng, khách quét bằng điện thoại nên trang không được nhảy đi. */
+  const hostedProviders = [
+    { code: 'COD', enabled: true },
+    { code: 'VNPAY', enabled: true, environment: 'sandbox', simulated: true },
+    { code: 'MOMO', enabled: true, environment: 'production' },
+  ];
+
+  it('shows the order QR instead of navigating away when a hosted gateway is available', async () => {
+    providers.mockReturnValue(of({ providers: hostedProviders }));
+    checkoutGuest.mockReturnValue(of({
+      success: true,
+      order: { order_id: 'order-qr', order_code: 'VLR-QR', payment_method: 'ONLINE_PAYMENT' },
+      order_access_token: 'guest-capability',
+      payment: { provider: 'VNPAY', url: 'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?x=1', qr_url: 'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?x=1', expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString() },
+    }));
+    const page = createCheckoutFixture().componentInstance;
+    vi.spyOn(page, 'validateCheckout').mockReturnValue(true);
+    page.payment = 'VNPAY';
+    page.place();
+    expect(page.step()).toBe('gateway');
+    expect(page.gateway().qrPayload).toContain('vpcpay.html');
+    await vi.waitFor(() => expect(page.qrImage()).toMatch(/^data:image\/png;base64,/));
+    expect(page.gatewaySandbox()).toBe(true);
+    expect(page.providerHint({ code: 'VNPAY', enabled: true, environment: 'sandbox' })).toContain('sandbox');
+    expect(page.providerHint({ code: 'MOMO', enabled: true, environment: 'production' })).not.toContain('sandbox');
+  });
+
+  it('asks the gateway to confirm instead of trusting the browser when the customer says they paid', async () => {
+    providers.mockReturnValue(of({ providers: hostedProviders }));
+    checkoutGuest.mockReturnValue(of({
+      success: true,
+      order: { order_id: 'order-qr', order_code: 'VLR-QR', payment_method: 'ONLINE_PAYMENT' },
+      payment: { provider: 'MOMO', url: 'https://test-payment.momo.vn/v2/gateway/pay?t=abc', qr_url: 'https://test-payment.momo.vn/v2/gateway/pay?t=abc', expires_at: new Date(Date.now() + 900_000).toISOString() },
+    }));
+    const page = createCheckoutFixture().componentInstance;
+    vi.spyOn(page, 'validateCheckout').mockReturnValue(true);
+    page.payment = 'MOMO';
+    page.place();
+    verifyPayment.mockReturnValue(of({ paid: true, status: 'paid', message: 'Đã ghi nhận' }));
+    page.checkPaymentNow();
+    expect(verifyPayment).toHaveBeenCalledWith('order-qr', undefined, 'MOMO');
+    await vi.waitFor(() => expect(page.step()).toBe('success'));
+    expect(page.order()?.paymentState).toBe('paid');
+  });
+
+  it('keeps a payment the gateway has not confirmed pending rather than claiming success', async () => {
+    providers.mockReturnValue(of({ providers: hostedProviders }));
+    checkoutGuest.mockReturnValue(of({
+      success: true,
+      order: { order_id: 'order-qr', order_code: 'VLR-QR', payment_method: 'ONLINE_PAYMENT' },
+      payment: { provider: 'VNPAY', url: 'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?x=2', qr_url: 'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?x=2', expires_at: new Date(Date.now() + 900_000).toISOString() },
+    }));
+    const page = createCheckoutFixture().componentInstance;
+    vi.spyOn(page, 'validateCheckout').mockReturnValue(true);
+    page.payment = 'VNPAY';
+    page.place();
+    verifyPayment.mockReturnValue(of({ paid: false, status: 'pending', message: 'Cổng chưa báo nhận được tiền.' }));
+    page.checkPaymentNow();
+    await vi.waitFor(() => expect(page.verifying()).toBe(false));
+    expect(page.step()).toBe('result');
+    expect(page.verifyNotice()).toContain('chưa báo nhận được tiền');
+    expect(page.paymentResult()).not.toBe('paid');
+  });
+
+  it('treats a hosted page the customer left as a cancellation, never as an unpaid success', async () => {
+    const address = { name: 'Nguyen An', phone: '0912345678', email: '', province: 'HCM', district: '', ward: 'Ward', detail: '12 Street' };
+    const order: DemoOrder = { id: 'VLR-BACK', orderId: 'order-back', member: false, address, items: DEMO_LINES.map((line) => ({ ...line, returnCount: 0, availableQuantity: line.quantity })), status: 'pending_payment', payment: 'VNPAY', paymentState: 'pending', subtotal: 840000, shipping: 0, discount: 50000, total: 790000, voucher: 'REAL50', createdAt: new Date().toISOString() };
+    loadPaymentOrder.mockResolvedValue(order);
+    providers.mockReturnValue(of({ providers: hostedProviders }));
+    const route = stubActivatedRoute();
+    TestBed.overrideProvider(ActivatedRoute, { useValue: { ...route, snapshot: { ...route.snapshot, queryParamMap: convertToParamMap({ order: 'VLR-BACK', payment_return: 'vnpay', vnp_ResponseCode: '10' }) } } });
+    const page = createCheckoutFixture().componentInstance;
+    await vi.waitFor(() => expect(page.step()).not.toBe('form'));
+    expect(page.paymentResult()).toBe('cancelled');
+    expect(page.order()?.paymentState).not.toBe('paid');
+    // Lời gọi đối soát vẫn đi tới endpoint của nhà mạng, không phải endpoint đọc sổ trong nước.
+    expect(verifyPayment).toHaveBeenCalledWith('order-back', undefined, 'VNPAY');
   });
 });

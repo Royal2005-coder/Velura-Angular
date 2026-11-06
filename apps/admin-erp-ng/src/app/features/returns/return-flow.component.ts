@@ -1,14 +1,18 @@
 import { Observable, forkJoin, of, switchMap } from 'rxjs';
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
 import { AdminErpApiService, AdminOrderRow, AdminReturnDisposition, AdminReturnItemAction, AdminReturnItemActionInput, AdminReturnLine, AdminReturnReplacementChoice, AdminReturnRow } from '../../core/admin-erp-api.service';
-import { CONTACT_RESULTS, MIN_NOTE_LENGTH, MIN_TRANSFER_REFERENCE_LENGTH, gatewayNote, itemRefundAllowed, refundReceiverBlocked, returnItemActions } from '../../core/admin-erp-service-desk';
+import { CONTACT_RESULTS, MIN_NOTE_LENGTH, MIN_TRANSFER_REFERENCE_LENGTH, gatewayNote, gatewayRefundRefused, isGatewayRefundChannel, itemRefundAllowed, refundReceiverBlocked, returnItemActions } from '../../core/admin-erp-service-desk';
 import { adminErrorMessage } from '../../core/admin-erp-http';
 import { adminMoney } from '../../core/admin-erp-format';
 import { buildReturnQrPayload, demoShipmentFacts, parseScan } from '../../core/admin-erp-qr';
 import { AdminErpModal } from '../../shared/ui/admin-modal';
 import { AdminErpQrScan } from '../../shared/ui/admin-qr-scan';
 
-/** Request-level contact is independent; all business and money actions target one item part. */
+/**
+ * Request-level contact is independent; all business and money actions target one item part.
+ * `stripe` is the gateway refund for any online channel — the endpoint keeps its published name
+ * while the API dispatches on the provider of the captured payment (Stripe, VNPay, MoMo).
+ */
 export type ReturnFlowKind = AdminReturnItemAction | 'contact' | 'refund-info' | 'manual' | 'stripe' | null;
 
 /** Operator labels shared by the drawer and its versioned item form. */
@@ -19,7 +23,7 @@ export const RETURN_ITEM_ACTION_LABELS: Readonly<Record<Exclude<ReturnFlowKind, 
   change_variant: 'Đổi biến thể thay thế', prepare_exchange: 'Chuẩn bị đơn đổi',
   ship_exchange: 'Giao phần hàng đổi', complete_exchange: 'Xác nhận giao hàng đổi thành công',
   contact: 'Ghi nhận liên hệ khách', 'refund-info': 'Yêu cầu bổ sung tài khoản',
-  manual: 'Đối soát chuyển khoản COD', stripe: 'Hoàn phần này qua Stripe',
+  manual: 'Đối soát chuyển khoản COD', stripe: 'Hoàn phần này qua cổng thanh toán',
 };
 
 /** One quantity part is saved at a time; refresh exposes any transactionally split remainder. */
@@ -94,10 +98,13 @@ export class ReturnFlowComponent {
     if (flow === 'contact' || flow === 'refund-info') return record.version != null;
     if (!line?.return_item_id || line.version == null) return false;
     if (!Number.isInteger(this.quantity()) || this.quantity() < 1 || this.quantity() > Number(line.quantity)) return false;
+    // Money follows the channel, never the request type: the gateway reverses its own money, so a
+    // hand transfer only exists for COD or for an order whose gateway already refused.
     if (this.isMoney()) {
       if (!this.canFinance() || !itemRefundAllowed(line) || this.refundable() <= 0) return false;
-      if (flow === 'stripe') return record.payment_kind === 'stripe';
-      return record.payment_kind === 'cod' && !refundReceiverBlocked(record)
+      if (flow === 'stripe') return isGatewayRefundChannel(record.payment_kind);
+      if (!this.canReconcileByHand(record)) return false;
+      return !refundReceiverBlocked(record)
         && this.transferReference().trim().length >= MIN_TRANSFER_REFERENCE_LENGTH
         && Boolean(this.proofFile()) && Number.isFinite(Date.parse(this.transferredAt()))
         && Date.parse(this.transferredAt()) <= Date.now();
@@ -145,6 +152,14 @@ export class ReturnFlowComponent {
       this.transferredAt.set(date.toISOString().slice(0, 16));
       this.pickedUpBy.set(''); this.pickedUpAt.set(date.toISOString().slice(0, 16));
     });
+  }
+
+  /**
+   * Whether this part may be paid by hand: COD always, an online order only after the gateway
+   * refused, because paying both ways would refund the same part twice.
+   */
+  private canReconcileByHand(record: AdminReturnRow): boolean {
+    return record.payment_kind === 'cod' || gatewayRefundRefused(record);
   }
 
   /** A fresh outbound AWB; the database still rewrites collisions and persists this on the sub-order. */
@@ -197,11 +212,17 @@ export class ReturnFlowComponent {
   readonly quickNotes = computed(() => {
     const f = this.flow();
     if (f === 'stripe') {
-      return [
-        'Đã hoàn tiền tự động cho khách qua cổng Stripe',
-        'Kho kiểm hàng đạt chuẩn, hoàn trả đủ số tiền',
-        'Đã đối soát thông tin và xác nhận hoàn tiền qua thẻ'
-      ];
+      // VNPay/MoMo hoàn về tài khoản ngân hàng hoặc ví đã thanh toán, nên câu "qua thẻ" chỉ đúng với Stripe.
+      return this.record()?.payment_kind === 'stripe'
+        ? [
+          'Đã hoàn tiền tự động cho khách qua cổng Stripe',
+          'Kho kiểm hàng đạt chuẩn, hoàn trả đủ số tiền',
+          'Đã đối soát thông tin và xác nhận hoàn tiền qua thẻ'
+        ]
+        : [
+          'Đã hoàn tiền tự động cho khách qua cổng thanh toán',
+          'Kho kiểm hàng đạt chuẩn, hoàn trả đủ số tiền'
+        ];
     }
     if (f === 'manual') {
       return [

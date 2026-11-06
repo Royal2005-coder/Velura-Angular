@@ -13,7 +13,9 @@ export interface PurchasePaymentProvider {
 export interface PurchaseOtpResponse {
   success?: boolean;
   message?: string;
-  channel?: 'sms' | 'email' | 'both';
+  channel?: 'sms' | 'email' | 'both' | 'dev';
+  /** Hạn của mã, do server trả về (AUTH-08: 300 giây). */
+  expires_in?: number;
   /** Signed challenge proof, valid only for this checkout phone. */
   guest_checkout_token?: string;
 }

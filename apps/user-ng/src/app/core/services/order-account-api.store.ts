@@ -473,7 +473,8 @@ export class OrderAccountApiStore implements OrderAccountModel {
   readonly maskedPhone = signal('');
   readonly otpChannel = signal<'sms' | 'email' | 'both'>('email');
   readonly developmentOtp = signal('');
-  readonly otpExpiresIn = signal(60);
+  /** Hạn mã tra cứu theo SĐT; server trả expires_in, đây là mức trần hiển thị (AUTH-08). */
+  readonly otpExpiresIn = signal(OTP_COUNTDOWN_SECONDS);
   readonly orders = signal<DemoOrder[]>([]);
   readonly requests = signal<DemoReturn[]>([]);
   readonly loading = signal(false);

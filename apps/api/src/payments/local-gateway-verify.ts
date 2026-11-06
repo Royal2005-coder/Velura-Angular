@@ -4,6 +4,7 @@ import { HttpError, readJson, sendJson } from "../http.js";
 import { callRpc, selectOne, selectRows } from "../supabase.js";
 import { asJsonObject, asString, type AuthContext, type HeaderMap, type HttpRequest, type HttpResponse, type JsonObject } from "../types.js";
 import { requireCustomerOrderAccess } from "../user/order-access.js";
+import { recordPaymentEvent, recordReconcileEvent } from "./payment-metrics.js";
 import {
   gatewayCredentials,
   gatewayEndpoints,
@@ -302,6 +303,7 @@ export async function verifyLocalGatewayOrder(
     p_environment: gatewayEnvironment(params.provider)
   }));
   const code = asString(reconcile.code) || "99";
+  recordPaymentEvent(params.provider.toLowerCase(), "verify_reconcile", query.outcome === "paid" && code === "00" ? "success" : "failed", attempt.amount);
   if (code === "07") throw new HttpError(422, "PAYMENT_SESSION_ENVIRONMENT_MISMATCH", "Phiên thanh toán thuộc môi trường khác nên không được chấp nhận.");
   if (query.outcome === "paid" && code !== "00") {
     return { success: true, paid: false, status: "pending", order_id: orderId, order_code: asString(order.order_code), provider: params.provider, message: asString(reconcile.message) || "Cổng báo đã thanh toán nhưng giao dịch chưa khớp đơn." };

@@ -2,6 +2,7 @@ import { HttpError } from "../http.js";
 import { callRpc, selectOne, selectRows, updateRows } from "../supabase.js";
 import { asJsonObject, asString, type JsonObject } from "../types.js";
 import { refundChannelFor } from "../returns/return-email.js";
+import { recordRefundEvent } from "./payment-metrics.js";
 import {
   gatewayCredentials,
   gatewayEndpoints,
@@ -209,8 +210,11 @@ function interpretMomoRefund(result: JsonObject, httpStatus: number): RefundInte
 
 /**
  * Cổng hoàn tiền thống nhất cho đơn hàng: đọc nhà mạng của chính giao dịch đã thu tiền rồi
- * gọi đúng client của nhà mạng đó. Trước đây mọi đường hoàn tiền đều_hardcode_ Stripe, nên
+ * gọi đúng client của nhà mạng đó. Trước đây mọi đường hoàn tiền đều hardcode Stripe, nên
  * một đơn VNPay/MoMo không có cách nào hoàn tự động.
+ *
+ * Đây cũng là chỗ duy nhất ghi số liệu hoàn tiền: mọi đường (hủy đơn, trả hàng theo phần) đều
+ * đi qua đây, nên counter không phụ thuộc vào từng client.
  */
 export async function refundOrderPayment(orderId: string, options: GatewayRefundOptions = {}): Promise<RefundResult> {
   const { rows } = await selectRows("payment", {
@@ -218,9 +222,12 @@ export async function refundOrderPayment(orderId: string, options: GatewayRefund
     payment_status: "in.(paid,refund_pending)",
     order: "created_at.desc",
     limit: "5",
-    select: "payment_id,payment_provider"
+    select: "payment_id,payment_provider,amount"
   }, { count: "none" });
   const provider = asString(rows[0]?.payment_provider).toLowerCase();
-  if (provider === "vnpay" || provider === "momo") return refundLocalGatewayOrder(orderId, options);
-  return refundStripeOrder(orderId, options);
+  const result = provider === "vnpay" || provider === "momo"
+    ? await refundLocalGatewayOrder(orderId, options)
+    : await refundStripeOrder(orderId, options);
+  recordRefundEvent(provider || "unknown", result.status, options.amount ?? Number(rows[0]?.amount ?? 0));
+  return result;
 }

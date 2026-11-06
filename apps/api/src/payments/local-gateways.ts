@@ -3,6 +3,7 @@ import { config } from "../config.js";
 import { HttpError, readJson, sendJson, sendNoContent } from "../http.js";
 import { callRpc, selectOne, updateRows } from "../supabase.js";
 import { asJsonObject, asString, type HeaderMap, type HttpRequest, type HttpResponse, type JsonObject } from "../types.js";
+import { recordPaymentEvent } from "./payment-metrics.js";
 
 /** Hosted payment providers whose signed callbacks share the existing order ledger. */
 export type LocalGateway = "VNPAY" | "MOMO";
@@ -271,6 +272,7 @@ export async function openLocalGateway(orderId: string, provider: LocalGateway, 
     qrUrl = asString(result.qrCodeUrl) || url;
   }
   await updateRows("payment", { payment_id: `eq.${paymentId}`, payment_status: `eq.pending` }, { gateway_checkout_url: url, gateway_qr_url: qrUrl });
+  recordPaymentEvent(provider.toLowerCase(), "open_attempt", "success", Number(attempt.amount));
   return { provider, url, payment_id: paymentId, expires_at: expiresAt, environment, qr_url: qrUrl };
 }
 
@@ -316,6 +318,7 @@ export async function handleLocalGatewayIpn(req: HttpRequest, res: HttpResponse,
       p_transaction: url.searchParams.get("vnp_TransactionNo"), p_success: url.searchParams.get("vnp_ResponseCode") === "00" && url.searchParams.get("vnp_TransactionStatus") === "00",
       p_response_code: url.searchParams.get("vnp_ResponseCode") || "unknown", p_environment: gatewayEnvironment("VNPAY")
     }));
+    recordPaymentEvent("vnpay", "ipn_reconcile", ["00", "02"].includes(asString(result.code)) ? "success" : "failed", Number(rawAmount) / 100);
     return sendJson(res, 200, { RspCode: result.code || "99", Message: result.message || "Unknown error" }, headers);
   }
   if (req.method !== "POST") throw new HttpError(405, "METHOD_NOT_ALLOWED", "POST required");
@@ -329,6 +332,7 @@ export async function handleLocalGatewayIpn(req: HttpRequest, res: HttpResponse,
     p_provider: "momo", p_reference: body.orderId, p_amount: Number(body.amount), p_transaction: String(body.transId ?? ""),
     p_success: Number(body.resultCode) === 0, p_response_code: String(body.resultCode), p_environment: gatewayEnvironment("MOMO")
   }));
+  recordPaymentEvent("momo", "ipn_reconcile", ["00", "02"].includes(asString(result.code)) ? "success" : "failed", Number(body.amount));
   if (!["00", "02"].includes(asString(result.code))) throw new HttpError(422, "PAYMENT_NOTIFICATION_MISMATCH", "Thông tin giao dịch không khớp đơn hàng.");
   return sendNoContent(res, headers);
 }

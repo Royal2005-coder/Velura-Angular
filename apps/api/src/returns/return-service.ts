@@ -21,6 +21,7 @@ import {
   refundReceiverStatus
 } from "./return-refund-receiver.js";
 import { listReturnEvidence, resolveEvidenceRef, storeReturnEvidence, type ReturnEvidenceKind } from "./return-evidence.js";
+import { recordRefundEvent } from "../payments/payment-metrics.js";
 import type { ReturnRepository } from "./return-repository.js";
 
 /**
@@ -436,6 +437,9 @@ export function createReturnService({
       const updated = await repository.recordManualRefund(returnId, version, {
         reference, amount, transferredAt: transferredAt.toISOString(), proof, note: asString(body.adminNote).trim() || undefined
       }, context.profile?.user_id || context.authUser.id, context.ipAddress, returnItemId);
+      // COD/chuyển khoản tay không đi qua dispatcher refundOrderPayment, nên ghi ở đây — nếu không
+      // tổng hoàn tiền trên /metrics sẽ thiếu đúng nhóm tiền lớn nhất trong vận hành thật.
+      recordRefundEvent("cod", "manual_approved", amount);
       void sendRefundSuccessEmail(returnId, { method: "manual", reference, returnItemId });
       return updated;
     },

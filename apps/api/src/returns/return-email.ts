@@ -8,6 +8,19 @@ export interface RefundEmailOptions {
   reference?: string;
   /** Independently completed return part; required for current item-based refunds. */
   returnItemId?: string;
+  /**
+   * Trạng thái của LỆNH HOÀN tiền, không phải của phiếu. VNPay/MoMo trả `requested` rồi mới tất
+   * toán nhiều ngày sau, nên khách phải được báo đúng từng bước — và mỗi bước một email riêng,
+   * không bước nào được chặn bước sau bằng cơ chế chống trùng.
+   */
+  status?: "succeeded" | "requested" | "failed";
+  /** Lý do cổng từ chối, chỉ dùng cho status 'failed'. */
+  reason?: string;
+}
+
+/** Template code theo trạng thái, để email "đã gửi yêu cầu" không chặn email "đã tất toán". */
+function refundTemplateCode(status: "succeeded" | "requested" | "failed"): string {
+  return status === "succeeded" ? "return_refund_completed" : status === "requested" ? "return_refund_requested" : "return_refund_failed";
 }
 
 /** Nhà mạng thực sự hoàn tiền. Thư và ghi chú vận hành phải nói đúng cái tên này. */
@@ -37,6 +50,7 @@ export async function sendRefundSuccessEmail(
   returnId: string,
   options: RefundEmailOptions = {}
 ): Promise<boolean> {
+  const status = options.status ?? "succeeded";
   try {
     const returnRecord = await selectOne("return_exchange", {
       select: "return_id,order_id,user_id,return_type,refund_amount,status,tracking_return_code,rejection_reason,description,admin_note",
@@ -48,16 +62,20 @@ export async function sendRefundSuccessEmail(
       return_item_id: `eq.${options.returnItemId}`,
       return_id: `eq.${returnId}`
     }) : null;
-    if (options.returnItemId && (!item || item.resolution_type !== "refund" || item.item_status !== "COMPLETED")) return false;
+    // 'COMPLETED' chỉ bắt buộc khi báo ĐÃ tất toán. Với requested/failed, phần hàng đang
+    // REFUND_PENDING — chặn ở đây nghĩa là khách không bao giờ nhận được hai email đầu.
+    if (options.returnItemId && (!item || item.resolution_type !== "refund")) return false;
+    if (options.returnItemId && status === "succeeded" && item?.item_status !== "COMPLETED") return false;
     if (!options.returnItemId && asString(returnRecord.return_type) !== "refund") return false;
 
     const orderId = asString(returnRecord.order_id);
     if (!orderId) return false;
 
-    // Kiểm tra xem đã gửi email hoàn tiền cho phiếu này chưa để tránh gửi lặp
+    // Kiểm tra xem đã gửi email cho TRẠNG THÁI NÀY của phiếu chưa để tránh gửi lặp.
+    const templateCode = refundTemplateCode(status);
     const existingOutbox = await selectRows("email_outbox", {
       select: "email_id,status,created_at,metadata",
-      template_code: "eq.return_refund_completed",
+      template_code: `eq.${templateCode}`,
       recipient: `neq.`,
       "metadata->>return_id": `eq.${returnId}`,
       limit: 20
@@ -123,17 +141,31 @@ export async function sendRefundSuccessEmail(
           ? "• Đối với thẻ quốc tế (Stripe): Tiền sẽ hoàn vào hạn mức thẻ trong vòng 3-7 ngày làm việc tùy chính sách ngân hàng phát hành thẻ."
           : "";
 
-    const subject = `[Velura] Xác nhận hoàn tiền thành công cho đơn hàng #${orderCode}`;
+    const subjectLine = status === "requested"
+      ? `Velura đã gửi yêu cầu hoàn tiền cho đơn hàng #${orderCode} (Phiếu #${trackingCode}) tới ${gateway ? refundChannelName(gateway) : "ngân hàng"} và đang chờ cổng xác nhận.`
+      : status === "failed"
+        ? `Cổng thanh toán chưa thể hoàn tiền cho đơn hàng #${orderCode} (Phiếu #${trackingCode}). ${options.reason ? `Lý do: ${options.reason}.` : ""} Velura sẽ chuyển khoản trực tiếp cho bạn sau khi CSKH xác nhận thông tin nhận tiền.`
+        : `Velura xin thông báo yêu cầu trả hàng và hoàn tiền cho đơn hàng #${orderCode} (Phiếu #${trackingCode}) của bạn đã được xử lý hoàn tất thành công.`;
+    const statusLine = status === "requested"
+      ? "Đã gửi yêu cầu tới cổng thanh toán - đang chờ cổng tất toán"
+      : status === "failed"
+        ? "Cổng từ chối - CSKH sẽ hoàn bằng chuyển khoản trực tiếp"
+        : "Đã hoàn tiền thành công";
+    const subject = status === "requested"
+      ? `[Velura] Đã gửi yêu cầu hoàn tiền cho đơn hàng #${orderCode}`
+      : status === "failed"
+        ? `[Velura] Hoàn tiền đơn hàng #${orderCode} cần xử lý thêm`
+        : `[Velura] Xác nhận hoàn tiền thành công cho đơn hàng #${orderCode}`;
     const text = `Kính chào ${customerName},
 
-Velura xin thông báo yêu cầu trả hàng và hoàn tiền cho đơn hàng #${orderCode} (Phiếu #${trackingCode}) của bạn đã được xử lý hoàn tất thành công.
+${subjectLine}
 
 THÔNG TIN HOÀN TIỀN:
 - Mã đơn hàng: #${orderCode}
 - Mã phiếu đổi trả: ${trackingCode}
 - Số tiền hoàn lại: ${amountFormatted}
 - Phương thức hoàn tiền: ${paymentMethodText}
-- Trạng thái: Đã hoàn tiền thành công
+- Trạng thái: ${statusLine}
 - Thời gian xử lý: ${new Date().toLocaleString("vi-VN")}
 
 Thời gian nhận tiền:
@@ -145,6 +177,24 @@ Tra cứu đơn hàng tại: https://velura.royalai.dev/account/track?code=${ord
 Trân trọng,
 Đội ngũ CSKH Velura`;
 
+    // Cùng một nội dung cho cả bản text lẫn bản HTML: hai bản mô tả hai trạng thái khác nhau là
+    // loại lỗi mà khách chỉ phát hiện khi đã trông chờ tiền về.
+    const htmlIcon = status === "failed" ? "!" : "✓";
+    const htmlIconStyle = status === "failed"
+      ? "background-color: #fef2f2; color: #b91c1c;"
+      : status === "requested"
+        ? "background-color: #fff7ed; color: #c2410c;"
+        : "background-color: #ecfdf5; color: #059669;";
+    const htmlHeadline = status === "requested" ? "Đã gửi yêu cầu hoàn tiền" : status === "failed" ? "Hoàn tiền cần xử lý thêm" : "Hoàn tiền thành công";
+    const htmlIntro = status === "requested"
+      ? `Velura đã chuyển yêu cầu hoàn tiền của đơn hàng <strong>#${orderCode}</strong> tới ${gateway ? refundChannelName(gateway) : "ngân hàng"} và đang chờ cổng tất toán. Bạn sẽ nhận được email xác nhận khi tiền về.`
+      : status === "failed"
+        ? `Cổng thanh toán chưa hoàn được tiền cho đơn hàng <strong>#${orderCode}</strong>${options.reason ? ` (lý do: ${options.reason})` : ""}. CSKH sẽ hoàn cho bạn bằng chuyển khoản trực tiếp sau khi có thông tin nhận tiền hợp lệ.`
+        : `Velura xin thông báo yêu cầu trả hàng và hoàn tiền cho đơn hàng <strong>#${orderCode}</strong> của bạn đã được kiểm tra và xử lý hoàn tất thành công.`;
+    const htmlTiming = status === "failed"
+      ? "• <strong>Chuyển khoản trực tiếp:</strong> CSKH sẽ gửi tiền trong 1-24 giờ làm việc sau khi bạn xác nhận tài khoản nhận tiền."
+      : `• <strong>Chuyển khoản ngân hàng:</strong> Tiền sẽ được cộng vào tài khoản của bạn trong vòng 1-24 giờ làm việc.<br/>${gatewayTiming.replace(/^• /, "• <strong>").replace(": ", ":</strong> ")}`;
+
     const html = `
       <div style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eaeaea; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05); background-color: #ffffff;">
         <div style="background-color: #222222; padding: 24px; text-align: center;">
@@ -152,16 +202,16 @@ Trân trọng,
         </div>
         <div style="padding: 32px; background-color: #ffffff;">
           <div style="text-align: center; margin-bottom: 24px;">
-            <div style="display: inline-block; width: 56px; height: 56px; line-height: 56px; border-radius: 50%; background-color: #ecfdf5; color: #059669; font-size: 28px; font-weight: bold; margin: 0 auto;">✓</div>
-            <h2 style="color: #111827; margin: 16px 0 6px; font-size: 22px; font-weight: 700;">Hoàn tiền thành công</h2>
-            <p style="color: #6b7280; font-size: 14px; margin: 0;">Phiếu yêu cầu trả hàng #${trackingCode} đã được xử lý hoàn tất</p>
+            <div style="display: inline-block; width: 56px; height: 56px; line-height: 56px; border-radius: 50%; ${htmlIconStyle} font-size: 28px; font-weight: bold; margin: 0 auto;">${htmlIcon}</div>
+            <h2 style="color: #111827; margin: 16px 0 6px; font-size: 22px; font-weight: 700;">${htmlHeadline}</h2>
+            <p style="color: #6b7280; font-size: 14px; margin: 0;">Phiếu yêu cầu trả hàng #${trackingCode} — ${statusLine.toLowerCase()}</p>
           </div>
 
           <p style="color: #374151; line-height: 1.6; font-size: 15px;">
             Kính chào <strong>${customerName}</strong>,
           </p>
           <p style="color: #374151; line-height: 1.6; font-size: 15px;">
-            Velura xin thông báo yêu cầu trả hàng và hoàn tiền cho đơn hàng <strong>#${orderCode}</strong> của bạn đã được kiểm tra và xử lý hoàn tất thành công.
+            ${htmlIntro}
           </p>
 
           <div style="background-color: #faf7f5; border: 1px solid #f0e6e0; border-left: 4px solid #7C5454; padding: 20px; margin: 24px 0; border-radius: 0 8px 8px 0;">
@@ -193,8 +243,7 @@ Trân trọng,
           <div style="background-color: #f3f4f6; border-radius: 6px; padding: 16px; margin-bottom: 24px;">
             <p style="margin: 0; font-size: 13px; color: #4b5563; line-height: 1.6;">
               💡 <strong>Thời gian nhận tiền:</strong><br/>
-              • <strong>Chuyển khoản ngân hàng:</strong> Tiền sẽ được cộng vào tài khoản của bạn trong vòng 1-24 giờ làm việc.<br/>
-              • <strong>Thẻ quốc tế (Visa/Mastercard qua Stripe):</strong> Tiền sẽ hoàn vào hạn mức thẻ trong vòng 3-7 ngày làm việc tùy theo ngân hàng phát hành thẻ.
+              ${htmlTiming}
             </p>
           </div>
 
@@ -212,12 +261,12 @@ Trân trọng,
       </div>
     `;
 
-    console.log(`[REFUND_EMAIL] Sending refund confirmation email to ${customerEmail} for order #${orderCode}...`);
+    console.log(`[REFUND_EMAIL] Sending refund ${status} email to ${customerEmail} for order #${orderCode}...`);
     const sent = await sendDirectEmail(customerEmail, subject, text, html);
 
     await insertRow("email_outbox", {
       recipient: customerEmail,
-      template_code: "return_refund_completed",
+      template_code: templateCode,
       subject,
       body: text,
       status: sent ? "sent" : "pending",

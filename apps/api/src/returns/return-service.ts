@@ -9,12 +9,15 @@ import {
   RETURN_STATUSES,
   SUPPORT_TICKET_TRANSITIONS
 } from "./return-constants.js";
-import { sendExchangeCompletedEmail, sendExchangeShippingEmail, sendRefundSuccessEmail, sendReturnApprovedEmail } from "./return-email.js";
+import { refundChannelFor, refundChannelName, sendExchangeCompletedEmail, sendExchangeShippingEmail, sendRefundSuccessEmail, sendReturnApprovedEmail } from "./return-email.js";
 import {
   adminRefundReceiver,
   classifyReturnPayment,
+  GATEWAY_REFUND_PROVIDERS,
   REFUND_RECEIVER_CLOSED_STATUSES,
+  refundFallbackAllowed,
   refundFlowFor,
+  refundReceiverRequired,
   refundReceiverStatus
 } from "./return-refund-receiver.js";
 import { listReturnEvidence, resolveEvidenceRef, storeReturnEvidence, type ReturnEvidenceKind } from "./return-evidence.js";
@@ -187,7 +190,7 @@ export function createReturnService({
       if (!ret) throw new HttpError(404, "RETURN_NOT_FOUND", "Return not found");
       // Kèm giá trị hoàn được để form duyệt hoàn tiền điền sẵn đúng số, không bắt gõ tay.
       // Các phép đọc độc lập chạy song song; mỗi phép là một PostgREST round-trip.
-      const [refundableAmount, payment, lines, shipments, events, evidence] = await Promise.all([
+      const [refundableAmount, payment, lines, shipments, events, evidence, refundOperations] = await Promise.all([
         repository.getRefundableAmount(returnId, context.accessToken),
         ret.order_id && repository.getPaymentByOrderId
           ? repository.getPaymentByOrderId(asString(ret.order_id), context.accessToken)
@@ -195,15 +198,19 @@ export function createReturnService({
         repository.listReturnLines(returnId, context.accessToken),
         repository.listReturnShipments ? repository.listReturnShipments(returnId).catch(() => []) : Promise.resolve([]),
         repository.listReturnEvents ? repository.listReturnEvents(returnId).catch(() => []) : Promise.resolve([]),
-        listReturnEvidence(returnId).catch(() => [])
+        listReturnEvidence(returnId).catch(() => []),
+        repository.listRefundOperations(returnId)
       ]);
-      // COD vs Stripe decides the whole refund screen: receiving account + manual transfer, or the automatic gateway refund.
+      // Đường hoàn tiền quyết định màn refund: COD hỏi tài khoản nhận, cổng thì reverse tự động.
       const kind = classifyReturnPayment(ret.payment_method ?? payment?.payment_method, payment?.payment_provider);
       const flow = refundFlowFor(lines.rows.some(line => line.resolution_type === "refund") ? "refund" : ret.return_type, kind);
-      const receiverRequired = flow === "cod_manual";
+      // Một lệnh hoàn `failed` là chứng cứ cổng đã từ chối trả: từ lúc này tiền chỉ về được bằng
+      // chuyển khoản tay, nên phiếu cũng cần tài khoản nhận của khách (đúng quy tắc migration 113).
+      const gatewayRefundFailed = refundOperations.some(operation => asString(operation.status) === "failed");
+      const receiverRequired = refundReceiverRequired(flow) || refundFallbackAllowed(flow, gatewayRefundFailed);
       const [receiver, manualRefund, exchangeOrder] = await Promise.all([
         receiverRequired ? repository.getRefundReceiver(returnId) : Promise.resolve(null),
-        flow === "cod_manual" || flow === "manual_transfer" ? repository.getManualRefund(returnId) : Promise.resolve(null),
+        flow === "none" ? Promise.resolve(null) : repository.getManualRefund(returnId),
         ret.exchange_order_id && repository.getExchangeOrder
           ? repository.getExchangeOrder(asString(ret.exchange_order_id))
           : Promise.resolve(null)
@@ -219,7 +226,7 @@ export function createReturnService({
           product_id: meta.product_id || null,
           current_variant_id: meta.variant_id || null,
           product_name: meta.product_name || null,
-          manual_refund: line.resolution_type === "refund" && kind === "cod" ? await repository.getManualRefund(returnId, asString(line.return_item_id)) : null,
+          manual_refund: line.resolution_type === "refund" && flow !== "none" ? await repository.getManualRefund(returnId, asString(line.return_item_id)) : null,
           refundable_amount: await repository.getItemRefundableAmount(asString(line.return_item_id)),
           exchange_order: line.exchange_order_id ? await repository.getExchangeOrder(asString(line.exchange_order_id)) : null
         };
@@ -240,6 +247,8 @@ export function createReturnService({
         lines: enrichedLines,
         payment_kind: kind,
         refund_flow: flow,
+        /** Cổng đã từ chối lệnh hoàn của phiếu này: ERP dựa vào đó để mở đường chuyển khoản tay. */
+        gateway_refund_failed: gatewayRefundFailed,
         refund_receiver_status: refundReceiverStatus(receiverRequired, receiver),
         refund_receiver: adminRefundReceiver(receiverRequired, receiver),
         manual_refund: manualRefund,
@@ -357,20 +366,26 @@ export function createReturnService({
       const { current, returnItemId, version } = await requireRefundItem(context, returnId, body);
       const orderId = asString(current.order_id);
       if (!orderId) throw new HttpError(422, "MISSING_ORDER_ID", "Phiếu không có mã đơn hàng hợp lệ.");
-      if (!refunds) throw new HttpError(503, "GATEWAY_UNAVAILABLE", "Cổng hoàn tiền Stripe chưa sẵn sàng.");
+      if (!refunds) throw new HttpError(503, "GATEWAY_UNAVAILABLE", "Cổng hoàn tiền chưa sẵn sàng.");
       const amount = await repository.getItemRefundableAmount(returnItemId);
       if (amount <= 0) throw new HttpError(422, "NOTHING_TO_REFUND", "Phần hàng không còn số dư để hoàn tiền.");
       const payment = await repository.getPaymentByOrderId(orderId, context.accessToken);
-      if (payment?.payment_provider !== "stripe") throw new HttpError(422, "STRIPE_PAYMENT_REQUIRED", "Chỉ thanh toán Stripe được hoàn qua cổng Stripe.");
+      // Tên endpoint giữ lại chữ "stripe" cho hợp đồng đã phát hành; hành vi thì theo nhà mạng của
+      // chính giao dịch: dispatcher `refundOrderPayment` gọi Stripe, VNPay hay MoMo tùy payment row.
+      const provider = asString(payment?.payment_provider).toLowerCase();
+      if (!GATEWAY_REFUND_PROVIDERS.includes(provider)) {
+        throw new HttpError(422, "GATEWAY_REFUND_UNAVAILABLE", "Giao dịch này không thuộc cổng có thể hoàn tự động. Hãy ghi nhận chuyển khoản thủ công.");
+      }
+      const label = refundChannelFor(provider);
       const result = await refunds.refund(orderId, amount, returnId, version, returnItemId);
       if (result.status === "refunded") {
-        void sendRefundSuccessEmail(returnId, { method: "stripe", returnItemId });
+        void sendRefundSuccessEmail(returnId, { method: label, returnItemId });
       } else if (result.status === "failed") {
-        throw new HttpError(422, "STRIPE_REFUND_FAILED", result.message || "Hoàn tiền qua Stripe thất bại.");
+        throw new HttpError(422, "GATEWAY_REFUND_FAILED", result.message || `Hoàn tiền qua ${refundChannelName(label)} thất bại.`);
       } else if (result.status === "skipped") {
-        throw new HttpError(422, "STRIPE_PAYMENT_REQUIRED", result.message || "Không tìm thấy thanh toán Stripe hợp lệ.");
+        throw new HttpError(422, "GATEWAY_REFUND_UNAVAILABLE", result.message || "Không tìm thấy thanh toán hợp lệ để hoàn.");
       }
-      return { success: true, return_item_id: returnItemId, refund: result };
+      return { success: true, return_item_id: returnItemId, refund: result, gateway: label };
     },
 
     async recordManualRefund(context, returnId, body) {
@@ -389,8 +404,15 @@ export function createReturnService({
       const payment = await repository.getPaymentByOrderId(asString(current.order_id), context.accessToken);
       const orderPaymentMethod = await repository.getOrderPaymentMethod(asString(current.order_id));
       const paymentMethod = current.payment_method ?? payment?.payment_method ?? orderPaymentMethod;
-      if (asString(paymentMethod).toUpperCase() !== "COD" ||
-          classifyReturnPayment(paymentMethod, payment?.payment_provider) !== "cod") {
+      const kind = classifyReturnPayment(paymentMethod, payment?.payment_provider);
+      const flow = refundFlowFor("refund", kind);
+      // COD thì chuyển khoản tay là đường chính. Với đơn qua cổng, chỉ được ghi tay SAU KHI cổng
+      // đã từ chối (một payment_refund `failed`), nếu không sẽ hoàn hai lần cho cùng một phần hàng.
+      const gatewayRefundFailed = flow !== "cod_manual" && asString((await repository.getRefundOperation(returnItemId))?.status) === "failed";
+      if (flow === "none" || (!refundReceiverRequired(flow) && !refundFallbackAllowed(flow, gatewayRefundFailed))) {
+        throw new HttpError(422, "GATEWAY_REFUND_REQUIRED", "Đơn thanh toán qua cổng phải hoàn tự động; chỉ ghi nhận chuyển khoản khi cổng từ chối.");
+      }
+      if (flow === "cod_manual" && kind !== "cod") {
         throw new HttpError(422, "COD_PAYMENT_REQUIRED", "Chỉ đơn COD được ghi nhận chuyển khoản hoàn tiền.");
       }
       const receiverStatus = refundReceiverStatus(true, await repository.getRefundReceiver(returnId));
@@ -425,10 +447,19 @@ export function createReturnService({
       if (REFUND_RECEIVER_CLOSED_STATUSES.includes(asString(current.status))) throw new HttpError(422, "RETURN_CLOSED", "Yêu cầu đổi/trả đã kết thúc, không thể yêu cầu bổ sung thông tin nhận hoàn tiền.");
       const payment = current.order_id ? await repository.getPaymentByOrderId(asString(current.order_id), context.accessToken) : null;
       const kind = classifyReturnPayment(current.payment_method ?? payment?.payment_method, payment?.payment_provider);
-      const hasRefundLine = current.return_type === "refund" ||
-        (await repository.listReturnLines(returnId, context.accessToken)).rows.some(line => line.resolution_type === "refund");
-      if (refundFlowFor(hasRefundLine ? "refund" : "exchange", kind) !== "cod_manual") {
-        throw new HttpError(422, "REFUND_RECEIVER_NOT_APPLICABLE", "Chỉ đơn COD có yêu cầu hoàn tiền mới cần thông tin nhận tiền.");
+      const flow = refundFlowFor("refund", kind);
+      const isRefundReturn = current.return_type === "refund";
+      // Một dòng chỉ cần đọc khi thật sự cần quyết định: COD refund thì không hỏi gì thêm.
+      if (!isRefundReturn && !(await repository.listReturnLines(returnId, context.accessToken)).rows.some(line => line.resolution_type === "refund")) {
+        throw new HttpError(422, "REFUND_RECEIVER_NOT_APPLICABLE", "Yêu cầu đổi hàng không hoàn tiền nên không cần thông tin nhận tiền.");
+      }
+      // COD thì tiền đi tay nên luôn cần tài khoản nhận. Đơn qua cổng chỉ cần hỏi khách SAU KHI
+      // nhà mạng từ chối hoàn, nếu không màn hình Stripe/VNPay lại đi đòi số tài khoản vô ích.
+      if (!refundReceiverRequired(flow)) {
+        const gatewayRefundFailed = (await repository.listRefundOperations(returnId)).some(operation => asString(operation.status) === "failed");
+        if (!refundFallbackAllowed(flow, gatewayRefundFailed)) {
+          throw new HttpError(422, "REFUND_RECEIVER_NOT_APPLICABLE", "Cổng thanh toán tự hoàn tiền nên chưa cần thông tin nhận tiền.");
+        }
       }
       const saved = await repository.requestRefundReceiverSupplement(returnId, expectedVersion, message, context.profile?.user_id || context.authUser.id);
       return { return_id: returnId, refund_receiver: adminRefundReceiver(true, { ...(await repository.getRefundReceiver(returnId)), supplement_request: saved.supplement_request, supplement_requested_at: saved.supplement_requested_at }) };

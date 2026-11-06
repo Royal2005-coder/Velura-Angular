@@ -28,7 +28,9 @@ import {
  * chỉ là đổi endpoint.
  *
  * Nó không bịa tiền: kết quả query/refund đọc lại từ chính sổ ledger, còn trạng thái thanh toán
- * chỉ đổi qua `velura_reconcile_gateway_attempt` y như một IPN thật.
+ * chỉ đổi qua `velura_reconcile_gateway_attempt` y như một IPN thật. Khoá ký của nó KHÔNG phải bí
+ * mật vận hành: an toàn của sandbox là migration 112 (mỗi phiên mang môi trường của nó), nên một
+ * chữ ký sandbox vô dụng trên phiên production.
  */
 
 const SANDBOX_TTL_MS = 15 * 60 * 1000;

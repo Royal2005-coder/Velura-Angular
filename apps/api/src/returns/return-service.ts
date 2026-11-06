@@ -380,6 +380,11 @@ export function createReturnService({
       const result = await refunds.refund(orderId, amount, returnId, version, returnItemId);
       if (result.status === "refunded") {
         void sendRefundSuccessEmail(returnId, { method: label, returnItemId });
+      } else if (result.status === "requested") {
+        // VNPay/MoMo tất toán sau nhiều ngày và không có callback: khách cần biết ngay rằng lệnh đã
+        // được gửi chứ chưa về, và email "đã tất toán" sẽ theo sau. Chống trùng theo template_code
+        // nên hai email này không chặn nhau.
+        void sendRefundSuccessEmail(returnId, { method: label, returnItemId, status: "requested" });
       } else if (result.status === "failed") {
         throw new HttpError(422, "GATEWAY_REFUND_FAILED", result.message || `Hoàn tiền qua ${refundChannelName(label)} thất bại.`);
       } else if (result.status === "skipped") {

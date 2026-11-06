@@ -338,10 +338,10 @@ export async function sendCheckoutOtpSms(phone: string, otpCode: string): Promis
   if (config.smsProvider === "esms") {
     return sendEsmsSms(
       phone,
-      `${otpCode} la ma xac nhan so dien thoai tai Velura. Ma co hieu luc 60 giay. Khong chia se ma nay.`
+      `${otpCode} la ma xac nhan so dien thoai tai Velura. Ma co hieu luc 5 phut. Khong chia se ma nay.`
     );
   }
-  const body = `[Velura] Ma xac thuc don hang cua ban la: ${otpCode}. Ma co hieu luc trong 60 giay. Vui long khong chia se ma cho bat ky ai.`;
+  const body = `[Velura] Ma xac thuc don hang cua ban la: ${otpCode}. Ma co hieu luc trong 5 phut. Vui long khong chia se ma cho bat ky ai.`;
   return sendTwilioSms(phone, body);
 }
 
@@ -415,9 +415,9 @@ export async function sendAuthOtpSms(
   if (purpose === "signup") {
     body = `[Velura] Ma OTP kich hoat tai khoan cua ban la: ${otpCode}. Co hieu luc trong 10 phut.`;
   } else if (purpose === "forgot_password") {
-    body = `[Velura] Ma OTP khoi phuc mat khau cua ban la: ${otpCode}. Co hieu luc trong 60 giay.`;
+    body = `[Velura] Ma OTP khoi phuc mat khau cua ban la: ${otpCode}. Co hieu luc trong 5 phut.`;
   } else {
-    body = `[Velura] Ma OTP xac thuc tai khoan cua ban la: ${otpCode}. Co hieu luc trong 60 giay.`;
+    body = `[Velura] Ma OTP xac thuc tai khoan cua ban la: ${otpCode}. Co hieu luc trong 5 phut.`;
   }
   return sendTwilioSms(phone, body);
 }

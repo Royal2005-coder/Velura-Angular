@@ -52,19 +52,27 @@ export interface GatewayCredentials {
 const SIMULATOR_MERCHANT_ID = "VELURASB";
 
 /**
- * Khoá ký của simulator: dùng PAYMENT_SIMULATOR_SECRET nếu người vận hành đặt, nếu không thì sinh
- * ngẫu nhiên khi process bật lên.
+ * Khoá ký của simulator, theo thứ tự ưu tiên:
+ *  1. `PAYMENT_SIMULATOR_SECRET` nếu người vận hành đặt;
+ *  2. dẫn xuất có ngữ cảnh từ khoá ký đã có của cluster (JWT_SIGNING_SECRET / service role key);
+ *  3. khoá sinh ngẫu nhiên lúc process bật, chỉ cho môi trường không có secret nào (test/local).
  *
- * Vì sao không cần secret: an toàn của sandbox không nằm ở việc giấu khoá demo — nó nằm ở migration
- * 112, nơi MỖI phiên lưu môi trường của mình và callback/verify/refund sai môi trường bị DB từ chối
- * trước khi động tới tiền. Khoá demo công khai cũng không ký nổi một capture trên phiên production.
- * Đặt PAYMENT_SIMULATOR_SECRET chỉ để liên kết QR sống sót qua restart pod; còn mặc định, simulator
- * tự ký và tự kiểm trong cùng process nên không có khoá nào lọt vào Git.
+ * Vì sao khoá không cần là bí mật vận hành: an toàn của sandbox KHÔNG nằm ở việc giấu khoá demo — nó
+ * nằm ở migration 112, nơi mỗi phiên lưu `gateway_environment` của mình và
+ * `velura_reconcile_gateway_attempt` trả `07` trước khi đụng bất kỳ hàng nào. Một chữ ký sandbox do
+ * đó không capture nổi phiên production, kể cả khi khoá demo là số công khai.
+ *
+ * Vì sao khoá phải ỔN ĐỊNH (đo thật khi verify trên cluster, không phải suy đoán): nếu mỗi process
+ * một khoá, link QR mà pod A ký sẽ bị pod B — hoặc chính pod sau restart — từ chối checksum. Dẫn xuất
+ * có ngữ cảnh giữ liên kết sống sót qua deploy và nhân bản, mà vẫn không lấy khoá JWT dùng trực tiếp.
  */
+const SIMULATOR_KEY_CONTEXT = "velura:gateway-simulator:v1";
 const BOOT_SIMULATOR_SECRET = randomBytes(32).toString("hex");
 
 function simulatorSigningKey(): string {
-  return config.paymentSimulatorSecret || BOOT_SIMULATOR_SECRET;
+  if (config.paymentSimulatorSecret) return config.paymentSimulatorSecret;
+  const material = process.env.JWT_SIGNING_SECRET || config.supabaseServiceRoleKey;
+  return material ? createHmac("sha256", material).update(SIMULATOR_KEY_CONTEXT).digest("hex") : BOOT_SIMULATOR_SECRET;
 }
 
 function realGatewayCredentials(provider: LocalGateway): GatewayCredentials {

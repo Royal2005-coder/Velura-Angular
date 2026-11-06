@@ -141,6 +141,34 @@ test("the simulator follows the sandbox declaration, not a hidden secret", () =>
   Object.assign(config, saved);
 });
 
+test("the simulator key is stable across processes, so a QR survives deploy and replicas", () => {
+  const saved = { ...config };
+  const savedJwt = process.env.JWT_SIGNING_SECRET;
+  Object.assign(config, {
+    apiPublicOrigin: "https://api.velura.test", vnpayTmnCode: "", vnpayHashSecret: "", momoPartnerCode: "", momoAccessKey: "", momoSecretKey: "",
+    paymentGatewayEnvironment: "sandbox", paymentGatewaySimulator: true, paymentSimulatorSecret: "",
+    supabaseServiceRoleKey: "service-role-material-for-key-derivation"
+  });
+  const derived = gatewayCredentials("VNPAY").secret;
+  assert.equal(derived, gatewayCredentials("VNPAY").secret, "cùng chất liệu thì khoá phải như nhau, không đổi theo lần gọi");
+  assert.equal(derived, createHmac("sha256", "service-role-material-for-key-derivation").update("velura:gateway-simulator:v1").digest("hex"),
+    "khoá là dẫn xuất có ngữ cảnh, không phải khoá JWT dùng trực tiếp");
+  assert.notEqual(derived, config.supabaseServiceRoleKey);
+  assert.equal(gatewayCredentials("MOMO").secret, derived, "hai nhà mạng dùng cùng chất liệu sandbox, không phải hai bí mật");
+
+  // Có secret tường minh thì secret đó thắng, phục vụ người vận hành muốn khoá tách riêng.
+  config.paymentSimulatorSecret = "operator-provided-simulator-secret";
+  assert.equal(gatewayCredentials("VNPAY").secret, "operator-provided-simulator-secret");
+
+  // Không có chất liệu nào (test/local) thì mới rơi về khoá tạm theo process.
+  config.paymentSimulatorSecret = "";
+  config.supabaseServiceRoleKey = "";
+  delete process.env.JWT_SIGNING_SECRET;
+  assert.notEqual(gatewayCredentials("VNPAY").secret, "", "khoá tạm vẫn phải đủ dài để ký");
+  if (savedJwt !== undefined) process.env.JWT_SIGNING_SECRET = savedJwt;
+  Object.assign(config, saved);
+});
+
 test("route off the simulator when it is disabled, instead of pretending to be a gateway", async () => {
   const saved = { ...config };
   Object.assign(config, { apiPublicOrigin: "https://api.velura.test", paymentGatewaySimulator: false, paymentSimulatorSecret: SIM_SECRET, paymentGatewayEnvironment: "sandbox", vnpayTmnCode: "", vnpayHashSecret: "", momoPartnerCode: "", momoAccessKey: "", momoSecretKey: "" });

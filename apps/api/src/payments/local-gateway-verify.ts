@@ -132,6 +132,104 @@ export async function queryGatewayTransaction(attempt: GatewayAttempt, clientIp 
   return attempt.provider === "VNPAY" ? queryVnpay(attempt, credentials, clientIp) : queryMomo(attempt, credentials);
 }
 
+/**
+ * Tra tình trạng một LỆNH HOÀN TIỀN đã gửi. VNPay và MoMo không có callback cho refund, và hoàn
+ * tiền về ngân hàng mất nhiều ngày, nên `requested` là trạng thái bình thường — nhưng nó phải có
+ * người đóng, nếu không sổ ledger treo vĩnh viễn ở `pending`.
+ */
+export interface GatewayRefundQuery {
+  outcome: "settled" | "pending" | "refused";
+  provider_ref: string;
+  message: string;
+}
+
+/**
+ * VNPay: trạng thái của LỆNH HOÀN là một giao dịch riêng, có `vnp_TransactionNo` do phản hồi refund
+ * cấp — nên phải truy vấn với số đó. Response QueryDR mô tả MỘT giao dịch và không có
+ * `vnp_TransactionType`, vì vậy không được suy loại từ nó.
+ */
+export async function queryVnpayRefundStatus(attempt: GatewayAttempt, refundTransactionNo: string, clientIp = ""): Promise<GatewayRefundQuery> {
+  const credentials = gatewayCredentials("VNPAY");
+  const { api } = gatewayEndpoints("VNPAY");
+  if (!api || !credentials.secret) throw new HttpError(503, "PAYMENT_PROVIDER_UNAVAILABLE", "VNPay chưa cấu hình URL QueryDR.");
+  const request: JsonObject = {
+    vnp_RequestId: randomUUID().replace(/-/g, ""), vnp_Version: "2.1.0", vnp_Command: "querydr",
+    vnp_TmnCode: credentials.merchantId, vnp_TxnRef: attempt.reference,
+    vnp_TransactionDate: vnpayDate(new Date(attempt.created_at)), vnp_CreateDate: vnpayDate(new Date()),
+    vnp_IpAddr: clientIp || "127.0.0.1", vnp_OrderInfo: `Velura refund query ${attempt.reference}`
+  };
+  request.vnp_SecureHash = vnpayPipeHash(VNPAY_QUERY_REQUEST.map(key => asString(request[key])), credentials.secret);
+  const response = await jsonRequest(api, request);
+  const result = asJsonObject(await response.json());
+  const code = asString(result.vnp_ResponseCode) || "99";
+  const message = asString(result.vnp_Message) || "Truy vấn hoàn tiền VNPay không thành công";
+  if (!response.ok) throw new HttpError(502, "VNPAY_QUERY_FAILED", `VNPay từ chối truy vấn (${code}).`);
+  if (asString(result.vnp_SecureHash)) {
+    // Đây là phản hồi QueryDR (15 trường, gồm cả hai trường promotion), KHÔNG phải phản hồi của lệnh
+    // `refund` (13 trường). Nhầm hai bảng mã này là mọi lần đối soát hoàn tiền VNPay sẽ fail closed.
+    const expected = vnpayPipeHash(VNPAY_QUERY_RESPONSE.map(key => asString(result[key])), credentials.secret);
+    if (!sameSignature(asString(result.vnp_SecureHash), expected)) throw new HttpError(502, "VNPAY_QUERY_INVALID", "Chữ ký phản hồi VNPay không hợp lệ.");
+  } else if (code === "00") {
+    // Phản hồi LỖI của VNPay không ký (đo thật: {"vnp_ResponseCode":"99",...}), nên không được đòi
+    // chữ ký ở đó. Nhưng một câu "00 thành công" không chữ ký thì KHÔNG phải bằng chứng tất toán.
+    throw new HttpError(502, "VNPAY_QUERY_INVALID", "Phản hồi thành công của VNPay thiếu chữ ký.");
+  }
+  if (asString(result.vnp_TmnCode) !== credentials.merchantId || asString(result.vnp_TxnRef) !== attempt.reference) {
+    throw new HttpError(502, "VNPAY_QUERY_MISMATCH", "Phản hồi VNPay không thuộc giao dịch truy vấn.");
+  }
+  const status = asString(result.vnp_TransactionStatus);
+  const reported = asString(result.vnp_TransactionNo);
+  // Mã 91 (không thấy giao dịch) hoặc 02 (lỗi) trên đúng số lệnh hoàn => cổng từ chối hoàn.
+  if (code === "91" || status === "02") return { outcome: "refused", provider_ref: `vnpay:${reported}`, message };
+  if (code !== "00") return { outcome: "pending", provider_ref: `vnpay:${reported}`, message };
+  // Số giao dịch phản hồi là số LỆNH HOÀN đã lưu; lệch nghĩa là VNPay đang nói về giao dịch thu tiền
+  // chứ không phải lệnh hoàn, nên chưa có bằng chứng để đóng ledger.
+  if (refundTransactionNo && reported !== refundTransactionNo) return { outcome: "pending", provider_ref: `vnpay:${reported}`, message: "VNPay chưa xác nhận lệnh hoàn tiền này" };
+  if (status === "00") return { outcome: "settled", provider_ref: `vnpay:${reported}`, message };
+  if (status === "09") return { outcome: "refused", provider_ref: `vnpay:${reported}`, message };
+  return { outcome: "pending", provider_ref: `vnpay:${reported}`, message };
+}
+
+const MOMO_REFUND_QUERY_KEYS = ["accessKey", "orderId", "partnerCode", "requestId"];
+
+/** MoMo có API riêng `/v2/gateway/api/refund/query`; orderId là orderId của LỆNH HOÀN, không phải lệnh thu. */
+export async function queryMomoRefundStatus(refundReference: string): Promise<GatewayRefundQuery> {
+  const credentials = gatewayCredentials("MOMO");
+  const { api } = gatewayEndpoints("MOMO");
+  if (!credentials.secret) throw new HttpError(503, "PAYMENT_PROVIDER_UNAVAILABLE", "MoMo chưa được cấu hình.");
+  const fields = { accessKey: credentials.accessKey, orderId: refundReference, partnerCode: credentials.merchantId, requestId: refundReference };
+  const request: JsonObject = {
+    partnerCode: credentials.merchantId, requestId: refundReference, orderId: refundReference, lang: "vi",
+    signature: momoSignature(fields, MOMO_REFUND_QUERY_KEYS, credentials.secret)
+  };
+  const response = await jsonRequest(`${api}/refund/query`, request);
+  const result = asJsonObject(await response.json());
+  if (!response.ok) throw new HttpError(502, "MOMO_QUERY_FAILED", `MoMo từ chối truy vấn hoàn tiền (${asString(result.resultCode) || response.status}).`);
+  const code = Number(result.resultCode);
+  const message = asString(result.message) || "Truy vấn hoàn tiền MoMo";
+  if (code === 0) return { outcome: "settled", provider_ref: `momo:${asString(result.transId) || refundReference}`, message };
+  if ([1081, 1088, 42].includes(code)) return { outcome: "refused", provider_ref: `momo:${refundReference}`, message };
+  return { outcome: "pending", provider_ref: `momo:${refundReference}`, message };
+}
+
+/**
+ * Đọc ledger để biết lệnh hoàn thuộc nhà mạng nào rồi tra đúng API của họ. Số lệnh hoàn VNPay
+ * (`vnpay:<n>`) đọc từ `provider_ref` client đã lưu khi gửi lệnh, vì QueryDR mô tả MỘT giao dịch và
+ * không tự phân biệt lệnh thu với lệnh hoàn — không có số đó thì không có bằng chứng để đóng ledger.
+ */
+export async function queryRefundStatus(refundRow: JsonObject, paymentRow: JsonObject, clientIp = ""): Promise<GatewayRefundQuery> {
+  if (asString(paymentRow.payment_provider).toUpperCase() === "MOMO") {
+    return queryMomoRefundStatus(asString(refundRow.refund_id).replace(/-/g, ""));
+  }
+  const providerRef = asString(refundRow.provider_ref);
+  return queryVnpayRefundStatus({
+    provider: "VNPAY", payment_id: asString(paymentRow.payment_id), reference: asString(paymentRow.gateway_session_id),
+    amount: Number(paymentRow.amount), created_at: asString(paymentRow.created_at),
+    expires_at: asString(paymentRow.gateway_expires_at), environment: asString(paymentRow.gateway_environment),
+    transaction_ref: asString(paymentRow.gateway_transaction_ref), payment_status: asString(paymentRow.payment_status)
+  }, providerRef.startsWith("vnpay:") ? providerRef.slice("vnpay:".length) : "", clientIp);
+}
+
 export interface LocalGatewayVerifyResult {
   success: boolean;
   paid: boolean;

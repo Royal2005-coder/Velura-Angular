@@ -49,6 +49,8 @@ export class AdminErpShell {
   readonly searchOpen = signal(false);
   readonly searchQuery = signal('');
   readonly searchInput = viewChild<ElementRef<HTMLInputElement>>('searchInput');
+  /** A guard waiting on a slow API must not leave the blocking navigation layer up forever. */
+  private navigationWatchdog: ReturnType<typeof setTimeout> | null = null;
   private readonly navigationTick = toSignal(
     this.router.events.pipe(
       filter((event): event is NavigationEnd => event instanceof NavigationEnd),
@@ -123,16 +125,28 @@ export class AdminErpShell {
     this.isMobile.set(media.matches);
     const onMediaChange = (event: MediaQueryListEvent) => this.isMobile.set(event.matches);
     media.addEventListener('change', onMediaChange);
-    this.destroyRef.onDestroy(() => media.removeEventListener('change', onMediaChange));
+    this.destroyRef.onDestroy(() => {
+      media.removeEventListener('change', onMediaChange);
+      if (this.navigationWatchdog) clearTimeout(this.navigationWatchdog);
+    });
     this.router.events
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((event) => {
         if (event instanceof NavigationStart) {
           // Block a second click immediately; the overlay fades in instead of flashing.
           this.navigating.set(true);
+          if (this.navigationWatchdog) clearTimeout(this.navigationWatchdog);
+          this.navigationWatchdog = setTimeout(() => {
+            this.navigationWatchdog = null;
+            this.navigating.set(false);
+          }, 15_000);
           return;
         }
         if (event instanceof NavigationEnd || event instanceof NavigationCancel || event instanceof NavigationError) {
+          if (this.navigationWatchdog) {
+            clearTimeout(this.navigationWatchdog);
+            this.navigationWatchdog = null;
+          }
           this.navigating.set(false);
         }
       });

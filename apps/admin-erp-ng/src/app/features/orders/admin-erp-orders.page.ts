@@ -43,7 +43,7 @@ import {
   adminRangeLabel,
 } from '../../core/admin-erp-http';
 import { AdminErpSessionService } from '../../core/admin-erp-session.service';
-import { useWorkspaceRefresh } from '../../core/admin-erp-refresh.service';
+import { useAutoRefresh, useWorkspaceRefresh } from '../../core/admin-erp-refresh.service';
 import { ORDER_STATUS_LABELS, statusLabelFrom } from '../../core/admin-erp-status-labels';
 import { AdminErpDataTable, AdminTableColumn } from '../../shared/ui/admin-data-table';
 import { AdminErpDrawer } from '../../shared/ui/admin-drawer';
@@ -331,6 +331,23 @@ export class AdminErpOrdersPage {
       }
     });
     useWorkspaceRefresh(() => (this.tab() === 'logs' ? this.loadLogs() : this.reload()));
+    // New orders must appear without F5; the tick stays silent and never interrupts a drawer.
+    useAutoRefresh(() => this.autoReload());
+  }
+
+  /**
+   * Background tick for the open queue. It skips while a drawer/modal is open or a load is
+   * running, and it never paints the blocking overlay.
+   */
+  private autoReload(): void {
+    if (this.loading() || this.detailLoading() || this.selected() || this.modal()) {
+      return;
+    }
+    if (this.tab() === 'logs') {
+      this.loadLogs(true);
+      return;
+    }
+    this.reload(true);
   }
 
   /**
@@ -357,11 +374,14 @@ export class AdminErpOrdersPage {
   }
 
   /**
-   * Reloads the order list and summary counts.
+   * Reloads the order list and summary counts. `silent` keeps rows and filters on screen while
+   * the background tick re-reads them.
    */
-  reload(): void {
-    this.loading.set(true);
-    this.loadError.set(null);
+  reload(silent = false): void {
+    if (!silent) {
+      this.loading.set(true);
+      this.loadError.set(null);
+    }
     const tab = this.tab();
     const params: Record<string, string> = {
       q: this.query(),
@@ -381,9 +401,11 @@ export class AdminErpOrdersPage {
         this.hasLoadedOnce.set(true);
       },
       error: (error: unknown) => {
-        this.loadError.set(adminErrorMessage(error, 'Không thể tải đơn hàng.'));
-        this.rows.set([]);
-        this.count.set(0);
+        if (!silent) {
+          this.loadError.set(adminErrorMessage(error, 'Không thể tải đơn hàng.'));
+          this.rows.set([]);
+          this.count.set(0);
+        }
         this.loading.set(false);
       },
     });
@@ -393,8 +415,10 @@ export class AdminErpOrdersPage {
   /**
    * Loads order audit rows.
    */
-  loadLogs(): void {
-    this.loading.set(true);
+  loadLogs(silent = false): void {
+    if (!silent) {
+      this.loading.set(true);
+    }
     this.api.listAuditLogs({ module: 'orders', limit: String(this.pageSize), offset: adminOffset(this.logsPage(), this.pageSize) }).subscribe({
       next: (payload) => {
         this.logs.set(adminListRows(payload));
@@ -402,7 +426,9 @@ export class AdminErpOrdersPage {
         this.loading.set(false);
       },
       error: (error: unknown) => {
-        this.loadError.set(adminErrorMessage(error, 'Không tải được nhật ký đơn hàng.'));
+        if (!silent) {
+          this.loadError.set(adminErrorMessage(error, 'Không tải được nhật ký đơn hàng.'));
+        }
         this.loading.set(false);
       },
     });

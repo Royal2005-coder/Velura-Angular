@@ -63,6 +63,8 @@ export class AdminErpPromotionsPage {
   readonly view = signal<PromoView>('campaigns');
   readonly query = signal('');
   readonly activeFilter = signal('');
+  /** Voucher tab: narrow by parent campaign; "none" keeps only standalone vouchers. */
+  readonly campaignFilter = signal('');
   readonly campaigns = signal<AdminPromotionRow[]>([]);
   readonly campaignOptions = signal<AdminPromotionRow[]>([]);
   readonly campaignLookupError = signal<string | null>(null);
@@ -212,6 +214,7 @@ export class AdminErpPromotionsPage {
     };
     if (this.query()) listParams['q'] = this.query();
     if (this.activeFilter()) listParams['isActive'] = this.activeFilter();
+    if (this.view() === 'vouchers' && this.campaignFilter()) listParams['promoId'] = this.campaignFilter();
     if (this.view() === 'campaigns') {
       this.api.listPromotions(listParams).subscribe({
         next: (payload) => {
@@ -294,6 +297,7 @@ export class AdminErpPromotionsPage {
     if (this.view() !== view) {
       this.query.set('');
       this.activeFilter.set('');
+      this.campaignFilter.set('');
     }
     this.view.set(view as PromoView);
     this.page.set(1);
@@ -314,6 +318,7 @@ export class AdminErpPromotionsPage {
   resetFilters(): void {
     this.query.set('');
     this.activeFilter.set('');
+    this.campaignFilter.set('');
     this.page.set(1);
     this.reload();
   }
@@ -330,6 +335,13 @@ export class AdminErpPromotionsPage {
    */
   onActiveFilter(event: Event): void {
     this.activeFilter.set((event.target as HTMLSelectElement).value);
+  }
+
+  /**
+   * Tracks the parent-campaign filter used by the voucher tab (UAT: filter by campaign name).
+   */
+  onCampaignFilter(event: Event): void {
+    this.campaignFilter.set((event.target as HTMLSelectElement).value);
   }
 
   /**

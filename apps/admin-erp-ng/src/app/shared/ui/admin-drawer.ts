@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, ElementRef, HostListener, effect, input, output, viewChild } from '@angular/core';
+import { lockBodyScroll } from '../../core/body-scroll-lock';
 
 /**
  * Right-side detail drawer with backdrop close, Escape and a Tab trap.
@@ -107,11 +108,10 @@ export class AdminErpDrawer {
         return;
       }
       this.lastFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-      const previousOverflow = document.body.style.overflow;
-      document.body.style.overflow = 'hidden';
+      const releaseScroll = lockBodyScroll();
       queueMicrotask(() => this.panel()?.nativeElement.focus());
       onCleanup(() => {
-        document.body.style.overflow = previousOverflow;
+        releaseScroll();
         const target = this.lastFocused;
         this.lastFocused = null;
         if (target?.isConnected) {

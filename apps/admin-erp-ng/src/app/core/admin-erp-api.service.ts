@@ -54,11 +54,19 @@ export interface AdminAccountRow {
 
 export interface AdminRoleRequestRow {
   request_id: string;
+  requester_id?: string;
   target_user_id?: string;
   requested_role?: string;
   expires_at?: string;
   status?: string;
   version?: number;
+  /** Joined display fields so the queue never shows a bare UUID (UAT TC_ACC_12). */
+  target_email?: string;
+  target_name?: string;
+  requester_email?: string;
+  requester_name?: string;
+  /** Reject note the approver wrote; null until a rejection exists (UAT TC_ACC_14). */
+  rejection_reason?: string | null;
 }
 
 export interface AdminReviewProduct {

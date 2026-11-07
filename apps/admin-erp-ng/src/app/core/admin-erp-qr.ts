@@ -19,6 +19,9 @@ export interface ShipmentQrFacts {
   readonly carrier?: string;
   readonly trackingCode?: string;
   readonly trackingUrl?: string;
+  /** Người giao hàng do ĐVVC in trên label; chỉ hiển thị, không phải dữ liệu shop tự sửa. */
+  readonly shipperName?: string;
+  readonly shipperPhone?: string;
 }
 
 export type ScanKind = "shipment" | "order" | "return" | "tracking" | "unknown";
@@ -34,6 +37,8 @@ export interface ScanResult {
   readonly carrier?: string;
   readonly trackingCode?: string;
   readonly trackingUrl?: string;
+  readonly shipperName?: string;
+  readonly shipperPhone?: string;
   /** `ORDER_MISMATCH` khi mã quét được thuộc một đơn khác đơn đang mở. */
   readonly mismatch?: string | null;
 }
@@ -71,6 +76,8 @@ export function buildShipmentQr(facts: ShipmentQrFacts): string {
   if (facts.carrier) params.set("carrier", facts.carrier.trim());
   if (facts.trackingCode) params.set("tracking", facts.trackingCode.trim());
   if (facts.trackingUrl) params.set("url", facts.trackingUrl.trim());
+  if (facts.shipperName) params.set("shipper", facts.shipperName.trim());
+  if (facts.shipperPhone) params.set("shipperPhone", facts.shipperPhone.trim());
   return `${SHIPMENT_QR_SCHEME}?${params.toString()}`;
 }
 
@@ -136,6 +143,8 @@ function schemeResult(raw: string): ScanResult | null {
       carrier: params.get("carrier") || undefined,
       trackingCode: params.get("tracking") || undefined,
       trackingUrl: params.get("url") || undefined,
+      shipperName: params.get("shipper") || undefined,
+      shipperPhone: params.get("shipperPhone") || undefined,
     };
   }
   if (raw.startsWith(`${ORDER_QR_SCHEME}?`)) {
@@ -174,6 +183,8 @@ function jsonResult(raw: string): ScanResult | null {
       carrier: text("carrier"),
       trackingCode: text("trackingCode") || text("tracking"),
       trackingUrl: text("trackingUrl") || text("url"),
+      shipperName: text("shipperName") || text("shipper"),
+      shipperPhone: text("shipperPhone"),
     };
   }
   if (kind === "order") {
@@ -276,8 +287,14 @@ export function demoShipmentFacts(order: {
   order_code?: string | null;
   carrier?: string | null;
   tracking_code?: string | null;
-}): { carrier: string; trackingCode: string; trackingUrl: string } {
+}): { carrier: string; trackingCode: string; trackingUrl: string; shipperName: string; shipperPhone: string } {
   const carrier = String(order.carrier || '').trim() || 'GHN';
   const trackingCode = String(order.tracking_code || '').trim() || demoTrackingCode(order.order_code);
-  return { carrier, trackingCode, trackingUrl: deriveTrackingUrl(carrier, trackingCode) };
+  return {
+    carrier,
+    trackingCode,
+    trackingUrl: deriveTrackingUrl(carrier, trackingCode),
+    shipperName: 'Nguyễn Văn Giao (demo)',
+    shipperPhone: '0909000111',
+  };
 }

@@ -3,6 +3,7 @@ import { ActivatedRoute, type ParamMap } from '@angular/router';
 import { catchError, forkJoin, of } from 'rxjs';
 import { choiceParam, textParam, watchQueryParams } from '../../core/admin-erp-deep-link';
 import { AdminAuditRow, AdminErpApiService } from '../../core/admin-erp-api.service';
+import { AdminErpSessionService } from '../../core/admin-erp-session.service';
 import { adminDateTime } from '../../core/admin-erp-format';
 import { useWorkspaceRefresh } from '../../core/admin-erp-refresh.service';
 import {
@@ -70,12 +71,16 @@ const MODULE_OPTIONS = [
 })
 export class AdminErpLogsPage {
   private readonly api = inject(AdminErpApiService);
+  private readonly session = inject(AdminErpSessionService);
   private readonly route = inject(ActivatedRoute);
   private readonly destroyRef = inject(DestroyRef);
 
   readonly tab = signal<LogTab>('all');
   readonly query = signal('');
   readonly module = signal('');
+  readonly actorFilter = signal('');
+  readonly fromDate = signal('');
+  readonly toDate = signal('');
   readonly targetScope = signal('');
   readonly rows = signal<AdminAuditRow[]>([]);
   readonly total = signal(0);
@@ -89,7 +94,14 @@ export class AdminErpLogsPage {
   readonly page = signal(1);
   readonly pageSize = 10;
   readonly selected = signal<AdminAuditRow | null>(null);
-  readonly moduleOptions = MODULE_OPTIONS;
+  /** Only offer modules this role operates; the API rejects the rest with 403 anyway. */
+  readonly moduleOptions = computed(() => {
+    const allowed = this.session.session()?.allowedModules || [];
+    if (allowed.includes('*')) {
+      return MODULE_OPTIONS;
+    }
+    return MODULE_OPTIONS.filter((option) => !option.value || allowed.includes(String(option.value)));
+  });
 
   readonly tabs = computed<readonly AdminErpTab[]>(() => [
     { key: 'all', label: 'Tất cả', count: this.allCount() },
@@ -238,6 +250,9 @@ export class AdminErpLogsPage {
   resetFilters(): void {
     this.query.set('');
     this.module.set('');
+    this.actorFilter.set('');
+    this.fromDate.set('');
+    this.toDate.set('');
     this.targetScope.set('');
     this.page.set(1);
     this.reload();
@@ -360,11 +375,35 @@ export class AdminErpLogsPage {
     return {
       q: this.query(),
       module: this.module(),
+      actor: this.actorFilter(),
+      from: this.fromDate() ? new Date(this.fromDate()).toISOString() : '',
+      to: this.toDate() ? new Date(this.toDate()).toISOString() : '',
       targetId: this.targetScope(),
       scope: this.module() || this.tab() === 'all' ? '' : this.tab(),
       limit: String(this.pageSize),
       offset: adminOffset(this.page(), this.pageSize),
     };
+  }
+
+  /**
+   * Tracks the actor filter (UAT: lọc theo người thực hiện).
+   */
+  onActorInput(event: Event): void {
+    this.actorFilter.set((event.target as HTMLInputElement).value);
+  }
+
+  /**
+   * Tracks the inclusive start of the time range.
+   */
+  onFromDate(event: Event): void {
+    this.fromDate.set((event.target as HTMLInputElement).value);
+  }
+
+  /**
+   * Tracks the inclusive end of the time range.
+   */
+  onToDate(event: Event): void {
+    this.toDate.set((event.target as HTMLInputElement).value);
   }
 
   private isFailure(row: AdminAuditRow): boolean {

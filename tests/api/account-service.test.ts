@@ -11,6 +11,11 @@ test("countWords counts normalized whitespace", () => {
   assert.equal(countWords(""), 0);
 });
 
+test("countWords ignores punctuation-only tokens so a reason cannot be all symbols (TC_ACC_07)", () => {
+  assert.equal(countWords("! ! ! ! ! ! ! ! ! ! !"), 0);
+  assert.equal(countWords("Lý do: ! ! !"), 2);
+});
+
 test("validateLock requires more than ten words", () => {
   assert.throws(
     () => validateLock({ lockType: "temporary", reason: "mot hai ba", expectedVersion: 1 }),

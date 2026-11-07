@@ -1,5 +1,6 @@
 import { createProductRepository } from "../products/product-repository.js";
-import { callRpc, quotePostgrestValue, selectOne, selectRows } from "../supabase.js";
+import { callRpc, selectOne, selectRows } from "../supabase.js";
+import { SEARCH_SCAN_LIMIT, searchMatches } from "../search-text.js";
 import { HttpError } from "../http.js";
 import { asJsonObject, asString, type JsonObject } from "../types.js";
 import { PRICE_HISTORY_SELECT, PROMOTION_BASE_SELECT, PROMOTION_SELECT, VOUCHER_BASE_SELECT, VOUCHER_SELECT } from "./pricing-constants.js";
@@ -48,25 +49,29 @@ export function createPricingRepository() {
     },
 
     async listPromotions(filters: JsonObject, accessToken: string | null) {
+      const search = asString(filters.q).trim();
+      const pageLimit = Math.max(1, Number(filters.limit) || 20);
+      const pageOffset = Math.max(0, Number(filters.offset) || 0);
       const query: Record<string, unknown> = {
         select: PROMOTION_SELECT,
         order: "start_date.desc",
-        limit: filters.limit,
-        offset: filters.offset
+        // PostgREST `ilike` is accent-sensitive; campaign search folds in Node instead.
+        limit: search ? String(SEARCH_SCAN_LIMIT) : filters.limit,
+        offset: search ? "0" : filters.offset
       };
       if (filters.isActive !== undefined) query.is_active = `eq.${filters.isActive}`;
       // Lọc theo loại chiến dịch, dùng cho tab Combo trên màn khuyến mãi.
       if (filters.type) query.promo_type = `eq.${filters.type}`;
-      if (filters.q) {
-        const pattern = `ilike.*${quotePostgrestValue(String(filters.q))}*`;
-        query.or = `(promo_name.${pattern},description.${pattern})`;
-      }
+      let result;
       try {
-        return await selectRows("promotion", query, authOptions(accessToken));
+        result = await selectRows("promotion", query, authOptions(accessToken));
       } catch {
         query.select = PROMOTION_BASE_SELECT;
-        return selectRows("promotion", query, authOptions(accessToken));
+        result = await selectRows("promotion", query, authOptions(accessToken));
       }
+      if (!search) return result;
+      const matched = result.rows.filter((row) => searchMatches(search, row.promo_name, row.description));
+      return { rows: matched.slice(pageOffset, pageOffset + pageLimit), count: matched.length };
     },
 
     /**
@@ -220,26 +225,29 @@ export function createPricingRepository() {
     },
 
     async listVouchers(filters: JsonObject, accessToken: string | null) {
+      const search = asString(filters.q).trim();
+      const pageLimit = Math.max(1, Number(filters.limit) || 20);
+      const pageOffset = Math.max(0, Number(filters.offset) || 0);
       const query: Record<string, unknown> = {
         select: VOUCHER_SELECT,
         order: "start_date.desc,code.asc",
-        limit: filters.limit,
-        offset: filters.offset
+        limit: search ? String(SEARCH_SCAN_LIMIT) : filters.limit,
+        offset: search ? "0" : filters.offset
       };
       if (filters.isActive !== undefined) query.is_active = `eq.${filters.isActive}`;
-      if (filters.q) {
-        const pattern = `ilike.*${quotePostgrestValue(String(filters.q))}*`;
-        query.or = `(code.${pattern},name.${pattern})`;
-      }
       // "none" là mã không thuộc chiến dịch nào; còn lại service đã kiểm là UUID.
       if (filters.promoId === "none") query.promo_id = "is.null";
       else if (filters.promoId) query.promo_id = `eq.${filters.promoId}`;
+      let result;
       try {
-        return await selectRows("voucher", query, authOptions(accessToken));
+        result = await selectRows("voucher", query, authOptions(accessToken));
       } catch {
         query.select = VOUCHER_BASE_SELECT;
-        return selectRows("voucher", query, authOptions(accessToken));
+        result = await selectRows("voucher", query, authOptions(accessToken));
       }
+      if (!search) return result;
+      const matched = result.rows.filter((row) => searchMatches(search, row.code, row.name));
+      return { rows: matched.slice(pageOffset, pageOffset + pageLimit), count: matched.length };
     },
 
     async getVoucher(voucherId: string, accessToken: string | null) {
